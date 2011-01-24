@@ -2,6 +2,12 @@ module MethodAST where
 
 type JavaFieldName = String
 
+{-Notes.
+To integerate this into the current symbolic simulator, we need to
+change the type system so that:
+ * Array types do not contain the type of the index.
+ * Records are structural rather than nominal (may be implemented in SAWScript.exe).
+-}
 
 -- | An expression representing a particular JVM value.
 data JavaExpression
@@ -10,92 +16,92 @@ data JavaExpression
     | Arg Int
     -- | @InstanceField x "foo"@ corresponds to Java "x.foo"
     | InstanceField JavaExpression JavaFieldName
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 type UninterpretedOp = String
 
--- | Name of records.
-type RecordName = String
-
 type BitWidth = Int
 
+-- | Expressions types for AST.
 data ExprType 
-  = Bool
-  | SignedBitVector 
-
+  = BoolType
+  | BitvectorType BitWidth
+  | Array Int ExprType
+  | Record [(String, ExprType)]
+ deriving (Eq, Ord, Show)
 
 -- | Roughly correspond to Cryptol expressions, but can also reference
 -- Java variables.
-data MixExpr
-    -- | Returns value of Java expression as a Cryptol value.
-    -- Java arrays are dereferenced and treated as a list of words.
-    -- Integers and longs are treated as bit vectors with corresponding length.
-    = JavaValue JavaExpression
-    -- * Variables
-    | Var String ExprType
+data MixExpr v
+    -- * External values
+    = Extern v 
     -- * Primitive constants.
     | ConstantBool Bool
-    | ConstantInt BitWidth Int
+    | ConstantInt BitWidth Integer
     -- * Arrays
-    | MkArray [MixExpr]
+    | MkArray [MixExpr v]
     -- * Records
-    | MkRecord RecordName [MixExpr]
-    | DerefField MixExpr String
+    | MkRecord [(String, MixExpr v)]
+    | DerefField (MixExpr v) String
     -- * Uninterpreted functions.
-    | UinterpretedFn String [MixExpr]
+    | UinterpretedFn String [MixExpr v]
     -- * Builtin operators.
-    | EqFn    MixExpr MixExpr
-    | IteFn   MixExpr MixExpr MixExpr
-    | TruncFn BitWidth MixExpr
-    | SignedExtFn BitWidth MixExpr
-    | NotFn MixExpr
-    | AndFn MixExpr MixExpr
-    | OrFn MixExpr MixExpr
-    | XorFn MixExpr MixExpr
-    | ShlFn MixExpr MixExpr
-    | ShrFn MixExpr MixExpr
-    | UShrFn MixExpr MixExpr
-    | AppendIntFn MixExpr MixExpr
-    | NegFn MixExpr
-    | AddFn MixExpr MixExpr
-    | MulFn MixExpr MixExpr
-    | SubFn MixExpr MixExpr
-    | SignedDivFn MixExpr MixExpr
-    | SignedRemFn MixExpr MixExpr
-    | SignedLeqFn MixExpr MixExpr
-    | SignedLtFn  MixExpr MixExpr
-    | UnsignedLeqFn MixExpr MixExpr
-    | UnsignedLtFn  MixExpr MixExpr
-    | GetArrayValueFn MixExpr MixExpr
-    | SetArrayValueFn MixExpr MixExpr MixExpr
-  deriving (Eq, Ord)
+    | EqFn    (MixExpr v) (MixExpr v)
+    | IteFn   (MixExpr v) (MixExpr v) (MixExpr v)
+    | TruncFn BitWidth (MixExpr v)
+    | SignedExtFn BitWidth (MixExpr v)
+    | NotFn (MixExpr v)
+    | AndFn (MixExpr v) (MixExpr v)
+    | OrFn (MixExpr v) (MixExpr v)
+    | XorFn (MixExpr v) (MixExpr v)
+    | ShlFn (MixExpr v) (MixExpr v)
+    | ShrFn (MixExpr v) (MixExpr v)
+    | UShrFn (MixExpr v) (MixExpr v)
+    | AppendIntFn (MixExpr v) (MixExpr v)
+    | NegFn (MixExpr v)
+    | AddFn (MixExpr v) (MixExpr v)
+    | MulFn (MixExpr v) (MixExpr v)
+    | SubFn (MixExpr v) (MixExpr v)
+    | SignedDivFn (MixExpr v) (MixExpr v)
+    | SignedRemFn (MixExpr v) (MixExpr v)
+    | SignedLeqFn (MixExpr v) (MixExpr v)
+    | SignedLtFn  (MixExpr v) (MixExpr v)
+    | UnsignedLeqFn (MixExpr v) (MixExpr v)
+    | UnsignedLtFn  (MixExpr v) (MixExpr v)
+    | GetArrayValueFn (MixExpr v) (MixExpr v)
+    | SetArrayValueFn (MixExpr v) (MixExpr v) (MixExpr v)
+  deriving (Eq, Ord, Show)
+
+type MethodSpecTerm = MixExpr JavaExpression
 
 -- | This is essential a mixed expression 
-type CryptolExpression = MixedExpression.
+type RewriteTerm = MixExpr (String, ExprType)
 
--- | The type assigned to 
-data JavaReferenceSymbolicType
+
+-- | The type assigned to a Java value for symbolic simulation purposes.
+data MethodSpecType
     -- | A constant array.
-    = SpecArrayConstant !(Vector Integer)
+    = SpecArrayConstant ![Integer]
     -- | A specific class for a reference (objects must be non-null).
     | SpecRefClass !String
     -- | Array of integer or long values with given length.
-    | SpecArray !Int32
+    | SpecArray !Int
   deriving (Eq, Ord, Show)
 
 -- | Change to the JVM state made by running method.
-data JavaUpdate
+data MethodSpecUpdate
   -- | Update value in array to given expression or new fresh terms
   -- if no expression is given.
   -- N.B. At most one update expression should be given for each potential
   -- aliases, and the Java expressions appearing in the left and right hand
   -- sides are evaluated in the context of the original state.
-  = Update JavaExpression (Maybe CryptolExpression)
+  = Update JavaExpression (Maybe MethodSpecTerm)
  deriving (Eq, Ord, Show)
 
 type SpecName = String
 
-data CryptolRule = Rule CryptolTerm CryptolTerm
+data RewriteRule = Rule RewriteTerm RewriteTerm
+  deriving (Eq, Ord, Show)
 
 data VerifierCommand 
   -- | Import declarations from another Java verifier file.
@@ -104,7 +110,6 @@ data VerifierCommand
   -- it the corresponding name in this context.
   -- The function will be uninterpreted in future SBV function reads.
   | LoadSBVFunction String FilePath
-  | DeclareSBVRecord TODO
   | DeclareJavaMethodSpec {
          specName :: SpecName
       -- | Class this method is for.
@@ -115,15 +120,14 @@ data VerifierCommand
       -- Note: This should be optional to define.
       , specInitializedClasses :: [String]
       -- | Types of references declared in specification.
-      , specRefs :: [(JavaExpression
-                    , JavaReferenceSymbolicType)]
+      , specRefs :: [(JavaExpression, MethodSpecType)]
       -- | Sets of Java values that may reference each other.
       , specMayAliasClasses :: [[JavaExpression]]
       -- | Condition on arguments before method is called.
-      , specPrecondition :: CryptolExpression
+      , specPrecondition :: MethodSpecTerm
       -- | Changes to Java state.
-      , specUpdates :: [JavaUpdate]
+      , specUpdates :: [MethodSpecUpdate]
       }
   | BlastJavaMethodSpec SpecName
-  | ReduceJavaMethodSpec SpecName [CryptolRule]
+  | ReduceJavaMethodSpec SpecName [RewriteRule]
  deriving (Eq, Ord, Show)
