@@ -1,4 +1,4 @@
-module MethodAST where
+module SAWScript.MethodAST where
 
 type JavaFieldName = String
 
