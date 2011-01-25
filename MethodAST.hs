@@ -72,11 +72,13 @@ data MixExpr v
     | SetArrayValueFn (MixExpr v) (MixExpr v) (MixExpr v)
   deriving (Eq, Ord, Show)
 
+-- | A method spec term is an expression that may refer to 
+-- Java expressions.
 type MethodSpecTerm = MixExpr JavaExpression
 
--- | This is essential a mixed expression 
+-- | A rewrite term is an expression that may refer to named and
+-- typed variables.
 type RewriteTerm = MixExpr (String, ExprType)
-
 
 -- | The type assigned to a Java value for symbolic simulation purposes.
 data MethodSpecType
@@ -100,17 +102,10 @@ data MethodSpecUpdate
 
 type SpecName = String
 
-data RewriteRule = Rule RewriteTerm RewriteTerm
+data RewriteRule = RewriteRule RewriteTerm RewriteTerm
   deriving (Eq, Ord, Show)
 
-data VerifierCommand 
-  -- | Import declarations from another Java verifier file.
-  = ImportCommand FilePath
-  -- | Load a SBV function from the given file path, and give
-  -- it the corresponding name in this context.
-  -- The function will be uninterpreted in future SBV function reads.
-  | LoadSBVFunction String FilePath
-  | DeclareJavaMethodSpec {
+data JavaMethodSpec = JavaMethodSpec {
          specName :: SpecName
       -- | Class this method is for.
       , specClass :: String
@@ -127,7 +122,16 @@ data VerifierCommand
       , specPrecondition :: MethodSpecTerm
       -- | Changes to Java state.
       , specUpdates :: [MethodSpecUpdate]
-      }
+      } deriving (Show)
+
+data VerifierCommand 
+  -- | Import declarations from another Java verifier file.
+  = ImportCommand FilePath
+  -- | Load a SBV function from the given file path, and give
+  -- it the corresponding name in this context.
+  -- The function will be uninterpreted in future SBV function reads.
+  | LoadSBVFunction String FilePath
+  | DeclareJavaMethodSpec JavaMethodSpec
   | BlastJavaMethodSpec SpecName
   | ReduceJavaMethodSpec SpecName [RewriteRule]
- deriving (Eq, Ord, Show)
+ deriving (Show)
