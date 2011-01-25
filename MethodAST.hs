@@ -102,9 +102,6 @@ data MethodSpecUpdate
 
 type SpecName = String
 
-data RewriteRule = RewriteRule RewriteTerm RewriteTerm
-  deriving (Eq, Ord, Show)
-
 data JavaMethodSpec = JavaMethodSpec {
          specName :: SpecName
       -- | Class this method is for.
@@ -124,14 +121,28 @@ data JavaMethodSpec = JavaMethodSpec {
       , specUpdates :: [MethodSpecUpdate]
       } deriving (Show)
 
+type RuleName = String
+
 data VerifierCommand 
   -- | Import declarations from another Java verifier file.
   = ImportCommand FilePath
   -- | Load a SBV function from the given file path, and give
   -- it the corresponding name in this context.
   -- The function will be uninterpreted in future SBV function reads.
+  -- This additionally introduces a rule named "<function_name>.def"
   | LoadSBVFunction String FilePath
-  | DeclareJavaMethodSpec JavaMethodSpec
+  -- | Define a record.
+  | DefineRecord String [(String, ExprType)]
+  -- | Define a Java method spec.
+  | DefineJavaMethodSpec JavaMethodSpec
+  -- | Define a rewrite rule with the given name.
+  | DefineRule RuleName RewriteTerm RewriteTerm
+  -- | Disable use of a rule.
+  | DisableRule RuleName
+  -- | Enable use of a rule.
+  | EnableRule RuleName
+  -- | Bitblast a method spec.
   | BlastJavaMethodSpec SpecName
-  | ReduceJavaMethodSpec SpecName [RewriteRule]
+  -- | Apply rewriting to eliminate a method spec.
+  | ReduceJavaMethodSpec SpecName
  deriving (Show)
