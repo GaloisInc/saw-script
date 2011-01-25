@@ -7,9 +7,10 @@
 module SAWScript.Lexer (lexSAW) where
 
 import SAWScript.Token
+import SAWScript.Utils
 }
 
-%wrapper "basic"
+%wrapper "posn"
 
 $digit = 0-9
 $alpha = [a-zA-Z]
@@ -20,19 +21,22 @@ $alpha = [a-zA-Z]
 sawTokens :-
 
 $white+                          ;
+"\n"                             ;
 "--".*                           ;
-let                              { const TokenLet      }
-in                               { const TokenIn       }
-$digit+                          { TokenInt . read     }
-"+"                              { const TokenPlus     }
-"("                              { const TokenOB       }
-")"                              { const TokenCB       }
-"="                              { const TokenEq       }
-$alpha [$alpha $digit \_ \']*    { TokenVar            }
-"\n"                             { const TokenNL       }
-.                                { TokenUnknown . head }
+let                              { cnst TokenLet                   }
+in                               { cnst TokenIn                    }
+$digit+                          { \p s -> TokenInt p (read s)     }
+"+"                              { cnst TokenPlus                  }
+"("                              { cnst TokenOB                    }
+")"                              { cnst TokenCB                    }
+"="                              { cnst TokenEq                    }
+$alpha [$alpha $digit \_ \']*    { TokenVar                        }
+.                                { \p s -> TokenUnknown p (head s) }
 
 {
-lexSAW :: String -> [Token]
-lexSAW = alexScanTokens
+cnst f p _ = f p
+
+lexSAW :: FilePath -> String -> [Token Pos]
+lexSAW f = map (fmap fixPos) . alexScanTokens
+  where fixPos (AlexPn _ l c) = Pos f l c
 }

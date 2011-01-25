@@ -1,13 +1,12 @@
-module SAWScript.Utils(Pos, incLineNo, initPos) where
+module SAWScript.Utils(endPos, Pos(..)) where
 
 data Pos = Pos !FilePath -- file
                !Int      -- line
+               !Int      -- col
 
-incLineNo :: Pos -> Pos
-incLineNo (Pos f i) = Pos f (i+1)
-
-initPos :: String -> Pos
-initPos f = Pos f 1
+endPos :: FilePath -> Pos
+endPos f = Pos f 0 0
 
 instance Show Pos where
-  show (Pos f l) = f ++ ":" ++ show l
+  show (Pos f 0 0) = f ++ ":end-of-file"
+  show (Pos f l c) = f ++ ":" ++ show l ++ ":" ++ show c
