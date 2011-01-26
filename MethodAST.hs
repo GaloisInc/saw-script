@@ -1,5 +1,7 @@
 module SAWScript.MethodAST where
 
+import SAWScript.Utils
+
 type JavaFieldName = String
 
 {-Notes.
@@ -11,14 +13,12 @@ change the type system so that:
 
 -- | An expression representing a particular JVM value.
 data JavaExpression
-    = This
+    = This Pos
     -- | "Arg 0" corresponds to argument in Java function.
-    | Arg Int
+    | Arg Pos Int
     -- | @InstanceField x "foo"@ corresponds to Java "x.foo"
-    | InstanceField JavaExpression JavaFieldName
-  deriving (Eq, Ord, Show)
-
-type UninterpretedOp = String
+    | InstanceField Pos JavaExpression JavaFieldName
+  deriving (Show)
 
 type BitWidth = Int
 
@@ -36,49 +36,70 @@ data MixExpr v
     -- * External values
     = Extern v 
     -- * Primitive constants.
-    | ConstantBool Bool
-    | ConstantInt BitWidth Integer
+    | ConstantBool Pos Bool
+    | ConstantInt  Pos BitWidth Integer
     -- * Arrays
-    | MkArray [MixExpr v]
+    | MkArray Pos [MixExpr v] 
     -- * Records
-    | MkRecord [(String, MixExpr v)]
-    | DerefField (MixExpr v) String
+    | MkRecord   Pos [(String, MixExpr v)]
+    | DerefField Pos (MixExpr v) String
     -- * Uninterpreted functions.
-    | UinterpretedFn String [MixExpr v]
+    | UinterpretedExpr Pos String [MixExpr v]
     -- * Builtin operators.
-    | EqFn    (MixExpr v) (MixExpr v)
-    | IteFn   (MixExpr v) (MixExpr v) (MixExpr v)
-    | TruncFn BitWidth (MixExpr v)
-    | SignedExtFn BitWidth (MixExpr v)
-    | NotFn (MixExpr v)
-    | AndFn (MixExpr v) (MixExpr v)
-    | OrFn (MixExpr v) (MixExpr v)
-    | XorFn (MixExpr v) (MixExpr v)
-    | ShlFn (MixExpr v) (MixExpr v)
-    | ShrFn (MixExpr v) (MixExpr v)
-    | UShrFn (MixExpr v) (MixExpr v)
-    | AppendIntFn (MixExpr v) (MixExpr v)
-    | NegFn (MixExpr v)
-    | AddFn (MixExpr v) (MixExpr v)
-    | MulFn (MixExpr v) (MixExpr v)
-    | SubFn (MixExpr v) (MixExpr v)
-    | SignedDivFn (MixExpr v) (MixExpr v)
-    | SignedRemFn (MixExpr v) (MixExpr v)
-    | SignedLeqFn (MixExpr v) (MixExpr v)
-    | SignedLtFn  (MixExpr v) (MixExpr v)
-    | UnsignedLeqFn (MixExpr v) (MixExpr v)
-    | UnsignedLtFn  (MixExpr v) (MixExpr v)
-    | GetArrayValueFn (MixExpr v) (MixExpr v)
-    | SetArrayValueFn (MixExpr v) (MixExpr v) (MixExpr v)
-  deriving (Eq, Ord, Show)
+    | EqExpr    Pos (MixExpr v) (MixExpr v)
+    | IteExpr   Pos (MixExpr v) (MixExpr v) (MixExpr v)
+    | TruncExpr Pos BitWidth (MixExpr v)
+    -- | Signed extend bitwidth.
+    | SExtExpr Pos BitWidth (MixExpr v)
+    -- | Unsigned extend bitwidth.
+    | UExtExpr Pos BitWidth (MixExpr v)
+    | NotExpr  Pos (MixExpr v)
+    | AndExpr  Pos (MixExpr v) (MixExpr v)
+    | OrExpr   Pos (MixExpr v) (MixExpr v)
+    | XorExpr  Pos (MixExpr v) (MixExpr v)
+    | ShlExpr  Pos (MixExpr v) (MixExpr v)
+    -- | Signed shift right (>>s) for syntax.
+    | SShrExpr Pos (MixExpr v) (MixExpr v)
+    -- | Unsigned shift right (>>u) for syntax.
+    | UShrExpr Pos (MixExpr v) (MixExpr v)
+    -- | Cryptol append operator (#)
+    | AppendExpr Pos (MixExpr v) (MixExpr v)
+    | NegExpr Pos (MixExpr v)
+    | AddExpr Pos (MixExpr v) (MixExpr v)
+    | MulExpr Pos (MixExpr v) (MixExpr v)
+    | SubExpr Pos (MixExpr v) (MixExpr v)
+    | SDivExpr Pos (MixExpr v) (MixExpr v)
+    | SRemExpr Pos (MixExpr v) (MixExpr v)
+    -- | Signed greater than or equal operation.
+    | SGeqExpr Pos (MixExpr v) (MixExpr v)
+    -- | Unsigned greater than or equal operation.
+    | UGeqExpr Pos (MixExpr v) (MixExpr v)
+    -- | Signed greater than operation.
+    | SGtExpr  Pos (MixExpr v) (MixExpr v)
+    -- | Unsigned greater than operation.
+    | UGtExpr  Pos (MixExpr v) (MixExpr v)
+    -- | Signed less than or equal operation.
+    | SLeqExpr Pos (MixExpr v) (MixExpr v)
+    -- | Unsigned less than or equal operation.
+    | ULeqExpr Pos (MixExpr v) (MixExpr v)
+    -- | Signed less than operation.
+    | SLtExpr  Pos (MixExpr v) (MixExpr v)
+    -- | Unsigned less than operation.
+    | ULtExpr  Pos (MixExpr v) (MixExpr v)
+    | GetArrayValueExpr Pos (MixExpr v) (MixExpr v)
+    | SetArrayValueExpr Pos (MixExpr v) (MixExpr v) (MixExpr v)
+  deriving (Show)
 
 -- | A method spec term is an expression that may refer to 
 -- Java expressions.
 type MethodSpecTerm = MixExpr JavaExpression
 
+data RewriteVar = RewriteVar Pos String ExprType
+  deriving (Show)
+
 -- | A rewrite term is an expression that may refer to named and
 -- typed variables.
-type RewriteTerm = MixExpr (String, ExprType)
+type RewriteTerm = MixExpr RewriteVar
 
 -- | The type assigned to a Java value for symbolic simulation purposes.
 data MethodSpecType
@@ -88,7 +109,7 @@ data MethodSpecType
     | SpecRefClass !String
     -- | Array of integer or long values with given length.
     | SpecArray !Int
-  deriving (Eq, Ord, Show)
+  deriving (Show)
 
 -- | Change to the JVM state made by running method.
 data MethodSpecUpdate
@@ -98,7 +119,7 @@ data MethodSpecUpdate
   -- aliases, and the Java expressions appearing in the left and right hand
   -- sides are evaluated in the context of the original state.
   = Update JavaExpression (Maybe MethodSpecTerm)
- deriving (Eq, Ord, Show)
+ deriving (Show)
 
 type SpecName = String
 
@@ -123,26 +144,26 @@ data JavaMethodSpec = JavaMethodSpec {
 
 type RuleName = String
 
-data VerifierCommand 
+data VerifierCommand
   -- | Import declarations from another Java verifier file.
-  = ImportCommand FilePath
+  = ImportCommand Pos FilePath
   -- | Load a SBV function from the given file path, and give
   -- it the corresponding name in this context.
   -- The function will be uninterpreted in future SBV function reads.
   -- This additionally introduces a rule named "<function_name>.def"
-  | LoadSBVFunction String FilePath
+  | LoadSBVFunction Pos String FilePath
   -- | Define a record.
-  | DefineRecord String [(String, ExprType)]
+  | DefineRecord Pos String [(String, ExprType)]
   -- | Define a Java method spec.
-  | DefineJavaMethodSpec JavaMethodSpec
+  | DefineJavaMethodSpec Pos JavaMethodSpec
   -- | Define a rewrite rule with the given name.
-  | DefineRule RuleName RewriteTerm RewriteTerm
-  -- | Disable use of a rule.
-  | DisableRule RuleName
+  | DefineRule Pos RuleName RewriteTerm RewriteTerm
+  -- | Disable use of a rule
+  | DisableRule Pos RuleName
   -- | Enable use of a rule.
-  | EnableRule RuleName
+  | EnableRule Pos RuleName
   -- | Bitblast a method spec.
-  | BlastJavaMethodSpec SpecName
+  | BlastJavaMethodSpec Pos SpecName
   -- | Apply rewriting to eliminate a method spec.
-  | ReduceJavaMethodSpec SpecName
+  | ReduceJavaMethodSpec Pos SpecName
  deriving (Show)
