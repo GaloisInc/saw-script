@@ -1,34 +1,25 @@
 module Main where
 
 import System.Environment (getArgs)
-import System.IO (hFlush, stdout)
+import Data.Version(showVersion)
+import qualified Data.Map as M
 
-import SAWScript.Parser   (parse)
+import Paths_JVM_verifier(version)
+import SAWScript.MethodAST(JV)
+import SAWScript.Parser(parseJVs)
 
 main :: IO ()
-main = do putStrLn "Welcome to SAWScript!"
-          as <- getArgs
-          case as of
-            []  -> testLoop
-            fs  -> mapM_ processFile fs
+main = do jvs <- getArgs
+          case jvs of
+            [] -> do putStrLn $ "sawScript v" ++ showVersion version ++ ": no input files"
+                     putStrLn $ "Usage: sawScript methodSpecFile.."
+            _  -> do parseMap <- parseJVs jvs
+                     let s     = M.size parseMap
+                         specs = show s ++ " method spec" ++ if s > 1 then "s" else ""
+                     putStrLn $ "Loaded " ++ specs ++ " successfully."
+                     process parseMap
 
-testLoop :: IO ()
-testLoop = do putStr "input? "
-              hFlush stdout
-              l <- getLine
-              if null l
-                 then return ()
-                 else do process "stdin" l
-                         testLoop
-
-processFile :: FilePath -> IO ()
-processFile f = do
-    putStrLn $ "Reading " ++ show f ++ ".."
-    cts <- readFile f
-    process f cts
-
-process :: FilePath -> String -> IO ()
-process f s = do er <- parse f s
-                 case er of
-                   Left e  -> putStrLn $ "*** Error:" ++ e
-                   Right r -> putStrLn $ show r
+process :: JV -> IO ()
+process m = do mapM_ disp $ M.assocs m
+  where disp (f, vs) = do putStrLn $ "=== " ++ show f ++ " ==================="
+                          mapM_ print vs

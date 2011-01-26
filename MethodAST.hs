@@ -1,6 +1,10 @@
 module SAWScript.MethodAST where
 
 import SAWScript.Utils
+import qualified Data.Map as M
+
+-- result of parsing a bunch of method specs
+type JV = M.Map FilePath [VerifierCommand]
 
 type JavaFieldName = String
 

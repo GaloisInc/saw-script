@@ -1,36 +1,40 @@
 module SAWScript.Token where
 
-data Token p = TokenLet     { getPos :: p }
-             | TokenIn      { getPos :: p }
-             | TokenEq      { getPos :: p }
-             | TokenPlus    { getPos :: p }
-             | TokenInt     { getPos :: p, getTokInt :: Int }
-             | TokenOB      { getPos :: p }
-             | TokenCB      { getPos :: p }
-             | TokenVar     { getPos :: p, getTokVar :: String }
-             | TokenUnknown { getPos :: p, getTokUnk :: Char }
-             | TokenEOF     { getPos :: p }
+data Token p = TImport  p
+             | TVar     p String
+             | TSemi    p
+             | TLit     p String
+             | TUnknown p String
+             | TCmntS   p
+             | TCmntE   p
+             | TEOF     p
 
-instance Show (Token a) where
-  show (TokenLet _)       = "let"
-  show (TokenIn _)        = "in"
-  show (TokenEq _)        = "="
-  show (TokenPlus _)      = "+"
-  show (TokenInt _ n)     = show n
-  show (TokenOB _)        = "("
-  show (TokenCB _)        = ")"
-  show (TokenVar _ v)     = v
-  show (TokenUnknown _ c) = show c
-  show (TokenEOF _)       = "<end-of-file>"
+getPos :: Token p -> p
+getPos (TImport p)    = p
+getPos (TVar p _)     = p
+getPos (TSemi p)      = p
+getPos (TLit p _)     = p
+getPos (TUnknown p _) = p
+getPos (TCmntS p)     = p
+getPos (TCmntE p)     = p
+getPos (TEOF p)       = p
+
+instance Show (Token p) where
+  show (TImport _)    = "import"
+  show (TVar _ n)     = n
+  show (TSemi _)      = ";"
+  show (TLit _ s)     = show s
+  show (TUnknown _ s) = show s
+  show (TCmntS _)     = "/*"
+  show (TCmntE _)     = "*/"
+  show (TEOF _)       = "<end-of-file>"
 
 instance Functor Token where
-  fmap f (TokenLet     p)   = TokenLet     (f p)
-  fmap f (TokenIn      p)   = TokenIn      (f p)
-  fmap f (TokenEq      p)   = TokenEq      (f p)
-  fmap f (TokenPlus    p)   = TokenPlus    (f p)
-  fmap f (TokenInt     p n) = TokenInt     (f p) n
-  fmap f (TokenOB      p)   = TokenOB      (f p)
-  fmap f (TokenCB      p)   = TokenCB      (f p)
-  fmap f (TokenVar     p v) = TokenVar     (f p) v
-  fmap f (TokenUnknown p c) = TokenUnknown (f p) c
-  fmap f (TokenEOF     p)   = TokenEOF     (f p)
+  fmap f (TImport  p)   = TImport  (f p)
+  fmap f (TVar     p n) = TVar     (f p) n
+  fmap f (TSemi    p)   = TSemi    (f p)
+  fmap f (TLit     p s) = TLit     (f p) s
+  fmap f (TUnknown p c) = TUnknown (f p) c
+  fmap f (TCmntS   p)   = TCmntS   (f p)
+  fmap f (TCmntE   p)   = TCmntE   (f p)
+  fmap f (TEOF     p)   = TEOF     (f p)
