@@ -4,6 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds       #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing     #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+{-# LANGUAGE    BangPatterns                 #-}
 module SAWScript.Lexer (lexSAW) where
 
 import SAWScript.Token
@@ -47,6 +48,8 @@ sawTokens :-
 $white+                          ;
 "\n"                             ;
 "//".*                           ;
+"/*"                             { cnst TCmntS     }
+"*/"                             { cnst TCmntE     }
 @reservedid                      { mkReserved      }
 ";"                              { cnst TSemi      }
 @varid                           { TVar            }
@@ -60,6 +63,17 @@ mkReserved p "import" = TImport p
 mkReserved p s        = TUnknown p s
 
 lexSAW :: FilePath -> String -> [Token Pos]
-lexSAW f = map (fmap fixPos) . alexScanTokens
+lexSAW f = dropComments . map (fmap fixPos) . alexScanTokens
   where fixPos (AlexPn _ l c) = Pos f l c
+
+dropComments :: [Token Pos] -> [Token Pos]
+dropComments = go 0
+  where go :: Int -> [Token Pos] -> [Token Pos]
+        go _  []              = []
+        go !i (TCmntS _ : ts) = go (i+1) ts
+        go !i (TCmntE _ : ts)
+         | i > 0              = go (i-1) ts
+        go !i (t : ts)
+         | i /= 0             = go i ts
+         | True               = t : go i ts
 }
