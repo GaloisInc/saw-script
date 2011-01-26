@@ -35,8 +35,8 @@ $nl        = [\n\r]
 $cntrl       = [$large \@\[\\\]\^\_]
 @ascii       = \^ $cntrl | NUL | SOH | STX | ETX | EOT | ENQ | ACK
              | BEL | BS | HT | LF | VT | FF | CR | SO | SI | DLE
-	     | DC1 | DC2 | DC3 | DC4 | NAK | SYN | ETB | CAN | EM
-	     | SUB | ESC | FS | GS | RS | US | SP | DEL
+             | DC1 | DC2 | DC3 | DC4 | NAK | SYN | ETB | CAN | EM
+             | SUB | ESC | FS | GS | RS | US | SP | DEL
 $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
 @gap         = \\ $whitechar+ \\
@@ -47,10 +47,10 @@ sawTokens :-
 $white+                          ;
 "\n"                             ;
 "//".*                           ;
-@reservedid			 { mkReserved      }
+@reservedid                      { mkReserved      }
 ";"                              { cnst TSemi      }
-@varid				 { TVar            }
-\" @string* \"			 { TLit `via` read }
+@varid                           { TVar            }
+\" @string* \"                   { TLit `via` read }
 .                                { TUnknown        }
 
 {
