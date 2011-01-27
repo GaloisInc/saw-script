@@ -1,30 +1,66 @@
-module Main where
+{-# LANGUAGE CPP #-}
+module Main (main) where
 
 import Control.Monad(zipWithM_)
--- import Data.Version(showVersion)
+import Data.Version(showVersion)
 import Data.Graph
 import Data.List(sortBy)
 import Data.Maybe(listToMaybe)
 import Data.Ord(comparing)
 import qualified Data.Map as M
+import System.Console.CmdArgs
+import qualified System.Console.CmdArgs.Explicit as CA(process)
 import System.Environment (getArgs)
+import System.Exit(exitFailure, exitSuccess, exitWith)
 
--- import Paths_JVM_verifier(version)
-import SAWScript.MethodAST(JVPgm(..))
-import SAWScript.Parser(parseJVPgm)
+import Paths_JVM_verifier(version)
+import SAWScript.MethodAST(SSPgm)
+import SAWScript.Parser(parseSSPgm)
+import SAWScript.CommandExec(runProofs)
 import SAWScript.Utils
 
 main :: IO ()
-main = do jvs <- getArgs
-          case jvs of
-            [f] -> do (pgm@(JVPgm _ parseMap), deps) <- parseJVPgm f
-                      case checkCycles deps of
-                        Just c  -> complainCycle deps c
-                        Nothing -> let cnt   = M.size parseMap
-                                       specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
-                                   in do putStrLn $ "Loaded " ++ specs ++ " successfully."
-                                         process pgm
-            _  -> putStrLn $ "Usage: sawScript <methodSpecFile>"
+main = do ssArgs <- parseArgs
+          (pmap, deps) <- parseSSPgm (entryPoint ssArgs)
+          case checkCycles deps of
+            Just c  -> do complainCycle deps c
+                          exitFailure
+            Nothing -> do let cnt   = M.size pmap
+                              specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
+                          putStrLn $ "Loaded " ++ specs ++ " successfully."
+                          if dump ssArgs
+                             then do dumpScripts pmap
+                                     exitSuccess
+                             else do ec <- runProofs ssArgs pmap
+                                     exitWith ec
+
+parseArgs :: IO SSOpts
+parseArgs = do popts <- getArgs >>= return . CA.process m
+               case popts of
+                 Left e -> do putStrLn $ "ERROR: Invalid invocation: " ++ e
+                              putStrLn $ "Try --help for more information."
+                              exitFailure
+                 Right c -> cmdArgsApply c
+
+ where m = cmdArgsMode $ SSOpts {
+              classpath = def &= typ "CLASSPATH"
+#ifdef mingw32_HOST_OS
+                         &= help "semicolon-delimited list of Java class-path"
+#else
+                         &= help "colon-delimited list of Java class-path"
+#endif
+            , jars       = def &= typ "JARS"
+#ifdef mingw32_HOST_OS
+                         &= help "semicolon-delimited list of jar paths (e.g. --jars=rt.jar;foo.jar)"
+#else
+                         &= help "colon-delimited list of jar paths (e.g. --jars=jdk1.6/classes.jar:foo.jar)"
+#endif
+            , verbose    = def &= help "Be chatty"
+            , dump       = def &= help "Dump files after parsing, and stop"
+            , entryPoint = def &= typFile &= argPos 0
+            }
+            &= program "sawScript"
+            &= summary ("sawScript v" ++ showVersion version ++ ". Copyright 2011 Galois, Inc. All rights reserved.")
 
 checkCycles :: M.Map FilePath [(FilePath, Pos)] -> Maybe [FilePath]
 checkCycles m = listToMaybe $ sortBy (comparing length) [ns | CyclicSCC ns <- stronglyConnComp g]
@@ -36,9 +72,9 @@ complainCycle deps c = do putStrLn $ "ERROR: Mutually recursive SAW script" ++ (
   where deps' = concat [[ip | ip@(i, _) <- is, i `elem` c] | (f, is) <- M.assocs deps, f `elem` c]
         disp (f, p) = putStrLn $ "  Script: " ++ show f ++ " imported at " ++ show p
 
-process :: JVPgm -> IO ()
-process (JVPgm _ m) = do putStrLn "*** Starting script dump."
-                         zipWithM_ disp [(1::Int)..] (M.assocs m)
-                         putStrLn "*** End method-spec dump."
+dumpScripts :: SSPgm -> IO ()
+dumpScripts m = do putStrLn "*** Starting script dump"
+                   zipWithM_ disp [(1::Int)..] (M.assocs m)
+                   putStrLn "*** End method-spec dump"
   where disp i (f, vs) = do putStrLn $ "=== " ++ show i ++ ". " ++ show f ++ " ==================="
                             mapM_ print vs

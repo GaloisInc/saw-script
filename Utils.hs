@@ -1,4 +1,7 @@
+{-# LANGUAGE DeriveDataTypeable  #-}
 module SAWScript.Utils where
+
+import System.Console.CmdArgs(Data, Typeable)
 
 data Pos = Pos !FilePath -- file
                !Int      -- line
@@ -12,10 +15,10 @@ instance Show Pos where
   show (Pos f l c) = '[' : show f ++ ":" ++ show l ++ ":" ++ show c ++ "]"
 
 data SSOpts = SSOpts {
-          verbose :: Bool
+          classpath  :: String
+       ,  jars       :: String
+       ,  verbose    :: Bool
+       ,  dump       :: Bool
+       ,  entryPoint :: String
        }
-
-defaultSSOpts :: SSOpts
-defaultSSOpts = SSOpts {
-          verbose = False
-        }
+       deriving (Show, Data, Typeable)

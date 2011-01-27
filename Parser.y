@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
-module SAWScript.Parser(parseJVPgm) where
+module SAWScript.Parser(parseSSPgm) where
 
 import Data.Maybe(isJust)
 import qualified Data.Map as M
@@ -62,11 +62,10 @@ lexer cont = Parser (\f ts ->
            []       -> unP (cont (TEOF (endPos f))) f []
            (t : ts) -> unP (cont t)                 f ts)
 
-parseJVPgm :: FilePath -> IO (JVPgm, M.Map FilePath [(FilePath, Pos)])
-parseJVPgm f = do (pgm, deps) <- go [(f, Nothing)] M.empty M.empty
-                  return (JVPgm f pgm, deps)
- where go :: [(FilePath, Maybe Pos)] -> JVPrograms -> M.Map FilePath [(FilePath, Pos)]
-          -> IO (JVPrograms, M.Map FilePath [(FilePath, Pos)])
+parseSSPgm :: FilePath -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
+parseSSPgm f = go [(f, Nothing)] M.empty M.empty
+ where go :: [(FilePath, Maybe Pos)] -> SSPgm -> M.Map FilePath [(FilePath, Pos)]
+          -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
        go []              m d = return (m, d)
        go ((f, mbP) : fs) m d
         | isJust (f `M.lookup` m)     -- already seen this file
