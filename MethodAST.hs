@@ -4,7 +4,7 @@ import SAWScript.Utils
 import qualified Data.Map as M
 
 -- result of parsing a bunch of method specs
-type JV = M.Map FilePath [VerifierCommand]
+type SSPgm = M.Map FilePath [VerifierCommand]
 
 {-Notes.
 To integerate this into the current symbolic simulator, we need to

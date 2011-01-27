@@ -10,14 +10,14 @@ data Token p = TImport  p
              | TEOF     p
 
 getPos :: Token p -> p
-getPos (TImport p)    = p
-getPos (TVar p _)     = p
-getPos (TSemi p)      = p
-getPos (TLit p _)     = p
+getPos (TImport  p)   = p
+getPos (TVar     p _) = p
+getPos (TSemi    p)   = p
+getPos (TLit     p _) = p
 getPos (TUnknown p _) = p
-getPos (TCmntS p)     = p
-getPos (TCmntE p)     = p
-getPos (TEOF p)       = p
+getPos (TCmntS   p)   = p
+getPos (TCmntE   p)   = p
+getPos (TEOF     p)   = p
 
 instance Show (Token p) where
   show (TImport _)    = "import"

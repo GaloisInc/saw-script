@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module SAWScript.CommandExec where
+module SAWScript.CommandExec(runProofs) where
 
 import Control.Exception
 import Control.Monad
@@ -14,12 +14,21 @@ import qualified Execution.Codebase as JSS
 import Simulation as JSS
 
 import MethodSpec
-import SAWScript.Utils (Pos(..))
+import SAWScript.Utils (Pos(..), SSOpts(..))
 import SAWScript.MethodAST
 import qualified SBVModel.SBV as SBV
 import SBVParser
 import Symbolic
 import Utils.IOStateT
+import System.Exit
+
+-- This is the entry point from the front-end
+-- The implicit assumption is that you can either return back with an exitCode;
+-- or never come back with a proper call to exitWith..
+runProofs :: SSOpts -> SSPgm -> IO ExitCode
+runProofs ssOpts pgm = do putStrLn $ "I will run proofs starting at: " ++ show (entryPoint ssOpts)
+                          putStrLn $ "There are " ++ show (Map.size pgm) ++ " script(s) to be processed."
+                          return ExitSuccess
 
 {-
 -- | Returns type of SBV program.
@@ -143,11 +152,9 @@ execute (DefineRule pos name lhs rhs) = do
       trhs = parseASTTerm rhs
   -- TODO: Check that types are equal, and check that right-hand side variables
   -- are contained in left-hand side.
-  case mkRuleFromCtor name tlhs trhs of
-    Left msg -> error msg -- Should never happen if checks succeed.
-    Right rl -> do
-      modify $ \s -> s { rules = Map.insert name rl (rules s)
-                       , enabledRules = Set.insert name (enabledRules s) }
+  let rl = mkRuleFromCtor name tlhs trhs
+  modify $ \s -> s { rules = Map.insert name rl (rules s)
+                   , enabledRules = Set.insert name (enabledRules s) }
 execute (DisableRule pos name) = do
   -- Check rule exists.
   re <- ruleExists name
