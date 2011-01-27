@@ -14,6 +14,7 @@ import SAWScript.MethodAST
 import SAWScript.Token
 import SAWScript.Lexer(lexSAW)
 import SAWScript.Utils
+import System.Exit(exitFailure)
 }
 
 %expect 0
@@ -54,7 +55,7 @@ parseError t = Parser (\_ _ -> failAt [t])
 
 failAt :: [Token Pos] -> Either String a
 failAt []    = Left $ "File ended before parsing was complete"
-failAt (t:_) = Left $ show (getPos t) ++ ": Parse error at <" ++ show t ++ ">"
+failAt (t:_) = Left $ show (getPos t) ++ ":\n  Parse error at \"" ++ show t ++ "\""
 
 lexer :: (Token Pos -> Parser a) -> Parser a
 lexer cont = Parser (\f ts ->
@@ -80,7 +81,7 @@ parseJV (f, mbP) = do
        cts <- readFile f
        let res = unP parseSAW f . lexSAW f $ cts
        case res of
-         Left e  -> error $ "*** Error:" ++ e
+         Left e  -> putStrLn e >> exitFailure
          Right r -> return (concatMap getImport r, reverse r)
   where getImport (ImportCommand p fp) = [(fp, p)]
         getImport _                    = []
