@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 module Main (main) where
 
-import Control.Monad(zipWithM_)
+import Control.Monad(zipWithM_, when)
 import Data.Version(showVersion)
 import Data.Graph
 import Data.List(sortBy)
@@ -20,18 +20,18 @@ import SAWScript.CommandExec(runProofs)
 import SAWScript.Utils
 
 main :: IO ()
-main = do ssArgs <- parseArgs
-          (pmap, deps) <- parseSSPgm (entryPoint ssArgs)
+main = do ssOpts <- parseArgs
+          (pmap, deps) <- parseSSPgm ssOpts
           case checkCycles deps of
             Just c  -> do complainCycle deps c
                           exitFailure
             Nothing -> do let cnt   = M.size pmap
                               specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
-                          putStrLn $ "Loaded " ++ specs ++ " successfully."
-                          if dump ssArgs
+                          when (notQuiet ssOpts) $ putStrLn $ "Loaded " ++ specs ++ " successfully."
+                          if dump ssOpts
                              then do dumpScripts pmap
                                      exitSuccess
-                             else do ec <- runProofs ssArgs pmap
+                             else do ec <- runProofs ssOpts pmap
                                      exitWith ec
 
 parseArgs :: IO SSOpts
@@ -55,7 +55,7 @@ parseArgs = do popts <- getArgs >>= return . CA.process m
 #else
                          &= help "colon-delimited list of jar paths (e.g. --jars=jdk1.6/classes.jar:foo.jar)"
 #endif
-            , verbose    = def &= help "Be chatty"
+            , verbose    = 1   &= help "Verbosity level, 0 is ultra quiet"
             , dump       = def &= help "Dump files after parsing, and stop"
             , entryPoint = def &= typFile &= argPos 0
             }
@@ -67,10 +67,10 @@ checkCycles m = listToMaybe $ sortBy (comparing length) [ns | CyclicSCC ns <- st
   where g = [(f, f, map fst fps) | (f, fps) <- M.assocs m]
 
 complainCycle :: M.Map FilePath [(FilePath, Pos)] -> [FilePath] -> IO ()
-complainCycle deps c = do putStrLn $ "ERROR: Mutually recursive SAW script" ++ (if length deps' > 1 then "s" else "") ++ " detected:"
+complainCycle deps c = do putStrLn $ "Cyclic SAW script" ++ (if length deps' > 1 then "s" else "") ++ " detected:"
                           mapM_ disp deps'
   where deps' = concat [[ip | ip@(i, _) <- is, i `elem` c] | (f, is) <- M.assocs deps, f `elem` c]
-        disp (f, p) = putStrLn $ "  Script: " ++ show f ++ " imported at " ++ show p
+        disp (f, p) = putStrLn $ fmtPos p $ "imports " ++ show f
 
 dumpScripts :: SSPgm -> IO ()
 dumpScripts m = do putStrLn "*** Starting script dump"

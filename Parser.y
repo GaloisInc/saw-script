@@ -7,6 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 module SAWScript.Parser(parseSSPgm) where
 
+import Control.Monad(when)
 import Data.Maybe(isJust)
 import qualified Data.Map as M
 
@@ -55,7 +56,7 @@ parseError t = Parser (\_ _ -> failAt [t])
 
 failAt :: [Token Pos] -> Either String a
 failAt []    = Left $ "File ended before parsing was complete"
-failAt (t:_) = Left $ show (getPos t) ++ ":\n  Parse error at \"" ++ show t ++ "\""
+failAt (t:_) = Left $ fmtPos (getPos t) "Parse error at " ++ show (show t)  -- double show is intentional
 
 lexer :: (Token Pos -> Parser a) -> Parser a
 lexer cont = Parser (\f ts ->
@@ -63,8 +64,8 @@ lexer cont = Parser (\f ts ->
            []       -> unP (cont (TEOF (endPos f))) f []
            (t : ts) -> unP (cont t)                 f ts)
 
-parseSSPgm :: FilePath -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
-parseSSPgm f = go [(f, Nothing)] M.empty M.empty
+parseSSPgm :: SSOpts -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
+parseSSPgm ssOpts = go [(entryPoint ssOpts, Nothing)] M.empty M.empty
  where go :: [(FilePath, Maybe Pos)] -> SSPgm -> M.Map FilePath [(FilePath, Pos)]
           -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
        go []              m d = return (m, d)
@@ -72,12 +73,12 @@ parseSSPgm f = go [(f, Nothing)] M.empty M.empty
         | isJust (f `M.lookup` m)     -- already seen this file
         = go fs m d
         | True
-        = do (deps, cmds) <- parseJV (f, mbP)
+        = do (deps, cmds) <- parseJV ssOpts (f, mbP)
              go (reverse [(f, Just p) | (f, p) <- deps] ++ fs) (M.insert f cmds m) (M.insert f deps d)
 
-parseJV :: (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
-parseJV (f, mbP) = do
-       putStrLn $ "Loading " ++ show f ++ ".." ++ reason
+parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
+parseJV ssOpts (f, mbP) = do
+       when (notQuiet ssOpts) $ putStrLn $ "Loading " ++ show f ++ ".." ++ reason
        cts <- readFile f
        let res = unP parseSAW f . lexSAW f $ cts
        case res of

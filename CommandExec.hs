@@ -26,9 +26,9 @@ import System.Exit
 -- The implicit assumption is that you can either return back with an exitCode;
 -- or never come back with a proper call to exitWith..
 runProofs :: SSOpts -> SSPgm -> IO ExitCode
-runProofs opts pgm = do putStrLn $ "I will run proofs starting at: " ++ show (entryPoint opts)
-                        putStrLn $ "There are " ++ show (Map.size pgm) ++ " script(s) to be processed."
-                        return ExitSuccess
+runProofs ssOpts pgm = do putStrLn $ "I will run proofs starting at: " ++ show (entryPoint ssOpts)
+                          putStrLn $ "There are " ++ show (Map.size pgm) ++ " script(s) to be processed."
+                          return ExitSuccess
 
 {-
 -- | Returns type of SBV program.
