@@ -28,6 +28,8 @@ import System.Exit
 runProofs :: SSOpts -> SSPgm -> IO ExitCode
 runProofs ssOpts pgm = do putStrLn $ "I will run proofs starting at: " ++ show (entryPoint ssOpts)
                           putStrLn $ "There are " ++ show (Map.size pgm) ++ " script(s) to be processed."
+                          putStrLn $ "Script paths are: "
+                          mapM putStrLn $ Map.keys pgm
                           return ExitSuccess
 
 {-

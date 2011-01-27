@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternGuards #-}
 module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseSSPgm) where
 
 import Control.Monad(when)
@@ -53,9 +54,14 @@ parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
         | True
         = do (deps, cmds) <- parseJV ssOpts (f, mbP)
              let canon (sf, sp) = do asf <- canonicalizePath (entryDir </> sf)
-                                     return (asf, Just sp)
-             cdeps <- mapM canon $ reverse deps
-             go (cdeps ++ fs) (M.insert f cmds m) (M.insert f deps d)
+                                     return ((asf, Just sp), (sf, asf))
+             cdepsMap <- mapM canon $ reverse deps
+             let (cdeps, cmap) = unzip cdepsMap
+             go (cdeps ++ fs) (M.insert f (map (route cmap) cmds) m) (M.insert f deps d)
+       route cmap (ImportCommand p fp)
+         | Just cfp <- fp `lookup` cmap = ImportCommand p cfp
+         | True                         = error $ "Cannot find import file " ++ show fp ++ " in import-map " ++ show cmap
+       route _ c = c
 
 parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
 parseJV ssOpts (f, mbP) = do
