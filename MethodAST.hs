@@ -23,6 +23,9 @@ data ExprType
   | Record [(String, ExprType)]
  deriving (Eq, Ord, Show)
 
+data FnType = FnType [ExprType] ExprType
+  deriving (Eq, Ord, Show)
+
 -- | Roughly correspond to Cryptol expressions, but can also reference
 -- Java variables.
 data MixExpr v
@@ -176,10 +179,14 @@ data VerifierCommand
   -- it the corresponding name in this context.
   -- The function will be uninterpreted in future SBV function reads.
   -- This additionally introduces a rule named "<function_name>.def"
-  | ExternSBV Pos String FilePath
+  | ExternSBV Pos String FilePath FnType
+  -- | Global binding.
+  | GlobalLet Pos String JavaExpr
+  -- | Verification option ("on" == True && "off" == False)
+  | SetVerification Pos Bool
   -- | Define a Java method spec.
-  | MethodSpec Pos String [MethodSpecDecl]
-  -- | Define a rewrite rule with the given name.
+  | DeclareMethodSpec Pos String [MethodSpecDecl]
+  -- | Define a rewrite rule with the given name, left-hand-side and right-hand side.
   | Rule Pos String RewriteTerm RewriteTerm
   -- | Disable use of a rule or extern definition.
   | Disable Pos String
