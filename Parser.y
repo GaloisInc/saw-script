@@ -5,17 +5,12 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
-module SAWScript.Parser(parseSSPgm) where
-
-import Control.Monad(when)
-import Data.Maybe(isJust)
-import qualified Data.Map as M
+module SAWScript.Parser(parseSAW) where
 
 import SAWScript.MethodAST
 import SAWScript.Token
-import SAWScript.Lexer(lexSAW)
 import SAWScript.Utils
-import System.Exit(exitFailure)
+import {-# SOURCE #-} SAWScript.ParserActions
 }
 
 %expect 0
@@ -37,54 +32,3 @@ VerifierCommands : {- empty -}                          { []      }
 
 VerifierCommand :: { VerifierCommand }
 VerifierCommand : import str { ImportCommand (getPos $1) $2 }
-
-{
-newtype Parser a = Parser { unP :: FilePath -> [Token Pos] -> Either String a }
-
-instance Monad Parser where
-  return x       = Parser (\_ _ -> Right x)
-  Parser h >>= k = Parser (\f ts -> case h f ts of
-                                      Left  e -> Left e
-                                      Right r -> unP (k r) f ts)
-  fail s = Parser (\_ _ -> Left s)
-
-happyError :: Parser a
-happyError = Parser $ \_ ts -> failAt ts
-
-parseError :: Token Pos -> Parser a
-parseError t = Parser (\_ _ -> failAt [t])
-
-failAt :: [Token Pos] -> Either String a
-failAt []    = Left $ "File ended before parsing was complete"
-failAt (t:_) = Left $ fmtPos (getPos t) "Parse error at " ++ show (show t)  -- double show is intentional
-
-lexer :: (Token Pos -> Parser a) -> Parser a
-lexer cont = Parser (\f ts ->
-        case ts of
-           []       -> unP (cont (TEOF (endPos f))) f []
-           (t : ts) -> unP (cont t)                 f ts)
-
-parseSSPgm :: SSOpts -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
-parseSSPgm ssOpts = go [(entryPoint ssOpts, Nothing)] M.empty M.empty
- where go :: [(FilePath, Maybe Pos)] -> SSPgm -> M.Map FilePath [(FilePath, Pos)]
-          -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
-       go []              m d = return (m, d)
-       go ((f, mbP) : fs) m d
-        | isJust (f `M.lookup` m)     -- already seen this file
-        = go fs m d
-        | True
-        = do (deps, cmds) <- parseJV ssOpts (f, mbP)
-             go (reverse [(f, Just p) | (f, p) <- deps] ++ fs) (M.insert f cmds m) (M.insert f deps d)
-
-parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
-parseJV ssOpts (f, mbP) = do
-       when (notQuiet ssOpts) $ putStrLn $ "Loading " ++ show f ++ ".." ++ reason
-       cts <- readFile f
-       let res = unP parseSAW f . lexSAW f $ cts
-       case res of
-         Left e  -> putStrLn e >> exitFailure
-         Right r -> return (concatMap getImport r, reverse r)
-  where getImport (ImportCommand p fp) = [(fp, p)]
-        getImport _                    = []
-        reason = maybe "" (\p -> " (imported at " ++ show p ++ ")") mbP
-}
