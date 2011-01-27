@@ -131,6 +131,7 @@ execute (ImportCommand pos path) = do
   mapM_ execute cmds 
   -- Reset run verification.
   modify $ \s -> s { runVerification = rv }
+  {-
 execute (DefineRecord pos name fields) = do
   undefined
 execute (LoadSBVFunction pos opName path) = do
@@ -174,12 +175,12 @@ execute (EnableRule pos name) = do
   when en $ do
     throwIOExecException pos $ "The rule " ++ name ++ " is already enabled."
   modify $ \s -> s { enabledRules = Set.insert name (enabledRules s) }
-  {-
 execute (BlastJavaMethodSpec pos specName) = do
   rv <- gets runVerification
   when rv $ do
     cb <- gets codeBase
-    let spec = undefined
+    let spec :: MethodSpec SymbolicMonad
+        spec = undefined
     lift $ blastMethodSpec cb spec
 execute (ReduceJavaMethodSpec pos specName) = do
   rv <- gets runVerification
@@ -188,7 +189,10 @@ execute (ReduceJavaMethodSpec pos specName) = do
     let spec :: MethodSpec SymbolicMonad
         spec = undefined
         installOverrides :: JSS.Simulator SymbolicMonad ()
-        installOverrides = undefined
+        installOverrides = do
+          -- TODO: Get list of overrides to install.
+          -- Install overrides.
+          undefined
     lift $ redMethodSpec cb spec installOverrides $ \t -> do
       --TODO: Attempt to reduce term t.
       throwIOExecException pos $ 
