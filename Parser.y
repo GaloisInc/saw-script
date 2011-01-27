@@ -21,14 +21,27 @@ import {-# SOURCE #-} SAWScript.ParserActions
 %name parseSAW VerifierCommands
 
 %token
-   import { TImport _ }
-   str    { TLit _ $$ }
-   ';'    { TSemi _   }
+   import { TReserved  _ "import" }
+   extern { TReserved  _ "extern" }
+   SBV    { TReserved  _ "SBV"    }
+   var    { TVar       _ $$       }
+   str    { TLit       _ $$       }
+   ';'    { TPunct     _ ";"      }
+   '('    { TPunct     _ "("      }
+   ')'    { TPunct     _ ")"      }
+   ':'    { TPunct     _ ":"      }
 %%
 
+-- Top level program structure
 VerifierCommands :: { [VerifierCommand] }
 VerifierCommands : {- empty -}                          { []      }
                  | VerifierCommands VerifierCommand ';' { $2 : $1 }
 
+-- Verifier commands
 VerifierCommand :: { VerifierCommand }
-VerifierCommand : import str { ImportCommand (getPos $1) $2 }
+VerifierCommand : import str                             { ImportCommand (getPos $1) $2   }
+                | extern SBV var '(' str ')' ':' FnType  { ExternSBV (getPos $1) $3 $5 $8 }
+
+-- Types
+FnType  :: { FnType }
+FnType  : {- empty -}   { FnType [] undefined }
