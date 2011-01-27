@@ -1,7 +1,6 @@
 {-# LANGUAGE PatternGuards #-}
 module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseSSPgm) where
 
-import Control.Monad(when)
 import Data.Maybe(isJust, listToMaybe)
 import qualified Data.Map as M
 import System.Directory(canonicalizePath, makeRelativeToCurrentDirectory)
@@ -65,13 +64,16 @@ parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
 
 parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
 parseJV ssOpts (f, mbP) = do
-       when (notQuiet ssOpts) $ do rf <- makeRelativeToCurrentDirectory f
-                                   let mkP p = do p' <- posRelativeToCurrentDirectory p
-                                                  return $ " (imported at " ++ show p' ++ ")"
-                                   reason <- maybe (return "") mkP mbP
-                                   putStrLn $ "Loading " ++ show rf ++ ".." ++ reason
+       notQuiet ssOpts $ do rf <- makeRelativeToCurrentDirectory f
+                            let mkP p = do p' <- posRelativeToCurrentDirectory p
+                                           return $ " (imported at " ++ show p' ++ ")"
+                            reason <- maybe (return "") mkP mbP
+                            putStrLn $ "Loading " ++ show rf ++ ".." ++ reason
        cts <- readFile f
-       res <- unP parseSAW f . lexSAW f $ cts
+       let toks = lexSAW f cts
+       debugVerbose ssOpts $ do putStrLn $ "Token stream for " ++ show f ++ ":"
+                                print toks
+       res <- unP parseSAW f toks
        case res of
          Left e  -> putStrLn e >> exitFailure
          Right r -> return (concatMap getImport r, reverse r)
