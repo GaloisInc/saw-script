@@ -20,14 +20,14 @@ $large     = [A-Z]
 $small     = [a-z]
 $alpha     = [$small $large]
 $symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~] # [$special \_\:\"\']
-$graphic   = [$alpha $symbol $digit $special \:\"\']
+$graphic   = [$alpha $symbol $digit $special \:\"\'\_]
 $octit     = 0-7
 $hexit     = [0-9 A-F a-f]
-$idchar    = [$alpha $digit \']
+$idchar    = [$alpha $digit \' \_]
 $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
-@reservedid  = import
+@reservedid  = import|extern|SBV
 @reservedop  = "+"
 @varid       = $alpha $idchar*
 @decimal     = $digit+
@@ -42,6 +42,7 @@ $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
 @gap         = \\ $whitechar+ \\
 @string      = $graphic # [\"\\] | " " | @escape | @gap
+@punct       = ";" | "(" | ")" | ":"
 
 sawTokens :-
 
@@ -50,8 +51,8 @@ $white+                          ;
 "//".*                           ;
 "/*"                             { cnst TCmntS     }
 "*/"                             { cnst TCmntE     }
-@reservedid                      { mkReserved      }
-";"                              { cnst TSemi      }
+@reservedid                      { TReserved       }
+@punct                           { TPunct          }
 @varid                           { TVar            }
 \" @string* \"                   { TLit `via` read }
 .                                { TUnknown        }
@@ -59,8 +60,6 @@ $white+                          ;
 {
 cnst f p _ = f p
 via c g p s = c p (g s)
-mkReserved p "import" = TImport p
-mkReserved p s        = TUnknown p s
 
 lexSAW :: FilePath -> String -> [Token Pos]
 lexSAW f = dropComments . map (fmap fixPos) . alexScanTokens
