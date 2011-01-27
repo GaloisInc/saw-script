@@ -1,0 +1,109 @@
+extern SBV is_field("sbv/ref_p384_is_val.sbv") : [384] -> Bit;
+extern SBV field_add("sbv/ref_p384_add.sbv") : ([384],[384]) -> [384];
+extern SBV field_sub("sbv/ref_p384_sub.sbv") : ([384],[384]) -> [384];
+extern SBV field_mul("sbv/ref_p384_mul.sbv") : ([384],[384]) -> [384];
+
+//TODO: Add extras
+
+let field_prime = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff:[384];
+
+
+set verification off;
+
+// Field addition
+method com.galois.ecc.P384ECC64.field_add {
+  // Simulator types
+  type args[0], args[1], args[2] : [12][32];
+
+  mayAlias { args[0], args[1], args[2] };
+
+  // Assumptions
+  const this.field_prime := split(field_prime) : [12][32];
+
+  // Result
+  ensures args[0] := field_add(join(args[1]) : [384], join(args[2]) : [384]) : [12][32];
+
+  verificationMethod: blast;  
+};
+
+// Field mul3
+method com.galois.ecc.P384ECC64.field_mul3 {
+  // Simulator types
+  type args[0], args[1] : [12][32];
+
+  // Constants
+  const this.field_prime := field_prime;
+
+  // Temporary
+  let jarg1 = join(args[1]) : [384];
+
+  // Result
+  ensures args[0] := split(field_add(jarg1, field_add(jarg1, jarg1))) : [12][32];
+
+  verificationMethod: blast;  
+};
+
+// Field_mul
+method com.galois.ecc.P384ECC64.field_mul {
+  // Simulator types
+  type args[0], args[1], args[2] : [12][32];
+  type this.a : [24][32];
+
+  mayAlias { args[0], args[1], args[2] };
+
+  assume is_field(args[1]);
+  assume is_field(args[2]);
+
+  // Constants
+  const this.field_prime = field_prime;
+
+  // Result
+  ensures args[0] := split(field_mul(join(args[1]) : [384], join(args[2]) : [384])) : [12][32];
+  arbitrary this.a;
+
+  verificationMethod skip;  
+};
+
+// TODO: More is_field;
+disable field_add;
+disable field_sub;
+disable field_mul;
+disable field_sq;
+
+// Define rules
+rule appendAssoc : { a b c } .
+  ((x:[a] # y:[b]) # z:[c]) -> (x # (y # z)); 
+
+rule andElim1 : True & x -> x;
+rule andElim2 : x & True -> x;
+
+// Test code for disabling and enabling rules.
+disable append-assoc;
+enable append-assoc;
+
+// Point doubling spec.
+
+method com.galois.ecc.P384ECC64.ec_double {
+  type args[0] : com.galois.ecc.JacobianPoint;
+  type args[0].x, args[0].y, args[0].z : [12][32];
+  type this.a : [24][32];
+  type this.t1, this.t2 : [12][32];
+  
+  assume is_field(args[0].x);
+  assume is_field(args[0].y);
+  assume is_field(args[0].z);
+    
+  // Constants
+  const this.field_prime = field_prime;
+
+  let res = ec_double { x = args[0].x ; y = args[0].y ; z = args[0].z }
+  
+  // Results
+  ensures args[0].x := res.x;
+  ensures args[0].y := res.y;
+  ensures args[0].z := res.z;
+  arbitrary this.a, this.t1, this.t2;
+
+  // Verification strategy
+  verificationMethod rewrite;
+};

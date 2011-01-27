@@ -1,10 +1,20 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module SAWScript.CommandExec where
 
+import Control.Exception
+import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Typeable
+import Prelude hiding (catch)
 
+import qualified Execution.Codebase as JSS
+import Simulation as JSS
+
+import MethodSpec
+import SAWScript.Utils (Pos(..))
 import SAWScript.MethodAST
 import qualified SBVModel.SBV as SBV
 import SBVParser
@@ -23,13 +33,16 @@ sbvRecords (SBVPgm (_,ir,_c, _v, _w, _ops)) = parseType ir
         parseType (TRecord (unzip -> (names,schemes))) =
           Set.fromList names : rest
          where rest = concat $ map (parseType . schemeType) schemes
-
 -}
 
 
 data ExecutorState = ES {
-   -- | Flag that indicates if verification commands should be executed.
-    runVerification :: Bool
+    -- | Java codebase
+    codeBase :: JSS.Codebase 
+    -- | Flag that indicates if verification commands should be executed.
+  , runVerification :: Bool
+    -- | Maps file paths to verifier commands.
+  , parsedFiles :: Map FilePath [VerifierCommand]
     -- | Maps field names to corresponding record definition.
   , recordDefs :: Map (Set String) SymRecDef
     -- | Maps function names read in from SBV file into corresponding
@@ -41,40 +54,137 @@ data ExecutorState = ES {
   , enabledRules :: Set String
   } deriving (Show)
 
+-- | Class of exceptions thrown by SBV parser.
+data ExecException = ExecException Pos String
+  deriving (Show, Typeable)
+ 
+instance Exception ExecException
+
 type Executor a = StateT ExecutorState OpSession a
 
--- Given a file path, this returns the verifier commands in the file,
+-- | Given a file path, this returns the verifier commands in the file,
 -- or throws an exception.
-parseFile :: FilePath -> IO [VerifierCommand]
-parseFile = undefined
+parseFile :: FilePath -> Executor [VerifierCommand]
+parseFile path = do
+  m <- gets parsedFiles
+  case Map.lookup path m of
+    Nothing -> error $ "internal: Could not find file " ++ path
+    Just cmds -> return cmds
 
+parseASTTerm :: RewriteTerm -> TermCtor
+parseASTTerm _ = undefined
+
+-- | Return true if rule with given name already exists.
+ruleExists :: String -> Executor Bool
+ruleExists name = fmap (Map.member name) $ gets rules
+
+-- | Return true if rule with given name is enabled.
+ruleEnabled :: String -> Executor Bool
+ruleEnabled name = fmap (Set.member name) $ gets enabledRules
+
+-- | Execute commands from given file.
+execCommands :: JSS.Codebase
+             -> FilePath
+             -> Map FilePath [VerifierCommand]
+             -> IO ()
+execCommands cb initialPath parsedFiles = do
+  let initState = ES {
+          codeBase = cb
+        , runVerification = True
+        , parsedFiles  = parsedFiles
+        , recordDefs   = Map.empty
+        , sbvFns       = Map.empty
+        , rules        = Map.empty
+        , enabledRules = Set.empty
+        }
+      action = do cmds <- parseFile initialPath
+                  mapM_ execute cmds
+                  liftIO $ putStrLn "Verification succeeded!"
+  catch (runOpSession (evalStateT action initState))
+    (\(ExecException pos msg) -> do
+        let Pos path line col = pos
+        putStrLn $ "Verification Failed!\n"
+        putStrLn $ path ++ ":" ++ show line ++ ":" ++ show col ++ ":"
+        putStrLn $ msg)
+
+-- | Throw exec exception in a MonadIO.
+throwIOExecException :: MonadIO m => Pos -> String -> m a
+throwIOExecException pos msg = liftIO $ throwIO (ExecException pos msg)
+
+-- | Execute command 
 execute :: VerifierCommand -> Executor ()
-execute (ImportCommand path) = do
+execute (ImportCommand pos path) = do
   -- Disable run verification.
   rv <- gets runVerification
   modify $ \s -> s { runVerification = False }
   -- Execute commands
-  cmds <- liftIO $ parseFile path
+  cmds <- parseFile path
   mapM_ execute cmds 
   -- Reset run verification.
   modify $ \s -> s { runVerification = rv }
-execute (DefineRecord name fields) = do
+execute (DefineRecord pos name fields) = do
   undefined
-execute (LoadSBVFunction opName path) = do
+execute (LoadSBVFunction pos opName path) = do
   sbv <- liftIO $ SBV.loadSBV path
   let recordFn args = undefined
       uninterpFns = undefined
   (op, WEF opFn) <- lift $ parseSBVOp recordFn uninterpFns opName opName defaultPrec sbv
   modify $ \s -> s { sbvFns = Map.insert opName op (sbvFns s) }
-execute (DefineJavaMethodSpec jvm) = do
+execute (DefineJavaMethodSpec pos jvm) = do
   undefined
-execute (DefineRule name lhs rhs) = do
-  undefined
-execute (DisableRule name) = do
-  undefined
-execute (EnableRule name) = do
-  undefined
-execute (BlastJavaMethodSpec specName) = do
-  undefined
-execute (ReduceJavaMethodSpec specName) = do
-  undefined
+execute (DefineRule pos name lhs rhs) = do
+  -- Check rule does not exist.
+  re <- ruleExists name
+  when re $ do
+    throwIOExecException pos $ "The rule " ++ name ++ " has previously been defined."
+  -- Parse terms.
+  let tlhs = parseASTTerm lhs
+      trhs = parseASTTerm rhs
+  -- TODO: Check that types are equal, and check that right-hand side variables
+  -- are contained in left-hand side.
+  case mkRuleFromCtor name tlhs trhs of
+    Left msg -> error msg -- Should never happen if checks succeed.
+    Right rl -> do
+      modify $ \s -> s { rules = Map.insert name rl (rules s)
+                       , enabledRules = Set.insert name (enabledRules s) }
+execute (DisableRule pos name) = do
+  -- Check rule exists.
+  re <- ruleExists name
+  when (not re) $ do
+    throwIOExecException pos $ "The rule " ++ name ++ " has not been defined."
+  -- Check rule is enabled.
+  en <- ruleEnabled name
+  when (not en) $ do
+    throwIOExecException pos $ "The rule " ++ name ++ " is already disabled."
+  modify $ \s -> s { enabledRules = Set.delete name (enabledRules s) }
+execute (EnableRule pos name) = do
+  -- Check rule exists.
+  re <- ruleExists name
+  when (not re) $ do
+    throwIOExecException pos $ "The rule " ++ name ++ " has not been defined."
+  -- Check rule is disabled.
+  en <- ruleEnabled name
+  when en $ do
+    throwIOExecException pos $ "The rule " ++ name ++ " is already enabled."
+  modify $ \s -> s { enabledRules = Set.insert name (enabledRules s) }
+  {-
+execute (BlastJavaMethodSpec pos specName) = do
+  rv <- gets runVerification
+  when rv $ do
+    cb <- gets codeBase
+    let spec = undefined
+    lift $ blastMethodSpec cb spec
+execute (ReduceJavaMethodSpec pos specName) = do
+  rv <- gets runVerification
+  when rv $ do
+    cb <- gets codeBase
+    let spec :: MethodSpec SymbolicMonad
+        spec = undefined
+        installOverrides :: JSS.Simulator SymbolicMonad ()
+        installOverrides = undefined
+    lift $ redMethodSpec cb spec installOverrides $ \t -> do
+      --TODO: Attempt to reduce term t.
+      throwIOExecException pos $ 
+        "Verification of " ++ specName ++ " failed!\n" ++
+        "The remaining proof obligation is:\n  " ++ prettyTerm t
+        -}
