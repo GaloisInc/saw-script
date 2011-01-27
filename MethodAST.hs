@@ -4,7 +4,8 @@ import SAWScript.Utils
 import qualified Data.Map as M
 
 -- result of parsing a bunch of method specs
-type JV = M.Map FilePath [VerifierCommand]
+type JVPrograms = M.Map FilePath [VerifierCommand]
+data JVPgm      = JVPgm FilePath JVPrograms
 
 type JavaFieldName = String
 

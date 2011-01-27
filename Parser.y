@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
-module SAWScript.Parser(parseJVs) where
+module SAWScript.Parser(parseJVPgm) where
 
 import Data.Maybe(isJust)
 import qualified Data.Map as M
@@ -62,28 +62,28 @@ lexer cont = Parser (\f ts ->
            []       -> unP (cont (TEOF (endPos f))) f []
            (t : ts) -> unP (cont t)                 f ts)
 
-parse :: FilePath -> String -> Either String [VerifierCommand]
-parse f = either Left (Right . reverse) . unP parseSAW f . lexSAW f
-
-parseJVs :: [FilePath] -> IO JV
-parseJVs fs = go (zip fs (repeat Nothing)) M.empty
- where go :: [(FilePath, Maybe Pos)] -> JV -> IO JV
-       go []     m = return m
-       go ((f, mbP) : fs) m
+parseJVPgm :: FilePath -> IO (JVPgm, M.Map FilePath [(FilePath, Pos)])
+parseJVPgm f = do (pgm, deps) <- go [(f, Nothing)] M.empty M.empty
+                  return (JVPgm f pgm, deps)
+ where go :: [(FilePath, Maybe Pos)] -> JVPrograms -> M.Map FilePath [(FilePath, Pos)]
+          -> IO (JVPrograms, M.Map FilePath [(FilePath, Pos)])
+       go []              m d = return (m, d)
+       go ((f, mbP) : fs) m d
         | isJust (f `M.lookup` m)     -- already seen this file
-        = go fs m
+        = go fs m d
         | True
         = do (deps, cmds) <- parseJV (f, mbP)
-             go (deps ++ fs) (M.insert f cmds m)
+             go (reverse [(f, Just p) | (f, p) <- deps] ++ fs) (M.insert f cmds m) (M.insert f deps d)
 
-parseJV :: (FilePath, Maybe Pos) -> IO ([(FilePath, Maybe Pos)], [VerifierCommand])
+parseJV :: (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
 parseJV (f, mbP) = do
        putStrLn $ "Loading " ++ show f ++ ".." ++ reason
        cts <- readFile f
-       case parse f cts of
-          Left e  -> error $ "*** Error:" ++ e
-          Right r -> return (concatMap getImport r, r)
-  where getImport (ImportCommand p fp) = [(fp, Just p)]
+       let res = unP parseSAW f . lexSAW f $ cts
+       case res of
+         Left e  -> error $ "*** Error:" ++ e
+         Right r -> return (concatMap getImport r, reverse r)
+  where getImport (ImportCommand p fp) = [(fp, p)]
         getImport _                    = []
         reason = maybe "" (\p -> " (imported at " ++ show p ++ ")") mbP
 }
