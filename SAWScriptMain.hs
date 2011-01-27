@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 module Main (main) where
 
-import Control.Monad(zipWithM_, when)
+import Control.Monad(zipWithM_)
 import Data.Version(showVersion)
 import Data.Graph
 import Data.List(sortBy)
@@ -33,7 +33,7 @@ main = do ssOpts <- parseArgs
                           exitFailure
             Nothing -> do let cnt   = M.size pmap
                               specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
-                          when (verboseAtLeast 2 ssOpts) $ putStrLn $ "Loaded " ++ specs ++ " successfully."
+                          notQuiet ssOpts $ putStrLn $ "Loaded " ++ specs ++ " successfully."
                           if dump ssOpts
                              then do dumpScripts pmap
                                      exitSuccess
