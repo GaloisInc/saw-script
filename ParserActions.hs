@@ -1,0 +1,79 @@
+{-# LANGUAGE PatternGuards #-}
+module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseSSPgm) where
+
+import Control.Monad(when)
+import Data.Maybe(isJust, listToMaybe)
+import qualified Data.Map as M
+import System.Directory(canonicalizePath, makeRelativeToCurrentDirectory)
+import System.FilePath(takeDirectory, (</>))
+import System.Exit(exitFailure)
+
+import SAWScript.MethodAST
+import SAWScript.Token
+import SAWScript.Lexer(lexSAW)
+import SAWScript.Parser(parseSAW)
+import SAWScript.Utils
+
+newtype Parser a = Parser { unP :: FilePath -> [Token Pos] -> IO (Either String a) }
+
+instance Monad Parser where
+  return x       = Parser (\_ _ -> return (Right x))
+  Parser h >>= k = Parser (\f ts -> do mbE <- h f ts
+                                       case mbE of
+                                         Left  e -> return $ Left e
+                                         Right r -> unP (k r) f ts)
+  fail s = Parser (\_ _ -> return (Left s))
+
+happyError :: Parser a
+happyError = Parser $ \_ ts -> failAt (listToMaybe ts)
+
+parseError :: Token Pos -> Parser a
+parseError t = Parser $ \_ _ -> failAt (Just t)
+
+failAt :: Maybe (Token Pos) -> IO (Either String a)
+failAt Nothing  = return $ Left $ "File ended before parsing was complete"
+failAt (Just t) = do p <- posRelativeToCurrentDirectory (getPos t)
+                     return $ Left $ fmtPos p $ "Parse error at " ++ show (show t)  -- double show is intentional
+
+lexer :: (Token Pos -> Parser a) -> Parser a
+lexer cont = Parser (\f toks ->
+        case toks of
+           []       -> unP (cont (TEOF (endPos f))) f []
+           (t : ts) -> unP (cont t)                 f ts)
+
+parseSSPgm :: SSOpts -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
+parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
+ where entry    = entryPoint ssOpts
+       entryDir = takeDirectory entry
+       go :: [(FilePath, Maybe Pos)] -> SSPgm -> M.Map FilePath [(FilePath, Pos)]
+          -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
+       go []              m d = return (m, d)
+       go ((f, mbP) : fs) m d
+        | isJust (f `M.lookup` m)     -- already seen this file
+        = go fs m d
+        | True
+        = do (deps, cmds) <- parseJV ssOpts (f, mbP)
+             let canon (sf, sp) = do asf <- canonicalizePath (entryDir </> sf)
+                                     return ((asf, Just sp), (sf, asf))
+             cdepsMap <- mapM canon $ reverse deps
+             let (cdeps, cmap) = unzip cdepsMap
+             go (cdeps ++ fs) (M.insert f (map (route cmap) cmds) m) (M.insert f deps d)
+       route cmap (ImportCommand p fp)
+         | Just cfp <- fp `lookup` cmap = ImportCommand p cfp
+         | True                         = error $ "Cannot find import file " ++ show fp ++ " in import-map " ++ show cmap
+       route _ c = c
+
+parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
+parseJV ssOpts (f, mbP) = do
+       when (notQuiet ssOpts) $ do rf <- makeRelativeToCurrentDirectory f
+                                   let mkP p = do p' <- posRelativeToCurrentDirectory p
+                                                  return $ " (imported at " ++ show p' ++ ")"
+                                   reason <- maybe (return "") mkP mbP
+                                   putStrLn $ "Loading " ++ show rf ++ ".." ++ reason
+       cts <- readFile f
+       res <- unP parseSAW f . lexSAW f $ cts
+       case res of
+         Left e  -> putStrLn e >> exitFailure
+         Right r -> return (concatMap getImport r, reverse r)
+  where getImport (ImportCommand p fp) = [(fp, p)]
+        getImport _                    = []
