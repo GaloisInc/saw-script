@@ -29,11 +29,11 @@ instance Show Pos where
   show (Pos f l c) = show f ++ ":" ++ show l ++ ":" ++ show c
 
 data SSOpts = SSOpts {
-          classpath  :: String
-       ,  jars       :: String
-       ,  verbose    :: Int
-       ,  dump       :: Bool
-       ,  entryPoint :: FilePath
+         classpath  :: String
+       , jars       :: String
+       , verbose    :: Int
+       , dump       :: Bool
+       , entryPoint :: FilePath
        }
        deriving (Show, Data, Typeable)
 

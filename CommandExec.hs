@@ -25,12 +25,11 @@ import System.Exit
 -- This is the entry point from the front-end
 -- The implicit assumption is that you can either return back with an exitCode;
 -- or never come back with a proper call to exitWith..
-runProofs :: SSOpts -> SSPgm -> IO ExitCode
-runProofs ssOpts pgm = do putStrLn $ "I will run proofs starting at: " ++ show (entryPoint ssOpts)
-                          putStrLn $ "There are " ++ show (Map.size pgm) ++ " script(s) to be processed."
-                          putStrLn $ "Script paths are: "
-                          mapM putStrLn $ Map.keys pgm
-                          return ExitSuccess
+runProofs :: Codebase -> SSOpts -> SSPgm -> IO ExitCode
+runProofs _cb ssOpts pgm = do
+        putStrLn $ "I will run proofs starting at: " ++ show (entryPoint ssOpts)
+        putStrLn $ "There are " ++ show (Map.size pgm) ++ " script(s) to be processed."
+        return ExitSuccess
 
 {-
 -- | Returns type of SBV program.

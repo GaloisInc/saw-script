@@ -13,6 +13,9 @@ import qualified System.Console.CmdArgs.Explicit as CA(process)
 import System.Directory(canonicalizePath, makeRelativeToCurrentDirectory)
 import System.Environment (getArgs)
 import System.Exit(exitFailure, exitSuccess, exitWith)
+import Text.ParserCombinators.Parsec(runParser, many1, noneOf, sepBy, char)
+
+import Execution.Codebase(Codebase, loadCodebase)
 
 import Paths_JVM_verifier(version)
 import SAWScript.MethodAST(SSPgm)
@@ -22,6 +25,7 @@ import SAWScript.Utils
 
 main :: IO ()
 main = do ssOpts <- parseArgs
+          cb <- getCodeBase ssOpts
           (pmap, deps) <- parseSSPgm ssOpts
           mbCycle <- checkCycles deps
           case mbCycle of
@@ -33,7 +37,7 @@ main = do ssOpts <- parseArgs
                           if dump ssOpts
                              then do dumpScripts pmap
                                      exitSuccess
-                             else do ec <- runProofs ssOpts pmap
+                             else do ec <- runProofs cb ssOpts pmap
                                      exitWith ec
 
 parseArgs :: IO SSOpts
@@ -65,6 +69,20 @@ parseArgs = do popts <- getArgs >>= return . CA.process m
             }
             &= program "sawScript"
             &= summary ("sawScript v" ++ showVersion version ++ ". Copyright 2011 Galois, Inc. All rights reserved.")
+
+getCodeBase :: SSOpts -> IO Codebase
+getCodeBase opts = loadCodebase jpaths cpaths
+  where parse w a emsg = either (const (error emsg)) id (runParser (delimited delimeter) () w a)
+        delimited c = many1 (noneOf [c]) `sepBy` char c
+        jpaths = parse "jars"      (jars opts)      $ "Unable to parse " ++ msg ++ "-delimited list of jar files"
+        cpaths = parse "classpath" (classpath opts) $ "Unable to parse " ++ msg ++ "-delimited CLASSPATH."
+#ifdef mingw32_HOST_OS
+        delimeter = ';'
+        msg       = "semicolon"
+#else
+        delimeter = ':'
+        msg       = "colon"
+#endif
 
 canonicalizeDeps :: M.Map FilePath [(FilePath,  Pos)] -> IO (M.Map FilePath [(FilePath, Pos)])
 canonicalizeDeps m = mapM mkNode (M.assocs m) >>= return . M.fromList
