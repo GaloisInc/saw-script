@@ -1,0 +1,20 @@
+extern SBV field_add("sbv/ref_p384_add.sbv") : ([384],[384]) -> [384];
+
+let field_prime = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff:[384];
+
+
+// Field addition
+method com.galois.ecc.P384ECC64.field_add {
+  // Simulator types
+  type args[0], args[1], args[2] : [12][32];
+
+  mayAlias { args[0], args[1], args[2] };
+
+  // Assumptions
+  const this.field_prime := split(field_prime) : [12][32];
+
+  // Result
+  ensures args[0] := split(field_add(join(args[1]) : [384], join(args[2]) : [384])) : [12][32];
+
+  verifyUsing: blast;  
+};
