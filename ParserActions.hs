@@ -1,7 +1,6 @@
 {-# LANGUAGE PatternGuards #-}
-module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseSSPgm) where
+module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseIntRange, parseSSPgm) where
 
-import Control.Monad(when)
 import Data.Maybe(isJust, listToMaybe)
 import qualified Data.Map as M
 import System.Directory(canonicalizePath, makeRelativeToCurrentDirectory)
@@ -29,6 +28,13 @@ happyError = Parser $ \_ ts -> failAt (listToMaybe ts)
 
 parseError :: Token Pos -> Parser a
 parseError t = Parser $ \_ _ -> failAt (Just t)
+
+parseIntRange :: (Int, Int) -> Integer -> Parser Int
+parseIntRange (l, h) i
+  | i < fromIntegral l || i > fromIntegral h
+  = fail $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
+  | True
+  = return $ fromIntegral i
 
 failAt :: Maybe (Token Pos) -> IO (Either String a)
 failAt Nothing  = return $ Left $ "File ended before parsing was complete"
@@ -61,17 +67,21 @@ parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
        route cmap (ImportCommand p fp)
          | Just cfp <- fp `lookup` cmap = ImportCommand p cfp
          | True                         = error $ "Cannot find import file " ++ show fp ++ " in import-map " ++ show cmap
+       route _ (ExternSBV p n fp t)     = ExternSBV p n (routePathThroughPos p fp) t
        route _ c = c
 
 parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
 parseJV ssOpts (f, mbP) = do
-       when (notQuiet ssOpts) $ do rf <- makeRelativeToCurrentDirectory f
-                                   let mkP p = do p' <- posRelativeToCurrentDirectory p
-                                                  return $ " (imported at " ++ show p' ++ ")"
-                                   reason <- maybe (return "") mkP mbP
-                                   putStrLn $ "Loading " ++ show rf ++ ".." ++ reason
+       notQuiet ssOpts $ do rf <- makeRelativeToCurrentDirectory f
+                            let mkP p = do p' <- posRelativeToCurrentDirectory p
+                                           return $ " (imported at " ++ show p' ++ ")"
+                            reason <- maybe (return "") mkP mbP
+                            putStrLn $ "Loading " ++ show rf ++ ".." ++ reason
        cts <- readFile f
-       res <- unP parseSAW f . lexSAW f $ cts
+       let toks = lexSAW f cts
+       debugVerbose ssOpts $ do putStrLn $ "Token stream for " ++ show f ++ ":"
+                                print toks
+       res <- unP parseSAW f toks
        case res of
          Left e  -> putStrLn e >> exitFailure
          Right r -> return (concatMap getImport r, reverse r)

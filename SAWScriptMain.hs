@@ -1,7 +1,8 @@
 {-# LANGUAGE CPP #-}
 module Main (main) where
 
-import Control.Monad(zipWithM_, when)
+import Control.Applicative((<$>))
+import Control.Monad(zipWithM_)
 import Data.Version(showVersion)
 import Data.Graph
 import Data.List(sortBy)
@@ -33,7 +34,7 @@ main = do ssOpts <- parseArgs
                           exitFailure
             Nothing -> do let cnt   = M.size pmap
                               specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
-                          when (verboseAtLeast 2 ssOpts) $ putStrLn $ "Loaded " ++ specs ++ " successfully."
+                          notQuiet ssOpts $ putStrLn $ "Loaded " ++ specs ++ " successfully."
                           if dump ssOpts
                              then do dumpScripts pmap
                                      exitSuccess
@@ -41,7 +42,7 @@ main = do ssOpts <- parseArgs
                                      exitWith ec
 
 parseArgs :: IO SSOpts
-parseArgs = do popts <- getArgs >>= return . CA.process m
+parseArgs = do popts <- CA.process m <$> getArgs
                case popts of
                  Left e -> do putStrLn $ "ERROR: Invalid invocation: " ++ e
                               putStrLn $ "Try --help for more information."
@@ -85,7 +86,7 @@ getCodeBase opts = loadCodebase jpaths cpaths
 #endif
 
 canonicalizeDeps :: M.Map FilePath [(FilePath,  Pos)] -> IO (M.Map FilePath [(FilePath, Pos)])
-canonicalizeDeps m = mapM mkNode (M.assocs m) >>= return . M.fromList
+canonicalizeDeps m = M.fromList <$> mapM mkNode (M.assocs m)
   where mkNode (f, fps) = do f' <- canonicalizePath f
                              fps' <- mapM (canonicalizePath . fst) fps
                              return (f', zip fps' (map snd fps))

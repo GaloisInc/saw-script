@@ -1,10 +1,11 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 module SAWScript.Utils where
 
+import Control.Monad(when)
 import Data.List(intercalate)
 import System.Console.CmdArgs(Data, Typeable)
 import System.Directory(makeRelativeToCurrentDirectory)
-import System.FilePath(makeRelative)
+import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
 
 data Pos = Pos !FilePath -- file
                !Int      -- line
@@ -24,6 +25,11 @@ posRelativeToCurrentDirectory (Pos f l c) = do f' <- makeRelativeToCurrentDirect
 posRelativeTo :: FilePath -> Pos -> Pos
 posRelativeTo d (Pos f l c) = Pos (makeRelative d f) l c
 
+routePathThroughPos :: Pos -> FilePath -> FilePath
+routePathThroughPos (Pos f _ _) fp
+  | isAbsolute fp = fp
+  | True          = takeDirectory f </> fp
+
 instance Show Pos where
   show (Pos f 0 0) = show f ++ ":end-of-file"
   show (Pos f l c) = show f ++ ":" ++ show l ++ ":" ++ show c
@@ -34,11 +40,13 @@ data SSOpts = SSOpts {
        , verbose    :: Int
        , dump       :: Bool
        , entryPoint :: FilePath
-       }
-       deriving (Show, Data, Typeable)
+       } deriving (Show, Data, Typeable)
 
-verboseAtLeast :: Int -> SSOpts -> Bool
-verboseAtLeast i o = verbose o >= i
+verboseAtLeast :: Int -> SSOpts -> IO () -> IO ()
+verboseAtLeast i o = when (verbose o >= i)
 
-notQuiet :: SSOpts -> Bool
-notQuiet = verboseAtLeast 1
+notQuiet :: SSOpts -> IO () -> IO ()
+notQuiet o = verboseAtLeast 1 o
+
+debugVerbose :: SSOpts -> IO () -> IO ()
+debugVerbose o = verboseAtLeast 10 o
