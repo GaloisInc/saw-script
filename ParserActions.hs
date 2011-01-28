@@ -1,5 +1,9 @@
 {-# LANGUAGE PatternGuards #-}
-module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseIntRange, parseSSPgm) where
+module SAWScript.ParserActions (
+     Parser, happyError, parseError, lexer, parseSSPgm
+   , parseIntRange
+   ) where
+
 
 import Data.Maybe(isJust, listToMaybe)
 import qualified Data.Map as M
@@ -29,13 +33,6 @@ happyError = Parser $ \_ ts -> failAt (listToMaybe ts)
 parseError :: Token Pos -> Parser a
 parseError t = Parser $ \_ _ -> failAt (Just t)
 
-parseIntRange :: (Int, Int) -> Integer -> Parser Int
-parseIntRange (l, h) i
-  | i < fromIntegral l || i > fromIntegral h
-  = fail $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
-  | True
-  = return $ fromIntegral i
-
 failAt :: Maybe (Token Pos) -> IO (Either String a)
 failAt Nothing  = return $ Left $ "File ended before parsing was complete"
 failAt (Just t) = do p <- posRelativeToCurrentDirectory (getPos t)
@@ -61,7 +58,7 @@ parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
         = do (deps, cmds) <- parseJV ssOpts (f, mbP)
              let canon (sf, sp) = do asf <- canonicalizePath (entryDir </> sf)
                                      return ((asf, Just sp), (sf, asf))
-             cdepsMap <- mapM canon $ reverse deps
+             cdepsMap <- mapM canon deps
              let (cdeps, cmap) = unzip cdepsMap
              go (cdeps ++ fs) (M.insert f (map (route cmap) cmds) m) (M.insert f deps d)
        route cmap (ImportCommand p fp)
@@ -84,6 +81,14 @@ parseJV ssOpts (f, mbP) = do
        res <- unP parseSAW f toks
        case res of
          Left e  -> putStrLn e >> exitFailure
-         Right r -> return (concatMap getImport r, reverse r)
+         Right r -> return (concatMap getImport r, r)
   where getImport (ImportCommand p fp) = [(fp, p)]
         getImport _                    = []
+
+-- Parse helpers
+parseIntRange :: (Int, Int) -> Integer -> Parser Int
+parseIntRange (l, h) i
+  | i < fromIntegral l || i > fromIntegral h
+  = fail $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
+  | True
+  = return $ fromIntegral i

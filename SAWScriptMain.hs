@@ -34,7 +34,7 @@ main = do ssOpts <- parseArgs
                           exitFailure
             Nothing -> do let cnt   = M.size pmap
                               specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
-                          notQuiet ssOpts $ putStrLn $ "Loaded " ++ specs ++ " successfully."
+                          verboseAtLeast 2 ssOpts $ putStrLn $ "Loaded " ++ specs ++ " successfully."
                           if dump ssOpts
                              then do dumpScripts pmap
                                      exitSuccess
