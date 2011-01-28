@@ -1,29 +1,11 @@
-extern SBV is_field("sbv/ref_p384_is_val.sbv") : [384] -> Bit;
-extern SBV field_add("sbv/ref_p384_add.sbv") : ([384],[384]) -> [384];
-extern SBV field_sub("sbv/ref_p384_sub.sbv") : ([384],[384]) -> [384];
-extern SBV field_mul("sbv/ref_p384_mul.sbv") : ([384],[384]) -> [384];
-
-//TODO: Add extras
-
-let field_prime = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff:[384];
+import "fieldAdd.jv"
 
 set verification off;
 
-// Field addition
-method com.galois.ecc.P384ECC64.field_add {
-  // Simulator types
-  type args[0], args[1], args[2] : [12][32];
-
-  mayAlias { args[0], args[1], args[2] };
-
-  // Assumptions
-  const this.field_prime := split(field_prime) : [12][32];
-
-  // Result
-  ensures args[0] := field_add(join(args[1]) : [384], join(args[2]) : [384]) : [12][32];
-
-  verifyUsing: blast;  
-};
+extern SBV is_field("sbv/ref_p384_is_val.sbv") : [384] -> Bit;
+extern SBV field_sub("sbv/ref_p384_sub.sbv") : ([384],[384]) -> [384];
+extern SBV field_mul("sbv/ref_p384_mul.sbv") : ([384],[384]) -> [384];
+//TODO: Add extras
 
 // Field mul3
 method com.galois.ecc.P384ECC64.field_mul3 {
@@ -78,7 +60,6 @@ rule ushr0 : {a} . (x:[a] >>u 0) -> x:[a];
 
 rule getSet : { l e i } .
  read(write(a:[l]e, i:[i], x:e), j:[i]) -> if i == j then x else read(a,j);
-
 
 // Point doubling spec.
 

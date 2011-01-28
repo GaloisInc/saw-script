@@ -15,16 +15,23 @@ change the type system so that:
 
 type BitWidth = Int
 
+data ExprWidth
+  = WidthVar String
+  | WidthConst BitWidth
+  | WidthAdd ExprWidth ExprWidth
+  deriving (Show)
+
 -- | Expressions types for AST.
 data ExprType 
   = BitType
-  | BitvectorType BitWidth
+  | BitvectorType ExprWidth
   | Array Int ExprType
   | Record [(String, ExprType)]
- deriving (Eq, Ord, Show)
+  | ShapeVar String
+ deriving (Show)
 
 data FnType = FnType [ExprType] ExprType
-  deriving (Eq, Ord, Show)
+  deriving (Show)
 
 -- | Roughly correspond to Cryptol expressions, but can also reference
 -- Java variables.
@@ -185,8 +192,9 @@ data VerifierCommand
   -- | Verification option ("on" == True && "off" == False)
   | SetVerification Pos Bool
   -- | Define a Java method spec.
-  | DeclareMethodSpec Pos String [MethodSpecDecl]
-  -- | Define a rewrite rule with the given name, left-hand-side and right-hand side.
+  | DeclareMethodSpec Pos [String] [MethodSpecDecl]
+  -- | Define a rewrite rule with the given name, left-hand-side and right-hand
+  -- side.
   | Rule Pos String RewriteTerm RewriteTerm
   -- | Disable use of a rule or extern definition.
   | Disable Pos String
