@@ -1,18 +1,16 @@
 module SAWScript.Token where
 
-data Token p = TExternSBV { getPos :: p, _gs :: FilePath }
-             | TVar       { getPos :: p, _gs :: String   }
+data Token p = TVar       { getPos :: p, _gs :: String   }
              | TLit       { getPos :: p, _gs :: String   }
              | TUnknown   { getPos :: p, _gs :: String   }
              | TPunct     { getPos :: p, _gs :: String   }
              | TReserved  { getPos :: p, _gs :: String   }
-             | TNum       { getPos :: p, _gi :: Integer  }
+             | TNum       { getPos :: p, getInteger :: Integer  }
              | TCmntS     { getPos :: p }
              | TCmntE     { getPos :: p }
              | TEOF       { getPos :: p }
 
 instance Show (Token p) where
-  show (TExternSBV _ f) = "extern SBV(" ++ show f ++ ")"
   show (TVar _ n)       = n
   show (TLit _ s)       = show s
   show (TUnknown _ s)   = s
@@ -24,7 +22,6 @@ instance Show (Token p) where
   show (TEOF _)         = "<end-of-file>"
 
 instance Functor Token where
-  fmap g (TExternSBV p f) = TExternSBV (g p) f
   fmap g (TVar       p n) = TVar       (g p) n
   fmap g (TLit       p s) = TLit       (g p) s
   fmap g (TUnknown   p c) = TUnknown   (g p) c

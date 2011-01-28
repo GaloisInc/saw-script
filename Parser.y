@@ -21,21 +21,23 @@ import {-# SOURCE #-} SAWScript.ParserActions
 %name parseSAW VerifierCommands
 
 %token
-   import { TReserved  _ "import" }
-   extern { TReserved  _ "extern" }
-   'SBV'  { TReserved  _ "SBV"    }
-   '->'   { TReserved  _ "->"     }
-   'Bit'  { TReserved  _ "Bit"    }
-   var    { TVar       _ $$       }
-   str    { TLit       _ $$       }
-   num    { TNum       _ $$       }
-   ';'    { TPunct     _ ";"      }
-   '['    { TPunct     _ "["      }
-   ']'    { TPunct     _ "]"      }
-   '('    { TPunct     _ "("      }
-   ')'    { TPunct     _ ")"      }
-   ':'    { TPunct     _ ":"      }
-   ','    { TPunct     _ ","      }
+   'import' { TReserved  _ "import" }
+   'extern' { TReserved  _ "extern" }
+   'let'    { TReserved  _ "let" }
+   'SBV'    { TReserved  _ "SBV"    }
+   'Bit'    { TReserved  _ "Bit"    }
+   var      { TVar       _ $$       }
+   str      { TLit       _ $$       }
+   num      { TNum       _ _        }
+   ';'      { TPunct     _ ";"      }
+   '['      { TPunct     _ "["      }
+   ']'      { TPunct     _ "]"      }
+   '('      { TPunct     _ "("      }
+   ')'      { TPunct     _ ")"      }
+   ':'      { TPunct     _ ":"      }
+   ','      { TPunct     _ ","      }
+   '='      { TPunct     _ "="      }
+   '->'     { TPunct     _ "->"     }
 %%
 
 -- Top level program structure
@@ -45,8 +47,9 @@ VerifierCommands : {- empty -}                          { []      }
 
 -- Verifier commands
 VerifierCommand :: { VerifierCommand }
-VerifierCommand : import str                               { ImportCommand (getPos $1) $2   }
-                | extern 'SBV' var '(' str ')' ':' FnType  { ExternSBV (getPos $1) $3 $5 $8 }
+VerifierCommand : 'import' str                               { ImportCommand (getPos $1) $2   }
+                | 'extern' 'SBV' var '(' str ')' ':' FnType  { ExternSBV (getPos $1) $3 $5 $8 }
+                | 'let' var '=' JavaExpr                     { GlobalLet (getPos $1) $2 $4    }
 
 -- Types
 FnType  :: { FnType }
@@ -59,5 +62,10 @@ ExprTypes : ExprType               { [$1]    }
           | ExprTypes ',' ExprType { $3 : $1 }
 
 ExprType :: { ExprType }
-ExprType : 'Bit'       { BitType                                                    }
-         | '[' num ']' {% parseIntRange (0, maxBound) $2 >>= return . BitvectorType }
+ExprType : 'Bit'       { BitType                                                                 }
+         | '[' num ']' {% parseIntRange (0, maxBound) (getInteger $2) >>= return . BitvectorType }
+
+-- Expressions
+JavaExpr :: { JavaExpr }
+JavaExpr : num                    { ConstantInt (getPos $1) (getInteger $1) }
+         | JavaExpr ':' ExprType  { TypeExpr $1 $3                          }
