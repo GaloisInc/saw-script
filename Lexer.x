@@ -37,7 +37,7 @@ $nl        = [\n\r]
 @decimal     = $digit+
 @binary      = $binit+
 @octal       = $octit+
-@hexadecimal = $hexit
+@hexadecimal = $hexit+
 $cntrl       = [$large \@\[\\\]\^\_]
 @ascii       = \^ $cntrl | NUL | SOH | STX | ETX | EOT | ENQ | ACK
              | BEL | BS | HT | LF | VT | FF | CR | SO | SI | DLE
