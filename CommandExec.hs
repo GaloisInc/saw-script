@@ -39,8 +39,8 @@ data ExecutorState = ES {
     -- | Maps function names read in from SBV file into corresponding
     -- operator definition.
   , sbvOps :: Map String OpDef
-    -- | Maps rule names to corresponding rule.
-  , rules :: Map String Rule
+    -- | Maps rule names to corresponding rule and location where it was introduced.
+  , rules :: Map String (Pos,Rule)
     -- | Set of currently enabled rules.
   , enabledRules :: Set String
   } deriving (Show)
@@ -64,13 +64,44 @@ parseFile path = do
     Nothing -> error $ "internal: Could not find file " ++ path
     Just cmds -> return cmds
 
--- | Return true if rule with given name already exists.
-ruleExists :: String -> Executor Bool
-ruleExists name = fmap (Map.member name) $ gets rules
+-- | Throw exec exception in a MonadIO.
+throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
+throwIOExecException pos errorMsg resolution =
+  liftIO $ throwIO (ExecException pos errorMsg resolution)
+
+-- Rule functions {{{2
 
 -- | Return true if rule with given name is enabled.
 ruleEnabled :: String -> Executor Bool
 ruleEnabled name = fmap (Set.member name) $ gets enabledRules
+
+-- | Throw exception indicating a rule already exists.
+checkRuleIsUndefined :: Pos -> String -> Executor ()
+checkRuleIsUndefined pos name = do
+  m <- gets rules
+  case Map.lookup name m of
+    Nothing -> return ()
+    Just (Pos prevFile prevLine _,_) -> do
+      throwIOExecException pos 
+                           (text "The name " <+> quotes (text name)
+                              <+> text "has already been defined at "
+                              <+> text prevFile <> colon <> int prevLine)
+                           ("Please ensure all names are distinct.")
+
+checkRuleIsDefined :: Pos -> String -> Executor ()
+checkRuleIsDefined pos name = do
+  m <- gets rules
+  if Map.member name m
+    then return ()
+    else throwIOExecException pos 
+                              (text "No operator or rule named " <+> quotes (text name)
+                                <+> text "has been defined.")
+                              ("Please check that the name is correct.")
+
+addRule :: String -> TermCtor -> TermCtor -> Executor ()
+addRule _nm _lhs _rhs = undefined
+
+-- }}}2
 
 -- This is the entry point from the front-end
 -- The implicit assumption is that you can either return back with an exitCode;
@@ -104,10 +135,18 @@ runProofs cb ssOpts parsedFiles = do
         when (resolution /= "") $ putStrLn $ resolution
         return $ ExitFailure (-1))
 
--- | Throw exec exception in a MonadIO.
-throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
-throwIOExecException pos errorMsg resolution =
-  liftIO $ throwIO (ExecException pos errorMsg resolution)
+-- | Returns record definition for given set of field names
+lookupRecordDef :: Set String -> Executor SymRecDef
+lookupRecordDef names = do
+  rm <- gets recordDefs 
+  case Map.lookup names rm of
+    Just def -> return def
+    Nothing -> do -- Create new record
+      let fields = V.map (\name -> (name, defaultPrec, SymShapeVar name))
+                 $ V.fromList $ Set.toList names
+      rec <- lift $ defineRecord (show names) fields
+      modify $ \s -> s { recordDefs = Map.insert names rec (recordDefs s) }
+      return rec
 
 -- Parse the given IRType to look for records.
 parseFnIRType :: Pos -> Doc -> Maybe String -> SBV.IRType -> Executor ()
@@ -137,15 +176,9 @@ parseFnIRType pos relativePath uninterpName tp =
                   ("Please rewrite the Cryptol function to use a record rather than a tuple.")
           | otherwise = mapM_ parseType args
         parseType (SBV.TRecord (unzip -> (names,schemes))) = do
-          let nameSet = Set.fromList names
-          rm <- gets recordDefs 
-          if Map.member nameSet rm
-            then return ()
-            else do -- Create new record
-             let fields = V.map (\name -> (name, defaultPrec, SymShapeVar name))
-                        $ V.fromList $ Set.toList nameSet
-             rec <- lift $ defineRecord (show nameSet) fields
-             modify $ \s -> s { recordDefs = Map.insert nameSet rec (recordDefs s) }
+          -- Lookup record def for files to ensure it is known to executor.
+          _ <- lookupRecordDef (Set.fromList names)
+          mapM_ (parseType . SBV.schemeType) schemes
 
 -- | Throw undeclared uninterpreted function message.
 throwUndeclaredFn :: MonadIO m => Pos -> Doc -> String -> m a
@@ -179,45 +212,48 @@ throwSBVParseError pos relativePath e =
    in throwIOExecException pos msg res
 
 -- | Returns argument types and result type.
-opDefType :: OpDef -> (V.Vector DagType, DagType)
-opDefType def = (opDefArgTypes def, opDefResultType def)
+opDefType :: OpDef -> ([DagType], DagType)
+opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 
 -- | Convert expression type from AST into WidthExpr
 parseExprWidth :: AST.ExprWidth -> WidthExpr
-parseExprWidth (AST.WidthVar nm) = undefined
-parseExprWidth (AST.WidthConst i) = undefined
-parseExprWidth (AST.WidthAdd u v) = undefined
+parseExprWidth (AST.WidthConst i) = constantWidth (Wx i)
+parseExprWidth (AST.WidthVar nm) = varWidth nm
+parseExprWidth (AST.WidthAdd u v) = addWidth (parseExprWidth u) (parseExprWidth v)
 
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
 parseExprType :: AST.ExprType -> Executor DagType
 parseExprType AST.BitType = return SymBool
-parseExprType (AST.BitvectorType w) = return $ SymInt (parseExprWidth w)
-parseExprType (AST.Array l tp) = undefined
+parseExprType (AST.BitvectorType w) = return (SymInt (parseExprWidth w))
+parseExprType (AST.Array l tp) =
+  fmap (SymArray (constantWidth (Wx l))) $ parseExprType tp
 parseExprType (AST.Record fields) = undefined
-parseExprType (AST.ShapeVar v) = undefined
+parseExprType (AST.ShapeVar v) = return (SymShapeVar v)
 
 -- | Parse the FnType returned by the parser into symbolic dag types.
-parseFnType :: AST.FnType -> Executor (V.Vector DagType, DagType)
+parseFnType :: AST.FnType -> Executor ([DagType], DagType)
 parseFnType (AST.FnType args res) = do
   parsedArgs <- V.mapM parseExprType (V.fromList args)
   parsedRes <- parseExprType res
-  return (parsedArgs, parsedRes)
+  return (V.toList parsedArgs, parsedRes)
 
 -- | Execute command 
 execute :: AST.VerifierCommand -> Executor ()
 -- Execute commands from file.
 execute (AST.ImportCommand pos path) = do
   mapM_ execute =<< parseFile path
-execute (AST.ExternSBV pos opName absolutePath fnType) = do
-  -- Get relative path for error messages.
+execute (AST.ExternSBV pos opName absolutePath astFnType) = do
+  -- Get relative path as Doc for error messages.
   relativePath <- liftIO $ fmap (doubleQuotes . text) $
                     makeRelativeToCurrentDirectory absolutePath
+  -- Check if rule is already defined.
+  checkRuleIsUndefined pos opName
   -- Load SBV file
   sbv <- liftIO $ SBV.loadSBV absolutePath
   --- Parse SBV type to add recordDefs as needed.
-  let SBV.SBVPgm (_ver, exprType, _cmds, _vc, _warn, sbvUninterpFns) = sbv
-  parseFnIRType pos relativePath Nothing exprType
+  let SBV.SBVPgm (_ver, sbvExprType, _cmds, _vc, _warn, sbvUninterpFns) = sbv
+  parseFnIRType pos relativePath Nothing sbvExprType
   forM_ sbvUninterpFns $ \((name, _loc), irType, _) ->
     parseFnIRType pos relativePath (Just name) irType
   -- Define recordDefMap
@@ -227,13 +263,21 @@ execute (AST.ExternSBV pos opName absolutePath fnType) = do
         let fieldNames = Set.fromList (map fst fields)
             sub = emptySubst { shapeSubst = Map.fromList fields }
          in fmap (flip SymRec sub) $ Map.lookup fieldNames curRecDefs
+  -- Check that op type matches expected type.
+  fnType <- parseFnType astFnType
+  unless (fnType == SBV.inferFunctionType recordFn sbvExprType) $ 
+    let msg = (text "The type of the function in the imported SBV file"
+                 <+> relativePath
+                 <+> text "differs from the type provided to the extern command")
+        res = "Please check that the function exported from Cryptol via SBV matches the expected type."
+     in throwIOExecException pos msg res
   -- Check function types are correct.
   curOps <- gets sbvOps
   forM_ sbvUninterpFns $ \((name, _loc), irType, _) -> do
     case Map.lookup name curOps of
       Nothing -> throwUndeclaredFn pos relativePath name
       Just def -> do
-        unless (opDefType def == undefined) $ --inferTypeList recordFn irType) $
+        unless (opDefType def == SBV.inferFunctionType recordFn irType) $
           throwUnexpectedFnType pos relativePath name
   -- Define uninterpreted function map.
   let uninterpFns :: String -> [DagType] -> Maybe Op
@@ -242,19 +286,28 @@ execute (AST.ExternSBV pos opName absolutePath fnType) = do
   (op, SBV.WEF opFn) <- 
     flip catchMIO (throwSBVParseError pos relativePath) $ lift $
       SBV.parseSBVOp recordFn uninterpFns opName opName defaultPrec sbv
-  --TODO: Check that op type matches expected type.
-  undefined
-  -- Add op to SBV ops
-  modify $ \s -> s { sbvOps = Map.insert opName op (sbvOps s) }
-  -- TODO: Add rule to list of rules.
-  undefined
+  -- Create rule for definition.
+  let (argTypes,_) = fnType
+  let lhsArgs = map (uncurry mkVar) $ (map show ([0..] :: [Int]) `zip` argTypes)
+  let lhs = evalTerm $ appTerm (groundOp op) lhsArgs
+  rhs <- lift $ runSymSession $ do
+    inputVars <- V.mapM freshUninterpretedVar (V.fromList argTypes)
+    res <- opFn inputVars :: SymbolicMonad Node
+    return $ nodeToTermCtor (fmap show . termInputId) res
+  case mkRuleFromCtor opName lhs rhs of
+    Left _msg -> error "internal: Unexpected failure when creating rule"
+    Right rl -> 
+      -- Update state with op and rules.
+      modify $ \s -> s { sbvOps = Map.insert opName op (sbvOps s)
+                       , rules = Map.insert opName (pos,rl) (rules s)
+                       , enabledRules = Set.insert opName (enabledRules s) }
 execute (AST.GlobalLet _pos _name _expr) = do
   undefined
 execute (AST.SetVerification _pos _val) = do
   undefined
 execute (AST.DeclareMethodSpec _pos _method _cmds) = do
   undefined
-execute (AST.Rule pos name lhs rhs) = do
+execute (AST.Rule _pos _name _lhs _rhs) = do
   undefined
   {-
   -- Check rule does not exist.
@@ -273,35 +326,10 @@ execute (AST.Rule pos name lhs rhs) = do
                    , enabledRules = Set.insert name (enabledRules s) }
                    -}
 execute (AST.Disable pos name) = do
-  -- Check rule exists.
-  re <- ruleExists name
-  when (not re) $ do
-    throwIOExecException pos 
-                         (text "No operator or rule named " <+> quotes (text name)
-                            <+> text "has been defined.")
-                         ("Please check that the name is correct.")
-  -- Check rule is enabled.
-  en <- ruleEnabled name
-  when (not en) $ do
-    throwIOExecException pos 
-                         (quotes (text name) <+> text "is already disabled.")
-                         ""
-  -- Disable rule
+  checkRuleIsDefined pos name
   modify $ \s -> s { enabledRules = Set.delete name (enabledRules s) }
 execute (AST.Enable pos name) = do
-  -- Check rule exists.
-  re <- ruleExists name
-  when (not re) $ do
-    throwIOExecException pos 
-                         (text "No operator or rule named " <+> quotes (text name)
-                            <+> text "has been defined.")
-                         ("Please check that the name is correct.")
-  -- Check rule is disabled.
-  en <- ruleEnabled name
-  when en $ do
-  when (not en) $ do
-    throwIOExecException pos (quotes (text name) <+> text "is already enabled.") ""
-  -- Enable rule
+  checkRuleIsDefined pos name
   modify $ \s -> s { enabledRules = Set.insert name (enabledRules s) }
 {-
 execute (BlastJavaMethodSpec pos specName) = do
