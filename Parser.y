@@ -92,7 +92,7 @@ MethodSpecDecls : {- emtpy -}                           { []      }
                 | MethodSpecDecls MethodSpecDecl ';'    { $2 : $1 }
 
 MethodSpecDecl :: { MethodSpecDecl }
-MethodSpecDecl : 'verifyUsing' VerificationMethod       { VerifyUsing $2 }
+MethodSpecDecl : 'verifyUsing' ':' VerificationMethod   { VerifyUsing $3 }
 
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'blast'                            { Blast   }
