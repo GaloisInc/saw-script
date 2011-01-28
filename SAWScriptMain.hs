@@ -18,7 +18,7 @@ import Text.ParserCombinators.Parsec(runParser, many1, noneOf, sepBy, char)
 
 import Execution.Codebase(Codebase, loadCodebase)
 
-import Paths_JVM_verifier(version)
+import Paths_jvm_verifier(version)
 import SAWScript.MethodAST(SSPgm)
 import SAWScript.ParserActions(parseSSPgm)
 import SAWScript.CommandExec(runProofs)
