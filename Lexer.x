@@ -7,6 +7,9 @@
 {-# LANGUAGE    BangPatterns                 #-}
 module SAWScript.Lexer (lexSAW) where
 
+import Data.List(isPrefixOf)
+import Numeric(readInt)
+
 import SAWScript.Token
 import SAWScript.Utils
 }
@@ -21,16 +24,18 @@ $small     = [a-z]
 $alpha     = [$small $large]
 $symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~] # [$special \_\:\"\']
 $graphic   = [$alpha $symbol $digit $special \:\"\'\_]
+$binit     = 0-1
 $octit     = 0-7
 $hexit     = [0-9 A-F a-f]
 $idchar    = [$alpha $digit \' \_]
 $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
-@reservedid  = import|extern|SBV
+@reservedid  = import|extern|SBV|"->"|Bit
 @reservedop  = "+"
 @varid       = $alpha $idchar*
 @decimal     = $digit+
+@binary      = $binit+
 @octal       = $octit+
 @hexadecimal = $hexit
 $cntrl       = [$large \@\[\\\]\^\_]
@@ -42,20 +47,25 @@ $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
 @gap         = \\ $whitechar+ \\
 @string      = $graphic # [\"\\] | " " | @escape | @gap
-@punct       = ";" | "(" | ")" | ":"
+@punct       = "," | ";" | "(" | ")" | ":" | "[" | "]"
+@num         = @decimal | 0[bB] @binary | 0[oO] @octal | 0[xX] @hexadecimal
 
 sawTokens :-
 
 $white+                          ;
 "\n"                             ;
 "//".*                           ;
-"/*"                             { cnst TCmntS     }
-"*/"                             { cnst TCmntE     }
-@reservedid                      { TReserved       }
-@punct                           { TPunct          }
-@varid                           { TVar            }
-\" @string* \"                   { TLit `via` read }
-.                                { TUnknown        }
+"/*"                             { cnst TCmntS        }
+"*/"                             { cnst TCmntE        }
+@reservedid                      { TReserved          }
+@punct                           { TPunct             }
+@varid                           { TVar               }
+\" @string* \"                   { TLit `via` read    }
+@decimal                         { TNum `via` read    }
+0[bB] @binary                    { TNum `via` readBin }
+0[oO] @octal                     { TNum `via` read    }
+0[xX] @hexadecimal               { TNum `via` read    }
+.                                { TUnknown           }
 
 {
 cnst f p _ = f p
@@ -64,6 +74,16 @@ via c g p s = c p (g s)
 lexSAW :: FilePath -> String -> [Token Pos]
 lexSAW f = dropComments . map (fmap fixPos) . alexScanTokens
   where fixPos (AlexPn _ l c) = Pos f l c
+
+readBin :: String -> Integer
+readBin s = case readInt 2 isDigit cvt s' of
+              [(a, "")] -> a
+              _         -> error $ "Cannot read a binary number from: " ++ show s
+  where cvt c = ord c - ord '0'
+        isDigit = (`elem` "01")
+        s' | "0b" `isPrefixOf` s = drop 2 s
+           | "0B" `isPrefixOf` s = drop 2 s
+           | True                = s
 
 dropComments :: [Token Pos] -> [Token Pos]
 dropComments = go 0

@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
-module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseSSPgm) where
+module SAWScript.ParserActions (Parser, happyError, parseError, lexer, parseIntRange, parseSSPgm) where
 
 import Data.Maybe(isJust, listToMaybe)
 import qualified Data.Map as M
@@ -28,6 +28,13 @@ happyError = Parser $ \_ ts -> failAt (listToMaybe ts)
 
 parseError :: Token Pos -> Parser a
 parseError t = Parser $ \_ _ -> failAt (Just t)
+
+parseIntRange :: (Int, Int) -> Integer -> Parser Int
+parseIntRange (l, h) i
+  | i < fromIntegral l || i > fromIntegral h
+  = fail $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
+  | True
+  = return $ fromIntegral i
 
 failAt :: Maybe (Token Pos) -> IO (Either String a)
 failAt Nothing  = return $ Left $ "File ended before parsing was complete"
