@@ -5,7 +5,7 @@ import Control.Monad(when)
 import Data.List(intercalate)
 import System.Console.CmdArgs(Data, Typeable)
 import System.Directory(makeRelativeToCurrentDirectory)
-import System.FilePath(makeRelative)
+import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
 
 data Pos = Pos !FilePath -- file
                !Int      -- line
@@ -24,6 +24,11 @@ posRelativeToCurrentDirectory (Pos f l c) = do f' <- makeRelativeToCurrentDirect
 
 posRelativeTo :: FilePath -> Pos -> Pos
 posRelativeTo d (Pos f l c) = Pos (makeRelative d f) l c
+
+routePathThroughPos :: Pos -> FilePath -> FilePath
+routePathThroughPos (Pos f _ _) fp
+  | isAbsolute fp = fp
+  | True          = takeDirectory f </> fp
 
 instance Show Pos where
   show (Pos f 0 0) = show f ++ ":end-of-file"

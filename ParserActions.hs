@@ -67,6 +67,7 @@ parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
        route cmap (ImportCommand p fp)
          | Just cfp <- fp `lookup` cmap = ImportCommand p cfp
          | True                         = error $ "Cannot find import file " ++ show fp ++ " in import-map " ++ show cmap
+       route _ (ExternSBV p n fp t)     = ExternSBV p n (routePathThroughPos p fp) t
        route _ c = c
 
 parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
