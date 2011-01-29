@@ -44,6 +44,7 @@ data FnType = FnType [ExprType] ExprType
 -- Java variables.
 data MixExpr v
     = Extern v 
+    | Var String
     | ConstantBool Pos Bool
     | ConstantInt  Pos Integer
 
@@ -173,15 +174,15 @@ data VerificationMethod = Blast | Rewrite
 
 -- | Commands in a method spec.
 data MethodSpecDecl 
-  = Type [JavaRef] JavaType
+  = Type Pos [JavaRef] JavaType
   -- | List of Java expressions that may alias.
-  | MayAlias [JavaRef]
+  | MayAlias Pos [JavaRef]
   -- | Contant value in reference.
-  | Const JavaRef JavaExpr
+  | Const Pos JavaRef JavaExpr
   -- | Local binding within a method spec.
-  | MethodLet String JavaExpr
-  | Ensures JavaRef JavaExpr
-  | VerifyUsing VerificationMethod
+  | MethodLet Pos String JavaExpr
+  | Ensures Pos JavaRef JavaExpr
+  | VerifyUsing Pos VerificationMethod
  deriving (Show)
 
 type RuleName = String
