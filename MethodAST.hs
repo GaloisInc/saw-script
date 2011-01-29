@@ -181,6 +181,7 @@ data MethodSpecDecl
   | Const Pos JavaRef JavaExpr
   -- | Local binding within a method spec.
   | MethodLet Pos String JavaExpr
+  | Assume Pos JavaExpr
   | Ensures Pos JavaRef JavaExpr
   | VerifyUsing Pos VerificationMethod
  deriving (Show)

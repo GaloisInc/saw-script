@@ -28,6 +28,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'Bit'          { TReserved  _ "Bit"          }
    'method'       { TReserved  _ "method"       }
    'mayAlias'     { TReserved  _ "mayAlias"     }
+   'assume'       { TReserved  _ "assume"       }
    'ensures'      { TReserved  _ "ensures"      }
    'const'        { TReserved  _ "const"        }
    'verifyUsing'  { TReserved  _ "verifyUsing"  }
@@ -116,6 +117,7 @@ MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type        (getPos $1) 
                | 'mayAlias' '{' JavaRefs '}'          { MayAlias    (getPos $1) $3                }
                | 'const' JavaRef ':=' JavaExpr        { Const       (getPos $1) $2 $4             }
                | 'let' var '=' JavaExpr               { MethodLet   (getPos $1) (getString $2) $4 }
+               | 'assume' JavaExpr                    { Assume      (getPos $1) $2                }
                | 'ensures' JavaRef ':=' JavaExpr      { Ensures     (getPos $1) $2 $4             }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing (getPos $1) $3                }
 
