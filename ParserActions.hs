@@ -17,7 +17,9 @@ import SAWScript.Lexer(lexSAW)
 import SAWScript.Parser(parseSAW)
 import SAWScript.Utils
 
-newtype Parser a = Parser { unP :: FilePath -> [Token Pos] -> IO (Either String a) }
+type PTok = Token Pos
+
+newtype Parser a = Parser { unP :: FilePath -> [PTok] -> IO (Either String a) }
 
 instance Monad Parser where
   return x       = Parser (\_ _ -> return (Right x))
@@ -30,21 +32,21 @@ instance Monad Parser where
 happyError :: Parser a
 happyError = Parser $ \_ ts -> failAt (listToMaybe ts)
 
-parseError :: Token Pos -> Parser a
+parseError :: PTok -> Parser a
 parseError t = Parser $ \_ _ -> failAt (Just t)
 
 bailOut :: Pos -> String -> Parser a
 bailOut ep msg = Parser $ \_ _ -> do p <- posRelativeToCurrentDirectory ep
                                      return $ Left $ fmtPos p msg
 
-failAt :: Maybe (Token Pos) -> IO (Either String a)
+failAt :: Maybe PTok -> IO (Either String a)
 failAt Nothing          = return $ Left $ "File ended before parsing was complete"
 failAt (Just (TEOF ep)) = do p <- posRelativeToCurrentDirectory ep
                              return $ Left $ fmtPos p $ "Parse error at the end of file, forgotten semicolon perhaps?"
 failAt (Just t)         = do p <- posRelativeToCurrentDirectory (getPos t)
                              return $ Left $ fmtPos p $ "Parse error at " ++ show (show t)  -- double show is intentional
 
-lexer :: (Token Pos -> Parser a) -> Parser a
+lexer :: (PTok -> Parser a) -> Parser a
 lexer cont = Parser (\f toks ->
         case toks of
            []       -> unP (cont (TEOF (endPos f))) f []

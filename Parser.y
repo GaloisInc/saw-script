@@ -21,41 +21,45 @@ import {-# SOURCE #-} SAWScript.ParserActions
 %name parseSAW SAWScript
 
 %token
-   'import'      { TReserved  _ "import"      }
-   'extern'      { TReserved  _ "extern"      }
-   'let'         { TReserved  _ "let"         }
-   'SBV'         { TReserved  _ "SBV"         }
-   'Bit'         { TReserved  _ "Bit"         }
-   'method'      { TReserved  _ "method"      }
-   'mayAlias'    { TReserved  _ "mayAlias"    }
-   'ensures'     { TReserved  _ "ensures"     }
-   'const'       { TReserved  _ "const"       }
-   'verifyUsing' { TReserved  _ "verifyUsing" }
-   'blast'       { TReserved  _ "blast"       }
-   'rewrite'     { TReserved  _ "rewrite"     }
-   'type'        { TReserved  _ "type"        }
-   'args'        { TReserved  _ "args"        }
-   'this'        { TReserved  _ "this"        }
-   'int'         { TReserved  _ "int"         }
-   'long'        { TReserved  _ "long"        }
-   'true'        { TReserved  _ "true"        }
-   'false'       { TReserved  _ "false"       }
-   var           { TVar       _ _             }
-   str           { TLit       _ $$            }
-   num           { TNum       _ _             }
-   ';'           { TPunct     _ ";"           }
-   '['           { TPunct     _ "["           }
-   ']'           { TPunct     _ "]"           }
-   '('           { TPunct     _ "("           }
-   ')'           { TPunct     _ ")"           }
-   '{'           { TPunct     _ "{"           }
-   '}'           { TPunct     _ "}"           }
-   ':'           { TPunct     _ ":"           }
-   ','           { TPunct     _ ","           }
-   '.'           { TPunct     _ "."           }
-   '='           { TPunct     _ "="           }
-   '->'          { TPunct     _ "->"          }
-   ':='          { TPunct     _ ":="          }
+   'import'       { TReserved  _ "import"       }
+   'extern'       { TReserved  _ "extern"       }
+   'let'          { TReserved  _ "let"          }
+   'SBV'          { TReserved  _ "SBV"          }
+   'Bit'          { TReserved  _ "Bit"          }
+   'method'       { TReserved  _ "method"       }
+   'mayAlias'     { TReserved  _ "mayAlias"     }
+   'ensures'      { TReserved  _ "ensures"      }
+   'const'        { TReserved  _ "const"        }
+   'verifyUsing'  { TReserved  _ "verifyUsing"  }
+   'blast'        { TReserved  _ "blast"        }
+   'rewrite'      { TReserved  _ "rewrite"      }
+   'set'          { TReserved  _ "set"          }
+   'verification' { TReserved  _ "verification" }
+   'on'           { TReserved  _ "on"           }
+   'off'          { TReserved  _ "off"          }
+   'type'         { TReserved  _ "type"         }
+   'args'         { TReserved  _ "args"         }
+   'this'         { TReserved  _ "this"         }
+   'int'          { TReserved  _ "int"          }
+   'long'         { TReserved  _ "long"         }
+   'true'         { TReserved  _ "true"         }
+   'false'        { TReserved  _ "false"        }
+   var            { TVar       _ _              }
+   str            { TLit       _ $$             }
+   num            { TNum       _ _              }
+   ';'            { TPunct     _ ";"            }
+   '['            { TPunct     _ "["            }
+   ']'            { TPunct     _ "]"            }
+   '('            { TPunct     _ "("            }
+   ')'            { TPunct     _ ")"            }
+   '{'            { TPunct     _ "{"            }
+   '}'            { TPunct     _ "}"            }
+   ':'            { TPunct     _ ":"            }
+   ','            { TPunct     _ ","            }
+   '.'            { TPunct     _ "."            }
+   '='            { TPunct     _ "="            }
+   '->'           { TPunct     _ "->"           }
+   ':='           { TPunct     _ ":="           }
 %%
 
 -- SAWScript
@@ -64,10 +68,12 @@ SAWScript : termBy(VerifierCommand, ';') { $1 }
 
 -- Verifier commands
 VerifierCommand :: { VerifierCommand }
-VerifierCommand : 'import' str                               { ImportCommand (getPos $1) $2               }
-                | 'extern' 'SBV' var '(' str ')' ':' FnType  { ExternSBV (getPos $1) (getString $3) $5 $8 }
-                | 'let' var '=' JavaExpr                     { GlobalLet (getPos $1) (getString $2) $4    }
-                | 'method' Qvar '{' MethodSpecDecls '}'      { DeclareMethodSpec (getPos $1) $2 $4        }
+VerifierCommand : 'import' str                              { ImportCommand (getPos $1) $2               }
+                | 'extern' 'SBV' var '(' str ')' ':' FnType { ExternSBV (getPos $1) (getString $3) $5 $8 }
+                | 'let' var '=' JavaExpr                    { GlobalLet (getPos $1) (getString $2) $4    }
+                | 'set' 'verification' 'on'                 { SetVerification (getPos $1) True           }
+                | 'set' 'verification' 'off'                { SetVerification (getPos $1) False          }
+                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) $2 $4        }
 
 -- Types
 FnType  :: { FnType }

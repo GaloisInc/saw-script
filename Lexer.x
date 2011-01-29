@@ -31,8 +31,8 @@ $idchar    = [$alpha $digit \' \_]
 $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
-@reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args|this|int|long
-              |mayAlias|const|true|false|ensures
+@reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args
+             |this|int|long|mayAlias|const|true|false|ensures|set|verification|on|off
 @reservedop  = "+"
 @varid       = $alpha $idchar*
 @decimal     = $digit+
