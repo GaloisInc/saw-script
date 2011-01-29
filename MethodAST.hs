@@ -29,11 +29,11 @@ data JavaType
   deriving (Show)
 
 -- | Expressions types for AST.
-data ExprType 
+data ExprType
   = BitType
   | BitvectorType ExprWidth
   | Array Int ExprType
-  | Record [(String, ExprType)]
+  | Record [(Pos, String, ExprType)]
   | ShapeVar String
  deriving (Show)
 
@@ -43,8 +43,8 @@ data FnType = FnType [ExprType] ExprType
 -- | Roughly correspond to Cryptol expressions, but can also reference
 -- Java variables.
 data MixExpr v
-    = Extern v 
-    | Var String
+    = Extern v
+    | Var Pos String
     | ConstantBool Pos Bool
     | ConstantInt  Pos Integer
 
@@ -53,11 +53,11 @@ data MixExpr v
     -- | Array comprehension.
     | MkArray Pos [MixExpr v]
     -- | Making a record
-    | MkRecord   Pos [(String, MixExpr v)]
+    | MkRecord   Pos [(Pos, String, MixExpr v)]
     
     -- Precedence 13
     -- | Type annotation on an expression.
-    | TypeExpr (MixExpr v) ExprType
+    | TypeExpr Pos (MixExpr v) ExprType
     -- | Dereference field
     | DerefField Pos (MixExpr v) String
 

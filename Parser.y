@@ -105,13 +105,19 @@ JavaExprs : sepBy1(JavaExpr, ',') { $1 }
 
 -- Expressions
 JavaExpr :: { JavaExpr }
-JavaExpr : JavaRef                { Extern $1                               }
-         | var                    { Var (getString $1)                      }
-         | 'true'                 { ConstantBool (getPos $1) True           }
-         | 'false'                { ConstantBool (getPos $1) False          }
-         | num                    { ConstantInt (getPos $1) (getInteger $1) }
-         | JavaExpr ':' ExprType  { TypeExpr $1 $3                          }
-         | var '(' JavaExprs ')'  { ApplyExpr (getPos $1) (getString $1) $3 }
+JavaExpr : JavaRef                { Extern       $1                            }
+         | var                    { Var          (getPos $1) (getString $1)    }
+         | 'true'                 { ConstantBool (getPos $1) True              }
+         | 'false'                { ConstantBool (getPos $1) False             }
+         | num                    { ConstantInt  (getPos $1) (getInteger $1)   }
+         | JavaExpr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
+         | var '(' JavaExprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
+         | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
+--         | JavaExpr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
+
+-- Records
+RecordExpr :: { [(Pos, String, JavaExpr)] }
+RecordExpr : sepBy(connected(var, '=', JavaExpr), ';')  { map ((\ (v, e) -> (getPos v, getString v, e))) $1 }
 
 -- Method spec body
 MethodSpecDecls :: { [MethodSpecDecl] }
@@ -154,12 +160,15 @@ int :: { Int }
 int : num       {% parseIntRange (getPos $1) (0, maxBound) (getInteger $1) }
 
 -- Parameterized productions, these come directly from the Happy manual..
-fst(p,q)    : p q   { $1 }
-snd(p,q)    : p q   { $2 }
-both(p,q)   : p q   { ($1,$2) }
+fst(p, q)  : p q   { $1 }
+snd(p, q)  : p q   { $2 }
+both(p, q) : p q   { ($1, $2) }
 
 -- p bracketed with some delims o-c
 bracketed(o,p,c) : o p c { $2 }
+
+-- p and q, connected by some connective c
+connected(p, c, q) : p c q { ($1, $3) }
 
 -- an optional p
 opt(p) : p            { Just $1 }
@@ -178,6 +187,10 @@ list(p) : {- empty -}    { [] }
 
 -- A list of at least one 1 p's, separated by q's
 sepBy1(p,q) : p list(snd(q, p)) { $1 : $2 }
+
+-- A list of 0 or more p's, separated by q's
+sepBy(p,q) : {- empty -}  { [] }
+           | sepBy1(p, q) { $1 }
 
 -- A list of at least one 1 p's, terminated by q's
 termBy1(p,q) : list1(fst(p, q)) { $1 }
