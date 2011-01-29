@@ -183,6 +183,7 @@ data MethodSpecDecl
   | MethodLet Pos String JavaExpr
   | Assume Pos JavaExpr
   | Ensures Pos JavaRef JavaExpr
+  | Arbitrary Pos JavaRef
   | VerifyUsing Pos VerificationMethod
  deriving (Show)
 

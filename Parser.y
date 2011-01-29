@@ -30,6 +30,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'mayAlias'     { TReserved  _ "mayAlias"     }
    'assume'       { TReserved  _ "assume"       }
    'ensures'      { TReserved  _ "ensures"      }
+   'arbitrary'    { TReserved  _ "arbitrary"    }
    'const'        { TReserved  _ "const"        }
    'verifyUsing'  { TReserved  _ "verifyUsing"  }
    'blast'        { TReserved  _ "blast"        }
@@ -113,12 +114,13 @@ MethodSpecDecls :: { [MethodSpecDecl] }
 MethodSpecDecls : termBy(MethodSpecDecl, ';') { $1 }
 
 MethodSpecDecl :: { MethodSpecDecl }
-MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type        (getPos $1) $2 $4             }
-               | 'mayAlias' '{' JavaRefs '}'          { MayAlias    (getPos $1) $3                }
-               | 'const' JavaRef ':=' JavaExpr        { Const       (getPos $1) $2 $4             }
-               | 'let' var '=' JavaExpr               { MethodLet   (getPos $1) (getString $2) $4 }
-               | 'assume' JavaExpr                    { Assume      (getPos $1) $2                }
-               | 'ensures' JavaRef ':=' JavaExpr      { Ensures     (getPos $1) $2 $4             }
+MethodSpecDecl : 'type'        JavaRefs ':' JavaType  { Type        (getPos $1) $2 $4             }
+               | 'mayAlias'    '{' JavaRefs '}'       { MayAlias    (getPos $1) $3                }
+               | 'const'       JavaRef ':=' JavaExpr  { Const       (getPos $1) $2 $4             }
+               | 'let'         var '=' JavaExpr       { MethodLet   (getPos $1) (getString $2) $4 }
+               | 'assume'      JavaExpr               { Assume      (getPos $1) $2                }
+               | 'ensures'     JavaRef ':=' JavaExpr  { Ensures     (getPos $1) $2 $4             }
+               | 'arbitrary'   JavaRef                { Arbitrary   (getPos $1) $2                }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing (getPos $1) $3                }
 
 -- Comma separated Sequence of JavaRef's, at least one
