@@ -32,6 +32,7 @@ $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
 @reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args|this|int|long
+              |mayAlias|const
 @reservedop  = "+"
 @varid       = $alpha $idchar*
 @decimal     = $digit+
@@ -47,7 +48,7 @@ $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
 @gap         = \\ $whitechar+ \\
 @string      = $graphic # [\"\\] | " " | @escape | @gap
-@punct       = "," | ";" | "(" | ")" | ":" | "[" | "]" | "->" | "=" | "{" | "}" | "."
+@punct       = "," | ";" | "(" | ")" | ":" | "[" | "]" | "->" | "=" | "{" | "}" | "." | ":="
 @num         = @decimal | 0[bB] @binary | 0[oO] @octal | 0[xX] @hexadecimal
 
 sawTokens :-

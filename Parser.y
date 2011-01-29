@@ -35,6 +35,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'this'        { TReserved  _ "this"        }
    'int'         { TReserved  _ "int"         }
    'long'        { TReserved  _ "long"        }
+   'mayAlias'    { TReserved  _ "mayAlias"    }
+   'const'       { TReserved  _ "const"       }
    var           { TVar       _ $$            }
    str           { TLit       _ $$            }
    num           { TNum       _ _             }
@@ -50,6 +52,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '.'           { TPunct     _ "."           }
    '='           { TPunct     _ "="           }
    '->'          { TPunct     _ "->"          }
+   ':='          { TPunct     _ ":="          }
 %%
 
 -- SAWScript
@@ -90,7 +93,9 @@ MethodSpecDecls :: { [MethodSpecDecl] }
 MethodSpecDecls : termBy(MethodSpecDecl, ';') { $1 }
 
 MethodSpecDecl :: { MethodSpecDecl }
-MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type $2 $4 }
+MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type $2 $4     }
+               | 'mayAlias' '{' JavaRefs '}'          { MayAlias $3    }
+               | 'const' JavaRef ':=' JavaExpr        { Const $2 $4    }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing $3 }
 
 -- Comma separated Sequence of JavaRef's, at least one
