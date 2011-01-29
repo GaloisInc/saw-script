@@ -26,7 +26,7 @@ data JavaType
   = RefType [String] -- ^ Class with given dots. 
   | IntArray Int -- ^ Int array with given length
   | LongArray Int -- ^ Long array with given length.   
-
+  deriving (Show)
 
 -- | Expressions types for AST.
 data ExprType 

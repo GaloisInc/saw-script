@@ -33,6 +33,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'type'        { TReserved  _ "type"        }
    'args'        { TReserved  _ "args"        }
    'this'        { TReserved  _ "this"        }
+   'int'         { TReserved  _ "int"         }
+   'long'        { TReserved  _ "long"        }
    var           { TVar       _ $$            }
    str           { TLit       _ $$            }
    num           { TNum       _ _             }
@@ -88,8 +90,8 @@ MethodSpecDecls :: { [MethodSpecDecl] }
 MethodSpecDecls : termBy(MethodSpecDecl, ';') { $1 }
 
 MethodSpecDecl :: { MethodSpecDecl }
-MethodSpecDecl : 'type' JavaRefs ':' ClassNameOrType    { Type $2 $4 }
-               | 'verifyUsing' ':' VerificationMethod   { VerifyUsing $3 }
+MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type $2 $4 }
+               | 'verifyUsing' ':' VerificationMethod { VerifyUsing $3 }
 
 -- Comma separated Sequence of JavaRef's, at least one
 JavaRefs :: { [JavaRef] }
@@ -100,8 +102,10 @@ JavaRef : 'this'                { This (getPos $1)                }
         | 'args' '[' int ']'    { Arg  (getPos $1) $3             }
         | JavaRef '.' var       { InstanceField (getPos $2) $1 $3 }
 
-ClassNameOrType :: { Either [String] ExprType }
-ClassNameOrType : either(Qvar, ExprType) { $1 }
+JavaType :: { JavaType }
+JavaType : Qvar               { RefType   $1 }
+         | 'int'  '[' int ']' { IntArray  $3 }
+         | 'long' '[' int ']' { LongArray $3 }
 
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'blast'    { Blast   }
