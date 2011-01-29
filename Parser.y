@@ -33,6 +33,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'arbitrary'    { TReserved  _ "arbitrary"    }
    'const'        { TReserved  _ "const"        }
    'verifyUsing'  { TReserved  _ "verifyUsing"  }
+   'enable'       { TReserved  _ "enable"       }
+   'disable'      { TReserved  _ "disable"      }
    'blast'        { TReserved  _ "blast"        }
    'rewrite'      { TReserved  _ "rewrite"      }
    'set'          { TReserved  _ "set"          }
@@ -70,12 +72,14 @@ SAWScript : termBy(VerifierCommand, ';') { $1 }
 
 -- Verifier commands
 VerifierCommand :: { VerifierCommand }
-VerifierCommand : 'import' str                              { ImportCommand (getPos $1) $2               }
-                | 'extern' 'SBV' var '(' str ')' ':' FnType { ExternSBV (getPos $1) (getString $3) $5 $8 }
-                | 'let' var '=' JavaExpr                    { GlobalLet (getPos $1) (getString $2) $4    }
-                | 'set' 'verification' 'on'                 { SetVerification (getPos $1) True           }
-                | 'set' 'verification' 'off'                { SetVerification (getPos $1) False          }
-                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) $2 $4        }
+VerifierCommand : 'import' str                              { ImportCommand     (getPos $1) $2                   }
+                | 'extern' 'SBV' var '(' str ')' ':' FnType { ExternSBV         (getPos $1) (getString $3) $5 $8 }
+                | 'let' var '=' JavaExpr                    { GlobalLet         (getPos $1) (getString $2) $4    }
+                | 'set' 'verification' 'on'                 { SetVerification   (getPos $1) True                 }
+                | 'set' 'verification' 'off'                { SetVerification   (getPos $1) False                }
+                | 'enable' var                              { Enable            (getPos $1) (getString $2)       }
+                | 'disable' var                             { Disable           (getPos $1) (getString $2)       }
+                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) $2 $4                }
 
 -- Types
 FnType  :: { FnType }
