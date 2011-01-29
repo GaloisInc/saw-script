@@ -35,8 +35,10 @@ parseError t = Parser $ \_ _ -> failAt (Just t)
 
 failAt :: Maybe (Token Pos) -> IO (Either String a)
 failAt Nothing  = return $ Left $ "File ended before parsing was complete"
-failAt (Just t) = do p <- posRelativeToCurrentDirectory (getPos t)
-                     return $ Left $ fmtPos p $ "Parse error at " ++ show (show t)  -- double show is intentional
+failAt (Just (TEOF ep)) = do p <- posRelativeToCurrentDirectory ep
+                             return $ Left $ fmtPos p $ "Parse error at the end of file, forgotten semicolon perhaps?"
+failAt (Just t)         = do p <- posRelativeToCurrentDirectory (getPos t)
+                             return $ Left $ fmtPos p $ "Parse error at " ++ show (show t)  -- double show is intentional
 
 lexer :: (Token Pos -> Parser a) -> Parser a
 lexer cont = Parser (\f toks ->
