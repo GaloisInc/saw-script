@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 module SAWScript.ParserActions (
      Parser, happyError, parseError, lexer, parseSSPgm
-   , parseIntRange
+   , parseIntRange, mkExprType
    ) where
 
 
@@ -33,8 +33,12 @@ happyError = Parser $ \_ ts -> failAt (listToMaybe ts)
 parseError :: Token Pos -> Parser a
 parseError t = Parser $ \_ _ -> failAt (Just t)
 
+bailOut :: Pos -> String -> Parser a
+bailOut ep msg = Parser $ \_ _ -> do p <- posRelativeToCurrentDirectory ep
+                                     return $ Left $ fmtPos p msg
+
 failAt :: Maybe (Token Pos) -> IO (Either String a)
-failAt Nothing  = return $ Left $ "File ended before parsing was complete"
+failAt Nothing          = return $ Left $ "File ended before parsing was complete"
 failAt (Just (TEOF ep)) = do p <- posRelativeToCurrentDirectory ep
                              return $ Left $ fmtPos p $ "Parse error at the end of file, forgotten semicolon perhaps?"
 failAt (Just t)         = do p <- posRelativeToCurrentDirectory (getPos t)
@@ -88,9 +92,14 @@ parseJV ssOpts (f, mbP) = do
         getImport _                    = []
 
 -- Parse helpers
-parseIntRange :: (Int, Int) -> Integer -> Parser Int
-parseIntRange (l, h) i
+parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser Int
+parseIntRange p (l, h) i
   | i < fromIntegral l || i > fromIntegral h
-  = fail $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
+  = bailOut p $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
   | True
   = return $ fromIntegral i
+
+mkExprType :: Pos -> ExprWidth -> Maybe ExprType -> Parser ExprType
+mkExprType _  w              Nothing  = return $ BitvectorType w
+mkExprType _  (WidthConst i) (Just t) = return $ Array i t
+mkExprType p  _              _        = bailOut p "malformed expression type"

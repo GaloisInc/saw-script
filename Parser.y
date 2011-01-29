@@ -27,6 +27,9 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'SBV'         { TReserved  _ "SBV"         }
    'Bit'         { TReserved  _ "Bit"         }
    'method'      { TReserved  _ "method"      }
+   'mayAlias'    { TReserved  _ "mayAlias"    }
+   'ensures'     { TReserved  _ "ensures"     }
+   'const'       { TReserved  _ "const"       }
    'verifyUsing' { TReserved  _ "verifyUsing" }
    'blast'       { TReserved  _ "blast"       }
    'rewrite'     { TReserved  _ "rewrite"     }
@@ -35,9 +38,9 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'this'        { TReserved  _ "this"        }
    'int'         { TReserved  _ "int"         }
    'long'        { TReserved  _ "long"        }
-   'mayAlias'    { TReserved  _ "mayAlias"    }
-   'const'       { TReserved  _ "const"       }
-   var           { TVar       _ $$            }
+   'true'        { TReserved  _ "true"        }
+   'false'       { TReserved  _ "false"       }
+   var           { TVar       _ _             }
    str           { TLit       _ $$            }
    num           { TNum       _ _             }
    ';'           { TPunct     _ ";"           }
@@ -61,10 +64,10 @@ SAWScript : termBy(VerifierCommand, ';') { $1 }
 
 -- Verifier commands
 VerifierCommand :: { VerifierCommand }
-VerifierCommand : 'import' str                               { ImportCommand (getPos $1) $2        }
-                | 'extern' 'SBV' var '(' str ')' ':' FnType  { ExternSBV (getPos $1) $3 $5 $8      }
-                | 'let' var '=' JavaExpr                     { GlobalLet (getPos $1) $2 $4         }
-                | 'method' Qvar '{' MethodSpecDecls '}'      { DeclareMethodSpec (getPos $1) $2 $4 }
+VerifierCommand : 'import' str                               { ImportCommand (getPos $1) $2               }
+                | 'extern' 'SBV' var '(' str ')' ':' FnType  { ExternSBV (getPos $1) (getString $3) $5 $8 }
+                | 'let' var '=' JavaExpr                     { GlobalLet (getPos $1) (getString $2) $4    }
+                | 'method' Qvar '{' MethodSpecDecls '}'      { DeclareMethodSpec (getPos $1) $2 $4        }
 
 -- Types
 FnType  :: { FnType }
@@ -76,36 +79,48 @@ ExprTypes :: { [ExprType] }
 ExprTypes : sepBy1(ExprType, ',') { $1 }
 
 ExprType :: { ExprType }
-ExprType : 'Bit'             {  BitType          }
-         | '[' ExprWidth ']' {  BitvectorType $2 }
+ExprType : 'Bit'                           {  BitType                      }
+         | '[' ExprWidth ']' opt(ExprType) {% mkExprType (getPos $1) $2 $4 }
+         | var                             {  ShapeVar (getString $1)      }
 
 ExprWidth :: { ExprWidth }
-ExprWidth : int              {  WidthConst $1 }
-          | var              {  WidthVar $1   }
+ExprWidth : int              {  WidthConst $1           }
+          | var              {  WidthVar (getString $1) }
+
+-- Comma separated expressions, at least one
+JavaExprs :: { [JavaExpr] }
+JavaExprs : sepBy1(JavaExpr, ',') { $1 }
 
 -- Expressions
 JavaExpr :: { JavaExpr }
-JavaExpr : num                    { ConstantInt (getPos $1) (getInteger $1) }
+JavaExpr : JavaRef                { Extern $1                               }
+         | var                    { Var (getString $1)                      }
+         | 'true'                 { ConstantBool (getPos $1) True           }
+         | 'false'                { ConstantBool (getPos $1) False          }
+         | num                    { ConstantInt (getPos $1) (getInteger $1) }
          | JavaExpr ':' ExprType  { TypeExpr $1 $3                          }
+         | var '(' JavaExprs ')'  { ApplyExpr (getPos $1) (getString $1) $3 }
 
 -- Method spec body
 MethodSpecDecls :: { [MethodSpecDecl] }
 MethodSpecDecls : termBy(MethodSpecDecl, ';') { $1 }
 
 MethodSpecDecl :: { MethodSpecDecl }
-MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type $2 $4     }
-               | 'mayAlias' '{' JavaRefs '}'          { MayAlias $3    }
-               | 'const' JavaRef ':=' JavaExpr        { Const $2 $4    }
-               | 'verifyUsing' ':' VerificationMethod { VerifyUsing $3 }
+MethodSpecDecl : 'type' JavaRefs ':' JavaType         { Type        (getPos $1) $2 $4             }
+               | 'mayAlias' '{' JavaRefs '}'          { MayAlias    (getPos $1) $3                }
+               | 'const' JavaRef ':=' JavaExpr        { Const       (getPos $1) $2 $4             }
+               | 'let' var '=' JavaExpr               { MethodLet   (getPos $1) (getString $2) $4 }
+               | 'ensures' JavaRef ':=' JavaExpr      { Ensures     (getPos $1) $2 $4             }
+               | 'verifyUsing' ':' VerificationMethod { VerifyUsing (getPos $1) $3                }
 
 -- Comma separated Sequence of JavaRef's, at least one
 JavaRefs :: { [JavaRef] }
 JavaRefs : sepBy1(JavaRef, ',') { $1 }
 
 JavaRef :: { JavaRef }
-JavaRef : 'this'                { This (getPos $1)                }
-        | 'args' '[' int ']'    { Arg  (getPos $1) $3             }
-        | JavaRef '.' var       { InstanceField (getPos $2) $1 $3 }
+JavaRef : 'this'                { This (getPos $1)                            }
+        | 'args' '[' int ']'    { Arg  (getPos $1) $3                         }
+        | JavaRef '.' var       { InstanceField (getPos $2) $1 (getString $3) }
 
 JavaType :: { JavaType }
 JavaType : Qvar               { RefType   $1 }
@@ -118,11 +133,11 @@ VerificationMethod : 'blast'    { Blast   }
 
 -- A qualified variable
 Qvar :: { [String] }
-Qvar : sepBy1(var, '.') { $1 }
+Qvar : sepBy1(var, '.') { map getString $1 }
 
 -- A literal that must fit into a Haskell Int
 int :: { Int }
-int : num       {% parseIntRange (0, maxBound) (getInteger $1) }
+int : num       {% parseIntRange (getPos $1) (0, maxBound) (getInteger $1) }
 
 -- Parameterized productions, these come directly from the Happy manual..
 fst(p,q)    : p q   { $1 }
@@ -133,7 +148,7 @@ both(p,q)   : p q   { ($1,$2) }
 bracketed(o,p,c) : o p c { $2 }
 
 -- an optional p
-opt(p) : p            { Just $ 1}
+opt(p) : p            { Just $1 }
        | {- empty -}  { Nothing }
 
 -- A reversed list of at least 1 p's

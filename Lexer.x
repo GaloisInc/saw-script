@@ -32,7 +32,7 @@ $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
 @reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args|this|int|long
-              |mayAlias|const
+              |mayAlias|const|true|false|ensures
 @reservedop  = "+"
 @varid       = $alpha $idchar*
 @decimal     = $digit+

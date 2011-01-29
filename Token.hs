@@ -1,6 +1,6 @@
 module SAWScript.Token where
 
-data Token p = TVar       { getPos :: p, _gs :: String   }
+data Token p = TVar       { getPos :: p, getString :: String   }
              | TLit       { getPos :: p, _gs :: String   }
              | TUnknown   { getPos :: p, _gs :: String   }
              | TPunct     { getPos :: p, _gs :: String   }
