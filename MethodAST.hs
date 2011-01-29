@@ -21,6 +21,13 @@ data ExprWidth
   | WidthAdd ExprWidth ExprWidth
   deriving (Show)
 
+-- | Java types for symbolic simulator.
+data JavaType
+  = RefType [String] -- ^ Class with given dots. 
+  | IntArray Int -- ^ Int array with given length
+  | LongArray Int -- ^ Long array with given length.   
+
+
 -- | Expressions types for AST.
 data ExprType 
   = BitType
@@ -166,7 +173,7 @@ data VerificationMethod = Blast | Rewrite
 
 -- | Commands in a method spec.
 data MethodSpecDecl 
-  = Type [JavaExpr] (Either String ExprType)
+  = Type [JavaExpr] JavaType
   -- | List of Java expressions that may alias.
   | MayAlias [JavaRef]
   -- | Contant value in reference.
