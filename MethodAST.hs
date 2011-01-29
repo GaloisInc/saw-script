@@ -166,7 +166,7 @@ data VerificationMethod = Blast | Rewrite
 
 -- | Commands in a method spec.
 data MethodSpecDecl 
-  = Type [JavaExpr] (Either String ExprType)
+  = Type [JavaRef] (Either [String] ExprType)
   -- | List of Java expressions that may alias.
   | MayAlias [JavaRef]
   -- | Contant value in reference.
