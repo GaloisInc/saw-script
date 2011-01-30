@@ -42,106 +42,107 @@ data FnType = FnType [ExprType] ExprType
 
 -- | Roughly correspond to Cryptol expressions, but can also reference
 -- Java variables.
-data MixExpr v
-    = Extern v
-    | Var Pos String
+data Expr
+    = Var Pos String
     | ConstantBool Pos Bool
     | ConstantInt  Pos Integer
 
     -- * Highest precedence
    
     -- | Array comprehension.
-    | MkArray Pos [MixExpr v]
+    | MkArray Pos [Expr]
     -- | Making a record
-    | MkRecord   Pos [(Pos, String, MixExpr v)]
+    | MkRecord Pos [(Pos, String, Expr)]
     
     -- Precedence 13
     -- | Type annotation on an expression.
-    | TypeExpr Pos (MixExpr v) ExprType
+    | TypeExpr Pos Expr ExprType
     -- | Dereference field
-    | DerefField Pos (MixExpr v) String
+    | DerefField Pos Expr String
 
     -- Precedence 12
     -- | Uninterpreted functions.
-    | ApplyExpr Pos String [MixExpr v]
+    | ApplyExpr Pos String [Expr]
+    -- | Array subscript
+    | ArrayExpr Pos Expr
 
     -- Precedence 11
     -- | Boolean negation (~)
-    | NotExpr  Pos (MixExpr v)
+    | NotExpr  Pos Expr
     -- | Integer negation (-)
-    | NegExpr Pos (MixExpr v)
+    | NegExpr Pos Expr
 
     -- Precedence 10
     -- | Multiplication
-    | MulExpr Pos (MixExpr v) (MixExpr v)
+    | MulExpr Pos Expr Expr
     -- | Signed division  (/s)
-    | SDivExpr Pos (MixExpr v) (MixExpr v)
+    | SDivExpr Pos Expr Expr
     -- | Signed remainder  (%s)
-    | SRemExpr Pos (MixExpr v) (MixExpr v)
+    | SRemExpr Pos Expr Expr
 
     -- Precedence 9
     -- | Addition
-    | PlusExpr Pos (MixExpr v) (MixExpr v)
+    | PlusExpr Pos Expr Expr
     -- | Subtraction
-    | SubExpr Pos (MixExpr v) (MixExpr v)
+    | SubExpr Pos Expr Expr
 
     -- Precedence 8
     -- | Shift left (<<)
-    | ShlExpr  Pos (MixExpr v) (MixExpr v)
+    | ShlExpr  Pos Expr Expr
     -- | Signed shift right (>>s)
-    | SShrExpr Pos (MixExpr v) (MixExpr v)
+    | SShrExpr Pos Expr Expr
     -- | Unsigned shift right (>>u)
-    | UShrExpr Pos (MixExpr v) (MixExpr v)
+    | UShrExpr Pos Expr Expr
 
     -- Precedence 7
     -- | Bitwise and (&)
-    | BitAndExpr  Pos (MixExpr v) (MixExpr v)
+    | BitAndExpr  Pos Expr Expr
 
     -- Precedence 6
     -- | Bitwise xor (^)
-    | BitXorExpr  Pos (MixExpr v) (MixExpr v)
+    | BitXorExpr  Pos Expr Expr
 
     -- Precedence 5
     -- | Bitwise or (|)
-    | BitOrExpr  Pos (MixExpr v) (MixExpr v)
+    | BitOrExpr  Pos Expr Expr
 
     -- Precedence 4
     -- | Cryptol append operator (#)
-    | AppendExpr Pos (MixExpr v) (MixExpr v)
+    | AppendExpr Pos Expr Expr
 
     -- Precedence 3
     -- | Equality (==)
-    | EqExpr   Pos (MixExpr v) (MixExpr v)
+    | EqExpr   Pos Expr Expr
     -- | Inequality
-    | IneqExpr Pos (MixExpr v) (MixExpr v)
+    | IneqExpr Pos Expr Expr
 
     -- Precedence 2
     -- | Signed greater than or equal operation (>=s)
-    | SGeqExpr Pos (MixExpr v) (MixExpr v)
+    | SGeqExpr Pos Expr Expr
     -- | Unsigned greater than or equal operation (>=u)
-    | UGeqExpr Pos (MixExpr v) (MixExpr v)
+    | UGeqExpr Pos Expr Expr
     -- | Signed greater than operation (>s)
-    | SGtExpr  Pos (MixExpr v) (MixExpr v)
+    | SGtExpr  Pos Expr Expr
     -- | Unsigned greater than operation (>u)
-    | UGtExpr  Pos (MixExpr v) (MixExpr v)
+    | UGtExpr  Pos Expr Expr
     -- | Signed less than or equal operation (<=s)
-    | SLeqExpr Pos (MixExpr v) (MixExpr v)
+    | SLeqExpr Pos Expr Expr
     -- | Unsigned less than or equal operation (<=u)
-    | ULeqExpr Pos (MixExpr v) (MixExpr v)
+    | ULeqExpr Pos Expr Expr
     -- | Signed less than operation (<s).
-    | SLtExpr  Pos (MixExpr v) (MixExpr v)
+    | SLtExpr  Pos Expr Expr
     -- | Unsigned less than operation (<u).
-    | ULtExpr  Pos (MixExpr v) (MixExpr v)
+    | ULtExpr  Pos Expr Expr
 
     -- Precedence 1
     -- | Boolean and (&&)
-    | AndExpr  Pos (MixExpr v) (MixExpr v)
+    | AndExpr  Pos Expr Expr
     -- | Boolean or (||)
-    | OrExpr   Pos (MixExpr v) (MixExpr v)
+    | OrExpr   Pos Expr Expr
 
     -- Precedence 0
     -- | If-then-else
-    | IteExpr  Pos (MixExpr v) (MixExpr v) (MixExpr v)
+    | IteExpr  Pos Expr Expr Expr
   deriving (Show)
 
 type JavaFieldName = String
@@ -156,16 +157,8 @@ data JavaRef
     | InstanceField Pos JavaRef JavaFieldName
   deriving (Show)
 
--- | A method spec term is an expression that may refer to 
--- Java expressions.
-type JavaExpr = MixExpr JavaRef
-
 data RewriteVar = RewriteVar Pos String
   deriving (Show)
-
--- | A rewrite term is an expression that may refer to named and
--- typed variables.
-type RewriteTerm = MixExpr RewriteVar
 
 type SpecName = String
 
@@ -178,11 +171,11 @@ data MethodSpecDecl
   -- | List of Java expressions that may alias.
   | MayAlias Pos [JavaRef]
   -- | Contant value in reference.
-  | Const Pos JavaRef JavaExpr
+  | Const Pos JavaRef Expr
   -- | Local binding within a method spec.
-  | MethodLet Pos String JavaExpr
-  | Assume Pos JavaExpr
-  | Ensures Pos JavaRef JavaExpr
+  | MethodLet Pos String Expr
+  | Assume Pos Expr
+  | Ensures Pos JavaRef Expr
   | Arbitrary Pos JavaRef
   | VerifyUsing Pos VerificationMethod
  deriving (Show)
@@ -198,14 +191,14 @@ data VerifierCommand
   -- This additionally introduces a rule named "<function_name>.def"
   | ExternSBV Pos String FilePath FnType
   -- | Global binding.
-  | GlobalLet Pos String JavaExpr
+  | GlobalLet Pos String Expr
   -- | Verification option ("on" == True && "off" == False)
   | SetVerification Pos Bool
   -- | Define a Java method spec.
   | DeclareMethodSpec Pos [String] [MethodSpecDecl]
   -- | Define a rewrite rule with the given name, left-hand-side and right-hand
   -- side.
-  | Rule Pos String RewriteTerm RewriteTerm
+  | Rule Pos String Expr Expr
   -- | Disable use of a rule or extern definition.
   | Disable Pos String
   -- | Enable use of a rule or extern definition.

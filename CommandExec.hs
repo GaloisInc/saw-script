@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module SAWScript.CommandExec(runProofs) where
 
+-- Imports {{{1
 import Control.Exception
 import Control.Monad
 import Data.Map (Map)
@@ -12,20 +13,43 @@ import Data.Typeable
 import qualified Data.Vector as V
 import Prelude hiding (catch)
 import System.Directory (makeRelativeToCurrentDirectory)
+import System.Exit
+import System.FilePath
 import Text.PrettyPrint.HughesPJ
 
-
 import qualified Execution.Codebase as JSS
-import qualified Simulation as JSS
-
-import MethodSpec
-import SAWScript.Utils (Pos(..), SSOpts(..))
+import SAWScript.Utils (Pos(..)
+                       , SSOpts(..)
+                       , posRelativeToCurrentDirectory)
 import qualified SAWScript.MethodAST as AST
 import qualified SBVModel.SBV as SBV
 import qualified SBVParser as SBV
+import qualified Simulation as JSS
 import Symbolic
 import Utils.IOStateT
-import System.Exit
+
+-- Utility functions {{{1
+
+-- | Convert a string to a paragraph formatted document.
+ftext :: String -> Doc
+ftext msg = fsep (map text $ words msg)
+
+-- ExecException {{{1
+
+-- | Class of exceptions thrown by SBV parser.
+data ExecException = ExecException Pos -- ^ Position
+                                   Doc -- ^ Error message
+                                   String -- ^ Resolution tip
+  deriving (Show, Typeable)
+ 
+instance Exception ExecException
+
+-- | Throw exec exception in a MonadIO.
+throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
+throwIOExecException pos errorMsg resolution =
+  liftIO $ throwIO (ExecException pos errorMsg resolution)
+
+-- Executor primitives {{{1
 
 data ExecutorState = ES {
     -- | Java codebase
@@ -37,21 +61,21 @@ data ExecutorState = ES {
     -- | Maps field names to corresponding record definition.
   , recordDefs :: Map (Set String) SymRecDef
     -- | Maps function names read in from SBV file into corresponding
-    -- operator definition.
-  , sbvOps :: Map String OpDef
-    -- | Maps rule names to corresponding rule and location where it was introduced.
-  , rules :: Map String (Pos,Rule)
+    -- operator definition and position where operator was introduced.
+  , sbvOpMap :: Map String (Pos,OpDef)
+    -- | Maps rule and let binding names to location where it was introduced.
+  , definedNames :: Map String Pos
+    -- | Maps SAWScript function names to corresponding operator definition.
+  , sawOpMap :: Map String OpDef
+    -- | Maps rule names to corresponding rule.
+  , rules :: Map String Rule
     -- | Set of currently enabled rules.
   , enabledRules :: Set String
+    -- | Map from names to constant value bound to name.
+  , globalLetBindings :: Map String CValue
+    -- | Flag used to control how much logging to print out.
+  , verbosity :: Int
   } deriving (Show)
-
--- | Class of exceptions thrown by SBV parser.
-data ExecException = ExecException Pos -- ^ Position
-                                   Doc -- ^ Error message
-                                   String -- ^ Resolution tip
-  deriving (Show, Typeable)
- 
-instance Exception ExecException
 
 type Executor a = StateT ExecutorState (OpSession IO) a
 
@@ -64,76 +88,12 @@ parseFile path = do
     Nothing -> error $ "internal: Could not find file " ++ path
     Just cmds -> return cmds
 
--- | Throw exec exception in a MonadIO.
-throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
-throwIOExecException pos errorMsg resolution =
-  liftIO $ throwIO (ExecException pos errorMsg resolution)
-
--- Rule functions {{{2
-
--- | Return true if rule with given name is enabled.
-ruleEnabled :: String -> Executor Bool
-ruleEnabled name = fmap (Set.member name) $ gets enabledRules
-
--- | Throw exception indicating a rule already exists.
-checkRuleIsUndefined :: Pos -> String -> Executor ()
-checkRuleIsUndefined pos name = do
-  m <- gets rules
-  case Map.lookup name m of
-    Nothing -> return ()
-    Just (Pos prevFile prevLine _,_) -> do
-      throwIOExecException pos 
-                           (text "The name " <+> quotes (text name)
-                              <+> text "has already been defined at "
-                              <+> text prevFile <> colon <> int prevLine)
-                           ("Please ensure all names are distinct.")
-
-checkRuleIsDefined :: Pos -> String -> Executor ()
-checkRuleIsDefined pos name = do
-  m <- gets rules
-  if Map.member name m
-    then return ()
-    else throwIOExecException pos 
-                              (text "No operator or rule named " <+> quotes (text name)
-                                <+> text "has been defined.")
-                              ("Please check that the name is correct.")
-
-addRule :: String -> TermCtor -> TermCtor -> Executor ()
-addRule _nm _lhs _rhs = undefined
-
--- }}}2
-
--- This is the entry point from the front-end
--- The implicit assumption is that you can either return back with an exitCode;
--- or never come back with a proper call to exitWith..
-runProofs :: JSS.Codebase
-          -> SSOpts
-          -> AST.SSPgm
-          -> IO ExitCode
-runProofs cb ssOpts parsedFiles = do
-  let initialPath = entryPoint ssOpts
-  let initState = ES {
-          codeBase = cb
-        , runVerification = True
-        , parsedFiles  = parsedFiles
-        , recordDefs   = Map.empty
-        , sbvOps       = Map.empty
-        , rules        = Map.empty
-        , enabledRules = Set.empty
-        }
-      action = do cmds <- parseFile initialPath
-                  mapM_ execute cmds
-                  liftIO $ putStrLn "Verification succeeded!"
-                  return ExitSuccess
-  catch (runOpSession (evalStateT action initState))
-    (\(ExecException pos errorMsg resolution) -> do
-        let Pos path line col = pos
-        relativePath <- makeRelativeToCurrentDirectory path
-        putStrLn $ "Verification Failed!\n"
-        putStrLn $ relativePath ++ ":" ++ show line ++ ":" ++ show col ++ ":"
-        putStrLn $ render errorMsg
-        when (resolution /= "") $ putStrLn $ resolution
-        return $ ExitFailure (-1))
+-- | Define a polymorphic record from a set of field names.
+defineRecFromFields :: Set String -> OpSession IO SymRecDef
+defineRecFromFields names =
+  defineRecord (show names) $
+    V.map (\name -> (name, defaultPrec, SymShapeVar name)) $
+          V.fromList (Set.toList names)
 
 -- | Returns record definition for given set of field names
 lookupRecordDef :: Set String -> Executor SymRecDef
@@ -142,11 +102,53 @@ lookupRecordDef names = do
   case Map.lookup names rm of
     Just def -> return def
     Nothing -> do -- Create new record
-      let fields = V.map (\name -> (name, defaultPrec, SymShapeVar name))
-                 $ V.fromList $ Set.toList names
-      rec <- lift $ defineRecord (show names) fields
+      rec <- lift $ defineRecFromFields names
       modify $ \s -> s { recordDefs = Map.insert names rec (recordDefs s) }
       return rec
+
+-- verbosity {{{2
+
+-- | Execute command when verbosity exceeds given minimum value.
+whenVerbosity :: Int -> Executor () -> Executor ()
+whenVerbosity minVerb action = do
+  cur <- gets verbosity
+  when (minVerb <= cur) action
+
+-- | Write debug message to standard IO.
+execDebugLog :: String -> Executor ()
+execDebugLog msg = whenVerbosity 6 $ liftIO $ putStrLn msg
+
+-- Rule functions {{{2
+
+-- | Throw exception indicating a rule already exists.
+checkNameIsUndefined :: Pos -> String -> Executor ()
+checkNameIsUndefined pos name = do
+  m <- gets definedNames
+  case Map.lookup name m of
+    Nothing -> return ()
+    Just absPos -> do
+      relPos <- liftIO $ posRelativeToCurrentDirectory absPos
+      throwIOExecException pos 
+                           (ftext "The name " <+> quotes (text name)
+                              <+> ftext "has already been defined at "
+                              <+> text (show relPos) <> char '.')
+                           ("Please ensure all names are distinct.")
+
+checkRuleIsDefined :: Pos -> String -> Executor ()
+checkRuleIsDefined pos name = do
+  m <- gets rules
+  unless (Map.member name m) $ do
+    throwIOExecException pos 
+                         (text "No operator or rule named " <+> quotes (text name)
+                           <+> text "has been defined.")
+                         ("Please check that the name is correct.")
+
+addRule :: String -> TermCtor -> TermCtor -> Executor ()
+addRule _nm _lhs _rhs = undefined
+
+-- }}}2
+
+--}}}1
 
 -- Parse the given IRType to look for records.
 parseFnIRType :: Pos -> Doc -> Maybe String -> SBV.IRType -> Executor ()
@@ -156,51 +158,29 @@ parseFnIRType pos relativePath uninterpName tp =
         | SBV.isTuple op (length irTypes) -> mapM_ parseType (irResult:irTypes)
      SBV.TApp "->" [irType, irResult] -> mapM_ parseType [irType, irResult]
      _ -> parseType tp -- Contant
-  where -- Parse single IRType.
+  where -- Parse single IRType to get records out of it and verify function names.
         parseType :: SBV.IRType -> Executor ()
-        parseType (SBV.TVar i) = return ()
-        parseType (SBV.TInt i) = return ()
+        parseType (SBV.TVar _i) = return ()
+        parseType (SBV.TInt _i) = return ()
         parseType (SBV.TApp fnName args)
           | SBV.isTuple fnName (length args) =
              case uninterpName of
                Just name -> 
                 throwIOExecException pos
                   (text "The SBV file" <+> relativePath
-                    <+> text "references an uninterpreted function" <+> text name
-                    <+> text "with a tuple type, however this is not currently supported by SAWScript.")
+                    <+> ftext "references an uninterpreted function" <+> text name
+                    <+> ftext "with a tuple type, however this is not currently supported by SAWScript.")
                   ("Please ensure that the SBV file was correctly generated.")
                Nothing -> 
                 throwIOExecException pos
                   (text "The SBV file" <+> relativePath
-                    <+> text "has a tuple in its signature.  This is not currently supported by SAWScript.")
+                    <+> ftext "has a tuple in its signature.  This is not currently supported by SAWScript.")
                   ("Please rewrite the Cryptol function to use a record rather than a tuple.")
           | otherwise = mapM_ parseType args
         parseType (SBV.TRecord (unzip -> (names,schemes))) = do
           -- Lookup record def for files to ensure it is known to executor.
           _ <- lookupRecordDef (Set.fromList names)
           mapM_ (parseType . SBV.schemeType) schemes
-
--- | Throw undeclared uninterpreted function message.
-throwUndeclaredFn :: MonadIO m => Pos -> Doc -> String -> m a
-throwUndeclaredFn pos relativePath name =
-  let msg = text "The extern SBV file"
-              <+> relativePath 
-              <+> text "calls an undefined uninterpreted function named"
-              <+> quotes (text name)
-              <> char '.'
-      res = "Please load this extern SBV file before attempting to load \'"
-              ++ name ++ "\'."
-   in throwIOExecException pos msg res
-
--- | Throw unexpected function type.
-throwUnexpectedFnType :: MonadIO m => Pos -> Doc -> String -> m a
-throwUnexpectedFnType pos relativePath name =
-  let msg = text "The type of the uninterpreted function"
-              <+> quotes (text name)
-              <+> text "does not match the type expected in the extern SBV file"
-              <+> relativePath <> char '.'
-      res = "Please check that the correct SBV files match the Cryptol source."
-   in throwIOExecException pos msg res
 
 -- | Throw ExecException if SBVException is thrown.
 throwSBVParseError :: MonadIO m => Pos -> Doc -> SBV.SBVException -> m a
@@ -221,14 +201,21 @@ parseExprWidth (AST.WidthConst i) = constantWidth (Wx i)
 parseExprWidth (AST.WidthVar nm) = varWidth nm
 parseExprWidth (AST.WidthAdd u v) = addWidth (parseExprWidth u) (parseExprWidth v)
 
+type FieldRecordMap = Map (Set String) SymRecDef
+
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
 parseExprType :: AST.ExprType -> Executor DagType
 parseExprType AST.BitType = return SymBool
-parseExprType (AST.BitvectorType w) = return (SymInt (parseExprWidth w))
+parseExprType (AST.BitvectorType w) = return $ SymInt (parseExprWidth w)
 parseExprType (AST.Array l tp) =
   fmap (SymArray (constantWidth (Wx l))) $ parseExprType tp
-parseExprType (AST.Record fields) = undefined
+parseExprType (AST.Record fields) = do
+  let names = [ nm | (_,nm,_) <- fields ]
+  def <- lookupRecordDef (Set.fromList names)
+  tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
+  let sub = emptySubst { shapeSubst = Map.fromList (names `zip` tps) }
+  return $ SymRec def sub
 parseExprType (AST.ShapeVar v) = return (SymShapeVar v)
 
 -- | Parse the FnType returned by the parser into symbolic dag types.
@@ -238,55 +225,175 @@ parseFnType (AST.FnType args res) = do
   parsedRes <- parseExprType res
   return (V.toList parsedArgs, parsedRes)
 
--- | Execute command 
-execute :: AST.VerifierCommand -> Executor ()
--- Execute commands from file.
-execute (AST.ImportCommand pos path) = do
-  mapM_ execute =<< parseFile path
-execute (AST.ExternSBV pos opName absolutePath astFnType) = do
-  -- Get relative path as Doc for error messages.
-  relativePath <- liftIO $ fmap (doubleQuotes . text) $
-                    makeRelativeToCurrentDirectory absolutePath
-  -- Check if rule is already defined.
-  checkRuleIsUndefined pos opName
-  -- Load SBV file
-  sbv <- liftIO $ SBV.loadSBV absolutePath
-  --- Parse SBV type to add recordDefs as needed.
-  let SBV.SBVPgm (_ver, sbvExprType, _cmds, _vc, _warn, sbvUninterpFns) = sbv
-  parseFnIRType pos relativePath Nothing sbvExprType
-  forM_ sbvUninterpFns $ \((name, _loc), irType, _) ->
-    parseFnIRType pos relativePath (Just name) irType
-  -- Define recordDefMap
+getRecordDefMap :: Executor SBV.RecordDefMap
+getRecordDefMap = do
   curRecDefs <- gets recordDefs
   let recordFn :: [(String, DagType)] -> Maybe DagType
       recordFn fields = 
         let fieldNames = Set.fromList (map fst fields)
             sub = emptySubst { shapeSubst = Map.fromList fields }
          in fmap (flip SymRec sub) $ Map.lookup fieldNames curRecDefs
+  return recordFn
+
+-- | Check uninterpreted functions expected in SBV are already defined.
+checkSBVUninterpretedFunctions :: Pos -> Doc -> SBV.SBVPgm -> Executor ()
+checkSBVUninterpretedFunctions pos relativePath sbv = do
+  let SBV.SBVPgm (_ver, sbvExprType, _cmds, _vc, _warn, sbvUninterpFns) = sbv
+  curSbvOps <- gets sbvOpMap
+  recordFn <- getRecordDefMap
+  forM_ sbvUninterpFns $ \((name, _loc), irType, _) -> do
+    case Map.lookup name curSbvOps of
+      Nothing -> do
+        let msg = text "The extern SBV file"
+                    <+> relativePath 
+                    <+> text "calls an undefined uninterpreted function named"
+                    <+> quotes (text name)
+                    <> char '.'
+            res = "Please load this extern SBV file before attempting to load \'"
+                    ++ name ++ "\'."
+        throwIOExecException pos msg res
+      Just (_,def) ->
+        unless (opDefType def == SBV.inferFunctionType recordFn irType) $ do
+          let msg = text "The type of the uninterpreted function"
+                     <+> quotes (text name)
+                     <+> text "does not match the type expected in the extern SBV file"
+                     <+> relativePath <> char '.'
+              res = "Please check that the correct SBV files match the Cryptol source."
+          throwIOExecException pos msg res
+
+{-
+parseGlobalLetExpr :: AST.RewriteTerm -> Executor CValue
+parseGlobalLetExpr initTerm = do
+  let parse :: MixExpr RewriteTerm -> SymbolicMonad Node
+      parse t = undefined
+  undefined
+
+parseMethodLetExpr :: AST.JavaExpr -> Executor (SpecExpr SymbolicMonad)
+parseMethodLetExpr = undefined
+
+extractSpecJavaExprs :: AST.JavaExpr -> Set SpecJavaExpr
+extractSpecJavaExprs = undefined
+
+parseJavaRef :: AST.JavaRef -> SpecJavaExpr 
+parseJavaRef = undefined
+
+parseRewriteExpr :: AST.RewriteTerm -> TermCtor
+parseRewriteExpr = undefined
+-}
+
+
+{-
+impl (Extern (RewriteVar p v)) = 
+  --TODO: Check to see if value for variable is already defined.
+impl (ConstantBool p b) = undefined
+
+impl (ConstantInt p i) =
+  error "An explicit type must be given for the literal integer " ++ show i
+
+
+impl (MkArray p []) = error "Explicit type for empty arrays."
+impl (MkRecord p fields) = undefined
+impl (DerefField p r f) = undefined
+
+impl (ApplyExpr p opName args) = undefined
+impl (NotExpr p e) = undefined
+impl (MulExpr p x y) = undefined
+impl (SDivExpr p x y) = undefined
+impl (SRemExpr p x y) = undefined
+impl (PlusExpr p x y) = undefined
+impl (SubExpr p x y) = undefined
+impl (ShlExpr p x y) = undefined
+impl (SShrExpr p x y) = undefined
+impl (UShrExpr p x y) = undefined
+impl (BitAndExpr p x y) = undefined
+impl (BitXorExpr p x y) = undefined
+impl (BitOrExpr p x y) = undefined
+impl (AppendExpr p x y) = undefined
+impl (EqExpr p x y) = undefined
+impl (IneqExpr p x y) = undefined
+impl (SGeqExpr p x y) = undefined
+impl (UGeqExpr p x y) = undefined
+impl (SGtExpr p x y) = undefined
+impl (UGtExpr p x y) = undefined
+impl (SLeqExpr p x y) = undefined
+impl (ULeqExpr p x y) = undefined
+impl (SLtExpr p x y) = undefined
+impl (ULtExpr p x y) = undefined
+impl (AndExpr p x y) = undefined
+impl (OrExpr p x y) = undefined
+impl (IteExpr p x y) = undefined
+
+
+--TODO: Handle special ops (trunc, sext, read, and write).
+
+impl (TypeExpr po (MkArray p [])) = undefined
+impl (TypeExpr po (ConstantInt pi i)) = undefined
+impl (TypeExpr p1 (TypeExpr p2 e tp2) tp1) =
+  undefined
+
+impl (TypeExpr p tp) = undefined
+-}
+
+-- | Execute command 
+execute :: AST.VerifierCommand -> Executor ()
+-- Execute commands from file.
+execute (AST.ImportCommand pos path) = do
+  mapM_ execute =<< parseFile path
+execute (AST.ExternSBV pos nm absolutePath astFnType) = do
+  -- Get relative path as Doc for error messages.
+  relativePath <- liftIO $ fmap (doubleQuotes . text) $
+                    makeRelativeToCurrentDirectory absolutePath
+  -- Get name of op in Cryptol from filename.
+  let sbvOpName = dropExtension (takeFileName absolutePath)
+  -- Get current uninterpreted function map.
+  curSbvOps <- gets sbvOpMap
+  -- Check if rule is undefined.
+  checkNameIsUndefined pos nm
+  -- Check SBV Op name is undefined.
+  case Map.lookup sbvOpName curSbvOps of
+    Nothing -> return ()
+    Just (absPos,_) -> do
+      relPos <- liftIO $ posRelativeToCurrentDirectory absPos
+      let msg = (text "The Cryptol function" 
+                  <+> text sbvOpName
+                  <+> ftext "has already been defined at"
+                  <+> text (show relPos)
+                  <> char '.')
+          res = "Please check that each exported function is only loaded once."
+       in throwIOExecException pos msg res
+  -- Load SBV file
+  sbv <- liftIO $ SBV.loadSBV absolutePath
+  --- Parse SBV type to add recordDefs as needed.
+  execDebugLog $ "Parsing SBV type for " ++ nm
+  let SBV.SBVPgm (_ver, sbvExprType, _cmds, _vc, _warn, sbvUninterpFns) = sbv
+  parseFnIRType pos relativePath Nothing sbvExprType
+  forM_ sbvUninterpFns $ \((name, _loc), irType, _) ->
+    parseFnIRType pos relativePath (Just name) irType
+  -- Define recordDefFn
+  execDebugLog $ "Defining recordDefFn for " ++ nm
+  recordFn <- getRecordDefMap
   -- Check that op type matches expected type.
+  execDebugLog $ "Checking expected type matches inferred type for " ++ nm
   fnType <- parseFnType astFnType
   unless (fnType == SBV.inferFunctionType recordFn sbvExprType) $ 
-    let msg = (text "The type of the function in the imported SBV file"
-                 <+> relativePath
-                 <+> text "differs from the type provided to the extern command")
-        res = "Please check that the function exported from Cryptol via SBV matches the expected type."
+    let msg = (ftext "The type of the function in the imported SBV file"
+                 $$ relativePath
+                 $$ ftext "differs from the type provided to the extern command.")
+        res = "Please check that the function exported from Cryptol via SBV matches the type in the SAWScript file."
      in throwIOExecException pos msg res
-  -- Check function types are correct.
-  curOps <- gets sbvOps
-  forM_ sbvUninterpFns $ \((name, _loc), irType, _) -> do
-    case Map.lookup name curOps of
-      Nothing -> throwUndeclaredFn pos relativePath name
-      Just def -> do
-        unless (opDefType def == SBV.inferFunctionType recordFn irType) $
-          throwUnexpectedFnType pos relativePath name
+  -- Check uninterpreted functions are defined.
+  execDebugLog $ "Checking uninterpreted inputs for " ++ nm
+  checkSBVUninterpretedFunctions pos relativePath sbv 
   -- Define uninterpreted function map.
   let uninterpFns :: String -> [DagType] -> Maybe Op
-      uninterpFns name _ = fmap groundOp $ Map.lookup name curOps
+      uninterpFns name _ = fmap (groundOp . snd) $ Map.lookup name curSbvOps
   -- Parse SBV file.
+  execDebugLog $ "Parsing SBV inport for " ++ nm
   (op, SBV.WEF opFn) <- 
     flip catchMIO (throwSBVParseError pos relativePath) $ lift $
-      SBV.parseSBVOp recordFn uninterpFns opName opName defaultPrec sbv
+      SBV.parseSBVOp recordFn uninterpFns nm nm defaultPrec sbv
   -- Create rule for definition.
+  execDebugLog $ "Creating rule definition for for " ++ nm
   let (argTypes,_) = fnType
   let lhsArgs = map (uncurry mkVar) $ (map show ([0..] :: [Int]) `zip` argTypes)
   let lhs = evalTerm $ appTerm (groundOp op) lhsArgs
@@ -294,21 +401,27 @@ execute (AST.ExternSBV pos opName absolutePath astFnType) = do
     inputVars <- V.mapM freshUninterpretedVar (V.fromList argTypes)
     res <- opFn inputVars :: SymbolicMonad Node
     return $ nodeToTermCtor (fmap show . termInputId) res
-  case mkRuleFromCtor opName lhs rhs of
-    Left _msg -> error "internal: Unexpected failure when creating rule"
-    Right rl -> 
-      -- Update state with op and rules.
-      modify $ \s -> s { sbvOps = Map.insert opName op (sbvOps s)
-                       , rules = Map.insert opName (pos,rl) (rules s)
-                       , enabledRules = Set.insert opName (enabledRules s) }
-execute (AST.GlobalLet _pos _name _expr) = do
-  undefined
-execute (AST.SetVerification _pos _val) = do
-  undefined
+  -- Update state with op and rules.
+  modify $ \s -> s { sbvOpMap = Map.insert sbvOpName (pos,op) (sbvOpMap s)
+                   , definedNames = Map.insert nm pos (definedNames s)
+                   , sawOpMap = Map.insert nm op (sawOpMap s)
+                   , rules = Map.insert nm (Rule nm lhs rhs) (rules s)
+                   , enabledRules = Set.insert nm (enabledRules s) }
+  execDebugLog $ "Finished process extern SBV " ++ nm
+execute (AST.GlobalLet pos name expr) = do
+  checkNameIsUndefined pos name
+  _bindings <- gets globalLetBindings
+  liftIO $ putStrLn (show expr)
+  let val = undefined
+  modify $ \s -> s { definedNames = Map.insert name pos (definedNames s)
+                   , globalLetBindings = Map.insert name val (globalLetBindings s) }
+  error "AST.GlobalLet"
+execute (AST.SetVerification _pos val) = do
+  modify $ \s -> s { runVerification = val }
 execute (AST.DeclareMethodSpec _pos _method _cmds) = do
-  undefined
+  error "AST.DeclareMethodSpec"
 execute (AST.Rule _pos _name _lhs _rhs) = do
-  undefined
+  error "AST.Rule"
   {-
   -- Check rule does not exist.
   re <- ruleExists name
@@ -356,3 +469,41 @@ execute (ReduceJavaMethodSpec pos specName) = do
         "Verification of " ++ specName ++ " failed!\n" ++
         "The remaining proof obligation is:\n  " ++ prettyTerm t
         -}
+
+-- | This is the entry point from the front-end
+-- The implicit assumption is that you can either return back with an exitCode;
+-- or never come back with a proper call to exitWith..
+runProofs :: JSS.Codebase
+          -> SSOpts
+          -> AST.SSPgm
+          -> IO ExitCode
+runProofs cb ssOpts files = do
+  let initialPath = entryPoint ssOpts
+  let initState = ES {
+          codeBase = cb
+        , runVerification = True
+        , parsedFiles = files
+        , recordDefs   = Map.empty
+        , sbvOpMap     = Map.empty
+        , definedNames = Map.empty
+        , sawOpMap     = Map.empty
+        , rules        = Map.empty
+        , enabledRules = Set.empty
+        , globalLetBindings = Map.empty
+        , verbosity = verbose ssOpts
+        }
+      action = do cmds <- parseFile initialPath
+                  mapM_ execute cmds
+                  liftIO $ putStrLn "Verification succeeded!"
+                  return ExitSuccess
+  catch (runOpSession (evalStateT action initState))
+    (\(ExecException absPos errorMsg resolution) -> do
+        relPos <- posRelativeToCurrentDirectory absPos
+        putStrLn $ "Verification Failed!\n"
+        putStrLn $ show relPos
+        let rend = renderStyle style { lineLength = 100 }
+        putStrLn $ rend $ nest 2 errorMsg
+        when (resolution /= "") $ do
+          putStrLn ""
+          putStrLn $ rend $ nest 2 $ ftext resolution
+        return $ ExitFailure (-1))
