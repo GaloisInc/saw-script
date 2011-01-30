@@ -176,7 +176,7 @@ data MethodSpecDecl
   | MethodLet Pos String Expr
   | Assume Pos Expr
   | Ensures Pos JavaRef Expr
-  | Arbitrary Pos JavaRef
+  | Arbitrary Pos [JavaRef]
   | VerifyUsing Pos VerificationMethod
  deriving (Show)
 

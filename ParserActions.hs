@@ -78,10 +78,10 @@ parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
 parseJV :: SSOpts -> (FilePath, Maybe Pos) -> IO ([(FilePath, Pos)], [VerifierCommand])
 parseJV ssOpts (f, mbP) = do
        notQuiet ssOpts $ do rf <- makeRelativeToCurrentDirectory f
-                            let mkP p = do p' <- posRelativeToCurrentDirectory p
-                                           return $ " (imported at " ++ show p' ++ ")"
-                            reason <- maybe (return "") mkP mbP
-                            putStrLn $ "Loading " ++ show rf ++ ".." ++ reason
+                            case mbP of
+                              Nothing -> putStrLn $ "Loading " ++ show rf ++ ".."
+                              Just p  -> do p' <- posRelativeToCurrentDirectory p
+                                            putStrLn $ "  Importing " ++ show rf ++ ".. (imported at " ++ show p' ++ ")"
        cts <- readFile f
        let toks = lexSAW f cts
        debugVerbose ssOpts $ do putStrLn $ "Token stream for " ++ show f ++ ":"
