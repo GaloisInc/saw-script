@@ -13,7 +13,7 @@ import SAWScript.Utils
 import {-# SOURCE #-} SAWScript.ParserActions
 }
 
-%expect 1
+%expect 0
 %tokentype { Token Pos }
 %monad { Parser }
 %lexer { lexer } { TEOF _ }
@@ -74,7 +74,7 @@ SAWScript : termBy(VerifierCommand, ';') { $1 }
 VerifierCommand :: { VerifierCommand }
 VerifierCommand : 'import' str                              { ImportCommand     (getPos $1) $2                   }
                 | 'extern' 'SBV' var '(' str ')' ':' FnType { ExternSBV         (getPos $1) (getString $3) $5 $8 }
-                | 'let' var '=' JavaExpr                    { GlobalLet         (getPos $1) (getString $2) $4    }
+                | 'let' var '=' Expr                        { GlobalLet         (getPos $1) (getString $2) $4    }
                 | 'set' 'verification' 'on'                 { SetVerification   (getPos $1) True                 }
                 | 'set' 'verification' 'off'                { SetVerification   (getPos $1) False                }
                 | 'enable' var                              { Enable            (getPos $1) (getString $2)       }
@@ -100,24 +100,23 @@ ExprWidth : int              {  WidthConst $1           }
           | var              {  WidthVar (getString $1) }
 
 -- Comma separated expressions, at least one
-JavaExprs :: { [JavaExpr] }
-JavaExprs : sepBy1(JavaExpr, ',') { $1 }
+Exprs :: { [Expr] }
+Exprs : sepBy1(Expr, ',') { $1 }
 
 -- Expressions
-JavaExpr :: { JavaExpr }
-JavaExpr : JavaRef                { Extern       $1                            }
-         | var                    { Var          (getPos $1) (getString $1)    }
-         | 'true'                 { ConstantBool (getPos $1) True              }
-         | 'false'                { ConstantBool (getPos $1) False             }
-         | num                    { ConstantInt  (getPos $1) (getInteger $1)   }
-         | JavaExpr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
-         | var '(' JavaExprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
-         | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
-         | JavaExpr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
+Expr :: { Expr }
+Expr : var                    { Var          (getPos $1) (getString $1)    }
+     | 'true'                 { ConstantBool (getPos $1) True              }
+     | 'false'                { ConstantBool (getPos $1) False             }
+     | num                    { ConstantInt  (getPos $1) (getInteger $1)   }
+     | Expr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
+     | var '(' Exprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
+     | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
+     | Expr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
 
 -- Records
-RecordExpr :: { [(Pos, String, JavaExpr)] }
-RecordExpr : sepBy(connected(var, '=', JavaExpr), ';')  { map ((\ (v, e) -> (getPos v, getString v, e))) $1 }
+RecordExpr :: { [(Pos, String, Expr)] }
+RecordExpr : sepBy(connected(var, '=', Expr), ';')  { map ((\ (v, e) -> (getPos v, getString v, e))) $1 }
 
 -- Method spec body
 MethodSpecDecls :: { [MethodSpecDecl] }
@@ -126,10 +125,10 @@ MethodSpecDecls : termBy(MethodSpecDecl, ';') { $1 }
 MethodSpecDecl :: { MethodSpecDecl }
 MethodSpecDecl : 'type'        JavaRefs ':' JavaType  { Type        (getPos $1) $2 $4             }
                | 'mayAlias'    '{' JavaRefs '}'       { MayAlias    (getPos $1) $3                }
-               | 'const'       JavaRef ':=' JavaExpr  { Const       (getPos $1) $2 $4             }
-               | 'let'         var '=' JavaExpr       { MethodLet   (getPos $1) (getString $2) $4 }
-               | 'assume'      JavaExpr               { Assume      (getPos $1) $2                }
-               | 'ensures'     JavaRef ':=' JavaExpr  { Ensures     (getPos $1) $2 $4             }
+               | 'const'       JavaRef ':=' Expr      { Const       (getPos $1) $2 $4             }
+               | 'let'         var '='  Expr          { MethodLet   (getPos $1) (getString $2) $4 }
+               | 'assume'      Expr                   { Assume      (getPos $1) $2                }
+               | 'ensures'     JavaRef ':=' Expr      { Ensures     (getPos $1) $2 $4             }
                | 'arbitrary'   ':' JavaRefs           { Arbitrary   (getPos $1) $3                }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing (getPos $1) $3                }
 
