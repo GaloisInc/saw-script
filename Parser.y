@@ -13,7 +13,7 @@ import SAWScript.Utils
 import {-# SOURCE #-} SAWScript.ParserActions
 }
 
-%expect 0
+%expect 1
 %tokentype { Token Pos }
 %monad { Parser }
 %lexer { lexer } { TEOF _ }
@@ -113,7 +113,7 @@ JavaExpr : JavaRef                { Extern       $1                            }
          | JavaExpr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
          | var '(' JavaExprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
          | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
---         | JavaExpr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
+         | JavaExpr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
 
 -- Records
 RecordExpr :: { [(Pos, String, JavaExpr)] }
@@ -130,7 +130,7 @@ MethodSpecDecl : 'type'        JavaRefs ':' JavaType  { Type        (getPos $1) 
                | 'let'         var '=' JavaExpr       { MethodLet   (getPos $1) (getString $2) $4 }
                | 'assume'      JavaExpr               { Assume      (getPos $1) $2                }
                | 'ensures'     JavaRef ':=' JavaExpr  { Ensures     (getPos $1) $2 $4             }
-               | 'arbitrary'   JavaRef                { Arbitrary   (getPos $1) $2                }
+               | 'arbitrary'   ':' JavaRefs           { Arbitrary   (getPos $1) $3                }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing (getPos $1) $3                }
 
 -- Comma separated Sequence of JavaRef's, at least one
@@ -138,9 +138,9 @@ JavaRefs :: { [JavaRef] }
 JavaRefs : sepBy1(JavaRef, ',') { $1 }
 
 JavaRef :: { JavaRef }
-JavaRef : 'this'                { This (getPos $1)                            }
-        | 'args' '[' int ']'    { Arg  (getPos $1) $3                         }
-        | JavaRef '.' var       { InstanceField (getPos $2) $1 (getString $3) }
+JavaRef : 'this'             { This          (getPos $1)                   }
+        | 'args' '[' int ']' { Arg           (getPos $1) $3                }
+        | JavaRef '.' var    { InstanceField (getPos $2) $1 (getString $3) }
 
 JavaType :: { JavaType }
 JavaType : Qvar               { RefType   $1 }
