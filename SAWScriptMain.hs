@@ -33,12 +33,13 @@ main = do ssOpts <- parseArgs
             Just c  -> do complainCycle deps c
                           exitFailure
             Nothing -> do let cnt   = M.size pmap
-                              specs = show cnt ++ " SAW sript" ++ if cnt > 1 then "s" else ""
-                          verboseAtLeast 2 ssOpts $ putStrLn $ "Loaded " ++ specs ++ " successfully."
+                              plu   = if cnt > 1 then "s" else ""
+                          verboseAtLeast 2 ssOpts $ putStrLn $ "Loaded " ++ show cnt ++ " SAW script" ++ plu ++ " successfully."
                           if dump ssOpts
                              then do dumpScripts pmap
                                      exitSuccess
-                             else do ec <- runProofs cb ssOpts pmap
+                             else do notQuiet ssOpts $ putStrLn $ "Starting verification tasks on " ++ show cnt ++ " specification" ++ plu ++ "."
+                                     ec <- runProofs cb ssOpts pmap
                                      exitWith ec
 
 parseArgs :: IO SSOpts
