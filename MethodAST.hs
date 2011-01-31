@@ -140,6 +140,7 @@ data Expr
     -- Precedence 1
     -- | Boolean and (&&)
     | AndExpr  Pos Expr Expr
+    -- Precedence 0.5
     -- | Boolean or (||)
     | OrExpr   Pos Expr Expr
 

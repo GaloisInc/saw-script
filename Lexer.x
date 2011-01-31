@@ -34,8 +34,9 @@ $nl        = [\n\r]
 @reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args
              |this|int|long|mayAlias|const|true|false|ensures|set|verification|on|off
              |assume|arbitrary|enable|disable|rule|forAll|not
-@reservedop  = "~" | "-" | "*" | "+" | "/s" | "%s" | ">>" | "<<" | ">>u" | "|" | "&" | "^"
-             | "#" | "==" | "!=" | ">=s" | ">=u" | ">s" | ">u" | "<=s" | "<=u" | "<s" | "<u"
+@reservedop  = "~"  | "-" | "*" | "+" | "/s" | "%s" | ">>" | "<<" | ">>u" | "|" | "&" | "^"
+             | "#"  | "==" | "!=" | ">=s" | ">=u" | ">s" | ">u" | "<=s" | "<=u" | "<s" | "<u"
+             | "&&" | "||"
 @punct       = "," | ";" | "(" | ")" | ":" | "[" | "]" | "->" | "=" | "{" | "}" | "." | ":="
 @varid       = $alpha $idchar*
 @decimal     = $digit+

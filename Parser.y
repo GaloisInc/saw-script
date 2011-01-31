@@ -90,8 +90,12 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '<=u'          { TOp        _ "<=u"          }
    '<s'           { TOp        _ "<s"           }
    '<u'           { TOp        _ "<u"           }
+   '&&'           { TOp        _ "&&"           }
+   '||'           { TOp        _ "||"           }
 
 -- Operators, precedence increases as you go down in this list
+%left '||'
+%left '&&'
 %nonassoc '>=s' '>=u' '>s' '>u' '<=s' '<=u' '<s' '<u'
 %nonassoc '==' '!='
 %right '#'
@@ -190,6 +194,8 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | Expr '<=u' Expr    { ULeqExpr     (getPos $2) $1 $3             }
      | Expr '<s'  Expr    { SLtExpr      (getPos $2) $1 $3             }
      | Expr '<u'  Expr    { ULtExpr      (getPos $2) $1 $3             }
+     | Expr '&&'  Expr    { AndExpr      (getPos $2) $1 $3             }
+     | Expr '||'  Expr    { OrExpr       (getPos $2) $1 $3             }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }
