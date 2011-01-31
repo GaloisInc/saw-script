@@ -64,7 +64,7 @@ data Expr
     -- | Uninterpreted functions.
     | ApplyExpr Pos String [Expr]
     -- | Array subscript
-    | ArrayExpr Pos Expr
+    | ArgsExpr Pos Int
 
     -- Precedence 11
     -- | Boolean negation (~)

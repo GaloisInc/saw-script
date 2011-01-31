@@ -1,12 +1,15 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 module SAWScript.CommandExec(runProofs) where
 
 -- Imports {{{1
 import Control.Exception
 import Control.Monad
+import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable
@@ -53,7 +56,7 @@ throwIOExecException pos errorMsg resolution =
 
 data ExecutorState = ES {
     -- | Java codebase
-    codeBase :: JSS.Codebase 
+    codebase :: JSS.Codebase 
     -- | Flag that indicates if verification commands should be executed.
   , runVerification :: Bool
     -- | Maps file paths to verifier commands.
@@ -77,7 +80,11 @@ data ExecutorState = ES {
   , verbosity :: Int
   } deriving (Show)
 
-type Executor a = StateT ExecutorState (OpSession IO) a
+type Executor = StateT ExecutorState (OpSession IO)
+
+instance JSS.HasCodebase Executor where
+  getCodebase = gets codebase
+  putCodebase cb = modify $ \s -> s { codebase = cb }
 
 -- | Given a file path, this returns the verifier commands in the file,
 -- or throws an exception.
@@ -142,9 +149,6 @@ checkRuleIsDefined pos name = do
                          (text "No operator or rule named " <+> quotes (text name)
                            <+> text "has been defined.")
                          ("Please check that the name is correct.")
-
-addRule :: String -> TermCtor -> TermCtor -> Executor ()
-addRule _nm _lhs _rhs = undefined
 
 -- }}}2
 
@@ -214,7 +218,7 @@ parseExprType (AST.Record fields) = do
   let names = [ nm | (_,nm,_) <- fields ]
   def <- lookupRecordDef (Set.fromList names)
   tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
-  let sub = emptySubst { shapeSubst = Map.fromList (names `zip` tps) }
+  let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
   return $ SymRec def sub
 parseExprType (AST.ShapeVar v) = return (SymShapeVar v)
 
@@ -225,6 +229,57 @@ parseFnType (AST.FnType args res) = do
   parsedRes <- parseExprType res
   return (V.toList parsedArgs, parsedRes)
 
+data TypedExpr 
+  = TypedVar String DagType
+  | TypedCns CValue DagType
+  | TypedApply Op [TypedExpr]
+  deriving (Show)
+
+-- | Evaluate a ground typed expression to a constant value.
+globalEval :: TypedExpr -> Executor CValue
+globalEval exp = do
+  let mkNode :: TypedExpr -> SymbolicMonad Node
+      mkNode (TypedVar _nm _tp) =
+        error "internal: globalEval called with non-ground expression"
+      mkNode (TypedCns c tp) = makeConstant c tp
+      mkNode (TypedApply op args) = do
+        argNodes <- mapM mkNode args
+        applyOp op argNodes
+  -- | Create rewrite program that contains all the operator definition rules.
+  sawOpNames <- fmap Map.keys $ gets sawOpMap
+  rls <- gets rules
+  let opRls = map (rls Map.!) sawOpNames
+      pgm = foldl addRule emptyProgram opRls
+  lift $ runSymSession $ do
+    n <- mkNode exp
+    -- Simplify definition.
+    rew <- liftIO $ mkRewriter pgm
+    nr <- reduce rew n
+    case termConst nr of
+      Nothing -> error "internal: globalEval called with an expression that could not be evaluated."
+      Just c -> return c
+
+-- | Convert an AST expression from parser into a typed expression.
+typecheckGlobalExpr :: AST.Expr -> Executor TypedExpr
+typecheckGlobalExpr (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
+  tp <- parseExprType astTp
+  let throwNonGround =
+        let msg = text "The type" <+> text (ppType tp)
+                    <+> ftext "bound to literals must be a ground type."
+         in throwIOExecException pos msg ""
+  case tp of
+    SymInt (widthConstant -> Just (Wx w)) ->
+      return $ TypedCns (mkCInt (Wx w) i) tp
+    SymInt _ -> throwNonGround
+    SymShapeVar _ -> throwNonGround
+    _ ->
+      let msg = text "Incompatible type" <+> text (ppType tp)
+                  <+> ftext "assigned to integer literal."
+       in throwIOExecException pos msg ""
+typecheckGlobalExpr e =
+  error $ "internal: typecheckExpr given illegal type " ++ show e
+
+-- | Create record def map using currently known records.
 getRecordDefMap :: Executor SBV.RecordDefMap
 getRecordDefMap = do
   curRecDefs <- gets recordDefs
@@ -337,7 +392,7 @@ impl (TypeExpr p tp) = undefined
 -- | Execute command 
 execute :: AST.VerifierCommand -> Executor ()
 -- Execute commands from file.
-execute (AST.ImportCommand pos path) = do
+execute (AST.ImportCommand _pos path) = do
   mapM_ execute =<< parseFile path
 execute (AST.ExternSBV pos nm absolutePath astFnType) = do
   -- Get relative path as Doc for error messages.
@@ -408,18 +463,30 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
                    , rules = Map.insert nm (Rule nm lhs rhs) (rules s)
                    , enabledRules = Set.insert nm (enabledRules s) }
   execDebugLog $ "Finished process extern SBV " ++ nm
-execute (AST.GlobalLet pos name expr) = do
+execute (AST.GlobalLet pos name astExpr) = do
+  execDebugLog $ "Start defining let " ++ name
   checkNameIsUndefined pos name
-  _bindings <- gets globalLetBindings
-  liftIO $ putStrLn (show expr)
-  let val = undefined
+  expr <- typecheckGlobalExpr astExpr
+  val <- globalEval expr
   modify $ \s -> s { definedNames = Map.insert name pos (definedNames s)
                    , globalLetBindings = Map.insert name val (globalLetBindings s) }
-  error "AST.GlobalLet"
+  execDebugLog $ "Finished defining let " ++ name
 execute (AST.SetVerification _pos val) = do
   modify $ \s -> s { runVerification = val }
-execute (AST.DeclareMethodSpec _pos _method _cmds) = do
-  error "AST.DeclareMethodSpec"
+execute (AST.DeclareMethodSpec pos method cmds) = do
+  let methodName:revClassPath = reverse method
+  when (null revClassPath) $
+    throwIOExecException pos (ftext "Missing class in method declaration.") ""
+  let jvmClassName = intercalate "/" $ reverse revClassPath
+  let javaClassName = intercalate "/" $ reverse revClassPath
+  maybeCl <- JSS.tryLookupClass jvmClassName
+  when (isNothing maybeCl) $
+    let msg = ftext ("The Java class " ++ javaClassName ++ " could not be found.")
+        res = "Please check the class name and class path to ensure that they are correct."
+     in throwIOExecException pos msg res
+  let Just cl = maybeCl
+  -- TODO: Find code for method.
+  error $ "AST.DeclareMethodSpec" ++ show method
 execute (AST.Rule _pos _name _lhs _rhs) = do
   error "AST.Rule"
   {-
@@ -448,14 +515,14 @@ execute (AST.Enable pos name) = do
 execute (BlastJavaMethodSpec pos specName) = do
   rv <- gets runVerification
   when rv $ do
-    cb <- gets codeBase
+    cb <- gets codebase
     let spec :: MethodSpec SymbolicMonad
         spec = undefined
     lift $ blastMethodSpec cb spec
 execute (ReduceJavaMethodSpec pos specName) = do
   rv <- gets runVerification
   when rv $ do
-    cb <- gets codeBase
+    cb <- gets codebase
     let spec :: MethodSpec SymbolicMonad
         spec = undefined
         installOverrides :: JSS.Simulator SymbolicMonad ()
@@ -480,7 +547,7 @@ runProofs :: JSS.Codebase
 runProofs cb ssOpts files = do
   let initialPath = entryPoint ssOpts
   let initState = ES {
-          codeBase = cb
+          codebase = cb
         , runVerification = True
         , parsedFiles = files
         , recordDefs   = Map.empty
