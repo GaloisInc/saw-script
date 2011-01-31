@@ -72,8 +72,12 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '+'            { TOp        _ "*"            }
    '/s'           { TOp        _ "/s"           }
    '%s'           { TOp        _ "%s"           }
+   '<<'           { TOp        _ "<<"           }
+   '>>s'          { TOp        _ ">>s"          }
+   '>>u'          { TOp        _ ">>u"          }
 
 -- Operators, precedence increases as you go down in this list
+%left '<<' '>>s' '>>u'
 %left '+' '-'
 %left '*' '/s' '%s'
 %left ':'
@@ -116,35 +120,40 @@ ExprWidth : int              {  WidthConst $1           }
           | var              {  WidthVar (getString $1) }
 
 -- Rule parameters
-RuleParams :: { [(Pos, String)] }
-RuleParams : {- empty -}             { []                                     }
-           | 'forAll' list(var)  '.' { map (\v -> (getPos v, getString v)) $2 }
+RuleParams :: { [(Pos, String, ExprType)] }
+RuleParams : {- empty -}                      { [] }
+           | 'forAll' sepBy1(Param, ',')  '.' { $2 }
 
--- Comma separated expressions, at least one
+Param :: { (Pos, String, ExprType) }
+Param : var ':' ExprType { (getPos $1, getString $1, $3) }
+
+-- Comma separated expressions, potentially none
 Exprs :: { [Expr] }
 Exprs : sepBy(Expr, ',') { $1 }
 
 -- Expressions
 Expr :: { Expr }
-Expr : var                    { Var          (getPos $1) (getString $1)    }
-     | 'this'                 { ThisExpr     (getPos $1)                   }
-     | 'true'                 { ConstantBool (getPos $1) True              }
-     | 'false'                { ConstantBool (getPos $1) False             }
-     | num                    { ConstantInt  (getPos $1) (getInteger $1)   }
-     -- MkArray
-     | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
-     | Expr ':' ExprType      { TypeExpr     (getPos $2) $1 $3             }
-     | Expr '.' var           { DerefField   (getPos $2) $1 (getString $3) }
-     | var '(' Exprs ')'      { ApplyExpr    (getPos $1) (getString $1) $3 }
-     | 'args' '[' int ']'     { ArgsExpr     (getPos $1) $3                }
-     | '[' Exprs ']'          { MkArray      (getPos $1) $2                }
-     | '~' Expr               { NotExpr      (getPos $1) $2                }
-     | '-' Expr  %prec NEG    { NegExpr      (getPos $1) $2                }
-     | Expr '*' Expr          { MulExpr      (getPos $2) $1 $3             }
-     | Expr '/s' Expr         { SDivExpr     (getPos $2) $1 $3             }
-     | Expr '%s' Expr         { SRemExpr     (getPos $2) $1 $3             }
-     | Expr '+' Expr          { PlusExpr     (getPos $2) $1 $3             }
-     | Expr '-' Expr          { SubExpr      (getPos $2) $1 $3             }
+Expr : var                { Var          (getPos $1) (getString $1)    }
+     | 'this'             { ThisExpr     (getPos $1)                   }
+     | 'true'             { ConstantBool (getPos $1) True              }
+     | 'false'            { ConstantBool (getPos $1) False             }
+     | num                { ConstantInt  (getPos $1) (getInteger $1)   }
+     | '{' RecordExpr '}' { MkRecord     (getPos $1) $2                }
+     | Expr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
+     | Expr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
+     | var '(' Exprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
+     | 'args' '[' int ']' { ArgsExpr     (getPos $1) $3                }
+     | '[' Exprs ']'      { MkArray      (getPos $1) $2                }
+     | '~' Expr           { NotExpr      (getPos $1) $2                }
+     | '-' Expr %prec NEG { NegExpr      (getPos $1) $2                }
+     | Expr '*'   Expr    { MulExpr      (getPos $2) $1 $3             }
+     | Expr '/s'  Expr    { SDivExpr     (getPos $2) $1 $3             }
+     | Expr '%s'  Expr    { SRemExpr     (getPos $2) $1 $3             }
+     | Expr '+'   Expr    { PlusExpr     (getPos $2) $1 $3             }
+     | Expr '-'   Expr    { SubExpr      (getPos $2) $1 $3             }
+     | Expr '>>u' Expr    { UShrExpr     (getPos $2) $1 $3             }
+     | Expr '>>s' Expr    { SShrExpr     (getPos $2) $1 $3             }
+     | Expr '<<'  Expr    { ShlExpr      (getPos $2) $1 $3             }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }
