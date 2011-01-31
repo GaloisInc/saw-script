@@ -6,6 +6,7 @@ module SAWScript.CommandExec(runProofs) where
 -- Imports {{{1
 import Control.Exception
 import Control.Monad
+import Data.Int
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -21,6 +22,7 @@ import System.FilePath
 import Text.PrettyPrint.HughesPJ
 
 import qualified Execution.Codebase as JSS
+import JavaParser as JSS
 import SAWScript.Utils (Pos(..)
                        , SSOpts(..)
                        , posRelativeToCurrentDirectory)
@@ -29,6 +31,7 @@ import qualified SBVModel.SBV as SBV
 import qualified SBVParser as SBV
 import qualified Simulation as JSS
 import Symbolic
+import Utils.Common
 import Utils.IOStateT
 
 -- Utility functions {{{1
@@ -80,7 +83,7 @@ data ExecutorState = ES {
   , verbosity :: Int
   } deriving (Show)
 
-type Executor = StateT ExecutorState (OpSession IO)
+type Executor = StateT ExecutorState OpSession
 
 instance JSS.HasCodebase Executor where
   getCodebase = gets codebase
@@ -96,7 +99,7 @@ parseFile path = do
     Just cmds -> return cmds
 
 -- | Define a polymorphic record from a set of field names.
-defineRecFromFields :: Set String -> OpSession IO SymRecDef
+defineRecFromFields :: Set String -> OpSession SymRecDef
 defineRecFromFields names =
   defineRecord (show names) $
     V.map (\name -> (name, defaultPrec, SymShapeVar name)) $
@@ -154,7 +157,7 @@ checkRuleIsDefined pos name = do
 
 --}}}1
 
--- Parse the given IRType to look for records.
+-- | Parse the given IRType to look for records.
 parseFnIRType :: Pos -> Doc -> Maybe String -> SBV.IRType -> Executor ()
 parseFnIRType pos relativePath uninterpName tp = 
    case tp of
@@ -381,14 +384,237 @@ impl (IteExpr p x y) = undefined
 
 --TODO: Handle special ops (trunc, sext, read, and write).
 
-impl (TypeExpr po (MkArray p [])) = undefined
-impl (TypeExpr po (ConstantInt pi i)) = undefined
-impl (TypeExpr p1 (TypeExpr p2 e tp2) tp1) =
-  undefined
-
-impl (TypeExpr p tp) = undefined
 -}
 
+-- | Atempt to find class with given name, or throw ExecException if no class
+-- with that name exists.
+lookupClass :: Pos -> String -> Executor JSS.Class
+lookupClass pos nm = do 
+  maybeCl <- JSS.tryLookupClass nm
+  case maybeCl of
+    Nothing -> do
+     let msg = ftext ("The Java class " ++ slashesToDots nm ++ " could not be found.")
+         res = "Please check the class name and class path to ensure that they are correct."
+      in throwIOExecException pos msg res
+    Just cl -> return cl
+
+-- | Returns method with given name in this class or one of its subclasses.
+-- Throws an ExecException if method could not be found or is ambiguous.
+findMethod :: Pos -> String -> JSS.Class -> Executor JSS.Method
+findMethod pos nm cl = do
+  let javaClassName = slashesToDots (className cl)
+  let methodMatches m = methodName m == nm && not (JSS.methodIsAbstract m)
+  case filter methodMatches (classMethods cl) of
+    [] -> do
+      case superClass cl of
+        Nothing ->
+          let msg = ftext $ "Could not find method " ++ nm
+                      ++ " in class " ++ javaClassName ++ "."
+              res = "Please check that the class and method are correct."
+           in throwIOExecException pos msg res
+        Just superName -> 
+          findMethod pos nm =<< lookupClass pos superName
+    [method] -> return method
+    _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
+                     ++ " is ambiguous.  SAWScript currently requires that "
+                     ++ "method names are unique."
+             res = "Please rename the Java method so that it is unique."
+          in throwIOExecException pos (ftext msg) res
+
+-- SpecJavaRefType {{{1
+
+-- | A parsed type from AST.JavaType
+data SpecJavaRefType
+  = SpecRefClass !(JSS.Class) -- ^ Specific class for a reference.
+  | SpecIntArray !Int32
+  | SpecLongArray !Int32
+--  deriving (Eq, Ord, Show)
+
+-- | Pretty print SpecJavaRefType
+ppSpecJavaRefType :: SpecJavaRefType -> String
+ppSpecJavaRefType (SpecRefClass cl) = className cl
+ppSpecJavaRefType (SpecIntArray l)  = "int[" ++ show l ++ "]"
+ppSpecJavaRefType (SpecLongArray l) = "long[" ++ show l ++ "]"
+
+-- | Converts an int into a Java array length.
+checkedGetArrayLength :: Pos -> Int -> Executor Int32
+checkedGetArrayLength pos l = do
+  unless (0 <= l && toInteger l < toInteger (maxBound :: Int32)) $
+    let msg  = "Array length " ++ show l ++ " is invalid."
+     in throwIOExecException pos (ftext msg) ""
+  return $ fromIntegral l
+
+-- | Parse AST Type.
+parseASTType :: AST.JavaType -> Executor SpecJavaRefType
+parseASTType (AST.RefType pos names) = do
+  let nm = intercalate "." names
+  fmap SpecRefClass $ lookupClass pos nm
+parseASTType (AST.IntArray pos l) =
+  fmap SpecIntArray $ checkedGetArrayLength pos l
+parseASTType (AST.LongArray pos l) =
+  fmap SpecLongArray $ checkedGetArrayLength pos l
+
+-- SpecJavaRef {{{1
+
+data SpecJavaRef 
+  = SpecThis
+  | SpecArg Int
+  | SpecField SpecJavaRef Field
+
+instance Eq SpecJavaRef where
+  SpecThis == SpecThis = True
+  SpecArg i == SpecArg j = i == j
+  SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && fieldName f1 == fieldName f2
+  _ == _ = False
+
+instance Ord SpecJavaRef where
+  SpecThis `compare` SpecThis = EQ
+  SpecThis `compare` _ = LT
+  _ `compare` SpecThis = GT
+  SpecArg i `compare` SpecArg j = i `compare` j
+  SpecArg i `compare` _ = LT
+  _ `compare` SpecArg i = GT
+  SpecField r1 f1 `compare` SpecField r2 f2 = 
+    case r1 `compare` r2 of 
+      EQ -> fieldName f1 `compare` fieldName f2
+      r -> r
+
+ {-
+  SpecArg i == SpecArg j = i == j
+  SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && fieldName f1 == fieldName f2
+  _ == _ = False
+  -}
+
+-- deriving (Eq, Ord, Show)
+
+-- | Pretty print SpecJavaRef
+ppSpecJavaRef :: SpecJavaRef -> String
+ppSpecJavaRef SpecThis = "this"
+ppSpecJavaRef (SpecArg i) = "args[" ++ show i ++ "]"
+ppSpecJavaRef (SpecField r f) = ppSpecJavaRef r ++ ('.' : fieldName f)
+
+-- | Returns JSS Type of SpecJavaRef
+getJSSTypeOfSpecRef :: -- | Name of class for this object
+                       -- (N.B. method may be defined in a subclass of this class).
+                       String
+                    -> JSS.Method -- ^ Method we are checking
+                    -> SpecJavaRef -- ^ Spec Java reference to get type of.
+                    -> JSS.Type -- ^ Java type (which must be a class or array type).
+getJSSTypeOfSpecRef clName _m SpecThis = JSS.ClassType clName
+getJSSTypeOfSpecRef _cl m (SpecArg i) = methodParameterTypes m !! i
+getJSSTypeOfSpecRef _cl _m (SpecField _ f) = fieldType f
+
+-- | Returns JSS Type of SpecJavaRefType
+getJSSTypeOfSpecRefType :: SpecJavaRefType -- ^ Spec Java reference to get type of.
+                        -> JSS.Type -- ^ Java type
+getJSSTypeOfSpecRefType (SpecRefClass cl) = JSS.ClassType (className cl)
+getJSSTypeOfSpecRefType (SpecIntArray _) = JSS.ArrayType JSS.IntType
+getJSSTypeOfSpecRefType (SpecLongArray _) = JSS.ArrayType JSS.LongType
+
+-- }}}1
+
+
+data SpecParserState = SPS {
+          refTypeMap :: Map SpecJavaRef SpecJavaRefType
+        }
+
+type SpecParser = StateT SpecParserState Executor
+
+-- | Check JSS Type is a reference type supported by SAWScript.
+checkJSSTypeIsRef :: Pos -> JSS.Type -> Executor ()
+checkJSSTypeIsRef pos (ArrayType IntType) = return ()
+checkJSSTypeIsRef pos (ArrayType LongType) = return ()
+checkJSSTypeIsRef pos (ArrayType eltType) = 
+  let msg = "SAWScript currently only supports arrays of int and long, "
+            ++ "and does yet support arrays with type " ++ show eltType ++ "."
+      res = "Please modify the Java code to only use int or long array types."
+   in throwIOExecException pos (ftext msg) res
+-- TODO: Check if need to confirm that class exists in next equation.
+checkJSSTypeIsRef pos (ClassType nm) = return ()
+checkJSSTypeIsRef pos tp =
+  let msg = "SAWScript only requires reference types to be annotated "
+            ++ "with type information, and currently only supports "
+            ++ "methods with array and reference values as arguments.  "
+            ++ "The type " ++ show tp ++ " is not a reference type."
+      res = "Please modify the Java code to only use int or long array "
+            ++ "types."
+   in throwIOExecException pos (ftext msg) res
+
+-- | Parse AST Java reference to get specification ref.
+parseASTRef :: JSS.Method 
+            -> AST.JavaRef
+            -> SpecParser SpecJavaRef
+parseASTRef method (AST.This pos) = do
+  when (methodIsStatic method) $
+    throwIOExecException pos (ftext "\'this\' is not defined on static methods.") ""
+  return SpecThis
+parseASTRef method (AST.Arg pos i) = do
+  let params = methodParameterTypes method
+  -- Check that arg index is valid.
+  unless (0 <= i && i < length params) $
+    throwIOExecException pos (ftext "Invalid argument index for method.") ""
+  lift $ checkJSSTypeIsRef pos (params !! i)
+  return $ SpecArg i
+parseASTRef method (AST.InstanceField pos astLhs fName) = do
+  lhs <- parseASTRef method astLhs
+  m <- gets refTypeMap
+  let throwFieldUndefined =
+        let msg = "Could not find a field named " ++ fName ++ " in " 
+                    ++ ppSpecJavaRef lhs ++ "."
+            res = "Please check to make sure the field name is correct."
+         in throwIOExecException pos (ftext msg) res
+  case Map.lookup lhs m of
+    Nothing -> 
+      let msg = "The type of " ++ ppSpecJavaRef lhs 
+                   ++ "must be specified before specifying the type of its fields."
+          res = "SAWScript requires that the type of an object is specified before the type of its fields."
+       in throwIOExecException pos (ftext msg) res
+    Just (SpecRefClass cl) -> do
+      case filter (\f -> fieldName f == fName) $ classFields cl of
+        [] -> throwFieldUndefined
+        [f] -> do
+          lift $ checkJSSTypeIsRef pos (fieldType f)
+          return $ SpecField lhs f
+        _ -> error "internal: Found multiple fields with the same name."
+    Just _ -> throwFieldUndefined
+
+
+-- | Returns map from Java references to type.
+parseMethodSpecDecl :: String
+                    -> JSS.Method
+                    -> [AST.MethodSpecDecl]
+                    -> Executor SpecParserState
+parseMethodSpecDecl clName method cmds = do
+  let impl :: AST.MethodSpecDecl -> SpecParser ()
+      impl (AST.Type pos astRefs astTp) = do
+        specType <- lift $ parseASTType astTp
+        forM_ astRefs $ \astRef -> do
+          ref <- parseASTRef method astRef
+          -- Check type has not already been assigned.
+          m <- gets refTypeMap 
+          when (Map.member ref m) $
+            let msg = "The type of " ++ ppSpecJavaRef ref ++ " is already defined."
+             in throwIOExecException pos (ftext msg) ""
+          -- Check that type of ref and the type of tp are compatible.
+          let reqType = getJSSTypeOfSpecRef clName method ref
+              tgtType = getJSSTypeOfSpecRefType specType
+          b <- lift $ JSS.isSubtype tgtType reqType
+          unless b $
+            let msg = "The type of " ++ ppSpecJavaRef ref ++ " is " ++ show reqType
+                       ++ ", which is incompatible with the specification type "
+                       ++ ppSpecJavaRefType specType ++ "."
+             in throwIOExecException pos (ftext msg) ""
+          -- TODO: Add ref to type map.
+          undefined
+      impl (AST.MayAlias _pos _refs) = undefined
+      impl (AST.Const _pos _ref _expr) = undefined
+      impl (AST.MethodLet _pos _ref _expr) = undefined
+      impl (AST.Assume _pos _expr) = undefined
+      impl (AST.Ensures _pos _ref _Expr) = undefined
+      impl (AST.Arbitrary _pos _refs) = undefined
+      impl (AST.VerifyUsing _pos _method) = undefined
+  undefined
+      
 -- | Execute command 
 execute :: AST.VerifierCommand -> Executor ()
 -- Execute commands from file.
@@ -473,19 +699,20 @@ execute (AST.GlobalLet pos name astExpr) = do
   execDebugLog $ "Finished defining let " ++ name
 execute (AST.SetVerification _pos val) = do
   modify $ \s -> s { runVerification = val }
-execute (AST.DeclareMethodSpec pos method cmds) = do
-  let methodName:revClassPath = reverse method
+execute (AST.DeclareMethodSpec pos methodId cmds) = do
+  let mName:revClassPath = reverse methodId
   when (null revClassPath) $
     throwIOExecException pos (ftext "Missing class in method declaration.") ""
   let jvmClassName = intercalate "/" $ reverse revClassPath
-  let javaClassName = intercalate "/" $ reverse revClassPath
-  maybeCl <- JSS.tryLookupClass jvmClassName
-  when (isNothing maybeCl) $
-    let msg = ftext ("The Java class " ++ javaClassName ++ " could not be found.")
-        res = "Please check the class name and class path to ensure that they are correct."
-     in throwIOExecException pos msg res
-  let Just cl = maybeCl
-  -- TODO: Find code for method.
+  let javaClassName = intercalate "." $ reverse revClassPath
+  -- Get class 
+  thisClass <- JSS.lookupClass jvmClassName
+  -- Find code for method.
+  method <- findMethod pos mName thisClass
+  -- Get a list of all distinct references in method spec commands.
+  -- For each possible aliasing configuration.
+  
+
   error $ "AST.DeclareMethodSpec" ++ show method
 execute (AST.Rule _pos _name _params _lhs _rhs) = do
   error "AST.Rule"
