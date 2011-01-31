@@ -210,17 +210,17 @@ type FieldRecordMap = Map (Set String) SymRecDef
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
 parseExprType :: AST.ExprType -> Executor DagType
-parseExprType AST.BitType = return SymBool
-parseExprType (AST.BitvectorType w) = return $ SymInt (parseExprWidth w)
-parseExprType (AST.Array l tp) =
+parseExprType (AST.BitType _) = return SymBool
+parseExprType (AST.BitvectorType _ w) = return $ SymInt (parseExprWidth w)
+parseExprType (AST.Array _ l tp) =
   fmap (SymArray (constantWidth (Wx l))) $ parseExprType tp
-parseExprType (AST.Record fields) = do
+parseExprType (AST.Record _ fields) = do
   let names = [ nm | (_,nm,_) <- fields ]
   def <- lookupRecordDef (Set.fromList names)
   tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
   let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
   return $ SymRec def sub
-parseExprType (AST.ShapeVar v) = return (SymShapeVar v)
+parseExprType (AST.ShapeVar _ v) = return (SymShapeVar v)
 
 -- | Parse the FnType returned by the parser into symbolic dag types.
 parseFnType :: AST.FnType -> Executor ([DagType], DagType)
@@ -487,7 +487,7 @@ execute (AST.DeclareMethodSpec pos method cmds) = do
   let Just cl = maybeCl
   -- TODO: Find code for method.
   error $ "AST.DeclareMethodSpec" ++ show method
-execute (AST.Rule _pos _name _lhs _rhs) = do
+execute (AST.Rule _pos _name _params _lhs _rhs) = do
   error "AST.Rule"
   {-
   -- Check rule does not exist.

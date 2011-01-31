@@ -30,11 +30,11 @@ data JavaType
 
 -- | Expressions types for AST.
 data ExprType
-  = BitType
-  | BitvectorType ExprWidth
-  | Array Int ExprType
-  | Record [(Pos, String, ExprType)]
-  | ShapeVar String
+  = BitType Pos
+  | BitvectorType Pos ExprWidth
+  | Array Pos Int ExprType
+  | Record Pos [(Pos, String, ExprType)]
+  | ShapeVar Pos String
  deriving (Show)
 
 data FnType = FnType [ExprType] ExprType
@@ -199,7 +199,7 @@ data VerifierCommand
   | DeclareMethodSpec Pos [String] [MethodSpecDecl]
   -- | Define a rewrite rule with the given name, left-hand-side and right-hand
   -- side.
-  | Rule Pos String Expr Expr
+  | Rule Pos RuleName [(Pos, String)] Expr Expr
   -- | Disable use of a rule or extern definition.
   | Disable Pos String
   -- | Enable use of a rule or extern definition.
