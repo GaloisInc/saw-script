@@ -80,7 +80,7 @@ VerifierCommand : 'import' str                              { ImportCommand     
                 | 'set' 'verification' 'off'                { SetVerification   (getPos $1) False                }
                 | 'enable' var                              { Enable            (getPos $1) (getString $2)       }
                 | 'disable' var                             { Disable           (getPos $1) (getString $2)       }
-                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) $2 $4                }
+                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) (snd $2) $4          }
                 | 'rule' var ':' Expr '->' Expr             { Rule              (getPos $1) (getString $2) $4 $6 }
 
 -- Types
@@ -112,6 +112,7 @@ Expr : var                    { Var          (getPos $1) (getString $1)    }
      | 'false'                { ConstantBool (getPos $1) False             }
      | num                    { ConstantInt  (getPos $1) (getInteger $1)   }
      | Expr ':' ExprType      { TypeExpr     (getPos $2) $1 $3             }
+     | 'this'                 { ThisExpr     (getPos $1)                   }
      | 'args' '[' int ']'     { ArgsExpr     (getPos $1) $3                }
      | var '(' Exprs ')'      { ApplyExpr    (getPos $1) (getString $1) $3 }
      | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
@@ -145,17 +146,17 @@ JavaRef : 'this'             { This          (getPos $1)                   }
         | JavaRef '.' var    { InstanceField (getPos $2) $1 (getString $3) }
 
 JavaType :: { JavaType }
-JavaType : Qvar               { RefType   $1 }
-         | 'int'  '[' int ']' { IntArray  $3 }
-         | 'long' '[' int ']' { LongArray $3 }
+JavaType : Qvar               { RefType   (fst $1)    (snd $1) }
+         | 'int'  '[' int ']' { IntArray  (getPos $1) $3       }
+         | 'long' '[' int ']' { LongArray (getPos $1) $3       }
 
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'blast'    { Blast   }
                    | 'rewrite'  { Rewrite }
 
 -- A qualified variable
-Qvar :: { [String] }
-Qvar : sepBy1(var, '.') { map getString $1 }
+Qvar :: { (Pos, [String]) }
+Qvar : sepBy1(var, '.') { (head (map getPos $1), map getString $1) }
 
 -- A literal that must fit into a Haskell Int
 int :: { Int }
@@ -167,7 +168,7 @@ snd(p, q)  : p q   { $2 }
 both(p, q) : p q   { ($1, $2) }
 
 -- p bracketed with some delims o-c
-bracketed(o,p,c) : o p c { $2 }
+bracketed(o, p, c) : o p c { $2 }
 
 -- p and q, connected by some connective c
 connected(p, c, q) : p c q { ($1, $3) }
@@ -188,14 +189,14 @@ list(p) : {- empty -}    { [] }
         | list1(p)       { $1 }
 
 -- A list of at least one 1 p's, separated by q's
-sepBy1(p,q) : p list(snd(q, p)) { $1 : $2 }
+sepBy1(p, q) : p list(snd(q, p)) { $1 : $2 }
 
 -- A list of 0 or more p's, separated by q's
-sepBy(p,q) : {- empty -}  { [] }
-           | sepBy1(p, q) { $1 }
+sepBy(p, q) : {- empty -}  { [] }
+            | sepBy1(p, q) { $1 }
 
 -- A list of at least one 1 p's, terminated by q's
-termBy1(p,q) : list1(fst(p, q)) { $1 }
+termBy1(p, q) : list1(fst(p, q)) { $1 }
 
 -- A list of 0 or more p's, terminated by q's
 termBy(p, q) : {- empty -}    { [] }

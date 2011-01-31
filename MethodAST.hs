@@ -23,9 +23,9 @@ data ExprWidth
 
 -- | Java types for symbolic simulator.
 data JavaType
-  = RefType [String] -- ^ Class with given dots. 
-  | IntArray Int -- ^ Int array with given length
-  | LongArray Int -- ^ Long array with given length.   
+  = RefType Pos [String] -- ^ Class with given dots. 
+  | IntArray Pos Int -- ^ Int array with given length
+  | LongArray Pos Int -- ^ Long array with given length.   
   deriving (Show)
 
 -- | Expressions types for AST.
@@ -44,6 +44,7 @@ data FnType = FnType [ExprType] ExprType
 -- Java variables.
 data Expr
     = Var Pos String
+    | ThisExpr Pos
     | ConstantBool Pos Bool
     | ConstantInt  Pos Integer
 
