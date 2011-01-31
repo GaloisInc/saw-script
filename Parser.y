@@ -82,8 +82,17 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '#'            { TOp        _ "#"            }
    '=='           { TOp        _ "=="           }
    '!='           { TOp        _ "!="           }
+   '>=s'          { TOp        _ ">=s"          }
+   '>=u'          { TOp        _ ">=u"          }
+   '>s'           { TOp        _ ">s"           }
+   '>u'           { TOp        _ ">u"           }
+   '<=s'          { TOp        _ "<=s"          }
+   '<=u'          { TOp        _ "<=u"          }
+   '<s'           { TOp        _ "<s"           }
+   '<u'           { TOp        _ "<u"           }
 
 -- Operators, precedence increases as you go down in this list
+%nonassoc '>=s' '>=u' '>s' '>u' '<=s' '<=u' '<s' '<u'
 %nonassoc '==' '!='
 %right '#'
 %left '|'
@@ -173,6 +182,14 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | Expr '#'   Expr    { AppendExpr   (getPos $2) $1 $3             }
      | Expr '=='  Expr    { EqExpr       (getPos $2) $1 $3             }
      | Expr '!='  Expr    { IneqExpr     (getPos $2) $1 $3             }
+     | Expr '>=s' Expr    { SGeqExpr     (getPos $2) $1 $3             }
+     | Expr '>=u' Expr    { UGeqExpr     (getPos $2) $1 $3             }
+     | Expr '>s'  Expr    { SGtExpr      (getPos $2) $1 $3             }
+     | Expr '>u'  Expr    { UGtExpr      (getPos $2) $1 $3             }
+     | Expr '<=s' Expr    { SLeqExpr     (getPos $2) $1 $3             }
+     | Expr '<=u' Expr    { ULeqExpr     (getPos $2) $1 $3             }
+     | Expr '<s'  Expr    { SLtExpr      (getPos $2) $1 $3             }
+     | Expr '<u'  Expr    { ULtExpr      (getPos $2) $1 $3             }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }
