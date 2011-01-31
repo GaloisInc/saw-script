@@ -199,7 +199,7 @@ data VerifierCommand
   | DeclareMethodSpec Pos [String] [MethodSpecDecl]
   -- | Define a rewrite rule with the given name, left-hand-side and right-hand
   -- side.
-  | Rule Pos RuleName [(Pos, String)] Expr Expr
+  | Rule Pos RuleName [(Pos, String, ExprType)] Expr Expr
   -- | Disable use of a rule or extern definition.
   | Disable Pos String
   -- | Enable use of a rule or extern definition.
