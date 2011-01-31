@@ -38,6 +38,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'disable'      { TReserved  _ "disable"      }
    'blast'        { TReserved  _ "blast"        }
    'rewrite'      { TReserved  _ "rewrite"      }
+   'auto'         { TReserved  _ "auto"         }
+   'skip'         { TReserved  _ "skip"         }
    'set'          { TReserved  _ "set"          }
    'verification' { TReserved  _ "verification" }
    'on'           { TReserved  _ "on"           }
@@ -138,6 +140,7 @@ ExprTypes : sepBy1(ExprType, ',') { $1 }
 ExprType :: { ExprType }
 ExprType : 'Bit'                           {  BitType    (getPos $1)                 }
          | '[' ExprWidth ']' opt(ExprType) {% mkExprType (getPos $1) $2 $4           }
+         | '{' RecordFTypes '}'            {  Record     (getPos $1) $2              }
          | var                             {  ShapeVar   (getPos $1) (getString $1)  }
 
 ExprWidth :: { ExprWidth }
@@ -163,7 +166,7 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | 'true'             { ConstantBool (getPos $1) True              }
      | 'false'            { ConstantBool (getPos $1) False             }
      | num                { ConstantInt  (getPos $1) (getInteger $1)   }
-     | '{' RecordExpr '}' { MkRecord     (getPos $1) $2                }
+     | '{' RecordFlds '}' { MkRecord     (getPos $1) $2                }
      | Expr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
      | Expr '.' var       { DerefField   (getPos $2) $1 (getString $3) }
      | var '(' Exprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
@@ -199,8 +202,11 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | '(' Expr ')'       { $2                                         }
 
 -- Records
-RecordExpr :: { [(Pos, String, Expr)] }
-RecordExpr : sepBy(connected(var, '=', Expr), ';')  { map ((\ (v, e) -> (getPos v, getString v, e))) $1 }
+RecordFTypes :: { [(Pos, String, ExprType)] }
+RecordFTypes : termBy(connected(var, ':', ExprType), ';')  { map ((\ (v, e) -> (getPos v, getString v, e))) $1 }
+
+RecordFlds :: { [(Pos, String, Expr)] }
+RecordFlds : termBy(connected(var, '=', Expr), ';')  { map ((\ (v, e) -> (getPos v, getString v, e))) $1 }
 
 -- Method spec body
 MethodSpecDecls :: { [MethodSpecDecl] }
@@ -233,6 +239,8 @@ JavaType : Qvar               { RefType   (fst $1)    (snd $1) }
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'blast'    { Blast   }
                    | 'rewrite'  { Rewrite }
+                   | 'skip'     { Skip    }
+                   | 'auto'     { Auto    }
 
 -- A qualified variable
 Qvar :: { (Pos, [String]) }

@@ -31,8 +31,8 @@ $idchar    = [$alpha $digit \' \_]
 $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
-@reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args
-             |this|int|long|mayAlias|const|true|false|ensures|set|verification|on|off
+@reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|skip|auto
+             |type|args|this|int|long|mayAlias|const|true|false|ensures|set|verification|on|off
              |assume|arbitrary|enable|disable|rule|forAll|not
 @reservedop  = "~"  | "-" | "*" | "+" | "/s" | "%s" | ">>" | "<<" | ">>u" | "|" | "&" | "^"
              | "#"  | "==" | "!=" | ">=s" | ">=u" | ">s" | ">u" | "<=s" | "<=u" | "<s" | "<u"

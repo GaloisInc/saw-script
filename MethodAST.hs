@@ -166,7 +166,7 @@ data RewriteVar = RewriteVar Pos String
 
 type SpecName = String
 
-data VerificationMethod = Blast | Rewrite
+data VerificationMethod = Blast | Rewrite | Auto | Skip
   deriving (Show)
 
 -- | Commands in a method spec.
