@@ -75,8 +75,14 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '<<'           { TOp        _ "<<"           }
    '>>s'          { TOp        _ ">>s"          }
    '>>u'          { TOp        _ ">>u"          }
+   '&'            { TOp        _ "&"            }
+   '^'            { TOp        _ "^"            }
+   '|'            { TOp        _ "|"            }
 
 -- Operators, precedence increases as you go down in this list
+%left '|'
+%left '^'
+%left '&'
 %left '<<' '>>s' '>>u'
 %left '+' '-'
 %left '*' '/s' '%s'
@@ -151,9 +157,12 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | Expr '%s'  Expr    { SRemExpr     (getPos $2) $1 $3             }
      | Expr '+'   Expr    { PlusExpr     (getPos $2) $1 $3             }
      | Expr '-'   Expr    { SubExpr      (getPos $2) $1 $3             }
-     | Expr '>>u' Expr    { UShrExpr     (getPos $2) $1 $3             }
-     | Expr '>>s' Expr    { SShrExpr     (getPos $2) $1 $3             }
      | Expr '<<'  Expr    { ShlExpr      (getPos $2) $1 $3             }
+     | Expr '>>s' Expr    { SShrExpr     (getPos $2) $1 $3             }
+     | Expr '>>u' Expr    { UShrExpr     (getPos $2) $1 $3             }
+     | Expr '&'   Expr    { BitAndExpr   (getPos $2) $1 $3             }
+     | Expr '^'   Expr    { BitXorExpr   (getPos $2) $1 $3             }
+     | Expr '|'   Expr    { BitOrExpr    (getPos $2) $1 $3             }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }
