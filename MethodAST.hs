@@ -68,8 +68,10 @@ data Expr
     | ArgsExpr Pos Int
 
     -- Precedence 11
-    -- | Boolean negation (~)
+    -- | Boolean negation (not)
     | NotExpr  Pos Expr
+    -- | Bitwise complement (~)
+    | BitComplExpr Pos Expr
     -- | Integer negation (-)
     | NegExpr Pos Expr
 

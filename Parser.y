@@ -49,6 +49,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'long'         { TReserved  _ "long"         }
    'true'         { TReserved  _ "true"         }
    'false'        { TReserved  _ "false"        }
+   'not'          { TReserved  _ "not"          }
    'forAll'       { TReserved  _ "forAll"       }
    var            { TVar       _ _              }
    str            { TLit       _ $$             }
@@ -78,8 +79,13 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '&'            { TOp        _ "&"            }
    '^'            { TOp        _ "^"            }
    '|'            { TOp        _ "|"            }
+   '#'            { TOp        _ "#"            }
+   '=='           { TOp        _ "=="           }
+   '!='           { TOp        _ "!="           }
 
 -- Operators, precedence increases as you go down in this list
+%nonassoc '==' '!='
+%right '#'
 %left '|'
 %left '^'
 %left '&'
@@ -88,7 +94,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
 %left '*' '/s' '%s'
 %left ':'
 %left '.'
-%right NEG '~'
+%right NEG 'not' '~'
 %%
 
 -- SAWScript
@@ -150,7 +156,8 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | var '(' Exprs ')'  { ApplyExpr    (getPos $1) (getString $1) $3 }
      | 'args' '[' int ']' { ArgsExpr     (getPos $1) $3                }
      | '[' Exprs ']'      { MkArray      (getPos $1) $2                }
-     | '~' Expr           { NotExpr      (getPos $1) $2                }
+     | '~' Expr           { BitComplExpr (getPos $1) $2                }
+     | 'not' Expr         { NotExpr      (getPos $1) $2                }
      | '-' Expr %prec NEG { NegExpr      (getPos $1) $2                }
      | Expr '*'   Expr    { MulExpr      (getPos $2) $1 $3             }
      | Expr '/s'  Expr    { SDivExpr     (getPos $2) $1 $3             }
@@ -163,6 +170,9 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | Expr '&'   Expr    { BitAndExpr   (getPos $2) $1 $3             }
      | Expr '^'   Expr    { BitXorExpr   (getPos $2) $1 $3             }
      | Expr '|'   Expr    { BitOrExpr    (getPos $2) $1 $3             }
+     | Expr '#'   Expr    { AppendExpr   (getPos $2) $1 $3             }
+     | Expr '=='  Expr    { EqExpr       (getPos $2) $1 $3             }
+     | Expr '!='  Expr    { IneqExpr     (getPos $2) $1 $3             }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }
