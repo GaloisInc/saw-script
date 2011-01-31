@@ -102,6 +102,6 @@ parseIntRange p (l, h) i
   = return $ fromIntegral i
 
 mkExprType :: Pos -> ExprWidth -> Maybe ExprType -> Parser ExprType
-mkExprType _  w              Nothing  = return $ BitvectorType w
-mkExprType _  (WidthConst i) (Just t) = return $ Array i t
+mkExprType p  w              Nothing  = return $ BitvectorType p w
+mkExprType p  (WidthConst i) (Just t) = return $ Array p i t
 mkExprType p  _              _        = bailOut p "malformed expression type"

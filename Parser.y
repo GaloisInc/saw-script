@@ -49,6 +49,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'long'         { TReserved  _ "long"         }
    'true'         { TReserved  _ "true"         }
    'false'        { TReserved  _ "false"        }
+   'forAll'       { TReserved  _ "forAll"       }
    var            { TVar       _ _              }
    str            { TLit       _ $$             }
    num            { TNum       _ _              }
@@ -73,15 +74,15 @@ SAWScript : termBy(VerifierCommand, ';') { $1 }
 
 -- Verifier commands
 VerifierCommand :: { VerifierCommand }
-VerifierCommand : 'import' str                              { ImportCommand     (getPos $1) $2                   }
-                | 'extern' 'SBV' var '(' str ')' ':' FnType { ExternSBV         (getPos $1) (getString $3) $5 $8 }
-                | 'let' var '=' Expr                        { GlobalLet         (getPos $1) (getString $2) $4    }
-                | 'set' 'verification' 'on'                 { SetVerification   (getPos $1) True                 }
-                | 'set' 'verification' 'off'                { SetVerification   (getPos $1) False                }
-                | 'enable' var                              { Enable            (getPos $1) (getString $2)       }
-                | 'disable' var                             { Disable           (getPos $1) (getString $2)       }
-                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) (snd $2) $4          }
-                | 'rule' var ':' Expr '->' Expr             { Rule              (getPos $1) (getString $2) $4 $6 }
+VerifierCommand : 'import' str                              { ImportCommand     (getPos $1) $2                      }
+                | 'extern' 'SBV' var '(' str ')' ':' FnType { ExternSBV         (getPos $1) (getString $3) $5 $8    }
+                | 'let' var '=' Expr                        { GlobalLet         (getPos $1) (getString $2) $4       }
+                | 'set' 'verification' 'on'                 { SetVerification   (getPos $1) True                    }
+                | 'set' 'verification' 'off'                { SetVerification   (getPos $1) False                   }
+                | 'enable' var                              { Enable            (getPos $1) (getString $2)          }
+                | 'disable' var                             { Disable           (getPos $1) (getString $2)          }
+                | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) (snd $2) $4             }
+                | 'rule' var ':' RuleParams Expr '->' Expr  { Rule              (getPos $1) (getString $2) $4 $5 $7 }
 
 -- Types
 FnType  :: { FnType }
@@ -93,13 +94,18 @@ ExprTypes :: { [ExprType] }
 ExprTypes : sepBy1(ExprType, ',') { $1 }
 
 ExprType :: { ExprType }
-ExprType : 'Bit'                           {  BitType                      }
-         | '[' ExprWidth ']' opt(ExprType) {% mkExprType (getPos $1) $2 $4 }
-         | var                             {  ShapeVar (getString $1)      }
+ExprType : 'Bit'                           {  BitType    (getPos $1)                 }
+         | '[' ExprWidth ']' opt(ExprType) {% mkExprType (getPos $1) $2 $4           }
+         | var                             {  ShapeVar   (getPos $1) (getString $1)  }
 
 ExprWidth :: { ExprWidth }
 ExprWidth : int              {  WidthConst $1           }
           | var              {  WidthVar (getString $1) }
+
+-- Rule parameters
+RuleParams :: { [(Pos, String)] }
+RuleParams : {- empty -}             { []                                     }
+           | 'forAll' list(var)  '.' { map (\v -> (getPos v, getString v)) $2 }
 
 -- Comma separated expressions, at least one
 Exprs :: { [Expr] }
