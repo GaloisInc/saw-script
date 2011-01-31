@@ -196,6 +196,7 @@ Expr : var                { Var          (getPos $1) (getString $1)    }
      | Expr '<u'  Expr    { ULtExpr      (getPos $2) $1 $3             }
      | Expr '&&'  Expr    { AndExpr      (getPos $2) $1 $3             }
      | Expr '||'  Expr    { OrExpr       (getPos $2) $1 $3             }
+     | '(' Expr ')'       { $2                                         }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }
