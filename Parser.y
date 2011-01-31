@@ -27,6 +27,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'SBV'          { TReserved  _ "SBV"          }
    'Bit'          { TReserved  _ "Bit"          }
    'method'       { TReserved  _ "method"       }
+   'rule'         { TReserved  _ "rule"         }
    'mayAlias'     { TReserved  _ "mayAlias"     }
    'assume'       { TReserved  _ "assume"       }
    'ensures'      { TReserved  _ "ensures"      }
@@ -80,6 +81,7 @@ VerifierCommand : 'import' str                              { ImportCommand     
                 | 'enable' var                              { Enable            (getPos $1) (getString $2)       }
                 | 'disable' var                             { Disable           (getPos $1) (getString $2)       }
                 | 'method' Qvar '{' MethodSpecDecls '}'     { DeclareMethodSpec (getPos $1) $2 $4                }
+                | 'rule' var ':' Expr '->' Expr             { Rule              (getPos $1) (getString $2) $4 $6 }
 
 -- Types
 FnType  :: { FnType }
@@ -159,7 +161,7 @@ Qvar : sepBy1(var, '.') { map getString $1 }
 int :: { Int }
 int : num       {% parseIntRange (getPos $1) (0, maxBound) (getInteger $1) }
 
--- Parameterized productions, these come directly from the Happy manual..
+-- Parameterized productions, most of these come directly from the Happy manual..
 fst(p, q)  : p q   { $1 }
 snd(p, q)  : p q   { $2 }
 both(p, q) : p q   { ($1, $2) }
