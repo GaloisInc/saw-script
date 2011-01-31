@@ -49,8 +49,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'this'         { TReserved  _ "this"         }
    'int'          { TReserved  _ "int"          }
    'long'         { TReserved  _ "long"         }
-   'true'         { TReserved  _ "true"         }
-   'false'        { TReserved  _ "false"        }
+   'True'         { TReserved  _ "True"         }
+   'False'        { TReserved  _ "False"        }
    'not'          { TReserved  _ "not"          }
    'forAll'       { TReserved  _ "forAll"       }
    var            { TVar       _ _              }
@@ -163,8 +163,8 @@ Exprs : sepBy(Expr, ',') { $1 }
 Expr :: { Expr }
 Expr : var                { Var          (getPos $1) (getString $1)    }
      | 'this'             { ThisExpr     (getPos $1)                   }
-     | 'true'             { ConstantBool (getPos $1) True              }
-     | 'false'            { ConstantBool (getPos $1) False             }
+     | 'True'             { ConstantBool (getPos $1) True              }
+     | 'False'            { ConstantBool (getPos $1) False             }
      | num                { ConstantInt  (getPos $1) (getInteger $1)   }
      | '{' RecordFlds '}' { MkRecord     (getPos $1) $2                }
      | Expr ':' ExprType  { TypeExpr     (getPos $2) $1 $3             }
