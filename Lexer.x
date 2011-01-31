@@ -34,7 +34,8 @@ $nl        = [\n\r]
 @reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|type|args
              |this|int|long|mayAlias|const|true|false|ensures|set|verification|on|off
              |assume|arbitrary|enable|disable|rule|forAll
-@reservedop  = "+"
+@reservedop  = "~" | "-" | "*" | "+" | "/s" | "%s"
+@punct       = "," | ";" | "(" | ")" | ":" | "[" | "]" | "->" | "=" | "{" | "}" | "." | ":="
 @varid       = $alpha $idchar*
 @decimal     = $digit+
 @binary      = $binit+
@@ -49,7 +50,6 @@ $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
 @gap         = \\ $whitechar+ \\
 @string      = $graphic # [\"\\] | " " | @escape | @gap
-@punct       = "," | ";" | "(" | ")" | ":" | "[" | "]" | "->" | "=" | "{" | "}" | "." | ":="
 @num         = @decimal | 0[bB] @binary | 0[oO] @octal | 0[xX] @hexadecimal
 
 sawTokens :-
@@ -60,6 +60,7 @@ $white+                          ;
 "/*"                             { cnst TCmntS        }
 "*/"                             { cnst TCmntE        }
 @reservedid                      { TReserved          }
+@reservedop                      { TOp                }
 @punct                           { TPunct             }
 @varid                           { TVar               }
 \" @string* \"                   { TLit `via` read    }

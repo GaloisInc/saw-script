@@ -66,6 +66,19 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '='            { TPunct     _ "="            }
    '->'           { TPunct     _ "->"           }
    ':='           { TPunct     _ ":="           }
+   '~'            { TOp        _ "~"            }
+   '-'            { TOp        _ "-"            }
+   '*'            { TOp        _ "+"            }
+   '+'            { TOp        _ "*"            }
+   '/s'           { TOp        _ "/s"           }
+   '%s'           { TOp        _ "%s"           }
+
+-- Operators, precedence increases as you go down in this list
+%left '+' '-'
+%left '*' '/s' '%s'
+%left ':'
+%left '.'
+%right NEG '~'
 %%
 
 -- SAWScript
@@ -109,20 +122,29 @@ RuleParams : {- empty -}             { []                                     }
 
 -- Comma separated expressions, at least one
 Exprs :: { [Expr] }
-Exprs : sepBy1(Expr, ',') { $1 }
+Exprs : sepBy(Expr, ',') { $1 }
 
 -- Expressions
 Expr :: { Expr }
 Expr : var                    { Var          (getPos $1) (getString $1)    }
+     | 'this'                 { ThisExpr     (getPos $1)                   }
      | 'true'                 { ConstantBool (getPos $1) True              }
      | 'false'                { ConstantBool (getPos $1) False             }
      | num                    { ConstantInt  (getPos $1) (getInteger $1)   }
-     | Expr ':' ExprType      { TypeExpr     (getPos $2) $1 $3             }
-     | 'this'                 { ThisExpr     (getPos $1)                   }
-     | 'args' '[' int ']'     { ArgsExpr     (getPos $1) $3                }
-     | var '(' Exprs ')'      { ApplyExpr    (getPos $1) (getString $1) $3 }
+     -- MkArray
      | '{' RecordExpr '}'     { MkRecord     (getPos $1) $2                }
+     | Expr ':' ExprType      { TypeExpr     (getPos $2) $1 $3             }
      | Expr '.' var           { DerefField   (getPos $2) $1 (getString $3) }
+     | var '(' Exprs ')'      { ApplyExpr    (getPos $1) (getString $1) $3 }
+     | 'args' '[' int ']'     { ArgsExpr     (getPos $1) $3                }
+     | '[' Exprs ']'          { MkArray      (getPos $1) $2                }
+     | '~' Expr               { NotExpr      (getPos $1) $2                }
+     | '-' Expr  %prec NEG    { NegExpr      (getPos $1) $2                }
+     | Expr '*' Expr          { MulExpr      (getPos $2) $1 $3             }
+     | Expr '/s' Expr         { SDivExpr     (getPos $2) $1 $3             }
+     | Expr '%s' Expr         { SRemExpr     (getPos $2) $1 $3             }
+     | Expr '+' Expr          { PlusExpr     (getPos $2) $1 $3             }
+     | Expr '-' Expr          { SubExpr      (getPos $2) $1 $3             }
 
 -- Records
 RecordExpr :: { [(Pos, String, Expr)] }

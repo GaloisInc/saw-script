@@ -5,6 +5,7 @@ data Token p = TVar       { getPos :: p, getString :: String   }
              | TUnknown   { getPos :: p, _gs :: String   }
              | TPunct     { getPos :: p, _gs :: String   }
              | TReserved  { getPos :: p, _gs :: String   }
+             | TOp        { getPos :: p, _gs :: String   }
              | TNum       { getPos :: p, getInteger :: Integer  }
              | TCmntS     { getPos :: p }
              | TCmntE     { getPos :: p }
@@ -16,6 +17,7 @@ instance Show (Token p) where
   show (TUnknown _ s)   = s
   show (TPunct _ s)     = s
   show (TReserved _ s)  = s
+  show (TOp _ s)        = s
   show (TNum _ i)       = show i
   show (TCmntS _)       = "/*"
   show (TCmntE _)       = "*/"
@@ -27,6 +29,7 @@ instance Functor Token where
   fmap g (TUnknown   p c) = TUnknown   (g p) c
   fmap g (TPunct     p s) = TPunct     (g p) s
   fmap g (TReserved  p s) = TReserved  (g p) s
+  fmap g (TOp        p s) = TReserved  (g p) s
   fmap g (TNum       p i) = TNum       (g p) i
   fmap g (TCmntS     p)   = TCmntS     (g p)
   fmap g (TCmntE     p)   = TCmntE     (g p)
