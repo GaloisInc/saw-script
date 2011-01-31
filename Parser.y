@@ -149,8 +149,8 @@ ExprWidth : int              {  WidthConst $1           }
 
 -- Rule parameters
 RuleParams :: { [(Pos, String, ExprType)] }
-RuleParams : {- empty -}                      { [] }
-           | 'forAll' sepBy1(Param, ',')  '.' { $2 }
+RuleParams : {- empty -}                              { [] }
+           | 'forAll' '{' sepBy1(Param, ',')  '}' '.' { $3 }
 
 Param :: { (Pos, String, ExprType) }
 Param : var ':' ExprType { (getPos $1, getString $1, $3) }
