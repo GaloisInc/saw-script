@@ -74,8 +74,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'not'          { TOp       _ "not"          }
    '~'            { TOp       _ "~"            }
    '-'            { TOp       _ "-"            }
-   '*'            { TOp       _ "+"            }
-   '+'            { TOp       _ "*"            }
+   '*'            { TOp       _ "*"            }
+   '+'            { TOp       _ "+"            }
    '/s'           { TOp       _ "/s"           }
    '%s'           { TOp       _ "%s"           }
    '<<'           { TOp       _ "<<"           }
@@ -99,6 +99,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '||'           { TOp       _ "||"           }
 
 -- Operators, precedence increases as you go down in this list
+%right 'else'
 %left '||'
 %left '&&'
 %nonassoc '>=s' '>=u' '>s' '>u' '<=s' '<=u' '<s' '<u'
@@ -164,45 +165,46 @@ Exprs : sepBy(Expr, ',') { $1 }
 
 -- Expressions
 Expr :: { Expr }
-Expr : var                { Var          (tokPos $1) (tokStr $1)    }
-     | 'this'             { ThisExpr     (tokPos $1)                }
-     | 'True'             { ConstantBool (tokPos $1) True           }
-     | 'False'            { ConstantBool (tokPos $1) False          }
-     | num                { ConstantInt  (tokPos $1) (tokNum $1)    }
-     | '{' RecordFlds '}' { MkRecord     (tokPos $1) $2             }
-     | Expr ':' ExprType  { TypeExpr     (tokPos $2) $1 $3          }
-     | Expr '.' var       { DerefField   (tokPos $2) $1 (tokStr $3) }
-     | var '(' Exprs ')'  { ApplyExpr    (tokPos $1) (tokStr $1) $3 }
-     | 'args' '[' int ']' { ArgsExpr     (tokPos $1) $3             }
-     | '[' Exprs ']'      { MkArray      (tokPos $1) $2             }
-     | '~' Expr           { BitComplExpr (tokPos $1) $2             }
-     | 'not' Expr         { NotExpr      (tokPos $1) $2             }
-     | '-' Expr %prec NEG { NegExpr      (tokPos $1) $2             }
-     | Expr '*'   Expr    { MulExpr      (tokPos $2) $1 $3          }
-     | Expr '/s'  Expr    { SDivExpr     (tokPos $2) $1 $3          }
-     | Expr '%s'  Expr    { SRemExpr     (tokPos $2) $1 $3          }
-     | Expr '+'   Expr    { PlusExpr     (tokPos $2) $1 $3          }
-     | Expr '-'   Expr    { SubExpr      (tokPos $2) $1 $3          }
-     | Expr '<<'  Expr    { ShlExpr      (tokPos $2) $1 $3          }
-     | Expr '>>s' Expr    { SShrExpr     (tokPos $2) $1 $3          }
-     | Expr '>>u' Expr    { UShrExpr     (tokPos $2) $1 $3          }
-     | Expr '&'   Expr    { BitAndExpr   (tokPos $2) $1 $3          }
-     | Expr '^'   Expr    { BitXorExpr   (tokPos $2) $1 $3          }
-     | Expr '|'   Expr    { BitOrExpr    (tokPos $2) $1 $3          }
-     | Expr '#'   Expr    { AppendExpr   (tokPos $2) $1 $3          }
-     | Expr '=='  Expr    { EqExpr       (tokPos $2) $1 $3          }
-     | Expr '!='  Expr    { IneqExpr     (tokPos $2) $1 $3          }
-     | Expr '>=s' Expr    { SGeqExpr     (tokPos $2) $1 $3          }
-     | Expr '>=u' Expr    { UGeqExpr     (tokPos $2) $1 $3          }
-     | Expr '>s'  Expr    { SGtExpr      (tokPos $2) $1 $3          }
-     | Expr '>u'  Expr    { UGtExpr      (tokPos $2) $1 $3          }
-     | Expr '<=s' Expr    { SLeqExpr     (tokPos $2) $1 $3          }
-     | Expr '<=u' Expr    { ULeqExpr     (tokPos $2) $1 $3          }
-     | Expr '<s'  Expr    { SLtExpr      (tokPos $2) $1 $3          }
-     | Expr '<u'  Expr    { ULtExpr      (tokPos $2) $1 $3          }
-     | Expr '&&'  Expr    { AndExpr      (tokPos $2) $1 $3          }
-     | Expr '||'  Expr    { OrExpr       (tokPos $2) $1 $3          }
-     | '(' Expr ')'       { $2                                      }
+Expr : var                               { Var          (tokPos $1) (tokStr $1)    }
+     | 'this'                            { ThisExpr     (tokPos $1)                }
+     | 'True'                            { ConstantBool (tokPos $1) True           }
+     | 'False'                           { ConstantBool (tokPos $1) False          }
+     | num                               { ConstantInt  (tokPos $1) (tokNum $1)    }
+     | '{' RecordFlds '}'                { MkRecord     (tokPos $1) $2             }
+     | Expr ':' ExprType                 { TypeExpr     (tokPos $2) $1 $3          }
+     | Expr '.' var                      { DerefField   (tokPos $2) $1 (tokStr $3) }
+     | var '(' Exprs ')'                 { ApplyExpr    (tokPos $1) (tokStr $1) $3 }
+     | 'args' '[' int ']'                { ArgsExpr     (tokPos $1) $3             }
+     | '[' Exprs ']'                     { MkArray      (tokPos $1) $2             }
+     | '~' Expr                          { BitComplExpr (tokPos $1) $2             }
+     | 'not' Expr                        { NotExpr      (tokPos $1) $2             }
+     | '-' Expr %prec NEG                { NegExpr      (tokPos $1) $2             }
+     | Expr '*'   Expr                   { MulExpr      (tokPos $2) $1 $3          }
+     | Expr '/s'  Expr                   { SDivExpr     (tokPos $2) $1 $3          }
+     | Expr '%s'  Expr                   { SRemExpr     (tokPos $2) $1 $3          }
+     | Expr '+'   Expr                   { PlusExpr     (tokPos $2) $1 $3          }
+     | Expr '-'   Expr                   { SubExpr      (tokPos $2) $1 $3          }
+     | Expr '<<'  Expr                   { ShlExpr      (tokPos $2) $1 $3          }
+     | Expr '>>s' Expr                   { SShrExpr     (tokPos $2) $1 $3          }
+     | Expr '>>u' Expr                   { UShrExpr     (tokPos $2) $1 $3          }
+     | Expr '&'   Expr                   { BitAndExpr   (tokPos $2) $1 $3          }
+     | Expr '^'   Expr                   { BitXorExpr   (tokPos $2) $1 $3          }
+     | Expr '|'   Expr                   { BitOrExpr    (tokPos $2) $1 $3          }
+     | Expr '#'   Expr                   { AppendExpr   (tokPos $2) $1 $3          }
+     | Expr '=='  Expr                   { EqExpr       (tokPos $2) $1 $3          }
+     | Expr '!='  Expr                   { IneqExpr     (tokPos $2) $1 $3          }
+     | Expr '>=s' Expr                   { SGeqExpr     (tokPos $2) $1 $3          }
+     | Expr '>=u' Expr                   { UGeqExpr     (tokPos $2) $1 $3          }
+     | Expr '>s'  Expr                   { SGtExpr      (tokPos $2) $1 $3          }
+     | Expr '>u'  Expr                   { UGtExpr      (tokPos $2) $1 $3          }
+     | Expr '<=s' Expr                   { SLeqExpr     (tokPos $2) $1 $3          }
+     | Expr '<=u' Expr                   { ULeqExpr     (tokPos $2) $1 $3          }
+     | Expr '<s'  Expr                   { SLtExpr      (tokPos $2) $1 $3          }
+     | Expr '<u'  Expr                   { ULtExpr      (tokPos $2) $1 $3          }
+     | Expr '&&'  Expr                   { AndExpr      (tokPos $2) $1 $3          }
+     | Expr '||'  Expr                   { OrExpr       (tokPos $2) $1 $3          }
+     | '(' Expr ')'                      { $2                                      }
+     | 'if' Expr 'then' Expr 'else' Expr { IteExpr (tokPos $1) $2 $4 $6            }
 
 -- Records
 RecordFTypes :: { [(Pos, String, ExprType)] }
