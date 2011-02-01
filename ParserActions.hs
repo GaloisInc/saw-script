@@ -40,17 +40,17 @@ bailOut ep msg = Parser $ \_ _ -> do p <- posRelativeToCurrentDirectory ep
                                      return $ Left $ fmtPos p msg
 
 failAt :: Maybe PTok -> IO (Either String a)
-failAt Nothing          = return $ Left $ "File ended before parsing was complete"
-failAt (Just (TEOF ep)) = do p <- posRelativeToCurrentDirectory ep
-                             return $ Left $ fmtPos p $ "Parse error at the end of file, forgotten semicolon perhaps?"
-failAt (Just t)         = do p <- posRelativeToCurrentDirectory (getPos t)
-                             return $ Left $ fmtPos p $ "Parse error at " ++ show (show t)  -- double show is intentional
+failAt Nothing            = return $ Left $ "File ended before parsing was complete"
+failAt (Just (TEOF ep _)) = do p <- posRelativeToCurrentDirectory ep
+                               return $ Left $ fmtPos p $ "Parse error at the end of file, forgotten semicolon perhaps?"
+failAt (Just t)           = do p <- posRelativeToCurrentDirectory (tokPos t)
+                               return $ Left $ fmtPos p $ "Parse error at " ++ show (tokStr t)
 
 lexer :: (PTok -> Parser a) -> Parser a
 lexer cont = Parser (\f toks ->
         case toks of
-           []       -> unP (cont (TEOF (endPos f))) f []
-           (t : ts) -> unP (cont t)                 f ts)
+           []       -> unP (cont (TEOF (endPos f) "end-of-file")) f []
+           (t : ts) -> unP (cont t)                               f ts)
 
 parseSSPgm :: SSOpts -> IO (SSPgm, M.Map FilePath [(FilePath, Pos)])
 parseSSPgm ssOpts = go [(entry, Nothing)] M.empty M.empty
@@ -85,7 +85,7 @@ parseJV ssOpts (f, mbP) = do
        cts <- readFile f
        let toks = lexSAW f cts
        debugVerbose ssOpts $ do putStrLn $ "Token stream for " ++ show f ++ ":"
-                                print toks
+                                mapM_ (putStrLn . ("  " ++) . show) toks
        res <- unP parseSAW f toks
        case res of
          Left e  -> putStrLn e >> exitFailure
