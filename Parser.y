@@ -148,8 +148,9 @@ ExprType : 'Bit'                           {  BitType    (tokPos $1)            
          | var                             {  ShapeVar   (tokPos $1) (tokStr $1) }
 
 ExprWidth :: { ExprWidth }
-ExprWidth : int              {  WidthConst $1        }
-          | var              {  WidthVar (tokStr $1) }
+ExprWidth : int                     { WidthConst (fst $1) (snd $1)       }
+          | var                     { WidthVar   (tokPos $1) (tokStr $1) }
+          | ExprWidth '+' ExprWidth { WidthAdd   (tokPos $2) $1 $3       }
 
 -- Rule parameters
 RuleParams :: { [(Pos, String, ExprType)] }
@@ -174,7 +175,7 @@ Expr : var                               { Var          (tokPos $1) (tokStr $1) 
      | Expr ':' ExprType                 { TypeExpr     (tokPos $2) $1 $3          }
      | Expr '.' var                      { DerefField   (tokPos $2) $1 (tokStr $3) }
      | var '(' Exprs ')'                 { ApplyExpr    (tokPos $1) (tokStr $1) $3 }
-     | 'args' '[' int ']'                { ArgsExpr     (tokPos $1) $3             }
+     | 'args' '[' int ']'                { ArgsExpr     (tokPos $1) (snd $3)       }
      | '[' Exprs ']'                     { MkArray      (tokPos $1) $2             }
      | '~' Expr                          { BitComplExpr (tokPos $1) $2             }
      | 'not' Expr                        { NotExpr      (tokPos $1) $2             }
@@ -233,13 +234,13 @@ JavaRefs : sepBy1(JavaRef, ',') { $1 }
 
 JavaRef :: { JavaRef }
 JavaRef : 'this'             { This          (tokPos $1)                }
-        | 'args' '[' int ']' { Arg           (tokPos $1) $3             }
+        | 'args' '[' int ']' { Arg           (tokPos $1) (snd $3)       }
         | JavaRef '.' var    { InstanceField (tokPos $2) $1 (tokStr $3) }
 
 JavaType :: { JavaType }
 JavaType : Qvar               { RefType   (fst $1)    (snd $1) }
-         | 'int'  '[' int ']' { IntArray  (tokPos $1) $3       }
-         | 'long' '[' int ']' { LongArray (tokPos $1) $3       }
+         | 'int'  '[' int ']' { IntArray  (tokPos $1) (snd $3) }
+         | 'long' '[' int ']' { LongArray (tokPos $1) (snd $3) }
 
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'blast'    { Blast   }
@@ -252,8 +253,8 @@ Qvar :: { (Pos, [String]) }
 Qvar : sepBy1(var, '.') { (head (map tokPos $1), map tokStr $1) }
 
 -- A literal that must fit into a Haskell Int
-int :: { Int }
-int : num       {% parseIntRange (tokPos $1) (0, maxBound) (tokNum $1) }
+int :: { (Pos, Int) }
+int : num  {% parseIntRange (tokPos $1) (0, maxBound) (tokNum $1) }
 
 -- Parameterized productions, most of these come directly from the Happy manual..
 fst(p, q)  : p q   { $1 }

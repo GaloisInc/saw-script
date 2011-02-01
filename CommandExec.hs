@@ -204,9 +204,9 @@ opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 
 -- | Convert expression type from AST into WidthExpr
 parseExprWidth :: AST.ExprWidth -> WidthExpr
-parseExprWidth (AST.WidthConst i) = constantWidth (Wx i)
-parseExprWidth (AST.WidthVar nm) = varWidth nm
-parseExprWidth (AST.WidthAdd u v) = addWidth (parseExprWidth u) (parseExprWidth v)
+parseExprWidth (AST.WidthConst _ i) = constantWidth (Wx i)
+parseExprWidth (AST.WidthVar _ nm) = varWidth nm
+parseExprWidth (AST.WidthAdd _ u v) = addWidth (parseExprWidth u) (parseExprWidth v)
 
 type FieldRecordMap = Map (Set String) SymRecDef
 

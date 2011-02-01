@@ -10,5 +10,5 @@ instance Monad Parser
 happyError    :: Parser a
 parseError    :: Token Pos -> Parser a
 lexer         :: (Token Pos -> Parser a) -> Parser a
-parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser Int
+parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser (Pos, Int)
 mkExprType    :: Pos -> ExprWidth -> Maybe ExprType -> Parser ExprType

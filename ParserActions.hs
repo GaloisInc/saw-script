@@ -94,12 +94,12 @@ parseJV ssOpts (f, mbP) = do
         getImport _                    = []
 
 -- Parse helpers
-parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser Int
+parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser (Pos, Int)
 parseIntRange p (l, h) i
   | i < fromIntegral l || i > fromIntegral h
   = bailOut p $ "Numeric value " ++ show i ++ " is out of expected range: [" ++ show l ++ "," ++ show h ++ "]"
   | True
-  = return $ fromIntegral i
+  = return $ (p, fromIntegral i)
 
 mkExprType :: Pos -> ExprWidth -> Maybe ExprType -> Parser ExprType
 mkExprType p  w Nothing  = return $ BitvectorType p w
