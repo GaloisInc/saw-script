@@ -36,8 +36,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'verifyUsing'  { TReserved _ "verifyUsing"  }
    'enable'       { TReserved _ "enable"       }
    'disable'      { TReserved _ "disable"      }
-   'blast'        { TReserved _ "blast"        }
-   'rewrite'      { TReserved _ "rewrite"      }
+   'abc'          { TReserved _ "abc"          }
+   'rewriter'     { TReserved _ "rewriter"     }
    'auto'         { TReserved _ "auto"         }
    'skip'         { TReserved _ "skip"         }
    'set'          { TReserved _ "set"          }
@@ -243,8 +243,8 @@ JavaType : Qvar               { RefType   (fst $1)    (snd $1) }
          | 'long' '[' int ']' { LongArray (tokPos $1) (snd $3) }
 
 VerificationMethod :: { VerificationMethod }
-VerificationMethod : 'blast'    { Blast   }
-                   | 'rewrite'  { Rewrite }
+VerificationMethod : 'abc'      { ABC     }
+                   | 'rewriter' { Rewrite }
                    | 'skip'     { Skip    }
                    | 'auto'     { Auto    }
 
