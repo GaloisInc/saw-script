@@ -16,9 +16,9 @@ change the type system so that:
 type BitWidth = Int
 
 data ExprWidth
-  = WidthVar String
-  | WidthConst BitWidth
-  | WidthAdd ExprWidth ExprWidth
+  = WidthVar Pos String
+  | WidthConst Pos BitWidth
+  | WidthAdd Pos ExprWidth ExprWidth
   deriving (Show)
 
 -- | Java types for symbolic simulator.
@@ -32,7 +32,7 @@ data JavaType
 data ExprType
   = BitType Pos
   | BitvectorType Pos ExprWidth
-  | Array Pos Int ExprType
+  | Array Pos ExprWidth ExprType
   | Record Pos [(Pos, String, ExprType)]
   | ShapeVar Pos String
  deriving (Show)

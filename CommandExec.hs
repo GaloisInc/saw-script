@@ -259,17 +259,17 @@ opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 
 -- | Convert expression type from AST into WidthExpr
 parseExprWidth :: AST.ExprWidth -> WidthExpr
-parseExprWidth (AST.WidthConst i) = constantWidth (Wx i)
-parseExprWidth (AST.WidthVar nm) = varWidth nm
-parseExprWidth (AST.WidthAdd u v) = addWidth (parseExprWidth u) (parseExprWidth v)
+parseExprWidth (AST.WidthConst _ i) = constantWidth (Wx i)
+parseExprWidth (AST.WidthVar _ nm) = varWidth nm
+parseExprWidth (AST.WidthAdd _ u v) = addWidth (parseExprWidth u) (parseExprWidth v)
 
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
 parseExprType :: AST.ExprType -> Executor DagType
 parseExprType (AST.BitType _) = return SymBool
 parseExprType (AST.BitvectorType _ w) = return $ SymInt (parseExprWidth w)
-parseExprType (AST.Array _ l tp) =
-  fmap (SymArray (constantWidth (Wx l))) $ parseExprType tp
+parseExprType (AST.Array _ w tp) =
+  fmap (SymArray (parseExprWidth w)) $ parseExprType tp
 parseExprType (AST.Record _ fields) = do
   let names = [ nm | (_,nm,_) <- fields ]
   def <- lookupRecordDef (Set.fromList names)

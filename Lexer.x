@@ -33,10 +33,10 @@ $nl        = [\n\r]
 
 @reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|blast|rewrite|skip|auto
              |type|args|this|int|long|mayAlias|const|True|False|ensures|set|verification|on|off
-             |assume|arbitrary|enable|disable|rule|forAll|not
+             |assume|arbitrary|enable|disable|rule|forAll|if|then|else
 @reservedop  = "~"  | "-" | "*" | "+" | "/s" | "%s" | ">>" | "<<" | ">>u" | "|" | "&" | "^"
              | "#"  | "==" | "!=" | ">=s" | ">=u" | ">s" | ">u" | "<=s" | "<=u" | "<s" | "<u"
-             | "&&" | "||"
+             | "&&" | "||" | "not"
 @punct       = "," | ";" | "(" | ")" | ":" | "[" | "]" | "->" | "=" | "{" | "}" | "." | ":="
 @varid       = $alpha $idchar*
 @decimal     = $digit+
@@ -65,7 +65,7 @@ $white+                          ;
 @reservedop                      { TOp                }
 @punct                           { TPunct             }
 @varid                           { TVar               }
-\" @string* \"                   { TLit `via` read    }
+\" @string* \"                   { TLit `via'` read   }
 @decimal                         { TNum `via` read    }
 0[bB] @binary                    { TNum `via` readBin }
 0[oO] @octal                     { TNum `via` read    }
@@ -73,8 +73,9 @@ $white+                          ;
 .                                { TUnknown           }
 
 {
-cnst f p _ = f p
-via c g p s = c p (g s)
+cnst f p s   = f p s
+via  c g p s = c p s (g s)
+via' c g p s = c p (g s)
 
 lexSAW :: FilePath -> String -> [Token Pos]
 lexSAW f = dropComments . map (fmap fixPos) . alexScanTokens
@@ -93,11 +94,11 @@ readBin s = case readInt 2 isDigit cvt s' of
 dropComments :: [Token Pos] -> [Token Pos]
 dropComments = go 0
   where go :: Int -> [Token Pos] -> [Token Pos]
-        go _  []              = []
-        go !i (TCmntS _ : ts) = go (i+1) ts
-        go !i (TCmntE _ : ts)
-         | i > 0              = go (i-1) ts
+        go _  []                 = []
+        go !i (TCmntS _ _ : ts)  = go (i+1) ts
+        go !i (TCmntE _ _ : ts)
+         | i > 0                 = go (i-1) ts
         go !i (t : ts)
-         | i /= 0             = go i ts
-         | True               = t : go i ts
+         | i /= 0                = go i ts
+         | True                  = t : go i ts
 }
