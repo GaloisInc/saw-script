@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -14,7 +13,6 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Typeable
 import qualified Data.Vector as V
 import Prelude hiding (catch)
 import System.Directory (makeRelativeToCurrentDirectory)
@@ -25,10 +23,9 @@ import Text.PrettyPrint.HughesPJ
 import qualified Execution.Codebase as JSS
 import JavaParser as JSS
 import MethodSpec as JSS(partitions)
-import SAWScript.Utils (Pos(..)
-                       , SSOpts(..)
-                       , posRelativeToCurrentDirectory)
+import SAWScript.Utils
 import qualified SAWScript.MethodAST as AST
+import SAWScript.TypeChecker 
 import qualified SBVModel.SBV as SBV
 import qualified SBVParser as SBV
 import qualified Simulation as JSS
@@ -38,53 +35,31 @@ import Utils.IOStateT
 
 import Debug.Trace
 
--- Utility functions {{{1
-
--- | Convert a string to a paragraph formatted document.
-ftext :: String -> Doc
-ftext msg = fsep (map text $ words msg)
-
--- ExecException {{{1
-
--- | Class of exceptions thrown by SBV parser.
-data ExecException = ExecException Pos -- ^ Position
-                                   Doc -- ^ Error message
-                                   String -- ^ Resolution tip
-  deriving (Show, Typeable)
- 
-instance Exception ExecException
-
--- | Throw exec exception in a MonadIO.
-throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
-throwIOExecException pos errorMsg resolution =
-  liftIO $ throwIO (ExecException pos errorMsg resolution)
-
 -- Executor primitives {{{1
 
 data ExecutorState = ES {
     -- | Java codebase
     codebase :: JSS.Codebase 
-    -- | Flag that indicates if verification commands should be executed.
-  , runVerification :: Bool
+    -- | Flag used to control how much logging to print out.
+  , verbosity :: Int
     -- | Maps file paths to verifier commands.
   , parsedFiles :: Map FilePath [AST.VerifierCommand]
-    -- | Maps field names to corresponding record definition.
-  , recordDefs :: Map (Set String) SymRecDef
-    -- | Maps function names read in from SBV file into corresponding
-    -- operator definition and position where operator was introduced.
-  , sbvOpMap :: Map String (Pos,OpDef)
+    -- | Flag that indicates if verification commands should be executed.
+  , runVerification :: Bool
     -- | Maps rule and let binding names to location where it was introduced.
   , definedNames :: Map String Pos
     -- | Maps SAWScript function names to corresponding operator definition.
   , sawOpMap :: Map String OpDef
+
+    -- | Maps function names read in from SBV file into corresponding
+    -- operator definition and position where operator was introduced.
+  , sbvOpMap :: Map String (Pos,OpDef)
     -- | Maps rule names to corresponding rule.
   , rules :: Map String Rule
     -- | Set of currently enabled rules.
   , enabledRules :: Set String
     -- | Map from names to constant value bound to name.
   , globalLetBindings :: Map String (CValue,DagType)
-    -- | Flag used to control how much logging to print out.
-  , verbosity :: Int
   } deriving (Show)
 
 type Executor = StateT ExecutorState OpSession
@@ -101,24 +76,6 @@ parseFile path = do
   case Map.lookup path m of
     Nothing -> error $ "internal: Could not find file " ++ path
     Just cmds -> return cmds
-
--- | Define a polymorphic record from a set of field names.
-defineRecFromFields :: Set String -> OpSession SymRecDef
-defineRecFromFields names =
-  defineRecord (show names) $
-    V.map (\name -> (name, defaultPrec, SymShapeVar name)) $
-          V.fromList (Set.toList names)
-
--- | Returns record definition for given set of field names
-lookupRecordDef :: Set String -> Executor SymRecDef
-lookupRecordDef names = do
-  rm <- gets recordDefs 
-  case Map.lookup names rm of
-    Just def -> return def
-    Nothing -> do -- Create new record
-      rec <- lift $ defineRecFromFields names
-      modify $ \s -> s { recordDefs = Map.insert names rec (recordDefs s) }
-      return rec
 
 -- verbosity {{{2
 
@@ -157,7 +114,7 @@ checkNameIsDefined pos name = do
                            <+> text "has been defined.")
                          ("Please check that the name is correct.")
 
--- lookupClass and findMethod {{{1
+-- Java lookup functions {{{2
 
 -- | Atempt to find class with given name, or throw ExecException if no class
 -- with that name exists.
@@ -167,7 +124,7 @@ lookupClass pos nm = do
   case maybeCl of
     Nothing -> do
      let msg = ftext ("The Java class " ++ slashesToDots nm ++ " could not be found.")
-         res = "Please check the class name and class path to ensure that they are correct."
+         res = "Please check that the --classpath and --jars options are set correctly."
       in throwIOExecException pos msg res
     Just cl -> return cl
 
@@ -194,8 +151,7 @@ findMethod pos nm initClass = do
                            ++ "method names are unique."
                    res = "Please rename the Java method so that it is unique."
                 in throwIOExecException pos (ftext msg) res
-  impl initClass 
-
+  impl initClass
 
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
@@ -248,60 +204,23 @@ idRecordsInIRType pos relativePath uninterpName tp =
           | otherwise = mapM_ parseType args
         parseType (SBV.TRecord (unzip -> (names,schemes))) = do
           -- Lookup record def for files to ensure it is known to executor.
-          _ <- lookupRecordDef (Set.fromList names)
+          _ <- lift $ getStructuralRecord (Set.fromList names)
           mapM_ (parseType . SBV.schemeType) schemes
 
--- }}}1
+-- Operations for extracting DagType from AST expression types {{{1
 
 -- | Returns argument types and result type.
 opDefType :: OpDef -> ([DagType], DagType)
 opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 
--- | Convert expression type from AST into WidthExpr
-parseExprWidth :: AST.ExprWidth -> WidthExpr
-parseExprWidth (AST.WidthConst _ i) = constantWidth (Wx i)
-parseExprWidth (AST.WidthVar _ nm) = varWidth nm
-parseExprWidth (AST.WidthAdd _ u v) = addWidth (parseExprWidth u) (parseExprWidth v)
-
--- | Convert expression type from AST into DagType.
--- Uses Executor monad for parsing record types.
-parseExprType :: AST.ExprType -> Executor DagType
-parseExprType (AST.BitType _) = return SymBool
-parseExprType (AST.BitvectorType _ w) = return $ SymInt (parseExprWidth w)
-parseExprType (AST.Array _ w tp) =
-  fmap (SymArray (parseExprWidth w)) $ parseExprType tp
-parseExprType (AST.Record _ fields) = do
-  let names = [ nm | (_,nm,_) <- fields ]
-  def <- lookupRecordDef (Set.fromList names)
-  tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
-  let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
-  return $ SymRec def sub
-parseExprType (AST.ShapeVar _ v) = return (SymShapeVar v)
-
 -- | Parse the FnType returned by the parser into symbolic dag types.
-parseFnType :: AST.FnType -> Executor ([DagType], DagType)
+parseFnType :: AST.FnType -> OpSession ([DagType], DagType)
 parseFnType (AST.FnType args res) = do
   parsedArgs <- V.mapM parseExprType (V.fromList args)
   parsedRes <- parseExprType res
   return (V.toList parsedArgs, parsedRes)
 
 -- TypedExpr {{{1
-
--- | A type checked expression which appears insider a global let binding, method
--- declaration, or rule term.
-data TypedExpr 
-  = TypedApply Op [TypedExpr]
-  | TypedCns CValue DagType
-  | TypedJavaArrayValue SpecJavaRef DagType
-  | TypedVar String DagType
-  deriving (Show)
-
--- | Return type of a typed expression.
-getTypeOfTypedExpr :: TypedExpr -> DagType
-getTypeOfTypedExpr (TypedVar _ tp) = tp
-getTypeOfTypedExpr (TypedCns _ tp) = tp
-getTypeOfTypedExpr (TypedJavaArrayValue _ tp) = tp
-getTypeOfTypedExpr (TypedApply op _) = opResultType op
 
 -- | Evaluate a ground typed expression to a constant value.
 globalEval :: TypedExpr -> Executor CValue
@@ -327,104 +246,20 @@ globalEval expr = do
       Nothing -> error "internal: globalEval called with an expression that could not be evaluated."
       Just c -> return c
 
-data ExprParserState = EPS {
-          localBindings :: Map String TypedExpr
-        }
+-- typecheckExpr{{{2
 
-globalParserState :: ExprParserState
-globalParserState =
-  EPS { localBindings = Map.empty }
 
--- | Check argument count matches expected length.
-checkArgCount :: Pos -> String -> [TypedExpr] -> Int -> Executor ()
-checkArgCount pos opName (length -> foundOpCnt) expectedCnt = do
-  unless (expectedCnt == foundOpCnt) $
-    let msg = "Incorrect number of arguments to \'" ++ opName ++ "\'.  "
-                ++ show expectedCnt ++ " arguments were expected, but "
-                ++ show foundOpCnt ++ " arguments were found."
-     in throwIOExecException pos (ftext msg) ""
+-- | Configuration used for parsing global expressions.
+globalParserConfig :: TCConfig
+globalParserConfig =
+  TCC { localBindings = Map.empty }
 
--- | Convert an AST expression from parser into a typed expression.
-parseExpr :: ExprParserState -> AST.Expr -> Executor TypedExpr
-parseExpr st (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
-  tp <- parseExprType astTp
-  let throwNonGround =
-        let msg = text "The type" <+> text (ppType tp)
-                    <+> ftext "bound to literals must be a ground type."
-         in throwIOExecException pos msg ""
-  case tp of
-    SymInt (widthConstant -> Just (Wx w)) ->
-      return $ TypedCns (mkCInt (Wx w) i) tp
-    SymInt _ -> throwNonGround
-    SymShapeVar _ -> throwNonGround
-    _ ->
-      let msg = text "Incompatible type" <+> text (ppType tp)
-                  <+> ftext "assigned to integer literal."
-       in throwIOExecException pos msg ""
-parseExpr EPS { localBindings } (AST.Var pos name) = do
-  case Map.lookup name localBindings of
-    Just res -> return res
-    Nothing -> do
-      globalMap <- gets globalLetBindings
-      case Map.lookup name globalMap of
-        Just (c,tp) -> return $ TypedCns c tp
-        Nothing -> 
-          let msg = "Unknown variable " ++ name ++ "."
-           in throwIOExecException pos (ftext msg) ""
-parseExpr st (AST.ApplyExpr appPos "join" astArgs) = do
-  args <- mapM (parseExpr st) astArgs
-  checkArgCount appPos "join" args 1
-  let argType = getTypeOfTypedExpr (head args)
-  case argType of
-    SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)) -> do
-      op <- lift $ joinOpDef l w
-      return $ TypedApply (groundOp op) args
-    _ -> let msg = "Illegal arguments and result type given to \'join\'.  "
-                   ++ "SAWScript currently requires that the argument is ground"
-                   ++ " array of integers. "
-          in throwIOExecException appPos (ftext msg) ""
-parseExpr st (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
-  args <- mapM (parseExpr st) astArgs
-  checkArgCount appPos "split" args 1
-  resType <- parseExprType astResType
-  let argType = getTypeOfTypedExpr (head args)
-  case (argType, resType) of
-    (  SymInt (widthConstant -> Just wl)
-     , SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w))) 
-      | wl == l * w -> do
-        op <- lift $ splitOpDef l w
-        return $ TypedApply (groundOp op) args
-    _ -> let msg = "Illegal arguments and result type given to \'split\'.  "
-                   ++ "SAWScript currently requires that the argument is ground type, "
-                   ++ "and an explicit result type is given."
-          in throwIOExecException appPos (ftext msg) ""
-parseExpr st (AST.ApplyExpr appPos opName astArgs) = do
-  m <- gets sawOpMap
-  case Map.lookup opName m of
-    Nothing ->
-      let msg = "Unknown operator " ++ opName ++ "."
-          res = "Please check that the operator is correct."
-       in throwIOExecException appPos (ftext msg) res
-    Just opDef -> do
-      let defArgTypes = opDefArgTypes opDef
-      args <- mapM (parseExpr st) astArgs
-      checkArgCount appPos opName args (V.length defArgTypes)
-      let defTypes = V.toList defArgTypes
-      let argTypes = map getTypeOfTypedExpr args
-      case matchSubst (defTypes `zip` argTypes) of
-        Nothing -> 
-          let msg = "Illegal arguments and result type given to \'" ++ opName ++ "\'."
-           in throwIOExecException appPos (ftext msg) ""
-        Just sub -> return $ TypedApply (mkOp opDef sub) args
-parseExpr st e =
-  error $ "internal: parseExpr given illegal type " ++ show e
-
--- }}}1
+-- Operations used for SBV Parsing {{{1
 
 -- | Create record def map using currently known records.
 getRecordDefMap :: Executor SBV.RecordDefMap
 getRecordDefMap = do
-  curRecDefs <- gets recordDefs
+  curRecDefs <- lift $ listStructuralRecords
   let recordFn :: [(String, DagType)] -> Maybe DagType
       recordFn fields = 
         let fieldNames = Set.fromList (map fst fields)
@@ -504,67 +339,24 @@ parseASTType (AST.IntArray pos l) =
 parseASTType (AST.LongArray pos l) =
   fmap SpecLongArray $ checkedGetArrayLength pos l
 
--- SpecJavaRef {{{1
-
--- | Identifies a reference to a Java value.
-data SpecJavaRef 
-  = SpecThis
-  | SpecArg Int
-  | SpecField SpecJavaRef Field
-
-instance Eq SpecJavaRef where
-  SpecThis == SpecThis = True
-  SpecArg i == SpecArg j = i == j
-  SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && fieldName f1 == fieldName f2
-  _ == _ = False
-
-instance Ord SpecJavaRef where
-  SpecThis `compare` SpecThis = EQ
-  SpecThis `compare` _ = LT
-  _ `compare` SpecThis = GT
-  SpecArg i `compare` SpecArg j = i `compare` j
-  SpecArg i `compare` _ = LT
-  _ `compare` SpecArg i = GT
-  SpecField r1 f1 `compare` SpecField r2 f2 = 
-    case r1 `compare` r2 of 
-      EQ -> fieldName f1 `compare` fieldName f2
-      r -> r
-
-instance Show SpecJavaRef where
-  show SpecThis = "this"
-  show (SpecArg i) = "args[" ++ show i ++ "]"
-  show (SpecField r f) = show r ++ "." ++ fieldName f
-
--- | Pretty print SpecJavaRef
-ppSpecJavaRef :: SpecJavaRef -> String
-ppSpecJavaRef SpecThis = "this"
-ppSpecJavaRef (SpecArg i) = "args[" ++ show i ++ "]"
-ppSpecJavaRef (SpecField r f) = ppSpecJavaRef r ++ ('.' : fieldName f)
-
--- | Returns JSS Type of SpecJavaRef
-getJSSTypeOfSpecRef :: -- | Name of class for this object
-                       -- (N.B. method may be defined in a subclass of this class).
-                       String
-                    -> V.Vector JSS.Type -- ^ Parameters of method that we are checking
-                    -> SpecJavaRef -- ^ Spec Java reference to get type of.
-                    -> JSS.Type -- ^ Java type (which must be a class or array type).
-getJSSTypeOfSpecRef clName _p SpecThis = JSS.ClassType clName
-getJSSTypeOfSpecRef _cl params (SpecArg i) = params V.! i
-getJSSTypeOfSpecRef _cl _p (SpecField _ f) = fieldType f
-
--- }}}1
-
+-- SpecParser {{{1
 
 data SpecParserState = SPS {
+          -- | Class we are currently parsing.
           specClass :: JSS.Class
         , specMethodIsStatic :: Bool
         , specMethodParams :: V.Vector JSS.Type
+          -- | Maps Java expressions referenced in type and const expressions
+          -- to their associated type.
         , refTypeMap :: Map SpecJavaRef SpecJavaRefType
         -- | Set of Java refs in a mayAlias relation.
-        , mayAliasRefs :: !(Set SpecJavaRef)
+        , mayAliasRefs :: Map SpecJavaRef Int
+        -- | Number of equivalence class
+        , mayAliasClassCount :: Int
         -- | List of mayAlias classes in reverse order that they were created.
         , revAliasSets :: [([SpecJavaRef], SpecJavaRefType)]
         , methodLetBindings :: Map String TypedExpr
+        , assumptions :: [TypedExpr]
         }
 
 type SpecParser = StateT SpecParserState Executor
@@ -601,10 +393,8 @@ lookupRefType pos ref = do
           res = "Please add a type annotation of the reference before this refence."
        in throwIOExecException pos (ftext msg) res
 
-
 -- | Parse AST Java reference to get specification ref.
-parseASTRef :: AST.JavaRef
-            -> SpecParser SpecJavaRef
+parseASTRef :: AST.JavaRef -> SpecParser SpecJavaRef
 parseASTRef (AST.This pos) = do
   isStatic <- gets specMethodIsStatic
   when isStatic $
@@ -635,6 +425,17 @@ checkRefTypeIsUndefined pos ref = do
     let msg = "The type of " ++ ppSpecJavaRef ref ++ " is already defined."
      in throwIOExecException pos (ftext msg) ""
 
+-- | Check that the reference type is undefined.
+checkRefTypeIsDefined :: Pos -> SpecJavaRef -> SpecParser ()
+checkRefTypeIsDefined pos ref = do
+  m <- gets refTypeMap 
+  unless (Map.member ref m) $
+    let msg = "The type of " ++ ppSpecJavaRef ref ++ " has not been defined."
+        res = "Please add a \'type\' declaration to indicate the concrete type of the reference."
+     in throwIOExecException pos (ftext msg) res
+
+-- | Throw io exception indicating that a reference type is incompatible with
+-- an expression type.
 throwIncompatibleRefType :: MonadIO m => Pos -> SpecJavaRef -> JSS.Type -> String -> m ()
 throwIncompatibleRefType pos ref refType specTypeName =
   let msg = "The type of " ++ ppSpecJavaRef ref ++ " is " ++ show refType
@@ -642,8 +443,9 @@ throwIncompatibleRefType pos ref refType specTypeName =
              ++ specTypeName ++ "."
    in throwIOExecException pos (ftext msg) ""
 
-parseDecl :: AST.MethodSpecDecl -> SpecParser ()
-parseDecl (AST.Type pos astRefs astTp) = do
+-- | Code for parsing a method spec declaration.
+tcDecl :: AST.MethodSpecDecl -> SpecParser ()
+tcDecl (AST.Type pos astRefs astTp) = do
   clName <- fmap className $ gets specClass
   params <- gets specMethodParams
   specType <- lift $ parseASTType astTp
@@ -660,8 +462,8 @@ parseDecl (AST.Type pos astRefs astTp) = do
     modify $ \s -> 
       s { refTypeMap = Map.insert ref specType (refTypeMap s) 
         }
-parseDecl (AST.MayAlias pos []) = error "internal: mayAlias set is empty"
-parseDecl (AST.MayAlias pos astRefs) = do
+tcDecl (AST.MayAlias pos []) = error "internal: mayAlias set is empty"
+tcDecl (AST.MayAlias pos astRefs) = do
   refs@(firstRef:restRefs) <- mapM parseASTRef astRefs
    -- Check types of references are the same. are the same.
   firstType <- lookupRefType pos firstRef 
@@ -676,23 +478,26 @@ parseDecl (AST.MayAlias pos astRefs) = do
   -- Check refs have not already appeared in a mayAlias set.
   do s <- gets mayAliasRefs
      forM_ refs $ \ref -> 
-       when (Set.member ref s) $ do
+       when (Map.member ref s) $ do
          let msg = ppSpecJavaRef ref ++ "was previously mentioned in a mayAlias"
                    ++ " declaration."
              res = "Please merge mayAlias declarations as needed so that each "
                    ++ "reference is mentioned at most once."
          throwIOExecException pos (ftext msg) res
+  --TODO: Replace undefined
   modify $ \s -> 
-    s { mayAliasRefs = foldr Set.insert (mayAliasRefs s) refs
+    s { mayAliasRefs = foldr (\r -> Map.insert r undefined)  (mayAliasRefs s) refs
       , revAliasSets = (refs,firstType) : revAliasSets s }
-parseDecl (AST.Const pos astRef astExpr) = do
+tcDecl (AST.Const pos astRef astExpr) = do
+  -- Parse ref and check type is undefined.
   ref <- parseASTRef astRef
   checkRefTypeIsUndefined pos ref
+  -- Parse expression.
   bindings <- gets methodLetBindings 
-  let parserState = EPS
+  let parserState = TCC
         { localBindings = bindings
         }
-  expr <- lift $ parseExpr parserState astExpr
+  expr <- lift $ lift $ tcExpr parserState astExpr
   -- Check ref and expr have compatible types.
   clName <- fmap className $ gets specClass
   params <- gets specMethodParams
@@ -705,13 +510,27 @@ parseDecl (AST.Const pos astRef astExpr) = do
      , SymArray (widthConstant -> Just _) (SymInt (widthConstant -> Just 64))) ->
        return ()
     (_,specType) -> throwIncompatibleRefType pos ref refType (ppType specType)
+  -- Add ref to refTypeMap
   modify $ \s ->
     s { refTypeMap = Map.insert ref (SpecRefConstant expr) (refTypeMap s) }
-parseDecl (AST.MethodLet _pos _ref _expr) = error "AST.MethodLet"
-parseDecl (AST.Assume _pos _expr) = error "AST.Assume"
-parseDecl (AST.Ensures _pos _ref _Expr) = error "AST.Ensures"
-parseDecl (AST.Arbitrary _pos _refs) = error "AST.Arbitrary"
-parseDecl (AST.VerifyUsing _pos _method) = error "AST.VerifyUsing"
+tcDecl (AST.MethodLet _pos _ref _expr) = do
+  error "AST.MethodLet"
+tcDecl (AST.Assume _pos _expr) = error "AST.Assume"
+tcDecl (AST.Ensures pos astRef astExpr) = do
+  -- Parse ref and check type is defined.
+  ref <- parseASTRef astRef
+  checkRefTypeIsDefined pos ref
+  -- Parse expression.
+  bindings <- gets methodLetBindings 
+  let parserState = TCC
+        { localBindings = bindings
+        }
+  expr <- lift $ lift $ tcExpr parserState astExpr
+  -- TODO: Check ref and expr have compatible types.
+  -- TODO: Add ref to ensures map.
+  error "AST.Ensures"
+tcDecl (AST.Arbitrary _pos _refs) = error "AST.Arbitrary"
+tcDecl (AST.VerifyUsing _pos _method) = error "AST.VerifyUsing"
 
 data ParsedMethodSpec = PMS {
     aliasSets :: [([SpecJavaRef], SpecJavaRefType)]
@@ -727,20 +546,21 @@ parseMethodSpecDecls cl method cmds = do
                , specMethodIsStatic = methodIsStatic method
                , specMethodParams = V.fromList (methodParameterTypes method)
                , refTypeMap = Map.singleton SpecThis (SpecRefClass cl)
-               , mayAliasRefs = Set.empty
+               , mayAliasRefs = Map.empty
                , revAliasSets = [] 
                , methodLetBindings = Map.empty
                }
   SPS { refTypeMap
       , mayAliasRefs
       , revAliasSets 
-      } <- fmap snd $ runStateT (mapM_ parseDecl cmds) st
+      } <- fmap snd $ runStateT (mapM_ tcDecl cmds) st
   let unaliasedRefs
         = map (\(r,tp) -> ([r],tp))
-        $ filter (\(r,tp) -> Set.notMember r mayAliasRefs)
+        $ filter (\(r,tp) -> Map.notMember r mayAliasRefs)
         $ Map.toList refTypeMap
   return PMS { aliasSets = revAliasSets ++ unaliasedRefs }
 
+-- Verifier command execution {{{1 
       
 -- | Execute command 
 execute :: AST.VerifierCommand -> Executor ()
@@ -782,7 +602,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
   recordFn <- getRecordDefMap
   -- Check that op type matches expected type.
   execDebugLog $ "Checking expected type matches inferred type for " ++ nm
-  fnType <- parseFnType astFnType
+  fnType <- lift $ parseFnType astFnType
   unless (fnType == SBV.inferFunctionType recordFn sbvExprType) $ 
     let msg = (ftext "The type of the function in the imported SBV file"
                  $$ relativePath
@@ -827,7 +647,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
 execute (AST.GlobalLet pos name astExpr) = do
   execDebugLog $ "Start defining let " ++ name
   checkNameIsUndefined pos name
-  expr <- parseExpr globalParserState astExpr
+  expr <- lift $ tcExpr globalParserConfig astExpr
   val <- globalEval expr
   let tp = getTypeOfTypedExpr expr
   modify $ \s -> s { definedNames = Map.insert name pos (definedNames s)
@@ -914,7 +734,6 @@ runProofs cb ssOpts files = do
           codebase = cb
         , runVerification = True
         , parsedFiles = files
-        , recordDefs   = Map.empty
         , sbvOpMap     = Map.empty
         , definedNames = Map.empty
         , sawOpMap     = Map.empty

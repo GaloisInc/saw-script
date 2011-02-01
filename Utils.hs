@@ -1,11 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 module SAWScript.Utils where
 
+import Control.Exception
 import Control.Monad(when)
 import Data.List(intercalate)
 import System.Console.CmdArgs(Data, Typeable)
 import System.Directory(makeRelativeToCurrentDirectory)
 import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
+import Text.PrettyPrint.HughesPJ
+import Utils.IOStateT
 
 data Pos = Pos !FilePath -- file
                !Int      -- line
@@ -50,3 +53,25 @@ notQuiet o = verboseAtLeast 1 o
 
 debugVerbose :: SSOpts -> IO () -> IO ()
 debugVerbose o = verboseAtLeast 10 o
+
+-- | Convert a string to a paragraph formatted document.
+ftext :: String -> Doc
+ftext msg = fsep (map text $ words msg)
+
+-- ExecException {{{1
+
+-- | Class of exceptions thrown by SBV parser.
+data ExecException = ExecException Pos -- ^ Position
+                                   Doc -- ^ Error message
+                                   String -- ^ Resolution tip
+  deriving (Show, Typeable)
+ 
+instance Exception ExecException
+
+-- | Throw exec exception in a MonadIO.
+throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
+throwIOExecException pos errorMsg resolution =
+  liftIO $ throwIO (ExecException pos errorMsg resolution)
+
+
+
