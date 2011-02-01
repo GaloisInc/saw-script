@@ -203,10 +203,10 @@ Expr : var                { Var          (tokPos $1) (tokStr $1)    }
 
 -- Records
 RecordFTypes :: { [(Pos, String, ExprType)] }
-RecordFTypes : termBy(connected(var, ':', ExprType), ';')  { map ((\ (v, e) -> (tokPos v, tokStr v, e))) $1 }
+RecordFTypes : sepBy(connected(var, ':', ExprType), ';')  { map ((\ (v, e) -> (tokPos v, tokStr v, e))) $1 }
 
 RecordFlds :: { [(Pos, String, Expr)] }
-RecordFlds : termBy(connected(var, '=', Expr), ';')  { map ((\ (v, e) -> (tokPos v, tokStr v, e))) $1 }
+RecordFlds : sepBy(connected(var, '=', Expr), ';')  { map ((\ (v, e) -> (tokPos v, tokStr v, e))) $1 }
 
 -- Method spec body
 MethodSpecDecls :: { [MethodSpecDecl] }

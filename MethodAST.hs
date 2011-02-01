@@ -32,7 +32,7 @@ data JavaType
 data ExprType
   = BitType Pos
   | BitvectorType Pos ExprWidth
-  | Array Pos Int ExprType
+  | Array Pos ExprWidth ExprType
   | Record Pos [(Pos, String, ExprType)]
   | ShapeVar Pos String
  deriving (Show)
