@@ -32,6 +32,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'assume'       { TReserved _ "assume"       }
    'ensures'      { TReserved _ "ensures"      }
    'arbitrary'    { TReserved _ "arbitrary"    }
+   'returns'      { TReserved _ "returns"      }
    'const'        { TReserved _ "const"        }
    'verifyUsing'  { TReserved _ "verifyUsing"  }
    'enable'       { TReserved _ "enable"       }
@@ -226,6 +227,7 @@ MethodSpecDecl : 'type'        JavaRefs ':' JavaType  { Type        (tokPos $1) 
                | 'assume'      Expr                   { Assume      (tokPos $1) $2             }
                | 'ensures'     JavaRef ':=' Expr      { Ensures     (tokPos $1) $2 $4          }
                | 'arbitrary'   ':' JavaRefs           { Arbitrary   (tokPos $1) $3             }
+               | 'returns'     ':' Expr               { Returns     (tokPos $1) $3             }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing (tokPos $1) $3             }
 
 -- Comma separated Sequence of JavaRef's, at least one
