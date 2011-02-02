@@ -163,7 +163,7 @@ tcExpr st (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = d
   let argType = getTypeOfTypedExpr (head args)
   case (argType, resType) of
     (  SymInt (widthConstant -> Just wl)
-     , SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w))) 
+     , SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)))
       | wl == l * w -> do
         op <- splitOpDef l w
         return $ TypedApply (groundOp op) args
@@ -188,7 +188,19 @@ tcExpr st (AST.ApplyExpr appPos nm astArgs) = do
           let msg = "Illegal arguments and result type given to \'" ++ nm ++ "\'."
            in throwIOExecException appPos (ftext msg) ""
         Just sub -> return $ TypedApply (mkOp opDef sub) args
---TODO: Add more typechecking equations for parsing expressions.
+tcExpr st (AST.TypeExpr p e astResType) = do
+   te <- tcExpr st e
+   let tet = getTypeOfTypedExpr te
+   resType <- parseExprType astResType
+   if tet /= resType
+      then let msg =    text "Type-annotation mismatch:" 
+                     $$ text "Annotation: " <+> text (show astResType)
+                     $$ text "Inferred  : " <+> text (show tet)
+           in throwIOExecException p msg ""
+      else return te
+-- TODO: Fix this!
+tcExpr _st (AST.ArgsExpr _ i) =
+   return $ error $ "Don't know how to type-check args[" ++ show i ++ "]"
+-- TODO: Add more typechecking equations for parsing expressions.
 tcExpr _st e =
-  error $ "internal: tcExpr given illegal type " ++ show e
-
+  error $ "internal: tcExpr: TBD: " ++ show e
