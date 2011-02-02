@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE ViewPatterns       #-}
 module SAWScript.TypeChecker
-  ( SpecJavaRef(..)
+  ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
   , parseExprType
   , TypedExpr(..)
@@ -24,47 +24,43 @@ import SAWScript.Utils
 import Symbolic
 import Utils.IOStateT
 
--- SpecJavaRef {{{1
+-- SpecJavaExpr {{{1
 
 -- | Identifies a reference to a Java value.
-data SpecJavaRef
-  = SpecThis
-  | SpecArg Int
-  | SpecField SpecJavaRef JSS.Field
+data SpecJavaExpr
+  = SpecThis String
+  | SpecArg Int JSS.Type
+  | SpecField SpecJavaExpr JSS.Field
 
-instance Eq SpecJavaRef where
-  SpecThis        == SpecThis        = True
-  SpecArg i       == SpecArg j       = i == j
+instance Eq SpecJavaExpr where
+  SpecThis _      == SpecThis _      = True
+  SpecArg i _     == SpecArg j _     = i == j
   SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && JSS.fieldName f1 == JSS.fieldName f2
   _               == _               = False
 
-instance Ord SpecJavaRef where
-  SpecThis        `compare` SpecThis        = EQ
-  SpecThis        `compare` _               = LT
-  _               `compare` SpecThis        = GT
-  SpecArg i       `compare` SpecArg j       = i `compare` j
-  SpecArg _       `compare` _               = LT
-  _               `compare` SpecArg _       = GT
+instance Ord SpecJavaExpr where
+  SpecThis _      `compare` SpecThis _      = EQ
+  SpecThis _      `compare` _               = LT
+  _               `compare` SpecThis _      = GT
+  SpecArg i _     `compare` SpecArg j _     = i `compare` j
+  SpecArg _ _     `compare` _               = LT
+  _               `compare` SpecArg _ _     = GT
   SpecField r1 f1 `compare` SpecField r2 f2 =
         case r1 `compare` r2 of
           EQ -> JSS.fieldName f1 `compare` JSS.fieldName f2
           r  -> r
 
-instance Show SpecJavaRef where
-  show SpecThis        = "this"
-  show (SpecArg i)     = "args[" ++ show i ++ "]"
+instance Show SpecJavaExpr where
+  show (SpecThis _)    = "this"
+  show (SpecArg i _)   = "args[" ++ show i ++ "]"
   show (SpecField r f) = show r ++ "." ++ JSS.fieldName f
 
--- | Returns JSS Type of SpecJavaRef
-getJSSTypeOfSpecRef :: String            -- ^ Name of class for this object (N.B. method may be defined in a subclass of this class).
-                    -> V.Vector JSS.Type -- ^ Parameters of method that we are checking
-                    -> SpecJavaRef       -- ^ Spec Java reference to get type of.
-                    -> JSS.Type          -- ^ Java type (which must be a class or array type).
-getJSSTypeOfSpecRef clName _p     SpecThis        = JSS.ClassType clName
-getJSSTypeOfSpecRef _cl    params (SpecArg i)
-  | i < V.length params = params V.! i
-  | True                = error $ "getJSSTypeOfSpecRef: Trying to access " ++ show i ++ ". element, but there are only " ++ show (V.length params)
-getJSSTypeOfSpecRef _cl    _p     (SpecField _ f) = JSS.fieldType f
+-- | Returns JSS Type of SpecJavaExpr
+getJSSTypeOfSpecRef :: SpecJavaExpr -- ^ Spec Java reference to get type of.
+                    -> JSS.Type
+getJSSTypeOfSpecRef (SpecThis cl)   = JSS.ClassType cl
+getJSSTypeOfSpecRef (SpecArg _ tp)  = tp
+getJSSTypeOfSpecRef (SpecField _ f) = JSS.fieldType f
 
 -- Typecheck expression types {{{1
 
@@ -95,7 +91,7 @@ parseExprType (AST.ShapeVar _ v)      = return (SymShapeVar v)
 data TypedExpr
    = TypedApply Op [TypedExpr]
    | TypedCns CValue DagType
-   | TypedJavaValue SpecJavaRef DagType
+   | TypedJavaValue SpecJavaExpr DagType
    | TypedVar String DagType
    deriving (Show)
 
@@ -193,6 +189,6 @@ tcExpr st (AST.ApplyExpr appPos nm astArgs) = do
            in throwIOExecException appPos (ftext msg) ""
         Just sub -> return $ TypedApply (mkOp opDef sub) args
 --TODO: Add more typechecking equations for parsing expressions.
-tcExpr st e =
+tcExpr _st e =
   error $ "internal: tcExpr given illegal type " ++ show e
 
