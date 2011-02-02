@@ -76,16 +76,18 @@ parseFile path = do
     Nothing -> error $ "internal: Could not find file " ++ path
     Just cmds -> return cmds
 
--- | Typecheck expression at global level.
-typecheckGlobalExpr :: AST.Expr -> Executor TypedExpr
-typecheckGlobalExpr astExpr = do
+-- | Typecheck and evaluate expression at global level.
+evaluateGlobalExpr :: AST.Expr -> Executor (CValue,DagType)
+evaluateGlobalExpr astExpr = do
   globalCnsBindings <- gets globalLetBindings
   opBindings <- gets sawOpMap
   let globalParserConfig =
        TCC { localBindings = Map.empty 
            , globalCnsBindings
            , opBindings }
-  lift $ tcExpr globalParserConfig astExpr
+  expr <- lift $ tcExpr globalParserConfig astExpr
+  val <- globalEval expr
+  return (val, getTypeOfTypedExpr expr)
 
 -- verbosity {{{2
 
@@ -272,9 +274,9 @@ globalEval expr = do
 -- Operations used for SBV Parsing {{{1
 
 -- | Create record def map using currently known records.
-getRecordDefMap :: Executor SBV.RecordDefMap
+getRecordDefMap :: OpSession SBV.RecordDefMap
 getRecordDefMap = do
-  curRecDefs <- lift $ listStructuralRecords
+  curRecDefs <- listStructuralRecords
   let recordFn :: [(String, DagType)] -> Maybe DagType
       recordFn fields = 
         let fieldNames = Set.fromList (map fst fields)
@@ -287,7 +289,7 @@ checkSBVUninterpretedFunctions :: Pos -> Doc -> SBV.SBVPgm -> Executor ()
 checkSBVUninterpretedFunctions pos relativePath sbv = do
   let SBV.SBVPgm (_ver, _, _cmds, _vc, _warn, sbvUninterpFns) = sbv
   curSbvOps <- gets sbvOpMap
-  recordFn <- getRecordDefMap
+  recordFn <- lift $ getRecordDefMap
   forM_ sbvUninterpFns $ \((name, _loc), irType, _) -> do
     case Map.lookup name curSbvOps of
       Nothing -> do
@@ -308,32 +310,44 @@ checkSBVUninterpretedFunctions pos relativePath sbv = do
               res = "Please check that the correct SBV files match the Cryptol source."
           throwIOExecException pos msg res
 
--- SpecJavaRefType {{{1
+-- SpecJavaType {{{1
 
 -- | A parsed type from AST.JavaType
-data SpecJavaRefType
+data SpecJavaType
   = SpecRefClass !(JSS.Class) -- ^ Specific class for a reference.
   | SpecIntArray !Int32
   | SpecLongArray !Int32
+  | SpecBool
+  | SpecInt
+  | SpecLong
 
-instance Eq SpecJavaRefType where
+instance Eq SpecJavaType where
   SpecRefClass c1 == SpecRefClass c2 = className c1 == className c2
   SpecIntArray l1 == SpecIntArray l2 = l1 == l2
   SpecLongArray l1 == SpecLongArray l2 = l1 == l2
+  SpecBool == SpecBool = True
+  SpecInt == SpecInt = True
+  SpecLong == SpecLong = True
   _ == _ = False
 
--- | Returns JSS Type of SpecJavaRefType
-getJSSTypeOfSpecRefType :: SpecJavaRefType -- ^ Spec Java reference to get type of.
-                        -> JSS.Type -- ^ Java type
-getJSSTypeOfSpecRefType (SpecRefClass cl) = JSS.ClassType (className cl)
-getJSSTypeOfSpecRefType (SpecIntArray _) = JSS.ArrayType JSS.IntType
-getJSSTypeOfSpecRefType (SpecLongArray _) = JSS.ArrayType JSS.LongType
+-- | Pretty print SpecJavaType
+ppSpecJavaType :: SpecJavaType -> String
+ppSpecJavaType (SpecRefClass cl) = className cl
+ppSpecJavaType (SpecIntArray l)  = "int[" ++ show l ++ "]"
+ppSpecJavaType (SpecLongArray l) = "long[" ++ show l ++ "]"
+ppSpecJavaType SpecBool = "bool"
+ppSpecJavaType SpecInt  = "int"
+ppSpecJavaType SpecLong = "long"
 
--- | Pretty print SpecJavaRefType
-ppSpecJavaRefType :: SpecJavaRefType -> String
-ppSpecJavaRefType (SpecRefClass cl) = className cl
-ppSpecJavaRefType (SpecIntArray l)  = "int[" ++ show l ++ "]"
-ppSpecJavaRefType (SpecLongArray l) = "long[" ++ show l ++ "]"
+-- | Returns JSS Type of SpecJavaType
+getJSSTypeOfSpecJavaType :: SpecJavaType -- ^ Spec Java reference to get type of.
+                        -> JSS.Type -- ^ Java type
+getJSSTypeOfSpecJavaType (SpecRefClass cl) = JSS.ClassType (className cl)
+getJSSTypeOfSpecJavaType (SpecIntArray _) = JSS.ArrayType JSS.IntType
+getJSSTypeOfSpecJavaType (SpecLongArray _) = JSS.ArrayType JSS.LongType
+getJSSTypeOfSpecJavaType SpecBool = JSS.BooleanType
+getJSSTypeOfSpecJavaType SpecInt  = JSS.IntType
+getJSSTypeOfSpecJavaType SpecLong = JSS.LongType
 
 -- | Converts an int into a Java array length.
 checkedGetArrayLength :: Pos -> Int -> Executor Int32
@@ -343,8 +357,8 @@ checkedGetArrayLength pos l = do
      in throwIOExecException pos (ftext msg) ""
   return $ fromIntegral l
 
--- | Parse AST Type to SpecJavaRefType.
-parseASTType :: AST.JavaType -> Executor SpecJavaRefType
+-- | Parse AST Type to SpecJavaType.
+parseASTType :: AST.JavaType -> Executor SpecJavaType
 parseASTType (AST.RefType pos names) = do
   let nm = intercalate "." names
   fmap SpecRefClass $ lookupClass pos nm
@@ -355,32 +369,40 @@ parseASTType (AST.LongArray pos l) =
 
 -- MethodSpecTranslator {{{1
 
+-- | Java expression initial value.
+data SpecJavaRefInitialValue
+  = JavaInput SpecJavaType
+  | JavaConst CValue DagType
+
 -- | Method spec translator state
 data MethodSpecTranslatorState = MSTS {
-          -- | Class we are currently parsing.
-          specClass :: JSS.Class
-        , specMethodIsStatic :: Bool
-        , specMethodParams :: V.Vector JSS.Type
-          -- | Maps Java expressions referenced in type expressions
-          -- to their associated type.
-        , refTypeMap :: Map SpecJavaRef SpecJavaRefType
-           -- Maps Java constants to associated typed expression.
-        , constExprMap :: Map SpecJavaRef TypedExpr
-        -- | Set of Java refs in a mayAlias relation.
-        , mayAliasRefs :: Map SpecJavaRef Int
-        -- | Number of equivalence class
-        , mayAliasClassCount :: Int
-        -- | List of mayAlias classes in reverse order that they were created.
-        , revAliasSets :: [([SpecJavaRef], SpecJavaRefType)]
-        -- | Let bindings local to expression.
-        , methodLetBindings :: Map String (Pos,TypedExpr)
-        -- | Lift of assumptions parsed so far in reverse order.
-        , assumptions :: [TypedExpr]
-        -- | Map from Java expressions to typed expression in ensures clause.
-        -- or nothing if this is bound.
-        , refEnsures :: Map SpecJavaRef (Pos,Maybe TypedExpr)
-        , verificationMethod :: Maybe (Pos, AST.VerificationMethod)
-        }
+         -- | Class we are currently parsing.
+         specClass :: JSS.Class
+       , specMethodIsStatic :: Bool
+       , specMethodParams :: V.Vector JSS.Type
+       -- | List of non-ref types found in type expressions.
+       , nonRefTypes :: Set SpecJavaExpr
+         -- | Maps Java expressions referenced in type expressions
+         -- to their associated type.
+       , refTypeMap :: Map SpecJavaExpr SpecJavaType
+         -- | Maps Java references to to associated constant expression.
+       , constExprMap :: Map SpecJavaExpr (CValue,DagType)
+       -- | Set of Java refs in a mayAlias relation.
+       , mayAliasRefs :: Map SpecJavaExpr Int
+       -- | Number of equivalence class
+       , mayAliasClassCount :: Int
+       -- | List of mayAlias classes in reverse order that they were created.
+       , revAliasSets :: [([SpecJavaExpr], SpecJavaType)]
+       -- | Let bindings local to expression.
+       , currentLetBindings :: Map String (Pos,TypedExpr)
+       -- | Lift of assumptions parsed so far in reverse order.
+       , currentAssumptions :: [TypedExpr]
+       -- | Map from Java expressions to typed expression in ensures clause.
+       -- or nothing if this is bound.
+       , curEnsures :: Map SpecJavaExpr (Pos,Maybe TypedExpr)
+       -- Verification method chosen.
+       , chosenVerificationMethod :: Maybe (Pos, AST.VerificationMethod)
+       }
 
 type MethodSpecTranslator = StateT MethodSpecTranslatorState Executor
 
@@ -429,24 +451,23 @@ checkJSSTypeIsValid pos True tp =
 -- This code will check that the result is a reference if the first Bool is
 -- true.
 -- Flag indicates if a reference is required.
-tcASTJavaExpr :: Bool -> AST.JavaRef -> MethodSpecTranslator SpecJavaRef
+tcASTJavaExpr :: Bool -> AST.JavaRef -> MethodSpecTranslator SpecJavaExpr
 tcASTJavaExpr _ (AST.This pos) = do
+  clName <- fmap className $ gets specClass
   isStatic <- gets specMethodIsStatic
   when isStatic $
     throwIOExecException pos (ftext "\'this\' is not defined on static methods.") ""
-  return SpecThis
+  return (SpecThis clName)
 tcASTJavaExpr refReq (AST.Arg pos i) = do
   params <- gets specMethodParams
   -- Check that arg index is valid.
   unless (0 <= i && i < V.length params) $
     throwIOExecException pos (ftext "Invalid argument index for method.") ""
   lift $ checkJSSTypeIsValid pos refReq (params V.! i)
-  return $ SpecArg i
+  return $ SpecArg i (params V.! i)
 tcASTJavaExpr refReq (AST.InstanceField pos astLhs fName) = do
   lhs <- tcASTJavaExpr True astLhs
-  clName <- fmap className $ gets specClass
-  params <- gets specMethodParams
-  case getJSSTypeOfSpecRef clName params lhs of
+  case getJSSTypeOfSpecRef lhs of
     JSS.ClassType lhsClassName -> lift $ do
       cl <- lookupClass pos lhsClassName
       f <- findField pos fName cl
@@ -457,24 +478,30 @@ tcASTJavaExpr refReq (AST.InstanceField pos astLhs fName) = do
              res = "Please check to make sure the field name is correct."
           in throwIOExecException pos (ftext msg) res
 
--- | Check that the reference type is undefined.
-checkRefTypeIsUndefined :: Pos -> SpecJavaRef -> MethodSpecTranslator ()
-checkRefTypeIsUndefined pos ref = do
-  do m <- gets refTypeMap 
-     when (Map.member ref m) $
-       let msg = "The type of \'" ++ show ref ++ "\' is already defined."
-        in throwIOExecException pos (ftext msg) ""
-  do m <- gets constExprMap
-     when (Map.member ref m) $
-       let msg = "The Java expression \'" ++ show ref
-                 ++ "\' was previously used in a const declaration.  Type "
-                 ++ "declarations and multiple const declarations on the same "
-                 ++ "Java expression are not allowed."
-           res = "Please remove the redundent declaration."
-        in throwIOExecException pos (ftext msg) res
+-- | Check that the reference type is not mentioned in a constant declaration.
+checkRefIsNotConst pos ref note = do
+  m <- gets constExprMap
+  when (Map.member ref m) $
+    let msg = "The Java expression \'" ++ show ref
+              ++ "\' was previously used in a const declaration.  "  ++ note
+     in throwIOExecException pos (ftext msg) ""
+
+-- | Check that the Java expression type is undefined.
+checkTypeIsUndefined :: Pos -> SpecJavaExpr -> String -> MethodSpecTranslator ()
+checkTypeIsUndefined pos ref note = do
+  s <- gets nonRefTypes
+  when (Set.member ref s) $
+    let msg = "The type of the Java expresssion \'" ++ show ref
+                ++ "\' has been already defined.  " ++ note
+     in throwIOExecException pos (ftext msg) ""
+  m <- gets refTypeMap 
+  when (Map.member ref m) $
+    let msg = "The type of the Java expresssion \'" ++ show ref
+                ++ "\' has been already defined.  " ++ note
+     in throwIOExecException pos (ftext msg) ""
 
 -- | Check that the reference type is undefined.
-checkRefTypeIsDefined :: Pos -> SpecJavaRef -> MethodSpecTranslator ()
+checkRefTypeIsDefined :: Pos -> SpecJavaExpr -> MethodSpecTranslator ()
 checkRefTypeIsDefined pos ref = do
   m <- gets refTypeMap 
   unless (Map.member ref m) $
@@ -484,7 +511,7 @@ checkRefTypeIsDefined pos ref = do
 
 -- | Throw io exception indicating that a reference type is incompatible with
 -- an expression type.
-throwIncompatibleRefType :: MonadIO m => Pos -> SpecJavaRef -> JSS.Type -> String -> m ()
+throwIncompatibleRefType :: MonadIO m => Pos -> SpecJavaExpr -> JSS.Type -> String -> m ()
 throwIncompatibleRefType pos ref refType specTypeName =
   let msg = "The type of " ++ show ref ++ " is " ++ show refType
              ++ ", which is incompatible with the specification type "
@@ -494,7 +521,7 @@ throwIncompatibleRefType pos ref refType specTypeName =
 -- | Typecheck expression at global level.
 typecheckMethodExpr :: AST.Expr -> MethodSpecTranslator TypedExpr
 typecheckMethodExpr astExpr = do
-  locals <- gets methodLetBindings 
+  locals <- gets currentLetBindings 
   lift $ do
     globalCnsBindings <- gets globalLetBindings
     opBindings <- gets sawOpMap
@@ -504,12 +531,9 @@ typecheckMethodExpr astExpr = do
     lift $ tcExpr tcc astExpr
 
 -- Check that the Java spec reference has a type compatible with typedExpr.
-checkSpecJavaExprCompat :: Pos -> SpecJavaRef -> TypedExpr -> MethodSpecTranslator ()
-checkSpecJavaExprCompat pos ref expr = do
-  clName <- fmap className $ gets specClass
-  params <- gets specMethodParams
-  let refType = getJSSTypeOfSpecRef clName params ref
-  case (refType, getTypeOfTypedExpr expr) of
+checkSpecJavaExprCompat :: Pos -> SpecJavaExpr -> DagType -> MethodSpecTranslator ()
+checkSpecJavaExprCompat pos ref dagType = do
+  case (getJSSTypeOfSpecRef ref, dagType) of
     (BooleanType, SymBool) -> return ()
     (IntType, SymInt (widthConstant -> Just 32)) -> return ()
     (LongType, SymInt (widthConstant -> Just 64)) -> return ()
@@ -520,13 +544,13 @@ checkSpecJavaExprCompat pos ref expr = do
      , SymArray (widthConstant -> Just _) (SymInt (widthConstant -> Just 64))) ->
        return ()
     --TODO: Add additional cases as needed.
-    (_,specType) -> throwIncompatibleRefType pos ref refType (ppType specType)
+    (refType,specType) -> throwIncompatibleRefType pos ref refType (ppType specType)
 
 -- | Check that no 'ensures' or 'arbitrary' statement has been added for the
 -- given reference is undefined.
-checkEnsuresUndefined :: Pos -> SpecJavaRef -> MethodSpecTranslator ()
+checkEnsuresUndefined :: Pos -> SpecJavaExpr -> MethodSpecTranslator ()
 checkEnsuresUndefined pos ref = do
-  m <- gets refEnsures
+  m <- gets curEnsures
   case Map.lookup ref m of
     Nothing -> return ()
     Just (absPrevPos,_) -> do
@@ -537,7 +561,7 @@ checkEnsuresUndefined pos ref = do
        in throwIOExecException pos (ftext msg) res
 
 -- | Get type assigned to SpecJavaRef, or throw exception if it is not assigned.
-lookupRefType :: Pos -> SpecJavaRef -> MethodSpecTranslator SpecJavaRefType
+lookupRefType :: Pos -> SpecJavaExpr -> MethodSpecTranslator SpecJavaType
 lookupRefType pos ref = do
   m <- gets refTypeMap
   case Map.lookup ref m of
@@ -548,6 +572,15 @@ lookupRefType pos ref = do
           res = "Please add a \'type\' declaration for this expression before this refence."
        in throwIOExecException pos (ftext msg) res
 
+-- | Check that a reference is unaliased.
+checkRefIsUnaliased :: Pos -> SpecJavaExpr -> String -> MethodSpecTranslator ()
+checkRefIsUnaliased pos ref res = do
+  s <- gets mayAliasRefs
+  when (Map.member ref s) $ do
+    let msg = "\'" ++ show ref ++ "\'was previously mentioned in a mayAlias"
+              ++ " declaration."
+    throwIOExecException pos (ftext msg) res
+
 -- | Code for parsing a method spec declaration.
 tcDecl :: AST.MethodSpecDecl -> MethodSpecTranslator ()
 tcDecl (AST.Type pos astRefs astTp) = do
@@ -555,18 +588,26 @@ tcDecl (AST.Type pos astRefs astTp) = do
   params <- gets specMethodParams
   specType <- lift $ parseASTType astTp
   forM_ astRefs $ \astRef -> do
-    ref <- tcASTJavaExpr True astRef
+    javaExpr <- tcASTJavaExpr False astRef
     -- Check type has not already been assigned.
-    checkRefTypeIsUndefined pos ref
+    checkTypeIsUndefined pos javaExpr $
+      "Multiple type declarations on the same Java expression " 
+        ++ "are not allowed."
+    -- Check type is not a const.
+    checkRefIsNotConst pos javaExpr $
+       "Type declarations and const declarations on the same Java expression " 
+         ++ "are not allowed."
+    let javaExprType = getJSSTypeOfSpecRef javaExpr
+        tgtType = getJSSTypeOfSpecJavaType specType
     -- Check that type of ref and the type of tp are compatible.
-    do let refType = getJSSTypeOfSpecRef clName params ref
-           tgtType = getJSSTypeOfSpecRefType specType
-       b <- lift $ JSS.isSubtype tgtType refType
-       unless b $ throwIncompatibleRefType pos ref refType (ppSpecJavaRefType specType)
-    -- Add ref to refTypeMap.
+    b <- lift $ JSS.isSubtype tgtType javaExprType
+    unless b $
+      throwIncompatibleRefType pos javaExpr javaExprType (ppSpecJavaType specType)
     modify $ \s -> 
-      s { refTypeMap = Map.insert ref specType (refTypeMap s) 
-        }
+      case javaExprType of
+        ArrayType _ -> s { refTypeMap = Map.insert javaExpr specType (refTypeMap s) }
+        ClassType _ -> s { refTypeMap = Map.insert javaExpr specType (refTypeMap s) }
+        _ -> s { nonRefTypes = Set.insert javaExpr (nonRefTypes s) }
 tcDecl (AST.MayAlias _ []) = error "internal: mayAlias set is empty"
 tcDecl (AST.MayAlias pos astRefs) = do
   refs@(firstRef:restRefs) <- mapM (tcASTJavaExpr True) astRefs
@@ -581,14 +622,12 @@ tcDecl (AST.MayAlias pos astRefs) = do
           res = "All references that may alias must be assigned the same type."
        in throwIOExecException pos (ftext msg) res
   -- Check refs have not already appeared in a mayAlias set.
-  do s <- gets mayAliasRefs
-     forM_ refs $ \ref -> 
-       when (Map.member ref s) $ do
-         let msg = show ref ++ "was previously mentioned in a mayAlias"
-                   ++ " declaration."
-             res = "Please merge mayAlias declarations as needed so that each "
-                   ++ "reference is mentioned at most once."
-         throwIOExecException pos (ftext msg) res
+  do forM_ refs $ \ref -> do
+       checkRefIsUnaliased pos ref $
+         "Please merge mayAlias declarations as needed so that each "
+           ++ "reference is mentioned at most once."
+       checkRefIsNotConst pos ref $
+         "Java expressions appearing in const declarations may not be aliased."
   -- Add mayAlias to state.
   modify $ \s -> 
     let cnt = mayAliasClassCount s
@@ -598,28 +637,33 @@ tcDecl (AST.MayAlias pos astRefs) = do
 tcDecl (AST.Const pos astRef astExpr) = do
   -- Parse ref and check type is undefined.
   ref <- tcASTJavaExpr True astRef
-  checkRefTypeIsUndefined pos ref
-  -- Parse expression.
-  expr <- typecheckMethodExpr astExpr
+  checkTypeIsUndefined pos ref $
+     "Type declarations and const declarations on the same Java expression " 
+        ++ "are not allowed."
+  checkRefIsNotConst pos ref $
+     "Multiple const declarations on the same Java expression " 
+       ++ "are not allowed."
+  -- Parse expression (must be global since this is a constant.
+  (val,tp) <- lift $ evaluateGlobalExpr astExpr
   -- Check ref and expr have compatible types.
-  checkSpecJavaExprCompat pos ref expr
+  checkSpecJavaExprCompat pos ref tp
   -- Add ref to refTypeMap
   modify $ \s ->
-    s { constExprMap = Map.insert ref expr (constExprMap s) }
+    s { constExprMap = Map.insert ref (val,tp) (constExprMap s) }
 tcDecl (AST.MethodLet pos name astExpr) = do
   -- Check var is not already bound.
   do lift $ checkNameIsUndefined pos name
-     locals <- gets methodLetBindings
+     locals <- gets currentLetBindings
      case Map.lookup name locals of
        Nothing -> return ()
        Just (prevPos,_) -> throwNameAlreadyDefined pos prevPos name
   expr <- typecheckMethodExpr astExpr
-  -- Add binding to methodLetBindings
+  -- Add binding to currentLetBindings
   modify $ \s ->
-    s { methodLetBindings = Map.insert name (pos,expr) (methodLetBindings s) }
+    s { currentLetBindings = Map.insert name (pos,expr) (currentLetBindings s) }
 tcDecl (AST.Assume _pos astExpr) = do
   expr <- typecheckMethodExpr astExpr
-  modify $ \s -> s { assumptions = expr : assumptions s }
+  modify $ \s -> s { currentAssumptions = expr : currentAssumptions s }
 tcDecl (AST.Ensures pos astRef astExpr) = do
   -- Parse ref and check type is defined.
   ref <- tcASTJavaExpr False astRef
@@ -629,15 +673,15 @@ tcDecl (AST.Ensures pos astRef astExpr) = do
   -- Parse expression.
   expr <- typecheckMethodExpr astExpr
   -- Check ref and expr have compatible types.
-  checkSpecJavaExprCompat pos ref expr
+  checkSpecJavaExprCompat pos ref (getTypeOfTypedExpr expr)
   -- Add ref to ensures map.
-  modify $ \s -> s { refEnsures = Map.insert ref (pos, Just expr) (refEnsures s) }
+  modify $ \s -> s { curEnsures = Map.insert ref (pos, Just expr) (curEnsures s) }
 tcDecl (AST.Arbitrary pos astRefs) = do 
   clName <- fmap className $ gets specClass
   params <- gets specMethodParams
   forM_  astRefs $ \astRef -> do
     ref <- tcASTJavaExpr False astRef
-    case getJSSTypeOfSpecRef clName params ref of
+    case getJSSTypeOfSpecRef ref of
       JSS.ClassType _ ->
         let msg = "'arbitrary' command given a reference value " ++ show ref
                   ++ "SAWScript currently requires references are unmodified by method calls."
@@ -646,10 +690,10 @@ tcDecl (AST.Arbitrary pos astRefs) = do
          in throwIOExecException pos (ftext msg) res
       _ -> return ()
     checkEnsuresUndefined pos ref
-    modify $ \s -> s { refEnsures = Map.insert ref (pos,Nothing) (refEnsures s) }
+    modify $ \s -> s { curEnsures = Map.insert ref (pos,Nothing) (curEnsures s) }
 tcDecl (AST.VerifyUsing pos method) = do
   -- Check verification method has not been assigned.
-  vm <- gets verificationMethod
+  vm <- gets chosenVerificationMethod
   case vm of
    Nothing -> return ()
    Just (_oldPos,_) ->
@@ -658,40 +702,100 @@ tcDecl (AST.VerifyUsing pos method) = do
          res = "Please include at most one verification tactic in a single specification."
       in throwIOExecException pos (ftext msg) res
   -- Assign verification method.
-  modify $ \s -> s { verificationMethod = Just (pos,method) }
+  modify $ \s -> s { chosenVerificationMethod = Just (pos,method) }
 
 data ParsedMethodSpec = PMS {
-    aliasSets :: [([SpecJavaRef], SpecJavaRefType)]
+    -- | References in specification with alias information and reference info.
+    specReferences :: [([SpecJavaExpr], SpecJavaRefInitialValue)]
+    -- | List of input variables read in.
+  , specInputs :: [SpecJavaExpr]
+  , specConstants :: [(SpecJavaExpr,CValue,DagType)]
+  , methodLetBindings :: Map String TypedExpr
+  , assumptions :: [TypedExpr]
+  , ensuresMap :: Map SpecJavaExpr (Maybe TypedExpr)
+  , verificationMethod :: AST.VerificationMethod
   }
 
 -- | Returns map from Java references to type.
-parseMethodSpecDecls :: JSS.Class
+parseMethodSpecDecls :: Pos
+                     -> JSS.Class
                      -> JSS.Method
                      -> [AST.MethodSpecDecl]
                      -> Executor ParsedMethodSpec
-parseMethodSpecDecls cl method cmds = do
+parseMethodSpecDecls pos cl method cmds = do
   let st = MSTS { specClass = cl
                 , specMethodIsStatic = methodIsStatic method
                 , specMethodParams = V.fromList (methodParameterTypes method)
-                , refTypeMap = Map.singleton SpecThis (SpecRefClass cl)
+                , nonRefTypes = Set.empty
+                , refTypeMap = Map.singleton (SpecThis (className cl)) (SpecRefClass cl)
                 , constExprMap = Map.empty
                 , mayAliasRefs = Map.empty
                 , mayAliasClassCount = 0
                 , revAliasSets = [] 
-                , methodLetBindings = Map.empty
-                , assumptions = []
-                , refEnsures = Map.empty
-                , verificationMethod = Nothing
+                , currentLetBindings = Map.empty
+                , currentAssumptions = []
+                , curEnsures = Map.empty
+                , chosenVerificationMethod = Nothing
                 }
-  MSTS { refTypeMap
-       , mayAliasRefs
-       , revAliasSets 
-       } <- fmap snd $ runStateT (mapM_ tcDecl cmds) st
+  st' <- fmap snd $ runStateT (mapM_ tcDecl cmds) st
+  -- Check that each declaration of a field does not have the base
+  -- object in the mayAlias class.
+  let allRefs = Map.keysSet (refTypeMap st') `Set.union` Map.keysSet (constExprMap st')
+  let checkRef (SpecThis _) = return ()
+      checkRef (SpecArg _ _) = return ()
+      checkRef (SpecField lhs f) = do
+        when (Map.member lhs (mayAliasRefs st')) $
+          let msg = "This specification contains a mayAlias declaration "
+                   ++ "containing \'" ++ show lhs ++ "\' and an additional "
+                   ++ "declaration that references its field \'"
+                   ++ JSS.fieldName f ++ "\'.  The current SAWScript "
+                   ++ "implementation does not support this."
+              res = "Please remove the mayAlias declaration of \'" ++ show lhs
+                   ++ "\' and alter the Java code as needed."
+           in throwIOExecException pos (ftext msg) res
+        checkRef lhs
+  mapM_ checkRef (Set.toList allRefs)
+  -- Define specReferences
+  let aliasedRefs = map (\(refs,tp) -> (refs, JavaInput tp))
+                  $ revAliasSets st'
   let unaliasedRefs
-        = map (\(r,tp) -> ([r],tp))
-        $ filter (\(r,_) -> Map.notMember r mayAliasRefs)
-        $ Map.toList refTypeMap
-  return PMS { aliasSets = revAliasSets ++ unaliasedRefs }
+        = map (\(r,tp) -> ([r], JavaInput tp))
+        $ filter (\(r,_) -> Map.notMember r (mayAliasRefs st'))
+        $ Map.toList (refTypeMap st')
+  let constRefs
+        = catMaybes
+        $ map (\(r,(c,tp)) ->
+                 case tp of
+                   SymArray _ _ -> Just ([r], JavaConst c tp)
+                   _ -> Nothing)
+        $ Map.toList (constExprMap st')
+  let specReferences = aliasedRefs ++ unaliasedRefs ++ constRefs
+  -- Get specConstants
+  let specConstants
+        = catMaybes
+        $ map (\(r,(c,tp)) ->
+                 case tp of
+                   SymInt _ -> Just (r, c, tp)
+                   _ -> Nothing)
+        $ Map.toList (constExprMap st')
+  -- Get verification method.
+  let throwUndefinedVerification =
+        let msg = "The verification method for \'" ++ methodName method 
+                  ++ "\' is undefined."
+            res = "Please specify a verification method.  Use \'skip\' to skip verification."
+         in throwIOExecException pos (ftext msg) res
+  verificationMethod
+    <- maybe throwUndefinedVerification (return . snd) $
+         chosenVerificationMethod st'
+  -- | Return set
+  return PMS { specReferences
+             , specInputs = undefined
+             , specConstants
+             , methodLetBindings = Map.map snd (currentLetBindings st')
+             , assumptions = currentAssumptions st'
+             , ensuresMap = Map.map snd (curEnsures st')
+             , verificationMethod
+             }
 
 -- Verifier command execution {{{1 
 
@@ -741,7 +845,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
     idRecordsInIRType pos relativePath (Just name) irType
   -- Define recordDefFn
   execDebugLog $ "Defining recordDefFn for " ++ nm
-  recordFn <- getRecordDefMap
+  recordFn <- lift $ getRecordDefMap
   -- Check that op type matches expected type.
   execDebugLog $ "Checking expected type matches inferred type for " ++ nm
   fnType <- lift $ parseFnType astFnType
@@ -782,10 +886,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
 execute (AST.GlobalLet pos name astExpr) = do
   execDebugLog $ "Start defining let " ++ name
   checkNameIsUndefined pos name
--- | Configuration used for parsing global expressions.
-  expr <- typecheckGlobalExpr astExpr
-  val <- globalEval expr
-  let tp = getTypeOfTypedExpr expr
+  (val,tp)<- evaluateGlobalExpr astExpr
   modify $ \s -> s { definedNames = Map.insert name pos (definedNames s)
                    , globalLetBindings = Map.insert name (val, tp) (globalLetBindings s) }
   execDebugLog $ "Finished defining let " ++ name
@@ -803,8 +904,8 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
   method <- findMethod pos mName thisClass
   -- Get a list of all distinct references in method spec commands.
   -- For each possible aliasing configuration.
-  PMS { aliasSets } <- parseMethodSpecDecls thisClass method cmds 
-  forM_ (JSS.partitions aliasSets) $ \(cnt, classRefMap, classTypeMap) -> do
+  PMS { specReferences } <- parseMethodSpecDecls pos thisClass method cmds 
+  forM_ (JSS.partitions specReferences) $ \(cnt, classRefMap, classTypeMap) -> do
     liftIO $ putStrLn $ "Considering equivalence class " ++ show cnt
   error $ "AST.DeclareMethodSpec"
 execute (AST.Rule _pos _name _params _lhs _rhs) = do
