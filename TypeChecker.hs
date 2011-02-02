@@ -9,7 +9,8 @@ module SAWScript.TypeChecker
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , TCConfig(..)
-  , tcExpr) where
+  , tcExpr
+  ) where
 
 import Control.Monad
 import Data.Map (Map)
@@ -62,6 +63,7 @@ ppSpecJavaRef (SpecArg i) = "args[" ++ show i ++ "]"
 ppSpecJavaRef (SpecField r f) = ppSpecJavaRef r ++ ('.' : JSS.fieldName f)
 
 -- | Returns JSS Type of SpecJavaRef
+-- N.B. The JSS.Type may refer to a class that does not exist in the codebase.
 getJSSTypeOfSpecRef :: -- | Name of class for this object
                        -- (N.B. method may be defined in a subclass of this class).
                        String
@@ -119,7 +121,6 @@ data TCConfig = TCC {
        , globalCnsBindings :: Map String (CValue,DagType)
        , opBindings :: Map String OpDef
        }
-
 
 -- | Check argument count matches expected length.
 checkArgCount :: MonadIO m => Pos -> String -> [TypedExpr] -> Int -> m ()
