@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE ViewPatterns #-}
-module SAWScript.TypeChecker 
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE ViewPatterns       #-}
+module SAWScript.TypeChecker
   ( SpecJavaRef(..)
   , ppSpecJavaRef
   , getJSSTypeOfSpecRef
@@ -27,73 +27,66 @@ import Utils.IOStateT
 -- SpecJavaRef {{{1
 
 -- | Identifies a reference to a Java value.
-data SpecJavaRef 
+data SpecJavaRef
   = SpecThis
   | SpecArg Int
   | SpecField SpecJavaRef JSS.Field
 
 instance Eq SpecJavaRef where
-  SpecThis == SpecThis = True
-  SpecArg i == SpecArg j = i == j
+  SpecThis        == SpecThis        = True
+  SpecArg i       == SpecArg j       = i == j
   SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && JSS.fieldName f1 == JSS.fieldName f2
-  _ == _ = False
+  _               == _               = False
 
 instance Ord SpecJavaRef where
-  SpecThis `compare` SpecThis = EQ
-  SpecThis `compare` _ = LT
-  _ `compare` SpecThis = GT
-  SpecArg i `compare` SpecArg j = i `compare` j
-  SpecArg _ `compare` _ = LT
-  _ `compare` SpecArg _ = GT
-  SpecField r1 f1 `compare` SpecField r2 f2 = 
-    case r1 `compare` r2 of 
-      EQ -> JSS.fieldName f1 `compare` JSS.fieldName f2
-      r -> r
+  SpecThis        `compare` SpecThis        = EQ
+  SpecThis        `compare` _               = LT
+  _               `compare` SpecThis        = GT
+  SpecArg i       `compare` SpecArg j       = i `compare` j
+  SpecArg _       `compare` _               = LT
+  _               `compare` SpecArg _       = GT
+  SpecField r1 f1 `compare` SpecField r2 f2 =
+        case r1 `compare` r2 of
+          EQ -> JSS.fieldName f1 `compare` JSS.fieldName f2
+          r  -> r
 
 instance Show SpecJavaRef where
-  show SpecThis = "this"
-  show (SpecArg i) = "args[" ++ show i ++ "]"
+  show SpecThis        = "this"
+  show (SpecArg i)     = "args[" ++ show i ++ "]"
   show (SpecField r f) = show r ++ "." ++ JSS.fieldName f
 
--- | Pretty print SpecJavaRef
-ppSpecJavaRef :: SpecJavaRef -> String
-ppSpecJavaRef SpecThis = "this"
-ppSpecJavaRef (SpecArg i) = "args[" ++ show i ++ "]"
-ppSpecJavaRef (SpecField r f) = ppSpecJavaRef r ++ ('.' : JSS.fieldName f)
-
 -- | Returns JSS Type of SpecJavaRef
-getJSSTypeOfSpecRef :: -- | Name of class for this object
-                       -- (N.B. method may be defined in a subclass of this class).
-                       String
+getJSSTypeOfSpecRef :: String            -- | Name of class for this object (N.B. method may be defined in a subclass of this class).
                     -> V.Vector JSS.Type -- ^ Parameters of method that we are checking
-                    -> SpecJavaRef -- ^ Spec Java reference to get type of.
-                    -> JSS.Type -- ^ Java type (which must be a class or array type).
-getJSSTypeOfSpecRef clName _p SpecThis = JSS.ClassType clName
-getJSSTypeOfSpecRef _cl params (SpecArg i) = params V.! i
-getJSSTypeOfSpecRef _cl _p (SpecField _ f) = JSS.fieldType f
+                    -> SpecJavaRef       -- ^ Spec Java reference to get type of.
+                    -> JSS.Type          -- ^ Java type (which must be a class or array type).
+getJSSTypeOfSpecRef clName _p     SpecThis        = JSS.ClassType clName
+getJSSTypeOfSpecRef _cl    params (SpecArg i)
+  | i < V.length params = params V.! i
+  | True                = error $ "getJSSTypeOfSpecRef: Trying to access " ++ show i ++ ". element, but there are only " ++ show (V.length params)
+getJSSTypeOfSpecRef _cl    _p     (SpecField _ f) = JSS.fieldType f
 
 -- Typecheck expression types {{{1
 
 -- | Convert expression type from AST into WidthExpr
-parseExprWidth :: AST.ExprWidth -> WidthExpr
-parseExprWidth (AST.WidthConst _ i) = constantWidth (Wx i)
-parseExprWidth (AST.WidthVar _ nm) = varWidth nm
-parseExprWidth (AST.WidthAdd _ u v) = addWidth (parseExprWidth u) (parseExprWidth v)
+tcheckExprWidth :: AST.ExprWidth -> WidthExpr
+tcheckExprWidth (AST.WidthConst _ i  ) = constantWidth (Wx i)
+tcheckExprWidth (AST.WidthVar   _ nm ) = varWidth nm
+tcheckExprWidth (AST.WidthAdd   _ u v) = addWidth (tcheckExprWidth u) (tcheckExprWidth v)
 
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
 parseExprType :: AST.ExprType -> OpSession DagType
-parseExprType (AST.BitType _) = return SymBool
-parseExprType (AST.BitvectorType _ w) = return $ SymInt (parseExprWidth w)
-parseExprType (AST.Array _ w tp) =
-  fmap (SymArray (parseExprWidth w)) $ parseExprType tp
-parseExprType (AST.Record _ fields) = do
-  let names = [ nm | (_,nm,_) <- fields ]
-  def <- getStructuralRecord (Set.fromList names)
-  tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
-  let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
-  return $ SymRec def sub
-parseExprType (AST.ShapeVar _ v) = return (SymShapeVar v)
+parseExprType (AST.BitType       _)   = return SymBool
+parseExprType (AST.BitvectorType _ w) = return $ SymInt (tcheckExprWidth w)
+parseExprType (AST.Array _ w tp)      = fmap (SymArray (tcheckExprWidth w)) $ parseExprType tp
+parseExprType (AST.Record _ fields)   = do
+       let names = [ nm | (_,nm,_) <- fields ]
+       def <- getStructuralRecord (Set.fromList names)
+       tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
+       let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
+       return $ SymRec def sub
+parseExprType (AST.ShapeVar _ v)      = return (SymShapeVar v)
 
 -- TypedExpr {{{1
 
@@ -108,18 +101,17 @@ data TypedExpr
 
 -- | Return type of a typed expression.
 getTypeOfTypedExpr :: TypedExpr -> DagType
-getTypeOfTypedExpr (TypedVar _ tp) = tp
-getTypeOfTypedExpr (TypedCns _ tp) = tp
+getTypeOfTypedExpr (TypedVar _ tp)       = tp
+getTypeOfTypedExpr (TypedCns _ tp)       = tp
 getTypeOfTypedExpr (TypedJavaValue _ tp) = tp
-getTypeOfTypedExpr (TypedApply op _) = opResultType op
+getTypeOfTypedExpr (TypedApply op _)     = opResultType op
 
 -- | Additional information used by parseExpr to control parseExpr.
 data TCConfig = TCC {
-         localBindings :: Map String TypedExpr
+         localBindings     :: Map String TypedExpr
        , globalCnsBindings :: Map String (CValue,DagType)
-       , opBindings :: Map String OpDef
+       , opBindings        :: Map String OpDef
        }
-
 
 -- | Check argument count matches expected length.
 checkArgCount :: MonadIO m => Pos -> String -> [TypedExpr] -> Int -> m ()
@@ -129,6 +121,8 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
                 ++ show expectedCnt ++ " arguments were expected, but "
                 ++ show foundOpCnt ++ " arguments were found."
      in throwIOExecException pos (ftext msg) ""
+
+LEFT HERE
 
 -- | Convert an AST expression from parser into a typed expression.
 tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
