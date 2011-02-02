@@ -237,8 +237,8 @@ opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 -- | Parse the FnType returned by the parser into symbolic dag types.
 parseFnType :: AST.FnType -> OpSession ([DagType], DagType)
 parseFnType (AST.FnType args res) = do
-  parsedArgs <- V.mapM parseExprType (V.fromList args)
-  parsedRes <- parseExprType res
+  parsedArgs <- V.mapM tcType (V.fromList args)
+  parsedRes <- tcType res
   return (V.toList parsedArgs, parsedRes)
 
 -- TypedExpr {{{1
