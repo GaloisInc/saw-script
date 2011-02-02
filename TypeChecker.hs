@@ -9,7 +9,8 @@ module SAWScript.TypeChecker
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , TCConfig(..)
-  , tcExpr) where
+  , tcExpr
+  ) where
 
 import Control.Monad
 import Data.Map (Map)
@@ -56,7 +57,7 @@ instance Show SpecJavaRef where
   show (SpecField r f) = show r ++ "." ++ JSS.fieldName f
 
 -- | Returns JSS Type of SpecJavaRef
-getJSSTypeOfSpecRef :: String            -- | Name of class for this object (N.B. method may be defined in a subclass of this class).
+getJSSTypeOfSpecRef :: String            -- ^ Name of class for this object (N.B. method may be defined in a subclass of this class).
                     -> V.Vector JSS.Type -- ^ Parameters of method that we are checking
                     -> SpecJavaRef       -- ^ Spec Java reference to get type of.
                     -> JSS.Type          -- ^ Java type (which must be a class or array type).
