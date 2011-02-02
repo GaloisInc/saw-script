@@ -366,9 +366,9 @@ parseASTType (AST.IntArray pos l) =
   fmap SpecIntArray $ checkedGetArrayLength pos l
 parseASTType (AST.LongArray pos l) =
   fmap SpecLongArray $ checkedGetArrayLength pos l
-parseASTType AST.BoolScalar = return SpecBool
-parseASTType AST.IntScalar = return SpecBool
-parseASTType AST.LongScalar = return SpecBool
+parseASTType (AST.BoolScalar  _) = return SpecBool
+parseASTType (AST.IntScalar  _) = return SpecInt
+parseASTType (AST.LongScalar  _) = return SpecLong
 
 -- MethodSpecTranslator {{{1
 

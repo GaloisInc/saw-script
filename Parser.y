@@ -50,6 +50,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'this'         { TReserved _ "this"         }
    'int'          { TReserved _ "int"          }
    'long'         { TReserved _ "long"         }
+   'boolean'      { TReserved _ "boolean"      }
    'True'         { TReserved _ "True"         }
    'False'        { TReserved _ "False"        }
    'forAll'       { TReserved _ "forAll"       }
@@ -240,9 +241,12 @@ JavaRef : 'this'             { This          (tokPos $1)                }
         | JavaRef '.' var    { InstanceField (tokPos $2) $1 (tokStr $3) }
 
 JavaType :: { JavaType }
-JavaType : Qvar               { RefType   (fst $1)    (snd $1) }
-         | 'int'  '[' int ']' { IntArray  (tokPos $1) (snd $3) }
-         | 'long' '[' int ']' { LongArray (tokPos $1) (snd $3) }
+JavaType : Qvar               { RefType    (fst $1)    (snd $1) }
+         | 'int'  '[' int ']' { IntArray   (tokPos $1) (snd $3) }
+         | 'long' '[' int ']' { LongArray  (tokPos $1) (snd $3) }
+         | 'int'              { IntScalar  (tokPos $1)          }
+         | 'boolean'          { BoolScalar (tokPos $1)          }
+         | 'long'             { LongScalar (tokPos $1)          }
 
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'abc'      { ABC     }
