@@ -64,7 +64,7 @@ data Expr
     -- Precedence 12
     -- | Uninterpreted functions.
     | ApplyExpr Pos String [Expr]
-    -- | Array subscript
+    -- | Java Args reference
     | ArgsExpr Pos Int
 
     -- Precedence 11
