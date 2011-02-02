@@ -121,9 +121,32 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
                 ++ show foundOpCnt ++ " arguments were found."
      in throwIOExecException pos (ftext msg) ""
 
--- | Convert an AST expression from parser into a typed expression.
 tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
-tcExpr _st (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
+tcExpr st e = tc st e
+
+type Context = [(Pos, String)]
+type WarnMsg = [(Pos, String)]
+type ErrMsg  = (Context, String)
+
+newtype TI a = TI { unTI :: Context -> TCConfig -> Either (TCConfig, a, [WarnMsg]) ErrMsg }
+
+instance Functor TI where
+  fmap f m = TI $ \c cfg -> case unTI m c cfg of
+                             Left (cfg', a, w) -> Left (cfg', f a, w)
+                             Right err         -> Right err
+
+instance Monad TI where
+  return x   = TI (\_   cfg -> Left (cfg, x, []))
+  TI c >>= f = TI (\ctx cfg -> case c ctx cfg of
+                                 Left (cfg', x, w1) -> case unTI (f x) ctx cfg' of
+                                                         Left (cfg'', y, w2) -> Left (cfg'', y, w1 ++ w2)
+                                                         r -> r
+                                 Right e -> Right e)
+  fail = error
+
+-- | Convert an AST expression from parser into a typed expression.
+tc :: TCConfig -> AST.Expr -> OpSession TypedExpr
+tc _st (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
   tp <- parseExprType astTp
   let throwNonGround =
         let msg = text "The type" <+> text (ppType tp)
@@ -138,7 +161,7 @@ tcExpr _st (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
       let msg = text "Incompatible type" <+> text (ppType tp)
                   <+> ftext "assigned to integer literal."
        in throwIOExecException pos msg ""
-tcExpr TCC { localBindings, globalCnsBindings } (AST.Var pos name) = do
+tc TCC { localBindings, globalCnsBindings } (AST.Var pos name) = do
   case Map.lookup name localBindings of
     Just res -> return res
     Nothing -> do
@@ -147,7 +170,7 @@ tcExpr TCC { localBindings, globalCnsBindings } (AST.Var pos name) = do
         Nothing -> 
           let msg = "Unknown variable \'" ++ name ++ "\'."
            in throwIOExecException pos (ftext msg) ""
-tcExpr st (AST.ApplyExpr appPos "join" astArgs) = do
+tc st (AST.ApplyExpr appPos "join" astArgs) = do
   args <- mapM (tcExpr st) astArgs
   checkArgCount appPos "join" args 1
   let argType = getTypeOfTypedExpr (head args)
@@ -159,7 +182,7 @@ tcExpr st (AST.ApplyExpr appPos "join" astArgs) = do
                    ++ "SAWScript currently requires that the argument is ground"
                    ++ " array of integers. "
           in throwIOExecException appPos (ftext msg) ""
-tcExpr st (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
+tc st (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
   args <- mapM (tcExpr st) astArgs
   checkArgCount appPos "split" args 1
   resType <- parseExprType astResType
@@ -174,7 +197,7 @@ tcExpr st (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = d
                    ++ "SAWScript currently requires that the argument is ground type, "
                    ++ "and an explicit result type is given."
           in throwIOExecException appPos (ftext msg) ""
-tcExpr st (AST.ApplyExpr appPos nm astArgs) = do
+tc st (AST.ApplyExpr appPos nm astArgs) = do
   case Map.lookup nm (opBindings st) of
     Nothing ->
       let msg = "Unknown operator " ++ nm ++ "."
@@ -191,7 +214,7 @@ tcExpr st (AST.ApplyExpr appPos nm astArgs) = do
           let msg = "Illegal arguments and result type given to \'" ++ nm ++ "\'."
            in throwIOExecException appPos (ftext msg) ""
         Just sub -> return $ TypedApply (mkOp opDef sub) args
-tcExpr st (AST.TypeExpr p e astResType) = do
+tc st (AST.TypeExpr p e astResType) = do
    te <- tcExpr st e
    let tet = getTypeOfTypedExpr te
    resType <- parseExprType astResType
@@ -202,8 +225,8 @@ tcExpr st (AST.TypeExpr p e astResType) = do
                 in throwIOExecException p msg ""
      Just s  -> return $ applySubstToTypedExpr te s
 -- TODO: Fix this!
-tcExpr _st (AST.ArgsExpr _ i) =
+tc _st (AST.ArgsExpr _ i) =
    return $ error $ "Don't know how to type-check args[" ++ show i ++ "]"
 -- TODO: Add more typechecking equations for parsing expressions.
-tcExpr _st e =
-  error $ "internal: tcExpr: TBD: " ++ show e
+tc _st e =
+  error $ "internal: tc: TBD: " ++ show e
