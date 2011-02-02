@@ -99,6 +99,9 @@ data TypedExpr
    | TypedVar String DagType
    deriving (Show)
 
+applySubstToTypedExpr :: TypedExpr -> TypeSubst -> TypedExpr
+applySubstToTypedExpr _t _s = error "TBD: applySubstToTypedExpr"
+
 -- | Return type of a typed expression.
 getTypeOfTypedExpr :: TypedExpr -> DagType
 getTypeOfTypedExpr (TypedVar _ tp)       = tp
@@ -196,12 +199,12 @@ tcExpr st (AST.TypeExpr p e astResType) = do
    te <- tcExpr st e
    let tet = getTypeOfTypedExpr te
    resType <- parseExprType astResType
-   if tet /= resType
-      then let msg =    text "Type-annotation mismatch:" 
-                     $$ text "Annotation: " <+> text (show astResType)
-                     $$ text "Inferred  : " <+> text (show tet)
-           in throwIOExecException p msg ""
-      else return te
+   case matchSubst [(tet, resType)] of
+     Nothing -> let msg =    text "Type-annotation mismatch:"
+                          $$ text "Annotation: " <+> text (show astResType)
+                          $$ text "Inferred  : " <+> text (show tet)
+                in throwIOExecException p msg ""
+     Just s  -> return $ applySubstToTypedExpr te s
 -- TODO: Fix this!
 tcExpr _st (AST.ArgsExpr _ i) =
    return $ error $ "Don't know how to type-check args[" ++ show i ++ "]"
