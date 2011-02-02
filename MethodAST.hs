@@ -23,9 +23,12 @@ data ExprWidth
 
 -- | Java types for symbolic simulator.
 data JavaType
-  = RefType Pos [String] -- ^ Class with given dots. 
-  | IntArray Pos Int -- ^ Int array with given length
-  | LongArray Pos Int -- ^ Long array with given length.   
+    = RefType Pos [String] -- ^ Class with given dots. 
+    | IntArray Pos Int -- ^ Int array with given length
+    | LongArray Pos Int -- ^ Long array with given length.   
+    | BoolScalar
+    | IntScalar
+    | LongScalar
   deriving (Show)
 
 -- | Expressions types for AST.
@@ -178,9 +181,11 @@ data MethodSpecDecl
   | Const Pos JavaRef Expr
   -- | Local binding within a method spec.
   | MethodLet Pos String Expr
+  -- | Assume a given precondition is true when method is called.
   | Assume Pos Expr
   | Ensures Pos JavaRef Expr
   | Arbitrary Pos [JavaRef]
+  | Returns Pos Expr
   | VerifyUsing Pos VerificationMethod
  deriving (Show)
 
