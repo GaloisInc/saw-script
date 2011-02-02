@@ -3,7 +3,6 @@
 {-# LANGUAGE ViewPatterns       #-}
 module SAWScript.TypeChecker
   ( SpecJavaRef(..)
-  , ppSpecJavaRef
   , getJSSTypeOfSpecRef
   , parseExprType
   , TypedExpr(..)
@@ -122,8 +121,6 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
                 ++ show expectedCnt ++ " arguments were expected, but "
                 ++ show foundOpCnt ++ " arguments were found."
      in throwIOExecException pos (ftext msg) ""
-
-LEFT HERE
 
 -- | Convert an AST expression from parser into a typed expression.
 tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr

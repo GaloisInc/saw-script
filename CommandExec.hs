@@ -453,7 +453,7 @@ tcASTJavaExpr refReq (AST.InstanceField pos astLhs fName) = do
       checkJSSTypeIsValid pos refReq (fieldType f)
       return $ SpecField lhs f
     _ -> let msg = "Could not find a field named " ++ fName ++ " in " 
-                     ++ ppSpecJavaRef lhs ++ "."
+                     ++ show lhs ++ "."
              res = "Please check to make sure the field name is correct."
           in throwIOExecException pos (ftext msg) res
 
@@ -462,11 +462,11 @@ checkRefTypeIsUndefined :: Pos -> SpecJavaRef -> MethodSpecTranslator ()
 checkRefTypeIsUndefined pos ref = do
   do m <- gets refTypeMap 
      when (Map.member ref m) $
-       let msg = "The type of \'" ++ ppSpecJavaRef ref ++ "\' is already defined."
+       let msg = "The type of \'" ++ show ref ++ "\' is already defined."
         in throwIOExecException pos (ftext msg) ""
   do m <- gets constExprMap
      when (Map.member ref m) $
-       let msg = "The Java expression \'" ++ ppSpecJavaRef ref
+       let msg = "The Java expression \'" ++ show ref
                  ++ "\' was previously used in a const declaration.  Type "
                  ++ "declarations and multiple const declarations on the same "
                  ++ "Java expression are not allowed."
@@ -478,7 +478,7 @@ checkRefTypeIsDefined :: Pos -> SpecJavaRef -> MethodSpecTranslator ()
 checkRefTypeIsDefined pos ref = do
   m <- gets refTypeMap 
   unless (Map.member ref m) $
-    let msg = "The type of " ++ ppSpecJavaRef ref ++ " has not been defined."
+    let msg = "The type of " ++ show ref ++ " has not been defined."
         res = "Please add a \'type\' declaration to indicate the concrete type of the reference."
      in throwIOExecException pos (ftext msg) res
 
@@ -486,7 +486,7 @@ checkRefTypeIsDefined pos ref = do
 -- an expression type.
 throwIncompatibleRefType :: MonadIO m => Pos -> SpecJavaRef -> JSS.Type -> String -> m ()
 throwIncompatibleRefType pos ref refType specTypeName =
-  let msg = "The type of " ++ ppSpecJavaRef ref ++ " is " ++ show refType
+  let msg = "The type of " ++ show ref ++ " is " ++ show refType
              ++ ", which is incompatible with the specification type "
              ++ specTypeName ++ "."
    in throwIOExecException pos (ftext msg) ""
@@ -532,7 +532,7 @@ checkEnsuresUndefined pos ref = do
     Just (absPrevPos,_) -> do
       relPos <- liftIO $ posRelativeToCurrentDirectory absPrevPos
       let msg = "An ensures or arbitrary statement has already been added for " 
-                  ++ ppSpecJavaRef ref ++ " at " ++ show relPos ++ "."
+                  ++ show ref ++ " at " ++ show relPos ++ "."
           res = "Please remove the conflicting statement."
        in throwIOExecException pos (ftext msg) res
 
@@ -543,7 +543,7 @@ lookupRefType pos ref = do
   case Map.lookup ref m of
     Just tp -> return tp
     Nothing -> 
-      let msg = "The type of " ++ ppSpecJavaRef ref ++ "must be specified "
+      let msg = "The type of " ++ show ref ++ "must be specified "
                   ++ "before referring to it or one of its fields."
           res = "Please add a \'type\' declaration for this expression before this refence."
        in throwIOExecException pos (ftext msg) res
@@ -575,16 +575,16 @@ tcDecl (AST.MayAlias pos astRefs) = do
   forM_ restRefs $ \r -> do
     restType <- lookupRefType pos r
     unless (firstType  == restType) $
-      let msg = "The type assigned to " ++ ppSpecJavaRef r 
+      let msg = "The type assigned to " ++ show r 
                   ++ " differs from the type assigned "
-                  ++ ppSpecJavaRef r ++ "."
+                  ++ show r ++ "."
           res = "All references that may alias must be assigned the same type."
        in throwIOExecException pos (ftext msg) res
   -- Check refs have not already appeared in a mayAlias set.
   do s <- gets mayAliasRefs
      forM_ refs $ \ref -> 
        when (Map.member ref s) $ do
-         let msg = ppSpecJavaRef ref ++ "was previously mentioned in a mayAlias"
+         let msg = show ref ++ "was previously mentioned in a mayAlias"
                    ++ " declaration."
              res = "Please merge mayAlias declarations as needed so that each "
                    ++ "reference is mentioned at most once."
@@ -639,7 +639,7 @@ tcDecl (AST.Arbitrary pos astRefs) = do
     ref <- tcASTJavaExpr False astRef
     case getJSSTypeOfSpecRef clName params ref of
       JSS.ClassType _ ->
-        let msg = "'arbitrary' command given a reference value " ++ ppSpecJavaRef ref
+        let msg = "'arbitrary' command given a reference value " ++ show ref
                   ++ "SAWScript currently requires references are unmodified by method calls."
             res = "Please modify the spec and/or Java code so that it does not "
                   ++ "modify a reference value."
