@@ -195,6 +195,16 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
 
 -- | Convert an AST expression from parser into a typed expression.
 tcE :: AST.Expr -> SawTI TypedExpr
+tcE (AST.Var pos name) = do
+  locals  <- gets localBindings
+  globals <- gets globalCnsBindings
+  case name `Map.lookup` locals of
+    Just res -> return res
+    Nothing -> do
+      case name `Map.lookup` globals of
+        Just (c,tp) -> return $ TypedCns c tp
+        Nothing -> typeErr pos $ ftext $ "Unknown variable \'" ++ name ++ "\'."
+tcE (AST.ConstantBool _ b) = return $ TypedCns (mkCBool b) SymBool
 tcE (AST.ConstantInt pos _)
   = typeErrWithR pos (ftext ("The use of constant literal requires a type-annotation"))
                      "Please provide the bit-size of the constant with a type-annotation"
@@ -208,15 +218,6 @@ tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
     SymShapeVar _ -> nonGround
     _             -> typeErr pos $   text "Incompatible type" <+> text (ppType tp)
                                  <+> ftext "assigned to integer literal."
-tcE (AST.Var pos name) = do
-  locals  <- gets localBindings
-  globals <- gets globalCnsBindings
-  case name `Map.lookup` locals of
-    Just res -> return res
-    Nothing -> do
-      case name `Map.lookup` globals of
-        Just (c,tp) -> return $ TypedCns c tp
-        Nothing -> typeErr pos $ ftext $ "Unknown variable \'" ++ name ++ "\'."
 tcE (AST.ApplyExpr appPos "join" astArgs) = do
   args <- mapM tcE astArgs
   checkArgCount appPos "join" args 1
