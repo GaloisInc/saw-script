@@ -47,7 +47,6 @@ data FnType = FnType [ExprType] ExprType
 -- Java variables.
 data Expr
     = Var Pos String
-    | ThisExpr Pos
     | ConstantBool Pos Bool
     | ConstantInt  Pos Integer
 
@@ -65,10 +64,10 @@ data Expr
     | DerefField Pos Expr String
 
     -- Precedence 12
+    -- | Java Value 
+    | JavaValue Pos JavaRef
     -- | Uninterpreted functions.
     | ApplyExpr Pos String [Expr]
-    -- | Java Args reference
-    | ArgsExpr Pos Int
 
     -- Precedence 11
     -- | Boolean negation (not)

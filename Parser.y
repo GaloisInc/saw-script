@@ -169,7 +169,8 @@ Exprs : sepBy(Expr, ',') { $1 }
 -- Expressions
 Expr :: { Expr }
 Expr : var                               { Var          (tokPos $1) (tokStr $1)    }
-     | 'this'                            { ThisExpr     (tokPos $1)                }
+--TODO: Add JavaValue
+--     | 'this'                            { ThisExpr     (tokPos $1)                }
      | 'True'                            { ConstantBool (tokPos $1) True           }
      | 'False'                           { ConstantBool (tokPos $1) False          }
      | num                               { ConstantInt  (tokPos $1) (tokNum $1)    }
@@ -177,7 +178,7 @@ Expr : var                               { Var          (tokPos $1) (tokStr $1) 
      | Expr ':' ExprType                 { TypeExpr     (tokPos $2) $1 $3          }
      | Expr '.' var                      { DerefField   (tokPos $2) $1 (tokStr $3) }
      | var '(' Exprs ')'                 { ApplyExpr    (tokPos $1) (tokStr $1) $3 }
-     | 'args' '[' int ']'                { ArgsExpr     (tokPos $1) (snd $3)       }
+--     | 'args' '[' int ']'                { ArgsExpr     (tokPos $1) (snd $3)       }
      | '[' Exprs ']'                     { MkArray      (tokPos $1) $2             }
      | '~' Expr                          { BitComplExpr (tokPos $1) $2             }
      | 'not' Expr                        { NotExpr      (tokPos $1) $2             }
