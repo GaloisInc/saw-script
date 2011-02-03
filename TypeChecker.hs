@@ -5,22 +5,20 @@
 module SAWScript.TypeChecker
   ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
-  , tcJavaExpr
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , TCConfig(..)
   , tcExpr
   , tcType
+  , tcJavaExpr
   ) where
 
 import Control.Monad
-import Control.Monad.Trans
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
-import Utils.Common
 
 import qualified JavaParser as JSS
 import qualified Execution.Codebase as JSS
@@ -86,37 +84,25 @@ tcheckExprWidth (AST.WidthConst _ i  ) = constantWidth (Wx i)
 tcheckExprWidth (AST.WidthVar   _ nm ) = varWidth nm
 tcheckExprWidth (AST.WidthAdd   _ u v) = addWidth (tcheckExprWidth u) (tcheckExprWidth v)
 
-throwUnsupportedIntType :: MonadIO m => Pos -> JSS.Type -> m ()
-throwUnsupportedIntType pos tp =
-  let msg = "SAWScript only supports integer and long integral values, and does"
-            ++ "not yet support " ++ show tp ++ "."
-      res = "Please modify the Java code to only use \'int\' instead."
-   in throwIOExecException pos (ftext msg) res
-
-throwUnsupportedFloatType :: MonadIO m => Pos -> m ()
-throwUnsupportedFloatType pos =
-  let msg = "SAWScript does not yet support \'float\' or \'double\'."
-      res = "Please modify the Java code to not use floating point types."
-   in throwIOExecException pos (ftext msg) res
-
 -- | Check JSS Type is a type supported by SAWScript.
-checkJSSTypeIsValid :: (JSS.HasCodebase m, MonadIO m) => Pos -> JSS.Type -> m ()
-checkJSSTypeIsValid _ (JSS.ArrayType JSS.IntType) = return ()
-checkJSSTypeIsValid _ (JSS.ArrayType JSS.LongType) = return ()
-checkJSSTypeIsValid pos (JSS.ArrayType eltType) = 
-  let msg = "SAWScript currently only supports arrays of int and long, "
-            ++ "and does yet support arrays with type " ++ show eltType ++ "."
-      res = "Please modify the Java code to only use int or long array types."
-   in throwIOExecException pos (ftext msg) res
-checkJSSTypeIsValid pos (JSS.ClassType nm) = lookupClass pos nm >> return ()
-checkJSSTypeIsValid _ JSS.BooleanType = return ()
-checkJSSTypeIsValid pos JSS.ByteType = throwUnsupportedIntType pos JSS.ByteType
-checkJSSTypeIsValid pos JSS.CharType = throwUnsupportedIntType pos JSS.CharType
-checkJSSTypeIsValid pos JSS.ShortType = throwUnsupportedIntType pos JSS.ShortType
-checkJSSTypeIsValid _ JSS.IntType = return ()
-checkJSSTypeIsValid _ JSS.LongType = return ()
-checkJSSTypeIsValid pos JSS.DoubleType = throwUnsupportedFloatType pos
-checkJSSTypeIsValid pos JSS.FloatType = throwUnsupportedFloatType pos
+checkJSSTypeIsValid :: Pos -> JSS.Type -> SawTI ()
+checkJSSTypeIsValid pos t = case t of
+                              JSS.ArrayType JSS.IntType  -> return ()
+                              JSS.ArrayType JSS.LongType -> return ()
+                              JSS.ClassType nm           -> lookupClass pos nm >> return ()
+                              JSS.ByteType               -> badI
+                              JSS.CharType               -> badI
+                              JSS.ShortType              -> badI
+                              JSS.DoubleType             -> badF
+                              JSS.FloatType              -> badF
+                              JSS.ArrayType et           -> badA et
+                              _                          -> return ()
+  where badA et = typeErrWithR pos (ftext ("SAWScript currently only supports arrays of int and long, and does yet support arrays with type " ++ show et ++ "."))
+                                   "Please modify the Java code to only use int or long array types."
+        badI    = typeErrWithR pos (ftext ("SAWScript only supports integer and long integral values and does not yet support " ++ show t ++ "."))
+                                   "Please modify the Java code to only use 'int' instead."
+        badF    = typeErrWithR pos (ftext "SAWScript does not yet support \'float\' or \'double\' types.")
+                                   "Please modify the Java code to not use floating point types."
 
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
@@ -141,9 +127,6 @@ data TypedExpr
    | TypedJavaValue SpecJavaExpr DagType
    | TypedVar String DagType
    deriving (Show)
-
-applySubstToTypedExpr :: TypedExpr -> TypeSubst -> TypedExpr
-applySubstToTypedExpr _t _s = error "TBD: applySubstToTypedExpr"
 
 -- | Return type of a typed expression.
 getTypeOfTypedExpr :: TypedExpr -> DagType
@@ -182,15 +165,13 @@ getMethodInfo = do
 tcASTJavaExpr :: AST.JavaRef -> SawTI SpecJavaExpr
 tcASTJavaExpr (AST.This pos) = do
   (method, cl) <- getMethodInfo
-  when (JSS.methodIsStatic method) $
-    throwIOExecException pos (ftext "\'this\' is not defined on static methods.") ""
+  when (JSS.methodIsStatic method) $ typeErr pos (ftext "\'this\' is not defined on static methods.")
   return (SpecThis (JSS.className cl))
 tcASTJavaExpr (AST.Arg pos i) = do
   (method, _) <- getMethodInfo
   let params = V.fromList (JSS.methodParameterTypes method)
   -- Check that arg index is valid.
-  unless (0 <= i && i < V.length params) $
-    throwIOExecException pos (ftext "Invalid argument index for method.") ""
+  unless (0 <= i && i < V.length params) $ typeErr pos (ftext "Invalid argument index for method.")
   checkJSSTypeIsValid pos (params V.! i)
   return $ SpecArg i (params V.! i)
 tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
@@ -201,10 +182,8 @@ tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
       f <- findField pos fName cl
       checkJSSTypeIsValid pos (JSS.fieldType f)
       return $ SpecField lhs f
-    _ -> let msg = "Could not find a field named " ++ fName ++ " in " 
-                     ++ show lhs ++ "."
-             res = "Please check to make sure the field name is correct."
-          in throwIOExecException pos (ftext msg) res
+    _ -> typeErrWithR pos (ftext ("Could not find a field named " ++ fName ++ " in " ++ show lhs ++ "."))
+                          "Please check to make sure the field name is correct."
 
 -- | Check argument count matches expected length
 checkArgCount :: Pos -> String -> [TypedExpr] -> Int -> SawTI ()
@@ -280,9 +259,9 @@ tcE (AST.TypeExpr p e astResType) = do
    te <- tcE e
    let tet = getTypeOfTypedExpr te
    resType <- tcT astResType
-   case matchSubst [(tet, resType)] of
-     Nothing -> mismatch p "type-annotation" (text (show astResType)) (text (show tet))
-     Just s  -> return $ applySubstToTypedExpr te s
+   if tet /= resType
+      then mismatch p "type-annotation" (text (show astResType)) (text (show tet))
+      else return te
 tcE (AST.JavaValue _ jref) = tcJRef jref
 -- TODO: Add more typechecking equations for parsing expressions.
 tcE e =
