@@ -88,7 +88,7 @@ globalParserConfig = do
              , opBindings 
              , codeBase = cb
              , methodInfo = Nothing
-             , toJavaExprType = \_ -> Nothing }
+             , toJavaExprType = \_ _ -> Nothing }
 
 -- | Typecheck and evaluate expression at global level.
 evaluateGlobalExpr :: AST.Expr -> Executor (CValue,DagType)
@@ -145,64 +145,6 @@ checkNameIsDefined pos name = do
                            <+> text "has been defined.")
                          ("Please check that the name is correct.")
 
--- Java lookup functions {{{2
-
--- | Atempt to find class with given name, or throw ExecException if no class
--- with that name exists.
-lookupClass :: Pos -> String -> Executor JSS.Class
-lookupClass pos nm = do 
-  maybeCl <- JSS.tryLookupClass nm
-  case maybeCl of
-    Nothing -> do
-     let msg = ftext ("The Java class " ++ slashesToDots nm ++ " could not be found.")
-         res = "Please check that the --classpath and --jars options are set correctly."
-      in throwIOExecException pos msg res
-    Just cl -> return cl
-
--- | Returns method with given name in this class or one of its subclasses.
--- Throws an ExecException if method could not be found or is ambiguous.
-findMethod :: Pos -> String -> JSS.Class -> Executor JSS.Method
-findMethod pos nm initClass = do
-  let javaClassName = slashesToDots (className initClass)
-  let methodMatches m = methodName m == nm && not (JSS.methodIsAbstract m)
-  let impl cl = 
-        case filter methodMatches (classMethods cl) of
-          [] -> do
-            case superClass cl of
-              Nothing ->
-                let msg = ftext $ "Could not find method " ++ nm
-                            ++ " in class " ++ javaClassName ++ "."
-                    res = "Please check that the class and method are correct."
-                 in throwIOExecException pos msg res
-              Just superName -> 
-                impl =<< lookupClass pos superName
-          [method] -> return method
-          _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
-                           ++ " is ambiguous.  SAWScript currently requires that "
-                           ++ "method names are unique."
-                   res = "Please rename the Java method so that it is unique."
-                in throwIOExecException pos (ftext msg) res
-  impl initClass
-
--- | Returns method with given name in this class or one of its subclasses.
--- Throws an ExecException if method could not be found or is ambiguous.
-findField :: Pos -> String -> JSS.Class -> Executor JSS.Field
-findField pos nm initClass = do
-  let impl cl = 
-        case filter (\f -> fieldName f == nm) $ classFields cl of
-          [] -> do
-            case superClass cl of
-              Nothing ->
-                let msg = "Could not find a field named " ++ nm ++ " in " 
-                            ++ slashesToDots (className initClass) ++ "."
-                    res = "Please check to make sure the field name is correct."
-                 in throwIOExecException pos (ftext msg) res
-              Just superName -> impl =<< lookupClass pos superName
-          [f] -> do
-            return f
-          _ -> error "internal: Found multiple fields with the same name."
-  impl initClass 
-
 -- idRecordsInIRType {{{1
 
 -- | Identify recors in IRType and register them with Executor.
@@ -242,9 +184,6 @@ idRecordsInIRType pos relativePath uninterpName tp =
 -- | Returns argument types and result type.
 opDefType :: OpDef -> ([DagType], DagType)
 opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
-
--- TODO: provide proper TCConfig here
-checkType = tcType $ error "provide proper TCConfig here"
 
 -- | Parse the FnType returned by the parser into symbolic dag types.
 parseFnType :: AST.FnType -> Executor ([DagType], DagType)
@@ -390,13 +329,15 @@ parseASTType (AST.LongScalar  _) = return SpecLong
 
 -- | Java expression initial value.
 data SpecJavaRefInitialValue
-  = RIVArrayConst CValue DagType
+  = RIVArrayConst JSS.Type -- ^ Java symbolic simulator type.
+                  CValue -- ^ Value of array as const.
+                  DagType -- ^ Type of array at symbolic level.
   | RIVClass JSS.Class
   | RIVIntArray !Int
   | RIVLongArray !Int
 
 instance Eq SpecJavaRefInitialValue where
-  RIVArrayConst c1 t1 == RIVArrayConst c2 t2 = c1 == c2 && t1 == t2
+  RIVArrayConst tp1 c1 _ == RIVArrayConst tp2 c2 _ = tp1 == tp2 && c1 == c2
   RIVClass c1 == RIVClass c2 = className c1 == className c2
   RIVIntArray l1 == RIVIntArray l2 = l1 == l2
   RIVLongArray l1 == RIVLongArray l2 = l1 == l2
@@ -437,38 +378,10 @@ data MethodSpecTranslatorState = MSTS {
 
 type MethodSpecTranslator = StateT MethodSpecTranslatorState Executor
 
-throwUnsupportedIntType :: Pos -> JSS.Type -> Executor ()
-throwUnsupportedIntType pos tp =
-  let msg = "SAWScript only supports integer and long integral values, and does"
-            ++ "not yet support " ++ show tp ++ "."
-      res = "Please modify the Java code to only use \'int\' instead."
-   in throwIOExecException pos (ftext msg) res
-
-throwUnsupportedFloatType :: Pos -> Executor ()
-throwUnsupportedFloatType pos =
-  let msg = "SAWScript does not yet support \'float\' or \'double\'."
-      res = "Please modify the Java code to not use floating point types."
-   in throwIOExecException pos (ftext msg) res
-
--- | Check JSS Type is a type supported by SAWScript.
-checkJSSTypeIsValid :: Pos -> Bool -> JSS.Type -> Executor ()
-checkJSSTypeIsValid _ _ (ArrayType IntType) = return ()
-checkJSSTypeIsValid _ _ (ArrayType LongType) = return ()
-checkJSSTypeIsValid pos _ (ArrayType eltType) = 
-  let msg = "SAWScript currently only supports arrays of int and long, "
-            ++ "and does yet support arrays with type " ++ show eltType ++ "."
-      res = "Please modify the Java code to only use int or long array types."
-   in throwIOExecException pos (ftext msg) res
-checkJSSTypeIsValid pos _ (ClassType nm) = lookupClass pos nm >> return ()
-checkJSSTypeIsValid _ False BooleanType = return ()
-checkJSSTypeIsValid pos False JSS.ByteType = throwUnsupportedIntType pos JSS.ByteType
-checkJSSTypeIsValid pos False JSS.CharType = throwUnsupportedIntType pos JSS.CharType
-checkJSSTypeIsValid pos False JSS.ShortType = throwUnsupportedIntType pos JSS.ShortType
-checkJSSTypeIsValid _ False IntType = return ()
-checkJSSTypeIsValid _ False LongType = return ()
-checkJSSTypeIsValid pos False DoubleType = throwUnsupportedFloatType pos
-checkJSSTypeIsValid pos False FloatType = throwUnsupportedFloatType pos
-checkJSSTypeIsValid pos True tp =
+checkJSSTypeIsRef :: Pos -> JSS.Type -> Executor ()
+checkJSSTypeIsRef _ (ArrayType _) = return ()
+checkJSSTypeIsRef _ (ClassType _) = return ()
+checkJSSTypeIsRef pos tp =
   let msg = "SAWScript only requires reference types to be annotated "
             ++ "with type information, and currently only supports "
             ++ "methods with array and reference values as arguments.  "
@@ -476,38 +389,6 @@ checkJSSTypeIsValid pos True tp =
       res = "Please modify the Java code to only use int or long array "
             ++ "types."
    in throwIOExecException pos (ftext msg) res
-
--- | Typecheck an AST Java expression to get specification Java expression.
--- This code will check that the result is a reference if the first Bool is
--- true.
--- Flag indicates if a reference is required.
-tcASTJavaExpr :: Bool -> AST.JavaRef -> MethodSpecTranslator SpecJavaExpr
-tcASTJavaExpr _ (AST.This pos) = do
-  clName <- fmap className $ gets specClass
-  method <- gets specMethod
-  when (JSS.methodIsStatic method) $
-    throwIOExecException pos (ftext "\'this\' is not defined on static methods.") ""
-  return (SpecThis clName)
-tcASTJavaExpr refReq (AST.Arg pos i) = do
-  method <- gets specMethod
-  let params = V.fromList (JSS.methodParameterTypes method)
-  -- Check that arg index is valid.
-  unless (0 <= i && i < V.length params) $
-    throwIOExecException pos (ftext "Invalid argument index for method.") ""
-  lift $ checkJSSTypeIsValid pos refReq (params V.! i)
-  return $ SpecArg i (params V.! i)
-tcASTJavaExpr refReq (AST.InstanceField pos astLhs fName) = do
-  lhs <- tcASTJavaExpr True astLhs
-  case getJSSTypeOfSpecRef lhs of
-    JSS.ClassType lhsClassName -> lift $ do
-      cl <- lookupClass pos lhsClassName
-      f <- findField pos fName cl
-      checkJSSTypeIsValid pos refReq (fieldType f)
-      return $ SpecField lhs f
-    _ -> let msg = "Could not find a field named " ++ fName ++ " in " 
-                     ++ show lhs ++ "."
-             res = "Please check to make sure the field name is correct."
-          in throwIOExecException pos (ftext msg) res
 
 -- | Check that the reference type is not mentioned in a constant declaration.
 checkRefIsNotConst pos ref note = do
@@ -551,26 +432,53 @@ throwIncompatibleExprType pos lhsExpr refType specTypeName =
    in throwIOExecException pos (ftext msg) ""
 
 -- | Typecheck expression at global level.
-typecheckMethodExpr :: AST.Expr -> MethodSpecTranslator TypedExpr
-typecheckMethodExpr astExpr = do
+methodParserConfig :: MethodSpecTranslator TCConfig
+methodParserConfig = do
   locals <- gets currentLetBindingMap
   cl <- gets specClass
   m <- gets specMethod
   rtm <- gets refTypeMap
-  cem <- gets refTypeMap
+  cem <- gets constExprMap
   lift $ do
     globalCnsBindings <- gets globalLetBindings
     opBindings <- gets sawOpMap
     cb <- JSS.getCodebase
-    let exprTypeFn :: SpecJavaExpr -> Maybe DagType
-        exprTypeFn e = Just undefined -- TODO
-    let tcc = TCC { localBindings = Map.map snd locals
-                  , globalCnsBindings
-                  , opBindings
-                  , codeBase = cb
-                  , methodInfo = Just (m, cl)
-                  , toJavaExprType = exprTypeFn }
-    lift $ tcExpr tcc astExpr
+    let exprTypeFn :: Pos -> SpecJavaExpr -> Maybe DagType
+        exprTypeFn pos e = 
+          case Map.lookup e rtm of
+            Just (RIVArrayConst _ _ tp) -> Just tp
+            Just (RIVClass _) ->
+              let msg = "The expression " ++ show e ++ " denotes a Java reference,"
+                        ++ " and cannot be directly used in a SAWScript expression."
+                  res = "Please alter the expression, perhaps by referring to "
+                        ++ "an field in the reference."
+               in throw $ ExecException pos (ftext msg) res
+            Just (RIVIntArray l) ->
+              Just $ SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32))
+            Just (RIVLongArray l) ->
+              Just $ SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64))
+            Nothing ->               
+              case Map.lookup e cem of
+                Nothing -> Nothing
+                Just (_,tp) -> Just tp
+    return TCC { localBindings = Map.map snd locals
+               , globalCnsBindings
+               , opBindings
+               , codeBase = cb
+               , methodInfo = Just (m, cl)
+               , toJavaExprType = exprTypeFn }
+
+-- | Typecheck expression at global level.
+typecheckJavaExpr :: AST.JavaRef -> MethodSpecTranslator SpecJavaExpr
+typecheckJavaExpr astExpr = do
+  config <- methodParserConfig
+  lift $ lift $ tcJavaExpr config astExpr
+
+-- | Typecheck expression at global level.
+typecheckMethodExpr :: AST.Expr -> MethodSpecTranslator TypedExpr
+typecheckMethodExpr astExpr = do
+  config <- methodParserConfig
+  lift $ lift $ tcExpr config astExpr
 
 -- Check that the Java spec reference has a type compatible with typedExpr.
 checkSpecJavaExprCompat :: Pos -> String -> JSS.Type -> DagType -> MethodSpecTranslator ()
@@ -643,7 +551,7 @@ resolveDecl (AST.Type pos astExprs astTp) = do
   let params = V.fromList (methodParameterTypes method)
   specType <- lift $ parseASTType astTp
   forM_ astExprs $ \astExpr -> do
-    javaExpr <- tcASTJavaExpr False astExpr
+    javaExpr <- typecheckJavaExpr astExpr
     -- Check type has not already been assigned.
     checkTypeIsUndefined pos javaExpr $
       "Multiple type declarations on the same Java expression " 
@@ -666,7 +574,11 @@ resolveDecl (AST.Type pos astExprs astTp) = do
         _ -> s { nonRefTypes = Set.insert javaExpr (nonRefTypes s) }
 resolveDecl (AST.MayAlias _ []) = error "internal: mayAlias set is empty"
 resolveDecl (AST.MayAlias pos astRefs) = do
-  refs@(firstRef:restRefs) <- mapM (tcASTJavaExpr True) astRefs
+  let tcASTJavaRef astRef = do
+        ref <- typecheckJavaExpr astRef
+        lift $ checkJSSTypeIsRef pos (getJSSTypeOfSpecRef ref)
+        return ref
+  refs@(firstRef:restRefs) <- mapM tcASTJavaRef astRefs
   -- Check types of references are the same. are the same.
   firstType <- lookupRefType pos firstRef 
   forM_ restRefs $ \r -> do
@@ -692,7 +604,7 @@ resolveDecl (AST.MayAlias pos astRefs) = do
           , revAliasSets = (refs,firstType) : revAliasSets s }
 resolveDecl (AST.Const pos astJavaExpr astValueExpr) = do
   -- Typecheck and validate javaExpr.
-  javaExpr <- tcASTJavaExpr True astJavaExpr
+  javaExpr <- typecheckJavaExpr astJavaExpr
   checkTypeIsUndefined pos javaExpr $
     "Type declarations and const declarations on the same Java expression are not allowed."
   checkRefIsNotConst pos javaExpr $
@@ -720,7 +632,7 @@ resolveDecl (AST.Assume _pos astExpr) = do
   modify $ \s -> s { currentAssumptions = expr : currentAssumptions s }
 resolveDecl (AST.Ensures pos astJavaExpr astValueExpr) = do
   -- Resolve and check astJavaExpr.
-  javaExpr <- tcASTJavaExpr False astJavaExpr
+  javaExpr <- typecheckJavaExpr astJavaExpr
   checkJavaTypeIsDefined pos javaExpr
   checkJavaExprIsModifiable pos javaExpr "\'ensures\'"
   checkEnsuresUndefined pos javaExpr
@@ -735,7 +647,7 @@ resolveDecl (AST.Ensures pos astJavaExpr astValueExpr) = do
 resolveDecl (AST.Arbitrary pos astJavaExprs) = do 
   forM_ astJavaExprs $ \astJavaExpr -> do
     -- Resolve and check astJavaExpr.
-    javaExpr <- tcASTJavaExpr False astJavaExpr
+    javaExpr <- typecheckJavaExpr astJavaExpr
     checkJavaTypeIsDefined pos javaExpr
     checkJavaExprIsModifiable pos javaExpr "\'arbitrary\'"
     checkEnsuresUndefined pos javaExpr
@@ -848,9 +760,10 @@ resolveMethodSpecIR pos cl method cmds = do
   let constRefs
         = catMaybes
         $ map (\(r,(c,tp)) ->
-                 case tp of
-                   SymArray _ _ -> Just ([r], RIVArrayConst c tp)
-                   _ -> Nothing)
+                 let javaTp = getJSSTypeOfSpecRef r
+                  in case javaTp of
+                       ArrayType _ -> Just ([r], RIVArrayConst javaTp c tp)
+                       _ -> Nothing)
         $ Map.toList (constExprMap st')
   let specReferences = revAliasSets st' ++ unaliasedRefs ++ constRefs
   --TODO: Validate that types or constants for all arguments have been provided.
@@ -915,56 +828,101 @@ data SymbolicInputResult
           -- | Maps Java expressions referring to input scalars to their input node.
         , scalarNodeMap :: Map SpecJavaExpr Node
          -- | Contains functions that translate from counterexample
-         -- returned by ABC back to constant values, in reverse order
-         -- that evaluators were added.
-        , revInputEvaluators :: [InputEvaluator]
-        -- | Maps Java expressions to the input associated with them.
-        , javaRefToInputMap :: Map SpecJavaExpr Int
+         -- returned by ABC back to constant values, along with the
+         -- Java expression associated with that evaluator.
+        , inputEvaluators :: [(SpecJavaExpr,InputEvaluator)]
         }
 
-createSpecSymbolicInputs :: MethodSpecIR -> SymbolicMonad SymbolicInputResult
-createSpecSymbolicInputs ir = do
-  let initialState = SIR Map.empty Map.empty [] Map.empty
+type EquivClassMap = (Int, Map Int [SpecJavaExpr], Map Int SpecJavaRefInitialValue)
+
+-- | Return list of class indices to initial values.
+equivClassMapEntries :: EquivClassMap -> [(Int,[SpecJavaExpr],SpecJavaRefInitialValue)]
+equivClassMapEntries (_,em,vm) =
+  map (\(i,v) -> (i,em Map.! i,v)) $ Map.toList vm
+
+createSpecSymbolicInputs :: MethodSpecIR
+                         -> EquivClassMap
+                         -> SymbolicMonad SymbolicInputResult
+createSpecSymbolicInputs ir cm = do
+  let initialState = SIR Map.empty Map.empty []
   fmap snd $ flip runStateT initialState $ do
     -- Create symbolic inputs from specReferences.
-    forM_ (specReferences ir) $ \(javaRefEC,initValue) -> do
-      let createInputArrayNode :: Int -> Int -> SymbolicMonad Node
+    forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
+      litCount <- lift $ liftAigMonad $ getInputLitCount
+      let -- create array input node with length and int width.
           createInputArrayNode l w = do
             let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
             lv <- liftAigMonad $ V.replicateM l
                                $ fmap LV $ SV.replicateM w makeInputLit
-            freshVar arrType (LVN lv)
+            n <- lift $ freshVar arrType (LVN lv)
+            let inputEval lits =
+                  CArray $ V.map (\j -> mkCIntFromLsbfV $ SV.slice j w lits)
+                         $ V.enumFromStepN litCount w (fromIntegral l)
+            modify $ \s -> 
+              s { arrayClassNodeMap = Map.insert idx n (arrayClassNodeMap s)
+                , inputEvaluators = map (\expr -> (expr,inputEval)) exprs
+                                        ++ inputEvaluators s }
       case initValue of
-        RIVArrayConst c tp -> do
+        RIVArrayConst _ c tp -> do
           n <- lift $ makeConstant c tp
           modify $ \s ->
-            s { arrayClassNodeMap = Map.insert undefined n (arrayClassNodeMap s) }
+            s { arrayClassNodeMap = Map.insert idx n (arrayClassNodeMap s) }
         RIVClass _ -> return ()
-        RIVIntArray l -> do
-          n <- lift $ createInputArrayNode l 32
-          modify $ \s -> s { arrayClassNodeMap = Map.insert undefined n (arrayClassNodeMap s) }
-        RIVLongArray l -> do
-          n <- lift $ createInputArrayNode l 64
-          modify $ \s -> s { arrayClassNodeMap = Map.insert undefined n (arrayClassNodeMap s) }
+        RIVIntArray l -> createInputArrayNode l 32
+        RIVLongArray l -> createInputArrayNode l 64
     -- Create symbolic inputs from specScalarInputs.
-    forM_ (specScalarInputs ir) $ \javaExpr ->
-      case getJSSTypeOfSpecRef javaExpr of
-        JSS.BooleanType -> error "TODO: createSpecSymbolicInputs BooleanType"
-        JSS.IntType -> error "TODO: createSpecSymbolicInputs IntType"
-        JSS.LongType -> error "TODO: createSpecSymbolicInputs LongType"
+    forM_ (specScalarInputs ir) $ \expr -> do
+      litCount <- lift $ liftAigMonad $ getInputLitCount
+      let addScalarNode node inputEval = 
+            modify $ \s ->
+              s { scalarNodeMap = Map.insert expr node (scalarNodeMap s)
+                , inputEvaluators = (expr,inputEval) : inputEvaluators s }
+      case getJSSTypeOfSpecRef expr of
+        JSS.BooleanType -> do
+          lv <- lift $ liftAigMonad $ SV.replicateM 1 makeInputLit
+          n <- lift $ freshVar SymBool (LV lv)
+          let inputEval lits = CBool (lits SV.! litCount)
+          addScalarNode n inputEval
+        JSS.IntType -> do
+          lv <- lift $ liftAigMonad $ SV.replicateM 32 makeInputLit
+          n <- lift $ freshVar (SymInt (constantWidth 32)) (LV lv)
+          let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 32 lits
+          addScalarNode n inputEval
+        JSS.LongType -> do
+          lv <- lift $ liftAigMonad $ SV.replicateM 64 makeInputLit
+          n <- lift $ freshVar (SymInt (constantWidth 64)) (LV lv)
+          let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 64 lits
+          addScalarNode n inputEval
         _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
 
 runMethodVerification :: MethodSpecIR
+                      -> EquivClassMap
                       -> SymbolicInputResult
                       -> JSS.Simulator SymbolicMonad ()
-runMethodVerification ir inputs = do
+runMethodVerification ir cm inputs = do
   -- Set initialization status.
   forM_ (initializedClasses ir) $ \c -> do
     JSS.setInitializationStatus c JSS.Initialized
   -- Create references.
-  forM_ (specReferences ir) $ \(javaEC,initValue) -> do
-    undefined 
+  refs <- forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
+    let Just arrayVal = Map.lookup idx (arrayClassNodeMap inputs)
+    case initValue of
+      RIVArrayConst javaTp c@(CArray v) _ -> do
+       let l = V.length v
+       JSS.newSymbolicArray javaTp (fromIntegral l) arrayVal
+      RIVArrayConst _ _ _ -> error "internal: Illegal RIVArrayConst to runMethodVerification"
+      RIVClass cl -> do
+        JSS.genRef (ClassType (className cl))
+      RIVIntArray l -> 
+       JSS.newSymbolicArray (JSS.ArrayType JSS.IntType) (fromIntegral l) arrayVal
+      RIVLongArray l ->
+       JSS.newSymbolicArray (JSS.ArrayType JSS.LongType) (fromIntegral l) arrayVal
+  -- TODO Construct map from Java expressions to reference.
   -- Update initial instance field values.
+  let fieldJavaExprs :: [(Int,Field)]
+      fieldJavaExprs = error "TODO: internal"
+  forM_ fieldJavaExprs $ \javaExpr -> do
+    error "TODO: internal"
 
 -- | Attempt to verify method spec using verification method specified.
 verifyMethodSpec :: MethodSpecIR -> Executor ()
@@ -972,14 +930,10 @@ verifyMethodSpec MSIR { verificationMethod = AST.Skip } = return ()
 verifyMethodSpec ir = do
   cb <- gets codebase
   let refEquivClasses = JSS.partitions (specReferences ir)
-  lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(i,(cnt, classRefMap, classTypeMap)) -> do
+  lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(i,equivMap) -> do
     runSymSession $ do
-            {-
-      whenVerbosity (>= 3) $ do
-        liftIO $ putStrLn $ "Verifying method for equivalence class " ++ show i ++ "."
-        -}
       -- Generate input vectors.
-      sir <- createSpecSymbolicInputs ir
+      sir <- createSpecSymbolicInputs ir equivMap
       -- Run simulator 
       (bFinalEq,counterFns) <- 
         JSS.runSimulator cb $ do

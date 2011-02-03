@@ -8,7 +8,11 @@ import System.Console.CmdArgs(Data, Typeable)
 import System.Directory(makeRelativeToCurrentDirectory)
 import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
 import Text.PrettyPrint.HughesPJ
+import Utils.Common (slashesToDots)
 import Utils.IOStateT
+
+import qualified Execution.Codebase as JSS
+import qualified JavaParser as JSS
 
 data Pos = Pos !FilePath -- file
                !Int      -- line
@@ -76,3 +80,63 @@ instance Exception ExecException
 throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
 throwIOExecException pos errorMsg resolution =
   liftIO $ throwIO (ExecException pos errorMsg resolution)
+
+-- Java lookup functions {{{1
+
+-- | Atempt to find class with given name, or throw ExecException if no class
+-- with that name exists.
+lookupClass ::  (JSS.HasCodebase m, MonadIO m) => Pos -> String -> m JSS.Class
+lookupClass pos nm = do 
+  maybeCl <- JSS.tryLookupClass nm
+  case maybeCl of
+    Nothing -> do
+     let msg = ftext ("The Java class " ++ slashesToDots nm ++ " could not be found.")
+         res = "Please check that the --classpath and --jars options are set correctly."
+      in throwIOExecException pos msg res
+    Just cl -> return cl
+
+-- | Returns method with given name in this class or one of its subclasses.
+-- Throws an ExecException if method could not be found or is ambiguous.
+findMethod :: (JSS.HasCodebase m, MonadIO m)
+           => Pos -> String -> JSS.Class -> m JSS.Method
+findMethod pos nm initClass = do
+  let javaClassName = slashesToDots (JSS.className initClass)
+  let methodMatches m = JSS.methodName m == nm && not (JSS.methodIsAbstract m)
+  let impl cl = 
+        case filter methodMatches (JSS.classMethods cl) of
+          [] -> do
+            case JSS.superClass cl of
+              Nothing ->
+                let msg = ftext $ "Could not find method " ++ nm
+                            ++ " in class " ++ javaClassName ++ "."
+                    res = "Please check that the class and method are correct."
+                 in throwIOExecException pos msg res
+              Just superName -> 
+                impl =<< lookupClass pos superName
+          [method] -> return method
+          _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
+                           ++ " is ambiguous.  SAWScript currently requires that "
+                           ++ "method names are unique."
+                   res = "Please rename the Java method so that it is unique."
+                in throwIOExecException pos (ftext msg) res
+  impl initClass
+
+-- | Returns method with given name in this class or one of its subclasses.
+-- Throws an ExecException if method could not be found or is ambiguous.
+findField :: (JSS.HasCodebase m, MonadIO m)
+          => Pos -> String -> JSS.Class -> m JSS.Field
+findField pos nm initClass = do
+  let impl cl = 
+        case filter (\f -> JSS.fieldName f == nm) $ JSS.classFields cl of
+          [] -> do
+            case JSS.superClass cl of
+              Nothing ->
+                let msg = "Could not find a field named " ++ nm ++ " in " 
+                            ++ slashesToDots (JSS.className initClass) ++ "."
+                    res = "Please check to make sure the field name is correct."
+                 in throwIOExecException pos (ftext msg) res
+              Just superName -> impl =<< lookupClass pos superName
+          [f] -> do
+            return f
+          _ -> error "internal: Found multiple fields with the same name."
+  impl initClass 

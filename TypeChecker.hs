@@ -5,6 +5,7 @@
 module SAWScript.TypeChecker
   ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
+  , tcJavaExpr
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , TCConfig(..)
@@ -13,11 +14,13 @@ module SAWScript.TypeChecker
   ) where
 
 import Control.Monad
+import Control.Monad.Trans
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
+import Utils.Common
 
 import qualified JavaParser as JSS
 import qualified Execution.Codebase as JSS
@@ -26,6 +29,9 @@ import qualified SAWScript.MethodAST as AST
 import SAWScript.TIMonad
 import SAWScript.Utils
 import Symbolic
+
+tcJavaExpr :: TCConfig -> AST.JavaRef -> OpSession SpecJavaExpr
+tcJavaExpr cfg e = runTI cfg (tcASTJavaExpr e)
 
 tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
 tcExpr cfg e = runTI cfg (tcE e)
@@ -44,7 +50,8 @@ data SpecJavaExpr
 instance Eq SpecJavaExpr where
   SpecThis _      == SpecThis _      = True
   SpecArg i _     == SpecArg j _     = i == j
-  SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && JSS.fieldName f1 == JSS.fieldName f2
+  SpecField r1 f1 == SpecField r2 f2 =
+    r1 == r2 && JSS.fieldName f1 == JSS.fieldName f2
   _               == _               = False
 
 instance Ord SpecJavaExpr where
@@ -78,6 +85,38 @@ tcheckExprWidth :: AST.ExprWidth -> WidthExpr
 tcheckExprWidth (AST.WidthConst _ i  ) = constantWidth (Wx i)
 tcheckExprWidth (AST.WidthVar   _ nm ) = varWidth nm
 tcheckExprWidth (AST.WidthAdd   _ u v) = addWidth (tcheckExprWidth u) (tcheckExprWidth v)
+
+throwUnsupportedIntType :: MonadIO m => Pos -> JSS.Type -> m ()
+throwUnsupportedIntType pos tp =
+  let msg = "SAWScript only supports integer and long integral values, and does"
+            ++ "not yet support " ++ show tp ++ "."
+      res = "Please modify the Java code to only use \'int\' instead."
+   in throwIOExecException pos (ftext msg) res
+
+throwUnsupportedFloatType :: MonadIO m => Pos -> m ()
+throwUnsupportedFloatType pos =
+  let msg = "SAWScript does not yet support \'float\' or \'double\'."
+      res = "Please modify the Java code to not use floating point types."
+   in throwIOExecException pos (ftext msg) res
+
+-- | Check JSS Type is a type supported by SAWScript.
+checkJSSTypeIsValid :: (JSS.HasCodebase m, MonadIO m) => Pos -> JSS.Type -> m ()
+checkJSSTypeIsValid _ (JSS.ArrayType JSS.IntType) = return ()
+checkJSSTypeIsValid _ (JSS.ArrayType JSS.LongType) = return ()
+checkJSSTypeIsValid pos (JSS.ArrayType eltType) = 
+  let msg = "SAWScript currently only supports arrays of int and long, "
+            ++ "and does yet support arrays with type " ++ show eltType ++ "."
+      res = "Please modify the Java code to only use int or long array types."
+   in throwIOExecException pos (ftext msg) res
+checkJSSTypeIsValid pos (JSS.ClassType nm) = lookupClass pos nm >> return ()
+checkJSSTypeIsValid _ JSS.BooleanType = return ()
+checkJSSTypeIsValid pos JSS.ByteType = throwUnsupportedIntType pos JSS.ByteType
+checkJSSTypeIsValid pos JSS.CharType = throwUnsupportedIntType pos JSS.CharType
+checkJSSTypeIsValid pos JSS.ShortType = throwUnsupportedIntType pos JSS.ShortType
+checkJSSTypeIsValid _ JSS.IntType = return ()
+checkJSSTypeIsValid _ JSS.LongType = return ()
+checkJSSTypeIsValid pos JSS.DoubleType = throwUnsupportedFloatType pos
+checkJSSTypeIsValid pos JSS.FloatType = throwUnsupportedFloatType pos
 
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
@@ -120,7 +159,7 @@ data TCConfig = TCC {
        , opBindings        :: Map String OpDef
        , codeBase          :: JSS.Codebase
        , methodInfo        :: Maybe (JSS.Method, JSS.Class)
-       , toJavaExprType    :: SpecJavaExpr -> Maybe DagType
+       , toJavaExprType    :: Pos -> SpecJavaExpr -> Maybe DagType
        }
 
 type SawTI = TI OpSession TCConfig
@@ -128,6 +167,44 @@ type SawTI = TI OpSession TCConfig
 instance HasCodebase SawTI where
   getCodebase    = gets codeBase
   putCodebase cb = modify $ \s -> s{ codeBase = cb }
+
+getMethodInfo :: SawTI (JSS.Method, JSS.Class)
+getMethodInfo = do
+  maybeMI <- gets methodInfo
+  case maybeMI of
+    Nothing -> error $ "internal: getMethodInfo called when parsing outside a method declaration"
+    Just p -> return p
+
+-- | Typecheck an AST Java expression to get specification Java expression.
+-- This code will check that the result is a reference if the first Bool is
+-- true.
+-- Flag indicates if a reference is required.
+tcASTJavaExpr :: AST.JavaRef -> SawTI SpecJavaExpr
+tcASTJavaExpr (AST.This pos) = do
+  (method, cl) <- getMethodInfo
+  when (JSS.methodIsStatic method) $
+    throwIOExecException pos (ftext "\'this\' is not defined on static methods.") ""
+  return (SpecThis (JSS.className cl))
+tcASTJavaExpr (AST.Arg pos i) = do
+  (method, _) <- getMethodInfo
+  let params = V.fromList (JSS.methodParameterTypes method)
+  -- Check that arg index is valid.
+  unless (0 <= i && i < V.length params) $
+    throwIOExecException pos (ftext "Invalid argument index for method.") ""
+  checkJSSTypeIsValid pos (params V.! i)
+  return $ SpecArg i (params V.! i)
+tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
+  lhs <- tcASTJavaExpr astLhs
+  case getJSSTypeOfSpecRef lhs of
+    JSS.ClassType lhsClassName -> do
+      cl <- lookupClass pos lhsClassName
+      f <- findField pos fName cl
+      checkJSSTypeIsValid pos (JSS.fieldType f)
+      return $ SpecField lhs f
+    _ -> let msg = "Could not find a field named " ++ fName ++ " in " 
+                     ++ show lhs ++ "."
+             res = "Please check to make sure the field name is correct."
+          in throwIOExecException pos (ftext msg) res
 
 -- | Check argument count matches expected length
 checkArgCount :: Pos -> String -> [TypedExpr] -> Int -> SawTI ()
@@ -221,7 +298,7 @@ tcJRef (AST.Arg p i) = do
        unless (0 <= i && i < length params) $ typeErr p $ ftext $ "'args[" ++ show i ++ "]' refers to an illegal argument index"
        toJavaT <- gets toJavaExprType
        let te = SpecArg i (params !! i)
-       case toJavaT te of
+       case toJavaT p te of
          Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
          Just t' -> return $ TypedJavaValue te t'
 -- TODO: Add the rest
