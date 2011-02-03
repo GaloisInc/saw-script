@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Vector.Storable as SV
 import qualified Data.Vector as V
 import Prelude hiding (catch)
 import System.Directory (makeRelativeToCurrentDirectory)
@@ -92,14 +93,14 @@ evaluateGlobalExpr astExpr = do
 -- verbosity {{{2
 
 -- | Execute command when verbosity exceeds given minimum value.
-whenVerbosity :: Int -> Executor () -> Executor ()
-whenVerbosity minVerb action = do
+whenVerbosity :: (Int -> Bool) -> Executor () -> Executor ()
+whenVerbosity cond action = do
   cur <- gets verbosity
-  when (minVerb <= cur) action
+  when (cond cur) action
 
 -- | Write debug message to standard IO.
 execDebugLog :: String -> Executor ()
-execDebugLog msg = whenVerbosity 6 $ liftIO $ putStrLn msg
+execDebugLog msg = whenVerbosity (>=6) $ liftIO $ putStrLn msg
 
 -- Rule functions {{{2
 
@@ -315,12 +316,13 @@ checkSBVUninterpretedFunctions pos relativePath sbv = do
 -- | A parsed type from AST.JavaType
 data SpecJavaType
   = SpecRefClass !(JSS.Class) -- ^ Specific class for a reference.
-  | SpecIntArray !Int32
-  | SpecLongArray !Int32
+  | SpecIntArray !Int
+  | SpecLongArray !Int
   | SpecBool
   | SpecInt
   | SpecLong
 
+{-
 instance Eq SpecJavaType where
   SpecRefClass c1 == SpecRefClass c2 = className c1 == className c2
   SpecIntArray l1 == SpecIntArray l2 = l1 == l2
@@ -329,6 +331,7 @@ instance Eq SpecJavaType where
   SpecInt == SpecInt = True
   SpecLong == SpecLong = True
   _ == _ = False
+  -}
 
 -- | Pretty print SpecJavaType
 ppSpecJavaType :: SpecJavaType -> String
@@ -350,7 +353,7 @@ getJSSTypeOfSpecJavaType SpecInt  = JSS.IntType
 getJSSTypeOfSpecJavaType SpecLong = JSS.LongType
 
 -- | Converts an int into a Java array length.
-checkedGetArrayLength :: Pos -> Int -> Executor Int32
+checkedGetArrayLength :: Pos -> Int -> Executor Int
 checkedGetArrayLength pos l = do
   unless (0 <= l && toInteger l < toInteger (maxBound :: Int32)) $
     let msg  = "Array length " ++ show l ++ " is invalid."
@@ -374,8 +377,17 @@ parseASTType AST.LongScalar = return SpecBool
 
 -- | Java expression initial value.
 data SpecJavaRefInitialValue
-  = JavaInput SpecJavaType
-  | JavaConst CValue DagType
+  = RIVArrayConst CValue DagType
+  | RIVClass JSS.Class
+  | RIVIntArray !Int
+  | RIVLongArray !Int
+
+instance Eq SpecJavaRefInitialValue where
+  RIVArrayConst c1 t1 == RIVArrayConst c2 t2 = c1 == c2 && t1 == t2
+  RIVClass c1 == RIVClass c2 = className c1 == className c2
+  RIVIntArray l1 == RIVIntArray l2 = l1 == l2
+  RIVLongArray l1 == RIVLongArray l2 = l1 == l2
+  _ == _ = False
 
 -- | Method spec translator state
 data MethodSpecTranslatorState = MSTS {
@@ -386,7 +398,7 @@ data MethodSpecTranslatorState = MSTS {
        , nonRefTypes :: Set SpecJavaExpr
          -- | Maps Java expressions referenced in type expressions
          -- to their associated type.
-       , refTypeMap :: Map SpecJavaExpr SpecJavaType
+       , refTypeMap :: Map SpecJavaExpr SpecJavaRefInitialValue
          -- | Maps Java references to to associated constant expression.
        , constExprMap :: Map SpecJavaExpr (CValue,DagType)
        -- | Set of Java refs in a mayAlias relation.
@@ -394,7 +406,7 @@ data MethodSpecTranslatorState = MSTS {
        -- | Number of equivalence class
        , mayAliasClassCount :: Int
        -- | List of mayAlias classes in reverse order that they were created.
-       , revAliasSets :: [([SpecJavaExpr], SpecJavaType)]
+       , revAliasSets :: [([SpecJavaExpr], SpecJavaRefInitialValue)]
        -- | Map let bindings local to expression.
        , currentLetBindingMap :: Map String (Pos,TypedExpr)
        -- | List of let bindings encountered in reverse order.
@@ -435,7 +447,6 @@ checkJSSTypeIsValid pos _ (ArrayType eltType) =
       res = "Please modify the Java code to only use int or long array types."
    in throwIOExecException pos (ftext msg) res
 checkJSSTypeIsValid pos _ (ClassType nm) = lookupClass pos nm >> return ()
-
 checkJSSTypeIsValid _ False BooleanType = return ()
 checkJSSTypeIsValid pos False JSS.ByteType = throwUnsupportedIntType pos JSS.ByteType
 checkJSSTypeIsValid pos False JSS.CharType = throwUnsupportedIntType pos JSS.CharType
@@ -569,7 +580,7 @@ checkEnsuresUndefined pos ref = do
        in throwIOExecException pos (ftext msg) res
 
 -- | Get type assigned to SpecJavaRef, or throw exception if it is not assigned.
-lookupRefType :: Pos -> SpecJavaExpr -> MethodSpecTranslator SpecJavaType
+lookupRefType :: Pos -> SpecJavaExpr -> MethodSpecTranslator SpecJavaRefInitialValue
 lookupRefType pos ref = do
   m <- gets refTypeMap
   case Map.lookup ref m of
@@ -625,9 +636,10 @@ resolveDecl (AST.Type pos astExprs astTp) = do
     unless b $
       throwIncompatibleExprType pos (show javaExpr) javaExprType (ppSpecJavaType specType)
     modify $ \s -> 
-      case javaExprType of
-        ArrayType _ -> s { refTypeMap = Map.insert javaExpr specType (refTypeMap s) }
-        ClassType _ -> s { refTypeMap = Map.insert javaExpr specType (refTypeMap s) }
+      case specType of
+        SpecRefClass cl -> s { refTypeMap = Map.insert javaExpr (RIVClass cl)    (refTypeMap s) }
+        SpecIntArray l  -> s { refTypeMap = Map.insert javaExpr (RIVIntArray l)  (refTypeMap s) }
+        SpecLongArray l -> s { refTypeMap = Map.insert javaExpr (RIVLongArray l) (refTypeMap s) }
         _ -> s { nonRefTypes = Set.insert javaExpr (nonRefTypes s) }
 resolveDecl (AST.MayAlias _ []) = error "internal: mayAlias set is empty"
 resolveDecl (AST.MayAlias pos astRefs) = do
@@ -744,8 +756,9 @@ resolveDecl (AST.VerifyUsing pos method) = do
   modify $ \s -> s { chosenVerificationMethod = Just (pos,method) }
 
 data MethodSpecIR = MSIR {
+    initializedClasses :: [String]
     -- | References in specification with alias information and reference info.
-    specReferences :: [([SpecJavaExpr], SpecJavaRefInitialValue)]
+  , specReferences :: [([SpecJavaExpr], SpecJavaRefInitialValue)]
     -- | List of non-reference input variables that must be available.
   , specScalarInputs :: [SpecJavaExpr]
     -- | List of constants expected in input.
@@ -756,6 +769,7 @@ data MethodSpecIR = MSIR {
   , postconditions :: Map SpecJavaExpr (Maybe TypedExpr)
   -- | Return value if any (is guaranteed to be compatible with method spec.
   , returnValue :: Maybe TypedExpr
+  -- | 
   , verificationMethod :: AST.VerificationMethod
   }
 
@@ -772,7 +786,7 @@ resolveMethodSpecIR pos cl method cmds = do
   let st = MSTS { specClass = cl
                 , specMethod = method
                 , nonRefTypes = Set.empty
-                , refTypeMap = Map.singleton (SpecThis (className cl)) (SpecRefClass cl)
+                , refTypeMap = Map.singleton (SpecThis (className cl)) (RIVClass cl)
                 , constExprMap = Map.empty
                 , mayAliasRefs = Map.empty
                 , mayAliasClassCount = 0
@@ -784,6 +798,8 @@ resolveMethodSpecIR pos cl method cmds = do
                 , chosenVerificationMethod = Nothing
                 }
   st' <- fmap snd $ runStateT (mapM_ resolveDecl cmds) st
+  -- Get list of initial superclasses.
+  superClasses <- JSS.supers cl
   -- Check that each declaration of a field does not have the base
   -- object in the mayAlias class.
   let allRefs = Map.keysSet (refTypeMap st') `Set.union` Map.keysSet (constExprMap st')
@@ -802,20 +818,19 @@ resolveMethodSpecIR pos cl method cmds = do
         checkRef lhs
   mapM_ checkRef (Set.toList allRefs)
   -- Define specReferences
-  let aliasedRefs = map (\(refs,tp) -> (refs, JavaInput tp))
-                  $ revAliasSets st'
   let unaliasedRefs
-        = map (\(r,tp) -> ([r], JavaInput tp))
+        = map (\(r,tp) -> ([r], tp))
         $ filter (\(r,_) -> Map.notMember r (mayAliasRefs st'))
         $ Map.toList (refTypeMap st')
   let constRefs
         = catMaybes
         $ map (\(r,(c,tp)) ->
                  case tp of
-                   SymArray _ _ -> Just ([r], JavaConst c tp)
+                   SymArray _ _ -> Just ([r], RIVArrayConst c tp)
                    _ -> Nothing)
         $ Map.toList (constExprMap st')
-  let specReferences = aliasedRefs ++ unaliasedRefs ++ constRefs
+  let specReferences = revAliasSets st' ++ unaliasedRefs ++ constRefs
+  --TODO: Validate that types or constants for all arguments have been provided.
   -- Get specConstants
   let specConstants
         = catMaybes
@@ -835,7 +850,6 @@ resolveMethodSpecIR pos cl method cmds = do
                in throwIOExecException pos (ftext msg) ""
         maybe throwUndefinedReturnValue (return . Just . snd) $
               (currentReturnValue st')
-
   -- Get verification method.
   let throwUndefinedVerification =
         let msg = "The verification method for \'" ++ methodName method 
@@ -845,8 +859,9 @@ resolveMethodSpecIR pos cl method cmds = do
   verificationMethod
     <- maybe throwUndefinedVerification (return . snd) $
          chosenVerificationMethod st'
-  -- | Return set
-  return MSIR { specReferences
+  -- Return IR.
+  return MSIR { initializedClasses = map className superClasses
+              , specReferences
               , specScalarInputs = Set.toList (nonRefTypes st')
               , specConstants
               , methodLetBindings = reverse (reversedLetBindings st')
@@ -866,6 +881,95 @@ throwSBVParseError pos relativePath e =
               text (SBV.ppSBVException e)
       res = "Please reconfirm that the SBV filename is a valid SBV file from Cryptol."
    in throwIOExecException pos msg res
+
+type InputEvaluator = SV.Vector Bool -> CValue
+
+data JavaRefClassMap = JRCM {}
+
+data SymbolicInputResult 
+  = SIR { -- | Maps reference equivalence class indices for arrays to their input node.
+          arrayClassNodeMap :: Map Int Node
+          -- | Maps Java expressions referring to input scalars to their input node.
+        , scalarNodeMap :: Map SpecJavaExpr Node
+         -- | Contains functions that translate from counterexample
+         -- returned by ABC back to constant values, in reverse order
+         -- that evaluators were added.
+        , revInputEvaluators :: [InputEvaluator]
+        -- | Maps Java expressions to the input associated with them.
+        , javaRefToInputMap :: Map SpecJavaExpr Int
+        }
+
+createSpecSymbolicInputs :: MethodSpecIR -> SymbolicMonad SymbolicInputResult
+createSpecSymbolicInputs ir = do
+  let initialState = SIR Map.empty Map.empty [] Map.empty
+  fmap snd $ flip runStateT initialState $ do
+    -- Create symbolic inputs from specReferences.
+    forM_ (specReferences ir) $ \(javaRefEC,initValue) -> do
+      let createInputArrayNode :: Int -> Int -> SymbolicMonad Node
+          createInputArrayNode l w = do
+            let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
+            lv <- liftAigMonad $ V.replicateM l
+                               $ fmap LV $ SV.replicateM w makeInputLit
+            freshVar arrType (LVN lv)
+      case initValue of
+        RIVArrayConst c tp -> do
+          n <- lift $ makeConstant c tp
+          modify $ \s ->
+            s { arrayClassNodeMap = Map.insert undefined n (arrayClassNodeMap s) }
+        RIVClass _ -> return ()
+        RIVIntArray l -> do
+          n <- lift $ createInputArrayNode l 32
+          modify $ \s -> s { arrayClassNodeMap = Map.insert undefined n (arrayClassNodeMap s) }
+        RIVLongArray l -> do
+          n <- lift $ createInputArrayNode l 64
+          modify $ \s -> s { arrayClassNodeMap = Map.insert undefined n (arrayClassNodeMap s) }
+    -- Create symbolic inputs from specScalarInputs.
+    forM_ (specScalarInputs ir) $ \javaExpr ->
+      case getJSSTypeOfSpecRef javaExpr of
+        JSS.BooleanType -> error "TODO: createSpecSymbolicInputs BooleanType"
+        JSS.IntType -> error "TODO: createSpecSymbolicInputs IntType"
+        JSS.LongType -> error "TODO: createSpecSymbolicInputs LongType"
+        _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
+
+runMethodVerification :: MethodSpecIR
+                      -> SymbolicInputResult
+                      -> JSS.Simulator SymbolicMonad ()
+runMethodVerification ir inputs = do
+  -- Set initialization status.
+  forM_ (initializedClasses ir) $ \c -> do
+    JSS.setInitializationStatus c JSS.Initialized
+  -- Create references.
+  forM_ (specReferences ir) $ \(javaEC,initValue) -> do
+    undefined 
+  -- Update initial instance field values.
+
+-- | Attempt to verify method spec using verification method specified.
+verifyMethodSpec :: MethodSpecIR -> Executor ()
+verifyMethodSpec MSIR { verificationMethod = AST.Skip } = return ()
+verifyMethodSpec ir = do
+  cb <- gets codebase
+  let refEquivClasses = JSS.partitions (specReferences ir)
+  lift $ forM_ ([1..] `zip` refEquivClasses) $ \(i,(cnt, classRefMap, classTypeMap)) -> do
+    runSymSession $ do
+            {-
+      whenVerbosity (>= 3) $ do
+        liftIO $ putStrLn $ "Verifying method for equivalence class " ++ show i ++ "."
+        -}
+      -- Generate input vectors.
+      sir <- createSpecSymbolicInputs ir
+      -- Run simulator 
+      (bFinalEq,counterFns) <- 
+        JSS.runSimulator cb $ do
+          -- TODO: Create initial state.
+          -- TODO: Add method spec overrides.
+          undefined
+          -- TODO: Execute method
+          -- TODO: Build final equation and functions for generating counterexamples.
+      case verificationMethod ir of
+        AST.ABC -> error "TODO: AST.SBV"
+        AST.Rewrite -> error "TODO: AST.Rewrite"
+        AST.Auto -> error "TODO: AST.Auto"
+        AST.Skip -> error "internal: Unexpected skip"
       
 -- | Execute command 
 execute :: AST.VerifierCommand -> Executor ()
@@ -965,10 +1069,7 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
   -- For each possible aliasing configuration.
   methodIR <- resolveMethodSpecIR pos thisClass method cmds 
   v <- gets runVerification
-  when v $ do
-    let refEquivClasses = JSS.partitions (specReferences methodIR)
-    forM_ refEquivClasses $ \(cnt, classRefMap, classTypeMap) -> do
-      liftIO $ putStrLn $ "Considering equivalence class " ++ show cnt
+  when v $ verifyMethodSpec methodIR
   --TODO: Add methodIR to state for later verification.
 execute (AST.Rule _pos _name _params _lhs _rhs) = do
   error "AST.Rule"
