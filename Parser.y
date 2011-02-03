@@ -74,6 +74,8 @@ import {-# SOURCE #-} SAWScript.ParserActions
    '='            { TPunct    _ "="            }
    '->'           { TPunct    _ "->"           }
    ':='           { TPunct    _ ":="           }
+   '<|'           { TPunct    _ "<|"           }
+   '|>'           { TPunct    _ "|>"           }
    'not'          { TOp       _ "not"          }
    '~'            { TOp       _ "~"            }
    '-'            { TOp       _ "-"            }
@@ -173,6 +175,7 @@ Expr : var                               { Var          (tokPos $1) (tokStr $1) 
      | 'True'                            { ConstantBool (tokPos $1) True           }
      | 'False'                           { ConstantBool (tokPos $1) False          }
      | num                               { ConstantInt  (tokPos $1) (tokNum $1)    }
+     | '<|' poly '|>'                    { ConstantInt  (tokPos $1) $2             }
      | '{' RecordFlds '}'                { MkRecord     (tokPos $1) $2             }
      | Expr ':' ExprType                 { TypeExpr     (tokPos $2) $1 $3          }
      | Expr '.' var                      { DerefField   (tokPos $2) $1 (tokStr $3) }
@@ -262,6 +265,19 @@ Qvar : sepBy1(var, '.') { (head (map tokPos $1), map tokStr $1) }
 -- A literal that must fit into a Haskell Int
 int :: { (Pos, Int) }
 int : num  {% parseIntRange (tokPos $1) (0, maxBound) (tokNum $1) }
+
+-- Polynomials, another way of writing Integers
+poly :: { Integer }
+poly : poly '+' polyTerm  { $1 + $3 }
+     | poly '-' polyTerm  { $1 - $3 }
+     | '-' polyTerm       { - $2    }
+     | polyTerm           { $1      }
+
+polyTerm :: { Integer }
+polyTerm :     num '^' num   {             tokNum $1 ^ tokNum $3   }
+         | num num           { tokNum $1 * tokNum $2               }
+         | num num '^' num   { tokNum $1 * (tokNum $2 ^ tokNum $4) }
+         | num               { tokNum $1                           }
 
 -- Parameterized productions, most of these come directly from the Happy manual..
 fst(p, q)  : p q   { $1 }
