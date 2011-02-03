@@ -49,6 +49,12 @@ mismatch p w g r = TI (\_ -> return (Left (p, msg, "")))
               $$ text "Given   : " <+> text (ppType g)
               $$ text "Required: " <+> text (ppType r)
 
+unexpected :: Monad m => Pos -> String -> String -> DagType -> TI m s a
+unexpected p w e g = TI (\_ -> return (Left (p, msg, "")))
+  where msg =    text ("Unexpected type: " ++ w)
+              $$ text "Expected: " <+> text e
+              $$ text "Got     : " <+> text (ppType g)
+
 typeErr :: Monad m => Pos -> Doc -> TI m s a
 typeErr p msg = TI (\_ -> return (Left (p, msg, "")))
 

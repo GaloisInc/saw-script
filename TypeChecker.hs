@@ -270,7 +270,7 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       case matchSubst (defTypes `zip` argTypes) of
         Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
         Just sub -> return $ TypedApply (mkOp opDef sub) args
--- TBD: NotExpr
+tcE (AST.NotExpr p l) = lift1Bool p "not" (groundOp bNotOpDef) l
 -- TBD: BitComplExpr
 -- TBD: NegExpr
 -- TBD: MulExpr
@@ -284,7 +284,8 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
 -- TBD: BitAndExpr
 -- TBD: BitXorExpr
 -- TBD: BitOrExpr
--- TBD: AppendExpr
+tcE (AST.AppendExpr p l r) = lift2Word p "#" app l r
+   where app wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
 -- TBD: EqExpr
 -- TBD: IneqExpr
 -- TBD: SGeqExpr
@@ -319,6 +320,14 @@ tcJRef (AST.Arg p i) = do
 tcJRef r =
   error $ "internal: tcJRef: TBD: " ++ show r
 
+lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
+lift1Bool p nm o l = do
+  l' <- tcE l
+  let lt = getTypeOfTypedExpr l'
+  case lt of
+    SymBool -> return $ TypedApply o [l']
+    _       -> mismatch p ("Argument to operator '" ++ show nm ++ "'")  lt SymBool
+
 lift2Bool :: Pos -> String -> Op -> AST.Expr -> AST.Expr -> SawTI TypedExpr
 lift2Bool p nm o l r = do
   l' <- tcE l
@@ -327,5 +336,16 @@ lift2Bool p nm o l r = do
       rt = getTypeOfTypedExpr r'
   case (lt, rt) of
     (SymBool, SymBool) -> return $ TypedApply o [l', r']
-    (SymBool, _      ) -> mismatch p ("Second argument to operator '" ++ show nm ++ "'") rt SymBool
-    (_,       _      ) -> mismatch p ("First argument to operator '" ++ show nm ++ "'")  lt SymBool
+    (SymBool, _      ) -> mismatch p ("Second argument to operator '" ++ nm ++ "'") rt SymBool
+    (_      , _      ) -> mismatch p ("First argument to operator '"  ++ nm ++ "'") lt SymBool
+
+lift2Word :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2Word p nm opMaker l r = do
+  l' <- tcE l
+  r' <- tcE r
+  let lt = getTypeOfTypedExpr l'
+      rt = getTypeOfTypedExpr r'
+  case (lt, rt) of
+    (SymInt wl, SymInt wr) -> return $ TypedApply (opMaker wl wr) [l', r']
+    (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
+    (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
