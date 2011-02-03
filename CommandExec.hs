@@ -77,16 +77,24 @@ parseFile path = do
     Nothing -> error $ "internal: Could not find file " ++ path
     Just cmds -> return cmds
 
+
+globalParserConfig :: Executor TCConfig
+globalParserConfig = do
+  globalCnsBindings <- gets globalLetBindings
+  opBindings <- gets sawOpMap
+  cb <- gets codebase
+  return TCC { localBindings = Map.empty 
+             , globalCnsBindings
+             , opBindings 
+             , codeBase = cb
+             , methodInfo = Nothing
+             , toJavaExprType = \_ -> Nothing }
+
 -- | Typecheck and evaluate expression at global level.
 evaluateGlobalExpr :: AST.Expr -> Executor (CValue,DagType)
 evaluateGlobalExpr astExpr = do
-  globalCnsBindings <- gets globalLetBindings
-  opBindings <- gets sawOpMap
-  let globalParserConfig =
-       TCC { localBindings = Map.empty 
-           , globalCnsBindings
-           , opBindings }
-  expr <- lift $ tcExpr globalParserConfig astExpr
+  config <- globalParserConfig
+  expr <- lift $ tcExpr config astExpr
   val <- globalEval expr
   return (val, getTypeOfTypedExpr expr)
 
@@ -239,11 +247,13 @@ opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 checkType = tcType $ error "provide proper TCConfig here"
 
 -- | Parse the FnType returned by the parser into symbolic dag types.
-parseFnType :: AST.FnType -> OpSession ([DagType], DagType)
+parseFnType :: AST.FnType -> Executor ([DagType], DagType)
 parseFnType (AST.FnType args res) = do
-  parsedArgs <- V.mapM checkType (V.fromList args)
-  parsedRes <- checkType res
-  return (V.toList parsedArgs, parsedRes)
+  config <- globalParserConfig
+  lift $ do
+    parsedArgs <- mapM (tcType config) args
+    parsedRes <- tcType config res
+    return (parsedArgs, parsedRes)
 
 -- TypedExpr {{{1
 
@@ -544,12 +554,22 @@ throwIncompatibleExprType pos lhsExpr refType specTypeName =
 typecheckMethodExpr :: AST.Expr -> MethodSpecTranslator TypedExpr
 typecheckMethodExpr astExpr = do
   locals <- gets currentLetBindingMap
+  cl <- gets specClass
+  m <- gets specMethod
+  rtm <- gets refTypeMap
+  cem <- gets refTypeMap
   lift $ do
     globalCnsBindings <- gets globalLetBindings
     opBindings <- gets sawOpMap
+    cb <- JSS.getCodebase
+    let exprTypeFn :: SpecJavaExpr -> Maybe DagType
+        exprTypeFn e = Just undefined -- TODO
     let tcc = TCC { localBindings = Map.map snd locals
                   , globalCnsBindings
-                  , opBindings }
+                  , opBindings
+                  , codeBase = cb
+                  , methodInfo = Just (m, cl)
+                  , toJavaExprType = exprTypeFn }
     lift $ tcExpr tcc astExpr
 
 -- Check that the Java spec reference has a type compatible with typedExpr.
@@ -952,7 +972,7 @@ verifyMethodSpec MSIR { verificationMethod = AST.Skip } = return ()
 verifyMethodSpec ir = do
   cb <- gets codebase
   let refEquivClasses = JSS.partitions (specReferences ir)
-  lift $ forM_ ([1..] `zip` refEquivClasses) $ \(i,(cnt, classRefMap, classTypeMap)) -> do
+  lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(i,(cnt, classRefMap, classTypeMap)) -> do
     runSymSession $ do
             {-
       whenVerbosity (>= 3) $ do
@@ -1014,7 +1034,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
   recordFn <- lift $ getRecordDefMap
   -- Check that op type matches expected type.
   execDebugLog $ "Checking expected type matches inferred type for " ++ nm
-  fnType <- lift $ parseFnType astFnType
+  fnType <- parseFnType astFnType
   unless (fnType == SBV.inferFunctionType recordFn sbvExprType) $ 
     let msg = (ftext "The type of the function in the imported SBV file"
                  $$ relativePath
