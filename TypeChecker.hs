@@ -195,6 +195,12 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
 
 -- | Convert an AST expression from parser into a typed expression.
 tcE :: AST.Expr -> SawTI TypedExpr
+tcE (AST.ConstantInt pos _)
+  = typeErrWithR pos (ftext ("The use of constant literal requires a type-annotation"))
+                     "Please provide the bit-size of the constant with a type-annotation"
+tcE (AST.ApplyExpr appPos nm _)
+  | nm `elem` ["split", "trunc", "signedExt"]
+  = typeErrWithR appPos (ftext ("Use of operator '" ++ nm ++ "' requires a type-annotation.")) "Please provide an annotation for the surrounding expression."
 tcE (AST.Var pos name) = do
   locals  <- gets localBindings
   globals <- gets globalCnsBindings
@@ -205,9 +211,6 @@ tcE (AST.Var pos name) = do
         Just (c,tp) -> return $ TypedCns c tp
         Nothing -> typeErr pos $ ftext $ "Unknown variable \'" ++ name ++ "\'."
 tcE (AST.ConstantBool _ b) = return $ TypedCns (mkCBool b) SymBool
-tcE (AST.ConstantInt pos _)
-  = typeErrWithR pos (ftext ("The use of constant literal requires a type-annotation"))
-                     "Please provide the bit-size of the constant with a type-annotation"
 tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
   tp <- tcT astTp
   let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
@@ -218,17 +221,8 @@ tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
     SymShapeVar _ -> nonGround
     _             -> typeErr pos $   text "Incompatible type" <+> text (ppType tp)
                                  <+> ftext "assigned to integer literal."
-tcE (AST.ApplyExpr appPos "join" astArgs) = do
-  args <- mapM tcE astArgs
-  checkArgCount appPos "join" args 1
-  let argType = getTypeOfTypedExpr (head args)
-  case argType of
-    SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)) -> do
-         op <- liftTI $ joinOpDef l w
-         return $ TypedApply (groundOp op) args
-    _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'join\'."
-                                ++ " SAWScript currently requires that the argument is ground"
-                                ++ " array of integers. "
+-- TBD: MkArray
+-- TBD: MkRecord
 tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
   args <- mapM tcE astArgs
   checkArgCount appPos "split" args 1
@@ -243,9 +237,26 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
     _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'split\'."
                                 ++ " SAWScript currently requires that the argument is ground type, "
                                 ++ " and an explicit result type is given."
-tcE (AST.ApplyExpr appPos nm _)
-  | nm `elem` ["split", "trunc", "signedExt"]
-  = typeErrWithR appPos (ftext ("Use of operator '" ++ nm ++ "' requires a type-annotation.")) "Please provide an annotation for the surrounding expression."
+tcE (AST.TypeExpr p e astResType) = do
+   te <- tcE e
+   let tet = getTypeOfTypedExpr te
+   resType <- tcT astResType
+   if tet /= resType
+      then mismatch p "type-annotation" tet resType
+      else return te
+-- TBD: DerefField
+tcE (AST.JavaValue _ jref) = tcJRef jref
+tcE (AST.ApplyExpr appPos "join" astArgs) = do
+  args <- mapM tcE astArgs
+  checkArgCount appPos "join" args 1
+  let argType = getTypeOfTypedExpr (head args)
+  case argType of
+    SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)) -> do
+         op <- liftTI $ joinOpDef l w
+         return $ TypedApply (groundOp op) args
+    _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'join\'."
+                                ++ " SAWScript currently requires that the argument is ground"
+                                ++ " array of integers. "
 tcE (AST.ApplyExpr appPos nm astArgs) = do
   opBindings <- gets opBindings
   case Map.lookup nm opBindings of
@@ -259,19 +270,39 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       case matchSubst (defTypes `zip` argTypes) of
         Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
         Just sub -> return $ TypedApply (mkOp opDef sub) args
-tcE (AST.TypeExpr p e astResType) = do
-   te <- tcE e
-   let tet = getTypeOfTypedExpr te
-   resType <- tcT astResType
-   if tet /= resType
-      then mismatch p "type-annotation" (text (show astResType)) (text (show tet))
-      else return te
-tcE (AST.JavaValue _ jref) = tcJRef jref
--- TODO: Add more typechecking equations for parsing expressions.
+-- TBD: NotExpr
+-- TBD: BitComplExpr
+-- TBD: NegExpr
+-- TBD: MulExpr
+-- TBD: SDivExpr
+-- TBD: SRemExpr
+-- TBD: PlusExpr
+-- TBD: SubExpr
+-- TBD: ShlExpr
+-- TBD: SShrExpr
+-- TBD: UShrExpr
+-- TBD: BitAndExpr
+-- TBD: BitXorExpr
+-- TBD: BitOrExpr
+-- TBD: AppendExpr
+-- TBD: EqExpr
+-- TBD: IneqExpr
+-- TBD: SGeqExpr
+-- TBD: UGeqExpr
+-- TBD: SGtExpr
+-- TBD: UGtExpr
+-- TBD: SLeqExpr
+-- TBD: ULeqExpr
+-- TBD: SLtExpr
+-- TBD: ULtExpr
+tcE (AST.AndExpr p l r) = lift2Bool p "&&" (groundOp bAndOpDef) l r
+tcE (AST.OrExpr  p l r) = lift2Bool p "||" (groundOp bOrOpDef)  l r
+-- TBD: IteExpr
 tcE e =
   error $ "internal: tcE: TBD: " ++ show e
 
 tcJRef :: AST.JavaRef -> SawTI TypedExpr
+-- TBD: This
 tcJRef (AST.Arg p i) = do
    mbMethodInfo <- gets methodInfo
    case mbMethodInfo of
@@ -284,6 +315,17 @@ tcJRef (AST.Arg p i) = do
        case toJavaT p te of
          Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
          Just t' -> return $ TypedJavaValue te t'
--- TODO: Add the rest
+-- TODO: InstanceField
 tcJRef r =
   error $ "internal: tcJRef: TBD: " ++ show r
+
+lift2Bool :: Pos -> String -> Op -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2Bool p nm o l r = do
+  l' <- tcE l
+  r' <- tcE r
+  let lt = getTypeOfTypedExpr l'
+      rt = getTypeOfTypedExpr r'
+  case (lt, rt) of
+    (SymBool, SymBool) -> return $ TypedApply o [l', r']
+    (SymBool, _      ) -> mismatch p ("Second argument to operator '" ++ show nm ++ "'") rt SymBool
+    (_,       _      ) -> mismatch p ("First argument to operator '" ++ show nm ++ "'")  lt SymBool
