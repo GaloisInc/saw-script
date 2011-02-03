@@ -195,6 +195,9 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
 
 -- | Convert an AST expression from parser into a typed expression.
 tcE :: AST.Expr -> SawTI TypedExpr
+tcE (AST.ConstantInt pos _)
+  = typeErrWithR pos (ftext ("The use of constant literal requires a type-annotation"))
+                     "Please provide the bit-size of the constant with a type-annotation"
 tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
   tp <- tcT astTp
   let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
