@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE ViewPatterns       #-}
+{-# LANGUAGE DeriveDataTypeable   #-}
+{-# LANGUAGE NamedFieldPuns       #-}
+{-# LANGUAGE ViewPatterns         #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 module SAWScript.TypeChecker
   ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
@@ -20,6 +21,7 @@ import Text.PrettyPrint.HughesPJ
 
 import qualified JavaParser as JSS
 import qualified Execution.Codebase as JSS
+import Execution(HasCodebase(..))
 import qualified SAWScript.MethodAST as AST
 import SAWScript.TIMonad
 import SAWScript.Utils
@@ -122,6 +124,10 @@ data TCConfig = TCC {
        }
 
 type SawTI = TI OpSession TCConfig
+
+instance HasCodebase SawTI where
+  getCodebase    = gets codeBase
+  putCodebase cb = modify $ \s -> s{ codeBase = cb }
 
 -- | Check argument count matches expected length
 checkArgCount :: Pos -> String -> [TypedExpr] -> Int -> SawTI ()

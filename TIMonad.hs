@@ -33,6 +33,9 @@ instance MonadIO m => MonadIO (TI m s) where
 gets :: Monad m => (s -> a) -> TI m s a
 gets f = TI (\s -> return (Right (s, f s, [])))
 
+modify :: Monad m => (s -> s) -> TI m s ()
+modify f = TI (\s -> return (Right (s, (), [])))
+
 liftTI :: Monad m => m a -> TI m s a
 liftTI m = TI (\s -> m >>= \a -> return $ Right (s, a, []))
 
