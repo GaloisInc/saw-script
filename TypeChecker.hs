@@ -197,8 +197,13 @@ tcE (AST.TypeExpr p e astResType) = do
    case matchSubst [(tet, resType)] of
      Nothing -> mismatch p "type-annotation" (text (show astResType)) (text (show tet))
      Just s  -> return $ applySubstToTypedExpr te s
-{-
-tcE (AST.ArgsExpr p i) = do
+tcE (AST.JavaValue _ jref) = tcJRef jref
+-- TODO: Add more typechecking equations for parsing expressions.
+tcE e =
+  error $ "internal: tcE: TBD: " ++ show e
+
+tcJRef :: AST.JavaRef -> SawTI TypedExpr
+tcJRef (AST.Arg p i) = do
    mbMethodInfo <- gets methodInfo
    case mbMethodInfo of
      Nothing          -> typeErr p $ ftext $ "Use of 'args[" ++ show i ++ "]' is illegal outside of method specifications"
@@ -210,7 +215,6 @@ tcE (AST.ArgsExpr p i) = do
        case toJavaT te of
          Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
          Just t' -> return $ TypedJavaValue te t'
-         -}
--- TODO: Add more typechecking equations for parsing expressions.
-tcE e =
-  error $ "internal: tcE: TBD: " ++ show e
+-- TODO: Add the rest
+tcJRef r =
+  error $ "internal: tcJRef: TBD: " ++ show r

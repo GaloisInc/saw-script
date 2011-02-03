@@ -57,6 +57,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'if'           { TReserved _ "if"           }
    'then'         { TReserved _ "then"         }
    'else'         { TReserved _ "else"         }
+   'fromJava'     { TReserved _ "fromJava"     }
    var            { TVar      _ _              }
    str            { TLit      _ $$             }
    num            { TNum      _ _ _            }
@@ -169,8 +170,6 @@ Exprs : sepBy(Expr, ',') { $1 }
 -- Expressions
 Expr :: { Expr }
 Expr : var                               { Var          (tokPos $1) (tokStr $1)    }
---TODO: Add JavaValue
---     | 'this'                            { ThisExpr     (tokPos $1)                }
      | 'True'                            { ConstantBool (tokPos $1) True           }
      | 'False'                           { ConstantBool (tokPos $1) False          }
      | num                               { ConstantInt  (tokPos $1) (tokNum $1)    }
@@ -178,7 +177,6 @@ Expr : var                               { Var          (tokPos $1) (tokStr $1) 
      | Expr ':' ExprType                 { TypeExpr     (tokPos $2) $1 $3          }
      | Expr '.' var                      { DerefField   (tokPos $2) $1 (tokStr $3) }
      | var '(' Exprs ')'                 { ApplyExpr    (tokPos $1) (tokStr $1) $3 }
---     | 'args' '[' int ']'                { ArgsExpr     (tokPos $1) (snd $3)       }
      | '[' Exprs ']'                     { MkArray      (tokPos $1) $2             }
      | '~' Expr                          { BitComplExpr (tokPos $1) $2             }
      | 'not' Expr                        { NotExpr      (tokPos $1) $2             }
@@ -207,8 +205,9 @@ Expr : var                               { Var          (tokPos $1) (tokStr $1) 
      | Expr '<u'  Expr                   { ULtExpr      (tokPos $2) $1 $3          }
      | Expr '&&'  Expr                   { AndExpr      (tokPos $2) $1 $3          }
      | Expr '||'  Expr                   { OrExpr       (tokPos $2) $1 $3          }
+     | 'fromJava' '(' JavaRef ')'        { JavaValue    (tokPos $1) $3             }
      | '(' Expr ')'                      { $2                                      }
-     | 'if' Expr 'then' Expr 'else' Expr { IteExpr (tokPos $1) $2 $4 $6            }
+     | 'if' Expr 'then' Expr 'else' Expr { IteExpr      (tokPos $1) $2 $4 $6       }
 
 -- Records
 RecordFTypes :: { [(Pos, String, ExprType)] }
@@ -240,6 +239,7 @@ JavaRef :: { JavaRef }
 JavaRef : 'this'             { This          (tokPos $1)                }
         | 'args' '[' int ']' { Arg           (tokPos $1) (snd $3)       }
         | JavaRef '.' var    { InstanceField (tokPos $2) $1 (tokStr $3) }
+        | '(' JavaRef ')'    { $2                                       }
 
 JavaType :: { JavaType }
 JavaType : Qvar               { RefType    (fst $1)    (snd $1) }
