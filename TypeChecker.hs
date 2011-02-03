@@ -19,16 +19,17 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
 
 import qualified JavaParser as JSS
+import qualified Execution.Codebase as JSS
 import qualified SAWScript.MethodAST as AST
 import SAWScript.TIMonad
 import SAWScript.Utils
 import Symbolic
 
 tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
-tcExpr st e = runTI st (tcE e)
+tcExpr cfg e = runTI cfg (tcE e)
 
-tcType :: AST.ExprType -> OpSession DagType
-tcType t = runTI emptyTCConfig (tcT t)
+tcType :: TCConfig -> AST.ExprType -> OpSession DagType
+tcType cfg t = runTI cfg (tcT t)
 
 -- SpecJavaExpr {{{1
 
@@ -115,13 +116,9 @@ data TCConfig = TCC {
          localBindings     :: Map String TypedExpr
        , globalCnsBindings :: Map String (CValue,DagType)
        , opBindings        :: Map String OpDef
-       }
-
-emptyTCConfig :: TCConfig
-emptyTCConfig =  TCC {
-         localBindings     = Map.empty
-       , globalCnsBindings = Map.empty
-       , opBindings        = Map.empty
+       , codeBase          :: JSS.Codebase
+       , methodInfo        :: Maybe (JSS.Method, JSS.Class)
+       , toJavaExprType    :: SpecJavaExpr -> Maybe DagType
        }
 
 type SawTI = TI OpSession TCConfig
@@ -200,9 +197,18 @@ tcE (AST.TypeExpr p e astResType) = do
    case matchSubst [(tet, resType)] of
      Nothing -> mismatch p "type-annotation" (text (show astResType)) (text (show tet))
      Just s  -> return $ applySubstToTypedExpr te s
--- TODO: Fix this!
-tcE (AST.ArgsExpr _ i) =
-   return $ error $ "Don't know how to type-check args[" ++ show i ++ "]"
+tcE (AST.ArgsExpr p i) = do
+   mbMethodInfo <- gets methodInfo
+   case mbMethodInfo of
+     Nothing          -> typeErr p $ ftext $ "Use of 'args[" ++ show i ++ "]' is illegal outside of method specifications"
+     Just (method, _) -> do
+       let params = JSS.methodParameterTypes method
+       unless (0 <= i && i < length params) $ typeErr p $ ftext $ "'args[" ++ show i ++ "]' refers to an illegal argument index"
+       toJavaT <- gets toJavaExprType
+       let te = SpecArg i (params !! i)
+       case toJavaT te of
+         Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
+         Just t' -> return $ TypedJavaValue te t'
 -- TODO: Add more typechecking equations for parsing expressions.
 tcE e =
   error $ "internal: tcE: TBD: " ++ show e

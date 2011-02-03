@@ -28,7 +28,7 @@ posRelativeToCurrentDirectory (PosInternal s) = return $ PosInternal s
 
 posRelativeTo :: FilePath -> Pos -> Pos
 posRelativeTo d (Pos f l c)     = Pos (makeRelative d f) l c
-posRelativeTo d (PosInternal s) = PosInternal s
+posRelativeTo _ (PosInternal s) = PosInternal s
 
 routePathThroughPos :: Pos -> FilePath -> FilePath
 routePathThroughPos (Pos f _ _) fp
