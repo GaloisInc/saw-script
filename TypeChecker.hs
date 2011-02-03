@@ -183,10 +183,13 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
     _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'split\'."
                                 ++ " SAWScript currently requires that the argument is ground type, "
                                 ++ " and an explicit result type is given."
+tcE (AST.ApplyExpr appPos nm _)
+  | nm `elem` ["split", "trunc", "signedExt"]
+  = typeErrWithR appPos (ftext ("Use of operator '" ++ nm ++ "' requires a type-annotation.")) "Please provide an annotation for the surrounding expression."
 tcE (AST.ApplyExpr appPos nm astArgs) = do
   opBindings <- gets opBindings
   case Map.lookup nm opBindings of
-    Nothing -> typeErrWithR appPos (ftext ("Unknown operator " ++ nm ++ ".")) "Please check that the operator is correct."
+    Nothing -> typeErrWithR appPos (ftext ("Unknown operator '" ++ nm ++ "'.")) "Please check that the operator is correct."
     Just opDef -> do
       args <- mapM tcE astArgs
       let defArgTypes = opDefArgTypes opDef
