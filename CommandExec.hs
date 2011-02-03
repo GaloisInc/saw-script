@@ -691,7 +691,9 @@ resolveDecl (AST.VerifyUsing pos method) = do
   modify $ \s -> s { chosenVerificationMethod = Just (pos,method) }
 
 data MethodSpecIR = MSIR {
-    initializedClasses :: [String]
+    methodSpecIRClass :: JSS.Class
+  , methodSpecIRMethod :: JSS.Method
+  , initializedClasses :: [String]
     -- | References in specification with alias information and reference info.
   , specReferences :: [([SpecJavaExpr], SpecJavaRefInitialValue)]
     -- | List of non-reference input variables that must be available.
@@ -796,7 +798,9 @@ resolveMethodSpecIR pos cl method cmds = do
     <- maybe throwUndefinedVerification (return . snd) $
          chosenVerificationMethod st'
   -- Return IR.
-  return MSIR { initializedClasses = map className superClasses
+  return MSIR { methodSpecIRClass = cl
+              , methodSpecIRMethod = method
+              , initializedClasses = map className superClasses
               , specReferences
               , specScalarInputs = Set.toList (nonRefTypes st')
               , specConstants
@@ -836,10 +840,12 @@ data SymbolicInputResult
 type EquivClassMap = (Int, Map Int [SpecJavaExpr], Map Int SpecJavaRefInitialValue)
 
 -- | Return list of class indices to initial values.
-equivClassMapEntries :: EquivClassMap -> [(Int,[SpecJavaExpr],SpecJavaRefInitialValue)]
-equivClassMapEntries (_,em,vm) =
-  map (\(i,v) -> (i,em Map.! i,v)) $ Map.toList vm
+equivClassMapEntries :: EquivClassMap -> V.Vector (Int,[SpecJavaExpr],SpecJavaRefInitialValue)
+equivClassMapEntries (_,em,vm) 
+  = V.map (\(i,v) -> (i,em Map.! i,v))
+  $ V.fromList $ Map.toList vm
 
+-- | Create symbolic inputs from method spec IR.
 createSpecSymbolicInputs :: MethodSpecIR
                          -> EquivClassMap
                          -> SymbolicMonad SymbolicInputResult
@@ -847,7 +853,7 @@ createSpecSymbolicInputs ir cm = do
   let initialState = SIR Map.empty Map.empty []
   fmap snd $ flip runStateT initialState $ do
     -- Create symbolic inputs from specReferences.
-    forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
+    V.forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
       litCount <- lift $ liftAigMonad $ getInputLitCount
       let -- create array input node with length and int width.
           createInputArrayNode l w = do
@@ -895,16 +901,13 @@ createSpecSymbolicInputs ir cm = do
           addScalarNode n inputEval
         _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
 
-runMethodVerification :: MethodSpecIR
-                      -> EquivClassMap
-                      -> SymbolicInputResult
-                      -> JSS.Simulator SymbolicMonad ()
-runMethodVerification ir cm inputs = do
-  -- Set initialization status.
-  forM_ (initializedClasses ir) $ \c -> do
-    JSS.setInitializationStatus c JSS.Initialized
+createSpecValueMap :: MethodSpecIR
+                   -> EquivClassMap
+                   -> SymbolicInputResult
+                   -> JSS.Simulator SymbolicMonad (Map SpecJavaExpr (JSS.Value Node))
+createSpecValueMap ir cm inputs = do
   -- Create references.
-  refs <- forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
+  classRefVec <- V.forM (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
     let Just arrayVal = Map.lookup idx (arrayClassNodeMap inputs)
     case initValue of
       RIVArrayConst javaTp c@(CArray v) _ -> do
@@ -918,11 +921,41 @@ runMethodVerification ir cm inputs = do
       RIVLongArray l ->
        JSS.newSymbolicArray (JSS.ArrayType JSS.LongType) (fromIntegral l) arrayVal
   -- TODO Construct map from Java expressions to reference.
+  undefined
+
+runMethodVerification :: MethodSpecIR
+                      -> EquivClassMap
+                      -> SymbolicInputResult
+                      -> JSS.Simulator SymbolicMonad ()
+runMethodVerification ir cm inputs = do
+  let clName = className (methodSpecIRClass ir)
+  -- Set initialization status.
+  forM_ (initializedClasses ir) $ \c -> do
+    JSS.setInitializationStatus c JSS.Initialized
+  -- Create map from specification entries to JSS simulator values.
+  specValueMap <- createSpecValueMap ir cm inputs
   -- Update initial instance field values.
-  let fieldJavaExprs :: [(Int,Field)]
-      fieldJavaExprs = error "TODO: internal"
-  forM_ fieldJavaExprs $ \javaExpr -> do
-    error "TODO: internal"
+  let fieldJavaExprs :: [(JSS.Ref, JSS.FieldId, JSS.Value Node)]
+      fieldJavaExprs = 
+        [ (r, fid, v)
+          | (SpecField expr f, v) <- Map.toList specValueMap 
+          , let Just (JSS.RValue r) = Map.lookup expr specValueMap
+          , let fid = FieldId clName (fieldName f) (fieldType f) ]
+  forM_ fieldJavaExprs $ \(r,f,v) -> do
+    JSS.setInstanceFieldValue r f v
+  -- Get old path state
+  oldPathState <- JSS.getPathState
+  -- Run method and get final path state
+  let method = methodSpecIRMethod ir
+  let params = 
+        [ v
+          | (i,tp) <- ([0..] `zip` methodParameterTypes method)
+          , let Just v = Map.lookup (SpecArg i tp) specValueMap]
+  let Just (JSS.RValue thisRef) = Map.lookup (SpecThis clName) specValueMap
+  if methodIsStatic method
+    then JSS.invokeStaticMethod clName (methodKey method) params
+    else JSS.invokeInstanceMethod clName (methodKey method) thisRef params
+  error "Finish runMethodVerification"
 
 -- | Attempt to verify method spec using verification method specified.
 verifyMethodSpec :: MethodSpecIR -> Executor ()
