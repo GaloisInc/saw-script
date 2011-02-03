@@ -281,6 +281,8 @@ tcE (AST.NotExpr p l) = lift1Bool p "not" (groundOp bNotOpDef) l
 -- TBD: ShlExpr
 -- TBD: SShrExpr
 -- TBD: UShrExpr
+tcE (AST.UShrExpr p l r) = lift2Word p ">>u" ush l r
+   where ush wx wy = mkOp ushrOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
 -- TBD: BitAndExpr
 -- TBD: BitXorExpr
 -- TBD: BitOrExpr
@@ -299,8 +301,7 @@ tcE (AST.AppendExpr p l r) = lift2Word p "#" app l r
 tcE (AST.AndExpr p l r) = lift2Bool p "&&" (groundOp bAndOpDef) l r
 tcE (AST.OrExpr  p l r) = lift2Bool p "||" (groundOp bOrOpDef)  l r
 -- TBD: IteExpr
-tcE e =
-  error $ "internal: tcE: TBD: " ++ show e
+tcE e = error $ "TBD: tcE " ++ show e
 
 tcJRef :: AST.JavaRef -> SawTI TypedExpr
 -- TBD: This
@@ -317,8 +318,7 @@ tcJRef (AST.Arg p i) = do
          Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
          Just t' -> return $ TypedJavaValue te t'
 -- TODO: InstanceField
-tcJRef r =
-  error $ "internal: tcJRef: TBD: " ++ show r
+tcJRef e = error $ "TBD: tcJRef " ++ show e
 
 lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
 lift1Bool p nm o l = do
