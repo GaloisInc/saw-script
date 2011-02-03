@@ -26,9 +26,9 @@ data JavaType
     = RefType Pos [String] -- ^ Class with given dots. 
     | IntArray Pos Int -- ^ Int array with given length
     | LongArray Pos Int -- ^ Long array with given length.   
-    | BoolScalar
-    | IntScalar
-    | LongScalar
+    | BoolScalar Pos
+    | IntScalar Pos
+    | LongScalar Pos
   deriving (Show)
 
 -- | Expressions types for AST.

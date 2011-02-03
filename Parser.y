@@ -32,6 +32,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'assume'       { TReserved _ "assume"       }
    'ensures'      { TReserved _ "ensures"      }
    'arbitrary'    { TReserved _ "arbitrary"    }
+   'returns'      { TReserved _ "returns"      }
    'const'        { TReserved _ "const"        }
    'verifyUsing'  { TReserved _ "verifyUsing"  }
    'enable'       { TReserved _ "enable"       }
@@ -49,6 +50,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'this'         { TReserved _ "this"         }
    'int'          { TReserved _ "int"          }
    'long'         { TReserved _ "long"         }
+   'boolean'      { TReserved _ "boolean"      }
    'True'         { TReserved _ "True"         }
    'False'        { TReserved _ "False"        }
    'forAll'       { TReserved _ "forAll"       }
@@ -226,6 +228,7 @@ MethodSpecDecl : 'type'        JavaRefs ':' JavaType  { Type        (tokPos $1) 
                | 'assume'      Expr                   { Assume      (tokPos $1) $2             }
                | 'ensures'     JavaRef ':=' Expr      { Ensures     (tokPos $1) $2 $4          }
                | 'arbitrary'   ':' JavaRefs           { Arbitrary   (tokPos $1) $3             }
+               | 'returns'     ':' Expr               { Returns     (tokPos $1) $3             }
                | 'verifyUsing' ':' VerificationMethod { VerifyUsing (tokPos $1) $3             }
 
 -- Comma separated Sequence of JavaRef's, at least one
@@ -238,9 +241,12 @@ JavaRef : 'this'             { This          (tokPos $1)                }
         | JavaRef '.' var    { InstanceField (tokPos $2) $1 (tokStr $3) }
 
 JavaType :: { JavaType }
-JavaType : Qvar               { RefType   (fst $1)    (snd $1) }
-         | 'int'  '[' int ']' { IntArray  (tokPos $1) (snd $3) }
-         | 'long' '[' int ']' { LongArray (tokPos $1) (snd $3) }
+JavaType : Qvar               { RefType    (fst $1)    (snd $1) }
+         | 'int'  '[' int ']' { IntArray   (tokPos $1) (snd $3) }
+         | 'long' '[' int ']' { LongArray  (tokPos $1) (snd $3) }
+         | 'int'              { IntScalar  (tokPos $1)          }
+         | 'boolean'          { BoolScalar (tokPos $1)          }
+         | 'long'             { LongScalar (tokPos $1)          }
 
 VerificationMethod :: { VerificationMethod }
 VerificationMethod : 'abc'      { ABC     }

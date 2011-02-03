@@ -235,11 +235,14 @@ idRecordsInIRType pos relativePath uninterpName tp =
 opDefType :: OpDef -> ([DagType], DagType)
 opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 
+-- TODO: provide proper TCConfig here
+checkType = tcType $ error "provide proper TCConfig here"
+
 -- | Parse the FnType returned by the parser into symbolic dag types.
 parseFnType :: AST.FnType -> OpSession ([DagType], DagType)
 parseFnType (AST.FnType args res) = do
-  parsedArgs <- V.mapM parseExprType (V.fromList args)
-  parsedRes <- parseExprType res
+  parsedArgs <- V.mapM checkType (V.fromList args)
+  parsedRes <- checkType res
   return (V.toList parsedArgs, parsedRes)
 
 -- TypedExpr {{{1
@@ -369,9 +372,9 @@ parseASTType (AST.IntArray pos l) =
   fmap SpecIntArray $ checkedGetArrayLength pos l
 parseASTType (AST.LongArray pos l) =
   fmap SpecLongArray $ checkedGetArrayLength pos l
-parseASTType AST.BoolScalar = return SpecBool
-parseASTType AST.IntScalar = return SpecBool
-parseASTType AST.LongScalar = return SpecBool
+parseASTType (AST.BoolScalar  _) = return SpecBool
+parseASTType (AST.IntScalar  _) = return SpecInt
+parseASTType (AST.LongScalar  _) = return SpecLong
 
 -- MethodSpecTranslator {{{1
 

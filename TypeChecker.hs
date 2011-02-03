@@ -4,11 +4,11 @@
 module SAWScript.TypeChecker
   ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
-  , parseExprType
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , TCConfig(..)
   , tcExpr
+  , tcType
   ) where
 
 import Control.Monad
@@ -19,10 +19,17 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
 
 import qualified JavaParser as JSS
+import qualified Execution.Codebase as JSS
 import qualified SAWScript.MethodAST as AST
+import SAWScript.TIMonad
 import SAWScript.Utils
 import Symbolic
-import Utils.IOStateT
+
+tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
+tcExpr cfg e = runTI cfg (tcE e)
+
+tcType :: TCConfig -> AST.ExprType -> OpSession DagType
+tcType cfg t = runTI cfg (tcT t)
 
 -- SpecJavaExpr {{{1
 
@@ -72,17 +79,16 @@ tcheckExprWidth (AST.WidthAdd   _ u v) = addWidth (tcheckExprWidth u) (tcheckExp
 
 -- | Convert expression type from AST into DagType.
 -- Uses Executor monad for parsing record types.
-parseExprType :: AST.ExprType -> OpSession DagType
-parseExprType (AST.BitType       _)   = return SymBool
-parseExprType (AST.BitvectorType _ w) = return $ SymInt (tcheckExprWidth w)
-parseExprType (AST.Array _ w tp)      = fmap (SymArray (tcheckExprWidth w)) $ parseExprType tp
-parseExprType (AST.Record _ fields)   = do
-       let names = [ nm | (_,nm,_) <- fields ]
-       def <- getStructuralRecord (Set.fromList names)
-       tps <- mapM parseExprType [ tp | (_,_,tp) <- fields ]
-       let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
-       return $ SymRec def sub
-parseExprType (AST.ShapeVar _ v)      = return (SymShapeVar v)
+tcT :: AST.ExprType -> SawTI DagType
+tcT (AST.BitType       _)   = return SymBool
+tcT (AST.BitvectorType _ w) = return $ SymInt (tcheckExprWidth w)
+tcT (AST.Array _ w tp)      = fmap (SymArray (tcheckExprWidth w)) $ tcT tp
+tcT (AST.Record _ fields)   = do let names = [ nm | (_,nm,_) <- fields ]
+                                 def <- liftTI $ getStructuralRecord (Set.fromList names)
+                                 tps <- mapM tcT [ tp | (_,_,tp) <- fields ]
+                                 let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` tps }
+                                 return $ SymRec def sub
+tcT (AST.ShapeVar _ v)      = return (SymShapeVar v)
 
 -- TypedExpr {{{1
 
@@ -110,100 +116,99 @@ data TCConfig = TCC {
          localBindings     :: Map String TypedExpr
        , globalCnsBindings :: Map String (CValue,DagType)
        , opBindings        :: Map String OpDef
+       , codeBase          :: JSS.Codebase
+       , methodInfo        :: Maybe (JSS.Method, JSS.Class)
+       , toJavaExprType    :: SpecJavaExpr -> Maybe DagType
        }
 
--- | Check argument count matches expected length.
-checkArgCount :: MonadIO m => Pos -> String -> [TypedExpr] -> Int -> m ()
+type SawTI = TI OpSession TCConfig
+
+-- | Check argument count matches expected length
+checkArgCount :: Pos -> String -> [TypedExpr] -> Int -> SawTI ()
 checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
   unless (expectedCnt == foundOpCnt) $
-    let msg = "Incorrect number of arguments to \'" ++ nm ++ "\'.  "
-                ++ show expectedCnt ++ " arguments were expected, but "
-                ++ show foundOpCnt ++ " arguments were found."
-     in throwIOExecException pos (ftext msg) ""
+    typeErr pos $ ftext $ "Incorrect number of arguments to \'" ++ nm ++ "\'.  "
+                        ++ show expectedCnt ++ " arguments were expected, but "
+                        ++ show foundOpCnt ++ " arguments were found."
 
 -- | Convert an AST expression from parser into a typed expression.
-tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
-tcExpr _st (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
-  tp <- parseExprType astTp
-  let throwNonGround =
-        let msg = text "The type" <+> text (ppType tp)
-                    <+> ftext "bound to literals must be a ground type."
-         in throwIOExecException pos msg ""
+tcE :: AST.Expr -> SawTI TypedExpr
+tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
+  tp <- tcT astTp
+  let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
+                              <+> ftext "bound to literals must be a ground type."
   case tp of
-    SymInt (widthConstant -> Just (Wx w)) ->
-      return $ TypedCns (mkCInt (Wx w) i) tp
-    SymInt _ -> throwNonGround
-    SymShapeVar _ -> throwNonGround
-    _ ->
-      let msg = text "Incompatible type" <+> text (ppType tp)
-                  <+> ftext "assigned to integer literal."
-       in throwIOExecException pos msg ""
-tcExpr TCC { localBindings, globalCnsBindings } (AST.Var pos name) = do
-  case Map.lookup name localBindings of
+    SymInt (widthConstant -> Just (Wx w)) -> return $ TypedCns (mkCInt (Wx w) i) tp
+    SymInt      _ -> nonGround
+    SymShapeVar _ -> nonGround
+    _             -> typeErr pos $   text "Incompatible type" <+> text (ppType tp)
+                                 <+> ftext "assigned to integer literal."
+tcE (AST.Var pos name) = do
+  locals  <- gets localBindings
+  globals <- gets globalCnsBindings
+  case name `Map.lookup` locals of
     Just res -> return res
     Nothing -> do
-      case Map.lookup name globalCnsBindings of
+      case name `Map.lookup` globals of
         Just (c,tp) -> return $ TypedCns c tp
-        Nothing -> 
-          let msg = "Unknown variable \'" ++ name ++ "\'."
-           in throwIOExecException pos (ftext msg) ""
-tcExpr st (AST.ApplyExpr appPos "join" astArgs) = do
-  args <- mapM (tcExpr st) astArgs
+        Nothing -> typeErr pos $ ftext $ "Unknown variable \'" ++ name ++ "\'."
+tcE (AST.ApplyExpr appPos "join" astArgs) = do
+  args <- mapM tcE astArgs
   checkArgCount appPos "join" args 1
   let argType = getTypeOfTypedExpr (head args)
   case argType of
     SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)) -> do
-      op <- joinOpDef l w
-      return $ TypedApply (groundOp op) args
-    _ -> let msg = "Illegal arguments and result type given to \'join\'.  "
-                   ++ "SAWScript currently requires that the argument is ground"
-                   ++ " array of integers. "
-          in throwIOExecException appPos (ftext msg) ""
-tcExpr st (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
-  args <- mapM (tcExpr st) astArgs
+         op <- liftTI $ joinOpDef l w
+         return $ TypedApply (groundOp op) args
+    _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'join\'."
+                                ++ " SAWScript currently requires that the argument is ground"
+                                ++ " array of integers. "
+tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
+  args <- mapM tcE astArgs
   checkArgCount appPos "split" args 1
-  resType <- parseExprType astResType
+  resType <- tcT astResType
   let argType = getTypeOfTypedExpr (head args)
   case (argType, resType) of
     (  SymInt (widthConstant -> Just wl)
      , SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)))
       | wl == l * w -> do
-        op <- splitOpDef l w
+        op <- liftTI $ splitOpDef l w
         return $ TypedApply (groundOp op) args
-    _ -> let msg = "Illegal arguments and result type given to \'split\'.  "
-                   ++ "SAWScript currently requires that the argument is ground type, "
-                   ++ "and an explicit result type is given."
-          in throwIOExecException appPos (ftext msg) ""
-tcExpr st (AST.ApplyExpr appPos nm astArgs) = do
-  case Map.lookup nm (opBindings st) of
-    Nothing ->
-      let msg = "Unknown operator " ++ nm ++ "."
-          res = "Please check that the operator is correct."
-       in throwIOExecException appPos (ftext msg) res
+    _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'split\'."
+                                ++ " SAWScript currently requires that the argument is ground type, "
+                                ++ " and an explicit result type is given."
+tcE (AST.ApplyExpr appPos nm astArgs) = do
+  opBindings <- gets opBindings
+  case Map.lookup nm opBindings of
+    Nothing -> typeErrWithR appPos (ftext ("Unknown operator " ++ nm ++ ".")) "Please check that the operator is correct."
     Just opDef -> do
-      args <- mapM (tcExpr st) astArgs
+      args <- mapM tcE astArgs
       let defArgTypes = opDefArgTypes opDef
       checkArgCount appPos nm args (V.length defArgTypes)
       let defTypes = V.toList defArgTypes
       let argTypes = map getTypeOfTypedExpr args
       case matchSubst (defTypes `zip` argTypes) of
-        Nothing -> 
-          let msg = "Illegal arguments and result type given to \'" ++ nm ++ "\'."
-           in throwIOExecException appPos (ftext msg) ""
+        Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
         Just sub -> return $ TypedApply (mkOp opDef sub) args
-tcExpr st (AST.TypeExpr p e astResType) = do
-   te <- tcExpr st e
+tcE (AST.TypeExpr p e astResType) = do
+   te <- tcE e
    let tet = getTypeOfTypedExpr te
-   resType <- parseExprType astResType
+   resType <- tcT astResType
    case matchSubst [(tet, resType)] of
-     Nothing -> let msg =    text "Type-annotation mismatch:"
-                          $$ text "Annotation: " <+> text (show astResType)
-                          $$ text "Inferred  : " <+> text (show tet)
-                in throwIOExecException p msg ""
+     Nothing -> mismatch p "type-annotation" (text (show astResType)) (text (show tet))
      Just s  -> return $ applySubstToTypedExpr te s
--- TODO: Fix this!
-tcExpr _st (AST.ArgsExpr _ i) =
-   return $ error $ "Don't know how to type-check args[" ++ show i ++ "]"
+tcE (AST.ArgsExpr p i) = do
+   mbMethodInfo <- gets methodInfo
+   case mbMethodInfo of
+     Nothing          -> typeErr p $ ftext $ "Use of 'args[" ++ show i ++ "]' is illegal outside of method specifications"
+     Just (method, _) -> do
+       let params = JSS.methodParameterTypes method
+       unless (0 <= i && i < length params) $ typeErr p $ ftext $ "'args[" ++ show i ++ "]' refers to an illegal argument index"
+       toJavaT <- gets toJavaExprType
+       let te = SpecArg i (params !! i)
+       case toJavaT te of
+         Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
+         Just t' -> return $ TypedJavaValue te t'
 -- TODO: Add more typechecking equations for parsing expressions.
-tcExpr _st e =
-  error $ "internal: tcExpr: TBD: " ++ show e
+tcE e =
+  error $ "internal: tcE: TBD: " ++ show e

@@ -13,6 +13,7 @@ import Utils.IOStateT
 data Pos = Pos !FilePath -- file
                !Int      -- line
                !Int      -- col
+         | PosInternal String
 
 endPos :: FilePath -> Pos
 endPos f = Pos f 0 0
@@ -22,20 +23,23 @@ fmtPos p m = show p ++ ":\n" ++ m'
   where m' = intercalate "\n" . map ("  " ++) . lines $ m
 
 posRelativeToCurrentDirectory :: Pos -> IO Pos
-posRelativeToCurrentDirectory (Pos f l c) = do f' <- makeRelativeToCurrentDirectory f
-                                               return $ Pos f' l c
+posRelativeToCurrentDirectory (Pos f l c)     = makeRelativeToCurrentDirectory f >>= \f' -> return (Pos f' l c)
+posRelativeToCurrentDirectory (PosInternal s) = return $ PosInternal s
 
 posRelativeTo :: FilePath -> Pos -> Pos
-posRelativeTo d (Pos f l c) = Pos (makeRelative d f) l c
+posRelativeTo d (Pos f l c)     = Pos (makeRelative d f) l c
+posRelativeTo _ (PosInternal s) = PosInternal s
 
 routePathThroughPos :: Pos -> FilePath -> FilePath
 routePathThroughPos (Pos f _ _) fp
   | isAbsolute fp = fp
   | True          = takeDirectory f </> fp
+routePathThroughPos (PosInternal _) fp = fp
 
 instance Show Pos where
-  show (Pos f 0 0) = show f ++ ":end-of-file"
-  show (Pos f l c) = show f ++ ":" ++ show l ++ ":" ++ show c
+  show (Pos f 0 0)     = show f ++ ":end-of-file"
+  show (Pos f l c)     = show f ++ ":" ++ show l ++ ":" ++ show c
+  show (PosInternal s) = "[internal:" ++ s ++ "]"
 
 data SSOpts = SSOpts {
          classpath  :: String
@@ -65,13 +69,10 @@ data ExecException = ExecException Pos -- ^ Position
                                    Doc -- ^ Error message
                                    String -- ^ Resolution tip
   deriving (Show, Typeable)
- 
+
 instance Exception ExecException
 
 -- | Throw exec exception in a MonadIO.
 throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
 throwIOExecException pos errorMsg resolution =
   liftIO $ throwIO (ExecException pos errorMsg resolution)
-
-
-

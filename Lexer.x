@@ -32,8 +32,8 @@ $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
 @reservedid  = import|extern|SBV|let|Bit|method|verifyUsing|abc|rewriter|skip|auto
-             |type|args|this|int|long|mayAlias|const|True|False|ensures|set|verification|on|off
-             |assume|arbitrary|enable|disable|rule|forAll|if|then|else
+             |type|args|this|int|long|boolean|mayAlias|const|True|False|ensures|set|verification|on|off
+             |assume|returns|arbitrary|enable|disable|rule|forAll|if|then|else
 @reservedop  = "~"  | "-" | "*" | "+" | "/s" | "%s" | ">>" | "<<" | ">>u" | "|" | "&" | "^"
              | "#"  | "==" | "!=" | ">=s" | ">=u" | ">s" | ">u" | "<=s" | "<=u" | "<s" | "<u"
              | "&&" | "||" | "not"
