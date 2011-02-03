@@ -77,26 +77,17 @@ parseFile path = do
     Nothing -> error $ "internal: Could not find file " ++ path
     Just cmds -> return cmds
 
-
-globalParserConfig :: Executor TCConfig
-globalParserConfig = do
+globalParserConfig :: Map String TypedExpr -> Executor TCConfig
+globalParserConfig localBindings = do
   globalCnsBindings <- gets globalLetBindings
   opBindings <- gets sawOpMap
   cb <- gets codebase
-  return TCC { localBindings = Map.empty 
+  return TCC { localBindings
              , globalCnsBindings
              , opBindings 
              , codeBase = cb
              , methodInfo = Nothing
              , toJavaExprType = \_ _ -> Nothing }
-
--- | Typecheck and evaluate expression at global level.
-evaluateGlobalExpr :: AST.Expr -> Executor (CValue,DagType)
-evaluateGlobalExpr astExpr = do
-  config <- globalParserConfig
-  expr <- lift $ tcExpr config astExpr
-  val <- globalEval expr
-  return (val, getTypeOfTypedExpr expr)
 
 -- verbosity {{{2
 
@@ -188,7 +179,7 @@ opDefType def = (V.toList (opDefArgTypes def), opDefResultType def)
 -- | Parse the FnType returned by the parser into symbolic dag types.
 parseFnType :: AST.FnType -> Executor ([DagType], DagType)
 parseFnType (AST.FnType args res) = do
-  config <- globalParserConfig
+  config <- globalParserConfig Map.empty
   lift $ do
     parsedArgs <- mapM (tcType config) args
     parsedRes <- tcType config res
@@ -610,7 +601,11 @@ resolveDecl (AST.Const pos astJavaExpr astValueExpr) = do
   checkRefIsNotConst pos javaExpr $
     "Multiple const declarations on the same Java expression are not allowed."
   -- Parse expression (must be global since this is a constant.
-  (val,tp) <- lift $ evaluateGlobalExpr astValueExpr
+  valueExpr <- lift $ do
+    config <- globalParserConfig Map.empty
+    lift $ tcExpr config astValueExpr
+  val <- lift $ globalEval valueExpr
+  let tp = getTypeOfTypedExpr valueExpr
   -- Check ref and expr have compatible types.
   checkSpecJavaExprCompat pos (show javaExpr) (getJSSTypeOfSpecRef javaExpr) tp
   -- Add ref to refTypeMap
@@ -691,7 +686,9 @@ resolveDecl (AST.VerifyUsing pos method) = do
   modify $ \s -> s { chosenVerificationMethod = Just (pos,method) }
 
 data MethodSpecIR = MSIR {
-    initializedClasses :: [String]
+    methodSpecIRClass :: JSS.Class
+  , methodSpecIRMethod :: JSS.Method
+  , initializedClasses :: [String]
     -- | References in specification with alias information and reference info.
   , specReferences :: [([SpecJavaExpr], SpecJavaRefInitialValue)]
     -- | List of non-reference input variables that must be available.
@@ -796,7 +793,9 @@ resolveMethodSpecIR pos cl method cmds = do
     <- maybe throwUndefinedVerification (return . snd) $
          chosenVerificationMethod st'
   -- Return IR.
-  return MSIR { initializedClasses = map className superClasses
+  return MSIR { methodSpecIRClass = cl
+              , methodSpecIRMethod = method
+              , initializedClasses = map className superClasses
               , specReferences
               , specScalarInputs = Set.toList (nonRefTypes st')
               , specConstants
@@ -836,10 +835,12 @@ data SymbolicInputResult
 type EquivClassMap = (Int, Map Int [SpecJavaExpr], Map Int SpecJavaRefInitialValue)
 
 -- | Return list of class indices to initial values.
-equivClassMapEntries :: EquivClassMap -> [(Int,[SpecJavaExpr],SpecJavaRefInitialValue)]
-equivClassMapEntries (_,em,vm) =
-  map (\(i,v) -> (i,em Map.! i,v)) $ Map.toList vm
+equivClassMapEntries :: EquivClassMap -> V.Vector (Int,[SpecJavaExpr],SpecJavaRefInitialValue)
+equivClassMapEntries (_,em,vm) 
+  = V.map (\(i,v) -> (i,em Map.! i,v))
+  $ V.fromList $ Map.toList vm
 
+-- | Create symbolic inputs from method spec IR.
 createSpecSymbolicInputs :: MethodSpecIR
                          -> EquivClassMap
                          -> SymbolicMonad SymbolicInputResult
@@ -847,7 +848,7 @@ createSpecSymbolicInputs ir cm = do
   let initialState = SIR Map.empty Map.empty []
   fmap snd $ flip runStateT initialState $ do
     -- Create symbolic inputs from specReferences.
-    forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
+    V.forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
       litCount <- lift $ liftAigMonad $ getInputLitCount
       let -- create array input node with length and int width.
           createInputArrayNode l w = do
@@ -895,16 +896,15 @@ createSpecSymbolicInputs ir cm = do
           addScalarNode n inputEval
         _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
 
-runMethodVerification :: MethodSpecIR
-                      -> EquivClassMap
-                      -> SymbolicInputResult
-                      -> JSS.Simulator SymbolicMonad ()
-runMethodVerification ir cm inputs = do
-  -- Set initialization status.
-  forM_ (initializedClasses ir) $ \c -> do
-    JSS.setInitializationStatus c JSS.Initialized
+type SpecJSSValueMap = Map SpecJavaExpr (JSS.Value Node)
+
+createSpecJSSValueMap :: MethodSpecIR
+                   -> EquivClassMap
+                   -> SymbolicInputResult
+                   -> JSS.Simulator SymbolicMonad SpecJSSValueMap
+createSpecJSSValueMap ir cm inputs = do
   -- Create references.
-  refs <- forM_ (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
+  classRefVec <- V.forM (equivClassMapEntries cm) $ \(idx, exprs, initValue) -> do
     let Just arrayVal = Map.lookup idx (arrayClassNodeMap inputs)
     case initValue of
       RIVArrayConst javaTp c@(CArray v) _ -> do
@@ -918,11 +918,43 @@ runMethodVerification ir cm inputs = do
       RIVLongArray l ->
        JSS.newSymbolicArray (JSS.ArrayType JSS.LongType) (fromIntegral l) arrayVal
   -- TODO Construct map from Java expressions to reference.
-  -- Update initial instance field values.
-  let fieldJavaExprs :: [(Int,Field)]
-      fieldJavaExprs = error "TODO: internal"
-  forM_ fieldJavaExprs $ \javaExpr -> do
-    error "TODO: internal"
+  undefined
+
+addInitializedClasses :: MethodSpecIR -> JSS.Simulator SymbolicMonad ()
+addInitializedClasses ir = do
+  forM_ (initializedClasses ir) $ \c -> do
+    JSS.setInitializationStatus c JSS.Initialized
+
+-- | Update initial instance field values.
+setInstanceFields :: MethodSpecIR 
+                  -> SpecJSSValueMap
+                  -> JSS.Simulator SymbolicMonad ()
+setInstanceFields ir specValueMap = do
+  let clName = className (methodSpecIRClass ir)
+  let fieldJavaExprs :: [(JSS.Ref, JSS.FieldId, JSS.Value Node)]
+      fieldJavaExprs = 
+        [ (r, fid, v)
+          | (SpecField expr f, v) <- Map.toList specValueMap 
+          , let Just (JSS.RValue r) = Map.lookup expr specValueMap
+          , let fid = FieldId clName (fieldName f) (fieldType f) ]
+  forM_ fieldJavaExprs $ \(r,f,v) -> do
+    JSS.setInstanceFieldValue r f v
+
+-- Run method and get final path state
+runMethod :: MethodSpecIR
+          -> SpecJSSValueMap
+          -> JSS.Simulator SymbolicMonad ()
+runMethod ir specValueMap = do
+  let clName = className (methodSpecIRClass ir)
+  let method = methodSpecIRMethod ir
+  let params = 
+        [ v
+          | (i,tp) <- ([0..] `zip` methodParameterTypes method)
+          , let Just v = Map.lookup (SpecArg i tp) specValueMap]
+  let Just (JSS.RValue thisRef) = Map.lookup (SpecThis clName) specValueMap
+  if methodIsStatic method
+    then JSS.invokeStaticMethod clName (methodKey method) params
+    else JSS.invokeInstanceMethod clName (methodKey method) thisRef params
 
 -- | Attempt to verify method spec using verification method specified.
 verifyMethodSpec :: MethodSpecIR -> Executor ()
@@ -930,18 +962,26 @@ verifyMethodSpec MSIR { verificationMethod = AST.Skip } = return ()
 verifyMethodSpec ir = do
   cb <- gets codebase
   let refEquivClasses = JSS.partitions (specReferences ir)
-  lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(i,equivMap) -> do
+  lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(i,cm) -> do
     runSymSession $ do
       -- Generate input vectors.
-      sir <- createSpecSymbolicInputs ir equivMap
+      sir <- createSpecSymbolicInputs ir cm
       -- Run simulator 
       (bFinalEq,counterFns) <- 
         JSS.runSimulator cb $ do
-          -- TODO: Create initial state.
+          -- Create map from specification entries to JSS simulator values.
+          specValueMap <- createSpecJSSValueMap ir cm sir
           -- TODO: Add method spec overrides.
-          undefined
-          -- TODO: Execute method
+          -- Initialize classes.
+          addInitializedClasses ir
+          setInstanceFields ir specValueMap
+          -- Get old path state
+          oldPathState <- JSS.getPathState
+          -- Execute method.
+          runMethod ir specValueMap
           -- TODO: Build final equation and functions for generating counterexamples.
+          newPathState <- JSS.getPathState
+          error "verifyMethodSpec"
       case verificationMethod ir of
         AST.ABC -> error "TODO: AST.SBV"
         AST.Rewrite -> error "TODO: AST.Rewrite"
@@ -961,7 +1001,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
   let sbvOpName = dropExtension (takeFileName absolutePath)
   -- Get current uninterpreted function map.
   curSbvOps <- gets sbvOpMap
-  -- Check if rule is undefined.
+  -- Check if rule for operator definition is undefined.
   checkNameIsUndefined pos nm
   -- Check SBV Op name is undefined.
   case Map.lookup sbvOpName curSbvOps of
@@ -1026,7 +1066,11 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
 execute (AST.GlobalLet pos name astExpr) = do
   execDebugLog $ "Start defining let " ++ name
   checkNameIsUndefined pos name
-  (val,tp)<- evaluateGlobalExpr astExpr
+  valueExpr <- do
+    config <- globalParserConfig Map.empty
+    lift $ tcExpr config astExpr
+  val <- globalEval valueExpr
+  let tp = getTypeOfTypedExpr valueExpr
   modify $ \s -> s { definedNames = Map.insert name pos (definedNames s)
                    , globalLetBindings = Map.insert name (val, tp) (globalLetBindings s) }
   execDebugLog $ "Finished defining let " ++ name
@@ -1048,8 +1092,28 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
   v <- gets runVerification
   when v $ verifyMethodSpec methodIR
   --TODO: Add methodIR to state for later verification.
-execute (AST.Rule _pos _name _params _lhs _rhs) = do
-  error "AST.Rule"
+execute (AST.Rule pos name params astLhsExpr astRhsExpr) = do
+  execDebugLog $ "Start defining rule " ++ name
+  checkNameIsUndefined pos name
+  globalConfig <- globalParserConfig Map.empty
+  -- | Get map from variable names to typed expressions.
+  nameTypeMap <- lift $ fmap snd $ flip runStateT Map.empty $ do
+    forM_ params $ \(pos, name, astType) -> do
+      m <- get
+      case Map.lookup name m of
+        Just _ ->
+          let msg = "Rule contains multiple declarations of the variable \'" 
+                     ++ name ++ "\'."
+           in throwIOExecException pos (ftext msg) ""
+        Nothing -> do
+          tp <- lift $ tcType globalConfig astType
+          modify $ Map.insert name (TypedVar name tp)
+  config <- globalParserConfig nameTypeMap
+  lhsExpr <- lift $ tcExpr config astLhsExpr
+  rhsExpr <- lift $ tcExpr config astRhsExpr
+  -- TODO: Parse lhsExpr and rhsExpr and add rule.
+  liftIO $ putStrLn "TODO: Support executing AST.Rule"
+  execDebugLog $ "Finished defining rule " ++ name
   {-
   -- Check rule does not exist.
   re <- ruleExists name
