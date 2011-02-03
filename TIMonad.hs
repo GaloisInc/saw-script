@@ -27,6 +27,9 @@ instance Monad m => Monad (TI m s) where
                                                         r                  -> return $ r)
   fail s = TI (\_ -> return (Left (PosInternal "type-checker", ftext s, "")))
 
+instance MonadIO m => MonadIO (TI m s) where
+  liftIO m = TI (\s -> liftIO m >>= \a -> return $ Right (s, a, []))
+
 gets :: Monad m => (s -> a) -> TI m s a
 gets f = TI (\s -> return (Right (s, f s, [])))
 
