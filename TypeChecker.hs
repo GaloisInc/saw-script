@@ -361,16 +361,13 @@ tcJRef p jr = do sje <- tcASTJavaExpr jr
                          res = "Please add a type declaration to Java values before "
                                 ++ "referring to them in SAWScript expressions."
                       in typeErrWithR p (ftext msg) res
-                   JEDTClass cl ->
+                   JEDTClass _ ->
                      let msg = "The Java value " ++ show sje ++ " denotes a Java reference,"
                                ++ " and cannot be directly used in a SAWScript expression."
                          res = "Please alter the expression, perhaps by referring to "
                                ++ "an field in the reference."
                       in typeErrWithR p (ftext msg) res
                    JEDTType t -> return $ TypedJavaValue sje t
-  where msg (AST.This{})              = "'this'"
-        msg (AST.Arg _ i)             = "'args[" ++ show i ++ "]"
-        msg (AST.InstanceField _ _ f) = "field selection for " ++ show f
 
 lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
 lift1Bool p nm o l = do
