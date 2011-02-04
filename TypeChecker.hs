@@ -291,9 +291,12 @@ tcE (AST.SShrExpr p l r) = lift2Word p ">>s" mk l r
    where mk wx wy = mkOp shrOpDef  (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
 tcE (AST.UShrExpr p l r) = lift2Word p ">>u" mk l r
    where mk wx wy = mkOp ushrOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
--- TBD: BitAndExpr
--- TBD: BitXorExpr
--- TBD: BitOrExpr
+tcE (AST.BitAndExpr p l r) = lift2WordEq p "&" mk l r
+   where mk wx _ = mkOp iAndOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.BitOrExpr p l r) = lift2WordEq p "|" mk l r
+   where mk wx _ = mkOp iOrOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.BitXorExpr p l r) = lift2WordEq p "^" mk l r
+   where mk wx _ = mkOp iXorOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.AppendExpr p l r) = lift2Word p "#" app l r
    where app wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
 -- TBD: EqExpr
