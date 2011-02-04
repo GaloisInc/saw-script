@@ -301,7 +301,7 @@ tcE (AST.AppendExpr p l r) = lift2Word p "#" mk l r
    where mk wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
 tcE (AST.EqExpr p l r) = lift2WordCmp p "==" mk l r
    where mk wx = mkOp eqOpDef (emptySubst { shapeSubst = Map.fromList [("x", wx)] })
--- TBD: EqExpr
+tcE (AST.IneqExpr p l r) = tcE (AST.NotExpr p (AST.EqExpr p l r))
 -- TBD: IneqExpr
 -- TBD: SGeqExpr
 -- TBD: UGeqExpr
