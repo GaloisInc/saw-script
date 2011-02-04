@@ -297,8 +297,10 @@ tcE (AST.BitOrExpr p l r) = lift2WordEq p "|" mk l r
    where mk wx _ = mkOp iOrOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.BitXorExpr p l r) = lift2WordEq p "^" mk l r
    where mk wx _ = mkOp iXorOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.AppendExpr p l r) = lift2Word p "#" app l r
-   where app wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
+tcE (AST.AppendExpr p l r) = lift2Word p "#" mk l r
+   where mk wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
+tcE (AST.EqExpr p l r) = lift2WordCmp p "==" mk l r
+   where mk wx = mkOp eqOpDef (emptySubst { shapeSubst = Map.fromList [("x", wx)] })
 -- TBD: EqExpr
 -- TBD: IneqExpr
 -- TBD: SGeqExpr
@@ -378,3 +380,13 @@ lift2WordGen checkEq p nm opMaker l r = do
                               else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
+
+lift2WordCmp :: Pos -> String -> (DagType -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordCmp p nm opMaker l r = do
+  l' <- tcE l
+  r' <- tcE r
+  let lt = getTypeOfTypedExpr l'
+      rt = getTypeOfTypedExpr r'
+  if lt == rt
+     then return $ TypedApply (opMaker lt) [l', r']
+     else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
