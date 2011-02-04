@@ -2,6 +2,7 @@
 {-# LANGUAGE NamedFieldPuns       #-}
 {-# LANGUAGE ViewPatterns         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE PatternGuards        #-}
 module SAWScript.TypeChecker
   ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
@@ -158,10 +159,6 @@ getMethodInfo = do
     Nothing -> error $ "internal: getMethodInfo called when parsing outside a method declaration"
     Just p -> return p
 
--- | Typecheck an AST Java expression to get specification Java expression.
--- This code will check that the result is a reference if the first Bool is
--- true.
--- Flag indicates if a reference is required.
 tcASTJavaExpr :: AST.JavaRef -> SawTI SpecJavaExpr
 tcASTJavaExpr (AST.This pos) = do
   (method, cl) <- getMethodInfo
@@ -195,12 +192,11 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
 
 -- | Convert an AST expression from parser into a typed expression.
 tcE :: AST.Expr -> SawTI TypedExpr
-tcE (AST.ConstantInt pos _)
-  = typeErrWithR pos (ftext ("The use of constant literal requires a type-annotation"))
-                     "Please provide the bit-size of the constant with a type-annotation"
-tcE (AST.ApplyExpr appPos nm _)
+tcE (AST.ConstantInt p _)
+  = typeErrWithR p (ftext ("The use of constant literal requires a type-annotation")) "Please provide the bit-size of the constant with a type-annotation"
+tcE (AST.ApplyExpr p nm _)
   | nm `elem` ["split", "trunc", "signedExt"]
-  = typeErrWithR appPos (ftext ("Use of operator '" ++ nm ++ "' requires a type-annotation.")) "Please provide an annotation for the surrounding expression."
+  = typeErrWithR p (ftext ("Use of operator '" ++ nm ++ "' requires a type-annotation.")) "Please provide an annotation for the surrounding expression."
 tcE (AST.Var pos name) = do
   locals  <- gets localBindings
   globals <- gets globalCnsBindings
@@ -211,6 +207,20 @@ tcE (AST.Var pos name) = do
         Just (c,tp) -> return $ TypedCns c tp
         Nothing -> typeErr pos $ ftext $ "Unknown variable \'" ++ name ++ "\'."
 tcE (AST.ConstantBool _ b) = return $ TypedCns (mkCBool b) SymBool
+tcE (AST.MkArray p [])
+  = typeErrWithR p (ftext ("Use of empty array-comprehensions requires a type-annotation")) "Please provide the type of the empty-array value"
+tcE (AST.MkArray p (es@(_:_))) = do
+        es' <- mapM tcE es
+        let go []                 = error "internal: impossible happened in tcE-non-empty-mkArray"
+            go [(_, x)]           = return x
+            go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("Array elements " ++ show i ++ " and " ++ show j) x y
+        t   <- go $ zip [(1::Int)..] $ map getTypeOfTypedExpr es'
+        let -- TODO: should toCValue be supporting none constant values as well?
+            toCValue :: TypedExpr -> SawTI CValue
+            toCValue (TypedCns c _) = return c
+            toCValue _              = typeErr p (ftext "SAWScript only supports array-comprehensions with constant elements currently")
+        vs' <- mapM toCValue es'
+        return $ TypedCns (CArray (V.fromList vs')) (SymArray (constantWidth (Wx (length es))) t)
 tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
   tp <- tcT astTp
   let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
@@ -221,8 +231,6 @@ tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
     SymShapeVar _ -> nonGround
     _             -> typeErr pos $   text "Incompatible type" <+> text (ppType tp)
                                  <+> ftext "assigned to integer literal."
--- TBD: MkArray
--- TBD: MkRecord
 tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
   args <- mapM tcE astArgs
   checkArgCount appPos "split" args 1
@@ -237,6 +245,11 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
     _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'split\'."
                                 ++ " SAWScript currently requires that the argument is ground type, "
                                 ++ " and an explicit result type is given."
+tcE (AST.TypeExpr p (AST.MkArray _ []) astResType) = do
+   resType <- tcT astResType
+   case resType of
+     SymArray we _ | Just (Wx 0) <- widthConstant we -> return $ TypedCns (CArray (V.fromList [])) resType
+     _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
 tcE (AST.TypeExpr p e astResType) = do
    te <- tcE e
    let tet = getTypeOfTypedExpr te
@@ -244,7 +257,6 @@ tcE (AST.TypeExpr p e astResType) = do
    if tet /= resType
       then mismatch p "type-annotation" tet resType
       else return te
--- TBD: DerefField
 tcE (AST.JavaValue _ jref) = tcJRef jref
 tcE (AST.ApplyExpr appPos "join" astArgs) = do
   args <- mapM tcE astArgs
@@ -270,58 +282,45 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       case matchSubst (defTypes `zip` argTypes) of
         Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
         Just sub -> return $ TypedApply (mkOp opDef sub) args
-tcE (AST.NotExpr p l)   = lift1Bool p "not" (groundOp bNotOpDef) l
-tcE (AST.BitComplExpr p l)   = lift1Word p "~" mk l
-   where mk wx = mkOp iNotOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.NegExpr p l)   = lift1Word p "-" mk l
-   where mk wx = mkOp negOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.MulExpr p l r) = lift2WordEq p "*" mk l r
-   where mk wx _  = mkOp mulOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.SDivExpr p l r) = lift2WordEq p "/s" mk l r
-   where mk wx _  = mkOp signedDivOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.SRemExpr p l r) = lift2WordEq p "%s" mk l r
-   where mk wx _  = mkOp signedRemOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.PlusExpr p l r) = lift2WordEq p "+" mk l r
-   where mk wx _  = mkOp addOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.SubExpr p l r) = lift2WordEq p "-" mk l r
-   where mk wx _  = mkOp subOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.ShlExpr p l r) = lift2Word p "<<" mk l r
-   where mk wx wy  = mkOp shlOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
-tcE (AST.SShrExpr p l r) = lift2Word p ">>s" mk l r
-   where mk wx wy = mkOp shrOpDef  (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
-tcE (AST.UShrExpr p l r) = lift2Word p ">>u" mk l r
-   where mk wx wy = mkOp ushrOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
-tcE (AST.BitAndExpr p l r) = lift2WordEq p "&" mk l r
-   where mk wx _ = mkOp iAndOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.BitOrExpr p l r) = lift2WordEq p "|" mk l r
-   where mk wx _ = mkOp iOrOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.BitXorExpr p l r) = lift2WordEq p "^" mk l r
-   where mk wx _ = mkOp iXorOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.AppendExpr p l r) = lift2Word p "#" mk l r
-   where mk wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
-tcE (AST.EqExpr p l r) = lift2ShapeCmp p "==" mk l r
-   where mk wx = mkOp eqOpDef (emptySubst { shapeSubst = Map.fromList [("x", wx)] })
-tcE (AST.IneqExpr p l r) = tcE (AST.NotExpr p (AST.EqExpr p l r))       -- l != r --> not (l == r)
-tcE (AST.SGeqExpr p l r) = tcE (AST.SLeqExpr p r l)                     -- l >=s r -->  r <=s l
-tcE (AST.SGtExpr p l r)  = tcE (AST.SLtExpr p r l)                      -- l >s r  -->  r <s l
-tcE (AST.SLeqExpr p l r) = lift2WordCmp p "<=s" mk l r
-   where mk wx = mkOp signedLeqOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.SLtExpr p l r)  = lift2WordCmp p "<s" mk l r
-   where mk wx = mkOp signedLtOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.UGeqExpr p l r) = tcE (AST.ULeqExpr p r l)                     -- l >=u r -->  r <=u l
-tcE (AST.UGtExpr p l r)  = tcE (AST.ULtExpr p r l)                      -- l >u r  -->  r <u l
-tcE (AST.ULeqExpr p l r) = lift2WordCmp p "<=u" mk l r
-   where mk wx = mkOp unsignedLeqOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.ULtExpr p l r)  = lift2WordCmp p "<u" mk l r
-   where mk wx = mkOp unsignedLtOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.AndExpr p l r) = lift2Bool p "&&" (groundOp bAndOpDef) l r
-tcE (AST.OrExpr  p l r) = lift2Bool p "||" (groundOp bOrOpDef)  l r
--- TBD: IteExpr
--- TBD: Remove the catch all below and make sure GHC's pattern-match warning is gone
-tcE e = error $ "TBD: tcE " ++ show e
+tcE (AST.NotExpr      p l)   = lift1Bool     p "not" (groundOp bNotOpDef)        l
+tcE (AST.BitComplExpr p l)   = lift1Word     p "~"   (wordOpX  iNotOpDef)        l
+tcE (AST.NegExpr      p l)   = lift1Word     p "-"   (wordOpX  negOpDef)         l
+tcE (AST.MulExpr      p l r) = lift2WordEq   p "*"   (wordOpEX mulOpDef)         l r
+tcE (AST.SDivExpr     p l r) = lift2WordEq   p "/s"  (wordOpEX signedDivOpDef)   l r
+tcE (AST.SRemExpr     p l r) = lift2WordEq   p "%s"  (wordOpEX signedRemOpDef)   l r
+tcE (AST.PlusExpr     p l r) = lift2WordEq   p "+"   (wordOpEX addOpDef)         l r
+tcE (AST.SubExpr      p l r) = lift2WordEq   p "-"   (wordOpEX subOpDef)         l r
+tcE (AST.ShlExpr      p l r) = lift2Word     p "<<"  (shftOpVS shlOpDef)         l r
+tcE (AST.SShrExpr     p l r) = lift2Word     p ">>s" (shftOpVS shrOpDef)         l r
+tcE (AST.UShrExpr     p l r) = lift2Word     p ">>u" (shftOpVS ushrOpDef)        l r
+tcE (AST.BitAndExpr   p l r) = lift2WordEq   p "&"   (wordOpEX iAndOpDef)        l r
+tcE (AST.BitOrExpr    p l r) = lift2WordEq   p "|"   (wordOpEX iOrOpDef)         l r
+tcE (AST.BitXorExpr   p l r) = lift2WordEq   p "^"   (wordOpEX iXorOpDef)        l r
+tcE (AST.AppendExpr   p l r) = lift2Word     p "#"   (wordOpXY appendIntOpDef)   l r
+tcE (AST.EqExpr       p l r) = lift2ShapeCmp p "=="  (shapeOpX eqOpDef)          l r
+tcE (AST.IneqExpr     p l r) = lift2ShapeCmp p "!="  (shapeOpX eqOpDef)          l r >>= \e -> return $ TypedApply (groundOp bNotOpDef) [e]
+tcE (AST.SGeqExpr     p l r) = lift2WordCmp  p ">=s" (wordOpX  signedLeqOpDef)   l r >>= return . flipBinOpArgs
+tcE (AST.SLeqExpr     p l r) = lift2WordCmp  p "<=s" (wordOpX  signedLeqOpDef)   l r
+tcE (AST.SGtExpr      p l r) = lift2WordCmp  p ">s"  (wordOpX  signedLtOpDef)    l r >>= return . flipBinOpArgs
+tcE (AST.SLtExpr      p l r) = lift2WordCmp  p "<s"  (wordOpX  signedLtOpDef)    l r
+tcE (AST.UGeqExpr     p l r) = lift2WordCmp  p ">=u" (wordOpX  unsignedLeqOpDef) l r >>= return . flipBinOpArgs
+tcE (AST.ULeqExpr     p l r) = lift2WordCmp  p "<=u" (wordOpX  unsignedLeqOpDef) l r
+tcE (AST.UGtExpr      p l r) = lift2WordCmp  p ">u"  (wordOpX  unsignedLtOpDef)  l r >>= return . flipBinOpArgs
+tcE (AST.ULtExpr      p l r) = lift2WordCmp  p "<u"  (wordOpX  unsignedLtOpDef)  l r
+tcE (AST.AndExpr      p l r) = lift2Bool     p "&&"  (groundOp bAndOpDef)        l r
+tcE (AST.OrExpr       p l r) = lift2Bool     p "||"  (groundOp bOrOpDef)         l r
+tcE (AST.IteExpr      p t l r) = do
+        [t', l', r'] <- mapM tcE [t, l, r]
+        let [tt, lt, rt] = map getTypeOfTypedExpr [t', l', r']
+        if tt /= SymBool
+           then mismatch p "Test expression of if-then-else" tt SymBool
+           else if lt /= rt
+                then mismatch p "Branches of if-then-else expression" lt rt
+                else return $ TypedApply (shapeOpX iteOpDef lt) [t', l', r']
+tcE (AST.MkRecord p _)     = typeErr p (ftext "TODO: type-checking of record constructors is not supported yet")
+tcE (AST.DerefField p _ _) = typeErr p (ftext "TODO: type-checking of field references is not supported yet")
 
 tcJRef :: AST.JavaRef -> SawTI TypedExpr
--- TBD: This
 tcJRef (AST.Arg p i) = do
    mbMethodInfo <- gets methodInfo
    case mbMethodInfo of
@@ -334,9 +333,8 @@ tcJRef (AST.Arg p i) = do
        case toJavaT p te of
          Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
          Just t' -> return $ TypedJavaValue te t'
--- TBD: InstanceField
--- TBD: Remove the catch all below and make sure GHC's pattern-match warning is gone
-tcJRef e = error $ "TBD: tcJRef " ++ show e
+tcJRef (AST.This p) = typeErr p (ftext "TODO: type-checking of 'this' is not supported yet")
+tcJRef (AST.InstanceField p _ _) = typeErr p (ftext "TODO: type-checking of instance-field selections is not supported yet")
 
 lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
 lift1Bool p nm o l = do
@@ -406,3 +404,23 @@ lift2WordCmp p nm opMaker l r = do
                               else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
+
+-- substitution constructor helpers
+wordOpX :: OpDef -> WidthExpr -> Op
+wordOpX  opDef wx    = mkOp opDef (emptySubst { widthSubst = Map.fromList [("x", wx)           ] })
+
+wordOpEX :: OpDef -> WidthExpr -> WidthExpr -> Op
+wordOpEX opDef wx _  = mkOp opDef (emptySubst { widthSubst = Map.fromList [("x", wx)           ] })
+
+wordOpXY :: OpDef -> WidthExpr -> WidthExpr -> Op
+wordOpXY opDef wx wy = mkOp opDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
+
+shftOpVS :: OpDef -> WidthExpr -> WidthExpr -> Op
+shftOpVS opDef wv ws = mkOp opDef (emptySubst { widthSubst = Map.fromList [("v", wv), ("s", ws)] })
+
+shapeOpX :: OpDef -> DagType -> Op
+shapeOpX opDef wx = mkOp opDef (emptySubst { shapeSubst = Map.fromList [("x", wx)] })
+
+flipBinOpArgs :: TypedExpr -> TypedExpr
+flipBinOpArgs (TypedApply o [a, b]) = TypedApply o [b, a]
+flipBinOpArgs e                     = error $ "internal: flipBinOpArgs: received: " ++ show e
