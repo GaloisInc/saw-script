@@ -125,16 +125,22 @@ tcT (AST.ShapeVar _ v)      = return (SymShapeVar v)
 data TypedExpr
    = TypedApply Op [TypedExpr]
    | TypedCns CValue DagType
+   | TypedArray [TypedExpr] DagType
+   | TypedRecord [(String, TypedExpr)] DagType
+   | TypedDeref TypedExpr String DagType
    | TypedJavaValue SpecJavaExpr DagType
    | TypedVar String DagType
    deriving (Show)
 
 -- | Return type of a typed expression.
 getTypeOfTypedExpr :: TypedExpr -> DagType
-getTypeOfTypedExpr (TypedVar _ tp)       = tp
-getTypeOfTypedExpr (TypedCns _ tp)       = tp
-getTypeOfTypedExpr (TypedJavaValue _ tp) = tp
-getTypeOfTypedExpr (TypedApply op _)     = opResultType op
+getTypeOfTypedExpr (TypedVar         _ tp) = tp
+getTypeOfTypedExpr (TypedCns         _ tp) = tp
+getTypeOfTypedExpr (TypedArray       _ tp) = tp
+getTypeOfTypedExpr (TypedRecord      _ tp) = tp
+getTypeOfTypedExpr (TypedDeref     _ _ tp)   = tp
+getTypeOfTypedExpr (TypedJavaValue   _ tp) = tp
+getTypeOfTypedExpr (TypedApply       op _) = opResultType op
 
 data TCConfig = TCC {
          localBindings     :: Map String TypedExpr
@@ -214,12 +220,7 @@ tcE (AST.MkArray p (es@(_:_))) = do
             go [(_, x)]           = return x
             go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("Array elements " ++ show i ++ " and " ++ show j) x y
         t   <- go $ zip [(1::Int)..] $ map getTypeOfTypedExpr es'
-        let -- TODO: should toCValue be supporting none constant values as well?
-            toCValue :: TypedExpr -> SawTI CValue
-            toCValue (TypedCns c _) = return c
-            toCValue _              = typeErr p (ftext "SAWScript only supports array-comprehensions with constant elements currently")
-        vs' <- mapM toCValue es'
-        return $ TypedCns (CArray (V.fromList vs')) (SymArray (constantWidth (Wx (length es))) t)
+        return $ TypedArray es' (SymArray (constantWidth (Wx (length es))) t)
 tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
   tp <- tcT astTp
   let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
@@ -247,7 +248,7 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
 tcE (AST.TypeExpr p (AST.MkArray _ []) astResType) = do
    resType <- tcT astResType
    case resType of
-     SymArray we _ | Just (Wx 0) <- widthConstant we -> return $ TypedCns (CArray (V.fromList [])) resType
+     SymArray we _ | Just (Wx 0) <- widthConstant we -> return $ TypedArray [] resType
      _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
 tcE (AST.TypeExpr p e astResType) = do
    te <- tcE e
@@ -316,14 +317,25 @@ tcE (AST.IteExpr      p t l r) = do
            else if lt /= rt
                 then mismatch p "Branches of if-then-else expression" lt rt
                 else return $ TypedApply (shapeOpX iteOpDef lt) [t', l', r']
-tcE (AST.MkRecord p _)     = typeErr p (ftext "TODO: type-checking of record constructors is not supported yet")
-tcE (AST.DerefField p _ _) = typeErr p (ftext "TODO: type-checking of field references is not supported yet")
+tcE (AST.MkRecord _ flds) = do
+   let tcFld (_, f, fe) = tcE fe >>= \tfe -> return (f, tfe)
+   flds' <- mapM tcFld flds
+   return $ TypedRecord flds' (error "TODO: construction of record-DAG type")
+tcE (AST.DerefField p e f) = do
+   e' <- tcE e
+   case getTypeOfTypedExpr e' of
+     rt@(SymRec recDef recSubst) -> do let fldNms = map opDefName $ V.toList $ recDefFieldOps recDef
+                                           ftypes = V.toList $ recFieldTypes recDef recSubst
+                                       case f `lookup` zip fldNms ftypes of
+                                         Nothing -> unexpected p "record field selection" ("record containing field " ++ show f) rt
+                                         Just ft -> return $ TypedDeref e' f ft
+     rt  -> unexpected p "record field selection" ("record containing field " ++ show f) rt
 
 tcJRef :: Pos -> AST.JavaRef -> SawTI TypedExpr
 tcJRef p jr = do sje <- tcASTJavaExpr jr
                  toJavaT <- gets toJavaExprType
                  case toJavaT p sje of
-                   Nothing -> typeErr p $ ftext $ "Cannot determine tye type of " ++ msg jr
+                   Nothing -> typeErr p $ ftext $ "Cannot determine the type of " ++ msg jr
                    Just t  -> return $ TypedJavaValue sje t
   where msg (AST.This{})              = "'this'"
         msg (AST.Arg _ i)             = "'args[" ++ show i ++ "]"
