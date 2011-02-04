@@ -222,7 +222,7 @@ tcE (AST.MkArray p (es@(_:_))) = do
         es' <- mapM tcE es
         let go []                 = error "internal: impossible happened in tcE-non-empty-mkArray"
             go [(_, x)]           = return x
-            go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("Array elements " ++ show i ++ " and " ++ show j) x y
+            go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("array elements " ++ show i ++ " and " ++ show j) x y
         t   <- go $ zip [(1::Int)..] $ map getTypeOfTypedExpr es'
         return $ TypedArray es' (SymArray (constantWidth (Wx (length es))) t)
 tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
@@ -338,9 +338,9 @@ tcE (AST.IteExpr      p t l r) = do
         [t', l', r'] <- mapM tcE [t, l, r]
         let [tt, lt, rt] = map getTypeOfTypedExpr [t', l', r']
         if tt /= SymBool
-           then mismatch p "Test expression of if-then-else" tt SymBool
+           then mismatch p "test expression of if-then-else" tt SymBool
            else if lt /= rt
-                then mismatch p "Branches of if-then-else expression" lt rt
+                then mismatch p "branches of if-then-else expression" lt rt
                 else return $ TypedApply (shapeOpX iteOpDef lt) [t', l', r']
 tcE (AST.DerefField p e f) = do
    e' <- tcE e
@@ -368,7 +368,7 @@ lift1Bool p nm o l = do
   let lt = getTypeOfTypedExpr l'
   case lt of
     SymBool -> return $ TypedApply o [l']
-    _       -> mismatch p ("Argument to operator '" ++ nm ++ "'")  lt SymBool
+    _       -> mismatch p ("argument to operator '" ++ nm ++ "'")  lt SymBool
 
 lift1Word :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> SawTI TypedExpr
 lift1Word p nm opMaker l = do
@@ -386,8 +386,8 @@ lift2Bool p nm o l r = do
       rt = getTypeOfTypedExpr r'
   case (lt, rt) of
     (SymBool, SymBool) -> return $ TypedApply o [l', r']
-    (SymBool, _      ) -> mismatch p ("Second argument to operator '" ++ nm ++ "'") rt SymBool
-    (_      , _      ) -> mismatch p ("First argument to operator '"  ++ nm ++ "'") lt SymBool
+    (SymBool, _      ) -> mismatch p ("second argument to operator '" ++ nm ++ "'") rt SymBool
+    (_      , _      ) -> mismatch p ("first argument to operator '"  ++ nm ++ "'") lt SymBool
 
 lift2Word :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
 lift2Word = lift2WordGen False
@@ -404,7 +404,7 @@ lift2WordGen checkEq p nm opMaker l r = do
   case (lt, rt) of
     (SymInt wl, SymInt wr) -> if not checkEq || wl == wr
                               then return $ TypedApply (opMaker wl wr) [l', r']
-                              else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
+                              else mismatch p ("arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
 
@@ -416,7 +416,7 @@ lift2ShapeCmp p nm opMaker l r = do
       rt = getTypeOfTypedExpr r'
   if lt == rt
      then return $ TypedApply (opMaker lt) [l', r']
-     else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
+     else mismatch p ("arguments to operator '" ++ nm ++ "'") lt rt
 
 lift2WordCmp :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
 lift2WordCmp p nm opMaker l r = do
@@ -427,7 +427,7 @@ lift2WordCmp p nm opMaker l r = do
   case (lt, rt) of
     (SymInt wl, SymInt wr) -> if wl == wr
                               then return $ TypedApply (opMaker wl) [l', r']
-                              else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
+                              else mismatch p ("arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
 
