@@ -47,8 +47,7 @@ mapInsertKeys keys val m = foldr (\i -> Map.insert i val) m keys
 data ExecutorState = ES {
     -- | Java codebase
     codebase :: JSS.Codebase 
-    -- | Flag used to control how much logging to print out.
-  , verbosity :: Int
+  , execOptions :: SSOpts
     -- | Maps file paths to verifier commands.
   , parsedFiles :: Map FilePath [AST.VerifierCommand]
     -- | Flag that indicates if verification commands should be executed.
@@ -88,20 +87,22 @@ globalParserConfig localBindings = do
   globalCnsBindings <- gets globalLetBindings
   opBindings <- gets sawOpMap
   cb <- gets codebase
+  opts <- gets execOptions
   return TCC { localBindings
              , globalCnsBindings
              , opBindings 
              , codeBase = cb
              , methodInfo = Nothing
-             , toJavaExprType = \_ _ -> Nothing }
+             , toJavaExprType = \_ _ -> Nothing
+             , sawOptions = opts }
 
 -- verbosity {{{2
 
 -- | Execute command when verbosity exceeds given minimum value.
 whenVerbosity :: (Int -> Bool) -> Executor () -> Executor ()
 whenVerbosity cond action = do
-  cur <- gets verbosity
-  when (cond cur) action
+  opts <- gets execOptions
+  when (cond (verbose opts)) action
 
 -- | Write debug message to standard IO.
 execDebugLog :: String -> Executor ()
@@ -260,6 +261,16 @@ checkSBVUninterpretedFunctions pos relativePath sbv = do
               res = "Please check that the correct SBV files match the Cryptol source."
           throwIOExecException pos msg res
 
+-- | Throw ExecException if SBVException is thrown.
+throwSBVParseError :: MonadIO m => Pos -> Doc -> SBV.SBVException -> m a
+throwSBVParseError pos relativePath e =
+  let msg = text "An internal error occurred when loading the SBV" 
+              <+> relativePath <> colon $$
+              text (SBV.ppSBVException e)
+      res = "Please reconfirm that the SBV filename is a valid SBV file from Cryptol."
+   in throwIOExecException pos msg res
+
+
 -- SpecJavaType {{{1
 
 -- | A parsed type from AST.JavaType
@@ -270,17 +281,6 @@ data SpecJavaType
   | SpecBool
   | SpecInt
   | SpecLong
-
-{-
-instance Eq SpecJavaType where
-  SpecRefClass c1 == SpecRefClass c2 = className c1 == className c2
-  SpecIntArray l1 == SpecIntArray l2 = l1 == l2
-  SpecLongArray l1 == SpecLongArray l2 = l1 == l2
-  SpecBool == SpecBool = True
-  SpecInt == SpecInt = True
-  SpecLong == SpecLong = True
-  _ == _ = False
-  -}
 
 -- | Pretty print SpecJavaType
 ppSpecJavaType :: SpecJavaType -> String
@@ -322,7 +322,9 @@ parseASTType (AST.BoolScalar  _) = return SpecBool
 parseASTType (AST.IntScalar  _) = return SpecInt
 parseASTType (AST.LongScalar  _) = return SpecLong
 
--- MethodSpecTranslator {{{1
+-- MethodSpecIR Translation {{{1
+
+-- MethodSpec translation common defines {{{2
 
 -- | Java expression initial value.
 data SpecJavaRefInitialValue
@@ -344,6 +346,10 @@ data SpecPostcondition
   = PostUnchanged
   | PostArbitrary
   | PostResult TypedExpr
+
+type SpecJavaRefEquivClass = [SpecJavaExpr]
+
+-- MethodSpecTranslation immediate state {{{2
 
 -- | Method spec translator state
 -- N.B. keys in nonRefTypes, refTypeMap and constExprMap are disjoint.
@@ -448,6 +454,7 @@ methodParserConfig = do
   lift $ do
     globalCnsBindings <- gets globalLetBindings
     opBindings <- gets sawOpMap
+    opts <- gets execOptions
     cb <- JSS.getCodebase
     let exprTypeFn :: Pos -> SpecJavaExpr -> Maybe DagType
         exprTypeFn pos e = 
@@ -472,7 +479,8 @@ methodParserConfig = do
                , opBindings
                , codeBase = cb
                , methodInfo = Just (m, cl)
-               , toJavaExprType = exprTypeFn }
+               , toJavaExprType = exprTypeFn
+               , sawOptions = opts }
 
 -- | Typecheck expression at global level.
 typecheckJavaExpr :: AST.JavaRef -> MethodSpecTranslator SpecJavaExpr
@@ -715,7 +723,7 @@ resolveDecl (AST.VerifyUsing pos method) = do
   -- Assign verification method.
   modify $ \s -> s { chosenVerificationMethod = Just (pos,method) }
 
-type SpecJavaRefEquivClass = [SpecJavaExpr]
+-- MethodSpecIR {{{2
 
 data MethodSpecIR = MSIR {
     methodSpecPos :: Pos
@@ -746,8 +754,6 @@ data MethodSpecIR = MSIR {
   -- | Verification method for method. 
   , verificationMethod :: AST.VerificationMethod
   }
-
--- resolveMethodSpecIR {{{2
 
 -- | Interprets AST method spec commands to construct an intermediate
 -- representation that 
@@ -871,30 +877,8 @@ resolveMethodSpecIR pos cl method cmds = do
               , verificationMethod
               }
 
--- Verifier command execution {{{1 
-
--- | Throw ExecException if SBVException is thrown.
-throwSBVParseError :: MonadIO m => Pos -> Doc -> SBV.SBVException -> m a
-throwSBVParseError pos relativePath e =
-  let msg = text "An internal error occurred when loading the SBV" 
-              <+> relativePath <> colon $$
-              text (SBV.ppSBVException e)
-      res = "Please reconfirm that the SBV filename is a valid SBV file from Cryptol."
-   in throwIOExecException pos msg res
-
-type InputEvaluator = SV.Vector Bool -> CValue
-
-data SymbolicInputResult 
-  = SIR { -- | Maps reference equivalence class indices for arrays to their input node.
-          arrayClassNodeMap :: Map Int Node
-          -- | Maps Java expressions referring to input scalars to their input node.
-        , scalarNodeMap :: Map SpecJavaExpr Node
-         -- | Contains functions that translate from counterexample
-         -- returned by ABC back to constant values, along with the
-         -- Java expression associated with that evaluator.
-        , inputEvaluators :: [(SpecJavaExpr,InputEvaluator)]
-        }
-
+-- MethodSpec verification {{{1
+-- EquivClassMap {{{2
 type EquivClassMap = (Int, Map Int [SpecJavaExpr], Map Int SpecJavaRefInitialValue)
 
 -- | Return list of class indices to initial values.
@@ -902,6 +886,9 @@ equivClassMapEntries :: EquivClassMap -> V.Vector (Int,[SpecJavaExpr],SpecJavaRe
 equivClassMapEntries (_,em,vm) 
   = V.map (\(i,v) -> (i,em Map.! i,v))
   $ V.fromList $ Map.toList vm
+
+-- JavaEvalState {{{2
+type InputEvaluator = SV.Vector Bool -> CValue
 
 data JavaEvalState = JES {
         -- | Name of class in printable form.
@@ -967,13 +954,89 @@ evalTypedExpr jes (TypedVar name tp) = do
 
 type JavaEvaluator = StateT JavaEvalState (JSS.Simulator SymbolicMonad)
 
+-- createJavaEvalState {{{3
+
+-- | Initialize JavaEvalState components involving references,
+-- and create them in simulator.
+createJavaEvalReferences :: EquivClassMap -> JavaEvaluator ()
+createJavaEvalReferences cm = do
+  let liftAig = lift . JSS.liftSymbolic . liftAigMonad
+      liftSym = lift . JSS.liftSymbolic
+  V.forM_ (equivClassMapEntries cm) $ \(idx, exprClass, initValue) -> do
+    litCount <- liftAig $ getInputLitCount
+    let refName = show (head exprClass)
+    let -- create array input node with length and int width.
+        createInputArrayNode l w = do
+          let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
+          lv <- liftAig $ V.replicateM l $ fmap LV $ SV.replicateM w makeInputLit
+          n <- liftSym $ freshVar arrType (LVN lv)
+          let inputEval lits =
+                CArray $ V.map (\j -> mkCIntFromLsbfV $ SV.slice j w lits)
+                       $ V.enumFromStepN litCount w (fromIntegral l)
+          ref <- lift $ JSS.newSymbolicArray (JSS.ArrayType JSS.IntType) (fromIntegral l) n
+          modify $ \s -> 
+            s { jesExprNodeMap =  mapInsertKeys exprClass n (jesExprNodeMap s)
+              , jesInputEvaluators = map (\expr -> (expr,inputEval)) exprClass
+                                      ++ jesInputEvaluators s
+              , jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
+              , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
+              , jesArrayNodeList = (ref,exprClass,n):(jesArrayNodeList s) }
+    case initValue of
+      RIVArrayConst javaTp c@(CArray v) tp -> do
+        n <- liftSym $ makeConstant c tp
+        let l = V.length v
+        ref <- lift $ JSS.newSymbolicArray javaTp (fromIntegral l) n
+        modify $ \s -> s 
+          { jesExprNodeMap =  mapInsertKeys exprClass n (jesExprNodeMap s)
+          , jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
+          , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
+          , jesArrayNodeList = (ref,exprClass,n):(jesArrayNodeList s)
+          }
+      RIVArrayConst _ _ _ -> error "internal: Illegal RIVArrayConst to runMethodVerification"
+      RIVClass cl -> do
+        ref <- lift $ JSS.genRef (ClassType (className cl))
+        modify $ \s -> s 
+          { jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
+          , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
+          }
+      RIVIntArray l ->  createInputArrayNode l 32
+      RIVLongArray l -> createInputArrayNode l 64
+
+createJavaEvalScalars :: MethodSpecIR -> JavaEvaluator ()
+createJavaEvalScalars ir = do
+  let liftAig = lift . JSS.liftSymbolic . liftAigMonad
+      liftSym = lift . JSS.liftSymbolic
+  -- Create symbolic inputs from specScalarInputs.
+  forM_ (specScalarInputs ir) $ \expr -> do
+    litCount <- liftAig $ getInputLitCount
+    let addScalarNode node inputEval value = 
+          modify $ \s ->
+            s { jesExprNodeMap = Map.insert expr node (jesExprNodeMap s)
+              , jesInputEvaluators = (expr,inputEval) : jesInputEvaluators s
+              , jesExprValueMap = Map.insert expr value (jesExprValueMap s) }
+    case getJSSTypeOfSpecRef expr of
+      JSS.BooleanType -> 
+        --TODO: Figure out what to do.
+        error "internal: Boolean not supported until value problem figured out."
+      JSS.IntType -> do
+        lv <- liftAig $ SV.replicateM 32 makeInputLit
+        n <- liftSym $ freshVar (SymInt (constantWidth 32)) (LV lv)
+        let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 32 lits
+        addScalarNode n inputEval (JSS.IValue n)
+      JSS.LongType -> do
+        lv <- liftAig $ SV.replicateM 64 makeInputLit
+        n <- liftSym $ freshVar (SymInt (constantWidth 64)) (LV lv)
+        let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 64 lits
+        addScalarNode n inputEval (JSS.LValue n)
+      _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
+
+-- | Create an evaluator state with the initial JVM state form the IR and
+-- equivalence class map.
 createJavaEvalState :: MethodSpecIR
                     -> EquivClassMap
                     -> JSS.Simulator SymbolicMonad JavaEvalState
 createJavaEvalState ir cm = do
-  let liftAig = lift . JSS.liftSymbolic . liftAigMonad
-      liftSym = lift . JSS.liftSymbolic
-      clName = slashesToDots $ JSS.className $ methodSpecIRClass ir
+  let clName = slashesToDots $ JSS.className $ methodSpecIRClass ir
       initialEvalState = JES
         { jesClassName = clName
         , jesMethodName = clName ++ "." ++ JSS.methodName (methodSpecIRMethod ir)
@@ -984,72 +1047,16 @@ createJavaEvalState ir cm = do
         , jesArrayNodeList = []
         , jesLetNodeBindings = Map.empty
         }
-  fmap snd $ flip runStateT initialEvalState $ do
-    -- Create references.
-    V.forM_ (equivClassMapEntries cm) $ \(idx, exprClass, initValue) -> do
-      litCount <- liftAig $ getInputLitCount
-      let refName = show (head exprClass)
-      let -- create array input node with length and int width.
-          createInputArrayNode l w = do
-            let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
-            lv <- liftAig $ V.replicateM l $ fmap LV $ SV.replicateM w makeInputLit
-            n <- liftSym $ freshVar arrType (LVN lv)
-            let inputEval lits =
-                  CArray $ V.map (\j -> mkCIntFromLsbfV $ SV.slice j w lits)
-                         $ V.enumFromStepN litCount w (fromIntegral l)
-            ref <- lift $ JSS.newSymbolicArray (JSS.ArrayType JSS.IntType) (fromIntegral l) n
-            modify $ \s -> 
-              s { jesExprNodeMap =  mapInsertKeys exprClass n (jesExprNodeMap s)
-                , jesInputEvaluators = map (\expr -> (expr,inputEval)) exprClass
-                                        ++ jesInputEvaluators s
-                , jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
-                , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
-                , jesArrayNodeList = (ref,exprClass,n):(jesArrayNodeList s) }
-      case initValue of
-        RIVArrayConst javaTp c@(CArray v) tp -> do
-          n <- liftSym $ makeConstant c tp
-          let l = V.length v
-          ref <- lift $ JSS.newSymbolicArray javaTp (fromIntegral l) n
-          modify $ \s -> s 
-            { jesExprNodeMap =  mapInsertKeys exprClass n (jesExprNodeMap s)
-            , jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
-            , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
-            , jesArrayNodeList = (ref,exprClass,n):(jesArrayNodeList s)
-            }
-        RIVArrayConst _ _ _ -> error "internal: Illegal RIVArrayConst to runMethodVerification"
-        RIVClass cl -> do
-          ref <- lift $ JSS.genRef (ClassType (className cl))
-          modify $ \s -> s 
-            { jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
-            , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
-            }
-        RIVIntArray l ->  createInputArrayNode l 32
-        RIVLongArray l -> createInputArrayNode l 64
-    -- Create symbolic inputs from specScalarInputs.
-    forM_ (specScalarInputs ir) $ \expr -> do
-      litCount <- liftAig $ getInputLitCount
-      let addScalarNode node inputEval value = 
-            modify $ \s ->
-              s { jesExprNodeMap = Map.insert expr node (jesExprNodeMap s)
-                , jesInputEvaluators = (expr,inputEval) : jesInputEvaluators s
-                , jesExprValueMap = Map.insert expr value (jesExprValueMap s) }
-      case getJSSTypeOfSpecRef expr of
-        JSS.BooleanType -> 
-          --TODO: Figure out what to do.
-          error "internal: Boolean not supported until value problem figured out."
-        JSS.IntType -> do
-          lv <- liftAig $ SV.replicateM 32 makeInputLit
-          n <- liftSym $ freshVar (SymInt (constantWidth 32)) (LV lv)
-          let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 32 lits
-          addScalarNode n inputEval (JSS.IValue n)
-        JSS.LongType -> do
-          lv <- liftAig $ SV.replicateM 64 makeInputLit
-          n <- liftSym $ freshVar (SymInt (constantWidth 64)) (LV lv)
-          let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 64 lits
-          addScalarNode n inputEval (JSS.LValue n)
-        _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
+  flip execStateT initialEvalState $ do
+    createJavaEvalReferences cm
+    createJavaEvalScalars ir
+    -- createMethodLetBindings
+    forM_ (methodLetBindings ir) $ \(name,expr) -> do
+      jes <- get
+      n <- lift $ JSS.liftSymbolic $ evalTypedExpr jes expr
+      modify $ \s -> s { jesLetNodeBindings = Map.insert name n (jesLetNodeBindings s) }
 
--- Java execution {{{1
+-- Java execution {{{2
 
 addInitializedClasses :: MethodSpecIR -> JSS.Simulator SymbolicMonad ()
 addInitializedClasses ir = do
@@ -1080,7 +1087,7 @@ runMethod ir jem = do
       JSS.RValue thisRef <- jesExprValue jem (SpecThis clName)
       JSS.invokeInstanceMethod clName (methodKey method) thisRef args
 
--- ExpectedStateDef {{{1
+-- ExpectedStateDef {{{2
 
 -- | Stores expected values in symbolic state after execution.
 data ExpectedStateDef = ESD {
@@ -1123,7 +1130,7 @@ createExpectedStateDef ir jes = do
                , esdArrays = Map.fromList arrays 
                }
 
--- VerificationConditions {{{1
+-- VerificationConditions {{{2
 
 -- | Difference between spec and JVM states.
 data JVMDiff
@@ -1135,19 +1142,40 @@ data JVMDiff
 type CounterFn = SymbolicEvalMonad SymbolicMonad (Maybe JVMDiff)
 
 -- | Conditions generated from comparing expected and resulting states.
-type VerificationConditions = [(Node,CounterFn)]
+data VerificationConditionSet = VCS {
+         vcsAssumptions :: Node
+       , vcsGoal :: Node
+       , vcsCounterFns :: [CounterFn]
+       }
+
+emptyVCSet :: MethodSpecIR -> JavaEvalState -> SymbolicMonad VerificationConditionSet
+emptyVCSet ir jes = do
+  nodes <- mapM (evalTypedExpr jes) (assumptions ir)
+  n <- foldM applyBAnd (mkCBool True) nodes
+  return VCS { vcsAssumptions = n
+             , vcsGoal = mkCBool True
+             , vcsCounterFns = []
+             }
 
 -- | Add verification condition to list.
-addEqVC :: String -> Node -> Node -> StateT VerificationConditions SymbolicMonad ()
+addEqVC :: String -> Node -> Node -> StateT VerificationConditionSet SymbolicMonad ()
 addEqVC name jvmNode specNode = do
-  res <- lift $ applyEq jvmNode specNode
-  let counterFn = do
+  oldGoal <- gets vcsGoal
+  newGoal <- lift $ applyBAnd oldGoal =<< applyEq jvmNode specNode
+  let fn = do
         jvmVal <- evalNode jvmNode
         specVal <- evalNode specNode
         if jvmVal == specVal
           then return Nothing
           else return $ Just (DV name specVal jvmVal)
-  modify $ \l -> (res,counterFn):l
+  modify $ \s -> s { vcsGoal = newGoal
+                   , vcsCounterFns = fn : vcsCounterFns s}
+
+-- | Return final goal from verification conditions with assumptions and result.
+finalGoal :: VerificationConditionSet -> SymbolicMonad Node
+finalGoal vcs = do
+  negA <- applyBNot (vcsAssumptions vcs)
+  applyBOr negA (vcsGoal vcs)
 
 -- | Compare old and 
 comparePathStates :: MethodSpecIR 
@@ -1155,12 +1183,13 @@ comparePathStates :: MethodSpecIR
                   -> JSS.PathState Node
                   -> ExpectedStateDef
                   -> JSS.PathState Node
-                  -> SymbolicMonad VerificationConditions
+                  -> SymbolicMonad VerificationConditionSet
 comparePathStates ir jes oldPathState ssd newPathState = do
   let pos = methodSpecPos ir
   let clName = jesClassName jes
   let mName = jesMethodName jes
-  fmap snd $ flip runStateT [] $ do
+  initialVCS <- emptyVCSet ir jes
+  flip execStateT initialVCS $ do
     -- Check initialization
     do let specInits = Set.fromList (initializedClasses ir)
            jvmInits  = Set.fromList $ Map.keys $ JSS.initialization newPathState
@@ -1271,12 +1300,37 @@ verifyMethodSpec ir = do
             -- Create verification conditions from path states.
             comparePathStates ir jes oldPathState ssd newPathState
       case verificationMethod ir of
-        AST.ABC -> error "TODO: AST.ABC"
+        AST.ABC -> do
+          {-
+          whenVerbosity (>=2) $
+             dbugM $ "Starting checkSat"
+          -- Check final result.
+          LV v <- getVarLit bFinalEq
+          when (LV.length v /= 1) $
+            error "internal: Unexpected number of in verification condition"
+          b <- liftAigMonad $ checkSat (neg (v `LV.unsafeIndex` 0))
+          case b of
+            UnSat -> return ()
+            Unknown -> error "Checking assumptions failed"
+            Sat lits -> do
+              let inputValues = V.map ($lits) litParseFns
+              --evalAndBlast inputValues lits
+              --liftIO $ putStrLn "EvalAndBlast succeeded"
+              counters <- symbolicEval inputValues counterFn
+              let inputMap = Map.fromList
+                           $ V.toList
+                           $ V.map (\(d,i) -> (d,inputValues V.! i))
+                           $ defInputVec
+              assert (not (null counters)) $
+                liftIO $ throwIO
+                       $ CounterExample classDefVec inputMap counters
+-}
+          error "TODO: AST.ABC"
         AST.Rewrite -> error "TODO: AST.Rewrite"
         AST.Auto -> error "TODO: AST.Auto"
         AST.Skip -> error "internal: Unexpected skip"
       
--- }}}1
+-- Verifier command execution {{{1 
 
 -- | Execute command 
 execute :: AST.VerifierCommand -> Executor ()
@@ -1438,6 +1492,7 @@ runProofs cb ssOpts files = do
   let initialPath = entryPoint ssOpts
   let initState = ES {
           codebase = cb
+        , execOptions = ssOpts
         , runVerification = True
         , parsedFiles = files
         , sbvOpMap     = Map.empty
@@ -1447,7 +1502,6 @@ runProofs cb ssOpts files = do
         , rules        = Map.empty
         , enabledRules = Set.empty
         , globalLetBindings = Map.empty
-        , verbosity = verbose ssOpts
         }
       action = do cmds <- parseFile initialPath
                   mapM_ execute cmds
