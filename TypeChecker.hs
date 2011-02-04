@@ -15,9 +15,7 @@ module SAWScript.TypeChecker
   ) where
 
 import Control.Monad
-import Data.List(sortBy)
 import Data.Map(Map)
-import Data.Ord(comparing)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import qualified Data.Set as Set
@@ -216,8 +214,6 @@ tcE (AST.Var pos name) = do
 tcE (AST.ConstantBool _ b) = return $ TypedCns (mkCBool b) SymBool
 tcE (AST.MkArray p [])
   = typeErrWithR p (ftext ("Use of empty array-comprehensions requires a type-annotation")) "Please provide the type of the empty-array value"
-tcE (AST.MkRecord p _)
-  = typeErrWithR p (ftext ("Use of record constructions requires a type-annotation")) "Please provide the type of the record value"
 tcE (AST.MkArray p (es@(_:_))) = do
         es' <- mapM tcE es
         let go []                 = error "internal: impossible happened in tcE-non-empty-mkArray"
@@ -254,27 +250,12 @@ tcE (AST.TypeExpr p (AST.MkArray _ []) astResType) = do
    case resType of
      SymArray we _ | Just (Wx 0) <- widthConstant we -> return $ TypedArray [] resType
      _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
-tcE (AST.TypeExpr p (AST.MkRecord _ flds) astRecType) = do
-   let fldNames = map (\ (_, f, _) -> f) flds
-   resType <- tcT astRecType
-   case astRecType of
-     AST.Record _ expectedFields -> do
-                let tcFld (_, f, fe) = tcE fe >>= \tfe -> return (f, tfe)
-                flds' <- mapM tcFld flds
-                let snd3 (_, x, _) = x
-                    expectedFs = sortBy (comparing snd3) expectedFields
-                    givenFs = sortBy (comparing fst) flds'
-                    expectedFNames = map snd3 expectedFs
-                    givenFNames = map fst givenFs
-                if givenFNames /= expectedFNames
-                   then typeErr p $    ftext ("Expected a record with fields: " ++ unwords expectedFNames)
-                                    $$ ftext ("Got a record with fields: " ++ unwords givenFNames)
-                   else do let matchField dtg (fp, s, te) = do
-                                        dte <- tcT te
-                                        unless (dtg == dte) $ mismatch fp ("record-field " ++ show s) dtg dte
-                           zipWithM_ matchField (map (getTypeOfTypedExpr . snd) givenFs) expectedFs
-                           return $ TypedRecord flds' resType
-     _ -> unexpected p "record construction" ("record with fields: " ++ unwords fldNames) resType
+tcE (AST.MkRecord _ flds) = do
+   flds' <- mapM tcE [e | (_, _, e) <- flds]
+   let names = [nm | (_, nm, _) <- flds]
+   def <- liftTI $ getStructuralRecord (Set.fromList names)
+   let t = SymRec def $ emptySubst { shapeSubst = Map.fromList $ names `zip` (map getTypeOfTypedExpr flds') }
+   return $ TypedRecord (names `zip` flds') t
 tcE (AST.TypeExpr p e astResType) = do
    te <- tcE e
    let tet = getTypeOfTypedExpr te
