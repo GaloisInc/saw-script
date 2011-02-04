@@ -320,7 +320,8 @@ tcE (AST.IteExpr      p t l r) = do
 tcE (AST.MkRecord _ flds) = do
    let tcFld (_, f, fe) = tcE fe >>= \tfe -> return (f, tfe)
    flds' <- mapM tcFld flds
-   return $ TypedRecord flds' (error "TODO: construction of record-DAG type")
+   let dt = SymRec (error "TODO: tcE: recdef") (error "TODO: tcE: typesubst")
+   return $ TypedRecord flds' dt
 tcE (AST.DerefField p e f) = do
    e' <- tcE e
    case getTypeOfTypedExpr e' of
