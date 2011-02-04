@@ -278,11 +278,12 @@ tcE (AST.NotExpr p l) = lift1Bool p "not" (groundOp bNotOpDef) l
 -- TBD: SRemExpr
 -- TBD: PlusExpr
 -- TBD: SubExpr
--- TBD: ShlExpr
--- TBD: SShrExpr
--- TBD: UShrExpr
-tcE (AST.UShrExpr p l r) = lift2Word p ">>u" ush l r
-   where ush wx wy = mkOp ushrOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
+tcE (AST.ShlExpr p l r) = lift2Word p "<<" mk l r
+   where mk wx wy  = mkOp shlOpDef  (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
+tcE (AST.SShrExpr p l r) = lift2Word p ">>s" mk l r
+   where mk wx wy = mkOp shrOpDef  (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
+tcE (AST.UShrExpr p l r) = lift2Word p ">>u" mk l r
+   where mk wx wy = mkOp ushrOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
 -- TBD: BitAndExpr
 -- TBD: BitXorExpr
 -- TBD: BitOrExpr
@@ -301,6 +302,7 @@ tcE (AST.AppendExpr p l r) = lift2Word p "#" app l r
 tcE (AST.AndExpr p l r) = lift2Bool p "&&" (groundOp bAndOpDef) l r
 tcE (AST.OrExpr  p l r) = lift2Bool p "||" (groundOp bOrOpDef)  l r
 -- TBD: IteExpr
+-- TBD: Remove the catch all below and make sure GHC's pattern-match warning is gone
 tcE e = error $ "TBD: tcE " ++ show e
 
 tcJRef :: AST.JavaRef -> SawTI TypedExpr
@@ -317,7 +319,8 @@ tcJRef (AST.Arg p i) = do
        case toJavaT p te of
          Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
          Just t' -> return $ TypedJavaValue te t'
--- TODO: InstanceField
+-- TBD: InstanceField
+-- TBD: Remove the catch all below and make sure GHC's pattern-match warning is gone
 tcJRef e = error $ "TBD: tcJRef " ++ show e
 
 lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
