@@ -270,9 +270,11 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       case matchSubst (defTypes `zip` argTypes) of
         Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
         Just sub -> return $ TypedApply (mkOp opDef sub) args
-tcE (AST.NotExpr p l) = lift1Bool p "not" (groundOp bNotOpDef) l
--- TBD: BitComplExpr
--- TBD: NegExpr
+tcE (AST.NotExpr p l)   = lift1Bool p "not" (groundOp bNotOpDef) l
+tcE (AST.BitComplExpr p l)   = lift1Word p "~" mk l
+   where mk wx = mkOp iNotOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.NegExpr p l)   = lift1Word p "-" mk l
+   where mk wx = mkOp negOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.MulExpr p l r) = lift2WordEq p "*" mk l r
    where mk wx _  = mkOp mulOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.SDivExpr p l r) = lift2WordEq p "/s" mk l r
@@ -334,7 +336,15 @@ lift1Bool p nm o l = do
   let lt = getTypeOfTypedExpr l'
   case lt of
     SymBool -> return $ TypedApply o [l']
-    _       -> mismatch p ("Argument to operator '" ++ show nm ++ "'")  lt SymBool
+    _       -> mismatch p ("Argument to operator '" ++ nm ++ "'")  lt SymBool
+
+lift1Word :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> SawTI TypedExpr
+lift1Word p nm opMaker l = do
+  l' <- tcE l
+  let lt = getTypeOfTypedExpr l'
+  case lt of
+    SymInt wl -> return $ TypedApply (opMaker wl) [l']
+    _         -> unexpected p ("Argument to operator '" ++ nm ++ "'") "word" lt
 
 lift2Bool :: Pos -> String -> Op -> AST.Expr -> AST.Expr -> SawTI TypedExpr
 lift2Bool p nm o l r = do
