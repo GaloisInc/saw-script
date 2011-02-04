@@ -292,7 +292,9 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       let argTypes = map getTypeOfTypedExpr args
       case matchSubst (defTypes `zip` argTypes) of
         Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
-        Just sub -> return $ TypedApply (mkOp opDef sub) args
+        Just sub -> do
+          debugTI $ "Making expression with operator " ++ opDefName opDef ++ " and substitution " ++  show sub
+          return $ TypedApply (mkOp opDef sub) args
 tcE (AST.NotExpr      p l)   = lift1Bool     p "not" (groundOp bNotOpDef)        l
 tcE (AST.BitComplExpr p l)   = lift1Word     p "~"   (wordOpX  iNotOpDef)        l
 tcE (AST.NegExpr      p l)   = lift1Word     p "-"   (wordOpX  negOpDef)         l
