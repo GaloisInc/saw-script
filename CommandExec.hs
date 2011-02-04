@@ -1276,16 +1276,16 @@ comparePathStates ir jes oldPathState ssd newPathState = do
           addEqVC refName jvmNode specNode
    
 -- | Attempt to verify method spec using verification method specified.
-verifyMethodSpec :: MethodSpecIR -> Executor ()
-verifyMethodSpec MSIR { verificationMethod = AST.Skip } = return ()
-verifyMethodSpec ir = do
+verifyMethodSpec :: Pos -> MethodSpecIR -> Executor ()
+verifyMethodSpec _ MSIR { verificationMethod = AST.Skip } = return ()
+verifyMethodSpec pos ir = do
   cb <- gets codebase
   let refEquivClasses = JSS.partitions (specReferences ir)
   lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(i,cm) -> do
     runSymSession $ do
       -- Generate input vectors.
       -- Run simulator 
-      vcs <- 
+      (jes,vcs) <- 
         JSS.runSimulator cb $ do
           -- Create map from specification entries to JSS simulator values.
           jes <- createJavaEvalState ir cm
@@ -1298,10 +1298,11 @@ verifyMethodSpec ir = do
           runMethod ir jes
           -- TODO: Build final equation and functions for generating counterexamples.
           newPathState <- JSS.getPathState
-          JSS.liftSymbolic $ do
-            ssd <- createExpectedStateDef ir jes
-            -- Create verification conditions from path states.
-            comparePathStates ir jes oldPathState ssd newPathState
+          vcs <- JSS.liftSymbolic $ do
+                   ssd <- createExpectedStateDef ir jes
+                   -- Create verification conditions from path states.
+                   comparePathStates ir jes oldPathState ssd newPathState
+          return (jes,vcs)
       -- Get final goal.
       fGoal <- finalGoal vcs
       case verificationMethod ir of
@@ -1315,7 +1316,26 @@ verifyMethodSpec ir = do
             Unknown -> error "Checking assumptions failed"
             Sat lits -> do
               --TODO:
-              error $ "Counterexample found in " ++ methodSpecName ir
+              let (inputExprs,inputEvals) = unzip (jesInputEvaluators jes)
+              let inputValues = map ($lits) inputEvals
+              -- Get differences between two.
+              counters <- symbolicEval (V.fromList inputValues) $
+                liftM catMaybes $ mapM id (vcsCounterFns vcs)
+              let inputDocs 
+                    = flip map (inputExprs `zip` inputValues) $ \(expr,c) ->
+                         text (show expr) <+> equals <+> ppCValueDoc c
+              let diffDocs
+                    = flip map counters $ \(DV name specVal jvmVal) ->
+                         text name $$
+                           nest 2 (text "Encountered: " <> ppCValueDoc jvmVal) $$
+                           nest 2 (text "Expected:    " <> ppCValueDoc specVal)
+              let msg = ftext ("A counterexample was found by ABC when verifying "
+                                 ++ methodSpecName ir ++ ".\n\n") $$
+                        ftext ("The inputs that generated the counterexample are:") $$
+                        nest 2 (vcat inputDocs) $$ char '\n' $$
+                        ftext ("Mismatches between spec and implementation include:") $$
+                        nest 2 (vcat diffDocs)
+              throwIOExecException pos msg ""
           {-
           whenVerbosity (>=2) $
              dbugM $ "Starting checkSat"
@@ -1441,7 +1461,7 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
   -- For each possible aliasing configuration.
   methodIR <- resolveMethodSpecIR pos thisClass method cmds 
   v <- gets runVerification
-  when v $ verifyMethodSpec methodIR
+  when v $ verifyMethodSpec pos methodIR
   --TODO: Add methodIR to state for later verification.
 execute (AST.Rule pos name params astLhsExpr astRhsExpr) = do
   execDebugLog $ "Start defining rule " ++ name
