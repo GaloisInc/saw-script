@@ -136,7 +136,6 @@ getTypeOfTypedExpr (TypedCns _ tp)       = tp
 getTypeOfTypedExpr (TypedJavaValue _ tp) = tp
 getTypeOfTypedExpr (TypedApply op _)     = opResultType op
 
--- | Additional information used by parseExpr to control parseExpr.
 data TCConfig = TCC {
          localBindings     :: Map String TypedExpr
        , globalCnsBindings :: Map String (CValue,DagType)
@@ -257,7 +256,7 @@ tcE (AST.TypeExpr p e astResType) = do
    if tet /= resType
       then mismatch p "type-annotation" tet resType
       else return te
-tcE (AST.JavaValue _ jref) = tcJRef jref
+tcE (AST.JavaValue p jref) = tcJRef p jref
 tcE (AST.ApplyExpr appPos "join" astArgs) = do
   args <- mapM tcE astArgs
   checkArgCount appPos "join" args 1
@@ -320,21 +319,15 @@ tcE (AST.IteExpr      p t l r) = do
 tcE (AST.MkRecord p _)     = typeErr p (ftext "TODO: type-checking of record constructors is not supported yet")
 tcE (AST.DerefField p _ _) = typeErr p (ftext "TODO: type-checking of field references is not supported yet")
 
-tcJRef :: AST.JavaRef -> SawTI TypedExpr
-tcJRef (AST.Arg p i) = do
-   mbMethodInfo <- gets methodInfo
-   case mbMethodInfo of
-     Nothing          -> typeErr p $ ftext $ "Use of 'args[" ++ show i ++ "]' is illegal outside of method specifications"
-     Just (method, _) -> do
-       let params = JSS.methodParameterTypes method
-       unless (0 <= i && i < length params) $ typeErr p $ ftext $ "'args[" ++ show i ++ "]' refers to an illegal argument index"
-       toJavaT <- gets toJavaExprType
-       let te = SpecArg i (params !! i)
-       case toJavaT p te of
-         Nothing -> typeErr p $ ftext $ "The type of 'args[" ++ show i ++ "]' has not been declared"
-         Just t' -> return $ TypedJavaValue te t'
-tcJRef (AST.This p) = typeErr p (ftext "TODO: type-checking of 'this' is not supported yet")
-tcJRef (AST.InstanceField p _ _) = typeErr p (ftext "TODO: type-checking of instance-field selections is not supported yet")
+tcJRef :: Pos -> AST.JavaRef -> SawTI TypedExpr
+tcJRef p jr = do sje <- tcASTJavaExpr jr
+                 toJavaT <- gets toJavaExprType
+                 case toJavaT p sje of
+                   Nothing -> typeErr p $ ftext $ "Cannot determine tye type of " ++ msg jr
+                   Just t  -> return $ TypedJavaValue sje t
+  where msg (AST.This{})              = "'this'"
+        msg (AST.Arg _ i)             = "'args[" ++ show i ++ "]"
+        msg (AST.InstanceField _ _ f) = "field selection for " ++ show f
 
 lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
 lift1Bool p nm o l = do
