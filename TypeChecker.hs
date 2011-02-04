@@ -273,13 +273,18 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
 tcE (AST.NotExpr p l) = lift1Bool p "not" (groundOp bNotOpDef) l
 -- TBD: BitComplExpr
 -- TBD: NegExpr
--- TBD: MulExpr
--- TBD: SDivExpr
--- TBD: SRemExpr
--- TBD: PlusExpr
--- TBD: SubExpr
+tcE (AST.MulExpr p l r) = lift2WordEq p "*" mk l r
+   where mk wx _  = mkOp mulOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.SDivExpr p l r) = lift2WordEq p "/s" mk l r
+   where mk wx _  = mkOp signedDivOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.SRemExpr p l r) = lift2WordEq p "%s" mk l r
+   where mk wx _  = mkOp signedRemOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.PlusExpr p l r) = lift2WordEq p "+" mk l r
+   where mk wx _  = mkOp addOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.SubExpr p l r) = lift2WordEq p "-" mk l r
+   where mk wx _  = mkOp subOpDef  (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.ShlExpr p l r) = lift2Word p "<<" mk l r
-   where mk wx wy  = mkOp shlOpDef  (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
+   where mk wx wy  = mkOp shlOpDef (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
 tcE (AST.SShrExpr p l r) = lift2Word p ">>s" mk l r
    where mk wx wy = mkOp shrOpDef  (emptySubst { widthSubst = Map.fromList [("v", wx), ("s", wy)] })
 tcE (AST.UShrExpr p l r) = lift2Word p ">>u" mk l r
@@ -343,12 +348,20 @@ lift2Bool p nm o l r = do
     (_      , _      ) -> mismatch p ("First argument to operator '"  ++ nm ++ "'") lt SymBool
 
 lift2Word :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
-lift2Word p nm opMaker l r = do
+lift2Word = lift2WordGen False
+lift2WordEq :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordEq = lift2WordGen True
+
+-- The bool argument says if the args should be of the same type
+lift2WordGen :: Bool -> Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordGen checkEq p nm opMaker l r = do
   l' <- tcE l
   r' <- tcE r
   let lt = getTypeOfTypedExpr l'
       rt = getTypeOfTypedExpr r'
   case (lt, rt) of
-    (SymInt wl, SymInt wr) -> return $ TypedApply (opMaker wl wr) [l', r']
+    (SymInt wl, SymInt wr) -> if not checkEq || wl == wr
+                              then return $ TypedApply (opMaker wl wr) [l', r']
+                              else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
