@@ -297,18 +297,23 @@ tcE (AST.BitOrExpr p l r) = lift2WordEq p "|" mk l r
    where mk wx _ = mkOp iOrOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.BitXorExpr p l r) = lift2WordEq p "^" mk l r
    where mk wx _ = mkOp iXorOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
-tcE (AST.AppendExpr p l r) = lift2Word p "#" app l r
-   where app wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
--- TBD: EqExpr
--- TBD: IneqExpr
--- TBD: SGeqExpr
--- TBD: UGeqExpr
--- TBD: SGtExpr
--- TBD: UGtExpr
--- TBD: SLeqExpr
--- TBD: ULeqExpr
--- TBD: SLtExpr
--- TBD: ULtExpr
+tcE (AST.AppendExpr p l r) = lift2Word p "#" mk l r
+   where mk wx wy = mkOp appendIntOpDef (emptySubst { widthSubst = Map.fromList [("x", wx), ("y", wy)] })
+tcE (AST.EqExpr p l r) = lift2ShapeCmp p "==" mk l r
+   where mk wx = mkOp eqOpDef (emptySubst { shapeSubst = Map.fromList [("x", wx)] })
+tcE (AST.IneqExpr p l r) = tcE (AST.NotExpr p (AST.EqExpr p l r))       -- l != r --> not (l == r)
+tcE (AST.SGeqExpr p l r) = tcE (AST.SLeqExpr p r l)                     -- l >=s r -->  r <=s l
+tcE (AST.SGtExpr p l r)  = tcE (AST.SLtExpr p r l)                      -- l >s r  -->  r <s l
+tcE (AST.SLeqExpr p l r) = lift2WordCmp p "<=s" mk l r
+   where mk wx = mkOp signedLeqOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.SLtExpr p l r)  = lift2WordCmp p "<s" mk l r
+   where mk wx = mkOp signedLtOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.UGeqExpr p l r) = tcE (AST.ULeqExpr p r l)                     -- l >=u r -->  r <=u l
+tcE (AST.UGtExpr p l r)  = tcE (AST.ULtExpr p r l)                      -- l >u r  -->  r <u l
+tcE (AST.ULeqExpr p l r) = lift2WordCmp p "<=u" mk l r
+   where mk wx = mkOp unsignedLeqOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
+tcE (AST.ULtExpr p l r)  = lift2WordCmp p "<u" mk l r
+   where mk wx = mkOp unsignedLtOpDef (emptySubst { widthSubst = Map.fromList [("x", wx)] })
 tcE (AST.AndExpr p l r) = lift2Bool p "&&" (groundOp bAndOpDef) l r
 tcE (AST.OrExpr  p l r) = lift2Bool p "||" (groundOp bOrOpDef)  l r
 -- TBD: IteExpr
@@ -375,6 +380,29 @@ lift2WordGen checkEq p nm opMaker l r = do
   case (lt, rt) of
     (SymInt wl, SymInt wr) -> if not checkEq || wl == wr
                               then return $ TypedApply (opMaker wl wr) [l', r']
+                              else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
+    (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
+    (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
+
+lift2ShapeCmp :: Pos -> String -> (DagType -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2ShapeCmp p nm opMaker l r = do
+  l' <- tcE l
+  r' <- tcE r
+  let lt = getTypeOfTypedExpr l'
+      rt = getTypeOfTypedExpr r'
+  if lt == rt
+     then return $ TypedApply (opMaker lt) [l', r']
+     else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
+
+lift2WordCmp :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordCmp p nm opMaker l r = do
+  l' <- tcE l
+  r' <- tcE r
+  let lt = getTypeOfTypedExpr l'
+      rt = getTypeOfTypedExpr r'
+  case (lt, rt) of
+    (SymInt wl, SymInt wr) -> if wl == wr
+                              then return $ TypedApply (opMaker wl) [l', r']
                               else mismatch p ("Arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
