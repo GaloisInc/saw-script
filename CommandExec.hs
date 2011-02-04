@@ -312,7 +312,7 @@ checkedGetArrayLength pos l = do
 -- | Parse AST Type to SpecJavaType.
 parseASTType :: AST.JavaType -> Executor SpecJavaType
 parseASTType (AST.RefType pos names) = do
-  let nm = intercalate "." names
+  let nm = intercalate "/" names
   fmap SpecRefClass $ lookupClass pos nm
 parseASTType (AST.IntArray pos l) =
   fmap SpecIntArray $ checkedGetArrayLength pos l

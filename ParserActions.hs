@@ -1,11 +1,13 @@
 {-# LANGUAGE PatternGuards #-}
 module SAWScript.ParserActions (
      Parser, happyError, parseError, lexer, parseSSPgm
-   , parseIntRange, mkExprType
+   , parseIntRange, mkExprType, mkRecordV, mkRecordT
    ) where
 
 
 import Data.Maybe(isJust, listToMaybe)
+import Data.List(sortBy, groupBy)
+import Data.Ord(comparing)
 import qualified Data.Map as M
 import System.Directory(canonicalizePath, makeRelativeToCurrentDirectory)
 import System.FilePath(takeDirectory, (</>))
@@ -38,6 +40,11 @@ parseError t = Parser $ \_ _ -> failAt (Just t)
 bailOut :: Pos -> String -> Parser a
 bailOut ep msg = Parser $ \_ _ -> do p <- posRelativeToCurrentDirectory ep
                                      return $ Left $ fmtPos p msg
+
+bailOuts :: [Pos] -> String -> Parser a
+bailOuts eps msg = Parser $ \_ _ -> do ps <- mapM posRelativeToCurrentDirectory eps
+                                       return $ Left $ fmtPoss ps msg
+
 
 failAt :: Maybe PTok -> IO (Either String a)
 failAt Nothing            = return $ Left $ "File ended before parsing was complete"
@@ -104,3 +111,21 @@ parseIntRange p (l, h) i
 mkExprType :: Pos -> ExprWidth -> Maybe ExprType -> Parser ExprType
 mkExprType p  w Nothing  = return $ BitvectorType p w
 mkExprType p  w (Just t) = return $ Array p w t
+
+mkRecordT :: Pos -> [(Pos, String, ExprType)] -> Parser ExprType
+mkRecordT p flds
+  | Just (s, ps) <- getDups flds = bailOuts ps $ "Duplicate field " ++ show s ++ " in record type"
+  | True                         = return (Record p flds)
+
+mkRecordV :: Pos -> [(Pos, String, Expr)] -> Parser Expr
+mkRecordV p flds
+  | Just (s, ps) <- getDups flds = bailOuts ps $ "Duplicate field " ++ show s ++ " in record construction"
+  | True                         = return (MkRecord p flds)
+
+getDups :: [(Pos, String, a)] -> Maybe (String, [Pos])
+getDups pss = case cands of
+                []     -> Nothing
+                ([]:_) -> Nothing   -- can't really happen, just be very safe
+                (xs:_) -> Just (head (map snd xs), map fst xs)
+ where pss'  = [(p, s) | (p, s, _) <- pss]
+       cands = [gp | gp <- groupBy (\x y -> snd x == snd y) (sortBy (comparing snd) pss'), length gp > 1]

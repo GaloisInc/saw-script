@@ -3,6 +3,7 @@ module SAWScript.TIMonad where
 import Control.Monad
 import Control.Monad.Trans
 import SAWScript.Utils
+import Symbolic.Common
 import Text.PrettyPrint.HughesPJ
 
 type WarnMsg = (Pos, Doc)
@@ -34,7 +35,7 @@ gets :: Monad m => (s -> a) -> TI m s a
 gets f = TI (\s -> return (Right (s, f s, [])))
 
 modify :: Monad m => (s -> s) -> TI m s ()
-modify f = TI (\s -> return (Right (s, (), [])))
+modify f = TI (\s -> return (Right (f s, (), [])))
 
 liftTI :: Monad m => m a -> TI m s a
 liftTI m = TI (\s -> m >>= \a -> return $ Right (s, a, []))
@@ -42,11 +43,17 @@ liftTI m = TI (\s -> m >>= \a -> return $ Right (s, a, []))
 typeErrWithR :: Monad m => Pos -> Doc -> String -> TI m s a
 typeErrWithR p msg resolution = TI (\_ -> return (Left (p, msg, resolution)))
 
-mismatch :: Monad m => Pos -> String -> Doc -> Doc -> TI m s a
-mismatch p w g i = TI (\_ -> return (Left (p, msg, "")))
+mismatch :: Monad m => Pos -> String -> DagType -> DagType -> TI m s a
+mismatch p w g r = TI (\_ -> return (Left (p, msg, "")))
   where msg =    text ("Type mismatch in " ++ w)
-              $$ text "Given   : " <+> g
-              $$ text "Inferred: " <+> i
+              $$ text "Given   : " <+> text (ppType g)
+              $$ text "Required: " <+> text (ppType r)
+
+unexpected :: Monad m => Pos -> String -> String -> DagType -> TI m s a
+unexpected p w e g = TI (\_ -> return (Left (p, msg, "")))
+  where msg =    text ("Unexpected type: " ++ w)
+              $$ text "Expected: " <+> text e
+              $$ text "Got     : " <+> text (ppType g)
 
 typeErr :: Monad m => Pos -> Doc -> TI m s a
 typeErr p msg = TI (\_ -> return (Left (p, msg, "")))

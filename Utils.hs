@@ -26,6 +26,11 @@ fmtPos :: Pos -> String -> String
 fmtPos p m = show p ++ ":\n" ++ m'
   where m' = intercalate "\n" . map ("  " ++) . lines $ m
 
+fmtPoss :: [Pos] -> String -> String
+fmtPoss [] m = fmtPos (PosInternal "saw-script internal") m
+fmtPoss ps m = "[" ++ intercalate ",\n " (map show ps) ++ "]:\n" ++ m'
+  where m' = intercalate "\n" . map ("  " ++) . lines $ m
+
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Pos f l c)     = makeRelativeToCurrentDirectory f >>= \f' -> return (Pos f' l c)
 posRelativeToCurrentDirectory (PosInternal s) = return $ PosInternal s
