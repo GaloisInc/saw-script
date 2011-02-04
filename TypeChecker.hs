@@ -90,7 +90,7 @@ checkJSSTypeIsValid :: Pos -> JSS.Type -> SawTI ()
 checkJSSTypeIsValid pos t = case t of
                               JSS.ArrayType JSS.IntType  -> return ()
                               JSS.ArrayType JSS.LongType -> return ()
-                              JSS.ClassType nm           -> lookupClass pos nm >> return ()
+                              JSS.ClassType nm           -> findClass pos nm >> return ()
                               JSS.ByteType               -> badI
                               JSS.CharType               -> badI
                               JSS.ShortType              -> badI
@@ -149,9 +149,14 @@ data TCConfig = TCC {
        , codeBase          :: JSS.Codebase
        , methodInfo        :: Maybe (JSS.Method, JSS.Class)
        , toJavaExprType    :: Pos -> SpecJavaExpr -> Maybe DagType
+       , sawOptions        :: SSOpts
        }
 
 type SawTI = TI OpSession TCConfig
+
+debugTI :: String -> SawTI ()
+debugTI msg = do os <- gets sawOptions
+                 liftIO $ debugVerbose os $ putStrLn msg
 
 instance HasCodebase SawTI where
   getCodebase    = gets codeBase
@@ -180,7 +185,7 @@ tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
   lhs <- tcASTJavaExpr astLhs
   case getJSSTypeOfSpecRef lhs of
     JSS.ClassType lhsClassName -> do
-      cl <- lookupClass pos lhsClassName
+      cl <- findClass pos lhsClassName
       f <- findField pos fName cl
       checkJSSTypeIsValid pos (JSS.fieldType f)
       return $ SpecField lhs f
@@ -431,3 +436,8 @@ shapeOpX opDef wx = mkOp opDef (emptySubst { shapeSubst = Map.fromList [("x", wx
 flipBinOpArgs :: TypedExpr -> TypedExpr
 flipBinOpArgs (TypedApply o [a, b]) = TypedApply o [b, a]
 flipBinOpArgs e                     = error $ "internal: flipBinOpArgs: received: " ++ show e
+
+findClass :: Pos -> String -> SawTI JSS.Class
+findClass p s = do
+        debugTI $ "Trying to find the class " ++ show s
+        lookupClass p s
