@@ -93,7 +93,7 @@ globalParserConfig localBindings = do
              , opBindings 
              , codeBase = cb
              , methodInfo = Nothing
-             , toJavaExprType = \_ _ -> Nothing
+             , toJavaExprType = \_ -> JEDTBadContext
              , sawOptions = opts }
 
 -- verbosity {{{2
@@ -456,24 +456,20 @@ methodParserConfig = do
     opBindings <- gets sawOpMap
     opts <- gets execOptions
     cb <- JSS.getCodebase
-    let exprTypeFn :: Pos -> SpecJavaExpr -> Maybe DagType
-        exprTypeFn pos e = 
+
+    let exprTypeFn :: SpecJavaExpr -> JavaExprDagType
+        exprTypeFn e = 
           case Map.lookup e rtm of
-            Just (RIVArrayConst _ _ tp) -> Just tp
-            Just (RIVClass _) ->
-              let msg = "The expression " ++ show e ++ " denotes a Java reference,"
-                        ++ " and cannot be directly used in a SAWScript expression."
-                  res = "Please alter the expression, perhaps by referring to "
-                        ++ "an field in the reference."
-               in throw $ ExecException pos (ftext msg) res
+            Just (RIVArrayConst _ _ tp) -> JEDTType tp
+            Just (RIVClass cl) -> JEDTClass (className cl)
             Just (RIVIntArray l) ->
-              Just $ SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32))
+              JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32)))
             Just (RIVLongArray l) ->
-              Just $ SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64))
-            Nothing ->               
+              JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64)))
+            Nothing ->
               case Map.lookup e cem of
-                Nothing -> Nothing
-                Just (_,tp) -> Just tp
+                Nothing -> JEDTUndefined
+                Just (_,tp) -> JEDTType tp
     return TCC { localBindings = Map.map snd locals
                , globalCnsBindings
                , opBindings

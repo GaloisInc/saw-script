@@ -6,6 +6,7 @@
 module SAWScript.TypeChecker
   ( SpecJavaExpr(..)
   , getJSSTypeOfSpecRef
+  , JavaExprDagType(..)
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , TCConfig(..)
@@ -142,13 +143,20 @@ getTypeOfTypedExpr (TypedDeref     _ _ tp)   = tp
 getTypeOfTypedExpr (TypedJavaValue   _ tp) = tp
 getTypeOfTypedExpr (TypedApply       op _) = opResultType op
 
+-- | Identifies the type of a Java expression.
+data JavaExprDagType
+  = JEDTClass String
+  | JEDTType DagType
+  | JEDTUndefined
+  | JEDTBadContext
+
 data TCConfig = TCC {
          localBindings     :: Map String TypedExpr
        , globalCnsBindings :: Map String (CValue,DagType)
        , opBindings        :: Map String OpDef
        , codeBase          :: JSS.Codebase
        , methodInfo        :: Maybe (JSS.Method, JSS.Class)
-       , toJavaExprType    :: Pos -> SpecJavaExpr -> Maybe DagType
+       , toJavaExprType    :: SpecJavaExpr -> JavaExprDagType
        , sawOptions        :: SSOpts
        }
 
@@ -343,9 +351,23 @@ tcE (AST.DerefField p e f) = do
 tcJRef :: Pos -> AST.JavaRef -> SawTI TypedExpr
 tcJRef p jr = do sje <- tcASTJavaExpr jr
                  toJavaT <- gets toJavaExprType
-                 case toJavaT p sje of
-                   Nothing -> typeErr p $ ftext $ "Cannot determine the type of " ++ msg jr
-                   Just t  -> return $ TypedJavaValue sje t
+                 case toJavaT sje of
+                   JEDTBadContext ->
+                     let msg = "The Java value \'" ++ show sje ++ "\' appears in a global context."
+                         res = "Java values may not be references outside method declarations."
+                      in typeErrWithR p (ftext msg) res
+                   JEDTUndefined ->
+                     let msg = "The Java value \'" ++ show sje ++ "\' is missing a \'type\' annotation."
+                         res = "Please add a type declaration to Java values before "
+                                ++ "referring to them in SAWScript expressions."
+                      in typeErrWithR p (ftext msg) res
+                   JEDTClass cl ->
+                     let msg = "The Java value " ++ show sje ++ " denotes a Java reference,"
+                               ++ " and cannot be directly used in a SAWScript expression."
+                         res = "Please alter the expression, perhaps by referring to "
+                               ++ "an field in the reference."
+                      in typeErrWithR p (ftext msg) res
+                   JEDTType t -> return $ TypedJavaValue sje t
   where msg (AST.This{})              = "'this'"
         msg (AST.Arg _ i)             = "'args[" ++ show i ++ "]"
         msg (AST.InstanceField _ _ f) = "field selection for " ++ show f
