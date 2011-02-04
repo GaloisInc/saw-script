@@ -149,7 +149,7 @@ ExprTypes : sepBy1(ExprType, ',') { $1 }
 ExprType :: { ExprType }
 ExprType : 'Bit'                           {  BitType    (tokPos $1)             }
          | '[' ExprWidth ']' opt(ExprType) {% mkExprType (tokPos $1) $2 $4       }
-         | '{' RecordFTypes '}'            {  Record     (tokPos $1) $2          }
+         | '{' RecordFTypes '}'            {% mkRecordT  (tokPos $1) $2          }
          | var                             {  ShapeVar   (tokPos $1) (tokStr $1) }
 
 ExprWidth :: { ExprWidth }
@@ -176,7 +176,7 @@ Expr : var                               { Var          (tokPos $1) (tokStr $1) 
      | 'False'                           { ConstantBool (tokPos $1) False          }
      | num                               { ConstantInt  (tokPos $1) (tokNum $1)    }
      | '<|' poly '|>'                    { ConstantInt  (tokPos $1) $2             }
-     | '{' RecordFlds '}'                { MkRecord     (tokPos $1) $2             }
+     | '{' RecordFlds '}'                {% mkRecordV   (tokPos $1) $2             }
      | Expr ':' ExprType                 { TypeExpr     (tokPos $2) $1 $3          }
      | Expr '.' var                      { DerefField   (tokPos $2) $1 (tokStr $3) }
      | var '(' Exprs ')'                 { ApplyExpr    (tokPos $1) (tokStr $1) $3 }
