@@ -755,6 +755,13 @@ data MethodSpecIR = MSIR {
   , verificationMethod :: AST.VerificationMethod
   }
 
+-- | Return name of method spec.
+methodSpecName :: MethodSpecIR -> String
+methodSpecName ir =
+ let clName = className (methodSpecIRClass ir)
+     mName = methodName (methodSpecIRMethod ir)
+  in slashesToDots clName ++ "." ++ mName
+
 -- | Interprets AST method spec commands to construct an intermediate
 -- representation that 
 resolveMethodSpecIR :: Pos
@@ -1299,20 +1306,24 @@ verifyMethodSpec ir = do
             ssd <- createExpectedStateDef ir jes
             -- Create verification conditions from path states.
             comparePathStates ir jes oldPathState ssd newPathState
+      -- Get final goal.
+      fGoal <- finalGoal vcs
       case verificationMethod ir of
         AST.ABC -> do
-          {-
-          whenVerbosity (>=2) $
-             dbugM $ "Starting checkSat"
-          -- Check final result.
-          LV v <- getVarLit bFinalEq
-          when (LV.length v /= 1) $
+          LV v <- getVarLit fGoal
+          unless (SV.length v == 1) $
             error "internal: Unexpected number of in verification condition"
-          b <- liftAigMonad $ checkSat (neg (v `LV.unsafeIndex` 0))
+          b <- liftAigMonad $ checkSat (neg (v SV.! 0))
           case b of
             UnSat -> return ()
             Unknown -> error "Checking assumptions failed"
             Sat lits -> do
+              --TODO:
+              error $ "Counterexample found in " ++ methodSpecName ir
+          {-
+          whenVerbosity (>=2) $
+             dbugM $ "Starting checkSat"
+          -- Check final result.
               let inputValues = V.map ($lits) litParseFns
               --evalAndBlast inputValues lits
               --liftIO $ putStrLn "EvalAndBlast succeeded"
