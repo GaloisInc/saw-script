@@ -103,7 +103,7 @@ lookupClass pos nm = do
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
 findMethod :: (JSS.HasCodebase m, MonadIO m)
-           => Pos -> String -> JSS.Class -> m JSS.Method
+           => Pos -> String -> JSS.Class -> m (JSS.Class,JSS.Method)
 findMethod pos nm initClass = do
   let javaClassName = slashesToDots (JSS.className initClass)
   let methodMatches m = JSS.methodName m == nm && not (JSS.methodIsAbstract m)
@@ -118,7 +118,7 @@ findMethod pos nm initClass = do
                  in throwIOExecException pos msg res
               Just superName -> 
                 impl =<< lookupClass pos superName
-          [method] -> return method
+          [method] -> return (cl,method)
           _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
                            ++ " is ambiguous.  SAWScript currently requires that "
                            ++ "method names are unique."
