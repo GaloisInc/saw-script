@@ -49,6 +49,14 @@ mismatch p w g r = TI (\_ -> return (Left (p, msg, "")))
               $$ text "Given   : " <+> text (ppType g)
               $$ text "Required: " <+> text (ppType r)
 
+mismatchArgs :: Monad m => Pos -> String -> [DagType] -> [DagType] -> TI m s a
+mismatchArgs p w gs rs = TI (\_ -> return (Left (p, msg, "")))
+  where msg =    text ("Type mismatch in " ++ w)
+              $$ text "Given   :" <+> mbP (punctuate comma (map (text . ppType) gs))
+              $$ text "Required:" <+> mbP (punctuate comma (map (text . ppType) rs))
+        mbP [x] = x
+        mbP xs  = parens $ fsep xs
+
 unexpected :: Monad m => Pos -> String -> String -> DagType -> TI m s a
 unexpected p w e g = TI (\_ -> return (Left (p, msg, "")))
   where msg =    text ("Unexpected type: " ++ w)
