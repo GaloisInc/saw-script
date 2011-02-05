@@ -299,7 +299,7 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       let defTypes = V.toList defArgTypes
       let argTypes = map getTypeOfTypedExpr args
       case matchSubst (defTypes `zip` argTypes) of
-        Nothing  -> typeErr appPos (ftext ("Illegal arguments and result type given to \'" ++ nm ++ "\'."))
+        Nothing  -> mismatchArgs appPos ("in call to '" ++ nm ++ "'") defTypes argTypes
         Just sub -> do
           debugTI $ "Making expression with operator " ++ opDefName opDef ++ " and substitution " ++  show sub
           return $ TypedApply (mkOp opDef sub) args
