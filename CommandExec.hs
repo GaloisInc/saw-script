@@ -1121,12 +1121,14 @@ createExpectedStateDef ir jes = do
   -- Get array values.
   arrays <-
     forM (jesArrayNodeList jes) $ \(r,refEquivClass,initValue) -> do
-      let Just exprPost = Map.lookup refEquivClass (arrayPostconditions ir)
+      let exprPost = Map.lookup refEquivClass (arrayPostconditions ir)
       expValue <-
         case exprPost of
-          PostUnchanged -> return (Just initValue)
-          PostArbitrary -> return Nothing
-          PostResult expr -> fmap Just $ evalTypedExpr jes expr
+          Just PostUnchanged -> return (Just initValue)
+          Just PostArbitrary -> return Nothing
+          Just (PostResult expr) -> fmap Just $ evalTypedExpr jes expr
+          Nothing -> error $ "internal: " ++ show refEquivClass ++
+                             " not in arrayPostconditions"
       return (r,expValue)
   -- Return expected state definition.
   return $ ESD { esdInstanceFields = Map.fromList instanceFields
