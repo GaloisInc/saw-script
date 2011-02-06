@@ -9,7 +9,7 @@ module SAWScript.CommandExec(runProofs) where
 import Control.Exception
 import Control.Monad
 import Data.Int
-import Data.List (intercalate)
+import Data.List (intercalate, sort)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -361,6 +361,7 @@ data SpecPostcondition
   = PostUnchanged
   | PostArbitrary
   | PostResult TypedExpr
+  deriving (Show)
 
 type SpecJavaRefEquivClass = [SpecJavaExpr]
 
@@ -814,7 +815,7 @@ resolveMethodSpecIR pos thisClass mName cmds = do
           let msg = "This specification contains a mayAlias declaration "
                    ++ "containing \'" ++ show lhs ++ "\' and an additional "
                    ++ "declaration that references its field \'"
-                   ++ JSS.fieldName f ++ "\'.  The current SAWScript "
+                   ++ JSS.fieldIdName f ++ "\'.  The current SAWScript "
                    ++ "implementation does not support this."
               res = "Please remove the mayAlias declaration of \'" ++ show lhs
                    ++ "\' and alter the Java code as needed."
@@ -865,18 +866,6 @@ resolveMethodSpecIR pos thisClass mName cmds = do
      
          in Map.fromList $ map getScalarPostCondition
                          $ Set.toList (nonRefTypes st')
-  let arrayPostconditions = 
-        let getArrayPostCondition expr =
-             case Map.lookup expr (arrayEnsures st') of
-               Nothing -> (expr, PostUnchanged)
-               Just (_,cond) -> (expr, cond)
-            isArrayClass (_, RIVClass _) = False
-            isArrayClass _ = True
-         in Map.fromList $ map getArrayPostCondition
-                         $ concat
-                         $ map fst
-                         $ filter isArrayClass
-                         $ specReferences
   -- Get verification method.
   let throwUndefinedVerification =
         let msg = "The verification method for \'" ++ methodName method 
@@ -898,7 +887,7 @@ resolveMethodSpecIR pos thisClass mName cmds = do
               , methodLetBindings = reverse (reversedLetBindings st')
               , assumptions = currentAssumptions st'
               , scalarPostconditions
-              , arrayPostconditions
+              , arrayPostconditions = Map.map snd (arrayEnsures st')
               , returnValue
               , verificationMethod
               }
@@ -958,10 +947,9 @@ jesExprValue jem expr = do
 initialInstanceFieldValues :: JavaEvalState
                            -> [(SpecJavaExpr, JSS.Ref, JSS.FieldId, JSS.Value Node)]
 initialInstanceFieldValues JES { jesClassName = clName, jesExprValueMap = m } =
-  [ (expr, ref, fid, v)
+  [ (expr, ref, f, v)
     | (expr@(SpecField refExpr f), v) <- Map.toList m
-    , let Just (JSS.RValue ref) = Map.lookup refExpr m
-    , let fid = FieldId clName (fieldName f) (fieldType f) ]
+    , let Just (JSS.RValue ref) = Map.lookup refExpr m ]
 
 -- | Evaluates a typed expression.
 evalTypedExpr :: JavaEvalState -> TypedExpr -> SymbolicMonad Node
@@ -990,7 +978,9 @@ createJavaEvalReferences cm = do
       liftSym = lift . JSS.liftSymbolic
   V.forM_ (equivClassMapEntries cm) $ \(idx, exprClass, initValue) -> do
     litCount <- liftAig $ getInputLitCount
-    let refName:_ = map show exprClass
+    let refName = case exprClass of
+                    [expr] -> show expr
+                    _ -> "{ " ++ intercalate ", " (map show (sort exprClass)) ++ " }"
     let -- create array input node with length and int width.
         createInputArrayNode l w = do
           let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
@@ -1150,8 +1140,7 @@ createExpectedStateDef ir jes = do
           Just PostArbitrary -> return Nothing
           Just (PostResult expr) ->
             fmap Just $ evalTypedExpr jes expr
-          Nothing -> error $ "internal: " ++ show refEquivClass ++
-                             " not in arrayPostconditions"
+          Nothing -> return (Just initValue)
       whenVerbosity (>= 6) $ 
         liftIO $ putStrLn 
                 $ "Expecting " ++ show refEquivClass ++ " has value " ++ show expValue
@@ -1214,8 +1203,10 @@ comparePathStates :: MethodSpecIR
                   -> JSS.PathState Node
                   -> ExpectedStateDef
                   -> JSS.PathState Node
+                  -> Maybe (JSS.Value Node)
                   -> SymbolicMonad VerificationConditionSet
-comparePathStates ir jes oldPathState ssd newPathState = do
+comparePathStates ir jes oldPathState ssd newPathState mbRetVal = do
+  --TODO: Handle mbRetVal
   let pos = methodSpecPos ir
   let clName = jesClassName jes
   let mName = jesMethodName jes
@@ -1332,8 +1323,9 @@ runABC pos ir jes fGoal counterFns = do
       -- Get differences between two.
       counters <- symbolicEval (V.fromList inputValues) $
         liftM catMaybes $ mapM id counterFns
+      let inputExprValMap = Map.fromList (inputExprs `zip` inputValues)
       let inputDocs 
-            = flip map (inputExprs `zip` inputValues) $ \(expr,c) ->
+            = flip map (Map.toList inputExprValMap) $ \(expr,c) ->
                  text (show expr) <+> equals <+> ppCValueDoc c
       let diffDocs
             = flip map counters $ \(DV name specVal jvmVal) ->
@@ -1352,16 +1344,24 @@ runABC pos ir jes fGoal counterFns = do
 verifyMethodSpec :: Pos -> MethodSpecIR -> Executor ()
 verifyMethodSpec _ MSIR { verificationMethod = AST.Skip } = return ()
 verifyMethodSpec pos ir = do
+  whenVerbosity (>= 3) $
+    liftIO $ putStrLn $ "Starting verification of " ++ methodSpecName ir
   cb <- gets codebase
   v <- fmap verbose $ gets execOptions
   let refEquivClasses = JSS.partitions (specReferences ir)
-  lift $ forM_ ([1::Integer ..] `zip` refEquivClasses) $ \(_i,cm) -> do
+  lift $ forM_ refEquivClasses $ \cm -> do
+    when (v >= 6) $
+      liftIO $ putStrLn $ "Considing new alias configuration of " ++ methodSpecName ir
     runSymSession $ do
       setVerbosity v
       -- Generate input vectors.
       -- Run simulator 
       (jes,vcs) <- 
         JSS.runSimulator cb $ do
+          setVerbosity v
+          when (v >= 6) $
+             liftIO $ putStrLn $
+               "Creating evaluation state for simulation of " ++ methodSpecName ir
           -- Create map from specification entries to JSS simulator values.
           jes <- createJavaEvalState ir cm
           -- TODO: Add method spec overrides.
@@ -1370,14 +1370,38 @@ verifyMethodSpec pos ir = do
           -- Get old path state
           oldPathState <- JSS.getPathState
           -- Execute method.
+          when (v >= 6) $
+             liftIO $ putStrLn $ "Executing " ++ methodSpecName ir
           jssResult <- runMethod ir jes
+              -- isReturn returns True if result is a normal return value.
+          let isReturn JSS.ReturnVal{} = True
+              isReturn JSS.Terminated = True
+              isReturn _ = False
+          let returnResults = filter (isReturn . snd) jssResult
+          when (null returnResults) $
+            let msg = "The Java method " ++ show (methodSpecName ir)
+                  ++ " through exceptions on all paths, and cannot be verified"
+                res = "Please check that all fields needed for correctness are defined."
+             in throwIOExecException pos (ftext msg) res
+          when (length returnResults > 1) $
+            error "internal: verifyMethodSpec returned multiple valid results"
+          let [(ps,fr)] = returnResults
+          let returnVal = case fr of
+                            JSS.ReturnVal v -> Just v
+                            JSS.Terminated -> Nothing
           --TODO: Parse jssResult to ge back final values.
           -- Build final equation and functions for generating counterexamples.
           newPathState <- JSS.getPathState
-          vcs <- JSS.liftSymbolic $ do
-                   ssd <- createExpectedStateDef ir jes
-                   -- Create verification conditions from path states.
-                   comparePathStates ir jes oldPathState ssd newPathState
+          vcs <-
+            JSS.liftSymbolic $ do
+              when (v >= 6) $
+                liftIO $ putStrLn $ "Creating expected result for " ++ methodSpecName ir
+              ssd <- createExpectedStateDef ir jes
+              whenVerbosity (>= 6) $
+                liftIO $ putStrLn $
+                  "Creating verification conditions for " ++ methodSpecName ir
+              -- Create verification conditions from path states.
+              comparePathStates ir jes oldPathState ssd newPathState returnVal
           return (jes,vcs)
       -- Get final goal.
       fGoal <- finalGoal vcs

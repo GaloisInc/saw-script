@@ -129,7 +129,7 @@ findMethod pos nm initClass = do
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
 findField :: (JSS.HasCodebase m, MonadIO m)
-          => Pos -> String -> JSS.Class -> m JSS.Field
+          => Pos -> String -> JSS.Class -> m JSS.FieldId
 findField pos nm initClass = do
   let impl cl = 
         case filter (\f -> JSS.fieldName f == nm) $ JSS.classFields cl of
@@ -141,7 +141,6 @@ findField pos nm initClass = do
                     res = "Please check to make sure the field name is correct."
                  in throwIOExecException pos (ftext msg) res
               Just superName -> impl =<< lookupClass pos superName
-          [f] -> do
-            return f
+          [f] -> return $ JSS.FieldId (JSS.className cl) nm (JSS.fieldType f)
           _ -> error "internal: Found multiple fields with the same name."
   impl initClass 

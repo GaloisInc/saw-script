@@ -45,13 +45,12 @@ tcType cfg t = runTI cfg (tcT t)
 data SpecJavaExpr
   = SpecThis String
   | SpecArg Int JSS.Type
-  | SpecField SpecJavaExpr JSS.Field
+  | SpecField SpecJavaExpr JSS.FieldId
 
 instance Eq SpecJavaExpr where
   SpecThis _      == SpecThis _      = True
   SpecArg i _     == SpecArg j _     = i == j
-  SpecField r1 f1 == SpecField r2 f2 =
-    r1 == r2 && JSS.fieldName f1 == JSS.fieldName f2
+  SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && f1 == f2
   _               == _               = False
 
 instance Ord SpecJavaExpr where
@@ -63,20 +62,20 @@ instance Ord SpecJavaExpr where
   _               `compare` SpecArg _ _     = GT
   SpecField r1 f1 `compare` SpecField r2 f2 =
         case r1 `compare` r2 of
-          EQ -> JSS.fieldName f1 `compare` JSS.fieldName f2
+          EQ -> f1 `compare` f2
           r  -> r
 
 instance Show SpecJavaExpr where
   show (SpecThis _)    = "this"
   show (SpecArg i _)   = "args[" ++ show i ++ "]"
-  show (SpecField r f) = show r ++ "." ++ JSS.fieldName f
+  show (SpecField r f) = show r ++ "." ++ JSS.fieldIdName f
 
 -- | Returns JSS Type of SpecJavaExpr
 getJSSTypeOfSpecRef :: SpecJavaExpr -- ^ Spec Java reference to get type of.
                     -> JSS.Type
 getJSSTypeOfSpecRef (SpecThis cl)   = JSS.ClassType cl
 getJSSTypeOfSpecRef (SpecArg _ tp)  = tp
-getJSSTypeOfSpecRef (SpecField _ f) = JSS.fieldType f
+getJSSTypeOfSpecRef (SpecField _ f) = JSS.fieldIdType f
 
 -- Typecheck expression types {{{1
 
@@ -195,7 +194,7 @@ tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
     JSS.ClassType lhsClassName -> do
       cl <- findClass pos lhsClassName
       f <- findField pos fName cl
-      checkJSSTypeIsValid pos (JSS.fieldType f)
+      checkJSSTypeIsValid pos (JSS.fieldIdType f)
       return $ SpecField lhs f
     _ -> typeErrWithR pos (ftext ("Could not find a field named " ++ fName ++ " in " ++ show lhs ++ "."))
                           "Please check to make sure the field name is correct."
