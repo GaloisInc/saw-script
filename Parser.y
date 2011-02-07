@@ -45,7 +45,7 @@ import {-# SOURCE #-} SAWScript.ParserActions
    'verification' { TReserved _ "verification" }
    'on'           { TReserved _ "on"           }
    'off'          { TReserved _ "off"          }
-   'type'         { TReserved _ "type"         }
+   'var'          { TReserved _ "var"          }
    'args'         { TReserved _ "args"         }
    'this'         { TReserved _ "this"         }
    'int'          { TReserved _ "int"          }
@@ -224,7 +224,7 @@ MethodSpecDecls :: { [MethodSpecDecl] }
 MethodSpecDecls : termBy(MethodSpecDecl, ';') { $1 }
 
 MethodSpecDecl :: { MethodSpecDecl }
-MethodSpecDecl : 'type'        JavaRefs ':' JavaType  { Type        (tokPos $1) $2 $4          }
+MethodSpecDecl : 'var'         JavaRefs ':' JavaType  { Type        (tokPos $1) $2 $4          }
                | 'mayAlias'    '{' JavaRefs '}'       { MayAlias    (tokPos $1) $3             }
                | 'const'       JavaRef ':=' Expr      { Const       (tokPos $1) $2 $4          }
                | 'let'         var '='  Expr          { MethodLet   (tokPos $1) (tokStr $2) $4 }
