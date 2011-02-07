@@ -1583,7 +1583,7 @@ verifyMethodSpec pos cb opts ir overrides rules = do
             isReturn _ = False
         let returnResults = filter (isReturn . snd) jssResult
         when (null returnResults) $
-          let msg = "The Java method " ++ show (methodSpecName ir)
+          let msg = "The Java method " ++ methodSpecName ir
                 ++ " throws exceptions on all paths, and cannot be verified"
               res = "Please check that all fields needed for correctness are defined."
            in throwIOExecException pos (ftext msg) res
@@ -1621,8 +1621,13 @@ verifyMethodSpec pos cb opts ir overrides rules = do
               case getBool newGoal of
                 Just True -> return ()
                 _ -> do
-                 liftIO $ putStrLn $ prettyTerm newGoal
-                 error "TODO: AST.Rewrite"
+                 let msg = ftext ("The rewriter failed to reduce the verification condition "
+                                    ++ " from the Java method " ++ methodSpecName ir 
+                                    ++ " to 'True'.\n\n") $$
+                           ftext ("The remaining goal is:") $$
+                           nest 2 (prettyTermD newGoal)
+                     res = "Please add new rewrite rules or modify existing ones to reduce the goal to True."
+                  in throwIOExecException pos msg res
             AST.Auto -> do
               newGoal <- runRewriter
               runABC pos ir jvs newGoal (vcsCounterFns vcs)
