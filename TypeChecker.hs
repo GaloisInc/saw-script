@@ -9,6 +9,7 @@ module SAWScript.TypeChecker
   , JavaExprDagType(..)
   , TypedExpr(..)
   , getTypeOfTypedExpr
+  , typedExprVarNames
   , TCConfig(..)
   , tcExpr
   , tcType
@@ -19,6 +20,7 @@ import Control.Monad
 import Data.Map(Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
 
@@ -43,7 +45,7 @@ tcType cfg t = runTI cfg (tcT t)
 
 -- | Identifies a reference to a Java value.
 data SpecJavaExpr
-  = SpecThis String
+  = SpecThis String -- | Name of classname for this object.
   | SpecArg Int JSS.Type
   | SpecField SpecJavaExpr JSS.FieldId
 
@@ -77,7 +79,7 @@ getJSSTypeOfSpecRef (SpecThis cl)   = JSS.ClassType cl
 getJSSTypeOfSpecRef (SpecArg _ tp)  = tp
 getJSSTypeOfSpecRef (SpecField _ f) = JSS.fieldIdType f
 
--- Typecheck expression types {{{1
+-- Typecheck DagType {{{1
 
 -- | Convert expression type from AST into WidthExpr
 tcheckExprWidth :: AST.ExprWidth -> WidthExpr
@@ -126,8 +128,6 @@ data TypedExpr
    = TypedApply Op [TypedExpr]
    | TypedCns CValue DagType
    | TypedArray [TypedExpr] DagType
-   | TypedRecord [(String, TypedExpr)] DagType
-   | TypedDeref TypedExpr String DagType
    | TypedJavaValue SpecJavaExpr DagType
    | TypedVar String DagType
    deriving (Show)
@@ -137,10 +137,17 @@ getTypeOfTypedExpr :: TypedExpr -> DagType
 getTypeOfTypedExpr (TypedVar         _ tp) = tp
 getTypeOfTypedExpr (TypedCns         _ tp) = tp
 getTypeOfTypedExpr (TypedArray       _ tp) = tp
-getTypeOfTypedExpr (TypedRecord      _ tp) = tp
-getTypeOfTypedExpr (TypedDeref     _ _ tp)   = tp
 getTypeOfTypedExpr (TypedJavaValue   _ tp) = tp
 getTypeOfTypedExpr (TypedApply       op _) = opResultType op
+
+-- | Returns names of variables appearing in typedExpr.
+typedExprVarNames :: TypedExpr -> Set String
+typedExprVarNames (TypedApply _ exprs) = Set.unions (map typedExprVarNames exprs)
+typedExprVarNames (TypedCns _ _) = Set.empty
+typedExprVarNames (TypedJavaValue _ _) = Set.empty
+typedExprVarNames (TypedVar nm _) = Set.singleton nm
+
+-- JavaExprDagType {{{1
 
 -- | Identifies the type of a Java expression.
 data JavaExprDagType
@@ -158,6 +165,8 @@ data TCConfig = TCC {
        , toJavaExprType    :: SpecJavaExpr -> JavaExprDagType
        , sawOptions        :: SSOpts
        }
+
+-- }}}1
 
 type SawTI = TI OpSession TCConfig
 
@@ -260,14 +269,17 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
 tcE (AST.TypeExpr p (AST.MkArray _ []) astResType) = do
    resType <- tcT astResType
    case resType of
-     SymArray we _ | Just (Wx 0) <- widthConstant we -> return $ TypedArray [] resType
+     SymArray we _ 
+       | Just (Wx 0) <- widthConstant we ->
+          return $ TypedArray [] resType
      _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
 tcE (AST.MkRecord _ flds) = do
    flds' <- mapM tcE [e | (_, _, e) <- flds]
    let names = [nm | (_, nm, _) <- flds]
    def <- liftTI $ getStructuralRecord (Set.fromList names)
-   let t = SymRec def $ emptySubst { shapeSubst = Map.fromList $ names `zip` (map getTypeOfTypedExpr flds') }
-   return $ TypedRecord (names `zip` flds') t
+   let fldTps = map getTypeOfTypedExpr flds'
+   let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` fldTps }
+   return $ TypedApply (mkOp (recDefCtor def) sub) flds'
 tcE (AST.TypeExpr p e astResType) = do
    te <- tcE e
    let tet = getTypeOfTypedExpr te
@@ -343,11 +355,10 @@ tcE (AST.IteExpr      p t l r) = do
 tcE (AST.DerefField p e f) = do
    e' <- tcE e
    case getTypeOfTypedExpr e' of
-     rt@(SymRec recDef recSubst) -> do let fldNms = map opDefName $ V.toList $ recDefFieldOps recDef
-                                           ftypes = V.toList $ recFieldTypes recDef recSubst
-                                       case f `lookup` zip fldNms ftypes of
+     rt@(SymRec recDef recSubst) -> do let fops = recDefFieldOps recDef
+                                       case V.find (\op -> opDefName op == f) fops of
                                          Nothing -> unexpected p "record field selection" ("record containing field " ++ show f) rt
-                                         Just ft -> return $ TypedDeref e' f ft
+                                         Just fop -> return $ TypedApply (mkOp fop recSubst) [e']
      rt  -> unexpected p "record field selection" ("record containing field " ++ show f) rt
 
 tcJRef :: Pos -> AST.JavaRef -> SawTI TypedExpr

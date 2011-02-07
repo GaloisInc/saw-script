@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -8,8 +7,9 @@ module SAWScript.CommandExec(runProofs) where
 -- Imports {{{1
 import Control.Exception
 import Control.Monad
+import Data.IORef
 import Data.Int
-import Data.List (intercalate, sort)
+import Data.List (foldl', intercalate, sort)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -50,6 +50,36 @@ mapInsertKeys keys val m = foldr (\i -> Map.insert i val) m keys
 mapLookupAny :: Ord k => [k] -> Map k a -> Maybe a
 mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -> Map.lookup k m) keys
 
+int32DagType :: DagType
+int32DagType = SymInt (constantWidth 32)
+
+int64DagType :: DagType
+int64DagType = SymInt (constantWidth 64)
+
+-- | Create a node with given number of bits.
+createSymbolicIntNode :: Int -> SymbolicMonad Node
+createSymbolicIntNode w = do
+  lv <- fmap LV $ liftAigMonad $ SV.replicateM w makeInputLit
+  freshVar (SymInt (constantWidth (Wx w))) lv
+
+-- | @createSymbolicArrayNode l w@ creates an array with length l@ and elements with width @w@.
+createSymbolicArrayNode :: Int -> Int -> SymbolicMonad Node
+createSymbolicArrayNode l w = do
+  let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
+  lv <- liftAigMonad $ V.replicateM l $ fmap LV $ SV.replicateM w makeInputLit
+  freshVar arrType (LVN lv)
+
+createLitVectorFromType :: DagType -> AigComputation OpSession (LitResult Lit)
+createLitVectorFromType tp@(SymInt (widthConstant -> Just (Wx w))) = do
+  fmap LV $ SV.replicateM w makeInputLit
+createLitVectorFromType tp@(SymArray (widthConstant -> Just (Wx l)) eltTp) = do
+  fmap LVN $ V.replicateM l $ createLitVectorFromType eltTp
+createLitVectorFromType _ = error "internal: createLitVectorFromType called with unsupported type."
+
+-- | Create a node with given number of bits.
+createSymbolicFromType :: DagType -> SymbolicMonad Node
+createSymbolicFromType tp = freshVar tp =<< liftAigMonad (createLitVectorFromType tp)
+
 -- Executor primitives {{{1
 
 data ExecutorState = ES {
@@ -67,6 +97,8 @@ data ExecutorState = ES {
     -- | Maps function names read in from SBV file into corresponding
     -- operator definition and position where operator was introduced.
   , sbvOpMap :: Map String (Pos,OpDef)
+    -- | List of method specs added to state.
+  , methodSpecs :: [MethodSpecIR]
     -- | Maps rule names to corresponding rule.
   , rules :: Map String Rule
     -- | Set of currently enabled rules.
@@ -293,7 +325,6 @@ data SpecJavaType
   = SpecRefClass !(JSS.Class) -- ^ Specific class for a reference.
   | SpecIntArray !Int
   | SpecLongArray !Int
-  | SpecBool
   | SpecInt
   | SpecLong
 
@@ -302,7 +333,6 @@ ppSpecJavaType :: SpecJavaType -> String
 ppSpecJavaType (SpecRefClass cl) = className cl
 ppSpecJavaType (SpecIntArray l)  = "int[" ++ show l ++ "]"
 ppSpecJavaType (SpecLongArray l) = "long[" ++ show l ++ "]"
-ppSpecJavaType SpecBool = "bool"
 ppSpecJavaType SpecInt  = "int"
 ppSpecJavaType SpecLong = "long"
 
@@ -312,7 +342,6 @@ getJSSTypeOfSpecJavaType :: SpecJavaType -- ^ Spec Java reference to get type of
 getJSSTypeOfSpecJavaType (SpecRefClass cl) = JSS.ClassType (className cl)
 getJSSTypeOfSpecJavaType (SpecIntArray _) = JSS.ArrayType JSS.IntType
 getJSSTypeOfSpecJavaType (SpecLongArray _) = JSS.ArrayType JSS.LongType
-getJSSTypeOfSpecJavaType SpecBool = JSS.BooleanType
 getJSSTypeOfSpecJavaType SpecInt  = JSS.IntType
 getJSSTypeOfSpecJavaType SpecLong = JSS.LongType
 
@@ -333,7 +362,8 @@ parseASTType (AST.IntArray pos l) =
   fmap SpecIntArray $ checkedGetArrayLength pos l
 parseASTType (AST.LongArray pos l) =
   fmap SpecLongArray $ checkedGetArrayLength pos l
-parseASTType (AST.BoolScalar  _) = return SpecBool
+-- Boolean AST expressions are internally treated as 32-bit integers by JVM
+parseASTType (AST.BoolScalar  _) = return SpecInt
 parseASTType (AST.IntScalar  _) = return SpecInt
 parseASTType (AST.LongScalar  _) = return SpecLong
 
@@ -349,6 +379,7 @@ data SpecJavaRefInitialValue
   | RIVClass JSS.Class
   | RIVIntArray !Int
   | RIVLongArray !Int
+  deriving (Show)
 
 instance Eq SpecJavaRefInitialValue where
   RIVArrayConst tp1 c1 _ == RIVArrayConst tp2 c2 _ = tp1 == tp2 && c1 == c2
@@ -359,11 +390,16 @@ instance Eq SpecJavaRefInitialValue where
 
 data SpecPostcondition 
   = PostUnchanged
-  | PostArbitrary
+  | PostArbitrary DagType
   | PostResult TypedExpr
   deriving (Show)
 
 type SpecJavaRefEquivClass = [SpecJavaExpr]
+
+ppSpecJavaRefEquivClass :: SpecJavaRefEquivClass -> String
+ppSpecJavaRefEquivClass [] = error "internal: ppSpecJavaRefEquivClass"
+ppSpecJavaRefEquivClass [expr] = show expr
+ppSpecJavaRefEquivClass cl = "{ " ++ intercalate ", " (map show (sort cl)) ++ " }"
 
 -- MethodSpecTranslation immediate state {{{2
 
@@ -459,6 +495,22 @@ throwIncompatibleExprType pos lhsExpr refType specTypeName =
              ++ specTypeName ++ "."
    in throwIOExecException pos (ftext msg) ""
 
+getExprTypeFn :: MethodSpecTranslator (SpecJavaExpr -> JavaExprDagType)
+getExprTypeFn = do
+  rtm <- gets refTypeMap
+  cem <- gets constExprMap
+  return $ \e -> case Map.lookup e rtm of
+                   Just (RIVArrayConst _ _ tp) -> JEDTType tp
+                   Just (RIVClass cl) -> JEDTClass (className cl)
+                   Just (RIVIntArray l) ->
+                     JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32)))
+                   Just (RIVLongArray l) ->
+                     JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64)))
+                   Nothing ->
+                     case Map.lookup e cem of
+                       Nothing -> JEDTUndefined
+                       Just (_,tp) -> JEDTType tp
+
 -- | Typecheck expression at global level.
 methodParserConfig :: MethodSpecTranslator TCConfig
 methodParserConfig = do
@@ -467,25 +519,12 @@ methodParserConfig = do
   m <- gets specMethod
   rtm <- gets refTypeMap
   cem <- gets constExprMap
+  exprTypeFn <- getExprTypeFn
   lift $ do
     globalCnsBindings <- gets globalLetBindings
     opBindings <- gets sawOpMap
     opts <- gets execOptions
     cb <- JSS.getCodebase
-
-    let exprTypeFn :: SpecJavaExpr -> JavaExprDagType
-        exprTypeFn e = 
-          case Map.lookup e rtm of
-            Just (RIVArrayConst _ _ tp) -> JEDTType tp
-            Just (RIVClass cl) -> JEDTClass (className cl)
-            Just (RIVIntArray l) ->
-              JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32)))
-            Just (RIVLongArray l) ->
-              JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64)))
-            Nothing ->
-              case Map.lookup e cem of
-                Nothing -> JEDTUndefined
-                Just (_,tp) -> JEDTType tp
     return TCC { localBindings = Map.map snd locals
                , globalCnsBindings
                , opBindings
@@ -510,15 +549,19 @@ typecheckMethodExpr astExpr = do
 checkSpecJavaExprCompat :: Pos -> String -> JSS.Type -> DagType -> MethodSpecTranslator ()
 checkSpecJavaExprCompat pos exprName exprType dagType = do
   case (exprType, dagType) of
-    (BooleanType, SymBool) -> return ()
-    (IntType, SymInt (widthConstant -> Just 32)) -> return ()
-    (LongType, SymInt (widthConstant -> Just 64)) -> return ()
-    (  ArrayType IntType
-     , SymArray (widthConstant -> Just _) (SymInt (widthConstant -> Just 32))) ->
-       return ()
-    (  ArrayType LongType
-     , SymArray (widthConstant -> Just _) (SymInt (widthConstant -> Just 64))) ->
-       return ()
+    (BooleanType, SymBool) -> 
+      let msg = "The type of \'" ++ exprName ++ "\' is in the Java \'Boolean\' type "
+                 ++ ", which internally to the JVM is treated as a 32-bit integer, and not "
+                 ++ " a \'Boolean\' predicate as in traditional mathematics."
+          res = "Please modify the expression to denote a 32-bit integer."
+       in throwIOExecException pos (ftext msg) res
+    (BooleanType, _) | dagType == int32DagType -> return ()
+    (IntType, _) | dagType == int32DagType -> return ()
+    (LongType, _) | dagType == int64DagType -> return ()
+    (ArrayType IntType, SymArray (widthConstant -> Just _) eltTp)
+      | eltTp == int32DagType -> return ()
+    (ArrayType LongType, SymArray (widthConstant -> Just _) eltTp)
+      | eltTp == int64DagType -> return ()
     (_, specType) -> throwIncompatibleExprType pos exprName exprType (ppType specType)
 
 -- | Check that no 'ensures' or 'arbitrary' statement has been added for the
@@ -694,10 +737,14 @@ resolveDecl (AST.Arbitrary pos astJavaExprs) = do
     -- Resolve and check astJavaExpr.
     javaExpr <- typecheckJavaExpr astJavaExpr
     checkJavaTypeIsDefined pos javaExpr
+    exprTypeFn <- getExprTypeFn
     checkJavaExprIsModifiable pos javaExpr "\'arbitrary\'"
     checkEnsuresUndefined pos javaExpr $
       "Multiple ensures and arbitrary statements have been added for " ++ show javaExpr ++ "."
-    addEnsures pos javaExpr PostArbitrary
+    let tp = case exprTypeFn javaExpr of
+               JEDTType tp -> tp
+               _ -> error "internal: resolveDecl Arbitrary given bad javaExpr"
+    addEnsures pos javaExpr (PostArbitrary tp)
 resolveDecl (AST.Returns pos astValueExpr) = do
   -- Check return value is undefined.
   do rv <- gets currentReturnValue
@@ -718,6 +765,7 @@ resolveDecl (AST.Returns pos astValueExpr) = do
                  ++ "method returns \'void\'."
        in throwIOExecException pos (ftext msg) ""
     Just returnType ->
+
       let valueExprType = getTypeOfTypedExpr valueExpr
        in checkSpecJavaExprCompat pos "the return value" returnType valueExprType
   -- Update state with return value.
@@ -767,7 +815,7 @@ data MethodSpecIR = MSIR {
   , returnValue :: Maybe TypedExpr
   -- | Verification method for method. 
   , verificationMethod :: AST.VerificationMethod
-  }
+  } deriving (Show)
 
 -- | Return name of method spec.
 methodSpecName :: MethodSpecIR -> String
@@ -790,7 +838,9 @@ resolveMethodSpecIR pos thisClass mName cmds = do
                 , specMethod = method
                 , nonRefTypes = Set.empty
                 , refTypeMap =
-                    Map.singleton (SpecThis (className thisClass)) (RIVClass thisClass)
+                    if methodIsStatic method
+                      then Map.empty
+                      else Map.singleton (SpecThis (className thisClass)) (RIVClass thisClass)
                 , constExprMap = Map.empty
                 , mayAliasRefs = Map.empty
                 , revAliasSets = [] 
@@ -892,6 +942,184 @@ resolveMethodSpecIR pos thisClass mName cmds = do
               , verificationMethod
               }
 
+-- JavaStateInfo {{{1
+
+-- | Stores information about a particular Java state.
+data JavaStateInfo = JSI {
+         jsiThis :: Maybe JSS.Ref
+       , jsiArgs :: V.Vector (JSS.Value Node) 
+       , jsiPathState :: JSS.PathState Node
+       }
+
+-- | Create a Java State info with the given values.
+createJavaStateInfo :: Maybe JSS.Ref -> [JSS.Value Node] -> JSS.Simulator SymbolicMonad JavaStateInfo
+createJavaStateInfo r args = do
+  s <- JSS.getPathState
+  return JSI { jsiThis = r, jsiArgs = V.fromList args, jsiPathState = s }
+
+-- | Returns value associated to Java expression in this state.
+javaExprValue :: JavaStateInfo -> SpecJavaExpr -> JSS.Value Node
+javaExprValue (jsiThis -> Just r) (SpecThis _) = JSS.RValue r
+javaExprValue (jsiThis -> Nothing) (SpecThis _) =
+  error "internal: javaExprValue given SpecThis for static method"
+javaExprValue (jsiArgs -> v) (SpecArg i _) = v V.! i
+javaExprValue s (SpecField e f) = 
+  let JSS.RValue r = javaExprValue s e
+      Just value = Map.lookup (r,f) (JSS.instanceFields (jsiPathState s))
+   in value
+
+-- | Returns nodes associated to Java expression in initial state associated with mapping.
+javaExprNode :: JavaStateInfo -> SpecJavaExpr -> Node
+javaExprNode jsi e =
+  case javaExprValue jsi e of
+    JSS.IValue n -> n
+    JSS.LValue n -> n
+    JSS.RValue r -> let Just (_,n) = Map.lookup r (JSS.arrays (jsiPathState jsi)) in n
+    _ -> error "internal: javaExprNode given an invalid expression."
+
+-- | Returns information about value of instance fields in state info.
+instanceFieldValues :: MethodSpecIR
+                    -> JavaStateInfo
+                    -> [(SpecJavaExpr, JSS.Ref, JSS.FieldId, JSS.Value Node)]
+instanceFieldValues ir jsi = do
+  let exprs = concat (map fst (specReferences ir)) ++ specScalarInputs ir
+   in [ (expr, ref, f, javaExprValue jsi expr)
+      | expr@(SpecField refExpr f) <- exprs
+      , let JSS.RValue ref = javaExprValue jsi refExpr ]
+
+-- SpecStateInfo {{{1
+
+-- | Stores information about the JavaState at a particular specification state.
+data SpecStateInfo = SSI {
+         ssiJavaStateInfo :: JavaStateInfo
+        -- | Maps names appearing in let bindings to the corresponding Node.
+       , ssiLetNodeBindings :: Map String Node
+       }
+
+-- | Create spec state info from a Java state info and method spec IR.
+createSpecStateInfo :: MethodSpecIR -> JavaStateInfo -> SymbolicMonad SpecStateInfo
+createSpecStateInfo ir jsi = do
+  let initialState = SSI jsi Map.empty
+  flip execStateT initialState $ do
+    -- create Method Let Bindings
+    forM_ (methodLetBindings ir) $ \(name,expr) -> do
+      ssi <- get
+      n <- lift $ evalTypedExpr ssi expr
+      modify $ \s -> s { ssiLetNodeBindings = Map.insert name n (ssiLetNodeBindings s) }
+
+-- | Evaluates a typed expression.
+evalTypedExpr :: SpecStateInfo -> TypedExpr -> SymbolicMonad Node
+evalTypedExpr ssi (TypedApply op exprs) = do
+  applyOp op =<< mapM (evalTypedExpr ssi) exprs
+evalTypedExpr _ (TypedCns c tp) = 
+  makeConstant c tp
+evalTypedExpr ssi (TypedJavaValue javaExpr _) =
+  return $ javaExprNode (ssiJavaStateInfo ssi) javaExpr
+evalTypedExpr ssi (TypedVar name tp) = do
+  case Map.lookup name (ssiLetNodeBindings ssi) of
+    Nothing -> error $ "internal: evalTypedExpr given invalid variable " ++ name
+    Just n -> return n
+
+-- Method specification overrides {{{1
+
+execOverride :: Pos
+             -> MethodSpecIR
+             -> Maybe JSS.Ref
+             -> [JSS.Value Node]
+             -> JSS.Simulator SymbolicMonad ()
+execOverride pos ir mbThis args = do
+  jsi <- createJavaStateInfo mbThis args
+  ssi <- JSS.liftSymbolic $ createSpecStateInfo ir jsi
+  -- Check initialization status
+  forM_ (initializedClasses ir) $ \c -> do
+    status <- JSS.getInitializationStatus c
+    when (status /= Just JSS.Initialized) $
+      let msg = "The method spec " ++ methodSpecName ir ++ " requires that the class "
+                  ++ slashesToDots c ++ " is initialized.  SAWScript does not "
+                  ++ "support new initialized classes yet."
+       in throwIOExecException pos (ftext msg) ""
+  -- Assume all assumptions
+  forM_ (assumptions ir) $ \e ->
+    JSS.assume =<< JSS.liftSymbolic (evalTypedExpr ssi e)
+  -- Check references have correct type.
+  liftIO $ do 
+    seenRefsIORef <- liftIO $ newIORef (Map.empty :: Map JSS.Ref SpecJavaExpr)
+    forM_ (specReferences ir) $ \(ec,iv) -> do
+      seenRefs <- liftIO $ readIORef seenRefsIORef
+      refs <- forM ec $ \javaExpr-> do
+                let JSS.RValue r = javaExprValue jsi javaExpr
+                case Map.lookup r seenRefs of
+                  Nothing -> return ()
+                  Just prevExpr -> do
+                    let msg = "When using the method override for " ++ methodSpecName ir 
+                                ++ ", the expression " ++ show javaExpr 
+                                ++ " aliased a reference that was referred by "  
+                                ++ show prevExpr ++ "."
+                        res = "Please use a \'mayAlias\' declaration when values may alias each other."
+                     in throwIOExecException pos (ftext msg) res
+                return r
+      let newRefs = foldr (uncurry Map.insert) seenRefs (refs `zip` ec)
+      writeIORef seenRefsIORef newRefs
+  -- Check constants are really constants.
+  forM (specConstants ir) $ \(javaExpr,c,tp) -> do
+    let jvmNode = javaExprNode jsi javaExpr
+    specNode <- JSS.liftSymbolic $ makeConstant c tp
+    JSS.assume =<< JSS.liftSymbolic (applyEq specNode jvmNode)
+  -- Update arrayPostconditions
+  forM_ (Map.toList $ arrayPostconditions ir) $ \(javaExpr,pc) -> do
+    let JSS.RValue r = javaExprValue jsi javaExpr
+    case pc of
+      PostUnchanged -> return ()
+      PostArbitrary tp -> do
+        n <- JSS.liftSymbolic $ createSymbolicFromType tp
+        JSS.setSymbolicArray r n
+      PostResult expr -> do
+        n <- JSS.liftSymbolic $ evalTypedExpr ssi expr
+        JSS.setSymbolicArray r n
+  -- Update scalarPostconditions
+  forM_ (Map.toList $ scalarPostconditions ir) $ \(javaExpr,pc) -> do
+    case javaExpr of
+      SpecField refExpr f -> do
+        let JSS.RValue r = javaExprValue jsi refExpr
+        let scalarValueFromNode :: JSS.Type -> Node -> JSS.Value Node
+            scalarValueFromNode JSS.BooleanType n = JSS.IValue n
+            scalarValueFromNode JSS.IntType n = JSS.IValue n
+            scalarValueFromNode JSS.LongType n = JSS.LValue n
+            scalarValueFromNode _ _ = error "internal: illegal type"
+        case pc of
+          PostUnchanged -> return ()
+          PostArbitrary tp -> do
+            n <- JSS.liftSymbolic (createSymbolicFromType tp)
+            let v = scalarValueFromNode (getJSSTypeOfSpecRef javaExpr) n
+            JSS.setInstanceFieldValue r f v
+          PostResult expr -> do
+            n <- JSS.liftSymbolic $ evalTypedExpr ssi expr
+            let v = scalarValueFromNode (getJSSTypeOfSpecRef javaExpr) n
+            JSS.setInstanceFieldValue r f v
+      _ -> error $ "internal: Illegal scalarPostcondition " ++ show javaExpr
+  -- Update return type.
+  let Just returnExpr = returnValue ir
+  case JSS.methodReturnType (methodSpecIRMethod ir) of
+    Nothing -> return ()
+    Just tp | tp == BooleanType || tp == IntType -> do
+      n <- JSS.liftSymbolic (evalTypedExpr ssi returnExpr)
+      JSS.pushValue (JSS.IValue n)
+    Just LongType -> do
+      n <- JSS.liftSymbolic (evalTypedExpr ssi returnExpr)
+      JSS.pushValue (JSS.LValue n)
+
+-- | Add a method override for the given method to the simulator.
+overrideFromSpec :: Pos -> MethodSpecIR -> JSS.Simulator SymbolicMonad ()
+overrideFromSpec pos ir = do
+  let cName = methodSpecIRMethodClassName ir
+  let method = methodSpecIRMethod ir
+  let key = JSS.methodKey method
+  if methodIsStatic method
+    then JSS.overrideStaticMethod cName key $ \args ->
+           execOverride pos ir Nothing args
+    else JSS.overrideInstanceMethod cName key $ \thisVal args ->
+           execOverride pos ir (Just thisVal) args
+
 -- MethodSpec verification {{{1
 -- EquivClassMap {{{2
 type EquivClassMap = (Int, Map Int [SpecJavaExpr], Map Int SpecJavaRefInitialValue)
@@ -902,75 +1130,45 @@ equivClassMapEntries (_,em,vm)
   = V.map (\(i,v) -> (i,em Map.! i,v))
   $ V.fromList $ Map.toList vm
 
--- JavaEvalState {{{2
+-- JavaVerificationState {{{2
 type InputEvaluator = SV.Vector Bool -> CValue
 
-data JavaEvalState = JES {
-        -- | Name of class in printable form.
-        jesClassName :: String   
+
+-- | JavaVerificationState contains information necessary to map between specification
+-- expressions and the initial JVM state during verification.
+data JavaVerificationState = IJSI {
         -- | Name of method in printable form.
-      , jesMethodName :: String
+        jvsMethodName :: String
         -- | Maps Java expression to associated node.
-      , jesExprNodeMap :: Map SpecJavaExpr Node
+      , jvsExprNodeMap :: Map SpecJavaExpr Node
         -- | Contains functions that translate from counterexample
         -- returned by ABC back to constant values, along with the
         -- Java expression associated with that evaluator.
-      , jesInputEvaluators :: [(SpecJavaExpr,InputEvaluator)]
+      , jvsInputEvaluators :: [(SpecJavaExpr,InputEvaluator)]
         -- | Maps Spec Java expression to value for that expression.
-      , jesExprValueMap :: Map SpecJavaExpr (JSS.Value Node)
+      , jvsExprValueMap :: Map SpecJavaExpr (JSS.Value Node)
         -- | Maps JSS refs to name for that ref.
-      , jesRefNameMap :: Map JSS.Ref String
+      , jvsRefNameMap :: Map JSS.Ref String
         -- | List of array references, the associated equivalence class, and the initial value.
-      , jesArrayNodeList :: [(JSS.Ref,SpecJavaRefEquivClass,Node)]
-      , jesLetNodeBindings :: Map String Node
+      , jvsArrayNodeList :: [(JSS.Ref,SpecJavaRefEquivClass,Node)]
       }
 
 -- | Returns name of reference in a state.
-getRefName :: MonadIO m => Pos -> JSS.Ref -> JavaEvalState -> m String
-getRefName pos r jem = do
-  case Map.lookup r (jesRefNameMap jem) of
+getRefName :: MonadIO m => Pos -> JSS.Ref -> JavaVerificationState -> m String
+getRefName pos r jvs = do
+  case Map.lookup r (jvsRefNameMap jvs) of
     Nothing ->
-      let msg = "The JVM method \'" ++ jesMethodName jem ++ "\' has allocated "
+      let msg = "The JVM method \'" ++ jvsMethodName jvs ++ "\' has allocated "
                 ++ "a new reference.  JavaVerifier does not currently support "
                 ++ "methods that allocate new references."
        in throwIOExecException pos (ftext msg) ""
     Just e -> return (show e)
 
--- | Returns value associated to Java expression in initial state associated with mapping.
-jesExprValue :: MonadIO m => JavaEvalState -> SpecJavaExpr -> m (JSS.Value Node)
-jesExprValue jem expr = do
-  case Map.lookup expr (jesExprValueMap jem) of
-    Nothing -> error $ "internal: jesExprValue given undefined expression " ++ show expr
-    Just v -> return v
+type JavaEvaluator = StateT JavaVerificationState (JSS.Simulator SymbolicMonad)
 
--- | Returns information about value of instance fields at initial state.
-initialInstanceFieldValues :: JavaEvalState
-                           -> [(SpecJavaExpr, JSS.Ref, JSS.FieldId, JSS.Value Node)]
-initialInstanceFieldValues JES { jesClassName = clName, jesExprValueMap = m } =
-  [ (expr, ref, f, v)
-    | (expr@(SpecField refExpr f), v) <- Map.toList m
-    , let Just (JSS.RValue ref) = Map.lookup refExpr m ]
+-- initializeJavaVerificationState {{{3
 
--- | Evaluates a typed expression.
-evalTypedExpr :: JavaEvalState -> TypedExpr -> SymbolicMonad Node
-evalTypedExpr jes (TypedApply op exprs) = do
-  applyOp op =<< mapM (evalTypedExpr jes) exprs
-evalTypedExpr _ (TypedCns c tp) = 
-  makeConstant c tp
-evalTypedExpr jes (TypedJavaValue javaExpr tp) = do
-  case Map.lookup javaExpr (jesExprNodeMap jes) of
-    Nothing -> error $ "internal: evalTypedExpr given invalid Java expression."
-    Just n -> return n
-evalTypedExpr jes (TypedVar name tp) = do
-  case Map.lookup name (jesLetNodeBindings jes) of
-    Nothing -> error $ "internal: evalTypedExpr given invalid variable " ++ name
-    Just n -> return n
-
-type JavaEvaluator = StateT JavaEvalState (JSS.Simulator SymbolicMonad)
-
--- createJavaEvalState {{{3
-
--- | Initialize JavaEvalState components involving references,
+-- | Initialize JavaVerificationState components involving references,
 -- and create them in simulator.
 createJavaEvalReferences :: EquivClassMap -> JavaEvaluator ()
 createJavaEvalReferences cm = do
@@ -978,42 +1176,38 @@ createJavaEvalReferences cm = do
       liftSym = lift . JSS.liftSymbolic
   V.forM_ (equivClassMapEntries cm) $ \(idx, exprClass, initValue) -> do
     litCount <- liftAig $ getInputLitCount
-    let refName = case exprClass of
-                    [expr] -> show expr
-                    _ -> "{ " ++ intercalate ", " (map show (sort exprClass)) ++ " }"
+    let refName = ppSpecJavaRefEquivClass exprClass
     let -- create array input node with length and int width.
         createInputArrayNode l w = do
-          let arrType = SymArray (constantWidth (Wx l)) (SymInt (constantWidth (Wx w)))
-          lv <- liftAig $ V.replicateM l $ fmap LV $ SV.replicateM w makeInputLit
-          n <- liftSym $ freshVar arrType (LVN lv)
+          n <- liftSym $ createSymbolicArrayNode l w
           let inputEval lits =
                 CArray $ V.map (\j -> mkCIntFromLsbfV $ SV.slice j w lits)
                        $ V.enumFromStepN litCount w (fromIntegral l)
           ref <- lift $ JSS.newSymbolicArray (JSS.ArrayType JSS.IntType) (fromIntegral l) n
           modify $ \s -> 
-            s { jesExprNodeMap =  mapInsertKeys exprClass n (jesExprNodeMap s)
-              , jesInputEvaluators = map (\expr -> (expr,inputEval)) exprClass
-                                      ++ jesInputEvaluators s
-              , jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
-              , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
-              , jesArrayNodeList = (ref,exprClass,n):(jesArrayNodeList s) }
+            s { jvsExprNodeMap =  mapInsertKeys exprClass n (jvsExprNodeMap s)
+              , jvsInputEvaluators = map (\expr -> (expr,inputEval)) exprClass
+                                      ++ jvsInputEvaluators s
+              , jvsExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jvsExprValueMap s)
+              , jvsRefNameMap = Map.insert ref refName (jvsRefNameMap s)
+              , jvsArrayNodeList = (ref,exprClass,n):(jvsArrayNodeList s) }
     case initValue of
       RIVArrayConst javaTp c@(CArray v) tp -> do
         n <- liftSym $ makeConstant c tp
         let l = V.length v
         ref <- lift $ JSS.newSymbolicArray javaTp (fromIntegral l) n
         modify $ \s -> s 
-          { jesExprNodeMap =  mapInsertKeys exprClass n (jesExprNodeMap s)
-          , jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
-          , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
-          , jesArrayNodeList = (ref,exprClass,n):(jesArrayNodeList s)
+          { jvsExprNodeMap =  mapInsertKeys exprClass n (jvsExprNodeMap s)
+          , jvsExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jvsExprValueMap s)
+          , jvsRefNameMap = Map.insert ref refName (jvsRefNameMap s)
+          , jvsArrayNodeList = (ref,exprClass,n):(jvsArrayNodeList s)
           }
       RIVArrayConst _ _ _ -> error "internal: Illegal RIVArrayConst to runMethodVerification"
       RIVClass cl -> do
         ref <- lift $ JSS.genRef (ClassType (className cl))
         modify $ \s -> s 
-          { jesExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jesExprValueMap s)
-          , jesRefNameMap = Map.insert ref refName (jesRefNameMap s)
+          { jvsExprValueMap = mapInsertKeys exprClass (JSS.RValue ref) (jvsExprValueMap s)
+          , jvsRefNameMap = Map.insert ref refName (jvsRefNameMap s)
           }
       RIVIntArray l ->  createInputArrayNode l 32
       RIVLongArray l -> createInputArrayNode l 64
@@ -1027,130 +1221,130 @@ createJavaEvalScalars ir = do
     litCount <- liftAig $ getInputLitCount
     let addScalarNode node inputEval value = 
           modify $ \s ->
-            s { jesExprNodeMap = Map.insert expr node (jesExprNodeMap s)
-              , jesInputEvaluators = (expr,inputEval) : jesInputEvaluators s
-              , jesExprValueMap = Map.insert expr value (jesExprValueMap s) }
+            s { jvsExprNodeMap = Map.insert expr node (jvsExprNodeMap s)
+              , jvsInputEvaluators = (expr,inputEval) : jvsInputEvaluators s
+              , jvsExprValueMap = Map.insert expr value (jvsExprValueMap s) }
     case getJSSTypeOfSpecRef expr of
-      JSS.BooleanType -> 
-        --TODO: Figure out what to do.
-        error "internal: Boolean not supported until value problem figured out."
+      JSS.BooleanType -> do
+        -- Treat JSS.Boolean as a 32-bit integer.
+        n <- liftSym $ createSymbolicIntNode 32
+        let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 32 lits
+        addScalarNode n inputEval (JSS.IValue n)
       JSS.IntType -> do
-        lv <- liftAig $ SV.replicateM 32 makeInputLit
-        n <- liftSym $ freshVar (SymInt (constantWidth 32)) (LV lv)
+        n <- liftSym $ createSymbolicIntNode 32
         let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 32 lits
         addScalarNode n inputEval (JSS.IValue n)
       JSS.LongType -> do
-        lv <- liftAig $ SV.replicateM 64 makeInputLit
-        n <- liftSym $ freshVar (SymInt (constantWidth 64)) (LV lv)
+        n <- liftSym $ createSymbolicIntNode 64
         let inputEval lits = mkCIntFromLsbfV $ SV.slice litCount 64 lits
         addScalarNode n inputEval (JSS.LValue n)
       _ -> error "internal: createSpecSymbolicInputs Illegal spectype."
 
 -- | Create an evaluator state with the initial JVM state form the IR and
 -- equivalence class map.
-createJavaEvalState :: MethodSpecIR
-                    -> EquivClassMap
-                    -> JSS.Simulator SymbolicMonad JavaEvalState
-createJavaEvalState ir cm = do
-  let clName = slashesToDots $ JSS.className $ methodSpecIRThisClass ir
-      initialEvalState = JES
-        { jesClassName = clName
-        , jesMethodName = clName ++ "." ++ JSS.methodName (methodSpecIRMethod ir)
-        , jesExprNodeMap = Map.empty
-        , jesInputEvaluators = []
-        , jesExprValueMap = Map.empty
-        , jesRefNameMap = Map.empty
-        , jesArrayNodeList = []
-        , jesLetNodeBindings = Map.empty
+initializeJavaVerificationState :: MethodSpecIR
+                                -> EquivClassMap
+                                -> JSS.Simulator SymbolicMonad JavaVerificationState
+initializeJavaVerificationState ir cm = do
+  let initialState = IJSI
+        { jvsMethodName = methodSpecName ir
+        , jvsExprNodeMap = Map.empty
+        , jvsInputEvaluators = []
+        , jvsExprValueMap = Map.empty
+        , jvsRefNameMap = Map.empty
+        , jvsArrayNodeList = []
         }
-  flip execStateT initialEvalState $ do
+  flip execStateT initialState $ do
+    -- Add initialized classes
+    lift $ forM_ (initializedClasses ir) $ \c -> do
+      JSS.setInitializationStatus c JSS.Initialized
+    -- Create references.
     createJavaEvalReferences cm
+    -- Create scalars.
     createJavaEvalScalars ir
-    -- createMethodLetBindings
-    forM_ (methodLetBindings ir) $ \(name,expr) -> do
-      jes <- get
-      n <- lift $ JSS.liftSymbolic $ evalTypedExpr jes expr
-      modify $ \s -> s { jesLetNodeBindings = Map.insert name n (jesLetNodeBindings s) }
+    -- Set field values.
+    do m <- gets jvsExprValueMap 
+       let fieldExprs = [ p | p@(SpecField{},_) <- Map.toList m ]
+       forM_ fieldExprs $ \((SpecField refExpr f),v) -> do
+         let Just (JSS.RValue r) = Map.lookup refExpr m
+         lift $ JSS.setInstanceFieldValue r f v
 
 -- Java execution {{{2
 
-addInitializedClasses :: MethodSpecIR -> JSS.Simulator SymbolicMonad ()
-addInitializedClasses ir = do
-  forM_ (initializedClasses ir) $ \c -> do
-    JSS.setInitializationStatus c JSS.Initialized
-
--- | Update initial instance field values.
-setInstanceFields :: JavaEvalState -> JSS.Simulator SymbolicMonad ()
-setInstanceFields jem = do
-  forM_ (initialInstanceFieldValues jem) $ \(_,r,f,v) -> do
-    JSS.setInstanceFieldValue r f v
-
 -- Run method and get final path state
 runMethod :: MethodSpecIR
-          -> JavaEvalState
+          -> JavaStateInfo
           -> JSS.Simulator SymbolicMonad [(JSS.PathDescriptor, JSS.FinalResult Node)]
-runMethod ir jem = do
+runMethod ir jsi = do
   let clName = methodSpecIRMethodClassName ir
   let method = methodSpecIRMethod ir
-  args <- mapM (jesExprValue jem)
-        $ map (uncurry SpecArg)
-        $ [0..] `zip` methodParameterTypes method
+  let args = V.toList (jsiArgs jsi)
   if methodIsStatic method
     then JSS.invokeStaticMethod clName (methodKey method) args
     else do
-      JSS.RValue thisRef <- jesExprValue jem (SpecThis clName)
+      let Just thisRef = jsiThis jsi
       JSS.invokeInstanceMethod clName (methodKey method) thisRef args
   JSS.run
-
 
 -- ExpectedStateDef {{{2
 
 -- | Stores expected values in symbolic state after execution.
 data ExpectedStateDef = ESD {
+       -- | Expected return value or Nothing if method returns void.
+       esdReturnValue :: Maybe Node
        -- | Maps instance fields to expected values.
-       esdInstanceFields :: Map (JSS.Ref, JSS.FieldId) (Maybe (JSS.Value Node))
+     , esdInstanceFields :: Map (JSS.Ref, JSS.FieldId) (Maybe (JSS.Value Node))
+       -- | Maps reference to expected node (or Nothing if value is arbitrary).
      , esdArrays :: Map JSS.Ref (Maybe Node)
      }
 
 -- | Create a expected state definition from method spec and eval state.
-createExpectedStateDef :: MethodSpecIR -> JavaEvalState -> SymbolicMonad ExpectedStateDef 
-createExpectedStateDef ir jes = do
+createExpectedStateDef :: MethodSpecIR
+                       -> JavaVerificationState
+                       -> SpecStateInfo
+                       -> SymbolicMonad ExpectedStateDef 
+createExpectedStateDef ir jvs ssi = do
+  esdReturnValue <- 
+    case returnValue ir of
+      Nothing -> return Nothing
+      Just expr -> fmap Just $ evalTypedExpr ssi expr
   -- Get instance field values.
-  instanceFields <- 
-    forM (initialInstanceFieldValues jes) $ \(expr,r,fid,v) -> do
+  let fieldValues = instanceFieldValues ir (ssiJavaStateInfo ssi)
+  instanceFields <- forM fieldValues $ \(expr,r,fid,v) -> do
       expValue <- 
         case Map.lookup expr (scalarPostconditions ir) of
           -- Non-modifiable case.
           Nothing -> return (Just v)
           Just PostUnchanged -> return (Just v) -- Unchanged
-          Just PostArbitrary -> return Nothing -- arbitrary case
+          Just (PostArbitrary _) -> return Nothing -- arbitrary case
           Just (PostResult expr) -> do
             case v of
               -- Use value for scalars
-              JSS.IValue _ -> fmap (Just . JSS.IValue) $ evalTypedExpr jes expr
-              JSS.LValue _ -> fmap (Just . JSS.LValue) $ evalTypedExpr jes expr
+              JSS.IValue _ -> fmap (Just . JSS.IValue) $ evalTypedExpr ssi expr
+              JSS.LValue _ -> fmap (Just . JSS.LValue) $ evalTypedExpr ssi expr
               _ -> error "internal: scalarPostcondition assigned to a illegal expression"
       return ((r,fid),expValue)
   -- Get array values.
   arrays <-
-    forM (jesArrayNodeList jes) $ \(r,refEquivClass,initValue) -> do
+    forM (jvsArrayNodeList jvs) $ \(r,refEquivClass,initValue) -> do
       expValue <-
         case mapLookupAny refEquivClass (arrayPostconditions ir) of
           Just PostUnchanged -> return (Just initValue)
-          Just PostArbitrary -> return Nothing
+          Just (PostArbitrary _) -> return Nothing
           Just (PostResult expr) ->
-            fmap Just $ evalTypedExpr jes expr
+            fmap Just $ evalTypedExpr ssi expr
           Nothing -> return (Just initValue)
       whenVerbosity (>= 6) $ 
         liftIO $ putStrLn 
                 $ "Expecting " ++ show refEquivClass ++ " has value " ++ show expValue
       return (r,expValue)
   -- Return expected state definition.
-  return $ ESD { esdInstanceFields = Map.fromList instanceFields
+  return $ ESD { esdReturnValue
+               , esdInstanceFields = Map.fromList instanceFields
                , esdArrays = Map.fromList arrays 
                }
 
--- VerificationConditions {{{2
+-- VerificationConditionSet {{{2
 
 -- | Difference between spec and JVM states.
 data JVMDiff
@@ -1168,12 +1362,13 @@ data VerificationConditionSet = VCS {
        , vcsCounterFns :: [CounterFn]
        }
 
-emptyVCSet :: MethodSpecIR -> JavaEvalState -> SymbolicMonad VerificationConditionSet
-emptyVCSet ir jes = do
-  nodes <- mapM (evalTypedExpr jes) (assumptions ir)
+-- | Create initial verification set with assumptions from IR and initial goal.
+initialVCSet :: MethodSpecIR -> SpecStateInfo -> Node -> SymbolicMonad VerificationConditionSet
+initialVCSet ir ssi goal = do
+  nodes <- mapM (evalTypedExpr ssi) (assumptions ir)
   n <- foldM applyBAnd (mkCBool True) nodes
   return VCS { vcsAssumptions = n
-             , vcsGoal = mkCBool True
+             , vcsGoal = goal
              , vcsCounterFns = []
              }
 
@@ -1197,21 +1392,27 @@ finalGoal vcs = do
   negA <- applyBNot (vcsAssumptions vcs)
   applyBOr negA (vcsGoal vcs)
 
--- | Compare old and 
+-- | Compare old and new states.
 comparePathStates :: MethodSpecIR 
-                  -> JavaEvalState
-                  -> JSS.PathState Node
+                  -> JavaVerificationState
+                  -> SpecStateInfo
                   -> ExpectedStateDef
                   -> JSS.PathState Node
                   -> Maybe (JSS.Value Node)
                   -> SymbolicMonad VerificationConditionSet
-comparePathStates ir jes oldPathState ssd newPathState mbRetVal = do
-  --TODO: Handle mbRetVal
+comparePathStates ir jvs ssi esd newPathState mbRetVal = do
   let pos = methodSpecPos ir
-  let clName = jesClassName jes
-  let mName = jesMethodName jes
-  initialVCS <- emptyVCSet ir jes
+  let clName = slashesToDots $ JSS.className $ methodSpecIRThisClass ir
+  let mName = methodSpecName ir
+  initialVCS <- initialVCSet ir ssi (JSS.psAssumptions newPathState)
   flip execStateT initialVCS $ do
+    -- Check return value.
+    let Just expRetVal = esdReturnValue esd
+    case mbRetVal of
+      Nothing -> return ()
+      Just (JSS.IValue rv) -> addEqVC "return value" rv expRetVal
+      Just (JSS.LValue rv) -> addEqVC "return value" rv expRetVal
+      Just _ ->  error "internal: The Java method has a return type unsupported by JavaVerifier."
     -- Check initialization
     do let specInits = Set.fromList (initializedClasses ir)
            jvmInits  = Set.fromList $ Map.keys $ JSS.initialization newPathState
@@ -1223,36 +1424,28 @@ comparePathStates ir jes oldPathState ssd newPathState mbRetVal = do
              newInitNames = nest 2 (vcat (map (text . slashesToDots) (Set.toList newInits)))
          throwIOExecException pos (ftext msg $$ newInitNames) ""
     -- Check class objects
-    do let specClassObjects = Set.fromList $ Map.keys $ JSS.classObjects oldPathState
-       let jvmClassObjects = Set.fromList $ Map.keys $ JSS.classObjects newPathState
-       let newClassObjects = jvmClassObjects `Set.difference` specClassObjects
-       unless (Set.null newClassObjects) $ do
+    do let jvmClassObjects = Set.fromList $ Map.keys $ JSS.classObjects newPathState
+       unless (Set.null jvmClassObjects) $ do
          let msg = "The JVM method \'" ++ mName ++ "\' referenced class objects "
                     ++ "during execution.  This feature is not currently suported "
                     ++ "by JavaVerifier.  The extra class objects are:"
              newNames = nest 2 
-                      $ vcat (map (text . slashesToDots) (Set.toList newClassObjects))
+                      $ vcat (map (text . slashesToDots) (Set.toList jvmClassObjects))
          throwIOExecException pos (ftext msg $$ newNames) ""
     -- Check static fields
-    do let specStaticFields = JSS.staticFields oldPathState
-       forM_ (Map.toList $ JSS.staticFields newPathState) $ \(fid,jvmVal) -> do
+    do forM_ (Map.toList $ JSS.staticFields newPathState) $ \(fid,jvmVal) -> do
          let clName = slashesToDots (fieldIdClass fid)
          let fName = clName ++ "." ++ fieldIdName fid
-         let throwModificationError =
-               let msg = "The JVM method \'" ++ mName ++ "\' has modified the "
-                        ++ " static field " ++ fName ++ " during execution.  "
-                        ++ "This feature is not currently suported by JavaVerifier."
-                in throwIOExecException pos (ftext msg) ""
-         case Map.lookup fid specStaticFields of
-           Nothing -> throwModificationError
-           Just specVal -> 
-             unless (specVal == jvmVal) throwModificationError
+         let msg = "The JVM method \'" ++ mName ++ "\' has modified the "
+                  ++ " static field " ++ fName ++ " during execution.  "
+                  ++ "This feature is not currently suported by JavaVerifier."
+          in throwIOExecException pos (ftext msg) ""
     -- Check instance fields
     forM_ (Map.toList $ JSS.instanceFields newPathState) $ \(fieldRef@(ref,fid),jvmVal) -> do
-      refName <- getRefName pos ref jes
+      refName <- getRefName pos ref jvs
       let fieldName = refName ++ "." ++ fieldIdName fid
       specVal <- 
-        case Map.lookup fieldRef (esdInstanceFields ssd) of
+        case Map.lookup fieldRef (esdInstanceFields esd) of
           Nothing -> do
             let msg = "The JVM method \'" ++ mName ++ "\' has written to the "
                        ++ "instance field \'" ++ fieldName
@@ -1278,29 +1471,30 @@ comparePathStates ir jes oldPathState ssd newPathState mbRetVal = do
           addEqVC fieldName jvmNode specNode
         (_, Just _) -> error "internal: comparePathStates encountered illegal field type."
     -- Check ref arrays
-    do let specRefArrays = JSS.refArrays oldPathState
-       let jvmRefArrays = JSS.refArrays newPathState
-       unless (specRefArrays == jvmRefArrays) $ do
+    do let jvmRefArrays = JSS.refArrays newPathState
+       unless (Map.empty == jvmRefArrays) $ do
          let msg = "The JVM method \'" ++ mName ++ "\' has modified reference arrays "
                     ++ "during execution.  This feature is not currently suported "
                     ++ "by JavaVerifier."
          throwIOExecException pos (ftext msg) ""
     -- Get array equations and counterexample parse functions
     forM_ (Map.toList (JSS.arrays newPathState)) $ \(ref,(_,jvmNode)) -> do
-      refName <- getRefName pos ref jes
-      case Map.lookup ref (esdArrays ssd) of
+      refName <- getRefName pos ref jvs
+      case Map.lookup ref (esdArrays esd) of
         Nothing -> error "internal: Unexpected undefined array reference."
         Just Nothing -> return ()
         Just (Just specNode) ->
           addEqVC refName jvmNode specNode
 
+-- verifyMethodSpec and friends {{{2
+
 runABC :: Pos
        -> MethodSpecIR
-       -> JavaEvalState
+       -> JavaVerificationState
        -> Node
        -> [CounterFn]
        -> SymbolicMonad ()
-runABC pos ir jes fGoal counterFns = do
+runABC pos ir jvs fGoal counterFns = do
   whenVerbosity (>= 3) $
     liftIO $ putStrLn $ "Running ABC on " ++ methodSpecName ir
   LV v <- getVarLit fGoal
@@ -1317,8 +1511,7 @@ runABC pos ir jes fGoal counterFns = do
                  ++ "connection to ABC."
        in throwIOExecException pos (ftext msg) ""
     Sat lits -> do
-      --TODO:
-      let (inputExprs,inputEvals) = unzip (jesInputEvaluators jes)
+      let (inputExprs,inputEvals) = unzip (jvsInputEvaluators jvs)
       let inputValues = map ($lits) inputEvals
       -- Get differences between two.
       counters <- symbolicEval (V.fromList inputValues) $
@@ -1341,80 +1534,101 @@ runABC pos ir jes fGoal counterFns = do
       throwIOExecException pos msg ""
    
 -- | Attempt to verify method spec using verification method specified.
-verifyMethodSpec :: Pos -> MethodSpecIR -> Executor ()
-verifyMethodSpec _ MSIR { verificationMethod = AST.Skip } = return ()
-verifyMethodSpec pos ir = do
-  whenVerbosity (>= 3) $
+verifyMethodSpec :: Pos
+                 -> JSS.Codebase
+                 -> SSOpts
+                 -> MethodSpecIR
+                 -> [MethodSpecIR]
+                 -> [Rule]
+                 -> OpSession ()
+verifyMethodSpec _ _ _ MSIR { verificationMethod = AST.Skip } _ _ = return ()
+verifyMethodSpec pos cb opts ir overrides rules = do
+  let v = verbose opts
+  when (v >= 3) $
     liftIO $ putStrLn $ "Starting verification of " ++ methodSpecName ir
-  cb <- gets codebase
-  v <- fmap verbose $ gets execOptions
   let refEquivClasses = JSS.partitions (specReferences ir)
-  lift $ forM_ refEquivClasses $ \cm -> do
+  forM_ refEquivClasses $ \cm -> do
     when (v >= 6) $
       liftIO $ putStrLn $ "Considing new alias configuration of " ++ methodSpecName ir
     runSymSession $ do
       setVerbosity v
-      -- Generate input vectors.
-      -- Run simulator 
-      (jes,vcs) <- 
-        JSS.runSimulator cb $ do
-          setVerbosity v
+      JSS.runSimulator cb $ do
+        setVerbosity v
+        when (v >= 6) $
+           liftIO $ putStrLn $
+             "Creating evaluation state for simulation of " ++ methodSpecName ir
+        -- Create map from specification entries to JSS simulator values.
+        jvs <- initializeJavaVerificationState ir cm
+        -- JavaStateInfo for inital verification state.
+        jsi <- 
+          let evm = jvsExprValueMap jvs
+              mbThis = case Map.lookup (SpecThis (JSS.className (methodSpecIRThisClass ir))) evm of
+                         Nothing -> Nothing
+                         Just (JSS.RValue r) -> Just r
+                         Just _ -> error "internal: Unexpected value for This"
+              method = methodSpecIRMethod ir
+              args = map (evm Map.!) 
+                   $ map (uncurry SpecArg)
+                   $ [0..] `zip` methodParameterTypes method
+           in createJavaStateInfo mbThis args
+        -- Add method spec overrides.
+        mapM_ (overrideFromSpec pos) overrides
+        -- Execute method.
+        when (v >= 6) $
+           liftIO $ putStrLn $ "Executing " ++ methodSpecName ir
+        jssResult <- runMethod ir jsi
+            -- isReturn returns True if result is a normal return value.
+        let isReturn JSS.ReturnVal{} = True
+            isReturn JSS.Terminated = True
+            isReturn _ = False
+        let returnResults = filter (isReturn . snd) jssResult
+        when (null returnResults) $
+          let msg = "The Java method " ++ show (methodSpecName ir)
+                ++ " throws exceptions on all paths, and cannot be verified"
+              res = "Please check that all fields needed for correctness are defined."
+           in throwIOExecException pos (ftext msg) res
+        when (length returnResults > 1) $
+          error "internal: verifyMethodSpec returned multiple valid results"
+        let [(ps,fr)] = returnResults
+        let returnVal = case fr of
+                          JSS.ReturnVal val -> Just val
+                          JSS.Terminated -> Nothing
+                          _ -> error "internal: Unexpected final result from JSS"
+        -- Build final equation and functions for generating counterexamples.
+        newPathState <- JSS.getPathStateByName ps
+        JSS.liftSymbolic $ do
           when (v >= 6) $
-             liftIO $ putStrLn $
-               "Creating evaluation state for simulation of " ++ methodSpecName ir
-          -- Create map from specification entries to JSS simulator values.
-          jes <- createJavaEvalState ir cm
-          -- TODO: Add method spec overrides.
-          addInitializedClasses ir
-          setInstanceFields jes
-          -- Get old path state
-          oldPathState <- JSS.getPathState
-          -- Execute method.
-          when (v >= 6) $
-             liftIO $ putStrLn $ "Executing " ++ methodSpecName ir
-          jssResult <- runMethod ir jes
-              -- isReturn returns True if result is a normal return value.
-          let isReturn JSS.ReturnVal{} = True
-              isReturn JSS.Terminated = True
-              isReturn _ = False
-          let returnResults = filter (isReturn . snd) jssResult
-          when (null returnResults) $
-            let msg = "The Java method " ++ show (methodSpecName ir)
-                  ++ " through exceptions on all paths, and cannot be verified"
-                res = "Please check that all fields needed for correctness are defined."
-             in throwIOExecException pos (ftext msg) res
-          when (length returnResults > 1) $
-            error "internal: verifyMethodSpec returned multiple valid results"
-          let [(ps,fr)] = returnResults
-          let returnVal = case fr of
-                            JSS.ReturnVal v -> Just v
-                            JSS.Terminated -> Nothing
-          --TODO: Parse jssResult to ge back final values.
-          -- Build final equation and functions for generating counterexamples.
-          newPathState <- JSS.getPathState
-          vcs <-
-            JSS.liftSymbolic $ do
-              when (v >= 6) $
-                liftIO $ putStrLn $ "Creating expected result for " ++ methodSpecName ir
-              ssd <- createExpectedStateDef ir jes
-              whenVerbosity (>= 6) $
-                liftIO $ putStrLn $
-                  "Creating verification conditions for " ++ methodSpecName ir
-              -- Create verification conditions from path states.
-              comparePathStates ir jes oldPathState ssd newPathState returnVal
-          return (jes,vcs)
-      -- Get final goal.
-      fGoal <- finalGoal vcs
-      case verificationMethod ir of
-        AST.ABC -> do
-          runABC pos ir jes fGoal (vcsCounterFns vcs)
-        AST.Rewrite -> do
-          error "TODO: AST.Rewrite"
-        AST.Auto -> do
-          --TODO: Add rewrite.
-          runABC pos ir jes fGoal (vcsCounterFns vcs)
-        AST.Skip -> error "internal: Unexpected skip"
+            liftIO $ putStrLn $ "Creating expected result for " ++ methodSpecName ir
+          ssi <- createSpecStateInfo ir jsi
+          esd <- createExpectedStateDef ir jvs ssi
+          whenVerbosity (>= 6) $
+            liftIO $ putStrLn $
+              "Creating verification conditions for " ++ methodSpecName ir
+          -- Create verification conditions from path states.
+          vcs <- comparePathStates ir jvs ssi esd newPathState returnVal
+          -- Get final goal.
+          fGoal <- finalGoal vcs
+          -- Run verification
+          let runRewriter = do
+              let pgm = foldl' addRule emptyProgram rules
+              rew <- liftIO $ mkRewriter pgm
+              reduce rew fGoal
+          case verificationMethod ir of
+            AST.ABC -> do
+              runABC pos ir jvs fGoal (vcsCounterFns vcs)
+            AST.Rewrite -> do
+              newGoal <- runRewriter
+              case getBool newGoal of
+                Just True -> return ()
+                _ -> do
+                 liftIO $ putStrLn $ prettyTerm newGoal
+                 error "TODO: AST.Rewrite"
+            AST.Auto -> do
+              newGoal <- runRewriter
+              runABC pos ir jvs newGoal (vcsCounterFns vcs)
+            AST.Skip -> error "internal: Unexpected skip"
       
+
 -- Verifier command execution {{{1 
 
 -- | Execute command 
@@ -1490,7 +1704,8 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
                    , definedNames = Map.insert nm pos (definedNames s)
                    , sawOpMap = Map.insert nm op (sawOpMap s)
                    , rules = Map.insert nm (Rule nm lhs rhs) (rules s)
-                   , enabledRules = Set.insert nm (enabledRules s) }
+                   --, enabledRules = Set.insert nm (enabledRules s) 
+                   }
   execDebugLog $ "Finished process extern SBV " ++ nm
 execute (AST.GlobalLet pos name astExpr) = do
   execDebugLog $ "Start defining let " ++ name
@@ -1506,17 +1721,25 @@ execute (AST.GlobalLet pos name astExpr) = do
 execute (AST.SetVerification _pos val) = do
   modify $ \s -> s { runVerification = val }
 execute (AST.DeclareMethodSpec pos methodId cmds) = do
-  let mName:revClassPath = reverse methodId
-  when (null revClassPath) $
+  let mName:revClasspath = reverse methodId
+  when (null revClasspath) $
     throwIOExecException pos (ftext "Missing class in method declaration.") ""
-  let jvmClassName = intercalate "/" $ reverse revClassPath
-  let javaClassName = intercalate "." $ reverse revClassPath
+  let jvmClassName = intercalate "/" $ reverse revClasspath
   -- Get class 
   thisClass <- JSS.lookupClass jvmClassName
-  methodIR <- resolveMethodSpecIR pos thisClass mName cmds 
+  -- Resolve method spec IR
+  ir <- resolveMethodSpecIR pos thisClass mName cmds 
   v <- gets runVerification
-  when v $ verifyMethodSpec pos methodIR
-  --TODO: Add methodIR to state for later verification.
+  when v $ do
+    cb <- gets codebase
+    opts <- gets execOptions
+    overrides <- gets methodSpecs
+    allRules <- gets rules 
+    enRules <- gets enabledRules
+    let activeRules = map (allRules Map.!) $ Set.toList enRules
+    lift $ verifyMethodSpec pos cb opts ir overrides activeRules
+  -- Add methodIR to state for use in later verifications.
+  modify $ \s -> s { methodSpecs = ir : methodSpecs s }
 execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
   execDebugLog $ "Start defining rule " ++ ruleName
   checkNameIsUndefined pos ruleName
@@ -1536,25 +1759,34 @@ execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
   config <- globalParserConfig nameTypeMap
   lhsExpr <- lift $ tcExpr config astLhsExpr
   rhsExpr <- lift $ tcExpr config astRhsExpr
+  -- Check types are equivalence
+  let lhsTp = getTypeOfTypedExpr lhsExpr
+      rhsTp = getTypeOfTypedExpr rhsExpr
+  unless (lhsTp == rhsTp) $ do
+    let msg = "In the rule " ++ ruleName 
+                ++ ", the left hand and right hand sides of the rule have distinct types "
+                ++ ppType lhsTp ++ " and " ++ ppType rhsTp ++ "."
+        res = "Please ensure the left and right-hand side of the rule have equivalent types."
+     in throwIOExecException pos (ftext msg) res
+  -- Check all vars in quantifier are used.
+  let paramVars = Set.fromList $ map (\(_,nm,_) -> nm) params
+      lhsVars = typedExprVarNames lhsExpr
+  unless (lhsVars == paramVars) $ do
+    let msg = "In the rule " ++ ruleName 
+                ++ ", the left hand side term does not refer to all of the variables in the quantifier."
+        res = "Please ensure that all variables are referred to in the left-hand side of the rule, "
+               ++ "ensure the right-hand side does not refer to variables unbound in the left-hand side."
+     in throwIOExecException pos (ftext msg) res
   -- TODO: Parse lhsExpr and rhsExpr and add rule.
-  liftIO $ putStrLn "TODO: Support executing AST.Rule"
+  let mkRuleTerm :: TypedExpr -> Term
+      mkRuleTerm (TypedApply op args) = appTerm op (map mkRuleTerm args)
+      mkRuleTerm (TypedCns cns tp) = mkConst cns tp
+      mkRuleTerm (TypedJavaValue _ _) = error "internal: Java value given to mkRuleTerm"
+      mkRuleTerm (TypedVar name tp) = mkVar name tp
+  let rl = Rule ruleName (evalTerm (mkRuleTerm lhsExpr)) (evalTerm (mkRuleTerm rhsExpr))
+  modify $ \s -> s { rules = Map.insert ruleName rl (rules s)
+                   , enabledRules = Set.insert ruleName (enabledRules s) }
   execDebugLog $ "Finished defining rule " ++ ruleName
-  {-
-  -- Check rule does not exist.
-  re <- ruleExists name
-  when re $ do
-    throwIOExecException pos $ "The rule " ++ name ++ " has previously been defined."
-  -- Parse terms.
-  let parseASTTerm :: RewriteTerm -> TermCtor
-      parseASTTerm _ = undefined
-  let tlhs = parseASTTerm lhs
-      trhs = parseASTTerm rhs
-  -- TODO: Check that types are equal, and check that right-hand side variables
-  -- are contained in left-hand side.
-  let rl = mkRuleFromCtor name tlhs trhs
-  modify $ \s -> s { rules = Map.insert name rl (rules s)
-                   , enabledRules = Set.insert name (enabledRules s) }
-                   -}
 execute (AST.Disable pos name) = do
   checkNameIsDefined pos name
   modify $ \s -> s { enabledRules = Set.delete name (enabledRules s) }
@@ -1574,12 +1806,13 @@ runProofs cb ssOpts files = do
   let initState = ES {
           codebase = cb
         , execOptions = ssOpts
-        , runVerification = True
         , parsedFiles = files
-        , sbvOpMap     = Map.empty
+        , runVerification = True
         , definedNames = Map.empty
         , sawOpMap     = Map.fromList [ ("read", getArrayValueOpDef)
                                       , ("write", setArrayValueOpDef)]
+        , sbvOpMap     = Map.empty
+        , methodSpecs  = []
         , rules        = Map.empty
         , enabledRules = Set.empty
         , globalLetBindings = Map.empty
