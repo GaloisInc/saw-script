@@ -77,4 +77,5 @@ runTI s (TI c) = do cs <- c s
                       Left (p, m, r)       -> throwIOExecException p m r
 
 printWarn :: MonadIO m => WarnMsg -> m ()
-printWarn (p, d) = liftIO $ putStrLn $ render $ (text (show p) <> text ":") $$ nest 2 d
+printWarn (p, d) = liftIO $ do p' <- posRelativeToCurrentDirectory p
+                               putStrLn $ "WARNING:" ++ fmtPos p' (render d)

@@ -134,18 +134,19 @@ data TypedExpr
 
 -- | Return type of a typed expression.
 getTypeOfTypedExpr :: TypedExpr -> DagType
-getTypeOfTypedExpr (TypedVar         _ tp) = tp
+getTypeOfTypedExpr (TypedApply       op _) = opResultType op
 getTypeOfTypedExpr (TypedCns         _ tp) = tp
 getTypeOfTypedExpr (TypedArray       _ tp) = tp
 getTypeOfTypedExpr (TypedJavaValue   _ tp) = tp
-getTypeOfTypedExpr (TypedApply       op _) = opResultType op
+getTypeOfTypedExpr (TypedVar         _ tp) = tp
 
 -- | Returns names of variables appearing in typedExpr.
 typedExprVarNames :: TypedExpr -> Set String
 typedExprVarNames (TypedApply _ exprs) = Set.unions (map typedExprVarNames exprs)
-typedExprVarNames (TypedCns _ _) = Set.empty
+typedExprVarNames (TypedCns _ _)       = Set.empty
+typedExprVarNames (TypedArray exprs _) = Set.unions (map typedExprVarNames exprs)
 typedExprVarNames (TypedJavaValue _ _) = Set.empty
-typedExprVarNames (TypedVar nm _) = Set.singleton nm
+typedExprVarNames (TypedVar nm _)      = Set.singleton nm
 
 -- JavaExprDagType {{{1
 
@@ -242,12 +243,13 @@ tcE (AST.MkArray p (es@(_:_))) = do
             go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("array elements " ++ show i ++ " and " ++ show j) x y
         t   <- go $ zip [(1::Int)..] $ map getTypeOfTypedExpr es'
         return $ TypedArray es' (SymArray (constantWidth (Wx (length es))) t)
-tcE (AST.TypeExpr pos (AST.ConstantInt _ i) astTp) = do
+tcE (AST.TypeExpr pos (AST.ConstantInt posCnst i) astTp) = do
   tp <- tcT astTp
   let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
                               <+> ftext "bound to literals must be a ground type."
   case tp of
-    SymInt (widthConstant -> Just (Wx w)) -> return $ TypedCns (mkCInt (Wx w) i) tp
+    SymInt (widthConstant -> Just (Wx w)) -> do warnRanges posCnst tp i w
+                                                return $ TypedCns (mkCInt (Wx w) i) tp
     SymInt      _ -> nonGround
     SymShapeVar _ -> nonGround
     _             -> typeErr pos $   text "Incompatible type" <+> text (ppType tp)
@@ -475,3 +477,16 @@ findClass :: Pos -> String -> SawTI JSS.Class
 findClass p s = do
         debugTI $ "Trying to find the class " ++ show s
         lookupClass p s
+
+warnRanges :: Pos -> DagType -> Integer -> Int -> SawTI ()
+warnRanges pos tp i w' = do when (not (inRange srange)) $ complain srange "a signed"
+                            when (not (inRange urange)) $ complain urange "an unsigned"
+  where w :: Integer
+        w = fromIntegral w'
+        srange, urange :: (Integer, Integer)
+        srange = (-(2^(w-1)), (2^(w-1))-1)
+        urange = (0, 2^w-1)
+        inRange (a, b) = i >= a && i <= b
+        complain (a, b) ctx = typeWarn pos $  ftext ("Due to the type declaration " ++ ppType tp ++ ", the constant " ++ show i)
+                                           $$ ftext (" will be subject to modular reduction to fit into the range [" ++
+                                                     show a ++ ", " ++ show b ++ "] when used in " ++ ctx ++ " context.")
