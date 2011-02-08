@@ -478,15 +478,19 @@ findClass p s = do
         debugTI $ "Trying to find the class " ++ show s
         lookupClass p s
 
+-- Only warn if the constant is beyond range for both signed/unsigned versions
+-- This is less precise than it can be, but less annoying too..
 warnRanges :: Pos -> DagType -> Integer -> Int -> SawTI ()
-warnRanges pos tp i w' = do when (not (inRange srange)) $ complain srange "a signed"
-                            when (not (inRange urange)) $ complain urange "an unsigned"
-  where w :: Integer
+warnRanges pos tp i w'
+  | violatesBoth = typeWarn pos $  ftext ("Constant \"" ++ show i ++ " : " ++ ppType tp ++ "\" will be subject to modular reduction.")
+                                $$ complain srange "a signed"
+                                $$ complain urange "an unsigned"
+  | True         = return ()
+  where violatesBoth = not (inRange srange || inRange urange)
+        w :: Integer
         w = fromIntegral w'
         srange, urange :: (Integer, Integer)
         srange = (-(2^(w-1)), (2^(w-1))-1)
         urange = (0, 2^w-1)
         inRange (a, b) = i >= a && i <= b
-        complain (a, b) ctx = typeWarn pos $  ftext ("Due to the type declaration " ++ ppType tp ++ ", the constant " ++ show i)
-                                           $$ ftext (" will be subject to modular reduction to fit into the range [" ++
-                                                     show a ++ ", " ++ show b ++ "] when used in " ++ ctx ++ " context.")
+        complain (a, b) ctx = ftext $ "In " ++ ctx ++ " context, range will be: [" ++ show a ++ ", " ++ show b ++ "]"
