@@ -849,7 +849,9 @@ resolveMethodSpecIR pos thisClass mName cmds = do
                 , currentAssumptions = []
                 , ensuredExprs = Set.empty
                 , scalarEnsures = Map.empty
+
                 , arrayEnsures = Map.empty
+                , currentReturnValue = Nothing
                 , chosenVerificationMethod = Nothing
                 }
   st' <- fmap snd $ runStateT (mapM_ resolveDecl cmds) st
@@ -1352,6 +1354,7 @@ data JVMDiff
   = DV String -- ^ Name of value with divergent value.
        CValue -- ^ Value in spec
        CValue -- ^ Value from JVM bytecode.
+  | UnsatisfiedPathConditions
 
 type CounterFn = SymbolicEvalMonad SymbolicMonad (Maybe JVMDiff)
 
@@ -1363,13 +1366,21 @@ data VerificationConditionSet = VCS {
        }
 
 -- | Create initial verification set with assumptions from IR and initial goal.
-initialVCSet :: MethodSpecIR -> SpecStateInfo -> Node -> SymbolicMonad VerificationConditionSet
+initialVCSet :: MethodSpecIR 
+             -> SpecStateInfo
+             -> Node
+             -> SymbolicMonad VerificationConditionSet
 initialVCSet ir ssi goal = do
   nodes <- mapM (evalTypedExpr ssi) (assumptions ir)
   n <- foldM applyBAnd (mkCBool True) nodes
+  let fn = do goalVal <- evalNode goal
+              case getBool goalVal of
+                Just True -> return Nothing
+                _ -> return $ Just UnsatisfiedPathConditions 
+  let t = mkCBool True :: Node
   return VCS { vcsAssumptions = n
-             , vcsGoal = goal
-             , vcsCounterFns = []
+             , vcsGoal = t
+             , vcsCounterFns = [fn]
              }
 
 -- | Add verification condition to list.
@@ -1521,14 +1532,18 @@ runABC pos ir jvs fGoal counterFns = do
             = flip map (Map.toList inputExprValMap) $ \(expr,c) ->
                  text (show expr) <+> equals <+> ppCValueDoc c
       let diffDocs
-            = flip map counters $ \(DV name specVal jvmVal) ->
-                 text name $$
-                   nest 2 (text "Encountered: " <> ppCValueDoc jvmVal) $$
-                   nest 2 (text "Expected:    " <> ppCValueDoc specVal)
+            = flip map counters $ \vc ->
+                case vc of 
+                  DV name specVal jvmVal ->
+                    text name $$
+                      nest 2 (text "Encountered: " <> ppCValueDoc jvmVal) $$
+                      nest 2 (text "Expected:    " <> ppCValueDoc specVal)
+                  UnsatisfiedPathConditions ->
+                    text "The path conditions were unsatisfied."
       let msg = ftext ("A counterexample was found by ABC when verifying "
                          ++ methodSpecName ir ++ ".\n\n") $$
                 ftext ("The inputs that generated the counterexample are:") $$
-                nest 2 (vcat inputDocs) $$ char '\n' $$
+                nest 2 (vcat inputDocs) $$
                 ftext ("Mismatches between spec and implementation include:") $$
                 nest 2 (vcat diffDocs)
       throwIOExecException pos msg ""
@@ -1544,7 +1559,7 @@ verifyMethodSpec :: Pos
 verifyMethodSpec _ _ _ MSIR { verificationMethod = AST.Skip } _ _ = return ()
 verifyMethodSpec pos cb opts ir overrides rules = do
   let v = verbose opts
-  when (v >= 3) $
+  when (v >= 2) $
     liftIO $ putStrLn $ "Starting verification of " ++ methodSpecName ir
   let refEquivClasses = JSS.partitions (specReferences ir)
   forM_ refEquivClasses $ \cm -> do
@@ -1814,8 +1829,8 @@ runProofs cb ssOpts files = do
         , parsedFiles = files
         , runVerification = True
         , definedNames = Map.empty
-        , sawOpMap     = Map.fromList [ ("read", getArrayValueOpDef)
-                                      , ("write", setArrayValueOpDef)]
+        , sawOpMap     = Map.fromList [ ("aget", getArrayValueOpDef)
+                                      , ("aset", setArrayValueOpDef)]
         , sbvOpMap     = Map.empty
         , methodSpecs  = []
         , rules        = Map.empty
@@ -1829,7 +1844,7 @@ runProofs cb ssOpts files = do
   catch (runOpSession (evalStateT action initState))
     (\(ExecException absPos errorMsg resolution) -> do
         relPos <- posRelativeToCurrentDirectory absPos
-        putStrLn $ "Verification Failed!\n"
+        putStrLn $ "SAWScript Failed!\n"
         putStrLn $ show relPos
         let rend = renderStyle style { lineLength = 100 }
         putStrLn $ rend $ nest 2 errorMsg
