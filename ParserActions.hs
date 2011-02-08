@@ -6,7 +6,7 @@ module SAWScript.ParserActions (
 
 
 import Data.Maybe(isJust, listToMaybe)
-import Data.List(sortBy, groupBy)
+import Data.List(sortBy, groupBy, isSuffixOf)
 import Data.Ord(comparing)
 import qualified Data.Map as M
 import System.Directory(canonicalizePath, makeRelativeToCurrentDirectory)
@@ -17,6 +17,7 @@ import SAWScript.MethodAST
 import SAWScript.Token
 import SAWScript.Lexer(lexSAW)
 import SAWScript.Parser(parseSAW)
+import SAWScript.Unlit(unlitCode)
 import SAWScript.Utils
 
 type PTok = Token Pos
@@ -89,7 +90,7 @@ parseJV ssOpts (f, mbP) = do
                               Nothing -> putStrLn $ "Loading " ++ show rf ++ ".."
                               Just p  -> do p' <- posRelativeToCurrentDirectory p
                                             putStrLn $ "  Importing " ++ show rf ++ ".. (imported at " ++ show p' ++ ")"
-       cts <- readFile f
+       cts <- getProgram f
        let toks = lexSAW f cts
        debugVerbose ssOpts $ do putStrLn $ "Token stream for " ++ show f ++ ":"
                                 mapM_ (putStrLn . ("  " ++) . show) toks
@@ -99,6 +100,19 @@ parseJV ssOpts (f, mbP) = do
          Right r -> return (concatMap getImport r, r)
   where getImport (ImportCommand p fp) = [(fp, p)]
         getImport _                    = []
+
+-- load a file, performing unlit if necessary
+getProgram :: FilePath -> IO [Char]
+getProgram f = do
+       cts <- readFile f
+       if not isLiterate
+          then return cts
+          else case unlitCode cts of
+                 Right cts'     -> return cts'
+                 Left (ln, msg) -> do p <- posRelativeToCurrentDirectory (Pos f ln 0)
+                                      putStrLn $ fmtPos p msg
+                                      exitFailure
+  where isLiterate = any (`isSuffixOf` f) [".ljv", ".tex"]
 
 -- Parse helpers
 parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser (Pos, Int)
