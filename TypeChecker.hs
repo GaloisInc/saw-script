@@ -483,14 +483,17 @@ findClass p s = do
 warnRanges :: Pos -> DagType -> Integer -> Int -> SawTI ()
 warnRanges pos tp i w'
   | violatesBoth = typeWarn pos $  ftext ("Constant \"" ++ show i ++ " : " ++ ppType tp ++ "\" will be subject to modular reduction.")
-                                $$ complain srange "a signed"
-                                $$ complain urange "an unsigned"
+                                $$ complain srange "a signed"    (if j >= 2^(w-1) then j - (2^w) else j)
+                                $$ complain urange "an unsigned" j
   | True         = return ()
   where violatesBoth = not (inRange srange || inRange urange)
         w :: Integer
         w = fromIntegral w'
+        j :: Integer
+        j = i `mod` (2^w)
         srange, urange :: (Integer, Integer)
         srange = (-(2^(w-1)), (2^(w-1))-1)
         urange = (0, 2^w-1)
         inRange (a, b) = i >= a && i <= b
-        complain (a, b) ctx = ftext $ "In " ++ ctx ++ " context, range will be: [" ++ show a ++ ", " ++ show b ++ "]"
+        complain (a, b) ctx i' =    ftext ("In " ++ ctx ++ " context, range will be: [" ++ show a ++ ", " ++ show b ++ "]")
+                                 $$ ftext ("And the constant will assume the value " ++ show i')
