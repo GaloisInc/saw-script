@@ -112,7 +112,7 @@ getProgram f = do
                  Left (ln, msg) -> do p <- posRelativeToCurrentDirectory (Pos f ln 0)
                                       putStrLn $ fmtPos p msg
                                       exitFailure
-  where isLiterate = any (`isSuffixOf` f) [".ljv", ".tex"]
+  where isLiterate = any (`isSuffixOf` f) [".lsaw", ".tex"]
 
 -- Parse helpers
 parseIntRange :: Pos -> (Int, Int) -> Integer -> Parser (Pos, Int)
