@@ -120,7 +120,6 @@ type Executor = MExecutor OpSession
 
 instance JSS.HasCodebase Executor where
   getCodebase = gets codebase
-  putCodebase cb = modify $ \s -> s { codebase = cb }
 
 -- | Given a file path, this returns the verifier commands in the file,
 -- or throws an exception.

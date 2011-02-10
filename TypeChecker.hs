@@ -177,7 +177,6 @@ debugTI msg = do os <- gets sawOptions
 
 instance HasCodebase SawTI where
   getCodebase    = gets codeBase
-  putCodebase cb = modify $ \s -> s{ codeBase = cb }
 
 getMethodInfo :: SawTI (JSS.Method, JSS.Class)
 getMethodInfo = do
