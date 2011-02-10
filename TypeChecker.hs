@@ -10,7 +10,10 @@ module SAWScript.TypeChecker
   , Expr(..)
   , getTypeOfExpr
   , typedExprVarNames
+  , globalEval
+  , GlobalBindings(..)
   , TCConfig(..)
+  , mkGlobalTCConfig
   , tcExpr
   , tcType
   , tcJavaExpr
@@ -74,7 +77,7 @@ instance Show JavaExpr where
 
 -- | Returns JSS Type of JavaExpr
 getJSSTypeOfJavaExpr :: JavaExpr -- ^ Spec Java reference to get type of.
-                    -> JSS.Type
+                     -> JSS.Type
 getJSSTypeOfJavaExpr (This cl)   = JSS.ClassType cl
 getJSSTypeOfJavaExpr (Arg _ tp)  = tp
 getJSSTypeOfJavaExpr (InstanceField _ f) = JSS.fieldIdType f
@@ -145,6 +148,20 @@ typedExprVarNames (Cns _ _)       = Set.empty
 typedExprVarNames (JavaValue _ _) = Set.empty
 typedExprVarNames (Var nm _)      = Set.singleton nm
 
+-- | Evaluate a ground typed expression to a constant value.
+globalEval :: Expr -> OpSession CValue
+globalEval expr = do
+  let mkNode :: Expr -> SymbolicMonad Node
+      mkNode (Var _nm _tp) =
+        error "internal: globalEval called with non-ground expression"
+      mkNode (JavaValue _nm _tp) =
+        error "internal: globalEval called with expression containing Java references."
+      mkNode (Cns c tp) = makeConstant c tp
+      mkNode (Apply op args) = applyOp op =<< mapM mkNode args
+  runSymSession $ do
+    n <- mkNode expr
+    symbolicEval V.empty $ evalNode n
+
 -- DefinedJavaExprType {{{1
 
 -- | Identifies the type of a Java expression.
@@ -152,26 +169,39 @@ data DefinedJavaExprType
   = DefinedClass JSS.Class
   | DefinedType DagType
 
-data TCConfig = TCC {
-         localBindings     :: Map String Expr
-       , globalCnsBindings :: Map String (CValue,DagType)
-       , opBindings        :: Map String OpDef
-       , codeBase          :: JSS.Codebase
-       , methodInfo        :: Maybe (JSS.Method, JSS.Class)
-       , toJavaExprType    :: Maybe (JavaExpr -> Maybe DefinedJavaExprType)
-       , sawOptions        :: SSOpts
+-- }}}1
+
+-- | Context for resolving top level expressions.
+data GlobalBindings = GlobalBindings {
+         codeBase      :: JSS.Codebase
+       , ssOpts        :: SSOpts
+       , opBindings    :: Map String OpDef
+       , constBindings :: Map String (CValue,DagType)
        }
 
--- }}}1
+-- | Context for resolving expressions at the top level or within a method.
+data TCConfig = TCC {
+         globalBindings :: GlobalBindings
+       , methodInfo     :: Maybe (JSS.Method, JSS.Class)
+       , localBindings  :: Map String Expr
+       , toJavaExprType :: Maybe (JavaExpr -> Maybe DefinedJavaExprType)
+       }
+
+mkGlobalTCConfig :: GlobalBindings -> Map String Expr -> TCConfig
+mkGlobalTCConfig globalBindings localBindings = do
+  TCC { globalBindings
+      , methodInfo = Nothing
+      , localBindings
+      , toJavaExprType = Nothing }
 
 type SawTI = TI OpSession TCConfig
 
 debugTI :: String -> SawTI ()
-debugTI msg = do os <- gets sawOptions
+debugTI msg = do os <- gets (ssOpts . globalBindings)
                  liftIO $ debugVerbose os $ putStrLn msg
 
 instance HasCodebase SawTI where
-  getCodebase = gets codeBase
+  getCodebase = gets (codeBase . globalBindings)
 
 getMethodInfo :: SawTI (JSS.Method, JSS.Class)
 getMethodInfo = do
@@ -220,7 +250,7 @@ tcE (AST.ApplyExpr p nm _)
   = typeErrWithR p (ftext ("Use of operator '" ++ nm ++ "' requires a type-annotation.")) "Please provide an annotation for the surrounding expression."
 tcE (AST.Var pos name) = do
   locals  <- gets localBindings
-  globals <- gets globalCnsBindings
+  globals <- gets (constBindings . globalBindings)
   case name `Map.lookup` locals of
     Just res -> return res
     Nothing -> do
@@ -298,7 +328,7 @@ tcE (AST.ApplyExpr appPos "join" astArgs) = do
                                 ++ " SAWScript currently requires that the argument is ground"
                                 ++ " array of integers. "
 tcE (AST.ApplyExpr appPos nm astArgs) = do
-  opBindings <- gets opBindings
+  opBindings <- gets (opBindings . globalBindings)
   case Map.lookup nm opBindings of
     Nothing -> typeErrWithR appPos (ftext ("Unknown operator '" ++ nm ++ "'.")) "Please check that the operator is correct."
     Just opDef -> do
