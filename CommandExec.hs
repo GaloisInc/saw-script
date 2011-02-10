@@ -1413,7 +1413,6 @@ comparePathStates :: MethodSpecIR
                   -> SymbolicMonad VerificationConditionSet
 comparePathStates ir jvs ssi esd newPathState mbRetVal = do
   let pos = methodSpecPos ir
-  let clName = slashesToDots $ JSS.className $ methodSpecIRThisClass ir
   let mName = methodSpecName ir
   initialVCS <- initialVCSet ir ssi (JSS.psAssumptions newPathState)
   flip execStateT initialVCS $ do
@@ -1444,7 +1443,7 @@ comparePathStates ir jvs ssi esd newPathState mbRetVal = do
                       $ vcat (map (text . slashesToDots) (Set.toList jvmClassObjects))
          throwIOExecException pos (ftext msg $$ newNames) ""
     -- Check static fields
-    do forM_ (Map.toList $ JSS.staticFields newPathState) $ \(fid,jvmVal) -> do
+    do forM_ (Map.toList $ JSS.staticFields newPathState) $ \(fid,_jvmVal) -> do
          let clName = slashesToDots (fieldIdClass fid)
          let fName = clName ++ "." ++ fieldIdName fid
          let msg = "The JVM method \'" ++ mName ++ "\' has modified the "
