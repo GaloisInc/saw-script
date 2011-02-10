@@ -141,7 +141,7 @@ globalParserConfig localBindings = do
                 , TC.opBindings 
                 , TC.codeBase = cb
                 , TC.methodInfo = Nothing
-                , TC.toJavaExprType = \_ -> TC.JEDTBadContext
+                , TC.toJavaExprType = Nothing
                 , TC.sawOptions = opts }
 
 -- verbosity {{{2
@@ -494,21 +494,24 @@ throwIncompatibleExprType pos lhsExpr refType specTypeName =
              ++ specTypeName ++ "."
    in throwIOExecException pos (ftext msg) ""
 
-getExprTypeFn :: MethodSpecTranslator (TC.JavaExpr -> TC.JavaExprDagType)
+getExprTypeFn :: MethodSpecTranslator (TC.JavaExpr -> Maybe TC.DefinedJavaExprType)
 getExprTypeFn = do
   rtm <- gets refTypeMap
   cem <- gets constExprMap
-  return $ \e -> case Map.lookup e rtm of
-                   Just (RIVArrayConst _ _ tp) -> TC.JEDTType tp
-                   Just (RIVClass cl) -> TC.JEDTClass (className cl)
-                   Just (RIVIntArray l) ->
-                     TC.JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32)))
-                   Just (RIVLongArray l) ->
-                     TC.JEDTType (SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64)))
-                   Nothing ->
-                     case Map.lookup e cem of
-                       Nothing -> TC.JEDTUndefined
-                       Just (_,tp) -> TC.JEDTType tp
+  return $ \e ->
+             case Map.lookup e rtm of
+               Just (RIVArrayConst _ _ tp) -> Just (TC.DefinedType tp)
+               Just (RIVClass cl) -> Just (TC.DefinedClass cl)
+               Just (RIVIntArray l) ->
+                 let arrayTp = SymArray (constantWidth (Wx l)) (SymInt (constantWidth 32))
+                  in Just (TC.DefinedType arrayTp)
+               Just (RIVLongArray l) ->
+                 let arrayTp = SymArray (constantWidth (Wx l)) (SymInt (constantWidth 64))
+                  in Just (TC.DefinedType arrayTp)
+               Nothing ->
+                 case Map.lookup e cem of
+                   Nothing -> Nothing
+                   Just (_,tp) -> Just (TC.DefinedType tp)
 
 -- | Typecheck expression at global level.
 methodParserConfig :: MethodSpecTranslator TC.TCConfig
@@ -529,7 +532,7 @@ methodParserConfig = do
                   , TC.opBindings
                   , TC.codeBase = cb
                   , TC.methodInfo = Just (m, cl)
-                  , TC.toJavaExprType = exprTypeFn
+                  , TC.toJavaExprType = Just exprTypeFn
                   , TC.sawOptions = opts }
 
 -- | Typecheck expression at global level.
@@ -741,7 +744,7 @@ resolveDecl (AST.Arbitrary pos astJavaExprs) = do
     checkEnsuresUndefined pos javaExpr $
       "Multiple ensures and arbitrary statements have been added for " ++ show javaExpr ++ "."
     let tp = case exprTypeFn javaExpr of
-               TC.JEDTType tp -> tp
+               Just (TC.DefinedType tp) -> tp
                _ -> error "internal: resolveDecl Arbitrary given bad javaExpr"
     addEnsures pos javaExpr (PostArbitrary tp)
 resolveDecl (AST.Returns pos astValueExpr) = do

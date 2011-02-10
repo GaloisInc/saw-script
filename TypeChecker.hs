@@ -6,7 +6,7 @@
 module SAWScript.TypeChecker
   ( JavaExpr(..)
   , getJSSTypeOfJavaExpr
-  , JavaExprDagType(..)
+  , DefinedJavaExprType(..)
   , TypedExpr(..)
   , getTypeOfTypedExpr
   , typedExprVarNames
@@ -148,14 +148,12 @@ typedExprVarNames (TypedArray exprs _) = Set.unions (map typedExprVarNames exprs
 typedExprVarNames (TypedJavaValue _ _) = Set.empty
 typedExprVarNames (TypedVar nm _)      = Set.singleton nm
 
--- JavaExprDagType {{{1
+-- DefinedJavaExprType {{{1
 
 -- | Identifies the type of a Java expression.
-data JavaExprDagType
-  = JEDTClass String
-  | JEDTType DagType
-  | JEDTUndefined
-  | JEDTBadContext
+data DefinedJavaExprType
+  = DefinedClass JSS.Class
+  | DefinedType DagType
 
 data TCConfig = TCC {
          localBindings     :: Map String TypedExpr
@@ -163,7 +161,7 @@ data TCConfig = TCC {
        , opBindings        :: Map String OpDef
        , codeBase          :: JSS.Codebase
        , methodInfo        :: Maybe (JSS.Method, JSS.Class)
-       , toJavaExprType    :: JavaExpr -> JavaExprDagType
+       , toJavaExprType    :: Maybe (JavaExpr -> Maybe DefinedJavaExprType)
        , sawOptions        :: SSOpts
        }
 
@@ -363,25 +361,28 @@ tcE (AST.DerefField p e f) = do
      rt  -> unexpected p "record field selection" ("record containing field " ++ show f) rt
 
 tcJRef :: Pos -> AST.JavaRef -> SawTI TypedExpr
-tcJRef p jr = do sje <- tcASTJavaExpr jr
-                 toJavaT <- gets toJavaExprType
-                 case toJavaT sje of
-                   JEDTBadContext ->
-                     let msg = "The Java value \'" ++ show sje ++ "\' appears in a global context."
-                         res = "Java values may not be references outside method declarations."
-                      in typeErrWithR p (ftext msg) res
-                   JEDTUndefined ->
-                     let msg = "The Java value \'" ++ show sje ++ "\' is missing a \'type\' annotation."
-                         res = "Please add a type declaration to Java values before "
-                                ++ "referring to them in SAWScript expressions."
-                      in typeErrWithR p (ftext msg) res
-                   JEDTClass _ ->
-                     let msg = "The Java value " ++ show sje ++ " denotes a Java reference,"
-                               ++ " and cannot be directly used in a SAWScript expression."
-                         res = "Please alter the expression, perhaps by referring to "
-                               ++ "an field in the reference."
-                      in typeErrWithR p (ftext msg) res
-                   JEDTType t -> return $ TypedJavaValue sje t
+tcJRef p jr = do
+  sje <- tcASTJavaExpr jr
+  mbToJavaT <- gets toJavaExprType
+  case mbToJavaT of
+    Nothing -> 
+      let msg = "The Java value \'" ++ show sje ++ "\' appears in a global context."
+          res = "Java values may not be references outside method declarations."
+       in typeErrWithR p (ftext msg) res
+    Just toJavaT -> do
+      case toJavaT sje of
+        Nothing ->
+          let msg = "The Java value \'" ++ show sje ++ "\' is missing a \'type\' annotation."
+              res = "Please add a type declaration to Java values before "
+                     ++ "referring to them in SAWScript expressions."
+           in typeErrWithR p (ftext msg) res
+        Just (DefinedClass _) ->
+          let msg = "The Java value " ++ show sje ++ " denotes a Java reference,"
+                    ++ " and cannot be directly used in a SAWScript expression."
+              res = "Please alter the expression, perhaps by referring to "
+                    ++ "an field in the reference."
+           in typeErrWithR p (ftext msg) res
+        Just (DefinedType t) -> return $ TypedJavaValue sje t
 
 lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
 lift1Bool p nm o l = do
