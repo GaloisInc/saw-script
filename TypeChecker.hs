@@ -7,8 +7,8 @@ module SAWScript.TypeChecker
   ( JavaExpr(..)
   , getJSSTypeOfJavaExpr
   , DefinedJavaExprType(..)
-  , TypedExpr(..)
-  , getTypeOfTypedExpr
+  , Expr(..)
+  , getTypeOfExpr
   , typedExprVarNames
   , TCConfig(..)
   , tcExpr
@@ -35,7 +35,7 @@ import Symbolic
 tcJavaExpr :: TCConfig -> AST.JavaRef -> OpSession JavaExpr
 tcJavaExpr cfg e = runTI cfg (tcASTJavaExpr e)
 
-tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
+tcExpr :: TCConfig -> AST.Expr -> OpSession Expr
 tcExpr cfg e = runTI cfg (tcE e)
 
 tcType :: TCConfig -> AST.ExprType -> OpSession DagType
@@ -120,33 +120,30 @@ tcT (AST.Record _ fields)   = do let names = [ nm | (_,nm,_) <- fields ]
                                  return $ SymRec def sub
 tcT (AST.ShapeVar _ v)      = return (SymShapeVar v)
 
--- TypedExpr {{{1
+-- Expr {{{1
 
 -- | A type-checked expression which appears insider a global let binding,
 -- method declaration, or rule term.
-data TypedExpr
-   = TypedApply Op [TypedExpr]
-   | TypedCns CValue DagType
-   | TypedArray [TypedExpr] DagType
-   | TypedJavaValue JavaExpr DagType
-   | TypedVar String DagType
+data Expr
+   = Apply Op [Expr]
+   | Cns CValue DagType
+   | JavaValue JavaExpr DagType
+   | Var String DagType
    deriving (Show)
 
 -- | Return type of a typed expression.
-getTypeOfTypedExpr :: TypedExpr -> DagType
-getTypeOfTypedExpr (TypedApply       op _) = opResultType op
-getTypeOfTypedExpr (TypedCns         _ tp) = tp
-getTypeOfTypedExpr (TypedArray       _ tp) = tp
-getTypeOfTypedExpr (TypedJavaValue   _ tp) = tp
-getTypeOfTypedExpr (TypedVar         _ tp) = tp
+getTypeOfExpr :: Expr -> DagType
+getTypeOfExpr (Apply       op _) = opResultType op
+getTypeOfExpr (Cns         _ tp) = tp
+getTypeOfExpr (JavaValue   _ tp) = tp
+getTypeOfExpr (Var         _ tp) = tp
 
 -- | Returns names of variables appearing in typedExpr.
-typedExprVarNames :: TypedExpr -> Set String
-typedExprVarNames (TypedApply _ exprs) = Set.unions (map typedExprVarNames exprs)
-typedExprVarNames (TypedCns _ _)       = Set.empty
-typedExprVarNames (TypedArray exprs _) = Set.unions (map typedExprVarNames exprs)
-typedExprVarNames (TypedJavaValue _ _) = Set.empty
-typedExprVarNames (TypedVar nm _)      = Set.singleton nm
+typedExprVarNames :: Expr -> Set String
+typedExprVarNames (Apply _ exprs) = Set.unions (map typedExprVarNames exprs)
+typedExprVarNames (Cns _ _)       = Set.empty
+typedExprVarNames (JavaValue _ _) = Set.empty
+typedExprVarNames (Var nm _)      = Set.singleton nm
 
 -- DefinedJavaExprType {{{1
 
@@ -156,7 +153,7 @@ data DefinedJavaExprType
   | DefinedType DagType
 
 data TCConfig = TCC {
-         localBindings     :: Map String TypedExpr
+         localBindings     :: Map String Expr
        , globalCnsBindings :: Map String (CValue,DagType)
        , opBindings        :: Map String OpDef
        , codeBase          :: JSS.Codebase
@@ -207,7 +204,7 @@ tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
                           "Please check to make sure the field name is correct."
 
 -- | Check argument count matches expected length
-checkArgCount :: Pos -> String -> [TypedExpr] -> Int -> SawTI ()
+checkArgCount :: Pos -> String -> [Expr] -> Int -> SawTI ()
 checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
   unless (expectedCnt == foundOpCnt) $
     typeErr pos $ ftext $ "Incorrect number of arguments to \'" ++ nm ++ "\'.  "
@@ -215,7 +212,7 @@ checkArgCount pos nm (length -> foundOpCnt) expectedCnt = do
                         ++ show foundOpCnt ++ " arguments were found."
 
 -- | Convert an AST expression from parser into a typed expression.
-tcE :: AST.Expr -> SawTI TypedExpr
+tcE :: AST.Expr -> SawTI Expr
 tcE (AST.ConstantInt p _)
   = typeErrWithR p (ftext ("The use of constant literal requires a type-annotation")) "Please provide the bit-size of the constant with a type-annotation"
 tcE (AST.ApplyExpr p nm _)
@@ -228,25 +225,26 @@ tcE (AST.Var pos name) = do
     Just res -> return res
     Nothing -> do
       case name `Map.lookup` globals of
-        Just (c,tp) -> return $ TypedCns c tp
+        Just (c,tp) -> return $ Cns c tp
         Nothing -> typeErr pos $ ftext $ "Unknown variable \'" ++ name ++ "\'."
-tcE (AST.ConstantBool _ b) = return $ TypedCns (mkCBool b) SymBool
+tcE (AST.ConstantBool _ b) = return $ Cns (mkCBool b) SymBool
 tcE (AST.MkArray p [])
   = typeErrWithR p (ftext ("Use of empty array-comprehensions requires a type-annotation")) "Please provide the type of the empty-array value"
 tcE (AST.MkArray p (es@(_:_))) = do
-        es' <- mapM tcE es
-        let go []                 = error "internal: impossible happened in tcE-non-empty-mkArray"
-            go [(_, x)]           = return x
-            go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("array elements " ++ show i ++ " and " ++ show j) x y
-        t   <- go $ zip [(1::Int)..] $ map getTypeOfTypedExpr es'
-        return $ TypedArray es' (SymArray (constantWidth (Wx (length es))) t)
+  es' <- mapM tcE es
+  let go []                 = error "internal: impossible happened in tcE-non-empty-mkArray"
+      go [(_, x)]           = return x
+      go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("array elements " ++ show i ++ " and " ++ show j) x y
+  t   <- go $ zip [(1::Int)..] $ map getTypeOfExpr es'
+  op <- liftTI $ mkArrayOp (length es') t
+  return $ Apply op es'
 tcE (AST.TypeExpr pos (AST.ConstantInt posCnst i) astTp) = do
   tp <- tcT astTp
   let nonGround = typeErr pos $   text "The type" <+> text (ppType tp)
                               <+> ftext "bound to literals must be a ground type."
   case tp of
     SymInt (widthConstant -> Just (Wx w)) -> do warnRanges posCnst tp i w
-                                                return $ TypedCns (mkCInt (Wx w) i) tp
+                                                return $ Cns (mkCInt (Wx w) i) tp
     SymInt      _ -> nonGround
     SymShapeVar _ -> nonGround
     _             -> typeErr pos $   text "Incompatible type" <+> text (ppType tp)
@@ -255,33 +253,34 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
   args <- mapM tcE astArgs
   checkArgCount appPos "split" args 1
   resType <- tcT astResType
-  let argType = getTypeOfTypedExpr (head args)
+  let argType = getTypeOfExpr (head args)
   case (argType, resType) of
     (  SymInt (widthConstant -> Just wl)
      , SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)))
       | wl == l * w -> do
         op <- liftTI $ splitOpDef l w
-        return $ TypedApply (groundOp op) args
+        return $ Apply (groundOp op) args
     _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'split\'."
                                 ++ " SAWScript currently requires that the argument is ground type, "
                                 ++ " and an explicit result type is given."
 tcE (AST.TypeExpr p (AST.MkArray _ []) astResType) = do
-   resType <- tcT astResType
-   case resType of
-     SymArray we _ 
-       | Just (Wx 0) <- widthConstant we ->
-          return $ TypedArray [] resType
-     _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
+  resType <- tcT astResType
+  case resType of
+    SymArray we _ 
+      | Just (Wx 0) <- widthConstant we -> do
+         op <- liftTI $ mkArrayOp 0 resType
+         return $ Apply op []
+    _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
 tcE (AST.MkRecord _ flds) = do
    flds' <- mapM tcE [e | (_, _, e) <- flds]
    let names = [nm | (_, nm, _) <- flds]
    def <- liftTI $ getStructuralRecord (Set.fromList names)
-   let fldTps = map getTypeOfTypedExpr flds'
+   let fldTps = map getTypeOfExpr flds'
    let sub = emptySubst { shapeSubst = Map.fromList $ names `zip` fldTps }
-   return $ TypedApply (mkOp (recDefCtor def) sub) flds'
+   return $ Apply (mkOp (recDefCtor def) sub) flds'
 tcE (AST.TypeExpr p e astResType) = do
    te <- tcE e
-   let tet = getTypeOfTypedExpr te
+   let tet = getTypeOfExpr te
    resType <- tcT astResType
    if tet /= resType
       then mismatch p "type-annotation" tet resType
@@ -290,11 +289,11 @@ tcE (AST.JavaValue p jref) = tcJRef p jref
 tcE (AST.ApplyExpr appPos "join" astArgs) = do
   args <- mapM tcE astArgs
   checkArgCount appPos "join" args 1
-  let argType = getTypeOfTypedExpr (head args)
+  let argType = getTypeOfExpr (head args)
   case argType of
     SymArray (widthConstant -> Just l) (SymInt (widthConstant -> Just w)) -> do
          op <- liftTI $ joinOpDef l w
-         return $ TypedApply (groundOp op) args
+         return $ Apply (groundOp op) args
     _ -> typeErr appPos $ ftext $ "Illegal arguments and result type given to \'join\'."
                                 ++ " SAWScript currently requires that the argument is ground"
                                 ++ " array of integers. "
@@ -307,7 +306,7 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
       let defArgTypes = opDefArgTypes opDef
       checkArgCount appPos nm args (V.length defArgTypes)
       let defTypes = V.toList defArgTypes
-      let argTypes = map getTypeOfTypedExpr args
+      let argTypes = map getTypeOfExpr args
       case matchSubst (defTypes `zip` argTypes) of
         Nothing  -> do
           debugTI $ show defTypes
@@ -315,7 +314,7 @@ tcE (AST.ApplyExpr appPos nm astArgs) = do
           mismatchArgs appPos ("in call to '" ++ nm ++ "'") argTypes defTypes
         Just sub -> do
           debugTI $ "Making expression with operator " ++ opDefName opDef ++ " and substitution " ++  show sub
-          return $ TypedApply (mkOp opDef sub) args
+          return $ Apply (mkOp opDef sub) args
 tcE (AST.NotExpr      p l)   = lift1Bool     p "not" (groundOp bNotOpDef)        l
 tcE (AST.BitComplExpr p l)   = lift1Word     p "~"   (wordOpX  iNotOpDef)        l
 tcE (AST.NegExpr      p l)   = lift1Word     p "-"   (wordOpX  negOpDef)         l
@@ -332,7 +331,7 @@ tcE (AST.BitOrExpr    p l r) = lift2WordEq   p "|"   (wordOpEX iOrOpDef)        
 tcE (AST.BitXorExpr   p l r) = lift2WordEq   p "^"   (wordOpEX iXorOpDef)        l r
 tcE (AST.AppendExpr   p l r) = lift2Word     p "#"   (wordOpXY appendIntOpDef)   l r
 tcE (AST.EqExpr       p l r) = lift2ShapeCmp p "=="  (shapeOpX eqOpDef)          l r
-tcE (AST.IneqExpr     p l r) = lift2ShapeCmp p "!="  (shapeOpX eqOpDef)          l r >>= \e -> return $ TypedApply (groundOp bNotOpDef) [e]
+tcE (AST.IneqExpr     p l r) = lift2ShapeCmp p "!="  (shapeOpX eqOpDef)          l r >>= \e -> return $ Apply (groundOp bNotOpDef) [e]
 tcE (AST.SGeqExpr     p l r) = lift2WordCmp  p ">=s" (wordOpX  signedLeqOpDef)   l r >>= return . flipBinOpArgs
 tcE (AST.SLeqExpr     p l r) = lift2WordCmp  p "<=s" (wordOpX  signedLeqOpDef)   l r
 tcE (AST.SGtExpr      p l r) = lift2WordCmp  p ">s"  (wordOpX  signedLtOpDef)    l r >>= return . flipBinOpArgs
@@ -345,22 +344,22 @@ tcE (AST.AndExpr      p l r) = lift2Bool     p "&&"  (groundOp bAndOpDef)       
 tcE (AST.OrExpr       p l r) = lift2Bool     p "||"  (groundOp bOrOpDef)         l r
 tcE (AST.IteExpr      p t l r) = do
         [t', l', r'] <- mapM tcE [t, l, r]
-        let [tt, lt, rt] = map getTypeOfTypedExpr [t', l', r']
+        let [tt, lt, rt] = map getTypeOfExpr [t', l', r']
         if tt /= SymBool
            then mismatch p "test expression of if-then-else" tt SymBool
            else if lt /= rt
                 then mismatch p "branches of if-then-else expression" lt rt
-                else return $ TypedApply (shapeOpX iteOpDef lt) [t', l', r']
+                else return $ Apply (shapeOpX iteOpDef lt) [t', l', r']
 tcE (AST.DerefField p e f) = do
    e' <- tcE e
-   case getTypeOfTypedExpr e' of
+   case getTypeOfExpr e' of
      rt@(SymRec recDef recSubst) -> do let fops = recDefFieldOps recDef
                                        case V.find (\op -> opDefName op == f) fops of
                                          Nothing -> unexpected p "record field selection" ("record containing field " ++ show f) rt
-                                         Just fop -> return $ TypedApply (mkOp fop recSubst) [e']
+                                         Just fop -> return $ Apply (mkOp fop recSubst) [e']
      rt  -> unexpected p "record field selection" ("record containing field " ++ show f) rt
 
-tcJRef :: Pos -> AST.JavaRef -> SawTI TypedExpr
+tcJRef :: Pos -> AST.JavaRef -> SawTI Expr
 tcJRef p jr = do
   sje <- tcASTJavaExpr jr
   mbToJavaT <- gets toJavaExprType
@@ -382,73 +381,73 @@ tcJRef p jr = do
               res = "Please alter the expression, perhaps by referring to "
                     ++ "an field in the reference."
            in typeErrWithR p (ftext msg) res
-        Just (DefinedType t) -> return $ TypedJavaValue sje t
+        Just (DefinedType t) -> return $ JavaValue sje t
 
-lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI TypedExpr
+lift1Bool :: Pos -> String -> Op -> AST.Expr -> SawTI Expr
 lift1Bool p nm o l = do
   l' <- tcE l
-  let lt = getTypeOfTypedExpr l'
+  let lt = getTypeOfExpr l'
   case lt of
-    SymBool -> return $ TypedApply o [l']
+    SymBool -> return $ Apply o [l']
     _       -> mismatch p ("argument to operator '" ++ nm ++ "'")  lt SymBool
 
-lift1Word :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> SawTI TypedExpr
+lift1Word :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> SawTI Expr
 lift1Word p nm opMaker l = do
   l' <- tcE l
-  let lt = getTypeOfTypedExpr l'
+  let lt = getTypeOfExpr l'
   case lt of
-    SymInt wl -> return $ TypedApply (opMaker wl) [l']
+    SymInt wl -> return $ Apply (opMaker wl) [l']
     _         -> unexpected p ("Argument to operator '" ++ nm ++ "'") "word" lt
 
-lift2Bool :: Pos -> String -> Op -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2Bool :: Pos -> String -> Op -> AST.Expr -> AST.Expr -> SawTI Expr
 lift2Bool p nm o l r = do
   l' <- tcE l
   r' <- tcE r
-  let lt = getTypeOfTypedExpr l'
-      rt = getTypeOfTypedExpr r'
+  let lt = getTypeOfExpr l'
+      rt = getTypeOfExpr r'
   case (lt, rt) of
-    (SymBool, SymBool) -> return $ TypedApply o [l', r']
+    (SymBool, SymBool) -> return $ Apply o [l', r']
     (SymBool, _      ) -> mismatch p ("second argument to operator '" ++ nm ++ "'") rt SymBool
     (_      , _      ) -> mismatch p ("first argument to operator '"  ++ nm ++ "'") lt SymBool
 
-lift2Word :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2Word :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI Expr
 lift2Word = lift2WordGen False
-lift2WordEq :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordEq :: Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI Expr
 lift2WordEq = lift2WordGen True
 
 -- The bool argument says if the args should be of the same type
-lift2WordGen :: Bool -> Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordGen :: Bool -> Pos -> String -> (WidthExpr -> WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI Expr
 lift2WordGen checkEq p nm opMaker l r = do
   l' <- tcE l
   r' <- tcE r
-  let lt = getTypeOfTypedExpr l'
-      rt = getTypeOfTypedExpr r'
+  let lt = getTypeOfExpr l'
+      rt = getTypeOfExpr r'
   case (lt, rt) of
     (SymInt wl, SymInt wr) -> if not checkEq || wl == wr
-                              then return $ TypedApply (opMaker wl wr) [l', r']
+                              then return $ Apply (opMaker wl wr) [l', r']
                               else mismatch p ("arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
 
-lift2ShapeCmp :: Pos -> String -> (DagType -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2ShapeCmp :: Pos -> String -> (DagType -> Op) -> AST.Expr -> AST.Expr -> SawTI Expr
 lift2ShapeCmp p nm opMaker l r = do
   l' <- tcE l
   r' <- tcE r
-  let lt = getTypeOfTypedExpr l'
-      rt = getTypeOfTypedExpr r'
+  let lt = getTypeOfExpr l'
+      rt = getTypeOfExpr r'
   if lt == rt
-     then return $ TypedApply (opMaker lt) [l', r']
+     then return $ Apply (opMaker lt) [l', r']
      else mismatch p ("arguments to operator '" ++ nm ++ "'") lt rt
 
-lift2WordCmp :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI TypedExpr
+lift2WordCmp :: Pos -> String -> (WidthExpr -> Op) -> AST.Expr -> AST.Expr -> SawTI Expr
 lift2WordCmp p nm opMaker l r = do
   l' <- tcE l
   r' <- tcE r
-  let lt = getTypeOfTypedExpr l'
-      rt = getTypeOfTypedExpr r'
+  let lt = getTypeOfExpr l'
+      rt = getTypeOfExpr r'
   case (lt, rt) of
     (SymInt wl, SymInt wr) -> if wl == wr
-                              then return $ TypedApply (opMaker wl) [l', r']
+                              then return $ Apply (opMaker wl) [l', r']
                               else mismatch p ("arguments to operator '" ++ nm ++ "'") lt rt
     (SymInt _,  _)         -> unexpected p ("Second argument to operator '" ++ nm ++ "'") "word" rt
     (_       ,  _)         -> unexpected p ("First argument to operator '"  ++ nm ++ "'") "word" lt
@@ -469,8 +468,8 @@ shftOpVS opDef wv ws = mkOp opDef (emptySubst { widthSubst = Map.fromList [("v",
 shapeOpX :: OpDef -> DagType -> Op
 shapeOpX opDef wx = mkOp opDef (emptySubst { shapeSubst = Map.fromList [("x", wx)] })
 
-flipBinOpArgs :: TypedExpr -> TypedExpr
-flipBinOpArgs (TypedApply o [a, b]) = TypedApply o [b, a]
+flipBinOpArgs :: Expr -> Expr
+flipBinOpArgs (Apply o [a, b]) = Apply o [b, a]
 flipBinOpArgs e                     = error $ "internal: flipBinOpArgs: received: " ++ show e
 
 findClass :: Pos -> String -> SawTI JSS.Class
