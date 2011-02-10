@@ -1,4 +1,11 @@
 {
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : lerkok
+-}
+
 {-# OPTIONS_GHC -fno-warn-name-shadowing     #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches     #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds       #-}

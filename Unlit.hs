@@ -1,3 +1,10 @@
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : lerkok
+-}
+
 {- This module is inspired by NHC's Unlit.hs code; modified and monadified to deal with
    first Cryptol's and then SAWScript's literate style and send back an appropriate
    error message instead of calling error.
@@ -9,14 +16,14 @@
      of this software which does not perform substantially the same task as this
      software, for instance, by re-using a parser but not the entire compiler."
 
-     Hereby we acknowledge the inspirational use of the Unlit.hs module from the 
+     Hereby we acknowledge the inspirational use of the Unlit.hs module from the
      NHC98 distribution, which can be freely obtained from "http://www.haskell.org/nhc98"
      Galois retains the rights to this particular module, in accordance with the
      NHC copyright statement as found in "http://www.haskell.org/nhc98/copyright.html"
    --------------------------------------------------------------------------------
 
    Note that while we were inspired by NHC's Unlit.hs code, the code below is
-   significantly rewritten to fit the current needs. 
+   significantly rewritten to fit the current needs.
 -}
 
 module SAWScript.Unlit (unlitCode, unlitCommands) where
@@ -50,8 +57,8 @@ unlit name allowBirdtracks contents =
         lines ('\n':s)       acc = acc [] : lines s id      -- Unix
         lines (c:s)          acc = lines s (acc . (c:))
 
-data Classified = Program String 
-                | Blank 
+data Classified = Program String
+                | Blank
                 | Comment
 
 noBeginLine :: Int
@@ -71,7 +78,7 @@ classify name allowBirdtracks = classify' where
     classify' bl []
         | not (insideBlock bl) = return []
         | otherwise           = Fail bl $ "Unmatched \"\\begin{" ++ name ++ "}\" marker"
-    classify' bl ((ln, ('\\':line)):lines) 
+    classify' bl ((ln, ('\\':line)):lines)
         | ("begin{" ++ name ++ "}") `isPrefixOf` line
         = if insideBlock bl
           then Fail ln $ "Nested \"\\begin{" ++ name ++ "}\" markers found, earlier start was on line " ++ show bl

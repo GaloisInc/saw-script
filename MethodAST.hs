@@ -1,3 +1,10 @@
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : jhendrix, lerkok
+-}
+
 module SAWScript.MethodAST where
 
 import SAWScript.Utils
@@ -23,9 +30,9 @@ data ExprWidth
 
 -- | Java types for symbolic simulator.
 data JavaType
-    = RefType Pos [String] -- ^ Class with given dots. 
+    = RefType Pos [String] -- ^ Class with given dots.
     | IntArray Pos Int -- ^ Int array with given length
-    | LongArray Pos Int -- ^ Long array with given length.   
+    | LongArray Pos Int -- ^ Long array with given length.
     | BoolScalar Pos
     | IntScalar Pos
     | LongScalar Pos
@@ -51,12 +58,12 @@ data Expr
     | ConstantInt  Pos Integer
 
     -- * Highest precedence
-   
+
     -- | Array comprehension.
     | MkArray Pos [Expr]
     -- | Making a record
     | MkRecord Pos [(Pos, String, Expr)]
-    
+
     -- Precedence 13
     -- | Type annotation on an expression.
     | TypeExpr Pos Expr ExprType
@@ -64,7 +71,7 @@ data Expr
     | DerefField Pos Expr String
 
     -- Precedence 12
-    -- | Java Value 
+    -- | Java Value
     | JavaValue Pos JavaRef
     -- | Uninterpreted functions.
     | ApplyExpr Pos String [Expr]
@@ -172,7 +179,7 @@ data VerificationMethod = ABC | Rewrite | Auto | Skip
   deriving (Show)
 
 -- | Commands in a method spec.
-data MethodSpecDecl 
+data MethodSpecDecl
   = Type Pos [JavaRef] JavaType
   -- | List of Java expressions that may alias.
   | MayAlias Pos [JavaRef]

@@ -1,3 +1,10 @@
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : lerkok
+-}
+
 {-# LANGUAGE PatternGuards #-}
 module SAWScript.ParserActions (
      Parser, happyError, parseError, lexer, parseSSPgm

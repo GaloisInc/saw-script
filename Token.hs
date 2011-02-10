@@ -1,3 +1,10 @@
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : lerkok
+-}
+
 {-# LANGUAGE DeriveFunctor #-}
 module SAWScript.Token where
 

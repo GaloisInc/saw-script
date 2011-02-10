@@ -1,3 +1,10 @@
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : jhendrix, lerkok
+-}
+
 {-# LANGUAGE DeriveDataTypeable  #-}
 module SAWScript.Utils where
 
@@ -91,7 +98,7 @@ throwIOExecException pos errorMsg resolution =
 -- | Atempt to find class with given name, or throw ExecException if no class
 -- with that name exists.
 lookupClass ::  (JSS.HasCodebase m, MonadIO m) => Pos -> String -> m JSS.Class
-lookupClass pos nm = do 
+lookupClass pos nm = do
   maybeCl <- JSS.tryLookupClass nm
   case maybeCl of
     Nothing -> do
@@ -107,7 +114,7 @@ findMethod :: (JSS.HasCodebase m, MonadIO m)
 findMethod pos nm initClass = do
   let javaClassName = slashesToDots (JSS.className initClass)
   let methodMatches m = JSS.methodName m == nm && not (JSS.methodIsAbstract m)
-  let impl cl = 
+  let impl cl =
         case filter methodMatches (JSS.classMethods cl) of
           [] -> do
             case JSS.superClass cl of
@@ -116,7 +123,7 @@ findMethod pos nm initClass = do
                             ++ " in class " ++ javaClassName ++ "."
                     res = "Please check that the class and method are correct."
                  in throwIOExecException pos msg res
-              Just superName -> 
+              Just superName ->
                 impl =<< lookupClass pos superName
           [method] -> return (cl,method)
           _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
@@ -131,16 +138,16 @@ findMethod pos nm initClass = do
 findField :: (JSS.HasCodebase m, MonadIO m)
           => Pos -> String -> JSS.Class -> m JSS.FieldId
 findField pos nm initClass = do
-  let impl cl = 
+  let impl cl =
         case filter (\f -> JSS.fieldName f == nm) $ JSS.classFields cl of
           [] -> do
             case JSS.superClass cl of
               Nothing ->
-                let msg = "Could not find a field named " ++ nm ++ " in " 
+                let msg = "Could not find a field named " ++ nm ++ " in "
                             ++ slashesToDots (JSS.className initClass) ++ "."
                     res = "Please check to make sure the field name is correct."
                  in throwIOExecException pos (ftext msg) res
               Just superName -> impl =<< lookupClass pos superName
           [f] -> return $ JSS.FieldId (JSS.className cl) nm (JSS.fieldType f)
           _ -> error "internal: Found multiple fields with the same name."
-  impl initClass 
+  impl initClass

@@ -1,3 +1,10 @@
+{- |
+Module           : $Header$
+Description      :
+Stability        : provisional
+Point-of-contact : jhendrix, lerkok
+-}
+
 {-# LANGUAGE DeriveDataTypeable   #-}
 {-# LANGUAGE NamedFieldPuns       #-}
 {-# LANGUAGE ViewPatterns         #-}
@@ -270,7 +277,7 @@ tcE (AST.TypeExpr _ (AST.ApplyExpr appPos "split" astArgs) astResType) = do
 tcE (AST.TypeExpr p (AST.MkArray _ []) astResType) = do
    resType <- tcT astResType
    case resType of
-     SymArray we _ 
+     SymArray we _
        | Just (Wx 0) <- widthConstant we ->
           return $ TypedArray [] resType
      _  -> unexpected p "Empty-array comprehension" "empty-array type" resType
