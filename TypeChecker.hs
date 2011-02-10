@@ -4,8 +4,8 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE PatternGuards        #-}
 module SAWScript.TypeChecker
-  ( SpecJavaExpr(..)
-  , getJSSTypeOfSpecRef
+  ( JavaExpr(..)
+  , getJSSTypeOfJavaExpr
   , JavaExprDagType(..)
   , TypedExpr(..)
   , getTypeOfTypedExpr
@@ -32,7 +32,7 @@ import SAWScript.TIMonad
 import SAWScript.Utils
 import Symbolic
 
-tcJavaExpr :: TCConfig -> AST.JavaRef -> OpSession SpecJavaExpr
+tcJavaExpr :: TCConfig -> AST.JavaRef -> OpSession JavaExpr
 tcJavaExpr cfg e = runTI cfg (tcASTJavaExpr e)
 
 tcExpr :: TCConfig -> AST.Expr -> OpSession TypedExpr
@@ -41,43 +41,43 @@ tcExpr cfg e = runTI cfg (tcE e)
 tcType :: TCConfig -> AST.ExprType -> OpSession DagType
 tcType cfg t = runTI cfg (tcT t)
 
--- SpecJavaExpr {{{1
+-- JavaExpr {{{1
 
 -- | Identifies a reference to a Java value.
-data SpecJavaExpr
-  = SpecThis String -- | Name of classname for this object.
-  | SpecArg Int JSS.Type
-  | SpecField SpecJavaExpr JSS.FieldId
+data JavaExpr
+  = This String -- | Name of classname for this object.
+  | Arg Int JSS.Type
+  | InstanceField JavaExpr JSS.FieldId
 
-instance Eq SpecJavaExpr where
-  SpecThis _      == SpecThis _      = True
-  SpecArg i _     == SpecArg j _     = i == j
-  SpecField r1 f1 == SpecField r2 f2 = r1 == r2 && f1 == f2
+instance Eq JavaExpr where
+  This _      == This _      = True
+  Arg i _     == Arg j _     = i == j
+  InstanceField r1 f1 == InstanceField r2 f2 = r1 == r2 && f1 == f2
   _               == _               = False
 
-instance Ord SpecJavaExpr where
-  SpecThis _      `compare` SpecThis _      = EQ
-  SpecThis _      `compare` _               = LT
-  _               `compare` SpecThis _      = GT
-  SpecArg i _     `compare` SpecArg j _     = i `compare` j
-  SpecArg _ _     `compare` _               = LT
-  _               `compare` SpecArg _ _     = GT
-  SpecField r1 f1 `compare` SpecField r2 f2 =
+instance Ord JavaExpr where
+  This _      `compare` This _      = EQ
+  This _      `compare` _               = LT
+  _               `compare` This _      = GT
+  Arg i _     `compare` Arg j _     = i `compare` j
+  Arg _ _     `compare` _               = LT
+  _               `compare` Arg _ _     = GT
+  InstanceField r1 f1 `compare` InstanceField r2 f2 =
         case r1 `compare` r2 of
           EQ -> f1 `compare` f2
           r  -> r
 
-instance Show SpecJavaExpr where
-  show (SpecThis _)    = "this"
-  show (SpecArg i _)   = "args[" ++ show i ++ "]"
-  show (SpecField r f) = show r ++ "." ++ JSS.fieldIdName f
+instance Show JavaExpr where
+  show (This _)    = "this"
+  show (Arg i _)   = "args[" ++ show i ++ "]"
+  show (InstanceField r f) = show r ++ "." ++ JSS.fieldIdName f
 
--- | Returns JSS Type of SpecJavaExpr
-getJSSTypeOfSpecRef :: SpecJavaExpr -- ^ Spec Java reference to get type of.
+-- | Returns JSS Type of JavaExpr
+getJSSTypeOfJavaExpr :: JavaExpr -- ^ Spec Java reference to get type of.
                     -> JSS.Type
-getJSSTypeOfSpecRef (SpecThis cl)   = JSS.ClassType cl
-getJSSTypeOfSpecRef (SpecArg _ tp)  = tp
-getJSSTypeOfSpecRef (SpecField _ f) = JSS.fieldIdType f
+getJSSTypeOfJavaExpr (This cl)   = JSS.ClassType cl
+getJSSTypeOfJavaExpr (Arg _ tp)  = tp
+getJSSTypeOfJavaExpr (InstanceField _ f) = JSS.fieldIdType f
 
 -- Typecheck DagType {{{1
 
@@ -128,7 +128,7 @@ data TypedExpr
    = TypedApply Op [TypedExpr]
    | TypedCns CValue DagType
    | TypedArray [TypedExpr] DagType
-   | TypedJavaValue SpecJavaExpr DagType
+   | TypedJavaValue JavaExpr DagType
    | TypedVar String DagType
    deriving (Show)
 
@@ -163,7 +163,7 @@ data TCConfig = TCC {
        , opBindings        :: Map String OpDef
        , codeBase          :: JSS.Codebase
        , methodInfo        :: Maybe (JSS.Method, JSS.Class)
-       , toJavaExprType    :: SpecJavaExpr -> JavaExprDagType
+       , toJavaExprType    :: JavaExpr -> JavaExprDagType
        , sawOptions        :: SSOpts
        }
 
@@ -176,7 +176,7 @@ debugTI msg = do os <- gets sawOptions
                  liftIO $ debugVerbose os $ putStrLn msg
 
 instance HasCodebase SawTI where
-  getCodebase    = gets codeBase
+  getCodebase = gets codeBase
 
 getMethodInfo :: SawTI (JSS.Method, JSS.Class)
 getMethodInfo = do
@@ -185,26 +185,26 @@ getMethodInfo = do
     Nothing -> error $ "internal: getMethodInfo called when parsing outside a method declaration"
     Just p -> return p
 
-tcASTJavaExpr :: AST.JavaRef -> SawTI SpecJavaExpr
+tcASTJavaExpr :: AST.JavaRef -> SawTI JavaExpr
 tcASTJavaExpr (AST.This pos) = do
   (method, cl) <- getMethodInfo
   when (JSS.methodIsStatic method) $ typeErr pos (ftext "\'this\' is not defined on static methods.")
-  return (SpecThis (JSS.className cl))
+  return (This (JSS.className cl))
 tcASTJavaExpr (AST.Arg pos i) = do
   (method, _) <- getMethodInfo
   let params = V.fromList (JSS.methodParameterTypes method)
   -- Check that arg index is valid.
   unless (0 <= i && i < V.length params) $ typeErr pos (ftext "Invalid argument index for method.")
   checkJSSTypeIsValid pos (params V.! i)
-  return $ SpecArg i (params V.! i)
+  return $ Arg i (params V.! i)
 tcASTJavaExpr (AST.InstanceField pos astLhs fName) = do
   lhs <- tcASTJavaExpr astLhs
-  case getJSSTypeOfSpecRef lhs of
+  case getJSSTypeOfJavaExpr lhs of
     JSS.ClassType lhsClassName -> do
       cl <- findClass pos lhsClassName
       f <- findField pos fName cl
       checkJSSTypeIsValid pos (JSS.fieldIdType f)
-      return $ SpecField lhs f
+      return $ InstanceField lhs f
     _ -> typeErrWithR pos (ftext ("Could not find a field named " ++ fName ++ " in " ++ show lhs ++ "."))
                           "Please check to make sure the field name is correct."
 
