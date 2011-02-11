@@ -44,8 +44,6 @@ import Utils.Common
 import Utils.IOStateT
 import Utils.LogMonad
 
-import Debug.Trace
-
 -- Utilities {{{1
 
 -- | Insert multiple keys that map to the same value in a map.
@@ -77,9 +75,9 @@ createSymbolicArrayNode l w = do
   freshVar arrType (LVN lv)
 
 createLitVectorFromType :: DagType -> AigComputation OpSession (LitResult Lit)
-createLitVectorFromType tp@(SymInt (widthConstant -> Just (Wx w))) = do
+createLitVectorFromType (SymInt (widthConstant -> Just (Wx w))) = do
   fmap LV $ SV.replicateM w makeInputLit
-createLitVectorFromType tp@(SymArray (widthConstant -> Just (Wx l)) eltTp) = do
+createLitVectorFromType (SymArray (widthConstant -> Just (Wx l)) eltTp) = do
   fmap LVN $ V.replicateM l $ createLitVectorFromType eltTp
 createLitVectorFromType _ = error "internal: createLitVectorFromType called with unsupported type."
 
@@ -1182,7 +1180,7 @@ createJavaEvalReferences :: EquivClassMap -> JavaEvaluator ()
 createJavaEvalReferences cm = do
   let liftAig = lift . JSS.liftSymbolic . liftAigMonad
       liftSym = lift . JSS.liftSymbolic
-  V.forM_ (equivClassMapEntries cm) $ \(idx, exprClass, initValue) -> do
+  V.forM_ (equivClassMapEntries cm) $ \(_idx, exprClass, initValue) -> do
     litCount <- liftAig $ getInputLitCount
     let refName = ppSpecJavaRefEquivClass exprClass
     let -- create array input node with length and int width.
@@ -1318,9 +1316,9 @@ createExpectedStateDef ir jvs ssi = do
       Just expr -> fmap Just $ evalTypedExpr ssi expr
   -- Get instance field values.
   let fieldValues = instanceFieldValues ir (ssiJavaStateInfo ssi)
-  instanceFields <- forM fieldValues $ \(expr,r,fid,v) -> do
+  instanceFields <- forM fieldValues $ \(javaExpr,r,fid,v) -> do
       expValue <-
-        case Map.lookup expr (scalarPostconditions ir) of
+        case Map.lookup javaExpr (scalarPostconditions ir) of
           -- Non-modifiable case.
           Nothing -> return (Just v)
           Just PostUnchanged -> return (Just v) -- Unchanged
@@ -1535,14 +1533,14 @@ runABC pos ir jvs fGoal counterFns = do
       let inputExprValMap = Map.fromList (inputExprs `zip` inputValues)
       let inputDocs
             = flip map (Map.toList inputExprValMap) $ \(expr,c) ->
-                 text (show expr) <+> equals <+> ppCValueDoc c
+                 text (show expr) <+> equals <+> ppCValueD Mixfix c
       let diffDocs
             = flip map counters $ \vc ->
                 case vc of
                   DV name specVal jvmVal ->
                     text name $$
-                      nest 2 (text "Encountered: " <> ppCValueDoc jvmVal) $$
-                      nest 2 (text "Expected:    " <> ppCValueDoc specVal)
+                      nest 2 (text "Encountered: " <> ppCValueD Mixfix jvmVal) $$
+                      nest 2 (text "Expected:    " <> ppCValueD Mixfix specVal)
                   UnsatisfiedPathConditions ->
                     text "The path conditions were unsatisfied."
       let msg = ftext ("A counterexample was found by ABC when verifying "
@@ -1714,7 +1712,7 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
   execDebugLog $ "Parsing SBV inport for " ++ nm
   (op, SBV.WEF opFn) <-
     flip catchMIO (throwSBVParseError pos relativePath) $ lift $
-      SBV.parseSBVOp recordFn uninterpFns nm nm defaultPrec sbv
+      SBV.parseSBVOp recordFn uninterpFns nm sbv
   -- Create rule for definition.
   execDebugLog $ "Creating rule definition for for " ++ nm
   let (argTypes,_) = fnType
