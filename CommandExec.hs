@@ -343,9 +343,9 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
     bindings <- getGlobalBindings
     lift $ TC.resolveMethodSpecIR bindings pos thisClass mName cmds
   v <- gets runVerification
+  normWriteNoLn $ "Verifying " ++ show (TC.methodSpecName ir) ++ "... "
   if v && (TC.methodSpecVerificationTactic ir /= AST.Skip)
     then do
-      normWriteNoLn $ "Verifying " ++ show (TC.methodSpecName ir) ++ "... "
       cb <- gets codebase
       opts <- gets execOptions
       overrides <- gets methodSpecs
@@ -355,7 +355,7 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
       lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
       normWrite $ "Done."
     else do
-      normWrite $ "Skipped (per user request)."
+      normWrite $ "Skipped."
   -- Add methodIR to state for use in later verifications.
   modify $ \s -> s { methodSpecs = ir : methodSpecs s }
 execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
