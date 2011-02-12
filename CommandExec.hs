@@ -14,7 +14,6 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Vector.Storable as SV
 import qualified Data.Vector as V
 import Prelude hiding (catch)
 import System.Directory (makeRelativeToCurrentDirectory)
@@ -103,9 +102,13 @@ instance LogMonad Executor where
   getVerbosity = fmap verbose $ gets execOptions
   setVerbosity v = modify $ \s -> s { execOptions = (execOptions s) { verbose = v } }
 
+-- | Write messages to standard IO.
+normWrite :: String -> Executor ()
+normWrite msg = whenVerbosity (>=1) $ liftIO $ putStrLn msg
+
 -- | Write debug message to standard IO.
-execDebugLog :: String -> Executor ()
-execDebugLog msg = whenVerbosity (>=6) $ liftIO $ putStrLn msg
+debugWrite :: String -> Executor ()
+debugWrite msg = whenVerbosity (>=6) $ liftIO $ putStrLn msg
 
 -- Rule functions {{{2
 
@@ -262,16 +265,16 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
   -- Load SBV file
   sbv <- liftIO $ SBV.loadSBV absolutePath
   --- Parse SBV type to add recordDefs as needed.
-  execDebugLog $ "Parsing SBV type for " ++ nm
+  debugWrite $ "Parsing SBV type for " ++ nm
   let SBV.SBVPgm (_ver, sbvExprType, _cmds, _vc, _warn, sbvUninterpFns) = sbv
   idRecordsInIRType pos relativePath Nothing sbvExprType
   forM_ sbvUninterpFns $ \((name, _loc), irType, _) ->
     idRecordsInIRType pos relativePath (Just name) irType
   -- Define recordDefFn
-  execDebugLog $ "Defining recordDefFn for " ++ nm
+  debugWrite $ "Defining recordDefFn for " ++ nm
   recordFn <- lift $ getRecordDefMap
   -- Check that op type matches expected type.
-  execDebugLog $ "Checking expected type matches inferred type for " ++ nm
+  debugWrite $ "Checking expected type matches inferred type for " ++ nm
   fnType <- parseFnType astFnType
   unless (fnType == SBV.inferFunctionType recordFn sbvExprType) $
     let msg = (ftext "The type of the function in the imported SBV file"
@@ -281,18 +284,18 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
                ++ "matches the type in the SAWScript file."
      in throwIOExecException pos msg res
   -- Check uninterpreted functions are defined.
-  execDebugLog $ "Checking uninterpreted inputs for " ++ nm
+  debugWrite $ "Checking uninterpreted inputs for " ++ nm
   checkSBVUninterpretedFunctions pos relativePath sbv
   -- Define uninterpreted function map.
   let uninterpFns :: String -> [DagType] -> Maybe Op
       uninterpFns name _ = fmap (groundOp . snd) $ Map.lookup name curSbvOps
   -- Parse SBV file.
-  execDebugLog $ "Parsing SBV inport for " ++ nm
+  debugWrite $ "Parsing SBV inport for " ++ nm
   (op, SBV.WEF opFn) <-
     flip catchMIO (throwSBVParseError pos relativePath) $ lift $
       SBV.parseSBVOp recordFn uninterpFns nm sbv
   -- Create rule for definition.
-  execDebugLog $ "Creating rule definition for for " ++ nm
+  debugWrite $ "Creating rule definition for for " ++ nm
   let (argTypes,_) = fnType
   let lhsArgs = map (uncurry mkVar) $ (map show ([0..] :: [Int]) `zip` argTypes)
   let lhs = evalTerm $ appTerm (groundOp op) lhsArgs
@@ -307,9 +310,9 @@ execute (AST.ExternSBV pos nm absolutePath astFnType) = do
                    , rules = Map.insert nm (Rule nm lhs rhs) (rules s)
                    --, enabledRules = Set.insert nm (enabledRules s)
                    }
-  execDebugLog $ "Finished process extern SBV " ++ nm
+  debugWrite $ "Finished process extern SBV " ++ nm
 execute (AST.GlobalLet pos name astExpr) = do
-  execDebugLog $ "Start defining let " ++ name
+  debugWrite $ "Start defining let " ++ name
   checkNameIsUndefined pos name
   valueExpr <- do
     bindings <- getGlobalBindings
@@ -319,7 +322,7 @@ execute (AST.GlobalLet pos name astExpr) = do
   let tp = TC.getTypeOfExpr valueExpr
   modify $ \s -> s { definedNames = Map.insert name pos (definedNames s)
                    , globalLetBindings = Map.insert name (val, tp) (globalLetBindings s) }
-  execDebugLog $ "Finished defining let " ++ name
+  debugWrite $ "Finished defining let " ++ name
 execute (AST.SetVerification _pos val) = do
   modify $ \s -> s { runVerification = val }
 execute (AST.DeclareMethodSpec pos methodId cmds) = do
@@ -334,18 +337,23 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
     bindings <- getGlobalBindings
     lift $ TC.resolveMethodSpecIR bindings pos thisClass mName cmds
   v <- gets runVerification
-  when v $ do
-    cb <- gets codebase
-    opts <- gets execOptions
-    overrides <- gets methodSpecs
-    allRules <- gets rules
-    enRules <- gets enabledRules
-    let activeRules = map (allRules Map.!) $ Set.toList enRules
-    lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
+  if v && (TC.methodSpecVerificationTactic ir /= AST.Skip)
+    then do
+      normWrite $ "Starting verification of " ++ TC.methodSpecName ir ++ "."
+      cb <- gets codebase
+      opts <- gets execOptions
+      overrides <- gets methodSpecs
+      allRules <- gets rules
+      enRules <- gets enabledRules
+      let activeRules = map (allRules Map.!) $ Set.toList enRules
+      lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
+      normWrite $ "Completed verification of " ++ TC.methodSpecName ir ++ "."
+    else do
+      normWrite $ "Skipping verification of " ++ TC.methodSpecName ir ++ "."
   -- Add methodIR to state for use in later verifications.
   modify $ \s -> s { methodSpecs = ir : methodSpecs s }
 execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
-  execDebugLog $ "Start defining rule " ++ ruleName
+  debugWrite $ "Start defining rule " ++ ruleName
   checkNameIsUndefined pos ruleName
   bindings <- getGlobalBindings
   -- | Get map from variable names to typed expressions.
@@ -392,7 +400,7 @@ execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
   let rl = Rule ruleName (evalTerm (mkRuleTerm lhsExpr)) (evalTerm (mkRuleTerm rhsExpr))
   modify $ \s -> s { rules = Map.insert ruleName rl (rules s)
                    , enabledRules = Set.insert ruleName (enabledRules s) }
-  execDebugLog $ "Finished defining rule " ++ ruleName
+  debugWrite $ "Finished defining rule " ++ ruleName
 execute (AST.Disable pos name) = do
   checkNameIsDefined pos name
   modify $ \s -> s { enabledRules = Set.delete name (enabledRules s) }
@@ -425,12 +433,12 @@ runProofs cb ssOpts files = do
         }
       Ex action = do cmds <- parseFile initialPath
                      mapM_ execute cmds
-                     liftIO $ putStrLn "Verification succeeded!"
+                     liftIO $ putStrLn "SAWScript completed without errors!"
                      return ExitSuccess
   catch (runOpSession (evalStateT action initState))
     (\(ExecException absPos errorMsg resolution) -> do
         relPos <- posRelativeToCurrentDirectory absPos
-        putStrLn $ "SAWScript Failed!\n"
+        putStrLn $ "SAWScript failed!\n"
         putStrLn $ show relPos
         let rend = renderStyle style { lineLength = 100 }
         putStrLn $ rend $ nest 2 errorMsg

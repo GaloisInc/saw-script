@@ -176,7 +176,7 @@ data RewriteVar = RewriteVar Pos String
 type SpecName = String
 
 data VerificationMethod = ABC | Rewrite | Auto | Skip
-  deriving (Show)
+  deriving (Eq, Show)
 
 -- | Commands in a method spec.
 data MethodSpecDecl
