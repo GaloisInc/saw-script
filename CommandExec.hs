@@ -19,6 +19,7 @@ import Prelude hiding (catch)
 import System.Directory (makeRelativeToCurrentDirectory)
 import System.Exit
 import System.FilePath
+import System.IO (hFlush, stdout)
 import Text.PrettyPrint.HughesPJ
 
 import qualified Execution.Codebase as JSS
@@ -103,6 +104,11 @@ instance LogMonad Executor where
   setVerbosity v = modify $ \s -> s { execOptions = (execOptions s) { verbose = v } }
 
 -- | Write messages to standard IO.
+normWriteNoLn :: String -> Executor ()
+normWriteNoLn msg = whenVerbosity (>=1) $ liftIO $ do
+                        putStr msg
+                        hFlush stdout
+
 normWrite :: String -> Executor ()
 normWrite msg = whenVerbosity (>=1) $ liftIO $ putStrLn msg
 
@@ -339,7 +345,7 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
   v <- gets runVerification
   if v && (TC.methodSpecVerificationTactic ir /= AST.Skip)
     then do
-      normWrite $ "Starting verification of " ++ TC.methodSpecName ir ++ "."
+      normWriteNoLn $ "Verifying " ++ show (TC.methodSpecName ir) ++ "... "
       cb <- gets codebase
       opts <- gets execOptions
       overrides <- gets methodSpecs
@@ -347,9 +353,9 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
       enRules <- gets enabledRules
       let activeRules = map (allRules Map.!) $ Set.toList enRules
       lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
-      normWrite $ "Completed verification of " ++ TC.methodSpecName ir ++ "."
+      normWrite $ "Done."
     else do
-      normWrite $ "Skipping verification of " ++ TC.methodSpecName ir ++ "."
+      normWrite $ "Skipped (per user request)."
   -- Add methodIR to state for use in later verifications.
   modify $ \s -> s { methodSpecs = ir : methodSpecs s }
 execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
@@ -433,12 +439,12 @@ runProofs cb ssOpts files = do
         }
       Ex action = do cmds <- parseFile initialPath
                      mapM_ execute cmds
-                     liftIO $ putStrLn "SAWScript completed without errors!"
+                     liftIO $ putStrLn "Verification complete!"
                      return ExitSuccess
   catch (runOpSession (evalStateT action initState))
     (\(ExecException absPos errorMsg resolution) -> do
         relPos <- posRelativeToCurrentDirectory absPos
-        putStrLn $ "SAWScript failed!\n"
+        putStrLn $ "\nVerification failed!\n"
         putStrLn $ show relPos
         let rend = renderStyle style { lineLength = 100 }
         putStrLn $ rend $ nest 2 errorMsg
