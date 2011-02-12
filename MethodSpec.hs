@@ -1423,7 +1423,4 @@ verifyMethodSpec pos cb opts ir overrides rules = do
             AST.Auto -> do
               newGoal <- runRewriter
               runABC pos ir jvs newGoal (vcsCounterFns vcs)
-            AST.Skip -> error "internal: Unexpected skip"
-
-
-
+            AST.Skip -> error "internal: verifyMethodTactic used invalid tactic."

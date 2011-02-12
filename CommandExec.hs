@@ -104,17 +104,22 @@ instance LogMonad Executor where
   setVerbosity v = modify $ \s -> s { execOptions = (execOptions s) { verbose = v } }
 
 -- | Write messages to standard IO.
-normWriteNoLn :: String -> Executor ()
-normWriteNoLn msg = whenVerbosity (>=1) $ liftIO $ do
-                        putStr msg
-                        hFlush stdout
+whenVerbosityWrite :: (Int -> Bool) -> String -> Executor ()
+whenVerbosityWrite cond msg = whenVerbosity cond $ liftIO $ putStrLn msg
 
+-- | Write messages to standard IO without printing a line.
+whenVerbosityWriteNoLn :: (Int -> Bool) -> String -> Executor ()
+whenVerbosityWriteNoLn cond msg =
+  whenVerbosity cond $ liftIO $ do
+    putStr msg
+    hFlush stdout
+          
 normWrite :: String -> Executor ()
-normWrite msg = whenVerbosity (>=1) $ liftIO $ putStrLn msg
+normWrite = whenVerbosityWrite (>=1)
 
 -- | Write debug message to standard IO.
 debugWrite :: String -> Executor ()
-debugWrite msg = whenVerbosity (>=6) $ liftIO $ putStrLn msg
+debugWrite = whenVerbosityWrite (>=6)
 
 -- Rule functions {{{2
 
@@ -345,7 +350,10 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
   v <- gets runVerification
   if v && (TC.methodSpecVerificationTactic ir /= AST.Skip)
     then do
-      normWriteNoLn $ "Verifying " ++ show (TC.methodSpecName ir) ++ "... "
+      whenVerbosityWriteNoLn (==1) $
+        "Verifying " ++ show (TC.methodSpecName ir) ++ "... "
+      whenVerbosityWrite (>1) $
+        "Starting verification of \"" ++ TC.methodSpecName ir ++ "\"."
       cb <- gets codebase
       opts <- gets execOptions
       overrides <- gets methodSpecs
@@ -353,9 +361,12 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
       enRules <- gets enabledRules
       let activeRules = map (allRules Map.!) $ Set.toList enRules
       lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
-      normWrite $ "Done."
+      whenVerbosityWrite (==1) $ "Done."
+      whenVerbosityWrite (>1) $
+        "Completed verification of \"" ++ TC.methodSpecName ir ++ "\"."
     else do
-      normWrite $ "Skipped (per user request)."
+      normWrite $ "Skipped " ++ show (TC.methodSpecName ir) 
+                     ++ " (per user request)."
   -- Add methodIR to state for use in later verifications.
   modify $ \s -> s { methodSpecs = ir : methodSpecs s }
 execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
