@@ -114,9 +114,6 @@ whenVerbosityWriteNoLn cond msg =
     putStr msg
     hFlush stdout
           
-normWrite :: String -> Executor ()
-normWrite = whenVerbosityWrite (>=1)
-
 -- | Write debug message to standard IO.
 debugWrite :: String -> Executor ()
 debugWrite = whenVerbosityWrite (>=6)
@@ -348,10 +345,10 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
     bindings <- getGlobalBindings
     lift $ TC.resolveMethodSpecIR bindings pos thisClass mName cmds
   v <- gets runVerification
+  whenVerbosityWriteNoLn (==1) $
+    "Verifying \"" ++ TC.methodSpecName ir ++ "\"... "
   if v && (TC.methodSpecVerificationTactic ir /= AST.Skip)
     then do
-      whenVerbosityWriteNoLn (==1) $
-        "Verifying " ++ show (TC.methodSpecName ir) ++ "... "
       whenVerbosityWrite (>1) $
         "Starting verification of \"" ++ TC.methodSpecName ir ++ "\"."
       cb <- gets codebase
@@ -365,8 +362,9 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
       whenVerbosityWrite (>1) $
         "Completed verification of \"" ++ TC.methodSpecName ir ++ "\"."
     else do
-      normWrite $ "Skipped " ++ show (TC.methodSpecName ir) 
-                     ++ " (per user request)."
+      whenVerbosityWrite (==1) $ "Skipped."
+      whenVerbosityWrite (>1) $
+        "Skipped verification of \"" ++ TC.methodSpecName ir ++ "\"."
   -- Add methodIR to state for use in later verifications.
   modify $ \s -> s { methodSpecs = ir : methodSpecs s }
 execute (AST.Rule pos ruleName params astLhsExpr astRhsExpr) = do
