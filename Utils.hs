@@ -172,4 +172,4 @@ timeIt action = do
 -- | get a readable time stamp
 getTimeStamp :: MonadIO m => m String
 getTimeStamp = do t <- liftIO (getClockTime >>= toCalendarTime)
-                  return $ formatCalendarTime defaultTimeLocale "%I:%M:%S %p" t
+                  return $ formatCalendarTime defaultTimeLocale "%l:%M:%S %p" t
