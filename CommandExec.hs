@@ -345,22 +345,24 @@ execute (AST.DeclareMethodSpec pos methodId cmds) = do
     bindings <- getGlobalBindings
     lift $ TC.resolveMethodSpecIR bindings pos thisClass mName cmds
   v <- gets runVerification
+  ts <- getTimeStamp
   whenVerbosityWriteNoLn (==1) $
-    "Verifying \"" ++ TC.methodSpecName ir ++ "\"... "
+    "[" ++ ts ++ "] Verifying \"" ++ TC.methodSpecName ir ++ "\"... "
   if v && (TC.methodSpecVerificationTactic ir /= AST.Skip)
     then do
       whenVerbosityWrite (>1) $
-        "Starting verification of \"" ++ TC.methodSpecName ir ++ "\"."
-      cb <- gets codebase
-      opts <- gets execOptions
-      overrides <- gets methodSpecs
-      allRules <- gets rules
-      enRules <- gets enabledRules
-      let activeRules = map (allRules Map.!) $ Set.toList enRules
-      lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
-      whenVerbosityWrite (==1) $ "Done."
+        "[" ++ ts ++ "] Starting verification of \"" ++ TC.methodSpecName ir ++ "\"."
+      ((), elapsedTime) <- timeIt $ do
+        cb <- gets codebase
+        opts <- gets execOptions
+        overrides <- gets methodSpecs
+        allRules <- gets rules
+        enRules <- gets enabledRules
+        let activeRules = map (allRules Map.!) $ Set.toList enRules
+        lift $ TC.verifyMethodSpec pos cb opts ir overrides activeRules
+      whenVerbosityWrite (==1) $ "Done. [Time: " ++ elapsedTime ++ "]"
       whenVerbosityWrite (>1) $
-        "Completed verification of \"" ++ TC.methodSpecName ir ++ "\"."
+        "Completed verification of \"" ++ TC.methodSpecName ir ++ "\". [Time: " ++ elapsedTime ++ "]"
     else do
       whenVerbosityWrite (==1) $ "Skipped."
       whenVerbosityWrite (>1) $
@@ -453,7 +455,8 @@ runProofs cb ssOpts files = do
   catch (runOpSession (evalStateT action initState))
     (\(ExecException absPos errorMsg resolution) -> do
         relPos <- posRelativeToCurrentDirectory absPos
-        putStrLn $ "\nVerification failed!\n"
+        ts <- getTimeStamp
+        putStrLn $ "\n[" ++ ts ++ "] Verification failed!\n"
         putStrLn $ show relPos
         let rend = renderStyle style { lineLength = 100 }
         putStrLn $ rend $ nest 2 errorMsg
