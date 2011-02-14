@@ -264,7 +264,7 @@ tcE (AST.MkArray p (es@(_:_))) = do
   es' <- mapM tcE es
   let go []                 = error "internal: impossible happened in tcE-non-empty-mkArray"
       go [(_, x)]           = return x
-      go ((i, x):(j, y):rs) = if x == y then go rs else mismatch p ("array elements " ++ show i ++ " and " ++ show j) x y
+      go ((i, x):rs@((j, y):_)) = if x == y then go rs else mismatch p ("array elements " ++ show i ++ " and " ++ show j) x y
   t   <- go $ zip [(1::Int)..] $ map getTypeOfExpr es'
   op <- liftTI $ mkArrayOp (length es') t
   return $ Apply op es'
