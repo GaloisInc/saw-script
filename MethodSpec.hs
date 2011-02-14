@@ -584,13 +584,23 @@ data MethodSpecIR = MSIR {
   , methodSpecVerificationTactic :: AST.VerificationMethod
   } deriving (Show)
 
--- | Return name of method spec.
+-- | Return user printable name of method spec (currently the class + method name).
 methodSpecName :: MethodSpecIR -> String
 methodSpecName ir =
  let clName = className (methodSpecIRThisClass ir)
      mName = methodName (methodSpecIRMethod ir)
-  in slashesToDots clName ++ "." ++ mName
+  in slashesToDots clName ++ ('.' : mName)
 
+-- | Returns all Java expressions referenced in specification.
+methodSpecJavaExprs :: MethodSpecIR -> [TC.JavaExpr]
+methodSpecJavaExprs ir =
+  concat (map fst (specReferences ir)) ++ specScalarInputs ir
+
+-- | Returns all Java field expressions referenced in specification.
+methodSpecInstanceFieldExprs :: MethodSpecIR -> [(TC.JavaExpr, JSS.FieldId)]
+methodSpecInstanceFieldExprs ir =
+  [ (refExpr, f) | TC.InstanceField refExpr f <- methodSpecJavaExprs ir ]
+  
 -- | Interprets AST method spec commands to construct an intermediate
 -- representation that
 resolveMethodSpecIR :: TC.GlobalBindings
@@ -727,42 +737,42 @@ data JavaStateInfo = JSI {
        , jsiPathState :: JSS.PathState Node
        }
 
--- | Create a Java State info with the given values.
-createJavaStateInfo :: Maybe JSS.Ref -> [JSS.Value Node] -> JSS.Simulator SymbolicMonad JavaStateInfo
-createJavaStateInfo r args = do
-  s <- JSS.getPathState
-  return JSI { jsiThis = r, jsiArgs = V.fromList args, jsiPathState = s }
+-- | Create a Java State info from the current simulator path state, 
+-- and using the given arguments for this and argument positions.
+createJavaStateInfo :: Maybe JSS.Ref
+                    -> [JSS.Value Node]
+                    -> JSS.PathState Node
+                    -> JavaStateInfo
+createJavaStateInfo r args s =
+  JSI { jsiThis = r, jsiArgs = V.fromList args, jsiPathState = s }
 
--- | Returns value associated to Java expression in this state.
-javaExprValue :: JavaStateInfo -> TC.JavaExpr -> JSS.Value Node
+-- | Returns value associated to Java expression in this state if it is defined,
+-- or Nothing if the expression is undefined.
+-- N.B. This method assumes that the Java path state is well-formed, the
+-- the JavaExpression syntactically referes to the correct type of method
+-- (static versus instance), and correct well-typed arguments.  It does
+-- not assume that all the instanceFields in the JavaStateInfo are initialized.
+javaExprValue :: JavaStateInfo -> TC.JavaExpr -> Maybe (JSS.Value Node)
 javaExprValue jsi (TC.This _) = 
   case jsiThis jsi of
-    Just r -> JSS.RValue r
+    Just r -> Just (JSS.RValue r)
     Nothing -> error "internal: javaExprValue given TC.This for static method"
-javaExprValue jsi (TC.Arg i _) = jsiArgs jsi V.! i
-javaExprValue jsi (TC.InstanceField e f) =
-  let JSS.RValue r = javaExprValue jsi e
-      Just value = Map.lookup (r,f) (JSS.instanceFields (jsiPathState jsi))
-   in value
+javaExprValue jsi (TC.Arg i _) = Just (jsiArgs jsi V.! i)
+javaExprValue jsi (TC.InstanceField e f) = do
+  JSS.RValue r <- javaExprValue jsi e
+  Map.lookup (r,f) (JSS.instanceFields (jsiPathState jsi))
 
 -- | Returns nodes associated to Java expression in initial state associated with mapping.
+-- N.B. This method assumes that the Java expression is well-defined in the state of the
+-- JavaStateInfo, and also assumes the state is well-typed as in @javaExprValue@.
 javaExprNode :: JavaStateInfo -> TC.JavaExpr -> Node
 javaExprNode jsi e =
   case javaExprValue jsi e of
-    JSS.IValue n -> n
-    JSS.LValue n -> n
-    JSS.RValue r -> let Just (_,n) = Map.lookup r (JSS.arrays (jsiPathState jsi)) in n
-    _ -> error "internal: javaExprNode given an invalid expression."
-
--- | Returns information about value of instance fields in state info.
-instanceFieldValues :: MethodSpecIR
-                    -> JavaStateInfo
-                    -> [(TC.JavaExpr, JSS.Ref, JSS.FieldId, JSS.Value Node)]
-instanceFieldValues ir jsi = do
-  let exprs = concat (map fst (specReferences ir)) ++ specScalarInputs ir
-   in [ (expr, ref, f, javaExprValue jsi expr)
-      | expr@(TC.InstanceField refExpr f) <- exprs
-      , let JSS.RValue ref = javaExprValue jsi refExpr ]
+    Just (JSS.IValue n) -> n
+    Just (JSS.LValue n) -> n
+    Just (JSS.RValue r) -> let Just (_,n) = Map.lookup r (JSS.arrays (jsiPathState jsi)) in n
+    Just _ -> error $ "internal: javaExprNode given an invalid expression \'" ++ show e ++ ".\'"
+    Nothing -> error $ "internal: javaExprNode given an undefined expression \'" ++ show e ++ ".\'"
 
 -- SpecStateInfo {{{1
 
@@ -800,12 +810,27 @@ evalExpr ssi (TC.Var name _tp) = do
 -- Method specification overrides {{{1
 
 execOverride :: Pos
+             -> String
              -> MethodSpecIR
              -> Maybe JSS.Ref
              -> [JSS.Value Node]
              -> JSS.Simulator SymbolicMonad ()
-execOverride pos ir mbThis args = do
-  jsi <- createJavaStateInfo mbThis args
+execOverride pos nm ir mbThis args = do
+  -- Check Java expressions referenced in IR are defined in the path state.
+  ps <- JSS.getPathState
+  -- Create JavaStateInfo and SpecStateInfo from current simulator state.
+  let jsi = createJavaStateInfo mbThis args ps
+  forM_ (methodSpecJavaExprs ir) $ \javaExpr -> do
+    when (isNothing (javaExprValue jsi javaExpr)) $ do
+      let msg = "The override for \'" ++ methodSpecName ir
+                  ++ "\' was called while symbolically simulating " ++ nm 
+                  ++ ".  However, the method specification of \'"
+                  ++ methodSpecName ir ++ "\' requires that the value of \'"
+                  ++ show javaExpr ++ "\' is defined."
+          res = "Please add a \'var\' or \'const\' declaration as appropriate "
+                  ++ "to the specification of \'" ++ nm
+                  ++ "\' to define \'" ++ show javaExpr ++ "\'."
+       in throwIOExecException pos (ftext msg) res
   ssi <- JSS.liftSymbolic $ createSpecStateInfo ir jsi
   -- Check initialization status
   forM_ (initializedClasses ir) $ \c -> do
@@ -824,7 +849,7 @@ execOverride pos ir mbThis args = do
     forM_ (specReferences ir) $ \(ec, _iv) -> do
       seenRefs <- liftIO $ readIORef seenRefsIORef
       refs <- forM ec $ \javaExpr-> do
-                let JSS.RValue r = javaExprValue jsi javaExpr
+                let Just (JSS.RValue r) = javaExprValue jsi javaExpr
                 case Map.lookup r seenRefs of
                   Nothing -> return ()
                   Just prevExpr -> do
@@ -844,7 +869,7 @@ execOverride pos ir mbThis args = do
     JSS.assume =<< JSS.liftSymbolic (applyEq specNode jvmNode)
   -- Update arrayPostconditions
   forM_ (Map.toList $ arrayPostconditions ir) $ \(javaExpr,pc) -> do
-    let JSS.RValue r = javaExprValue jsi javaExpr
+    let Just (JSS.RValue r) = javaExprValue jsi javaExpr
     case pc of
       PostUnchanged -> return ()
       PostArbitrary tp -> do
@@ -857,7 +882,7 @@ execOverride pos ir mbThis args = do
   forM_ (Map.toList $ scalarPostconditions ir) $ \(javaExpr,pc) -> do
     case javaExpr of
       TC.InstanceField refExpr f -> do
-        let JSS.RValue r = javaExprValue jsi refExpr
+        let Just (JSS.RValue r) = javaExprValue jsi refExpr
         let scalarValueFromNode :: JSS.Type -> Node -> JSS.Value Node
             scalarValueFromNode JSS.BooleanType n = JSS.IValue n
             scalarValueFromNode JSS.IntType n = JSS.IValue n
@@ -888,16 +913,16 @@ execOverride pos ir mbThis args = do
                   ++ " that should have been caught during resolution."
 
 -- | Add a method override for the given method to the simulator.
-overrideFromSpec :: Pos -> MethodSpecIR -> JSS.Simulator SymbolicMonad ()
-overrideFromSpec pos ir = do
+overrideFromSpec :: Pos -> String -> MethodSpecIR -> JSS.Simulator SymbolicMonad ()
+overrideFromSpec pos nm ir = do
   let cName = className (methodSpecIRMethodClass ir)
   let method = methodSpecIRMethod ir
   let key = JSS.methodKey method
   if methodIsStatic method
     then JSS.overrideStaticMethod cName key $ \args ->
-           execOverride pos ir Nothing args
+           execOverride pos nm ir Nothing args
     else JSS.overrideInstanceMethod cName key $ \thisVal args ->
-           execOverride pos ir (Just thisVal) args
+           execOverride pos nm ir (Just thisVal) args
 
 -- MethodSpec verification {{{1
 -- EquivClassMap {{{2
@@ -1085,13 +1110,16 @@ createExpectedStateDef :: MethodSpecIR
                        -> SpecStateInfo
                        -> SymbolicMonad ExpectedStateDef
 createExpectedStateDef ir jvs ssi = do
+  let jsi = ssiJavaStateInfo ssi
   esdReturnValue <-
     case returnValue ir of
       Nothing -> return Nothing
       Just expr -> fmap Just $ evalExpr ssi expr
   -- Get instance field values.
-  let fieldValues = instanceFieldValues ir (ssiJavaStateInfo ssi)
-  instanceFields <- forM fieldValues $ \(javaExpr,r,fid,v) -> do
+  instanceFields <- forM (methodSpecInstanceFieldExprs ir) $ \(refExpr,fid) -> do
+      let javaExpr = TC.InstanceField refExpr fid
+      let Just (JSS.RValue ref) = javaExprValue jsi refExpr
+      let Just v = javaExprValue jsi javaExpr
       expValue <-
         case Map.lookup javaExpr (scalarPostconditions ir) of
           -- Non-modifiable case.
@@ -1104,7 +1132,7 @@ createExpectedStateDef ir jvs ssi = do
               JSS.IValue _ -> fmap (Just . JSS.IValue) $ evalExpr ssi expr
               JSS.LValue _ -> fmap (Just . JSS.LValue) $ evalExpr ssi expr
               _ -> error "internal: scalarPostcondition assigned to a illegal expression"
-      return ((r,fid),expValue)
+      return ((ref,fid),expValue)
   -- Get array values.
   arrays <-
     forM (jvsArrayNodeList jvs) $ \(r,refEquivClass,initValue) -> do
@@ -1288,19 +1316,20 @@ methodSpecVCs pos cb opts overrides ir = do
       -- Create map from specification entries to JSS simulator values.
       jvs <- initializeJavaVerificationState ir cm
       -- JavaStateInfo for inital verification state.
-      jsi <-
-        let evm = jvsExprValueMap jvs
-            mbThis = case Map.lookup (TC.This (JSS.className (methodSpecIRThisClass ir))) evm of
-                       Nothing -> Nothing
-                       Just (JSS.RValue r) -> Just r
-                       Just _ -> error "internal: Unexpected value for This"
-            method = methodSpecIRMethod ir
-            args = map (evm Map.!)
-                 $ map (uncurry TC.Arg)
-                 $ [0..] `zip` methodParameterTypes method
-         in createJavaStateInfo mbThis args
+      initialPS <- JSS.getPathState
+      let jsi =
+            let evm = jvsExprValueMap jvs
+                mbThis = case Map.lookup (TC.This (JSS.className (methodSpecIRThisClass ir))) evm of
+                           Nothing -> Nothing
+                           Just (JSS.RValue r) -> Just r
+                           Just _ -> error "internal: Unexpected value for This"
+                method = methodSpecIRMethod ir
+                args = map (evm Map.!)
+                     $ map (uncurry TC.Arg)
+                     $ [0..] `zip` methodParameterTypes method
+             in createJavaStateInfo mbThis args initialPS
       -- Add method spec overrides.
-      mapM_ (overrideFromSpec pos) overrides
+      mapM_ (overrideFromSpec pos (methodSpecName ir)) overrides
       -- Execute method.
       when (v >= 6) $
          liftIO $ putStrLn $ "Executing " ++ methodSpecName ir
@@ -1402,11 +1431,9 @@ verifyMethodSpec pos cb opts ir overrides rules = do
       forM (vcChecks vc) $ \check -> do
         whenVerbosity (>= 2) $
           liftIO $ putStrLn $ "Verify " ++ checkName check
-        let fAssume = vcAssumptions vc
         -- Get final goal.
         fConseq <- checkGoal check
-        nAssume <- applyBNot fAssume
-        fGoal <- applyBOr nAssume fConseq
+        fGoal <- applyBinaryOp bImpliesOp (vcAssumptions vc) fConseq
         -- Run verification
         let runRewriter = do
             let pgm = foldl' addRule emptyProgram rules
