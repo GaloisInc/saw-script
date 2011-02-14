@@ -1400,7 +1400,7 @@ verifyMethodSpec pos cb opts ir overrides rules = do
       setVerbosity v
       vc <- mVC
       forM (vcChecks vc) $ \check -> do
-        whenVerbosity (>= 1) $
+        whenVerbosity (>= 2) $
           liftIO $ putStrLn $ "Verify " ++ checkName check
         let fAssume = vcAssumptions vc
         -- Get final goal.
