@@ -913,10 +913,11 @@ equivClassMapEntries (_,em,vm)
 -- JavaVerificationState {{{2
 type InputEvaluator = SV.Vector Bool -> CValue
 
+type InputEvaluatorList = [(TC.JavaExpr, InputEvaluator)]
 
 -- | JavaVerificationState contains information necessary to map between specification
 -- expressions and the initial JVM state during verification.
-data JavaVerificationState = IJSI {
+data JavaVerificationState = JVS {
         -- | Name of method in printable form.
         jvsMethodName :: String
         -- | Maps Java expression to associated node.
@@ -924,7 +925,7 @@ data JavaVerificationState = IJSI {
         -- | Contains functions that translate from counterexample
         -- returned by ABC back to constant values, along with the
         -- Java expression associated with that evaluator.
-      , jvsInputEvaluators :: [(TC.JavaExpr, InputEvaluator)]
+      , jvsInputEvaluators :: InputEvaluatorList
         -- | Maps Spec Java expression to value for that expression.
       , jvsExprValueMap :: Map TC.JavaExpr (JSS.Value Node)
         -- | Maps JSS refs to name for that ref.
@@ -1026,7 +1027,7 @@ initializeJavaVerificationState :: MethodSpecIR
                                 -> EquivClassMap
                                 -> JSS.Simulator SymbolicMonad JavaVerificationState
 initializeJavaVerificationState ir cm = do
-  let initialState = IJSI
+  let initialState = JVS
         { jvsMethodName = methodSpecName ir
         , jvsExprNodeMap = Map.empty
         , jvsInputEvaluators = []
@@ -1124,75 +1125,60 @@ createExpectedStateDef ir jvs ssi = do
                , esdArrays = Map.fromList arrays
                }
 
--- VerificationConditionSet {{{2
+-- VerificationCheck {{{2
 
--- | Difference between spec and JVM states.
-data JVMDiff
-  -- | A value whose spec value difers from simulator value.
-  = DV String -- ^ Name of value with divergent value.
-       CValue -- ^ Value in spec
-       CValue -- ^ Value from JVM bytecode.
-  | UnsatisfiedPathConditions
+data VerificationCheck
+  = PathCheck Node
+  | EqualityCheck String -- ^ Name of value to compare
+                  Node -- ^ Value returned by JVM symbolic simulator.
+                  Node -- ^ Expected value in Spec.
+  deriving (Eq, Ord, Show)
 
-type CounterFn = SymbolicEvalMonad SymbolicMonad (Maybe JVMDiff)
+-- | Returns goal that one needs to prove.
+checkGoal :: VerificationCheck -> SymbolicMonad Node
+checkGoal (PathCheck n) = return n
+checkGoal (EqualityCheck _ x y) = applyEq x y
 
--- | Conditions generated from comparing expected and resulting states.
-data VerificationConditionSet = VCS {
-         vcsAssumptions :: Node
-       , vcsGoal :: Node
-       , vcsCounterFns :: [CounterFn]
-       }
+checkName :: VerificationCheck -> String
+checkName (PathCheck _) = "the path condition"
+checkName (EqualityCheck nm _ _) = nm
 
--- | Create initial verification set with assumptions from IR and initial goal.
-initialVCSet :: MethodSpecIR
-             -> SpecStateInfo
-             -> Node
-             -> SymbolicMonad VerificationConditionSet
-initialVCSet ir ssi goal = do
+-- | Returns documentation for check that fails.
+checkCounterexample :: VerificationCheck
+                    -> SymbolicEvalMonad SymbolicMonad Doc
+checkCounterexample (PathCheck _) =
+  return $ text "The path conditions were unsatisfied."
+checkCounterexample (EqualityCheck nm jvmNode specNode) = do
+  jvmVal <- evalNode jvmNode
+  specVal <- evalNode specNode
+  return $ text nm $$
+             nest 2 (text "Encountered: " <> ppCValueD Mixfix jvmVal) $$
+             nest 2 (text "Expected:    " <> ppCValueD Mixfix specVal)
+
+-- | Returns assumptions in method spec.
+methodAssumptions :: MethodSpecIR
+                  -> SpecStateInfo
+                  -> SymbolicMonad Node
+methodAssumptions ir ssi = do
   nodes <- mapM (evalExpr ssi) (assumptions ir)
-  n <- foldM applyBAnd (mkCBool True) nodes
-  let fn = do goalVal <- evalNode goal
-              case getBool goalVal of
-                Just True -> return Nothing
-                _ -> return $ Just UnsatisfiedPathConditions
-  let t = mkCBool True :: Node
-  return VCS { vcsAssumptions = n
-             , vcsGoal = t
-             , vcsCounterFns = [fn]
-             }
+  foldM applyBAnd (mkCBool True) nodes
 
 -- | Add verification condition to list.
-addEqVC :: String -> Node -> Node -> StateT VerificationConditionSet SymbolicMonad ()
+addEqVC :: String -> Node -> Node -> StateT [VerificationCheck] SymbolicMonad ()
 addEqVC name jvmNode specNode = do
-  oldGoal <- gets vcsGoal
-  newGoal <- lift $ applyBAnd oldGoal =<< applyEq jvmNode specNode
-  let fn = do
-        jvmVal <- evalNode jvmNode
-        specVal <- evalNode specNode
-        if jvmVal == specVal
-          then return Nothing
-          else return $ Just (DV name specVal jvmVal)
-  modify $ \s -> s { vcsGoal = newGoal
-                   , vcsCounterFns = fn : vcsCounterFns s}
-
--- | Return final goal from verification conditions with assumptions and result.
-finalGoal :: VerificationConditionSet -> SymbolicMonad Node
-finalGoal vcs = do
-  negA <- applyBNot (vcsAssumptions vcs)
-  applyBOr negA (vcsGoal vcs)
+  modify $ \l -> EqualityCheck name jvmNode specNode : l
 
 -- | Compare old and new states.
 comparePathStates :: MethodSpecIR
                   -> JavaVerificationState
-                  -> SpecStateInfo
                   -> ExpectedStateDef
                   -> JSS.PathState Node
                   -> Maybe (JSS.Value Node)
-                  -> SymbolicMonad VerificationConditionSet
-comparePathStates ir jvs ssi esd newPathState mbRetVal = do
+                  -> SymbolicMonad [VerificationCheck]
+comparePathStates ir jvs esd newPathState mbRetVal = do
   let pos = methodSpecPos ir
   let mName = methodSpecName ir
-  initialVCS <- initialVCSet ir ssi (JSS.psAssumptions newPathState)
+  let initialVCS  = [PathCheck (JSS.psAssumptions newPathState)]
   flip execStateT initialVCS $ do
     -- Check return value.
     let Just expRetVal = esdReturnValue esd
@@ -1276,13 +1262,91 @@ comparePathStates ir jvs ssi esd newPathState mbRetVal = do
 
 -- verifyMethodSpec and friends {{{2
 
-runABC :: Pos
-       -> MethodSpecIR
-       -> JavaVerificationState
+data VerificationContext = VContext {
+          vcAssumptions :: Node 
+        , vcInputs :: InputEvaluatorList
+        , vcChecks :: [VerificationCheck]
+        }
+
+-- | Attempt to verify method spec using verification method specified.
+methodSpecVCs :: Pos
+              -> JSS.Codebase
+              -> SSOpts
+              -> [MethodSpecIR]
+              -> MethodSpecIR
+              -> [SymbolicMonad VerificationContext]
+methodSpecVCs pos cb opts overrides ir = do
+  let v = verbose opts
+  let refEquivClasses = partitions (specReferences ir)
+  flip map refEquivClasses $ \cm -> do
+    setVerbosity v
+    JSS.runSimulator cb $ do
+      setVerbosity v
+      when (v >= 6) $
+         liftIO $ putStrLn $
+           "Creating evaluation state for simulation of " ++ methodSpecName ir
+      -- Create map from specification entries to JSS simulator values.
+      jvs <- initializeJavaVerificationState ir cm
+      -- JavaStateInfo for inital verification state.
+      jsi <-
+        let evm = jvsExprValueMap jvs
+            mbThis = case Map.lookup (TC.This (JSS.className (methodSpecIRThisClass ir))) evm of
+                       Nothing -> Nothing
+                       Just (JSS.RValue r) -> Just r
+                       Just _ -> error "internal: Unexpected value for This"
+            method = methodSpecIRMethod ir
+            args = map (evm Map.!)
+                 $ map (uncurry TC.Arg)
+                 $ [0..] `zip` methodParameterTypes method
+         in createJavaStateInfo mbThis args
+      -- Add method spec overrides.
+      mapM_ (overrideFromSpec pos) overrides
+      -- Execute method.
+      when (v >= 6) $
+         liftIO $ putStrLn $ "Executing " ++ methodSpecName ir
+      jssResult <- runMethod ir jsi
+          -- isReturn returns True if result is a normal return value.
+      let isReturn JSS.ReturnVal{} = True
+          isReturn JSS.Terminated = True
+          isReturn _ = False
+      let returnResults = filter (isReturn . snd) jssResult
+      when (null returnResults) $
+        let msg = "The Java method " ++ methodSpecName ir
+              ++ " throws exceptions on all paths, and cannot be verified"
+            res = "Please check that all fields needed for correctness are defined."
+         in throwIOExecException pos (ftext msg) res
+      when (length returnResults > 1) $
+        error "internal: verifyMethodSpec returned multiple valid results"
+      let [(ps,fr)] = returnResults
+      let returnVal = case fr of
+                        JSS.ReturnVal val -> Just val
+                        JSS.Terminated -> Nothing
+                        _ -> error "internal: Unexpected final result from JSS"
+      -- Build final equation and functions for generating counterexamples.
+      newPathState <- JSS.getPathStateByName ps
+      JSS.liftSymbolic $ do
+        when (v >= 6) $
+          liftIO $ putStrLn $ "Creating expected result for " ++ methodSpecName ir
+        ssi <- createSpecStateInfo ir jsi
+        esd <- createExpectedStateDef ir jvs ssi
+        whenVerbosity (>= 6) $
+          liftIO $ putStrLn $
+            "Creating verification conditions for " ++ methodSpecName ir
+        as <- methodAssumptions ir ssi
+        -- Create verification conditions from path states.
+        vcs <- comparePathStates ir jvs esd newPathState returnVal
+        return VContext {
+                  vcAssumptions = as
+                , vcInputs = jvsInputEvaluators jvs
+                , vcChecks = vcs
+                }
+
+runABC :: MethodSpecIR
+       -> InputEvaluatorList
        -> Node
-       -> [CounterFn]
+       -> SymbolicEvalMonad SymbolicMonad Doc
        -> SymbolicMonad ()
-runABC pos ir jvs fGoal counterFns = do
+runABC ir inputEvalList fGoal counterFn = do
   whenVerbosity (>= 3) $
     liftIO $ putStrLn $ "Running ABC on " ++ methodSpecName ir
   LV v <- getVarLit fGoal
@@ -1297,33 +1361,23 @@ runABC pos ir jvs fGoal counterFns = do
                  ++ "result is not expected for sequential circuits, and could"
                  ++ "indicate an internal error in ABC or JavaVerifer's "
                  ++ "connection to ABC."
-       in throwIOExecException pos (ftext msg) ""
+       in throwIOExecException (methodSpecPos ir) (ftext msg) ""
     Sat lits -> do
-      let (inputExprs,inputEvals) = unzip (jvsInputEvaluators jvs)
+      let (inputExprs,inputEvals) = unzip inputEvalList
       let inputValues = map ($lits) inputEvals
       -- Get differences between two.
-      counters <- symbolicEval (V.fromList inputValues) $
-        liftM catMaybes $ mapM id counterFns
+      diffDoc <- symbolicEval (V.fromList inputValues) $ counterFn
       let inputExprValMap = Map.fromList (inputExprs `zip` inputValues)
       let inputDocs
             = flip map (Map.toList inputExprValMap) $ \(expr,c) ->
                  text (show expr) <+> equals <+> ppCValueD Mixfix c
-      let diffDocs
-            = flip map counters $ \vc ->
-                case vc of
-                  DV name specVal jvmVal ->
-                    text name $$
-                      nest 2 (text "Encountered: " <> ppCValueD Mixfix jvmVal) $$
-                      nest 2 (text "Expected:    " <> ppCValueD Mixfix specVal)
-                  UnsatisfiedPathConditions ->
-                    text "The path conditions were unsatisfied."
       let msg = ftext ("A counterexample was found by ABC when verifying "
                          ++ methodSpecName ir ++ ".\n\n") $$
                 ftext ("The inputs that generated the counterexample are:") $$
                 nest 2 (vcat inputDocs) $$
-                ftext ("Mismatches between spec and implementation include:") $$
-                nest 2 (vcat diffDocs)
-      throwIOExecException pos msg ""
+                ftext ("Counterexample:") $$
+                nest 2 diffDoc
+      throwIOExecException (methodSpecPos ir) msg ""
 
 -- | Attempt to verify method spec using verification method specified.
 verifyMethodSpec :: Pos
@@ -1338,89 +1392,43 @@ verifyMethodSpec pos cb opts ir overrides rules = do
   let v = verbose opts
   when (v >= 2) $
     liftIO $ putStrLn $ "Starting verification of " ++ methodSpecName ir
-  let refEquivClasses = partitions (specReferences ir)
-  forM_ refEquivClasses $ \cm -> do
+  let vcList = methodSpecVCs pos cb opts overrides ir
+  forM_ vcList $ \mVC -> do
     when (v >= 6) $
       liftIO $ putStrLn $ "Considing new alias configuration of " ++ methodSpecName ir
     runSymSession $ do
       setVerbosity v
-      JSS.runSimulator cb $ do
-        setVerbosity v
-        when (v >= 6) $
-           liftIO $ putStrLn $
-             "Creating evaluation state for simulation of " ++ methodSpecName ir
-        -- Create map from specification entries to JSS simulator values.
-        jvs <- initializeJavaVerificationState ir cm
-        -- JavaStateInfo for inital verification state.
-        jsi <-
-          let evm = jvsExprValueMap jvs
-              mbThis = case Map.lookup (TC.This (JSS.className (methodSpecIRThisClass ir))) evm of
-                         Nothing -> Nothing
-                         Just (JSS.RValue r) -> Just r
-                         Just _ -> error "internal: Unexpected value for This"
-              method = methodSpecIRMethod ir
-              args = map (evm Map.!)
-                   $ map (uncurry TC.Arg)
-                   $ [0..] `zip` methodParameterTypes method
-           in createJavaStateInfo mbThis args
-        -- Add method spec overrides.
-        mapM_ (overrideFromSpec pos) overrides
-        -- Execute method.
-        when (v >= 6) $
-           liftIO $ putStrLn $ "Executing " ++ methodSpecName ir
-        jssResult <- runMethod ir jsi
-            -- isReturn returns True if result is a normal return value.
-        let isReturn JSS.ReturnVal{} = True
-            isReturn JSS.Terminated = True
-            isReturn _ = False
-        let returnResults = filter (isReturn . snd) jssResult
-        when (null returnResults) $
-          let msg = "The Java method " ++ methodSpecName ir
-                ++ " throws exceptions on all paths, and cannot be verified"
-              res = "Please check that all fields needed for correctness are defined."
-           in throwIOExecException pos (ftext msg) res
-        when (length returnResults > 1) $
-          error "internal: verifyMethodSpec returned multiple valid results"
-        let [(ps,fr)] = returnResults
-        let returnVal = case fr of
-                          JSS.ReturnVal val -> Just val
-                          JSS.Terminated -> Nothing
-                          _ -> error "internal: Unexpected final result from JSS"
-        -- Build final equation and functions for generating counterexamples.
-        newPathState <- JSS.getPathStateByName ps
-        JSS.liftSymbolic $ do
-          when (v >= 6) $
-            liftIO $ putStrLn $ "Creating expected result for " ++ methodSpecName ir
-          ssi <- createSpecStateInfo ir jsi
-          esd <- createExpectedStateDef ir jvs ssi
-          whenVerbosity (>= 6) $
-            liftIO $ putStrLn $
-              "Creating verification conditions for " ++ methodSpecName ir
-          -- Create verification conditions from path states.
-          vcs <- comparePathStates ir jvs ssi esd newPathState returnVal
-          -- Get final goal.
-          fGoal <- finalGoal vcs
-          -- Run verification
-          let runRewriter = do
-              let pgm = foldl' addRule emptyProgram rules
-              rew <- liftIO $ mkRewriter pgm
-              reduce rew fGoal
-          case methodSpecVerificationTactic ir of
-            AST.ABC -> do
-              runABC pos ir jvs fGoal (vcsCounterFns vcs)
-            AST.Rewrite -> do
-              newGoal <- runRewriter
-              case getBool newGoal of
-                Just True -> return ()
-                _ -> do
-                 let msg = ftext ("The rewriter failed to reduce the verification condition "
-                                    ++ " from the Java method " ++ methodSpecName ir
-                                    ++ " to 'True'.\n\n") $$
-                           ftext ("The remaining goal is:") $$
-                           nest 2 (prettyTermD newGoal)
-                     res = "Please add new rewrite rules or modify existing ones to reduce the goal to True."
-                  in throwIOExecException pos msg res
-            AST.Auto -> do
-              newGoal <- runRewriter
-              runABC pos ir jvs newGoal (vcsCounterFns vcs)
-            AST.Skip -> error "internal: verifyMethodTactic used invalid tactic."
+      vc <- mVC
+      forM (vcChecks vc) $ \check -> do
+        whenVerbosity (>= 1) $
+          liftIO $ putStrLn $ "Verify " ++ checkName check
+        let fAssume = vcAssumptions vc
+        -- Get final goal.
+        fConseq <- checkGoal check
+        nAssume <- applyBNot fAssume
+        fGoal <- applyBOr nAssume fConseq
+        -- Run verification
+        let runRewriter = do
+            let pgm = foldl' addRule emptyProgram rules
+            rew <- liftIO $ mkRewriter pgm
+            reduce rew fGoal
+        case methodSpecVerificationTactic ir of
+          AST.ABC -> do
+            runABC ir (vcInputs vc) fGoal (checkCounterexample check)
+          AST.Rewrite -> do
+            newGoal <- runRewriter
+            case getBool newGoal of
+              Just True -> return ()
+              _ -> do
+               let msg = ftext ("The rewriter failed to reduce the verification condition "
+                                  ++ " generated from " ++ checkName check
+                                  ++ " in the Java method " ++ methodSpecName ir
+                                  ++ " to 'True'.\n\n") $$
+                         ftext ("The remaining goal is:") $$
+                         nest 2 (prettyTermD newGoal)
+                   res = "Please add new rewrite rules or modify existing ones to reduce the goal to True."
+                in throwIOExecException pos msg res
+          AST.Auto -> do
+            newGoal <- runRewriter
+            runABC ir (vcInputs vc) newGoal (checkCounterexample check)
+          AST.Skip -> error "internal: verifyMethodTactic used invalid tactic."
