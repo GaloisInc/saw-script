@@ -33,6 +33,7 @@ import qualified SAWScript.TypeChecker as TC
 import qualified Simulation as JSS
 import Symbolic
 import SAWScript.Utils
+import SAWScript.TypeChecker
 import Utils.Common
 import Utils.IOStateT
 import Utils.LogMonad
@@ -287,7 +288,11 @@ getExprTypeFn = do
                   in Just (TC.DefinedType arrayTp)
                Nothing ->
                  case Map.lookup e cem of
-                   Nothing -> Nothing
+                   Nothing ->
+                     case getJSSTypeOfJavaExpr e of
+                       IntType ->
+                         Just (TC.DefinedType (SymInt (constantWidth 32)))
+                       _ -> Nothing
                    Just (_,tp) -> Just (TC.DefinedType tp)
 
 -- | Typecheck expression at global level.
