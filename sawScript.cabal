@@ -1,0 +1,29 @@
+Name:          sawScript
+Version:       0.1
+Author:        Galois Inc.
+Maintainer:    atomb@galois.com
+Build-type:    Simple
+Cabal-version: >= 1.8.0.2
+
+library
+  build-depends:
+      base >= 4
+    , llvm-verifier
+    , jvm-verifier
+
+  hs-source-dirs: src
+
+  exposed-modules:
+    SAWScript.Types
+
+  GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
+
+executable sawScript
+  hs-source-dirs: src
+
+  main-is: Main.hs
+
+  build-depends:
+      base >= 4
+    , llvm-verifier
+    , jvm-verifier
