@@ -1,21 +1,43 @@
-/* Some open questions:
-     * What's a good syntax for binding? Many of these examples say something
-       like "... as foo", but we could also do "foo <- ...", or something
-       similar.
-     * Do we want to be able to create monadic abstractions and apply them?
-     * If so, can they be recursive?
-*/
+/*
+Some open questions:
+  * What's a good syntax for binding? Many of these examples say something
+    like "... as foo", but we could also do "foo <- ...", or something
+    similar.
+  * Do we want to be able to create monadic abstractions and apply them?
+  * If so, can they be recursive?
 
-/* The syntax here is very tentative, and largely follows the style of
+The syntax here is very tentative, and largely follows the style of
 existing SAWScript code. Feel free to suggest alternative approaches!
-*/
 
-/* Initial experiments with this language could be as an EDSL in
+Initial experiments with this language could be as an EDSL in
 Haskell, and commands like "import", "theorem", and "prove" could just
 be Haskell functions. This would mean that an external syntax could be
-implemented on top of a nice underlying interface. */
+implemented on top of a nice underlying interface.
+*/
 
-// Java imports. (Type annotations often unnecessary, but useful.)
+// Cryptol imports. (Type annotations unnecessary, but helpful documentation.)
+
+import cryptol "SHA384.cry" Ch as cryptol_Ch : ([64], [64], [64]) -> [64];
+
+import cryptol "SHA384.cry" Maj as cryptol_Maj : ([64], [64], [64]) -> [64];
+
+import cryptol "SHA384.cry" UpperSigma_0 as cryptol_Sum0 : [64] -> [64];
+
+import cryptol "SHA384.cry" UpperSigma_1 as cryptol_Sum1 : [64] -> [64];
+
+import cryptol "SHA384.cry" LowerSigma_0 as cryptol_Sigma0 : [64] -> [64];
+
+import cryptol "SHA384.cry" LowerSigma_1 as cryptol_Sigma1 : [64] -> [64];
+
+import java org.bouncycastle.crypto.digests.SHA384Digest.K as java_K : [80][64];
+
+import cryptol "SHA384.cry" block512
+  as cryptol_Block : ([8][64], [16][64]) -> [8][64];
+
+// We can import constants as well as functions.
+import cryptol "SHA384.cry" Ks512 as cryptol_K : [80][64];
+
+// Java imports. (Bouncy Castle)
 
 /* Pure methods, i.e. methods that just produce a return value as a
 function of their inputs, can be imported with minimum fuss. */
@@ -38,11 +60,18 @@ import java org.bouncycastle.crypto.digests.SHA384Digest.Sigma1
   pure as java_Sigma1 : [64] -> [64];
 
 /* TODO: how to deal with the various models that can be generated
-from different aliasing configuration? */
+from different aliasing configurations? Something like mayAlias from
+older SAWScript could work, but would result in multiple models.
+Unless, of course, we have symbolic references...*/
+
+/* "import" takes a language name, a name of some construct within the
+language, and a block of configuration details. */
 import java org.bouncycastle.crypto.digests.SHA384Digest.processBlock {
 
-    /* Variables that need more refined types (array sizes, subtypes)
-    need to be declared. Other variables take their static Java types. */
+    /* Double colons indicate foreign language types, with the
+    specific language determined by context. Variables that need more
+    refined types (array sizes, subtypes) need to be declared. Other
+    variables take their statically-declared types. */
 
     this.xBuf :: byte[8];
     this.W :: long[80];
@@ -67,7 +96,6 @@ import java org.bouncycastle.crypto.digests.SHA384Digest.processBlock {
     output this.wOff; // OR: modify this.wOff;
     /* Could use a structure similar to the input example. */
 
-    // TODO: how to nicely specify a type signature?
 } as java_Block : ([64], [64], [8][64], [80][64]) ->
                   ([64], [64], [8][64], [80][64], [32]);
 
@@ -81,28 +109,6 @@ import java org.bouncycastle.crypto.digests.SHA384Digest.reset {
     modify this.wOff, this.W;
 } as java_H : [8][64];
 
-// Cryptol imports. (Type annotations unnecessary, but helpful documentation.)
-
-import cryptol "SHA384.cry" Ch
-  as cryptol_Ch : ([64], [64], [64]) -> [64];
-
-import cryptol "SHA384.cry" Maj
-  as cryptol_Maj : ([64], [64], [64]) -> [64];
-
-import cryptol "SHA384.cry" UpperSigma_0 as cryptol_Sum0 : [64] -> [64];
-
-import cryptol "SHA384.cry" UpperSigma_1 as cryptol_Sum1 : [64] -> [64];
-
-import cryptol "SHA384.cry" LowerSigma_0 as cryptol_Sigma0 : [64] -> [64];
-
-import cryptol "SHA384.cry" LowerSigma_1 as cryptol_Sigma1 : [64] -> [64];
-
-import java org.bouncycastle.crypto.digests.SHA384Digest.K as java_K : [80][64];
-
-import cryptol "SHA384.cry" block512
-  as cryptol_Block : ([8][64], [16][64]) -> [8][64];
-
-import cryptol "SHA384.cry" Ks512 as cryptol_K : [80][64];
 
 // Other formats
 
@@ -114,7 +120,8 @@ import btor "Sum0.btor" as btor_Sum0 : [64] -> [64];
 
 // Sigma0 and Sigma1 are macros. TODO: what's the best way to deal with this?
 
-import llvm "sha512.bc" ROTR as llvm_ROTR : ([64], [64]) -> [64];
+// Pure functions in LLVM are similar to Java.
+import llvm "sha512.bc" ROTR pure as llvm_ROTR : ([64], [64]) -> [64];
 
 import llvm "sha512.bc" Ch
   pure as llvm_Ch : ([64], [64], [64]) -> [64];
@@ -130,7 +137,8 @@ import llvm "sha512.bc" transform {
     data :: char[128];
     input hd;
     input data;
-} as llvm_Block;
+    output data;
+} as llvm_Block : ([8][64], [128][8]) -> [128][8];
 
 import llvm "sha512.bc" transform.k as llvm_k : [80][64];
 
@@ -141,6 +149,9 @@ automatically be represented as vectors and records in the
 intermediate term language. However, sometimes some reordering,
 matching up of field names, and filling in redundant fields are
 necessary. */
+
+/* Do we really need these as special constructs? Should they just be
+functions that we can later apply if necessary? */
 
 transform llvm SHA512_CONTEXT <=> [8][64] {
   to ctx = [ ctx.h0, ctx.h1, ctx.h2, ctx.h3, ctx.h4, ctx.h5, ctx.h6, ctx.h7 ];
@@ -192,8 +203,9 @@ theorem aig_btor_Sum0: aig_Sum0 == btor_sum0;
 
 /* TODO: want to be able to refer to counter-examples or satisfying
 assignments. Also want to be able to specify quantifiers. Both
-universals and existentials should be possible. Sean is very keen on
-QBF lately, and we'd like to be able to talk to QBF solvers. */
+universal and existential quantification should be possible. Sean is
+very keen on QBF lately, and we'd like to be able to talk to QBF
+solvers. */
 
 // Proofs.
 prove llvm_cryptol_Ch using { rewrite; yices; };
