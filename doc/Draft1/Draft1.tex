@@ -1,0 +1,282 @@
+\documentclass[11pt]{amsart}
+\usepackage[hmargin=.5in,vmargin=.5in]{geometry}
+\geometry{letterpaper}
+\usepackage{graphicx}
+\usepackage[parfill]{parskip}
+\usepackage{amssymb}
+\usepackage{epstopdf}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+
+\renewcommand{\b}[1]{\textbf{#1}}
+
+\newenvironment{code}
+{\begin{verbatim}}
+{\end{verbatim}}
+
+
+
+\title{SAWScript: The Next Generation}
+\author{Brian Ledger, Aaron Tomb}
+
+\begin{document}
+\maketitle
+
+\section*{Introduction}
+
+SAWScript is statically typed language, useful in the domain of embedded systems for construction of hierarchical proofs of correctness.  By reflecting the modular design-approaches embodied in high-level specification languages such as Java, C/C++, and Cryptol, SAWScript enables speed-ups in proofs involving complex non-deterministic search and satisfaction constraints.
+
+\section*{Goals}
+
+We've identified three major goals in the production of SAWScript, namely:
+
+\begin{itemize}
+\item Orchestration
+\item Composition
+\item Search
+\end{itemize}
+
+
+\subsection*{Orchestration} SAWScript enables function imports from the Java, C/C++, and Cryptol languages.  This allows users to specify complex proofs of equivalence between functions from a standpoint of language-agnosticism.  As well, the SAWScript interpreter can import and export in the industry standard AIG, DIMACS, and BTOR file formats.
+
+The SAWScript interpreter also interfaces with the abc and yices theorem provers, allowing for encapsulated dispatch and handling of sophisticated proofs on circuits.
+
+\subsection*{Composition}
+
+SAWScript allows binding of foreign functions within a Cryptol-like type system, providing an analogy between function composition and circuit synthesis.  By carrying the compositional analogy into the domain of proofs, the system allows the programmer to certify complex systems through automatic propagation of constraints.
+
+\subsection*{Search}
+
+blah blah baz
+
+
+\section*{Partial Evaluation}
+
+
+
+\section*{Abstract Analysis}
+
+\begin{tabular}{|l||c|c|c|c|}\hline
+$\circ$ & fun & inj & sur & iso\\\hline\hline
+fun & fun & fun & fun & fun\\\hline
+inj & fun & inj & fun & inj\\\hline
+sur & fun & fun & sur & sur\\\hline
+iso & fun & inj & sur & iso\\\hline
+\end{tabular}\\
+
+
+\section*{Contexts and Mappings}
+
+A mapping is a function between concrete domains.
+
+A context is a mapping from symbolic names to a concrete subdomain.
+
+\clearpage
+\section*{Sample Code}
+
+This first sample demonstrates the new keywords for function declaration, namely \b{fun}, \b{inj}, \b{sur}, and \b{iso}.\\
+
+\begin{verbatim}
+> fun foo = ...
+foo :: a -> [b]
+`foo :: b -> [a]
+
+> inj bar = ...
+bar :: a -> [b]
+`bar :: b -> a
+
+> sur baz = ...
+baz :: a -> b
+`baz :: b -> [a]
+
+> iso qux = ...
+qux :: a -> b
+`qux :: b -> a
+\end{verbatim}
+
+\vspace{.125in}The \b{let} declaration should reconstruct the function-type with the compositional strategy outlined above.  Programmers desiring stronger types are then free to declare the type they like, and the SAW compiler will statically check their assertions.\\
+
+\begin{verbatim}
+> let myFun = qux . qux . baz
+myFun :: a -> c
+`myFun :: c -> [a]
+\end{verbatim}
+
+\clearpage
+\subsection*{Pure imports}
+
+\begin{verbatim}
+
+> let cryptol_Sigma0 = importCry "SHA384.cry" "LowerSigma_0"
+cryptol_Sigma0 :: [64] -> [64]
+
+> let java_Sigma0 = importJavaPure "org.bouncycastle.crypto.digests.SHA384" "Sigma0"
+java_Sigma0 :: [64] -> [64]
+
+> let llvm_Ch = importLLVMPure "sha512.bc" "Ch"
+llvm_Ch :: ([64], [64], [64]) -> [64]
+
+> let aig_Sum0 = importAIG "Sum0.aig"
+aig_Sum0 :: [64] -> [64]
+
+> let btor_Sum0 = importBTOR "Sum0.btor"
+btor_Sum0 :: [64] -> [64]
+
+\end{verbatim}
+
+\clearpage
+\subsection*{Java/LLVM Contexts}
+
+Let's propose to separate the input, output, and modifiable contexts of any non-pure function.  This obviates the need for the \b{input}, \b{output}, and \b{modify} keywords in our context containers.
+
+\begin{verbatim}
+> processBlockInput = {
+>   this.byteCount1 = _,
+>   this.byteCount2 = _,
+>   this.xbuf as [this.H1, this.H2, this.H3, this.H4,
+>                   this.H5, this.H6, this.H7, this.H8] = _ byte[8],
+>   this.W = _: long[80] }
+processBlockInput :: ([?], [?], [8][8], [80][64])
+\end{verbatim}
+
+\vspace{.125in}
+The question marks, \b{?}, do not denote generic types, but are placeholders for concrete types which can only be inferred at runtime
+
+\begin{verbatim}
+> processBlockOutput = {
+>   this.byteCount1 = _,
+>   this.byteCount2 = _,
+>   this.xbuf as [this.H1, this.H2, this.H3, this.H4, 
+>                 this.H5, this.H6, this.H7, this.H8] = _ : byte[8],
+>   this.W = _ : long[80],
+>   this.wOff = _ }
+processBlockOutput :: ([?], [?], [8][8], [80][64], [?])
+
+> processBlockModify = { }
+processBlockModify :: [0]
+\end{verbatim}
+
+The programmer can forego the assignment of each context variable to the ``don't care'' literal, considering that the majority of contexts variables are not assigned for partial evaluation.  We could thus refactor \b{processBlockInput} to
+
+\begin{verbatim}
+> processBlockInput = {
+>   this.byteCount1,
+>   this.byteCount2,
+>   this.xbuf as [this.H1, this.H2, this.H3, this.H4, 
+>                 this.H5, this.H6, this.H7, this.H8] : byte[8],
+>   this.W : long[80] }
+processBlockInput :: ([?], [?], [8][8], [80][64])
+\end{verbatim}.
+
+
+\clearpage
+\subsection*{Impure Imports}
+We then pass our input, output, and modify contexts to the \b{importJava} and \b{importLLVM} methods:
+
+\begin{verbatim}
+> let javaBlock = 
+>   importJava "org.bouncycastle.crypto.digests.SHA384Digest" "processBlock"
+>     processBlockInput processBlockOutput processBlockModify
+javaBlock :: ([64], [64], [8][64], [80][64]) -> ([64], [64], [8][64], [80][64], [32])
+\end{verbatim}
+
+Naturally, we can still declare our contexts in-line.
+
+\begin{verbatim}
+> let javaH = importJava "org.bouncycastle.crypto.digests.SHA384Digest" "reset"
+>   { }
+>   { [this.H1, this.H2, this.H3, this.H4, this.H5, this.H6, this.H7, this.H8] }
+>   { this.byteCount1, this.byteCount2, this.xBufOff, this.xBuf, this.wOff, this.W }
+javaH :: [0] -> [8][64]
+\end{verbatim}
+
+
+\clearpage
+\subsection*{Exports}
+
+\begin{verbatim}
+> exportDIMACS llvm_cryptol_Ch "llvm_cryptol_Ch.cnf"
+** Exporting llvm_cryptol as DIMACS to llvm_cryptol_Ch.cnf.
+
+> exportAIG llvm_Ch "llvm_Ch.aig"
+** Exporting llvm_Ch as AIG to llvm_Ch.aig.
+\end{verbatim}
+
+
+
+
+\end{document}  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
