@@ -1,6 +1,7 @@
 module REPL where
 
 import System.Console.Haskeline
+import System.Exit
 
 --import SAWScript.Parser    ( read )
 --import SAWScript.Evaluator ( evaluate )
@@ -24,14 +25,19 @@ main = do
       loop = do
         minput <- getInputLine "> "
         case minput of
-          Nothing -> return ()
-          Just (':':s) -> processDirective s
-          Just expr -> do
-            --let ast = read expr
-            --    val = evaluate ast
-            --echo . print $ val
-            outputStrLn $ expr ++ " :: <Expr>"--TODO: Replace this line with the above.
-        loop
+          Nothing      -> loop
+          Just (":q")  -> do
+                            echo "Leaving SAWScript"
+                            return ()
+          Just (':':s) -> do
+                            processDirective s
+                            loop
+          Just expr    -> do
+                          --let ast = read expr
+                          --    val = evaluate ast
+                          --echo . print $ val
+                          outputStrLn $ expr ++ " :: <Expr>"--TODO: Replace this line with the above.
+                          loop
 
 processDirective :: String -> InputT IO ()
 processDirective s = case s of
