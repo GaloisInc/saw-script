@@ -1,9 +1,9 @@
-module REPL where
+module Main where
 
 import System.Console.Haskeline
 import System.Exit
 
---import SAWScript.Parser    ( read )
+--import SAWScript.MyParser  ( parseExpr )
 --import SAWScript.Evaluator ( evaluate )
 --import SAWScript.AST       ( print )
 
