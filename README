@@ -1,0 +1,6 @@
+
+cd Verifier
+make saw
+bin/saw
+
+*Will move this from Makefile to .cabal format at some future point.
