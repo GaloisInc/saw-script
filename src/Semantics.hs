@@ -21,9 +21,14 @@ data Expr
   = BitLit Bits
   | Bag [(String,Expr)]
   | Cmd Cmd
-  | Var [String]
+  | Var Name
   | Func [(String,ExprType)] Expr
   | App Expr [Expr]
+  deriving Eq
+
+data Name
+  = Name String
+  | In String Name
   deriving Eq
 
 data Cmd
@@ -31,7 +36,7 @@ data Cmd
   | Seq Cmd String Cmd
   deriving Eq
 
-newtype Bits = Bits [Bool] deriving Eq
+newtype Bits = Bits ![Bool] deriving Eq
 
 instance Show Expr where
   show e = case e of
@@ -39,7 +44,7 @@ instance Show Expr where
     Bag b        -> wrapLoose '{' '}' " , " showPair b
       where
         showPair (s,e) = s ++ " = " ++ show e
-    Var ss       -> intercalate "." ss
+    Var n        -> show n
     Cmd c        -> "[" ++ show c ++ "]"
     App e1 e2    -> showCall (e1:e2)
       where
@@ -50,6 +55,11 @@ instance Show Expr where
         showArgs :: [(String,ExprType)] -> String
         showArgs = wrapLoose '(' ')' " , " showPair
         showPair (name,et) = name ++ " :: " ++ show et
+
+instance Show Name where
+  show n = case n of
+    Name s -> s
+    In r n -> r ++ "." ++ show n
 
 instance Show Cmd where
   show c = case c of
@@ -71,26 +81,19 @@ instance Show Bits where
 data ExprType
   = BitLitT
   | BagT [(String,ExprType)]
-  | CmdT CmdType
+  | CmdT ExprType
   | FuncT [(String,ExprType)] ExprType
-  deriving Eq
-
-data CmdType
-  = RetT ExprType
   deriving Eq
 
 instance Show ExprType where
   show et = case et of
     BitLitT -> "BitLit"
     BagT bt -> wrapLoose '{' '}' " , " showPair bt
-    CmdT ct -> show ct
+    CmdT ct -> "(Cmd " ++ show ct ++ ")"
     FuncT [et1] et -> "(" ++ (show $ snd et1) ++ " -> " ++ show et ++ ")"
     FuncT ets et -> "(" ++ (wrapClose '(' ')' ", " show $ map snd ets) ++ " -> " ++ show et ++ ")"
     where
       showPair (s,et) = s ++ " :: " ++ show et
-
-instance Show CmdType where
-  show (RetT et) = "(Cmd " ++ show et ++ ")"
 
 type Env = [(String,ExprType)]
 emptyEnv = []
@@ -113,39 +116,41 @@ instance Monad Exc where
 failure = Failure
 
 typeOf :: Expr -> Exc ExprType
-typeOf = typeOfExpr emptyEnv
+typeOf = typeOf emptyEnv
 
-typeOfExpr :: Env -> Expr -> Exc ExprType
-typeOfExpr env e = case e of
-  BitLit b   -> return BitLitT
-  Bag b      -> do bt <- mapM (\(s,e)->do et <- typeOfExpr env e; return (s,et)) b
-                   return (BagT bt)
-  Var []     -> failure "empty reference"
-  Var [s]    -> case lookup s env of
-                  Just a -> return a
-                  Nothing -> failure ("unbound var: " ++ s)
-  Var (s:ss) -> case lookup s env of
-                  Just a -> typeOfExpr env (Var ss) 
-                  Nothing -> failure ("unbound var: " ++ s)
-  Cmd c      -> do ct <- typeOfCmd env c
-                   return (CmdT ct)
-  Func as e  -> do et <- typeOfExpr (extendEnv env as) e
-                   return (FuncT as et)
-  App e es   -> do t <- typeOfExpr env e
-                   ets <- mapM (typeOfExpr env) es
-                   case t of
-                      FuncT ets' et -> if matchArgTypes (map snd ets') ets then return et else failure "type mismatch"
-                      _             -> failure ("not a function: " ++ show e)
-    where
-      matchArgTypes :: [ExprType] -> [ExprType] -> Bool
-      matchArgTypes must has = all (`elem` has) must
-                   
-typeOfCmd :: Env -> Cmd -> Exc CmdType
-typeOfCmd env c = case c of
-  Return e    -> do et <- typeOfExpr env e
-                    return (RetT et)
-  Seq c1 x c2 -> do (RetT et1) <- typeOfCmd env c1
-                    typeOfCmd ((x,et1):env) c2
+typeOf :: Env -> Expr -> Exc ExprType
+typeOf env e = case e of
+  BitLit b     -> return BitLitT
+  Bag b        -> do bt <- mapM (\(s,e)->do et <- typeOf env e; return (s,et)) b
+                     return (BagT bt)
+  Var (Name n) -> case lookup n env of
+                    Just a -> return a
+                    Nothing -> failure ("unbound var: " ++ n)
+  -- FIXME
+  Var (In r n) -> case lookup r env of
+                    Just a -> typeOf env (Var n)
+                    Nothing -> failure ("unbound var: " ++ r)
+  Cmd c        -> do ct <- typeOfCmd env c
+                     return (CmdT ct)
+  Func as e    -> do et <- typeOf (extendEnv env as) e
+                     return (FuncT as et)
+  App e es     -> do t <- typeOf env e
+                     ets <- mapM (typeOf env) es
+                     case t of
+                        FuncT ets' et -> if matchArgTypes ets $ map snd ets'
+                                           then return et
+                                           else failure "type mismatch"
+                        _             -> failure ("not a function: " ++ show e)
+
+matchArgTypes :: [ExprType] -> [ExprType] -> Bool
+matchArgTypes has exp = case (has,exp) of
+  ([],[])         -> True
+  (h:has',e:exp') -> (h `matchType` e) && (matchArgTypes has' exp')
+  _               -> False
+
+-- FIXME
+matchType :: ExprType -> ExprType -> Bool
+matchType = undefined
 
 -------------
 -- Helpers --
