@@ -31,56 +31,25 @@ instance Foldable Expr where
     where
       foldElem acc (_,expr) = acc `mappend` (foldMap f expr)
 
-instance Functor Expr where
-  fmap f (Var n a) =
-    Var n (f a)
+module Unification2 where
 
-  fmap f (Pattern p a) =
-    Pattern p (f a)
+import SAWScript.AST
+import Data.Map
 
-  fmap f (Func t as e a) =
-    Func t as (fmap f e) (f a)
+data SAWType =
+  | TypeVariable String
+  | Atom Name SAWType
+  | BitField [Integer]
+  | DirectedMultiset (Set SAWType)
+  | Arrow ArrowType [SAWType] SAWType
 
-  fmap f (App e1 e2 a) =
-    App (fmap f e1) (fmap f e2) (f a)
+type Context = Map String SAWType
 
-  fmap f (Switch e es a) =
-    Switch (fmap f e) (map mapCase es) (f a)
-    where
-      mapCase (guard, expr) = (fmap f guard, fmap f expr)
+freshTypeVariable :: Context -> 
+frashTypeVariable ctxt = 
+  let names = "'":[name++[c] | name <- names, c <- ['A'..'Z']]
+      taken = snd . unzip . assocs $ ctxt
+  take . (dropWhile (\v -> elem v taken)) . (drop 1) $ names
 
-  fmap f (DM es a) =
-    DM (map mapElem es) (f a)
-    where
-      mapElem (b,expr) = (b, fmap f expr)
-
-instance Traversable Expr where
-  traverse f (Var n a) = 
-    Var n <$> f a
-
-  traverse f (Pattern p a) = 
-    Pattern p <$> f a
-
-  traverse f (Func t args e a) =
-    (Func t args) <$> traverse f e <*> f a
-
-  traverse f (App e1 e2 a) =
-    App <$> traverse f e1 <*> traverse f e2 <*> f a
-
-  traverse f (Switch e es a) =
-    Switch <$> traverse f e <*> (sequenceA (List.map mapCase es)) <*> f a
-    where
-      mapCase (guard,expr) =
-        (,) <$> traverse f guard <*> traverse f expr
-
-  traverse f (DM es a) =
-    DM <$> (sequenceA (List.map mapElem es)) <*> f a
-    where
-      mapElem (b,expr) = 
-        (,) b <$> traverse f expr
-
--- TODO quickcheck fmap should be equivalent to traversal with the 
---   identity applicative functor (fmapDefault).
--- TODO quickcheck foldMap should be equivalent to traversal with a
---   constant applicative functor (foldMapDefault).
-
+appendTypes :: Expr TypeAnnotation -> Expr SAWType
+appendTypes

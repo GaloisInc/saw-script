@@ -37,7 +37,25 @@ frashTypeVariable ctxt =
       taken = snd . unzip . assocs $ ctxt
   take . (dropWhile (\v -> elem v taken)) . (drop 1) $ names
 
-patternWidth :: Pattern -> Integer
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 inferType :: Context -> Expr a -> SAWType
