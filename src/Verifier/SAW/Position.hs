@@ -4,7 +4,7 @@ module Verifier.SAW.Position
   , incCol
   , ppPos
   , Positioned(..)
-  )
+  ) where
 
 import System.FilePath (makeRelative)
 

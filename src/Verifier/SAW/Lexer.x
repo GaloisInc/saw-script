@@ -35,13 +35,13 @@ $digit = [0-9]
 $idchar = [$alpha $digit \' \_]
 @num = $digit+
 @varid = [$alpha \_] $idchar*
-@punct = "::" | "->" | "(" | ")" | "{" | "}" | "?" | "??" | "???" | ";" | "\\"
+@punct = "(" | ")" | "->" | "." | ";" | "::" | "=" | "?" | "??" | "???" | "\\" | "{" | "}"
 @keywords = "data" | "where"
 @key = @punct | @keywords
 
 sawTokens :-
 
-$white+;
+$white+; 
 "--".*;
 "{-"        { \_ -> TCmntS }
 "-}"        { \_ -> TCmntE }

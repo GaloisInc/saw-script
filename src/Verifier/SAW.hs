@@ -1,1 +1,5 @@
-module Verifier.SAW where
+module Verifier.SAW 
+  ( module Verifier.SAW.DagTerm 
+  ) where
+
+import Verifier.SAW.DagTerm
