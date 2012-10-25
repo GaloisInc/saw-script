@@ -142,54 +142,6 @@ import llvm "sha512.bc" transform {
 
 import llvm "sha512.bc" transform.k as llvm_k : [80][64];
 
-// Type coercions
-
-/* No conversion is necessary for arrays and objects/structs. They'll
-automatically be represented as vectors and records in the
-intermediate term language. However, sometimes some reordering,
-matching up of field names, and filling in redundant fields are
-necessary. */
-
-/* Do we really need these as special constructs? Should they just be
-functions that we can later apply if necessary? */
-
-transform llvm SHA512_CONTEXT <=> [8][64] {
-  to ctx = [ ctx.h0, ctx.h1, ctx.h2, ctx.h3, ctx.h4, ctx.h5, ctx.h6, ctx.h7 ];
-  from H = { .h0 = H@0
-           ; .h1 = H@1
-           ; .h2 = H@2
-           ; .h3 = H@3
-           ; .h4 = H@4
-           ; .h5 = H@5
-           ; .h6 = H@6
-           ; .h7 = H@7
-           ; .nblocks = 0
-           ; .buf = zero : [128][8]
-           ; .count = 0
-           };
-};
-
-transform
-  java org.bouncycastle.crypto.digests.LongDigest <=>
-  ([8][64], [80][64]) {
-  to dgst = ( [ dgst.H1, dgst.H2, dgst.H3, dgst.H4
-              , dgst.H5, dgst.H6, dgst.H7, dgst.H8
-              ]
-            , dgst.W
-l            );
-  from (H, W) = { .H1 = H@0
-                ; .H2 = H@1
-                ; .H3 = H@2
-                ; .H4 = H@3
-                ; .H5 = H@4
-                ; .H6 = H@5
-                ; .H7 = H@6
-                ; .H8 = H@7
-                ; .W = W
-                };
-};
-
-
 // Theorems, properties, equivalences.
 
 // Don't strictly need to have all three of these, but it's illustrative.
