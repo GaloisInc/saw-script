@@ -16,16 +16,22 @@ pure = return ()
  * automatically be converted to and from internal types, but names
  * familiar in the target language would be useful. Maybe, instead of
  * binding these at the top level, they'd be bound within the context of
- * a setup block. */
-long = [64];
-int = [32];
-char = [16];
-byte = [8];
+ * a setup block. These type synonyms could, in some contexts, be useful
+ * for LLVM, as well. */
+long = Signed 64;
+int = Signed 32;
+char = Signed 16;
+byte = Signed 8;
+
+[n] = Unsigned n;
 
 main = do {
   // Cryptol imports. (Type annotations unnecessary, but helpful documentation.)
 
   extract Cryptol "SHA384.cry" "Ch" as cryptol_Ch : ([64], [64], [64]) -> [64];
+  // Alternatively:
+  // cryptol_Ch : ([64], [64], [64]) -> [64];
+  // cryptol_Ch <- extract Cryptol "SHA384.cry" "Ch";
 
   extract Cryptol "SHA384.cry" "Maj" as cryptol_Maj : ([64], [64], [64]) -> [64];
 
@@ -37,7 +43,8 @@ main = do {
 
   extract Cryptol "SHA384.cry" "LowerSigma_1" as cryptol_Sigma1 : [64] -> [64];
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.K" pure as java_K : [80][64];
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.K"
+    pure as java_K : [80][64];
 
   extract Cryptol "SHA384.cry" "block512"
     as cryptol_Block : ([8][64], [16][64]) -> [8][64];
@@ -51,22 +58,22 @@ main = do {
   function of their inputs, can be imported with minimum fuss. */
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Ch"
-    pure as java_Ch : ([64], [64], [64]) -> [64];
+    pure as java_Ch : (long, long, long) -> long;
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Maj"
-    pure as java_Maj : ([64], [64], [64]) -> [64];
+    pure as java_Maj : (long, long, long) -> long;
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum0"
-    pure as java_Sum0 : [64] -> [64];
+    pure as java_Sum0 : long -> long;
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum1"
-    pure as java_Sum1 : [64] -> [64];
+    pure as java_Sum1 : long -> long;
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma0"
-    pure as java_Sigma0 : [64] -> [64];
+    pure as java_Sigma0 : long -> long;
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
-    pure as java_Sigma1 : [64] -> [64];
+    pure as java_Sigma1 : long -> long;
 
   /* TODO: how to deal with the various models that can be generated
   from different aliasing configurations? Something like mayAlias from
@@ -111,8 +118,6 @@ main = do {
             );
       */
 
-      arbitrary this.wOff;
-
       modify this.wOff;
 
       output this.byteCount1, this.byteCount2;
@@ -122,11 +127,23 @@ main = do {
       output this.wOff; // OR: modify this.wOff;
       /* Could use a structure similar to the input example. */
 
-  } as java_Block : ([64], [64], [8][64], [80][64]) ->
-                    ([64], [64], [8][64], [80][64], [32]);
+  } as java_Block : (long, long, Array 8 long, Array 80 long) ->
+                    (long, long, Array 8 long, Array 80 long, int);
 
 
   let reset_spec = spec {
+      this.H1 :: long;
+      this.H2 :: long;
+      this.H3 :: long;
+      this.H4 :: long;
+      this.H5 :: long;
+      this.H6 :: long;
+      this.H7 :: long;
+      this.H8 :: long;
+      this.xBuf :: byte[8];
+      this.xBufOff :: long;
+      this.W :: long[80];
+      this.wOff :: long;
       output this.H1, this.H2, this.H3, this.H4,
              this.H5, this.H6, this.H7, this.H8;
       // Should these be 'output' or 'modify'? The former is more general.
@@ -136,7 +153,7 @@ main = do {
   }
 
   extract Java "org.bouncycastle.crypto.digests.SHA384Digest.reset"
-    reset_spec as java_H : [8][64];
+    reset_spec as java_H : Array 8 long;
 
   // Other formats
 
@@ -162,13 +179,14 @@ main = do {
   extract LLVM "sha512.bc" "Sum1" pure as llvm_Sum1 : [64] -> [64];
 
   extract LLVM "sha512.bc" transform {
-      data :: char[128];
+      data :: [128]byte;
+      hd :: [8]long;
       input hd;
       input data;
       output data;
-  } as llvm_Block : ([8][64], [128][8]) -> [128][8];
+  } as llvm_Block : (Array 8 long, Array 128 byte) -> Array 128 byte;
 
-  extract LLVM "sha512.bc" transform.k as llvm_k : [80][64];
+  extract LLVM "sha512.bc" transform.k as llvm_k : Array 80 long;
 
   // Theorems, properties, equivalences.
 
@@ -195,10 +213,10 @@ main = do {
   assgn <- sat java_llvm_Ch using picosat;
 
   // Exporting theorems ...
-  export llvm_cryptol_Ch as dimacs "llvm_cryptol_Ch.cnf";
+  export DIMACS llvm_cryptol_Ch "llvm_cryptol_Ch.cnf";
 
   // ... or models
-  export llvm_Ch as aig "llvm_Ch.aig";
+  export AIG llvm_Ch "llvm_Ch.aig";
 
   // Rewriting models without immediately proving or exporting
   llvm_Ch' <- rewrite llvm_Ch;
