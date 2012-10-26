@@ -10,7 +10,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 module Verifier.SAW.Lexer
-  ( module Verifier.SAW.AST
+  ( module Verifier.SAW.Position
   , Token(..)
   , ppToken
   , ParseError(..)
@@ -26,7 +26,7 @@ import qualified Data.ByteString.Lazy as B
 import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Word (Word8)
 
-import Verifier.SAW.AST
+import Verifier.SAW.Position
 
 }
 
@@ -110,7 +110,6 @@ setInput inp = Parser $ modify $ \s -> s { psInput = inp }
 
 parsePos :: Parser Pos
 parsePos = Parser $ gets (pos . psInput)
-
 
 lexer :: (Positioned Token -> Parser a) -> Parser a
 lexer f = do
