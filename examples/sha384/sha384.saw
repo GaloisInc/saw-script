@@ -1,0 +1,221 @@
+/* The top-level scope  of a file is simply a collection of
+ * newline-delimited variable bindings.  Maybe have a command line
+ * option that has the effect of wrapping an entire file in "main = do {
+ * ... }"
+ */
+
+/* The following abbreviations would probably be builtin, but are here
+ * for illustration. */
+
+/* Perform no setup action. Useful for setting up the simulator to
+ * extracts models of simple functions from arguments to return values.
+ */
+pure = return ()
+
+/* Java type synonyms, for convenience. Java and LLVM types will
+ * automatically be converted to and from internal types, but names
+ * familiar in the target language would be useful. Maybe, instead of
+ * binding these at the top level, they'd be bound within the context of
+ * a setup block. */
+long = [64];
+int = [32];
+char = [16];
+byte = [8];
+
+main = do {
+  // Cryptol imports. (Type annotations unnecessary, but helpful documentation.)
+
+  extract Cryptol "SHA384.cry" "Ch" as cryptol_Ch : ([64], [64], [64]) -> [64];
+
+  extract Cryptol "SHA384.cry" "Maj" as cryptol_Maj : ([64], [64], [64]) -> [64];
+
+  extract Cryptol "SHA384.cry" "UpperSigma_0" as cryptol_Sum0 : [64] -> [64];
+
+  extract Cryptol "SHA384.cry" "UpperSigma_1" as cryptol_Sum1 : [64] -> [64];
+
+  extract Cryptol "SHA384.cry" "LowerSigma_0" as cryptol_Sigma0 : [64] -> [64];
+
+  extract Cryptol "SHA384.cry" "LowerSigma_1" as cryptol_Sigma1 : [64] -> [64];
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.K" pure as java_K : [80][64];
+
+  extract Cryptol "SHA384.cry" "block512"
+    as cryptol_Block : ([8][64], [16][64]) -> [8][64];
+
+  // We can import constants as well as functions.
+  extract Cryptol "SHA384.cry" "Ks512" as cryptol_K : [80][64];
+
+  // Java imports. (Bouncy Castle)
+
+  /* Pure methods, i.e. methods that just produce a return value as a
+  function of their inputs, can be imported with minimum fuss. */
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Ch"
+    pure as java_Ch : ([64], [64], [64]) -> [64];
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Maj"
+    pure as java_Maj : ([64], [64], [64]) -> [64];
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum0"
+    pure as java_Sum0 : [64] -> [64];
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum1"
+    pure as java_Sum1 : [64] -> [64];
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma0"
+    pure as java_Sigma0 : [64] -> [64];
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
+    pure as java_Sigma1 : [64] -> [64];
+
+  /* TODO: how to deal with the various models that can be generated
+  from different aliasing configurations? Something like mayAlias from
+  older SAWScript could work, but would result in multiple models.
+  Unless, of course, we have symbolic references...*/
+
+  /* "import" takes a language name, a name of some construct within the
+  language, and a block of configuration details. */
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.processBlock" {
+
+      /* Double colons indicate foreign language types, with the
+      specific language determined by context. Variables that need more
+      refined types (array sizes, subtypes) need to be declared. Other
+      variables take their statically-declared types. */
+
+      /* We need to provide types for all Java variables we mention. */
+      this.H1 :: long;
+      this.H2 :: long;
+      this.H3 :: long;
+      this.H4 :: long;
+      this.H5 :: long;
+      this.H6 :: long;
+      this.H7 :: long;
+      this.H8 :: long;
+      this.xBuf :: byte[8];
+      this.W :: long[80];
+
+      input this.byteCount1, this.byteCount2;
+      input this.H1, this.H2, this.H3, this.H4,
+            this.H5, this.H6, this.H7, this.H8;
+      input this.W;
+
+      /* The following would be a nice alternative, but I'm not sure how
+       * it'll fit in to the type system. Ideas welcome.
+       */
+      /*
+      input ( this.byteCount1, this.byteCount2
+            , [ this.H1, this.H2, this.H3, this.H4
+              , this.H5, this.H6. this.H7, this.H8
+              ]
+            , this.W
+            );
+      */
+
+      arbitrary this.wOff;
+
+      modify this.wOff;
+
+      output this.byteCount1, this.byteCount2;
+      output this.H1, this.H2, this.H3, this.H4,
+             this.H5, this.H6, this.H7, this.H8;
+      output this.W;
+      output this.wOff; // OR: modify this.wOff;
+      /* Could use a structure similar to the input example. */
+
+  } as java_Block : ([64], [64], [8][64], [80][64]) ->
+                    ([64], [64], [8][64], [80][64], [32]);
+
+
+  let reset_spec = spec {
+      output this.H1, this.H2, this.H3, this.H4,
+             this.H5, this.H6, this.H7, this.H8;
+      // Should these be 'output' or 'modify'? The former is more general.
+      modify this.byteCount1, this.byteCount2;
+      modify this.xBufOff, this.xBuf;
+      modify this.wOff, this.W;
+  }
+
+  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.reset"
+    reset_spec as java_H : [8][64];
+
+  // Other formats
+
+  load AIG "Sum0.aig" as aig_Sum0 : [64] -> [64];
+
+  load BTOR "Sum0.btor" as btor_Sum0 : [64] -> [64];
+
+  // LLVM imports (libgcrypt).
+
+  // Sigma0 and Sigma1 are macros. TODO: what's the best way to deal with this?
+
+  // Pure functions in LLVM are similar to Java.
+  extract LLVM "sha512.bc" "ROTR" pure as llvm_ROTR : ([64], [64]) -> [64];
+
+  extract LLVM "sha512.bc" "Ch"
+    pure as llvm_Ch : ([64], [64], [64]) -> [64];
+
+  extract LLVM "sha512.bc" "Maj"
+    pure as llvm_Maj : ([64], [64], [64]) -> [64];
+
+  extract LLVM "sha512.bc" "Sum0" pure as llvm_Sum0 : [64] -> [64];
+
+  extract LLVM "sha512.bc" "Sum1" pure as llvm_Sum1 : [64] -> [64];
+
+  extract LLVM "sha512.bc" transform {
+      data :: char[128];
+      input hd;
+      input data;
+      output data;
+  } as llvm_Block : ([8][64], [128][8]) -> [128][8];
+
+  extract LLVM "sha512.bc" transform.k as llvm_k : [80][64];
+
+  // Theorems, properties, equivalences.
+
+  // Don't strictly need to have all three of these, but it's illustrative.
+  // Functions of compatible types can be asserted to be equal without
+  // mentioning input or output variables.
+  let llvm_cryptol_Ch = llvm_Ch == cryptol_Ch;
+  let java_cryptol_Ch = java_Ch == cryptol_Ch;
+  let java_llvm_Ch = java_Ch == llvm_Ch;
+
+  let aig_btor_Sum0 = aig_Sum0 == btor_sum0;
+
+  /* TODO: want to be able to refer to counter-examples or satisfying
+  assignments. Also want to be able to specify quantifiers. Both
+  universal and existential quantification should be possible. Sean is
+  very keen on QBF lately, and we'd like to be able to talk to QBF
+  solvers. */
+
+  // Proofs.
+
+  /* We can prove any term of boolean type. */
+  cex1 <- prove llvm_cryptol_Ch using { rewrite; yices; };
+  cex2 <- prove aig_btor_Sum0 using abc;
+  assgn <- sat java_llvm_Ch using picosat;
+
+  // Exporting theorems ...
+  export llvm_cryptol_Ch as dimacs "llvm_cryptol_Ch.cnf";
+
+  // ... or models
+  export llvm_Ch as aig "llvm_Ch.aig";
+
+  // Rewriting models without immediately proving or exporting
+  llvm_Ch' <- rewrite llvm_Ch;
+
+  // Rewriting with specific options, such as choice of rewrite rules.
+
+  // Rewrite only redundant "and" terms.
+  llvm_Block' <- rewrite llvm_Block using only and_idem;
+
+  // Apply all rewrite rules, in-place, to llvm_Block';
+  rewrite llvm_Block';
+
+  // Rewrite redundant "and" and "or" terms.
+  llvm_Transform' <- rewrite llvm_Transform using and_or_rules;
+
+  /* TODO: how should counter-examples/satisfying assignments be bound? The
+  tricky bit is that they may or may not exist, so we either need a
+  Maybe-like type, which we don't have, or conditional bindings, which
+  may make other things tricky. */
+}
