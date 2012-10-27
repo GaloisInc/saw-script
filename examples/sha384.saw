@@ -28,51 +28,51 @@ byte = Signed 8;
 main = do {
   // Cryptol imports. (Type annotations unnecessary, but helpful documentation.)
 
-  extract Cryptol "SHA384.cry" "Ch" as cryptol_Ch : ([64], [64], [64]) -> [64];
+  extractCryptol "SHA384.cry" "Ch" as cryptol_Ch : ([64], [64], [64]) -> [64];
   // Alternatively:
   // cryptol_Ch : ([64], [64], [64]) -> [64];
-  // cryptol_Ch <- extract Cryptol "SHA384.cry" "Ch";
+  // cryptol_Ch <- extractCryptol "SHA384.cry" "Ch";
 
-  extract Cryptol "SHA384.cry" "Maj" as cryptol_Maj : ([64], [64], [64]) -> [64];
+  extractCryptol "SHA384.cry" "Maj" as cryptol_Maj : ([64], [64], [64]) -> [64];
 
-  extract Cryptol "SHA384.cry" "UpperSigma_0" as cryptol_Sum0 : [64] -> [64];
+  extractCryptol "SHA384.cry" "UpperSigma_0" as cryptol_Sum0 : [64] -> [64];
 
-  extract Cryptol "SHA384.cry" "UpperSigma_1" as cryptol_Sum1 : [64] -> [64];
+  extractCryptol "SHA384.cry" "UpperSigma_1" as cryptol_Sum1 : [64] -> [64];
 
-  extract Cryptol "SHA384.cry" "LowerSigma_0" as cryptol_Sigma0 : [64] -> [64];
+  extractCryptol "SHA384.cry" "LowerSigma_0" as cryptol_Sigma0 : [64] -> [64];
 
-  extract Cryptol "SHA384.cry" "LowerSigma_1" as cryptol_Sigma1 : [64] -> [64];
+  extractCryptol "SHA384.cry" "LowerSigma_1" as cryptol_Sigma1 : [64] -> [64];
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.K"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.K"
     pure as java_K : [80][64];
 
-  extract Cryptol "SHA384.cry" "block512"
+  extractCryptol "SHA384.cry" "block512"
     as cryptol_Block : ([8][64], [16][64]) -> [8][64];
 
   // We can import constants as well as functions.
-  extract Cryptol "SHA384.cry" "Ks512" as cryptol_K : [80][64];
+  extractCryptol "SHA384.cry" "Ks512" as cryptol_K : [80][64];
 
   // Java imports. (Bouncy Castle)
 
   /* Pure methods, i.e. methods that just produce a return value as a
   function of their inputs, can be imported with minimum fuss. */
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Ch"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Ch"
     pure as java_Ch : (long, long, long) -> long;
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Maj"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Maj"
     pure as java_Maj : (long, long, long) -> long;
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum0"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sum0"
     pure as java_Sum0 : long -> long;
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum1"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sum1"
     pure as java_Sum1 : long -> long;
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma0"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sigma0"
     pure as java_Sigma0 : long -> long;
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
     pure as java_Sigma1 : long -> long;
 
   /* TODO: how to deal with the various models that can be generated
@@ -82,7 +82,7 @@ main = do {
 
   /* "import" takes a language name, a name of some construct within the
   language, and a block of configuration details. */
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.processBlock" {
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.processBlock" {
 
       /* Double colons indicate foreign language types, with the
       specific language determined by context. Variables that need more
@@ -152,7 +152,7 @@ main = do {
       modify this.wOff, this.W;
   }
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.reset"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.reset"
     reset_spec as java_H : Array 8 long;
 
   // Other formats
@@ -166,19 +166,19 @@ main = do {
   // Sigma0 and Sigma1 are macros. TODO: what's the best way to deal with this?
 
   // Pure functions in LLVM are similar to Java.
-  extract LLVM "sha512.bc" "ROTR" pure as llvm_ROTR : ([64], [64]) -> [64];
+  extractLLVM "sha512.bc" "ROTR" pure as llvm_ROTR : ([64], [64]) -> [64];
 
-  extract LLVM "sha512.bc" "Ch"
+  extractLLVM "sha512.bc" "Ch"
     pure as llvm_Ch : ([64], [64], [64]) -> [64];
 
-  extract LLVM "sha512.bc" "Maj"
+  extractLLVM "sha512.bc" "Maj"
     pure as llvm_Maj : ([64], [64], [64]) -> [64];
 
-  extract LLVM "sha512.bc" "Sum0" pure as llvm_Sum0 : [64] -> [64];
+  extractLLVM "sha512.bc" "Sum0" pure as llvm_Sum0 : [64] -> [64];
 
-  extract LLVM "sha512.bc" "Sum1" pure as llvm_Sum1 : [64] -> [64];
+  extractLLVM "sha512.bc" "Sum1" pure as llvm_Sum1 : [64] -> [64];
 
-  extract LLVM "sha512.bc" transform {
+  extractLLVM "sha512.bc" transform {
       data :: [128]byte;
       hd :: [8]long;
       input hd;
@@ -186,7 +186,7 @@ main = do {
       output data;
   } as llvm_Block : (Array 8 long, Array 128 byte) -> Array 128 byte;
 
-  extract LLVM "sha512.bc" transform.k as llvm_k : Array 80 long;
+  extractLLVM "sha512.bc" transform.k as llvm_k : Array 80 long;
 
   // Theorems, properties, equivalences.
 
@@ -207,10 +207,18 @@ main = do {
 
   // Proofs.
 
-  /* We can prove any term of boolean type. */
-  cex1 <- prove llvm_cryptol_Ch using { rewrite; yices; };
+  let and_idem = forall (x :: Bool). x && x -> x;
+  let or_idem = forall (x :: Bool). x || x -> x;
+  let and_or_rules = [and_idem, or_idem];
+
+  /* We can prove or check satisfiability of any term of boolean type. */
+  cex1 <- prove llvm_cryptol_Ch using {
+      goal' <- rewrite goal using and_or_rules;
+      yices goal';
+  };
   cex2 <- prove aig_btor_Sum0 using abc;
   assgn <- sat java_llvm_Ch using picosat;
+  /* The results, cex1, cex2, and assgn are algebraic data types. */
 
   // Exporting theorems ...
   export DIMACS llvm_cryptol_Ch "llvm_cryptol_Ch.cnf";
@@ -224,16 +232,8 @@ main = do {
   // Rewriting with specific options, such as choice of rewrite rules.
 
   // Rewrite only redundant "and" terms.
-  llvm_Block' <- rewrite llvm_Block using only and_idem;
-
-  // Apply all rewrite rules, in-place, to llvm_Block';
-  rewrite llvm_Block';
+  llvm_Block' <- rewrite llvm_Block using [and_idem];
 
   // Rewrite redundant "and" and "or" terms.
   llvm_Transform' <- rewrite llvm_Transform using and_or_rules;
-
-  /* TODO: how should counter-examples/satisfying assignments be bound? The
-  tricky bit is that they may or may not exist, so we either need a
-  Maybe-like type, which we don't have, or conditional bindings, which
-  may make other things tricky. */
 }

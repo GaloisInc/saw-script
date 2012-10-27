@@ -15,51 +15,56 @@ though we may not have them as operators in SAWCore. We'll still
 have them as functions. */
 
 main =
-  extract Cryptol "SHA384.cry" "Ch" >>=
-    \cryptol_Ch : ([64], [64], [64]) -> [64] ->
+  extractCryptol "SHA384.cry" "Ch" >>=
+    \cryptol_Ch : (([64], [64], [64]) -> [64]) ->
 
-  extract Cryptol "SHA384.cry" "Maj" >>=
-    \cryptol_Maj : ([64], [64], [64]) -> [64] ->
+  extractCryptol "SHA384.cry" "Maj" >>=
+    \cryptol_Maj : (([64], [64], [64]) -> [64]) ->
 
-  extract Cryptol "SHA384.cry" "UpperSigma_0" >>=
-    \cryptol_Sum0 : [64] -> [64] ->
+  extractCryptol "SHA384.cry" "UpperSigma_0" >>=
+    \cryptol_Sum0 : ([64] -> [64]) ->
  
-  extract Cryptol "SHA384.cry" "UpperSigma_1" >>=
-    \cryptol_Sum1 : [64] -> [64] ->
+  extractCryptol "SHA384.cry" "UpperSigma_1" >>=
+    \cryptol_Sum1 : ([64] -> [64]) ->
 
-  extract Cryptol "SHA384.cry" "LowerSigma_0" >>=
-    \cryptol_Sigma0 : [64] -> [64] ->
+  extractCryptol "SHA384.cry" "LowerSigma_0" >>=
+    \cryptol_Sigma0 : ([64] -> [64]) ->
 
-  extract Cryptol "SHA384.cry" "LowerSigma_1" >>=
-    \cryptol_Sigma1 : [64] -> [64] ->
+  extractCryptol "SHA384.cry" "LowerSigma_1" >>=
+    \cryptol_Sigma1 : ([64] -> [64]) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.K" pure >>=
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.K" pure >>=
     \java_K : Array 80 long ->
 
-  extract Cryptol "SHA384.cry" "block512" >>=
-    \cryptol_Block : (Array 8 [64], Array 16 [64]) -> Array 8 [64] ->
+  extractCryptol "SHA384.cry" "block512" >>=
+    \cryptol_Block : ((Array 8 [64], Array 16 [64]) -> Array 8 [64]) ->
 
-  extract Cryptol "SHA384.cry" "Ks512" >>= \cryptol_K : Array 80 long ->
+  extractCryptol "SHA384.cry" "Ks512" >>= \cryptol_K : Array 80 long ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Ch"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Ch"
     pure >>= \java_Ch : ((long, long, long) -> long) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Maj"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Maj"
     pure >>= \java_Maj : ((long, long, long) -> long) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum0"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sum0"
     pure >>= \java_Sum0 : (long -> long) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sum1"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sum1"
     pure >>= \java_Sum1 : (long -> long) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma0"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sigma0"
     pure >>= \java_Sigma0 : (long -> long) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
     pure >>= \java_Sigma1 : (long -> long) ->
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.processBlock" (
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.processBlock" (
+      /* This introduces new local names for Java variables, because
+      otherwise it's a little difficult to deal with names like "this.H1",
+      unless we implicitly introduce all variables as records (which is
+      certainly a possibility). I'm open to other suggestions. */
+
       javaVar "this.H1" long >>= \x1 ->
       javaVar "this.H2" long >>= \x2 ->
       javaVar "this.H3" long >>= \x3 ->
@@ -98,14 +103,10 @@ main =
       output x9 >>
       output x10
 
-  ) >>= \java_Block : ((long, long, Array 8 logn, Array 80 long) ->
+  ) >>= \java_Block : ((long, long, Array 8 long, Array 80 long) ->
                        (long, long, Array 8 long, Array 80 long, int)) ->
 
   let reset_spec = (
-      /* This introduces new local names for Java variables, because
-      otherwise it's a little difficult to deal with names like "this.H1",
-      unless we implicitly introduce all variables as records (which is
-      certainly a possibility). I'm open to other suggestions. */
       javaVar "this.H1" long >>= \x1 ->
       javaVar "this.H2" long >>= \x2 ->
       javaVar "this.H3" long >>= \x3 ->
@@ -132,7 +133,7 @@ main =
       modify x12
   ) in
 
-  extract Java "org.bouncycastle.crypto.digests.SHA384Digest.reset"
+  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.reset"
     reset_spec >>= \java_H : (Array 8 long) ->
 
   // Other formats
@@ -141,20 +142,20 @@ main =
 
   load BTOR "Sum0.btor" >>= \btor_Sum0 : ([64] -> [64]) ->
 
-  extract LLVM "sha512.bc" "ROTR" pure >>=
+  extractLLVM "sha512.bc" "ROTR" pure >>=
     \llvm_ROTR : (([64], [64]) -> [64]) ->
 
-  extract LLVM "sha512.bc" "Ch"
+  extractLLVM "sha512.bc" "Ch"
     pure >>= \llvm_Ch : (([64], [64], [64]) -> [64]) ->
 
-  extract LLVM "sha512.bc" "Maj"
+  extractLLVM "sha512.bc" "Maj"
     pure >>= \llvm_Maj : (([64], [64], [64]) -> [64]) ->
 
-  extract LLVM "sha512.bc" "Sum0" pure >>= \llvm_Sum0 : ([64] -> [64]) ->
+  extractLLVM "sha512.bc" "Sum0" pure >>= \llvm_Sum0 : ([64] -> [64]) ->
 
-  extract LLVM "sha512.bc" "Sum1" pure >>= \llvm_Sum1 : ([64] -> [64]) ->
+  extractLLVM "sha512.bc" "Sum1" pure >>= \llvm_Sum1 : ([64] -> [64]) ->
 
-  extract LLVM "sha512.bc" transform (
+  extractLLVM "sha512.bc" transform (
       llvmVar "data" (Array 128 char) >>= \x1 ->
       llvmVar "hd" (Array 8 long) >>= \x2 ->
       input x2 >>
@@ -162,7 +163,7 @@ main =
       output x1
   ) >>= \llvm_Block : ((Array 8 long, Array 8 long) -> Array 128 char) ->
 
-  extract LLVM "sha512.bc" transform.k >>= \llvm_k : Array 80 long ->
+  extractLLVM "sha512.bc" transform.k >>= \llvm_k : Array 80 long ->
 
   /* Assuming we have let bindings for the moment. Could easily be
   translated if we don't. */
