@@ -47,13 +47,13 @@ main = do {
   extractCryptol "SHA384.cry" "LowerSigma_1" as cryptol_Sigma1 : [64] -> [64];
 
   extractJava "org.bouncycastle.crypto.digests.SHA384Digest.K"
-    pure as java_K : [80][64];
+    pure as java_K : Array 80 long;
 
   extractCryptol "SHA384.cry" "block512"
-    as cryptol_Block : ([8][64], [16][64]) -> [8][64];
+    as cryptol_Block : (Array 8 [64], Array 16 [64]) -> Array 8 [64];
 
   // We can import constants as well as functions.
-  extractCryptol "SHA384.cry" "Ks512" as cryptol_K : [80][64];
+  extractCryptol "SHA384.cry" "Ks512" as cryptol_K : Array 80 [64];
 
   // Java imports. (Bouncy Castle)
 
@@ -96,8 +96,10 @@ main = do {
       this.H6 :: long;
       this.H7 :: long;
       this.H8 :: long;
-      this.xBuf :: byte[8];
       this.W :: long[80];
+      this.wOff :: long;
+      this.byteCount1 :: long;
+      this.byteCount2 :: long;
 
       input this.byteCount1, this.byteCount2;
       input this.H1, this.H2, this.H3, this.H4,
@@ -141,7 +143,6 @@ main = do {
       this.wOff :: long;
       output this.H1, this.H2, this.H3, this.H4,
              this.H5, this.H6, this.H7, this.H8;
-      modify this.byteCount1, this.byteCount2;
       modify this.xBufOff, this.xBuf;
       modify this.wOff, this.W;
   }
@@ -173,7 +174,6 @@ main = do {
              this.H6 == refH6 &&
              this.H7 == refH7 &&
              this.H8 == refH8;
-      modify this.byteCount1, this.byteCount2;
       modify this.xBufOff, this.xBuf;
       modify this.wOff, this.W;
 
@@ -181,12 +181,9 @@ main = do {
        * outputs, similar to the expression allowed by 'ensure'.
        */
       /*
-      input ( this.byteCount1, this.byteCount2
-            , [ this.H1, this.H2, this.H3, this.H4
+      output ([ this.H1, this.H2, this.H3, this.H4
               , this.H5, this.H6. this.H7, this.H8
-              ]
-            , this.W
-            );
+              ]);
       */
   }
 
@@ -250,15 +247,15 @@ main = do {
 
   extractLLVM "sha512.bc" "Sum1" pure as llvm_Sum1 : [64] -> [64];
 
-  extractLLVM "sha512.bc" transform {
-      data :: [128]byte;
-      hd :: [8]long;
+  extractLLVM "sha512.bc" "transform" {
+      hd :: long[8];
+      data :: char[128];
       input hd;
       input data;
       output data;
   } as llvm_Block : (Array 8 long, Array 128 byte) -> Array 128 byte;
 
-  extractLLVM "sha512.bc" transform.k as llvm_k : Array 80 long;
+  extractLLVM "sha512.bc" "transform.k" as llvm_k : Array 80 long;
 
   // Theorems, properties, equivalences.
 
