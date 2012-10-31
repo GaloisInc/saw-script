@@ -13,11 +13,12 @@ module Verifier.SAW.Lexer
   ( module Verifier.SAW.Position
   , Token(..)
   , ppToken
-  , ParseError(..)
-  , Parser
-  , lexer
-	, runParser
-  , addError
+  , Buffer(..)
+  , AlexInput
+  , initialAlexInput
+  , alexScan
+  , alexGetByte
+  , AlexReturn(..)
   ) where
 
 import Codec.Binary.UTF8.Generic ()
@@ -30,12 +31,13 @@ import Verifier.SAW.Position
 
 }
 
-$alpha = [a-z A-Z]
-$digit = [0-9]
-$idchar = [$alpha $digit \' \_]
-@num = $digit+
-@varid = [$alpha \_] $idchar*
-@punct = "(" | ")" | "->" | "." | ";" | "::" | "=" | "?" | "??" | "???" | "\\" | "{" | "}"
+$idchar = [a-z A-Z 0-9 \' \_]
+@num = [0-9]+
+@var = [a-z \_] $idchar*
+@con = [A-Z] $idchar*
+
+@punct = "#" | "," | "->" | "." | ";" | "::" | "=" | "?" | "??" | "???" | "\"
+       | "(" | ")" | "[" | "]" | "{" | "}"
 @keywords = "data" | "where"
 @key = @punct | @keywords
 
@@ -47,25 +49,27 @@ $white+;
 "-}"        { \_ -> TCmntE }
 @num        { TNat . read }
 @key        { TKey }
-@varid      { TSym }
+@var        { TVar }
+@con        { TCon }
 .           { TIllegal }
-
 
 {
 data Token
-  = TSym { tokSym :: String }   -- ^ Start of a variable.
+  = TVar { tokVar :: String }   -- ^ Variable identifier (lower case).
+  | TCon { tokCon :: String }   -- ^ Start of a constructor (may be pattern matched). 
   | TNat { tokNat :: Integer }  -- ^ Natural number literal
-  | TKey String    -- ^ Keyword or predefined symbol
-  | TEnd           -- ^ End of file.
-  | TCmntS         -- ^ Start of a block comment
-  | TCmntE         -- ^ End of a block comment. 
+  | TKey String     -- ^ Keyword or predefined symbol
+  | TEnd            -- ^ End of file.
+  | TCmntS          -- ^ Start of a block comment
+  | TCmntE          -- ^ End of a block comment. 
   | TIllegal String -- ^ Illegal character
   deriving (Show)
 
 ppToken :: Token -> String
 ppToken tkn = 
   case tkn of
-    TSym s -> s
+    TVar s -> s
+    TCon s -> s   
     TNat n -> show n
     TKey s -> s
     TEnd -> "END"
@@ -73,86 +77,23 @@ ppToken tkn =
     TCmntE -> "XXXE"
     TIllegal s -> "illegal " ++ show s
 
-data ParseError
-  = UnexpectedLex [Word8]
-  | UnexpectedEndOfBlockComment
-  | UnexpectedToken Token
-  | ParseError String
-  | UnexpectedEnd
-  deriving (Show)
-
 data Buffer = Buffer Char !B.ByteString
 
-type AlexInput = Positioned Buffer
+type AlexInput = PosPair Buffer
+
+initialAlexInput :: FilePath -> B.ByteString -> AlexInput
+initialAlexInput path b = PosPair pos input
+  where pos = Pos { posPath = path, posLine = 1, posCol = 0 }
+        prevChar = error "internal: runLexer prev char undefined"
+        input = Buffer prevChar b
 
 alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar (val -> Buffer c _) = c
 
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte (Positioned p (Buffer _ b)) = fmap fn (B.uncons b)
-  where fn (w,b') = (w, Positioned p' (Buffer c b'))
+alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
+  where fn (w,b') = (w, PosPair p' (Buffer c b'))
           where c     = toEnum (fromIntegral w)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
-
-type ErrorList = [Positioned ParseError]
-
-data ParserState = PS { psInput :: AlexInput, psErrors :: [Positioned ParseError] }
-
-newtype Parser a = Parser { _unParser :: State ParserState a }
-  deriving (Functor, Monad)
-
-addError :: Pos -> ParseError -> Parser ()
-addError p err = Parser $ modify $ \s -> s { psErrors = Positioned p err : psErrors s }
-
-setInput :: AlexInput -> Parser ()
-setInput inp = Parser $ modify $ \s -> s { psInput = inp }
-
-parsePos :: Parser Pos
-parsePos = Parser $ gets (pos . psInput)
-
-lexer :: (Positioned Token -> Parser a) -> Parser a
-lexer f = do
-  let go prevErr next = do
-        let addErrors =
-              case prevErr of
-                Nothing -> return ()
-                Just (po,l) -> addError po (UnexpectedLex (reverse l))
-        s <- Parser get
-        let inp@(Positioned p (Buffer _ b)) = psInput s
-            end = addErrors >> next (Positioned p TEnd)
-        case alexScan inp 0 of
-          AlexEOF -> end
-          AlexError _ ->
-            case alexGetByte inp of
-              Just (w,inp') -> do
-                setInput inp'
-                case prevErr of
-                  Nothing -> go (Just (p,[w])) next
-                  Just (po,l) -> go (Just (po,w:l)) next
-              Nothing -> end
-          AlexSkip inp' _ -> addErrors >> setInput inp' >> go Nothing next
-          AlexToken inp' l act -> do
-            addErrors
-            setInput inp'
-            let v = act (toString (B.take (fromIntegral l) b))
-            next (Positioned p v)
-  let read i tkn =
-        case val tkn of
-          TCmntS -> go Nothing (read (i+1))
-          TCmntE | i > 0 -> go Nothing (read (i-1))
-                 | otherwise -> do
-                     addError (pos tkn) (UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
-                     go Nothing (read 0)
-          _ | i > 0 -> go Nothing (read i)
-            | otherwise -> f tkn 
-  go Nothing (read (0::Integer))
-
-runParser :: FilePath -> B.ByteString -> Parser a -> (a,ErrorList)
-runParser path b (Parser m) = (r, reverse (psErrors s))
-  where prevChar = error "internal: runLexer prev char undefined"
-        pos = Pos { posPath = path, posLine = 1, posCol = 0 }
-        input = Buffer prevChar b
-        initState = PS { psInput = Positioned pos input, psErrors = [] }
-        (r,s) = runState m initState
 }

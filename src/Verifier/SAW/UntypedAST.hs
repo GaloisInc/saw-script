@@ -2,15 +2,17 @@ module Verifier.SAW.UntypedAST
   ( module Verifier.SAW.Position
   , Ident
   , ParamType(..)
+  , LambdaBinding
+  , AppExpr(..)
   , Expr(..)
-  , exprPos
-  , asTypeLambda
-  , LambdaArg
+  , badExpr, badAppExpr
   , CtorDecl(..)
   , Decl(..)
   ) where
 
 import Verifier.SAW.Position
+
+type Ident = String
 
 data ParamType
   = NormalParam
@@ -19,44 +21,73 @@ data ParamType
   | ProofParam
   deriving (Eq, Ord, Show)
 
-type Ident = String
+data AppExpr
+  = IntLit Pos Integer
+  | Var (PosPair Ident)
+  | Con (PosPair Ident)
+    -- | Tuple expressions and their type.
+  | TupleValue Pos [Expr]
+  | TupleType Pos [Expr]
+  | App AppExpr AppExpr
+    -- | Record expressions and their type.
+  | RecordValue Pos [(PosPair Ident, Expr)]
+  | RecordType  Pos [(PosPair Ident, Expr)]
+  | RecordSelector AppExpr (PosPair Ident)
+    -- | Arguments to an array constructor.
+  | ArrayValue Pos [Expr]
+  | Paren Pos Expr
+  | ParamType Pos ParamType AppExpr
+  | BadExpression Pos
+ deriving (Eq, Ord, Show)
 
-type LambdaArg = (Pos, ParamType, Ident, Expr)
+type LambdaBinding e = (ParamType, e)
 
 data Expr
-  = IntLit Pos Integer
-  | Ident (Positioned Ident)
-  | ParamType Pos ParamType Expr
-  | App Expr Expr
+  = AppExpr AppExpr
+    -- | Pi is the type of a lambda expression.
+  | Lambda Pos [LambdaBinding AppExpr] Expr
+  | Pi ParamType [PosPair Ident] Expr Pos Expr
+  -- * Expressions that may appear in parsing, but do not affect value.
   | TypeConstraint Expr Pos Expr
-  | TypeLambda Pos [LambdaArg] Expr -- Lambda not prefixed with backslash (used for type rules)
-  | ValueLambda Pos [LambdaArg] Expr -- Lambda prefixed with backslash ('\'')
-  | Paren Pos Expr
-  | BadExpression Pos
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
-exprPos :: Expr -> Pos
-exprPos (IntLit p _) = p
-exprPos (Ident i) = pos i
-exprPos (ParamType p _ _) = p
-exprPos (App x _) = exprPos x
-exprPos (TypeConstraint _ p _) = p
-exprPos (TypeLambda _ ((p,_,_,_):_) _) = p
-exprPos (TypeLambda p [] _) = p
-exprPos (ValueLambda p _ _) = p
-exprPos (Paren p _) = p
-exprPos (BadExpression p) = p
+instance Positioned AppExpr where
+  pos e =
+    case e of
+      IntLit p _         -> p
+      Var i              -> pos i
+      Con i              -> pos i
+      TupleValue p _     -> p
+      TupleType p _      -> p
+      App x _            -> pos x
+      RecordValue p _    -> p
+      RecordType p _     -> p
+      RecordSelector _ i -> pos i
+      ArrayValue p _     -> p
+      Paren p _          -> p
+      ParamType p _ _    -> p
+      BadExpression p    -> p
+ 
+instance Positioned Expr where
+  pos e =
+    case e of
+      AppExpr ae -> pos ae
+      Lambda p _ _    -> p
+      Pi _ _ _ p _      -> p
+      TypeConstraint _ p _ -> p
 
-asTypeLambda :: Expr -> ([LambdaArg], Expr)
-asTypeLambda (TypeLambda _ l r) = (l,r)
-asTypeLambda e = ([],e)
+badAppExpr :: Pos -> AppExpr
+badAppExpr = BadExpression
+
+badExpr :: Pos -> Expr
+badExpr = AppExpr . BadExpression
 
 -- | Constructor declaration.
-data CtorDecl = Ctor [Positioned Ident] Expr
+data CtorDecl = Ctor (PosPair Ident) Expr
   deriving (Show)
 
 data Decl
-    = TypeDecl [Positioned Ident] Expr
-    | DataDecl (Positioned Ident) Expr [CtorDecl]
-    | TermDef Expr Expr  
+   = TypeDecl [(PosPair Ident)] Expr
+   | DataDecl (PosPair Ident) Expr [CtorDecl]
+   | TermDef (PosPair Ident) [LambdaBinding AppExpr] Expr
   deriving (Show)
