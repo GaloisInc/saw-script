@@ -27,14 +27,22 @@ byte = Signed 8;
 
 /* Built in: [n] = Unsigned n; */
 
+import Cryptol "SHA384.cry" as cryptol_sha384;
+import Java "org.bouncycastle.crypto.digests.SHA384Digest" as java_sha384;
+import LLVM "SHA384.bc" as llvm_sha384;
+
 main = do {
   // Cryptol imports. (Type annotations unnecessary, but helpful documentation.)
 
+  /* Question: should these be commands, and declarative imports? May have both as options? */
   extractCryptol "SHA384.cry" "Ch" as cryptol_Ch : ([64], [64], [64]) -> [64];
   // Alternatively:
   // cryptol_Ch : ([64], [64], [64]) -> [64];
   // cryptol_Ch <- extractCryptol "SHA384.cry" "Ch";
   // Which is nicer?
+
+  cryptol_Ch : ([64], [64], [64]) -> [64];
+  cryptol_Ch <- extractCryptol cryptol_sha384.Ch;
 
   extractCryptol "SHA384.cry" "Maj" as cryptol_Maj : ([64], [64], [64]) -> [64];
 
@@ -79,7 +87,13 @@ main = do {
   extractJava "org.bouncycastle.crypto.digests.SHA384Digest.Sigma1"
     pure as java_Sigma1 : long -> long;
 
-  extractJava "org.bouncycastle.crypto.digests.SHA384Digest.processBlock" {
+  extractJava java_sha384.processBlock (\x1 -> do {
+    this.H1 := x1.H1;
+    run;
+    get [this.H1, this.H2, this.H3, this.H4];
+  })
+
+  extractJava java_sha384.processBlock {
 
       /* Double colons indicate foreign language types, with the
        * specific language determined by context. Variable type
@@ -87,7 +101,7 @@ main = do {
        * of variables by specifying array sizes or subclasses. We
        * need to provide types for all Java variables we mention.
        */
-
+      this :: org.bouncycastle.crypto.digests.SHA384Digest;
       this.H1 :: long;
       this.H2 :: long;
       this.H3 :: long;
@@ -166,7 +180,7 @@ main = do {
        * or 'sat'. Definitions of refH1 to refH8 are omitted for brevity.
        * Expression is evaluated in final context.
        */
-      ensure this.H1 == refH1 &&
+      output this.H1 == refH1 &&
              this.H2 == refH2 &&
              this.H3 == refH3 &&
              this.H4 == refH4 &&
