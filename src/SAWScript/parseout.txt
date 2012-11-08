@@ -9,9 +9,9 @@ Grammar
 	%start_parse -> Statement                          (0)
 	Statement -> 'let' Declarations1                   (1)
 	Statement -> name '::' Type                        (2)
-	Statement -> name Exprs                            (3)
-	Statement -> 'type' name '=' Type                  (4)
-	Statement -> 'import' Import                       (5)
+	Statement -> 'type' name '=' Type                  (3)
+	Statement -> 'import' Import                       (4)
+	Statement -> Expr                                  (5)
 	Declaration -> name Args MaybeType '=' Expr        (6)
 	Import -> name                                     (7)
 	Import -> name '(' CommaSepNames ')'               (8)
@@ -21,52 +21,50 @@ Grammar
 	Arg -> '(' name ':' Type ')'                       (12)
 	Expr -> UnsafeExpr                                 (13)
 	Expr -> SafeExpr                                   (14)
-	UnsafeExpr -> 'fun' Args MaybeType '->' Expr       (15)
-	UnsafeExpr -> 'let' Declarations1 'in' Expr        (16)
-	SafeExpr -> bits MaybeType                         (17)
-	SafeExpr -> string MaybeType                       (18)
-	SafeExpr -> int MaybeType                          (19)
-	SafeExpr -> name MaybeType                         (20)
-	SafeExpr -> '{' CommaSepFields '}' MaybeType       (21)
-	SafeExpr -> '(' Expr ')' MaybeType                 (22)
-	SafeExpr -> ' [' CommaSepExprs ']' MaybeType       (23)
-	SafeExpr -> 'do' '{' SemiSepStatements '}'         (24)
-	SafeExpr -> SafeExpr '.' name MaybeType            (25)
-	SafeExpr -> SafeExpr '[' Expr ']' MaybeType        (26)
-	Field -> name ':' Expr                             (27)
-	Field -> string ':' Expr                           (28)
-	Type -> 'integer'                                  (29)
-	Type -> name                                       (30)
-	Type -> '[' int ']'                                (31)
-	Type -> ' [' int ']'                               (32)
-	Type -> '[' Type ']'                               (33)
-	Type -> ' [' Type ']'                              (34)
-	MaybeType ->                                       (35)
-	MaybeType -> ':' Type                              (36)
-	Declarations1 -> Declaration                       (37)
-	Declarations1 -> Declaration 'and' Declarations1   (38)
-	Args ->                                            (39)
-	Args -> Args1                                      (40)
-	Args1 -> Arg                                       (41)
-	Args1 -> Arg Args1                                 (42)
-	SemiSepStatements ->                               (43)
-	SemiSepStatements -> Statement ';' SemiSepStatements   (44)
-	Exprs ->                                           (45)
-	Exprs -> Exprs1                                    (46)
-	Exprs1 -> Expr                                     (47)
-	Exprs1 -> SafeExpr Exprs1                          (48)
-	CommaSepExprs ->                                   (49)
-	CommaSepExprs -> CommaSepExprs1                    (50)
-	CommaSepExprs1 -> Expr                             (51)
-	CommaSepExprs1 -> Expr ',' CommaSepExprs1          (52)
-	CommaSepFields ->                                  (53)
-	CommaSepFields -> CommaSepFields1                  (54)
-	CommaSepFields1 -> Field                           (55)
-	CommaSepFields1 -> Field ',' CommaSepFields1       (56)
-	CommaSepNames ->                                   (57)
-	CommaSepNames -> CommaSepNames1                    (58)
-	CommaSepNames1 -> name                             (59)
-	CommaSepNames1 -> name ',' CommaSepNames1          (60)
+	Expr -> SafeExpr Expr                              (15)
+	UnsafeExpr -> 'fun' Args MaybeType '->' Expr       (16)
+	UnsafeExpr -> 'let' Declarations1 'in' Expr        (17)
+	UnsafeExpr -> SafeExpr infixOp Expr                (18)
+	SafeExpr -> bits MaybeType                         (19)
+	SafeExpr -> string MaybeType                       (20)
+	SafeExpr -> int MaybeType                          (21)
+	SafeExpr -> name MaybeType                         (22)
+	SafeExpr -> '{' CommaSepFields '}' MaybeType       (23)
+	SafeExpr -> '(' Expr ')'                           (24)
+	SafeExpr -> ' [' CommaSepExprs ']' MaybeType       (25)
+	SafeExpr -> 'do' '{' SemiSepStatements '}'         (26)
+	SafeExpr -> SafeExpr '.' name MaybeType            (27)
+	SafeExpr -> SafeExpr '[' Expr ']' MaybeType        (28)
+	Field -> name ':' Expr                             (29)
+	Field -> string ':' Expr                           (30)
+	Type -> 'integer'                                  (31)
+	Type -> name                                       (32)
+	Type -> '[' int ']'                                (33)
+	Type -> ' [' int ']'                               (34)
+	Type -> '[' Type ']'                               (35)
+	Type -> ' [' Type ']'                              (36)
+	MaybeType ->                                       (37)
+	MaybeType -> ':' Type                              (38)
+	Declarations1 -> Declaration                       (39)
+	Declarations1 -> Declaration 'and' Declarations1   (40)
+	Args ->                                            (41)
+	Args -> Args1                                      (42)
+	Args1 -> Arg                                       (43)
+	Args1 -> Arg Args1                                 (44)
+	SemiSepStatements ->                               (45)
+	SemiSepStatements -> Statement ';' SemiSepStatements   (46)
+	CommaSepExprs ->                                   (47)
+	CommaSepExprs -> CommaSepExprs1                    (48)
+	CommaSepExprs1 -> Expr                             (49)
+	CommaSepExprs1 -> Expr ',' CommaSepExprs1          (50)
+	CommaSepFields ->                                  (51)
+	CommaSepFields -> CommaSepFields1                  (52)
+	CommaSepFields1 -> Field                           (53)
+	CommaSepFields1 -> Field ',' CommaSepFields1       (54)
+	CommaSepNames ->                                   (55)
+	CommaSepNames -> CommaSepNames1                    (56)
+	CommaSepNames1 -> name                             (57)
+	CommaSepNames1 -> name ',' CommaSepNames1          (58)
 
 -----------------------------------------------------------------------------
 Terminals
@@ -94,6 +92,7 @@ Terminals
 	'}'            { T.OutfixR    _ "}" }
 	'['            { T.Postfix    _ "[" }
 	'.'            { T.Postfix    _ "." }
+	infixOp        { T.Infix      _ $$ }
 	bits           { T.Bitfield   _ $$ }
 	string         { T.String     _ $$ }
 	int            { T.Integer    _ $$ }
@@ -107,24 +106,22 @@ Non-terminals
 	Declaration     rule  6
 	Import          rules 7, 8, 9, 10
 	Arg             rules 11, 12
-	Expr            rules 13, 14
-	UnsafeExpr      rules 15, 16
-	SafeExpr        rules 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
-	Field           rules 27, 28
-	Type            rules 29, 30, 31, 32, 33, 34
-	MaybeType       rules 35, 36
-	Declarations1   rules 37, 38
-	Args            rules 39, 40
-	Args1           rules 41, 42
-	SemiSepStatements rules 43, 44
-	Exprs           rules 45, 46
-	Exprs1          rules 47, 48
-	CommaSepExprs   rules 49, 50
-	CommaSepExprs1  rules 51, 52
-	CommaSepFields  rules 53, 54
-	CommaSepFields1 rules 55, 56
-	CommaSepNames   rules 57, 58
-	CommaSepNames1  rules 59, 60
+	Expr            rules 13, 14, 15
+	UnsafeExpr      rules 16, 17, 18
+	SafeExpr        rules 19, 20, 21, 22, 23, 24, 25, 26, 27, 28
+	Field           rules 29, 30
+	Type            rules 31, 32, 33, 34, 35, 36
+	MaybeType       rules 37, 38
+	Declarations1   rules 39, 40
+	Args            rules 41, 42
+	Args1           rules 43, 44
+	SemiSepStatements rules 45, 46
+	CommaSepExprs   rules 47, 48
+	CommaSepExprs1  rules 49, 50
+	CommaSepFields  rules 51, 52
+	CommaSepFields1 rules 53, 54
+	CommaSepNames   rules 55, 56
+	CommaSepNames1  rules 57, 58
 
 -----------------------------------------------------------------------------
 States
@@ -132,12 +129,23 @@ States
 State 0
 
 
-	'import'       shift, and enter state 4
-	'let'          shift, and enter state 2
-	'type'         shift, and enter state 5
-	name           shift, and enter state 6
+	'import'       shift, and enter state 7
+	'let'          shift, and enter state 8
+	'fun'          shift, and enter state 9
+	'type'         shift, and enter state 10
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 18
 
 	Statement      goto state 3
+	Expr           goto state 4
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
 
 State 1
 
@@ -149,10 +157,10 @@ State 2
 
 	Statement -> 'let' . Declarations1                  (rule 1)
 
-	name           shift, and enter state 28
+	name           shift, and enter state 45
 
-	Declaration    goto state 26
-	Declarations1  goto state 27
+	Declaration    goto state 43
+	Declarations1  goto state 52
 
 State 3
 
@@ -163,53 +171,13 @@ State 3
 
 State 4
 
-	Statement -> 'import' . Import                      (rule 5)
+	Statement -> Expr .                                 (rule 5)
 
-	name           shift, and enter state 25
+	';'            reduce using rule 5
+	%eof           reduce using rule 5
 
-	Import         goto state 24
 
 State 5
-
-	Statement -> 'type' . name '=' Type                 (rule 4)
-
-	name           shift, and enter state 23
-
-
-State 6
-
-	Statement -> name . '::' Type                       (rule 2)
-	Statement -> name . Exprs                           (rule 3)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	';'            reduce using rule 45
-	'::'           shift, and enter state 15
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-	%eof           reduce using rule 45
-
-	Expr           goto state 7
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 9
-	Exprs          goto state 10
-	Exprs1         goto state 11
-
-State 7
-
-	Exprs1 -> Expr .                                    (rule 47)
-
-	';'            reduce using rule 47
-	%eof           reduce using rule 47
-
-
-State 8
 
 	Expr -> UnsafeExpr .                                (rule 13)
 
@@ -223,1243 +191,253 @@ State 8
 	%eof           reduce using rule 13
 
 
-State 9
+State 6
 
 	Expr -> SafeExpr .                                  (rule 14)
-	SafeExpr -> SafeExpr . '.' name MaybeType           (rule 25)
-	SafeExpr -> SafeExpr . '[' Expr ']' MaybeType       (rule 26)
-	Exprs1 -> SafeExpr . Exprs1                         (rule 48)
+	Expr -> SafeExpr . Expr                             (rule 15)
+	UnsafeExpr -> SafeExpr . infixOp Expr               (rule 18)
+	SafeExpr -> SafeExpr . '.' name MaybeType           (rule 27)
+	SafeExpr -> SafeExpr . '[' Expr ']' MaybeType       (rule 28)
 
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
+	'let'          shift, and enter state 33
+	'and'          reduce using rule 14
+	'fun'          shift, and enter state 9
+	'in'           reduce using rule 14
+	'do'           shift, and enter state 11
 	';'            reduce using rule 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	'['            shift, and enter state 62
-	'.'            shift, and enter state 63
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
+	','            reduce using rule 14
+	'('            shift, and enter state 12
+	')'            reduce using rule 14
+	' ['           shift, and enter state 13
+	']'            reduce using rule 14
+	'{'            shift, and enter state 14
+	'}'            reduce using rule 14
+	'['            shift, and enter state 49
+	'.'            shift, and enter state 50
+	infixOp        shift, and enter state 51
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
 	%eof           reduce using rule 14
 
-	Expr           goto state 7
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 9
-	Exprs1         goto state 61
+	Expr           goto state 48
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 7
+
+	Statement -> 'import' . Import                      (rule 4)
+
+	name           shift, and enter state 47
+
+	Import         goto state 46
+
+State 8
+
+	Statement -> 'let' . Declarations1                  (rule 1)
+	UnsafeExpr -> 'let' . Declarations1 'in' Expr       (rule 17)
+
+	name           shift, and enter state 45
+
+	Declaration    goto state 43
+	Declarations1  goto state 44
+
+State 9
+
+	UnsafeExpr -> 'fun' . Args MaybeType '->' Expr      (rule 16)
+
+	'->'           reduce using rule 41
+	':'            reduce using rule 41
+	'('            shift, and enter state 41
+	name           shift, and enter state 42
+
+	Arg            goto state 38
+	Args           goto state 39
+	Args1          goto state 40
 
 State 10
 
-	Statement -> name Exprs .                           (rule 3)
+	Statement -> 'type' . name '=' Type                 (rule 3)
 
-	';'            reduce using rule 3
-	%eof           reduce using rule 3
+	name           shift, and enter state 37
 
 
 State 11
 
-	Exprs -> Exprs1 .                                   (rule 46)
+	SafeExpr -> 'do' . '{' SemiSepStatements '}'        (rule 26)
 
-	';'            reduce using rule 46
-	%eof           reduce using rule 46
+	'{'            shift, and enter state 36
 
 
 State 12
 
-	UnsafeExpr -> 'let' . Declarations1 'in' Expr       (rule 16)
+	SafeExpr -> '(' . Expr ')'                          (rule 24)
 
-	name           shift, and enter state 28
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
 
-	Declaration    goto state 26
-	Declarations1  goto state 60
+	Expr           goto state 35
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
 
 State 13
 
-	UnsafeExpr -> 'fun' . Args MaybeType '->' Expr      (rule 15)
+	SafeExpr -> ' [' . CommaSepExprs ']' MaybeType      (rule 25)
 
-	'->'           reduce using rule 39
-	':'            reduce using rule 39
-	'('            shift, and enter state 32
-	name           shift, and enter state 33
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	']'            reduce using rule 47
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
 
-	Arg            goto state 29
-	Args           goto state 59
-	Args1          goto state 31
+	Expr           goto state 30
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+	CommaSepExprs  goto state 31
+	CommaSepExprs1 goto state 32
 
 State 14
 
-	SafeExpr -> 'do' . '{' SemiSepStatements '}'        (rule 24)
+	SafeExpr -> '{' . CommaSepFields '}' MaybeType      (rule 23)
 
-	'{'            shift, and enter state 58
+	'}'            reduce using rule 51
+	string         shift, and enter state 28
+	name           shift, and enter state 29
 
+	Field          goto state 25
+	CommaSepFields goto state 26
+	CommaSepFields1goto state 27
 
 State 15
 
-	Statement -> name '::' . Type                       (rule 2)
+	SafeExpr -> bits . MaybeType                        (rule 19)
 
-	'integer'      shift, and enter state 54
-	' ['           shift, and enter state 55
-	'['            shift, and enter state 56
-	name           shift, and enter state 57
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
 
-	Type           goto state 53
+	MaybeType      goto state 24
 
 State 16
 
-	SafeExpr -> '(' . Expr ')' MaybeType                (rule 22)
+	SafeExpr -> string . MaybeType                      (rule 20)
 
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
 
-	Expr           goto state 52
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
+	MaybeType      goto state 23
 
 State 17
 
-	SafeExpr -> ' [' . CommaSepExprs ']' MaybeType      (rule 23)
+	SafeExpr -> int . MaybeType                         (rule 21)
 
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	']'            reduce using rule 49
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
 
-	Expr           goto state 48
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-	CommaSepExprs  goto state 50
-	CommaSepExprs1 goto state 51
+	MaybeType      goto state 22
 
 State 18
 
-	SafeExpr -> '{' . CommaSepFields '}' MaybeType      (rule 21)
+	Statement -> name . '::' Type                       (rule 2)
+	SafeExpr -> name . MaybeType                        (rule 22)
 
-	'}'            reduce using rule 53
-	string         shift, and enter state 46
-	name           shift, and enter state 47
+	'let'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	':'            shift, and enter state 20
+	'::'           shift, and enter state 21
+	'('            reduce using rule 37
+	' ['           reduce using rule 37
+	'{'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
 
-	Field          goto state 43
-	CommaSepFields goto state 44
-	CommaSepFields1goto state 45
+	MaybeType      goto state 19
 
 State 19
 
-	SafeExpr -> bits . MaybeType                        (rule 17)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 42
-
-State 20
-
-	SafeExpr -> string . MaybeType                      (rule 18)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 41
-
-State 21
-
-	SafeExpr -> int . MaybeType                         (rule 19)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 40
-
-State 22
-
-	SafeExpr -> name . MaybeType                        (rule 20)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 38
-
-State 23
-
-	Statement -> 'type' name . '=' Type                 (rule 4)
-
-	'='            shift, and enter state 37
-
-
-State 24
-
-	Statement -> 'import' Import .                      (rule 5)
-
-	';'            reduce using rule 5
-	%eof           reduce using rule 5
-
-
-State 25
-
-	Import -> name .                                    (rule 7)
-	Import -> name . '(' CommaSepNames ')'              (rule 8)
-	Import -> name . 'as' name                          (rule 9)
-	Import -> name . '(' CommaSepNames ')' 'as' name    (rule 10)
-
-	'as'           shift, and enter state 35
-	';'            reduce using rule 7
-	'('            shift, and enter state 36
-	%eof           reduce using rule 7
-
-
-State 26
-
-	Declarations1 -> Declaration .                      (rule 37)
-	Declarations1 -> Declaration . 'and' Declarations1    (rule 38)
-
-	'and'          shift, and enter state 34
-	'in'           reduce using rule 37
-	';'            reduce using rule 37
-	%eof           reduce using rule 37
-
-
-State 27
-
-	Statement -> 'let' Declarations1 .                  (rule 1)
-
-	';'            reduce using rule 1
-	%eof           reduce using rule 1
-
-
-State 28
-
-	Declaration -> name . Args MaybeType '=' Expr       (rule 6)
-
-	'='            reduce using rule 39
-	':'            reduce using rule 39
-	'('            shift, and enter state 32
-	name           shift, and enter state 33
-
-	Arg            goto state 29
-	Args           goto state 30
-	Args1          goto state 31
-
-State 29
-
-	Args1 -> Arg .                                      (rule 41)
-	Args1 -> Arg . Args1                                (rule 42)
-
-	'='            reduce using rule 41
-	'->'           reduce using rule 41
-	':'            reduce using rule 41
-	'('            shift, and enter state 32
-	name           shift, and enter state 33
-
-	Arg            goto state 29
-	Args1          goto state 90
-
-State 30
-
-	Declaration -> name Args . MaybeType '=' Expr       (rule 6)
-
-	'='            reduce using rule 35
-	':'            shift, and enter state 39
-
-	MaybeType      goto state 89
-
-State 31
-
-	Args -> Args1 .                                     (rule 40)
-
-	'='            reduce using rule 40
-	'->'           reduce using rule 40
-	':'            reduce using rule 40
-
-
-State 32
-
-	Arg -> '(' . name ':' Type ')'                      (rule 12)
-
-	name           shift, and enter state 88
-
-
-State 33
-
-	Arg -> name .                                       (rule 11)
-
-	'='            reduce using rule 11
-	'->'           reduce using rule 11
-	':'            reduce using rule 11
-	'('            reduce using rule 11
-	name           reduce using rule 11
-
-
-State 34
-
-	Declarations1 -> Declaration 'and' . Declarations1    (rule 38)
-
-	name           shift, and enter state 28
-
-	Declaration    goto state 26
-	Declarations1  goto state 87
-
-State 35
-
-	Import -> name 'as' . name                          (rule 9)
-
-	name           shift, and enter state 86
-
-
-State 36
-
-	Import -> name '(' . CommaSepNames ')'              (rule 8)
-	Import -> name '(' . CommaSepNames ')' 'as' name    (rule 10)
-
-	')'            reduce using rule 57
-	name           shift, and enter state 85
-
-	CommaSepNames  goto state 83
-	CommaSepNames1 goto state 84
-
-State 37
-
-	Statement -> 'type' name '=' . Type                 (rule 4)
-
-	'integer'      shift, and enter state 54
-	' ['           shift, and enter state 55
-	'['            shift, and enter state 56
-	name           shift, and enter state 57
-
-	Type           goto state 82
-
-State 38
-
-	SafeExpr -> name MaybeType .                        (rule 20)
-
-	'let'          reduce using rule 20
-	'and'          reduce using rule 20
-	'fun'          reduce using rule 20
-	'in'           reduce using rule 20
-	'do'           reduce using rule 20
-	';'            reduce using rule 20
-	','            reduce using rule 20
-	'('            reduce using rule 20
-	')'            reduce using rule 20
-	' ['           reduce using rule 20
-	']'            reduce using rule 20
-	'{'            reduce using rule 20
-	'}'            reduce using rule 20
-	'['            reduce using rule 20
-	'.'            reduce using rule 20
-	bits           reduce using rule 20
-	string         reduce using rule 20
-	int            reduce using rule 20
-	name           reduce using rule 20
-	%eof           reduce using rule 20
-
-
-State 39
-
-	MaybeType -> ':' . Type                             (rule 36)
-
-	'integer'      shift, and enter state 54
-	' ['           shift, and enter state 55
-	'['            shift, and enter state 56
-	name           shift, and enter state 57
-
-	Type           goto state 81
-
-State 40
-
-	SafeExpr -> int MaybeType .                         (rule 19)
-
-	'let'          reduce using rule 19
-	'and'          reduce using rule 19
-	'fun'          reduce using rule 19
-	'in'           reduce using rule 19
-	'do'           reduce using rule 19
-	';'            reduce using rule 19
-	','            reduce using rule 19
-	'('            reduce using rule 19
-	')'            reduce using rule 19
-	' ['           reduce using rule 19
-	']'            reduce using rule 19
-	'{'            reduce using rule 19
-	'}'            reduce using rule 19
-	'['            reduce using rule 19
-	'.'            reduce using rule 19
-	bits           reduce using rule 19
-	string         reduce using rule 19
-	int            reduce using rule 19
-	name           reduce using rule 19
-	%eof           reduce using rule 19
-
-
-State 41
-
-	SafeExpr -> string MaybeType .                      (rule 18)
-
-	'let'          reduce using rule 18
-	'and'          reduce using rule 18
-	'fun'          reduce using rule 18
-	'in'           reduce using rule 18
-	'do'           reduce using rule 18
-	';'            reduce using rule 18
-	','            reduce using rule 18
-	'('            reduce using rule 18
-	')'            reduce using rule 18
-	' ['           reduce using rule 18
-	']'            reduce using rule 18
-	'{'            reduce using rule 18
-	'}'            reduce using rule 18
-	'['            reduce using rule 18
-	'.'            reduce using rule 18
-	bits           reduce using rule 18
-	string         reduce using rule 18
-	int            reduce using rule 18
-	name           reduce using rule 18
-	%eof           reduce using rule 18
-
-
-State 42
-
-	SafeExpr -> bits MaybeType .                        (rule 17)
-
-	'let'          reduce using rule 17
-	'and'          reduce using rule 17
-	'fun'          reduce using rule 17
-	'in'           reduce using rule 17
-	'do'           reduce using rule 17
-	';'            reduce using rule 17
-	','            reduce using rule 17
-	'('            reduce using rule 17
-	')'            reduce using rule 17
-	' ['           reduce using rule 17
-	']'            reduce using rule 17
-	'{'            reduce using rule 17
-	'}'            reduce using rule 17
-	'['            reduce using rule 17
-	'.'            reduce using rule 17
-	bits           reduce using rule 17
-	string         reduce using rule 17
-	int            reduce using rule 17
-	name           reduce using rule 17
-	%eof           reduce using rule 17
-
-
-State 43
-
-	CommaSepFields1 -> Field .                          (rule 55)
-	CommaSepFields1 -> Field . ',' CommaSepFields1      (rule 56)
-
-	','            shift, and enter state 80
-	'}'            reduce using rule 55
-
-
-State 44
-
-	SafeExpr -> '{' CommaSepFields . '}' MaybeType      (rule 21)
-
-	'}'            shift, and enter state 79
-
-
-State 45
-
-	CommaSepFields -> CommaSepFields1 .                 (rule 54)
-
-	'}'            reduce using rule 54
-
-
-State 46
-
-	Field -> string . ':' Expr                          (rule 28)
-
-	':'            shift, and enter state 78
-
-
-State 47
-
-	Field -> name . ':' Expr                            (rule 27)
-
-	':'            shift, and enter state 77
-
-
-State 48
-
-	CommaSepExprs1 -> Expr .                            (rule 51)
-	CommaSepExprs1 -> Expr . ',' CommaSepExprs1         (rule 52)
-
-	','            shift, and enter state 76
-	']'            reduce using rule 51
-
-
-State 49
-
-	Expr -> SafeExpr .                                  (rule 14)
-	SafeExpr -> SafeExpr . '.' name MaybeType           (rule 25)
-	SafeExpr -> SafeExpr . '[' Expr ']' MaybeType       (rule 26)
-
-	'and'          reduce using rule 14
-	'in'           reduce using rule 14
-	';'            reduce using rule 14
-	','            reduce using rule 14
-	')'            reduce using rule 14
-	']'            reduce using rule 14
-	'}'            reduce using rule 14
-	'['            shift, and enter state 62
-	'.'            shift, and enter state 63
-	%eof           reduce using rule 14
-
-
-State 50
-
-	SafeExpr -> ' [' CommaSepExprs . ']' MaybeType      (rule 23)
-
-	']'            shift, and enter state 75
-
-
-State 51
-
-	CommaSepExprs -> CommaSepExprs1 .                   (rule 50)
-
-	']'            reduce using rule 50
-
-
-State 52
-
-	SafeExpr -> '(' Expr . ')' MaybeType                (rule 22)
-
-	')'            shift, and enter state 74
-
-
-State 53
-
-	Statement -> name '::' Type .                       (rule 2)
-
-	';'            reduce using rule 2
-	%eof           reduce using rule 2
-
-
-State 54
-
-	Type -> 'integer' .                                 (rule 29)
-
-	'let'          reduce using rule 29
-	'and'          reduce using rule 29
-	'fun'          reduce using rule 29
-	'in'           reduce using rule 29
-	'do'           reduce using rule 29
-	'='            reduce using rule 29
-	'->'           reduce using rule 29
-	';'            reduce using rule 29
-	','            reduce using rule 29
-	'('            reduce using rule 29
-	')'            reduce using rule 29
-	' ['           reduce using rule 29
-	']'            reduce using rule 29
-	'{'            reduce using rule 29
-	'}'            reduce using rule 29
-	'['            reduce using rule 29
-	'.'            reduce using rule 29
-	bits           reduce using rule 29
-	string         reduce using rule 29
-	int            reduce using rule 29
-	name           reduce using rule 29
-	%eof           reduce using rule 29
-
-
-State 55
-
-	Type -> ' [' . int ']'                              (rule 32)
-	Type -> ' [' . Type ']'                             (rule 34)
-
-	'integer'      shift, and enter state 54
-	' ['           shift, and enter state 55
-	'['            shift, and enter state 56
-	int            shift, and enter state 73
-	name           shift, and enter state 57
-
-	Type           goto state 72
-
-State 56
-
-	Type -> '[' . int ']'                               (rule 31)
-	Type -> '[' . Type ']'                              (rule 33)
-
-	'integer'      shift, and enter state 54
-	' ['           shift, and enter state 55
-	'['            shift, and enter state 56
-	int            shift, and enter state 71
-	name           shift, and enter state 57
-
-	Type           goto state 70
-
-State 57
-
-	Type -> name .                                      (rule 30)
-
-	'let'          reduce using rule 30
-	'and'          reduce using rule 30
-	'fun'          reduce using rule 30
-	'in'           reduce using rule 30
-	'do'           reduce using rule 30
-	'='            reduce using rule 30
-	'->'           reduce using rule 30
-	';'            reduce using rule 30
-	','            reduce using rule 30
-	'('            reduce using rule 30
-	')'            reduce using rule 30
-	' ['           reduce using rule 30
-	']'            reduce using rule 30
-	'{'            reduce using rule 30
-	'}'            reduce using rule 30
-	'['            reduce using rule 30
-	'.'            reduce using rule 30
-	bits           reduce using rule 30
-	string         reduce using rule 30
-	int            reduce using rule 30
-	name           reduce using rule 30
-	%eof           reduce using rule 30
-
-
-State 58
-
-	SafeExpr -> 'do' '{' . SemiSepStatements '}'        (rule 24)
-
-	'import'       shift, and enter state 4
-	'let'          shift, and enter state 2
-	'type'         shift, and enter state 5
-	'}'            reduce using rule 43
-	name           shift, and enter state 6
-
-	Statement      goto state 68
-	SemiSepStatementsgoto state 69
-
-State 59
-
-	UnsafeExpr -> 'fun' Args . MaybeType '->' Expr      (rule 15)
-
-	'->'           reduce using rule 35
-	':'            shift, and enter state 39
-
-	MaybeType      goto state 67
-
-State 60
-
-	UnsafeExpr -> 'let' Declarations1 . 'in' Expr       (rule 16)
-
-	'in'           shift, and enter state 66
-
-
-State 61
-
-	Exprs1 -> SafeExpr Exprs1 .                         (rule 48)
-
-	';'            reduce using rule 48
-	%eof           reduce using rule 48
-
-
-State 62
-
-	SafeExpr -> SafeExpr '[' . Expr ']' MaybeType       (rule 26)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 65
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-
-State 63
-
-	SafeExpr -> SafeExpr '.' . name MaybeType           (rule 25)
-
-	name           shift, and enter state 64
-
-
-State 64
-
-	SafeExpr -> SafeExpr '.' name . MaybeType           (rule 25)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 111
-
-State 65
-
-	SafeExpr -> SafeExpr '[' Expr . ']' MaybeType       (rule 26)
-
-	']'            shift, and enter state 110
-
-
-State 66
-
-	UnsafeExpr -> 'let' Declarations1 'in' . Expr       (rule 16)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 109
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-
-State 67
-
-	UnsafeExpr -> 'fun' Args MaybeType . '->' Expr      (rule 15)
-
-	'->'           shift, and enter state 108
-
-
-State 68
-
-	SemiSepStatements -> Statement . ';' SemiSepStatements    (rule 44)
-
-	';'            shift, and enter state 107
-
-
-State 69
-
-	SafeExpr -> 'do' '{' SemiSepStatements . '}'        (rule 24)
-
-	'}'            shift, and enter state 106
-
-
-State 70
-
-	Type -> '[' Type . ']'                              (rule 33)
-
-	']'            shift, and enter state 105
-
-
-State 71
-
-	Type -> '[' int . ']'                               (rule 31)
-
-	']'            shift, and enter state 104
-
-
-State 72
-
-	Type -> ' [' Type . ']'                             (rule 34)
-
-	']'            shift, and enter state 103
-
-
-State 73
-
-	Type -> ' [' int . ']'                              (rule 32)
-
-	']'            shift, and enter state 102
-
-
-State 74
-
-	SafeExpr -> '(' Expr ')' . MaybeType                (rule 22)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 101
-
-State 75
-
-	SafeExpr -> ' [' CommaSepExprs ']' . MaybeType      (rule 23)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 100
-
-State 76
-
-	CommaSepExprs1 -> Expr ',' . CommaSepExprs1         (rule 52)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 48
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-	CommaSepExprs1 goto state 99
-
-State 77
-
-	Field -> name ':' . Expr                            (rule 27)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 98
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-
-State 78
-
-	Field -> string ':' . Expr                          (rule 28)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 97
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-
-State 79
-
-	SafeExpr -> '{' CommaSepFields '}' . MaybeType      (rule 21)
-
-	'let'          reduce using rule 35
-	'and'          reduce using rule 35
-	'fun'          reduce using rule 35
-	'in'           reduce using rule 35
-	'do'           reduce using rule 35
-	';'            reduce using rule 35
-	','            reduce using rule 35
-	':'            shift, and enter state 39
-	'('            reduce using rule 35
-	')'            reduce using rule 35
-	' ['           reduce using rule 35
-	']'            reduce using rule 35
-	'{'            reduce using rule 35
-	'}'            reduce using rule 35
-	'['            reduce using rule 35
-	'.'            reduce using rule 35
-	bits           reduce using rule 35
-	string         reduce using rule 35
-	int            reduce using rule 35
-	name           reduce using rule 35
-	%eof           reduce using rule 35
-
-	MaybeType      goto state 96
-
-State 80
-
-	CommaSepFields1 -> Field ',' . CommaSepFields1      (rule 56)
-
-	string         shift, and enter state 46
-	name           shift, and enter state 47
-
-	Field          goto state 43
-	CommaSepFields1goto state 95
-
-State 81
-
-	MaybeType -> ':' Type .                             (rule 36)
-
-	'let'          reduce using rule 36
-	'and'          reduce using rule 36
-	'fun'          reduce using rule 36
-	'in'           reduce using rule 36
-	'do'           reduce using rule 36
-	'='            reduce using rule 36
-	'->'           reduce using rule 36
-	';'            reduce using rule 36
-	','            reduce using rule 36
-	'('            reduce using rule 36
-	')'            reduce using rule 36
-	' ['           reduce using rule 36
-	']'            reduce using rule 36
-	'{'            reduce using rule 36
-	'}'            reduce using rule 36
-	'['            reduce using rule 36
-	'.'            reduce using rule 36
-	bits           reduce using rule 36
-	string         reduce using rule 36
-	int            reduce using rule 36
-	name           reduce using rule 36
-	%eof           reduce using rule 36
-
-
-State 82
-
-	Statement -> 'type' name '=' Type .                 (rule 4)
-
-	';'            reduce using rule 4
-	%eof           reduce using rule 4
-
-
-State 83
-
-	Import -> name '(' CommaSepNames . ')'              (rule 8)
-	Import -> name '(' CommaSepNames . ')' 'as' name    (rule 10)
-
-	')'            shift, and enter state 94
-
-
-State 84
-
-	CommaSepNames -> CommaSepNames1 .                   (rule 58)
-
-	')'            reduce using rule 58
-
-
-State 85
-
-	CommaSepNames1 -> name .                            (rule 59)
-	CommaSepNames1 -> name . ',' CommaSepNames1         (rule 60)
-
-	','            shift, and enter state 93
-	')'            reduce using rule 59
-
-
-State 86
-
-	Import -> name 'as' name .                          (rule 9)
-
-	';'            reduce using rule 9
-	%eof           reduce using rule 9
-
-
-State 87
-
-	Declarations1 -> Declaration 'and' Declarations1 .    (rule 38)
-
-	'in'           reduce using rule 38
-	';'            reduce using rule 38
-	%eof           reduce using rule 38
-
-
-State 88
-
-	Arg -> '(' name . ':' Type ')'                      (rule 12)
-
-	':'            shift, and enter state 92
-
-
-State 89
-
-	Declaration -> name Args MaybeType . '=' Expr       (rule 6)
-
-	'='            shift, and enter state 91
-
-
-State 90
-
-	Args1 -> Arg Args1 .                                (rule 42)
-
-	'='            reduce using rule 42
-	'->'           reduce using rule 42
-	':'            reduce using rule 42
-
-
-State 91
-
-	Declaration -> name Args MaybeType '=' . Expr       (rule 6)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 118
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-
-State 92
-
-	Arg -> '(' name ':' . Type ')'                      (rule 12)
-
-	'integer'      shift, and enter state 54
-	' ['           shift, and enter state 55
-	'['            shift, and enter state 56
-	name           shift, and enter state 57
-
-	Type           goto state 117
-
-State 93
-
-	CommaSepNames1 -> name ',' . CommaSepNames1         (rule 60)
-
-	name           shift, and enter state 85
-
-	CommaSepNames1 goto state 116
-
-State 94
-
-	Import -> name '(' CommaSepNames ')' .              (rule 8)
-	Import -> name '(' CommaSepNames ')' . 'as' name    (rule 10)
-
-	'as'           shift, and enter state 115
-	';'            reduce using rule 8
-	%eof           reduce using rule 8
-
-
-State 95
-
-	CommaSepFields1 -> Field ',' CommaSepFields1 .      (rule 56)
-
-	'}'            reduce using rule 56
-
-
-State 96
-
-	SafeExpr -> '{' CommaSepFields '}' MaybeType .      (rule 21)
-
-	'let'          reduce using rule 21
-	'and'          reduce using rule 21
-	'fun'          reduce using rule 21
-	'in'           reduce using rule 21
-	'do'           reduce using rule 21
-	';'            reduce using rule 21
-	','            reduce using rule 21
-	'('            reduce using rule 21
-	')'            reduce using rule 21
-	' ['           reduce using rule 21
-	']'            reduce using rule 21
-	'{'            reduce using rule 21
-	'}'            reduce using rule 21
-	'['            reduce using rule 21
-	'.'            reduce using rule 21
-	bits           reduce using rule 21
-	string         reduce using rule 21
-	int            reduce using rule 21
-	name           reduce using rule 21
-	%eof           reduce using rule 21
-
-
-State 97
-
-	Field -> string ':' Expr .                          (rule 28)
-
-	','            reduce using rule 28
-	'}'            reduce using rule 28
-
-
-State 98
-
-	Field -> name ':' Expr .                            (rule 27)
-
-	','            reduce using rule 27
-	'}'            reduce using rule 27
-
-
-State 99
-
-	CommaSepExprs1 -> Expr ',' CommaSepExprs1 .         (rule 52)
-
-	']'            reduce using rule 52
-
-
-State 100
-
-	SafeExpr -> ' [' CommaSepExprs ']' MaybeType .      (rule 23)
-
-	'let'          reduce using rule 23
-	'and'          reduce using rule 23
-	'fun'          reduce using rule 23
-	'in'           reduce using rule 23
-	'do'           reduce using rule 23
-	';'            reduce using rule 23
-	','            reduce using rule 23
-	'('            reduce using rule 23
-	')'            reduce using rule 23
-	' ['           reduce using rule 23
-	']'            reduce using rule 23
-	'{'            reduce using rule 23
-	'}'            reduce using rule 23
-	'['            reduce using rule 23
-	'.'            reduce using rule 23
-	bits           reduce using rule 23
-	string         reduce using rule 23
-	int            reduce using rule 23
-	name           reduce using rule 23
-	%eof           reduce using rule 23
-
-
-State 101
-
-	SafeExpr -> '(' Expr ')' MaybeType .                (rule 22)
+	SafeExpr -> name MaybeType .                        (rule 22)
 
 	'let'          reduce using rule 22
 	'and'          reduce using rule 22
@@ -1476,6 +454,7 @@ State 101
 	'}'            reduce using rule 22
 	'['            reduce using rule 22
 	'.'            reduce using rule 22
+	infixOp        reduce using rule 22
 	bits           reduce using rule 22
 	string         reduce using rule 22
 	int            reduce using rule 22
@@ -1483,65 +462,739 @@ State 101
 	%eof           reduce using rule 22
 
 
-State 102
+State 20
 
-	Type -> ' [' int ']' .                              (rule 32)
+	MaybeType -> ':' . Type                             (rule 38)
 
-	'let'          reduce using rule 32
-	'and'          reduce using rule 32
-	'fun'          reduce using rule 32
-	'in'           reduce using rule 32
-	'do'           reduce using rule 32
-	'='            reduce using rule 32
-	'->'           reduce using rule 32
-	';'            reduce using rule 32
-	','            reduce using rule 32
-	'('            reduce using rule 32
-	')'            reduce using rule 32
-	' ['           reduce using rule 32
-	']'            reduce using rule 32
-	'{'            reduce using rule 32
-	'}'            reduce using rule 32
-	'['            reduce using rule 32
-	'.'            reduce using rule 32
-	bits           reduce using rule 32
-	string         reduce using rule 32
-	int            reduce using rule 32
-	name           reduce using rule 32
-	%eof           reduce using rule 32
+	'integer'      shift, and enter state 76
+	' ['           shift, and enter state 77
+	'['            shift, and enter state 78
+	name           shift, and enter state 79
 
+	Type           goto state 80
 
-State 103
+State 21
 
-	Type -> ' [' Type ']' .                             (rule 34)
+	Statement -> name '::' . Type                       (rule 2)
 
-	'let'          reduce using rule 34
-	'and'          reduce using rule 34
-	'fun'          reduce using rule 34
-	'in'           reduce using rule 34
-	'do'           reduce using rule 34
-	'='            reduce using rule 34
-	'->'           reduce using rule 34
-	';'            reduce using rule 34
-	','            reduce using rule 34
-	'('            reduce using rule 34
-	')'            reduce using rule 34
-	' ['           reduce using rule 34
-	']'            reduce using rule 34
-	'{'            reduce using rule 34
-	'}'            reduce using rule 34
-	'['            reduce using rule 34
-	'.'            reduce using rule 34
-	bits           reduce using rule 34
-	string         reduce using rule 34
-	int            reduce using rule 34
-	name           reduce using rule 34
-	%eof           reduce using rule 34
+	'integer'      shift, and enter state 76
+	' ['           shift, and enter state 77
+	'['            shift, and enter state 78
+	name           shift, and enter state 79
+
+	Type           goto state 75
+
+State 22
+
+	SafeExpr -> int MaybeType .                         (rule 21)
+
+	'let'          reduce using rule 21
+	'and'          reduce using rule 21
+	'fun'          reduce using rule 21
+	'in'           reduce using rule 21
+	'do'           reduce using rule 21
+	';'            reduce using rule 21
+	','            reduce using rule 21
+	'('            reduce using rule 21
+	')'            reduce using rule 21
+	' ['           reduce using rule 21
+	']'            reduce using rule 21
+	'{'            reduce using rule 21
+	'}'            reduce using rule 21
+	'['            reduce using rule 21
+	'.'            reduce using rule 21
+	infixOp        reduce using rule 21
+	bits           reduce using rule 21
+	string         reduce using rule 21
+	int            reduce using rule 21
+	name           reduce using rule 21
+	%eof           reduce using rule 21
 
 
-State 104
+State 23
 
-	Type -> '[' int ']' .                               (rule 31)
+	SafeExpr -> string MaybeType .                      (rule 20)
+
+	'let'          reduce using rule 20
+	'and'          reduce using rule 20
+	'fun'          reduce using rule 20
+	'in'           reduce using rule 20
+	'do'           reduce using rule 20
+	';'            reduce using rule 20
+	','            reduce using rule 20
+	'('            reduce using rule 20
+	')'            reduce using rule 20
+	' ['           reduce using rule 20
+	']'            reduce using rule 20
+	'{'            reduce using rule 20
+	'}'            reduce using rule 20
+	'['            reduce using rule 20
+	'.'            reduce using rule 20
+	infixOp        reduce using rule 20
+	bits           reduce using rule 20
+	string         reduce using rule 20
+	int            reduce using rule 20
+	name           reduce using rule 20
+	%eof           reduce using rule 20
+
+
+State 24
+
+	SafeExpr -> bits MaybeType .                        (rule 19)
+
+	'let'          reduce using rule 19
+	'and'          reduce using rule 19
+	'fun'          reduce using rule 19
+	'in'           reduce using rule 19
+	'do'           reduce using rule 19
+	';'            reduce using rule 19
+	','            reduce using rule 19
+	'('            reduce using rule 19
+	')'            reduce using rule 19
+	' ['           reduce using rule 19
+	']'            reduce using rule 19
+	'{'            reduce using rule 19
+	'}'            reduce using rule 19
+	'['            reduce using rule 19
+	'.'            reduce using rule 19
+	infixOp        reduce using rule 19
+	bits           reduce using rule 19
+	string         reduce using rule 19
+	int            reduce using rule 19
+	name           reduce using rule 19
+	%eof           reduce using rule 19
+
+
+State 25
+
+	CommaSepFields1 -> Field .                          (rule 53)
+	CommaSepFields1 -> Field . ',' CommaSepFields1      (rule 54)
+
+	','            shift, and enter state 74
+	'}'            reduce using rule 53
+
+
+State 26
+
+	SafeExpr -> '{' CommaSepFields . '}' MaybeType      (rule 23)
+
+	'}'            shift, and enter state 73
+
+
+State 27
+
+	CommaSepFields -> CommaSepFields1 .                 (rule 52)
+
+	'}'            reduce using rule 52
+
+
+State 28
+
+	Field -> string . ':' Expr                          (rule 30)
+
+	':'            shift, and enter state 72
+
+
+State 29
+
+	Field -> name . ':' Expr                            (rule 29)
+
+	':'            shift, and enter state 71
+
+
+State 30
+
+	CommaSepExprs1 -> Expr .                            (rule 49)
+	CommaSepExprs1 -> Expr . ',' CommaSepExprs1         (rule 50)
+
+	','            shift, and enter state 70
+	']'            reduce using rule 49
+
+
+State 31
+
+	SafeExpr -> ' [' CommaSepExprs . ']' MaybeType      (rule 25)
+
+	']'            shift, and enter state 69
+
+
+State 32
+
+	CommaSepExprs -> CommaSepExprs1 .                   (rule 48)
+
+	']'            reduce using rule 48
+
+
+State 33
+
+	UnsafeExpr -> 'let' . Declarations1 'in' Expr       (rule 17)
+
+	name           shift, and enter state 45
+
+	Declaration    goto state 43
+	Declarations1  goto state 68
+
+State 34
+
+	SafeExpr -> name . MaybeType                        (rule 22)
+
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
+
+	MaybeType      goto state 19
+
+State 35
+
+	SafeExpr -> '(' Expr . ')'                          (rule 24)
+
+	')'            shift, and enter state 67
+
+
+State 36
+
+	SafeExpr -> 'do' '{' . SemiSepStatements '}'        (rule 26)
+
+	'import'       shift, and enter state 7
+	'let'          shift, and enter state 8
+	'fun'          shift, and enter state 9
+	'type'         shift, and enter state 10
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	'}'            reduce using rule 45
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 18
+
+	Statement      goto state 65
+	Expr           goto state 4
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+	SemiSepStatementsgoto state 66
+
+State 37
+
+	Statement -> 'type' name . '=' Type                 (rule 3)
+
+	'='            shift, and enter state 64
+
+
+State 38
+
+	Args1 -> Arg .                                      (rule 43)
+	Args1 -> Arg . Args1                                (rule 44)
+
+	'='            reduce using rule 43
+	'->'           reduce using rule 43
+	':'            reduce using rule 43
+	'('            shift, and enter state 41
+	name           shift, and enter state 42
+
+	Arg            goto state 38
+	Args1          goto state 63
+
+State 39
+
+	UnsafeExpr -> 'fun' Args . MaybeType '->' Expr      (rule 16)
+
+	'->'           reduce using rule 37
+	':'            shift, and enter state 20
+
+	MaybeType      goto state 62
+
+State 40
+
+	Args -> Args1 .                                     (rule 42)
+
+	'='            reduce using rule 42
+	'->'           reduce using rule 42
+	':'            reduce using rule 42
+
+
+State 41
+
+	Arg -> '(' . name ':' Type ')'                      (rule 12)
+
+	name           shift, and enter state 61
+
+
+State 42
+
+	Arg -> name .                                       (rule 11)
+
+	'='            reduce using rule 11
+	'->'           reduce using rule 11
+	':'            reduce using rule 11
+	'('            reduce using rule 11
+	name           reduce using rule 11
+
+
+State 43
+
+	Declarations1 -> Declaration .                      (rule 39)
+	Declarations1 -> Declaration . 'and' Declarations1    (rule 40)
+
+	'and'          shift, and enter state 60
+	'in'           reduce using rule 39
+	';'            reduce using rule 39
+	%eof           reduce using rule 39
+
+
+State 44
+
+	Statement -> 'let' Declarations1 .                  (rule 1)
+	UnsafeExpr -> 'let' Declarations1 . 'in' Expr       (rule 17)
+
+	'in'           shift, and enter state 59
+	';'            reduce using rule 1
+	%eof           reduce using rule 1
+
+
+State 45
+
+	Declaration -> name . Args MaybeType '=' Expr       (rule 6)
+
+	'='            reduce using rule 41
+	':'            reduce using rule 41
+	'('            shift, and enter state 41
+	name           shift, and enter state 42
+
+	Arg            goto state 38
+	Args           goto state 58
+	Args1          goto state 40
+
+State 46
+
+	Statement -> 'import' Import .                      (rule 4)
+
+	';'            reduce using rule 4
+	%eof           reduce using rule 4
+
+
+State 47
+
+	Import -> name .                                    (rule 7)
+	Import -> name . '(' CommaSepNames ')'              (rule 8)
+	Import -> name . 'as' name                          (rule 9)
+	Import -> name . '(' CommaSepNames ')' 'as' name    (rule 10)
+
+	'as'           shift, and enter state 56
+	';'            reduce using rule 7
+	'('            shift, and enter state 57
+	%eof           reduce using rule 7
+
+
+State 48
+
+	Expr -> SafeExpr Expr .                             (rule 15)
+
+	'and'          reduce using rule 15
+	'in'           reduce using rule 15
+	';'            reduce using rule 15
+	','            reduce using rule 15
+	')'            reduce using rule 15
+	']'            reduce using rule 15
+	'}'            reduce using rule 15
+	%eof           reduce using rule 15
+
+
+State 49
+
+	SafeExpr -> SafeExpr '[' . Expr ']' MaybeType       (rule 28)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 55
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 50
+
+	SafeExpr -> SafeExpr '.' . name MaybeType           (rule 27)
+
+	name           shift, and enter state 54
+
+
+State 51
+
+	UnsafeExpr -> SafeExpr infixOp . Expr               (rule 18)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 53
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 52
+
+	Statement -> 'let' Declarations1 .                  (rule 1)
+
+
+
+State 53
+
+	UnsafeExpr -> SafeExpr infixOp Expr .               (rule 18)
+
+	'and'          reduce using rule 18
+	'in'           reduce using rule 18
+	';'            reduce using rule 18
+	','            reduce using rule 18
+	')'            reduce using rule 18
+	']'            reduce using rule 18
+	'}'            reduce using rule 18
+	%eof           reduce using rule 18
+
+
+State 54
+
+	SafeExpr -> SafeExpr '.' name . MaybeType           (rule 27)
+
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
+
+	MaybeType      goto state 104
+
+State 55
+
+	SafeExpr -> SafeExpr '[' Expr . ']' MaybeType       (rule 28)
+
+	']'            shift, and enter state 103
+
+
+State 56
+
+	Import -> name 'as' . name                          (rule 9)
+
+	name           shift, and enter state 102
+
+
+State 57
+
+	Import -> name '(' . CommaSepNames ')'              (rule 8)
+	Import -> name '(' . CommaSepNames ')' 'as' name    (rule 10)
+
+	')'            reduce using rule 55
+	name           shift, and enter state 101
+
+	CommaSepNames  goto state 99
+	CommaSepNames1 goto state 100
+
+State 58
+
+	Declaration -> name Args . MaybeType '=' Expr       (rule 6)
+
+	'='            reduce using rule 37
+	':'            shift, and enter state 20
+
+	MaybeType      goto state 98
+
+State 59
+
+	UnsafeExpr -> 'let' Declarations1 'in' . Expr       (rule 17)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 97
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 60
+
+	Declarations1 -> Declaration 'and' . Declarations1    (rule 40)
+
+	name           shift, and enter state 45
+
+	Declaration    goto state 43
+	Declarations1  goto state 96
+
+State 61
+
+	Arg -> '(' name . ':' Type ')'                      (rule 12)
+
+	':'            shift, and enter state 95
+
+
+State 62
+
+	UnsafeExpr -> 'fun' Args MaybeType . '->' Expr      (rule 16)
+
+	'->'           shift, and enter state 94
+
+
+State 63
+
+	Args1 -> Arg Args1 .                                (rule 44)
+
+	'='            reduce using rule 44
+	'->'           reduce using rule 44
+	':'            reduce using rule 44
+
+
+State 64
+
+	Statement -> 'type' name '=' . Type                 (rule 3)
+
+	'integer'      shift, and enter state 76
+	' ['           shift, and enter state 77
+	'['            shift, and enter state 78
+	name           shift, and enter state 79
+
+	Type           goto state 93
+
+State 65
+
+	SemiSepStatements -> Statement . ';' SemiSepStatements    (rule 46)
+
+	';'            shift, and enter state 92
+
+
+State 66
+
+	SafeExpr -> 'do' '{' SemiSepStatements . '}'        (rule 26)
+
+	'}'            shift, and enter state 91
+
+
+State 67
+
+	SafeExpr -> '(' Expr ')' .                          (rule 24)
+
+	'let'          reduce using rule 24
+	'and'          reduce using rule 24
+	'fun'          reduce using rule 24
+	'in'           reduce using rule 24
+	'do'           reduce using rule 24
+	';'            reduce using rule 24
+	','            reduce using rule 24
+	'('            reduce using rule 24
+	')'            reduce using rule 24
+	' ['           reduce using rule 24
+	']'            reduce using rule 24
+	'{'            reduce using rule 24
+	'}'            reduce using rule 24
+	'['            reduce using rule 24
+	'.'            reduce using rule 24
+	infixOp        reduce using rule 24
+	bits           reduce using rule 24
+	string         reduce using rule 24
+	int            reduce using rule 24
+	name           reduce using rule 24
+	%eof           reduce using rule 24
+
+
+State 68
+
+	UnsafeExpr -> 'let' Declarations1 . 'in' Expr       (rule 17)
+
+	'in'           shift, and enter state 59
+
+
+State 69
+
+	SafeExpr -> ' [' CommaSepExprs ']' . MaybeType      (rule 25)
+
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
+
+	MaybeType      goto state 90
+
+State 70
+
+	CommaSepExprs1 -> Expr ',' . CommaSepExprs1         (rule 50)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 30
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+	CommaSepExprs1 goto state 89
+
+State 71
+
+	Field -> name ':' . Expr                            (rule 29)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 88
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 72
+
+	Field -> string ':' . Expr                          (rule 30)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 87
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 73
+
+	SafeExpr -> '{' CommaSepFields '}' . MaybeType      (rule 23)
+
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
+
+	MaybeType      goto state 86
+
+State 74
+
+	CommaSepFields1 -> Field ',' . CommaSepFields1      (rule 54)
+
+	string         shift, and enter state 28
+	name           shift, and enter state 29
+
+	Field          goto state 25
+	CommaSepFields1goto state 85
+
+State 75
+
+	Statement -> name '::' Type .                       (rule 2)
+
+	';'            reduce using rule 2
+	%eof           reduce using rule 2
+
+
+State 76
+
+	Type -> 'integer' .                                 (rule 31)
 
 	'let'          reduce using rule 31
 	'and'          reduce using rule 31
@@ -1560,6 +1213,7 @@ State 104
 	'}'            reduce using rule 31
 	'['            reduce using rule 31
 	'.'            reduce using rule 31
+	infixOp        reduce using rule 31
 	bits           reduce using rule 31
 	string         reduce using rule 31
 	int            reduce using rule 31
@@ -1567,9 +1221,562 @@ State 104
 	%eof           reduce using rule 31
 
 
+State 77
+
+	Type -> ' [' . int ']'                              (rule 34)
+	Type -> ' [' . Type ']'                             (rule 36)
+
+	'integer'      shift, and enter state 76
+	' ['           shift, and enter state 77
+	'['            shift, and enter state 78
+	int            shift, and enter state 84
+	name           shift, and enter state 79
+
+	Type           goto state 83
+
+State 78
+
+	Type -> '[' . int ']'                               (rule 33)
+	Type -> '[' . Type ']'                              (rule 35)
+
+	'integer'      shift, and enter state 76
+	' ['           shift, and enter state 77
+	'['            shift, and enter state 78
+	int            shift, and enter state 82
+	name           shift, and enter state 79
+
+	Type           goto state 81
+
+State 79
+
+	Type -> name .                                      (rule 32)
+
+	'let'          reduce using rule 32
+	'and'          reduce using rule 32
+	'fun'          reduce using rule 32
+	'in'           reduce using rule 32
+	'do'           reduce using rule 32
+	'='            reduce using rule 32
+	'->'           reduce using rule 32
+	';'            reduce using rule 32
+	','            reduce using rule 32
+	'('            reduce using rule 32
+	')'            reduce using rule 32
+	' ['           reduce using rule 32
+	']'            reduce using rule 32
+	'{'            reduce using rule 32
+	'}'            reduce using rule 32
+	'['            reduce using rule 32
+	'.'            reduce using rule 32
+	infixOp        reduce using rule 32
+	bits           reduce using rule 32
+	string         reduce using rule 32
+	int            reduce using rule 32
+	name           reduce using rule 32
+	%eof           reduce using rule 32
+
+
+State 80
+
+	MaybeType -> ':' Type .                             (rule 38)
+
+	'let'          reduce using rule 38
+	'and'          reduce using rule 38
+	'fun'          reduce using rule 38
+	'in'           reduce using rule 38
+	'do'           reduce using rule 38
+	'='            reduce using rule 38
+	'->'           reduce using rule 38
+	';'            reduce using rule 38
+	','            reduce using rule 38
+	'('            reduce using rule 38
+	')'            reduce using rule 38
+	' ['           reduce using rule 38
+	']'            reduce using rule 38
+	'{'            reduce using rule 38
+	'}'            reduce using rule 38
+	'['            reduce using rule 38
+	'.'            reduce using rule 38
+	infixOp        reduce using rule 38
+	bits           reduce using rule 38
+	string         reduce using rule 38
+	int            reduce using rule 38
+	name           reduce using rule 38
+	%eof           reduce using rule 38
+
+
+State 81
+
+	Type -> '[' Type . ']'                              (rule 35)
+
+	']'            shift, and enter state 115
+
+
+State 82
+
+	Type -> '[' int . ']'                               (rule 33)
+
+	']'            shift, and enter state 114
+
+
+State 83
+
+	Type -> ' [' Type . ']'                             (rule 36)
+
+	']'            shift, and enter state 113
+
+
+State 84
+
+	Type -> ' [' int . ']'                              (rule 34)
+
+	']'            shift, and enter state 112
+
+
+State 85
+
+	CommaSepFields1 -> Field ',' CommaSepFields1 .      (rule 54)
+
+	'}'            reduce using rule 54
+
+
+State 86
+
+	SafeExpr -> '{' CommaSepFields '}' MaybeType .      (rule 23)
+
+	'let'          reduce using rule 23
+	'and'          reduce using rule 23
+	'fun'          reduce using rule 23
+	'in'           reduce using rule 23
+	'do'           reduce using rule 23
+	';'            reduce using rule 23
+	','            reduce using rule 23
+	'('            reduce using rule 23
+	')'            reduce using rule 23
+	' ['           reduce using rule 23
+	']'            reduce using rule 23
+	'{'            reduce using rule 23
+	'}'            reduce using rule 23
+	'['            reduce using rule 23
+	'.'            reduce using rule 23
+	infixOp        reduce using rule 23
+	bits           reduce using rule 23
+	string         reduce using rule 23
+	int            reduce using rule 23
+	name           reduce using rule 23
+	%eof           reduce using rule 23
+
+
+State 87
+
+	Field -> string ':' Expr .                          (rule 30)
+
+	','            reduce using rule 30
+	'}'            reduce using rule 30
+
+
+State 88
+
+	Field -> name ':' Expr .                            (rule 29)
+
+	','            reduce using rule 29
+	'}'            reduce using rule 29
+
+
+State 89
+
+	CommaSepExprs1 -> Expr ',' CommaSepExprs1 .         (rule 50)
+
+	']'            reduce using rule 50
+
+
+State 90
+
+	SafeExpr -> ' [' CommaSepExprs ']' MaybeType .      (rule 25)
+
+	'let'          reduce using rule 25
+	'and'          reduce using rule 25
+	'fun'          reduce using rule 25
+	'in'           reduce using rule 25
+	'do'           reduce using rule 25
+	';'            reduce using rule 25
+	','            reduce using rule 25
+	'('            reduce using rule 25
+	')'            reduce using rule 25
+	' ['           reduce using rule 25
+	']'            reduce using rule 25
+	'{'            reduce using rule 25
+	'}'            reduce using rule 25
+	'['            reduce using rule 25
+	'.'            reduce using rule 25
+	infixOp        reduce using rule 25
+	bits           reduce using rule 25
+	string         reduce using rule 25
+	int            reduce using rule 25
+	name           reduce using rule 25
+	%eof           reduce using rule 25
+
+
+State 91
+
+	SafeExpr -> 'do' '{' SemiSepStatements '}' .        (rule 26)
+
+	'let'          reduce using rule 26
+	'and'          reduce using rule 26
+	'fun'          reduce using rule 26
+	'in'           reduce using rule 26
+	'do'           reduce using rule 26
+	';'            reduce using rule 26
+	','            reduce using rule 26
+	'('            reduce using rule 26
+	')'            reduce using rule 26
+	' ['           reduce using rule 26
+	']'            reduce using rule 26
+	'{'            reduce using rule 26
+	'}'            reduce using rule 26
+	'['            reduce using rule 26
+	'.'            reduce using rule 26
+	infixOp        reduce using rule 26
+	bits           reduce using rule 26
+	string         reduce using rule 26
+	int            reduce using rule 26
+	name           reduce using rule 26
+	%eof           reduce using rule 26
+
+
+State 92
+
+	SemiSepStatements -> Statement ';' . SemiSepStatements    (rule 46)
+
+	'import'       shift, and enter state 7
+	'let'          shift, and enter state 8
+	'fun'          shift, and enter state 9
+	'type'         shift, and enter state 10
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	'}'            reduce using rule 45
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 18
+
+	Statement      goto state 65
+	Expr           goto state 4
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+	SemiSepStatementsgoto state 111
+
+State 93
+
+	Statement -> 'type' name '=' Type .                 (rule 3)
+
+	';'            reduce using rule 3
+	%eof           reduce using rule 3
+
+
+State 94
+
+	UnsafeExpr -> 'fun' Args MaybeType '->' . Expr      (rule 16)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 110
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 95
+
+	Arg -> '(' name ':' . Type ')'                      (rule 12)
+
+	'integer'      shift, and enter state 76
+	' ['           shift, and enter state 77
+	'['            shift, and enter state 78
+	name           shift, and enter state 79
+
+	Type           goto state 109
+
+State 96
+
+	Declarations1 -> Declaration 'and' Declarations1 .    (rule 40)
+
+	'in'           reduce using rule 40
+	';'            reduce using rule 40
+	%eof           reduce using rule 40
+
+
+State 97
+
+	UnsafeExpr -> 'let' Declarations1 'in' Expr .       (rule 17)
+
+	'and'          reduce using rule 17
+	'in'           reduce using rule 17
+	';'            reduce using rule 17
+	','            reduce using rule 17
+	')'            reduce using rule 17
+	']'            reduce using rule 17
+	'}'            reduce using rule 17
+	%eof           reduce using rule 17
+
+
+State 98
+
+	Declaration -> name Args MaybeType . '=' Expr       (rule 6)
+
+	'='            shift, and enter state 108
+
+
+State 99
+
+	Import -> name '(' CommaSepNames . ')'              (rule 8)
+	Import -> name '(' CommaSepNames . ')' 'as' name    (rule 10)
+
+	')'            shift, and enter state 107
+
+
+State 100
+
+	CommaSepNames -> CommaSepNames1 .                   (rule 56)
+
+	')'            reduce using rule 56
+
+
+State 101
+
+	CommaSepNames1 -> name .                            (rule 57)
+	CommaSepNames1 -> name . ',' CommaSepNames1         (rule 58)
+
+	','            shift, and enter state 106
+	')'            reduce using rule 57
+
+
+State 102
+
+	Import -> name 'as' name .                          (rule 9)
+
+	';'            reduce using rule 9
+	%eof           reduce using rule 9
+
+
+State 103
+
+	SafeExpr -> SafeExpr '[' Expr ']' . MaybeType       (rule 28)
+
+	'let'          reduce using rule 37
+	'and'          reduce using rule 37
+	'fun'          reduce using rule 37
+	'in'           reduce using rule 37
+	'do'           reduce using rule 37
+	';'            reduce using rule 37
+	','            reduce using rule 37
+	':'            shift, and enter state 20
+	'('            reduce using rule 37
+	')'            reduce using rule 37
+	' ['           reduce using rule 37
+	']'            reduce using rule 37
+	'{'            reduce using rule 37
+	'}'            reduce using rule 37
+	'['            reduce using rule 37
+	'.'            reduce using rule 37
+	infixOp        reduce using rule 37
+	bits           reduce using rule 37
+	string         reduce using rule 37
+	int            reduce using rule 37
+	name           reduce using rule 37
+	%eof           reduce using rule 37
+
+	MaybeType      goto state 105
+
+State 104
+
+	SafeExpr -> SafeExpr '.' name MaybeType .           (rule 27)
+
+	'let'          reduce using rule 27
+	'and'          reduce using rule 27
+	'fun'          reduce using rule 27
+	'in'           reduce using rule 27
+	'do'           reduce using rule 27
+	';'            reduce using rule 27
+	','            reduce using rule 27
+	'('            reduce using rule 27
+	')'            reduce using rule 27
+	' ['           reduce using rule 27
+	']'            reduce using rule 27
+	'{'            reduce using rule 27
+	'}'            reduce using rule 27
+	'['            reduce using rule 27
+	'.'            reduce using rule 27
+	infixOp        reduce using rule 27
+	bits           reduce using rule 27
+	string         reduce using rule 27
+	int            reduce using rule 27
+	name           reduce using rule 27
+	%eof           reduce using rule 27
+
+
 State 105
 
-	Type -> '[' Type ']' .                              (rule 33)
+	SafeExpr -> SafeExpr '[' Expr ']' MaybeType .       (rule 28)
+
+	'let'          reduce using rule 28
+	'and'          reduce using rule 28
+	'fun'          reduce using rule 28
+	'in'           reduce using rule 28
+	'do'           reduce using rule 28
+	';'            reduce using rule 28
+	','            reduce using rule 28
+	'('            reduce using rule 28
+	')'            reduce using rule 28
+	' ['           reduce using rule 28
+	']'            reduce using rule 28
+	'{'            reduce using rule 28
+	'}'            reduce using rule 28
+	'['            reduce using rule 28
+	'.'            reduce using rule 28
+	infixOp        reduce using rule 28
+	bits           reduce using rule 28
+	string         reduce using rule 28
+	int            reduce using rule 28
+	name           reduce using rule 28
+	%eof           reduce using rule 28
+
+
+State 106
+
+	CommaSepNames1 -> name ',' . CommaSepNames1         (rule 58)
+
+	name           shift, and enter state 101
+
+	CommaSepNames1 goto state 119
+
+State 107
+
+	Import -> name '(' CommaSepNames ')' .              (rule 8)
+	Import -> name '(' CommaSepNames ')' . 'as' name    (rule 10)
+
+	'as'           shift, and enter state 118
+	';'            reduce using rule 8
+	%eof           reduce using rule 8
+
+
+State 108
+
+	Declaration -> name Args MaybeType '=' . Expr       (rule 6)
+
+	'let'          shift, and enter state 33
+	'fun'          shift, and enter state 9
+	'do'           shift, and enter state 11
+	'('            shift, and enter state 12
+	' ['           shift, and enter state 13
+	'{'            shift, and enter state 14
+	bits           shift, and enter state 15
+	string         shift, and enter state 16
+	int            shift, and enter state 17
+	name           shift, and enter state 34
+
+	Expr           goto state 117
+	UnsafeExpr     goto state 5
+	SafeExpr       goto state 6
+
+State 109
+
+	Arg -> '(' name ':' Type . ')'                      (rule 12)
+
+	')'            shift, and enter state 116
+
+
+State 110
+
+	UnsafeExpr -> 'fun' Args MaybeType '->' Expr .      (rule 16)
+
+	'and'          reduce using rule 16
+	'in'           reduce using rule 16
+	';'            reduce using rule 16
+	','            reduce using rule 16
+	')'            reduce using rule 16
+	']'            reduce using rule 16
+	'}'            reduce using rule 16
+	%eof           reduce using rule 16
+
+
+State 111
+
+	SemiSepStatements -> Statement ';' SemiSepStatements .    (rule 46)
+
+	'}'            reduce using rule 46
+
+
+State 112
+
+	Type -> ' [' int ']' .                              (rule 34)
+
+	'let'          reduce using rule 34
+	'and'          reduce using rule 34
+	'fun'          reduce using rule 34
+	'in'           reduce using rule 34
+	'do'           reduce using rule 34
+	'='            reduce using rule 34
+	'->'           reduce using rule 34
+	';'            reduce using rule 34
+	','            reduce using rule 34
+	'('            reduce using rule 34
+	')'            reduce using rule 34
+	' ['           reduce using rule 34
+	']'            reduce using rule 34
+	'{'            reduce using rule 34
+	'}'            reduce using rule 34
+	'['            reduce using rule 34
+	'.'            reduce using rule 34
+	infixOp        reduce using rule 34
+	bits           reduce using rule 34
+	string         reduce using rule 34
+	int            reduce using rule 34
+	name           reduce using rule 34
+	%eof           reduce using rule 34
+
+
+State 113
+
+	Type -> ' [' Type ']' .                             (rule 36)
+
+	'let'          reduce using rule 36
+	'and'          reduce using rule 36
+	'fun'          reduce using rule 36
+	'in'           reduce using rule 36
+	'do'           reduce using rule 36
+	'='            reduce using rule 36
+	'->'           reduce using rule 36
+	';'            reduce using rule 36
+	','            reduce using rule 36
+	'('            reduce using rule 36
+	')'            reduce using rule 36
+	' ['           reduce using rule 36
+	']'            reduce using rule 36
+	'{'            reduce using rule 36
+	'}'            reduce using rule 36
+	'['            reduce using rule 36
+	'.'            reduce using rule 36
+	infixOp        reduce using rule 36
+	bits           reduce using rule 36
+	string         reduce using rule 36
+	int            reduce using rule 36
+	name           reduce using rule 36
+	%eof           reduce using rule 36
+
+
+State 114
+
+	Type -> '[' int ']' .                               (rule 33)
 
 	'let'          reduce using rule 33
 	'and'          reduce using rule 33
@@ -1588,6 +1795,7 @@ State 105
 	'}'            reduce using rule 33
 	'['            reduce using rule 33
 	'.'            reduce using rule 33
+	infixOp        reduce using rule 33
 	bits           reduce using rule 33
 	string         reduce using rule 33
 	int            reduce using rule 33
@@ -1595,90 +1803,19 @@ State 105
 	%eof           reduce using rule 33
 
 
-State 106
+State 115
 
-	SafeExpr -> 'do' '{' SemiSepStatements '}' .        (rule 24)
-
-	'let'          reduce using rule 24
-	'and'          reduce using rule 24
-	'fun'          reduce using rule 24
-	'in'           reduce using rule 24
-	'do'           reduce using rule 24
-	';'            reduce using rule 24
-	','            reduce using rule 24
-	'('            reduce using rule 24
-	')'            reduce using rule 24
-	' ['           reduce using rule 24
-	']'            reduce using rule 24
-	'{'            reduce using rule 24
-	'}'            reduce using rule 24
-	'['            reduce using rule 24
-	'.'            reduce using rule 24
-	bits           reduce using rule 24
-	string         reduce using rule 24
-	int            reduce using rule 24
-	name           reduce using rule 24
-	%eof           reduce using rule 24
-
-
-State 107
-
-	SemiSepStatements -> Statement ';' . SemiSepStatements    (rule 44)
-
-	'import'       shift, and enter state 4
-	'let'          shift, and enter state 2
-	'type'         shift, and enter state 5
-	'}'            reduce using rule 43
-	name           shift, and enter state 6
-
-	Statement      goto state 68
-	SemiSepStatementsgoto state 114
-
-State 108
-
-	UnsafeExpr -> 'fun' Args MaybeType '->' . Expr      (rule 15)
-
-	'let'          shift, and enter state 12
-	'fun'          shift, and enter state 13
-	'do'           shift, and enter state 14
-	'('            shift, and enter state 16
-	' ['           shift, and enter state 17
-	'{'            shift, and enter state 18
-	bits           shift, and enter state 19
-	string         shift, and enter state 20
-	int            shift, and enter state 21
-	name           shift, and enter state 22
-
-	Expr           goto state 113
-	UnsafeExpr     goto state 8
-	SafeExpr       goto state 49
-
-State 109
-
-	UnsafeExpr -> 'let' Declarations1 'in' Expr .       (rule 16)
-
-	'and'          reduce using rule 16
-	'in'           reduce using rule 16
-	';'            reduce using rule 16
-	','            reduce using rule 16
-	')'            reduce using rule 16
-	']'            reduce using rule 16
-	'}'            reduce using rule 16
-	%eof           reduce using rule 16
-
-
-State 110
-
-	SafeExpr -> SafeExpr '[' Expr ']' . MaybeType       (rule 26)
+	Type -> '[' Type ']' .                              (rule 35)
 
 	'let'          reduce using rule 35
 	'and'          reduce using rule 35
 	'fun'          reduce using rule 35
 	'in'           reduce using rule 35
 	'do'           reduce using rule 35
+	'='            reduce using rule 35
+	'->'           reduce using rule 35
 	';'            reduce using rule 35
 	','            reduce using rule 35
-	':'            shift, and enter state 39
 	'('            reduce using rule 35
 	')'            reduce using rule 35
 	' ['           reduce using rule 35
@@ -1687,109 +1824,26 @@ State 110
 	'}'            reduce using rule 35
 	'['            reduce using rule 35
 	'.'            reduce using rule 35
+	infixOp        reduce using rule 35
 	bits           reduce using rule 35
 	string         reduce using rule 35
 	int            reduce using rule 35
 	name           reduce using rule 35
 	%eof           reduce using rule 35
 
-	MaybeType      goto state 112
-
-State 111
-
-	SafeExpr -> SafeExpr '.' name MaybeType .           (rule 25)
-
-	'let'          reduce using rule 25
-	'and'          reduce using rule 25
-	'fun'          reduce using rule 25
-	'in'           reduce using rule 25
-	'do'           reduce using rule 25
-	';'            reduce using rule 25
-	','            reduce using rule 25
-	'('            reduce using rule 25
-	')'            reduce using rule 25
-	' ['           reduce using rule 25
-	']'            reduce using rule 25
-	'{'            reduce using rule 25
-	'}'            reduce using rule 25
-	'['            reduce using rule 25
-	'.'            reduce using rule 25
-	bits           reduce using rule 25
-	string         reduce using rule 25
-	int            reduce using rule 25
-	name           reduce using rule 25
-	%eof           reduce using rule 25
-
-
-State 112
-
-	SafeExpr -> SafeExpr '[' Expr ']' MaybeType .       (rule 26)
-
-	'let'          reduce using rule 26
-	'and'          reduce using rule 26
-	'fun'          reduce using rule 26
-	'in'           reduce using rule 26
-	'do'           reduce using rule 26
-	';'            reduce using rule 26
-	','            reduce using rule 26
-	'('            reduce using rule 26
-	')'            reduce using rule 26
-	' ['           reduce using rule 26
-	']'            reduce using rule 26
-	'{'            reduce using rule 26
-	'}'            reduce using rule 26
-	'['            reduce using rule 26
-	'.'            reduce using rule 26
-	bits           reduce using rule 26
-	string         reduce using rule 26
-	int            reduce using rule 26
-	name           reduce using rule 26
-	%eof           reduce using rule 26
-
-
-State 113
-
-	UnsafeExpr -> 'fun' Args MaybeType '->' Expr .      (rule 15)
-
-	'and'          reduce using rule 15
-	'in'           reduce using rule 15
-	';'            reduce using rule 15
-	','            reduce using rule 15
-	')'            reduce using rule 15
-	']'            reduce using rule 15
-	'}'            reduce using rule 15
-	%eof           reduce using rule 15
-
-
-State 114
-
-	SemiSepStatements -> Statement ';' SemiSepStatements .    (rule 44)
-
-	'}'            reduce using rule 44
-
-
-State 115
-
-	Import -> name '(' CommaSepNames ')' 'as' . name    (rule 10)
-
-	name           shift, and enter state 120
-
 
 State 116
 
-	CommaSepNames1 -> name ',' CommaSepNames1 .         (rule 60)
+	Arg -> '(' name ':' Type ')' .                      (rule 12)
 
-	')'            reduce using rule 60
+	'='            reduce using rule 12
+	'->'           reduce using rule 12
+	':'            reduce using rule 12
+	'('            reduce using rule 12
+	name           reduce using rule 12
 
 
 State 117
-
-	Arg -> '(' name ':' Type . ')'                      (rule 12)
-
-	')'            shift, and enter state 119
-
-
-State 118
 
 	Declaration -> name Args MaybeType '=' Expr .       (rule 6)
 
@@ -1799,15 +1853,18 @@ State 118
 	%eof           reduce using rule 6
 
 
+State 118
+
+	Import -> name '(' CommaSepNames ')' 'as' . name    (rule 10)
+
+	name           shift, and enter state 120
+
+
 State 119
 
-	Arg -> '(' name ':' Type ')' .                      (rule 12)
+	CommaSepNames1 -> name ',' CommaSepNames1 .         (rule 58)
 
-	'='            reduce using rule 12
-	'->'           reduce using rule 12
-	':'            reduce using rule 12
-	'('            reduce using rule 12
-	name           reduce using rule 12
+	')'            reduce using rule 58
 
 
 State 120
@@ -1821,7 +1878,7 @@ State 120
 -----------------------------------------------------------------------------
 Grammar Totals
 -----------------------------------------------------------------------------
-Number of rules: 61
-Number of terminals: 27
-Number of non-terminals: 23
+Number of rules: 59
+Number of terminals: 28
+Number of non-terminals: 21
 Number of states: 121
