@@ -49,6 +49,7 @@ import Debug.Trace
   '{'     { PosPair _ (TKey "{") }
   '}'     { PosPair _ (TKey "}") }
   'data'  { PosPair _ (TKey "data") }
+  'sort'  { PosPair _ (TKey "sort") }
   'where' { PosPair _ (TKey "where") }
   var     { PosPair _ (TVar _) }
   con     { PosPair _ (TCon _) }
@@ -57,96 +58,79 @@ import Debug.Trace
 %%
 
 SAWDecls :: { [Decl] }
-SAWDecls : RSAWDecls { reverse $1 }
-
-RSAWDecls :: { [Decl] }
-RSAWDecls : RSAWDecls SAWDecl { $2 : $1 }
-          | { [] } 
+SAWDecls : list(SAWDecl) { $1 }
 
 SAWDecl :: { Decl }
-SAWDecl : 'data' Con '::' LExpr 'where' '{' RCtorDeclList '}' { DataDecl $2 $4 (reverse $7) }
+SAWDecl : 'data' Con '::' LExpr 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
         | DeclLhs '::' LExpr ';' {% mkTypeDecl $1 $3 }
         | DeclLhs '='  Expr ';'  {% mkTermDef  $1 $3 }
 
 DeclLhs :: { DeclLhs }
-DeclLhs : Con             { ($1,[]) }
-        | Var             { ($1,[]) }
-        | Con RLambdaArgs { ($1,[]) }
-        | Var RLambdaArgs { ($1,reverse $2) }
+DeclLhs : Con list(LambdaArg) { ($1, $2) }
+        | Var list(LambdaArg) { ($1, $2) }
 
 CtorDecl :: { CtorDecl }
 CtorDecl : Con '::' LExpr ';' { Ctor $1 $3 }
 
-RCtorDeclList :: { [CtorDecl] }
-RCtorDeclList : {- empty -} { [] }
-              | RCtorDeclList CtorDecl { $2 : $1 }
-
-AtomExpr :: { AppExpr }
-AtomExpr : nat                     { IntLit (pos $1) (tokNat (val $1)) }
-         | Var                     { Var $1 }
-         | Con                     { Con $1 }
-         | '(' CommaExprs ')'      {% parseVParen (pos $1) $2 }
-         | '#' '(' CommaExprs ')'  {% parseTParen (pos $1) $3 }
-         |     '{' RRecValue '}'   { RecordValue (pos $1) (reverse $2) } 
-         | '#' '{' RRecType  '}'   { RecordType  (pos $1) (reverse $3) }
-         | '[' CommaExprs ']'      { ArrayValue (pos $1) $2 }
-         | AtomExpr '.' Var        { RecordSelector $1 $3 }
-
-ParamType :: { ParamType }
-ParamType : '?'         { ImplicitParam }
-          | '??'        { InstanceParam }
-          | '???'       { ProofParam }
---          | {- empty -} { NormalParam }
+AtomExpr :: { Expr }
+AtomExpr : nat                          { IntLit (pos $1) (tokNat (val $1)) }
+         | Var                          { Var $1 }
+         | Con                          { Con $1 }
+         | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
+         |     '(' sepBy(Expr, ',') ')' {% parseVParen (pos $1) $2 }
+         | '#' '(' sepBy(Expr, ',') ')' {% parseTParen (pos $1) $3 }
+         | '{' list(RecValue) '}'       { RecordValue (pos $1) $2 } 
+         | '#' '{' list(RecType) '}'    { RecordType  (pos $1) $3 }
+         | '[' sepBy(Expr, ',') ']'     { ArrayValue (pos $1) $2 }
+         | AtomExpr '.' Var             { RecordSelector $1 $3 }
 
 -- Expression formed from applications of atomic expressions.
-AppExpr :: { AppExpr }
-AppExpr : AtomExpr { $1 }
-        | AppExpr AtomExpr { App $1 $2 }
-
-PiArg :: { (ParamType,AppExpr) }
-PiArg : ParamType AtomExpr { ($1, $2) } 
-      | AppExpr            { (NormalParam, $1) }
-
-LambdaArg :: { (ParamType, AppExpr) }
-LambdaArg : AtomExpr            { (NormalParam, $1) }
-          | ParamType AtomExpr  { ($1, $2) } 
-
-RLambdaArgs :: { [(ParamType, AppExpr)] }
-RLambdaArgs : LambdaArg { [$1] }
-            | RLambdaArgs LambdaArg { $2 : $1 } 
+AppExpr :: { Expr }
+AppExpr : AtomExpr                   { $1 }
+        | AppExpr AtomExpr           { App $1 NormalParam $2 }
+        | AppExpr ParamType AtomExpr { App $1 $2 $3 }
 
 -- Expression with uses of pi and lambda, but no typing.
 LExpr :: { Expr }
-LExpr : AppExpr                     { AppExpr $1 }
-      | PiArg '->' LExpr            {% mkPi (pos $2) $1 $3 }
-      | '\\' RLambdaArgs '->' LExpr { Lambda (pos $1) (reverse $2) $4 }
+LExpr : AppExpr                          {  $1 }
+      | PiArg '->' LExpr                 {% mkPi (pos $2) $1 $3 }
+      | '\\' list1(LambdaArg) '->' LExpr {  Lambda (pos $1) $2 $4 }
 
 Expr :: { Expr }
 Expr : LExpr { $1 }
      | LExpr '::' LExpr { TypeConstraint $1 (pos $2) $3 }
 
-CommaExprs :: { [Expr] }
-CommaExprs : {- empty -} { [] }
-           | RCommaExprs1 { reverse $1 }
-            
--- | Comma separated list of expressions in reverse order.
-RCommaExprs1 :: { [Expr] }
-RCommaExprs1 : Expr { [$1] }
-             | RCommaExprs1 ',' Expr { $3 : $1 }
+PiArg :: { (ParamType, Expr) }
+PiArg : ParamType AtomExpr { ($1, $2) } 
+      | AppExpr            { (NormalParam, $1) }
 
-RRecValue :: { [(PosPair Ident, Expr)] }
-RRecValue : {- empty -} { [] }
-          | RRecValue Var '=' Expr ';' { ($2, $4) : $1 }
+LambdaArg :: { (ParamType, Expr) }
+LambdaArg : AtomExpr           { (NormalParam, $1) }
+          | ParamType AtomExpr { ($1, $2) }
 
-RRecType :: { [(PosPair Ident, Expr)] }
-RRecType : {- empty -}   { [] }
-         | RRecType Var '::' LExpr ';' { ($2, $4) : $1 } 
+ParamType :: { ParamType }
+ParamType : '?'   { ImplicitParam }
+          | '??'  { InstanceParam }
+          | '???' { ProofParam    }
+
+RecValue :: { (PosPair Ident, Expr) }
+RecValue : Var '=' Expr ';' { ($1, $3) }
+
+RecType :: { (PosPair Ident, Expr) }
+RecType : Var '::' LExpr ';' { ($1, $3) } 
 
 Var :: { PosPair Ident }
-Var : var { fmap tokVar $1 }
+Var : var { fmap (mkIdent . tokVar) $1 }
 
 Con :: { PosPair Ident }
-Con : con { fmap tokCon $1 }
+Con : con { fmap (mkIdent . tokCon) $1 }
+
+-- A possibly-empty list of p's separated by q.
+sepBy(p,q) : {- empty -} { [] }
+           | rsepBy1(p,q) { reverse $1 }
+
+rsepBy1(p,q) : p { [$1] }
+             | rsepBy1(p,q) q p { $3 : $1 }
 
 -- A list of 0 or more p's, terminated by q's
 list(p) : {- empty -} { [] }
@@ -269,45 +253,40 @@ mergeParamType NormalParam _ tp = return tp
 mergeParamType pt p mpt = do
   unexpectedParameterAnnotation p mpt >> return pt
 
-appExprAsVarList :: AppExpr -> String -> Parser [PosPair Ident]
-appExprAsVarList ae errMsg =
-  case ae of
-    Var pi -> return [pi]
-    App x y -> liftM2 (++) (appExprAsVarList x errMsg) (appExprAsVarList y errMsg)
-    BadExpression _ -> return []
-    _ -> addParseError (pos ae) errMsg >> return []
-
 -- Attempts to parses an expression as a list of identifiers.
 -- Will return a value on all expressions, but may add errors to parser state.
 exprAsVarList :: Expr -> String -> Parser [PosPair Ident]
 exprAsVarList ex errMsg =
   case ex of
-    AppExpr e -> appExprAsVarList e errMsg
+    Var pi -> return [pi]
+    App x _ y -> liftM2 (++) (exprAsVarList x errMsg) (exprAsVarList y errMsg)
+    BadExpression _ -> return []
     _ -> addParseError (pos ex) errMsg >> return []
 
-mkPi :: Pos -> (ParamType,AppExpr) -> Expr -> Parser Expr
+mkPi :: Pos -> (ParamType, Expr) -> Expr -> Parser Expr
 mkPi ptp (ppt,l) r = parseLhs l
   where parseLhs (Paren _ (TypeConstraint x _ t)) = 
           fmap (\l -> Pi ppt l t ptp r) $ 
                exprAsVarList x "Invalid arguments to Pi expression."
-        parseLhs e = return $ Pi ppt [PosPair (pos e) "_"] (AppExpr e) ptp r   
+        parseLhs e =
+          return $ Pi ppt [PosPair (pos e) (mkIdent "_")] e ptp r   
 
-parseVParen :: Pos -> [Expr] -> Parser AppExpr
+parseVParen :: Pos -> [Expr] -> Parser Expr
 parseVParen p [expr] = return $ Paren p expr
 parseVParen p l = return $ TupleValue p l
 
-parseTParen :: Pos -> [Expr] -> Parser AppExpr
+parseTParen :: Pos -> [Expr] -> Parser Expr
 parseTParen p [expr] = do
   addParseError p "Tuple may not contain a single value."
-  return (badAppExpr p)
+  return (badExpr p)
 parseTParen p l = return $ TupleType p l
 
-asAppList :: AppExpr -> (AppExpr,[AppExpr])
+asAppList :: Expr -> (Expr,[Expr])
 asAppList = \x -> impl x []
-  where impl (App x y) r = impl x (y:r)
+  where impl (App x _ y) r = impl x (y:r)
         impl x r = (x,r)
 
-type DeclLhs = (PosPair Ident, [LambdaBinding AppExpr])
+type DeclLhs = (PosPair Ident, [LambdaBinding Expr])
 
 mkTypeDecl :: DeclLhs -> Expr -> Parser Decl
 mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
