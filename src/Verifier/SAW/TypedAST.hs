@@ -2,7 +2,6 @@
 module Verifier.SAW.TypedAST
  ( Un.Ident, Un.mkIdent
  , Un.ParamType(..)
- , Builtin(..)
  , LambdaVar
  , TermF(..)
  , Term(..)
@@ -27,88 +26,9 @@ import Verifier.SAW.Position
 import qualified Verifier.SAW.UntypedAST (Sort)
 import qualified Verifier.SAW.UntypedAST as Un
 
-
 type Ident = Un.Ident
 
 type ParamType = Un.ParamType
-
-data Builtin
-  = TypeType
-
-  | BoolType
-  | TrueCtor
-  | FalseCtor
-  | IteFn
-  | AssertFn
-  | TrueProp
-  | AtomicProof
-  | FalseProp
-
-  | EqClass
-  | EqFn
-  | BoolEqInstance
-
-  | OrdClass
-  | LeqFn
-  | LtFn
-  | GeqFn
-  | GtFn
-  | BoolOrdInstance
-
-  | NumClass
-  | NegFn
-  | AddFn
-  | SubFn
-  | MulFn
-  | DivFn
-  | RemFn
-
-  | BitsClass
-  | NotFn
-  | AndFn
-  | OrFn
-  | XorFn
-  | ImpliesFn
-  | ShlFn
-  | ShrFn
-  | BoolBitsInstance
-
-  | IntegerType
-  | IntegerEqInstance
-  | IntegerOrdInstance
-  | IntegerNumInstance
-  | IntegerBitsInstance
-  
-  | ArrayType
-  | ArrayEqInstance
-  | ArrayOrdInstance
-  | ArrayBitsInstance
-  | GetFn
-  | SetFn
-  | GenerateFn
-  
-  | SignedType
-  | SignedEqInstance
-  | SignedOrdInstance
-  | SignedNumInstance
-  | SignedBitsInstance
-
-  | UnsignedType
-  | UnsignedEqInstance
-  | UnsignedOrdInstance
-  | UnsignedNumInstance
-  | UnsignedBitsInstance
-
-  | SignedToInteger
-  | UnsignedToInteger
-  | IntegerToSigned
-  | IntegerToUnsigned
-
-  | SignedToArray
-  | UnsignedToArray
-  | ArrayToSigned
-  | ArrayToUnsigned
-  deriving (Eq, Ord)
 
 type LambdaVar e = (Un.ParamType, Ident, e)
 
@@ -117,54 +37,71 @@ type LambdaVar e = (Un.ParamType, Ident, e)
 -- these decisions were made so that terms have a well-specified type, and we do
 -- not need to be concerned about record subtyping.
 
+type DeBrujinIndex = Integer
+
+-- Patterns are used to match equations.
+data Pat e = PVar DeBrujinIndex -- ^ Variable and it's type (variables should appear at most once)
+           | PCtor Ident [Pat e]
+           | PTuple [Pat e]
+           | PRecord (Map String (Pat e))
+             -- An arbitrary term that matches anything, but needs to be later
+             -- verified to be equivalent.
+           | PInaccessible e
+  deriving (Eq,Ord)
+
+data DefEqn e
+  = DefEqn [(Ident,e)] -- ^ List of variables introduced in definition and their types (context)
+           [Pat e]  -- ^ List of patterns
+           e -- ^ Right hand side.
+  deriving (Eq, Ord)
+
+-- A Definition contains an identifier, the type of the definition, and a list of equations.
+data Def e = Def Ident e [DefEqn e]
+  deriving (Eq,Ord)
+
 data TermF e
-  = IntLit Pos Integer
-  | LocalVar Pos Integer   -- ^ Local variables are referenced by deBrujin index.
-  | GlobalRef Pos Integer  -- ^ Global variables are referenced by deBrujin level.
-  | Lambda (ParamType, PosPair Ident, e) e
+  = IntLit Integer
+  | LocalVar Integer   -- ^ Local variables are referenced by deBrujin index.
+  | GlobalRef Integer  -- ^ Global variables are referenced by label.
+
+  | Lambda (ParamType, Ident, e) e
   | App e e
-  | Pi (ParamType, PosPair Ident, e) e
-  | TupleValue Pos [e]
-  | TupleType Pos [e]
-  | RecordValue Pos (Map String e)
-  | RecordSelector Pos (Map String e)
-  | RecordType Pos (Map String e)
-  | ArrayValue Pos [e]
-  | Sort Pos Un.Sort
+  | Pi (ParamType, Ident, e) e
+
+    -- Tuples may be 0 or 2+ elements.  The empty tuple is not allowed.
+  | TupleValue [e]
+  | TupleType [e]
+
+  | RecordValue (Map String e)
+  | RecordSelector (Map String e)
+  | RecordType (Map String e)
+
+  | ArrayValue [e]
+    -- ^ List of bindings and the let expression itself.
+    -- Let expressions introduce variables for each identifier.
+  | Let [Def e] e
+
+  | Sort Un.Sort
  deriving (Eq,Ord)
 
 data Term = Term (TermF Term)
 
+data SymEqn t = SymEqn [Un.LambdaBinding Un.Pat] t
+  deriving (Eq,Ord,Functor,Show)
+
 data SymDef t = SD { sdIdent :: PosPair Ident
                    , sdType  :: t
-                   , sdDef   :: Maybe t
+                   , sdDef   :: [SymEqn t]
                    } deriving (Functor, Show)
 
 instance Positioned (SymDef t) where
   pos sd = pos (sdIdent sd)
 
-type Def = SymDef Term
+--type Def = SymDef Term
 
 data Module = Module {
          moduleDefs :: Map Ident (SymDef Term)
        }
-
-{-
-Experiments:
-
-Can I get an untype map from identifiers to type and equations?
-
-
-Things that need to happen:
-
-* Identify bound variables with their corresponding lambda expression (via deBrujin indices).
-
-2. Validate that type 
-
-TODO: Read Pierce chapter on type inference.
-
-
--}
 
 data GroupError
  = PrevDefined (PosPair Ident) -- ^ Identifier and old position.
@@ -174,12 +111,12 @@ data GroupError
  | Limitation String
  deriving (Show)
 
-groupDecls :: [Un.Decl] -> ([PosPair GroupError], Map Ident (SymDef Un.Expr))
+groupDecls :: [Un.Decl] -> ([PosPair GroupError], Map Ident (SymDef Un.Term))
 groupDecls d = (reverse (gsErrors so), gsDefs so)
   where si = GS { gsDefs = Map.empty, gsErrors = [] }
-        so = execState (collectGroups d) si
+        so = execState (identifySymDefs d) si
 
-type UnEqn = (Pos, [Un.LambdaBinding Un.Expr], Un.Expr)
+type UnEqn = (Pos, [Un.LambdaBinding Un.Pat], Un.Term)
 
 -- Extract equations for identifier an return them along with remaining equations.
 gatherEqs :: Ident -> [Un.Decl] -> ([UnEqn], [Un.Decl])
@@ -196,7 +133,7 @@ gatherManyEqs s = go Map.empty
               where (feqs, rest) = gatherEqs i decls
         go m decls = (m, decls)
 
-data GroupState = GS { gsDefs :: Map Ident (SymDef Un.Expr)
+data GroupState = GS { gsDefs :: Map Ident (SymDef Un.Term)
                      , gsErrors :: [PosPair GroupError]
                      }
 
@@ -206,7 +143,7 @@ addGroupError :: Pos -> GroupError -> Grouper ()
 addGroupError p e = do
   modify $ \s -> s { gsErrors = PosPair p e : gsErrors s }
 
-addSymDef :: SymDef Un.Expr -> Grouper ()
+addSymDef :: SymDef Un.Term -> Grouper ()
 addSymDef sd = do
   let sym = val (sdIdent sd)
   dm <- gets gsDefs
@@ -214,48 +151,40 @@ addSymDef sd = do
     Just old -> addGroupError (pos sd) $ PrevDefined (sdIdent old)
     Nothing -> modify $ \s -> s { gsDefs = Map.insert sym sd (gsDefs s) } 
 
-collectGroups :: [Un.Decl] -> Grouper ()
-collectGroups (Un.TypeDecl idl tp: decls) = do
+-- | Collect individual untyped declarations into symbol definitions.
+identifySymDefs :: [Un.Decl] -> Grouper ()
+identifySymDefs (Un.TypeDecl idl tp: decls) = do
   let (meqs,rest) = gatherManyEqs (Set.fromList (val <$> idl)) decls
   forM_ idl $ \psym -> do
-    def <-
-        case Map.lookup (val psym) meqs of
-          Just ((p,lhs,rhs):r) -> do
-            case r of
-              [] -> return ()
-              (p2,_,_):_ -> addGroupError p2 (DuplicateDef (val psym) p) 
-            unless (null lhs) $
-              addGroupError p $
-                Limitation "Terms on left-hand side of assignment are unsupported."
-            return (Just rhs)
-          _ -> return Nothing
+    let eqs = fromMaybe [] $ Map.lookup (val psym) meqs
+    let mapEqn (_, lhsl, rhs) = SymEqn lhsl rhs
     addSymDef SD { sdIdent = psym
                  , sdType = tp
-                 , sdDef = def
+                 , sdDef = mapEqn <$> eqs
                  }
-  collectGroups rest
-collectGroups (Un.DataDecl psym tp ctors: decls) = do
+  identifySymDefs rest
+identifySymDefs (Un.DataDecl psym tp ctors: decls) = do
   -- Add type symbol
   addSymDef SD { sdIdent = psym
                , sdType = tp
-               , sdDef = Nothing
+               , sdDef = []
                }
   -- Add ctor symbols
   forM_ ctors $ \(Un.Ctor ctorId ctorTp) -> do
     addSymDef SD { sdIdent = ctorId
                  , sdType = ctorTp
-                 , sdDef = Nothing
+                 , sdDef = []
                  }
-  collectGroups decls
-collectGroups (Un.TermDef psym _ _ : decls) = do
+  identifySymDefs decls
+identifySymDefs (Un.TermDef psym _ _ : decls) = do
   let (_, rest) = gatherEqs (val psym) decls
   addGroupError (pos psym) (NoSignature (val psym))
-  collectGroups rest
-collectGroups [] = return ()
+  identifySymDefs rest
+identifySymDefs [] = return ()
 
 data TypeConstraint
   = EqualTypes Term Term
-  | HasType Term Un.Expr
+  | HasType Term Un.Term
 
 data TCError = UnknownError
 
@@ -281,8 +210,8 @@ type TypeChecker a = State TypeCheckerState a
 
 execTypechecker :: TypeChecker () -> 
 
-unexpectedBadExpression :: Pos -> a
-unexpectedBadExpression p =
+unexpectedBadTermession :: Pos -> a
+unexpectedBadTermession p =
     error "internal: Bad expression from " ++ show p ++ " appears during typechecking"
 -}
 
@@ -309,7 +238,7 @@ tc ex =
     Un.Paren _ e -> tcExpr ctx e
     Un.TypeConstraint e _ _ -> tcExpr ctx e
     -- Ignore bad expressions, as they are the result of parse errors.
-    Un.BadExpression p -> unexpectedBadExpression p
+    Un.BadTerm p -> unexpectedBadTerm p
 -}
 
 {-      

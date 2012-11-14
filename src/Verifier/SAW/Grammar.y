@@ -2,7 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Grammar 
   ( Decl(..)
-  , Expr(..)
+  , Term(..)
   , parseSAW
   , runParser
   , lexer
@@ -61,69 +61,86 @@ SAWDecls :: { [Decl] }
 SAWDecls : list(SAWDecl) { $1 }
 
 SAWDecl :: { Decl }
-SAWDecl : 'data' Con '::' LExpr 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
-        | DeclLhs '::' LExpr ';' {% mkTypeDecl $1 $3 }
-        | DeclLhs '='  Expr ';'  {% mkTermDef  $1 $3 }
+SAWDecl : 'data' Con '::' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
+        | DeclLhs '::' LTerm ';' {% mkTypeDecl $1 $3 }
+        | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
 
 DeclLhs :: { DeclLhs }
 DeclLhs : Con list(LambdaArg) { ($1, $2) }
         | Var list(LambdaArg) { ($1, $2) }
 
 CtorDecl :: { CtorDecl }
-CtorDecl : Con '::' LExpr ';' { Ctor $1 $3 }
+CtorDecl : Con '::' LTerm ';' { Ctor $1 $3 }
 
-AtomExpr :: { Expr }
-AtomExpr : nat                          { IntLit (pos $1) (tokNat (val $1)) }
+LambdaArg :: { (ParamType, Pat) }
+LambdaArg : AtomPat           { (NormalParam, $1) }
+          | ParamType AtomPat { ($1, $2) }
+
+Pat :: { Pat }
+Pat : CtorPat { $1 }
+    | CtorPat '::' LTerm { PTypeConstraint $1 $3 }
+
+CtorPat :: { Pat }
+CtorPat : AtomPat           { $1 }
+        | Con list(AtomPat) { PCtor $1 $2 }
+
+AtomPat :: { Pat }
+AtomPat : Var                       { PVar $1 }
+        | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
+        | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
+        | '.' AtomTerm              { PInaccessible $2 }
+
+Term :: { Term }
+Term : LTerm { $1 }
+     | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
+
+-- Term with uses of pi and lambda, but no typing.
+LTerm :: { Term }
+LTerm : AppTerm                          {  $1 }
+      | PiArg '->' LTerm                 {% mkPi (pos $2) $1 $3 }
+      | '\\' list1(LambdaArg) '->' LTerm {  Lambda (pos $1) $2 $4 }
+
+-- Term formed from applications of atomic expressions.
+AppTerm :: { Term }
+AppTerm : RecTerm                   { $1 }
+        | AppTerm RecTerm           { App $1 NormalParam $2 }
+        | AppTerm ParamType RecTerm { App $1 $2 $3 }
+
+RecTerm :: { Term }
+RecTerm : AtomTerm        { $1 }
+        | RecTerm '.' Var { RecordSelector $1 $3 }
+
+AtomTerm :: { Term }
+AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
          | Var                          { Var $1 }
          | Con                          { Con $1 }
          | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
-         |     '(' sepBy(Expr, ',') ')' {% parseVParen (pos $1) $2 }
-         | '#' '(' sepBy(Expr, ',') ')' {% parseTParen (pos $1) $3 }
-         | '{' list(RecValue) '}'       { RecordValue (pos $1) $2 } 
-         | '#' '{' list(RecType) '}'    { RecordType  (pos $1) $3 }
-         | '[' sepBy(Expr, ',') ']'     { ArrayValue (pos $1) $2 }
-         | AtomExpr '.' Var             { RecordSelector $1 $3 }
+         |     '(' sepBy(Term, ',') ')'     { parseParen Paren TupleValue (pos $1) $2 }
+         | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
+         |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 } 
+         | '#' '{' recList('::', LTerm) '}' { RecordType  (pos $1) $3 }
+         |     '[' sepBy(Term, ',') ']'     { ArrayValue (pos $1) $2 }
 
--- Expression formed from applications of atomic expressions.
-AppExpr :: { Expr }
-AppExpr : AtomExpr                   { $1 }
-        | AppExpr AtomExpr           { App $1 NormalParam $2 }
-        | AppExpr ParamType AtomExpr { App $1 $2 $3 }
-
--- Expression with uses of pi and lambda, but no typing.
-LExpr :: { Expr }
-LExpr : AppExpr                          {  $1 }
-      | PiArg '->' LExpr                 {% mkPi (pos $2) $1 $3 }
-      | '\\' list1(LambdaArg) '->' LExpr {  Lambda (pos $1) $2 $4 }
-
-Expr :: { Expr }
-Expr : LExpr { $1 }
-     | LExpr '::' LExpr { TypeConstraint $1 (pos $2) $3 }
-
-PiArg :: { (ParamType, Expr) }
-PiArg : ParamType AtomExpr { ($1, $2) } 
-      | AppExpr            { (NormalParam, $1) }
-
-LambdaArg :: { (ParamType, Expr) }
-LambdaArg : AtomExpr           { (NormalParam, $1) }
-          | ParamType AtomExpr { ($1, $2) }
+PiArg :: { (ParamType, Term) }
+PiArg : ParamType RecTerm { ($1, $2) } 
+      | AppTerm            { (NormalParam, $1) }
 
 ParamType :: { ParamType }
 ParamType : '?'   { ImplicitParam }
           | '??'  { InstanceParam }
           | '???' { ProofParam    }
 
-RecValue :: { (PosPair Ident, Expr) }
-RecValue : Var '=' Expr ';' { ($1, $3) }
-
-RecType :: { (PosPair Ident, Expr) }
-RecType : Var '::' LExpr ';' { ($1, $3) } 
-
 Var :: { PosPair Ident }
 Var : var { fmap (mkIdent . tokVar) $1 }
 
 Con :: { PosPair Ident }
 Con : con { fmap (mkIdent . tokCon) $1 }
+
+-- Two elements p and r separated by q and terminated by s
+sepPair(p,q,r,s) : p q r s { ($1,$3) }
+
+-- A list of record fields with the given separator and element type.
+recList(q,r) : list(sepPair(Var,q,r,';')) { $1 }
 
 -- A possibly-empty list of p's separated by q.
 sepBy(p,q) : {- empty -} { [] }
@@ -255,15 +272,15 @@ mergeParamType pt p mpt = do
 
 -- Attempts to parses an expression as a list of identifiers.
 -- Will return a value on all expressions, but may add errors to parser state.
-exprAsVarList :: Expr -> String -> Parser [PosPair Ident]
+exprAsVarList :: Term -> String -> Parser [PosPair Ident]
 exprAsVarList ex errMsg =
   case ex of
     Var pi -> return [pi]
     App x _ y -> liftM2 (++) (exprAsVarList x errMsg) (exprAsVarList y errMsg)
-    BadExpression _ -> return []
+    BadTerm _ -> return []
     _ -> addParseError (pos ex) errMsg >> return []
 
-mkPi :: Pos -> (ParamType, Expr) -> Expr -> Parser Expr
+mkPi :: Pos -> (ParamType, Term) -> Term -> Parser Term
 mkPi ptp (ppt,l) r = parseLhs l
   where parseLhs (Paren _ (TypeConstraint x _ t)) = 
           fmap (\l -> Pi ppt l t ptp r) $ 
@@ -271,26 +288,31 @@ mkPi ptp (ppt,l) r = parseLhs l
         parseLhs e =
           return $ Pi ppt [PosPair (pos e) (mkIdent "_")] e ptp r   
 
-parseVParen :: Pos -> [Expr] -> Parser Expr
-parseVParen p [expr] = return $ Paren p expr
-parseVParen p l = return $ TupleValue p l
+-- | Parse a parenthesized expression which may actually be a tuple.
+parseParen :: (Pos -> a -> b) -- ^ singleton case.
+           -> (Pos -> [a] -> b) -- ^ Tuple case
+           -> Pos
+           -> [a]
+           -> b
+parseParen f _ p [e] = f p e
+parseParen _ g p l = g p l               
 
-parseTParen :: Pos -> [Expr] -> Parser Expr
+parseTParen :: Pos -> [Term] -> Parser Term
 parseTParen p [expr] = do
   addParseError p "Tuple may not contain a single value."
-  return (badExpr p)
+  return (badTerm p)
 parseTParen p l = return $ TupleType p l
 
-asAppList :: Expr -> (Expr,[Expr])
+asAppList :: Term -> (Term,[Term])
 asAppList = \x -> impl x []
   where impl (App x _ y) r = impl x (y:r)
         impl x r = (x,r)
 
-type DeclLhs = (PosPair Ident, [LambdaBinding Expr])
+type DeclLhs = (PosPair Ident, [LambdaBinding Pat])
 
-mkTypeDecl :: DeclLhs -> Expr -> Parser Decl
+mkTypeDecl :: DeclLhs -> Term -> Parser Decl
 mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
-  where filterArgs ((NormalParam,Var pi):l) r = filterArgs l (pi:r)
+  where filterArgs ((NormalParam,PVar pi):l) r = filterArgs l (pi:r)
         filterArgs ((NormalParam,e):l) r = do
           addParseError (pos e) "Expected variable identifier in type declaration."
           filterArgs l r
@@ -299,6 +321,6 @@ mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
           filterArgs l r
         filterArgs [] r = return (reverse r)
 
-mkTermDef :: DeclLhs -> Expr -> Parser Decl
+mkTermDef :: DeclLhs -> Term -> Parser Decl
 mkTermDef (op,args) rhs = return (TermDef op args rhs)
 }

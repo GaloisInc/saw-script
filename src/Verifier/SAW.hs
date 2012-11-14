@@ -1,5 +1,5 @@
 module Verifier.SAW 
-  ( module Verifier.SAW.DagTerm 
+  ( module Verifier.SAW.SharedTerm 
   ) where
 
-import Verifier.SAW.DagTerm
+import Verifier.SAW.SharedTerm

@@ -4,8 +4,9 @@ module Verifier.SAW.UntypedAST
   , Sort, mkSort, sortOf
   , ParamType(..)
   , LambdaBinding
-  , Expr(..)
-  , badExpr
+  , Pat(..)
+  , Term(..)
+  , badTerm
   , CtorDecl(..)
   , Decl(..)
   ) where
@@ -39,64 +40,84 @@ data ParamType
   | ProofParam
   deriving (Eq, Ord, Show)
 
-data Expr
+data Term
   = IntLit Pos Integer
   | Var (PosPair Ident)
   | Con (PosPair Ident)
   | Sort Pos Sort
-  | Lambda Pos [LambdaBinding Expr] Expr
-  | App Expr ParamType Expr
+  | Lambda Pos [LambdaBinding Pat] Term
+  | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
-  | Pi ParamType [PosPair Ident] Expr Pos Expr
+  | Pi ParamType [PosPair Ident] Term Pos Term
     -- | Tuple expressions and their type.
-  | TupleValue Pos [Expr]
-  | TupleType Pos [Expr]
+  | TupleValue Pos [Term]
+  | TupleType Pos [Term]
     -- | A record value.
-  | RecordValue Pos [(PosPair Ident, Expr)]
+  | RecordValue Pos [(PosPair Ident, Term)]
     -- | The value stored in a record.
-  | RecordSelector Expr (PosPair Ident)
+  | RecordSelector Term (PosPair Ident)
     -- | Type of a record value.
-  | RecordType  Pos [(PosPair Ident, Expr)]
+  | RecordType  Pos [(PosPair Ident, Term)]
     -- | Arguments to an array constructor.  
-  | ArrayValue Pos [Expr]
-  | Paren Pos Expr
-  -- * Expressions that may appear in parsing, but do not affect value.
-  | TypeConstraint Expr Pos Expr
-  | BadExpression Pos
+  | ArrayValue Pos [Term]
+  | Paren Pos Term
+  -- * Termessions that may appear in parsing, but do not affect value.
+  | TypeConstraint Term Pos Term
+  | BadTerm Pos
  deriving (Eq, Ord, Show)
+
+-- | A pattern used for matching a variable.
+data Pat
+  = PVar (PosPair Ident)
+  | PCtor (PosPair Ident) [Pat]
+  | PTuple Pos [Pat]
+  | PRecord Pos [(PosPair Ident, Pat)]
+  | PInaccessible Term
+  | PTypeConstraint Pat Term
+  deriving (Eq, Ord, Show)
 
 type LambdaBinding t = (ParamType, t)
 
-instance Positioned Expr where
-  pos e =
-    case e of
+instance Positioned Term where
+  pos t =
+    case t of
       IntLit p _           -> p
       Var i                -> pos i
       Con i                -> pos i
+      Sort p _             -> p
+      Lambda p _ _         -> p
+      App x _ _            -> pos x
+      Pi _ _ _ p _         -> p
       TupleValue p _       -> p
       TupleType p _        -> p
-      App x _ _            -> pos x
       RecordValue p _      -> p
-      RecordType p _       -> p
       RecordSelector _ i   -> pos i
+      RecordType p _       -> p
       ArrayValue p _       -> p
       Paren p _            -> p
-      Lambda p _ _         -> p
-      Pi _ _ _ p _         -> p
       TypeConstraint _ p _ -> p
-      Sort p _             -> p
-      BadExpression p      -> p
+      BadTerm p            -> p
 
-badExpr :: Pos -> Expr
-badExpr = BadExpression
+instance Positioned Pat where
+  pos pat =
+    case pat of
+      PVar i      -> pos i
+      PCtor i _   -> pos i
+      PTuple p _  -> p
+      PRecord p _ -> p
+      PInaccessible t -> pos t
+      PTypeConstraint _ t -> pos t
+
+badTerm :: Pos -> Term
+badTerm = BadTerm
 
 -- | Constructor declaration.
-data CtorDecl = Ctor (PosPair Ident) Expr
+data CtorDecl = Ctor (PosPair Ident) Term
   deriving (Show)
 
 -- Data declarations introduce an operator for each constructor, and an operator for the type.
 data Decl
-   = TypeDecl [(PosPair Ident)] Expr
-   | DataDecl (PosPair Ident) Expr [CtorDecl]
-   | TermDef (PosPair Ident) [LambdaBinding Expr] Expr
+   = TypeDecl [(PosPair Ident)] Term
+   | DataDecl (PosPair Ident) Term [CtorDecl]
+   | TermDef (PosPair Ident) [LambdaBinding Pat] Term
   deriving (Show)
