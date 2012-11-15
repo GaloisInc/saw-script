@@ -1,6 +1,6 @@
 module Verifier.SAW.SharedTerm
   ( ParamType(..)
-  , Builtin(..)
+--  , Builtin(..)
   , TermF(..)
   , Ident, mkIdent
   , SharedTerm
@@ -11,16 +11,17 @@ module Verifier.SAW.SharedTerm
   , scApplyAll
   , scLambda
   , scFreshGlobal
+  , scRecordSelect
 --  , scFreshGlobal
 --  , scLocalVar
-  , scBuiltin
+--  , scBuiltin
   , scInteger
   , scTypeOf
 --  , scView
   , scPrettyTerm
     -- ** Utilities.
-  , scGroundSignedType
-  , scGroundSignedValueFn
+--  , scGroundSignedType
+--  , scGroundSignedValueFn
   , scViewAsBool
   , scViewAsNum
   ) where
@@ -31,7 +32,7 @@ import Text.PrettyPrint.HughesPJ
 
 import Verifier.SAW.TypedAST
 
-
+{-
 -- | Builtin operations.
 data Builtin
   = BoolType
@@ -54,12 +55,12 @@ data Builtin
   | BoolOrdInstance
 
   | NumClass
-  | NegFn
-  | AddFn
-  | SubFn
-  | MulFn
-  | DivFn
-  | RemFn
+  | NegOp
+  | AddOp
+  | SubOp
+  | MulOp
+  | DivOp
+  | RemOp
 
   | BitsClass
   | NotFn
@@ -106,9 +107,10 @@ data Builtin
   | ResizeSigned
   | SignedToUnsigned
   | UnsignedToSigned
+  | SignedUShr
 
   deriving (Eq, Ord)
-
+-}
 
 data SharedTerm s = SharedTerm Word64 (TermF (SharedTerm s))
 
@@ -128,10 +130,13 @@ data SharedContext s = SharedContext
                -> IO (SharedTerm s)
     -- | @scApplyFn f x@ returns the result of applying @x@ to a lambda function @x@.
   , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-  , scBuiltinFn       :: Builtin -> IO (SharedTerm s)
+    -- | Select an element out of a record.
+  , scRecordSelectFn  :: SharedTerm s -> String -> IO (SharedTerm s)
   , scIntegerFn       :: Integer -> IO (SharedTerm s)
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
+    -- Returns the globals in the current scope as a record of functions.
+  --, scGetCurrentModuleFn :: IO (SharedTerm s)
   }
 
 scLambda :: (?sc :: SharedContext s)
@@ -147,8 +152,8 @@ scApply = scApplyFn ?sc
 scApplyAll :: (?sc :: SharedContext s) => SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll = foldM scApply
 
-scBuiltin :: (?sc :: SharedContext s) => Builtin -> IO (SharedTerm s)
-scBuiltin = scBuiltinFn ?sc
+scRecordSelect :: (?sc :: SharedContext s) => SharedTerm s -> String -> IO (SharedTerm s)
+scRecordSelect = scRecordSelectFn ?sc
 
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scInteger = scIntegerFn ?sc
@@ -162,6 +167,7 @@ scFreshGlobal :: (?sc :: SharedContext s)
               -> IO (SharedTerm s)
 scFreshGlobal = undefined
 
+{-
 -- | Returns signed type with the given bitwidth
 scGroundSignedType :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scGroundSignedType w = do
@@ -174,6 +180,7 @@ scGroundSignedValueFn w = do
   f <- scBuiltin IntegerToSigned
   fw <- scApply f =<< scInteger w
   return $ scApply fw <=< scInteger
+-}
 
 -- | Returns term as a constant Boolean if it can be evaluated as one.
 scViewAsBool :: (?sc :: SharedContext s) => SharedTerm s -> Maybe Bool
@@ -196,7 +203,7 @@ mkSharedContext = do
 --     , scFreshGlobalFn = undefined
 --     , scGlobalsWithType = undefined
 --     , scLocalVarFn = undefined
-     , scBuiltinFn = undefined
+--     , scBuiltinFn = undefined
      , scIntegerFn = undefined
      , scTypeOfFn  = undefined
 --     , scViewFn = undefined
