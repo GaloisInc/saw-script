@@ -1,8 +1,11 @@
-{-# LANGUAGE MultiParamTypeClasses, KindSignatures #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module SAWScript.LiftPoly where
 
 import SAWScript.AST
+import SAWScript.FixFunctor
 
 import Control.Monad.State
 import Control.Applicative
@@ -13,7 +16,7 @@ type LS = State (Int,[(Name,Int)])
 liftPoly :: Module PType -> Module LType
 liftPoly m = evalState (lp m) (0,[])
 
-class LiftPoly (a :: * -> *) where
+class (Functor f) => LiftPoly f where
   lp :: a PType -> LS (a LType)
 
 instance LiftPoly Module where
