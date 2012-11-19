@@ -132,7 +132,7 @@ data SharedContext s = SharedContext
     -- | @scApplyFn f x@ returns the result of applying @x@ to a lambda function @x@.
   , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
     -- | Select an element out of a record.
-  , scRecordSelectFn  :: SharedTerm s -> String -> IO (SharedTerm s)
+  , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scIntegerFn       :: Integer -> IO (SharedTerm s)
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
@@ -153,7 +153,7 @@ scApply = scApplyFn ?sc
 scApplyAll :: (?sc :: SharedContext s) => SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll = foldM scApply
 
-scRecordSelect :: (?sc :: SharedContext s) => SharedTerm s -> String -> IO (SharedTerm s)
+scRecordSelect :: (?sc :: SharedContext s) => SharedTerm s -> FieldName -> IO (SharedTerm s)
 scRecordSelect = scRecordSelectFn ?sc
 
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)

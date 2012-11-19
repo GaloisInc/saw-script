@@ -3,6 +3,7 @@ module Verifier.SAW.TypedAST
  ( Un.Ident, Un.mkIdent
  , Un.ParamType(..)
  , LambdaVar
+ , FieldName
  , TermF(..)
  , Term(..)
  , PosPair(..)
@@ -39,11 +40,13 @@ type LambdaVar e = (Un.ParamType, Ident, e)
 
 type DeBruijnIndex = Integer
 
+type FieldName = String
+
 -- Patterns are used to match equations.
 data Pat e = PVar DeBruijnIndex -- ^ Variable and it's type (variables should appear at most once)
            | PCtor Ident [Pat e]
            | PTuple [Pat e]
-           | PRecord (Map String (Pat e))
+           | PRecord (Map FieldName (Pat e))
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PInaccessible e
@@ -72,9 +75,9 @@ data TermF e
   | TupleValue [e]
   | TupleType [e]
 
-  | RecordValue (Map String e)
-  | RecordSelector e String
-  | RecordType (Map String e)
+  | RecordValue (Map FieldName e)
+  | RecordSelector e FieldName
+  | RecordType (Map FieldName e)
 
   | ArrayValue [e]
     -- ^ List of bindings and the let expression itself.
