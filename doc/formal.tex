@@ -11,6 +11,7 @@
 \newcommand{\set}[1]{\fn{set}_{#1}}
 \newcommand{\rctor}[3]{{#1} : {#2} \downarrow {#3}}
 \newcommand{\Piexpr}[3]{\Pi {#1}{:}{#2}.\ {#3}}
+\newcommand{\letexpr}[2]{\fn{let}\ {#1}\ \fn{in}\ {#2}}
 \newcommand{\rlbl}[1]{\mathrm{\scriptstyle{}#1}}
 
 \begin{document}
@@ -32,17 +33,17 @@ $c \in C$ \emph{constructors}.
 \begin{align*}
 &\begin{array}{llrll}
 \text{Terms}
-& T,U    &:=\:& x & \text{var term}\\
-&        & |\:& (\lambda x . T) &\text{lambda}\\
-&        & |\:& T U &\text{app}\\
+& T,U    &:=\:& x & \text{Variable}\\
+&        & |\:& (\lambda x . T) &\text{Lambda}\\
+&        & |\:& T U &\text{Application}\\
 &        & |\:& \Piexpr{x}{T}{U} &\text{Pi expression}\\
-&        & |\:& \set{i}\\
-&        & |\:& (T_1, \dots, T_n)\\ % Tuples
-&        & |\:& \#(T_1, \dots, T_n)\\ % Tuple types
-&        & |\:& \{ f_1 = T_1; \dots; f_n = T_n \} \\ % records
-&        & |\:& \#\{ f_1 : T_1; \dots; f_n : T_n \} \\ % record types
-&        & |\:& c(T_1,\dots,T_n)\\ % Constructors
-&        & |\:& \fn{let}\ [ D_1; \dots; D_n ]\ \fn{in}\ T\\ % let
+&        & |\:& \set{i} & \text{Set}\\
+&        & |\:& (T_1, \dots, T_n)   & \text{Tuples}\\
+&        & |\:& \#(T_1, \dots, T_n)                 & \text{Tuple types}\\
+&        & |\:& \{ f_1 = T_1; \dots; f_n = T_n \}   & \text{Records}\\
+&        & |\:& \#\{ f_1 : T_1; \dots; f_n : T_n \} & \text{Record types}\\
+&        & |\:& c(T_1,\dots,T_n)                    & \text{Constructor}\\
+&        & |\:& \letexpr{[ D_1; \dots; D_n ]}{T}    & \text{Let}\\
 \text{Definitions}
 &D_i     &:=\:&x :: T; E_{x,1}; \dots; E_{x,n}\\
 \text{Equations}
@@ -56,9 +57,16 @@ $c \in C$ \emph{constructors}.
 \end{array}\\
 \end{align*}
 
-A term is logically defined
-
 \section{Typing Rules}
+
+There are a number of inferences that need to be defined to get typing the relations include:
+
+\begin{itemize}
+  \item $\Gamma |- T : U$ Type checking
+  \item $\Gamma |- \rctor{\vec{T}}{U}{V}$ Infer constructor arguments
+  \item $\Gamma |- T \sqsubseteq U$
+\end{itemize}
+
 \begin{gather*}
 \begin{array}{rc}
 % Variables
@@ -66,29 +74,27 @@ A term is logically defined
 \inference{}{\Gamma, x{:}A |- x : A}\\[1em]
 \rlbl{var-2}&
 \inference{\Gamma |- x : A \quad y \not\in (\{x\} \cup \fn{fv}(A))}
-          {\Gamma,y{:}B |- x : A}\\[1em]
+          {\Gamma,y{:}B |- x : A}\\[1.5em]
 % Lambda
 \rlbl{lambda}&
-\inference{\Gamma |- A{:}\set{\alpha} \quad \Gamma,x{:}A |- b{:}B}
-          {\Gamma |- (\lambda x . b) : (\Piexpr{x}{A}{B})}\\[1em]
+\inference{\Gamma |- T{:}\set{\alpha} \quad \Gamma,x{:}T |- u{:}U}
+          {\Gamma |- (\lambda x . u) : (\Piexpr{x}{T}{U})}\\[1em]
 \rlbl{app}&
 \inference{\Gamma |- f : (\Piexpr{x}{A}{B}) \quad \Gamma |- t : A  }
           {\Gamma |- f t : B[x/t] }\\[1em]
 \rlbl{pi}&
 \inference{\Gamma |- A : \set{i} \quad \Gamma,x:A |- B : \set{i}}
-          {\Gamma |- (\Piexpr{x}{A}{B}) : \set{i}}\\[1em]
+          {\Gamma |- (\Piexpr{x}{A}{B}) : \set{i}}\\[1.5em]
 %Set
 \rlbl{set}&
-\inference{}{\Gamma |- \set{i} : \set{i+1}}\\[1em]
-\rlbl{subset}&
-\inference{\Gamma |- t : \set{i}}{\Gamma |- t : \set{i+1}}\\[1em]
+\inference{}{\Gamma |- \set{i} : \set{i+1}}\\[1.5em]
 % Tuples
 \rlbl{tuple-1}&
 \inference{\Gamma |- x_1 : T_1 \quad \dots \quad \Gamma |- x_n : T_n}
           {\Gamma |- (x_1, \dots, x_n) : \#(T_1, \dots, T_n)}\\[1em]
 \rlbl{tuple-2}&
 \inference{\Gamma |- T_1 : \set{i} \quad \dots \quad \Gamma |- T_n : \set{i}}
-          {\Gamma |- \#(T_1, \dots, T_n) : \set{i}}\\[1em]
+          {\Gamma |- \#(T_1, \dots, T_n) : \set{i}}\\[1.5em]
 % Records
 \rlbl{record-1}&
 \inference{\Gamma |- t_1 : T_1\ \dots\ \Gamma |- t_n : T_n }
@@ -99,11 +105,28 @@ A term is logically defined
           {\Gamma |- \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n} : \set{i}}\\[1em]
 \rlbl{record-3}&
 \inference{\Gamma |- r : \rectyp{ x : t; \dots }}
-          {\Gamma |- r.x : t }\\[1em]
+          {\Gamma |- r.x : t }\\[1.5em]
 % Constructors
-\rlbl{ctor-1}&
+\rlbl{ctor}&
 \inference{c : T \in \Sigma \quad \Gamma |- \rctor{t_1,\dots,t_n}{T}{C}}
-          {\Gamma |- c(t_1,\dots,t_n) : C}\\[1em]
+          {\Gamma |- c(t_1,\dots,t_n) : C}\\[1.5em]
+\rlbl{let}&
+\inference{\displaystyle
+           \bigwedge_{i\in[1..n]}\ \Gamma |- \fn{type}(D_i)\quad
+           \Gamma' |- T : U\quad
+           \bigwedge_{i\in[1..n]} \bigwedge_{e \in \fn{eqs}(D_i)} \Gamma' |- e\text{ is correct}\\
+           \Gamma' = \Gamma,\fn{var}(D_1){:}\fn{type}(D_1), \dots, \fn{var}(D_n){:}\fn{type}(D_n)}
+          {\Gamma |- \letexpr{[D_1; \dots; D_n]}{T} : U}
+\\[1.5em]
+\rlbl{subset}&
+\inference{\Gamma |- t : A \quad \Gamma |- A \sqsubseteq B}
+          {\Gamma |- t : B}\\[1.5em]
+\end{array}
+\end{gather*}
+
+Rules for infering the target type of a constructor datatype $c(t_1, \dots, t_n)$.
+\begin{gather*}
+\begin{array}{rc}
 % Constructor inference.
 \rlbl{ctor-2}&
 \inference{\Gamma|- t_1 : A \quad \Gamma |- \rctor{t_2,\dots,t_n}{B[x/t_1]}{C}}

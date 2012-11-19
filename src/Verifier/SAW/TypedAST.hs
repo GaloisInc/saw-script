@@ -21,6 +21,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Vector (Vector)
 import Data.Word (Word64)
 
 import Verifier.SAW.Position
@@ -71,6 +72,8 @@ data TermF e
   | App e e
   | Pi (ParamType, Ident, e) e
 
+  | Ctor [e]
+
     -- Tuples may be 0 or 2+ elements.  The empty tuple is not allowed.
   | TupleValue [e]
   | TupleType [e]
@@ -79,7 +82,7 @@ data TermF e
   | RecordSelector e FieldName
   | RecordType (Map FieldName e)
 
-  | ArrayValue [e]
+  | ArrayValue (Vector e)
     -- ^ List of bindings and the let expression itself.
     -- Let expressions introduce variables for each identifier.
   | Let [Def e] e

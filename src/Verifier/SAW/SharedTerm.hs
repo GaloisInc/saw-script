@@ -28,92 +28,17 @@ module Verifier.SAW.SharedTerm
   ) where
 
 import Control.Monad
+import Data.IORef
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Word
 import Text.PrettyPrint.HughesPJ
 
 import Verifier.SAW.TypedAST
 
-{-
--- | Builtin operations.
-data Builtin
-  = BoolType
-  | TrueCtor
-  | FalseCtor
-  | IteFn
+type TermIndex = Word64
 
-  | EqFn -- Equality takes the type and the two arguments to compare.
-
-  | TrueProp
-  | AtomicProof
-  | FalseProp
-  | AssertFn
-
-  | OrdClass
-  | LeqFn
-  | LtFn
-  | GeqFn
-  | GtFn
-  | BoolOrdInstance
-
-  | NumClass
-  | NegOp
-  | AddOp
-  | SubOp
-  | MulOp
-  | DivOp
-  | RemOp
-
-  | BitsClass
-  | NotFn
-  | AndFn
-  | OrFn
-  | XorFn
-  | ImpliesFn
-  | ShlFn
-  | ShrFn
-  | BoolBitsInstance
-
-  | IntegerType
-  | IntegerOrdInstance
-  | IntegerNumInstance
-  | IntegerBitsInstance
-  
-  | ArrayType
-  | ArrayOrdInstance
-  | ArrayBitsInstance
-  | GetFn
-  | SetFn
-  | GenerateFn
-  
-  | SignedType
-  | SignedOrdInstance
-  | SignedNumInstance
-  | SignedBitsInstance
-
-  | UnsignedType
-  | UnsignedOrdInstance
-  | UnsignedNumInstance
-  | UnsignedBitsInstance
-
-  | SignedToInteger
-  | UnsignedToInteger
-  | IntegerToSigned
-  | IntegerToUnsigned
-
-  | SignedToArray
-  | UnsignedToArray
-  | ArrayToSigned
-  | ArrayToUnsigned
-
-  | ResizeSigned
-  | SignedToUnsigned
-  | UnsignedToSigned
-  | SignedUShr
-
-  deriving (Eq, Ord)
--}
-
-data SharedTerm s = SharedTerm Word64 (TermF (SharedTerm s))
+data SharedTerm s = SharedTerm TermIndex (TermF (SharedTerm s))
 
 instance Eq (SharedTerm s) where
   SharedTerm i _ == SharedTerm j _ = i == j
@@ -121,8 +46,10 @@ instance Eq (SharedTerm s) where
 instance Ord (SharedTerm s) where
   compare (SharedTerm i _) (SharedTerm j _) = compare i j
 
--- | Operations that are defined, but not 
+-- | TODO: Writeup module
+newtype Module = Module ()
 
+-- | Operations that are defined, but not 
 data SharedContext s = SharedContext
   { -- | Returns a lambda expression with the 
     scLambdaFn :: ParamType
@@ -131,13 +58,14 @@ data SharedContext s = SharedContext
                -> IO (SharedTerm s)
     -- | @scApplyFn f x@ returns the result of applying @x@ to a lambda function @x@.
   , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+  , scMkRecordFn      :: Map String (SharedTerm s) -> IO (SharedTerm s)
     -- | Select an element out of a record.
   , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scIntegerFn       :: Integer -> IO (SharedTerm s)
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
+  , scLoadModule      :: Module -> IO (Map String (SharedTerm s))
     -- Returns the globals in the current scope as a record of functions.
-  --, scGetCurrentModuleFn :: IO (SharedTerm s)
   }
 
 scLambda :: (?sc :: SharedContext s)
@@ -195,10 +123,32 @@ scViewAsNum = undefined
 scPrettyTerm :: (?sc :: SharedContext s) => SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDocFn ?sc t)
 
-mkSharedContext :: IO (SharedContext s)
-mkSharedContext = do
+-- 
+data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
+                     , acNextIdx :: !Word64
+                     }
+
+emptyAppCache :: AppCache s
+emptyAppCache = AC Map.empty 0
+
+-- | Return term for application using existing term in cache if it is avaiable.
+getTerm :: IORef (AppCache s) -> TermF (SharedTerm s) -> IO (SharedTerm s)
+getTerm r a = do
+  s <- readIORef r
+  case Map.lookup a (acBindings s) of
+    Just t -> return t
+    Nothing -> do
+      let t = SharedTerm (acNextIdx s) a
+      writeIORef r $! s { acBindings = Map.insert a t (acBindings s)
+                        , acNextIdx = acNextIdx s + 1
+                        }
+      return t
+
+mkUninterpretedSharedContext :: IO (SharedContext s)
+mkUninterpretedSharedContext = do
+  cr <- newIORef emptyAppCache
   return SharedContext {
-       scApplyFn = undefined
+       scApplyFn = \f x -> getTerm cr (App f x)         
      , scLambdaFn = undefined
 --     , scGlobalFn = undefined              
 --     , scFreshGlobalFn = undefined
@@ -210,3 +160,6 @@ mkSharedContext = do
 --     , scViewFn = undefined
      , scPrettyTermDocFn = undefined
      }
+
+mkSharedContext :: IO (SharedContext s)
+mkSharedContext = undefined
