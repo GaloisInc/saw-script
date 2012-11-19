@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 module Verifier.SAW.Position
   ( Pos(..)
   , ppPos

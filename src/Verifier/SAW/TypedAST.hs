@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveFunctor #-}
 module Verifier.SAW.TypedAST
  ( Un.Ident, Un.mkIdent
  , Un.ParamType(..)
