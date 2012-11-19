@@ -1,0 +1,116 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{semantic}
+
+\title{The Logic of SAW}
+
+%\newcommand{\inference}[2]{\frac{#1}{#2}}
+\newcommand{\rectyp}[1]{\#\{#1\}}
+\newcommand{\recval}[1]{\{#1\}}
+\newcommand{\fn}[1]{\mathtt{#1}}
+\newcommand{\set}[1]{\fn{set}_{#1}}
+\newcommand{\rctor}[3]{{#1} : {#2} \downarrow {#3}}
+\newcommand{\Piexpr}[3]{\Pi {#1}{:}{#2}.\ {#3}}
+\newcommand{\rlbl}[1]{\mathrm{\scriptstyle{}#1}}
+
+\begin{document}
+
+%Lambda
+%Pi
+%Tuple Values & Types
+%Record Values & Types
+%Record selectors
+
+\section{Syntax}
+
+We begin by defining \emph{pseudo-terms}, syntactically constructed objects that
+may or may not have a valid type accordining to the type inference rules which we
+will define later.  In defining the terms, we assume that there are disjoint infinite
+sets $X$ and $C$.  We call the elements $x \in X$ \emph{variables}, and the elements
+$c \in C$ \emph{constructors}.
+
+\begin{align*}
+&\begin{array}{llrll}
+\text{Terms}
+& T,U    &:=\:& x & \text{var term}\\
+&        & |\:& (\lambda x . T) &\text{lambda}\\
+&        & |\:& T U &\text{app}\\
+&        & |\:& \Piexpr{x}{T}{U} &\text{Pi expression}\\
+&        & |\:& \set{i}\\
+&        & |\:& (T_1, \dots, T_n)\\ % Tuples
+&        & |\:& \#(T_1, \dots, T_n)\\ % Tuple types
+&        & |\:& \{ f_1 = T_1; \dots; f_n = T_n \} \\ % records
+&        & |\:& \#\{ f_1 : T_1; \dots; f_n : T_n \} \\ % record types
+&        & |\:& c(T_1,\dots,T_n)\\ % Constructors
+&        & |\:& \fn{let}\ [ D_1; \dots; D_n ]\ \fn{in}\ T\\ % let
+\text{Definitions}
+&D_i     &:=\:&x :: T; E_{x,1}; \dots; E_{x,n}\\
+\text{Equations}
+&E_{c,i} &:=\:&c\ P_1\ \dots\ P_n = T\\
+\text{Patterns}
+&P       &:=\:&x & \text{Variable}\\
+&        & |\:&(P_1, \dots, P_n) &\text{Tuple}\\ % Tuples
+&        & |\:&\{ f_1 = P_1; \dots; f_n = P_n \} & \text{Record}\\ % Records
+&        & |\:&c(P_1, \dots, P_n) & \text{Constructor}\\ % Constructors
+&        & |\:&.T & \text{Inaccessible term}\\
+\end{array}\\
+\end{align*}
+
+A term is logically defined
+
+\section{Typing Rules}
+\begin{gather*}
+\begin{array}{rc}
+% Variables
+\rlbl{var-1}&
+\inference{}{\Gamma, x{:}A |- x : A}\\[1em]
+\rlbl{var-2}&
+\inference{\Gamma |- x : A \quad y \not\in (\{x\} \cup \fn{fv}(A))}
+          {\Gamma,y{:}B |- x : A}\\[1em]
+% Lambda
+\rlbl{lambda}&
+\inference{\Gamma |- A{:}\set{\alpha} \quad \Gamma,x{:}A |- b{:}B}
+          {\Gamma |- (\lambda x . b) : (\Piexpr{x}{A}{B})}\\[1em]
+\rlbl{app}&
+\inference{\Gamma |- f : (\Piexpr{x}{A}{B}) \quad \Gamma |- t : A  }
+          {\Gamma |- f t : B[x/t] }\\[1em]
+\rlbl{pi}&
+\inference{\Gamma |- A : \set{i} \quad \Gamma,x:A |- B : \set{i}}
+          {\Gamma |- (\Piexpr{x}{A}{B}) : \set{i}}\\[1em]
+%Set
+\rlbl{set}&
+\inference{}{\Gamma |- \set{i} : \set{i+1}}\\[1em]
+\rlbl{subset}&
+\inference{\Gamma |- t : \set{i}}{\Gamma |- t : \set{i+1}}\\[1em]
+% Tuples
+\rlbl{tuple-1}&
+\inference{\Gamma |- x_1 : T_1 \quad \dots \quad \Gamma |- x_n : T_n}
+          {\Gamma |- (x_1, \dots, x_n) : \#(T_1, \dots, T_n)}\\[1em]
+\rlbl{tuple-2}&
+\inference{\Gamma |- T_1 : \set{i} \quad \dots \quad \Gamma |- T_n : \set{i}}
+          {\Gamma |- \#(T_1, \dots, T_n) : \set{i}}\\[1em]
+% Records
+\rlbl{record-1}&
+\inference{\Gamma |- t_1 : T_1\ \dots\ \Gamma |- t_n : T_n }
+          {\Gamma |- \recval{ x_1 = t_1;\ \dots\ ; x_n = t_n} 
+                   : \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n}}\\[1em]
+\rlbl{record-2}&
+\inference{\Gamma |- T_1 : \set{i} \quad \dots \quad \Gamma |- T_n : \set{i}}
+          {\Gamma |- \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n} : \set{i}}\\[1em]
+\rlbl{record-3}&
+\inference{\Gamma |- r : \rectyp{ x : t; \dots }}
+          {\Gamma |- r.x : t }\\[1em]
+% Constructors
+\rlbl{ctor-1}&
+\inference{c : T \in \Sigma \quad \Gamma |- \rctor{t_1,\dots,t_n}{T}{C}}
+          {\Gamma |- c(t_1,\dots,t_n) : C}\\[1em]
+% Constructor inference.
+\rlbl{ctor-2}&
+\inference{\Gamma|- t_1 : A \quad \Gamma |- \rctor{t_2,\dots,t_n}{B[x/t_1]}{C}}
+          {\Gamma |- \rctor{t_1,\dots,t_n}{\Piexpr{x}{A}{B}}{C}}\\[1em]
+\rlbl{ctor-3}&
+\inference{}{\Gamma |- \rctor{\epsilon}{B}{B}}\\[1em]
+\end{array}
+\end{gather*}
+
+\end{document}
