@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 module Verifier.SAW.SharedTerm
   ( ParamType(..)
 --  , Builtin(..)
