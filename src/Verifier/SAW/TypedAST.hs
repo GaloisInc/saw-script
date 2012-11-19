@@ -37,10 +37,10 @@ type LambdaVar e = (Un.ParamType, Ident, e)
 -- these decisions were made so that terms have a well-specified type, and we do
 -- not need to be concerned about record subtyping.
 
-type DeBrujinIndex = Integer
+type DeBruijnIndex = Integer
 
 -- Patterns are used to match equations.
-data Pat e = PVar DeBrujinIndex -- ^ Variable and it's type (variables should appear at most once)
+data Pat e = PVar DeBruijnIndex -- ^ Variable and it's type (variables should appear at most once)
            | PCtor Ident [Pat e]
            | PTuple [Pat e]
            | PRecord (Map String (Pat e))
