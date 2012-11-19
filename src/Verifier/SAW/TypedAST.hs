@@ -73,7 +73,7 @@ data TermF e
   | TupleType [e]
 
   | RecordValue (Map String e)
-  | RecordSelector (Map String e)
+  | RecordSelector e String
   | RecordType (Map String e)
 
   | ArrayValue [e]
