@@ -9,10 +9,15 @@
 \newcommand{\recval}[1]{\{#1\}}
 \newcommand{\fn}[1]{\mathtt{#1}}
 \newcommand{\set}[1]{\fn{set}_{#1}}
-\newcommand{\rctor}[3]{{#1} : {#2} \downarrow {#3}}
+\newcommand{\rctor}[4]{#1 |- {#2} : {#3} \downarrow {#4}}
+\newcommand{\lamexpr}[3]{\lambda {#1}{:}{#2}.\ {#3}}
 \newcommand{\Piexpr}[3]{\Pi {#1}{:}{#2}.\ {#3}}
 \newcommand{\letexpr}[2]{\fn{let}\ {#1}\ \fn{in}\ {#2}}
 \newcommand{\rlbl}[1]{\mathrm{\scriptstyle{}#1}}
+\newcommand{\ctxcons}[3]{#1 (#2{:}#3)}
+\newcommand{\ctx}[2]{(#1,#2)}
+\newcommand{\subtype}[2]{#1 \subseteq #2}
+
 
 \begin{document}
 
@@ -22,32 +27,36 @@
 %Record Values & Types
 %Record selectors
 
+%NOTES: The treatment of constructors is wrong.  We need to ensure that the exact expected
+% number of argments is passed.
+
 \section{Syntax}
 
 We begin by defining \emph{pseudo-terms}, syntactically constructed objects that
 may or may not have a valid type accordining to the type inference rules which we
 will define later.  In defining the terms, we assume that there are disjoint infinite
-sets $X$ and $C$.  We call the elements $x \in X$ \emph{variables}, and the elements
-$c \in C$ \emph{constructors}.
-
+sets $X$ and $\Sigma$.  We call the elements $x \in X$ \emph{variables}, and the elements
+$c \in \Sigma$ \emph{constructors}.  Each constructor $c \in \Sigma$ is associated to a
+term $\fn{type}(c)$, called the type.
 \begin{align*}
 &\begin{array}{llrll}
 \text{Terms}
 & T,U    &:=\:& x & \text{Variable}\\
-&        & |\:& (\lambda x . T) &\text{Lambda}\\
+&        & |\:& \lamexpr{x}{T}{U} &\text{Lambda}\\
 &        & |\:& T U &\text{Application}\\
 &        & |\:& \Piexpr{x}{T}{U} &\text{Pi expression}\\
-&        & |\:& \set{i} & \text{Set}\\
 &        & |\:& (T_1, \dots, T_n)   & \text{Tuples}\\
 &        & |\:& \#(T_1, \dots, T_n)                 & \text{Tuple types}\\
 &        & |\:& \{ f_1 = T_1; \dots; f_n = T_n \}   & \text{Records}\\
 &        & |\:& \#\{ f_1 : T_1; \dots; f_n : T_n \} & \text{Record types}\\
+&        & |\:& T.f                                & \text{Record selector}\\ 
 &        & |\:& c(T_1,\dots,T_n)                    & \text{Constructor}\\
+&        & |\:& \set{i} & \text{Set}\\
 &        & |\:& \letexpr{[ D_1; \dots; D_n ]}{T}    & \text{Let}\\
 \text{Definitions}
-&D_i     &:=\:&x :: T; E_{x,1}; \dots; E_{x,n}\\
+&D_i     &:=\:&x ::\ T \text{where}\ E_{x,1}; \dots; E_{x,n}\\
 \text{Equations}
-&E_{c,i} &:=\:&c\ P_1\ \dots\ P_n = T\\
+&E_{x,i} &:=\:&x\ P_1\ \dots\ P_n = T\\
 \text{Patterns}
 &P       &:=\:&x & \text{Variable}\\
 &        & |\:&(P_1, \dots, P_n) &\text{Tuple}\\ % Tuples
@@ -57,70 +66,92 @@ $c \in C$ \emph{constructors}.
 \end{array}\\
 \end{align*}
 
+In addition, to the rules above.  We make a few additional syntactic
+restrictions on terms:
+\begin{itemize}
+  \item In the patterns $P_1 \dots P_n$ bound in an equation, each
+    variable may appear at most once in an accessible position in the
+    patterns $P_1 \dots P_n$.
+\end{itemize}
+
+
 \section{Typing Rules}
 
 There are a number of inferences that need to be defined to get typing the relations include:
 
+\newcommand{\defctx}{\ctx{\Gamma}{\Delta}}
+
 \begin{itemize}
-  \item $\Gamma |- T : U$ Type checking
-  \item $\Gamma |- \rctor{\vec{T}}{U}{V}$ Infer constructor arguments
-  \item $\Gamma |- T \sqsubseteq U$
+  \item $\defctx{} |- T : U$ denotes $T$ has type $U$ in $\defctx{}$.
+  \item $\rctor{\defctx}{\vec{T}}{U}{V}$ Infer constructor arguments
+  \item $\defctx{} |- T \sqsubseteq U$
 \end{itemize}
 
 \begin{gather*}
 \begin{array}{rc}
 % Variables
 \rlbl{var-1}&
-\inference{}{\Gamma, x{:}A |- x : A}\\[1em]
+\inference{}{\ctx{\ctxcons{\Gamma}{x}{A}}{\Delta} |- x : A}\\[1em]
 \rlbl{var-2}&
-\inference{\Gamma |- x : A \quad y \not\in (\{x\} \cup \fn{fv}(A))}
-          {\Gamma,y{:}B |- x : A}\\[1.5em]
+\inference{\defctx{} |- x : A \quad y \not\in (\{x\} \cup \fn{fv}(A))}
+          {\ctx{\ctxcons{\Gamma}{y}{B}}{\Delta} |- x : A}\\[1.5em]
 % Lambda
 \rlbl{lambda}&
-\inference{\Gamma |- T{:}\set{\alpha} \quad \Gamma,x{:}T |- u{:}U}
-          {\Gamma |- (\lambda x . u) : (\Piexpr{x}{T}{U})}\\[1em]
+\inference{\defctx{}                 |- T{:}\set{\alpha}
+     \quad \ctx{\ctxcons{\Gamma}{x}{T}}{\Delta} |- v{:}V}
+          {\defctx{} |- (\lamexpr{x}{T}{v} : (\Piexpr{x}{U}{V})}\\[1em]
 \rlbl{app}&
-\inference{\Gamma |- f : (\Piexpr{x}{A}{B}) \quad \Gamma |- t : A  }
-          {\Gamma |- f t : B[x/t] }\\[1em]
+\inference{\defctx{} |- f : (\Piexpr{x}{A}{B}) \quad \ctx{\Gamma}{\Delta} |- t : A  }
+          {\defctx{} |- f t : B[x/t] }\\[1em]
 \rlbl{pi}&
-\inference{\Gamma |- A : \set{i} \quad \Gamma,x:A |- B : \set{i}}
-          {\Gamma |- (\Piexpr{x}{A}{B}) : \set{i}}\\[1.5em]
+\inference{\defctx{} |- A : \set{i}
+     \quad \ctx{\ctxcons{\Gamma}{x}{A}}{\Delta} |- B : \set{i}}
+          {\defctx{} |- (\Piexpr{x}{A}{B}) : \set{i}}\\[1.5em]
 %Set
 \rlbl{set}&
-\inference{}{\Gamma |- \set{i} : \set{i+1}}\\[1.5em]
+\inference{}{\defctx{} |- \set{i} : \set{i+1}}\\[1.5em]
 % Tuples
 \rlbl{tuple-1}&
-\inference{\Gamma |- x_1 : T_1 \quad \dots \quad \Gamma |- x_n : T_n}
-          {\Gamma |- (x_1, \dots, x_n) : \#(T_1, \dots, T_n)}\\[1em]
+\inference{\defctx{} |- x_1 : T_1
+     \quad \dots
+     \quad \defctx{} |- x_n : T_n}
+          {\defctx{} |- (x_1, \dots, x_n) : \#(T_1, \dots, T_n)}\\[1em]
 \rlbl{tuple-2}&
-\inference{\Gamma |- T_1 : \set{i} \quad \dots \quad \Gamma |- T_n : \set{i}}
-          {\Gamma |- \#(T_1, \dots, T_n) : \set{i}}\\[1.5em]
+\inference{\defctx{} |- T_1 : \set{i}
+     \quad \dots
+     \quad \defctx{} |- T_n : \set{i}}
+          {\defctx{} |- \#(T_1, \dots, T_n) : \set{i}}\\[1.5em]
 % Records
 \rlbl{record-1}&
-\inference{\Gamma |- t_1 : T_1\ \dots\ \Gamma |- t_n : T_n }
-          {\Gamma |- \recval{ x_1 = t_1;\ \dots\ ; x_n = t_n} 
-                   : \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n}}\\[1em]
+\inference{\defctx{} |- t_1 : T_1
+     \quad \dots
+     \quad \defctx{} |- t_n : T_n }
+          {\defctx{} |- \recval{ x_1 = t_1;\ \dots\ ; x_n = t_n} 
+                     : \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n}}\\[1em]
 \rlbl{record-2}&
-\inference{\Gamma |- T_1 : \set{i} \quad \dots \quad \Gamma |- T_n : \set{i}}
-          {\Gamma |- \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n} : \set{i}}\\[1em]
+\inference{\defctx{} |- T_1 : \set{i}
+     \quad \dots
+     \quad \defctx{} |- T_n : \set{i}}
+          {\defctx{} |- \rectyp{ x_1 : T_1;\ \dots\ ; x_n : T_n} : \set{i}}\\[1em]
 \rlbl{record-3}&
-\inference{\Gamma |- r : \rectyp{ x : t; \dots }}
-          {\Gamma |- r.x : t }\\[1.5em]
+\inference{\defctx{} |- r : \rectyp{ x : t; \dots }}
+          {\defctx{} |- r.x : t }\\[1.5em]
 % Constructors
 \rlbl{ctor}&
-\inference{c : T \in \Sigma \quad \Gamma |- \rctor{t_1,\dots,t_n}{T}{C}}
-          {\Gamma |- c(t_1,\dots,t_n) : C}\\[1.5em]
+\inference{\rctor{\defctx{}}{t_1,\dots,t_n}{\fn{type}(c)}{C}}
+          {\defctx{} |- c(t_1,\dots,t_n) : C}\\[1.5em]
 \rlbl{let}&
 \inference{\displaystyle
            \bigwedge_{i\in[1..n]}\ \Gamma |- \fn{type}(D_i)\quad
            \Gamma' |- T : U\quad
            \bigwedge_{i\in[1..n]} \bigwedge_{e \in \fn{eqs}(D_i)} \Gamma' |- e\text{ is correct}\\
            \Gamma' = \Gamma,\fn{var}(D_1){:}\fn{type}(D_1), \dots, \fn{var}(D_n){:}\fn{type}(D_n)}
-          {\Gamma |- \letexpr{[D_1; \dots; D_n]}{T} : U}
+          {\defctx{} |- \letexpr{[D_1; \dots; D_n]}{T} : U}
 \\[1.5em]
 \rlbl{subset}&
-\inference{\Gamma |- t : A \quad \Gamma |- A \sqsubseteq B}
-          {\Gamma |- t : B}\\[1.5em]
+\inference{\defctx |- t : A
+     \quad \defctx |- \subtype{A}{B}}
+          {\defctx |- t : B}\\[1.5em]
 \end{array}
 \end{gather*}
 
@@ -128,12 +159,157 @@ Rules for infering the target type of a constructor datatype $c(t_1, \dots, t_n)
 \begin{gather*}
 \begin{array}{rc}
 % Constructor inference.
-\rlbl{ctor-2}&
-\inference{\Gamma|- t_1 : A \quad \Gamma |- \rctor{t_2,\dots,t_n}{B[x/t_1]}{C}}
-          {\Gamma |- \rctor{t_1,\dots,t_n}{\Piexpr{x}{A}{B}}{C}}\\[1em]
-\rlbl{ctor-3}&
-\inference{}{\Gamma |- \rctor{\epsilon}{B}{B}}\\[1em]
+\rlbl{ctor-cons}&
+\inference{\defctx{}|- t_1 : A
+     \quad \rctor{\defctx}{t_2,\dots,t_n}{B[x/t_1]}{C}}
+          {\rctor{\defctx}{t_1,\dots,t_n}{\Piexpr{x}{A}{B}}{C}}\\[1em]
+\rlbl{ctor-set}&
+\inference{}
+          {\rctor{\defctx}{\epsilon}{\set{i}}{\set{i}}}\\[1em]
+\rlbl{ctor-type}&
+\inference{}
+          {\rctor{\defctx}{\epsilon}{c(t_1, \dots, t_n)}{c(t_1, \dots, t_n)}}\\[1em]
 \end{array}
 \end{gather*}
+
+\newcommand{\red}{\to_\beta}
+
+%TODO: Define \fn{vars}(t)
+
+\newcommand{\tcong}[4]{#1 |- #2 \cong #3 : #4}
+\newcommand{\ccong}[5]{\tcong{#1}{#2}{#3}{#4} \downarrow #5}
+
+%TODO: Define ccong
+
+The rules for conversion are as follows:
+\begin{gather*}
+\begin{array}{rc}
+\rlbl{eta equivalence}&
+\inference{x \not\in \fn{vars}(t)}
+          {\tcong{\defctx}{t}{(\lamexpr{x}{s}{t x})}{\Piexpr{x}{U}{V}}}\\[1.5em]
+\rlbl{tuple}&
+\inference{\displaystyle
+           \bigwedge_{i\in[1,n]}\ \tcong{\defctx}{t_i}{u_i}{A_i}}
+          {\tcong{\defctx}{  (t_1, \dots, t_n)}
+                          {  (u_1, \dots, u_n)}
+                          {\#(A_1, \dots, A_n)}}\\[1.5em]
+\rlbl{record}&
+\inference{\bigwedge_{i\in[1,n]}\ \tcong{\defctx}{t_i}{u_i}{A_i}}
+          {\tcong{\defctx}{  \{ \vec{f} = \vec{t} \} }
+                          {  \{ \vec{f} = \vec{t} \} }
+                          {\#\{ \vec{f} : \vec{A} \} }}\\[1.5em]
+\rlbl{constructor}&
+\inference{\ccong{\defctx}{t_1,\dots,t_n}{u_1,\dots,u_n}{\fn{type}(c)}{C}}
+          {\tcong{\defctx}{c(t_1, \dots, t_n)}{c(u_1, \dots, u_n)}{C}}\\[1.5em]
+\rlbl{reduction}&
+\inference{\defctx |- t \red{} u}
+          {\tcong{\defctx}{t}{u}{A}}\\[1.5em]
+\rlbl{reflexitivity}&
+\inference{}{\tcong{\defctx}{t}{t}{A}}\\[1em]
+\rlbl{symmetry}&
+\inference{\tcong{\defctx}{t}{u}{A}}{\tcong{\defctx}{u}{t}{A}}\\[1em]
+\rlbl{transitivity}&
+\inference{\tcong{\defctx}{t}{u}{A}
+     \quad \tcong{\defctx}{u}{v}{A}}
+          {\tcong{\defctx}{u}{v}{A}}\\[1em]
+\end{array}
+\end{gather*}
+
+
+\newcommand{\pmatch}[4]{\fn{match}(#1,#2,#3) \downarrow #4}
+
+The rules for reduction are as follows:
+\begin{gather*}
+\begin{array}{rc}
+\rlbl{Beta reduction} &
+\inference{}{\defctx{} |- \lamexpr{x}{T}{s} t  \red{} s[x/t]}\\[1.5em]
+\rlbl{Record selection} &
+\inference{}{\defctx{} |- \{ f = t; \dots \}.f \red{} t}\\[1.5em]
+\rlbl{Match} &
+\inference{\fn{lookupDef}(x,Delta) \downarrow d\\
+            \exists (x P_1 \dots P_n = t) \in \fn{eqs}(d).
+              \ \pmatch{t_1 \dots t_n}{P_1 \dots P_n}{t}{u}}
+          {\defctx{} |- x t_1 \dots t_n \red{} u}\\[1.5em]
+\end{array}
+\end{gather*}
+
+
+%TODO: Define lookupDef
+%TODO: Define match
+
+The partial function match is defined as follows:
+\[
+\begin{array}{rc}
+\rlbl{Empty}&
+\inference{}{\pmatch{\epsilon}{\epsilon}{A}{A}}\\[1em]
+\rlbl{List}&
+\inference{\pmatch{t}{p}{A}{B}
+    \quad  \pmatch{\vec{t}}{\vec{p}}{B}{C}}
+          {\pmatch{t \vec{t}}{p \vec{p}}{A}{C}}\\[1em]
+\rlbl{Variable}&
+\inference{}
+          {\pmatch{t}{x}{A}{A[x/t]}}\\[1em]
+\rlbl{Tuple}&
+\inference{\pmatch{t_1 \dots t_n}{p_1 \dots p_n}{A}{B}}
+          {\pmatch{(t_1, \dots, t_n)}{(p_1, \dots, p_n)}{A}{B}}\\[1em]
+\rlbl{Record}&
+\inference{\pmatch{t_1 \dots t_n}{p_1 \dots p_n}{A}{B}}
+          {\pmatch{\{ f_1 = t_1; \dots; f_n = t_n\}}
+                  {\{ f_1 = p_1; \dots; f_n = p_n\}}
+                  {A}
+                  {B}}\\[1em]
+\rlbl{Constructor}&
+\inference{\pmatch{t_1 \dots t_n}{p_1 \dots p_n}{A}{B}}
+          {\pmatch{c(t_1, \dots, t_n\}}
+                  {c(p_1, \dots, p_n\}}
+                  {A}
+                  {B}}\\[1em]
+\rlbl{Inaccessible}&
+\inference{}
+          {\pmatch{t}{.u}{A}{A}}\\[1em]
+\end{array}
+\]
+
+The rules for subtyping are defined as follows:
+
+\begin{gather*}
+\begin{array}{rc}
+\rlbl{conversion}&\displaystyle
+\inference{\defctx{} |- A : \set{i}
+     \quad \defctx{} |- B : \set{i}
+     \quad \defctx{} |- A \cong B : \set{i}}
+          {\defctx{} |- \subtype{A}{B}}\\[1em]
+\rlbl{trans}&\displaystyle
+\inference{\defctx{} |- \subtype{A}{B}
+     \quad \defctx{} |- \subtype{B}{C}}
+          {\defctx{} |- \subtype{A}{C}}\\[1em]
+\rlbl{lambda contravariance}&\displaystyle
+\inference{\defctx{} |- \subtype{B}{A}}
+          {\defctx{} |- \subtype{\Piexpr{x}{A}{C}}{\Piexpr{x}{B}{C}}}\\[1em]
+\rlbl{lambda covariance}&\displaystyle
+\inference{\ctx{\ctxcons{\Gamma}{x}{A}}{\Delta} |- \subtype{B}{C}}
+          {\defctx{} |- \subtype{\Piexpr{x}{A}{B}}{\Piexpr{x}{A}{C}}}\\[1em]
+\rlbl{tuple covariance}&\displaystyle
+\inference{\defctx{} |- \subtype{T_1}{U_1}
+     \quad \dots
+     \quad \defctx{} |- \subtype{T_n}{U_n}}
+          {\defctx{} |- \subtype{\#(T_1, \dots, T_n)}{\#(U_1, \dots, U_n)}}\\[1em]
+\rlbl{record covariance}&\displaystyle
+\inference{\defctx{} |- \subtype{T_1}{U_1}
+     \quad \dots
+     \quad \defctx{} |- \subtype{T_n}{U_n}}
+          {\defctx{} |- \subtype{\#\{f_1 : T_1; \dots; f_n : T_n; \dots\}}
+                                {\#\{f_1 : U_1, \dots; f_n : U_n\}}}\\[1em]
+\rlbl{constructor covariance}&\displaystyle
+\inference{\defctx{} |- \subtype{T_1}{U_1}
+     \quad \dots
+     \quad \defctx{} |- \subtype{T_n}{U_n}}
+          {\defctx{} |- \subtype{c(T_1, \dots, T_n)}{c(U_1, \dots, U_n)}}\\[1em]
+\rlbl{set subsumption}&\displaystyle
+\inference{}
+          {\defctx{} |- \subtype{\set{i}}{\set{i+1}}}\\[1em]
+\end{array}
+\end{gather*}
+
 
 \end{document}
