@@ -142,9 +142,13 @@ There are a number of inferences that need to be defined to get typing the relat
           {\defctx{} |- c(t_1,\dots,t_n) : C}\\[1.5em]
 \rlbl{let}&
 \inference{\displaystyle
-           \bigwedge_{i\in[1..n]}\ \Gamma |- \fn{type}(D_i)\quad
-           \Gamma' |- T : U\quad
-           \bigwedge_{i\in[1..n]} \bigwedge_{e \in \fn{eqs}(D_i)} \Gamma' |- e\text{ is correct}\\
+           \bigwedge_{i\in[1..n]}\ \Gamma |- \fn{type}(D_i)
+     \quad \Gamma' |- T : U
+     \quad \bigwedge_{i\in[1..n]}
+              \left(\fn{complete}(\fn{eqs}(D_i))
+                    \wedge \bigwedge_{e \in \fn{eqs}(D_i)}
+                             \ \Gamma' |- e\text{ is type correct}
+              \right)\\
            \Gamma' = \Gamma,\fn{var}(D_1){:}\fn{type}(D_1), \dots, \fn{var}(D_n){:}\fn{type}(D_n)}
           {\defctx{} |- \letexpr{[D_1; \dots; D_n]}{T} : U}
 \\[1.5em]
