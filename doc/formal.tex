@@ -18,7 +18,6 @@
 \newcommand{\ctx}[2]{(#1,#2)}
 \newcommand{\subtype}[2]{#1 \subseteq #2}
 
-
 \begin{document}
 
 %Lambda
@@ -48,8 +47,8 @@ term $\fn{type}(c)$, called the type.
 &        & |\:& (T_1, \dots, T_n)   & \text{Tuples}\\
 &        & |\:& \#(T_1, \dots, T_n)                 & \text{Tuple types}\\
 &        & |\:& \{ f_1 = T_1; \dots; f_n = T_n \}   & \text{Records}\\
-&        & |\:& \#\{ f_1 : T_1; \dots; f_n : T_n \} & \text{Record types}\\
 &        & |\:& T.f                                & \text{Record selector}\\ 
+&        & |\:& \#\{ f_1 : T_1; \dots; f_n : T_n \} & \text{Record types}\\
 &        & |\:& c(T_1,\dots,T_n)                    & \text{Constructor}\\
 &        & |\:& \set{i} & \text{Set}\\
 &        & |\:& \letexpr{[ D_1; \dots; D_n ]}{T}    & \text{Let}\\
@@ -150,8 +149,7 @@ There are a number of inferences that need to be defined to get typing the relat
                              \ \Gamma' |- e\text{ is type correct}
               \right)\\
            \Gamma' = \Gamma,\fn{var}(D_1){:}\fn{type}(D_1), \dots, \fn{var}(D_n){:}\fn{type}(D_n)}
-          {\defctx{} |- \letexpr{[D_1; \dots; D_n]}{T} : U}
-\\[1.5em]
+          {\defctx{} |- \letexpr{[D_1; \dots; D_n]}{T} : U}\\[1.5em]
 \rlbl{subset}&
 \inference{\defctx |- t : A
      \quad \defctx |- \subtype{A}{B}}
@@ -314,6 +312,5 @@ The rules for subtyping are defined as follows:
           {\defctx{} |- \subtype{\set{i}}{\set{i+1}}}\\[1em]
 \end{array}
 \end{gather*}
-
 
 \end{document}

@@ -63,6 +63,7 @@ data Term
   | Paren Pos Term
   -- * Termessions that may appear in parsing, but do not affect value.
   | TypeConstraint Term Pos Term
+  | LetTerm Pos [Decl] Term
   | BadTerm Pos
  deriving (Eq, Ord, Show)
 
@@ -113,11 +114,11 @@ badTerm = BadTerm
 
 -- | Constructor declaration.
 data CtorDecl = Ctor (PosPair Ident) Term
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
 -- Data declarations introduce an operator for each constructor, and an operator for the type.
 data Decl
    = TypeDecl [(PosPair Ident)] Term
    | DataDecl (PosPair Ident) Term [CtorDecl]
    | TermDef (PosPair Ident) [LambdaBinding Pat] Term
-  deriving (Show)
+  deriving (Eq, Ord, Show)

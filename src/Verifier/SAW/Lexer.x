@@ -38,7 +38,7 @@ $idchar = [a-z A-Z 0-9 \' \_]
 
 @punct = "#" | "," | "->" | "." | ";" | "::" | "=" | "?" | "??" | "???" | "\"
        | "(" | ")" | "[" | "]" | "{" | "}"
-@keywords = "data" | "sort" | "where"
+@keywords = "data" | "in" | "sort" | "where" | "let"
 @key = @punct | @keywords
 
 sawTokens :-

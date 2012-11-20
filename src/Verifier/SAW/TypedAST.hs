@@ -25,7 +25,7 @@ import Data.Vector (Vector)
 import Data.Word (Word64)
 
 import Verifier.SAW.Position
-import qualified Verifier.SAW.UntypedAST (Sort)
+import Verifier.SAW.UntypedAST (Sort)
 import qualified Verifier.SAW.UntypedAST as Un
 
 type Ident = Un.Ident
@@ -54,8 +54,7 @@ data Pat e = PVar DeBruijnIndex -- ^ Variable and it's type (variables should ap
   deriving (Eq,Ord)
 
 data DefEqn e
-  = DefEqn [(Ident,e)] -- ^ List of variables introduced in definition and their types (context)
-           [Pat e]  -- ^ List of patterns
+  = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
   deriving (Eq, Ord)
 
@@ -63,18 +62,19 @@ data DefEqn e
 data Def e = Def Ident e [DefEqn e]
   deriving (Eq,Ord)
 
+data Ctor = Ctor { ctorId ::  Integer }
+  deriving (Eq, Ord)
+
 data TermF e
-  = IntLit Integer
-  | LocalVar Integer   -- ^ Local variables are referenced by deBrujin index.
+  = LocalVar Integer   -- ^ Local variables are referenced by deBrujin index.
   | GlobalRef Integer  -- ^ Global variables are referenced by label.
 
-  | Lambda (ParamType, Ident, e) e
+  | Lambda Ident e e
   | App e e
   | Pi (ParamType, Ident, e) e
 
-  | Ctor [e]
-
-    -- Tuples may be 0 or 2+ elements.  The empty tuple is not allowed.
+    -- Tuples may be 0 or 2+ elements. 
+    -- A tuple of a single element is not allowed in well-formed expressions.
   | TupleValue [e]
   | TupleType [e]
 
@@ -82,17 +82,23 @@ data TermF e
   | RecordSelector e FieldName
   | RecordType (Map FieldName e)
 
-  | ArrayValue (Vector e)
+  | CtorValue Ctor [e]
+
+  | Sort Sort
+
     -- ^ List of bindings and the let expression itself.
     -- Let expressions introduce variables for each identifier.
   | Let [Def e] e
 
-  | Sort Un.Sort
+    -- Primitive builtin values
+  | IntLit Integer
+  | ArrayValue (Vector e)
+
  deriving (Eq,Ord)
 
 data Term = Term (TermF Term)
 
-data SymEqn t = SymEqn [Un.LambdaBinding Un.Pat] t
+data SymEqn t = SymEqn [Un.Pat] t
   deriving (Eq,Ord,Functor,Show)
 
 data SymDef t = SD { sdIdent :: PosPair Ident
@@ -122,20 +128,20 @@ groupDecls d = (reverse (gsErrors so), gsDefs so)
   where si = GS { gsDefs = Map.empty, gsErrors = [] }
         so = execState (identifySymDefs d) si
 
-type UnEqn = (Pos, [Un.LambdaBinding Un.Pat], Un.Term)
+type UnEqn = (Pos, [Un.Pat], Un.Term)
 
 -- Extract equations for identifier an return them along with remaining equations.
 gatherEqs :: Ident -> [Un.Decl] -> ([UnEqn], [Un.Decl])
 gatherEqs i = go []
   where go eqs (Un.TermDef (PosPair p j) lhs rhs : decls)
-          | i == j = go ((p,lhs,rhs):eqs) decls
+          | i == j = go ((p,snd <$> lhs,rhs):eqs) decls
         go eqs decls = (reverse eqs, decls)
 
 -- Extract declarations from list of functions.
 gatherManyEqs :: Set Ident -> [Un.Decl] -> (Map Ident [UnEqn], [Un.Decl])
 gatherManyEqs s = go Map.empty
   where go m (Un.TermDef (PosPair p i) lhs rhs : decls)
-          | Set.member i s = go (Map.insert i ((p,lhs,rhs):feqs) m) rest
+          | Set.member i s = go (Map.insert i ((p,snd <$> lhs,rhs):feqs) m) rest
               where (feqs, rest) = gatherEqs i decls
         go m decls = (m, decls)
 

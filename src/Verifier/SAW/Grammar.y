@@ -49,6 +49,8 @@ import Debug.Trace
   '{'     { PosPair _ (TKey "{") }
   '}'     { PosPair _ (TKey "}") }
   'data'  { PosPair _ (TKey "data") }
+  'in'    { PosPair _ (TKey "in") }
+  'let'   { PosPair _ (TKey "let") }
   'sort'  { PosPair _ (TKey "sort") }
   'where' { PosPair _ (TKey "where") }
   var     { PosPair _ (TVar _) }
@@ -62,8 +64,11 @@ SAWDecls : list(SAWDecl) { $1 }
 
 SAWDecl :: { Decl }
 SAWDecl : 'data' Con '::' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
-        | DeclLhs '::' LTerm ';' {% mkTypeDecl $1 $3 }
-        | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
+        | SAWEqDecl { $1 }
+
+SAWEqDecl :: { Decl }
+SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl $1 $3 }
+          | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
 
 DeclLhs :: { DeclLhs }
 DeclLhs : Con list(LambdaArg) { ($1, $2) }
@@ -91,8 +96,12 @@ AtomPat : Var                       { PVar $1 }
         | '.' AtomTerm              { PInaccessible $2 }
 
 Term :: { Term }
-Term : LTerm { $1 }
-     | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
+Term : TTerm { $1 }
+     | 'let' '{' list(SAWEqDecl) '}' 'in' Term { LetTerm (pos $1) $3 $6 }
+
+TTerm :: { Term }
+TTerm : LTerm { $1 }
+      | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
 
 -- Term with uses of pi and lambda, but no typing.
 LTerm :: { Term }
