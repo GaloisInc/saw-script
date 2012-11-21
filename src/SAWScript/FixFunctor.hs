@@ -193,6 +193,9 @@ instance (Functor f, Functor g, Functor h, f :<: g) =>  f :<: (h :+: g) where
 inject :: (g :<: f) => g (Mu f) -> Mu f
 inject = In . inj
 
+match :: (g :<: f) => Mu f -> Maybe (g (Mu f))
+match (In t) = prj t
+
 {-
 
 class (Functor f, Functor g) => f :=>: g where
@@ -213,6 +216,12 @@ instance (f :<: h, g :=>: h) => (f :+: g) :=>: h where
 
 -- Render {{{1
 
+instance Render f => Show (Mu f) where
+  show (In t) = render t
+
+class Render f where
+  render :: Render g => f (Mu g) -> String
+
 instance Render Val where
   render (Val i) = show i
 instance Render Add where
@@ -220,16 +229,31 @@ instance Render Add where
 instance Render Mul where
   render (Mul x y) = "(" ++ show x ++ " * " ++ show y ++ ")"
 
-class Render f where
-  render :: Render g => f (Mu g) -> String
-
 instance (Render f, Render g) => Render (f :+: g) where
   render cp = case cp of
     Inl x -> render x
     Inr y -> render y
 
-instance Render f => Show (Mu f) where
-  show (In t) = render t
+-- Eq {{{1
+
+instance Equal f => Eq (Mu f) where
+  (In e1) == (In e2) = equal e1 e2
+
+class Equal f where
+  equal :: Equal g => f (Mu g) -> f (Mu g) -> Bool
+
+instance Equal Val where
+  equal (Val x) (Val y) = x == y
+instance Equal Add where
+  equal (Add x1 y1) (Add x2 y2) = x1 == x2 && y1 == y2
+instance Equal Mul where
+  equal (Mul x1 y1) (Mul x2 y2) = x1 == x2 && y1 == y2
+
+instance (Equal f, Equal g) => Equal (f :+: g) where
+  equal cp1 cp2 = case (cp1,cp2) of
+    (Inl e1,Inl e2) -> equal e1 e2
+    (Inr e1,Inr e2) -> equal e1 e2
+    _               -> False
 
 -- Operators {{{1
 
