@@ -8,12 +8,9 @@ module Verifier.SAW.TypedAST
  , FieldName
  , TermF(..)
  , Term(..)
--- , PosPair(..)
--- , GroupError(..)
  , Module
+ , emptyModule
  , unsafeMkModule
--- , TCError(..)
--- , tcDefs
  ) where
 
 import Control.Applicative ((<$>))
@@ -277,10 +274,6 @@ ppTerm lcls p t =
     (Term u,[]) -> pptf p u
     (Term u,l) -> maybeParens (p >= 10) $ hsep $ pptf 10 u : fmap (ppTerm lcls 10) l 
  where pptf = ppTermF ppTerm lcls
-{-
-
-ppTerm p (Term t) = ppTermF ppTerm p t
--}
 
 instance Show Term where
   showsPrec p t = shows $ ppTerm emptyLocalVarDoc p t
@@ -305,17 +298,6 @@ insDef m d = m { moduleDefs = moduleDefs m ++ [d] }
 
 insDataType :: Module -> DataType -> Module
 insDataType m tp = m { moduleTypes = tp:moduleTypes m } 
-
-{-
-data GroupError
- = PrevDefined Pos Ident -- ^ Identifier and old p
-osition.
- | NoSignature Ident -- ^ Identifier is missing signature.
- | DuplicateDef Ident Pos -- ^ Equation for defintion already appeared.
-   -- ^ An internal limitation resulted in an error.
- | Limitation String
- deriving (Show)
--}
 
 declEqs :: TermContext -> [Un.Decl] -> (Ident -> [DefEqn Term])
 declEqs ctx d = \i -> fromMaybe [] $ Map.lookup i eqMap
@@ -349,31 +331,6 @@ unsafeMkModule d = gloMod
         insertDef m Un.TermDef{} = m
         gloMod = foldl' insertDef emptyModule d
         gloCtx = globalContext gloMod
-
-{-
-type UnEqn = (Pos, [Un.Pat], Un.Term)
-
--- Extract equations for identifier an return them along with remaining equations.
-gatherEqs :: Ident -> [Un.Decl] -> ([UnEqn], [Un.Decl])
-gatherEqs i = go []
-  where go eqs (Un.TermDef (PosPair p j) lhs rhs : decls)
-          | i == j = go ((p,snd <$> lhs,rhs):eqs) decls
-        go eqs decls = (reverse eqs, decls)
-
--- Extract declarations from list of functions.
-gatherManyEqs :: Set Ident -> [Un.Decl] -> (Map Ident [UnEqn], [Un.Decl])
-gatherManyEqs s = go Map.empty
-  where go m (Un.TermDef (PosPair p i) lhs rhs : decls)
-          | Set.member i s = go (Map.insert i ((p,snd <$> lhs,rhs):feqs) m) rest
-              where (feqs, rest) = gatherEqs i decls
-        go m decls = (m, decls)
-
-data GroupState = GS { gsDefs :: Map Ident (Pos, Def Term)
-                     , gsErrors :: [PosPair GroupError]
-                     }
-
-type Grouper a = State GroupState a
--}
 
 type DeBruijnLevel = Integer
 
@@ -417,8 +374,8 @@ insertLocalVars = foldl' insertLocalVar
 findCon :: TermContext -> Ident -> Either Ctor DataType
 findCon tc i =
   case Map.lookup i (tcDataDecls tc) of
-    Nothing -> error $ "Failed to find constructor " ++ show i
-                                     ++ " in context:\n" ++ show tc
+    Nothing ->
+      error $ "Failed to find constructor " ++ show i ++ " in context:\n" ++ show tc
     Just v -> v 
 
 varIndex :: TermContext -> Ident -> Either DeBruijnIndex (Def Term)
@@ -490,55 +447,3 @@ convertPat ctx p =
     Un.PRecord _ l -> PRecord (Map.fromList (fn <$> l))
       where fn (i,q) = (val i,convertPat ctx q)
     Un.PInaccessible t -> PInaccessible (convertTerm ctx t)
---    Un.PTypeConstraint p _ -> convertPat ctx p
-
-{-
--- | Collect individual untyped declarations into symbol definitions.
-identifyDefs :: [Un.Decl] -> Grouper ()
-identifyDefs (Un.TypeDecl idl tp: decls) = do
-  let (meqs,rest) = gatherManyEqs (Set.fromList (val <$> idl)) decls
-  forM_ idl $ \psym -> do
-    let eqs = fromMaybe [] $ Map.lookup (val psym) meqs
-    let mapEqn (_, lhsl, rhs) = DefEqn (convertPat ctx <$> lhsl) (convertTerm ctx rhs)
-    addDef (pos psym)
-           Def { defIdent = val psym
-               , defType = convertTerm ctx tp
-               , defEqs = mapEqn <$> eqs
-               }
-  identifyDefs rest
-identifyDefs (Un.DataDecl psym tp ctors: decls) = do
-  -- Add type symbol
-  addDef (pos psym)
-         Def { defIdent = val psym
-             , defType = convertTerm ctx tp
-             , defEqs = []
-             }
-  -- Add ctor symbols
-  forM_ ctors $ \(Un.Ctor ctorId ctorTp) -> do
-    addDef (pos psym)
-           Def { defIdent = val ctorId
-               , defType = convertTerm ctx ctorTp
-               , defEqs = []
-               }
-  identifyDefs decls
-identifyDefs (Un.TermDef psym _ _ : decls) = do
-  let (_, rest) = gatherEqs (val psym) decls
-  addGroupError (pos psym) (NoSignature (val psym))
-  identifyDefs rest
-identifyDefs [] = return ()
--}
-
-{-
-data TypeCheckerState = TCS {
-                            }
-
-type TypeChecker a = State TypeCheckerState a
-
-
-execTypechecker :: TypeChecker () -> 
-
-unexpectedBadTermession :: Pos -> a
-unexpectedBadTermession p =
-    error "internal: Bad expression from " ++ show p ++ " appears during typechecking"
--}
-
