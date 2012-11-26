@@ -71,19 +71,27 @@ SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl $1 $3 }
           | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
 
 DeclLhs :: { DeclLhs }
-DeclLhs : Con list(LambdaArg) { ($1, $2) }
-        | Var list(LambdaArg) { ($1, $2) }
+DeclLhs : Con list(LhsArg) { ($1, $2) }
+        | Var list(LhsArg) { ($1, $2) }
+
+LhsArg :: { (ParamType, Pat) }
+LhsArg : AtomPat           { (NormalParam, $1) }
+       | ParamType AtomPat { ($1, $2) }
+
 
 CtorDecl :: { CtorDecl }
 CtorDecl : Con '::' LTerm ';' { Ctor $1 $3 }
 
-LambdaArg :: { (ParamType, Pat) }
-LambdaArg : AtomPat           { (NormalParam, $1) }
-          | ParamType AtomPat { ($1, $2) }
+LambdaPat :: { (Pat, Term) }
+LambdaPat : '(' CtorPat '::' LTerm ')' { ($2, $4) }
+
+LambdaArg :: { (ParamType, Pat, Term) }
+LambdaArg : LambdaPat           { (NormalParam, fst $1, snd $1) }
+          | ParamType LambdaPat { ($1, fst $2, snd $2) }
 
 Pat :: { Pat }
 Pat : CtorPat { $1 }
-    | CtorPat '::' LTerm { PTypeConstraint $1 $3 }
+--    | CtorPat '::' LTerm { PTypeConstraint $1 $3 }
 
 CtorPat :: { Pat }
 CtorPat : AtomPat           { $1 }
@@ -116,8 +124,8 @@ AppTerm : RecTerm                   { $1 }
         | AppTerm ParamType RecTerm { App $1 $2 $3 }
 
 RecTerm :: { Term }
-RecTerm : AtomTerm        { $1 }
-        | RecTerm '.' Var { RecordSelector $1 $3 }
+RecTerm : AtomTerm              { $1 }
+        | RecTerm '.' FieldName { RecordSelector $1 $3 }
 
 AtomTerm :: { Term }
 AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
@@ -139,6 +147,9 @@ ParamType : '?'   { ImplicitParam }
           | '??'  { InstanceParam }
           | '???' { ProofParam    }
 
+FieldName :: { PosPair FieldName }
+FieldName : var { fmap tokVar $1 }
+
 Var :: { PosPair Ident }
 Var : var { fmap (mkIdent . tokVar) $1 }
 
@@ -149,7 +160,7 @@ Con : con { fmap (mkIdent . tokCon) $1 }
 sepPair(p,q,r,s) : p q r s { ($1,$3) }
 
 -- A list of record fields with the given separator and element type.
-recList(q,r) : list(sepPair(Var,q,r,';')) { $1 }
+recList(q,r) : list(sepPair(FieldName,q,r,';')) { $1 }
 
 -- A possibly-empty list of p's separated by q.
 sepBy(p,q) : {- empty -} { [] }

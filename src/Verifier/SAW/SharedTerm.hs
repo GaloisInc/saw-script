@@ -25,6 +25,7 @@ module Verifier.SAW.SharedTerm
 --  , scGroundSignedValueFn
   , scViewAsBool
   , scViewAsNum
+  , mkUninterpretedSharedContext
   ) where
 
 import Control.Monad
@@ -45,9 +46,6 @@ instance Eq (SharedTerm s) where
 
 instance Ord (SharedTerm s) where
   compare (SharedTerm i _) (SharedTerm j _) = compare i j
-
--- | TODO: Writeup module
-newtype Module = Module ()
 
 -- | Operations that are defined, but not 
 data SharedContext s = SharedContext
@@ -159,6 +157,9 @@ mkUninterpretedSharedContext = do
      , scTypeOfFn  = undefined
 --     , scViewFn = undefined
      , scPrettyTermDocFn = undefined
+     , scMkRecordFn = undefined
+     , scRecordSelectFn = undefined
+     , scLoadModule = undefined
      }
 
 mkSharedContext :: IO (SharedContext s)

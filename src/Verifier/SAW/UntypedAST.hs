@@ -5,8 +5,10 @@ module Verifier.SAW.UntypedAST
   , ParamType(..)
   , LambdaBinding
   , Pat(..)
+  , FieldName
   , Term(..)
   , badTerm
+  , asApp
   , CtorDecl(..)
   , Decl(..)
   ) where
@@ -14,7 +16,10 @@ module Verifier.SAW.UntypedAST
 import Verifier.SAW.Position
 
 newtype Ident = Ident String
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show Ident where
+  show (Ident s) = s
 
 mkIdent :: String -> Ident
 mkIdent = Ident
@@ -22,8 +27,11 @@ mkIdent = Ident
 unusedIdent :: Ident
 unusedIdent = Ident "_"
 
-newtype Sort = SortCtor Integer
-  deriving (Eq, Ord, Show)
+newtype Sort = SortCtor { _sortIndex :: Integer }
+  deriving (Eq, Ord)
+
+instance Show Sort where
+  showsPrec p (SortCtor i) = showParen (p >= 10) (showString "sort " . shows i)
 
 mkSort :: Integer -> Sort
 mkSort i | 0 <= i = SortCtor i
@@ -40,12 +48,13 @@ data ParamType
   | ProofParam
   deriving (Eq, Ord, Show)
 
+type FieldName = String
+
 data Term
-  = IntLit Pos Integer
-  | Var (PosPair Ident)
+  = Var (PosPair Ident)
   | Con (PosPair Ident)
   | Sort Pos Sort
-  | Lambda Pos [LambdaBinding Pat] Term
+  | Lambda Pos [(ParamType,Pat,Term)] Term
   | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
   | Pi ParamType [PosPair Ident] Term Pos Term
@@ -53,17 +62,18 @@ data Term
   | TupleValue Pos [Term]
   | TupleType Pos [Term]
     -- | A record value.
-  | RecordValue Pos [(PosPair Ident, Term)]
+  | RecordValue Pos [(PosPair FieldName, Term)]
     -- | The value stored in a record.
-  | RecordSelector Term (PosPair Ident)
+  | RecordSelector Term (PosPair FieldName)
     -- | Type of a record value.
-  | RecordType  Pos [(PosPair Ident, Term)]
+  | RecordType  Pos [(PosPair FieldName, Term)]
     -- | Arguments to an array constructor.  
   | ArrayValue Pos [Term]
   | Paren Pos Term
   -- * Termessions that may appear in parsing, but do not affect value.
   | TypeConstraint Term Pos Term
   | LetTerm Pos [Decl] Term
+  | IntLit Pos Integer
   | BadTerm Pos
  deriving (Eq, Ord, Show)
 
@@ -72,9 +82,9 @@ data Pat
   = PVar (PosPair Ident)
   | PCtor (PosPair Ident) [Pat]
   | PTuple Pos [Pat]
-  | PRecord Pos [(PosPair Ident, Pat)]
+  | PRecord Pos [(PosPair FieldName, Pat)]
   | PInaccessible Term
-  | PTypeConstraint Pat Term
+--  | PTypeConstraint Pat Term
   deriving (Eq, Ord, Show)
 
 type LambdaBinding t = (ParamType, t)
@@ -107,7 +117,7 @@ instance Positioned Pat where
       PTuple p _  -> p
       PRecord p _ -> p
       PInaccessible t -> pos t
-      PTypeConstraint _ t -> pos t
+--      PTypeConstraint _ t -> pos t
 
 badTerm :: Pos -> Term
 badTerm = BadTerm
@@ -122,3 +132,9 @@ data Decl
    | DataDecl (PosPair Ident) Term [CtorDecl]
    | TermDef (PosPair Ident) [LambdaBinding Pat] Term
   deriving (Eq, Ord, Show)
+
+
+asApp :: Term -> (Term,[Term])
+asApp = go []
+  where go l (App t _ u) = go (u:l) t
+        go l t = (t,l)
