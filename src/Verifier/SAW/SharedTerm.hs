@@ -162,5 +162,5 @@ mkUninterpretedSharedContext = do
      , scLoadModule = undefined
      }
 
-mkSharedContext :: IO (SharedContext s)
+mkSharedContext :: Module -> IO (SharedContext s, Map String (SharedTerm s))
 mkSharedContext = undefined

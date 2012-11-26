@@ -11,7 +11,7 @@ module Verifier.SAW.TypedAST
 -- , PosPair(..)
 -- , GroupError(..)
  , Module
- , groupDecls
+ , unsafeMkModule
 -- , TCError(..)
 -- , tcDefs
  ) where
@@ -327,8 +327,9 @@ declEqs ctx d = \i -> fromMaybe [] $ Map.lookup i eqMap
         insertEq m Un.DataDecl{} = m
         eqMap = foldl' insertEq Map.empty d
 
-groupDecls :: [Un.Decl] -> Module
-groupDecls d = gloMod
+-- | Creates a module from a list of untyped declarations.
+unsafeMkModule :: [Un.Decl] -> Module
+unsafeMkModule d = gloMod
   where lookupEq = declEqs gloCtx d
         insertDef m (Un.TypeDecl idl untp) = foldl' insDef m (idDef <$> idl)
           where tp = convertTerm gloCtx untp
