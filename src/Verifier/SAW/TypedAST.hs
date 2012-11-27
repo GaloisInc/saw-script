@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.TypedAST
@@ -21,6 +23,8 @@ import Data.Maybe (fromMaybe)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.HughesPJ
+import Data.Foldable (Foldable)
+import Data.Traversable (Traversable)
 
 import Verifier.SAW.UntypedAST (Ident, FieldName, Sort, val)
 import qualified Verifier.SAW.UntypedAST as Un
@@ -44,7 +48,7 @@ data Pat e = -- | Variable and associated identifier.
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PInaccessible e
-  deriving (Eq,Ord, Functor, Show)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 patBoundVars :: Pat e -> [Ident]
 patBoundVars p =
@@ -73,6 +77,7 @@ data Def e = Def { defIdent :: Ident
                  , defType :: e
                  , defEqs :: [DefEqn e]
                  }
+  deriving (Functor, Foldable, Traversable)
 
 instance Eq (Def e) where
   (==) = lift2 defIdent (==)
@@ -83,6 +88,7 @@ instance Ord (Def e) where
 data DefEqn e
   = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
+  deriving (Functor, Foldable, Traversable)
 
 data Ctor = Ctor { ctorIdent :: Ident
                  , ctorType :: Term
@@ -149,7 +155,7 @@ data TermF e
     -- Primitive builtin values
   | IntLit Integer
   | ArrayValue (Vector e)
- deriving (Eq,Ord)
+ deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
