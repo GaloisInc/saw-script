@@ -3,11 +3,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Verifier.SAW.TermNet
-  ( TermT
-  , Term
+  ( PatternShape(..)
+  , Pattern(..)
   , Key
   , key_of_term  -- :: Term t => t -> [Key]
-  , Net ()       -- :: * -> *
+  , Net          -- :: * -> *
   , empty        -- :: Net a
   , insert       -- :: Eq a => ([Key], a) -> Net a -> Net a
   , insert_term  -- :: (Term t, Eq a) => (t, a) -> Net a -> Net a
@@ -44,15 +44,13 @@ match_term no longer treats abstractions as wildcards; instead they match
 only wildcards in patterns.  Requires operands to be beta-eta-normal.
 -}
 
--- Simplified term type. This is just a placeholder for the real term type,
--- which will be based on TypedAST.TermF.
-data TermT t = Atom String | Var | App t t
+data PatternShape t = Atom String | Var | App t t
 
-class Term t where
-  toTerm :: t -> TermT t
+class Pattern t where
+  patternShape :: t -> PatternShape t
 
-isVarApp :: Term t => t -> Bool
-isVarApp t = case toTerm t of
+isVarApp :: Pattern t => t -> Bool
+isVarApp t = case patternShape t of
   Atom _   -> False
   Var      -> True
   App t' _ -> isVarApp t'
@@ -67,16 +65,16 @@ data Key = CombK | VarK | AtomK String
     and "near" eta-conversions such as %x.?P(?f(x)).
 -}
 
-add_key_of_terms :: Term t => t -> [Key] -> [Key]
+add_key_of_terms :: Pattern t => t -> [Key] -> [Key]
 add_key_of_terms t cs
   | isVarApp t = VarK : cs
-  | otherwise  = rands (toTerm t) cs
+  | otherwise  = rands (patternShape t) cs
   where
-    rands (App f t) cs = CombK : rands (toTerm f) (add_key_of_terms t cs)
+    rands (App f t) cs = CombK : rands (patternShape f) (add_key_of_terms t cs)
     rands (Atom c)  cs = AtomK c : cs
 
 {-convert a term to a list of keys-}
-key_of_term :: Term t => t -> [Key]
+key_of_term :: Pattern t => t -> [Key]
 key_of_term t = add_key_of_terms t []
 
 {-Trees indexed by key lists: each arc is labelled by a key.
@@ -122,7 +120,7 @@ insert (keys, x) net = ins1 keys net
       let atoms' = Map.insertWith (const id) a empty atoms
       in Net {comb = comb, var = var, atoms = atoms'}
 
-insert_term :: (Term t, Eq a) => (t, a) -> Net a -> Net a
+insert_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
 insert_term (t, x) = insert (key_of_term t, x)
 
 {-** Deletion from a discrimination net **-}
@@ -150,7 +148,7 @@ delete (keys, x) net = del1 keys net
           atoms' = Map.update (nonempty . del1 keys) a atoms
       in newnet $ Net {comb = comb, var = var, atoms = atoms'}
 
-delete_term :: (Term t, Eq a) => (t, a) -> Net a -> Net a
+delete_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
 delete_term (t, x) = delete (key_of_term t, x)
 
 {-** Retrieval functions for discrimination nets **-}
@@ -187,18 +185,18 @@ look1 (atoms, a) nets =
   Abs or Var in object: if "unif", regarded as wildcard,
                                    else matches only a variable in net.
 -}
-matching :: Term t => Bool -> t -> Net a -> [Net a] -> [Net a]
+matching :: Pattern t => Bool -> t -> Net a -> [Net a] -> [Net a]
 matching unif t net nets =
   case net of
     Leaf _ -> nets
     Net {var, ..} ->
-      case toTerm t of
+      case patternShape t of
         Var -> if unif then net_skip net nets else var : nets {-only matches Var in net-}
         _   -> rands t net (var : nets)  {-var could match also-}
   where
     rands _ (Leaf _) nets = nets
     rands t (Net {comb, atoms, ..}) nets =
-      case toTerm t of
+      case patternShape t of
         Atom c    -> look1 (atoms, c) nets
         Var       -> nets
         App t1 t2 -> foldr (matching unif t2) nets (rands t1 comb [])
@@ -207,11 +205,11 @@ extract_leaves :: [Net a] -> [a]
 extract_leaves = concatMap (\(Leaf xs) -> xs)
 
 {-return items whose key could match t, WHICH MUST BE BETA-ETA NORMAL-}
-match_term :: Term t => Net a -> t -> [a]
+match_term :: Pattern t => Net a -> t -> [a]
 match_term net t = extract_leaves (matching False t net [])
 
 {-return items whose key could unify with t-}
-unify_term :: Term t => Net a -> t -> [a]
+unify_term :: Pattern t => Net a -> t -> [a]
 unify_term net t = extract_leaves (matching True t net [])
 
 {--------------------------------------------------------------------
