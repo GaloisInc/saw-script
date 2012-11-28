@@ -82,10 +82,10 @@ LhsArg : AtomPat           { (NormalParam, $1) }
 CtorDecl :: { CtorDecl }
 CtorDecl : Con '::' LTerm ';' { Ctor $1 $3 }
 
-LambdaPat :: { (Pat, Term) }
-LambdaPat : '(' CtorPat '::' LTerm ')' { ($2, $4) }
+LambdaPat :: { (Ident, Term) }
+LambdaPat : '(' Var '::' LTerm ')' { (val $2, $4) }
 
-LambdaArg :: { (ParamType, Pat, Term) }
+LambdaArg :: { (ParamType, Ident, Term) }
 LambdaArg : LambdaPat           { (NormalParam, fst $1, snd $1) }
           | ParamType LambdaPat { ($1, fst $2, snd $2) }
 
@@ -136,7 +136,8 @@ AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
          | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
          |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 } 
          | '#' '{' recList('::', LTerm) '}' { RecordType  (pos $1) $3 }
-         |     '[' sepBy(Term, ',') ']'     { ArrayValue (pos $1) $2 }
+
+--         |     '[' sepBy(Term, ',') ']'     { ArrayValue (pos $1) $2 }
 
 PiArg :: { (ParamType, Term) }
 PiArg : ParamType RecTerm { ($1, $2) } 
@@ -328,7 +329,7 @@ asAppList = \x -> impl x []
   where impl (App x _ y) r = impl x (y:r)
         impl x r = (x,r)
 
-type DeclLhs = (PosPair Ident, [LambdaBinding Pat])
+type DeclLhs = (PosPair Ident, [(ParamType, Pat)])
 
 mkTypeDecl :: DeclLhs -> Term -> Parser Decl
 mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []

@@ -3,7 +3,6 @@ module Verifier.SAW.UntypedAST
   , Ident, mkIdent, unusedIdent
   , Sort, mkSort, sortOf
   , ParamType(..)
-  , LambdaBinding
   , Pat(..)
   , FieldName
   , Term(..)
@@ -54,7 +53,7 @@ data Term
   = Var (PosPair Ident)
   | Con (PosPair Ident)
   | Sort Pos Sort
-  | Lambda Pos [(ParamType,Pat,Term)] Term
+  | Lambda Pos [(ParamType,Ident,Term)] Term
   | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
   | Pi ParamType [PosPair Ident] Term Pos Term
@@ -67,11 +66,10 @@ data Term
   | RecordSelector Term (PosPair FieldName)
     -- | Type of a record value.
   | RecordType  Pos [(PosPair FieldName, Term)]
-    -- | Arguments to an array constructor.  
-  | ArrayValue Pos [Term]
-  | Paren Pos Term
-  -- * Termessions that may appear in parsing, but do not affect value.
+    -- | Identifies a type constraint on the term.
   | TypeConstraint Term Pos Term
+    -- | Arguments to an array constructor.  
+  | Paren Pos Term
   | LetTerm Pos [Decl] Term
   | IntLit Pos Integer
   | BadTerm Pos
@@ -80,19 +78,15 @@ data Term
 -- | A pattern used for matching a variable.
 data Pat
   = PVar (PosPair Ident)
-  | PCtor (PosPair Ident) [Pat]
   | PTuple Pos [Pat]
   | PRecord Pos [(PosPair FieldName, Pat)]
+  | PCtor (PosPair Ident) [Pat]
   | PInaccessible Term
---  | PTypeConstraint Pat Term
   deriving (Eq, Ord, Show)
-
-type LambdaBinding t = (ParamType, t)
 
 instance Positioned Term where
   pos t =
     case t of
-      IntLit p _           -> p
       Var i                -> pos i
       Con i                -> pos i
       Sort p _             -> p
@@ -104,10 +98,13 @@ instance Positioned Term where
       RecordValue p _      -> p
       RecordSelector _ i   -> pos i
       RecordType p _       -> p
-      ArrayValue p _       -> p
-      Paren p _            -> p
+--      ArrayValue p _       -> p
       TypeConstraint _ p _ -> p
+      Paren p _            -> p
+      LetTerm p _ _        -> p
+      IntLit p _           -> p
       BadTerm p            -> p
+     
 
 instance Positioned Pat where
   pos pat =
@@ -130,7 +127,7 @@ data CtorDecl = Ctor (PosPair Ident) Term
 data Decl
    = TypeDecl [(PosPair Ident)] Term
    | DataDecl (PosPair Ident) Term [CtorDecl]
-   | TermDef (PosPair Ident) [LambdaBinding Pat] Term
+   | TermDef (PosPair Ident) [(ParamType, Pat)] Term
   deriving (Eq, Ord, Show)
 
 
