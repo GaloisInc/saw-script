@@ -1,4 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Verifier.SAW.SharedTerm
   ( ParamType(..)
 --  , Builtin(..)
@@ -28,12 +31,15 @@ module Verifier.SAW.SharedTerm
   , mkUninterpretedSharedContext
   ) where
 
-import Control.Monad
+import Control.Monad (foldM)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word
 import Text.PrettyPrint.HughesPJ
+import qualified Control.Monad.State as State
+import Control.Monad.Trans (lift)
+import qualified Data.Traversable as Traversable
 
 import Verifier.SAW.TypedAST
 
@@ -164,3 +170,36 @@ mkUninterpretedSharedContext = do
 
 mkSharedContext :: Module -> IO (SharedContext s, Map String (SharedTerm s))
 mkSharedContext = undefined
+
+
+-- | Fold with memoization
+foldSharedTerm :: forall b s. (TermF b -> b) -> SharedTerm s -> b
+foldSharedTerm f t = State.evalState (go t) Map.empty
+  where
+    go :: SharedTerm s -> State.State (Map TermIndex b) b
+    go (SharedTerm i t) = do
+      memo <- State.get
+      case Map.lookup i memo of
+        Just x  -> return x
+        Nothing -> do
+          x <- fmap f (Traversable.mapM go t)
+          State.modify (Map.insert i x)
+          return x
+
+-- | Monadic fold with memoization
+foldSharedTermM :: forall b s m. Monad m => (TermF b -> m b) -> SharedTerm s -> m b
+foldSharedTermM f t = State.evalStateT (go t) Map.empty
+  where
+    go :: SharedTerm s -> State.StateT (Map TermIndex b) m b
+    go (SharedTerm i t) = do
+      memo <- State.get
+      case Map.lookup i memo of
+        Just x  -> return x
+        Nothing -> do
+          t' <- Traversable.mapM go t
+          x <- lift (f t')
+          State.modify (Map.insert i x)
+          return x
+
+unshare :: SharedTerm s -> Term
+unshare = foldSharedTerm Term
