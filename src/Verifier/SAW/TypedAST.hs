@@ -6,6 +6,7 @@
 module Verifier.SAW.TypedAST
  ( Un.Ident, Un.mkIdent, Un.unusedIdent
  , Un.ParamType(..)
+ , DeBruijnIndex
  , LambdaVar
  , FieldName
  , TermF(..)
@@ -199,9 +200,9 @@ maybeParens :: Bool -> Doc -> Doc
 maybeParens True  d = parens d
 maybeParens False d = d
 
-data LocalVarDoc = LVD { docMap :: !(Map Integer Doc)
-                       , docLvl :: !Integer
-                       , docUsedMap :: Map Ident Integer
+data LocalVarDoc = LVD { docMap :: !(Map DeBruijnIndex Doc)
+                       , docLvl :: !DeBruijnIndex
+                       , docUsedMap :: Map Ident DeBruijnIndex
                        }
 
 emptyLocalVarDoc :: LocalVarDoc
@@ -220,12 +221,12 @@ consBinding lvd i = LVD { docMap = Map.insert lvl (ppIdent i) m
              Just pl -> Map.delete pl (docMap lvd)
              Nothing -> docMap lvd
 
-lookupDoc :: LocalVarDoc -> Integer -> Doc
+lookupDoc :: LocalVarDoc -> DeBruijnIndex -> Doc
 lookupDoc lvd i =
   let lvl = docLvl lvd - i - 1
    in case Map.lookup lvl (docMap lvd) of
         Just d -> d
-        Nothing -> char '!' <> integer i
+        Nothing -> char '!' <> integer (toInteger i)
 
 -- | @ppTermF@ pretty prints term functros.
 ppTermF :: TermPrinter e -- ^ Pretty printer for elements.
@@ -338,7 +339,7 @@ unsafeMkModule d = gloMod
         gloMod = foldl' insertDef emptyModule d
         gloCtx = globalContext gloMod
 
-type DeBruijnLevel = Integer
+type DeBruijnLevel = DeBruijnIndex
 
 data TermContext = TermContext {
          tcDeBruijnLevel :: DeBruijnLevel
