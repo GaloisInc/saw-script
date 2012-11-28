@@ -1,4 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Verifier.SAW.SharedTerm
   ( ParamType(..)
   , TermF(..)
@@ -31,6 +34,9 @@ import Data.Foldable
 import Data.Traversable
 import Prelude hiding (mapM, maximum)
 import Text.PrettyPrint.HughesPJ
+import qualified Control.Monad.State as State
+import Control.Monad.Trans (lift)
+import qualified Data.Traversable as Traversable
 
 import Verifier.SAW.TypedAST
 
@@ -194,17 +200,12 @@ getCacheValue (IOCache mv f) k =
       Nothing -> fn <$> f k
         where fn v = (Map.insert k v m, v)        
 
-data AppFns s = AppFns { defTypeCache :: IOCache Def (SharedTerm s) }
+data AppFns s = AppFns { defTypeCache :: IOCache (Def (SharedTerm s)) (SharedTerm s) }
 
 mkApp :: (?af :: AppFns s) => TermF (SharedTerm s) -> IO (SharedTerm s)
 mkApp = undefined
 
-{-
-mkSharedTerm :: (?af :: AppFns s) => Term -> IO (SharedTerm s)
-mkSharedTerm = undefined
--}
-
-sharedDefType :: (?af :: AppFns s) => Def -> IO (SharedTerm s)
+sharedDefType :: (?af :: AppFns s) => Def (SharedTerm s) -> IO (SharedTerm s)
 sharedDefType = getCacheValue (defTypeCache ?af)
 
 -- | Substitute var 0 in first term for second term, and shift all variable
@@ -264,7 +265,7 @@ mkSharedContext m = do
   let getDef sym =
         case findDef m (mkIdent sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> getTerm cr (GlobalDef d)
+          Just d -> getTerm cr (GlobalDef (undefined d))
   trueTerm <- getCtor "True" []
   falseTerm <- getCtor "False" []
   let freshGlobal sym tp = do
@@ -292,3 +293,43 @@ mkSharedContext m = do
            , scPrettyTermDocFn = undefined
            , scViewAsNumFn = viewAsNum
            }
+
+-- | Fold with memoization
+foldSharedTerm :: forall s b . 
+               (VarIndex -> Ident -> SharedTerm s -> b) 
+               -> (TermF b -> b) -> SharedTerm s -> b
+foldSharedTerm g f t = State.evalState (go t) Map.empty
+  where
+    go :: SharedTerm s -> State.State (Map TermIndex b) b
+    go (STVar i sym tp) = return $ g i sym tp
+    go (STApp i t) = do
+      memo <- State.get
+      case Map.lookup i memo of
+        Just x  -> return x
+        Nothing -> do
+          x <- fmap f (Traversable.mapM go t)
+          State.modify (Map.insert i x)
+          return x
+
+-- | Monadic fold with memoization
+foldSharedTermM :: forall s b m . Monad m 
+                => (VarIndex -> Ident -> SharedTerm s -> m b)
+                -> (TermF b -> m b) -> SharedTerm s -> m b
+foldSharedTermM g f t = State.evalStateT (go t) Map.empty
+  where
+    go :: SharedTerm s -> State.StateT (Map TermIndex b) m b
+    go (STVar i sym tp) = lift $ g i sym tp
+    go (STApp i t) = do
+      memo <- State.get
+      case Map.lookup i memo of
+        Just x  -> return x
+        Nothing -> do
+          t' <- Traversable.mapM go t
+          x <- lift (f t')
+          State.modify (Map.insert i x)
+          return x
+
+{-
+unshare :: SharedTerm s -> Term
+unshare = foldSharedTerm Term
+-}

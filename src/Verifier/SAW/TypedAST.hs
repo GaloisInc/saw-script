@@ -1,12 +1,14 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.TypedAST
  ( Un.Ident, Un.mkIdent, Un.unusedIdent
  , Un.ParamType(..)
+ , DeBruijnIndex
  , LambdaVar
  , FieldName
- , DeBruijnIndex
  , Sort, Un.sortOf
  , Def
  , TermF(..)
@@ -28,6 +30,7 @@ import Data.Maybe (fromMaybe)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.HughesPJ
+import Data.Traversable (Traversable)
 
 
 import Prelude hiding (concatMap, sum)
@@ -42,7 +45,7 @@ type LambdaVar e = (Un.ParamType, Ident, e)
 -- these decisions were made so that terms have a well-specified type, and we do
 -- not need to be concerned about record subtyping.
 
-type DeBruijnIndex = Integer
+type DeBruijnIndex = Int
 
 -- Patterns are used to match equations.
 data Pat e = -- | Variable and associated identifier. 
@@ -54,7 +57,7 @@ data Pat e = -- | Variable and associated identifier.
              -- verified to be equivalent.
            | PCtor Ctor [Pat e]
            | PInaccessible e
-  deriving (Eq,Ord, Functor)
+  deriving (Eq,Ord, Functor, Foldable, Traversable)
 
 patBoundVars :: Pat e -> [Ident]
 patBoundVars p =
@@ -69,20 +72,22 @@ lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y) 
 
 -- A Definition contains an identifier, the type of the definition, and a list of equations.
-data Def = Def { defIdent :: Ident
-               , defType :: Term
-               , defEqs :: [DefEqn Term]
-               }
+data Def e = Def { defIdent :: Ident
+                 , defType :: e
+                 , defEqs :: [DefEqn e]
+                 }
+  deriving (Functor, Foldable, Traversable)
 
-instance Eq Def where
+instance Eq (Def e) where
   (==) = lift2 defIdent (==)
 
-instance Ord Def where
+instance Ord (Def e) where
   compare = lift2 defIdent compare  
 
 data DefEqn e
   = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
+  deriving (Functor, Foldable, Traversable)
 
 data Ctor = Ctor { ctorIdent :: !Ident
                    -- | The type of the constructor (should contain no free variables).
@@ -123,7 +128,7 @@ ppDataType dt = text "data" <+> tc <+> text "where" <+> lbrace $$
 
 data TermF e
   = LocalVar !DeBruijnIndex e -- ^ Local variables are referenced by deBrujin index, and the type.
-  | GlobalDef Def           -- ^ Global variables are referenced by label.
+  | GlobalDef (Def e)  -- ^ Global variables are referenced by label.
 
   | Lambda Ident e e
   | App e e
@@ -145,13 +150,13 @@ data TermF e
 
     -- ^ List of bindings and the let expression itself.
     -- Let expressions introduce variables for each identifier.
-  | Let [Def] e
+  | Let [Def Term] e
 
     -- Primitive builtin values
   | IntLit Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
- deriving (Eq,Ord)
+ deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
@@ -159,7 +164,7 @@ ppIdent i = text (show i)
 doublecolon :: Doc
 doublecolon = colon <> colon
 
-ppDef :: LocalVarDoc -> Def -> Doc
+ppDef :: LocalVarDoc -> Def Term -> Doc
 ppDef lcls d = vcat (typeDoc : (ppEq <$> defEqs d))
   where sym = ppIdent (defIdent d)
         typeDoc = sym <+> doublecolon <+> ppTerm lcls 1 (defType d)
@@ -195,9 +200,9 @@ maybeParens :: Bool -> Doc -> Doc
 maybeParens True  d = parens d
 maybeParens False d = d
 
-data LocalVarDoc = LVD { docMap :: !(Map Integer Doc)
-                       , docLvl :: !Integer
-                       , docUsedMap :: Map Ident Integer
+data LocalVarDoc = LVD { docMap :: !(Map DeBruijnIndex Doc)
+                       , docLvl :: !DeBruijnIndex
+                       , docUsedMap :: Map Ident DeBruijnIndex
                        }
 
 emptyLocalVarDoc :: LocalVarDoc
@@ -216,12 +221,12 @@ consBinding lvd i = LVD { docMap = Map.insert lvl (ppIdent i) m
              Just pl -> Map.delete pl (docMap lvd)
              Nothing -> docMap lvd
 
-lookupDoc :: LocalVarDoc -> Integer -> Doc
+lookupDoc :: LocalVarDoc -> DeBruijnIndex -> Doc
 lookupDoc lvd i =
   let lvl = docLvl lvd - i - 1
    in case Map.lookup lvl (docMap lvd) of
         Just d -> d
-        Nothing -> char '!' <> integer i
+        Nothing -> char '!' <> integer (toInteger i)
 
 -- | @ppTermF@ pretty prints term functros.
 ppTermF :: TermPrinter e -- ^ Pretty printer for elements.
@@ -283,11 +288,10 @@ incVars initialLevel j = assert (j > 0) $ go initialLevel
             PTuple pl -> PTuple (goPat l <$> pl)
             PRecord m -> PRecord (goPat l <$> m)
             PInaccessible t -> PInaccessible (go l t)
-        go :: Integer -> Term -> Term
+        go :: DeBruijnIndex -> Term -> Term
         go l t@(Term tf) =
           case tf of
-            LocalVar i tp
-              | i >= l -> Term $ LocalVar (i+j) (go l tp)
+            LocalVar i tp | i >= l -> Term $ LocalVar (i+j) (go l tp)
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
             App x y -> Term $ App (go l x) (go l y) 
             Pi i lhs rhs -> Term $ Pi i (go l lhs) (go (l+1) rhs)
@@ -299,7 +303,7 @@ incVars initialLevel j = assert (j > 0) $ go initialLevel
             CtorValue c ll -> Term $ CtorValue c (goList l ll)
             CtorType dt ll -> Term $ CtorType dt (goList l ll)
             Let defs r -> Term $ Let (procDef <$> defs) (go l' r)
-              where l' = l + toInteger (length defs)
+              where l' = l + length defs
                     procDef d = Def { defIdent = defIdent d
                                     , defType = go l (defType d)
                                     , defEqs = procEq <$> defEqs d
@@ -330,12 +334,12 @@ instance Show Term where
   showsPrec p t = shows $ ppTerm emptyLocalVarDoc p t
 
 data ModuleDecl = TypeDecl DataType 
-                | DefDecl Def
+                | DefDecl (Def Term)
  
 data Module = Module {
           moduleTypeMap :: !(Map Ident DataType)
         , moduleCtorMap :: !(Map Ident Ctor)
-        , moduleDefMap  :: !(Map Ident Def)
+        , moduleDefMap  :: !(Map Ident (Def Term))
         , moduleDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added. 
         }
 
@@ -350,7 +354,7 @@ findDataType m i = Map.lookup i (moduleTypeMap m)
 findCtor :: Module -> Ident -> Maybe Ctor
 findCtor m i = Map.lookup i (moduleCtorMap m)
 
-findDef :: Module -> Ident -> Maybe Def
+findDef :: Module -> Ident -> Maybe (Def Term)
 findDef m i = Map.lookup i (moduleDefMap m)
 
 emptyModule :: Module
@@ -367,7 +371,7 @@ insDataType m dt = m { moduleTypeMap = Map.insert (dtIdent dt) dt (moduleTypeMap
                      }
   where insCtor m' c = Map.insert (ctorIdent c) c m' 
 
-insDef :: Module -> Def -> Module
+insDef :: Module -> Def Term -> Module
 insDef m d = m { moduleDefMap = Map.insert (defIdent d) d (moduleDefMap m)
                , moduleDecls = DefDecl d : moduleDecls m
                }
@@ -406,11 +410,11 @@ unsafeMkModule d = gloMod
         gloMod = foldl' insertDef emptyModule d
         gloCtx = globalContext gloMod
 
-type DeBruijnLevel = Integer
+type DeBruijnLevel = DeBruijnIndex
 
 data TermContext = TermContext {
          tcDeBruijnLevel :: DeBruijnLevel
-       , tcMap :: Map Ident (Either (DeBruijnLevel,Term) Def) 
+       , tcMap :: Map Ident (Either (DeBruijnLevel,Term) (Def Term)) 
        , tcDataDecls :: Map Ident (Either Ctor DataType)
        }
 
@@ -544,7 +548,7 @@ consPatVars :: TermContext
 consPatVars = undefined
 
 -- | Return the number of bound variables in the pattern.
-patBoundVarCount :: Pat Term -> Integer
+patBoundVarCount :: Pat Term -> DeBruijnIndex
 patBoundVarCount p =
   case p of
     PVar{}    -> 1
