@@ -37,7 +37,7 @@ type LambdaVar e = (Un.ParamType, Ident, e)
 -- these decisions were made so that terms have a well-specified type, and we do
 -- not need to be concerned about record subtyping.
 
-type DeBruijnIndex = Integer
+type DeBruijnIndex = Int
 
 -- Patterns are used to match equations.
 data Pat e = -- | Variable and associated identifier. 
