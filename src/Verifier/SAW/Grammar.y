@@ -54,6 +54,7 @@ import Debug.Trace
   'sort'  { PosPair _ (TKey "sort") }
   'where' { PosPair _ (TKey "where") }
   var     { PosPair _ (TVar _) }
+  unvar   { PosPair _ (TUnVar _) }
   con     { PosPair _ (TCon _) }
   nat     { PosPair _ (TNat _) }
 
@@ -74,7 +75,7 @@ DeclLhs :: { DeclLhs }
 DeclLhs : Con list(LhsArg) { ($1, $2) }
         | Var list(LhsArg) { ($1, $2) }
 
-LhsArg :: { (ParamType, Pat) }
+LhsArg :: { (ParamType, Pat Term) }
 LhsArg : AtomPat           { (NormalParam, $1) }
        | ParamType AtomPat { ($1, $2) }
 
@@ -82,23 +83,23 @@ LhsArg : AtomPat           { (NormalParam, $1) }
 CtorDecl :: { CtorDecl }
 CtorDecl : Con '::' LTerm ';' { Ctor $1 $3 }
 
-LambdaPat :: { (Ident, Term) }
-LambdaPat : '(' Var '::' LTerm ')' { (val $2, $4) }
+LambdaPat :: { (EitherIdent, Term) }
+LambdaPat : '(' EitherVar '::' LTerm ')' { (val $2, $4) }
 
-LambdaArg :: { (ParamType, Ident, Term) }
+LambdaArg :: { (ParamType, EitherIdent, Term) }
 LambdaArg : LambdaPat           { (NormalParam, fst $1, snd $1) }
           | ParamType LambdaPat { ($1, fst $2, snd $2) }
 
-Pat :: { Pat }
+Pat :: { Pat Term }
 Pat : CtorPat { $1 }
 --    | CtorPat '::' LTerm { PTypeConstraint $1 $3 }
 
-CtorPat :: { Pat }
+CtorPat :: { Pat Term }
 CtorPat : AtomPat           { $1 }
         | Con list(AtomPat) { PCtor $1 $2 }
 
-AtomPat :: { Pat }
-AtomPat : Var                       { PVar $1 }
+AtomPat :: { Pat Term }
+AtomPat : EitherVar                 { PVar $1 }
         | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
         | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
         | '.' AtomTerm              { PInaccessible $2 }
@@ -153,6 +154,11 @@ FieldName : var { fmap tokVar $1 }
 
 Var :: { PosPair Ident }
 Var : var { fmap (mkIdent . tokVar) $1 }
+
+EitherVar :: { PosPair EitherIdent }
+EitherVar : unvar { fmap (Left . mkUnusedIdent . tokVar) $1 }
+          | Var { fmap Right $1 }
+
 
 Con :: { PosPair Ident }
 Con : con { fmap (mkIdent . tokCon) $1 }
@@ -293,10 +299,10 @@ mergeParamType pt p mpt = do
 
 -- Attempts to parses an expression as a list of identifiers.
 -- Will return a value on all expressions, but may add errors to parser state.
-exprAsVarList :: Term -> String -> Parser [PosPair Ident]
+exprAsVarList :: Term -> String -> Parser [PosPair EitherIdent]
 exprAsVarList ex errMsg =
   case ex of
-    Var pi -> return [pi]
+    Var pi -> return [Right <$> pi]
     App x _ y -> liftM2 (++) (exprAsVarList x errMsg) (exprAsVarList y errMsg)
     BadTerm _ -> return []
     _ -> addParseError (pos ex) errMsg >> return []
@@ -307,7 +313,7 @@ mkPi ptp (ppt,l) r = parseLhs l
           fmap (\l -> Pi ppt l t ptp r) $ 
                exprAsVarList x "Invalid arguments to Pi expression."
         parseLhs e =
-          return $ Pi ppt [PosPair (pos e) (mkIdent "_")] e ptp r   
+          return $ Pi ppt [PosPair (pos e) (Left unusedIdent)] e ptp r   
 
 -- | Parse a parenthesized expression which may actually be a tuple.
 parseParen :: (Pos -> a -> b) -- ^ singleton case.
@@ -329,11 +335,12 @@ asAppList = \x -> impl x []
   where impl (App x _ y) r = impl x (y:r)
         impl x r = (x,r)
 
-type DeclLhs = (PosPair Ident, [(ParamType, Pat)])
+type DeclLhs = (PosPair Ident, [(ParamType, Pat Term)])
 
 mkTypeDecl :: DeclLhs -> Term -> Parser Decl
 mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
-  where filterArgs ((NormalParam,PVar pi):l) r = filterArgs l (pi:r)
+  where filterArgs ((NormalParam,PVar (PosPair p (Right i))):l) r =
+          filterArgs l (PosPair p i:r)
         filterArgs ((NormalParam,e):l) r = do
           addParseError (pos e) "Expected variable identifier in type declaration."
           filterArgs l r

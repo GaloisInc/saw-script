@@ -1,6 +1,8 @@
 module Verifier.SAW.UntypedAST
   ( module Verifier.SAW.Position
-  , Ident, mkIdent, unusedIdent
+  , Ident, mkIdent
+  , UnusedIdent, mkUnusedIdent, unusedIdent
+  , EitherIdent
   , Sort, mkSort, sortOf
   , ParamType(..)
   , Pat(..)
@@ -12,19 +14,42 @@ module Verifier.SAW.UntypedAST
   , Decl(..)
   ) where
 
+import Control.Exception (assert)
+import Data.Char
 import Verifier.SAW.Position
 
 newtype Ident = Ident String
   deriving (Eq, Ord)
 
+
 instance Show Ident where
   show (Ident s) = s
 
-mkIdent :: String -> Ident
-mkIdent = Ident
+isIdChar :: Char -> Bool
+isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 
-unusedIdent :: Ident
-unusedIdent = Ident "_"
+isIdent :: String -> Bool
+isIdent (c:l) = isAlpha c && all isIdChar l
+isIdent [] = False
+
+mkIdent :: String -> Ident
+mkIdent = \s -> assert (isIdent s) $ Ident s
+
+newtype UnusedIdent = UnusedIdent String
+  deriving (Eq, Ord)
+
+instance Show UnusedIdent where
+  show (UnusedIdent s) = s
+
+mkUnusedIdent :: String -> UnusedIdent
+mkUnusedIdent = \s -> assert (isUnusedIdent s) $ UnusedIdent s 
+  where isUnusedIdent s = 
+          case dropWhile (=='_') s of
+            [] -> True
+            l -> isIdent l
+
+unusedIdent :: UnusedIdent
+unusedIdent = UnusedIdent "_"
 
 newtype Sort = SortCtor { _sortIndex :: Integer }
   deriving (Eq, Ord)
@@ -49,14 +74,16 @@ data ParamType
 
 type FieldName = String
 
+type EitherIdent = Either UnusedIdent Ident
+
 data Term
   = Var (PosPair Ident)
   | Con (PosPair Ident)
   | Sort Pos Sort
-  | Lambda Pos [(ParamType,Ident,Term)] Term
+  | Lambda Pos [(ParamType,EitherIdent,Term)] Term
   | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
-  | Pi ParamType [PosPair Ident] Term Pos Term
+  | Pi ParamType [PosPair EitherIdent] Term Pos Term
     -- | Tuple expressions and their type.
   | TupleValue Pos [Term]
   | TupleType Pos [Term]
@@ -76,12 +103,12 @@ data Term
  deriving (Eq, Ord, Show)
 
 -- | A pattern used for matching a variable.
-data Pat
-  = PVar (PosPair Ident)
-  | PTuple Pos [Pat]
-  | PRecord Pos [(PosPair FieldName, Pat)]
-  | PCtor (PosPair Ident) [Pat]
-  | PInaccessible Term
+data Pat t
+  = PVar (PosPair EitherIdent)
+  | PTuple Pos [Pat t]
+  | PRecord Pos [(PosPair FieldName, Pat t)]
+  | PCtor (PosPair Ident) [Pat t]
+  | PInaccessible t
   deriving (Eq, Ord, Show)
 
 instance Positioned Term where
@@ -106,15 +133,14 @@ instance Positioned Term where
       BadTerm p            -> p
      
 
-instance Positioned Pat where
+instance Positioned (Pat Term) where
   pos pat =
     case pat of
       PVar i      -> pos i
-      PCtor i _   -> pos i
       PTuple p _  -> p
       PRecord p _ -> p
+      PCtor i _   -> pos i
       PInaccessible t -> pos t
---      PTypeConstraint _ t -> pos t
 
 badTerm :: Pos -> Term
 badTerm = BadTerm
@@ -127,9 +153,8 @@ data CtorDecl = Ctor (PosPair Ident) Term
 data Decl
    = TypeDecl [(PosPair Ident)] Term
    | DataDecl (PosPair Ident) Term [CtorDecl]
-   | TermDef (PosPair Ident) [(ParamType, Pat)] Term
+   | TermDef (PosPair Ident) [(ParamType, Pat Term)] Term
   deriving (Eq, Ord, Show)
-
 
 asApp :: Term -> (Term,[Term])
 asApp = go []

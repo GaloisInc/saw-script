@@ -298,7 +298,7 @@ mkSharedContext m = do
 foldSharedTerm :: forall s b . 
                (VarIndex -> Ident -> SharedTerm s -> b) 
                -> (TermF b -> b) -> SharedTerm s -> b
-foldSharedTerm g f t = State.evalState (go t) Map.empty
+foldSharedTerm g f = \t -> State.evalState (go t) Map.empty
   where
     go :: SharedTerm s -> State.State (Map TermIndex b) b
     go (STVar i sym tp) = return $ g i sym tp
@@ -315,7 +315,7 @@ foldSharedTerm g f t = State.evalState (go t) Map.empty
 foldSharedTermM :: forall s b m . Monad m 
                 => (VarIndex -> Ident -> SharedTerm s -> m b)
                 -> (TermF b -> m b) -> SharedTerm s -> m b
-foldSharedTermM g f t = State.evalStateT (go t) Map.empty
+foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
   where
     go :: SharedTerm s -> State.StateT (Map TermIndex b) m b
     go (STVar i sym tp) = lift $ g i sym tp

@@ -33,7 +33,8 @@ import Verifier.SAW.Position
 
 $idchar = [a-z A-Z 0-9 \' \_]
 @num = [0-9]+
-@var = [a-z \_] $idchar*
+@var = [a-z] $idchar*
+@unvar = [\_]+ ([a-z] $idchar*)? 
 @con = [A-Z] $idchar*
 
 @punct = "#" | "," | "->" | "." | ";" | "::" | "=" | "?" | "??" | "???" | "\"
@@ -50,12 +51,14 @@ $white+;
 @num        { TNat . read }
 @key        { TKey }
 @var        { TVar }
+@unvar      { TUnVar }
 @con        { TCon }
 .           { TIllegal }
 
 {
 data Token
   = TVar { tokVar :: String }   -- ^ Variable identifier (lower case).
+  | TUnVar { tokVar :: String } -- ^ Variable identifier prefixed by underscore.
   | TCon { tokCon :: String }   -- ^ Start of a constructor (may be pattern matched). 
   | TNat { tokNat :: Integer }  -- ^ Natural number literal
   | TKey String     -- ^ Keyword or predefined symbol
@@ -69,6 +72,7 @@ ppToken :: Token -> String
 ppToken tkn = 
   case tkn of
     TVar s -> s
+    TUnVar s -> s
     TCon s -> s   
     TNat n -> show n
     TKey s -> s
