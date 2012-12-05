@@ -310,11 +310,13 @@ asApp = go []
   where go l (Term (App t u)) = go (u:l) t
         go l t = (t,l)
 
--- | @incVars j k t@ increments free variables at least @j@ by @k@.
--- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVars :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
-incVars _ 0 = id
-incVars initialLevel j = assert (j > 0) $ go initialLevel 
+-- | @instantiateVars f l t@ substitutes each dangling bound variable
+-- @LocalVar j t@ with the term @f i j t'@, where @i@ is the number of
+-- binders surrounding @LocalVar j t@ and @t'@ is the result of
+-- recursively instantiating @t@.
+instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> Term -> Term)
+                -> DeBruijnIndex -> Term -> Term
+instantiateVars f initialLevel = go initialLevel 
   where goList _ []  = []
         goList l (e:r) = go l e : goList (l+1) r
         goPat l p = 
@@ -327,7 +329,7 @@ incVars initialLevel j = assert (j > 0) $ go initialLevel
         go :: DeBruijnIndex -> Term -> Term
         go l t@(Term tf) =
           case tf of
-            LocalVar i tp | i >= l -> Term $ LocalVar (i+j) (go l tp)
+            LocalVar i tp | i >= l -> f l i (go l tp)
                           | otherwise -> Term $ LocalVar i (go l tp)
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
             App x y -> Term $ App (go l x) (go l y) 
@@ -349,6 +351,29 @@ incVars initialLevel j = assert (j > 0) $ go initialLevel
                       where eql = l' + sum (patBoundVarCount <$> pats)
                             pats' = goPat eql <$> pats
             _ -> t
+
+-- | @incVars j k t@ increments free variables at least @j@ by @k@.
+-- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
+incVars :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
+incVars _ 0 = id
+incVars initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
+  where fn _ i t = Term $ LocalVar (i+j) t
+
+-- | Substitute @t@ for variable @k@ and decrement all higher dangling
+-- variables.
+instantiateVar :: DeBruijnIndex -> Term -> Term -> Term
+instantiateVar k t = instantiateVars fn 0
+  where -- Use terms to memoize instantiated versions of t.
+        terms = [ incVars 0 i t | i <- [0..] ] 
+        -- Instantiate variable 0.
+        fn i j t | j  > i + k = Term $ LocalVar (j - 1) t
+                 | j == i + k = terms !! i
+                 | otherwise  = Term $ LocalVar j t
+
+-- | Substitute @t@ for variable 0 in @s@ and decrement all remaining
+-- variables.
+betaReduce :: Term -> Term -> Term
+betaReduce s t = instantiateVar 0 t s
 
 {-
 -- | @termApp t u@ returns the term obtained by replacing var 0 in @t@
