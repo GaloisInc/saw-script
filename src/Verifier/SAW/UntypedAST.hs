@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Verifier.SAW.UntypedAST
   ( module Verifier.SAW.Position
   , Ident, mkIdent
