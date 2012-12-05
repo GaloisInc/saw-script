@@ -328,6 +328,7 @@ incVars initialLevel j = assert (j > 0) $ go initialLevel
         go l t@(Term tf) =
           case tf of
             LocalVar i tp | i >= l -> Term $ LocalVar (i+j) (go l tp)
+                          | otherwise -> Term $ LocalVar i (go l tp)
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
             App x y -> Term $ App (go l x) (go l y) 
             Pi i lhs rhs -> Term $ Pi i (go l lhs) (go (l+1) rhs)
