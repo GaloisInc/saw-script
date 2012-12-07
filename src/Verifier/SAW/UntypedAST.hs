@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Verifier.SAW.UntypedAST
   ( Module(..) 
   , ModuleName, mkModuleName

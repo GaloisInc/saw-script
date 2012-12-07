@@ -1,6 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.SharedTerm
   ( TermF(..)
