@@ -37,9 +37,10 @@ $idchar = [a-z A-Z 0-9 \' \_]
 @unvar = [\_]+ ([a-z] $idchar*)? 
 @con = [A-Z] $idchar*
 
-@punct = "#" | "," | "->" | "." | ";" | "::" | "=" | "?" | "??" | "???" | "\"
-       | "(" | ")" | "[" | "]" | "{" | "}"
-@keywords = "data" | "in" | "sort" | "where" | "let"
+@punct = "#" | "," | "->" | "." | ".." | ";" | "::" | "=" | "?" | "??" | "???"
+       | "\" | "(" | ")" | "[" | "]" | "{" | "}"
+@keywords = "as" | "data" | "hiding" | "import" | "in" | "let" | "module"
+          | "qualified" | "sort" | "where"
 @key = @punct | @keywords
 
 sawTokens :-

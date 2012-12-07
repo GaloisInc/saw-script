@@ -5,7 +5,7 @@ module Verifier.SAW.Position
   , incLine
   , incCol
   , Positioned(..)
-  , PosPair(..), val
+  , PosPair(..)
   ) where
 
 import Data.Monoid
@@ -40,11 +40,8 @@ incCol p = p { posCol = 1 + posCol p }
 class Positioned v where
   pos :: v -> Pos
 
-data PosPair v = PosPair !Pos !v
+data PosPair v = PosPair { _pos :: !Pos, val :: !v }
   deriving (Eq, Ord, Functor, Show)
-
-val :: PosPair v -> v
-val (PosPair _ v) = v 
 
 instance Positioned (PosPair v) where
   pos (PosPair p _) = p

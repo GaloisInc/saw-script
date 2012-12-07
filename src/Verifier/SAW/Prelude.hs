@@ -18,6 +18,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import Verifier.SAW.Grammar
 import Verifier.SAW.TypedAST
+import Verifier.SAW.Typechecker
 
 {-# NOINLINE preludeModule #-}
 -- | Returns a module containing the standard prelude for SAW. 
@@ -34,5 +35,5 @@ preludeModule = unsafePerformIO $ do
                              primExpr = LitE $ StringPrimL $ UTF8.toString b
 #endif
                       (_,errors) -> fail $ "Failed to parse prelude:\n" ++ show errors)
-  let (decls,[]) = runParser "SAW.core" (BL.fromChunks [b]) parseSAW
-  return (unsafeMkModule decls)
+  let (m,[]) = runParser "SAW.core" (BL.fromChunks [b]) parseSAW
+  return (unsafeMkModule [] m)

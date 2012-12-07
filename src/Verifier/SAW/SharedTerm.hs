@@ -3,8 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Verifier.SAW.SharedTerm
-  ( ParamType(..)
-  , TermF(..)
+  ( TermF(..)
   , Ident, mkIdent
   , SharedTerm
   , SharedContext(..)
@@ -259,11 +258,11 @@ mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newMVar emptyAppCache
   let getCtor sym args =
-        case findCtor m (mkIdent sym) of
+        case findCtor m (undefined sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
           Just c -> getTerm cr (CtorValue c args)
   let getDef sym =
-        case findDef m (mkIdent sym) of
+        case findDef m (undefined sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
           Just d -> getTerm cr (GlobalDef (undefined d))
   trueTerm <- getCtor "True" []
