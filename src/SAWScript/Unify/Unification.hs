@@ -7,10 +7,10 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 
-module Unify.Unify where
+module SAWScript.Unify.Unification where
 
-import Unify.Fix
-import Unify.Goal
+import SAWScript.Unify.Fix
+import SAWScript.Unify.Goal
 
 import Control.Arrow
 import Control.Applicative
@@ -26,7 +26,7 @@ type Results a = Either [String] [a]
 
 -- Logic {{{
 
-data Logic a = LV Index deriving (Show,Functor,F.Foldable,T.Traversable)
+data Logic a = LV Index deriving (Functor,F.Foldable,T.Traversable)
 
 instance Render Logic where
   render (LV i) = "_." ++ show i
@@ -60,12 +60,16 @@ unify :: (Unifiable f) => Mu f -> Mu f -> Goal (Mu f)
 unify u v = do
   u'@(In ue) <- walk u
   v'@(In ve) <- walk v
+  s <- GoalM $ gets snd
   mcond $
     [ guard (u' == v') :|:        succeed
-    , isVar u'         :>: \ui -> occursCheck ui v' >>= guard . not >> extendS ui v'
-    , isVar v'         :>: \vi -> occursCheck vi u' >>= guard . not >> extendS vi u'
+    , isVar u'         :>: \ui -> occursCheck ui v' >>= \b -> assert (not b) (cycleErr (show u') (show v')) >> extendS ui v'
+    , isVar v'         :>: \vi -> occursCheck vi u' >>= \b -> assert (not b) (cycleErr (show v') (show u')) >> extendS vi u'
     , Else              $         uni ue ve
     ] 
+
+cycleErr :: String -> String -> String
+cycleErr u v = concat [ "Unification of " , u, " and ", v, " causes infinite cycle." ]
 
 walkStar :: (Unifiable f) => Mu f -> GoalM (Mu f) (Mu f)
 walkStar u = out <$> walk u >>= (In <$>) . wkS
@@ -141,7 +145,7 @@ extendS ui v = modifySubst ((lVar ui,v):)
 
 mcond :: MonadPlus m => [Case m a] -> m a
 mcond cs = case cs of
-  [] -> mzero
+  [] -> (fail "Ran off the end of mcond expression")
   (Else m) : _          -> m
   (Just _  :|: m) : _   -> m
   (Nothing :|: _) : cs' -> mcond cs'
@@ -156,6 +160,9 @@ data Case m a
 -- }}}
 
 -- Framework {{{
+
+assert :: Unifiable f => Bool -> String -> Goal (Mu f)
+assert p err = if p then succeed else fail err
 
 succeed :: Unifiable f => Goal (Mu f)
 succeed = return ()
@@ -199,6 +206,18 @@ foldMapM f = F.foldrM (\a n -> f a >>= return . mappend n) mempty
 
 foldOrM :: (F.Foldable t, Monad m) => (a -> m Bool) -> t a -> m Bool
 foldOrM f = F.foldrM (\a n -> f a >>= return . (||) n) False
+
+zipWithMP :: (MonadPlus m, Show a, Show b) => (a -> b -> m c) -> [a] -> [b] -> m [c]
+zipWithMP f as bs = case (as,bs) of
+  ([],[])       -> return []
+  ([],_)        -> fail ("Length mismatch: " ++ show as ++ " and " ++ show bs)
+  (_,[])        -> fail ("Length mismatch: " ++ show as ++ " and " ++ show bs)
+  (a:as',b:bs') -> do c <- f a b
+                      rest <- zipWithMP f as' bs'
+                      return (c:rest)
+
+zipWithMP_ :: (MonadPlus m, Show a, Show b) => (a -> b -> m c) -> [a] -> [b] -> m ()
+zipWithMP_ f as bs = zipWithMP f as bs >> return ()
 
 -- }}}
 

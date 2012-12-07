@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Unify.Goal where
+module SAWScript.Unify.Goal where
 
 import Control.Applicative
 import Control.Arrow

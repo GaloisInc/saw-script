@@ -2,11 +2,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
-module Unify.Fresh where
+module SAWScript.Unify.Fresh where
 
-import Unify.Fix
-import Unify.Goal
-import Unify.Unify
+import SAWScript.Unify.Fix
+import SAWScript.Unify.Goal
+import SAWScript.Unify.Unification
 
 import Control.Monad
 

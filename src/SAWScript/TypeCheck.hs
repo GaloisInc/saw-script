@@ -4,8 +4,6 @@
 
 module SAWScript.TypeCheck where
 
-import Prelude hiding (fail)
-
 import SAWScript.AST
 import SAWScript.Unify
 
@@ -14,8 +12,10 @@ import SAWScript.LiftPoly (runLS, assignVar,ModuleGen)
 import Control.Applicative
 import Control.Arrow
 import Control.Monad.Trans.Reader
-import Control.Monad hiding (fail)
+import Control.Monad.Trans.State
+import Control.Monad
 
+import Data.List
 import Data.Monoid
 import Data.Maybe
 import qualified Data.Foldable as Fold
@@ -23,13 +23,13 @@ import qualified Data.Traversable as Trav
 
 import qualified Debug.Trace as Debug
 
-typeCheck :: ModuleGen -> Module LType
+typeCheck :: ModuleGen -> Err (Module LType)
 typeCheck (m@(Module ds mb),gen) = case res of
-  Empty           -> error "Type check failure"
-  Choice m' Empty -> m'
-  _               -> error ("Ambiguous types: \n" ++ (show $ takeInterleave Nothing $ res))
+  Left es   -> Left (intercalate "\n" ("TypeCheck:" : "  typing failure:" : es))
+  Right [r] -> Right r
+  Right rs  -> Left (intercalate "\n" ("TypeCheck:" : "  Ambiguous typing:" : map show rs))
   where
-    res = fmap fst $ runGoalM goal (gen,emptyS)
+    res = fromStream Nothing Nothing $ fmap fst $ runStateT (runGoalM goal) (gen,emptyS)
     goal = runReaderT
              (do m' <- tCheck m
                  liftReader (Trav.traverse walkStar m'))
@@ -80,7 +80,7 @@ instance TypeCheck (TopStmt LType) where
                     return (TopLet $ zip ns es')
     _          -> return ts
 
-instance TypeCheck [BlockStmt Context LType] where
+instance TypeCheck [BlockStmt LType] where
   tCheck mb = case mb of
     []    -> return []
     s:mb' -> case s of
@@ -109,7 +109,7 @@ instance TypeCheck (Expr LType) where
     Block ss t         -> do ss' <- tCheck ss
                              let cs = mapMaybe context ss'
                              liftReader (do (c,bt) <- finalStmtType $ last ss'
-                                            guard (and $ map (== c) cs)
+                                            assert (all (== c) cs) ("Inconsistent contexts: " ++ show cs)
                                             t === block c bt)
                              return (Block ss' t)
     Tuple es t         -> do es' <- mapM tCheck es
@@ -139,7 +139,7 @@ instance TypeCheck (Expr LType) where
                                            Nothing -> case foundP of
                                              Just pt -> do lt <- instantiate pt
                                                            t === lt
-                                             Nothing -> fail)
+                                             Nothing -> fail ("Unbound variable: " ++ n))
                              return (Var n t)
     Function an at b t -> do b' <- extendType an at $ tCheck b
                              let bt = decor b'
@@ -167,6 +167,9 @@ subtype t1 t2 =
             | (n2,t2) <- nts2
           ]
 
+matchGoal :: (g :<: f) => Mu f -> GoalM (Mu f) (g (Mu f))
+matchGoal x = maybe mzero return (match x)
+
 instantiate :: PType -> GoalM LType LType
 instantiate = fmap fst . flip runLS [] . assignVar
 
@@ -175,8 +178,8 @@ compose f as = case as of
   []    -> id
   a:as' -> f a . compose f as'
 
-finalStmtType :: BlockStmt Context LType -> GoalM LType (Context,LType)
+finalStmtType :: BlockStmt LType -> GoalM LType (Context,LType)
 finalStmtType s = case s of
   Bind Nothing c e -> return (c,decor e)
-  _                -> fail
+  _                -> fail ("Final statement of do block must be an expression: " ++ show s)
 

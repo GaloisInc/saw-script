@@ -5,9 +5,9 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 
-module Unify.Tests where
+module SAWScript.Unify.Tests where
 
-import Unify
+import SAWScript.Unify
 
 import Control.Monad
 import Control.Applicative

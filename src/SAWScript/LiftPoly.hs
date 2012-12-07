@@ -13,34 +13,23 @@ import Control.Arrow
 import Control.Monad
 import Control.Monad.Trans.State
 
+import Data.List
 import Data.Foldable
 import Data.Traversable
 
 type LS = StateT [(Name,LType)] (GoalM LType)
 
-runLS = runStateT
-
-liftState :: (Monad m) => m a -> StateT s m a
-liftState m = StateT $ \s -> m >>= \a -> return (a,s)
-
-evalLS :: Show a => LS a -> (a,Int)
-evalLS m = case stream of
-  [a] -> a
-  _   -> error ("what happened? evalLS got " ++ show stream)
-  where
-    goal = runStateT m []
-    res = runGoalM goal initGState
-    stream = takeInterleave Nothing $ fmap ((fst >>> fst) &&& (snd >>> fst)) res
-
 type ModuleGen = (Module LType,Int)
 
-liftPoly :: Module MPType -> ModuleGen
-liftPoly m = evalLS (lPoly m)
-
-fillHoles :: MPType -> LS LType
-fillHoles mpt = case mpt of
-  Nothing -> liftState newLVar
-  Just pt -> assignVar pt
+liftPoly :: Module MPType -> Err ModuleGen
+liftPoly m = case stream of
+  Left es   -> Left (intercalate "\n" ("LiftPoly:" : "  No possible lifting:" : es))
+  Right [r] -> Right r
+  Right rs  -> Left (intercalate "\n" ("LiftPoly:" : "  Ambiguous lifting:\n" : map show rs))
+  where
+    goal = runStateT (lPoly m) []
+    res = runStateT (runGoalM goal) initGState
+    stream = fromStream Nothing Nothing $ fmap ((fst >>> fst) &&& (snd >>> fst)) res
 
 class (Functor f, Traversable f) => LiftPoly f where
   lPoly :: f MPType -> LS (f LType)
@@ -49,7 +38,7 @@ class (Functor f, Traversable f) => LiftPoly f where
 instance LiftPoly Module where
   lPoly = traverse (saveEnv . fillHoles)
 instance LiftPoly TopStmt
-instance LiftPoly (BlockStmt Context)
+instance LiftPoly BlockStmt
 instance LiftPoly Expr
 
 class (Functor f, Traversable f) => Assignable f where
@@ -67,12 +56,20 @@ instance Assignable Poly where
     case mi of
       Just x  -> return x
       Nothing -> do
-        x <- liftState newLVar
+        x <- newLVarLS
         extendEnv n x
         return x
 
+fillHoles :: MPType -> LS LType
+fillHoles mpt = case mpt of
+  Nothing -> newLVarLS
+  Just pt -> assignVar pt
+
 assignVar :: PType -> LS LType
 assignVar = foldMuM assign
+
+newLVarLS :: LS LType
+newLVarLS = StateT $ \s -> newLVar >>= \a -> return (a,s)
 
 extendEnv :: Name -> LType -> LS ()
 extendEnv n x = modify ((n,x):)

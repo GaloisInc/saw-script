@@ -6,12 +6,12 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 
-module Unify.Ops where
+module SAWScript.Unify.Ops where
 
-import Unify.Fix
-import Unify.Goal
-import Unify.Unify
-import Unify.Fresh
+import SAWScript.Unify.Fix
+import SAWScript.Unify.Goal
+import SAWScript.Unify.Unification
+import SAWScript.Unify.Fresh
 
 import Control.Monad
 import Control.Monad.Trans.State

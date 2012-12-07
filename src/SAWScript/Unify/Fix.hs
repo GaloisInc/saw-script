@@ -6,7 +6,9 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 
-module Unify.Fix where
+module SAWScript.Unify.Fix where
+
+import Control.Applicative
 
 import Data.Foldable
 import Data.Traversable
@@ -50,6 +52,9 @@ match (In e) = prj e
 
 foldMu :: Functor f => (f a -> a) -> Mu f -> a
 foldMu f (In e) = f (fmap (foldMu f) e)
+
+foldMuM :: (Applicative m, Monad m, Traversable f) => (f a -> m a) -> Mu f -> m a
+foldMuM f (In e) = traverse (foldMuM f) e >>= f
 
 -- }}}
 
