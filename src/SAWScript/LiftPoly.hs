@@ -18,14 +18,15 @@ import Data.Foldable
 import Data.Traversable
 
 type LS = StateT [(Name,LType)] (GoalM LType)
+runLS = runStateT
 
 type ModuleGen = (Module LType,Int)
 
 liftPoly :: Module MPType -> Err ModuleGen
 liftPoly m = case stream of
-  Left es   -> Left (intercalate "\n" ("LiftPoly:" : "  No possible lifting:" : es))
+  Left es   -> Left (intercalate "\n" ("LiftPoly: No possible lifting:" : es))
   Right [r] -> Right r
-  Right rs  -> Left (intercalate "\n" ("LiftPoly:" : "  Ambiguous lifting:\n" : map show rs))
+  Right rs  -> Left (intercalate "\n" ("LiftPoly: Ambiguous lifting:\n" : map show rs))
   where
     goal = runStateT (lPoly m) []
     res = runStateT (runGoalM goal) initGState

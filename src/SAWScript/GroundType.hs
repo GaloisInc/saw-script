@@ -8,9 +8,9 @@ import SAWScript.Unify
 import Data.List
 import Data.Traversable
 
-groundType :: Module LType -> Either String (Module CType)
+groundType :: Module LType -> Err (Module CType)
 groundType m = case traverse (foldMuM gType) m of
-  Left e   -> Left (intercalate "\n" ["GroundType:" , ("  " ++ e) , show m])
+  Left e   -> Left (intercalate "\n" ["GroundType: " ++ e, "in:", show m])
   Right m' -> Right m'
 
 class Functor f => Groundable f where

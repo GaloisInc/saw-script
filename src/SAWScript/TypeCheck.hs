@@ -25,9 +25,9 @@ import qualified Debug.Trace as Debug
 
 typeCheck :: ModuleGen -> Err (Module LType)
 typeCheck (m@(Module ds mb),gen) = case res of
-  Left es   -> Left (intercalate "\n" ("TypeCheck:" : "  typing failure:" : es))
+  Left es   -> Left $ intercalate "\n" ("TypeCheck:" : (es ++ [ "in:" , show m ]))
   Right [r] -> Right r
-  Right rs  -> Left (intercalate "\n" ("TypeCheck:" : "  Ambiguous typing:" : map show rs))
+  Right rs  -> Left $ intercalate "\n" ("TypeCheck: Ambiguous typing:" : map show rs)
   where
     res = fromStream Nothing Nothing $ fmap fst $ runStateT (runGoalM goal) (gen,emptyS)
     goal = runReaderT
@@ -97,9 +97,6 @@ instance TypeCheck [BlockStmt LType] where
                                es' <- mapM tCheck es
                                rest <- (compose $ uncurry extendType) (zip ns $ map decor es') $ tCheck mb'
                                return (BlockLet (zip ns es') : rest)
-
-liftReader :: (Monad m) => m a -> ReaderT r m a
-liftReader m = ReaderT $ \r -> m
 
 instance TypeCheck (Expr LType) where
   tCheck e = case e of
@@ -182,4 +179,7 @@ finalStmtType :: BlockStmt LType -> GoalM LType (Context,LType)
 finalStmtType s = case s of
   Bind Nothing c e -> return (c,decor e)
   _                -> fail ("Final statement of do block must be an expression: " ++ show s)
+
+liftReader :: (Monad m) => m a -> ReaderT r m a
+liftReader m = ReaderT $ \r -> m
 
