@@ -164,7 +164,8 @@ data Case m a
 assert :: Unifiable f => Bool -> String -> Goal (Mu f)
 assert p err = if p then succeed else fail err
 
-succeed :: Unifiable f => Goal (Mu f)
+--succeed :: Unifiable f => Goal (Mu f)
+succeed :: MonadPlus m => m ()
 succeed = return ()
 
 isVar :: Unifiable f => Mu f -> Maybe Index

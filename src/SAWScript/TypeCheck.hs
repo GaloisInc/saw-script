@@ -100,9 +100,16 @@ instance TypeCheck [BlockStmt LType] where
 
 instance TypeCheck (Expr LType) where
   tCheck e = case e of
-    Bit b t            -> liftReader (t === bit) >> return (Bit b t)
-    Quote s t          -> liftReader (t === quote) >> return (Quote s t)
-    Z i t              -> liftReader (t === z) >> return (Z i t)
+    Bit b t            -> t `typeEqual` bit   >>= \(u,v) -> u === v>> return (Bit b t)
+    Quote s t          -> t `typeEqual` quote >>= \(u,v) -> u === v>> return (Quote s t)
+    Z i t              -> t `typeEqual` z     >>= \(u,v) -> u === v>> return (Z i t)
+    Array es t         -> do es' <- mapM tCheck es
+                             let l = i $ length es
+                                 ts = map decor es'
+                             liftReader (case ts of
+                                           [] -> fresh $ \a -> t === array a l
+                                           at:ts' -> mapM_ (=== at) ts' >> t === array at l)
+                             return (Array es' t)
     Block ss t         -> do ss' <- tCheck ss
                              let cs = mapMaybe context ss'
                              liftReader (do (c,bt) <- finalStmtType $ last ss'
@@ -122,8 +129,9 @@ instance TypeCheck (Expr LType) where
                              ix' <- tCheck ix
                              let at = decor ar'
                              let it = decor ix'
-                             liftReader (do at === array t -- FIXME: how to type check length?
-                                            it === z)
+                             liftReader (fresh $ \l -> do
+                                           at === array t l
+                                           it === z)
                              return (Index ar' ix' t)
     Lookup r n t       -> do r' <- tCheck r
                              let rt = decor r'
@@ -153,7 +161,23 @@ instance TypeCheck (Expr LType) where
                              let ts = map decor es'
                              b' <- (compose $ uncurry extendType) (zip ns ts) $ tCheck b
                              return (LetBlock (zip ns es') b')
-                               
+
+typeEqual :: LType -> LType -> TC (LType,LType)
+typeEqual u v = do
+  u' <- resolveSyn u
+  v' <- resolveSyn v
+  return (u',v')
+
+resolveSyn :: LType -> TC LType
+resolveSyn u = mcond
+  [ do Syn n <- match u; return n :>: do foundP <- asks $ lookup n . pEnv
+                                         liftReader $
+                                           case foundP of
+                                             Just pt -> instantiate pt
+                                             Nothing -> fail ("Unbound type variable: " ++ n)
+  , Else                           $  return u
+  ]
+
 subtype :: LType -> LType -> Goal LType
 subtype t1 t2 = 
   do Record' nts1 <- matchGoal t1

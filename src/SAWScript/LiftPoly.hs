@@ -60,6 +60,8 @@ instance Assignable Poly where
         x <- newLVarLS
         extendEnv n x
         return x
+instance Assignable I where
+  assign = return . inject
 
 fillHoles :: MPType -> LS LType
 fillHoles mpt = case mpt of
