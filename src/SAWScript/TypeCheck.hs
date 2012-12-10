@@ -1,224 +1,185 @@
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module SAWScript.TypeCheck where
 
 import SAWScript.AST
-import SAWScript.FixFunctor
+import SAWScript.Unify
 
+import SAWScript.LiftPoly (runLS, assignVar,ModuleGen)
+
+import Control.Applicative
+import Control.Arrow
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State
 import Control.Monad
-import Data.Maybe (fromMaybe)
 
-type Subst a = [(a,a)]
-type Unify f = Subst f -> FL (Subst f)
+import Data.List
+import Data.Monoid
+import Data.Maybe
+import qualified Data.Foldable as Fold
+import qualified Data.Traversable as Trav
 
--- Goal {{{
+import qualified Debug.Trace as Debug
 
-newtype GoalM f a = GoalM { runGoalM :: Subst f -> FL (a,Subst f) }
-type Goal f = GoalM f ()
+typeCheck :: ModuleGen -> Err (Module LType)
+typeCheck (m@(Module ds mb),gen) = case res of
+  Left es   -> Left $ intercalate "\n" ("TypeCheck:" : (es ++ [ "in:" , show m ]))
+  Right [r] -> Right r
+  Right rs  -> Left $ intercalate "\n" ("TypeCheck: Ambiguous typing:" : map show rs)
+  where
+    res = fromStream Nothing Nothing $ fmap fst $ runStateT (runGoalM goal) (gen,emptyS)
+    goal = runReaderT
+             (do m' <- tCheck m
+                 liftReader (Trav.traverse walkStar m'))
+             env
+    env = Fold.foldMap buildEnv ds
 
-instance Functor (GoalM f) where
-  fmap f g = GoalM $ \s ->
-    let (as,ss) = unzipList $ runGoalM g s in
-      zipList (map f as) ss
+type TC a = ReaderT Env (GoalM LType) a
 
-instance Monad (GoalM f) where
-  return a = GoalM $ \s -> return (a,s)
-  m >>= f  = GoalM $ \s ->
-    let (as,ss) = unzipList $ runGoalM m s in
-      msum $ zipWith (runGoalM . f) as ss
+-- Env {{{
 
-instance MonadPlus (GoalM f) where
-  mzero = GoalM $ \s -> mzero
-  mplus m1 m2 = GoalM $ \s ->
-    let p1 = runGoalM m1 s
-        p2 = runGoalM m2 s in
-      mplus p1 p2
+data Env = Env
+  { lEnv :: [(Name,LType)]
+  , pEnv :: [(Name,PType)]
+  } deriving Show
 
--- }}}
+instance Monoid Env where
+  mempty = Env [] []
+  mappend (Env l1 p1) (Env l2 p2) = Env (l1 ++ l2) (p1 ++ p2)
 
--- Fair List Interleaving {{{
+buildEnv :: TopStmt LType -> Env
+buildEnv s = case s of
+  TypeDef n pt     -> Env { pEnv = [(n,pt)] , lEnv = [] }
+  TopTypeDecl n pt -> Env { pEnv = [(n,pt)] , lEnv = [] }
+  TopLet nes       -> Env { pEnv = []       , lEnv = map (fmap decor) $ nes }
+  Import _ _ _     -> mempty
 
-newtype FL a = FL [a] deriving Show
+extendType :: Name -> LType -> TC a -> TC a
+extendType n lt m = local (\e -> e { lEnv = (n,lt) : lEnv e }) m
 
-instance Functor FL where
-  fmap f (FL as) = FL $ map f as
-
-instance Monad FL where
-  return a = FL [a]
-  (>>=)    = (>>-)
-
-instance MonadPlus FL where
-  mzero = FL []
-  mplus = interleave
-
-interleave :: FL a -> FL a -> FL a
-interleave (FL xs) m2 = case xs of
-  []    -> m2
-  a:xs' -> FL (a : rest)
-    where
-      (FL rest) = interleave m2 (FL xs')
-
-(>>-) :: FL a -> (a -> FL b) -> FL b
-(FL as) >>- f = case as of
-  []   -> FL []
-  a:as' -> interleave (f a) (FL as' >>- f)
-
-unzipList :: FL (a,b) -> ([a],[b])
-unzipList (FL l) = unzip l
-
-zipList :: [a] -> [b] -> FL (a,b)
-zipList as bs = FL $ zip as bs
-
--- }}}
-        
--- Unifiable Class {{{
-
-class Eq f => Unifiable f where
-  unify :: f -> f -> Unify f
-
-instance (Logic :<: f, Equal f, Uni f) => Unifiable (Mu f) where
-  unify u v s = mcond $
-    [ guard (u' == v')     :|:        return s
-    , isVar u'             :>: \ui -> occursCheck ui v' s
-    , isVar v'             :>: \vi -> occursCheck vi u' s
-    , Else $                          uni u'' v'' s
-    ]
-    where
-      u'@(In u'') = walk u s
-      v'@(In v'') = walk v s
-
--- Base instances
-class Uni f where
-  uni :: (Equal g, Logic :<: g, Uni g) => f (Mu g) -> f (Mu g) -> Unify (Mu g)
-instance (Uni f, Uni g) => Uni (f :+: g) where
-  uni cp1 cp2 s = case (cp1,cp2) of
-    (Inl e1,Inl e2) -> uni e1 e2 s
-    (Inr e1,Inr e2) -> uni e1 e2 s
-    _               -> mzero
-instance Uni Logic where
-  uni (LVar x) (LVar y) = error "unreachable"
-
--- User instances
-instance Uni Val where
-  uni (Val x) (Val y) s = guard (x == y) >> return s
-instance Uni Add where
-  uni (Add x1 y1) (Add x2 y2) = unify x1 x2 >=> unify y1 y2
-instance Uni Mul where
-  uni (Mul x1 y1) (Mul x2 y2) = unify x1 x2 >=> unify y1 y2
+extendPoly :: Name -> PType -> TC a -> TC a
+extendPoly n pt m = local (\e -> e { pEnv = (n,pt) : pEnv e }) m
 
 -- }}}
 
--- Unification Helpers {{{
+class TypeCheck f where
+  tCheck :: f -> TC f -- possibly (f CType)
 
-runL :: Maybe Int -> GoalM f a -> [Subst f]
-runL mn g = let (FL l) = runGoalM g emptyS
-                (_,ss) = unzip l in
-  case mn of
-    Nothing -> ss
-    Just n  -> take n ss
+instance TypeCheck (Module LType) where
+  tCheck (Module ds mb) = do
+    ds' <- mapM tCheck ds
+    mb' <- tCheck mb
+    return (Module ds' mb')
 
-occursCheck :: (Logic :<: f, Equal f) => Int -> Mu f -> Unify (Mu f)
-occursCheck ui v s = mcond $
-  [ isVar v      :>: \vi -> do guard (ui /= vi)
-                               extendS ui v s
-  , Else          $         extendS ui v s
-  ]
+instance TypeCheck (TopStmt LType) where
+  tCheck ts = case ts of
+    TopLet nes -> let (ns,es) = unzip nes in do
+                    es' <- mapM tCheck es
+                    return (TopLet $ zip ns es')
+    _          -> return ts
 
---walk :: (Logic :<: f, Equal f) => Mu f -> Subst (Mu f) -> Mu f
-walk :: (Unifiable f) => f -> Subst f -> f
-walk x s = fromMaybe x $ do
-  v <- lookup x s
-  return $ walk v s
+instance TypeCheck [BlockStmt LType] where
+  tCheck mb = case mb of
+    []    -> return []
+    s:mb' -> case s of
+      Bind Nothing c e   -> do e' <- tCheck e
+                               rest <- tCheck mb'
+                               return (Bind Nothing c e' : rest)
+      Bind (Just n) c e  -> do e' <- tCheck e
+                               let et = decor e'
+                               rest <- extendType n et $ tCheck mb'
+                               return (Bind (Just n) c e' : rest)
+      BlockTypeDecl n pt -> do rest <- extendPoly n pt $ tCheck mb'
+                               return (BlockTypeDecl n pt : rest)
+      BlockLet nes       -> let (ns,es) = unzip nes in do
+                               es' <- mapM tCheck es
+                               rest <- (compose $ uncurry extendType) (zip ns $ map decor es') $ tCheck mb'
+                               return (BlockLet (zip ns es') : rest)
 
-isVar :: (Logic :<: f) => Mu f -> Maybe Int
-isVar x = do
-  LVar i <- match x
-  return i
+instance TypeCheck (Expr LType) where
+  tCheck e = case e of
+    Bit b t            -> liftReader (t === bit) >> return (Bit b t)
+    Quote s t          -> liftReader (t === quote) >> return (Quote s t)
+    Z i t              -> liftReader (t === z) >> return (Z i t)
+    Block ss t         -> do ss' <- tCheck ss
+                             let cs = mapMaybe context ss'
+                             liftReader (do (c,bt) <- finalStmtType $ last ss'
+                                            assert (all (== c) cs) ("Inconsistent contexts: " ++ show cs)
+                                            t === block c bt)
+                             return (Block ss' t)
+    Tuple es t         -> do es' <- mapM tCheck es
+                             let ts = map decor es'
+                             liftReader (t === tuple ts)
+                             return (Tuple es' t)
+    Record nes t       -> do let (ns,es) = unzip nes
+                             es' <- mapM tCheck es
+                             let ts = map decor es'
+                             liftReader (t === record (zip ns ts))
+                             return (Record (zip ns es') t)
+    Index ar ix t      -> do ar' <- tCheck ar
+                             ix' <- tCheck ix
+                             let at = decor ar'
+                             let it = decor ix'
+                             liftReader (do at === array t -- FIXME: how to type check length?
+                                            it === z)
+                             return (Index ar' ix' t)
+    Lookup r n t       -> do r' <- tCheck r
+                             let rt = decor r'
+                             liftReader (rt `subtype` record [(n,t)])
+                             return (Lookup r' n t)
+    Var n t            -> do foundT <- asks (lookup n . lEnv)
+                             foundP <- asks (lookup n . pEnv)
+                             liftReader (case foundT of
+                                           Just lt -> t === lt
+                                           Nothing -> case foundP of
+                                             Just pt -> do lt <- instantiate pt
+                                                           t === lt
+                                             Nothing -> fail ("Unbound variable: " ++ n))
+                             return (Var n t)
+    Function an at b t -> do b' <- extendType an at $ tCheck b
+                             let bt = decor b'
+                             liftReader (t === function at bt)
+                             return (Function an at b' t)
+    Application f v t  -> do f' <- tCheck f
+                             v' <- tCheck v
+                             let ft = decor f'
+                             let vt = decor v'
+                             liftReader (do ft === function vt t)
+                             return (Application f' v' t)
+    LetBlock nes b     -> do let (ns,es) = unzip nes
+                             es' <- mapM tCheck es
+                             let ts = map decor es'
+                             b' <- (compose $ uncurry extendType) (zip ns ts) $ tCheck b
+                             return (LetBlock (zip ns es') b')
+                               
+subtype :: LType -> LType -> Goal LType
+subtype t1 t2 = 
+  do Record' nts1 <- matchGoal t1
+     Record' nts2 <- matchGoal t2
+     conj [ disj [ guard (n1 == n2) >> (t1 === t2)
+                   | (n1,t1) <- nts1
+                 ]
+            | (n2,t2) <- nts2
+          ]
 
-extendS :: (Logic :<: f) => Int -> Mu f -> Unify (Mu f)
-extendS ui v s = return $ (lVar ui,v):s
+matchGoal :: (g :<: f) => Mu f -> GoalM (Mu f) (g (Mu f))
+matchGoal x = maybe mzero return (match x)
 
-emptyS :: Subst f
-emptyS = []
+instantiate :: PType -> GoalM LType LType
+instantiate = fmap fst . flip runLS [] . assignVar
 
-reify :: Unifiable f => f -> Subst f -> [f]
-reify x s = return $ walk x s
+compose :: (a -> b -> b) -> [a] -> b -> b
+compose f as = case as of
+  []    -> id
+  a:as' -> f a . compose f as'
 
--- }}}
+finalStmtType :: BlockStmt LType -> GoalM LType (Context,LType)
+finalStmtType s = case s of
+  Bind Nothing c e -> return (c,decor e)
+  _                -> fail ("Final statement of do block must be an expression: " ++ show s)
 
--- mcond {{{
+liftReader :: (Monad m) => m a -> ReaderT r m a
+liftReader m = ReaderT $ \r -> m
 
-mcond :: (MonadPlus m) => [Case (m a)] -> m a
-mcond ms = case ms of
-  []              -> mzero
-  (Else        m) : _   -> m
-  (Just _  :|: m) : _   -> m
-  (Nothing :|: m) : ms' -> mcond ms'
-  (Just a  :>: f) : _   -> f a
-  (Nothing :>: f) : ms' -> mcond ms'
-
-data Case a where
-  (:|:) :: Maybe b -> a -> Case a
-  (:>:) :: Maybe b -> (b -> a) -> Case a
-  Else  :: a -> Case a
-
--- }}}
-
--- Tests {{{
-
-type LExpr = Mu (Logic :+: Val :+: Add :+: Mul)
-
-e1,e2 :: LExpr
-e1 = lVar 0
-e2 = val 5
-
-e3,e4,e5 :: LExpr
-e3 = add (lVar 0) (lVar 1)
-e4 = add (val 1) (lVar 2)
-e5 = mul (val 2) (val 3)
-
---arr1,arr2 :: LType
---arr1 = array (lVar 0) 4
---arr2 = array z 4
---
---tup1,tup2 :: LType
---tup1 = tuple [lVar 0,bit]
---tup2 = tuple [z,lVar 1]
---
---testArr = unify arr1 arr2 []
---testTup = unify tup1 tup2 []
---testAT1 = unify arr1 tup1 []
---testAT2 = unify arr2 tup2 []
---testAT3 = unify arr1 tup2 []
---testAT4 = unify arr2 tup1 []
-
--- }}}
-
--- Goals {{{
-
-(===) :: (Unifiable f) => f -> f -> Goal f
-e1 === e2 = mkGoal $ unify e1 e2
-
-conj :: [Goal f] -> Goal f
-conj = sequence_
-
-disj :: [Goal f] -> Goal f
-disj = msum
-
-mkGoal :: Unify f -> Goal f
-mkGoal u = GoalM $ \s -> 
-  let ss = u s in
-    fmap (\s->((),s)) ss
-
--- }}}
-
-lpTest1 :: LExpr -> [LExpr]
-lpTest1 x = reify x =<<
-  (runL Nothing $ conj
-     [ lVar 0 === lVar 1
-     , lVar 0 === (add (val 1) (lVar 2))
-     , lVar 1 === (add (lVar 3) (val 2))
-     ])
