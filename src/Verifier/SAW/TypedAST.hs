@@ -386,6 +386,25 @@ instantiateVar k t = instantiateVars fn 0
                  | j == i + k = terms !! i
                  | otherwise  = Term $ LocalVar j t
 
+-- | Substitute @t@ for variable @k@ and decrement all higher dangling
+-- variables.
+instantiateVarList :: DeBruijnIndex -> Term -> [Term] -> Term
+instantiateVarList k [] = id
+instantiateVarList k ts = instantiateVars fn 0
+  where
+    l = length ts
+    -- Use terms to memoize instantiated versions of ts.
+    terms = [ [ incVars 0 i t | i <- [0..] ] | t <- ts ]
+    -- Instantiate variables [k .. k+l-1].
+    fn i j t | j >= i + k + l = Term $ LocalVar (j - l) t
+             | j >= i + k     = (terms !! (j - i - k)) !! i
+             | otherwise      = Term $ LocalVar j t
+-- ^ Specification in terms of @instantiateVar@ (by example):
+-- @instantiateVarList 0 [x, y, z] t == instantiateVar 0 x
+-- (instantiateVar 1 (incVars 0 1 y) (instantiateVar 2 (incVars 0 2 z)
+-- t))@
+
+
 -- | Substitute @t@ for variable 0 in @s@ and decrement all remaining
 -- variables.
 betaReduce :: Term -> Term -> Term
