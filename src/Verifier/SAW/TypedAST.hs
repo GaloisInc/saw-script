@@ -282,7 +282,7 @@ lookupDoc lvd i =
   let lvl = docLvl lvd - i - 1
    in case Map.lookup lvl (docMap lvd) of
         Just d -> d
-        Nothing -> char '!' <> integer (toInteger i)
+        Nothing -> char '!' <> integer (toInteger (i - docLvl lvd))
 
 -- | @ppTermF@ pretty prints term functros.
 ppTermF :: TermPrinter e -- ^ Pretty printer for elements.
