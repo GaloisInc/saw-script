@@ -19,8 +19,6 @@ import Control.Monad.Trans.Either
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
 
-import GHC.TypeLits
-
 conj :: [Goal t] -> Goal t
 conj = sequence_
 
