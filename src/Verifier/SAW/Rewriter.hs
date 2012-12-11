@@ -16,6 +16,8 @@ data RewriteRule =
   , lhs :: Term
   , rhs :: Term
   }
+-- ^ Invariant: The set of loose variables in @lhs@ must be exactly
+-- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
 instance Net.Pattern Term where
   patternShape (Term t) =
@@ -45,3 +47,27 @@ first_order_match ctxt pat term = match pat term Map.empty
       match x1 y1 m >>= match x2 y2
     match x y m =
       if x == y then Just m else Nothing
+
+
+-- Bottom-up rewriting
+
+type Simpset = Net.Net RewriteRule
+
+rewriteTerm :: Simpset -> Term -> Term
+rewriteTerm ss = rewriteAll
+  where
+    rewriteAll :: Term -> Term
+    rewriteAll t = rewriteTop (rewriteSubterms t)
+    rewriteSubterms :: Term -> Term
+    rewriteSubterms (Term t) = Term (fmap rewriteAll t)
+    rewriteTop :: Term -> Term
+    rewriteTop t = apply (Net.match_term ss t) t
+    apply :: [RewriteRule] -> Term -> Term
+    apply [] t = t
+    apply (rule : rules) t =
+      case first_order_match (ctxt rule) (lhs rule) t of
+        Nothing -> apply rules t
+        Just inst -> rewriteAll (instantiateVarList 0 (Map.elems inst) t)
+-- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
+-- re-examination of subterms after applying a rewrite
+
