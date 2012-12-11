@@ -210,6 +210,13 @@ data TermF e
   | IntLit Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
+
+    -- | @EqType x y@ is a type representing the equality proposition @x = y@
+  | EqType e e
+    -- | @Oracle s t@ represents a proof of proposition @t@ (typically
+    -- of the form @EqType x y@, but possibly with extra @Pi@
+    -- quantifiers), which came from the trusted proof tool @s@.
+  | Oracle String e
  deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
@@ -324,6 +331,8 @@ ppTermF f lcls p tf = do
       where lcls' = foldl' consBinding lcls (fmap (identName . defIdent) dl)
     IntLit i -> integer i
     ArrayValue _ vl -> brackets (commaSepList (f lcls 1 <$> V.toList vl))
+    EqType lhs rhs -> f lcls 1 lhs <+> equals <+> f lcls 1 rhs
+    Oracle s prop -> quotes (text s) <> parens (f lcls 0 prop)
 
 newtype Term = Term (TermF Term)
   deriving (Eq,Ord)
@@ -367,6 +376,8 @@ instantiateVars f initialLevel = go initialLevel
                                     }
                     procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)
                       where eql = l' + sum (patBoundVarCount <$> pats)
+            EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
+            Oracle s prop -> Term $ Oracle s (go l prop)
             _ -> t
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
