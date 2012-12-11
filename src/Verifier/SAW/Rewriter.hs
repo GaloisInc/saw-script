@@ -1,4 +1,10 @@
-module Verifier.SAW.Rewriter where
+module Verifier.SAW.Rewriter
+  ( Simpset
+  , emptySimpset
+  , addSimp
+  , delSimp
+  , rewriteTerm
+  ) where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -16,6 +22,7 @@ data RewriteRule =
   , lhs :: Term
   , rhs :: Term
   }
+  deriving (Eq, Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
@@ -47,11 +54,36 @@ first_order_match ctxt pat term = match pat term Map.empty
       match x1 y1 m >>= match x2 y2
     match x y m =
       if x == y then Just m else Nothing
+-- ^ Precondition: Every loose variable in the pattern @pat@ must
+-- occur as the 2nd argument of an @App@ constructor. This ensures
+-- that instantiations are well-typed.
 
-
--- Bottom-up rewriting
+----------------------------------------------------------------------
+-- Simpsets
 
 type Simpset = Net.Net RewriteRule
+
+-- | Converts a universally quantified equality proposition from a
+-- Term representation to a RewriteRule.
+ruleOfTerm :: Term -> RewriteRule
+ruleOfTerm (Term (EqType x y)) = RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfTerm (Term (Pi _ t e)) = rule { ctxt = t : ctxt rule }
+  where rule = ruleOfTerm e
+ruleOfTerm _ = error "ruleOfTerm: Illegal argument"
+
+emptySimpset :: Simpset
+emptySimpset = Net.empty
+
+addSimp :: Term -> Simpset -> Simpset
+addSimp prop = Net.insert_term (lhs rule, rule)
+  where rule = ruleOfTerm prop
+
+delSimp :: Term -> Simpset -> Simpset
+delSimp prop = Net.delete_term (lhs rule, rule)
+  where rule = ruleOfTerm prop
+
+----------------------------------------------------------------------
+-- Bottom-up rewriting
 
 rewriteTerm :: Simpset -> Term -> Term
 rewriteTerm ss = rewriteAll
@@ -71,3 +103,8 @@ rewriteTerm ss = rewriteAll
 -- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
 -- re-examination of subterms after applying a rewrite
 
+-- | Like rewriteTerm, but returns an equality theorem instead of just
+-- the right-hand side.
+rewriteOracle :: Simpset -> Term -> Term
+rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
+  where rhs = rewriteTerm ss lhs
