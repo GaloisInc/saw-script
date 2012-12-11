@@ -36,6 +36,7 @@ module Verifier.SAW.TypedAST
  , Ident(identModule, identName), mkIdent
  , DeBruijnIndex
  , FieldName
+ , instantiateVarList
  ) where
 
 import Control.Applicative ((<$>))
