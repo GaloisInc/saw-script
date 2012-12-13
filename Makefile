@@ -6,6 +6,3 @@ all:
 
 clean:
 	cabal clean
-
-saw:
-	cd src; make REPL
