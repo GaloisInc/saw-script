@@ -34,9 +34,9 @@ import Data.Foldable
 import Data.Traversable
 import Prelude hiding (mapM, maximum)
 import Text.PrettyPrint.HughesPJ
-import qualified Control.Monad.State as State
-import Control.Monad.Trans (lift)
-import qualified Data.Traversable as Traversable
+--import qualified Control.Monad.State as State
+--import Control.Monad.Trans (lift)
+--import qualified Data.Traversable as Traversable
 
 import Verifier.SAW.TypedAST
 
@@ -138,28 +138,6 @@ getTerm r a =
                      , acNextIdx = acNextIdx s + 1
                      }
 
-{-
-mkUninterpretedSharedContext :: IO (SharedContext s)
-mkUninterpretedSharedContext = do
-  cr <- newIORef emptyAppCache
-  return SharedContext {
-       scApplyFn = \f x -> getTerm cr (App f x)         
-     , scLambdaFn = undefined
---     , scGlobalFn = undefined              
---     , scFreshGlobalFn = undefined
---     , scGlobalsWithType = undefined
---     , scLocalVarFn = undefined
---     , scBuiltinFn = undefined
-     , scIntegerFn = undefined
-     , scTypeOfFn  = undefined
---     , scViewFn = undefined
-     , scPrettyTermDocFn = undefined
-     , scMkRecordFn = undefined
-     , scRecordSelectFn = undefined
-     , scLoadModule = undefined
-     }
--}
-
 asIntLit :: SharedTerm s -> Maybe Integer
 asIntLit (STApp _ (IntLit i)) = Just i
 asIntLit _ = Nothing
@@ -218,8 +196,8 @@ sortOfTerm t = do
   STApp _ (Sort s) <- typeOf t
   return s
 
-mkSort :: (?af :: AppFns s) => Sort -> IO (SharedTerm s)
-mkSort s = mkApp (Sort s)
+mkSharedSort :: (?af :: AppFns s) => Sort -> IO (SharedTerm s)
+mkSharedSort s = mkApp (Sort s)
 
 typeOf :: (?af :: AppFns s)
        => SharedTerm s
@@ -238,18 +216,18 @@ typeOf (STApp _ tf) =
     Pi _ tp rhs -> do
       ltp <- sortOfTerm tp
       rtp <- sortOfTerm rhs
-      mkSort (max ltp rtp)
+      mkSharedSort (max ltp rtp)
     TupleValue l  -> mkApp . TupleType =<< mapM typeOf l
-    TupleType l  -> mkSort . maximum =<< mapM sortOfTerm l
+    TupleType l  -> mkSharedSort . maximum =<< mapM sortOfTerm l
     RecordValue m -> mkApp . RecordType =<< mapM typeOf m
     RecordSelector t f -> do
       STApp _ (RecordType m) <- typeOf t
       let Just tp = Map.lookup f m
       return tp
-    RecordType m -> mkSort . maximum =<< mapM sortOfTerm m
+    RecordType m -> mkSharedSort . maximum =<< mapM sortOfTerm m
     CtorValue c args -> undefined c args
     CtorType dt args -> undefined dt args
-    Sort s -> mkSort (sortOf s)
+    Sort s -> mkSharedSort (sortOf s)
     Let defs rhs -> undefined defs rhs
     IntLit i -> undefined i
     ArrayValue tp _ -> undefined tp
@@ -261,7 +239,7 @@ mkSharedContext m = do
   let getCtor sym args =
         case findCtor m (undefined sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just c -> getTerm cr (CtorValue c args)
+          Just c -> getTerm cr (CtorValue (undefined c) args)
   let getDef sym =
         case findDef m (undefined sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
@@ -294,6 +272,7 @@ mkSharedContext m = do
            , scViewAsNumFn = viewAsNum
            }
 
+{-
 -- | Fold with memoization
 foldSharedTerm :: forall s b . 
                (VarIndex -> Ident -> SharedTerm s -> b) 
@@ -310,7 +289,9 @@ foldSharedTerm g f = \t -> State.evalState (go t) Map.empty
           x <- fmap f (Traversable.mapM go t)
           State.modify (Map.insert i x)
           return x
+-}
 
+{-
 -- | Monadic fold with memoization
 foldSharedTermM :: forall s b m . Monad m 
                 => (VarIndex -> Ident -> SharedTerm s -> m b)
@@ -328,6 +309,7 @@ foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
           x <- lift (f t')
           State.modify (Map.insert i x)
           return x
+-}
 
 {-
 unshare :: SharedTerm s -> Term

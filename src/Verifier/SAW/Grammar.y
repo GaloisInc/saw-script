@@ -71,7 +71,7 @@ import Debug.Trace
 %%
 
 Module :: { Module }
-Module : 'module' ModuleName 'where' list(SAWDecl) { Module $2 $4 }
+Module : 'module' ModuleName 'where' list(Import) list(SAWDecl) { Module $2 $4 $5 }
 
 ModuleName :: { PosPair ModuleName }
 ModuleName : ConDotList { mkPosModuleName $1 }
@@ -80,10 +80,12 @@ ConDotList :: { [PosPair String] }
 ConDotList : Con { [$1] }
            | ConDotList '.' Con { $3 : $1 }
 
+Import :: { Import }
+Import : 'import' opt('qualified') ModuleName opt(AsName) opt(ModuleImports) ';'
+          { Import (isJust $2) $3 $4 $5 }
+
 SAWDecl :: { Decl }
 SAWDecl : 'data' Con '::' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
-        | 'import' opt('qualified') ModuleName opt(AsName) opt(ModuleImports) ';'
-          { ImportDecl (isJust $2) $3 $4 $5 }
         | SAWEqDecl { $1 }
 
 AsName :: { PosPair String }
@@ -108,18 +110,18 @@ SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl $1 $3 }
 DeclLhs :: { DeclLhs }
 DeclLhs : Symbol list(LhsArg) { ($1, $2) }
 
-LhsArg :: { (ParamType, Pat String) }
+LhsArg :: { (ParamType, Pat) }
 LhsArg : AtomPat           { (NormalParam, $1) }
        | ParamType AtomPat { ($1, $2) }
 
 CtorDecl :: { CtorDecl }
-CtorDecl : Con '::' LTerm ';' { Ctor $1 $3 }
+CtorDecl : Con '::' CtorType ';' { Ctor $1 $3 }
 
-Pat :: { Pat String }
+Pat :: { Pat }
 Pat : AtomPat           { $1 }
     | ConDotList list(AtomPat) { PCtor (identFromList1 $1) $2 }
 
-AtomPat :: { Pat String }
+AtomPat :: { Pat }
 AtomPat : unvar { PUnused (fmap tokVar $1) }
         | Var   { PVar $1 }
         | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
@@ -136,8 +138,13 @@ TTerm : LTerm { $1 }
 -- Term with uses of pi and lambda, but no typing.
 LTerm :: { Term }
 LTerm : AppTerm                          {  $1 }
-      | PiArg '->' LTerm                 {% mkPi (pos $2) $1 $3 }
+      | PiArg '->' LTerm                 {  mkPi (pos $2) $1 $3 }
       | '\\' list1(LambdaArg) '->' LTerm {% mkLambda (pos $1) $2 $4 }
+
+-- Term with uses of pi and lambda, but no typing.
+CtorType :: { CtorType (ParamType,[Pat]) Term }
+CtorType : AppTerm             { CtorResult $1 }
+         | PiArg '->' CtorType { mkCtorArg $1 $3 }
 
 LambdaArg :: { (ParamType, Term) }
 LambdaArg : AtomTerm           { (NormalParam, $1) }
@@ -168,9 +175,9 @@ AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
          |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 } 
          | '#' '{' recList('::', LTerm) '}' { RecordType  (pos $1) $3 }
 
-PiArg :: { (ParamType, Term) }
-PiArg : ParamType AppArg { ($1, $2) } 
-      | AppTerm          { (NormalParam, $1) }
+PiArg :: { PiArg }
+PiArg : ParamType AppArg {% mkPiArg ($1, $2) } 
+      | AppTerm          {% mkPiArg (NormalParam, $1) }
 
 ParamType :: { ParamType }
 ParamType : '?'   { ImplicitParam }
@@ -329,7 +336,7 @@ mergeParamType NormalParam _ tp = return tp
 mergeParamType pt p mpt = do
   unexpectedParameterAnnotation p mpt >> return pt
 
-termAsPat :: Term -> Parser (Maybe (Pat String))
+termAsPat :: Term -> Parser (Maybe Pat)
 termAsPat ex = do
     case asApp ex of
       (Var i, []) ->
@@ -357,7 +364,7 @@ termAsPat ex = do
       (TypeConstraint{}, []) -> badPat "Type constraint"
       (Paren{}, _) -> error "internal: Unexpected paren"
       (LetTerm{}, _) -> badPat "Let expression"
-      (IntLit p i, []) -> ret $ PIntLit p i
+--      (IntLit p i, []) -> ret $ PIntLit p i
       (BadTerm{}, _) -> return Nothing
       (_, h:_) -> err (pos h) "Unexpected expression"
   where ret r = return (Just r)
@@ -368,7 +375,7 @@ termAsPat ex = do
 
 -- Attempts to parses an expression as a list of identifiers.
 -- Will return a value on all expressions, but may add errors to parser state.
-exprAsPatList :: Term -> Parser [Pat String]
+exprAsPatList :: Term -> Parser [Pat]
 exprAsPatList ex = go ex []
   where go (App x _ y) r = do
           mp <- termAsPat y
@@ -377,16 +384,29 @@ exprAsPatList ex = go ex []
           mp <- termAsPat x
           return (maybe r (:r) mp)
 
+
+type PiArg = (ParamType,[Pat],Term)
+
 -- | Pi expressions should have one of the forms:
 -- * opt(ParamType) '(' list(Pat) '::' LTerm ')' '->' LTerm
 -- * opt(ParamType) AppTerm '->' LTerm
-mkPi :: Pos -> (ParamType, Term) -> Term -> Parser Term
-mkPi ptp (ppt,l) r = parseLhs l
-  where parseLhs (Paren _ (TypeConstraint x _ t)) = 
-          fmap (\l -> Pi ppt l t ptp r) $ 
-               exprAsPatList x
-        parseLhs e =
-          return $ Pi ppt [PUnused (PosPair (pos e) "_")] e ptp r   
+mkPiArg :: (ParamType, Term) -> Parser PiArg
+mkPiArg (ppt, Paren _ (TypeConstraint x _ t)) =
+  (\pats -> (ppt, pats, t)) <$> exprAsPatList x
+mkPiArg (ppt,lhs) =
+  return (ppt, [PUnused (PosPair (pos lhs) "_")], lhs)
+
+-- | Pi expressions should have one of the forms:
+-- * opt(ParamType) '(' list(Pat) '::' LTerm ')' '->' LTerm
+-- * opt(ParamType) AppTerm '->' LTerm
+mkPi :: Pos -> PiArg -> Term -> Term
+mkPi ptp (ppt,pats,tp) r = Pi ppt pats tp ptp r   
+
+mkCtorArg :: PiArg
+          -> CtorType (ParamType,[Pat]) Term
+          -> CtorType (ParamType,[Pat]) Term
+mkCtorArg (ppt,pats,tp) ctp = CtorArg (ppt,pats) tp ctp
+
 
 mkLambda :: Pos -> [(ParamType, Term)] -> Term -> Parser Term
 mkLambda ptp lhs rhs = parseLhs lhs []
@@ -415,7 +435,7 @@ asAppList = \x -> impl x []
   where impl (App x _ y) r = impl x (y:r)
         impl x r = (x,r)
 
-type DeclLhs = (PosPair String, [(ParamType, Pat String)])
+type DeclLhs = (PosPair String, [(ParamType, Pat)])
 
 mkTypeDecl :: DeclLhs -> Term -> Parser Decl
 mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
