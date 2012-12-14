@@ -40,6 +40,7 @@ module Verifier.SAW.TypedAST
  , isIdent
  , DeBruijnIndex
  , FieldName
+ , instantiateVarList
  ) where
 
 import Control.Applicative ((<$>))
@@ -270,7 +271,13 @@ data TermF e
   | IntLit Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
- deriving (Eq, Ord) -- , Functor, Foldable, Traversable)
+    -- | @EqType x y@ is a type representing the equality proposition @x = y@
+  | EqType e e
+    -- | @Oracle s t@ represents a proof of proposition @t@ (typically
+    -- of the form @EqType x y@, but possibly with extra @Pi@
+    -- quantifiers), which came from the trusted proof tool @s@.
+  | Oracle String e
+ deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
@@ -350,7 +357,7 @@ lookupDoc lvd i =
   let lvl = docLvl lvd - i - 1
    in case Map.lookup lvl (docMap lvd) of
         Just d -> d
-        Nothing -> char '!' <> integer (toInteger i)
+        Nothing -> char '!' <> integer (toInteger (i - docLvl lvd))
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
@@ -397,6 +404,8 @@ ppTermF f lcls p tf = do
             lcls' = foldl' consBinding lcls nms
     IntLit i -> integer i
     ArrayValue _ vl -> brackets (commaSepList (f lcls 1 <$> V.toList vl))
+    EqType lhs rhs -> f lcls 1 lhs <+> equals <+> f lcls 1 rhs
+    Oracle s prop -> quotes (text s) <> parens (f lcls 0 prop)
 
 newtype Term = Term (TermF Term)
   deriving (Eq)
@@ -439,6 +448,8 @@ instantiateVars f initialLevel = go initialLevel
                             eqs' = procEq <$> eqs
                     procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)
                       where eql = l' + sum (patBoundVarCount <$> pats)
+            EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
+            Oracle s prop -> Term $ Oracle s (go l prop)
             _ -> t
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
@@ -458,6 +469,26 @@ instantiateVar k u = instantiateVars fn 0
         fn i j t | j - k == i = terms !! i
                  | j - i > k = Term $ LocalVar (j - 1) t                 
                  | otherwise  = Term $ LocalVar j t
+
+-- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
+-- decrement all higher loose variables by @length ts@.
+instantiateVarList :: DeBruijnIndex -> [Term] -> Term -> Term
+instantiateVarList k [] = id
+instantiateVarList k ts = instantiateVars fn 0
+  where
+    l = length ts
+    -- Use terms to memoize instantiated versions of ts.
+    terms = [ [ incVars 0 i t | i <- [0..] ] | t <- ts ]
+    -- Instantiate variables [k .. k+l-1].
+    fn i j t | j >= i + k + l = Term $ LocalVar (j - l) t
+             | j >= i + k     = (terms !! (j - i - k)) !! i
+             | otherwise      = Term $ LocalVar j t
+-- ^ Specification in terms of @instantiateVar@ (by example):
+-- @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of @Lam
+-- (Lam (Lam t)) `App` z `App` y `App` x@, i.e. @instantiateVarList 0
+-- [x,y,z] t == instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
+-- (instantiateVar 2 (incVars 0 2 z) t))@.
+
 
 -- | Substitute @t@ for variable 0 in @s@ and decrement all remaining
 -- variables.
