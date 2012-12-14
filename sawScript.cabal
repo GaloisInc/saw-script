@@ -45,7 +45,7 @@ library
 
   build-tools: alex, happy
 
-executable sawScript
+executable saw
   hs-source-dirs: src
 
   main-is: Main.hs
