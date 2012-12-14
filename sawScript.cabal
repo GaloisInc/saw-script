@@ -12,26 +12,34 @@ library
     , cmdargs
     , containers
     , deepseq
+    , either
     , directory
     , filepath
-    , jvm-verifier
-    , llvm-verifier
+    --, jvm-verifier
+    --, llvm-verifier
     , mtl >= 2.1
     , old-locale
     , old-time
     , pretty
-    , Verinf
+    , transformers
+    --, Verinf
 
   hs-source-dirs: src
 
   exposed-modules:
+    SAWScript.AST
+    SAWScript.ConvertType
     SAWScript.Lexer
-    SAWScript.MethodAST
+    SAWScript.LiftPoly
     SAWScript.Parser
-    SAWScript.ParserActions
     SAWScript.Token
-    SAWScript.Unlit
-    SAWScript.Utils
+    --SAWScript.TypeCheck
+    SAWScript.Unify
+    SAWScript.Unify.Fix
+    SAWScript.Unify.Fresh
+    SAWScript.Unify.Goal
+    SAWScript.Unify.Ops
+    SAWScript.Unify.Unification
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 
@@ -44,4 +52,6 @@ executable sawScript
 
   build-depends:
       base >= 4
+    , haskeline
+    , transformers
     , sawScript
