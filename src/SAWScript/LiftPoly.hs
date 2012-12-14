@@ -32,7 +32,7 @@ liftPoly m = case stream of
     res = runStateT (runGoalM goal) initGState
     stream = fromStream Nothing Nothing $ fmap ((fst >>> fst) &&& (snd >>> fst)) res
 
-class (Functor f, Traversable f) => LiftPoly f where
+class (Traversable f) => LiftPoly f where
   lPoly :: f MPType -> LS (f LType)
   lPoly  = traverse fillHoles
 

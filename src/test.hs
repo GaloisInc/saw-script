@@ -2,6 +2,7 @@
 import SAWScript.AST
 import SAWScript.Unify
 
+import SAWScript.ResolveSyns
 import SAWScript.LiftPoly
 import SAWScript.TypeCheck
 import SAWScript.ConvertType
@@ -38,7 +39,7 @@ labelModule :: String -> IO ()
 labelModule n = putStrLn (n ++ ":")
 
 typeModule :: Module MPType -> Err (Module Type')
-typeModule = liftPoly >=> typeCheck >=> convertType
+typeModule = resolveSyns >=> liftPoly >=> typeCheck >=> convertType
 
 indent :: Int -> String -> String
 indent n = unlines . map (replicate n ' ' ++) . lines

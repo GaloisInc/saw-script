@@ -56,6 +56,7 @@ instance (Defixable f, Defixable g) => Defixable (f :+: g) where
 
 instance Defixable Type where
   dType t = case t of
+    Unit'                           -> Right $ Right UnitT
     Bit'                            -> Right $ Right BitT
     Z'                              -> Right $ Right ZT
     Quote'                          -> Right $ Right QuoteT

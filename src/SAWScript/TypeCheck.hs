@@ -100,38 +100,40 @@ instance TypeCheck [BlockStmt LType] where
 
 instance TypeCheck (Expr LType) where
   tCheck e = case e of
-    Bit b t            -> t `typeEqual` bit   >>= \(u,v) -> u === v>> return (Bit b t)
-    Quote s t          -> t `typeEqual` quote >>= \(u,v) -> u === v>> return (Quote s t)
-    Z i t              -> t `typeEqual` z     >>= \(u,v) -> u === v>> return (Z i t)
+    Unit t             -> t `typeEqual` unit  >> return (Unit t)
+    Bit b t            -> t `typeEqual` bit   >> return (Bit b t)
+    Quote s t          -> t `typeEqual` quote >> return (Quote s t)
+    Z i t              -> t `typeEqual` z     >> return (Z i t)
     Array es t         -> do es' <- mapM tCheck es
                              let l = i $ length es
                                  ts = map decor es'
-                             liftReader (case ts of
-                                           [] -> fresh $ \a -> t === array a l
-                                           at:ts' -> mapM_ (=== at) ts' >> t === array at l)
+                             case ts of
+                               []     -> do a <- liftReader newLVar
+                                            t `typeEqual` array a l
+                               at:ts' -> mapM_ (typeEqual at) ts' >> t `typeEqual` array at l
                              return (Array es' t)
     Block ss t         -> do ss' <- tCheck ss
                              let cs = mapMaybe context ss'
-                             liftReader (do (c,bt) <- finalStmtType $ last ss'
-                                            assert (all (== c) cs) ("Inconsistent contexts: " ++ show cs)
-                                            t === block c bt)
+                             (c,bt) <- finalStmtType $ last ss'
+                             liftReader $ assert (all (== c) cs) ("Inconsistent contexts: " ++ show cs)
+                             t `typeEqual` block c bt
                              return (Block ss' t)
     Tuple es t         -> do es' <- mapM tCheck es
                              let ts = map decor es'
-                             liftReader (t === tuple ts)
+                             t `typeEqual` tuple ts
                              return (Tuple es' t)
     Record nes t       -> do let (ns,es) = unzip nes
                              es' <- mapM tCheck es
                              let ts = map decor es'
-                             liftReader (t === record (zip ns ts))
+                             t `typeEqual` record (zip ns ts)
                              return (Record (zip ns es') t)
     Index ar ix t      -> do ar' <- tCheck ar
                              ix' <- tCheck ix
                              let at = decor ar'
                              let it = decor ix'
-                             liftReader (fresh $ \l -> do
-                                           at === array t l
-                                           it === z)
+                             l <- liftReader newLVar
+                             at `typeEqual` array t l
+                             it `typeEqual` z
                              return (Index ar' ix' t)
     Lookup r n t       -> do r' <- tCheck r
                              let rt = decor r'
@@ -139,22 +141,22 @@ instance TypeCheck (Expr LType) where
                              return (Lookup r' n t)
     Var n t            -> do foundT <- asks (lookup n . lEnv)
                              foundP <- asks (lookup n . pEnv)
-                             liftReader (case foundT of
-                                           Just lt -> t === lt
-                                           Nothing -> case foundP of
-                                             Just pt -> do lt <- instantiate pt
-                                                           t === lt
-                                             Nothing -> fail ("Unbound variable: " ++ n))
+                             case foundT of
+                               Just lt -> t `typeEqual` lt
+                               Nothing -> case foundP of
+                                 Just pt -> do lt <- liftReader $ instantiate pt
+                                               t `typeEqual` lt
+                                 Nothing -> liftReader $ fail ("Unbound variable: " ++ n)
                              return (Var n t)
     Function an at b t -> do b' <- extendType an at $ tCheck b
                              let bt = decor b'
-                             liftReader (t === function at bt)
+                             t `typeEqual` function at bt
                              return (Function an at b' t)
     Application f v t  -> do f' <- tCheck f
                              v' <- tCheck v
                              let ft = decor f'
                              let vt = decor v'
-                             liftReader (do ft === function vt t)
+                             ft `typeEqual` function vt t
                              return (Application f' v' t)
     LetBlock nes b     -> do let (ns,es) = unzip nes
                              es' <- mapM tCheck es
@@ -162,19 +164,19 @@ instance TypeCheck (Expr LType) where
                              b' <- (compose $ uncurry extendType) (zip ns ts) $ tCheck b
                              return (LetBlock (zip ns es') b')
 
-typeEqual :: LType -> LType -> TC (LType,LType)
+typeEqual :: LType -> LType -> TC ()
 typeEqual u v = do
   u' <- resolveSyn u
   v' <- resolveSyn v
-  return (u',v')
+  liftReader (u' === v')
 
 resolveSyn :: LType -> TC LType
 resolveSyn u = mcond
-  [ do Syn n <- match u; return n :>: do foundP <- asks $ lookup n . pEnv
-                                         liftReader $
-                                           case foundP of
-                                             Just pt -> instantiate pt
-                                             Nothing -> fail ("Unbound type variable: " ++ n)
+  [ (do Syn n <- match u; return n) :>: \n -> do foundP <- asks $ lookup n . pEnv
+                                                 liftReader $
+                                                   case foundP of
+                                                     Just pt -> instantiate pt
+                                                     Nothing -> fail ("Unbound type variable: " ++ n)
   , Else                           $  return u
   ]
 
@@ -199,10 +201,10 @@ compose f as = case as of
   []    -> id
   a:as' -> f a . compose f as'
 
-finalStmtType :: BlockStmt LType -> GoalM LType (Context,LType)
+finalStmtType :: BlockStmt LType -> TC (Context,LType)
 finalStmtType s = case s of
   Bind Nothing c e -> return (c,decor e)
-  _                -> fail ("Final statement of do block must be an expression: " ++ show s)
+  _                -> liftReader $ fail ("Final statement of do block must be an expression: " ++ show s)
 
 liftReader :: (Monad m) => m a -> ReaderT r m a
 liftReader m = ReaderT $ \r -> m
