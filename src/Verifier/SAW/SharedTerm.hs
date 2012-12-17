@@ -10,18 +10,22 @@ module Verifier.SAW.SharedTerm
   , SharedContext(..)
   , mkSharedContext
     -- ** Implicit versions of functions.
+  , scFreshGlobal
+  , scModule
   , scApply
   , scApplyAll
-  , scFreshGlobal
+  , scMkRecord
   , scRecordSelect
-  , scTrue
-  , scFalse
+  , scApplyCtor
+  , scNat
   , scInteger
   , scTypeOf
   , scPrettyTerm
-    -- ** Utilities
   , scViewAsBool
   , scViewAsNum
+    -- ** Utilities
+--  , scTrue
+--  , scFalse
   ) where
 
 import Control.Applicative ((<$>))
@@ -37,6 +41,7 @@ import Text.PrettyPrint.HughesPJ
 --import qualified Control.Monad.State as State
 --import Control.Monad.Trans (lift)
 --import qualified Data.Traversable as Traversable
+
 
 import Verifier.SAW.TypedAST
 
@@ -61,21 +66,25 @@ instance Ord (SharedTerm s) where
 -- | Operations that are defined, but not 
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
-    scCurrentModuleFn :: IO Module
-  , scTrueTerm        :: SharedTerm s
-  , scFalseTerm       :: SharedTerm s
+    scModuleFn :: IO Module
      -- Returns the globals in the current scope as a record of functions.
   , scFreshGlobalFn   :: Ident -> SharedTerm s -> IO (SharedTerm s)
      -- | @scApplyFn f x@ returns the result of applying @x@ to a lambda function @x@.
+  , scDefTermFn       :: TypedDef -> IO (SharedTerm s)
   , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
   , scMkRecordFn      :: Map String (SharedTerm s) -> IO (SharedTerm s)
-    -- | Select an element out of a record.
   , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
+  , scApplyCtorFn     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
   , scIntegerFn       :: Integer -> IO (SharedTerm s)
+    -- | Select an element out of a record.
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
+  , scViewAsBoolFn    :: SharedTerm s -> Maybe Bool
   , scViewAsNumFn     :: SharedTerm s -> Maybe Integer
   }
+
+scModule :: (?sc :: SharedContext s) => IO Module
+scModule = scModuleFn ?sc
 
 scApply :: (?sc :: SharedContext s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply = scApplyFn ?sc
@@ -83,8 +92,17 @@ scApply = scApplyFn ?sc
 scApplyAll :: (?sc :: SharedContext s) => SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll = foldlM scApply
 
+scMkRecord :: (?sc :: SharedContext s) => Map String (SharedTerm s) -> IO (SharedTerm s)
+scMkRecord = scMkRecordFn ?sc
+
 scRecordSelect :: (?sc :: SharedContext s) => SharedTerm s -> FieldName -> IO (SharedTerm s)
 scRecordSelect = scRecordSelectFn ?sc
+
+scApplyCtor :: (?sc :: SharedContext s) => TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
+scApplyCtor = scApplyCtorFn ?sc
+
+scNat :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
+scNat = undefined
 
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scInteger = scIntegerFn ?sc
@@ -98,17 +116,17 @@ scFreshGlobal :: (?sc :: SharedContext s)
               -> IO (SharedTerm s)
 scFreshGlobal = scFreshGlobalFn ?sc
 
-scTrue :: (?sc :: SharedContext s) => SharedTerm s
-scTrue = scTrueTerm ?sc
+{-
+scTrue :: (?sc :: SharedContext s) => IO (SharedTerm s)
+scTrue = scApplyCtor preludeTrue []
 
-scFalse :: (?sc :: SharedContext s) => SharedTerm s
-scFalse = scFalseTerm ?sc
+scFalse :: (?sc :: SharedContext s) => IO (SharedTerm s)
+scFalse = scApplyCtor preludeFalse []
+-}
 
 -- | Returns term as a constant Boolean if it can be evaluated as one.
 scViewAsBool :: (?sc :: SharedContext s) => SharedTerm s -> Maybe Bool
-scViewAsBool s | s == scTrue  = Just True
-               | s == scFalse = Just False
-               | otherwise = Nothing
+scViewAsBool = scViewAsBoolFn ?sc
 
 -- | Returns term as an integer if it is an integer, signed bitvector, or unsigned
 -- bitvector.
@@ -231,21 +249,17 @@ typeOf (STApp _ tf) =
     Let defs rhs -> undefined defs rhs
     IntLit i -> undefined i
     ArrayValue tp _ -> undefined tp
-   
+    EqType{} -> undefined 
+    Oracle{} -> undefined
+
 mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newMVar emptyAppCache
-  let getCtor sym args =
-        case findCtor m (undefined sym) of
-          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just c -> getTerm cr (CtorValue (undefined c) args)
   let getDef sym =
         case findDef m (undefined sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
           Just d -> getTerm cr (GlobalDef (undefined d))
-  trueTerm <- getCtor "True" []
-  falseTerm <- getCtor "False" []
   let freshGlobal sym tp = do
         i <- modifyMVarMasked vr (\i -> return (i,i+1))
         return (STVar i sym tp)
@@ -259,16 +273,16 @@ mkSharedContext m = do
   let ?af = AppFns { defTypeCache = tpCache
                    }
   return SharedContext {
-             scCurrentModuleFn = return m
-           , scTrueTerm = trueTerm
-           , scFalseTerm = falseTerm
+             scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
            , scApplyFn = \f x -> undefined f x
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
+           , scApplyCtorFn = undefined
            , scIntegerFn = undefined
            , scTypeOfFn = typeOf
            , scPrettyTermDocFn = undefined
+           , scViewAsBoolFn = undefined
            , scViewAsNumFn = viewAsNum
            }
 

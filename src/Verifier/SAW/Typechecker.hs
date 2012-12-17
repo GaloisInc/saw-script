@@ -33,9 +33,6 @@ import Verifier.SAW.UntypedAST ( PosPair(..))
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as Un
 
-internalError :: String -> a
-internalError msg = error $ "internal: " ++ msg
-
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y) 
 
@@ -91,8 +88,8 @@ topSort vertices e = go (initNulls, initMap) []
                      | otherwise = Left zm
         go (h:l,zm) r = go (foldl' decInEdgeCount (l,zm) (outEdges h)) (h:r)
 
-mapDefEqn :: (p -> q) -> (s -> t) -> DefEqn p s -> DefEqn q t
-mapDefEqn pfn tfn (DefEqn pl rhs) = DefEqn (pfn <$> pl) (tfn rhs)
+mapDefEqn :: (p -> q) -> (s -> t) -> DefEqnGen p s -> DefEqnGen q t
+mapDefEqn pfn tfn (DefEqnGen pl rhs) = DefEqnGen (pfn <$> pl) (tfn rhs)
 
 failPos :: Monad m => Pos -> String -> m a
 failPos p msg = fail $ show p ++ ": " ++ msg
@@ -120,11 +117,25 @@ instance Show RigidVarRef where
                       where f = (++) (ppPos "" po ++ " " ++ rvrName r)
 
 
-type UnPat = (Un.ParamType, [Un.Pat])
-type UnCtorType = CtorType UnPat Un.Term
-type UnCtor = Ctor String UnPat Un.Term
-type UnDataType = DataType String UnPat Un.Term
+data LocalDefGen n p t
+   = LocalFnDefGen n t [DefEqnGen p t]
+  deriving (Show)
 
+localVarNamesGen :: LocalDefGen n p e -> [n]
+localVarNamesGen (LocalFnDefGen nm _ _) = [nm]
+
+data DefEqnGen p t
+   = DefEqnGen [p]  -- ^ List of patterns
+                t -- ^ Right hand side.
+  deriving (Show)
+
+type UnPat = (Un.ParamType, [Un.Pat])
+type UnCtor = Ctor String Un.Term
+type UnDataType = DataType String Un.Term
+type UnDefEqn = DefEqnGen Un.Pat Un.Term
+type UnLocalDef = LocalDefGen (PosPair String) Un.Pat Un.Term
+
+{-
 type NormalizedCtorType = CtorType Un.Pat Un.Term
 
 normalizeUnCtorType :: UnCtorType -> NormalizedCtorType
@@ -132,6 +143,7 @@ normalizeUnCtorType = go
   where go (CtorResult r) = CtorResult r
         go (CtorArg (_,pats) l r) = foldr ins (go r) pats
           where ins p = CtorArg p l
+-}
 
 data GlobalBinding 
   = CtorIdent Ident
@@ -145,7 +157,7 @@ data GlobalContext = GlobalContext {
       , ctxGlobalBindings :: Map Un.Ident GlobalBinding
       , ctxNewDataTypes :: [UnDataType]
       , ctxNewDefTypes :: [(String, Un.Term)]
-      , ctxNewEqns :: [(String, DefEqn Un.Pat Un.Term)]
+      , ctxNewEqns :: [(String, UnDefEqn)]
       }
 
 ctxModuleName :: GlobalContext -> ModuleName
@@ -178,28 +190,26 @@ bindLocalTerm nm t ctx = ctx { tcVarBindings = Map.insert (Un.localIdent nm) t m
 addLocalBindings :: TermContext -> [RigidVarRef] -> TermContext
 addLocalBindings ctx l = ctx { tcVarBindings = foldl' fn (tcVarBindings ctx) l }
   where fn m r = Map.insert (Un.localIdent (rvrName r)) (URigidVar r) m
-       
 
 -- | Organizes information about local declarations.
-type LocalDeclsGroup = [LocalDef (PosPair String) Un.Pat Un.Term]
+type LocalDeclsGroup = [UnLocalDef]
 
 type GroupLocalDeclsState = ( Map String (PosPair String, Un.Term)
-                            , Map String [DefEqn Un.Pat Un.Term]
+                            , Map String [UnDefEqn]
                             )
 
 groupLocalDecls :: [Un.Decl] -> LocalDeclsGroup
 groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
   where finalize :: GroupLocalDeclsState -> LocalDeclsGroup
         finalize (tpMap,eqMap) = fn <$> Map.elems tpMap
-          where fn :: (PosPair String, Un.Term)
-                   -> LocalDef (PosPair String) Un.Pat Un.Term 
-                fn (pnm,tp) = LocalFnDef pnm tp eqs
+          where fn :: (PosPair String, Un.Term) -> UnLocalDef
+                fn (pnm,tp) = LocalFnDefGen pnm tp eqs
                   where Just eqs = Map.lookup (val pnm) eqMap
         groupDecl :: GroupLocalDeclsState -> Un.Decl -> GroupLocalDeclsState
         groupDecl (tpMap,eqMap) (Un.TypeDecl idl tp) = (tpMap',eqMap)
           where tpMap' = foldr (\k -> Map.insert (val k) (k,tp)) tpMap idl
         groupDecl (tpMap,eqMap) (Un.TermDef pnm pats rhs) = (tpMap, eqMap')
-          where eq = DefEqn (snd <$> pats) rhs
+          where eq = DefEqnGen (snd <$> pats) rhs
                 eqMap' = Map.insertWith (++) (val pnm) [eq] eqMap
         groupDecl _ Un.DataDecl{} = error "Unexpected data declaration in let binding"
 
@@ -248,7 +258,7 @@ upatToTerm (UPatF _ pf) =
     UPRecord m -> URecordValue (upatToTerm <$> m)
     UPCtor c l -> UCtorApp c   (upatToTerm <$> l)
 
-type UnifyLocalDef = LocalDef RigidVarRef UPat UnifyTerm
+type UnifyLocalDef = LocalDefGen RigidVarRef UPat UnifyTerm
 
 data UnifyTerm
   = URigidVar RigidVarRef -- ^ Rigid variable that cannot be instantiated.
@@ -311,16 +321,16 @@ varBindingTerm :: VarBinding -> UnifyTerm
 varBindingTerm (TypeBinding t) = t
 varBindingTerm (ValueBinding t _) = t
 
-type UnifyCtorType = CtorType UPat UnifyTerm
-type UnifyCtor = Ctor Ident UPat UnifyTerm
-type UnifyDataType = DataType Ident UPat UnifyTerm
+type UnifyDataType = DataType Ident UnifyTerm
+type UnifyCtor = Ctor Ident UnifyTerm
+type UnifyDefEqn = DefEqnGen UPat UnifyTerm
 
-type TypedCtorType = CtorType (Pat Term) Term
+--type UnifyCtorType = CtorType UPat UnifyTerm
 
 data UnifyState = US { usGlobalContext :: Maybe GlobalContext
                      , usTypeMap :: Map RigidVarRef UnifyTerm
                      , usVarBindings :: Map VarIndex VarBinding
-                     , usCtorTypes :: Map Ident (Either NormalizedCtorType TypedCtorType)
+                     , usCtorTypes :: Map Ident (Either Un.Term Term)
                      , unifyEqs :: [UnifyEq]
                      , usVars :: Set UVar
                        -- An element (p,s) in usEdges asserts that p must come before s.
@@ -363,8 +373,10 @@ newRigidVar p nm = state fn
 setRigidVarType :: RigidVarRef -> UnifyTerm -> Unifier ()
 setRigidVarType sym tp = modify $ \s ->
   case Map.lookup sym (usTypeMap s) of
-    Just prevTp -> pushUnifyEqs [UnifyEqTypes tp prevTp] s
-    Nothing -> s { usTypeMap = Map.insert sym tp (usTypeMap s) }
+    Just prevTp ->
+      pushUnifyEqs [UnifyEqTypes tp prevTp] s
+    Nothing ->
+      s { usTypeMap = Map.insert sym tp (usTypeMap s) }
 
 newUnifyVarIndex :: PosPair String -> Unifier VarIndex
 newUnifyVarIndex nm = state fn
@@ -455,19 +467,19 @@ instPiType = go
 
 convertEqn :: TermContext
            -> UnifyTerm
-           -> DefEqn Un.Pat Un.Term
-           -> Unifier (DefEqn UPat UnifyTerm) 
-convertEqn ctx tp (DefEqn unpats unrhs) = do
+           -> UnDefEqn
+           -> Unifier UnifyDefEqn
+convertEqn ctx tp (DefEqnGen unpats unrhs) = do
   pats <- mapM (indexUnPat (tcGlobalContext ctx)) unpats
   _rhsTp <- instPiType pats tp
   let ctx' = addLocalBindings ctx (concatMap upatBoundVars pats)
   rhs <- convertTerm ctx' unrhs
-  return (DefEqn pats rhs)
+  return (DefEqnGen pats rhs)
 
 -- | Insert local definitions the terms belong to the given context.
 consLocalDecls :: TermContext -> [Un.Decl] -> Unifier (TermContext, [UnifyLocalDef])
 consLocalDecls tc udl = do
-  let procDef (LocalFnDef pnm utp ueqs) = do
+  let procDef (LocalFnDefGen pnm utp ueqs) = do
         let nm = val pnm
         r <- newRigidVar (Just (pos pnm)) nm
         tp <- convertTerm tc utp
@@ -476,13 +488,13 @@ consLocalDecls tc udl = do
   (nl,dl') <- unzip <$> mapM procDef (groupLocalDecls udl)
   let tc1 = addLocalBindings tc nl
   let procEqns (r, tp, ueqs) = do
-        res <- forM ueqs $ \(DefEqn unpat unrhs) -> do
+        res <- forM ueqs $ \(DefEqnGen unpat unrhs) -> do
           pat <- mapM (indexUnPat (tcGlobalContext tc)) unpat
           _rhsTp <- instPiType pat tp
           let tc2 = addLocalBindings tc1 (concatMap upatBoundVars pat)
           rhs <- convertTerm tc2 unrhs
-          return (DefEqn pat rhs)
-        return (LocalFnDef r tp res)
+          return (DefEqnGen pat rhs)
+        return (LocalFnDefGen r tp res)
   dl <- mapM procEqns dl'
   return (tc1, dl)
 
@@ -543,12 +555,6 @@ convertTerm tc uut =
     Un.IntLit _ i -> return $ UIntLit i
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
 
-preludeModuleName :: ModuleName
-preludeModuleName = Un.mkModuleName ["Prelude"]
-
-preludeIdent :: String -> Ident
-preludeIdent nm = mkIdent preludeModuleName nm
-
 type UnifyPatSubst = Map RigidVarRef UPat
 
 matchUnPat :: UPat -> Un.Pat -> TermContext -> TermContext
@@ -598,22 +604,24 @@ matchPat = go Map.empty
 
 -- | @checkCtorType c cpl tp@ checks that the pattern @c(cpl)@ has type @tp@.
 checkCtorType :: Ident -> [UPat] -> UnifyTerm -> Unifier ()
-checkCtorType c cpl tp = do
+checkCtorType c cpl ctorType = do
   Just gctx <- gets usGlobalContext
   m <- gets usCtorTypes
   case Map.lookup c m of
     Nothing -> internalError $ "Could not find ctor type for " ++ show c ++ "."
     Just (Left untp) -> go (emptyTermContext gctx) cpl untp
-      where go :: TermContext -> [UPat] -> NormalizedCtorType -> Unifier ()
-            go ctx [] (CtorResult urhsTp) = do
-              rhsTp <- convertTerm ctx urhsTp 
-              addUnifyEqs [UnifyEqTypes rhsTp tp]
-            go ctx (p:pl) (CtorArg pat ulhs rhsTp) = do
+      where go :: TermContext -> [UPat] -> Un.Term -> Unifier ()
+            go ctx initPl (Un.Pi _ initPats ulhs _ rhsTp) = do
               lhs <- convertTerm ctx ulhs
-              hasType p lhs
-              let ctx' = matchUnPat p pat ctx
-              go ctx' pl rhsTp
-    Just (Right tp) -> internalError "Typed ctor types unsupported"
+              let procPat (p:pl) (pat:patl) c = do
+                   hasType p lhs 
+                   procPat pl patl (matchUnPat p pat c)
+                  procPat pl [] c = go c pl rhsTp
+              procPat initPl initPats ctx
+            go ctx [] urhsTp = do
+              rhsTp <- convertTerm ctx urhsTp 
+              addUnifyEqs [UnifyEqTypes rhsTp ctorType]
+    Just (Right _tp) -> internalError "Typed ctor types unsupported"
 
 hasType :: UPat
         -> UnifyTerm
@@ -796,14 +804,14 @@ completeTerm = go
               where Just dt = findDataType (urModule r) i
             USort s   -> Term $ Sort s
             ULet dl t -> Term $ Let (completeLocalDef <$> dl) (go r' t)
-              where r' = bindPatImpl r (concatMap localVarNames dl)
-                    completeLocalDef (LocalFnDef v tp eqs) =
+              where r' = bindPatImpl r (concatMap localVarNamesGen dl)
+                    completeLocalDef (LocalFnDefGen v tp eqs) =
                         LocalFnDef (rvrName v) (go r tp) (completeEqn r' <$> eqs)
             UIntLit i -> Term $ IntLit i
             UArray tp v -> Term $ ArrayValue (go r tp) (go r <$> v)
 
-completeEqn :: UnifyResult -> DefEqn UPat UnifyTerm -> DefEqn (Pat Term) Term
-completeEqn r (DefEqn upl urhs) = DefEqn pl (completeTerm r' urhs)
+completeEqn :: UnifyResult -> UnifyDefEqn -> TypedDefEqn
+completeEqn r (DefEqnGen upl urhs) = DefEqn pl (completeTerm r' urhs)
   where (r',pl) = bindPats r upl
 
 
@@ -970,7 +978,7 @@ newUnifyDefs idl tp = modify fn
 newUnifyEqn :: Un.Pos -> String -> [Un.Pat] -> Un.Term  -> ContextInitializer ()
 newUnifyEqn _ nm pats rhs = modify fn
   where fn gc = gc { ctxNewEqns = (nm, eqn) :  ctxNewEqns gc }
-          where eqn = DefEqn pats rhs
+          where eqn = DefEqnGen pats rhs
 
 {-
 importTerm :: Term -> ContextInitializer UnifyTerm
@@ -1014,11 +1022,11 @@ importedRigidVar mnml v sym tp moduleFn = do
 -}
 
 addDataType :: [Maybe ModuleName] -- ^ Untyped module names to add symbols to.
-            -> DataType Ident (Pat Term) Term
+            -> TypedDataType
                -- | Indicates if datatype itself should be visibile in untyped context.
             -> Bool
                -- | List of ctors to make visible in untyped context.
-            -> [Ctor Ident (Pat Term) Term] 
+            -> [TypedCtor]
             -> ContextInitializer ()
 addDataType _mnml dt _ _ = do
   let ctxFn gc = gc { gcModule = insDataType (gcModule gc) dt
@@ -1041,18 +1049,20 @@ addDef mnml v def = do
                  | otherwise = m
   modify ctxFn
 
+{-
 completeCtorType :: UnifyResult -> UnifyCtorType -> TypedCtorType
 completeCtorType = go
   where go r (CtorResult t) = CtorResult (completeTerm r t)
         go r (CtorArg p tp rhs) = CtorArg p' (completeTerm r tp) (go r' rhs)
           where (r',p') = bindPat r p
+-}
 
-completeCtor :: UnifyResult -> UnifyCtor -> Ctor Ident (Pat Term) Term
-completeCtor r (Ctor nm tp) = Ctor nm (completeCtorType r tp)
+completeCtor :: UnifyResult -> UnifyCtor -> TypedCtor
+completeCtor r (Ctor nm tp) = Ctor nm (completeTerm r tp)
 
 completeDataType :: UnifyResult 
                  -> UnifyDataType
-                 -> DataType Ident (Pat Term) Term
+                 -> TypedDataType
 completeDataType r dt =
   DataType { dtName = dtName dt
            , dtType = completeTerm r (dtType dt)
@@ -1073,11 +1083,13 @@ convertDataType ctx dt = do
 convertCtor :: GlobalContext -> UnCtor -> Unifier UnifyCtor
 convertCtor ctx c = do
   let mnm = moduleName (gcModule ctx)
-  tp <- convertCtorType ctx (normalizeUnCtorType (ctorType c))
+  let tc = emptyTermContext ctx
+  tp <- convertTerm tc (ctorType c)
   return Ctor { ctorName = mkIdent mnm (ctorName c)
               , ctorType = tp
               }
 
+{-
 convertCtorType :: GlobalContext -> NormalizedCtorType -> Unifier UnifyCtorType
 convertCtorType = go . emptyTermContext
   where go tc (CtorResult t) = CtorResult <$> convertTerm tc t
@@ -1086,18 +1098,19 @@ convertCtorType = go . emptyTermContext
           (tc',[pat]) <- consPatVars tc [upat] tp
           r <- go tc' ur
           return $ CtorArg pat tp r
+-}
 
 unifierModule :: Module
               -> [UnifyDataType]
               -> [(String, UnifyTerm)]
-              -> Map String [DefEqn UPat UnifyTerm]
+              -> Map String [UnifyDefEqn]
               -> Unifier Module
 unifierModule ctxm udtl defs eqnMap = do
   let mnm = moduleName ctxm
   s <- get
   case unifyEqs s of
     eq:eqs -> do
-      trace "Parsing equation" $ put s { unifyEqs = eqs }
+      put s { unifyEqs = eqs }
       case eq of
         UnifyEqTypes x y -> unifyTypes x y
         UnifyEqValues x y tp -> unifyTerms x y tp
@@ -1163,7 +1176,7 @@ runUnification nm initialization = flip evalState emptyUnifyState $ do
   let ctx = execState initialization gc0
   modify $ \s -> s { usGlobalContext = Just ctx }
   do let ctors = concatMap dtCtors (ctxNewDataTypes ctx)
-     let newCtorBindings c = (mkIdent nm (ctorName c), Left (normalizeUnCtorType (ctorType c)))
+     let newCtorBindings c = (mkIdent nm (ctorName c), Left (ctorType c))
      let updateCtors s = s { usCtorTypes = Map.fromList (newCtorBindings <$> ctors) }
      modify updateCtors
   udtl <- mapM (convertDataType ctx) (ctxNewDataTypes ctx)

@@ -15,15 +15,25 @@ module Verifier.SAW.TypedAST
  , moduleName
  , ModuleDecl(..)
  , moduleDecls
+ , TypedDataType
  , findDataType
+ , TypedCtor
+-- , TypedCtorType
+ , moduleCtors
  , findCtor
+ , findExportedCtor
+ , TypedDef
+ , TypedDefEqn
+ , moduleDefs
  , findDef
+ , findExportedDef
  , insDataType
  , insDef
    -- * Data types and defintiions.
  , DataType(..)
  , Ctor(..)
  , CtorType(..)
+ , ctorTypeArgCount
  , Def(..)
  , LocalDef(..)
  , localVarNames
@@ -33,6 +43,7 @@ module Verifier.SAW.TypedAST
    -- * Terms and associated operations.
  , Term(..)
  , incVars
+ , piArgCount
  , TermF(..)
    -- * Primitive types.
  , Sort, mkSort, sortOf
@@ -93,7 +104,6 @@ instance Show Ident where
 mkIdent :: ModuleName -> String -> Ident
 mkIdent = Ident
 
-
 newtype Sort = SortCtor { _sortIndex :: Integer }
   deriving (Eq, Ord)
 
@@ -123,7 +133,7 @@ data Pat e = -- | Variable bound by pattern.
            | PRecord (Map FieldName (Pat e))
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
-           | PCtor (Ctor Ident (Pat Term) Term) [Pat e]
+           | PCtor (Ctor Ident e) [Pat e]
 --           | PIntLit Integer
   deriving (Eq,Ord, Show, Functor, Foldable, Traversable)
 
@@ -148,19 +158,19 @@ patBoundVars p =
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y) 
 
-data LocalDef n p e
-   = LocalFnDef n e [DefEqn p e]
-  deriving (Eq, Ord, Show)
-  
+data LocalDef n e
+   = LocalFnDef n e [DefEqn e]
+  deriving (Eq, Ord, Show, Functor, Foldable)
 
-localVarNames :: LocalDef n p e -> [n]
+localVarNames :: LocalDef n e -> [n]
 localVarNames (LocalFnDef nm _ _) = [nm]
 
 -- A Definition contains an identifier, the type of the definition, and a list of equations.
 data Def e = Def { defIdent :: Ident
                  , defType :: e
-                 , defEqs :: [DefEqn (Pat e) e]
+                 , defEqs :: [DefEqn e]
                  }
+  deriving (Functor, Foldable)
 
 instance Eq (Def e) where
   (==) = lift2 defIdent (==)
@@ -171,39 +181,45 @@ instance Ord (Def e) where
 instance Show (Def e) where
   show = show . defIdent
 
-data DefEqn p e
-  = DefEqn [p]  -- ^ List of patterns
+data DefEqn e
+  = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
   deriving (Functor, Foldable, Traversable)
 
-instance (Eq e, Eq p) => Eq (DefEqn p e) where
+instance (Eq e) => Eq (DefEqn e) where
   DefEqn xp xr == DefEqn yp yr = xp == yp && xr == yr
 
-instance (Ord e, Ord p) => Ord (DefEqn p e) where
+instance (Ord e) => Ord (DefEqn e) where
   compare (DefEqn xp xr) (DefEqn yp yr) = compare (xp,xr) (yp,yr)
 
-instance (Show e, Show p) => Show (DefEqn p e) where
+instance (Show e) => Show (DefEqn e) where
   showsPrec p t = showParen (p >= 10) $ ("DefEqn "++) . showsPrec 10 p . showsPrec 10 t
 
-data Ctor n p e = Ctor { ctorName :: !n
-                         -- | The type of the constructor (should contain no free variables).
-                       , ctorType :: CtorType p e
-                       }
+data Ctor n tp = Ctor { ctorName :: !n
+                        -- | The type of the constructor (should contain no free variables).
+                      , ctorType :: tp
+                      }
+  deriving (Functor, Foldable, Traversable)
 
-instance Eq n => Eq (Ctor n p e) where
+instance Eq n => Eq (Ctor n tp) where
   (==) = lift2 ctorName (==)
 
-instance Ord n => Ord (Ctor n p e) where
+instance Ord n => Ord (Ctor n tp) where
   compare = lift2 ctorName compare
 
-instance Show n => Show (Ctor n p e) where
+instance Show n => Show (Ctor n tp) where
   show = show . ctorName
+
 
 data CtorType p e
   = CtorResult e
   | CtorArg p e (CtorType p e)
   deriving (Show)
-  
+
+ctorTypeArgCount :: CtorType p e -> Int
+ctorTypeArgCount = go 0
+  where go n CtorResult{} = n
+        go n (CtorArg _ _ r) = go (n+1) r
 
 ppCtorType :: TermPrinter e -> TermPrinter (CtorType (Pat e) e)
 ppCtorType ppe = go
@@ -211,26 +227,27 @@ ppCtorType ppe = go
         go lcls p (CtorArg pat tp rhs) =
           ppPi ppe go lcls p (pat,tp,rhs)
 
-ppCtor :: TermPrinter e -> Ctor Ident (Pat e) e -> Doc
+ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
 ppCtor f c = ppIdent (ctorName c) <+> doublecolon <+> tp
   where lcls = emptyLocalVarDoc
-        tp = ppCtorType f lcls 1 (ctorType c)
+        tp = f lcls 1 (ctorType c)
 
-data DataType n p t = DataType { dtName :: n
-                               , dtType :: t
-                               , dtCtors :: [Ctor n p t]
-                               }
+data DataType n t = DataType { dtName :: n
+                             , dtType :: t
+                             , dtCtors :: [Ctor n t]
+                             }
+  deriving (Functor, Foldable)
 
-instance Eq n => Eq (DataType n p t) where
+instance Eq n => Eq (DataType n t) where
   (==) = lift2 dtName (==)
 
-instance Ord n => Ord (DataType n p t) where
+instance Ord n => Ord (DataType n t) where
   compare = lift2 dtName compare
 
-instance Show n => Show (DataType n p t) where
+instance Show n => Show (DataType n t) where
   show = show . dtName
 
-ppDataType :: TermPrinter e -> DataType Ident (Pat e) e -> Doc
+ppDataType :: TermPrinter e -> DataType Ident e -> Doc
 ppDataType f dt = text "data" <+> tc <+> text "where" <+> lbrace $$
                     nest 4 (vcat (ppc <$> dtCtors dt)) $$
                     nest 2 rbrace
@@ -258,14 +275,14 @@ data TermF e
   | RecordSelector e FieldName
   | RecordType (Map FieldName e)
 
-  | CtorValue !(Ctor Ident (Pat e) Term) [e]
-  | CtorType !(DataType Ident (Pat e) Term) [e]
+  | CtorValue !(Ctor Ident e) [e]
+  | CtorType !(DataType Ident e) [e]
 
   | Sort Sort
 
     -- ^ List of bindings and the let expression itself.
     -- Let expressions introduce variables for each identifier.
-  | Let [LocalDef String (Pat e) e] e
+  | Let [LocalDef String e] e
 
     -- Primitive builtin values
   | IntLit Integer
@@ -277,7 +294,7 @@ data TermF e
     -- of the form @EqType x y@, but possibly with extra @Pi@
     -- quantifiers), which came from the trusted proof tool @s@.
   | Oracle String e
- deriving (Eq, Ord, Functor, Foldable, Traversable)
+ deriving (Eq, Ord, Functor, Foldable)
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
@@ -293,12 +310,12 @@ ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> defEqs d))
   where sym = ppIdent (defIdent d)
         tpd = ppTypeConstraint ppTerm lcls sym (defType d)
 
-ppLocalDef :: TermPrinter e -> LocalVarDoc -> LocalDef String (Pat e) e -> Doc
+ppLocalDef :: TermPrinter e -> LocalVarDoc -> LocalDef String e -> Doc
 ppLocalDef f lcls (LocalFnDef nm tp eqs) = tpd $$ vcat (ppDefEqn f lcls sym <$> eqs)
   where sym = text nm
         tpd = sym <+> doublecolon <+> f lcls 1 tp
 
-ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn (Pat e) e -> Doc
+ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
 ppDefEqn f lcls sym (DefEqn pats rhs) = lhs <+> equals <+> f lcls' 1 rhs
   where lcls' = foldl' consBinding lcls (concatMap patBoundVars pats) 
         lhs = sym <+> hsep (ppPat f lcls' 10 <$> pats)
@@ -415,6 +432,12 @@ asApp = go []
   where go l (Term (App t u)) = go (u:l) t
         go l t = (t,l)
 
+-- | Returns the number of nested pi expressions.
+piArgCount :: Term -> Int
+piArgCount = go 0
+  where go i (Term (Pi _ _ rhs)) = go (i+1) rhs
+        go i _ = i
+
 -- | @instantiateVars f l t@ substitutes each dangling bound variable
 -- @LocalVar j t@ with the term @f i j t@, where @i@ is the number of
 -- binders surrounding @LocalVar j t@.
@@ -473,7 +496,7 @@ instantiateVar k u = instantiateVars fn 0
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
 instantiateVarList :: DeBruijnIndex -> [Term] -> Term -> Term
-instantiateVarList k [] = id
+instantiateVarList _ [] = id
 instantiateVarList k ts = instantiateVars fn 0
   where
     l = length ts
@@ -506,33 +529,27 @@ ppTerm lcls p t =
 instance Show Term where
   showsPrec p t = shows $ ppTerm emptyLocalVarDoc p t
 
-data ModuleDecl = TypeDecl (DataType Ident (Pat Term) Term) 
-                | DefDecl (Def Term)
+type TypedDataType = DataType Ident Term
+type TypedCtor = Ctor Ident Term
+--type TypedCtorType = CtorType (Pat Term) Term
+type TypedDef = Def Term
+type TypedDefEqn = DefEqn Term
+
+data ModuleDecl = TypeDecl TypedDataType
+                | DefDecl TypedDef
  
 data Module = Module {
           moduleName    :: ModuleName
-        , moduleTypeMap :: !(Map Ident (DataType Ident (Pat Term) Term))
-        , moduleCtorMap :: !(Map Ident (Ctor Ident (Pat Term) Term))
-        , moduleDefMap  :: !(Map Ident (Def Term))
+        , moduleTypeMap :: !(Map Ident TypedDataType)
+        , moduleCtorMap :: !(Map Ident TypedCtor)
+        , moduleDefMap  :: !(Map Ident TypedDef)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added. 
         }
-
-moduleDecls :: Module -> [ModuleDecl]
-moduleDecls = reverse . moduleRDecls
 
 instance Show Module where
   show m = render $ vcat $ ppdecl <$> moduleDecls m
     where ppdecl (TypeDecl d) = ppDataType ppTerm d
           ppdecl (DefDecl d) = ppDef emptyLocalVarDoc d <> char '\n'
-
-findDataType :: Module -> Ident -> Maybe (DataType Ident (Pat Term) Term)
-findDataType m i = Map.lookup i (moduleTypeMap m)
-
-findCtor :: Module -> Ident -> Maybe (Ctor Ident (Pat Term) Term)
-findCtor m i = Map.lookup i (moduleCtorMap m)
-
-findDef :: Module -> Ident -> Maybe (Def Term)
-findDef m i = Map.lookup i (moduleDefMap m)
 
 emptyModule :: ModuleName -> Module
 emptyModule nm =
@@ -543,14 +560,39 @@ emptyModule nm =
          , moduleRDecls = []
          }
 
-insDataType :: Module -> DataType Ident (Pat Term) Term -> Module
+findDataType :: Module -> Ident -> Maybe TypedDataType
+findDataType m i = Map.lookup i (moduleTypeMap m)
+
+insDataType :: Module -> TypedDataType -> Module
 insDataType m dt = m { moduleTypeMap = Map.insert (dtName dt) dt (moduleTypeMap m)
                      , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
                      , moduleRDecls = TypeDecl dt : moduleRDecls m
                      }
   where insCtor m' c = Map.insert (ctorName c) c m' 
 
+-- | Returns all Ctors defined in module and exported.
+moduleCtors :: Module -> [TypedCtor]
+moduleCtors = Map.elems . moduleCtorMap
+
+findCtor :: Module -> Ident -> Maybe TypedCtor
+findCtor m i = Map.lookup i (moduleCtorMap m)
+
+findExportedCtor :: Module -> String -> Maybe TypedCtor
+findExportedCtor _ _ = undefined
+
+moduleDefs :: Module -> [TypedDef]
+moduleDefs = Map.elems . moduleDefMap
+
+findDef :: Module -> Ident -> Maybe TypedDef
+findDef m i = Map.lookup i (moduleDefMap m)
+
+findExportedDef :: Module -> String -> Maybe TypedDef
+findExportedDef _ _ = undefined
+
 insDef :: Module -> Def Term -> Module
 insDef m d = m { moduleDefMap = Map.insert (defIdent d) d (moduleDefMap m)
                , moduleRDecls = DefDecl d : moduleRDecls m
                }
+
+moduleDecls :: Module -> [ModuleDecl]
+moduleDecls = reverse . moduleRDecls

@@ -141,7 +141,7 @@ badTerm :: Pos -> Term
 badTerm = BadTerm
 
 -- | Constructor declaration.
-data CtorDecl = Ctor (PosPair String) (CtorType (ParamType,[Pat]) Term)
+data CtorDecl = Ctor (PosPair String) Term
   deriving (Show)
 
 data Module = Module (PosPair ModuleName) [Import] [Decl]

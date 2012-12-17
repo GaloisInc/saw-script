@@ -142,9 +142,9 @@ LTerm : AppTerm                          {  $1 }
       | '\\' list1(LambdaArg) '->' LTerm {% mkLambda (pos $1) $2 $4 }
 
 -- Term with uses of pi and lambda, but no typing.
-CtorType :: { CtorType (ParamType,[Pat]) Term }
-CtorType : AppTerm             { CtorResult $1 }
-         | PiArg '->' CtorType { mkCtorArg $1 $3 }
+CtorType :: { Term }
+CtorType : AppTerm             { $1 }
+         | PiArg '->' CtorType { mkPi (pos $2) $1 $3 }
 
 LambdaArg :: { (ParamType, Term) }
 LambdaArg : AtomTerm           { (NormalParam, $1) }
