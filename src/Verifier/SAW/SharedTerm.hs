@@ -275,6 +275,7 @@ mkSharedContext m = do
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
+           , scDefTermFn = undefined
            , scApplyFn = \f x -> undefined f x
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
