@@ -402,12 +402,6 @@ mkPiArg (ppt,lhs) =
 mkPi :: Pos -> PiArg -> Term -> Term
 mkPi ptp (ppt,pats,tp) r = Pi ppt pats tp ptp r   
 
-mkCtorArg :: PiArg
-          -> CtorType (ParamType,[Pat]) Term
-          -> CtorType (ParamType,[Pat]) Term
-mkCtorArg (ppt,pats,tp) ctp = CtorArg (ppt,pats) tp ctp
-
-
 mkLambda :: Pos -> [(ParamType, Term)] -> Term -> Parser Term
 mkLambda ptp lhs rhs = parseLhs lhs []
   where parseLhs [] r = return $ Lambda ptp r rhs

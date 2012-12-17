@@ -18,7 +18,6 @@ module Verifier.SAW.TypedAST
  , TypedDataType
  , findDataType
  , TypedCtor
--- , TypedCtorType
  , moduleCtors
  , findCtor
  , findExportedCtor
@@ -32,8 +31,6 @@ module Verifier.SAW.TypedAST
    -- * Data types and defintiions.
  , DataType(..)
  , Ctor(..)
- , CtorType(..)
- , ctorTypeArgCount
  , Def(..)
  , LocalDef(..)
  , localVarNames
@@ -209,23 +206,6 @@ instance Ord n => Ord (Ctor n tp) where
 
 instance Show n => Show (Ctor n tp) where
   show = show . ctorName
-
-
-data CtorType p e
-  = CtorResult e
-  | CtorArg p e (CtorType p e)
-  deriving (Show)
-
-ctorTypeArgCount :: CtorType p e -> Int
-ctorTypeArgCount = go 0
-  where go n CtorResult{} = n
-        go n (CtorArg _ _ r) = go (n+1) r
-
-ppCtorType :: TermPrinter e -> TermPrinter (CtorType (Pat e) e)
-ppCtorType ppe = go
-  where go lcls p (CtorResult tp) = ppe lcls p tp
-        go lcls p (CtorArg pat tp rhs) =
-          ppPi ppe go lcls p (pat,tp,rhs)
 
 ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
 ppCtor f c = ppIdent (ctorName c) <+> doublecolon <+> tp
@@ -531,7 +511,6 @@ instance Show Term where
 
 type TypedDataType = DataType Ident Term
 type TypedCtor = Ctor Ident Term
---type TypedCtorType = CtorType (Pat Term) Term
 type TypedDef = Def Term
 type TypedDefEqn = DefEqn Term
 

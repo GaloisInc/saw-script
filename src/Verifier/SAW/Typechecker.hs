@@ -135,16 +135,6 @@ type UnDataType = DataType String Un.Term
 type UnDefEqn = DefEqnGen Un.Pat Un.Term
 type UnLocalDef = LocalDefGen (PosPair String) Un.Pat Un.Term
 
-{-
-type NormalizedCtorType = CtorType Un.Pat Un.Term
-
-normalizeUnCtorType :: UnCtorType -> NormalizedCtorType
-normalizeUnCtorType = go
-  where go (CtorResult r) = CtorResult r
-        go (CtorArg (_,pats) l r) = foldr ins (go r) pats
-          where ins p = CtorArg p l
--}
-
 data GlobalBinding 
   = CtorIdent Ident
   | DataTypeIdent Ident
@@ -324,8 +314,6 @@ varBindingTerm (ValueBinding t _) = t
 type UnifyDataType = DataType Ident UnifyTerm
 type UnifyCtor = Ctor Ident UnifyTerm
 type UnifyDefEqn = DefEqnGen UPat UnifyTerm
-
---type UnifyCtorType = CtorType UPat UnifyTerm
 
 data UnifyState = US { usGlobalContext :: Maybe GlobalContext
                      , usTypeMap :: Map RigidVarRef UnifyTerm
@@ -1049,14 +1037,6 @@ addDef mnml v def = do
                  | otherwise = m
   modify ctxFn
 
-{-
-completeCtorType :: UnifyResult -> UnifyCtorType -> TypedCtorType
-completeCtorType = go
-  where go r (CtorResult t) = CtorResult (completeTerm r t)
-        go r (CtorArg p tp rhs) = CtorArg p' (completeTerm r tp) (go r' rhs)
-          where (r',p') = bindPat r p
--}
-
 completeCtor :: UnifyResult -> UnifyCtor -> TypedCtor
 completeCtor r (Ctor nm tp) = Ctor nm (completeTerm r tp)
 
@@ -1088,17 +1068,6 @@ convertCtor ctx c = do
   return Ctor { ctorName = mkIdent mnm (ctorName c)
               , ctorType = tp
               }
-
-{-
-convertCtorType :: GlobalContext -> NormalizedCtorType -> Unifier UnifyCtorType
-convertCtorType = go . emptyTermContext
-  where go tc (CtorResult t) = CtorResult <$> convertTerm tc t
-        go tc (CtorArg upat utp ur) = do
-          tp <- convertTerm tc utp
-          (tc',[pat]) <- consPatVars tc [upat] tp
-          r <- go tc' ur
-          return $ CtorArg pat tp r
--}
 
 unifierModule :: Module
               -> [UnifyDataType]

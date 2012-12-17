@@ -7,7 +7,6 @@ module Verifier.SAW.UntypedAST
   , ImportConstraint(..)
   , ImportName(..)
   , CtorDecl(..)
-  , CtorType(..)
   , Term(..)
   , asApp
   , ParamType(..)
@@ -25,7 +24,6 @@ import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, sortOf
   , FieldName
-  , CtorType(..)
   , isIdent
   )
 
