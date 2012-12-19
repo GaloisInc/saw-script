@@ -28,13 +28,14 @@ module Verifier.SAW.SharedTerm
 --  , scFalse
   ) where
 
-import Control.Applicative ((<$>))
-import Control.Monad ()
+import Control.Applicative ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
+import Control.Monad.Trans (lift)
+import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word
-import Data.Foldable
+import Data.Foldable hiding (sum)
 import Data.Traversable
 import Prelude hiding (mapM, maximum)
 import Text.PrettyPrint.HughesPJ
@@ -42,7 +43,7 @@ import Text.PrettyPrint.HughesPJ
 --import Control.Monad.Trans (lift)
 --import qualified Data.Traversable as Traversable
 
-
+import Verifier.SAW.Change
 import Verifier.SAW.TypedAST
 
 type TermIndex = Word64
@@ -275,6 +276,7 @@ mkSharedContext m = do
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
+           , scDefTermFn = undefined
            , scApplyFn = \f x -> undefined f x
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
@@ -329,3 +331,107 @@ foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
 unshare :: SharedTerm s -> Term
 unshare = foldSharedTerm Term
 -}
+
+scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
+scTermF = undefined -- FIXME: extend definition of SharedContext to support this
+
+instantiateVars :: forall s. (?sc :: SharedContext s) =>
+                   (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
+                                  -> ChangeT IO (IO (SharedTerm s)))
+                -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
+instantiateVars f initialLevel t =
+    do ref <- lift (newIORef Map.empty)
+       let ?ref = ref in go initialLevel t
+  where
+    goList :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
+              DeBruijnIndex -> [SharedTerm s] -> ChangeT IO [SharedTerm s]
+    goList l xs = preserve xs $
+      case xs of
+        [] -> pure []
+        e:r -> (:) <$> go l e <*> goList (l+1) r
+
+    go :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
+          DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
+    go l t@(STVar {}) = pure t
+    go l t@(STApp tidx tf) = do
+      memo <- lift (readIORef ?ref)
+      case Map.lookup (tidx, l) memo of
+        Just t' -> return t'
+        Nothing -> do
+          t' <- preserveChangeT t $ go' l tf
+          lift (modifyIORef ?ref (Map.insert (tidx, l) t'))
+          return t'
+
+    go' :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
+           DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
+    go' l tf =
+      case tf of
+        LocalVar i tp
+          | i < l            -> scTermF <$> (LocalVar i <$> go (l-(i+1)) tp)
+          | otherwise        -> f l i (go (l-(i+1)) tp)
+        Lambda i tp rhs      -> scTermF <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
+        App x y              -> scTermF <$> (App <$> go l x <*> go l y)
+        Pi i lhs rhs         -> scTermF <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
+        TupleValue ll        -> scTermF <$> (TupleValue <$> changeList (go l) ll)
+        TupleType ll         -> scTermF <$> (TupleType <$> changeList (go l) ll)
+        RecordValue m        -> scTermF <$> (RecordValue <$> traverse (go l) m)
+        RecordSelector x fld -> scTermF <$> (RecordSelector <$> go l x <*> pure fld)
+        RecordType m         -> scTermF <$> (RecordType <$> traverse (go l) m)
+        CtorValue c ll       -> scTermF <$> (CtorValue c <$> goList l ll)
+        CtorType dt ll       -> scTermF <$> (CtorType dt <$> goList l ll)
+        Let defs r           -> scTermF <$> (Let <$> changeList procDef defs <*> go l' r)
+          where l' = l + length defs
+                procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
+                procDef (LocalFnDef sym tp eqs) =
+                    LocalFnDef sym <$> go l tp <*> changeList procEq eqs
+                procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
+                procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
+                  where eql = l' + sum (patBoundVarCount <$> pats)
+        EqType lhs rhs       -> scTermF <$> (EqType <$> go l lhs <*> go l rhs)
+        Oracle s prop        -> scTermF <$> (Oracle s <$> go l prop)
+        _ -> return <$> pure t
+
+-- | @incVars j k t@ increments free variables at least @j@ by @k@.
+-- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
+incVarsChangeT :: (?sc :: SharedContext s) =>
+                  DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
+incVarsChangeT initialLevel j
+    | j == 0 = return
+    | j >  0 = instantiateVars fn initialLevel
+    where
+      fn _ i t = taint $ scTermF <$> (LocalVar (i+j) <$> t)
+
+incVars :: (?sc :: SharedContext s) =>
+           DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
+incVars i j t = commitChangeT (incVarsChangeT i j t)
+
+-- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
+-- dangling variables.
+instantiateVarChangeT :: forall s. (?sc :: SharedContext s) =>
+                         DeBruijnIndex -> SharedTerm s -> SharedTerm s
+                                       -> ChangeT IO (SharedTerm s)
+instantiateVarChangeT k t0 t =
+    do ref <- lift (newIORef Map.empty)
+       let ?ref = ref in instantiateVars fn 0 t
+  where -- Use map reference to memoize instantiated versions of t.
+        -- TODO: factor out a general mechanism for memo functions.
+        term :: (?ref :: IORef (Map DeBruijnIndex (SharedTerm s))) =>
+                DeBruijnIndex -> ChangeT IO (SharedTerm s)
+        term i = do
+          memo <- lift (readIORef ?ref)
+          case Map.lookup i memo of
+            Just t' -> return t'
+            Nothing -> do t' <- incVarsChangeT 0 i t0
+                          lift (modifyIORef ?ref (Map.insert i t'))
+                          return t'
+        -- Instantiate variable 0.
+        fn :: (?ref :: IORef (Map DeBruijnIndex (SharedTerm s))) =>
+              DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
+                            -> ChangeT IO (IO (SharedTerm s))
+        fn i j t | j  > i + k = taint $ scTermF <$> (LocalVar (j - 1) <$> t)
+                 | j == i + k = taint $ return <$> term i
+                 | otherwise  = scTermF <$> (LocalVar j <$> t)
+
+instantiateVar :: (?sc :: SharedContext s) =>
+                  DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+instantiateVar k t0 t = commitChangeT (instantiateVarChangeT k t0 t)
