@@ -9,6 +9,7 @@ module Verifier.SAW.Rewriter
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
 
@@ -42,18 +43,31 @@ instance Net.Pattern Term where
 
 type Substitution = Map DeBruijnIndex Term
 
+-- | Equivalent to @(lookup k t, insert k x t)@.
+insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
+insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
+
 first_order_match :: Context -> Term -> Term -> Maybe Substitution
-first_order_match ctxt pat term = match pat term Map.empty
+first_order_match _ pat term = matchGeneric unwrapTerm pat term
+  where unwrapTerm (Term tf) = tf
+
+matchSharedTerm :: SharedTerm s -> SharedTerm s -> Maybe (Map DeBruijnIndex (SharedTerm s))
+matchSharedTerm pat term = matchGeneric unwrapSharedTerm pat term
+
+matchGeneric :: Eq t => (t -> TermF t) -> t -> t -> Maybe (Map DeBruijnIndex t)
+matchGeneric unwrap pat term = match pat term Map.empty
   where
-    match (Term (LocalVar i _)) y m =
-      case y' of
-        Nothing -> Just m'
-        Just y' -> if y == y' then Just m' else Nothing
-      where (y', m') = Map.insertLookupWithKey (\_ a _ -> a) i y m
-    match (Term (App x1 x2)) (Term (App y1 y2)) m =
-      match x1 y1 m >>= match x2 y2
     match x y m =
-      if x == y then Just m else Nothing
+      case (unwrap x, unwrap y) of
+        (LocalVar i _, _) ->
+            case y' of
+              Nothing -> Just m'
+              Just y' -> if y == y' then Just m' else Nothing
+            where (y', m') = insertLookup i y m
+        (App x1 x2, App y1 y2) ->
+            match x1 y1 m >>= match x2 y2
+        (_, _) ->
+            if x == y then Just m else Nothing
 -- ^ Precondition: Every loose variable in the pattern @pat@ must
 -- occur as the 2nd argument of an @App@ constructor. This ensures
 -- that instantiations are well-typed.

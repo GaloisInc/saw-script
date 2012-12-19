@@ -8,6 +8,7 @@ module Verifier.SAW.SharedTerm
   , Ident, mkIdent
   , SharedTerm
   , SharedContext(..)
+  , unwrapSharedTerm
   , mkSharedContext
     -- ** Implicit versions of functions.
   , scFreshGlobal
@@ -63,6 +64,9 @@ instance Ord (SharedTerm s) where
   compare STVar{} _ = LT
   compare _ STVar{} = GT
   compare (STApp x _) (STApp y _) = compare x y
+
+unwrapSharedTerm :: SharedTerm s -> TermF (SharedTerm s)
+unwrapSharedTerm (STApp _ tf) = tf
 
 -- | Operations that are defined, but not 
 data SharedContext s = SharedContext
