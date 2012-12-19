@@ -61,6 +61,7 @@ import Data.Traversable (Traversable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.HughesPJ
+import Data.Traversable (Traversable, traverse)
 
 import Prelude hiding (all, concatMap, foldr, sum)
 
@@ -157,7 +158,7 @@ lift2 f h x y = h (f x) (f y)
 
 data LocalDef n e
    = LocalFnDef n e [DefEqn e]
-  deriving (Eq, Ord, Show, Functor, Foldable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 localVarNames :: LocalDef n e -> [n]
 localVarNames (LocalFnDef nm _ _) = [nm]
@@ -167,7 +168,7 @@ data Def e = Def { defIdent :: Ident
                  , defType :: e
                  , defEqs :: [DefEqn e]
                  }
-  deriving (Functor, Foldable)
+  deriving (Functor, Foldable, Traversable)
 
 instance Eq (Def e) where
   (==) = lift2 defIdent (==)
@@ -216,7 +217,7 @@ data DataType n t = DataType { dtName :: n
                              , dtType :: t
                              , dtCtors :: [Ctor n t]
                              }
-  deriving (Functor, Foldable)
+  deriving (Functor, Foldable, Traversable)
 
 instance Eq n => Eq (DataType n t) where
   (==) = lift2 dtName (==)
@@ -274,7 +275,7 @@ data TermF e
     -- of the form @EqType x y@, but possibly with extra @Pi@
     -- quantifiers), which came from the trusted proof tool @s@.
   | Oracle String e
- deriving (Eq, Ord, Functor, Foldable)
+  deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)

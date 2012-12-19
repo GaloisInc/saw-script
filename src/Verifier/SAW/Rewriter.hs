@@ -6,9 +6,12 @@ module Verifier.SAW.Rewriter
   , rewriteTerm
   ) where
 
+import Control.Applicative ((<$>), pure, (<*>))
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Traversable (Traversable, traverse)
 
+import Verifier.SAW.Change
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
@@ -116,6 +119,22 @@ rewriteTerm ss = rewriteAll
         Just inst -> rewriteAll (instantiateVarList 0 (Map.elems inst) t)
 -- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
 -- re-examination of subterms after applying a rewrite
+
+rewriteTermChange :: Simpset -> Term -> Change Term
+rewriteTermChange ss = rewriteAll
+  where
+    rewriteAll :: Term -> Change Term
+    rewriteAll t = rewriteSubterms t >>= rewriteTop
+    rewriteSubterms :: Term -> Change Term
+    rewriteSubterms t@(Term tf) = preserve t $ Term <$> traverse rewriteAll tf
+    rewriteTop :: Term -> Change Term
+    rewriteTop t = apply (Net.match_term ss t) t
+    apply :: [RewriteRule] -> Term -> Change Term
+    apply [] t = pure t
+    apply (rule : rules) t =
+      case first_order_match (ctxt rule) (lhs rule) t of
+        Nothing -> apply rules t
+        Just inst -> taint $ rewriteAll (instantiateVarList 0 (Map.elems inst) t)
 
 -- | Like rewriteTerm, but returns an equality theorem instead of just
 -- the right-hand side.
