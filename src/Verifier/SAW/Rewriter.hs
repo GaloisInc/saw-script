@@ -116,7 +116,7 @@ rewriteTerm ss = rewriteAll
     apply (rule : rules) t =
       case first_order_match (ctxt rule) (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll (instantiateVarList 0 (Map.elems inst) t)
+        Just inst -> rewriteAll (instantiateVarList 0 (Map.elems inst) (rhs rule))
 -- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
 -- re-examination of subterms after applying a rewrite
 
@@ -134,7 +134,7 @@ rewriteTermChange ss = rewriteAll
     apply (rule : rules) t =
       case first_order_match (ctxt rule) (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> taint $ rewriteAll (instantiateVarList 0 (Map.elems inst) t)
+        Just inst -> taint $ rewriteAll (instantiateVarList 0 (Map.elems inst) (rhs rule))
 
 -- | Like rewriteTerm, but returns an equality theorem instead of just
 -- the right-hand side.
