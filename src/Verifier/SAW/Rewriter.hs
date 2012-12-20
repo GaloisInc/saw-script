@@ -167,12 +167,9 @@ rewriteSharedTerm ss t =
   where
     rewriteAll :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
                   SharedTerm s -> IO (SharedTerm s)
-    rewriteAll t = rewriteSubterms t >>= rewriteTop
-    rewriteSubterms :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
-                       SharedTerm s -> IO (SharedTerm s)
-    rewriteSubterms (STApp tidx tf) =
-        memoizeIO ?ref tidx (scTermF =<< traverse rewriteAll tf)
-    rewriteSubterms t = return t
+    rewriteAll (STApp tidx tf) =
+        memoizeIO ?ref tidx (traverse rewriteAll tf >>= scTermF >>= rewriteTop)
+    rewriteAll t = return t
     rewriteTop :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t = apply (Net.match_term ss t) t
