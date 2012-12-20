@@ -342,6 +342,23 @@ unshare = foldSharedTerm Term
 scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
 scTermF = undefined -- FIXME: extend definition of SharedContext to support this
 
+memoizeGeneric :: (Monad m, Ord k) =>
+                  m (Map k a) -> ((Map k a -> Map k a) -> m ()) -> k -> m a -> m a
+memoizeGeneric read modify k m =
+    do memo <- read
+       case Map.lookup k memo of
+         Just x -> return x
+         Nothing ->
+             do x <- m
+                modify (Map.insert k x)
+                return x
+
+memoizeIO :: Ord k => IORef (Map k a) -> k -> IO a -> IO a
+memoizeIO ref = memoizeGeneric (readIORef ref) (modifyIORef ref)
+
+memoizeChangeT :: Ord k => IORef (Map k a) -> k -> ChangeT IO a -> ChangeT IO a
+memoizeChangeT ref = memoizeGeneric (lift $ readIORef ref) (lift . modifyIORef ref)
+
 instantiateVars :: forall s. (?sc :: SharedContext s) =>
                    (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
@@ -360,15 +377,8 @@ instantiateVars f initialLevel t =
     go :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STVar {}) = pure t
-    go l t@(STApp tidx tf) = do
-      memo <- lift (readIORef ?ref)
-      case Map.lookup (tidx, l) memo of
-        Just t' -> return t'
-        Nothing -> do
-          t' <- preserveChangeT t $ go' l tf
-          lift (modifyIORef ?ref (Map.insert (tidx, l) t'))
-          return t'
-
+    go l t@(STApp tidx tf) =
+        memoizeChangeT ?ref (tidx, l) (preserveChangeT t $ go' l tf)
     go' :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l tf =
@@ -424,13 +434,7 @@ instantiateVarChangeT k t0 t =
         -- TODO: factor out a general mechanism for memo functions.
         term :: (?ref :: IORef (Map DeBruijnIndex (SharedTerm s))) =>
                 DeBruijnIndex -> ChangeT IO (SharedTerm s)
-        term i = do
-          memo <- lift (readIORef ?ref)
-          case Map.lookup i memo of
-            Just t' -> return t'
-            Nothing -> do t' <- incVarsChangeT 0 i t0
-                          lift (modifyIORef ?ref (Map.insert i t'))
-                          return t'
+        term i = memoizeChangeT ?ref i (incVarsChangeT 0 i t0)
         -- Instantiate variable 0.
         fn :: (?ref :: IORef (Map DeBruijnIndex (SharedTerm s))) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
@@ -457,13 +461,7 @@ instantiateVarListChangeT k ts t =
     -- Memoize instantiated versions of ts.
     term :: (IORef (Map DeBruijnIndex (SharedTerm s)), SharedTerm s)
          -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-    term (ref, t) i =
-        do memo <- lift (readIORef ref)
-           case Map.lookup i memo of
-             Just t' -> return t'
-             Nothing -> do t' <- incVarsChangeT 0 i t
-                           lift (modifyIORef ref (Map.insert i t'))
-                           return t'
+    term (ref, t) i = memoizeChangeT ref i (incVarsChangeT 0 i t)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(IORef (Map DeBruijnIndex (SharedTerm s)), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
