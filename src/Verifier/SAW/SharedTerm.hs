@@ -11,6 +11,7 @@ module Verifier.SAW.SharedTerm
   , TermIndex
   , instantiateVarList
   , unwrapSharedTerm
+  , memoizeIO
   , mkSharedContext
     -- ** Implicit versions of functions.
   , scFreshGlobal

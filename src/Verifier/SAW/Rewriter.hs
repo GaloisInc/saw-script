@@ -171,14 +171,7 @@ rewriteSharedTerm ss t =
     rewriteSubterms :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
                        SharedTerm s -> IO (SharedTerm s)
     rewriteSubterms (STApp tidx tf) =
-        do memo <- readIORef ?ref
-           case Map.lookup tidx memo of
-             Just t' -> return t'
-             Nothing ->
-                 do tf' <- traverse rewriteAll tf
-                    t' <- scTermF tf'
-                    modifyIORef ?ref (Map.insert tidx t')
-                    return t'
+        memoizeIO ?ref tidx (scTermF =<< traverse rewriteAll tf)
     rewriteSubterms t = return t
     rewriteTop :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
                   SharedTerm s -> IO (SharedTerm s)
