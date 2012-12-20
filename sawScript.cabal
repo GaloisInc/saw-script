@@ -32,8 +32,9 @@ library
     SAWScript.Lexer
     SAWScript.LiftPoly
     SAWScript.Parser
+    SAWScript.ResolveSyns
     SAWScript.Token
-    --SAWScript.TypeCheck
+    SAWScript.TypeCheck
     SAWScript.Unify
     SAWScript.Unify.Fix
     SAWScript.Unify.Fresh
@@ -46,12 +47,13 @@ library
   build-tools: alex, happy
 
 executable saw
-  hs-source-dirs: src
+  hs-source-dirs: .
 
   main-is: Main.hs
 
   build-depends:
       base >= 4
+    , either
     , haskeline
     , transformers
     , sawScript

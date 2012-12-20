@@ -1,6 +1,9 @@
 import System.Console.Haskeline
+import SAWScript.AST
 import SAWScript.Lexer
+import SAWScript.LiftPoly
 import SAWScript.Parser
+import SAWScript.TypeCheck
 import System.Environment
 import System.IO
 import Control.Monad
@@ -58,8 +61,11 @@ interpret :: String -> IO ()
 interpret str = do
   let tokens = scan str
   mapM_ print tokens
-  let ast = parse tokens
-  print ast
+  let stmts = parse tokens
+      m = liftPoly $ Module stmts []
+  case m of
+    Left err -> putStrLn err
+    Right m' -> print . typeCheck $ m'
 
 main :: IO ()
 main = getArgs >>= load >>= mapM_ interpret >> repl
