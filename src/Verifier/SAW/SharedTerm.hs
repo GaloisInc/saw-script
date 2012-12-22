@@ -90,6 +90,7 @@ data SharedContext s = SharedContext
   , scPrettyTermDocFn :: SharedTerm s -> Doc
   , scViewAsBoolFn    :: SharedTerm s -> Maybe Bool
   , scViewAsNumFn     :: SharedTerm s -> Maybe Integer
+  , scTermFFn         :: TermF (SharedTerm s) -> IO (SharedTerm s)
   }
 
 scModule :: (?sc :: SharedContext s) => IO Module
@@ -144,6 +145,9 @@ scViewAsNum = scViewAsNumFn ?sc
 
 scPrettyTerm :: (?sc :: SharedContext s) => SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDocFn ?sc t)
+
+scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
+scTermF = scTermFFn ?sc
 
 -- 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
@@ -294,6 +298,7 @@ mkSharedContext m = do
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
            , scViewAsNumFn = viewAsNum
+           , scTermFFn = getTerm cr
            }
 
 {-
@@ -339,9 +344,6 @@ foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
 unshare :: SharedTerm s -> Term
 unshare = foldSharedTerm Term
 -}
-
-scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
-scTermF = undefined -- FIXME: extend definition of SharedContext to support this
 
 memoizeGeneric :: (Monad m, Ord k) =>
                   m (Map k a) -> ((Map k a -> Map k a) -> m ()) -> k -> m a -> m a
