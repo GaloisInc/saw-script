@@ -14,6 +14,7 @@ module Verifier.SAW.Change
 import Control.Applicative
 import Control.Monad (liftM, liftM2)
 import Control.Monad.Trans
+import Control.Monad.IO.Class
 
 ----------------------------------------------------------------------
 -- Monads for tracking whether values have changed
@@ -107,6 +108,9 @@ instance Monad m => Monad (ChangeT m) where
 
 instance MonadTrans ChangeT where
   lift m = ChangeT (liftM Original m)
+
+instance MonadIO m => MonadIO (ChangeT m) where
+  liftIO m = lift (liftIO m)
 
 instance Monad m => ChangeMonad (ChangeT m) where
   preserve x (ChangeT m) = ChangeT (liftM (preserve x) m)

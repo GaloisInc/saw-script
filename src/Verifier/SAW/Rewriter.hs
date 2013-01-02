@@ -17,6 +17,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable (Traversable, traverse)
 
+import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.SharedTerm hiding (instantiateVarList)
 import qualified Verifier.SAW.SharedTerm as S
@@ -162,18 +163,18 @@ rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
 rewriteSharedTerm :: forall s. (?sc :: SharedContext s) =>
                      Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
 rewriteSharedTerm ss t =
-    do ref <- newIORef Map.empty
-       let ?ref = ref in rewriteAll t
+    do cache <- newCache
+       let ?cache = cache in rewriteAll t
   where
-    rewriteAll :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
+    rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (STApp tidx tf) =
-        memoizeIO ?ref tidx (traverse rewriteAll tf >>= scTermF >>= rewriteTop)
+        useCache ?cache tidx (traverse rewriteAll tf >>= scTermF >>= rewriteTop)
     rewriteAll t = return t
-    rewriteTop :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
+    rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?ref :: IORef (Map TermIndex (SharedTerm s))) =>
+    apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
              [RewriteRule (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t
     apply (rule : rules) t =

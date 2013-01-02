@@ -11,7 +11,6 @@ module Verifier.SAW.SharedTerm
   , TermIndex
   , instantiateVarList
   , unwrapSharedTerm
-  , memoizeIO
   , mkSharedContext
     -- ** Implicit versions of functions.
   , scFreshGlobal
@@ -48,6 +47,7 @@ import Text.PrettyPrint.HughesPJ
 --import Control.Monad.Trans (lift)
 --import qualified Data.Traversable as Traversable
 
+import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.TypedAST hiding (instantiateVarList)
 
@@ -345,44 +345,27 @@ unshare :: SharedTerm s -> Term
 unshare = foldSharedTerm Term
 -}
 
-memoizeGeneric :: (Monad m, Ord k) =>
-                  m (Map k a) -> ((Map k a -> Map k a) -> m ()) -> k -> m a -> m a
-memoizeGeneric read modify k m =
-    do memo <- read
-       case Map.lookup k memo of
-         Just x -> return x
-         Nothing ->
-             do x <- m
-                modify (Map.insert k x)
-                return x
-
-memoizeIO :: Ord k => IORef (Map k a) -> k -> IO a -> IO a
-memoizeIO ref = memoizeGeneric (readIORef ref) (modifyIORef ref)
-
-memoizeChangeT :: Ord k => IORef (Map k a) -> k -> ChangeT IO a -> ChangeT IO a
-memoizeChangeT ref = memoizeGeneric (lift $ readIORef ref) (lift . modifyIORef ref)
-
 instantiateVars :: forall s. (?sc :: SharedContext s) =>
                    (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVars f initialLevel t =
-    do ref <- lift (newIORef Map.empty)
-       let ?ref = ref in go initialLevel t
+    do cache <- newCache
+       let ?cache = cache in go initialLevel t
   where
-    goList :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
+    goList :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
               DeBruijnIndex -> [SharedTerm s] -> ChangeT IO [SharedTerm s]
     goList l xs = preserve xs $
       case xs of
         [] -> pure []
         e:r -> (:) <$> go l e <*> goList (l+1) r
 
-    go :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
+    go :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STVar {}) = pure t
     go l t@(STApp tidx tf) =
-        memoizeChangeT ?ref (tidx, l) (preserveChangeT t $ go' l tf)
-    go' :: (?ref :: IORef (Map (TermIndex, DeBruijnIndex) (SharedTerm s))) =>
+        useCache ?cache (tidx, l) (preserveChangeT t $ go' l tf)
+    go' :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l tf =
       case tf of
@@ -431,15 +414,14 @@ instantiateVarChangeT :: forall s. (?sc :: SharedContext s) =>
                          DeBruijnIndex -> SharedTerm s -> SharedTerm s
                                        -> ChangeT IO (SharedTerm s)
 instantiateVarChangeT k t0 t =
-    do ref <- lift (newIORef Map.empty)
-       let ?ref = ref in instantiateVars fn 0 t
+    do cache <- newCache
+       let ?cache = cache in instantiateVars fn 0 t
   where -- Use map reference to memoize instantiated versions of t.
-        -- TODO: factor out a general mechanism for memo functions.
-        term :: (?ref :: IORef (Map DeBruijnIndex (SharedTerm s))) =>
+        term :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
                 DeBruijnIndex -> ChangeT IO (SharedTerm s)
-        term i = memoizeChangeT ?ref i (incVarsChangeT 0 i t0)
+        term i = useCache ?cache i (incVarsChangeT 0 i t0)
         -- Instantiate variable 0.
-        fn :: (?ref :: IORef (Map DeBruijnIndex (SharedTerm s))) =>
+        fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
         fn i j t | j  > i + k = taint $ scTermF <$> (LocalVar (j - 1) <$> t)
@@ -457,16 +439,16 @@ instantiateVarListChangeT :: forall s. (?sc :: SharedContext s) =>
                           -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVarListChangeT _ [] t = return t
 instantiateVarListChangeT k ts t =
-    do refs <- lift (mapM (const (newIORef Map.empty)) ts)
-       instantiateVars (fn (zip refs ts)) 0 t
+    do caches <- mapM (const newCache) ts
+       instantiateVars (fn (zip caches ts)) 0 t
   where
     l = length ts
     -- Memoize instantiated versions of ts.
-    term :: (IORef (Map DeBruijnIndex (SharedTerm s)), SharedTerm s)
+    term :: (Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)
          -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-    term (ref, t) i = memoizeChangeT ref i (incVarsChangeT 0 i t)
+    term (cache, t) i = useCache cache i (incVarsChangeT 0 i t)
     -- Instantiate variables [k .. k+l-1].
-    fn :: [(IORef (Map DeBruijnIndex (SharedTerm s)), SharedTerm s)]
+    fn :: [(Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
        -> ChangeT IO (IO (SharedTerm s))
     fn rs i j t | j >= i + k + l = taint $ scTermF <$> (LocalVar (j - l) <$> t)
