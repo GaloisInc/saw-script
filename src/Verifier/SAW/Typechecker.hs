@@ -114,7 +114,7 @@ instance Show RigidVarRef where
   showsPrec p r = case rvrPos r of
                     Nothing -> (rvrName r ++)
                     Just po -> showParen (p >= 10) f
-                      where f = (++) (ppPos "" po ++ " " ++ rvrName r)
+                      where f = (++) (ppPos po ++ " " ++ rvrName r)
 
 
 data LocalDefGen n p t

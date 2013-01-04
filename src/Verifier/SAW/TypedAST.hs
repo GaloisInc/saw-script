@@ -16,6 +16,7 @@ module Verifier.SAW.TypedAST
  , ModuleDecl(..)
  , moduleDecls
  , TypedDataType
+ , moduleDataTypes
  , findDataType
  , TypedCtor
  , moduleCtors
@@ -43,7 +44,7 @@ module Verifier.SAW.TypedAST
  , piArgCount
  , TermF(..)
    -- * Primitive types.
- , Sort, mkSort, sortOf
+ , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
  , isIdent
  , DeBruijnIndex
@@ -116,6 +117,10 @@ mkSort i | 0 <= i = SortCtor i
 -- | Returns sort of the given sort.
 sortOf :: Sort -> Sort
 sortOf (SortCtor i) = SortCtor (i + 1)
+
+-- | Returns the larger of the two sorts.
+maxSort :: Sort -> Sort -> Sort
+maxSort (SortCtor x) (SortCtor y) = SortCtor (max x y)
 
 type DeBruijnIndex = Int
 
@@ -550,7 +555,11 @@ insDataType m dt = m { moduleTypeMap = Map.insert (dtName dt) dt (moduleTypeMap 
                      }
   where insCtor m' c = Map.insert (ctorName c) c m' 
 
--- | Returns all Ctors defined in module and exported.
+-- | Data types defined in module.
+moduleDataTypes :: Module -> [TypedDataType]
+moduleDataTypes = Map.elems . moduleTypeMap
+
+-- | Ctors defined in module.
 moduleCtors :: Module -> [TypedCtor]
 moduleCtors = Map.elems . moduleCtorMap
 

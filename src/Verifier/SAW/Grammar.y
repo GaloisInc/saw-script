@@ -298,15 +298,15 @@ lexer f = do
             | otherwise -> f tkn 
   go Nothing (read (0::Integer))
 
-runParser :: FilePath -> B.ByteString -> Parser a -> (a,ErrorList)
-runParser path b (Parser m) = (r, reverse (psErrors s))
-  where initState = PS { psInput = initialAlexInput path b, psErrors = [] }
+runParser :: FilePath -> FilePath -> B.ByteString -> Parser a -> (a,ErrorList)
+runParser base path b (Parser m) = (r, reverse (psErrors s))
+  where initState = PS { psInput = initialAlexInput base path b, psErrors = [] }
         (r,s) = runState m initState
 
 parseError :: PosPair Token -> Parser a
 parseError pt = do
   addError (pos pt) (UnexpectedToken (val pt))
-  fail $ (ppPos "" (pos pt)) ++ " Parse error\n  " ++ (ppToken (val pt))
+  fail $ (ppPos (pos pt)) ++ " Parse error\n  " ++ (ppToken (val pt))
 
 addParseError :: Pos -> String -> Parser ()
 addParseError p s = addError p (ParseError s)
