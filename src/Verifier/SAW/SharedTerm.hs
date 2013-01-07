@@ -160,7 +160,7 @@ emptyAppCache = AC Map.empty 0
 -- | Return term for application using existing term in cache if it is avaiable.
 getTerm :: MVar (AppCache s) -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
-  modifyMVarMasked r $ \s -> do
+  modifyMVar r $ \s -> do
     case Map.lookup a (acBindings s) of
       Just t -> return (s,t)
       Nothing -> seq s' $ return (s',t)
@@ -203,7 +203,7 @@ newIOCache fn = do
 
 getCacheValue :: Ord k => IOCache k v -> k -> IO v
 getCacheValue (IOCache mv f) k = 
-  modifyMVarMasked mv $ \m ->
+  modifyMVar mv $ \m ->
     case Map.lookup k m of
       Just v -> return (m,v)
       Nothing -> fn <$> f k
@@ -274,7 +274,7 @@ mkSharedContext m = do
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
           Just d -> getTerm cr (GlobalDef (undefined d))
   let freshGlobal sym tp = do
-        i <- modifyMVarMasked vr (\i -> return (i,i+1))
+        i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
   integerToSignedOp   <- getDef "integerToSigned"
   integerToUnsignedOp <- getDef "integerToUnsigned"

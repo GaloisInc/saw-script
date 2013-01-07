@@ -101,20 +101,25 @@ mkDecModule modules decNameStr path = do
       (_,[]) -> return ()
       (_,errors) -> fail $ "Failed to parse prelude:\n" ++ show errors
     m <- runIO $ readModule (dmModule <$> modules) base path compile_b
+    let decName = mkName decNameStr
     let blen :: Int
         blen = fromIntegral (BL.length compile_b)
 #if __GLASGOW_HASKELL__ >= 706
         primExpr = LitE $ StringPrimL $ BL.unpack compile_b
+        noinlinePragma = InlineP decName NoInline FunLike AllPhases
 #else
         primExpr = LitE $ StringPrimL $ UTF8.toString compile_b
+        noinlinePragma = InlineP decName (InlineSpec False False Nothing)
 #endif
-    let decName = mkName decNameStr
     moduleTp <- [t| Module |]
     packExpr <- [| unsafePerformIO $ do
         b <- unsafePackAddressLen blen $(return primExpr)
         readModule $(return (ListE (dmExp <$> modules))) base path (BL.fromChunks [b])
       |]
-    let decs =  [ PragmaD (InlineP decName NoInline FunLike AllPhases)
+#if __GLASGOW_HASKELL__ >= 706
+#else
+#endif
+    let decs =  [ PragmaD noinlinePragma
                 , SigD decName moduleTp
                 , FunD decName [ Clause [] (NormalB packExpr) [] ]
                 ]
@@ -130,10 +135,21 @@ mkDecModule modules decNameStr path = do
 sharedFunctionType :: Int -> Q Type
 sharedFunctionType 0 =
     [t| forall s . SharedContext s -> IO (SharedTerm s) |]
-sharedFunctionType n =
-    [t| (forall s . SharedContext s -> IO $(go [t|SharedTerm s|] n)) |]
+sharedFunctionType n = do
+    s <- newName "s"
+    forallT [PlainTV s] (return [])
+       [t| SharedContext $(varT s) -> IO $(go [t|SharedTerm $(varT s)|] n) |]
   where go nm 0 = [t| IO $(nm) |]
         go nm i = [t| $(nm) -> $(go nm (i-1)) |]
+
+{- This code is simpler, but has an error in GHC 7.4 due to a template haskell limitation.
+sharedFunctionType n =
+    [t| forall s . SharedContext s -> IO $(go [t|SharedTerm s|] n) |]
+  where --st = AppT (ContT 
+        go nm 0 = [t| IO $(nm) |]
+        go nm i = [t| $(nm) -> $(go nm (i-1)) |]
+-}
+
 
 -- Given a ctor with the type
 --   c : T1 -> ... -> TN -> T
