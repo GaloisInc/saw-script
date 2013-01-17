@@ -179,7 +179,7 @@ ppDataType dt = text "data" <+> tc <+> text "where" <+> lbrace $$
         ppc c = ppCtor c <> semi
 
 data TermF e
-    -- ^ Local variables are referenced by deBrujin index.
+    -- ^ Local variables are referenced by deBruijn index.
     -- The type of the var is in the context of when the variable was bound.
   = LocalVar !DeBruijnIndex !e
   | GlobalDef (Def e)  -- ^ Global variables are referenced by label.
