@@ -11,25 +11,28 @@ module Verifier.SAW.Position
 import Data.Monoid
 import System.FilePath (makeRelative)
 
-data Pos = Pos { posPath  :: !FilePath
+data Pos = Pos { -- | Base directory to use for pretty printing purposes
+                 posBase :: !FilePath
+               , posPath  :: !FilePath
                , posLine  :: !Int
                , posCol   :: !Int
                }
   deriving (Show)
 
+posTuple :: Pos -> (Int,Int,FilePath)
+posTuple x = (posLine x, posCol x, posPath x)
+
 -- Eq instance  overridden to compare positions in the same file more efficiently.
 instance Eq Pos where
-  (Pos xp xl xc) == (Pos yp yl yc) =
-    (xl == yl) && (xc == yc) && (xp == yp)
+  x == y = posTuple x == posTuple y
 
 -- Ord instance  overridden to compare positions in the same file more efficiently.
 instance Ord Pos where
-  compare (Pos xp xl xc) (Pos yp yl yc) =
-    compare xl yl <> compare xc yc <> compare xp yp
+  compare x y = compare (posTuple x) (posTuple y)
 
-ppPos :: FilePath -> Pos -> String
-ppPos bp p = rp ++ ':' : show (posLine p) ++ ':' : show (posCol p) ++ ":"
-  where rp = makeRelative bp (posPath p)
+ppPos :: Pos -> String
+ppPos p = rp ++ ':' : show (posLine p) ++ ':' : show (posCol p) ++ ":"
+  where rp = makeRelative (posBase p) (posPath p)
 
 incLine :: Pos -> Pos
 incLine p = p { posLine = 1 + posLine p, posCol = 0 }

@@ -86,9 +86,13 @@ data Buffer = Buffer Char !B.ByteString
 
 type AlexInput = PosPair Buffer
 
-initialAlexInput :: FilePath -> B.ByteString -> AlexInput
-initialAlexInput path b = PosPair pos input
-  where pos = Pos { posPath = path, posLine = 1, posCol = 0 }
+initialAlexInput :: FilePath -> FilePath -> B.ByteString -> AlexInput
+initialAlexInput base path b = PosPair pos input
+  where pos = Pos { posBase = base
+                  , posPath = path
+                  , posLine = 1
+                  , posCol = 0
+                  }
         prevChar = error "internal: runLexer prev char undefined"
         input = Buffer prevChar b
 
