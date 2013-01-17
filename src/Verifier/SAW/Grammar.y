@@ -1,4 +1,5 @@
 {
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Grammar 
   ( Decl(..)

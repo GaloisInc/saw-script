@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveFoldable #-} 
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Typechecker
   ( unsafeMkModule
   ) where
