@@ -1,5 +1,7 @@
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -16,8 +18,6 @@ import Data.List
 import Data.Maybe
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
-
-import Debug.Trace
 
 -- Arithmetic {{{
 
@@ -67,8 +67,8 @@ testArith2 = run Nothing Nothing $ \q -> do
     x === (i 3)
     q === mul z y
 
-testArith3 :: Results (Subst LArith)
-testArith3 = runS Nothing Nothing $ \q -> do
+testArith3 :: Results LArith
+testArith3 = run Nothing Nothing $ \q -> do
   fresh $ \x y -> do
     y === add x (i 2)
     q === mul x y
@@ -235,7 +235,7 @@ alwayso = anyo succeed
 
 -- }}}
 
--- Oleg Numbers {{{
+-- Oleg Arithmetic {{{
 
 buildNum :: (Unifiable f, Cons :<: f, Nil :<: f, I :<: f) => Int -> Mu f
 buildNum n
@@ -303,27 +303,22 @@ testPlus2 = run Nothing Nothing $ \q ->
     q === buildNum 25
     pluso x y q
 
-class Functor f => OlegNum f where
-  toInt :: f Int -> Int 
+class (Functor f) => OlegNumber f where
+  toInt :: f Int -> Int
 
-instance (OlegNum f, OlegNum g) => OlegNum (f :+: g) where
-  toInt cp = case cp of
-    Inl e -> toInt e
-    Inr e -> toInt e
-
-instance OlegNum I where
+instance OlegNumber I where
   toInt (I x) = x
 
-instance OlegNum Nil where
+instance OlegNumber Nil where
   toInt Nil = 0
 
-instance OlegNum Cons where
+instance OlegNumber Cons where
   toInt (Cons a d) = a + (2*d)
 
-instance OlegNum Logic where
+instance OlegNumber Logic where
   toInt _ = error "non-ground"
 
-olegToInt :: (OlegNum f) => Mu f -> Int
+olegToInt :: (OlegNumber f) => Mu f -> Int
 olegToInt = foldMu toInt
 
 -- }}}
@@ -365,6 +360,13 @@ testMK6 :: Results MK
 testMK6 = run Nothing Nothing $ \q -> do
   q === int 1
   q === int 2
+
+testMK7 :: Results MK
+testMK7 = run Nothing Nothing $ \q -> do
+  disj
+    [ q === int 1
+    , q === int 2
+    ]
 
 -- }}}
 
@@ -455,4 +457,19 @@ testRem = run Nothing Nothing $ \q -> do
     rembero x l q
 
 -- }}}
+
+data Foo a
+  = Foo a
+  | Bar a a
+  deriving (Show,Functor,F.Foldable,T.Traversable)
+
+type FOO = Mu (I :+: Foo)
+
+foo :: (Foo :<: f) => Mu f -> Mu f
+foo x = inject $ Foo x
+bar :: (Foo :<: f) => Mu f -> Mu f -> Mu f
+bar x y = inject $ Bar x y
+
+xxx :: FOO
+xxx = bar (i 1) (i 2)
 

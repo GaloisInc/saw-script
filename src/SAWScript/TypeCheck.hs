@@ -165,7 +165,8 @@ instance TypeCheck (Expr LType) where
                              return (LetBlock (zip ns es') b')
 
 typeEqual :: LType -> LType -> TC ()
-typeEqual u v = do
+typeEqual u v = liftReader $ u === v
+{-
   u' <- resolveSyn u
   v' <- resolveSyn v
   liftReader (u' === v')
@@ -179,12 +180,13 @@ resolveSyn u = mcond
                                                      Nothing -> fail ("Unbound type variable: " ++ n)
   , Else                           $  return u
   ]
+-}
 
 subtype :: LType -> LType -> Goal LType
 subtype t1 t2 = 
   do Record' nts1 <- matchGoal t1
      Record' nts2 <- matchGoal t2
-     conj [ disj [ guard (n1 == n2) >> (t1 === t2)
+     conj [ disj [ guard (n1 == n2) >> t1 === t2
                    | (n1,t1) <- nts1
                  ]
             | (n2,t2) <- nts2

@@ -15,7 +15,8 @@ import SAWScript.Unify.Goal
 import Control.Arrow
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Trans.State
+import Control.Monad.State
+import Control.Monad.Error
 import Data.Monoid
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T

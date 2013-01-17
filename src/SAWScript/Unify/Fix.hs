@@ -61,7 +61,7 @@ foldMuM f (In e) = traverse (foldMuM f) e >>= f
 -- Render {{{
 
 class (Functor f) => Render f where
-  render :: Render g => f (Mu g) -> String
+  render :: (Render g) => f (Mu g) -> String
 
 instance (Render f, Render g) => Render (f :+: g) where
   render cp = case cp of

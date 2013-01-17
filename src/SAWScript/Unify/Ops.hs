@@ -14,7 +14,7 @@ import SAWScript.Unify.Unification
 import SAWScript.Unify.Fresh
 
 import Control.Monad
-import Control.Monad.Trans.State
+import Control.Monad.State
 import Control.Monad.Trans.Either
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
@@ -28,13 +28,12 @@ disj = msum
 anyo :: Unifiable f => Goal (Mu f) -> Goal (Mu f)
 anyo g = disj [ g , anyo g ]
 
-onceo :: Unifiable f => Goal (Mu f) -> Goal (Mu f)
-onceo g = GoalM $ StateT $ \s ->
-  let (EitherT (Interleave ss)) = runStateT (runGoalM g) s in
-    case ss of
-      [] -> EitherT $ Interleave []
-      a:_ -> EitherT $ Interleave [a]
-
 (===) :: Unifiable f => Mu f -> Mu f -> Goal (Mu f)
 (===) = unify
+
+onceo :: Unifiable f => Goal (Mu f) -> Goal (Mu f)
+onceo g = GoalM $ StateT $ \s ->
+  case firstAnswer $ runStateT (runGoalM g) s of
+    Nothing -> EitherT $ mzero
+    Just a  -> EitherT $ return (Right a)
 

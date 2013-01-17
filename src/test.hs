@@ -8,6 +8,7 @@ import SAWScript.TypeCheck
 import SAWScript.ConvertType
 
 import Control.Monad
+import Data.Maybe
 import Test.QuickCheck
 
 -- Handwritten tests {{{
@@ -44,14 +45,9 @@ typeModule = resolveSyns >=> liftPoly >=> typeCheck >=> convertType
 indent :: Int -> String -> String
 indent n = unlines . map (replicate n ' ' ++) . lines
 
-{-
 class Variant a where
   valid :: Gen a
   invalid :: Gen a
-
-
-
--- PType Predicate {{{
 
 wellFormedPInt :: PType -> Bool
 wellFormedPInt pt = isJust $ do
@@ -65,7 +61,7 @@ wellFormedPType pt = isJust $ msum
   , do Quote' <- match pt; succeed
   , do Array' t l <- match pt
        guard (wellFormedPType t)
-       guard (wellFormedInt l)
+       guard (wellFormedPInt l)
   , do Tuple' ts <- match pt
        guard (all wellFormedPType ts)
   , do Record' nts <- match pt
@@ -77,7 +73,4 @@ wellFormedPType pt = isJust $ msum
   , do Syn n <- match pt; succeed
   , do Poly n <- match pt; succeed
   ]
-
--- }}}
--}
 
