@@ -1,14 +1,18 @@
 import System.Console.Haskeline
+import SAWScript.AST
 import SAWScript.Lexer
+import SAWScript.LiftPoly
 import SAWScript.Parser
+import SAWScript.TypeCheck
+import System.Environment
 import System.IO
 import Control.Monad
 import Control.Monad.Trans.Class
 
 echo s = do outputStrLn s; return ()
 
-main :: IO ()
-main = do
+repl :: IO ()
+repl = do
   putStrLn "SAWScript, Version 2.0.1, :? for help\n"
   putStrLn "\n .oooooo..o       .o.    oooooo   oooooo     oooo "
   putStrLn "d8P'    `Y8      .888.    `888.    `888.     .8'  "
@@ -31,16 +35,14 @@ main = do
             processDirective s
             loop
           Just str     -> do
-            interpret str
+            lift $ interpret str
             loop
 
 processDirective :: String -> InputT IO ()
 processDirective s = case words s of
   ["h"]     -> printHelp
   ["?"]     -> printHelp
-  "l":files -> do
-    strings <- lift (load files)
-    mapM_ interpret strings
+  "l":files -> lift (load files >>= mapM_ interpret)
   otherwise -> do echo ("Unrecognized directive: ':"++s++"'."); return ()
 
 printHelp :: InputT IO ()
@@ -55,9 +57,16 @@ load :: [FilePath] -> IO [String]
 load = 
   (mapM readFile)
 
-interpret :: String -> InputT IO ()
+interpret :: String -> IO ()
 interpret str = do
   let tokens = scan str
-  mapM_ (echo . show) tokens
-  let ast = parse tokens
-  echo . show $ ast
+  mapM_ print tokens
+  let stmts = parse tokens
+      m = liftPoly $ Module stmts []
+  case m of
+    Left err -> putStrLn err
+    Right m' -> print . typeCheck $ m'
+
+main :: IO ()
+main = getArgs >>= load >>= mapM_ interpret >> repl
+  
