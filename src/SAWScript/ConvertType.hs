@@ -10,7 +10,7 @@ import Data.Either
 import Data.List
 import Data.Traversable
 
-convertType :: Module LType -> Err (Module Type')
+convertType :: Module LType -> Err (Module Type)
 convertType = groundType >=> defixType >=> removeEither
 
 -- groundType {{{
@@ -31,7 +31,7 @@ instance (Groundable f, Groundable g) => Groundable (f :+: g) where
 instance Groundable Logic where
   gType x = Left ("non-ground type: " ++ render x)
 
-instance Groundable Type where
+instance Groundable TypeF where
   gType = Right . inject
 
 instance Groundable I where
@@ -41,20 +41,20 @@ instance Groundable I where
 
 -- defixType {{{
 
-defixType :: Module CType -> Err (Module (Either Int Type'))
+defixType :: Module CType -> Err (Module (Either Int Type))
 defixType m = case traverse (foldMuM dType) m of
   Left e -> Left (intercalate "\n" ["DefixType: " ++ e, "in:", show m])
   Right m' -> Right m'
 
 class Functor f => Defixable f where
-  dType :: f (Either Int Type') -> Err (Either Int Type')
+  dType :: f (Either Int Type) -> Err (Either Int Type)
 
 instance (Defixable f, Defixable g) => Defixable (f :+: g) where
   dType cp = case cp of
     Inl e -> dType e
     Inr e -> dType e
 
-instance Defixable Type where
+instance Defixable TypeF where
   dType t = case t of
     Unit'                           -> Right $ Right UnitT
     Bit'                            -> Right $ Right BitT
@@ -76,12 +76,12 @@ instance Defixable I where
 
 -- removeEither {{{
 
-removeEither :: Module (Either Int Type') -> Err (Module Type')
+removeEither :: Module (Either Int Type) -> Err (Module Type)
 removeEither m = case traverse unEither m of
   Left e -> Left (intercalate "\n" ["RemoveEither: " ++ e, "in:", show m])
   Right m' -> Right m'
 
-unEither :: Either Int Type' -> Err Type'
+unEither :: Either Int Type -> Err Type
 unEither (Right t) = Right t
 unEither (Left x)  = Left ("nonsense type: " ++ show x)
 

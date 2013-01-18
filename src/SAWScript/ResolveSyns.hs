@@ -76,7 +76,7 @@ instance (Resolvable f, Resolvable g) => Resolvable (f :+: g) where
     Inl e -> resolve e
     Inr e -> resolve e
 
-instance Resolvable Type where
+instance Resolvable TypeF where
   resolve t = case t of
     Syn n -> do found <- asks $ lookup n
                 case found of

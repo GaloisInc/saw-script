@@ -49,7 +49,7 @@ instance (Assignable f, Assignable g) => Assignable (f :+: g) where
   assign cp = case cp of
    Inl e -> assign e 
    Inr e -> assign e 
-instance Assignable Type where
+instance Assignable TypeF where
   assign = return . inject
 instance Assignable Poly where
   assign (Poly n) = do

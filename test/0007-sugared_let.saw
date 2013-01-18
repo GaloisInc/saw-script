@@ -1,1 +1,1 @@
-let apply function arg = function arg
+let apply function arg = function arg;
