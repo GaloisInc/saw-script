@@ -20,7 +20,6 @@ module Verifier.SAW.SharedTerm
   , scMkRecord
   , scRecordSelect
   , scApplyCtor
-  , scNat
   , scInteger
   , scTermF
   , scTypeOf
@@ -110,9 +109,6 @@ scRecordSelect = scRecordSelectFn ?sc
 
 scApplyCtor :: (?sc :: SharedContext s) => TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyCtor = scApplyCtorFn ?sc
-
-scNat :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
-scNat = undefined
 
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scInteger = scIntegerFn ?sc
