@@ -250,7 +250,7 @@ data TermF e
 
   | Lambda !(Pat e) !e !e
   | App !e !e
-  | Pi !(Pat e) !e !e
+  | Pi !String !e !e
 
     -- Tuples may be 0 or 2+ elements. 
     -- A tuple of a single element is not allowed in well-formed expressions.
@@ -364,13 +364,12 @@ lookupDoc lvd i =
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
-ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (Pat e, e, r)
-ppPi ftp frhs lcls p (pat,tp,rhs) = 
+ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (String, e, r)
+ppPi ftp frhs lcls p (i,tp,rhs) = 
     maybeParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
-  where lcls' = foldl' consBinding lcls (patBoundVars pat)
-        lhs = case pat of
-                PUnused -> ftp lcls 2 tp
-                _ -> parens (ppPat ftp lcls' 1 pat <> doublecolon <> ftp lcls 1 tp)
+  where lcls' = consBinding lcls i
+        lhs | i == "_"  = ftp lcls 2 tp
+            | otherwise = parens (text i <> doublecolon <> ftp lcls 1 tp)
 
 -- | @ppTermF@ pretty prints term functros.
 ppTermF :: TermPrinter e -- ^ Pretty printer for elements.

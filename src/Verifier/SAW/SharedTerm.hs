@@ -238,7 +238,7 @@ typeOf (STApp _ tf) =
   case tf of
     LocalVar _ tp -> return tp
     GlobalDef d -> sharedDefType d
-    Lambda i tp rhs -> do
+    Lambda (PVar i _ _) tp rhs -> do
       rtp <- typeOf rhs
       mkApp (Pi i tp rtp)
     App x y -> do

@@ -518,7 +518,7 @@ convertTerm tc uut =
     Un.App f _ t -> liftM2 UApp (convertTerm tc f) (convertTerm tc t)
     Un.Pi _ pats utp _ rhs -> do
       tp <- convertTerm tc utp
-      (tc', pl) <- consPatVars tc pats tp
+      (tc', pl) <- consPatVars tc (map Un.PSimple pats) tp
       rest <- convertTerm tc' rhs
       return $ foldr (\p -> UPi p tp) rest pl
 
@@ -552,8 +552,8 @@ matchUnPat = go
         goList [] ctx = ctx
         goList ((s,p):l) ctx = goList l (go s p ctx)
         go :: UPat -> Un.Pat -> TermContext -> TermContext
-        go t (Un.PVar v) ctx = bindLocalTerm (val v) (upatToTerm t) ctx
-        go _ Un.PUnused{}  ctx = ctx
+        go t (Un.PSimple (Un.PVar v)) ctx = bindLocalTerm (val v) (upatToTerm t) ctx
+        go _ (Un.PSimple (Un.PUnused{})) ctx = ctx
         go (UPatF _ (UPTuple sl)) (Un.PTuple _ pl) ctx
           | length sl == length pl = goList (zip sl pl) ctx
         go (UPatF _ (UPRecord sm)) (Un.PRecord _ pl) ctx
@@ -606,7 +606,7 @@ checkCtorType c cpl ctorType = do
                    hasType p lhs 
                    procPat pl patl (matchUnPat p pat c)
                   procPat pl [] c = go c pl rhsTp
-              procPat initPl initPats ctx
+              procPat initPl (map Un.PSimple initPats) ctx
             go ctx [] urhsTp = do
               rhsTp <- convertTerm ctx urhsTp 
               addUnifyEqs [UnifyEqTypes rhsTp ctorType]
@@ -758,6 +758,13 @@ bindPat :: UnifyResult -> UPat -> (UnifyResult, Pat Term)
 bindPat r0 up = (r,completePat (urLevel r0) r up)
   where r = bindPatImpl r0 (upatBoundVars up)
 
+bindPiPat :: UnifyResult -> UPat -> (UnifyResult, String)
+bindPiPat r0 up = (r, nameOfPat p)
+  where (r, p) = bindPat r0 up
+        nameOfPat (PVar name _ _) = name
+        nameOfPat PUnused = "_"
+        nameOfPat _ = error "bindPiPat"
+
 bindPats :: UnifyResult -> [UPat] -> (UnifyResult, [Pat Term])
 bindPats r0 upl = (r, completePat (urLevel r0) r <$> upl)
   where r = bindPatImpl r0 (concatMap upatBoundVars upl)
@@ -781,7 +788,7 @@ completeTerm = go
               where (r',p') = bindPat r p
             UApp x y  -> Term $ App (go r x) (go r y)
             UPi p lhs rhs -> Term (Pi p' (go r lhs) (go r' rhs))
-              where (r',p') = bindPat r p
+              where (r',p') = bindPiPat r p
             UTupleValue l -> Term $ TupleValue (go r <$> l)
             UTupleType l  -> Term $ TupleType  (go r <$> l)
             URecordValue m      -> Term $ RecordValue (go r <$> m)
@@ -871,8 +878,8 @@ termUnPat = go
 indexUnPat :: GlobalContext -> Un.Pat -> Unifier UPat
 indexUnPat ctx pat = 
   case pat of
-    Un.PVar psym -> UPVar <$> newRigidVar (Just (pos psym)) (val psym)
-    Un.PUnused s -> UPUnused <$> newUnifyVarIndex s
+    Un.PSimple (Un.PVar psym) -> UPVar <$> newRigidVar (Just (pos psym)) (val psym)
+    Un.PSimple (Un.PUnused s) -> UPUnused <$> newUnifyVarIndex s
     Un.PTuple p pl   -> (UPatF (Just p) . UPTuple) <$> mapM (indexUnPat ctx) pl
     Un.PRecord p fpl -> (UPatF (Just p) . UPRecord . Map.fromList . zip (val <$> fl))
                                    <$> mapM (indexUnPat ctx) pl
