@@ -20,6 +20,7 @@ module Verifier.SAW.SharedTerm
   , scMkRecord
   , scRecordSelect
   , scApplyCtor
+  , scFun
   , scInteger
   , scTermF
   , scTypeOf
@@ -144,6 +145,11 @@ scPrettyTerm t = show (scPrettyTermDocFn ?sc t)
 
 scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
 scTermF = scTermFFn ?sc
+
+scFun :: (?sc :: SharedContext s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFun t1 t2 =
+    do t2' <- Verifier.SAW.SharedTerm.incVars 0 1 t2
+       scTermF (Pi "_" t1 t2')
 
 -- 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
