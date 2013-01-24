@@ -47,9 +47,13 @@ module Verifier.SAW.TypedAST
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
  , isIdent
+ , ppIdent
  , DeBruijnIndex
  , FieldName
  , instantiateVarList
+   -- * Utility functions
+ , commaSepList
+ , semiTermList
  ) where
 
 import Control.Applicative ((<$>))
@@ -137,7 +141,6 @@ data Pat e = -- | Variable bound by pattern.
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PCtor (Ctor Ident e) [Pat e]
---           | PIntLit Integer
   deriving (Eq,Ord, Show, Functor, Foldable, Traversable)
 
 patBoundVarCount :: Pat e -> DeBruijnIndex
@@ -387,13 +390,12 @@ ppTermF f lcls p tf = do
     Pi pat tp rhs -> ppPi f f lcls p (pat,tp,rhs)
     TupleValue tl -> parens (commaSepList $ f lcls 1 <$> tl)
     TupleType tl -> char '#' <> parens (commaSepList $ f lcls 1 <$> tl)
-    RecordValue m        ->
-      let ppFld (fld,v) = text fld <+> equals <+> f lcls 1 v 
-       in braces (semiTermList (ppFld <$> Map.toList m))
+    RecordValue m -> braces (semiTermList (ppFld <$> Map.toList m))
+
+      where ppFld (fld,v) = text fld <+> equals <+> f lcls 1 v 
     RecordSelector t fld -> f lcls 11 t <> text ('.':fld)
-    RecordType m         ->
-      let ppFld (fld,v) = text fld <> doublecolon <+> f lcls 1 v
-       in char '#' <> braces (semiTermList (ppFld <$> Map.toList m))
+    RecordType m -> char '#' <> braces (semiTermList (ppFld <$> Map.toList m))
+      where ppFld (fld,v) = text fld <> doublecolon <+> f lcls 1 v
     CtorValue c tl
       | null tl -> ppIdent (ctorName c)
       | otherwise -> sp 10 $ hsep $ ppIdent (ctorName c) : fmap (f lcls 10) tl

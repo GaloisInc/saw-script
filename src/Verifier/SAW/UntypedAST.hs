@@ -49,7 +49,6 @@ asLocalIdent :: Ident -> Maybe String
 asLocalIdent (LocalIdent s) = Just s
 asLocalIdent _ = Nothing
 
-
 identModule :: Ident -> Maybe ModuleName
 identModule (Ident m _) = Just m
 identModule (LocalIdent _) = Nothing
@@ -76,6 +75,7 @@ data Term
   | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
   | Pi ParamType [Pat] Term Pos Term
+
     -- | Tuple expressions and their type.
   | TupleValue Pos [Term]
   | TupleType Pos [Term]
