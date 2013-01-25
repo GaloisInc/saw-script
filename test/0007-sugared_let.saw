@@ -1,1 +1,6 @@
 let apply function arg = function arg;
+
+let main = do {
+    let x = 1;
+    x;
+    };

@@ -5,6 +5,7 @@ module SAWScript.ResolveSyns where
 
 import SAWScript.AST
 import SAWScript.Unify
+import SAWScript.Compiler
 
 import Control.Applicative
 import Control.Monad.Trans.Reader
@@ -12,13 +13,9 @@ import Data.List
 import Data.Foldable
 import Data.Traversable hiding (mapM)
 
-resolveSyns :: Module MPType -> Err (Module MPType)
-resolveSyns m@(Module ds mb) = case res of
-  Left e -> Left (intercalate "\n" ["ResolveSyns: " ++ e, "in:",show m])
-  Right m' -> Right m'
-  where
-    env = buildEnv ds
-    res = runReaderT (rSyns m) env
+resolveSyns :: Compiler (Module MPType) (Module MPType)
+resolveSyns = compiler "ResolveSyns" $ \m@(Module ds mb) ->
+  runReaderT (rSyns m) $ buildEnv ds
 
 liftReader :: (Monad m) => m a -> ReaderT e m a
 liftReader = ReaderT . const
@@ -80,7 +77,7 @@ instance Resolvable TypeF where
   resolve t = case t of
     Syn n -> do found <- asks $ lookup n
                 case found of
-                  Nothing -> liftReader $ Left ("unbound type synonym: " ++ show n)
+                  Nothing -> liftReader $ fail ("unbound type synonym: " ++ show n)
                   Just pt -> rSyns pt
     _     -> fmap inject $ traverse rSyns t
 

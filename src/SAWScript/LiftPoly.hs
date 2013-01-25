@@ -4,6 +4,8 @@
 
 module SAWScript.LiftPoly where
 
+import SAWScript.Compiler
+
 import SAWScript.AST
 import SAWScript.Unify
 
@@ -17,20 +19,22 @@ import Data.List
 import Data.Foldable
 import Data.Traversable
 
+import qualified Text.Show.Pretty as PP
+
 type LS = StateT [(Name,LType)] (GoalM LType)
 runLS = runStateT
 
-type ModuleGen = (Module LType,Int)
-
-liftPoly :: Module MPType -> Err ModuleGen
-liftPoly m = case stream of
-  Left es   -> Left (intercalate "\n" ("LiftPoly: No possible lifting:" : es))
-  Right [r] -> Right r
-  Right rs  -> Left (intercalate "\n" ("LiftPoly: Ambiguous lifting:\n" : map show rs))
+liftPoly :: Compiler (Module MPType) (Module LType,Int)
+liftPoly = compiler "LiftPoly" $ \input ->
+  case getStream $ runGoal $ getGoal input of
+    Left es   -> fail "No possible lifting"
+    Right [r] -> return r
+    Right rs  -> fail ("Ambiguous lifting:" ++ PP.ppShow rs)
   where
-    goal = runStateT (lPoly m) []
-    res = runStateT (runGoalM goal) initGState
-    stream = fromStream Nothing Nothing $ fmap ((fst >>> fst) &&& (snd >>> fst)) res
+  getGoal = flip runStateT [] . lPoly
+  runGoal = flip runStateT initGState . runGoalM
+  getStream = fromStream Nothing Nothing . fmap getModuleGen
+  getModuleGen = (fst >>> fst) &&& (snd >>> fst)
 
 class (Traversable f) => LiftPoly f where
   lPoly :: f MPType -> LS (f LType)

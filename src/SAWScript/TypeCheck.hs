@@ -4,10 +4,12 @@
 
 module SAWScript.TypeCheck where
 
+import SAWScript.Compiler
+
 import SAWScript.AST
 import SAWScript.Unify
 
-import SAWScript.LiftPoly (runLS, assignVar,ModuleGen)
+import SAWScript.LiftPoly (runLS,assignVar)
 
 import Control.Applicative
 import Control.Arrow
@@ -18,23 +20,21 @@ import Control.Monad
 import Data.List
 import Data.Monoid
 import Data.Maybe
-import qualified Data.Foldable as Fold
-import qualified Data.Traversable as Trav
+import qualified Data.Foldable as F
+import qualified Data.Traversable as T
 
 import qualified Debug.Trace as Debug
 
-typeCheck :: ModuleGen -> Err (Module LType)
-typeCheck (m@(Module ds mb),gen) = case res of
-  Left es   -> Left $ intercalate "\n" ("TypeCheck:" : (es ++ [ "in:" , show m ]))
-  Right [r] -> Right r
-  Right rs  -> Left $ intercalate "\n" ("TypeCheck: Ambiguous typing:" : map show rs)
+typeCheck :: Compiler (Module LType,Int) (Module LType)
+typeCheck = compiler "TypeCheck" $ \(m,gen) ->
+  case runGoal gen $ getGoal m of
+    Left es   -> fail $ unlines es
+    Right [r] -> return r
+    Right rs  -> fail $ unlines ("Ambiguous typing:" : map show rs)
   where
-    res = fromStream Nothing Nothing $ fmap fst $ runStateT (runGoalM goal) (gen,emptyS)
-    goal = runReaderT
-             (do m' <- tCheck m
-                 liftReader (Trav.traverse walkStar m'))
-             env
-    env = Fold.foldMap buildEnv ds
+  getGoal m@(Module ds _) = flip runReaderT (env ds) (tCheck m >>= liftReader . T.traverse walkStar)
+  runGoal gen = fromStream Nothing Nothing . fmap fst . flip runStateT (gen,emptyS) . runGoalM
+  env ds = F.foldMap buildEnv ds
 
 type TC a = ReaderT Env (GoalM LType) a
 

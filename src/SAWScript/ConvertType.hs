@@ -2,6 +2,8 @@
 
 module SAWScript.ConvertType where
 
+import SAWScript.Compiler
+
 import SAWScript.AST
 import SAWScript.Unify
 
@@ -15,10 +17,11 @@ convertType = groundType >=> defixType >=> removeEither
 
 -- groundType {{{
 
-groundType :: Module LType -> Err (Module CType)
-groundType m = case traverse (foldMuM gType) m of
-  Left e   -> Left (intercalate "\n" ["GroundType: " ++ e, "in:", show m])
-  Right m' -> Right m'
+groundType :: Compiler (Module LType) (Module CType)
+groundType = compiler "GroundType" $ traverseFA gType
+--groundType m = case traverse (foldMuM gType) m of
+--  Left e   -> Left (intercalate "\n" ["GroundType: " ++ e, "in:", show m])
+--  Right m' -> Right m'
 
 class Functor f => Groundable f where
   gType :: f CType -> Err CType
@@ -29,22 +32,23 @@ instance (Groundable f, Groundable g) => Groundable (f :+: g) where
     Inr e -> gType e
 
 instance Groundable Logic where
-  gType x = Left ("non-ground type: " ++ render x)
+  gType x = fail ("non-ground type: " ++ render x)
 
 instance Groundable TypeF where
-  gType = Right . inject
+  gType = return . inject
 
 instance Groundable I where
-  gType = Right . inject
+  gType = return . inject
 
 -- }}}
 
 -- defixType {{{
 
-defixType :: Module CType -> Err (Module (Either Int Type))
-defixType m = case traverse (foldMuM dType) m of
-  Left e -> Left (intercalate "\n" ["DefixType: " ++ e, "in:", show m])
-  Right m' -> Right m'
+defixType :: Compiler (Module CType) (Module (Either Int Type))
+defixType = compiler "DefixType" $ traverseFA dType
+--defixType m = case traverse (foldMuM dType) m of
+--  Left e -> Left (intercalate "\n" ["DefixType: " ++ e, "in:", show m])
+--  Right m' -> Right m'
 
 class Functor f => Defixable f where
   dType :: f (Either Int Type) -> Err (Either Int Type)
@@ -56,34 +60,35 @@ instance (Defixable f, Defixable g) => Defixable (f :+: g) where
 
 instance Defixable TypeF where
   dType t = case t of
-    Unit'                           -> Right $ Right UnitT
-    Bit'                            -> Right $ Right BitT
-    Z'                              -> Right $ Right ZT
-    Quote'                          -> Right $ Right QuoteT
-    Array' (Right t') (Left l)      -> Right $ Right $ ArrayT t' l
-    Block' c (Right t')             -> Right $ Right $ BlockT c t'
+    Unit'                           -> return $ Right UnitT
+    Bit'                            -> return $ Right BitT
+    Z'                              -> return $ Right ZT
+    Quote'                          -> return $ Right QuoteT
+    Array' (Right t') (Left l)      -> return $ Right $ ArrayT t' l
+    Block' c (Right t')             -> return $ Right $ BlockT c t'
     Tuple' ts
-      | null $ lefts ts             -> Right $ Right $ TupleT $ rights ts
+      | null $ lefts ts             -> return $ Right $ TupleT $ rights ts
     Record' nts
-      | null $ lefts $ map snd nts  -> let (ns,ts) = unzip nts in Right $ Right $ RecordT $ zip ns $ rights ts
-    Function' (Right at) (Right bt) -> Right $ Right $ FunctionT at bt
-    _                               -> Left ("Bad type: " ++ show t)
+      | null $ lefts $ map snd nts  -> let (ns,ts) = unzip nts in return $ Right $ RecordT $ zip ns $ rights ts
+    Function' (Right at) (Right bt) -> return $ Right $ FunctionT at bt
+    _                               -> fail ("Bad type: " ++ show t)
 
 instance Defixable I where
-  dType (I x) = Right $ Left x
+  dType (I x) = return $ Left x
 
 -- }}}
 
 -- removeEither {{{
 
-removeEither :: Module (Either Int Type) -> Err (Module Type)
-removeEither m = case traverse unEither m of
-  Left e -> Left (intercalate "\n" ["RemoveEither: " ++ e, "in:", show m])
-  Right m' -> Right m'
+removeEither :: Compiler (Module (Either Int Type)) (Module Type)
+removeEither = compiler "RemoveEither" $ traverse unEither
+--removeEither m = case traverse unEither m of
+--  Left e -> Left (intercalate "\n" ["RemoveEither: " ++ e, "in:", show m])
+--  Right m' -> Right m'
 
 unEither :: Either Int Type -> Err Type
-unEither (Right t) = Right t
-unEither (Left x)  = Left ("nonsense type: " ++ show x)
+unEither (Right t) = return t
+unEither (Left x)  = fail ("nonsense type: " ++ show x)
 
 -- }}}
 
