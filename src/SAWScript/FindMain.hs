@@ -16,7 +16,8 @@ multiMainErr n xs = fail ("Multiple main functions defined: " ++ show n ++ " " +
 
 -- | Takes a list of TopStmts, separates out any main blocks, failing if there is not exactly one.
 findMain :: Compiler [TopStmt MPType] (Module MPType)
-findMain ss = case partitionMaybe sepMain ss of
+findMain = compiler "FindMain" $ \input ->
+  case partitionMaybe sepMain input of
   ([],_) -> noMainErr
   (res:restBinds,ts)
     | null restBinds -> case res of
@@ -25,7 +26,6 @@ findMain ss = case partitionMaybe sepMain ss of
           | null restBs -> return $ Module { declarations = TopLet binds : ts, mainBlock = mb }
           | otherwise -> multiMainErr 1 (mb:restBs)
     | otherwise -> multiMainErr 2 (res:restBinds)
-  where
 
 -- | Takes a TopStmt and possibly returns two lists, the first a list of all the main blocks found in the module,
 --   the second a list of the other, non-main bindings from a TopLet statement that contains a main binding.
