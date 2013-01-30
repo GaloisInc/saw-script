@@ -13,6 +13,7 @@ module Verifier.SAW.Typechecker.Context
   , TCDefGen(..)
   , TCDataTypeGen
   , TCDefEqn
+  , TCLocalDef
   , DefEqnGen(..)
   , LocalDefGen(..)
   , DataTypeGen(..)
@@ -24,10 +25,16 @@ module Verifier.SAW.Typechecker.Context
   , TCRefDataType
   , TCRefCtor
   , TCRefDef
+  , TCRefLocalDef
   , fmapTCPat
   , fmapTCLocalDefs
   , tcPatVarCount
-  , incTCVars
+  , localVarNamesCount
+  , ppTCTerm, ppTCTermF
+  , tcApply
+  , tcPatApply
+  , applyExt
+  , boundFreeVarsWithPi
     -- * Global context
   , GlobalContext
   , emptyGlobalContext
@@ -46,17 +53,21 @@ module Verifier.SAW.Typechecker.Context
   , resolveBoundVar
   , resolveLocalDef
   , contextNames
+  , ppTermContext
+  , boundVarDiff
   ) where
 
 import Control.Applicative
---import Control.Monad.Trans
+import Control.Monad.Identity
 import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable
 import Data.Vector (Vector)
+import qualified Data.Vector as V
+import Text.PrettyPrint
 
-import Prelude hiding (foldr, sum)
+import Prelude hiding (concatMap, foldr, sum)
 
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Position
@@ -73,7 +84,7 @@ data DefEqnGen p t
                 t -- ^ Right hand side.
   deriving (Show)
 
-type TCDefEqn = DefEqnGen (TCPat TCTerm) TCTerm
+type TCDefEqn = DefEqnGen TCPat TCTerm
 
 -- | Local definition in its most generic form.
 -- n is the identifier for name, p is the pattern, and t is the type.
@@ -86,6 +97,10 @@ data LocalDefGen t e
      LocalFnDefGen String t e
   deriving (Show)
 
+localVarNamesGen :: [LocalDefGen t e] -> [String]
+localVarNamesGen = fmap go
+  where go (LocalFnDefGen nm _ _) = nm
+
 localVarNamesCount :: [LocalDefGen t e] -> Int
 localVarNamesCount = length
 
@@ -93,21 +108,18 @@ type TCLocalDef = LocalDefGen TCTerm [TCDefEqn]
 
 data TCTerm
   = TCF !(TCTermF TCTerm)
-  | TCLambda !(TCPat TCTerm) !TCTerm !TCTerm
-  | TCPi !(TCPat TCTerm) !TCTerm !TCTerm
+  | TCLambda !TCPat !TCTerm !TCTerm
+  | TCPi !TCPat !TCTerm !TCTerm
   | TCLet [TCLocalDef] TCTerm
     -- | A local variable with its deBruijn index and type in the current context.
-  | TCVar DeBruijnIndex TCTerm
+  | TCVar DeBruijnIndex
     -- | A reference to a let bound function with equations.
-  | TCLocalDef -- | Index of variable.
-               DeBruijnIndex 
-               -- | Type 
-               TCTerm
+  | TCLocalDef DeBruijnIndex 
  deriving (Show)
 
-data TCPat tp = TCPVar String DeBruijnIndex tp
-              | TCPUnused -- ^ Unused pattern
-              | TCPatF (PatF (TCPat tp))
+data TCPat = TCPVar String DeBruijnIndex TCTerm
+           | TCPUnused -- ^ Unused pattern
+           | TCPatF (PatF TCPat)
   deriving (Show)
 
 data PatF p
@@ -115,7 +127,6 @@ data PatF p
    | UPRecord (Map FieldName p)
    | UPCtor Ident [p]
   deriving (Functor, Foldable, Traversable, Show)
-
 
 data TCTermF t
     -- | A global definition identifier.
@@ -143,7 +154,7 @@ data TCTermF t
 -- | A pi type that accepted a statically-determined number of arguments.
 data FixedPiType r
   = FPResult r
-  | FPPi (TCPat TCTerm) TCTerm (FixedPiType r)
+  | FPPi TCPat TCTerm (FixedPiType r)
 
 fixedPiArgCount :: FixedPiType r -> Int
 fixedPiArgCount = go 0
@@ -168,8 +179,13 @@ type TCRefCtor s = TCCtorGen (TCRef s)
 type TCRefDef s = TCDefGen (TCRef s)
 type TCRefLocalDef s = LocalDefGen TCTerm (TCRef s [TCDefEqn])
 
+patVarNames :: TCPat -> [String]
+patVarNames (TCPVar nm _ _) = [nm]
+patVarNames TCPUnused = []
+patVarNames (TCPatF pf) = concatMap patVarNames pf
+
 fmapTCPat :: (Int -> TCTerm -> TCTerm)
-          -> Int -> TCPat TCTerm -> TCPat TCTerm
+          -> Int -> TCPat -> TCPat
 fmapTCPat fn i (TCPVar nm j tp) = TCPVar nm j (fn (i+j) tp)
 fmapTCPat _ _ TCPUnused   = TCPUnused
 fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)  
@@ -195,7 +211,7 @@ termFromTCCtorType :: Ident -> TCCtorType -> TCTerm
 termFromTCCtorType dt (FPResult tl) = TCF (UDataType dt tl)
 termFromTCCtorType dt (FPPi p tp r) = TCPi p tp (termFromTCCtorType dt r)
 
-tcPatVarCount :: TCPat TCTerm -> Int
+tcPatVarCount :: TCPat -> Int
 tcPatVarCount TCPVar{} = 1 
 tcPatVarCount TCPUnused{} = 0
 tcPatVarCount (TCPatF pf) = sum (tcPatVarCount <$> pf)
@@ -203,8 +219,9 @@ tcPatVarCount (TCPatF pf) = sum (tcPatVarCount <$> pf)
 
 -- | Increment free vars in TC term by given amount if the index is at least the given level.
 -- This is used for inserting extra variables to a context.
-incTCVars :: Int -> DeBruijnIndex -> TCTerm -> TCTerm
-incTCVars ii j = go ii
+-- The context should be for the new context.
+incTCVars :: Int -> Int -> TCTerm -> TCTerm
+incTCVars j = go
   where pfn = fmapTCPat go
         go i (TCF tf) = TCF (go i <$> tf)
         go i (TCLambda p tp r) = TCLambda (pfn i p) (go i tp) r'
@@ -213,10 +230,55 @@ incTCVars ii j = go ii
           where r' = go (i+tcPatVarCount p) r
         go i (TCLet lcls t) = TCLet (fmapTCLocalDefs go i lcls) t'
           where t' = go (i+localVarNamesCount lcls) t
-        go i (TCVar l tp) = TCVar l' (go i tp)
-          where l' = if l >= i then l+j else l
-        go i (TCLocalDef l tp) = TCLocalDef l' (go i tp)
-          where l' = if l >= i then l+j else l
+        go i (TCVar l) = TCVar $ if l >= i then l+j else l
+        go i (TCLocalDef l) = TCLocalDef $ if l >= i then l+j else l
+
+
+-- | @tcApply t n args@ substitutes free variables [n..length args-1] with args.
+-- The args are assumed to be in the same context as @t@ after substitution.
+tcApply :: TermContext s -> (TermContext s,TCTerm) -> (TermContext s,Vector TCTerm) -> TCTerm
+tcApply baseTC (fTC, f) (vTC, v)
+   | V.length v == fd = tcApplyImpl vd v 0 f
+   | otherwise = error "tcApply given bad vector"
+  where fd = boundVarDiff fTC baseTC
+        vd = boundVarDiff vTC baseTC
+
+tcPatApply :: TermContext s
+           -> (TermContext s, TCPat)
+           -> (TermContext s, Vector TCTerm)
+           -> TCPat
+tcPatApply baseTC (fTC, p) (vTC, v)
+   | V.length v == fd = fmapTCPat (tcApplyImpl vd v) 0 p
+   | otherwise = error "tcApply given bad vector"
+  where fd = boundVarDiff fTC baseTC
+        vd = boundVarDiff vTC baseTC
+
+tcApplyImpl :: Int -> Vector TCTerm -> Int -> TCTerm -> TCTerm
+tcApplyImpl vd v = go
+  where fd = V.length v
+        go i (TCF tf) = TCF (go i <$> tf)
+        go i (TCLambda p tp r) = TCLambda (fmapTCPat go i p) (go i tp) r'
+          where r' = go (i + tcPatVarCount p) r
+        go i (TCPi p tp r) = TCPi (fmapTCPat go i p) (go i tp) r'
+          where r' = go (i + tcPatVarCount p) r
+        go i (TCLet lcls r) = TCLet (fmapTCLocalDefs go i lcls) r'
+          where r' = go (i + length lcls) r
+        go i (TCVar j) | j < i = TCVar j
+                       | j - i < fd = incTCVars i 0 (v V.! (j - i))
+                       | otherwise = TCVar (vd + j - fd)
+        go i (TCLocalDef j)
+          | j < i = TCLocalDef j
+          | j - i < fd = error "Attempt to instantiate let bound definition."
+          | otherwise = TCLocalDef (vd + j - fd)
+
+-- | Extend a term with the context from the given pair to the extended context.
+applyExt :: (TermContext s,TCTerm) -> TermContext s -> TCTerm
+applyExt (tc0,t) tc1 = incTCVars (boundVarDiff tc1 tc0) 0 t
+
+-- | Bound the free variables in the term with pi quantifiers.
+boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
+boundFreeVarsWithPi = error "boundFreeVarsWithPi unimplemented"
+
 
 -- Global context stuff
 
@@ -279,6 +341,20 @@ data TermContext s where
   LetContext :: TermContext s -> [TCRefLocalDef s] -> TermContext s
   BindContext :: TermContext s -> String -> TCTerm -> TermContext s
 
+boundVarDiff :: TermContext s -> TermContext s -> Int
+boundVarDiff tc1 tc0
+    | d >= 0 = d
+    | otherwise = error $ show $ 
+        text "boundVarDiff given bad contexts:" $$
+        ppTermContext tc1 $$
+        ppTermContext tc0
+  where d = termBoundCount tc1 - termBoundCount tc0
+
+termBoundCount :: TermContext s -> Int
+termBoundCount TopContext{} = 0
+termBoundCount (LetContext tc lcls) = termBoundCount tc + length lcls
+termBoundCount (BindContext tc _ _) = termBoundCount tc + 1
+
 -- | Empty term context.
 emptyTermContext :: GlobalContext s -> TermContext s
 emptyTermContext = TopContext
@@ -311,13 +387,13 @@ data InferResult where
   PartialCtor :: Ident -- Datatype identifier
               -> Ident -- Ctor identifier.
               -> [TCTerm]
-              -> TCPat TCTerm
+              -> TCPat
               -> TCTerm
               -> TCCtorType
               -> InferResult
   PartialDataType :: Ident
                   -> [TCTerm] 
-                  -> TCPat TCTerm
+                  -> TCPat
                   -> TCTerm
                   -> TCDTType
                   -> InferResult
@@ -330,18 +406,20 @@ matchName _ _ = False
 -- | Infer result of variable or ctor reference.
 resolveIdent :: forall s . TermContext s
              -> PosPair Un.Ident -> TC s InferResult
-resolveIdent tc0 (PosPair p ident) = go 0 tc0
-  where go i (BindContext tc nm tp)
-            | matchName nm ident = pure (TypedValue (TCVar i tp') tp')
-            | otherwise = go (i+1) tc
-          where tp' = incTCVars 0 (i+1) tp
-        go i0 (LetContext tc lcls) = lclFn i0 lcls
+resolveIdent tc0 (PosPair p ident) = go tc0
+  where go tc1@(BindContext tc nm tp)
+            | matchName nm ident =
+                pure $ TypedValue (applyExt (tc1,TCVar 0) tc0)
+                                  (applyExt (tc,tp) tc0)
+            | otherwise = go tc
+        go tc1@(LetContext tc lcls) = lclFn 0 lcls
           where lclFn i (LocalFnDefGen nm tp _ : r)
-                    | matchName nm ident = pure (TypedValue (TCLocalDef i tp') tp')
+                    | matchName nm ident =
+                        pure $ TypedValue (applyExt (tc1, TCLocalDef i) tc0)
+                                          (applyExt (tc,tp) tc0)
                     | otherwise = lclFn (i+1) r
-                  where tp' = incTCVars 0 (i+1) tp
-                lclFn i [] = go i tc
-        go _ (TopContext gc) =        
+                lclFn _ [] = go tc
+        go (TopContext gc) =        
           case Map.lookup ident (gcMap gc) of
             Just (DataTypeBinding (DataTypeGen dt rtp _)) -> do
               ftp <- eval p rtp
@@ -383,6 +461,66 @@ contextNames (BindContext tc nm _) = nm : contextNames tc
 contextNames (LetContext tc lcls) = fmap lclName lcls ++ contextNames tc
   where lclName (LocalFnDefGen nm _ _) = nm
 contextNames TopContext{} = []
+
+ppTermContext :: TermContext s -> Doc
+ppTermContext (BindContext tc nm tp) =
+  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc tp $$
+  ppTermContext tc
+ppTermContext (LetContext tc lcls) =
+    text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) $$
+    ppTermContext tc  
+  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc tp  
+ppTermContext TopContext{} = text "top"
+
+ppTCTerm :: TermContext s -> TCTerm -> Doc
+ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
+
+-- | Pretty print TC term with doc used for free variables.
+ppTCTermGen :: [Doc] -> TCTerm -> Doc
+ppTCTermGen d (TCF tf) = runIdentity $ ppTCTermF (Identity . ppTCTermGen d) tf
+ppTCTermGen d (TCLambda p l r) = 
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d l) 
+             <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) r
+ppTCTermGen d (TCPi p l r) =
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d l) 
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) r
+ppTCTermGen d (TCLet lcls t) = 
+    text "let " <> nest 4 (vcat (ppLcl <$> lcls)) $$
+    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) t)
+  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTermGen d tp
+ppTCTermGen d (TCVar i) | 0 <= i && i < length d = d !! i
+                        | otherwise = text $ "Bad variable index " ++ show i
+ppTCTermGen d (TCLocalDef i) | 0 <= i && i < length d = d !! i
+                             | otherwise = text $ "Bad local var index " ++ show i
+
+ppTCPat :: TCPat -> Doc
+ppTCPat (TCPVar nm _ _) = text nm
+ppTCPat (TCPUnused) = text "_"
+ppTCPat (TCPatF pf) = 
+  case pf of
+    UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
+    UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
+    UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
+
+ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
+ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
+  where ppFld (fld,v) = (text fld <+> equals <+>) <$> pp v
+
+ppTCTermF :: Applicative f => (t -> f Doc) -> TCTermF t -> f Doc
+ppTCTermF pp tf =
+  case tf of
+    UGlobal i -> pure $ ppIdent i
+    UApp l r -> liftA2 (<+>) (pp l) (pp r)
+    UTupleValue l -> parens . commaSepList <$> traverse pp l
+    UTupleType l -> (char '#' <>) . parens . commaSepList <$> traverse pp l
+    URecordValue m -> ppRecordF pp m
+    URecordSelector t f -> (<> (char '.' <> text f)) <$> pp t
+    URecordType m -> (char '#' <>) <$> ppRecordF pp m
+    UCtorApp c l -> hsep . (ppIdent c :) <$> traverse pp l
+    UDataType dt l -> hsep . (ppIdent dt :) <$> traverse pp l
+    USort s -> pure $ text (show s)
+    UNatLit i -> pure $ text (show i)
+    UArray _ vl -> brackets . commaSepList <$> traverse pp (V.toList vl)
 
 {-
 -- | Checks that references in term point to valid variables.

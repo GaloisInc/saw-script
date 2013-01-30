@@ -10,6 +10,7 @@ module Verifier.SAW.Typechecker.Monad
   , newRef
   , assign
   , eval
+  , evaluatedRef
   ) where
 
 import Control.Applicative
@@ -254,3 +255,10 @@ eval p0 r = TC $ \tc0 s0 -> do
               where el' = (p, tcrName rp, tcrName rn):el
     TRSDone v -> tcDone v tc0 s0
     TRSFailed -> tcError tc0 s0
+
+-- | Create a ref that is already fully evaluated.
+evaluatedRef :: NodeName -> v -> TC s (TCRef s v)
+evaluatedRef nm v = TC $ \tc s -> do
+  r <- newSTRef (TRSDone v)
+  let c = tsRefCount s
+  tcDone (TCRef nm c r) tc s { tsRefCount = c + 1 }
