@@ -13,10 +13,11 @@ module Verifier.SAW.Typechecker
   ) where
 
 import Control.Applicative
-import Control.Arrow ((***), first, second)
+import Control.Arrow ((***), first, second, (+++), right)
 import Control.Exception (assert)
 
 import Control.Monad (liftM2, liftM3, zipWithM_)
+import Control.Monad.Error (ErrorT, runErrorT, throwError)
 import Control.Monad.State hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Control.Monad.Identity (Identity(..))
 import Control.Monad.ST
@@ -208,7 +209,7 @@ groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
         finalize (tpMap,eqMap) = fn <$> Map.elems tpMap
           where fn :: (PosPair String, Un.Term) -> UnLocalDef
                 fn (PosPair _ nm,tp) = LocalFnDefGen nm tp eqs
-                  where Just eqs = Map.lookup nm eqMap
+                  where eqs = fromMaybe [] $ Map.lookup nm eqMap
         groupDecl :: GroupLocalDeclsState -> Un.Decl -> GroupLocalDeclsState
         groupDecl (tpMap,eqMap) (Un.TypeDecl idl tp) = (tpMap',eqMap)
           where tpMap' = foldr (\k -> Map.insert (val k) (k,tp)) tpMap idl
@@ -477,8 +478,9 @@ mkVar nm vs = do
                    }
   v <$ put s { usVarCount = vidx + 1 }
  
-newRigidVar :: Un.Pos -> String -> VarIndex s -> Unifier s (RigidVarRef s)
-newRigidVar p nm tp = do
+newRigidVar :: Un.Pos -> String -> Unifier s (RigidVarRef s, VarIndex s)
+newRigidVar p nm = do
+  tp <- mkVar ("type of " ++ nm) (UFreeType nm)
   s <- get
   let idx = usRigidCount s
   let rv = RigidVarRef { rvrIndex = idx
@@ -486,7 +488,7 @@ newRigidVar p nm tp = do
                        , rvrName = nm
                        , rvrType = tp
                        }
-  rv <$ put s { usRigidCount = idx + 1 }
+  (rv,tp) <$ put s { usRigidCount = idx + 1 }
 
 ppUTerm :: UVarState s -> TC s Doc
 ppUTerm vs0 = evalStateT (go vs0) Set.empty
@@ -497,7 +499,7 @@ ppUTerm vs0 = evalStateT (go vs0) Set.empty
             return $ text (viName v)
           else do
             put (Set.insert v s)
-            go =<< lift (readVarState v) 
+            go =<< lift (liftST (readSTRef (viRef v)))
         go :: UVarState s -> StateT (Set (VarIndex s)) (TC s) Doc
         go (UVar v) = goVar v
         go (URigidVar r) = pure (text (rvrName r))
@@ -574,10 +576,7 @@ upatToTerm (UPatF _ pf) =
 indexUnPat :: Un.Pat -> Unifier s (UPat s, VarIndex s)
 indexUnPat upat =
   case upat of
-    Un.PVar (PosPair p nm) -> do
-        tp <- mkVar ("type of " ++ nm) (UFreeType nm)
-        r <- newRigidVar p nm tp
-        return (UPVar r, tp)
+    Un.PVar (PosPair p nm) -> first UPVar <$> newRigidVar p nm
     Un.PUnused (PosPair p nm) -> do
       tpv <- mkVar ("type of " ++ nm) (UFreeType nm)
       v <- mkVar nm (UUnused nm tpv)
@@ -752,16 +751,37 @@ data UnifyResult s
           urOuterContext :: TermContext s
           -- Current context
         , urContext :: TermContext s
-          -- | Position where unification occured (useful for unification errors involving
-          -- the whole problem such as occurs check failures).
-        , urPos :: Pos
         , urBoundMap :: UResolverCache s (VarIndex s) (TermContext s, TCTerm)
         -- | Cache that maps variables to their typechecked value at the
         -- given deBruijnIndex.
         , urVarMap :: UResolverCache s (VarIndex s) (TermContext s, TCTerm)
         }
 
-type UResolver s = StateT (UnifyResult s) (TC s)
+newtype UResolver s v
+  = URR { unURR :: UnifyResult s -> ST s (Either String (v, UnifyResult s)) }
+
+instance Functor (UResolver s) where
+  fmap f (URR fn) = URR $ \r -> fmap (right (first f)) (fn r)
+
+instance Applicative (UResolver s) where 
+  pure = return
+  (<*>) = ap
+
+instance Monad (UResolver s) where
+  fail msg = URR $ \_ -> return (Left msg)
+  return v = URR $ \r -> return (Right (v,r))
+  URR f >>= h = URR $ \r -> do
+    c <- f r
+    case c of
+      Left msg -> return (Left msg)
+      Right (v,r') -> unURR (h v) r'
+
+instance MonadState (UnifyResult s) (UResolver s) where
+  get = URR $ \r -> return (Right (r,r))
+  put r = URR $ \_ -> return (Right ((), r))
+
+urST :: ST s v -> UResolver s v
+urST m = URR $ \r -> fmap (\v -> Right (v,r)) m
 
 data URRes v = URSeen v
              | URActive
@@ -772,9 +792,7 @@ newCache :: ST s (UResolverCache s k v)
 newCache = newSTRef Map.empty
 
 occursCheckFailure :: String -> UResolver s a
-occursCheckFailure nm = do
-    p <- gets urPos
-    lift $ tcFail p msg
+occursCheckFailure nm = fail msg
   where msg = "Cyclic dependency detected during unification of " ++ nm
 
 type UResolverCacheFn s k v = UnifyResult s -> UResolverCache s k v
@@ -782,34 +800,36 @@ type UResolverCacheFn s k v = UnifyResult s -> UResolverCache s k v
 uresolveCache :: Ord k
               => UResolverCacheFn s k v
               -> (k -> UResolver s v)
-              -> String -> k -> UResolver s v
+              -> String
+              -> k
+              -> UResolver s v
 uresolveCache gfn rfn nm k = do
   cr <- gets gfn
-  m0 <- lift $ liftST $ readSTRef cr
+  m0 <- urST $ readSTRef cr
   case Map.lookup k m0 of
     Just (URSeen r) -> return r 
     Just URActive -> occursCheckFailure nm
     Nothing -> do
-      lift $ liftST $ writeSTRef cr $ Map.insert k URActive m0
+      urST $ writeSTRef cr $ Map.insert k URActive m0
       r <- rfn k
-      lift $ liftST $ modifySTRef cr $ Map.insert k (URSeen r)
+      urST $ modifySTRef cr $ Map.insert k (URSeen r)
       return r
 
-resolve :: UResolver s a -> Unifier s (a, TermContext s)
-resolve m = do
+resolve :: UResolver s a -> Unifier s (Either String (a, TermContext s))
+resolve (URR m) = do
   us <- get
-  rmc <- lift $ liftST newCache
-  vmc <- lift $ liftST newCache
-  let ur0 = UR { urOuterContext = usGlobalContext us
-               , urContext = usGlobalContext us
-               , urPos = usPos us
-               , urBoundMap = rmc
-               , urVarMap = vmc
-               }
-  lift $ second urContext <$> runStateT m ur0
+  lift $ do
+    rmc <- liftST newCache
+    vmc <- liftST newCache
+    let ur0 = UR { urOuterContext = usGlobalContext us
+                 , urContext = usGlobalContext us
+                 , urBoundMap = rmc
+                 , urVarMap = vmc
+                 }
+    right (second urContext) <$> liftST (m ur0)
 
-readVarState :: VarIndex s -> TC s (UVarState s)
-readVarState v = liftST $ readSTRef (viRef v)
+readVarState :: VarIndex s -> UResolver s (UVarState s)
+readVarState v = urST $ readSTRef (viRef v)
 
 -- | Resolve a variable corresponding to an unused pattern variable,
 -- returning index and type.
@@ -836,7 +856,7 @@ resolvePat (UPVar v) = do
   tc0 <- gets urOuterContext
   return $ TCPVar (rvrName v) (boundVarDiff tc tc0) tp
 resolvePat (UPUnused v) = do 
-  s <- lift $ readVarState v
+  s <- readVarState v
   case s of
     UUnused nm vtp -> do
      (tc,tp) <- uresolveBoundVar nm vtp
@@ -863,7 +883,7 @@ resolveUTerm' v = do
   -- Returns a refernce to a pattern variable with the given name, index, and type.
   let mkPatVarRef nm tpv = fn <$> uresolveBoundVar nm tpv
         where fn (tc,tp) = (consBoundVar nm tp tc, TCVar 0)
-  uvs <- lift $ liftST $ readSTRef (viRef v)
+  uvs <- urST $ readSTRef (viRef v)
   case uvs of
     URigidVar r -> mkPatVarRef (rvrName r) (rvrType r)
     UVar v -> resolveUTerm v
@@ -889,11 +909,14 @@ typecheckPats :: TermContext s
 typecheckPats _ [] _ = fail "Unexpected attempt to typecheck empty list of pats"
 typecheckPats tc upl@(up:_) tp = do
   rtp <- reduce tc tp
-  runUnifier tc (pos up) $ do
+  r <- runUnifier tc (pos up) $ do
     utp <- mkUnifyTerm (emptyLocalCtx tc) rtp
     (pl,utpl) <- unzip <$> traverse indexUnPat upl
     traverse_ (usetEqual utp) utpl
     resolve $ traverse resolvePat pl
+  case r of
+    Left msg -> tcFail (pos up) msg
+    Right rv -> return rv
 
 -- | Typecheck pats against the given pi type.
 typecheckPiPats :: TermContext s
@@ -903,11 +926,15 @@ typecheckPiPats :: TermContext s
 typecheckPiPats tc [] tp = fail "Unexpected attempt to unify empty list of pi pats"
 typecheckPiPats tc pats@(up:_) tp = do
   tp' <- reduce tc tp
-  runUnifier tc (pos up) $ do
-    (pl,utp') <- indexPiPats pats tp'
-    resolve $ do
-      pl' <- traverse resolvePat pl
-      fmap (pl',) $ resolveCurrent =<< resolveUTerm utp'
+  r <- runUnifier tc (pos up) $ do
+      (pl,utp') <- indexPiPats pats tp'
+      resolve $ do
+        pl' <- traverse resolvePat pl
+        fmap (pl',) $ resolveCurrent =<< resolveUTerm utp'
+  case r of
+    Left msg -> tcFail (pos up) msg
+    Right rv -> return rv
+  
 
 tcEqns :: TermContext s -> [UnDefEqn] -> TCTerm -> TC s [TCDefEqn]
 tcEqns tc ueqs tp = traverse (\eq -> tcEqn tc eq tp) ueqs
@@ -1146,10 +1173,73 @@ evaluatedRefLocalDef lcls = traverse go lcls
 
 type Subst = Vector TCTerm
 
-instantiatePats :: TermContext s -> TCPat -> TCPat
-                -> TC s (TermContext s, Subst, Subst)
-instantiatePats tc x y = unimpl "instantiatePats"
-  
+type VarIndexMap s = Map Int (VarIndex s)
+
+mergePats :: Pos -> TCPat -> TCPat -> Unifier s (Maybe (Vector (VarIndex s), Vector (VarIndex s)))
+mergePats p p10 p20 = do
+    r <- runErrorT $ execStateT (go p10 p20) (Map.empty, Map.empty)
+    return $
+      case r of
+        Left _ -> Nothing
+        Right (m1,m2) -> Just (mfn m1, mfn m2)
+          where mfn m = V.fromList (Map.elems m)
+  where instPat :: TCPat -> StateT (VarIndexMap s) (Unifier s) (VarIndex s) 
+        instPat (TCPVar nm j _) = do
+          r <- lift $ newRigidVar p nm
+          v <- lift $ mkVar nm (URigidVar (fst r))
+          v <$ modify (Map.insert j v)
+        instPat TCPUnused = lift $ do
+          tpv <- mkVar ("type of unused") (UFreeType "unused")
+          mkVar "unused" (UUnused "unused" tpv)
+        instPat (TCPatF pf) = lift . mkVar "unnamed" . UTF =<< mapM instPat (pfToTF pf)
+          where pfToTF (UPTuple l) = UTupleValue l
+                pfToTF (UPRecord m) = URecordValue m
+                pfToTF (UPCtor c l) = UCtorApp c l
+        go :: TCPat
+           -> TCPat
+           -> StateT (VarIndexMap s, VarIndexMap s) (ErrorT String (Unifier s)) ()
+        go (TCPVar _ i _) p2 = do
+          (m1,m2) <- get
+          (v,m2') <- lift $ lift $ runStateT (instPat p2) m2
+          put (Map.insert i v m1, m2')
+        go p1 (TCPVar _ i _) = do
+          (m1,m2) <- get
+          (v,m1') <- lift $ lift $ runStateT (instPat p1) m1
+          put (m1', Map.insert i v m2)
+        go TCPUnused p2 = do
+          (m1,m2) <- get
+          m2' <- lift $ lift $ snd <$> runStateT (instPat p2) m2
+          put (m1, m2')
+        go p1 TCPUnused = do
+          (m1,m2) <- get
+          (v,m1') <- lift $ lift $ runStateT (instPat p1) m1
+          put (m1', m2)
+        go (TCPatF pf1) (TCPatF pf2) = do
+          case (pf1, pf2) of
+            (UPTuple l1, UPTuple l2)
+              | length l1 == length l2 -> zipWithM_ go l1 l2
+            (UPRecord m1, UPRecord m2)
+              | Map.keys m1 == Map.keys m2 -> sequence_ (Map.intersectionWith go m1 m2)
+            (UPCtor c1 l1, UPCtor c2 l2)
+              | c1 == c2 && length l1 == length l2 -> zipWithM_ go l1 l2 
+            _ -> lift $ throwError "Pattern match failed"
+
+instantiatePats :: Pos -> TermContext s -> TCPat -> TCPat
+                -> TC s (Maybe (TermContext s, Subst, Subst))
+instantiatePats p tc x y = do
+  runUnifier tc p $ do
+    mr <- mergePats p x y
+    case mr of
+      Nothing -> return Nothing 
+      Just (xv,yv) -> do
+        mr' <- resolve $ do
+          xsv <- traverse resolveUTerm xv
+          ysv <- traverse resolveUTerm yv
+          tc <- gets urContext
+          return (flip applyExt tc <$> xsv, flip applyExt tc <$> ysv)
+        case mr' of
+          Left _ -> return Nothing
+          Right ((xs,ys),tc') -> return $ Just (tc', xs, ys)
 
 -- | Check types applied to reduced terms.
 checkTypesEqual' :: forall s . Pos -> CheckTypesCtx s
@@ -1196,11 +1286,13 @@ checkTypesEqual' p ctx tc x y = do
 
     ( (TCPi xp xtp xr, []), (TCPi yp ytp yr, []) ) -> do
        check' tc xtp ytp
-       (tc',xsub,ysub) <- instantiatePats tc xp yp 
-       let xr' = tcApply tc (extendPatContext tc xp, xr) (tc', xsub)
-       let yr' = tcApply tc (extendPatContext tc yp, yr) (tc', ysub)
-       check' tc' xr' yr'
-
+       mr <- instantiatePats p tc xp yp 
+       case mr of
+         Nothing -> return ()
+         Just (tc', xsub, ysub) -> do
+           let xr' = tcApply tc (extendPatContext tc xp, xr) (tc', xsub)
+           let yr' = tcApply tc (extendPatContext tc yp, yr) (tc', ysub)
+           check' tc' xr' yr'
     ( (TCLet lcls xv, xa), _) -> do
        rlcls <- evaluatedRefLocalDef lcls
        let tc' = consLocalDefs rlcls tc
