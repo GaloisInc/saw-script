@@ -302,15 +302,18 @@ fmapTCApply :: Functor f
              -> f TCTerm
 fmapTCApply (sTC, s) (vTC,v) = (\t -> tcApply vTC (sTC,t) (vTC,v)) <$> s
 
+
+addPatBindings :: TCPat -> State (Map Int (String,TCTerm)) ()
+addPatBindings (TCPVar nm i tp) = modify $ Map.insert i (nm,tp)
+addPatBindings TCPUnused{} = return ()
+addPatBindings (TCPatF pf) = traverse_ addPatBindings pf 
+
+
 patBoundVars :: TCPat -> [(String,TCTerm)]
-patBoundVars pat0 = Map.elems $ execState (go pat0) Map.empty
-  where go (TCPVar nm i tp) = modify $ Map.insert i (nm,tp)
-        go TCPUnused{} = return ()
-        go (TCPatF pf) = traverse_ go pf 
+patBoundVars pat0 = Map.elems $ execState (addPatBindings pat0) Map.empty
 
 extendPatContext :: TermContext s -> TCPat -> TermContext s
-extendPatContext tc0 pat = foldl' ins tc0 (patBoundVars pat)
-  where ins tc (nm,tp) = consBoundVar nm tp tc
+extendPatContext tc0 pat = foldr (uncurry consBoundVar) tc0 (patBoundVars pat)
 
 tcFixedPiApply :: ((TermContext s, r) -> (TermContext s, Vector TCTerm) -> r)
                -> (TermContext s, FixedPiType r)
@@ -374,34 +377,6 @@ consLocalDecls tc udl = do
   dl <- mapM procEqns dl'
   return (tc1, dl)
 
-headNormalForm :: UnifyTerm -> TC s UnifyTerm
-headNormalForm t =
-  case t of
-    UUndefinedVar i -> do
-      vb <- gets usVarBindings
-      case Map.lookup i vb of
-        Nothing -> return t
-        Just (TypeBinding u) -> headNormalForm u
-        Just (ValueBinding u _) -> headNormalForm u 
-    ULambda{} -> return t
-    UPi{} -> return t
-
-    UTupleValue{} -> return t
-    UTupleType {} -> return t
-
-    URecordValue{} -> return t
-    URecordSelector x f -> do
-      hnf <- headNormalForm x
-      case hnf of
-        URecordValue m | Just v <- Map.lookup f m ->
-          return v
-        _ -> return t
-    URecordType{} -> return t
-    UCtorApp{} -> return t
-    UDataType{} -> return t
-    USort{} -> return t
-    _ -> error $ "headNormalForm\n" ++ show t
-
 lookupTermRef :: UnifyTermRef -> TC s UnifyTerm
 lookupTermRef r = do
   s <- get
@@ -420,25 +395,7 @@ lookupTermRef r = do
     Just ActiveRef -> fail $ ppPos (pos sym) ++ " Cycle detected during typechecking: "
                                ++ show (val sym)
       where sym = utrIdent r
-
--- | @chkPiUnTermList@ checks 
-chkPiUnTermList :: TermContext s -> [Un.Term] -> UnifyTerm -> TC s ([UnifyTerm],UnifyTerm)
-chkPiUnTermList ctx = go []
-  where go al [] rhs = return (reverse al, rhs)
-        go al (ua:r) (UPi lhs lhsType rhs) = do
-          a <- tcTerm ctx ua lhsType
-          let sub = matchPat a lhs
-          rhs' <- headNormalForm =<< applyUnifyPatSub sub rhs
-          go (a:al) r rhs'
 -}
-
-{-
-typecheckEq :: UnifyTerm -> UnifyTerm -> TC s ()
---typecheckEq x y = error $ "typecheckEq undefined\n" ++ show x
-typecheckEq _ _ = return ()
--}
-
---data UVarRepState = UVRS { uvrs :: 
 
 data VarIndex s = VarIndex { viIndex :: !Int
                            , viName :: String
@@ -664,25 +621,6 @@ indexPiPats = go []
             UPi pip pilhs pirhs -> do
              -- Match up against pip and get substitution
              go (undefined pip pilhs pr) upl (undefined pirhs)
--}
-
-{-
-newFlexVar 
-
-  case pat of
-    Un.PVar pnm -> 
-    Un.PUnused pnm -> UPUnused <$> newFlexVar (Just (pos pnm)) (val pnm)
-    Un.PTuple p pl   -> (UPatF (Just p) . UPTuple) <$> mapM indexUnPat pl
-    Un.PRecord p fpl -> (UPatF (Just p) . UPRecord . Map.fromList . zip (val <$> fl))
-                                   <$> mapM indexUnPat pl
-      where (fl,pl) = unzip fpl
-    Un.PCtor i l -> do
-      tc <- gets usGlobalContext
-      case Map.lookup (val i) (tcBindings tc) of
-        Just (CtorIdent c _) -> do
-          (UPatF (Just (pos i)) . UPCtor c) <$> mapM indexUnPat l 
-        Just _ -> fail $ show (val i) ++ " does not refer to a constructor."
-        Nothing -> fail $ "Unknown symbol " ++ show (val i)
 -}
 
 runUnifier :: TermContext s -> Pos -> Unifier s v -> TC s v
@@ -958,6 +896,37 @@ tcTerm tc ut rtp = do
   v <$ checkTypeSubtype tc (pos ut) tp rtp
 
 reduce :: TermContext s -> TCTerm -> TC s TCTerm
+reduce tc t =
+  case tcAsApp t of
+    (TCF (URecordSelector r f), a) -> do
+      r' <- reduce tc r
+      case r' of
+        TCF (URecordValue m) ->
+          case Map.lookup f m of
+            Just v -> reduce tc (tcMkApp v a)
+            Nothing -> fail "Missing record field in reduce"
+        _ -> return t
+    (TCLambda pat tp rhs, a0:al) -> do
+      r <- tryMatchPat tc pat a0
+      case r of
+        Nothing -> return t
+        Just (tc',sub,_) -> reduce tc (tcMkApp t' al)
+          where t' = tcApply tc (tc',rhs) (tc,sub)
+    (TCF (UGlobal g), al) -> do
+        -- Get global equations.
+        m <- tryEval (globalDefEqns g tc)
+        case m of
+          Nothing -> return t
+          Just eqs -> procEqs eqs
+      where procEqs [] = return t
+            procEqs (DefEqnGen pats rhs:eql) = do
+              m <- tryMatchPatList tc pats al
+              case m of
+                Nothing -> procEqs eql
+                Just (tc', sub, rest) -> reduce tc (tcMkApp g' rest)
+                  where g' = tcApply tc (tc',rhs) (tc,V.reverse sub)
+    _ -> return t
+ 
 reduce _ t@(TCF tf) =
   case tf of
 {-
@@ -1016,7 +985,6 @@ tcCtorType i = tcFixedPiType (tcSpecificDataType i)
 maximumSort :: Foldable f => f Sort -> Sort
 maximumSort = foldl' maxSort (mkSort 0)
 
-
 inferTypedValue :: TermContext s -> Un.Term -> TC s (TCTerm, TCTerm)
 inferTypedValue tc ut = do
   r <- inferTerm tc ut
@@ -1053,8 +1021,7 @@ inferTerm tc uut = do
     Un.Lambda p pl r -> inferLambda tc p pl r
     Un.App uf _ ua -> mkRes =<< inferTerm tc uf
       where mkRes (PartialCtor dt i rargs pat tp cur) = do
-              (a,args) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
-              let tc1 = extendPatContext tc pat
+              (tc1, args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
               case cur of
                 FPResult dtArgs -> pure $ TypedValue v tp'
                   where v = TCF (UCtorApp i (reverse (a:rargs)))
@@ -1065,8 +1032,7 @@ inferTerm tc uut = do
                         tc2 = extendPatContext tc1 pat1
                         next' = tcCtorTypeApply (tc2,next) (tc,args)
             mkRes (PartialDataType dt rargs pat tp cur) = do
-              (a,args) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
-              let tc1 = extendPatContext tc pat
+              (tc1, args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
               case cur of
                 FPResult s -> pure $ TypedValue v (TCF (USort s))
                   where v = TCF (UDataType dt (reverse (a:rargs)))
@@ -1077,8 +1043,7 @@ inferTerm tc uut = do
                         next' = tcDTTypeApply (tc2,next) (tc,args)
             mkRes (TypedValue v tp0) = do
               (pat,patTp,tp) <- reduceToPiExpr tc (pos uf) tp0
-              (a,args) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
-              let tc1 = extendPatContext tc pat
+              (tc1, args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
               return $ TypedValue (TCF (UApp v a)) (tcApply tc (tc1,tp) (tc, args))
 
     Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
@@ -1175,7 +1140,14 @@ type Subst = Vector TCTerm
 
 type VarIndexMap s = Map Int (VarIndex s)
 
-mergePats :: Pos -> TCPat -> TCPat -> Unifier s (Maybe (Vector (VarIndex s), Vector (VarIndex s)))
+type VarSubst s = Vector (VarIndex s)
+
+type MergeComputation s = StateT (VarIndexMap s, VarIndexMap s) (ErrorT String (Unifier s))
+
+mergePats :: Pos
+          -> TCPat
+          -> TCPat
+          -> Unifier s (Maybe (VarSubst s, VarSubst s))
 mergePats p p10 p20 = do
     r <- runErrorT $ execStateT (go p10 p20) (Map.empty, Map.empty)
     return $
@@ -1184,10 +1156,10 @@ mergePats p p10 p20 = do
         Right (m1,m2) -> Just (mfn m1, mfn m2)
           where mfn m = V.fromList (Map.elems m)
   where instPat :: TCPat -> StateT (VarIndexMap s) (Unifier s) (VarIndex s) 
-        instPat (TCPVar nm j _) = do
-          r <- lift $ newRigidVar p nm
-          v <- lift $ mkVar nm (URigidVar (fst r))
-          v <$ modify (Map.insert j v)
+        instPat (TCPVar nm j _) = StateT $ \m -> do
+          r <- newRigidVar p nm
+          v <- mkVar nm (URigidVar (fst r))
+          return (v, Map.insert j v m)
         instPat TCPUnused = lift $ do
           tpv <- mkVar ("type of unused") (UFreeType "unused")
           mkVar "unused" (UUnused "unused" tpv)
@@ -1222,7 +1194,7 @@ mergePats p p10 p20 = do
               | Map.keys m1 == Map.keys m2 -> sequence_ (Map.intersectionWith go m1 m2)
             (UPCtor c1 l1, UPCtor c2 l2)
               | c1 == c2 && length l1 == length l2 -> zipWithM_ go l1 l2 
-            _ -> lift $ throwError "Pattern match failed"
+            _ -> lift $ throwError "Pattern merging failed"
 
 instantiatePats :: Pos -> TermContext s -> TCPat -> TCPat
                 -> TC s (Maybe (TermContext s, Subst, Subst))
@@ -1340,27 +1312,68 @@ checkTypeSubtype tc p x y = do
 unimpl :: String -> a
 unimpl nm = error (nm ++ " unimplemented")
 
+type MatchAttempt s = StateT (Map Int TCTerm) (ErrorT String (TC s))
+
+-- | Attempt to match term against a pat, returns reduced term that matches.
+attemptMatch :: TermContext s -> TCPat -> TCTerm -> MatchAttempt s TCTerm
+attemptMatch _ (TCPVar _ i _) t = t <$ modify (Map.insert i t)
+attemptMatch _ TCPUnused t = return t
+attemptMatch tc (TCPatF pf) t = do
+  let go = attemptMatch tc
+  rt <- lift $ lift $ reduce tc t
+  case (pf, rt) of
+    (UPTuple pl, TCF (UTupleValue tl)) | length pl == length tl ->
+      TCF . UTupleValue <$> sequenceA (zipWith go pl tl)
+    (UPRecord pm, TCF (URecordValue tm)) | Map.keys pm == Map.keys tm ->
+      TCF . URecordValue <$> sequenceA (Map.intersectionWith go pm tm)
+    (UPCtor cp pl, TCF (UCtorApp ct tl)) | cp == ct ->
+      TCF . UCtorApp ct <$> sequenceA (zipWith go pl tl)
+    _ -> lift $ throwError "Pattern match failed."
+
+-- | Match untyped term against pattern, returning variables in reverse order.
+-- so that last-bound variable is first.  Also returns the term after it was matched.
+-- This may differ to the input term due to the use of reduction during matching.
+tryMatchPat :: TermContext s
+            -> TCPat -> TCTerm -> TC s (Maybe (TermContext s, Subst, TCTerm))
+tryMatchPat tc pat t = do
+    fmap finish $ runErrorT $ runStateT (attemptMatch tc pat t) Map.empty
+  where finish Left{} = Nothing
+        finish (Right (t,args)) = Just (tc', V.fromList (Map.elems args), t)
+          where tc' = extendPatContext tc pat
+
+
+-- | Match untyped term against pattern, returning variables in reverse order.
+-- so that last-bound variable is first.  Also returns the term after it was matched.
+-- This may differ to the input term due to the use of reduction during matching.
+tryMatchPatList :: TermContext s
+                -> [TCPat]
+                -> [TCTerm]
+                -> TC s (Maybe ( TermContext s
+                               , Subst
+                               , [TCTerm]))
+tryMatchPatList tc pats terms =
+    fmap finish $ runErrorT $ runStateT (go pats terms) Map.empty
+  where go (pat:pl) (term:tl) =
+          attemptMatch tc pat term >> go pl tl
+        go [] tl = return tl
+        go _ [] = fail "Insufficient number of terms"
+        finish Left{} = Nothing
+        finish (Right (tl,args)) = Just (tc', V.fromList (Map.elems args), tl)
+          where bindings = Map.elems $ execState (mapM_ addPatBindings pats) Map.empty 
+                tc' = foldr (uncurry consBoundVar) tc bindings
+
+
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.
 -- This may differ to the input term due to the use of reduction during matching.
 matchPat :: forall s
           . TermContext s
-         -> Pos -> TCPat -> TCTerm -> TC s (TCTerm, Vector TCTerm)
-matchPat tc p pat t = second finish <$> runStateT (go (pat, t)) Map.empty
-  where finish = V.reverse . V.fromList . Map.elems 
-        go :: (TCPat, TCTerm) -> StateT (Map Int TCTerm) (TC s) TCTerm
-        go (TCPVar _ i _, t) = t <$ modify (Map.insert i t)
-        go (TCPUnused, t) = return t
-        go (TCPatF pf, t) = do
-          rt <- lift $ reduce tc t
-          case (pf,rt) of
-            (UPTuple pl, TCF (UTupleValue tl)) | length pl == length tl ->
-              TCF . UTupleValue <$> traverse go (zip pl tl)
-            (UPRecord pm, TCF (URecordValue tm)) | Map.keys pm == Map.keys tm ->
-              TCF . URecordValue <$> traverse go (Map.intersectionWith (,) pm tm)
-            (UPCtor pc pl, TCF (UCtorApp tc tl)) | pc == tc ->
-              TCF . UCtorApp tc <$> traverse go (zip pl tl)
-            _ -> lift $ tcFail p $ "Pattern match failed."
+         -> Pos -> TCPat -> TCTerm -> TC s (TermContext s, Vector TCTerm, TCTerm)
+matchPat tc p pat t = do
+  mr <- tryMatchPat tc pat t
+  case mr of
+    Nothing -> tcFail p $ "Pattern match failed."
+    Just r -> return r
 
 -- | Attempt to reduce a term to a  pi expression, returning the pattern, type
 -- of the pattern and the right-hand side.
@@ -1404,131 +1417,6 @@ typecheckAnyType ctx ut = do
     USort s -> return (t,s)
     _ -> errMsg
 
--- | Typecheck that this term has a type.
-typecheckAnyTerm :: TermContext s -> Un.Term -> TC s (UnifyTerm,UnifyTerm)
-typecheckAnyTerm tc (Un.asApp -> (Un.Con i, uargs)) = do
-  case Map.lookup (val i) (tcGlobalBindings tc) of
-    Just (CtorIdent c r) -> do
-      tp <- lookupTermRef r
-      (args,rhsTp) <- chkPiUnTermList tc uargs =<< headNormalForm tp
-      return (UCtorApp c args, rhsTp)
-    Just (DataTypeIdent dt r) -> do
-      tp <- lookupTermRef r
-      (args,rhsTp) <- chkPiUnTermList tc uargs =<< headNormalForm tp
-      return (UDataType dt args, rhsTp)
-    Just DefIdent{} -> internalError "Found def identifier bound to constructor ident"
-    Nothing -> fail $ ppPos (pos i) ++ " Not in scope: \'" ++ show (val i) ++ "\'"
-
-typecheckAnyTerm tc utp =
-  case utp of
-    Un.Var ui -> do
-      case Map.lookup (val ui) (tcVarBindings tc) of
-        Just p -> return p
-        Nothing -> do
-          case Map.lookup (val ui) (tcGlobalBindings tc) of
-            Just (DefIdent i r _) -> do
-              tp <- lookupTermRef r
-              return (UGlobal i,tp)
-            _ -> failPos (pos ui) $ show (val ui) ++ " unbound in current context."
-    Un.Sort _ s -> return (USort s, USort (sortOf s))
-
-    Un.App uf _ ut -> do
-      (f,ftp) <- typecheckAnyTerm tc uf
-      UPi lhs lhsType rhs <- headNormalForm ftp
-      t <- tcTerm tc ut lhsType
-      let sub = matchPat t lhs
-      rhs' <- applyUnifyPatSub sub rhs
-      return (UApp f t, rhs')
-
-    Un.Pi _ pats utp _ rhs -> do
-      (tp, tpSort) <- typecheckAnyType tc utp
-      (tc', pl) <- consPatVars tc pats tp
-      (rest, restSort) <- typecheckAnyType tc' rhs
-      return ( foldr (\p -> UPi p tp) rest pl
-             , USort (maxSort tpSort restSort)
-             )
-
-    Un.TupleType _ tl  -> do
-      pairs <- mapM (typecheckAnyType tc) tl
-      let (terms,types) = unzip pairs
-      let resSort = foldl' maxSort (mkSort 0) types
-      return ( UTupleType terms
-             , USort resSort
-             )
-
-    Un.RecordType _ fl -> do
-      let (fields,uterms) = unzip fl
-      pairs <- mapM (typecheckAnyType tc) uterms
-      let (terms,types) = unzip pairs
-      let resSort = foldl' maxSort (mkSort 0) types
-      return ( URecordType (Map.fromList (fmap val fields `zip` terms))
-             , USort resSort
-             )
-
-    Un.Paren _ t -> typecheckAnyTerm tc t
-
-    _ -> error $ "typecheckAnyTerm " ++ show utp
-
--- | Convert an untyped expression into a term for unification.
-convertTerm :: TermContext s -> Un.Term -> TC s UnifyTerm
-convertTerm ctx (Un.asApp -> (Un.Con i, uargs)) = do
-  bm <- gets (ctxGlobalBindings . usGlobalContext)
-  case Map.lookup (val i) bm of
-    Just (CtorIdent c r) -> do
-      tp <- lookupTermRef r
-      hnf <- headNormalForm tp
-      (args,_) <- chkPiUnTermList ctx uargs hnf
-      return $ UCtorApp c args
-    Just (DataTypeIdent dt _) -> do
-      args <- mapM (convertTerm ctx) uargs  
-      return $ UDataType dt args
-    Just DefIdent{} -> internalError "Found def identifier bound to constructor ident"
-    Nothing -> fail $ ppPos (pos i) ++ " Not in scope: \'" ++ show (val i) ++ "\'"
-convertTerm tc uut =
-  case uut of
-    Un.Var i -> tcFindLocalBinding i tc
-    Un.Unused{} -> fail "Pattern syntax when term expected"
-    Un.Con{} -> fail "Unexpected constructor"
-    Un.Sort _ s -> return (USort s)
-    Un.Lambda _ args rhs -> procArgs tc args
-      where procArgs :: TermContext s
-                     -> [(Un.ParamType, [Un.Pat], Un.Term)]
-                     -> TC s UnifyTerm
-            procArgs lctx [] = convertTerm lctx rhs 
-            procArgs lctx ((_,patl,utp):l) = do
-              tp <- convertTerm lctx utp
-              (lctx',pl) <- consPatVars lctx patl tp
-              rest <- procArgs lctx' l
-              return $ foldr (\p -> ULambda p tp) rest pl
-    Un.App f _ t -> liftM2 UApp (convertTerm tc f) (convertTerm tc t)
-    Un.Pi _ pats utp _ rhs -> do
-      tp <- convertTerm tc utp
-      (tc', pl) <- consPatVars tc pats tp
-      rest <- convertTerm tc' rhs
-      return $ foldr (\p -> UPi p tp) rest pl
-
-    Un.TupleValue _ tl -> UTupleValue <$> mapM (convertTerm tc) tl
-    Un.TupleType _ tl  -> UTupleType <$> mapM (convertTerm tc) tl
-
-    Un.RecordValue _ fl -> do
-      let (fields,uterms) = unzip fl
-      terms <- mapM (convertTerm tc) uterms
-      return $ URecordValue (Map.fromList (fmap val fields `zip` terms))
-    Un.RecordSelector ux i -> (flip URecordSelector (val i)) <$> convertTerm tc ux
-    Un.RecordType _ fl -> do
-      let (fields,uterms) = unzip fl
-      terms <- mapM (convertTerm tc) uterms
-      return $ URecordType (Map.fromList (fmap val fields `zip` terms))
-
-    Un.TypeConstraint t _ _ -> convertTerm tc t
-    Un.Paren _ t -> convertTerm tc t
-    Un.LetTerm _ udl urhs -> do
-      (tc',dl) <- consLocalDecls tc udl
-      rhs <- convertTerm tc' urhs
-      return $ ULet dl rhs
-    Un.IntLit _ i -> return $ UIntLit i
-    Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
-
 -- | A substitution that is applied to rigid variables in a pattern.
 type UnifyPatSubst = Map RigidVarRef UnifyTerm
 
@@ -1567,25 +1455,6 @@ checkCtorType c cpl ctorType = do
       tp <- lookupTermRef r
       rhsTp <- instPiType cpl tp
       unifyTypes rhsTp ctorType
-
-hasType :: UPat
-        -> UnifyTerm
-        -> TC s ()
-hasType (UPVar v) tp = setRigidVarType v tp
-hasType (UPUnused _) _ = return ()
-hasType (UPatF _ pf) tp =
-  case pf of
-    UPTuple pl ->
-      case tp of
-        UTupleType tpl | length pl == length tpl ->
-          zipWithM_ hasType pl tpl
-        _ -> internalError $ "Could not match tuple pattern against type " ++ show tp
-    UPRecord pm ->
-      case tp of
-        URecordType tpm | Map.keys pm == Map.keys tpm ->
-          zipWithM_ hasType (Map.elems pm) (Map.elems tpm)
-        _ -> internalError "Could not match record pattern"
-    UPCtor c cpl -> checkCtorType c cpl tp
 
 applyUnifyPatSub :: UnifyPatSubst -> UnifyTerm -> TC s UnifyTerm
 applyUnifyPatSub sub = go 
@@ -1792,13 +1661,6 @@ includeNameInModule mic = fn . identName
                  where imset = importNameStrings iml
 
 {-
-completeCtor :: UnifyResult -> TCCtor -> TypedCtor
-completeCtor r (Ctor nm tp) = Ctor nm (completeTerm r tp)
-
-
-completeDef :: TermContext s
-            -> TC s 
-
 assignDataType :: TermContext s -> UnDataType -> TC s TCDataType
 assignDataType tc dt = do
   tp <- convertTerm tc (dtType dt)

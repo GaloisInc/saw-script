@@ -11,6 +11,7 @@ module Verifier.SAW.Typechecker.Monad
   , assign
   , eval
   , evaluatedRef
+  , tryEval
   ) where
 
 import Control.Applicative
@@ -29,7 +30,6 @@ data TCState s = TS { tsErrors :: [FailReason]
 -- | Record the given error reason.
 addError :: TCState s -> FailReason -> TCState s
 addError s e = s { tsErrors = e : tsErrors s }
-
 
 data FailReason where
   -- | This is raised by bugs in the typechecker.
@@ -87,20 +87,14 @@ data TCCont s a where
   -- current task succeeds or fails.
   TCFail :: TCCont s a -> TCCont s b
   -- | Continuation for resuming computation after the current task finishes.
-  TCTry :: TCCont s (Maybe a) -> TCCont s a
+  TCTry :: TCRef s a
+        -> TCCont s (Maybe a)
+        -> TCCont s a
   -- | Set a lazy value when task succeeds, and provide the value to the given continuations.
-  TCSet :: TCRef s a -> Maybe (Pos, TCCont s a) -> TCCont s a
-
-{-
--- | Return name of node this context will set next.
-contName :: TCCont s a -> String
-contName (TCFMap _ c) = contName c
-contName (TCApp _ c) = contName c
-contName (TCBind _ c) = contName c
-contName (TCFail c) = contName c
-contName (TCTry c) = contName c
-contName (TCSet r _) = tcrName r
--}
+  TCSet :: TCRef s a
+        -> Maybe (Pos, TCCont s a)
+        -> TC s a -- ^ Action that we are doing for evaluating.
+        -> TCCont s a
 
 -- | Called when computation completes succcessfully.
 tcDone :: v -> TCCont s v -> TCState s -> ST s (TCState s)
@@ -110,18 +104,16 @@ tcDone v tc0 s =
     TCApp (TC g) tc -> g (TCFMap v tc) s
     TCBind g tc -> unTC (g v) tc s
     TCFail tc -> tcError tc s
-    TCTry tc -> tcDone (Just v) tc s
-    TCSet r mcl -> do
-      rs <- readSTRef (tcrRef r)
-      let intErr msg = tcError tc0 (s `addError` fr)
-            where fr = InternalError msg
-      case rs of
-        TRSActive -> do
-          writeSTRef (tcrRef r) $! TRSDone v
-          case mcl of
-            Nothing -> return s
-            Just (_,tc') -> tcDone v tc' s
-        _ -> intErr "Illegal attempt to set value."
+    TCTry r tc -> do
+      writeSTRef (tcrRef r) $! TRSDone v
+      tcDone (Just v) tc s
+    TCSet r mcl _ -> do
+      TRSActive <- readSTRef (tcrRef r)
+      writeSTRef (tcrRef r) $! TRSDone v
+      case mcl of
+        Nothing -> return s
+        Just (_,tc) -> tcDone v tc s
+
 
 tcError :: TCCont s a
         -> TCState s
@@ -132,8 +124,8 @@ tcError tc0 s =
     TCApp (TC g) tc -> g (TCFail tc) s
     TCBind _ tc -> tcError tc s
     TCFail tc -> tcError tc s 
-    TCTry tc -> tcDone Nothing tc s
-    TCSet r mcl -> do
+    TCTry _ tc -> tcDone Nothing tc s
+    TCSet r mcl _ -> do
       rs <- readSTRef (tcrRef r)
       let intErr msg = tcError tc0 (s `addError` fr1)
             where fr1 = InternalError msg
@@ -171,7 +163,7 @@ runTC tc = runST $ do
   let ts0 = TS { tsErrors = []
                , tsRefCount = 1
                }
-  s <- unTC tc (TCSet (TCRef "Initial node" 0 vr) Nothing) ts0
+  s <- unTC tc (TCSet (TCRef "Initial node" 0 vr) Nothing tc) ts0
   case tsErrors s of
     [] -> do
      r <- readSTRef vr
@@ -219,6 +211,21 @@ assign r h  = TC $ \tc s -> do
     _ -> tcError tc (s `addError` fr)
       where fr = InternalError "Duplicate ref assignment"
 
+data SomeTCRef s where
+  SomeTCRef :: TCRef s v -> TC s v -> SomeTCRef s
+
+tryEval :: forall s v . TCRef s v -> TC s (Maybe v)
+tryEval r = TC $ \tc0 s0 -> do
+  m <- readSTRef (tcrRef r)
+  case m of
+    TRSUnassigned -> fail "Attempt to evaluate reference before it is assigned"
+    TRSAssigned h -> do
+      writeSTRef (tcrRef r) $! TRSActive
+      unTC h (TCTry r tc0) s0
+    TRSActive -> tcDone Nothing tc0 s0
+    TRSDone v -> tcDone (Just v) tc0 s0
+    TRSFailed -> tcDone Nothing tc0 s0
+
 eval :: forall s v . Pos -> TCRef s v -> TC s v
 eval p0 r = TC $ \tc0 s0 -> do
   m <- readSTRef (tcrRef r)
@@ -226,32 +233,38 @@ eval p0 r = TC $ \tc0 s0 -> do
     TRSUnassigned -> fail "Attempt to evaluate reference before it is assigned"
     TRSAssigned h -> do
       writeSTRef (tcrRef r) $! TRSActive
-      unTC h (TCSet r (Just (p0,tc0))) s0
-    TRSActive -> resolveCycle (p0,r,[],s0) tc0
-      where resolveCycle :: (Pos,TCRef s a, [CycleEdge], TCState s)
+      unTC h (TCSet r (Just (p0,tc0)) h) s0
+    TRSActive -> resolveCycle (p0,r,[],[],s0) tc0
+      where resetSet (SomeTCRef r' h) = writeSTRef (tcrRef r') $! TRSAssigned h
+            failSet (SomeTCRef r' _) = writeSTRef (tcrRef r') TRSFailed
+            resolveCycle :: (Pos,TCRef s a, [CycleEdge], [SomeTCRef s], TCState s)
                          -> TCCont s b
                          -> ST s (TCState s)
             resolveCycle c (TCFMap _ tc) = resolveCycle c tc
             resolveCycle c (TCApp _ tc)  = resolveCycle c tc
             resolveCycle c (TCBind _ tc) = resolveCycle c tc
-            resolveCycle (_,_,_,s) (TCFail tc)   = tcError tc s
-            resolveCycle (_,_,_,s) (TCTry tc)    = tcDone Nothing tc s
+            resolveCycle (_,_,_,l,s) (TCFail tc) =
+              mapM_ resetSet l >> tcError tc s
+            resolveCycle (_,_,_,l,s) (TCTry _ tc) =
+              mapM_ resetSet l >> tcDone Nothing tc s
             -- We found the end of the cycle 
-            resolveCycle (p,rn,el,s) (TCSet rp mcl) | tcrIdx r == tcrIdx rp = do
+            resolveCycle (p,rn,el,l,s) (TCSet rp mcl _) | tcrIdx r == tcrIdx rp = do
+              mapM_ failSet l
               writeSTRef (tcrRef rp) TRSFailed
               let el' = (p, tcrName r, tcrName rn):el
               let s' = s `addError` CycleFound el'
               case mcl of
                 Nothing -> return s'
                 Just (_,tc') -> tcError tc' s'
-            resolveCycle (_,_,el,s) (TCSet rp Nothing) = do
+            resolveCycle (_,_,el,l,s) (TCSet rp Nothing _) = do
+                mapM_ failSet l
                 writeSTRef (tcrRef rp) TRSFailed
                 return (s `addError` InternalError msg)
               where msg = "Encountered terminating continuation before end of cycle:\n"
                             ++ show (ppCycle el)
-            resolveCycle (p,rn,el,s) (TCSet rp (Just (p',tc))) = do
+            resolveCycle (p,rn,el,l,s) (TCSet rp (Just (p',tc)) h) = do
                 writeSTRef (tcrRef rp) TRSFailed
-                resolveCycle (p',rp,el',s) tc
+                resolveCycle (p',rp,el',SomeTCRef rp h:l, s) tc
               where el' = (p, tcrName rp, tcrName rn):el
     TRSDone v -> tcDone v tc0 s0
     TRSFailed -> tcError tc0 s0

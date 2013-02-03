@@ -52,6 +52,7 @@ module Verifier.SAW.Typechecker.Context
   , resolveIdent
   , resolveBoundVar
   , resolveLocalDef
+  , globalDefEqns
   , contextNames
   , ppTermContext
   , boundVarDiff
@@ -62,6 +63,7 @@ import Control.Monad.Identity
 import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -291,12 +293,14 @@ data GlobalBinding r
 type GlobalContextMap s = Map Un.Ident (GlobalBinding (TCRef s))
 
 data GlobalContext s = GC { gcMap :: !(GlobalContextMap s)
+                          , gcEqns :: !(Map Ident (TCRef s [TCDefEqn]))
                           , gcTypes :: ![ TCRefDataType s ]
                           , gcDefs :: ![ TCRefDef s ]
                           } 
 
 emptyGlobalContext :: GlobalContext s
 emptyGlobalContext = GC { gcMap = Map.empty
+                        , gcEqns = Map.empty
                         , gcTypes = []
                         , gcDefs = []
                         }
@@ -330,8 +334,9 @@ insertDef :: [Maybe ModuleName]
           -> TCRefDef s
           -> GlobalContext s
           -> GlobalContext s
-insertDef mnml vis d@(DefGen nm _ _) gc =
+insertDef mnml vis d@(DefGen nm _ eqs) gc =
     gc { gcMap = ins $ gcMap gc
+       , gcEqns = Map.insert nm eqs (gcEqns gc)
        , gcDefs = d:gcDefs gc
        }
   where ins = insGlobalBinding vis mnml (identName nm) (DefBinding d)
@@ -366,12 +371,15 @@ consBoundVar nm tp ctx = BindContext ctx nm tp
 consLocalDefs :: [TCRefLocalDef s] -> TermContext s -> TermContext s
 consLocalDefs = flip LetContext
 
+globalContext :: TermContext s -> GlobalContext s
+globalContext (BindContext tc _ _) = globalContext tc
+globalContext (LetContext tc _) = globalContext tc
+globalContext (TopContext gc) = gc
+
 -- | Lookup ctor returning identifier and type.
 resolveCtor :: TermContext s -> PosPair Un.Ident -> Int -> TC s (Ident, TCTerm)
-resolveCtor (BindContext tc _ _) p args = resolveCtor tc p args
-resolveCtor (LetContext tc _) p args = resolveCtor tc p args
-resolveCtor (TopContext gc) (PosPair p nm) argc = do
-  case Map.lookup nm (gcMap gc) of
+resolveCtor tc (PosPair p nm) argc =
+  case Map.lookup nm (gcMap (globalContext tc)) of
     Just (CtorBinding dt (Ctor c rtp)) -> do
       tp <- eval p rtp
       if fixedPiArgCount tp == argc then
@@ -380,7 +388,11 @@ resolveCtor (TopContext gc) (PosPair p nm) argc = do
         tcFail p "Incorrect number of arguments givne to constructor."
     Just (DataTypeBinding{}) -> tcFail p $ "Pattern matching data type is unsupported."
     Just _ -> fail "Unexpected ident type"
-    Nothing -> tcFail p $ "Unknown identifierl: " ++ show nm ++ "."
+    Nothing -> tcFail p $ "Unknown identifier: " ++ show nm ++ "."
+
+globalDefEqns :: Ident -> TermContext s -> TCRef s [TCDefEqn]
+globalDefEqns i tc = fromMaybe emsg $ Map.lookup i (gcEqns (globalContext tc))
+  where emsg = error $ "Could not find equations for " ++ show i ++ "."
 
 data InferResult where
   -- | Ctor with identifier argument list and 
