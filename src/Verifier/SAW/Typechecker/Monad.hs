@@ -5,6 +5,7 @@ module Verifier.SAW.Typechecker.Monad
   , liftST
   , runTC
   , tcFail
+  , tcFailD
   , TCRef
   , NodeName
   , newRef
@@ -179,6 +180,9 @@ liftST m = TC $ \c s -> m >>= \v -> tcDone v c s
 -- | Fail with a typechecker error.  Position is required for all non-internal errors.
 tcFail :: Pos -> String -> TC s a
 tcFail p nm = TC $ \tc s -> tcError tc (s `addError` TypeError p nm) 
+
+tcFailD :: Pos -> Doc -> TC s a
+tcFailD p d = tcFail p $ show d
 
 data TCRefState s v
   = TRSUnassigned

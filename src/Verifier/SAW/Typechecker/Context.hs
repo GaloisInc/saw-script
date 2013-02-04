@@ -8,33 +8,39 @@ module Verifier.SAW.Typechecker.Context
   ( -- * Term definitions
     TCTerm(..)
   , TCTermF(..)
+  , tcMkApp
+  , tcAsApp
+  , ppTCTerm, ppTCTermF
   , TCPat(..)
   , PatF(..)
-  , TCDefGen(..)
-  , TCDataTypeGen
-  , TCDefEqn
-  , TCLocalDef
-  , DefEqnGen(..)
+  , tcPatVarCount
+  , fmapTCPat
+  , tcApply
+  , tcPatApply
+
   , LocalDefGen(..)
+  , TCRefLocalDef
+  , TCLocalDef
+  , fmapTCLocalDefs
+  , localVarNamesCount
+
+  , TCDefGen(..)
+  , TCRefDef
+
+  , DefEqnGen(..)
+  , TCDefEqn
+
   , DataTypeGen(..)
+  , TCDataTypeGen
+  , TCRefDataType
+  , TCCtorType
+  , TCRefCtor
+
   , FixedPiType(..)
   , TCDTType
   , termFromTCDTType
-  , TCCtorType
   , termFromTCCtorType
-  , TCRefDataType
-  , TCRefCtor
-  , TCRefDef
-  , TCRefLocalDef
-  , fmapTCPat
-  , fmapTCLocalDefs
-  , tcPatVarCount
-  , localVarNamesCount
-  , ppTCTerm, ppTCTermF
-  , tcApply
-  , tcPatApply
-  , applyExt
-  , boundFreeVarsWithPi
+
     -- * Global context
   , GlobalContext
   , emptyGlobalContext
@@ -56,6 +62,8 @@ module Verifier.SAW.Typechecker.Context
   , contextNames
   , ppTermContext
   , boundVarDiff
+  , applyExt
+  , boundFreeVarsWithPi
   ) where
 
 import Control.Applicative
@@ -152,6 +160,16 @@ data TCTermF t
   | UArray t (Vector t)
 
   deriving (Show, Functor, Foldable, Traversable)
+
+tcMkApp :: TCTerm -> [TCTerm] -> TCTerm
+tcMkApp = go
+  where go t [] = t
+        go t (a:l) = go (TCF (UApp t a)) l
+
+tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
+tcAsApp = go []
+  where go r (TCF (UApp f v)) = go (v:r) f
+        go r f = (f,r) 
 
 -- | A pi type that accepted a statically-determined number of arguments.
 data FixedPiType r
@@ -276,11 +294,6 @@ tcApplyImpl vd v = go
 -- | Extend a term with the context from the given pair to the extended context.
 applyExt :: (TermContext s,TCTerm) -> TermContext s -> TCTerm
 applyExt (tc0,t) tc1 = incTCVars (boundVarDiff tc1 tc0) 0 t
-
--- | Bound the free variables in the term with pi quantifiers.
-boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
-boundFreeVarsWithPi = error "boundFreeVarsWithPi unimplemented"
-
 
 -- Global context stuff
 
@@ -533,6 +546,14 @@ ppTCTermF pp tf =
     USort s -> pure $ text (show s)
     UNatLit i -> pure $ text (show i)
     UArray _ vl -> brackets . commaSepList <$> traverse pp (V.toList vl)
+
+-- | Bound the free variables in the term with pi quantifiers.
+boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
+boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0 
+  where d0 = boundVarDiff tc1 tc0
+        go 0 _ t = t
+        go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm 0 tp) tp t) 
+        go _ _ _ = error "boundFreeVarsWithPi given bad context"
 
 {-
 -- | Checks that references in term point to valid variables.
