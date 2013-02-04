@@ -20,7 +20,7 @@ module Verifier.SAW.SharedTerm
   , scMkRecord
   , scRecordSelect
   , scApplyCtor
-  , scNat
+  , scFun
   , scInteger
   , scTermF
   , scTypeOf
@@ -111,9 +111,6 @@ scRecordSelect = scRecordSelectFn ?sc
 scApplyCtor :: (?sc :: SharedContext s) => TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyCtor = scApplyCtorFn ?sc
 
-scNat :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
-scNat = undefined
-
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scInteger = scIntegerFn ?sc
 
@@ -148,6 +145,11 @@ scPrettyTerm t = show (scPrettyTermDocFn ?sc t)
 
 scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
 scTermF = scTermFFn ?sc
+
+scFun :: (?sc :: SharedContext s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFun t1 t2 =
+    do t2' <- Verifier.SAW.SharedTerm.incVars 0 1 t2
+       scTermF (Pi "_" t1 t2')
 
 -- 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
@@ -238,7 +240,7 @@ typeOf (STApp _ tf) =
   case tf of
     LocalVar _ tp -> return tp
     GlobalDef d -> sharedDefType d
-    Lambda i tp rhs -> do
+    Lambda (PVar i _ _) tp rhs -> do
       rtp <- typeOf rhs
       mkApp (Pi i tp rtp)
     App x y -> do
@@ -293,7 +295,7 @@ mkSharedContext m = do
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
            , scApplyCtorFn = undefined
-           , scIntegerFn = undefined
+           , scIntegerFn = getTerm cr . IntLit
            , scTypeOfFn = typeOf
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined

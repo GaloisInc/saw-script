@@ -258,8 +258,9 @@ upatToTerm (UPatF _ pf) =
 indexUnPat :: Un.Pat -> Unifier s (UPat s, VarIndex s)
 indexUnPat upat =
   case upat of
-    Un.PVar (PosPair p nm) -> first UPVar <$> newRigidVar p nm
-    Un.PUnused (PosPair _ nm) -> do
+    Un.PSimple (Un.PVar (PosPair p nm)) ->
+      first UPVar <$> newRigidVar p nm
+    Un.PSimple (Un.PUnused (PosPair _ nm)) -> do
       tpv <- mkVar ("type of " ++ nm) (UFreeType nm)
       v <- mkVar nm (UUnused nm tpv)
       return (UPUnused v, tpv)

@@ -218,7 +218,7 @@ tcFixedPiType :: (TermContext s -> Un.Term -> TC s r)
 tcFixedPiType fn = go 
   where go tc (Un.Pi _ pats utp _ rhs) = do
           (tp, _) <- tcType tc utp
-          (pl, tc') <- typecheckPats tc pats tp
+          (pl, tc') <- typecheckPats tc (Un.PSimple <$> pats) tp
           (\r -> foldr (\pat -> FPPi pat tp) r pl) <$> go tc' rhs
         go tc ut = FPResult <$> fn tc ut
 
@@ -294,7 +294,7 @@ inferTerm tc uut = do
     Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
     Un.Pi _ pats utp _ rhs -> do
       (tp,tps) <- tcType tc utp
-      (pl, tc') <- typecheckPats tc pats tp
+      (pl, tc') <- typecheckPats tc (Un.PSimple <$> pats) tp
       (rest,rps) <- tcType tc' rhs
       let v' = foldr (\pat -> TCPi pat tp) rest pl
       return $ TypedValue v' (TCF (USort (maxSort tps rps)))
@@ -336,7 +336,6 @@ inferTerm tc uut = do
       where natIdent = mkIdent (mkModuleName ["Prelude"]) "Nat"
             nattp = TCF (UDataType natIdent [])
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
-
 
 tcLocalDecls :: TermContext s
              -> Pos
@@ -489,9 +488,12 @@ completeTerm cc (TCF tf) =
 completeTerm cc (TCLambda pat tp r) = Term $
     Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
   where (pat', cc') = completePat cc pat
-completeTerm cc (TCPi pat tp r) = Term $
-    Pi pat' (completeTerm cc tp) (completeTerm cc' r)
+completeTerm cc (TCPi pat@(TCPVar nm _ _) tp r) = Term $
+    Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (pat', cc') = completePat cc pat
+completeTerm cc (TCPi pat@(TCPUnused{}) tp r) = Term $
+    Pi "_" (completeTerm cc tp) (completeTerm cc' r)
+  where (_, cc') = completePat cc pat
 completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
   where (cc',tps) = addPatTypes cc (localBoundVars <$> lcls)
         completeLocal (LocalFnDefGen nm _ eqns) tp =
@@ -499,6 +501,7 @@ completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
         lcls' = zipWith completeLocal lcls tps
 completeTerm cc (TCVar i) = Term $ LocalVar i (ccVarType cc i)
 completeTerm cc (TCLocalDef i) = Term $ LocalVar i (ccVarType cc i)
+
 
 addImportNameStrings :: Un.ImportName -> Set String -> Set String
 addImportNameStrings im s =

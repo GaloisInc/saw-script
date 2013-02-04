@@ -11,6 +11,7 @@ module Verifier.SAW.UntypedAST
   , asApp
   , ParamType(..)
   , Pat(..), ppPat
+  , SimplePat(..)
   , FieldName
   , Ident, localIdent, asLocalIdent, mkIdent, identModule, setIdentModule
   , Sort, mkSort, sortOf
@@ -79,8 +80,8 @@ data Term
   | Lambda Pos [(ParamType,[Pat],Term)] Term
   | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
-  | Pi ParamType [Pat] Term Pos Term
-
+--  | Pi ParamType [Pat] Term Pos Term
+  | Pi ParamType [SimplePat] Term Pos Term
     -- | Tuple expressions and their type.
   | TupleValue Pos [Term]
   | TupleType Pos [Term]
@@ -100,17 +101,22 @@ data Term
  deriving (Show)
 
 -- | A pattern used for matching a variable.
-data Pat
+data SimplePat
   = PVar (PosPair String)
   | PUnused (PosPair String)
+  deriving (Eq, Ord, Show)
+
+-- | A pattern used for matching a variable.
+data Pat
+  = PSimple SimplePat
   | PTuple Pos [Pat]
   | PRecord Pos [(PosPair FieldName, Pat)]
   | PCtor (PosPair Ident) [Pat]
   deriving (Eq, Ord, Show)
 
 ppPat :: Prec -> Pat -> Doc
-ppPat _ (PVar pnm) = text (val pnm)
-ppPat _ (PUnused pnm) = text (val pnm)
+ppPat _ (PSimple (PVar pnm)) = text (val pnm)
+ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
 ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat 1 <$> l)
 ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
   where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat 1 v
@@ -138,11 +144,16 @@ instance Positioned Term where
       IntLit p _           -> p
       BadTerm p            -> p
 
-instance Positioned Pat where
+instance Positioned SimplePat where
   pos pat =
     case pat of
       PVar i      -> pos i
       PUnused i   -> pos i
+
+instance Positioned Pat where
+  pos pat =
+    case pat of
+      PSimple i   -> pos i
       PTuple p _  -> p
       PRecord p _ -> p
       PCtor i _   -> pos i
