@@ -302,15 +302,18 @@ fmapTCApply :: Functor f
              -> f TCTerm
 fmapTCApply (sTC, s) (vTC,v) = (\t -> tcApply vTC (sTC,t) (vTC,v)) <$> s
 
+type PatVarParser = State (Map Int (String,TCTerm)) ()
 
-addPatBindings :: TCPat -> State (Map Int (String,TCTerm)) ()
+addPatBindings :: TCPat -> PatVarParser
 addPatBindings (TCPVar nm i tp) = modify $ Map.insert i (nm,tp)
 addPatBindings TCPUnused{} = return ()
 addPatBindings (TCPatF pf) = traverse_ addPatBindings pf 
 
+runPatVarParser :: PatVarParser -> [(String,TCTerm)]
+runPatVarParser pvp = Map.elems (execState pvp Map.empty)
 
 patBoundVars :: TCPat -> [(String,TCTerm)]
-patBoundVars pat0 = Map.elems $ execState (addPatBindings pat0) Map.empty
+patBoundVars pat = runPatVarParser (addPatBindings pat)
 
 extendPatContext :: TermContext s -> TCPat -> TermContext s
 extendPatContext tc0 pat = foldr (uncurry consBoundVar) tc0 (patBoundVars pat)
@@ -927,20 +930,6 @@ reduce tc t =
                   where g' = tcApply tc (tc',rhs) (tc,V.reverse sub)
     _ -> return t
  
-reduce _ t@(TCF tf) =
-  case tf of
-{-
-    UGlobal _ -> unimpl "reduce UGlobal"
-    UApp l r -> unimpl "reduce UApp"
-    URecordSelector{} -> unimpl "reduce URecordSelector"
--}
-    _ -> pure t
-reduce _ t@TCLambda{} = pure t
-reduce _ t@TCPi{} = pure t
-reduce _ t@TCLet{} = pure t -- unimpl "reduce TCLet"
-reduce _ t@TCVar{} = pure t
-reduce _ t@TCLocalDef{} = pure t
-
 -- | Check that term is equivalent to Sort i for some i.
 checkIsSort :: TermContext s -> Pos -> TCTerm -> TC s Sort
 checkIsSort tc p t0 = do
@@ -1341,7 +1330,6 @@ tryMatchPat tc pat t = do
         finish (Right (t,args)) = Just (tc', V.fromList (Map.elems args), t)
           where tc' = extendPatContext tc pat
 
-
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.
 -- This may differ to the input term due to the use of reduction during matching.
@@ -1359,9 +1347,8 @@ tryMatchPatList tc pats terms =
         go _ [] = fail "Insufficient number of terms"
         finish Left{} = Nothing
         finish (Right (tl,args)) = Just (tc', V.fromList (Map.elems args), tl)
-          where bindings = Map.elems $ execState (mapM_ addPatBindings pats) Map.empty 
+          where bindings = runPatVarParser (mapM_ addPatBindings pats)
                 tc' = foldr (uncurry consBoundVar) tc bindings
-
 
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.
@@ -1558,12 +1545,25 @@ evalDef :: TCRefDef s -> TC s TCDef
 evalDef (DefGen nm tpr elr) =
   liftA2 (DefGen nm) (Identity <$> topEval tpr) (Identity <$> topEval elr)
 
-data CompletionContext = CC { ccModule :: Module }
+data CompletionContext
+  = CCGlobal Module
+  | CCBinding CompletionContext Term
 
-{-
-bindPat :: CompletionContext -> TCPat -> (CompletionContext,Pat Term)
-bindPat _ _ = undefined
--}
+ccModule :: CompletionContext -> Module
+ccModule (CCGlobal m) = m
+ccModule (CCBinding cc _) = ccModule cc
+
+addPatTypes :: CompletionContext -> [(String,TCTerm)] -> (CompletionContext, [Term])
+addPatTypes cc0 vars = mapAccumL ins cc0 vars
+  where ins cc (_,tp) = (CCBinding cc tp', tp')
+          where tp' = completeTerm cc tp
+
+ccVarType :: CompletionContext -> DeBruijnIndex -> Term
+ccVarType cc0 i = go i cc0
+  where go i (CCBinding cc t)
+          | i == 0 = incVars 0 (i+1) t
+          | otherwise = go (i-1) cc
+        go _ CCGlobal{} = error "Could not find var with index in context."
 
 completeDataType :: CompletionContext
                  -> TCDataType
@@ -1584,61 +1584,73 @@ completeDef cc (DefGen nm tp el) = def
                   }
 
 completeDefEqn :: CompletionContext -> TCDefEqn -> TypedDefEqn
-completeDefEqn cc (DefEqnGen pl rhs) = eqn
-  where eqn = DefEqn (completePat cc <$> pl) (completeTerm cc rhs)
+completeDefEqn cc (DefEqnGen pats rhs) = eqn
+  where m = ccModule cc
+        bindings = runPatVarParser (mapM_ addPatBindings pats)
+        (cc', v) = second V.fromList $ addPatTypes cc bindings
+        eqn = DefEqn (completePat' m v <$> pats) (completeTerm cc' rhs)
 
-completePat :: CompletionContext -> TCPat -> Pat Term
-completePat _cc = unimpl "completePat" -- fmap (completeTerm cc)
+completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
+completePat cc0 pat = (completePat' (ccModule cc0) v pat, cc')
+  where (cc', v) = second V.fromList $ addPatTypes cc0 (patBoundVars pat)
+
+completePat' :: Module -> Vector Term -> TCPat -> Pat Term
+completePat' m v = go
+  where go (TCPVar nm i _) = PVar nm i (v V.! i)
+        go TCPUnused = PUnused
+        go (TCPatF pf) =
+          case pf of
+            UPTuple l -> PTuple (go <$> l)
+            UPRecord m -> PRecord (go <$> m)
+            UPCtor i l -> PCtor c (go <$> l)
+              where Just c = findCtor m i
+
+addBoundVars :: [(String,TCTerm)] -> CompletionContext -> CompletionContext
+addBoundVars _ _ = unimpl "addBoundVars"
+
+localBoundVars :: TCLocalDef -> (String, TCTerm)
+localBoundVars (LocalFnDefGen nm tp _) = (nm,tp)
+
+completePatBoundVars :: TCPat -> CompletionContext -> CompletionContext
+completePatBoundVars _ _ = unimpl "completePatBoundVars"
+
+completeLocalVars :: [(String, TCTerm)] -> CompletionContext -> CompletionContext
+completeLocalVars _ _ = unimpl "completeLocalVars"
 
 -- | Returns the type of a unification term in the current context.
 completeTerm :: CompletionContext -> TCTerm -> Term
-completeTerm = unimpl "completeTerm undefined"
-{-
 completeTerm cc (TCF tf) =
-
   case tf of
     UGlobal i -> Term (GlobalDef d)
       where Just d = findDef m i
-    ULambda p lhs rhs -> 
-    ULambda p lhs rhs -> Term (Lambda p' (go cc lhs) (go cc' rhs))
-      where (cc',p') = bindPat cc p
+    UApp l r -> Term $ App (go l) (go r)
+    UTupleValue l -> Term $ TupleValue (go <$> l)
+    UTupleType l -> Term $ TupleType (go <$> l)
+    URecordValue m      -> Term $ RecordValue (go <$> m)
+    URecordSelector t f -> Term $ RecordSelector (go t) f
+    URecordType m       -> Term $ RecordType (go <$> m)
+    UCtorApp i l        -> Term $ CtorValue c (go <$> l)
+      where Just c = findCtor m i
+    UDataType i l       -> Term $ CtorType dt (go <$> l)
+      where Just dt = findDataType m i
+    USort s             -> Term $ Sort s
+    UNatLit i           -> Term $ IntLit i
+    UArray tp v         -> Term $ ArrayValue (go tp) (go <$> v)
  where m = ccModule cc
--}
-
-{-
-completeTerm = go
-  where go r ut =
-          case ut of
-            URigidVar v -> incVars 0 (urLevel r - l) t
-              where err = "Could not complete term: unknown type " ++ show (v,urRigidTypeMap r)
-                    (l,t) = fromMaybe (internalError err) $
-                              Map.lookup v (urRigidTypeMap r)
-            UUndefinedVar i -> go r t
-              where Just t = Map.lookup i (urVarBindings r)
-            UApp x y  -> Term $ App (go r x) (go r y)
-            UPi p lhs rhs -> Term (Pi p' (go r lhs) (go r' rhs))
-              where (r',p') = bindPat r p
-            UTupleValue l -> Term $ TupleValue (go r <$> l)
-            UTupleType l  -> Term $ TupleType  (go r <$> l)
-            URecordValue m      -> Term $ RecordValue (go r <$> m)
-            URecordSelector x f -> Term $ RecordSelector (go r x) f
-            URecordType m       -> Term $ RecordType (go r <$> m)
-            UCtorApp i l   -> Term $ CtorValue c (go r <$> l)
-              where Just c = findCtor (urModule r) i
-            UDataType i l -> Term $ CtorType dt (go r <$> l)
-              where Just dt = findDataType (urModule r) i
-            USort s   -> Term $ Sort s
-            ULet dl t -> Term $ Let (completeLocalDef <$> dl) (go r' t)
-              where r' = bindPatImpl r (localVarNamesGen dl)
-                    completeLocalDef (LocalFnDefGen v tp eqs) =
-                        LocalFnDef (rvrName v) (go r tp) (completeEqn r' <$> eqs)
-            UIntLit i -> Term $ IntLit i
-            UArray tp v -> Term $ ArrayValue (go r tp) (go r <$> v)
-
-completeEqn :: UnifyResult -> UnifyDefEqn -> TypedDefEqn
-completeEqn r (DefEqnGen upl urhs) = DefEqn pl (completeTerm r' urhs)
-  where (r',pl) = bindPats r upl
--}
+       go = completeTerm cc
+completeTerm cc (TCLambda pat tp r) = Term $
+    Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
+  where (pat', cc') = completePat cc pat
+completeTerm cc (TCPi pat tp r) = Term $
+    Pi pat' (completeTerm cc tp) (completeTerm cc' r)
+  where (pat', cc') = completePat cc pat
+completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
+  where (cc',tps) = addPatTypes cc (localBoundVars <$> lcls)
+        completeLocal (LocalFnDefGen nm _ eqns) tp =
+          LocalFnDef nm tp (completeDefEqn cc' <$> eqns)
+        lcls' = zipWith completeLocal lcls tps
+completeTerm cc (TCVar i) = Term $ LocalVar i (ccVarType cc i)
+completeTerm cc (TCLocalDef i) = Term $ LocalVar i (ccVarType cc i)
 
 addImportNameStrings :: Un.ImportName -> Set String -> Set String
 addImportNameStrings im s =
@@ -1810,8 +1822,7 @@ unsafeMkModule ml (Un.Module (PosPair _ nm) iml d) = do
     sequence_ $ (($ tc) <$> isPending is)
     
     let mkFinal tps defs = m
-          where cc = CC { ccModule = m
-                        }
+          where cc = CCGlobal m
                 m = flip (foldl' insDef) (completeDef cc <$> defs)
                   $ flip (foldl' insDataType) (completeDataType cc <$> tps)
                   $ emptyModule nm
