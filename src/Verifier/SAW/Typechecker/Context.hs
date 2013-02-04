@@ -10,7 +10,7 @@ module Verifier.SAW.Typechecker.Context
   , TCTermF(..)
   , tcMkApp
   , tcAsApp
-  , ppTCTerm, ppTCTermF
+  , Prec, ppTCTerm, ppTCTermF
   , TCPat(..)
   , PatF(..)
   , tcPatVarCount
@@ -489,34 +489,35 @@ contextNames TopContext{} = []
 
 ppTermContext :: TermContext s -> Doc
 ppTermContext (BindContext tc nm tp) =
-  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc tp $$
+  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc 1 tp $$
   ppTermContext tc
 ppTermContext (LetContext tc lcls) =
     text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) $$
     ppTermContext tc  
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc tp  
+  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp  
 ppTermContext TopContext{} = text "top"
 
-ppTCTerm :: TermContext s -> TCTerm -> Doc
+ppTCTerm :: TermContext s -> Prec -> TCTerm -> Doc
 ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 
 -- | Pretty print TC term with doc used for free variables.
-ppTCTermGen :: [Doc] -> TCTerm -> Doc
-ppTCTermGen d (TCF tf) = runIdentity $ ppTCTermF (Identity . ppTCTermGen d) tf
-ppTCTermGen d (TCLambda p l r) = 
-  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d l) 
-             <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) r
-ppTCTermGen d (TCPi p l r) =
-  parens (ppTCPat p <+> colon <+> ppTCTermGen d l) 
-    <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) r
-ppTCTermGen d (TCLet lcls t) = 
+ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
+ppTCTermGen d pr (TCF tf) =
+  runIdentity $ ppTCTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
+ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
+             <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
+ppTCTermGen d pr (TCPi p l r) = ppParens (pr >= 1) $
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
+ppTCTermGen d pr (TCLet lcls t) = ppParens (pr >= 1) $
     text "let " <> nest 4 (vcat (ppLcl <$> lcls)) $$
-    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) t)
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTermGen d tp
-ppTCTermGen d (TCVar i) | 0 <= i && i < length d = d !! i
-                        | otherwise = text $ "Bad variable index " ++ show i
-ppTCTermGen d (TCLocalDef i) | 0 <= i && i < length d = d !! i
-                             | otherwise = text $ "Bad local var index " ++ show i
+    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) 1 t)
+  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTermGen d 1 tp
+ppTCTermGen d _ (TCVar i) | 0 <= i && i < length d = d !! i
+                          | otherwise = text $ "Bad variable index " ++ show i
+ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
+                               | otherwise = text $ "Bad local var index " ++ show i
 
 ppTCPat :: TCPat -> Doc
 ppTCPat (TCPVar nm _ _) = text nm
@@ -531,21 +532,21 @@ ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
 ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
   where ppFld (fld,v) = (text fld <+> equals <+>) <$> pp v
 
-ppTCTermF :: Applicative f => (t -> f Doc) -> TCTermF t -> f Doc
-ppTCTermF pp tf =
+ppTCTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> TCTermF t -> f Doc
+ppTCTermF pp prec tf =
   case tf of
     UGlobal i -> pure $ ppIdent i
-    UApp l r -> liftA2 (<+>) (pp l) (pp r)
-    UTupleValue l -> parens . commaSepList <$> traverse pp l
-    UTupleType l -> (char '#' <>) . parens . commaSepList <$> traverse pp l
-    URecordValue m -> ppRecordF pp m
-    URecordSelector t f -> (<> (char '.' <> text f)) <$> pp t
-    URecordType m -> (char '#' <>) <$> ppRecordF pp m
-    UCtorApp c l -> hsep . (ppIdent c :) <$> traverse pp l
-    UDataType dt l -> hsep . (ppIdent dt :) <$> traverse pp l
+    UApp l r -> ppParens (prec >= 10) <$> liftA2 (<+>) (pp 10 l) (pp 10 r)
+    UTupleValue l -> parens . commaSepList <$> traverse (pp 1) l
+    UTupleType l -> (char '#' <>) . parens . commaSepList <$> traverse (pp 1) l
+    URecordValue m -> ppRecordF (pp 1) m
+    URecordSelector t f -> ppParens (prec >= 10) . (<> (char '.' <> text f)) <$> pp 11 t
+    URecordType m -> (char '#' <>) <$> ppRecordF (pp 1) m
+    UCtorApp c l -> ppParens (prec >= 10) . hsep . (ppIdent c :) <$> traverse (pp 10) l
+    UDataType dt l -> ppParens (prec >= 10) . hsep . (ppIdent dt :) <$> traverse (pp 10) l
     USort s -> pure $ text (show s)
     UNatLit i -> pure $ text (show i)
-    UArray _ vl -> brackets . commaSepList <$> traverse pp (V.toList vl)
+    UArray _ vl -> brackets . commaSepList <$> traverse (pp 1) (V.toList vl)
 
 -- | Bound the free variables in the term with pi quantifiers.
 boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm

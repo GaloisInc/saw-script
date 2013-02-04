@@ -52,8 +52,10 @@ module Verifier.SAW.TypedAST
  , FieldName
  , instantiateVarList
    -- * Utility functions
+ , Prec
  , commaSepList
  , semiTermList
+ , ppParens
  ) where
 
 import Control.Applicative ((<$>))
@@ -62,7 +64,6 @@ import Data.Char
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Traversable (Traversable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.HughesPJ
@@ -315,27 +316,26 @@ semiTermList = hsep . fmap (<> semi)
 
 type Prec = Int
 
+-- | Add parenthesis around a document if condition is true.
+ppParens :: Bool -> Doc -> Doc
+ppParens True  d = parens d
+ppParens False d = d
+
 ppPat :: TermPrinter e -> TermPrinter (Pat e)
 ppPat f lcls p pat = 
   case pat of
     PVar i _ _ -> text i
     PUnused{} -> char '_'
-    PCtor c pl -> sp 10 $ ppIdent (ctorName c) <+> hsep (ppPat f lcls 10 <$> pl)
+    PCtor c pl -> ppParens (p >= 10) $
+      ppIdent (ctorName c) <+> hsep (ppPat f lcls 10 <$> pl)
     PTuple pl -> parens $ commaSepList $ ppPat f lcls 1 <$> pl
-    PRecord m -> 
-      let ppFld (fld,v) = text fld <+> equals <+> ppPat f lcls 1 v
-       in braces $ semiTermList $ ppFld <$> Map.toList m
---    PIntLit i -> integer i
- where sp l d = if p >= l then parens d else d
+    PRecord m -> braces $ semiTermList $ ppFld <$> Map.toList m
+      where ppFld (fld,v) = text fld <+> equals <+> ppPat f lcls 1 v
 
 commaSepList :: [Doc] -> Doc
 commaSepList [] = empty
 commaSepList [d] = d
 commaSepList (d:l) = d <> comma <+> commaSepList l
-
-maybeParens :: Bool -> Doc -> Doc
-maybeParens True  d = parens d
-maybeParens False d = d
 
 data LocalVarDoc = LVD { docMap :: !(Map DeBruijnIndex Doc)
                        , docLvl :: !DeBruijnIndex
@@ -369,7 +369,7 @@ type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
 ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (Pat e, e, r)
 ppPi ftp frhs lcls p (pat,tp,rhs) = 
-    maybeParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
+    ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
   where lcls' = foldl' consBinding lcls (patBoundVars pat)
         lhs = case pat of
                 PUnused -> ftp lcls 2 tp
@@ -379,14 +379,14 @@ ppPi ftp frhs lcls p (pat,tp,rhs) =
 ppTermF :: TermPrinter e -- ^ Pretty printer for elements.
         -> TermPrinter (TermF e)
 ppTermF f lcls p tf = do
-  let sp l d = maybeParens (p >= l) d
+  let sp l d = ppParens (p >= l) d
   case tf of
     LocalVar i _ -> lookupDoc lcls i
     GlobalDef d -> ppIdent $ defIdent d
     Lambda pat tp rhs -> sp 1 $ text "\\" <> lhs <+> text "->" <+> f lcls' 2 rhs
       where lcls' = foldl' consBinding lcls (patBoundVars pat)
             lhs = parens (ppPat f lcls' 1 pat <> doublecolon <> f lcls 1 tp)
-    App t u -> sp 10 (f lcls 10 t <+> f lcls 10 u)
+    App t u -> ppParens (p >= 10) (f lcls 10 t <+> f lcls 10 u)
     Pi pat tp rhs -> ppPi f f lcls p (pat,tp,rhs)
     TupleValue tl -> parens (commaSepList $ f lcls 1 <$> tl)
     TupleType tl -> char '#' <> parens (commaSepList $ f lcls 1 <$> tl)
@@ -511,7 +511,7 @@ ppTerm :: TermPrinter Term
 ppTerm lcls p t =
   case asApp t of
     (Term u,[]) -> pptf p u
-    (Term u,l) -> maybeParens (p >= 10) $ hsep $ pptf 10 u : fmap (ppTerm lcls 10) l 
+    (Term u,l) -> ppParens (p >= 10) $ hsep $ pptf 10 u : fmap (ppTerm lcls 10) l 
  where pptf = ppTermF ppTerm lcls
 
 instance Show Term where

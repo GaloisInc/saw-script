@@ -47,11 +47,8 @@ import Verifier.SAW.Typechecker.Unification
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as Un
 
-{-
-mkEdgeMap :: Ord a => [(a,a)] -> Map a [a]
-mkEdgeMap = foldl' fn Map.empty
-  where fn m (x,y) = Map.insertWith (++) x [y] m
--}
+unimpl :: String -> a
+unimpl nm = error (nm ++ " unimplemented")
 
 -- | Given a project function returning a key and a list of values, return a map
 -- from the keys to values.
@@ -65,11 +62,11 @@ multiMap = foldl' fn Map.empty
   where fn m (k,v) = Map.insertWith (++) k [v] m
 
 {-
-orderedListMap :: Ord a => [a] -> Map a Int
-orderedListMap l = Map.fromList (l `zip` [0..])
--}
 
-{-
+mkEdgeMap :: Ord a => [(a,a)] -> Map a [a]
+mkEdgeMap = foldl' fn Map.empty
+  where fn m (x,y) = Map.insertWith (++) x [y] m
+
 topSort :: forall a . Ord a
         => Set a -- List of vertices.
         -> [(a,a)] -- List of edges
@@ -196,7 +193,7 @@ checkIsSort tc p t0 = do
   t <- reduce tc t0
   case t of
     TCF (USort s) -> return s
-    _ -> tcFailD p $ ppTCTerm tc t <+> text "could not be interpreted as a sort."
+    _ -> tcFailD p $ ppTCTerm tc 0 t <+> text "could not be interpreted as a sort."
 
 -- | Typecheck a term as a type, returning a term equivalent to it, and
 -- with the same type as the term.
@@ -365,7 +362,7 @@ checkTypeSubtype tc p x y = do
   xr <- reduce tc x
   yr <- reduce tc y
   let ppFailure = tcFailD p msg
-        where msg = ppTCTerm tc xr <+> text "is not a subtype of" <+> ppTCTerm tc yr <> char '.'
+        where msg = ppTCTerm tc 0 xr <+> text "is not a subtype of" <+> ppTCTerm tc 0 yr <> char '.'
   case (tcAsApp xr, tcAsApp yr) of
     ( (TCF (USort xs), []), (TCF (USort ys), []) )
       | xs <= ys -> return ()
@@ -390,7 +387,7 @@ reduceToRecordType tc p tp = do
   case rtp of
     TCF (URecordType m) -> return m
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$ 
-                       nest 2 (ppTCTerm tc rtp)
+                       nest 2 (ppTCTerm tc 0 rtp)
 
 topEval :: TCRef s v -> TC s v
 topEval r = eval (internalError $ "Cyclic error in top level" ++ show r) r

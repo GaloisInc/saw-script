@@ -10,7 +10,7 @@ module Verifier.SAW.UntypedAST
   , Term(..)
   , asApp
   , ParamType(..)
-  , Pat(..)
+  , Pat(..), ppPat
   , FieldName
   , Ident, localIdent, asLocalIdent, mkIdent, identModule, setIdentModule
   , Sort, mkSort, sortOf
@@ -18,13 +18,18 @@ module Verifier.SAW.UntypedAST
   , module Verifier.SAW.Position
   ) where
 
+import Control.Applicative ((<$>))
 import Control.Exception (assert)
+import Text.PrettyPrint
+
 import Verifier.SAW.Position
 import Verifier.SAW.TypedAST 
   ( ModuleName, mkModuleName
   , Sort, mkSort, sortOf
   , FieldName
   , isIdent
+  , Prec
+  , commaSepList, semiTermList, ppParens
   )
 
 -- | Identifiers represent a compound name (e.g., Prelude.add).
@@ -101,8 +106,16 @@ data Pat
   | PTuple Pos [Pat]
   | PRecord Pos [(PosPair FieldName, Pat)]
   | PCtor (PosPair Ident) [Pat]
---  | PIntLit Pos Integer
   deriving (Eq, Ord, Show)
+
+ppPat :: Prec -> Pat -> Doc
+ppPat _ (PVar pnm) = text (val pnm)
+ppPat _ (PUnused pnm) = text (val pnm)
+ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat 1 <$> l)
+ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
+  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat 1 v
+ppPat prec (PCtor pnm l) = ppParens (prec >= 10) $
+  hsep (text (show (val pnm)) : fmap (ppPat 10) l) 
 
 instance Positioned Term where
   pos t =
