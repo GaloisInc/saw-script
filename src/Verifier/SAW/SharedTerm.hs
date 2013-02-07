@@ -151,6 +151,9 @@ scFun t1 t2 =
     do t2' <- Verifier.SAW.SharedTerm.incVars 0 1 t2
        scTermF (Pi "_" t1 t2')
 
+scFunAll :: (?sc :: SharedContext s) => [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+scFunAll argTypes resultType = foldrM scFun resultType argTypes
+
 -- 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
                      , acNextIdx :: !Word64
