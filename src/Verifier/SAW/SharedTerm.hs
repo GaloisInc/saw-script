@@ -21,6 +21,7 @@ module Verifier.SAW.SharedTerm
   , scRecordSelect
   , scApplyCtor
   , scFun
+  , scFunAll
   , scInteger
   , scTermF
   , scTypeOf
