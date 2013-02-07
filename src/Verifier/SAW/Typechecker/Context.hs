@@ -1,9 +1,11 @@
 {-# LANGUAGE DeriveFoldable #-} 
+{-# LANGUAGE DeriveFunctor #-} 
 {-# LANGUAGE DeriveTraversable #-} 
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Typechecker.Context
   ( -- * Term definitions
     TCTerm(..)
