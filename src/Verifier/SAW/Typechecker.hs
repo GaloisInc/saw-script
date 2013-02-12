@@ -453,7 +453,7 @@ completePat cc0 pat = (completePat' (ccModule cc0) v pat, cc')
 completePat' :: Module -> Vector Term -> TCPat -> Pat Term
 completePat' cm v = go
   where go (TCPVar nm i _) = PVar nm i (v V.! i)
-        go TCPUnused = PUnused
+        go TCPUnused{} = PUnused
         go (TCPatF pf) =
           case pf of
             UPTuple l -> PTuple (go <$> l)
@@ -490,10 +490,11 @@ completeTerm cc (TCLambda pat tp r) = Term $
   where (pat', cc') = completePat cc pat
 completeTerm cc (TCPi pat@(TCPVar nm _ _) tp r) = Term $
     Pi nm (completeTerm cc tp) (completeTerm cc' r)
-  where (pat', cc') = completePat cc pat
-completeTerm cc (TCPi pat@(TCPUnused{}) tp r) = Term $
-    Pi "_" (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
+completeTerm cc (TCPi pat@(TCPUnused nm) tp r) = Term $
+    Pi nm (completeTerm cc tp) (completeTerm cc' r)
+  where (_, cc') = completePat cc pat
+completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term" 
 completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
   where (cc',tps) = addPatTypes cc (localBoundVars <$> lcls)
         completeLocal (LocalFnDefGen nm _ eqns) tp =

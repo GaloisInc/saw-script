@@ -21,6 +21,7 @@ module Verifier.SAW.SharedTerm
   , scRecordSelect
   , scApplyCtor
   , scFun
+  , scNat
   , scInteger
   , scTermF
   , scTypeOf
@@ -111,6 +112,9 @@ scRecordSelect = scRecordSelectFn ?sc
 scApplyCtor :: (?sc :: SharedContext s) => TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyCtor = scApplyCtorFn ?sc
 
+scNat :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
+scNat = error "scNat unimplemented"
+
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scInteger = scIntegerFn ?sc
 
@@ -122,14 +126,6 @@ scFreshGlobal :: (?sc :: SharedContext s)
               => Ident -> SharedTerm s 
               -> IO (SharedTerm s)
 scFreshGlobal = scFreshGlobalFn ?sc
-
-{-
-scTrue :: (?sc :: SharedContext s) => IO (SharedTerm s)
-scTrue = scApplyCtor preludeTrue []
-
-scFalse :: (?sc :: SharedContext s) => IO (SharedTerm s)
-scFalse = scApplyCtor preludeFalse []
--}
 
 -- | Returns term as a constant Boolean if it can be evaluated as one.
 scViewAsBool :: (?sc :: SharedContext s) => SharedTerm s -> Maybe Bool

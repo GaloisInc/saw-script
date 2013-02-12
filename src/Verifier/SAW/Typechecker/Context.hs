@@ -128,7 +128,7 @@ data TCTerm
  deriving (Show)
 
 data TCPat = TCPVar String DeBruijnIndex TCTerm
-           | TCPUnused -- ^ Unused pattern
+           | TCPUnused String -- ^ Unused pattern
            | TCPatF (PatF TCPat)
   deriving (Show)
 
@@ -201,13 +201,13 @@ type TCRefLocalDef s = LocalDefGen TCTerm (TCRef s [TCDefEqn])
 
 patVarNames :: TCPat -> [String]
 patVarNames (TCPVar nm _ _) = [nm]
-patVarNames TCPUnused = []
+patVarNames TCPUnused{} = []
 patVarNames (TCPatF pf) = concatMap patVarNames pf
 
 fmapTCPat :: (Int -> TCTerm -> TCTerm)
           -> Int -> TCPat -> TCPat
 fmapTCPat fn i (TCPVar nm j tp) = TCPVar nm j (fn (i+j) tp)
-fmapTCPat _ _ TCPUnused   = TCPUnused
+fmapTCPat _ _ (TCPUnused nm) = TCPUnused nm
 fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)  
 
 fmapTCLocalDefs :: (Int -> TCTerm -> TCTerm)
@@ -521,7 +521,7 @@ ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
 
 ppTCPat :: TCPat -> Doc
 ppTCPat (TCPVar nm _ _) = text nm
-ppTCPat (TCPUnused) = text "_"
+ppTCPat (TCPUnused nm) = text nm
 ppTCPat (TCPatF pf) = 
   case pf of
     UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)

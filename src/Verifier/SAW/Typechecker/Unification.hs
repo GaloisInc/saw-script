@@ -412,9 +412,9 @@ mergePats p p10 p20 = do
           r <- newRigidVar p nm
           v <- mkVar nm (URigidVar (fst r))
           return (v, Map.insert j v m)
-        instPat TCPUnused = lift $ do
-          tpv <- mkVar ("type of unused") (UFreeType "unused")
-          mkVar "unused" (UUnused "unused" tpv)
+        instPat (TCPUnused nm) = lift $ do
+          tpv <- mkVar ("type of " ++ show nm) (UFreeType nm)
+          mkVar nm (UUnused nm tpv)
         instPat (TCPatF pf) = lift . mkVar "unnamed" . UTF =<< mapM instPat (pfToTF pf)
           where pfToTF (UPTuple l) = UTupleValue l
                 pfToTF (UPRecord m) = URecordValue m
@@ -430,11 +430,11 @@ mergePats p p10 p20 = do
           (m1,m2) <- get
           (v,m1') <- lift $ lift $ runStateT (instPat p1) m1
           put (m1', Map.insert i v m2)
-        go TCPUnused p2 = do
+        go TCPUnused{} p2 = do
           (m1,m2) <- get
           m2' <- lift $ lift $ snd <$> runStateT (instPat p2) m2
           put (m1, m2')
-        go p1 TCPUnused = do
+        go p1 TCPUnused{} = do
           (m1,m2) <- get
           (_,m1') <- lift $ lift $ runStateT (instPat p1) m1
           put (m1', m2)
@@ -566,7 +566,7 @@ resolvePat (UPUnused v) = do
      (tc,tp) <- uresolveBoundVar nm vtp
      tc0 <- gets urOuterContext
      return $ TCPVar nm (boundVarDiff tc tc0) tp
-    _ -> return $ TCPUnused
+    _ -> return $ TCPUnused (viName v)
 resolvePat (UPatF _ pf) = TCPatF <$> traverse resolvePat pf
 
 traverseResolveUTerm :: Traversable t

@@ -58,7 +58,7 @@ runMatcher m = fmap finish $ runErrorT $ runStateT m Map.empty
 -- | Attempt to match term against a pat, returns reduced term that matches.
 attemptMatch :: TermContext s -> TCPat -> TCTerm -> Matcher s TCTerm
 attemptMatch _ (TCPVar _ i _) t = t <$ modify (Map.insert i t)
-attemptMatch _ TCPUnused t = return t
+attemptMatch _ TCPUnused{} t = return t
 attemptMatch tc (TCPatF pf) t = do
   let go = attemptMatch tc
   rt <- lift $ lift $ reduce tc t
