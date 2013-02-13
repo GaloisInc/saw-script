@@ -85,7 +85,7 @@ data SharedContext s = SharedContext
   , scMkRecordFn      :: Map String (SharedTerm s) -> IO (SharedTerm s)
   , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scApplyCtorFn     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-  , scLiteralFn        :: Integer -> IO (SharedTerm s)
+  , scLiteralFn       :: Integer -> IO (SharedTerm s)
     -- | Select an element out of a record.
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
