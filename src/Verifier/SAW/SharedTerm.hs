@@ -22,7 +22,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scFun
   , scFunAll
-  , scInteger
+  , scLiteral
   , scTermF
   , scTuple
   , scTupleType
@@ -85,7 +85,7 @@ data SharedContext s = SharedContext
   , scMkRecordFn      :: Map String (SharedTerm s) -> IO (SharedTerm s)
   , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scApplyCtorFn     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-  , scIntegerFn       :: Integer -> IO (SharedTerm s)
+  , scLiteralFn        :: Integer -> IO (SharedTerm s)
     -- | Select an element out of a record.
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
@@ -112,8 +112,8 @@ scRecordSelect = scRecordSelectFn ?sc
 scApplyCtor :: (?sc :: SharedContext s) => TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyCtor = scApplyCtorFn ?sc
 
-scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
-scInteger = scIntegerFn ?sc
+scLiteral :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
+scLiteral = scLiteralFn ?sc
 
 scTuple :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
 scTuple terms = scTermF (TupleValue terms)
@@ -305,7 +305,7 @@ mkSharedContext m = do
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
            , scApplyCtorFn = undefined
-           , scIntegerFn = getTerm cr . IntLit
+           , scLiteralFn = getTerm cr . IntLit
            , scTypeOfFn = typeOf
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
