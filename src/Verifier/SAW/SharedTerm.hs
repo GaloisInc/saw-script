@@ -35,6 +35,7 @@ module Verifier.SAW.SharedTerm
 
 import Control.Applicative ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
+import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.IORef
 import Data.Map (Map)
@@ -44,9 +45,6 @@ import Data.Foldable hiding (sum)
 import Data.Traversable
 import Prelude hiding (mapM, maximum)
 import Text.PrettyPrint.HughesPJ
---import qualified Control.Monad.State as State
---import Control.Monad.Trans (lift)
---import qualified Data.Traversable as Traversable
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
@@ -308,25 +306,6 @@ mkSharedContext m = do
            }
 
 {-
--- | Fold with memoization
-foldSharedTerm :: forall s b . 
-               (VarIndex -> Ident -> SharedTerm s -> b) 
-               -> (TermF b -> b) -> SharedTerm s -> b
-foldSharedTerm g f = \t -> State.evalState (go t) Map.empty
-  where
-    go :: SharedTerm s -> State.State (Map TermIndex b) b
-    go (STVar i sym tp) = return $ g i sym tp
-    go (STApp i t) = do
-      memo <- State.get
-      case Map.lookup i memo of
-        Just x  -> return x
-        Nothing -> do
-          x <- fmap f (Traversable.mapM go t)
-          State.modify (Map.insert i x)
-          return x
--}
-
-{-
 -- | Monadic fold with memoization
 foldSharedTermM :: forall s b m . Monad m 
                 => (VarIndex -> Ident -> SharedTerm s -> m b)
@@ -346,10 +325,20 @@ foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
           return x
 -}
 
-{-
-unshare :: SharedTerm s -> Term
-unshare = foldSharedTerm Term
--}
+-- | The inverse function to @sharedTerm@.
+unshare :: forall s. SharedTerm s -> Term
+unshare t = State.evalState (go t) Map.empty
+  where
+    go :: SharedTerm s -> State.State (Map TermIndex Term) Term
+    go (STVar i sym tp) = error "unshare STVar"
+    go (STApp i t) = do
+      memo <- State.get
+      case Map.lookup i memo of
+        Just x  -> return x
+        Nothing -> do
+          x <- Term <$> traverse go t
+          State.modify (Map.insert i x)
+          return x
 
 sharedTerm :: MVar (AppCache s) -> Term -> IO (SharedTerm s)
 sharedTerm mvar = go
