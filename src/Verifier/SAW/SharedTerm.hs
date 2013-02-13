@@ -276,9 +276,9 @@ mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newMVar emptyAppCache
   let getDef sym =
-        case findDef m (undefined sym) of
+        case findDef m (mkIdent (moduleName m) sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> getTerm cr (GlobalDef (undefined d))
+          Just d -> sharedTerm cr (Term (GlobalDef d))
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
@@ -350,6 +350,10 @@ foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
 unshare :: SharedTerm s -> Term
 unshare = foldSharedTerm Term
 -}
+
+sharedTerm :: MVar (AppCache s) -> Term -> IO (SharedTerm s)
+sharedTerm mvar = go
+    where go (Term termf) = getTerm mvar =<< traverse go termf
 
 instantiateVars :: forall s. (?sc :: SharedContext s) =>
                    (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
