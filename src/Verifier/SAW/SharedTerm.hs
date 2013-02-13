@@ -24,6 +24,8 @@ module Verifier.SAW.SharedTerm
   , scFunAll
   , scInteger
   , scTermF
+  , scTuple
+  , scTupleType
   , scTypeOf
   , scPrettyTerm
   , scViewAsBool
@@ -112,6 +114,12 @@ scApplyCtor = scApplyCtorFn ?sc
 
 scInteger :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scInteger = scIntegerFn ?sc
+
+scTuple :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
+scTuple terms = scTermF (TupleValue terms)
+
+scTupleType :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
+scTupleType typs = scTermF (TupleType typs)
 
 scTypeOf :: (?sc :: SharedContext s) => SharedTerm s -> IO (SharedTerm s)
 scTypeOf = scTypeOfFn ?sc
