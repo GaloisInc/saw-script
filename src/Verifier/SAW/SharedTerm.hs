@@ -9,6 +9,8 @@ module Verifier.SAW.SharedTerm
   , SharedTerm(..)
   , SharedContext(..)
   , TermIndex
+  , AppCacheRef
+  , getTerm
   , instantiateVarList
   , unwrapSharedTerm
   , mkSharedContext
