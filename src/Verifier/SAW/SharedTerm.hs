@@ -217,56 +217,48 @@ getCacheValue (IOCache mv f) k =
       Nothing -> fn <$> f k
         where fn v = (Map.insert k v m, v)        
 
-data AppFns s = AppFns { defTypeCache :: IOCache (Def (SharedTerm s)) (SharedTerm s) }
-
-mkApp :: (?af :: AppFns s) => TermF (SharedTerm s) -> IO (SharedTerm s)
-mkApp = undefined
-
-sharedDefType :: (?af :: AppFns s) => Def (SharedTerm s) -> IO (SharedTerm s)
-sharedDefType = getCacheValue (defTypeCache ?af)
-
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
-subst0 :: (?af :: AppFns s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+subst0 :: MVar (AppCache s) -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 subst0 = undefined
 
-sortOfTerm :: (?af :: AppFns s) => SharedTerm s -> IO Sort
-sortOfTerm t = do
-  STApp _ (Sort s) <- typeOf t
+sortOfTerm :: MVar (AppCache s) -> SharedTerm s -> IO Sort
+sortOfTerm ac t = do
+  STApp _ (Sort s) <- typeOf ac t
   return s
 
-mkSharedSort :: (?af :: AppFns s) => Sort -> IO (SharedTerm s)
-mkSharedSort s = mkApp (Sort s)
+mkSharedSort :: MVar (AppCache s) -> Sort -> IO (SharedTerm s)
+mkSharedSort ac s = getTerm ac (Sort s)
 
-typeOf :: (?af :: AppFns s)
-       => SharedTerm s
+typeOf :: MVar (AppCache s)
+       -> SharedTerm s
        -> IO (SharedTerm s)
-typeOf (STVar _ _ tp) = return tp
-typeOf (STApp _ tf) =
+typeOf ac (STVar _ _ tp) = return tp
+typeOf ac (STApp _ tf) =
   case tf of
     LocalVar _ tp -> return tp
-    GlobalDef d -> sharedDefType d
+    GlobalDef d -> return (defType d)
     Lambda (PVar i _ _) tp rhs -> do
-      rtp <- typeOf rhs
-      mkApp (Pi i tp rtp)
+      rtp <- typeOf ac rhs
+      getTerm ac (Pi i tp rtp)
     App x y -> do
-      STApp _ (Pi _i _ rhs) <- typeOf x
-      subst0 rhs y
+      STApp _ (Pi _i _ rhs) <- typeOf ac x
+      subst0 ac rhs y
     Pi _ tp rhs -> do
-      ltp <- sortOfTerm tp
-      rtp <- sortOfTerm rhs
-      mkSharedSort (max ltp rtp)
-    TupleValue l  -> mkApp . TupleType =<< mapM typeOf l
-    TupleType l  -> mkSharedSort . maximum =<< mapM sortOfTerm l
-    RecordValue m -> mkApp . RecordType =<< mapM typeOf m
+      ltp <- sortOfTerm ac tp
+      rtp <- sortOfTerm ac rhs
+      mkSharedSort ac (max ltp rtp)
+    TupleValue l -> getTerm ac . TupleType =<< mapM (typeOf ac) l
+    TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) l
+    RecordValue m -> getTerm ac . RecordType =<< mapM (typeOf ac) m
     RecordSelector t f -> do
-      STApp _ (RecordType m) <- typeOf t
+      STApp _ (RecordType m) <- typeOf ac t
       let Just tp = Map.lookup f m
       return tp
-    RecordType m -> mkSharedSort . maximum =<< mapM sortOfTerm m
+    RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) m
     CtorValue c args -> undefined c args
     CtorType dt args -> undefined dt args
-    Sort s -> mkSharedSort (sortOf s)
+    Sort s -> mkSharedSort ac (sortOf s)
     Let defs rhs -> undefined defs rhs
     IntLit i -> undefined i
     ArrayValue tp _ -> undefined tp
@@ -291,8 +283,6 @@ mkSharedContext m = do
       viewAsNum (asApp3Of integerToUnsignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
       viewAsNum _ = Nothing
   tpCache <- newIOCache undefined
-  let ?af = AppFns { defTypeCache = tpCache
-                   }
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
@@ -306,7 +296,7 @@ mkSharedContext m = do
            , scLiteralFn = getTerm cr . IntLit
            , scTupleFn = getTerm cr . TupleValue
            , scTupleTypeFn = getTerm cr . TupleType
-           , scTypeOfFn = typeOf
+           , scTypeOfFn = typeOf cr
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
            , scViewAsNumFn = viewAsNum
