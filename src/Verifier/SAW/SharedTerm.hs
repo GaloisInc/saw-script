@@ -162,12 +162,17 @@ data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s)
                      , acNextIdx :: !Word64
                      }
 
+newtype AppCacheRef s = ACR (MVar (AppCache s))
+
 emptyAppCache :: AppCache s
 emptyAppCache = AC Map.empty 0
 
+newAppCacheRef :: IO (AppCacheRef s)
+newAppCacheRef = ACR <$> newMVar emptyAppCache
+
 -- | Return term for application using existing term in cache if it is avaiable.
-getTerm :: MVar (AppCache s) -> TermF (SharedTerm s) -> IO (SharedTerm s)
-getTerm r a =
+getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
+getTerm (ACR r) a =
   modifyMVar r $ \s -> do
     case Map.lookup a (acBindings s) of
       Just t -> return (s,t)
@@ -219,18 +224,18 @@ getCacheValue (IOCache mv f) k =
 
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
-subst0 :: MVar (AppCache s) -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+subst0 :: AppCacheRef s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 subst0 = undefined
 
-sortOfTerm :: MVar (AppCache s) -> SharedTerm s -> IO Sort
+sortOfTerm :: AppCacheRef s -> SharedTerm s -> IO Sort
 sortOfTerm ac t = do
   STApp _ (Sort s) <- typeOf ac t
   return s
 
-mkSharedSort :: MVar (AppCache s) -> Sort -> IO (SharedTerm s)
+mkSharedSort :: AppCacheRef s -> Sort -> IO (SharedTerm s)
 mkSharedSort ac s = getTerm ac (Sort s)
 
-typeOf :: MVar (AppCache s)
+typeOf :: AppCacheRef s
        -> SharedTerm s
        -> IO (SharedTerm s)
 typeOf ac (STVar _ _ tp) = return tp
@@ -268,7 +273,7 @@ typeOf ac (STApp _ tf) =
 mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
-  cr <- newMVar emptyAppCache
+  cr <- newAppCacheRef
   let getDef sym =
         case findDef m (mkIdent (moduleName m) sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
@@ -338,11 +343,11 @@ unshare t = State.evalState (go t) Map.empty
           State.modify (Map.insert i x)
           return x
 
-sharedTerm :: MVar (AppCache s) -> Term -> IO (SharedTerm s)
+sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
 sharedTerm mvar = go
     where go (Term termf) = getTerm mvar =<< traverse go termf
 
-instantiateVars :: forall s. MVar (AppCache s)
+instantiateVars :: forall s. AppCacheRef s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
@@ -393,7 +398,7 @@ instantiateVars ac f initialLevel t =
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVarsChangeT :: MVar (AppCache s)
+incVarsChangeT :: AppCacheRef s
                -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 incVarsChangeT ac initialLevel j
     | j == 0 = return
@@ -401,13 +406,13 @@ incVarsChangeT ac initialLevel j
     where
       fn _ i t = taint $ getTerm ac <$> (LocalVar (i+j) <$> t)
 
-incVars :: MVar (AppCache s)
+incVars :: AppCacheRef s
         -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
 incVars ac i j t = commitChangeT (incVarsChangeT ac i j t)
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
-instantiateVarChangeT :: forall s. MVar (AppCache s)
+instantiateVarChangeT :: forall s. AppCacheRef s
                       -> DeBruijnIndex -> SharedTerm s -> SharedTerm s
                       -> ChangeT IO (SharedTerm s)
 instantiateVarChangeT ac k t0 t =
@@ -425,13 +430,13 @@ instantiateVarChangeT ac k t0 t =
                  | j == i + k = taint $ return <$> term i
                  | otherwise  = getTerm ac <$> (LocalVar j <$> t)
 
-instantiateVar :: MVar (AppCache s)
+instantiateVar :: AppCacheRef s
                -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 instantiateVar ac k t0 t = commitChangeT (instantiateVarChangeT ac k t0 t)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
-instantiateVarListChangeT :: forall s. MVar (AppCache s)
+instantiateVarListChangeT :: forall s. AppCacheRef s
                           -> DeBruijnIndex -> [SharedTerm s]
                           -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVarListChangeT _ _ [] t = return t
