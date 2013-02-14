@@ -207,21 +207,6 @@ localVarType :: DeBruijnIndex -> LocalVarTypeMap s -> SharedTerm s
 localVarType = undefined
 -}
 
-data IOCache k v = IOCache !(MVar (Map k v)) (k -> IO v)
-
-newIOCache :: (k -> IO v) -> IO (IOCache k v)
-newIOCache fn = do
-  mv <- newMVar Map.empty
-  return (IOCache mv fn)  
-
-getCacheValue :: Ord k => IOCache k v -> k -> IO v
-getCacheValue (IOCache mv f) k = 
-  modifyMVar mv $ \m ->
-    case Map.lookup k m of
-      Just v -> return (m,v)
-      Nothing -> fn <$> f k
-        where fn v = (Map.insert k v m, v)        
-
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
 subst0 :: AppCacheRef s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
@@ -287,7 +272,6 @@ mkSharedContext m = do
       viewAsNum (asApp3Of integerToSignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
       viewAsNum (asApp3Of integerToUnsignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
       viewAsNum _ = Nothing
-  tpCache <- newIOCache undefined
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
