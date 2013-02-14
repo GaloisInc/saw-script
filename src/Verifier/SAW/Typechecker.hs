@@ -8,6 +8,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Typechecker
   ( unsafeMkModule
   ) where
@@ -438,10 +439,11 @@ completeDataType :: CompletionContext
                  -> TCDataType
                  -> TypedDataType
 completeDataType cc (DataTypeGen dt tp cl) = 
-  DataType { dtName = dt
-           , dtType = completeTerm cc (termFromTCDTType tp)
-           , dtCtors = fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
-           }
+  ( DataType { dtName = dt
+             , dtType = completeTerm cc (termFromTCDTType tp)
+             }
+  , fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
+  )
 
 completeDef :: CompletionContext
             -> TCDef
@@ -492,7 +494,7 @@ completeTerm cc (TCF tf) =
     UCtorApp i l        -> Term $ CtorValue c (go <$> l)
       where Just c = findCtor cm i
     UDataType i l       -> Term $ CtorType dt (go <$> l)
-      where Just dt = findDataType cm i
+      where Just (dt, _ctors) = findDataType cm i
     USort s             -> Term $ Sort s
     UNatLit i           -> Term $ IntLit i
     UArray tp v         -> Term $ ArrayValue (go tp) (go <$> v)
@@ -649,12 +651,12 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
                               (\s -> Un.mkModuleName [s])
                               (val <$> mAsName)
       -- Add datatypes to module
-      for_ (moduleDataTypes m) $ \dt -> do
+      for_ (moduleDataTypes m) $ \(dt, ctors) -> do
         let dtnm = dtName dt
         dtr <- addPending (identName dtnm) $ \tc ->
           liftTCDataType tc (dtType dt)
         -- Add constructors to module.
-        cl <- for (dtCtors dt) $ \c -> do
+        cl <- for ctors $ \c -> do
           let cnm = ctorName c
               cfn tc = liftTCCtorType tc (ctorType c)
           let use = includeNameInModule mcns cnm

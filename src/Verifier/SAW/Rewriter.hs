@@ -160,16 +160,16 @@ rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
   where rhs = rewriteTerm ss lhs
 
 -- | Rewriter for shared terms
-rewriteSharedTerm :: forall s. (?sc :: SharedContext s) =>
-                     Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
-rewriteSharedTerm ss t =
+rewriteSharedTerm :: forall s. AppCacheRef s
+                  -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
+rewriteSharedTerm ac ss t =
     do cache <- newCache
        let ?cache = cache in rewriteAll t
   where
     rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (STApp tidx tf) =
-        useCache ?cache tidx (traverse rewriteAll tf >>= scTermF >>= rewriteTop)
+        useCache ?cache tidx (traverse rewriteAll tf >>= getTerm ac >>= rewriteTop)
     rewriteAll t = return t
     rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
@@ -180,4 +180,4 @@ rewriteSharedTerm ss t =
     apply (rule : rules) t =
       case matchSharedTerm (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll =<< S.instantiateVarList 0 (Map.elems inst) (rhs rule)
+        Just inst -> rewriteAll =<< S.instantiateVarList ac 0 (Map.elems inst) (rhs rule)
