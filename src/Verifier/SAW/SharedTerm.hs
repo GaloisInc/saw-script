@@ -82,7 +82,7 @@ data SharedContext s = SharedContext
      -- | @scApplyFn f x@ returns the result of applying @x@ to a lambda function @x@.
   , scDefTermFn       :: TypedDef -> IO (SharedTerm s)
   , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-  , scMkRecordFn      :: Map String (SharedTerm s) -> IO (SharedTerm s)
+  , scMkRecordFn      :: Map FieldName (SharedTerm s) -> IO (SharedTerm s)
   , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scApplyCtorFn     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
   , scLiteralFn       :: Integer -> IO (SharedTerm s)
