@@ -289,7 +289,7 @@ mkSharedContext m = do
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
            , scViewAsNumFn = viewAsNum
-           , scInstVarListFn = \k ts t -> commitChangeT (instantiateVarListChangeT cr k ts t)
+           , scInstVarListFn = instantiateVarList cr
            }
 
 {-
@@ -441,6 +441,6 @@ instantiateVarListChangeT ac k ts t =
                 | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
                 | otherwise      = getTerm ac <$> (LocalVar j <$> t)
 
-instantiateVarList :: (?sc :: SharedContext s) =>
-                      DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
-instantiateVarList = scInstVarListFn ?sc
+instantiateVarList :: AppCacheRef s
+                   -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+instantiateVarList ac k ts t = commitChangeT (instantiateVarListChangeT ac k ts t)
