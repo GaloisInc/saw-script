@@ -258,8 +258,11 @@ incTCVars j = go
 -- The args are assumed to be in the same context as @t@ after substitution.
 tcApply :: TermContext s -> (TermContext s,TCTerm) -> (TermContext s,Vector TCTerm) -> TCTerm
 tcApply baseTC (fTC, f) (vTC, v)
-   | V.length v == fd = tcApplyImpl vd v 0 f
-   | otherwise = error "tcApply given bad vector"
+   | V.length v <= fd = tcApplyImpl vd v (fd - V.length v) f
+   | otherwise = error $ show $ text "tcApply given bad arguments:" $$
+      ppTCTerm fTC 0 f $$
+      text ("fd = " ++ show fd) $$
+      vcat (ppTCTerm vTC 0 <$> V.toList v) 
   where fd = boundVarDiff fTC baseTC
         vd = boundVarDiff vTC baseTC
 
@@ -268,8 +271,8 @@ tcPatApply :: TermContext s
            -> (TermContext s, Vector TCTerm)
            -> TCPat
 tcPatApply baseTC (fTC, p) (vTC, v)
-   | V.length v == fd = fmapTCPat (tcApplyImpl vd v) 0 p
-   | otherwise = error "tcApply given bad vector"
+   | V.length v <= fd = fmapTCPat (tcApplyImpl vd v) (fd - V.length v) p
+   | otherwise = error "tcPatApply given bad vector"
   where fd = boundVarDiff fTC baseTC
         vd = boundVarDiff vTC baseTC
 
@@ -283,9 +286,9 @@ tcApplyImpl vd v = go
           where r' = go (i + tcPatVarCount p) r
         go i (TCLet lcls r) = TCLet (fmapTCLocalDefs go i lcls) r'
           where r' = go (i + length lcls) r
-        go i (TCVar j) | j < i = TCVar j
-                       | j - i < fd = incTCVars i 0 (v V.! (j - i))
-                       | otherwise = TCVar (vd + j - fd)
+        go i (TCVar j) | j < i = TCVar j -- Variable bound
+                       | j - i < fd = incTCVars i 0 (v V.! (j - i)) -- Variable instantiated.
+                       | otherwise = TCVar (vd + j - fd) -- Variable in new extended context.
         go i (TCLocalDef j)
           | j < i = TCLocalDef j
           | j - i < fd = error "Attempt to instantiate let bound definition."
@@ -411,10 +414,10 @@ data InferResult where
   -- | Ctor with identifier argument list and 
   PartialCtor :: Ident -- Datatype identifier
               -> Ident -- Ctor identifier.
-              -> [TCTerm]
-              -> TCPat
-              -> TCTerm
-              -> TCCtorType
+              -> [TCTerm] -- Arguments so far.
+              -> TCPat  -- Pattern for next argument 
+              -> TCTerm -- Type of next argument. 
+              -> TCCtorType -- Result ctor type.
               -> InferResult
   PartialDataType :: Ident
                   -> [TCTerm] 

@@ -13,7 +13,7 @@ module Verifier.SAW.Typechecker
   ) where
 
 import Control.Applicative
-import Control.Arrow ((***), second)
+import Control.Arrow ((***), first, second)
 import Control.Monad.State hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Control.Monad.Identity (Identity(..))
 import Data.Map (Map)
@@ -136,28 +136,32 @@ type TCDataType = DataTypeGen TCDTType (Ctor Ident TCCtorType)
 type TCDef = TCDefGen Identity
 
 fmapTCApply :: Functor f
-             => (TermContext s, f TCTerm)
-             -> (TermContext s, Vector TCTerm)
-             -> f TCTerm
+            => (TermContext s, f TCTerm)
+            -> (TermContext s, Vector TCTerm)
+            -> f TCTerm
 fmapTCApply (sTC, s) (vTC,v) = (\t -> tcApply vTC (sTC,t) (vTC,v)) <$> s
 
-tcFixedPiApply :: ((TermContext s, r) -> (TermContext s, Vector TCTerm) -> r)
+-- | Apply a vector of arguments to a fixed pi term.
+tcFixedPiApply :: -- Function for base case.
+                  -- Takes base value and its context along with extended version of arguments
+                  -- in their context.
+                  ((TermContext s, r) -> (TermContext s, Vector TCTerm) -> r)
+                  -- Context for fixed pi type and itself.
+                  -- The fixed pi type context should be an extension of the vector context.
                -> (TermContext s, FixedPiType r)
+                  -- Context for vectors
                -> (TermContext s, Vector TCTerm)
+                  -- Resulting fixed pi type will be in context for vectors.
                -> FixedPiType r
-tcFixedPiApply base = go
-  where go (itc, FPResult r) v = FPResult (base (itc, r) v)
-        go (itc, FPPi pat tp r) (vtc, v) = FPPi pat' tp' r'
-          where pat' = tcPatApply vtc (itc, pat) (vtc, v)
-                tp' = tcApply vtc (itc, tp) (vtc, v)
-                itc' = extendPatContext itc pat
-                vtc' = extendPatContext vtc pat'
-                v' = fmap (\t -> applyExt (vtc,t) vtc') v
-                r' = go (itc', r) (vtc', v')
+tcFixedPiApply baseFn i0 v@(vtc, _) = go i0
+  where go (itc, FPResult r) = FPResult (baseFn (itc, r) v)
+        go (itc, FPPi pat tp r) = FPPi pat' tp' (go (extendPatContext itc pat, r))
+          where pat' = tcPatApply vtc (itc, pat) v
+                tp' = tcApply vtc (itc, tp) v
 
 tcDTTypeApply :: (TermContext s, TCDTType)
               -> (TermContext s, Vector TCTerm) -> TCDTType
-tcDTTypeApply = tcFixedPiApply (\(_,s) _ -> s)
+tcDTTypeApply i0 (vtc0, v0) = tcFixedPiApply (\(_,s) _ -> s) i0 (vtc0, v0)
 
 tcCtorTypeApply :: (TermContext s, TCCtorType)
                 -> (TermContext s, Vector TCTerm)
@@ -213,13 +217,21 @@ tcSpecificDataType expected tc ut = do
     TCF (UDataType i tl) | i == expected -> pure tl
     _ -> tcFail (pos ut) $ "Expected " ++ show expected
 
-tcFixedPiType :: (TermContext s -> Un.Term -> TC s r)
+
+tcFixedPiType :: forall r s . (TermContext s -> Un.Term -> TC s r)
               -> TermContext s -> Un.Term -> TC s (FixedPiType r)
 tcFixedPiType fn = go 
-  where go tc (Un.Pi _ pats utp _ rhs) = do
-          (tp, _) <- tcType tc utp
-          (pl, tc') <- typecheckPats tc (Un.PSimple <$> pats) tp
-          (\r -> foldr (\pat -> FPPi pat tp) r pl) <$> go tc' rhs
+  where go tc (Un.Pi _ upats0 utp _ rhs) = do
+          (tp0, _) <- tcType tc utp
+          let tcPats :: TermContext s
+                     -> [Un.SimplePat]
+                     -> TCTerm
+                     -> TC s (FixedPiType r)
+              tcPats tc1 [] _ = go tc1 rhs
+              tcPats tc1 (upat:upats) tp = do
+                ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
+                FPPi pat tp <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
+          tcPats tc upats0 tp0
         go tc ut = FPResult <$> fn tc ut
 
 tcDTType :: TermContext s -> Un.Term -> TC s TCDTType
@@ -266,39 +278,41 @@ inferTerm tc uut = do
     Un.Lambda _ pl r -> inferLambda tc pl r
     Un.App uf _ ua -> mkRes =<< inferTerm tc uf
       where mkRes (PartialCtor dt i rargs pat tp cur) = do
-              (tc1, args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
+              (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
+              let tc1 = extendPatContext tc pat
               case cur of
                 FPResult dtArgs -> pure $ TypedValue v tp'
                   where v = TCF (UCtorApp i (reverse (a:rargs)))
                         tp' = TCF (UDataType dt (fmapTCApply (tc1, dtArgs) (tc,args)))
-                FPPi pat1 tp1 next -> pure $ PartialCtor dt i (a:rargs) pat' tp' next'
-                  where pat' = tcPatApply tc (tc1,pat1) (tc,args)
-                        tp' = tcApply tc (tc1,tp1) (tc,args)
-                        tc2 = extendPatContext tc1 pat1
-                        next' = tcCtorTypeApply (tc2,next) (tc,args)
+                FPPi pat1 tp1 next -> pure $ PartialCtor dt i (a:rargs) pat1' tp1' next'
+                  where pat1' = tcPatApply tc (tc1,pat1) (tc,args)
+                        tp1' = tcApply tc (tc1,tp1) (tc,args)
+                        next' = tcCtorTypeApply (extendPatContext tc1 pat1, next) (tc,args)
             mkRes (PartialDataType dt rargs pat tp cur) = do
-              (tc1, args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
+              (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
               case cur of
                 FPResult s -> pure $ TypedValue v (TCF (USort s))
                   where v = TCF (UDataType dt (reverse (a:rargs)))
-                FPPi pat1 tp1 next -> pure $ PartialDataType dt (a:rargs) pat' tp' next'
-                  where pat' = tcPatApply tc (tc1,pat1) (tc, args)
-                        tp' = tcApply tc (tc1,tp1) (tc, args)
-                        tc2 = extendPatContext tc1 pat1
-                        next' = tcDTTypeApply (tc2,next) (tc,args)
+                FPPi pat1 tp1 next -> pure $ PartialDataType dt (a:rargs) pat1' tp1' next'
+                  where tc1 = extendPatContext tc pat
+                        pat1' = tcPatApply tc (tc1,pat1) (tc, args)
+                        tp1'  = tcApply tc (tc1,tp1) (tc, args)
+                        next' = tcDTTypeApply (extendPatContext tc1 pat1, next) (tc, args)
             mkRes (TypedValue v tp0) = do
               (pat,patTp,tp) <- reduceToPiExpr tc (pos uf) tp0
-              (tc1, args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
+              (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
+              let tc1 = extendPatContext tc pat
               return $ TypedValue (TCF (UApp v a)) (tcApply tc (tc1,tp) (tc, args))
-
     Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
-    Un.Pi _ pats utp _ rhs -> do
-      (tp,tps) <- tcType tc utp
-      (pl, tc') <- typecheckPats tc (Un.PSimple <$> pats) tp
-      (rest,rps) <- tcType tc' rhs
-      let v' = foldr (\pat -> TCPi pat tp) rest pl
-      return $ TypedValue v' (TCF (USort (maxSort tps rps)))
-
+    Un.Pi _ upats0 utp _ rhs -> do
+      (tp0,tps) <- tcType tc utp
+      let tcPats :: TermContext s -> [Un.SimplePat] -> TCTerm -> TC s (TCTerm, Sort)
+          tcPats tc1 [] _ = tcType tc1 rhs
+          tcPats tc1 (upat:upats) tp = do
+            ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
+            first (TCPi pat tp) <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
+      (v',rps) <- tcPats tc upats0 tp0
+      return $ TypedValue v' (TCF (USort (maxSort rps tps)))
     Un.TupleValue _ tl -> do
       (vl,tpl) <- unzip <$> traverse (inferTypedValue tc) tl
       return $ TypedValue (TCF (UTupleValue vl)) (TCF (UTupleType tpl))
@@ -333,8 +347,7 @@ inferTerm tc uut = do
       return $ TypedValue (TCLet lcls rhs) (TCLet lcls rhsTp)
     Un.IntLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
                   | otherwise -> pure $ TypedValue (TCF (UNatLit i)) nattp
-      where natIdent = mkIdent (mkModuleName ["Prelude"]) "Nat"
-            nattp = TCF (UDataType natIdent [])
+      where nattp = TCF (UDataType preludeNatIdent [])
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
 
 tcLocalDecls :: TermContext s
@@ -373,7 +386,7 @@ checkTypeSubtype tc p x y = do
 -- This may differ to the input term due to the use of reduction during matching.
 matchPat :: forall s
           . TermContext s
-         -> Pos -> TCPat -> TCTerm -> TC s (TermContext s, Vector TCTerm, TCTerm)
+         -> Pos -> TCPat -> TCTerm -> TC s (Vector TCTerm, TCTerm)
 matchPat tc p pat t = do
   mr <- tryMatchPat tc pat t
   case mr of

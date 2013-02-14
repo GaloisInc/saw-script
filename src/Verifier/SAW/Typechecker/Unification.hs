@@ -5,6 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 module Verifier.SAW.Typechecker.Unification
   ( hasDups
+  , typecheckPat
   , typecheckPats
   , typecheckPiPats
   , checkTypesEqual
@@ -605,6 +606,23 @@ resolveUTerm' v = do
       tc <- gets urOuterContext
       return (tc, TCLocalDef i)
 
+-- | Typecheck pat against given expected type.
+typecheckPat :: TermContext s
+             -> Un.Pat
+             -> TCTerm
+             -> TC s (TCPat, TermContext s)
+typecheckPat tc up tp = do
+  rtp <- reduce tc tp
+  r <- runUnifier tc (pos up) $ do
+    utp <- mkUnifyTerm (emptyLocalCtx tc) rtp
+    (p,uptp) <- indexUnPat up
+    usetEqual utp uptp
+    resolve $ resolvePat p
+  case r of
+    Left msg -> tcFail (pos up) msg
+    Right rv -> return rv  
+
+
 -- | Typecheck pats against given expected type.
 typecheckPats :: TermContext s
               -> [Un.Pat]
@@ -736,6 +754,18 @@ checkTypesEqual' p ctx tc x y = do
     ( (TCLocalDef xi, xa), (TCLocalDef yi, ya))
       | xi == yi && length xa == length ya ->
         checkAll (zip xa ya)
+
+    ( (TCF (UNatLit 0), []), (TCF (UCtorApp c []), [])) 
+      | c == preludeZeroIdent -> pure ()
+    ( (TCF (UCtorApp c []), []), (TCF (UNatLit 0), [])) 
+      | c == preludeZeroIdent -> pure ()
+
+    ( (TCF (UNatLit n), []), (TCF (UCtorApp c [b]), [])) 
+      | c == preludeSuccIdent && n > 0 ->
+      check' tc (TCF (UNatLit (n-1))) b
+    ( (TCF (UCtorApp c [b]), []), (TCF (UNatLit n), [])) 
+      | c == preludeSuccIdent && n > 0 ->
+      check' tc b (TCF (UNatLit (n-1)))
 
     _ -> do
        tcFail p $ show $ text "Equivalence check failed during typechecking:"  $$

@@ -1,6 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Verifier.SAW.Typechecker.Simplification
-  ( PatVarParser
+  (     -- * Standard prelude names used during typechecking.
+    preludeNatIdent
+  , preludeZeroIdent
+  , preludeSuccIdent
+  , PatVarParser
   , addPatBindings
   , runPatVarParser
   , patBoundVars
@@ -28,15 +32,30 @@ import Prelude hiding (foldr, mapM_)
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
+import Verifier.SAW.TypedAST
 
+preludeModuleName :: ModuleName
+preludeModuleName = mkModuleName ["Prelude"]
 
+preludeNatIdent :: Ident
+preludeNatIdent =  mkIdent preludeModuleName "Nat"
+
+preludeZeroIdent :: Ident
+preludeZeroIdent =  mkIdent preludeModuleName "Zero"
+
+preludeSuccIdent :: Ident
+preludeSuccIdent =  mkIdent preludeModuleName "Succ"
+
+-- | State monad for recording variables found in patterns.
 type PatVarParser = State (Map Int (String,TCTerm)) ()
 
+-- | Add variables in pattern to state.
 addPatBindings :: TCPat -> PatVarParser
 addPatBindings (TCPVar nm i tp) = modify $ Map.insert i (nm,tp)
 addPatBindings TCPUnused{} = return ()
 addPatBindings (TCPatF pf) = traverse_ addPatBindings pf 
 
+-- | Get list of variables by running parser.
 runPatVarParser :: PatVarParser -> [(String,TCTerm)]
 runPatVarParser pvp = Map.elems (execState pvp Map.empty)
 
@@ -69,17 +88,24 @@ attemptMatch tc (TCPatF pf) t = do
       TCF . URecordValue <$> sequenceA (Map.intersectionWith go pm tm)
     (UPCtor cp pl, TCF (UCtorApp ct tl)) | cp == ct ->
       TCF . UCtorApp ct <$> sequenceA (zipWith go pl tl)
+
+    (UPCtor c [], TCF (UNatLit 0)) | c == preludeZeroIdent ->
+      return rt
+    (UPCtor c [p], TCF (UNatLit n)) 
+      | c == preludeSuccIdent && n > 0 ->
+      go p (TCF (UNatLit (n-1)))
+
     _ -> lift $ throwError "Pattern match failed."
 
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.
 -- This may differ to the input term due to the use of reduction during matching.
+-- All terms are relative to the initial context.
 tryMatchPat :: TermContext s
-            -> TCPat -> TCTerm -> TC s (Maybe (TermContext s, Subst, TCTerm))
+            -> TCPat -> TCTerm -> TC s (Maybe (Subst, TCTerm))
 tryMatchPat tc pat t = do
     fmap (fmap finish) $ runMatcher (attemptMatch tc pat t)
-  where finish (r,args) = (tc', args, r)
-          where tc' = extendPatContext tc pat
+  where finish (r,args) = (args, r)
 
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.
@@ -115,8 +141,9 @@ reduce tc t =
       r <- tryMatchPat tc pat a0
       case r of
         Nothing -> return t
-        Just (tc',sub,_) -> reduce tc (tcMkApp t' al)
-          where t' = tcApply tc (tc',rhs) (tc,sub)
+        Just (sub,_) -> reduce tc (tcMkApp t' al)
+          where tc' = extendPatContext tc pat 
+                t' = tcApply tc (tc',rhs) (tc,sub)
     (TCF (UGlobal g), al) -> do
         -- Get global equations.
         m <- tryEval (globalDefEqns g tc)
