@@ -86,6 +86,8 @@ data SharedContext s = SharedContext
   , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scApplyCtorFn     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
   , scLiteralFn       :: Integer -> IO (SharedTerm s)
+  , scTupleFn         :: [SharedTerm s] -> IO (SharedTerm s)
+  , scTupleTypeFn     :: [SharedTerm s] -> IO (SharedTerm s)
     -- | Select an element out of a record.
   , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDocFn :: SharedTerm s -> Doc
@@ -116,10 +118,10 @@ scLiteral :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scLiteral = scLiteralFn ?sc
 
 scTuple :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
-scTuple terms = scTermF (TupleValue terms)
+scTuple = scTupleFn ?sc
 
 scTupleType :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
-scTupleType typs = scTermF (TupleType typs)
+scTupleType = scTupleTypeFn ?sc
 
 scTypeOf :: (?sc :: SharedContext s) => SharedTerm s -> IO (SharedTerm s)
 scTypeOf = scTypeOfFn ?sc
@@ -306,6 +308,8 @@ mkSharedContext m = do
            , scRecordSelectFn = undefined
            , scApplyCtorFn = undefined
            , scLiteralFn = getTerm cr . IntLit
+           , scTupleFn = getTerm cr . TupleValue
+           , scTupleTypeFn = getTerm cr . TupleType
            , scTypeOfFn = typeOf
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
