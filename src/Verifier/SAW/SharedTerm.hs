@@ -197,6 +197,9 @@ unshare t = State.evalState (go t) Map.empty
           State.modify (Map.insert i x)
           return x
 
+instance Show (SharedTerm s) where
+  show = show . unshare
+
 sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
 sharedTerm mvar = go
     where go (Term termf) = getTerm mvar =<< traverse go termf
