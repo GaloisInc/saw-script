@@ -24,6 +24,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scFun
   , scNat
+  , scBitvector
   , scFunAll
   , scLiteral
   , scTuple
@@ -118,6 +119,14 @@ scApplyCtor = scApplyCtorFn ?sc
 
 scNat :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scNat = error "scNat unimplemented"
+
+-- | Obtain term representation a bitvector with a given width and known
+-- value.
+scBitvector :: (?sc :: SharedContext s)
+            => (SharedTerm s)
+            -> Integer
+            -> IO (SharedTerm s)
+scBitvector = error "scBitvector unimplemented"
 
 scLiteral :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
 scLiteral = scLiteralFn ?sc
