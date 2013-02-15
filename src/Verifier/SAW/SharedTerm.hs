@@ -103,6 +103,12 @@ getTerm (ACR r) a =
                      , acNextIdx = acNextIdx s + 1
                      }
 
+getFlatTerm :: AppCacheRef s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
+getFlatTerm ac = getTerm ac . FTermF
+
+
+
+
 {-
 data LocalVarTypeMap s = LVTM { lvtmMap :: Map Integer (SharedTerm s) }
 
@@ -120,47 +126,46 @@ subst0 = undefined
 
 sortOfTerm :: AppCacheRef s -> SharedTerm s -> IO Sort
 sortOfTerm ac t = do
-  STApp _ (Sort s) <- typeOf ac t
+  STApp _ (FTermF (Sort s)) <- typeOf ac t
   return s
 
 mkSharedSort :: AppCacheRef s -> Sort -> IO (SharedTerm s)
-mkSharedSort ac s = getTerm ac (Sort s)
+mkSharedSort ac s = getFlatTerm ac (Sort s)
 
 typeOf :: AppCacheRef s
        -> SharedTerm s
        -> IO (SharedTerm s)
 typeOf ac (STVar _ _ tp) = return tp
-typeOf ac (STApp _ tf) =
+typeOf ac (STApp _ (FTermF tf)) =
   case tf of
-    LocalVar _ tp -> return tp
     GlobalDef d -> return (defType d)
-    Lambda (PVar i _ _) tp rhs -> do
-      rtp <- typeOf ac rhs
-      getTerm ac (Pi i tp rtp)
-    App x y -> do
-      STApp _ (Pi _i _ rhs) <- typeOf ac x
-      subst0 ac rhs y
-    Pi _ tp rhs -> do
-      ltp <- sortOfTerm ac tp
-      rtp <- sortOfTerm ac rhs
-      mkSharedSort ac (max ltp rtp)
-    TupleValue l -> getTerm ac . TupleType =<< mapM (typeOf ac) l
+--    App x y -> do
+--      STPi _i _ rhs <- typeOf ac x
+--      subst0 ac rhs y
+    TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac) l
     TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) l
-    RecordValue m -> getTerm ac . RecordType =<< mapM (typeOf ac) m
+    RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac) m
     RecordSelector t f -> do
-      STApp _ (RecordType m) <- typeOf ac t
+      STApp _ (FTermF (RecordType m)) <- typeOf ac t
       let Just tp = Map.lookup f m
       return tp
     RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) m
     CtorValue c args -> undefined c args
     CtorType dt args -> undefined dt args
     Sort s -> mkSharedSort ac (sortOf s)
-    Let defs rhs -> undefined defs rhs
-    IntLit i -> undefined i
+--    Let defs rhs -> undefined defs rhs
+    NatLit i -> undefined i
     ArrayValue tp _ -> undefined tp
     EqType{} -> undefined 
     Oracle{} -> undefined
-
+typeOf ac (STApp _ (Lambda (PVar i _ _) tp rhs)) = do
+  rtp <- typeOf ac rhs
+  getTerm ac (Pi i tp rtp)
+typeOf ac (STApp _ (Pi _ tp rhs)) = do
+  ltp <- sortOfTerm ac tp
+  rtp <- sortOfTerm ac rhs
+  mkSharedSort ac (max ltp rtp)
+typeOf ac (STApp _ (LocalVar _ tp)) = return tp
 
 {-
 -- | Monadic fold with memoization
@@ -221,33 +226,38 @@ instantiateVars ac f initialLevel t =
     go l t@(STVar {}) = pure t
     go l t@(STApp tidx tf) =
         useCache ?cache (tidx, l) (preserveChangeT t $ go' l tf)
+
     go' :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
-    go' l tf =
+    go' l (FTermF tf) = gof l tf
+    go' l (Lambda i tp rhs) = getTerm ac <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
+    go' l (Pi i lhs rhs)    = getTerm ac <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
+    go' l (LocalVar i tp)
+      | i < l     = getTerm ac <$> (LocalVar i <$> go (l-(i+1)) tp)
+      | otherwise = f l i (go (l-(i+1)) tp)
+
+    gof :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+           DeBruijnIndex -> FlatTermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
+    gof l tf =
       case tf of
-        LocalVar i tp
-          | i < l            -> getTerm ac <$> (LocalVar i <$> go (l-(i+1)) tp)
-          | otherwise        -> f l i (go (l-(i+1)) tp)
-        Lambda i tp rhs      -> getTerm ac <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
-        App x y              -> getTerm ac <$> (App <$> go l x <*> go l y)
-        Pi i lhs rhs         -> getTerm ac <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
-        TupleValue ll        -> getTerm ac <$> (TupleValue <$> changeList (go l) ll)
-        TupleType ll         -> getTerm ac <$> (TupleType <$> changeList (go l) ll)
-        RecordValue m        -> getTerm ac <$> (RecordValue <$> traverse (go l) m)
-        RecordSelector x fld -> getTerm ac <$> (RecordSelector <$> go l x <*> pure fld)
-        RecordType m         -> getTerm ac <$> (RecordType <$> traverse (go l) m)
-        CtorValue c ll       -> getTerm ac <$> (CtorValue c <$> goList l ll)
-        CtorType dt ll       -> getTerm ac <$> (CtorType dt <$> goList l ll)
-        Let defs r           -> getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
-          where l' = l + length defs
-                procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
-                procDef (LocalFnDef sym tp eqs) =
-                    LocalFnDef sym <$> go l tp <*> changeList procEq eqs
-                procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
-                procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
-                  where eql = l' + sum (patBoundVarCount <$> pats)
-        EqType lhs rhs       -> getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
-        Oracle s prop        -> getTerm ac <$> (Oracle s <$> go l prop)
+        App x y              -> getFlatTerm ac <$> (App <$> go l x <*> go l y)
+        TupleValue ll        -> getFlatTerm ac <$> (TupleValue <$> changeList (go l) ll)
+        TupleType ll         -> getFlatTerm ac <$> (TupleType <$> changeList (go l) ll)
+        RecordValue m        -> getFlatTerm ac <$> (RecordValue <$> traverse (go l) m)
+        RecordSelector x fld -> getFlatTerm ac <$> (RecordSelector <$> go l x <*> pure fld)
+        RecordType m         -> getFlatTerm ac <$> (RecordType <$> traverse (go l) m)
+        CtorValue c ll       -> getFlatTerm ac <$> (CtorValue c <$> goList l ll)
+        CtorType dt ll       -> getFlatTerm ac <$> (CtorType dt <$> goList l ll)
+--        Let defs r           -> getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
+--          where l' = l + length defs
+--                procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
+--                procDef (LocalFnDef sym tp eqs) =
+--                    LocalFnDef sym <$> go l tp <*> changeList procEq eqs
+--                procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
+--                procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
+--                  where eql = l' + sum (patBoundVarCount <$> pats)
+        EqType lhs rhs       -> getFlatTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
+        Oracle s prop        -> getFlatTerm ac <$> (Oracle s <$> go l prop)
         _ -> return <$> pure t
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
@@ -280,9 +290,10 @@ instantiateVarChangeT ac k t0 t =
         fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
-        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
-                 | j == i + k = taint $ return <$> term i
-                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
+        fn = undefined
+--        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
+--                 | j == i + k = taint $ return <$> term i
+--                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
 
 instantiateVar :: AppCacheRef s
                -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
@@ -307,9 +318,10 @@ instantiateVarListChangeT ac k ts t =
     fn :: [(Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
        -> ChangeT IO (IO (SharedTerm s))
-    fn rs i j t | j >= i + k + l = taint $ getTerm ac <$> (LocalVar (j - l) <$> t)
-                | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
-                | otherwise      = getTerm ac <$> (LocalVar j <$> t)
+    fn = undefined
+--    fn rs i j t | j >= i + k + l = taint $ getTerm ac <$> (LocalVar (j - l) <$> t)
+--                | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
+--                | otherwise      = getTerm ac <$> (LocalVar j <$> t)
 
 instantiateVarList :: AppCacheRef s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
@@ -415,29 +427,31 @@ mkSharedContext m = do
   let getDef sym =
         case findDef m (mkIdent (moduleName m) sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> sharedTerm cr (Term (GlobalDef d))
+          Just d -> sharedTerm cr (Term (FTermF (GlobalDef d)))
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
   integerToSignedOp   <- getDef "integerToSigned"
   integerToUnsignedOp <- getDef "integerToUnsigned"
-  let viewAsNum (asIntLit -> Just i) = Just i
-      viewAsNum (asApp3Of integerToSignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
-      viewAsNum (asApp3Of integerToUnsignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
+  let viewAsNum (asNatLit -> Just i) = Just i
+      viewAsNum (asApp3Of integerToSignedOp -> Just (_,_,asNatLit -> Just i)) = Just i
+      viewAsNum (asApp3Of integerToUnsignedOp -> Just (_,_,asNatLit -> Just i)) = Just i
       viewAsNum _ = Nothing
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
            , scDefTermFn = undefined
-           , scApplyFn = \f x -> getTerm cr (App f x)
+           , scApplyFn = \f x -> getFlatTerm cr (App f x)
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
            , scApplyCtorFn = undefined
+{-
            , scFunFn = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
                                   getTerm cr (Pi "_" a b')
-           , scLiteralFn = getTerm cr . IntLit
-           , scTupleFn = getTerm cr . TupleValue
-           , scTupleTypeFn = getTerm cr . TupleType
+-}
+           , scLiteralFn = getFlatTerm cr . NatLit
+           , scTupleFn = getFlatTerm cr . TupleValue
+           , scTupleTypeFn = getFlatTerm cr . TupleType
            , scTypeOfFn = typeOf cr
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
@@ -445,12 +459,12 @@ mkSharedContext m = do
            , scInstVarListFn = instantiateVarList cr
            }
 
-asIntLit :: SharedTerm s -> Maybe Integer
-asIntLit (STApp _ (IntLit i)) = Just i
-asIntLit _ = Nothing
+asNatLit :: SharedTerm s -> Maybe Integer
+asNatLit (STApp _ (FTermF (NatLit i))) = Just i
+asNatLit _ = Nothing
 
 asApp :: SharedTerm s -> Maybe (SharedTerm s, SharedTerm s)
-asApp (STApp _ (App t u)) = Just (t,u)
+asApp (STApp _ (FTermF (App t u))) = Just (t,u)
 asApp _ = Nothing
 
 asApp3Of :: SharedTerm s -> SharedTerm s -> Maybe (SharedTerm s, SharedTerm s, SharedTerm s)

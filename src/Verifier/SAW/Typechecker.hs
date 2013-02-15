@@ -481,33 +481,33 @@ localBoundVars (LocalFnDefGen nm tp _) = (nm,tp)
 
 -- | Returns the type of a unification term in the current context.
 completeTerm :: CompletionContext -> TCTerm -> Term
-completeTerm cc (TCF tf) =
+completeTerm cc (TCF tf) = Term $ FTermF $
   case tf of
-    UGlobal i -> Term (GlobalDef d)
+    UGlobal i -> GlobalDef d
       where Just d = findDef cm i
-    UApp l r -> Term $ App (go l) (go r)
-    UTupleValue l -> Term $ TupleValue (go <$> l)
-    UTupleType l -> Term $ TupleType (go <$> l)
-    URecordValue m      -> Term $ RecordValue (go <$> m)
-    URecordSelector t f -> Term $ RecordSelector (go t) f
-    URecordType m       -> Term $ RecordType (go <$> m)
-    UCtorApp i l        -> Term $ CtorValue c (go <$> l)
+    UApp l r -> App (go l) (go r)
+    UTupleValue l -> TupleValue (go <$> l)
+    UTupleType l -> TupleType (go <$> l)
+    URecordValue m      -> RecordValue (go <$> m)
+    URecordSelector t f -> RecordSelector (go t) f
+    URecordType m       -> RecordType (go <$> m)
+    UCtorApp i l        -> CtorValue c (go <$> l)
       where Just c = findCtor cm i
-    UDataType i l       -> Term $ CtorType dt (go <$> l)
+    UDataType i l       -> CtorType dt (go <$> l)
       where Just (dt, _ctors) = findDataType cm i
-    USort s             -> Term $ Sort s
-    UNatLit i           -> Term $ IntLit i
-    UArray tp v         -> Term $ ArrayValue (go tp) (go <$> v)
+    USort s             -> Sort s
+    UNatLit i           -> NatLit i
+    UArray tp v         -> ArrayValue (go tp) (go <$> v)
  where cm = ccModule cc
        go = completeTerm cc
-completeTerm cc (TCLambda pat tp r) = Term $
-    Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
+completeTerm cc (TCLambda pat tp r) =
+    Term $ Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
   where (pat', cc') = completePat cc pat
-completeTerm cc (TCPi pat@(TCPVar nm _ _) tp r) = Term $
-    Pi nm (completeTerm cc tp) (completeTerm cc' r)
+completeTerm cc (TCPi pat@(TCPVar nm _ _) tp r) =
+    Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
-completeTerm cc (TCPi pat@(TCPUnused nm) tp r) = Term $
-    Pi nm (completeTerm cc tp) (completeTerm cc' r)
+completeTerm cc (TCPi pat@(TCPUnused nm) tp r) =
+    Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term" 
 completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
