@@ -82,18 +82,18 @@ attemptMatch tc (TCPatF pf) t = do
   let go = attemptMatch tc
   rt <- lift $ lift $ reduce tc t
   case (pf, rt) of
-    (UPTuple pl, TCF (UTupleValue tl)) | length pl == length tl ->
-      TCF . UTupleValue <$> sequenceA (zipWith go pl tl)
-    (UPRecord pm, TCF (URecordValue tm)) | Map.keys pm == Map.keys tm ->
-      TCF . URecordValue <$> sequenceA (Map.intersectionWith go pm tm)
-    (UPCtor cp pl, TCF (UCtorApp ct tl)) | cp == ct ->
-      TCF . UCtorApp ct <$> sequenceA (zipWith go pl tl)
+    (UPTuple pl, TCF (TupleValue tl)) | length pl == length tl ->
+      TCF . TupleValue <$> sequenceA (zipWith go pl tl)
+    (UPRecord pm, TCF (RecordValue tm)) | Map.keys pm == Map.keys tm ->
+      TCF . RecordValue <$> sequenceA (Map.intersectionWith go pm tm)
+    (UPCtor cp pl, TCF (CtorApp ct tl)) | cp == ct ->
+      TCF . CtorApp ct <$> sequenceA (zipWith go pl tl)
 
-    (UPCtor c [], TCF (UNatLit 0)) | c == preludeZeroIdent ->
+    (UPCtor c [], TCF (NatLit 0)) | c == preludeZeroIdent ->
       return rt
-    (UPCtor c [p], TCF (UNatLit n)) 
+    (UPCtor c [p], TCF (NatLit n)) 
       | c == preludeSuccIdent && n > 0 ->
-      go p (TCF (UNatLit (n-1)))
+      go p (TCF (NatLit (n-1)))
 
     _ -> lift $ throwError "Pattern match failed."
 
@@ -129,10 +129,10 @@ tryMatchPatList tc pats terms =
 reduce :: TermContext s -> TCTerm -> TC s TCTerm
 reduce tc t =
   case tcAsApp t of
-    (TCF (URecordSelector r f), a) -> do
+    (TCF (RecordSelector r f), a) -> do
       r' <- reduce tc r
       case r' of
-        TCF (URecordValue m) ->
+        TCF (RecordValue m) ->
           case Map.lookup f m of
             Just v -> reduce tc (tcMkApp v a)
             Nothing -> fail "Missing record field in reduce"
@@ -144,7 +144,7 @@ reduce tc t =
         Just (sub,_) -> reduce tc (tcMkApp t' al)
           where tc' = extendPatContext tc pat 
                 t' = tcApply tc (tc',rhs) (tc,sub)
-    (TCF (UGlobal g), al) -> do
+    (TCF (GlobalDef g), al) -> do
         -- Get global equations.
         m <- tryEval (globalDefEqns g tc)
         case m of

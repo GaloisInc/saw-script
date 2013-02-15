@@ -37,7 +37,7 @@ import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
 import Verifier.SAW.Typechecker.Simplification
-import Verifier.SAW.TypedAST (ppParens)
+import Verifier.SAW.TypedAST (ppParens, zipWithFlatTermF, ppFlatTermF)
 import qualified Verifier.SAW.UntypedAST as Un
 
 -- | Return true if set has duplicates.
@@ -46,36 +46,6 @@ hasDups l = Set.size (Set.fromList l) < length l
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y) 
-
-zipWithTCTermF :: (x -> y -> z) -> TCTermF x -> TCTermF y -> Maybe (TCTermF z)
-zipWithTCTermF f = go
-  where go (UGlobal x) (UGlobal y) | x == y = pure $ UGlobal x
-        go (UApp fx vx) (UApp fy vy) = pure $ UApp (f fx fy) (f vx vy)
-
-        go (UTupleValue lx) (UTupleValue ly)
-          | length lx == length ly = pure $ UTupleValue (zipWith f lx ly)
-        go (UTupleType lx) (UTupleType ly)
-          | length lx == length ly = pure $ UTupleType (zipWith f lx ly)
-
-        go (URecordValue mx) (URecordValue my)
-          | Map.keys mx == Map.keys my = 
-              pure $ URecordValue $ Map.intersectionWith f mx my 
-        go (URecordSelector x fx) (URecordSelector y fy)
-          | fx == fy = pure $ URecordSelector (f x y) fx
-        go (URecordType mx) (URecordType my)
-          | Map.keys mx == Map.keys my = 
-              pure $ URecordType (Map.intersectionWith f mx my) 
-
-        go (UCtorApp cx lx) (UCtorApp cy ly)
-          | cx == cy = pure $ UCtorApp cx (zipWith f lx ly)
-        go (UDataType dx lx) (UDataType dy ly)
-          | dx == dy = pure $ UDataType dx (zipWith f lx ly)
-        go (USort sx) (USort sy) | sx == sy = pure (USort sx)
-        go (UNatLit ix) (UNatLit iy) | ix == iy = pure (UNatLit ix)
-        go (UArray tx vx) (UArray ty vy)
-          | V.length vx == V.length vy = pure $ UArray (f tx ty) (V.zipWith f vx vy)
-
-        go _ _ = Nothing
 
 evaluatedRefLocalDef :: [TCLocalDef] -> TC s [TCRefLocalDef s]
 evaluatedRefLocalDef lcls = traverse go lcls
@@ -125,7 +95,7 @@ data UVarState s
     -- to instantiate it.
   | UHolTerm (TermContext s, TCTerm) -- Type with free variables.
              [VarIndex s] -- Variables bound to type.
-  | UTF (TCTermF (VarIndex s))
+  | UTF (FlatTermF (VarIndex s))
     -- A variable bound outside the context of the unification problem with name and type
     -- relative to when before unification began.
   | UOuterVar String Int
@@ -150,7 +120,7 @@ ppUTerm vs0 = evalStateT (go 0 vs0) Set.empty
         go pr (UHolTerm (tc,t) []) = pure $ ppTCTerm tc pr t
         go pr (UHolTerm (tc,t) bindings) = ppParens (pr >= 10) .
           hsep . (ppTCTerm tc 10 t :) <$> traverse (goVar 10) bindings
-        go pr (UTF tf) = ppTCTermF goVar pr tf
+        go pr (UTF tf) = ppFlatTermF goVar pr tf
         go _ (UOuterVar nm _) = pure (text nm)
         go _ (UOuterLet nm _) = pure (text nm)
 
@@ -213,7 +183,7 @@ usetEqual vx vy = do
     (_,UVar vz) -> usetEqual vx vz
     (URigidVar rx, URigidVar ry) | rx == ry -> pure ()
     (UTF ufx, UTF ufy)
-      | Just ufz <- zipWithTCTermF usetEqual ufx ufy -> sequence_ ufz
+      | Just ufz <- zipWithFlatTermF usetEqual ufx ufy -> sequence_ ufz
   
     (UFreeType{}, _) -> lift $ liftST $ writeSTRef (viRef vx) (UVar vy)
     (_, UFreeType{}) -> lift $ liftST $ writeSTRef (viRef vy) (UVar vx)
@@ -250,11 +220,11 @@ upatToTerm (UPUnused v) = pure v
 upatToTerm (UPatF _ pf) =
   case pf of
     UPTuple l -> do
-      mkVar "tuple" . UTF . UTupleValue =<< traverse upatToTerm l
+      mkVar "tuple" . UTF . TupleValue =<< traverse upatToTerm l
     UPRecord m -> do
-      mkVar "record" . UTF . URecordValue =<< traverse upatToTerm m
+      mkVar "record" . UTF . RecordValue =<< traverse upatToTerm m
     UPCtor c l -> do
-      mkVar "ctor" . UTF . UCtorApp c =<< traverse upatToTerm l
+      mkVar "ctor" . UTF . CtorApp c =<< traverse upatToTerm l
 
 -- | Create a upat from a untyped pat, and return and it's type.
 indexUnPat :: Un.Pat -> Unifier s (UPat s, VarIndex s)
@@ -268,7 +238,7 @@ indexUnPat upat =
       return (UPUnused v, tpv)
     Un.PTuple p l -> do
         (up,utp) <- unzip <$> traverse indexUnPat l
-        tpv <-  mkVar (show (Un.ppPat 0 upat)) (UTF (UTupleType utp))
+        tpv <-  mkVar (show (Un.ppPat 0 upat)) (UTF (TupleType utp))
         return (UPatF p (UPTuple up), tpv)
     Un.PRecord p fpl
         | hasDups (val . fst <$> fpl) ->
@@ -276,7 +246,7 @@ indexUnPat upat =
         | otherwise -> do
            rm <- traverse indexUnPat (Map.fromList (first val <$> fpl))
            tpv <- mkVar (show (Un.ppPat 0 upat))
-                        (UTF $ URecordType (fmap snd rm))
+                        (UTF $ RecordType (fmap snd rm))
            return (UPatF p (UPRecord (fmap fst rm)), tpv)
     Un.PCtor pnm pl -> do
       tc <- gets usGlobalContext
@@ -418,9 +388,9 @@ mergePats p p10 p20 = do
           tpv <- mkVar ("type of " ++ show nm) (UFreeType nm)
           mkVar nm (UUnused nm tpv)
         instPat (TCPatF pf) = lift . mkVar "unnamed" . UTF =<< mapM instPat (pfToTF pf)
-          where pfToTF (UPTuple l) = UTupleValue l
-                pfToTF (UPRecord m) = URecordValue m
-                pfToTF (UPCtor c l) = UCtorApp c l
+          where pfToTF (UPTuple l) = TupleValue l
+                pfToTF (UPRecord m) = RecordValue m
+                pfToTF (UPCtor c l) = CtorApp c l
         go :: TCPat
            -> TCPat
            -> StateT (VarIndexMap s, VarIndexMap s) (ErrorT String (Unifier s)) ()
@@ -693,38 +663,38 @@ checkTypesEqual' p ctx tc x y = do
       checkAll :: Foldable t => t (TCTerm, TCTerm) -> TC s ()
       checkAll = mapM_ (uncurry (check' tc))
   case (tcAsApp x, tcAsApp y) of
-    ( (TCF (UGlobal xg), xa), (TCF (UGlobal yg), ya))
+    ( (TCF (GlobalDef xg), xa), (TCF (GlobalDef yg), ya))
       | xg == yg && length xa == length ya -> do
         checkAll (zip xa ya)
 
-    ( (TCF (UTupleValue xa), []), (TCF (UTupleValue ya), []))
+    ( (TCF (TupleValue xa), []), (TCF (TupleValue ya), []))
       | length xa == length ya ->
         checkAll (zip xa ya)
-    ( (TCF (UTupleType xa), []), (TCF (UTupleType ya), []))
+    ( (TCF (TupleType xa), []), (TCF (TupleType ya), []))
       | length xa == length ya ->
         checkAll (zip xa ya)
 
-    ( (TCF (URecordValue xm), []), (TCF (URecordValue ym), []))
+    ( (TCF (RecordValue xm), []), (TCF (RecordValue ym), []))
       | Map.keys xm == Map.keys ym ->
         checkAll (Map.intersectionWith (,) xm ym)
-    ( (TCF (URecordSelector xr xf), []), (TCF (URecordSelector yr yf), []))
+    ( (TCF (RecordSelector xr xf), []), (TCF (RecordSelector yr yf), []))
       | xf == yf ->
         check' tc xr yr
-    ( (TCF (URecordType xm), []), (TCF (URecordType ym), []))
+    ( (TCF (RecordType xm), []), (TCF (RecordType ym), []))
       | Map.keys xm == Map.keys ym ->
         checkAll (Map.intersectionWith (,) xm ym)
                  
-    ( (TCF (UCtorApp xc xa), []), (TCF (UCtorApp yc ya), []))
+    ( (TCF (CtorApp xc xa), []), (TCF (CtorApp yc ya), []))
       | xc == yc ->
         checkAll (zip xa ya)
-    ( (TCF (UDataType xdt xa), []), (TCF (UDataType ydt ya), []))
+    ( (TCF (DataTypeApp xdt xa), []), (TCF (DataTypeApp ydt ya), []))
       | xdt == ydt ->
         checkAll (zip xa ya)
 
-    ( (TCF (USort xs), []), (TCF (USort ys), [])) | xs == ys -> return ()
+    ( (TCF (Sort xs), []), (TCF (Sort ys), [])) | xs == ys -> return ()
 
-    ( (TCF (UNatLit xi), []), (TCF (UNatLit yi), [])) | xi == yi -> return ()
-    ( (TCF (UArray xtp xv), []), (TCF (UArray ytp yv), []))
+    ( (TCF (NatLit xi), []), (TCF (NatLit yi), [])) | xi == yi -> return ()
+    ( (TCF (ArrayValue xtp xv), []), (TCF (ArrayValue ytp yv), []))
       | V.length xv == V.length yv ->
          check' tc xtp ytp *> checkAll (V.zip xv yv)
 
@@ -756,26 +726,26 @@ checkTypesEqual' p ctx tc x y = do
       | xi == yi && length xa == length ya ->
         checkAll (zip xa ya)
 
-    ( (TCF (UNatLit 0), []), (TCF (UCtorApp c []), [])) 
+    ( (TCF (NatLit 0), []), (TCF (CtorApp c []), [])) 
       | c == preludeZeroIdent -> pure ()
-    ( (TCF (UCtorApp c []), []), (TCF (UNatLit 0), [])) 
+    ( (TCF (CtorApp c []), []), (TCF (NatLit 0), [])) 
       | c == preludeZeroIdent -> pure ()
 
-    ( (TCF (UNatLit n), []), (TCF (UCtorApp c [b]), [])) 
+    ( (TCF (NatLit n), []), (TCF (CtorApp c [b]), [])) 
       | c == preludeSuccIdent && n > 0 ->
-      check' tc (TCF (UNatLit (n-1))) b
-    ( (TCF (UCtorApp c [b]), []), (TCF (UNatLit n), [])) 
+      check' tc (TCF (NatLit (n-1))) b
+    ( (TCF (CtorApp c [b]), []), (TCF (NatLit n), [])) 
       | c == preludeSuccIdent && n > 0 ->
-      check' tc b (TCF (UNatLit (n-1)))
+      check' tc b (TCF (NatLit (n-1)))
 
     _ -> do
        tcFail p $ show $ text "Equivalence check failed during typechecking:"  $$
-          nest 2 (text $ show x) $$ text "and\n" $$
-          nest 2 (text $ show y) $$ text "in context\n" $$
+          nest 2 (ppTCTerm tc 0 x) $$ text "and\n" $$
+          nest 2 (ppTCTerm tc 0 y) $$ text "in context\n" $$
           nest 4 (ppTermContext tc) $$ 
           nest 2 (vcat (ppScope <$> ctx))
       where ppScope (tc',x',y') =
              text "while typechecking" $$
-             nest 2 (text $ show x') $$ text "and\n" $$
-             nest 2 (text $ show y') $$ text "in context\n" $$
+             nest 2 (ppTCTerm tc 0 x') $$ text "and\n" $$
+             nest 2 (ppTCTerm tc 0 y') $$ text "in context\n" $$
              nest 4 (ppTermContext tc')

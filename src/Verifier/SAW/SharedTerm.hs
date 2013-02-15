@@ -132,16 +132,16 @@ sortOfTerm ac t = do
 mkSharedSort :: AppCacheRef s -> Sort -> IO (SharedTerm s)
 mkSharedSort ac s = getFlatTerm ac (Sort s)
 
-typeOf :: AppCacheRef s
-       -> SharedTerm s
-       -> IO (SharedTerm s)
-typeOf ac (STVar _ _ tp) = return tp
-typeOf ac (STApp _ (FTermF tf)) =
+
+typeOfFTermF :: AppCacheRef s
+             -> FlatTermF (SharedTerm s)
+             -> IO (SharedTerm s)
+typeOfFTermF ac tf =
   case tf of
-    GlobalDef d -> return (defType d)
---    App x y -> do
---      STPi _i _ rhs <- typeOf ac x
---      subst0 ac rhs y
+    GlobalDef d -> undefined d
+    App x y -> do
+      STApp _ (Pi _ _ rhs) <- typeOf ac x
+      subst0 ac rhs y
     TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac) l
     TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) l
     RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac) m
@@ -150,22 +150,30 @@ typeOf ac (STApp _ (FTermF tf)) =
       let Just tp = Map.lookup f m
       return tp
     RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) m
-    CtorValue c args -> undefined c args
-    CtorType dt args -> undefined dt args
+    CtorApp c args -> undefined c args
+    DataTypeApp dt args -> undefined dt args
     Sort s -> mkSharedSort ac (sortOf s)
---    Let defs rhs -> undefined defs rhs
     NatLit i -> undefined i
     ArrayValue tp _ -> undefined tp
+
+typeOf :: AppCacheRef s
+       -> SharedTerm s
+       -> IO (SharedTerm s)
+typeOf ac (STVar _ _ tp) = return tp
+typeOf ac (STApp _ tf) =
+  case tf of
+    FTermF ftf -> typeOfFTermF ac ftf
+    Lambda (PVar i _ _) tp rhs -> do
+      rtp <- typeOf ac rhs
+      getTerm ac (Pi i tp rtp)
+    Pi _ tp rhs -> do
+      ltp <- sortOfTerm ac tp
+      rtp <- sortOfTerm ac rhs
+      mkSharedSort ac (max ltp rtp)
+    Let defs rhs -> undefined defs rhs
+    LocalVar _ tp -> return tp
     EqType{} -> undefined 
     Oracle{} -> undefined
-typeOf ac (STApp _ (Lambda (PVar i _ _) tp rhs)) = do
-  rtp <- typeOf ac rhs
-  getTerm ac (Pi i tp rtp)
-typeOf ac (STApp _ (Pi _ tp rhs)) = do
-  ltp <- sortOfTerm ac tp
-  rtp <- sortOfTerm ac rhs
-  mkSharedSort ac (max ltp rtp)
-typeOf ac (STApp _ (LocalVar _ tp)) = return tp
 
 {-
 -- | Monadic fold with memoization
@@ -214,13 +222,6 @@ instantiateVars ac f initialLevel t =
     do cache <- newCache
        let ?cache = cache in go initialLevel t
   where
-    goList :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
-              DeBruijnIndex -> [SharedTerm s] -> ChangeT IO [SharedTerm s]
-    goList l xs = preserve xs $
-      case xs of
-        [] -> pure []
-        e:r -> (:) <$> go l e <*> goList (l+1) r
-
     go :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STVar {}) = pure t
@@ -229,36 +230,22 @@ instantiateVars ac f initialLevel t =
 
     go' :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
-    go' l (FTermF tf) = gof l tf
+    go' l (FTermF tf) = getFlatTerm ac <$> (traverse (go l) tf)
     go' l (Lambda i tp rhs) = getTerm ac <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
     go' l (Pi i lhs rhs)    = getTerm ac <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
+    go' l (Let defs r) = getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
+      where l' = l + length defs
+            procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
+            procDef (LocalFnDef sym tp eqs) =
+              LocalFnDef sym <$> go l tp <*> changeList procEq eqs
+            procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
+            procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
+              where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i tp)
       | i < l     = getTerm ac <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
-
-    gof :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
-           DeBruijnIndex -> FlatTermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
-    gof l tf =
-      case tf of
-        App x y              -> getFlatTerm ac <$> (App <$> go l x <*> go l y)
-        TupleValue ll        -> getFlatTerm ac <$> (TupleValue <$> changeList (go l) ll)
-        TupleType ll         -> getFlatTerm ac <$> (TupleType <$> changeList (go l) ll)
-        RecordValue m        -> getFlatTerm ac <$> (RecordValue <$> traverse (go l) m)
-        RecordSelector x fld -> getFlatTerm ac <$> (RecordSelector <$> go l x <*> pure fld)
-        RecordType m         -> getFlatTerm ac <$> (RecordType <$> traverse (go l) m)
-        CtorValue c ll       -> getFlatTerm ac <$> (CtorValue c <$> goList l ll)
-        CtorType dt ll       -> getFlatTerm ac <$> (CtorType dt <$> goList l ll)
---        Let defs r           -> getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
---          where l' = l + length defs
---                procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
---                procDef (LocalFnDef sym tp eqs) =
---                    LocalFnDef sym <$> go l tp <*> changeList procEq eqs
---                procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
---                procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
---                  where eql = l' + sum (patBoundVarCount <$> pats)
-        EqType lhs rhs       -> getFlatTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
-        Oracle s prop        -> getFlatTerm ac <$> (Oracle s <$> go l prop)
-        _ -> return <$> pure t
+    go' l (EqType lhs rhs) = getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
+    go' l (Oracle s prop) = getTerm ac <$> (Oracle s <$> go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -427,7 +414,7 @@ mkSharedContext m = do
   let getDef sym =
         case findDef m (mkIdent (moduleName m) sym) of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> sharedTerm cr (Term (FTermF (GlobalDef d)))
+          Just d -> sharedTerm cr (Term (FTermF (GlobalDef (defIdent d))))
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)

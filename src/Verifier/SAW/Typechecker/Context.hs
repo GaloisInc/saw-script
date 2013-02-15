@@ -9,10 +9,10 @@
 module Verifier.SAW.Typechecker.Context
   ( -- * Term definitions
     TCTerm(..)
-  , TCTermF(..)
+  , FlatTermF(..)
   , tcMkApp
   , tcAsApp
-  , Prec, ppTCTerm, ppTCTermF
+  , Prec, ppTCTerm
   , TCPat(..)
   , PatF(..)
   , tcPatVarCount
@@ -119,7 +119,7 @@ localVarNamesCount = length
 type TCLocalDef = LocalDefGen TCTerm [TCDefEqn]
 
 data TCTerm
-  = TCF !(TCTermF TCTerm)
+  = TCF !(FlatTermF TCTerm)
   | TCLambda !TCPat !TCTerm !TCTerm
   | TCPi !TCPat !TCTerm !TCTerm
   | TCLet [TCLocalDef] TCTerm
@@ -127,12 +127,10 @@ data TCTerm
   | TCVar DeBruijnIndex
     -- | A reference to a let bound function with equations.
   | TCLocalDef DeBruijnIndex 
- deriving (Show)
 
 data TCPat = TCPVar String DeBruijnIndex TCTerm
            | TCPUnused String -- ^ Unused pattern
            | TCPatF (PatF TCPat)
-  deriving (Show)
 
 data PatF p
    = UPTuple [p]
@@ -140,37 +138,14 @@ data PatF p
    | UPCtor Ident [p]
   deriving (Functor, Foldable, Traversable, Show)
 
-data TCTermF t
-    -- | A global definition identifier.
-  = UGlobal Ident
-
-  | UApp t t
-
-  | UTupleValue [t]
-  | UTupleType [t]
-
-  | URecordValue (Map FieldName t)
-  | URecordSelector t FieldName
-  | URecordType (Map FieldName t)
-
-  | UCtorApp Ident [t]
-  | UDataType Ident [t]
-
-  | USort Sort
- 
-  | UNatLit Integer
-  | UArray t (Vector t)
-
-  deriving (Show, Functor, Foldable, Traversable)
-
 tcMkApp :: TCTerm -> [TCTerm] -> TCTerm
 tcMkApp = go
   where go t [] = t
-        go t (a:l) = go (TCF (UApp t a)) l
+        go t (a:l) = go (TCF (App t a)) l
 
 tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
 tcAsApp = go []
-  where go r (TCF (UApp f v)) = go (v:r) f
+  where go r (TCF (App f v)) = go (v:r) f
         go r f = (f,r) 
 
 -- | A pi type that accepted a statically-determined number of arguments.
@@ -226,11 +201,11 @@ fmapTCDefEqn tfn l (DefEqnGen pl r) = DefEqnGen pl' r'
         r' = tfn (l+ sum (tcPatVarCount <$> pl)) r
 
 termFromTCDTType :: TCDTType -> TCTerm
-termFromTCDTType (FPResult s) = TCF (USort s)
+termFromTCDTType (FPResult s) = TCF (Sort s)
 termFromTCDTType (FPPi p tp r) = TCPi p tp (termFromTCDTType r)
 
 termFromTCCtorType :: Ident -> TCCtorType -> TCTerm
-termFromTCCtorType dt (FPResult tl) = TCF (UDataType dt tl)
+termFromTCCtorType dt (FPResult tl) = TCF (DataTypeApp dt tl)
 termFromTCCtorType dt (FPPi p tp r) = TCPi p tp (termFromTCCtorType dt r)
 
 tcPatVarCount :: TCPat -> Int
@@ -454,17 +429,17 @@ resolveIdent tc0 (PosPair p ident) = go tc0
             Just (DataTypeBinding (DataTypeGen dt rtp _)) -> do
               ftp <- eval p rtp
               case ftp of
-                FPResult s -> pure $ TypedValue (TCF (UDataType dt [])) (TCF (USort s))
+                FPResult s -> pure $ TypedValue (TCF (DataTypeApp dt [])) (TCF (Sort s))
                 FPPi pat tp next -> pure $ PartialDataType dt [] pat tp next 
             Just (CtorBinding dt (Ctor c rtp)) -> do
               ftp <- eval p rtp
               case ftp of
                 FPResult args ->
-                 pure $ TypedValue (TCF (UCtorApp c []))
-                                   (TCF (UDataType (dtgName dt) args))
+                 pure $ TypedValue (TCF (CtorApp c []))
+                                   (TCF (DataTypeApp (dtgName dt) args))
                 FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next 
             Just (DefBinding (DefGen gi rtp _)) ->
-              TypedValue (TCF (UGlobal gi)) <$> eval p rtp
+              TypedValue (TCF (GlobalDef gi)) <$> eval p rtp
             Nothing -> tcFail p $ "Unknown identifier: " ++ show ident ++ "."
 
 resolveBoundVar :: DeBruijnIndex -> TermContext s -> String
@@ -508,7 +483,7 @@ ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 -- | Pretty print TC term with doc used for free variables.
 ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
-  runIdentity $ ppTCTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
+  runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
 ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
   char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
              <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
@@ -532,26 +507,6 @@ ppTCPat (TCPatF pf) =
     UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
     UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
     UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
-
-ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
-ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
-  where ppFld (fld,v) = (text fld <+> equals <+>) <$> pp v
-
-ppTCTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> TCTermF t -> f Doc
-ppTCTermF pp prec tf =
-  case tf of
-    UGlobal i -> pure $ ppIdent i
-    UApp l r -> ppParens (prec >= 10) <$> liftA2 (<+>) (pp 10 l) (pp 10 r)
-    UTupleValue l -> parens . commaSepList <$> traverse (pp 1) l
-    UTupleType l -> (char '#' <>) . parens . commaSepList <$> traverse (pp 1) l
-    URecordValue m -> ppRecordF (pp 1) m
-    URecordSelector t f -> ppParens (prec >= 10) . (<> (char '.' <> text f)) <$> pp 11 t
-    URecordType m -> (char '#' <>) <$> ppRecordF (pp 1) m
-    UCtorApp c l -> ppParens (prec >= 10) . hsep . (ppIdent c :) <$> traverse (pp 10) l
-    UDataType dt l -> ppParens (prec >= 10) . hsep . (ppIdent dt :) <$> traverse (pp 10) l
-    USort s -> pure $ text (show s)
-    UNatLit i -> pure $ text (show i)
-    UArray _ vl -> brackets . commaSepList <$> traverse (pp 1) (V.toList vl)
 
 -- | Bound the free variables in the term with pi quantifiers.
 boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm

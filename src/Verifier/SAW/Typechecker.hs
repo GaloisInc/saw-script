@@ -197,7 +197,7 @@ checkIsSort :: TermContext s -> Pos -> TCTerm -> TC s Sort
 checkIsSort tc p t0 = do
   t <- reduce tc t0
   case t of
-    TCF (USort s) -> return s
+    TCF (Sort s) -> return s
     _ -> tcFailD p $ ppTCTerm tc 0 t <+> text "could not be interpreted as a sort."
 
 -- | Typecheck a term as a type, returning a term equivalent to it, and
@@ -215,7 +215,7 @@ tcSpecificDataType expected tc ut = do
   (v,_) <- inferTypedValue tc ut
   rtp <- reduce tc v
   case rtp of
-    TCF (UDataType i tl) | i == expected -> pure tl
+    TCF (DataTypeApp i tl) | i == expected -> pure tl
     _ -> tcFail (pos ut) $ "Expected " ++ show expected
 
 
@@ -275,7 +275,7 @@ inferTerm tc uut = do
     Un.Var i -> resolveIdent tc i
     Un.Unused{} -> fail "Pattern syntax when type expected."
     Un.Con i -> resolveIdent tc i
-    Un.Sort _ s -> return $ TypedValue (TCF (USort s)) (TCF (USort (sortOf s)))
+    Un.Sort _ s -> return $ TypedValue (TCF (Sort s)) (TCF (Sort (sortOf s)))
     Un.Lambda _ pl r -> inferLambda tc pl r
     Un.App uf _ ua -> mkRes =<< inferTerm tc uf
       where mkRes (PartialCtor dt i rargs pat tp cur) = do
@@ -283,8 +283,8 @@ inferTerm tc uut = do
               let tc1 = extendPatContext tc pat
               case cur of
                 FPResult dtArgs -> pure $ TypedValue v tp'
-                  where v = TCF (UCtorApp i (reverse (a:rargs)))
-                        tp' = TCF (UDataType dt (fmapTCApply (tc1, dtArgs) (tc,args)))
+                  where v = TCF (CtorApp i (reverse (a:rargs)))
+                        tp' = TCF (DataTypeApp dt (fmapTCApply (tc1, dtArgs) (tc,args)))
                 FPPi pat1 tp1 next -> pure $ PartialCtor dt i (a:rargs) pat1' tp1' next'
                   where pat1' = tcPatApply tc (tc1,pat1) (tc,args)
                         tp1' = tcApply tc (tc1,tp1) (tc,args)
@@ -292,8 +292,8 @@ inferTerm tc uut = do
             mkRes (PartialDataType dt rargs pat tp cur) = do
               (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
               case cur of
-                FPResult s -> pure $ TypedValue v (TCF (USort s))
-                  where v = TCF (UDataType dt (reverse (a:rargs)))
+                FPResult s -> pure $ TypedValue v (TCF (Sort s))
+                  where v = TCF (DataTypeApp dt (reverse (a:rargs)))
                 FPPi pat1 tp1 next -> pure $ PartialDataType dt (a:rargs) pat1' tp1' next'
                   where tc1 = extendPatContext tc pat
                         pat1' = tcPatApply tc (tc1,pat1) (tc, args)
@@ -303,7 +303,7 @@ inferTerm tc uut = do
               (pat,patTp,tp) <- reduceToPiExpr tc (pos uf) tp0
               (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
               let tc1 = extendPatContext tc pat
-              return $ TypedValue (TCF (UApp v a)) (tcApply tc (tc1,tp) (tc, args))
+              return $ TypedValue (TCF (App v a)) (tcApply tc (tc1,tp) (tc, args))
     Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
     Un.Pi _ upats0 utp _ rhs -> do
       (tp0,tps) <- tcType tc utp
@@ -313,31 +313,31 @@ inferTerm tc uut = do
             ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
             first (TCPi pat tp) <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
       (v',rps) <- tcPats tc upats0 tp0
-      return $ TypedValue v' (TCF (USort (maxSort rps tps)))
+      return $ TypedValue v' (TCF (Sort (maxSort rps tps)))
     Un.TupleValue _ tl -> do
       (vl,tpl) <- unzip <$> traverse (inferTypedValue tc) tl
-      return $ TypedValue (TCF (UTupleValue vl)) (TCF (UTupleType tpl))
+      return $ TypedValue (TCF (TupleValue vl)) (TCF (TupleType tpl))
     Un.TupleType _ tl  -> do
       (tpl,sl) <- unzip <$> traverse (tcType tc) tl
-      return $ TypedValue (TCF (UTupleType tpl))
-                          (TCF (USort (maximumSort sl)))
+      return $ TypedValue (TCF (TupleType tpl))
+                          (TCF (Sort (maximumSort sl)))
 
     Un.RecordValue p (unzip -> (fmap val -> fl,vl))
         | hasDups fl -> tcFail p "Duplicate fields in record"
         | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (inferTypedValue tc) vl
       where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
-            mkRes = mkMap URecordValue *** mkMap URecordType
+            mkRes = mkMap RecordValue *** mkMap RecordType
     Un.RecordSelector ux (PosPair p f) -> do
       (x,tp) <- inferTypedValue tc ux
       m <- reduceToRecordType tc p tp
       case Map.lookup f m of
         Nothing -> tcFail p $ "No field named " ++ f ++ " in record."
-        Just ftp -> return $ TypedValue (TCF (URecordSelector x f)) ftp
+        Just ftp -> return $ TypedValue (TCF (RecordSelector x f)) ftp
     Un.RecordType p (unzip -> (fmap val -> fl,vl))
         | hasDups fl -> tcFail p "Duplicate fields in record"
         | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (tcType tc) vl
       where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
-            mkRes = (mkMap URecordType) *** (TCF . USort . maximumSort)
+            mkRes = (mkMap RecordType) *** (TCF . Sort . maximumSort)
     Un.TypeConstraint ut _ utp -> do
       (tp,_) <- tcType tc utp
       flip TypedValue tp <$> tcTerm tc ut tp
@@ -347,8 +347,8 @@ inferTerm tc uut = do
       (rhs,rhsTp) <- inferTypedValue tc' urhs
       return $ TypedValue (TCLet lcls rhs) (TCLet lcls rhsTp)
     Un.IntLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
-                  | otherwise -> pure $ TypedValue (TCF (UNatLit i)) nattp
-      where nattp = TCF (UDataType preludeNatIdent [])
+                  | otherwise -> pure $ TypedValue (TCF (NatLit i)) nattp
+      where nattp = TCF (DataTypeApp preludeNatIdent [])
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
 
 tcLocalDecls :: TermContext s
@@ -377,7 +377,7 @@ checkTypeSubtype tc p x y = do
   let ppFailure = tcFailD p msg
         where msg = ppTCTerm tc 0 xr <+> text "is not a subtype of" <+> ppTCTerm tc 0 yr <> char '.'
   case (tcAsApp xr, tcAsApp yr) of
-    ( (TCF (USort xs), []), (TCF (USort ys), []) )
+    ( (TCF (Sort xs), []), (TCF (Sort ys), []) )
       | xs <= ys -> return ()
       | otherwise -> ppFailure
     _ -> checkTypesEqual' p [] tc xr yr
@@ -398,7 +398,7 @@ reduceToRecordType :: TermContext s -> Pos -> TCTerm -> TC s (Map FieldName TCTe
 reduceToRecordType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
-    TCF (URecordType m) -> return m
+    TCF (RecordType m) -> return m
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$ 
                        nest 2 (ppTCTerm tc 0 rtp)
 
@@ -481,25 +481,7 @@ localBoundVars (LocalFnDefGen nm tp _) = (nm,tp)
 
 -- | Returns the type of a unification term in the current context.
 completeTerm :: CompletionContext -> TCTerm -> Term
-completeTerm cc (TCF tf) = Term $ FTermF $
-  case tf of
-    UGlobal i -> GlobalDef d
-      where Just d = findDef cm i
-    UApp l r -> App (go l) (go r)
-    UTupleValue l -> TupleValue (go <$> l)
-    UTupleType l -> TupleType (go <$> l)
-    URecordValue m      -> RecordValue (go <$> m)
-    URecordSelector t f -> RecordSelector (go t) f
-    URecordType m       -> RecordType (go <$> m)
-    UCtorApp i l        -> CtorValue c (go <$> l)
-      where Just c = findCtor cm i
-    UDataType i l       -> CtorType dt (go <$> l)
-      where Just (dt, _ctors) = findDataType cm i
-    USort s             -> Sort s
-    UNatLit i           -> NatLit i
-    UArray tp v         -> ArrayValue (go tp) (go <$> v)
- where cm = ccModule cc
-       go = completeTerm cc
+completeTerm cc (TCF tf) = Term $ FTermF $ fmap (completeTerm cc) tf
 completeTerm cc (TCLambda pat tp r) =
     Term $ Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
   where (pat', cc') = completePat cc pat
@@ -572,8 +554,26 @@ unsafeMkModule ml (Un.Module (PosPair _ nm) iml d) = do
            (traverse evalDataType (gcTypes gc))
            (traverse evalDef (gcDefs gc))
 
+
+liftTCPat :: TermContext s -> Pat Term -> TC s (TCPat,TermContext s)
+liftTCPat = unimpl "liftTCPat"
+
 liftTCTerm :: TermContext s -> Term -> TC s TCTerm
-liftTCTerm _ _ = unimpl "liftTCTerm"
+liftTCTerm tc (Term tf) = 
+  case tf of
+    FTermF ftf -> TCF <$> traverse (liftTCTerm tc) ftf
+    Lambda pat tp rhs -> do
+      (pat', tc') <- liftTCPat tc pat
+      TCLambda pat' <$> liftTCTerm tc tp <*> liftTCTerm tc' rhs
+    Pi nm tp rhs -> do
+      (pat', tc') <- unimpl "liftTCTerm0" nm
+      TCPi pat' <$> liftTCTerm tc tp <*> liftTCTerm tc' rhs
+    Let lcls tp -> do
+      unimpl "liftTCTerm" lcls tp
+    LocalVar i tp -> do
+      unimpl "liftTCTerm2" i tp
+    EqType{} -> unimpl "liftTCTerm3"
+    Oracle{} -> unimpl "liftTCTerm4"
 
 liftTCDefEqn :: TermContext s -> TypedDefEqn -> TC s TCDefEqn
 liftTCDefEqn _ _ = unimpl "liftTCDefEqn"
