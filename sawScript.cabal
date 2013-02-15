@@ -52,11 +52,15 @@ library
 executable saw
   hs-source-dirs: .
 
-  main-is: Main.hs
+  main-is: src/Main.hs
 
   build-depends:
       base >= 4
+    , directory
     , either
+    , filepath
     , haskeline
+    , QuickCheck
     , transformers
     , sawScript
+    , unix
