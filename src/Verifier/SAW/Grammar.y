@@ -120,16 +120,17 @@ CtorDecl : Con '::' CtorType ';' { Ctor $1 $3 }
 
 Pat :: { Pat }
 Pat : AtomPat           { $1 }
-    | ConDotList list(AtomPat) { PCtor (identFromList1 $1) $2 }
+    | ConDotList list1(AtomPat) { PCtor (identFromList1 $1) $2 }
+
+AtomPat :: { Pat }
+AtomPat : SimplePat                 { PSimple $1 }
+        | ConDotList                { PCtor (identFromList1 $1) [] }
+        | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
+        | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
 
 SimplePat :: { SimplePat }
 SimplePat : unvar { PUnused (fmap tokVar $1) }
           | Var   { PVar $1 }
-
-AtomPat :: { Pat }
-AtomPat : SimplePat                 { PSimple $1 }
-        | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
-        | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
 
 Term :: { Term }
 Term : TTerm { $1 }
@@ -222,6 +223,9 @@ rsepBy1(p,q) : p { [$1] }
 -- A list of 0 or more p's, terminated by q's
 list(p) : {- empty -} { [] }
         | rlist1(p) { reverse $1 }
+
+-- A list of 0 or more p's, terminated by q's
+list1(p) : rlist1(p) { reverse $1 }
 
 -- A reversed list of at least 1 p's
 rlist1(p) : p           { [$1]    }
