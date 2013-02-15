@@ -1,30 +1,13 @@
-extract_cryptol : String -> String -> CryptolSetup -> a;
-extract_llvm : String -> String -> LLVMSetup -> a;
-verify_llvm : String -> String -> LLVMSetup -> ProofResult;
-returns : Bit -> Setup;
-verify : ProofScript -> Setup;
-yices : ProofScript;
-abc : ProofScript;
-rewrite : ProofScript;
-
-llvm_var : String -> LLVMType -> LLVMObject;
-llvm_field : LLVMObject -> String -> LLVMObject
-from_llvm : LLVMObject -> a;
-
-print : String -> TopLevel
-
-show_result : ProofResult -> TopLevel
-show_result r = proof_result r
-                (\thm -> print "Success!")
-                (\cex -> do { print "Failure:" ; print cex })
-
-pure = do {};
+import prelude;
 
 main = do {
 
   /* Cryptol extraction is straightforward. Initially, it'll go through
    * SBV, but later it'll be a direct compilation. We allow "[x]y" as
-   * sugar for "Array x y", where "y" defaults to "Bit".
+   * sugar for "Array x y", where "y" defaults to "Bit". The last parameter
+   * consists of a simulator setup block, and for most Cryptol code this can
+   * be "pure". The "extract_*" functions automatically coerce from target
+   * language types into internal types.
    */
   cryptol_Ch : ([64],[64],[64]) -> [64];
   cryptol_Ch <- extract_cryptol "SHA384.cry" "Ch" pure;
@@ -57,8 +40,8 @@ main = do {
                   "UpperSigma_0", "UpperSigma_1", "Ch", "Maj"])
 
 
-  /* Since Ch is such a simple function, we can extract it directly,
-   * without any fuss. */
+  /* Since Ch is such a simple function, we can extract it directly
+   * from an LLVM implementation without any fuss. */
   llvm_Ch : ([64],[64],[64]) -> [64];
   llvm_Ch <- extract_llvm "sha384.bc" "Ch" pure;
 
@@ -99,6 +82,7 @@ main = do {
 
   /* TODO: similar code for LLVM Maj, UpperSigma_*, and LowerSigma_*. */
 
+  /* For more complex functions, specification blocks can be necessary. */
   llvm_Block512_W_result <- llvm_verify "sha384.bc" (do {
     w2  <- llvm_var "w2" (llvm_int 64);
     w7  <- llvm_var "w7" (llvm_int 64);
@@ -111,11 +95,19 @@ main = do {
     /* In the result, leave these functions uninterpreted. */
     uninterpret ["LowerSigma_0", "LowerSigma_1"];
 
-    returns cryptol_Block512_W(w2, w7, w15, w16);
+    returns cryptol_Block512_W(from_llvm(w2), from_llvm(w7),
+                               from_llvm(w15), from_llvm(w16));
     verify abc;
   });
 
   llvm_sha384_init_result <- verify_llvm "sha384.bc" "sha384_init" (do {
+    /* We can refer to arguments by number, in case debug info isn't
+     * available. Also, any pointer variables are allocated to point
+     * to an instance of the appropriate type, recursively, unless
+     * stated otherwise (and we currently don't have a way to state
+     * otherwise). All pointers point to distinct objects unless
+     * a may_alias statement says otherwise.
+     */
     ctx <- llvm_arg 0 (llvm_ptr (llvm_struct "SHA512_CONTEXT"));
     let res = [ from_llvm (llvm_field ctx "h0")
               , from_llvm (llvm_field ctx "h1")

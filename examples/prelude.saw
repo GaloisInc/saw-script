@@ -1,0 +1,98 @@
+/* We start by declaring the types of some primitive functions. */
+
+/* TODO: should the type parameter in CryptolSetup, etc., be used
+ * for anything in the simulators?
+ */
+
+/* I'm undecided about underscore_naming versus camelCase here. */
+
+/* We assume that these are well-typed, and check at runtime. */
+extract_cryptol : String -> String -> CryptolSetup () -> a;
+extract_llvm : String -> String -> LLVMSetup () -> a;
+
+/* A ProofResult encodes either a statement of what it proved, or a
+ * counterexample.
+ */
+verify_llvm : String -> String -> LLVMSetup () -> ProofResult ();
+
+/* A successful proof about a method can be used to override calls to
+ * the method.
+ */
+override : [ProofResult ()] -> LLVMSetup ();
+
+/* We can uninterpret particular names along with overrides. Is this
+ * the right approach?
+ */
+uninterpret : [String] -> Setup;
+
+/* State that the current function returns the given value. We assume,
+ * again, that the argument is of the right type, and check at runtime.
+ */
+returns : a -> Setup ();
+
+/* Declare that the particular expression is an output, for model
+ * extraction.
+ */
+output : a -> Setup ();
+
+/* Declare that the particular expression is an input, for model
+ * extraction.
+ */
+input : a -> Setup ();
+
+/* We can verify a function by writing a proof script. */
+verify : ProofScript () -> Setup ();
+
+/* These work in the context of an implicit goal. */
+
+/* Send the current goal to Yices, and return proof status. */
+yices : ProofScript ProofResult;
+
+/* Send the current goal to abc, and return proof status. */
+abc : ProofScript ProofResult;
+
+/* Rewrite the current goal with a default set of rules, and return
+ * the rewritten term (also updating the implicit state?).
+ */
+rewrite : ProofScript Goal;
+
+/* Rewrite with a specific set of results. */
+rewrite_with : [Rule] -> ProofScript Goal;
+
+/* These allow us to refer to objects in the LLVM world. */
+llvm_var : String -> LLVMType -> LLVMObject;
+llvm_arg : Nat -> LLVMType -> LLVMObject;
+llvm_struct : String -> LLVMType;
+llvm_ptr : LLVMType -> LLVMType;
+llvm_int : Nat -> LLVMType; /* An LLVM integer with the given number of bits. */
+llvm_field : LLVMObject -> String -> LLVMObject
+llvm_deref : LLVMObject -> LLVMObject
+
+/* It would be nice to allow some sort of type classing, or something
+ * similar, so that certain operations would be legal in multiple
+ * contexts (e.g., Java and LLVM).
+ */
+may_alias : [LLVMObject] -> LLVMSetup ();
+
+/* This allows us to project from an LLVM value into a native value.
+ * We assume that these are well-typed, and check at runtime.
+ */
+from_llvm : LLVMObject -> a;
+
+/* Printing is polymorphic for now. */
+print : a -> TopLevel ()
+
+/* Something to make it easy to print the result of a proof. We don't
+ * have case expressions in the language at the moment, and instead use
+ * destructor functions for any built-in algebraic data types.
+ */
+show_result : ProofResult () -> TopLevel ()
+show_result r = proof_result r
+                (\thm -> print "Success!")
+                (\cex -> do { print "Failure:" ; print cex })
+
+/* Pure is a simulator setup block that does nothing. The simulators
+ * will then use defaults that work well for pure functions.
+ */
+pure : Setup ()
+pure = do {};
