@@ -30,6 +30,7 @@ module Verifier.SAW.SharedTerm
   , scBitvector
   , scFunAll
   , scLiteral
+  , scLookupDef
   , scTuple
   , scTupleType
   , scTypeOf
@@ -327,7 +328,7 @@ data SharedContext s = SharedContext
     scModuleFn :: IO Module
      -- Returns the globals in the current scope as a record of functions.
   , scFreshGlobalFn   :: Ident -> SharedTerm s -> IO (SharedTerm s)
-     -- | @scApplyFn f x@ returns the result of applying @x@ to a lambda function @x@.
+  , scLookupDefFn     :: String -> IO (SharedTerm s)
   , scDefTermFn       :: TypedDef -> IO (SharedTerm s)
   , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
   , scMkRecordFn      :: Map FieldName (SharedTerm s) -> IO (SharedTerm s)
@@ -352,6 +353,11 @@ scApply = scApplyFn ?sc
 
 scApplyAll :: (?sc :: SharedContext s) => SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll = foldlM scApply
+
+-- | Returns the defined constant with the given name. Fails if no such
+-- constant exists in the module.
+scLookupDef :: (?sc :: SharedContext s) => String -> IO (SharedTerm s)
+scLookupDef = scLookupDefFn ?sc
 
 scMkRecord :: (?sc :: SharedContext s) => Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scMkRecord = scMkRecordFn ?sc
@@ -415,22 +421,27 @@ mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newAppCacheRef
+  let shareDef d = do
+        t <- sharedTerm cr $ stripDefEqs $ Term (GlobalDef d)
+        return (defIdent d, t)
+  sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
   let getDef sym =
-        case findDef m (mkIdent (moduleName m) sym) of
+        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
           Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> sharedTerm cr (Term (GlobalDef d))
+          Just d -> return d
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
-  integerToSignedOp   <- getDef "integerToSigned"
-  integerToUnsignedOp <- getDef "integerToUnsigned"
+  --integerToSignedOp   <- getDef "integerToSigned"
+  --integerToUnsignedOp <- getDef "integerToUnsigned"
   let viewAsNum (asIntLit -> Just i) = Just i
-      viewAsNum (asApp3Of integerToSignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
-      viewAsNum (asApp3Of integerToUnsignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
+      --viewAsNum (asApp3Of integerToSignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
+      --viewAsNum (asApp3Of integerToUnsignedOp -> Just (_,_,asIntLit -> Just i)) = Just i
       viewAsNum _ = Nothing
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
+           , scLookupDefFn = getDef
            , scDefTermFn = undefined
            , scApplyFn = \f x -> getTerm cr (App f x)
            , scMkRecordFn = undefined
@@ -447,6 +458,16 @@ mkSharedContext m = do
            , scViewAsNumFn = viewAsNum
            , scInstVarListFn = instantiateVarList cr
            }
+
+-- | Strip equations from every GlobalDef, making the term acyclic.
+-- This makes it possible to run @sharedTerm@ on the result. TODO:
+-- Update the term representation to make this unnecessary.
+stripDefEqs :: Term -> Term
+stripDefEqs (Term termf) =
+    Term $ fmap stripDefEqs $
+         case termf of
+           GlobalDef d -> GlobalDef d{defEqs = []}
+           _ -> termf
 
 asIntLit :: SharedTerm s -> Maybe Integer
 asIntLit (STApp _ (IntLit i)) = Just i
