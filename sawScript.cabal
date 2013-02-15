@@ -21,6 +21,7 @@ library
     , old-locale
     , old-time
     , pretty
+    , pretty-show
     , transformers
     --, Verinf
 
@@ -28,7 +29,9 @@ library
 
   exposed-modules:
     SAWScript.AST
+    SAWScript.Compiler
     SAWScript.ConvertType
+    SAWScript.FindMain
     SAWScript.Lexer
     SAWScript.LiftPoly
     SAWScript.Parser
