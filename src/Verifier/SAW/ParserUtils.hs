@@ -45,7 +45,9 @@ camelCase [] = []
 readModule :: [Module] -> FilePath -> FilePath -> BL.ByteString -> IO Module
 readModule imports base path b = do
   let (m,[]) = Un.runParser base path b Un.parseSAW
-  return (unsafeMkModule imports m)
+  case unsafeMkModule imports m of
+    Left e -> fail $ "Errors while reading module:\n" ++ show e
+    Right m -> return m
 
 readByteStringExpr :: ExpQ -> FilePath -> Q Exp
 readByteStringExpr modules path = do

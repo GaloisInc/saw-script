@@ -1,52 +1,60 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFoldable #-} 
+{-# LANGUAGE DeriveTraversable #-} 
+{-# LANGUAGE DoAndIfThenElse #-} 
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GADTs  #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Typechecker
   ( unsafeMkModule
   ) where
 
-import Control.Applicative ((<$>))
-import Control.Exception (assert)
-
-import Control.Monad (liftM2, liftM3, zipWithM_)
-import Control.Monad.State hiding (forM, forM_, mapM, mapM_)
-import Control.Monad.Identity (Identity)
-
+import Control.Applicative
+import Control.Arrow ((***), first, second)
+import Control.Monad.State hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
+import Control.Monad.Identity (Identity(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Text.PrettyPrint
 
-import Prelude hiding (all, concatMap, foldl, foldr, mapM, mapM_)
-
-import Debug.Trace
+import Prelude hiding ( all
+                      , concat
+                      , concatMap
+                      , foldl
+                      , foldr
+                      , mapM
+                      , mapM_
+                      , sequence
+                      , sequence_
+                      , sum)
 
 import Verifier.SAW.Utils
 
 import Verifier.SAW.Position
-import Verifier.SAW.UntypedAST ( PosPair(..))
+import Verifier.SAW.Typechecker.Context
+import Verifier.SAW.Typechecker.Monad
+import Verifier.SAW.Typechecker.Simplification
+import Verifier.SAW.Typechecker.Unification
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as Un
 
-lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
-lift2 f h x y = h (f x) (f y) 
-
-mkEdgeMap :: Ord a => [(a,a)] -> Map a [a]
-mkEdgeMap = foldl' fn Map.empty
-  where fn m (x,y) = Map.insertWith (++) x [y] m
+unimpl :: String -> a
+unimpl nm = error (nm ++ " unimplemented")
 
 -- | Given a project function returning a key and a list of values, return a map
 -- from the keys to values.
 projMap :: Ord k => (a -> k) -> [a] -> Map k a
 projMap f l = Map.fromList [ (f e,e) | e <- l ] 
-
-flipPair :: (a,b) -> (b,a)
-flipPair (x,y) = (y,x)
 
 -- | Given a list of keys and values, construct a map that maps each key to the list
 -- of values.
@@ -54,11 +62,11 @@ multiMap :: Ord k => [(k,a)] -> Map k [a]
 multiMap = foldl' fn Map.empty
   where fn m (k,v) = Map.insertWith (++) k [v] m
 
-orderedListMap :: Ord a => [a] -> Map a Int
-orderedListMap l = Map.fromList (l `zip` [0..])
+{-
 
-sepKeys :: Map k v -> ([k],[v])
-sepKeys m = (Map.keys m, Map.elems m)
+mkEdgeMap :: Ord a => [(a,a)] -> Map a [a]
+mkEdgeMap = foldl' fn Map.empty
+  where fn m (x,y) = Map.insertWith (++) x [y] m
 
 topSort :: forall a . Ord a
         => Set a -- List of vertices.
@@ -87,99 +95,21 @@ topSort vertices e = go (initNulls, initMap) []
         go ([],zm) r | Map.null zm = Right (reverse r)
                      | otherwise = Left zm
         go (h:l,zm) r = go (foldl' decInEdgeCount (l,zm) (outEdges h)) (h:r)
-
-mapDefEqn :: (p -> q) -> (s -> t) -> DefEqnGen p s -> DefEqnGen q t
-mapDefEqn pfn tfn (DefEqnGen pl rhs) = DefEqnGen (pfn <$> pl) (tfn rhs)
-
-failPos :: Monad m => Pos -> String -> m a
-failPos p msg = fail $ show p ++ ": " ++ msg
- 
-
-type DeBruijnLevel = DeBruijnIndex
+-}
 
 -- Global context declarations.
 
-data RigidVarRef = RigidVarRef { rvrPos :: !(Maybe Un.Pos)
-                               , rvrName :: String
-                               , rvrIndex :: !Int
-                               }
-
-instance Eq RigidVarRef where
-  (==) = lift2 rvrIndex (==)
-
-instance Ord RigidVarRef where
-  compare = lift2 rvrIndex compare
-
-instance Show RigidVarRef where
-  showsPrec p r = case rvrPos r of
-                    Nothing -> (rvrName r ++)
-                    Just po -> showParen (p >= 10) f
-                      where f = (++) (ppPos po ++ " " ++ rvrName r)
-
-
-data LocalDefGen n p t
-   = LocalFnDefGen n t [DefEqnGen p t]
-  deriving (Show)
-
-localVarNamesGen :: LocalDefGen n p e -> [n]
-localVarNamesGen (LocalFnDefGen nm _ _) = [nm]
-
-data DefEqnGen p t
-   = DefEqnGen [p]  -- ^ List of patterns
-                t -- ^ Right hand side.
-  deriving (Show)
-
-type UnPat = (Un.ParamType, [Un.Pat])
-type UnCtor = Ctor String Un.Term
-type UnDataType = DataType String Un.Term
+-- | Type synonyms in untyped world.
 type UnDefEqn = DefEqnGen Un.Pat Un.Term
-type UnLocalDef = LocalDefGen (PosPair String) Un.Pat Un.Term
+type UnLocalDef = LocalDefGen Un.Term [UnDefEqn]
 
-data GlobalBinding 
-  = CtorIdent Ident
-  | DataTypeIdent Ident
-  | DefIdent Ident
-
--- | Tracks untyped theory and provides information for parsing typed terms.
-data GlobalContext = GlobalContext {
-        gcModule :: Module
-        -- | Maps untyped identifiers for constructors to the typed identifier.
-      , ctxGlobalBindings :: Map Un.Ident GlobalBinding
-      , ctxNewDataTypes :: [UnDataType]
-      , ctxNewDefTypes :: [(String, Un.Term)]
-      , ctxNewEqns :: [(String, UnDefEqn)]
-      }
-
-ctxModuleName :: GlobalContext -> ModuleName
-ctxModuleName = moduleName . gcModule
-
-data TermContext = TermContext {
-   tcGlobalContext :: !GlobalContext
-   -- | Maps each variable to the term it is bound to in the current
-   -- context.
- , tcVarBindings :: !(Map Un.Ident UnifyTerm)
- }
-
-emptyTermContext :: GlobalContext -> TermContext
-emptyTermContext ctx = TermContext ctx Map.empty
-
-tcFindGlobalBinding :: Un.Ident -> TermContext -> Maybe GlobalBinding
-tcFindGlobalBinding i tc = Map.lookup i (ctxGlobalBindings (tcGlobalContext tc))
-
-tcFindLocalBinding :: Un.Ident -> TermContext -> Maybe UnifyTerm
-tcFindLocalBinding i tc = mplus (Map.lookup i (tcVarBindings tc)) globalRes
-  where globalRes =
-          case tcFindGlobalBinding i tc of
-            Just (DefIdent i) -> Just (UGlobal i)
-            _ -> Nothing
-
-bindLocalTerm :: String -> UnifyTerm -> TermContext -> TermContext
-bindLocalTerm nm t ctx = ctx { tcVarBindings = Map.insert (Un.localIdent nm) t m }
-  where m = tcVarBindings ctx
-
-addLocalBindings :: TermContext -> [RigidVarRef] -> TermContext
-addLocalBindings ctx l = ctx { tcVarBindings = foldl' fn (tcVarBindings ctx) l }
-  where fn m r = Map.insert (Un.localIdent (rvrName r)) (URigidVar r) m
+{-
+-- | @extendModule m base@ returns base with the additional imports in @m@. 
+extendModule :: Module -> Module -> Module
+extendModule m base = flip (foldl' insDef) (moduleDefs m)
+                    $ flip (foldl' insDataType) (moduleDataTypes m)
+                    $ base
+-}
 
 -- | Organizes information about local declarations.
 type LocalDeclsGroup = [UnLocalDef]
@@ -193,8 +123,8 @@ groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
   where finalize :: GroupLocalDeclsState -> LocalDeclsGroup
         finalize (tpMap,eqMap) = fn <$> Map.elems tpMap
           where fn :: (PosPair String, Un.Term) -> UnLocalDef
-                fn (pnm,tp) = LocalFnDefGen pnm tp eqs
-                  where Just eqs = Map.lookup (val pnm) eqMap
+                fn (PosPair _ nm,tp) = LocalFnDefGen nm tp eqs
+                  where eqs = fromMaybe [] $ Map.lookup nm eqMap
         groupDecl :: GroupLocalDeclsState -> Un.Decl -> GroupLocalDeclsState
         groupDecl (tpMap,eqMap) (Un.TypeDecl idl tp) = (tpMap',eqMap)
           where tpMap' = foldr (\k -> Map.insert (val k) (k,tp)) tpMap idl
@@ -203,700 +133,373 @@ groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
                 eqMap' = Map.insertWith (++) (val pnm) [eq] eqMap
         groupDecl _ Un.DataDecl{} = error "Unexpected data declaration in let binding"
 
+type TCDataType = DataTypeGen TCDTType (Ctor Ident TCCtorType)
+type TCDef = TCDefGen Identity
 
-data VarIndex = VarIndex { fvrIndex :: !Int
-                         , _fvrName :: !(PosPair String)
-                         }
-  deriving (Show)
+fmapTCApply :: Functor f
+            => (TermContext s, f TCTerm)
+            -> (TermContext s, Vector TCTerm)
+            -> f TCTerm
+fmapTCApply (sTC, s) (vTC,v) = (\t -> tcApply vTC (sTC,t) (vTC,v)) <$> s
 
-instance Eq VarIndex where
-  (==) = lift2 fvrIndex (==)
+-- | Apply a vector of arguments to a fixed pi term.
+tcFixedPiApply :: -- Function for base case.
+                  -- Takes base value and its context along with extended version of arguments
+                  -- in their context.
+                  ((TermContext s, r) -> (TermContext s, Vector TCTerm) -> r)
+                  -- Context for fixed pi type and itself.
+                  -- The fixed pi type context should be an extension of the vector context.
+               -> (TermContext s, FixedPiType r)
+                  -- Context for vectors
+               -> (TermContext s, Vector TCTerm)
+                  -- Resulting fixed pi type will be in context for vectors.
+               -> FixedPiType r
+tcFixedPiApply baseFn i0 v@(vtc, _) = go i0
+  where go (itc, FPResult r) = FPResult (baseFn (itc, r) v)
+        go (itc, FPPi pat tp r) = FPPi pat' tp' (go (extendPatContext itc pat, r))
+          where pat' = tcPatApply vtc (itc, pat) v
+                tp' = tcApply vtc (itc, tp) v
 
-instance Ord VarIndex where
-  compare = lift2 fvrIndex compare
+tcDTTypeApply :: (TermContext s, TCDTType)
+              -> (TermContext s, Vector TCTerm) -> TCDTType
+tcDTTypeApply i0 (vtc0, v0) = tcFixedPiApply (\(_,s) _ -> s) i0 (vtc0, v0)
 
-data UVar = UPRigid RigidVarRef | UIVar VarIndex
-  deriving (Eq, Ord, Show)
+tcCtorTypeApply :: (TermContext s, TCCtorType)
+                -> (TermContext s, Vector TCTerm)
+                -> TCCtorType
+tcCtorTypeApply = tcFixedPiApply base
+  where base (itc, tl) (vtc,v) = (\t -> tcApply vtc (itc,t) (vtc, v)) <$> tl
 
-data PatF c f p
-   = UPTuple [p]
-   | UPRecord (Map f p)
-   | UPCtor c [p]
-  deriving (Foldable, Show)
+tcEqns :: TermContext s -> [UnDefEqn] -> TCTerm -> TC s [TCDefEqn]
+tcEqns tc ueqs tp = traverse (\eq -> tcEqn tc eq tp) ueqs
 
-data UPat = UPVar RigidVarRef
-          | UPUnused VarIndex -- ^ Unused pattern
-          | UPatF (Maybe Un.Pos) (PatF Ident FieldName UPat)
-  deriving (Show)
+-- | Typecheck equation is returns a term with the given type.
+tcEqn :: TermContext s -> UnDefEqn -> TCTerm -> TC s TCDefEqn
+tcEqn tc (DefEqnGen [] unrhs) tp = DefEqnGen [] <$> tcTerm tc unrhs tp
+tcEqn tc (DefEqnGen unpats unrhs) tp = do
+  ((pats,rhsTp), tc') <- typecheckPiPats tc unpats tp
+  DefEqnGen pats <$> tcTerm tc' unrhs rhsTp
 
-upatBoundVars :: UPat -> [RigidVarRef]
-upatBoundVars (UPVar r) = [r]
-upatBoundVars UPUnused{} = []
-upatBoundVars (UPatF _ pf) = concatMap upatBoundVars pf
+tcTerm :: TermContext s
+       -- Typecheck term
+       -> Un.Term
+          -- | Required type type (actual type may be a subtype).
+       -> TCTerm
+       -- Typechecked term.
+       -> TC s TCTerm
+tcTerm tc ut rtp = do
+  (v,tp) <- inferTypedValue tc ut
+  v <$ checkTypeSubtype tc (pos ut) tp rtp
 
-upatBoundVarCount :: UPat -> DeBruijnIndex
-upatBoundVarCount UPVar{} = 1
-upatBoundVarCount UPUnused{} = 0
-upatBoundVarCount (UPatF _ pf) = sumBy upatBoundVarCount pf
-
-upatToTerm :: UPat -> UnifyTerm
-upatToTerm (UPVar r) = URigidVar r
-upatToTerm (UPUnused i) = UnificationVar i
-upatToTerm (UPatF _ pf) =
-  case pf of
-    UPTuple l  -> UTupleValue  (upatToTerm <$> l)
-    UPRecord m -> URecordValue (upatToTerm <$> m)
-    UPCtor c l -> UCtorApp c   (upatToTerm <$> l)
-
-type UnifyLocalDef = LocalDefGen RigidVarRef UPat UnifyTerm
-
-data UnifyTerm
-  = URigidVar RigidVarRef -- ^ Rigid variable that cannot be instantiated.
-  | UnificationVar VarIndex
-
-    -- | A global definition.
-  | UGlobal Ident
-  
-  | ULambda UPat UnifyTerm UnifyTerm
-  | UApp UnifyTerm UnifyTerm
-  | UPi UPat UnifyTerm UnifyTerm
-
-  | UTupleValue [UnifyTerm]
-  | UTupleType [UnifyTerm]
-
-  | URecordValue (Map FieldName UnifyTerm)
-  | URecordSelector UnifyTerm FieldName
-  | URecordType (Map FieldName UnifyTerm)
-
-  | UCtorApp Ident [UnifyTerm]
-  | UDataType Ident [UnifyTerm]
-
-  | USort Sort
  
-  | ULet [UnifyLocalDef] UnifyTerm
-  | UIntLit Integer
-  | UArray UnifyTerm (Vector UnifyTerm)
+-- | Check that term is equivalent to Sort i for some i.
+checkIsSort :: TermContext s -> Pos -> TCTerm -> TC s Sort
+checkIsSort tc p t0 = do
+  t <- reduce tc t0
+  case t of
+    TCF (Sort s) -> return s
+    _ -> tcFailD p $ ppTCTerm tc 0 t <+> text "could not be interpreted as a sort."
 
-  deriving (Show)
+-- | Typecheck a term as a type, returning a term equivalent to it, and
+-- with the same type as the term.
+tcType :: TermContext s -> Un.Term -> TC s (TCTerm,Sort)
+tcType tc t = do
+  (v,tp) <- inferTypedValue tc t
+  (v,) <$> checkIsSort tc (pos t) tp
 
-addUnifyTermVars :: Set UVar -> UnifyTerm -> Set UVar
-addUnifyTermVars = go
-  where go s (URigidVar sym) = Set.insert (UPRigid sym) s
-        go s (ULambda _ x y) = go (go s x) y
-        go s (UApp x y)      = go (go s x) y
-        go s (UPi _ x y)     = go (go s x) y
-        go s (UTupleValue l) = foldl' go s l
-        go s (UTupleType l)  = foldl' go s l
-        go s (URecordValue m) = foldl' go s m
-        go s (URecordSelector x _) = go s x
-        go s (URecordType m) = foldl' go s m
-        go s (UCtorApp _ l) = foldl' go s l
-        go s (UDataType _ l) = foldl' go s l
-        go s (ULet _ x) = go s x
-        go s (UArray x v) = foldl' go (go s x) v
-        go s (UnificationVar i) = Set.insert (UIVar i) s
-        go s _ = s
+tcSort :: TermContext s -> Un.Term -> TC s Sort
+tcSort tc t = checkIsSort tc (pos t) . fst =<< inferTypedValue tc t
 
-data UnifyEq
-    -- | Assert two terms are equal types (i.e., have type Set a for some a).
-  = UnifyEqTypes UnifyTerm UnifyTerm
-  | UnifyEqValues UnifyTerm UnifyTerm UnifyTerm
-  | UnifyPatHasType UPat UnifyTerm
+tcSpecificDataType :: Ident -> TermContext s -> Un.Term -> TC s [TCTerm]
+tcSpecificDataType expected tc ut = do
+  (v,_) <- inferTypedValue tc ut
+  rtp <- reduce tc v
+  case rtp of
+    TCF (DataTypeApp i tl) | i == expected -> pure tl
+    _ -> tcFail (pos ut) $ "Expected " ++ show expected
 
-data VarBinding = TypeBinding UnifyTerm
-                  -- | ValueBinding contains term and type.
-                | ValueBinding UnifyTerm UnifyTerm
 
-varBindingTerm :: VarBinding -> UnifyTerm
-varBindingTerm (TypeBinding t) = t
-varBindingTerm (ValueBinding t _) = t
+tcFixedPiType :: forall r s . (TermContext s -> Un.Term -> TC s r)
+              -> TermContext s -> Un.Term -> TC s (FixedPiType r)
+tcFixedPiType fn = go 
+  where go tc (Un.Pi _ upats0 utp _ rhs) = do
+          (tp0, _) <- tcType tc utp
+          let tcPats :: TermContext s
+                     -> [Un.SimplePat]
+                     -> TCTerm
+                     -> TC s (FixedPiType r)
+              tcPats tc1 [] _ = go tc1 rhs
+              tcPats tc1 (upat:upats) tp = do
+                ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
+                FPPi pat tp <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
+          tcPats tc upats0 tp0
+        go tc ut = FPResult <$> fn tc ut
 
-type UnifyDataType = DataType Ident UnifyTerm
-type UnifyCtor = Ctor Ident UnifyTerm
-type UnifyDefEqn = DefEqnGen UPat UnifyTerm
+tcDTType :: TermContext s -> Un.Term -> TC s TCDTType
+tcDTType = tcFixedPiType tcSort
 
-data UnifyState = US { usGlobalContext :: Maybe GlobalContext
-                     , usTypeMap :: Map RigidVarRef UnifyTerm
-                     , usVarBindings :: Map VarIndex VarBinding
-                     , usCtorTypes :: Map Ident (Either Un.Term Term)
-                     , unifyEqs :: [UnifyEq]
-                     , usVars :: Set UVar
-                       -- An element (p,s) in usEdges asserts that p must come before s.
-                     , usEdges :: Set (UVar,UVar)
-                     , nextVarIndex :: Int
-                     , nextRigidIndex :: Int
-                     }
+tcCtorType :: Ident -> TermContext s -> Un.Term -> TC s TCCtorType
+tcCtorType i = tcFixedPiType (tcSpecificDataType i)
 
-emptyUnifyState :: UnifyState
-emptyUnifyState =
-    US { usGlobalContext = Nothing
-       , usTypeMap = Map.empty
-       , usVarBindings = Map.empty
-       , usCtorTypes = Map.empty
-       , unifyEqs = []
-       , usVars = Set.empty
-       , usEdges = Set.empty
-       , nextVarIndex = 0
-       , nextRigidIndex = 0
-       }
+maximumSort :: Foldable f => f Sort -> Sort
+maximumSort = foldl' maxSort (mkSort 0)
 
-pushUnifyEqs :: [UnifyEq] -> UnifyState -> UnifyState
-pushUnifyEqs eqs s = s { unifyEqs = eqs ++ unifyEqs s }
+inferTypedValue :: TermContext s -> Un.Term -> TC s (TCTerm, TCTerm)
+inferTypedValue tc ut = do
+  r <- inferTerm tc ut
+  case r of
+    PartialCtor{} ->
+      tcFail (pos ut) $ "Expected additional argument to constructor."
+    PartialDataType{} ->
+      tcFail (pos ut) $ "Expected additional argument to data type."
+    TypedValue v tp -> pure (v, tp)
 
-type Unifier = State UnifyState
+inferLambda  :: TermContext s
+             -> [(Un.ParamType, [Un.Pat], Un.Term)] -- Patterns.
+             -> Un.Term -- Right hand side of lambda expression
+             -> TC s InferResult
+inferLambda tc0 pl0 urhs = go [] tc0 pl0
+  where go args tc [] = mkRes <$> inferTypedValue tc urhs
+          where mkRes (v,tp) = TypedValue v' tp'
+                  where v'  = foldr (uncurry TCLambda) v args
+                        tp' = foldr (uncurry TCPi) tp args
+        go args tc1 ((_,patl,utp):l) = do
+          (tp,_) <- tcType tc1 utp
+          (pl,tc') <- typecheckPats tc1 patl tp
+          let typedPL = (,tp) <$> pl 
+          go (args ++ typedPL) tc' l
 
-addEdge :: UVar -> UVar -> Unifier ()
-addEdge p q = modify $ \s -> s { usEdges = Set.insert (p,q) (usEdges s) }
-
-newRigidVar :: Maybe Un.Pos -> String -> Unifier RigidVarRef
-newRigidVar p nm = state fn
-  where fn s = (v, s')
-          where idx = nextRigidIndex s
-                v = RigidVarRef p nm idx 
-                s' = s { usVars = Set.insert (UPRigid v) (usVars s)
-                       , nextRigidIndex = idx + 1
-                       }
-
--- | Set the type of a rigid variable.
-setRigidVarType :: RigidVarRef -> UnifyTerm -> Unifier ()
-setRigidVarType sym tp = modify $ \s ->
-  case Map.lookup sym (usTypeMap s) of
-    Just prevTp ->
-      pushUnifyEqs [UnifyEqTypes tp prevTp] s
-    Nothing ->
-      s { usTypeMap = Map.insert sym tp (usTypeMap s) }
-
-newUnifyVarIndex :: PosPair String -> Unifier VarIndex
-newUnifyVarIndex nm = state fn
-  where fn us = (v, us')
-          where idx = nextVarIndex us
-                v = VarIndex idx nm
-                us' = us { usVars = Set.insert (UIVar v) (usVars us) 
-                         , nextVarIndex = idx + 1
-                         }
-
-addUnifyEqs :: [UnifyEq] -> Unifier ()
-addUnifyEqs = modify . pushUnifyEqs
-
-bindVar :: VarIndex -> VarBinding -> Unifier ()
-bindVar i b = modify fn
-  where fn s = case Map.lookup i m of
-                 Nothing -> s { usVarBindings = Map.insert i b m }
-                 Just (TypeBinding u) -> do
-                   case b of
-                     TypeBinding t -> pushUnifyEqs [UnifyEqTypes t u] s
-                     ValueBinding t tp -> pushUnifyEqs [UnifyEqValues t u tp] s
-                 Just (ValueBinding u utp) -> do
-                   case b of
-                     TypeBinding t -> pushUnifyEqs [UnifyEqValues t u utp] s
-                     ValueBinding t ttp -> pushUnifyEqs eqs s
-                       where eqs = [ UnifyEqTypes ttp utp
-                                   , UnifyEqValues t u ttp]
-          where m = usVarBindings s
-
-addTypeEq :: UnifyTerm -> UnifyTerm -> Unifier ()
-addTypeEq x y = addUnifyEqs [UnifyEqTypes x y]
-
-unifyTypes :: UnifyTerm -> UnifyTerm -> Unifier ()
-unifyTypes (URigidVar x) (URigidVar y) | x == y = return ()
-unifyTypes (UnificationVar i) y = bindVar i (TypeBinding y)
-unifyTypes x (UnificationVar j) = bindVar j (TypeBinding x)
-unifyTypes (UGlobal x) (UGlobal y) | x == y = return ()
-unifyTypes (UTupleType l) (UTupleType r)   = zipWithM_ addTypeEq l r
-unifyTypes (URecordType l) (URecordType r) =
-  assert (Map.keys l == Map.keys r) $
-    zipWithM_ addTypeEq (Map.elems l) (Map.elems r)
-unifyTypes (UDataType ld l) (UDataType rd r) =
-  assert (ld == rd) $
-    zipWithM_ addTypeEq l r
-unifyTypes (USort s) (USort t) | s == t = return ()
-unifyTypes x y = fail $ "unifyTypes failed " ++ show (x,y)
-
-unifyTerms :: UnifyTerm -> UnifyTerm -> UnifyTerm -> Unifier ()
-unifyTerms (UTupleValue l) (UTupleValue r) (UTupleType tpl)
-  | (length l == length tpl && length r == length tpl) 
-  = addUnifyEqs $ zipWith3 UnifyEqValues l r tpl
-
-unifyTerms (URecordValue l) (URecordValue r) (URecordType tpm)
-    | (lk == tpk && rk == tpk) = addUnifyEqs $ zipWith3 UnifyEqValues le re tpe
-  where (lk, le)  = sepKeys l
-        (rk, re)  = sepKeys r
-        (tpk,tpe) = sepKeys tpm
-
-unifyTerms x y USort{} = unifyTypes x y
-unifyTerms x y tp = internalError $ "unifyTerms failed " ++ show (x,y,tp)
-
--- | Add untyped pat bindings to context, each of which have the given type,
-consPatVars :: TermContext
-            -> [Un.Pat]
-            -> UnifyTerm
-            -> Unifier (TermContext, [UPat])
-consPatVars ctx upl tp = do
-  pl <- mapM (indexUnPat (tcGlobalContext ctx)) upl
-  addUnifyEqs $ (\p -> UnifyPatHasType p tp) <$> pl
-  let ctx' = addLocalBindings ctx (concatMap upatBoundVars pl)
-  return (ctx', pl)
-
--- | Create a set of constraints for matching a list of patterns against a given pi type.
-instPiType -- | Continuation to generate final constraints
-           :: [UPat] -- ^ Patterns to match
-           -> UnifyTerm -- ^ Expected pi type 
-           -> Unifier UnifyTerm
-instPiType = go
-  where go [] ltp = return ltp
-        go (p:pl) ltp =
-          case ltp of
-            UPi pat lhs rhs -> do
-              addUnifyEqs [UnifyPatHasType p lhs]
-              let lhsSub = matchPat p pat
-              rhs' <- applyUnifyPatSub lhsSub rhs
-              go pl rhs' 
-            _ -> internalError $ "Could not parse " ++  show ltp ++ " as pi type"
-
-convertEqn :: TermContext
-           -> UnifyTerm
-           -> UnDefEqn
-           -> Unifier UnifyDefEqn
-convertEqn ctx tp (DefEqnGen unpats unrhs) = do
-  pats <- mapM (indexUnPat (tcGlobalContext ctx)) unpats
-  _rhsTp <- instPiType pats tp
-  let ctx' = addLocalBindings ctx (concatMap upatBoundVars pats)
-  rhs <- convertTerm ctx' unrhs
-  return (DefEqnGen pats rhs)
-
--- | Insert local definitions the terms belong to the given context.
-consLocalDecls :: TermContext -> [Un.Decl] -> Unifier (TermContext, [UnifyLocalDef])
-consLocalDecls tc udl = do
-  let procDef (LocalFnDefGen pnm utp ueqs) = do
-        let nm = val pnm
-        r <- newRigidVar (Just (pos pnm)) nm
-        tp <- convertTerm tc utp
-        setRigidVarType r tp
-        return (r, (r, tp, ueqs))
-  (nl,dl') <- unzip <$> mapM procDef (groupLocalDecls udl)
-  let tc1 = addLocalBindings tc nl
-  let procEqns (r, tp, ueqs) = do
-        res <- forM ueqs $ \(DefEqnGen unpat unrhs) -> do
-          pat <- mapM (indexUnPat (tcGlobalContext tc)) unpat
-          _rhsTp <- instPiType pat tp
-          let tc2 = addLocalBindings tc1 (concatMap upatBoundVars pat)
-          rhs <- convertTerm tc2 unrhs
-          return (DefEqnGen pat rhs)
-        return (LocalFnDefGen r tp res)
-  dl <- mapM procEqns dl'
-  return (tc1, dl)
-
--- | Convert an untyped expression into a term for unification.
-convertTerm :: TermContext -> Un.Term -> Unifier UnifyTerm
-convertTerm ctx (Un.asApp -> (Un.Con i, uargs)) = do
-  args <- mapM (convertTerm ctx) uargs
-  case tcFindGlobalBinding (val i) ctx of
-    Just (CtorIdent c)      -> return $ UCtorApp c args
-    Just (DataTypeIdent dt) -> return $ UDataType dt args
-    Just DefIdent{} -> internalError "Found def identifier bound to constructor ident"
-    Nothing -> fail $ "Failed to find constructor for " ++ show i ++ "."
-convertTerm tc uut =
+inferTerm :: TermContext s -> Un.Term -> TC s InferResult
+inferTerm tc uut = do
   case uut of
-    Un.Var i ->
-      case tcFindLocalBinding (val i) tc of
-        Just t -> return t
-        Nothing -> failPos (pos i) $ show (val i) ++ " unbound in current context."
-    Un.Unused{} -> fail "Pattern syntax when term expected"
-    Un.Con{} -> fail "Unexpected constructor"
-    Un.Sort _ s -> return (USort s)
-    Un.Lambda _ args rhs -> procArgs tc args
-      where procArgs :: TermContext
-                     -> [(Un.ParamType, [Un.Pat], Un.Term)]
-                     -> Unifier UnifyTerm
-            procArgs lctx [] = convertTerm lctx rhs 
-            procArgs lctx ((_,patl,utp):l) = do
-              tp <- convertTerm lctx utp
-              (lctx',pl) <- consPatVars lctx patl tp
-              rest <- procArgs lctx' l
-              return $ foldr (\p -> ULambda p tp) rest pl
-    Un.App f _ t -> liftM2 UApp (convertTerm tc f) (convertTerm tc t)
-    Un.Pi _ pats utp _ rhs -> do
-      tp <- convertTerm tc utp
-      (tc', pl) <- consPatVars tc pats tp
-      rest <- convertTerm tc' rhs
-      return $ foldr (\p -> UPi p tp) rest pl
+    Un.Var i -> resolveIdent tc i
+    Un.Unused{} -> fail "Pattern syntax when type expected."
+    Un.Con i -> resolveIdent tc i
+    Un.Sort _ s -> return $ TypedValue (TCF (Sort s)) (TCF (Sort (sortOf s)))
+    Un.Lambda _ pl r -> inferLambda tc pl r
+    Un.App uf _ ua -> mkRes =<< inferTerm tc uf
+      where mkRes (PartialCtor dt i rargs pat tp cur) = do
+              (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
+              let tc1 = extendPatContext tc pat
+              case cur of
+                FPResult dtArgs -> pure $ TypedValue v tp'
+                  where v = TCF (CtorApp i (reverse (a:rargs)))
+                        tp' = TCF (DataTypeApp dt (fmapTCApply (tc1, dtArgs) (tc,args)))
+                FPPi pat1 tp1 next -> pure $ PartialCtor dt i (a:rargs) pat1' tp1' next'
+                  where pat1' = tcPatApply tc (tc1,pat1) (tc,args)
+                        tp1' = tcApply tc (tc1,tp1) (tc,args)
+                        next' = tcCtorTypeApply (extendPatContext tc1 pat1, next) (tc,args)
+            mkRes (PartialDataType dt rargs pat tp cur) = do
+              (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
+              case cur of
+                FPResult s -> pure $ TypedValue v (TCF (Sort s))
+                  where v = TCF (DataTypeApp dt (reverse (a:rargs)))
+                FPPi pat1 tp1 next -> pure $ PartialDataType dt (a:rargs) pat1' tp1' next'
+                  where tc1 = extendPatContext tc pat
+                        pat1' = tcPatApply tc (tc1,pat1) (tc, args)
+                        tp1'  = tcApply tc (tc1,tp1) (tc, args)
+                        next' = tcDTTypeApply (extendPatContext tc1 pat1, next) (tc, args)
+            mkRes (TypedValue v tp0) = do
+              (pat,patTp,tp) <- reduceToPiExpr tc (pos uf) tp0
+              (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
+              let tc1 = extendPatContext tc pat
+              return $ TypedValue (TCF (App v a)) (tcApply tc (tc1,tp) (tc, args))
+    Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
+    Un.Pi _ upats0 utp _ rhs -> do
+      (tp0,tps) <- tcType tc utp
+      let tcPats :: TermContext s -> [Un.SimplePat] -> TCTerm -> TC s (TCTerm, Sort)
+          tcPats tc1 [] _ = tcType tc1 rhs
+          tcPats tc1 (upat:upats) tp = do
+            ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
+            first (TCPi pat tp) <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
+      (v',rps) <- tcPats tc upats0 tp0
+      return $ TypedValue v' (TCF (Sort (maxSort rps tps)))
+    Un.TupleValue _ tl -> do
+      (vl,tpl) <- unzip <$> traverse (inferTypedValue tc) tl
+      return $ TypedValue (TCF (TupleValue vl)) (TCF (TupleType tpl))
+    Un.TupleType _ tl  -> do
+      (tpl,sl) <- unzip <$> traverse (tcType tc) tl
+      return $ TypedValue (TCF (TupleType tpl))
+                          (TCF (Sort (maximumSort sl)))
 
-    Un.TupleValue _ tl -> UTupleValue <$> mapM (convertTerm tc) tl
-    Un.TupleType _ tl  -> UTupleType <$> mapM (convertTerm tc) tl
-
-    Un.RecordValue _ fl -> do
-      let (fields,uterms) = unzip fl
-      terms <- mapM (convertTerm tc) uterms
-      return $ URecordValue (Map.fromList (fmap val fields `zip` terms))
-    Un.RecordSelector ux i -> (flip URecordSelector (val i)) <$> convertTerm tc ux
-    Un.RecordType _ fl -> do
-      let (fields,uterms) = unzip fl
-      terms <- mapM (convertTerm tc) uterms
-      return $ URecordType (Map.fromList (fmap val fields `zip` terms))
-
-    Un.TypeConstraint t _ _ -> convertTerm tc t
-    Un.Paren _ t -> convertTerm tc t
-    Un.LetTerm _ udl urhs -> do
-      (tc',dl) <- consLocalDecls tc udl
-      rhs <- convertTerm tc' urhs
-      return $ ULet dl rhs
-    Un.IntLit _ i -> return $ UIntLit i
+    Un.RecordValue p (unzip -> (fmap val -> fl,vl))
+        | hasDups fl -> tcFail p "Duplicate fields in record"
+        | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (inferTypedValue tc) vl
+      where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
+            mkRes = mkMap RecordValue *** mkMap RecordType
+    Un.RecordSelector ux (PosPair p f) -> do
+      (x,tp) <- inferTypedValue tc ux
+      m <- reduceToRecordType tc p tp
+      case Map.lookup f m of
+        Nothing -> tcFail p $ "No field named " ++ f ++ " in record."
+        Just ftp -> return $ TypedValue (TCF (RecordSelector x f)) ftp
+    Un.RecordType p (unzip -> (fmap val -> fl,vl))
+        | hasDups fl -> tcFail p "Duplicate fields in record"
+        | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (tcType tc) vl
+      where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
+            mkRes = (mkMap RecordType) *** (TCF . Sort . maximumSort)
+    Un.TypeConstraint ut _ utp -> do
+      (tp,_) <- tcType tc utp
+      flip TypedValue tp <$> tcTerm tc ut tp
+    Un.Paren _ t -> uncurry TypedValue <$> inferTypedValue tc t
+    Un.LetTerm p udl urhs -> do
+      (tc', lcls) <- tcLocalDecls tc p udl
+      (rhs,rhsTp) <- inferTypedValue tc' urhs
+      return $ TypedValue (TCLet lcls rhs) (TCLet lcls rhsTp)
+    Un.IntLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
+                  | otherwise -> pure $ TypedValue (TCF (NatLit i)) nattp
+      where nattp = TCF (DataTypeApp preludeNatIdent [])
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
 
-type UnifyPatSubst = Map RigidVarRef UPat
+tcLocalDecls :: TermContext s
+             -> Pos
+             -> [Un.Decl]
+             -> TC s (TermContext s, [TCLocalDef])
+tcLocalDecls tc0 p lcls = do
+    (tps,pending) <- unzip <$> traverse tcLclType (groupLocalDecls lcls)
+    let tc = consLocalDefs tps tc0
+    traverse_ ($ tc) pending
+    let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> eval p r
+    (tc,) <$> traverse mkDef tps
+  where tcLclType (LocalFnDefGen nm utp ueqs) = do
+          (tp,_) <- tcType tc0 utp
+          r <- newRef nm
+          let pendingFn tc = do
+                let tp' = applyExt (tc0,tp) tc
+                assign r (tcEqns tc ueqs tp')
+          return (LocalFnDefGen nm tp r, pendingFn)
 
-matchUnPat :: UPat -> Un.Pat -> TermContext -> TermContext
-matchUnPat = go
-  where goList :: [(UPat, Un.Pat)] -> TermContext -> TermContext
-        goList [] ctx = ctx
-        goList ((s,p):l) ctx = goList l (go s p ctx)
-        go :: UPat -> Un.Pat -> TermContext -> TermContext
-        go t (Un.PVar v) ctx = bindLocalTerm (val v) (upatToTerm t) ctx
-        go _ Un.PUnused{}  ctx = ctx
-        go (UPatF _ (UPTuple sl)) (Un.PTuple _ pl) ctx
-          | length sl == length pl = goList (zip sl pl) ctx
-        go (UPatF _ (UPRecord sm)) (Un.PRecord _ pl) ctx
-            | sk == pk =  goList (zip se pe) ctx
-          where pm = Map.fromList [ (val f, p) | (f,p) <- pl ]
-                (sk,se) = sepKeys sm
-                (pk,pe) = sepKeys pm
-        go (UPatF _ (UPCtor sc sl)) (Un.PCtor pc pl) ctx
-            | sc == c && length sl == length pl
-            = goList (zip sl pl) ctx
-          where Just (CtorIdent c) = tcFindGlobalBinding (val pc) ctx
+-- | @checkTypeSubtype tc p x y@ checks that @x@ is a subtype of @y@.
+checkTypeSubtype :: forall s . TermContext s -> Pos -> TCTerm -> TCTerm -> TC s ()
+checkTypeSubtype tc p x y = do
+  xr <- reduce tc x
+  yr <- reduce tc y
+  let ppFailure = tcFailD p msg
+        where msg = ppTCTerm tc 0 xr <+> text "is not a subtype of" <+> ppTCTerm tc 0 yr <> char '.'
+  case (tcAsApp xr, tcAsApp yr) of
+    ( (TCF (Sort xs), []), (TCF (Sort ys), []) )
+      | xs <= ys -> return ()
+      | otherwise -> ppFailure
+    _ -> checkTypesEqual' p [] tc xr yr
 
--- | @matchPat vpat tppat pattype@ matches the pattern @vpat@ against the variables
--- in @tppat@ which is assumed to have the type @pattype@.  It returns the a substituion
--- from the vars bound in tppat to terms in vpat.
--- @tppat@ is assumed to have type @pattype".
-matchPat :: UPat -> UPat -> UnifyPatSubst
-matchPat = go Map.empty 
-  where goList :: UnifyPatSubst -> [(UPat, UPat)] -> UnifyPatSubst
-        goList sub [] = sub
-        goList sub ((s,p):l) = goList (go sub s p) l
-        go :: UnifyPatSubst -> UPat -> UPat -> UnifyPatSubst
-        go sub s (UPVar r) = Map.insert r s sub
-        go sub _ UPUnused{} = sub
-        go sub s@(UPatF _ sf) p@(UPatF _ pf) =
-          case (sf,pf) of
-            (UPTuple sl, UPTuple pl)
-              | length sl == length pl -> goList sub (zip sl pl)
-            (UPRecord sm, UPRecord pm)
-                | sk == pk -> goList sub (zip se pe)
-              where (sk, se)  = sepKeys sm
-                    (pk, pe)  = sepKeys pm
-            (UPCtor sc sl, UPCtor pc pl)
-                | sc == pc -> goList sub (zip sl pl)
-            _ -> internalError $ "matchPat failed to match " ++ show (s,p)  
-        go _ s p = internalError $ "matchPat failed to match " ++ show (s,p)  
+-- | Match untyped term against pattern, returning variables in reverse order.
+-- so that last-bound variable is first.  Also returns the term after it was matched.
+-- This may differ to the input term due to the use of reduction during matching.
+matchPat :: forall s
+          . TermContext s
+         -> Pos -> TCPat -> TCTerm -> TC s (Vector TCTerm, TCTerm)
+matchPat tc p pat t = do
+  mr <- tryMatchPat tc pat t
+  case mr of
+    Nothing -> tcFail p $ "Pattern match failed."
+    Just r -> return r
 
--- | @checkCtorType c cpl tp@ checks that the pattern @c(cpl)@ has type @tp@.
-checkCtorType :: Ident -> [UPat] -> UnifyTerm -> Unifier ()
-checkCtorType c cpl ctorType = do
-  Just gctx <- gets usGlobalContext
-  m <- gets usCtorTypes
-  case Map.lookup c m of
-    Nothing -> internalError $ "Could not find ctor type for " ++ show c ++ "."
-    Just (Left untp) -> go (emptyTermContext gctx) cpl untp
-      where go :: TermContext -> [UPat] -> Un.Term -> Unifier ()
-            go ctx initPl (Un.Pi _ initPats ulhs _ rhsTp) = do
-              lhs <- convertTerm ctx ulhs
-              let procPat (p:pl) (pat:patl) c = do
-                   hasType p lhs 
-                   procPat pl patl (matchUnPat p pat c)
-                  procPat pl [] c = go c pl rhsTp
-              procPat initPl initPats ctx
-            go ctx [] urhsTp = do
-              rhsTp <- convertTerm ctx urhsTp 
-              addUnifyEqs [UnifyEqTypes rhsTp ctorType]
-    Just (Right _tp) -> internalError "Typed ctor types unsupported"
+reduceToRecordType :: TermContext s -> Pos -> TCTerm -> TC s (Map FieldName TCTerm)
+reduceToRecordType tc p tp = do
+  rtp <- reduce tc tp
+  case rtp of
+    TCF (RecordType m) -> return m
+    _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$ 
+                       nest 2 (ppTCTerm tc 0 rtp)
 
-hasType :: UPat
-        -> UnifyTerm
-        -> Unifier ()
-hasType (UPVar v) tp = setRigidVarType v tp
-hasType (UPUnused _) _ = return ()
-hasType (UPatF _ pf) tp =
-  case pf of
-    UPTuple pl ->
-      case tp of
-        UTupleType tpl | length pl == length tpl ->
-          zipWithM_ hasType pl tpl
-        _ -> internalError $ "Could not match tuple pattern against type " ++ show tp
-    UPRecord pm ->
-      case tp of
-        URecordType tpm | Map.keys pm == Map.keys tpm ->
-          zipWithM_ hasType (Map.elems pm) (Map.elems tpm)
-        _ -> internalError "Could not match record pattern"
-    UPCtor c cpl -> checkCtorType c cpl tp
+topEval :: TCRef s v -> TC s v
+topEval r = eval (internalError $ "Cyclic error in top level" ++ show r) r
 
-applyUnifyPatSub :: UnifyPatSubst -> UnifyTerm -> Unifier UnifyTerm
-applyUnifyPatSub sub = go 
-  where boundv = Map.keys sub
-        isUnbound v = Map.notMember v sub
-        go :: UnifyTerm -> Unifier UnifyTerm
-        go t@(URigidVar r) = return $ fromMaybe t (upatToTerm <$> Map.lookup r sub)
-        -- Unification variables had to be bound in an outer context, and hence cannot
-        -- refer to variables in the substitution.
-        go t@(UnificationVar v) = do
-          mapM_ (\r -> addEdge (UPRigid r) (UIVar v)) boundv
-          return t
-        go t@UGlobal{} = return t
-        go (ULambda pat tp rhs) 
-          | all isUnbound (upatBoundVars pat) =
-            liftM2 (ULambda pat) (go tp) (go rhs)
-        go (UApp x y) = liftM2 UApp (go x) (go y)
-        go (UPi pat tp rhs)
-          | all isUnbound (upatBoundVars pat) =
-            liftM2 (UPi pat) (go tp) (go rhs)
-        go (UTupleValue l) = UTupleValue <$> mapM go l
-        go (UTupleType l)  = UTupleType <$> mapM go l
-        go (URecordValue m) = URecordValue <$> mapM go m
-        go (URecordSelector t f) = (flip URecordSelector f) <$> go t
-        go (URecordType m) = URecordType <$> mapM go m
-        go (UCtorApp i l) = UCtorApp i <$> mapM go l
-        go (UDataType i l) = UDataType i <$> mapM go l
-        go t@USort{} = return t
-        go ULet{} = internalError "applyUnifyPatSub does not support ULet"
-        go t@UIntLit{} = return t
-        go (UArray tp v) = liftM2 UArray (go tp) (mapM go v)
+evalDataType :: TCRefDataType s -> TC s TCDataType
+evalDataType (DataTypeGen n tp ctp) =
+  liftM2 (DataTypeGen n)
+         (topEval tp) 
+         (traverse (traverse topEval) ctp)
 
-{-
--- | Instantiate local variables with patterns.
-instWithUnPat :: UnifyTerm -> V.Vector UnifyTerm -> Unifier UnifyTerm
-instWithUnPat pv = go 0
-  where plen = V.length pv
-        go :: Int -> UnifyTerm -> Unifier UnifyTerm
-        go _ _ = internalError "instWithUnPat undefined"
-        go bnd (Term tf) = 
-          case tf of 
-            LocalVar i tp
-              | i < bnd        -> return (ULocalVar i tp)
-              | i - bnd < plen -> return (pv V.! (i-bnd))
-              | otherwise      -> return (ULocalVar (i-bnd) tp)
-            GlobalDef d -> return (UGlobal d)
+evalDef :: TCRefDef s -> TC s TCDef
+evalDef (DefGen nm tpr elr) =
+  liftA2 (DefGen nm) (Identity <$> topEval tpr) (Identity <$> topEval elr)
 
-            Lambda pat lhs rhs ->
-                liftM3 ULambda
-                       (indexPat pat)
-                       (go bnd lhs)
-                       (go (bnd + patBoundVarCount pat) rhs)
-            App x y ->
-              liftM2 UApp (go bnd x) (go bnd y)
-            Pi pat lhs rhs ->
-                liftM3 UPi
-                       (indexPat pat)
-                       (go bnd lhs)
-                       (go (bnd + patBoundVarCount pat) rhs)
+data CompletionContext
+  = CCGlobal Module
+  | CCBinding CompletionContext Term
 
-            TupleValue l -> UTupleValue <$> mapM (go bnd) l
-            TupleType l  -> UTupleType  <$> mapM (go bnd) l
+ccModule :: CompletionContext -> Module
+ccModule (CCGlobal m) = m
+ccModule (CCBinding cc _) = ccModule cc
 
-            RecordValue m -> URecordValue <$> mapM (go bnd) m
-            RecordSelector x f -> flip URecordSelector f <$> go bnd x
-            RecordType m  -> URecordType <$> mapM (go bnd) m
+addPatTypes :: CompletionContext -> [(String,TCTerm)] -> (CompletionContext, [Term])
+addPatTypes cc0 vars = mapAccumL ins cc0 vars
+  where ins cc (_,tp) = (CCBinding cc tp', tp')
+          where tp' = completeTerm cc tp
 
-            CtorValue c l -> UCtorApp c <$> mapM (go bnd) l
-            CtorType dt l -> UDataType dt <$> mapM (go bnd) l
+ccVarType :: CompletionContext -> DeBruijnIndex -> Term
+ccVarType cc0 i0 = go cc0 i0
+  where go (CCBinding cc t) i
+          | i == 0 = incVars 0 (i0+1) t
+          | otherwise = go cc (i-1)
+        go CCGlobal{} _ = error "Could not find var with index in context."
 
-            Sort s -> return (USort s)
-            Let dl t -> ULet dl <$> go (bnd + length dl) t
-            IntLit i -> return (UIntLit i)
-            ArrayValue tp v -> do
-               liftM2 UArray (go bnd tp) (mapM (go bnd) v)
--}
+completeDataType :: CompletionContext
+                 -> TCDataType
+                 -> TypedDataType
+completeDataType cc (DataTypeGen dt tp cl) = 
+  ( DataType { dtName = dt
+             , dtType = completeTerm cc (termFromTCDTType tp)
+             }
+  , fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
+  )
 
+completeDef :: CompletionContext
+            -> TCDef
+            -> TypedDef
+completeDef cc (DefGen nm tp el) = def
+  where def = Def { defIdent = nm 
+                  , defType = completeTerm cc (runIdentity tp)
+                  , defEqs = completeDefEqn cc <$> (runIdentity el) 
+                  }
 
-data UnifyResult =
-       UResult { -- Maps each rigid variable to the number of variables
-                 -- in the patterns bound before it, and the type.
-                 urRigidIndexMap :: Map RigidVarRef (Int,UnifyTerm)
-                 -- | Maps unification vars to the term
-               , urVarBindings :: Map VarIndex UnifyTerm
-               , urModule :: Module
-               , urLevel :: !DeBruijnLevel
-                  -- | Maps rigid var refs in the current context to the level
-                  -- and type when they were bound.
-               , urRigidTypeMap :: Map RigidVarRef (DeBruijnLevel,Term)
-               }
+completeDefEqn :: CompletionContext -> TCDefEqn -> TypedDefEqn
+completeDefEqn cc (DefEqnGen pats rhs) = eqn
+  where m = ccModule cc
+        bindings = runPatVarParser (mapM_ addPatBindings pats)
+        (cc', v) = second V.fromList $ addPatTypes cc bindings
+        eqn = DefEqn (completePat' m v <$> pats) (completeTerm cc' rhs)
 
-completePat :: DeBruijnLevel -> UnifyResult -> UPat -> Pat Term
-completePat lvl0 r = go
-  where go (UPVar v) = assert (i >= lvl0) $ PVar (rvrName v) (i-lvl0) tp
-          where Just (i,tp) = Map.lookup v (urRigidTypeMap r)
-        go UPUnused{} = PUnused
-        go (UPatF _ pf) =
+completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
+completePat cc0 pat = (completePat' (ccModule cc0) v pat, cc')
+  where (cc', v) = second V.fromList $ addPatTypes cc0 (patBoundVars pat)
+
+completePat' :: Module -> Vector Term -> TCPat -> Pat Term
+completePat' cm v = go
+  where go (TCPVar nm i _) = PVar nm i (v V.! i)
+        go TCPUnused{} = PUnused
+        go (TCPatF pf) =
           case pf of
             UPTuple l -> PTuple (go <$> l)
             UPRecord m -> PRecord (go <$> m)
-            UPCtor uc l -> PCtor c (go <$> l) 
-              where Just c = findCtor (urModule r) uc
+            UPCtor i l -> PCtor c (go <$> l)
+              where Just c = findCtor cm i
 
--- | Bind list of rigid variables in result.
-bindPatImpl :: UnifyResult -> [RigidVarRef] -> UnifyResult
-bindPatImpl r [] = r
-bindPatImpl r0 bvl = rf
-  where err v = internalError $ "bindPatImpl: Cannot find binding for " ++ show v
-        -- Get rigid vars sorted by index
-        uvl = Map.elems
-            $ Map.fromList [ (i,(v,tp))
-                           | v <- bvl
-                           , let (i,tp) = fromMaybe (err v)
-                                        $ Map.lookup v (urRigidIndexMap r0)
-                           ]
-        addVar :: UnifyResult -> (RigidVarRef,UnifyTerm) -> UnifyResult
-        addVar r (v,utp) = r'
-         where tp = completeTerm r utp
-               lvl = urLevel r
-               r' = r { urLevel = lvl + 1
-                      , urRigidTypeMap = Map.insert v (lvl,tp) (urRigidTypeMap r)
-                      }
-        rf = foldl' addVar r0 uvl
-
-bindPat :: UnifyResult -> UPat -> (UnifyResult, Pat Term)
-bindPat r0 up = (r,completePat (urLevel r0) r up)
-  where r = bindPatImpl r0 (upatBoundVars up)
-
-bindPats :: UnifyResult -> [UPat] -> (UnifyResult, [Pat Term])
-bindPats r0 upl = (r, completePat (urLevel r0) r <$> upl)
-  where r = bindPatImpl r0 (concatMap upatBoundVars upl)
+localBoundVars :: TCLocalDef -> (String, TCTerm)
+localBoundVars (LocalFnDefGen nm tp _) = (nm,tp)
 
 -- | Returns the type of a unification term in the current context.
-completeTerm :: UnifyResult
-             -> UnifyTerm
-             -> Term
-completeTerm = go
-  where go r ut =
-          case ut of
-            URigidVar v -> incVars 0 (urLevel r - l) t
-              where err = "Could not complete term: unknown type " ++ show (v,urRigidTypeMap r)
-                    (l,t) = fromMaybe (internalError err) $
-                              Map.lookup v (urRigidTypeMap r)
-            UnificationVar i -> go r t
-              where Just t = Map.lookup i (urVarBindings r)
-            UGlobal i -> Term (GlobalDef d)
-              where Just d = findDef (urModule r) i
-            ULambda p lhs rhs -> Term (Lambda p' (go r lhs) (go r' rhs))
-              where (r',p') = bindPat r p
-            UApp x y  -> Term $ App (go r x) (go r y)
-            UPi p lhs rhs -> Term (Pi p' (go r lhs) (go r' rhs))
-              where (r',p') = bindPat r p
-            UTupleValue l -> Term $ TupleValue (go r <$> l)
-            UTupleType l  -> Term $ TupleType  (go r <$> l)
-            URecordValue m      -> Term $ RecordValue (go r <$> m)
-            URecordSelector x f -> Term $ RecordSelector (go r x) f
-            URecordType m       -> Term $ RecordType (go r <$> m)
-            UCtorApp i l   -> Term $ CtorValue c (go r <$> l)
-              where Just c = findCtor (urModule r) i
-            UDataType i l -> Term $ CtorType dt (go r <$> l)
-              where Just dt = findDataType (urModule r) i
-            USort s   -> Term $ Sort s
-            ULet dl t -> Term $ Let (completeLocalDef <$> dl) (go r' t)
-              where r' = bindPatImpl r (concatMap localVarNamesGen dl)
-                    completeLocalDef (LocalFnDefGen v tp eqs) =
-                        LocalFnDef (rvrName v) (go r tp) (completeEqn r' <$> eqs)
-            UIntLit i -> Term $ IntLit i
-            UArray tp v -> Term $ ArrayValue (go r tp) (go r <$> v)
+completeTerm :: CompletionContext -> TCTerm -> Term
+completeTerm cc (TCF tf) = Term $ FTermF $ fmap (completeTerm cc) tf
+completeTerm cc (TCLambda pat tp r) =
+    Term $ Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
+  where (pat', cc') = completePat cc pat
+completeTerm cc (TCPi pat@(TCPVar nm _ _) tp r) =
+    Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
+  where (_, cc') = completePat cc pat
+completeTerm cc (TCPi pat@(TCPUnused nm) tp r) =
+    Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
+  where (_, cc') = completePat cc pat
+completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term" 
+completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
+  where (cc',tps) = addPatTypes cc (localBoundVars <$> lcls)
+        completeLocal (LocalFnDefGen nm _ eqns) tp =
+          LocalFnDef nm tp (completeDefEqn cc' <$> eqns)
+        lcls' = zipWith completeLocal lcls tps
+completeTerm cc (TCVar i) = Term $ LocalVar i (ccVarType cc i)
+completeTerm cc (TCLocalDef i) = Term $ LocalVar i (ccVarType cc i)
 
-completeEqn :: UnifyResult -> UnifyDefEqn -> TypedDefEqn
-completeEqn r (DefEqnGen upl urhs) = DefEqn pl (completeTerm r' urhs)
-  where (r',pl) = bindPats r upl
-
-
-{-
--- | Perform Unification, and add bindings from unify state to context.
--- Returns context and function for translating unifyterms in original context.
-withUResult :: TermContext
-            -> (UnifyResult -> a)
-            -> Unifier a
-withUResult ctx fn = state sfn
-  where sfn s = (fn (addVarBindings ctx s'), s')
-          where s' = unifyCns s
-
-addVarBindings :: TermContext
-               -> UnifyState
-               -> UnifyResult
-addVarBindings tc s = undefined tc s
-  where varSubvars :: UVar -> Set UVar
-        varSubvars (UPRigid sym) = addUnifyTermVars Set.empty tp
-          where err = error $ "Could not find type for " ++ show sym
-                tp = fromMaybe err $ rigidType sym us
-        varSubvars (UIVar i) = 
-          case inaccessibleBinding us i of
-            Just t -> addUnifyTermVars Set.empty t
-            Nothing -> Set.empty
-        vars = usVars us
-        edges = [ (v, u)
-                      | u <- Set.toList vars
-                      , v <- Set.toList (varSubvars u)
-                      ]
-        allOrdering =
-          case topSort vars edges of
-            Left zm -> error $ "Found cyclic dependencies: " ++ show zm
-            Right o -> o
-        ordering = V.fromList [ i | UPRigid i <- allOrdering ]
-        pIdxMap :: Map RigidVarRef DeBruijnIndex
-        pIdxMap = orderedListMap (V.toList ordering)
-        varUnifyTypes :: Vector UnifyTerm
-        varUnifyTypes = V.generate (V.length ordering) fn
-          where fn idx = tp
-                  where Just tp = rigidType (ordering V.! idx) us
-        -- Vector of types.  The term is in the context of the term it is bound to.
-        varTypes :: Vector Term
-        varTypes = V.generate (V.length varUnifyTypes) fn
-          where fn idx = completeTerm ur (inaccessibleBinding us) idx
-                           0 (varUnifyTypes V.! idx)
-        pVarMap = (\i -> (i,varTypes V.! i)) <$> pIdxMap
-        -- Inner context
-        ctx' = foldl' (uncurry . consLocalVar) tc (V.zip (rvrName <$> ordering) varTypes)
-        ur = UResult { urRigidMap = pVarMap
-                     }
--}
-
-{-
-termUnPat :: (?ctx :: TermContext) => UPat -> UnifyTerm
-termUnPat = go
-  where go (UPVar sym) = URigidVar sym
-        go (UPUnused i) = UnificationVar i
-        go (UPatF _ pf) =
-          case pf of
-            UPTuple pl    -> UTupleValue (go <$> pl)
-            UPRecord pm   -> URecordValue (go <$> pm)
-            UPCtor sym pl -> UCtorApp c (go <$> pl)
-              where Just c = findCon ?ctx sym
-            UPIntLit i  -> UIntLit i
--}
-
-indexUnPat :: GlobalContext -> Un.Pat -> Unifier UPat
-indexUnPat ctx pat = 
-  case pat of
-    Un.PVar psym -> UPVar <$> newRigidVar (Just (pos psym)) (val psym)
-    Un.PUnused s -> UPUnused <$> newUnifyVarIndex s
-    Un.PTuple p pl   -> (UPatF (Just p) . UPTuple) <$> mapM (indexUnPat ctx) pl
-    Un.PRecord p fpl -> (UPatF (Just p) . UPRecord . Map.fromList . zip (val <$> fl))
-                                   <$> mapM (indexUnPat ctx) pl
-      where (fl,pl) = unzip fpl
-
-    Un.PCtor i l ->
-      case Map.lookup (val i) (ctxGlobalBindings ctx) of
-        Just (CtorIdent c) ->
-          (UPatF (Just (pos i)) . UPCtor c) <$> mapM (indexUnPat ctx) l 
-        Just _ -> fail $ show (val i) ++ " does not refer to a constructor."
-        Nothing -> fail $ "Unknown symbol " ++ show (val i)
-
-{-
-declEqs :: TermContext -> [Un.Decl] -> (String -> [DefEqn Pat Term])
-declEqs ctx d = \i -> Map.findWithDefault [] i eqMap
-  where insertEq m (Un.TermDef psym lhs rhs) = Map.insertWith (++) sym v m
-          where sym = val psym
-                tp = case findDefType ctx (Un.localIdent sym) of
-                       Just tp' -> tp'
-                       Nothing -> internalError $ "Could not find " ++ show sym
-                (ctx',lhs') = convertLhsPatterns ctx (snd <$> lhs) tp
-                v = [DefEqn lhs' (convertTerm ctx' rhs)]
-        insertEq m _ = m
-        eqMap = foldl' insertEq Map.empty d
--}
 
 addImportNameStrings :: Un.ImportName -> Set String -> Set String
 addImportNameStrings im s =
@@ -909,296 +512,163 @@ addImportNameStrings im s =
 importNameStrings :: [Un.ImportName] -> Set String
 importNameStrings = foldr addImportNameStrings Set.empty
 
-includeNameInModule :: Maybe Un.ImportConstraint -> String -> Bool
-includeNameInModule mic =
-  case mic of
-    Nothing -> \_ -> True
-    Just (Un.SpecificImports iml) -> flip Set.member imset
-      where imset = importNameStrings iml
-    Just (Un.HidingImports iml) -> flip Set.notMember imset
-      where imset = importNameStrings iml
-
-{-
--- | Return a term representing the given local var.
-varIndex :: GlobalContext -> Un.Ident -> Maybe UnifyTerm
-varIndex tc i = fn <$> Map.lookup i (tcMap tc)
-  where fn (Left (lvl,t)) = Term $ LocalVar idx t
-          where idx = tcDeBruijnLevel tc - lvl - 1
-        fn (Right d) = Term $ GlobalDef d
--}
-
-{-
--- | Returns constructor or data type associated with given identifier.
--- Calls error if attempt to find constructor failed.
-findCon :: TermContext -> Un.Ident -> Maybe (Ctor Ident UnifyTerm)
-findCon tc i = Map.lookup i (tcDataDecls tc)
--}
-
-type ContextInitializer = State GlobalContext
-
--- | Create a 
-newUnifyDataType :: UnDataType -> ContextInitializer ()
-newUnifyDataType dt = modify fn
-  where fn :: GlobalContext -> GlobalContext
-        fn ctx = ctx'
-          where ctxIdent = mkIdent (ctxModuleName ctx)
-                insCtor m c = Map.insert (Un.localIdent nm) (CtorIdent sym) m
-                  where nm = ctorName c
-                        sym = ctxIdent nm
-                dnm = dtName dt
-                dnmIdent = DataTypeIdent (ctxIdent dnm)
-                b1 = foldl' insCtor (ctxGlobalBindings ctx) (dtCtors dt)     
-                b2 = Map.insert (Un.localIdent dnm) dnmIdent b1
-                ctx' = ctx { ctxGlobalBindings = b2
-                           , ctxNewDataTypes = dt : ctxNewDataTypes ctx
-                           }
-
--- | Insert identifiers with given type into global context.
-newUnifyDefs :: [Un.PosPair String] -> Un.Term -> ContextInitializer ()
-newUnifyDefs idl tp = modify fn
-  where newDefs = (\i -> (val i,tp)) <$> idl 
-        fn ctx = ctx { ctxGlobalBindings = foldl' ins (ctxGlobalBindings ctx) idl
-                     , ctxNewDefTypes = ctxNewDefTypes ctx ++ newDefs
-                     }
-          where ins m nm = Map.insert (Un.localIdent (val nm)) (DefIdent sym) m
-                  where sym = mkIdent (ctxModuleName ctx) (val nm)
-
-newUnifyEqn :: Un.Pos -> String -> [Un.Pat] -> Un.Term  -> ContextInitializer ()
-newUnifyEqn _ nm pats rhs = modify fn
-  where fn gc = gc { ctxNewEqns = (nm, eqn) :  ctxNewEqns gc }
-          where eqn = DefEqnGen pats rhs
-
-{-
-importTerm :: Term -> ContextInitializer UnifyTerm
-importTerm = go []
-  where go :: [RigidVarRef] -> ContextInitializer UnifyTerm 
-        go bindings (Term tf) =
-          case tf of
-            LocalVar i _ -> return (URigidVar (bindings !! i))
-            GlobalDef d -> do
-              StateT $ \s -> do 
-                case Map.lookup (defIdent d) (ctxImports s) of
-                  Just r -> return (URigidVar r,s')
-
-importedRigidVar :: [Maybe ModuleName]
-                 -> Bool
-                 -> Ident
-                 -> Term -- ^ Type of imported term
-                 -> (Module -> Module) -- ^ Module update function
-                 -> ContextInitializer ()
-importedRigidVar mnml v sym tp moduleFn = do
-  utp <- undefined tp
-  let nm = identName sym
-      unm | v = Un.mkIdent (head mnml) nm
-          | otherwise = Un.mkIdent (Just (identModule sym)) nm
-  let fn s = (v, s')
-        where idx = nextRigidIndex s
-              v = RigidVarRef Nothing unm idx 
-              s' = s { usTypeMap = Map.insert v utp (usTypeMap s) 
-                     , usVars = Set.insert (UPRigid v) (usVars s)
-                     , nextRigidIndex = idx + 1
-                     }
-  r <- lift $ state fn
-  let ctxFn ctx = ctx { ctxVarBindings = m'
-                      , gcModule = moduleFn (gcModule ctx)
-                      }
-        where m = ctxVarBindings ctx
-              ins m mnm = Map.insert (Un.mkIdent mnm nm) (Left d) m
-              m' | v = foldl' ins m mnml
-                 | otherwise = m
-  modify ctxFn
--}
-
-addDataType :: [Maybe ModuleName] -- ^ Untyped module names to add symbols to.
-            -> TypedDataType
-               -- | Indicates if datatype itself should be visibile in untyped context.
-            -> Bool
-               -- | List of ctors to make visible in untyped context.
-            -> [TypedCtor]
-            -> ContextInitializer ()
-addDataType _mnml dt _ _ = do
-  let ctxFn gc = gc { gcModule = insDataType (gcModule gc) dt
-                    , ctxGlobalBindings = internalError "addDataType undefined"
-                    }
-  modify ctxFn
-
-addDef :: [Maybe ModuleName]
-       -> Bool -- ^ Indicates if definition should be visible to untyped context.
-       -> Def Term
-       -> ContextInitializer ()
-addDef mnml v def = do
-  let nm = identName (defIdent def)
-  let ctxFn ctx = ctx { ctxGlobalBindings = m'
-                      , gcModule = insDef (gcModule ctx) def
-                      }
-        where m = ctxGlobalBindings ctx
-              ins mnm = Map.insert (Un.mkIdent mnm nm) (DefIdent (defIdent def))
-              m' | v = foldl' (flip ins) m mnml
-                 | otherwise = m
-  modify ctxFn
-
-completeCtor :: UnifyResult -> UnifyCtor -> TypedCtor
-completeCtor r (Ctor nm tp) = Ctor nm (completeTerm r tp)
-
-completeDataType :: UnifyResult 
-                 -> UnifyDataType
-                 -> TypedDataType
-completeDataType r dt =
-  DataType { dtName = dtName dt
-           , dtType = completeTerm r (dtType dt)
-           , dtCtors = completeCtor r <$> dtCtors dt
-           }
-
-convertDataType :: GlobalContext -> UnDataType -> Unifier UnifyDataType
-convertDataType ctx dt = do
-  let mnm = moduleName (gcModule ctx)
-  let tc = emptyTermContext ctx
-  tp <- convertTerm tc (dtType dt)
-  ctors <- mapM (convertCtor ctx) (dtCtors dt)
-  return DataType { dtName = mkIdent mnm (dtName dt)
-                  , dtType = tp
-                  , dtCtors = ctors
-                  }
-
-convertCtor :: GlobalContext -> UnCtor -> Unifier UnifyCtor
-convertCtor ctx c = do
-  let mnm = moduleName (gcModule ctx)
-  let tc = emptyTermContext ctx
-  tp <- convertTerm tc (ctorType c)
-  return Ctor { ctorName = mkIdent mnm (ctorName c)
-              , ctorType = tp
-              }
-
-unifierModule :: Module
-              -> [UnifyDataType]
-              -> [(String, UnifyTerm)]
-              -> Map String [UnifyDefEqn]
-              -> Unifier Module
-unifierModule ctxm udtl defs eqnMap = do
-  let mnm = moduleName ctxm
-  s <- get
-  case unifyEqs s of
-    eq:eqs -> do
-      put s { unifyEqs = eqs }
-      case eq of
-        UnifyEqTypes x y -> unifyTypes x y
-        UnifyEqValues x y tp -> unifyTerms x y tp
-        UnifyPatHasType p tp -> hasType p tp
-      unifierModule ctxm udtl defs eqnMap
-    [] -> do
-      let completeDef :: String -> UnifyTerm -> Def Term
-          completeDef nm tp =
-            Def { defIdent = mkIdent mnm nm
-                , defType = completeTerm r tp
-                , defEqs = completeEqn r <$> eqs
-                }
-            where eqs = fromMaybe [] $ Map.lookup nm eqnMap
-          m = flip (foldl' insDef) (map (uncurry completeDef) defs)
-            $ flip (foldl' insDataType) (completeDataType r <$> udtl)
-            $ ctxm
-          varSubvars :: UVar -> Set UVar
-          varSubvars (UPRigid sym) = addUnifyTermVars Set.empty tp
-            where err = "Could not find type for " ++ show sym
-                  tp = fromMaybe (internalError err) $ Map.lookup sym (usTypeMap s)
-          varSubvars (UIVar i) = 
-            case Map.lookup i (usVarBindings s) of
-              Just t -> addUnifyTermVars Set.empty (varBindingTerm t)
-              Nothing -> Set.empty
-          vars = usVars s
-          edges = [ (v, u)
-                  | u <- Set.toList vars
-                  , v <- Set.toList (varSubvars u)
-                  ]
-          allOrdering =
-            case topSort vars edges of
-              Left zm -> error $ "Found cyclic dependencies: " ++ show zm
-              Right o -> o
-          ordering :: Vector RigidVarRef
-          ordering = V.fromList [ i | UPRigid i <- allOrdering ]
-          pIdxMap :: Map RigidVarRef DeBruijnIndex
-          pIdxMap = orderedListMap (V.toList ordering)
-          varUnifyTypes :: Vector UnifyTerm
-          varUnifyTypes = fn <$> ordering
-            where fn v = tp
-                    where Just tp = Map.lookup v (usTypeMap s)
---          varTypes :: Vector Term
---          varTypes = V.generate (V.length ordering) fn
---            where fn idx = completeTerm r (varUnifyTypes V.! idx)
-          getRigidVarType i = (i,varUnifyTypes V.! i)
-          r = UResult { urRigidIndexMap = getRigidVarType <$> pIdxMap
-                      , urVarBindings = varBindingTerm <$> usVarBindings s
-                      , urModule = m
-                      , urLevel = 0
-                      , urRigidTypeMap = Map.empty
-                      }
-      return m
-
-runUnification :: ModuleName -> ContextInitializer () -> Module
-runUnification nm initialization = flip evalState emptyUnifyState $ do
-  let gc0 = GlobalContext {
-                gcModule = emptyModule nm
-              , ctxGlobalBindings = Map.empty
-              , ctxNewDataTypes = []
-              , ctxNewDefTypes = []
-              , ctxNewEqns = []
-              }
-  let ctx = execState initialization gc0
-  modify $ \s -> s { usGlobalContext = Just ctx }
-  do let ctors = concatMap dtCtors (ctxNewDataTypes ctx)
-     let newCtorBindings c = (mkIdent nm (ctorName c), Left (ctorType c))
-     let updateCtors s = s { usCtorTypes = Map.fromList (newCtorBindings <$> ctors) }
-     modify updateCtors
-  udtl <- mapM (convertDataType ctx) (ctxNewDataTypes ctx)
-  let (defNames,untps) = unzip (ctxNewDefTypes ctx)
-  let tc = emptyTermContext ctx
-  defTypes <- mapM (convertTerm tc) untps
-  let defTypeMap = Map.fromList (defNames `zip` defTypes)
-
-  eqnMap <- fmap multiMap $ 
-    forM (ctxNewEqns ctx) $ \(sym,uneqn) -> do
-      let Just tp = Map.lookup sym defTypeMap
-      eqn <- convertEqn tc tp uneqn
-      return (sym, eqn)
-  unifierModule (gcModule ctx) udtl (defNames `zip` defTypes) eqnMap
-
+includeNameInModule :: Maybe Un.ImportConstraint -> Ident -> Bool
+includeNameInModule mic = fn . identName
+  where fn = case mic of
+               Nothing -> \_ -> True
+               Just (Un.SpecificImports iml) -> flip Set.member imset
+                 where imset = importNameStrings iml
+               Just (Un.HidingImports iml) -> flip Set.notMember imset
+                 where imset = importNameStrings iml
 
 -- | Creates a module from a list of untyped declarations.
 unsafeMkModule :: [Module] -- ^ List of modules loaded already.
                -> Un.Module
-               -> Module
-unsafeMkModule ml (Un.Module (PosPair _ nm) iml d) = r
-  where moduleMap = projMap moduleName ml
-        r = runUnification nm $ do
-              mapM_ insertImport iml
-              mapM_ insertDef d
-        insertImport :: Un.Import -> ContextInitializer ()
-        insertImport (Un.Import q pm mAsName mcns) = mapM_ insDecl (moduleDecls m) 
-          where Just m = Map.lookup (val pm) moduleMap
-                qnm = maybe (moduleName m)
-                            (\s -> Un.mkModuleName [s])
-                            (val <$> mAsName) 
-                -- Return true if this identifer should be added to module.
-                identPred :: Ident -> Bool
-                identPred = nmPred . identName
-                  where nmPred = includeNameInModule mcns
-                mnml | q = [Just qnm]
-                     | otherwise = [Nothing, Just qnm]
-                -- Insert individual declaration from module.
-                insDecl :: ModuleDecl -> ContextInitializer ()
-                insDecl md = 
-                  case md of
-                    TypeDecl dt -> addDataType mnml dt dtVis ctors
-                      where dtVis = identPred (dtName dt)
-                            ctors = filter (identPred . ctorName) (dtCtors dt)
-                    DefDecl def -> addDef mnml defVis def
-                      where defVis = identPred (defIdent def) 
-        insertDef :: Un.Decl -> ContextInitializer ()
-        insertDef (Un.TypeDecl idl untp) = newUnifyDefs idl untp
-        insertDef (Un.DataDecl psym untp ucl) = do
-          let ctorDef (Un.Ctor pnm ctorTp) = Ctor (val pnm) ctorTp
-          newUnifyDataType DataType { dtName = val psym
-                                    , dtType = untp
-                                    , dtCtors = ctorDef <$> ucl
-                                    }
-        insertDef (Un.TermDef psym lhs rhs) =
-          newUnifyEqn (Un.pos psym) (val psym) (snd <$> lhs) rhs
+               -> Either Doc Module
+unsafeMkModule ml (Un.Module (PosPair _ nm) iml d) = do
+  let moduleMap = projMap moduleName ml
+  runTC $ do
+    let gc0 = emptyGlobalContext
+    let is0 = IS { isModuleName = nm
+                 , isCtx = gc0
+                 , isPending = []
+                 }
+    let eqnMap = multiMap [ (val psym, DefEqnGen (snd <$> lhs) rhs)
+                          | Un.TermDef psym lhs rhs <- d
+                          ]
+    -- Parse imports and declarations.
+    let actions = fmap (parseImport moduleMap) iml
+               ++ fmap (parseDecl eqnMap) d
+    is <- execStateT (sequenceA_ actions) is0
+    let gc = isCtx is
+    let tc = emptyTermContext gc
+    -- Execute pending assignments with final TermContext.
+    sequence_ $ (($ tc) <$> isPending is)
+    
+    let mkFinal tps defs = m
+          where cc = CCGlobal m
+                m = flip (foldl' insDef) (completeDef cc <$> defs)
+                  $ flip (foldl' insDataType) (completeDataType cc <$> tps)
+                  $ emptyModule nm
+    liftA2 mkFinal
+           (traverse evalDataType (gcTypes gc))
+           (traverse evalDef (gcDefs gc))
+
+
+liftTCPat :: TermContext s -> Pat Term -> TC s (TCPat,TermContext s)
+liftTCPat = unimpl "liftTCPat"
+
+liftTCTerm :: TermContext s -> Term -> TC s TCTerm
+liftTCTerm tc (Term tf) = 
+  case tf of
+    FTermF ftf -> TCF <$> traverse (liftTCTerm tc) ftf
+    Lambda pat tp rhs -> do
+      (pat', tc') <- liftTCPat tc pat
+      TCLambda pat' <$> liftTCTerm tc tp <*> liftTCTerm tc' rhs
+    Pi nm tp rhs -> do
+      (pat', tc') <- unimpl "liftTCTerm0" nm
+      TCPi pat' <$> liftTCTerm tc tp <*> liftTCTerm tc' rhs
+    Let lcls tp -> do
+      unimpl "liftTCTerm" lcls tp
+    LocalVar i tp -> do
+      unimpl "liftTCTerm2" i tp
+    EqType{} -> unimpl "liftTCTerm3"
+    Oracle{} -> unimpl "liftTCTerm4"
+
+liftTCDefEqn :: TermContext s -> TypedDefEqn -> TC s TCDefEqn
+liftTCDefEqn _ _ = unimpl "liftTCDefEqn"
+
+liftTCDataType :: TermContext s -> Term -> TC s TCDTType
+liftTCDataType _ = unimpl "liftTCDataType"
+
+liftTCCtorType :: TermContext s -> Term -> TC s TCCtorType
+liftTCCtorType _ = unimpl "liftTCCtorType"
+
+-- | Typechecker computation that needs input before running.
+type PendingAction s a = a -> TC s ()
+
+mkPendingAssign :: TCRef s v -> (a -> TC s v) -> PendingAction s a
+mkPendingAssign r f a = assign r (f a)
+
+data InitState s = IS { isModuleName :: ModuleName
+                      , isCtx :: GlobalContext s
+                      , isPending :: [ PendingAction s (TermContext s) ]
+                      }
+
+type Initializer s a = StateT (InitState s) (TC s) a
+
+initModuleName :: Initializer s ModuleName
+initModuleName = gets isModuleName
+
+updateIsCtx :: (GlobalContext s -> GlobalContext s) -> Initializer s ()
+updateIsCtx f = modify $ \s -> s { isCtx = f (isCtx s) }
+
+addPending :: NodeName -> (TermContext s -> TC s r) -> Initializer s (TCRef s r)
+addPending nm fn = do
+  r <- lift $ newRef nm  
+  r <$ modify (\s -> s { isPending = mkPendingAssign r fn : isPending s })
+
+parseCtor :: Ident -> Un.CtorDecl -> Initializer s (Bool, TCRefCtor s)
+parseCtor dt (Un.Ctor pnm utp) = do
+  mnm <- initModuleName
+  tp <- addPending (val pnm) (\tc -> tcCtorType dt tc utp)
+  let ci = mkIdent mnm (val pnm)
+  return (True, Ctor { ctorName = ci, ctorType = tp })
+
+parseDecl :: Map String [UnDefEqn] -> Un.Decl -> Initializer s ()
+parseDecl eqnMap d = do
+  mnm <- initModuleName
+  case d of
+    Un.TypeDecl idl utp -> do
+      let id1:_ = idl
+      rtp <- addPending (val id1) (\uc -> fst <$> tcType uc utp)
+      for_ idl $ \(PosPair p nm) -> do
+        let ueqs = fromMaybe [] $ Map.lookup nm eqnMap
+        eqs <- addPending ("Equations for " ++ nm) $ \tc -> do
+          tp <- eval p rtp
+          tcEqns tc ueqs tp
+        let di = mkIdent mnm nm
+        updateIsCtx $ insertDef [Nothing] True (DefGen di rtp eqs)
+    Un.DataDecl psym utp ucl -> do
+      let dti = mkIdent mnm (val psym)
+      dt <- liftA2 (DataTypeGen dti)
+                   (addPending (val psym) (\tc -> tcDTType tc utp))
+                   (traverse (parseCtor dti) ucl)
+      updateIsCtx $ insertDataType [Nothing] True dt
+    Un.TermDef{} -> return ()
+
+parseImport :: Map ModuleName Module
+            -> Un.Import
+            -> Initializer s ()
+parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
+  case Map.lookup nm moduleMap of
+    Nothing -> lift $ tcFail p $ "Cannot find module " ++ show nm ++ "."
+    Just m -> do
+      -- Get list of module names to use for local identifiers.
+      let mnml | q = [Just qnm]
+               | otherwise = [Nothing, Just qnm]
+            where qnm = maybe (moduleName m)
+                              (\s -> Un.mkModuleName [s])
+                              (val <$> mAsName)
+      -- Add datatypes to module
+      for_ (moduleDataTypes m) $ \(dt, ctors) -> do
+        let dtnm = dtName dt
+        dtr <- addPending (identName dtnm) $ \tc ->
+          liftTCDataType tc (dtType dt)
+        -- Add constructors to module.
+        cl <- for ctors $ \c -> do
+          let cnm = ctorName c
+              cfn tc = liftTCCtorType tc (ctorType c)
+          let use = includeNameInModule mcns cnm
+          (use,) . Ctor cnm <$> addPending (identName cnm) cfn
+        let dtuse = includeNameInModule mcns dtnm
+        updateIsCtx $ insertDataType mnml dtuse (DataTypeGen dtnm dtr cl)
+      -- Add definitions to module.
+      for_ (moduleDefs m) $ \def -> do
+        let inm = identName (defIdent def)
+        tpr <- addPending inm $ \tc ->
+          liftTCTerm tc (defType def)
+        eqr <- addPending inm $ \tc ->
+          traverse (liftTCDefEqn tc) (defEqs def)
+        let use = includeNameInModule mcns (defIdent def)
+        updateIsCtx $ insertDef mnml use (DefGen (defIdent def) tpr eqr)

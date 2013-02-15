@@ -43,22 +43,32 @@ module Verifier.SAW.TypedAST
  , incVars
  , piArgCount
  , TermF(..)
+ , FlatTermF(..)
+ , zipWithFlatTermF
+ , ppFlatTermF
+ , ppRecordF
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
  , isIdent
+ , ppIdent
  , DeBruijnIndex
  , FieldName
  , instantiateVarList
+   -- * Utility functions
+ , Prec
+ , commaSepList
+ , semiTermList
+ , ppParens
  ) where
 
-import Control.Applicative ((<$>))
+import Control.Applicative hiding (empty)
 import Control.Exception (assert)
+import Control.Monad.Identity (runIdentity)
 import Data.Char
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Traversable (Traversable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.HughesPJ
@@ -137,7 +147,6 @@ data Pat e = -- | Variable bound by pattern.
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PCtor (Ctor Ident e) [Pat e]
---           | PIntLit Integer
   deriving (Eq,Ord, Show, Functor, Foldable, Traversable)
 
 patBoundVarCount :: Pat e -> DeBruijnIndex
@@ -220,7 +229,6 @@ ppCtor f c = ppIdent (ctorName c) <+> doublecolon <+> tp
 
 data DataType n t = DataType { dtName :: n
                              , dtType :: t
-                             , dtCtors :: [Ctor n t]
                              }
   deriving (Functor, Foldable, Traversable)
 
@@ -233,24 +241,20 @@ instance Ord n => Ord (DataType n t) where
 instance Show n => Show (DataType n t) where
   show = show . dtName
 
-ppDataType :: TermPrinter e -> DataType Ident e -> Doc
-ppDataType f dt = text "data" <+> tc <+> text "where" <+> lbrace $$
-                    nest 4 (vcat (ppc <$> dtCtors dt)) $$
-                    nest 2 rbrace
+ppDataType :: TermPrinter e -> (DataType Ident e, [Ctor Ident e]) -> Doc
+ppDataType f (dt, ctors) =
+    text "data" <+> tc <+> text "where" <+> lbrace $$
+      nest 4 (vcat (ppc <$> ctors)) $$
+      nest 2 rbrace
   where lcls = emptyLocalVarDoc
         sym = ppIdent (dtName dt)
         tc = ppTypeConstraint f lcls sym (dtType dt)
         ppc c = ppCtor f c <> semi
 
-data TermF e
-    -- ^ Local variables are referenced by deBrujin index.
-    -- The type of the var is in the context of when the variable was bound.
-  = LocalVar !DeBruijnIndex !e
-  | GlobalDef (Def e)  -- ^ Global variables are referenced by label.
+data FlatTermF e
+  = GlobalDef Ident  -- ^ Global variables are referenced by label.
 
-  | Lambda !(Pat e) !e !e
   | App !e !e
-  | Pi !(Pat e) !e !e
 
     -- Tuples may be 0 or 2+ elements. 
     -- A tuple of a single element is not allowed in well-formed expressions.
@@ -261,25 +265,63 @@ data TermF e
   | RecordSelector e FieldName
   | RecordType (Map FieldName e)
 
-  | CtorValue !(Ctor Ident e) [e]
-  | CtorType !(DataType Ident e) [e]
+  | CtorApp Ident [e]
+  | DataTypeApp Ident [e]
 
   | Sort Sort
 
-    -- ^ List of bindings and the let expression itself.
-    -- Let expressions introduce variables for each identifier.
-  | Let [LocalDef String e] e
-
     -- Primitive builtin values
-  | IntLit Integer
+  | NatLit Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
-    -- | @EqType x y@ is a type representing the equality proposition @x = y@
-  | EqType e e
-    -- | @Oracle s t@ represents a proof of proposition @t@ (typically
-    -- of the form @EqType x y@, but possibly with extra @Pi@
-    -- quantifiers), which came from the trusted proof tool @s@.
-  | Oracle String e
+  deriving (Eq, Ord, Functor, Foldable, Traversable)
+
+zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
+zipWithFlatTermF f = go
+  where go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
+        go (App fx vx) (App fy vy) = Just $ App (f fx fy) (f vx vy)
+
+        go (TupleValue lx) (TupleValue ly)
+          | length lx == length ly = Just $ TupleValue (zipWith f lx ly)
+        go (TupleType lx) (TupleType ly)
+          | length lx == length ly = Just $ TupleType (zipWith f lx ly)
+
+        go (RecordValue mx) (RecordValue my)
+          | Map.keys mx == Map.keys my = 
+              Just $ RecordValue $ Map.intersectionWith f mx my 
+        go (RecordSelector x fx) (RecordSelector y fy)
+          | fx == fy = Just $ RecordSelector (f x y) fx
+        go (RecordType mx) (RecordType my)
+          | Map.keys mx == Map.keys my = 
+              Just $ RecordType (Map.intersectionWith f mx my) 
+
+        go (CtorApp cx lx) (CtorApp cy ly)
+          | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
+        go (DataTypeApp dx lx) (DataTypeApp dy ly)
+          | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
+        go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
+        go (NatLit ix) (NatLit iy) | ix == iy = Just (NatLit ix)
+        go (ArrayValue tx vx) (ArrayValue ty vy)
+          | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
+
+        go _ _ = Nothing
+
+data TermF e
+    = FTermF !(FlatTermF e)  -- ^ Global variables are referenced by label.
+    | Lambda !(Pat e) !e !e
+    | Pi !String !e !e
+       -- | List of bindings and the let expression itself.
+      -- Let expressions introduce variables for each identifier.
+    | Let [LocalDef String e] !e
+      -- | Local variables are referenced by deBruijn index.
+      -- The type of the var is in the context of when the variable was bound.
+    | LocalVar !DeBruijnIndex !e
+      -- | @EqType x y@ is a type representing the equality proposition @x = y@
+    | EqType e e
+      -- | @Oracle s t@ represents a proof of proposition @t@ (typically
+      -- of the form @EqType x y@, but possibly with extra @Pi@
+      -- quantifiers), which came from the trusted proof tool @s@.
+    | Oracle String e
   deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
@@ -312,27 +354,26 @@ semiTermList = hsep . fmap (<> semi)
 
 type Prec = Int
 
+-- | Add parenthesis around a document if condition is true.
+ppParens :: Bool -> Doc -> Doc
+ppParens True  d = parens d
+ppParens False d = d
+
 ppPat :: TermPrinter e -> TermPrinter (Pat e)
 ppPat f lcls p pat = 
   case pat of
     PVar i _ _ -> text i
     PUnused{} -> char '_'
-    PCtor c pl -> sp 10 $ ppIdent (ctorName c) <+> hsep (ppPat f lcls 10 <$> pl)
+    PCtor c pl -> ppParens (p >= 10) $
+      ppIdent (ctorName c) <+> hsep (ppPat f lcls 10 <$> pl)
     PTuple pl -> parens $ commaSepList $ ppPat f lcls 1 <$> pl
-    PRecord m -> 
-      let ppFld (fld,v) = text fld <+> equals <+> ppPat f lcls 1 v
-       in braces $ semiTermList $ ppFld <$> Map.toList m
---    PIntLit i -> integer i
- where sp l d = if p >= l then parens d else d
+    PRecord m -> braces $ semiTermList $ ppFld <$> Map.toList m
+      where ppFld (fld,v) = text fld <+> equals <+> ppPat f lcls 1 v
 
 commaSepList :: [Doc] -> Doc
 commaSepList [] = empty
 commaSepList [d] = d
 commaSepList (d:l) = d <> comma <+> commaSepList l
-
-maybeParens :: Bool -> Doc -> Doc
-maybeParens True  d = parens d
-maybeParens False d = d
 
 data LocalVarDoc = LVD { docMap :: !(Map DeBruijnIndex Doc)
                        , docLvl :: !DeBruijnIndex
@@ -364,58 +405,53 @@ lookupDoc lvd i =
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
+{-
 ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (Pat e, e, r)
 ppPi ftp frhs lcls p (pat,tp,rhs) = 
-    maybeParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
+    ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
   where lcls' = foldl' consBinding lcls (patBoundVars pat)
         lhs = case pat of
                 PUnused -> ftp lcls 2 tp
                 _ -> parens (ppPat ftp lcls' 1 pat <> doublecolon <> ftp lcls 1 tp)
+-}
 
--- | @ppTermF@ pretty prints term functros.
-ppTermF :: TermPrinter e -- ^ Pretty printer for elements.
-        -> TermPrinter (TermF e)
-ppTermF f lcls p tf = do
-  let sp l d = maybeParens (p >= l) d
+ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (String, e, r)
+ppPi ftp frhs lcls p (i,tp,rhs) = 
+    ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
+  where lcls' = consBinding lcls i
+        lhs | i == "_"  = ftp lcls 2 tp
+            | otherwise = parens (text i <> doublecolon <> ftp lcls 1 tp)
+
+ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
+ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
+  where ppFld (fld,v) = (text fld <+> equals <+>) <$> pp v
+
+ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
+ppFlatTermF pp prec tf =
   case tf of
-    LocalVar i _ -> lookupDoc lcls i
-    GlobalDef d -> ppIdent $ defIdent d
-    Lambda pat tp rhs -> sp 1 $ text "\\" <> lhs <+> text "->" <+> f lcls' 2 rhs
-      where lcls' = foldl' consBinding lcls (patBoundVars pat)
-            lhs = parens (ppPat f lcls' 1 pat <> doublecolon <> f lcls 1 tp)
-    App t u -> sp 10 (f lcls 10 t <+> f lcls 10 u)
-    Pi pat tp rhs -> ppPi f f lcls p (pat,tp,rhs)
-    TupleValue tl -> parens (commaSepList $ f lcls 1 <$> tl)
-    TupleType tl -> char '#' <> parens (commaSepList $ f lcls 1 <$> tl)
-    RecordValue m        ->
-      let ppFld (fld,v) = text fld <+> equals <+> f lcls 1 v 
-       in braces (semiTermList (ppFld <$> Map.toList m))
-    RecordSelector t fld -> f lcls 11 t <> text ('.':fld)
-    RecordType m         ->
-      let ppFld (fld,v) = text fld <> doublecolon <+> f lcls 1 v
-       in char '#' <> braces (semiTermList (ppFld <$> Map.toList m))
-    CtorValue c tl
-      | null tl -> ppIdent (ctorName c)
-      | otherwise -> sp 10 $ hsep $ ppIdent (ctorName c) : fmap (f lcls 10) tl
-    CtorType dt tl
-      | null tl -> ppIdent (dtName dt)
-      | otherwise -> sp 10 $ hsep $ ppIdent (dtName dt) : fmap (f lcls 10) tl
-    Sort s -> text (show s)
-    Let dl t -> text "let" <+> vcat (ppLocalDef f lcls' <$> dl) $$
-                text " in" <+> f lcls' 0 t
-      where nms = concatMap localVarNames dl
-            lcls' = foldl' consBinding lcls nms
-    IntLit i -> integer i
-    ArrayValue _ vl -> brackets (commaSepList (f lcls 1 <$> V.toList vl))
-    EqType lhs rhs -> f lcls 1 lhs <+> equals <+> f lcls 1 rhs
-    Oracle s prop -> quotes (text s) <> parens (f lcls 0 prop)
+    GlobalDef i -> pure $ ppIdent i
+    App l r -> ppParens (prec >= 10) <$> liftA2 (<+>) (pp 10 l) (pp 10 r)
+    TupleValue l -> parens . commaSepList <$> traverse (pp 1) l
+    TupleType l -> (char '#' <>) . parens . commaSepList <$> traverse (pp 1) l
+    RecordValue m -> ppRecordF (pp 1) m
+    RecordSelector t f -> ppParens (prec >= 10) . (<> (char '.' <> text f)) <$> pp 11 t
+    RecordType m -> (char '#' <>) <$> ppRecordF (pp 1) m
+    CtorApp c l
+      | null l -> pure (ppIdent c)
+      | otherwise -> ppParens (prec >= 10) . hsep . (ppIdent c :) <$> traverse (pp 10) l
+    DataTypeApp dt l 
+      | null l -> pure (ppIdent dt)
+      | otherwise -> ppParens (prec >= 10) . hsep . (ppIdent dt :) <$> traverse (pp 10) l
+    Sort s -> pure $ text (show s)
+    NatLit i -> pure $ integer i
+    ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp 1) (V.toList vl)
 
 newtype Term = Term (TermF Term)
   deriving (Eq)
 
 asApp :: Term -> (Term, [Term])
 asApp = go []
-  where go l (Term (App t u)) = go (u:l) t
+  where go l (Term (FTermF (App t u))) = go (u:l) t
         go l t = (t,l)
 
 -- | Returns the number of nested pi expressions.
@@ -434,32 +470,35 @@ instantiateVars f initialLevel = go initialLevel
         goList _ []  = []
         goList l (e:r) = go l e : goList (l+1) r
 
+        gof l ftf = 
+          case ftf of
+            App x y -> App (go l x) (go l y) 
+            TupleValue ll -> TupleValue $ go l <$> ll
+            TupleType ll  -> TupleType $ go l <$> ll
+            RecordValue m -> RecordValue $ go l <$> m
+            RecordSelector x fld -> RecordSelector (go l x) fld
+            RecordType m      -> RecordType $ go l <$> m
+            CtorApp c ll      -> CtorApp c (goList l ll)
+            DataTypeApp dt ll -> DataTypeApp dt (goList l ll)
+            _ -> ftf
         go :: DeBruijnIndex -> Term -> Term
-        go l t@(Term tf) =
+        go l (Term tf) =
           case tf of
-            LocalVar i tp 
-              | i < l -> Term $ LocalVar i (go l tp)
-              | otherwise -> f l i (go l tp)
+            FTermF ftf ->  Term $ FTermF $ gof l ftf
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
-            App x y -> Term $ App (go l x) (go l y) 
-            Pi i lhs rhs -> Term $ Pi i (go l lhs) (go (l+1) rhs)
-            TupleValue ll -> Term $ TupleValue $ go l <$> ll
-            TupleType ll  -> Term $ TupleType $ go l <$> ll
-            RecordValue m -> Term $ RecordValue $ go l <$> m
-            RecordSelector x fld -> Term $ RecordSelector (go l x) fld
-            RecordType m -> Term $ RecordType $ go l <$> m
-            CtorValue c ll -> Term $ CtorValue c (goList l ll)
-            CtorType dt ll -> Term $ CtorType dt (goList l ll)
-            Let defs r -> Term $ Let (procDef <$> defs) (go l' r)
+            Pi i lhs rhs    -> Term $ Pi i (go l lhs) (go (l+1) rhs)
+            Let defs r      -> Term $ Let (procDef <$> defs) (go l' r)
               where l' = l + length defs
                     procDef (LocalFnDef sym tp eqs) = LocalFnDef sym tp' eqs'
                       where tp' = go l tp
                             eqs' = procEq <$> eqs
                     procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)
                       where eql = l' + sum (patBoundVarCount <$> pats)
+            LocalVar i tp
+              | i < l -> Term $ LocalVar i (go l tp)
+              | otherwise -> f l i (go l tp)
             EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
-            Oracle s prop -> Term $ Oracle s (go l prop)
-            _ -> t
+            Oracle s prop  -> Term $ Oracle s (go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -476,7 +515,7 @@ instantiateVar k u = instantiateVars fn 0
         terms = [ incVars 0 i u | i <- [0..] ] 
         -- Instantiate variable 0.
         fn i j t | j - k == i = terms !! i
-                 | j - i > k = Term $ LocalVar (j - 1) t                 
+                 | j - i > k  = Term $ LocalVar (j - 1) t                 
                  | otherwise  = Term $ LocalVar j t
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
@@ -506,16 +545,30 @@ betaReduce s t = instantiateVar 0 t s
 
 -- | Pretty print a term with the given outer precedence.
 ppTerm :: TermPrinter Term
-ppTerm lcls p t =
+ppTerm lcls p0 t =
   case asApp t of
-    (Term u,[]) -> pptf p u
-    (Term u,l) -> maybeParens (p >= 10) $ hsep $ pptf 10 u : fmap (ppTerm lcls 10) l 
- where pptf = ppTermF ppTerm lcls
+    (Term u,[]) -> ppTermF p0 u
+    (Term u,l) -> ppParens (p0 >= 10) $ hsep $ ppTermF 10 u : fmap (ppTerm lcls 10) l
+ where ppTermF p (FTermF tf) = runIdentity $ ppFlatTermF (\p' -> pure . ppTerm lcls p') p tf
+       ppTermF p (Lambda pat tp rhs) = ppParens (p >= 1) $
+           text "\\" <> lhs <+> text "->" <+> ppTerm lcls' 2 rhs
+         where lcls' = foldl' consBinding lcls (patBoundVars pat)
+               lhs = parens (ppPat ppTerm lcls' 1 pat <> doublecolon <> ppTerm lcls 1 tp)
+       ppTermF p (Pi pat tp rhs) = ppPi ppTerm ppTerm lcls p (pat,tp,rhs)
+       ppTermF p (Let dl u) = ppParens (p >= 2) $
+           text "let" <+> vcat (ppLocalDef ppTerm lcls' <$> dl) $$
+           text " in" <+> ppTerm lcls' 0 u
+         where nms = concatMap localVarNames dl
+               lcls' = foldl' consBinding lcls nms
+       ppTermF _ (LocalVar i _) = lookupDoc lcls i
+       ppTermF _ (EqType lhs rhs) = ppTerm lcls 1 lhs <+> equals <+> ppTerm lcls 1 rhs
+       ppTermF _ (Oracle s prop) = quotes (text s) <> parens (ppTerm lcls 0 prop)
+
 
 instance Show Term where
   showsPrec p t = shows $ ppTerm emptyLocalVarDoc p t
 
-type TypedDataType = DataType Ident Term
+type TypedDataType = (DataType Ident Term, [TypedCtor])
 type TypedCtor = Ctor Ident Term
 type TypedDef = Def Term
 type TypedDefEqn = DefEqn Term
@@ -549,8 +602,8 @@ findDataType :: Module -> Ident -> Maybe TypedDataType
 findDataType m i = Map.lookup i (moduleTypeMap m)
 
 insDataType :: Module -> TypedDataType -> Module
-insDataType m dt = m { moduleTypeMap = Map.insert (dtName dt) dt (moduleTypeMap m)
-                     , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
+insDataType m dt = m { moduleTypeMap = Map.insert (dtName (fst dt)) dt (moduleTypeMap m)
+                     , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (snd dt)
                      , moduleRDecls = TypeDecl dt : moduleRDecls m
                      }
   where insCtor m' c = Map.insert (ctorName c) c m' 

@@ -1,4 +1,5 @@
 {
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Grammar 
   ( Decl(..)
@@ -119,13 +120,17 @@ CtorDecl : Con '::' CtorType ';' { Ctor $1 $3 }
 
 Pat :: { Pat }
 Pat : AtomPat           { $1 }
-    | ConDotList list(AtomPat) { PCtor (identFromList1 $1) $2 }
+    | ConDotList list1(AtomPat) { PCtor (identFromList1 $1) $2 }
 
 AtomPat :: { Pat }
-AtomPat : unvar { PUnused (fmap tokVar $1) }
-        | Var   { PVar $1 }
+AtomPat : SimplePat                 { PSimple $1 }
+        | ConDotList                { PCtor (identFromList1 $1) [] }
         | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
         | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
+
+SimplePat :: { SimplePat }
+SimplePat : unvar { PUnused (fmap tokVar $1) }
+          | Var   { PVar $1 }
 
 Term :: { Term }
 Term : TTerm { $1 }
@@ -218,6 +223,9 @@ rsepBy1(p,q) : p { [$1] }
 -- A list of 0 or more p's, terminated by q's
 list(p) : {- empty -} { [] }
         | rlist1(p) { reverse $1 }
+
+-- A list of 0 or more p's, terminated by q's
+list1(p) : rlist1(p) { reverse $1 }
 
 -- A reversed list of at least 1 p's
 rlist1(p) : p           { [$1]    }
@@ -341,9 +349,9 @@ termAsPat ex = do
     case asApp ex of
       (Var i, []) ->
         case asLocalIdent (val i) of
-          Just nm -> ret $ PVar (PosPair (pos i) nm)
+          Just nm -> ret $ PSimple $ PVar (PosPair (pos i) nm)
           _ -> badPat "Imported expressions"
-      (Unused i,[]) -> ret $ PUnused i
+      (Unused i,[]) -> ret $ PSimple $ PUnused i
       (Con i,l) -> fmap (fmap (PCtor i) . sequence) $ mapM termAsPat l
       (Sort{},_) -> badPat "Sorts"
 
@@ -384,15 +392,39 @@ exprAsPatList ex = go ex []
           mp <- termAsPat x
           return (maybe r (:r) mp)
 
+termAsSimplePat :: Term -> Parser (Maybe SimplePat)
+termAsSimplePat ex = do
+    case asApp ex of
+      (Var i, []) ->
+        case asLocalIdent (val i) of
+          Just nm -> ret $ PVar (PosPair (pos i) nm)
+          _ -> badPat "Imported expressions"
+      (BadTerm{}, _) -> return Nothing
+      (_, h:_) -> err (pos h) "Unexpected expression"
+  where ret r = return (Just r)
+        badPat nm = err (pos ex) (nm ++ " may not appear in patterns")
+        err p msg = addParseError p msg >> return Nothing
 
-type PiArg = (ParamType,[Pat],Term)
+-- Attempts to parses an expression as a list of identifiers.
+-- Will return a value on all expressions, but may add errors to parser state.
+exprAsSimplePatList :: Term -> Parser [SimplePat]
+exprAsSimplePatList ex = go ex []
+  where go (App x _ y) r = do
+          mp <- termAsSimplePat y
+          go x (maybe r (:r) mp)
+        go x r = do
+          mp <- termAsSimplePat x
+          return (maybe r (:r) mp)
+
+
+type PiArg = (ParamType,[SimplePat],Term)
 
 -- | Pi expressions should have one of the forms:
 -- * opt(ParamType) '(' list(Pat) '::' LTerm ')' '->' LTerm
 -- * opt(ParamType) AppTerm '->' LTerm
 mkPiArg :: (ParamType, Term) -> Parser PiArg
 mkPiArg (ppt, Paren _ (TypeConstraint x _ t)) =
-  (\pats -> (ppt, pats, t)) <$> exprAsPatList x
+  (\pats -> (ppt, pats, t)) <$> exprAsSimplePatList x
 mkPiArg (ppt,lhs) =
   return (ppt, [PUnused (PosPair (pos lhs) "_")], lhs)
 
@@ -433,7 +465,7 @@ type DeclLhs = (PosPair String, [(ParamType, Pat)])
 
 mkTypeDecl :: DeclLhs -> Term -> Parser Decl
 mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
-  where filterArgs ((NormalParam,PVar (PosPair p i)):l) r =
+  where filterArgs ((NormalParam,PSimple (PVar (PosPair p i))):l) r =
           filterArgs l (PosPair p i:r)
         filterArgs ((NormalParam,e):l) r = do
           addParseError (pos e) "Expected variable identifier in type declaration."

@@ -8,7 +8,6 @@ module Verifier.SAW.Position
   , PosPair(..)
   ) where
 
-import Data.Monoid
 import System.FilePath (makeRelative)
 
 data Pos = Pos { -- | Base directory to use for pretty printing purposes
