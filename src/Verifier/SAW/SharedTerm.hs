@@ -125,9 +125,9 @@ localVarType = undefined
 subst0 :: AppCacheRef s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 subst0 = undefined
 
-sortOfTerm :: AppCacheRef s -> SharedTerm s -> IO Sort
-sortOfTerm ac t = do
-  STApp _ (FTermF (Sort s)) <- typeOf ac t
+sortOfTerm :: AppCacheRef s -> (Ident -> IO (SharedTerm s)) -> SharedTerm s -> IO Sort
+sortOfTerm ac typeOfGlobal t = do
+  STApp _ (FTermF (Sort s)) <- typeOf ac typeOfGlobal t
   return s
 
 mkSharedSort :: AppCacheRef s -> Sort -> IO (SharedTerm s)
@@ -135,22 +135,23 @@ mkSharedSort ac s = getFlatTerm ac (Sort s)
 
 
 typeOfFTermF :: AppCacheRef s
+             -> (Ident -> IO (SharedTerm s))
              -> FlatTermF (SharedTerm s)
              -> IO (SharedTerm s)
-typeOfFTermF ac tf =
+typeOfFTermF ac typeOfGlobal tf =
   case tf of
-    GlobalDef d -> undefined d
+    GlobalDef d -> typeOfGlobal d
     App x y -> do
-      STApp _ (Pi _ _ rhs) <- typeOf ac x
+      STApp _ (Pi _ _ rhs) <- typeOf ac typeOfGlobal x
       subst0 ac rhs y
-    TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac) l
-    TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) l
-    RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac) m
+    TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac typeOfGlobal) l
+    TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac typeOfGlobal) l
+    RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac typeOfGlobal) m
     RecordSelector t f -> do
-      STApp _ (FTermF (RecordType m)) <- typeOf ac t
+      STApp _ (FTermF (RecordType m)) <- typeOf ac typeOfGlobal t
       let Just tp = Map.lookup f m
       return tp
-    RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) m
+    RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac typeOfGlobal) m
     CtorApp c args -> undefined c args
     DataTypeApp dt args -> undefined dt args
     Sort s -> mkSharedSort ac (sortOf s)
@@ -158,18 +159,19 @@ typeOfFTermF ac tf =
     ArrayValue tp _ -> undefined tp
 
 typeOf :: AppCacheRef s
+       -> (Ident -> IO (SharedTerm s))
        -> SharedTerm s
        -> IO (SharedTerm s)
-typeOf ac (STVar _ _ tp) = return tp
-typeOf ac (STApp _ tf) =
+typeOf ac _ (STVar _ _ tp) = return tp
+typeOf ac typeOfGlobal (STApp _ tf) =
   case tf of
-    FTermF ftf -> typeOfFTermF ac ftf
+    FTermF ftf -> typeOfFTermF ac typeOfGlobal ftf
     Lambda (PVar i _ _) tp rhs -> do
-      rtp <- typeOf ac rhs
+      rtp <- typeOf ac typeOfGlobal rhs
       getTerm ac (Pi i tp rtp)
     Pi _ tp rhs -> do
-      ltp <- sortOfTerm ac tp
-      rtp <- sortOfTerm ac rhs
+      ltp <- sortOfTerm ac typeOfGlobal tp
+      rtp <- sortOfTerm ac typeOfGlobal rhs
       mkSharedSort ac (max ltp rtp)
     Let defs rhs -> undefined defs rhs
     LocalVar _ tp -> return tp
@@ -420,14 +422,18 @@ mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newAppCacheRef
-  let shareDef d = do
-        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
-        return (defIdent d, t)
-  sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
-  let getDef sym =
-        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
-          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> return d
+--  let shareDef d = do
+--        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
+--        return (defIdent d, t)
+--  sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
+--  let getDef sym =
+--        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
+--          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
+--          Just d -> return d
+  let typeOfGlobal ident =
+        case findDef m ident of
+          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+          Just d -> sharedTerm cr (defType d)
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
@@ -436,37 +442,23 @@ mkSharedContext m = do
   return SharedContext {
              scModuleFn = return m
            , scFreshGlobalFn = freshGlobal
-           , scLookupDefFn = getDef
+           , scLookupDefFn = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
            , scDefTermFn = undefined
            , scApplyFn = \f x -> getFlatTerm cr (App f x)
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
            , scApplyCtorFn = undefined
-{-
            , scFunFn = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
                                   getTerm cr (Pi "_" a b')
--}
            , scLiteralFn = getFlatTerm cr . NatLit
            , scTupleFn = getFlatTerm cr . TupleValue
            , scTupleTypeFn = getFlatTerm cr . TupleType
-           , scTypeOfFn = typeOf cr
+           , scTypeOfFn = typeOf cr typeOfGlobal
            , scPrettyTermDocFn = undefined
            , scViewAsBoolFn = undefined
            , scViewAsNumFn = viewAsNum
            , scInstVarListFn = instantiateVarList cr
            }
-
-{-
--- | Strip equations from every GlobalDef, making the term acyclic.
--- This makes it possible to run @sharedTerm@ on the result. TODO:
--- Update the term representation to make this unnecessary.
-stripDefEqs :: Term -> Term
-stripDefEqs (Term termf) =
-    Term $ fmap stripDefEqs $
-         case termf of
-           FTermF (GlobalDef d) -> FTermF (GlobalDef d)
-           _ -> termf
--}
 
 asNatLit :: SharedTerm s -> Maybe Integer
 asNatLit (STApp _ (FTermF (NatLit i))) = Just i
