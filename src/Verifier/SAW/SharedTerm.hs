@@ -421,7 +421,7 @@ mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newAppCacheRef
   let shareDef d = do
-        t <- sharedTerm cr $ stripDefEqs $ Term (FTermF (GlobalDef (defIdent d)))
+        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
         return (defIdent d, t)
   sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
   let getDef sym =
@@ -454,15 +454,6 @@ mkSharedContext m = do
            , scInstVarListFn = instantiateVarList cr
            }
 
--- | Strip equations from every GlobalDef, making the term acyclic.
--- This makes it possible to run @sharedTerm@ on the result. TODO:
--- Update the term representation to make this unnecessary.
-stripDefEqs :: Term -> Term
-stripDefEqs (Term termf) =
-    Term $ fmap stripDefEqs $
-         case termf of
-           FTermF (GlobalDef d) -> FTermF (GlobalDef d)
-           _ -> termf
 asNatLit :: SharedTerm s -> Maybe Integer
 asNatLit (STApp _ (FTermF (NatLit i))) = Just i
 asNatLit _ = Nothing
