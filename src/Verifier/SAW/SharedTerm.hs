@@ -173,8 +173,8 @@ typeOf ac (STApp _ tf) =
       mkSharedSort ac (max ltp rtp)
     Let defs rhs -> undefined defs rhs
     LocalVar _ tp -> return tp
-    EqType{} -> undefined 
-    Oracle{} -> undefined
+--    EqType{} -> undefined 
+--    Oracle{} -> undefined
 
 {-
 -- | Monadic fold with memoization
@@ -239,7 +239,7 @@ instantiateVars ac f initialLevel t =
     go' l (Pi i lhs rhs)    = getTerm ac <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
     go' l (Let defs r) = getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
       where l' = l + length defs
-            procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
+            procDef :: LocalDef (SharedTerm s) -> ChangeT IO (LocalDef (SharedTerm s))
             procDef (LocalFnDef sym tp eqs) =
               LocalFnDef sym <$> go l tp <*> changeList procEq eqs
             procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
@@ -248,8 +248,8 @@ instantiateVars ac f initialLevel t =
     go' l (LocalVar i tp)
       | i < l     = getTerm ac <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
-    go' l (EqType lhs rhs) = getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
-    go' l (Oracle s prop) = getTerm ac <$> (Oracle s <$> go l prop)
+--    go' l (EqType lhs rhs) = getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
+--    go' l (Oracle s prop) = getTerm ac <$> (Oracle s <$> go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -421,7 +421,7 @@ mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newAppCacheRef
   let shareDef d = do
-        t <- sharedTerm cr $ stripDefEqs $ Term (FTermF (GlobalDef (defIdent d)))
+        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
         return (defIdent d, t)
   sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
   let getDef sym =
@@ -456,6 +456,7 @@ mkSharedContext m = do
            , scInstVarListFn = instantiateVarList cr
            }
 
+{-
 -- | Strip equations from every GlobalDef, making the term acyclic.
 -- This makes it possible to run @sharedTerm@ on the result. TODO:
 -- Update the term representation to make this unnecessary.
@@ -465,6 +466,8 @@ stripDefEqs (Term termf) =
          case termf of
            FTermF (GlobalDef d) -> FTermF (GlobalDef d)
            _ -> termf
+-}
+
 asNatLit :: SharedTerm s -> Maybe Integer
 asNatLit (STApp _ (FTermF (NatLit i))) = Just i
 asNatLit _ = Nothing

@@ -146,7 +146,7 @@ data Pat e = -- | Variable bound by pattern.
            | PRecord (Map FieldName (Pat e))
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
-           | PCtor (Ctor Ident e) [Pat e]
+           | PCtor Ident [Pat e]
   deriving (Eq,Ord, Show, Functor, Foldable, Traversable)
 
 patBoundVarCount :: Pat e -> DeBruijnIndex
@@ -170,11 +170,11 @@ patBoundVars p =
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y) 
 
-data LocalDef n e
-   = LocalFnDef n e [DefEqn e]
+data LocalDef e
+   = LocalFnDef String e [DefEqn e]
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-localVarNames :: LocalDef n e -> [n]
+localVarNames :: LocalDef e -> [String]
 localVarNames (LocalFnDef nm _ _) = [nm]
 
 -- A Definition contains an identifier, the type of the definition, and a list of equations.
@@ -182,7 +182,6 @@ data Def e = Def { defIdent :: Ident
                  , defType :: e
                  , defEqs :: [DefEqn e]
                  }
-  deriving (Functor, Foldable, Traversable)
 
 instance Eq (Def e) where
   (==) = lift2 defIdent (==)
@@ -312,16 +311,11 @@ data TermF e
     | Pi !String !e !e
        -- | List of bindings and the let expression itself.
       -- Let expressions introduce variables for each identifier.
-    | Let [LocalDef String e] !e
+    | Let [LocalDef e] !e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex !e
       -- | @EqType x y@ is a type representing the equality proposition @x = y@
-    | EqType e e
-      -- | @Oracle s t@ represents a proof of proposition @t@ (typically
-      -- of the form @EqType x y@, but possibly with extra @Pi@
-      -- quantifiers), which came from the trusted proof tool @s@.
-    | Oracle String e
   deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
@@ -338,7 +332,7 @@ ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> defEqs d))
   where sym = ppIdent (defIdent d)
         tpd = ppTypeConstraint ppTerm lcls sym (defType d)
 
-ppLocalDef :: TermPrinter e -> LocalVarDoc -> LocalDef String e -> Doc
+ppLocalDef :: TermPrinter e -> LocalVarDoc -> LocalDef e -> Doc
 ppLocalDef f lcls (LocalFnDef nm tp eqs) = tpd $$ vcat (ppDefEqn f lcls sym <$> eqs)
   where sym = text nm
         tpd = sym <+> doublecolon <+> f lcls 1 tp
@@ -365,7 +359,7 @@ ppPat f lcls p pat =
     PVar i _ _ -> text i
     PUnused{} -> char '_'
     PCtor c pl -> ppParens (p >= 10) $
-      ppIdent (ctorName c) <+> hsep (ppPat f lcls 10 <$> pl)
+      ppIdent c <+> hsep (ppPat f lcls 10 <$> pl)
     PTuple pl -> parens $ commaSepList $ ppPat f lcls 1 <$> pl
     PRecord m -> braces $ semiTermList $ ppFld <$> Map.toList m
       where ppFld (fld,v) = text fld <+> equals <+> ppPat f lcls 1 v
@@ -497,8 +491,8 @@ instantiateVars f initialLevel = go initialLevel
             LocalVar i tp
               | i < l -> Term $ LocalVar i (go l tp)
               | otherwise -> f l i (go l tp)
-            EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
-            Oracle s prop  -> Term $ Oracle s (go l prop)
+--            EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
+--            Oracle s prop  -> Term $ Oracle s (go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -561,8 +555,8 @@ ppTerm lcls p0 t =
          where nms = concatMap localVarNames dl
                lcls' = foldl' consBinding lcls nms
        ppTermF _ (LocalVar i _) = lookupDoc lcls i
-       ppTermF _ (EqType lhs rhs) = ppTerm lcls 1 lhs <+> equals <+> ppTerm lcls 1 rhs
-       ppTermF _ (Oracle s prop) = quotes (text s) <> parens (ppTerm lcls 0 prop)
+--       ppTermF _ (EqType lhs rhs) = ppTerm lcls 1 lhs <+> equals <+> ppTerm lcls 1 rhs
+--       ppTermF _ (Oracle s prop) = quotes (text s) <> parens (ppTerm lcls 0 prop)
 
 
 instance Show Term where
