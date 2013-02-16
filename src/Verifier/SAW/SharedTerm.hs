@@ -442,10 +442,8 @@ mkSharedContext m = do
            , scMkRecordFn = undefined
            , scRecordSelectFn = undefined
            , scApplyCtorFn = undefined
-{-
            , scFunFn = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
                                   getTerm cr (Pi "_" a b')
--}
            , scLiteralFn = getFlatTerm cr . NatLit
            , scTupleFn = getFlatTerm cr . TupleValue
            , scTupleTypeFn = getFlatTerm cr . TupleType
