@@ -11,20 +11,29 @@
 
 /* We start by declaring the types of some primitive functions. */
 
-/* We assume that these are well-typed, and check at runtime. */
-extract_cryptol : String -> String -> CryptolSetup () -> a;
-extract_llvm : String -> String -> LLVMSetup () -> a;
-extract_java : String -> JavaSetup () -> a;
-
 /* A VerifyResult encodes either a statement of what it proved, or a
- * counterexample.
+ * counterexample. These work like the method specs in the first version
+ * of SAWScript.
  */
 verify_cryptol : String -> String -> CryptolSetup () -> CryptolVerifyResult ();
 verify_llvm : String -> String -> LLVMSetup () -> LLVMVerifyResult ();
 verify_java : String -> JavaSetup () -> JavaVerifyResult ();
 
+/* Extract pure models from suitably well-structured programs. We assume
+ * that these are well-typed, and check at runtime.
+ */
+extract_cryptol : String -> String -> CryptolSetup () -> a;
+extract_llvm : String -> String -> LLVMSetup () -> a;
+extract_java : String -> JavaSetup () -> a;
+
+/* One method is currently available for Cryptol extraction. */
+sbv : CryptolSetup ();
+
 /* A successful proof about a method can be used to override calls to
- * the method.
+ * the method. The requirement to provide verification results serves
+ * two purposes:
+ *   - it tells the simulator how to provide inputs and interpret outputs
+ *   - it ensures soundness by only allowing overrides that are proven correct
  */
 override_llvm : [LLVMVerifyResult ()] -> LLVMSetup ();
 override_java : [JavaVerifyResult ()] -> JavaSetup ();
@@ -32,7 +41,11 @@ override_java : [JavaVerifyResult ()] -> JavaSetup ();
 /* We can uninterpret particular names along with overrides. Is this
  * the right approach? For Cryptol, uninterpreting is the only form of
  * overriding. For LLVM and Java, it can complement overriding by causing
- * portions of the overriding model to be left uninterpreted.
+ * portions of the overriding model to be left uninterpreted. It would be
+ * nice if it could have this more polymorphic type, and be usable in
+ * various contexts, rather than being specialized to one language. Not
+ * sure how to do that at the moment, without introducing a lot of
+ * machinery, so it just fakes it with the "Setup" type.
  */
 uninterpret : [String] -> Setup ();
 
@@ -56,36 +69,29 @@ output : a -> Setup ();
  */
 input : a -> Setup ();
 
-/* Assume a particular starting condition. */
-assume : a -> Setup ();
-
 /* Assert a particular starting condition. */
-assert : a -> Setup ();
+assert : Bit -> Setup ();
+
+/* Assign the given value to the given object before execution. */
+assume_equal_java : JavaObject -> a -> JavaSetup();
+assume_equal_llvm : LLVMObject -> a -> LLVMSetup();
 
 /* Ensure that the given object is assigned the given value on
  * termination.
  */
-ensureEqualJava : JavaObject -> a -> JavaSetup ();
-ensureEqualLLVM : LLVMObject -> a -> LLVMSetup ();
+ensure_equal_java : JavaObject -> a -> JavaSetup ();
+ensure_equal_llvm : LLVMObject -> a -> LLVMSetup ();
+
+/* Java and LLVM statements that a particular object is modified with
+ * an arbitrary value.
+ */
+modify_java : JavaObject -> JavaSetup ();
+modify_llvm : LLVMObject -> JavaSetup ();
 
 /* We can verify a function by writing a proof script. */
 verify : ProofScript () -> Setup ();
 
 /* These work in the context of an implicit goal. */
-
-/* Send the current goal to Yices, and return proof status. */
-yices : ProofScript ProofResult;
-
-/* Send the current goal to abc, and return proof status. */
-abc : ProofScript ProofResult;
-
-/* Rewrite the current goal with a default set of rules, and return
- * the rewritten term (also updating the implicit state?).
- */
-rewrite : ProofScript Goal;
-
-/* Rewrite with a specific set of results. */
-rewrite_with : [Rule] -> ProofScript Goal;
 
 /* These allow us to refer to objects in the LLVM world. */
 llvm_var : String -> LLVMType -> LLVMObject;
@@ -121,8 +127,23 @@ may_alias_java : [JavaObject] -> LLVMSetup ();
 from_llvm : LLVMObject -> a;
 from_java : JavaObject -> a;
 
+/* Send the current goal to Yices, and return proof status. */
+yices : ProofScript ProofResult;
+
+/* Send the current goal to abc, and return proof status. */
+abc : ProofScript ProofResult;
+
+/* Rewrite rules. */
 rule : a -> a -> Rule;
 expand : a -> Rule;
+
+/* Rewrite the current goal with a default set of rules, and return
+ * the rewritten term (also updating the implicit state?).
+ */
+rewrite : ProofScript Goal;
+
+/* Rewrite with a specific set of results. */
+rewrite_with : [Rule] -> ProofScript Goal;
 
 goal : Bit -> Goal;
 forall : (a -> Goal) -> Goal;
