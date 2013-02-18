@@ -306,6 +306,8 @@ lexer f = do
             | otherwise -> f tkn 
   go Nothing (read (0::Integer))
 
+-- | Run parser given a directory for the base (used for making pathname relative),
+-- bytestring to parse, and parser to run.
 runParser :: FilePath -> FilePath -> B.ByteString -> Parser a -> (a,ErrorList)
 runParser base path b (Parser m) = (r, reverse (psErrors s))
   where initState = PS { psInput = initialAlexInput base path b, psErrors = [] }

@@ -10,7 +10,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Typechecker
-  ( unsafeMkModule
+  ( tcModule
   ) where
 
 import Control.Applicative
@@ -513,10 +513,10 @@ includeNameInModule mic = fn . identName
                  where imset = importNameStrings iml
 
 -- | Creates a module from a list of untyped declarations.
-unsafeMkModule :: [Module] -- ^ List of modules loaded already.
+tcModule :: [Module] -- ^ List of modules loaded already.
                -> Un.Module
                -> Either Doc Module
-unsafeMkModule ml (Un.Module (PosPair _ nm) iml d) = do
+tcModule ml (Un.Module (PosPair _ nm) iml d) = do
   let moduleMap = projMap moduleName ml
   runTC $ do
     let gc0 = emptyGlobalContext
@@ -626,7 +626,7 @@ liftTCCtorType :: Ident -> TermContext s -> Term -> TC s TCCtorType
 liftTCCtorType dt tc0 t0 = liftFixedType fn tc0 t0
   where fn tc (Term (FTermF (DataTypeApp i tl))) | dt == i = do
           FPResult <$> traverse (liftTCTerm tc) tl
-        fn _ t = fail $ "Unexpected term to liftTCCtorType " ++ show dt ++ ":\n  " ++ show t0
+        fn _ _ = fail $ "Unexpected term to liftTCCtorType " ++ show dt ++ ":\n  " ++ show t0
 
 -- | Typechecker computation that needs input before running.
 type PendingAction s a = a -> TC s ()
