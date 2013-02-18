@@ -59,17 +59,17 @@ main = do {
   /* Since Ch is such a simple function, we can extract it directly
    * from an LLVM implementation without any fuss. */
   llvm_Ch : ([64],[64],[64]) -> [64];
-  llvm_Ch <- extract_llvm "sha384.bc" "Ch" pure;
+  llvm_Ch <- extract_llvm "sha384.bc" "Ch" pure_llvm;
 
   /* Same for some others. */
   llvm_Maj : ([64],[64],[64]) -> [64];
-  llvm_Maj <- extract_llvm "sha384.bc" "Maj" pure;
+  llvm_Maj <- extract_llvm "sha384.bc" "Maj" pure_llvm;
   llvm_Sum0 : ([64]) -> [64];
-  llvm_Sum0 <- extract_llvm "sha384.bc" "Sum0" pure;
+  llvm_Sum0 <- extract_llvm "sha384.bc" "Sum0" pure_llvm;
   llvm_Sum1 : ([64]) -> [64];
-  llvm_Sum1 <- extract_llvm "sha384.bc" "Sum1" pure;
+  llvm_Sum1 <- extract_llvm "sha384.bc" "Sum1" pure_llvm;
   llvm_ROTR : ([64], [64]) -> [64];
-  llvm_ROTR <- extract_llvm "sha384.bc" "ROTR" pure;
+  llvm_ROTR <- extract_llvm "sha384.bc" "ROTR" pure_llvm;
 
   /* We can state a simple theorem that the Cryptol and LLVM
    * implementations are equivalent. */
@@ -111,8 +111,8 @@ main = do {
     y <- llvm_var "y" (llvm_int 64);
     z <- llvm_var "z" (llvm_int 64);
     /* Alternatively: x <- argLLVM 0 (llvm_int 64) */
-    returns cryptol_Ch(from_llvm(x), from_llvm(y), from_llvm(z));
-    verify abc;
+    return_llvm cryptol_Ch(from_llvm(x), from_llvm(y), from_llvm(z));
+    verify_llvm abc;
   });
   show_result llvm_Ch_result;
 
@@ -129,11 +129,11 @@ main = do {
     override_llvm [llvm_S0_result, llvm_S1_result];
 
     /* In the result, leave these functions uninterpreted. */
-    uninterpret ["LowerSigma_0", "LowerSigma_1"];
+    uninterpret_llvm ["LowerSigma_0", "LowerSigma_1"];
 
-    returns cryptol_Block512_W(from_llvm(w2), from_llvm(w7),
+    return_llvm cryptol_Block512_W(from_llvm(w2), from_llvm(w7),
                                from_llvm(w15), from_llvm(w16));
-    verify abc;
+    verify_llvm abc;
   });
 
   llvm_sha384_init_result <- verify_llvm "sha384.bc" "sha384_init" (do {
@@ -178,6 +178,6 @@ main = do {
     
     /* This tells us what model to return. No "input" clauses means
      * it'll be a constant. */
-    output res;
+    output_llvm res;
   });
 };

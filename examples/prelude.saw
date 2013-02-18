@@ -1,12 +1,15 @@
 /* Questions:
- *   - should we have lists? Useful for rule lists, override lists, uninterpret lists
- *   - can we have some built-ins polymorphic over block type? Or a generic block
-       within an LLVM or Java block?
+ *   - should we have lists? Useful for rule lists, override lists,
+ *     uninterpret lists
+ *   - can we have some built-ins polymorphic over block type? Or a generic
+ *     block within an LLVM or Java block?
  *   - should we have different top-level versus spec-level proof commands?
  *   - is the LLVMObject/JavaObject approach reasonable?
  *   - should the type parameter in CryptolSetup, etc., be used for anything
  *     in the simulators?
  *   - should we use  underscore_naming or camelCase?
+ *   - what sort of syntactic sugar should we provide on top of these
+ *     primitive functions?
  */
 
 /* We start by declaring the types of some primitive functions. */
@@ -29,6 +32,12 @@ extract_java : String -> JavaSetup () -> a;
 /* One method is currently available for Cryptol extraction. */
 sbv : CryptolSetup ();
 
+/* Set up symbolic simulation for a pure function from fixed-size arguments
+ * to fixed-size return value.
+ */
+pure_llvm : LLVMSetup ();
+pure_java : LLVMSetup ();
+
 /* A successful proof about a method can be used to override calls to
  * the method. The requirement to provide verification results serves
  * two purposes:
@@ -41,13 +50,10 @@ override_java : [JavaVerifyResult ()] -> JavaSetup ();
 /* We can uninterpret particular names along with overrides. Is this
  * the right approach? For Cryptol, uninterpreting is the only form of
  * overriding. For LLVM and Java, it can complement overriding by causing
- * portions of the overriding model to be left uninterpreted. It would be
- * nice if it could have this more polymorphic type, and be usable in
- * various contexts, rather than being specialized to one language. Not
- * sure how to do that at the moment, without introducing a lot of
- * machinery, so it just fakes it with the "Setup" type.
+ * portions of the overriding model to be left uninterpreted.
  */
-uninterpret : [String] -> Setup ();
+java_uninterpret : [String] -> JavaSetup ();
+llvm_uninterpret : [String] -> LLVMSetup ();
 
 /* It would be nice to allow some sort of type classing, or something
  * similar, so that certain operations would be legal in multiple
@@ -57,20 +63,24 @@ uninterpret : [String] -> Setup ();
 /* State that the current function returns the given value. We assume,
  * again, that the argument is of the right type, and check at runtime.
  */
-returns : a -> Setup ();
+java_return : a -> JavaSetup ();
+llvm_return : a -> LLVMSetup ();
 
 /* Declare that the particular expression is an output, for model
  * extraction.
  */
-output : a -> Setup ();
+java_output : a -> JavaSetup ();
+llvm_output : a -> LLVMSetup ();
 
 /* Declare that the particular expression is an input, for model
  * extraction.
  */
-input : a -> Setup ();
+java_input : a -> JavaSetup ();
+llvm_input : a -> LLVMSetup ();
 
 /* Assert a particular starting condition. */
-assert : Bit -> Setup ();
+assert_java : Bit -> JavaSetup ();
+assert_llvm : Bit -> LLVMSetup ();
 
 /* Assign the given value to the given object before execution. */
 assume_equal_java : JavaObject -> a -> JavaSetup();
@@ -89,7 +99,8 @@ modify_java : JavaObject -> JavaSetup ();
 modify_llvm : LLVMObject -> JavaSetup ();
 
 /* We can verify a function by writing a proof script. */
-verify : ProofScript () -> Setup ();
+verify_java : ProofScript () -> JavaSetup ();
+verify_llvm : ProofScript () -> LLVMSetup (); 
 
 /* These work in the context of an implicit goal. */
 
@@ -133,6 +144,11 @@ yices : ProofScript ProofResult;
 /* Send the current goal to abc, and return proof status. */
 abc : ProofScript ProofResult;
 
+/* Prove the same goal with multiple provers. */
+multi_prove : [ProofScript ProofResult] -> ProofScript ProofResult;
+
+/* TODO: might some theorem provers return new, simplified goals? */
+
 /* Rewrite rules. */
 rule : a -> a -> Rule;
 expand : a -> Rule;
@@ -145,7 +161,10 @@ rewrite : ProofScript Goal;
 /* Rewrite with a specific set of results. */
 rewrite_with : [Rule] -> ProofScript Goal;
 
+/* Any boolean expression can be a goal. */
 goal : Bit -> Goal;
+
+/* Goals can have quantifiers added. */
 forall : (a -> Goal) -> Goal;
 exists : (a -> Goal) -> Goal;
 
@@ -154,9 +173,10 @@ Example:
   forall (\a -> exists (\b -> goal (a == b)))
 */
 
-prove : Goal -> ProofScript ProofResult;
-sat : Goal -> ProofScript ProofResult;
-quickcheck : Goal -> ProofScript ProofResult;
+/* Top level proof commands. */
+prove : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
+sat : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
+quickcheck : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
 
 /* Printing is polymorphic for now. */
 print : a -> TopLevel ()
@@ -181,9 +201,3 @@ show_result : ProofResult () -> TopLevel ()
 show_result r = proof_result r
                 (\thm -> print "Success!")
                 (\cex -> do { print "Failure:" ; print cex })
-
-/* Pure is a simulator setup block that does nothing. The simulators
- * will then use defaults that work well for pure functions.
- */
-pure : Setup ()
-pure = do {};
