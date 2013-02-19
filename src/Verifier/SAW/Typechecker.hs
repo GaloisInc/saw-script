@@ -432,11 +432,10 @@ completeDataType :: CompletionContext
                  -> TCDataType
                  -> TypedDataType
 completeDataType cc (DataTypeGen dt tp cl) = 
-  ( DataType { dtName = dt
-             , dtType = completeTerm cc (termFromTCDTType tp)
-             }
-  , fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
-  )
+  DataType { dtName = dt
+           , dtType = completeTerm cc (termFromTCDTType tp)
+           , dtCtors = fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
+           }
 
 completeDef :: CompletionContext
             -> TCDef
@@ -695,11 +694,11 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
                               (\s -> Un.mkModuleName [s])
                               (val <$> mAsName)
       -- Add datatypes to module
-      for_ (moduleDataTypes m) $ \(dt, ctors) -> do
+      for_ (moduleDataTypes m) $ \dt -> do
         let dtnm = dtName dt
         dtr <- addPending (identName dtnm) $ \tc -> liftTCDataType tc (dtType dt)
         -- Add constructors to module.
-        cl <- for ctors $ \c -> do
+        cl <- for (dtCtors dt) $ \c -> do
           let cnm = ctorName c
               cfn tc = liftTCCtorType dtnm tc (ctorType c)
           let use = includeNameInModule mcns cnm
