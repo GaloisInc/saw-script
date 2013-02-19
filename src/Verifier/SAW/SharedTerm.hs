@@ -375,7 +375,7 @@ scNat = error "scNat unimplemented"
 -- | Obtain term representation a bitvector with a given width and known
 -- value.
 scBitvector :: (?sc :: SharedContext s)
-            => (SharedTerm s)
+            => SharedTerm s
             -> Integer
             -> IO (SharedTerm s)
 scBitvector = error "scBitvector unimplemented"
