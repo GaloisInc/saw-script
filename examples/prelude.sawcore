@@ -1,0 +1,228 @@
+module SAWScriptPrelude where
+
+-- Questions:
+--   - should we have lists? Useful for rule lists, override lists,
+--     uninterpret lists
+--   - can we have some built-ins polymorphic over block type? Or a generic
+--     block within an LLVM or Java block?
+--   - should we have different top-level versus spec-level proof commands?
+--   - is the LLVMObject/JavaObject approach reasonable?
+--   - should the type parameter in CryptolSetup, etc., be used for anything
+--     in the simulators?
+--   - should we use  underscore_naming or camelCase?
+--   - what sort of syntactic sugar should we provide on top of these
+--     primitive functions?
+--
+
+data Nat :: sort 0 where { }
+data Bool :: sort 0 where { }
+
+data Unit :: sort 0 where { }
+data String :: sort 0 where { }
+data TopLevel :: sort 0 -> sort 0 where { }
+data CryptolSetup :: sort 0 -> sort 0 where { }
+data CryptolVerifyResult :: sort 0 where { }
+data JavaSetup :: sort 0 -> sort 0 where { }
+data JavaVerifyResult :: sort 0 where { }
+data LLVMSetup :: sort 0 -> sort 0 where { }
+data LLVMVerifyResult :: sort 0 where { }
+data List :: sort 0 -> sort 0 where { }
+
+-- We start by declaring the types of some primitive functions.
+
+-- A VerifyResult encodes either a statement of what it proved, or a
+-- counterexample. These work like the method specs in the first version
+-- of SAWScript.
+verify_cryptol :: String -> String -> CryptolSetup Unit
+               -> TopLevel CryptolVerifyResult;
+verify_llvm :: String -> String -> LLVMSetup Unit -> TopLevel LLVMVerifyResult;
+verify_java :: String -> JavaSetup Unit -> TopLevel JavaVerifyResult;
+
+-- Extract pure models from suitably well-structured programs. We assume
+-- that these are well-typed, and check at runtime.
+extract_cryptol :: ?(a :: sort 0) -> String -> String -> CryptolSetup Unit -> a;
+extract_llvm :: ?(a :: sort 0) -> String -> String -> LLVMSetup Unit -> a;
+extract_java :: ?(a :: sort 0) -> String -> JavaSetup Unit -> a;
+
+-- One method is currently available for Cryptol extraction.
+sbv :: CryptolSetup Unit;
+
+-- Set up symbolic simulation for a pure function from fixed-size arguments
+-- to fixed-size return value.
+pure_llvm :: LLVMSetup Unit;
+pure_java :: LLVMSetup Unit;
+
+-- A successful proof about a method can be used to override calls to
+-- the method. The requirement to provide verification results serves
+-- two purposes:
+--   - it tells the simulator how to provide inputs and interpret outputs
+--   - it ensures soundness by only allowing overrides that are proven correct
+override_llvm :: List LLVMVerifyResult -> LLVMSetup Unit;
+override_java :: List JavaVerifyResult -> JavaSetup Unit;
+
+-- We can uninterpret particular names along with overrides. Is this
+-- the right approach? For Cryptol, uninterpreting is the only form of
+-- overriding. For LLVM and Java, it can complement overriding by causing
+-- portions of the overriding model to be left uninterpreted.
+java_uninterpret :: List String -> JavaSetup Unit;
+llvm_uninterpret :: List String -> LLVMSetup Unit;
+
+-- It would be nice to allow some sort of type classing, or something
+-- similar, so that certain operations would be legal in multiple
+-- contexts (e.g., Java and LLVM).
+
+-- State that the current function returns the given value. We assume,
+-- again, that the argument is of the right type, and check at runtime.
+java_return :: ?(a :: sort 0) -> a -> JavaSetup Unit;
+llvm_return :: ?(a :: sort 0) -> a -> LLVMSetup Unit;
+
+-- Declare that the particular expression is an output, for model
+-- extraction.
+java_output :: ?(a :: sort 0) -> a -> JavaSetup Unit;
+llvm_output :: ?(a :: sort 0) -> a -> LLVMSetup Unit;
+
+-- Declare that the particular expression is an input, for model
+-- extraction.
+java_input :: ?(a :: sort 0) -> a -> JavaSetup Unit;
+llvm_input :: ?(a :: sort 0) -> a -> LLVMSetup Unit;
+
+-- Assert a particular starting condition.
+assert_java :: Bool -> JavaSetup Unit;
+assert_llvm :: Bool -> LLVMSetup Unit;
+
+data JavaObject :: sort 0 where { }
+data LLVMObject :: sort 0 where { }
+
+-- Assign the given value to the given object before execution.
+assume_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup Unit;
+assume_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup Unit;
+
+-- Ensure that the given object is assigned the given value on
+-- termination.
+ensure_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup Unit;
+ensure_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup Unit;
+
+-- Java and LLVM statements that a particular object is modified with
+-- an arbitrary value.
+modify_java :: JavaObject -> JavaSetup Unit;
+modify_llvm :: LLVMObject -> JavaSetup Unit;
+
+data ProofScript :: sort 0 -> sort 0 where { }
+data ProofResult :: sort 0 where { }
+
+-- We can verify a function by writing a proof script.
+verify_java :: ProofScript Unit -> JavaSetup Unit;
+verify_llvm :: ProofScript Unit -> LLVMSetup Unit; 
+
+-- These work in the context of an implicit goal.
+
+data JavaType :: sort 0 where { }
+data LLVMType :: sort 0 where { }
+
+data JavaObject :: sort 0 where { }
+data LLVMObject :: sort 0 where { }
+
+-- These allow us to refer to objects in the LLVM world.
+llvm_var :: String -> LLVMType -> LLVMObject;
+llvm_arg :: Nat -> LLVMType -> LLVMObject;
+llvm_field :: LLVMObject -> String -> LLVMObject;
+llvm_deref :: LLVMObject -> LLVMObject;
+
+-- And in the Java world.
+java_var :: String -> JavaType -> JavaObject;
+java_arg :: Nat -> JavaType -> JavaObject;
+java_field :: JavaObject -> String -> JavaObject;
+
+-- And LLVM types.
+llvm_struct :: String -> LLVMType;
+llvm_ptr :: LLVMType -> LLVMType;
+llvm_int :: Nat -> LLVMType; -- An LLVM integer with the given number of bits.
+llvm_array :: Nat -> LLVMType -> LLVMType;
+
+-- And Java types.
+java_class :: String -> JavaType;
+java_array :: Nat -> JavaType -> JavaType;
+java_byte :: JavaType;
+java_char :: JavaType;
+java_int :: JavaType;
+java_long :: JavaType;
+
+may_alias_llvm :: List LLVMObject -> LLVMSetup Unit;
+may_alias_java :: List JavaObject -> LLVMSetup Unit;
+
+-- This allows us to project from an LLVM value into a native value.
+-- We assume that these are well-typed, and check at runtime.
+from_llvm :: ?(a :: sort 0) -> LLVMObject -> a;
+from_java :: ?(a :: sort 0) -> JavaObject -> a;
+
+-- Send the current goal to Yices, and return proof status.
+yices :: ProofScript ProofResult;
+
+-- Send the current goal to abc, and return proof status.
+abc :: ProofScript ProofResult;
+
+-- Prove the same goal with multiple provers.
+multi_prove :: List (ProofScript ProofResult) -> ProofScript ProofResult;
+
+-- TODO: might some theorem provers return new, simplified goals?
+
+data Rule :: sort 0 where { }
+data Goal :: sort 0 where { }
+
+-- Rewrite rules.
+rule :: ?(a :: sort 0) -> a -> a -> Rule;
+expand :: ?(a :: sort 0) -> a -> Rule;
+
+-- Rewrite the current goal with a default set of rules, and return
+-- the rewritten term (also updating the implicit state?).
+rewrite :: ProofScript Goal;
+
+-- Rewrite with a specific set of results.
+rewrite_with :: List Rule -> ProofScript Goal;
+
+-- Any boolean expression can be a goal.
+goal :: Bool -> Goal;
+
+-- Goals can have quantifiers added.
+forall :: ?(a :: sort 0) -> (a -> Goal) -> Goal;
+exists :: ?(a :: sort 0) -> (a -> Goal) -> Goal;
+
+-- Example:
+--   forall (\a -> exists (\b -> goal (a == b)))
+
+-- Top level proof commands.
+prove :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
+sat :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
+quickcheck :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
+
+-- Printing is polymorphic for now.
+print :: ?(a :: sort 0) -> a -> TopLevel Unit;
+
+data JavaOverride :: sort 0 where { }
+data LLVMOverride :: sort 0 where { }
+data JavaCounterExample :: sort 0 where { }
+data LLVMCounterExample :: sort 0 where { }
+data Theorem :: sort 0 where { }
+
+java_verify_result :: ?(a :: sort 0)
+                   -> JavaVerifyResult
+                   -> (JavaOverride -> a)
+                   -> (JavaCounterExample -> a)
+                   -> a;
+
+llvm_verify_result :: ?(a :: sort 0)
+                   -> LLVMVerifyResult
+                   -> (LLVMOverride -> a)
+                   -> (LLVMCounterExample -> a)
+                   -> a;
+
+--proof_result :: ?(a :: sort 0)
+--             -> ProofResult -> (Theorem -> a) -> (CounterExample -> a) -> a;
+
+-- Something to make it easy to print the result of a proof. We don't
+-- have case expressions in the language at the moment, and instead use
+-- destructor functions for any built-in algebraic data types.
+--show_result :: ProofResult Unit -> TopLevel Unit
+--show_result r = proof_result r
+--                (\thm -> print "Success!")
+--                (\cex -> do { print "Failure:" ; print cex })
