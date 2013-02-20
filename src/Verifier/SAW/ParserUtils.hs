@@ -9,6 +9,7 @@ module Verifier.SAW.ParserUtils
  , DecWriter
  , runDecWriter
  , DecExp(..) 
+ , importExp
  , mkDecModule
  , decSharedCtorApp
  , decSharedDefApp
@@ -79,11 +80,6 @@ readByteStringExpr modules path = do
     (_,errors) -> fail $ "Failed to parse prelude:\n" ++ show errors
 
 
--- | Contains a value and an expression that will evaluate to it at runtime.
-data DecExp a = DecExp { decExp :: !Exp
-                       , decVal :: !a
-                       }
-
 data DecWriterState = DecWriterState { dwDecs :: [Dec]
                                      }
 
@@ -95,6 +91,12 @@ type DecWriter = StateT DecWriterState Q
 runDecWriter :: DecWriter () -> Q [Dec]
 runDecWriter m = dwDecs <$> execStateT m s
   where s = DecWriterState { dwDecs = [] }
+
+
+-- | Contains a value and an expression that will evaluate to it at runtime.
+data DecExp a = DecExp { decExp :: !Exp
+                       , decVal :: !a
+                       }
 
 -- | Define a declared 
 importExp :: ExpQ -> a -> DecWriter (DecExp a)
