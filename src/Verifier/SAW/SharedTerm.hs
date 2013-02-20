@@ -283,10 +283,9 @@ instantiateVarChangeT ac k t0 t =
         fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
-        fn = undefined
---        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
---                 | j == i + k = taint $ return <$> term i
---                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
+        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
+                 | j == i + k = taint $ return <$> term i
+                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
 
 instantiateVar :: AppCacheRef s
                -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)

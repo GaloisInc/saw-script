@@ -228,6 +228,7 @@ ppCtor f c = ppIdent (ctorName c) <+> doublecolon <+> tp
 
 data DataType n t = DataType { dtName :: n
                              , dtType :: t
+                             , dtCtors :: [Ctor n t]
                              }
   deriving (Functor, Foldable, Traversable)
 
@@ -240,11 +241,10 @@ instance Ord n => Ord (DataType n t) where
 instance Show n => Show (DataType n t) where
   show = show . dtName
 
-ppDataType :: TermPrinter e -> (DataType Ident e, [Ctor Ident e]) -> Doc
-ppDataType f (dt, ctors) =
-    text "data" <+> tc <+> text "where" <+> lbrace $$
-      nest 4 (vcat (ppc <$> ctors)) $$
-      nest 2 rbrace
+ppDataType :: TermPrinter e -> DataType Ident e -> Doc
+ppDataType f dt = text "data" <+> tc <+> text "where" <+> lbrace $$
+                    nest 4 (vcat (ppc <$> dtCtors dt)) $$
+                    nest 2 rbrace
   where lcls = emptyLocalVarDoc
         sym = ppIdent (dtName dt)
         tc = ppTypeConstraint f lcls sym (dtType dt)
@@ -259,6 +259,7 @@ data FlatTermF e
     -- A tuple of a single element is not allowed in well-formed expressions.
   | TupleValue [e]
   | TupleType [e]
+  | TupleSelector e Int
 
   | RecordValue (Map FieldName e)
   | RecordSelector e FieldName
@@ -427,6 +428,7 @@ ppFlatTermF pp prec tf =
     App l r -> ppParens (prec >= 10) <$> liftA2 (<+>) (pp 10 l) (pp 10 r)
     TupleValue l -> parens . commaSepList <$> traverse (pp 1) l
     TupleType l -> (char '#' <>) . parens . commaSepList <$> traverse (pp 1) l
+    TupleSelector t i -> ppParens (prec >= 10) . (<> (char '.' <> int i)) <$> pp 11 t
     RecordValue m -> ppRecordF (pp 1) m
     RecordSelector t f -> ppParens (prec >= 10) . (<> (char '.' <> text f)) <$> pp 11 t
     RecordType m -> (char '#' <>) <$> ppRecordF (pp 1) m
@@ -562,7 +564,7 @@ ppTerm lcls p0 t =
 instance Show Term where
   showsPrec p t = shows $ ppTerm emptyLocalVarDoc p t
 
-type TypedDataType = (DataType Ident Term, [TypedCtor])
+type TypedDataType = DataType Ident Term
 type TypedCtor = Ctor Ident Term
 type TypedDef = Def Term
 type TypedDefEqn = DefEqn Term
@@ -596,8 +598,8 @@ findDataType :: Module -> Ident -> Maybe TypedDataType
 findDataType m i = Map.lookup i (moduleTypeMap m)
 
 insDataType :: Module -> TypedDataType -> Module
-insDataType m dt = m { moduleTypeMap = Map.insert (dtName (fst dt)) dt (moduleTypeMap m)
-                     , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (snd dt)
+insDataType m dt = m { moduleTypeMap = Map.insert (dtName dt) dt (moduleTypeMap m)
+                     , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
                      , moduleRDecls = TypeDecl dt : moduleRDecls m
                      }
   where insCtor m' c = Map.insert (ctorName c) c m' 

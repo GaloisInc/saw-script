@@ -169,6 +169,7 @@ RecTerm :: { Term }
 RecTerm : AtomTerm              { $1 }
         | ConDotList '.' Var    { Var (identFromList1 ($3 : $1)) }
         | RecTerm '.' FieldName { RecordSelector $1 $3 }
+        | RecTerm '.' nat       { TupleSelector $1 (fmap tokNat $3) }
 
 AtomTerm :: { Term }
 AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
