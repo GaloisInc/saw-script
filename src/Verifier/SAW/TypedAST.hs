@@ -259,6 +259,7 @@ data FlatTermF e
     -- A tuple of a single element is not allowed in well-formed expressions.
   | TupleValue [e]
   | TupleType [e]
+  | TupleSelector e Int
 
   | RecordValue (Map FieldName e)
   | RecordSelector e FieldName
@@ -427,6 +428,7 @@ ppFlatTermF pp prec tf =
     App l r -> ppParens (prec >= 10) <$> liftA2 (<+>) (pp 10 l) (pp 10 r)
     TupleValue l -> parens . commaSepList <$> traverse (pp 1) l
     TupleType l -> (char '#' <>) . parens . commaSepList <$> traverse (pp 1) l
+    TupleSelector t i -> ppParens (prec >= 10) . (<> (char '.' <> int i)) <$> pp 11 t
     RecordValue m -> ppRecordF (pp 1) m
     RecordSelector t f -> ppParens (prec >= 10) . (<> (char '.' <> text f)) <$> pp 11 t
     RecordType m -> (char '#' <>) <$> ppRecordF (pp 1) m

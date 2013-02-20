@@ -318,6 +318,12 @@ inferTerm tc uut = do
       (tpl,sl) <- unzip <$> traverse (tcType tc) tl
       return $ TypedValue (TCF (TupleType tpl))
                           (TCF (Sort (maximumSort sl)))
+    Un.TupleSelector ux (PosPair p i) -> do
+      (x,tp) <- inferTypedValue tc ux
+      ts <- reduceToTupleType tc p tp
+      case lookup i (zip [1..] ts) of
+        Nothing -> tcFail p $ "No component number " ++ show i ++ " in tuple."
+        Just ftp -> return $ TypedValue (TCF (TupleSelector x (fromIntegral i))) ftp
 
     Un.RecordValue p (unzip -> (fmap val -> fl,vl))
         | hasDups fl -> tcFail p "Duplicate fields in record"
@@ -397,6 +403,14 @@ reduceToRecordType tc p tp = do
   case rtp of
     TCF (RecordType m) -> return m
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$ 
+                       nest 2 (ppTCTerm tc 0 rtp)
+
+reduceToTupleType :: TermContext s -> Pos -> TCTerm -> TC s [TCTerm]
+reduceToTupleType tc p tp = do
+  rtp <- reduce tc tp
+  case rtp of
+    TCF (TupleType ts) -> return ts
+    _ -> tcFailD p $ text "Attempt to dereference component of term with type:" $$ 
                        nest 2 (ppTCTerm tc 0 rtp)
 
 topEval :: TCRef s v -> TC s v
