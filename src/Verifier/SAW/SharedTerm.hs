@@ -17,11 +17,13 @@ module Verifier.SAW.SharedTerm
     -- * High-level SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
+    -- ** Low-level generic term constructors
+  , scTermF
+  , scFlatTermF
     -- ** Implicit versions of functions.
   , scDefTerm
   , scFreshGlobal
   , scModule
-  , scTermF
   , scApply
   , scApplyAll
   , scMkRecord
@@ -335,14 +337,8 @@ data SharedContext s = SharedContext
   -- constant exists in the module.
   , scLookupDef     :: String -> IO (SharedTerm s)
   , scDefTerm       :: TypedDef -> IO (SharedTerm s)
-  , scApply         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-  , scMkRecord      :: Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-  , scRecordSelect  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
   , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
   , scFun           :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-  , scLiteral       :: Integer -> IO (SharedTerm s)
-  , scTuple         :: [SharedTerm s] -> IO (SharedTerm s)
-  , scTupleType     :: [SharedTerm s] -> IO (SharedTerm s)
   , scTypeOf        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDoc :: SharedTerm s -> Doc
   -- | Returns term as a constant Boolean if it can be evaluated as one.
@@ -353,11 +349,34 @@ data SharedContext s = SharedContext
   , scInstVarList   :: DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
   }
 
+scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
+scFlatTermF sc ftf = scTermF sc (FTermF ftf)
+
+scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scApply sc f x = scFlatTermF sc (App f x)
+
 scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll sc = foldlM (scApply sc)
 
+scLiteral :: SharedContext s -> Integer -> IO (SharedTerm s)
+scLiteral sc n
+  | 0 <= n = scFlatTermF sc (NatLit n)
+  | otherwise = error $ "scLiteral: negative value " ++ show n
+
+scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
+scMkRecord sc m = scFlatTermF sc (RecordValue m)
+
+scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
+scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
+
 scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
 scNat = error "scNat unimplemented"
+
+scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scTuple sc ts = scFlatTermF sc (TupleValue ts)
+
+scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scTupleType sc ts = scFlatTermF sc (TupleType ts)
 
 -- | Obtain term representation a bitvector with a given width and known
 -- value.
@@ -402,15 +421,9 @@ mkSharedContext m = do
            , scFreshGlobal = freshGlobal
            , scLookupDef = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
            , scDefTerm = undefined
-           , scApply = \f x -> getFlatTerm cr (App f x)
-           , scMkRecord = undefined
-           , scRecordSelect = undefined
            , scApplyCtor = undefined
            , scFun = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
                                 getTerm cr (Pi "_" a b')
-           , scLiteral = getFlatTerm cr . NatLit
-           , scTuple = getFlatTerm cr . TupleValue
-           , scTupleType = getFlatTerm cr . TupleType
            , scTypeOf = typeOf cr typeOfGlobal
            , scPrettyTermDoc = undefined
            , scViewAsBool = undefined
