@@ -20,6 +20,7 @@ module Verifier.SAW.SharedTerm
     -- ** Implicit versions of functions.
   , scFreshGlobal
   , scModule
+  , scTermF
   , scApply
   , scApplyAll
   , scMkRecord
@@ -326,6 +327,7 @@ instantiateVarList ac k ts t = commitChangeT (instantiateVarListChangeT ac k ts 
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
     scModuleFn :: IO Module
+  , scTermFFn         :: TermF (SharedTerm s) -> IO (SharedTerm s)
      -- Returns the globals in the current scope as a record of functions.
   , scFreshGlobalFn   :: Ident -> SharedTerm s -> IO (SharedTerm s)
   , scLookupDefFn     :: String -> IO (SharedTerm s)
@@ -347,6 +349,9 @@ data SharedContext s = SharedContext
 
 scModule :: (?sc :: SharedContext s) => IO Module
 scModule = scModuleFn ?sc
+
+scTermF :: (?sc :: SharedContext s) => TermF (SharedTerm s) -> IO (SharedTerm s)
+scTermF = scTermFFn ?sc
 
 scApply :: (?sc :: SharedContext s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply = scApplyFn ?sc
@@ -440,6 +445,7 @@ mkSharedContext m = do
       viewAsNum _ = Nothing
   return SharedContext {
              scModuleFn = return m
+           , scTermFFn = getTerm cr
            , scFreshGlobalFn = freshGlobal
            , scLookupDefFn = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
            , scDefTermFn = undefined
