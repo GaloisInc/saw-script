@@ -167,15 +167,15 @@ decSharedCtorApp nm n c = do
     tp <- sharedFunctionType n
     -- Get value of result.
     decExpr <- [| \sc -> do
-       m <- scModuleFn sc
+       m <- scModule sc
        case findExportedCtor m $(stringE cName) of
          Nothing -> fail $(stringE ("Could not find " ++ cName))
          Just cExpr ->
            $(case n of
-               0 -> [|scApplyCtorFn sc cExpr []|]
+               0 -> [|scApplyCtor sc cExpr []|]
                _ -> [|return $(retFn n [])|]
                  where retFn 0 rArgs =
-                         [|scApplyCtorFn sc cExpr $(listE (reverse rArgs)) |]
+                         [|scApplyCtor sc cExpr $(listE (reverse rArgs)) |]
                        retFn i rArgs = do
                          x <- newName "x"
                          LamE [VarP x] <$> retFn (i-1) (varE x:rArgs))
@@ -204,21 +204,21 @@ decSharedDefApp nm n def = do
     tp <- sharedFunctionType n
     -- Get value of result.
     decExpr <- [| \sc -> do
-      m <- scModuleFn sc
+      m <- scModule sc
       case findExportedDef m $(stringE iName) of
         Nothing -> fail ($(stringE ("Could not find " ++ iName ++ " in "))
                               ++ show (moduleName m))
         Just typedDef -> do
           $(case n of
-              0 -> [| scDefTermFn sc typedDef |]
-              _ -> [| do d <- scDefTermFn sc typedDef
+              0 -> [| scDefTerm sc typedDef |]
+              _ -> [| do d <- scDefTerm sc typedDef
                          return
                            $(let procStmt :: Exp -> [ExpQ] -> [StmtQ] -> ExpQ
                                  procStmt r [h] rStmts = doE (reverse (stmt:rStmts))
-                                   where stmt = noBindS [|scApplyFn sc $(return r) $(h)|]
+                                   where stmt = noBindS [|scApply sc $(return r) $(h)|]
                                  procStmt r (h:l) rStmts = do
                                    r0 <- newName "r"
-                                   let stmt = bindS (varP r0) [|scApplyFn sc $(return r) $(h)|]
+                                   let stmt = bindS (varP r0) [|scApply sc $(return r) $(h)|]
                                    procStmt (VarE r0) l (stmt:rStmts)
                                  procStmt _ [] _ = error "Unexpected empty list to procStmt"
                                  retFn :: Int -> [ExpQ] -> ExpQ
