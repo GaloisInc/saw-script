@@ -336,8 +336,6 @@ data SharedContext s = SharedContext
   , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
   -- | Create a global variable with the given identifier (which may be "_") and type.
   , scFreshGlobal   :: Ident -> SharedTerm s -> IO (SharedTerm s)
-  -- | Returns term as a constant Boolean if it can be evaluated as one.
-  , scViewAsBool    :: SharedTerm s -> Maybe Bool
   }
 
 scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
@@ -443,7 +441,6 @@ mkSharedContext m = do
              scModule = return m
            , scTermF = getTerm cr
            , scFreshGlobal = freshGlobal
-           , scViewAsBool = undefined
            }
 
 asNatLit :: SharedTerm s -> Maybe Integer
@@ -467,3 +464,8 @@ scViewAsNum :: SharedTerm s -> Maybe Integer
 scViewAsNum (asNatLit -> Just i) = Just i
 scViewAsNum _ = Nothing
 -- FIXME: add patterns for bitvector constructors.
+
+-- | Returns term as a constant Boolean if it can be evaluated as one.
+-- bh: Is this really intended to do *evaluation*? Or is it supposed to work like asNatLit?
+scViewAsBool :: SharedTerm s -> Maybe Bool
+scViewAsBool = undefined --FIXME
