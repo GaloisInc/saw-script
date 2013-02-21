@@ -15,9 +15,13 @@ module Verifier.SAW.SharedTerm
     -- ** Utility functions using AppCache
   , instantiateVarList
     -- * High-level SharedContext interface for building shared terms
-  , SharedContext(..)
+  , SharedContext
   , mkSharedContext
+    -- ** Low-level generic term constructors
+  , scTermF
+  , scFlatTermF
     -- ** Implicit versions of functions.
+  , scDefTerm
   , scFreshGlobal
   , scModule
   , scApply
@@ -125,9 +129,9 @@ localVarType = undefined
 subst0 :: AppCacheRef s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 subst0 = undefined
 
-sortOfTerm :: AppCacheRef s -> SharedTerm s -> IO Sort
-sortOfTerm ac t = do
-  STApp _ (FTermF (Sort s)) <- typeOf ac t
+sortOfTerm :: AppCacheRef s -> (Ident -> IO (SharedTerm s)) -> SharedTerm s -> IO Sort
+sortOfTerm ac typeOfGlobal t = do
+  STApp _ (FTermF (Sort s)) <- typeOf ac typeOfGlobal t
   return s
 
 mkSharedSort :: AppCacheRef s -> Sort -> IO (SharedTerm s)
@@ -135,22 +139,23 @@ mkSharedSort ac s = getFlatTerm ac (Sort s)
 
 
 typeOfFTermF :: AppCacheRef s
+             -> (Ident -> IO (SharedTerm s))
              -> FlatTermF (SharedTerm s)
              -> IO (SharedTerm s)
-typeOfFTermF ac tf =
+typeOfFTermF ac typeOfGlobal tf =
   case tf of
-    GlobalDef d -> undefined d
+    GlobalDef d -> typeOfGlobal d
     App x y -> do
-      STApp _ (Pi _ _ rhs) <- typeOf ac x
+      STApp _ (Pi _ _ rhs) <- typeOf ac typeOfGlobal x
       subst0 ac rhs y
-    TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac) l
-    TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) l
-    RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac) m
+    TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac typeOfGlobal) l
+    TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac typeOfGlobal) l
+    RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac typeOfGlobal) m
     RecordSelector t f -> do
-      STApp _ (FTermF (RecordType m)) <- typeOf ac t
+      STApp _ (FTermF (RecordType m)) <- typeOf ac typeOfGlobal t
       let Just tp = Map.lookup f m
       return tp
-    RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac) m
+    RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac typeOfGlobal) m
     CtorApp c args -> undefined c args
     DataTypeApp dt args -> undefined dt args
     Sort s -> mkSharedSort ac (sortOf s)
@@ -158,23 +163,24 @@ typeOfFTermF ac tf =
     ArrayValue tp _ -> undefined tp
 
 typeOf :: AppCacheRef s
+       -> (Ident -> IO (SharedTerm s))
        -> SharedTerm s
        -> IO (SharedTerm s)
-typeOf ac (STVar _ _ tp) = return tp
-typeOf ac (STApp _ tf) =
+typeOf ac _ (STVar _ _ tp) = return tp
+typeOf ac typeOfGlobal (STApp _ tf) =
   case tf of
-    FTermF ftf -> typeOfFTermF ac ftf
+    FTermF ftf -> typeOfFTermF ac typeOfGlobal ftf
     Lambda (PVar i _ _) tp rhs -> do
-      rtp <- typeOf ac rhs
+      rtp <- typeOf ac typeOfGlobal rhs
       getTerm ac (Pi i tp rtp)
     Pi _ tp rhs -> do
-      ltp <- sortOfTerm ac tp
-      rtp <- sortOfTerm ac rhs
+      ltp <- sortOfTerm ac typeOfGlobal tp
+      rtp <- sortOfTerm ac typeOfGlobal rhs
       mkSharedSort ac (max ltp rtp)
     Let defs rhs -> undefined defs rhs
     LocalVar _ tp -> return tp
-    EqType{} -> undefined 
-    Oracle{} -> undefined
+--    EqType{} -> undefined 
+--    Oracle{} -> undefined
 
 {-
 -- | Monadic fold with memoization
@@ -239,7 +245,7 @@ instantiateVars ac f initialLevel t =
     go' l (Pi i lhs rhs)    = getTerm ac <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
     go' l (Let defs r) = getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
       where l' = l + length defs
-            procDef :: LocalDef String (SharedTerm s) -> ChangeT IO (LocalDef String (SharedTerm s))
+            procDef :: LocalDef (SharedTerm s) -> ChangeT IO (LocalDef (SharedTerm s))
             procDef (LocalFnDef sym tp eqs) =
               LocalFnDef sym <$> go l tp <*> changeList procEq eqs
             procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
@@ -248,8 +254,8 @@ instantiateVars ac f initialLevel t =
     go' l (LocalVar i tp)
       | i < l     = getTerm ac <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
-    go' l (EqType lhs rhs) = getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
-    go' l (Oracle s prop) = getTerm ac <$> (Oracle s <$> go l prop)
+--    go' l (EqType lhs rhs) = getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
+--    go' l (Oracle s prop) = getTerm ac <$> (Oracle s <$> go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -281,10 +287,9 @@ instantiateVarChangeT ac k t0 t =
         fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
-        fn = undefined
---        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
---                 | j == i + k = taint $ return <$> term i
---                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
+        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
+                 | j == i + k = taint $ return <$> term i
+                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
 
 instantiateVar :: AppCacheRef s
                -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
@@ -324,95 +329,68 @@ instantiateVarList ac k ts t = commitChangeT (instantiateVarListChangeT ac k ts 
 -- | Operations that are defined, but not 
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
-    scModuleFn :: IO Module
-     -- Returns the globals in the current scope as a record of functions.
-  , scFreshGlobalFn   :: Ident -> SharedTerm s -> IO (SharedTerm s)
-  , scLookupDefFn     :: String -> IO (SharedTerm s)
-  , scDefTermFn       :: TypedDef -> IO (SharedTerm s)
-  , scApplyFn         :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-  , scMkRecordFn      :: Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-  , scRecordSelectFn  :: SharedTerm s -> FieldName -> IO (SharedTerm s)
-  , scApplyCtorFn     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-  , scFunFn           :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-  , scLiteralFn       :: Integer -> IO (SharedTerm s)
-  , scTupleFn         :: [SharedTerm s] -> IO (SharedTerm s)
-  , scTupleTypeFn     :: [SharedTerm s] -> IO (SharedTerm s)
-  , scTypeOfFn        :: SharedTerm s -> IO (SharedTerm s)
-  , scPrettyTermDocFn :: SharedTerm s -> Doc
-  , scViewAsBoolFn    :: SharedTerm s -> Maybe Bool
-  , scViewAsNumFn     :: SharedTerm s -> Maybe Integer
-  , scInstVarListFn   :: DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+    scModule :: IO Module
+  , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
+  -- | Create a global variable with the given identifier (which may be "_") and type.
+  , scFreshGlobal   :: Ident -> SharedTerm s -> IO (SharedTerm s)
+  -- | Returns the defined constant with the given name. Fails if no such
+  -- constant exists in the module.
+  , scLookupDef     :: String -> IO (SharedTerm s)
+  , scDefTerm       :: TypedDef -> IO (SharedTerm s)
+  , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
+  , scFun           :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+  , scTypeOf        :: SharedTerm s -> IO (SharedTerm s)
+  , scPrettyTermDoc :: SharedTerm s -> Doc
+  -- | Returns term as a constant Boolean if it can be evaluated as one.
+  , scViewAsBool    :: SharedTerm s -> Maybe Bool
+  -- | Returns term as an integer if it is an integer, signed
+  -- bitvector, or unsigned bitvector.
+  , scViewAsNum     :: SharedTerm s -> Maybe Integer
+  , scInstVarList   :: DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
   }
 
-scModule :: (?sc :: SharedContext s) => IO Module
-scModule = scModuleFn ?sc
+scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
+scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
-scApply :: (?sc :: SharedContext s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scApply = scApplyFn ?sc
+scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scApply sc f x = scFlatTermF sc (App f x)
 
-scApplyAll :: (?sc :: SharedContext s) => SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
-scApplyAll = foldlM scApply
+scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
+scApplyAll sc = foldlM (scApply sc)
 
--- | Returns the defined constant with the given name. Fails if no such
--- constant exists in the module.
-scLookupDef :: (?sc :: SharedContext s) => String -> IO (SharedTerm s)
-scLookupDef = scLookupDefFn ?sc
+scLiteral :: SharedContext s -> Integer -> IO (SharedTerm s)
+scLiteral sc n
+  | 0 <= n = scFlatTermF sc (NatLit n)
+  | otherwise = error $ "scLiteral: negative value " ++ show n
 
-scMkRecord :: (?sc :: SharedContext s) => Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-scMkRecord = scMkRecordFn ?sc
+scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
+scMkRecord sc m = scFlatTermF sc (RecordValue m)
 
-scRecordSelect :: (?sc :: SharedContext s) => SharedTerm s -> FieldName -> IO (SharedTerm s)
-scRecordSelect = scRecordSelectFn ?sc
+scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
+scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
 
-scApplyCtor :: (?sc :: SharedContext s) => TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-scApplyCtor = scApplyCtorFn ?sc
-
-scNat :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
+scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
 scNat = error "scNat unimplemented"
+
+scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scTuple sc ts = scFlatTermF sc (TupleValue ts)
+
+scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scTupleType sc ts = scFlatTermF sc (TupleType ts)
 
 -- | Obtain term representation a bitvector with a given width and known
 -- value.
-scBitvector :: (?sc :: SharedContext s)
-            => (SharedTerm s)
+scBitvector :: SharedContext s
+            -> (SharedTerm s)
             -> Integer
             -> IO (SharedTerm s)
 scBitvector = error "scBitvector unimplemented"
 
-scLiteral :: (?sc :: SharedContext s) => Integer -> IO (SharedTerm s)
-scLiteral = scLiteralFn ?sc
+scPrettyTerm :: SharedContext s -> SharedTerm s -> String
+scPrettyTerm sc t = show (scPrettyTermDoc sc t)
 
-scTuple :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
-scTuple = scTupleFn ?sc
-
-scTupleType :: (?sc :: SharedContext s) => [SharedTerm s] -> IO (SharedTerm s)
-scTupleType = scTupleTypeFn ?sc
-
-scTypeOf :: (?sc :: SharedContext s) => SharedTerm s -> IO (SharedTerm s)
-scTypeOf = scTypeOfFn ?sc
-
--- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshGlobal :: (?sc :: SharedContext s)
-              => Ident -> SharedTerm s 
-              -> IO (SharedTerm s)
-scFreshGlobal = scFreshGlobalFn ?sc
-
--- | Returns term as a constant Boolean if it can be evaluated as one.
-scViewAsBool :: (?sc :: SharedContext s) => SharedTerm s -> Maybe Bool
-scViewAsBool = scViewAsBoolFn ?sc
-
--- | Returns term as an integer if it is an integer, signed bitvector, or unsigned
--- bitvector.
-scViewAsNum :: (?sc :: SharedContext s) => SharedTerm s -> Maybe Integer
-scViewAsNum = scViewAsNumFn ?sc
-
-scPrettyTerm :: (?sc :: SharedContext s) => SharedTerm s -> String
-scPrettyTerm t = show (scPrettyTermDocFn ?sc t)
-
-scFun :: (?sc :: SharedContext s) => SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scFun = scFunFn ?sc
-
-scFunAll :: (?sc :: SharedContext s) => [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
-scFunAll argTypes resultType = foldrM scFun resultType argTypes
+scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
@@ -420,51 +398,39 @@ mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newAppCacheRef
-  let shareDef d = do
-        t <- sharedTerm cr $ stripDefEqs $ Term (FTermF (GlobalDef (defIdent d)))
-        return (defIdent d, t)
-  sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
-  let getDef sym =
-        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
-          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
-          Just d -> return d
+--  let shareDef d = do
+--        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
+--        return (defIdent d, t)
+--  sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
+--  let getDef sym =
+--        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
+--          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
+--          Just d -> return d
+  let typeOfGlobal ident =
+        case findDef m ident of
+          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+          Just d -> sharedTerm cr (defType d)
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
   let viewAsNum (asNatLit -> Just i) = Just i
       viewAsNum _ = Nothing
   return SharedContext {
-             scModuleFn = return m
-           , scFreshGlobalFn = freshGlobal
-           , scLookupDefFn = getDef
-           , scDefTermFn = undefined
-           , scApplyFn = \f x -> getFlatTerm cr (App f x)
-           , scMkRecordFn = undefined
-           , scRecordSelectFn = undefined
-           , scApplyCtorFn = undefined
-{-
-           , scFunFn = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
-                                  getTerm cr (Pi "_" a b')
--}
-           , scLiteralFn = getFlatTerm cr . NatLit
-           , scTupleFn = getFlatTerm cr . TupleValue
-           , scTupleTypeFn = getFlatTerm cr . TupleType
-           , scTypeOfFn = typeOf cr
-           , scPrettyTermDocFn = undefined
-           , scViewAsBoolFn = undefined
-           , scViewAsNumFn = viewAsNum
-           , scInstVarListFn = instantiateVarList cr
+             scModule = return m
+           , scTermF = getTerm cr
+           , scFreshGlobal = freshGlobal
+           , scLookupDef = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
+           , scDefTerm = undefined
+           , scApplyCtor = undefined
+           , scFun = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
+                                getTerm cr (Pi "_" a b')
+           , scTypeOf = typeOf cr typeOfGlobal
+           , scPrettyTermDoc = undefined
+           , scViewAsBool = undefined
+           , scViewAsNum = viewAsNum
+           , scInstVarList = instantiateVarList cr
            }
 
--- | Strip equations from every GlobalDef, making the term acyclic.
--- This makes it possible to run @sharedTerm@ on the result. TODO:
--- Update the term representation to make this unnecessary.
-stripDefEqs :: Term -> Term
-stripDefEqs (Term termf) =
-    Term $ fmap stripDefEqs $
-         case termf of
-           FTermF (GlobalDef d) -> FTermF (GlobalDef d)
-           _ -> termf
 asNatLit :: SharedTerm s -> Maybe Integer
 asNatLit (STApp _ (FTermF (NatLit i))) = Just i
 asNatLit _ = Nothing

@@ -250,7 +250,7 @@ indexUnPat upat =
            return (UPatF p (UPRecord (fmap fst rm)), tpv)
     Un.PCtor pnm pl -> do
       tc <- gets usGlobalContext
-      (c,tp) <- lift $ resolveCtor tc pnm (length pl)
+      (c,tp) <- lift $ resolveCtor (globalContext tc) pnm (length pl)
       let vfn upl = UPatF (pos pnm) (UPCtor c upl)
       first vfn <$> indexPiPats pl tp
 
@@ -302,10 +302,10 @@ mkUnifyTerm l t =
           case lookupLocalCtxVar l i of
             Just v -> return v
             Nothing -> mkTermVar (UOuterVar nm (i - localCtxSize l))
-        where nm = resolveBoundVar i (ulcTC l)
+        where BoundVar nm = resolveBoundInfo i (ulcTC l)
       TCLocalDef i | i >= localCtxSize l -> mkTermVar (UOuterLet nm (i - localCtxSize l))
                    | otherwise -> error "mkUnifyTerm encountered unexpected local def."
-        where nm = resolveLocalDef i (ulcTC l)
+        where LocalDef nm = resolveBoundInfo i (ulcTC l)
   where holTerm = mkTermVar (mkHolTerm l t)
         mkTermVar = mkVar "intermediate term"
 
@@ -343,7 +343,7 @@ matchUnPat il itcp iup = do
               where um = Map.fromList $ first val <$> fpl
             (UPCtor c pl, Un.PCtor pnm upl) -> do
               tc <- lift $ gets usGlobalContext
-              (c',_) <- lift $ lift $ resolveCtor tc pnm (length upl)
+              (c',_) <- lift $ lift $ resolveCtor (globalContext tc) pnm (length upl)
               unless (c == c') (err (pos pnm))
               UPatF (pos pnm) . UPCtor c <$> zipWithM go pl upl
             _ -> err (pos unpat)

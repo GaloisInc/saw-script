@@ -3,16 +3,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Verifier.SAW.ParserUtils 
  ( module Verifier.SAW.TypedAST
+   -- * Parser utilities.
+ , readModuleFromFile
+   -- * Template haskell utilities.
  , DecWriter
  , runDecWriter
- , DecModule(..) 
- , decModule
+ , DecExp(..) 
+ , importExp
  , mkDecModule
  , decSharedCtorApp
  , decSharedDefApp
  , decSharedModuleFns
-   -- * Utilities.
- , camelCase
  ) where
 
 import Control.Applicative
@@ -41,13 +42,21 @@ camelCase :: String -> String
 camelCase (h:l) = toUpper h : l
 camelCase [] = []
 
+-- | Read module from file with givne imports.
+readModuleFromFile :: [Module] -> FilePath -> IO Module
+readModuleFromFile imports path = do
+  base <- getCurrentDirectory
+  b <- BL.readFile path
+  readModule imports base path b
+
+
 -- | Returns a module containing the standard prelude for SAW. 
 readModule :: [Module] -> FilePath -> FilePath -> BL.ByteString -> IO Module
 readModule imports base path b = do
   let (m,[]) = Un.runParser base path b Un.parseSAW
-  case unsafeMkModule imports m of
+  case tcModule imports m of
     Left e -> fail $ "Errors while reading module:\n" ++ show e
-    Right m -> return m
+    Right r -> return r
 
 readByteStringExpr :: ExpQ -> FilePath -> Q Exp
 readByteStringExpr modules path = do
@@ -71,10 +80,6 @@ readByteStringExpr modules path = do
     (_,errors) -> fail $ "Failed to parse prelude:\n" ++ show errors
 
 
-data DecModule = DecModule { dmExp :: !Exp
-                           , dmModule :: !Module
-                           }
-
 data DecWriterState = DecWriterState { dwDecs :: [Dec]
                                      }
 
@@ -87,13 +92,19 @@ runDecWriter :: DecWriter () -> Q [Dec]
 runDecWriter m = dwDecs <$> execStateT m s
   where s = DecWriterState { dwDecs = [] }
 
--- | Create a declared module.
-decModule :: ExpQ -> Module -> DecWriter DecModule
-decModule eq m = do
-  e <- lift eq
-  return DecModule { dmExp = e, dmModule = m }
 
-mkDecModule :: [DecModule] -> String -> FilePath -> DecWriter DecModule
+-- | Contains a value and an expression that will evaluate to it at runtime.
+data DecExp a = DecExp { decExp :: !Exp
+                       , decVal :: !a
+                       }
+
+-- | Define a declared 
+importExp :: ExpQ -> a -> DecWriter (DecExp a)
+importExp eq m = do
+  e <- lift eq
+  return DecExp { decExp = e, decVal = m }
+
+mkDecModule :: [DecExp Module] -> String -> FilePath -> DecWriter (DecExp Module)
 mkDecModule modules decNameStr path = do
   let nm = takeFileName path
   StateT $ \s -> do
@@ -101,8 +112,8 @@ mkDecModule modules decNameStr path = do
     compile_b <- runIO $ BL.readFile path
     case Un.runParser base nm compile_b Un.parseSAW of
       (_,[]) -> return ()
-      (_,errors) -> fail $ "Failed to parse prelude:\n" ++ show errors
-    m <- runIO $ readModule (dmModule <$> modules) base path compile_b
+      (_,errors) -> fail $ "Failed to parse module:\n" ++ show errors
+    m <- runIO $ readModule (decVal <$> modules) base path compile_b
     let decName = mkName decNameStr
     let blen :: Int
         blen = fromIntegral (BL.length compile_b)
@@ -116,21 +127,17 @@ mkDecModule modules decNameStr path = do
     moduleTp <- [t| Module |]
     packExpr <- [| unsafePerformIO $ do
         b <- unsafePackAddressLen blen $(return primExpr)
-        readModule $(return (ListE (dmExp <$> modules))) base path (BL.fromChunks [b])
+        readModule $(return (ListE (decExp <$> modules))) base path (BL.fromChunks [b])
       |]
-#if __GLASGOW_HASKELL__ >= 706
-#else
-#endif
     let decs =  [ PragmaD noinlinePragma
                 , SigD decName moduleTp
                 , FunD decName [ Clause [] (NormalB packExpr) [] ]
                 ]
-    let dm = DecModule { dmExp = VarE decName 
-                       , dmModule = m
-                       }
+    let dm = DecExp { decExp = VarE decName 
+                    , decVal  = m
+                    }
     let s' = s `addDecs` decs
     return (dm, s')
-
 
 -- @sharedFnType n@ returns the type of a function for generating function
 -- applications.
@@ -143,14 +150,6 @@ sharedFunctionType n = do
        [t| SharedContext $(varT s) -> IO $(go [t|SharedTerm $(varT s)|] n) |]
   where go nm 0 = [t| IO $(nm) |]
         go nm i = [t| $(nm) -> $(go nm (i-1)) |]
-
-{- This code is simpler, but has an error in GHC 7.4 due to a template haskell limitation.
-sharedFunctionType n =
-    [t| forall s . SharedContext s -> IO $(go [t|SharedTerm s|] n) |]
-  where --st = AppT (ContT 
-        go nm 0 = [t| IO $(nm) |]
-        go nm i = [t| $(nm) -> $(go nm (i-1)) |]
--}
 
 
 -- Given a ctor with the type
@@ -170,15 +169,15 @@ decSharedCtorApp nm n c = do
     tp <- sharedFunctionType n
     -- Get value of result.
     decExpr <- [| \sc -> do
-       m <- scModuleFn sc
+       m <- scModule sc
        case findExportedCtor m $(stringE cName) of
          Nothing -> fail $(stringE ("Could not find " ++ cName))
          Just cExpr ->
            $(case n of
-               0 -> [|scApplyCtorFn sc cExpr []|]
+               0 -> [|scApplyCtor sc cExpr []|]
                _ -> [|return $(retFn n [])|]
                  where retFn 0 rArgs =
-                         [|scApplyCtorFn sc cExpr $(listE (reverse rArgs)) |]
+                         [|scApplyCtor sc cExpr $(listE (reverse rArgs)) |]
                        retFn i rArgs = do
                          x <- newName "x"
                          LamE [VarP x] <$> retFn (i-1) (varE x:rArgs))
@@ -192,10 +191,10 @@ decSharedCtorApp nm n c = do
 
 -- Given a ctor with the type
 --   c : T1 -> ... -> TN -> T
--- This hads a declaration of the function.
--- scApply(modulename)(upcase c)
---   :: SharedContext s
---   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)  
+-- This hads a declaration of the function:
+--   scApply(modulename)(upcase c)
+--     :: SharedContext s
+--     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)  
 decSharedDefApp :: String
                 -> Int
                 -> TypedDef
@@ -207,21 +206,21 @@ decSharedDefApp nm n def = do
     tp <- sharedFunctionType n
     -- Get value of result.
     decExpr <- [| \sc -> do
-      m <- scModuleFn sc
+      m <- scModule sc
       case findExportedDef m $(stringE iName) of
         Nothing -> fail ($(stringE ("Could not find " ++ iName ++ " in "))
                               ++ show (moduleName m))
         Just typedDef -> do
           $(case n of
-              0 -> [| scDefTermFn sc typedDef |]
-              _ -> [| do d <- scDefTermFn sc typedDef
+              0 -> [| scDefTerm sc typedDef |]
+              _ -> [| do d <- scDefTerm sc typedDef
                          return
                            $(let procStmt :: Exp -> [ExpQ] -> [StmtQ] -> ExpQ
                                  procStmt r [h] rStmts = doE (reverse (stmt:rStmts))
-                                   where stmt = noBindS [|scApplyFn sc $(return r) $(h)|]
+                                   where stmt = noBindS [|scApply sc $(return r) $(h)|]
                                  procStmt r (h:l) rStmts = do
                                    r0 <- newName "r"
-                                   let stmt = bindS (varP r0) [|scApplyFn sc $(return r) $(h)|]
+                                   let stmt = bindS (varP r0) [|scApply sc $(return r) $(h)|]
                                    procStmt (VarE r0) l (stmt:rStmts)
                                  procStmt _ [] _ = error "Unexpected empty list to procStmt"
                                  retFn :: Int -> [ExpQ] -> ExpQ

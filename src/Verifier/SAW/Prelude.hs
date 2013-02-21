@@ -11,5 +11,5 @@ import Verifier.SAW.ParserUtils
 
 $(runDecWriter $ do
     prelude <- mkDecModule [] "preludeModule" "prelude/Prelude.saw"
-    decSharedModuleFns "Prelude" (dmModule prelude)
+    decSharedModuleFns "Prelude" (decVal prelude)
  )

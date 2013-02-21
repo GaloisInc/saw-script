@@ -50,16 +50,17 @@ module Verifier.SAW.Typechecker.Context
   , gcDefs
   , insertDataType
   , insertDef
+  , resolveCtor
     -- * Term context
   , TermContext
+  , globalContext
   , emptyTermContext
   , consBoundVar
   , consLocalDefs
-  , resolveCtor
   , InferResult(..)
   , resolveIdent
-  , resolveBoundVar
-  , resolveLocalDef
+  , BoundInfo(..)
+  , resolveBoundInfo
   , globalDefEqns
   , contextNames
   , ppTermContext
@@ -334,6 +335,22 @@ insertDef mnml vis d@(DefGen nm _ eqs) gc =
        }
   where ins = insGlobalBinding vis mnml (identName nm) (DefBinding d)
 
+-- | Lookup ctor returning identifier and type.
+resolveCtor :: GlobalContext s -> PosPair Un.Ident -> Int -> TC s (Ident, TCTerm)
+resolveCtor gc (PosPair p nm) argc =
+  case Map.lookup nm (gcMap gc) of
+    Just (CtorBinding dt (Ctor c rtp)) -> do
+      tp <- eval p rtp
+      if fixedPiArgCount tp == argc then
+        return $ (c, termFromTCCtorType (dtgName dt) tp)
+      else
+        tcFail p "Incorrect number of arguments givne to constructor."
+    Just (DataTypeBinding{}) -> tcFail p $ "Pattern matching data type is unsupported."
+    Just _ -> fail "Unexpected ident type"
+    Nothing -> tcFail p $ "Unknown identifier: " ++ show nm ++ "."
+
+-- TermContext
+
 data TermContext s where
   TopContext :: GlobalContext s -> TermContext s
   LetContext :: TermContext s -> [TCRefLocalDef s] -> TermContext s
@@ -361,6 +378,7 @@ emptyTermContext = TopContext
 consBoundVar :: String -> TCTerm -> TermContext s -> TermContext s
 consBoundVar nm tp ctx = BindContext ctx nm tp
 
+-- | Add local definitions to context.
 consLocalDefs :: [TCRefLocalDef s] -> TermContext s -> TermContext s
 consLocalDefs = flip LetContext
 
@@ -369,19 +387,18 @@ globalContext (BindContext tc _ _) = globalContext tc
 globalContext (LetContext tc _) = globalContext tc
 globalContext (TopContext gc) = gc
 
--- | Lookup ctor returning identifier and type.
-resolveCtor :: TermContext s -> PosPair Un.Ident -> Int -> TC s (Ident, TCTerm)
-resolveCtor tc (PosPair p nm) argc =
-  case Map.lookup nm (gcMap (globalContext tc)) of
-    Just (CtorBinding dt (Ctor c rtp)) -> do
-      tp <- eval p rtp
-      if fixedPiArgCount tp == argc then
-        return $ (c, termFromTCCtorType (dtgName dt) tp)
-      else
-        tcFail p "Incorrect number of arguments givne to constructor."
-    Just (DataTypeBinding{}) -> tcFail p $ "Pattern matching data type is unsupported."
-    Just _ -> fail "Unexpected ident type"
-    Nothing -> tcFail p $ "Unknown identifier: " ++ show nm ++ "."
+data BoundInfo where
+  BoundVar :: String -> BoundInfo
+  LocalDef :: String -> BoundInfo
+
+resolveBoundInfo :: DeBruijnIndex -> TermContext s -> BoundInfo
+resolveBoundInfo 0 (BindContext _ nm _) = BoundVar nm
+resolveBoundInfo i (BindContext tc _ _) = resolveBoundInfo (i-1) tc
+resolveBoundInfo i0 (LetContext tc lcls) = lclFn i0 lcls
+  where lclFn 0 (LocalFnDefGen nm _ _:_) = LocalDef nm
+        lclFn i (_:r) = lclFn (i-1) r
+        lclFn i [] = resolveBoundInfo i tc
+resolveBoundInfo _ TopContext{} = error "resolveBoundInfo given invalid index."
 
 globalDefEqns :: Ident -> TermContext s -> TCRef s [TCDefEqn]
 globalDefEqns i tc = fromMaybe emsg $ Map.lookup i (gcEqns (globalContext tc))
@@ -442,31 +459,15 @@ resolveIdent tc0 (PosPair p ident) = go tc0
               TypedValue (TCF (GlobalDef gi)) <$> eval p rtp
             Nothing -> tcFail p $ "Unknown identifier: " ++ show ident ++ "."
 
-resolveBoundVar :: DeBruijnIndex -> TermContext s -> String
-resolveBoundVar 0 (BindContext _ nm _) = nm
-resolveBoundVar i (BindContext tc _ _) = resolveBoundVar (i-1) tc
-resolveBoundVar i (LetContext tc lcls)
-    | i >= l = resolveBoundVar (i-l) tc
-    | otherwise = error "resolveBoundVar given index that refers to let binding"
-  where l = length lcls
-resolveBoundVar _ TopContext{} = error "resolveBoundVar given invalid index."
-
-resolveLocalDef :: DeBruijnIndex -> TermContext s -> String
-resolveLocalDef 0 BindContext{} = 
-  error "resolveLocalDef given index that refers to bound var"
-resolveLocalDef i (BindContext tc _ _) = resolveLocalDef (i-1) tc
-resolveLocalDef i0 (LetContext tc lcls) = lclFn i0 lcls
-  where lclFn 0 (LocalFnDefGen nm _ _:_) = nm
-        lclFn i (_:r) = lclFn (i-1) r
-        lclFn i [] = resolveLocalDef i tc
-resolveLocalDef _ TopContext{} = error "resolveLocalDef given invalid index."
-
 contextNames :: TermContext s -> [String]
 contextNames (BindContext tc nm _) = nm : contextNames tc
 contextNames (LetContext tc lcls) = fmap lclName lcls ++ contextNames tc
   where lclName (LocalFnDefGen nm _ _) = nm
 contextNames TopContext{} = []
 
+-- Pretty printing
+
+-- | Pretty print a term context.
 ppTermContext :: TermContext s -> Doc
 ppTermContext (BindContext tc nm tp) =
   text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc 1 tp $$
@@ -476,6 +477,16 @@ ppTermContext (LetContext tc lcls) =
     ppTermContext tc  
   where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp  
 ppTermContext TopContext{} = text "top"
+
+-- | Pretty print a pat
+ppTCPat :: TCPat -> Doc
+ppTCPat (TCPVar nm _ _) = text nm
+ppTCPat (TCPUnused nm) = text nm
+ppTCPat (TCPatF pf) = 
+  case pf of
+    UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
+    UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
+    UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
 
 ppTCTerm :: TermContext s -> Prec -> TCTerm -> Doc
 ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
@@ -499,15 +510,6 @@ ppTCTermGen d _ (TCVar i) | 0 <= i && i < length d = d !! i
 ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
                                | otherwise = text $ "Bad local var index " ++ show i
 
-ppTCPat :: TCPat -> Doc
-ppTCPat (TCPVar nm _ _) = text nm
-ppTCPat (TCPUnused nm) = text nm
-ppTCPat (TCPatF pf) = 
-  case pf of
-    UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
-    UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
-    UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
-
 -- | Bound the free variables in the term with pi quantifiers.
 boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
 boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0 
@@ -515,23 +517,3 @@ boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0
         go 0 _ t = t
         go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm 0 tp) tp t) 
         go _ _ _ = error "boundFreeVarsWithPi given bad context"
-
-{-
--- | Checks that references in term point to valid variables.
--- Used for sanity checking terms.
-validTermContext :: TermContext s -> TCTerm -> Bool
-validTermContext tc it = go 0 it
-  where goPat _ _ = True
-        go i (TCF tf) = all (go i) tf
-        go i (TCLambda p tp r) =
-          go i tp && goPat i p && go (i+tcPatVarCount p) r
-        go i (TCPi p tp r) =
-          go i tp && goPat i p && go (i+tcPatVarCount p) r
-        go i (TCLet lcls t) = all goLocal lcls && go i' t
-          where i' = i + localVarNamesCount lcls
-                goLocal (LocalFnDefGen _ tp eqs) = go i tp && all goEq eqs
-                goEq (DefEqnGen pl r) = all (goPat i') pl && go i2 r
-                  where i2 = i' + sum (tcPatVarCount <$> pl)
-        go i (TCVar j t) = 0 <= j && j < i + tcLevel tc
-        go i (TCLocalDef j t) = 0 <= j && j < i + tcLevel tc
--}

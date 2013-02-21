@@ -85,6 +85,8 @@ data Term
     -- | Tuple expressions and their type.
   | TupleValue Pos [Term]
   | TupleType Pos [Term]
+    -- | The value stored in a tuple.
+  | TupleSelector Term (PosPair Integer)
     -- | A record value.
   | RecordValue Pos [(PosPair FieldName, Term)]
     -- | The value stored in a record.
@@ -135,6 +137,7 @@ instance Positioned Term where
       Pi _ _ _ p _         -> p
       TupleValue p _       -> p
       TupleType p _        -> p
+      TupleSelector _ i    -> pos i
       RecordValue p _      -> p
       RecordSelector _ i   -> pos i
       RecordType p _       -> p
