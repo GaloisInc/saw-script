@@ -338,9 +338,6 @@ data SharedContext s = SharedContext
   , scFreshGlobal   :: Ident -> SharedTerm s -> IO (SharedTerm s)
   -- | Returns term as a constant Boolean if it can be evaluated as one.
   , scViewAsBool    :: SharedTerm s -> Maybe Bool
-  -- | Returns term as an integer if it is an integer, signed
-  -- bitvector, or unsigned bitvector.
-  , scViewAsNum     :: SharedTerm s -> Maybe Integer
   }
 
 scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
@@ -442,14 +439,11 @@ mkSharedContext m = do
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
-  let viewAsNum (asNatLit -> Just i) = Just i
-      viewAsNum _ = Nothing
   return SharedContext {
              scModule = return m
            , scTermF = getTerm cr
            , scFreshGlobal = freshGlobal
            , scViewAsBool = undefined
-           , scViewAsNum = viewAsNum
            }
 
 asNatLit :: SharedTerm s -> Maybe Integer
@@ -466,3 +460,10 @@ asApp3Of op s3 = do
   (s1,a2) <- asApp s2
   (s0,a1) <- asApp s1
   if s0 == op then return (a1,a2,a3) else fail ""
+
+-- | Returns term as an integer if it is an integer, signed
+-- bitvector, or unsigned bitvector.
+scViewAsNum :: SharedTerm s -> Maybe Integer
+scViewAsNum (asNatLit -> Just i) = Just i
+scViewAsNum _ = Nothing
+-- FIXME: add patterns for bitvector constructors.
