@@ -152,7 +152,7 @@ typeOfFTermF sc tf =
       subst0 sc rhs y
     TupleValue l -> scTupleType sc =<< mapM (scTypeOf sc) l
     TupleType l -> scSort sc . maximum =<< mapM (sortOfTerm sc) l
-    RecordValue m -> scFlatTermF sc . RecordType =<< mapM (scTypeOf sc) m
+    RecordValue m -> scRecordType sc =<< mapM (scTypeOf sc) m
     RecordSelector t f -> do
       STApp _ (FTermF (RecordType m)) <- scTypeOf sc t
       let Just tp = Map.lookup f m
@@ -378,6 +378,9 @@ scMkRecord sc m = scFlatTermF sc (RecordValue m)
 
 scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
 scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
+
+scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
+scRecordType sc m = scFlatTermF sc (RecordType m)
 
 scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
 scNat = error "scNat unimplemented"
