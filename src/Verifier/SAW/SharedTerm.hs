@@ -9,12 +9,7 @@ module Verifier.SAW.SharedTerm
   , SharedTerm(..)
   , TermIndex
   , unwrapSharedTerm
-    -- * Low-level AppCache interface for building shared terms
-  , AppCacheRef
-  , getTerm
-    -- ** Utility functions using AppCache
-  , instantiateVarList
-    -- * High-level SharedContext interface for building shared terms
+    -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
     -- ** Low-level generic term constructors
@@ -45,6 +40,8 @@ module Verifier.SAW.SharedTerm
     -- ** Utilities
 --  , scTrue
 --  , scFalse
+    -- ** Variable substitution
+  , instantiateVarList
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
@@ -89,17 +86,12 @@ data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s)
                      , acNextIdx :: !Word64
                      }
 
-newtype AppCacheRef s = ACR (MVar (AppCache s))
-
 emptyAppCache :: AppCache s
 emptyAppCache = AC Map.empty 0
 
-newAppCacheRef :: IO (AppCacheRef s)
-newAppCacheRef = ACR <$> newMVar emptyAppCache
-
 -- | Return term for application using existing term in cache if it is avaiable.
-getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
-getTerm (ACR r) a =
+getTerm :: MVar (AppCache s) -> TermF (SharedTerm s) -> IO (SharedTerm s)
+getTerm r a =
   modifyMVar r $ \s -> do
     case Map.lookup a (acBindings s) of
       Just t -> return (s,t)
@@ -108,12 +100,6 @@ getTerm (ACR r) a =
               s' = s { acBindings = Map.insert a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
-
-getFlatTerm :: AppCacheRef s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
-getFlatTerm ac = getTerm ac . FTermF
-
-
-
 
 {-
 data LocalVarTypeMap s = LVTM { lvtmMap :: Map Integer (SharedTerm s) }
@@ -200,7 +186,7 @@ unshare t = State.evalState (go t) Map.empty
 instance Show (SharedTerm s) where
   show = show . unshare
 
-sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
+sharedTerm :: MVar (AppCache s) -> Term -> IO (SharedTerm s)
 sharedTerm mvar = go
     where go (Term termf) = getTerm mvar =<< traverse go termf
 
@@ -407,7 +393,7 @@ scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
-  cr <- newAppCacheRef
+  cr <- newMVar emptyAppCache
 --  let shareDef d = do
 --        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
 --        return (defIdent d, t)
