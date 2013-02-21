@@ -134,9 +134,6 @@ sortOfTerm sc t = do
   STApp _ (FTermF (Sort s)) <- scTypeOf sc t
   return s
 
-mkSharedSort :: SharedContext s -> Sort -> IO (SharedTerm s)
-mkSharedSort sc s = scFlatTermF sc (Sort s)
-
 typeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
 typeOfGlobal sc ident =
     do m <- scModule sc
@@ -154,16 +151,16 @@ typeOfFTermF sc tf =
       STApp _ (Pi _ _ rhs) <- scTypeOf sc x
       subst0 sc rhs y
     TupleValue l -> scTupleType sc =<< mapM (scTypeOf sc) l
-    TupleType l -> mkSharedSort sc . maximum =<< mapM (sortOfTerm sc) l
+    TupleType l -> scSort sc . maximum =<< mapM (sortOfTerm sc) l
     RecordValue m -> scFlatTermF sc . RecordType =<< mapM (scTypeOf sc) m
     RecordSelector t f -> do
       STApp _ (FTermF (RecordType m)) <- scTypeOf sc t
       let Just tp = Map.lookup f m
       return tp
-    RecordType m -> mkSharedSort sc . maximum =<< mapM (sortOfTerm sc) m
+    RecordType m -> scSort sc . maximum =<< mapM (sortOfTerm sc) m
     CtorApp c args -> undefined c args
     DataTypeApp dt args -> undefined dt args
-    Sort s -> mkSharedSort sc (sortOf s)
+    Sort s -> scSort sc (sortOf s)
     NatLit i -> undefined i
     ArrayValue tp _ -> undefined tp
 
@@ -178,7 +175,7 @@ scTypeOf sc (STApp _ tf) =
     Pi _ tp rhs -> do
       ltp <- sortOfTerm sc tp
       rtp <- sortOfTerm sc rhs
-      mkSharedSort sc (max ltp rtp)
+      scSort sc (max ltp rtp)
     Let defs rhs -> undefined defs rhs
     LocalVar _ tp -> return tp
 --    EqType{} -> undefined 
@@ -367,6 +364,9 @@ scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
 scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
 scDefTerm sc d = scGlobalDef sc (defIdent d)
+
+scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
+scSort sc s = scFlatTermF sc (Sort s)
 
 scLiteral :: SharedContext s -> Integer -> IO (SharedTerm s)
 scLiteral sc n
