@@ -11,38 +11,27 @@ import Control.Monad
 noMainErr :: Err a
 noMainErr = fail "No main function defined."
 
-multiMainErr :: Show a => Int -> [a] -> Err b
-multiMainErr n xs = fail ("Multiple main functions defined: " ++ show n ++ " " ++ show xs)
+multiMainErr :: Err b
+multiMainErr = fail "Multiple main functions defined."
 
 -- | Takes a list of TopStmts, separates out any main blocks, failing if there is not exactly one.
 findMain :: Compiler [TopStmt MPType] (Module MPType)
 findMain = compiler "FindMain" $ \input ->
-  case partitionMaybe sepMain input of
-  ([],_) -> noMainErr
-  (res:restBinds,ts)
-    | null restBinds -> case res of
-        ([],_) -> noMainErr
-        (mb:restBs,binds)
-          | null restBs -> return $ Module { declarations = TopLet binds : ts, mainBlock = mb }
-          | otherwise -> multiMainErr 1 (mb:restBs)
-    | otherwise -> multiMainErr 2 (res:restBinds)
+  case separate sepMain input of
+  ([],_)    -> noMainErr
+  ([mb],ts) -> return $ Module { declarations = ts, mainBlock = mb }
+  _ -> multiMainErr
 
 -- | Takes a TopStmt and possibly returns two lists, the first a list of all the main blocks found in the module,
---   the second a list of the other, non-main bindings from a TopLet statement that contains a main binding.
-sepMain :: TopStmt MPType -> Maybe ([[BlockStmt MPType]],[(Name,Expr MPType)])
+--   the second a list of the other, non-main bindings from a TopBind statement that contains a main binding.
+sepMain :: TopStmt MPType -> Maybe [BlockStmt MPType]
 sepMain ts = case ts of
-  TopLet binds -> let ts = partitionMaybe isMain binds in guard (not $ null $ fst ts) >> return ts
+  TopBind "main" (Block bs _) -> Just bs
   _            -> Nothing
 
--- | Takes a binding pair and returns a main block if the binding is of the appropriate form, Nothing otherwise.
-isMain :: (Name,Expr MPType) -> Maybe [BlockStmt MPType]
-isMain (n,e) = case (n,e) of
-  ("main",Block bs _) -> Just bs
-  _                   -> Nothing
-
 -- |Partition that produces what results it can as it traverses the list
-partitionMaybe :: (a -> Maybe b) -> [a] -> ([b],[a])
-partitionMaybe f = foldr
+separate :: (a -> Maybe b) -> [a] -> ([b],[a])
+separate f = foldr
   (\a (y,n) -> case f a of
      Just b  -> (b:y,n)
      Nothing -> (y,a:n))

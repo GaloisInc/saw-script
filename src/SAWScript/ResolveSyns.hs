@@ -46,7 +46,7 @@ instance ResolveSyns (TopStmt MPType) where
     Import n mns mn  -> return (Import n mns mn)
     TypeDef n pt     -> TypeDef n <$> rSyns pt
     TopTypeDecl n pt -> TopTypeDecl n <$> rSyns pt
-    TopLet nes       -> let (ns,es) = unzip nes in TopLet <$> zip ns <$> mapM rSyns es
+    TopBind n e      -> TopBind n <$> rSyns e
 
 instance ResolveSyns (BlockStmt MPType) where
   rSyns s = case s of

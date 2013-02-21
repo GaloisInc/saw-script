@@ -31,17 +31,19 @@ liftPoly = compiler "LiftPoly" $ \input ->
     Right [r] -> return r
     Right rs  -> fail ("Ambiguous lifting:" ++ PP.ppShow rs)
   where
-  getGoal = flip runStateT [] . lPoly
+  getGoal (Module ds mb) = flip runStateT [] (Module <$> traverse saveLPoly ds <*> traverse saveLPoly mb)
   runGoal = flip runStateT initGState . runGoalM
   getStream = fromStream Nothing Nothing . fmap getModuleGen
   getModuleGen = (fst >>> fst) &&& (snd >>> fst)
+  saveLPoly :: Traversable f => f MPType -> LS (f LType)
+  saveLPoly = traverse (saveEnv . fillHoles)
 
 class (Traversable f) => LiftPoly f where
   lPoly :: f MPType -> LS (f LType)
   lPoly  = traverse fillHoles
 
-instance LiftPoly Module where
-  lPoly = traverse (saveEnv . fillHoles)
+--instance LiftPoly Module' where
+--  lPoly = traverse (saveEnv . fillHoles)
 instance LiftPoly TopStmt
 instance LiftPoly BlockStmt
 instance LiftPoly Expr

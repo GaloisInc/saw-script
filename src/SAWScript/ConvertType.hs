@@ -7,21 +7,19 @@ import SAWScript.Compiler
 import SAWScript.AST
 import SAWScript.Unify
 
+import Control.Applicative
 import Control.Monad
 import Data.Either
 import Data.List
 import Data.Traversable
 
-convertType :: Module LType -> Err (Module Type)
+convertType :: Compiler (Module LType) (Module' LType Type)
 convertType = groundType >=> defixType >=> removeEither
 
 -- groundType {{{
 
-groundType :: Compiler (Module LType) (Module CType)
-groundType = compiler "GroundType" $ traverseFA gType
---groundType m = case traverse (foldMuM gType) m of
---  Left e   -> Left (intercalate "\n" ["GroundType: " ++ e, "in:", show m])
---  Right m' -> Right m'
+groundType :: Compiler (Module LType) (Module' LType CType)
+groundType = compiler "GroundType" $ traverseMB $ foldMuM gType
 
 class Functor f => Groundable f where
   gType :: f CType -> Err CType
@@ -44,11 +42,8 @@ instance Groundable I where
 
 -- defixType {{{
 
-defixType :: Compiler (Module CType) (Module (Either Int Type))
-defixType = compiler "DefixType" $ traverseFA dType
---defixType m = case traverse (foldMuM dType) m of
---  Left e -> Left (intercalate "\n" ["DefixType: " ++ e, "in:", show m])
---  Right m' -> Right m'
+defixType :: Compiler (Module' LType CType) (Module' LType (Either Int Type))
+defixType = compiler "DefixType" $ traverseMB $ foldMuM dType
 
 class Functor f => Defixable f where
   dType :: f (Either Int Type) -> Err (Either Int Type)
@@ -80,15 +75,15 @@ instance Defixable I where
 
 -- removeEither {{{
 
-removeEither :: Compiler (Module (Either Int Type)) (Module Type)
-removeEither = compiler "RemoveEither" $ traverse unEither
---removeEither m = case traverse unEither m of
---  Left e -> Left (intercalate "\n" ["RemoveEither: " ++ e, "in:", show m])
---  Right m' -> Right m'
+removeEither :: Compiler (Module' LType (Either Int Type)) (Module' LType Type)
+removeEither = compiler "RemoveEither" $ traverseMB unEither
 
 unEither :: Either Int Type -> Err Type
 unEither (Right t) = return t
 unEither (Left x)  = fail ("nonsense type: " ++ show x)
 
 -- }}}
+
+traverseMB :: (Applicative f) => (a -> f b) -> Module' c a -> f (Module' c b)
+traverseMB f (Module ds mb) = Module ds <$> traverse (traverse f) mb
 

@@ -53,7 +53,7 @@ buildEnv :: TopStmt LType -> Env
 buildEnv s = case s of
   TypeDef n pt     -> Env { pEnv = [(n,pt)] , lEnv = [] }
   TopTypeDecl n pt -> Env { pEnv = [(n,pt)] , lEnv = [] }
-  TopLet nes       -> Env { pEnv = []       , lEnv = map (fmap decor) $ nes }
+  TopBind n e      -> Env { pEnv = []       , lEnv = [(n,decor e)] }
   Import _ _ _     -> mempty
 
 extendType :: Name -> LType -> TC a -> TC a
@@ -75,10 +75,9 @@ instance TypeCheck (Module LType) where
 
 instance TypeCheck (TopStmt LType) where
   tCheck ts = case ts of
-    TopLet nes -> let (ns,es) = unzip nes in do
-                    es' <- mapM tCheck es
-                    return (TopLet $ zip ns es')
-    _          -> return ts
+    TopBind n e -> do e' <- tCheck e
+                      return (TopBind n e')
+    _           -> return ts
 
 instance TypeCheck [BlockStmt LType] where
   tCheck mb = case mb of
