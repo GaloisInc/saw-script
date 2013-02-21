@@ -182,26 +182,6 @@ scTypeOf sc (STApp _ tf) =
 --    EqType{} -> undefined 
 --    Oracle{} -> undefined
 
-{-
--- | Monadic fold with memoization
-foldSharedTermM :: forall s b m . Monad m 
-                => (VarIndex -> Ident -> SharedTerm s -> m b)
-                -> (TermF b -> m b) -> SharedTerm s -> m b
-foldSharedTermM g f = \t -> State.evalStateT (go t) Map.empty
-  where
-    go :: SharedTerm s -> State.StateT (Map TermIndex b) m b
-    go (STVar i sym tp) = lift $ g i sym tp
-    go (STApp i t) = do
-      memo <- State.get
-      case Map.lookup i memo of
-        Just x  -> return x
-        Nothing -> do
-          t' <- Traversable.mapM go t
-          x <- lift (f t')
-          State.modify (Map.insert i x)
-          return x
--}
-
 -- | The inverse function to @sharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
 unshare t = State.evalState (go t) Map.empty
