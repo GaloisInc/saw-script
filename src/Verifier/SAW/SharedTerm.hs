@@ -320,10 +320,9 @@ instantiateVarListChangeT sc k ts t =
     fn :: [(Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
        -> ChangeT IO (IO (SharedTerm s))
-    fn = undefined
---    fn rs i j t | j >= i + k + l = taint $ getTerm sc <$> (LocalVar (j - l) <$> t)
---                | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
---                | otherwise      = getTerm sc <$> (LocalVar j <$> t)
+    fn rs i j t | j >= i + k + l = taint $ scTermF sc <$> (LocalVar (j - l) <$> t)
+                | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
+                | otherwise      = scTermF sc <$> (LocalVar j <$> t)
 
 instantiateVarList :: SharedContext s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
