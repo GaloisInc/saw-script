@@ -28,6 +28,7 @@ module Verifier.SAW.SharedTerm
   , scApplyAll
   , scMkRecord
   , scRecordSelect
+  , scCtorApp
   , scApplyCtor
   , scFun
   , scNat
@@ -335,7 +336,6 @@ data SharedContext s = SharedContext
   , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
   -- | Create a global variable with the given identifier (which may be "_") and type.
   , scFreshGlobal   :: Ident -> SharedTerm s -> IO (SharedTerm s)
-  , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
   -- | Returns term as a constant Boolean if it can be evaluated as one.
   , scViewAsBool    :: SharedTerm s -> Maybe Bool
   -- | Returns term as an integer if it is an integer, signed
@@ -364,6 +364,18 @@ scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
 scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
 scDefTerm sc d = scGlobalDef sc (defIdent d)
+
+-- | Applies the constructor with the given name to the list of
+-- arguments. This version does no checking against the module.
+scCtorApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
+scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
+
+-- TODO: implement version of scCtorApp that looks up the arity of the
+-- constructor identifier in the module.
+
+-- | Deprecated. Use scCtorApp instead.
+scApplyCtor :: SharedContext s -> TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
+scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
 scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
 scSort sc s = scFlatTermF sc (Sort s)
@@ -436,7 +448,6 @@ mkSharedContext m = do
              scModule = return m
            , scTermF = getTerm cr
            , scFreshGlobal = freshGlobal
-           , scApplyCtor = undefined
            , scViewAsBool = undefined
            , scViewAsNum = viewAsNum
            }
