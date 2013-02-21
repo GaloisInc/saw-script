@@ -344,7 +344,6 @@ data SharedContext s = SharedContext
   , scLookupDef     :: String -> IO (SharedTerm s)
   , scDefTerm       :: TypedDef -> IO (SharedTerm s)
   , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-  , scPrettyTermDoc :: SharedTerm s -> Doc
   -- | Returns term as a constant Boolean if it can be evaluated as one.
   , scViewAsBool    :: SharedTerm s -> Maybe Bool
   -- | Returns term as an integer if it is an integer, signed
@@ -389,6 +388,10 @@ scBitvector :: SharedContext s
             -> IO (SharedTerm s)
 scBitvector = error "scBitvector unimplemented"
 
+-- TODO: remove unused SharedContext argument
+scPrettyTermDoc :: SharedContext s -> SharedTerm s -> Doc
+scPrettyTermDoc _sc t = ppTerm emptyLocalVarDoc 0 (unshare t)
+
 scPrettyTerm :: SharedContext s -> SharedTerm s -> String
 scPrettyTerm sc t = show (scPrettyTermDoc sc t)
 
@@ -425,7 +428,6 @@ mkSharedContext m = do
            , scLookupDef = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
            , scDefTerm = undefined
            , scApplyCtor = undefined
-           , scPrettyTermDoc = undefined
            , scViewAsBool = undefined
            , scViewAsNum = viewAsNum
            }
