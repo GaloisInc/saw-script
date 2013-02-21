@@ -126,57 +126,59 @@ localVarType = undefined
 
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
-subst0 :: AppCacheRef s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+subst0 :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 subst0 = undefined
 
-sortOfTerm :: AppCacheRef s -> (Ident -> IO (SharedTerm s)) -> SharedTerm s -> IO Sort
-sortOfTerm ac typeOfGlobal t = do
-  STApp _ (FTermF (Sort s)) <- typeOf ac typeOfGlobal t
+sortOfTerm :: SharedContext s -> SharedTerm s -> IO Sort
+sortOfTerm sc t = do
+  STApp _ (FTermF (Sort s)) <- scTypeOf sc t
   return s
 
-mkSharedSort :: AppCacheRef s -> Sort -> IO (SharedTerm s)
-mkSharedSort ac s = getFlatTerm ac (Sort s)
+mkSharedSort :: SharedContext s -> Sort -> IO (SharedTerm s)
+mkSharedSort sc s = scFlatTermF sc (Sort s)
 
+typeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
+typeOfGlobal sc ident =
+    do m <- scModule sc
+       case findDef m ident of
+         Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+         Just d -> scSharedTerm sc (defType d)
 
-typeOfFTermF :: AppCacheRef s
-             -> (Ident -> IO (SharedTerm s))
+typeOfFTermF :: SharedContext s
              -> FlatTermF (SharedTerm s)
              -> IO (SharedTerm s)
-typeOfFTermF ac typeOfGlobal tf =
+typeOfFTermF sc tf =
   case tf of
-    GlobalDef d -> typeOfGlobal d
+    GlobalDef d -> typeOfGlobal sc d
     App x y -> do
-      STApp _ (Pi _ _ rhs) <- typeOf ac typeOfGlobal x
-      subst0 ac rhs y
-    TupleValue l -> getFlatTerm ac . TupleType =<< mapM (typeOf ac typeOfGlobal) l
-    TupleType l -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac typeOfGlobal) l
-    RecordValue m -> getFlatTerm ac . RecordType =<< mapM (typeOf ac typeOfGlobal) m
+      STApp _ (Pi _ _ rhs) <- scTypeOf sc x
+      subst0 sc rhs y
+    TupleValue l -> scTupleType sc =<< mapM (scTypeOf sc) l
+    TupleType l -> mkSharedSort sc . maximum =<< mapM (sortOfTerm sc) l
+    RecordValue m -> scFlatTermF sc . RecordType =<< mapM (scTypeOf sc) m
     RecordSelector t f -> do
-      STApp _ (FTermF (RecordType m)) <- typeOf ac typeOfGlobal t
+      STApp _ (FTermF (RecordType m)) <- scTypeOf sc t
       let Just tp = Map.lookup f m
       return tp
-    RecordType m -> mkSharedSort ac . maximum =<< mapM (sortOfTerm ac typeOfGlobal) m
+    RecordType m -> mkSharedSort sc . maximum =<< mapM (sortOfTerm sc) m
     CtorApp c args -> undefined c args
     DataTypeApp dt args -> undefined dt args
-    Sort s -> mkSharedSort ac (sortOf s)
+    Sort s -> mkSharedSort sc (sortOf s)
     NatLit i -> undefined i
     ArrayValue tp _ -> undefined tp
 
-typeOf :: AppCacheRef s
-       -> (Ident -> IO (SharedTerm s))
-       -> SharedTerm s
-       -> IO (SharedTerm s)
-typeOf ac _ (STVar _ _ tp) = return tp
-typeOf ac typeOfGlobal (STApp _ tf) =
+scTypeOf :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scTypeOf sc (STVar _ _ tp) = return tp
+scTypeOf sc (STApp _ tf) =
   case tf of
-    FTermF ftf -> typeOfFTermF ac typeOfGlobal ftf
+    FTermF ftf -> typeOfFTermF sc ftf
     Lambda (PVar i _ _) tp rhs -> do
-      rtp <- typeOf ac typeOfGlobal rhs
-      getTerm ac (Pi i tp rtp)
+      rtp <- scTypeOf sc rhs
+      scTermF sc (Pi i tp rtp)
     Pi _ tp rhs -> do
-      ltp <- sortOfTerm ac typeOfGlobal tp
-      rtp <- sortOfTerm ac typeOfGlobal rhs
-      mkSharedSort ac (max ltp rtp)
+      ltp <- sortOfTerm sc tp
+      rtp <- sortOfTerm sc rhs
+      mkSharedSort sc (max ltp rtp)
     Let defs rhs -> undefined defs rhs
     LocalVar _ tp -> return tp
 --    EqType{} -> undefined 
@@ -223,6 +225,10 @@ instance Show (SharedTerm s) where
 sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
 sharedTerm mvar = go
     where go (Term termf) = getTerm mvar =<< traverse go termf
+
+scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
+scSharedTerm sc = go
+    where go (Term termf) = scTermF sc =<< traverse go termf
 
 instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
@@ -338,7 +344,6 @@ data SharedContext s = SharedContext
   , scLookupDef     :: String -> IO (SharedTerm s)
   , scDefTerm       :: TypedDef -> IO (SharedTerm s)
   , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-  , scTypeOf        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDoc :: SharedTerm s -> Doc
   -- | Returns term as a constant Boolean if it can be evaluated as one.
   , scViewAsBool    :: SharedTerm s -> Maybe Bool
@@ -408,10 +413,6 @@ mkSharedContext m = do
 --        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
 --          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
 --          Just d -> return d
-  let typeOfGlobal ident =
-        case findDef m ident of
-          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
-          Just d -> sharedTerm cr (defType d)
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i,i+1))
         return (STVar i sym tp)
@@ -424,7 +425,6 @@ mkSharedContext m = do
            , scLookupDef = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
            , scDefTerm = undefined
            , scApplyCtor = undefined
-           , scTypeOf = typeOf cr typeOfGlobal
            , scPrettyTermDoc = undefined
            , scViewAsBool = undefined
            , scViewAsNum = viewAsNum
