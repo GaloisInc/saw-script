@@ -128,7 +128,7 @@ localVarType = undefined
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
 subst0 :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-subst0 = undefined
+subst0 sc t t0 = instantiateVar sc 0 t0 t
 
 sortOfTerm :: SharedContext s -> SharedTerm s -> IO Sort
 sortOfTerm sc t = do
@@ -275,6 +275,8 @@ instantiateVarChangeT sc k t0 t =
                  | j == i + k = taint $ return <$> term i
                  | otherwise  = scTermF sc <$> (LocalVar j <$> t)
 
+-- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
+-- dangling variables.
 instantiateVar :: SharedContext s
                -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 instantiateVar sc k t0 t = commitChangeT (instantiateVarChangeT sc k t0 t)
