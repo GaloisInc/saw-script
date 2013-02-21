@@ -61,7 +61,7 @@ import Text.PrettyPrint.HughesPJ
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
-import Verifier.SAW.TypedAST hiding (instantiateVarList)
+import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
 type TermIndex = Word64
 type VarIndex = Word64
@@ -224,11 +224,11 @@ sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
 sharedTerm mvar = go
     where go (Term termf) = getTerm mvar =<< traverse go termf
 
-instantiateVars :: forall s. AppCacheRef s
+instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
-instantiateVars ac f initialLevel t =
+instantiateVars sc f initialLevel t =
     do cache <- newCache
        let ?cache = cache in go initialLevel t
   where
@@ -240,10 +240,10 @@ instantiateVars ac f initialLevel t =
 
     go' :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
-    go' l (FTermF tf) = getFlatTerm ac <$> (traverse (go l) tf)
-    go' l (Lambda i tp rhs) = getTerm ac <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
-    go' l (Pi i lhs rhs)    = getTerm ac <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
-    go' l (Let defs r) = getTerm ac <$> (Let <$> changeList procDef defs <*> go l' r)
+    go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
+    go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
+    go' l (Pi i lhs rhs)    = scTermF sc <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
+    go' l (Let defs r) = scTermF sc <$> (Let <$> changeList procDef defs <*> go l' r)
       where l' = l + length defs
             procDef :: LocalDef (SharedTerm s) -> ChangeT IO (LocalDef (SharedTerm s))
             procDef (LocalFnDef sym tp eqs) =
@@ -252,76 +252,76 @@ instantiateVars ac f initialLevel t =
             procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
               where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i tp)
-      | i < l     = getTerm ac <$> (LocalVar i <$> go (l-(i+1)) tp)
+      | i < l     = scTermF sc <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
---    go' l (EqType lhs rhs) = getTerm ac <$> (EqType <$> go l lhs <*> go l rhs)
---    go' l (Oracle s prop) = getTerm ac <$> (Oracle s <$> go l prop)
+--    go' l (EqType lhs rhs) = scTermF sc <$> (EqType <$> go l lhs <*> go l rhs)
+--    go' l (Oracle s prop) = scTermF sc <$> (Oracle s <$> go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVarsChangeT :: AppCacheRef s
+incVarsChangeT :: SharedContext s
                -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
-incVarsChangeT ac initialLevel j
+incVarsChangeT sc initialLevel j
     | j == 0 = return
-    | j >  0 = instantiateVars ac fn initialLevel
+    | j >  0 = instantiateVars sc fn initialLevel
     where
-      fn _ i t = taint $ getTerm ac <$> (LocalVar (i+j) <$> t)
+      fn _ i t = taint $ scTermF sc <$> (LocalVar (i+j) <$> t)
 
-incVars :: AppCacheRef s
+incVars :: SharedContext s
         -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
-incVars ac i j t = commitChangeT (incVarsChangeT ac i j t)
+incVars sc i j t = commitChangeT (incVarsChangeT sc i j t)
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
-instantiateVarChangeT :: forall s. AppCacheRef s
+instantiateVarChangeT :: forall s. SharedContext s
                       -> DeBruijnIndex -> SharedTerm s -> SharedTerm s
                       -> ChangeT IO (SharedTerm s)
-instantiateVarChangeT ac k t0 t =
+instantiateVarChangeT sc k t0 t =
     do cache <- newCache
-       let ?cache = cache in instantiateVars ac fn 0 t
+       let ?cache = cache in instantiateVars sc fn 0 t
   where -- Use map reference to memoize instantiated versions of t.
         term :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
                 DeBruijnIndex -> ChangeT IO (SharedTerm s)
-        term i = useCache ?cache i (incVarsChangeT ac 0 i t0)
+        term i = useCache ?cache i (incVarsChangeT sc 0 i t0)
         -- Instantiate variable 0.
         fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
-        fn i j t | j  > i + k = taint $ getTerm ac <$> (LocalVar (j - 1) <$> t)
+        fn i j t | j  > i + k = taint $ scTermF sc <$> (LocalVar (j - 1) <$> t)
                  | j == i + k = taint $ return <$> term i
-                 | otherwise  = getTerm ac <$> (LocalVar j <$> t)
+                 | otherwise  = scTermF sc <$> (LocalVar j <$> t)
 
-instantiateVar :: AppCacheRef s
+instantiateVar :: SharedContext s
                -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-instantiateVar ac k t0 t = commitChangeT (instantiateVarChangeT ac k t0 t)
+instantiateVar sc k t0 t = commitChangeT (instantiateVarChangeT sc k t0 t)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
-instantiateVarListChangeT :: forall s. AppCacheRef s
+instantiateVarListChangeT :: forall s. SharedContext s
                           -> DeBruijnIndex -> [SharedTerm s]
                           -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVarListChangeT _ _ [] t = return t
-instantiateVarListChangeT ac k ts t =
+instantiateVarListChangeT sc k ts t =
     do caches <- mapM (const newCache) ts
-       instantiateVars ac (fn (zip caches ts)) 0 t
+       instantiateVars sc (fn (zip caches ts)) 0 t
   where
     l = length ts
     -- Memoize instantiated versions of ts.
     term :: (Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)
          -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-    term (cache, t) i = useCache cache i (incVarsChangeT ac 0 i t)
+    term (cache, t) i = useCache cache i (incVarsChangeT sc 0 i t)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
        -> ChangeT IO (IO (SharedTerm s))
     fn = undefined
---    fn rs i j t | j >= i + k + l = taint $ getTerm ac <$> (LocalVar (j - l) <$> t)
+--    fn rs i j t | j >= i + k + l = taint $ getTerm sc <$> (LocalVar (j - l) <$> t)
 --                | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
---                | otherwise      = getTerm ac <$> (LocalVar j <$> t)
+--                | otherwise      = getTerm sc <$> (LocalVar j <$> t)
 
-instantiateVarList :: AppCacheRef s
+instantiateVarList :: SharedContext s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
-instantiateVarList ac k ts t = commitChangeT (instantiateVarListChangeT ac k ts t)
+instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts t)
 
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building SharedTerms.
@@ -338,7 +338,6 @@ data SharedContext s = SharedContext
   , scLookupDef     :: String -> IO (SharedTerm s)
   , scDefTerm       :: TypedDef -> IO (SharedTerm s)
   , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-  , scFun           :: SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
   , scTypeOf        :: SharedTerm s -> IO (SharedTerm s)
   , scPrettyTermDoc :: SharedTerm s -> Doc
   -- | Returns term as a constant Boolean if it can be evaluated as one.
@@ -346,7 +345,6 @@ data SharedContext s = SharedContext
   -- | Returns term as an integer if it is an integer, signed
   -- bitvector, or unsigned bitvector.
   , scViewAsNum     :: SharedTerm s -> Maybe Integer
-  , scInstVarList   :: DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
   }
 
 scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
@@ -389,6 +387,10 @@ scBitvector = error "scBitvector unimplemented"
 scPrettyTerm :: SharedContext s -> SharedTerm s -> String
 scPrettyTerm sc t = show (scPrettyTermDoc sc t)
 
+scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFun sc a b = do b' <- incVars sc 0 1 b
+                  scTermF sc (Pi "_" a b')
+
 scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
@@ -422,13 +424,10 @@ mkSharedContext m = do
            , scLookupDef = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
            , scDefTerm = undefined
            , scApplyCtor = undefined
-           , scFun = \a b -> do b' <- Verifier.SAW.SharedTerm.incVars cr 0 1 b
-                                getTerm cr (Pi "_" a b')
            , scTypeOf = typeOf cr typeOfGlobal
            , scPrettyTermDoc = undefined
            , scViewAsBool = undefined
            , scViewAsNum = viewAsNum
-           , scInstVarList = instantiateVarList cr
            }
 
 asNatLit :: SharedTerm s -> Maybe Integer
