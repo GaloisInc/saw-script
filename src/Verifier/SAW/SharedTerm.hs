@@ -338,10 +338,6 @@ data SharedContext s = SharedContext
   , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
   -- | Create a global variable with the given identifier (which may be "_") and type.
   , scFreshGlobal   :: Ident -> SharedTerm s -> IO (SharedTerm s)
-  -- | Returns the defined constant with the given name. Fails if no such
-  -- constant exists in the module.
-  , scLookupDef     :: String -> IO (SharedTerm s)
-  , scDefTerm       :: TypedDef -> IO (SharedTerm s)
   , scApplyCtor     :: TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
   -- | Returns term as a constant Boolean if it can be evaluated as one.
   , scViewAsBool    :: SharedTerm s -> Maybe Bool
@@ -358,6 +354,19 @@ scApply sc f x = scFlatTermF sc (App f x)
 
 scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll sc = foldlM (scApply sc)
+
+-- | This version does no checking against the module namespace.
+scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
+scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
+
+-- | Returns the defined constant with the given name. Fails if no
+-- such constant exists in the module.
+scLookupDef :: SharedContext s -> Ident -> IO (SharedTerm s)
+scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
+
+-- | Deprecated. Use scGlobalDef or scLookupDef instead.
+scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
+scDefTerm sc d = scGlobalDef sc (defIdent d)
 
 scLiteral :: SharedContext s -> Integer -> IO (SharedTerm s)
 scLiteral sc n
@@ -424,8 +433,6 @@ mkSharedContext m = do
              scModule = return m
            , scTermF = getTerm cr
            , scFreshGlobal = freshGlobal
-           , scLookupDef = getFlatTerm cr . GlobalDef . mkIdent (moduleName m)
-           , scDefTerm = undefined
            , scApplyCtor = undefined
            , scViewAsBool = undefined
            , scViewAsNum = viewAsNum
