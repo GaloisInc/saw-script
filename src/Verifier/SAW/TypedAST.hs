@@ -45,6 +45,7 @@ module Verifier.SAW.TypedAST
  , TermF(..)
  , FlatTermF(..)
  , zipWithFlatTermF
+ , ppTerm
  , ppFlatTermF
  , ppRecordF
    -- * Primitive types.
@@ -60,6 +61,7 @@ module Verifier.SAW.TypedAST
  , commaSepList
  , semiTermList
  , ppParens
+ , emptyLocalVarDoc
  ) where
 
 import Control.Applicative hiding (empty)
