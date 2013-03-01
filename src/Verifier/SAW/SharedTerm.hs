@@ -18,11 +18,13 @@ module Verifier.SAW.SharedTerm
     -- ** Implicit versions of functions.
   , scDefTerm
   , scFreshGlobal
+  , scGlobalDef
   , scModule
   , scApply
   , scApplyAll
   , scMkRecord
   , scRecordSelect
+  , scRecordType
   , scCtorApp
   , scApplyCtor
   , scFun
@@ -358,7 +360,7 @@ scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTer
 scRecordType sc m = scFlatTermF sc (RecordType m)
 
 scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
-scNat = error "scNat unimplemented"
+scNat = scLiteral
 
 scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTuple sc ts = scFlatTermF sc (TupleValue ts)
