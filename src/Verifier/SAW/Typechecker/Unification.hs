@@ -698,6 +698,15 @@ checkTypesEqual' p ctx tc x y = do
       | V.length xv == V.length yv ->
          check' tc xtp ytp *> checkAll (V.zip xv yv)
 
+    ( (TCLambda xp xtp xr, []), (TCLambda yp ytp yr, []) ) -> do
+       check' tc xtp ytp
+       mr <- instantiatePats p tc xp yp 
+       case mr of
+         Nothing -> return ()
+         Just (tc', xsub, ysub) -> do
+           let xr' = tcApply tc (extendPatContext tc xp, xr) (tc', xsub)
+           let yr' = tcApply tc (extendPatContext tc yp, yr) (tc', ysub)
+           check' tc' xr' yr'
     ( (TCPi xp xtp xr, []), (TCPi yp ytp yr, []) ) -> do
        check' tc xtp ytp
        mr <- instantiatePats p tc xp yp 
