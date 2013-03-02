@@ -48,6 +48,7 @@ module Verifier.SAW.SharedTerm
 
 import Control.Applicative ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
+import Control.Monad (foldM)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.IORef
@@ -85,7 +86,7 @@ unwrapSharedTerm :: SharedTerm s -> TermF (SharedTerm s)
 unwrapSharedTerm (STApp _ tf) = tf
 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
-                     , acNextIdx :: !Word64
+                     , acNextIdx :: !TermIndex
                      }
 
 emptyAppCache :: AppCache s
@@ -118,6 +119,10 @@ localVarType = undefined
 subst0 :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 subst0 sc t t0 = instantiateVar sc 0 t0 t
 
+reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+reducePi sc (STApp _ (Pi _ _ body)) arg = instantiateVar sc 0 arg body
+reducePi _ _ _ = error "reducePi: not a Pi term"
+
 sortOfTerm :: SharedContext s -> SharedTerm s -> IO Sort
 sortOfTerm sc t = do
   STApp _ (FTermF (Sort s)) <- scTypeOf sc t
@@ -130,6 +135,20 @@ typeOfGlobal sc ident =
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
          Just d -> scSharedTerm sc (defType d)
 
+typeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
+typeOfDataType sc ident =
+    do m <- scModule sc
+       case findDataType m ident of
+         Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+         Just d -> scSharedTerm sc (dtType d)
+
+typeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
+typeOfCtor sc ident =
+    do m <- scModule sc
+       case findCtor m ident of
+         Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+         Just d -> scSharedTerm sc (ctorType d)
+
 typeOfFTermF :: SharedContext s
              -> FlatTermF (SharedTerm s)
              -> IO (SharedTerm s)
@@ -137,21 +156,28 @@ typeOfFTermF sc tf =
   case tf of
     GlobalDef d -> typeOfGlobal sc d
     App x y -> do
-      STApp _ (Pi _ _ rhs) <- scTypeOf sc x
-      subst0 sc rhs y
+      tx <- scTypeOf sc x
+      reducePi sc tx y
     TupleValue l -> scTupleType sc =<< mapM (scTypeOf sc) l
     TupleType l -> scSort sc . maximum =<< mapM (sortOfTerm sc) l
+    TupleSelector t i -> do
+      STApp _ (FTermF (TupleType ts)) <- scTypeOf sc t
+      return (ts !! (i-1)) -- FIXME test for i < length ts
     RecordValue m -> scRecordType sc =<< mapM (scTypeOf sc) m
     RecordSelector t f -> do
       STApp _ (FTermF (RecordType m)) <- scTypeOf sc t
       let Just tp = Map.lookup f m
       return tp
     RecordType m -> scSort sc . maximum =<< mapM (sortOfTerm sc) m
-    CtorApp c args -> undefined c args
-    DataTypeApp dt args -> undefined dt args
+    CtorApp c args -> do
+      t <- typeOfCtor sc c
+      foldM (reducePi sc) t args
+    DataTypeApp dt args -> do
+      t <- typeOfDataType sc dt
+      foldM (reducePi sc) t args
     Sort s -> scSort sc (sortOf s)
-    NatLit i -> undefined i
-    ArrayValue tp _ -> undefined tp
+    NatLit i -> scNat sc i
+    ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
 
 scTypeOf :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scTypeOf sc (STVar _ _ tp) = return tp
@@ -167,8 +193,6 @@ scTypeOf sc (STApp _ tf) =
       scSort sc (max ltp rtp)
     Let defs rhs -> undefined defs rhs
     LocalVar _ tp -> return tp
---    EqType{} -> undefined 
---    Oracle{} -> undefined
 
 -- | The inverse function to @sharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
