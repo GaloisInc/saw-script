@@ -30,12 +30,16 @@ module Verifier.SAW.SharedTerm
   , scFun
   , scNat
   , scNatType
+  , scBoolType
   , scBitvector
   , scFunAll
+  , scLambda
   , scLiteral
+  , scLocalVar
   , scLookupDef
   , scTuple
   , scTupleType
+  , scTupleSelector
   , scTypeOf
   , scPrettyTerm
   , scViewAsBool
@@ -406,6 +410,9 @@ scTuple sc ts = scFlatTermF sc (TupleValue ts)
 scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTupleType sc ts = scFlatTermF sc (TupleType ts)
 
+scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
+scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
+
 -- | Obtain term representation a bitvector with a given width and known
 -- value.
 scBitvector :: SharedContext s
@@ -428,10 +435,20 @@ scFun sc a b = do b' <- incVars sc 0 1 b
 scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
+scLambda :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scLambda sc varname ty body = scTermF sc (Lambda (PVar varname 0 ty) ty body)
+
+scLocalVar :: SharedContext s -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
+scLocalVar sc i t = scTermF sc (LocalVar i t)
+
+------------------------------------------------------------
 -- Building terms using prelude functions
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
+
+scBoolType :: SharedContext s -> IO (SharedTerm s)
+scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Bool") [])
 
 scNatType :: SharedContext s -> IO (SharedTerm s)
 scNatType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Nat") [])
