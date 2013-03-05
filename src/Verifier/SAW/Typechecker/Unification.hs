@@ -21,18 +21,18 @@ import Control.Monad.Error (ErrorT(..), throwError)
 import Control.Monad.State (StateT(..), MonadState(..), evalStateT, gets)
 import Control.Monad.Trans
 import Control.Monad.ST
-import Data.Foldable
+import Data.Foldable (Foldable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.STRef
-import Data.Traversable
+--import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint
 
-import Prelude hiding (mapM, mapM_, sequence, sequence_)
+--import Prelude hiding (mapM, mapM_, sequence, sequence_)
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
@@ -134,9 +134,15 @@ data UnifierState s =
   US { usGlobalContext :: TermContext s
        -- Position where unification began.                     
      , usPos :: Pos
-     , usVarCount :: Int
-     , usRigidCount :: Int
+     , _usVarCount :: Int
+     , _usRigidCount :: Int
      }
+
+usVarCount :: Simple Lens (UnifierState s) Int
+usVarCount = lens _usVarCount (\s c -> s { _usVarCount = c })
+
+usRigidCount :: Simple Lens (UnifierState s) Int
+usRigidCount = lens _usRigidCount (\s c -> s { _usRigidCount = c })
 
 type Unifier s = StateT (UnifierState s) (TC s)
 
@@ -144,35 +150,35 @@ runUnifier :: TermContext s -> Pos -> Unifier s v -> TC s v
 runUnifier uc p m = evalStateT m s0
   where s0 = US { usGlobalContext = uc
                 , usPos = p
-                , usVarCount = 0
-                , usRigidCount = 0
+                , _usVarCount = 0
+                , _usRigidCount = 0
                 }
+
 
 mkVar :: String -> UVarState s -> Unifier s (VarIndex s)
 mkVar nm vs = do
   vr <- lift $ liftST $ newSTRef vs
-  s <- get
-  let vidx = usVarCount s
-      v = VarIndex { viIndex  = vidx
-                   , viName = nm
-                   , viRef = vr
-                   }
-  v <$ put s { usVarCount = vidx + 1 }
+  vidx <- use usVarCount
+  usVarCount += 1
+  return VarIndex { viIndex  = vidx
+                  , viName = nm
+                  , viRef = vr
+                  }
  
 mkFreeTypeVar :: String -> Unifier s (VarIndex s)
 mkFreeTypeVar nm = mkVar ("type of " ++ show nm) (UFreeType nm)
 
 newRigidVar :: Un.Pos -> String -> Unifier s (RigidVarRef s, VarIndex s)
 newRigidVar p nm = do
-  tp <- mkVar ("type of " ++ nm) (UFreeType nm)
-  s <- get
-  let idx = usRigidCount s
+  tp <- mkFreeTypeVar nm
+  idx <- use usRigidCount
+  usRigidCount += 1
   let rv = RigidVarRef { rvrIndex = idx
                        , rvrPos = p
                        , rvrName = nm
                        , rvrType = tp
                        }
-  (rv,tp) <$ put s { usRigidCount = idx + 1 }
+  return (rv,tp)
 
 unFail :: Pos -> Doc -> Unifier s a
 unFail p msg = lift (tcFail p (show msg))
@@ -190,7 +196,7 @@ usetEqual vx vy = do
       | rx == ry -> pure ()
       | otherwise -> unFail p (text "Ununifiable rigid vars")
     (UTF ufx, UTF ufy)
-      | Just ufz <- zipWithFlatTermF usetEqual ufx ufy -> sequence_ ufz
+      | Just ufz <- zipWithFlatTermF usetEqual ufx ufy -> sequenceOf_ folded ufz
   
     (UFreeType{}, _) -> lift $ liftST $ writeSTRef (viRef vx) (UVar vy)
     (_, UFreeType{}) -> lift $ liftST $ writeSTRef (viRef vy) (UVar vx)
@@ -287,7 +293,7 @@ extendLocalCtx1 b@(_,vtp,nm,tp) ulc = do
                        }
 
 extendLocalCtx :: [LocalCtxBinding s] -> UnifyLocalCtx s -> Unifier s (UnifyLocalCtx s)
-extendLocalCtx l ulc = foldlM (flip extendLocalCtx1) ulc l
+extendLocalCtx l ulc = foldlMOf folded (flip extendLocalCtx1) ulc l
 
 -- | Create a unify term from a term.  
 mkUnifyTerm :: UnifyLocalCtx s
@@ -340,7 +346,7 @@ matchUnPat il itcp iup = do
                 | Map.size um < length fpl -> lift $
                     unFail p $ text "Duplicate field names in pattern."
                 | Map.keys pm == Map.keys um ->
-                    UPatF p . UPRecord <$> sequence (Map.intersectionWith go pm um)
+                    UPatF p . UPRecord <$> sequenceOf traverse (Map.intersectionWith go pm um)
               where um = Map.fromList $ first val <$> fpl
             (UPCtor c pl, Un.PCtor pnm upl) -> do
               tc <- lift $ gets usGlobalContext
@@ -365,72 +371,19 @@ indexPiPats unpats0 tp0 = do
           (up,lctx') <- matchUnPat lctx p unpat
           go (up:ppats) upl (lctx', r)
 
-{-
-type VarIndexMap s = Map Int (VarIndex s)
-type VarSubst s = Vector (VarIndex s)
-
--- | Return term representing pat and storing vars in map.
-instPat :: TCPat -> StateT (VarIndexMap s) (Unifier s) (VarIndex s) 
-instPat (TCPVar nm (j, _)) = do
-  m <- get
-  v <- lift $ do 
-    p <- gets usPos
-    (r,_) <- newRigidVar p nm
-    mkVar nm $ URigidVar r
-  v <$ put (Map.insert j v m)
-instPat (TCPUnused nm _) = lift $ do
-  tpv <- mkFreeTypeVar nm
-  mkVar nm (UUnused nm tpv)
-instPat (TCPatF pf) =
-  lift . mkVar "unnamed" . UTF . termFromPatF =<< traverse instPat pf
-
--- | Attempt to unify two pats, updating state to map variables to term they are bound to.
-mergePats' :: TCPat
-           -> TCPat
-           -> StateT (VarIndexMap s, VarIndexMap s) (ErrorT String (Unifier s)) ()
-mergePats' (TCPVar _ (i, _)) p2 = do
-  (m1,m2) <- get
-  (v,m2') <- lift $ lift $ runStateT (instPat p2) m2
-  put (Map.insert i v m1, m2')
-mergePats' p1 (TCPVar _ (i, _)) = do
-  (m1,m2) <- get
-  (v,m1') <- lift $ lift $ runStateT (instPat p1) m1
-  put (m1', Map.insert i v m2)
-mergePats' TCPUnused{} p2 = do
-  (m1,m2) <- get
-  (_,m2') <- lift $ lift $ runStateT (instPat p2) m2
-  put (m1, m2')
-mergePats' p1 TCPUnused{} = do
-  (m1,m2) <- get
-  (_,m1') <- lift $ lift $ runStateT (instPat p1) m1
-  put (m1', m2)
-mergePats' (TCPatF pf1) (TCPatF pf2) = do
-  case zipWithPatF mergePats' pf1 pf2 of
-    Just pf -> sequence_ pf 
-    Nothing -> lift $ throwError "Pattern merging failed"
-
-
-mergePats :: TCPat
-          -> TCPat
-          -> Unifier s (Maybe (VarSubst s, VarSubst s))
-mergePats p10 p20 = do
-  mr <- runErrorT $ execStateT (mergePats' p10 p20) (Map.empty, Map.empty)
-  return $
-    case mr of
-      Left _ -> Nothing
-      Right r -> Just (over both (V.fromList . Map.elems) r)
--}
-
 data UnifyResult s
    = UR { -- | Context when unification began
           urOuterContext :: TermContext s
           -- Current context
-        , urContext :: TermContext s
+        , _urContext :: TermContext s
         , urBoundMap :: UResolverCache s (VarIndex s) (TermContext s, TCTerm)
         -- | Cache that maps variables to their typechecked value at the
         -- given deBruijnIndex.
         , urVarMap :: UResolverCache s (VarIndex s) (TermContext s, TCTerm)
         }
+
+urContext :: Simple Lens (UnifyResult s) (TermContext s)
+urContext = lens _urContext (\s c -> s { _urContext = c })
 
 newtype UResolver s v
   = URR { unURR :: UnifyResult s -> ST s (Either String (v, UnifyResult s)) }
@@ -463,11 +416,11 @@ resolve (URR m) = do
     rmc <- liftST newCache
     vmc <- liftST newCache
     let ur0 = UR { urOuterContext = usGlobalContext us
-                 , urContext = usGlobalContext us
+                 , _urContext = usGlobalContext us
                  , urBoundMap = rmc
                  , urVarMap = vmc
                  }
-    right (second urContext) <$> liftST (m ur0)
+    right (second _urContext) <$> liftST (m ur0)
 
 urST :: ST s v -> UResolver s v
 urST m = URR $ \r -> fmap (\v -> Right (v,r)) m
@@ -484,10 +437,9 @@ uresolveBoundVar nm tpv = uresolveCache urBoundMap (uresolveBoundVar' nm) nm tpv
 uresolveBoundVar' :: String -> VarIndex s -> UResolver s (TermContext s, TCTerm)
 uresolveBoundVar' nm tpv = do
   tp <- resolveCurrent =<< resolveUTerm tpv
-  ur <- get
-  put ur { urContext = consBoundVar nm tp (urContext ur)
-         }
-  return (urContext ur, tp)
+  ctx <- use urContext
+  urContext .= consBoundVar nm tp ctx
+  return (ctx,tp)
 
 data URRes v = URSeen v
              | URActive
@@ -523,7 +475,7 @@ uresolveCache gfn rfn nm k = do
 
 -- | Convert a TCTerm at a given level to be valid at the current level.
 resolveCurrent :: (TermContext s, TCTerm) -> UResolver s TCTerm
-resolveCurrent p = mk <$> gets urContext
+resolveCurrent p = mk <$> use urContext
   where mk tc = applyExt tc p
 
 -- | Resolve a unifier pat to a tcpat.
@@ -550,8 +502,8 @@ traverseResolveUTerm :: Traversable t
                      -> UResolver s (TermContext s, t TCTerm)
 traverseResolveUTerm tv = do
   ttf <- traverse resolveUTerm tv
-  tc <- gets urContext
-  let Just r = mapM (applyExtSafe tc) ttf
+  tc <- use urContext
+  let Just r = traverse (applyExtSafe tc) ttf
   return (tc, r)
 
 -- | Returns the TCTerm for the given var with vars relative to returned deBruijn level.
@@ -610,7 +562,7 @@ typecheckPats tc upl@(up:_) tp = do
   r <- runUnifier tc (pos up) $ do
     utp <- mkUnifyTerm (emptyLocalCtx tc) rtp
     (pl,utpl) <- unzip <$> traverse indexUnPat upl
-    traverse_ (usetEqual utp) utpl
+    traverseOf_ folded (usetEqual utp) utpl
     resolve $ traverse resolvePat pl
   case r of
     Left msg -> tcFail (pos up) msg
@@ -668,8 +620,7 @@ instUnifyPat :: UnifyPat s -> Unifier s (VarIndex s)
 instUnifyPat (TCPVar    _ (_, (v,_))) = pure v
 instUnifyPat (TCPUnused _ (_, (v,_))) = pure v
 instUnifyPat (TCPatF pf) =
-  mkVar "patf" . UTF . termFromPatF
-    =<< traverse instUnifyPat pf
+  mkVar "patf" . UTF . termFromPatF =<< traverse instUnifyPat pf
 
 -- | Attempt to unify two pats, updating state to map variables to term they are bound to.
 mergeUnifyPats :: UnifyPat s
@@ -685,7 +636,7 @@ mergeUnifyPats p1 (TCPUnused _ (_, (v,_))) = do
   lift $ flip usetEqual v =<< instUnifyPat p1
 mergeUnifyPats (TCPatF pf1) (TCPatF pf2) = do
   case zipWithPatF mergeUnifyPats pf1 pf2 of
-    Just pf -> sequence_ pf 
+    Just pf -> sequenceOf_ folded pf 
     Nothing -> throwError "Pattern merging failed"
 
 instPats :: Pos
@@ -706,7 +657,7 @@ instPats p tc _tp (xp,xr) (yp,yr) = do
             mkSub = traverse (resolveUTerm . fst . snd) . V.fromList . patBoundVars
         mr' <- resolve $ both mkSub (xp',yp')
         case mr' of
-          Left msg -> return Nothing
+          Left{} -> return Nothing
           Right ((xs,ys),tc') -> do
             let getRes pat r sub = tcApply tc (extendPatContext tc pat, r) (tc', sub')
                   where Just sub' = traverse (applyExtSafe tc') sub
@@ -731,7 +682,7 @@ checkTypesEqual' :: forall s . Pos -> CheckTypesCtx s
 checkTypesEqual' p ctx tc x y = do
   let check' = checkTypesEqual p ((tc,x,y):ctx)
       checkAll :: Foldable t => t (TCTerm, TCTerm) -> TC s ()
-      checkAll = mapM_ (uncurry (check' tc))
+      checkAll = traverseOf_ folded (uncurry (check' tc))
   case (tcAsApp x, tcAsApp y) of
     ( (TCF (GlobalDef xg), xa), (TCF (GlobalDef yg), ya))
       | xg == yg && length xa == length ya -> do
