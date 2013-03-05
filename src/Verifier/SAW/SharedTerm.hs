@@ -29,6 +29,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scFun
   , scNat
+  , scNatType
   , scBitvector
   , scFunAll
   , scLiteral
@@ -204,7 +205,7 @@ scTypeOf sc t = State.evalStateT (memo t) Map.empty
           t <- lift $ typeOfDataType sc dt
           lift $ foldM (reducePi sc) t args
         Sort s -> lift $ scSort sc (sortOf s)
-        NatLit i -> lift $ scNat sc i
+        NatLit i -> lift $ scNatType sc
         ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
 
 -- | The inverse function to @sharedTerm@.
@@ -426,6 +427,14 @@ scFun sc a b = do b' <- incVars sc 0 1 b
 
 scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
+
+-- Building terms using prelude functions
+
+preludeName :: ModuleName
+preludeName = mkModuleName ["Prelude"]
+
+scNatType :: SharedContext s -> IO (SharedTerm s)
+scNatType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Nat") [])
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
