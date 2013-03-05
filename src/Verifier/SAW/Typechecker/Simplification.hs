@@ -4,10 +4,6 @@ module Verifier.SAW.Typechecker.Simplification
     preludeNatIdent
   , preludeZeroIdent
   , preludeSuccIdent
-  , PatVarParser
-  , addPatBindings
-  , runPatVarParser
-  , patBoundVars
   , tryMatchPat
   , Subst
   , extendPatContext
@@ -17,17 +13,16 @@ module Verifier.SAW.Typechecker.Simplification
 
 import Control.Applicative
 import Control.Arrow (second)
+import Control.Lens
 import Control.Monad.Error (ErrorT(..), throwError)
-import Control.Monad.State (State, execState, StateT(..), modify)
+import Control.Monad.State (StateT(..), modify)
 import Control.Monad.Trans
-import Data.Foldable
 import Data.Traversable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Data.Vector (Vector)
 import Text.PrettyPrint
-import Prelude hiding (foldr, mapM_)
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
@@ -46,22 +41,6 @@ preludeZeroIdent =  mkIdent preludeModuleName "Zero"
 preludeSuccIdent :: Ident
 preludeSuccIdent =  mkIdent preludeModuleName "Succ"
 
--- | State monad for recording variables found in patterns.
-type PatVarParser = State (Map Int (String,TCTerm)) ()
-
--- | Add variables in pattern to state.
-addPatBindings :: TCPat -> PatVarParser
-addPatBindings (TCPVar nm i tp) = modify $ Map.insert i (nm,tp)
-addPatBindings TCPUnused{} = return ()
-addPatBindings (TCPatF pf) = traverse_ addPatBindings pf 
-
--- | Get list of variables by running parser.
-runPatVarParser :: PatVarParser -> [(String,TCTerm)]
-runPatVarParser pvp = Map.elems (execState pvp Map.empty)
-
-patBoundVars :: TCPat -> [(String,TCTerm)]
-patBoundVars pat = runPatVarParser (addPatBindings pat)
-
 extendPatContext :: TermContext s -> TCPat -> TermContext s
 extendPatContext tc0 pat = foldr (uncurry consBoundVar) tc0 (patBoundVars pat)
 
@@ -76,7 +55,7 @@ runMatcher m = fmap finish $ runErrorT $ runStateT m Map.empty
 
 -- | Attempt to match term against a pat, returns reduced term that matches.
 attemptMatch :: TermContext s -> TCPat -> TCTerm -> Matcher s TCTerm
-attemptMatch _ (TCPVar _ i _) t = t <$ modify (Map.insert i t)
+attemptMatch _ (TCPVar _ (i,_)) t = t <$ modify (Map.insert i t)
 attemptMatch _ TCPUnused{} t = return t
 attemptMatch tc (TCPatF pf) t = do
   let go = attemptMatch tc
@@ -123,7 +102,7 @@ tryMatchPatList tc pats terms =
         go [] tl = return tl
         go _ [] = fail "Insufficient number of terms"
         finish (tl,args) = (tc', args, tl)
-          where bindings = runPatVarParser (mapM_ addPatBindings pats)
+          where bindings = patBoundVarsOf folded pats
                 tc' = foldr (uncurry consBoundVar) tc bindings
 
 reduce :: TermContext s -> TCTerm -> TC s TCTerm
