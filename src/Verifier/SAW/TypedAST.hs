@@ -68,6 +68,7 @@ import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Monad.Identity (runIdentity)
 import Data.Char
+import Data.Foldable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map

@@ -9,7 +9,7 @@ module Verifier.SAW.Typechecker.Monad
   , TCRef
   , NodeName
   , newRef
-  , assign
+  , assignRef
   , eval
   , evaluatedRef
   , tryEval
@@ -205,8 +205,8 @@ newRef nm = TC $ \tc s -> do
   let c = tsRefCount s
   tcDone (TCRef nm c r) tc s { tsRefCount = c + 1 }
 
-assign :: TCRef s v -> TC s v -> TC s ()
-assign r h  = TC $ \tc s -> do
+assignRef :: TCRef s v -> TC s v -> TC s ()
+assignRef r h  = TC $ \tc s -> do
   m <- readSTRef (tcrRef r)
   case m of
     TRSUnassigned -> do

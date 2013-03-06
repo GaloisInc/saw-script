@@ -3,8 +3,7 @@
 -- Declarations here should refer primarily to terms defined in other packages.
 -- SAW-specific declarations should be stored in separate modules.
 module Verifier.SAW.Utils 
-  ( module Data.Foldable
-  , internalError
+  ( internalError
   , sumBy
   ) where
 

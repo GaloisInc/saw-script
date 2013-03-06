@@ -15,30 +15,19 @@ module Verifier.SAW.Typechecker
 
 import Control.Applicative
 import Control.Arrow ((***), first, second)
-import Control.Monad.State hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
+import Control.Lens hiding (assign, use)
+import Control.Monad.State
 import Control.Monad.Identity (Identity(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint
 
-import Prelude hiding ( all
-                      , concat
-                      , concatMap
-                      , foldl
-                      , foldr
-                      , mapM
-                      , mapM_
-                      , sequence
-                      , sequence_
-                      , sum)
-
-import Verifier.SAW.Utils
+import Verifier.SAW.Utils (internalError)
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
@@ -56,57 +45,14 @@ projMap f l = Map.fromList [ (f e,e) | e <- l ]
 -- | Given a list of keys and values, construct a map that maps each key to the list
 -- of values.
 multiMap :: Ord k => [(k,a)] -> Map k [a]
-multiMap = foldl' fn Map.empty
+multiMap = foldlOf' folded fn Map.empty
   where fn m (k,v) = Map.insertWith (++) k [v] m
-
-{-
-
-mkEdgeMap :: Ord a => [(a,a)] -> Map a [a]
-mkEdgeMap = foldl' fn Map.empty
-  where fn m (x,y) = Map.insertWith (++) x [y] m
-
-topSort :: forall a . Ord a
-        => Set a -- List of vertices.
-        -> [(a,a)] -- List of edges
-        -> Either (Map a Int) [a]
-topSort vertices e = go (initNulls, initMap) []
-  where vl = Set.toList vertices
-        outEdgeMap = mkEdgeMap e
-        outEdges v = Map.findWithDefault [] v outEdgeMap
-        inEdgeMap = mkEdgeMap (flipPair <$> e)
-        -- Nodes that have edge to the given node. 
-        inEdges :: a -> [a]
-        inEdges v = Map.findWithDefault [] v inEdgeMap
-        initNulls = filter (null . inEdges) vl
-        initMap = Map.fromList [  (v,l) | v <- vl
-                               , let l = length (inEdges v)
-                               , l > 0
-                               ]
-        decInEdgeCount :: ([a], Map a Int) -> a -> ([a], Map a Int)
-        decInEdgeCount (l,zm) v = 
-            case Map.lookup v zm of
-                    Nothing -> error "internal: topSort did not maintain edge count"
-                    Just 1 -> (v:l, Map.delete v zm)
-                    Just n -> assert (n > 1) $ (l, Map.insert v (n-1) zm)
-        go :: ([a], Map a Int) -> [a] -> Either (Map a Int) [a]
-        go ([],zm) r | Map.null zm = Right (reverse r)
-                     | otherwise = Left zm
-        go (h:l,zm) r = go (foldl' decInEdgeCount (l,zm) (outEdges h)) (h:r)
--}
 
 -- Global context declarations.
 
 -- | Type synonyms in untyped world.
 type UnDefEqn = DefEqnGen Un.Pat Un.Term
 type UnLocalDef = LocalDefGen Un.Term [UnDefEqn]
-
-{-
--- | @extendModule m base@ returns base with the additional imports in @m@. 
-extendModule :: Module -> Module -> Module
-extendModule m base = flip (foldl' insDef) (moduleDefs m)
-                    $ flip (foldl' insDataType) (moduleDataTypes m)
-                    $ base
--}
 
 -- | Organizes information about local declarations.
 type LocalDeclsGroup = [UnLocalDef]
@@ -228,7 +174,7 @@ tcFixedPiType fn = go
               tcPats tc1 [] _ = go tc1 rhs
               tcPats tc1 (upat:upats) tp = do
                 ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
-                FPPi pat tp <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
+                FPPi pat tp <$> tcPats tc2 upats (applyExt tc2 (tc1, tp))
           tcPats tc upats0 tp0
         go tc ut = FPResult <$> fn tc ut
 
@@ -238,8 +184,8 @@ tcDTType = tcFixedPiType tcSort
 tcCtorType :: Ident -> TermContext s -> Un.Term -> TC s TCCtorType
 tcCtorType i = tcFixedPiType (tcSpecificDataType i)
 
-maximumSort :: Foldable f => f Sort -> Sort
-maximumSort = foldl' maxSort (mkSort 0)
+maximumSortOf :: Fold s Sort -> s -> Sort
+maximumSortOf fold = foldlOf' fold maxSort (mkSort 0)
 
 inferTypedValue :: TermContext s -> Un.Term -> TC s (TCTerm, TCTerm)
 inferTypedValue tc ut = do
@@ -308,7 +254,7 @@ inferTerm tc uut = do
           tcPats tc1 [] _ = tcType tc1 rhs
           tcPats tc1 (upat:upats) tp = do
             ([pat], tc2) <- typecheckPats tc1 [Un.PSimple upat] tp
-            first (TCPi pat tp) <$> tcPats tc2 upats (applyExt (tc1, tp) tc2)
+            first (TCPi pat tp) <$> tcPats tc2 upats (applyExt tc2 (tc1, tp))
       (v',rps) <- tcPats tc upats0 tp0
       return $ TypedValue v' (TCF (Sort (maxSort rps tps)))
     Un.TupleValue _ tl -> do
@@ -317,7 +263,7 @@ inferTerm tc uut = do
     Un.TupleType _ tl  -> do
       (tpl,sl) <- unzip <$> traverse (tcType tc) tl
       return $ TypedValue (TCF (TupleType tpl))
-                          (TCF (Sort (maximumSort sl)))
+                          (TCF (Sort (maximumSortOf folded sl)))
     Un.TupleSelector ux (PosPair p i) -> do
       (x,tp) <- inferTypedValue tc ux
       ts <- reduceToTupleType tc p tp
@@ -340,7 +286,7 @@ inferTerm tc uut = do
         | hasDups fl -> tcFail p "Duplicate fields in record"
         | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (tcType tc) vl
       where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
-            mkRes = (mkMap RecordType) *** (TCF . Sort . maximumSort)
+            mkRes = (mkMap RecordType) *** (TCF . Sort . maximumSortOf folded)
     Un.TypeConstraint ut _ utp -> do
       (tp,_) <- tcType tc utp
       flip TypedValue tp <$> tcTerm tc ut tp
@@ -361,15 +307,15 @@ tcLocalDecls :: TermContext s
 tcLocalDecls tc0 p lcls = do
     (tps,pending) <- unzip <$> traverse tcLclType (groupLocalDecls lcls)
     let tc = consLocalDefs tps tc0
-    traverse_ ($ tc) pending
+    traverseOf_ folded ($ tc) pending
     let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> eval p r
     (tc,) <$> traverse mkDef tps
   where tcLclType (LocalFnDefGen nm utp ueqs) = do
           (tp,_) <- tcType tc0 utp
           r <- newRef nm
           let pendingFn tc = do
-                let tp' = applyExt (tc0,tp) tc
-                assign r (tcEqns tc ueqs tp')
+                let tp' = applyExt tc (tc0,tp)
+                assignRef r (tcEqns tc ueqs tp')
           return (LocalFnDefGen nm tp r, pendingFn)
 
 -- | @checkTypeSubtype tc p x y@ checks that @x@ is a subtype of @y@.
@@ -378,7 +324,8 @@ checkTypeSubtype tc p x y = do
   xr <- reduce tc x
   yr <- reduce tc y
   let ppFailure = tcFailD p msg
-        where msg = ppTCTerm tc 0 xr <+> text "is not a subtype of" <+> ppTCTerm tc 0 yr <> char '.'
+        where msg = ppTCTerm tc 0 xr <+> text "is not a subtype of"
+                                     <+> ppTCTerm tc 0 yr <> char '.'
   case (tcAsApp xr, tcAsApp yr) of
     ( (TCF (Sort xs), []), (TCF (Sort ys), []) )
       | xs <= ys -> return ()
@@ -418,20 +365,20 @@ topEval r = eval (internalError $ "Cyclic error in top level" ++ show r) r
 
 evalDataType :: TCRefDataType s -> TC s TCDataType
 evalDataType (DataTypeGen n tp ctp) =
-  liftM2 (DataTypeGen n)
-         (topEval tp) 
-         (traverse (traverse topEval) ctp)
+  DataTypeGen n <$> topEval tp
+                <*> traverse (traverse topEval) ctp
 
 evalDef :: TCRefDef s -> TC s TCDef
 evalDef (DefGen nm tpr elr) =
-  liftA2 (DefGen nm) (Identity <$> topEval tpr) (Identity <$> topEval elr)
+  DefGen nm <$> (Identity <$> topEval tpr)
+            <*> (Identity <$> topEval elr)
 
 data CompletionContext
   = CCGlobal Module
   | CCBinding CompletionContext Term
 
 addPatTypes :: CompletionContext -> [(String,TCTerm)] -> (CompletionContext, [Term])
-addPatTypes cc0 vars = mapAccumL ins cc0 vars
+addPatTypes cc0 vars = mapAccumLOf traverse ins cc0 vars
   where ins cc (_,tp) = (CCBinding cc tp', tp')
           where tp' = completeTerm cc tp
 
@@ -462,7 +409,7 @@ completeDef cc (DefGen nm tp el) = def
 
 completeDefEqn :: CompletionContext -> TCDefEqn -> TypedDefEqn
 completeDefEqn cc (DefEqnGen pats rhs) = eqn
-  where bindings = runPatVarParser (mapM_ addPatBindings pats)
+  where bindings = patBoundVarsOf folded pats
         (cc', v) = second V.fromList $ addPatTypes cc bindings
         eqn = DefEqn (completePat' v <$> pats) (completeTerm cc' rhs)
 
@@ -472,7 +419,7 @@ completePat cc0 pat = (completePat' v pat, cc')
 
 completePat' :: Vector Term -> TCPat -> Pat Term
 completePat' v = go
-  where go (TCPVar nm i _) = PVar nm i (v V.! i)
+  where go (TCPVar nm (i,_)) = PVar nm i (v V.! i)
         go TCPUnused{} = PUnused
         go (TCPatF pf) =
           case pf of
@@ -489,10 +436,10 @@ completeTerm cc (TCF tf) = Term $ FTermF $ fmap (completeTerm cc) tf
 completeTerm cc (TCLambda pat tp r) =
     Term $ Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
   where (pat', cc') = completePat cc pat
-completeTerm cc (TCPi pat@(TCPVar nm _ _) tp r) =
+completeTerm cc (TCPi pat@(TCPVar nm _) tp r) =
     Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
-completeTerm cc (TCPi pat@(TCPUnused nm) tp r) =
+completeTerm cc (TCPi pat@(TCPUnused nm _) tp r) =
     Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term" 
@@ -543,7 +490,7 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
     -- Parse imports and declarations.
     let actions = fmap (parseImport moduleMap) iml
                ++ fmap (parseDecl eqnMap) d
-    is <- execStateT (sequenceA_ actions) is0
+    is <- execStateT (sequenceOf_ folded actions) is0
     let gc = isCtx is
     let tc = emptyTermContext gc
     -- Execute pending assignments with final TermContext.
@@ -551,8 +498,8 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
     
     let mkFinal tps defs = m
           where cc = CCGlobal m
-                m = flip (foldl' insDef) (completeDef cc <$> defs)
-                  $ flip (foldl' insDataType) (completeDataType cc <$> tps)
+                m = flip (foldl insDef) (completeDef cc <$> defs)
+                  $ flip (foldl insDataType) (completeDataType cc <$> tps)
                   $ emptyModule nm
     liftA2 mkFinal
            (traverse evalDataType (gcTypes gc))
@@ -571,35 +518,35 @@ patVarInfo :: Pat Term -> VarCollector
 patVarInfo = go
   where go (PVar nm i tp) = modify $ Map.insert i (nm,tp)
         go PUnused = return ()
-        go (PTuple l) = traverse_ go l
-        go (PRecord m) = traverse_ go m
-        go (PCtor _ l) = traverse_ go l
+        go (PTuple l)  = traverseOf_ folded go l
+        go (PRecord m) = traverseOf_ folded go m
+        go (PCtor _ l) = traverseOf_ folded go l
 
 liftTCPat :: Vector TCTerm -> Pat Term -> TCPat
 liftTCPat tps = go
-  where go (PVar nm i _) = TCPVar nm i (tps V.! i)
-        go PUnused  = TCPUnused "_"
+  where go (PVar nm i _) = TCPVar nm (i, tps V.! i)
+        go PUnused  = TCPUnused "_" undefined
         go (PTuple pl)  = TCPatF (UPTuple  (go <$> pl))
         go (PRecord pm) = TCPatF (UPRecord (go <$> pm))
         go (PCtor c pl) = TCPatF (UPCtor c (go <$> pl))
 
 liftEqn :: TermContext s -> DefEqn Term -> TC s TCDefEqn
 liftEqn tc0 (DefEqn pl r) = do
-  (tps, tc) <- runVarCollector tc0 (traverse_ patVarInfo pl)
+  (tps, tc) <- runVarCollector tc0 (traverseOf_ folded patVarInfo pl)
   DefEqnGen (liftTCPat tps <$> pl) <$> liftTCTerm tc r
 
 liftLocalDefs :: TermContext s -> [LocalDef Term] -> TC s ([TCLocalDef], TermContext s)
 liftLocalDefs tc0 lcls = do
     (tps,pending) <- unzip <$> traverse tcLclType lcls
     let tc = consLocalDefs tps tc0
-    traverse_ ($ tc) pending
+    traverseOf_ folded ($ tc) pending
     let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> topEval r
     (,tc) <$> traverse mkDef tps
   where tcLclType (LocalFnDef nm tp0 eqs) = do
           tp <- liftTCTerm tc0 tp0
           r <- newRef nm
           let pendingFn tc = do
-                assign r (traverse (liftEqn tc) eqs)
+                assignRef r (traverse (liftEqn tc) eqs)
           return (LocalFnDefGen nm tp r, pendingFn)
 
 liftTCTerm :: TermContext s -> Term -> TC s TCTerm
@@ -612,7 +559,7 @@ liftTCTerm tc (Term tf) =
     Pi nm tp rhs -> do
       tp' <- liftTCTerm tc tp
       let tc' = consBoundVar nm tp' tc
-      TCPi (TCPVar nm 0 tp') tp' <$> liftTCTerm tc' rhs
+      TCPi (TCPVar nm (0, tp')) tp' <$> liftTCTerm tc' rhs
     Let lcls r -> do
       (lcls', tc') <- liftLocalDefs tc lcls
       TCLet lcls' <$> liftTCTerm tc' r
@@ -627,7 +574,7 @@ liftFixedType :: (TermContext s -> Term -> TC s (FixedPiType r))
 liftFixedType fn tc (Term (Pi nm t r)) = do
   t' <- liftTCTerm tc t
   let tc' = consBoundVar nm t' tc
-  FPPi (TCPVar nm 0 t') t' <$> liftFixedType fn tc' r
+  FPPi (TCPVar nm (0, t')) t' <$> liftFixedType fn tc' r
 liftFixedType fn tc t = fn tc t
 
 liftTCDataType :: TermContext s -> Term -> TC s TCDTType
@@ -645,7 +592,7 @@ liftTCCtorType dt tc0 t0 = liftFixedType fn tc0 t0
 type PendingAction s a = a -> TC s ()
 
 mkPendingAssign :: TCRef s v -> (a -> TC s v) -> PendingAction s a
-mkPendingAssign r f a = assign r (f a)
+mkPendingAssign r f a = assignRef r (f a)
 
 data InitState s = IS { isModuleName :: ModuleName
                       , isCtx :: GlobalContext s
@@ -679,7 +626,7 @@ parseDecl eqnMap d = do
     Un.TypeDecl idl utp -> do
       let id1:_ = idl
       rtp <- addPending (val id1) (\uc -> fst <$> tcType uc utp)
-      for_ idl $ \(PosPair p nm) -> do
+      forOf_ folded idl $ \(PosPair p nm) -> do
         let ueqs = fromMaybe [] $ Map.lookup nm eqnMap
         eqs <- addPending ("Equations for " ++ nm) $ \tc -> do
           tp <- eval p rtp
@@ -708,11 +655,11 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
                               (\s -> Un.mkModuleName [s])
                               (val <$> mAsName)
       -- Add datatypes to module
-      for_ (moduleDataTypes m) $ \dt -> do
+      forOf_ folded (moduleDataTypes m) $ \dt -> do
         let dtnm = dtName dt
         dtr <- addPending (identName dtnm) $ \tc -> liftTCDataType tc (dtType dt)
         -- Add constructors to module.
-        cl <- for (dtCtors dt) $ \c -> do
+        cl <- forOf traverse (dtCtors dt) $ \c -> do
           let cnm = ctorName c
               cfn tc = liftTCCtorType dtnm tc (ctorType c)
           let use = includeNameInModule mcns cnm
@@ -720,7 +667,7 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
         let dtuse = includeNameInModule mcns dtnm
         updateIsCtx $ insertDataType mnml dtuse (DataTypeGen dtnm dtr cl)
       -- Add definitions to module.
-      for_ (moduleDefs m) $ \def -> do
+      forOf_ folded (moduleDefs m) $ \def -> do
         let inm = identName (defIdent def)
         tpr <- addPending inm $ \tc ->
           liftTCTerm tc (defType def)
