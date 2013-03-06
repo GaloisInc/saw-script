@@ -34,7 +34,6 @@ module Verifier.SAW.SharedTerm
   , scBitvector
   , scFunAll
   , scLambda
-  , scLiteral
   , scLocalVar
   , scLookupDef
   , scTuple
@@ -387,10 +386,10 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
 scSort sc s = scFlatTermF sc (Sort s)
 
-scLiteral :: SharedContext s -> Integer -> IO (SharedTerm s)
-scLiteral sc n
+scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
+scNat sc n
   | 0 <= n = scFlatTermF sc (NatLit n)
-  | otherwise = error $ "scLiteral: negative value " ++ show n
+  | otherwise = error $ "scNat: negative value " ++ show n
 
 scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scMkRecord sc m = scFlatTermF sc (RecordValue m)
@@ -400,9 +399,6 @@ scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
 
 scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scRecordType sc m = scFlatTermF sc (RecordType m)
-
-scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
-scNat = scLiteral
 
 scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTuple sc ts = scFlatTermF sc (TupleValue ts)
