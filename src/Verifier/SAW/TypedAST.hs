@@ -144,7 +144,8 @@ data Pat e = -- | Variable bound by pattern.
              -- Variables may be bound in context in a different order than
              -- a left-to-right traversal.  The DeBruijnIndex indicates the order.
              PVar String DeBruijnIndex e
-           | PUnused
+             -- | The 
+           | PUnused DeBruijnIndex e
            | PTuple [Pat e]
            | PRecord (Map FieldName (Pat e))
              -- An arbitrary term that matches anything, but needs to be later

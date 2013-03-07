@@ -1,6 +1,7 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -24,6 +25,7 @@ import Control.Monad.ST
 import Data.Foldable (Foldable)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.STRef
@@ -126,7 +128,7 @@ ppUTerm vs0 = evalStateT (go 0 vs0) Set.empty
         go _ (UOuterLet nm _) = pure $ text $ "outerl" ++ nm
 
 data UPat s
-  = UPVar (RigidVarRef s)
+  = UPVar (VarIndex s)
   | UPUnused (VarIndex s) String (VarIndex s)
   | UPatF Un.Pos (PatF (UPat s))
 
@@ -229,7 +231,7 @@ usetEqual vx vy = do
                       ]
 
 upatToTerm :: UPat s -> Unifier s (VarIndex s)
-upatToTerm (UPVar r) = mkVar (rvrName r) (URigidVar r)
+upatToTerm (UPVar v) = pure v -- mkVar (rvrName r) (URigidVar r)
 upatToTerm (UPUnused v _ _) = pure v
 upatToTerm (UPatF _ pf) =
   mkVar "patf" . UTF . termFromPatF =<< traverse upatToTerm pf
@@ -238,8 +240,10 @@ upatToTerm (UPatF _ pf) =
 indexUnPat :: Un.Pat -> Unifier s (UPat s, VarIndex s)
 indexUnPat upat =
   case upat of
-    Un.PSimple (Un.PVar (PosPair p nm)) ->
-      first UPVar <$> newRigidVar p nm
+    Un.PSimple (Un.PVar (PosPair p nm)) -> do
+      (rvr,tpv) <- newRigidVar p nm
+      v <- mkVar nm (URigidVar rvr)
+      return (UPVar v,tpv)
     Un.PSimple (Un.PUnused (PosPair _ nm)) -> do
       tpv <- mkVar ("type of " ++ nm) (UFreeType nm)
       (\v -> (UPUnused v nm tpv, tpv)) <$> mkVar nm (UUnused nm tpv)
@@ -371,19 +375,30 @@ indexPiPats unpats0 tp0 = do
           (up,lctx') <- matchUnPat lctx p unpat
           go (up:ppats) upl (lctx', r)
 
+data URRes v = URSeen v
+             | URActive
+
+type UResolverCache k v = Map k (URRes v)
+
 data UnifyResult s
    = UR { -- | Context when unification began
           urOuterContext :: TermContext s
           -- Current context
-        , _urContext :: TermContext s
-        , urBoundMap :: UResolverCache s (VarIndex s) (TermContext s, TCTerm)
+        , _urContext  :: TermContext s
+        , _urBoundMap :: UResolverCache (VarIndex s) (TermContext s, TCTerm)
         -- | Cache that maps variables to their typechecked value at the
         -- given deBruijnIndex.
-        , urVarMap :: UResolverCache s (VarIndex s) (TermContext s, TCTerm)
+        , _urVarMap   :: UResolverCache (VarIndex s) (TermContext s, TCTerm)
         }
 
 urContext :: Simple Lens (UnifyResult s) (TermContext s)
 urContext = lens _urContext (\s c -> s { _urContext = c })
+
+urBoundMap :: Simple Lens (UnifyResult s) (UResolverCache (VarIndex s) (TermContext s, TCTerm))
+urBoundMap = lens _urBoundMap (\s v -> s { _urBoundMap = v })
+
+urVarMap :: Simple Lens (UnifyResult s) (UResolverCache (VarIndex s) (TermContext s, TCTerm))
+urVarMap = lens _urVarMap (\s v -> s { _urVarMap = v })
 
 newtype UResolver s v
   = URR { unURR :: UnifyResult s -> ST s (Either String (v, UnifyResult s)) }
@@ -413,12 +428,10 @@ resolve :: UResolver s a -> Unifier s (Either String (a, TermContext s))
 resolve (URR m) = do
   us <- get
   lift $ do
-    rmc <- liftST newCache
-    vmc <- liftST newCache
     let ur0 = UR { urOuterContext = usGlobalContext us
-                 , _urContext = usGlobalContext us
-                 , urBoundMap = rmc
-                 , urVarMap = vmc
+                 , _urContext  = usGlobalContext us
+                 , _urBoundMap = Map.empty
+                 , _urVarMap   = Map.empty
                  }
     right (second _urContext) <$> liftST (m ur0)
 
@@ -429,49 +442,47 @@ urST m = URR $ \r -> fmap (\v -> Right (v,r)) m
 readVarState :: VarIndex s -> UResolver s (UVarState s)
 readVarState v = urST $ readSTRef (viRef v)
 
--- | Resolve a variable corresponding to an unused pattern variable,
--- returning index and type.
-uresolveBoundVar :: String -> VarIndex s -> UResolver s (TermContext s, TCTerm)
-uresolveBoundVar nm tpv = uresolveCache urBoundMap (uresolveBoundVar' nm) nm tpv
-
-uresolveBoundVar' :: String -> VarIndex s -> UResolver s (TermContext s, TCTerm)
-uresolveBoundVar' nm tpv = do
-  tp <- resolveCurrent =<< resolveUTerm tpv
-  ctx <- use urContext
-  urContext .= consBoundVar nm tp ctx
-  return (ctx,tp)
-
-data URRes v = URSeen v
-             | URActive
-
-type UResolverCache s k v = STRef s (Map k (URRes v))
-
-occursCheckFailure :: String -> UResolver s a
+occursCheckFailure :: Monad m => String -> m a
 occursCheckFailure nm = fail msg
   where msg = "Cyclic dependency detected during unification of " ++ nm
 
-
-newCache :: ST s (UResolverCache s k v)
-newCache = newSTRef Map.empty
-
-type UResolverCacheFn s k v = UnifyResult s -> UResolverCache s k v
-
-uresolveCache :: Ord k
-              => UResolverCacheFn s k v
-              -> (k -> UResolver s v)
-              -> String
-              -> k
-              -> UResolver s v
-uresolveCache gfn rfn nm k = do
-  cr <- gets gfn
-  m0 <- urST $ readSTRef cr
+-- | Function for getting value from cache once.
+uresolveCache :: (Ord k, MonadState s m)
+                 -- | Lens for accessing cache in state.
+              => Simple Lens s (UResolverCache k v)
+              -> (k -> m v) -- ^ Evaluation function for getting value if key is empty.
+              -> String -- ^ Name if occurs check failure occurs.
+              -> k -- ^ Value to lookup.
+              -> m v
+uresolveCache clens evalFn nm k = do
+  m0 <- use clens
   case Map.lookup k m0 of
     Just (URSeen r) -> return r 
     Just URActive -> occursCheckFailure nm
     Nothing -> do
-      urST $ writeSTRef cr $ Map.insert k URActive m0
-      r <- rfn k
-      r <$ urST (modifySTRef cr $ Map.insert k $ URSeen r)
+      clens . at k ?= URActive
+      r <- evalFn k
+      clens . at k ?= URSeen r
+      return r
+
+-- | Resolve variable that should be bound to a new pattern variable.
+-- Returns context just before variable was added, and type of variable (which is relative
+-- to the returned context.)
+uresolveBoundVar :: String -- ^ Name of variable.
+                 -> VarIndex s -- ^ Variable for value.
+                 -> VarIndex s -- ^ Variable for type.
+                 -> UResolver s (TermContext s, TCTerm)
+uresolveBoundVar nm v vtp = do
+  uresolveCache urBoundMap (uresolveBoundVar' nm vtp) nm v
+
+-- | Resolve bound var name and type, and add bound var to current context.
+uresolveBoundVar' :: String -> VarIndex s -> VarIndex s -> UResolver s (TermContext s, TCTerm)
+uresolveBoundVar' nm vtp _ = do
+  tpp <- resolveUTerm vtp
+  tc <- use urContext
+  let tp = applyExt tc tpp
+  urContext .= consBoundVar nm tp tc
+  return (tc,tp)
 
 -- | Convert a TCTerm at a given level to be valid at the current level.
 resolveCurrent :: (TermContext s, TCTerm) -> UResolver s TCTerm
@@ -481,19 +492,27 @@ resolveCurrent p = mk <$> use urContext
 -- | Resolve a unifier pat to a tcpat.
 resolvePat :: UPat s -> UResolver s TCPat
 resolvePat (UPVar v) = do
-  (tc,tp) <- uresolveBoundVar (rvrName v) (rvrType v)
-  tc0 <- gets urOuterContext
-  let Just d = boundVarDiff tc tc0
-  return $ TCPVar (rvrName v) (d, tp)
-resolvePat (UPUnused v nm vtp) = do 
-  (tc,tp) <- uresolveBoundVar nm vtp
-  tc0 <- gets urOuterContext
   s <- readVarState v
-  let fn = case s of
-             UUnused _ _ -> TCPVar
-             _ -> TCPUnused
-  let Just d = boundVarDiff tc tc0
-  return $ fn nm (d, tp)
+  case s of
+    URigidVar rvr -> do
+      tc0 <- gets urOuterContext
+      (tc,tp) <- uresolveBoundVar (rvrName rvr) v (rvrType rvr)
+      let Just d = tc `boundVarDiff` tc0
+      return $ TCPVar (rvrName rvr) (d, tp)
+    _ -> error "Rigid var ref has been replaced."
+resolvePat (UPUnused v nm vtp) = do 
+  s <- readVarState v
+  case s of
+    UUnused _ _ -> do
+      (tc,tp) <- uresolveBoundVar nm v vtp
+      tc0 <- gets urOuterContext
+      let Just d = tc `boundVarDiff` tc0
+      return $ TCPVar nm (d,tp)
+    _ -> do
+      (tc,tp) <- resolveUTerm vtp
+      tc0 <- gets urOuterContext
+      let Just d = tc `boundVarDiff` tc0
+      return $ TCPUnused nm (d,tp)
 
 resolvePat (UPatF _ pf) = TCPatF <$> traverse resolvePat pf
 
@@ -511,16 +530,17 @@ resolveUTerm :: VarIndex s -> UResolver s (TermContext s, TCTerm)
 resolveUTerm v = uresolveCache urVarMap resolveUTerm' (viName v) v
 
 -- | Returns the TCTerm for the given var with vars relative to returned deBruijn level.
-resolveUTerm' :: VarIndex s -> UResolver s (TermContext s, TCTerm)
+resolveUTerm' :: forall s . VarIndex s -> UResolver s (TermContext s, TCTerm)
 resolveUTerm' v = do
   -- Returns a refernce to a pattern variable with the given name, index, and type.
-  let mkPatVarRef nm tpv = fn <$> uresolveBoundVar nm tpv
+  let mkPatVarRef :: String -> VarIndex s -> VarIndex s -> UResolver s (TermContext s, TCTerm)
+      mkPatVarRef nm ivar tpv = fn <$> uresolveBoundVar nm ivar tpv
         where fn (tc,tp) = (consBoundVar nm tp tc, TCVar 0)
   uvs <- urST $ readSTRef (viRef v)
   case uvs of
-    URigidVar r -> mkPatVarRef (rvrName r) (rvrType r)
+    URigidVar r -> mkPatVarRef (rvrName r) v (rvrType r)
     UVar v' -> resolveUTerm v'
-    UUnused nm tpv -> mkPatVarRef nm tpv
+    UUnused nm tpv -> mkPatVarRef nm v tpv
     UFreeType _ -> fail "Free type variable unbound during unification"
     UHolTerm f c -> do
       baseTC <- gets urOuterContext
@@ -570,19 +590,21 @@ typecheckPats tc upl@(up:_) tp = do
 
 -- | Typecheck pats against the given pi type.
 typecheckPiPats :: TermContext s
+                -> Pos 
                 -> [Un.Pat]
                 -> TCTerm
                 -> TC s (([TCPat], TCTerm), TermContext s)
-typecheckPiPats _ [] _ = fail "Unexpected attempt to unify empty list of pi pats"
-typecheckPiPats tc pats@(up:_) tp = do
+typecheckPiPats tc p pats tp = do
   tp' <- reduce tc tp
-  r <- runUnifier tc (pos up) $ do
+  r <- runUnifier tc p $ do
       (pl,utp') <- indexPiPats pats tp'
       resolve $ do
         pl' <- traverse resolvePat pl
+        unless (isJust (checkTCPatOf (termBoundCount tc) traverse pl')) $
+          fail "typecheckPiPats failed"
         fmap (pl',) $ resolveCurrent =<< resolveUTerm utp'
   case r of
-    Left msg -> tcFail (pos up) msg
+    Left msg -> tcFail p msg
     Right rv -> return rv
 
 -- | Pattern where each variable is annotated with var for value and type.
@@ -591,7 +613,7 @@ type UnifyPat s = AnnPat (VarIndex s,VarIndex s)
 -- | Convert a typechecked pat into something usable in unification.
 convertPat :: TCPat -> Unifier s (UnifyPat s)
 convertPat p0 = do
-  let vterms = V.fromList $ patBoundVars p0
+  let vterms = patBoundVars p0
   let fn :: (String,TCTerm)
          -> StateT (UnifyLocalCtx s) (Unifier s) (UnifyLocalCtx s, (VarIndex s, VarIndex s)) 
       fn (nm,tp) = do
@@ -654,7 +676,8 @@ instPats p tc _tp (xp,xr) (yp,yr) = do
       Left{} -> return Nothing
       Right{} -> do
         let mkSub :: UnifyPat s -> UResolver s (Vector (TermContext s, TCTerm))
-            mkSub = traverse (resolveUTerm . fst . snd) . V.fromList . patBoundVars
+            mkSub = traverse (resolveUTerm . typeOfBoundVar) . patBoundVars
+              where typeOfBoundVar = fst . snd
         mr' <- resolve $ both mkSub (xp',yp')
         case mr' of
           Left{} -> return Nothing
