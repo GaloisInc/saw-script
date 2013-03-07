@@ -23,8 +23,6 @@ import Prelude hiding (mapM, sequence)
 import Verifier.SAW.UntypedAST
 import Verifier.SAW.Lexer
 
-import Debug.Trace
-
 }
 
 %name parseSAW

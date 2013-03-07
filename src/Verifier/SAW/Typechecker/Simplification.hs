@@ -42,7 +42,7 @@ preludeSuccIdent :: Ident
 preludeSuccIdent =  mkIdent preludeModuleName "Succ"
 
 extendPatContext :: TermContext s -> TCPat -> TermContext s
-extendPatContext tc0 pat = foldr (uncurry consBoundVar) tc0 (patBoundVars pat)
+extendPatContext tc0 pat = V.foldl (flip $ uncurry consBoundVar) tc0 (patBoundVars pat)
 
 type Subst = Vector TCTerm
 
@@ -103,7 +103,7 @@ tryMatchPatList tc pats terms =
         go _ [] = fail "Insufficient number of terms"
         finish (tl,args) = (tc', args, tl)
           where bindings = patBoundVarsOf folded pats
-                tc' = foldr (uncurry consBoundVar) tc bindings
+                tc' = V.foldl (flip $ uncurry consBoundVar) tc bindings
 
 reduce :: TermContext s -> TCTerm -> TC s TCTerm
 reduce tc t =

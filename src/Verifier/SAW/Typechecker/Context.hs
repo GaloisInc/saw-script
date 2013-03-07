@@ -74,6 +74,12 @@ module Verifier.SAW.Typechecker.Context
   , applyExt
   , applyExtSafe
   , boundFreeVarsWithPi
+  , termBoundCount
+    -- * Checking terms
+  , checkTCPatOf
+  , checkDefEqn
+  , checkLocalDefs
+  , checkTCTerm
   ) where
 
 import Control.Applicative
@@ -84,6 +90,7 @@ import Data.Foldable (Foldable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint
@@ -192,27 +199,34 @@ type TCRefDef s = TCDefGen (TCRef s)
 type TCRefLocalDef s = LocalDefGen TCTerm (TCRef s [TCDefEqn])
 
 -- | State monad for recording variables found in patterns.
-type PatVarParser a = State (Map Int (String,a)) 
+type PatVarParser a = State (Int,Map Int (String,a))
 
 -- | Add variables in pattern to state.
 addPatBindings :: AnnPat a -> PatVarParser a ()
-addPatBindings (TCPVar nm (i, v)) = modify $ Map.insert i (nm,v)
+addPatBindings (TCPVar nm (i, v)) = modify $ \(c,m) -> (max c (i+1), Map.insert i (nm,v) m)
 addPatBindings TCPUnused{} = return ()
-addPatBindings (TCPatF pf) = traverseOf_ folded addPatBindings pf 
+addPatBindings (TCPatF pf) = traverseOf_ folded addPatBindings pf
 
 -- | Get list of variables by running parser.
-runPatVarParser :: PatVarParser a () -> [(String,a)]
-runPatVarParser pvp = Map.elems (execState pvp Map.empty)
+runPatVarParser :: PatVarParser a () -> Vector (String,a)
+runPatVarParser pvp 
+   | c == Map.size m = V.generate c fn
+   | otherwise = error "patBoundVarsOf given incomplete list of patterns"
+  where (c,m) = execState pvp (0,Map.empty)
+        fn i = r
+          where Just r = Map.lookup i m
 
 -- | Get information about bound variables from fold.
-patBoundVarsOf :: Fold s (AnnPat a) -> s -> [(String,a)]
-patBoundVarsOf fold pats = runPatVarParser (traverseOf_ fold addPatBindings pats)
+patBoundVarsOf :: Fold s (AnnPat a) -> s -> Vector (String,a)
+patBoundVarsOf fold pats =
+  runPatVarParser (traverseOf_ fold addPatBindings pats)
 
-patBoundVars :: AnnPat a -> [(String,a)]
+-- | Returns variables in order they are bound.
+patBoundVars :: AnnPat a -> Vector (String,a)
 patBoundVars pat = patBoundVarsOf id pat
 
 -- | Returns names of bound variables in order they are bound.
-patVarNames :: AnnPat a -> [String]
+patVarNames :: AnnPat a -> Vector String
 patVarNames pat = fst <$> patBoundVars pat
 
 fmapTCPat :: (Int -> TCTerm -> TCTerm)
@@ -554,10 +568,10 @@ ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
 ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
   char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
-             <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
+             <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
 ppTCTermGen d pr (TCPi p l r) = ppParens (pr >= 1) $
   parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
-    <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
 ppTCTermGen d pr (TCLet lcls t) = ppParens (pr >= 1) $
     text "let " <> nest 4 (vcat (ppLcl <$> lcls)) $$
     text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) 1 t)
@@ -574,3 +588,55 @@ boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0
         go 0 _ t = t
         go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm (0,tp)) tp t) 
         go _ _ _ = error "boundFreeVarsWithPi given bad context"
+
+-- | Check TCPat free variables returning new number of bound variables.
+checkTCPatOf :: Int -> Simple Traversal s TCPat -> s -> Maybe Int
+checkTCPatOf c t s0 = finalCheck =<< execStateT (traverseOf_ t go s0) (Set.empty,Set.empty)
+  where finalCheck (s,u) = do
+          let sz = Set.size s
+          -- Check s contains all variables in range (0..sz-1)
+          let cnt = maybe 0 ((+1) . fst) (Set.maxView s)
+          unless (cnt == sz) $ error $ "Set missing variables: " ++ show s
+          -- Check all elements in u are at most sz.
+          unless (allOf folded (<= sz) u) $ error "Invalid index in unused variable."
+          return (c+sz)
+        go (TCPVar _ (i,tp)) = do
+          lift $ checkTCTerm (c+i) tp
+          s <- use _1
+          when (Set.member i s) $ error "Already encountered variable"
+          _1 .= Set.insert i s
+        go (TCPUnused _ (i,tp)) = do
+          lift $ checkTCTerm (c+i) tp
+          _2 %= Set.insert i
+        go (TCPatF pf) = traverseOf_ folded go pf
+
+checkDefEqn :: Int -> TCDefEqn -> Maybe ()
+checkDefEqn c (DefEqnGen pl r) = do
+  c' <- checkTCPatOf c traverse pl
+  checkTCTerm c' r
+
+checkLocalDefs :: Int -> [TCLocalDef] -> Maybe Int
+checkLocalDefs c l = traverseOf_ folded checkFn l >> return (c+length l)
+  where c' = c + length l
+        checkFn (LocalFnDefGen _ tp eqns) = do
+          checkTCTerm c tp
+          traverseOf_ folded (checkDefEqn c') eqns
+
+-- | Check that term does not reference free variables out of given range.
+checkTCTerm :: Int -> TCTerm -> Maybe ()
+checkTCTerm c t0 =
+  case t0 of
+    TCF tf -> traverseOf_ folded (checkTCTerm c) tf
+    TCLambda p tp r -> do
+      checkTCTerm c tp
+      c' <- checkTCPatOf c id p
+      checkTCTerm c' r
+    TCPi p tp r -> do
+      checkTCTerm c tp
+      c' <- checkTCPatOf c id p
+      checkTCTerm c' r
+    TCLet lcls r -> do
+      c' <- checkLocalDefs c lcls
+      checkTCTerm c' r
+    TCVar i -> unless (i < c) $ error "Illegal var index"
+    TCLocalDef i -> unless (i < c) $ error "Illegal local def index"
