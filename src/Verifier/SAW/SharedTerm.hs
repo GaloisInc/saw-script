@@ -29,16 +29,32 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scFun
   , scNat
-  , scBitvector
+  , scNatType
+  , scBoolType
   , scFunAll
-  , scLiteral
+  , scLambda
+  , scLocalVar
   , scLookupDef
   , scTuple
   , scTupleType
+  , scTupleSelector
   , scTypeOf
   , scPrettyTerm
   , scViewAsBool
   , scViewAsNum
+  , scGlobalApply
+    -- ** Prelude operations
+  , scAppend
+  , scIte
+  , scSlice
+    -- *** Bitvector primitives
+  , scBitvector
+  , scBvNat
+  , scBvAdd, scBvSub, scBvMul
+  , scBvOr, scBvAnd, scBvXor
+  , scBvNot
+  , scBvEq, scBvUGe, scBvUGt, scBvULe, scBvULt
+  , scBvShl, scBvShr
     -- ** Utilities
 --  , scTrue
 --  , scFalse
@@ -204,7 +220,7 @@ scTypeOf sc t = State.evalStateT (memo t) Map.empty
           t <- lift $ typeOfDataType sc dt
           lift $ foldM (reducePi sc) t args
         Sort s -> lift $ scSort sc (sortOf s)
-        NatLit i -> lift $ scNat sc i
+        NatLit i -> lift $ scNatType sc
         ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
 
 -- | The inverse function to @sharedTerm@.
@@ -382,10 +398,10 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
 scSort sc s = scFlatTermF sc (Sort s)
 
-scLiteral :: SharedContext s -> Integer -> IO (SharedTerm s)
-scLiteral sc n
+scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
+scNat sc n
   | 0 <= n = scFlatTermF sc (NatLit n)
-  | otherwise = error $ "scLiteral: negative value " ++ show n
+  | otherwise = error $ "scNat: negative value " ++ show n
 
 scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scMkRecord sc m = scFlatTermF sc (RecordValue m)
@@ -396,22 +412,14 @@ scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
 scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scRecordType sc m = scFlatTermF sc (RecordType m)
 
-scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
-scNat = scLiteral
-
 scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTuple sc ts = scFlatTermF sc (TupleValue ts)
 
 scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTupleType sc ts = scFlatTermF sc (TupleType ts)
 
--- | Obtain term representation a bitvector with a given width and known
--- value.
-scBitvector :: SharedContext s
-            -> (SharedTerm s)
-            -> Integer
-            -> IO (SharedTerm s)
-scBitvector = error "scBitvector unimplemented"
+scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
+scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
 
 -- TODO: remove unused SharedContext argument
 scPrettyTermDoc :: SharedContext s -> SharedTerm s -> Doc
@@ -426,6 +434,91 @@ scFun sc a b = do b' <- incVars sc 0 1 b
 
 scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
+
+scLambda :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scLambda sc varname ty body = scTermF sc (Lambda (PVar varname 0 ty) ty body)
+
+scLocalVar :: SharedContext s -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
+scLocalVar sc i t = scTermF sc (LocalVar i t)
+
+scGlobalApply :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
+scGlobalApply sc i ts =
+    do c <- scGlobalDef sc i
+       scApplyAll sc c ts
+
+------------------------------------------------------------
+-- Building terms using prelude functions
+
+preludeName :: ModuleName
+preludeName = mkModuleName ["Prelude"]
+
+scBoolType :: SharedContext s -> IO (SharedTerm s)
+scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Bool") [])
+
+scNatType :: SharedContext s -> IO (SharedTerm s)
+scNatType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Nat") [])
+
+-- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
+scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
+         SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scIte sc t b x y = scGlobalApply sc (mkIdent preludeName "ite") [t, b, x, y]
+
+-- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
+scAppend :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s ->
+            SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scAppend sc t m n x y = scGlobalApply sc (mkIdent preludeName "append") [m, n, t, x, y]
+
+-- | slice :: (e :: sort 1) -> (i n o :: Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
+scSlice :: SharedContext s -> SharedTerm s -> SharedTerm s ->
+           SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scSlice sc e i n o a = scGlobalApply sc (mkIdent preludeName "slice") [e, i, n, o, a]
+
+-- Primitive operations on bitvectors
+
+-- | bitvector :: (n : Nat) -> sort 1
+-- bitvector n = Vec n Bool
+scBitvector :: SharedContext s -> Integer -> IO (SharedTerm s)
+scBitvector sc size =
+    do s <- scNat sc size
+       c <- scGlobalDef sc (mkIdent preludeName "bitvector")
+       scApply sc c s
+
+-- | bvNat :: (x :: Nat) -> Nat -> bitvector x;
+scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvNat sc x y = scGlobalApply sc (mkIdent preludeName "bvNat") [x, y]
+
+-- | bvAdd/Sub/Mul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvAdd, scBvSub, scBvMul
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvAdd sc n x y = scGlobalApply sc (mkIdent preludeName "bvAdd") [n, x, y]
+scBvSub sc n x y = scGlobalApply sc (mkIdent preludeName "bvSub") [n, x, y]
+scBvMul sc n x y = scGlobalApply sc (mkIdent preludeName "bvMul") [n, x, y]
+
+-- | bvOr/And/Xor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+scBvOr, scBvAnd, scBvXor
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvAnd sc n x y = scGlobalApply sc (mkIdent preludeName "bvAnd") [n, x, y]
+scBvXor sc n x y = scGlobalApply sc (mkIdent preludeName "bvXor") [n, x, y]
+scBvOr sc n x y = scGlobalApply sc (mkIdent preludeName "bvOr") [n, x, y]
+
+-- | bvNot :: (n :: Nat) -> bitvector n -> bitvector n;
+scBvNot :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvNot sc n x = scGlobalApply sc (mkIdent preludeName "bvNot") [n, x]
+
+-- | bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+scBvEq, scBvUGe, scBvUGt, scBvULe, scBvULt
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvEq sc n x y = scGlobalApply sc (mkIdent preludeName "bvEq") [n, x, y]
+scBvUGe sc n x y = scGlobalApply sc (mkIdent preludeName "bvuge") [n, x, y]
+scBvULe sc n x y = scGlobalApply sc (mkIdent preludeName "bvule") [n, x, y]
+scBvUGt sc n x y = scGlobalApply sc (mkIdent preludeName "bvugt") [n, x, y]
+scBvULt sc n x y = scGlobalApply sc (mkIdent preludeName "bvult") [n, x, y]
+
+-- | bvShl, bvShr :: (n :: Nat) -> bitvector n -> Nat -> bitvector n;
+scBvShl, scBvShr
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvShl sc n x y = scGlobalApply sc (mkIdent preludeName "bvShl") [n, x, y]
+scBvShr sc n x y = scGlobalApply sc (mkIdent preludeName "bvShr") [n, x, y]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
