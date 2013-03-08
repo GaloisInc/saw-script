@@ -120,16 +120,6 @@ getTerm r a =
                      , acNextIdx = acNextIdx s + 1
                      }
 
-{-
-data LocalVarTypeMap s = LVTM { lvtmMap :: Map Integer (SharedTerm s) }
-
-consLocalVarType :: LocalVarTypeMap s -> Ident -> SharedTerm s -> LocalVarTypeMap s
-consLocalVarType = undefined
-
-localVarType :: DeBruijnIndex -> LocalVarTypeMap s -> SharedTerm s
-localVarType = undefined
--}
-
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
 subst0 :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
