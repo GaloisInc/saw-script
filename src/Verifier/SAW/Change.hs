@@ -85,7 +85,7 @@ commitChange (Original x) = x
 commitChange (Modified x) = x
 -- ^ Satisfies the following laws:
 -- @commitChange (fmap f m) = f (commitChange m)@
--- @commitChange (taint m) = commitChange m@ 
+-- @commitChange (taint m) = commitChange m@
 -- @commitChange (m >>= k) = commitChange (k (commitChange m))@
 
 ----------------------------------------------------------------------

@@ -1,14 +1,14 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Verifier.SAW.ParserUtils 
+module Verifier.SAW.ParserUtils
  ( module Verifier.SAW.TypedAST
    -- * Parser utilities.
  , readModuleFromFile
    -- * Template haskell utilities.
  , DecWriter
  , runDecWriter
- , DecExp(..) 
+ , DecExp(..)
  , importExp
  , mkDecModule
  , decSharedCtorApp
@@ -50,7 +50,7 @@ readModuleFromFile imports path = do
   readModule imports base path b
 
 
--- | Returns a module containing the standard prelude for SAW. 
+-- | Returns a module containing the standard prelude for SAW.
 readModule :: [Module] -> FilePath -> FilePath -> BL.ByteString -> IO Module
 readModule imports base path b = do
   let (m,[]) = Un.runParser base path b Un.parseSAW
@@ -64,7 +64,7 @@ readByteStringExpr modules path = do
   base <- runIO $ getCurrentDirectory
   compile_b <- runIO $ BL.readFile path
   case Un.runParser base nm compile_b Un.parseSAW of
-    (_,[]) -> do 
+    (_,[]) -> do
       let blen :: Int
           blen = fromIntegral (BL.length compile_b)
 #if __GLASGOW_HASKELL__ >= 706
@@ -84,7 +84,7 @@ data DecWriterState = DecWriterState { dwDecs :: [Dec]
                                      }
 
 addDecs :: DecWriterState -> [Dec] -> DecWriterState
-addDecs dw decs = dw { dwDecs = dwDecs dw ++ decs } 
+addDecs dw decs = dw { dwDecs = dwDecs dw ++ decs }
 
 type DecWriter = StateT DecWriterState Q
 
@@ -98,7 +98,7 @@ data DecExp a = DecExp { decExp :: !Exp
                        , decVal :: !a
                        }
 
--- | Define a declared 
+-- | Define a declared
 importExp :: ExpQ -> a -> DecWriter (DecExp a)
 importExp eq m = do
   e <- lift eq
@@ -133,7 +133,7 @@ mkDecModule modules decNameStr path = do
                 , SigD decName moduleTp
                 , FunD decName [ Clause [] (NormalB packExpr) [] ]
                 ]
-    let dm = DecExp { decExp = VarE decName 
+    let dm = DecExp { decExp = VarE decName
                     , decVal  = m
                     }
     let s' = s `addDecs` decs
@@ -157,7 +157,7 @@ sharedFunctionType n = do
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
 --   :: SharedContext s
---   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)  
+--   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 decSharedCtorApp :: String
                  -> Int
                  -> TypedCtor
@@ -194,7 +194,7 @@ decSharedCtorApp nm n c = do
 -- This hads a declaration of the function:
 --   scApply(modulename)(upcase c)
 --     :: SharedContext s
---     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)  
+--     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 decSharedDefApp :: String
                 -> Int
                 -> TypedDef

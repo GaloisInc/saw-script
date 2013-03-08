@@ -2,7 +2,7 @@
 -- | Provides utility functions about general data structured used by SAW.
 -- Declarations here should refer primarily to terms defined in other packages.
 -- SAW-specific declarations should be stored in separate modules.
-module Verifier.SAW.Utils 
+module Verifier.SAW.Utils
   ( internalError
   , sumBy
   ) where

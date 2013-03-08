@@ -55,7 +55,7 @@ isVarApp t = case patternShape t of
   Var      -> True
   App t' _ -> isVarApp t'
 
--- Start 
+-- Start
 
 data Key = CombK | VarK | AtomK String
 

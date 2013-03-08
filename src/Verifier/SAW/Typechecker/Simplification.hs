@@ -70,7 +70,7 @@ attemptMatch tc (TCPatF pf) t = do
 
     (UPCtor c [], TCF (NatLit 0)) | c == preludeZeroIdent ->
       return rt
-    (UPCtor c [p], TCF (NatLit n)) 
+    (UPCtor c [p], TCF (NatLit n))
       | c == preludeSuccIdent && n > 0 ->
       go p (TCF (NatLit (n-1)))
 
@@ -121,7 +121,7 @@ reduce tc t =
       case r of
         Nothing -> return t
         Just (sub,_) -> reduce tc (tcMkApp t' al)
-          where tc' = extendPatContext tc pat 
+          where tc' = extendPatContext tc pat
                 t' = tcApply tc (tc',rhs) (tc,sub)
     (TCF (GlobalDef g), al) -> do
         -- Get global equations.

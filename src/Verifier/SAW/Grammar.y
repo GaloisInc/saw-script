@@ -1,7 +1,7 @@
 {
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
-module Verifier.SAW.Grammar 
+module Verifier.SAW.Grammar
   ( Decl(..)
   , Term(..)
   , parseSAW
@@ -160,7 +160,7 @@ AppTerm : AppArg                   { $1 }
         | AppTerm ParamType AppArg { App $1 $2 $3 }
 
 AppArg :: { Term }
-AppArg : RecTerm { $1 } 
+AppArg : RecTerm { $1 }
        | ConDotList { Con (identFromList1 $1) }
 
 RecTerm :: { Term }
@@ -176,11 +176,11 @@ AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
          | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
          |     '(' sepBy(Term, ',') ')'     { parseParen Paren TupleValue (pos $1) $2 }
          | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
-         |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 } 
+         |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 }
          | '#' '{' recList('::', LTerm) '}' { RecordType  (pos $1) $3 }
 
 PiArg :: { PiArg }
-PiArg : ParamType AppArg {% mkPiArg ($1, $2) } 
+PiArg : ParamType AppArg {% mkPiArg ($1, $2) }
       | AppTerm          {% mkPiArg (NormalParam, $1) }
 
 ParamType :: { ParamType }
@@ -302,7 +302,7 @@ lexer f = do
                      addError (pos tkn) (UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
                      go Nothing (read 0)
           _ | i > 0 -> go Nothing (read i)
-            | otherwise -> f tkn 
+            | otherwise -> f tkn
   go Nothing (read (0::Integer))
 
 -- | Run parser given a directory for the base (used for making pathname relative),
@@ -325,7 +325,7 @@ unexpectedIntLiteral p _ ctxt = do
   addParseError p $ "Unexpected integer literal when parsing " ++ ctxt ++ "."
 
 unexpectedParameterAnnotation :: Pos -> ParamType -> Parser ()
-unexpectedParameterAnnotation p _ = 
+unexpectedParameterAnnotation p _ =
   addParseError p "Multiple parameter annotations are not supported."
 
 unexpectedTypeConstraint :: Pos -> Parser ()
@@ -379,7 +379,6 @@ termAsPat ex = do
   where ret r = return (Just r)
         badPat nm = err (pos ex) (nm ++ " may not appear in patterns")
         err p msg = addParseError p msg >> return Nothing
-        
 
 
 -- Attempts to parses an expression as a list of identifiers.
@@ -433,7 +432,7 @@ mkPiArg (ppt,lhs) =
 -- * opt(ParamType) '(' list(Pat) '::' LTerm ')' '->' LTerm
 -- * opt(ParamType) AppTerm '->' LTerm
 mkPi :: Pos -> PiArg -> Term -> Term
-mkPi ptp (ppt,pats,tp) r = Pi ppt pats tp ptp r   
+mkPi ptp (ppt,pats,tp) r = Pi ppt pats tp ptp r
 
 mkLambda :: Pos -> [(ParamType, Term)] -> Term -> Parser Term
 mkLambda ptp lhs rhs = parseLhs lhs []
@@ -449,7 +448,7 @@ parseParen :: (Pos -> a -> b) -- ^ singleton case.
            -> [a]
            -> b
 parseParen f _ p [e] = f p e
-parseParen _ g p l = g p l               
+parseParen _ g p l = g p l
 
 parseTParen :: Pos -> [Term] -> Parser Term
 parseTParen p [expr] = do
@@ -483,7 +482,7 @@ mkPosModuleName [] = error "internal: Unexpected empty module name"
 mkPosModuleName l = PosPair p (mkModuleName nms)
   where nms = fmap val l
         p = pos (last l)
-           
+
 identFromList1 :: [PosPair String] -> PosPair Ident
 identFromList1 [] = error "internal: identFromList1 expected non-empty list"
 identFromList1 [PosPair p sym] = PosPair p (mkIdent Nothing sym)

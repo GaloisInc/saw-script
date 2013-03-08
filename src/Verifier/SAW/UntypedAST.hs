@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Verifier.SAW.UntypedAST
-  ( Module(..) 
+  ( Module(..)
   , ModuleName, mkModuleName
   , Import(..)
   , Decl(..)
@@ -24,7 +24,7 @@ import Control.Exception (assert)
 import Text.PrettyPrint
 
 import Verifier.SAW.Position
-import Verifier.SAW.TypedAST 
+import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, sortOf
   , FieldName
@@ -43,7 +43,7 @@ instance Show Ident where
   show (Ident m s) = shows m ('.':s)
 
 mkIdent :: Maybe ModuleName -> String -> Ident
-mkIdent mnm nm = assert (isIdent nm) $ 
+mkIdent mnm nm = assert (isIdent nm) $
   case mnm of
     Nothing -> LocalIdent nm
     Just m -> Ident m nm
@@ -95,7 +95,7 @@ data Term
   | RecordType  Pos [(PosPair FieldName, Term)]
     -- | Identifies a type constraint on the term.
   | TypeConstraint Term Pos Term
-    -- | Arguments to an array constructor.  
+    -- | Arguments to an array constructor.
   | Paren Pos Term
   | LetTerm Pos [Decl] Term
   | IntLit Pos Integer
@@ -123,7 +123,7 @@ ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat 1 <$> l)
 ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
   where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat 1 v
 ppPat prec (PCtor pnm l) = ppParens (prec >= 10) $
-  hsep (text (show (val pnm)) : fmap (ppPat 10) l) 
+  hsep (text (show (val pnm)) : fmap (ppPat 10) l)
 
 instance Positioned Term where
   pos t =

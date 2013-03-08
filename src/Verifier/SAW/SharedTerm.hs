@@ -375,7 +375,7 @@ instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts 
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building SharedTerms.
 
--- | Operations that are defined, but not 
+-- | Operations that are defined, but not
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
     scModule :: IO Module

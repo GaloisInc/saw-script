@@ -25,7 +25,7 @@ import Verifier.SAW.Position
 
 -- | State for continuations.
 data TCState s = TS { tsErrors :: [FailReason]
-                    , tsRefCount :: !Int 
+                    , tsRefCount :: !Int
                     }
 
 -- | Record the given error reason.
@@ -124,7 +124,7 @@ tcError tc0 s =
     TCFMap _ tc -> tcError tc s
     TCApp (TC g) tc -> g (TCFail tc) s
     TCBind _ tc -> tcError tc s
-    TCFail tc -> tcError tc s 
+    TCFail tc -> tcError tc s
     TCTry _ tc -> tcDone Nothing tc s
     TCSet r mcl _ -> do
       rs <- readSTRef (tcrRef r)
@@ -151,7 +151,7 @@ instance Applicative (TC s) where
   pure v = TC (tcDone v)
   TC f <*> g = TC $ \c s -> f (TCApp g c) s
 
-instance Monad (TC s) where 
+instance Monad (TC s) where
   return v = TC (tcDone v)
   TC f >>= g = TC $ \c s -> f (TCBind g c) s
   fail msg = TC $ \c s -> tcError c (s `addError` fr)
@@ -174,12 +174,12 @@ runTC tc = runST $ do
     rsns -> return $ Left $ ppFailReasons rsns
 
 -- | Lift ST to TC monad.
-liftST :: ST s a -> TC s a 
+liftST :: ST s a -> TC s a
 liftST m = TC $ \c s -> m >>= \v -> tcDone v c s
 
 -- | Fail with a typechecker error.  Position is required for all non-internal errors.
 tcFail :: Pos -> String -> TC s a
-tcFail p nm = TC $ \tc s -> tcError tc (s `addError` TypeError p nm) 
+tcFail p nm = TC $ \tc s -> tcError tc (s `addError` TypeError p nm)
 
 tcFailD :: Pos -> Doc -> TC s a
 tcFailD p d = tcFail p $ show d
@@ -251,7 +251,7 @@ eval p0 r = TC $ \tc0 s0 -> do
               mapM_ resetSet l >> tcError tc s
             resolveCycle (_,_,_,l,s) (TCTry _ tc) =
               mapM_ resetSet l >> tcDone Nothing tc s
-            -- We found the end of the cycle 
+            -- We found the end of the cycle
             resolveCycle (p,rn,el,l,s) (TCSet rp mcl _) | tcrIdx r == tcrIdx rp = do
               mapM_ failSet l
               writeSTRef (tcrRef rp) TRSFailed
