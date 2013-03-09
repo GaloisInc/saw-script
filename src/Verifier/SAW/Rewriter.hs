@@ -11,7 +11,9 @@ module Verifier.SAW.Rewriter
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
+import Control.Monad ((>=>))
 import Control.Monad.Trans (lift)
+import qualified Data.Foldable as Foldable
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -41,20 +43,20 @@ data RewriteRule t =
 instance Net.Pattern Term where
   patternShape (Term t) =
     case t of
-      GlobalDef d -> Net.Atom (show (defIdent d))
-      Sort s      -> Net.Atom (show s)
-      IntLit n    -> Net.Atom ('#' : show n)
-      App t1 t2   -> Net.App t1 t2
-      _           -> Net.Var
+      FTermF (GlobalDef d) -> Net.Atom (show d)
+      FTermF (Sort s)      -> Net.Atom (show s)
+      FTermF (NatLit n)    -> Net.Atom ('#' : show n)
+      FTermF (App t1 t2)   -> Net.App t1 t2
+      _                    -> Net.Var
 
 instance Net.Pattern (SharedTerm s) where
   patternShape (STApp _ t) =
     case t of
-      GlobalDef d -> Net.Atom (show (defIdent d))
-      Sort s      -> Net.Atom (show s)
-      IntLit n    -> Net.Atom ('#' : show n)
-      App t1 t2   -> Net.App t1 t2
-      _           -> Net.Var
+      FTermF (GlobalDef d) -> Net.Atom (show d)
+      FTermF (Sort s)      -> Net.Atom (show s)
+      FTermF (NatLit n)    -> Net.Atom ('#' : show n)
+      FTermF (App t1 t2)   -> Net.App t1 t2
+      _                    -> Net.Var
 
 ----------------------------------------------------------------------
 -- Matching
@@ -84,8 +86,9 @@ matchGeneric unwrap pat term = match pat term Map.empty
               Nothing -> Just m'
               Just y' -> if y == y' then Just m' else Nothing
             where (y', m') = insertLookup i y m
-        (App x1 x2, App y1 y2) ->
-            match x1 y1 m >>= match x2 y2
+        (FTermF xf, FTermF yf) ->
+            do zf <- zipWithFlatTermF match xf yf
+               Foldable.foldl (>=>) Just zf m
         (_, _) ->
             if x == y then Just m else Nothing
 -- ^ Precondition: Every loose variable in the pattern @pat@ must
@@ -100,7 +103,8 @@ type Simpset t = Net.Net (RewriteRule t)
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Term -> RewriteRule Term
-ruleOfTerm (Term (EqType x y)) = RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfTerm (Term (FTermF (DataTypeApp ident [_, x, y])))
+  | ident == mkIdent (mkModuleName ["Prelude"]) "Eq" = RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfTerm (Term (Pi _ t e)) = rule { ctxt = t : ctxt rule }
   where rule = ruleOfTerm e
 ruleOfTerm _ = error "ruleOfTerm: Illegal argument"
@@ -155,21 +159,25 @@ rewriteTermChange ss = rewriteAll
 
 -- | Like rewriteTerm, but returns an equality theorem instead of just
 -- the right-hand side.
+{-
 rewriteOracle :: Simpset Term -> Term -> Term
 rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
   where rhs = rewriteTerm ss lhs
+-}
+-- TODO: add a constant to the SAWCore prelude to replace defunct "Oracle" constructor:
+-- rewriterOracle :: (t : sort 1) -> (x y : t) -> Eq t x y
 
 -- | Rewriter for shared terms
-rewriteSharedTerm :: forall s. AppCacheRef s
+rewriteSharedTerm :: forall s. SharedContext s
                   -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
-rewriteSharedTerm ac ss t =
+rewriteSharedTerm sc ss t =
     do cache <- newCache
        let ?cache = cache in rewriteAll t
   where
     rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (STApp tidx tf) =
-        useCache ?cache tidx (traverse rewriteAll tf >>= getTerm ac >>= rewriteTop)
+        useCache ?cache tidx (traverse rewriteAll tf >>= scTermF sc >>= rewriteTop)
     rewriteAll t = return t
     rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
@@ -180,4 +188,4 @@ rewriteSharedTerm ac ss t =
     apply (rule : rules) t =
       case matchSharedTerm (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll =<< S.instantiateVarList ac 0 (Map.elems inst) (rhs rule)
+        Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
