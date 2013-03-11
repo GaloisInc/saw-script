@@ -8,7 +8,7 @@ module Verifier.SAW.SharedTerm
   , Ident, mkIdent
   , SharedTerm(..)
   , TermIndex
-  , unwrapSharedTerm
+  , Termlike(..)
   , looseVars
     -- * SharedContext interface for building shared terms
   , SharedContext
@@ -100,8 +100,14 @@ instance Ord (SharedTerm s) where
   compare _ STVar{} = GT
   compare (STApp x _) (STApp y _) = compare x y
 
-unwrapSharedTerm :: SharedTerm s -> TermF (SharedTerm s)
-unwrapSharedTerm (STApp _ tf) = tf
+class Termlike t where
+  unwrapTermF :: t -> TermF t
+
+instance Termlike Term where
+  unwrapTermF (Term tf) = tf
+
+instance Termlike (SharedTerm s) where
+  unwrapTermF (STApp _ tf) = tf
 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
                      , acNextIdx :: !TermIndex
