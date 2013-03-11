@@ -98,7 +98,9 @@ data Term
     -- | Arguments to an array constructor.  
   | Paren Pos Term
   | LetTerm Pos [Decl] Term
-  | IntLit Pos Integer
+  | NatLit Pos Integer
+    -- | Vector literal.
+  | VecLit Pos [Term]
   | BadTerm Pos
  deriving (Show)
 
@@ -144,7 +146,8 @@ instance Positioned Term where
       TypeConstraint _ p _ -> p
       Paren p _            -> p
       LetTerm p _ _        -> p
-      IntLit p _           -> p
+      NatLit p _           -> p
+      VecLit p _           -> p
       BadTerm p            -> p
 
 instance Positioned SimplePat where
@@ -160,7 +163,6 @@ instance Positioned Pat where
       PTuple p _  -> p
       PRecord p _ -> p
       PCtor i _   -> pos i
---      PIntLit p _ -> p
 
 badTerm :: Pos -> Term
 badTerm = BadTerm

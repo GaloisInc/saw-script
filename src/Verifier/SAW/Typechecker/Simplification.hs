@@ -4,6 +4,7 @@ module Verifier.SAW.Typechecker.Simplification
     preludeNatIdent
   , preludeZeroIdent
   , preludeSuccIdent
+  , preludeVecIdent
   , tryMatchPat
   , Subst
   , extendPatContext
@@ -40,6 +41,9 @@ preludeZeroIdent =  mkIdent preludeModuleName "Zero"
 
 preludeSuccIdent :: Ident
 preludeSuccIdent =  mkIdent preludeModuleName "Succ"
+
+preludeVecIdent :: Ident
+preludeVecIdent =  mkIdent preludeModuleName "Vec"
 
 extendPatContext :: TermContext s -> TCPat -> TermContext s
 extendPatContext tc0 pat = V.foldl (flip $ uncurry consBoundVar) tc0 (patBoundVars pat)

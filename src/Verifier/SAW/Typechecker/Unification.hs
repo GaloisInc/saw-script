@@ -29,12 +29,9 @@ import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.STRef
---import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint
-
---import Prelude hiding (mapM, mapM_, sequence, sequence_)
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
@@ -53,7 +50,6 @@ lift2 f h x y = h (f x) (f y)
 evaluatedRefLocalDef :: [TCLocalDef] -> TC s [TCRefLocalDef s]
 evaluatedRefLocalDef lcls = traverse go lcls
    where go (LocalFnDefGen nm tp eqns) = LocalFnDefGen nm tp <$> evaluatedRef nm eqns
-
 
 -- | Rigid variable used during pattern unification.
 data RigidVarRef s 
@@ -436,8 +432,7 @@ resolve (URR m) = do
     right (second _urContext) <$> liftST (m ur0)
 
 urST :: ST s v -> UResolver s v
-urST m = URR $ \r -> fmap (\v -> Right (v,r)) m
-
+urST m = URR $ \r -> Right . (,r) <$> m
 
 readVarState :: VarIndex s -> UResolver s (UVarState s)
 readVarState v = urST $ readSTRef (viRef v)

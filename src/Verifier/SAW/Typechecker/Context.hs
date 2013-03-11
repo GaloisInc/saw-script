@@ -52,8 +52,7 @@ module Verifier.SAW.Typechecker.Context
     -- * Global context
   , GlobalContext
   , emptyGlobalContext
-  , gcTypes
-  , gcDefs
+  , Loc(..)
   , insertDataType
   , insertDef
   , resolveCtor
@@ -99,11 +98,6 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.Position
 import qualified Verifier.SAW.UntypedAST as Un
 import Verifier.SAW.Typechecker.Monad
-
-maybeApply :: Bool -> (a -> a) -> a -> a
-maybeApply True f a = f a
-maybeApply False _ a = a
-
 
 data DefEqnGen p t
    = DefEqnGen [p]  -- ^ List of patterns
@@ -351,76 +345,118 @@ applyExtSafe tc1 (tc0,t) = (\d -> incTCVars d 0 t) <$> boundVarDiff tc1 tc0
 
 -- Global context stuff
 
-data GlobalBinding r
-  = DataTypeBinding (TCDataTypeGen r)
-    -- Datatype ident, ctor ident, ctor type.
-  | CtorBinding (TCDataTypeGen r) (TCCtorGen r)
-  | DefBinding (TCDefGen r)
+-- | Location contains 
+data Loc
+  = ImportedLoc ModuleName Pos
+  | LocalLoc Pos
 
-type GlobalContextMap s = Map Un.Ident (GlobalBinding (TCRef s))
+data GlobalBinding r
+  = DataTypeBinding Loc (TCDataTypeGen r)
+    -- Datatype ident, ctor ident, ctor type.
+  | CtorBinding Loc (TCDataTypeGen r) (TCCtorGen r)
+  | DefBinding Loc (TCDefGen r)
+
+-- | Returns location and identified of global binding.
+globalBindingDesc :: GlobalBinding r -> (Loc,Ident)
+globalBindingDesc gb =
+  case gb of
+    DataTypeBinding l dt -> (l, dtgName dt)
+    CtorBinding l _ c -> (l, ctorName c)
+    DefBinding l (DefGen nm _ _) -> (l, nm)
+
+type GlobalContextMap s = Map Un.Ident [GlobalBinding (TCRef s)]
 
 data GlobalContext s = GC { gcMap :: !(GlobalContextMap s)
                           , gcEqns :: !(Map Ident (TCRef s [TCDefEqn]))
-                          , gcTypes :: ![ TCRefDataType s ]
-                          , gcDefs :: ![ TCRefDef s ]
-                          } 
+                          }
 
 emptyGlobalContext :: GlobalContext s
 emptyGlobalContext = GC { gcMap = Map.empty
                         , gcEqns = Map.empty
-                        , gcTypes = []
-                        , gcDefs = []
                         }
 
--- | Add untyped global with the given module names.
-insGlobalBinding :: Bool
-                 -> [Maybe ModuleName]
-                 -> String
-                 -> GlobalBinding (TCRef s)
-                 -> GlobalContextMap s
-                 -> GlobalContextMap s
-insGlobalBinding vis mnml nm gb = maybeApply vis $ flip (foldr ins) mnml
-  where ins mnm = Map.insert (Un.mkIdent mnm nm) gb  
+type UntypedBinding s = (Un.Ident, GlobalBinding (TCRef s))
 
-insertDataType :: [Maybe ModuleName]
-               -> Bool -- Visible in untyped context.
-               -> DataTypeGen (TCRef s TCDTType) (Bool, TCRefCtor s)
+insertAllBindings :: [UntypedBinding s] -> GlobalContextMap s -> GlobalContextMap s
+insertAllBindings = flip (foldr ins)
+  where ins (i,v) = Map.insertWith (++) i [v]
+
+
+-- | Add untyped global with the given module names.
+untypedBindings :: Bool
+                -> [Maybe ModuleName]
+                -> String
+                -> GlobalBinding (TCRef s)
+                -> [UntypedBinding s]
+untypedBindings vis mnml nm gb
+  | vis = [ (Un.mkIdent mnm nm, gb) | mnm <- mnml ]
+  | otherwise = []
+
+-- | Insert data type into global context.
+insertDataType :: [Maybe ModuleName] -- ^ List of namespaces for symbols.
+               -> Bool -- ^ Indicates if data type should be visible to users.
+               -> Loc -- ^ Location where datatype comes from.
+               -> DataTypeGen (TCRef s TCDTType) (Bool, Loc, TCRefCtor s)
                -> GlobalContext s
                -> GlobalContext s
-insertDataType mnml vis (DataTypeGen dtnm dtp cl) gc = 
-    gc { gcMap = flip (foldr insCtor) cl $ insDT $ gcMap gc
-       , gcTypes = dt:gcTypes gc
-       } 
-  where dt = DataTypeGen dtnm dtp (snd <$> cl)
-        insDT = insGlobalBinding vis mnml (identName dtnm) (DataTypeBinding dt)
-        insCtor (b, c@(Ctor cnm _)) =
-          insGlobalBinding b mnml (identName cnm) (CtorBinding dt c)
+insertDataType mnml vis loc (DataTypeGen dtnm dtp cl) gc =
+    gc { gcMap = insertAllBindings bindings (gcMap gc) }
+  where dt = DataTypeGen dtnm dtp (view _3 <$> cl)
+        dtBindings = untypedBindings vis mnml (identName dtnm) (DataTypeBinding loc dt)
+        cBindings (b, cloc, c@(Ctor cnm _)) = 
+          untypedBindings b mnml (identName cnm) (CtorBinding cloc dt c)
+        bindings = dtBindings ++ concatMap cBindings cl
 
 insertDef :: [Maybe ModuleName]
-          -> Bool -- Visibile in untyped context.
+          -> Bool -- ^ Indicates ifd definition should be visible to users.
+          -> Loc -- ^ Location where symbol comes form.
           -> TCRefDef s
           -> GlobalContext s
           -> GlobalContext s
-insertDef mnml vis d@(DefGen nm _ eqs) gc =
-    gc { gcMap = ins $ gcMap gc
+insertDef mnml vis loc d@(DefGen nm _ eqs) gc =
+    gc { gcMap  = insertAllBindings bindings (gcMap gc)
        , gcEqns = Map.insert nm eqs (gcEqns gc)
-       , gcDefs = d:gcDefs gc
        }
-  where ins = insGlobalBinding vis mnml (identName nm) (DefBinding d)
+  where bindings = untypedBindings vis mnml (identName nm) (DefBinding loc d)
+
+squote :: Doc -> Doc
+squote d = char '`' <> d <> char '\''
+
+showQuoted :: Show s => s -> Doc
+showQuoted nm = squote (text (show nm))
+
+-- | Lookup ctor returning identifier and type.
+resolveGlobalIdent :: GlobalContext s -> PosPair Un.Ident -> TC s (GlobalBinding (TCRef s))
+resolveGlobalIdent gc (PosPair p nm) =
+  case fromMaybe [] $ Map.lookup nm (gcMap gc) of
+    [] -> tcFail p $ show $ text "Unknown identifier:" <+> showQuoted nm <> text "."
+    [d] -> return d
+    (d:r) -> tcFail p $ show $
+      text "Ambiguous occurance" <+> showQuoted nm <> text "." $$
+      ppLoc firstText (globalBindingDesc d) $$
+      vcat (ppLoc otherText . globalBindingDesc <$> r)
+ where firstText = "It could refer to either"
+       otherText = "                      or"
+       imporText = "                         imported from"
+       ppLoc t (ImportedLoc mnm oldp, sym) =
+         text t <+> showQuoted sym <> comma $$
+         text imporText <+> showQuoted mnm <+> text ("at " ++ show oldp)
+       ppLoc t (LocalLoc pm, sym) =
+         text t <+> showQuoted sym <> text (", defined at " ++ show pm)
 
 -- | Lookup ctor returning identifier and type.
 resolveCtor :: GlobalContext s -> PosPair Un.Ident -> Int -> TC s (Ident, TCTerm)
-resolveCtor gc (PosPair p nm) argc =
-  case Map.lookup nm (gcMap gc) of
-    Just (CtorBinding dt (Ctor c rtp)) -> do
+resolveCtor gc (PosPair p nm) argc = do
+  gb <- resolveGlobalIdent gc (PosPair p nm)
+  case gb of
+    CtorBinding _ dt (Ctor c rtp) -> do
       tp <- eval p rtp
       if fixedPiArgCount tp == argc then
         return $ (c, termFromTCCtorType (dtgName dt) tp)
       else
-        tcFail p "Incorrect number of arguments givne to constructor."
-    Just (DataTypeBinding{}) -> tcFail p $ "Pattern matching data type is unsupported."
-    Just _ -> fail "Unexpected ident type"
-    Nothing -> tcFail p $ "Unknown identifier: " ++ show nm ++ "."
+        tcFail p "Incorrect number of arguments given to constructor."
+    DataTypeBinding{} -> tcFail p $ "Pattern matching data type is unsupported."
+    _ -> fail "Unexpected ident type"
 
 -- TermContext
 
@@ -511,23 +547,23 @@ resolveIdent tc0 (PosPair p ident) = go tc0
                                           (applyExt tc0 (tc,tp))
                     | otherwise = lclFn (i+1) r
                 lclFn _ [] = go tc
-        go (TopContext gc) =        
-          case Map.lookup ident (gcMap gc) of
-            Just (DataTypeBinding (DataTypeGen dt rtp _)) -> do
+        go (TopContext gc) = do
+          gb <- resolveGlobalIdent gc (PosPair p ident)
+          case gb of
+            DataTypeBinding _ (DataTypeGen dt rtp _) -> do
               ftp <- eval p rtp
               case ftp of
                 FPResult s -> pure $ TypedValue (TCF (DataTypeApp dt [])) (TCF (Sort s))
                 FPPi pat tp next -> pure $ PartialDataType dt [] pat tp next 
-            Just (CtorBinding dt (Ctor c rtp)) -> do
+            CtorBinding _ dt (Ctor c rtp) -> do
               ftp <- eval p rtp
               case ftp of
                 FPResult args ->
                  pure $ TypedValue (TCF (CtorApp c []))
                                    (TCF (DataTypeApp (dtgName dt) args))
                 FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next 
-            Just (DefBinding (DefGen gi rtp _)) ->
+            DefBinding _ (DefGen gi rtp _) ->
               TypedValue (TCF (GlobalDef gi)) <$> eval p rtp
-            Nothing -> tcFail p $ "Unknown identifier: " ++ show ident ++ "."
 
 -- | Return names in context.
 contextNames :: TermContext s -> [String]

@@ -25,6 +25,7 @@ module Verifier.SAW.SharedTerm
   , scMkRecord
   , scRecordSelect
   , scRecordType
+  , scDataTypeApp
   , scCtorApp
   , scApplyCtor
   , scFun
@@ -382,6 +383,11 @@ scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
 scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
 scDefTerm sc d = scGlobalDef sc (defIdent d)
+
+-- | Applies the constructor with the given name to the list of
+-- arguments. This version does no checking against the module.
+scDataTypeApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
+scDataTypeApp sc ident args = scFlatTermF sc (DataTypeApp ident args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
