@@ -104,10 +104,10 @@ emptynet = Net { comb = empty, var = empty, atoms = Map.empty }
   Creates node if not already present.
   The empty list of keys generates a Leaf node, others a Net node.
 -}
-insert :: (Eq a) => ([Key], a) -> Net a -> Net a
+insert :: forall a. (Eq a) => ([Key], a) -> Net a -> Net a
 insert (keys, x) net = ins1 keys net
   where
-    -- ins1 :: [Key] -> Net a -> Net a --FIXME: why doesn't this type signature work?
+    ins1 :: [Key] -> Net a -> Net a
     ins1 [] (Leaf xs)
       | x `elem` xs = Leaf xs
       | otherwise   = Leaf (x : xs)
