@@ -117,7 +117,7 @@ insert (keys, x) net = ins1 keys net
     ins1 (VarK : keys) (Net {comb, var, atoms}) =
       Net {comb = comb, var = ins1 keys var, atoms = atoms}
     ins1 (AtomK a : keys) (Net {comb, var, atoms}) =
-      let atoms' = Map.insertWith (const id) a empty atoms
+      let atoms' = Map.alter (Just . ins1 keys . fromMaybe empty) a atoms
       in Net {comb = comb, var = var, atoms = atoms'}
 
 insert_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
