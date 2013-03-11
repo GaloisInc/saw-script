@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveFoldable #-} 
-{-# LANGUAGE DeriveTraversable #-} 
-{-# LANGUAGE DoAndIfThenElse #-} 
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GADTs  #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -40,7 +40,7 @@ import qualified Verifier.SAW.UntypedAST as Un
 -- | Given a project function returning a key and a list of values, return a map
 -- from the keys to values.
 projMap :: Ord k => (a -> k) -> [a] -> Map k a
-projMap f l = Map.fromList [ (f e,e) | e <- l ] 
+projMap f l = Map.fromList [ (f e,e) | e <- l ]
 
 -- | Given a list of keys and values, construct a map that maps each key to the list
 -- of values.
@@ -132,7 +132,7 @@ tcTerm :: TermContext s
 tcTerm tc ut rtp = do
   (v,tp) <- inferTypedValue tc ut
   v <$ checkTypeSubtype tc (pos ut) tp rtp
- 
+
 -- | Check that term is equivalent to Sort i for some i.
 checkIsSort :: TermContext s -> Pos -> TCTerm -> TC s Sort
 checkIsSort tc p t0 = do
@@ -162,7 +162,7 @@ tcSpecificDataType expected tc ut = do
 
 tcFixedPiType :: forall r s . (TermContext s -> Un.Term -> TC s r)
               -> TermContext s -> Un.Term -> TC s (FixedPiType r)
-tcFixedPiType fn = go 
+tcFixedPiType fn = go
   where go tc (Un.Pi _ upats0 utp _ rhs) = do
           (tp0, _) <- tcType tc utp
           let tcPats :: TermContext s
@@ -207,7 +207,7 @@ inferLambda tc0 pl0 urhs = go [] tc0 pl0
         go args tc1 ((_,patl,utp):l) = do
           (tp,_) <- tcType tc1 utp
           (pl,tc') <- typecheckPats tc1 patl tp
-          let typedPL = (,tp) <$> pl 
+          let typedPL = (,tp) <$> pl
           go (args ++ typedPL) tc' l
 
 inferTerm :: TermContext s -> Un.Term -> TC s InferResult
@@ -354,7 +354,7 @@ reduceToRecordType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
     TCF (RecordType m) -> return m
-    _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$ 
+    _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$
                        nest 2 (ppTCTerm tc 0 rtp)
 
 reduceToTupleType :: TermContext s -> Pos -> TCTerm -> TC s [TCTerm]
@@ -362,7 +362,7 @@ reduceToTupleType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
     TCF (TupleType ts) -> return ts
-    _ -> tcFailD p $ text "Attempt to dereference component of term with type:" $$ 
+    _ -> tcFailD p $ text "Attempt to dereference component of term with type:" $$
                        nest 2 (ppTCTerm tc 0 rtp)
 
 topEval :: TCRef s v -> TC s v
@@ -401,7 +401,7 @@ ccVarType cc0 i0 = go cc0 i0
 completeDataType :: CompletionContext
                  -> TCDataType
                  -> TypedDataType
-completeDataType cc (DataTypeGen dt tp cl) = 
+completeDataType cc (DataTypeGen dt tp cl) =
   DataType { dtName = dt
            , dtType = completeTerm cc (termFromTCDTType tp)
            , dtCtors = fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
@@ -411,9 +411,9 @@ completeDef :: CompletionContext
             -> TCDef
             -> TypedDef
 completeDef cc (DefGen nm tp el) = def
-  where def = Def { defIdent = nm 
+  where def = Def { defIdent = nm
                   , defType = completeTerm cc (runIdentity tp)
-                  , defEqs = completeDefEqn cc <$> (runIdentity el) 
+                  , defEqs = completeDefEqn cc <$> (runIdentity el)
                   }
 
 completeDefEqn :: CompletionContext -> TCDefEqn -> TypedDefEqn
@@ -463,7 +463,7 @@ completeTerm cc (TCPi pat@(TCPVar nm _) tp r) =
 completeTerm cc (TCPi pat@(TCPUnused nm _) tp r) =
     Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
-completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term" 
+completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term"
 completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
   where (cc',tps) = addPatTypes cc (localBoundVars <$> V.fromList lcls)
         completeLocal (LocalFnDefGen nm _ eqns) tp =
@@ -479,7 +479,7 @@ addImportNameStrings im s =
   case im of
     Un.SingleImport pnm -> Set.insert (val pnm) s
     Un.AllImport pnm -> Set.insert (val pnm) s
-    Un.SelectiveImport pnm cl -> foldr Set.insert s (val <$> (pnm:cl)) 
+    Un.SelectiveImport pnm cl -> foldr Set.insert s (val <$> (pnm:cl))
 
 -- | Returns set of names identified in a given list of names to import.
 importNameStrings :: [Un.ImportName] -> Set String
@@ -518,7 +518,6 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
     let tc = emptyTermContext (is^.isCtx)
     -- Execute pending assignments with final TermContext.
     sequence_ $ (($ tc) <$> is^.isPending)
-    
     let mkFinal tps defs = m
           where cc = CCGlobal m
                 m = flip (foldl insDef) (completeDef cc <$> defs)
@@ -543,7 +542,7 @@ liftTCPatT :: forall s f
             . Traversable f
            => TermContext s
            -> f (Pat Term) -> TC s (f TCPat, TermContext s)
-liftTCPatT tc0 a = do 
+liftTCPatT tc0 a = do
   let vinfo :: Vector (String,Term)
       vinfo = V.fromList $ Map.elems $ execState (traverse patVarInfo a) Map.empty
       fn (nm,tp) = do
@@ -587,7 +586,7 @@ liftLocalDefs tc0 lcls = do
           return (LocalFnDefGen nm tp r, pendingFn)
 
 liftTCTerm :: TermContext s -> Term -> TC s TCTerm
-liftTCTerm tc (Term tf) = 
+liftTCTerm tc (Term tf) =
   case tf of
     FTermF ftf -> TCF <$> traverse (liftTCTerm tc) ftf
     Lambda pat tp rhs -> do
@@ -600,7 +599,7 @@ liftTCTerm tc (Term tf) =
     Let lcls r -> do
       (lcls', tc') <- liftLocalDefs tc lcls
       TCLet lcls' <$> liftTCTerm tc' r
-    LocalVar i _ -> return $ 
+    LocalVar i _ -> return $
       case resolveBoundInfo i tc of
         BoundVar{} -> TCVar i
         LocalDef{} -> TCLocalDef i
@@ -660,8 +659,13 @@ initModuleName = moduleName <$> use isModule
 
 addPending :: NodeName -> (TermContext s -> TC s r) -> Initializer s (TCRef s r)
 addPending nm fn = do
+<<<<<<< HEAD
   r <- lift $ newRef nm  
   r <$ (isPending %= (mkPendingAssign r fn :))
+=======
+  r <- lift $ newRef nm
+  r <$ modify (\s -> s { isPending = mkPendingAssign r fn : isPending s })
+>>>>>>> 0e443259f5cd5311e6f52da935f10e371e72c8f3
 
 parseCtor :: Ident -> Un.CtorDecl -> Initializer s (Bool, Loc, TCRefCtor s)
 parseCtor dt (Un.Ctor pnm utp) = do

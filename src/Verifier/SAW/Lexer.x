@@ -34,7 +34,7 @@ import Verifier.SAW.Position
 $idchar = [a-z A-Z 0-9 \' \_]
 @num = [0-9]+
 @var = [a-z] $idchar*
-@unvar = [\_]+ ([a-z] $idchar*)? 
+@unvar = [\_]+ ([a-z] $idchar*)?
 @con = [A-Z] $idchar*
 
 @punct = "#" | "," | "->" | "." | ".." | ";" | "::" | "=" | "?" | "??" | "???"
@@ -45,7 +45,7 @@ $idchar = [a-z A-Z 0-9 \' \_]
 
 sawTokens :-
 
-$white+; 
+$white+;
 "--".*;
 "{-"        { \_ -> TCmntS }
 "-}"        { \_ -> TCmntE }
@@ -60,21 +60,21 @@ $white+;
 data Token
   = TVar { tokVar :: String }   -- ^ Variable identifier (lower case).
   | TUnVar { tokVar :: String } -- ^ Variable identifier prefixed by underscore.
-  | TCon { tokCon :: String }   -- ^ Start of a constructor (may be pattern matched). 
+  | TCon { tokCon :: String }   -- ^ Start of a constructor (may be pattern matched).
   | TNat { tokNat :: Integer }  -- ^ Natural number literal
   | TKey String     -- ^ Keyword or predefined symbol
   | TEnd            -- ^ End of file.
   | TCmntS          -- ^ Start of a block comment
-  | TCmntE          -- ^ End of a block comment. 
+  | TCmntE          -- ^ End of a block comment.
   | TIllegal String -- ^ Illegal character
   deriving (Show)
 
 ppToken :: Token -> String
-ppToken tkn = 
+ppToken tkn =
   case tkn of
     TVar s -> s
     TUnVar s -> s
-    TCon s -> s   
+    TCon s -> s
     TNat n -> show n
     TKey s -> s
     TEnd -> "END"

@@ -9,6 +9,7 @@ module Verifier.SAW.SharedTerm
   , SharedTerm(..)
   , TermIndex
   , unwrapSharedTerm
+  , looseVars
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
@@ -65,9 +66,10 @@ module Verifier.SAW.SharedTerm
 
 import Control.Applicative ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
-import Control.Monad (foldM)
+import Control.Monad (foldM, liftM)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
+import Data.Bits
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -120,16 +122,6 @@ getTerm r a =
               s' = s { acBindings = Map.insert a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
-
-{-
-data LocalVarTypeMap s = LVTM { lvtmMap :: Map Integer (SharedTerm s) }
-
-consLocalVarType :: LocalVarTypeMap s -> Ident -> SharedTerm s -> LocalVarTypeMap s
-consLocalVarType = undefined
-
-localVarType :: DeBruijnIndex -> LocalVarTypeMap s -> SharedTerm s
-localVarType = undefined
--}
 
 -- | Substitute var 0 in first term for second term, and shift all variable
 -- references down.
@@ -250,6 +242,37 @@ scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
     where go (Term termf) = scTermF sc =<< traverse go termf
 
+type BitSet = Integer
+
+looseVars :: forall s. SharedTerm s -> BitSet
+looseVars t = State.evalState (go t) Map.empty
+    where
+      go :: SharedTerm s -> State.State (Map TermIndex BitSet) BitSet
+      go (STVar i sym tp) = return 0
+      go (STApp i tf) = do
+        memo <- State.get
+        case Map.lookup i memo of
+          Just x -> return x
+          Nothing -> do
+            x <- termf tf
+            State.modify (Map.insert i x)
+            return x
+      termf :: TermF (SharedTerm s) -> State.State (Map TermIndex BitSet) BitSet
+      termf (FTermF tf) = foldlM (\b t -> liftM (b .|.) (go t)) 0 tf
+      termf (Lambda pat tp rhs) =
+          do let n = patBoundVarCount pat
+             x <- go tp
+             y <- go rhs
+             return (x .|. shiftR y n)
+      termf (Pi _name lhs rhs) =
+          do x <- go lhs
+             y <- go rhs
+             return (x .|. shiftR y 1)
+      termf (Let defs r) = error "unimplemented: looseVars Let"
+      termf (LocalVar i tp) =
+          do x <- go tp
+             return (x .|. bit i)
+
 instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
@@ -353,7 +376,7 @@ instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts 
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building SharedTerms.
 
--- | Operations that are defined, but not 
+-- | Operations that are defined, but not
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
     scModule :: IO Module

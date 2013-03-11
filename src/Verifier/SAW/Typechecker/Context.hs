@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveFoldable #-} 
-{-# LANGUAGE DeriveFunctor #-} 
-{-# LANGUAGE DeriveTraversable #-} 
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
@@ -23,7 +23,7 @@ module Verifier.SAW.Typechecker.Context
   , patBoundVarsOf
   , patBoundVars
   , fmapTCPat
-  , zipWithPatF  
+  , zipWithPatF
   , termFromPatF
 
   , LocalDefGen(..)
@@ -134,7 +134,7 @@ data TCTerm
     -- | A local variable with its deBruijn index and type in the current context.
   | TCVar DeBruijnIndex
     -- | A reference to a let bound function with equations.
-  | TCLocalDef DeBruijnIndex 
+  | TCLocalDef DeBruijnIndex
 
 data AnnPat a
     -- | Variable with its annotation.
@@ -162,7 +162,7 @@ tcMkApp = go
 tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
 tcAsApp = go []
   where go r (TCF (App f v)) = go (v:r) f
-        go r f = (f,r) 
+        go r f = (f,r)
 
 -- | A pi type that accepted a statically-determined number of arguments.
 data FixedPiType r
@@ -203,7 +203,7 @@ addPatBindings (TCPatF pf) = traverseOf_ folded addPatBindings pf
 
 -- | Get list of variables by running parser.
 runPatVarParser :: PatVarParser a () -> Vector (String,a)
-runPatVarParser pvp 
+runPatVarParser pvp
    | c == Map.size m = V.generate c fn
    | otherwise = error "patBoundVarsOf given incomplete list of patterns"
   where (c,m) = execState pvp (0,Map.empty)
@@ -227,7 +227,7 @@ fmapTCPat :: (Int -> TCTerm -> TCTerm)
           -> Int -> TCPat -> TCPat
 fmapTCPat fn i (TCPVar nm (j,tp)) = TCPVar nm (j, fn (i+j) tp)
 fmapTCPat fn i (TCPUnused nm (j,tp)) = TCPUnused nm (j, fn (i+j) tp)
-fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)  
+fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)
 
 -- | Convert pats into equivalent termf.
 termFromPatF :: PatF a -> FlatTermF a
@@ -273,7 +273,7 @@ termFromTCCtorType dt (FPPi p tp r) = TCPi p tp (termFromTCCtorType dt r)
 
 -- | Returns number of bound variables in pat.
 tcPatVarCount :: TCPat -> Int
-tcPatVarCount TCPVar{} = 1 
+tcPatVarCount TCPVar{} = 1
 tcPatVarCount TCPUnused{} = 0
 tcPatVarCount (TCPatF pf) = sumOf folded (tcPatVarCount <$> pf)
 
@@ -302,7 +302,7 @@ tcApply baseTC (fTC, f) (vTC, v)
    | otherwise = error $ show $ text "tcApply given bad arguments:" $$
       ppTCTerm fTC 0 f $$
       text ("fd = " ++ show fd) $$
-      vcat (ppTCTerm vTC 0 <$> V.toList v) 
+      vcat (ppTCTerm vTC 0 <$> V.toList v)
   where Just fd = boundVarDiff fTC baseTC
         Just vd = boundVarDiff vTC baseTC
 
@@ -383,6 +383,7 @@ insertAllBindings = flip (foldr ins)
 
 
 -- | Add untyped global with the given module names.
+<<<<<<< HEAD
 untypedBindings :: Bool
                 -> [Maybe ModuleName]
                 -> String
@@ -511,16 +512,16 @@ globalDefEqns i tc = fromMaybe emsg $ Map.lookup i (gcEqns (globalContext tc))
   where emsg = error $ "Could not find equations for " ++ show i ++ "."
 
 data InferResult where
-  -- | Ctor with identifier argument list and 
+  -- | Ctor with identifier argument list and
   PartialCtor :: Ident -- Datatype identifier
               -> Ident -- Ctor identifier.
               -> [TCTerm] -- Arguments so far.
-              -> TCPat  -- Pattern for next argument 
-              -> TCTerm -- Type of next argument. 
+              -> TCPat  -- Pattern for next argument
+              -> TCTerm -- Type of next argument.
               -> TCCtorType -- Result ctor type.
               -> InferResult
   PartialDataType :: Ident
-                  -> [TCTerm] 
+                  -> [TCTerm]
                   -> TCPat
                   -> TCTerm
                   -> TCDTType
@@ -561,7 +562,7 @@ resolveIdent tc0 (PosPair p ident) = go tc0
                 FPResult args ->
                  pure $ TypedValue (TCF (CtorApp c []))
                                    (TCF (DataTypeApp (dtgName dt) args))
-                FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next 
+                FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next
             DefBinding _ (DefGen gi rtp _) ->
               TypedValue (TCF (GlobalDef gi)) <$> eval p rtp
 
@@ -581,15 +582,15 @@ ppTermContext (BindContext tc nm tp) =
   ppTermContext tc
 ppTermContext (LetContext tc lcls) =
     text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) $$
-    ppTermContext tc  
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp  
+    ppTermContext tc
+  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp
 ppTermContext TopContext{} = text "top"
 
 -- | Pretty print a pat
 ppTCPat :: AnnPat a -> Doc
 ppTCPat (TCPVar nm _) = text nm
 ppTCPat (TCPUnused nm _) = text nm
-ppTCPat (TCPatF pf) = 
+ppTCPat (TCPatF pf) =
   case pf of
     UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
     UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
@@ -603,10 +604,10 @@ ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
 ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
-  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
              <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
 ppTCTermGen d pr (TCPi p l r) = ppParens (pr >= 1) $
-  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
     <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
 ppTCTermGen d pr (TCLet lcls t) = ppParens (pr >= 1) $
     text "let " <> nest 4 (vcat (ppLcl <$> lcls)) $$
@@ -619,10 +620,10 @@ ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
 
 -- | Bound the free variables in the term with pi quantifiers.
 boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
-boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0 
+boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0
   where Just d0 = boundVarDiff tc1 tc0
         go 0 _ t = t
-        go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm (0,tp)) tp t) 
+        go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm (0,tp)) tp t)
         go _ _ _ = error "boundFreeVarsWithPi given bad context"
 
 -- | Check TCPat free variables returning new number of bound variables.
