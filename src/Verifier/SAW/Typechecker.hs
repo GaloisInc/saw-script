@@ -659,13 +659,8 @@ initModuleName = moduleName <$> use isModule
 
 addPending :: NodeName -> (TermContext s -> TC s r) -> Initializer s (TCRef s r)
 addPending nm fn = do
-<<<<<<< HEAD
   r <- lift $ newRef nm  
   r <$ (isPending %= (mkPendingAssign r fn :))
-=======
-  r <- lift $ newRef nm
-  r <$ modify (\s -> s { isPending = mkPendingAssign r fn : isPending s })
->>>>>>> 0e443259f5cd5311e6f52da935f10e371e72c8f3
 
 parseCtor :: Ident -> Un.CtorDecl -> Initializer s (Bool, Loc, TCRefCtor s)
 parseCtor dt (Un.Ctor pnm utp) = do

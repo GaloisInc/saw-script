@@ -383,7 +383,6 @@ insertAllBindings = flip (foldr ins)
 
 
 -- | Add untyped global with the given module names.
-<<<<<<< HEAD
 untypedBindings :: Bool
                 -> [Maybe ModuleName]
                 -> String
