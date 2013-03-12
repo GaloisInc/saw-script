@@ -332,7 +332,6 @@ data TermF e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex !e
-      -- | @EqType x y@ is a type representing the equality proposition @x = y@
   deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 ppIdent :: Ident -> Doc
@@ -509,8 +508,6 @@ instantiateVars f initialLevel = go initialLevel
             LocalVar i tp
               | i < l -> Term $ LocalVar i (go l tp)
               | otherwise -> f l i (go l tp)
---            EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
---            Oracle s prop  -> Term $ Oracle s (go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
