@@ -248,8 +248,6 @@ scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
     where go (Term termf) = scTermF sc =<< traverse go termf
 
-type BitSet = Integer
-
 looseVars :: forall s. SharedTerm s -> BitSet
 looseVars t = State.evalState (go t) Map.empty
     where
@@ -260,24 +258,9 @@ looseVars t = State.evalState (go t) Map.empty
         case Map.lookup i memo of
           Just x -> return x
           Nothing -> do
-            x <- termf tf
+            x <- liftM freesTermF (traverse go tf)
             State.modify (Map.insert i x)
             return x
-      termf :: TermF (SharedTerm s) -> State.State (Map TermIndex BitSet) BitSet
-      termf (FTermF tf) = foldlM (\b t -> liftM (b .|.) (go t)) 0 tf
-      termf (Lambda pat tp rhs) =
-          do let n = patBoundVarCount pat
-             x <- go tp
-             y <- go rhs
-             return (x .|. shiftR y n)
-      termf (Pi _name lhs rhs) =
-          do x <- go lhs
-             y <- go rhs
-             return (x .|. shiftR y 1)
-      termf (Let defs r) = error "unimplemented: looseVars Let"
-      termf (LocalVar i tp) =
-          do x <- go tp
-             return (x .|. bit i)
 
 instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)

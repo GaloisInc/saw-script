@@ -44,6 +44,9 @@ module Verifier.SAW.TypedAST
  , TermF(..)
  , FlatTermF(..)
  , zipWithFlatTermF
+ , BitSet
+ , freesTerm
+ , freesTermF
  , ppTerm
  , ppFlatTermF
  , ppRecordF
@@ -68,6 +71,7 @@ import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Lens
 import Control.Monad.Identity (runIdentity)
+import Data.Bits
 import Data.Char
 import Data.Foldable
 import Data.List (intercalate)
@@ -470,6 +474,24 @@ piArgCount :: Term -> Int
 piArgCount = go 0
   where go i (Term (Pi _ _ rhs)) = go (i+1) rhs
         go i _ = i
+
+-- | A @BitSet@ represents a set of natural numbers.
+-- Bit n is a 1 iff n is in the set.
+type BitSet = Integer
+
+freesTermF :: TermF BitSet -> BitSet
+freesTermF tf =
+    case tf of
+      FTermF ftf -> Data.Foldable.foldl' (.|.) 0 ftf
+      Lambda pat tp rhs ->
+          Data.Foldable.foldl' (.|.) 0 pat .|. tp .|.
+          shiftR rhs (patBoundVarCount pat)
+      Pi _name lhs rhs -> lhs .|. shiftR rhs 1
+      Let defs r -> error "unimplemented: freesTermF Let"
+      LocalVar i tp -> bit i .|. tp
+
+freesTerm :: Term -> BitSet
+freesTerm (Term t) = freesTermF (fmap freesTerm t)
 
 -- | @instantiateVars f l t@ substitutes each dangling bound variable
 -- @LocalVar j t@ with the term @f i j t@, where @i@ is the number of
