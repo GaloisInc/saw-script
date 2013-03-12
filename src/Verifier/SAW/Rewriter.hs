@@ -10,6 +10,7 @@ module Verifier.SAW.Rewriter
   , delSimp
   , rewriteTerm
   , rewriteSharedTerm
+  , rewriteSharedTermTypeSafe
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
@@ -179,6 +180,57 @@ rewriteSharedTerm sc ss t =
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (traverse rewriteAll tf >>= scTermF sc >>= rewriteTop)
     rewriteAll t = return t
+    rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+                  SharedTerm s -> IO (SharedTerm s)
+    rewriteTop t = apply (Net.match_term ss t) t
+    apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+             [RewriteRule (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
+    apply [] t = return t
+    apply (rule : rules) t =
+      case first_order_match (lhs rule) t of
+        Nothing -> apply rules t
+        Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+
+-- | Type-safe rewriter for shared terms
+rewriteSharedTermTypeSafe
+    :: forall s. SharedContext s -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
+rewriteSharedTermTypeSafe sc ss t =
+    do cache <- newCache
+       let ?cache = cache in rewriteAll t
+  where
+    rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+                  SharedTerm s -> IO (SharedTerm s)
+    rewriteAll t@(STApp tidx tf) =
+        putStrLn "Rewriting term:" >> print t >>
+        useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
+    rewriteAll t = return t
+    rewriteTermF :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+                    TermF (SharedTerm s) -> IO (TermF (SharedTerm s))
+    rewriteTermF tf =
+        case tf of
+          FTermF ftf -> FTermF <$> rewriteFTermF ftf
+          Lambda pat t e -> Lambda pat t <$> rewriteAll e
+          _ -> return tf -- traverse rewriteAll tf
+    rewriteFTermF :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+                     FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
+    rewriteFTermF ftf =
+        case ftf of
+          App e1 e2 ->
+              do t1 <- scTypeOf sc e1
+                 case unwrapTermF t1 of
+                   Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
+                   _ -> App <$> rewriteAll e1 <*> pure e2
+          TupleValue{} -> traverse rewriteAll ftf
+          TupleType{} -> return ftf -- doesn't matter
+          TupleSelector{} -> traverse rewriteAll ftf
+          RecordValue{} -> traverse rewriteAll ftf
+          RecordSelector{} -> traverse rewriteAll ftf
+          RecordType{} -> return ftf -- doesn't matter
+          CtorApp ident es -> return ftf --FIXME
+          DataTypeApp{} -> return ftf -- could treat same as CtorApp
+          Sort{} -> return ftf -- doesn't matter
+          NatLit{} -> return ftf -- doesn't matter
+          ArrayValue t es -> ArrayValue t <$> traverse rewriteAll es
     rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t = apply (Net.match_term ss t) t
