@@ -573,8 +573,6 @@ ppTerm lcls p0 t =
          where nms = concatMap localVarNames dl
                lcls' = foldl' consBinding lcls nms
        ppTermF _ (LocalVar i _) = lookupDoc lcls i
---       ppTermF _ (EqType lhs rhs) = ppTerm lcls 1 lhs <+> equals <+> ppTerm lcls 1 rhs
---       ppTermF _ (Oracle s prop) = quotes (text s) <> parens (ppTerm lcls 0 prop)
 
 
 instance Show Term where
