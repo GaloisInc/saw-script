@@ -170,12 +170,13 @@ RecTerm : AtomTerm              { $1 }
         | RecTerm '.' nat       { TupleSelector $1 (fmap tokNat $3) }
 
 AtomTerm :: { Term }
-AtomTerm : nat                          { IntLit (pos $1) (tokNat (val $1)) }
+AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
          | Var                          { Var (fmap localIdent $1) }
          | unvar                        { Unused (fmap tokVar $1) }
          | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
          |     '(' sepBy(Term, ',') ')'     { parseParen Paren TupleValue (pos $1) $2 }
          | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
+         |     '[' sepBy(Term, ',') ']'     { VecLit (pos $1) $2 }
          |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 }
          | '#' '{' recList('::', LTerm) '}' { RecordType  (pos $1) $3 }
 
@@ -373,7 +374,6 @@ termAsPat ex = do
       (TypeConstraint{}, []) -> badPat "Type constraint"
       (Paren{}, _) -> error "internal: Unexpected paren"
       (LetTerm{}, _) -> badPat "Let expression"
---      (IntLit p i, []) -> ret $ PIntLit p i
       (BadTerm{}, _) -> return Nothing
       (_, h:_) -> err (pos h) "Unexpected expression"
   where ret r = return (Just r)

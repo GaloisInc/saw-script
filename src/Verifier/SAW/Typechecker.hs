@@ -293,9 +293,16 @@ inferTerm tc uut = do
       (tc', lcls) <- tcLocalDecls tc p udl
       (rhs,rhsTp) <- inferTypedValue tc' urhs
       return $ TypedValue (TCLet lcls rhs) (TCLet lcls rhsTp)
-    Un.IntLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
+    Un.NatLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
                   | otherwise -> pure $ TypedValue (TCF (NatLit i)) nattp
       where nattp = TCF (DataTypeApp preludeNatIdent [])
+    Un.VecLit p [] -> tcFail p "SAWCore parser does not support empty array literals."
+    Un.VecLit _ (h:l) -> do
+      (v,tp) <- inferTypedValue tc h
+      vl <- traverse (\u -> tcTerm tc u tp) l
+      let vals = V.fromList (v:vl)
+      let n = TCF (NatLit (toInteger (V.length vals)))
+      return $ TypedValue (TCF (ArrayValue tp vals)) (TCF (DataTypeApp preludeVecIdent [n,tp]))
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
 
 tcLocalDecls :: TermContext s
@@ -374,10 +381,6 @@ evalDef (DefGen nm tpr elr) =
 data CompletionContext
   = CCGlobal Module
   | CCBinding CompletionContext Term
-
-_ccHeight :: CompletionContext -> Int
-_ccHeight CCGlobal{} = 0
-_ccHeight (CCBinding cc _) = _ccHeight cc + 1
 
 addPatTypes :: CompletionContext
             -> Vector (String,TCTerm)
@@ -493,15 +496,17 @@ includeNameInModule mic = fn . identName
 
 -- | Creates a module from a list of untyped declarations.
 tcModule :: [Module] -- ^ List of modules loaded already.
-               -> Un.Module
-               -> Either Doc Module
+         -> Un.Module
+         -> Either Doc Module
 tcModule ml (Un.Module (PosPair _ nm) iml d) = do
   let moduleMap = projMap moduleName ml
   runTC $ do
     let gc0 = emptyGlobalContext
-    let is0 = IS { isModuleName = nm
-                 , isCtx = gc0
-                 , isPending = []
+    let is0 = IS { _isModule = emptyModule nm
+                 , _isCtx = gc0
+                 , _isTypes = []
+                 , _isDefs = []
+                 , _isPending = []
                  }
     let eqnMap = multiMap [ (val psym, DefEqnGen (snd <$> lhs) rhs)
                           | Un.TermDef psym lhs rhs <- d
@@ -510,18 +515,16 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
     let actions = fmap (parseImport moduleMap) iml
                ++ fmap (parseDecl eqnMap) d
     is <- execStateT (sequenceOf_ folded actions) is0
-    let gc = isCtx is
-    let tc = emptyTermContext gc
+    let tc = emptyTermContext (is^.isCtx)
     -- Execute pending assignments with final TermContext.
-    sequence_ $ (($ tc) <$> isPending is)
-
+    sequence_ $ (($ tc) <$> is^.isPending)
     let mkFinal tps defs = m
           where cc = CCGlobal m
                 m = flip (foldl insDef) (completeDef cc <$> defs)
                   $ flip (foldl insDataType) (completeDataType cc <$> tps)
-                  $ emptyModule nm
-    mkFinal <$> traverse evalDataType (gcTypes gc)
-            <*> traverse evalDef (gcDefs gc)
+                  $ is^.isModule
+    mkFinal <$> traverse evalDataType (is^.isTypes)
+            <*> traverse evalDef (is^.isDefs)
 
 type VarCollector = State (Map Int (String, Term))
 
@@ -627,30 +630,44 @@ type PendingAction s a = a -> TC s ()
 mkPendingAssign :: TCRef s v -> (a -> TC s v) -> PendingAction s a
 mkPendingAssign r f a = assignRef r (f a)
 
-data InitState s = IS { isModuleName :: ModuleName
-                      , isCtx :: GlobalContext s
-                      , isPending :: [ PendingAction s (TermContext s) ]
+data InitState s = IS { _isModule :: Module
+                      , _isCtx :: GlobalContext s
+                      , _isTypes :: ![ TCRefDataType s ] 
+                      , _isDefs  :: ![ TCRefDef s ]
+                      , _isPending :: [ PendingAction s (TermContext s) ]
                       }
+
+isModule :: Simple Lens (InitState s) Module
+isModule = lens _isModule (\s v -> s { _isModule = v })
+
+isCtx :: Simple Lens (InitState s) (GlobalContext s)
+isCtx = lens _isCtx (\s v -> s { _isCtx = v })
+
+isTypes :: Simple Lens (InitState s) [TCRefDataType s] 
+isTypes = lens _isTypes (\s v -> s { _isTypes = v })
+
+isDefs :: Simple Lens (InitState s) [ TCRefDef s ]
+isDefs = lens _isDefs (\s v -> s { _isDefs = v })
+
+isPending :: Simple Lens (InitState s) [ PendingAction s (TermContext s) ]
+isPending = lens _isPending (\s v -> s { _isPending = v })
 
 type Initializer s a = StateT (InitState s) (TC s) a
 
 initModuleName :: Initializer s ModuleName
-initModuleName = gets isModuleName
-
-updateIsCtx :: (GlobalContext s -> GlobalContext s) -> Initializer s ()
-updateIsCtx f = modify $ \s -> s { isCtx = f (isCtx s) }
+initModuleName = moduleName <$> use isModule
 
 addPending :: NodeName -> (TermContext s -> TC s r) -> Initializer s (TCRef s r)
 addPending nm fn = do
-  r <- lift $ newRef nm
-  r <$ modify (\s -> s { isPending = mkPendingAssign r fn : isPending s })
+  r <- lift $ newRef nm  
+  r <$ (isPending %= (mkPendingAssign r fn :))
 
-parseCtor :: Ident -> Un.CtorDecl -> Initializer s (Bool, TCRefCtor s)
+parseCtor :: Ident -> Un.CtorDecl -> Initializer s (Bool, Loc, TCRefCtor s)
 parseCtor dt (Un.Ctor pnm utp) = do
   mnm <- initModuleName
   tp <- addPending (val pnm) (\tc -> tcCtorType dt tc utp)
   let ci = mkIdent mnm (val pnm)
-  return (True, Ctor { ctorName = ci, ctorType = tp })
+  return (True, LocalLoc (pos pnm), Ctor { ctorName = ci, ctorType = tp })
 
 parseDecl :: Map String [UnDefEqn] -> Un.Decl -> Initializer s ()
 parseDecl eqnMap d = do
@@ -665,14 +682,16 @@ parseDecl eqnMap d = do
           tp <- eval p rtp
           eqs <- traverse (tcEqn tc tp) ueqs
           return eqs
-        let di = mkIdent mnm nm
-        updateIsCtx $ insertDef [Nothing] True (DefGen di rtp eqs)
+        let def = DefGen (mkIdent mnm nm) rtp eqs
+        isCtx  %= insertDef [Nothing] True (LocalLoc p) def
+        isDefs %= (def:)
     Un.DataDecl psym utp ucl -> do
       let dti = mkIdent mnm (val psym)
-      dt <- liftA2 (DataTypeGen dti)
-                   (addPending (val psym) (\tc -> tcDTType tc utp))
-                   (traverse (parseCtor dti) ucl)
-      updateIsCtx $ insertDataType [Nothing] True dt
+      dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
+      cl  <- traverse (parseCtor dti) ucl
+      let dt = DataTypeGen dti dtp cl
+      isCtx   %= insertDataType [Nothing] True (LocalLoc (pos psym)) dt
+      isTypes %= (DataTypeGen dti dtp (view _3 <$> cl):)
     Un.TermDef{} -> return ()
 
 parseImport :: Map ModuleName Module
@@ -682,12 +701,15 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
   case Map.lookup nm moduleMap of
     Nothing -> lift $ tcFail p $ "Cannot find module " ++ show nm ++ "."
     Just m -> do
+      let mnm = moduleName m
+      isModule %= insImport m 
       -- Get list of module names to use for local identifiers.
       let mnml | q = [Just qnm]
                | otherwise = [Nothing, Just qnm]
             where qnm = maybe (moduleName m)
                               (\s -> Un.mkModuleName [s])
                               (val <$> mAsName)
+      let loc = ImportedLoc mnm p
       -- Add datatypes to module
       forOf_ folded (moduleDataTypes m) $ \dt -> do
         let dtnm = dtName dt
@@ -697,9 +719,9 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
           let cnm = ctorName c
               cfn tc = liftTCCtorType dtnm tc (ctorType c)
           let addInModule = includeNameInModule mcns cnm
-          (addInModule,) . Ctor cnm <$> addPending (identName cnm) cfn
+          (addInModule,loc,) . Ctor cnm <$> addPending (identName cnm) cfn
         let dtuse = includeNameInModule mcns dtnm
-        updateIsCtx $ insertDataType mnml dtuse (DataTypeGen dtnm dtr cl)
+        isCtx %= insertDataType mnml dtuse loc (DataTypeGen dtnm dtr cl)
       -- Add definitions to module.
       forOf_ folded (moduleDefs m) $ \def -> do
         let inm = identName (defIdent def)
@@ -708,7 +730,7 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
         eqr <- addPending inm $ \tc ->
           traverse (liftEqn tc) (defEqs def)
         let addInModule = includeNameInModule mcns (defIdent def)
-        updateIsCtx $ insertDef mnml addInModule (DefGen (defIdent def) tpr eqr)
+        isCtx %= insertDef mnml addInModule loc (DefGen (defIdent def) tpr eqr)
 
 _checkDef :: TCDef -> Maybe ()
 _checkDef (DefGen _ (Identity tp) (Identity eqns)) = do
