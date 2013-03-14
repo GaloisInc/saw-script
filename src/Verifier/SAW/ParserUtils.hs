@@ -1,14 +1,14 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Verifier.SAW.ParserUtils 
+module Verifier.SAW.ParserUtils
  ( module Verifier.SAW.TypedAST
    -- * Parser utilities.
  , readModuleFromFile
    -- * Template haskell utilities.
  , DecWriter
  , runDecWriter
- , DecExp(..) 
+ , DecExp(..)
  , importExp
  , mkDecModule
  , decSharedCtorApp
@@ -50,7 +50,7 @@ readModuleFromFile imports path = do
   readModule imports base path b
 
 
--- | Returns a module containing the standard prelude for SAW. 
+-- | Returns a module containing the standard prelude for SAW.
 readModule :: [Module] -> FilePath -> FilePath -> BL.ByteString -> IO Module
 readModule imports base path b = do
   let (m,[]) = Un.runParser base path b Un.parseSAW
@@ -64,7 +64,7 @@ readByteStringExpr modules path = do
   base <- runIO $ getCurrentDirectory
   compile_b <- runIO $ BL.readFile path
   case Un.runParser base nm compile_b Un.parseSAW of
-    (_,[]) -> do 
+    (_,[]) -> do
       let blen :: Int
           blen = fromIntegral (BL.length compile_b)
 #if __GLASGOW_HASKELL__ >= 706
@@ -84,7 +84,7 @@ data DecWriterState = DecWriterState { dwDecs :: [Dec]
                                      }
 
 addDecs :: DecWriterState -> [Dec] -> DecWriterState
-addDecs dw decs = dw { dwDecs = dwDecs dw ++ decs } 
+addDecs dw decs = dw { dwDecs = dwDecs dw ++ decs }
 
 type DecWriter = StateT DecWriterState Q
 
@@ -98,7 +98,7 @@ data DecExp a = DecExp { decExp :: !Exp
                        , decVal :: !a
                        }
 
--- | Define a declared 
+-- | Define a declared
 importExp :: ExpQ -> a -> DecWriter (DecExp a)
 importExp eq m = do
   e <- lift eq
@@ -133,7 +133,7 @@ mkDecModule modules decNameStr path = do
                 , SigD decName moduleTp
                 , FunD decName [ Clause [] (NormalB packExpr) [] ]
                 ]
-    let dm = DecExp { decExp = VarE decName 
+    let dm = DecExp { decExp = VarE decName
                     , decVal  = m
                     }
     let s' = s `addDecs` decs
@@ -157,57 +157,91 @@ sharedFunctionType n = do
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
 --   :: SharedContext s
---   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)  
+--   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
+decSharedDataTypeApp :: String
+                     -> TypedDataType
+                     -> DecWriter ()
+decSharedDataTypeApp nm dt = do
+  let sym = show (dtName dt)
+  let n = piArgCount (dtType dt)
+  -- Get type of result.
+  tp <- lift $ sharedFunctionType n
+  -- Get value of result.
+  decExpr <- lift $ [| \sc -> do
+    m <- scModule sc
+    case findDataType m (parseIdent $(stringE sym)) of
+      Nothing -> fail $(stringE ("Could not find " ++ sym))
+      Just dt ->
+        $(do let applyFn expr = [| scDataTypeApp sc (dtName dt) $(expr) |]
+             case n of
+               0 -> applyFn [|[]|]
+               _ -> do
+                 nms <- replicateM n (newName "x")
+                 let expr = ListE (VarE <$> nms)
+                 [|return $(LamE (VarP <$> nms) <$> applyFn (return expr))|])
+    |]
+    -- Add declarations for ctor.
+  let decName = mkName nm
+  let decs = [ SigD decName tp
+             , FunD decName [ Clause [] (NormalB decExpr) [] ]
+             ]
+  modify $ \s -> addDecs s decs
+
+
+-- Given a ctor with the type
+--   c : T1 -> ... -> TN -> T
+-- This hads a declaration of the function.
+-- scApply(modulename)(upcase c)
+--   :: SharedContext s
+--   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 decSharedCtorApp :: String
-                 -> Int
                  -> TypedCtor
                  -> DecWriter ()
-decSharedCtorApp nm n c = do
-  StateT $ \s -> do
-    let cName = identName (ctorName c)
-    -- Get type of result.
-    tp <- sharedFunctionType n
-    -- Get value of result.
-    decExpr <- [| \sc -> do
-       m <- scModule sc
-       case findExportedCtor m $(stringE cName) of
-         Nothing -> fail $(stringE ("Could not find " ++ cName))
-         Just cExpr ->
-           $(case n of
-               0 -> [|scApplyCtor sc cExpr []|]
-               _ -> [|return $(retFn n [])|]
-                 where retFn 0 rArgs =
-                         [|scApplyCtor sc cExpr $(listE (reverse rArgs)) |]
-                       retFn i rArgs = do
-                         x <- newName "x"
-                         LamE [VarP x] <$> retFn (i-1) (varE x:rArgs))
-     |]
+decSharedCtorApp nm c = do
+  let cName = show(ctorName c)
+  let n = piArgCount (ctorType c)
+  -- Get type of result.
+  tp <- lift $ sharedFunctionType n
+  -- Get value of result.
+  decExpr <- lift $ [| \sc -> do
+    m <- scModule sc
+    case findCtor m (parseIdent $(stringE cName)) of
+      Nothing -> fail $(stringE ("Could not find " ++ cName))
+      Just cExpr ->
+        $(do let applyFn expr = [| scCtorApp sc (ctorName cExpr) $(expr) |]
+             case n of
+               0 -> applyFn [|[]|]
+               _ -> do
+                 nms <- replicateM n (newName "x")
+                 let expr = ListE (VarE <$> nms)
+                 [|return $(LamE (VarP <$> nms) <$> applyFn (return expr))|])
+    |]
     -- Add declarations for ctor.
-    let decName = mkName nm
-    let decs = [ SigD decName tp
-               , FunD decName [ Clause [] (NormalB decExpr) [] ]
-               ]
-    return ((), s `addDecs` decs)
+  let decName = mkName nm
+  let decs = [ SigD decName tp
+             , FunD decName [ Clause [] (NormalB decExpr) [] ]
+             ]
+  modify $ \s -> addDecs s decs
 
 -- Given a ctor with the type
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function:
 --   scApply(modulename)(upcase c)
 --     :: SharedContext s
---     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)  
+--     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 decSharedDefApp :: String
                 -> Int
                 -> TypedDef
                 -> DecWriter ()
 decSharedDefApp nm n def = do
   StateT $ \st -> do
-    let iName = identName (defIdent def)
+    let iName = show (defIdent def)
     -- Get type of result.
     tp <- sharedFunctionType n
     -- Get value of result.
     decExpr <- [| \sc -> do
       m <- scModule sc
-      case findExportedDef m $(stringE iName) of
+      case findDef m (parseIdent $(stringE iName)) of
         Nothing -> fail ($(stringE ("Could not find " ++ iName ++ " in "))
                               ++ show (moduleName m))
         Just typedDef -> do
@@ -215,22 +249,17 @@ decSharedDefApp nm n def = do
               0 -> [| scDefTerm sc typedDef |]
               _ -> [| do d <- scDefTerm sc typedDef
                          return
-                           $(let procStmt :: Exp -> [ExpQ] -> [StmtQ] -> ExpQ
-                                 procStmt r [h] rStmts = doE (reverse (stmt:rStmts))
-                                   where stmt = noBindS [|scApply sc $(return r) $(h)|]
-                                 procStmt r (h:l) rStmts = do
-                                   r0 <- newName "r"
-                                   let stmt = bindS (varP r0) [|scApply sc $(return r) $(h)|]
-                                   procStmt (VarE r0) l (stmt:rStmts)
-                                 procStmt _ [] _ = error "Unexpected empty list to procStmt"
-                                 retFn :: Int -> [ExpQ] -> ExpQ
-                                 retFn 0 rArgs = do
-                                   de <- [|d|]
-                                   procStmt de (reverse rArgs) []
-                                 retFn i rArgs = do
-                                   x <- newName "x"
-                                   LamE [VarP x] <$> retFn (i-1) (varE x:rArgs)
-                              in retFn n [])|])
+                           $(do let procStmt :: Exp -> [ExpQ] -> Q [Stmt]
+                                    procStmt r [h] = do
+                                      return <$> noBindS [|scApply sc $(return r) $(h)|]
+                                    procStmt r (h:l) = do
+                                      r0 <- newName "r"
+                                      stmt <- bindS (varP r0) [|scApply sc $(return r) $(h)|]
+                                      (stmt:) <$> procStmt (VarE r0) l
+                                    procStmt _ [] = error "Unexpected empty list to procStmt"
+                                nms <- replicateM n $ newName "x"
+                                de <- [|d|]
+                                LamE (VarP <$> nms) . DoE <$> procStmt de (varE <$> nms))|])
      |]
     -- Add declarations for ctor.
     let decName = mkName nm
@@ -242,10 +271,12 @@ decSharedDefApp nm n def = do
 -- | Declare functions for creating shared terms for module.
 decSharedModuleFns :: String -> Module -> DecWriter ()
 decSharedModuleFns mnm m = do
+  forM_ (moduleDataTypes m) $ \dt -> do
+    let nm = "sc" ++ mnm ++ identName (dtName dt)
+    decSharedDataTypeApp nm dt
   forM_ (moduleCtors m) $ \c -> do
     let nm = "scApply" ++ mnm ++ identName (ctorName c)
-    let n = piArgCount (ctorType c)
-    decSharedCtorApp nm n c
+    decSharedCtorApp nm c
   forM_ (moduleDefs m) $ \d -> do
     let nm = "scApply" ++ mnm ++ camelCase (identName (defIdent d))
     decSharedDefApp nm (piArgCount (defType d)) d

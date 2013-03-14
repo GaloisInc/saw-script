@@ -21,12 +21,11 @@ module Verifier.SAW.TypedAST
  , TypedCtor
  , moduleCtors
  , findCtor
- , findExportedCtor
  , TypedDef
  , TypedDefEqn
  , moduleDefs
  , findDef
- , findExportedDef
+ , insImport
  , insDataType
  , insDef
    -- * Data types and defintiions.
@@ -51,6 +50,7 @@ module Verifier.SAW.TypedAST
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
+ , parseIdent
  , isIdent
  , ppIdent
  , DeBruijnIndex
@@ -66,15 +66,16 @@ module Verifier.SAW.TypedAST
 
 import Control.Applicative hiding (empty)
 import Control.Exception (assert)
+import Control.Lens
 import Control.Monad.Identity (runIdentity)
 import Data.Char
+import Data.Foldable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.HughesPJ
-import Data.Traversable (Traversable, traverse)
 
 import Prelude hiding (all, concatMap, foldr, sum)
 
@@ -115,6 +116,18 @@ instance Show Ident where
 mkIdent :: ModuleName -> String -> Ident
 mkIdent = Ident
 
+-- | Parse a fully qualified identifier.
+parseIdent :: String -> Ident
+parseIdent s0 = 
+    case reverse (breakEach s0) of
+      (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
+      _ -> internalError $ "parseIdent given bad identifier " ++ show s0
+  where breakEach s =
+          case break (=='.') s of
+            (h,[]) -> [h]
+            (h,'.':r) -> h : breakEach r
+            _ -> internalError "breakEach failed"
+    
 newtype Sort = SortCtor { _sortIndex :: Integer }
   deriving (Eq, Ord)
 
@@ -143,7 +156,8 @@ data Pat e = -- | Variable bound by pattern.
              -- Variables may be bound in context in a different order than
              -- a left-to-right traversal.  The DeBruijnIndex indicates the order.
              PVar String DeBruijnIndex e
-           | PUnused
+             -- | The
+           | PUnused DeBruijnIndex e
            | PTuple [Pat e]
            | PRecord (Map FieldName (Pat e))
              -- An arbitrary term that matches anything, but needs to be later
@@ -170,7 +184,7 @@ patBoundVars p =
     _ -> []
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
-lift2 f h x y = h (f x) (f y) 
+lift2 f h x y = h (f x) (f y)
 
 data LocalDef e
    = LocalFnDef String e [DefEqn e]
@@ -189,7 +203,7 @@ instance Eq (Def e) where
   (==) = lift2 defIdent (==)
 
 instance Ord (Def e) where
-  compare = lift2 defIdent compare  
+  compare = lift2 defIdent compare
 
 instance Show (Def e) where
   show = show . defIdent
@@ -257,7 +271,7 @@ data FlatTermF e
 
   | App !e !e
 
-    -- Tuples may be 0 or 2+ elements. 
+    -- Tuples may be 0 or 2+ elements.
     -- A tuple of a single element is not allowed in well-formed expressions.
   | TupleValue [e]
   | TupleType [e]
@@ -289,20 +303,20 @@ zipWithFlatTermF f = go
           | length lx == length ly = Just $ TupleType (zipWith f lx ly)
 
         go (RecordValue mx) (RecordValue my)
-          | Map.keys mx == Map.keys my = 
-              Just $ RecordValue $ Map.intersectionWith f mx my 
+          | Map.keys mx == Map.keys my =
+              Just $ RecordValue $ Map.intersectionWith f mx my
         go (RecordSelector x fx) (RecordSelector y fy)
           | fx == fy = Just $ RecordSelector (f x y) fx
         go (RecordType mx) (RecordType my)
-          | Map.keys mx == Map.keys my = 
-              Just $ RecordType (Map.intersectionWith f mx my) 
+          | Map.keys mx == Map.keys my =
+              Just $ RecordType (Map.intersectionWith f mx my)
 
         go (CtorApp cx lx) (CtorApp cy ly)
           | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
         go (DataTypeApp dx lx) (DataTypeApp dy ly)
           | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
         go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
-        go (NatLit ix) (NatLit iy) | ix == iy = Just (NatLit ix)
+        go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
         go (ArrayValue tx vx) (ArrayValue ty vy)
           | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
 
@@ -342,7 +356,7 @@ ppLocalDef f lcls (LocalFnDef nm tp eqs) = tpd $$ vcat (ppDefEqn f lcls sym <$> 
 
 ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
 ppDefEqn f lcls sym (DefEqn pats rhs) = lhs <+> equals <+> f lcls' 1 rhs
-  where lcls' = foldl' consBinding lcls (concatMap patBoundVars pats) 
+  where lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
         lhs = sym <+> hsep (ppPat f lcls' 10 <$> pats)
 
 -- | Print a list of items separated by semicolons
@@ -357,7 +371,7 @@ ppParens True  d = parens d
 ppParens False d = d
 
 ppPat :: TermPrinter e -> TermPrinter (Pat e)
-ppPat f lcls p pat = 
+ppPat f lcls p pat =
   case pat of
     PVar i _ _ -> text i
     PUnused{} -> char '_'
@@ -384,7 +398,7 @@ emptyLocalVarDoc = LVD { docMap = Map.empty
                        }
 
 consBinding :: LocalVarDoc -> String -> LocalVarDoc
-consBinding lvd i = LVD { docMap = Map.insert lvl (text i) m          
+consBinding lvd i = LVD { docMap = Map.insert lvl (text i) m
                         , docLvl = lvl + 1
                         , docUsedMap = Map.insert i lvl (docUsedMap lvd)
                         }
@@ -404,7 +418,7 @@ type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
 {-
 ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (Pat e, e, r)
-ppPi ftp frhs lcls p (pat,tp,rhs) = 
+ppPi ftp frhs lcls p (pat,tp,rhs) =
     ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
   where lcls' = foldl' consBinding lcls (patBoundVars pat)
         lhs = case pat of
@@ -413,7 +427,7 @@ ppPi ftp frhs lcls p (pat,tp,rhs) =
 -}
 
 ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (String, e, r)
-ppPi ftp frhs lcls p (i,tp,rhs) = 
+ppPi ftp frhs lcls p (i,tp,rhs) =
     ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
   where lcls' = consBinding lcls i
         lhs | i == "_"  = ftp lcls 2 tp
@@ -437,7 +451,7 @@ ppFlatTermF pp prec tf =
     CtorApp c l
       | null l -> pure (ppIdent c)
       | otherwise -> ppParens (prec >= 10) . hsep . (ppIdent c :) <$> traverse (pp 10) l
-    DataTypeApp dt l 
+    DataTypeApp dt l
       | null l -> pure (ppIdent dt)
       | otherwise -> ppParens (prec >= 10) . hsep . (ppIdent dt :) <$> traverse (pp 10) l
     Sort s -> pure $ text (show s)
@@ -463,14 +477,14 @@ piArgCount = go 0
 -- binders surrounding @LocalVar j t@.
 instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> Term -> Term)
                 -> DeBruijnIndex -> Term -> Term
-instantiateVars f initialLevel = go initialLevel 
+instantiateVars f initialLevel = go initialLevel
   where goList :: DeBruijnIndex -> [Term] -> [Term]
         goList _ []  = []
         goList l (e:r) = go l e : goList (l+1) r
 
-        gof l ftf = 
+        gof l ftf =
           case ftf of
-            App x y -> App (go l x) (go l y) 
+            App x y -> App (go l x) (go l y)
             TupleValue ll -> TupleValue $ go l <$> ll
             TupleType ll  -> TupleType $ go l <$> ll
             RecordValue m -> RecordValue $ go l <$> m
@@ -510,10 +524,10 @@ incVars initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
 instantiateVar :: DeBruijnIndex -> Term -> Term -> Term
 instantiateVar k u = instantiateVars fn 0
   where -- Use terms to memoize instantiated versions of t.
-        terms = [ incVars 0 i u | i <- [0..] ] 
+        terms = [ incVars 0 i u | i <- [0..] ]
         -- Instantiate variable 0.
         fn i j t | j - k == i = terms !! i
-                 | j - i > k  = Term $ LocalVar (j - 1) t                 
+                 | j - i > k  = Term $ LocalVar (j - 1) t
                  | otherwise  = Term $ LocalVar j t
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
@@ -573,23 +587,30 @@ type TypedDefEqn = DefEqn Term
 
 data ModuleDecl = TypeDecl TypedDataType
                 | DefDecl TypedDef
- 
+
 data Module = Module {
-          moduleName    :: ModuleName
-        , moduleTypeMap :: !(Map Ident TypedDataType)
-        , moduleCtorMap :: !(Map Ident TypedCtor)
-        , moduleDefMap  :: !(Map Ident TypedDef)
-        , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added. 
+          moduleName    :: !ModuleName
+        , _moduleImports :: !(Map ModuleName Module)
+        , moduleTypeMap :: !(Map String TypedDataType)
+        , moduleCtorMap :: !(Map String TypedCtor)
+        , moduleDefMap  :: !(Map String TypedDef)
+        , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
 
+moduleImports :: Simple Lens Module (Map ModuleName Module)
+moduleImports = lens _moduleImports (\m v -> m { _moduleImports = v })
+
 instance Show Module where
-  show m = render $ vcat $ ppdecl <$> moduleDecls m
-    where ppdecl (TypeDecl d) = ppDataType ppTerm d
+  show m = render $ vcat $ fmap ppImport (Map.keys (m^.moduleImports))
+                        ++ fmap ppdecl   (moduleDecls m)
+    where ppImport nm = text $ "import " ++ show nm 
+          ppdecl (TypeDecl d) = ppDataType ppTerm d
           ppdecl (DefDecl d) = ppDef emptyLocalVarDoc d <> char '\n'
 
 emptyModule :: ModuleName -> Module
 emptyModule nm =
   Module { moduleName = nm
+         , _moduleImports = Map.empty
          , moduleTypeMap = Map.empty
          , moduleCtorMap = Map.empty
          , moduleDefMap  = Map.empty
@@ -597,14 +618,23 @@ emptyModule nm =
          }
 
 findDataType :: Module -> Ident -> Maybe TypedDataType
-findDataType m i = Map.lookup i (moduleTypeMap m)
+findDataType m i = do
+  m' <- findDeclaringModule m (identModule i)
+  Map.lookup (identName i) (moduleTypeMap m')
+
+-- | @insImport i m@ returns module obtained by importing @i@ into @m@.
+insImport :: Module -> Module -> Module
+insImport i = moduleImports . at (moduleName i) ?~ i
 
 insDataType :: Module -> TypedDataType -> Module
-insDataType m dt = m { moduleTypeMap = Map.insert (dtName dt) dt (moduleTypeMap m)
-                     , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
-                     , moduleRDecls = TypeDecl dt : moduleRDecls m
-                     }
-  where insCtor m' c = Map.insert (ctorName c) c m' 
+insDataType m dt 
+    | identModule (dtName dt) == moduleName m =
+        m { moduleTypeMap = Map.insert (identName (dtName dt)) dt (moduleTypeMap m)
+          , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
+          , moduleRDecls = TypeDecl dt : moduleRDecls m
+          }
+    | otherwise = internalError "insDataType given datatype from another module."
+  where insCtor m' c = Map.insert (identName (ctorName c)) c m' 
 
 -- | Data types defined in module.
 moduleDataTypes :: Module -> [TypedDataType]
@@ -614,25 +644,31 @@ moduleDataTypes = Map.elems . moduleTypeMap
 moduleCtors :: Module -> [TypedCtor]
 moduleCtors = Map.elems . moduleCtorMap
 
-findCtor :: Module -> Ident -> Maybe TypedCtor
-findCtor m i = Map.lookup i (moduleCtorMap m)
+findDeclaringModule :: Module -> ModuleName -> Maybe Module
+findDeclaringModule m nm
+  | moduleName m == nm = Just m
+  | otherwise = m^.moduleImports^.at nm
 
-findExportedCtor :: Module -> String -> Maybe TypedCtor
-findExportedCtor _ _ = undefined
+findCtor :: Module -> Ident -> Maybe TypedCtor
+findCtor m i = do
+  m' <- findDeclaringModule m (identModule i)
+  Map.lookup (identName i) (moduleCtorMap m')
 
 moduleDefs :: Module -> [TypedDef]
 moduleDefs = Map.elems . moduleDefMap
 
 findDef :: Module -> Ident -> Maybe TypedDef
-findDef m i = Map.lookup i (moduleDefMap m)
-
-findExportedDef :: Module -> String -> Maybe TypedDef
-findExportedDef _ _ = undefined
+findDef m i = do
+  m' <- findDeclaringModule m (identModule i)
+  Map.lookup (identName i) (moduleDefMap m')
 
 insDef :: Module -> Def Term -> Module
-insDef m d = m { moduleDefMap = Map.insert (defIdent d) d (moduleDefMap m)
-               , moduleRDecls = DefDecl d : moduleRDecls m
-               }
+insDef m d 
+  | identModule (defIdent d) == moduleName m =
+      m { moduleDefMap = Map.insert (identName (defIdent d)) d (moduleDefMap m)
+        , moduleRDecls = DefDecl d : moduleRDecls m
+        }
+  | otherwise = internalError "insDef given def from another module."
 
 moduleDecls :: Module -> [ModuleDecl]
 moduleDecls = reverse . moduleRDecls

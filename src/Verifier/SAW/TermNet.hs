@@ -55,7 +55,7 @@ isVarApp t = case patternShape t of
   Var      -> True
   App t' _ -> isVarApp t'
 
--- Start 
+-- Start
 
 data Key = CombK | VarK | AtomK String
 
@@ -104,10 +104,10 @@ emptynet = Net { comb = empty, var = empty, atoms = Map.empty }
   Creates node if not already present.
   The empty list of keys generates a Leaf node, others a Net node.
 -}
-insert :: (Eq a) => ([Key], a) -> Net a -> Net a
+insert :: forall a. (Eq a) => ([Key], a) -> Net a -> Net a
 insert (keys, x) net = ins1 keys net
   where
-    -- ins1 :: [Key] -> Net a -> Net a --FIXME: why doesn't this type signature work?
+    ins1 :: [Key] -> Net a -> Net a
     ins1 [] (Leaf xs)
       | x `elem` xs = Leaf xs
       | otherwise   = Leaf (x : xs)
@@ -117,7 +117,7 @@ insert (keys, x) net = ins1 keys net
     ins1 (VarK : keys) (Net {comb, var, atoms}) =
       Net {comb = comb, var = ins1 keys var, atoms = atoms}
     ins1 (AtomK a : keys) (Net {comb, var, atoms}) =
-      let atoms' = Map.insertWith (const id) a empty atoms
+      let atoms' = Map.alter (Just . ins1 keys . fromMaybe empty) a atoms
       in Net {comb = comb, var = var, atoms = atoms'}
 
 insert_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a

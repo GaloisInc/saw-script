@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveFoldable #-} 
-{-# LANGUAGE DeriveFunctor #-} 
-{-# LANGUAGE DeriveTraversable #-} 
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
@@ -13,12 +13,18 @@ module Verifier.SAW.Typechecker.Context
   , tcMkApp
   , tcAsApp
   , Prec, ppTCTerm
-  , TCPat(..)
+  , AnnPat(..)
+  , TCPat
   , PatF(..)
   , tcPatVarCount
-  , fmapTCPat
   , tcApply
   , tcPatApply
+  , ppTCPat
+  , patBoundVarsOf
+  , patBoundVars
+  , fmapTCPat
+  , zipWithPatF
+  , termFromPatF
 
   , LocalDefGen(..)
   , TCRefLocalDef
@@ -46,8 +52,7 @@ module Verifier.SAW.Typechecker.Context
     -- * Global context
   , GlobalContext
   , emptyGlobalContext
-  , gcTypes
-  , gcDefs
+  , Loc(..)
   , insertDataType
   , insertDef
   , resolveCtor
@@ -66,31 +71,33 @@ module Verifier.SAW.Typechecker.Context
   , ppTermContext
   , boundVarDiff
   , applyExt
+  , applyExtSafe
   , boundFreeVarsWithPi
+  , termBoundCount
+    -- * Checking terms
+  , checkTCPatOf
+  , checkDefEqn
+  , checkLocalDefs
+  , checkTCTerm
   ) where
 
 import Control.Applicative
+import Control.Lens
 import Control.Monad.Identity
-import Data.Foldable
+import Control.Monad.State
+import Data.Foldable (Foldable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Traversable
+import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint
-
-import Prelude hiding (concatMap, foldr, sum)
 
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Position
 import qualified Verifier.SAW.UntypedAST as Un
 import Verifier.SAW.Typechecker.Monad
-
-maybeApply :: Bool -> (a -> a) -> a -> a
-maybeApply True f a = f a
-maybeApply False _ a = a
-
 
 data DefEqnGen p t
    = DefEqnGen [p]  -- ^ List of patterns
@@ -127,12 +134,20 @@ data TCTerm
     -- | A local variable with its deBruijn index and type in the current context.
   | TCVar DeBruijnIndex
     -- | A reference to a let bound function with equations.
-  | TCLocalDef DeBruijnIndex 
+  | TCLocalDef DeBruijnIndex
 
-data TCPat = TCPVar String DeBruijnIndex TCTerm
-           | TCPUnused String -- ^ Unused pattern
-           | TCPatF (PatF TCPat)
+data AnnPat a
+    -- | Variable with its annotation.
+    -- Type is relative to bound variables in pat with smaller deBruijnIndex
+  = TCPVar String (DeBruijnIndex,a)
+    -- | Unused variable and its type.
+    -- Index is used to show what context the information in the annotation is relative to.
+  | TCPUnused String (DeBruijnIndex,a)
+  | TCPatF (PatF (AnnPat a))
 
+type TCPat = AnnPat TCTerm
+
+-- | Pattern functor
 data PatF p
    = UPTuple [p]
    | UPRecord (Map FieldName p)
@@ -147,7 +162,7 @@ tcMkApp = go
 tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
 tcAsApp = go []
   where go r (TCF (App f v)) = go (v:r) f
-        go r f = (f,r) 
+        go r f = (f,r)
 
 -- | A pi type that accepted a statically-determined number of arguments.
 data FixedPiType r
@@ -177,16 +192,63 @@ type TCRefCtor s = TCCtorGen (TCRef s)
 type TCRefDef s = TCDefGen (TCRef s)
 type TCRefLocalDef s = LocalDefGen TCTerm (TCRef s [TCDefEqn])
 
-patVarNames :: TCPat -> [String]
-patVarNames (TCPVar nm _ _) = [nm]
-patVarNames TCPUnused{} = []
-patVarNames (TCPatF pf) = concatMap patVarNames pf
+-- | State monad for recording variables found in patterns.
+type PatVarParser a = State (Int,Map Int (String,a))
+
+-- | Add variables in pattern to state.
+addPatBindings :: AnnPat a -> PatVarParser a ()
+addPatBindings (TCPVar nm (i, v)) = modify $ \(c,m) -> (max c (i+1), Map.insert i (nm,v) m)
+addPatBindings TCPUnused{} = return ()
+addPatBindings (TCPatF pf) = traverseOf_ folded addPatBindings pf
+
+-- | Get list of variables by running parser.
+runPatVarParser :: PatVarParser a () -> Vector (String,a)
+runPatVarParser pvp
+   | c == Map.size m = V.generate c fn
+   | otherwise = error "patBoundVarsOf given incomplete list of patterns"
+  where (c,m) = execState pvp (0,Map.empty)
+        fn i = r
+          where Just r = Map.lookup i m
+
+-- | Get information about bound variables from fold.
+patBoundVarsOf :: Fold s (AnnPat a) -> s -> Vector (String,a)
+patBoundVarsOf fold pats =
+  runPatVarParser (traverseOf_ fold addPatBindings pats)
+
+-- | Returns variables in order they are bound.
+patBoundVars :: AnnPat a -> Vector (String,a)
+patBoundVars pat = patBoundVarsOf id pat
+
+-- | Returns names of bound variables in order they are bound.
+patVarNames :: AnnPat a -> Vector String
+patVarNames pat = fst <$> patBoundVars pat
 
 fmapTCPat :: (Int -> TCTerm -> TCTerm)
           -> Int -> TCPat -> TCPat
-fmapTCPat fn i (TCPVar nm j tp) = TCPVar nm j (fn (i+j) tp)
-fmapTCPat _ _ (TCPUnused nm) = TCPUnused nm
-fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)  
+fmapTCPat fn i (TCPVar nm (j,tp)) = TCPVar nm (j, fn (i+j) tp)
+fmapTCPat fn i (TCPUnused nm (j,tp)) = TCPUnused nm (j, fn (i+j) tp)
+fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)
+
+-- | Convert pats into equivalent termf.
+termFromPatF :: PatF a -> FlatTermF a
+termFromPatF (UPTuple l)  = TupleValue l
+termFromPatF (UPRecord m) = RecordValue m
+termFromPatF (UPCtor c l) = CtorApp c l
+
+-- | Attempt to zip two patfs together.
+zipWithPatF :: (a -> b -> c) -> PatF a -> PatF b -> Maybe (PatF c)
+zipWithPatF f x y =
+  case (x,y) of
+    (UPTuple  lx, UPTuple  ly)
+      | length lx == length ly ->
+          Just $ UPTuple (zipWith f lx ly)
+    (UPRecord mx, UPRecord my)
+      | Map.keys mx == Map.keys my ->
+          Just $ UPRecord (Map.intersectionWith f mx my)
+    (UPCtor cx lx, UPCtor cy ly)
+      | (cx,length lx) == (cy, length ly) ->
+          Just $ UPCtor cx (zipWith f lx ly)
+    _ -> Nothing
 
 fmapTCLocalDefs :: (Int -> TCTerm -> TCTerm)
                 -> Int -> [TCLocalDef] -> [TCLocalDef]
@@ -209,11 +271,11 @@ termFromTCCtorType :: Ident -> TCCtorType -> TCTerm
 termFromTCCtorType dt (FPResult tl) = TCF (DataTypeApp dt tl)
 termFromTCCtorType dt (FPPi p tp r) = TCPi p tp (termFromTCCtorType dt r)
 
+-- | Returns number of bound variables in pat.
 tcPatVarCount :: TCPat -> Int
-tcPatVarCount TCPVar{} = 1 
+tcPatVarCount TCPVar{} = 1
 tcPatVarCount TCPUnused{} = 0
-tcPatVarCount (TCPatF pf) = sum (tcPatVarCount <$> pf)
-
+tcPatVarCount (TCPatF pf) = sumOf folded (tcPatVarCount <$> pf)
 
 -- | Increment free vars in TC term by given amount if the index is at least the given level.
 -- This is used for inserting extra variables to a context.
@@ -240,9 +302,9 @@ tcApply baseTC (fTC, f) (vTC, v)
    | otherwise = error $ show $ text "tcApply given bad arguments:" $$
       ppTCTerm fTC 0 f $$
       text ("fd = " ++ show fd) $$
-      vcat (ppTCTerm vTC 0 <$> V.toList v) 
-  where fd = boundVarDiff fTC baseTC
-        vd = boundVarDiff vTC baseTC
+      vcat (ppTCTerm vTC 0 <$> V.toList v)
+  where Just fd = boundVarDiff fTC baseTC
+        Just vd = boundVarDiff vTC baseTC
 
 tcPatApply :: TermContext s
            -> (TermContext s, TCPat)
@@ -251,8 +313,8 @@ tcPatApply :: TermContext s
 tcPatApply baseTC (fTC, p) (vTC, v)
    | V.length v <= fd = fmapTCPat (tcApplyImpl vd v) (fd - V.length v) p
    | otherwise = error "tcPatApply given bad vector"
-  where fd = boundVarDiff fTC baseTC
-        vd = boundVarDiff vTC baseTC
+  where Just fd = boundVarDiff fTC baseTC
+        Just vd = boundVarDiff vTC baseTC
 
 tcApplyImpl :: Int -> Vector TCTerm -> Int -> TCTerm -> TCTerm
 tcApplyImpl vd v = go
@@ -273,81 +335,128 @@ tcApplyImpl vd v = go
           | otherwise = TCLocalDef (vd + j - fd)
 
 -- | Extend a term with the context from the given pair to the extended context.
-applyExt :: (TermContext s,TCTerm) -> TermContext s -> TCTerm
-applyExt (tc0,t) tc1 = incTCVars (boundVarDiff tc1 tc0) 0 t
+applyExt :: TermContext s -> (TermContext s,TCTerm) -> TCTerm
+applyExt tc1 (tc0,t) = incTCVars d 0 t
+  where Just d = boundVarDiff tc1 tc0
+
+-- | Extend a term with the context from the given pair to the extended context.
+applyExtSafe :: TermContext s -> (TermContext s,TCTerm) -> Maybe TCTerm
+applyExtSafe tc1 (tc0,t) = (\d -> incTCVars d 0 t) <$> boundVarDiff tc1 tc0
 
 -- Global context stuff
 
-data GlobalBinding r
-  = DataTypeBinding (TCDataTypeGen r)
-    -- Datatype ident, ctor ident, ctor type.
-  | CtorBinding (TCDataTypeGen r) (TCCtorGen r)
-  | DefBinding (TCDefGen r)
+-- | Location contains 
+data Loc
+  = ImportedLoc ModuleName Pos
+  | LocalLoc Pos
 
-type GlobalContextMap s = Map Un.Ident (GlobalBinding (TCRef s))
+data GlobalBinding r
+  = DataTypeBinding Loc (TCDataTypeGen r)
+    -- Datatype ident, ctor ident, ctor type.
+  | CtorBinding Loc (TCDataTypeGen r) (TCCtorGen r)
+  | DefBinding Loc (TCDefGen r)
+
+-- | Returns location and identified of global binding.
+globalBindingDesc :: GlobalBinding r -> (Loc,Ident)
+globalBindingDesc gb =
+  case gb of
+    DataTypeBinding l dt -> (l, dtgName dt)
+    CtorBinding l _ c -> (l, ctorName c)
+    DefBinding l (DefGen nm _ _) -> (l, nm)
+
+type GlobalContextMap s = Map Un.Ident [GlobalBinding (TCRef s)]
 
 data GlobalContext s = GC { gcMap :: !(GlobalContextMap s)
                           , gcEqns :: !(Map Ident (TCRef s [TCDefEqn]))
-                          , gcTypes :: ![ TCRefDataType s ]
-                          , gcDefs :: ![ TCRefDef s ]
-                          } 
+                          }
 
 emptyGlobalContext :: GlobalContext s
 emptyGlobalContext = GC { gcMap = Map.empty
                         , gcEqns = Map.empty
-                        , gcTypes = []
-                        , gcDefs = []
                         }
 
--- | Add untyped global with the given module names.
-insGlobalBinding :: Bool
-                 -> [Maybe ModuleName]
-                 -> String
-                 -> GlobalBinding (TCRef s)
-                 -> GlobalContextMap s
-                 -> GlobalContextMap s
-insGlobalBinding vis mnml nm gb = maybeApply vis $ flip (foldr ins) mnml
-  where ins mnm = Map.insert (Un.mkIdent mnm nm) gb  
+type UntypedBinding s = (Un.Ident, GlobalBinding (TCRef s))
 
-insertDataType :: [Maybe ModuleName]
-               -> Bool -- Visible in untyped context.
-               -> DataTypeGen (TCRef s TCDTType) (Bool, TCRefCtor s)
+insertAllBindings :: [UntypedBinding s] -> GlobalContextMap s -> GlobalContextMap s
+insertAllBindings = flip (foldr ins)
+  where ins (i,v) = Map.insertWith (++) i [v]
+
+
+-- | Add untyped global with the given module names.
+untypedBindings :: Bool
+                -> [Maybe ModuleName]
+                -> String
+                -> GlobalBinding (TCRef s)
+                -> [UntypedBinding s]
+untypedBindings vis mnml nm gb
+  | vis = [ (Un.mkIdent mnm nm, gb) | mnm <- mnml ]
+  | otherwise = []
+
+-- | Insert data type into global context.
+insertDataType :: [Maybe ModuleName] -- ^ List of namespaces for symbols.
+               -> Bool -- ^ Indicates if data type should be visible to users.
+               -> Loc -- ^ Location where datatype comes from.
+               -> DataTypeGen (TCRef s TCDTType) (Bool, Loc, TCRefCtor s)
                -> GlobalContext s
                -> GlobalContext s
-insertDataType mnml vis (DataTypeGen dtnm dtp cl) gc = 
-    gc { gcMap = flip (foldr insCtor) cl $ insDT $ gcMap gc
-       , gcTypes = dt:gcTypes gc
-       } 
-  where dt = DataTypeGen dtnm dtp (snd <$> cl)
-        insDT = insGlobalBinding vis mnml (identName dtnm) (DataTypeBinding dt)
-        insCtor (b, c@(Ctor cnm _)) =
-          insGlobalBinding b mnml (identName cnm) (CtorBinding dt c)
+insertDataType mnml vis loc (DataTypeGen dtnm dtp cl) gc =
+    gc { gcMap = insertAllBindings bindings (gcMap gc) }
+  where dt = DataTypeGen dtnm dtp (view _3 <$> cl)
+        dtBindings = untypedBindings vis mnml (identName dtnm) (DataTypeBinding loc dt)
+        cBindings (b, cloc, c@(Ctor cnm _)) = 
+          untypedBindings b mnml (identName cnm) (CtorBinding cloc dt c)
+        bindings = dtBindings ++ concatMap cBindings cl
 
 insertDef :: [Maybe ModuleName]
-          -> Bool -- Visibile in untyped context.
+          -> Bool -- ^ Indicates ifd definition should be visible to users.
+          -> Loc -- ^ Location where symbol comes form.
           -> TCRefDef s
           -> GlobalContext s
           -> GlobalContext s
-insertDef mnml vis d@(DefGen nm _ eqs) gc =
-    gc { gcMap = ins $ gcMap gc
+insertDef mnml vis loc d@(DefGen nm _ eqs) gc =
+    gc { gcMap  = insertAllBindings bindings (gcMap gc)
        , gcEqns = Map.insert nm eqs (gcEqns gc)
-       , gcDefs = d:gcDefs gc
        }
-  where ins = insGlobalBinding vis mnml (identName nm) (DefBinding d)
+  where bindings = untypedBindings vis mnml (identName nm) (DefBinding loc d)
+
+squote :: Doc -> Doc
+squote d = char '`' <> d <> char '\''
+
+showQuoted :: Show s => s -> Doc
+showQuoted nm = squote (text (show nm))
+
+-- | Lookup ctor returning identifier and type.
+resolveGlobalIdent :: GlobalContext s -> PosPair Un.Ident -> TC s (GlobalBinding (TCRef s))
+resolveGlobalIdent gc (PosPair p nm) =
+  case fromMaybe [] $ Map.lookup nm (gcMap gc) of
+    [] -> tcFail p $ show $ text "Unknown identifier:" <+> showQuoted nm <> text "."
+    [d] -> return d
+    (d:r) -> tcFail p $ show $
+      text "Ambiguous occurance" <+> showQuoted nm <> text "." $$
+      ppLoc firstText (globalBindingDesc d) $$
+      vcat (ppLoc otherText . globalBindingDesc <$> r)
+ where firstText = "It could refer to either"
+       otherText = "                      or"
+       imporText = "                         imported from"
+       ppLoc t (ImportedLoc mnm oldp, sym) =
+         text t <+> showQuoted sym <> comma $$
+         text imporText <+> showQuoted mnm <+> text ("at " ++ show oldp)
+       ppLoc t (LocalLoc pm, sym) =
+         text t <+> showQuoted sym <> text (", defined at " ++ show pm)
 
 -- | Lookup ctor returning identifier and type.
 resolveCtor :: GlobalContext s -> PosPair Un.Ident -> Int -> TC s (Ident, TCTerm)
-resolveCtor gc (PosPair p nm) argc =
-  case Map.lookup nm (gcMap gc) of
-    Just (CtorBinding dt (Ctor c rtp)) -> do
+resolveCtor gc (PosPair p nm) argc = do
+  gb <- resolveGlobalIdent gc (PosPair p nm)
+  case gb of
+    CtorBinding _ dt (Ctor c rtp) -> do
       tp <- eval p rtp
       if fixedPiArgCount tp == argc then
         return $ (c, termFromTCCtorType (dtgName dt) tp)
       else
-        tcFail p "Incorrect number of arguments givne to constructor."
-    Just (DataTypeBinding{}) -> tcFail p $ "Pattern matching data type is unsupported."
-    Just _ -> fail "Unexpected ident type"
-    Nothing -> tcFail p $ "Unknown identifier: " ++ show nm ++ "."
+        tcFail p "Incorrect number of arguments given to constructor."
+    DataTypeBinding{} -> tcFail p $ "Pattern matching data type is unsupported."
+    _ -> fail "Unexpected ident type"
 
 -- TermContext
 
@@ -356,13 +465,10 @@ data TermContext s where
   LetContext :: TermContext s -> [TCRefLocalDef s] -> TermContext s
   BindContext :: TermContext s -> String -> TCTerm -> TermContext s
 
-boundVarDiff :: TermContext s -> TermContext s -> Int
+boundVarDiff :: TermContext s -> TermContext s -> Maybe Int
 boundVarDiff tc1 tc0
-    | d >= 0 = d
-    | otherwise = error $ show $ 
-        text "boundVarDiff given bad contexts:" $$
-        ppTermContext tc1 $$
-        ppTermContext tc0
+    | d >= 0 = Just d
+    | otherwise = Nothing
   where d = termBoundCount tc1 - termBoundCount tc0
 
 termBoundCount :: TermContext s -> Int
@@ -405,16 +511,16 @@ globalDefEqns i tc = fromMaybe emsg $ Map.lookup i (gcEqns (globalContext tc))
   where emsg = error $ "Could not find equations for " ++ show i ++ "."
 
 data InferResult where
-  -- | Ctor with identifier argument list and 
+  -- | Ctor with identifier argument list and
   PartialCtor :: Ident -- Datatype identifier
               -> Ident -- Ctor identifier.
               -> [TCTerm] -- Arguments so far.
-              -> TCPat  -- Pattern for next argument 
-              -> TCTerm -- Type of next argument. 
+              -> TCPat  -- Pattern for next argument
+              -> TCTerm -- Type of next argument.
               -> TCCtorType -- Result ctor type.
               -> InferResult
   PartialDataType :: Ident
-                  -> [TCTerm] 
+                  -> [TCTerm]
                   -> TCPat
                   -> TCTerm
                   -> TCDTType
@@ -431,34 +537,35 @@ resolveIdent :: forall s . TermContext s
 resolveIdent tc0 (PosPair p ident) = go tc0
   where go tc1@(BindContext tc nm tp)
             | matchName nm ident =
-                pure $ TypedValue (applyExt (tc1,TCVar 0) tc0)
-                                  (applyExt (tc,tp) tc0)
+                pure $ TypedValue (applyExt tc0 (tc1,TCVar 0))
+                                  (applyExt tc0 (tc,tp))
             | otherwise = go tc
         go tc1@(LetContext tc lcls) = lclFn 0 lcls
           where lclFn i (LocalFnDefGen nm tp _ : r)
                     | matchName nm ident =
-                        pure $ TypedValue (applyExt (tc1, TCLocalDef i) tc0)
-                                          (applyExt (tc,tp) tc0)
+                        pure $ TypedValue (applyExt tc0 (tc1, TCLocalDef i))
+                                          (applyExt tc0 (tc,tp))
                     | otherwise = lclFn (i+1) r
                 lclFn _ [] = go tc
-        go (TopContext gc) =        
-          case Map.lookup ident (gcMap gc) of
-            Just (DataTypeBinding (DataTypeGen dt rtp _)) -> do
+        go (TopContext gc) = do
+          gb <- resolveGlobalIdent gc (PosPair p ident)
+          case gb of
+            DataTypeBinding _ (DataTypeGen dt rtp _) -> do
               ftp <- eval p rtp
               case ftp of
                 FPResult s -> pure $ TypedValue (TCF (DataTypeApp dt [])) (TCF (Sort s))
                 FPPi pat tp next -> pure $ PartialDataType dt [] pat tp next 
-            Just (CtorBinding dt (Ctor c rtp)) -> do
+            CtorBinding _ dt (Ctor c rtp) -> do
               ftp <- eval p rtp
               case ftp of
                 FPResult args ->
                  pure $ TypedValue (TCF (CtorApp c []))
                                    (TCF (DataTypeApp (dtgName dt) args))
-                FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next 
-            Just (DefBinding (DefGen gi rtp _)) ->
+                FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next
+            DefBinding _ (DefGen gi rtp _) ->
               TypedValue (TCF (GlobalDef gi)) <$> eval p rtp
-            Nothing -> tcFail p $ "Unknown identifier: " ++ show ident ++ "."
 
+-- | Return names in context.
 contextNames :: TermContext s -> [String]
 contextNames (BindContext tc nm _) = nm : contextNames tc
 contextNames (LetContext tc lcls) = fmap lclName lcls ++ contextNames tc
@@ -474,15 +581,15 @@ ppTermContext (BindContext tc nm tp) =
   ppTermContext tc
 ppTermContext (LetContext tc lcls) =
     text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) $$
-    ppTermContext tc  
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp  
+    ppTermContext tc
+  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp
 ppTermContext TopContext{} = text "top"
 
 -- | Pretty print a pat
-ppTCPat :: TCPat -> Doc
-ppTCPat (TCPVar nm _ _) = text nm
-ppTCPat (TCPUnused nm) = text nm
-ppTCPat (TCPatF pf) = 
+ppTCPat :: AnnPat a -> Doc
+ppTCPat (TCPVar nm _) = text nm
+ppTCPat (TCPUnused nm _) = text nm
+ppTCPat (TCPatF pf) =
   case pf of
     UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
     UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
@@ -496,11 +603,11 @@ ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
 ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
-  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
-             <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
+             <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
 ppTCTermGen d pr (TCPi p l r) = ppParens (pr >= 1) $
-  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l) 
-    <+> text "->" <+> ppTCTermGen (d ++ fmap text (patVarNames p)) 2 r
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
 ppTCTermGen d pr (TCLet lcls t) = ppParens (pr >= 1) $
     text "let " <> nest 4 (vcat (ppLcl <$> lcls)) $$
     text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) 1 t)
@@ -512,8 +619,60 @@ ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
 
 -- | Bound the free variables in the term with pi quantifiers.
 boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
-boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0 
-  where d0 = boundVarDiff tc1 tc0
+boundFreeVarsWithPi (tc1,t0) tc0 = go d0 tc1 t0
+  where Just d0 = boundVarDiff tc1 tc0
         go 0 _ t = t
-        go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm 0 tp) tp t) 
+        go d (BindContext tc nm tp) t = go (d-1) tc (TCPi (TCPVar nm (0,tp)) tp t)
         go _ _ _ = error "boundFreeVarsWithPi given bad context"
+
+-- | Check TCPat free variables returning new number of bound variables.
+checkTCPatOf :: Int -> Simple Traversal s TCPat -> s -> Maybe Int
+checkTCPatOf c t s0 = finalCheck =<< execStateT (traverseOf_ t go s0) (Set.empty,Set.empty)
+  where finalCheck (s,u) = do
+          let sz = Set.size s
+          -- Check s contains all variables in range (0..sz-1)
+          let cnt = maybe 0 ((+1) . fst) (Set.maxView s)
+          unless (cnt == sz) $ error $ "Set missing variables: " ++ show s
+          -- Check all elements in u are at most sz.
+          unless (allOf folded (<= sz) u) $ error "Invalid index in unused variable."
+          return (c+sz)
+        go (TCPVar _ (i,tp)) = do
+          lift $ checkTCTerm (c+i) tp
+          s <- use _1
+          when (Set.member i s) $ error "Already encountered variable"
+          _1 .= Set.insert i s
+        go (TCPUnused _ (i,tp)) = do
+          lift $ checkTCTerm (c+i) tp
+          _2 %= Set.insert i
+        go (TCPatF pf) = traverseOf_ folded go pf
+
+checkDefEqn :: Int -> TCDefEqn -> Maybe ()
+checkDefEqn c (DefEqnGen pl r) = do
+  c' <- checkTCPatOf c traverse pl
+  checkTCTerm c' r
+
+checkLocalDefs :: Int -> [TCLocalDef] -> Maybe Int
+checkLocalDefs c l = traverseOf_ folded checkFn l >> return (c+length l)
+  where c' = c + length l
+        checkFn (LocalFnDefGen _ tp eqns) = do
+          checkTCTerm c tp
+          traverseOf_ folded (checkDefEqn c') eqns
+
+-- | Check that term does not reference free variables out of given range.
+checkTCTerm :: Int -> TCTerm -> Maybe ()
+checkTCTerm c t0 =
+  case t0 of
+    TCF tf -> traverseOf_ folded (checkTCTerm c) tf
+    TCLambda p tp r -> do
+      checkTCTerm c tp
+      c' <- checkTCPatOf c id p
+      checkTCTerm c' r
+    TCPi p tp r -> do
+      checkTCTerm c tp
+      c' <- checkTCPatOf c id p
+      checkTCTerm c' r
+    TCLet lcls r -> do
+      c' <- checkLocalDefs c lcls
+      checkTCTerm c' r
+    TCVar i -> unless (i < c) $ error "Illegal var index"
+    TCLocalDef i -> unless (i < c) $ error "Illegal local def index"
