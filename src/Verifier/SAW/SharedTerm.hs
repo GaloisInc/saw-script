@@ -570,7 +570,7 @@ mkSharedContext m = do
 --          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
 --          Just d -> return d
   let freshGlobal sym tp = do
-        i <- modifyMVar vr (\i -> return (i,i+1))
+        i <- modifyMVar vr (\i -> return (i+1,i))
         return (STVar i sym tp)
   return SharedContext {
              scModule = return m
