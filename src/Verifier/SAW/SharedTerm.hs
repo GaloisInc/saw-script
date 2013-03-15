@@ -64,6 +64,7 @@ module Verifier.SAW.SharedTerm
 --  , scTrue
 --  , scFalse
     -- ** Variable substitution
+  , instantiateVar
   , instantiateVarList
   ) where
 
