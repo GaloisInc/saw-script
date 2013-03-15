@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,6 +9,11 @@ module Verifier.SAW.Rewriter
   ( Simpset
   , emptySimpset
   , ruleOfTerm
+  , ruleOfDefEqn
+  , rulesOfTypedDef
+  , addRule
+  , delRule
+  , addRules
   , addSimp
   , delSimp
   , rewriteTerm
@@ -41,7 +49,7 @@ data RewriteRule t =
   , lhs :: t
   , rhs :: t
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
@@ -140,16 +148,26 @@ ruleOfDefEqn ident (DefEqn pats rhs) =
           PCtor c pats -> (Term . FTermF . CtorApp c) <$> traverse termOfPat pats
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
+rulesOfTypedDef :: TypedDef -> [RewriteRule Term]
+rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
+
 emptySimpset :: Simpset t
 emptySimpset = Net.empty
 
+addRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
+addRule rule = Net.insert_term (lhs rule, rule)
+
+delRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
+delRule rule = Net.delete_term (lhs rule, rule)
+
+addRules :: (Eq t, Net.Pattern t) => [RewriteRule t] -> Simpset t -> Simpset t
+addRules rules ss = foldr addRule ss rules
+
 addSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
-addSimp prop = Net.insert_term (lhs rule, rule)
-  where rule = ruleOfTerm prop
+addSimp prop = addRule (ruleOfTerm prop)
 
 delSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
-delSimp prop = Net.delete_term (lhs rule, rule)
-  where rule = ruleOfTerm prop
+delSimp prop = delRule (ruleOfTerm prop)
 
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
