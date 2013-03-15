@@ -70,7 +70,6 @@ import Control.Monad (foldM, liftM)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.Bits
-import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word
@@ -87,7 +86,7 @@ type TermIndex = Word64
 type VarIndex = Word64
 
 data SharedTerm s
-  = STVar !VarIndex !Ident !(SharedTerm s)
+  = STVar !VarIndex !String !(SharedTerm s)
   | STApp !TermIndex !(TermF (SharedTerm s))
 
 instance Eq (SharedTerm s) where
@@ -108,6 +107,7 @@ instance Termlike Term where
   unwrapTermF (Term tf) = tf
 
 instance Termlike (SharedTerm s) where
+  unwrapTermF STVar{} = error "unwrapTermF called on STVar{}"
   unwrapTermF (STApp _ tf) = tf
 
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
@@ -165,7 +165,7 @@ typeOfCtor sc ident =
 -- memoization on subterms. Perhaps the fast one won't need to?
 
 scTypeOf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
-scTypeOf sc t = State.evalStateT (memo t) Map.empty
+scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo (STVar i sym tp) = return tp
@@ -227,7 +227,7 @@ unshare :: forall s. SharedTerm s -> Term
 unshare t = State.evalState (go t) Map.empty
   where
     go :: SharedTerm s -> State.State (Map TermIndex Term) Term
-    go (STVar i sym tp) = error "unshare STVar"
+    go STVar{} = error "unshare STVar"
     go (STApp i t) = do
       memo <- State.get
       case Map.lookup i memo of
@@ -252,7 +252,7 @@ looseVars :: forall s. SharedTerm s -> BitSet
 looseVars t = State.evalState (go t) Map.empty
     where
       go :: SharedTerm s -> State.State (Map TermIndex BitSet) BitSet
-      go (STVar i sym tp) = return 0
+      go STVar{} = return 0
       go (STApp i tf) = do
         memo <- State.get
         case Map.lookup i memo of
@@ -371,7 +371,7 @@ data SharedContext s = SharedContext
     scModule :: IO Module
   , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
   -- | Create a global variable with the given identifier (which may be "_") and type.
-  , scFreshGlobal   :: Ident -> SharedTerm s -> IO (SharedTerm s)
+  , scFreshGlobal   :: String -> SharedTerm s -> IO (SharedTerm s)
   }
 
 scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
@@ -553,7 +553,7 @@ mkSharedContext m = do
 --          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
 --          Just d -> return d
   let freshGlobal sym tp = do
-        i <- modifyMVar vr (\i -> return (i,i+1))
+        i <- modifyMVar vr (\i -> return (i+1,i))
         return (STVar i sym tp)
   return SharedContext {
              scModule = return m
