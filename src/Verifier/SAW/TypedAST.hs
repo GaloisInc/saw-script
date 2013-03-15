@@ -37,6 +37,7 @@ module Verifier.SAW.TypedAST
  , DefEqn(..)
  , Pat(..)
  , patBoundVarCount
+ , patUnusedVarCount
    -- * Terms and associated operations.
  , Term(..)
  , incVars
@@ -177,6 +178,15 @@ patBoundVarCount p =
     PTuple l  -> sumBy patBoundVarCount l
     PRecord m -> sumBy patBoundVarCount m
     _ -> 0
+
+patUnusedVarCount :: Pat e -> DeBruijnIndex
+patUnusedVarCount p =
+  case p of
+    PVar{} -> 0
+    PUnused{} -> 1
+    PCtor _ l -> sumBy patUnusedVarCount l
+    PTuple l  -> sumBy patUnusedVarCount l
+    PRecord m -> sumBy patUnusedVarCount m
 
 patBoundVars :: Pat e -> [String]
 patBoundVars p =

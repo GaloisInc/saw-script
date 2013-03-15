@@ -15,7 +15,9 @@ module Verifier.SAW.Rewriter
 
 import Control.Applicative ((<$>), pure, (<*>))
 import Control.Monad ((>=>))
+import Control.Monad.State
 import Control.Monad.Trans (lift)
+import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 import Data.IORef
 import Data.Map (Map)
@@ -109,6 +111,34 @@ ruleOfTerm t =
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
+
+ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
+ruleOfDefEqn ident (DefEqn pats rhs) =
+    RewriteRule { ctxt = Map.elems varmap
+                , lhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
+                , rhs = incVars 0 nUnused rhs }
+  where
+    nBound = sum (map patBoundVarCount pats)
+    nUnused = sum (map patUnusedVarCount pats)
+    n = nBound + nUnused
+    mkApp :: Term -> Term -> Term
+    mkApp f x = Term (FTermF (App f x))
+    termOfPat :: Pat Term -> State (Int, Map Int Term) Term
+    termOfPat pat =
+        case pat of
+          PVar s i e ->
+              do (j, m) <- get
+                 put (j, Map.insert i e m)
+                 return $ Term (LocalVar (n - 1 - i) (incVars 0 (n - i) e))
+          PUnused i e ->
+              do (j, m) <- get
+                 let s = "_" ++ show j
+                 put (j + 1, Map.insert j (incVars 0 (j - i) e) m)
+                 return $ Term (LocalVar (n - 1 - j) (incVars 0 (n - i) e))
+          PTuple pats -> (Term . FTermF . TupleValue) <$> traverse termOfPat pats
+          PRecord pats -> (Term . FTermF . RecordValue) <$> traverse termOfPat pats
+          PCtor c pats -> (Term . FTermF . CtorApp c) <$> traverse termOfPat pats
+    (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
 emptySimpset :: Simpset t
 emptySimpset = Net.empty
