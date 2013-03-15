@@ -215,16 +215,13 @@ instance Show (Def e) where
 data DefEqn e
   = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
-  deriving (Functor, Foldable, Traversable)
+  deriving (Functor, Foldable, Traversable, Show)
 
 instance (Eq e) => Eq (DefEqn e) where
   DefEqn xp xr == DefEqn yp yr = xp == yp && xr == yr
 
 instance (Ord e) => Ord (DefEqn e) where
   compare (DefEqn xp xr) (DefEqn yp yr) = compare (xp,xr) (yp,yr)
-
-instance (Show e) => Show (DefEqn e) where
-  showsPrec p t = showParen (p >= 10) $ ("DefEqn "++) . showsPrec 10 p . showsPrec 10 t
 
 data Ctor n tp = Ctor { ctorName :: !n
                         -- | The type of the constructor (should contain no free variables).
