@@ -270,16 +270,16 @@ instantiateVars :: forall s. SharedContext s
                                   -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVars sc f initialLevel t =
-    do cache <- newCache
+    do cache <- lift newCache
        let ?cache = cache in go initialLevel t
   where
-    go :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STVar {}) = pure t
     go l t@(STApp tidx tf) =
-        useCache ?cache (tidx, l) (preserveChangeT t $ go' l tf)
+        ChangeT $ useCache ?cache (tidx, l) (runChangeT $ preserveChangeT t (go' l tf))
 
-    go' :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
     go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -295,8 +295,6 @@ instantiateVars sc f initialLevel t =
     go' l (LocalVar i tp)
       | i < l     = scTermF sc <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
---    go' l (EqType lhs rhs) = scTermF sc <$> (EqType <$> go l lhs <*> go l rhs)
---    go' l (Oracle s prop) = scTermF sc <$> (Oracle s <$> go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
