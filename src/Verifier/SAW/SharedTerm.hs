@@ -40,11 +40,14 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
-  , scTypeOf
   , scPrettyTerm
   , scViewAsBool
   , scViewAsNum
   , scGlobalApply
+  , scSharedTerm
+    -- ** Type checking
+  , scTypeOf
+  , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend
   , scIte
@@ -138,22 +141,22 @@ reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 reducePi sc (STApp _ (Pi _ _ body)) arg = instantiateVar sc 0 arg body
 reducePi _ _ _ = error "reducePi: not a Pi term"
 
-typeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
-typeOfGlobal sc ident =
+scTypeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
+scTypeOfGlobal sc ident =
     do m <- scModule sc
        case findDef m ident of
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
          Just d -> scSharedTerm sc (defType d)
 
-typeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
-typeOfDataType sc ident =
+scTypeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
+scTypeOfDataType sc ident =
     do m <- scModule sc
        case findDataType m ident of
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
          Just d -> scSharedTerm sc (dtType d)
 
-typeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
-typeOfCtor sc ident =
+scTypeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
+scTypeOfCtor sc ident =
     do m <- scModule sc
        case findCtor m ident of
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
@@ -197,7 +200,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
     ftermf :: FlatTermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
       case tf of
-        GlobalDef d -> lift $ typeOfGlobal sc d
+        GlobalDef d -> lift $ scTypeOfGlobal sc d
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
@@ -213,10 +216,10 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           return tp
         RecordType m -> lift . scSort sc . maximum =<< mapM sort m
         CtorApp c args -> do
-          t <- lift $ typeOfCtor sc c
+          t <- lift $ scTypeOfCtor sc c
           lift $ foldM (reducePi sc) t args
         DataTypeApp dt args -> do
-          t <- lift $ typeOfDataType sc dt
+          t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t args
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit i -> lift $ scNatType sc
