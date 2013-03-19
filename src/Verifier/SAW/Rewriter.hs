@@ -309,19 +309,19 @@ rewriteSharedTerm sc ss t =
     apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
              [RewriteRule (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t
-    apply (rule : rules) t =
-      case first_order_match (lhs rule) t of
+    apply (RewriteRule _ lhs rhs : rules) t =
+      case first_order_match lhs t of
         Nothing -> apply rules t
         Just inst ->
             do putStrLn "REWRITING:"
-               print (lhs rule)
-               case rule of
-                 RewriteRule{} ->
-                     rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
-                 RewriteProc { proc = Conversion conv } ->
-                     case conv (scTermF sc) t of
-                       Nothing -> apply rules t
-                       Just io -> rewriteAll =<< io
+               print lhs
+               rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) rhs
+    apply (RewriteProc _ lhs conv : rules) t =
+        do putStrLn "REWRITING:"
+           print lhs
+           case runConversion conv (scTermF sc) t of
+             Nothing -> apply rules t
+             Just io -> rewriteAll =<< io
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
