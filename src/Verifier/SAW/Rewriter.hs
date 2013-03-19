@@ -170,6 +170,51 @@ delSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
 delSimp prop = delRule (ruleOfTerm prop)
 
 ----------------------------------------------------------------------
+-- Destructors for terms
+
+asApp :: Termlike t => t -> Maybe (t, t)
+asApp (unwrapTermF -> FTermF (App x y)) = Just (x, y)
+asApp _ = Nothing
+
+asLambda :: Termlike t => t -> Maybe (String, t, t)
+asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = Just (s, ty, body)
+asLambda _ = Nothing
+
+asTupleValue :: Termlike t => t -> Maybe [t]
+asTupleValue (unwrapTermF -> FTermF (TupleValue ts)) = Just ts
+asTupleValue _ = Nothing
+
+asRecordValue :: Termlike t => t -> Maybe (Map FieldName t)
+asRecordValue (unwrapTermF -> FTermF (RecordValue m)) = Just m
+asRecordValue _ = Nothing
+
+asTupleSelector :: Termlike t => t -> Maybe (t, Int)
+asTupleSelector (unwrapTermF -> FTermF (TupleSelector t i)) = Just (t, i)
+asTupleSelector _ = Nothing
+
+asRecordSelector :: Termlike t => t -> Maybe (t, FieldName)
+asRecordSelector (unwrapTermF -> FTermF (RecordSelector t i)) = Just (t, i)
+asRecordSelector _ = Nothing
+
+asBetaRedex :: Termlike t => t -> Maybe (String, t, t, t)
+asBetaRedex t =
+    do (f, arg) <- asApp t
+       (s, ty, body) <- asLambda f
+       return (s, ty, body, arg)
+
+asTupleRedex :: Termlike t => t -> Maybe ([t], Int)
+asTupleRedex t =
+    do (x, i) <- asTupleSelector t
+       ts <- asTupleValue x
+       return (ts, i)
+
+asRecordRedex :: Termlike t => t -> Maybe (Map FieldName t, FieldName)
+asRecordRedex t =
+    do (x, i) <- asRecordSelector t
+       ts <- asRecordValue x
+       return (ts, i)
+
+----------------------------------------------------------------------
 -- Bottom-up rewriting
 
 rewriteTerm :: Simpset Term -> Term -> Term
@@ -216,6 +261,14 @@ rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
 -- TODO: add a constant to the SAWCore prelude to replace defunct "Oracle" constructor:
 -- rewriterOracle :: (t : sort 1) -> (x y : t) -> Eq t x y
 
+-- | Do a single reduction step (beta, record or tuple selector) at top
+-- level, if possible.
+reduceSharedTerm :: SharedContext s -> SharedTerm s -> Maybe (IO (SharedTerm s))
+reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
+reduceSharedTerm sc (asTupleRedex -> Just (ts, i)) = Just (return (ts !! (i - 1)))
+reduceSharedTerm sc (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
+reduceSharedTerm _ _ = Nothing
+
 -- | Rewriter for shared terms
 rewriteSharedTerm :: forall s. SharedContext s
                   -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
@@ -230,7 +283,10 @@ rewriteSharedTerm sc ss t =
     rewriteAll t = return t
     rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
-    rewriteTop t = apply (Net.match_term ss t) t
+    rewriteTop t =
+        case reduceSharedTerm sc t of
+          Nothing -> apply (Net.match_term ss t) t
+          Just io -> rewriteAll =<< io
     apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
              [RewriteRule (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t
