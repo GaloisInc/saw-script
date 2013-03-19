@@ -54,6 +54,12 @@ asGlobalDef :: Termlike t => Ident -> t -> Maybe ()
 asGlobalDef ident (unwrapTermF -> FTermF (GlobalDef ident')) | ident == ident' = Just ()
 asGlobalDef _ _ = Nothing
 
+asBoolType :: Termlike t => t -> Maybe ()
+asBoolType (unwrapTermF -> FTermF (DataTypeApp ident [])) | ident == bool = Just ()
+    where
+      bool = mkIdent (mkModuleName ["Prelude"]) "Bool"
+asBoolType _ = Nothing
+
 asBvNatLit :: Termlike t => t -> Maybe (Integer, Integer)
 asBvNatLit t =
     do (((), n), x) <- (asGlobalDef bvNat <:> asNatLit <:> asNatLit) t
@@ -89,7 +95,7 @@ append_bvNat =
     Conversion $ \mk t ->
         do ((((((), m), n), _), (_, x)), (_, y)) <-
                (asGlobalDef append <:> asNatLit <:> asNatLit <:>
-                            Just <:> asBvNatLit <:> asBvNatLit) t
+                   asBoolType <:> asBvNatLit <:> asBvNatLit) t
            return $ mkBvNat mk (m + n) (shiftL x (fromIntegral n) .|. y)
            -- ^ Assuming big-endian order
     where
@@ -119,3 +125,15 @@ bvult_bvNat =
            return $ mkBool mk (x < y)
     where
       bvult = mkIdent (mkModuleName ["Prelude"]) "bvult"
+
+slice_bvNat =
+    Conversion $ \mk t ->
+        do ((((((), _), i), n), j), (m, x)) <-
+               (asGlobalDef slice <:> asBoolType <:>
+                   asNatLit <:> asNatLit <:> asNatLit <:> asBvNatLit) t
+           guard (i + n + j == m)
+           let mask = bit (fromIntegral n) - 1
+           return $ mkBvNat mk n (shiftR x (fromIntegral j) .&. mask)
+           -- ^ Assuming big-endian order
+    where
+      slice = mkIdent (mkModuleName ["Prelude"]) "slice"
