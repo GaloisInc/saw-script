@@ -8,10 +8,12 @@
 
 module Verifier.SAW.Rewriter
   ( Simpset
+  , RewriteRule
   , emptySimpset
   , ruleOfTerm
   , ruleOfDefEqn
   , rulesOfTypedDef
+  , procOfTerm
   , addRule
   , delRule
   , addRules
@@ -35,6 +37,7 @@ import Data.Traversable (Traversable, traverse)
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
+import Verifier.SAW.Conversion
 import Verifier.SAW.SharedTerm hiding (instantiateVarList)
 import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
@@ -44,15 +47,19 @@ import qualified Verifier.SAW.TermNet as Net
 -- Loose bound variables in the head index the tail of the list
 type Context = [Term]
 
-data RewriteRule t =
-  RewriteRule
-  { ctxt :: [t]
-  , lhs :: t
-  , rhs :: t
-  }
+data RewriteRule t
+  = RewriteRule { ctxt :: [t], lhs :: t, rhs :: t }
+  | RewriteProc { ctxt :: [t], lhs :: t, proc :: Conversion }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
+
+-- | A hack to make the derived instance for RewriteRule work.
+instance Eq Conversion where
+    x == y = True
+
+instance Show Conversion where
+    show _ = "<<<Conversion>>>"
 
 instance Net.Pattern Term where
   patternShape (Term t) =
@@ -120,6 +127,17 @@ ruleOfTerm t =
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
+
+procOfTerm :: Termlike t => Conversion -> t -> RewriteRule t
+procOfTerm conv t =
+    case unwrapTermF t of
+      FTermF (DataTypeApp ident [_, x])
+          | ident == singleIdent -> RewriteProc { ctxt = [], lhs = x, proc = conv }
+      Pi _ ty body -> rule { ctxt = ty : ctxt rule }
+          where rule = procOfTerm conv body
+      _ -> error "procOfTerm: Illegal argument"
+    where
+      singleIdent = mkIdent (mkModuleName ["Prelude"]) "Single"
 
 ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
 ruleOfDefEqn ident (DefEqn pats rhs) =
@@ -294,7 +312,16 @@ rewriteSharedTerm sc ss t =
     apply (rule : rules) t =
       case first_order_match (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+        Just inst ->
+            do putStrLn "REWRITING:"
+               print (lhs rule)
+               case rule of
+                 RewriteRule{} ->
+                     rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+                 RewriteProc { proc = Conversion conv } ->
+                     case conv (scTermF sc) t of
+                       Nothing -> apply rules t
+                       Just io -> rewriteAll =<< io
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
