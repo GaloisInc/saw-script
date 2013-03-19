@@ -51,6 +51,12 @@ data Pat = Atom String | Var | App Pat Pat
 class Pattern t where
   toPat :: t -> Pat
 
+instance Show Pat where
+  showsPrec p (Atom s) = showString s
+  showsPrec p Var = showString "_"
+  showsPrec p (App x y) =
+      showParen (p > 5) (showsPrec 5 x . showString " " . showsPrec 6 y)
+
 isVarApp :: Pat -> Bool
 isVarApp t = case t of
   Atom _   -> False
