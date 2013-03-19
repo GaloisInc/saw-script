@@ -61,23 +61,30 @@ instance Eq Conversion where
 instance Show Conversion where
     show _ = "<<<Conversion>>>"
 
+termToPat :: Termlike t => t -> Net.Pat
+termToPat t =
+    case unwrapTermF t of
+      FTermF (GlobalDef d)      -> Net.Atom (show d)
+      FTermF (Sort s)           -> Net.Atom ('*' : show s)
+      FTermF (NatLit n)         -> Net.Atom (show n)
+      FTermF (App t1 t2)        -> Net.App (termToPat t1) (termToPat t2)
+      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (show c)) (map termToPat ts)
+      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (show c)) (map termToPat ts)
+      _                     -> Net.Var
+
 instance Net.Pattern Term where
-  patternShape (Term t) =
-    case t of
-      FTermF (GlobalDef d) -> Net.Atom (show d)
-      FTermF (Sort s)      -> Net.Atom (show s)
-      FTermF (NatLit n)    -> Net.Atom ('#' : show n)
-      FTermF (App t1 t2)   -> Net.App t1 t2
-      _                    -> Net.Var
+  toPat = termToPat
 
 instance Net.Pattern (SharedTerm s) where
-  patternShape (STApp _ t) =
-    case t of
-      FTermF (GlobalDef d) -> Net.Atom (show d)
-      FTermF (Sort s)      -> Net.Atom (show s)
-      FTermF (NatLit n)    -> Net.Atom ('#' : show n)
-      FTermF (App t1 t2)   -> Net.App t1 t2
-      _                    -> Net.Var
+  toPat = termToPat
+
+----------------------------------------------------------------------
+-- Simplification procedures
+
+-- belongs in SharedTerm.hs
+scBool :: SharedContext s -> Bool -> IO (SharedTerm s)
+scBool sc True = scFlatTermF sc (CtorApp (mkIdent (mkModuleName ["Prelude"]) "True") [])
+scBool sc False = scFlatTermF sc (CtorApp (mkIdent (mkModuleName ["Prelude"]) "False") [])
 
 ----------------------------------------------------------------------
 -- Matching
