@@ -19,14 +19,14 @@ findMain :: Compiler [TopStmt MPType] (Module MPType)
 findMain = compiler "FindMain" $ \input ->
   case separate sepMain input of
   ([],_)    -> noMainErr
-  ([mb],ts) -> return $ Module { declarations = ts, mainBlock = mb }
+  ([mn],ts) -> return $ Module { declarations = ts, mainBlock = mn }
   _ -> multiMainErr
 
 -- | Takes a TopStmt and possibly returns two lists, the first a list of all the main blocks found in the module,
 --   the second a list of the other, non-main bindings from a TopBind statement that contains a main binding.
-sepMain :: TopStmt MPType -> Maybe [BlockStmt MPType]
+sepMain :: TopStmt MPType -> Maybe (Expr MPType)
 sepMain ts = case ts of
-  TopBind "main" (Block bs _) -> Just bs
+  TopBind "main" e -> Just e
   _            -> Nothing
 
 -- |Partition that produces what results it can as it traverses the list

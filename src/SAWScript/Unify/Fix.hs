@@ -56,8 +56,8 @@ foldMu f (In e) = f (fmap (foldMu f) e)
 foldMuM :: (Applicative m, Monad m, Traversable f) => (f a -> m a) -> Mu f -> m a
 foldMuM f (In e) = traverse (foldMuM f) e >>= f
 
-traverseFA :: (Monad g, Applicative g, Traversable t, Traversable f) =>
-  (f b -> g b) -> t (Mu f) -> g (t b)
+traverseFA :: (Monad m, Applicative m, Traversable t, Traversable f) =>
+  (f b -> m b) -> t (Mu f) -> m (t b)
 traverseFA = traverse . foldMuM
 
 -- }}}

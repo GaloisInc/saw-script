@@ -10,11 +10,12 @@ import SAWScript.Compiler
 import Control.Applicative
 import Control.Monad.Trans.Reader
 import Data.List
+import Data.Monoid
 import Data.Foldable
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (Module MPType) (Module MPType)
-resolveSyns = compiler "ResolveSyns" $ \m@(Module ds mb) ->
+resolveSyns = compiler "ResolveSyns" $ \m@(Module ds _) ->
   runReaderT (rSyns m) $ buildEnv ds
 
 liftReader :: (Monad m) => m a -> ReaderT e m a
@@ -22,24 +23,23 @@ liftReader = ReaderT . const
 
 -- Env {{{
 
-buildEnv :: [TopStmt MPType] -> Env
+buildEnv :: [TopStmt MPType] -> Env MPType
 buildEnv = foldMap extractSyn
 
-extractSyn :: TopStmt MPType -> Env
+extractSyn :: TopStmt MPType -> Env MPType
 extractSyn s = case s of
-  TypeDef n pt -> [(n,pt)]
-  _            -> []
+  TypeDef n pt -> typePair n pt
+  _            -> mempty
 
 -- }}}
 
-type Env = [(Name,PType)]
-type RS = ReaderT Env Err
+type RS = ReaderT (Env MPType) Err
 
 class ResolveSyns f where
   rSyns :: f -> RS f
 
 instance ResolveSyns (Module MPType) where
-  rSyns (Module ds mb) = Module <$> mapM rSyns ds <*> mapM rSyns mb
+  rSyns (Module ds mn) = Module <$> mapM rSyns ds <*> rSyns mn
 
 instance ResolveSyns (TopStmt MPType) where
   rSyns s = case s of
@@ -75,7 +75,7 @@ instance (Resolvable f, Resolvable g) => Resolvable (f :+: g) where
 
 instance Resolvable TypeF where
   resolve t = case t of
-    Syn n -> do found <- asks $ lookup n
+    Syn n -> do found <- asks $ lookupType n
                 case found of
                   Nothing -> liftReader $ fail ("unbound type synonym: " ++ show n)
                   Just pt -> rSyns pt

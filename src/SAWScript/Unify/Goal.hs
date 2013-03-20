@@ -91,8 +91,14 @@ firstAnswer = fstAns . runInterleave . runEitherT
 evalGoal :: GoalM t a -> GState t -> Stream a
 evalGoal m s = evalStateT (runGoalM m) s
 
+runGoal :: GoalM t a -> GState t -> Stream (a,GState t)
+runGoal m s = runStateT (runGoalM m) s
+
 newtype GoalM t a = GoalM { runGoalM :: StateT (GState t) Stream a } deriving (Functor)
 type Goal t = GoalM t ()
+
+instance Show (GoalM t a) where
+  show g = "<goal>"
 
 instance Monad (GoalM t) where
   return a = GoalM $ return a
