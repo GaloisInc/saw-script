@@ -326,9 +326,9 @@ rewriteSharedTerm sc ss t =
     apply (RewriteProc _ lhs conv : rules) t =
         do putStrLn "REWRITING:"
            print lhs
-           case runConversion conv (scTermF sc) t of
+           case runConversion conv t of
              Nothing -> apply rules t
-             Just io -> rewriteAll =<< io
+             Just k -> rewriteAll =<< k (scTermF sc)
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe

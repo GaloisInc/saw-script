@@ -28,7 +28,7 @@ import Verifier.SAW.TypedAST
 
 data Conversion =
     Conversion { runConversion ::
-        forall m t. (Monad m, Termlike t) => (TermF t -> m t) -> t -> Maybe (m t) }
+        forall m t. (Monad m, Termlike t) => t -> Maybe ((TermF t -> m t) -> m t) }
 
 ----------------------------------------------------------------------
 -- Destructors for terms
@@ -71,14 +71,14 @@ asBvNatLit t =
 ----------------------------------------------------------------------
 -- Constructors for return values
 
-mkBool :: Monad m => (TermF t -> m t) -> Bool -> m t
-mkBool mk b = mk (FTermF (CtorApp (if b then idTrue else idFalse) []))
+mkBool :: Monad m => Bool -> (TermF t -> m t) -> m t
+mkBool b mk = mk (FTermF (CtorApp (if b then idTrue else idFalse) []))
     where
       idTrue = mkIdent (mkModuleName ["Prelude"]) "True"
       idFalse = mkIdent (mkModuleName ["Prelude"]) "False"
 
-mkBvNat :: Monad m => (TermF t -> m t) -> Integer -> Integer -> m t
-mkBvNat mk n x =
+mkBvNat :: Monad m => Integer -> Integer -> (TermF t -> m t) -> m t
+mkBvNat n x mk =
     do n' <- mk (FTermF (NatLit n))
        x' <- mk (FTermF (NatLit x))
        t0 <- mk (FTermF (GlobalDef bvNat))
@@ -92,48 +92,48 @@ mkBvNat mk n x =
 -- Conversions for Prelude operations
 
 append_bvNat =
-    Conversion $ \mk t ->
+    Conversion $ \t ->
         do ((((((), m), n), _), (_, x)), (_, y)) <-
                (asGlobalDef append <:> asNatLit <:> asNatLit <:>
                    asBoolType <:> asBvNatLit <:> asBvNatLit) t
-           return $ mkBvNat mk (m + n) (shiftL x (fromIntegral n) .|. y)
+           return $ mkBvNat (m + n) (shiftL x (fromIntegral n) .|. y)
            -- ^ Assuming big-endian order
     where
       append = mkIdent (mkModuleName ["Prelude"]) "append"
 
 bvAdd_bvNat =
-    Conversion $ \mk t ->
+    Conversion $ \t ->
         do ((((), n), (_, x)), (_, y)) <-
                (asGlobalDef bvAdd <:> asNatLit <:> asBvNatLit <:> asBvNatLit) t
            let mask = bit (fromIntegral n) - 1
-           return $ mkBvNat mk n ((x + y) .&. mask)
+           return $ mkBvNat n ((x + y) .&. mask)
     where
       bvAdd = mkIdent (mkModuleName ["Prelude"]) "bvAdd"
 
 bvule_bvNat =
-    Conversion $ \mk t ->
+    Conversion $ \t ->
         do ((((), n), (_, x)), (_, y)) <-
                (asGlobalDef bvule <:> asNatLit <:> asBvNatLit <:> asBvNatLit) t
-           return $ mkBool mk (x <= y)
+           return $ mkBool (x <= y)
     where
       bvule = mkIdent (mkModuleName ["Prelude"]) "bvule"
 
 bvult_bvNat =
-    Conversion $ \mk t ->
+    Conversion $ \t ->
         do ((((), n), (_, x)), (_, y)) <-
                (asGlobalDef bvult <:> asNatLit <:> asBvNatLit <:> asBvNatLit) t
-           return $ mkBool mk (x < y)
+           return $ mkBool (x < y)
     where
       bvult = mkIdent (mkModuleName ["Prelude"]) "bvult"
 
 slice_bvNat =
-    Conversion $ \mk t ->
+    Conversion $ \t ->
         do ((((((), _), i), n), j), (m, x)) <-
                (asGlobalDef slice <:> asBoolType <:>
                    asNatLit <:> asNatLit <:> asNatLit <:> asBvNatLit) t
            guard (i + n + j == m)
            let mask = bit (fromIntegral n) - 1
-           return $ mkBvNat mk n (shiftR x (fromIntegral j) .&. mask)
+           return $ mkBvNat n (shiftR x (fromIntegral j) .&. mask)
            -- ^ Assuming big-endian order
     where
       slice = mkIdent (mkModuleName ["Prelude"]) "slice"
