@@ -28,7 +28,9 @@ import Verifier.SAW.TypedAST
 
 data Conversion =
     Conversion { runConversion ::
-        forall m t. (Monad m, Termlike t) => t -> Maybe ((TermF t -> m t) -> m t) }
+        forall m t. (Monad m, Termlike t) => t -> Maybe (TermBuilder m t) }
+
+type TermBuilder m t = (TermF t -> m t) -> m t
 
 ----------------------------------------------------------------------
 -- Destructors for terms
@@ -69,15 +71,15 @@ asBvNatLit t =
       bvNat = mkIdent (mkModuleName ["Prelude"]) "bvNat"
 
 ----------------------------------------------------------------------
--- Constructors for return values
+-- Term builders
 
-mkBool :: Monad m => Bool -> (TermF t -> m t) -> m t
+mkBool :: Monad m => Bool -> TermBuilder m t
 mkBool b mk = mk (FTermF (CtorApp (if b then idTrue else idFalse) []))
     where
       idTrue = mkIdent (mkModuleName ["Prelude"]) "True"
       idFalse = mkIdent (mkModuleName ["Prelude"]) "False"
 
-mkBvNat :: Monad m => Integer -> Integer -> (TermF t -> m t) -> m t
+mkBvNat :: Monad m => Integer -> Integer -> TermBuilder m t
 mkBvNat n x mk =
     do n' <- mk (FTermF (NatLit n))
        x' <- mk (FTermF (NatLit x))
