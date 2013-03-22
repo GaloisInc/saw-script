@@ -13,12 +13,13 @@ module Verifier.SAW.Rewriter
   , ruleOfTerm
   , ruleOfDefEqn
   , rulesOfTypedDef
-  , procOfTerm
   , addRule
   , delRule
   , addRules
   , addSimp
   , delSimp
+  , addConv
+  , addConvs
   , rewriteTerm
   , rewriteSharedTerm
   , rewriteSharedTermTypeSafe
@@ -49,17 +50,16 @@ type Context = [Term]
 
 data RewriteRule t
   = RewriteRule { ctxt :: [t], lhs :: t, rhs :: t }
-  | RewriteProc { ctxt :: [t], lhs :: t, proc :: Conversion }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
--- | A hack to make the derived instance for RewriteRule work.
-instance Eq Conversion where
-    x == y = True
+-- | A hack to allow storage of conversions in a term net.
+instance Eq (Conversion t) where
+    x == y = Net.toPat x == Net.toPat y
 
-instance Show Conversion where
-    show _ = "<<<Conversion>>>"
+instance Show (Conversion t) where
+    show x = show (Net.toPat x)
 
 termToPat :: Termlike t => t -> Net.Pat
 termToPat t =
@@ -77,6 +77,9 @@ instance Net.Pattern Term where
 
 instance Net.Pattern (SharedTerm s) where
   toPat = termToPat
+
+instance Net.Pattern t => Net.Pattern (RewriteRule t) where
+  toPat (RewriteRule _ lhs _) = Net.toPat lhs
 
 ----------------------------------------------------------------------
 -- Simplification procedures
@@ -119,7 +122,7 @@ first_order_match pat term = match pat term Map.empty
 ----------------------------------------------------------------------
 -- Simpsets
 
-type Simpset t = Net.Net (RewriteRule t)
+type Simpset t = Net.Net (Either (RewriteRule t) (Conversion t))
 
 eqIdent :: Ident
 eqIdent = mkIdent (mkModuleName ["Prelude"]) "Eq"
@@ -134,17 +137,6 @@ ruleOfTerm t =
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
-
-procOfTerm :: Termlike t => Conversion -> t -> RewriteRule t
-procOfTerm conv t =
-    case unwrapTermF t of
-      FTermF (DataTypeApp ident [_, x])
-          | ident == singleIdent -> RewriteProc { ctxt = [], lhs = x, proc = conv }
-      Pi _ ty body -> rule { ctxt = ty : ctxt rule }
-          where rule = procOfTerm conv body
-      _ -> error "procOfTerm: Illegal argument"
-    where
-      singleIdent = mkIdent (mkModuleName ["Prelude"]) "Single"
 
 ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
 ruleOfDefEqn ident (DefEqn pats rhs) =
@@ -181,10 +173,10 @@ emptySimpset :: Simpset t
 emptySimpset = Net.empty
 
 addRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
-addRule rule = Net.insert_term (lhs rule, rule)
+addRule rule = Net.insert_term (lhs rule, Left rule)
 
 delRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
-delRule rule = Net.delete_term (lhs rule, rule)
+delRule rule = Net.delete_term (lhs rule, Left rule)
 
 addRules :: (Eq t, Net.Pattern t) => [RewriteRule t] -> Simpset t -> Simpset t
 addRules rules ss = foldr addRule ss rules
@@ -194,6 +186,12 @@ addSimp prop = addRule (ruleOfTerm prop)
 
 delSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
 delSimp prop = delRule (ruleOfTerm prop)
+
+addConv :: Eq t => Conversion t -> Simpset t -> Simpset t
+addConv conv = Net.insert_term (conv, Right conv)
+
+addConvs :: Eq t => [Conversion t] -> Simpset t -> Simpset t
+addConvs convs ss = foldr addConv ss convs
 
 ----------------------------------------------------------------------
 -- Destructors for terms
@@ -251,7 +249,7 @@ rewriteTerm ss = rewriteAll
     rewriteSubterms :: Term -> Term
     rewriteSubterms (Term t) = Term (fmap rewriteAll t)
     rewriteTop :: Term -> Term
-    rewriteTop t = apply (Net.match_term ss t) t
+    rewriteTop t = apply [ r | Left r <- Net.match_term ss t ] t
     apply :: [RewriteRule Term] -> Term -> Term
     apply [] t = t
     apply (rule : rules) t =
@@ -269,7 +267,7 @@ rewriteTermChange ss = rewriteAll
     rewriteSubterms :: Term -> Change Term
     rewriteSubterms t@(Term tf) = preserve t $ Term <$> traverse rewriteAll tf
     rewriteTop :: Term -> Change Term
-    rewriteTop t = apply (Net.match_term ss t) t
+    rewriteTop t = apply [ r | Left r <- Net.match_term ss t ] t
     apply :: [RewriteRule Term] -> Term -> Change Term
     apply [] t = pure t
     apply (rule : rules) t =
@@ -314,21 +312,22 @@ rewriteSharedTerm sc ss t =
           Nothing -> apply (Net.match_term ss t) t
           Just io -> rewriteAll =<< io
     apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-             [RewriteRule (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
+             [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
+             SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t
-    apply (RewriteRule _ lhs rhs : rules) t =
+    apply (Left (RewriteRule _ lhs rhs) : rules) t =
       case first_order_match lhs t of
         Nothing -> apply rules t
         Just inst ->
             do putStrLn "REWRITING:"
                print lhs
                rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) rhs
-    apply (RewriteProc _ lhs conv : rules) t =
+    apply (Right conv : rules) t =
         do putStrLn "REWRITING:"
-           print lhs
+           print (Net.toPat conv)
            case runConversion conv t of
              Nothing -> apply rules t
-             Just k -> rewriteAll =<< k (scTermF sc)
+             Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
@@ -374,9 +373,10 @@ rewriteSharedTermTypeSafe sc ss t =
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t = apply (Net.match_term ss t) t
     apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-             [RewriteRule (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
+             [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
+             SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t
-    apply (rule : rules) t =
+    apply (Left rule : rules) t =
       case first_order_match (lhs rule) t of
         Nothing -> apply rules t
         Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
