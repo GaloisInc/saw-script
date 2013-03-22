@@ -469,9 +469,6 @@ scGlobalApply sc i ts =
 ------------------------------------------------------------
 -- Building terms using prelude functions
 
-preludeName :: ModuleName
-preludeName = mkModuleName ["Prelude"]
-
 scBoolType :: SharedContext s -> IO (SharedTerm s)
 scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Bool") [])
 

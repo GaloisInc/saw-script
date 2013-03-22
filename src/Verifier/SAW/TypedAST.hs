@@ -13,6 +13,7 @@ module Verifier.SAW.TypedAST
  , emptyModule
  , ModuleName, mkModuleName
  , moduleName
+ , preludeName
  , ModuleDecl(..)
  , moduleDecls
  , TypedDataType
@@ -109,6 +110,9 @@ isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 mkModuleName :: [String] -> ModuleName
 mkModuleName [] = error "internal: Unexpected empty module name"
 mkModuleName nms = assert (all isCtor nms) $ ModuleName nms
+
+preludeName :: ModuleName
+preludeName = mkModuleName ["Prelude"]
 
 data Ident = Ident { identModule :: ModuleName
                    , identName :: String
