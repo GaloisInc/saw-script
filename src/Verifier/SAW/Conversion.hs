@@ -175,8 +175,8 @@ append_bvNat =
     thenMatcher (asGlobalDef append <:> asNatLit <:> asNatLit <:>
                  asBoolType <:> asBvNatLit <:> asBvNatLit)
     (\((((((), m), n), _), (_, x)), (_, y)) ->
-         return $ mkBvNat (m + n) (shiftL x (fromIntegral n) .|. y))
-           -- ^ Assuming big-endian order
+--         return $ mkBvNat (m + n) (shiftL x (fromIntegral n) .|. y)) -- ^ Assuming big-endian order
+         return $ mkBvNat (m + n) (x .|. shiftL y (fromIntegral m))) -- ^ Assuming little-endian order
     where
       append = mkIdent (mkModuleName ["Prelude"]) "append"
 
@@ -222,8 +222,8 @@ get_bvNat =
     thenMatcher
     (asGlobalDef get <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
     (\(((((), n), ()), (n', x)), (i, j)) ->
-         return $ mkBool (testBit x (fromIntegral j)))
-         -- ^ Assuming big-endian order
+--         return $ mkBool (testBit x (fromIntegral j))) -- ^ Assuming big-endian order
+         return $ mkBool (testBit x (fromIntegral i))) -- ^ Assuming little-endian order
     where
       get = mkIdent (mkModuleName ["Prelude"]) "get"
 
@@ -236,7 +236,7 @@ slice_bvNat =
     (\((((((), _), i), n), j), (m, x)) ->
          guard (i + n + j == m) >>
          let mask = bit (fromIntegral n) - 1
-         in return $ mkBvNat n (shiftR x (fromIntegral j) .&. mask))
-           -- ^ Assuming big-endian order
+--         in return $ mkBvNat n (shiftR x (fromIntegral j) .&. mask)) -- ^ Assuming big-endian order
+         in return $ mkBvNat n (shiftR x (fromIntegral i) .&. mask)) -- ^ Assuming little-endian order
     where
       slice = mkIdent (mkModuleName ["Prelude"]) "slice"
