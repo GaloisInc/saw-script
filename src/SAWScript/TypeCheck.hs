@@ -127,7 +127,7 @@ instance TypeCheck (Expr LType) where
     Quote s t          -> t `typeEqual` quote >> return (Quote s t)
     Z i t              -> t `typeEqual` z     >> return (Z i t)
     Array es t         -> do es' <- mapM tCheck es
-                             let l = i $ length es
+                             let l = i $ fromIntegral $ length es
                                  ts = map decor es'
                              case ts of
                                []     -> do a <- logic newLVar

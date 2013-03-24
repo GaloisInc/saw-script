@@ -12,7 +12,7 @@ main = do {
    * be "pure". The "extract" functions automatically coerce from target
    * language types into internal types.
    */
-  cryptol_Ch : ([64],[64],[64]) -> [64];
+  cryptol_Ch : ([64], [64], [64] ) -> [64];
   cryptol_Ch <- Cryptol.extract "SHA384.cry" "Ch" sbv;
 
   cryptol_Maj : ([64],[64],[64]) -> [64];
@@ -32,33 +32,33 @@ main = do {
 
   cryptol_Block512_T1 : [6][64] -> [64];
   cryptol_Block512_T1 <- extract "SHA384-Ops.cry" "Block512_T1"
-    (do { Cryptol.sbv; Cryptol.uninterpret ["UpperSigma_1", "Ch"]; })
+    (do { Cryptol.sbv; Cryptol.uninterpret ["UpperSigma_1", "Ch"]; });
 
   cryptol_Block512_T2 : [3][64] -> [64];
   cryptol_Block512_T2 <- extract "SHA384-Ops.cry" "Block512_T2"
-    (do { Cryptol.sbv; Cryptol.uninterpret ["LowerSigma_1", "LowerSigma_0"]; })
+    (do { Cryptol.sbv; Cryptol.uninterpret ["LowerSigma_1", "LowerSigma_0"]; });
 
   cryptol_Block512_W : [4][64] -> [64];
   cryptol_Block512_W <- extract "SHA384-Ops.cry" "Block512_W"
-    (do { Cryptol.sbv; Cryptol.uninterpret ["LowerSigma_0", "LowerSigma_1"]; })
+    (do { Cryptol.sbv; Cryptol.uninterpret ["LowerSigma_0", "LowerSigma_1"]; });
 
   cryptol_Block512_Inner : ([80][64], [9][64]) -> [9][64];
   cryptol_Block512_Inner <- extract "SHA384-Ops.cry" "Block512_Inner"
-    (do { Cryptol.sbv; Cryptol.uninterpret ["Block512_T1", "Block512_T2"]; })
+    (do { Cryptol.sbv; Cryptol.uninterpret ["Block512_T1", "Block512_T2"]; });
 
   cryptol_Transform : ([8][64], [16][64]) -> [8][64];
   cryptol_Transform <- extract "SHA384-Ops.cry" "Transform"
-    (do { Cryptol.sbv; Cryptol.uninterpret ["Block512_Inner", "Block512_W"] })
+    (do { Cryptol.sbv; Cryptol.uninterpret ["Block512_Inner", "Block512_W"]; });
 
   cryptol_sha384_init : [8][64];
   cryptol_sha384_init <- Cryptol.extract "SHA384.cry" "iv384" Cryptol.sbv;
 
   cryptol_block512 : ([8][64], [16][64]) -> [8][64];
-  cryptol_block512 <- Cryptol.extract "SHA384.cry" "block512"
-    (do { Cryptol.sbv 
-        ; Cryptol.uninterpret ["LowerSigma_0", "LowerSigma_1",
-                               "UpperSigma_0", "UpperSigma_1", "Ch", "Maj"]
-        })
+  cryptol_block512 <- Cryptol.extract "SHA384.cry" "block512" (do {
+    Cryptol.sbv;
+    Cryptol.uninterpret ["LowerSigma_0", "LowerSigma_1",
+                         "UpperSigma_0", "UpperSigma_1", "Ch", "Maj"];
+  });
 
 
   /* Since Ch is such a simple function, we can extract it directly
@@ -79,16 +79,17 @@ main = do {
   /* We can state a simple theorem that the Cryptol and LLVM
    * implementations are equivalent. */
   llvm_cryptol_Ch : ([64],[64],[64]) -> Bit;
-  let llvm_cryptol_Ch (x, y, z) = cryptol_Ch(x, y, z) == llvm_Ch(x, y, z);
+  // TODO: Don't yet have pattern matching.
+  //let llvm_cryptol_Ch (x, y, z) = cryptol_Ch(x, y, z) == llvm_Ch(x, y, z);
 
   llvm_cryptol_Maj : ([64],[64],[64]) -> Bit;
-  let llvm_cryptol_Maj (x, y, z) = cryptol_Maj(x, y, z) == llvm_Maj(x, y, z);
+  //let llvm_cryptol_Maj (x, y, z) = cryptol_Maj(x, y, z) == llvm_Maj(x, y, z);
 
-  llvm_cryptol_UpperSigma0 : ([64]) -> Bit;
-  let llvm_cryptol_UpperSigma0 (x) = cryptol_UpperSigma0(x) == llvm_Sum0(x);
+  llvm_cryptol_UpperSigma0 : [64] -> Bit;
+  let llvm_cryptol_UpperSigma0 x = (cryptol_UpperSigma0 x) == (llvm_Sum0 x);
 
-  llvm_cryptol_UpperSigma1 : ([64]) -> Bit;
-  let llvm_cryptol_UpperSigma1 (x) = cryptol_UpperSigma1(x) == llvm_Sum1(x);
+  llvm_cryptol_UpperSigma1 : [64] -> Bit;
+  let llvm_cryptol_UpperSigma1 x = cryptol_UpperSigma1 x == llvm_Sum1 x;
 
   prove llvm_cryptol_Ch abc;
   prove llvm_cryptol_Maj abc;
@@ -104,7 +105,7 @@ main = do {
     x <- LLVM.var "x" (LLVM.int 64);
     y <- LLVM.var "y" (LLVM.int 64);
     z <- LLVM.var "z" (LLVM.int 64);
-    LLVM.return llvm_Ch(LLVM.from(x), LLVM.from(y), LLVM.from(z));
+    LLVM.return llvm_Ch(LLVM.from x, LLVM.from y, LLVM.from z);
     LLVM.verify rewrite;
   });
 
@@ -180,7 +181,7 @@ main = do {
      */
     LLVM.ensure_equal (LLVM.field ctx "nblocks") 0;
     LLVM.ensure_equal (LLVM.field ctx "count") 0;
-    
+
     /* This tells us what model to return. No "input" clauses means
      * it'll be a constant. */
     LLVM.output res;

@@ -24,6 +24,7 @@ library
     , pretty-show
     , saw-core
     , transformers
+    , vector
     --, Verinf
 
   hs-source-dirs: src
@@ -46,6 +47,7 @@ library
     SAWScript.Unify.Goal
     SAWScript.Unify.Ops
     SAWScript.Unify.Unification
+    SAWScript.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 

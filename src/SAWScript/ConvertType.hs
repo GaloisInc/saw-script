@@ -48,12 +48,12 @@ instance Groundable I where
 
 -- defixType {{{
 
-defixType :: Compiler (Module' LType CType) (Module' LType (Either Int Type))
+defixType :: Compiler (Module' LType CType) (Module' LType (Either Integer Type))
 defixType = compiler "DefixType" $ \(Module ds mn) ->
   Module ds <$> traverseFA dType mn
 
 class Functor f => Defixable f where
-  dType :: f (Either Int Type) -> Err (Either Int Type)
+  dType :: f (Either Integer Type) -> Err (Either Integer Type)
 
 instance (Defixable f, Defixable g) => Defixable (f :+: g) where
   dType cp = case cp of
@@ -82,11 +82,11 @@ instance Defixable I where
 
 -- removeEither {{{
 
-removeEither :: Compiler (Module' LType (Either Int Type)) (Module' LType Type)
+removeEither :: Compiler (Module' LType (Either Integer Type)) (Module' LType Type)
 removeEither = compiler "RemoveEither" $ \(Module ds mn) ->
   Module ds <$> T.traverse unEither mn
 
-unEither :: Either Int Type -> Err Type
+unEither :: Either Integer Type -> Err Type
 unEither (Right t) = return t
 unEither (Left x)  = fail ("nonsense type: " ++ show x)
 
