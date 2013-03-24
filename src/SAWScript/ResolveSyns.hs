@@ -15,7 +15,7 @@ import Data.Foldable
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (Module MPType) (Module MPType)
-resolveSyns = compiler "ResolveSyns" $ \m@(Module ds _) ->
+resolveSyns = compiler "ResolveSyns" $ \m@(Module _ ds _) ->
   runReaderT (rSyns m) $ buildEnv ds
 
 liftReader :: (Monad m) => m a -> ReaderT e m a
@@ -39,7 +39,7 @@ class ResolveSyns f where
   rSyns :: f -> RS f
 
 instance ResolveSyns (Module MPType) where
-  rSyns (Module ds mn) = Module <$> mapM rSyns ds <*> rSyns mn
+  rSyns (Module mname ds mn) = Module mname <$> mapM rSyns ds <*> rSyns mn
 
 instance ResolveSyns (TopStmt MPType) where
   rSyns s = case s of

@@ -61,8 +61,8 @@ liftPoly = compiler "LiftPoly" $ \input ->
     Right rs  -> fail ("Ambiguous lifting:" ++ PP.ppShow rs)
 
 getStream :: Module MPType -> Stream ((Module LType, LSEnv), (Int, Subst LType))
-getStream (Module ds mn) = flip runGoal initGState $ evalLS $
-  Module <$> traverse saveLPoly ds <*> saveLPoly mn
+getStream (Module mname ds mn) = flip runGoal initGState $ evalLS $
+  Module mname <$> traverse saveLPoly ds <*> saveLPoly mn
 
 evalStream :: Stream ((Module LType, LSEnv), (Int, Subst LType)) -> Either [String] [Lifted]
 evalStream = fromStream Nothing Nothing . fmap getModuleGen

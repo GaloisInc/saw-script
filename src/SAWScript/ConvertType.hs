@@ -24,8 +24,8 @@ varNames = drop 1 (("" : names') ++ ((++) <$> varNames <*> names'))
 -- groundType {{{
 
 groundType :: Compiler (Module LType) (Module' LType CType)
-groundType = compiler "GroundType" $ \(Module ds mn) -> 
-  Module ds <$> traverseFA gType mn
+groundType = compiler "GroundType" $ \(Module mname ds mn) -> 
+  Module mname ds <$> traverseFA gType mn
 
 class Functor f => Groundable f where
   gType :: f CType -> Err CType
@@ -49,8 +49,8 @@ instance Groundable I where
 -- defixType {{{
 
 defixType :: Compiler (Module' LType CType) (Module' LType (Either Integer Type))
-defixType = compiler "DefixType" $ \(Module ds mn) ->
-  Module ds <$> traverseFA dType mn
+defixType = compiler "DefixType" $ \(Module mname ds mn) ->
+  Module mname ds <$> traverseFA dType mn
 
 class Functor f => Defixable f where
   dType :: f (Either Integer Type) -> Err (Either Integer Type)
@@ -83,8 +83,8 @@ instance Defixable I where
 -- removeEither {{{
 
 removeEither :: Compiler (Module' LType (Either Integer Type)) (Module' LType Type)
-removeEither = compiler "RemoveEither" $ \(Module ds mn) ->
-  Module ds <$> T.traverse unEither mn
+removeEither = compiler "RemoveEither" $ \(Module mname ds mn) ->
+  Module mname ds <$> T.traverse unEither mn
 
 unEither :: Either Integer Type -> Err Type
 unEither (Right t) = return t
@@ -93,8 +93,8 @@ unEither (Left x)  = fail ("nonsense type: " ++ show x)
 -- }}}
 
 reifyDeclarations :: Compiler (Module' LType Type) (Module' PType Type)
-reifyDeclarations = compiler "ReifyDeclarations" $ \(Module ds mn) ->
-  Module <$> mapM runRDecs ds <*> pure mn
+reifyDeclarations = compiler "ReifyDeclarations" $ \(Module mname ds mn) ->
+  Module mname <$> mapM runRDecs ds <*> pure mn
   where
   runRDecs = return . flip evalState initRState . traverseFA rDecs
 

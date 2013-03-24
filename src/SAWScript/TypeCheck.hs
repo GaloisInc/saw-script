@@ -33,9 +33,9 @@ typeCheck = compiler "TypeCheck" $ \(Lifted m gen env) ->
     Right rs  -> fail $ unlines ("Ambiguous typing:" : map show rs)
 
 getGoal :: [(Name,GoalM LType LType)] -> Module LType -> GoalM LType (Module LType)
-getGoal env m@(Module ds _) = flip runReaderT (newPolyEnv env <> F.foldMap buildEnv ds) $ do
-  (Module ds' mn') <- tCheck m
-  logic (Module <$> mapM resolve ds' <*> resolve mn')
+getGoal env m@(Module _ ds _) = flip runReaderT (newPolyEnv env <> F.foldMap buildEnv ds) $ do
+  (Module mname ds' mn') <- tCheck m
+  logic (Module mname <$> mapM resolve ds' <*> resolve mn')
 
 instantiateGoal :: Int -> GoalM LType a -> Either [String] [a]
 instantiateGoal gen = fromStream Nothing Nothing . fmap fst . flip runStateT (gen,emptyS) . runGoalM
@@ -92,10 +92,10 @@ class TypeCheck f where
   tCheck :: f -> TC f
 
 instance TypeCheck (Module LType) where
-  tCheck (Module ds mn) = do
+  tCheck (Module mname ds mn) = do
     ds' <- mapM tCheck ds
     mn' <- tCheck mn
-    return (Module ds' mn')
+    return (Module mname ds' mn')
 
 instance TypeCheck (TopStmt LType) where
   tCheck ts = case ts of
