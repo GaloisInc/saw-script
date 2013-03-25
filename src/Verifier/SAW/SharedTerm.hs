@@ -62,11 +62,14 @@ module Verifier.SAW.SharedTerm
 --  , scFalse
     -- ** Variable substitution
   , instantiateVarList
+  , asTermF
+  , asApp
+  , asNatLit
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
-import Control.Monad (foldM, liftM)
+import Control.Monad (foldM, liftM, when)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.Bits
@@ -80,6 +83,7 @@ import Text.PrettyPrint.HughesPJ
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
+import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
 type TermIndex = Word64
@@ -110,15 +114,50 @@ instance Termlike (SharedTerm s) where
   unwrapTermF STVar{} = error "unwrapTermF called on STVar{}"
   unwrapTermF (STApp _ tf) = tf
 
+-- Shared context.
+
+data SharedContext s = SharedContext
+  { -- | Returns the current module for the underlying global theory.
+    scModule        :: IO Module
+  , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
+    -- | Create a global variable with the given identifier (which may be "_") and type.
+  , scFreshGlobal   :: String -> SharedTerm s -> IO (SharedTerm s)
+  }
+
+scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
+scFlatTermF sc ftf = scTermF sc (FTermF ftf)
+
+-- | Returns shared term associated with ident.
+-- Does not check module namespace.
+scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
+scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
+
+scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scApply sc f = scFlatTermF sc . App f
+
+-- | Applies the constructor with the given name to the list of
+-- arguments. This version does no checking against the module.
+scDataTypeApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
+scDataTypeApp sc ident args = scFlatTermF sc (DataTypeApp ident args)
+
+-- | Applies the constructor with the given name to the list of
+-- arguments. This version does no checking against the module.
+scCtorApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
+scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
+
+-- SharedContext implementation.
+
 data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
                      , acNextIdx :: !TermIndex
                      }
+
+type AppCacheRef s = MVar (AppCache s)
 
 emptyAppCache :: AppCache s
 emptyAppCache = AC Map.empty 0
 
 -- | Return term for application using existing term in cache if it is avaiable.
-getTerm :: MVar (AppCache s) -> TermF (SharedTerm s) -> IO (SharedTerm s)
+getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
   modifyMVar r $ \s -> do
     case Map.lookup a (acBindings s) of
@@ -194,7 +233,8 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           lift $ scSort sc (max ltp rtp)
         Let defs rhs -> undefined defs rhs
         LocalVar _ tp -> return tp
-    ftermf :: FlatTermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    ftermf :: FlatTermF (SharedTerm s)
+           -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ typeOfGlobal sc d
@@ -221,6 +261,8 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit i -> lift $ scNatType sc
         ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
+        FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
+        DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
 
 -- | The inverse function to @sharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
@@ -382,27 +424,8 @@ instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts 
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building SharedTerms.
 
--- | Operations that are defined, but not
-data SharedContext s = SharedContext
-  { -- | Returns the current module for the underlying global theory.
-    scModule :: IO Module
-  , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
-  -- | Create a global variable with the given identifier (which may be "_") and type.
-  , scFreshGlobal   :: String -> SharedTerm s -> IO (SharedTerm s)
-  }
-
-scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
-scFlatTermF sc ftf = scTermF sc (FTermF ftf)
-
-scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scApply sc f x = scFlatTermF sc (App f x)
-
 scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll sc = foldlM (scApply sc)
-
--- | This version does no checking against the module namespace.
-scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
-scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
 -- | Returns the defined constant with the given name. Fails if no
 -- such constant exists in the module.
@@ -412,16 +435,6 @@ scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
 scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
 scDefTerm sc d = scGlobalDef sc (defIdent d)
-
--- | Applies the constructor with the given name to the list of
--- arguments. This version does no checking against the module.
-scDataTypeApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
-scDataTypeApp sc ident args = scFlatTermF sc (DataTypeApp ident args)
-
--- | Applies the constructor with the given name to the list of
--- arguments. This version does no checking against the module.
-scCtorApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
-scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
@@ -485,13 +498,13 @@ scGlobalApply sc i ts =
 -- Building terms using prelude functions
 
 preludeName :: ModuleName
-preludeName = mkModuleName ["Prelude"]
+preludeName = preludeModuleName
 
 scBoolType :: SharedContext s -> IO (SharedTerm s)
-scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Bool") [])
+scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeModuleName "Bool") [])
 
 scNatType :: SharedContext s -> IO (SharedTerm s)
-scNatType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeName "Nat") [])
+scNatType sc = scFlatTermF sc (DataTypeApp preludeNatIdent [])
 
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
@@ -578,20 +591,26 @@ mkSharedContext m = do
            , scFreshGlobal = freshGlobal
            }
 
+asTermF :: SharedTerm s -> Maybe (TermF (SharedTerm s))
+asTermF (STApp _ app) = Just app
+asTermF _ = Nothing
+
+asFTermF :: SharedTerm s -> Maybe (FlatTermF (SharedTerm s))
+asFTermF t = do FTermF ftf <- asTermF t; return ftf
+
 asNatLit :: SharedTerm s -> Maybe Integer
-asNatLit (STApp _ (FTermF (NatLit i))) = Just i
-asNatLit _ = Nothing
+asNatLit t = do NatLit i <- asFTermF t; return i
 
 asApp :: SharedTerm s -> Maybe (SharedTerm s, SharedTerm s)
-asApp (STApp _ (FTermF (App t u))) = Just (t,u)
-asApp _ = Nothing
+asApp t = do App x y <- asFTermF t; return (x,y)
 
 asApp3Of :: SharedTerm s -> SharedTerm s -> Maybe (SharedTerm s, SharedTerm s, SharedTerm s)
 asApp3Of op s3 = do
   (s2,a3) <- asApp s3
   (s1,a2) <- asApp s2
   (s0,a1) <- asApp s1
-  if s0 == op then return (a1,a2,a3) else fail ""
+  when (s0 /= op) $ fail "Unexpected op"
+  return (a1,a2,a3)
 
 -- | Returns term as an integer if it is an integer, signed
 -- bitvector, or unsigned bitvector.

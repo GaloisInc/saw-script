@@ -1,15 +1,16 @@
--- Provides access to the preludeLanguage.Haskell.TH
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 module Verifier.SAW.Prelude
   ( Module
   , module Verifier.SAW.Prelude
+  , module Verifier.SAW.Prelude.Constants
   ) where
 
 import Verifier.SAW.ParserUtils
+import Verifier.SAW.Prelude.Constants
 
 $(runDecWriter $ do
-    prelude <- mkDecModule [] "preludeModule" "prelude/Prelude.saw"
-    decSharedModuleFns "Prelude" (decVal prelude)
+    prelude <- defineModuleFromFile [] "preludeModule" "prelude/Prelude.saw"
+    declareSharedModuleFns "Prelude" (decVal prelude)
  )
+

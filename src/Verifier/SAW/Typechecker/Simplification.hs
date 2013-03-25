@@ -5,6 +5,8 @@ module Verifier.SAW.Typechecker.Simplification
   , preludeZeroIdent
   , preludeSuccIdent
   , preludeVecIdent
+  , preludeFloatIdent
+  , preludeDoubleIdent
   , tryMatchPat
   , Subst
   , extendPatContext
@@ -26,24 +28,9 @@ import Data.Vector (Vector)
 import Text.PrettyPrint
 
 import Verifier.SAW.Position
+import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
-import Verifier.SAW.TypedAST
-
-preludeModuleName :: ModuleName
-preludeModuleName = mkModuleName ["Prelude"]
-
-preludeNatIdent :: Ident
-preludeNatIdent =  mkIdent preludeModuleName "Nat"
-
-preludeZeroIdent :: Ident
-preludeZeroIdent =  mkIdent preludeModuleName "Zero"
-
-preludeSuccIdent :: Ident
-preludeSuccIdent =  mkIdent preludeModuleName "Succ"
-
-preludeVecIdent :: Ident
-preludeVecIdent =  mkIdent preludeModuleName "Vec"
 
 extendPatContext :: TermContext s -> TCPat -> TermContext s
 extendPatContext tc0 pat = V.foldl (flip $ uncurry consBoundVar) tc0 (patBoundVars pat)

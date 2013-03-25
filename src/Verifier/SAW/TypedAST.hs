@@ -287,9 +287,14 @@ data FlatTermF e
   | Sort Sort
 
     -- Primitive builtin values
+    -- | Natural number with given value (negative numbers are not allowed).
   | NatLit Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
+    -- | Floating point literal
+  | FloatLit Float
+    -- | Double precision floating point literal.
+  | DoubleLit Double
   deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
@@ -457,6 +462,10 @@ ppFlatTermF pp prec tf =
     Sort s -> pure $ text (show s)
     NatLit i -> pure $ integer i
     ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp 1) (V.toList vl)
+    FloatLit v  -> pure $ text (show v)
+    DoubleLit v -> pure $ text (show v)
+
+
 
 newtype Term = Term (TermF Term)
   deriving (Eq)
