@@ -47,6 +47,7 @@ only wildcards in patterns.  Requires operands to be beta-eta-normal.
 -- Laziness is important here, as we will often create and partially
 -- traverse patterns for very large terms.
 data Pat = Atom String | Var | App Pat Pat
+    deriving Eq
 
 class Pattern t where
   toPat :: t -> Pat
