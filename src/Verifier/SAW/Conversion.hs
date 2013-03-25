@@ -7,9 +7,16 @@ module Verifier.SAW.Conversion
   , runConversion
   , TermBuilder
   , runTermBuilder
+  , natConversions
+  , finConversions
+  , vecConversions
+  , bvConversions
   , finInc_FinVal
   , finIncLim_FinVal
+  , succ_NatLit
   , addNat_NatLit
+  , get_VecLit
+  , append_VecLit
   , append_bvNat
   , bvAdd_bvNat
   , bvSub_bvNat
@@ -23,6 +30,7 @@ import Control.Applicative ((<$>), pure, (<*>))
 import Control.Monad (guard, (>=>))
 import Data.Bits
 import Data.Map (Map)
+import qualified Data.Vector as V
 
 import Verifier.SAW.SharedTerm (Termlike(..))
 import qualified Verifier.SAW.TermNet as Net
@@ -35,6 +43,9 @@ data Matcher t a = Matcher Net.Pat (t -> Maybe a)
 
 thenMatcher :: Matcher t a -> (a -> Maybe b) -> Matcher t b
 thenMatcher (Matcher pat match) f = Matcher pat (match >=> f)
+
+asAny :: Matcher t t
+asAny = Matcher Net.Var Just
 
 infixl 8 <:>
 
@@ -52,6 +63,12 @@ asNatLit :: Termlike t => Matcher t Integer
 asNatLit = Matcher Net.Var match
     where
       match (unwrapTermF -> FTermF (NatLit i)) = Just i
+      match _ = Nothing
+
+asVecLit :: Termlike t => Matcher t (t, V.Vector t)
+asVecLit = Matcher Net.Var match
+    where
+      match (unwrapTermF -> FTermF (ArrayValue t xs)) = Just (t, xs)
       match _ = Nothing
 
 asGlobalDef :: Termlike t => Ident -> Matcher t ()
@@ -76,6 +93,15 @@ asFinValLit = Matcher pat match
       match _ = Nothing
       finval = mkIdent (mkModuleName ["Prelude"]) "FinVal"
 
+asSuccLit :: Termlike t => Matcher t Integer
+asSuccLit = Matcher pat match
+    where
+      pat = Net.App (Net.Atom (show succ)) Net.Var
+      match (unwrapTermF -> FTermF (CtorApp ident [x]))
+          | ident == succ = destNatLit x
+      match _ = Nothing
+      succ = mkIdent (mkModuleName ["Prelude"]) "Succ"
+
 asBvNatLit :: Termlike t => Matcher t (Integer, Integer)
 asBvNatLit =
     thenMatcher (asGlobalDef bvNat <:> asNatLit <:> asNatLit) $
@@ -89,6 +115,9 @@ asBvNatLit =
 newtype TermBuilder t =
     TermBuilder { runTermBuilder :: forall m. Monad m => (TermF t -> m t) -> m t }
 
+mkAny :: t -> TermBuilder t
+mkAny t = TermBuilder $ \mk -> return t
+
 mkBool :: Bool -> TermBuilder t
 mkBool b = TermBuilder $ \mk ->
     mk (FTermF (CtorApp (if b then idTrue else idFalse) []))
@@ -98,6 +127,9 @@ mkBool b = TermBuilder $ \mk ->
 
 mkNatLit :: Integer -> TermBuilder t
 mkNatLit n = TermBuilder $ \mk -> mk (FTermF (NatLit n))
+
+mkVecLit :: t -> V.Vector t -> TermBuilder t
+mkVecLit t xs = TermBuilder $ \mk -> mk (FTermF (ArrayValue t xs))
 
 mkFinVal :: Integer -> Integer -> TermBuilder t
 mkFinVal i j = TermBuilder $ \mk ->
@@ -137,7 +169,13 @@ instance Net.Pattern (Conversion t) where
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
 
--- type Nat
+-- | Conversions for operations on Nat literals
+natConversions :: Termlike t => [Conversion t]
+natConversions = [succ_NatLit, addNat_NatLit]
+
+succ_NatLit :: Termlike t => Conversion t
+succ_NatLit =
+    Conversion $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
 
 addNat_NatLit :: Termlike t => Conversion t
 addNat_NatLit =
@@ -147,7 +185,9 @@ addNat_NatLit =
     where
       addNat = mkIdent (mkModuleName ["Prelude"]) "addNat"
 
--- type Fin
+-- | Conversions for operations on Fin literals
+finConversions :: Termlike t => [Conversion t]
+finConversions = [finInc_FinVal, finIncLim_FinVal]
 
 finInc_FinVal :: Termlike t => Conversion t
 finInc_FinVal =
@@ -167,7 +207,32 @@ finIncLim_FinVal =
     where
       finIncLim = mkIdent (mkModuleName ["Prelude"]) "finIncLim"
 
--- Bitvectors
+-- | Conversions for operations on vector literals
+vecConversions :: Termlike t => [Conversion t]
+vecConversions = [get_VecLit, append_VecLit]
+
+get_VecLit :: Termlike t => Conversion t
+get_VecLit =
+    Conversion $
+    thenMatcher (asGlobalDef get <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
+    (\(((((), n), e), (_, xs)), (i, j)) ->
+         return $ mkAny ((V.!) xs (fromIntegral i)))
+    where
+      get = mkIdent (mkModuleName ["Prelude"]) "get"
+
+append_VecLit :: Termlike t => Conversion t
+append_VecLit =
+    Conversion $
+    thenMatcher (asGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
+    (\((((((), m), n), e), (_, xs)), (_, ys)) ->
+         return $ mkVecLit e ((V.++) xs ys))
+    where
+      append = mkIdent (mkModuleName ["Prelude"]) "append"
+
+-- | Conversions for operations on bitvector literals
+bvConversions :: Termlike t => [Conversion t]
+bvConversions =
+    [append_bvNat, bvAdd_bvNat, bvSub_bvNat, bvule_bvNat, bvult_bvNat, get_bvNat, slice_bvNat]
 
 append_bvNat :: Termlike t => Conversion t
 append_bvNat =
