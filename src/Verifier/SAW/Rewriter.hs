@@ -22,6 +22,7 @@ module Verifier.SAW.Rewriter
   , addConvs
   , rewriteTerm
   , rewriteSharedTerm
+  , rewriteSharedTermToTerm
   , rewriteSharedTermTypeSafe
   ) where
 
@@ -34,6 +35,7 @@ import qualified Data.Foldable as Foldable
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import Data.Traversable (Traversable, traverse)
 
 import Verifier.SAW.Cache
