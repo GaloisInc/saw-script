@@ -185,6 +185,8 @@ instance TypeCheck (Expr LType) where
                              b' <- (compose $ uncurry extendType) (zip ns es') $ tCheck b
                              return (LetBlock (zip ns es') b')
 
+tUnit = typeEqual unit
+
 whenJust :: Monad m => (a -> m ()) -> Maybe a -> m ()
 whenJust f m = case m of
   Just a  -> f a
