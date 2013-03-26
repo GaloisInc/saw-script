@@ -74,6 +74,9 @@ import Control.Monad (foldM, liftM)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.Bits
+import Data.Hashable (Hashable, hashWithSalt)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word
@@ -92,6 +95,9 @@ type VarIndex = Word64
 data SharedTerm s
   = STVar !VarIndex !String !(SharedTerm s)
   | STApp !TermIndex !(TermF (SharedTerm s))
+
+instance Hashable (SharedTerm s) where
+    hashWithSalt x (STApp idx _) = hashWithSalt x idx
 
 instance Eq (SharedTerm s) where
   STVar x _ _ == STVar y _ _ = x == y
@@ -114,22 +120,22 @@ instance Termlike (SharedTerm s) where
   unwrapTermF STVar{} = error "unwrapTermF called on STVar{}"
   unwrapTermF (STApp _ tf) = tf
 
-data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
+data AppCache s = AC { acBindings :: !(HashMap (TermF (SharedTerm s)) (SharedTerm s))
                      , acNextIdx :: !TermIndex
                      }
 
 emptyAppCache :: AppCache s
-emptyAppCache = AC Map.empty 0
+emptyAppCache = AC HMap.empty 0
 
 -- | Return term for application using existing term in cache if it is avaiable.
 getTerm :: MVar (AppCache s) -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
   modifyMVar r $ \s -> do
-    case Map.lookup a (acBindings s) of
+    case HMap.lookup a (acBindings s) of
       Just t -> return (s,t)
       Nothing -> seq s' $ return (s',t)
         where t = STApp (acNextIdx s) a
-              s' = s { acBindings = Map.insert a t (acBindings s)
+              s' = s { acBindings = HMap.insert a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
 

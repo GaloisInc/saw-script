@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -76,19 +77,29 @@ import Control.Monad.Identity (runIdentity)
 import Data.Bits
 import Data.Char
 import Data.Foldable
+import Data.Hashable (Hashable, hashWithSalt)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import GHC.Generics (Generic)
 import Text.PrettyPrint.HughesPJ
 
 import Prelude hiding (all, concatMap, foldr, sum)
 
 import Verifier.SAW.Utils
 
+instance (Hashable k, Hashable a) => Hashable (Map k a) where
+    hashWithSalt x m = hashWithSalt x (Map.assocs m)
+
+instance Hashable a => Hashable (Vector a) where
+    hashWithSalt x v = hashWithSalt x (V.toList v)
+
 data ModuleName = ModuleName [String]
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
    show (ModuleName s) = intercalate "." (reverse s)
@@ -117,7 +128,9 @@ preludeName = mkModuleName ["Prelude"]
 data Ident = Ident { identModule :: ModuleName
                    , identName :: String
                    }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable Ident -- automatically derived
 
 instance Show Ident where
   show (Ident m s) = shows m ('.' : s)
@@ -138,7 +151,9 @@ parseIdent s0 =
             _ -> internalError "breakEach failed"
     
 newtype Sort = SortCtor { _sortIndex :: Integer }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable Sort -- automatically derived
 
 instance Show Sort where
   showsPrec p (SortCtor i) = showParen (p >= 10) (showString "sort " . shows i)
@@ -172,7 +187,9 @@ data Pat e = -- | Variable bound by pattern.
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PCtor Ident [Pat e]
-  deriving (Eq,Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq,Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (Pat e) -- automatically derived
 
 patBoundVarCount :: Pat e -> DeBruijnIndex
 patBoundVarCount p =
@@ -206,7 +223,9 @@ lift2 f h x y = h (f x) (f y)
 
 data LocalDef e
    = LocalFnDef String e [DefEqn e]
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (LocalDef e) -- automatically derived
 
 localVarNames :: LocalDef e -> [String]
 localVarNames (LocalFnDef nm _ _) = [nm]
@@ -229,7 +248,9 @@ instance Show (Def e) where
 data DefEqn e
   = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
-  deriving (Functor, Foldable, Traversable, Show)
+  deriving (Functor, Foldable, Traversable, Generic, Show)
+
+instance Hashable e => Hashable (DefEqn e) -- automatically derived
 
 instance (Eq e) => Eq (DefEqn e) where
   DefEqn xp xr == DefEqn yp yr = xp == yp && xr == yr
@@ -305,7 +326,9 @@ data FlatTermF e
   | NatLit Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
-  deriving (Eq, Ord, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
 zipWithFlatTermF f = go
@@ -347,7 +370,9 @@ data TermF e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex !e
-  deriving (Eq, Ord, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (TermF e) -- automatically derived
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
