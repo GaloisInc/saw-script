@@ -19,8 +19,14 @@ import qualified Verifier.SAW.TypedAST as SC
 newtype M a = M (ErrorT String Identity a)
   deriving (Functor, Monad, MonadError String)
 
-translateModule :: SS.Module' SS.PType SS.Type -> M SC.Module
-translateModule (SS.Module mname tss main) =
+runTranslate :: M a -> Either String a
+runTranslate (M a) = runIdentity $ runErrorT a
+
+translateModule :: SS.Module' SS.PType SS.Type -> Either String SC.Module
+translateModule = runTranslate . translateModule'
+
+translateModule' :: SS.Module' SS.PType SS.Type -> M SC.Module
+translateModule' (SS.Module mname tss main) =
   flip SC.insDef mainDef <$> foldM insertTopStmt (SC.emptyModule modName) tss
     where modName = SC.mkModuleName [mname]
           mainName = SC.mkIdent modName "main"

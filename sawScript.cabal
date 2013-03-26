@@ -67,4 +67,5 @@ executable saw
     , QuickCheck
     , transformers
     , sawScript
+    , saw-core
     , unix
