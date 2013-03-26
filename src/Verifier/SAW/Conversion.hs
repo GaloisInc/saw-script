@@ -232,7 +232,8 @@ append_VecLit =
 -- | Conversions for operations on bitvector literals
 bvConversions :: Termlike t => [Conversion t]
 bvConversions =
-    [append_bvNat, bvAdd_bvNat, bvSub_bvNat, bvule_bvNat, bvult_bvNat, get_bvNat, slice_bvNat]
+    [append_bvNat, bvAdd_bvNat, bvSub_bvNat, bvNot_bvNat,
+     bvule_bvNat, bvult_bvNat, get_bvNat, slice_bvNat]
 
 append_bvNat :: Termlike t => Conversion t
 append_bvNat =
@@ -264,6 +265,16 @@ bvSub_bvNat =
          in return $ mkBvNat n ((x - y) .&. mask))
     where
       bvSub = mkIdent (mkModuleName ["Prelude"]) "bvSub"
+
+bvNot_bvNat :: Termlike t => Conversion t
+bvNot_bvNat =
+    Conversion $
+    thenMatcher (asGlobalDef bvNot <:> asNatLit <:> asBvNatLit)
+    (\(((), n), (_, x)) ->
+         let mask = bit (fromIntegral n) - 1
+         in return $ mkBvNat n (x `xor` mask))
+    where
+      bvNot = mkIdent (mkModuleName ["Prelude"]) "bvNot"
 
 bvule_bvNat :: Termlike t => Conversion t
 bvule_bvNat =
