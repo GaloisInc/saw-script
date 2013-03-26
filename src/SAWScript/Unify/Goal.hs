@@ -71,9 +71,12 @@ type Stream = EitherT String Interleave
 runStream :: Stream a -> Interleave (Either String a)
 runStream = runEitherT
 
+-- Recent versions of the 'either' package define this.
+{-
 instance MonadPlus m => MonadPlus (EitherT e m) where
   mzero = EitherT $ mzero
   (EitherT m1) `mplus` (EitherT m2) = EitherT (m1 `mplus` m2)
+-}
 
 firstAnswer :: Stream a -> Maybe a
 firstAnswer = fstAns . runInterleave . runEitherT

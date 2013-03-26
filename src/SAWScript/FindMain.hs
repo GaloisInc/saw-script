@@ -15,11 +15,15 @@ multiMainErr :: Err b
 multiMainErr = fail "Multiple main functions defined."
 
 -- | Takes a list of TopStmts, separates out any main blocks, failing if there is not exactly one.
-findMain :: Compiler [TopStmt MPType] (Module MPType)
-findMain = compiler "FindMain" $ \input ->
+findMain :: String -> Compiler [TopStmt MPType] (Module MPType)
+findMain mname = compiler "FindMain" $ \input ->
   case separate sepMain input of
   ([],_)    -> noMainErr
-  ([mn],ts) -> return $ Module { declarations = ts, mainBlock = mn }
+  ([mn],ts) -> return $ Module {
+                 modName = mname
+               , declarations = ts
+               , mainBlock = mn
+               }
   _ -> multiMainErr
 
 -- | Takes a TopStmt and possibly returns two lists, the first a list of all the main blocks found in the module,

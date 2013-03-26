@@ -22,7 +22,9 @@ library
     , old-time
     , pretty
     , pretty-show
+    , saw-core
     , transformers
+    , vector
     --, Verinf
 
   hs-source-dirs: src
@@ -36,6 +38,7 @@ library
     SAWScript.LiftPoly
     SAWScript.Parser
     SAWScript.ResolveSyns
+    SAWScript.ToSAWCore
     SAWScript.Token
     SAWScript.TypeCheck
     SAWScript.Unify
@@ -44,6 +47,7 @@ library
     SAWScript.Unify.Goal
     SAWScript.Unify.Ops
     SAWScript.Unify.Unification
+    SAWScript.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 
@@ -63,4 +67,5 @@ executable saw
     , QuickCheck
     , transformers
     , sawScript
+    , saw-core
     , unix
