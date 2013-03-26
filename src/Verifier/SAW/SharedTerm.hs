@@ -10,6 +10,7 @@ module Verifier.SAW.SharedTerm
   , TermIndex
   , Termlike(..)
   , looseVars
+  , unshare
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext

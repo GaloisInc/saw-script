@@ -329,6 +329,35 @@ rewriteSharedTerm sc ss t =
              Nothing -> apply rules t
              Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
 
+-- | Rewriter for shared terms, returning an unshared term.
+rewriteSharedTermToTerm ::
+    forall s. SharedContext s -> Simpset Term -> SharedTerm s -> IO Term
+rewriteSharedTermToTerm sc ss t =
+    do cache <- newCache
+       let ?cache = cache in rewriteAll t
+  where
+    rewriteAll :: (?cache :: Cache IO TermIndex Term) => SharedTerm s -> IO Term
+    rewriteAll (asBetaRedex -> Just (_, _, body, arg)) =
+        instantiateVar sc 0 arg body >>= rewriteAll
+    rewriteAll (STApp tidx tf) =
+        useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
+    rewriteAll t = return (unshare t)
+    rewriteTop :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
+    rewriteTop (asTupleRedex -> Just (ts, i)) = return (ts !! (i - 1))
+    rewriteTop (asRecordRedex -> Just (m, i)) = return (fromJust (Map.lookup i m))
+    rewriteTop t = apply (Net.match_term ss t) t
+    apply :: (?cache :: Cache IO TermIndex Term) =>
+             [Either (RewriteRule Term) (Conversion Term)] -> Term -> IO Term
+    apply [] t = return t
+    apply (Left (RewriteRule _ lhs rhs) : rules) t =
+        case first_order_match lhs t of
+          Nothing -> apply rules t
+          Just inst -> return (instantiateVarList 0 (Map.elems inst) rhs)
+    apply (Right conv : rules) t =
+         case runConversion conv t of
+             Nothing -> apply rules t
+             Just tb -> runTermBuilder tb (return . Term)
+
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
     :: forall s. SharedContext s -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
