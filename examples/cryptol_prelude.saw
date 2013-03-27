@@ -2,12 +2,12 @@
  * counterexample. These work like the method specs in the first version
  * of SAWScript.
  */
-verify : String -> String -> CryptolSetup () -> CryptolVerifyResult ();
+verify : String -> String -> CryptolSetup () -> TopLevel CryptolVerifyResult;
 
 /* Extract pure models from suitably well-structured programs. We assume
  * that these are well-typed, and check at runtime.
  */
-extract : {a} String -> String -> CryptolSetup () -> a;
+extract : {a} String -> String -> CryptolSetup () -> TopLevel a;
 
 /* One method is currently available for Cryptol extraction. */
 sbv : CryptolSetup ();

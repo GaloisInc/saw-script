@@ -9,7 +9,7 @@ yices : ProofScript ProofResult;
 abc : ProofScript ProofResult;
 
 /* Prove the same goal with multiple provers. */
-multi_prove : [ProofScript ProofResult] -> ProofScript ProofResult;
+multi_prove : {a} [a](ProofScript ProofResult) -> ProofScript ProofResult;
 
 /* TODO: might some theorem provers return new, simplified goals? */
 
@@ -23,7 +23,7 @@ expand : {a} a -> Rule;
 rewrite : ProofScript Goal;
 
 /* Rewrite with a specific set of results. */
-rewrite_with : [Rule] -> ProofScript Goal;
+rewrite_with : {a} [a]Rule -> ProofScript Goal;
 
 /* Any boolean expression can be a goal. */
 goal : Bit -> Goal;
@@ -46,12 +46,3 @@ quickcheck : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
 print : {a} a -> TopLevel ();
 
 proof_result : {a} ProofResult -> (Theorem -> a) -> (CounterExample -> a) -> a;
-
-/* Something to make it easy to print the result of a proof. We don't
- * have case expressions in the language at the moment, and instead use
- * destructor functions for any built-in algebraic data types.
- */
-show_result : ProofResult () -> TopLevel ()
-show_result r = proof_result r
-                (\thm -> print "Success!")
-                (\cex -> do { print "Failure:" ; print cex })
