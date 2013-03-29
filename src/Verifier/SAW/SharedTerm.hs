@@ -10,6 +10,7 @@ module Verifier.SAW.SharedTerm
   , TermIndex
   , Termlike(..)
   , looseVars
+  , unshare
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
@@ -40,11 +41,14 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
-  , scTypeOf
   , scPrettyTerm
   , scViewAsBool
   , scViewAsNum
   , scGlobalApply
+  , scSharedTerm
+    -- ** Type checking
+  , scTypeOf
+  , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend
   , scIte
@@ -61,6 +65,7 @@ module Verifier.SAW.SharedTerm
 --  , scTrue
 --  , scFalse
     -- ** Variable substitution
+  , instantiateVar
   , instantiateVarList
   , asTermF
   , asApp
@@ -73,6 +78,9 @@ import Control.Monad (foldM, liftM, when)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.Bits
+import Data.Hashable (Hashable, hashWithSalt)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word
@@ -92,6 +100,9 @@ type VarIndex = Word64
 data SharedTerm s
   = STVar !VarIndex !String !(SharedTerm s)
   | STApp !TermIndex !(TermF (SharedTerm s))
+
+instance Hashable (SharedTerm s) where
+    hashWithSalt x (STApp idx _) = hashWithSalt x idx
 
 instance Eq (SharedTerm s) where
   STVar x _ _ == STVar y _ _ = x == y
@@ -147,24 +158,24 @@ scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
 
 -- SharedContext implementation.
 
-data AppCache s = AC { acBindings :: !(Map (TermF (SharedTerm s)) (SharedTerm s))
+data AppCache s = AC { acBindings :: !(HashMap (TermF (SharedTerm s)) (SharedTerm s))
                      , acNextIdx :: !TermIndex
                      }
 
 type AppCacheRef s = MVar (AppCache s)
 
 emptyAppCache :: AppCache s
-emptyAppCache = AC Map.empty 0
+emptyAppCache = AC HMap.empty 0
 
 -- | Return term for application using existing term in cache if it is avaiable.
 getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
   modifyMVar r $ \s -> do
-    case Map.lookup a (acBindings s) of
+    case HMap.lookup a (acBindings s) of
       Just t -> return (s,t)
       Nothing -> seq s' $ return (s',t)
         where t = STApp (acNextIdx s) a
-              s' = s { acBindings = Map.insert a t (acBindings s)
+              s' = s { acBindings = HMap.insert a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
 
@@ -177,22 +188,22 @@ reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 reducePi sc (STApp _ (Pi _ _ body)) arg = instantiateVar sc 0 arg body
 reducePi _ _ _ = error "reducePi: not a Pi term"
 
-typeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
-typeOfGlobal sc ident =
+scTypeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
+scTypeOfGlobal sc ident =
     do m <- scModule sc
        case findDef m ident of
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
          Just d -> scSharedTerm sc (defType d)
 
-typeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
-typeOfDataType sc ident =
+scTypeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
+scTypeOfDataType sc ident =
     do m <- scModule sc
        case findDataType m ident of
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
          Just d -> scSharedTerm sc (dtType d)
 
-typeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
-typeOfCtor sc ident =
+scTypeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
+scTypeOfCtor sc ident =
     do m <- scModule sc
        case findCtor m ident of
          Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
@@ -237,7 +248,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
       case tf of
-        GlobalDef d -> lift $ typeOfGlobal sc d
+        GlobalDef d -> lift $ scTypeOfGlobal sc d
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
@@ -253,10 +264,10 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           return tp
         RecordType m -> lift . scSort sc . maximum =<< mapM sort m
         CtorApp c args -> do
-          t <- lift $ typeOfCtor sc c
+          t <- lift $ scTypeOfCtor sc c
           lift $ foldM (reducePi sc) t args
         DataTypeApp dt args -> do
-          t <- lift $ typeOfDataType sc dt
+          t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t args
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit i -> lift $ scNatType sc
@@ -290,8 +301,6 @@ scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
     where go (Term termf) = scTermF sc =<< traverse go termf
 
-type BitSet = Integer
-
 looseVars :: forall s. SharedTerm s -> BitSet
 looseVars t = State.evalState (go t) Map.empty
     where
@@ -302,40 +311,25 @@ looseVars t = State.evalState (go t) Map.empty
         case Map.lookup i memo of
           Just x -> return x
           Nothing -> do
-            x <- termf tf
+            x <- liftM freesTermF (traverse go tf)
             State.modify (Map.insert i x)
             return x
-      termf :: TermF (SharedTerm s) -> State.State (Map TermIndex BitSet) BitSet
-      termf (FTermF tf) = foldlM (\b t -> liftM (b .|.) (go t)) 0 tf
-      termf (Lambda pat tp rhs) =
-          do let n = patBoundVarCount pat
-             x <- go tp
-             y <- go rhs
-             return (x .|. shiftR y n)
-      termf (Pi _name lhs rhs) =
-          do x <- go lhs
-             y <- go rhs
-             return (x .|. shiftR y 1)
-      termf (Let defs r) = error "unimplemented: looseVars Let"
-      termf (LocalVar i tp) =
-          do x <- go tp
-             return (x .|. bit i)
 
 instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVars sc f initialLevel t =
-    do cache <- newCache
+    do cache <- lift newCache
        let ?cache = cache in go initialLevel t
   where
-    go :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STVar {}) = pure t
     go l t@(STApp tidx tf) =
-        useCache ?cache (tidx, l) (preserveChangeT t $ go' l tf)
+        ChangeT $ useCache ?cache (tidx, l) (runChangeT $ preserveChangeT t (go' l tf))
 
-    go' :: (?cache :: Cache (ChangeT IO) (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
     go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -351,8 +345,6 @@ instantiateVars sc f initialLevel t =
     go' l (LocalVar i tp)
       | i < l     = scTermF sc <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
---    go' l (EqType lhs rhs) = scTermF sc <$> (EqType <$> go l lhs <*> go l rhs)
---    go' l (Oracle s prop) = scTermF sc <$> (Oracle s <$> go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -497,9 +489,6 @@ scGlobalApply sc i ts =
 ------------------------------------------------------------
 -- Building terms using prelude functions
 
-preludeName :: ModuleName
-preludeName = preludeModuleName
-
 scBoolType :: SharedContext s -> IO (SharedTerm s)
 scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeModuleName "Bool") [])
 
@@ -583,7 +572,7 @@ mkSharedContext m = do
 --          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
 --          Just d -> return d
   let freshGlobal sym tp = do
-        i <- modifyMVar vr (\i -> return (i,i+1))
+        i <- modifyMVar vr (\i -> return (i+1,i))
         return (STVar i sym tp)
   return SharedContext {
              scModule = return m

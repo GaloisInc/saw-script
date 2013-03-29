@@ -3,19 +3,19 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Verifier.SAW.TermNet
-  ( PatternShape(..)
+  ( Pat(..)
   , Pattern(..)
   , Key
-  , key_of_term  -- :: Term t => t -> [Key]
+  , key_of_term  -- :: Pat -> [Key]
   , Net          -- :: * -> *
   , empty        -- :: Net a
   , insert       -- :: Eq a => ([Key], a) -> Net a -> Net a
-  , insert_term  -- :: (Term t, Eq a) => (t, a) -> Net a -> Net a
+  , insert_term  -- :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
   , delete       -- :: Eq a => ([Key], a) -> Net a -> Net a
-  , delete_term  -- :: (Term t, Eq a) => (t, a) -> Net a -> Net a
+  , delete_term  -- :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
   , lookup       -- :: Net a -> [Key] -> [a]
-  , match_term   -- :: Term t => Net a -> t -> [a]
-  , unify_term   -- :: Term t => Net a -> t -> [a]
+  , match_term   -- :: Pattern t => Net a -> t -> [a]
+  , unify_term   -- :: Pattern t => Net a -> t -> [a]
   , merge        -- :: Eq a => Net a -> Net a -> Net a
   , content      -- :: Net a -> [a]
   ) where
@@ -44,13 +44,22 @@ match_term no longer treats abstractions as wildcards; instead they match
 only wildcards in patterns.  Requires operands to be beta-eta-normal.
 -}
 
-data PatternShape t = Atom String | Var | App t t
+-- Laziness is important here, as we will often create and partially
+-- traverse patterns for very large terms.
+data Pat = Atom String | Var | App Pat Pat
+    deriving Eq
 
 class Pattern t where
-  patternShape :: t -> PatternShape t
+  toPat :: t -> Pat
 
-isVarApp :: Pattern t => t -> Bool
-isVarApp t = case patternShape t of
+instance Show Pat where
+  showsPrec p (Atom s) = showString s
+  showsPrec p Var = showString "_"
+  showsPrec p (App x y) =
+      showParen (p > 5) (showsPrec 5 x . showString " " . showsPrec 6 y)
+
+isVarApp :: Pat -> Bool
+isVarApp t = case t of
   Atom _   -> False
   Var      -> True
   App t' _ -> isVarApp t'
@@ -65,16 +74,16 @@ data Key = CombK | VarK | AtomK String
     and "near" eta-conversions such as %x.?P(?f(x)).
 -}
 
-add_key_of_terms :: Pattern t => t -> [Key] -> [Key]
+add_key_of_terms :: Pat -> [Key] -> [Key]
 add_key_of_terms t cs
   | isVarApp t = VarK : cs
-  | otherwise  = rands (patternShape t) cs
+  | otherwise  = rands t cs
   where
-    rands (App f t) cs = CombK : rands (patternShape f) (add_key_of_terms t cs)
+    rands (App f t) cs = CombK : rands f (add_key_of_terms t cs)
     rands (Atom c)  cs = AtomK c : cs
 
 {-convert a term to a list of keys-}
-key_of_term :: Pattern t => t -> [Key]
+key_of_term :: Pat -> [Key]
 key_of_term t = add_key_of_terms t []
 
 {-Trees indexed by key lists: each arc is labelled by a key.
@@ -121,7 +130,7 @@ insert (keys, x) net = ins1 keys net
       in Net {comb = comb, var = var, atoms = atoms'}
 
 insert_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
-insert_term (t, x) = insert (key_of_term t, x)
+insert_term (t, x) = insert (key_of_term (toPat t), x)
 
 {-** Deletion from a discrimination net **-}
 
@@ -149,7 +158,7 @@ delete (keys, x) net = del1 keys net
       in newnet $ Net {comb = comb, var = var, atoms = atoms'}
 
 delete_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
-delete_term (t, x) = delete (key_of_term t, x)
+delete_term (t, x) = delete (key_of_term (toPat t), x)
 
 {-** Retrieval functions for discrimination nets **-}
 
@@ -185,18 +194,18 @@ look1 (atoms, a) nets =
   Abs or Var in object: if "unif", regarded as wildcard,
                                    else matches only a variable in net.
 -}
-matching :: Pattern t => Bool -> t -> Net a -> [Net a] -> [Net a]
+matching :: Bool -> Pat -> Net a -> [Net a] -> [Net a]
 matching unif t net nets =
   case net of
     Leaf _ -> nets
     Net {var, ..} ->
-      case patternShape t of
+      case t of
         Var -> if unif then net_skip net nets else var : nets {-only matches Var in net-}
         _   -> rands t net (var : nets)  {-var could match also-}
   where
     rands _ (Leaf _) nets = nets
     rands t (Net {comb, atoms, ..}) nets =
-      case patternShape t of
+      case t of
         Atom c    -> look1 (atoms, c) nets
         Var       -> nets
         App t1 t2 -> foldr (matching unif t2) nets (rands t1 comb [])
@@ -206,11 +215,11 @@ extract_leaves = concatMap (\(Leaf xs) -> xs)
 
 {-return items whose key could match t, WHICH MUST BE BETA-ETA NORMAL-}
 match_term :: Pattern t => Net a -> t -> [a]
-match_term net t = extract_leaves (matching False t net [])
+match_term net t = extract_leaves (matching False (toPat t) net [])
 
 {-return items whose key could unify with t-}
 unify_term :: Pattern t => Net a -> t -> [a]
-unify_term net t = extract_leaves (matching True t net [])
+unify_term net t = extract_leaves (matching True (toPat t) net [])
 
 {--------------------------------------------------------------------
 

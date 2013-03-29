@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -13,6 +14,7 @@ module Verifier.SAW.TypedAST
  , emptyModule
  , ModuleName, mkModuleName
  , moduleName
+ , preludeName
  , ModuleDecl(..)
  , moduleDecls
  , TypedDataType
@@ -37,6 +39,7 @@ module Verifier.SAW.TypedAST
  , DefEqn(..)
  , Pat(..)
  , patBoundVarCount
+ , patUnusedVarCount
    -- * Terms and associated operations.
  , Term(..)
  , incVars
@@ -44,6 +47,9 @@ module Verifier.SAW.TypedAST
  , TermF(..)
  , FlatTermF(..)
  , zipWithFlatTermF
+ , BitSet
+ , freesTerm
+ , freesTermF
  , ppTerm
  , ppFlatTermF
  , ppRecordF
@@ -68,21 +74,32 @@ import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Lens
 import Control.Monad.Identity (runIdentity)
+import Data.Bits
 import Data.Char
 import Data.Foldable
+import Data.Hashable (Hashable, hashWithSalt)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import GHC.Generics (Generic)
 import Text.PrettyPrint.HughesPJ
 
 import Prelude hiding (all, concatMap, foldr, sum)
 
 import Verifier.SAW.Utils
 
+instance (Hashable k, Hashable a) => Hashable (Map k a) where
+    hashWithSalt x m = hashWithSalt x (Map.assocs m)
+
+instance Hashable a => Hashable (Vector a) where
+    hashWithSalt x v = hashWithSalt x (V.toList v)
+
 data ModuleName = ModuleName [String]
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
    show (ModuleName s) = intercalate "." (reverse s)
@@ -105,10 +122,15 @@ mkModuleName :: [String] -> ModuleName
 mkModuleName [] = error "internal: Unexpected empty module name"
 mkModuleName nms = assert (all isCtor nms) $ ModuleName nms
 
+preludeName :: ModuleName
+preludeName = mkModuleName ["Prelude"]
+
 data Ident = Ident { identModule :: ModuleName
                    , identName :: String
                    }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable Ident -- automatically derived
 
 instance Show Ident where
   show (Ident m s) = shows m ('.' : s)
@@ -129,7 +151,9 @@ parseIdent s0 =
             _ -> internalError "breakEach failed"
     
 newtype Sort = SortCtor { _sortIndex :: Integer }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable Sort -- automatically derived
 
 instance Show Sort where
   showsPrec p (SortCtor i) = showParen (p >= 10) (showString "sort " . shows i)
@@ -163,7 +187,9 @@ data Pat e = -- | Variable bound by pattern.
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PCtor Ident [Pat e]
-  deriving (Eq,Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq,Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (Pat e) -- automatically derived
 
 patBoundVarCount :: Pat e -> DeBruijnIndex
 patBoundVarCount p =
@@ -173,6 +199,15 @@ patBoundVarCount p =
     PTuple l  -> sumBy patBoundVarCount l
     PRecord m -> sumBy patBoundVarCount m
     _ -> 0
+
+patUnusedVarCount :: Pat e -> DeBruijnIndex
+patUnusedVarCount p =
+  case p of
+    PVar{} -> 0
+    PUnused{} -> 1
+    PCtor _ l -> sumBy patUnusedVarCount l
+    PTuple l  -> sumBy patUnusedVarCount l
+    PRecord m -> sumBy patUnusedVarCount m
 
 patBoundVars :: Pat e -> [String]
 patBoundVars p =
@@ -188,7 +223,9 @@ lift2 f h x y = h (f x) (f y)
 
 data LocalDef e
    = LocalFnDef String e [DefEqn e]
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (LocalDef e) -- automatically derived
 
 localVarNames :: LocalDef e -> [String]
 localVarNames (LocalFnDef nm _ _) = [nm]
@@ -211,16 +248,15 @@ instance Show (Def e) where
 data DefEqn e
   = DefEqn [Pat e]  -- ^ List of patterns
            e -- ^ Right hand side.
-  deriving (Functor, Foldable, Traversable)
+  deriving (Functor, Foldable, Traversable, Generic, Show)
+
+instance Hashable e => Hashable (DefEqn e) -- automatically derived
 
 instance (Eq e) => Eq (DefEqn e) where
   DefEqn xp xr == DefEqn yp yr = xp == yp && xr == yr
 
 instance (Ord e) => Ord (DefEqn e) where
   compare (DefEqn xp xr) (DefEqn yp yr) = compare (xp,xr) (yp,yr)
-
-instance (Show e) => Show (DefEqn e) where
-  showsPrec p t = showParen (p >= 10) $ ("DefEqn "++) . showsPrec 10 p . showsPrec 10 t
 
 data Ctor n tp = Ctor { ctorName :: !n
                         -- | The type of the constructor (should contain no free variables).
@@ -295,7 +331,9 @@ data FlatTermF e
   | FloatLit Float
     -- | Double precision floating point literal.
   | DoubleLit Double
-  deriving (Eq, Ord, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
 zipWithFlatTermF f = go
@@ -337,8 +375,9 @@ data TermF e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex !e
-      -- | @EqType x y@ is a type representing the equality proposition @x = y@
-  deriving (Eq, Ord, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+instance Hashable e => Hashable (TermF e) -- automatically derived
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
@@ -481,6 +520,24 @@ piArgCount = go 0
   where go i (Term (Pi _ _ rhs)) = go (i+1) rhs
         go i _ = i
 
+-- | A @BitSet@ represents a set of natural numbers.
+-- Bit n is a 1 iff n is in the set.
+type BitSet = Integer
+
+freesTermF :: TermF BitSet -> BitSet
+freesTermF tf =
+    case tf of
+      FTermF ftf -> Data.Foldable.foldl' (.|.) 0 ftf
+      Lambda pat tp rhs ->
+          Data.Foldable.foldl' (.|.) 0 pat .|. tp .|.
+          shiftR rhs (patBoundVarCount pat)
+      Pi _name lhs rhs -> lhs .|. shiftR rhs 1
+      Let defs r -> error "unimplemented: freesTermF Let"
+      LocalVar i tp -> bit i .|. tp
+
+freesTerm :: Term -> BitSet
+freesTerm (Term t) = freesTermF (fmap freesTerm t)
+
 -- | @instantiateVars f l t@ substitutes each dangling bound variable
 -- @LocalVar j t@ with the term @f i j t@, where @i@ is the number of
 -- binders surrounding @LocalVar j t@.
@@ -518,8 +575,6 @@ instantiateVars f initialLevel = go initialLevel
             LocalVar i tp
               | i < l -> Term $ LocalVar i (go l tp)
               | otherwise -> f l i (go l tp)
---            EqType lhs rhs -> Term $ EqType (go l lhs) (go l rhs)
---            Oracle s prop  -> Term $ Oracle s (go l prop)
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -582,8 +637,6 @@ ppTerm lcls p0 t =
          where nms = concatMap localVarNames dl
                lcls' = foldl' consBinding lcls nms
        ppTermF _ (LocalVar i _) = lookupDoc lcls i
---       ppTermF _ (EqType lhs rhs) = ppTerm lcls 1 lhs <+> equals <+> ppTerm lcls 1 rhs
---       ppTermF _ (Oracle s prop) = quotes (text s) <> parens (ppTerm lcls 0 prop)
 
 
 instance Show Term where
