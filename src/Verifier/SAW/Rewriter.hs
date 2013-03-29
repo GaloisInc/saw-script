@@ -66,13 +66,13 @@ instance Show (Conversion t) where
 termToPat :: Termlike t => t -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      FTermF (GlobalDef d)      -> Net.Atom (show d)
+      FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
       FTermF (NatLit n)         -> Net.Atom (show n)
       FTermF (App t1 t2)        -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (show c)) (map termToPat ts)
-      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (show c)) (map termToPat ts)
-      _                     -> Net.Var
+      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      _                         -> Net.Var
 
 instance Net.Pattern Term where
   toPat = termToPat

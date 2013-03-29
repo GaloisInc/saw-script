@@ -72,13 +72,13 @@ asVecLit = Matcher Net.Var match
       match _ = Nothing
 
 asGlobalDef :: Termlike t => Ident -> Matcher t ()
-asGlobalDef ident = Matcher (Net.Atom (show ident)) match
+asGlobalDef ident = Matcher (Net.Atom (identName ident)) match
     where
       match (unwrapTermF -> FTermF (GlobalDef ident')) | ident == ident' = Just ()
       match _ = Nothing
 
 asBoolType :: Termlike t => Matcher t ()
-asBoolType = Matcher (Net.Atom (show bool)) match
+asBoolType = Matcher (Net.Atom (identName bool)) match
     where
       match (unwrapTermF -> FTermF (DataTypeApp ident [])) | ident == bool = Just ()
       match _ = Nothing
@@ -87,7 +87,7 @@ asBoolType = Matcher (Net.Atom (show bool)) match
 asFinValLit :: Termlike t => Matcher t (Integer, Integer)
 asFinValLit = Matcher pat match
     where
-      pat = Net.App (Net.App (Net.Atom (show finval)) Net.Var) Net.Var
+      pat = Net.App (Net.App (Net.Atom (identName finval)) Net.Var) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x, y]))
           | ident == finval = (,) <$> destNatLit x <*> destNatLit y
       match _ = Nothing
@@ -96,7 +96,7 @@ asFinValLit = Matcher pat match
 asSuccLit :: Termlike t => Matcher t Integer
 asSuccLit = Matcher pat match
     where
-      pat = Net.App (Net.Atom (show succ)) Net.Var
+      pat = Net.App (Net.Atom (identName succ)) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x]))
           | ident == succ = destNatLit x
       match _ = Nothing
