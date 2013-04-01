@@ -31,7 +31,7 @@ translateModule' (SS.Module mname tss main) =
     where modName = SC.mkModuleName [mname]
           mainName = SC.mkIdent modName "main"
           mainDef = SC.Def mainName mainTy [mainBody]
-          mainTy = translateType (SS.decor main)
+          mainTy = translateType (SS.typeOf main)
           mainBody = SC.DefEqn [] (translateExpr translateType main)
 
 insertTopStmt :: SC.Module -> SS.TopStmt SS.PType -> M SC.Module
@@ -47,7 +47,7 @@ insertTopStmt m s = return $
     SS.TopBind name e -> SC.insDef m (SC.Def i t [d])
       where mname = SC.moduleName m
             i = SC.mkIdent mname name
-            t = translatePType (SS.decor e)
+            t = translatePType (SS.typeOf e)
             d = SC.DefEqn [] (translateExpr translatePType e)
 
 translateBlockStmts :: (a -> SC.Term) -> [SS.BlockStmt a] -> SC.Term
@@ -63,7 +63,7 @@ translateBlockStmt doType s k =
     SS.Bind (Just x) ctx e -> fterm $ bind (translateExpr doType e) f
       where f = SC.Lambda (SC.PVar x i ty) fty k
             i = undefined
-            ty = doType (SS.decor e)
+            ty = doType (SS.typeOf e)
             fty = undefined
     SS.BlockTypeDecl name ty -> undefined
     SS.BlockLet decls ->
@@ -71,7 +71,7 @@ translateBlockStmt doType s k =
       where decls' = map translateDecl decls
             translateDecl (n, e) =
               SC.LocalFnDef n ty [SC.DefEqn [] $ translateExpr doType e]
-                where ty = doType (SS.decor e)
+                where ty = doType (SS.typeOf e)
 
 translateExpr :: (a -> SC.Term) -> SS.Expr a -> SC.Term
 translateExpr doType e = go e
@@ -90,7 +90,7 @@ translateExpr doType e = go e
                where translateFld (n, e) = (n, go e)
         go (SS.Index a i ty) =
           aget n (doType ty) (go a) (go i)
-            where n = case doType (SS.decor a) of
+            where n = case doType (SS.typeOf a) of
                         (vecSize -> Just i) -> i
                         _ -> error "array size is not constant"
         go (SS.Lookup e f ty) = fterm $ SC.RecordSelector (go e) f

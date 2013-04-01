@@ -128,7 +128,7 @@ instance TypeCheck (Expr LType) where
     Z i t              -> t `typeEqual` z     >> return (Z i t)
     Array es t         -> do es' <- mapM tCheck es
                              let l = i $ fromIntegral $ length es
-                                 ts = map decor es'
+                                 ts = map typeOf es'
                              case ts of
                                []     -> do a <- logic newLVar
                                             t `typeEqual` array a l
@@ -141,27 +141,27 @@ instance TypeCheck (Expr LType) where
                              t `typeEqual` block c bt
                              return (Block ss' t)
     Tuple es t         -> do es' <- mapM tCheck es
-                             let ts = map decor es'
+                             let ts = map typeOf es'
                              t `typeEqual` tuple ts
                              return (Tuple es' t)
     Record nes t       -> do let (ns,es) = unzip nes
                              es' <- mapM tCheck es
-                             let ts = map decor es'
+                             let ts = map typeOf es'
                              t `typeEqual` record (zip ns ts)
                              return (Record (zip ns es') t)
     Index ar ix t      -> do ar' <- tCheck ar
                              ix' <- tCheck ix
-                             let at = decor ar'
-                             let it = decor ix'
+                             let at = typeOf ar'
+                             let it = typeOf ix'
                              l <- logic newLVar
                              at `typeEqual` array t l
                              it `typeEqual` z
                              return (Index ar' ix' t)
     Lookup r n t       -> do r' <- tCheck r
-                             let rt = decor r'
+                             let rt = typeOf r'
                              logic (rt `subtype` record [(n,t)])
                              return (Lookup r' n t)
-    Var n t            -> do foundE <- fmap decor <$> lookupExpr n
+    Var n t            -> do foundE <- fmap typeOf <$> lookupExpr n
                              foundT <- lookupPoly n
                              case (foundT,foundE) of
                                (Just g,_) -> do
@@ -171,13 +171,13 @@ instance TypeCheck (Expr LType) where
                                (Nothing,Nothing) -> logic $ fail ("Unbound variable: " ++ n)
                              return (Var n t)
     Function an at b t -> do b' <- extendType an (Var an at) $ tCheck b
-                             let bt = decor b'
+                             let bt = typeOf b'
                              t `typeEqual` function at bt
                              return (Function an at b' t)
     Application f v t  -> do f' <- tCheck f
                              v' <- tCheck v
-                             let ft = decor f'
-                             let vt = decor v'
+                             let ft = typeOf f'
+                             let vt = typeOf v'
                              ft `typeEqual` function vt t
                              return (Application f' v' t)
     LetBlock nes b     -> do let (ns,es) = unzip nes
@@ -215,6 +215,6 @@ compose f as = case as of
 
 finalStmtType :: BlockStmt LType -> TC (Context,LType)
 finalStmtType s = case s of
-  Bind Nothing c e -> return (c,decor e)
+  Bind Nothing c e -> return (c,typeOf e)
   _                -> logic $ fail ("Final statement of do block must be an expression: " ++ show s)
 

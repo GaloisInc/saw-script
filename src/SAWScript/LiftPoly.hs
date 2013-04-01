@@ -119,7 +119,7 @@ instantiateType :: PType -> GoalM LType LType
 instantiateType = fmap fst . evalLS . assignVar
 
 instantiateExpr :: Expr MPType -> GoalM LType LType
-instantiateExpr = fmap (decor . fst) . evalLS . traverse fillHoles
+instantiateExpr = fmap (typeOf . fst) . evalLS . traverse fillHoles
 
 fillHoles :: MPType -> LS LType
 fillHoles mpt = case mpt of
