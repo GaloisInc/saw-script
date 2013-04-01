@@ -1,34 +1,20 @@
-/* Questions:
- *   - should we have lists? Useful for rule lists, override lists,
- *     uninterpret lists
- *   - can we have some built-ins polymorphic over block type? Or a generic
- *     block within an LLVM or Java block?
- *   - should we have different top-level versus spec-level proof commands?
- *   - is the LLVMObject/JavaObject approach reasonable?
- *   - should the type parameter in CryptolSetup, etc., be used for anything
- *     in the simulators?
- *   - should we use  underscore_naming or camelCase?
- *   - what sort of syntactic sugar should we provide on top of these
- *     primitive functions?
- */
-
 /* We start by declaring the types of some primitive functions. */
 
 /* A VerifyResult encodes either a statement of what it proved, or a
  * counterexample. These work like the method specs in the first version
  * of SAWScript.
  */
-verify : String -> JavaSetup () -> JavaVerifyResult ();
+verify : String -> JavaSetup () -> TopLevel JavaVerifyResult;
 
 /* Extract pure models from suitably well-structured programs. We assume
  * that these are well-typed, and check at runtime.
  */
-extract : {a} String -> JavaSetup () -> a;
+extract : {a} String -> JavaSetup () -> TopLevel a;
 
 /* Set up symbolic simulation for a pure function from fixed-size arguments
  * to fixed-size return value.
  */
-pure : LLVMSetup ();
+pure : JavaSetup ();
 
 /* A successful proof about a method can be used to override calls to
  * the method. The requirement to provide verification results serves
@@ -36,19 +22,14 @@ pure : LLVMSetup ();
  *   - it tells the simulator how to provide inputs and interpret outputs
  *   - it ensures soundness by only allowing overrides that are proven correct
  */
-override : [JavaVerifyResult ()] -> JavaSetup ();
+override : [JavaVerifyResult] -> JavaSetup ();
 
 /* We can uninterpret particular names along with overrides. Is this
  * the right approach? For Cryptol, uninterpreting is the only form of
- * overriding. For LLVM and Java, it can complement overriding by causing
+ * overriding. For Java, it can complement overriding by causing
  * portions of the overriding model to be left uninterpreted.
  */
 uninterpret : [String] -> JavaSetup ();
-
-/* It would be nice to allow some sort of type classing, or something
- * similar, so that certain operations would be legal in multiple
- * contexts (e.g., Java and LLVM).
- */
 
 /* State that the current function returns the given value. We assume,
  * again, that the argument is of the right type, and check at runtime.
@@ -76,9 +57,7 @@ assume_equal : {a} JavaObject -> a -> JavaSetup();
  */
 ensure_equal : {a} JavaObject -> a -> JavaSetup ();
 
-/* Java and LLVM statements that a particular object is modified with
- * an arbitrary value.
- */
+/* State that a particular object is modified with an arbitrary value.  */
 modify : JavaObject -> JavaSetup ();
 
 /* And in the Java world. */
@@ -94,9 +73,9 @@ char : JavaType;
 int : JavaType;
 long : JavaType;
 
-may_alias : [JavaObject] -> LLVMSetup ();
+may_alias : [JavaObject] -> JavaSetup ();
 
-/* This allows us to project from an LLVM value into a native value.
+/* This allows us to project from a Java value into a native value.
  * We assume that these are well-typed, and check at runtime.
  */
 from_java : {a} JavaObject -> a;

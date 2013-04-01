@@ -169,20 +169,22 @@ unitTerm = fterm $ SC.CtorApp (preludeIdent "Unit") []
 trueTerm = fterm $ SC.CtorApp (preludeIdent "True") []
 falseTerm = fterm $ SC.CtorApp (preludeIdent "False") []
 
-ssPreludeName, cryptolName, javaName, llvmName :: SC.ModuleName
+ssPreludeName :: SC.ModuleName
 ssPreludeName = SC.mkModuleName ["SAWScriptPrelude"]
+{-
 cryptolName = SC.mkModuleName ["Cryptol"]
 javaName = SC.mkModuleName ["Java"]
 llvmName = SC.mkModuleName ["LLVM"]
+-}
 
 blockType :: SS.Context -> SC.Term -> SC.Term
 blockType ctx rty = fterm $ SC.DataTypeApp cname [rty]
   where cname =
           case ctx of
-            SS.CryptolSetupContext -> SC.mkIdent cryptolName "Setup"
-            SS.JavaSetupContext -> SC.mkIdent javaName "Setup"
-            SS.LLVMSetupContext -> SC.mkIdent llvmName "Setup"
-            SS.VerifyScriptContext -> SC.mkIdent ssPreludeName "VerifyScript"
+            SS.CryptolSetupContext -> SC.mkIdent ssPreludeName "CryptolSetup"
+            SS.JavaSetupContext -> SC.mkIdent ssPreludeName "JavaSetup"
+            SS.LLVMSetupContext -> SC.mkIdent ssPreludeName "LLVMSetup"
+            SS.ProofScriptContext -> SC.mkIdent ssPreludeName "ProofScript"
             SS.TopLevelContext -> SC.mkIdent ssPreludeName "TopLevel"
 
 vec :: Integer -> SC.Term -> SC.Term
