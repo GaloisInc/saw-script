@@ -411,3 +411,26 @@ rewriteSharedTermTypeSafe sc ss t =
       case first_order_match (lhs rule) t of
         Nothing -> apply rules t
         Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+
+-- | Generate a new SharedContext that normalizes terms as it builds them.
+rewritingSharedContext :: forall s. SharedContext s -> Simpset (SharedTerm s) -> SharedContext s
+rewritingSharedContext sc ss = sc'
+  where
+    sc' = sc { scTermF = rewriteTop }
+    rewriteTop :: TermF (SharedTerm s) -> IO (SharedTerm s)
+    rewriteTop tf =
+      let t = STApp (-1) tf in
+      case reduceSharedTerm sc' t of
+        Nothing -> apply (Net.match_term ss t) t
+        Just io -> io
+    apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
+             SharedTerm s -> IO (SharedTerm s)
+    apply [] (STApp _ tf) = scTermF sc tf
+    apply (Left (RewriteRule _ lhs rhs) : rules) t =
+      case first_order_match lhs t of
+        Nothing -> apply rules t
+        Just inst -> S.instantiateVarList sc' 0 (Map.elems inst) rhs
+    apply (Right conv : rules) t =
+      case runConversion conv t of
+        Nothing -> apply rules t
+        Just tb -> runTermBuilder tb (scTermF sc')
