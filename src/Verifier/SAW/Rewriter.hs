@@ -7,12 +7,17 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Rewriter
-  ( Simpset
-  , RewriteRule
-  , emptySimpset
+  -- * Rewrite rules
+  ( RewriteRule
   , ruleOfTerm
   , ruleOfDefEqn
   , rulesOfTypedDef
+  , scDefRewriteRules
+  , scDefsRewriteRules
+  , scEqsRewriteRules
+  -- * Simplification sets
+  , Simpset
+  , emptySimpset
   , addRule
   , delRule
   , addRules
@@ -20,10 +25,15 @@ module Verifier.SAW.Rewriter
   , delSimp
   , addConv
   , addConvs
+  , scSimpset
+  -- * Term rewriting
   , rewriteTerm
   , rewriteSharedTerm
+  , rewriteSharedTerm' -- uses ChangeT
   , rewriteSharedTermToTerm
   , rewriteSharedTermTypeSafe
+  -- * SharedContext
+  , rewritingSharedContext
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
@@ -114,9 +124,7 @@ first_order_match pat term = match pat term Map.empty
 -- that instantiations are well-typed.
 
 ----------------------------------------------------------------------
--- Simpsets
-
-type Simpset t = Net.Net (Either (RewriteRule t) (Conversion t))
+-- Building rewrite rules
 
 eqIdent :: Ident
 eqIdent = mkIdent (mkModuleName ["Prelude"]) "Eq"
@@ -163,6 +171,27 @@ ruleOfDefEqn ident (DefEqn pats rhs) =
 rulesOfTypedDef :: TypedDef -> [RewriteRule Term]
 rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
 
+-- | Creates a set of rewrite rules from the defining equations of the named constant.
+scDefRewriteRules :: SharedContext s -> Ident -> IO [RewriteRule (SharedTerm s)]
+scDefRewriteRules sc ident =
+    do m <- scModule sc
+       case findDef m ident of
+         Nothing -> return []
+         Just def -> mapM (traverse (scSharedTerm sc)) (rulesOfTypedDef def)
+
+-- | Collects rewrite rules from defining equations of all named constants.
+scDefsRewriteRules :: SharedContext s -> [Ident] -> IO [RewriteRule (SharedTerm s)]
+scDefsRewriteRules sc idents = concat <$> mapM (scDefRewriteRules sc) idents
+
+-- | Collects rewrite rules from named constants, whose types must be equations.
+scEqsRewriteRules :: SharedContext s -> [Ident] -> IO [RewriteRule (SharedTerm s)]
+scEqsRewriteRules sc idents = map ruleOfTerm <$> mapM (scTypeOfGlobal sc) idents
+
+----------------------------------------------------------------------
+-- Simpsets
+
+type Simpset t = Net.Net (Either (RewriteRule t) (Conversion t))
+
 emptySimpset :: Simpset t
 emptySimpset = Net.empty
 
@@ -186,6 +215,13 @@ addConv conv = Net.insert_term (conv, Right conv)
 
 addConvs :: Eq t => [Conversion t] -> Simpset t -> Simpset t
 addConvs convs ss = foldr addConv ss convs
+
+scSimpset :: SharedContext s -> [Ident] -> [Ident] -> [Conversion (SharedTerm s)] ->
+               IO (Simpset (SharedTerm s))
+scSimpset sc defIdents eqIdents convs =
+    do defRules <- scDefsRewriteRules sc defIdents
+       eqRules <- scEqsRewriteRules sc eqIdents
+       return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
 ----------------------------------------------------------------------
 -- Destructors for terms
