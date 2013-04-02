@@ -84,14 +84,6 @@ instance Net.Pattern t => Net.Pattern (RewriteRule t) where
   toPat (RewriteRule _ lhs _) = Net.toPat lhs
 
 ----------------------------------------------------------------------
--- Simplification procedures
-
--- belongs in SharedTerm.hs
-scBool :: SharedContext s -> Bool -> IO (SharedTerm s)
-scBool sc True = scFlatTermF sc (CtorApp (mkIdent (mkModuleName ["Prelude"]) "True") [])
-scBool sc False = scFlatTermF sc (CtorApp (mkIdent (mkModuleName ["Prelude"]) "False") [])
-
-----------------------------------------------------------------------
 -- Matching
 
 -- First-order matching
