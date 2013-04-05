@@ -4,17 +4,17 @@
  * counterexample. These work like the method specs in the first version
  * of SAWScript.
  */
-verify : String -> String -> LLVMSetup () -> TopLevel LLVMVerifyResult;
+llvm_verify : String -> String -> LLVMSetup () -> TopLevel LLVMVerifyResult;
 
 /* Extract pure models from suitably well-structured programs. We assume
  * that these are well-typed, and check at runtime.
  */
-extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
+llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
 
 /* Set up symbolic simulation for a pure function from fixed-size arguments
  * to fixed-size return value.
  */
-pure : LLVMSetup ();
+llvm_pure : LLVMSetup ();
 
 /* A successful proof about a method can be used to override calls to
  * the method. The requirement to provide verification results serves
@@ -22,66 +22,66 @@ pure : LLVMSetup ();
  *   - it tells the simulator how to provide inputs and interpret outputs
  *   - it ensures soundness by only allowing overrides that are proven correct
  */
-override : [LLVMVerifyResult] -> LLVMSetup ();
+llvm_override : [LLVMVerifyResult] -> LLVMSetup ();
 
 /* We can uninterpret particular names along with overrides. Is this
  * the right approach? For Cryptol, uninterpreting is the only form of
  * overriding. For LLVM, it can complement overriding by causing
  * portions of the overriding model to be left uninterpreted.
  */
-uninterpret : [String] -> LLVMSetup ();
+llvm_uninterpret : [String] -> LLVMSetup ();
 
 /* State that the current function returns the given value. We assume,
  * again, that the argument is of the right type, and check at runtime.
  */
-return : {a} a -> LLVMSetup ();
+llvm_return : {a} a -> LLVMSetup ();
 
 /* Declare that the particular expression is an output, for model
  * extraction.
  */
-output : {a} a -> LLVMSetup ();
+llvm_output : {a} a -> LLVMSetup ();
 
 /* Declare that the particular expression is an input, for model
  * extraction.
  */
-input : {a} a -> LLVMSetup ();
+llvm_input : {a} a -> LLVMSetup ();
 
 /* Assert a particular starting condition. */
-assert : Bit -> LLVMSetup ();
+llvm_assert : Bit -> LLVMSetup ();
 
 /* Assign the given value to the given object before execution. */
-assume_equal : {a} LLVMObject -> a -> LLVMSetup ();
+llvm_assume_equal : {a} LLVMObject -> a -> LLVMSetup ();
 
 /* Ensure that the given object is assigned the given value on
  * termination.
  */
-ensure_equal : {a} LLVMObject -> a -> LLVMSetup ();
+llvm_ensure_equal : {a} LLVMObject -> a -> LLVMSetup ();
 
 /* State that a particular object is modified with an arbitrary value.  */
-modify : LLVMObject -> LLVMSetup ();
+llvm_modify : LLVMObject -> LLVMSetup ();
 
 /* These work in the context of an implicit goal. */
 
 /* These allow us to refer to objects in the LLVM world. */
-var : String -> LLVMType -> LLVMObject;
-arg : Nat -> LLVMType -> LLVMObject;
-field : LLVMObject -> String -> LLVMObject;
-deref : LLVMObject -> LLVMObject;
+llvm_var : String -> LLVMType -> LLVMObject;
+llvm_arg : Nat -> LLVMType -> LLVMObject;
+llvm_field : LLVMObject -> String -> LLVMObject;
+llvm_deref : LLVMObject -> LLVMObject;
 
 /* And LLVM types. */
-struct : String -> LLVMType;
-ptr : LLVMType -> LLVMType;
-int : Nat -> LLVMType; /* An LLVM integer with the given number of bits. */
-array : Nat -> LLVMType -> LLVMType;
+llvm_struct : String -> LLVMType;
+llvm_ptr : LLVMType -> LLVMType;
+llvm_int : Nat -> LLVMType; /* An LLVM integer with the given number of bits. */
+llvm_array : Nat -> LLVMType -> LLVMType;
 
-may_alias : [LLVMObject] -> LLVMSetup ();
+llvm_may_alias : [LLVMObject] -> LLVMSetup ();
 
 /* This allows us to project from an LLVM value into a native value.
  * We assume that these are well-typed, and check at runtime.
  */
 from_llvm : {a} LLVMObject -> a;
 
-verify_result : {a} LLVMVerifyResult
-              -> (LLVMOverride -> a)
-              -> (LLVMCounterExample -> a)
-              -> a;
+llvm_verify_result : {a} LLVMVerifyResult
+                   -> (LLVMOverride -> a)
+                   -> (LLVMCounterExample -> a)
+                   -> a;

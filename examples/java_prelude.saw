@@ -1,20 +1,21 @@
-/* We start by declaring the types of some primitive functions. */
+/* NB: eventually the "java_" prefix will be removed, and qualified
+ * module imports will be supported. */
 
 /* A VerifyResult encodes either a statement of what it proved, or a
  * counterexample. These work like the method specs in the first version
  * of SAWScript.
  */
-verify : String -> JavaSetup () -> TopLevel JavaVerifyResult;
+java_verify : String -> JavaSetup () -> TopLevel JavaVerifyResult;
 
 /* Extract pure models from suitably well-structured programs. We assume
  * that these are well-typed, and check at runtime.
  */
-extract : {a} String -> JavaSetup () -> TopLevel a;
+java_extract : {a} String -> JavaSetup () -> TopLevel a;
 
 /* Set up symbolic simulation for a pure function from fixed-size arguments
  * to fixed-size return value.
  */
-pure : JavaSetup ();
+java_pure : JavaSetup ();
 
 /* A successful proof about a method can be used to override calls to
  * the method. The requirement to provide verification results serves
@@ -22,65 +23,65 @@ pure : JavaSetup ();
  *   - it tells the simulator how to provide inputs and interpret outputs
  *   - it ensures soundness by only allowing overrides that are proven correct
  */
-override : [JavaVerifyResult] -> JavaSetup ();
+java_override : [JavaVerifyResult] -> JavaSetup ();
 
 /* We can uninterpret particular names along with overrides. Is this
  * the right approach? For Cryptol, uninterpreting is the only form of
  * overriding. For Java, it can complement overriding by causing
  * portions of the overriding model to be left uninterpreted.
  */
-uninterpret : [String] -> JavaSetup ();
+java_uninterpret : [String] -> JavaSetup ();
 
 /* State that the current function returns the given value. We assume,
  * again, that the argument is of the right type, and check at runtime.
  */
-return : {a} a -> JavaSetup ();
+java_return : {a} a -> JavaSetup ();
 
 /* Declare that the particular expression is an output, for model
  * extraction.
  */
-output : {a} a -> JavaSetup ();
+java_output : {a} a -> JavaSetup ();
 
 /* Declare that the particular expression is an input, for model
  * extraction.
  */
-input : {a} a -> JavaSetup ();
+java_input : {a} a -> JavaSetup ();
 
 /* Assert a particular starting condition. */
-assert : Bit -> JavaSetup ();
+java_assert : Bit -> JavaSetup ();
 
 /* Assign the given value to the given object before execution. */
-assume_equal : {a} JavaObject -> a -> JavaSetup();
+java_assume_equal : {a} JavaObject -> a -> JavaSetup();
 
 /* Ensure that the given object is assigned the given value on
  * termination.
  */
-ensure_equal : {a} JavaObject -> a -> JavaSetup ();
+java_ensure_equal : {a} JavaObject -> a -> JavaSetup ();
 
 /* State that a particular object is modified with an arbitrary value.  */
-modify : JavaObject -> JavaSetup ();
+java_modify : JavaObject -> JavaSetup ();
 
 /* And in the Java world. */
-var : String -> JavaType -> JavaObject;
-arg : Nat -> JavaType -> JavaObject;
-field : JavaObject -> String -> JavaObject;
+java_var : String -> JavaType -> JavaObject;
+java_arg : Nat -> JavaType -> JavaObject;
+java_field : JavaObject -> String -> JavaObject;
 
 /* And Java types. */
-class : String -> JavaType;
-array : Nat -> JavaType -> JavaType;
-byte : JavaType;
-char : JavaType;
-int : JavaType;
-long : JavaType;
+java_class : String -> JavaType;
+java_array : Nat -> JavaType -> JavaType;
+java_byte : JavaType;
+java_char : JavaType;
+java_int : JavaType;
+java_long : JavaType;
 
-may_alias : [JavaObject] -> JavaSetup ();
+java_may_alias : [JavaObject] -> JavaSetup ();
 
 /* This allows us to project from a Java value into a native value.
  * We assume that these are well-typed, and check at runtime.
  */
 from_java : {a} JavaObject -> a;
 
-verify_result : {a} JavaVerifyResult
-              -> (JavaOverride -> a)
-              -> (JavaCounterExample -> a)
-              -> a;
+java_verify_result : {a} JavaVerifyResult
+                   -> (JavaOverride -> a)
+                   -> (JavaCounterExample -> a)
+                   -> a;
