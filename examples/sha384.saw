@@ -32,30 +32,30 @@ main = do {
 
   cryptol_Block512_T1 : [6][64] -> [64];
   cryptol_Block512_T1 <- extract "SHA384-Ops.cry" "Block512_T1"
-    (do { cryptol_sbv; cryptol_uninterpret ["UpperSigma_1", "Ch"]; });
+    (do { sbv; cryptol_uninterpret ["UpperSigma_1", "Ch"]; });
 
   cryptol_Block512_T2 : [3][64] -> [64];
   cryptol_Block512_T2 <- extract "SHA384-Ops.cry" "Block512_T2"
-    (do { cryptol_sbv; cryptol_uninterpret ["LowerSigma_1", "LowerSigma_0"]; });
+    (do { sbv; cryptol_uninterpret ["LowerSigma_1", "LowerSigma_0"]; });
 
   cryptol_Block512_W : [4][64] -> [64];
   cryptol_Block512_W <- extract "SHA384-Ops.cry" "Block512_W"
-    (do { cryptol_sbv; cryptol_uninterpret ["LowerSigma_0", "LowerSigma_1"]; });
+    (do { sbv; cryptol_uninterpret ["LowerSigma_0", "LowerSigma_1"]; });
 
   cryptol_Block512_Inner : ([80][64], [9][64]) -> [9][64];
   cryptol_Block512_Inner <- extract "SHA384-Ops.cry" "Block512_Inner"
-    (do { cryptol_sbv; cryptol_uninterpret ["Block512_T1", "Block512_T2"]; });
+    (do { sbv; cryptol_uninterpret ["Block512_T1", "Block512_T2"]; });
 
   cryptol_Transform : ([8][64], [16][64]) -> [8][64];
   cryptol_Transform <- extract "SHA384-Ops.cry" "Transform"
-    (do { cryptol_sbv; cryptol_uninterpret ["Block512_Inner", "Block512_W"]; });
+    (do { sbv; cryptol_uninterpret ["Block512_Inner", "Block512_W"]; });
 
   cryptol_sha384_init : [8][64];
-  cryptol_sha384_init <- cryptol_extract "SHA384.cry" "iv384" cryptol_sbv;
+  cryptol_sha384_init <- cryptol_extract "SHA384.cry" "iv384" sbv;
 
   cryptol_block512 : ([8][64], [16][64]) -> [8][64];
   cryptol_block512 <- cryptol_extract "SHA384.cry" "block512" (do {
-    cryptol_sbv;
+    sbv;
     cryptol_uninterpret ["LowerSigma_0", "LowerSigma_1",
                          "UpperSigma_0", "UpperSigma_1", "Ch", "Maj"];
   });
