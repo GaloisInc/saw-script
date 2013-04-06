@@ -2,6 +2,7 @@ module Verifier.SAW.Cache
   ( Cache
   , newCache
   , newCacheIORefMap
+  , newCacheIORefMap'
   , newCacheMVarMap
   , newCacheIORefIntMap
   , newCacheSTRefMap
@@ -36,6 +37,13 @@ newCache = newCacheIORefMap
 newCacheIORefMap :: (MonadIO m, Ord k) => m (Cache m k a)
 newCacheIORefMap =
     do ref <- liftIO $ newIORef Map.empty
+       let lookup k = liftIO $ Map.lookup k <$> readIORef ref
+       let update k x = liftIO $ modifyIORef ref (Map.insert k x)
+       return (Cache lookup update)
+
+newCacheIORefMap' :: (MonadIO m, Ord k) => Map.Map k a -> m (Cache m k a)
+newCacheIORefMap' initialMap =
+    do ref <- liftIO $ newIORef initialMap
        let lookup k = liftIO $ Map.lookup k <$> readIORef ref
        let update k x = liftIO $ modifyIORef ref (Map.insert k x)
        return (Cache lookup update)
