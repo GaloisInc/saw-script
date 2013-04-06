@@ -23,6 +23,7 @@ library
     , pretty
     , pretty-show
     , saw-core
+    , split
     , transformers
     , vector
     --, Verinf
@@ -34,8 +35,10 @@ library
     SAWScript.Compiler
     SAWScript.ConvertType
     SAWScript.FindMain
+    SAWScript.Import
     SAWScript.Lexer
     SAWScript.LiftPoly
+    SAWScript.Options
     SAWScript.Parser
     SAWScript.ResolveSyns
     SAWScript.ToSAWCore
