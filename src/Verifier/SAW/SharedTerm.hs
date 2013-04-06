@@ -7,6 +7,7 @@ module Verifier.SAW.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
   , SharedTerm(..)
+  , VarIndex
   , TermIndex
   , Termlike(..)
   , looseVars
@@ -68,7 +69,7 @@ module Verifier.SAW.SharedTerm
   , instantiateVar
   , instantiateVarList
   , asTermF
-  , asApp
+--  , asApp
   , asNatLit
   ) where
 
@@ -125,7 +126,8 @@ instance Termlike (SharedTerm s) where
   unwrapTermF STVar{} = error "unwrapTermF called on STVar{}"
   unwrapTermF (STApp _ tf) = tf
 
--- Shared context.
+----------------------------------------------------------------------
+-- SharedContext: a high-level interface for building SharedTerms.
 
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
@@ -412,9 +414,6 @@ instantiateVarListChangeT sc k ts t =
 instantiateVarList :: SharedContext s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts t)
-
-----------------------------------------------------------------------
--- SharedContext: a high-level interface for building SharedTerms.
 
 scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll sc = foldlM (scApply sc)
