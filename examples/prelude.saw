@@ -1,6 +1,6 @@
-import cryptol_prelude as cryptol;
-import java_prelude as java;
-import llvm_prelude as llvm;
+import cryptol_prelude;
+import java_prelude;
+import llvm_prelude;
 
 /* Send the current goal to Yices, and return proof status. */
 yices : ProofScript ProofResult;
