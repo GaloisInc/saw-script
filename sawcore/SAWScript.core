@@ -1,0 +1,21 @@
+module SAWScript where
+
+import Prelude;
+
+data ProofResult :: sort 0 where { }
+
+data Rule :: sort 0 where { }
+
+data TopLevel :: sort 0 -> sort 0 where { }
+
+data ProofScript :: sort 0 -> sort 0 where { }
+
+print :: (a :: sort 0) -> a -> TopLevel TUnit;
+
+topBind :: (a :: sort 0) -> (b :: sort 0)
+        -> TopLevel a -> (a -> TopLevel b) -> TopLevel b;
+
+topReturn :: (a :: sort 0) -> a -> TopLevel a;
+
+main :: TopLevel TUnit;
+main = topBind Nat TUnit (topReturn Nat 3) (\(n :: Nat) -> print Nat n);
