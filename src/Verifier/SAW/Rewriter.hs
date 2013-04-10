@@ -29,7 +29,6 @@ module Verifier.SAW.Rewriter
   -- * Term rewriting
   , rewriteTerm
   , rewriteSharedTerm
-  , rewriteSharedTerm' -- uses ChangeT
   , rewriteSharedTermToTerm
   , rewriteSharedTermTypeSafe
   -- * SharedContext
