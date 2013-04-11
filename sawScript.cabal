@@ -23,10 +23,11 @@ library
     , pretty
     , pretty-show
     , saw-core
+    , smtLib
     , split
     , transformers
     , vector
-    --, Verinf
+    , Verinf
 
   hs-source-dirs: src
 
@@ -44,6 +45,7 @@ library
     SAWScript.ResolveSyns
     SAWScript.ToSAWCore
     SAWScript.Token
+    SAWScript.TopLevel
     SAWScript.TypeCheck
     SAWScript.Unify
     SAWScript.Unify.Fix
