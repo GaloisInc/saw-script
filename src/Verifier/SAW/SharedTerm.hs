@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -43,6 +44,7 @@ module Verifier.SAW.SharedTerm
   , scTupleType
   , scTupleSelector
   , scPrettyTerm
+  , scPrettyTermDoc
   , scViewAsBool
   , scViewAsNum
   , scGlobalApply
@@ -69,7 +71,6 @@ module Verifier.SAW.SharedTerm
   , instantiateVar
   , instantiateVarList
   , asTermF
---  , asApp
   , asNatLit
   ) where
 
@@ -79,7 +80,7 @@ import Control.Monad (foldM, liftM, when)
 import qualified Control.Monad.State as State
 import Control.Monad.Trans (lift)
 import Data.Bits
-import Data.Hashable (Hashable, hashWithSalt)
+import Data.Hashable (Hashable(..), hash)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.Map (Map)
@@ -169,13 +170,18 @@ type AppCacheRef s = MVar (AppCache s)
 emptyAppCache :: AppCache s
 emptyAppCache = AC HMap.empty 0
 
+instance Show (TermF (SharedTerm s)) where
+  show t@FTermF{} = "termF fTermF"
+  show _ = "termF SharedTerm"
+
 -- | Return term for application using existing term in cache if it is avaiable.
 getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
   modifyMVar r $ \s -> do
     case HMap.lookup a (acBindings s) of
       Just t -> return (s,t)
-      Nothing -> seq s' $ return (s',t)
+      Nothing -> do
+          seq s' $ return (s',t)
         where t = STApp (acNextIdx s) a
               s' = s { acBindings = HMap.insert a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
@@ -461,11 +467,11 @@ scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
 scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
 
 -- TODO: remove unused SharedContext argument
-scPrettyTermDoc :: SharedContext s -> SharedTerm s -> Doc
-scPrettyTermDoc _sc t = ppTerm emptyLocalVarDoc 0 (unshare t)
+scPrettyTermDoc :: SharedTerm s -> Doc
+scPrettyTermDoc t = ppTerm emptyLocalVarDoc 0 (unshare t)
 
-scPrettyTerm :: SharedContext s -> SharedTerm s -> String
-scPrettyTerm sc t = show (scPrettyTermDoc sc t)
+scPrettyTerm :: SharedTerm s -> String
+scPrettyTerm t = show (scPrettyTermDoc t)
 
 scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFun sc a b = do b' <- incVars sc 0 1 b

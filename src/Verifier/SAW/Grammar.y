@@ -5,7 +5,7 @@ module Verifier.SAW.Grammar
   ( Decl(..)
   , Term(..)
   , parseSAW
-  , runParser
+  , parseSAWTerm
   , lexer
   ) where
 
@@ -25,8 +25,9 @@ import Verifier.SAW.Lexer
 
 }
 
-%name parseSAW
---%expect 0
+%name parseSAW2 Module
+%name parseSAWTerm2 Term
+
 %tokentype { PosPair Token }
 %monad { Parser }
 %lexer { lexer } { PosPair _ TEnd }
@@ -308,10 +309,16 @@ lexer f = do
 
 -- | Run parser given a directory for the base (used for making pathname relative),
 -- bytestring to parse, and parser to run.
-runParser :: FilePath -> FilePath -> B.ByteString -> Parser a -> (a,ErrorList)
-runParser base path b (Parser m) = (r, reverse (psErrors s))
+runParser :: Parser a -> FilePath -> FilePath -> B.ByteString -> (a,ErrorList)
+runParser (Parser m) base path b = (r, reverse (psErrors s))
   where initState = PS { psInput = initialAlexInput base path b, psErrors = [] }
         (r,s) = runState m initState
+
+parseSAW :: FilePath -> FilePath -> B.ByteString -> (Module,ErrorList)
+parseSAW = runParser parseSAW2
+
+parseSAWTerm :: FilePath -> FilePath -> B.ByteString -> (Term,ErrorList)
+parseSAWTerm = runParser parseSAWTerm2
 
 parseError :: PosPair Token -> Parser a
 parseError pt = do

@@ -26,6 +26,7 @@ module Verifier.SAW.TypedAST
  , TypedDef
  , TypedDefEqn
  , moduleDefs
+ , allModuleDefs
  , findDef
  , insImport
  , insDataType
@@ -77,13 +78,14 @@ import Control.Monad.Identity (runIdentity)
 import Data.Bits
 import Data.Char
 import Data.Foldable
-import Data.Hashable (Hashable, hashWithSalt)
+import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Generics (Generic)
+import GHC.Exts (IsString(..))
 import Text.PrettyPrint.HughesPJ
 
 import Prelude hiding (all, concatMap, foldr, sum)
@@ -149,6 +151,9 @@ parseIdent s0 =
             (h,[]) -> [h]
             (h,'.':r) -> h : breakEach r
             _ -> internalError "breakEach failed"
+
+instance IsString Ident where
+  fromString = parseIdent
     
 newtype Sort = SortCtor { _sortIndex :: Integer }
   deriving (Eq, Ord, Generic)
@@ -377,7 +382,7 @@ data TermF e
     | LocalVar !DeBruijnIndex !e
   deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
-instance Hashable e => Hashable (TermF e) -- automatically derived
+instance Hashable e => Hashable (TermF e) -- automatically derived.
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
@@ -504,8 +509,6 @@ ppFlatTermF pp prec tf =
     FloatLit v  -> pure $ text (show v)
     DoubleLit v -> pure $ text (show v)
 
-
-
 newtype Term = Term (TermF Term)
   deriving (Eq)
 
@@ -532,7 +535,7 @@ freesTermF tf =
           Data.Foldable.foldl' (.|.) 0 pat .|. tp .|.
           shiftR rhs (patBoundVarCount pat)
       Pi _name lhs rhs -> lhs .|. shiftR rhs 1
-      Let defs r -> error "unimplemented: freesTermF Let"
+      Let{} -> error "unimplemented: freesTermF Let"
       LocalVar i tp -> bit i .|. tp
 
 freesTerm :: Term -> BitSet
@@ -583,6 +586,7 @@ incVars _ 0 = id
 incVars initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
   where fn _ i t = Term $ LocalVar (i+j) t
 
+{-
 -- | Substitute @t@ for variable @k@ and decrement all higher dangling
 -- variables.
 instantiateVar :: DeBruijnIndex -> Term -> Term -> Term
@@ -593,6 +597,7 @@ instantiateVar k u = instantiateVars fn 0
         fn i j t | j - k == i = terms !! i
                  | j - i > k  = Term $ LocalVar (j - 1) t
                  | otherwise  = Term $ LocalVar j t
+-}
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
@@ -613,11 +618,12 @@ instantiateVarList k ts = instantiateVars fn 0
 -- [x,y,z] t == instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
 -- (instantiateVar 2 (incVars 0 2 z) t))@.
 
-
+{-
 -- | Substitute @t@ for variable 0 in @s@ and decrement all remaining
 -- variables.
 betaReduce :: Term -> Term -> Term
 betaReduce s t = instantiateVar 0 t s
+-}
 
 -- | Pretty print a term with the given outer precedence.
 ppTerm :: TermPrinter Term
@@ -718,6 +724,9 @@ findCtor m i = do
 
 moduleDefs :: Module -> [TypedDef]
 moduleDefs = Map.elems . moduleDefMap
+
+allModuleDefs :: Module -> [TypedDef]
+allModuleDefs m = concatMap moduleDefs (m : Map.elems (m^.moduleImports))
 
 findDef :: Module -> Ident -> Maybe TypedDef
 findDef m i = do

@@ -22,6 +22,9 @@ import Control.Applicative
 import Control.Lens
 import Control.Monad.State 
 import qualified Data.ByteString.Lazy as BL
+#if !MIN_VERSION_template_haskell(2,8,0)
+import qualified Data.ByteString.Lazy.UTF8 as UTF8
+#endif
 import Data.ByteString.Unsafe (unsafePackAddressLen)
 import Data.Char
 import Data.Maybe
@@ -33,9 +36,7 @@ import System.Directory
 import System.FilePath
 import System.IO.Unsafe (unsafePerformIO)
 
-#if !MIN_VERSION_template_haskell(2,8,0)
-import qualified Data.ByteString.Lazy.UTF8 as UTF8
-#endif
+import Text.PrettyPrint (nest)
 
 import qualified Verifier.SAW.Grammar as Un
 import Verifier.SAW.SharedTerm
@@ -57,7 +58,7 @@ camelCase [] = []
 -- | Returns a module containing the standard prelude for SAW.
 readModule :: [Module] -> FilePath -> FilePath -> BL.ByteString -> Module
 readModule imports base path b = do
-  let (m,[]) = Un.runParser base path b Un.parseSAW
+  let (m,[]) = Un.parseSAW base path b
   case tcModule imports m of
     Left e -> error $ "Errors while reading module:\n" ++ show e
     Right r -> r
@@ -74,7 +75,7 @@ readByteStringExpr modules path = do
   let nm = takeFileName path
   base <- runIO $ getCurrentDirectory
   compile_b <- runIO $ BL.readFile path
-  case Un.runParser base nm compile_b Un.parseSAW of
+  case Un.parseSAW base nm compile_b of
     (_,[]) -> do
       let blen :: Int
           blen = fromIntegral (BL.length compile_b)
@@ -126,10 +127,15 @@ defineModuleFromFile modules decNameStr path = do
   -- Load file as lazy bytestring.
   compile_b <- lift $ runIO $ BL.readFile path
   -- Run parser.
-  case Un.runParser base nm compile_b Un.parseSAW of
-    (_,[]) -> return ()
-    (_,errors) -> fail $ "Failed to parse module:\n" ++ show errors
-  let m = readModule (decVal <$> modules) base path compile_b
+  let imports = decVal <$> modules
+
+  m <- 
+    case Un.parseSAW base nm compile_b of
+      (m0,[]) -> do
+        case tcModule imports m0 of
+          Right r -> return r
+          Left e -> fail $ "Module typechecking failed:\n" ++ show (nest 4 e)
+      (_,errors) -> fail $ "Module Parsing failed:\n" ++ show errors
   let decName = mkName decNameStr
   let blen :: Int
       blen = fromIntegral (BL.length compile_b)

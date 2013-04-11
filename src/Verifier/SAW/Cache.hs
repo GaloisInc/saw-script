@@ -11,13 +11,13 @@ module Verifier.SAW.Cache
 
 import Control.Applicative ((<$>))
 import Control.Concurrent.MVar
-import Control.Monad (liftM)
 import Control.Monad.IO.Class
 import Control.Monad.ST
 import Data.IORef
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.STRef
+import Prelude hiding (lookup)
 
 data Cache m k a = Cache (k -> m (Maybe a)) (k -> a -> m ())
 
