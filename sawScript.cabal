@@ -15,8 +15,9 @@ library
     , either
     , directory
     , filepath
-    --, jvm-verifier
-    --, llvm-verifier
+    , jvm-verifier
+    , llvm-pretty
+    , llvm-verifier
     , mtl >= 2.1
     , old-locale
     , old-time
