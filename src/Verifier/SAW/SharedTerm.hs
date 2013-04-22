@@ -3,7 +3,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-
 module Verifier.SAW.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
@@ -43,6 +42,7 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
+  , scTermCount
   , scPrettyTerm
   , scPrettyTermDoc
   , scViewAsBool
@@ -74,47 +74,44 @@ module Verifier.SAW.SharedTerm
   , asNatLit
   ) where
 
-import Control.Applicative ((<$>), pure, (<*>))
+import Control.Applicative
+-- ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
+import Control.Lens
 import Control.Monad (foldM, liftM, when)
-import qualified Control.Monad.State as State
+import Control.Monad.State.Strict as State
 import Control.Monad.Trans (lift)
 import Data.Bits
 import Data.Hashable (Hashable(..), hash)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import qualified Data.IntMap.Strict as IMap
+
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word
 import Data.Foldable hiding (sum)
-import Data.Traversable
+import Data.Traversable ()
 import Prelude hiding (mapM, maximum)
-import Text.PrettyPrint.HughesPJ
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
-type TermIndex = Word64
-type VarIndex = Word64
+type TermIndex = Int -- Word64
 
 data SharedTerm s
-  = STVar !VarIndex !String !(SharedTerm s)
-  | STApp !TermIndex !(TermF (SharedTerm s))
+  = STApp !TermIndex !(TermF (SharedTerm s))
 
 instance Hashable (SharedTerm s) where
     hashWithSalt x (STApp idx _) = hashWithSalt x idx
 
 instance Eq (SharedTerm s) where
-  STVar x _ _ == STVar y _ _ = x == y
   STApp x _ == STApp y _ = x == y
-  _ == _ = False
 
 instance Ord (SharedTerm s) where
-  compare (STVar x _ _) (STVar y _ _) = compare x y
-  compare STVar{} _ = LT
-  compare _ STVar{} = GT
   compare (STApp x _) (STApp y _) = compare x y
 
 class Termlike t where
@@ -124,7 +121,6 @@ instance Termlike Term where
   unwrapTermF (Term tf) = tf
 
 instance Termlike (SharedTerm s) where
-  unwrapTermF STVar{} = error "unwrapTermF called on STVar{}"
   unwrapTermF (STApp _ tf) = tf
 
 ----------------------------------------------------------------------
@@ -226,7 +222,6 @@ scTypeOf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
-    memo (STVar i sym tp) = return tp
     memo (STApp i t) = do
       memo <- State.get
       case Map.lookup i memo of
@@ -260,17 +255,17 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
-        TupleValue l -> lift . scTupleType sc =<< mapM memo l
-        TupleType l -> lift . scSort sc . maximum =<< mapM sort l
+        TupleValue l -> lift . scTupleType sc =<< traverse memo l
+        TupleType l -> lift . scSort sc . maximum =<< traverse sort l
         TupleSelector t i -> do
           STApp _ (FTermF (TupleType ts)) <- memo t
           return (ts !! (i-1)) -- FIXME test for i < length ts
-        RecordValue m -> lift . scRecordType sc =<< mapM memo m
+        RecordValue m -> lift . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
           STApp _ (FTermF (RecordType m)) <- memo t
           let Just tp = Map.lookup f m
           return tp
-        RecordType m -> lift . scSort sc . maximum =<< mapM sort m
+        RecordType m -> lift . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- lift $ scTypeOfCtor sc c
           lift $ foldM (reducePi sc) t args
@@ -288,7 +283,6 @@ unshare :: forall s. SharedTerm s -> Term
 unshare t = State.evalState (go t) Map.empty
   where
     go :: SharedTerm s -> State.State (Map TermIndex Term) Term
-    go STVar{} = error "unshare STVar"
     go (STApp i t) = do
       memo <- State.get
       case Map.lookup i memo of
@@ -309,17 +303,17 @@ scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
     where go (Term termf) = scTermF sc =<< traverse go termf
 
+-- | Returns bitset containing indices of all free local variables.
 looseVars :: forall s. SharedTerm s -> BitSet
 looseVars t = State.evalState (go t) Map.empty
     where
       go :: SharedTerm s -> State.State (Map TermIndex BitSet) BitSet
-      go STVar{} = return 0
       go (STApp i tf) = do
         memo <- State.get
         case Map.lookup i memo of
           Just x -> return x
           Nothing -> do
-            x <- liftM freesTermF (traverse go tf)
+            x <- freesTermF <$> traverse go tf
             State.modify (Map.insert i x)
             return x
 
@@ -333,7 +327,6 @@ instantiateVars sc f initialLevel t =
   where
     go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
-    go l t@(STVar {}) = pure t
     go l t@(STApp tidx tf) =
         ChangeT $ useCache ?cache (tidx, l) (runChangeT $ preserveChangeT t (go' l tf))
 
@@ -466,9 +459,59 @@ scTupleType sc ts = scFlatTermF sc (TupleType ts)
 scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
 scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
 
--- TODO: remove unused SharedContext argument
+type OccurenceMap = IMap.IntMap Word64
+
+-- | Returns map that associated each term index appearing in the term
+-- to the number of occurences in the shared term.
+scTermCount :: SharedTerm s -> OccurenceMap
+scTermCount t0 = execState (rec [t0]) IMap.empty
+  where rec :: [SharedTerm s] -> State OccurenceMap ()
+        rec [] = return ()
+        rec (STApp i tf:r) = do
+          m <- get
+          case IMap.lookup (fromIntegral i) m of
+            Just n -> do
+              put $ IMap.insert (fromIntegral i) (n+1) m
+              rec r
+            Nothing -> do
+              put $ IMap.insert (fromIntegral i) 1 m              
+              rec (Data.Foldable.foldr' (:) r tf)
+
+ppTermF' :: Applicative f
+         => (LocalVarDoc -> Prec -> SharedTerm s -> f Doc)
+         -> LocalVarDoc
+         -> Prec
+         -> TermF (SharedTerm s)
+         -> f Doc
+ppTermF' pp lcls p t0 =
+  case t0 of
+    FTermF tf ->
+      case tf of
+        GlobalDef i -> pure (ppIdent i)
+        App x y -> ppParens (p >= 10) <$> liftA2 (<+>) (pp lcls 10 x) (pp lcls 10 y)
+        ExtCns ec -> pure (text (ecName ec))
+
 scPrettyTermDoc :: SharedTerm s -> Doc
-scPrettyTermDoc t = ppTerm emptyLocalVarDoc 0 (unshare t)
+scPrettyTermDoc t0 = evalState (go emptyLocalVarDoc 0 t0) IMap.empty
+  where ocm = scTermCount t0 -- Occurence map
+        go :: LocalVarDoc
+           -> Prec
+           -> SharedTerm s
+           -> State (IMap.IntMap Doc) Doc
+        go lcls p (STApp i tf) = do
+          md <- IMap.lookup (fromIntegral i) <$> get
+          case md of
+            Just d -> return d
+            Nothing 
+              | shouldShare -> do
+                  d <- ppTermF' go lcls 11 tf
+                  m <- get
+                  let v = text $ 'x' : show (IMap.size m)
+                  put $ IMap.insert (fromIntegral i) v m
+                  return $ v <> text "@" <> d
+              | otherwise -> ppTermF' go lcls p tf
+             where Just c = IMap.lookup (fromIntegral i) ocm
+                   shouldShare = c >= 2
 
 scPrettyTerm :: SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDoc t)
@@ -578,7 +621,7 @@ mkSharedContext m = do
 --          Just d -> return d
   let freshGlobal sym tp = do
         i <- modifyMVar vr (\i -> return (i+1,i))
-        return (STVar i sym tp)
+        getTerm cr (FTermF (ExtCns (EC i sym tp)))
   return SharedContext {
              scModule = return m
            , scTermF = getTerm cr

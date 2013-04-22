@@ -25,7 +25,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Data.Vector (Vector)
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.Prelude.Constants
@@ -137,5 +137,5 @@ reduceToPiExpr tc p tp = do
   rtp <- reduce tc tp
   case rtp of
     TCPi pat l r -> return (pat,l,r)
-    _ -> tcFailD p $ text "Unexpected argument to term with type:" $$
+    _ -> tcFailD p $ text "Unexpected argument to term with type:" <$$>
                          nest 2 (ppTCTerm tc 0 rtp)

@@ -48,10 +48,19 @@ module Verifier.SAW.TypedAST
  , TermF(..)
  , FlatTermF(..)
  , zipWithFlatTermF
- , BitSet
  , freesTerm
  , freesTermF
+
+ , LocalVarDoc
+ , emptyLocalVarDoc
+ , docShowLocalNames
+ , docShowLocalTypes
+
+ , TermPrinter
+ 
+ , Prec
  , ppTerm
+ , ppTermF
  , ppFlatTermF
  , ppRecordF
    -- * Primitive types.
@@ -60,15 +69,17 @@ module Verifier.SAW.TypedAST
  , parseIdent
  , isIdent
  , ppIdent
+ , ppDefEqn
  , DeBruijnIndex
  , FieldName
  , instantiateVarList
+ , ExtCns(..)
+ , VarIndex
    -- * Utility functions
- , Prec
+ , BitSet
  , commaSepList
  , semiTermList
  , ppParens
- , emptyLocalVarDoc
  ) where
 
 import Control.Applicative hiding (empty)
@@ -76,21 +87,24 @@ import Control.Exception (assert)
 import Control.Lens
 import Control.Monad.Identity (runIdentity)
 import Data.Bits
+import qualified Data.ByteString.UTF8 as BS
 import Data.Char
-import Data.Foldable
+import Data.Foldable (Foldable, foldl', sum, all)
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
-import Text.PrettyPrint.HughesPJ
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
-import Prelude hiding (all, concatMap, foldr, sum)
+import Prelude hiding (all, foldr, sum)
 
-import Verifier.SAW.Utils
+import Verifier.SAW.Utils (internalError, sumBy)
+
 
 instance (Hashable k, Hashable a) => Hashable (Map k a) where
     hashWithSalt x m = hashWithSalt x (Map.assocs m)
@@ -98,13 +112,36 @@ instance (Hashable k, Hashable a) => Hashable (Map k a) where
 instance Hashable a => Hashable (Vector a) where
     hashWithSalt x v = hashWithSalt x (V.toList v)
 
-data ModuleName = ModuleName [String]
+doublecolon :: Doc
+doublecolon = colon <> colon
+
+-- | Print a list of items separated by semicolons
+semiTermList :: [Doc] -> Doc
+semiTermList = hsep . fmap (<> semi)
+
+commaSepList :: [Doc] -> Doc
+commaSepList [] = empty
+commaSepList [d] = d
+commaSepList (d:l) = d <> comma <+> commaSepList l
+
+-- | Add parenthesis around a document if condition is true.
+ppParens :: Bool -> Doc -> Doc
+ppParens b = if b then parens else id
+
+newtype ModuleName = ModuleName BS.ByteString -- [String]
   deriving (Eq, Ord, Generic)
 
 instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
-   show (ModuleName s) = intercalate "." (reverse s)
+  show (ModuleName s) = BS.toString s
+
+-- | Crete a module name given a list of strings with the top-most
+-- module name given first.
+mkModuleName :: [String] -> ModuleName
+mkModuleName [] = error "internal: Unexpected empty module name"
+mkModuleName nms = assert (all isCtor nms) $ ModuleName (BS.fromString s)
+  where s = intercalate "." (reverse nms)
 
 isIdent :: String -> Bool
 isIdent (c:l) = isAlpha c && all isIdChar l
@@ -118,11 +155,6 @@ isCtor [] = False
 isIdChar :: Char -> Bool
 isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 
--- | Crete a module name given a list of strings with the top-most
--- module name given first.
-mkModuleName :: [String] -> ModuleName
-mkModuleName [] = error "internal: Unexpected empty module name"
-mkModuleName nms = assert (all isCtor nms) $ ModuleName nms
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
@@ -200,10 +232,10 @@ patBoundVarCount :: Pat e -> DeBruijnIndex
 patBoundVarCount p =
   case p of
     PVar{} -> 1
+    PUnused{} -> 0
     PCtor _ l -> sumBy patBoundVarCount l
     PTuple l  -> sumBy patBoundVarCount l
     PRecord m -> sumBy patBoundVarCount m
-    _ -> 0
 
 patUnusedVarCount :: Pat e -> DeBruijnIndex
 patUnusedVarCount p =
@@ -220,7 +252,7 @@ patBoundVars p =
     PVar s _ _ -> [s]
     PCtor _ l -> concatMap patBoundVars l
     PTuple l -> concatMap patBoundVars l
-    PRecord m -> concatMap patBoundVars m
+    PRecord m -> concatMapOf folded patBoundVars m
     _ -> []
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
@@ -234,6 +266,51 @@ instance Hashable e => Hashable (LocalDef e) -- automatically derived
 
 localVarNames :: LocalDef e -> [String]
 localVarNames (LocalFnDef nm _ _) = [nm]
+
+
+data LocalVarDoc = LVD { docModuleName :: Map ModuleName String
+                       , _docShowLocalNames :: Bool
+                       , _docShowLocalTypes :: Bool
+                       , docMap :: !(Map DeBruijnIndex Doc)
+                       , docLvl :: !DeBruijnIndex
+                       , docUsedMap :: Map String DeBruijnIndex
+                       }
+
+-- | Flag indicates doc should use local names (default True)
+docShowLocalNames :: Simple Lens LocalVarDoc Bool
+docShowLocalNames = lens _docShowLocalNames (\s v -> s { _docShowLocalNames = v })
+
+-- | Flag indicates doc should print type for locals (default false)
+docShowLocalTypes :: Simple Lens LocalVarDoc Bool
+docShowLocalTypes = lens _docShowLocalTypes (\s v -> s { _docShowLocalTypes = v })
+
+emptyLocalVarDoc :: LocalVarDoc
+emptyLocalVarDoc = LVD { docModuleName = Map.empty
+                       , _docShowLocalNames = True
+                       , _docShowLocalTypes = False
+                       , docMap = Map.empty
+                       , docLvl = 0
+                       , docUsedMap = Map.empty
+                       }
+
+consBinding :: LocalVarDoc -> String -> LocalVarDoc
+consBinding lvd i = lvd { docMap = Map.insert lvl (text i) m
+                        , docLvl = lvl + 1
+                        , docUsedMap = Map.insert i lvl (docUsedMap lvd)
+                        }
+ where lvl = docLvl lvd
+       m = case Map.lookup i (docUsedMap lvd) of
+             Just pl -> Map.delete pl (docMap lvd)
+             Nothing -> docMap lvd
+
+lookupDoc :: LocalVarDoc -> DeBruijnIndex -> Doc
+lookupDoc lvd i
+    | lvd^.docShowLocalNames =
+        case Map.lookup lvl (docMap lvd) of
+          Just d -> d
+          Nothing -> text ('!' : show (i - docLvl lvd))
+    | otherwise = text ('!' : show i)
+  where lvl = docLvl lvd - i - 1
 
 -- A Definition contains an identifier, the type of the definition, and a list of equations.
 data Def e = Def { defIdent :: Ident
@@ -299,16 +376,18 @@ instance Show n => Show (DataType n t) where
   show = show . dtName
 
 ppDataType :: TermPrinter e -> DataType Ident e -> Doc
-ppDataType f dt = text "data" <+> tc <+> text "where" <+> lbrace $$
-                    nest 4 (vcat (ppc <$> dtCtors dt)) $$
+ppDataType f dt = text "data" <+> tc <+> text "where" <+> lbrace <$$>
+                    nest 4 (vcat (ppc <$> dtCtors dt)) <$$>
                     nest 2 rbrace
   where lcls = emptyLocalVarDoc
         sym = ppIdent (dtName dt)
         tc = ppTypeConstraint f lcls sym (dtType dt)
         ppc c = ppCtor f c <> semi
 
+type VarIndex = Word64
+
 data FlatTermF e
-  = GlobalDef Ident  -- ^ Global variables are referenced by label.
+  = GlobalDef !Ident  -- ^ Global variables are referenced by label.
 
   | App !e !e
 
@@ -316,27 +395,47 @@ data FlatTermF e
     -- A tuple of a single element is not allowed in well-formed expressions.
   | TupleValue [e]
   | TupleType [e]
-  | TupleSelector e Int
+  | TupleSelector !e !Int
 
   | RecordValue (Map FieldName e)
   | RecordSelector e FieldName
   | RecordType (Map FieldName e)
 
-  | CtorApp Ident [e]
-  | DataTypeApp Ident [e]
+  | CtorApp !Ident ![e]
+  | DataTypeApp !Ident ![e]
 
-  | Sort Sort
+  | Sort !Sort
 
     -- Primitive builtin values
     -- | Natural number with given value (negative numbers are not allowed).
-  | NatLit Integer
+  | NatLit !Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
     -- | Floating point literal
-  | FloatLit Float
+  | FloatLit !Float
     -- | Double precision floating point literal.
-  | DoubleLit Double
+  | DoubleLit !Double
+
+    -- | An external constant with a name.
+  | ExtCns !(ExtCns e)
   deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+
+-- | An external constant with a name.
+-- Names are necessarily unique, but the var index should be.
+data ExtCns e = EC { ecVarIndex :: !VarIndex
+                   , ecName :: !String
+                   , ecType :: !e
+                   }
+  deriving (Functor, Foldable, Traversable)
+
+instance Eq (ExtCns e) where
+  x == y = ecVarIndex x == ecVarIndex y
+
+instance Ord (ExtCns e) where
+  compare x y = compare (ecVarIndex x) (ecVarIndex y)
+
+instance Hashable (ExtCns e) where
+  hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
@@ -376,6 +475,9 @@ data TermF e
     | Pi !String !e !e
        -- | List of bindings and the let expression itself.
       -- Let expressions introduce variables for each identifier.
+      -- Let definitions are bound in the order they appear, e.g., the first symbol
+      -- is referred to by the largest deBruijnIndex within the let, and the last
+      -- symbol has index 0 within the let.
     | Let [LocalDef e] !e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
@@ -387,9 +489,6 @@ instance Hashable e => Hashable (TermF e) -- automatically derived.
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
-doublecolon :: Doc
-doublecolon = colon <> colon
-
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = sym <+> doublecolon <+> f lcls 1 tp
 
@@ -398,116 +497,84 @@ ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> defEqs d))
   where sym = ppIdent (defIdent d)
         tpd = ppTypeConstraint ppTerm lcls sym (defType d)
 
-ppLocalDef :: TermPrinter e -> LocalVarDoc -> LocalDef e -> Doc
-ppLocalDef f lcls (LocalFnDef nm tp eqs) = tpd $$ vcat (ppDefEqn f lcls sym <$> eqs)
+ppLocalDef :: Applicative f 
+           => (LocalVarDoc -> Prec -> e -> f Doc)
+           -> LocalVarDoc -- ^ Context outside let
+           -> LocalVarDoc -- ^ Context inside let
+           -> LocalDef e
+           -> f Doc
+ppLocalDef pp lcls lcls' (LocalFnDef nm tp eqs) =
+    ppd <$> (pptc <$> pp lcls 1 tp)
+        <*> traverse (ppDefEqnF pp lcls' sym) eqs
   where sym = text nm
-        tpd = sym <+> doublecolon <+> f lcls 1 tp
+        pptc tpd = sym <+> doublecolon <+> tpd
+        ppd tpd eqds = vcat (tpd : eqds)
 
 ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
-ppDefEqn f lcls sym (DefEqn pats rhs) = lhs <+> equals <+> f lcls' 1 rhs
-  where lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
-        lhs = sym <+> hsep (ppPat f lcls' 10 <$> pats)
+ppDefEqn pp lcls sym eq = runIdentity (ppDefEqnF pp' lcls sym eq)
+  where pp' l' p' e' = pure (pp l' p' e')
 
--- | Print a list of items separated by semicolons
-semiTermList :: [Doc] -> Doc
-semiTermList = hsep . fmap (<> semi)
+ppDefEqnF :: Applicative f
+          => (LocalVarDoc -> Prec -> e -> f Doc)
+          -> LocalVarDoc -> Doc -> DefEqn e -> f Doc
+ppDefEqnF f lcls sym (DefEqn pats rhs) = 
+    ppEq <$> traverse ppPat' pats
+         <*> f lcls' 1 rhs
+  where ppEq pd rhs' = sym <+> hsep pd <+> equals <+> rhs'
+        lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
+        ppPat' = ppPat (f lcls') 10
 
 type Prec = Int
 
--- | Add parenthesis around a document if condition is true.
-ppParens :: Bool -> Doc -> Doc
-ppParens True  d = parens d
-ppParens False d = d
+ppAppList :: Prec -> Doc -> [Doc] -> Doc
+ppAppList _ sym [] = sym
+ppAppList p sym l = ppParens (p >= 10) $ hsep (sym : l)
 
-ppPat :: TermPrinter e -> TermPrinter (Pat e)
-ppPat f lcls p pat =
+ppTuple :: [Doc] -> Doc
+ppTuple = parens . commaSepList
+
+ppPat :: Applicative f
+      => (Prec -> e -> f Doc)
+      -> Prec -> Pat e -> f Doc
+ppPat f p pat =
   case pat of
-    PVar i _ _ -> text i
-    PUnused{} -> char '_'
-    PCtor c pl -> ppParens (p >= 10) $
-      ppIdent c <+> hsep (ppPat f lcls 10 <$> pl)
-    PTuple pl -> parens $ commaSepList $ ppPat f lcls 1 <$> pl
-    PRecord m -> braces $ semiTermList $ ppFld <$> Map.toList m
-      where ppFld (fld,v) = text fld <+> equals <+> ppPat f lcls 1 v
-
-commaSepList :: [Doc] -> Doc
-commaSepList [] = empty
-commaSepList [d] = d
-commaSepList (d:l) = d <> comma <+> commaSepList l
-
-data LocalVarDoc = LVD { docMap :: !(Map DeBruijnIndex Doc)
-                       , docLvl :: !DeBruijnIndex
-                       , docUsedMap :: Map String DeBruijnIndex
-                       }
-
-emptyLocalVarDoc :: LocalVarDoc
-emptyLocalVarDoc = LVD { docMap = Map.empty
-                       , docLvl = 0
-                       , docUsedMap = Map.empty
-                       }
-
-consBinding :: LocalVarDoc -> String -> LocalVarDoc
-consBinding lvd i = LVD { docMap = Map.insert lvl (text i) m
-                        , docLvl = lvl + 1
-                        , docUsedMap = Map.insert i lvl (docUsedMap lvd)
-                        }
- where lvl = docLvl lvd
-       m = case Map.lookup i (docUsedMap lvd) of
-             Just pl -> Map.delete pl (docMap lvd)
-             Nothing -> docMap lvd
-
-lookupDoc :: LocalVarDoc -> DeBruijnIndex -> Doc
-lookupDoc lvd i =
-  let lvl = docLvl lvd - i - 1
-   in case Map.lookup lvl (docMap lvd) of
-        Just d -> d
-        Nothing -> char '!' <> integer (toInteger (i - docLvl lvd))
+    PVar i _ _ -> pure (text i)
+    PUnused{}  -> pure (char '_')
+    PCtor c pl -> ppAppList p (ppIdent c) <$> traverse (ppPat f 10) pl
+    PTuple pl  -> ppTuple <$> traverse (ppPat f 1) pl
+    PRecord m  -> ppRecordF (ppPat f 1) m
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
-{-
-ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (Pat e, e, r)
-ppPi ftp frhs lcls p (pat,tp,rhs) =
-    ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
-  where lcls' = foldl' consBinding lcls (patBoundVars pat)
-        lhs = case pat of
-                PUnused -> ftp lcls 2 tp
-                _ -> parens (ppPat ftp lcls' 1 pat <> doublecolon <> ftp lcls 1 tp)
--}
-
-ppPi :: TermPrinter e -> TermPrinter r -> TermPrinter (String, e, r)
-ppPi ftp frhs lcls p (i,tp,rhs) =
-    ppParens (p >= 2) $ lhs <+> text "->" <+> frhs lcls' 1 rhs
-  where lcls' = consBinding lcls i
-        lhs | i == "_"  = ftp lcls 2 tp
-            | otherwise = parens (text i <> doublecolon <> ftp lcls 1 tp)
-
 ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
 ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
-  where ppFld (fld,v) = (text fld <+> equals <+>) <$> pp v
+  where ppFld (fld,v) = eqCat (text fld) <$> pp v
+        eqCat x y = x <+> equals <+> y
 
 ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
+
     App l r -> ppParens (prec >= 10) <$> liftA2 (<+>) (pp 10 l) (pp 10 r)
-    TupleValue l -> parens . commaSepList <$> traverse (pp 1) l
-    TupleType l -> (char '#' <>) . parens . commaSepList <$> traverse (pp 1) l
+
+    TupleValue l ->                 ppTuple <$> traverse (pp 1) l
+    TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp 1) l
     TupleSelector t i -> ppParens (prec >= 10) . (<> (char '.' <> int i)) <$> pp 11 t
-    RecordValue m -> ppRecordF (pp 1) m
+
+    RecordValue m      -> ppRecordF (pp 1) m
     RecordSelector t f -> ppParens (prec >= 10) . (<> (char '.' <> text f)) <$> pp 11 t
-    RecordType m -> (char '#' <>) <$> ppRecordF (pp 1) m
-    CtorApp c l
-      | null l -> pure (ppIdent c)
-      | otherwise -> ppParens (prec >= 10) . hsep . (ppIdent c :) <$> traverse (pp 10) l
-    DataTypeApp dt l
-      | null l -> pure (ppIdent dt)
-      | otherwise -> ppParens (prec >= 10) . hsep . (ppIdent dt :) <$> traverse (pp 10) l
+    RecordType m       -> (char '#' <>) <$> ppRecordF (pp 1) m
+
+    CtorApp c l      -> ppAppList prec (ppIdent c) <$> traverse (pp 10) l
+    DataTypeApp dt l -> ppAppList prec (ppIdent dt) <$> traverse (pp 10) l
+
     Sort s -> pure $ text (show s)
     NatLit i -> pure $ integer i
     ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp 1) (V.toList vl)
     FloatLit v  -> pure $ text (show v)
     DoubleLit v -> pure $ text (show v)
+    ExtCns (EC _ v _) -> pure $ text v
 
 newtype Term = Term (TermF Term)
   deriving (Eq)
@@ -523,19 +590,41 @@ piArgCount = go 0
   where go i (Term (Pi _ _ rhs)) = go (i+1) rhs
         go i _ = i
 
+bitwiseOrOf :: (Bits a, Num a) => Fold s a -> s -> a
+bitwiseOrOf fld = foldlOf' fld (.|.) 0
+
 -- | A @BitSet@ represents a set of natural numbers.
 -- Bit n is a 1 iff n is in the set.
 type BitSet = Integer
 
+freesPat :: Pat BitSet -> BitSet
+freesPat p0 =
+  case p0 of
+    PVar  _ i tp -> tp `shiftR` i
+    PUnused i tp -> tp `shiftR` i
+    PTuple  pl -> bitwiseOrOf folded (freesPat <$> pl)
+    PRecord pm -> bitwiseOrOf folded (freesPat <$> pm)
+    PCtor _ pl -> bitwiseOrOf folded (freesPat <$> pl)
+                  
+freesDefEqn :: DefEqn BitSet -> BitSet
+freesDefEqn (DefEqn pl rhs) = 
+    bitwiseOrOf folded (freesPat <$> pl) .|. rhs `shiftR` pc
+  where pc = sum (patBoundVarCount <$> pl) 
+
 freesTermF :: TermF BitSet -> BitSet
 freesTermF tf =
     case tf of
-      FTermF ftf -> Data.Foldable.foldl' (.|.) 0 ftf
+      FTermF ftf -> bitwiseOrOf folded ftf
       Lambda pat tp rhs ->
-          Data.Foldable.foldl' (.|.) 0 pat .|. tp .|.
-          shiftR rhs (patBoundVarCount pat)
-      Pi _name lhs rhs -> lhs .|. shiftR rhs 1
-      Let{} -> error "unimplemented: freesTermF Let"
+        freesPat pat .|. tp .|. rhs `shiftR` patBoundVarCount pat
+      Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
+      Let lcls rhs ->
+          bitwiseOrOf (folded . folded) lcls' .|. rhs `shiftR` n
+        where n = length lcls
+              freesLocalDef :: LocalDef BitSet -> [BitSet]
+              freesLocalDef (LocalFnDef _ tp eqs) = 
+                tp : fmap ((`shiftR` n) . freesDefEqn) eqs
+              lcls' = freesLocalDef <$> lcls
       LocalVar i tp -> bit i .|. tp
 
 freesTerm :: Term -> BitSet
@@ -586,19 +675,6 @@ incVars _ 0 = id
 incVars initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
   where fn _ i t = Term $ LocalVar (i+j) t
 
-{-
--- | Substitute @t@ for variable @k@ and decrement all higher dangling
--- variables.
-instantiateVar :: DeBruijnIndex -> Term -> Term -> Term
-instantiateVar k u = instantiateVars fn 0
-  where -- Use terms to memoize instantiated versions of t.
-        terms = [ incVars 0 i u | i <- [0..] ]
-        -- Instantiate variable 0.
-        fn i j t | j - k == i = terms !! i
-                 | j - i > k  = Term $ LocalVar (j - 1) t
-                 | otherwise  = Term $ LocalVar j t
--}
-
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
 instantiateVarList :: DeBruijnIndex -> [Term] -> Term -> Term
@@ -629,21 +705,51 @@ betaReduce s t = instantiateVar 0 t s
 ppTerm :: TermPrinter Term
 ppTerm lcls p0 t =
   case asApp t of
-    (Term u,[]) -> ppTermF p0 u
-    (Term u,l) -> ppParens (p0 >= 10) $ hsep $ ppTermF 10 u : fmap (ppTerm lcls 10) l
- where ppTermF p (FTermF tf) = runIdentity $ ppFlatTermF (\p' -> pure . ppTerm lcls p') p tf
-       ppTermF p (Lambda pat tp rhs) = ppParens (p >= 1) $
-           text "\\" <> lhs <+> text "->" <+> ppTerm lcls' 2 rhs
-         where lcls' = foldl' consBinding lcls (patBoundVars pat)
-               lhs = parens (ppPat ppTerm lcls' 1 pat <> doublecolon <> ppTerm lcls 1 tp)
-       ppTermF p (Pi pat tp rhs) = ppPi ppTerm ppTerm lcls p (pat,tp,rhs)
-       ppTermF p (Let dl u) = ppParens (p >= 2) $
-           text "let" <+> vcat (ppLocalDef ppTerm lcls' <$> dl) $$
-           text " in" <+> ppTerm lcls' 0 u
-         where nms = concatMap localVarNames dl
-               lcls' = foldl' consBinding lcls nms
-       ppTermF _ (LocalVar i _) = lookupDoc lcls i
+    (Term u,[]) -> ppTermF' p0 u
+    (Term u,l) -> ppParens (p0 >= 10) $ hsep $ ppTermF' 10 u : fmap (ppTerm lcls 10) l
+  where ppTermF' p u = runIdentity (ppTermF ppTerm' lcls p u)
+        ppTerm' l' p' t' = pure (ppTerm l' p' t')
+ 
+ppTermF :: Applicative f
+        => (LocalVarDoc -> Prec -> e -> f Doc)
+        -> LocalVarDoc
+        -> Prec
+        -> TermF e
+        -> f Doc
+ppTermF pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
+ppTermF pp lcls p (Lambda pat tp rhs) =
+    ppLam
+      <$> ppPat (pp lcls') 1 pat -- TODO: Check if this is right.
+      <*> pp lcls  1 tp
+      <*> pp lcls' 2 rhs
+  where ppLam pat' tp' rhs' =
+          ppParens (p >= 1) $
+            text "\\" <> parens (pat' <> doublecolon <> tp')
+               <+> text "->"
+               <+> rhs'
+        lcls' = foldl' consBinding lcls (patBoundVars pat)
 
+ppTermF pp lcls p (Pi i tp rhs) = ppPi <$> lhs <*> pp lcls' 1 rhs
+  where ppPi lhs' rhs' = ppParens (p >= 2) $ lhs' <+> text "->" <+> rhs'
+        lhs | i == "_" = pp lcls 2 tp
+            | otherwise = (\tp' -> parens (text i <> doublecolon <> tp'))
+                            <$> pp lcls 1 tp
+        lcls' = consBinding lcls i
+
+ppTermF pp lcls p (Let dl u) = 
+    ppLet <$> traverse (ppLocalDef pp lcls lcls') dl
+          <*> pp lcls' 0 u
+  where ppLet dl' u' = 
+          ppParens (p >= 2) $
+            text "let" <+> vcat dl' <$$>
+            text " in" <+> u'
+        nms = concatMap localVarNames dl
+        lcls' = foldl' consBinding lcls nms
+ppTermF pp lcls p (LocalVar i tp) 
+    | lcls^.docShowLocalTypes = pptc <$> pp lcls 1 tp
+    | otherwise = pure d
+  where d = lookupDoc lcls i
+        pptc tpd = ppParens (p >= 1) (d <> doublecolon <> tpd)
 
 instance Show Term where
   showsPrec p t = shows $ ppTerm emptyLocalVarDoc p t
@@ -669,7 +775,7 @@ moduleImports :: Simple Lens Module (Map ModuleName Module)
 moduleImports = lens _moduleImports (\m v -> m { _moduleImports = v })
 
 instance Show Module where
-  show m = render $ vcat $ fmap ppImport (Map.keys (m^.moduleImports))
+  show m = show $ vcat $ fmap ppImport (Map.keys (m^.moduleImports))
                         ++ fmap ppdecl   (moduleDecls m)
     where ppImport nm = text $ "import " ++ show nm 
           ppdecl (TypeDecl d) = ppDataType ppTerm d

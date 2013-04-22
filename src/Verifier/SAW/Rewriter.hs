@@ -37,9 +37,13 @@ module Verifier.SAW.Rewriter
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
+import Control.Exception
+import Control.Lens
 import Control.Monad ((>=>))
+import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans (lift)
+import Data.Bits
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 import Data.IORef
@@ -47,6 +51,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Traversable (Traversable, traverse)
+
+import Text.PrettyPrint
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
@@ -142,32 +148,46 @@ ruleOfTerm t =
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
 
+-- Create a rewrite rule from an equation.
+-- Terms do not have unused variables, so unused variables are introduced
+-- as new variables bound after all the used variables.
 ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
-ruleOfDefEqn ident (DefEqn pats rhs) =
-    RewriteRule { ctxt = Map.elems varmap
-                , lhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
-                , rhs = incVars 0 nUnused rhs }
+ruleOfDefEqn ident (DefEqn pats rhs@(Term rtf)) =
+      RewriteRule { ctxt = Map.elems varmap
+                  , lhs = ruleLhs
+                  , rhs = ruleRhs
+                 }
   where
-    nBound = sum (map patBoundVarCount pats)
-    nUnused = sum (map patUnusedVarCount pats)
+    lvd = emptyLocalVarDoc
+        & docShowLocalNames .~ False
+        & docShowLocalTypes .~ True
+    varsUnbound t i = freesTerm t `shiftR` i /= 0
+    ruleLhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
+    ruleRhs = incVars 0 nUnused rhs
+
+    nBound  = sum $ fmap patBoundVarCount  pats
+    nUnused = sum $ fmap patUnusedVarCount pats
     n = nBound + nUnused
     mkApp :: Term -> Term -> Term
     mkApp f x = Term (FTermF (App f x))
+
     termOfPat :: Pat Term -> State (Int, Map Int Term) Term
     termOfPat pat =
         case pat of
-          PVar s i e ->
-              do (j, m) <- get
-                 put (j, Map.insert i e m)
-                 return $ Term (LocalVar (n - 1 - i) (incVars 0 (n - i) e))
-          PUnused i e ->
-              do (j, m) <- get
-                 let s = "_" ++ show j
-                 put (j + 1, Map.insert j (incVars 0 (j - i) e) m)
-                 return $ Term (LocalVar (n - 1 - j) (incVars 0 (n - i) e))
+          PVar s i tp -> do
+            (j, m) <- get
+            put (j, Map.insert i tp m)
+            let tp' = incVars 0 (n - i) tp
+            return $ Term $ LocalVar (n - 1 - i) tp'
+          PUnused i tp -> do
+            (j, m) <- get
+            let s = "_" ++ show j
+            put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
+            return $ Term $ LocalVar (n - 1 - j) (incVars 0 (n - i) tp)
           PTuple pats -> (Term . FTermF . TupleValue) <$> traverse termOfPat pats
           PRecord pats -> (Term . FTermF . RecordValue) <$> traverse termOfPat pats
           PCtor c pats -> (Term . FTermF . CtorApp c) <$> traverse termOfPat pats
+
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
 rulesOfTypedDef :: TypedDef -> [RewriteRule Term]
@@ -411,6 +431,8 @@ rewriteSharedTermTypeSafe sc ss t =
           App e1 e2 ->
               do t1 <- scTypeOf sc e1
                  case unwrapTermF t1 of
+                   -- We only rewrite e2 if type of e1 is not a dependent type.
+                   -- This prevents rewriting e2 from changing type of @App e1 e2@.
                    Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
           TupleValue{} -> traverse rewriteAll ftf

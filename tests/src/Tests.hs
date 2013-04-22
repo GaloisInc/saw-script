@@ -4,10 +4,13 @@ module Main where
 import System.Exit
 
 import Tests.Common
+import Tests.Parser
 import Tests.SharedTerm
 
 main = do
-  let allTests = sharedTermTests
+  let allTests = [ ("SharedTerm", sharedTermTests)
+                 , ("ParserTests", parserTests)
+                 ]
   r <- runTestCases allTests
   if r then
     putStrLn "All tests successful." >> exitWith ExitSuccess

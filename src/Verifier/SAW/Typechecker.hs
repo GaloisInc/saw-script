@@ -25,7 +25,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Utils (internalError)
 
@@ -310,11 +310,11 @@ tcLocalDecls :: TermContext s
              -> [Un.Decl]
              -> TC s (TermContext s, [TCLocalDef])
 tcLocalDecls tc0 p lcls = do
-    (tps,pending) <- unzip <$> traverse tcLclType (groupLocalDecls lcls)
-    let tc = consLocalDefs tps tc0
+    (lclDefs,pending) <- unzip <$> traverse tcLclType (groupLocalDecls lcls)
+    let tc = consLocalDefs lclDefs tc0
     traverseOf_ folded ($ tc) pending
     let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> eval p r
-    (tc,) <$> traverse mkDef tps
+    (tc,) <$> traverse mkDef lclDefs
   where tcLclType (LocalFnDefGen nm utp ueqs) = do
           (tp,_) <- tcType tc0 utp
           r <- newRef nm
@@ -354,7 +354,7 @@ reduceToRecordType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
     TCF (RecordType m) -> return m
-    _ -> tcFailD p $ text "Attempt to dereference field of term with type:" $$
+    _ -> tcFailD p $ text "Attempt to dereference field of term with type:" <$$>
                        nest 2 (ppTCTerm tc 0 rtp)
 
 reduceToTupleType :: TermContext s -> Pos -> TCTerm -> TC s [TCTerm]
@@ -362,7 +362,7 @@ reduceToTupleType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
     TCF (TupleType ts) -> return ts
-    _ -> tcFailD p $ text "Attempt to dereference component of term with type:" $$
+    _ -> tcFailD p $ text "Attempt to dereference component of term with type:" <$$>
                        nest 2 (ppTCTerm tc 0 rtp)
 
 topEval :: TCRef s v -> TC s v
@@ -381,14 +381,6 @@ evalDef (DefGen nm tpr elr) =
 data CompletionContext
   = CCGlobal Module
   | CCBinding CompletionContext Term
-
-addPatTypes :: CompletionContext
-            -> Vector (String,TCTerm)
-            -> (CompletionContext, Vector Term)
-addPatTypes cc0 bl =
- mapAccumLOf traverse ins cc0 (snd <$> bl)
-  where ins cc tp = (CCBinding cc tp', tp')
-          where tp' = completeTerm cc tp
 
 -- | Returns var with index in context or nothing if it not defined.
 ccVarType :: CompletionContext -> DeBruijnIndex -> Maybe Term
@@ -421,20 +413,19 @@ completeDefEqn cc (DefEqnGen pats rhs) = eqn
   where (pats',cc') = completePatT cc pats
         eqn = DefEqn pats' (completeTerm cc' rhs)
 
-
 completePatT :: Traversable f
              => CompletionContext
              -> f TCPat
              -> (f (Pat Term), CompletionContext)
-completePatT cc0 pats = (pats', cc')
+completePatT cc0 pats = (go <$> pats, cc')
   where bl = patBoundVarsOf folded pats
-        ins cc tp = (CCBinding cc tp', (cc,tp'))
+        ins cc (_,tp) = (CCBinding cc tp', (cc,tp'))
           where tp' = completeTerm cc tp
-        (cc', v) =  mapAccumLOf traverse ins cc0 (snd <$> bl)
+        (cc', v) =  mapAccumLOf traverse ins cc0 bl
         ctxv = fmap fst v `V.snoc` cc'
-        boundTypes = snd <$> v
+        
         go (TCPVar nm (i,_)) = PVar nm i tp
-          where Just tp = boundTypes V.!? i
+          where Just (_,tp) = v V.!? i
         go (TCPUnused _ (i,tp)) = PUnused i (completeTerm cc tp)
           where Just cc = ctxv V.!? i
         go (TCPatF pf) =
@@ -442,14 +433,9 @@ completePatT cc0 pats = (pats', cc')
             UPTuple l -> PTuple (go <$> l)
             UPRecord m -> PRecord (go <$> m)
             UPCtor c l -> PCtor c (go <$> l)
-        pats' = go <$> pats
-
 
 completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
 completePat cc0 pat = over _1 runIdentity $ completePatT cc0 (Identity pat)
-
-localBoundVars :: TCLocalDef -> (String, TCTerm)
-localBoundVars (LocalFnDefGen nm tp _) = (nm,tp)
 
 -- | Returns the type of a unification term in the current context.
 completeTerm :: CompletionContext -> TCTerm -> Term
@@ -464,11 +450,17 @@ completeTerm cc (TCPi pat@(TCPUnused nm _) tp r) =
     Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term"
-completeTerm cc (TCLet lcls t) = Term $ Let lcls' (completeTerm cc' t)
-  where (cc',tps) = addPatTypes cc (localBoundVars <$> V.fromList lcls)
-        completeLocal (LocalFnDefGen nm _ eqns) tp =
+completeTerm cc (TCLet lcls t) = 
+    Term $ Let (completeLocal <$> lcls') (completeTerm cc' t)
+  where -- Complete types in local defs using outer context.
+        lcls' = lcls & traverse . localDefType %~ completeTerm cc
+        -- Create new context.
+        cc' = foldlOf' folded CCBinding cc
+            $ zipWith (incVars 0) [0..]
+            $ view localDefType <$> lcls'
+        -- Complete equations in new context.
+        completeLocal (LocalFnDefGen nm tp eqns) =
           LocalFnDef nm tp (completeDefEqn cc' <$> eqns)
-        lcls' = zipWith completeLocal lcls (V.toList tps)
 completeTerm cc (TCVar i) = Term $ LocalVar i tp
   where Just tp = ccVarType cc i
 completeTerm cc (TCLocalDef i) = Term $ LocalVar i tp

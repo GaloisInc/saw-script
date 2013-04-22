@@ -31,7 +31,7 @@ import qualified Data.Set as Set
 import Data.STRef
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
@@ -783,13 +783,13 @@ checkTypesEqual' p ctx tc x y = do
       | c == preludeSuccIdent && n > 0 ->
       check' tc b (TCF (NatLit (n-1)))
     _ -> do
-       tcFail p $ show $ text "Equivalence check failed during typechecking:"  $$
-          nest 2 (ppTCTerm tc 0 x) $$ text "and\n" $$
-          nest 2 (ppTCTerm tc 0 y) $$ text "in context\n" $$
-          nest 4 (ppTermContext tc) $$
+       tcFail p $ show $ text "Equivalence check failed during typechecking:"  <$$>
+          nest 2 (ppTCTerm tc 0 x) <$$> text "and\n" <$$>
+          nest 2 (ppTCTerm tc 0 y) <$$> text "in context\n" <$$>
+          nest 4 (ppTermContext tc) <$$>
           nest 2 (vcat (ppScope <$> ctx))
       where ppScope (tc',x',y') =
-             text "while typechecking" $$
-             nest 2 (ppTCTerm tc 0 x') $$ text "and\n" $$
-             nest 2 (ppTCTerm tc 0 y') $$ text "in context\n" $$
+             text "while typechecking" <$$>
+             nest 2 (ppTCTerm tc 0 x') <$$> text "and\n" <$$>
+             nest 2 (ppTCTerm tc 0 y') <$$> text "in context\n" <$$>
              nest 4 (ppTermContext tc')

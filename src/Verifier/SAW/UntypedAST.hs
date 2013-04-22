@@ -21,7 +21,7 @@ module Verifier.SAW.UntypedAST
 
 import Control.Applicative ((<$>))
 import Control.Exception (assert)
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
