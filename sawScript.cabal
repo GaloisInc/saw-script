@@ -67,6 +67,7 @@ executable saw
 
   build-depends:
       base >= 4
+    , containers
     , directory
     , either
     , filepath
