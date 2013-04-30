@@ -89,9 +89,11 @@ import qualified Data.IntMap.Strict as IMap
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Map.Strict as StrictMap
 import Data.Word
 import Data.Foldable hiding (sum)
 import Data.Traversable ()
+import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 import Text.PrettyPrint.Leijen hiding ((<$>))
 
@@ -459,24 +461,28 @@ scTupleType sc ts = scFlatTermF sc (TupleType ts)
 scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
 scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
 
-type OccurenceMap = IMap.IntMap Word64
+type SharedTermMap s v = StrictMap.Map (SharedTerm s) v
+
+
+type OccurenceMap s = SharedTermMap s Word64
 
 -- | Returns map that associated each term index appearing in the term
 -- to the number of occurences in the shared term.
-scTermCount :: SharedTerm s -> OccurenceMap
-scTermCount t0 = execState (rec [t0]) IMap.empty
-  where rec :: [SharedTerm s] -> State OccurenceMap ()
+scTermCount :: SharedTerm s -> OccurenceMap s
+scTermCount t0 = execState (rec [t0]) StrictMap.empty
+  where rec :: [SharedTerm s] -> State (OccurenceMap s) ()
         rec [] = return ()
-        rec (STApp i tf:r) = do
+        rec (t:r) = do
           m <- get
-          case IMap.lookup (fromIntegral i) m of
+          case StrictMap.lookup t m of
             Just n -> do
-              put $ IMap.insert (fromIntegral i) (n+1) m
+              put $ StrictMap.insert t (n+1) m
               rec r
             Nothing -> do
-              put $ IMap.insert (fromIntegral i) 1 m              
-              rec (Data.Foldable.foldr' (:) r tf)
+              put $ StrictMap.insert t 1 m              
+              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
+{-
 ppTermF' :: Applicative f
          => (LocalVarDoc -> Prec -> SharedTerm s -> f Doc)
          -> LocalVarDoc
@@ -488,30 +494,59 @@ ppTermF' pp lcls p t0 =
     FTermF tf ->
       case tf of
         GlobalDef i -> pure (ppIdent i)
-        App x y -> ppParens (p >= 10) <$> liftA2 (<+>) (pp lcls 10 x) (pp lcls 10 y)
+        App x y -> ppAppParens (p >= 10) <$> liftA2 (<+>) (pp lcls 10 x) (pp lcls 10 y)
         ExtCns ec -> pure (text (ecName ec))
+-}
 
-scPrettyTermDoc :: SharedTerm s -> Doc
-scPrettyTermDoc t0 = evalState (go emptyLocalVarDoc 0 t0) IMap.empty
-  where ocm = scTermCount t0 -- Occurence map
-        go :: LocalVarDoc
-           -> Prec
-           -> SharedTerm s
-           -> State (IMap.IntMap Doc) Doc
-        go lcls p (STApp i tf) = do
-          md <- IMap.lookup (fromIntegral i) <$> get
-          case md of
-            Just d -> return d
-            Nothing 
-              | shouldShare -> do
-                  d <- ppTermF' go lcls 11 tf
-                  m <- get
-                  let v = text $ 'x' : show (IMap.size m)
-                  put $ IMap.insert (fromIntegral i) v m
-                  return $ v <> text "@" <> d
-              | otherwise -> ppTermF' go lcls p tf
-             where Just c = IMap.lookup (fromIntegral i) ocm
-                   shouldShare = c >= 2
+lineSep :: [Doc] -> Doc
+lineSep l = hcat (punctuate line l)
+
+scPrettyTermDoc :: forall s . SharedTerm s -> Doc
+scPrettyTermDoc t0
+    | null bound = ppt lcls0 PrecNone t0
+    | otherwise =
+        text "let { " <> nest 6 (lineSep lets) <$$>
+        text "    }" <$$>
+        text " in " <> ppt lcls0 PrecLetTerm t0
+  where lcls0 = emptyLocalVarDoc
+        cm = scTermCount t0 -- Occurence map
+        -- Return true if variable should be introduced to name term.
+        shouldName :: SharedTerm s -> Word64 -> Bool
+        shouldName t c =
+          case unwrapTermF t of
+            FTermF GlobalDef{} -> False
+            FTermF (TupleValue []) -> False
+            FTermF (TupleType []) -> False
+            FTermF (CtorApp _ []) -> False
+            FTermF (DataTypeApp _ []) -> False
+            FTermF NatLit{} -> False
+            FTermF (ArrayValue _ v) | V.length v == 0 -> False
+            FTermF FloatLit{} -> False
+            FTermF DoubleLit{} -> False
+            FTermF ExtCns{} -> False
+            LocalVar{} -> False
+            _ -> c > 1
+
+        -- Terms bound in map.
+        bound :: [SharedTerm s]
+        bound = [ t | (t,c) <- Map.toList cm, shouldName t c ]
+
+        var :: Word64 -> Doc
+        var n = char 'x' <> integer (toInteger n)
+
+        lets = [ var n <+> char '=' <+> ppTermF ppt lcls0 PrecNone (unwrapTermF t) <> char ';'
+               | (t,n) <- bound `zip` [0..]
+               ]
+        
+        dm :: SharedTermMap s Doc
+        dm = Data.Foldable.foldl' insVar StrictMap.empty (bound `zip` [0..])
+          where insVar m (t,n) = StrictMap.insert t (var n) m
+
+        ppt :: LocalVarDoc -> Prec -> SharedTerm s -> Doc
+        ppt lcls p t =
+          case StrictMap.lookup t dm of
+            Just d -> d
+            Nothing -> ppTermF ppt lcls p (unwrapTermF t)
 
 scPrettyTerm :: SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDoc t)

@@ -139,7 +139,7 @@ checkIsSort tc p t0 = do
   t <- reduce tc t0
   case t of
     TCF (Sort s) -> return s
-    _ -> tcFailD p $ ppTCTerm tc 0 t <+> text "could not be interpreted as a sort."
+    _ -> tcFailD p $ ppTCTerm tc PrecNone t <+> text "could not be interpreted as a sort."
 
 -- | Typecheck a term as a type, returning a term equivalent to it, and
 -- with the same type as the term.
@@ -329,8 +329,9 @@ checkTypeSubtype tc p x y = do
   xr <- reduce tc x
   yr <- reduce tc y
   let ppFailure = tcFailD p msg
-        where msg = ppTCTerm tc 0 xr <+> text "is not a subtype of"
-                                     <+> ppTCTerm tc 0 yr <> char '.'
+        where msg = ppTCTerm tc PrecNone xr
+                    <+> text "is not a subtype of"
+                    <+> ppTCTerm tc PrecNone yr <> char '.'
   case (tcAsApp xr, tcAsApp yr) of
     ( (TCF (Sort xs), []), (TCF (Sort ys), []) )
       | xs <= ys -> return ()
@@ -355,7 +356,7 @@ reduceToRecordType tc p tp = do
   case rtp of
     TCF (RecordType m) -> return m
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" <$$>
-                       nest 2 (ppTCTerm tc 0 rtp)
+                       nest 2 (ppTCTerm tc PrecNone rtp)
 
 reduceToTupleType :: TermContext s -> Pos -> TCTerm -> TC s [TCTerm]
 reduceToTupleType tc p tp = do
@@ -363,7 +364,7 @@ reduceToTupleType tc p tp = do
   case rtp of
     TCF (TupleType ts) -> return ts
     _ -> tcFailD p $ text "Attempt to dereference component of term with type:" <$$>
-                       nest 2 (ppTCTerm tc 0 rtp)
+                       nest 2 (ppTCTerm tc PrecNone rtp)
 
 topEval :: TCRef s v -> TC s v
 topEval r = eval (internalError $ "Cyclic error in top level" ++ show r) r

@@ -306,9 +306,9 @@ tcApply baseTC (fTC, f) (vTC, v)
    | V.length v <= fd = tcApplyImpl vd v (fd - V.length v) f
    | otherwise = error $ show $
       text "tcApply given bad arguments:" <$$>
-      ppTCTerm fTC 0 f <$$>
+      ppTCTerm fTC PrecNone f <$$>
       text ("fd = " ++ show fd) <$$>
-      vcat (ppTCTerm vTC 0 <$> V.toList v)
+      vcat (ppTCTerm vTC PrecNone <$> V.toList v)
   where Just fd = boundVarDiff fTC baseTC
         Just vd = boundVarDiff vTC baseTC
 
@@ -580,12 +580,13 @@ contextNames TopContext{} = []
 -- | Pretty print a term context.
 ppTermContext :: TermContext s -> Doc
 ppTermContext (BindContext tc nm tp) =
-  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc 1 tp <$$>
+  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc PrecTypeConstraintRhs tp <$$>
   ppTermContext tc
 ppTermContext (LetContext tc lcls) =
     text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) <$$>
     ppTermContext tc
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp
+  where ppLcl (LocalFnDefGen nm tp _) =
+         text nm <+> text "::" <+> ppTCTerm tc PrecTypeConstraintRhs tp
 ppTermContext TopContext{} = text "top"
 
 -- | Pretty print a pat
@@ -605,16 +606,18 @@ ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
-ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
-  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
-             <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
-ppTCTermGen d pr (TCPi p l r) = ppParens (pr >= 1) $
-  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
-    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
-ppTCTermGen d pr (TCLet lcls t) = ppParens (pr >= 1) $
+ppTCTermGen d pr (TCLambda p l r) = ppParens (precInt pr >= 1) $
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecTypeConstraintRhs l)
+            <+> text "->"
+            <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecLambdaRhs r
+ppTCTermGen d pr (TCPi p l r) = ppParens (precInt pr >= 1) $
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecTypeConstraintRhs l)
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecPiRhs r
+ppTCTermGen d pr (TCLet lcls t) = ppParens (precInt pr >= 1) $
     text "let " <> nest 4 (vcat (ppLcl <$> lcls)) <$$>
-    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) 1 t)
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTermGen d 1 tp
+    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) PrecLetTerm t)
+  where ppLcl (LocalFnDefGen nm tp _) =
+          text nm <+> text "::" <+> ppTCTermGen d PrecTypeConstraintRhs tp
 ppTCTermGen d _ (TCVar i) | 0 <= i && i < length d = d !! i
                           | otherwise = text $ "Bad variable index " ++ show i
 ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i

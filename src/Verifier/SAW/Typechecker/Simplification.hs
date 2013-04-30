@@ -31,6 +31,7 @@ import Verifier.SAW.Position
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
+import Verifier.SAW.TypedAST
 
 extendPatContext :: TermContext s -> TCPat -> TermContext s
 extendPatContext tc0 pat = V.foldl (flip $ uncurry consBoundVar) tc0 (patBoundVars pat)
@@ -138,4 +139,4 @@ reduceToPiExpr tc p tp = do
   case rtp of
     TCPi pat l r -> return (pat,l,r)
     _ -> tcFailD p $ text "Unexpected argument to term with type:" <$$>
-                         nest 2 (ppTCTerm tc 0 rtp)
+                         nest 2 (ppTCTerm tc PrecNone rtp)
