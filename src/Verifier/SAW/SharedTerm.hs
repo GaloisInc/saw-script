@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE CPP #-}
 module Verifier.SAW.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
@@ -85,11 +86,16 @@ import Data.Bits
 import Data.Hashable (Hashable(..), hash)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
-import qualified Data.IntMap.Strict as IMap
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+#if __GLASGOW_HASKELL__ < 706
+import qualified Data.Map as StrictMap
+import qualified Data.IntMap as IMap
+#else
 import qualified Data.Map.Strict as StrictMap
+import qualified Data.IntMap.Strict as IMap
+#endif
 import Data.Word
 import Data.Foldable hiding (sum)
 import Data.Traversable ()
