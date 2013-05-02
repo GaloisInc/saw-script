@@ -22,31 +22,27 @@ import Prelude hiding (lookup)
 data Cache m k a = Cache (k -> m (Maybe a)) (k -> a -> m ())
 
 useCache :: Monad m => Cache m k a -> k -> m a -> m a
-useCache (Cache lookup update) k action =
-    do result <- lookup k
-       case result of
-         Just x -> return x
-         Nothing ->
-             do x <- action
-                update k x
-                return x
+useCache (Cache lookup update) k action = do
+  result <- lookup k
+  case result of
+    Just x -> return x
+    Nothing -> do
+      x <- action
+      update k x
+      return x
 
 newCache :: (MonadIO m, Ord k) => m (Cache m k a)
-newCache = newCacheIORefMap
+newCache = liftIO newCacheIORefMap
 
-newCacheIORefMap :: (MonadIO m, Ord k) => m (Cache m k a)
-newCacheIORefMap =
-    do ref <- liftIO $ newIORef Map.empty
-       let lookup k = liftIO $ Map.lookup k <$> readIORef ref
-       let update k x = liftIO $ modifyIORef ref (Map.insert k x)
-       return (Cache lookup update)
+newCacheIORefMap :: (MonadIO m, Ord k) => IO (Cache m k a)
+newCacheIORefMap = newCacheIORefMap' Map.empty
 
-newCacheIORefMap' :: (MonadIO m, Ord k) => Map.Map k a -> m (Cache m k a)
-newCacheIORefMap' initialMap =
-    do ref <- liftIO $ newIORef initialMap
-       let lookup k = liftIO $ Map.lookup k <$> readIORef ref
-       let update k x = liftIO $ modifyIORef ref (Map.insert k x)
-       return (Cache lookup update)
+newCacheIORefMap' :: (MonadIO m, Ord k) => Map.Map k a -> IO (Cache m k a)
+newCacheIORefMap' initialMap = do
+  ref <- liftIO $ newIORef initialMap
+  let lookup k = liftIO $ Map.lookup k <$> readIORef ref
+  let update k x = liftIO $ modifyIORef ref (Map.insert k x)
+  return (Cache lookup update)
 
 newCacheMVarMap :: (MonadIO m, Ord k) => m (Cache m k a)
 newCacheMVarMap =

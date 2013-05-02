@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -7,10 +8,20 @@
 module Verifier.SAW.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
-  , SharedTerm(..)
   , VarIndex
-  , TermIndex
   , Termlike(..)
+  , asTermF
+  , asFTermF
+  , asCtor
+  , asDataType
+  , asGlobalDef
+  , isGlobalDef
+  , asNatLit
+  , asBool
+    -- * Shared terms
+  , SharedTerm(..)
+  , scFreshGlobal
+  , TermIndex
   , looseVars
   , unshare
     -- * SharedContext interface for building shared terms
@@ -21,6 +32,7 @@ module Verifier.SAW.SharedTerm
   , scFlatTermF
     -- ** Implicit versions of functions.
   , scDefTerm
+  , scFreshGlobalVar
   , scFreshGlobal
   , scGlobalDef
   , scModule
@@ -46,8 +58,6 @@ module Verifier.SAW.SharedTerm
   , scTermCount
   , scPrettyTerm
   , scPrettyTermDoc
-  , scViewAsBool
-  , scViewAsNum
   , scGlobalApply
   , scSharedTerm
     -- ** Type checking
@@ -71,8 +81,7 @@ module Verifier.SAW.SharedTerm
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
-  , asTermF
-  , asNatLit
+  , scInstantiateExt
   ) where
 
 import Control.Applicative
@@ -108,6 +117,39 @@ import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
+class Termlike t where
+  unwrapTermF :: t -> TermF t
+
+asTermF :: Termlike t => t -> TermF t
+asTermF = unwrapTermF
+
+asFTermF :: Termlike t => t -> Maybe (FlatTermF t)
+asFTermF (asTermF -> FTermF ftf) = Just ftf
+asFTermF _ = Nothing
+
+asCtor :: Termlike t => t -> Maybe (Ident, [t])
+asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
+
+asDataType :: Termlike t => t -> Maybe (Ident, [t])
+asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l) 
+
+asGlobalDef :: Termlike t => t -> Maybe Ident
+asGlobalDef t = do GlobalDef i <- asFTermF t; return i
+
+isGlobalDef :: Termlike t => Ident -> t -> Maybe ()
+isGlobalDef i (asGlobalDef -> Just o) | i == o = Just ()
+isGlobalDef _ _ = Nothing
+
+asNatLit :: Termlike t => t -> Maybe Integer
+asNatLit t = do NatLit i <- asFTermF t; return i
+
+-- | Returns term as a constant Boolean if it can be evaluated as one.
+-- bh: Is this really intended to do *evaluation*? Or is it supposed to work like asNatLit?
+asBool :: Termlike t => t -> Maybe Bool
+asBool (asCtor -> Just ("Prelude.True",  [])) = Just True
+asBool (asCtor -> Just ("Prelude.False", [])) = Just False
+asBool _ = Nothing
+
 type TermIndex = Int -- Word64
 
 data SharedTerm s
@@ -122,9 +164,6 @@ instance Eq (SharedTerm s) where
 instance Ord (SharedTerm s) where
   compare (STApp x _) (STApp y _) = compare x y
 
-class Termlike t where
-  unwrapTermF :: t -> TermF t
-
 instance Termlike Term where
   unwrapTermF (Term tf) = tf
 
@@ -138,12 +177,17 @@ data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
     scModule        :: IO Module
   , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
-    -- | Create a global variable with the given identifier (which may be "_") and type.
-  , scFreshGlobal   :: String -> SharedTerm s -> IO (SharedTerm s)
+  , scFreshGlobalVar :: IO VarIndex
   }
 
 scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
+
+-- | Create a global variable with the given identifier (which may be "_") and type.
+scFreshGlobal :: SharedContext s -> String -> SharedTerm s -> IO (SharedTerm s)
+scFreshGlobal sc sym tp = do
+  i <- scFreshGlobalVar sc
+  scFlatTermF sc (ExtCns (EC i sym tp))
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -485,24 +529,10 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               put $ StrictMap.insert t (n+1) m
               rec r
             Nothing -> do
-              put $ StrictMap.insert t 1 m              
-              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
-
-{-
-ppTermF' :: Applicative f
-         => (LocalVarDoc -> Prec -> SharedTerm s -> f Doc)
-         -> LocalVarDoc
-         -> Prec
-         -> TermF (SharedTerm s)
-         -> f Doc
-ppTermF' pp lcls p t0 =
-  case t0 of
-    FTermF tf ->
-      case tf of
-        GlobalDef i -> pure (ppIdent i)
-        App x y -> ppAppParens (p >= 10) <$> liftA2 (<+>) (pp lcls 10 x) (pp lcls 10 y)
-        ExtCns ec -> pure (text (ecName ec))
--}
+              put $ StrictMap.insert t 1 m
+              let (h,args) = asAppList t
+              rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
+--              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
 lineSep :: [Doc] -> Doc
 lineSep l = hcat (punctuate line l)
@@ -579,7 +609,7 @@ scGlobalApply sc i ts =
 -- Building terms using prelude functions
 
 scBoolType :: SharedContext s -> IO (SharedTerm s)
-scBoolType sc = scFlatTermF sc (DataTypeApp (mkIdent preludeModuleName "Bool") [])
+scBoolType sc = scFlatTermF sc (DataTypeApp "Prelude.Bool" [])
 
 scNatType :: SharedContext s -> IO (SharedTerm s)
 scNatType sc = scFlatTermF sc (DataTypeApp preludeNatIdent [])
@@ -587,64 +617,64 @@ scNatType sc = scFlatTermF sc (DataTypeApp preludeNatIdent [])
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
          SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scIte sc t b x y = scGlobalApply sc (mkIdent preludeName "ite") [t, b, x, y]
+scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 
 -- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s ->
             SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scAppend sc t m n x y = scGlobalApply sc (mkIdent preludeName "append") [m, n, t, x, y]
+scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 
 -- | slice :: (e :: sort 1) -> (i n o :: Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
 scSlice :: SharedContext s -> SharedTerm s -> SharedTerm s ->
            SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scSlice sc e i n o a = scGlobalApply sc (mkIdent preludeName "slice") [e, i, n, o, a]
+scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
 
 -- Primitive operations on bitvectors
 
 -- | bitvector :: (n : Nat) -> sort 1
 -- bitvector n = Vec n Bool
 scBitvector :: SharedContext s -> Integer -> IO (SharedTerm s)
-scBitvector sc size =
-    do s <- scNat sc size
-       c <- scGlobalDef sc (mkIdent preludeName "bitvector")
-       scApply sc c s
+scBitvector sc size = do
+  c <- scGlobalDef sc "Prelude.bitvector"
+  s <- scNat sc size
+  scApply sc c s
 
 -- | bvNat :: (x :: Nat) -> Nat -> bitvector x;
 scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scBvNat sc x y = scGlobalApply sc (mkIdent preludeName "bvNat") [x, y]
+scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
 
 -- | bvAdd/Sub/Mul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 scBvAdd, scBvSub, scBvMul
     :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scBvAdd sc n x y = scGlobalApply sc (mkIdent preludeName "bvAdd") [n, x, y]
-scBvSub sc n x y = scGlobalApply sc (mkIdent preludeName "bvSub") [n, x, y]
-scBvMul sc n x y = scGlobalApply sc (mkIdent preludeName "bvMul") [n, x, y]
+scBvAdd sc n x y = scGlobalApply sc "Prelude.bvAdd" [n, x, y]
+scBvSub sc n x y = scGlobalApply sc "Prelude.bvSub" [n, x, y]
+scBvMul sc n x y = scGlobalApply sc "Prelude.bvMul" [n, x, y]
 
 -- | bvOr/And/Xor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 scBvOr, scBvAnd, scBvXor
     :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scBvAnd sc n x y = scGlobalApply sc (mkIdent preludeName "bvAnd") [n, x, y]
-scBvXor sc n x y = scGlobalApply sc (mkIdent preludeName "bvXor") [n, x, y]
-scBvOr sc n x y = scGlobalApply sc (mkIdent preludeName "bvOr") [n, x, y]
+scBvAnd sc n x y = scGlobalApply sc "Prelude.bvAnd" [n, x, y]
+scBvXor sc n x y = scGlobalApply sc "Prelude.bvXor" [n, x, y]
+scBvOr  sc n x y = scGlobalApply sc "Prelude.bvOr"  [n, x, y]
 
 -- | bvNot :: (n :: Nat) -> bitvector n -> bitvector n;
 scBvNot :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scBvNot sc n x = scGlobalApply sc (mkIdent preludeName "bvNot") [n, x]
+scBvNot sc n x = scGlobalApply sc "Prelude.bvNot" [n, x]
 
 -- | bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 scBvEq, scBvUGe, scBvUGt, scBvULe, scBvULt
     :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scBvEq sc n x y = scGlobalApply sc (mkIdent preludeName "bvEq") [n, x, y]
-scBvUGe sc n x y = scGlobalApply sc (mkIdent preludeName "bvuge") [n, x, y]
-scBvULe sc n x y = scGlobalApply sc (mkIdent preludeName "bvule") [n, x, y]
-scBvUGt sc n x y = scGlobalApply sc (mkIdent preludeName "bvugt") [n, x, y]
-scBvULt sc n x y = scGlobalApply sc (mkIdent preludeName "bvult") [n, x, y]
+scBvEq  sc n x y = scGlobalApply sc "Prelude.bvEq"  [n, x, y]
+scBvUGe sc n x y = scGlobalApply sc "Prelude.bvuge" [n, x, y]
+scBvULe sc n x y = scGlobalApply sc "Prelude.bvule" [n, x, y]
+scBvUGt sc n x y = scGlobalApply sc "Prelude.bvugt" [n, x, y]
+scBvULt sc n x y = scGlobalApply sc "Prelude.bvult" [n, x, y]
 
 -- | bvShl, bvShr :: (n :: Nat) -> bitvector n -> Nat -> bitvector n;
 scBvShl, scBvShr
     :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scBvShl sc n x y = scGlobalApply sc (mkIdent preludeName "bvShl") [n, x, y]
-scBvShr sc n x y = scGlobalApply sc (mkIdent preludeName "bvShr") [n, x, y]
+scBvShl sc n x y = scGlobalApply sc "Prelude.bvShl" [n, x, y]
+scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
@@ -652,52 +682,50 @@ mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
   vr <- newMVar  0 -- ^ Reference for getting variables.
   cr <- newMVar emptyAppCache
---  let shareDef d = do
---        t <- sharedTerm cr $ Term (FTermF (GlobalDef (defIdent d)))
---        return (defIdent d, t)
---  sharedDefMap <- Map.fromList <$> traverse shareDef (moduleDefs m)
---  let getDef sym =
---        case Map.lookup (mkIdent (moduleName m) sym) sharedDefMap of
---          Nothing -> fail $ "Failed to find " ++ show sym ++ " in module."
---          Just d -> return d
-  let freshGlobal sym tp = do
-        i <- modifyMVar vr (\i -> return (i+1,i))
-        getTerm cr (FTermF (ExtCns (EC i sym tp)))
+  let freshGlobalVar = modifyMVar vr (\i -> return (i+1,i))
   return SharedContext {
              scModule = return m
            , scTermF = getTerm cr
-           , scFreshGlobal = freshGlobal
+           , scFreshGlobalVar = freshGlobalVar
            }
-
-asTermF :: SharedTerm s -> Maybe (TermF (SharedTerm s))
-asTermF (STApp _ app) = Just app
-asTermF _ = Nothing
-
-asFTermF :: SharedTerm s -> Maybe (FlatTermF (SharedTerm s))
-asFTermF t = do FTermF ftf <- asTermF t; return ftf
-
-asNatLit :: SharedTerm s -> Maybe Integer
-asNatLit t = do NatLit i <- asFTermF t; return i
 
 asApp :: SharedTerm s -> Maybe (SharedTerm s, SharedTerm s)
 asApp t = do App x y <- asFTermF t; return (x,y)
 
-asApp3Of :: SharedTerm s -> SharedTerm s -> Maybe (SharedTerm s, SharedTerm s, SharedTerm s)
-asApp3Of op s3 = do
-  (s2,a3) <- asApp s3
-  (s1,a2) <- asApp s2
-  (s0,a1) <- asApp s1
-  when (s0 /= op) $ fail "Unexpected op"
-  return (a1,a2,a3)
+asAppList :: SharedTerm s -> (SharedTerm s, [SharedTerm s])
+asAppList = go []
+  where go l t =
+          case asApp t of
+            Just (f,v) -> go (v:l) f
+            Nothing -> (t,l)
 
--- | Returns term as an integer if it is an integer, signed
--- bitvector, or unsigned bitvector.
-scViewAsNum :: SharedTerm s -> Maybe Integer
-scViewAsNum (asNatLit -> Just i) = Just i
-scViewAsNum _ = Nothing
--- FIXME: add patterns for bitvector constructors.
+useChangeCache :: Monad m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
+useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
 
--- | Returns term as a constant Boolean if it can be evaluated as one.
--- bh: Is this really intended to do *evaluation*? Or is it supposed to work like asNatLit?
-scViewAsBool :: SharedTerm s -> Maybe Bool
-scViewAsBool = undefined --FIXME
+-- | Performs an action when a value has been modified, and otherwise
+-- returns a pure value.
+whenModified :: (Functor m, Monad m) => b -> (a -> m b) -> ChangeT m a -> ChangeT m b
+whenModified b act m = ChangeT $ do
+  ca <- runChangeT m
+  case ca of
+    Original{} -> return (Original b)
+    Modified a -> Modified <$> act a
+
+-- | Instantiate some of the external constants
+scInstantiateExt :: forall s 
+                  . SharedContext s
+                 -> Map VarIndex (SharedTerm s)
+                 -> SharedTerm s
+                 -> IO (SharedTerm s)
+scInstantiateExt sc vmap t0 = do
+  tcache <- newCacheIORefMap' Map.empty
+  let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
+      go t@(STApp idx tf) =
+        case tf of
+          -- | Lookup variable in term if it is bound.
+          FTermF (ExtCns ec) ->
+            maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
+          -- | Recurse on other terms.
+          _ -> useChangeCache tcache idx $
+                 whenModified t (scTermF sc) (traverse go tf)
+  commitChangeT (go t0)

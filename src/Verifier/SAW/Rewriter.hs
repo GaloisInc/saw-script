@@ -57,6 +57,7 @@ import Text.PrettyPrint
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Conversion
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (instantiateVarList)
 import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
@@ -242,29 +243,21 @@ scSimpset sc defs eqIdents convs = do
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asApp :: Termlike t => t -> Maybe (t, t)
-asApp (unwrapTermF -> FTermF (App x y)) = Just (x, y)
-asApp _ = Nothing
-
-asLambda :: Termlike t => t -> Maybe (String, t, t)
+asLambda :: Termlike t => Recognizer t (String, t, t)
 asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = Just (s, ty, body)
 asLambda _ = Nothing
 
-asTupleValue :: Termlike t => t -> Maybe [t]
-asTupleValue (unwrapTermF -> FTermF (TupleValue ts)) = Just ts
-asTupleValue _ = Nothing
+asTupleValue :: Termlike t => Recognizer t [t]
+asTupleValue t = do TupleValue ts <- asFTermF t; return ts
 
-asRecordValue :: Termlike t => t -> Maybe (Map FieldName t)
-asRecordValue (unwrapTermF -> FTermF (RecordValue m)) = Just m
-asRecordValue _ = Nothing
+asTupleSelector :: Termlike t => Recognizer t (t, Int)
+asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
 
-asTupleSelector :: Termlike t => t -> Maybe (t, Int)
-asTupleSelector (unwrapTermF -> FTermF (TupleSelector t i)) = Just (t, i)
-asTupleSelector _ = Nothing
+asRecordValue :: Termlike t => Recognizer t (Map FieldName t)
+asRecordValue t = do RecordValue m <- asFTermF t; return m
 
 asRecordSelector :: Termlike t => t -> Maybe (t, FieldName)
-asRecordSelector (unwrapTermF -> FTermF (RecordSelector t i)) = Just (t, i)
-asRecordSelector _ = Nothing
+asRecordSelector t = do RecordSelector u i <- asFTermF t; return (u,i)
 
 asBetaRedex :: Termlike t => t -> Maybe (String, t, t, t)
 asBetaRedex t =

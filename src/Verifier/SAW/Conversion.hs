@@ -9,7 +9,7 @@ module Verifier.SAW.Conversion
   , (<:>)
   , asAny
   , asFinValLit
-  , asGlobalDef
+  , matchGlobalDef
   , thenMatcher
   , TermBuilder
   , mkAny
@@ -88,8 +88,8 @@ isGlobalDef :: Termlike t => Ident -> t -> Maybe ()
 isGlobalDef i (unwrapTermF -> FTermF (GlobalDef i')) | i == i' = Just ()
 isGlobalDef _ _ = Nothing
 
-asGlobalDef :: Termlike t => Ident -> Matcher t ()
-asGlobalDef ident = Matcher (Net.Atom (identName ident)) (isGlobalDef ident)
+matchGlobalDef :: Termlike t => Ident -> Matcher t ()
+matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (isGlobalDef ident)
 
 asBoolType :: Termlike t => Matcher t ()
 asBoolType = Matcher (Net.Atom (identName bool)) match
@@ -118,7 +118,7 @@ asSuccLit = Matcher pat match
 
 asBvNatLit :: Termlike t => Matcher t (Integer, Integer)
 asBvNatLit =
-    thenMatcher (asGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
+    thenMatcher (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
         \(((), n), x) -> return (n, x .&. bitMask n)
 
 
@@ -131,7 +131,7 @@ normSignedBV n x | testBit x n = x' - bit (n+1)
 
 asSignedBvNatLit :: Termlike t => Matcher t Integer
 asSignedBvNatLit =
-    thenMatcher (asGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
+    thenMatcher (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
         \(((), n), x) -> return (normSignedBV (fromInteger n) x)
 
 ----------------------------------------------------------------------
@@ -208,9 +208,8 @@ succ_NatLit =
 addNat_NatLit :: Termlike t => Conversion t
 addNat_NatLit =
     Conversion $
-    thenMatcher (asGlobalDef addNat <:> asNatLit <:> asNatLit)
+    thenMatcher (matchGlobalDef "Prelude.addNat" <:> asNatLit <:> asNatLit)
     (\(((), m), n) -> return $ mkNatLit (m + n))
-    where addNat = "Prelude.addNat"
 
 -- | Conversions for operations on Fin literals
 finConversions :: Termlike t => [Conversion t]
@@ -219,18 +218,16 @@ finConversions = [finInc_FinVal, finIncLim_FinVal]
 finInc_FinVal :: Termlike t => Conversion t
 finInc_FinVal =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.finInc" <:> asNatLit <:> asNatLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.finInc" <:> asNatLit <:> asNatLit <:> asFinValLit)
     (\((((), m), n), (i, j)) ->
          guard (n == i + j + 1) >> return (mkFinVal (m + i) j))
 
 finIncLim_FinVal :: Termlike t => Conversion t
 finIncLim_FinVal =
     Conversion $
-    thenMatcher (asGlobalDef finIncLim <:> asNatLit <:> asNatLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.finIncLim" <:> asNatLit <:> asNatLit <:> asFinValLit)
     (\((((), m), n), (i, j)) ->
          guard (n == i + j + 1) >> return (mkFinVal i (m + j)))
-    where
-      finIncLim = "Prelude.finIncLim"
 
 -- | Conversions for operations on vector literals
 vecConversions :: Termlike t => [Conversion t]
@@ -239,16 +236,14 @@ vecConversions = [get_VecLit, append_VecLit]
 get_VecLit :: Termlike t => Conversion t
 get_VecLit =
     Conversion $
-    thenMatcher (asGlobalDef get <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.get" <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
     (\(((((), n), e), (_, xs)), (i, j)) ->
          return $ mkAny (xs V.! fromIntegral i))
-    where
-      get = "Prelude.get"
 
 append_VecLit :: Termlike t => Conversion t
 append_VecLit =
     Conversion $
-    thenMatcher (asGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
+    thenMatcher (matchGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
     (\((((((), m), n), e), (_, xs)), (_, ys)) ->
          return $ mkVecLit e ((V.++) xs ys))
     where append = "Prelude.append"
@@ -283,12 +278,13 @@ bvConversions =
     , bvTrunc_bvNat, bvUExt_bvNat, bvSExt_bvNat
 
     , get_bvNat, slice_bvNat
+    , vTake_bvNat, vDrop_bvNat
     ]
 
 append_bvNat :: Termlike t => Conversion t
 append_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef append <:> asNatLit <:> asNatLit <:>
+    thenMatcher (matchGlobalDef append <:> asNatLit <:> asNatLit <:>
                  asBoolType <:> asBvNatLit <:> asBvNatLit)
     (\((((((), m), n), _), (_, x)), (_, y)) ->
 --         return $ mkBvNat (m + n) (shiftL x (fromIntegral n) .|. y)) -- ^ Assuming big-endian order
@@ -305,14 +301,14 @@ preludeBinBVGroundSimplifier :: Termlike t
                              -> Conversion t
 preludeBinBVGroundSimplifier symId fn =
     Conversion $
-    thenMatcher (asGlobalDef symId <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef symId <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\( (((), n), (_, x)), (_, y)) ->
-      return $ mkBvNat n (fn n x y .&. bitMask n))
+      return $ mkBvNat n (fn n x y))
 
 bvToNat_bvNat :: Termlike t => Conversion t
 bvToNat_bvNat =
   Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvToNat" <:> asNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvToNat" <:> asNatLit <:> asBvNatLit)
     (\( (((), n), (_, x))) ->
       return $ mkNatLit (x .&. bitMask n))
 
@@ -321,11 +317,11 @@ bvAdd_bvNat = preludeBinBVGroundSimplifier "Prelude.bvAdd" (const (+))
 
 bvAddWithCarry_bvNat :: Termlike t => Conversion t
 bvAddWithCarry_bvNat = Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvAddWithCarry" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvAddWithCarry" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\( (((), n), (_, x)), (_, y)) -> Just $ do
       let r = x + y
       o <- mkBool $ r `testBit` fromInteger n
-      v <- mkBvNat n $ r .&. bitMask n
+      v <- mkBvNat n r
       mkTuple [o, v])
 
 bvSub_bvNat :: Termlike t => Conversion t
@@ -336,21 +332,21 @@ bvMul_bvNat = preludeBinBVGroundSimplifier "Prelude.bvMul" (const (*))
 
 bvUDiv_bvNat :: Termlike t => Conversion t
 bvUDiv_bvNat = Conversion $
-   thenMatcher (asGlobalDef "Prelude.bvUDiv" <:> asNatLit <:> asBvNatLit <:> asBvNatLit) fn
+   thenMatcher (matchGlobalDef "Prelude.bvUDiv" <:> asNatLit <:> asBvNatLit <:> asBvNatLit) fn
  where fn ((((), n), (_,x)), (_,y))
          | y == 0 = Nothing
          | otherwise = return $ mkBvNat n (x `quot` y)
 
 bvURem_bvNat :: Termlike t => Conversion t
 bvURem_bvNat = Conversion $
-   thenMatcher (asGlobalDef "Prelude.bvURem" <:> asNatLit <:> asBvNatLit <:> asBvNatLit) fn
+   thenMatcher (matchGlobalDef "Prelude.bvURem" <:> asNatLit <:> asBvNatLit <:> asBvNatLit) fn
  where fn ((((), n), (_,x)), (_,y))
          | y == 0 = Nothing
          | otherwise = return $ mkBvNat n (x `rem` y)
 
 bvSDiv_bvNat :: Termlike t => Conversion t
 bvSDiv_bvNat = Conversion $
-   thenMatcher (asGlobalDef "Prelude.bvSDiv" <:> asNatLit
+   thenMatcher (matchGlobalDef "Prelude.bvSDiv" <:> asNatLit
                                              <:> asSignedBvNatLit
                                              <:> asSignedBvNatLit)
                fn
@@ -360,7 +356,7 @@ bvSDiv_bvNat = Conversion $
 
 bvSRem_bvNat :: Termlike t => Conversion t
 bvSRem_bvNat = Conversion $
-   thenMatcher (asGlobalDef "Prelude.bvSRem" <:> asNatLit
+   thenMatcher (matchGlobalDef "Prelude.bvSRem" <:> asNatLit
                                              <:> asSignedBvNatLit
                                              <:> asSignedBvNatLit)
                fn
@@ -371,28 +367,28 @@ bvSRem_bvNat = Conversion $
 bvShl_bvNat :: Termlike t => Conversion t
 bvShl_bvNat =
    Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvShl" <:> asNatLit <:> asBvNatLit <:> asNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvShl" <:> asNatLit <:> asBvNatLit <:> asNatLit)
     (\((((), n), (_,x)), i) ->
       return $ mkBvNat n (x `shiftL` fromInteger i))
 
 bvShr_bvNat :: Termlike t => Conversion t
 bvShr_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvShr" <:> asNatLit <:> asBvNatLit <:> asNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvShr" <:> asNatLit <:> asBvNatLit <:> asNatLit)
     (\((((), n), (_,x)), i) ->
       return $ mkBvNat n (x `shiftR` fromInteger i))
 
 bvSShr_bvNat :: Termlike t => Conversion t
 bvSShr_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvSShr" <:> asNatLit <:> asSignedBvNatLit <:> asNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvSShr" <:> asNatLit <:> asSignedBvNatLit <:> asNatLit)
     (\((((), n), x), i) ->
       return $ mkBvNat (n+1) (x `shiftR` fromInteger i))
 
 bvNot_bvNat :: Termlike t => Conversion t
 bvNot_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvNot" <:> asNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvNot" <:> asNatLit <:> asBvNatLit)
     (\(((), n), (_, x)) ->
       return $ mkBvNat n (x `xor` bitMask n))
 
@@ -408,99 +404,115 @@ bvXor_bvNat = preludeBinBVGroundSimplifier "Prelude.bvXor" (const xor)
 bvMbit_bvNat :: Termlike t => Conversion t
 bvMbit_bvNat =
   Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvMbit" <:> asNatLit <:> asBvNatLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.bvMbit" <:> asNatLit <:> asBvNatLit <:> asFinValLit)
     (\( (((), n), (_, v)), (_, y)) ->
       return $ mkBool (testBit v (fromInteger y)))
 
 bvEq_bvNat :: Termlike t => Conversion t
 bvEq_bvNat =
   Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvEq" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvEq" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\( (((), n), (_, x)), (_, y)) ->
       return $ mkBool (x .&. bitMask n == y .&. bitMask n))
 
 bvugt_bvNat :: Termlike t => Conversion t
 bvugt_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvugt" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvugt" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x > y))
 
 bvuge_bvNat :: Termlike t => Conversion t
 bvuge_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvuge" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvuge" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x >= y))
 
 bvult_bvNat :: Termlike t => Conversion t
 bvult_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvult" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvult" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x < y))
 
 bvule_bvNat :: Termlike t => Conversion t
 bvule_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvule" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvule" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
     (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x <= y))
 
 bvsgt_bvNat :: Termlike t => Conversion t
 bvsgt_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvsgt" <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvsgt" <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
     (\((((), _), x), y) -> return $ mkBool (x > y))
 
 bvsge_bvNat :: Termlike t => Conversion t
 bvsge_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvsge" 
+    thenMatcher (matchGlobalDef "Prelude.bvsge" 
                                  <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
     (\((((), _), x), y) -> return $ mkBool (x >= y))
 
 bvslt_bvNat :: Termlike t => Conversion t
 bvslt_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvslt" <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvslt" <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
     (\((((), _), x), y) -> return $ mkBool (x < y))
 
 bvsle_bvNat :: Termlike t => Conversion t
 bvsle_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvsle" 
+    thenMatcher (matchGlobalDef "Prelude.bvsle" 
                                  <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
     (\((((), _), x), y) -> return $ mkBool (x <= y))
 
 bvTrunc_bvNat :: Termlike t => Conversion t
 bvTrunc_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvTrunc" <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvTrunc" <:> asNatLit <:> asNatLit <:> asBvNatLit)
     (\((((), _), y), (_, a)) -> return $ mkBvNat y a)
 
 bvUExt_bvNat :: Termlike t => Conversion t
 bvUExt_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvUExt" <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvUExt" <:> asNatLit <:> asNatLit <:> asBvNatLit)
     (\((((), x), y), (_, a)) -> return $ mkBvNat (x+y) a)
 
 bvSExt_bvNat :: Termlike t => Conversion t
 bvSExt_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef "Prelude.bvSExt" <:> asNatLit <:> asNatLit <:> asSignedBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvSExt" <:> asNatLit <:> asNatLit <:> asSignedBvNatLit)
     (\((((), x), y), a) -> return $ mkBvNat (x+y) a)
 
 get_bvNat :: Termlike t => Conversion t
 get_bvNat =
     Conversion $
     thenMatcher
-    (asGlobalDef "Prelude.get" <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
+    (matchGlobalDef "Prelude.get" <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
     (\(((((), n), ()), (n', x)), (i, j)) ->
 --         return $ mkBool (testBit x (fromIntegral j))) -- ^ Assuming big-endian order
          return $ mkBool (testBit x (fromIntegral i))) -- ^ Assuming little-endian order
+
+vTake_bvNat :: Termlike t => Conversion t
+vTake_bvNat =
+    Conversion $
+    thenMatcher
+    (matchGlobalDef "Prelude.vTake" <:> asBoolType <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    (\(((((), ()), m), n), (_, x)) ->
+         return $ mkBvNat m x) -- Assumes little-endian order
+
+vDrop_bvNat :: Termlike t => Conversion t
+vDrop_bvNat =
+    Conversion $
+    thenMatcher
+    (matchGlobalDef "Prelude.vDrop" <:> asBoolType <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    (\(((((), ()), m), n), (_, x)) ->
+         return $ mkBvNat n (x `shiftR` fromInteger m)) -- Assumes little-endian order
 
 slice_bvNat :: Termlike t => Conversion t
 slice_bvNat =
     Conversion $
     thenMatcher
-    (asGlobalDef "Prelude.slice" <:> asBoolType <:>
+    (matchGlobalDef "Prelude.slice" <:> asBoolType <:>
      asNatLit <:> asNatLit <:> asNatLit <:> asBvNatLit)
     (\((((((), _), i), n), j), (m, x)) ->
          guard (i + n + j == m) >>
