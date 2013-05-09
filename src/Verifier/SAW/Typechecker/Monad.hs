@@ -19,7 +19,7 @@ import Control.Applicative
 import Control.Monad.ST
 import qualified Data.Map as Map
 import Data.STRef
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 
@@ -67,7 +67,7 @@ ppCycle edges = vcat $ header : fmap ppEdge edges
 
 ppInternalErrors :: [String] -> Doc
 ppInternalErrors im =
-  text "Internal" <+> emsg <+> text "during typechecking:" $$
+  text "Internal" <+> emsg <+> text "during typechecking:" <$$>
     nest 2 (vcat (text <$> im))
  where emsg = text $ if length im > 1 then "errors" else "error"
 

@@ -27,6 +27,7 @@ module Verifier.SAW.Typechecker.Context
   , termFromPatF
 
   , LocalDefGen(..)
+  , localDefType
   , TCRefLocalDef
   , TCLocalDef
   , fmapTCLocalDefs
@@ -92,7 +93,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Position
@@ -114,12 +115,16 @@ data LocalDefGen t e
    = -- | A Local function definition with position, name, type, and equations.
      -- Type is typed in context before let bindings.
      -- Equations are typed in context after let bindings.
-     LocalFnDefGen String t e
+    LocalFnDefGen String t e
   deriving (Show)
 
 localVarNamesGen :: [LocalDefGen t e] -> [String]
 localVarNamesGen = fmap go
   where go (LocalFnDefGen nm _ _) = nm
+
+localDefType :: Lens (LocalDefGen a e) (LocalDefGen b e) a b
+localDefType f (LocalFnDefGen nm tp rhs) = g <$> f tp
+  where g tp' = LocalFnDefGen nm tp' rhs
 
 localVarNamesCount :: [LocalDefGen t e] -> Int
 localVarNamesCount = length
@@ -138,10 +143,10 @@ data TCTerm
 
 data AnnPat a
     -- | Variable with its annotation.
-    -- Type is relative to bound variables in pat with smaller deBruijnIndex
+    -- Index contains order in which this variable is bound.
   = TCPVar String (DeBruijnIndex,a)
     -- | Unused variable and its type.
-    -- Index is used to show what context the information in the annotation is relative to.
+    -- Index contains number of variables in this pattern bound in the context of the type.
   | TCPUnused String (DeBruijnIndex,a)
   | TCPatF (PatF (AnnPat a))
 
@@ -299,10 +304,11 @@ incTCVars j = go
 tcApply :: TermContext s -> (TermContext s,TCTerm) -> (TermContext s,Vector TCTerm) -> TCTerm
 tcApply baseTC (fTC, f) (vTC, v)
    | V.length v <= fd = tcApplyImpl vd v (fd - V.length v) f
-   | otherwise = error $ show $ text "tcApply given bad arguments:" $$
-      ppTCTerm fTC 0 f $$
-      text ("fd = " ++ show fd) $$
-      vcat (ppTCTerm vTC 0 <$> V.toList v)
+   | otherwise = error $ show $
+      text "tcApply given bad arguments:" <$$>
+      ppTCTerm fTC PrecNone f <$$>
+      text ("fd = " ++ show fd) <$$>
+      vcat (ppTCTerm vTC PrecNone <$> V.toList v)
   where Just fd = boundVarDiff fTC baseTC
         Just vd = boundVarDiff vTC baseTC
 
@@ -419,11 +425,8 @@ insertDef mnml vis loc d@(DefGen nm _ eqs) gc =
        }
   where bindings = untypedBindings vis mnml (identName nm) (DefBinding loc d)
 
-squote :: Doc -> Doc
-squote d = char '`' <> d <> char '\''
-
 showQuoted :: Show s => s -> Doc
-showQuoted nm = squote (text (show nm))
+showQuoted nm = squotes (text (show nm))
 
 -- | Lookup ctor returning identifier and type.
 resolveGlobalIdent :: GlobalContext s -> PosPair Un.Ident -> TC s (GlobalBinding (TCRef s))
@@ -432,14 +435,14 @@ resolveGlobalIdent gc (PosPair p nm) =
     [] -> tcFail p $ show $ text "Unknown identifier:" <+> showQuoted nm <> text "."
     [d] -> return d
     (d:r) -> tcFail p $ show $
-      text "Ambiguous occurance" <+> showQuoted nm <> text "." $$
-      ppLoc firstText (globalBindingDesc d) $$
+      text "Ambiguous occurance" <+> showQuoted nm <> text "." <$$>
+      ppLoc firstText (globalBindingDesc d) <$$>
       vcat (ppLoc otherText . globalBindingDesc <$> r)
  where firstText = "It could refer to either"
        otherText = "                      or"
        imporText = "                         imported from"
        ppLoc t (ImportedLoc mnm oldp, sym) =
-         text t <+> showQuoted sym <> comma $$
+         text t <+> showQuoted sym <> comma <$$>
          text imporText <+> showQuoted mnm <+> text ("at " ++ show oldp)
        ppLoc t (LocalLoc pm, sym) =
          text t <+> showQuoted sym <> text (", defined at " ++ show pm)
@@ -500,7 +503,7 @@ data BoundInfo where
 resolveBoundInfo :: DeBruijnIndex -> TermContext s -> BoundInfo
 resolveBoundInfo 0 (BindContext _ nm _) = BoundVar nm
 resolveBoundInfo i (BindContext tc _ _) = resolveBoundInfo (i-1) tc
-resolveBoundInfo i0 (LetContext tc lcls) = lclFn i0 lcls
+resolveBoundInfo i0 (LetContext tc lcls) = lclFn i0 (reverse lcls)
   where lclFn 0 (LocalFnDefGen nm _ _:_) = LocalDef nm
         lclFn i (_:r) = lclFn (i-1) r
         lclFn i [] = resolveBoundInfo i tc
@@ -540,7 +543,7 @@ resolveIdent tc0 (PosPair p ident) = go tc0
                 pure $ TypedValue (applyExt tc0 (tc1,TCVar 0))
                                   (applyExt tc0 (tc,tp))
             | otherwise = go tc
-        go tc1@(LetContext tc lcls) = lclFn 0 lcls
+        go tc1@(LetContext tc lcls) = lclFn 0 (reverse lcls)
           where lclFn i (LocalFnDefGen nm tp _ : r)
                     | matchName nm ident =
                         pure $ TypedValue (applyExt tc0 (tc1, TCLocalDef i))
@@ -577,12 +580,13 @@ contextNames TopContext{} = []
 -- | Pretty print a term context.
 ppTermContext :: TermContext s -> Doc
 ppTermContext (BindContext tc nm tp) =
-  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc 1 tp $$
+  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc PrecTypeConstraintRhs tp <$$>
   ppTermContext tc
 ppTermContext (LetContext tc lcls) =
-    text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) $$
+    text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) <$$>
     ppTermContext tc
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTerm tc 1 tp
+  where ppLcl (LocalFnDefGen nm tp _) =
+         text nm <+> text "::" <+> ppTCTerm tc PrecTypeConstraintRhs tp
 ppTermContext TopContext{} = text "top"
 
 -- | Pretty print a pat
@@ -602,16 +606,18 @@ ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
-ppTCTermGen d pr (TCLambda p l r) = ppParens (pr >= 1) $
-  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
-             <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
-ppTCTermGen d pr (TCPi p l r) = ppParens (pr >= 1) $
-  parens (ppTCPat p <+> colon <+> ppTCTermGen d 1 l)
-    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) 2 r
-ppTCTermGen d pr (TCLet lcls t) = ppParens (pr >= 1) $
-    text "let " <> nest 4 (vcat (ppLcl <$> lcls)) $$
-    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) 1 t)
-  where ppLcl (LocalFnDefGen nm tp _) = text nm <+> text "::" <+> ppTCTermGen d 1 tp
+ppTCTermGen d pr (TCLambda p l r) = ppParens (precInt pr >= 1) $
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecTypeConstraintRhs l)
+            <+> text "->"
+            <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecLambdaRhs r
+ppTCTermGen d pr (TCPi p l r) = ppParens (precInt pr >= 1) $
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecTypeConstraintRhs l)
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecPiRhs r
+ppTCTermGen d pr (TCLet lcls t) = ppParens (precInt pr >= 1) $
+    text "let " <> nest 4 (vcat (ppLcl <$> lcls)) <$$>
+    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) PrecLetTerm t)
+  where ppLcl (LocalFnDefGen nm tp _) =
+          text nm <+> text "::" <+> ppTCTermGen d PrecTypeConstraintRhs tp
 ppTCTermGen d _ (TCVar i) | 0 <= i && i < length d = d !! i
                           | otherwise = text $ "Bad variable index " ++ show i
 ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i

@@ -21,7 +21,7 @@ module Verifier.SAW.UntypedAST
 
 import Control.Applicative ((<$>))
 import Control.Exception (assert)
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
@@ -29,8 +29,8 @@ import Verifier.SAW.TypedAST
   , Sort, mkSort, sortOf
   , FieldName
   , isIdent
-  , Prec
-  , commaSepList, semiTermList, ppParens
+  , Prec(..), ppAppParens
+  , commaSepList, semiTermList
   )
 
 -- | Identifiers represent a compound name (e.g., Prelude.add).
@@ -121,11 +121,11 @@ data Pat
 ppPat :: Prec -> Pat -> Doc
 ppPat _ (PSimple (PVar pnm)) = text (val pnm)
 ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
-ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat 1 <$> l)
+ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat PrecComma <$> l)
 ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
-  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat 1 v
-ppPat prec (PCtor pnm l) = ppParens (prec >= 10) $
-  hsep (text (show (val pnm)) : fmap (ppPat 10) l)
+  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecComma v
+ppPat prec (PCtor pnm l) = ppAppParens prec $
+  hsep (text (show (val pnm)) : fmap (ppPat PrecAppArg) l)
 
 instance Positioned Term where
   pos t =

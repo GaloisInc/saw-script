@@ -13,7 +13,6 @@ module Verifier.SAW.Rewriter
   , ruleOfDefEqn
   , rulesOfTypedDef
   , scDefRewriteRules
-  , scDefsRewriteRules
   , scEqsRewriteRules
   -- * Simplification sets
   , Simpset
@@ -33,12 +32,17 @@ module Verifier.SAW.Rewriter
   , rewriteSharedTermTypeSafe
   -- * SharedContext
   , rewritingSharedContext
+  , asApp
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
+import Control.Exception
+import Control.Lens
 import Control.Monad ((>=>))
+import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans (lift)
+import Data.Bits
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 import Data.IORef
@@ -47,13 +51,18 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Traversable (Traversable, traverse)
 
+import Text.PrettyPrint
+
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Conversion
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (instantiateVarList)
 import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
+
+import Debug.Trace
 
 -- Context, a.k.a. "Telescope"
 -- Loose bound variables in the head index the tail of the list
@@ -139,48 +148,55 @@ ruleOfTerm t =
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
 
+-- Create a rewrite rule from an equation.
+-- Terms do not have unused variables, so unused variables are introduced
+-- as new variables bound after all the used variables.
 ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
-ruleOfDefEqn ident (DefEqn pats rhs) =
-    RewriteRule { ctxt = Map.elems varmap
-                , lhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
-                , rhs = incVars 0 nUnused rhs }
+ruleOfDefEqn ident (DefEqn pats rhs@(Term rtf)) =
+      RewriteRule { ctxt = Map.elems varmap
+                  , lhs = ruleLhs
+                  , rhs = ruleRhs
+                 }
   where
-    nBound = sum (map patBoundVarCount pats)
-    nUnused = sum (map patUnusedVarCount pats)
+    lvd = emptyLocalVarDoc
+        & docShowLocalNames .~ False
+        & docShowLocalTypes .~ True
+    varsUnbound t i = freesTerm t `shiftR` i /= 0
+    ruleLhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
+    ruleRhs = incVars 0 nUnused rhs
+
+    nBound  = sum $ fmap patBoundVarCount  pats
+    nUnused = sum $ fmap patUnusedVarCount pats
     n = nBound + nUnused
     mkApp :: Term -> Term -> Term
     mkApp f x = Term (FTermF (App f x))
+
     termOfPat :: Pat Term -> State (Int, Map Int Term) Term
     termOfPat pat =
         case pat of
-          PVar s i e ->
-              do (j, m) <- get
-                 put (j, Map.insert i e m)
-                 return $ Term (LocalVar (n - 1 - i) (incVars 0 (n - i) e))
-          PUnused i e ->
-              do (j, m) <- get
-                 let s = "_" ++ show j
-                 put (j + 1, Map.insert j (incVars 0 (j - i) e) m)
-                 return $ Term (LocalVar (n - 1 - j) (incVars 0 (n - i) e))
+          PVar s i tp -> do
+            (j, m) <- get
+            put (j, Map.insert i tp m)
+            let tp' = incVars 0 (n - i) tp
+            return $ Term $ LocalVar (n - 1 - i) tp'
+          PUnused i tp -> do
+            (j, m) <- get
+            let s = "_" ++ show j
+            put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
+            return $ Term $ LocalVar (n - 1 - j) (incVars 0 (n - i) tp)
           PTuple pats -> (Term . FTermF . TupleValue) <$> traverse termOfPat pats
           PRecord pats -> (Term . FTermF . RecordValue) <$> traverse termOfPat pats
           PCtor c pats -> (Term . FTermF . CtorApp c) <$> traverse termOfPat pats
+
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
 rulesOfTypedDef :: TypedDef -> [RewriteRule Term]
 rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
 
 -- | Creates a set of rewrite rules from the defining equations of the named constant.
-scDefRewriteRules :: SharedContext s -> Ident -> IO [RewriteRule (SharedTerm s)]
-scDefRewriteRules sc ident =
-    do m <- scModule sc
-       case findDef m ident of
-         Nothing -> return []
-         Just def -> mapM (traverse (scSharedTerm sc)) (rulesOfTypedDef def)
-
--- | Collects rewrite rules from defining equations of all named constants.
-scDefsRewriteRules :: SharedContext s -> [Ident] -> IO [RewriteRule (SharedTerm s)]
-scDefsRewriteRules sc idents = concat <$> mapM (scDefRewriteRules sc) idents
+scDefRewriteRules :: SharedContext s -> TypedDef -> IO [RewriteRule (SharedTerm s)]
+scDefRewriteRules sc def =
+  (traverse . traverse) (scSharedTerm sc) (rulesOfTypedDef def)
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext s -> [Ident] -> IO [RewriteRule (SharedTerm s)]
@@ -215,39 +231,32 @@ addConv conv = Net.insert_term (conv, Right conv)
 addConvs :: Eq t => [Conversion t] -> Simpset t -> Simpset t
 addConvs convs ss = foldr addConv ss convs
 
-scSimpset :: SharedContext s -> [Ident] -> [Ident] -> [Conversion (SharedTerm s)] ->
+scSimpset :: SharedContext s -> [TypedDef] -> [Ident] -> [Conversion (SharedTerm s)] ->
                IO (Simpset (SharedTerm s))
-scSimpset sc defIdents eqIdents convs =
-    do defRules <- scDefsRewriteRules sc defIdents
-       eqRules <- scEqsRewriteRules sc eqIdents
-       return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
+scSimpset sc defs eqIdents convs = do
+  m <- scModule sc
+  defRules <- concat <$> traverse (scDefRewriteRules sc) defs
+  eqRules <- scEqsRewriteRules sc eqIdents
+  return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asApp :: Termlike t => t -> Maybe (t, t)
-asApp (unwrapTermF -> FTermF (App x y)) = Just (x, y)
-asApp _ = Nothing
-
-asLambda :: Termlike t => t -> Maybe (String, t, t)
+asLambda :: Termlike t => Recognizer t (String, t, t)
 asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = Just (s, ty, body)
 asLambda _ = Nothing
 
-asTupleValue :: Termlike t => t -> Maybe [t]
-asTupleValue (unwrapTermF -> FTermF (TupleValue ts)) = Just ts
-asTupleValue _ = Nothing
+asTupleValue :: Termlike t => Recognizer t [t]
+asTupleValue t = do TupleValue ts <- asFTermF t; return ts
 
-asRecordValue :: Termlike t => t -> Maybe (Map FieldName t)
-asRecordValue (unwrapTermF -> FTermF (RecordValue m)) = Just m
-asRecordValue _ = Nothing
+asTupleSelector :: Termlike t => Recognizer t (t, Int)
+asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
 
-asTupleSelector :: Termlike t => t -> Maybe (t, Int)
-asTupleSelector (unwrapTermF -> FTermF (TupleSelector t i)) = Just (t, i)
-asTupleSelector _ = Nothing
+asRecordValue :: Termlike t => Recognizer t (Map FieldName t)
+asRecordValue t = do RecordValue m <- asFTermF t; return m
 
 asRecordSelector :: Termlike t => t -> Maybe (t, FieldName)
-asRecordSelector (unwrapTermF -> FTermF (RecordSelector t i)) = Just (t, i)
-asRecordSelector _ = Nothing
+asRecordSelector t = do RecordSelector u i <- asFTermF t; return (u,i)
 
 asBetaRedex :: Termlike t => t -> Maybe (String, t, t, t)
 asBetaRedex t =
@@ -414,6 +423,8 @@ rewriteSharedTermTypeSafe sc ss t =
           App e1 e2 ->
               do t1 <- scTypeOf sc e1
                  case unwrapTermF t1 of
+                   -- We only rewrite e2 if type of e1 is not a dependent type.
+                   -- This prevents rewriting e2 from changing type of @App e1 e2@.
                    Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
           TupleValue{} -> traverse rewriteAll ftf
@@ -453,10 +464,10 @@ rewritingSharedContext sc ss = sc'
     apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
     apply [] (STApp _ tf) = scTermF sc tf
-    apply (Left (RewriteRule _ lhs rhs) : rules) t =
-      case first_order_match lhs t of
+    apply (Left (RewriteRule _ l r) : rules) t =
+      case first_order_match l t of
         Nothing -> apply rules t
-        Just inst -> S.instantiateVarList sc' 0 (Map.elems inst) rhs
+        Just inst -> S.instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t

@@ -31,13 +31,13 @@ import qualified Data.Set as Set
 import Data.STRef
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Text.PrettyPrint
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
 import Verifier.SAW.Typechecker.Simplification
-import Verifier.SAW.TypedAST (ppParens, zipWithFlatTermF, ppFlatTermF)
+import Verifier.SAW.TypedAST (ppParens, zipWithFlatTermF, ppFlatTermF, Prec(..), precInt)
 import qualified Verifier.SAW.UntypedAST as Un
 
 -- | Return true if set has duplicates.
@@ -102,7 +102,7 @@ data UVarState s
   | UOuterLet String Int -- DeBruijnIndex in outer context.
 
 ppUTerm :: UVarState s -> TC s Doc
-ppUTerm vs0 = evalStateT (go 0 vs0) Set.empty
+ppUTerm vs0 = evalStateT (go PrecNone vs0) Set.empty
   where goVar :: Prec -> VarIndex s -> StateT (Set (VarIndex s)) (TC s) Doc
         goVar pr v = do
           s <- get
@@ -117,8 +117,8 @@ ppUTerm vs0 = evalStateT (go 0 vs0) Set.empty
         go _ (UUnused nm _) = pure $ text $ "un" ++ nm
         go _ (UFreeType nm) = pure (text $ "typeOf(" ++ nm ++ ")")
         go pr (UHolTerm (tc,t) []) = pure $ ppTCTerm tc pr t
-        go pr (UHolTerm (tc,t) bindings) = ppParens (pr >= 10) .
-          hsep . (ppTCTerm tc 10 t :) <$> traverse (goVar 10) bindings
+        go pr (UHolTerm (tc,t) bindings) = ppParens (precInt pr >= 10) .
+          hsep . (ppTCTerm tc PrecAppFun t :) <$> traverse (goVar PrecAppArg) bindings
         go pr (UTF tf) = ppFlatTermF goVar pr tf
         go _ (UOuterVar nm _) = pure $ text $ "outerv" ++ nm
         go _ (UOuterLet nm _) = pure $ text $ "outerl" ++ nm
@@ -245,14 +245,14 @@ indexUnPat upat =
       (\v -> (UPUnused v nm tpv, tpv)) <$> mkVar nm (UUnused nm tpv)
     Un.PTuple p l -> do
         (up,utp) <- unzip <$> traverse indexUnPat l
-        tpv <-  mkVar (show (Un.ppPat 0 upat)) (UTF (TupleType utp))
+        tpv <-  mkVar (show (Un.ppPat PrecNone upat)) (UTF (TupleType utp))
         return (UPatF p (UPTuple up), tpv)
     Un.PRecord p fpl
         | hasDups (val . fst <$> fpl) ->
            unFail p $ text "Duplicate field names in pattern."
         | otherwise -> do
            rm <- traverse indexUnPat (Map.fromList (first val <$> fpl))
-           tpv <- mkVar (show (Un.ppPat 0 upat))
+           tpv <- mkVar (show (Un.ppPat PrecNone upat))
                         (UTF $ RecordType (fmap snd rm))
            return (UPatF p (UPRecord (fmap fst rm)), tpv)
     Un.PCtor pnm pl -> do
@@ -783,13 +783,13 @@ checkTypesEqual' p ctx tc x y = do
       | c == preludeSuccIdent && n > 0 ->
       check' tc b (TCF (NatLit (n-1)))
     _ -> do
-       tcFail p $ show $ text "Equivalence check failed during typechecking:"  $$
-          nest 2 (ppTCTerm tc 0 x) $$ text "and\n" $$
-          nest 2 (ppTCTerm tc 0 y) $$ text "in context\n" $$
-          nest 4 (ppTermContext tc) $$
+       tcFail p $ show $ text "Equivalence check failed during typechecking:"  <$$>
+          nest 2 (ppTCTerm tc PrecNone x) <$$> text "and\n" <$$>
+          nest 2 (ppTCTerm tc PrecNone y) <$$> text "in context\n" <$$>
+          nest 4 (ppTermContext tc) <$$>
           nest 2 (vcat (ppScope <$> ctx))
       where ppScope (tc',x',y') =
-             text "while typechecking" $$
-             nest 2 (ppTCTerm tc 0 x') $$ text "and\n" $$
-             nest 2 (ppTCTerm tc 0 y') $$ text "in context\n" $$
+             text "while typechecking" <$$>
+             nest 2 (ppTCTerm tc PrecNone x') <$$> text "and\n" <$$>
+             nest 2 (ppTCTerm tc PrecNone y') <$$> text "in context\n" <$$>
              nest 4 (ppTermContext tc')

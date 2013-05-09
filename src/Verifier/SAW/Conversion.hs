@@ -1,12 +1,22 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Conversion
-  ( Conversion
-  , runConversion
+  ( isGlobalDef
+  , Matcher
+  , (<:>)
+  , asAny
+  , asFinValLit
+  , matchGlobalDef
+  , thenMatcher
   , TermBuilder
+  , mkAny
   , runTermBuilder
+  , Conversion(..)
+  , runConversion
+  -- Prelude conversions
   , natConversions
   , finConversions
   , vecConversions
@@ -22,11 +32,14 @@ module Verifier.SAW.Conversion
   , bvSub_bvNat
   , bvule_bvNat
   , bvult_bvNat
+  , bvsle_bvNat
+  , bvslt_bvNat
   , get_bvNat
   , slice_bvNat
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
+import Control.Exception (assert)
 import Control.Monad (guard, (>=>))
 import Data.Bits
 import Data.Map (Map)
@@ -71,18 +84,19 @@ asVecLit = Matcher Net.Var match
       match (unwrapTermF -> FTermF (ArrayValue t xs)) = Just (t, xs)
       match _ = Nothing
 
-asGlobalDef :: Termlike t => Ident -> Matcher t ()
-asGlobalDef ident = Matcher (Net.Atom (identName ident)) match
-    where
-      match (unwrapTermF -> FTermF (GlobalDef ident')) | ident == ident' = Just ()
-      match _ = Nothing
+isGlobalDef :: Termlike t => Ident -> t -> Maybe () 
+isGlobalDef i (unwrapTermF -> FTermF (GlobalDef i')) | i == i' = Just ()
+isGlobalDef _ _ = Nothing
+
+matchGlobalDef :: Termlike t => Ident -> Matcher t ()
+matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (isGlobalDef ident)
 
 asBoolType :: Termlike t => Matcher t ()
 asBoolType = Matcher (Net.Atom (identName bool)) match
     where
       match (unwrapTermF -> FTermF (DataTypeApp ident [])) | ident == bool = Just ()
       match _ = Nothing
-      bool = mkIdent (mkModuleName ["Prelude"]) "Bool"
+      bool = "Prelude.Bool"
 
 asFinValLit :: Termlike t => Matcher t (Integer, Integer)
 asFinValLit = Matcher pat match
@@ -91,7 +105,7 @@ asFinValLit = Matcher pat match
       match (unwrapTermF -> FTermF (CtorApp ident [x, y]))
           | ident == finval = (,) <$> destNatLit x <*> destNatLit y
       match _ = Nothing
-      finval = mkIdent (mkModuleName ["Prelude"]) "FinVal"
+      finval = "Prelude.FinVal"
 
 asSuccLit :: Termlike t => Matcher t Integer
 asSuccLit = Matcher pat match
@@ -100,55 +114,69 @@ asSuccLit = Matcher pat match
       match (unwrapTermF -> FTermF (CtorApp ident [x]))
           | ident == succ = destNatLit x
       match _ = Nothing
-      succ = mkIdent (mkModuleName ["Prelude"]) "Succ"
+      succ = "Prelude.Succ"
 
 asBvNatLit :: Termlike t => Matcher t (Integer, Integer)
 asBvNatLit =
-    thenMatcher (asGlobalDef bvNat <:> asNatLit <:> asNatLit) $
-        \(((), n), x) -> guard (x < bit (fromIntegral n)) >> return (n, x)
-    where
-      bvNat = mkIdent (mkModuleName ["Prelude"]) "bvNat"
+    thenMatcher (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
+        \(((), n), x) -> return (n, x .&. bitMask n)
+
+
+normSignedBV :: Int -> Integer -> Integer
+normSignedBV n x | testBit x n = x' - bit (n+1)
+                 | otherwise   = x'
+  where mask = bit (n+1) - 1
+        x' = x .&. mask
+
+
+asSignedBvNatLit :: Termlike t => Matcher t Integer
+asSignedBvNatLit =
+    thenMatcher (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
+        \(((), n), x) -> return (normSignedBV (fromInteger n) x)
 
 ----------------------------------------------------------------------
 -- Term builders
 
-newtype TermBuilder t =
-    TermBuilder { runTermBuilder :: forall m. Monad m => (TermF t -> m t) -> m t }
+newtype TermBuilder t v =
+    TermBuilder { runTermBuilder :: forall m. Monad m => (TermF t -> m t) -> m v }
 
-mkAny :: t -> TermBuilder t
-mkAny t = TermBuilder $ \mk -> return t
+instance Monad (TermBuilder t) where
+  m >>= h = TermBuilder $ \mk -> do
+    r <- runTermBuilder m mk
+    runTermBuilder (h r) mk
+  return v = TermBuilder $ \_ -> return v
 
-mkBool :: Bool -> TermBuilder t
-mkBool b = TermBuilder $ \mk ->
-    mk (FTermF (CtorApp (if b then idTrue else idFalse) []))
-    where
-      idTrue = mkIdent (mkModuleName ["Prelude"]) "True"
-      idFalse = mkIdent (mkModuleName ["Prelude"]) "False"
+mkAny :: t -> TermBuilder t t
+mkAny t = TermBuilder $ \_ -> return t
 
-mkNatLit :: Integer -> TermBuilder t
+mkBool :: Bool -> TermBuilder t t
+mkBool b = TermBuilder $ \mk -> mk (FTermF (CtorApp idSym []))
+  where idSym | b = "Prelude.True" 
+              | otherwise = "Prelude.False"
+
+mkNatLit :: Integer -> TermBuilder t t
 mkNatLit n = TermBuilder $ \mk -> mk (FTermF (NatLit n))
 
-mkVecLit :: t -> V.Vector t -> TermBuilder t
+mkVecLit :: t -> V.Vector t -> TermBuilder t t
 mkVecLit t xs = TermBuilder $ \mk -> mk (FTermF (ArrayValue t xs))
 
-mkFinVal :: Integer -> Integer -> TermBuilder t
+mkTuple :: [t] -> TermBuilder t t
+mkTuple l = TermBuilder $ \mk -> mk (FTermF (TupleValue l))
+
+mkFinVal :: Integer -> Integer -> TermBuilder t t
 mkFinVal i j = TermBuilder $ \mk ->
     do i' <- mk (FTermF (NatLit i))
        j' <- mk (FTermF (NatLit j))
-       mk (FTermF (CtorApp finval [i', j']))
-    where
-      finval = mkIdent (mkModuleName ["Prelude"]) "FinVal"
+       mk (FTermF (CtorApp "Prelude.FinVal" [i', j']))
 
-mkBvNat :: Integer -> Integer -> TermBuilder t
-mkBvNat n x = TermBuilder $ \mk ->
+mkBvNat :: Integer -> Integer -> TermBuilder t t
+mkBvNat n x = TermBuilder $ \mk -> assert (n >= 0) $ 
     do n' <- mk (FTermF (NatLit n))
-       x' <- mk (FTermF (NatLit x))
-       t0 <- mk (FTermF (GlobalDef bvNat))
+       x' <- mk $ FTermF $ NatLit $ x .&. bitMask n 
+       t0 <- mk (FTermF (GlobalDef "Prelude.bvNat"))
        t1 <- mk (FTermF (App t0 n'))
        t2 <- mk (FTermF (App t1 x'))
        return t2
-    where
-       bvNat = mkIdent (mkModuleName ["Prelude"]) "bvNat"
 
 ----------------------------------------------------------------------
 -- Conversions
@@ -158,9 +186,9 @@ mkBvNat n x = TermBuilder $ \mk ->
 -- rewritten term. We use conversions to model the behavior of
 -- primitive operations in SAWCore.
 
-newtype Conversion t = Conversion (Matcher t (TermBuilder t))
+newtype Conversion t = Conversion (Matcher t (TermBuilder t t))
 
-runConversion :: Conversion t -> t -> Maybe (TermBuilder t)
+runConversion :: Conversion t -> t -> Maybe (TermBuilder t t)
 runConversion (Conversion (Matcher _ f)) = f
 
 instance Net.Pattern (Conversion t) where
@@ -180,10 +208,8 @@ succ_NatLit =
 addNat_NatLit :: Termlike t => Conversion t
 addNat_NatLit =
     Conversion $
-    thenMatcher (asGlobalDef addNat <:> asNatLit <:> asNatLit)
+    thenMatcher (matchGlobalDef "Prelude.addNat" <:> asNatLit <:> asNatLit)
     (\(((), m), n) -> return $ mkNatLit (m + n))
-    where
-      addNat = mkIdent (mkModuleName ["Prelude"]) "addNat"
 
 -- | Conversions for operations on Fin literals
 finConversions :: Termlike t => [Conversion t]
@@ -192,20 +218,16 @@ finConversions = [finInc_FinVal, finIncLim_FinVal]
 finInc_FinVal :: Termlike t => Conversion t
 finInc_FinVal =
     Conversion $
-    thenMatcher (asGlobalDef finInc <:> asNatLit <:> asNatLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.finInc" <:> asNatLit <:> asNatLit <:> asFinValLit)
     (\((((), m), n), (i, j)) ->
          guard (n == i + j + 1) >> return (mkFinVal (m + i) j))
-    where
-      finInc = mkIdent (mkModuleName ["Prelude"]) "finInc"
 
 finIncLim_FinVal :: Termlike t => Conversion t
 finIncLim_FinVal =
     Conversion $
-    thenMatcher (asGlobalDef finIncLim <:> asNatLit <:> asNatLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.finIncLim" <:> asNatLit <:> asNatLit <:> asFinValLit)
     (\((((), m), n), (i, j)) ->
          guard (n == i + j + 1) >> return (mkFinVal i (m + j)))
-    where
-      finIncLim = mkIdent (mkModuleName ["Prelude"]) "finIncLim"
 
 -- | Conversions for operations on vector literals
 vecConversions :: Termlike t => [Conversion t]
@@ -214,105 +236,286 @@ vecConversions = [get_VecLit, append_VecLit]
 get_VecLit :: Termlike t => Conversion t
 get_VecLit =
     Conversion $
-    thenMatcher (asGlobalDef get <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
+    thenMatcher (matchGlobalDef "Prelude.get" <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
     (\(((((), n), e), (_, xs)), (i, j)) ->
-         return $ mkAny ((V.!) xs (fromIntegral i)))
-    where
-      get = mkIdent (mkModuleName ["Prelude"]) "get"
+         return $ mkAny (xs V.! fromIntegral i))
 
 append_VecLit :: Termlike t => Conversion t
 append_VecLit =
     Conversion $
-    thenMatcher (asGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
+    thenMatcher (matchGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
     (\((((((), m), n), e), (_, xs)), (_, ys)) ->
          return $ mkVecLit e ((V.++) xs ys))
-    where
-      append = mkIdent (mkModuleName ["Prelude"]) "append"
+    where append = "Prelude.append"
+
 
 -- | Conversions for operations on bitvector literals
 bvConversions :: Termlike t => [Conversion t]
 bvConversions =
-    [append_bvNat, bvAdd_bvNat, bvSub_bvNat, bvNot_bvNat,
-     bvule_bvNat, bvult_bvNat, get_bvNat, slice_bvNat]
+    [ bvToNat_bvNat
+    , append_bvNat
+    , bvAdd_bvNat
+    , bvAddWithCarry_bvNat
+    , bvSub_bvNat
+    , bvMul_bvNat
+    , bvUDiv_bvNat
+    , bvURem_bvNat
+    , bvSDiv_bvNat
+    , bvSRem_bvNat
+    , bvShl_bvNat
+    , bvShr_bvNat
+    , bvSShr_bvNat
+    , bvNot_bvNat
+    , bvAnd_bvNat
+    , bvOr_bvNat
+    , bvXor_bvNat
+    , bvMbit_bvNat
+    , bvEq_bvNat
+
+    , bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat
+    , bvsgt_bvNat, bvsge_bvNat, bvsle_bvNat, bvslt_bvNat
+
+    , bvTrunc_bvNat, bvUExt_bvNat, bvSExt_bvNat
+
+    , get_bvNat, slice_bvNat
+    , vTake_bvNat, vDrop_bvNat
+    ]
 
 append_bvNat :: Termlike t => Conversion t
 append_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef append <:> asNatLit <:> asNatLit <:>
+    thenMatcher (matchGlobalDef append <:> asNatLit <:> asNatLit <:>
                  asBoolType <:> asBvNatLit <:> asBvNatLit)
     (\((((((), m), n), _), (_, x)), (_, y)) ->
 --         return $ mkBvNat (m + n) (shiftL x (fromIntegral n) .|. y)) -- ^ Assuming big-endian order
          return $ mkBvNat (m + n) (x .|. shiftL y (fromIntegral m))) -- ^ Assuming little-endian order
     where
-      append = mkIdent (mkModuleName ["Prelude"]) "append"
+      append = "Prelude.append"
+
+bitMask :: Integer -> Integer
+bitMask n = bit (fromInteger n) - 1
+
+preludeBinBVGroundSimplifier :: Termlike t
+                             => Ident
+                             -> (Integer -> Integer -> Integer -> Integer)  
+                             -> Conversion t
+preludeBinBVGroundSimplifier symId fn =
+    Conversion $
+    thenMatcher (matchGlobalDef symId <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\( (((), n), (_, x)), (_, y)) ->
+      return $ mkBvNat n (fn n x y))
+
+bvToNat_bvNat :: Termlike t => Conversion t
+bvToNat_bvNat =
+  Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvToNat" <:> asNatLit <:> asBvNatLit)
+    (\( (((), n), (_, x))) ->
+      return $ mkNatLit (x .&. bitMask n))
 
 bvAdd_bvNat :: Termlike t => Conversion t
-bvAdd_bvNat =
-    Conversion $
-    thenMatcher (asGlobalDef bvAdd <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
-    (\((((), n), (_, x)), (_, y)) ->
-         let mask = bit (fromIntegral n) - 1
-         in return $ mkBvNat n ((x + y) .&. mask))
-    where
-      bvAdd = mkIdent (mkModuleName ["Prelude"]) "bvAdd"
+bvAdd_bvNat = preludeBinBVGroundSimplifier "Prelude.bvAdd" (const (+))
+
+bvAddWithCarry_bvNat :: Termlike t => Conversion t
+bvAddWithCarry_bvNat = Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvAddWithCarry" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\( (((), n), (_, x)), (_, y)) -> Just $ do
+      let r = x + y
+      o <- mkBool $ r `testBit` fromInteger n
+      v <- mkBvNat n r
+      mkTuple [o, v])
 
 bvSub_bvNat :: Termlike t => Conversion t
-bvSub_bvNat =
+bvSub_bvNat = preludeBinBVGroundSimplifier "Prelude.bvSub" (const (-))
+
+bvMul_bvNat :: Termlike t => Conversion t
+bvMul_bvNat = preludeBinBVGroundSimplifier "Prelude.bvMul" (const (*))
+
+bvUDiv_bvNat :: Termlike t => Conversion t
+bvUDiv_bvNat = Conversion $
+   thenMatcher (matchGlobalDef "Prelude.bvUDiv" <:> asNatLit <:> asBvNatLit <:> asBvNatLit) fn
+ where fn ((((), n), (_,x)), (_,y))
+         | y == 0 = Nothing
+         | otherwise = return $ mkBvNat n (x `quot` y)
+
+bvURem_bvNat :: Termlike t => Conversion t
+bvURem_bvNat = Conversion $
+   thenMatcher (matchGlobalDef "Prelude.bvURem" <:> asNatLit <:> asBvNatLit <:> asBvNatLit) fn
+ where fn ((((), n), (_,x)), (_,y))
+         | y == 0 = Nothing
+         | otherwise = return $ mkBvNat n (x `rem` y)
+
+bvSDiv_bvNat :: Termlike t => Conversion t
+bvSDiv_bvNat = Conversion $
+   thenMatcher (matchGlobalDef "Prelude.bvSDiv" <:> asNatLit
+                                             <:> asSignedBvNatLit
+                                             <:> asSignedBvNatLit)
+               fn
+ where fn ((((), n), x), y)
+         | y == 0 = Nothing
+         | otherwise = return $ mkBvNat n (x `quot` y)
+
+bvSRem_bvNat :: Termlike t => Conversion t
+bvSRem_bvNat = Conversion $
+   thenMatcher (matchGlobalDef "Prelude.bvSRem" <:> asNatLit
+                                             <:> asSignedBvNatLit
+                                             <:> asSignedBvNatLit)
+               fn
+ where fn ((((), n), x), y)
+         | y == 0 = Nothing
+         | otherwise = return $ mkBvNat n (x `rem` y)
+
+bvShl_bvNat :: Termlike t => Conversion t
+bvShl_bvNat =
+   Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvShl" <:> asNatLit <:> asBvNatLit <:> asNatLit)
+    (\((((), n), (_,x)), i) ->
+      return $ mkBvNat n (x `shiftL` fromInteger i))
+
+bvShr_bvNat :: Termlike t => Conversion t
+bvShr_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef bvSub <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
-    (\((((), n), (_, x)), (_, y)) ->
-         let mask = bit (fromIntegral n) - 1
-         in return $ mkBvNat n ((x - y) .&. mask))
-    where
-      bvSub = mkIdent (mkModuleName ["Prelude"]) "bvSub"
+    thenMatcher (matchGlobalDef "Prelude.bvShr" <:> asNatLit <:> asBvNatLit <:> asNatLit)
+    (\((((), n), (_,x)), i) ->
+      return $ mkBvNat n (x `shiftR` fromInteger i))
+
+bvSShr_bvNat :: Termlike t => Conversion t
+bvSShr_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvSShr" <:> asNatLit <:> asSignedBvNatLit <:> asNatLit)
+    (\((((), n), x), i) ->
+      return $ mkBvNat (n+1) (x `shiftR` fromInteger i))
 
 bvNot_bvNat :: Termlike t => Conversion t
 bvNot_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef bvNot <:> asNatLit <:> asBvNatLit)
+    thenMatcher (matchGlobalDef "Prelude.bvNot" <:> asNatLit <:> asBvNatLit)
     (\(((), n), (_, x)) ->
-         let mask = bit (fromIntegral n) - 1
-         in return $ mkBvNat n (x `xor` mask))
-    where
-      bvNot = mkIdent (mkModuleName ["Prelude"]) "bvNot"
+      return $ mkBvNat n (x `xor` bitMask n))
 
-bvule_bvNat :: Termlike t => Conversion t
-bvule_bvNat =
+bvAnd_bvNat :: Termlike t => Conversion t
+bvAnd_bvNat = preludeBinBVGroundSimplifier "Prelude.bvAnd" (const (.&.))
+
+bvOr_bvNat  :: Termlike t => Conversion t
+bvOr_bvNat  = preludeBinBVGroundSimplifier "Prelude.bvOr" (const (.|.))
+
+bvXor_bvNat :: Termlike t => Conversion t
+bvXor_bvNat = preludeBinBVGroundSimplifier "Prelude.bvXor" (const xor)
+
+bvMbit_bvNat :: Termlike t => Conversion t
+bvMbit_bvNat =
+  Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvMbit" <:> asNatLit <:> asBvNatLit <:> asFinValLit)
+    (\( (((), n), (_, v)), (_, y)) ->
+      return $ mkBool (testBit v (fromInteger y)))
+
+bvEq_bvNat :: Termlike t => Conversion t
+bvEq_bvNat =
+  Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvEq" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\( (((), n), (_, x)), (_, y)) ->
+      return $ mkBool (x .&. bitMask n == y .&. bitMask n))
+
+bvugt_bvNat :: Termlike t => Conversion t
+bvugt_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef bvule <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
-    (\((((), n), (_, x)), (_, y)) -> return $ mkBool (x <= y))
-    where
-      bvule = mkIdent (mkModuleName ["Prelude"]) "bvule"
+    thenMatcher (matchGlobalDef "Prelude.bvugt" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x > y))
+
+bvuge_bvNat :: Termlike t => Conversion t
+bvuge_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvuge" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x >= y))
 
 bvult_bvNat :: Termlike t => Conversion t
 bvult_bvNat =
     Conversion $
-    thenMatcher (asGlobalDef bvult <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
-    (\((((), n), (_, x)), (_, y)) -> return $ mkBool (x < y))
-    where
-      bvult = mkIdent (mkModuleName ["Prelude"]) "bvult"
+    thenMatcher (matchGlobalDef "Prelude.bvult" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x < y))
+
+bvule_bvNat :: Termlike t => Conversion t
+bvule_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvule" <:> asNatLit <:> asBvNatLit <:> asBvNatLit)
+    (\((((), _), (_, x)), (_, y)) -> return $ mkBool (x <= y))
+
+bvsgt_bvNat :: Termlike t => Conversion t
+bvsgt_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvsgt" <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
+    (\((((), _), x), y) -> return $ mkBool (x > y))
+
+bvsge_bvNat :: Termlike t => Conversion t
+bvsge_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvsge" 
+                                 <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
+    (\((((), _), x), y) -> return $ mkBool (x >= y))
+
+bvslt_bvNat :: Termlike t => Conversion t
+bvslt_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvslt" <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
+    (\((((), _), x), y) -> return $ mkBool (x < y))
+
+bvsle_bvNat :: Termlike t => Conversion t
+bvsle_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvsle" 
+                                 <:> asNatLit <:> asSignedBvNatLit <:> asSignedBvNatLit)
+    (\((((), _), x), y) -> return $ mkBool (x <= y))
+
+bvTrunc_bvNat :: Termlike t => Conversion t
+bvTrunc_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvTrunc" <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    (\((((), _), y), (_, a)) -> return $ mkBvNat y a)
+
+bvUExt_bvNat :: Termlike t => Conversion t
+bvUExt_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvUExt" <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    (\((((), x), y), (_, a)) -> return $ mkBvNat (x+y) a)
+
+bvSExt_bvNat :: Termlike t => Conversion t
+bvSExt_bvNat =
+    Conversion $
+    thenMatcher (matchGlobalDef "Prelude.bvSExt" <:> asNatLit <:> asNatLit <:> asSignedBvNatLit)
+    (\((((), x), y), a) -> return $ mkBvNat (x+y) a)
 
 get_bvNat :: Termlike t => Conversion t
 get_bvNat =
     Conversion $
     thenMatcher
-    (asGlobalDef get <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
+    (matchGlobalDef "Prelude.get" <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
     (\(((((), n), ()), (n', x)), (i, j)) ->
 --         return $ mkBool (testBit x (fromIntegral j))) -- ^ Assuming big-endian order
          return $ mkBool (testBit x (fromIntegral i))) -- ^ Assuming little-endian order
-    where
-      get = mkIdent (mkModuleName ["Prelude"]) "get"
+
+vTake_bvNat :: Termlike t => Conversion t
+vTake_bvNat =
+    Conversion $
+    thenMatcher
+    (matchGlobalDef "Prelude.vTake" <:> asBoolType <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    (\(((((), ()), m), n), (_, x)) ->
+         return $ mkBvNat m x) -- Assumes little-endian order
+
+vDrop_bvNat :: Termlike t => Conversion t
+vDrop_bvNat =
+    Conversion $
+    thenMatcher
+    (matchGlobalDef "Prelude.vDrop" <:> asBoolType <:> asNatLit <:> asNatLit <:> asBvNatLit)
+    (\(((((), ()), m), n), (_, x)) ->
+         return $ mkBvNat n (x `shiftR` fromInteger m)) -- Assumes little-endian order
 
 slice_bvNat :: Termlike t => Conversion t
 slice_bvNat =
     Conversion $
     thenMatcher
-    (asGlobalDef slice <:> asBoolType <:>
+    (matchGlobalDef "Prelude.slice" <:> asBoolType <:>
      asNatLit <:> asNatLit <:> asNatLit <:> asBvNatLit)
     (\((((((), _), i), n), j), (m, x)) ->
          guard (i + n + j == m) >>
          let mask = bit (fromIntegral n) - 1
 --         in return $ mkBvNat n (shiftR x (fromIntegral j) .&. mask)) -- ^ Assuming big-endian order
          in return $ mkBvNat n (shiftR x (fromIntegral i) .&. mask)) -- ^ Assuming little-endian order
-    where
-      slice = mkIdent (mkModuleName ["Prelude"]) "slice"
