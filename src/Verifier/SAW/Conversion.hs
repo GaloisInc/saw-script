@@ -38,11 +38,10 @@ module Verifier.SAW.Conversion
   , slice_bvNat
   ) where
 
-import Control.Applicative ((<$>), pure, (<*>))
+import Control.Applicative ((<$>), (<*>))
 import Control.Exception (assert)
 import Control.Monad (guard, (>=>))
 import Data.Bits
-import Data.Map (Map)
 import qualified Data.Vector as V
 
 import Verifier.SAW.SharedTerm (Termlike(..))
@@ -110,11 +109,11 @@ asFinValLit = Matcher pat match
 asSuccLit :: Termlike t => Matcher t Integer
 asSuccLit = Matcher pat match
     where
-      pat = Net.App (Net.Atom (identName succ)) Net.Var
+      pat = Net.App (Net.Atom (identName succId)) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x]))
-          | ident == succ = destNatLit x
+          | ident == succId = destNatLit x
       match _ = Nothing
-      succ = "Prelude.Succ"
+      succId = "Prelude.Succ"
 
 asBvNatLit :: Termlike t => Matcher t (Integer, Integer)
 asBvNatLit =
@@ -237,14 +236,14 @@ get_VecLit :: Termlike t => Conversion t
 get_VecLit =
     Conversion $
     thenMatcher (matchGlobalDef "Prelude.get" <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
-    (\(((((), n), e), (_, xs)), (i, j)) ->
+    (\(((((), _n), _e), (_, xs)), (i, _j)) ->
          return $ mkAny (xs V.! fromIntegral i))
 
 append_VecLit :: Termlike t => Conversion t
 append_VecLit =
     Conversion $
     thenMatcher (matchGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
-    (\((((((), m), n), e), (_, xs)), (_, ys)) ->
+    (\((((((), _m), _n), e), (_, xs)), (_, ys)) ->
          return $ mkVecLit e ((V.++) xs ys))
     where append = "Prelude.append"
 
@@ -405,7 +404,7 @@ bvMbit_bvNat :: Termlike t => Conversion t
 bvMbit_bvNat =
   Conversion $
     thenMatcher (matchGlobalDef "Prelude.bvMbit" <:> asNatLit <:> asBvNatLit <:> asFinValLit)
-    (\( (((), n), (_, v)), (_, y)) ->
+    (\( (((), _n), (_, v)), (_, y)) ->
       return $ mkBool (testBit v (fromInteger y)))
 
 bvEq_bvNat :: Termlike t => Conversion t
@@ -488,7 +487,7 @@ get_bvNat =
     Conversion $
     thenMatcher
     (matchGlobalDef "Prelude.get" <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
-    (\(((((), n), ()), (n', x)), (i, j)) ->
+    (\(((((), _n), ()), (_n', x)), (i, _j)) ->
 --         return $ mkBool (testBit x (fromIntegral j))) -- ^ Assuming big-endian order
          return $ mkBool (testBit x (fromIntegral i))) -- ^ Assuming little-endian order
 
@@ -497,7 +496,7 @@ vTake_bvNat =
     Conversion $
     thenMatcher
     (matchGlobalDef "Prelude.vTake" <:> asBoolType <:> asNatLit <:> asNatLit <:> asBvNatLit)
-    (\(((((), ()), m), n), (_, x)) ->
+    (\(((((), ()), m), _n), (_, x)) ->
          return $ mkBvNat m x) -- Assumes little-endian order
 
 vDrop_bvNat :: Termlike t => Conversion t
