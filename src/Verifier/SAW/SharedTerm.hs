@@ -20,7 +20,6 @@ module Verifier.SAW.SharedTerm
   , asBool
     -- * Shared terms
   , SharedTerm(..)
-  , scFreshGlobal
   , TermIndex
   , looseVars
   , unshare
@@ -88,11 +87,8 @@ import Control.Applicative
 -- ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
 import Control.Lens
-import Control.Monad (foldM, liftM, when)
 import Control.Monad.State.Strict as State
-import Control.Monad.Trans (lift)
-import Data.Bits
-import Data.Hashable (Hashable(..), hash)
+import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 
@@ -100,10 +96,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 #if __GLASGOW_HASKELL__ < 706
 import qualified Data.Map as StrictMap
-import qualified Data.IntMap as IMap
 #else
 import qualified Data.Map.Strict as StrictMap
-import qualified Data.IntMap.Strict as IMap
 #endif
 import Data.Word
 import Data.Foldable hiding (sum)
@@ -219,7 +213,7 @@ emptyAppCache :: AppCache s
 emptyAppCache = AC HMap.empty 0
 
 instance Show (TermF (SharedTerm s)) where
-  show t@FTermF{} = "termF fTermF"
+  show FTermF{} = "termF fTermF"
   show _ = "termF SharedTerm"
 
 -- | Return term for application using existing term in cache if it is avaiable.
@@ -234,11 +228,6 @@ getTerm r a =
               s' = s { acBindings = HMap.insert a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
-
--- | Substitute var 0 in first term for second term, and shift all variable
--- references down.
-subst0 :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-subst0 sc t t0 = instantiateVar sc 0 t0 t
 
 reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 reducePi sc (STApp _ (Pi _ _ body)) arg = instantiateVar sc 0 arg body
@@ -275,8 +264,8 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo (STApp i t) = do
-      memo <- State.get
-      case Map.lookup i memo of
+      table <- State.get
+      case Map.lookup i table of
         Just x  -> return x
         Nothing -> do
           x <- termf t
@@ -293,6 +282,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         Lambda (PVar i _ _) tp rhs -> do
           rtp <- memo rhs
           lift $ scTermF sc (Pi i tp rtp)
+        Lambda _ _ _ -> error "scTypeOf Lambda"
         Pi _ tp rhs -> do
           ltp <- sort tp
           rtp <- sort rhs
@@ -325,14 +315,15 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t args
         Sort s -> lift $ scSort sc (sortOf s)
-        NatLit i -> lift $ scNatType sc
+        NatLit _ -> lift $ scNatType sc
         ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
         FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
+        ExtCns{}    -> error "scTypeOf ExtCns"
 
 -- | The inverse function to @sharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
-unshare t = State.evalState (go t) Map.empty
+unshare t0 = State.evalState (go t0) Map.empty
   where
     go :: SharedTerm s -> State.State (Map TermIndex Term) Term
     go (STApp i t) = do
@@ -373,9 +364,9 @@ instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                                   -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
-instantiateVars sc f initialLevel t =
+instantiateVars sc f initialLevel t0 =
     do cache <- lift newCache
-       let ?cache = cache in go initialLevel t
+       let ?cache = cache in go initialLevel t0
   where
     go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
@@ -404,8 +395,8 @@ instantiateVars sc f initialLevel t =
 incVarsChangeT :: SharedContext s
                -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 incVarsChangeT sc initialLevel j
-    | j == 0 = return
-    | j >  0 = instantiateVars sc fn initialLevel
+    | j == 0    = return
+    | otherwise = instantiateVars sc fn initialLevel
     where
       fn _ i t = taint $ scTermF sc <$> (LocalVar (i+j) <$> t)
 
@@ -429,9 +420,9 @@ instantiateVarChangeT sc k t0 t =
         fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
-        fn i j t | j  > i + k = taint $ scTermF sc <$> (LocalVar (j - 1) <$> t)
+        fn i j x | j  > i + k = taint $ scTermF sc <$> (LocalVar (j - 1) <$> x)
                  | j == i + k = taint $ return <$> term i
-                 | otherwise  = scTermF sc <$> (LocalVar j <$> t)
+                 | otherwise  = scTermF sc <$> (LocalVar j <$> x)
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
@@ -453,14 +444,14 @@ instantiateVarListChangeT sc k ts t =
     -- Memoize instantiated versions of ts.
     term :: (Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)
          -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-    term (cache, t) i = useCache cache i (incVarsChangeT sc 0 i t)
+    term (cache, x) i = useCache cache i (incVarsChangeT sc 0 i x)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
        -> ChangeT IO (IO (SharedTerm s))
-    fn rs i j t | j >= i + k + l = taint $ scTermF sc <$> (LocalVar (j - l) <$> t)
+    fn rs i j x | j >= i + k + l = taint $ scTermF sc <$> (LocalVar (j - l) <$> x)
                 | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
-                | otherwise      = scTermF sc <$> (LocalVar j <$> t)
+                | otherwise      = scTermF sc <$> (LocalVar j <$> x)
 
 instantiateVarList :: SharedContext s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
@@ -705,11 +696,11 @@ useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
 -- | Performs an action when a value has been modified, and otherwise
 -- returns a pure value.
 whenModified :: (Functor m, Monad m) => b -> (a -> m b) -> ChangeT m a -> ChangeT m b
-whenModified b act m = ChangeT $ do
+whenModified b f m = ChangeT $ do
   ca <- runChangeT m
   case ca of
     Original{} -> return (Original b)
-    Modified a -> Modified <$> act a
+    Modified a -> Modified <$> f a
 
 -- | Instantiate some of the external constants
 scInstantiateExt :: forall s 
