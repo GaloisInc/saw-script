@@ -53,8 +53,8 @@ class Pattern t where
   toPat :: t -> Pat
 
 instance Show Pat where
-  showsPrec p (Atom s) = showString s
-  showsPrec p Var = showString "_"
+  showsPrec _ (Atom s) = showString s
+  showsPrec _ Var = showString "_"
   showsPrec p (App x y) =
       showParen (p > 5) (showsPrec 5 x . showString " " . showsPrec 6 y)
 
@@ -77,14 +77,24 @@ data Key = CombK | VarK | AtomK String
 add_key_of_terms :: Pat -> [Key] -> [Key]
 add_key_of_terms t cs
   | isVarApp t = VarK : cs
-  | otherwise  = rands t cs
-  where
-    rands (App f t) cs = CombK : rands f (add_key_of_terms t cs)
-    rands (Atom c)  cs = AtomK c : cs
+  | otherwise  = add_key_of_terms' t cs
+
+-- | Precondition: not (isVarApp t).
+add_key_of_terms' :: Pat -> [Key] -> [Key]
+add_key_of_terms' (App f t) cs = CombK : add_key_of_terms' f (add_key_of_terms t cs)
+add_key_of_terms' (Atom c)  cs = AtomK c : cs
+add_key_of_terms' Var       _  = error "impossible"
 
 {-convert a term to a list of keys-}
 key_of_term :: Pat -> [Key]
 key_of_term t = add_key_of_terms t []
+{- ^ Required property: @depth (key_of_term t) = 1@
+depth :: [Key] -> Int
+depth [] = 0
+depth (CombK   : keys) = depth keys - 1
+depth (VarK    : keys) = depth keys + 1
+depth (AtomK _ : keys) = depth keys + 1
+-}
 
 {-Trees indexed by key lists: each arc is labelled by a key.
   Each node contains a list of items, and arcs to children.
@@ -96,6 +106,16 @@ data Net a
   = Leaf [a]
   | Net { comb :: Net a, var :: Net a, atoms :: Map String (Net a) }
   deriving Show
+
+{-
+Invariant: A well-formed term net should satisfy @valid 1@.
+Every sub-net should satisfy @valid n@ for some non-negative @n@.
+
+valid :: Int -> Net a -> Bool
+valid n (Leaf xs) = null xs || n == 0
+valid n (Net {comb, var, atoms}) =
+  n > 0 && valid (n+1) comb && valid (n-1) var && all (valid (n-1)) (elems atoms)
+-}
 
 empty :: Net a
 empty = Leaf []
@@ -114,7 +134,7 @@ emptynet = Net { comb = empty, var = empty, atoms = Map.empty }
   The empty list of keys generates a Leaf node, others a Net node.
 -}
 insert :: forall a. (Eq a) => ([Key], a) -> Net a -> Net a
-insert (keys, x) net = ins1 keys net
+insert (keys0, x) net = ins1 keys0 net
   where
     ins1 :: [Key] -> Net a -> Net a
     ins1 [] (Leaf xs)
@@ -128,6 +148,8 @@ insert (keys, x) net = ins1 keys net
     ins1 (AtomK a : keys) (Net {comb, var, atoms}) =
       let atoms' = Map.alter (Just . ins1 keys . fromMaybe empty) a atoms
       in Net {comb = comb, var = var, atoms = atoms'}
+    ins1 [] (Net {}) = error "impossible"
+    ins1 (_ : _) (Leaf (_ : _)) = error "impossible"
 
 insert_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
 insert_term (t, x) = insert (key_of_term (toPat t), x)
@@ -135,27 +157,30 @@ insert_term (t, x) = insert (key_of_term (toPat t), x)
 {-** Deletion from a discrimination net **-}
 
 {-Create a new Net node if it would be nonempty-}
-newnet :: Net a -> Net a
-newnet (args @ Net {comb, var, atoms}) =
+newnet :: Net a -> Net a -> Map String (Net a) -> Net a
+newnet comb var atoms =
   if is_empty comb && is_empty var && Map.null atoms
-  then empty else args
+  then empty else Net { comb = comb, var = var, atoms = atoms }
 
 {-Deletes item x from the list at the node addressed by the keys.
   Returns Nothing if absent.  Collapses the net if possible. -}
 delete :: (Eq a) => ([Key], a) -> Net a -> Net a
-delete (keys, x) net = del1 keys net
+delete (keys0, x) net0 = del1 keys0 net0
   where
+    -- | Invariant: @del1 keys net@ requires @valid (depth keys) net@.
     del1 [] (Leaf xs) = Leaf (List.delete x xs)
-    del1 keys (Leaf []) = Leaf []
+    del1 _ (Leaf []) = Leaf []
     del1 (CombK : keys) (Net {comb, var, atoms}) =
-      newnet $ Net {comb = del1 keys comb, var = var, atoms = atoms}
+      newnet (del1 keys comb) var atoms
     del1 (VarK : keys) (Net {comb, var, atoms}) =
-      newnet $ Net {comb = comb, var = del1 keys var, atoms = atoms}
+      newnet comb (del1 keys var) atoms
     del1 (AtomK a : keys) (Net {comb, var, atoms}) =
       let nonempty (Leaf []) = Nothing
           nonempty net = Just net
           atoms' = Map.update (nonempty . del1 keys) a atoms
-      in newnet $ Net {comb = comb, var = var, atoms = atoms'}
+      in newnet comb var atoms'
+    del1 [] (Net {}) = error "impossible"
+    del1 (_ : _) (Leaf (_ : _)) = error "impossible"
 
 delete_term :: (Pattern t, Eq a) => (t, a) -> Net a -> Net a
 delete_term (t, x) = delete (key_of_term (toPat t), x)
@@ -163,15 +188,17 @@ delete_term (t, x) = delete (key_of_term (toPat t), x)
 {-** Retrieval functions for discrimination nets **-}
 
 {-Return the list of items at the given node, [] if no such node-}
+-- | Invariant: @lookup net keys@ requires @valid (depth keys) net@.
 lookup :: Net a -> [Key] -> [a]
 lookup (Leaf xs) [] = xs
 lookup (Leaf _) (_ : _) = []  {-non-empty keys and empty net-}
-lookup (Net {comb, var, atoms}) (CombK : keys) = lookup comb keys
-lookup (Net {comb, var, atoms}) (VarK : keys) = lookup var keys
-lookup (Net {comb, var, atoms}) (AtomK a : keys) =
+lookup (Net {comb}) (CombK : keys) = lookup comb keys
+lookup (Net {var}) (VarK : keys) = lookup var keys
+lookup (Net {atoms}) (AtomK a : keys) =
   case Map.lookup a atoms of
     Just net -> lookup net keys
     Nothing -> []
+lookup (Net {}) [] = error "impossible"
 
 {-Skipping a term in a net.  Recursively skip 2 levels if a combination-}
 net_skip :: Net a -> [Net a] -> [Net a]
@@ -195,20 +222,23 @@ look1 (atoms, a) nets =
                                    else matches only a variable in net.
 -}
 matching :: Bool -> Pat -> Net a -> [Net a] -> [Net a]
-matching unif t net nets =
-  case net of
-    Leaf _ -> nets
-    Net {var, ..} ->
-      case t of
-        Var -> if unif then net_skip net nets else var : nets {-only matches Var in net-}
-        _   -> rands t net (var : nets)  {-var could match also-}
+matching unif = match
   where
+    match :: Pat -> Net a -> [Net a] -> [Net a]
+    match t net nets =
+      case net of
+        Leaf _ -> nets
+        Net {var, ..} ->
+          case t of
+            Var -> if unif then net_skip net nets else var : nets {-only matches Var in net-}
+            _   -> rands t net (var : nets)  {-var could match also-}
+    rands :: Pat -> Net a -> [Net a] -> [Net a]
     rands _ (Leaf _) nets = nets
     rands t (Net {comb, atoms, ..}) nets =
       case t of
         Atom c    -> look1 (atoms, c) nets
         Var       -> nets
-        App t1 t2 -> foldr (matching unif t2) nets (rands t1 comb [])
+        App t1 t2 -> foldr (match t2) nets (rands t1 comb [])
 
 extract_leaves :: [Net a] -> [a]
 extract_leaves = concatMap (\(Leaf xs) -> xs)
