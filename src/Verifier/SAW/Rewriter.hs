@@ -43,6 +43,7 @@ import Control.Monad.State
 import Data.Bits
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
+import Data.IORef (IORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
@@ -305,17 +306,17 @@ rewriteSharedTerm sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    rewriteAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (traverse rewriteAll tf >>= scTermF sc >>= rewriteTop)
-    rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    rewriteTop :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t =
         case reduceSharedTerm sc t of
           Nothing -> apply (Net.match_term ss t) t
           Just io -> rewriteAll =<< io
-    apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    apply :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
              [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t
@@ -340,16 +341,16 @@ rewriteSharedTermToTerm sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IO TermIndex Term) => SharedTerm s -> IO Term
+    rewriteAll :: (?cache :: Cache IORef TermIndex Term) => SharedTerm s -> IO Term
     rewriteAll (asBetaRedex -> Just (_, _, body, arg)) =
         instantiateVar sc 0 arg body >>= rewriteAll
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
-    rewriteTop :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
+    rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
     rewriteTop (asTupleRedex -> Just (ts, i)) = return (ts !! (i - 1))
     rewriteTop (asRecordRedex -> Just (m, i)) = return (fromJust (Map.lookup i m))
     rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?cache :: Cache IO TermIndex Term) =>
+    apply :: (?cache :: Cache IORef TermIndex Term) =>
              [Either (RewriteRule Term) (Conversion Term)] -> Term -> IO Term
     apply [] t = return t
     apply (Left (RewriteRule _ lhs rhs) : rules) t =
@@ -368,19 +369,19 @@ rewriteSharedTermTypeSafe sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    rewriteAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll t@(STApp tidx tf) =
         putStrLn "Rewriting term:" >> print t >>
         useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
-    rewriteTermF :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    rewriteTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                     TermF (SharedTerm s) -> IO (TermF (SharedTerm s))
     rewriteTermF tf =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF ftf
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           _ -> return tf -- traverse rewriteAll tf
-    rewriteFTermF :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    rewriteFTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                      FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
     rewriteFTermF ftf =
         case ftf of
@@ -406,10 +407,10 @@ rewriteSharedTermTypeSafe sc ss t0 =
           FloatLit{}       -> return ftf
           DoubleLit{}      -> return ftf
           ExtCns{}         -> return ftf
-    rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    rewriteTop :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    apply :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
              [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
     apply [] t = return t

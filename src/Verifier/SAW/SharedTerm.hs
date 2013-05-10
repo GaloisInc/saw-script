@@ -87,10 +87,12 @@ import Control.Applicative
 -- ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
 import Control.Lens
+import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import Data.IORef (IORef)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -368,12 +370,12 @@ instantiateVars sc f initialLevel t0 =
     do cache <- lift newCache
        let ?cache = cache in go initialLevel t0
   where
-    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
+    go :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
           DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STApp tidx tf) =
         ChangeT $ useCache ?cache (tidx, l) (runChangeT $ preserveChangeT t (go' l tf))
 
-    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
+    go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
     go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
@@ -413,11 +415,11 @@ instantiateVarChangeT sc k t0 t =
     do cache <- newCache
        let ?cache = cache in instantiateVars sc fn 0 t
   where -- Use map reference to memoize instantiated versions of t.
-        term :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
+        term :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
                 DeBruijnIndex -> ChangeT IO (SharedTerm s)
         term i = useCache ?cache i (incVarsChangeT sc 0 i t0)
         -- Instantiate variable 0.
-        fn :: (?cache :: Cache (ChangeT IO) DeBruijnIndex (SharedTerm s)) =>
+        fn :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
               DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
                             -> ChangeT IO (IO (SharedTerm s))
         fn i j x | j  > i + k = taint $ scTermF sc <$> (LocalVar (j - 1) <$> x)
@@ -442,11 +444,11 @@ instantiateVarListChangeT sc k ts t =
   where
     l = length ts
     -- Memoize instantiated versions of ts.
-    term :: (Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)
+    term :: (Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)
          -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
     term (cache, x) i = useCache cache i (incVarsChangeT sc 0 i x)
     -- Instantiate variables [k .. k+l-1].
-    fn :: [(Cache (ChangeT IO) DeBruijnIndex (SharedTerm s), SharedTerm s)]
+    fn :: [(Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)]
        -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
        -> ChangeT IO (IO (SharedTerm s))
     fn rs i j x | j >= i + k + l = taint $ scTermF sc <$> (LocalVar (j - l) <$> x)
@@ -690,7 +692,7 @@ asAppList = go []
             Just (f,v) -> go (v:l) f
             Nothing -> (t,l)
 
-useChangeCache :: Monad m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
+useChangeCache :: MonadRef r m => Cache r k (Change v) -> k -> ChangeT m v -> ChangeT m v
 useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
 
 -- | Performs an action when a value has been modified, and otherwise
@@ -709,7 +711,7 @@ scInstantiateExt :: forall s
                  -> SharedTerm s
                  -> IO (SharedTerm s)
 scInstantiateExt sc vmap t0 = do
-  tcache <- newCacheIORefMap' Map.empty
+  tcache <- newCacheMap' Map.empty
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
