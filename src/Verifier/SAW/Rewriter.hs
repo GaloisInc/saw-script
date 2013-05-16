@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -28,7 +29,6 @@ module Verifier.SAW.Rewriter
   -- * Term rewriting
   , rewriteTerm
   , rewriteSharedTerm
---  , rewriteSharedTerm' -- uses ChangeT
   , rewriteSharedTermToTerm
   , rewriteSharedTermTypeSafe
   -- * SharedContext
@@ -37,37 +37,25 @@ module Verifier.SAW.Rewriter
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
-import Control.Exception
 import Control.Lens
-import Control.Monad ((>=>))
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Monad.Trans (lift)
+import Control.Monad.ST
 import Data.Bits
 import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
-import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
-import Data.Traversable (Traversable, traverse)
-
-import Text.PrettyPrint
+import Data.STRef (STRef)
 
 import Verifier.SAW.Cache
-import Verifier.SAW.Change
 import Verifier.SAW.Conversion
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (instantiateVarList)
 import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
-
-import Debug.Trace
-
--- Context, a.k.a. "Telescope"
--- Loose bound variables in the head index the tail of the list
-type Context = [Term]
 
 data RewriteRule t
   = RewriteRule { ctxt :: [t], lhs :: t, rhs :: t }
@@ -107,8 +95,6 @@ instance Net.Pattern t => Net.Pattern (RewriteRule t) where
 
 -- First-order matching
 
-type Substitution = Map DeBruijnIndex Term
-
 -- | Equivalent to @(lookup k t, insert k x t)@.
 insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
@@ -119,10 +105,10 @@ first_order_match pat term = match pat term Map.empty
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
         (LocalVar i _, _) ->
-            case y' of
+            case my' of
               Nothing -> Just m'
               Just y' -> if y == y' then Just m' else Nothing
-            where (y', m') = insertLookup i y m
+            where (my', m') = insertLookup i y m
         (FTermF xf, FTermF yf) ->
             do zf <- zipWithFlatTermF match xf yf
                Foldable.foldl (>=>) Just zf m
@@ -153,16 +139,16 @@ ruleOfTerm t =
 -- Terms do not have unused variables, so unused variables are introduced
 -- as new variables bound after all the used variables.
 ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
-ruleOfDefEqn ident (DefEqn pats rhs@(Term rtf)) =
+ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
       RewriteRule { ctxt = Map.elems varmap
                   , lhs = ruleLhs
                   , rhs = ruleRhs
-                 }
+                  }
   where
-    lvd = emptyLocalVarDoc
+    _lvd = emptyLocalVarDoc
         & docShowLocalNames .~ False
         & docShowLocalTypes .~ True
-    varsUnbound t i = freesTerm t `shiftR` i /= 0
+    _varsUnbound t i = freesTerm t `shiftR` i /= 0
     ruleLhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
     ruleRhs = incVars 0 nUnused rhs
 
@@ -175,19 +161,18 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term rtf)) =
     termOfPat :: Pat Term -> State (Int, Map Int Term) Term
     termOfPat pat =
         case pat of
-          PVar s i tp -> do
+          PVar _ i tp -> do
             (j, m) <- get
             put (j, Map.insert i tp m)
             let tp' = incVars 0 (n - i) tp
             return $ Term $ LocalVar (n - 1 - i) tp'
           PUnused i tp -> do
             (j, m) <- get
-            let s = "_" ++ show j
             put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
             return $ Term $ LocalVar (n - 1 - j) (incVars 0 (n - i) tp)
-          PTuple pats -> (Term . FTermF . TupleValue) <$> traverse termOfPat pats
-          PRecord pats -> (Term . FTermF . RecordValue) <$> traverse termOfPat pats
-          PCtor c pats -> (Term . FTermF . CtorApp c) <$> traverse termOfPat pats
+          PTuple ps -> (Term . FTermF . TupleValue) <$> traverse termOfPat ps
+          PRecord ps -> (Term . FTermF . RecordValue) <$> traverse termOfPat ps
+          PCtor c ps -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
 
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
@@ -195,13 +180,12 @@ rulesOfTypedDef :: TypedDef -> [RewriteRule Term]
 rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
 
 -- | Creates a set of rewrite rules from the defining equations of the named constant.
-scDefRewriteRules :: SharedContext s -> TypedDef -> IO [RewriteRule (SharedTerm s)]
-scDefRewriteRules sc def =
-  (traverse . traverse) (scSharedTerm sc) (rulesOfTypedDef def)
+scDefRewriteRules :: TypedDef -> SC s [RewriteRule (SharedTerm s)]
+scDefRewriteRules def = (traverse . traverse) scSharedTerm (rulesOfTypedDef def)
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
-scEqsRewriteRules :: SharedContext s -> [Ident] -> IO [RewriteRule (SharedTerm s)]
-scEqsRewriteRules sc idents = map ruleOfTerm <$> mapM (scTypeOfGlobal sc) idents
+scEqsRewriteRules :: [Ident] -> SC s [RewriteRule (SharedTerm s)]
+scEqsRewriteRules idents = map ruleOfTerm <$> mapM scTypeOfGlobal idents
 
 ----------------------------------------------------------------------
 -- Simpsets
@@ -232,12 +216,11 @@ addConv conv = Net.insert_term (conv, Right conv)
 addConvs :: Eq t => [Conversion t] -> Simpset t -> Simpset t
 addConvs convs ss = foldr addConv ss convs
 
-scSimpset :: SharedContext s -> [TypedDef] -> [Ident] -> [Conversion (SharedTerm s)] ->
-               IO (Simpset (SharedTerm s))
-scSimpset sc defs eqIdents convs = do
-  m <- scModule sc
-  defRules <- concat <$> traverse (scDefRewriteRules sc) defs
-  eqRules <- scEqsRewriteRules sc eqIdents
+scSimpset :: [TypedDef] -> [Ident] -> [Conversion (SharedTerm s)] ->
+             SC s (Simpset (SharedTerm s))
+scSimpset defs eqIdents convs = do
+  defRules <- concat <$> traverse scDefRewriteRules defs
+  eqRules <- scEqsRewriteRules eqIdents
   return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
 ----------------------------------------------------------------------
@@ -298,22 +281,6 @@ rewriteTerm ss = rewriteAll
 -- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
 -- re-examination of subterms after applying a rewrite
 
-rewriteTermChange :: Simpset Term -> Term -> Change Term
-rewriteTermChange ss = rewriteAll
-  where
-    rewriteAll :: Term -> Change Term
-    rewriteAll t = rewriteSubterms t >>= rewriteTop
-    rewriteSubterms :: Term -> Change Term
-    rewriteSubterms t@(Term tf) = preserve t $ Term <$> traverse rewriteAll tf
-    rewriteTop :: Term -> Change Term
-    rewriteTop t = apply [ r | Left r <- Net.match_term ss t ] t
-    apply :: [RewriteRule Term] -> Term -> Change Term
-    apply [] t = pure t
-    apply (rule : rules) t =
-      case first_order_match (lhs rule) t of
-        Nothing -> apply rules t
-        Just inst -> taint $ rewriteAll (instantiateVarList 0 (Map.elems inst) (rhs rule))
-
 -- | Like rewriteTerm, but returns an equality theorem instead of just
 -- the right-hand side.
 {-
@@ -326,67 +293,63 @@ rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
 
 -- | Do a single reduction step (beta, record or tuple selector) at top
 -- level, if possible.
-reduceSharedTerm :: SharedContext s -> SharedTerm s -> Maybe (IO (SharedTerm s))
-reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
-reduceSharedTerm sc (asTupleRedex -> Just (ts, i)) = Just (return (ts !! (i - 1)))
-reduceSharedTerm sc (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
-reduceSharedTerm _ _ = Nothing
+reduceSharedTerm :: SharedTerm s -> Maybe (SC s (SharedTerm s))
+reduceSharedTerm (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar 0 arg body)
+reduceSharedTerm (asTupleRedex -> Just (ts, i)) = Just (return (ts !! (i - 1)))
+reduceSharedTerm (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
+reduceSharedTerm _ = Nothing
 
 -- | Rewriter for shared terms
-rewriteSharedTerm :: forall s. SharedContext s
-                  -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
-rewriteSharedTerm sc ss t =
+rewriteSharedTerm :: forall s. Simpset (SharedTerm s) -> SharedTerm s -> SC s (SharedTerm s)
+rewriteSharedTerm ss t0 =
     do cache <- newCache
-       let ?cache = cache in rewriteAll t
+       let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-                  SharedTerm s -> IO (SharedTerm s)
+    rewriteAll :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
+                  SharedTerm s -> SC s (SharedTerm s)
     rewriteAll (STApp tidx tf) =
-        useCache ?cache tidx (traverse rewriteAll tf >>= scTermF sc >>= rewriteTop)
-    rewriteAll t = return t
-    rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-                  SharedTerm s -> IO (SharedTerm s)
+        useCache ?cache tidx (traverse rewriteAll tf >>= scTermF >>= rewriteTop)
+    rewriteTop :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
+                  SharedTerm s -> SC s (SharedTerm s)
     rewriteTop t =
-        case reduceSharedTerm sc t of
+        case reduceSharedTerm t of
           Nothing -> apply (Net.match_term ss t) t
           Just io -> rewriteAll =<< io
-    apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    apply :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
              [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
-             SharedTerm s -> IO (SharedTerm s)
+             SharedTerm s -> SC s (SharedTerm s)
     apply [] t = return t
-    apply (Left (RewriteRule _ lhs rhs) : rules) t =
+    apply (Left (RewriteRule {lhs, rhs}) : rules) t =
       case first_order_match lhs t of
         Nothing -> apply rules t
         Just inst ->
-            do putStrLn "REWRITING:"
-               print lhs
-               rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) rhs
+            do -- putStrLn "REWRITING:"
+               -- print lhs
+               rewriteAll =<< S.instantiateVarList 0 (Map.elems inst) rhs
     apply (Right conv : rules) t =
-        do putStrLn "REWRITING:"
-           print (Net.toPat conv)
+        do -- putStrLn "REWRITING:"
+           -- print (Net.toPat conv)
            case runConversion conv t of
              Nothing -> apply rules t
-             Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
+             Just tb -> rewriteAll =<< runTermBuilder tb scTermF
 
 -- | Rewriter for shared terms, returning an unshared term.
-rewriteSharedTermToTerm ::
-    forall s. SharedContext s -> Simpset Term -> SharedTerm s -> IO Term
-rewriteSharedTermToTerm sc ss t =
+rewriteSharedTermToTerm :: forall s. Simpset Term -> SharedTerm s -> SC s Term
+rewriteSharedTermToTerm ss t0 =
     do cache <- newCache
-       let ?cache = cache in rewriteAll t
+       let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IO TermIndex Term) => SharedTerm s -> IO Term
+    rewriteAll :: (?cache :: Cache (STRef s) TermIndex Term) => SharedTerm s -> SC s Term
     rewriteAll (asBetaRedex -> Just (_, _, body, arg)) =
-        instantiateVar sc 0 arg body >>= rewriteAll
+        instantiateVar 0 arg body >>= rewriteAll
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
-    rewriteAll t = return (unshare t)
-    rewriteTop :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
+    rewriteTop :: (?cache :: Cache (STRef s) TermIndex Term) => Term -> SC s Term
     rewriteTop (asTupleRedex -> Just (ts, i)) = return (ts !! (i - 1))
     rewriteTop (asRecordRedex -> Just (m, i)) = return (fromJust (Map.lookup i m))
     rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?cache :: Cache IO TermIndex Term) =>
-             [Either (RewriteRule Term) (Conversion Term)] -> Term -> IO Term
+    apply :: (?cache :: Cache (STRef s) TermIndex Term) =>
+             [Either (RewriteRule Term) (Conversion Term)] -> Term -> SC s Term
     apply [] t = return t
     apply (Left (RewriteRule _ lhs rhs) : rules) t =
         case first_order_match lhs t of
@@ -399,77 +362,84 @@ rewriteSharedTermToTerm sc ss t =
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
-    :: forall s. SharedContext s -> Simpset (SharedTerm s) -> SharedTerm s -> IO (SharedTerm s)
-rewriteSharedTermTypeSafe sc ss t =
+    :: forall s. Simpset (SharedTerm s) -> SharedTerm s -> SC s (SharedTerm s)
+rewriteSharedTermTypeSafe ss t0 =
     do cache <- newCache
-       let ?cache = cache in rewriteAll t
+       let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-                  SharedTerm s -> IO (SharedTerm s)
+    rewriteAll :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
+                  SharedTerm s -> SC s (SharedTerm s)
     rewriteAll t@(STApp tidx tf) =
-        putStrLn "Rewriting term:" >> print t >>
-        useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
-    rewriteAll t = return t
-    rewriteTermF :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-                    TermF (SharedTerm s) -> IO (TermF (SharedTerm s))
+        -- putStrLn "Rewriting term:" >> print t >>
+        useCache ?cache tidx (rewriteTermF tf >>= scTermF >>= rewriteTop)
+    rewriteTermF :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
+                    TermF (SharedTerm s) -> SC s (TermF (SharedTerm s))
     rewriteTermF tf =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF ftf
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           _ -> return tf -- traverse rewriteAll tf
-    rewriteFTermF :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-                     FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
+    rewriteFTermF :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
+                     FlatTermF (SharedTerm s) -> SC s (FlatTermF (SharedTerm s))
     rewriteFTermF ftf =
         case ftf of
           App e1 e2 ->
-              do t1 <- scTypeOf sc e1
+              do t1 <- scTypeOf e1
                  case unwrapTermF t1 of
                    -- We only rewrite e2 if type of e1 is not a dependent type.
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
                    Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
-          TupleValue{} -> traverse rewriteAll ftf
-          TupleType{} -> return ftf -- doesn't matter
-          TupleSelector{} -> traverse rewriteAll ftf
-          RecordValue{} -> traverse rewriteAll ftf
+          TupleValue{}     -> traverse rewriteAll ftf
+          TupleType{}      -> return ftf -- doesn't matter
+          TupleSelector{}  -> traverse rewriteAll ftf
+          RecordValue{}    -> traverse rewriteAll ftf
           RecordSelector{} -> traverse rewriteAll ftf
-          RecordType{} -> return ftf -- doesn't matter
-          CtorApp ident es -> return ftf --FIXME
-          DataTypeApp{} -> return ftf -- could treat same as CtorApp
-          Sort{} -> return ftf -- doesn't matter
-          NatLit{} -> return ftf -- doesn't matter
-          ArrayValue t es -> ArrayValue t <$> traverse rewriteAll es
-    rewriteTop :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
-                  SharedTerm s -> IO (SharedTerm s)
+          RecordType{}     -> return ftf -- doesn't matter
+          CtorApp{}        -> return ftf --FIXME
+          DataTypeApp{}    -> return ftf -- could treat same as CtorApp
+          Sort{}           -> return ftf -- doesn't matter
+          NatLit{}         -> return ftf -- doesn't matter
+          ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
+          GlobalDef{}      -> return ftf
+          FloatLit{}       -> return ftf
+          DoubleLit{}      -> return ftf
+          ExtCns{}         -> return ftf
+    rewriteTop :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
+                  SharedTerm s -> SC s (SharedTerm s)
     rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?cache :: Cache IO TermIndex (SharedTerm s)) =>
+    apply :: (?cache :: Cache (STRef s) TermIndex (SharedTerm s)) =>
              [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
-             SharedTerm s -> IO (SharedTerm s)
+             SharedTerm s -> SC s (SharedTerm s)
     apply [] t = return t
     apply (Left rule : rules) t =
       case first_order_match (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+        Just inst -> rewriteAll =<< S.instantiateVarList 0 (Map.elems inst) (rhs rule)
+    apply (Right conv : rules) t =
+      case runConversion conv t of
+        Nothing -> apply rules t
+        Just tb -> rewriteAll =<< runTermBuilder tb scTermF
 
 -- | Generate a new SharedContext that normalizes terms as it builds them.
 rewritingSharedContext :: forall s. SharedContext s -> Simpset (SharedTerm s) -> SharedContext s
 rewritingSharedContext sc ss = sc'
   where
-    sc' = sc { scTermF = rewriteTop }
-    rewriteTop :: TermF (SharedTerm s) -> IO (SharedTerm s)
+    sc' = sc { scTermF' = rewriteTop }
+    rewriteTop :: TermF (SharedTerm s) -> ST s (SharedTerm s)
     rewriteTop tf =
       let t = STApp (-1) tf in
-      case reduceSharedTerm sc' t of
+      case reduceSharedTerm t of
         Nothing -> apply (Net.match_term ss t) t
-        Just io -> io
+        Just action -> runSC action sc'
     apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
-             SharedTerm s -> IO (SharedTerm s)
-    apply [] (STApp _ tf) = scTermF sc tf
+             SharedTerm s -> ST s (SharedTerm s)
+    apply [] (STApp _ tf) = runSC (scTermF tf) sc
     apply (Left (RewriteRule _ l r) : rules) t =
       case first_order_match l t of
         Nothing -> apply rules t
-        Just inst -> S.instantiateVarList sc' 0 (Map.elems inst) r
+        Just inst -> runSC (S.instantiateVarList 0 (Map.elems inst) r) sc'
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
-        Just tb -> runTermBuilder tb (scTermF sc')
+        Just tb -> runTermBuilder tb (\tf -> runSC (scTermF tf) sc')

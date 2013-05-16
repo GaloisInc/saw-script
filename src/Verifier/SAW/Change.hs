@@ -1,4 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Verifier.SAW.Change
   ( ChangeMonad(..)
   , Change(..)
@@ -13,6 +16,7 @@ module Verifier.SAW.Change
 
 import Control.Applicative
 import Control.Monad (liftM, liftM2)
+import Control.Monad.Ref
 import Control.Monad.Trans
 
 ----------------------------------------------------------------------
@@ -110,6 +114,12 @@ instance MonadTrans ChangeT where
 
 instance MonadIO m => MonadIO (ChangeT m) where
   liftIO m = lift (liftIO m)
+
+instance MonadRef r m => MonadRef r (ChangeT m) where
+    newRef    r   = lift $ newRef    r
+    readRef   r   = lift $ readRef   r
+    writeRef  r x = lift $ writeRef  r x
+    modifyRef r f = lift $ modifyRef r f
 
 instance Monad m => ChangeMonad (ChangeT m) where
   preserve x (ChangeT m) = ChangeT (liftM (preserve x) m)

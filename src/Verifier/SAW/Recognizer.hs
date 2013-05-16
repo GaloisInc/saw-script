@@ -1,6 +1,7 @@
 -- Lightweight calculus for composing patterns as functions.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Recognizer 
   ( Recognizer
   , firstMatch
@@ -9,7 +10,14 @@ module Verifier.SAW.Recognizer
   , (<@>), (@>)
   , asApp
   , asApplyAll
+  , asFTermF
+  , asCtor
+  , asDataType
   , isDataType
+  , asGlobalDef
+  , isGlobalDef
+  , asNatLit
+  , asBool
   , asBoolType
   , asBitvectorType
   , asMux
@@ -17,7 +25,6 @@ module Verifier.SAW.Recognizer
 
 import Control.Applicative
 import Verifier.SAW.TypedAST
-import Verifier.SAW.SharedTerm
 
 type Recognizer t a = t -> Maybe a
 
@@ -43,6 +50,10 @@ emptyl _ = Nothing
 endl :: Recognizer t a -> Recognizer [t] a
 endl f = f <: emptyl
 
+asFTermF :: Termlike t => Recognizer t (FlatTermF t)
+asFTermF (unwrapTermF -> FTermF ftf) = Just ftf
+asFTermF _ = Nothing
+
 data a :*: b = (:*:) a b
 
 (<@>) :: Termlike t => Recognizer t a -> Recognizer t b -> Recognizer t (a :*: b)
@@ -55,7 +66,7 @@ data a :*: b = (:*:) a b
 (@>) f g (asApp -> Just (f -> Just (), y)) = g y
 (@>) _ _ _ = Nothing
 
-asApp :: Termlike t => Recognizer t (t,t)
+asApp :: Termlike t => Recognizer t (t, t)
 asApp t = do App x y <- asFTermF t; return (x,y)
 
 asApplyAll :: Termlike t => t -> (t, [t])
@@ -64,6 +75,29 @@ asApplyAll = go []
           case asApp t of
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
+
+asCtor :: Termlike t => Recognizer t (Ident, [t])
+asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
+
+asDataType :: Termlike t => Recognizer t (Ident, [t])
+asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l) 
+
+asGlobalDef :: Termlike t => Recognizer t Ident
+asGlobalDef t = do GlobalDef i <- asFTermF t; return i
+
+isGlobalDef :: Termlike t => Ident -> Recognizer t ()
+isGlobalDef i (asGlobalDef -> Just o) | i == o = Just ()
+isGlobalDef _ _ = Nothing
+
+asNatLit :: Termlike t => Recognizer t Integer
+asNatLit t = do NatLit i <- asFTermF t; return i
+
+-- | Returns term as a constant Boolean if it can be evaluated as one.
+-- bh: Is this really intended to do *evaluation*? Or is it supposed to work like asNatLit?
+asBool :: Termlike t => Recognizer t Bool
+asBool (asCtor -> Just ("Prelude.True",  [])) = Just True
+asBool (asCtor -> Just ("Prelude.False", [])) = Just False
+asBool _ = Nothing
 
 isDataType :: Termlike t => Ident -> Recognizer [t] a -> Recognizer t a
 isDataType i p (asDataType -> Just (o,l)) | i == o = p l

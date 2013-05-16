@@ -1,66 +1,47 @@
+{-# LANGUAGE ExistentialQuantification #-}
 module Verifier.SAW.Cache
   ( Cache
   , newCache
-  , newCacheIORefMap
-  , newCacheIORefMap'
-  , newCacheMVarMap
-  , newCacheIORefIntMap
-  , newCacheSTRefMap
+  , newCacheMap
+  , newCacheMap'
+  , newCacheIntMap
+  , newCacheIntMap'
   , useCache
   ) where
 
-import Control.Applicative ((<$>))
-import Control.Concurrent.MVar
-import Control.Monad.IO.Class
-import Control.Monad.ST
-import Data.IORef
+import Control.Monad (liftM)
+import Control.Monad.Ref
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
-import Data.STRef
 import Prelude hiding (lookup)
 
-data Cache m k a = Cache (k -> m (Maybe a)) (k -> a -> m ())
+data Cache r k a = forall t. Cache (r t) (k -> t -> Maybe a) (k -> a -> t -> t)
 
-useCache :: Monad m => Cache m k a -> k -> m a -> m a
-useCache (Cache lookup update) k action = do
-  result <- lookup k
+useCache :: MonadRef r m => Cache r k a -> k -> m a -> m a
+useCache (Cache ref lookup update) k action = do
+  result <- liftM (lookup k) (readRef ref)
   case result of
     Just x -> return x
     Nothing -> do
       x <- action
-      update k x
+      modifyRef ref (update k x)
       return x
 
-newCache :: (MonadIO m, Ord k) => m (Cache m k a)
-newCache = liftIO newCacheIORefMap
+newCache :: (MonadRef r m, Ord k) => m (Cache r k a)
+newCache = newCacheMap
 
-newCacheIORefMap :: (MonadIO m, Ord k) => IO (Cache m k a)
-newCacheIORefMap = newCacheIORefMap' Map.empty
+newCacheMap :: (MonadRef r m, Ord k) => m (Cache r k a)
+newCacheMap = newCacheMap' Map.empty
 
-newCacheIORefMap' :: (MonadIO m, Ord k) => Map.Map k a -> IO (Cache m k a)
-newCacheIORefMap' initialMap = do
-  ref <- liftIO $ newIORef initialMap
-  let lookup k = liftIO $ Map.lookup k <$> readIORef ref
-  let update k x = liftIO $ modifyIORef ref (Map.insert k x)
-  return (Cache lookup update)
+newCacheMap' :: (MonadRef r m, Ord k) => Map.Map k a -> m (Cache r k a)
+newCacheMap' initialMap = do
+  ref <- newRef initialMap
+  return (Cache ref Map.lookup Map.insert)
 
-newCacheMVarMap :: (MonadIO m, Ord k) => m (Cache m k a)
-newCacheMVarMap =
-    do mvar <- liftIO $ newMVar Map.empty
-       let lookup k = liftIO $ Map.lookup k <$> readMVar mvar
-       let update k x = liftIO $ modifyMVar_ mvar (return . Map.insert k x)
-       return (Cache lookup update)
+newCacheIntMap :: (MonadRef r m) => m (Cache r Int a)
+newCacheIntMap = newCacheIntMap' IntMap.empty
 
-newCacheIORefIntMap :: MonadIO m => m (Cache m Int a)
-newCacheIORefIntMap =
-    do ref <- liftIO $ newIORef IntMap.empty
-       let lookup k = liftIO $ IntMap.lookup k <$> readIORef ref
-       let update k x = liftIO $ modifyIORef ref (IntMap.insert k x)
-       return (Cache lookup update)
-
-newCacheSTRefMap :: Ord k => ST s (Cache (ST s) k a)
-newCacheSTRefMap =
-    do ref <- newSTRef Map.empty
-       let lookup k = Map.lookup k <$> readSTRef ref
-       let update k x = modifySTRef ref (Map.insert k x)
-       return (Cache lookup update)
+newCacheIntMap' :: (MonadRef r m) => IntMap.IntMap a -> m (Cache r Int a)
+newCacheIntMap' initialMap = do
+  ref <- newRef initialMap
+  return (Cache ref IntMap.lookup IntMap.insert)

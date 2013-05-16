@@ -4,8 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Conversion
-  ( isGlobalDef
-  , Matcher
+  ( Matcher
   , (<:>)
   , asAny
   , asFinValLit
@@ -38,14 +37,13 @@ module Verifier.SAW.Conversion
   , slice_bvNat
   ) where
 
-import Control.Applicative ((<$>), pure, (<*>))
+import Control.Applicative ((<$>), (<*>))
 import Control.Exception (assert)
 import Control.Monad (guard, (>=>))
 import Data.Bits
-import Data.Map (Map)
 import qualified Data.Vector as V
 
-import Verifier.SAW.SharedTerm (Termlike(..))
+import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
 
@@ -68,15 +66,8 @@ infixl 8 <:>
       match (unwrapTermF -> FTermF (App t1 t2)) = (,) <$> f1 t1 <*> f2 t2
       match _ = Nothing
 
-destNatLit :: Termlike t => t -> Maybe Integer
-destNatLit (unwrapTermF -> FTermF (NatLit i)) = Just i
-destNatLit _ = Nothing
-
 asNatLit :: Termlike t => Matcher t Integer
-asNatLit = Matcher Net.Var match
-    where
-      match (unwrapTermF -> FTermF (NatLit i)) = Just i
-      match _ = Nothing
+asNatLit = Matcher Net.Var R.asNatLit
 
 asVecLit :: Termlike t => Matcher t (t, V.Vector t)
 asVecLit = Matcher Net.Var match
@@ -84,18 +75,12 @@ asVecLit = Matcher Net.Var match
       match (unwrapTermF -> FTermF (ArrayValue t xs)) = Just (t, xs)
       match _ = Nothing
 
-isGlobalDef :: Termlike t => Ident -> t -> Maybe () 
-isGlobalDef i (unwrapTermF -> FTermF (GlobalDef i')) | i == i' = Just ()
-isGlobalDef _ _ = Nothing
-
 matchGlobalDef :: Termlike t => Ident -> Matcher t ()
-matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (isGlobalDef ident)
+matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (R.isGlobalDef ident)
 
 asBoolType :: Termlike t => Matcher t ()
-asBoolType = Matcher (Net.Atom (identName bool)) match
+asBoolType = Matcher (Net.Atom (identName bool)) R.asBoolType
     where
-      match (unwrapTermF -> FTermF (DataTypeApp ident [])) | ident == bool = Just ()
-      match _ = Nothing
       bool = "Prelude.Bool"
 
 asFinValLit :: Termlike t => Matcher t (Integer, Integer)
@@ -103,18 +88,18 @@ asFinValLit = Matcher pat match
     where
       pat = Net.App (Net.App (Net.Atom (identName finval)) Net.Var) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x, y]))
-          | ident == finval = (,) <$> destNatLit x <*> destNatLit y
+          | ident == finval = (,) <$> R.asNatLit x <*> R.asNatLit y
       match _ = Nothing
       finval = "Prelude.FinVal"
 
 asSuccLit :: Termlike t => Matcher t Integer
 asSuccLit = Matcher pat match
     where
-      pat = Net.App (Net.Atom (identName succ)) Net.Var
+      pat = Net.App (Net.Atom (identName succId)) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x]))
-          | ident == succ = destNatLit x
+          | ident == succId = R.asNatLit x
       match _ = Nothing
-      succ = "Prelude.Succ"
+      succId = "Prelude.Succ"
 
 asBvNatLit :: Termlike t => Matcher t (Integer, Integer)
 asBvNatLit =
@@ -237,14 +222,14 @@ get_VecLit :: Termlike t => Conversion t
 get_VecLit =
     Conversion $
     thenMatcher (matchGlobalDef "Prelude.get" <:> asNatLit <:> asAny <:> asVecLit <:> asFinValLit)
-    (\(((((), n), e), (_, xs)), (i, j)) ->
+    (\(((((), _n), _e), (_, xs)), (i, _j)) ->
          return $ mkAny (xs V.! fromIntegral i))
 
 append_VecLit :: Termlike t => Conversion t
 append_VecLit =
     Conversion $
     thenMatcher (matchGlobalDef append <:> asNatLit <:> asNatLit <:> asAny <:> asVecLit <:> asVecLit)
-    (\((((((), m), n), e), (_, xs)), (_, ys)) ->
+    (\((((((), _m), _n), e), (_, xs)), (_, ys)) ->
          return $ mkVecLit e ((V.++) xs ys))
     where append = "Prelude.append"
 
@@ -405,7 +390,7 @@ bvMbit_bvNat :: Termlike t => Conversion t
 bvMbit_bvNat =
   Conversion $
     thenMatcher (matchGlobalDef "Prelude.bvMbit" <:> asNatLit <:> asBvNatLit <:> asFinValLit)
-    (\( (((), n), (_, v)), (_, y)) ->
+    (\( (((), _n), (_, v)), (_, y)) ->
       return $ mkBool (testBit v (fromInteger y)))
 
 bvEq_bvNat :: Termlike t => Conversion t
@@ -488,7 +473,7 @@ get_bvNat =
     Conversion $
     thenMatcher
     (matchGlobalDef "Prelude.get" <:> asNatLit <:> asBoolType <:> asBvNatLit <:> asFinValLit)
-    (\(((((), n), ()), (n', x)), (i, j)) ->
+    (\(((((), _n), ()), (_n', x)), (i, _j)) ->
 --         return $ mkBool (testBit x (fromIntegral j))) -- ^ Assuming big-endian order
          return $ mkBool (testBit x (fromIntegral i))) -- ^ Assuming little-endian order
 
@@ -497,7 +482,7 @@ vTake_bvNat =
     Conversion $
     thenMatcher
     (matchGlobalDef "Prelude.vTake" <:> asBoolType <:> asNatLit <:> asNatLit <:> asBvNatLit)
-    (\(((((), ()), m), n), (_, x)) ->
+    (\(((((), ()), m), _n), (_, x)) ->
          return $ mkBvNat m x) -- Assumes little-endian order
 
 vDrop_bvNat :: Termlike t => Conversion t
