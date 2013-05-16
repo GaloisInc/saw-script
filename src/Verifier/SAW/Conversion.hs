@@ -37,9 +37,9 @@ module Verifier.SAW.Conversion
   , slice_bvNat
   ) where
 
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative (Applicative(..), (<$>), (<*>))
 import Control.Exception (assert)
-import Control.Monad (guard, (>=>))
+import Control.Monad (ap, guard, liftM, (>=>))
 import Data.Bits
 import qualified Data.Vector as V
 
@@ -131,36 +131,46 @@ instance Monad (TermBuilder t) where
     runTermBuilder (h r) mk
   return v = TermBuilder $ \_ -> return v
 
+instance Functor (TermBuilder t) where
+    fmap = liftM
+
+instance Applicative (TermBuilder t) where
+    pure = return
+    (<*>) = ap
+
+mkTermF :: TermF t -> TermBuilder t t
+mkTermF tf = TermBuilder (\mk -> mk tf)
+
 mkAny :: t -> TermBuilder t t
 mkAny t = TermBuilder $ \_ -> return t
 
 mkBool :: Bool -> TermBuilder t t
-mkBool b = TermBuilder $ \mk -> mk (FTermF (CtorApp idSym []))
+mkBool b = mkTermF (FTermF (CtorApp idSym []))
   where idSym | b = "Prelude.True" 
               | otherwise = "Prelude.False"
 
 mkNatLit :: Integer -> TermBuilder t t
-mkNatLit n = TermBuilder $ \mk -> mk (FTermF (NatLit n))
+mkNatLit n = mkTermF (FTermF (NatLit n))
 
 mkVecLit :: t -> V.Vector t -> TermBuilder t t
-mkVecLit t xs = TermBuilder $ \mk -> mk (FTermF (ArrayValue t xs))
+mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 
 mkTuple :: [t] -> TermBuilder t t
-mkTuple l = TermBuilder $ \mk -> mk (FTermF (TupleValue l))
+mkTuple l = mkTermF (FTermF (TupleValue l))
 
 mkFinVal :: Integer -> Integer -> TermBuilder t t
-mkFinVal i j = TermBuilder $ \mk ->
-    do i' <- mk (FTermF (NatLit i))
-       j' <- mk (FTermF (NatLit j))
-       mk (FTermF (CtorApp "Prelude.FinVal" [i', j']))
+mkFinVal i j =
+    do i' <- mkNatLit i
+       j' <- mkNatLit j
+       mkTermF (FTermF (CtorApp "Prelude.FinVal" [i', j']))
 
 mkBvNat :: Integer -> Integer -> TermBuilder t t
-mkBvNat n x = TermBuilder $ \mk -> assert (n >= 0) $ 
-    do n' <- mk (FTermF (NatLit n))
-       x' <- mk $ FTermF $ NatLit $ x .&. bitMask n 
-       t0 <- mk (FTermF (GlobalDef "Prelude.bvNat"))
-       t1 <- mk (FTermF (App t0 n'))
-       t2 <- mk (FTermF (App t1 x'))
+mkBvNat n x = assert (n >= 0) $
+    do n' <- mkNatLit n
+       x' <- mkNatLit (x .&. bitMask n)
+       t0 <- mkTermF (FTermF (GlobalDef "Prelude.bvNat"))
+       t1 <- mkTermF (FTermF (App t0 n'))
+       t2 <- mkTermF (FTermF (App t1 x'))
        return t2
 
 ----------------------------------------------------------------------
