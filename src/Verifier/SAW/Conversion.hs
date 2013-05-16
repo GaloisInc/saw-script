@@ -4,8 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Conversion
-  ( isGlobalDef
-  , Matcher
+  ( Matcher
   , (<:>)
   , asAny
   , asFinValLit
@@ -44,6 +43,7 @@ import Control.Monad (guard, (>=>))
 import Data.Bits
 import qualified Data.Vector as V
 
+import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
 
@@ -66,15 +66,8 @@ infixl 8 <:>
       match (unwrapTermF -> FTermF (App t1 t2)) = (,) <$> f1 t1 <*> f2 t2
       match _ = Nothing
 
-destNatLit :: Termlike t => t -> Maybe Integer
-destNatLit (unwrapTermF -> FTermF (NatLit i)) = Just i
-destNatLit _ = Nothing
-
 asNatLit :: Termlike t => Matcher t Integer
-asNatLit = Matcher Net.Var match
-    where
-      match (unwrapTermF -> FTermF (NatLit i)) = Just i
-      match _ = Nothing
+asNatLit = Matcher Net.Var R.asNatLit
 
 asVecLit :: Termlike t => Matcher t (t, V.Vector t)
 asVecLit = Matcher Net.Var match
@@ -82,18 +75,12 @@ asVecLit = Matcher Net.Var match
       match (unwrapTermF -> FTermF (ArrayValue t xs)) = Just (t, xs)
       match _ = Nothing
 
-isGlobalDef :: Termlike t => Ident -> t -> Maybe () 
-isGlobalDef i (unwrapTermF -> FTermF (GlobalDef i')) | i == i' = Just ()
-isGlobalDef _ _ = Nothing
-
 matchGlobalDef :: Termlike t => Ident -> Matcher t ()
-matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (isGlobalDef ident)
+matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (R.isGlobalDef ident)
 
 asBoolType :: Termlike t => Matcher t ()
-asBoolType = Matcher (Net.Atom (identName bool)) match
+asBoolType = Matcher (Net.Atom (identName bool)) R.asBoolType
     where
-      match (unwrapTermF -> FTermF (DataTypeApp ident [])) | ident == bool = Just ()
-      match _ = Nothing
       bool = "Prelude.Bool"
 
 asFinValLit :: Termlike t => Matcher t (Integer, Integer)
@@ -101,7 +88,7 @@ asFinValLit = Matcher pat match
     where
       pat = Net.App (Net.App (Net.Atom (identName finval)) Net.Var) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x, y]))
-          | ident == finval = (,) <$> destNatLit x <*> destNatLit y
+          | ident == finval = (,) <$> R.asNatLit x <*> R.asNatLit y
       match _ = Nothing
       finval = "Prelude.FinVal"
 
@@ -110,7 +97,7 @@ asSuccLit = Matcher pat match
     where
       pat = Net.App (Net.Atom (identName succId)) Net.Var
       match (unwrapTermF -> FTermF (CtorApp ident [x]))
-          | ident == succId = destNatLit x
+          | ident == succId = R.asNatLit x
       match _ = Nothing
       succId = "Prelude.Succ"
 
