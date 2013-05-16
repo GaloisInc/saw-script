@@ -47,6 +47,7 @@ module Verifier.SAW.TypedAST
  , piArgCount
  , TermF(..)
  , FlatTermF(..)
+ , Termlike(..)
  , zipWithFlatTermF
  , freesTerm
  , freesTermF
@@ -488,6 +489,9 @@ data TermF e
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
 
+class Termlike t where
+  unwrapTermF :: t -> TermF t
+
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
@@ -610,6 +614,9 @@ ppFlatTermF pp prec tf =
 
 newtype Term = Term (TermF Term)
   deriving (Eq)
+
+instance Termlike Term where
+  unwrapTermF (Term tf) = tf
 
 {-
 asApp :: Term -> (Term, [Term])

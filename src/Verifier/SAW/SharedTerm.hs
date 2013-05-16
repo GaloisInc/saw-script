@@ -11,15 +11,6 @@ module Verifier.SAW.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
   , VarIndex
-  , Termlike(..)
-  , asTermF
-  , asFTermF
-  , asCtor
-  , asDataType
-  , asGlobalDef
-  , isGlobalDef
-  , asNatLit
-  , asBool
     -- * Shared terms
   , SharedTerm(..)
   , TermIndex
@@ -117,40 +108,11 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
+import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
-
-class Termlike t where
-  unwrapTermF :: t -> TermF t
 
 asTermF :: Termlike t => t -> TermF t
 asTermF = unwrapTermF
-
-asFTermF :: Termlike t => t -> Maybe (FlatTermF t)
-asFTermF (asTermF -> FTermF ftf) = Just ftf
-asFTermF _ = Nothing
-
-asCtor :: Termlike t => t -> Maybe (Ident, [t])
-asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
-
-asDataType :: Termlike t => t -> Maybe (Ident, [t])
-asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l) 
-
-asGlobalDef :: Termlike t => t -> Maybe Ident
-asGlobalDef t = do GlobalDef i <- asFTermF t; return i
-
-isGlobalDef :: Termlike t => Ident -> t -> Maybe ()
-isGlobalDef i (asGlobalDef -> Just o) | i == o = Just ()
-isGlobalDef _ _ = Nothing
-
-asNatLit :: Termlike t => t -> Maybe Integer
-asNatLit t = do NatLit i <- asFTermF t; return i
-
--- | Returns term as a constant Boolean if it can be evaluated as one.
--- bh: Is this really intended to do *evaluation*? Or is it supposed to work like asNatLit?
-asBool :: Termlike t => t -> Maybe Bool
-asBool (asCtor -> Just ("Prelude.True",  [])) = Just True
-asBool (asCtor -> Just ("Prelude.False", [])) = Just False
-asBool _ = Nothing
 
 type TermIndex = Int -- Word64
 
@@ -165,9 +127,6 @@ instance Eq (SharedTerm s) where
 
 instance Ord (SharedTerm s) where
   compare (STApp x _) (STApp y _) = compare x y
-
-instance Termlike Term where
-  unwrapTermF (Term tf) = tf
 
 instance Termlike (SharedTerm s) where
   unwrapTermF (STApp _ tf) = tf
@@ -548,7 +507,7 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               rec r
             Nothing -> do
               put $ StrictMap.insert t 1 m
-              let (h,args) = asAppList t
+              let (h,args) = asApplyAll t
               rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
 --              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
@@ -708,16 +667,6 @@ mkSharedContext m = do
            , scTermF' = getTerm cr
            , scFreshGlobalVar' = freshGlobalVar
            }
-
-asApp :: SharedTerm s -> Maybe (SharedTerm s, SharedTerm s)
-asApp t = do App x y <- asFTermF t; return (x,y)
-
-asAppList :: SharedTerm s -> (SharedTerm s, [SharedTerm s])
-asAppList = go []
-  where go l t =
-          case asApp t of
-            Just (f,v) -> go (v:l) f
-            Nothing -> (t,l)
 
 useChangeCache :: MonadRef r m => Cache r k (Change v) -> k -> ChangeT m v -> ChangeT m v
 useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)

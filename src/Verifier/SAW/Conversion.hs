@@ -44,7 +44,6 @@ import Control.Monad (guard, (>=>))
 import Data.Bits
 import qualified Data.Vector as V
 
-import Verifier.SAW.SharedTerm (Termlike(..))
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
 
