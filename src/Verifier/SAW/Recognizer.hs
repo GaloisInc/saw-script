@@ -1,6 +1,7 @@
 -- Lightweight calculus for composing patterns as functions.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.Recognizer 
   ( Recognizer
   , firstMatch
