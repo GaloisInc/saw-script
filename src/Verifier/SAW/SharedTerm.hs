@@ -111,9 +111,6 @@ import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
-asTermF :: Termlike t => t -> TermF t
-asTermF = unwrapTermF
-
 type TermIndex = Int -- Word64
 
 data SharedTerm s
