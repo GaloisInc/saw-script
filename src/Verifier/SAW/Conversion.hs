@@ -11,7 +11,6 @@ module Verifier.SAW.Conversion
   , matchGlobalDef
   , thenMatcher
   , TermBuilder
-  , mkAny
   , runTermBuilder
   , Conversion(..)
   , runConversion
