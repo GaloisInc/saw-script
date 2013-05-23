@@ -37,6 +37,10 @@ signed (BV w x)
 ------------------------------------------------------------
 -- Primitive operations
 
+-- coerce :: (y x :: sort 0) -> Eq (sort 0) x y -> x -> y;
+coerce :: () -> () -> () -> a -> a
+coerce _ _ _ x = x
+
 -- ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 ite :: t -> Bool -> a -> a -> a
 ite _ b x y = if b then x else y
@@ -60,6 +64,10 @@ finInc i _n (FinVal l r) = FinVal (i + l) r
 finIncLim :: Int -> Int -> Fin -> Fin
 finIncLim n _m (FinVal l r) = FinVal l (r + n)
   -- ^ Precondition: m == l + r + 1
+
+-- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
+generate :: Int -> () -> (Fin -> a) -> Vector a
+generate n _ f = V.generate n (\i -> f (FinVal i (n-1 - i)))
 
 -- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
 get :: Int -> t -> Vec t e -> Fin -> e
