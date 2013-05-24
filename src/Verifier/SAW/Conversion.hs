@@ -174,9 +174,6 @@ instance Applicative (TermBuilder t) where
 mkTermF :: TermF t -> TermBuilder t t
 mkTermF tf = TermBuilder (\mk -> mk tf)
 
-mkAny :: t -> TermBuilder t t
-mkAny t = TermBuilder $ \_ -> return t
-
 mkBool :: Bool -> TermBuilder t t
 mkBool b = mkTermF (FTermF (CtorApp idSym []))
   where idSym | b = "Prelude.True" 
