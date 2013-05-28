@@ -21,7 +21,6 @@ module Verifier.SAW.ParserUtils
 import Control.Applicative
 import Control.Lens
 import Control.Monad.State
-import Control.Monad.ST
 import qualified Data.ByteString.Lazy as BL
 #if !MIN_VERSION_template_haskell(2,8,0)
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
@@ -178,20 +177,20 @@ declareDefTermF mexp nm = do
 -- applications.
 sharedFunctionType :: Int -> Q Type
 sharedFunctionType 0 =
-    [t| forall s . SharedContext s -> ST s (SharedTerm s) |]
+    [t| forall s . SharedContext s -> IO (SharedTerm s) |]
 sharedFunctionType n = do
     s <- newName "s"
     forallT [PlainTV s] (return [])
-       [t| SharedContext $(varT s) -> ST $(varT s) $(go s [t|SharedTerm $(varT s)|] n) |]
-  where go s nm 0 = [t| ST $(varT s) $(nm) |]
-        go s nm i = [t| $(nm) -> $(go s nm (i-1)) |]
+       [t| SharedContext $(varT s) -> IO $(go [t|SharedTerm $(varT s)|] n) |]
+  where go nm 0 = [t| IO $(nm) |]
+        go nm i = [t| $(nm) -> $(go nm (i-1)) |]
 
 -- Given a datatype with the type
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
 --   :: SharedContext s
---   -> ST s (SharedTerm s -> ... -> SharedTerm s -> ST s (SharedTerm s)
+--   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 declareSharedDataTypeApp :: String
                          -> TypedDataType
                          -> DecWriter ()
@@ -224,7 +223,7 @@ declareSharedDataTypeApp nm tdt = do
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
 --   :: SharedContext s
---   -> ST s (SharedTerm s -> ... -> SharedTerm s -> ST s (SharedTerm s)
+--   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 declareSharedCtorApp :: String
                  -> TypedCtor
                  -> DecWriter ()
@@ -257,7 +256,7 @@ declareSharedCtorApp nm c = do
 -- This hads a declaration of the function:
 --   scApply(modulename)(upcase c)
 --     :: SharedContext s
---     -> ST s (SharedTerm s -> ... -> SharedTerm s -> ST s (SharedTerm s)
+--     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
 declareSharedDefApp :: String
                 -> Int
                 -> TypedDef

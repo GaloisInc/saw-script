@@ -78,14 +78,15 @@ module Verifier.SAW.SharedTerm
 
 import Control.Applicative
 -- ((<$>), pure, (<*>))
+import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad.Ref
-import Control.Monad.ST
 import Control.Monad.State.Strict as State
 import Data.Foldable hiding (sum)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import Data.IORef (IORef)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -94,7 +95,6 @@ import qualified Data.Map as StrictMap
 #else
 import qualified Data.Map.Strict as StrictMap
 #endif
-import Data.STRef
 import Data.Traversable ()
 import qualified Data.Vector as V
 import Data.Word
@@ -130,35 +130,35 @@ instance Termlike (SharedTerm s) where
 data SharedContext s = SharedContext
   { -- | Returns the current module for the underlying global theory.
     scModule        :: Module
-  , scTermF         :: TermF (SharedTerm s) -> ST s (SharedTerm s)
-  , scFreshGlobalVar :: ST s VarIndex
+  , scTermF         :: TermF (SharedTerm s) -> IO (SharedTerm s)
+  , scFreshGlobalVar :: IO VarIndex
   }
 
-scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> ST s (SharedTerm s)
+scFlatTermF :: SharedContext s -> FlatTermF (SharedTerm s) -> IO (SharedTerm s)
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshGlobal :: SharedContext s -> String -> SharedTerm s -> ST s (SharedTerm s)
+scFreshGlobal :: SharedContext s -> String -> SharedTerm s -> IO (SharedTerm s)
 scFreshGlobal sc sym tp = do
   i <- scFreshGlobalVar sc
   scFlatTermF sc (ExtCns (EC i sym tp))
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
-scGlobalDef :: SharedContext s -> Ident -> ST s (SharedTerm s)
+scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
-scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply sc f = scFlatTermF sc . App f
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
-scDataTypeApp :: SharedContext s -> Ident -> [SharedTerm s] -> ST s (SharedTerm s)
+scDataTypeApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
 scDataTypeApp sc ident args = scFlatTermF sc (DataTypeApp ident args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
-scCtorApp :: SharedContext s -> Ident -> [SharedTerm s] -> ST s (SharedTerm s)
+scCtorApp :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
 scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
 
 -- SharedContext implementation.
@@ -167,7 +167,7 @@ data AppCache s = AC { acBindings :: !(HashMap (TermF (SharedTerm s)) (SharedTer
                      , acNextIdx :: !TermIndex
                      }
 
-type AppCacheRef s = STRef s (AppCache s)
+type AppCacheRef s = MVar (AppCache s)
 
 emptyAppCache :: AppCache s
 emptyAppCache = AC HMap.empty 0
@@ -177,36 +177,35 @@ instance Show (TermF (SharedTerm s)) where
   show _ = "termF SharedTerm"
 
 -- | Return term for application using existing term in cache if it is avaiable.
-getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> ST s (SharedTerm s)
-getTerm r a = do
-  s <- readSTRef r
-  case HMap.lookup a (acBindings s) of
-    Just t -> return t
-    Nothing -> do
-        writeSTRef r $! s'
-        return t
-      where t = STApp (acNextIdx s) a
-            s' = s { acBindings = HMap.insert a t (acBindings s)
-                   , acNextIdx = acNextIdx s + 1
-                   }
+getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
+getTerm r a =
+  modifyMVar r $ \s -> do
+    case HMap.lookup a (acBindings s) of
+      Just t -> return (s,t)
+      Nothing -> do
+          seq s' $ return (s',t)
+        where t = STApp (acNextIdx s) a
+              s' = s { acBindings = HMap.insert a t (acBindings s)
+                     , acNextIdx = acNextIdx s + 1
+                     }
 
-reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 reducePi sc (STApp _ (Pi _ _ body)) arg = instantiateVar sc 0 arg body
 reducePi _ _ _ = error "reducePi: not a Pi term"
 
-scTypeOfGlobal :: SharedContext s -> Ident -> ST s (SharedTerm s)
+scTypeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfGlobal sc ident =
     case findDef (scModule sc) ident of
       Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (defType d)
 
-scTypeOfDataType :: SharedContext s -> Ident -> ST s (SharedTerm s)
+scTypeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfDataType sc ident =
     case findDataType (scModule sc) ident of
       Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (dtType d)
 
-scTypeOfCtor :: SharedContext s -> Ident -> ST s (SharedTerm s)
+scTypeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfCtor sc ident =
     case findCtor (scModule sc) ident of
       Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
@@ -217,10 +216,10 @@ scTypeOfCtor sc ident =
 -- ensuring that it is well-formed. The full typechecking should use
 -- memoization on subterms. Perhaps the fast one won't need to?
 
-scTypeOf :: forall s. SharedContext s -> SharedTerm s -> ST s (SharedTerm s)
+scTypeOf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
   where
-    memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) (ST s) (SharedTerm s)
+    memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo (STApp i t) = do
       table <- State.get
       case Map.lookup i table of
@@ -229,11 +228,11 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           x <- termf t
           State.modify (Map.insert i x)
           return x
-    sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) (ST s) Sort
+    sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
     sort t = do
       STApp _ (FTermF (Sort s)) <- memo t
       return s
-    termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) (ST s) (SharedTerm s)
+    termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     termf tf =
       case tf of
         FTermF ftf -> ftermf ftf
@@ -248,7 +247,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         Let defs rhs -> undefined defs rhs
         LocalVar _ tp -> return tp
     ftermf :: FlatTermF (SharedTerm s)
-           -> State.StateT (Map TermIndex (SharedTerm s)) (ST s) (SharedTerm s)
+           -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ scTypeOfGlobal sc d
@@ -296,11 +295,11 @@ unshare t0 = State.evalState (go t0) Map.empty
 instance Show (SharedTerm s) where
   show = show . unshare
 
-sharedTerm :: STRef s (AppCache s) -> Term -> ST s (SharedTerm s)
+sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
 sharedTerm ref = go
     where go (Term termf) = getTerm ref =<< traverse go termf
 
-scSharedTerm :: SharedContext s -> Term -> ST s (SharedTerm s)
+scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
     where go (Term termf) = scTermF sc =<< traverse go termf
 
@@ -319,29 +318,29 @@ looseVars t = State.evalState (go t) Map.empty
             return x
 
 instantiateVars :: forall s. SharedContext s
-                -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT (ST s) (SharedTerm s)
-                                  -> ChangeT (ST s) (ST s (SharedTerm s)))
-                -> DeBruijnIndex -> SharedTerm s -> ChangeT (ST s) (SharedTerm s)
+                -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
+                                  -> ChangeT IO (IO (SharedTerm s)))
+                -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVars sc f initialLevel t0 =
     do cache <- newCache
        let ?cache = cache in go initialLevel t0
   where
-    go :: (?cache :: Cache (STRef s) (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
-          DeBruijnIndex -> SharedTerm s -> ChangeT (ST s) (SharedTerm s)
+    go :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
+          DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
     go l t@(STApp tidx tf) =
         ChangeT $ useCache ?cache (tidx, l) (runChangeT $ preserveChangeT t (go' l tf))
 
-    go' :: (?cache :: Cache (STRef s) (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
-           DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT (ST s) (ST s (SharedTerm s))
+    go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
+           DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
     go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
     go' l (Pi i lhs rhs)    = scTermF sc <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
     go' l (Let defs r) = scTermF sc <$> (Let <$> changeList procDef defs <*> go l' r)
       where l' = l + length defs
-            procDef :: LocalDef (SharedTerm s) -> ChangeT (ST s) (LocalDef (SharedTerm s))
+            procDef :: LocalDef (SharedTerm s) -> ChangeT IO (LocalDef (SharedTerm s))
             procDef (LocalFnDef sym tp eqs) =
               LocalFnDef sym <$> go l tp <*> changeList procEq eqs
-            procEq :: DefEqn (SharedTerm s) -> ChangeT (ST s) (DefEqn (SharedTerm s))
+            procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
             procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
               where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i tp)
@@ -351,7 +350,7 @@ instantiateVars sc f initialLevel t0 =
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
 incVarsChangeT :: SharedContext s
-               -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT (ST s) (SharedTerm s)
+               -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 incVarsChangeT sc initialLevel j
     | j == 0    = return
     | otherwise = instantiateVars sc fn initialLevel
@@ -359,25 +358,25 @@ incVarsChangeT sc initialLevel j
       fn _ i t = taint $ scTermF sc <$> (LocalVar (i+j) <$> t)
 
 incVars :: SharedContext s
-        -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ST s (SharedTerm s)
+        -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
 incVars sc i j t = commitChangeT (incVarsChangeT sc i j t)
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
 instantiateVarChangeT :: forall s. SharedContext s
                       -> DeBruijnIndex -> SharedTerm s -> SharedTerm s
-                      -> ChangeT (ST s) (SharedTerm s)
+                      -> ChangeT IO (SharedTerm s)
 instantiateVarChangeT sc k t0 t =
     do cache <- newCache
        let ?cache = cache in instantiateVars sc fn 0 t
   where -- Use map reference to memoize instantiated versions of t.
-        term :: (?cache :: Cache (STRef s) DeBruijnIndex (SharedTerm s)) =>
-                DeBruijnIndex -> ChangeT (ST s) (SharedTerm s)
+        term :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
+                DeBruijnIndex -> ChangeT IO (SharedTerm s)
         term i = useCache ?cache i (incVarsChangeT sc 0 i t0)
         -- Instantiate variable 0.
-        fn :: (?cache :: Cache (STRef s) DeBruijnIndex (SharedTerm s)) =>
-              DeBruijnIndex -> DeBruijnIndex -> ChangeT (ST s) (SharedTerm s)
-                            -> ChangeT (ST s) (ST s (SharedTerm s))
+        fn :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
+              DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
+                            -> ChangeT IO (IO (SharedTerm s))
         fn i j x | j  > i + k = taint $ scTermF sc <$> (LocalVar (j - 1) <$> x)
                  | j == i + k = taint $ return <$> term i
                  | otherwise  = scTermF sc <$> (LocalVar j <$> x)
@@ -385,14 +384,14 @@ instantiateVarChangeT sc k t0 t =
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
 instantiateVar :: SharedContext s
-               -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+               -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 instantiateVar sc k t0 t = commitChangeT (instantiateVarChangeT sc k t0 t)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
 instantiateVarListChangeT :: forall s. SharedContext s
                           -> DeBruijnIndex -> [SharedTerm s]
-                          -> SharedTerm s -> ChangeT (ST s) (SharedTerm s)
+                          -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVarListChangeT _ _ [] t = return t
 instantiateVarListChangeT sc k ts t =
     do caches <- mapM (const newCache) ts
@@ -400,64 +399,64 @@ instantiateVarListChangeT sc k ts t =
   where
     l = length ts
     -- Memoize instantiated versions of ts.
-    term :: (Cache (STRef s) DeBruijnIndex (SharedTerm s), SharedTerm s)
-         -> DeBruijnIndex -> ChangeT (ST s) (SharedTerm s)
+    term :: (Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)
+         -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
     term (cache, x) i = useCache cache i (incVarsChangeT sc 0 i x)
     -- Instantiate variables [k .. k+l-1].
-    fn :: [(Cache (STRef s) DeBruijnIndex (SharedTerm s), SharedTerm s)]
-       -> DeBruijnIndex -> DeBruijnIndex -> ChangeT (ST s) (SharedTerm s)
-       -> ChangeT (ST s) (ST s (SharedTerm s))
+    fn :: [(Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)]
+       -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
+       -> ChangeT IO (IO (SharedTerm s))
     fn rs i j x | j >= i + k + l = taint $ scTermF sc <$> (LocalVar (j - l) <$> x)
                 | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
                 | otherwise      = scTermF sc <$> (LocalVar j <$> x)
 
 instantiateVarList :: SharedContext s
-                   -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> ST s (SharedTerm s)
+                   -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts t)
 
-scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> ST s (SharedTerm s)
+scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyAll sc = foldlM (scApply sc)
 
 -- | Returns the defined constant with the given name. Fails if no
 -- such constant exists in the module.
-scLookupDef :: SharedContext s -> Ident -> ST s (SharedTerm s)
+scLookupDef :: SharedContext s -> Ident -> IO (SharedTerm s)
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
-scDefTerm :: SharedContext s -> TypedDef -> ST s (SharedTerm s)
+scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
 scDefTerm sc d = scGlobalDef sc (defIdent d)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the
 -- constructor identifier in the module.
 
 -- | Deprecated. Use scCtorApp instead.
-scApplyCtor :: SharedContext s -> TypedCtor -> [SharedTerm s] -> ST s (SharedTerm s)
+scApplyCtor :: SharedContext s -> TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
 scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
-scSort :: SharedContext s -> Sort -> ST s (SharedTerm s)
+scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
 scSort sc s = scFlatTermF sc (Sort s)
 
-scNat :: SharedContext s -> Integer -> ST s (SharedTerm s)
+scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
 scNat sc n
   | 0 <= n = scFlatTermF sc (NatLit n)
   | otherwise = error $ "scNat: negative value " ++ show n
 
-scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> ST s (SharedTerm s)
+scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scMkRecord sc m = scFlatTermF sc (RecordValue m)
 
-scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> ST s (SharedTerm s)
+scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
 scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
 
-scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> ST s (SharedTerm s)
+scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scRecordType sc m = scFlatTermF sc (RecordType m)
 
-scTuple :: SharedContext s -> [SharedTerm s] -> ST s (SharedTerm s)
+scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTuple sc ts = scFlatTermF sc (TupleValue ts)
 
-scTupleType :: SharedContext s -> [SharedTerm s] -> ST s (SharedTerm s)
+scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTupleType sc ts = scFlatTermF sc (TupleType ts)
 
-scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> ST s (SharedTerm s)
+scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
 scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
 
 type SharedTermMap s v = StrictMap.Map (SharedTerm s) v
@@ -536,20 +535,20 @@ scPrettyTermDoc t0
 scPrettyTerm :: SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDoc t)
 
-scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFun sc a b = do b' <- incVars sc 0 1 b
                   scTermF sc (Pi "_" a b')
 
-scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> ST s (SharedTerm s)
+scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
-scLambda :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+scLambda :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scLambda sc varname ty body = scTermF sc (Lambda (PVar varname 0 ty) ty body)
 
-scLocalVar :: SharedContext s -> DeBruijnIndex -> SharedTerm s -> ST s (SharedTerm s)
+scLocalVar :: SharedContext s -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
 scLocalVar sc i t = scTermF sc (LocalVar i t)
 
-scGlobalApply :: SharedContext s -> Ident -> [SharedTerm s] -> ST s (SharedTerm s)
+scGlobalApply :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
 scGlobalApply sc i ts =
     do c <- scGlobalDef sc i
        scApplyAll sc c ts
@@ -557,62 +556,62 @@ scGlobalApply sc i ts =
 ------------------------------------------------------------
 -- Building terms using prelude functions
 
-scBoolType :: SharedContext s -> ST s (SharedTerm s)
+scBoolType :: SharedContext s -> IO (SharedTerm s)
 scBoolType sc = scFlatTermF sc (DataTypeApp "Prelude.Bool" [])
 
-scNatType :: SharedContext s -> ST s (SharedTerm s)
+scNatType :: SharedContext s -> IO (SharedTerm s)
 scNatType sc = scFlatTermF sc (DataTypeApp preludeNatIdent [])
 
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
-         SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+         SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 
 -- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s ->
-            SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+            SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 
 -- | slice :: (e :: sort 1) -> (i n o :: Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
 scSlice :: SharedContext s -> SharedTerm s -> SharedTerm s ->
-           SharedTerm s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+           SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
 
 -- Primitive operations on bitvectors
 
 -- | bitvector :: (n : Nat) -> sort 1
 -- bitvector n = Vec n Bool
-scBitvector :: SharedContext s -> Integer -> ST s (SharedTerm s)
+scBitvector :: SharedContext s -> Integer -> IO (SharedTerm s)
 scBitvector sc size = do
   c <- scGlobalDef sc "Prelude.bitvector"
   s <- scNat sc size
   scApply sc c s
 
 -- | bvNat :: (x :: Nat) -> Nat -> bitvector x;
-scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
 
 -- | bvAdd/Sub/Mul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 scBvAdd, scBvSub, scBvMul
-    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvAdd sc n x y = scGlobalApply sc "Prelude.bvAdd" [n, x, y]
 scBvSub sc n x y = scGlobalApply sc "Prelude.bvSub" [n, x, y]
 scBvMul sc n x y = scGlobalApply sc "Prelude.bvMul" [n, x, y]
 
 -- | bvOr/And/Xor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 scBvOr, scBvAnd, scBvXor
-    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvAnd sc n x y = scGlobalApply sc "Prelude.bvAnd" [n, x, y]
 scBvXor sc n x y = scGlobalApply sc "Prelude.bvXor" [n, x, y]
 scBvOr  sc n x y = scGlobalApply sc "Prelude.bvOr"  [n, x, y]
 
 -- | bvNot :: (n :: Nat) -> bitvector n -> bitvector n;
-scBvNot :: SharedContext s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+scBvNot :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvNot sc n x = scGlobalApply sc "Prelude.bvNot" [n, x]
 
 -- | bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 scBvEq, scBvUGe, scBvUGt, scBvULe, scBvULt
-    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvEq  sc n x y = scGlobalApply sc "Prelude.bvEq"  [n, x, y]
 scBvUGe sc n x y = scGlobalApply sc "Prelude.bvuge" [n, x, y]
 scBvULe sc n x y = scGlobalApply sc "Prelude.bvule" [n, x, y]
@@ -621,19 +620,17 @@ scBvULt sc n x y = scGlobalApply sc "Prelude.bvult" [n, x, y]
 
 -- | bvShl, bvShr :: (n :: Nat) -> bitvector n -> Nat -> bitvector n;
 scBvShl, scBvShr
-    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> ST s (SharedTerm s)
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvShl sc n x y = scGlobalApply sc "Prelude.bvShl" [n, x, y]
 scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
-mkSharedContext :: Module -> ST s (SharedContext s)
+mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
-  vr <- newSTRef 0 -- ^ Reference for getting variables.
-  cr <- newSTRef emptyAppCache
-  let freshGlobalVar = do i <- readSTRef vr
-                          writeSTRef vr (i+1)
-                          return i
+  vr <- newMVar 0 -- ^ Reference for getting variables.
+  cr <- newMVar emptyAppCache
+  let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   return SharedContext {
              scModule = m
            , scTermF = getTerm cr
@@ -657,10 +654,10 @@ scInstantiateExt :: forall s
                   . SharedContext s
                  -> Map VarIndex (SharedTerm s)
                  -> SharedTerm s
-                 -> ST s (SharedTerm s)
+                 -> IO (SharedTerm s)
 scInstantiateExt sc vmap t0 = do
   tcache <- newCacheMap' Map.empty
-  let go :: SharedTerm s -> ChangeT (ST s) (SharedTerm s) 
+  let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
           -- | Lookup variable in term if it is bound.
