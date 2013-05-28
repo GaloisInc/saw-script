@@ -15,7 +15,7 @@ module Verifier.SAW.Conversion
   , thenMatcher
   , TermBuilder
   , runTermBuilder
-  , mkAny
+  -- , mkAny
   , Conversion(..)
   , runConversion
   -- Prelude conversions
