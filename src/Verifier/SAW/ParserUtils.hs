@@ -21,6 +21,7 @@ module Verifier.SAW.ParserUtils
 import Control.Applicative
 import Control.Lens
 import Control.Monad.State
+import Control.Monad.ST
 import qualified Data.ByteString.Lazy as BL
 #if !MIN_VERSION_template_haskell(2,8,0)
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
@@ -177,19 +178,20 @@ declareDefTermF mexp nm = do
 -- applications.
 sharedFunctionType :: Int -> Q Type
 sharedFunctionType 0 =
-    [t| forall s . SC s (SharedTerm s) |]
+    [t| forall s . SharedContext s -> ST s (SharedTerm s) |]
 sharedFunctionType n = do
     s <- newName "s"
     forallT [PlainTV s] (return [])
-       [t| SC $(varT s) $(go s [t|SharedTerm $(varT s)|] n) |]
-  where go s nm 0 = [t| SC $(varT s) $(nm) |]
+       [t| SharedContext $(varT s) -> ST $(varT s) $(go s [t|SharedTerm $(varT s)|] n) |]
+  where go s nm 0 = [t| ST $(varT s) $(nm) |]
         go s nm i = [t| $(nm) -> $(go s nm (i-1)) |]
 
 -- Given a datatype with the type
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
---   :: SC s (SharedTerm s -> ... -> SharedTerm s -> SC s (SharedTerm s)
+--   :: SharedContext s
+--   -> ST s (SharedTerm s -> ... -> SharedTerm s -> ST s (SharedTerm s)
 declareSharedDataTypeApp :: String
                          -> TypedDataType
                          -> DecWriter ()
@@ -199,12 +201,11 @@ declareSharedDataTypeApp nm tdt = do
   -- Get type of result.
   tp <- lift $ sharedFunctionType n
   -- Get value of result.
-  decExpr <- lift $ [| do
-    m <- scModule
-    case findDataType m (parseIdent $(stringE sym)) of
+  decExpr <- lift $ [| \sc ->
+    case findDataType (scModule sc) (parseIdent $(stringE sym)) of
       Nothing -> fail $(stringE ("Could not find " ++ sym))
       Just dt ->
-        $(do let applyFn expr = [| scDataTypeApp (dtName dt) $(expr) |]
+        $(do let applyFn expr = [| scDataTypeApp sc (dtName dt) $(expr) |]
              case n of
                0 -> applyFn [|[]|]
                _ -> do
@@ -222,7 +223,8 @@ declareSharedDataTypeApp nm tdt = do
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
---   :: SC s (SharedTerm s -> ... -> SharedTerm s -> SC s (SharedTerm s)
+--   :: SharedContext s
+--   -> ST s (SharedTerm s -> ... -> SharedTerm s -> ST s (SharedTerm s)
 declareSharedCtorApp :: String
                  -> TypedCtor
                  -> DecWriter ()
@@ -232,12 +234,11 @@ declareSharedCtorApp nm c = do
   -- Get type of result.
   tp <- lift $ sharedFunctionType n
   -- Get value of result.
-  decExpr <- lift $ [| do
-    m <- scModule
-    case findCtor m (parseIdent $(stringE cName)) of
+  decExpr <- lift $ [| \sc ->
+    case findCtor (scModule sc) (parseIdent $(stringE cName)) of
       Nothing -> fail $(stringE ("Could not find " ++ cName))
       Just cExpr ->
-        $(do let applyFn expr = [| scCtorApp (ctorName cExpr) $(expr) |]
+        $(do let applyFn expr = [| scCtorApp sc (ctorName cExpr) $(expr) |]
              case n of
                0 -> applyFn [|[]|]
                _ -> do
@@ -255,7 +256,8 @@ declareSharedCtorApp nm c = do
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function:
 --   scApply(modulename)(upcase c)
---     :: SC s (SharedTerm s -> ... -> SharedTerm s -> SC s (SharedTerm s)
+--     :: SharedContext s
+--     -> ST s (SharedTerm s -> ... -> SharedTerm s -> ST s (SharedTerm s)
 declareSharedDefApp :: String
                 -> Int
                 -> TypedDef
@@ -266,17 +268,17 @@ declareSharedDefApp nm n def = do
   tp <- lift $ sharedFunctionType n
 
   -- Get value of result.
-  decExpr <- lift $ [| do
-    m <- scModule
+  decExpr <- lift $ [| \sc -> do
+    let m = scModule sc
     let typedDef = parseIdent $(stringE iName)
     when (isNothing (findDef m typedDef)) $
       fail ($(stringE ("Could not find " ++ iName ++ " in ")) ++ show (moduleName m))
     $(case n of
-        0 -> [| scGlobalDef typedDef |]
-        _ -> [| do d <- scGlobalDef typedDef
+        0 -> [| scGlobalDef sc typedDef |]
+        _ -> [| do d <- scGlobalDef sc typedDef
                    return $(do let procStmt :: Exp -> [ExpQ] -> Q [Stmt]
                                    procStmt r [h] = do
-                                     return <$> noBindS [|scApply $(return r) $(h)|]
+                                     return <$> noBindS [|scApply sc $(return r) $(h)|]
                                    procStmt r (h:l) = do
 #if MIN_VERSION_template_haskell(2,8,0)
                                      r0 <- newName "r"
@@ -285,7 +287,7 @@ declareSharedDefApp nm n def = do
                                      -- ghc 7.4.2 (GHC Trac ticket #7092).
                                      r0 <- newName ("r" ++ show (length l))
 #endif
-                                     stmt <- bindS (varP r0) [|scApply $(return r) $(h)|]
+                                     stmt <- bindS (varP r0) [|scApply sc $(return r) $(h)|]
                                      (stmt:) <$> procStmt (VarE r0) l
                                    procStmt _ [] = error "Unexpected empty list to procStmt"
                                nms <- replicateM n $ newName "x"
