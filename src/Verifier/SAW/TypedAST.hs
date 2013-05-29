@@ -34,8 +34,9 @@ module Verifier.SAW.TypedAST
    -- * Data types and defintiions.
  , DataType(..)
  , Ctor(..)
- , Def(..)
- , LocalDef(..)
+ , GenericDef(..)
+ , Def
+ , LocalDef
  , localVarNames
  , DefEqn(..)
  , Pat(..)
@@ -261,14 +262,21 @@ patBoundVars p =
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
-data LocalDef e
-   = LocalFnDef String e [DefEqn e]
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+-- | A Definition contains an identifier, the type of the definition, and a list of equations.
+data GenericDef n e =
+    Def { defIdent :: n
+        , defType :: e
+        , defEqs :: [DefEqn e]
+        }
+    deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
-instance Hashable e => Hashable (LocalDef e) -- automatically derived
+type Def = GenericDef Ident
+type LocalDef = GenericDef String
+
+instance (Hashable n, Hashable e) => Hashable (GenericDef n e) -- automatically derived
 
 localVarNames :: LocalDef e -> [String]
-localVarNames (LocalFnDef nm _ _) = [nm]
+localVarNames (Def nm _ _) = [nm]
 
 
 data LocalVarDoc = LVD { docModuleName :: Map ModuleName String
@@ -314,21 +322,6 @@ lookupDoc lvd i
           Nothing -> text ('!' : show (i - docLvl lvd))
     | otherwise = text ('!' : show i)
   where lvl = docLvl lvd - i - 1
-
--- A Definition contains an identifier, the type of the definition, and a list of equations.
-data Def e = Def { defIdent :: Ident
-                 , defType :: e
-                 , defEqs :: [DefEqn e]
-                 }
-
-instance Eq (Def e) where
-  (==) = lift2 defIdent (==)
-
-instance Ord (Def e) where
-  compare = lift2 defIdent compare
-
-instance Show (Def e) where
-  show = show . defIdent
 
 data DefEqn e
   = DefEqn [Pat e]  -- ^ List of patterns
@@ -509,7 +502,7 @@ ppLocalDef :: Applicative f
            -> LocalVarDoc -- ^ Context inside let
            -> LocalDef e
            -> f Doc
-ppLocalDef pp lcls lcls' (LocalFnDef nm tp eqs) =
+ppLocalDef pp lcls lcls' (Def nm tp eqs) =
     ppd <$> (pptc <$> pp lcls PrecTypeConstraintRhs tp)
         <*> traverse (ppDefEqnF pp lcls' sym) eqs
   where sym = text nm
@@ -663,7 +656,7 @@ freesTermF tf =
           bitwiseOrOf (folded . folded) lcls' .|. rhs `shiftR` n
         where n = length lcls
               freesLocalDef :: LocalDef BitSet -> [BitSet]
-              freesLocalDef (LocalFnDef _ tp eqs) = 
+              freesLocalDef (Def _ tp eqs) = 
                 tp : fmap ((`shiftR` n) . freesDefEqn) eqs
               lcls' = freesLocalDef <$> lcls
       LocalVar i tp -> bit i .|. tp
@@ -700,7 +693,7 @@ instantiateVars f initialLevel = go initialLevel
             Pi i lhs rhs    -> Term $ Pi i (go l lhs) (go (l+1) rhs)
             Let defs r      -> Term $ Let (procDef <$> defs) (go l' r)
               where l' = l + length defs
-                    procDef (LocalFnDef sym tp eqs) = LocalFnDef sym tp' eqs'
+                    procDef (Def sym tp eqs) = Def sym tp' eqs'
                       where tp' = go l tp
                             eqs' = procEq <$> eqs
                     procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)

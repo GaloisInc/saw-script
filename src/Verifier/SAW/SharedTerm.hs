@@ -338,8 +338,7 @@ instantiateVars sc f initialLevel t0 =
     go' l (Let defs r) = scTermF sc <$> (Let <$> changeList procDef defs <*> go l' r)
       where l' = l + length defs
             procDef :: LocalDef (SharedTerm s) -> ChangeT IO (LocalDef (SharedTerm s))
-            procDef (LocalFnDef sym tp eqs) =
-              LocalFnDef sym <$> go l tp <*> changeList procEq eqs
+            procDef (Def sym tp eqs) = Def sym <$> go l tp <*> changeList procEq eqs
             procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
             procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
               where eql = l' + sum (patBoundVarCount <$> pats)

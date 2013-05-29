@@ -461,7 +461,7 @@ completeTerm cc (TCLet lcls t) =
             $ view localDefType <$> lcls'
         -- Complete equations in new context.
         completeLocal (LocalFnDefGen nm tp eqns) =
-          LocalFnDef nm tp (completeDefEqn cc' <$> eqns)
+          Def nm tp (completeDefEqn cc' <$> eqns)
 completeTerm cc (TCVar i) = Term $ LocalVar i tp
   where Just tp = ccVarType cc i
 completeTerm cc (TCLocalDef i) = Term $ LocalVar i tp
@@ -571,7 +571,7 @@ liftLocalDefs tc0 lcls = do
     traverseOf_ folded ($ tc) pending
     let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> topEval r
     (,tc) <$> traverse mkDef tps
-  where tcLclType (LocalFnDef nm tp0 eqs) = do
+  where tcLclType (Def nm tp0 eqs) = do
           tp <- liftTCTerm tc0 tp0
           r <- newRef nm
           let pendingFn tc = do
