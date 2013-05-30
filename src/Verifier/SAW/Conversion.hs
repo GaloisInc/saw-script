@@ -1,16 +1,22 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Conversion
   ( Matcher
   , (<:>)
+  , (:*:)(..)
+  , asVar
   , asAny
   , asFinValLit
+  , asBoolType
+  , asSignedBvNatLit
   , matchGlobalDef
   , thenMatcher
   , TermBuilder
@@ -42,11 +48,12 @@ module Verifier.SAW.Conversion
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
 import Control.Exception (assert)
-import Control.Monad (ap, guard, liftM, (>=>))
+import Control.Monad (ap, liftM, liftM2, (<=<))
 import Data.Bits
 import qualified Data.Vector as V
 
 import qualified Verifier.SAW.Prim as Prim
+import Verifier.SAW.Recognizer ((:*:)(..))
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
@@ -54,64 +61,71 @@ import Verifier.SAW.TypedAST
 ----------------------------------------------------------------------
 -- Matchers for terms
 
-data Matcher t a = Matcher Net.Pat (t -> Maybe a)
+data Matcher m t a = Matcher Net.Pat (t -> m a)
 
-thenMatcher :: Matcher t a -> (a -> Maybe b) -> Matcher t b
-thenMatcher (Matcher pat match) f = Matcher pat (match >=> f)
+instance Functor m => Functor (Matcher m t) where
+  fmap f (Matcher p m) = Matcher p (fmap f . m)
 
-asAny :: Matcher t t
-asAny = Matcher Net.Var Just
+thenMatcher :: Monad m => Matcher m t a -> (a -> m b) -> Matcher m t b
+thenMatcher (Matcher pat match) f = Matcher pat (f <=< match)
+
+asVar :: (t -> m a) -> Matcher m t a
+asVar = Matcher Net.Var
+
+asAny :: Applicative m => Matcher m t t
+asAny = asVar pure
 
 infixl 8 <:>
 
-(<:>) :: Termlike t => Matcher t a -> Matcher t b -> Matcher t (a, b)
+(<:>) :: (Termlike t, Applicative m, Monad m)
+      => Matcher m t a -> Matcher m t b -> Matcher m t (a :*: b)
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
     where
-      match (unwrapTermF -> FTermF (App t1 t2)) = (,) <$> f1 t1 <*> f2 t2
-      match _ = Nothing
+      match (unwrapTermF -> FTermF (App t1 t2)) = liftM2 (:*:) (f1 t1) (f2 t2)
+      match _ = fail "internal: <:> net failed"
 
-asNatLit :: Termlike t => Matcher t Integer
-asNatLit = Matcher Net.Var R.asNatLit
+asNatLit :: (Termlike t, Monad m) => Matcher m t Integer
+asNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
 
-asVecLit :: Termlike t => Matcher t (t, V.Vector t)
-asVecLit = Matcher Net.Var match
-    where
-      match (unwrapTermF -> FTermF (ArrayValue t xs)) = Just (t, xs)
-      match _ = Nothing
+asVecLit :: (Termlike t, Monad m) => Matcher m t (t, V.Vector t)
+asVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
-matchGlobalDef :: Termlike t => Ident -> Matcher t ()
-matchGlobalDef ident = Matcher (Net.Atom (identName ident)) (R.isGlobalDef ident)
+matchGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
+matchGlobalDef ident = Matcher (Net.Atom (identName ident)) f
+  where f (R.asGlobalDef -> Just o) | ident == o = return ()
+        f _ = fail (show ident ++ " match failed.")
 
-asBoolType :: Termlike t => Matcher t ()
-asBoolType = Matcher (Net.Atom (identName bool)) R.asBoolType
-    where
-      bool = "Prelude.Bool"
+asBoolType :: (Monad m, Termlike t) => Matcher m t ()
+asBoolType = Matcher (Net.Atom "Prelude.Bool") R.asBoolType
 
-asFinValLit :: Termlike t => Matcher t (Integer, Integer)
+asFinValLit :: (Monad m, Termlike t) => Matcher m t (Integer, Integer)
 asFinValLit = Matcher pat match
     where
       pat = Net.App (Net.App (Net.Atom (identName finval)) Net.Var) Net.Var
-      match (unwrapTermF -> FTermF (CtorApp ident [x, y]))
-          | ident == finval = (,) <$> R.asNatLit x <*> R.asNatLit y
-      match _ = Nothing
+      match t = do
+        CtorApp ident [x, y] <- R.asFTermF t
+        if ident == finval then
+          liftM2 (,) (R.asNatLit x) (R.asNatLit y)
+        else
+          fail "FinVal match failed"
       finval = "Prelude.FinVal"
 
-asSuccLit :: Termlike t => Matcher t Integer
+asSuccLit :: (Monad m, Termlike t) => Matcher m t Integer
 asSuccLit = Matcher pat match
     where
       pat = Net.App (Net.Atom (identName succId)) Net.Var
-      match (unwrapTermF -> FTermF (CtorApp ident [x]))
-          | ident == succId = R.asNatLit x
-      match _ = Nothing
       succId = "Prelude.Succ"
+      match t = do
+        CtorApp ident [x] <- R.asFTermF t
+        if ident == succId then R.asNatLit x else  fail "succMatch failed"
 
 bitMask :: Integer -> Integer
 bitMask n = bit (fromInteger n) - 1
 
-asBvNatLit :: Termlike t => Matcher t (Integer, Integer)
+asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
 asBvNatLit =
-    thenMatcher (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
-        \(((), n), x) -> return (n, x .&. bitMask n)
+  (\(_ :*: n :*: x) -> (n, x .&. bitMask n)) <$>
+    (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
 
 normSignedBV :: Int -> Integer -> Integer
 normSignedBV n x | testBit x n = x' - bit (n+1)
@@ -119,39 +133,38 @@ normSignedBV n x | testBit x n = x' - bit (n+1)
   where mask = bit (n+1) - 1
         x' = x .&. mask
 
-asSignedBvNatLit :: Termlike t => Matcher t Integer
+asSignedBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Integer
 asSignedBvNatLit =
-    thenMatcher (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit) $
-        \(((), n), x) -> return (normSignedBV (fromInteger n) x)
+   (\(_ :*: n :*: x) -> normSignedBV (fromInteger n) x)
+    <$> (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
 
-class Matchable t a where
-    defaultMatcher :: Matcher t a
+class Matchable m t a where
+    defaultMatcher :: Matcher m t a
 
-instance Matchable t () where
-    defaultMatcher = Matcher Net.Var (const (Just ()))
+instance Applicative m => Matchable m t () where
+    defaultMatcher = asVar (const (pure ()))
 
-instance Matchable t t where
+instance Applicative m => Matchable m t t where
     defaultMatcher = asAny
 
-instance Termlike t => Matchable t Integer where
+instance (Monad m, Termlike t) => Matchable m t Integer where
     defaultMatcher = asNatLit
 
-instance Termlike t => Matchable t Int where
+instance (Monad m, Termlike t) => Matchable m t Int where
     defaultMatcher = thenMatcher asNatLit toInt
-        where toInt x | 0 <= x && x <= toInteger (maxBound :: Int) = Just (fromInteger x)
-                      | otherwise = Nothing
+        where toInt x | 0 <= x && x <= toInteger (maxBound :: Int) = return (fromInteger x)
+                      | otherwise = fail "match out of range"
 
-instance Termlike t => Matchable t Prim.BitVector where
-    defaultMatcher = thenMatcher asBvNatLit
-        (\(w, x) -> Just (Prim.BV (fromInteger w) x))
+instance (Applicative m, Monad m, Termlike t) => Matchable m t Prim.BitVector where
+    defaultMatcher =
+        (\(w, x) -> Prim.BV (fromInteger w) x) <$> asBvNatLit
 
-instance Termlike t => Matchable t Prim.Fin where
-    defaultMatcher = thenMatcher asFinValLit
-        (\(i, j) -> Just (Prim.FinVal (fromInteger i) (fromInteger j)))
+instance (Functor m, Monad m, Termlike t) => Matchable m t Prim.Fin where
+    defaultMatcher =
+      (\(i, j) -> Prim.FinVal (fromInteger i) (fromInteger j)) <$> asFinValLit
 
-instance Termlike t => Matchable t (Prim.Vec t t) where
-    defaultMatcher = thenMatcher asVecLit
-        (\(t, v) -> Just (Prim.Vec t v))
+instance (Functor m, Monad m, Termlike t) => Matchable m t (Prim.Vec t t) where
+    defaultMatcher = uncurry Prim.Vec <$> asVecLit
 
 ----------------------------------------------------------------------
 -- Term builders
@@ -242,7 +255,7 @@ instance Buildable t Prim.BitVector where
 -- rewritten term. We use conversions to model the behavior of
 -- primitive operations in SAWCore.
 
-newtype Conversion t = Conversion (Matcher t (TermBuilder t t))
+newtype Conversion t = Conversion (Matcher Maybe t (TermBuilder t t))
 
 runConversion :: Conversion t -> t -> Maybe (TermBuilder t t)
 runConversion (Conversion (Matcher _ f)) = f
@@ -257,16 +270,16 @@ instance Net.Pattern (Conversion t) where
 -- its arguments and builds the result.
 
 class Conversionable t a where
-    convOfMatcher :: Matcher t a -> Conversion t
+    convOfMatcher :: Matcher Maybe t a -> Conversion t
 
-instance (Termlike t, Matchable t a, Conversionable t b) => Conversionable t (a -> b) where
+instance (Termlike t, Matchable Maybe t a, Conversionable t b) => Conversionable t (a -> b) where
     convOfMatcher m = convOfMatcher
-        (thenMatcher (m <:> defaultMatcher) (\(f, x) -> Just (f x)))
+        (thenMatcher (m <:> defaultMatcher) (\(f :*: x) -> Just (f x)))
 
 instance Buildable t a => Conversionable t (Maybe a) where
     convOfMatcher m = Conversion (thenMatcher m (fmap defaultBuilder))
 
-defaultConvOfMatcher :: Buildable t a => Matcher t a -> Conversion t
+defaultConvOfMatcher :: Buildable t a => Matcher Maybe t a -> Conversion t
 defaultConvOfMatcher m = Conversion (thenMatcher m (Just . defaultBuilder))
 
 instance Conversionable t t where

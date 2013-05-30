@@ -6,7 +6,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
-
 {-# LANGUAGE ViewPatterns #-}
 module Verifier.SAW.TypedAST
  ( -- * Module operations.

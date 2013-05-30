@@ -226,17 +226,17 @@ scSimpset sc defs eqIdents convs = do
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asLambda :: Termlike t => Recognizer t (String, t, t)
-asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = Just (s, ty, body)
-asLambda _ = Nothing
+asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
+asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
+asLambda _ = fail "not a lambda"
 
-asTupleValue :: Termlike t => Recognizer t [t]
+asTupleValue :: (Monad m, Termlike t) => Recognizer m t [t]
 asTupleValue t = do TupleValue ts <- asFTermF t; return ts
 
-asTupleSelector :: Termlike t => Recognizer t (t, Int)
+asTupleSelector :: (Monad m, Termlike t) => Recognizer m t (t, Int)
 asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
 
-asRecordValue :: Termlike t => Recognizer t (Map FieldName t)
+asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
 asRecordValue t = do RecordValue m <- asFTermF t; return m
 
 asRecordSelector :: Termlike t => t -> Maybe (t, FieldName)
@@ -370,7 +370,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
   where
     rewriteAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
-    rewriteAll t@(STApp tidx tf) =
+    rewriteAll (STApp tidx tf) =
         -- putStrLn "Rewriting term:" >> print t >>
         useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
     rewriteTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
