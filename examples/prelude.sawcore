@@ -1,5 +1,7 @@
 module SAWScriptPrelude where
 
+import Prelude;
+
 -- Questions:
 --   - should we have lists? Useful for rule lists, override lists,
 --     uninterpret lists
@@ -14,10 +16,6 @@ module SAWScriptPrelude where
 --     primitive functions?
 --
 
-data Nat :: sort 0 where { }
-data Bool :: sort 0 where { }
-
-data Unit :: sort 0 where { }
 data String :: sort 0 where { }
 data TopLevel :: sort 0 -> sort 0 where { }
 data CryptolSetup :: sort 0 -> sort 0 where { }
@@ -30,42 +28,45 @@ data List :: sort 0 -> sort 0 where { }
 
 -- We start by declaring the types of some primitive functions.
 
+topBind :: (a b :: sort 0) -> TopLevel a -> (a -> TopLevel b) -> TopLevel b;
+topReturn :: (a :: sort 0) -> a -> TopLevel a;
+
 -- A VerifyResult encodes either a statement of what it proved, or a
 -- counterexample. These work like the method specs in the first version
 -- of SAWScript.
-verify_cryptol :: String -> String -> CryptolSetup Unit
+verify_cryptol :: String -> String -> CryptolSetup #()
                -> TopLevel CryptolVerifyResult;
-verify_llvm :: String -> String -> LLVMSetup Unit -> TopLevel LLVMVerifyResult;
-verify_java :: String -> JavaSetup Unit -> TopLevel JavaVerifyResult;
+verify_llvm :: String -> String -> LLVMSetup #() -> TopLevel LLVMVerifyResult;
+verify_java :: String -> JavaSetup #() -> TopLevel JavaVerifyResult;
 
 -- Extract pure models from suitably well-structured programs. We assume
 -- that these are well-typed, and check at runtime.
-extract_cryptol :: ?(a :: sort 0) -> String -> String -> CryptolSetup Unit -> a;
-extract_llvm :: ?(a :: sort 0) -> String -> String -> LLVMSetup Unit -> a;
-extract_java :: ?(a :: sort 0) -> String -> JavaSetup Unit -> a;
+extract_cryptol :: ?(a :: sort 0) -> String -> String -> CryptolSetup #() -> a;
+extract_llvm :: ?(a :: sort 0) -> String -> String -> LLVMSetup #() -> a;
+extract_java :: ?(a :: sort 0) -> String -> JavaSetup #() -> a;
 
 -- One method is currently available for Cryptol extraction.
-sbv :: CryptolSetup Unit;
+sbv :: CryptolSetup #();
 
 -- Set up symbolic simulation for a pure function from fixed-size arguments
 -- to fixed-size return value.
-pure_llvm :: LLVMSetup Unit;
-pure_java :: LLVMSetup Unit;
+pure_llvm :: LLVMSetup #();
+pure_java :: LLVMSetup #();
 
 -- A successful proof about a method can be used to override calls to
 -- the method. The requirement to provide verification results serves
 -- two purposes:
 --   - it tells the simulator how to provide inputs and interpret outputs
 --   - it ensures soundness by only allowing overrides that are proven correct
-override_llvm :: List LLVMVerifyResult -> LLVMSetup Unit;
-override_java :: List JavaVerifyResult -> JavaSetup Unit;
+override_llvm :: List LLVMVerifyResult -> LLVMSetup #();
+override_java :: List JavaVerifyResult -> JavaSetup #();
 
 -- We can uninterpret particular names along with overrides. Is this
 -- the right approach? For Cryptol, uninterpreting is the only form of
 -- overriding. For LLVM and Java, it can complement overriding by causing
 -- portions of the overriding model to be left uninterpreted.
-java_uninterpret :: List String -> JavaSetup Unit;
-llvm_uninterpret :: List String -> LLVMSetup Unit;
+java_uninterpret :: List String -> JavaSetup #();
+llvm_uninterpret :: List String -> LLVMSetup #();
 
 -- It would be nice to allow some sort of type classing, or something
 -- similar, so that certain operations would be legal in multiple
@@ -73,54 +74,51 @@ llvm_uninterpret :: List String -> LLVMSetup Unit;
 
 -- State that the current function returns the given value. We assume,
 -- again, that the argument is of the right type, and check at runtime.
-java_return :: ?(a :: sort 0) -> a -> JavaSetup Unit;
-llvm_return :: ?(a :: sort 0) -> a -> LLVMSetup Unit;
+java_return :: ?(a :: sort 0) -> a -> JavaSetup #();
+llvm_return :: ?(a :: sort 0) -> a -> LLVMSetup #();
 
 -- Declare that the particular expression is an output, for model
 -- extraction.
-java_output :: ?(a :: sort 0) -> a -> JavaSetup Unit;
-llvm_output :: ?(a :: sort 0) -> a -> LLVMSetup Unit;
+java_output :: ?(a :: sort 0) -> a -> JavaSetup #();
+llvm_output :: ?(a :: sort 0) -> a -> LLVMSetup #();
 
 -- Declare that the particular expression is an input, for model
 -- extraction.
-java_input :: ?(a :: sort 0) -> a -> JavaSetup Unit;
-llvm_input :: ?(a :: sort 0) -> a -> LLVMSetup Unit;
+java_input :: ?(a :: sort 0) -> a -> JavaSetup #();
+llvm_input :: ?(a :: sort 0) -> a -> LLVMSetup #();
 
 -- Assert a particular starting condition.
-assert_java :: Bool -> JavaSetup Unit;
-assert_llvm :: Bool -> LLVMSetup Unit;
+assert_java :: Bool -> JavaSetup #();
+assert_llvm :: Bool -> LLVMSetup #();
 
 data JavaObject :: sort 0 where { }
 data LLVMObject :: sort 0 where { }
 
 -- Assign the given value to the given object before execution.
-assume_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup Unit;
-assume_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup Unit;
+assume_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup #();
+assume_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup #();
 
 -- Ensure that the given object is assigned the given value on
 -- termination.
-ensure_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup Unit;
-ensure_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup Unit;
+ensure_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup #();
+ensure_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup #();
 
 -- Java and LLVM statements that a particular object is modified with
 -- an arbitrary value.
-modify_java :: JavaObject -> JavaSetup Unit;
-modify_llvm :: LLVMObject -> JavaSetup Unit;
+modify_java :: JavaObject -> JavaSetup #();
+modify_llvm :: LLVMObject -> JavaSetup #();
 
 data ProofScript :: sort 0 -> sort 0 where { }
 data ProofResult :: sort 0 where { }
 
 -- We can verify a function by writing a proof script.
-verify_java :: ProofScript Unit -> JavaSetup Unit;
-verify_llvm :: ProofScript Unit -> LLVMSetup Unit; 
+verify_java :: ProofScript #() -> JavaSetup #();
+verify_llvm :: ProofScript #() -> LLVMSetup #(); 
 
 -- These work in the context of an implicit goal.
 
 data JavaType :: sort 0 where { }
 data LLVMType :: sort 0 where { }
-
-data JavaObject :: sort 0 where { }
-data LLVMObject :: sort 0 where { }
 
 -- These allow us to refer to objects in the LLVM world.
 llvm_var :: String -> LLVMType -> LLVMObject;
@@ -147,8 +145,8 @@ java_char :: JavaType;
 java_int :: JavaType;
 java_long :: JavaType;
 
-may_alias_llvm :: List LLVMObject -> LLVMSetup Unit;
-may_alias_java :: List JavaObject -> LLVMSetup Unit;
+may_alias_llvm :: List LLVMObject -> LLVMSetup #();
+may_alias_java :: List JavaObject -> LLVMSetup #();
 
 -- This allows us to project from an LLVM value into a native value.
 -- We assume that these are well-typed, and check at runtime.
@@ -196,7 +194,7 @@ sat :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
 quickcheck :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
 
 -- Printing is polymorphic for now.
-print :: ?(a :: sort 0) -> a -> TopLevel Unit;
+print :: ?(a :: sort 0) -> a -> TopLevel #();
 
 data JavaOverride :: sort 0 where { }
 data LLVMOverride :: sort 0 where { }
@@ -222,7 +220,7 @@ llvm_verify_result :: ?(a :: sort 0)
 -- Something to make it easy to print the result of a proof. We don't
 -- have case expressions in the language at the moment, and instead use
 -- destructor functions for any built-in algebraic data types.
---show_result :: ProofResult Unit -> TopLevel Unit
+--show_result :: ProofResult #() -> TopLevel #()
 --show_result r = proof_result r
 --                (\thm -> print "Success!")
 --                (\cex -> do { print "Failure:" ; print cex })
