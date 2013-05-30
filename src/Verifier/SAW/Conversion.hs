@@ -9,17 +9,26 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Conversion
-  ( Matcher
-  , (<:>)
-  , (:*:)(..)
+  ( (:*:)(..)
+  , Matcher, matchPat
+  , thenMatcher
+  , MatcherList
+  , (<:)
+  , asEmpty
   , asVar
   , asAny
-  , asFinValLit
+  , (<:>)
+  , asNatLit
+  , asVecLit
+  , asGlobalDef
+  , asCtor
+  , asDataType
+
   , asBoolType
+  , asFinValLit
   , asSignedBvNatLit
-  , matchGlobalDef
-  , thenMatcher
-  , TermBuilder
+
+  , Matchable(..)
   , runTermBuilder
   -- , mkAny
   , Conversion(..)
@@ -61,7 +70,7 @@ import Verifier.SAW.TypedAST
 ----------------------------------------------------------------------
 -- Matchers for terms
 
-data Matcher m t a = Matcher Net.Pat (t -> m a)
+data Matcher m t a = Matcher { matchPat :: Net.Pat, _matchFn :: t -> m a }
 
 instance Functor m => Functor (Matcher m t) where
   fmap f (Matcher p m) = Matcher p (fmap f . m)
@@ -90,34 +99,51 @@ asNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
 asVecLit :: (Termlike t, Monad m) => Matcher m t (t, V.Vector t)
 asVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
-matchGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
-matchGlobalDef ident = Matcher (Net.Atom (identName ident)) f
+asGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
+asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
         f _ = fail (show ident ++ " match failed.")
 
+
+data MatcherList m t a = MatcherList [Net.Pat] ([t] -> m a)
+
+infixr 9 <:
+
+(<:) :: (Monad m) => Matcher m t a -> MatcherList m t b -> MatcherList m t (a :*: b)
+(<:) (Matcher p f) (MatcherList pl g) = MatcherList (p:pl) match
+  where match (h:l) = liftM2 (:*:) (f h) (g l)
+        match [] = fail "empty"
+
+asEmpty :: (Monad m) => MatcherList m t ()
+asEmpty = MatcherList [] match
+  where match l | null l = return ()
+                | otherwise = fail "not empty"
+
+asCtor :: (Monad m, Termlike t) => Ident -> MatcherList m t a -> Matcher m t a
+asCtor o (MatcherList pl f) = Matcher pat match
+  where pat = foldl Net.App (Net.Atom (identName o)) pl
+        match t = do
+          CtorApp c l <- R.asFTermF t
+          if c == o then f l else fail ("not " ++ show o)
+
+asDataType :: (Monad m, Termlike t) => Ident -> MatcherList m t a -> Matcher m t a
+asDataType o (MatcherList pl f) = Matcher pat match
+  where pat = foldl Net.App (Net.Atom (identName o)) pl
+        match t = do
+          DataTypeApp dt l <- R.asFTermF t
+          if dt == o then f l else fail ("not " ++ show o)
+
 asBoolType :: (Monad m, Termlike t) => Matcher m t ()
-asBoolType = Matcher (Net.Atom "Prelude.Bool") R.asBoolType
+--asBoolType = Matcher (Net.Atom "Prelude.Bool") R.asBoolType
+asBoolType = asDataType "Prelude.Bool" asEmpty
 
-asFinValLit :: (Monad m, Termlike t) => Matcher m t (Integer, Integer)
-asFinValLit = Matcher pat match
-    where
-      pat = Net.App (Net.App (Net.Atom (identName finval)) Net.Var) Net.Var
-      match t = do
-        CtorApp ident [x, y] <- R.asFTermF t
-        if ident == finval then
-          liftM2 (,) (R.asNatLit x) (R.asNatLit y)
-        else
-          fail "FinVal match failed"
-      finval = "Prelude.FinVal"
 
-asSuccLit :: (Monad m, Termlike t) => Matcher m t Integer
-asSuccLit = Matcher pat match
-    where
-      pat = Net.App (Net.Atom (identName succId)) Net.Var
-      succId = "Prelude.Succ"
-      match t = do
-        CtorApp ident [x] <- R.asFTermF t
-        if ident == succId then R.asNatLit x else  fail "succMatch failed"
+asFinValLit :: (Functor m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
+asFinValLit = (\(i :*: (j :*: _)) -> (i,j))
+  <$> asCtor "Prelude.FinVal" (asNatLit <: asNatLit <: asEmpty) 
+
+asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Integer
+asSuccLit = (\(i :*: _) -> i) <$> asCtor "Prelude.Succ" (asNatLit <: asEmpty)
 
 bitMask :: Integer -> Integer
 bitMask n = bit (fromInteger n) - 1
@@ -125,7 +151,7 @@ bitMask n = bit (fromInteger n) - 1
 asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
 asBvNatLit =
   (\(_ :*: n :*: x) -> (n, x .&. bitMask n)) <$>
-    (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
+    (asGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
 
 normSignedBV :: Int -> Integer -> Integer
 normSignedBV n x | testBit x n = x' - bit (n+1)
@@ -136,7 +162,7 @@ normSignedBV n x | testBit x n = x' - bit (n+1)
 asSignedBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Integer
 asSignedBvNatLit =
    (\(_ :*: n :*: x) -> normSignedBV (fromInteger n) x)
-    <$> (matchGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
+    <$> (asGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
 
 class Matchable m t a where
     defaultMatcher :: Matcher m t a
@@ -304,7 +330,7 @@ instance (Termlike t, Buildable t a, Buildable t b) => Conversionable t (a, b) w
     convOfMatcher = defaultConvOfMatcher
 
 globalConv :: (Termlike t, Conversionable t a) => Ident -> a -> Conversion t
-globalConv ident f = convOfMatcher (thenMatcher (matchGlobalDef ident) (const (Just f)))
+globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just f)))
 
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
