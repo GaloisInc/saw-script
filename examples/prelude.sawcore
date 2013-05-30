@@ -41,9 +41,9 @@ verify_java :: String -> JavaSetup #() -> TopLevel JavaVerifyResult;
 
 -- Extract pure models from suitably well-structured programs. We assume
 -- that these are well-typed, and check at runtime.
-extract_cryptol :: ?(a :: sort 0) -> String -> String -> CryptolSetup #() -> a;
-extract_llvm :: ?(a :: sort 0) -> String -> String -> LLVMSetup #() -> a;
-extract_java :: ?(a :: sort 0) -> String -> JavaSetup #() -> a;
+extract_cryptol :: ?(a :: sort 0) -> String -> String -> CryptolSetup #() -> TopLevel a;
+extract_llvm :: ?(a :: sort 0) -> String -> String -> LLVMSetup #() -> TopLevel a;
+extract_java :: ?(a :: sort 0) -> String -> JavaSetup #() -> TopLevel a;
 
 -- One method is currently available for Cryptol extraction.
 sbv :: CryptolSetup #();
