@@ -106,7 +106,7 @@ ensure_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup #();
 -- Java and LLVM statements that a particular object is modified with
 -- an arbitrary value.
 modify_java :: JavaObject -> JavaSetup #();
-modify_llvm :: LLVMObject -> JavaSetup #();
+modify_llvm :: LLVMObject -> LLVMSetup #();
 
 data ProofScript :: sort 0 -> sort 0 where { }
 data ProofResult :: sort 0 where { }
