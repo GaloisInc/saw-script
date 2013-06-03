@@ -7,33 +7,55 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
-
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Verifier.SAW.Conversion
   ( (:*:)(..)
-  , Matcher, matchPat
+  , Net.toPat
+  , termToPat
+    -- * Matcher
+  , Matcher
+  , runMatcher
   , thenMatcher
-  , MatcherList
-  , (<:)
-  , asEmpty
   , asVar
   , asAny
-  , (<:>)
-  , asNatLit
-  , asVecLit
+    -- ** Matcher arguments
+  , ArgsMatcher
+  , ArgsMatchable
+  , asEmpty
+  , (>:)
+  , runArgsMatcher
+    -- ** Term matchers
   , asGlobalDef
+  , (<:>)
+  , asAnyTupleValue
+  , asTupleValue
+  , asAnyTupleType
+  , asTupleType
+  , asAnyRecordValue
+  , asAnyRecordType
   , asCtor
   , asDataType
-
+  , asAnySort
+  , asSort
+  , asAnyNatLit
+  , asAnyVecLit
+  , asAnyFloatLit
+  , asAnyDoubleLit
+    -- ** Prelude matchers
   , asBoolType
   , asFinValLit
+  , asSuccLit
+  , asBvNatLit
   , asSignedBvNatLit
-
+    -- ** Matchable typeclass
   , Matchable(..)
+    -- ** TermBuilder
+  , TermBuilder
   , runTermBuilder
-  -- , mkAny
+    -- * Conversion
   , Conversion(..)
   , runConversion
-  -- Prelude conversions
+    -- ** Prelude conversions
   , natConversions
   , finConversions
   , vecConversions
@@ -57,8 +79,9 @@ module Verifier.SAW.Conversion
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
 import Control.Exception (assert)
-import Control.Monad (ap, liftM, liftM2, (<=<))
+import Control.Monad (ap, liftM, liftM2, unless, (<=<))
 import Data.Bits
+import Data.Map (Map)
 import qualified Data.Vector as V
 
 import qualified Verifier.SAW.Prim as Prim
@@ -67,10 +90,27 @@ import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
 
+termToPat :: Termlike t => t -> Net.Pat
+termToPat t =
+    case unwrapTermF t of
+      FTermF (GlobalDef d)      -> Net.Atom (identName d)
+      FTermF (Sort s)           -> Net.Atom ('*' : show s)
+      FTermF (NatLit n)         -> Net.Atom (show n)
+      FTermF (App t1 t2)        -> Net.App (termToPat t1) (termToPat t2)
+      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      _                         -> Net.Var
+
+instance Net.Pattern Term where
+  toPat = termToPat
+
 ----------------------------------------------------------------------
 -- Matchers for terms
 
-data Matcher m t a = Matcher { matchPat :: Net.Pat, _matchFn :: t -> m a }
+data Matcher m t a = Matcher { matcherPat :: Net.Pat, runMatcher :: t -> m a }
+
+instance Net.Pattern (Matcher m t a) where
+    toPat = matcherPat
 
 instance Functor m => Functor (Matcher m t) where
   fmap f (Matcher p m) = Matcher p (fmap f . m)
@@ -86,6 +126,57 @@ asAny = asVar pure
 
 infixl 8 <:>
 
+-- | Match a list of terms as arguments to a term.
+data ArgsMatcher m t a = ArgsMatcher [Net.Pat] ([t] -> m a)
+
+class ArgsMatchable v m t a where
+  defaultArgsMatcher :: v m t a -> ArgsMatcher m t a
+
+instance Monad m => ArgsMatchable Matcher m t a where
+  defaultArgsMatcher (Matcher p f) = ArgsMatcher [p] match
+    where match [h] = f h
+          match [] = fail "empty"
+          match _ = fail "not singleton"
+
+instance ArgsMatchable ArgsMatcher m t a where
+  defaultArgsMatcher = id
+
+infixl 9 >:
+
+asEmpty :: (Monad m) => ArgsMatcher m t ()
+asEmpty = ArgsMatcher [] match
+  where match l | null l = return ()
+                | otherwise = fail "not empty"
+
+(>:) :: (Monad m, ArgsMatchable v m t a) => v m t a -> Matcher m t b -> ArgsMatcher m t (a :*: b)
+(>:) (defaultArgsMatcher -> ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (p:pl) match
+  where match (h:l) = liftM2 (:*:) (f l) (g h)
+        match [] = fail "empty"
+
+runArgsMatcher :: ArgsMatcher m t a -> [t] -> m a
+runArgsMatcher (ArgsMatcher _ f) = f . reverse
+ 
+-- | Produces a matcher from an ArgsMatcher and a matcher that yields
+-- subterms.
+resolveArgs :: (Monad m, ArgsMatchable v m t a)
+               -- ^ Given a term, matches arguments to temr.
+            => Matcher m t [t] 
+            -> v m t a
+            -> Matcher m t a
+resolveArgs (Matcher p m) (defaultArgsMatcher -> ArgsMatcher pl f)
+    = Matcher (foldl Net.App p (reverse pl))
+              (f . reverse <=< m)
+
+----------------------------------------------------------------------
+-- Term matchers
+
+-- | Match a global definition.
+asGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
+asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
+  where f (R.asGlobalDef -> Just o) | ident == o = return ()
+        f _ = fail (show ident ++ " match failed.")
+
+-- | Match an application
 (<:>) :: (Termlike t, Applicative m, Monad m)
       => Matcher m t a -> Matcher m t b -> Matcher m t (a :*: b)
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
@@ -93,57 +184,96 @@ infixl 8 <:>
       match (unwrapTermF -> FTermF (App t1 t2)) = liftM2 (:*:) (f1 t1) (f2 t2)
       match _ = fail "internal: <:> net failed"
 
-asNatLit :: (Termlike t, Monad m) => Matcher m t Integer
-asNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
+-- | Matches any tuple.
+asAnyTupleValue :: (Monad m, Termlike t) => Matcher m t [t]
+asAnyTupleValue = asVar $ \t -> do TupleType l <- R.asFTermF t; return l
 
-asVecLit :: (Termlike t, Monad m) => Matcher m t (t, V.Vector t)
-asVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
+-- | Matches a tuple with arguments matching constraints.
+asTupleValue :: (Monad m, Termlike t, ArgsMatchable v m t a)
+             => v m t a -> Matcher m t a
+asTupleValue (defaultArgsMatcher -> m) = asVar $ \t -> do
+  TupleValue l <- R.asFTermF t
+  runArgsMatcher m l
 
-asGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
-asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
-  where f (R.asGlobalDef -> Just o) | ident == o = return ()
-        f _ = fail (show ident ++ " match failed.")
+-- | Matches the type of any tuple.
+asAnyTupleType :: (Monad m, Termlike t) => Matcher m t [t]
+asAnyTupleType = asVar $ \t -> do TupleType l <- R.asFTermF t; return l
 
+-- | Matches a tuple type with arguments matching constraints.
+asTupleType :: (Monad m, Termlike t, ArgsMatchable v m t a)
+             => v m t a -> Matcher m t a
+asTupleType (defaultArgsMatcher -> m) = asVar $ \t -> do
+  TupleType l <- R.asFTermF t
+  runArgsMatcher m l
 
-data MatcherList m t a = MatcherList [Net.Pat] ([t] -> m a)
+--TODO: TupleSelector
 
-infixr 9 <:
+-- | Matches record values, and returns fields.
+asAnyRecordValue :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
+asAnyRecordValue = asVar $ \t -> do RecordValue m <- R.asFTermF t; return m
 
-(<:) :: (Monad m) => Matcher m t a -> MatcherList m t b -> MatcherList m t (a :*: b)
-(<:) (Matcher p f) (MatcherList pl g) = MatcherList (p:pl) match
-  where match (h:l) = liftM2 (:*:) (f h) (g l)
-        match [] = fail "empty"
+-- | Matches record types, and returns fields.
+asAnyRecordType :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
+asAnyRecordType = asVar $ \t -> do RecordType m <- R.asFTermF t; return m
 
-asEmpty :: (Monad m) => MatcherList m t ()
-asEmpty = MatcherList [] match
-  where match l | null l = return ()
-                | otherwise = fail "not empty"
+--TODO: RecordSelector
 
-asCtor :: (Monad m, Termlike t) => Ident -> MatcherList m t a -> Matcher m t a
-asCtor o (MatcherList pl f) = Matcher pat match
-  where pat = foldl Net.App (Net.Atom (identName o)) pl
-        match t = do
+-- | Match a constructor
+asCtor :: (Monad m, Termlike t, ArgsMatchable v m t a)
+       => Ident -> v m t a -> Matcher m t a
+asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
+  where match t = do
           CtorApp c l <- R.asFTermF t
-          if c == o then f l else fail ("not " ++ show o)
+          unless (c == o) $ fail $ "not " ++ show o
+          return l
 
-asDataType :: (Monad m, Termlike t) => Ident -> MatcherList m t a -> Matcher m t a
-asDataType o (MatcherList pl f) = Matcher pat match
-  where pat = foldl Net.App (Net.Atom (identName o)) pl
-        match t = do
+-- | Match a datatype.
+asDataType :: (Monad m, Termlike t, ArgsMatchable v m t a)
+           => Ident -> v m t a -> Matcher m t a
+asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
+  where match t = do
           DataTypeApp dt l <- R.asFTermF t
-          if dt == o then f l else fail ("not " ++ show o)
+          unless (dt == o) $ fail $ "not " ++ show o
+          return l
+
+-- | Match any sort.
+asAnySort :: (Termlike t, Monad m) => Matcher m t Sort
+asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
+
+-- | Match a specific sort.
+asSort :: (Termlike t, Monad m) => Sort -> Matcher m t ()
+asSort s = Matcher (termToPat (Term (FTermF (Sort s)))) fn
+  where fn t = do Sort s' <- R.asFTermF t
+                  unless (s == s') $ fail "Does not matched expected sort."
+            
+-- | Match a Nat literal
+asAnyNatLit :: (Termlike t, Monad m) => Matcher m t Integer
+asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
+
+-- | Match a Vec literal
+asAnyVecLit :: (Termlike t, Monad m) => Matcher m t (t, V.Vector t)
+asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
+
+-- | Match a Float literal
+asAnyFloatLit :: (Termlike t, Monad m) => Matcher m t Float
+asAnyFloatLit = asVar $ \t -> do FloatLit i <- R.asFTermF t; return i
+
+-- | Match a Double literal
+asAnyDoubleLit :: (Termlike t, Monad m) => Matcher m t Double
+asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
+
+----------------------------------------------------------------------
+-- Prelude matchers
 
 asBoolType :: (Monad m, Termlike t) => Matcher m t ()
---asBoolType = Matcher (Net.Atom "Prelude.Bool") R.asBoolType
 asBoolType = asDataType "Prelude.Bool" asEmpty
 
-
 asFinValLit :: (Functor m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
-asFinValLit = (\(i :*: (j :*: _)) -> (i,j))
-  <$> asCtor "Prelude.FinVal" (asNatLit <: asNatLit <: asEmpty) 
+asFinValLit = (\(i :*: j) -> (i,j))
+  <$> asCtor "Prelude.FinVal" (asAnyNatLit >: asAnyNatLit) 
 
 asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Integer
-asSuccLit = (\(i :*: _) -> i) <$> asCtor "Prelude.Succ" (asNatLit <: asEmpty)
+asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
 bitMask :: Integer -> Integer
 bitMask n = bit (fromInteger n) - 1
@@ -151,7 +281,7 @@ bitMask n = bit (fromInteger n) - 1
 asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
 asBvNatLit =
   (\(_ :*: n :*: x) -> (n, x .&. bitMask n)) <$>
-    (asGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
+    (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
 
 normSignedBV :: Int -> Integer -> Integer
 normSignedBV n x | testBit x n = x' - bit (n+1)
@@ -159,10 +289,18 @@ normSignedBV n x | testBit x n = x' - bit (n+1)
   where mask = bit (n+1) - 1
         x' = x .&. mask
 
+checkedIntegerToNonNegInt :: Monad m => Integer -> m Int
+checkedIntegerToNonNegInt x 
+  | 0 <= x && x <= toInteger (maxBound :: Int) = return (fromInteger x)
+  | otherwise = fail "match out of range"
+
 asSignedBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Integer
 asSignedBvNatLit =
    (\(_ :*: n :*: x) -> normSignedBV (fromInteger n) x)
-    <$> (asGlobalDef "Prelude.bvNat" <:> asNatLit <:> asNatLit)
+    <$> (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
+
+----------------------------------------------------------------------
+-- Matchable
 
 class Matchable m t a where
     defaultMatcher :: Matcher m t a
@@ -174,12 +312,10 @@ instance Applicative m => Matchable m t t where
     defaultMatcher = asAny
 
 instance (Monad m, Termlike t) => Matchable m t Integer where
-    defaultMatcher = asNatLit
+    defaultMatcher = asAnyNatLit
 
 instance (Monad m, Termlike t) => Matchable m t Int where
-    defaultMatcher = thenMatcher asNatLit toInt
-        where toInt x | 0 <= x && x <= toInteger (maxBound :: Int) = return (fromInteger x)
-                      | otherwise = fail "match out of range"
+    defaultMatcher = thenMatcher asAnyNatLit checkedIntegerToNonNegInt
 
 instance (Applicative m, Monad m, Termlike t) => Matchable m t Prim.BitVector where
     defaultMatcher =
@@ -190,7 +326,7 @@ instance (Functor m, Monad m, Termlike t) => Matchable m t Prim.Fin where
       (\(i, j) -> Prim.FinVal (fromInteger i) (fromInteger j)) <$> asFinValLit
 
 instance (Functor m, Monad m, Termlike t) => Matchable m t (Prim.Vec t t) where
-    defaultMatcher = uncurry Prim.Vec <$> asVecLit
+    defaultMatcher = uncurry Prim.Vec <$> asAnyVecLit
 
 ----------------------------------------------------------------------
 -- Term builders
@@ -283,11 +419,12 @@ instance Buildable t Prim.BitVector where
 
 newtype Conversion t = Conversion (Matcher Maybe t (TermBuilder t t))
 
-runConversion :: Conversion t -> t -> Maybe (TermBuilder t t)
-runConversion (Conversion (Matcher _ f)) = f
-
 instance Net.Pattern (Conversion t) where
-    toPat (Conversion (Matcher pat _)) = pat
+    toPat (Conversion m) = Net.toPat m
+
+runConversion :: Conversion t -> t -> Maybe (TermBuilder t t)
+runConversion (Conversion m) = runMatcher m
+
 
 -- | This class is meant to include n-ary function types whose
 -- arguments are all in class @Matchable t@ and whose result type is

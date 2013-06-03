@@ -33,7 +33,6 @@ module Verifier.SAW.Rewriter
   , rewriteSharedTermTypeSafe
   -- * SharedContext
   , rewritingSharedContext
-  , asApp
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
@@ -50,11 +49,14 @@ import Data.Maybe (fromJust)
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Conversion
-import Verifier.SAW.Recognizer
+import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm hiding (instantiateVarList)
 import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
+
+instance Net.Pattern (SharedTerm s) where
+  toPat = termToPat
 
 data RewriteRule t
   = RewriteRule { ctxt :: [t], lhs :: t, rhs :: t }
@@ -68,23 +70,6 @@ instance Eq (Conversion t) where
 
 instance Show (Conversion t) where
     show x = show (Net.toPat x)
-
-termToPat :: Termlike t => t -> Net.Pat
-termToPat t =
-    case unwrapTermF t of
-      FTermF (GlobalDef d)      -> Net.Atom (identName d)
-      FTermF (Sort s)           -> Net.Atom ('*' : show s)
-      FTermF (NatLit n)         -> Net.Atom (show n)
-      FTermF (App t1 t2)        -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      _                         -> Net.Var
-
-instance Net.Pattern Term where
-  toPat = termToPat
-
-instance Net.Pattern (SharedTerm s) where
-  toPat = termToPat
 
 instance Net.Pattern t => Net.Pattern (RewriteRule t) where
   toPat (RewriteRule _ lhs _) = Net.toPat lhs
@@ -226,38 +211,22 @@ scSimpset sc defs eqIdents convs = do
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
-asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
-asLambda _ = fail "not a lambda"
-
-asTupleValue :: (Monad m, Termlike t) => Recognizer m t [t]
-asTupleValue t = do TupleValue ts <- asFTermF t; return ts
-
-asTupleSelector :: (Monad m, Termlike t) => Recognizer m t (t, Int)
-asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
-
-asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
-asRecordValue t = do RecordValue m <- asFTermF t; return m
-
-asRecordSelector :: Termlike t => t -> Maybe (t, FieldName)
-asRecordSelector t = do RecordSelector u i <- asFTermF t; return (u,i)
-
-asBetaRedex :: Termlike t => t -> Maybe (String, t, t, t)
+asBetaRedex :: (Monad m, Termlike t) => R.Recognizer m t (String, t, t, t)
 asBetaRedex t =
-    do (f, arg) <- asApp t
-       (s, ty, body) <- asLambda f
+    do (f, arg) <- R.asApp t
+       (s, ty, body) <- R.asLambda f
        return (s, ty, body, arg)
 
-asTupleRedex :: Termlike t => t -> Maybe ([t], Int)
+asTupleRedex :: (Monad m, Termlike t) => R.Recognizer m t ([t], Int)
 asTupleRedex t =
-    do (x, i) <- asTupleSelector t
-       ts <- asTupleValue x
+    do (x, i) <- R.asTupleSelector t
+       ts <- R.asTupleValue x
        return (ts, i)
 
-asRecordRedex :: Termlike t => t -> Maybe (Map FieldName t, FieldName)
+asRecordRedex :: (Monad m, Termlike t) => R.Recognizer m t (Map FieldName t, FieldName)
 asRecordRedex t =
-    do (x, i) <- asRecordSelector t
-       ts <- asRecordValue x
+    do (x, i) <- R.asRecordSelector t
+       ts <- R.asRecordValue x
        return (ts, i)
 
 ----------------------------------------------------------------------

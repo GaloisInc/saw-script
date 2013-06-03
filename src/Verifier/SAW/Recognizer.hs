@@ -6,16 +6,23 @@ module Verifier.SAW.Recognizer
   ( Recognizer
   , (<:), emptyl, endl
   , (:*:)(..)
-  , (<@>), (@>)
-  , asApp
-  , asApplyAll
   , asFTermF
+
+  , asGlobalDef
+  , isGlobalDef
+  , asApp
+  , (<@>), (@>)
+  , asApplyAll
+  , asTupleValue
+  , asTupleSelector
+  , asRecordValue
+  , asRecordSelector
   , asCtor
   , asDataType
   , isDataType
-  , asGlobalDef
-  , isGlobalDef
   , asNatLit
+  , asLambda
+    -- * Prelude recognizers.
   , asBool
   , asBoolType
   , asBitvectorType
@@ -24,7 +31,10 @@ module Verifier.SAW.Recognizer
 
 import Control.Applicative
 import Control.Monad
+import Data.Map (Map)
 import Verifier.SAW.TypedAST
+
+data a :*: b = (:*:) a b
 
 type Recognizer m t a = t -> m a
 
@@ -51,7 +61,16 @@ asFTermF :: (Monad f, Termlike t) => Recognizer f t (FlatTermF t)
 asFTermF (unwrapTermF -> FTermF ftf) = return ftf
 asFTermF _ = fail "not ftermf"
 
-data a :*: b = (:*:) a b
+asGlobalDef :: (Monad f, Termlike t) => Recognizer f t Ident
+asGlobalDef t = do GlobalDef i <- asFTermF t; return i
+
+isGlobalDef :: (Monad f, Termlike t) => Ident -> Recognizer f t ()
+isGlobalDef i t = do
+  o <- asGlobalDef t
+  if i == o then return () else fail ("not " ++ show i)
+
+asApp :: (Monad f, Termlike t) => Recognizer f t (t, t)
+asApp t = do App x y <- asFTermF t; return (x,y)
 
 (<@>) :: (Monad f, Termlike t)
       => Recognizer f t a -> Recognizer f t b -> Recognizer f t (a :*: b)
@@ -65,9 +84,6 @@ data a :*: b = (:*:) a b
   (x, y) <- asApp t
   liftM2 (const id) (f x) (g y)
 
-asApp :: (Monad f, Termlike t) => Recognizer f t (t, t)
-asApp t = do App x y <- asFTermF t; return (x,y)
-
 asApplyAll :: Termlike t => t -> (t, [t])
 asApplyAll = go []
   where go xs t =
@@ -75,34 +91,41 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
+asTupleValue :: (Monad m, Termlike t) => Recognizer m t [t]
+asTupleValue t = do TupleValue ts <- asFTermF t; return ts
+
+asTupleSelector :: (Monad m, Termlike t) => Recognizer m t (t, Int)
+asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
+
+asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
+asRecordValue t = do RecordValue m <- asFTermF t; return m
+
+asRecordSelector :: (Monad m, Termlike t) => Recognizer m t (t, FieldName)
+asRecordSelector t = do RecordSelector u i <- asFTermF t; return (u,i)
+
 asCtor :: (Monad f, Termlike t) => Recognizer f t (Ident, [t])
 asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
 
 asDataType :: (Monad f, Termlike t) => Recognizer f t (Ident, [t])
 asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l) 
 
-asGlobalDef :: (Monad f, Termlike t) => Recognizer f t Ident
-asGlobalDef t = do GlobalDef i <- asFTermF t; return i
-
-isGlobalDef :: (Monad f, Termlike t) => Ident -> Recognizer f t ()
-isGlobalDef i t = do
-  o <- asGlobalDef t
-  if i == o then return () else fail ("not " ++ show i)
-
-asNatLit :: (Monad f, Termlike t) => Recognizer f t Integer
-asNatLit t = do NatLit i <- asFTermF t; return i
-
--- | Returns term as a constant Boolean if it can be evaluated as one.
--- bh: Is this really intended to do *evaluation*? Or is it supposed to work like asNatLit?
-asBool :: (Monad f, Termlike t) => Recognizer f t Bool
-asBool (asCtor -> Just ("Prelude.True",  [])) = return True
-asBool (asCtor -> Just ("Prelude.False", [])) = return False
-asBool _ = fail "not bool"
-
 isDataType :: (Monad f, Termlike t) => Ident -> Recognizer f [t] a -> Recognizer f t a
 isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else fail "not datatype"
+
+asNatLit :: (Monad f, Termlike t) => Recognizer f t Integer
+asNatLit t = do NatLit i <- asFTermF t; return i
+
+asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
+asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
+asLambda _ = fail "not a lambda"
+
+-- | Returns term as a constant Boolean if it is one.
+asBool :: (Monad f, Termlike t) => Recognizer f t Bool
+asBool (asCtor -> Just ("Prelude.True",  [])) = return True
+asBool (asCtor -> Just ("Prelude.False", [])) = return False
+asBool _ = fail "not bool"
 
 asBoolType :: (Monad f, Termlike t) => Recognizer f t ()
 asBoolType = isDataType "Prelude.Bool" emptyl

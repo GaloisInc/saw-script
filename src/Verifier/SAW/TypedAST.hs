@@ -393,8 +393,8 @@ data FlatTermF e
   | TupleSelector !e !Int
 
   | RecordValue (Map FieldName e)
-  | RecordSelector e FieldName
   | RecordType (Map FieldName e)
+  | RecordSelector e FieldName
 
   | CtorApp !Ident ![e]
   | DataTypeApp !Ident ![e]
