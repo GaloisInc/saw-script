@@ -13,6 +13,7 @@ module Verifier.SAW.Conversion
   ( (:*:)(..)
   , Net.toPat
   , termToPat
+  , Termlike
     -- * Matcher
   , Matcher
   , runMatcher
