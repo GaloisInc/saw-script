@@ -177,7 +177,7 @@ translateExpr doType e = go e
                 translateDecl (n, de) = do
                   ty <- doType (SS.typeOf de)
                   e' <- go de
-                  return $ SC.LocalFnDef n ty [SC.DefEqn [] e']
+                  return $ SC.Def n ty [SC.DefEqn [] e']
 
 translatePType :: SS.PType -> M SC.Term
 translatePType t = addParams ps <$> local polyEnv (translatePType' t)
