@@ -555,13 +555,13 @@ bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Termlike t => Conversion t
 bvugt_bvNat = globalConv "Prelude.bvugt" Prim.bvugt
 bvuge_bvNat = globalConv "Prelude.bvuge" Prim.bvuge
 bvult_bvNat = globalConv "Prelude.bvult" Prim.bvult
-bvule_bvNat = globalConv "Prelude.bvult" Prim.bvule
+bvule_bvNat = globalConv "Prelude.bvule" Prim.bvule
 
 bvsgt_bvNat, bvsge_bvNat, bvslt_bvNat, bvsle_bvNat :: Termlike t => Conversion t
 bvsgt_bvNat = globalConv "Prelude.bvsgt" Prim.bvsgt
 bvsge_bvNat = globalConv "Prelude.bvsge" Prim.bvsge
 bvslt_bvNat = globalConv "Prelude.bvslt" Prim.bvslt
-bvsle_bvNat = globalConv "Prelude.bvslt" Prim.bvsle
+bvsle_bvNat = globalConv "Prelude.bvsle" Prim.bvsle
 
 get_bvNat :: Termlike t => Conversion t
 get_bvNat = globalConv "Prelude.get" Prim.get_bv
