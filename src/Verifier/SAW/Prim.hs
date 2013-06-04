@@ -175,7 +175,7 @@ bvNat :: Int -> Integer -> BitVector
 bvNat w x = bv w x
 
 -- bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-bvAdd, bvSub, bvMul :: Int -> BitVector -> BitVector -> BitVector
+bvAdd, bvSub, bvMul :: Nat -> BitVector -> BitVector -> BitVector
 bvAdd _ (BV w x) (BV _ y) = bv w (x + y)
 bvSub _ (BV w x) (BV _ y) = bv w (x - y)
 bvMul _ (BV w x) (BV _ y) = bv w (x * y)
