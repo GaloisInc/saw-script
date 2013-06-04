@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Verifier.SAW.Prim where
 
 import Control.Applicative
@@ -24,7 +25,7 @@ instance Num Nat where
     where r = x - y
 
   negate (Nat 0) = Nat 0
-  negate _ = error "Nat negation is negative."
+  negate _ = error "Nat negation is upsupported."
 
   abs = id
   
@@ -36,7 +37,7 @@ instance Num Nat where
 
 instance Enum Nat where
   succ (Nat x) = Nat (succ x)
-  pred (Nat 0) = error "Natural 0 has not predecessor."
+  pred (Nat 0) = error "Nat 0 has no predecessor."
   pred (Nat x) = Nat (pred x)
 
   toEnum   = fromIntegral
@@ -57,6 +58,33 @@ instance Integral Nat where
     where (q,r) = x `quotRem` y
   divMod = quotRem
   toInteger (Nat x) = x  
+
+instance Bits Nat where
+  Nat x .&. Nat y   = Nat (x .&. y)
+  Nat x .|. Nat y   = Nat (x .|. y)
+  Nat x `xor` Nat y = Nat (x `xor` y)
+
+  complement = error "complement(Nat) unsupported."
+  Nat x `shift` i = Nat (x `shift` i)
+
+  rotate = shift
+
+  bit = Nat . bit
+  Nat x `setBit` i = Nat (x `setBit` i)
+
+  Nat x `clearBit` i = Nat (x `clearBit` i)
+
+  complementBit (Nat x) i = Nat (x `complementBit` i)
+
+  testBit (Nat x) i = testBit x i
+
+  bitSize = error "bitSize(Nat) unsupported."
+
+  isSigned _ = False
+
+#if MIN_VERSION_base(4,6,0)
+  popCount (Nat x) = popCount x
+#endif
 
 -- data Fin :: (n :: Nat) -> sort 0 where {
 --     FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
