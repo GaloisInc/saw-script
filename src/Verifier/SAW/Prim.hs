@@ -1,5 +1,7 @@
 module Verifier.SAW.Prim where
 
+import Control.Applicative
+import Control.Exception (assert)
 import Data.Bits
 import Data.Vector ( Vector )
 import qualified Data.Vector as V
@@ -7,11 +9,100 @@ import qualified Data.Vector as V
 ------------------------------------------------------------
 -- Primitive types
 
+-- | A natural number.
+newtype Nat = Nat Integer
+  deriving (Eq,Ord)
+
+instance Show Nat where
+  show (Nat x) = show x
+
+instance Num Nat where
+  Nat x + Nat y = Nat (x + y)
+  Nat x * Nat y = Nat (x * y)
+  Nat x - Nat y | r >= 0 = Nat r
+                | otherwise = error "internal: Nat subtraction result must be non-negative."
+    where r = x - y
+
+  negate (Nat 0) = Nat 0
+  negate _ = error "Nat negation is negative."
+
+  abs = id
+  
+  signum (Nat 0) = 0
+  signum (Nat _) = 1
+
+  fromInteger r | r >= 0 = Nat r
+                | otherwise = error "internal: Natural numbers must be non-negative."
+
+instance Enum Nat where
+  succ (Nat x) = Nat (succ x)
+  pred (Nat 0) = error "Natural 0 has not predecessor."
+  pred (Nat x) = Nat (pred x)
+
+  toEnum   = fromIntegral
+  fromEnum = fromIntegral
+
+  enumFrom       (Nat x)                 = Nat <$> enumFrom x
+  enumFromThen   (Nat x) (Nat y)         = Nat <$> enumFromThen x y
+  enumFromTo     (Nat x)         (Nat z) = Nat <$> enumFromTo x z
+  enumFromThenTo (Nat x) (Nat y) (Nat z) = Nat <$> enumFromThenTo x y z
+
+
+instance Real Nat where
+  toRational (Nat x) = toRational x
+
+instance Integral Nat where
+  Nat x `quotRem` Nat y | y == 0 = error "Nat division by zero."
+                        | otherwise = (Nat q, Nat r)
+    where (q,r) = x `quotRem` y
+  divMod = quotRem
+  toInteger (Nat x) = x  
+
 -- data Fin :: (n :: Nat) -> sort 0 where {
 --     FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
 --   }
-data Fin = FinVal !Int !Int
-    deriving Show
+data Fin = FinVal { finVal :: !Nat, finRem :: Nat }
+    deriving (Eq, Show)
+
+finFromBound :: Nat -> Nat -> Fin
+finFromBound i n
+  | i < n = FinVal i (pred (n - i))
+  | otherwise = error "finFromBound given out-of-range index."
+                                                                                  
+finSize :: Fin -> Nat
+finSize (FinVal x r) = succ (r + x)
+
+incFinBy :: Fin -> Nat -> Maybe Fin
+incFinBy x y
+   | r' < 0 = Nothing
+   | otherwise = Just x'
+ where r' = toInteger (finRem x) - toInteger y
+       x' = FinVal (finVal x + y) (fromInteger r')
+
+instance Enum Fin where
+  succ (FinVal _ 0) = error "FinVal has no successor."
+  succ (FinVal x r) = FinVal (succ x) (pred r)
+  pred (FinVal 0 _) = error "FinVal has no predecessor."
+  pred (FinVal x r) = FinVal (pred x) (succ r)
+  toEnum x = FinVal (toEnum x) (error "FinVal.toEnum has no bound.")
+  fromEnum = fromEnum . finVal
+  enumFrom x | finRem x == 0 = [x]
+             | otherwise = x : enumFrom (succ x)
+
+  enumFromThen x y =
+    case incFinBy x (finVal y) of
+      Nothing -> [x]
+      Just x' -> x : enumFromThen x' y
+ 
+  enumFromTo x z = enumFromThenTo x (FinVal 1 (finSize x)) z
+
+  enumFromThenTo x0 y z =
+      assert (finSize x0 == finSize z) $
+      assert (finVal x0 <= finVal z) $
+      go x0
+    where go x = case incFinBy x (finVal y) of
+                   Nothing -> [x]
+                   Just x' -> x : go x'
 
 -- data Vec :: (n :: Nat) -> sort 0 -> sort 0
 data Vec t a = Vec t !(Vector a)
@@ -54,24 +145,22 @@ addNat :: Integer -> Integer -> Integer
 addNat = (+)
 
 -- finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n);
--- FIXME: Is this really necessary?
-finInc :: Int -> Int -> Fin -> Fin
+finInc :: Nat -> Nat -> Fin -> Fin
 finInc i _n (FinVal l r) = FinVal (i + l) r
   -- ^ Precondition: n == l + r + 1
 
 -- finIncLim :: (n :: Nat) -> (m :: Nat) -> Fin m -> Fin (addNat m n);
--- FIXME: Is this really necessary?
-finIncLim :: Int -> Int -> Fin -> Fin
+finIncLim :: Nat -> Nat -> Fin -> Fin
 finIncLim n _m (FinVal l r) = FinVal l (r + n)
   -- ^ Precondition: m == l + r + 1
 
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
-generate :: Int -> () -> (Fin -> a) -> Vector a
-generate n _ f = V.generate n (\i -> f (FinVal i (n-1 - i)))
+generate :: Nat -> () -> (Fin -> a) -> Vector a
+generate n _ f = V.generate (fromEnum n) (\i -> f (finFromBound (fromIntegral i) n))
 
 -- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
 get :: Int -> t -> Vec t e -> Fin -> e
-get _ _ (Vec _ v) (FinVal i _) = (V.!) v i
+get _ _ (Vec _ v) i = v V.! fromEnum i
 
 -- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 append :: Int -> Int -> t -> Vec t e -> Vec t e -> Vec t e
@@ -114,7 +203,7 @@ bvsle _ x y = signed x <= signed y
 -- | @get@ specialized to BitVector
 -- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
 get_bv :: Int -> () -> BitVector -> Fin -> Bool
-get_bv _ _ x (FinVal i _) = testBit (unsigned x) i
+get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
 -- ^ Assuming little-endian order
 
 -- | @append@ specialized to BitVector
@@ -163,7 +252,7 @@ bvSShr _ x i = bv (width x) (signed x `shiftR` i)
 
 -- bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
 bvMbit :: Int -> BitVector -> Fin -> Bool
-bvMbit _ (BV _ x) (FinVal i _) = testBit x i
+bvMbit _ (BV _ x) i = testBit x (fromEnum i)
 
 -- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
 bvTrunc :: Int -> Int -> BitVector -> BitVector

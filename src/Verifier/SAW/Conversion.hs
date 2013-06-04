@@ -48,7 +48,6 @@ module Verifier.SAW.Conversion
   , asFinValLit
   , asSuccLit
   , asBvNatLit
-  , asSignedBvNatLit
     -- ** Matchable typeclass
   , Matchable(..)
     -- ** TermBuilder
@@ -80,7 +79,6 @@ module Verifier.SAW.Conversion
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
-import Control.Exception (assert)
 import Control.Monad (ap, liftM, liftM2, unless, (<=<))
 import Data.Bits
 import Data.Map (Map)
@@ -249,8 +247,8 @@ asSort s = Matcher (termToPat (Term (FTermF (Sort s)))) fn
                   unless (s == s') $ fail "Does not matched expected sort."
             
 -- | Match a Nat literal
-asAnyNatLit :: (Termlike t, Monad m) => Matcher m t Integer
-asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
+asAnyNatLit :: (Termlike t, Monad m) => Matcher m t Prim.Nat
+asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
 
 -- | Match a Vec literal
 asAnyVecLit :: (Termlike t, Monad m) => Matcher m t (t, V.Vector t)
@@ -270,36 +268,25 @@ asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
 asBoolType :: (Monad m, Termlike t) => Matcher m t ()
 asBoolType = asDataType "Prelude.Bool" asEmpty
 
-asFinValLit :: (Functor m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
-asFinValLit = (\(i :*: j) -> (i,j))
+asFinValLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Fin
+asFinValLit = (\(i :*: j) -> Prim.FinVal i j)
   <$> asCtor "Prelude.FinVal" (asAnyNatLit >: asAnyNatLit) 
 
-asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Integer
+asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
-bitMask :: Integer -> Integer
-bitMask n = bit (fromInteger n) - 1
+bitMask :: Prim.Nat -> Integer
+bitMask n = bit (fromIntegral n) - 1
 
-asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t (Integer, Integer)
+asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Prim.BitVector
 asBvNatLit =
-  (\(_ :*: n :*: x) -> (n, x .&. bitMask n)) <$>
+  (\(_ :*: n :*: x) -> Prim.bv (fromIntegral n) (toInteger x)) <$>
     (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
-
-normSignedBV :: Int -> Integer -> Integer
-normSignedBV n x | testBit x n = x' - bit (n+1)
-                 | otherwise   = x'
-  where mask = bit (n+1) - 1
-        x' = x .&. mask
 
 checkedIntegerToNonNegInt :: Monad m => Integer -> m Int
 checkedIntegerToNonNegInt x 
   | 0 <= x && x <= toInteger (maxBound :: Int) = return (fromInteger x)
   | otherwise = fail "match out of range"
-
-asSignedBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Integer
-asSignedBvNatLit =
-   (\(_ :*: n :*: x) -> normSignedBV (fromInteger n) x)
-    <$> (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
 
 ----------------------------------------------------------------------
 -- Matchable
@@ -313,19 +300,20 @@ instance Applicative m => Matchable m t () where
 instance Applicative m => Matchable m t t where
     defaultMatcher = asAny
 
-instance (Monad m, Termlike t) => Matchable m t Integer where
+instance (Monad m, Termlike t) => Matchable m t Prim.Nat where
     defaultMatcher = asAnyNatLit
 
+instance (Functor m, Monad m, Termlike t) => Matchable m t Integer where
+    defaultMatcher = toInteger <$> asAnyNatLit
+
 instance (Monad m, Termlike t) => Matchable m t Int where
-    defaultMatcher = thenMatcher asAnyNatLit checkedIntegerToNonNegInt
+    defaultMatcher = thenMatcher asAnyNatLit (checkedIntegerToNonNegInt . toInteger)
 
 instance (Applicative m, Monad m, Termlike t) => Matchable m t Prim.BitVector where
-    defaultMatcher =
-        (\(w, x) -> Prim.BV (fromInteger w) x) <$> asBvNatLit
+    defaultMatcher = asBvNatLit
 
 instance (Functor m, Monad m, Termlike t) => Matchable m t Prim.Fin where
-    defaultMatcher =
-      (\(i, j) -> Prim.FinVal (fromInteger i) (fromInteger j)) <$> asFinValLit
+    defaultMatcher = asFinValLit
 
 instance (Functor m, Monad m, Termlike t) => Matchable m t (Prim.Vec t t) where
     defaultMatcher = uncurry Prim.Vec <$> asAnyVecLit
@@ -357,8 +345,8 @@ mkBool b = mkTermF (FTermF (CtorApp idSym []))
   where idSym | b = "Prelude.True" 
               | otherwise = "Prelude.False"
 
-mkNatLit :: Integer -> TermBuilder t t
-mkNatLit n = mkTermF (FTermF (NatLit n))
+mkNatLit :: Prim.Nat -> TermBuilder t t
+mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
 
 mkVecLit :: t -> V.Vector t -> TermBuilder t t
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
@@ -366,20 +354,20 @@ mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 mkTuple :: [t] -> TermBuilder t t
 mkTuple l = mkTermF (FTermF (TupleValue l))
 
-mkFinVal :: Integer -> Integer -> TermBuilder t t
-mkFinVal i j =
+mkFinVal :: Prim.Fin -> TermBuilder t t
+mkFinVal (Prim.FinVal i j) =
     do i' <- mkNatLit i
        j' <- mkNatLit j
        mkTermF (FTermF (CtorApp "Prelude.FinVal" [i', j']))
 
-mkBvNat :: Integer -> Integer -> TermBuilder t t
-mkBvNat n x = assert (n >= 0) $
-    do n' <- mkNatLit n
-       x' <- mkNatLit (x .&. bitMask n)
-       t0 <- mkTermF (FTermF (GlobalDef "Prelude.bvNat"))
-       t1 <- mkTermF (FTermF (App t0 n'))
-       t2 <- mkTermF (FTermF (App t1 x'))
-       return t2
+mkBvNat :: Prim.Nat -> Integer -> TermBuilder t t
+mkBvNat n x = do
+  n' <- mkNatLit n
+  x' <- mkNatLit (fromInteger (x .&. bitMask n))
+  t0 <- mkTermF (FTermF (GlobalDef "Prelude.bvNat"))
+  t1 <- mkTermF (FTermF (App t0 n'))
+  t2 <- mkTermF (FTermF (App t1 x'))
+  return t2
 
 class Buildable t a where
     defaultBuilder :: a -> TermBuilder t t
@@ -391,10 +379,10 @@ instance Buildable t Bool where
     defaultBuilder = mkBool
 
 instance Buildable t Integer where
-    defaultBuilder = mkNatLit
+    defaultBuilder = mkNatLit . fromInteger
 
 instance Buildable t Int where
-    defaultBuilder = mkNatLit . toInteger
+    defaultBuilder = mkNatLit . fromIntegral
 
 instance (Buildable t a, Buildable t b) => Buildable t (a, b) where
     defaultBuilder (x, y) = do
@@ -403,13 +391,13 @@ instance (Buildable t a, Buildable t b) => Buildable t (a, b) where
       mkTuple [a, b]
 
 instance Buildable t Prim.Fin where
-    defaultBuilder (Prim.FinVal i j) = mkFinVal (toInteger i) (toInteger j)
+    defaultBuilder = mkFinVal
 
 instance Buildable t (Prim.Vec t t) where
     defaultBuilder (Prim.Vec t v) = mkVecLit t v
 
 instance Buildable t Prim.BitVector where
-    defaultBuilder (Prim.BV w x) = mkBvNat (toInteger w) x
+    defaultBuilder (Prim.BV w x) = mkBvNat (fromIntegral w) x
 
 ----------------------------------------------------------------------
 -- Conversions

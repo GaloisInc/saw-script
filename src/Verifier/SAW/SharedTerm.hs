@@ -244,7 +244,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           ltp <- sort tp
           rtp <- sort rhs
           lift $ scSort sc (max ltp rtp)
-        Let defs rhs -> undefined defs rhs
+        Let defs rhs -> error "scTypeOf Let" defs rhs
         LocalVar _ tp -> return tp
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
