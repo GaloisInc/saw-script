@@ -43,6 +43,7 @@ module Verifier.SAW.Conversion
   , asAnyVecLit
   , asAnyFloatLit
   , asAnyDoubleLit
+  , asExtCns
     -- ** Prelude matchers
   , asBoolType
   , asFinValLit
@@ -261,6 +262,10 @@ asAnyFloatLit = asVar $ \t -> do FloatLit i <- R.asFTermF t; return i
 -- | Match a Double literal
 asAnyDoubleLit :: (Termlike t, Monad m) => Matcher m t Double
 asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
+
+-- | Match any external constant.
+asExtCns :: (Termlike t, Monad m) => Matcher m t (ExtCns t)
+asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
 
 ----------------------------------------------------------------------
 -- Prelude matchers

@@ -142,7 +142,7 @@ instance Show ModuleName where
 -- | Crete a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [String] -> ModuleName
-mkModuleName [] = error "internal: Unexpected empty module name"
+mkModuleName [] = error "internal: mkModuleName given empty module name"
 mkModuleName nms = assert (all isCtor nms) $ ModuleName (BS.fromString s)
   where s = intercalate "." (reverse nms)
 
@@ -179,13 +179,14 @@ mkIdent = Ident
 parseIdent :: String -> Ident
 parseIdent s0 = 
     case reverse (breakEach s0) of
+      (_:[]) -> internalError $ "parseIdent given empty module name."
       (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
       _ -> internalError $ "parseIdent given bad identifier " ++ show s0
   where breakEach s =
           case break (=='.') s of
             (h,[]) -> [h]
             (h,'.':r) -> h : breakEach r
-            _ -> internalError "breakEach failed"
+            _ -> internalError "parseIdent.breakEach failed"
 
 instance IsString Ident where
   fromString = parseIdent

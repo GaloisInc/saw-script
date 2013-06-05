@@ -11,6 +11,7 @@ module Verifier.SAW.SharedTerm
   ( TermF(..)
   , Ident, mkIdent
   , VarIndex
+  , ExtCns(..)
     -- * Shared terms
   , SharedTerm(..)
   , TermIndex
