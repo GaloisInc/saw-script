@@ -276,7 +276,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
         FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
-        ExtCns{}    -> error "scTypeOf ExtCns"
+        ExtCns ec   -> return $ ecType ec
 
 -- | The inverse function to @sharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
@@ -295,9 +295,11 @@ unshare t0 = State.evalState (go t0) Map.empty
 instance Show (SharedTerm s) where
   show = show . unshare
 
+{-
 sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
 sharedTerm ref = go
     where go (Term termf) = getTerm ref =<< traverse go termf
+-}
 
 scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
