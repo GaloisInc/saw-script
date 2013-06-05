@@ -1,6 +1,0 @@
-record_bag = { 
-  cys = '000; 
-  his = '001; 
-  arg = '010; 
-  tyr = '011; 
-  gln = '100 }
