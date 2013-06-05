@@ -48,6 +48,7 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
+  , scVector
   , scTermCount
   , scPrettyTerm
   , scPrettyTermDoc
@@ -58,7 +59,9 @@ module Verifier.SAW.SharedTerm
   , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend
+  , scGet
   , scIte
+  , scSingle
   , scSlice
     -- *** Bitvector primitives
   , scBitvector
@@ -443,6 +446,9 @@ scNat sc n
   | 0 <= n = scFlatTermF sc (NatLit n)
   | otherwise = error $ "scNat: negative value " ++ show n
 
+scVector :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
+scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
+
 scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scMkRecord sc m = scFlatTermF sc (RecordValue m)
 
@@ -578,6 +584,16 @@ scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 scSlice :: SharedContext s -> SharedTerm s -> SharedTerm s ->
            SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
+
+-- | get :: (n :: Nat) -> (e :: sort 1) -> Vec n e -> Fin n -> e;
+scGet :: SharedContext s -> SharedTerm s -> SharedTerm s ->
+         SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
+
+-- | single :: (e :: sort 1) -> e -> Vec 1 e;
+-- single e x = generate 1 e (\(i :: Fin 1) -> x);
+scSingle :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
 
 -- Primitive operations on bitvectors
 
