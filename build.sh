@@ -1,3 +1,6 @@
+#!/bin/sh
+set -e
+
 cabal-dev install --force-reinstalls ../../abcBridge
 cabal-dev install --force-reinstalls ../../jvm-parser
 cabal-dev install --force-reinstalls ../../llvm-pretty
