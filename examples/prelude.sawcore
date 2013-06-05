@@ -31,6 +31,39 @@ data List :: sort 0 -> sort 0 where { }
 topBind :: (a b :: sort 0) -> TopLevel a -> (a -> TopLevel b) -> TopLevel b;
 topReturn :: (a :: sort 0) -> a -> TopLevel a;
 
+-- A type to represent SAWCore shared terms.
+data Term :: sort 0 where { }
+
+termApp :: Term -> Term -> TopLevel Term;
+termGlobal :: String -> TopLevel Term;
+termNat :: Nat -> TopLevel Term;
+termTuple :: (n :: Nat) -> Vec n Term -> TopLevel Term;
+bvNatIdent :: String;
+-- TODO: add more term constructors
+
+termBvNat :: Nat -> Nat -> TopLevel Term;
+termBvNat w x =
+  topBind Term Term (termGlobal bvNatIdent) (\(t0::Term) ->
+  topBind Term Term (termNat w) (\(t1::Term) ->
+  topBind Term Term (termApp t0 t1) (\(t2::Term) ->
+  topBind Term Term (termNat x) (\(t3::Term) ->
+  termApp t2 t3))));
+
+evaluate :: (a :: sort 0) -> Term -> a;
+loadSBV :: String -> TopLevel Term;
+
+p384_safe_product_path :: String;
+
+test :: TopLevel #();
+test =
+  topBind Term #() (loadSBV p384_safe_product_path) (\(t0::Term) ->
+  topBind Term #() (termBvNat 384 111) (\(t1::Term) ->
+  topBind Term #() (termBvNat 384 111111) (\(t2::Term) ->
+  topBind Term #() (termTuple 2 [t1, t2]) (\(t3::Term) ->
+  topBind Term #() (termApp t0 t3) (\(t4::Term) ->
+  topBind #() #() (print Term t4) (\(_ :: #()) ->
+  print (bitvector 768) (evaluate (bitvector 768) t4)))))));
+
 -- A VerifyResult encodes either a statement of what it proved, or a
 -- counterexample. These work like the method specs in the first version
 -- of SAWScript.
@@ -41,9 +74,9 @@ verify_java :: String -> JavaSetup #() -> TopLevel JavaVerifyResult;
 
 -- Extract pure models from suitably well-structured programs. We assume
 -- that these are well-typed, and check at runtime.
-extract_cryptol :: ?(a :: sort 0) -> String -> String -> CryptolSetup #() -> TopLevel a;
-extract_llvm :: ?(a :: sort 0) -> String -> String -> LLVMSetup #() -> TopLevel a;
-extract_java :: ?(a :: sort 0) -> String -> JavaSetup #() -> TopLevel a;
+extract_cryptol :: String -> String -> CryptolSetup #() -> TopLevel Term;
+extract_llvm :: String -> String -> LLVMSetup #() -> TopLevel Term;
+extract_java :: String -> JavaSetup #() -> TopLevel Term;
 
 -- One method is currently available for Cryptol extraction.
 sbv :: CryptolSetup #();
@@ -74,18 +107,18 @@ llvm_uninterpret :: List String -> LLVMSetup #();
 
 -- State that the current function returns the given value. We assume,
 -- again, that the argument is of the right type, and check at runtime.
-java_return :: ?(a :: sort 0) -> a -> JavaSetup #();
-llvm_return :: ?(a :: sort 0) -> a -> LLVMSetup #();
+java_return :: Term -> JavaSetup #();
+llvm_return :: Term -> LLVMSetup #();
 
 -- Declare that the particular expression is an output, for model
 -- extraction.
-java_output :: ?(a :: sort 0) -> a -> JavaSetup #();
-llvm_output :: ?(a :: sort 0) -> a -> LLVMSetup #();
+java_output :: Term -> JavaSetup #();
+llvm_output :: Term -> LLVMSetup #();
 
 -- Declare that the particular expression is an input, for model
 -- extraction.
-java_input :: ?(a :: sort 0) -> a -> JavaSetup #();
-llvm_input :: ?(a :: sort 0) -> a -> LLVMSetup #();
+java_input :: Term -> JavaSetup #();
+llvm_input :: Term -> LLVMSetup #();
 
 -- Assert a particular starting condition.
 assert_java :: Bool -> JavaSetup #();
@@ -95,13 +128,13 @@ data JavaObject :: sort 0 where { }
 data LLVMObject :: sort 0 where { }
 
 -- Assign the given value to the given object before execution.
-assume_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup #();
-assume_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup #();
+assume_equal_java :: JavaObject -> Term -> JavaSetup #();
+assume_equal_llvm :: LLVMObject -> Term -> LLVMSetup #();
 
 -- Ensure that the given object is assigned the given value on
 -- termination.
-ensure_equal_java :: ?(a :: sort 0) -> JavaObject -> a -> JavaSetup #();
-ensure_equal_llvm :: ?(a :: sort 0) -> LLVMObject -> a -> LLVMSetup #();
+ensure_equal_java :: JavaObject -> Term -> JavaSetup #();
+ensure_equal_llvm :: LLVMObject -> Term -> LLVMSetup #();
 
 -- Java and LLVM statements that a particular object is modified with
 -- an arbitrary value.
@@ -150,8 +183,8 @@ may_alias_java :: List JavaObject -> LLVMSetup #();
 
 -- This allows us to project from an LLVM value into a native value.
 -- We assume that these are well-typed, and check at runtime.
-from_llvm :: ?(a :: sort 0) -> LLVMObject -> a;
-from_java :: ?(a :: sort 0) -> JavaObject -> a;
+from_llvm :: LLVMObject -> Term;
+from_java :: JavaObject -> Term;
 
 -- Send the current goal to Yices, and return proof status.
 yices :: ProofScript ProofResult;
@@ -189,9 +222,10 @@ exists :: ?(a :: sort 0) -> (a -> Goal) -> Goal;
 --   forall (\a -> exists (\b -> goal (a == b)))
 
 -- Top level proof commands.
-prove :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
-sat :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
-quickcheck :: Goal -> ProofScript ProofResult -> TopLevel ProofResult;
+-- Term arguments should have type Goal.
+prove :: Term -> ProofScript ProofResult -> TopLevel ProofResult;
+sat :: Term -> ProofScript ProofResult -> TopLevel ProofResult;
+quickcheck :: Term -> ProofScript ProofResult -> TopLevel ProofResult;
 
 -- Printing is polymorphic for now.
 print :: ?(a :: sort 0) -> a -> TopLevel #();
