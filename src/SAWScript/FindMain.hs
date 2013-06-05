@@ -4,8 +4,6 @@ module SAWScript.FindMain where
 import SAWScript.Compiler
 import SAWScript.AST
 
-import Control.Monad
-
 -- errMsgs
 
 noMainErr :: Err a

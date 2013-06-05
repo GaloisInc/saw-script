@@ -9,7 +9,6 @@ import SAWScript.Compiler
 
 import Control.Applicative
 import Control.Monad.Trans.Reader
-import Data.List
 import Data.Monoid
 import Data.Foldable
 import Data.Traversable hiding (mapM)

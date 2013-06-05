@@ -4,7 +4,7 @@
 
 module SAWScript.TypeCheck where
 
-import SAWScript.Compiler (Compiler (..), compiler)
+import SAWScript.Compiler (Compiler, compiler)
 
 import SAWScript.AST
 import SAWScript.Unify
@@ -12,18 +12,14 @@ import SAWScript.Unify
 import SAWScript.LiftPoly (instantiateType,Lifted(..))
 
 import Control.Applicative
-import Control.Arrow
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
 import Control.Monad
 
-import Data.List
 import Data.Monoid
 import Data.Maybe
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
-
-import qualified Debug.Trace as Debug
 
 typeCheck :: Compiler Lifted (Module LType)
 typeCheck = compiler "TypeCheck" $ \(Lifted m gen env) ->

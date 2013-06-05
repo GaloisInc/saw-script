@@ -11,12 +11,12 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.State
 import Data.Either
-import Data.List
 import qualified Data.Traversable as T
 
 convertType :: Compiler (Module LType) (Module' PType Type)
 convertType = groundType >=> defixType >=> removeEither >=> reifyDeclarations
 
+varNames :: [String]
 varNames = drop 1 (("" : names') ++ ((++) <$> varNames <*> names'))
   where
   names' = [ [c] | c <- ['a'..'z'] ]
@@ -106,6 +106,7 @@ data ReifyState = ReifyState
   , reifyEnv :: [(Index,PType)]
   }
 
+initRState :: ReifyState
 initRState = ReifyState
   { reifyGen = varNames
   , reifyEnv = []

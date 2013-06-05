@@ -10,14 +10,9 @@ import SAWScript.Unify
 
 import Prelude hiding (mapM)
 import Control.Applicative
-import Control.Arrow
-import Control.Monad
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Either
 
-import Data.List
 import Data.Monoid
-import Data.Foldable
 import Data.Traversable
 
 import qualified Text.Show.Pretty as PP
@@ -45,6 +40,8 @@ instance Monoid LSEnv where
 -- }}}
 
 type LS = StateT LSEnv (GoalM LType)
+
+evalLS :: LS a -> GoalM LType (a, LSEnv)
 evalLS = flip runStateT initLSEnv
 
 data Lifted = Lifted
@@ -67,6 +64,7 @@ getStream (Module mname ds mn) = flip runGoal initGState $ evalLS $
 evalStream :: Stream ((Module LType, LSEnv), (Int, Subst LType)) -> Either [String] [Lifted]
 evalStream = fromStream Nothing Nothing . fmap getModuleGen
 
+getModuleGen :: ((Module LType, LSEnv), (Int, Subst LType)) -> Lifted
 getModuleGen ((m,e),(g,_)) = Lifted m g $ polyEnv e
 
 buildEnv :: TopStmt MPType -> LSEnv
