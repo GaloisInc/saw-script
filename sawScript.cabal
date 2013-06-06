@@ -77,4 +77,3 @@ executable saw
     , transformers
     , sawScript
     , saw-core
-    , unix
