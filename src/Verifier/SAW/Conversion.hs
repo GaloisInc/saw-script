@@ -16,12 +16,13 @@ module Verifier.SAW.Conversion
   , Termlike
     -- * Matcher
   , Matcher
+  , matcherPat
   , runMatcher
   , thenMatcher
   , asVar
   , asAny
     -- ** Matcher arguments
-  , ArgsMatcher
+  , ArgsMatcher(..)
   , ArgsMatchable
   , asEmpty
   , (>:)
@@ -80,7 +81,7 @@ module Verifier.SAW.Conversion
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
-import Control.Monad (ap, liftM, liftM2, unless, (<=<))
+import Control.Monad (ap, liftM, liftM2, unless, (>=>), (<=<))
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Vector as V
@@ -128,34 +129,40 @@ asAny = asVar pure
 infixl 8 <:>
 
 -- | Match a list of terms as arguments to a term.
-data ArgsMatcher m t a = ArgsMatcher [Net.Pat] ([t] -> m a)
+-- Note that the pats and arguments are in reverse order.
+data ArgsMatcher m t a = ArgsMatcher [Net.Pat] ([t] -> m (a,[t]))
 
 class ArgsMatchable v m t a where
   defaultArgsMatcher :: v m t a -> ArgsMatcher m t a
 
 instance Monad m => ArgsMatchable Matcher m t a where
   defaultArgsMatcher (Matcher p f) = ArgsMatcher [p] match
-    where match [h] = f h
+    where match (h:r) = do v <- f h; return (v,r)
           match [] = fail "empty"
-          match _ = fail "not singleton"
 
 instance ArgsMatchable ArgsMatcher m t a where
   defaultArgsMatcher = id
 
+consArgsMatcher :: (Monad m) => ArgsMatcher m t a -> Matcher m t b -> ArgsMatcher m t (a :*: b)
+consArgsMatcher (ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (pl ++ [p]) match
+  where match l = do
+          (a,l1) <- f l
+          case l1 of
+            (h:l2) -> do b <- g h; return (a :*: b, l2)
+            [] ->  fail "empty"
+
 infixl 9 >:
 
 asEmpty :: (Monad m) => ArgsMatcher m t ()
-asEmpty = ArgsMatcher [] match
-  where match l | null l = return ()
-                | otherwise = fail "not empty"
+asEmpty = ArgsMatcher [] (\l -> return ((),l))
 
 (>:) :: (Monad m, ArgsMatchable v m t a) => v m t a -> Matcher m t b -> ArgsMatcher m t (a :*: b)
-(>:) (defaultArgsMatcher -> ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (p:pl) match
-  where match (h:l) = liftM2 (:*:) (f l) (g h)
-        match [] = fail "empty"
+(>:) = consArgsMatcher . defaultArgsMatcher
 
-runArgsMatcher :: ArgsMatcher m t a -> [t] -> m a
-runArgsMatcher (ArgsMatcher _ f) = f . reverse
+runArgsMatcher :: Monad m => ArgsMatcher m t a -> [t] -> m a
+runArgsMatcher (ArgsMatcher _ f) l = do
+  (v,[]) <- f l
+  return v
  
 -- | Produces a matcher from an ArgsMatcher and a matcher that yields
 -- subterms.
@@ -164,9 +171,8 @@ resolveArgs :: (Monad m, ArgsMatchable v m t a)
             => Matcher m t [t] 
             -> v m t a
             -> Matcher m t a
-resolveArgs (Matcher p m) (defaultArgsMatcher -> ArgsMatcher pl f)
-    = Matcher (foldl Net.App p (reverse pl))
-              (f . reverse <=< m)
+resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
+  Matcher (foldl Net.App p pl) (m >=> runArgsMatcher args)
 
 ----------------------------------------------------------------------
 -- Term matchers
