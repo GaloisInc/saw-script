@@ -1,0 +1,24 @@
+type ProofResult = ();
+type Model = Int;
+
+//cryptol_extract : {a} String -> String -> CryptolSetup () -> TopLevel a;
+cryptol_extract : String -> String -> CryptolSetup () -> TopLevel Model;
+sbv : CryptolSetup ();
+
+//llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
+llvm_extract : String -> String -> LLVMSetup () -> TopLevel Model;
+llvm_pure : LLVMSetup ();
+
+//prove_equal : {a} ProofScript ProofResult -> a -> a -> TopLevel ProofResult;
+prove_equal : ProofScript ProofResult -> Model -> Model -> TopLevel ProofResult;
+
+abc : ProofScript ProofResult;
+
+print : {a} a -> TopLevel ();
+
+main = do {
+  ffs_ref <- llvm_extract "ffs.bc" "ffs_ref" llvm_pure;
+  ffs_imp <- llvm_extract "ffs.bc" "ffs_imp" llvm_pure;
+  ffs_res <- prove_equal abc ffs_ref ffs_imp;
+  print ffs_res;
+};

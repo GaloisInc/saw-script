@@ -1,0 +1,29 @@
+type ProofResult = ();
+type Model = Int;
+
+//cryptol_extract : {a} String -> String -> CryptolSetup () -> TopLevel a;
+cryptol_extract : String -> String -> CryptolSetup () -> TopLevel Model;
+sbv : CryptolSetup ();
+
+//llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
+llvm_extract : String -> String -> LLVMSetup () -> TopLevel Model;
+llvm_pure : LLVMSetup ();
+
+//prove_equal : {a} ProofScript ProofResult -> a -> a -> TopLevel ProofResult;
+prove_equal : ProofScript ProofResult -> Model -> Model -> TopLevel ProofResult;
+
+abc : ProofScript ProofResult;
+
+print : {a} a -> TopLevel ();
+
+main = do {
+
+  cryptol_Ch <- cryptol_extract "SHA384.cry" "Ch" sbv;
+
+  llvm_Ch <- llvm_extract "sha384.bc" "Ch" llvm_pure;
+
+  //ch_res_llvm <- prove_equal abc cryptol_Ch llvm_Ch;
+
+  print cryptol_Ch;
+  print "Done.";
+};
