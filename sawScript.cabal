@@ -37,7 +37,7 @@ library
     SAWScript.Compiler
     SAWScript.ConvertType
     SAWScript.Execution
-    SAWScript.FindMain
+    --SAWScript.FindMain
     SAWScript.Import
     SAWScript.Lexer
     SAWScript.LiftPoly
