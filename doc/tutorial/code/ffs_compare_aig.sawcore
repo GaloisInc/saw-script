@@ -1,0 +1,9 @@
+main :: TopLevel Unit
+main =
+  bind (load_aig "java_ffs_ref.aig") (\java_ffs_ref ->
+  bind (load_aig "java_ffs_imp.aig") (\java_ffs_imp ->
+  bind (load_aig "c_ffs_ref.aig") (\c_ffs_ref ->
+  bind (load_aig "c_ffs_imp.aig") (\c_ffs_imp ->
+  bind (prove_equal abc java_ffs_ref java_ffs_imp) (\java_res ->
+  bind (prove_equal abc c_ffs_ref c_ffs_im) (\pc_res ->
+  bind (print java_res_) (\_ -> print c_res)))))));
