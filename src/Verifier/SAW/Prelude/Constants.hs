@@ -22,3 +22,6 @@ preludeFloatIdent =  mkIdent preludeModuleName "Float"
 
 preludeDoubleIdent :: Ident
 preludeDoubleIdent =  mkIdent preludeModuleName "Double"
+
+preludeStringIdent :: Ident
+preludeStringIdent =  mkIdent preludeModuleName "String"

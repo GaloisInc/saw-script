@@ -280,6 +280,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
         FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
+        StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
 -- | The inverse function to @sharedTerm@.

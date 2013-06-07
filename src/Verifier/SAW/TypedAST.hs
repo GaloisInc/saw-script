@@ -411,6 +411,8 @@ data FlatTermF e
   | FloatLit !Float
     -- | Double precision floating point literal.
   | DoubleLit !Double
+    -- | String literal.
+  | StringLit !String
 
     -- | An external constant with a name.
   | ExtCns !(ExtCns e)
@@ -603,6 +605,7 @@ ppFlatTermF pp prec tf =
     ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp PrecComma) (V.toList vl)
     FloatLit v  -> pure $ text (show v)
     DoubleLit v -> pure $ text (show v)
+    StringLit s -> pure $ text (show s)
     ExtCns (EC _ v _) -> pure $ text v
 
 newtype Term = Term (TermF Term)
