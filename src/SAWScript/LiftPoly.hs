@@ -20,14 +20,14 @@ import qualified Text.Show.Pretty as PP
 -- LSEnv {{{
 
 data LSEnv = LSEnv
-  { polyEnv :: [(Name,GoalM LType LType)]
-  , monoEnv :: [(Name,LType)]
+  { polyEnv :: [(Name,GoalM TCheckT TCheckT)]
+  , monoEnv :: [(Name,TCheckT)]
   } deriving (Show)
 
-polyPair :: Name -> GoalM LType LType -> LSEnv
+polyPair :: Name -> GoalM TCheckT TCheckT -> LSEnv
 polyPair n g = LSEnv [(n,g)] []
 
-monoPair :: Name -> LType -> LSEnv
+monoPair :: Name -> TCheckT -> LSEnv
 monoPair n t = LSEnv [] [(n,t)]
 
 initLSEnv :: LSEnv
@@ -39,41 +39,41 @@ instance Monoid LSEnv where
 
 -- }}}
 
-type LS = StateT LSEnv (GoalM LType)
+type LS = StateT LSEnv (GoalM TCheckT)
 
-evalLS :: LS a -> GoalM LType (a, LSEnv)
+evalLS :: LS a -> GoalM TCheckT (a, LSEnv)
 evalLS = flip runStateT initLSEnv
 
 data Lifted = Lifted
-  { liftedModule :: Module LType
+  { liftedModule :: ModuleSimple TCheckT TCheckT
   , liftedGen    :: Int
-  , liftedEnv    :: [(Name,GoalM LType LType)]
+  , liftedEnv    :: [(Name,GoalM TCheckT TCheckT)]
   } deriving (Show)
 
-liftPoly :: Compiler (Module MPType) Lifted
+liftPoly :: Compiler (ModuleSimple RawT RawT) Lifted
 liftPoly = compiler "LiftPoly" $ \input ->
   case evalStream $ getStream input of
     Left es   -> fail "No possible lifting"
     Right [r] -> return r
     Right rs  -> fail ("Ambiguous lifting:" ++ PP.ppShow rs)
 
-getStream :: Module MPType -> Stream ((Module LType, LSEnv), (Int, Subst LType))
-getStream (Module mname ds mn) = flip runGoal initGState $ evalLS $
-  Module mname <$> traverse saveLPoly ds <*> saveLPoly mn
+getStream :: ModuleSimple RawT RawT -> Stream ((ModuleSimple TCheckT TCheckT, LSEnv), (Int, Subst TCheckT))
+getStream (Module nm ee te ds) = flip runGoal initGState $ evalLS $
+  Module nm <$> traverse saveLPoly ee <*> saveLPoly te <*> pure ds
 
-evalStream :: Stream ((Module LType, LSEnv), (Int, Subst LType)) -> Either [String] [Lifted]
+evalStream :: Stream ((ModuleSimple TCheckT TCheckT, LSEnv), (Int, Subst TCheckT)) -> Either [String] [Lifted]
 evalStream = fromStream Nothing Nothing . fmap getModuleGen
 
-getModuleGen :: ((Module LType, LSEnv), (Int, Subst LType)) -> Lifted
+getModuleGen :: ((ModuleSimple TCheckT TCheckT, LSEnv), (Int, Subst TCheckT)) -> Lifted
 getModuleGen ((m,e),(g,_)) = Lifted m g $ polyEnv e
 
-buildEnv :: TopStmt MPType -> LSEnv
+buildEnv :: TopStmtSimple RawT -> LSEnv
 buildEnv t = case t of
   TopTypeDecl n t -> polyPair n $ instantiateType t
   TopBind n e     -> polyPair n $ instantiateExpr e
   _               -> mempty
 
-saveLPoly :: Traversable f => f MPType -> LS (f LType)
+saveLPoly :: Traversable f => f RawT -> LS (f TCheckT)
 saveLPoly = traverse (saveEnv . fillHoles)
 
 fromAll :: Monoid m => (a -> m) -> [a] -> m
@@ -83,17 +83,17 @@ join2 :: (c -> d -> e) -> (a -> c) -> (b -> d) -> a -> b -> e
 join2 op f g x y = (f x) `op` (g y)
 
 class (Traversable f) => LiftPoly f where
-  lPoly :: f MPType -> LS (f LType)
+  lPoly :: f RawT -> LS (f TCheckT)
   lPoly  = traverse fillHoles
 
---instance LiftPoly Module where
+--instance LiftPoly ModuleSimple where
 --  lPoly = traverse (saveEnv . fillHoles)
-instance LiftPoly TopStmt
-instance LiftPoly BlockStmt
-instance LiftPoly Expr
+instance LiftPoly TopStmtSimple
+instance LiftPoly BlockStmtSimple
+instance LiftPoly ExprSimple
 
 class (Functor f, Traversable f) => Assignable f where
-  assign :: f LType -> LS LType
+  assign :: f TCheckT -> LS TCheckT
 
 instance (Assignable f, Assignable g) => Assignable (f :+: g) where
   assign cp = case cp of
@@ -102,35 +102,37 @@ instance (Assignable f, Assignable g) => Assignable (f :+: g) where
 instance Assignable TypeF where
   assign = return . inject
 instance Assignable Poly where
-  assign (Poly n) = do
-    mt <- gets (lookup n . monoEnv)
-    case mt of
-      Just t  -> return t
-      Nothing -> do
-        x <- newLVarLS
-        extendEnv n x
-        return x
+  assign p = case p of
+    PVar n -> do
+      mt <- gets (lookup n . monoEnv)
+      case mt of
+        Just t  -> return t
+        Nothing -> do
+          x <- newLVarLS
+          extendEnv n x
+          return x
+    PAbs ns t -> PAbs ns <$> fillHoles t
 instance Assignable I where
   assign = return . inject
 
-instantiateType :: PType -> GoalM LType LType
+instantiateType :: RawSigT -> GoalM TCheckT TCheckT
 instantiateType = fmap fst . evalLS . assignVar
 
-instantiateExpr :: Expr MPType -> GoalM LType LType
+instantiateExpr :: ExprSimple RawT -> GoalM TCheckT TCheckT
 instantiateExpr = fmap (typeOf . fst) . evalLS . traverse fillHoles
 
-fillHoles :: MPType -> LS LType
+fillHoles :: RawT -> LS TCheckT
 fillHoles mpt = case mpt of
   Nothing -> newLVarLS
   Just pt -> assignVar pt
 
-assignVar :: PType -> LS LType
+assignVar :: RawSigT -> LS TCheckT
 assignVar = foldMuM assign
 
-newLVarLS :: LS LType
+newLVarLS :: LS TCheckT
 newLVarLS = StateT $ \s -> newLVar >>= \a -> return (a,s)
 
-extendEnv :: Name -> LType -> LS ()
+extendEnv :: Name -> TCheckT -> LS ()
 extendEnv n t = modify (monoPair n t <>)
 
 saveEnv :: LS r -> LS r
