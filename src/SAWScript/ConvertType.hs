@@ -21,12 +21,12 @@ varNames = drop 1 (("" : names') ++ ((++) <$> varNames <*> names'))
 
 -- groundTypeF {{{
 
-groundType :: Compiler (ModuleSimple TCheckT TCheckT) (ModuleSimple FinalT FinalT)
+groundType :: Compiler (ModuleSimple TCheckT TCheckT) (ModuleSimple FullT FullT)
 groundType = compiler "GroundType" $ \(Module nm ee te ds) ->
   Module nm <$> T.traverse (traverseFA groundTypeF) ee <*> traverseFA groundTypeF te <*> pure ds
 
 class Functor f => Groundable f where
-  groundTypeF :: f FinalT -> Err FinalT
+  groundTypeF :: f FullT -> Err FullT
 
 instance (Groundable f, Groundable g) => Groundable (f :+: g) where
   groundTypeF cp = case cp of
@@ -68,7 +68,7 @@ isTyp _ = False
 allTyps :: [Defix] -> Bool
 allTyps = all isTyp
 
-defixType :: Compiler (ModuleSimple FinalT FinalT) (ModuleSimple Defix Defix)
+defixType :: Compiler (ModuleSimple FullT FullT) (ModuleSimple Defix Defix)
 defixType = compiler "DefixType" $ \(Module nm ee te ds) ->
   Module nm <$> T.traverse (traverseFA defixTypeF) ee <*> traverseFA defixTypeF te <*> pure ds
 
