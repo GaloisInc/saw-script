@@ -45,7 +45,7 @@ library
     SAWScript.Parser
     SAWScript.ResolveSyns
     SAWScript.TestEval
-    SAWScript.ToSAWCore
+    --SAWScript.ToSAWCore
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.TypeCheck
