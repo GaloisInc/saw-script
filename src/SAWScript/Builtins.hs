@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ConstraintKinds #-}
-module SAWScript.TestEval where
+module SAWScript.Builtins where
 
 import Control.Applicative
 import qualified Control.Exception as CE

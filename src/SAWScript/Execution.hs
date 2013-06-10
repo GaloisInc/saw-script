@@ -5,7 +5,8 @@ import Verifier.SAW.Evaluator
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
-import SAWScript.TestEval
+
+import SAWScript.Builtins
 
 execSAWCore :: Module -> IO ()
 execSAWCore m =
