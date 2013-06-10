@@ -1,9 +1,51 @@
-main :: TopLevel Unit
+module SAWScriptMain where
+
+data TopLevel :: sort 0 -> sort 0 where { }
+
+topBind :: (a b :: sort 0) -> TopLevel a -> (a -> TopLevel b) -> TopLevel b;
+topReturn :: (a :: sort 0) -> a -> TopLevel a;
+
+data Term :: sort 0 where { }
+
+data String :: sort 0 where { }
+
+loadAIG :: String -> TopLevel Term;
+
+print :: ?(a :: sort 0) -> a -> TopLevel #();
+
+equal :: Term -> Term -> Term;
+
+data ProofScript :: sort 0 -> sort 0 where { }
+data ProofResult :: sort 0 where { }
+
+abc :: ProofScript ProofResult;
+
+prove :: ProofScript ProofResult -> Term -> TopLevel ProofResult;
+
+java_ffs_ref_aig :: String;
+java_ffs_imp_aig :: String;
+c_ffs_ref_aig :: String;
+c_ffs_imp_aig :: String;
+
+main :: TopLevel #();
 main =
-  bind (load_aig "java_ffs_ref.aig") (\java_ffs_ref ->
-  bind (load_aig "java_ffs_imp.aig") (\java_ffs_imp ->
-  bind (load_aig "c_ffs_ref.aig") (\c_ffs_ref ->
-  bind (load_aig "c_ffs_imp.aig") (\c_ffs_imp ->
-  bind (prove_equal abc java_ffs_ref java_ffs_imp) (\java_res ->
-  bind (prove_equal abc c_ffs_ref c_ffs_im) (\pc_res ->
-  bind (print java_res_) (\_ -> print c_res)))))));
+  topBind Term #()
+    (loadAIG java_ffs_ref_aig) (\(java_ffs_ref :: Term) ->
+  print Term java_ffs_ref);
+  {-
+  topBind Term #()
+    (loadAIG java_ffs_imp_aig) (\(java_ffs_imp :: Term) ->
+  topBind Term #()
+    (loadAIG c_ffs_ref_aig) (\(c_ffs_ref :: Term) ->
+  topBind Term #()
+    (loadAIG c_ffs_imp_aig) (\(c_ffs_imp :: Term) ->
+  topBind ProofResult #()
+    (prove abc (equal java_ffs_ref java_ffs_imp))
+    (\(java_res :: ProofResult) ->
+  topBind ProofResult #()
+    (prove abc (equal c_ffs_ref c_ffs_imp))
+    (\(c_res:: ProofResult)  ->
+  topBind #() #()
+    (print ProofResult java_res) (\(blah :: #()) ->
+  print ProofResult c_res)))))));
+  -}
