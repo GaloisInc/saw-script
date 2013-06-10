@@ -13,76 +13,60 @@ import Data.Monoid
 import Data.Foldable
 import Data.Traversable hiding (mapM)
 
-resolveSyns :: Compiler (Module MPType) (Module MPType)
-resolveSyns = compiler "ResolveSyns" $ \m@(Module _ ds _) ->
-  runReaderT (rSyns m) $ buildEnv ds
+resolveSyns :: Compiler (ModuleSimple RawT RawSigT) (ModuleSimple ResolvedT FullT)
+resolveSyns = compiler "ResolveSyns" $ \(Module nm ee te ds) -> evalRS te $ 
+  Module nm <$> traverse (traverse resolve) ee <*> traverse resolveSig te <*> pure ds
 
-liftReader :: (Monad m) => m a -> ReaderT e m a
+type RS = ReaderT RSEnv Err
+type RSEnv = Env RawSigT
+
+evalRS :: RSEnv -> RS a -> Err a
+evalRS e m = runReaderT m e
+
+liftReader :: Err a -> RS a
 liftReader = ReaderT . const
 
--- Env {{{
+failRS :: String -> RS a
+failRS = liftReader . fail
 
-buildEnv :: [TopStmt MPType] -> Env MPType
-buildEnv = foldMap extractSyn
+getSynEnv :: RS RSEnv
+getSynEnv = ask
 
-extractSyn :: TopStmt MPType -> Env MPType
-extractSyn s = case s of
-  TypeDef n pt -> typePair n pt
-  _            -> mempty
+getsSynEnv :: (RSEnv -> a) -> RS a
+getsSynEnv = asks
 
--- }}}
+resolve :: RawT -> RS ResolvedT
+resolve mt = case mt of
+  Nothing -> return Nothing
+  Just t  -> Just <$> resolveSig t
 
-type RS = ReaderT (Env MPType) Err
-
-class ResolveSyns f where
-  rSyns :: f -> RS f
-
-instance ResolveSyns (Module MPType) where
-  rSyns (Module mname ds mn) = Module mname <$> mapM rSyns ds <*> rSyns mn
-
-instance ResolveSyns (TopStmt MPType) where
-  rSyns s = case s of
-    Import n mns mn  -> return (Import n mns mn)
-    TypeDef n pt     -> TypeDef n <$> rSyns pt
-    TopTypeDecl n pt -> TopTypeDecl n <$> rSyns pt
-    TopBind n e      -> TopBind n <$> rSyns e
-
-instance ResolveSyns (BlockStmt MPType) where
-  rSyns s = case s of
-    Bind mn c e        -> Bind mn c <$> rSyns e
-    BlockTypeDecl n pt -> BlockTypeDecl n <$> rSyns pt
-    BlockLet nes       -> let (ns,es) = unzip nes in BlockLet <$> zip ns <$> mapM rSyns es
-
-instance ResolveSyns (Expr MPType) where
-  rSyns = traverse rSyns
-
-instance ResolveSyns MPType where
-  rSyns mpt = case mpt of
-    Nothing -> return Nothing
-    Just pt -> Just <$> rSyns pt
-
-instance ResolveSyns PType where
-  rSyns = foldMuM resolve
+resolveSig :: RawSigT -> RS FullT
+resolveSig = foldMuM resolveF
 
 class Functor f => Resolvable f where
-  resolve :: f PType -> RS PType
+  resolveF :: f FullT -> RS FullT
 
 instance (Resolvable f, Resolvable g) => Resolvable (f :+: g) where
-  resolve cp = case cp of
-    Inl e -> resolve e
-    Inr e -> resolve e
+  resolveF cp = case cp of
+    Inl e -> resolveF e
+    Inr e -> resolveF e
+
+instance Resolvable Syn where
+  resolveF (Syn n) = do
+    found <- getsSynEnv $ lookupEnv n
+    case found of
+      Nothing -> failRS $ "unbound type synonym: " ++ show n
+      Just t  -> resolveSig t
 
 instance Resolvable TypeF where
-  resolve t = case t of
-    Syn n -> do found <- asks $ lookupType n
-                case found of
-                  Nothing -> liftReader $ fail ("unbound type synonym: " ++ show n)
-                  Just pt -> rSyns pt
-    _     -> fmap inject $ traverse rSyns t
+  resolveF = return . inject
+
+instance Resolvable ContextF where
+  resolveF = return . inject
 
 instance Resolvable Poly where
-  resolve = return . inject
+  resolveF = return . inject
 
 instance Resolvable I where
-  resolve = return . inject
+  resolveF = return . inject
 

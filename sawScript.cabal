@@ -37,15 +37,15 @@ library
     SAWScript.Compiler
     SAWScript.ConvertType
     SAWScript.Execution
-    SAWScript.FindMain
-    SAWScript.Import
+    --SAWScript.FindMain
+    --SAWScript.Import
     SAWScript.Lexer
     SAWScript.LiftPoly
     SAWScript.Options
     SAWScript.Parser
     SAWScript.ResolveSyns
     SAWScript.TestEval
-    SAWScript.ToSAWCore
+    --SAWScript.ToSAWCore
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.TypeCheck

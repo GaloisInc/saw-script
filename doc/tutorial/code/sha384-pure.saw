@@ -1,49 +1,51 @@
+cry_sha384 f = cryptol_extract "SHA384.cry" f sbv;
+llvm_sha384 f = llvm_extract "sha384.bc" f llvm_pure;
+
+bc = "org.bouncycastle.crypto.digests.SHA384Digest";
+java_sha384 f = java_extract bc f java_pure;
+
+eq_abc m1 m2 = do {
+  res <- prove abc (equal m1 m2);
+  print res;
+};
+
+eq_smt f m1 m2 = do {
+  write_smtlib f (equal m1 m2);
+  print "Run an SMT-Lib prover on:";
+  print f;
+}
+
 main = do {
-
   /* Extract some simple Cryptol functions. */
-  cryptol_Ch <- cryptol_extract "SHA384.cry" "Ch" sbv;
+  cryptol_Ch <- cry_sha384 "Ch";
+  cryptol_Maj <- cry_sha384 "Maj";
+  cryptol_UpperSigma_0 <- cry_sha384 "UpperSigma_0";
+  cryptol_UpperSigma_1 <- cry_sha384 "UpperSigma_1";
+  cryptol_LowerSigma_0 <- cry_sha384 "LowerSigma_0";
+  cryptol_LowerSigma_1 <- cry_sha384 "LowerSigma_1";
 
-  cryptol_Maj <- cryptol_extract "SHA384.cry" "Maj" sbv;
-
-  cryptol_UpperSigma_0 <- cryptol_extract "SHA384.cry" "UpperSigma_0" sbv;
-
-  cryptol_UpperSigma_1 <- cryptol_extract "SHA384.cry" "UpperSigma_1" sbv;
-
-  cryptol_LowerSigma_0 <- cryptol_extract "SHA384.cry" "LowerSigma_0" sbv;
-
-  cryptol_LowerSigma_1 <- cryptol_extract "SHA384.cry" "LowerSigma_1" sbv;
-
-  /* Extract some simple LLVM functions. */
-  llvm_Ch <- llvm_extract "sha384.bc" "Ch" llvm_pure;
-
-  llvm_Maj <- llvm_extract "sha384.bc" "Maj" llvm_pure;
-
-  llvm_Sum0 <- llvm_extract "sha384.bc" "Sum0" llvm_pure;
-
-  llvm_Sum1 <- llvm_extract "sha384.bc" "Sum1" llvm_pure;
-
-  llvm_ROTR <- llvm_extract "sha384.bc" "ROTR" llvm_pure;
+  /* Extract some simple LLVM (C) functions. */
+  llvm_Ch <- llvm_sha384 "Ch";
+  llvm_Maj <- llvm_sha384 "Maj";
+  llvm_Sum0 <- llvm_sha384 "Sum0";
+  llvm_Sum1 <- llvm_sha384 "Sum1";
+  llvm_ROTR <- llvm_sha384 "ROTR";
 
   /* Extract some simple Java functions. */
-  let bc = "org.bouncycastle.crypto.digests.SHA384Digest";
+  java_Ch <- java_sha384 "Ch";
+  java_Maj <- java_sha384 "Maj";
+  java_Sum0 <- java_sha384 "Sum0";
+  java_Sum1 <- java_sha384 "Sum1";
+  java_Sigma0 <- java_sha384 "Sigma0";
+  java_Sigma1 <- java_sha384 "Sigma1";
 
-  java_Ch <- java_extract bc "Ch" java_pure;
+  /* Prove equality of all three Ch implementations using built-in ABC. */
+  eq_abc cryptol_Ch llvm_Ch;
+  eq_abc cryptol_Ch java_Ch;
 
-  java_Maj <- java_extract bc "Maj" java_pure;
-
-  java_Sum0 <- java_extract bc "Sum0" java_pure;
-
-  java_Sum1 <- java_extract bc "Sum1" java_pure;
-
-  java_Sigma0 <- java_extract bc "Sigma0" java_pure;
-
-  java_Sigma1 <- java_extract bc "Sigma1" java_pure;
-
-  /* Prove equalit of all three Ch implementations. */
-  ch_res_llvm <- prove_equal abc cryptol_Ch llvm_Ch;
-  ch_res_java <- prove_equal abc cryptol_Ch java_Ch;
-
-  /* Prove equalit of all three Maj implementations. */
-  maj_res_llvm <- prove_equal smtlib cryptol_Maj llvm_Maj;
-  maj_res_java <- prove_equal smtlib cryptol_Maj java_Maj;
+  /* Export equality proof obligaitions in SMT-Lib format for all three
+   * Maj implementations.
+   */
+  eq_smt "llvm_maj.smt" cryptol_Maj llvm_Maj;
+  eq_smt "java_maj.smt" cryptol_Maj java_Maj;
 };

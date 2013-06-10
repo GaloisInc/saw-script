@@ -29,6 +29,12 @@ sawScriptPrims global = Map.fromList
       (topBind :: () -> () -> SC s (Value s) -> (Value s -> SC s (Value s)) -> SC s (Value s)))
   , ("SAWScriptPrelude.topReturn", toValue
       (topReturn :: () -> Value s -> SC s (Value s)))
+  , ("SAWScriptPrelude.loadSBV", toValue
+      (loadSBV :: FilePath -> SC s (SharedTerm s)))
+  --, ("SAWScriptPrelude.loadAIG", toValue
+  --    (loadAIG :: FilePath -> SC s (SharedTerm s)))
+  , ("SAWScriptPrelude.termGlobal", toValue
+      (termGlobal :: String -> SC s (SharedTerm s)))
   , ("SAWScriptPrelude.termTrue", toValue (termTrue :: SC s (SharedTerm s)))
   , ("SAWScriptPrelude.termFalse", toValue (termFalse :: SC s (SharedTerm s)))
   , ("SAWScriptPrelude.termNat", toValue
@@ -86,6 +92,15 @@ termTrue = mkSC $ \sc -> scCtorApp sc "Prelude.True" []
 
 termFalse :: SC s (SharedTerm s)
 termFalse = mkSC $ \sc -> scCtorApp sc "Prelude.False" []
+
+{-
+loadAIG :: FilePath -> SC s (SharedTerm s)
+loadAIG path =
+    mkSC $ \sc -> do
+      n <- createNetwork
+      freeNetwork n
+      error "not yet implemented"
+-}
 
 termNat :: Integer -> SC s (SharedTerm s)
 termNat n = mkSC $ \sc -> scNat sc n
