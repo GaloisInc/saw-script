@@ -8,6 +8,7 @@ Cabal-version: >= 1.8.0.2
 library
   build-depends:
       base >= 4
+    , abcBridge
     , array
     , cmdargs
     , containers
