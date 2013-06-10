@@ -6,8 +6,8 @@
 -- TODO: generate correct deBruijn indices
 -- TODO: translate inferred types to explicit type parameters
 module SAWScript.ToSAWCore
-  ( translateModule
-  , translateExprShared
+  ( {-translateModule
+  , -}translateExprShared
   , translateExprMeta
   )
   where
@@ -60,6 +60,7 @@ type M' = MT IO
 runTranslate :: Env -> M a -> Either String a
 runTranslate env (M a) = runIdentity . runErrorT . runReaderT a $ env
 
+{-FIXME
 translateModule :: [SC.Module] -> SS.Module' SS.PType SS.Type -> Either String SC.Module
 translateModule ms m = runTranslate env $ translateModule' m
     where ssGlobs = mapMaybe getTopBindName (SS.declarations m)
@@ -69,7 +70,9 @@ translateModule ms m = runTranslate env $ translateModule' m
           scGlobs = map SC.defIdent . SC.moduleDefs
           globs = ssGlobs ++ concatMap scGlobs ms
           env = (emptyEnv { modules = ms, globals = globs })
+-}
 
+{-FIXME
 translateModule' :: SS.Module' SS.PType SS.Type -> M SC.Module
 translateModule' (SS.Module mname tss main) = do
   body' <- translateExpr (return . translateType) main
@@ -79,7 +82,9 @@ translateModule' (SS.Module mname tss main) = do
       mainDef = SC.Def mainName mainTy [mainBody]
       mainTy = translateType (SS.typeOf main)
   flip SC.insDef mainDef <$> foldM insertTopStmt (SC.emptyModule modName) tss
+-}
 
+{-FIXME
 -- We assume @env@ already includes any modules imported by @m@.
 insertTopStmt :: SC.Module -> SS.TopStmt SS.PType -> M SC.Module
 insertTopStmt m s = do
@@ -110,8 +115,9 @@ insertTopStmt m s = do
           i = SC.mkIdent mname name
           d = SC.DefEqn [] e'
       return $ SC.insDef m (SC.Def i t [d])
+-}
 
-translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt a]
+translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt String a]
                     -> M (SC.Term, SC.Term) -- (term, type)
 translateBlockStmts _ []  = fail "can't translate empty block"
 translateBlockStmts doType [SS.Bind Nothing _ e] =
@@ -140,7 +146,7 @@ translateBlockStmts doType (SS.BlockLet decls:ss) =
             return $ SC.LocalFnDef n ty [SC.DefEqn [] e']
 -}
 
-translateExpr :: (a -> M SC.Term) -> SS.Expr a -> M SC.Term
+translateExpr :: (a -> M SC.Term) -> SS.Expr String a -> M SC.Term
 translateExpr doType e = go e
   where go (SS.Unit _) = return unitTerm
         go (SS.Bit True _) = return trueTerm
@@ -189,9 +195,9 @@ translateExpr doType e = go e
 
 -- | Directly builds an appropriately-typed SAWCore shared term.
 translateExprShared :: forall s a. SC.SharedContext s -> (a -> M' (SC.SharedTerm s))
-               -> SS.Expr a -> M' (SC.SharedTerm s)
+                    -> SS.Expr String a -> M' (SC.SharedTerm s)
 translateExprShared sc doType = go
-  where go :: SS.Expr a -> M' (SC.SharedTerm s)
+  where go :: SS.Expr String a -> M' (SC.SharedTerm s)
         go (SS.Unit _) = liftIO $ SC.scTuple sc []
         go (SS.Bit True _) = liftIO $ SC.scCtorApp sc (preludeIdent "True") []
         go (SS.Bit False _) = liftIO $ SC.scCtorApp sc (preludeIdent "False") []
@@ -247,9 +253,9 @@ translateExprShared sc doType = go
 -- uses the SAWCore monadic operations from the SAWScriptPrelude
 -- module. When executed, it should generate the same output as the
 -- translateExprShared function does.
-translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr a -> M SC.Term
+translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr String a -> M SC.Term
 translateExprMeta doType = go
-  where go :: SS.Expr a -> M SC.Term
+  where go :: SS.Expr String a -> M SC.Term
         go (SS.Unit _) = return $ ssGlobalTerm "termUnit"
         go (SS.Bit True _) = return $ ssGlobalTerm "termTrue"
         go (SS.Bit False _) = return $ ssGlobalTerm "termFalse"
@@ -317,18 +323,18 @@ translateExprMeta doType = go
                   return $ SC.Def n ty [SC.DefEqn [] e']
 -}
 
-translatePType :: SS.PType -> M SC.Term
+--FIXME translatePType :: SS.PType -> M SC.Term
 translatePType t = addParams ps <$> local polyEnv (translatePType' t)
     where ps = map unwrap $ getPolyTypes t
-          unwrap (SS.Poly n) = n
+          unwrap (SS.PVar n) = n
           polyEnv env = env { locals = M.fromList (zip (reverse ps) [0..]) }
           addParams [] = id
           addParams (_:ns) =
             tfun (fterm (SC.Sort (SC.mkSort 0))) . addParams ns
 
-translatePType' :: SS.PType -> M SC.Term
+--FIXME translatePType' :: SS.PType -> M SC.Term
 translatePType' (In (Inl _)) = fail "polymorphic type is integer"
-translatePType' (In (Inr (Inr (SS.Poly x)))) = do
+translatePType' (In (Inr (Inr (SS.PVar x)))) = do
   ls <- locals <$> ask
   case M.lookup x ls of
     Just n ->
@@ -336,23 +342,23 @@ translatePType' (In (Inr (Inr (SS.Poly x)))) = do
     Nothing -> fail $ "unbound type variable: " ++ x
 translatePType' (In (Inr (Inl ty))) =
   case ty of
-    SS.Unit' -> return unitType
-    SS.Bit' -> return bitType
-    SS.Z' -> return intType
-    SS.Quote' -> return quoteType
-    SS.Array' ety (In (Inl (SS.I n))) -> vec n <$> translatePType' ety
-    SS.Array' _ _ -> fail "array dimension is not constant"
-    SS.Block' ctx rty -> blockType ctx <$> translatePType' rty
-    SS.Tuple' tys ->
+    SS.UnitF -> return unitType
+    SS.BitF -> return bitType
+    SS.ZF -> return intType
+    SS.QuoteF -> return quoteType
+    SS.ArrayF ety (In (Inl (SS.I n))) -> vec n <$> translatePType' ety
+    SS.ArrayF _ _ -> fail "array dimension is not constant"
+--FIXME    SS.BlockF ctx rty -> blockType ctx <$> translatePType' rty
+    SS.TupleF tys ->
       (fterm . SC.TupleType) <$> mapM translatePType' tys
-    SS.Record' flds ->
+    SS.RecordF flds ->
       (fterm . SC.RecordType . M.fromList) <$> mapM translateField flds
         where translateField (fn, fty) = (fn,) <$> translatePType' fty
-    SS.Function' aty rty ->
+    SS.FunctionF aty rty ->
       tfun <$> translatePType' aty <*> translatePType' rty
-    SS.Syn name -> fail $ "unresolved type synonym: " ++ name
+--FIXME    SS.Syn name -> fail $ "unresolved type synonym: " ++ name
 
-getPolyTypes :: SS.PType -> [SS.Poly SS.PType]
+--FIXME getPolyTypes :: SS.PType -> [SS.Poly SS.PType]
 getPolyTypes (In (Inl _)) = []
 getPolyTypes (In (Inr (Inr p))) = [p]
 getPolyTypes (In (Inr (Inl ty))) = F.concatMap getPolyTypes ty
@@ -372,6 +378,8 @@ translateType ty =
         where translateField (fn, fty) = (fn, translateType fty)
     SS.FunctionT aty rty ->
       tfun (translateType aty) (translateType rty)
+
+-- SAWCore term and type constructors
 
 preludeIdent :: String -> SC.Ident
 preludeIdent = SC.mkIdent SC.preludeName
@@ -426,11 +434,11 @@ blockType :: SS.Context -> SC.Term -> SC.Term
 blockType ctx rty = fterm $ SC.DataTypeApp cname [rty]
   where cname =
           case ctx of
-            SS.CryptolSetupContext -> SC.mkIdent ssPreludeName "CryptolSetup"
-            SS.JavaSetupContext -> SC.mkIdent ssPreludeName "JavaSetup"
-            SS.LLVMSetupContext -> SC.mkIdent ssPreludeName "LLVMSetup"
-            SS.ProofScriptContext -> SC.mkIdent ssPreludeName "ProofScript"
-            SS.TopLevelContext -> SC.mkIdent ssPreludeName "TopLevel"
+            SS.CryptolSetup -> SC.mkIdent ssPreludeName "CryptolSetup"
+            SS.JavaSetup -> SC.mkIdent ssPreludeName "JavaSetup"
+            SS.LLVMSetup -> SC.mkIdent ssPreludeName "LLVMSetup"
+            SS.ProofScript -> SC.mkIdent ssPreludeName "ProofScript"
+            SS.TopLevel -> SC.mkIdent ssPreludeName "TopLevel"
 
 vec :: Integer -> SC.Term -> SC.Term
 vec n ty = fterm $ SC.DataTypeApp (preludeIdent "Vec") [nt, ty]
