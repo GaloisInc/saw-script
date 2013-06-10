@@ -1,0 +1,31 @@
+module SAWScriptMain where
+
+data TopLevel :: sort 0 -> sort 0 where { }
+
+topBind :: (a b :: sort 0) -> TopLevel a -> (a -> TopLevel b) -> TopLevel b;
+topReturn :: (a :: sort 0) -> a -> TopLevel a;
+
+data Term :: sort 0 where { }
+
+data String :: sort 0 where { }
+
+loadAIG :: String -> TopLevel Term;
+loadSBV :: String -> TopLevel Term;
+
+print :: ?(a :: sort 0) -> a -> TopLevel #();
+
+equal :: Term -> Term -> Term;
+
+data ProofScript :: sort 0 -> sort 0 where { }
+data ProofResult :: sort 0 where { }
+
+abc :: ProofScript ProofResult;
+
+prove :: ProofScript ProofResult -> Term -> TopLevel ProofResult;
+
+ref_ch_sbv :: String;
+
+main :: TopLevel #();
+main =
+  topBind Term #()
+    (loadSBV ref_ch_sbv) (\(ref_ch :: Term) -> print Term ref_ch);
