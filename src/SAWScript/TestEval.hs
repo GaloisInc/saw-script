@@ -31,6 +31,8 @@ sawScriptPrims global = Map.fromList
       (topReturn :: () -> Value s -> SC s (Value s)))
   , ("SAWScriptPrelude.loadSBV", toValue
       (loadSBV :: FilePath -> SC s (SharedTerm s)))
+  --, ("SAWScriptPrelude.loadAIG", toValue
+  --    (loadAIG :: FilePath -> SC s (SharedTerm s)))
   , ("SAWScriptPrelude.termGlobal", toValue
       (termGlobal :: String -> SC s (SharedTerm s)))
   , ("SAWScriptPrelude.termNat", toValue
@@ -67,6 +69,15 @@ loadSBV path =
     mkSC $ \sc -> do
       pgm <- SBV.loadSBV path
       SBV.parseSBVPgm sc (\_ _ -> Nothing) pgm
+
+{-
+loadAIG :: FilePath -> SC s (SharedTerm s)
+loadAIG path =
+    mkSC $ \sc -> do
+      n <- createNetwork
+      freeNetwork n
+      error "not yet implemented"
+-}
 
 termApp :: SharedTerm s -> SharedTerm s -> SC s (SharedTerm s)
 termApp t1 t2 = mkSC $ \sc -> scApply sc t1 t2
