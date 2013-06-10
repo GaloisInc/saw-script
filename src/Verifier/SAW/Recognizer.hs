@@ -35,6 +35,7 @@ import Data.Map (Map)
 import Verifier.SAW.TypedAST
 
 data a :*: b = (:*:) a b
+  deriving (Eq,Ord,Show)
 
 type Recognizer m t a = t -> m a
 

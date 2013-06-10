@@ -55,6 +55,8 @@ module Verifier.SAW.Conversion
     -- ** TermBuilder
   , TermBuilder
   , runTermBuilder
+    -- ** Prebuild builders
+  , mkBvNat
     -- * Conversion
   , Conversion(..)
   , runConversion
@@ -78,6 +80,8 @@ module Verifier.SAW.Conversion
   , bvslt_bvNat
   , get_bvNat
   , slice_bvNat
+  , remove_coerce
+  , remove_unsafeCoerce
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
@@ -377,8 +381,7 @@ mkBvNat n x = do
   x' <- mkNatLit (fromInteger (x .&. bitMask n))
   t0 <- mkTermF (FTermF (GlobalDef "Prelude.bvNat"))
   t1 <- mkTermF (FTermF (App t0 n'))
-  t2 <- mkTermF (FTermF (App t1 x'))
-  return t2
+  mkTermF (FTermF (App t1 x'))
 
 class Buildable t a where
     defaultBuilder :: a -> TermBuilder t t
@@ -573,3 +576,16 @@ vDrop_bvNat = globalConv "Prelude.vDrop" Prim.vDrop_bv
 
 slice_bvNat :: Termlike t => Conversion t
 slice_bvNat = globalConv "Prelude.slice" Prim.slice_bv
+
+mixfix_snd :: (a :*: b) -> b
+mixfix_snd (_ :*: y) = y
+
+remove_coerce :: Termlike t => Conversion t
+remove_coerce = Conversion $
+  return . mixfix_snd <$>
+    (asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny)
+ 
+remove_unsafeCoerce :: Termlike t => Conversion t
+remove_unsafeCoerce = Conversion $
+  return . mixfix_snd <$>
+    (asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny)
