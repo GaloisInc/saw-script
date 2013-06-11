@@ -13,8 +13,10 @@ module Verifier.SAW.Recognizer
   , asApp
   , (<@>), (@>)
   , asApplyAll
+  , asTupleType
   , asTupleValue
   , asTupleSelector
+  , asRecordType
   , asRecordValue
   , asRecordSelector
   , asCtor
@@ -92,11 +94,17 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
+asTupleType :: (Monad m, Termlike t) => Recognizer m t [t]
+asTupleType t = do TupleType ts <- asFTermF t; return ts
+
 asTupleValue :: (Monad m, Termlike t) => Recognizer m t [t]
 asTupleValue t = do TupleValue ts <- asFTermF t; return ts
 
 asTupleSelector :: (Monad m, Termlike t) => Recognizer m t (t, Int)
 asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
+
+asRecordType :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
+asRecordType t = do RecordType m <- asFTermF t; return m
 
 asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
 asRecordValue t = do RecordValue m <- asFTermF t; return m
