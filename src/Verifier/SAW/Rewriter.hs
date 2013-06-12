@@ -374,6 +374,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           GlobalDef{}      -> return ftf
           FloatLit{}       -> return ftf
           DoubleLit{}      -> return ftf
+          StringLit{}      -> return ftf
           ExtCns{}         -> return ftf
     rewriteTop :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
