@@ -17,6 +17,7 @@ library
     , directory
     , filepath
     , jvm-verifier
+    , lens
     , llvm-pretty
     , llvm-verifier
     , mtl >= 2.1
@@ -30,6 +31,7 @@ library
     , transformers
     , vector
     , Verinf
+    , wl-pprint
 
   hs-source-dirs: src
 

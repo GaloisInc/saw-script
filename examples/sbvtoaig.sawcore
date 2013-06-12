@@ -1,0 +1,9 @@
+module SAWScriptMain where
+
+import Prelude;
+import SAWScriptPrelude;
+
+main :: TopLevel #();
+main =
+  topBind Term #() (readSBV p384_safe_product_path) (\(t0::Term) ->
+  writeAIG p384_safe_product_aig_path t0);
