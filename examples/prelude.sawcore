@@ -34,12 +34,73 @@ topReturn :: (a :: sort 0) -> a -> TopLevel a;
 -- A type to represent SAWCore shared terms.
 data Term :: sort 0 where { }
 
-termApp :: Term -> Term -> TopLevel Term;
-termGlobal :: String -> TopLevel Term;
+-- SharedTerm primitives
+termTrue :: TopLevel Term;
+termFalse :: TopLevel Term;
 termNat :: Nat -> TopLevel Term;
+termVec :: (n :: Nat) -> Term -> Vec n Term -> TopLevel Term;
+termGet :: Term -> Term -> Term -> TopLevel Term;
 termTuple :: (n :: Nat) -> Vec n Term -> TopLevel Term;
+termRecord :: (n :: Nat) -> Vec n #(String, Term) -> TopLevel Term;
+termSelect :: Term -> String -> TopLevel Term;
+termLocalVar :: Nat -> Term -> TopLevel Term;
+termGlobal :: String -> TopLevel Term;
+termLambda :: String -> Term -> Term -> TopLevel Term;
+termApp :: Term -> Term -> TopLevel Term;
+
+termUnit :: TopLevel Term;
+termUnit = termTuple 0 (EmptyVec Term);
+
+topTraverse :: (a b :: sort 0) -> (n :: Nat) -> (a -> TopLevel b) -> Vec n a -> TopLevel (Vec n b);
+topTraverse a b _ f (EmptyVec _) = topReturn (Vec 0 b) (EmptyVec b);
+topTraverse a b _ f (ConsVec _ x n xs) =
+  topBind b (Vec (Succ n) b) (f x) (\(y::b) ->
+  topBind (Vec n b) (Vec (Succ n) b) (topTraverse a b n f xs) (\(ys::Vec n b) ->
+  topReturn (Vec (Succ n) b) (ConsVec b y n ys)));
+
+topSequence :: (a :: sort 0) -> (n :: Nat) -> Vec n (TopLevel a) -> TopLevel (Vec n a);
+topSequence a n = topTraverse (TopLevel a) a n (\(x::TopLevel a) -> x);
+{-
+topSequence a _ (EmptyVec _) = topReturn (Vec 0 a) (EmptyVec a);
+topSequence a _ (ConsVec _ x n xs) =
+  topBind a (Vec (Succ n) a) x (\(y::a) ->
+  topBind (Vec n a) (Vec (Succ n) a) (topSequence a n xs) (\(ys::Vec n a) ->
+  topReturn (Vec (Succ n) a) (ConsVec a y n ys)));
+-}
+
+termVec' :: (n :: Nat) -> TopLevel Term -> Vec n (TopLevel Term) -> TopLevel Term;
+termVec' n m ms =
+  topBind Term Term m (\(a::Term) ->
+  topBind (Vec n Term) Term (topSequence Term n ms) (termVec n a));
+
+termTuple' :: (n :: Nat) -> Vec n (TopLevel Term) -> TopLevel Term;
+termTuple' n ms = topBind (Vec n Term) Term (topSequence Term n ms) (termTuple n);
+
+termRecord' :: (n :: Nat) -> Vec n #(String, TopLevel Term) -> TopLevel Term;
+termRecord' n v =
+  topBind (Vec n #(String, Term)) Term
+    (topTraverse #(String, TopLevel Term) #(String, Term) n
+      (\(x::#(String, TopLevel Term)) ->
+        topBind Term #(String, Term) (x.2) (\(t::Term) -> topReturn #(String, Term) (x.1, t)))
+    v) (termRecord n);
+
+termSelect' :: TopLevel Term -> String -> TopLevel Term;
+termSelect' m s = topBind Term Term m (\(t::Term) -> termSelect t s);
+
+termLocalVar' :: Nat -> TopLevel Term -> TopLevel Term;
+termLocalVar' n m = topBind Term Term m (\(t::Term) -> termLocalVar n t);
+
+termLambda' :: String -> TopLevel Term -> TopLevel Term -> TopLevel Term;
+termLambda' s m1 m2 =
+  topBind Term Term m1 (\(t1::Term) ->
+  topBind Term Term m2 (\(t2::Term) -> termLambda s t1 t2));
+
+termApp' :: TopLevel Term -> TopLevel Term -> TopLevel Term;
+termApp' m1 m2 =
+  topBind Term Term m1 (\(t1::Term) ->
+  topBind Term Term m2 (\(t2::Term) -> termApp t1 t2));
+
 bvNatIdent :: String;
--- TODO: add more term constructors
 
 termBvNat :: Nat -> Nat -> TopLevel Term;
 termBvNat w x =

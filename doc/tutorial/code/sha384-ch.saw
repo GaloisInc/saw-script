@@ -20,6 +20,8 @@ main = do {
 
   cryptol_Ch <- cryptol_extract "SHA384.cry" "Ch" sbv;
 
+  //cryptol_sbv_Ch <- load_sbv "sha384_Ch.sbv";
+
   llvm_Ch <- llvm_extract "sha384.bc" "Ch" llvm_pure;
 
   //ch_res_llvm <- prove_equal abc cryptol_Ch llvm_Ch;

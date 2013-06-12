@@ -8,6 +8,7 @@ Cabal-version: >= 1.8.0.2
 library
   build-depends:
       base >= 4
+    , abcBridge
     , array
     , cmdargs
     , containers
@@ -34,6 +35,7 @@ library
 
   exposed-modules:
     SAWScript.AST
+    SAWScript.Builtins
     SAWScript.Compiler
     SAWScript.ConvertType
     SAWScript.Execution
@@ -48,8 +50,8 @@ library
     SAWScript.TestEval
     --SAWScript.ToSAWCore
     SAWScript.Token
-    SAWScript.TopLevel
-    SAWScript.TypeCheck
+    --SAWScript.TopLevel
+    --SAWScript.TypeCheck
     SAWScript.Unify
     SAWScript.Unify.Fix
     SAWScript.Unify.Fresh
