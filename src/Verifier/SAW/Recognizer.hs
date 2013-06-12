@@ -22,6 +22,7 @@ module Verifier.SAW.Recognizer
   , isDataType
   , asNatLit
   , asLambda
+  , asLocalVar
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -121,6 +122,10 @@ asNatLit t = do NatLit i <- asFTermF t; return i
 asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
 asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
 asLambda _ = fail "not a lambda"
+
+asLocalVar :: (Monad m, Termlike t) => Recognizer m t (DeBruijnIndex, t)
+asLocalVar (unwrapTermF -> LocalVar i ty) = return (i, ty)
+asLocalVar _ = fail "not a local variable"
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: (Monad f, Termlike t) => Recognizer f t Bool
