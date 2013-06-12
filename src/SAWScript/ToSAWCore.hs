@@ -60,6 +60,15 @@ type M' = MT IO
 runTranslate :: Env -> M a -> Either String a
 runTranslate env (M a) = runIdentity . runErrorT . runReaderT a $ env
 
+-- TODO: this type (or its equivalent) should be defined in AST.hs
+data VarName = Local SS.Name | Global SS.QName
+
+translateIdent :: SS.QName -> SC.Ident
+translateIdent (SS.QName m n) = SC.mkIdent (translateModuleName m) n
+
+translateModuleName :: SS.ModuleName -> SC.ModuleName
+translateModuleName (SS.ModuleName xs x) = SC.mkModuleName (xs ++ [x])
+
 {-FIXME
 translateModule :: [SC.Module] -> SS.Module' SS.PType SS.Type -> Either String SC.Module
 translateModule ms m = runTranslate env $ translateModule' m
@@ -117,7 +126,7 @@ insertTopStmt m s = do
       return $ SC.insDef m (SC.Def i t [d])
 -}
 
-translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt String a]
+translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt VarName a]
                     -> M (SC.Term, SC.Term) -- (term, type)
 translateBlockStmts _ []  = fail "can't translate empty block"
 translateBlockStmts doType [SS.Bind Nothing _ e] =
@@ -146,7 +155,7 @@ translateBlockStmts doType (SS.BlockLet decls:ss) =
             return $ SC.LocalFnDef n ty [SC.DefEqn [] e']
 -}
 
-translateExpr :: (a -> M SC.Term) -> SS.Expr String a -> M SC.Term
+translateExpr :: (a -> M SC.Term) -> SS.Expr VarName a -> M SC.Term
 translateExpr doType e = go e
   where go (SS.Unit _) = return unitTerm
         go (SS.Bit True _) = return trueTerm
@@ -168,18 +177,17 @@ translateExpr doType e = go e
           aget n'' <$> doType ty <*> go a <*> go ie
         go (SS.Lookup re f _) =
           (fterm . flip SC.RecordSelector f) <$> go re
-        go (SS.Var x ty) = do
+        go (SS.Var (Local x) ty) = do
+          ls <- locals <$> ask
+          case M.lookup x ls of
+            Just n -> (SC.Term . SC.LocalVar n) <$> doType ty
+            Nothing -> fail $ "unbound variable: " ++ x
+        go (SS.Var (Global x) ty) = do
           gs <- globals <$> ask
-          -- TODO: this isn't the right name-matching logic. Fix once
-          -- qualified names are fully implemented in SAWScript.
-          let matches = find (\i -> SC.identName i == x) gs
-          case matches of
-            Nothing -> do
-              ls <- locals <$> ask
-              case M.lookup x ls of
-                Just n -> (SC.Term . SC.LocalVar n) <$> doType ty
-                Nothing -> fail $ "unbound variable: " ++ x
-            Just i -> return . fterm . SC.GlobalDef $ i
+          let i = translateIdent x
+          if i `elem` gs
+            then return . fterm . SC.GlobalDef $ i
+            else fail $ "unknown global variable: " ++ show i
         go (SS.Function x ty body fty) = do
           pat <- SC.PVar x 0 <$> doType ty
           SC.Term <$> (SC.Lambda pat <$> doType fty <*> addLocal x (go body))
@@ -195,9 +203,9 @@ translateExpr doType e = go e
 
 -- | Directly builds an appropriately-typed SAWCore shared term.
 translateExprShared :: forall s a. SC.SharedContext s -> (a -> M' (SC.SharedTerm s))
-                    -> SS.Expr String a -> M' (SC.SharedTerm s)
+                    -> SS.Expr VarName a -> M' (SC.SharedTerm s)
 translateExprShared sc doType = go
-  where go :: SS.Expr String a -> M' (SC.SharedTerm s)
+  where go :: SS.Expr VarName a -> M' (SC.SharedTerm s)
         go (SS.Unit _) = liftIO $ SC.scTuple sc []
         go (SS.Bit True _) = liftIO $ SC.scCtorApp sc (preludeIdent "True") []
         go (SS.Bit False _) = liftIO $ SC.scCtorApp sc (preludeIdent "False") []
@@ -219,18 +227,17 @@ translateExprShared sc doType = go
         go (SS.Lookup re f _) = do
           re' <- go re
           liftIO $ SC.scRecordSelect sc re' f
-        go (SS.Var x ty) = do
+        go (SS.Var (Local x) ty) = do
+          ls <- locals <$> ask
+          case M.lookup x ls of
+            Just n -> (liftIO . SC.scLocalVar sc n) =<< doType ty
+            Nothing -> fail $ "unbound variable: " ++ x
+        go (SS.Var (Global x) ty) = do
           gs <- globals <$> ask
-          -- TODO: this isn't the right name-matching logic. Fix once
-          -- qualified names are fully implemented in SAWScript.
-          let matches = find (\i -> SC.identName i == x) gs
-          case matches of
-            Nothing -> do
-              ls <- locals <$> ask
-              case M.lookup x ls of
-                Just n -> (liftIO . SC.scLocalVar sc n) =<< doType ty
-                Nothing -> fail $ "unbound variable: " ++ x
-            Just i -> liftIO $ SC.scGlobalDef sc i
+          let i = translateIdent x
+          if i `elem` gs
+            then liftIO $ SC.scGlobalDef sc i
+            else fail $ "unknown global variable: " ++ show i
         go (SS.Function x ty body _) = do
           ty' <- doType ty
           body' <- addLocal x (go body)
@@ -253,9 +260,9 @@ translateExprShared sc doType = go
 -- uses the SAWCore monadic operations from the SAWScriptPrelude
 -- module. When executed, it should generate the same output as the
 -- translateExprShared function does.
-translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr String a -> M SC.Term
+translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr VarName a -> M SC.Term
 translateExprMeta doType = go
-  where go :: SS.Expr String a -> M SC.Term
+  where go :: SS.Expr VarName a -> M SC.Term
         go (SS.Unit _) = return $ ssGlobalTerm "termUnit"
         go (SS.Bit True _) = return $ ssGlobalTerm "termTrue"
         go (SS.Bit False _) = return $ ssGlobalTerm "termFalse"
@@ -291,20 +298,19 @@ translateExprMeta doType = go
         go (SS.Lookup re f _) = do
           re' <- go re
           return $ ssGlobalTerm "termSelect'" `app` re' `app` stringTerm f
-        go (SS.Var x ty) = do
+        go (SS.Var (Local x) ty) = do
+          ls <- locals <$> ask
+          case M.lookup x ls of
+            Just n -> do
+              ty' <- doType ty
+              return $ ssGlobalTerm "termLocalVar'" `app` natTerm (toInteger n) `app` ty'
+            Nothing -> fail $ "unbound variable: " ++ x
+        go (SS.Var (Global x) ty) = do
           gs <- globals <$> ask
-          -- TODO: this isn't the right name-matching logic. Fix once
-          -- qualified names are fully implemented in SAWScript.
-          let matches = find (\i -> SC.identName i == x) gs
-          case matches of
-            Just i -> return $ ssGlobalTerm "termGlobal" `app` stringTerm (show i)
-            Nothing -> do
-              ls <- locals <$> ask
-              case M.lookup x ls of
-                Just n -> do
-                  ty' <- doType ty
-                  return $ ssGlobalTerm "termLocalVar'" `app` natTerm (toInteger n) `app` ty'
-                Nothing -> fail $ "unbound variable: " ++ x
+          let i = translateIdent x
+          if i `elem` gs
+            then return $ ssGlobalTerm "termGlobal" `app` stringTerm (show i)
+            else fail $ "unknown global variable: " ++ show i
         go (SS.Function x ty body _) = do
           ty' <- doType ty
           body' <- addLocal x (go body)
