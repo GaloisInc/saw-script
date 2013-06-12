@@ -39,7 +39,7 @@ library
     SAWScript.AST
     SAWScript.Builtins
     SAWScript.Compiler
-    SAWScript.ConvertType
+    --SAWScript.ConvertType
     SAWScript.Execution
     --SAWScript.FindMain
     --SAWScript.Import
@@ -49,10 +49,8 @@ library
     SAWScript.Parser
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
-    SAWScript.TestEval
     --SAWScript.ToSAWCore
     SAWScript.Token
-    --SAWScript.TopLevel
     --SAWScript.TypeCheck
     SAWScript.Unify
     SAWScript.Unify.Fix
