@@ -26,6 +26,7 @@ module Verifier.SAW.Recognizer
   , asLambda
   , asPi
   , asPiList
+  , asLocalVar
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -142,6 +143,9 @@ asPiList :: Termlike t => t -> ([(String, t)], t)
 asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
+asLocalVar :: (Monad m, Termlike t) => Recognizer m t (DeBruijnIndex, t)
+asLocalVar (unwrapTermF -> LocalVar i ty) = return (i, ty)
+asLocalVar _ = fail "not a local variable"
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: (Monad f, Termlike t) => Recognizer f t Bool
