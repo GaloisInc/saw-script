@@ -22,6 +22,8 @@ module Verifier.SAW.Recognizer
   , isDataType
   , asNatLit
   , asLambda
+  , asPi
+  , asPiList
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -121,6 +123,17 @@ asNatLit t = do NatLit i <- asFTermF t; return i
 asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
 asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
 asLambda _ = fail "not a lambda"
+
+asPi :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
+asPi (unwrapTermF -> Pi nm tp body) = return (nm, tp, body)
+asPi _ = fail "not a Pi term"
+
+-- | Decomposes a term into a list of pi bindings, followed by a right
+-- term that is not a pi binding.
+asPiList :: Termlike t => t -> ([(String, t)], t)
+asPiList = go []
+  where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
+        go r rhs = (reverse r, rhs)
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: (Monad f, Termlike t) => Recognizer f t Bool

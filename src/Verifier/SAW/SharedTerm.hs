@@ -43,6 +43,9 @@ module Verifier.SAW.SharedTerm
   , scBoolType
   , scFunAll
   , scLambda
+  , scLambdaList
+  , scPi
+  , scPiList
   , scLocalVar
   , scLookupDef
   , scTuple
@@ -547,13 +550,45 @@ scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFun sc a b = do b' <- incVars sc 0 1 b
                   scTermF sc (Pi "_" a b')
 
-scFunAll :: SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+scFunAll :: SharedContext s
+         -> [SharedTerm s]
+         -> SharedTerm s
+         -> IO (SharedTerm s)
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
-scLambda :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scLambda :: SharedContext s
+         -> String
+         -> SharedTerm s
+         -> SharedTerm s
+         -> IO (SharedTerm s)
 scLambda sc varname ty body = scTermF sc (Lambda (PVar varname 0 ty) ty body)
 
-scLocalVar :: SharedContext s -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
+scLambdaList :: SharedContext s
+             -> [(String, SharedTerm s)]
+             -> SharedTerm s
+             -> IO (SharedTerm s)
+scLambdaList _ [] rhs = return rhs
+scLambdaList sc ((nm,tp):r) rhs =
+  scLambda sc nm tp =<< scLambdaList sc r rhs
+
+scPi :: SharedContext s
+     -> String
+     -> SharedTerm s
+     -> SharedTerm s
+     -> IO (SharedTerm s)
+scPi sc nm tp body = scTermF sc (Pi nm tp body)
+
+scPiList :: SharedContext s
+             -> [(String, SharedTerm s)]
+             -> SharedTerm s
+             -> IO (SharedTerm s)
+scPiList _ [] rhs = return rhs
+scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
+
+scLocalVar :: SharedContext s
+           -> DeBruijnIndex
+           -> SharedTerm s
+           -> IO (SharedTerm s)
 scLocalVar sc i t = scTermF sc (LocalVar i t)
 
 scGlobalApply :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
