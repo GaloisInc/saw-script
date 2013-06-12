@@ -9,7 +9,7 @@ import SAWScript.Compiler (Compiler, compiler)
 import SAWScript.AST
 import SAWScript.Unify
 
-import SAWScript.LiftPoly (instantiateType,Lifted(..))
+import SAWScript.LiftPoly (Lifted(..))
 
 import Control.Applicative
 import Control.Monad.Trans.Reader
@@ -21,65 +21,65 @@ import Data.Maybe
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
 
-typeCheck :: Compiler Lifted (Module LType)
+typeCheck :: Compiler Lifted (ModuleSimple TCheckT TCheckT)
 typeCheck = compiler "TypeCheck" $ \(Lifted m gen env) ->
   case instantiateGoal gen $ getGoal env m of
-    Left es   -> fail $ unlines es
     Right [r] -> return r
     Right rs  -> fail $ unlines ("Ambiguous typing:" : map show rs)
+    Left es   -> fail $ unlines es
 
-getGoal :: [(Name,GoalM LType LType)] -> Module LType -> GoalM LType (Module LType)
-getGoal env m@(Module _ ds _) = flip runReaderT (newPolyEnv env <> F.foldMap buildEnv ds) $ do
+getGoal :: [(Name,GoalM TCheckT TCheckT)] -> Module TCheckT -> GoalM TCheckT (Module TCheckT)
+getGoal env m@(Module nm ee te ds) = flip runReaderT (newPolyEnv env <> F.foldMap buildEnv ds) $ do
   (Module mname ds' mn') <- tCheck m
   logic (Module mname <$> mapM resolve ds' <*> resolve mn')
 
-instantiateGoal :: Int -> GoalM LType a -> Either [String] [a]
+instantiateGoal :: Int -> GoalM TCheckT a -> Either [String] [a]
 instantiateGoal gen = fromStream Nothing Nothing . fmap fst . flip runStateT (gen,emptyS) . runGoalM
 
-logic :: GoalM LType a -> TC a
+logic :: GoalM TCheckT a -> TC a
 logic = ReaderT . const
 
-resolve :: (T.Traversable t) => t LType -> GoalM LType (t LType)
+resolve :: (T.Traversable t) => t TCheckT -> GoalM TCheckT (t TCheckT)
 resolve = T.traverse walkStar
 
-type TC a = ReaderT TCEnv (GoalM LType) a
+type TC a = ReaderT TCEnv (GoalM TCheckT) a
 
 -- Env {{{
 
 data TCEnv = TCEnv
-  { exprEnv :: [(Name,Expr LType)]
-  , polyEnv :: [(Name,GoalM LType LType)]
+  { exprEnv :: [(Name,Expr TCheckT)]
+  , polyEnv :: [(Name,GoalM TCheckT TCheckT)]
   } deriving (Show)
 
 instance Monoid TCEnv where
   mempty = TCEnv mempty mempty
   mappend e1 e2 = TCEnv (exprEnv e1 <> exprEnv e2) (polyEnv e1 <> polyEnv e2)
 
-newPolyEnv :: [(Name,GoalM LType LType)] -> TCEnv
+newPolyEnv :: [(Name,GoalM TCheckT TCheckT)] -> TCEnv
 newPolyEnv = TCEnv []
 
-exprPair :: Name -> Expr LType -> TCEnv
+exprPair :: Name -> Expr TCheckT -> TCEnv
 exprPair n e = TCEnv [(n,e)] []
 
-polyPair :: Name -> GoalM LType LType -> TCEnv
+polyPair :: Name -> GoalM TCheckT TCheckT -> TCEnv
 polyPair n g = TCEnv [] [(n,g)]
 
-buildEnv :: TopStmt LType -> TCEnv
+buildEnv :: TopStmt TCheckT -> TCEnv
 buildEnv s = case s of
   TopTypeDecl n pt -> polyPair n $ instantiateType pt
   TopBind n e      -> exprPair n e
   _                -> mempty
 
-extendType :: Name -> Expr LType -> TC a -> TC a
+extendType :: Name -> Expr TCheckT -> TC a -> TC a
 extendType n e m = local (exprPair n e <>) m
 
-lookupExpr :: Name -> TC (Maybe (Expr LType))
+lookupExpr :: Name -> TC (Maybe (Expr TCheckT))
 lookupExpr n = asks $ lookup n . exprEnv
 
-extendPoly :: Name -> PType -> TC a -> TC a
+extendPoly :: Name -> FullT -> TC a -> TC a
 extendPoly n pt m = local (polyPair n (instantiateType pt) <>) m
 
-lookupPoly :: Name -> TC (Maybe (GoalM LType LType))
+lookupPoly :: Name -> TC (Maybe (GoalM TCheckT TCheckT))
 lookupPoly n = asks $ lookup n . polyEnv
 
 -- }}}
@@ -87,19 +87,19 @@ lookupPoly n = asks $ lookup n . polyEnv
 class TypeCheck f where
   tCheck :: f -> TC f
 
-instance TypeCheck (Module LType) where
+instance TypeCheck (Module TCheckT) where
   tCheck (Module mname ds mn) = do
     ds' <- mapM tCheck ds
     mn' <- tCheck mn
     return (Module mname ds' mn')
 
-instance TypeCheck (TopStmt LType) where
+instance TypeCheck (TopStmt TCheckT) where
   tCheck ts = case ts of
     TopBind n e -> do e' <- tCheck e
                       return (TopBind n e')
     _           -> return ts
 
-instance TypeCheck [BlockStmt LType] where
+instance TypeCheck [BlockStmt TCheckT] where
   tCheck mb = case mb of
     []    -> return []
     s:mb' -> case s of
@@ -116,7 +116,7 @@ instance TypeCheck [BlockStmt LType] where
                                rest <- (compose $ uncurry extendType) (zip ns es') $ tCheck mb'
                                return (BlockLet (zip ns es') : rest)
 
-instance TypeCheck (Expr LType) where
+instance TypeCheck (Expr TCheckT) where
   tCheck e = case e of
     Unit t             -> t `typeEqual` unit  >> return (Unit t)
     Bit b t            -> t `typeEqual` bit   >> return (Bit b t)
@@ -188,10 +188,10 @@ whenJust f m = case m of
   Just a  -> f a
   Nothing -> return ()
 
-typeEqual :: LType -> LType -> TC ()
+typeEqual :: TCheckT -> TCheckT -> TC ()
 typeEqual u v = logic $ u === v
 
-subtype :: LType -> LType -> Goal LType
+subtype :: TCheckT -> TCheckT -> Goal TCheckT
 subtype t1 t2 = 
   do Record' nts1 <- matchGoal t1
      Record' nts2 <- matchGoal t2
@@ -209,7 +209,7 @@ compose f as = case as of
   []    -> id
   a:as' -> f a . compose f as'
 
-finalStmtType :: BlockStmt LType -> TC (Context,LType)
+finalStmtType :: BlockStmt TCheckT -> TC (Context,TCheckT)
 finalStmtType s = case s of
   Bind Nothing c e -> return (c,typeOf e)
   _                -> logic $ fail ("Final statement of do block must be an expression: " ++ show s)

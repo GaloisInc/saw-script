@@ -27,7 +27,7 @@ import qualified Verifier.SAW.TypedAST as SC
 data Env = Env {
     modules :: [SC.Module]
   , depth :: Int
-  , locals :: Map SS.Name Int
+  , locals :: Env Int
   , globals :: [SC.Ident]
   }
 
