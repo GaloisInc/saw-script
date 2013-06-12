@@ -16,7 +16,6 @@ import Prelude;
 --     primitive functions?
 --
 
-data String :: sort 0 where { }
 data TopLevel :: sort 0 -> sort 0 where { }
 data CryptolSetup :: sort 0 -> sort 0 where { }
 data CryptolVerifyResult :: sort 0 where { }
