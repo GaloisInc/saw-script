@@ -14,8 +14,8 @@ execSAWCore opts m =
   case findDef m mainId of
     Nothing -> putStrLn "Module doesn't include a main function"
     Just mainDef -> do
-      putStrLn $ "The main function has type " ++ show (defType (mainDef))
-      putStrLn $ "Going to execute SAWCore module " ++ show (moduleName m)
+      putStrLn $ "Executing " ++ show (moduleName m) ++
+                 ".main :: " ++ show (defType (mainDef))
       (sc :: SharedContext s) <- mkSharedContext m
       let global = evalGlobal m ((allPrims opts) global)
       let t = Term (FTermF (GlobalDef mainId))

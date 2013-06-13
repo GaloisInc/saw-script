@@ -5,5 +5,5 @@ import SAWScriptPrelude;
 
 main :: TopLevel #();
 main =
-  topBind Term #() (readSBV "examples/add_comm.sbv") (\(t0::Term) ->
-  writeAIG "add_com.aig" t0);
+  topBind Term #() (extract_java "Foo" "f" java_pure) (\(t0::Term) ->
+  writeAIG "java_f.aig" t0);
