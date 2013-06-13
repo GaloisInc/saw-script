@@ -284,6 +284,8 @@ matchType _ _ = Nothing
 
 matchTypes :: [SS.Type] -> [SS.Type] -> Maybe (Map SS.Name SS.Type)
 matchTypes [] [] = Just M.empty
+matchTypes [] (_ : _) = Nothing
+matchTypes (_ : _) [] = Nothing
 matchTypes (x : xs) (y : ys) = do
   m1 <- matchType x y
   m2 <- matchTypes xs ys
