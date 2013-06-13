@@ -32,7 +32,7 @@ import qualified Verifier.SAW.SharedTerm as SC
 data Env = Env {
     modules :: [SC.Module]
   , depth :: Int
-  , locals :: Env Int
+  , locals :: Map SS.Name Int
   , globals :: [SC.Ident]
   , localTs :: Map SS.Name Int
   }
@@ -72,13 +72,10 @@ type M' = MT IO
 runTranslate :: Env -> M a -> Either String a
 runTranslate env (M a) = runIdentity . runErrorT . runReaderT a $ env
 
--- TODO: this type (or its equivalent) should be defined in AST.hs
-data VarName = Local SS.Name | Global SS.QName
+type Expression = SS.Expr SS.ResolvedName SS.Type
 
-type Expression = SS.Expr VarName SS.Type
-
-translateIdent :: SS.QName -> SC.Ident
-translateIdent (SS.QName m n) = SC.mkIdent (translateModuleName m) n
+translateIdent :: SS.ModuleName -> SS.Name -> SC.Ident
+translateIdent m n = SC.mkIdent (translateModuleName m) n
 
 translateModuleName :: SS.ModuleName -> SC.ModuleName
 translateModuleName (SS.ModuleName xs x) = SC.mkModuleName (xs ++ [x])
@@ -140,7 +137,7 @@ insertTopStmt m s = do
       return $ SC.insDef m (SC.Def i t [d])
 -}
 
-translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt VarName a]
+translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt SS.ResolvedName a]
                     -> M (SC.Term, SC.Term) -- (term, type)
 translateBlockStmts _ []  = fail "can't translate empty block"
 translateBlockStmts doType [SS.Bind Nothing _ e] =
@@ -169,7 +166,7 @@ translateBlockStmts doType (SS.BlockLet decls:ss) =
             return $ SC.LocalFnDef n ty [SC.DefEqn [] e']
 -}
 
-translateExpr :: (a -> M SC.Term) -> SS.Expr VarName a -> M SC.Term
+translateExpr :: (a -> M SC.Term) -> SS.Expr SS.ResolvedName a -> M SC.Term
 translateExpr doType e = go e
   where go (SS.Unit _) = return unitTerm
         go (SS.Bit True _) = return trueTerm
@@ -191,14 +188,14 @@ translateExpr doType e = go e
           aget n'' <$> doType ty <*> go a <*> go ie
         go (SS.Lookup re f _) =
           (fterm . flip SC.RecordSelector f) <$> go re
-        go (SS.Var (Local x) ty) = do
+        go (SS.Var (SS.LocalName x) ty) = do
           ls <- locals <$> ask
           case M.lookup x ls of
             Just n -> (SC.Term . SC.LocalVar n) <$> doType ty
             Nothing -> fail $ "unbound variable: " ++ x
-        go (SS.Var (Global x) ty) = do
+        go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
-          let i = translateIdent x
+          let i = translateIdent m x
           if i `elem` gs
             then return . fterm . SC.GlobalDef $ i
             else fail $ "unknown global variable: " ++ show i
@@ -232,9 +229,9 @@ translatePolyExprShared sc doType expr =
 
 -- | Directly builds an appropriately-typed SAWCore shared term.
 translateExprShared :: forall s a. SC.SharedContext s -> (a -> M' (SC.SharedTerm s))
-                    -> SS.Expr VarName a -> M' (SC.SharedTerm s)
+                    -> SS.Expr SS.ResolvedName a -> M' (SC.SharedTerm s)
 translateExprShared sc doType = go
-  where go :: SS.Expr VarName a -> M' (SC.SharedTerm s)
+  where go :: SS.Expr SS.ResolvedName a -> M' (SC.SharedTerm s)
         go (SS.Unit _) = liftIO $ SC.scTuple sc []
         go (SS.Bit True _) = liftIO $ SC.scCtorApp sc (preludeIdent "True") []
         go (SS.Bit False _) = liftIO $ SC.scCtorApp sc (preludeIdent "False") []
@@ -256,14 +253,14 @@ translateExprShared sc doType = go
         go (SS.Lookup re f _) = do
           re' <- go re
           liftIO $ SC.scRecordSelect sc re' f
-        go (SS.Var (Local x) ty) = do
+        go (SS.Var (SS.LocalName x) ty) = do
           ls <- locals <$> ask
           case M.lookup x ls of
             Just n -> (liftIO . SC.scLocalVar sc n) =<< doType ty
             Nothing -> fail $ "unbound variable: " ++ x
-        go (SS.Var (Global x) ty) = do
+        go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
-          let i = translateIdent x
+          let i = translateIdent m x
           if i `elem` gs
             then liftIO $ SC.scGlobalDef sc i
             else fail $ "unknown global variable: " ++ show i
@@ -289,9 +286,9 @@ translateExprShared sc doType = go
 -- uses the SAWCore monadic operations from the SAWScriptPrelude
 -- module. When executed, it should generate the same output as the
 -- translateExprShared function does.
-translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr VarName a -> M SC.Term
+translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr SS.ResolvedName a -> M SC.Term
 translateExprMeta doType = go
-  where go :: SS.Expr VarName a -> M SC.Term
+  where go :: SS.Expr SS.ResolvedName a -> M SC.Term
         go (SS.Unit _) = return $ ssGlobalTerm "termUnit"
         go (SS.Bit True _) = return $ ssGlobalTerm "termTrue"
         go (SS.Bit False _) = return $ ssGlobalTerm "termFalse"
@@ -327,16 +324,16 @@ translateExprMeta doType = go
         go (SS.Lookup re f _) = do
           re' <- go re
           return $ ssGlobalTerm "termSelect'" `app` re' `app` stringTerm f
-        go (SS.Var (Local x) ty) = do
+        go (SS.Var (SS.LocalName x) ty) = do
           ls <- locals <$> ask
           case M.lookup x ls of
             Just n -> do
               ty' <- doType ty
               return $ ssGlobalTerm "termLocalVar'" `app` natTerm (toInteger n) `app` ty'
             Nothing -> fail $ "unbound variable: " ++ x
-        go (SS.Var (Global x) ty) = do
+        go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
-          let i = translateIdent x
+          let i = translateIdent m x
           if i `elem` gs
             then return $ ssGlobalTerm "termGlobal" `app` stringTerm (show i)
             else fail $ "unknown global variable: " ++ show i
