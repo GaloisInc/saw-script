@@ -30,6 +30,7 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 import Verifier.SAW.Utils (internalError)
 
 import Verifier.SAW.Position
+import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
 import Verifier.SAW.Typechecker.Simplification
@@ -296,6 +297,8 @@ inferTerm tc uut = do
     Un.NatLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
                   | otherwise -> pure $ TypedValue (TCF (NatLit i)) nattp
       where nattp = TCF (DataTypeApp preludeNatIdent [])
+    Un.StringLit _ s -> pure $ TypedValue (TCF (StringLit s)) strtp
+      where strtp = TCF (DataTypeApp preludeStringIdent [])
     Un.VecLit p [] -> tcFail p "SAWCore parser does not support empty array literals."
     Un.VecLit _ (h:l) -> do
       (v,tp) <- inferTypedValue tc h
