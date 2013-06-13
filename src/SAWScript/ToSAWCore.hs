@@ -158,7 +158,7 @@ translateBlockStmts doType (SS.BlockTypeDecl _ _:ss) =
   -- they provide is taken from the annotations resulting from type
   -- checking.
   translateBlockStmts doType ss
-translateBlockStmts doType (SS.BlockLet decls:ss) =
+translateBlockStmts _doType (SS.BlockLet _decls : _ss) =
   fail "block-level let expressions not yet supported"
 {-
   decls' <- mapM translateDecl decls
@@ -205,7 +205,7 @@ translateExpr doType e = go e
         go (SS.Function x ty body fty) = do
           pat <- SC.PVar x 0 <$> doType ty
           SC.Term <$> (SC.Lambda pat <$> doType fty <*> addLocal x (go body))
-        go (SS.Application f arg ty) =
+        go (SS.Application f arg _ty) =
           -- TODO: include type parameters
           fterm <$> (SC.App <$> go f <*> go arg)
         go (SS.LetBlock decls body) = SC.Term <$> (SC.Let <$> decls' <*> go body)
@@ -289,8 +289,8 @@ matchTypes (_ : _) [] = Nothing
 matchTypes (x : xs) (y : ys) = do
   m1 <- matchType x y
   m2 <- matchTypes xs ys
-  let agree = and (M.elems (M.intersectionWith (==) m1 m2))
-  if agree then Just (M.union m1 m2) else Nothing
+  let compatible = and (M.elems (M.intersectionWith (==) m1 m2))
+  if compatible then Just (M.union m1 m2) else Nothing
 
 -- | Directly builds an appropriately-typed SAWCore shared term.
 translateExprShared :: forall s. SC.SharedContext s -> Expression -> M' (SC.SharedTerm s)

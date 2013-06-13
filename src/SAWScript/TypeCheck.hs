@@ -121,7 +121,7 @@ instance TypeCheck (Expr TCheckT) where
     Unit t             -> t `typeEqual` unit  >> return (Unit t)
     Bit b t            -> t `typeEqual` bit   >> return (Bit b t)
     Quote s t          -> t `typeEqual` quote >> return (Quote s t)
-    Z i t              -> t `typeEqual` z     >> return (Z i t)
+    Z j t              -> t `typeEqual` z     >> return (Z j t)
     Array es t         -> do es' <- mapM tCheck es
                              let l = i $ fromIntegral $ length es
                                  ts = map typeOf es'
@@ -181,6 +181,7 @@ instance TypeCheck (Expr TCheckT) where
                              b' <- (compose $ uncurry extendType) (zip ns es') $ tCheck b
                              return (LetBlock (zip ns es') b')
 
+tUnit :: LType -> TC ()
 tUnit = typeEqual unit
 
 whenJust :: Monad m => (a -> m ()) -> Maybe a -> m ()
