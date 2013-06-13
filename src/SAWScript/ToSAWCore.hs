@@ -241,21 +241,21 @@ translateTypeShared sc = go
 -- they are represented in a top-level expression's type (using
 -- TypAbs). If present, these must be translated into SAWCore as
 -- explicit type abstractions.
-translatePolyExprShared :: forall s. SC.SharedContext s -> (SS.Type -> M' (SC.SharedTerm s))
-                        -> Expression -> M' (SC.SharedTerm s)
-translatePolyExprShared sc doType expr =
+translatePolyExprShared :: forall s. SC.SharedContext s -> Expression -> M' (SC.SharedTerm s)
+translatePolyExprShared sc expr =
     case SS.typeOf expr of
       SS.TypAbs ns _ -> do
         s0 <- liftIO $ SC.scSort sc (SC.mkSort 0)
-        t <- addLocalTypes ns (translateExprShared sc doType expr)
+        t <- addLocalTypes ns (translateExprShared sc expr)
         liftIO $ SC.scLambdaList sc [ (n, s0) | n <- ns ] t
-      _ -> translateExprShared sc doType expr
+      _ -> translateExprShared sc expr
 
 -- | Directly builds an appropriately-typed SAWCore shared term.
-translateExprShared :: forall s a. SC.SharedContext s -> (a -> M' (SC.SharedTerm s))
-                    -> SS.Expr SS.ResolvedName a -> M' (SC.SharedTerm s)
-translateExprShared sc doType = go
-  where go :: SS.Expr SS.ResolvedName a -> M' (SC.SharedTerm s)
+translateExprShared :: forall s. SC.SharedContext s -> Expression -> M' (SC.SharedTerm s)
+translateExprShared sc = go
+  where doType :: SS.Type -> M' (SC.SharedTerm s)
+        doType = translateTypeShared sc
+        go :: Expression -> M' (SC.SharedTerm s)
         go (SS.Unit _) = liftIO $ SC.scTuple sc []
         go (SS.Bit True _) = liftIO $ SC.scCtorApp sc (preludeIdent "True") []
         go (SS.Bit False _) = liftIO $ SC.scCtorApp sc (preludeIdent "False") []
