@@ -1,0 +1,9 @@
+module SAWScriptMain where
+
+import Prelude;
+import SAWScriptPrelude;
+
+main :: TopLevel #();
+main =
+  topBind Term #() (extract_llvm "foo.bc" "f" llvm_pure) (\(t0::Term) ->
+  writeAIG "llvm_f.aig" t0);

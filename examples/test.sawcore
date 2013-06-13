@@ -5,7 +5,7 @@ import SAWScriptPrelude;
 
 main :: TopLevel #();
 main =
-  topBind Term #() (loadSBV p384_safe_product_path) (\(t0::Term) ->
+  topBind Term #() (readSBV "examples/p384_safe_product.sbv") (\(t0::Term) ->
   topBind Term #() (termBvNat 384 111) (\(t1::Term) ->
   topBind Term #() (termBvNat 384 111111) (\(t2::Term) ->
   topBind Term #() (termTuple 2 [t1, t2]) (\(t3::Term) ->
