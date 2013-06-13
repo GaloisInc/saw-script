@@ -34,6 +34,7 @@ data Env = Env {
   , depth :: Int
   , locals :: Map SS.Name Int
   , globals :: [SC.Ident]
+  , localTs :: Map SS.Name Int
   }
 
 emptyEnv :: Env
@@ -42,6 +43,7 @@ emptyEnv =
       , depth = 0
       , locals = M.empty
       , globals = []
+      , localTs = M.empty
       }
 
 incVars :: Map a Int -> Map a Int
@@ -49,7 +51,17 @@ incVars = M.map (+1)
 
 addLocal :: Monad m => SS.Name -> MT m a -> MT m a
 addLocal x =
-  local (\env -> env { locals = M.insert x 0 (incVars (locals env)) })
+  local (\env -> env { locals = M.insert x 0 (incVars (locals env))
+                     , localTs = incVars (localTs env) })
+
+addLocalType :: Monad m => SS.Name -> MT m a -> MT m a
+addLocalType x =
+  local (\env -> env { locals = incVars (locals env)
+                     , localTs = M.insert x 0 (incVars (localTs env)) })
+
+addLocalTypes :: Monad m => [SS.Name] -> MT m a -> MT m a
+addLocalTypes [] m = m
+addLocalTypes (x : xs) m = addLocalTypes xs (addLocalType x m)
 
 newtype MT m a = M (ReaderT Env (ErrorT String m) a)
   deriving (Applicative, Functor, Monad, MonadError String, MonadReader Env, MonadIO)
