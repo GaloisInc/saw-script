@@ -29,11 +29,14 @@ import SAWScript.Unify.Fix
 import qualified Verifier.SAW.TypedAST as SC
 import qualified Verifier.SAW.SharedTerm as SC
 
+-- TODO: change to something that makes lookupTypeOf implementable.
+type GlobalEnv = [SC.Ident]
+
 data Env = Env {
     modules :: [SC.Module]
   , depth :: Int
   , locals :: Map SS.Name Int
-  , globals :: [SC.Ident]
+  , globals :: GlobalEnv
   , localTs :: Map SS.Name Int
   }
 
@@ -250,6 +253,43 @@ translatePolyExprShared sc expr =
         liftIO $ SC.scLambdaList sc [ (n, s0) | n <- ns ] t
       _ -> translateExprShared sc expr
 
+lookupTypeOf :: SS.ModuleName -> SS.Name -> GlobalEnv -> Maybe SS.Type
+lookupTypeOf = error "unimplemented"
+
+-- | Matches a (possibly) polymorphic type @polyty@ against a
+-- monomorphic type @monoty@, which must be an instance of it. The
+-- function returns a list of type variable instantiations, in the
+-- same order as the variables in the outermost TypAbs of @polyty@.
+typeInstantiation :: SS.Type -> SS.Type -> [SS.Type]
+typeInstantiation (SS.TypAbs xs t1) t2 = [ fromJust (M.lookup x m) | x <- xs ]
+    where m = fromJust (matchType t1 t2)
+typeInstantiation _ _ = []
+
+-- | @matchType pat ty@ returns a map of variable instantiations, if
+-- @ty@ is an instance of @pat@. Both types must be first-order:
+-- neither may contain @TypAbs@.
+matchType :: SS.Type -> SS.Type -> Maybe (Map SS.Name SS.Type)
+matchType SS.UnitT  SS.UnitT  = Just M.empty
+matchType SS.BitT   SS.BitT   = Just M.empty
+matchType SS.ZT     SS.ZT     = Just M.empty
+matchType SS.QuoteT SS.QuoteT = Just M.empty
+matchType (SS.ArrayT t1 n1) (SS.ArrayT t2 n2) | n1 == n2 = matchType t1 t2
+matchType (SS.BlockT c1 t1) (SS.BlockT c2 t2) | c1 == c2 = matchType t1 t2
+matchType (SS.TupleT ts1) (SS.TupleT ts2) = matchTypes ts1 ts2
+matchType (SS.RecordT bs1) (SS.RecordT bs2)
+    | map fst bs1 == map fst bs2 = matchTypes (map snd bs1) (map snd bs2)
+matchType (SS.FunctionT a1 b1) (SS.FunctionT a2 b2) = matchTypes [a1, b1] [a2, b2]
+matchType (SS.TypVar x)    t2 = Just (M.singleton x t2)
+matchType _ _ = Nothing
+
+matchTypes :: [SS.Type] -> [SS.Type] -> Maybe (Map SS.Name SS.Type)
+matchTypes [] [] = Just M.empty
+matchTypes (x : xs) (y : ys) = do
+  m1 <- matchType x y
+  m2 <- matchTypes xs ys
+  let agree = and (M.elems (M.intersectionWith (==) m1 m2))
+  if agree then Just (M.union m1 m2) else Nothing
+
 -- | Directly builds an appropriately-typed SAWCore shared term.
 translateExprShared :: forall s. SC.SharedContext s -> Expression -> M' (SC.SharedTerm s)
 translateExprShared sc = go
@@ -284,10 +324,13 @@ translateExprShared sc = go
             Nothing -> fail $ "unbound variable: " ++ x
         go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
-          let i = translateIdent m x
-          if i `elem` gs
-            then liftIO $ SC.scGlobalDef sc i
-            else fail $ "unknown global variable: " ++ show i
+          let ident = translateIdent m x
+          case lookupTypeOf m x gs of
+            Nothing -> fail $ "unknown global variable: " ++ show ident
+            Just polyty -> do
+              t <- liftIO $ SC.scGlobalDef sc ident
+              args <- mapM doType (typeInstantiation polyty ty)
+              liftIO $ SC.scApplyAll sc t args
         go (SS.Function x ty body _) = do
           ty' <- doType ty
           body' <- addLocal x (go body)
