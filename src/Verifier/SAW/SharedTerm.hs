@@ -48,6 +48,7 @@ module Verifier.SAW.SharedTerm
   , scPiList
   , scLocalVar
   , scLookupDef
+  , scSort
   , scTuple
   , scTupleType
   , scTupleSelector
