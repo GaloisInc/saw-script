@@ -1,0 +1,14 @@
+module SAWScriptMain where
+
+import Prelude;
+import SAWScriptPrelude;
+
+main :: TopLevel #();
+main =
+  topBind Term #() (loadSBV p384_safe_product_path) (\(t0::Term) ->
+  topBind Term #() (termBvNat 384 111) (\(t1::Term) ->
+  topBind Term #() (termBvNat 384 111111) (\(t2::Term) ->
+  topBind Term #() (termTuple 2 [t1, t2]) (\(t3::Term) ->
+  topBind Term #() (termApp t0 t3) (\(t4::Term) ->
+  topBind #() #() (print Term t4) (\(_ :: #()) ->
+  print (bitvector 768) (evaluate (bitvector 768) t4)))))));

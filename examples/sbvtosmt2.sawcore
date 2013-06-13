@@ -1,0 +1,9 @@
+module SAWScriptMain where
+
+import Prelude;
+import SAWScriptPrelude;
+
+main :: TopLevel #();
+main =
+  topBind Term #() (readSBV add_comm_path) (\(t0::Term) ->
+  writeSMTLib2 p384_safe_product_smt_path t0);

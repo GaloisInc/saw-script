@@ -17,6 +17,7 @@ library
     , directory
     , filepath
     , jvm-verifier
+    , lens
     , llvm-pretty
     , llvm-verifier
     , mtl >= 2.1
@@ -30,6 +31,7 @@ library
     , transformers
     , vector
     , Verinf
+    , wl-pprint
 
   hs-source-dirs: src
 
@@ -37,18 +39,18 @@ library
     SAWScript.AST
     SAWScript.Builtins
     SAWScript.Compiler
-    SAWScript.ConvertType
+    --SAWScript.ConvertType
     SAWScript.Execution
     --SAWScript.FindMain
     --SAWScript.Import
     SAWScript.Lexer
-    SAWScript.LiftPoly
+    --SAWScript.LiftPoly
     SAWScript.Options
     SAWScript.Parser
+    SAWScript.RenameRefs
     SAWScript.ResolveSyns
     --SAWScript.ToSAWCore
     SAWScript.Token
-    --SAWScript.TopLevel
     --SAWScript.TypeCheck
     SAWScript.Unify
     SAWScript.Unify.Fix
