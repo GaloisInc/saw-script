@@ -99,6 +99,7 @@ data Term
   | Paren Pos Term
   | LetTerm Pos [Decl] Term
   | NatLit Pos Integer
+  | StringLit Pos String
     -- | Vector literal.
   | VecLit Pos [Term]
   | BadTerm Pos
@@ -147,6 +148,7 @@ instance Positioned Term where
       Paren p _            -> p
       LetTerm p _ _        -> p
       NatLit p _           -> p
+      StringLit p _        -> p
       VecLit p _           -> p
       BadTerm p            -> p
 

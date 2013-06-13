@@ -31,8 +31,29 @@ import Verifier.SAW.Position
 
 }
 
-$idchar = [a-z A-Z 0-9 \' \_]
-@num = [0-9]+
+$whitechar = [ \t\n\r\f\v]
+$special   = [\(\)\,\;\[\]\`\{\}]
+$digit     = 0-9
+$binit     = 0-1
+$octit     = 0-7
+$hexit     = [0-9 A-F a-f]
+$large     = [A-Z]
+$small     = [a-z]
+$alpha     = [$small $large]
+$symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~] # [$special \_\:\"\']
+$graphic   = [$alpha $symbol $digit $special \:\"\'\_]
+$charesc   = [abfnrtv\\\"\'\&]
+$idchar    = [a-z A-Z 0-9 \' \_]
+$cntrl     = [$large \@\[\\\]\^\_]
+@ascii     = \^ $cntrl | NUL | SOH | STX | ETX | EOT | ENQ | ACK
+           | BEL | BS | HT | LF | VT | FF | CR | SO | SI | DLE
+           | DC1 | DC2 | DC3 | DC4 | NAK | SYN | ETB | CAN | EM
+           | SUB | ESC | FS | GS | RS | US | SP | DEL
+@num       = $digit+
+@decimal   = $digit+
+@binary    = $binit+
+@octal     = $octit+
+@hex       = $hexit+
 @var = [a-z] $idchar*
 @unvar = [\_]+ ([a-z] $idchar*)?
 @con = [A-Z] $idchar*
@@ -43,12 +64,17 @@ $idchar = [a-z A-Z 0-9 \' \_]
           | "qualified" | "sort" | "where"
 @key = @punct | @keywords
 
+@escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hex)
+@gap         = \\ $whitechar+ \\
+@string      = $graphic # [\"\\] | " " | @escape | @gap
+
 sawTokens :-
 
 $white+;
 "--".*;
 "{-"        { \_ -> TCmntS }
 "-}"        { \_ -> TCmntE }
+\" @string* \" { TString . read   }
 @num        { TNat . read }
 @key        { TKey }
 @var        { TVar }
@@ -62,6 +88,7 @@ data Token
   | TUnVar { tokVar :: String } -- ^ Variable identifier prefixed by underscore.
   | TCon { tokCon :: String }   -- ^ Start of a constructor (may be pattern matched).
   | TNat { tokNat :: Integer }  -- ^ Natural number literal
+  | TString { tokString :: String } -- ^ String literal
   | TKey String     -- ^ Keyword or predefined symbol
   | TEnd            -- ^ End of file.
   | TCmntS          -- ^ Start of a block comment
@@ -76,6 +103,7 @@ ppToken tkn =
     TUnVar s -> s
     TCon s -> s
     TNat n -> show n
+    TString s -> show s
     TKey s -> s
     TEnd -> "END"
     TCmntS -> "XXXS"

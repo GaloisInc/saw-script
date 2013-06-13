@@ -67,6 +67,7 @@ import Verifier.SAW.Lexer
   unvar    { PosPair _ (TUnVar _) }
   con      { PosPair _ (TCon _) }
   nat      { PosPair _ (TNat _) }
+  string   { PosPair _ (TString _) }
 
 %%
 
@@ -172,6 +173,7 @@ RecTerm : AtomTerm              { $1 }
 
 AtomTerm :: { Term }
 AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
+         | string                       { StringLit (pos $1) (tokString (val $1)) }
          | Var                          { Var (fmap localIdent $1) }
          | unvar                        { Unused (fmap tokVar $1) }
          | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
