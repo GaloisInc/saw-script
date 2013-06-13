@@ -212,6 +212,30 @@ translateExpr doType e = go e
                   e' <- go de
                   return $ SC.Def n ty [SC.DefEqn [] e']
 
+translateTypeShared :: SC.SharedContext s -> SS.Type -> M' (SC.SharedTerm s)
+translateTypeShared sc = go
+  where go SS.UnitT           = liftIO $ SC.scTupleType sc []
+        go SS.BitT            = liftIO $ SC.scBoolType sc
+        go SS.ZT              = liftIO $ SC.scNatType sc
+        go SS.QuoteT          = liftIO $ SC.scDataTypeApp sc (SC.parseIdent "Prelude.String") []
+        go (SS.ArrayT t n)    = do t' <- go t
+                                   n' <- liftIO $ SC.scNat sc n
+                                   liftIO $ SC.scDataTypeApp sc (SC.parseIdent "Prelude.Vec") [n', t']
+        go (SS.BlockT c t)    = fail "BlockT not supported"
+        go (SS.TupleT ts)     = liftIO . SC.scTupleType sc =<< traverse go ts
+        go (SS.RecordT _)     = error "TODO: translateTypeShared RecordT"
+        go (SS.FunctionT t u) = do t' <- go t
+                                   u' <- go u
+                                   liftIO $ SC.scFun sc t' u'
+        go (SS.TypAbs xs t)   = do s0 <- liftIO $ SC.scSort sc (SC.mkSort 0)
+                                   t' <- addLocalTypes xs (go t)
+                                   liftIO $ SC.scLambdaList sc [ (x, s0) | x <- xs ] t'
+        go (SS.TypVar x)      = do ls <- localTs <$> ask
+                                   s0 <- liftIO $ SC.scSort sc (SC.mkSort 0)
+                                   case M.lookup x ls of
+                                     Nothing -> fail $ "unbound type variable: " ++ x
+                                     Just i -> liftIO $ SC.scLocalVar sc i s0
+
 -- | Toplevel SAWScript expressions may be polymorphic. Type
 -- abstractions do not show up explicitly in the Expr datatype, but
 -- they are represented in a top-level expression's type (using
