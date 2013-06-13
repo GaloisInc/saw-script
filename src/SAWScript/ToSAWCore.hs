@@ -75,6 +75,8 @@ runTranslate env (M a) = runIdentity . runErrorT . runReaderT a $ env
 -- TODO: this type (or its equivalent) should be defined in AST.hs
 data VarName = Local SS.Name | Global SS.QName
 
+type Expression = SS.Expr VarName SS.Type
+
 translateIdent :: SS.QName -> SC.Ident
 translateIdent (SS.QName m n) = SC.mkIdent (translateModuleName m) n
 
@@ -212,6 +214,21 @@ translateExpr doType e = go e
                   ty <- doType (SS.typeOf de)
                   e' <- go de
                   return $ SC.Def n ty [SC.DefEqn [] e']
+
+-- | Toplevel SAWScript expressions may be polymorphic. Type
+-- abstractions do not show up explicitly in the Expr datatype, but
+-- they are represented in a top-level expression's type (using
+-- TypAbs). If present, these must be translated into SAWCore as
+-- explicit type abstractions.
+translatePolyExprShared :: forall s. SC.SharedContext s -> (SS.Type -> M' (SC.SharedTerm s))
+                        -> Expression -> M' (SC.SharedTerm s)
+translatePolyExprShared sc doType expr =
+    case SS.typeOf expr of
+      SS.TypAbs ns _ -> do
+        s0 <- liftIO $ SC.scSort sc (SC.mkSort 0)
+        t <- addLocalTypes ns (translateExprShared sc doType expr)
+        liftIO $ SC.scLambdaList sc [ (n, s0) | n <- ns ] t
+      _ -> translateExprShared sc doType expr
 
 -- | Directly builds an appropriately-typed SAWCore shared term.
 translateExprShared :: forall s a. SC.SharedContext s -> (a -> M' (SC.SharedTerm s))
