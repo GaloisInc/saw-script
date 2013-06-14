@@ -1,10 +1,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module SAWScript.RenameRefs where
+module SAWScript.RenameRefs
+  ( renameRefs
+  , IncomingModule
+  , OutgoingModule
+  ) where
 
 import SAWScript.AST
 import SAWScript.Compiler
-import SAWScript.LiftPoly
 
 import Control.Applicative
 import Control.Monad.State
@@ -95,7 +98,7 @@ resolveInExpr exp = case exp of
   Var nm t          -> Var <$> resolveName nm <*> pure t
   -- Recursive structures
   Array  es t       -> Array  <$> mapM resolveInExpr es   <*> pure t
-  Block  bs t       -> Block  <$> mapM resolveInBStmt bs  <*> pure t
+  Block  bs t       -> Block  <$> resolveInBStmts bs      <*> pure t
   Tuple  es t       -> Tuple  <$> mapM resolveInExpr es   <*> pure t
   Record bs t       -> Record <$> mapM resolveInBind bs   <*> pure t
   Index  e1 e2 t    -> Index  <$> resolveInExpr e1        <*> resolveInExpr e2 <*> pure t
@@ -130,13 +133,17 @@ duplicates bs = nub $ mapMaybe f ns
 resolveInBind :: Bind IncomingExpr -> RR (Bind OutgoingExpr)
 resolveInBind (n,e) = (,) <$> pure n <*> resolveInExpr e
 
-resolveInBStmt :: IncomingBStmt -> RR OutgoingBStmt
-resolveInBStmt bst = case bst of
-  Bind mn t e       -> Bind mn t <$> resolveInExpr e
-  BlockTypeDecl n t -> pure $ BlockTypeDecl n t
-  BlockLet bs       -> BlockLet <$> mapM resolveInBind bs
+resolveInBStmts :: [IncomingBStmt] -> RR [OutgoingBStmt]
+resolveInBStmts bsts = case bsts of
+  []                        -> return []
 
+  Bind Nothing c e  : bsts' ->   (:) <$> (Bind Nothing c   <$> resolveInExpr e)       <*> resolveInBStmts bsts'
+  Bind (Just n) c e : bsts' -> addName n $ \n' ->
+                                 (:) <$> (Bind (Just n') c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
 
+  BlockTypeDecl n t : bsts' ->   (:) <$> (pure $ BlockTypeDecl n t)            <*> resolveInBStmts bsts'
+  BlockLet bs       : bsts' -> addNamesFromBinds bs $ \bs' ->
+                                 (:) <$> (BlockLet <$> mapM resolveInBind bs') <*> resolveInBStmts bsts'
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
 --  failing if the UnresolvedName is unbound or ambiguous.
