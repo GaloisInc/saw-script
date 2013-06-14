@@ -183,10 +183,10 @@ instance ReifyDecs Logic where
       Nothing -> newVar n
 
 newVar :: Index -> RD ResolvedT
-newVar i = do
+newVar ix = do
   n <- gets $ head . reifyGen
   let v = pVar n
-  modify $ \(ReifyState g e) -> ReifyState (tail g) ((i,v):e)
+  modify $ \(ReifyState g e) -> ReifyState (tail g) ((ix,v):e)
   return v
 
 -- }}}

@@ -16,7 +16,6 @@ import Prelude;
 --     primitive functions?
 --
 
-data String :: sort 0 where { }
 data TopLevel :: sort 0 -> sort 0 where { }
 data CryptolSetup :: sort 0 -> sort 0 where { }
 data CryptolVerifyResult :: sort 0 where { }
@@ -111,19 +110,11 @@ termBvNat w x =
   termApp t2 t3))));
 
 evaluate :: (a :: sort 0) -> Term -> a;
-loadSBV :: String -> TopLevel Term;
-
-p384_safe_product_path :: String;
-
-test :: TopLevel #();
-test =
-  topBind Term #() (loadSBV p384_safe_product_path) (\(t0::Term) ->
-  topBind Term #() (termBvNat 384 111) (\(t1::Term) ->
-  topBind Term #() (termBvNat 384 111111) (\(t2::Term) ->
-  topBind Term #() (termTuple 2 [t1, t2]) (\(t3::Term) ->
-  topBind Term #() (termApp t0 t3) (\(t4::Term) ->
-  topBind #() #() (print Term t4) (\(_ :: #()) ->
-  print (bitvector 768) (evaluate (bitvector 768) t4)))))));
+readSBV :: String -> TopLevel Term;
+readAIG :: String -> TopLevel Term;
+writeAIG :: String -> Term -> TopLevel #();
+writeSMTLib1 :: String -> Term -> TopLevel #();
+writeSMTLib2 :: String -> Term -> TopLevel #();
 
 -- A VerifyResult encodes either a statement of what it proved, or a
 -- counterexample. These work like the method specs in the first version

@@ -1,0 +1,9 @@
+module SAWScriptMain where
+
+import Prelude;
+import SAWScriptPrelude;
+
+main :: TopLevel #();
+main =
+  topBind Term #() (extract_java "Foo" "f" java_pure) (\(t0::Term) ->
+  writeAIG "java_f.aig" t0);

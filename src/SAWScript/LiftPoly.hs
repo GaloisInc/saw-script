@@ -53,7 +53,7 @@ data Lifted = Lifted
 liftPoly :: Compiler (ModuleSimple ResolvedT ResolvedT) Lifted
 liftPoly = compiler "LiftPoly" $ \input ->
   case evalStream $ getStream input of
-    Left es   -> fail "No possible lifting"
+    Left _es  -> fail "No possible lifting"
     Right [r] -> return r
     Right rs  -> fail ("Ambiguous lifting:" ++ PP.ppShow rs)
 
