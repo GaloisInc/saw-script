@@ -1,48 +1,25 @@
-import cryptol_prelude;
-import java_prelude;
-import llvm_prelude;
+-- Model extraction
+java_pure : JavaSetup ();
+extract_java : String -> String -> JavaSetup () -> TopLevel Model;
+llvm_pure : LLVMSetup ();
+extract_llvm : String -> String -> LLVMSetup () -> TopLevel Model;
 
-/* Send the current goal to Yices, and return proof status. */
-yices : ProofScript ProofResult;
+-- Reading models from external files
+read_aig : String -> TopLevel Model;
+read_sbv : String -> TopLevel Model;
 
-/* Send the current goal to abc, and return proof status. */
-abc : ProofScript ProofResult;
+-- Theorem creation
+equal : Model -> Model -> TopLevel Model;
+not : Model -> TopLevel Model;
 
-/* Prove the same goal with multiple provers. */
-multi_prove : {a} [a](ProofScript ProofResult) -> ProofScript ProofResult;
+-- Theorem export
+write_aig : String -> Model -> TopLevel Unit;
+write_smtlib1 : String -> Model -> TopLevel Unit;
+write_smtlib2 : String -> Model -> TopLevel Unit;
 
-/* TODO: might some theorem provers return new, simplified goals? */
+-- Theorem proving
+prove : ProofScript ProofResult -> Model -> TopLevel ();
+sat : ProofScript ProofResult -> Model -> TopLevel ();
 
-/* Rewrite rules. */
-rule : {a} a -> a -> Rule;
-expand : {a} a -> Rule;
-
-/* Rewrite the current goal with a default set of rules, and return
- * the rewritten term (also updating the implicit state?).
- */
-rewrite : ProofScript Goal;
-
-/* Rewrite with a specific set of results. */
-rewrite_with : {a} [a]Rule -> ProofScript Goal;
-
-/* Any boolean expression can be a goal. */
-goal : Bit -> Goal;
-
-/* Goals can have quantifiers added. */
-forall : {a} (a -> Goal) -> Goal;
-exists : {a} (a -> Goal) -> Goal;
-
-/*
-Example:
-  forall (\a -> exists (\b -> goal (a == b)))
-*/
-
-/* Top level proof commands. */
-prove : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
-sat : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
-quickcheck : Goal -> ProofScript ProofResult -> TopLevel ProofResult;
-
-/* Printing is polymorphic for now. */
+-- Misc
 print : {a} a -> TopLevel ();
-
-proof_result : {a} ProofResult -> (Theorem -> a) -> (CounterExample -> a) -> a;
