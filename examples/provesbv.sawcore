@@ -1,0 +1,10 @@
+module SAWScriptMain where
+
+import Prelude;
+import SAWScriptPrelude;
+
+main :: TopLevel #();
+main =
+  topBind Term ProofResult (readSBV "examples/add_comm.sbv") (\(t0::Term) ->
+  topBind ProofResult #() (prove t0 abc) (\(r::ProofResult) ->
+  print ProofResult r));

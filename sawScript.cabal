@@ -42,14 +42,14 @@ library
     --SAWScript.ConvertType
     SAWScript.Execution
     --SAWScript.FindMain
-    SAWScript.Import
+    --SAWScript.Import
     SAWScript.Lexer
     --SAWScript.LiftPoly
     SAWScript.Options
     SAWScript.Parser
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
-    --SAWScript.ToSAWCore
+    SAWScript.ToSAWCore
     SAWScript.Token
     --SAWScript.TypeCheck
     SAWScript.Unify
