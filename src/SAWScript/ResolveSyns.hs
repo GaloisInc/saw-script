@@ -13,12 +13,12 @@ import Data.Monoid
 import Data.Foldable
 import Data.Traversable hiding (mapM)
 
-resolveSyns :: Compiler (ModuleSimple RawT RawSigT) (ModuleSimple ResolvedT FullT)
+resolveSyns :: Compiler (ModuleSimple RawT RawT) (ModuleSimple ResolvedT ResolvedT)
 resolveSyns = compiler "ResolveSyns" $ \(Module nm ee te ds) -> evalRS te $ 
-  Module nm <$> traverse (traverse resolve) ee <*> traverse resolveSig te <*> pure ds
+  Module nm <$> traverse (traverse resolve) ee <*> traverse resolve te <*> pure ds
 
 type RS = ReaderT RSEnv Err
-type RSEnv = Env RawSigT
+type RSEnv = Env RawT
 
 evalRS :: RSEnv -> RS a -> Err a
 evalRS e m = runReaderT m e
@@ -56,7 +56,8 @@ instance Resolvable Syn where
     found <- getsSynEnv $ lookupEnv n
     case found of
       Nothing -> failRS $ "unbound type synonym: " ++ show n
-      Just t  -> resolveSig t
+      Just (Just t)  -> resolve t
+      Just Nothing   -> return 
 
 instance Resolvable TypeF where
   resolveF = return . inject
