@@ -48,7 +48,7 @@ library
     SAWScript.Options
     SAWScript.Parser
     SAWScript.RenameRefs
-    SAWScript.ResolveSyns
+    --SAWScript.ResolveSyns
     SAWScript.ToSAWCore
     SAWScript.Token
     --SAWScript.TypeCheck
