@@ -135,8 +135,8 @@ sbv :: CryptolSetup #();
 
 -- Set up symbolic simulation for a pure function from fixed-size arguments
 -- to fixed-size return value.
-pure_llvm :: LLVMSetup #();
-pure_java :: LLVMSetup #();
+llvm_pure :: LLVMSetup #();
+java_pure :: LLVMSetup #();
 
 -- A successful proof about a method can be used to override calls to
 -- the method. The requirement to provide verification results serves
