@@ -9,8 +9,6 @@ import SAWScript.Compiler
 
 import Control.Applicative
 import Control.Monad.Trans.Reader
-import Data.Monoid
-import Data.Foldable
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (ModuleSimple RawT RawT) (ModuleSimple ResolvedT ResolvedT)
@@ -56,8 +54,12 @@ instance Resolvable Syn where
     found <- getsSynEnv $ lookupEnv n
     case found of
       Nothing -> failRS $ "unbound type synonym: " ++ show n
-      Just (Just t)  -> resolve t
-      Just Nothing   -> return 
+      Just t  -> do
+        t' <- resolve t
+        case t' of
+          Just t'' -> return t''
+          -- TODO: is the following correct?
+          Nothing -> failRS $ "failed to resolve synonym: " ++ show n
 
 instance Resolvable TypeF where
   resolveF = return . inject
