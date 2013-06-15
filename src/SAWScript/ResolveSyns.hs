@@ -38,13 +38,13 @@ getsSynEnv = asks
 resolve :: RawT -> RS ResolvedT
 resolve mt = case mt of
   Nothing -> return Nothing
-  Just t  -> Just <$> resolveSig t
+  Just t  -> resolveSig t
 
-resolveSig :: RawSigT -> RS FullT
+resolveSig :: RawSigT -> RS ResolvedT
 resolveSig = foldMuM resolveF
 
 class Functor f => Resolvable f where
-  resolveF :: f FullT -> RS FullT
+  resolveF :: f ResolvedT -> RS ResolvedT
 
 instance (Resolvable f, Resolvable g) => Resolvable (f :+: g) where
   resolveF cp = case cp of
@@ -56,15 +56,32 @@ instance Resolvable Syn where
     found <- getsSynEnv $ lookupEnv n
     case found of
       Nothing -> failRS $ "unbound type synonym: " ++ show n
-      Just (Just t)  -> resolve t
-      Just Nothing   -> return 
+      Just (Just t)  -> resolveSig t
+      Just Nothing   -> undefined
 
 instance Resolvable TypeF where
-  resolveF = return . inject
+  resolveF typ = case typ of
+    UnitF           -> return $ Just unit
+    BitF            -> return $ Just bit
+    ZF              -> return $ Just z
+    QuoteF          -> return $ Just quote
+    PVar n          -> return $ Just $ pVar n
+    ArrayF t1 t2    -> return $ array <$> t1 <*> t2
+    BlockF t1 t2    -> return $ block <$> t1 <*> t2
+    TupleF ts       -> return $ tuple <$> sequenceA ts
+    RecordF nts     -> return $ record <$> traverse (\(n,t) -> (,) <$> pure n <*> t) nts
+    FunctionF t1 t2 -> return $ function <$> t1 <*> t2
+    PAbs ns t       -> return $ pAbs ns <$> t
+    
 
 instance Resolvable ContextF where
-  resolveF = return . inject
+  resolveF cxt = case cxt of
+    CryptolSetupContext -> return $ Just cryptolSetupContext
+    JavaSetupContext    -> return $ Just javaSetupContext   
+    LLVMSetupContext    -> return $ Just llvmSetupContext   
+    ProofScriptContext  -> return $ Just proofScriptContext 
+    TopLevelContext     -> return $ Just topLevelContext    
 
 instance Resolvable I where
-  resolveF = return . inject
+  resolveF (I n) = return $ Just $ i n
 
