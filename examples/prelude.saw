@@ -1,25 +1,25 @@
--- Model extraction
+/* Model extraction */
 java_pure : JavaSetup ();
 extract_java : String -> String -> JavaSetup () -> TopLevel Model;
 llvm_pure : LLVMSetup ();
 extract_llvm : String -> String -> LLVMSetup () -> TopLevel Model;
 
--- Reading models from external files
+/* Reading models from external files */
 read_aig : String -> TopLevel Model;
 read_sbv : String -> TopLevel Model;
 
--- Theorem creation
+/* Theorem creation */
 equal : Model -> Model -> TopLevel Model;
-not : Model -> TopLevel Model;
+/* not : Model -> TopLevel Model; */
 
--- Theorem export
+/* Theorem export */
 write_aig : String -> Model -> TopLevel Unit;
 write_smtlib1 : String -> Model -> TopLevel Unit;
 write_smtlib2 : String -> Model -> TopLevel Unit;
 
--- Theorem proving
+/* Theorem proving */
 prove : ProofScript ProofResult -> Model -> TopLevel ();
 sat : ProofScript ProofResult -> Model -> TopLevel ();
 
--- Misc
+/* Misc */
 print : {a} a -> TopLevel ();
