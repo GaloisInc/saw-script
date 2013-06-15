@@ -70,6 +70,8 @@ library
 executable saw
   hs-source-dirs: .
 
+  GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
+
   main-is: src/Main.hs
 
   build-depends:
