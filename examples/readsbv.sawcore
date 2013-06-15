@@ -5,5 +5,5 @@ import SAWScriptPrelude;
 
 main :: TopLevel #();
 main =
-  topBind Term #() (readSBV "examples/add_comm.sbv") (\(t0::Term) ->
+  topBind Term #() (read_sbv "examples/add_comm.sbv") (\(t0::Term) ->
   print Term t0);

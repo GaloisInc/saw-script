@@ -5,5 +5,5 @@ import SAWScriptPrelude;
 
 main :: TopLevel #();
 main =
-  topBind Term #() (readSBV "examples/add_comm.sbv") (\(t0::Term) ->
-  writeSMTLib2 "add_comm.smt2" t0);
+  topBind Term #() (read_sbv "examples/add_comm.sbv") (\(t0::Term) ->
+  write_smtlib2 "add_comm.smt2" t0);

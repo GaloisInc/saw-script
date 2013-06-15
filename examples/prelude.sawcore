@@ -46,6 +46,8 @@ termLocalVar :: Nat -> Term -> TopLevel Term;
 termGlobal :: String -> TopLevel Term;
 termLambda :: String -> Term -> Term -> TopLevel Term;
 termApp :: Term -> Term -> TopLevel Term;
+termEqual :: Term -> Term -> TopLevel Term;
+termNot :: Term -> TopLevel Term;
 
 termUnit :: TopLevel Term;
 termUnit = termTuple 0 (EmptyVec Term);
@@ -110,11 +112,13 @@ termBvNat w x =
   termApp t2 t3))));
 
 evaluate :: (a :: sort 0) -> Term -> a;
-readSBV :: String -> TopLevel Term;
-readAIG :: String -> TopLevel Term;
-writeAIG :: String -> Term -> TopLevel #();
-writeSMTLib1 :: String -> Term -> TopLevel #();
-writeSMTLib2 :: String -> Term -> TopLevel #();
+
+read_sbv :: String -> TopLevel Term;
+read_aig :: String -> TopLevel Term;
+
+write_aig :: String -> Term -> TopLevel #();
+write_smtlib1 :: String -> Term -> TopLevel #();
+write_smtlib2 :: String -> Term -> TopLevel #();
 
 -- A VerifyResult encodes either a statement of what it proved, or a
 -- counterexample. These work like the method specs in the first version
@@ -128,7 +132,7 @@ verify_java :: String -> JavaSetup #() -> TopLevel JavaVerifyResult;
 -- that these are well-typed, and check at runtime.
 extract_cryptol :: String -> String -> CryptolSetup #() -> TopLevel Term;
 extract_llvm :: String -> String -> LLVMSetup #() -> TopLevel Term;
-extract_java :: String -> JavaSetup #() -> TopLevel Term;
+extract_java :: String -> String -> JavaSetup #() -> TopLevel Term;
 
 -- One method is currently available for Cryptol extraction.
 sbv :: CryptolSetup #();
@@ -136,7 +140,7 @@ sbv :: CryptolSetup #();
 -- Set up symbolic simulation for a pure function from fixed-size arguments
 -- to fixed-size return value.
 llvm_pure :: LLVMSetup #();
-java_pure :: LLVMSetup #();
+java_pure :: JavaSetup #();
 
 -- A successful proof about a method can be used to override calls to
 -- the method. The requirement to provide verification results serves
@@ -275,9 +279,9 @@ exists :: ?(a :: sort 0) -> (a -> Goal) -> Goal;
 
 -- Top level proof commands.
 -- Term arguments should have type Goal.
-prove :: Term -> ProofScript ProofResult -> TopLevel ProofResult;
-sat :: Term -> ProofScript ProofResult -> TopLevel ProofResult;
-quickcheck :: Term -> ProofScript ProofResult -> TopLevel ProofResult;
+prove :: ProofScript ProofResult -> Term -> TopLevel ProofResult;
+sat :: ProofScript ProofResult -> Term -> TopLevel ProofResult;
+quickcheck :: ProofScript ProofResult -> Term -> TopLevel ProofResult;
 
 -- Printing is polymorphic for now.
 print :: ?(a :: sort 0) -> a -> TopLevel #();

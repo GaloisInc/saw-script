@@ -6,4 +6,4 @@ import SAWScriptPrelude;
 main :: TopLevel #();
 main =
   topBind Term #() (extract_llvm "examples/double.bc" "f" llvm_pure) (\(t0::Term) ->
-  writeAIG "llvm_f.aig" t0);
+  write_aig "llvm_f.aig" t0);

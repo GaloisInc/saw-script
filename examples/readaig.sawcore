@@ -5,5 +5,5 @@ import SAWScriptPrelude;
 
 main :: TopLevel #();
 main =
-  topBind Term #() (readAIG "Maj.aig") (\(t0::Term) ->
+  topBind Term #() (read_aig "Maj.aig") (\(t0::Term) ->
   print Term t0);
