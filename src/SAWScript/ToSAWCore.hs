@@ -6,8 +6,8 @@
 -- TODO: generate correct deBruijn indices
 -- TODO: translate inferred types to explicit type parameters
 module SAWScript.ToSAWCore
-  ( {-translateModule
-  , -}translateExprShared
+  ( translateModule
+  , translateExprShared
   , translateExprMeta
   )
   where
@@ -83,62 +83,21 @@ translateIdent m n = SC.mkIdent (translateModuleName m) n
 translateModuleName :: SS.ModuleName -> SC.ModuleName
 translateModuleName (SS.ModuleName xs x) = SC.mkModuleName (xs ++ [x])
 
-{-FIXME
-translateModule :: [SC.Module] -> SS.Module' SS.PType SS.Type -> Either String SC.Module
-translateModule ms m = runTranslate env $ translateModule' m
-    where ssGlobs = mapMaybe getTopBindName (SS.declarations m)
-          getTopBindName (SS.TopBind name _) =
-            Just $ SC.mkIdent (SC.mkModuleName [SS.modName m]) name
-          getTopBindName _ = Nothing
-          scGlobs = map SC.defIdent . SC.moduleDefs
-          globs = ssGlobs ++ concatMap scGlobs ms
-          env = (emptyEnv { modules = ms, globals = globs })
--}
+translateModule :: SS.ValidModule -> Either String SC.Module
+translateModule m = runTranslate emptyEnv $
+  foldM translateTopDef (SC.emptyModule mn) exprs
+    where exprs = M.toList (SS.moduleExprEnv m)
+          mn = translateModuleName (SS.moduleName m)
 
-{-FIXME
-translateModule' :: SS.Module' SS.PType SS.Type -> M SC.Module
-translateModule' (SS.Module mname tss main) = do
-  body' <- translateExpr (return . translateType) main
-  let mainBody = SC.DefEqn [] body'
-      modName = SC.mkModuleName [mname]
-      mainName = SC.mkIdent modName "main"
-      mainDef = SC.Def mainName mainTy [mainBody]
-      mainTy = translateType (SS.typeOf main)
-  flip SC.insDef mainDef <$> foldM insertTopStmt (SC.emptyModule modName) tss
--}
-
-{-FIXME
--- We assume @env@ already includes any modules imported by @m@.
-insertTopStmt :: SC.Module -> SS.TopStmt SS.PType -> M SC.Module
-insertTopStmt m s = do
-  env <- ask
-  let ms =  modules env
-  case s of
-    SS.Import mname _ _ ->
-      case find (\m' -> SC.moduleName m' == SC.mkModuleName [mname]) ms of
-        Just m' -> return $ SC.insImport m' m
-        Nothing -> fail $ "can't find module " ++ mname
-
-    -- Type synonyms are erased by this point, so we don't try to
-    -- translate them.
-    SS.TypeDef name _ -> fail $ "unexpected type synonym: " ++ name
-
-    -- Types from signatures get propagated during type checking, so
-    -- they don't need to be inserted into the module. They'll be
-    -- re-created based on the inferred type of the declaration, so we
-    -- don't need to care whether an explicit signature existed or
-    -- not.
-    SS.TopTypeDecl _ _ -> return m
-
-    -- TODO: for each binding, introduce a type signature based on its inferred type
-    SS.TopBind name e -> do
-      e' <- translateExpr translatePType e
-      t <- translatePType (SS.typeOf e)
-      let mname = SC.moduleName m
-          i = SC.mkIdent mname name
-          d = SC.DefEqn [] e'
-      return $ SC.insDef m (SC.Def i t [d])
--}
+-- TODO: translate imports
+translateTopDef :: SC.Module
+                -> (SS.Name, SS.Expr SS.ResolvedName SS.Type)
+                -> M SC.Module
+translateTopDef m (n, e) = do
+  e' <- translateExpr (return . translateType) e
+  let ty = translateType (SS.typeOf e)
+  return $ SC.insDef m (SC.Def (SC.mkIdent mn n) ty [SC.DefEqn [] e'])
+    where mn = SC.moduleName m
 
 translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt SS.ResolvedName a]
                     -> M (SC.Term, SC.Term) -- (term, type)
