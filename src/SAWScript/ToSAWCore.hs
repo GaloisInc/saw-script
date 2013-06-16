@@ -385,6 +385,7 @@ translateExprMeta doType = go
                   return $ SC.Def n ty [SC.DefEqn [] e']
 -}
 
+{-
 --FIXME translatePType :: SS.PType -> M SC.Term
 translatePType t = addParams ps <$> local polyEnv (translatePType' t)
     where ps = map unwrap $ getPolyTypes t
@@ -419,8 +420,9 @@ translatePType' (In (Inr (Inl ty))) =
     SS.FunctionF aty rty ->
       tfun <$> translatePType' aty <*> translatePType' rty
 --FIXME    SS.Syn name -> fail $ "ToSAWCore: unresolved type synonym: " ++ name
+-}
 
---FIXME getPolyTypes :: SS.PType -> [SS.Poly SS.PType]
+getPolyTypes :: SS.FullT -> [SS.TypeF SS.FullT]
 getPolyTypes (In (Inl _)) = []
 getPolyTypes (In (Inr (Inr p))) = [p]
 getPolyTypes (In (Inr (Inl ty))) = F.concatMap getPolyTypes ty
@@ -440,6 +442,9 @@ translateType ty =
         where translateField (fn, fty) = (fn, translateType fty)
     SS.FunctionT aty rty ->
       tfun (translateType aty) (translateType rty)
+    SS.Abstract _ -> error "abstract types not yet translated"
+    SS.TypAbs _ _ -> error "type abstractions not yet translated"
+    SS.TypVar _ -> error "type variables not yet translated"
 
 -- SAWCore term and type constructors
 
