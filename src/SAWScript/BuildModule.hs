@@ -52,7 +52,11 @@ assemble mn envs = go mn
   where
   go n = case lookup n envs of
     Nothing         -> fail $ "Module " ++ renderModuleName n ++ " was not loaded"
-    Just (ee,te,ds) -> return (Module n ee te ds)
+    Just (ee,te,ds) -> return (Module n ee te $ M.fromSet dummyModule ds)
+
+-- TODO: build a reasonable module
+dummyModule :: ModuleName -> ValidModule
+dummyModule mn = Module mn M.empty M.empty M.empty
 
 -- Every expression name must be bound to something
 ensureExprPresent :: Name -> ExprAssoc -> Err (ExprSimple RawT)
