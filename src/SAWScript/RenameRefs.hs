@@ -18,8 +18,8 @@ import qualified Data.Map as M
 import qualified Data.Traversable as T
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
-renameRefs :: Compiler IncomingModule OutgoingModule
-renameRefs = compiler "RenameRefs" $ \m@(Module nm ee te ds) -> evalRR m $
+renameRefs :: Env Name -> Compiler IncomingModule OutgoingModule
+renameRefs env = compiler "RenameRefs" $ \m@(Module nm ee te ds) -> evalRR env m $
   Module nm <$> T.traverse resolveInExpr ee <*> pure te <*> pure ds
 
 -- Types {{{
@@ -40,7 +40,7 @@ type RR = StateT Int (ReaderT RREnv Err)
 --  name for the module, and the expr env for the module.
 -- Since these are fully typechecked modules, we can assume that
 --  their Expr type is FullT.
-type ExprMaps = (ModuleName, Env IncomingExpr, ModuleEnv (Env (Expr ResolvedName TCheckT)))
+type ExprMaps = (ModuleName, Env IncomingExpr, ModuleEnv (Env (Expr ResolvedName Type)))
 
 -- }}}
 
@@ -58,10 +58,10 @@ onLocalNameEnv f e = e { localNameEnv = f $ localNameEnv e }
 
 -- Monadic Operations {{{
 
-evalRR :: IncomingModule -> RR a -> Err a
-evalRR mod m = runReaderT (evalStateT m 0) env
+evalRR :: Env Name -> IncomingModule -> RR a -> Err a
+evalRR env0 mod m = runReaderT (evalStateT m 0) env
   where
-  env = RREnv mod emptyEnv
+  env = RREnv mod env0
 
 incrGen :: RR Int
 incrGen = do

@@ -9,8 +9,6 @@ import SAWScript.Compiler
 
 import Control.Applicative
 import Control.Monad.Trans.Reader
-import Data.Monoid
-import Data.Foldable
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (ModuleSimple RawT RawT) (ModuleSimple ResolvedT ResolvedT)
@@ -38,13 +36,13 @@ getsSynEnv = asks
 resolve :: RawT -> RS ResolvedT
 resolve mt = case mt of
   Nothing -> return Nothing
-  Just t  -> resolveSig t
+  Just t  -> Just <$> resolveSig t
 
-resolveSig :: RawSigT -> RS ResolvedT
+resolveSig :: RawSigT -> RS FullT
 resolveSig = foldMuM resolveF
 
 class Functor f => Resolvable f where
-  resolveF :: f ResolvedT -> RS ResolvedT
+  resolveF :: f FullT -> RS FullT
 
 instance (Resolvable f, Resolvable g) => Resolvable (f :+: g) where
   resolveF cp = case cp of
@@ -55,33 +53,17 @@ instance Resolvable Syn where
   resolveF (Syn n) = do
     found <- getsSynEnv $ lookupEnv n
     case found of
-      Nothing -> failRS $ "unbound type synonym: " ++ show n
-      Just (Just t)  -> resolveSig t
-      Just Nothing   -> undefined
+      Nothing       -> failRS $ "unbound type synonym: " ++ show n
+      Just Nothing  -> failRS $ "type synonym mistakenly bound to abstract type: " ++ show n
+      Just (Just t) -> resolveSig t
 
 instance Resolvable TypeF where
-  resolveF typ = case typ of
-    UnitF           -> return $ Just unit
-    BitF            -> return $ Just bit
-    ZF              -> return $ Just z
-    QuoteF          -> return $ Just quote
-    PVar n          -> return $ Just $ pVar n
-    ArrayF t1 t2    -> return $ array <$> t1 <*> t2
-    BlockF t1 t2    -> return $ block <$> t1 <*> t2
-    TupleF ts       -> return $ tuple <$> sequenceA ts
-    RecordF nts     -> return $ record <$> traverse (\(n,t) -> (,) <$> pure n <*> t) nts
-    FunctionF t1 t2 -> return $ function <$> t1 <*> t2
-    PAbs ns t       -> return $ pAbs ns <$> t
+  resolveF = return . inject
     
 
 instance Resolvable ContextF where
-  resolveF cxt = case cxt of
-    CryptolSetupContext -> return $ Just cryptolSetupContext
-    JavaSetupContext    -> return $ Just javaSetupContext   
-    LLVMSetupContext    -> return $ Just llvmSetupContext   
-    ProofScriptContext  -> return $ Just proofScriptContext 
-    TopLevelContext     -> return $ Just topLevelContext    
+  resolveF = return . inject
 
 instance Resolvable I where
-  resolveF (I n) = return $ Just $ i n
+  resolveF = return . inject
 
