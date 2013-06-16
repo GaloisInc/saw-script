@@ -49,6 +49,7 @@ library
     --SAWScript.LiftPoly
     SAWScript.Options
     SAWScript.Parser
+    SAWScript.Prelude
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.ToSAWCore
