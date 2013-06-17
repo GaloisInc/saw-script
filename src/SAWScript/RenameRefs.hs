@@ -8,6 +8,7 @@ module SAWScript.RenameRefs
 
 import SAWScript.AST
 import SAWScript.Compiler
+import SAWScript.Prelude
 
 import Control.Applicative
 import Control.Monad.State
@@ -18,8 +19,8 @@ import qualified Data.Map as M
 import qualified Data.Traversable as T
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
-renameRefs :: Env Name -> Compiler IncomingModule OutgoingModule
-renameRefs env = compiler "RenameRefs" $ \m@(Module nm ee te ds) -> evalRR env m $
+renameRefs :: Compiler IncomingModule OutgoingModule
+renameRefs = compiler "RenameRefs" $ \m@(Module nm ee te ds) -> evalRR m $
   Module nm <$> T.traverse resolveInExpr ee <*> pure te <*> pure ds
 
 -- Types {{{
@@ -58,10 +59,10 @@ onLocalNameEnv f e = e { localNameEnv = f $ localNameEnv e }
 
 -- Monadic Operations {{{
 
-evalRR :: Env Name -> IncomingModule -> RR a -> Err a
-evalRR env0 mod m = runReaderT (evalStateT m 0) env
+evalRR :: IncomingModule -> RR a -> Err a
+evalRR mod m = runReaderT (evalStateT m 0) env
   where
-  env = RREnv mod env0
+  env = RREnv mod emptyEnv
 
 incrGen :: RR Int
 incrGen = do
@@ -163,7 +164,11 @@ allExprMaps (Module modNm exprEnv _ deps) = (modNm,exprEnv,foldr f M.empty (M.el
   where
   f (Module modNm exprEnv _ _) = M.insert modNm exprEnv
 
-
+-- TODO: this will need to change once we can refer to prelude functions
+-- with qualified names.
+isInPrelude :: UnresolvedName -> Bool
+isInPrelude (UnresolvedName [] n) = n `elem` preludeNames
+isInPrelude _ = False
 
 resolveUnresolvedName :: Env Name -> ExprMaps -> UnresolvedName -> [ResolvedName]
 resolveUnresolvedName
@@ -171,8 +176,11 @@ resolveUnresolvedName
   (localModNm,localTopEnv,rms)
   un@(UnresolvedName ns n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
-  inLocal ++ mapMaybe inDepMod (M.assocs rms)
+  inPrelude ++ inLocal ++ mapMaybe inDepMod (M.assocs rms)
   where
+  inPrelude
+   | isInPrelude un = [TopLevelName preludeName n]
+   | otherwise = []
   -- ignores name shadowing, defering to the local binding over the top level binding.
   inLocal = maybeToList $ inLocalAnon `mplus` inLocalTop
   -- If it's in the localAnonEnv, use the unique name.

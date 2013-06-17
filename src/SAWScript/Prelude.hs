@@ -4,7 +4,7 @@ module SAWScript.Prelude where
 import SAWScript.AST hiding (Name)
 import SAWScript.MGU
 
-import Verifier.SAW.ParserUtils
+import Verifier.SAW.ParserUtils hiding (ModuleName)
 import Verifier.SAW.Prelude
 
 import qualified Data.Map as M
@@ -19,6 +19,9 @@ $(runDecWriter $ do
                "prelude/prelude.sawcore"
   declareSharedModuleFns "SAWScriptPrelude" (decVal prelude)
  )
+
+preludeName :: ModuleName
+preludeName = ModuleName [] "Prelude"
 
 preludeEnv :: [(Name, Schema)]
 preludeEnv =
@@ -35,3 +38,5 @@ preludeEnv =
 preludeEnvRenamer :: Env Name
 preludeEnvRenamer = M.fromList $ map (\(n,_) -> (n,n)) preludeEnv
 
+preludeNames :: [String]
+preludeNames = map fst preludeEnv
