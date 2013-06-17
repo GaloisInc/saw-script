@@ -28,6 +28,7 @@ library
     , saw-core
     , smtLib
     , split
+    , template-haskell
     , transformers
     , vector
     , Verinf

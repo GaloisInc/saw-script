@@ -1,9 +1,24 @@
+{-# LANGUAGE TemplateHaskell #-}
 module SAWScript.Prelude where
 
 import SAWScript.AST hiding (Name)
 import SAWScript.MGU
 
+import Verifier.SAW.ParserUtils
+import Verifier.SAW.Prelude
+
 import qualified Data.Map as M
+import Language.Haskell.TH.Syntax hiding (Name)
+
+$(runDecWriter $ do
+  let prelName = returnQ $ VarE (mkName "preludeModule")
+  preludeExp <- defineImport prelName preludeModule
+  prelude <- defineModuleFromFile
+               [ preludeExp ]
+               "ssPreludeModule"
+               "prelude/prelude.sawcore"
+  declareSharedModuleFns "SAWScriptPrelude" (decVal prelude)
+ )
 
 preludeEnv :: [(Name, Schema)]
 preludeEnv =
