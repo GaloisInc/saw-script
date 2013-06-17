@@ -4,7 +4,7 @@ module SAWScript.Prelude where
 import SAWScript.AST hiding (Name)
 import SAWScript.MGU
 
-import Verifier.SAW.ParserUtils hiding (ModuleName)
+import Verifier.SAW.ParserUtils hiding (ModuleName, preludeName)
 import Verifier.SAW.Prelude
 
 import qualified Data.Map as M
@@ -23,8 +23,9 @@ $(runDecWriter $ do
 preludeName :: ModuleName
 preludeName = ModuleName [] "Prelude"
 
-preludeEnv :: [(Name, Schema)]
-preludeEnv =
+
+preludeEnv :: [(ResolvedName, Schema)]
+preludeEnv = map qualify $
   [ ("return", Forall ["a"]
                (tFun (boundVar "a") (topLevel (boundVar "a")))
     )
@@ -34,9 +35,4 @@ preludeEnv =
   ]
   where topLevel = tBlock (tContext TopLevel)
         boundVar = TyVar . BoundVar
-
-preludeEnvRenamer :: Env Name
-preludeEnvRenamer = M.fromList $ map (\(n,_) -> (n,n)) preludeEnv
-
-preludeNames :: [String]
-preludeNames = map fst preludeEnv
+        qualify (n, ty) = (TopLevelName preludeName n, ty)

@@ -166,21 +166,18 @@ allExprMaps (Module modNm exprEnv _ deps) = (modNm,exprEnv,foldr f M.empty (M.el
 
 -- TODO: this will need to change once we can refer to prelude functions
 -- with qualified names.
-isInPrelude :: UnresolvedName -> Bool
-isInPrelude (UnresolvedName [] n) = n `elem` preludeNames
-isInPrelude _ = False
-
 resolveUnresolvedName :: Env Name -> ExprMaps -> UnresolvedName -> [ResolvedName]
 resolveUnresolvedName
   localAnonEnv
   (localModNm,localTopEnv,rms)
   un@(UnresolvedName ns n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
-  inPrelude ++ inLocal ++ mapMaybe inDepMod (M.assocs rms)
+  case inLocalAnon of
+    Just n -> [n]
+    Nothing -> maybeToList inLocalTop ++ inPrelude ++ mapMaybe inDepMod (M.assocs rms)
   where
-  inPrelude
-   | isInPrelude un = [TopLevelName preludeName n]
-   | otherwise = []
+  -- TODO: fix when we have proper modules
+  inPrelude = [ s | s@(TopLevelName _ x) <- map fst preludeEnv, n == x ]
   -- ignores name shadowing, defering to the local binding over the top level binding.
   inLocal = maybeToList $ inLocalAnon `mplus` inLocalTop
   -- If it's in the localAnonEnv, use the unique name.
@@ -189,7 +186,7 @@ resolveUnresolvedName
     | isUnqualified un         = LocalName                        <$> M.lookup n localAnonEnv
     | otherwise                = Nothing
   -- check the local module top level names if either...
-  inLocalTop  
+  inLocalTop
     -- unqualified
     | isUnqualified un         = TopLevelName localModNm n        <$  M.lookup n localTopEnv
     -- qualified as local module
