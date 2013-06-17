@@ -101,7 +101,7 @@ translateTopDef m (n, e) = do
   return $ SC.insDef m (SC.Def (SC.mkIdent mn n) ty [SC.DefEqn [] e'])
     where mn = SC.moduleName m
 
-translateBlockStmts :: (a -> M SC.Term) -> [SS.BlockStmt SS.ResolvedName a]
+translateBlockStmts :: (SS.Type -> M SC.Term) -> [SS.BlockStmt SS.ResolvedName SS.Type]
                     -> M (SC.Term, SC.Term) -- (term, type)
 translateBlockStmts _ []  = fail "ToSAWCore: can't translate empty block"
 translateBlockStmts doType [SS.Bind Nothing _ e] =
@@ -130,7 +130,7 @@ translateBlockStmts _doType (SS.BlockLet _decls : _ss) =
             return $ SC.LocalFnDef n ty [SC.DefEqn [] e']
 -}
 
-translateExpr :: (a -> M SC.Term) -> SS.Expr SS.ResolvedName a -> M SC.Term
+translateExpr :: (SS.Type -> M SC.Term) -> Expression -> M SC.Term
 translateExpr doType e = go e
   where go (SS.Unit _) = return unitTerm
         go (SS.Bit True _) = return trueTerm
@@ -159,15 +159,17 @@ translateExpr doType e = go e
             Nothing -> fail $ "ToSAWCore: unbound variable: " ++ x
         go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
-          let i = translateIdent m x
-          if i `elem` gs
-            then return . fterm . SC.GlobalDef $ i
-            else fail $ "ToSAWCore: unknown global variable: " ++ show i
+          let ident = translateIdent m x
+          case lookupTypeOf m x gs of
+            Nothing -> fail $ "ToSAWCore: unknown global variable: " ++ show ident
+            Just polyty -> do
+              let t = fterm $ SC.GlobalDef ident
+              args <- mapM doType (typeInstantiation polyty ty)
+              return $ foldl app t args
         go (SS.Function x ty body fty) = do
           pat <- SC.PVar x 0 <$> doType ty
           SC.Term <$> (SC.Lambda pat <$> doType fty <*> addLocal x (go body))
         go (SS.Application f arg _ty) =
-          -- TODO: include type parameters
           fterm <$> (SC.App <$> go f <*> go arg)
         go (SS.LetBlock decls body) = SC.Term <$> (SC.Let <$> decls' <*> go body)
           where decls' = mapM translateDecl decls
