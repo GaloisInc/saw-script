@@ -38,6 +38,7 @@ module Verifier.SAW.SharedTerm
   , scCtorApp
   , scApplyCtor
   , scFun
+  , scString
   , scNat
   , scNatType
   , scBoolType
@@ -450,6 +451,9 @@ scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
 scNat sc n
   | 0 <= n = scFlatTermF sc (NatLit n)
   | otherwise = error $ "scNat: negative value " ++ show n
+
+scString :: SharedContext s -> String -> IO (SharedTerm s)
+scString sc s = scFlatTermF sc (StringLit s)
 
 scVector :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
