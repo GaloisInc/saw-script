@@ -44,6 +44,9 @@ preludeEnv = map qualify $
   , ( "equal"
     , Forall [] (tFun term (tFun term (topLevel term)))
     )
+  , ( "negate"
+    , Forall [] (tFun term (topLevel term))
+    )
   , ( "prove"
     , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
     )
