@@ -282,7 +282,9 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           lift $ foldM (reducePi sc) t args
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
-        ArrayValue tp _ -> error "typeOfFTermF ArrayValue" tp
+        ArrayValue tp vs -> lift $ do
+          n <- scNat sc (fromIntegral (V.length vs))
+          scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
         FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
