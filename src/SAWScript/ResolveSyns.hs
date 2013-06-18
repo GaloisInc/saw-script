@@ -54,7 +54,7 @@ instance Resolvable Syn where
     found <- getsSynEnv $ lookupEnv n
     case found of
       Nothing       -> failRS $ "unbound type synonym: " ++ show n
-      Just Nothing  -> failRS $ "type synonym mistakenly bound to abstract type: " ++ show n
+      Just Nothing  -> return $ abstract n
       Just (Just t) -> resolveSig t
 
 instance Resolvable TypeF where

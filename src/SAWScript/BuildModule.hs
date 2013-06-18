@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
 
 module SAWScript.BuildModule
@@ -11,8 +12,8 @@ import SAWScript.Import (LoadedModules (..))
 import Control.Applicative
 import Control.Arrow
 import Control.Monad
-import Control.Monad.State
-import Data.Monoid
+--import Control.Monad.State
+--import Data.Monoid
 import Data.Foldable (foldrM)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -45,14 +46,14 @@ build (nm,ts) = (,) <$> pure nm <*> foldrM modBuilder (M.empty, M.empty, S.empty
 check :: (ModuleName,ModuleBuilder) -> Err (ModuleName,ModuleParts)
 check (nm,(ee,te,ds)) = (,) <$> pure nm <*> mps
   where
-  mps = (,,) <$> M.traverseWithKey ensureExprPresent ee <*> pure te <*> pure ds
+  mps = (,,) <$> traverseWithKey ensureExprPresent ee <*> pure te <*> pure ds
 -- stage3: make a module out of the resulting envs
 assemble :: ModuleName -> [(ModuleName,ModuleParts)] -> Err Outgoing
 assemble mn envs = go mn
   where
   go n = case lookup n envs of
     Nothing         -> fail $ "Module " ++ renderModuleName n ++ " was not loaded"
-    Just (ee,te,ds) -> return (Module n ee te $ M.fromSet dummyModule ds)
+    Just (ee,te,ds) -> return (Module n ee te $ fromSet dummyModule ds)
 
 -- TODO: build a reasonable module
 dummyModule :: ModuleName -> ValidModule
@@ -121,3 +122,19 @@ multiDeclErr n = fail ("Multiple declarations of '" ++ n ++ "'")
 noBindingErr :: Name -> Err a
 noBindingErr n = fail ("The type signature for '" ++ n ++ "' lacks an accompanying binding.")
 
+-- Backward Compatibility ------------------------------------------------------
+
+#if __GLASGOW_HASKELL__ < 706
+fromSet :: Eq k => (k -> a) -> S.Set k -> M.Map k a
+fromSet f s = M.fromAscList [ (x, f x) | x <- S.toAscList s ]
+
+traverseWithKey :: (Applicative t, Ord k) => (k -> a -> t b) -> M.Map k a -> t (M.Map k b)
+traverseWithKey f s =
+  fmap M.fromList (T.traverse (\(k, v) -> fmap ((,) k) (f k v)) (M.toList s))
+#else
+fromSet :: (k -> a) -> S.Set k -> M.Map k a
+fromSet = M.fromSet
+
+traverseWithKey :: Applicative t => (k -> a -> t b) -> M.Map k a -> t (M.Map k b)
+traverseWithKey = M.traverseWithKey
+#endif
