@@ -132,7 +132,7 @@ traverseWithKey :: (Applicative t, Ord k) => (k -> a -> t b) -> M.Map k a -> t (
 traverseWithKey f s =
   fmap M.fromList (T.traverse (\(k, v) -> fmap ((,) k) (f k v)) (M.toList s))
 #else
-fromSet :: (k -> a) -> Set.Set k -> M.Map k a
+fromSet :: (k -> a) -> S.Set k -> M.Map k a
 fromSet = M.fromSet
 
 traverseWithKey :: Applicative t => (k -> a -> t b) -> M.Map k a -> t (M.Map k b)
