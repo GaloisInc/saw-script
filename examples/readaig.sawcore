@@ -1,9 +1,0 @@
-module SAWScriptMain where
-
-import Prelude;
-import SAWScriptPrelude;
-
-main :: TopLevel #();
-main =
-  topBind Term #() (read_aig "Maj.aig") (\(t0::Term) ->
-  print Term t0);

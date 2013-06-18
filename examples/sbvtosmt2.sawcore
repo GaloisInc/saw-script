@@ -1,9 +1,0 @@
-module SAWScriptMain where
-
-import Prelude;
-import SAWScriptPrelude;
-
-main :: TopLevel #();
-main =
-  topBind Term #() (read_sbv "examples/add_comm.sbv") (\(t0::Term) ->
-  write_smtlib2 "add_comm.smt2" t0);
