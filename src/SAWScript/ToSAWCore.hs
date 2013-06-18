@@ -465,7 +465,11 @@ translateType ty =
         where translateField (fn, fty) = (fn, translateType fty)
     SS.FunctionT aty rty ->
       tfun (translateType aty) (translateType rty)
-    SS.Abstract _ -> error "abstract types not yet translated"
+    SS.Abstract "Term" ->
+      fterm $ SC.DataTypeApp (ssPreludeIdent "Term") []
+    SS.Abstract "ProofScript" ->
+      fterm $ SC.DataTypeApp (ssPreludeIdent "ProofScript") []
+    SS.Abstract n -> error $ "unknown abstract type: " ++ n
     SS.TypAbs _ _ -> error "type abstractions not yet translated"
     SS.TypVar _ -> error "type variables not yet translated"
 

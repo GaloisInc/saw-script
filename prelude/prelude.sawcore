@@ -136,16 +136,16 @@ write_smtlib2 :: String -> Term -> TopLevel #();
 -- A VerifyResult encodes either a statement of what it proved, or a
 -- counterexample. These work like the method specs in the first version
 -- of SAWScript.
-verify_cryptol :: String -> String -> CryptolSetup #()
+cryptol_verify :: String -> String -> CryptolSetup #()
                -> TopLevel CryptolVerifyResult;
-verify_llvm :: String -> String -> LLVMSetup #() -> TopLevel LLVMVerifyResult;
-verify_java :: String -> JavaSetup #() -> TopLevel JavaVerifyResult;
+llvm_verify :: String -> String -> LLVMSetup #() -> TopLevel LLVMVerifyResult;
+java_verify :: String -> JavaSetup #() -> TopLevel JavaVerifyResult;
 
 -- Extract pure models from suitably well-structured programs. We assume
 -- that these are well-typed, and check at runtime.
-extract_cryptol :: String -> String -> CryptolSetup #() -> TopLevel Term;
-extract_llvm :: String -> String -> LLVMSetup #() -> TopLevel Term;
-extract_java :: String -> String -> JavaSetup #() -> TopLevel Term;
+cryptol_extract :: String -> String -> CryptolSetup #() -> TopLevel Term;
+llvm_extract :: String -> String -> LLVMSetup #() -> TopLevel Term;
+java_extract :: String -> String -> JavaSetup #() -> TopLevel Term;
 
 -- One method is currently available for Cryptol extraction.
 sbv :: CryptolSetup #();
@@ -160,8 +160,8 @@ java_pure :: JavaSetup #();
 -- two purposes:
 --   - it tells the simulator how to provide inputs and interpret outputs
 --   - it ensures soundness by only allowing overrides that are proven correct
-override_llvm :: List LLVMVerifyResult -> LLVMSetup #();
-override_java :: List JavaVerifyResult -> JavaSetup #();
+llvm_override :: List LLVMVerifyResult -> LLVMSetup #();
+java_override :: List JavaVerifyResult -> JavaSetup #();
 
 -- We can uninterpret particular names along with overrides. Is this
 -- the right approach? For Cryptol, uninterpreting is the only form of
@@ -190,32 +190,28 @@ java_input :: Term -> JavaSetup #();
 llvm_input :: Term -> LLVMSetup #();
 
 -- Assert a particular starting condition.
-assert_java :: Bool -> JavaSetup #();
-assert_llvm :: Bool -> LLVMSetup #();
+java_assert :: Bool -> JavaSetup #();
+llvm_assert :: Bool -> LLVMSetup #();
 
 data JavaObject :: sort 0 where { }
 data LLVMObject :: sort 0 where { }
 
 -- Assign the given value to the given object before execution.
-assume_equal_java :: JavaObject -> Term -> JavaSetup #();
-assume_equal_llvm :: LLVMObject -> Term -> LLVMSetup #();
+java_assume_equal :: JavaObject -> Term -> JavaSetup #();
+llvm_assume_equal :: LLVMObject -> Term -> LLVMSetup #();
 
 -- Ensure that the given object is assigned the given value on
 -- termination.
-ensure_equal_java :: JavaObject -> Term -> JavaSetup #();
-ensure_equal_llvm :: LLVMObject -> Term -> LLVMSetup #();
+java_ensure_equal :: JavaObject -> Term -> JavaSetup #();
+llvm_ensure_equal :: LLVMObject -> Term -> LLVMSetup #();
 
 -- Java and LLVM statements that a particular object is modified with
 -- an arbitrary value.
-modify_java :: JavaObject -> JavaSetup #();
-modify_llvm :: LLVMObject -> LLVMSetup #();
+java_modify :: JavaObject -> JavaSetup #();
+llvm_modify :: LLVMObject -> LLVMSetup #();
 
 data ProofScript :: sort 0 -> sort 0 where { }
 data ProofResult :: sort 0 where { }
-
--- We can verify a function by writing a proof script.
-verify_java :: ProofScript #() -> JavaSetup #();
-verify_llvm :: ProofScript #() -> LLVMSetup #(); 
 
 -- These work in the context of an implicit goal.
 
@@ -247,8 +243,8 @@ java_char :: JavaType;
 java_int :: JavaType;
 java_long :: JavaType;
 
-may_alias_llvm :: List LLVMObject -> LLVMSetup #();
-may_alias_java :: List JavaObject -> LLVMSetup #();
+llvm_may_alias :: List LLVMObject -> LLVMSetup #();
+java_may_alias :: List JavaObject -> LLVMSetup #();
 
 -- This allows us to project from an LLVM value into a native value.
 -- We assume that these are well-typed, and check at runtime.

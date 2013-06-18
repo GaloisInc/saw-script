@@ -26,13 +26,58 @@ preludeName = ModuleName [] "Prelude"
 
 preludeEnv :: [(ResolvedName, Schema)]
 preludeEnv = map qualify $
-  [ ("return", Forall ["m", "a"]
-               (tFun (boundVar "a") (tBlock (boundVar "m") (boundVar "a")))
+  [ ( "return"
+    , Forall ["m", "a"]
+             (tFun (boundVar "a") (tBlock (boundVar "m") (boundVar "a")))
     )
-  , ("print", Forall ["a"]
-               (tFun (boundVar "a") (topLevel (tTuple [])))
+  , ( "read_aig" , Forall [] (tFun tString (topLevel term)) )
+  , ( "read_sbv" , Forall [] (tFun tString (topLevel term)) )
+  , ( "write_aig"
+    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    )
+  , ( "write_smtlib1"
+    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    )
+  , ( "write_smtlib2"
+    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    )
+  , ( "equal"
+    , Forall [] (tFun term (tFun term (topLevel term)))
+    )
+  , ( "prove"
+    , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
+    )
+  , ( "sat"
+    , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
+    )
+  , ( "abc"
+    , Forall [] (proofScript proofResult)
+    )
+  , ( "java_pure"
+    , Forall [] (javaSetup tUnit)
+    )
+  , ( "java_extract"
+    , Forall [] (tFun tString
+                 (tFun tString
+                  (tFun (javaSetup tUnit) (topLevel term))))
+    )
+  , ( "llvm_pure", Forall [] (llvmSetup tUnit) )
+  , ( "llvm_extract"
+    , Forall [] (tFun tString
+                 (tFun tString
+                  (tFun (llvmSetup tUnit) (topLevel term))))
+    )
+  , ( "print"
+    , Forall ["a"]
+             (tFun (boundVar "a") (topLevel (tTuple [])))
     )
   ]
   where topLevel = tBlock (tContext TopLevel)
+        llvmSetup = tBlock (tContext LLVMSetup)
+        javaSetup = tBlock (tContext JavaSetup)
+        term =  TyCon (AbstractCon "Term") []
+        proofScript = tBlock (tContext ProofScript)
+        proofResult = TyCon (AbstractCon "ProofScript") []
         boundVar = TyVar . BoundVar
+        tUnit = tTuple []
         qualify (n, ty) = (TopLevelName preludeName n, ty)
