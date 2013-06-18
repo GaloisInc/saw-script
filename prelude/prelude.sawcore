@@ -27,8 +27,21 @@ data List :: sort 0 -> sort 0 where { }
 
 -- We start by declaring the types of some primitive functions.
 
+data Context :: sort 0 where {
+   TopLevelContext :: Context;
+}
+
+block :: Context -> sort 0 -> sort 0;
+block TopLevelContext t = TopLevel t;
+
 topBind :: (a b :: sort 0) -> TopLevel a -> (a -> TopLevel b) -> TopLevel b;
 topReturn :: (a :: sort 0) -> a -> TopLevel a;
+
+bind :: (m :: Context) -> (a b :: sort 0) -> block m a -> (a -> block m b) -> block m b;
+bind TopLevelContext = topBind;
+
+return :: (m :: Context) -> (a :: sort 0) -> a -> block m a;
+return TopLevelContext = topReturn;
 
 -- A type to represent SAWCore shared terms.
 data Term :: sort 0 where { }
