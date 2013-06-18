@@ -4,7 +4,6 @@
 {-# LANGUAGE ViewPatterns #-}
 
 -- TODO: generate correct deBruijn indices
--- TODO: translate inferred types to explicit type parameters
 module SAWScript.ToSAWCore
   ( translateModule
   , translateExprShared
@@ -25,13 +24,14 @@ import qualified Data.Vector as V
 import Data.Traversable hiding ( mapM )
 
 import qualified SAWScript.AST as SS
+import SAWScript.MGU (exportSchema)
+import SAWScript.Prelude
 import SAWScript.Unify.Fix
 import Verifier.SAW.Prelude (preludeModule)
 import qualified Verifier.SAW.TypedAST as SC
 import qualified Verifier.SAW.SharedTerm as SC
 
--- TODO: change to something that makes lookupTypeOf implementable.
-type GlobalEnv = [SC.Ident]
+type GlobalEnv = Map SS.ResolvedName SS.Type
 
 data Env = Env {
     modules :: [SC.Module]
@@ -46,10 +46,9 @@ emptyEnv =
   Env { modules = [preludeModule]
       , depth = 0
       , locals = M.empty
-      , globals = preludeGlobs
+      , globals = M.empty
       , localTs = M.empty
       }
-  where preludeGlobs = map SC.defIdent $ SC.moduleDefs preludeModule
 
 incVars :: Map a Int -> Map a Int
 incVars = M.map (+1)
@@ -83,13 +82,24 @@ translateIdent :: SS.ModuleName -> SS.Name -> SC.Ident
 translateIdent m n = SC.mkIdent (translateModuleName m) n
 
 translateModuleName :: SS.ModuleName -> SC.ModuleName
+-- TODO: fix this when we have proper modules
+translateModuleName (SS.ModuleName [] "Prelude") =
+  SC.mkModuleName ["SAWScriptPrelude"]
 translateModuleName (SS.ModuleName xs x) = SC.mkModuleName (xs ++ [x])
 
 translateModule :: SS.ValidModule -> Either String SC.Module
-translateModule m = runTranslate emptyEnv $
-  foldM translateTopDef (SC.emptyModule mn) exprs
+translateModule m = runTranslate initEnv $
+  foldM translateTopDef mod exprs
     where exprs = M.toList (SS.moduleExprEnv m)
           mn = translateModuleName (SS.moduleName m)
+          mod = SC.insImport ssPreludeModule $
+                SC.insImport preludeModule $
+                SC.emptyModule mn
+          initEnv = emptyEnv { globals = initGlobs }
+          initGlobs =
+            M.fromList $
+            [ (n, exportSchema s) | (n, s) <- preludeEnv ] ++
+            [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
 
 -- TODO: translate imports
 translateTopDef :: SC.Module
@@ -102,18 +112,23 @@ translateTopDef m (n, e) = do
     where mn = SC.moduleName m
 
 translateBlockStmts :: (SS.Type -> M SC.Term) -> [SS.BlockStmt SS.ResolvedName SS.Type]
-                    -> M (SC.Term, SC.Term) -- (term, type)
+                    -> M (SC.Term, (SC.Term, SC.Term)) -- (term, (context, result type))
 translateBlockStmts _ []  = fail "ToSAWCore: can't translate empty block"
-translateBlockStmts doType [SS.Bind Nothing _ e] =
-  (,) <$> translateExpr doType e <*> doType (SS.typeOf e)
+translateBlockStmts doType [SS.Bind Nothing _ e] = do
+  let (ctx, bt) = blockTypeOf e
+  t' <- doType bt
+  e' <- translateExpr doType e
+  return (e', (translateContext ctx, t'))
 translateBlockStmts _ [_] = fail "ToSAWCore: invalid block ending statement"
 translateBlockStmts doType (SS.Bind mx _ e:ss) = do
   e' <- translateExpr doType e
-  ty <- doType (SS.typeOf e)
+  let (ctx, ty0) = blockTypeOf e
+  ty <- doType ty0
   let x = fromMaybe "_" mx
-  (k, kty) <- addLocal x $ translateBlockStmts doType ss
-  let f = SC.Term $ SC.Lambda (SC.PVar x 0 ty) (tfun ty kty) k
-  return (bind e' f, kty)
+  (k, (ctx, rty)) <- addLocal x $ translateBlockStmts doType ss
+  let kty = ssGlobalTerm "block" `app` ctx `app` rty
+      f = SC.Term $ SC.Lambda (SC.PVar x 0 ty) (tfun ty kty) k
+  return (bind ctx ty rty e' f, (ctx, rty))
 translateBlockStmts doType (SS.BlockTypeDecl _ _:ss) =
   -- Type declarations are not translated directly. Any information
   -- they provide is taken from the annotations resulting from type
@@ -132,8 +147,7 @@ translateBlockStmts _doType (SS.BlockLet _decls : _ss) =
 
 translateExpr :: (SS.Type -> M SC.Term) -> Expression -> M SC.Term
 translateExpr doType e = go e
-  where go (SS.Unit _) = return unitTerm
-        go (SS.Bit True _) = return trueTerm
+  where go (SS.Bit True _) = return trueTerm
         go (SS.Bit False _) = return falseTerm
         go (SS.Quote s _) = return $ stringTerm s
         go (SS.Z i _) = return $ natTerm (fromIntegral i)
@@ -180,12 +194,11 @@ translateExpr doType e = go e
 
 translateTypeShared :: SC.SharedContext s -> SS.Type -> M' (SC.SharedTerm s)
 translateTypeShared sc = go
-  where go SS.UnitT           = liftIO $ SC.scTupleType sc []
-        go SS.BitT            = liftIO $ SC.scBoolType sc
+  where go SS.BitT            = liftIO $ SC.scBoolType sc
         go SS.ZT              = liftIO $ SC.scNatType sc
         go SS.QuoteT          = liftIO $ SC.scDataTypeApp sc (SC.parseIdent "Prelude.String") []
         go (SS.ArrayT t n)    = do t' <- go t
-                                   n' <- liftIO $ SC.scNat sc n
+                                   n' <- go n
                                    liftIO $ SC.scDataTypeApp sc (SC.parseIdent "Prelude.Vec") [n', t']
         go (SS.BlockT c t)    = fail "ToSAWCore: BlockT not supported"
         go (SS.TupleT ts)     = liftIO . SC.scTupleType sc =<< traverse go ts
@@ -216,34 +229,43 @@ translatePolyExprShared sc expr =
         liftIO $ SC.scLambdaList sc [ (n, s0) | n <- ns ] t
       _ -> translateExprShared sc expr
 
-lookupTypeOf :: SS.ModuleName -> SS.Name -> GlobalEnv -> Maybe SS.Type
-lookupTypeOf = error "unimplemented"
+lookupTypeOf :: SS.ModuleName -> SS.Name  -> GlobalEnv -> Maybe SS.Type
+lookupTypeOf mn n = M.lookup (SS.TopLevelName mn n)
+
+blockTypeOf :: Expression -> (SS.Context, SS.Type)
+blockTypeOf e =
+  case SS.typeOf e of
+    SS.BlockT (SS.ContextT ctx) t -> (ctx, t)
+    SS.BlockT _ _ -> error "polymorphic context"
+    _ -> error "not a block type"
 
 -- | Matches a (possibly) polymorphic type @polyty@ against a
 -- monomorphic type @monoty@, which must be an instance of it. The
 -- function returns a list of type variable instantiations, in the
 -- same order as the variables in the outermost TypAbs of @polyty@.
 typeInstantiation :: SS.Type -> SS.Type -> [SS.Type]
-typeInstantiation (SS.TypAbs xs t1) t2 = [ fromJust (M.lookup x m) | x <- xs ]
-    where m = fromJust (matchType t1 t2)
+typeInstantiation (SS.TypAbs xs t1) t2 =
+  [ fromMaybe (error "unbund type variable") (M.lookup x m) | x <- xs ]
+    where m = fromMaybe (error "matchType failed") (matchType t1 t2)
 typeInstantiation _ _ = []
 
 -- | @matchType pat ty@ returns a map of variable instantiations, if
 -- @ty@ is an instance of @pat@. Both types must be first-order:
 -- neither may contain @TypAbs@.
 matchType :: SS.Type -> SS.Type -> Maybe (Map SS.Name SS.Type)
-matchType SS.UnitT  SS.UnitT  = Just M.empty
 matchType SS.BitT   SS.BitT   = Just M.empty
 matchType SS.ZT     SS.ZT     = Just M.empty
 matchType SS.QuoteT SS.QuoteT = Just M.empty
-matchType (SS.ArrayT t1 n1) (SS.ArrayT t2 n2) | n1 == n2 = matchType t1 t2
-matchType (SS.BlockT c1 t1) (SS.BlockT c2 t2) | c1 == c2 = matchType t1 t2
+matchType (SS.ContextT c1) (SS.ContextT c2) | c1 == c2 = Just M.empty
+matchType (SS.IntegerT n1) (SS.IntegerT n2) | n1 == n2 = Just M.empty
+matchType (SS.ArrayT t1 n1) (SS.ArrayT t2 n2) = matchTypes [n1, t1] [n2, t2]
+matchType (SS.BlockT c1 t1) (SS.BlockT c2 t2) = matchTypes [c1, t1] [c2, t2]
 matchType (SS.TupleT ts1) (SS.TupleT ts2) = matchTypes ts1 ts2
 matchType (SS.RecordT bs1) (SS.RecordT bs2)
     | map fst bs1 == map fst bs2 = matchTypes (map snd bs1) (map snd bs2)
 matchType (SS.FunctionT a1 b1) (SS.FunctionT a2 b2) = matchTypes [a1, b1] [a2, b2]
 matchType (SS.TypVar x)    t2 = Just (M.singleton x t2)
-matchType _ _ = Nothing
+matchType t1 t2 = error $ "matchType failed: " ++ show (t1, t2)
 
 matchTypes :: [SS.Type] -> [SS.Type] -> Maybe (Map SS.Name SS.Type)
 matchTypes [] [] = Just M.empty
@@ -261,7 +283,6 @@ translateExprShared sc = go
   where doType :: SS.Type -> M' (SC.SharedTerm s)
         doType = translateTypeShared sc
         go :: Expression -> M' (SC.SharedTerm s)
-        go (SS.Unit _) = liftIO $ SC.scTuple sc []
         go (SS.Bit True _) = liftIO $ SC.scCtorApp sc (preludeIdent "True") []
         go (SS.Bit False _) = liftIO $ SC.scCtorApp sc (preludeIdent "False") []
         go (SS.Quote s _) = liftIO $ SC.scString sc s
@@ -321,7 +342,6 @@ translateExprShared sc = go
 translateExprMeta :: forall a. (a -> M SC.Term) -> SS.Expr SS.ResolvedName a -> M SC.Term
 translateExprMeta doType = go
   where go :: SS.Expr SS.ResolvedName a -> M SC.Term
-        go (SS.Unit _) = return $ ssGlobalTerm "termUnit"
         go (SS.Bit True _) = return $ ssGlobalTerm "termTrue"
         go (SS.Bit False _) = return $ ssGlobalTerm "termFalse"
         go (SS.Quote s _) = return $ ssGlobalTerm "termString" `app` stringTerm s
@@ -366,9 +386,9 @@ translateExprMeta doType = go
         go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
           let i = translateIdent m x
-          if i `elem` gs
-            then return $ ssGlobalTerm "termGlobal" `app` stringTerm (show i)
-            else fail $ "ToSAWCore: unknown global variable: " ++ show i
+          case lookupTypeOf m x gs of
+            Just _ -> return $ ssGlobalTerm "termGlobal" `app` stringTerm (show i)
+            Nothing -> fail $ "ToSAWCore: unknown global variable: " ++ show i
         go (SS.Function x ty body _) = do
           ty' <- doType ty
           body' <- addLocal x (go body)
@@ -407,7 +427,6 @@ translatePType' (In (Inr (Inr (SS.PVar x)))) = do
     Nothing -> fail $ "ToSAWCore: unbound type variable: " ++ x
 translatePType' (In (Inr (Inl ty))) =
   case ty of
-    SS.UnitF -> return unitType
     SS.BitF -> return bitType
     SS.ZF -> return intType
     SS.QuoteF -> return quoteType
@@ -432,12 +451,14 @@ getPolyTypes (In (Inr (Inl ty))) = F.concatMap getPolyTypes ty
 translateType :: SS.Type -> SC.Term
 translateType ty =
   case ty of
-    SS.UnitT -> unitType
     SS.BitT -> bitType
-    SS.ZT -> intType
+    SS.ZT -> natType
     SS.QuoteT -> quoteType
-    SS.ArrayT ety sz -> vec (fromIntegral sz) (translateType ety)
-    SS.BlockT ctx rty ->  blockType ctx (translateType rty)
+    SS.ContextT ctx -> translateContext ctx
+    SS.IntegerT n -> natTerm n
+    SS.ArrayT ety sz -> vec (translateType sz) (translateType ety)
+    SS.BlockT ctx rty ->
+      ssGlobalTerm "block" `app` translateType ctx `app` translateType rty
     SS.TupleT tys -> fterm . SC.TupleType . map translateType $ tys
     SS.RecordT flds ->
       fterm . SC.RecordType . M.fromList . map translateField $ flds
@@ -453,23 +474,24 @@ translateType ty =
 preludeIdent :: String -> SC.Ident
 preludeIdent = SC.mkIdent SC.preludeName
 
+ssPreludeIdent :: String -> SC.Ident
+ssPreludeIdent = SC.mkIdent (SC.mkModuleName ["SAWScriptPrelude"])
+
 fterm :: SC.FlatTermF SC.Term -> SC.Term
 fterm = SC.Term . SC.FTermF
 
 tfun :: SC.Term -> SC.Term -> SC.Term
 tfun d r = SC.Term $ SC.Pi "_" d r
 
-unitType, bitType, intType, quoteType :: SC.Term
-unitType = fterm $ SC.DataTypeApp (preludeIdent "TUnit") []
+bitType, natType, quoteType :: SC.Term
 bitType = fterm $ SC.DataTypeApp (preludeIdent "Bool") []
-intType = fterm $ SC.DataTypeApp (preludeIdent "Int") [] -- TODO: Nat?
-quoteType = fterm $ SC.DataTypeApp (preludeIdent "String") [] -- TODO
+natType = fterm $ SC.DataTypeApp (preludeIdent "Nat") []
+quoteType = fterm $ SC.DataTypeApp (preludeIdent "String") []
 
 tupleType :: [SC.Term] -> SC.Term
 tupleType ts = fterm $ SC.TupleType ts
 
-unitTerm, trueTerm, falseTerm :: SC.Term
-unitTerm = fterm $ SC.CtorApp (preludeIdent "Unit") []
+trueTerm, falseTerm :: SC.Term
 trueTerm = fterm $ SC.CtorApp (preludeIdent "True") []
 falseTerm = fterm $ SC.CtorApp (preludeIdent "False") []
 
@@ -499,19 +521,19 @@ javaName = SC.mkModuleName ["Java"]
 llvmName = SC.mkModuleName ["LLVM"]
 -}
 
-blockType :: SS.Context -> SC.Term -> SC.Term
-blockType ctx rty = fterm $ SC.DataTypeApp cname [rty]
-  where cname =
-          case ctx of
-            SS.CryptolSetup -> SC.mkIdent ssPreludeName "CryptolSetup"
-            SS.JavaSetup -> SC.mkIdent ssPreludeName "JavaSetup"
-            SS.LLVMSetup -> SC.mkIdent ssPreludeName "LLVMSetup"
-            SS.ProofScript -> SC.mkIdent ssPreludeName "ProofScript"
-            SS.TopLevel -> SC.mkIdent ssPreludeName "TopLevel"
+translateContext :: SS.Context -> SC.Term
+translateContext ctx = fterm $ SC.CtorApp (ssPreludeIdent cname) []
+  where
+    cname =
+      case ctx of
+        SS.CryptolSetup -> "CryptolSetupContext"
+        SS.JavaSetup -> "JavaSetupContext"
+        SS.LLVMSetup -> "LLVMSetupContext"
+        SS.ProofScript -> "ProofScriptContext"
+        SS.TopLevel -> "TopLevelContext"
 
-vec :: Integer -> SC.Term -> SC.Term
-vec n ty = fterm $ SC.DataTypeApp (preludeIdent "Vec") [nt, ty]
-  where nt = fterm $ SC.NatLit n
+vec :: SC.Term -> SC.Term -> SC.Term
+vec nt ty = fterm $ SC.DataTypeApp (preludeIdent "Vec") [nt, ty]
 
 getNat :: SC.Term -> Maybe Integer
 getNat (SC.Term (SC.FTermF (SC.NatLit n))) = Just n
@@ -537,7 +559,5 @@ aget w ety ae ie = app (app (app (app getFn wt) ety) ae) ie
   where wt = fterm (SC.NatLit w)
         getFn = fterm (SC.GlobalDef (preludeIdent "get"))
 
--- TODO: include type parameters
-bind :: SC.Term -> SC.Term -> SC.Term
-bind l r = app (app bindFn l) r
-  where bindFn = fterm (SC.GlobalDef (preludeIdent "bind"))
+bind :: SC.Term -> SC.Term -> SC.Term -> SC.Term -> SC.Term -> SC.Term
+bind ctx a b l r = ssGlobalTerm "bind" `app` ctx `app` a `app` b `app` l `app` r
