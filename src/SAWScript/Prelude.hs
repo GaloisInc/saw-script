@@ -26,11 +26,11 @@ preludeName = ModuleName [] "Prelude"
 
 preludeEnv :: [(ResolvedName, Schema)]
 preludeEnv = map qualify $
-  [ ("return", Forall ["a"]
-               (tFun (boundVar "a") (topLevel (boundVar "a")))
+  [ ("return", Forall ["m", "a"]
+               (tFun (boundVar "a") (tBlock (boundVar "m") (boundVar "a")))
     )
   , ("print", Forall ["a"]
-               (tFun (boundVar "a") (topLevel tUnit))
+               (tFun (boundVar "a") (topLevel (tTuple [])))
     )
   ]
   where topLevel = tBlock (tContext TopLevel)
