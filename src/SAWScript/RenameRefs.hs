@@ -113,7 +113,6 @@ resolveInExpr exp = case exp of
                            LetBlock <$> mapM resolveInBind bs' <*> resolveInExpr e
                          else duplicateBindingsFail ds
   -- No-ops
-  Unit t            -> pure $ Unit t
   Bit b t           -> pure $ Bit b t
   Quote s t         -> pure $ Quote s t
   Z i t             -> pure $ Z i t
