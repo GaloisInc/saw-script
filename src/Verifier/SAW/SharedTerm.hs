@@ -59,6 +59,7 @@ module Verifier.SAW.SharedTerm
   , scPrettyTermDoc
   , scGlobalApply
   , scSharedTerm
+  , scImport
     -- ** Type checking
   , scTypeOf
   , scTypeOfGlobal
@@ -290,7 +291,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
--- | The inverse function to @sharedTerm@.
+-- | The inverse function to @scSharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
 unshare t0 = State.evalState (go t0) Map.empty
   where
@@ -307,15 +308,20 @@ unshare t0 = State.evalState (go t0) Map.empty
 instance Show (SharedTerm s) where
   show = show . unshare
 
-{-
-sharedTerm :: AppCacheRef s -> Term -> IO (SharedTerm s)
-sharedTerm ref = go
-    where go (Term termf) = getTerm ref =<< traverse go termf
--}
-
 scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
     where go (Term termf) = scTermF sc =<< traverse go termf
+
+-- | Imports a term built in a different shared context into the given
+-- shared context. The caller must ensure that all the global constants
+-- appearing in the term are valid in the new context.
+scImport :: forall s s'. SharedContext s -> SharedTerm s' -> IO (SharedTerm s)
+scImport sc t0 =
+    do cache <- newCache
+       go cache t0
+  where
+    go :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s' -> IO (SharedTerm s)
+    go cache (STApp idx tf) = useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
 -- | Returns bitset containing indices of all free local variables.
 looseVars :: forall s. SharedTerm s -> BitSet
