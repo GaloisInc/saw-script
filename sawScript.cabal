@@ -16,6 +16,7 @@ library
     , either
     , directory
     , filepath
+    , jvm-parser
     , jvm-verifier
     , lens
     , llvm-pretty
