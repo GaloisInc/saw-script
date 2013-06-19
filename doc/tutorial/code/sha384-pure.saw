@@ -1,28 +1,26 @@
-cry_sha384 f = cryptol_extract "SHA384.cry" f sbv;
+//cry_sha384 f = cryptol_extract "SHA384.cry" f sbv;
 llvm_sha384 f = llvm_extract "sha384.bc" f llvm_pure;
 
 bc = "org.bouncycastle.crypto.digests.SHA384Digest";
 java_sha384 f = java_extract bc f java_pure;
 
-eq_abc m1 m2 = do {
-  res <- prove abc (equal m1 m2);
+eq_abc msg m1 m2 = do {
+  print msg;
+  thm <- equal m1 m2;
+  res <- prove abc thm;
   print res;
 };
 
-eq_smt f m1 m2 = do {
-  write_smtlib f (equal m1 m2);
-  print "Run an SMT-Lib prover on:";
-  print f;
-}
-
 main = do {
   /* Extract some simple Cryptol functions. */
+  /*
   cryptol_Ch <- cry_sha384 "Ch";
   cryptol_Maj <- cry_sha384 "Maj";
   cryptol_UpperSigma_0 <- cry_sha384 "UpperSigma_0";
   cryptol_UpperSigma_1 <- cry_sha384 "UpperSigma_1";
   cryptol_LowerSigma_0 <- cry_sha384 "LowerSigma_0";
   cryptol_LowerSigma_1 <- cry_sha384 "LowerSigma_1";
+  */
 
   /* Extract some simple LLVM (C) functions. */
   llvm_Ch <- llvm_sha384 "Ch";
@@ -40,12 +38,5 @@ main = do {
   java_Sigma1 <- java_sha384 "Sigma1";
 
   /* Prove equality of all three Ch implementations using built-in ABC. */
-  eq_abc cryptol_Ch llvm_Ch;
-  eq_abc cryptol_Ch java_Ch;
-
-  /* Export equality proof obligaitions in SMT-Lib format for all three
-   * Maj implementations.
-   */
-  eq_smt "llvm_maj.smt" cryptol_Maj llvm_Maj;
-  eq_smt "java_maj.smt" cryptol_Maj java_Maj;
+  eq_abc "Ch" java_Ch llvm_Ch;
 };

@@ -1,31 +1,18 @@
-type ProofResult = ();
-type Model = Int;
+llvm_sha384 f = llvm_extract "sha384.bc" f llvm_pure;
 
-//cryptol_extract : {a} String -> String -> CryptolSetup () -> TopLevel a;
-cryptol_extract : String -> String -> CryptolSetup () -> TopLevel Model;
-sbv : CryptolSetup ();
+bc = "org.bouncycastle.crypto.digests.SHA384Digest";
+java_sha384 f = java_extract bc f java_pure;
 
-//llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
-llvm_extract : String -> String -> LLVMSetup () -> TopLevel Model;
-llvm_pure : LLVMSetup ();
-
-//prove_equal : {a} ProofScript ProofResult -> a -> a -> TopLevel ProofResult;
-prove_equal : ProofScript ProofResult -> Model -> Model -> TopLevel ProofResult;
-
-abc : ProofScript ProofResult;
-
-print : {a} a -> TopLevel ();
+eq_abc msg m1 m2 = do {
+  print msg;
+  thm <- equal m1 m2;
+  res <- prove abc thm;
+  print res;
+};
 
 main = do {
-
-  cryptol_Ch <- cryptol_extract "SHA384.cry" "Ch" sbv;
-
-  //cryptol_sbv_Ch <- load_sbv "sha384_Ch.sbv";
-
-  llvm_Ch <- llvm_extract "sha384.bc" "Ch" llvm_pure;
-
-  //ch_res_llvm <- prove_equal abc cryptol_Ch llvm_Ch;
-
-  print cryptol_Ch;
+  llvm_Ch <- llvm_sha384 "Ch";
+  java_Ch <- java_sha384 "Ch";
+  eq_abc "Proving Ch with ABC" java_Ch llvm_Ch;
   print "Done.";
 };
