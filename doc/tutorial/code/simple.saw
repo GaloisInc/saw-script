@@ -4,6 +4,6 @@ main = do {
     eq <- equal double_ref double_imp;
     r <- prove abc eq;
     print r;
-    //eq_neg <- negate eq;
-    //write_smtlib1 "simple.smt" eq_neg;
+    eq_neg <- negate eq;
+    write_smtlib1 "simple.smt" eq_neg;
 };
