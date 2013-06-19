@@ -1,0 +1,5 @@
+main : TopLevel ();
+main = do {
+  t <- llvm_extract "examples/double.bc" "f" llvm_pure;
+  write_aig "llvm_f.aig" t;
+};
