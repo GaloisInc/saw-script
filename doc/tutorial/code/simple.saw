@@ -1,9 +1,0 @@
-main = do {
-    double_imp <- llvm_extract "simple.bc" "double_imp" llvm_pure;
-    double_ref <- llvm_extract "simple.bc" "double_ref" llvm_pure;
-    eq <- equal double_ref double_imp;
-    r <- prove abc eq;
-    print r;
-    eq_neg <- negate eq;
-    write_smtlib1 "simple.smt" eq_neg;
-};
