@@ -55,6 +55,7 @@ module Verifier.SAW.SharedTerm
   , scTupleType
   , scTupleSelector
   , scVector
+  , scVecType
   , scTermCount
   , scPrettyTerm
   , scPrettyTermDoc
@@ -619,10 +620,13 @@ scBool sc True  = scCtorApp sc "Prelude.True" []
 scBool sc False = scCtorApp sc "Prelude.False" []
 
 scBoolType :: SharedContext s -> IO (SharedTerm s)
-scBoolType sc = scFlatTermF sc (DataTypeApp "Prelude.Bool" [])
+scBoolType sc = scDataTypeApp sc "Prelude.Bool" []
 
 scNatType :: SharedContext s -> IO (SharedTerm s)
-scNatType sc = scFlatTermF sc (DataTypeApp preludeNatIdent [])
+scNatType sc = scDataTypeApp sc preludeNatIdent []
+
+scVecType :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scVecType sc n e = scDataTypeApp sc "Prelude.Vec" [n, e]
 
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
