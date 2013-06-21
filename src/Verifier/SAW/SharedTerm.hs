@@ -86,6 +86,7 @@ module Verifier.SAW.SharedTerm
   , instantiateVar
   , instantiateVarList
   , scInstantiateExt
+  , incVars
   ) where
 
 import Control.Applicative
