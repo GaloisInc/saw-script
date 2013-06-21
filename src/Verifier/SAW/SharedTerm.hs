@@ -41,6 +41,7 @@ module Verifier.SAW.SharedTerm
   , scString
   , scNat
   , scNatType
+  , scBool
   , scBoolType
   , scFunAll
   , scLambda
@@ -612,6 +613,10 @@ scGlobalApply sc i ts =
 
 ------------------------------------------------------------
 -- Building terms using prelude functions
+
+scBool :: SharedContext s -> Bool -> IO (SharedTerm s)
+scBool sc True  = scCtorApp sc "Prelude.True" []
+scBool sc False = scCtorApp sc "Prelude.False" []
 
 scBoolType :: SharedContext s -> IO (SharedTerm s)
 scBoolType sc = scFlatTermF sc (DataTypeApp "Prelude.Bool" [])
