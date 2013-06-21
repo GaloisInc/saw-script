@@ -50,7 +50,7 @@ import Data.Maybe (fromJust)
 import Verifier.SAW.Cache
 import Verifier.SAW.Conversion
 import qualified Verifier.SAW.Recognizer as R
-import Verifier.SAW.SharedTerm hiding (instantiateVarList)
+import Verifier.SAW.SharedTerm hiding (instantiateVarList, incVars)
 import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
