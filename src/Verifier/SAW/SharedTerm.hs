@@ -31,7 +31,7 @@ module Verifier.SAW.SharedTerm
   , scModule
   , scApply
   , scApplyAll
-  , scMkRecord
+  , scRecord
   , scRecordSelect
   , scRecordType
   , scDataTypeApp
@@ -469,8 +469,8 @@ scString sc s = scFlatTermF sc (StringLit s)
 scVector :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
-scMkRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-scMkRecord sc m = scFlatTermF sc (RecordValue m)
+scRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
+scRecord sc m = scFlatTermF sc (RecordValue m)
 
 scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
 scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
