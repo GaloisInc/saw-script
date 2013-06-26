@@ -293,7 +293,7 @@ translateExprShared sc = go
           liftIO $ SC.scVector sc ty' es'
         go (SS.Block _ss _) = fail "ToSAWCore: block statements not supported"
         go (SS.Tuple es _) = traverse go es >>= (liftIO . SC.scTuple sc)
-        go (SS.Record flds _) = traverse go (M.fromList flds) >>= (liftIO . SC.scMkRecord sc)
+        go (SS.Record flds _) = traverse go (M.fromList flds) >>= (liftIO . SC.scRecord sc)
         go (SS.Index a ie _) = do
           ne <- doType (SS.typeOf a)
           (n, e) <- maybe (fail "ToSAWCore: not an array type") return (destVec ne)
