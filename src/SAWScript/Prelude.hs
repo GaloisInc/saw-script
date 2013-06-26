@@ -2,7 +2,7 @@
 module SAWScript.Prelude where
 
 import SAWScript.AST hiding (Name)
-import SAWScript.MGU
+import SAWScript.NewAST
 
 import Verifier.SAW.ParserUtils hiding (ModuleName, preludeName)
 import Verifier.SAW.Prelude

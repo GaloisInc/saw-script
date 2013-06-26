@@ -49,6 +49,7 @@ library
     SAWScript.Import
     SAWScript.Lexer
     --SAWScript.LiftPoly
+    SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
     SAWScript.Prelude
