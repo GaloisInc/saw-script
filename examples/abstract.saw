@@ -1,0 +1,5 @@
+
+abstract Test;
+
+foo : Test -> Test;
+foo = 1;

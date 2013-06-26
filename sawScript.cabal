@@ -40,7 +40,7 @@ library
 
   exposed-modules:
     SAWScript.AST
-    SAWScript.BuildModule
+    SAWScript.BuildModules
     SAWScript.Builtins
     SAWScript.Compiler
     --SAWScript.ConvertType

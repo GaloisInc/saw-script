@@ -9,12 +9,15 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
 import SAWScript.Builtins
+import SAWScript.Compiler (reportError)
 import SAWScript.Options
 
 execSAWCore :: Options -> Module -> IO ()
 execSAWCore opts m =
   case findDef m mainId of
-    Nothing -> putStrLn "Module doesn't include a main function"
+    Nothing -> reportError $
+         "Module " ++ show (show (moduleName m))
+      ++ " doesn't include a main function"
     Just _ -> do
       when (verbLevel opts > 0) $
         putStrLn $ "Executing " ++ show (moduleName m) ++ ".main"
