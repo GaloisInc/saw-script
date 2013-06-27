@@ -30,6 +30,9 @@ preludeEnv = map qualify $
     , Forall ["m", "a"]
              (tFun (boundVar "a") (tBlock (boundVar "m") (boundVar "a")))
     )
+  , ( "bitSequence"
+    , Forall ["n"] (tFun tZ (tArray (boundVar "n") tBool))
+    )
   , ( "read_aig" , Forall [] (tFun tString (topLevel term)) )
   , ( "read_sbv" , Forall [] (tFun tString (topLevel term)) )
   , ( "write_aig"

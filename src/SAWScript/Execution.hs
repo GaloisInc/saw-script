@@ -15,9 +15,12 @@ import SAWScript.Options
 execSAWCore :: Options -> Module -> IO ()
 execSAWCore opts m =
   case findDef m mainId of
-    Nothing -> reportError $
-         "Module " ++ show (show (moduleName m))
-      ++ " doesn't include a main function"
+    Nothing -> reportError $ unlines
+      [    "Module " ++ show (show (moduleName m))
+        ++ " doesn't include a main function"
+      , "in:"
+      , show m
+      ]
     Just _ -> do
       when (verbLevel opts > 0) $
         putStrLn $ "Executing " ++ show (moduleName m) ++ ".main"

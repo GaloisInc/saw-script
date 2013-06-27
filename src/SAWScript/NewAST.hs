@@ -98,7 +98,10 @@ instance PrettyPrint Type where
     $ commaSepAll
     $ map (\(n,t) -> PP.text n `prettyTypeSig` pretty False t)
     $ M.toList fs
-  pretty par (TyVar tv) = case tv of
+  pretty par (TyVar tv) = pretty par tv
+
+instance PrettyPrint TyVar where
+  pretty par tv = case tv of
     FreeVar n  -> PP.text "fv." PP.<> PP.integer n
     BoundVar n -> PP.text n
 

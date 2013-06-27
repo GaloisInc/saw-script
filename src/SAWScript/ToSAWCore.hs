@@ -24,7 +24,8 @@ import qualified Data.Vector as V
 import Data.Traversable hiding ( mapM )
 
 import qualified SAWScript.AST as SS
-import SAWScript.MGU (exportSchema)
+import SAWScript.Compiler
+import SAWScript.MGU (evalTI,exportSchema)
 import SAWScript.Prelude
 import SAWScript.Unify.Fix
 import Verifier.SAW.Prelude (preludeModule)
@@ -87,19 +88,36 @@ translateModuleName (SS.ModuleName [] "Prelude") =
   SC.mkModuleName ["SAWScriptPrelude"]
 translateModuleName (SS.ModuleName xs x) = SC.mkModuleName (xs ++ [x])
 
+{-
 translateModule :: SS.ValidModule -> Either String SC.Module
-translateModule m = runTranslate initEnv $
-  foldM translateTopDef mod exprs
-    where exprs = M.toList (SS.moduleExprEnv m)
-          mn = translateModuleName (SS.moduleName m)
-          mod = SC.insImport ssPreludeModule $
-                SC.insImport preludeModule $
-                SC.emptyModule mn
-          initEnv = emptyEnv { globals = initGlobs }
-          initGlobs =
-            M.fromList $
-            [ (n, exportSchema s) | (n, s) <- preludeEnv ] ++
-            [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
+translateModule m = case initGlobs of
+  Left errs   -> Left $ unlines errs
+  Right globs -> let initEnv = emptyEnv { globals = globs }
+                   in runTranslate initEnv $ foldM translateTopDef mod exprs
+  where exprs = M.toList (SS.moduleExprEnv m)
+        mn = translateModuleName (SS.moduleName m)
+        mod = SC.insImport ssPreludeModule $
+              SC.insImport preludeModule $
+              SC.emptyModule mn
+        initGlobs = do
+          l1 <- evalTI (SS.moduleName m) $ mapM (\(n,s) -> (n,) <$> exportSchema s) preludeEnv
+          let l2 = [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
+          return $ M.fromList $ l1 ++ l2
+-}
+
+translateModule :: Compiler SS.ValidModule SC.Module
+translateModule = compiler "TranslateModule" $ \m -> do
+  let mn = translateModuleName $ SS.moduleName m
+      mod = SC.insImport ssPreludeModule $ 
+            SC.insImport preludeModule $
+            SC.emptyModule mn
+      exprs = M.toList $ SS.moduleExprEnv m
+  l1 <- mapM (\(n,s) -> (n,) <$> exportSchema s) preludeEnv
+  let l2 = [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
+      initEnv = emptyEnv { globals = M.fromList $ l1 ++ l2 }
+  case runTranslate initEnv $ foldM translateTopDef mod exprs of
+    Left err  -> fail err
+    Right res -> return res
 
 -- TODO: translate imports
 translateTopDef :: SC.Module
