@@ -47,6 +47,7 @@ library
     SAWScript.Execution
     --SAWScript.FindMain
     SAWScript.Import
+    SAWScript.Interpreter
     SAWScript.Lexer
     --SAWScript.LiftPoly
     SAWScript.NewAST

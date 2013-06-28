@@ -33,8 +33,8 @@ preludeEnv = map qualify $
   , ( "bitSequence"
     , Forall ["n"] (tFun tZ (tArray (boundVar "n") tBool))
     )
-  , ( "read_aig" , Forall [] (tFun tString (topLevel term)) )
-  , ( "read_sbv" , Forall [] (tFun tString (topLevel term)) )
+  , ( "read_aig" , Forall ["a"] (tFun tString (topLevel (boundVar "a"))) )
+  , ( "read_sbv" , Forall ["a"] (tFun tString (topLevel (boundVar "a"))) )
   , ( "write_aig"
     , Forall [] (tFun tString (tFun term (topLevel tUnit)))
     )
@@ -51,7 +51,7 @@ preludeEnv = map qualify $
     , Forall [] (tFun term (topLevel term))
     )
   , ( "prove"
-    , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun (proofScript proofResult) (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "sat"
     , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
@@ -74,8 +74,13 @@ preludeEnv = map qualify $
                   (tFun (llvmSetup tUnit) (topLevel term))))
     )
   , ( "print"
-    , Forall ["a"]
-             (tFun (boundVar "a") (topLevel (tTuple [])))
+    , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
+    )
+  , ( "print_type"
+    , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
+    )
+  , ( "print_term"
+    , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
     )
   ]
   where topLevel = tBlock (tContext TopLevel)
