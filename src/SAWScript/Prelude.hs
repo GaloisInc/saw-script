@@ -7,7 +7,6 @@ import SAWScript.NewAST
 import Verifier.SAW.ParserUtils hiding (ModuleName, preludeName)
 import Verifier.SAW.Prelude
 
-import qualified Data.Map as M
 import Language.Haskell.TH.Syntax hiding (Name)
 
 $(runDecWriter $ do
@@ -36,7 +35,7 @@ preludeEnv = map qualify $
   , ( "read_aig" , Forall ["a"] (tFun tString (topLevel (boundVar "a"))) )
   , ( "read_sbv" , Forall ["a"] (tFun tString (topLevel (boundVar "a"))) )
   , ( "write_aig"
-    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "write_smtlib1"
     , Forall [] (tFun tString (tFun term (topLevel tUnit)))
@@ -69,9 +68,9 @@ preludeEnv = map qualify $
     )
   , ( "llvm_pure", Forall [] (llvmSetup tUnit) )
   , ( "llvm_extract"
-    , Forall [] (tFun tString
-                 (tFun tString
-                  (tFun (llvmSetup tUnit) (topLevel term))))
+    , Forall ["a"] (tFun tString
+                    (tFun tString
+                     (tFun (llvmSetup tUnit) (topLevel (boundVar "a")))))
     )
   , ( "print"
     , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
