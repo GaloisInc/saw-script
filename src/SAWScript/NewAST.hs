@@ -14,6 +14,7 @@ data Expr
   = Bit Bool
   | String String
   | Z Integer
+  | Undefined
   -- Structures
   | Array  [Expr]
   | Block  [BlockStmt]
@@ -181,6 +182,9 @@ tContext c = TyCon (ContextCon c) []
 
 tAbstract :: Name -> Type
 tAbstract n = TyCon (AbstractCon n) []
+
+boundVar :: Name -> Type
+boundVar n = TyVar (BoundVar n) 
 
 -- }}}
 

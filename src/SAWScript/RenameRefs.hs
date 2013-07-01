@@ -8,7 +8,7 @@ module SAWScript.RenameRefs
 
 import SAWScript.AST
 import SAWScript.Compiler
-import SAWScript.Prelude
+--import SAWScript.Prelude
 
 import Control.Applicative
 import Control.Monad.State
@@ -25,11 +25,11 @@ renameRefs = compiler "RenameRefs" $ \m@(Module nm ee te ds) -> evalRR m $
 
 -- Types {{{
 
-type IncomingModule = Module    UnresolvedName ResolvedT ResolvedT
+type IncomingModule = Module    (Expr UnresolvedName ResolvedT) ResolvedT
 type IncomingExpr   = Expr      UnresolvedName ResolvedT
 type IncomingBStmt  = BlockStmt UnresolvedName ResolvedT
 
-type OutgoingModule = Module    ResolvedName   ResolvedT ResolvedT
+type OutgoingModule = Module    (Expr ResolvedName   ResolvedT) ResolvedT
 type OutgoingExpr   = Expr      ResolvedName   ResolvedT
 type OutgoingBStmt  = BlockStmt ResolvedName   ResolvedT
 
@@ -116,6 +116,7 @@ resolveInExpr exp = case exp of
   Bit b t           -> pure $ Bit b t
   Quote s t         -> pure $ Quote s t
   Z i t             -> pure $ Z i t
+  Undefined t       -> pure $ Undefined t
 
 duplicateBindingsFail :: [Name] -> RR a
 duplicateBindingsFail ns = fail $
@@ -173,10 +174,10 @@ resolveUnresolvedName
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
     Just n -> [n]
-    Nothing -> maybeToList inLocalTop ++ inPrelude ++ mapMaybe inDepMod (M.assocs rms)
+    Nothing -> maybeToList inLocalTop ++ {- inPrelude ++ -} mapMaybe inDepMod (M.assocs rms)
   where
   -- TODO: fix when we have proper modules
-  inPrelude = [ s | s@(TopLevelName _ x) <- map fst preludeEnv, n == x ]
+  -- inPrelude = [ s | s@(TopLevelName _ x) <- map fst preludeEnv, n == x ]
   -- ignores name shadowing, defering to the local binding over the top level binding.
   inLocal = maybeToList $ inLocalAnon `mplus` inLocalTop
   -- If it's in the localAnonEnv, use the unique name.

@@ -112,12 +112,15 @@ translateModule = compiler "TranslateModule" $ \m -> do
             SC.insImport preludeModule $
             SC.emptyModule mn
       exprs = M.toList $ SS.moduleExprEnv m
-  l1 <- mapM (\(n,s) -> (n,) <$> exportSchema s) preludeEnv
-  let l2 = [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
-      initEnv = emptyEnv { globals = M.fromList $ l1 ++ l2 }
-  case runTranslate initEnv $ foldM translateTopDef mod exprs of
-    Left err  -> fail err
-    Right res -> return res
+  let ml1 = evalTI (SS.moduleName m) (mapM (\(n,s) -> (n,) <$> exportSchema s) preludeEnv)
+  case ml1 of
+    Left err -> fail $ unlines err
+    Right l1 -> do
+      let l2 = [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
+          initEnv = emptyEnv { globals = M.fromList $ l1 ++ l2 }
+      case runTranslate initEnv $ foldM translateTopDef mod exprs of
+        Left err  -> fail err
+        Right res -> return res
 
 -- TODO: translate imports
 translateTopDef :: SC.Module
@@ -131,13 +134,13 @@ translateTopDef m (n, e) = do
 
 translateBlockStmts :: (SS.Type -> M SC.Term) -> [SS.BlockStmt SS.ResolvedName SS.Type]
                     -> M (SC.Term, (SC.Term, SC.Term)) -- (term, (context, result type))
-translateBlockStmts _ []  = fail "ToSAWCore: can't translate empty block"
+translateBlockStmts _ []  = fail "can't translate empty block"
 translateBlockStmts doType [SS.Bind Nothing _ e] = do
   let (ctx, bt) = blockTypeOf e
   t' <- doType bt
   e' <- translateExpr doType e
   return (e', (translateContext ctx, t'))
-translateBlockStmts _ [_] = fail "ToSAWCore: invalid block ending statement"
+translateBlockStmts _ [_] = fail "invalid block ending statement"
 translateBlockStmts doType (SS.Bind mx _ e:ss) = do
   e' <- translateExpr doType e
   let (ctx, ty0) = blockTypeOf e
@@ -153,7 +156,7 @@ translateBlockStmts doType (SS.BlockTypeDecl _ _:ss) =
   -- checking.
   translateBlockStmts doType ss
 translateBlockStmts _doType (SS.BlockLet _decls : _ss) =
-  fail "ToSAWCore: block-level let expressions not yet supported"
+  fail "block-level let expressions not yet supported"
 {-
   decls' <- mapM translateDecl decls
   return (SC.Term $ SC.Let decls' k, kty)
@@ -171,6 +174,7 @@ translateExpr doType e = go e
         go (SS.Z i _) = return $ natTerm (fromIntegral i)
         go (SS.Array es ty) =
           fterm <$> (SC.ArrayValue <$> doType ty <*> (V.fromList <$> mapM go es))
+        go (SS.Undefined ty) = fail "undefined"
         go (SS.Block ss _) = fst <$> translateBlockStmts doType ss
         go (SS.Tuple es _) = (fterm . SC.TupleValue) <$> mapM go es
         go (SS.Record flds _) =
@@ -180,7 +184,7 @@ translateExpr doType e = go e
           ne <- doType (SS.typeOf a)
           n'' <- case ne of
                    (vecSize -> Just n') -> return n'
-                   _ -> fail "ToSAWCore: array size is not constant"
+                   _ -> fail "array size is not constant"
           aget n'' <$> doType ty <*> go a <*> go ie
         go (SS.Lookup re f _) =
           (fterm . flip SC.RecordSelector f) <$> go re
@@ -188,12 +192,12 @@ translateExpr doType e = go e
           ls <- locals <$> ask
           case M.lookup x ls of
             Just n -> (SC.Term . SC.LocalVar n) <$> doType ty
-            Nothing -> fail $ "ToSAWCore: unbound variable: " ++ x
+            Nothing -> fail $ "unbound variable: " ++ x
         go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
           let ident = translateIdent m x
           case lookupTypeOf m x gs of
-            Nothing -> fail $ "ToSAWCore: unknown global variable: " ++ show ident
+            Nothing -> fail $ "unknown global variable: " ++ show ident
             Just polyty -> do
               let t = fterm $ SC.GlobalDef ident
               args <- mapM doType (typeInstantiation polyty ty)
@@ -218,7 +222,7 @@ translateTypeShared sc = go
         go (SS.ArrayT t n)    = do t' <- go t
                                    n' <- go n
                                    liftIO $ SC.scDataTypeApp sc (SC.parseIdent "Prelude.Vec") [n', t']
-        go (SS.BlockT c t)    = fail "ToSAWCore: BlockT not supported"
+        go (SS.BlockT c t)    = fail "BlockT not supported"
         go (SS.TupleT ts)     = liftIO . SC.scTupleType sc =<< traverse go ts
         go (SS.RecordT _)     = error "TODO: translateTypeShared RecordT"
         go (SS.FunctionT t u) = do t' <- go t
@@ -230,7 +234,7 @@ translateTypeShared sc = go
         go (SS.TypVar x)      = do ls <- localTs <$> ask
                                    s0 <- liftIO $ SC.scSort sc (SC.mkSort 0)
                                    case M.lookup x ls of
-                                     Nothing -> fail $ "ToSAWCore: unbound type variable: " ++ x
+                                     Nothing -> fail $ "unbound type variable: " ++ x
                                      Just i -> liftIO $ SC.scLocalVar sc i s0
 
 -- | Toplevel SAWScript expressions may be polymorphic. Type
@@ -309,12 +313,12 @@ translateExprShared sc = go
           ty' <- doType ty
           es' <- mapM go es
           liftIO $ SC.scVector sc ty' es'
-        go (SS.Block _ss _) = fail "ToSAWCore: block statements not supported"
+        go (SS.Block _ss _) = fail "block statements not supported"
         go (SS.Tuple es _) = traverse go es >>= (liftIO . SC.scTuple sc)
         go (SS.Record flds _) = traverse go (M.fromList flds) >>= (liftIO . SC.scRecord sc)
         go (SS.Index a ie _) = do
           ne <- doType (SS.typeOf a)
-          (n, e) <- maybe (fail "ToSAWCore: not an array type") return (destVec ne)
+          (n, e) <- maybe (fail "not an array type") return (destVec ne)
           a' <- go a
           ie' <- go ie
           liftIO $ SC.scGet sc n e a' ie'
@@ -325,12 +329,12 @@ translateExprShared sc = go
           ls <- locals <$> ask
           case M.lookup x ls of
             Just n -> (liftIO . SC.scLocalVar sc n) =<< doType ty
-            Nothing -> fail $ "ToSAWCore: unbound variable: " ++ x
+            Nothing -> fail $ "unbound variable: " ++ x
         go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
           let ident = translateIdent m x
           case lookupTypeOf m x gs of
-            Nothing -> fail $ "ToSAWCore: unknown global variable: " ++ show ident
+            Nothing -> fail $ "unknown global variable: " ++ show ident
             Just polyty -> do
               t <- liftIO $ SC.scGlobalDef sc ident
               args <- mapM doType (typeInstantiation polyty ty)
@@ -370,7 +374,7 @@ translateExprMeta doType = go
           es' <- mapM go es
           let topterm = ssGlobalTerm "TopLevel" `app` ssGlobalTerm "Term"
           return $ ssGlobalTerm "termVec'" `app` natTerm n `app` ty' `app` vecTerm topterm es'
-        go (SS.Block _ss _) = fail "ToSAWCore: block statements not supported"
+        go (SS.Block _ss _) = fail "block statements not supported"
         go (SS.Tuple es _) = do
           let n = toInteger (length es)
           es' <- mapM go es
@@ -386,7 +390,7 @@ translateExprMeta doType = go
 {-
         go (SS.Index a ie _) = do
           ne <- doType (SS.typeOf a)
-          (n, e) <- maybe (fail "ToSAWCore: not an array type") return (destVec ne)
+          (n, e) <- maybe (fail "not an array type") return (destVec ne)
           a' <- go a
           ie' <- go ie
           liftIO $ SC.scGet sc n e a' ie'
@@ -400,13 +404,13 @@ translateExprMeta doType = go
             Just n -> do
               ty' <- doType ty
               return $ ssGlobalTerm "termLocalVar'" `app` natTerm (toInteger n) `app` ty'
-            Nothing -> fail $ "ToSAWCore: unbound variable: " ++ x
+            Nothing -> fail $ "unbound variable: " ++ x
         go (SS.Var (SS.TopLevelName m x) ty) = do
           gs <- globals <$> ask
           let i = translateIdent m x
           case lookupTypeOf m x gs of
             Just _ -> return $ ssGlobalTerm "termGlobal" `app` stringTerm (show i)
-            Nothing -> fail $ "ToSAWCore: unknown global variable: " ++ show i
+            Nothing -> fail $ "unknown global variable: " ++ show i
         go (SS.Function x ty body _) = do
           ty' <- doType ty
           body' <- addLocal x (go body)
@@ -436,20 +440,20 @@ translatePType t = addParams ps <$> local polyEnv (translatePType' t)
             tfun (fterm (SC.Sort (SC.mkSort 0))) . addParams ns
 
 --FIXME translatePType' :: SS.PType -> M SC.Term
-translatePType' (In (Inl _)) = fail "ToSAWCore: polymorphic type is integer"
+translatePType' (In (Inl _)) = fail "polymorphic type is integer"
 translatePType' (In (Inr (Inr (SS.PVar x)))) = do
   ls <- locals <$> ask
   case M.lookup x ls of
     Just n ->
       return . SC.Term . SC.LocalVar n $ fterm . SC.Sort . SC.mkSort $ 0
-    Nothing -> fail $ "ToSAWCore: unbound type variable: " ++ x
+    Nothing -> fail $ "unbound type variable: " ++ x
 translatePType' (In (Inr (Inl ty))) =
   case ty of
     SS.BitF -> return bitType
     SS.ZF -> return intType
     SS.QuoteF -> return quoteType
     SS.ArrayF ety (In (Inl (SS.I n))) -> vec n <$> translatePType' ety
-    SS.ArrayF _ _ -> fail "ToSAWCore: array dimension is not constant"
+    SS.ArrayF _ _ -> fail "array dimension is not constant"
 --FIXME    SS.BlockF ctx rty -> blockType ctx <$> translatePType' rty
     SS.TupleF tys ->
       (fterm . SC.TupleType) <$> mapM translatePType' tys
@@ -458,7 +462,7 @@ translatePType' (In (Inr (Inl ty))) =
         where translateField (fn, fty) = (fn,) <$> translatePType' fty
     SS.FunctionF aty rty ->
       tfun <$> translatePType' aty <*> translatePType' rty
---FIXME    SS.Syn name -> fail $ "ToSAWCore: unresolved type synonym: " ++ name
+--FIXME    SS.Syn name -> fail $ "unresolved type synonym: " ++ name
 -}
 
 getPolyTypes :: SS.FullT -> [SS.TypeF SS.FullT]

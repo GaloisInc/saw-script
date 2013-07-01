@@ -43,17 +43,25 @@ newtype ModMap e = ModMap
 -- BuildEnv --------------------------------------------------------------------
 
 buildModules :: Compiler Incoming Outgoing
-buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> check) >=> assemble
+buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDependency >=> check) >=> assemble
   $ M.assocs $ modules ms
+
+addPreludeDependency :: ModuleParts UncheckedExpr -> Err (ModuleParts UncheckedExpr)
+addPreludeDependency (ModuleParts mn ee te ds)
+  | mn == ModuleName [] "Prelude" = return $ ModuleParts mn ee te ds
+  | otherwise = return $ ModuleParts mn ee te $ S.insert preludeName ds
+  where
+  preludeName = ModuleName [] "Prelude"
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
---build :: [TopStmtSimple RawT] -> ModuleBuilder
 build :: (ModuleName,[TopStmtSimple RawT]) -> Err (ModuleParts UncheckedExpr)
 build (mn,ts) = foldrM modBuilder (ModuleParts mn M.empty M.empty S.empty) ts
+
 -- stage2: force every expression var to have exactly one bound expression.
 check :: ModuleParts UncheckedExpr -> Err (ModuleParts CheckedExpr)
 check (ModuleParts mn ee te ds) = ModuleParts mn <$> traverseWithKey ensureExprPresent ee <*> pure te <*> pure ds
+
 -- stage3: make a module out of the resulting envs
 assemble :: [ModuleParts CheckedExpr] -> Err Outgoing
 assemble mods = return $ buildQueue modM
@@ -87,6 +95,7 @@ modBuilder t (ModuleParts mn ee te ds) = case t of
   AbsTypeDecl n    -> if M.member n te
                       then multiDeclErr n
                       else return $ ModuleParts mn ee (intoTypeEnv n newAbsType te) ds
+  Prim n t         -> undefined
   -- Imports show dependencies
   Import n _ _     -> return $ ModuleParts mn ee te (addDependency n ds)
 
