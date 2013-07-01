@@ -13,7 +13,7 @@ import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.SharedTerm
 
 $(runDecWriter $ do
-    prelude <- defineModuleFromFile [] "preludeModule" "prelude/Prelude.saw"
+    prelude <- defineModuleFromFile [] "preludeModule" "prelude/Prelude.sawcore"
     declareSharedModuleFns "Prelude" (decVal prelude)
  )
 
