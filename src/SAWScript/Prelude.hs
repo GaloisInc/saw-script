@@ -62,9 +62,9 @@ preludeEnv = map qualify $
     , Forall [] (javaSetup tUnit)
     )
   , ( "java_extract"
-    , Forall [] (tFun tString
-                 (tFun tString
-                  (tFun (javaSetup tUnit) (topLevel term))))
+    , Forall ["a"] (tFun tString
+                    (tFun tString
+                     (tFun (javaSetup tUnit) (topLevel (boundVar "a")))))
     )
   , ( "llvm_pure", Forall [] (llvmSetup tUnit) )
   , ( "llvm_extract"
