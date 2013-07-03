@@ -52,6 +52,9 @@ preludeEnv = map qualify $
   , ( "and"
     , Forall [] (tFun tBool (tFun tBool tBool))
     )
+  , ( "or"
+    , Forall [] (tFun tBool (tFun tBool tBool))
+    )
   , ( "negate"
     , Forall [] (tFun term (topLevel term))
     )
