@@ -38,10 +38,10 @@ preludeEnv = map qualify $
     , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "write_smtlib1"
-    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "write_smtlib2"
-    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "equal"
     , Forall [] (tFun term (tFun term (topLevel term)))
