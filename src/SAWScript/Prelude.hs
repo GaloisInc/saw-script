@@ -56,7 +56,7 @@ preludeEnv = map qualify $
     , Forall ["a"] (tFun (proofScript proofResult) (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "sat"
-    , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun (proofScript proofResult) (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "abc"
     , Forall [] (proofScript proofResult)
