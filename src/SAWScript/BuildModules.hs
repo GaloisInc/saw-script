@@ -150,16 +150,10 @@ findModule mn mm = modMap mm M.! mn
 -- Backward Compatibility ------------------------------------------------------
 
 #if __GLASGOW_HASKELL__ < 706
-fromSet :: Eq k => (k -> a) -> S.Set k -> M.Map k a
-fromSet f s = M.fromAscList [ (x, f x) | x <- S.toAscList s ]
-
 traverseWithKey :: (Applicative t, Ord k) => (k -> a -> t b) -> M.Map k a -> t (M.Map k b)
 traverseWithKey f s =
   fmap M.fromList (T.traverse (\(k, v) -> fmap ((,) k) (f k v)) (M.toList s))
 #else
-fromSet :: (k -> a) -> S.Set k -> M.Map k a
-fromSet = M.fromSet
-
 traverseWithKey :: Applicative t => (k -> a -> t b) -> M.Map k a -> t (M.Map k b)
 traverseWithKey = M.traverseWithKey
 #endif
