@@ -32,7 +32,7 @@ data Expr
   deriving (Show)
 
 data BlockStmt
-  = Bind          (Maybe Name) (Maybe Type) Expr
+  = Bind          (Maybe Name) (Maybe Type) (Maybe Type) Expr
   -- | BlockTypeDecl Name             typeT  
   | BlockLet      [Bind Expr]
   deriving (Show)
