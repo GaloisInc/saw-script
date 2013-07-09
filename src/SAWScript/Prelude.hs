@@ -43,6 +43,9 @@ preludeEnv = map qualify $
   , ( "write_smtlib2"
     , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
+  , ( "write_core"
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
+    )
   , ( "equal"
     , Forall [] (tFun term (tFun term (topLevel term)))
     )
