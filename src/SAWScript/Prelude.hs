@@ -58,6 +58,11 @@ preludeEnv = map qualify $
   , ( "or"
     , Forall [] (tFun tBool (tFun tBool tBool))
     )
+  , ( "eq"
+--    , Forall ["a"] (tFun (boundVar "a") (tFun (boundVar "a") tBool))
+-- FIXME: make equality polymorphic
+    , Forall ["n"] (tFun (tArray (boundVar "n") tBool) (tFun (tArray (boundVar "n") tBool) tBool))
+    )
   , ( "negate"
     , Forall [] (tFun term (topLevel term))
     )
