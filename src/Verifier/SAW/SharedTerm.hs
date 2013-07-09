@@ -75,6 +75,7 @@ module Verifier.SAW.SharedTerm
     -- *** Bitvector primitives
   , scBitvector
   , scBvNat
+  , scFinVal
   , scBvAdd, scBvSub, scBvMul
   , scBvOr, scBvAnd, scBvXor
   , scBvNot
@@ -719,6 +720,10 @@ scBitvector sc size = do
 -- | bvNat :: (x :: Nat) -> Nat -> bitvector x;
 scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
+
+-- | FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
+scFinVal :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFinVal sc a b = scCtorApp sc "Prelude.FinVal" [a, b]
 
 -- | bvAdd/Sub/Mul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 scBvAdd, scBvSub, scBvMul
