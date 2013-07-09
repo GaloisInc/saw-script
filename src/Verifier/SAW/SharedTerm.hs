@@ -62,6 +62,7 @@ module Verifier.SAW.SharedTerm
   , scGlobalApply
   , scSharedTerm
   , scImport
+  , scWriteExternal
     -- ** Type checking
   , scTypeOf
   , scTypeOfGlobal
@@ -325,6 +326,57 @@ scImport sc t0 =
   where
     go :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s' -> IO (SharedTerm s)
     go cache (STApp idx tf) = useCache cache idx (scTermF sc =<< traverse (go cache) tf)
+
+-- | Render to external text format
+scWriteExternal :: SharedTerm s -> String
+scWriteExternal t0 =
+    let (x, (_, output, _)) = State.runState (go t0) (Map.empty, [], 1)
+    in unlines (unwords ["SAWCoreTerm", show x] : reverse output)
+  where
+    go :: SharedTerm s -> State.State (Map TermIndex Int, [String], Int) Int
+    go (STApp i tf) = do
+      (memo, _, _) <- State.get
+      case Map.lookup i memo of
+        Just x -> return x
+        Nothing -> do
+          tf' <- traverse go tf
+          (m, output, x) <- State.get
+          let s = unwords [show x, writeTermF tf']
+          State.put (Map.insert i x m, s : output, x + 1)
+          return x
+    writeTermF :: TermF Int -> String
+    writeTermF tf =
+      case tf of
+        Lambda p t e -> unwords ["Lam", writePat p, show t, show e]
+        Pi s t e     -> unwords ["Pi", show s, show t, show e]
+        Let ds e     -> unwords ["Def", writeDefs ds, show e]
+        LocalVar i e -> unwords ["Var", show i, show e]
+        FTermF ftf   ->
+          case ftf of
+            GlobalDef ident    -> unwords ["Global", show ident]
+            App e1 e2          -> unwords ["App", show e1, show e2]
+            TupleValue es      -> unwords ("Tuple" : map show es)
+            TupleType es       -> unwords ("TupleT" : map show es)
+            TupleSelector e i  -> unwords ["TupleSel", show e, show i]
+            RecordValue m      -> unwords ("Record" : map writeField (Map.assocs m))
+            RecordType m       -> unwords ("RecordT" : map writeField (Map.assocs m))
+            RecordSelector e i -> unwords ["RecordSel", show e, show i]
+            CtorApp i es       -> unwords ("Ctor" : show i : map show es)
+            DataTypeApp i es   -> unwords ("Data" : show i : map show es)
+            Sort s             -> unwords ["Sort", show s]
+            NatLit n           -> unwords ["Nat", show n]
+            ArrayValue e v     -> unwords ("Array" : show e : map show (V.toList v))
+            FloatLit x         -> unwords ["Float", show x]
+            DoubleLit x        -> unwords ["Double", show x]
+            StringLit s        -> unwords ["String", show s]
+            ExtCns ext         -> unwords ["ExtCns", writeExtCns ext]
+    writeField :: (String, Int) -> String
+    writeField (s, e) = unwords [show s, show e]
+    writePat :: Pat Int -> String
+    writePat (PVar s 0 _) = s
+    writePat _ = error "unsupported pattern"
+    writeDefs = error "unsupported Let expression"
+    writeExtCns = error "unsupported ExtCns"
 
 -- | Returns bitset containing indices of all free local variables.
 looseVars :: forall s. SharedTerm s -> BitSet
