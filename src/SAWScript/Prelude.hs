@@ -72,6 +72,10 @@ preludeEnv = map qualify $
   , ( "sat"
     , Forall ["a"] (tFun (proofScript proofResult) (tFun (boundVar "a") (topLevel tUnit)))
     )
+  , ( "rewrite"
+    , Forall ["a"] (tFun tUnit (tFun (boundVar "a") (topLevel (boundVar "a"))))
+    -- TODO: add simpset argument (for now just use default rewrite rules)
+    )
   , ( "abc"
     , Forall [] (proofScript proofResult)
     )
