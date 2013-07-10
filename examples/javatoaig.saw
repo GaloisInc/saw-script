@@ -1,6 +1,6 @@
 main : TopLevel ();
 main = do {
-  t <- java_extract "Double" "f" java_pure;
+  (t : [32] -> [32]) <- java_extract "Double" "f" java_pure;
   print t;
-  //write_aig "java_f.aig" t;
+  write_aig "java_f.aig" t;
 };
