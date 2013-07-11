@@ -49,11 +49,20 @@ assert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
 coerce :: (y x :: sort 0) -> Eq (sort 0) x y -> x -> y;
 coerce _ _ (Refl _ _) x = x;
 
+coerce_same :: (a :: sort 0) -> (eq :: Eq (sort 0) a a) -> (x :: a) -> Eq a (coerce a a eq x) x;
+coerce_same a (Refl _ _) x = Refl a x;
+
 rcoerce :: (y x :: sort 0) -> Eq (sort 0) y x -> x -> y;
 rcoerce y x eq = coerce y x (sym (sort 0) y x eq);
 
+rcoerce_same :: (a :: sort 0) -> (eq :: Eq (sort 0) a a) -> (x :: a) -> Eq a (rcoerce a a eq x) x;
+rcoerce_same a eq x = coerce_same a (sym (sort 0) a a eq) x;
+
 unsafeCoerce :: (y x :: sort 0) -> x -> y;
 unsafeCoerce y x = rcoerce y x (assert (sort 0) y x);
+
+unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
+unsafeCoerce_same a x = rcoerce_same a (assert (sort 0) a a) x;
 
 piCong0 :: (r x y :: sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
 piCong0 r _ _ (Refl _ tp) = Refl (sort 0) (tp -> r);
