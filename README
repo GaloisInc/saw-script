@@ -1,9 +1,5 @@
 For a simple build:
 
-  cabal configure
-  cabal build
+./build.sh
 
-And then run dist/build/sawScript/sawScript
-
-For a more complete build, as will be necessary once we start to bind to
-the verification tools, use the Makefile, which will invoke cabal-dev.
+And then run dist/build/saw/saw
