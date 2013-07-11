@@ -63,6 +63,7 @@ module Verifier.SAW.SharedTerm
   , scSharedTerm
   , scImport
   , scWriteExternal
+  , scReadExternal
     -- ** Type checking
   , scTypeOf
   , scTypeOfGlobal
@@ -361,7 +362,7 @@ scWriteExternal t0 =
             TupleSelector e i  -> unwords ["TupleSel", show e, show i]
             RecordValue m      -> unwords ("Record" : map writeField (Map.assocs m))
             RecordType m       -> unwords ("RecordT" : map writeField (Map.assocs m))
-            RecordSelector e i -> unwords ["RecordSel", show e, show i]
+            RecordSelector e i -> unwords ["RecordSel", show e, i]
             CtorApp i es       -> unwords ("Ctor" : show i : map show es)
             DataTypeApp i es   -> unwords ("Data" : show i : map show es)
             Sort s             -> unwords ["Sort", show s]
@@ -372,12 +373,55 @@ scWriteExternal t0 =
             StringLit s        -> unwords ["String", show s]
             ExtCns ext         -> unwords ["ExtCns", writeExtCns ext]
     writeField :: (String, Int) -> String
-    writeField (s, e) = unwords [show s, show e]
+    writeField (s, e) = unwords [s, show e]
     writePat :: Pat Int -> String
     writePat (PVar s 0 _) = s
     writePat _ = error "unsupported pattern"
     writeDefs = error "unsupported Let expression"
     writeExtCns = error "unsupported ExtCns"
+
+scReadExternal :: forall s. SharedContext s -> String -> IO (SharedTerm s)
+scReadExternal sc input =
+  case map words (lines input) of
+    (["SAWCoreTerm", read -> final] : rows) ->
+        do m <- foldM go Map.empty rows
+           return $ (Map.!) m final
+    _ -> fail "scReadExternal"
+  where
+    go :: Map Int (SharedTerm s) -> [String] -> IO (Map Int (SharedTerm s))
+    go m (n : tokens) =
+        do t <- scTermF sc (fmap ((Map.!) m) (parse tokens))
+           return (Map.insert (read n) t m)
+    go _ _ = fail "Parse error"
+    parse :: [String] -> TermF Int
+    parse tokens =
+      case tokens of
+        ["Lam", x, t, e]    -> Lambda (PVar x 0 (read t)) (read t) (read e)
+        ["Pi", s, t, e]     -> Pi (read s) (read t) (read e)
+        -- TODO: support LetDef
+        ["Var", i, e]       -> LocalVar (read i) (read e)
+        ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
+        ["App", e1, e2]     -> FTermF (App (read e1) (read e2))
+        ("Tuple" : es)      -> FTermF (TupleValue (map read es))
+        ("TupleT" : es)     -> FTermF (TupleType (map read es))
+        ["TupleSel", e, i]  -> FTermF (TupleSelector (read e) (read i))
+        ("Record" : fs)     -> FTermF (RecordValue (readMap fs))
+        ("RecordT" : fs)    -> FTermF (RecordType (readMap fs))
+        ["RecordSel", e, i] -> FTermF (RecordSelector (read e) i)
+        ("Ctor" : i : es)   -> FTermF (CtorApp (parseIdent i) (map read es))
+        ("Data" : i : es)   -> FTermF (DataTypeApp (parseIdent i) (map read es))
+        ["Sort", s]         -> FTermF (Sort (mkSort (read s)))
+        ["Nat", n]          -> FTermF (NatLit (read n))
+        ("Array" : e : es)  -> FTermF (ArrayValue (read e) (V.fromList (map read es)))
+        ["Float", x]        -> FTermF (FloatLit (read x))
+        ["Double", x]       -> FTermF (DoubleLit (read x))
+        ["String", s]       -> FTermF (StringLit (read s))
+        -- TODO: support ExtCns
+        _ -> error $ "Parse error: " ++ unwords tokens
+    readMap :: [String] -> Map FieldName Int
+    readMap [] = Map.empty
+    readMap (i : e : fs) = Map.insert i (read e) (readMap fs)
+    readMap _ = error $ "Parse error"
 
 -- | Returns bitset containing indices of all free local variables.
 looseVars :: forall s. SharedTerm s -> BitSet
