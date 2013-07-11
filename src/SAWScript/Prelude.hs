@@ -46,6 +46,9 @@ preludeEnv = map qualify $
   , ( "write_core"
     , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
+  , ( "read_core"
+    , Forall ["a"] (tFun tString (topLevel (boundVar "a")))
+    )
   , ( "equal"
     , Forall [] (tFun term (tFun term (topLevel term)))
     )
