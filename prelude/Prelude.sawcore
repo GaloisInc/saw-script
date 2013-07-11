@@ -128,6 +128,15 @@ ite_not a True _ y = Refl a y;
 ite_not a False x _ = Refl a x;
 
 --------------------------------------------------------------------------------
+-- Boolean equality
+
+eq :: (a :: sort 0) -> a -> a -> Bool;
+
+eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
+
+eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
+
+--------------------------------------------------------------------------------
 -- Pairs
 fst :: (x y :: sort 0) -> #(x,y) -> x;
 fst x y (l,h) = l;
