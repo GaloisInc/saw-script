@@ -151,12 +151,12 @@ buildQueue mm = map (flip findModule mm . (findInMap vertModMap)) depOrder
                ]
 
 findModule :: ModuleName -> ModMap e -> ModuleParts e
-findModule mn mm = modMap mm M.! mn
+findModule mn mm = findInMap (modMap mm) mn
 
 findInMap :: (Ord k, Show k) => M.Map k a -> k -> a
 findInMap m k = case M.lookup k m of
   Just a  -> a
-  Nothing -> error $ "Couldn't find element " ++ show k ++ " in map"
+  Nothing -> error $ "Couldn't find element " ++ show k ++ " in Map"
 
 -- Backward Compatibility ------------------------------------------------------
 

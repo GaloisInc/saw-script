@@ -1,0 +1,28 @@
+
+abstract Term;
+abstract ProofResult;
+
+prim return : { m , a } a -> m a;
+prim print  : { a } a -> TopLevel ();
+
+prim bitSequence : { n } Int -> [n];
+
+prim read_aig : String -> TopLevel Term;
+prim read_sbv : String -> TopLevel Term;
+
+prim write_aig     : String -> Term -> TopLevel ();
+prim write_smtlib1 : String -> Term -> TopLevel ();
+prim write_smtlib2 : String -> Term -> TopLevel ();
+
+prim equal  : Term -> Term -> TopLevel Term;
+prim negate : Term -> TopLevel Term;
+
+prim prove : ProofScript ProofResult -> Term -> TopLevel ();
+prim sat   : ProofScript ProofResult -> Term -> TopLevel ();
+prim abc   : ProofScript ProofResult;
+
+prim java_pure    : JavaSetup ();
+prim java_extract : String -> String -> JavaSetup () -> TopLevel Term;
+prim llvm_pure    : LLVMSetup ();
+prim llvm_extract : String -> String -> LLVMSetup () -> TopLevel Term;
+
