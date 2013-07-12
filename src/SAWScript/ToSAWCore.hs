@@ -32,6 +32,8 @@ import Verifier.SAW.Prelude (preludeModule)
 import qualified Verifier.SAW.TypedAST as SC
 import qualified Verifier.SAW.SharedTerm as SC
 
+import Debug.Trace
+
 type GlobalEnv = Map SS.ResolvedName SS.Type
 
 data Env = Env {
@@ -112,12 +114,14 @@ translateModule = compiler "TranslateModule" $ \m -> do
             SC.insImport preludeModule $
             SC.emptyModule mn
       exprs = M.toList $ SS.moduleExprEnv m
+      prims = M.toList $ SS.modulePrimEnv m
   let ml1 = evalTI (SS.moduleName m) (mapM (\(n,s) -> (n,) <$> exportSchema s) preludeEnv)
   case ml1 of
     Left err -> fail $ unlines err
     Right l1 -> do
       let l2 = [ (SS.TopLevelName (SS.moduleName m) n, SS.typeOf e) | (n, e) <- exprs ]
-          initEnv = emptyEnv { globals = M.fromList $ l1 ++ l2 }
+          l3 = [ (SS.TopLevelName (SS.moduleName m) n, t)           | (n, t) <- prims ]
+          initEnv = emptyEnv { globals = M.fromList $ l1 ++ l2 ++ l3 }
       case runTranslate initEnv $ foldM translateTopDef mod exprs of
         Left err  -> fail err
         Right res -> return res

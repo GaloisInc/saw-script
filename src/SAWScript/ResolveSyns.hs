@@ -11,9 +11,10 @@ import Control.Applicative
 import Control.Monad.Trans.Reader
 import Data.Traversable hiding (mapM)
 
-resolveSyns :: Compiler (Module (ExprSimple RawT) RawT) (Module (ExprSimple ResolvedT) ResolvedT)
-resolveSyns = compiler "ResolveSyns" $ \(Module nm ee te ds) -> evalRS te $ 
-  Module nm <$> traverse (traverse resolve) ee <*> traverse resolve te <*> pure ds
+resolveSyns :: Compiler (Module UnresolvedName RawT      RawT)
+                        (Module UnresolvedName ResolvedT ResolvedT)
+resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds) -> evalRS te $ 
+  Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds
 
 type RS = ReaderT RSEnv Err
 type RSEnv = Env RawT

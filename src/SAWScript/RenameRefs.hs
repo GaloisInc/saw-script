@@ -8,7 +8,7 @@ module SAWScript.RenameRefs
 
 import SAWScript.AST
 import SAWScript.Compiler
---import SAWScript.Prelude
+-- import SAWScript.Prelude
 
 import Control.Applicative
 import Control.Monad.State
@@ -20,18 +20,20 @@ import qualified Data.Traversable as T
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
 renameRefs :: Compiler IncomingModule OutgoingModule
-renameRefs = compiler "RenameRefs" $ \m@(Module nm ee te ds) -> evalRR m $
-  Module nm <$> T.traverse resolveInExpr ee <*> pure te <*> pure ds
+renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe te ds) -> evalRR m $
+  Module nm <$> T.traverse resolveInExpr ee <*> pure pe <*> pure te <*> pure ds
 
 -- Types {{{
 
-type IncomingModule = Module    (Expr UnresolvedName ResolvedT) ResolvedT
-type IncomingExpr   = Expr      UnresolvedName ResolvedT
-type IncomingBStmt  = BlockStmt UnresolvedName ResolvedT
+type IncomingModule = Module UnresolvedName ResolvedT      ResolvedT
+-- type IncomingExprs  =        Exprs          UnresolvedName ResolvedT
+type IncomingExpr   =        Expr           UnresolvedName ResolvedT
+type IncomingBStmt  =        BlockStmt      UnresolvedName ResolvedT
 
-type OutgoingModule = Module    (Expr ResolvedName   ResolvedT) ResolvedT
-type OutgoingExpr   = Expr      ResolvedName   ResolvedT
-type OutgoingBStmt  = BlockStmt ResolvedName   ResolvedT
+type OutgoingModule = Module ResolvedName   ResolvedT      ResolvedT
+-- type OutgoingExprs  =        Exprs          ResolvedName   ResolvedT
+type OutgoingExpr   =        Expr           ResolvedName   ResolvedT
+type OutgoingBStmt  =        BlockStmt      ResolvedName   ResolvedT
 
 type RR = StateT Int (ReaderT RREnv Err)
 
@@ -41,7 +43,7 @@ type RR = StateT Int (ReaderT RREnv Err)
 --  name for the module, and the expr env for the module.
 -- Since these are fully typechecked modules, we can assume that
 --  their Expr type is FullT.
-type ExprMaps = (ModuleName, Env IncomingExpr, ModuleEnv (Env (Expr ResolvedName Type)))
+type ExprMaps = (ModuleName, Env IncomingExpr, Env ResolvedT, ModuleEnv (Env (Expr ResolvedName Type),Env Type))
 
 -- }}}
 
@@ -92,11 +94,25 @@ addNamesFromBinds ns f = foldr step f ns []
 
 -- }}}
 
+{-
+resolveInExprs :: IncomingExprs -> RR OutgoingExprs
+resolveInExprs pexp = case pexp of
+  PrimExpr t -> return $ PrimExpr t
+  Defined e -> Defined <$> resolveInExpr e
+-}
+
 -- traversal operations for Exprs, BlockStmts, and Binds
 resolveInExpr :: IncomingExpr -> RR OutgoingExpr
 resolveInExpr exp = case exp of
-  -- Focus of the whole compiler pass
+  -- Focus of the whole pass
   Var nm t          -> Var <$> resolveName nm <*> pure t
+  -- Binders, which add to the local name environment.
+  Function a at e t -> addName a $ \a' ->
+                         Function a' at <$> resolveInExpr e  <*> pure t
+  LetBlock bs e     -> let ds = duplicates bs in if null ds
+                         then addNamesFromBinds bs $ \bs' ->
+                           LetBlock <$> mapM resolveInBind bs' <*> resolveInExpr e
+                         else duplicateBindingsFail ds
   -- Recursive structures
   Array  es t       -> Array  <$> mapM resolveInExpr es   <*> pure t
   Block  bs t       -> Block  <$> resolveInBStmts bs      <*> pure t
@@ -105,13 +121,6 @@ resolveInExpr exp = case exp of
   Index  e1 e2 t    -> Index  <$> resolveInExpr e1        <*> resolveInExpr e2 <*> pure t
   Lookup e n t      -> Lookup <$> resolveInExpr e         <*> pure n           <*> pure t
   Application f v t -> Application   <$> resolveInExpr f  <*> resolveInExpr v  <*> pure t
-  -- Binders, which add to the local name environment.
-  Function a at e t -> addName a $ \a' ->
-                         Function a' at <$> resolveInExpr e  <*> pure t
-  LetBlock bs e     -> let ds = duplicates bs in if null ds
-                         then addNamesFromBinds bs $ \bs' ->
-                           LetBlock <$> mapM resolveInBind bs' <*> resolveInExpr e
-                         else duplicateBindingsFail ds
   -- No-ops
   Bit b t           -> pure $ Bit b t
   Quote s t         -> pure $ Quote s t
@@ -160,26 +169,25 @@ resolveName un = do
 
 -- Take a module to its collection of Expr Environments.
 allExprMaps :: IncomingModule -> ExprMaps
-allExprMaps (Module modNm exprEnv _ deps) = (modNm,exprEnv,foldr f M.empty (M.elems deps))
+allExprMaps (Module modNm exprEnv primEnv _ deps) = (modNm,exprEnv,primEnv,foldr f M.empty (M.elems deps))
   where
-  f (Module modNm exprEnv _ _) = M.insert modNm exprEnv
+  f (Module modNm exprEnv primEnv _ _) = M.insert modNm (exprEnv,primEnv)
 
 -- TODO: this will need to change once we can refer to prelude functions
 -- with qualified names.
 resolveUnresolvedName :: Env Name -> ExprMaps -> UnresolvedName -> [ResolvedName]
 resolveUnresolvedName
   localAnonEnv
-  (localModNm,localTopEnv,rms)
+  (localModNm,localTopEnv,localPrimEnv,rms)
   un@(UnresolvedName ns n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
     Just n -> [n]
-    Nothing -> maybeToList inLocalTop ++ {- inPrelude ++ -} mapMaybe inDepMod (M.assocs rms)
+    Nothing -> maybeToList inLocalTop ++ maybeToList inLocalPrim ++ mapMaybe inDepMod (M.assocs rms)
   where
   -- TODO: fix when we have proper modules
   -- inPrelude = [ s | s@(TopLevelName _ x) <- map fst preludeEnv, n == x ]
-  -- ignores name shadowing, defering to the local binding over the top level binding.
-  inLocal = maybeToList $ inLocalAnon `mplus` inLocalTop
+
   -- If it's in the localAnonEnv, use the unique name.
   inLocalAnon
     -- only check the local anon env if the name is unqualified
@@ -192,11 +200,12 @@ resolveUnresolvedName
     -- qualified as local module
     | un `inModule` localModNm = TopLevelName localModNm n        <$  M.lookup n localTopEnv
     | otherwise                = Nothing
-  inDepMod (mn, exprEnv)
+  inLocalPrim                  = TopLevelName localModNm n        <$  M.lookup n localPrimEnv
+  inDepMod (mn, (exprEnv,primEnv))
     -- unqualified
-    | isUnqualified un = TopLevelName mn n <$ M.lookup n exprEnv
+    | isUnqualified un = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
     -- qualified as this module
-    | un `inModule` mn = TopLevelName mn n <$ M.lookup n exprEnv
+    | un `inModule` mn = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
     | otherwise        = Nothing
 
 isUnqualified :: UnresolvedName -> Bool

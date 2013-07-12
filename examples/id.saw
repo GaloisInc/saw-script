@@ -1,2 +1,5 @@
 id : {a} a -> a;
 id x = x;
+
+main = return ();
+
