@@ -148,8 +148,8 @@ resolveInBStmts bsts = case bsts of
   []                        -> return []
 
   Bind Nothing c e  : bsts' ->   (:) <$> (Bind Nothing c   <$> resolveInExpr e)       <*> resolveInBStmts bsts'
-  Bind (Just n) c e : bsts' -> addName n $ \n' ->
-                                 (:) <$> (Bind (Just n') c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
+  Bind (Just (n, t)) c e : bsts' -> addName n $ \n' ->
+                                 (:) <$> (Bind (Just (n', t)) c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
 
   BlockTypeDecl n t : bsts' ->   (:) <$> (pure $ BlockTypeDecl n t)            <*> resolveInBStmts bsts'
   BlockLet bs       : bsts' -> addNamesFromBinds bs $ \bs' ->

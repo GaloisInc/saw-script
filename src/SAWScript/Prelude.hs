@@ -7,7 +7,6 @@ import SAWScript.NewAST
 import Verifier.SAW.ParserUtils hiding (ModuleName, preludeName)
 import Verifier.SAW.Prelude
 
-import qualified Data.Map as M
 import Language.Haskell.TH.Syntax hiding (Name)
 
 $(runDecWriter $ do
@@ -33,28 +32,50 @@ preludeEnv = map qualify $
   , ( "bitSequence"
     , Forall ["n"] (tFun tZ (tArray (boundVar "n") tBool))
     )
-  , ( "read_aig" , Forall [] (tFun tString (topLevel term)) )
-  , ( "read_sbv" , Forall [] (tFun tString (topLevel term)) )
+  , ( "read_aig" , Forall ["a"] (tFun tString (topLevel (boundVar "a"))) )
+  , ( "read_sbv" , Forall ["a"] (tFun tString (topLevel (boundVar "a"))) )
   , ( "write_aig"
-    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "write_smtlib1"
-    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "write_smtlib2"
-    , Forall [] (tFun tString (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
+    )
+  , ( "write_core"
+    , Forall ["a"] (tFun tString (tFun (boundVar "a") (topLevel tUnit)))
+    )
+  , ( "read_core"
+    , Forall ["a"] (tFun tString (topLevel (boundVar "a")))
     )
   , ( "equal"
     , Forall [] (tFun term (tFun term (topLevel term)))
+    )
+  , ( "not"
+    , Forall [] (tFun tBool tBool)
+    )
+  , ( "and"
+    , Forall [] (tFun tBool (tFun tBool tBool))
+    )
+  , ( "or"
+    , Forall [] (tFun tBool (tFun tBool tBool))
+    )
+  , ( "eq"
+    , Forall ["a"] (tFun (boundVar "a") (tFun (boundVar "a") tBool))
     )
   , ( "negate"
     , Forall [] (tFun term (topLevel term))
     )
   , ( "prove"
-    , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun (proofScript proofResult) (tFun (boundVar "a") (topLevel tUnit)))
     )
   , ( "sat"
-    , Forall [] (tFun (proofScript proofResult) (tFun term (topLevel tUnit)))
+    , Forall ["a"] (tFun (proofScript proofResult) (tFun (boundVar "a") (topLevel tUnit)))
+    )
+  , ( "rewrite"
+    , Forall ["a"] (tFun tUnit (tFun (boundVar "a") (topLevel (boundVar "a"))))
+    -- TODO: add simpset argument (for now just use default rewrite rules)
     )
   , ( "abc"
     , Forall [] (proofScript proofResult)
@@ -63,19 +84,24 @@ preludeEnv = map qualify $
     , Forall [] (javaSetup tUnit)
     )
   , ( "java_extract"
-    , Forall [] (tFun tString
-                 (tFun tString
-                  (tFun (javaSetup tUnit) (topLevel term))))
+    , Forall ["a"] (tFun tString
+                    (tFun tString
+                     (tFun (javaSetup tUnit) (topLevel (boundVar "a")))))
     )
   , ( "llvm_pure", Forall [] (llvmSetup tUnit) )
   , ( "llvm_extract"
-    , Forall [] (tFun tString
-                 (tFun tString
-                  (tFun (llvmSetup tUnit) (topLevel term))))
+    , Forall ["a"] (tFun tString
+                    (tFun tString
+                     (tFun (llvmSetup tUnit) (topLevel (boundVar "a")))))
     )
   , ( "print"
-    , Forall ["a"]
-             (tFun (boundVar "a") (topLevel (tTuple [])))
+    , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
+    )
+  , ( "print_type"
+    , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
+    )
+  , ( "print_term"
+    , Forall ["a"] (tFun (boundVar "a") (topLevel tUnit))
     )
   ]
   where topLevel = tBlock (tContext TopLevel)

@@ -44,9 +44,9 @@ library
     SAWScript.Builtins
     SAWScript.Compiler
     --SAWScript.ConvertType
-    SAWScript.Execution
     --SAWScript.FindMain
     SAWScript.Import
+    SAWScript.Interpreter
     SAWScript.Lexer
     --SAWScript.LiftPoly
     SAWScript.NewAST
@@ -55,7 +55,6 @@ library
     SAWScript.Prelude
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
-    SAWScript.ToSAWCore
     SAWScript.Token
     --SAWScript.TypeCheck
     SAWScript.MGU
