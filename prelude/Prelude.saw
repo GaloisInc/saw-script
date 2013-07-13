@@ -3,26 +3,39 @@ abstract Term;
 abstract ProofResult;
 
 prim return : { m , a } a -> m a;
-prim print  : { a } a -> TopLevel ();
+
+prim print      : {a} a -> TopLevel ();
+prim print_term : {a} a -> TopLevel ();
+prim print_type : {a} a -> TopLevel ();
 
 prim bitSequence : { n } Int -> [n];
 
-prim read_aig : String -> TopLevel Term;
-prim read_sbv : String -> TopLevel Term;
+prim read_aig  : {a} String -> TopLevel a;
+prim read_sbv  : {a} String -> TopLevel a;
+prim read_core : {a} String -> TopLevel a;
 
-prim write_aig     : String -> Term -> TopLevel ();
-prim write_smtlib1 : String -> Term -> TopLevel ();
-prim write_smtlib2 : String -> Term -> TopLevel ();
+prim write_aig     : {a} String -> a -> TopLevel ();
+prim write_smtlib1 : {a} String -> a -> TopLevel ();
+prim write_smtlib2 : {a} String -> a -> TopLevel ();
+prim write_core    : {a} String -> a -> TopLevel ();
 
 prim equal  : Term -> Term -> TopLevel Term;
 prim negate : Term -> TopLevel Term;
 
-prim prove : ProofScript ProofResult -> Term -> TopLevel ();
-prim sat   : ProofScript ProofResult -> Term -> TopLevel ();
+prim prove : {a} ProofScript ProofResult -> a -> TopLevel ();
+prim sat   : {a} ProofScript ProofResult -> a -> TopLevel ();
 prim abc   : ProofScript ProofResult;
 
-prim java_pure    : JavaSetup ();
-prim java_extract : String -> String -> JavaSetup () -> TopLevel Term;
-prim llvm_pure    : LLVMSetup ();
-prim llvm_extract : String -> String -> LLVMSetup () -> TopLevel Term;
+prim rewrite : {a} () -> a -> TopLevel a;
+// TODO: add simpset argument
 
+prim java_pure    : JavaSetup ();
+prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
+prim llvm_pure    : LLVMSetup ();
+prim llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
+
+prim eq : {a} a -> a -> Bit;
+
+prim not  : Bit -> Bit;
+prim conj : Bit -> Bit -> Bit;
+prim disj : Bit -> Bit -> Bit;
