@@ -56,7 +56,6 @@ library
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.Token
-    --SAWScript.TypeCheck
     SAWScript.MGU
     SAWScript.Unify
     SAWScript.Unify.Fix
