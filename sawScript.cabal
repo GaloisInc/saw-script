@@ -44,6 +44,7 @@ library
     SAWScript.Builtins
     SAWScript.Compiler
     --SAWScript.ConvertType
+    SAWScript.FileQuote
     --SAWScript.FindMain
     SAWScript.Import
     SAWScript.Interpreter
