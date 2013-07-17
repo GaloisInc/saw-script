@@ -42,7 +42,12 @@ type RR = StateT Int (ReaderT RREnv Err)
 --  name for the module, and the expr env for the module.
 -- Since these are fully typechecked modules, we can assume that
 --  their Expr type is FullT.
-type ExprMaps = (ModuleName, Env IncomingExpr, Env ResolvedT, ModuleEnv (Env (Expr ResolvedName Type),Env Type))
+type ExprMaps =
+    ( ModuleName
+    , Env IncomingExpr
+    , Env ResolvedT
+    , ModuleEnv (Env (Expr ResolvedName Schema), Env Schema)
+    )
 
 -- }}}
 
