@@ -219,5 +219,6 @@ enforceResolution :: UnresolvedName -> [ResolvedName] -> RR ResolvedName
 enforceResolution un qs = case qs of
   [qn] -> return qn
   []   -> fail $ "Unbound reference for " ++ renderUnresolvedName un
-  _    -> fail $ "Ambiguous reference for " ++ renderUnresolvedName un
+  qns  -> fail $ "Ambiguous reference for " ++ renderUnresolvedName un
+          ++ "\n" ++ unlines (map renderResolvedName qns)
 
