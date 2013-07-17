@@ -53,7 +53,6 @@ library
     SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
-    SAWScript.Prelude
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.Token

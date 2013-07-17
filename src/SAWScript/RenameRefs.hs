@@ -8,7 +8,6 @@ module SAWScript.RenameRefs
 
 import SAWScript.AST
 import SAWScript.Compiler
--- import SAWScript.Prelude
 
 import Control.Applicative
 import Control.Monad.State
