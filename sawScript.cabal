@@ -43,13 +43,10 @@ library
     SAWScript.BuildModules
     SAWScript.Builtins
     SAWScript.Compiler
-    --SAWScript.ConvertType
     SAWScript.FileQuote
-    --SAWScript.FindMain
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
-    --SAWScript.LiftPoly
     SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
