@@ -6,7 +6,7 @@ module SAWScript.RenameRefs
   , OutgoingModule
   ) where
 
-import SAWScript.AST
+import SAWScript.AST hiding (i)
 import SAWScript.Compiler
 
 import Control.Applicative
@@ -183,7 +183,7 @@ resolveUnresolvedName :: Env Name -> ExprMaps -> UnresolvedName -> [ResolvedName
 resolveUnresolvedName
   localAnonEnv
   (localModNm,localTopEnv,localPrimEnv,rms)
-  un@(UnresolvedName ns n) =
+  un@(UnresolvedName _ns n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
     Just n -> [n]
