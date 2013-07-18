@@ -20,7 +20,7 @@ library
     , jvm-verifier
     , lens
     , llvm-pretty
-    , llvm-verifier
+    , llvm-verifier >= 0.2.1
     , mtl >= 2.1
     , old-locale
     , old-time
