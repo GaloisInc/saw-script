@@ -39,3 +39,5 @@ prim eq : {a} a -> a -> Bit;
 prim not  : Bit -> Bit;
 prim conj : Bit -> Bit -> Bit;
 prim disj : Bit -> Bit -> Bit;
+
+prim complement : {n} [n] -> [n];
