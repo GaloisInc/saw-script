@@ -24,19 +24,23 @@ module Verifier.SAW.Recognizer
   , isDataType
   , asNatLit
   , asLambda
+  , asLambdaList
   , asPi
   , asPiList
   , asLocalVar
     -- * Prelude recognizers.
   , asBool
   , asBoolType
+  , Nat
   , asBitvectorType
+  , isVecType
   , asMux
   ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Map (Map)
+import Verifier.SAW.Prim
 import Verifier.SAW.TypedAST
 
 data a :*: b = (:*:) a b
@@ -44,7 +48,7 @@ data a :*: b = (:*:) a b
 
 type Recognizer m t a = t -> m a
 
--- | Tries both recognizers and returns first that succeeds.
+-- | Tries both recognizers.
 (<>) :: Alternative f => Recognizer f t a -> Recognizer f t a -> Recognizer f t a
 (<>) f g t = f t <|> g t
 
@@ -53,6 +57,12 @@ type Recognizer m t a = t -> m a
      => Recognizer f t a -> Recognizer f [t] () -> Recognizer f [t] a
 (<:) f g (h:r) = do x <- f h; _ <- g r; return x
 (<:) _ _ [] = fail "empty-list"
+
+-- | Recognizes the head and tail of a list, and returns head.
+(<:>) :: Monad f
+     => Recognizer f t a -> Recognizer f [t] b -> Recognizer f [t] (a :*: b)
+(<:>) f g (h:r) = do x <- f h; y <- g r; return (x :*: y)
+(<:>) _ _ [] = fail "empty-list"
 
 -- | Recognizes empty list
 emptyl :: Monad m => Recognizer m [t] ()
@@ -126,12 +136,17 @@ isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else fail "not datatype"
 
-asNatLit :: (Monad f, Termlike t) => Recognizer f t Integer
-asNatLit t = do NatLit i <- asFTermF t; return i
+asNatLit :: (Monad f, Termlike t) => Recognizer f t Nat
+asNatLit t = do NatLit i <- asFTermF t; return (fromInteger i)
 
 asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
 asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
 asLambda _ = fail "not a lambda"
+
+asLambdaList :: Termlike t => t -> ([(String, t)], t)
+asLambdaList = go []
+  where go r (asLambda -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
+        go r rhs = (reverse r, rhs)
 
 asPi :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
 asPi (unwrapTermF -> Pi nm tp body) = return (nm, tp, body)
@@ -143,6 +158,7 @@ asPiList :: Termlike t => t -> ([(String, t)], t)
 asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
+
 asLocalVar :: (Monad m, Termlike t) => Recognizer m t (DeBruijnIndex, t)
 asLocalVar (unwrapTermF -> LocalVar i ty) = return (i, ty)
 asLocalVar _ = fail "not a local variable"
@@ -156,7 +172,11 @@ asBool _ = fail "not bool"
 asBoolType :: (Monad f, Termlike t) => Recognizer f t ()
 asBoolType = isDataType "Prelude.Bool" emptyl
 
-asBitvectorType :: (Alternative f, Monad f, Termlike t) => Recognizer f t Integer
+isVecType :: (Monad f, Termlike t)
+          => Recognizer f t a -> Recognizer f t (Nat :*: a)
+isVecType tp = isDataType "Prelude.Vec" (asNatLit <:> endl tp)
+
+asBitvectorType :: (Alternative f, Monad f, Termlike t) => Recognizer f t Nat
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNatLit)
   <> isDataType "Prelude.Vec" 

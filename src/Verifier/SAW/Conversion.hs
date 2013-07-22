@@ -34,8 +34,10 @@ module Verifier.SAW.Conversion
   , asTupleValue
   , asAnyTupleType
   , asTupleType
+  , asTupleSelector
   , asAnyRecordValue
   , asAnyRecordType
+  , asRecordSelector
   , asCtor
   , asDataType
   , asAnySort
@@ -45,6 +47,7 @@ module Verifier.SAW.Conversion
   , asAnyFloatLit
   , asAnyDoubleLit
   , asExtCns
+  , asLocalVar
     -- ** Prelude matchers
   , asBoolType
   , asFinValLit
@@ -85,6 +88,7 @@ module Verifier.SAW.Conversion
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
+import Control.Lens (_1)
 import Control.Monad (ap, liftM, liftM2, unless, (>=>), (<=<))
 import Data.Bits
 import Data.Map (Map)
@@ -217,15 +221,23 @@ asTupleType (defaultArgsMatcher -> m) = asVar $ \t -> do
   TupleType l <- R.asFTermF t
   runArgsMatcher m l
 
---TODO: TupleSelector
+asTupleSelector :: (Functor m, Monad m, Termlike t)
+                => Matcher m t a -> Matcher m t (a, Int)
+asTupleSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asTupleSelector t
 
 -- | Matches record values, and returns fields.
 asAnyRecordValue :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
-asAnyRecordValue = asVar $ \t -> do RecordValue m <- R.asFTermF t; return m
+asAnyRecordValue = asVar R.asRecordValue
 
 -- | Matches record types, and returns fields.
 asAnyRecordType :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
-asAnyRecordType = asVar $ \t -> do RecordType m <- R.asFTermF t; return m
+asAnyRecordType = asVar R.asRecordType
+
+-- | Matches 
+asRecordSelector :: (Functor m, Monad m, Termlike t)
+                 => Matcher m t a
+                 -> Matcher m t (a, FieldName) 
+asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 
 --TODO: RecordSelector
 
@@ -276,6 +288,10 @@ asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
 -- | Match any external constant.
 asExtCns :: (Termlike t, Monad m) => Matcher m t (ExtCns t)
 asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
+
+-- | Returns index of local var if any.
+asLocalVar :: (Termlike t, Monad m) => Matcher m t DeBruijnIndex
+asLocalVar = asVar $ \t -> do (i,_) <- R.asLocalVar t; return i
 
 ----------------------------------------------------------------------
 -- Prelude matchers

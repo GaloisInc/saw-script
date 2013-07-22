@@ -39,6 +39,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scFun
   , scString
+  , Nat
   , scNat
   , scNatType
   , scBool
@@ -76,6 +77,7 @@ module Verifier.SAW.SharedTerm
     -- *** Bitvector primitives
   , scBitvector
   , scBvNat
+  , scBvConst
   , scFinVal
   , scBvAdd, scBvSub, scBvMul
   , scBvOr, scBvAnd, scBvXor
@@ -95,9 +97,11 @@ module Verifier.SAW.SharedTerm
 import Control.Applicative
 -- ((<$>), pure, (<*>))
 import Control.Concurrent.MVar
+import Control.Exception
 import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
+import Data.Bits
 import Data.Foldable hiding (sum)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
@@ -555,10 +559,8 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
 scSort sc s = scFlatTermF sc (Sort s)
 
-scNat :: SharedContext s -> Integer -> IO (SharedTerm s)
-scNat sc n
-  | 0 <= n = scFlatTermF sc (NatLit n)
-  | otherwise = error $ "scNat: negative value " ++ show n
+scNat :: SharedContext s -> Nat -> IO (SharedTerm s)
+scNat sc n = scFlatTermF sc (NatLit (toInteger n))
 
 scString :: SharedContext s -> String -> IO (SharedTerm s)
 scString sc s = scFlatTermF sc (StringLit s)
@@ -755,7 +757,7 @@ scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
 
 -- | bitvector :: (n : Nat) -> sort 1
 -- bitvector n = Vec n Bool
-scBitvector :: SharedContext s -> Integer -> IO (SharedTerm s)
+scBitvector :: SharedContext s -> Nat -> IO (SharedTerm s)
 scBitvector sc size = do
   c <- scGlobalDef sc "Prelude.bitvector"
   s <- scNat sc size
@@ -764,6 +766,13 @@ scBitvector sc size = do
 -- | bvNat :: (x :: Nat) -> Nat -> bitvector x;
 scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
+
+-- | Returns constant bitvector.
+scBvConst :: SharedContext s -> Nat -> Integer -> IO (SharedTerm s)
+scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
+  x <- scNat sc w
+  y <- scNat sc $ fromInteger $ v .&. (1 `shiftL` fromIntegral w - 1)
+  scGlobalApply sc "Prelude.bvNat" [x, y]
 
 -- | FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
 scFinVal :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)

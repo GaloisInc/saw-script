@@ -18,8 +18,8 @@ $(runDecWriter $ do
  )
 
 scFinConst :: SharedContext s
-           -> Integer -- ^ Index
-           -> Integer -- ^ Bound n
+           -> Nat -- ^ Index
+           -> Nat -- ^ Bound n
            -> IO (SharedTerm s)
 scFinConst sc i n | i < n = do
   fv <- scApplyPreludeFinVal sc

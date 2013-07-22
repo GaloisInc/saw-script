@@ -30,9 +30,9 @@ checkEqn sym (DefEqn pats rhs@(Term rtf)) = do
           & docShowLocalTypes .~ True
   let msg = "Equation right hand side has unbound variables:\n"
          ++ show (ppDefEqn ppTerm emptyLocalVarDoc (ppIdent sym) (DefEqn pats rhs)) ++ "\n"
-         ++ show (ppTerm lvd 0 rhs) ++ "\n"
+         ++ show (ppTerm lvd PrecNone rhs) ++ "\n"
          ++ show (freesTerm rhs) ++ "\n"
-         ++ show (runIdentity $ ppTermF (\_ _ -> pure . text . show) lvd 0 (freesTerm <$> rtf))
+         ++ show (ppTermF (\_ _ -> text . show) lvd PrecNone (freesTerm <$> rtf))
 
   printTestCase
     (namedMsg sym msg)
@@ -54,4 +54,3 @@ parserTests :: [TestCase]
 parserTests =
   [ mkTestCase "preludeModule" $ checkModule preludeModule
   ]
-          
