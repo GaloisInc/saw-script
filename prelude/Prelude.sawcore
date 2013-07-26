@@ -703,13 +703,13 @@ doubleToBV :: Double -> bitvector 64;
 
 
 bveq_sameL :: (n :: Nat)
-           -> (x y z :: bitvector n) 
+           -> (x z :: bitvector n) 
            -> Eq Bool
                  (bvEq n x (bvAdd n x z))
                  (bvEq n (bvNat n 0) z);
 
 bveq_sameR :: (n :: Nat)
-           -> (x y z :: bitvector n) 
+           -> (x y :: bitvector n) 
            -> Eq Bool
                  (bvEq n (bvAdd n x y) x)
                  (bvEq n y (bvNat n 0));

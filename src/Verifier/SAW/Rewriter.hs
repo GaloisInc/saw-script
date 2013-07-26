@@ -15,7 +15,8 @@ module Verifier.SAW.Rewriter
   , rulesOfTypedDef
   , scDefRewriteRules
   , scEqsRewriteRules
-  -- * Simplification sets
+  , scEqRewriteRule
+    -- * Simplification sets
   , Simpset
   , emptySimpset
   , addRule
@@ -170,7 +171,10 @@ scDefRewriteRules sc def =
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext s -> [Ident] -> IO [RewriteRule (SharedTerm s)]
-scEqsRewriteRules sc idents = map ruleOfTerm <$> mapM (scTypeOfGlobal sc) idents
+scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
+
+scEqRewriteRule :: SharedContext s -> Ident -> IO (RewriteRule (SharedTerm s))
+scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 
 ----------------------------------------------------------------------
 -- Simpsets
@@ -205,7 +209,7 @@ scSimpset :: SharedContext s -> [TypedDef] -> [Ident] -> [Conversion (SharedTerm
              IO (Simpset (SharedTerm s))
 scSimpset sc defs eqIdents convs = do
   defRules <- concat <$> traverse (scDefRewriteRules sc) defs
-  eqRules <- scEqsRewriteRules sc eqIdents
+  eqRules <- mapM (scEqRewriteRule sc) eqIdents
   return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
 ----------------------------------------------------------------------
