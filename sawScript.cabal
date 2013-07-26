@@ -8,9 +8,9 @@ Cabal-version: >= 1.8.0.2
 library
   build-depends:
       base >= 4
-    , abcBridge
+--    , abcBridge
     , array
-    , cmdargs
+--    , cmdargs
     , containers
     , deepseq
     , either
@@ -27,8 +27,8 @@ library
     , pretty
     , pretty-show
     , saw-core
-    , smtLib
-    , split
+--    , smtLib
+--    , split
     , template-haskell
     , transformers
     , vector
