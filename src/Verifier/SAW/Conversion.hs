@@ -96,6 +96,7 @@ import qualified Data.Vector as V
 
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Recognizer ((:*:)(..))
+import Verifier.SAW.Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
@@ -306,9 +307,6 @@ asFinValLit = (\(i :*: j) -> Prim.FinVal i j)
 asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
-bitMask :: Prim.Nat -> Integer
-bitMask n = bit (fromIntegral n) - 1
-
 asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Prim.BitVector
 asBvNatLit =
   (\(_ :*: n :*: x) -> Prim.bv (fromIntegral n) (toInteger x)) <$>
@@ -394,7 +392,7 @@ mkFinVal (Prim.FinVal i j) =
 mkBvNat :: Prim.Nat -> Integer -> TermBuilder t t
 mkBvNat n x = do
   n' <- mkNatLit n
-  x' <- mkNatLit (fromInteger (x .&. bitMask n))
+  x' <- mkNatLit $ fromInteger $ x .&. bitMask (fromIntegral n)
   t0 <- mkTermF (FTermF (GlobalDef "Prelude.bvNat"))
   t1 <- mkTermF (FTermF (App t0 n'))
   mkTermF (FTermF (App t1 x'))
@@ -407,6 +405,9 @@ instance Buildable t t where
 
 instance Buildable t Bool where
     defaultBuilder = mkBool
+
+instance Buildable t Nat where
+    defaultBuilder = mkNatLit
 
 instance Buildable t Integer where
     defaultBuilder = mkNatLit . fromInteger
@@ -445,7 +446,6 @@ instance Net.Pattern (Conversion t) where
 runConversion :: Conversion t -> t -> Maybe (TermBuilder t t)
 runConversion (Conversion m) = runMatcher m
 
-
 -- | This class is meant to include n-ary function types whose
 -- arguments are all in class @Matchable t@ and whose result type is
 -- in class @Buildable t@. Given a matcher for the global constant
@@ -471,6 +471,9 @@ instance Conversionable t t where
 instance Termlike t => Conversionable t Bool where
     convOfMatcher = defaultConvOfMatcher
 
+instance Termlike t => Conversionable t Nat where
+    convOfMatcher = defaultConvOfMatcher
+
 instance Termlike t => Conversionable t Integer where
     convOfMatcher = defaultConvOfMatcher
 
@@ -494,14 +497,17 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 
 -- | Conversions for operations on Nat literals
 natConversions :: Termlike t => [Conversion t]
-natConversions = [succ_NatLit, addNat_NatLit]
+natConversions = [succ_NatLit, addNat_NatLit, mulNat_NatLit]
 
 succ_NatLit :: Termlike t => Conversion t
 succ_NatLit =
     Conversion $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
 
 addNat_NatLit :: Termlike t => Conversion t
-addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Integer -> Integer -> Integer)
+addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Nat -> Nat -> Nat)
+
+mulNat_NatLit :: Termlike t => Conversion t
+mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
 
 -- | Conversions for operations on Fin literals
 finConversions :: Termlike t => [Conversion t]
