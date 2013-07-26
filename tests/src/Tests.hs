@@ -9,12 +9,13 @@ import Tests.Common
 import Tests.BitBlast
 import Tests.Parser
 import Tests.SharedTerm
-
+import Tests.Rewriter
 
 main = do
   let allTests = [ ("SharedTerm", sharedTermTests)
-                 , ("ParserTests", parserTests)
-                 , ("BitBlastTests", bitblastTests)
+                 , ("Parser", parserTests)
+                 , ("BitBlast", bitblastTests)
+                 , ("Rewriter", rewriter_tests)
                  ]
   r <- runTestCases allTests
   if r then

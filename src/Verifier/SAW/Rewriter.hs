@@ -133,14 +133,14 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
         & docShowLocalNames .~ False
         & docShowLocalTypes .~ True
     _varsUnbound t i = freesTerm t `shiftR` i /= 0
-    ruleLhs = foldl mkApp (Term (FTermF (GlobalDef ident))) args
+    ruleLhs = foldl mkTermApp (Term (FTermF (GlobalDef ident))) args
     ruleRhs = incVars 0 nUnused rhs
 
     nBound  = sum $ fmap patBoundVarCount  pats
     nUnused = sum $ fmap patUnusedVarCount pats
     n = nBound + nUnused
-    mkApp :: Term -> Term -> Term
-    mkApp f x = Term (FTermF (App f x))
+    mkTermApp :: Term -> Term -> Term
+    mkTermApp f x = Term (FTermF (App f x))
 
     termOfPat :: Pat Term -> State (Int, Map Int Term) Term
     termOfPat pat =

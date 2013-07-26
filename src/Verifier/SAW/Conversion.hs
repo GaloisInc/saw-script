@@ -58,7 +58,17 @@ module Verifier.SAW.Conversion
     -- ** TermBuilder
   , TermBuilder
   , runTermBuilder
-    -- ** Prebuild builders
+  , mkGlobalDef
+  , mkApp
+  , pureApp
+  , mkTuple
+  , mkCtor
+  , mkDataType
+  , mkNatLit
+  , mkVecLit
+    -- ** Prelude builders
+  , mkBool
+  , mkFinVal
   , mkBvNat
     -- * Conversion
   , Conversion(..)
@@ -369,10 +379,31 @@ instance Applicative (TermBuilder t) where
 mkTermF :: TermF t -> TermBuilder t t
 mkTermF tf = TermBuilder (\mk -> mk tf)
 
-mkBool :: Bool -> TermBuilder t t
-mkBool b = mkTermF (FTermF (CtorApp idSym []))
-  where idSym | b = "Prelude.True" 
-              | otherwise = "Prelude.False"
+mkGlobalDef :: Ident -> TermBuilder t t
+mkGlobalDef i = mkTermF (FTermF (GlobalDef i))
+
+infixl 9 `mkApp` 
+infixl 9 `pureApp`
+
+mkApp :: TermBuilder t t -> TermBuilder t t -> TermBuilder t t
+mkApp mx my = do
+  x <- mx
+  y <- my
+  mkTermF (FTermF (App x y))
+
+pureApp :: TermBuilder t t -> t -> TermBuilder t t
+pureApp mx y = do
+  x <- mx
+  mkTermF (FTermF (App x y))
+
+mkTuple :: [TermBuilder t t] -> TermBuilder t t
+mkTuple l = mkTermF . FTermF . TupleValue =<< sequence l
+
+mkCtor :: Ident -> [TermBuilder t t] -> TermBuilder t t
+mkCtor i l = mkTermF . FTermF . CtorApp i =<< sequence l
+
+mkDataType :: Ident -> [TermBuilder t t] -> TermBuilder t t
+mkDataType i l = mkTermF . FTermF . DataTypeApp i =<< sequence l
 
 mkNatLit :: Prim.Nat -> TermBuilder t t
 mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
@@ -380,55 +411,48 @@ mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
 mkVecLit :: t -> V.Vector t -> TermBuilder t t
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 
-mkTuple :: [t] -> TermBuilder t t
-mkTuple l = mkTermF (FTermF (TupleValue l))
+mkBool :: Bool -> TermBuilder t t
+mkBool True  = mkCtor "Prelude.True" []
+mkBool False = mkCtor "Prelude.False" []
 
 mkFinVal :: Prim.Fin -> TermBuilder t t
-mkFinVal (Prim.FinVal i j) =
-    do i' <- mkNatLit i
-       j' <- mkNatLit j
-       mkTermF (FTermF (CtorApp "Prelude.FinVal" [i', j']))
+mkFinVal (Prim.FinVal i j) = mkCtor "Prelude.FinVal" [mkNatLit i, mkNatLit j]
 
 mkBvNat :: Prim.Nat -> Integer -> TermBuilder t t
 mkBvNat n x = do
-  n' <- mkNatLit n
-  x' <- mkNatLit $ fromInteger $ x .&. bitMask (fromIntegral n)
-  t0 <- mkTermF (FTermF (GlobalDef "Prelude.bvNat"))
-  t1 <- mkTermF (FTermF (App t0 n'))
-  mkTermF (FTermF (App t1 x'))
+  mkGlobalDef "Prelude.bvNat"
+    `mkApp` (mkNatLit n)
+    `mkApp` (mkNatLit $ fromInteger $ x .&. bitMask (fromIntegral n))
 
 class Buildable t a where
-    defaultBuilder :: a -> TermBuilder t t
+  defaultBuilder :: a -> TermBuilder t t
 
 instance Buildable t t where
-    defaultBuilder = return
+  defaultBuilder = return
 
 instance Buildable t Bool where
-    defaultBuilder = mkBool
+  defaultBuilder = mkBool
 
 instance Buildable t Nat where
-    defaultBuilder = mkNatLit
+  defaultBuilder = mkNatLit
 
 instance Buildable t Integer where
-    defaultBuilder = mkNatLit . fromInteger
+  defaultBuilder = mkNatLit . fromInteger
 
 instance Buildable t Int where
-    defaultBuilder = mkNatLit . fromIntegral
+  defaultBuilder = mkNatLit . fromIntegral
 
 instance (Buildable t a, Buildable t b) => Buildable t (a, b) where
-    defaultBuilder (x, y) = do
-      a <- defaultBuilder x
-      b <- defaultBuilder y
-      mkTuple [a, b]
+  defaultBuilder (x, y) = mkTuple [defaultBuilder x, defaultBuilder y]
 
 instance Buildable t Prim.Fin where
-    defaultBuilder = mkFinVal
+  defaultBuilder = mkFinVal
 
 instance Buildable t (Prim.Vec t t) where
-    defaultBuilder (Prim.Vec t v) = mkVecLit t v
+  defaultBuilder (Prim.Vec t v) = mkVecLit t v
 
 instance Buildable t Prim.BitVector where
-    defaultBuilder (Prim.BV w x) = mkBvNat (fromIntegral w) x
+  defaultBuilder (Prim.BV w x) = mkBvNat (fromIntegral w) x
 
 ----------------------------------------------------------------------
 -- Conversions

@@ -700,3 +700,22 @@ data Double :: sort 0 where { }
 
 bvToDouble :: bitvector 64 -> Double;
 doubleToBV :: Double -> bitvector 64;
+
+
+bveq_sameL :: (n :: Nat)
+           -> (x y z :: bitvector n) 
+           -> Eq Bool
+                 (bvEq n x (bvAdd n x z))
+                 (bvEq n (bvNat n 0) z);
+
+bveq_sameR :: (n :: Nat)
+           -> (x y z :: bitvector n) 
+           -> Eq Bool
+                 (bvEq n (bvAdd n x y) x)
+                 (bvEq n y (bvNat n 0));
+
+bveq_same2 :: (n :: Nat)
+           -> (x y z :: bitvector n) 
+           -> Eq Bool
+                 (bvEq n (bvAdd n x y) (bvAdd n x z))
+                 (bvEq n y z);
