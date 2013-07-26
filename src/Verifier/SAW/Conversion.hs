@@ -145,8 +145,6 @@ asVar = Matcher Net.Var
 asAny :: Applicative m => Matcher m t t
 asAny = asVar pure
 
-infixl 8 <:>
-
 -- | Match a list of terms as arguments to a term.
 -- Note that the pats and arguments are in reverse order.
 data ArgsMatcher m t a = ArgsMatcher [Net.Pat] ([t] -> m (a,[t]))
@@ -170,11 +168,12 @@ consArgsMatcher (ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (pl ++ [p]) match
             (h:l2) -> do b <- g h; return (a :*: b, l2)
             [] ->  fail "empty"
 
-infixl 9 >:
-
 asEmpty :: (Monad m) => ArgsMatcher m t ()
 asEmpty = ArgsMatcher [] (\l -> return ((),l))
 
+infixl 9 >:
+
+-- | @x >: y@ appends @y@ to the list of arguments to match.
 (>:) :: (Monad m, ArgsMatchable v m t a) => v m t a -> Matcher m t b -> ArgsMatcher m t (a :*: b)
 (>:) = consArgsMatcher . defaultArgsMatcher
 
@@ -201,6 +200,8 @@ asGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
 asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
         f _ = fail (show ident ++ " match failed.")
+
+infixl 8 <:>
 
 -- | Match an application
 (<:>) :: (Termlike t, Applicative m, Monad m)

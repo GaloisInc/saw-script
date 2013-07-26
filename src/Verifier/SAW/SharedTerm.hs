@@ -365,7 +365,7 @@ scWriteExternal t0 =
     writeTermF tf =
       case tf of
         Lambda p t e -> unwords ["Lam", writePat p, show t, show e]
-        Pi s t e     -> unwords ["Pi", show s, show t, show e]
+        Pi s t e     -> unwords ["Pi", s, show t, show e]
         Let ds e     -> unwords ["Def", writeDefs ds, show e]
         LocalVar i e -> unwords ["Var", show i, show e]
         FTermF ftf   ->
@@ -412,7 +412,7 @@ scReadExternal sc input =
     parse tokens =
       case tokens of
         ["Lam", x, t, e]    -> Lambda (PVar x 0 (read t)) (read t) (read e)
-        ["Pi", s, t, e]     -> Pi (read s) (read t) (read e)
+        ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i, e]       -> LocalVar (read i) (read e)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))

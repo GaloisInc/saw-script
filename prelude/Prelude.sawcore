@@ -530,6 +530,7 @@ append m n e x y =
 --------------------------------------------------------------------------------
 -- Bitvectors
 
+-- | Bitvector operations current has least-significant bit first.
 bitvector :: (n :: Nat) -> sort 0;
 bitvector n = Vec n Bool;
 
