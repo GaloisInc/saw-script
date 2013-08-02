@@ -386,14 +386,14 @@ scWriteExternal t0 =
             FloatLit x         -> unwords ["Float", show x]
             DoubleLit x        -> unwords ["Double", show x]
             StringLit s        -> unwords ["String", show s]
-            ExtCns ext         -> unwords ["ExtCns", writeExtCns ext]
+            ExtCns ext         -> unwords ("ExtCns" : writeExtCns ext)
     writeField :: (String, Int) -> String
     writeField (s, e) = unwords [s, show e]
     writePat :: Pat Int -> String
     writePat (PVar s 0 _) = s
     writePat _ = error "unsupported pattern"
     writeDefs = error "unsupported Let expression"
-    writeExtCns = error "unsupported ExtCns"
+    writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
 scReadExternal :: forall s. SharedContext s -> String -> IO (SharedTerm s)
 scReadExternal sc input =
@@ -431,7 +431,7 @@ scReadExternal sc input =
         ["Float", x]        -> FTermF (FloatLit (read x))
         ["Double", x]       -> FTermF (DoubleLit (read x))
         ["String", s]       -> FTermF (StringLit (read s))
-        -- TODO: support ExtCns
+        ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
         _ -> error $ "Parse error: " ++ unwords tokens
     readMap :: [String] -> Map FieldName Int
     readMap [] = Map.empty
