@@ -599,10 +599,10 @@ bvShl n x j =
    in go j n x (compareNat j n);
 
 -- Logical right shift.  New bits are False.
-bvShr :: (x :: Nat) -> bitvector x -> Nat -> bitvector x;
+bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
-bvSShr :: (x :: Nat) -> bitvector (Succ x) -> Nat -> bitvector (Succ x);
+bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
 --TODO
 
 -- | Zipwith specialized to bitvectors.

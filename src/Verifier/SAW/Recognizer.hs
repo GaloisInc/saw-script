@@ -1,4 +1,5 @@
 -- Lightweight calculus for composing patterns as functions.
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -38,6 +39,7 @@ module Verifier.SAW.Recognizer
   ) where
 
 import Control.Applicative
+import Control.Lens
 import Control.Monad
 import Data.Map (Map)
 import Verifier.SAW.Prim
@@ -45,6 +47,12 @@ import Verifier.SAW.TypedAST
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)
+
+instance Field1 (a :*: b) (a' :*: b) a a' where
+  _1 k (a :*: b) = indexed k (0 :: Int) a <&> (:*: b)
+
+instance Field2 (a :*: b) (a :*: b') b b' where
+  _2 k (a :*: b) = (a :*:) <$> indexed k (1 :: Int) b
 
 type Recognizer m t a = t -> m a
 

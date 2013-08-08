@@ -30,6 +30,7 @@ module Verifier.SAW.Conversion
     -- ** Term matchers
   , asGlobalDef
   , (<:>)
+  , (<:>>)
   , asAnyTupleValue
   , asTupleValue
   , asAnyTupleType
@@ -98,7 +99,7 @@ module Verifier.SAW.Conversion
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
-import Control.Lens (_1)
+import Control.Lens (view, _1, _2)
 import Control.Monad (ap, liftM, liftM2, unless, (>=>), (<=<))
 import Data.Bits
 import Data.Map (Map)
@@ -136,6 +137,7 @@ instance Net.Pattern (Matcher m t a) where
 instance Functor m => Functor (Matcher m t) where
   fmap f (Matcher p m) = Matcher p (fmap f . m)
 
+-- | @thenMatcher 
 thenMatcher :: Monad m => Matcher m t a -> (a -> m b) -> Matcher m t b
 thenMatcher (Matcher pat match) f = Matcher pat (f <=< match)
 
@@ -210,6 +212,12 @@ infixl 8 <:>
     where
       match (unwrapTermF -> FTermF (App t1 t2)) = liftM2 (:*:) (f1 t1) (f2 t2)
       match _ = fail "internal: <:> net failed"
+
+-- | Match an application and return second term.
+(<:>>) :: (Termlike t, Applicative m, Monad m)
+       => Matcher m t a -> Matcher m t b -> Matcher m t b
+x <:>> y = fmap (view _2) $ x <:> y
+
 
 -- | Matches any tuple.
 asAnyTupleValue :: (Monad m, Termlike t) => Matcher m t [t]
