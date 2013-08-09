@@ -73,6 +73,7 @@ module Verifier.SAW.SharedTerm
     -- ** Prelude operations
   , scAppend
   , scGet
+  , scNot
   , scIte
   , scSingle
   , scSlice
@@ -738,6 +739,9 @@ scNatType sc = scDataTypeApp sc preludeNatIdent []
 
 scVecType :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scVecType sc n e = scDataTypeApp sc "Prelude.Vec" [n, e]
+
+scNot :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scNot sc t = scGlobalApply sc "Prelude.not" [t]
 
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
