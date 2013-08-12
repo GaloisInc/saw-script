@@ -4,6 +4,8 @@ abstract ProofResult;
 
 prim return : { m , a } a -> m a;
 
+prim define : {a} String -> a -> TopLevel a;
+
 prim print      : {a} a -> TopLevel ();
 prim print_term : {a} a -> TopLevel ();
 prim print_type : {a} a -> TopLevel ();
