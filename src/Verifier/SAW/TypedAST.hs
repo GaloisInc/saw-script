@@ -385,6 +385,7 @@ type VarIndex = Word64
 
 data FlatTermF e
   = GlobalDef !Ident  -- ^ Global variables are referenced by label.
+  | Constant !Ident !e  -- ^ An abstract constant packaged with its definition.
 
   | App !e !e
 
@@ -587,6 +588,7 @@ ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
+    Constant i _ -> pure $ ppIdent i
     App l r -> ppAppParens prec <$> liftA2 (<+>) (pp PrecAppFun l) (pp PrecAppArg r)
     TupleValue l ->                 ppTuple <$> traverse (pp PrecComma) l
     TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp PrecComma) l

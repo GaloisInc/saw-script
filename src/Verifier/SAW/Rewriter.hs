@@ -282,7 +282,10 @@ rewriteSharedTerm sc ss t0 =
     rewriteAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (STApp tidx tf) =
-        useCache ?cache tidx (traverse rewriteAll tf >>= scTermF sc >>= rewriteTop)
+        useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
+    traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
+    traverseTF _ tf@(FTermF (Constant _ _)) = pure tf
+    traverseTF f tf = traverse f tf
     rewriteTop :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t =
@@ -376,6 +379,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
           GlobalDef{}      -> return ftf
+          Constant{}       -> return ftf
           FloatLit{}       -> return ftf
           DoubleLit{}      -> return ftf
           StringLit{}      -> return ftf

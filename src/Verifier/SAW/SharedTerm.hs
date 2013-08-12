@@ -29,6 +29,7 @@ module Verifier.SAW.SharedTerm
   , scFreshGlobal
   , scGlobalDef
   , scModule
+  , scConstant
   , scApply
   , scApplyAll
   , SharedTermExt(..)
@@ -171,6 +172,9 @@ scFreshGlobal sc sym tp = do
 scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
+scConstant :: SharedContext s -> Ident -> SharedTerm s -> IO (SharedTerm s)
+scConstant sc ident t = scFlatTermF sc (Constant ident t)
+
 scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply sc f = scFlatTermF sc . App f
 
@@ -283,6 +287,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ scTypeOfGlobal sc d
+        Constant _ t -> memo t
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
@@ -372,6 +377,7 @@ scWriteExternal t0 =
         FTermF ftf   ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
+            Constant ident e   -> unwords ["Constant", show ident, show e]
             App e1 e2          -> unwords ["App", show e1, show e2]
             TupleValue es      -> unwords ("Tuple" : map show es)
             TupleType es       -> unwords ("TupleT" : map show es)
@@ -417,6 +423,7 @@ scReadExternal sc input =
         -- TODO: support LetDef
         ["Var", i, e]       -> LocalVar (read i) (read e)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
+        ["Constant", x, e]  -> FTermF (Constant (parseIdent x) (read e))
         ["App", e1, e2]     -> FTermF (App (read e1) (read e2))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
         ("TupleT" : es)     -> FTermF (TupleType (map read es))
