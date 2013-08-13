@@ -1,8 +1,10 @@
 
 abstract Term;
 abstract ProofResult;
+abstract Simpset;
 
 prim return : { m , a } a -> m a;
+prim seq : {a, b} ProofScript a -> ProofScript b -> ProofScript b; //temporary
 
 prim define : {a} String -> a -> TopLevel a;
 
@@ -24,12 +26,15 @@ prim write_core    : {a} String -> a -> TopLevel ();
 prim equal  : Term -> Term -> TopLevel Term;
 prim negate : Term -> TopLevel Term;
 
-prim prove : {a} ProofScript ProofResult -> a -> TopLevel ();
+prim prove : {a} ProofScript ProofResult -> a -> TopLevel Simpset;
 prim sat   : {a} ProofScript ProofResult -> a -> TopLevel ();
-prim abc   : ProofScript ProofResult;
 
-prim rewrite : {a} () -> a -> TopLevel a;
-// TODO: add simpset argument
+prim unfolding  : {n} [n]String -> ProofScript ();
+prim simplify   : Simpset -> ProofScript ();
+prim print_goal : ProofScript ();
+prim abc        : ProofScript ProofResult;
+
+prim rewrite : {a} Simpset -> a -> TopLevel a;
 
 prim java_pure    : JavaSetup ();
 prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
