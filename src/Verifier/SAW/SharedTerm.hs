@@ -96,6 +96,8 @@ module Verifier.SAW.SharedTerm
   , instantiateVarList
   , scInstantiateExt
   , incVars
+  , scUnfoldConstants
+  , scUnfoldConstants'
   ) where
 
 import Control.Applicative
@@ -106,7 +108,7 @@ import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Bits
-import Data.Foldable hiding (sum)
+import Data.Foldable hiding (sum, elem)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
@@ -625,7 +627,9 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
             Nothing -> do
               put $ StrictMap.insert t 1 m
               let (h,args) = asApplyAll t
-              rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
+              case unwrapTermF h of
+                FTermF (Constant _ _) -> rec (args ++ r)
+                _ -> rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
 --              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
 lineSep :: [Doc] -> Doc
@@ -873,6 +877,32 @@ scInstantiateExt sc vmap t0 = do
           FTermF (ExtCns ec) ->
             maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
           -- | Recurse on other terms.
+          _ -> useChangeCache tcache idx $
+                 whenModified t (scTermF sc) (traverse go tf)
+  commitChangeT (go t0)
+
+scUnfoldConstants :: forall s. SharedContext s -> [Ident] -> SharedTerm s -> IO (SharedTerm s)
+scUnfoldConstants sc ids t0 = do
+  cache <- newCache
+  let go :: SharedTerm s -> IO (SharedTerm s)
+      go t@(STApp idx tf) = useCache cache idx $
+        case tf of
+          FTermF (Constant ident rhs)
+            | ident `elem` ids -> go rhs
+            | otherwise        -> return t
+          _ -> scTermF sc =<< traverse go tf
+  go t0
+
+-- | TODO: test whether this version is slower or faster.
+scUnfoldConstants' :: forall s. SharedContext s -> [Ident] -> SharedTerm s -> IO (SharedTerm s)
+scUnfoldConstants' sc ids t0 = do
+  tcache <- newCacheMap' Map.empty
+  let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
+      go t@(STApp idx tf) =
+        case tf of
+          FTermF (Constant ident rhs)
+            | ident `elem` ids -> taint (go rhs)
+            | otherwise        -> pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)

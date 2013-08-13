@@ -11,6 +11,7 @@ module Verifier.SAW.Rewriter
   -- * Rewrite rules
   ( RewriteRule
   , ruleOfTerm
+  , ruleOfPred
   , ruleOfDefEqn
   , rulesOfTypedDef
   , scDefRewriteRules
@@ -109,6 +110,9 @@ first_order_match pat term = match pat term Map.empty
 eqIdent :: Ident
 eqIdent = mkIdent (mkModuleName ["Prelude"]) "Eq"
 
+eqIdent' :: Ident
+eqIdent' = mkIdent (mkModuleName ["Prelude"]) "eq"
+
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Termlike t => t -> RewriteRule t
@@ -119,6 +123,14 @@ ruleOfTerm t =
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
+
+-- | Converts a parameterized equality predicate to a RewriteRule.
+ruleOfPred :: SharedTerm s -> RewriteRule (SharedTerm s)
+ruleOfPred (R.asLambda -> Just (_, ty, body)) =
+  let rule = ruleOfPred body in rule { ctxt = ty : ctxt rule }
+ruleOfPred (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
+  RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfPred _ = error "Predicate not an equation"
 
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced

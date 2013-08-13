@@ -442,6 +442,7 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
+        go (Constant x tx) (Constant y ty) | x == y = Just $ Constant x (f tx ty)
         go (App fx vx) (App fy vy) = Just $ App (f fx fy) (f vx vy)
 
         go (TupleValue lx) (TupleValue ly)
