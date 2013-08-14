@@ -34,6 +34,7 @@ prim simplify   : Simpset -> ProofScript ();
 prim print_goal : ProofScript ();
 prim abc        : ProofScript ProofResult;
 
+prim empty_ss : Simpset;
 prim rewrite : {a} Simpset -> a -> TopLevel a;
 
 prim java_pure    : JavaSetup ();
