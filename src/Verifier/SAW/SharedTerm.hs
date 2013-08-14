@@ -175,7 +175,7 @@ scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
 scConstant :: SharedContext s -> Ident -> SharedTerm s -> IO (SharedTerm s)
-scConstant sc ident t = scFlatTermF sc (Constant ident t)
+scConstant sc ident t = scTermF sc (Constant ident t)
 
 scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply sc f = scFlatTermF sc . App f
@@ -284,12 +284,12 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           lift $ scSort sc (max ltp rtp)
         Let defs rhs -> error "scTypeOf Let" defs rhs
         LocalVar _ tp -> return tp
+        Constant _ t -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ scTypeOfGlobal sc d
-        Constant _ t -> memo t
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
@@ -376,10 +376,10 @@ scWriteExternal t0 =
         Pi s t e     -> unwords ["Pi", s, show t, show e]
         Let ds e     -> unwords ["Def", writeDefs ds, show e]
         LocalVar i e -> unwords ["Var", show i, show e]
+        Constant i e -> unwords ["Constant", show i, show e]
         FTermF ftf   ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
-            Constant ident e   -> unwords ["Constant", show ident, show e]
             App e1 e2          -> unwords ["App", show e1, show e2]
             TupleValue es      -> unwords ("Tuple" : map show es)
             TupleType es       -> unwords ("TupleT" : map show es)
@@ -424,8 +424,8 @@ scReadExternal sc input =
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i, e]       -> LocalVar (read i) (read e)
+        ["Constant", x, e]  -> Constant (parseIdent x) (read e)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
-        ["Constant", x, e]  -> FTermF (Constant (parseIdent x) (read e))
         ["App", e1, e2]     -> FTermF (App (read e1) (read e2))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
         ("TupleT" : es)     -> FTermF (TupleType (map read es))
@@ -490,6 +490,7 @@ instantiateVars sc f initialLevel t0 =
     go' l (LocalVar i tp)
       | i < l     = scTermF sc <$> (LocalVar i <$> go (l-(i+1)) tp)
       | otherwise = f l i (go (l-(i+1)) tp)
+    go' _ tf@(Constant _ _) = pure $ scTermF sc tf
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -628,7 +629,7 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               put $ StrictMap.insert t 1 m
               let (h,args) = asApplyAll t
               case unwrapTermF h of
-                FTermF (Constant _ _) -> rec (args ++ r)
+                Constant _ _ -> rec (args ++ r)
                 _ -> rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
 --              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
@@ -887,7 +888,7 @@ scUnfoldConstants sc ids t0 = do
   let go :: SharedTerm s -> IO (SharedTerm s)
       go t@(STApp idx tf) = useCache cache idx $
         case tf of
-          FTermF (Constant ident rhs)
+          Constant ident rhs
             | ident `elem` ids -> go rhs
             | otherwise        -> return t
           _ -> scTermF sc =<< traverse go tf
@@ -900,7 +901,7 @@ scUnfoldConstants' sc ids t0 = do
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
-          FTermF (Constant ident rhs)
+          Constant ident rhs
             | ident `elem` ids -> taint (go rhs)
             | otherwise        -> pure t
           _ -> useChangeCache tcache idx $

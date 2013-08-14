@@ -296,7 +296,7 @@ rewriteSharedTerm sc ss t0 =
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
-    traverseTF _ tf@(FTermF (Constant _ _)) = pure tf
+    traverseTF _ tf@(Constant _ _) = pure tf
     traverseTF f tf = traverse f tf
     rewriteTop :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
@@ -367,6 +367,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF ftf
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
+          Constant{}     -> return tf
           _ -> return tf -- traverse rewriteAll tf
     rewriteFTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                      FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
@@ -391,7 +392,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
           GlobalDef{}      -> return ftf
-          Constant{}       -> return ftf
           FloatLit{}       -> return ftf
           DoubleLit{}      -> return ftf
           StringLit{}      -> return ftf

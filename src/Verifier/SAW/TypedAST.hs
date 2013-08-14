@@ -385,7 +385,6 @@ type VarIndex = Word64
 
 data FlatTermF e
   = GlobalDef !Ident  -- ^ Global variables are referenced by label.
-  | Constant !Ident !e  -- ^ An abstract constant packaged with its definition.
 
   | App !e !e
 
@@ -442,7 +441,6 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
-        go (Constant x tx) (Constant y ty) | x == y = Just $ Constant x (f tx ty)
         go (App fx vx) (App fy vy) = Just $ App (f fx fy) (f vx vy)
 
         go (TupleValue lx) (TupleValue ly)
@@ -483,6 +481,7 @@ data TermF e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex !e
+    | Constant !Ident !e  -- ^ An abstract constant packaged with its definition.
   deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
@@ -589,7 +588,6 @@ ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
-    Constant i _ -> pure $ ppIdent i
     App l r -> ppAppParens prec <$> liftA2 (<+>) (pp PrecAppFun l) (pp PrecAppArg r)
     TupleValue l ->                 ppTuple <$> traverse (pp PrecComma) l
     TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp PrecComma) l
@@ -667,6 +665,7 @@ freesTermF tf =
                 tp : fmap ((`shiftR` n) . freesDefEqn) eqs
               lcls' = freesLocalDef <$> lcls
       LocalVar i tp -> bit i .|. tp
+      Constant _ _ -> 0 -- assume rhs is a closed term
 
 freesTerm :: Term -> BitSet
 freesTerm (Term t) = freesTermF (fmap freesTerm t)
@@ -696,6 +695,7 @@ instantiateVars f initialLevel = go initialLevel
         go l (Term tf) =
           case tf of
             FTermF ftf ->  Term $ FTermF $ gof l ftf
+            Constant _ _rhs -> Term tf -- assume rhs is a closed term, so leave it unchanged
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
             Pi i lhs rhs    -> Term $ Pi i (go l lhs) (go (l+1) rhs)
             Let defs r      -> Term $ Let (procDef <$> defs) (go l' r)
@@ -792,6 +792,7 @@ ppTermF' pp lcls p (LocalVar i tp)
   where d = lookupDoc lcls i
         pptc tpd = ppParens (precInt p >= precInt PrecTypeConstraintRhs)
                             (d <> doublecolon <> tpd)
+ppTermF' _ _ _ (Constant i _) = pure $ ppIdent i
 
 instance Show Term where
   showsPrec _ t = shows $ ppTerm emptyLocalVarDoc PrecNone t

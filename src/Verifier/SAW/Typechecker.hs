@@ -599,6 +599,7 @@ liftTCTerm tc (Term tf) =
       case resolveBoundInfo i tc of
         BoundVar{} -> TCVar i
         LocalDef{} -> TCLocalDef i
+    Constant {} -> error "liftTCTerm"
 
 
 liftFixedType :: (TermContext s -> Term -> TC s (FixedPiType r))

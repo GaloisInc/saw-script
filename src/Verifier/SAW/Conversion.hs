@@ -115,8 +115,8 @@ import Verifier.SAW.TypedAST
 termToPat :: Termlike t => t -> Net.Pat
 termToPat t =
     case unwrapTermF t of
+      Constant d _              -> Net.Atom (identName d)
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
-      FTermF (Constant d _)     -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
       FTermF (NatLit n)         -> Net.Atom (show n)
       FTermF (App t1 t2)        -> Net.App (termToPat t1) (termToPat t2)
