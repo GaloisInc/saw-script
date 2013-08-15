@@ -15,6 +15,7 @@ library
     , deepseq
     , either
     , directory
+    , fgl
     , filepath
     , jvm-parser
     , jvm-verifier
@@ -42,11 +43,13 @@ library
     SAWScript.AST
     SAWScript.BuildModules
     SAWScript.Builtins
+    --SAWScript.CongruenceClosure
     SAWScript.Compiler
     SAWScript.FileQuote
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
+    --SAWScript.MethodSpecIR
     SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
