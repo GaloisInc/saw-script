@@ -43,18 +43,20 @@ library
     SAWScript.AST
     SAWScript.BuildModules
     SAWScript.Builtins
-    --SAWScript.CongruenceClosure
+    SAWScript.CongruenceClosure
     SAWScript.Compiler
     SAWScript.FileQuote
     SAWScript.Import
     SAWScript.Interpreter
+    SAWScript.JavaExpr
     SAWScript.Lexer
-    --SAWScript.MethodSpecIR
+    SAWScript.MethodSpecIR
     SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
+    SAWScript.TIMonad
     SAWScript.Token
     SAWScript.MGU
     SAWScript.Unify
