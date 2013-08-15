@@ -28,7 +28,7 @@ library
     , pretty
     , pretty-show
     , saw-core
---    , smtLib
+    , smtLib
 --    , split
     , template-haskell
     , transformers
@@ -50,6 +50,7 @@ library
     SAWScript.Interpreter
     SAWScript.JavaExpr
     SAWScript.Lexer
+    SAWScript.MethodSpec
     SAWScript.MethodSpecIR
     SAWScript.NewAST
     SAWScript.Options
