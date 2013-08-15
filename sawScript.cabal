@@ -16,6 +16,7 @@ library
     , either
     , directory
     , filepath
+    , haskeline
     , jvm-parser
     , jvm-verifier
     , lens
@@ -52,6 +53,7 @@ library
     SAWScript.Parser
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
+    SAWScript.REPL
     SAWScript.Token
     SAWScript.MGU
     SAWScript.Unify
