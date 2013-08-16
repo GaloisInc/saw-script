@@ -1,7 +1,14 @@
-
 abstract Term;
 abstract ProofResult;
 abstract Simpset;
+
+abstract JavaType;
+abstract JavaObject;
+abstract VerifiedJava;
+
+abstract LLVMType;
+abstract LLVMObject;
+abstract VerifiedLLVM;
 
 prim return : { m , a } a -> m a;
 prim seq : {a, b} ProofScript a -> ProofScript b -> ProofScript b; //temporary
@@ -37,10 +44,38 @@ prim abc        : ProofScript ProofResult;
 prim empty_ss : Simpset;
 prim rewrite : {a} Simpset -> a -> TopLevel a;
 
+prim java_bool    : JavaType;
+prim java_byte    : JavaType;
+prim java_char    : JavaType;
+prim java_short   : JavaType;
+prim java_int     : JavaType;
+prim java_long    : JavaType;
+prim java_float   : JavaType;
+prim java_double  : JavaType;
+prim java_array   : Int -> JavaType -> JavaType;
+prim java_class   : String -> JavaType;
+
+prim java_var     : String -> JavaType -> JavaSetup JavaObject;
+prim java_field   : JavaObject -> String -> JavaObject;
+prim java_value   : {a} JavaObject -> a;
+prim java_may_alias : {n} [n]JavaObject -> JavaSetup ();
+prim java_modify  : JavaObject -> JavaSetup ();
 prim java_pure    : JavaSetup ();
+
 prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
+prim java_verify  : {a} String -> String -> JavaSetup ()
+                 -> TopLevel VerifiedJava;
+
+prim llvm_int     : Int -> LLVMType;
+prim llvm_float   : LLVMType;
+prim llvm_double  : LLVMType;
+prim llvm_array   : Int -> LLVMType -> LLVMType;
+
 prim llvm_pure    : LLVMSetup ();
+
 prim llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
+prim llvm_verify  : {a} String -> String -> LLVMSetup ()
+                 -> TopLevel VerifiedLLVM;
 
 prim eq : {a} a -> a -> Bit;
 
