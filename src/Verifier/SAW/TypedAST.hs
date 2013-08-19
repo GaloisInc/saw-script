@@ -60,7 +60,7 @@ module Verifier.SAW.TypedAST
 
  , TermPrinter
  
- , Prec(..), precInt
+ , Prec(..)
  , ppAppParens
  , ppTerm
  , ppTermF
@@ -355,7 +355,7 @@ instance Show n => Show (Ctor n tp) where
 ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
 ppCtor f c = ppIdent (ctorName c) <+> doublecolon <+> tp
   where lcls = emptyLocalVarDoc
-        tp = f lcls PrecTypeConstraintRhs (ctorType c)
+        tp = f lcls PrecLambda (ctorType c)
 
 data DataType n t = DataType { dtName :: n
                              , dtType :: t
@@ -493,7 +493,7 @@ ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
-ppTypeConstraint f lcls sym tp = sym <+> doublecolon <+> f lcls PrecTypeConstraintRhs tp
+ppTypeConstraint f lcls sym tp = sym <+> doublecolon <+> f lcls PrecLambda tp
 
 ppDef :: LocalVarDoc -> Def Term -> Doc
 ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> defEqs d))
@@ -507,7 +507,7 @@ ppLocalDef :: Applicative f
            -> LocalDef e
            -> f Doc
 ppLocalDef pp lcls lcls' (Def nm tp eqs) =
-    ppd <$> (pptc <$> pp lcls PrecTypeConstraintRhs tp)
+    ppd <$> (pptc <$> pp lcls PrecLambda tp)
         <*> traverse (ppDefEqnF pp lcls' sym) eqs
   where sym = text nm
         pptc tpd = sym <+> doublecolon <+> tpd
@@ -522,42 +522,20 @@ ppDefEqnF :: Applicative f
           -> LocalVarDoc -> Doc -> DefEqn e -> f Doc
 ppDefEqnF f lcls sym (DefEqn pats rhs) = 
     ppEq <$> traverse ppPat' pats
-         <*> f lcls' PrecLambdaRhs rhs
+         <*> f lcls' PrecLambda rhs
   where ppEq pd rhs' = sym <+> hsep pd <+> equals <+> rhs'
         lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
-        ppPat' = ppPat (f lcls') PrecAppArg
+        ppPat' = ppPat (f lcls') PrecArg
 
 data Prec
-  = PrecDot
-  | PrecAppFun
-  | PrecAppArg
-  | PrecLambdaRhs
-  | PrecTypeConstraintLhs
-  | PrecTypeConstraintRhs
-  | PrecPiLhs
-  | PrecPiRhs
-  | PrecNone
-  | PrecLetTerm
-  | PrecComma
-
-precInt :: Prec -> Int
-precInt p =
-  case p of
-    PrecDot -> 11
-    PrecAppFun -> 10
-    PrecAppArg -> 10
-    PrecLambdaRhs -> 2
-    PrecPiLhs -> 2
-    PrecPiRhs -> 1
-    PrecTypeConstraintLhs -> 1
-    PrecTypeConstraintRhs -> 1
-    PrecComma -> 1
-    PrecLetTerm -> 0
-    PrecNone -> 0
+  = PrecNone   -- ^ Nonterminal 'Term'
+  | PrecLambda -- ^ Nonterminal 'LTerm'
+  | PrecApp    -- ^ Nonterminal 'AppTerm'
+  | PrecArg    -- ^ Nonterminal 'AppArg'
+  deriving (Eq, Ord)
 
 ppAppParens :: Prec -> Doc -> Doc
-ppAppParens PrecAppFun d = d
-ppAppParens p d = ppParens (precInt p >= 10) d 
+ppAppParens p d = ppParens (p > PrecApp) d 
 
 ppAppList :: Prec -> Doc -> [Doc] -> Doc
 ppAppList _ sym [] = sym
@@ -573,9 +551,9 @@ ppPat f p pat =
   case pat of
     PVar i _ _ -> pure (text i)
     PUnused{}  -> pure (char '_')
-    PCtor c pl -> ppAppList p (ppIdent c) <$> traverse (ppPat f PrecAppArg) pl
-    PTuple pl  -> ppTuple <$> traverse (ppPat f PrecComma) pl
-    PRecord m  -> ppRecordF (ppPat f PrecComma) m
+    PCtor c pl -> ppAppList p (ppIdent c) <$> traverse (ppPat f PrecArg) pl
+    PTuple pl  -> ppTuple <$> traverse (ppPat f PrecNone) pl
+    PRecord m  -> ppRecordF (ppPat f PrecNone) m
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
@@ -588,23 +566,23 @@ ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
-    App l r -> ppAppParens prec <$> liftA2 (<+>) (pp PrecAppFun l) (pp PrecAppArg r)
-    TupleValue l ->                 ppTuple <$> traverse (pp PrecComma) l
-    TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp PrecComma) l
-    TupleSelector t i -> ppParens (precInt prec >= precInt PrecDot)
-                           . (<> (char '.' <> int i)) <$> pp PrecDot t
+    App l r -> ppAppParens prec <$> liftA2 (<+>) (pp PrecApp l) (pp PrecArg r)
+    TupleValue l ->                 ppTuple <$> traverse (pp PrecNone) l
+    TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp PrecNone) l
+    TupleSelector t i -> ppParens (prec > PrecArg)
+                           . (<> (char '.' <> int i)) <$> pp PrecArg t
 
-    RecordValue m      -> ppRecordF (pp PrecComma) m
-    RecordType m       -> (char '#' <>) <$> ppRecordF (pp PrecComma) m
-    RecordSelector t f -> ppParens (precInt prec >= precInt PrecDot)
-                          . (<> (char '.' <> text f)) <$> pp PrecDot t
+    RecordValue m      -> ppRecordF (pp PrecNone) m
+    RecordType m       -> (char '#' <>) <$> ppRecordF (pp PrecNone) m
+    RecordSelector t f -> ppParens (prec > PrecArg)
+                          . (<> (char '.' <> text f)) <$> pp PrecArg t
 
-    CtorApp c l      -> ppAppList prec (ppIdent c) <$> traverse (pp PrecAppArg) l
-    DataTypeApp dt l -> ppAppList prec (ppIdent dt) <$> traverse (pp PrecAppArg) l
+    CtorApp c l      -> ppAppList prec (ppIdent c) <$> traverse (pp PrecArg) l
+    DataTypeApp dt l -> ppAppList prec (ppIdent dt) <$> traverse (pp PrecArg) l
 
     Sort s -> pure $ text (show s)
     NatLit i -> pure $ integer i
-    ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp PrecComma) (V.toList vl)
+    ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp PrecNone) (V.toList vl)
     FloatLit v  -> pure $ text (show v)
     DoubleLit v -> pure $ text (show v)
     StringLit s -> pure $ text (show s)
@@ -760,37 +738,37 @@ ppTermF' :: Applicative f
 ppTermF' pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
 ppTermF' pp lcls p (Lambda pat tp rhs) =
     ppLam
-      <$> ppPat (pp lcls') PrecTypeConstraintLhs pat -- TODO: Check if this is right.
-      <*> pp lcls  PrecTypeConstraintRhs tp
-      <*> pp lcls' PrecLambdaRhs rhs
+      <$> ppPat (pp lcls') PrecLambda pat
+      <*> pp lcls  PrecLambda tp
+      <*> pp lcls' PrecLambda rhs
   where ppLam pat' tp' rhs' =
-          ppParens (precInt p >= 1) $
+          ppParens (p > PrecLambda) $
             text "\\" <> parens (pat' <> doublecolon <> tp')
                <+> text "->"
                <+> rhs'
         lcls' = foldl' consBinding lcls (patBoundVars pat)
 
-ppTermF' pp lcls p (Pi i tp rhs) = ppPi <$> lhs <*> pp lcls' PrecPiRhs rhs
-  where ppPi lhs' rhs' = ppParens (precInt p >= 2) $ lhs' <+> text "->" <+> rhs'
-        lhs | i == "_" = pp lcls PrecPiLhs tp
+ppTermF' pp lcls p (Pi i tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
+  where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <+> text "->" <+> rhs'
+        lhs | i == "_" = pp lcls PrecApp tp
             | otherwise = (\tp' -> parens (text i <> doublecolon <> tp'))
-                            <$> pp lcls PrecTypeConstraintRhs tp
+                            <$> pp lcls PrecLambda tp
         lcls' = consBinding lcls i
 
 ppTermF' pp lcls p (Let dl u) = 
     ppLet <$> traverse (ppLocalDef pp lcls lcls') dl
-          <*> pp lcls' PrecLetTerm u
+          <*> pp lcls' PrecNone u
   where ppLet dl' u' = 
-          ppParens (precInt p >= 2) $
+          ppParens (p > PrecNone) $
             text "let" <+> vcat dl' <$$>
             text " in" <+> u'
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
 ppTermF' pp lcls p (LocalVar i tp) 
-    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecTypeConstraintRhs tp
+    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
     | otherwise = pure d
   where d = lookupDoc lcls i
-        pptc tpd = ppParens (precInt p >= precInt PrecTypeConstraintRhs)
+        pptc tpd = ppParens (p > PrecNone)
                             (d <> doublecolon <> tpd)
 ppTermF' _ _ _ (Constant i _) = pure $ ppIdent i
 

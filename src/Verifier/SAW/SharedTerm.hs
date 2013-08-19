@@ -642,7 +642,7 @@ scPrettyTermDoc t0
     | otherwise =
         text "let { " <> nest 6 (lineSep lets) <$$>
         text "    }" <$$>
-        text " in " <> ppt lcls0 PrecLetTerm t0
+        text " in " <> ppt lcls0 PrecNone t0
   where lcls0 = emptyLocalVarDoc
         cm = scTermCount t0 -- Occurence map
         -- Return true if variable should be introduced to name term.

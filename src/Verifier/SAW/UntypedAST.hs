@@ -122,11 +122,11 @@ data Pat
 ppPat :: Prec -> Pat -> Doc
 ppPat _ (PSimple (PVar pnm)) = text (val pnm)
 ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
-ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat PrecComma <$> l)
+ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat PrecNone <$> l)
 ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
-  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecComma v
+  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecNone v
 ppPat prec (PCtor pnm l) = ppAppParens prec $
-  hsep (text (show (val pnm)) : fmap (ppPat PrecAppArg) l)
+  hsep (text (show (val pnm)) : fmap (ppPat PrecArg) l)
 
 instance Positioned Term where
   pos t =

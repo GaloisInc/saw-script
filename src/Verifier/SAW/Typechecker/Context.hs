@@ -580,13 +580,13 @@ contextNames TopContext{} = []
 -- | Pretty print a term context.
 ppTermContext :: TermContext s -> Doc
 ppTermContext (BindContext tc nm tp) =
-  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc PrecTypeConstraintRhs tp <$$>
+  text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc PrecLambda tp <$$>
   ppTermContext tc
 ppTermContext (LetContext tc lcls) =
     text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) <$$>
     ppTermContext tc
   where ppLcl (LocalFnDefGen nm tp _) =
-         text nm <+> text "::" <+> ppTCTerm tc PrecTypeConstraintRhs tp
+         text nm <+> text "::" <+> ppTCTerm tc PrecLambda tp
 ppTermContext TopContext{} = text "top"
 
 -- | Pretty print a pat
@@ -606,18 +606,18 @@ ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
-ppTCTermGen d pr (TCLambda p l r) = ppParens (precInt pr >= 1) $
-  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecTypeConstraintRhs l)
+ppTCTermGen d pr (TCLambda p l r) = ppParens (pr > PrecNone) $
+  char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecLambda l)
             <+> text "->"
-            <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecLambdaRhs r
-ppTCTermGen d pr (TCPi p l r) = ppParens (precInt pr >= 1) $
-  parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecTypeConstraintRhs l)
-    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecPiRhs r
-ppTCTermGen d pr (TCLet lcls t) = ppParens (precInt pr >= 1) $
+            <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecLambda r
+ppTCTermGen d pr (TCPi p l r) = ppParens (pr > PrecNone) $
+  parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecLambda l)
+    <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecLambda r
+ppTCTermGen d pr (TCLet lcls t) = ppParens (pr > PrecNone) $
     text "let " <> nest 4 (vcat (ppLcl <$> lcls)) <$$>
-    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) PrecLetTerm t)
+    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) PrecNone t)
   where ppLcl (LocalFnDefGen nm tp _) =
-          text nm <+> text "::" <+> ppTCTermGen d PrecTypeConstraintRhs tp
+          text nm <+> text "::" <+> ppTCTermGen d PrecLambda tp
 ppTCTermGen d _ (TCVar i) | 0 <= i && i < length d = d !! i
                           | otherwise = text $ "Bad variable index " ++ show i
 ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
