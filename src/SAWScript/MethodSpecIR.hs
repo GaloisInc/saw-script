@@ -21,18 +21,18 @@ module SAWScript.MethodSpecIR
   , specInitializedClasses
   , specBehaviors
   , specValidationPlan
-  -- , resolveMethodSpecIR
+  , resolveMethodSpecIR
     -- * Method behavior.
   , BehaviorSpec
   , bsPC
-  -- , bsRefExprs
-  -- , bsMayAliasSet
-  -- , RefEquivConfiguration
+  , bsRefExprs
+  , bsMayAliasSet
+  , RefEquivConfiguration
   -- , bsRefEquivClasses
-  -- , bsLogicAssignments
-  -- , bsLogicClasses
+  , bsLogicAssignments
+  , bsLogicClasses
   , BehaviorCommand(..)
-  -- , bsCommands
+  , bsCommands
     -- * Equivalence classes for references.
   , JavaExprEquivClass
   , ppJavaExprEquivClass
@@ -61,6 +61,9 @@ import Verinf.Symbolic
 
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.LLVM.Codebase as LSS
+
+import Verifier.SAW.SharedTerm
+
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.CongruenceClosure (CCSet)
 import SAWScript.JavaExpr
@@ -120,11 +123,11 @@ ppJavaExprEquivClass cl = "{ " ++ intercalate ", " (map ppJavaExpr (sort cl)) ++
 -- MethodTypecheckContext {{{1
 
 -- | Global context for method spec typechecker.
-data MethodTypecheckContext = MTC {
+data MethodTypecheckContext s = MTC {
          -- | Position of method spec declaration.
          mtcPos :: Pos
          -- Bindings at global level.
-       , mtcGlobalBindings :: GlobalBindings
+       , mtcGlobalBindings :: GlobalBindings s
          -- | Class we are currently parsing.
        , mtcClass :: JSS.Class
          -- | Method that spec is for.
@@ -133,11 +136,11 @@ data MethodTypecheckContext = MTC {
        , mtcRuleNames :: Set String
        }
 
-typecheckerConfig :: MethodTypecheckContext -- ^ Context for typechecker
+typecheckerConfig :: MethodTypecheckContext s -- ^ Context for typechecker
                   -> JSS.PC -- ^ PC to parse from.
                   -> ExprActualTypeMap -- ^ Maps Java expressions for references to actual type.
-                  -> Map String MixedExpr -- ^ Local bindings
-                  -> TCConfig
+                  -> Map String (MixedExpr s) -- ^ Local bindings
+                  -> TCConfig s
 typecheckerConfig mtc pc actualTypeMap localBindings =
   TCC { globalBindings = mtcGlobalBindings mtc
       , localBindings = localBindings
@@ -152,26 +155,26 @@ typecheckerConfig mtc pc actualTypeMap localBindings =
 -- BehaviorSpec {{{1
 
 -- | Postconditions used for implementing behavior specification.
-data BehaviorCommand
+data BehaviorCommand s
      -- | An assertion that is assumed to be true in the specificaiton.
-   = AssertPred Pos LogicExpr
+   = AssertPred Pos (LogicExpr s)
      -- | An assumption made in a conditional behavior specification.
-   | AssumePred LogicExpr
+   | AssumePred (LogicExpr s)
      -- | Assign Java expression the value given by the mixed expression.
-   | EnsureInstanceField Pos JavaExpr JSS.FieldId MixedExpr
+   | EnsureInstanceField Pos JavaExpr JSS.FieldId (MixedExpr s)
      -- | Assign array value of Java expression the value given by the rhs.
-   | EnsureArray Pos JavaExpr LogicExpr
+   | EnsureArray Pos JavaExpr (LogicExpr s)
      -- | Modify the Java expression to an arbitrary value.
      -- May point to integral type or array.
    | ModifyInstanceField JavaExpr JSS.FieldId
      -- | Modify the Java array to an arbitrary value.
      -- May point to integral type or array.
-   | ModifyArray JavaExpr DagType
+   | ModifyArray JavaExpr (SharedTerm s)
      -- | Specifies value method returns.
-   | Return MixedExpr
+   | Return (MixedExpr s)
   deriving (Show)
 
-data BehaviorSpec = BS {
+data BehaviorSpec s = BS {
          -- | Program counter for spec.
          bsPC :: JSS.PC
          -- | Maps all expressions seen along path to actual type.
@@ -181,27 +184,27 @@ data BehaviorSpec = BS {
          -- | May alias relation between Java expressions.
        , bsMayAliasClasses :: [[JavaExpr]]
          -- | Equations 
-       , bsLogicAssignments :: [(Pos, JavaExpr, LogicExpr)]
+       , bsLogicAssignments :: [(Pos, JavaExpr, LogicExpr s)]
          -- | Commands to execute in reverse order.
-       , bsReversedCommands :: [BehaviorCommand]
+       , bsReversedCommands :: [BehaviorCommand s]
        } deriving (Show)
 
 -- | Returns list of all Java expressions that are references.
-bsExprs :: BehaviorSpec -> [JavaExpr]
+bsExprs :: BehaviorSpec s -> [JavaExpr]
 bsExprs bs = Map.keys (bsActualTypeMap bs)
 
 -- | Returns list of all Java expressions that are references.
-bsRefExprs :: BehaviorSpec -> [JavaExpr]
+bsRefExprs :: BehaviorSpec s -> [JavaExpr]
 bsRefExprs bs = filter isRefJavaExpr (bsExprs bs)
 
-bsMayAliasSet :: BehaviorSpec -> CCSet JavaExprF
+bsMayAliasSet :: BehaviorSpec s -> CCSet JavaExprF
 bsMayAliasSet bs =
   CC.foldr CC.insertEquivalenceClass
            (bsMustAliasSet bs)
            (bsMayAliasClasses bs)
 
 -- | Check that all expressions that may alias have equal types.
-bsCheckAliasTypes :: Pos -> BehaviorSpec -> IO ()
+bsCheckAliasTypes :: Pos -> BehaviorSpec s -> IO ()
 bsCheckAliasTypes pos bs = mapM_ checkClass (CC.toList (bsMayAliasSet bs))
   where atm = bsActualTypeMap bs
         checkClass [] = error "internal: Equivalence class empty"
@@ -216,9 +219,8 @@ bsCheckAliasTypes pos bs = mapM_ checkClass (CC.toList (bsMayAliasSet bs))
 
 type RefEquivConfiguration = [(JavaExprEquivClass, JavaActualType)]
 
-{-
 -- | Returns all possible potential equivalence classes for spec.
-bsRefEquivClasses :: BehaviorSpec -> [RefEquivConfiguration]
+bsRefEquivClasses :: BehaviorSpec s -> [RefEquivConfiguration]
 bsRefEquivClasses bs = 
   map (map parseSet . CC.toList) $ Set.toList $
     mayAliases (bsMayAliasClasses bs) (bsMustAliasSet bs)
@@ -227,17 +229,16 @@ bsRefEquivClasses bs =
            Just tp -> (l,tp)
            Nothing -> error $ "internal: bsRefEquivClass given bad expression: " ++ show e
        parseSet [] = error "internal: bsRefEquivClasses given empty list."
--}
 
-bsPrimitiveExprs :: BehaviorSpec -> [JavaExpr]
+bsPrimitiveExprs :: BehaviorSpec s -> [JavaExpr]
 bsPrimitiveExprs bs =
   [ e | (e, PrimitiveType _) <- Map.toList (bsActualTypeMap bs) ]
  
-bsLogicEqs :: BehaviorSpec -> [(JavaExpr, JavaExpr)]
+bsLogicEqs :: BehaviorSpec s -> [(JavaExpr, JavaExpr)]
 bsLogicEqs bs = [ (lhs,rhs) | (_,lhs,JavaValue rhs _ _) <- bsLogicAssignments bs ]
 
 -- | Returns logic assignments to equivance class.
-bsAssignmentsForClass :: BehaviorSpec -> JavaExprEquivClass -> [LogicExpr]
+bsAssignmentsForClass :: BehaviorSpec s -> JavaExprEquivClass -> [LogicExpr s]
 bsAssignmentsForClass bs cl = res 
   where s = Set.fromList cl
         isJavaExpr (JavaValue _ _ _) = True
@@ -248,9 +249,9 @@ bsAssignmentsForClass bs cl = res
               , not (isJavaExpr rhs) ]
 
 -- | Retuns ordering of Java expressions to corresponding logic value.
-bsLogicClasses :: BehaviorSpec
+bsLogicClasses :: BehaviorSpec s
                -> RefEquivConfiguration
-               -> Maybe [(JavaExprEquivClass, DagType, [LogicExpr])]
+               -> Maybe [(JavaExprEquivClass, SharedTerm s, [LogicExpr s])]
 bsLogicClasses bs rec
     | all (\l -> length l == 1) components =
        Just [ (cl, at, bsAssignmentsForClass bs cl)
@@ -280,43 +281,43 @@ bsLogicClasses bs rec
                              , se <- Set.toList (logicExprJavaExprs src)
                              , let Just s = Map.lookup se exprNodeMap ]
         -- Compute strongly connected components.
-        components = scc (mkGraph grNodes grEdges :: Gr (JavaExprEquivClass, DagType) ())
+        components = scc (mkGraph grNodes grEdges :: Gr (JavaExprEquivClass, SharedTerm s) ())
 
 -- BehaviorTypechecker {{{1
 
-data BehaviorTypecheckState = BTS {
+data BehaviorTypecheckState s = BTS {
          btsPC :: JSS.PC
          -- | Maps expressions to actual type (forgets expressions within conditionals and
          -- blocks).
        , btsActualTypeMap :: ExprActualTypeMap
          -- | Maps let bindings already seen to position they were defined.
-       , btsLetBindings :: Map String (Pos, MixedExpr)
+       , btsLetBindings :: Map String (Pos, MixedExpr s)
          -- | Flag indicating if return has been set.
        , btsReturnSet :: Bool
          -- | Paths along execution.
-       , btsPaths :: [BehaviorSpec]
+       , btsPaths :: [BehaviorSpec s]
        }
 
-type BehaviorTypechecker =
-  StateT BehaviorTypecheckState (ReaderT MethodTypecheckContext IO)
+type BehaviorTypechecker s =
+  StateT (BehaviorTypecheckState s) (ReaderT (MethodTypecheckContext s) IO)
 
 -- BehaviorTypechecker Utilities {{{1
 
 -- | Get codebase used in behavior typechecker.
-getBTCCodebase :: BehaviorTypechecker JSS.Codebase
+getBTCCodebase :: BehaviorTypechecker s JSS.Codebase
 getBTCCodebase = asks (codeBase . mtcGlobalBindings)
 
-forEachPath_ :: (BehaviorSpec -> IO a) -> BehaviorTypechecker ()
+forEachPath_ :: (BehaviorSpec s -> IO a) -> BehaviorTypechecker s ()
 forEachPath_ fn = mapM_ (liftIO . fn) =<< gets btsPaths
 
-modifyPaths :: (BehaviorSpec -> BehaviorSpec) -> BehaviorTypechecker ()
+modifyPaths :: (BehaviorSpec s -> BehaviorSpec s) -> BehaviorTypechecker s ()
 modifyPaths fn = do 
   modify $ \bts -> bts { btsPaths = map fn (btsPaths bts) }
 
 -- Actual Type utilities {{{2
 
 -- | Checks actual type is undefined.
-checkActualTypeUndefined :: Pos -> JavaExpr -> BehaviorTypechecker ()
+checkActualTypeUndefined :: Pos -> JavaExpr -> BehaviorTypechecker s ()
 checkActualTypeUndefined pos expr = do
   --Check type is not defined
   forEachPath_ $ \bs -> do
@@ -325,7 +326,7 @@ checkActualTypeUndefined pos expr = do
        in throwIOExecException pos (ftext msg) ""
 
 -- | Records that the given expression is bound to the actual type.
-recordActualType :: Pos -> JavaExpr -> JavaActualType -> BehaviorTypechecker ()
+recordActualType :: Pos -> JavaExpr -> JavaActualType -> BehaviorTypechecker s ()
 recordActualType pos expr at = do
   -- Record actual type undefined or unchanged.
   bts <- get
@@ -349,7 +350,7 @@ recordActualType pos expr at = do
           , btsPaths = newPaths }
 
 -- | Returns actual type of Java expression.
-getActualType :: Pos -> JavaExpr -> BehaviorTypechecker JavaActualType
+getActualType :: Pos -> JavaExpr -> BehaviorTypechecker s JavaActualType
 getActualType pos expr = do
   typeMap <- gets btsActualTypeMap
   case Map.lookup expr typeMap of
@@ -384,13 +385,14 @@ throwInvalidAssignment pos lhs tp =
   let msg = lhs ++ " cannot be assigned a value with type " ++ tp ++ "."
    in throwIOExecException pos (ftext msg) ""
 
-checkLogicExprIsPred :: MonadIO m => Pos -> LogicExpr -> m ()
-checkLogicExprIsPred pos expr =
+checkLogicExprIsPred :: MonadIO m => Pos -> LogicExpr s -> m ()
+checkLogicExprIsPred pos expr = undefined -- FIXME
+{-
   case typeOfLogicExpr expr of
     SymBool -> return ()
     _ -> let msg = "Expression does not denote a predicate."
           in throwIOExecException pos (ftext msg) ""
-
+-}
 
 {-
 -- Typecheck utilities {{{2
@@ -509,16 +511,16 @@ typecheckMixedExpr lhsPos lhsName lhsType rhsAst =
 -- Command utilities {{{2
 
 -- | Return commands in behavior in order they appeared in spec.
-bsCommands :: BehaviorSpec -> [BehaviorCommand]
+bsCommands :: BehaviorSpec s -> [BehaviorCommand s]
 bsCommands = reverse . bsReversedCommands
 
 -- | Add command to typechecker.
-addCommand :: BehaviorCommand -> BehaviorTypechecker ()
+addCommand :: BehaviorCommand s -> BehaviorTypechecker s ()
 addCommand bc = modifyPaths $ \bs ->
   bs { bsReversedCommands = bc : bsReversedCommands bs }
 
 -- | Make sure expr can be assigned a postcondition.
-checkValuePostconditionTarget :: Pos -> JavaExpr -> BehaviorTypechecker ()
+checkValuePostconditionTarget :: Pos -> JavaExpr -> BehaviorTypechecker s ()
 checkValuePostconditionTarget pos (CC.Term expr) = do
   case expr of
     Local _ _ _ -> 
@@ -526,17 +528,17 @@ checkValuePostconditionTarget pos (CC.Term expr) = do
        in throwIOExecException pos (ftext msg) ""
     InstanceField{} -> return ()
 
-recordLogicAssertion :: Pos -> JavaExpr -> LogicExpr -> BehaviorTypechecker ()
+recordLogicAssertion :: Pos -> JavaExpr -> LogicExpr s -> BehaviorTypechecker s ()
 recordLogicAssertion pos lhs rhs =
   modifyPaths $ \bs ->
     bs { bsLogicAssignments = (pos, lhs, rhs) : bsLogicAssignments bs }
 
 -- resolveDecl {{{1
 
-{-
 -- | Code for parsing a method spec declaration.
-resolveDecl :: [BehaviorDecl] -> BehaviorTypechecker ()
+resolveDecl :: [BehaviorDecl s] -> BehaviorTypechecker s ()
 resolveDecl [] = return ()
+{-
 resolveDecl (VarDecl _ exprAstList typeAst:r) = do
   -- Get actual type.
   at <- runTypechecker $ tcActualType typeAst
@@ -757,19 +759,18 @@ mayAliases :: (CC.OrdFoldable f, CC.Traversable f)
 mayAliases l s = foldr splitClass (Set.singleton s) l
 
 
-{-
 -- resolveBehaviorSpecs {{{1
 
-resolveBehaviorSpecs :: MethodTypecheckContext 
+resolveBehaviorSpecs :: MethodTypecheckContext s
                      -> JSS.PC
-                     -> BehaviorDecl
-                     -> IO BehaviorTypecheckState
-resolveBehaviorSpecs mtc pc block = do
+                     -> [BehaviorDecl s]
+                     -> IO (BehaviorTypecheckState s)
+resolveBehaviorSpecs mtc pc cmds = do
   let method = mtcMethod mtc
-  let this = TC.thisJavaExpr (mtcClass mtc)
+  let this = thisJavaExpr (mtcClass mtc)
   let initTypeMap | JSS.methodIsStatic method = Map.empty
                   | otherwise = 
-                      Map.singleton this (TC.ClassInstance (mtcClass mtc))
+                      Map.singleton this (ClassInstance (mtcClass mtc))
       initPath = BS { bsPC = pc
                     , bsActualTypeMap = initTypeMap
                     , bsMustAliasSet = 
@@ -787,13 +788,9 @@ resolveBehaviorSpecs mtc pc block = do
                     , btsPaths = [initPath]
                     , btsReturnSet = False
                     }
-  -- Flatten commands so top level type information is available to expression parser.
-  let flatDecls = case block of
-                    Block cmds -> cmds
-                    _ -> [block]
   bts <- flip runReaderT mtc $
            flip execStateT initBts $ do
-             resolveDecl flatDecls
+             resolveDecl cmds
   -- Check expressions that may alias to verify they have equivalent types.
   mapM_ (bsCheckAliasTypes (mtcPos mtc)) (btsPaths bts)
   if pc == 0 then
@@ -809,7 +806,6 @@ resolveBehaviorSpecs mtc pc block = do
      in throwIOExecException (mtcPos mtc) (ftext msg) ""
   -- Return paths parsed from this spec.
   return bts
--}
 
 -- resolveValidationPlan {{{1
 
@@ -819,7 +815,7 @@ data VerifyCommand
    | ABC
    | SmtLib (Maybe Int) (Maybe String) -- version, file
    | Yices (Maybe Int)
-   | Expand Pos Op [LogicExpr] DagTerm
+   -- | Expand Pos Op [LogicExpr s] (SharedTerm s)
     -- | Enable use of a rule or extern definition.
    | VerifyEnable String
      -- | Disable use of a rule or extern definition.
@@ -840,15 +836,15 @@ checkRuleIsDefined pos nm ruleNames = do
     let msg = "Unknown rule or definition " ++ show nm ++ "."
     throwIOExecException pos (ftext msg) ""
 
-data VerifyTypecheckerState = VTS {
-         vtsMTC :: MethodTypecheckContext
-       , vtsBehaviors :: Map JSS.PC BehaviorTypecheckState
+data VerifyTypecheckerState s = VTS {
+         vtsMTC :: MethodTypecheckContext s
+       , vtsBehaviors :: Map JSS.PC (BehaviorTypecheckState s)
        , vtsRuleNames :: Set String
          -- | Current PC (if inside at command).
-       , vtsPC :: Maybe (JSS.PC, BehaviorTypecheckState)
+       , vtsPC :: Maybe (JSS.PC, BehaviorTypecheckState s)
        }
 
-type VerifyTypechecker = StateT VerifyTypecheckerState IO
+type VerifyTypechecker s = StateT (VerifyTypecheckerState s) IO
 
 {-
 resolveVerifyCommand :: VerifyCommand -> VerifyTypechecker [VerifyCommand]
@@ -933,7 +929,7 @@ resolveValidationPlan ruleNames mtc allBehaviors decls =
 
 -- MethodSpecIR {{{1
 
-data MethodSpecIR = MSIR {
+data MethodSpecIR s = MSIR {
     specPos :: Pos
     -- | Class used for this instance.
   , specThisClass :: JSS.Class
@@ -947,30 +943,29 @@ data MethodSpecIR = MSIR {
   , specInitializedClasses :: [String]
     -- | Behavior specifications for method at different PC values.
     -- A list is used because the behavior may depend on the inputs.
-  , specBehaviors :: Map JSS.PC [BehaviorSpec]
+  , specBehaviors :: Map JSS.PC [BehaviorSpec s]
     -- | Describes how the method is expected to be validatioed.
   , specValidationPlan :: ValidationPlan
   } deriving (Show)
 
 -- | Return user printable name of method spec (currently the class + method name).
-specName :: MethodSpecIR -> String
+specName :: MethodSpecIR s -> String
 specName ir =
  let clName = JSS.className (specThisClass ir)
      mName = JSS.methodName (specMethod ir)
   in JSS.slashesToDots clName ++ ('.' : mName)
 
-{-
 -- | Interprets AST method spec commands to construct an intermediate
 -- representation that
-resolveMethodSpecIR :: TC.GlobalBindings
+resolveMethodSpecIR :: GlobalBindings s
                     -> Set String -- ^ Names of rules in spec.
                     -> Pos
                     -> JSS.Class
                     -> String
-                    -> [MethodSpecDecl]
-                    -> IO MethodSpecIR
+                    -> [BehaviorDecl s]
+                    -> IO (MethodSpecIR s)
 resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
-  let cb = TC.codeBase gb
+  let cb = codeBase gb
   (methodClass,method) <- findMethod cb pos mName thisClass
   let mtc = MTC { mtcPos = pos
                 , mtcGlobalBindings = gb
@@ -981,18 +976,20 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
   -- Get list of initial superclasses.
   superClasses <- JSS.supers cb thisClass
   -- Resolve behavior spec for PC 0.
-  methodBehavior <- resolveBehaviorSpecs mtc 0 $
-    Block [ cmd | Behavior cmd <- cmds ]
+  methodBehavior <- resolveBehaviorSpecs mtc 0 cmds
   --  Resolve behavior specs at other PCs.
+  -- FIXME: not yet implemented
+  {-
   let specAtCmds = [ (specPos, pc, bcmds) | SpecAt specPos pc bcmds <- cmds ]
   localBehaviors <- forM specAtCmds $ \(specPos,astPC,bcmds) -> do
       pc <- typecheckPC specPos method astPC
       bs <- resolveBehaviorSpecs mtc pc bcmds
       return (pc, bs)
+      -}
   -- TODO: Check that no duplicates appear in local behavior specifications.
-  let allBehaviors = Map.fromList $ (0, methodBehavior) : localBehaviors
+  let allBehaviors = Map.fromList $ (0, methodBehavior) : [] -- localBehaviors
   -- Resolve verification plan.
-  plan <- resolveValidationPlan ruleNames mtc allBehaviors cmds
+  plan <- undefined -- resolveValidationPlan ruleNames mtc allBehaviors cmds
   -- Return IR.
   return MSIR { specPos = pos
               , specThisClass = thisClass
@@ -1002,4 +999,3 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
               , specBehaviors = Map.map btsPaths allBehaviors
               , specValidationPlan = plan
               }
--}
