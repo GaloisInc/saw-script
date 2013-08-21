@@ -5,7 +5,6 @@ module Tests.SharedTerm
 import Control.Monad
 import Data.Hashable
 import qualified Data.Map as Map
-import qualified Data.IntMap.Strict as HMap
 
 import Data.Time.Clock
 import Tests.Common
