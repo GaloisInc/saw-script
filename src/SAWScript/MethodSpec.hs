@@ -47,6 +47,7 @@ import System.IO
 
 import qualified SAWScript.CongruenceClosure as CC
 import qualified SAWScript.JavaExpr as TC
+import SAWScript.Options
 import SAWScript.Utils
 import SAWScript.MethodSpecIR
 
@@ -965,7 +966,7 @@ mkSpecVC :: JSS.MonadSim (SharedContext s) m =>
 mkSpecVC sc params esd = do
   let ir = vpSpec params
   -- Log execution.
-  setVerbosity (simverbose (vpOpts params))
+  -- setVerbosity (simverbose (vpOpts params)) -- TODO
   -- Add method spec overrides.
   mapM_ (overrideFromSpec sc (specPos ir)) (vpOver params)
   -- Execute code.
@@ -998,7 +999,7 @@ mkSpecVC sc params esd = do
 
 data VerifyParams s = VerifyParams
   { vpCode    :: JSS.Codebase
-  , vpOpts    :: SSOpts
+  , vpOpts    :: Options
   , vpSpec    :: MethodSpecIR s
   , vpOver    :: [MethodSpecIR s]
   , vpRules   :: [Rule]
