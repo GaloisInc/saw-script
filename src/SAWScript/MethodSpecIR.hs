@@ -24,7 +24,7 @@ module SAWScript.MethodSpecIR
   , resolveMethodSpecIR
     -- * Method behavior.
   , BehaviorSpec
-  , bsPC
+  , bsLoc
   , bsRefExprs
   , bsMayAliasSet
   , RefEquivConfiguration
@@ -60,7 +60,9 @@ import Text.PrettyPrint.Leijen
 import Verinf.Symbolic
 
 import qualified Verifier.Java.Codebase as JSS
+import qualified Verifier.Java.Common as JSS
 import qualified Verifier.LLVM.Codebase as LSS
+import qualified Data.JVM.Symbolic.AST as JSS
 
 import Verifier.SAW.SharedTerm
 
@@ -77,7 +79,7 @@ checkLineNumberInfoAvailable pos m = do
     let msg = ftext $ "Source does not contain line number infomation."
      in throwIOExecException pos msg ""
 
-typecheckPC :: MonadIO m => Pos -> JSS.Method -> MethodLocation -> m JSS.PC
+typecheckPC :: MonadIO m => Pos -> JSS.Method -> MethodLocation -> m JSS.Breakpoint
 typecheckPC pos m (LineOffset off) = do
   checkLineNumberInfoAvailable pos m
   case JSS.sourceLineNumberOrPrev m 0 of
@@ -87,14 +89,14 @@ typecheckPC pos m (LineOffset off) = do
     Just base -> do
       let ln = toInteger base + off
       case JSS.lookupLineStartPC m (fromInteger ln) of
-        Just pc -> return pc
+        Just pc -> return (JSS.BreakLineNum (fromIntegral ln))
         Nothing -> do
           let msg = ftext $ "Could not find line " ++ show ln ++ "."
            in throwIOExecException pos msg ""
 typecheckPC pos m (LineExact ln) = do
   checkLineNumberInfoAvailable pos m
   case JSS.lookupLineStartPC m (fromInteger ln) of
-    Just pc -> return pc
+    Just pc -> return (JSS.BreakLineNum (fromIntegral ln))
     Nothing -> do
       let msg = ftext $ "Could not find line " ++ show ln ++ "."
        in throwIOExecException pos msg ""
@@ -103,7 +105,7 @@ typecheckPC pos _ (PC pc) = do
   when (pc <= 0) $ do
     let msg = ftext $ "Invalid program counter."
      in throwIOExecException pos msg ""
-  return (fromInteger pc)
+  return (JSS.BreakPC (fromInteger pc))
 
 -- ExprActualTypeMap {{{1
 
@@ -176,7 +178,7 @@ data BehaviorCommand s
 
 data BehaviorSpec s = BS {
          -- | Program counter for spec.
-         bsPC :: JSS.PC
+         bsLoc :: JSS.Breakpoint
          -- | Maps all expressions seen along path to actual type.
        , bsActualTypeMap :: ExprActualTypeMap
          -- | Stores which Java expressions must alias each other.
@@ -286,7 +288,7 @@ bsLogicClasses bs rec
 -- BehaviorTypechecker {{{1
 
 data BehaviorTypecheckState s = BTS {
-         btsPC :: JSS.PC
+         btsLoc :: JSS.Breakpoint
          -- | Maps expressions to actual type (forgets expressions within conditionals and
          -- blocks).
        , btsActualTypeMap :: ExprActualTypeMap
@@ -762,16 +764,16 @@ mayAliases l s = foldr splitClass (Set.singleton s) l
 -- resolveBehaviorSpecs {{{1
 
 resolveBehaviorSpecs :: MethodTypecheckContext s
-                     -> JSS.PC
+                     -> JSS.Breakpoint
                      -> [BehaviorDecl s]
                      -> IO (BehaviorTypecheckState s)
-resolveBehaviorSpecs mtc pc cmds = do
+resolveBehaviorSpecs mtc loc cmds = do
   let method = mtcMethod mtc
   let this = thisJavaExpr (mtcClass mtc)
   let initTypeMap | JSS.methodIsStatic method = Map.empty
                   | otherwise = 
                       Map.singleton this (ClassInstance (mtcClass mtc))
-      initPath = BS { bsPC = pc
+      initPath = BS { bsLoc = loc
                     , bsActualTypeMap = initTypeMap
                     , bsMustAliasSet = 
                         if JSS.methodIsStatic method then
@@ -782,7 +784,7 @@ resolveBehaviorSpecs mtc pc cmds = do
                     , bsLogicAssignments = []
                     , bsReversedCommands = []
                     }
-      initBts = BTS { btsPC = pc
+      initBts = BTS { btsLoc = loc
                     , btsActualTypeMap = initTypeMap
                     , btsLetBindings = Map.empty
                     , btsPaths = [initPath]
@@ -793,7 +795,7 @@ resolveBehaviorSpecs mtc pc cmds = do
              resolveDecl cmds
   -- Check expressions that may alias to verify they have equivalent types.
   mapM_ (bsCheckAliasTypes (mtcPos mtc)) (btsPaths bts)
-  if pc == 0 then
+  if loc == JSS.BreakEntry then
     -- TODO: Check all arguments are defined.
     return ()
   else
@@ -841,7 +843,7 @@ data VerifyTypecheckerState s = VTS {
        , vtsBehaviors :: Map JSS.PC (BehaviorTypecheckState s)
        , vtsRuleNames :: Set String
          -- | Current PC (if inside at command).
-       , vtsPC :: Maybe (JSS.PC, BehaviorTypecheckState s)
+       , vtsLine :: Maybe (JSS.Breakpoint, BehaviorTypecheckState s)
        }
 
 type VerifyTypechecker s = StateT (VerifyTypecheckerState s) IO
@@ -943,7 +945,7 @@ data MethodSpecIR s = MSIR {
   , specInitializedClasses :: [String]
     -- | Behavior specifications for method at different PC values.
     -- A list is used because the behavior may depend on the inputs.
-  , specBehaviors :: Map JSS.PC [BehaviorSpec s]
+  , specBehaviors :: Map JSS.Breakpoint [BehaviorSpec s]
     -- | Describes how the method is expected to be validatioed.
   , specValidationPlan :: ValidationPlan
   } deriving (Show)
@@ -976,7 +978,7 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
   -- Get list of initial superclasses.
   superClasses <- JSS.supers cb thisClass
   -- Resolve behavior spec for PC 0.
-  methodBehavior <- resolveBehaviorSpecs mtc 0 cmds
+  methodBehavior <- resolveBehaviorSpecs mtc JSS.BreakEntry cmds
   --  Resolve behavior specs at other PCs.
   -- FIXME: not yet implemented
   {-
@@ -987,7 +989,7 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
       return (pc, bs)
       -}
   -- TODO: Check that no duplicates appear in local behavior specifications.
-  let allBehaviors = Map.fromList $ (0, methodBehavior) : [] -- localBehaviors
+  let allBehaviors = Map.fromList $ (JSS.BreakEntry, methodBehavior) : [] -- localBehaviors
   -- Resolve verification plan.
   plan <- undefined -- resolveValidationPlan ruleNames mtc allBehaviors cmds
   -- Return IR.

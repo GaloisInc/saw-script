@@ -51,6 +51,8 @@ import SAWScript.Utils
 import SAWScript.MethodSpecIR
 
 import qualified Verifier.Java.Simulator as JSS
+import qualified Verifier.Java.Common as JSS
+import qualified Data.JVM.Symbolic.AST as JSS
 import Verifier.Java.SAWBackend
 import Verinf.Symbolic
 import qualified Verinf.Symbolic.BLIF as Blif
@@ -64,6 +66,7 @@ import Verifier.SAW.Evaluator
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 
 import qualified SMTLib1 as SmtLib
 import qualified SMTLib2 as SmtLib2
@@ -80,7 +83,7 @@ findM check (x:xs)  = do ok <- check x
 -- Verinf Utilities {{{1
 
 scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scEq sc x y = undefined -- scApply?? sc x y -- FIXME
+scEq sc x y = undefined -- scApply?? sc x y -- TODO: want more polymorphic equality?
 
 scImplies :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scImplies sc x y = do
@@ -119,9 +122,10 @@ setInstanceFieldValue r f v =
 -- Assumes value is an array with a ground length.
 setArrayValue :: JSS.Ref -> SharedTerm s
               -> SpecPathState s -> SpecPathState s
-setArrayValue r v =
+setArrayValue r v@(STApp _ (FTermF (ArrayValue _ vs))) =
   JSS.pathMemory . JSS.memScalarArrays %~ Map.insert r (w, v)
-    where w = undefined -- FIXME
+    where w = fromIntegral $ V.length vs
+setArrayValue r _ = error "setArrayValue called with non-array value"
 
 -- | Returns value constructor from node.
 mkJSSValue :: JSS.Type -> n -> JSS.Value n
@@ -135,17 +139,17 @@ mkJSSValue _ _ = error "internal: illegal type"
 
 -- | Add assumption for predicate to path state.
 addAssumption :: SharedContext s -> SharedTerm s -> SpecPathState s -> IO (SpecPathState s)
-addAssumption sc x ps = return ps -- FIXME
+addAssumption sc x ps = return ps -- TODO
 {- TODO: JSS
   do prop <- scApplyPreludeAnd sc (JSS.psAssumptions ps) x
      return ps { JSS.psAssumptions = prop }
 -}
 
 -- | Add assertion for predicate to path state.
-addAssertion :: String -> SharedTerm s -> SpecPathState s -> SpecPathState s
-addAssertion nm x ps = ps -- FIXME
-  -- TODO: JSS
-  -- ps { JSS.pathAssertions = (nm,x) : JSS.pathAssertions ps }
+addAssertion :: SharedContext s -> SharedTerm s -> SpecPathState s -> IO (SpecPathState s)
+addAssertion sc x p = do
+  andOp <- liftIO $ scApplyPreludeAnd sc
+  p & JSS.pathAssertions %%~ \a -> liftIO (andOp a x)
 
 -- EvalContext {{{1
 
@@ -213,32 +217,33 @@ evalJavaExprAsLogic expr ec = do
 
 -- | Evaluates a typed expression.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
-evalLogicExpr initExpr ec = undefined -- eval initExpr
+evalLogicExpr initExpr ec = eval initExpr
   where sc = ecContext ec
-        -- FIXME: SAWCore
-        {-
-        eval (TC.Apply op exprs) =
-          (liftIO . deApplyOp de op) =<< V.mapM eval (V.fromList exprs)
-        eval (TC.Cns c tp) = return $ ConstTerm c tp
-        eval (TC.IntLit i we@(widthConstant -> Just w)) =
-          return $ ConstTerm (mkCInt w i) (SymInt we)
-        eval TC.IntLit{} = error "internal: evalLogicExpr called with non-ground literal."
-        eval (TC.Var _ _) = error "internal: evalLogicExpr called with var"
-        eval (TC.JavaValue expr _ _) = evalJavaExprAsLogic expr ec
-        -}
+        eval (TC.Apply op exprs) = undefined -- TODO
+          -- (liftIO . deApplyOp de op) =<< V.mapM eval (V.fromList exprs)
+        eval (TC.Cns c tp) = undefined -- TODO
+          -- return $ ConstTerm c tp
+        eval (TC.IntLit i we@(widthConstant -> Just w)) = undefined -- TODO
+          -- return $ ConstTerm (mkCInt w i) (SymInt we)
+        eval TC.IntLit{} = undefined -- TODO
+          error "internal: evalLogicExpr called with non-ground literal."
+        eval (TC.Var _ _) = undefined -- TODO
+          error "internal: evalLogicExpr called with var"
+        eval (TC.JavaValue expr _ _) = undefined -- TODO
+          evalJavaExprAsLogic expr ec
 
 -- | Return Java value associated with mixed expression.
 evalMixedExpr :: TC.MixedExpr s -> EvalContext s
               -> ExprEvaluator (SpecJavaValue s)
 evalMixedExpr (TC.LE expr) ec = do
   n <- evalLogicExpr expr ec
-  undefined -- FIXME: SAWCore
-{-
-  case termType n of
-    SymInt (widthConstant -> Just 32) -> return (JSS.IValue n)
-    SymInt (widthConstant -> Just 64) -> return (JSS.LValue n)
-    _ -> error "internal: mixedExprValue called with malformed result type."
--}
+  let sc = ecContext ec
+  ty <- liftIO $ scTypeOf sc n
+  case asBitvectorType ty of
+    Just 32 -> return (JSS.IValue n)
+    Just 64 -> return (JSS.LValue n)
+    Just _ -> error "internal: bitvector of unsupported size passed to evalMixedExpr"
+    Nothing -> error "internal: non-bitvector expression passed to evalMixedExpr"
 evalMixedExpr (TC.JE expr) ec = evalJavaExpr expr ec
 
 
@@ -247,7 +252,7 @@ evalMixedExpr (TC.JE expr) ec = evalJavaExpr expr ec
 
 -- | State for running the behavior specifications in a method override.
 data OCState s = OCState {
-         ocsPC :: JSS.PC
+         ocsLoc :: JSS.Breakpoint
        , ocsEvalContext :: !(EvalContext s)
        , ocsResultState :: !(SpecPathState s)
        , ocsReturnValue :: !(Maybe (SpecJavaValue s))
@@ -275,22 +280,20 @@ ppOverrideError (SimException s)     = "Simulation exception: " ++ s ++ "."
 ppOverrideError Abort                = "Path was aborted."
 
 data OverrideResult s
-   = SuccessfulRun (JSS.Memory (SharedTerm s)) (Maybe JSS.PC) (Maybe (SpecJavaValue s))
+   = SuccessfulRun (JSS.Path (SharedContext s)) (Maybe JSS.Breakpoint) (Maybe (SpecJavaValue s))
    | FalseAssumption
-   | FailedRun (JSS.ErrorPath (SharedContext s)) (Maybe JSS.PC) [OverrideError]
+   | FailedRun (JSS.Path (SharedContext s)) (Maybe JSS.Breakpoint) [OverrideError]
    -- deriving (Show)
 
-type RunResult s = ( Maybe (JSS.Path (SharedContext s))
-                   , Maybe JSS.PC
+type RunResult s = ( JSS.Path (SharedContext s)
+                   , Maybe JSS.Breakpoint
                    , Either [OverrideError] (Maybe (SpecJavaValue s))
                    )
 
 orParseResults :: [OverrideResult s] -> [RunResult s]
 orParseResults l = undefined
-{- TODO: design
-  [ (ps, pc, Left  e) | FailedRun     ps pc e <- l ]
-                ++ [ (ps, pc, Right v) | SuccessfulRun ps pc v <- l ]
--}
+  [ (ps, block, Left  e) | FailedRun     ps block e <- l ] ++
+  [ (ps, block, Right v) | SuccessfulRun ps block v <- l ]
 
 type OverrideComputation s = ContT (OverrideResult s) (StateT (OCState s) IO)
 
@@ -329,10 +332,11 @@ ocModifyResultStateIO fn = do
 -- | Add assumption for predicate.
 ocAssert :: Pos -> String -> SharedTerm s -> OverrideComputation s ()
 ocAssert p nm x = do
+  sc <- (ecContext . ocsEvalContext) <$> get
   case asBool x of
     Just True -> return ()
     Just False -> ocError (FalseAssertion p)
-    _ -> ocModifyResultState $ addAssertion nm x
+    _ -> ocModifyResultStateIO (addAssertion sc x)
 
 -- ocStep {{{2
 
@@ -379,24 +383,22 @@ execBehavior bsl ec ps = do
   -- Get state of current execution path in simulator.
   fmap orParseResults $ forM bsl $ \bs -> do
     let initOCS =
-          OCState { ocsPC = bsPC bs
+          OCState { ocsLoc = bsLoc bs
                   , ocsEvalContext = ec
                   , ocsResultState = ps
                   , ocsReturnValue = Nothing
                   , ocsErrors = []
                   }
     let resCont () = do
-          OCState { ocsPC = pc
+          OCState { ocsLoc = loc
                   , ocsResultState = resPS
                   , ocsReturnValue = v
                   , ocsErrors = l } <- get
-          return $ undefined -- FIXME
-{- TODO: design
+          return $
             if null l then
-              SuccessfulRun resPS (Just pc) v
+              SuccessfulRun resPS (Just loc) v
             else
-              FailedRun resPS (Just pc) l
--}
+              FailedRun resPS (Just loc) l
     flip evalStateT initOCS $ flip runContT resCont $ do
        -- Check that all expressions that reference each other may do so.
        do -- Build map from references to expressions that map to them.
@@ -425,7 +427,8 @@ execBehavior bsl ec ps = do
 checkClassesInitialized :: JSS.MonadSim (SharedContext s) m => Pos -> String -> [String] -> JSS.Simulator (SharedContext s) m ()
 checkClassesInitialized pos nm requiredClasses = do
   forM_ requiredClasses $ \c -> do
-    status <- undefined -- JSS.getInitializationStatus c -- FIXME: JSS
+    mem <- JSS.getMem (PP.text "checkClassesInitialized")
+    let status = Map.lookup c (mem ^. JSS.memInitialization)
     when (status /= Just JSS.Initialized) $
       let msg = "The method spec \'" ++ nm ++ "\' requires that the class "
                   ++ JSS.slashesToDots c ++ " is initialized.  SAWScript does not "
@@ -442,7 +445,7 @@ execOverride :: JSS.MonadSim (SharedContext s) m
 execOverride sc pos ir mbThis args = do
   -- Execute behaviors.
   initPS <- JSS.getPath (PP.text "MethodSpec override")
-  let Just bsl = Map.lookup 0 (specBehaviors ir)
+  let Just bsl = Map.lookup (JSS.BreakPC 0) (specBehaviors ir)
   let method = specMethod ir
       argLocals = map (JSS.localIndexOfParameter method) [0..] `zip` args
   let ec = EvalContext { ecContext = sc
@@ -510,8 +513,8 @@ overrideFromSpec de pos ir
 
 -- | Describes expected result of computation.
 data ExpectedStateDef s = ESD {
-         -- | PC that we started from.
-         esdStartPC :: JSS.PC
+         -- | Location that we started from.
+         esdStartLoc :: JSS.Breakpoint
          -- | Initial path state (used for evaluating expressions in
          -- verification).
        , esdInitialPathState :: SpecPathState s
@@ -584,7 +587,7 @@ esAddEqAssertion :: SharedContext s -> String -> SharedTerm s -> SharedTerm s
                  -> ExpectedStateGenerator s ()
 esAddEqAssertion sc nm x y =
   do prop <- liftIO (scEq sc x y)
-     esModifyInitialPathState (addAssertion nm prop)
+     esModifyInitialPathStateIO (addAssertion sc prop)
 
 -- | Assert that two terms are equal.
 esAssertEq :: String -> SpecJavaValue s -> SpecJavaValue s
@@ -604,7 +607,7 @@ esAssertEq _ _ _ = error "internal: esAssertEq given illegal arguments."
 esSetJavaValue :: TC.JavaExpr -> SpecJavaValue s -> ExpectedStateGenerator s ()
 esSetJavaValue e@(CC.Term exprF) v = do
   case exprF of
-    -- FIXME: the following is ugly, and doesn't make good use of lenses
+    -- TODO: the following is ugly, and doesn't make good use of lenses
     TC.Local _ idx _ -> do
       ps <- esGetInitialPathState
       let ls = case JSS.currentCallFrame ps of
@@ -617,7 +620,7 @@ esSetJavaValue e@(CC.Term exprF) v = do
       case Map.lookup idx ls of
         Just oldValue -> esAssertEq (TC.ppJavaExpr e) oldValue v
         Nothing -> esPutInitialPathState ps'
-    -- FIXME: the following is ugly, and doesn't make good use of lenses
+    -- TODO: the following is ugly, and doesn't make good use of lenses
     TC.InstanceField refExpr f -> do
       -- Lookup refrence associated to refExpr
       Just ref <- Map.lookup refExpr <$> gets esExprRefMap
@@ -644,17 +647,18 @@ esResolveLogicExprs _ (hrhs:rrhs) = do
   -- Return value.
   return t
 
-esSetLogicValues :: [TC.JavaExpr] -> SharedTerm s -> [TC.LogicExpr s]
+esSetLogicValues :: SharedContext s -> [TC.JavaExpr] -> SharedTerm s -> [TC.LogicExpr s]
                  -> ExpectedStateGenerator s ()
-esSetLogicValues cl tp lrhs = do
+esSetLogicValues sc cl tp lrhs = do
   -- Get value of rhs.
   value <- esResolveLogicExprs tp lrhs
   -- Update Initial assignments.
   modify $ \es -> es { esInitialAssignments =
                          map (\e -> (e,value)) cl ++  esInitialAssignments es }
-{- TODO: JSS & SAWCore
+  ty <- liftIO $ scTypeOf sc value
   -- Update value.
-  case termType value of
+  case ty of
+{- TODO: JSS & SAWCore
      SymArray (widthConstant -> Just (Wx l)) _ -> do
        refs <- forM cl $ \expr -> do
                  JSS.RValue ref <- esEval $ evalJavaExpr expr
@@ -668,9 +672,8 @@ esSetLogicValues cl tp lrhs = do
        mapM_ (flip esSetJavaValue (JSS.IValue value)) cl
      SymInt (widthConstant -> Just 64) ->
        mapM_ (flip esSetJavaValue (JSS.LValue value)) cl
-     _ -> error "internal: initializing Java values given bad rhs."
 -}
-  return () -- FIXME
+     _ -> error "internal: initializing Java values given bad rhs."
 
 esStep :: BehaviorCommand s -> ExpectedStateGenerator s ()
 esStep (AssertPred _ expr) = do
@@ -719,9 +722,11 @@ esStep (EnsureArray _pos lhsExpr rhsExpr) = do
   -- Evaluate expressions.
   ref    <- esEval $ evalJavaRefExpr lhsExpr
   value  <- esEval $ evalLogicExpr rhsExpr
-  let l = undefined -- SymArray (widthConstant -> Just (Wx l)) _ = termType value -- FIXME
   -- Get dag engine
   sc <- gets esContext
+  let l = case value of
+            (STApp _ (FTermF (ArrayValue _ vs))) -> fromIntegral (V.length vs)
+            _ -> error "right hand side of array ensure clause isn't an array"
   -- Check if array has already been assigned value.
   aMap <- gets esArrays
   case Map.lookup ref aMap of
@@ -745,51 +750,33 @@ initializeVerification :: JSS.MonadSim (SharedContext s) m =>
                        -> RefEquivConfiguration
                        -> JSS.Simulator (SharedContext s) m (ExpectedStateDef s)
 initializeVerification sc ir bs refConfig = do
-  exprRefs <- undefined -- mapM (JSS.genRef . jssTypeOfActual . snd) refConfig -- FIXME
+  exprRefs <- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig
   let refAssignments = (map fst refConfig `zip` exprRefs)
-  let clName = JSS.className (specThisClass ir)
+      clName = JSS.className (specThisClass ir)
       key = JSS.methodKey (specMethod ir)
-{- TODO: JSS
-      callFrame = JSS.Call { JSS.frmClass = clName
-                           , JSS.frmMethod = specMethod ir
-                           , JSS.frmPC = bsPC bs
-                           , JSS.frmLocals = Map.empty
-                           , JSS.frmOpds = []
-                           }
-  -- Push frame to create appropriate merge frames.
-  JSS.pushFrame callFrame
-  -- Get path state selector.
-  initPSS <- JSS.pathStSel <$> JSS.getPathState
-  -}
-  -- Create initialize path state.
-  let initPS = undefined
-  {- TODO: JSS
-        JSS.PathState {
-            JSS.frames         = [callFrame]
-          , JSS.finalResult    = JSS.Unassigned
-          , JSS.initialization = Map.fromList $
-                                   [ (cl, JSS.Initialized)
-                                   | cl <- specInitializedClasses ir ]
-          , JSS.staticFields   = Map.empty
-          , JSS.instanceFields = Map.empty
-          , JSS.arrays         = Map.empty
-          , JSS.refArrays      = Map.empty
-          , JSS.psAssumptions  = mkCBool True
-          , JSS.psAssertions   = []
-          , JSS.pathStSel      = initPSS
-          , JSS.classObjects   = Map.empty
-          , JSS.startingPC     = bsPC bs
-          , JSS.breakpoints    = Set.fromList $
-              map (\brpc -> (clName, key, brpc)) (Map.keys (specBehaviors ir))
-          , JSS.insnCount      = 0
-          }
--}
-      initESG = ESGState { esContext = sc
+      pushFrame cs = fromMaybe (error "failed to push call frame") mcs'
+        where
+          mcs' = JSS.pushCallFrame clName
+                                   (specMethod ir)
+                                   JSS.entryBlock -- TODO: not the right block
+                                   Map.empty
+                                   cs
+  JSS.modifyCSM_ (return . pushFrame)
+  let updateInitializedClasses m =
+        foldr (flip JSS.setInitializationStatus JSS.Initialized)
+              m
+              (specInitializedClasses ir)
+  JSS.modifyPathM_ (PP.text "initializeVerification") $
+    return . (JSS.pathMemory %~ updateInitializedClasses)
+  forM_ (Map.keys (specBehaviors ir)) $ JSS.addBreakpoint clName key
+  -- TODO: set starting PC
+  ps <- JSS.getPath (PP.text "initializeVerification")
+  let initESG = ESGState { esContext = sc
                          , esMethod = specMethod ir
                          , esExprRefMap = Map.fromList
                              [ (e, r) | (cl,r) <- refAssignments, e <- cl ]
                          , esInitialAssignments = []
-                         , esInitialPathState = initPS
+                         , esInitialPathState = ps
                          , esReturnValue = Nothing
                          , esInstanceFields = Map.empty
                          , esArrays = Map.empty
@@ -803,14 +790,10 @@ initializeVerification sc ir bs refConfig = do
             Nothing ->
               let msg = "Unresolvable cyclic dependencies between assumptions."
                in throwIOExecException (specPos ir) (ftext msg) ""
-            Just assignments -> mapM_ (\(l,t,r) -> esSetLogicValues l t r) assignments
+            Just assignments -> mapM_ (\(l,t,r) -> esSetLogicValues sc l t r) assignments
           -- Process commands
           mapM esStep (bsCommands bs)
-  let ps = esInitialPathState es
-{- TODO: JSS
-  JSS.putPathState ps
-  -}
-  return ESD { esdStartPC = bsPC bs
+  return ESD { esdStartLoc = bsLoc bs
              , esdInitialPathState = esInitialPathState es
              , esdInitialAssignments = reverse (esInitialAssignments es)
              , esdRefExprMap =
@@ -847,10 +830,7 @@ vcName (EqualityCheck nm _ _) = nm
 -- | Returns goal that one needs to prove.
 vcGoal :: SharedContext s -> VerificationCheck s -> IO (SharedTerm s)
 vcGoal _ (AssertionCheck _ n) = return n
--- FIXME: want more polymorphic equality?
-vcGoal sc (EqualityCheck _ x y) = do
-  n <- scNat sc undefined -- FIXME: size of x and y
-  scBvEq sc n x y
+vcGoal sc (EqualityCheck _ x y) = scEq sc x y
 
 type CounterexampleFn s = (SharedTerm s -> IO Value) -> IO Doc
 
@@ -869,8 +849,8 @@ vcCounterexample (EqualityCheck nm jvmNode specNode) evalFn =
 
 -- | Describes the verification result arising from one symbolic execution path.
 data PathVC s = PathVC {
-          pvcStartPC :: JSS.PC
-        , pvcEndPC :: Maybe JSS.PC
+          pvcStartLoc :: JSS.Breakpoint
+        , pvcEndLoc :: Maybe JSS.Breakpoint
         , pvcInitialAssignments :: [(TC.JavaExpr, SharedTerm s)]
           -- | Assumptions on inputs.
         , pvcAssumptions :: SharedTerm s
@@ -902,13 +882,12 @@ generateVC :: MethodSpecIR s
            -> ExpectedStateDef s -- ^ What is expected
            -> RunResult s -- ^ Results of symbolic execution.
            -> PathVC s -- ^ Proof oblications
-generateVC ir esd (Nothing, _, _) = undefined -- TODO
-generateVC ir esd (Just ps, endPC, res) = do
+generateVC ir esd (ps, endLoc, res) = do
   let initState  =
         PathVC { pvcInitialAssignments = esdInitialAssignments esd
-               , pvcStartPC = esdStartPC esd
-               , pvcEndPC = endPC
-               , pvcAssumptions = undefined -- JSS.psAssumptions ps -- FIXME
+               , pvcStartLoc = esdStartLoc esd
+               , pvcEndLoc = endLoc
+               , pvcAssumptions = undefined -- JSS.psAssumptions ps -- TODO
                , pvcStaticErrors = []
                , pvcChecks = []
                }
@@ -970,14 +949,11 @@ generateVC ir esd (Just ps, endPC, res) = do
         -- Check ref arrays
         when (not (Map.null (ps ^. JSS.pathMemory . JSS.memRefArrays))) $ do
           pvcgFail $ ftext "Modifies references arrays."
-{- TODO: JSS
         -- Check assertions
-        forM_ (JSS.psAssertions ps) $ \(nm,n) -> do
-          pvcgAssert nm n
+        pvcgAssert "final assertions" (ps ^. JSS.pathAssertions)
         -- Check class objects
-        forM_ (Map.keys (JSS.classObjects ps)) $ \clNm ->
+        forM_ (Map.keys (ps ^. JSS.pathMemory . JSS.memClassObjects)) $ \clNm ->
           pvcgFail $ ftext $ "Allocated class object for " ++ JSS.slashesToDots clNm ++ "."
--}
 
 -- verifyMethodSpec and friends {{{2
 
@@ -995,7 +971,7 @@ mkSpecVC sc params esd = do
   -- Execute code.
   JSS.run
   returnVal <- JSS.getProgramReturnValue
-  ps <- JSS.getPathMaybe
+  ps <- JSS.getPath (PP.text "mkSpecVC")
   errPaths <- JSS.getProgramErrorPaths
 {-
   finalPathResults <-
@@ -1121,7 +1097,7 @@ runValidation params de esd results = do
                      , vsRules = vpRules params
                      , vsEnabledRules = vpEnabledRules params
                      , vsEnabledOps = vpEnabledOps params
-                     , vsFromPC = esdStartPC esd
+                     , vsFromBlock = esdStartBlock esd
                      , vsEvalContext = evalContextFromPathState de ps
                      , vsInitialAssignments = pvcInitialAssignments pvc
                      , vsCounterexampleFn = cfn
@@ -1136,11 +1112,11 @@ runValidation params de esd results = do
            runVerify vs g cmds
         else do
           let vsName = "an invalid path "
-                         ++ (case esdStartPC esd of
+                         ++ (case esdStartLoc esd of
                                0 -> ""
-                               pc -> " from pc " ++ show pc)
-                         ++ maybe "" (\pc -> " to pc " ++ show pc)
-                                  (pvcEndPC pvc)
+                               block -> " from " ++ show loc)
+                         ++ maybe "" (\loc -> " to " ++ show loc)
+                                  (pvcEndLoc pvc)
           let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
           g <- scImplies sc (pvcAssumptions pvc) (mkCBool False)
           when (verb >= 4) $ do
@@ -1166,7 +1142,7 @@ validateMethodSpec
                 ]
   forM_ configs $ \(bs,cl) -> do
     when (verb >= 3) $
-      putStrLn $ "Executing " ++ specName ir ++ " at PC " ++ show (bsPC bs) ++ "."
+      putStrLn $ "Executing " ++ specName ir ++ " at PC " ++ show (bsLoc bs) ++ "."
     withSymbolicMonadState oc $ \sms -> do
       let de = smsDagEngine sms
       let sbe = symbolicBackend sms
@@ -1184,8 +1160,8 @@ data VerifyState s = VState {
        , vsVerbosity :: Verbosity
        -- , vsRules :: [Rule]
        , vsEnabledRules :: Set String
-         -- | Starting PC is used for checking VerifyAt commands.
-       , vsFromPC :: JSS.PC
+         -- | Starting Block is used for checking VerifyAt commands.
+       , vsFromBlock :: JSS.BlockId
          -- | Evaluation context used for parsing expressions during
          -- verification.
        , vsEvalContext :: EvalContext s
@@ -1219,17 +1195,17 @@ runABC goal = do
       putStrLn $ scPrettyTerm goal
     be <- createBitEngine
     flip finally (beFree be) $ do
-      inputTypes <- undefined -- deInputTypes de -- FIXME
+      inputTypes <- undefined -- deInputTypes de -- TODO
       inputPairs <- V.forM inputTypes $ \tp -> do
         -- Get number of literals.
         lc <- beInputLitCount be
         -- Create input variable.
-        l <- undefined -- let ?be = be in lMkInputLitResult tp -- FIXME
-        let evalFn bits = undefined -- mkInputEval tp $ SV.slice lc (typeBitCount tp) bits -- FIXME
+        l <- let ?be = be in lMkInputLitResult tp
+        let evalFn bits = undefined -- mkInputEval tp $ SV.slice lc (typeBitCount tp) bits -- TODO
         return (l,evalFn)
       let (iLits,inputs) = V.unzip inputPairs
       let inputFn i _ = return (iLits V.! i)
-      lEval <- undefined -- evalDagTermFn inputFn (mkBitBlastTermSemantics be) -- FIXME
+      lEval <- undefined -- evalDagTermFn inputFn (mkBitBlastTermSemantics be) -- TODO
       LV value <- lEval goal
       unless (SV.length value == 1) $
         error "internal: Unexpected number of in verification condition"
@@ -1247,7 +1223,7 @@ runABC goal = do
                         ++ "error in ABC or SAWScript's connection to ABC."
                in throwIOExecException (specPos ir) (ftext msg) ""
             Sat lits -> do
-              evalFn <- undefined -- concreteEvalFn (V.map (\fn -> fn lits) inputs) -- FIXME
+              evalFn <- undefined -- concreteEvalFn (V.map (\fn -> fn lits) inputs) -- TODO
               -- Get doc showing inputs
               let docInput (e,n) =
                     do vn <- evalFn n
@@ -1534,9 +1510,9 @@ applyTactics (VerifyEnable nm :r) g = do
 applyTactics (VerifyDisable nm :r) g = do
   modify (\s -> s { vsEnabledRules = Set.delete nm (vsEnabledRules s) })
   applyTactics r g
-applyTactics (VerifyAt pc cmds :r) g = do
-  fromPC <- gets vsFromPC
-  let newCmds | fromPC == pc = cmds ++ r
+applyTactics (VerifyAt block cmds :r) g = do
+  fromBlock <- gets vsFromBlock
+  let newCmds | fromBlock == block = cmds ++ r
               | otherwise = r
   applyTactics newCmds g
 applyTactics [] g = do
