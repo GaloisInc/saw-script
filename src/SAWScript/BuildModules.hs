@@ -4,6 +4,7 @@
 module SAWScript.BuildModules
   ( buildModules
   , ModuleParts (..)
+  , preludeName
   ) where
 
 import SAWScript.AST
@@ -48,11 +49,12 @@ buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDepe
   $ M.assocs $ modules ms
 
 addPreludeDependency :: ModuleParts UncheckedExpr -> Err (ModuleParts UncheckedExpr)
-addPreludeDependency (ModuleParts mn ee pe te ds)
-  | mn == ModuleName [] "Prelude" = return $ ModuleParts mn ee pe te ds
+addPreludeDependency mparts@(ModuleParts mn ee pe te ds)
+  | mn == preludeName = return mparts
   | otherwise = return $ ModuleParts mn ee pe te $ S.insert preludeName ds
-  where
-  preludeName = ModuleName [] "Prelude"
+
+preludeName :: ModuleName
+preludeName = ModuleName [] "Prelude"
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
