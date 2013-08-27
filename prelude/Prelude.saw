@@ -55,11 +55,10 @@ prim java_double  : JavaType;
 prim java_array   : Int -> JavaType -> JavaType;
 prim java_class   : String -> JavaType;
 
-prim java_var     : String -> JavaType -> JavaSetup JavaObject;
-prim java_field   : JavaObject -> String -> JavaObject;
+prim java_var     : String -> JavaType -> JavaSetup ();
 prim java_value   : {a} JavaObject -> a;
-prim java_may_alias : {n} [n]JavaObject -> JavaSetup ();
-prim java_modify  : JavaObject -> JavaSetup ();
+prim java_may_alias : {n} [n]String -> JavaSetup ();
+prim java_modify  : String -> JavaSetup ();
 prim java_pure    : JavaSetup ();
 
 prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
