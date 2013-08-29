@@ -248,6 +248,14 @@ compareNat Zero y = LeNatOrd Zero y;
 compareNat (Succ x) Zero = GtNatOrd Zero x;
 compareNat (Succ x) (Succ y) = succNatOrdering x y (compareNat x y);
 
+equalNat :: Nat -> Nat -> Bool;
+equalNat Zero Zero = True;
+equalNat Zero (Succ _) = False;
+equalNat (Succ _) Zero = False;
+equalNat (Succ x) (Succ y) = equalNat x y;
+
+-- | Axiom: equalNat implements *the* equality on type Nat.
+eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- There are implicit constructors from integer literals.
 
@@ -265,6 +273,16 @@ finCong _ _ (Refl _ v) = Refl (sort 0) (Fin v);
 
 finSucc :: (n :: Nat) -> Fin n -> Fin (Succ n); 
 finSucc _ (FinVal b r) = FinVal (Succ b) r;
+
+finFst :: (n :: Nat) -> Fin n -> Nat;
+finFst _ (FinVal b _) = b;
+
+finSnd :: (n :: Nat) -> Fin n -> Nat;
+finSnd _ (FinVal _ r) = r;
+
+-- | Axiom: equality on Fin values reduces to equality on first components.
+eq_Fin :: (n :: Nat) -> (i j :: Fin n)
+       -> Eq Bool (eq (Fin n) i j) (equalNat (finFst n i) (finFst n j));
 
 -- | Return maximum finite number less than given bound if any.
 finMax :: (n :: Nat) -> Maybe (Fin n);
@@ -396,7 +414,11 @@ get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n)
                 Eq e (get n e (generate n e f) i) (f i);
 
 set :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e -> Vec n e;
---TODO
+set n e v i x = generate n e (\ (j :: Fin n) -> ite e (eq (Fin n) i j) x (get n e v j));
+
+get_set :: (n :: Nat) -> (e :: sort 0) -> (v :: Vec n e) -> (i j :: Fin n) -> (x :: e)
+        -> Eq e (get n e (set n e v i x) j) (ite e (eq (Fin n) i j) x (get n e v j));
+get_set n e v i j x = get_generate n e (\(j :: Fin n) -> ite e (eq (Fin n) i j) x (get n e v j)) j;
 
 -- | Take a prefix of a vector.
 vMove :: (e :: sort 0)
@@ -650,6 +672,9 @@ bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
 -- | Return true if two bitvectors are equal.
 bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i)); 
+
+-- | Axiom: bvEq implements *the* equality operation on bitvectors.
+eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
 -- | Return true if two bitvectors are not equal.
 bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;

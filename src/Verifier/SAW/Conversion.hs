@@ -531,7 +531,7 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 
 -- | Conversions for operations on Nat literals
 natConversions :: Termlike t => [Conversion t]
-natConversions = [succ_NatLit, addNat_NatLit, mulNat_NatLit]
+natConversions = [succ_NatLit, addNat_NatLit, mulNat_NatLit, equalNat_NatLit]
 
 succ_NatLit :: Termlike t => Conversion t
 succ_NatLit =
@@ -542,6 +542,9 @@ addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Nat -> Nat -> Nat)
 
 mulNat_NatLit :: Termlike t => Conversion t
 mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
+
+equalNat_NatLit :: Termlike t => Conversion t
+equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
 
 -- | Conversions for operations on Fin literals
 finConversions :: Termlike t => [Conversion t]
