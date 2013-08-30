@@ -15,13 +15,13 @@ import SAWScript.AST (ModuleName(ModuleName),
                       Module(..), ValidModule,
                       Expr(Block),
                       BlockStmt,
-                      ResolvedT,
+                      RawT,
                       Name)
 
 wrapBStmt :: Map ModuleName ValidModule
              -> Name
-             -> BlockStmt refT ResolvedT
-             -> Module refT ResolvedT ResolvedT
+             -> BlockStmt refT RawT
+             -> Module refT RawT typeT
 wrapBStmt modsInScope stmtName stmt =
   (scratchpad modsInScope) {
     {- The expression environment simply maps @it@ to the statement. Statements
