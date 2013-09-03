@@ -5,11 +5,11 @@ abstract Theorem;
 
 abstract JavaType;
 abstract JavaObject;
-abstract VerifiedJava;
+abstract JavaMethodSpec;
 
 abstract LLVMType;
 abstract LLVMObject;
-abstract VerifiedLLVM;
+abstract LLVMMethodSpec;
 
 prim return : { m , a } a -> m a;
 prim seq : {a, b} ProofScript a -> ProofScript b -> ProofScript b; //temporary
@@ -66,7 +66,7 @@ prim java_pure    : JavaSetup ();
 
 prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
 prim java_verify  : {a} String -> String -> JavaSetup ()
-                 -> TopLevel VerifiedJava;
+                 -> TopLevel JavaMethodSpec;
 
 prim llvm_int     : Int -> LLVMType;
 prim llvm_float   : LLVMType;
@@ -77,7 +77,7 @@ prim llvm_pure    : LLVMSetup ();
 
 prim llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
 prim llvm_verify  : {a} String -> String -> LLVMSetup ()
-                 -> TopLevel VerifiedLLVM;
+                 -> TopLevel LLVMMethodSpec;
 
 prim eq : {a} a -> a -> Bit;
 

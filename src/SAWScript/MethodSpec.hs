@@ -218,8 +218,9 @@ evalJavaExprAsLogic expr ec = do
 
 -- | Evaluates a typed expression.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
-evalLogicExpr initExpr ec = eval initExpr
+evalLogicExpr initExpr ec = undefined -- eval initExpr
   where sc = ecContext ec
+        {-
         eval (TC.Apply op exprs) = undefined -- TODO
           -- (liftIO . deApplyOp de op) =<< V.mapM eval (V.fromList exprs)
         eval (TC.Cns c tp) = undefined -- TODO
@@ -232,6 +233,7 @@ evalLogicExpr initExpr ec = eval initExpr
           error "internal: evalLogicExpr called with var"
         eval (TC.JavaValue expr _ _) = undefined -- TODO
           evalJavaExprAsLogic expr ec
+        -}
 
 -- | Return Java value associated with mixed expression.
 evalMixedExpr :: TC.MixedExpr s -> EvalContext s
@@ -446,7 +448,7 @@ execOverride :: JSS.MonadSim (SharedContext s) m
 execOverride sc pos ir mbThis args = do
   -- Execute behaviors.
   initPS <- JSS.getPath (PP.text "MethodSpec override")
-  let Just bsl = Map.lookup (JSS.BreakPC 0) (specBehaviors ir)
+  let bsl = specBehaviors ir -- Map.lookup (JSS.BreakPC 0) (specBehaviors ir) -- TODO
   let method = specMethod ir
       argLocals = map (JSS.localIndexOfParameter method) [0..] `zip` args
   let ec = EvalContext { ecContext = sc
@@ -459,7 +461,7 @@ execOverride sc pos ir mbThis args = do
   -- Check class initialization.
   checkClassesInitialized pos (specName ir) (specInitializedClasses ir)
   -- Execute behavior.
-  res <- liftIO . execBehavior bsl ec =<< JSS.getPath (PP.text "MethodSpec behavior")
+  res <- liftIO . execBehavior [bsl] ec =<< JSS.getPath (PP.text "MethodSpec behavior")
   when (null res) $ error "internal: execBehavior returned empty result list."
   -- Create function for generation resume actions.
   {- TODO: JSS
@@ -769,7 +771,8 @@ initializeVerification sc ir bs refConfig = do
               (specInitializedClasses ir)
   JSS.modifyPathM_ (PP.text "initializeVerification") $
     return . (JSS.pathMemory %~ updateInitializedClasses)
-  forM_ (Map.keys (specBehaviors ir)) $ JSS.addBreakpoint clName key
+  -- TODO: add breakpoints once local specs exist
+  --forM_ (Map.keys (specBehaviors ir)) $ JSS.addBreakpoint clName key
   -- TODO: set starting PC
   ps <- JSS.getPath (PP.text "initializeVerification")
   let initESG = ESGState { esContext = sc

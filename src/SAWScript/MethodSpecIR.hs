@@ -21,6 +21,9 @@ module SAWScript.MethodSpecIR
   , specInitializedClasses
   , specBehaviors
   , specValidationPlan
+  , specAddBehaviorCommand
+  , specAddVarDecl
+  , specAddAliasSet
   , resolveMethodSpecIR
     -- * Method behavior.
   , BehaviorSpec
@@ -237,14 +240,17 @@ bsPrimitiveExprs bs =
   [ e | (e, PrimitiveType _) <- Map.toList (bsActualTypeMap bs) ]
  
 bsLogicEqs :: BehaviorSpec s -> [(JavaExpr, JavaExpr)]
-bsLogicEqs bs = [ (lhs,rhs) | (_,lhs,JavaValue rhs _ _) <- bsLogicAssignments bs ]
+bsLogicEqs bs = undefined -- FIXME -- [ (lhs,rhs) | (_,lhs,JavaValue rhs _ _) <- bsLogicAssignments bs ]
 
 -- | Returns logic assignments to equivance class.
 bsAssignmentsForClass :: BehaviorSpec s -> JavaExprEquivClass -> [LogicExpr s]
 bsAssignmentsForClass bs cl = res 
   where s = Set.fromList cl
+        isJavaExpr = undefined -- FIXME
+        {-
         isJavaExpr (JavaValue _ _ _) = True
         isJavaExpr _ = False
+        -}
         res = [ rhs 
               | (_,lhs,rhs) <- bsLogicAssignments bs
               , Set.member lhs s
@@ -521,6 +527,10 @@ addCommand :: BehaviorCommand s -> BehaviorTypechecker s ()
 addCommand bc = modifyPaths $ \bs ->
   bs { bsReversedCommands = bc : bsReversedCommands bs }
 
+bsAddCommand :: BehaviorCommand s -> BehaviorSpec s -> BehaviorSpec s
+bsAddCommand bc bs =
+  bs { bsReversedCommands = bc : bsReversedCommands bs }
+
 -- | Make sure expr can be assigned a postcondition.
 checkValuePostconditionTarget :: Pos -> JavaExpr -> BehaviorTypechecker s ()
 checkValuePostconditionTarget pos (CC.Term expr) = do
@@ -538,9 +548,9 @@ recordLogicAssertion pos lhs rhs =
 -- resolveDecl {{{1
 
 -- | Code for parsing a method spec declaration.
-resolveDecl :: [BehaviorDecl s] -> BehaviorTypechecker s ()
-resolveDecl [] = return ()
 {-
+resolveDecl :: [BehaviorDecl (SharedTerm s)] -> BehaviorTypechecker s ()
+resolveDecl [] = return ()
 resolveDecl (VarDecl _ exprAstList typeAst:r) = do
   -- Get actual type.
   at <- runTypechecker $ tcActualType typeAst
@@ -763,9 +773,10 @@ mayAliases l s = foldr splitClass (Set.singleton s) l
 
 -- resolveBehaviorSpecs {{{1
 
+{-
 resolveBehaviorSpecs :: MethodTypecheckContext s
                      -> JSS.Breakpoint
-                     -> [BehaviorDecl s]
+                     -> [BehaviorDecl (SharedTerm s)]
                      -> IO (BehaviorTypecheckState s)
 resolveBehaviorSpecs mtc loc cmds = do
   let method = mtcMethod mtc
@@ -790,9 +801,9 @@ resolveBehaviorSpecs mtc loc cmds = do
                     , btsPaths = [initPath]
                     , btsReturnSet = False
                     }
-  bts <- flip runReaderT mtc $
+  bts <- undefined {- flip runReaderT mtc $
            flip execStateT initBts $ do
-             resolveDecl cmds
+             resolveDecl cmds -}
   -- Check expressions that may alias to verify they have equivalent types.
   mapM_ (bsCheckAliasTypes (mtcPos mtc)) (btsPaths bts)
   if loc == JSS.BreakEntry then
@@ -808,6 +819,7 @@ resolveBehaviorSpecs mtc loc cmds = do
      in throwIOExecException (mtcPos mtc) (ftext msg) ""
   -- Return paths parsed from this spec.
   return bts
+-}
 
 -- resolveValidationPlan {{{1
 
@@ -945,7 +957,7 @@ data MethodSpecIR s = MSIR {
   , specInitializedClasses :: [String]
     -- | Behavior specifications for method at different PC values.
     -- A list is used because the behavior may depend on the inputs.
-  , specBehaviors :: Map JSS.Breakpoint [BehaviorSpec s]
+  , specBehaviors :: BehaviorSpec s -- Map JSS.Breakpoint [BehaviorSpec s]
     -- | Describes how the method is expected to be validatioed.
   , specValidationPlan :: ValidationPlan
   } deriving (Show)
@@ -957,6 +969,19 @@ specName ir =
      mName = JSS.methodName (specMethod ir)
   in JSS.slashesToDots clName ++ ('.' : mName)
 
+specAddVarDecl :: String -> SharedTerm s
+               -> MethodSpecIR s -> MethodSpecIR s
+specAddVarDecl name ty = id -- TODO
+
+specAddAliasSet :: [String] -> MethodSpecIR s -> MethodSpecIR s
+specAddAliasSet names = id -- TODO
+
+specAddBehaviorCommand :: BehaviorCommand s
+                       -> MethodSpecIR s -> MethodSpecIR s
+specAddBehaviorCommand bc ms =
+  ms { specBehaviors = bsAddCommand bc (specBehaviors ms) }
+
+
 -- | Interprets AST method spec commands to construct an intermediate
 -- representation that
 resolveMethodSpecIR :: GlobalBindings s
@@ -964,7 +989,7 @@ resolveMethodSpecIR :: GlobalBindings s
                     -> Pos
                     -> JSS.Class
                     -> String
-                    -> [BehaviorDecl s]
+                    -> [BehaviorSpec s]
                     -> IO (MethodSpecIR s)
 resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
   let cb = codeBase gb
@@ -978,7 +1003,7 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
   -- Get list of initial superclasses.
   superClasses <- JSS.supers cb thisClass
   -- Resolve behavior spec for PC 0.
-  methodBehavior <- resolveBehaviorSpecs mtc JSS.BreakEntry cmds
+  methodBehavior <- undefined -- resolveBehaviorSpecs mtc JSS.BreakEntry cmds -- FIXME
   --  Resolve behavior specs at other PCs.
   -- FIXME: not yet implemented
   {-
@@ -998,6 +1023,6 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
               , specMethodClass = methodClass
               , specMethod = method
               , specInitializedClasses = map JSS.className superClasses
-              , specBehaviors = Map.map btsPaths allBehaviors
+              , specBehaviors = methodBehavior -- Map.map btsPaths allBehaviors
               , specValidationPlan = plan
               }
