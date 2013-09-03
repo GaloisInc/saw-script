@@ -17,6 +17,7 @@ library
     , directory
     , fgl
     , filepath
+    , haskeline
     , jvm-parser
     , jvm-verifier
     , lens
@@ -55,9 +56,11 @@ library
     SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
+    SAWScript.ProcessFile
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.TIMonad
+    SAWScript.REPL
     SAWScript.Token
     SAWScript.MGU
     SAWScript.Unify

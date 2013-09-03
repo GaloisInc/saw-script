@@ -3,6 +3,6 @@ main = do {
   (ffs_imp : [32] -> [32]) <- llvm_extract "ffs.bc" "ffs_imp" llvm_pure;
 
   let thm1 x = ffs_ref x == ffs_imp x;
-  ffs_res <- prove abc thm1;
-  print ffs_res;
+  prove abc thm1;
+  print "Done.";
 };
