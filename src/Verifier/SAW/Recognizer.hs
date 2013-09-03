@@ -25,6 +25,7 @@ module Verifier.SAW.Recognizer
   , asDataType
   , isDataType
   , asNatLit
+  , asStringLit
   , asLambda
   , asLambdaList
   , asPi
@@ -147,6 +148,9 @@ isDataType i p t = do
 
 asNatLit :: (Monad f, Termlike t) => Recognizer f t Nat
 asNatLit t = do NatLit i <- asFTermF t; return (fromInteger i)
+
+asStringLit :: (Monad f, Termlike t) => Recognizer f t String
+asStringLit t = do StringLit i <- asFTermF t; return i
 
 asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
 asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
