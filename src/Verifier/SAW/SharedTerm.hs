@@ -112,6 +112,8 @@ import Data.Foldable hiding (sum, elem)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IORef (IORef)
 
 import Data.Map (Map)
@@ -149,6 +151,34 @@ instance Ord (SharedTerm s) where
 
 instance Termlike (SharedTerm s) where
   unwrapTermF (STApp _ tf) = tf
+
+------------------------------------------------------------
+-- TermFMaps
+
+data TermFMap s a
+  = TermFMap
+  { appMapTFM :: !(IntMap (IntMap a))
+  , hashMapTFM :: !(HashMap (TermF (SharedTerm s)) a)
+  }
+
+emptyTFM :: TermFMap s a
+emptyTFM = TermFMap IntMap.empty HMap.empty
+
+lookupTFM :: TermF (SharedTerm s) -> TermFMap s a -> Maybe a
+lookupTFM tf tfm =
+  case tf of
+    FTermF (App (STApp i _) (STApp j _)) ->
+      IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
+    _ -> HMap.lookup tf (hashMapTFM tfm)
+
+insertTFM :: TermF (SharedTerm s) -> a -> TermFMap s a -> TermFMap s a
+insertTFM tf x tfm =
+  case tf of
+    FTermF (App (STApp i _) (STApp j _)) ->
+      let f Nothing = Just (IntMap.singleton j x)
+          f (Just m) = Just (IntMap.insert j x m)
+      in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
+    _ -> tfm { hashMapTFM = HMap.insert tf x (hashMapTFM tfm) }
 
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building SharedTerms.
@@ -201,14 +231,14 @@ scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
 
 -- SharedContext implementation.
 
-data AppCache s = AC { acBindings :: !(HashMap (TermF (SharedTerm s)) (SharedTerm s))
+data AppCache s = AC { acBindings :: !(TermFMap s (SharedTerm s))
                      , acNextIdx :: !TermIndex
                      }
 
 type AppCacheRef s = MVar (AppCache s)
 
 emptyAppCache :: AppCache s
-emptyAppCache = AC HMap.empty 0
+emptyAppCache = AC emptyTFM 0
 
 instance Show (TermF (SharedTerm s)) where
   show FTermF{} = "termF fTermF"
@@ -218,12 +248,12 @@ instance Show (TermF (SharedTerm s)) where
 getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
   modifyMVar r $ \s -> do
-    case HMap.lookup a (acBindings s) of
+    case lookupTFM a (acBindings s) of
       Just t -> return (s,t)
       Nothing -> do
           seq s' $ return (s',t)
         where t = STApp (acNextIdx s) a
-              s' = s { acBindings = HMap.insert a t (acBindings s)
+              s' = s { acBindings = insertTFM a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
 
