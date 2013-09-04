@@ -138,7 +138,7 @@ import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 type TermIndex = Int -- Word64
 
 data SharedTerm s
-  = STApp !TermIndex !(TermF (SharedTerm s))
+  = STApp {-# UNPACK #-} !TermIndex !(TermF (SharedTerm s))
 
 instance Hashable (SharedTerm s) where
     hashWithSalt x (STApp idx _) = hashWithSalt x idx
