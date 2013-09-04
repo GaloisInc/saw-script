@@ -167,14 +167,14 @@ emptyTFM = TermFMap IntMap.empty HMap.empty
 lookupTFM :: TermF (SharedTerm s) -> TermFMap s a -> Maybe a
 lookupTFM tf tfm =
   case tf of
-    FTermF (App (STApp i _) (STApp j _)) ->
+    App (STApp i _) (STApp j _) ->
       IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
     _ -> HMap.lookup tf (hashMapTFM tfm)
 
 insertTFM :: TermF (SharedTerm s) -> a -> TermFMap s a -> TermFMap s a
 insertTFM tf x tfm =
   case tf of
-    FTermF (App (STApp i _) (STApp j _)) ->
+    App (STApp i _) (STApp j _) ->
       let f Nothing = Just (IntMap.singleton j x)
           f (Just m) = Just (IntMap.insert j x m)
       in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
@@ -208,7 +208,7 @@ scConstant :: SharedContext s -> Ident -> SharedTerm s -> IO (SharedTerm s)
 scConstant sc ident t = scTermF sc (Constant ident t)
 
 scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scApply sc f = scFlatTermF sc . App f
+scApply sc f = scTermF sc . App f
 
 data SharedTermExt s
    = SharedTermApp (TermF (SharedTermExt s))
@@ -304,6 +304,9 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
     termf tf =
       case tf of
         FTermF ftf -> ftermf ftf
+        App x y -> do
+          tx <- memo x
+          lift $ reducePi sc tx y
         Lambda (PVar i _ _) tp rhs -> do
           rtp <- memo rhs
           lift $ scTermF sc (Pi i tp rtp)
@@ -320,9 +323,6 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ scTypeOfGlobal sc d
-        App x y -> do
-          tx <- memo x
-          lift $ reducePi sc tx y
         TupleValue l -> lift . scTupleType sc =<< traverse memo l
         TupleType l -> lift . scSort sc . maximum =<< traverse sort l
         TupleSelector t i -> do
@@ -402,6 +402,7 @@ scWriteExternal t0 =
     writeTermF :: TermF Int -> String
     writeTermF tf =
       case tf of
+        App e1 e2    -> unwords ["App", show e1, show e2]
         Lambda p t e -> unwords ["Lam", writePat p, show t, show e]
         Pi s t e     -> unwords ["Pi", s, show t, show e]
         Let ds e     -> unwords ["Def", writeDefs ds, show e]
@@ -410,7 +411,6 @@ scWriteExternal t0 =
         FTermF ftf   ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
-            App e1 e2          -> unwords ["App", show e1, show e2]
             TupleValue es      -> unwords ("Tuple" : map show es)
             TupleType es       -> unwords ("TupleT" : map show es)
             TupleSelector e i  -> unwords ["TupleSel", show e, show i]
@@ -450,13 +450,13 @@ scReadExternal sc input =
     parse :: [String] -> TermF Int
     parse tokens =
       case tokens of
+        ["App", e1, e2]     -> App (read e1) (read e2)
         ["Lam", x, t, e]    -> Lambda (PVar x 0 (read t)) (read t) (read e)
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i, e]       -> LocalVar (read i) (read e)
         ["Constant", x, e]  -> Constant (parseIdent x) (read e)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
-        ["App", e1, e2]     -> FTermF (App (read e1) (read e2))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
         ("TupleT" : es)     -> FTermF (TupleType (map read es))
         ["TupleSel", e, i]  -> FTermF (TupleSelector (read e) (read i))
@@ -508,6 +508,7 @@ instantiateVars sc f initialLevel t0 =
     go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
     go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
+    go' l (App x y)         = scTermF sc <$> (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
     go' l (Pi i lhs rhs)    = scTermF sc <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
     go' l (Let defs r) = scTermF sc <$> (Let <$> changeList procDef defs <*> go l' r)
