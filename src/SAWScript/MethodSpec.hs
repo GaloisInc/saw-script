@@ -12,12 +12,12 @@ module SAWScript.MethodSpec
   , specMethod
   , specName
   , specMethodClass
-  --, specValidationPlan
+  , specValidationPlan
   --, resolveMethodSpecIR
   , SymbolicRunHandler
   --, writeBlif
-  --, runValidation
-  --, validateMethodSpec
+  , runValidation
+  , validateMethodSpec
   , VerifyParams(..)
   ) where
 
@@ -1002,6 +1002,7 @@ mkSpecVC sc params esd = do
 
 data VerifyParams s = VerifyParams
   { vpCode    :: JSS.Codebase
+  , vpContext :: SharedContext s
   , vpOpts    :: Options
   , vpSpec    :: MethodSpecIR s
   , vpOver    :: [MethodSpecIR s]
@@ -1080,18 +1081,19 @@ writeBlif path compressed de _ results = do
         void $ Blif.addModel "all" iTypes SymBool $ \inputs ->
           Blif.mkNegation <$> joinModels models inputs
   putStrLn $ "Written to " ++ show nm ++ "."
+-}
 
-runValidation :: VerifyParams -> SymbolicRunHandler
-runValidation params de esd results = do
+runValidation :: VerifyParams s -> SymbolicRunHandler s
+runValidation params sc esd results = do
   let ir = vpSpec params
-  let verb = verbose (vpOpts params)
-  let ps = esdInitialPathState esd
+      verb = undefined -- verbose (vpOpts params) -- TODO
+      ps = esdInitialPathState esd
   case specValidationPlan ir of
     Skip -> error "internal: Unexpected call to runValidation with Skip"
     GenBlif _ -> error "internal: Unexpected call to runValidation with GenBlif"
     QuickCheck n lim -> do
       forM_ results $ \pvc -> do
-        testRandom de verb ir (fromInteger n) (fromInteger <$> lim) pvc
+        testRandom sc verb ir (fromInteger n) (fromInteger <$> lim) pvc
     RunVerify cmds -> do
       forM_ results $ \pvc -> do
         let mkVState nm cfn =
@@ -1100,9 +1102,9 @@ runValidation params de esd results = do
                      , vsVerbosity = verb
                      , vsRules = vpRules params
                      , vsEnabledRules = vpEnabledRules params
-                     , vsEnabledOps = vpEnabledOps params
-                     , vsFromBlock = esdStartBlock esd
-                     , vsEvalContext = evalContextFromPathState de ps
+                     -- , vsEnabledOps = vpEnabledOps params
+                     -- , vsFromBlock = esdStartLoc esd
+                     , vsEvalContext = evalContextFromPathState sc ps
                      , vsInitialAssignments = pvcInitialAssignments pvc
                      , vsCounterexampleFn = cfn
                      , vsStaticErrors = pvcStaticErrors pvc
@@ -1110,43 +1112,49 @@ runValidation params de esd results = do
         if null (pvcStaticErrors pvc) then
          forM_ (pvcChecks pvc) $ \vc -> do
            let vs = mkVState (vcName vc) (vcCounterexample vc)
-           g <- scImplies sc (pvcAssumptions pvc) =<< vcGoal de vc
+           g <- scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
            when (verb >= 4) $ do
              putStrLn $ "Checking " ++ vcName vc
            runVerify vs g cmds
         else do
           let vsName = "an invalid path "
+{-
                          ++ (case esdStartLoc esd of
                                0 -> ""
                                block -> " from " ++ show loc)
                          ++ maybe "" (\loc -> " to " ++ show loc)
                                   (pvcEndLoc pvc)
+-}
           let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
-          g <- scImplies sc (pvcAssumptions pvc) (mkCBool False)
+          false <- scBool sc False
+          g <- scImplies sc (pvcAssumptions pvc) false
           when (verb >= 4) $ do
             putStrLn $ "Checking " ++ vsName
             print $ pvcStaticErrors pvc
-            putStrLn $ "Calling runVerify to disprove " ++ prettyTerm (pvcAssumptions pvc)
+            putStrLn $ "Calling runVerify to disprove " ++
+                     scPrettyTerm (pvcAssumptions pvc)
           runVerify vs g cmds
 
 
 -- | Attempt to verify method spec using verification method specified.
-validateMethodSpec :: VerifyParams -> SymbolicRunHandler -> IO ()
+validateMethodSpec :: VerifyParams s -> SymbolicRunHandler s -> IO ()
 validateMethodSpec
     params@VerifyParams { vpCode = cb
-                        , vpOpCache = oc
                         , vpSpec = ir
                         } 
     handler = do
-  let verb = verbose (vpOpts params)
+  let verb = undefined -- verbose (vpOpts params) -- TODO
   when (verb >= 2) $ putStrLn $ "Starting verification of " ++ specName ir
   let configs = [ (bs, cl)
-                | bs <- concat $ Map.elems $ specBehaviors ir
+                | bs <- {- concat $ Map.elems $ -} [specBehaviors ir]
                 , cl <- bsRefEquivClasses bs
                 ]
   forM_ configs $ \(bs,cl) -> do
-    when (verb >= 3) $
+    when (verb >= 3) $ do
       putStrLn $ "Executing " ++ specName ir ++ " at PC " ++ show (bsLoc bs) ++ "."
+      putStrLn "*** Temporarily disabled ***"
+    -- TODO
+    {-
     withSymbolicMonadState oc $ \sms -> do
       let de = smsDagEngine sms
       let sbe = symbolicBackend sms
@@ -1156,16 +1164,16 @@ validateMethodSpec
         -- Generate VC
         res <- mkSpecVC de params esd
         liftIO $ handler de esd res      
--}
+    -}
 
 data VerifyState s = VState {
          vsVCName :: String
        , vsMethodSpec :: MethodSpecIR s
        , vsVerbosity :: Verbosity
-       -- , vsRules :: [Rule]
+       , vsRules :: [Rule]
        , vsEnabledRules :: Set String
          -- | Starting Block is used for checking VerifyAt commands.
-       , vsFromBlock :: JSS.BlockId
+       -- , vsFromBlock :: JSS.BlockId
          -- | Evaluation context used for parsing expressions during
          -- verification.
        , vsEvalContext :: EvalContext s
@@ -1179,8 +1187,8 @@ vsSharedContext = ecContext . vsEvalContext
 
 type VerifyExecutor s = StateT (VerifyState s) IO
 
---runVerify :: VerifyState s -> SharedTerm s -> [VerifyCommand s] -> IO ()
---runVerify vs g cmds = evalStateT (applyTactics cmds g) vs
+runVerify :: VerifyState s -> SharedTerm s -> [VerifyCommand] -> IO ()
+runVerify vs g cmds = return () -- evalStateT (applyTactics cmds g) vs -- TODO
 
 -- runABC {{{2
 
@@ -1247,10 +1255,10 @@ runABC goal = do
 
 type Verbosity = Int
 
+testRandom :: SharedContext s -> Verbosity
+           -> MethodSpecIR s -> Int -> Maybe Int -> PathVC s -> IO ()
+testRandom de v ir test_num lim pvc = return () -- TODO
 {-
-testRandom :: DagEngine -> Verbosity
-           -> MethodSpecIR -> Int -> Maybe Int -> PathVC -> IO ()
-testRandom de v ir test_num lim pvc =
     do when (v >= 3) $
          putStrLn $ "Generating random tests: " ++ specName ir
        (passed,run) <- loop 0 0

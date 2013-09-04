@@ -24,6 +24,7 @@ module SAWScript.MethodSpecIR
   , specAddBehaviorCommand
   , specAddVarDecl
   , specAddAliasSet
+  , initMethodSpec
   , resolveMethodSpecIR
     -- * Method behavior.
   , BehaviorSpec
@@ -31,7 +32,7 @@ module SAWScript.MethodSpecIR
   , bsRefExprs
   , bsMayAliasSet
   , RefEquivConfiguration
-  -- , bsRefEquivClasses
+  , bsRefEquivClasses
   , bsLogicAssignments
   , bsLogicClasses
   , BehaviorCommand(..)
@@ -59,6 +60,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import Text.PrettyPrint.Leijen
+import qualified Language.JVM.Common as JP
 
 import Verinf.Symbolic
 
@@ -393,9 +395,9 @@ throwInvalidAssignment pos lhs tp =
   let msg = lhs ++ " cannot be assigned a value with type " ++ tp ++ "."
    in throwIOExecException pos (ftext msg) ""
 
-checkLogicExprIsPred :: MonadIO m => Pos -> LogicExpr s -> m ()
-checkLogicExprIsPred pos expr = undefined -- FIXME
 {-
+checkLogicExprIsPred :: MonadIO m => Pos -> LogicExpr s -> m ()
+checkLogicExprIsPred pos sc expr =
   case typeOfLogicExpr expr of
     SymBool -> return ()
     _ -> let msg = "Expression does not denote a predicate."
@@ -769,6 +771,40 @@ splitClass (h:l) sets = splitClass l (sets `Set.union` newSets)
 mayAliases :: (CC.OrdFoldable f, CC.Traversable f)
            => [[CC.Term f]] -> CCSet f -> Set (CCSet f)
 mayAliases l s = foldr splitClass (Set.singleton s) l
+
+
+initMethodSpec :: Pos -> JSS.Codebase -> String -> String
+               -> IO (MethodSpecIR s)
+initMethodSpec pos cb cname mname = do
+  let cname' = JP.dotsToSlashes cname -- TODO: necessary?
+  thisClass <- lookupClass cb pos cname'
+  (methodClass,method) <- findMethod cb pos mname thisClass
+  superClasses <- JSS.supers cb thisClass
+  let this = thisJavaExpr methodClass
+      initTypeMap | JSS.methodIsStatic method = Map.empty
+                  | otherwise = Map.singleton this (ClassInstance methodClass)
+      initBS = BS { bsLoc = JSS.BreakEntry
+                  , bsActualTypeMap = initTypeMap
+                  , bsMustAliasSet =
+                      if JSS.methodIsStatic method then
+                        CC.empty
+                      else
+                        CC.insertTerm this CC.empty
+                  , bsMayAliasClasses = []
+                  , bsLogicAssignments = []
+                  , bsReversedCommands = []
+                  }
+      initMS = MSIR { specPos = pos
+                    , specThisClass = thisClass
+                    , specMethodClass = methodClass
+                    , specMethod = method
+                    , specInitializedClasses =
+                        map JSS.className superClasses
+                    , specBehaviors = initBS
+                    , specValidationPlan = Skip
+                    }
+  return initMS
+
 
 
 -- resolveBehaviorSpecs {{{1
