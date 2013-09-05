@@ -133,6 +133,7 @@ type TCLocalDef = LocalDefGen TCTerm [TCDefEqn]
 
 data TCTerm
   = TCF !(FlatTermF TCTerm)
+  | TCApp !TCTerm !TCTerm
   | TCLambda !TCPat !TCTerm !TCTerm
   | TCPi !TCPat !TCTerm !TCTerm
   | TCLet [TCLocalDef] TCTerm
@@ -162,11 +163,11 @@ data PatF p
 tcMkApp :: TCTerm -> [TCTerm] -> TCTerm
 tcMkApp = go
   where go t [] = t
-        go t (a:l) = go (TCF (App t a)) l
+        go t (a:l) = go (TCApp t a) l
 
 tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
 tcAsApp = go []
-  where go r (TCF (App f v)) = go (v:r) f
+  where go r (TCApp f v) = go (v:r) f
         go r f = (f,r)
 
 -- | A pi type that accepted a statically-determined number of arguments.
@@ -289,6 +290,7 @@ incTCVars :: Int -> Int -> TCTerm -> TCTerm
 incTCVars j = go
   where pfn = fmapTCPat go
         go i (TCF tf) = TCF (go i <$> tf)
+        go i (TCApp x y) = TCApp (go i x) (go i y)
         go i (TCLambda p tp r) = TCLambda (pfn i p) (go i tp) r'
           where r' = go (i+tcPatVarCount p) r
         go i (TCPi p tp r) = TCPi (pfn i p) (go i tp) r'
@@ -326,6 +328,7 @@ tcApplyImpl :: Int -> Vector TCTerm -> Int -> TCTerm -> TCTerm
 tcApplyImpl vd v = go
   where fd = V.length v
         go i (TCF tf) = TCF (go i <$> tf)
+        go i (TCApp x y) = TCApp (go i x) (go i y)
         go i (TCLambda p tp r) = TCLambda (fmapTCPat go i p) (go i tp) r'
           where r' = go (i + tcPatVarCount p) r
         go i (TCPi p tp r) = TCPi (fmapTCPat go i p) (go i tp) r'
@@ -606,6 +609,8 @@ ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
   runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
+ppTCTermGen d pr (TCApp x y) = ppAppParens pr $
+  ppTCTermGen d PrecApp x <+> ppTCTermGen d PrecArg y
 ppTCTermGen d pr (TCLambda p l r) = ppParens (pr > PrecNone) $
   char '\\' <> parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecLambda l)
             <+> text "->"
@@ -669,6 +674,9 @@ checkTCTerm :: Int -> TCTerm -> Maybe ()
 checkTCTerm c t0 =
   case t0 of
     TCF tf -> traverseOf_ folded (checkTCTerm c) tf
+    TCApp x y -> do
+      checkTCTerm c x
+      checkTCTerm c y
     TCLambda p tp r -> do
       checkTCTerm c tp
       c' <- checkTCPatOf c id p

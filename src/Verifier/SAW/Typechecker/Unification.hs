@@ -15,7 +15,7 @@ module Verifier.SAW.Typechecker.Unification
   ) where
 
 import Control.Applicative
-import Control.Arrow
+import Control.Arrow hiding ((<+>))
 import Control.Lens
 import Control.Monad (ap, unless, zipWithM, zipWithM_)
 import Control.Monad.Error (ErrorT(..), throwError)
@@ -97,6 +97,7 @@ data UVarState s
   | UTF (FlatTermF (VarIndex s))
     -- A variable bound outside the context of the unification problem with name and type
     -- relative to when before unification began.
+  | UApp (VarIndex s) (VarIndex s)
   | UOuterVar String Int
 
   | UOuterLet String Int -- DeBruijnIndex in outer context.
@@ -120,6 +121,7 @@ ppUTerm vs0 = evalStateT (go PrecNone vs0) Set.empty
         go pr (UHolTerm (tc,t) bindings) = ppParens (pr > PrecApp) .
           hsep . (ppTCTerm tc PrecApp t :) <$> traverse (goVar PrecArg) bindings
         go pr (UTF tf) = ppFlatTermF goVar pr tf
+        go pr (UApp l r) = ppParens (pr > PrecApp) <$> liftA2 (<+>) (goVar PrecApp l) (goVar PrecArg r)
         go _ (UOuterVar nm _) = pure $ text $ "outerv" ++ nm
         go _ (UOuterLet nm _) = pure $ text $ "outerl" ++ nm
 
@@ -195,7 +197,9 @@ usetEqual vx vy = do
       | otherwise -> unFail p (text "Ununifiable rigid vars")
     (UTF ufx, UTF ufy)
       | Just ufz <- zipWithFlatTermF usetEqual ufx ufy -> sequenceOf_ folded ufz
-
+    (UApp ufx1 ufx2, UApp ufy1 ufy2) -> do
+      usetEqual ufx1 ufy1
+      usetEqual ufx2 ufy2
     (UFreeType{}, _) -> lift $ liftST $ writeSTRef (viRef vx) (UVar vy)
     (_, UFreeType{}) -> lift $ liftST $ writeSTRef (viRef vy) (UVar vx)
     -- We only merge unused with counterparts that are not free types.
@@ -302,6 +306,7 @@ mkUnifyTerm :: UnifyLocalCtx s
 mkUnifyTerm l t =
     case t of
       TCF tf -> mkTermVar . UTF =<< traverse (mkUnifyTerm l) tf
+      TCApp x y -> mkTermVar =<< (UApp <$> mkUnifyTerm l x <*> mkUnifyTerm l y)
       TCLambda{} -> holTerm
       TCPi{} -> holTerm
       TCLet{} -> holTerm
@@ -542,6 +547,13 @@ resolveUTerm' v = do
       let finish p@(tc,_) = (tc, tcApply baseTC f p)
       finish <$> traverseResolveUTerm (V.fromList c)
     UTF utf -> second TCF <$> traverseResolveUTerm utf
+    UApp l r -> do
+      x <- resolveUTerm l
+      y <- resolveUTerm r
+      tc <- use urContext
+      let Just a = applyExtSafe tc x
+      let Just b = applyExtSafe tc y
+      return (tc, TCApp a b)
     UOuterVar _ i -> do
       tc <- gets urOuterContext
       return (tc, TCVar i)

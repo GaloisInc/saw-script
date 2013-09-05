@@ -386,8 +386,6 @@ type VarIndex = Word64
 data FlatTermF e
   = GlobalDef !Ident  -- ^ Global variables are referenced by label.
 
-  | App !e !e
-
     -- Tuples may be 0 or 2+ elements.
     -- A tuple of a single element is not allowed in well-formed expressions.
   | TupleValue [e]
@@ -441,7 +439,6 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
-        go (App fx vx) (App fy vy) = Just $ App (f fx fy) (f vx vy)
 
         go (TupleValue lx) (TupleValue ly)
           | length lx == length ly = Just $ TupleValue (zipWith f lx ly)
@@ -470,6 +467,7 @@ zipWithFlatTermF f = go
 
 data TermF e
     = FTermF !(FlatTermF e)  -- ^ Global variables are referenced by label.
+    | App !e !e
     | Lambda !(Pat e) !e !e
     | Pi !String !e !e
        -- | List of bindings and the let expression itself.
@@ -566,7 +564,6 @@ ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
-    App l r -> ppAppParens prec <$> liftA2 (<+>) (pp PrecApp l) (pp PrecArg r)
     TupleValue l ->                 ppTuple <$> traverse (pp PrecNone) l
     TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp PrecNone) l
     TupleSelector t i -> ppParens (prec > PrecArg)
@@ -632,6 +629,7 @@ freesTermF :: TermF BitSet -> BitSet
 freesTermF tf =
     case tf of
       FTermF ftf -> bitwiseOrOf folded ftf
+      App l r -> l .|. r
       Lambda pat tp rhs ->
         freesPat pat .|. tp .|. rhs `shiftR` patBoundVarCount pat
       Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
@@ -660,7 +658,6 @@ instantiateVars f initialLevel = go initialLevel
 
         gof l ftf =
           case ftf of
-            App x y -> App (go l x) (go l y)
             TupleValue ll -> TupleValue $ go l <$> ll
             TupleType ll  -> TupleType $ go l <$> ll
             RecordValue m -> RecordValue $ go l <$> m
@@ -673,6 +670,7 @@ instantiateVars f initialLevel = go initialLevel
         go l (Term tf) =
           case tf of
             FTermF ftf ->  Term $ FTermF $ gof l ftf
+            App x y         -> Term $ App (go l x) (go l y)
             Constant _ _rhs -> Term tf -- assume rhs is a closed term, so leave it unchanged
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
             Pi i lhs rhs    -> Term $ Pi i (go l lhs) (go (l+1) rhs)
@@ -736,6 +734,8 @@ ppTermF' :: Applicative f
          -> TermF e
          -> f Doc
 ppTermF' pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
+ppTermF' pp lcls p (App l r) =
+    ppAppParens p <$> liftA2 (<+>) (pp lcls PrecApp l) (pp lcls PrecArg r)
 ppTermF' pp lcls p (Lambda pat tp rhs) =
     ppLam
       <$> ppPat (pp lcls') PrecLambda pat

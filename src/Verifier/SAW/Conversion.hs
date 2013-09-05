@@ -116,10 +116,10 @@ termToPat :: Termlike t => t -> Net.Pat
 termToPat t =
     case unwrapTermF t of
       Constant d _              -> Net.Atom (identName d)
+      App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
       FTermF (NatLit n)         -> Net.Atom (show n)
-      FTermF (App t1 t2)        -> Net.App (termToPat t1) (termToPat t2)
       FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
       FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
       _                         -> Net.Var
@@ -211,7 +211,7 @@ infixl 8 <:>
       => Matcher m t a -> Matcher m t b -> Matcher m t (a :*: b)
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
     where
-      match (unwrapTermF -> FTermF (App t1 t2)) = liftM2 (:*:) (f1 t1) (f2 t2)
+      match (unwrapTermF -> App t1 t2) = liftM2 (:*:) (f1 t1) (f2 t2)
       match _ = fail "internal: <:> net failed"
 
 -- | Match an application and return second term.
@@ -399,12 +399,12 @@ mkApp :: TermBuilder t t -> TermBuilder t t -> TermBuilder t t
 mkApp mx my = do
   x <- mx
   y <- my
-  mkTermF (FTermF (App x y))
+  mkTermF (App x y)
 
 pureApp :: TermBuilder t t -> t -> TermBuilder t t
 pureApp mx y = do
   x <- mx
-  mkTermF (FTermF (App x y))
+  mkTermF (App x y)
 
 mkTuple :: [TermBuilder t t] -> TermBuilder t t
 mkTuple l = mkTermF . FTermF . TupleValue =<< sequence l

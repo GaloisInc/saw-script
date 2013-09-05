@@ -245,7 +245,7 @@ inferTerm tc uut = do
               (pat,patTp,tp) <- reduceToPiExpr tc (pos uf) tp0
               (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
               let tc1 = extendPatContext tc pat
-              return $ TypedValue (TCF (App v a)) (tcApply tc (tc1,tp) (tc, args))
+              return $ TypedValue (TCApp v a) (tcApply tc (tc1,tp) (tc, args))
     Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
     Un.Pi _ upats0 utp _ rhs -> do
       (tp0,tps) <- tcType tc utp
@@ -444,6 +444,7 @@ completePat cc0 pat = over _1 runIdentity $ completePatT cc0 (Identity pat)
 -- | Returns the type of a unification term in the current context.
 completeTerm :: CompletionContext -> TCTerm -> Term
 completeTerm cc (TCF tf) = Term $ FTermF $ fmap (completeTerm cc) tf
+completeTerm cc (TCApp l r) = Term $ App (completeTerm cc l) (completeTerm cc r)
 completeTerm cc (TCLambda pat tp r) =
     Term $ Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
   where (pat', cc') = completePat cc pat
@@ -585,6 +586,7 @@ liftTCTerm :: TermContext s -> Term -> TC s TCTerm
 liftTCTerm tc (Term tf) =
   case tf of
     FTermF ftf -> TCF <$> traverse (liftTCTerm tc) ftf
+    App l r -> TCApp <$> liftTCTerm tc l <*> liftTCTerm tc r
     Lambda pat tp rhs -> do
        (Identity pat',tc') <- liftTCPatT tc (Identity pat)
        TCLambda pat' <$> liftTCTerm tc tp <*> liftTCTerm tc' rhs

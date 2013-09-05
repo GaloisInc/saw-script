@@ -96,7 +96,8 @@ isGlobalDef i t = do
   if i == o then return () else fail ("not " ++ show i)
 
 asApp :: (Monad f, Termlike t) => Recognizer f t (t, t)
-asApp t = do App x y <- asFTermF t; return (x,y)
+asApp (unwrapTermF -> App x y) = return (x, y)
+asApp _ = fail "not app"
 
 (<@>) :: (Monad f, Termlike t)
       => Recognizer f t a -> Recognizer f t b -> Recognizer f t (a :*: b)

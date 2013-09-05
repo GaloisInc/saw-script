@@ -95,6 +95,8 @@ first_order_match pat term = match pat term Map.empty
               Nothing -> Just m'
               Just y' -> if y == y' then Just m' else Nothing
             where (my', m') = insertLookup i y m
+        (App x1 x2, App y1 y2) ->
+            match x1 y1 m >>= match x2 y2
         (FTermF xf, FTermF yf) ->
             do zf <- zipWithFlatTermF match xf yf
                Foldable.foldl (>=>) Just zf m
@@ -153,7 +155,7 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
     nUnused = sum $ fmap patUnusedVarCount pats
     n = nBound + nUnused
     mkTermApp :: Term -> Term -> Term
-    mkTermApp f x = Term (FTermF (App f x))
+    mkTermApp f x = Term (App f x)
 
     termOfPat :: Pat Term -> State (Int, Map Int Term) Term
     termOfPat pat =
@@ -366,13 +368,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
     rewriteTermF tf =
         case tf of
           FTermF ftf -> FTermF <$> rewriteFTermF ftf
-          Lambda pat t e -> Lambda pat t <$> rewriteAll e
-          Constant{}     -> return tf
-          _ -> return tf -- traverse rewriteAll tf
-    rewriteFTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
-                     FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
-    rewriteFTermF ftf =
-        case ftf of
           App e1 e2 ->
               do t1 <- scTypeOf sc e1
                  case unwrapTermF t1 of
@@ -380,6 +375,13 @@ rewriteSharedTermTypeSafe sc ss t0 =
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
                    Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
+          Lambda pat t e -> Lambda pat t <$> rewriteAll e
+          Constant{}     -> return tf
+          _ -> return tf -- traverse rewriteAll tf
+    rewriteFTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
+                     FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
+    rewriteFTermF ftf =
+        case ftf of
           TupleValue{}     -> traverse rewriteAll ftf
           TupleType{}      -> return ftf -- doesn't matter
           TupleSelector{}  -> traverse rewriteAll ftf
