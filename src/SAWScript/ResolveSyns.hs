@@ -20,11 +20,6 @@ resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds) ->
   evalRS te $
     Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds
 
-resolveBlockStmtSyns :: RSEnv
-                        -> Compiler (BlockStmt UnresolvedName RawT)
-                                    (BlockStmt UnresolvedName ResolvedT)
-resolveBlockStmtSyns env = evalRS env . traverse resolve
-
 type RS = ReaderT RSEnv Err
 type RSEnv = Env RawT
 
