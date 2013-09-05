@@ -30,7 +30,7 @@ library
     , pretty-show
     , saw-core
     , smtLib
---    , split
+    , split
     , template-haskell
     , transformers
     , vector

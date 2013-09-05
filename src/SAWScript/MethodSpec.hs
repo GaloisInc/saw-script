@@ -753,7 +753,7 @@ initializeVerification :: JSS.MonadSim (SharedContext s) m =>
                        -> RefEquivConfiguration
                        -> JSS.Simulator (SharedContext s) m (ExpectedStateDef s)
 initializeVerification sc ir bs refConfig = do
-  exprRefs <- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig
+  exprRefs <- undefined -- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig -- TODO
   let refAssignments = (map fst refConfig `zip` exprRefs)
       clName = JSS.className (specThisClass ir)
       key = JSS.methodKey (specMethod ir)

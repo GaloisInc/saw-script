@@ -65,7 +65,7 @@ prim java_modify  : String -> JavaSetup ();
 prim java_pure    : JavaSetup ();
 
 prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
-prim java_verify  : {a} String -> String -> JavaSetup ()
+prim java_verify  : String -> String -> JavaSetup ()
                  -> TopLevel JavaMethodSpec;
 
 prim llvm_int     : Int -> LLVMType;
@@ -76,7 +76,7 @@ prim llvm_array   : Int -> LLVMType -> LLVMType;
 prim llvm_pure    : LLVMSetup ();
 
 prim llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
-prim llvm_verify  : {a} String -> String -> LLVMSetup ()
+prim llvm_verify  : String -> String -> LLVMSetup ()
                  -> TopLevel LLVMMethodSpec;
 
 prim eq : {a} a -> a -> Bit;

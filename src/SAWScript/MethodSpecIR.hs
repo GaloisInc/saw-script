@@ -115,7 +115,7 @@ typecheckPC pos _ (PC pc) = do
 -- ExprActualTypeMap {{{1
 
 -- | Maps Java expressions for references to actual type.
-type ExprActualTypeMap = Map JavaExpr JavaActualType
+type ExprActualTypeMap = Map JavaExpr JSS.Type
 
 -- Alias definitions {{{1
 
@@ -224,7 +224,7 @@ bsCheckAliasTypes pos bs = mapM_ checkClass (CC.toList (bsMayAliasSet bs))
                   res = "All references that may alias must be assigned the same type."
               throwIOExecException pos (ftext msg) res
 
-type RefEquivConfiguration = [(JavaExprEquivClass, JavaActualType)]
+type RefEquivConfiguration = [(JavaExprEquivClass, JSS.Type)]
 
 -- | Returns all possible potential equivalence classes for spec.
 bsRefEquivClasses :: BehaviorSpec s -> [RefEquivConfiguration]
@@ -239,7 +239,7 @@ bsRefEquivClasses bs =
 
 bsPrimitiveExprs :: BehaviorSpec s -> [JavaExpr]
 bsPrimitiveExprs bs =
-  [ e | (e, PrimitiveType _) <- Map.toList (bsActualTypeMap bs) ]
+  [ e | (e, ty) <- Map.toList (bsActualTypeMap bs), JSS.isPrimitiveType ty ]
  
 bsLogicEqs :: BehaviorSpec s -> [(JavaExpr, JavaExpr)]
 bsLogicEqs bs = undefined -- FIXME -- [ (lhs,rhs) | (_,lhs,JavaValue rhs _ _) <- bsLogicAssignments bs ]
@@ -336,7 +336,7 @@ checkActualTypeUndefined pos expr = do
        in throwIOExecException pos (ftext msg) ""
 
 -- | Records that the given expression is bound to the actual type.
-recordActualType :: Pos -> JavaExpr -> JavaActualType -> BehaviorTypechecker s ()
+recordActualType :: Pos -> JavaExpr -> JSS.Type -> BehaviorTypechecker s ()
 recordActualType pos expr at = do
   -- Record actual type undefined or unchanged.
   bts <- get
@@ -360,7 +360,7 @@ recordActualType pos expr at = do
           , btsPaths = newPaths }
 
 -- | Returns actual type of Java expression.
-getActualType :: Pos -> JavaExpr -> BehaviorTypechecker s JavaActualType
+getActualType :: Pos -> JavaExpr -> BehaviorTypechecker s JSS.Type
 getActualType pos expr = do
   typeMap <- gets btsActualTypeMap
   case Map.lookup expr typeMap of
@@ -422,7 +422,7 @@ runTypechecker typeChecker = do
 -- | Check that a type declaration has been provided for this expression.
 typecheckRecordedJavaExpr :: (Expr -> TCConfig -> IO JavaExpr)
                           -> Expr
-                          -> BehaviorTypechecker (JavaExpr, JavaActualType)
+                          -> BehaviorTypechecker (JavaExpr, JSS.Type)
 typecheckRecordedJavaExpr typeChecker astExpr = do
   let pos = exprPos astExpr
   expr <- runTypechecker $ typeChecker astExpr
@@ -498,7 +498,7 @@ typecheckLogicExpr lhsPos lhsName lhsType rhsAst =
     =<< runTypechecker (tcLogicExpr rhsAst)
 
 typecheckMixedExpr :: Pos -> String -> JSS.Type -> Expr
-                   -> BehaviorTypechecker (MixedExpr, JavaActualType)
+                   -> BehaviorTypechecker (MixedExpr, JSS.Type)
 typecheckMixedExpr lhsPos lhsName lhsType rhsAst =
   if JSS.isRefType lhsType then do
     rhsExpr <- runTypechecker (tcJavaExpr rhsAst)
@@ -782,7 +782,7 @@ initMethodSpec pos cb cname mname = do
   superClasses <- JSS.supers cb thisClass
   let this = thisJavaExpr methodClass
       initTypeMap | JSS.methodIsStatic method = Map.empty
-                  | otherwise = Map.singleton this (ClassInstance methodClass)
+                  | otherwise = Map.singleton this (JSS.ClassType (JSS.className methodClass))
       initBS = BS { bsLoc = JSS.BreakEntry
                   , bsActualTypeMap = initTypeMap
                   , bsMustAliasSet =
@@ -1007,10 +1007,18 @@ specName ir =
 
 specAddVarDecl :: String -> SharedTerm s
                -> MethodSpecIR s -> MethodSpecIR s
-specAddVarDecl name ty = id -- TODO
+specAddVarDecl name ty ms = ms { specBehaviors = bs' }
+  where bs = specBehaviors ms
+        bs' = bs { bsActualTypeMap =
+                     Map.insert expr jt (bsActualTypeMap bs) }
+        expr = parseJavaExpr name
+        jt = exportJavaType ty
 
 specAddAliasSet :: [String] -> MethodSpecIR s -> MethodSpecIR s
-specAddAliasSet names = id -- TODO
+specAddAliasSet names ms = ms { specBehaviors = bs' }
+  where exprs = map parseJavaExpr names
+        bs = specBehaviors ms
+        bs' = bs { bsMayAliasClasses = exprs : bsMayAliasClasses bs }
 
 specAddBehaviorCommand :: BehaviorCommand s
                        -> MethodSpecIR s -> MethodSpecIR s
