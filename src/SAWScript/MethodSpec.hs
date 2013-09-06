@@ -66,6 +66,7 @@ import Verinf.Utils.LogMonad
 import Verifier.SAW.Evaluator
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -84,7 +85,7 @@ findM check (x:xs)  = do ok <- check x
 -- Verinf Utilities {{{1
 
 scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scEq sc x y = undefined -- scApply?? sc x y -- TODO: want more polymorphic equality?
+scEq sc x y = error "scEq" -- scApply?? sc x y -- TODO: want more polymorphic equality?
 
 scImplies :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scImplies sc x y = do
@@ -218,7 +219,7 @@ evalJavaExprAsLogic expr ec = do
 
 -- | Evaluates a typed expression.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
-evalLogicExpr initExpr ec = undefined -- eval initExpr
+evalLogicExpr initExpr ec = error "evalLogicExpr" -- eval initExpr -- TODO
   where sc = ecContext ec
         {-
         eval (TC.Apply op exprs) = undefined -- TODO
@@ -650,7 +651,8 @@ esResolveLogicExprs _ (hrhs:rrhs) = do
   -- Return value.
   return t
 
-esSetLogicValues :: SharedContext s -> [TC.JavaExpr] -> SharedTerm s -> [TC.LogicExpr s]
+esSetLogicValues :: SharedContext s -> [TC.JavaExpr] -> SharedTerm s
+                 -> [TC.LogicExpr s]
                  -> ExpectedStateGenerator s ()
 esSetLogicValues sc cl tp lrhs = do
   -- Get value of rhs.
@@ -661,8 +663,8 @@ esSetLogicValues sc cl tp lrhs = do
   ty <- liftIO $ scTypeOf sc value
   -- Update value.
   case ty of
-{- TODO: JSS & SAWCore
-     SymArray (widthConstant -> Just (Wx l)) _ -> do
+    -- (isVecType -> Just (l, _)) -> undefined
+{-
        refs <- forM cl $ \expr -> do
                  JSS.RValue ref <- esEval $ evalJavaExpr expr
                  return ref
@@ -671,12 +673,12 @@ esSetLogicValues sc cl tp lrhs = do
        esModifyInitialPathState $ \ps -> ps {
            JSS.arrays = foldr insertValue (JSS.arrays ps) refs
          }
-     SymInt (widthConstant -> Just 32) ->
-       mapM_ (flip esSetJavaValue (JSS.IValue value)) cl
-     SymInt (widthConstant -> Just 64) ->
-       mapM_ (flip esSetJavaValue (JSS.LValue value)) cl
 -}
-     _ -> error "internal: initializing Java values given bad rhs."
+    (asBitvectorType -> Just 32) ->
+       mapM_ (flip esSetJavaValue (JSS.IValue value)) cl
+    (asBitvectorType -> Just 64) ->
+       mapM_ (flip esSetJavaValue (JSS.LValue value)) cl
+    _ -> error "internal: initializing Java values given bad rhs."
 
 esStep :: BehaviorCommand s -> ExpectedStateGenerator s ()
 esStep (AssertPred _ expr) = do
@@ -753,7 +755,7 @@ initializeVerification :: JSS.MonadSim (SharedContext s) m =>
                        -> RefEquivConfiguration
                        -> JSS.Simulator (SharedContext s) m (ExpectedStateDef s)
 initializeVerification sc ir bs refConfig = do
-  exprRefs <- undefined -- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig -- TODO
+  exprRefs <- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig
   let refAssignments = (map fst refConfig `zip` exprRefs)
       clName = JSS.className (specThisClass ir)
       key = JSS.methodKey (specMethod ir)
@@ -790,7 +792,8 @@ initializeVerification sc ir bs refConfig = do
           forM_ refAssignments $ \(cl,r) ->
             forM_ cl $ \e -> esSetJavaValue e (JSS.RValue r)
           -- Set initial logic values.
-          case bsLogicClasses bs refConfig of
+          lcs <- liftIO $ bsLogicClasses sc bs refConfig
+          case lcs of
             Nothing ->
               let msg = "Unresolvable cyclic dependencies between assumptions."
                in throwIOExecException (specPos ir) (ftext msg) ""
@@ -891,7 +894,7 @@ generateVC ir esd (ps, endLoc, res) = do
         PathVC { pvcInitialAssignments = esdInitialAssignments esd
                , pvcStartLoc = esdStartLoc esd
                , pvcEndLoc = endLoc
-               , pvcAssumptions = undefined -- JSS.psAssumptions ps -- TODO
+               , pvcAssumptions = error "pvcAssumptions" -- JSS.psAssumptions ps -- TODO
                , pvcStaticErrors = []
                , pvcChecks = []
                }
@@ -1151,20 +1154,18 @@ validateMethodSpec
                 ]
   forM_ configs $ \(bs,cl) -> do
     when (verb >= 3) $ do
-      putStrLn $ "Executing " ++ specName ir ++ " at PC " ++ show (bsLoc bs) ++ "."
-      putStrLn "*** Temporarily disabled ***"
-    -- TODO
-    {-
-    withSymbolicMonadState oc $ \sms -> do
-      let de = smsDagEngine sms
-      let sbe = symbolicBackend sms
-      JSS.runDefSimulator sbe cb $ do
-        -- Create initial Java state and expected state definition.
-        esd <- initializeVerification de ir bs cl
-        -- Generate VC
-        res <- mkSpecVC de params esd
-        liftIO $ handler de esd res      
-    -}
+      putStrLn $ "Executing " ++ specName ir ++
+                 " at PC " ++ show (bsLoc bs) ++ "."
+    sc0 <- mkSharedContext preludeModule
+    ss <- basic_ss sc0
+    let jsc = rewritingSharedContext sc0 ss
+    be <- createBitEngine
+    backend <- sawBackend jsc be
+    JSS.runDefSimulator cb backend $ do
+      esd <- initializeVerification jsc ir bs cl
+      res <- mkSpecVC jsc params esd
+      liftIO $ handler jsc esd res
+    beFree be
 
 data VerifyState s = VState {
          vsVCName :: String
@@ -1192,6 +1193,7 @@ runVerify vs g cmds = return () -- evalStateT (applyTactics cmds g) vs -- TODO
 
 -- runABC {{{2
 
+{-
 runABC :: SharedTerm s -> VerifyExecutor s ()
 runABC goal = do
   sc <- gets vsSharedContext
@@ -1250,6 +1252,7 @@ runABC goal = do
                         nest 2 (vcat inputDocs) <$$>
                          ftext ("Counterexample:") <$$> nest 2 val
               throwIOExecException (specPos ir) msg ""
+-}
 
 -- testRandom {{{2
 

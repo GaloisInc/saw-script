@@ -10,6 +10,7 @@ Point-of-contact : jhendrix, atomb
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module SAWScript.MethodSpecIR 
   ( -- * MethodSpec record
     MethodSpecIR
@@ -55,11 +56,11 @@ import Data.Graph.Inductive (scc, Gr, mkGraph)
 import Data.List (intercalate, sort)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Text.PrettyPrint.Leijen
+import Text.PrettyPrint.Leijen hiding ((<$>))
 import qualified Language.JVM.Common as JP
 
 import Verinf.Symbolic
@@ -115,7 +116,7 @@ typecheckPC pos _ (PC pc) = do
 -- ExprActualTypeMap {{{1
 
 -- | Maps Java expressions for references to actual type.
-type ExprActualTypeMap = Map JavaExpr JSS.Type
+type ExprActualTypeMap = Map JavaExpr JavaActualType
 
 -- Alias definitions {{{1
 
@@ -224,7 +225,7 @@ bsCheckAliasTypes pos bs = mapM_ checkClass (CC.toList (bsMayAliasSet bs))
                   res = "All references that may alias must be assigned the same type."
               throwIOExecException pos (ftext msg) res
 
-type RefEquivConfiguration = [(JavaExprEquivClass, JSS.Type)]
+type RefEquivConfiguration = [(JavaExprEquivClass, JavaActualType)]
 
 -- | Returns all possible potential equivalence classes for spec.
 bsRefEquivClasses :: BehaviorSpec s -> [RefEquivConfiguration]
@@ -239,16 +240,20 @@ bsRefEquivClasses bs =
 
 bsPrimitiveExprs :: BehaviorSpec s -> [JavaExpr]
 bsPrimitiveExprs bs =
-  [ e | (e, ty) <- Map.toList (bsActualTypeMap bs), JSS.isPrimitiveType ty ]
+  [ e | (e, PrimitiveType _) <- Map.toList (bsActualTypeMap bs) ]
  
 bsLogicEqs :: BehaviorSpec s -> [(JavaExpr, JavaExpr)]
-bsLogicEqs bs = undefined -- FIXME -- [ (lhs,rhs) | (_,lhs,JavaValue rhs _ _) <- bsLogicAssignments bs ]
+bsLogicEqs bs = []
+  -- FIXME!
+  {-
+  [ (lhs,rhs') | (_,lhs,rhs) <- bsLogicAssignments bs
+               , let Just rhs' = asJavaExpr rhs] -}
 
 -- | Returns logic assignments to equivance class.
 bsAssignmentsForClass :: BehaviorSpec s -> JavaExprEquivClass -> [LogicExpr s]
 bsAssignmentsForClass bs cl = res 
   where s = Set.fromList cl
-        isJavaExpr = undefined -- FIXME
+        isJavaExpr _ = False -- error "isJavaExpr" -- FIXME
         {-
         isJavaExpr (JavaValue _ _ _) = True
         isJavaExpr _ = False
@@ -259,39 +264,43 @@ bsAssignmentsForClass bs cl = res
               , not (isJavaExpr rhs) ]
 
 -- | Retuns ordering of Java expressions to corresponding logic value.
-bsLogicClasses :: BehaviorSpec s
+bsLogicClasses :: forall s.
+                  SharedContext s
+               -> BehaviorSpec s
                -> RefEquivConfiguration
-               -> Maybe [(JavaExprEquivClass, SharedTerm s, [LogicExpr s])]
-bsLogicClasses bs rec
-    | all (\l -> length l == 1) components =
-       Just [ (cl, at, bsAssignmentsForClass bs cl)
-            | [n] <- components
-            , let (cl,at) = v V.! n ]
-    | otherwise = Nothing
-  where allClasses
-          = CC.toList
-            -- Add logic equations.
-          $ flip (foldr (uncurry CC.insertEquation)) (bsLogicEqs bs)
-            -- Add primitive expression.
-          $ flip (foldr CC.insertTerm) (bsPrimitiveExprs bs)
-            -- Create initial set with references.
-          $ CC.fromList (map fst rec)
-        logicClasses = 
-          [ (cl,tp) | cl@(e:_) <- allClasses
-                                 , let Just at = Map.lookup e (bsActualTypeMap bs)
-                                 , Just tp <- [logicTypeOfActual at]
-                                 ]
-        v = V.fromList logicClasses
-        -- Create nodes.
-        grNodes = [0..] `zip` logicClasses
-        -- Create edges
-        exprNodeMap = Map.fromList [ (e,n) | (n,(cl,_)) <- grNodes, e <- cl ]
-        grEdges = [ (s,t,()) | (t,(cl,_)) <- grNodes
-                             , src:_ <- [bsAssignmentsForClass bs cl]
-                             , se <- Set.toList (logicExprJavaExprs src)
-                             , let Just s = Map.lookup se exprNodeMap ]
-        -- Compute strongly connected components.
-        components = scc (mkGraph grNodes grEdges :: Gr (JavaExprEquivClass, SharedTerm s) ())
+               -> IO (Maybe [(JavaExprEquivClass, SharedTerm s, [LogicExpr s])])
+bsLogicClasses sc bs cfg = do
+  let allClasses = CC.toList
+                   -- Add logic equations.
+                   $ flip (foldr (uncurry CC.insertEquation)) (bsLogicEqs bs)
+                   -- Add primitive expression.
+                   $ flip (foldr CC.insertTerm) (bsPrimitiveExprs bs)
+                   -- Create initial set with references.
+                   $ CC.fromList (map fst cfg)
+  logicClasses <- (catMaybes <$>) $
+                  forM allClasses $ \(cl@(e:_)) -> do
+                    case Map.lookup e (bsActualTypeMap bs) of
+                      Just at -> do
+                        mtp <- logicTypeOfActual sc at
+                        case mtp of
+                          Just tp -> return (Just (cl, tp))
+                          Nothing -> return Nothing
+  let v = V.fromList logicClasses
+      -- Create nodes.
+      grNodes = [0..] `zip` logicClasses
+      -- Create edges
+      exprNodeMap = Map.fromList [ (e,n) | (n,(cl,_)) <- grNodes, e <- cl ]
+      grEdges = [ (s,t,()) | (t,(cl,_)) <- grNodes
+                           , src:_ <- [bsAssignmentsForClass bs cl]
+                           , se <- Set.toList (logicExprJavaExprs src)
+                           , let Just s = Map.lookup se exprNodeMap ]
+      -- Compute strongly connected components.
+      components = scc (mkGraph grNodes grEdges :: Gr (JavaExprEquivClass, SharedTerm s) ())
+  return $ if all (\l -> length l == 1) components
+             then Just [ (cl, at, bsAssignmentsForClass bs cl)
+                       | [n] <- components
+                       , let (cl,at) = v V.! n ]
+             else Nothing
 
 -- BehaviorTypechecker {{{1
 
@@ -336,7 +345,8 @@ checkActualTypeUndefined pos expr = do
        in throwIOExecException pos (ftext msg) ""
 
 -- | Records that the given expression is bound to the actual type.
-recordActualType :: Pos -> JavaExpr -> JSS.Type -> BehaviorTypechecker s ()
+recordActualType :: Pos -> JavaExpr -> JavaActualType
+                 -> BehaviorTypechecker s ()
 recordActualType pos expr at = do
   -- Record actual type undefined or unchanged.
   bts <- get
@@ -360,7 +370,7 @@ recordActualType pos expr at = do
           , btsPaths = newPaths }
 
 -- | Returns actual type of Java expression.
-getActualType :: Pos -> JavaExpr -> BehaviorTypechecker s JSS.Type
+getActualType :: Pos -> JavaExpr -> BehaviorTypechecker s JavaActualType
 getActualType pos expr = do
   typeMap <- gets btsActualTypeMap
   case Map.lookup expr typeMap of
@@ -782,7 +792,7 @@ initMethodSpec pos cb cname mname = do
   superClasses <- JSS.supers cb thisClass
   let this = thisJavaExpr methodClass
       initTypeMap | JSS.methodIsStatic method = Map.empty
-                  | otherwise = Map.singleton this (JSS.ClassType (JSS.className methodClass))
+                  | otherwise = Map.singleton this (ClassInstance methodClass)
       initBS = BS { bsLoc = JSS.BreakEntry
                   , bsActualTypeMap = initTypeMap
                   , bsMustAliasSet =
@@ -1005,7 +1015,7 @@ specName ir =
      mName = JSS.methodName (specMethod ir)
   in JSS.slashesToDots clName ++ ('.' : mName)
 
-specAddVarDecl :: JavaExpr -> JSS.Type
+specAddVarDecl :: JavaExpr -> JavaActualType
                -> MethodSpecIR s -> MethodSpecIR s
 specAddVarDecl expr jt ms = ms { specBehaviors = bs' }
   where bs = specBehaviors ms
