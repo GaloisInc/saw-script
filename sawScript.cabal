@@ -73,6 +73,7 @@ library
     SAWScript.Unify.Ops
     SAWScript.Unify.Unification
     SAWScript.Utils
+    SAWScript.Value
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 

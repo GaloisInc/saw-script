@@ -1005,19 +1005,16 @@ specName ir =
      mName = JSS.methodName (specMethod ir)
   in JSS.slashesToDots clName ++ ('.' : mName)
 
-specAddVarDecl :: String -> SharedTerm s
+specAddVarDecl :: JavaExpr -> JSS.Type
                -> MethodSpecIR s -> MethodSpecIR s
-specAddVarDecl name ty ms = ms { specBehaviors = bs' }
+specAddVarDecl expr jt ms = ms { specBehaviors = bs' }
   where bs = specBehaviors ms
         bs' = bs { bsActualTypeMap =
                      Map.insert expr jt (bsActualTypeMap bs) }
-        expr = parseJavaExpr name
-        jt = exportJavaType ty
 
-specAddAliasSet :: [String] -> MethodSpecIR s -> MethodSpecIR s
-specAddAliasSet names ms = ms { specBehaviors = bs' }
-  where exprs = map parseJavaExpr names
-        bs = specBehaviors ms
+specAddAliasSet :: [JavaExpr] -> MethodSpecIR s -> MethodSpecIR s
+specAddAliasSet exprs ms = ms { specBehaviors = bs' }
+  where bs = specBehaviors ms
         bs' = bs { bsMayAliasClasses = exprs : bsMayAliasClasses bs }
 
 specAddBehaviorCommand :: BehaviorCommand s

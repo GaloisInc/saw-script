@@ -4,11 +4,9 @@ abstract Simpset;
 abstract Theorem;
 
 abstract JavaType;
-abstract JavaObject;
 abstract JavaMethodSpec;
 
 abstract LLVMType;
-abstract LLVMObject;
 abstract LLVMMethodSpec;
 
 prim return : { m , a } a -> m a;
@@ -59,7 +57,8 @@ prim java_array   : Int -> JavaType -> JavaType;
 prim java_class   : String -> JavaType;
 
 prim java_var     : String -> JavaType -> JavaSetup ();
-prim java_value   : {a} JavaObject -> a;
+prim java_value   : {a} String -> a;
+prim java_return  : {a} a -> JavaSetup ();
 prim java_may_alias : {n} [n]String -> JavaSetup ();
 prim java_modify  : String -> JavaSetup ();
 prim java_pure    : JavaSetup ();
@@ -86,3 +85,4 @@ prim conj : Bit -> Bit -> Bit;
 prim disj : Bit -> Bit -> Bit;
 
 prim complement : {n} [n] -> [n];
+prim add : {n} [n] -> [n] -> [n];
