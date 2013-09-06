@@ -1086,7 +1086,7 @@ writeBlif path compressed de _ results = do
 runValidation :: VerifyParams s -> SymbolicRunHandler s
 runValidation params sc esd results = do
   let ir = vpSpec params
-      verb = undefined -- verbose (vpOpts params) -- TODO
+      verb = 4 -- verbose (vpOpts params) -- TODO
       ps = esdInitialPathState esd
   case specValidationPlan ir of
     Skip -> error "internal: Unexpected call to runValidation with Skip"
@@ -1143,7 +1143,7 @@ validateMethodSpec
                         , vpSpec = ir
                         } 
     handler = do
-  let verb = undefined -- verbose (vpOpts params) -- TODO
+  let verb = 4 -- verbose (vpOpts params) -- TODO
   when (verb >= 2) $ putStrLn $ "Starting verification of " ++ specName ir
   let configs = [ (bs, cl)
                 | bs <- {- concat $ Map.elems $ -} [specBehaviors ir]
