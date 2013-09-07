@@ -847,9 +847,9 @@ resolveBehaviorSpecs mtc loc cmds = do
                     , btsPaths = [initPath]
                     , btsReturnSet = False
                     }
-  bts <- undefined {- flip runReaderT mtc $
+  bts <- flip runReaderT mtc $
            flip execStateT initBts $ do
-             resolveDecl cmds -}
+             resolveDecl cmds
   -- Check expressions that may alias to verify they have equivalent types.
   mapM_ (bsCheckAliasTypes (mtcPos mtc)) (btsPaths bts)
   if loc == JSS.BreakEntry then
