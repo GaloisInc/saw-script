@@ -759,13 +759,13 @@ initializeVerification sc ir bs refConfig = do
   -- TODO: add breakpoints once local specs exist
   --forM_ (Map.keys (specBehaviors ir)) $ JSS.addBreakpoint clName key
   -- TODO: set starting PC
-  ps <- JSS.getPath (PP.text "initializeVerification")
+  initPS <- JSS.getPath (PP.text "initializeVerification")
   let initESG = ESGState { esContext = sc
                          , esMethod = specMethod ir
                          , esExprRefMap = Map.fromList
                              [ (e, r) | (cl,r) <- refAssignments, e <- cl ]
                          , esInitialAssignments = []
-                         , esInitialPathState = ps
+                         , esInitialPathState = initPS
                          , esReturnValue = Nothing
                          , esInstanceFields = Map.empty
                          , esArrays = Map.empty
@@ -783,6 +783,8 @@ initializeVerification sc ir bs refConfig = do
             Just assignments -> mapM_ (\(l,t,r) -> esSetLogicValues sc l t r) assignments
           -- Process commands
           mapM esStep (bsCommands bs)
+  let ps = esInitialPathState es
+  JSS.modifyPathM_ (PP.text "initializeVerification") (\_ -> return ps)
   return ESD { esdStartLoc = bsLoc bs
              , esdInitialPathState = esInitialPathState es
              , esdInitialAssignments = reverse (esInitialAssignments es)
