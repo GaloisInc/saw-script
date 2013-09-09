@@ -1093,7 +1093,7 @@ validateMethodSpec
     ss <- basic_ss sc0
     let jsc = rewritingSharedContext sc0 ss
     be <- createBitEngine
-    backend <- sawBackend jsc be
+    backend <- sawBackend jsc Nothing be
     JSS.runDefSimulator cb backend $ do
       esd <- initializeVerification jsc ir bs cl
       res <- mkSpecVC jsc params esd
