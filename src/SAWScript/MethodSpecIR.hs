@@ -26,7 +26,7 @@ module SAWScript.MethodSpecIR
   , specAddVarDecl
   , specAddAliasSet
   , initMethodSpec
-  -- , resolveMethodSpecIR
+  --, resolveMethodSpecIR
     -- * Method behavior.
   , BehaviorSpec
   , bsLoc
