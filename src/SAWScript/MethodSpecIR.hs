@@ -26,7 +26,7 @@ module SAWScript.MethodSpecIR
   , specAddVarDecl
   , specAddAliasSet
   , initMethodSpec
-  , resolveMethodSpecIR
+  -- , resolveMethodSpecIR
     -- * Method behavior.
   , BehaviorSpec
   , bsLoc
@@ -1033,6 +1033,7 @@ specAddBehaviorCommand bc ms =
   ms { specBehaviors = bsAddCommand bc (specBehaviors ms) }
 
 
+{-
 -- | Interprets AST method spec commands to construct an intermediate
 -- representation that
 resolveMethodSpecIR :: GlobalBindings s
@@ -1054,7 +1055,7 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
   -- Get list of initial superclasses.
   superClasses <- JSS.supers cb thisClass
   -- Resolve behavior spec for PC 0.
-  methodBehavior <- undefined -- resolveBehaviorSpecs mtc JSS.BreakEntry cmds -- FIXME
+  methodBehavior <- resolveBehaviorSpecs mtc JSS.BreakEntry cmds -- FIXME
   --  Resolve behavior specs at other PCs.
   -- FIXME: not yet implemented
   {-
@@ -1077,3 +1078,4 @@ resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
               , specBehaviors = methodBehavior -- Map.map btsPaths allBehaviors
               , specValidationPlan = plan
               }
+-}

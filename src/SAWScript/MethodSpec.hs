@@ -205,17 +205,17 @@ evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
 evalLogicExpr initExpr ec = error "evalLogicExpr" -- eval initExpr -- TODO
   where sc = ecContext ec
         {-
-        eval (TC.Apply op exprs) = undefined -- TODO
+        eval (TC.Apply op exprs) =
           -- (liftIO . deApplyOp de op) =<< V.mapM eval (V.fromList exprs)
-        eval (TC.Cns c tp) = undefined -- TODO
+        eval (TC.Cns c tp) =
           -- return $ ConstTerm c tp
-        eval (TC.IntLit i we@(widthConstant -> Just w)) = undefined -- TODO
+        eval (TC.IntLit i we@(widthConstant -> Just w)) =
           -- return $ ConstTerm (mkCInt w i) (SymInt we)
-        eval TC.IntLit{} = undefined -- TODO
+        eval TC.IntLit{} =
           error "internal: evalLogicExpr called with non-ground literal."
-        eval (TC.Var _ _) = undefined -- TODO
+        eval (TC.Var _ _) =
           error "internal: evalLogicExpr called with var"
-        eval (TC.JavaValue expr _ _) = undefined -- TODO
+        eval (TC.JavaValue expr _ _) =
           evalJavaExprAsLogic expr ec
         -}
 
@@ -278,7 +278,7 @@ type RunResult s = ( JSS.Path (SharedContext s)
                    )
 
 orParseResults :: [OverrideResult s] -> [RunResult s]
-orParseResults l = undefined
+orParseResults l =
   [ (ps, block, Left  e) | FailedRun     ps block e <- l ] ++
   [ (ps, block, Right v) | SuccessfulRun ps block v <- l ]
 
@@ -1025,7 +1025,7 @@ runValidation params sc esd results = do
       verb = 4 -- verbose (vpOpts params) -- TODO
       ps = esdInitialPathState esd
   case specValidationPlan ir of
-    Skip -> error "internal: Unexpected call to runValidation with Skip"
+    Skip -> putStrLn "WARNING: call to runValidation with Skip"
     GenBlif _ -> error "internal: Unexpected call to runValidation with GenBlif"
     QuickCheck n lim -> do
       forM_ results $ \pvc -> do
