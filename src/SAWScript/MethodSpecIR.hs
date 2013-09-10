@@ -16,6 +16,7 @@ module SAWScript.MethodSpecIR
     MethodSpecIR
   , specName
   , specPos
+  , specContext
   , specThisClass
   , specMethod
   , specMethodClass
@@ -24,6 +25,7 @@ module SAWScript.MethodSpecIR
   , specValidationPlan
   , specAddBehaviorCommand
   , specAddVarDecl
+  , specAddVarInput
   , specAddAliasSet
   , initMethodSpec
   --, resolveMethodSpecIR
@@ -185,6 +187,8 @@ data BehaviorCommand s
 data BehaviorSpec s = BS {
          -- | Program counter for spec.
          bsLoc :: JSS.Breakpoint
+         -- | Maps Java variable access strings to global input variables.
+       , bsVarInputs :: Map.Map String (SharedTerm s)
          -- | Maps all expressions seen along path to actual type.
        , bsActualTypeMap :: ExprActualTypeMap
          -- | Stores which Java expressions must alias each other.
@@ -783,9 +787,10 @@ mayAliases :: (CC.OrdFoldable f, CC.Traversable f)
 mayAliases l s = foldr splitClass (Set.singleton s) l
 
 
-initMethodSpec :: Pos -> JSS.Codebase -> String -> String
+initMethodSpec :: Pos -> JSS.Codebase -> SharedContext s
+               -> String -> String
                -> IO (MethodSpecIR s)
-initMethodSpec pos cb cname mname = do
+initMethodSpec pos cb jsc cname mname = do
   let cname' = JP.dotsToSlashes cname -- TODO: necessary?
   thisClass <- lookupClass cb pos cname'
   (methodClass,method) <- findMethod cb pos mname thisClass
@@ -805,6 +810,7 @@ initMethodSpec pos cb cname mname = do
                   , bsReversedCommands = []
                   }
       initMS = MSIR { specPos = pos
+                    , specContext = jsc
                     , specThisClass = thisClass
                     , specMethodClass = methodClass
                     , specMethod = method
@@ -991,6 +997,8 @@ resolveValidationPlan ruleNames mtc allBehaviors decls =
 
 data MethodSpecIR s = MSIR {
     specPos :: Pos
+    -- | The SharedContext used by JSS for this method
+  , specContext :: SharedContext s
     -- | Class used for this instance.
   , specThisClass :: JSS.Class
     -- | Class where method is defined.
@@ -1006,7 +1014,7 @@ data MethodSpecIR s = MSIR {
   , specBehaviors :: BehaviorSpec s -- Map JSS.Breakpoint [BehaviorSpec s]
     -- | Describes how the method is expected to be validatioed.
   , specValidationPlan :: ValidationPlan
-  } deriving (Show)
+  }
 
 -- | Return user printable name of method spec (currently the class + method name).
 specName :: MethodSpecIR s -> String
@@ -1021,6 +1029,13 @@ specAddVarDecl expr jt ms = ms { specBehaviors = bs' }
   where bs = specBehaviors ms
         bs' = bs { bsActualTypeMap =
                      Map.insert expr jt (bsActualTypeMap bs) }
+
+specAddVarInput :: String -> SharedTerm s
+                -> MethodSpecIR s -> MethodSpecIR s
+specAddVarInput name inp ms = ms { specBehaviors = bs' }
+  where bs = specBehaviors ms
+        bs' = bs { bsVarInputs =
+                     Map.insert name inp (bsVarInputs bs) }
 
 specAddAliasSet :: [JavaExpr] -> MethodSpecIR s -> MethodSpecIR s
 specAddAliasSet exprs ms = ms { specBehaviors = bs' }

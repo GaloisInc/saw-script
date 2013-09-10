@@ -205,6 +205,7 @@ evalJavaExprAsLogic expr ec = do
 -- | Evaluates a typed expression.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
 evalLogicExpr initExpr ec = error $ "evalLogicExpr: " ++ show initExpr
+  -- TODO: Rewrite initExpr to use things from bsVarInputs in place of fromJava
   -- eval initExpr -- TODO
   where sc = ecContext ec
         {-
