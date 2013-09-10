@@ -15,8 +15,10 @@ module SAWScript.MethodSpec
   , specValidationPlan
   --, resolveMethodSpecIR
   , SymbolicRunHandler
+  , initializeVerification
   , runValidation
   , validateMethodSpec
+  , mkSpecVC
   , VerifyParams(..)
   ) where
 
