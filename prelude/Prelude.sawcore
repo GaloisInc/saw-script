@@ -93,6 +93,9 @@ xor :: Bool -> Bool -> Bool;
 xor (True) b = not b;
 xor (False) b = b; 
 
+implies :: Bool -> Bool -> Bool;
+implies a b = or (not a) b;
+
 boolEq :: Bool -> Bool -> Bool;
 boolEq True b = b;
 boolEq False b = not b;
