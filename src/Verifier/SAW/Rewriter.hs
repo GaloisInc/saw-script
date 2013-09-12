@@ -11,6 +11,7 @@ module Verifier.SAW.Rewriter
   -- * Rewrite rules
   ( RewriteRule
   , ruleOfTerm
+  , ruleOfTerms
   , ruleOfPred
   , ruleOfDefEqn
   , rulesOfTypedDef
@@ -125,6 +126,11 @@ ruleOfTerm t =
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
+
+-- | Converts a universally quantified equality proposition between the
+-- two given terms to a RewriteRule.
+ruleOfTerms :: Termlike t => t -> t -> RewriteRule t
+ruleOfTerms l r = RewriteRule { ctxt = [], lhs = l, rhs = r }
 
 -- | Converts a parameterized equality predicate to a RewriteRule.
 ruleOfPred :: SharedTerm s -> RewriteRule (SharedTerm s)
