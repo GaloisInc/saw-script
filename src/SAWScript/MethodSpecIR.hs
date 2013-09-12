@@ -51,8 +51,8 @@ module SAWScript.MethodSpecIR
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.State
+--import Control.Monad.Reader
+--import Control.Monad.State
 import Data.Graph.Inductive (scc, Gr, mkGraph)
 import Data.List (intercalate, sort)
 import Data.Map (Map)
@@ -61,15 +61,15 @@ import Data.Maybe (isJust, catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Text.PrettyPrint.Leijen hiding ((<$>))
+--import Text.PrettyPrint.Leijen hiding ((<$>))
 import qualified Language.JVM.Common as JP
 
-import Verinf.Symbolic
+--import Verinf.Symbolic
 
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.Java.Common as JSS
-import qualified Verifier.LLVM.Codebase as LSS
-import qualified Data.JVM.Symbolic.AST as JSS
+--import qualified Verifier.LLVM.Codebase as LSS
+--import qualified Data.JVM.Symbolic.AST as JSS
 
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
@@ -82,6 +82,7 @@ import SAWScript.Utils
 
 -- Utility definitions {{{1
 
+{-
 checkLineNumberInfoAvailable :: MonadIO m => Pos -> JSS.Method -> m ()
 checkLineNumberInfoAvailable pos m = do
   when (null (JSS.sourceLineNumberInfo m)) $
@@ -115,6 +116,7 @@ typecheckPC pos _ (PC pc) = do
     let msg = ftext $ "Invalid program counter."
      in throwIOExecException pos msg ""
   return (JSS.BreakPC (fromInteger pc))
+-}
 
 -- ExprActualTypeMap {{{1
 
@@ -131,6 +133,7 @@ ppJavaExprEquivClass [] = error "internal: ppJavaExprEquivClass"
 ppJavaExprEquivClass [expr] = ppJavaExpr expr
 ppJavaExprEquivClass cl = "{ " ++ intercalate ", " (map ppJavaExpr (sort cl)) ++ " }"
 
+{-
 -- MethodTypecheckContext {{{1
 
 -- | Global context for method spec typechecker.
@@ -162,6 +165,7 @@ typecheckerConfig mtc pc actualTypeMap localBindings =
                      , miJavaExprType = flip Map.lookup actualTypeMap
                      }
       }
+-}
 
 -- BehaviorSpec {{{1
 
@@ -214,6 +218,7 @@ bsMayAliasSet bs =
            (bsMustAliasSet bs)
            (bsMayAliasClasses bs)
 
+{-
 -- | Check that all expressions that may alias have equal types.
 bsCheckAliasTypes :: Pos -> BehaviorSpec s -> IO ()
 bsCheckAliasTypes pos bs = mapM_ checkClass (CC.toList (bsMayAliasSet bs))
@@ -227,6 +232,7 @@ bsCheckAliasTypes pos bs = mapM_ checkClass (CC.toList (bsMayAliasSet bs))
               let msg = "Different types are assigned to " ++ show x ++ " and " ++ show y ++ "."
                   res = "All references that may alias must be assigned the same type."
               throwIOExecException pos (ftext msg) res
+-}
 
 type RefEquivConfiguration = [(JavaExprEquivClass, JavaActualType)]
 
@@ -290,6 +296,7 @@ bsLogicClasses sc m bs cfg = do
                         case mtp of
                           Just tp -> return (Just (cl, tp))
                           Nothing -> return Nothing
+                      Nothing -> return Nothing
   let v = V.fromList logicClasses
       -- Create nodes.
       grNodes = [0..] `zip` logicClasses
@@ -307,6 +314,7 @@ bsLogicClasses sc m bs cfg = do
                        , let (cl,at) = v V.! n ]
              else Nothing
 
+{-
 -- BehaviorTypechecker {{{1
 
 data BehaviorTypecheckState s = BTS {
@@ -409,6 +417,7 @@ throwInvalidAssignment :: MonadIO m => Pos -> String -> String -> m a
 throwInvalidAssignment pos lhs tp =
   let msg = lhs ++ " cannot be assigned a value with type " ++ tp ++ "."
    in throwIOExecException pos (ftext msg) ""
+-}
 
 {-
 checkLogicExprIsPred :: MonadIO m => Pos -> LogicExpr s -> m ()
@@ -533,21 +542,25 @@ typecheckMixedExpr lhsPos lhsName lhsType rhsAst =
     return (LE rhsExpr, PrimitiveType lhsType)
 -}
 
+
 -- Command utilities {{{2
 
 -- | Return commands in behavior in order they appeared in spec.
 bsCommands :: BehaviorSpec s -> [BehaviorCommand s]
 bsCommands = reverse . bsReversedCommands
 
+{-
 -- | Add command to typechecker.
 addCommand :: BehaviorCommand s -> BehaviorTypechecker s ()
 addCommand bc = modifyPaths $ \bs ->
   bs { bsReversedCommands = bc : bsReversedCommands bs }
+-}
 
 bsAddCommand :: BehaviorCommand s -> BehaviorSpec s -> BehaviorSpec s
 bsAddCommand bc bs =
   bs { bsReversedCommands = bc : bsReversedCommands bs }
 
+{-
 -- | Make sure expr can be assigned a postcondition.
 checkValuePostconditionTarget :: Pos -> JavaExpr -> BehaviorTypechecker s ()
 checkValuePostconditionTarget pos (CC.Term expr) = do
@@ -561,6 +574,7 @@ recordLogicAssertion :: Pos -> JavaExpr -> LogicExpr s -> BehaviorTypechecker s 
 recordLogicAssertion pos lhs rhs =
   modifyPaths $ \bs ->
     bs { bsLogicAssignments = (pos, lhs, rhs) : bsLogicAssignments bs }
+-}
 
 -- resolveDecl {{{1
 
@@ -792,7 +806,7 @@ initMethodSpec :: Pos -> JSS.Codebase
                -> String -> String
                -> IO (MethodSpecIR s)
 initMethodSpec pos cb cname mname = do
-  let cname' = JP.dotsToSlashes cname -- TODO: necessary?
+  let cname' = JP.dotsToSlashes cname
   thisClass <- lookupClass cb pos cname'
   (methodClass,method) <- findMethod cb pos mname thisClass
   superClasses <- JSS.supers cb thisClass
@@ -821,58 +835,6 @@ initMethodSpec pos cb cname mname = do
                     }
   return initMS
 
-
-
--- resolveBehaviorSpecs {{{1
-
-{-
-resolveBehaviorSpecs :: MethodTypecheckContext s
-                     -> JSS.Breakpoint
-                     -> [BehaviorDecl (SharedTerm s)]
-                     -> IO (BehaviorTypecheckState s)
-resolveBehaviorSpecs mtc loc cmds = do
-  let method = mtcMethod mtc
-  let this = thisJavaExpr (mtcClass mtc)
-  let initTypeMap | JSS.methodIsStatic method = Map.empty
-                  | otherwise = 
-                      Map.singleton this (ClassInstance (mtcClass mtc))
-      initPath = BS { bsLoc = loc
-                    , bsActualTypeMap = initTypeMap
-                    , bsMustAliasSet = 
-                        if JSS.methodIsStatic method then
-                          CC.empty
-                        else
-                          CC.insertTerm this CC.empty
-                    , bsMayAliasClasses = []
-                    , bsLogicAssignments = []
-                    , bsReversedCommands = []
-                    }
-      initBts = BTS { btsLoc = loc
-                    , btsActualTypeMap = initTypeMap
-                    , btsLetBindings = Map.empty
-                    , btsPaths = [initPath]
-                    , btsReturnSet = False
-                    }
-  bts <- flip runReaderT mtc $
-           flip execStateT initBts $ do
-             resolveDecl cmds
-  -- Check expressions that may alias to verify they have equivalent types.
-  mapM_ (bsCheckAliasTypes (mtcPos mtc)) (btsPaths bts)
-  if loc == JSS.BreakEntry then
-    -- TODO: Check all arguments are defined.
-    return ()
-  else
-    -- TODO: Check all expected locals are defined.
-    return ()
-  -- Ensure returns is set if method has return value.
-  when (isJust (JSS.methodReturnType method) && not (btsReturnSet bts)) $
-    let msg = "The Java method \'" ++ JSS.methodName method
-                     ++ "\' has a return value, but the spec does not define it."
-     in throwIOExecException (mtcPos mtc) (ftext msg) ""
-  -- Return paths parsed from this spec.
-  return bts
--}
-
 -- resolveValidationPlan {{{1
 
 -- | Commands issued to verify method.
@@ -896,6 +858,7 @@ data ValidationPlan
   | RunVerify [VerifyCommand]
   deriving (Show)
 
+{-
 checkRuleIsDefined :: MonadIO m => Pos -> String -> Set String -> m ()
 checkRuleIsDefined pos nm ruleNames = do
   when (Set.notMember nm ruleNames) $ do
@@ -911,6 +874,7 @@ data VerifyTypecheckerState s = VTS {
        }
 
 type VerifyTypechecker s = StateT (VerifyTypecheckerState s) IO
+-}
 
 {-
 resolveVerifyCommand :: VerifyCommand -> VerifyTypechecker [VerifyCommand]
@@ -1037,51 +1001,3 @@ specAddBehaviorCommand :: BehaviorCommand s
                        -> MethodSpecIR s -> MethodSpecIR s
 specAddBehaviorCommand bc ms =
   ms { specBehaviors = bsAddCommand bc (specBehaviors ms) }
-
-
-{-
--- | Interprets AST method spec commands to construct an intermediate
--- representation that
-resolveMethodSpecIR :: GlobalBindings s
-                    -> Set String -- ^ Names of rules in spec.
-                    -> Pos
-                    -> JSS.Class
-                    -> String
-                    -> [BehaviorSpec s]
-                    -> IO (MethodSpecIR s)
-resolveMethodSpecIR gb ruleNames pos thisClass mName cmds = do
-  let cb = codeBase gb
-  (methodClass,method) <- findMethod cb pos mName thisClass
-  let mtc = MTC { mtcPos = pos
-                , mtcGlobalBindings = gb
-                , mtcClass = thisClass
-                , mtcMethod = method
-                , mtcRuleNames = ruleNames
-                }
-  -- Get list of initial superclasses.
-  superClasses <- JSS.supers cb thisClass
-  -- Resolve behavior spec for PC 0.
-  methodBehavior <- resolveBehaviorSpecs mtc JSS.BreakEntry cmds -- FIXME
-  --  Resolve behavior specs at other PCs.
-  -- FIXME: not yet implemented
-  {-
-  let specAtCmds = [ (specPos, pc, bcmds) | SpecAt specPos pc bcmds <- cmds ]
-  localBehaviors <- forM specAtCmds $ \(specPos,astPC,bcmds) -> do
-      pc <- typecheckPC specPos method astPC
-      bs <- resolveBehaviorSpecs mtc pc bcmds
-      return (pc, bs)
-      -}
-  -- TODO: Check that no duplicates appear in local behavior specifications.
-  let allBehaviors = Map.fromList $ (JSS.BreakEntry, methodBehavior) : [] -- localBehaviors
-  -- Resolve verification plan.
-  plan <- undefined -- resolveValidationPlan ruleNames mtc allBehaviors cmds
-  -- Return IR.
-  return MSIR { specPos = pos
-              , specThisClass = thisClass
-              , specMethodClass = methodClass
-              , specMethod = method
-              , specInitializedClasses = map JSS.className superClasses
-              , specBehaviors = methodBehavior -- Map.map btsPaths allBehaviors
-              , specValidationPlan = plan
-              }
--}

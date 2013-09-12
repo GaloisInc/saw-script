@@ -20,32 +20,33 @@ module SAWScript.MethodSpec
   , runValidation
   --, validateMethodSpec
   , mkSpecVC
+  , ppPathVC
   , VerifyParams(..)
   ) where
 
 -- Imports {{{1
 
 import Control.Applicative hiding (empty)
-import Control.Exception (finally)
+--import Control.Exception (finally)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.Error (ErrorT, runErrorT, throwError, MonadError)
 import Control.Monad.State
 import Data.Int
-import Data.List (foldl', intercalate, intersperse)
+--import Data.List (foldl', intercalate, intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Set (Set)
+--import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Vector.Storable as SV
+--import qualified Data.Vector.Storable as SV
 import qualified Data.Vector as V
 import Text.PrettyPrint.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.HughesPJ as PP
-import System.Directory(doesFileExist)
-import System.FilePath (splitExtension, addExtension)
-import System.IO
+--import System.Directory(doesFileExist)
+--import System.FilePath (splitExtension, addExtension)
+--import System.IO
 
 import qualified SAWScript.CongruenceClosure as CC
 import qualified SAWScript.JavaExpr as TC
@@ -54,15 +55,15 @@ import SAWScript.Utils
 import SAWScript.MethodSpecIR
 
 import qualified Verifier.Java.Simulator as JSS
-import qualified Verifier.Java.Common as JSS
+--import qualified Verifier.Java.Common as JSS
 import qualified Data.JVM.Symbolic.AST as JSS
-import Verifier.Java.SAWBackend
-import Verinf.Symbolic
-import qualified Verinf.Symbolic.BLIF as Blif
-import qualified Verinf.Symbolic.QuickCheck as QuickCheck
-import qualified Verinf.Symbolic.SmtLibTrans as SmtLib
-import qualified Verinf.Symbolic.SmtLibTrans2 as SmtLib2
-import qualified Verinf.Symbolic.Yices  as Yices
+import Verifier.Java.SAWBackend()
+--import Verinf.Symbolic
+--import qualified Verinf.Symbolic.BLIF as Blif
+--import qualified Verinf.Symbolic.QuickCheck as QuickCheck
+--import qualified Verinf.Symbolic.SmtLibTrans as SmtLib
+--import qualified Verinf.Symbolic.SmtLibTrans2 as SmtLib2
+--import qualified Verinf.Symbolic.Yices  as Yices
 import Verinf.Utils.LogMonad
 
 import Verifier.SAW.Evaluator
@@ -72,17 +73,19 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
-import qualified SMTLib1 as SmtLib
-import qualified SMTLib2 as SmtLib2
+--import qualified SMTLib1 as SmtLib
+--import qualified SMTLib2 as SmtLib2
 
 -- Utilities {{{1
 
+{-
 -- | Return first value satisfying predicate if any.
 findM :: Monad m => (a -> m Bool) -> [a] -> m (Maybe a)
 findM _ [] = return Nothing
 findM check (x:xs)  = do ok <- check x
                          if ok then return (Just x)
                                else findM check xs
+-}
 
 -- Verinf Utilities {{{1
 
@@ -113,7 +116,7 @@ setArrayValue :: JSS.Ref -> SharedTerm s
 setArrayValue r v@(STApp _ (FTermF (ArrayValue _ vs))) =
   JSS.pathMemory . JSS.memScalarArrays %~ Map.insert r (w, v)
     where w = fromIntegral $ V.length vs
-setArrayValue r _ = error "setArrayValue called with non-array value"
+setArrayValue _ _ = error "internal: setArrayValue called with non-array value"
 
 -- | Returns value constructor from node.
 mkJSSValue :: JSS.Type -> n -> JSS.Value n
@@ -164,10 +167,13 @@ type ExprEvaluator a = ErrorT TC.JavaExpr IO a
 runEval :: MonadIO m => ExprEvaluator b -> m (Either TC.JavaExpr b)
 runEval v = liftIO (runErrorT v)
 
+addJavaValues :: (Monad m) =>
+                 Map String TC.JavaExpr -> EvalContext s
+              -> m (EvalContext s)
 addJavaValues m ec = do
   vs <- forM (Map.toList m) $
-          \(name, exp) -> do mv <- evalExpr exp
-                             maybe (return Nothing) (return . Just . (name,)) mv
+          \(name, expr) -> do mv <- evalExpr expr
+                              maybe (return Nothing) (return . Just . (name,)) mv
   return ec { ecJavaValues = Map.fromList (catMaybes vs) }
     where evalExpr e = do
             v <- evalJavaExpr e ec
@@ -216,6 +222,14 @@ evalJavaExprAsLogic expr ec = do
     JSS.LValue n -> return n
     _ -> error "internal: evalJavaExprAsExpr encountered illegal value."
 
+scRemoveBitvector :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scRemoveBitvector sc tm = do 
+  rules <- scDefRewriteRules sc def
+  tm' <- rewriteSharedTerm sc (addRules rules emptySimpset) tm
+  putStrLn $ show (scPrettyTermDoc tm) ++ " -> " ++ show (scPrettyTermDoc tm')
+  return tm'
+    where Just def = findDef (scModule sc) (parseIdent "Prelude.bitvector")
+
 scJavaValue :: SharedContext s -> SharedTerm s -> String -> IO (SharedTerm s)
 scJavaValue sc ty name = do
   s <- scString sc name
@@ -223,15 +237,20 @@ scJavaValue sc ty name = do
 
 -- | Evaluates a typed expression in the context of a particular state.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
-evalLogicExpr initExpr ec = do
+evalLogicExpr initExpr ec = liftIO $ do
   let sc = ecContext ec
-  t <- liftIO $ scImport sc initExpr 
+  t <- scImport sc initExpr 
   rules <- forM (Map.toList (ecJavaValues ec)) $ \(name, lt) ->
-             do ty <- liftIO $ scTypeOf sc lt
-                nt <- liftIO $ scJavaValue sc ty name
+             do ty <- scTypeOf sc lt
+                ty' <- scRemoveBitvector sc ty
+                nt <- scJavaValue sc ty' name
                 return (ruleOfTerms nt lt)
   let ss = addRules rules emptySimpset
-  liftIO $ rewriteSharedTerm sc ss t
+  putStrLn "evalLogicExpr"
+  print rules
+  t' <- rewriteSharedTerm sc ss t
+  putStrLn $ show (scPrettyTermDoc t) ++ " -> " ++ show (scPrettyTermDoc t')
+  return t'
 
 -- | Return Java value associated with mixed expression.
 evalMixedExpr :: TC.MixedExpr s -> EvalContext s
@@ -332,7 +351,7 @@ ocModifyResultStateIO fn = do
 
 -- | Add assumption for predicate.
 ocAssert :: Pos -> String -> SharedTerm s -> OverrideComputation s ()
-ocAssert p nm x = do
+ocAssert p _nm x = do
   sc <- (ecContext . ocsEvalContext) <$> get
   case asBool x of
     Just True -> return ()
@@ -466,7 +485,7 @@ execOverride sc pos m ir mbThis args = do
   res <- liftIO . execBehavior [bsl] ec =<< JSS.getPath (PP.text "MethodSpec behavior")
   when (null res) $ error "internal: execBehavior returned empty result list."
   -- Create function for generation resume actions.
-  {- TODO: JSS
+  {- FIXME: JSS
   let -- Failed run
       resAction (ps, _, Left el) = do
         let msg = "Unsatisified assertions in " ++ specName ir ++ ":\n"
@@ -594,7 +613,7 @@ esModifyInitialPathStateIO fn =
 
 esAddEqAssertion :: SharedContext s -> String -> SharedTerm s -> SharedTerm s
                  -> ExpectedStateGenerator s ()
-esAddEqAssertion sc nm x y =
+esAddEqAssertion sc _nm x y =
   do prop <- liftIO (scEq sc x y)
      esModifyInitialPathStateIO (addAssertion sc prop)
 
@@ -622,10 +641,9 @@ esSetJavaValue e@(CC.Term exprF) v = do
       let ls = case JSS.currentCallFrame ps of
                  Just cf -> cf ^. JSS.cfLocals
                  Nothing -> Map.empty
-          ls' = Map.insert idx v ls
           ps' = (JSS.pathStack %~ updateLocals) ps
           updateLocals (f:r) = (JSS.cfLocals %~ Map.insert idx v) f : r
-          updateLocals [] = error "esSetJavaValue of local with empty call stack"
+          updateLocals [] = error "internal: esSetJavaValue of local with empty call stack"
       case Map.lookup idx ls of
         Just oldValue -> esAssertEq (TC.ppJavaExpr e) oldValue v
         Nothing -> esPutInitialPathState ps'
@@ -730,12 +748,12 @@ esStep (EnsureArray _pos lhsExpr rhsExpr) = do
   sc <- gets esContext
   let l = case value of
             (STApp _ (FTermF (ArrayValue _ vs))) -> fromIntegral (V.length vs)
-            _ -> error "right hand side of array ensure clause isn't an array"
+            _ -> error "internal: right hand side of array ensure clause isn't an array"
   -- Check if array has already been assigned value.
   aMap <- gets esArrays
   case Map.lookup ref aMap of
     Just (Just (oldLen, prev))
-      | l /= fromIntegral oldLen -> error "Array changed size."
+      | l /= fromIntegral oldLen -> error "internal: array changed size."
       | otherwise -> esAddEqAssertion sc (show lhsExpr) prev value
     _ -> return ()
   -- Define instance field post condition.
@@ -758,19 +776,19 @@ initializeVerification sc m ir bs refConfig = do
   exprRefs <- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig
   let refAssignments = (map fst refConfig `zip` exprRefs)
       clName = JSS.className (specThisClass ir)
-      key = JSS.methodKey (specMethod ir)
-      pushFrame cs = fromMaybe (error "failed to push call frame") mcs'
+      --key = JSS.methodKey (specMethod ir)
+      pushFrame cs = fromMaybe (error "internal: failed to push call frame") mcs'
         where
           mcs' = JSS.pushCallFrame clName
                                    (specMethod ir)
                                    -- FIXME: this is probably the cause of the empty operand stack
-                                   JSS.entryBlock -- TODO: not the right block
+                                   JSS.entryBlock -- FIXME: not the right block
                                    Map.empty
                                    cs
   JSS.modifyCSM_ (return . pushFrame)
-  let updateInitializedClasses m =
+  let updateInitializedClasses mem =
         foldr (flip JSS.setInitializationStatus JSS.Initialized)
-              m
+              mem
               (specInitializedClasses ir)
   JSS.modifyPathM_ (PP.text "initializeVerification") $
     return . (JSS.pathMemory %~ updateInitializedClasses)
@@ -870,6 +888,39 @@ data PathVC s = PathVC {
           -- | What to verify for this result.
         , pvcChecks :: [VerificationCheck s]
         }
+
+ppPathVC :: PathVC s -> Doc
+ppPathVC pvc =
+  nest 2 $
+  vcat [ text "Path VC:"
+       , nest 2 $ vcat $
+         text "Initial assignments:" :
+         map ppAssignment (pvcInitialAssignments pvc)
+       , nest 2 $
+         vcat [ text "Assumptions:"
+              , scPrettyTermDoc (pvcAssumptions pvc)
+              ]
+       , nest 2 $ vcat $
+         text "Static errors:" :
+         pvcStaticErrors pvc
+       , nest 2 $ vcat $
+         text "Checks:" :
+         map ppCheck (pvcChecks pvc)
+       ]
+  where ppAssignment (expr, tm) = hsep [ text (TC.ppJavaExpr expr) 
+                                       , text ":="
+                                       , scPrettyTermDoc tm
+                                       ]
+        ppCheck (AssertionCheck nm tm) =
+          hsep [ text (nm ++ ":")
+               , scPrettyTermDoc tm
+               ]
+        ppCheck (EqualityCheck nm tm tm') =
+          hsep [ text (nm ++ ":")
+               , scPrettyTermDoc tm
+               , text ":="
+               , scPrettyTermDoc tm'
+               ]
 
 type PathVCGenerator s = State (PathVC s)
 
@@ -977,15 +1028,15 @@ mkSpecVC sc params esd = do
   let ir = vpSpec params
       m = vpJavaExprs params
   -- Log execution.
-  -- setVerbosity (simverbose (vpOpts params)) -- TODO
+  setVerbosity (simVerbose (vpOpts params))
   -- Add method spec overrides.
   mapM_ (overrideFromSpec sc (specPos ir) m) (vpOver params)
   -- Execute code.
   JSS.run
   returnVal <- JSS.getProgramReturnValue
   ps <- JSS.getPath (PP.text "mkSpecVC")
-  errPaths <- JSS.getProgramErrorPaths
 {-
+  errPaths <- JSS.getProgramErrorPaths
   finalPathResults <-
     forM jssResults $ \(pd, fr) -> do
       finalPS <- JSS.getPathStateByName pd
@@ -1005,7 +1056,7 @@ mkSpecVC sc params esd = do
           return [(finalPS, Nothing, Left [Abort])]
         JSS.Unassigned -> error "internal: run terminated before completing."
 -}
-  -- TODO: include error paths
+  -- FIXME: include error paths
   return $ map (generateVC ir esd) [(ps, Nothing, Right returnVal)]
 
 data VerifyParams s = VerifyParams
@@ -1015,10 +1066,9 @@ data VerifyParams s = VerifyParams
   , vpSpec    :: MethodSpecIR s
   , vpOver    :: [MethodSpecIR s]
   , vpJavaExprs :: Map String TC.JavaExpr
-  , vpRules   :: [Rule]
-  , vpEnabledRules :: Set String
   }
 
+{-
 writeToNewFile :: FilePath -- ^ Base file name
                -> String -- ^ Default extension
                -> (Handle -> IO ())
@@ -1036,6 +1086,7 @@ writeToNewFile path defaultExt m =
             impl base (cnt + 1) ext
           else
             withFile nm WriteMode m >> return nm
+-}
 
 type SymbolicRunHandler s =
   SharedContext s -> ExpectedStateDef s -> [PathVC s] -> IO ()
@@ -1043,22 +1094,25 @@ type SymbolicRunHandler s =
 runValidation :: VerifyParams s -> SymbolicRunHandler s
 runValidation params sc esd results = do
   let ir = vpSpec params
-      verb = 4 -- verbose (vpOpts params) -- TODO
+      verb = verbLevel (vpOpts params)
       ps = esdInitialPathState esd
   case specValidationPlan ir of
     Skip -> putStrLn "WARNING: call to runValidation with Skip"
     GenBlif _ -> error "internal: Unexpected call to runValidation with GenBlif"
-    QuickCheck n lim -> do
+    QuickCheck _n _lim -> do
+      error "internal: quickcheck temporarily disabled" -- TODO
+      {-
       forM_ results $ \pvc -> do
         testRandom sc verb ir (fromInteger n) (fromInteger <$> lim) pvc
+         -}
     RunVerify cmds -> do
       forM_ results $ \pvc -> do
         let mkVState nm cfn =
               VState { vsVCName = nm
                      , vsMethodSpec = ir
                      , vsVerbosity = verb
-                     , vsRules = vpRules params
-                     , vsEnabledRules = vpEnabledRules params
+                     --, vsRules = vpRules params
+                     --, vsEnabledRules = vpEnabledRules params
                      -- , vsEnabledOps = vpEnabledOps params
                      -- , vsFromBlock = esdStartLoc esd
                      , vsEvalContext = evalContextFromPathState sc ps
@@ -1127,8 +1181,8 @@ data VerifyState s = VState {
          vsVCName :: String
        , vsMethodSpec :: MethodSpecIR s
        , vsVerbosity :: Verbosity
-       , vsRules :: [Rule]
-       , vsEnabledRules :: Set String
+       --, vsRules :: [Rule]
+       --, vsEnabledRules :: Set String
          -- | Starting Block is used for checking VerifyAt commands.
        -- , vsFromBlock :: JSS.BlockId
          -- | Evaluation context used for parsing expressions during
@@ -1139,22 +1193,24 @@ data VerifyState s = VState {
        , vsStaticErrors :: [Doc]
        }
 
+{-
 vsSharedContext :: VerifyState s -> SharedContext s
 vsSharedContext = ecContext . vsEvalContext
+-}
 
-type VerifyExecutor s = StateT (VerifyState s) IO
+--type VerifyExecutor s = StateT (VerifyState s) IO
 
 runVerify :: VerifyState s -> SharedTerm s -> [VerifyCommand] -> IO ()
-runVerify vs g cmds = return () -- evalStateT (applyTactics cmds g) vs -- TODO
+runVerify _vs _g _cmds = return () -- evalStateT (applyTactics cmds g) vs -- TODO
 
 -- testRandom {{{2
 
 type Verbosity = Int
 
+{-
 testRandom :: SharedContext s -> Verbosity
            -> MethodSpecIR s -> Int -> Maybe Int -> PathVC s -> IO ()
-testRandom de v ir test_num lim pvc = return () -- TODO
-{-
+testRandom de v ir test_num lim pvc = return ()
     do when (v >= 3) $
          putStrLn $ "Generating random tests: " ++ specName ir
        (passed,run) <- loop 0 0
@@ -1235,7 +1291,9 @@ testRandom de v ir test_num lim pvc = return () -- TODO
 
 -- useSMTLIB {{{2
 
+{-
 announce :: String -> VerifyExecutor s ()
 announce msg = do
   v <- gets vsVerbosity
   when (v >= 3) $ liftIO (putStrLn msg)
+-}
