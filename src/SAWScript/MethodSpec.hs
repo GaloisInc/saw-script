@@ -5,6 +5,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TupleSections #-}
 module SAWScript.MethodSpec
   ( VerifyCommand
   , ValidationPlan(..)
@@ -17,7 +18,7 @@ module SAWScript.MethodSpec
   , SymbolicRunHandler
   , initializeVerification
   , runValidation
-  , validateMethodSpec
+  --, validateMethodSpec
   , mkSpecVC
   , VerifyParams(..)
   ) where
@@ -29,7 +30,7 @@ import Control.Exception (finally)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Cont
-import Control.Monad.Error (ErrorT, runErrorT, throwError)
+import Control.Monad.Error (ErrorT, runErrorT, throwError, MonadError)
 import Control.Monad.State
 import Data.Int
 import Data.List (foldl', intercalate, intersperse)
@@ -86,7 +87,7 @@ findM check (x:xs)  = do ok <- check x
 -- Verinf Utilities {{{1
 
 scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scEq sc x y = error "scEq" -- scApply?? sc x y -- TODO: want more polymorphic equality?
+scEq = equal
 
 scImplies :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scImplies sc x y = do
@@ -126,15 +127,14 @@ mkJSSValue _ _ = error "internal: illegal type"
 
 -- | Add assumption for predicate to path state.
 addAssumption :: SharedContext s -> SharedTerm s -> SpecPathState s -> IO (SpecPathState s)
-addAssumption sc x ps = return ps -- TODO
-{- TODO: JSS
-  do prop <- scApplyPreludeAnd sc (JSS.psAssumptions ps) x
-     return ps { JSS.psAssumptions = prop }
--}
+addAssumption sc x p = do
+  andOp <- liftIO $ scApplyPreludeAnd sc
+  p & JSS.pathAssertions %%~ \a -> liftIO (andOp a x)
 
 -- | Add assertion for predicate to path state.
 addAssertion :: SharedContext s -> SharedTerm s -> SpecPathState s -> IO (SpecPathState s)
 addAssertion sc x p = do
+  -- TODO: p becomes an additional VC in this case
   andOp <- liftIO $ scApplyPreludeAnd sc
   p & JSS.pathAssertions %%~ \a -> liftIO (andOp a x)
 
@@ -145,6 +145,7 @@ data EvalContext s = EvalContext {
          ecContext :: SharedContext s
        , ecLocals :: Map JSS.LocalVariableIndex (SpecJavaValue s)
        , ecPathState :: (SpecPathState s)
+       , ecJavaValues :: Map String (SharedTerm s)
        }
 
 evalContextFromPathState :: SharedContext s -> SpecPathState s -> EvalContext s
@@ -152,35 +153,48 @@ evalContextFromPathState sc ps =
   let Just f = JSS.currentCallFrame ps
       localMap = f ^. JSS.cfLocals
   in EvalContext {
-          ecContext = sc
-        , ecLocals = localMap
-        , ecPathState = ps
-        }
+         ecContext = sc
+       , ecLocals = localMap
+       , ecPathState = ps
+       , ecJavaValues = Map.empty
+       }
 
 type ExprEvaluator a = ErrorT TC.JavaExpr IO a
 
 runEval :: MonadIO m => ExprEvaluator b -> m (Either TC.JavaExpr b)
 runEval v = liftIO (runErrorT v)
 
+addJavaValues m ec = do
+  vs <- forM (Map.toList m) $
+          \(name, exp) -> do mv <- evalExpr exp
+                             maybe (return Nothing) (return . Just . (name,)) mv
+  return ec { ecJavaValues = Map.fromList (catMaybes vs) }
+    where evalExpr e = do
+            v <- evalJavaExpr e ec
+            case v of
+              JSS.IValue t -> return (Just t)
+              JSS.LValue t -> return (Just t)
+              _ -> return Nothing
+
 -- or undefined subexpression if not.
 -- N.B. This method assumes that the Java path state is well-formed, the
 -- the JavaExpression syntactically referes to the correct type of method
 -- (static versus instance), and correct well-typed arguments.  It does
 -- not assume that all the instanceFields in the JavaEvalContext are initialized.
-evalJavaExpr :: TC.JavaExpr -> EvalContext s -> ExprEvaluator (SpecJavaValue s)
+evalJavaExpr :: (Monad m) => TC.JavaExpr -> EvalContext s -> m (SpecJavaValue s)
 evalJavaExpr expr ec = eval expr
   where eval e@(CC.Term app) =
           case app of
             TC.Local _ idx _ ->
               case Map.lookup idx (ecLocals ec) of
                 Just v -> return v
-                Nothing -> throwError e
+                Nothing -> fail (show e) -- TODO
             TC.InstanceField r f -> do
               JSS.RValue ref <- eval r
               let ifields = (ecPathState ec) ^. JSS.pathMemory . JSS.memInstanceFields
               case Map.lookup (ref, f) ifields of
                 Just v -> return v
-                Nothing -> throwError e
+                Nothing -> fail (show e) -- TODO
 
 evalJavaRefExpr :: TC.JavaExpr -> EvalContext s -> ExprEvaluator JSS.Ref
 evalJavaRefExpr expr ec = do
@@ -202,26 +216,22 @@ evalJavaExprAsLogic expr ec = do
     JSS.LValue n -> return n
     _ -> error "internal: evalJavaExprAsExpr encountered illegal value."
 
--- | Evaluates a typed expression.
+scJavaValue :: SharedContext s -> SharedTerm s -> String -> IO (SharedTerm s)
+scJavaValue sc ty name = do
+  s <- scString sc name
+  scCtorApp sc (parseIdent "Java.mkValue") [ty, s]
+
+-- | Evaluates a typed expression in the context of a particular state.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
-evalLogicExpr initExpr ec = error $ "evalLogicExpr: " ++ show initExpr
-  -- TODO: Rewrite initExpr to use things from bsVarInputs in place of fromJava
-  -- eval initExpr -- TODO
-  where sc = ecContext ec
-        {-
-        eval (TC.Apply op exprs) =
-          -- (liftIO . deApplyOp de op) =<< V.mapM eval (V.fromList exprs)
-        eval (TC.Cns c tp) =
-          -- return $ ConstTerm c tp
-        eval (TC.IntLit i we@(widthConstant -> Just w)) =
-          -- return $ ConstTerm (mkCInt w i) (SymInt we)
-        eval TC.IntLit{} =
-          error "internal: evalLogicExpr called with non-ground literal."
-        eval (TC.Var _ _) =
-          error "internal: evalLogicExpr called with var"
-        eval (TC.JavaValue expr _ _) =
-          evalJavaExprAsLogic expr ec
-        -}
+evalLogicExpr initExpr ec = do
+  let sc = ecContext ec
+  t <- liftIO $ scImport sc initExpr 
+  rules <- forM (Map.toList (ecJavaValues ec)) $ \(name, lt) ->
+             do ty <- liftIO $ scTypeOf sc lt
+                nt <- liftIO $ scJavaValue sc ty name
+                return (ruleOfTerms nt lt)
+  let ss = addRules rules emptySimpset
+  liftIO $ rewriteSharedTerm sc ss t
 
 -- | Return Java value associated with mixed expression.
 evalMixedExpr :: TC.MixedExpr s -> EvalContext s
@@ -358,10 +368,11 @@ ocStep (ModifyInstanceField refExpr f) =
     logicType <- liftIO $ scBitvector sc (fromInteger w)
     n <- liftIO $ scFreshGlobal sc "_" logicType
     ocModifyResultState $ setInstanceFieldValue lhsRef f (mkJSSValue tp n)
-ocStep (ModifyArray refExpr tp) = do
+ocStep (ModifyArray refExpr ty) = do
   ocEval (evalJavaRefExpr refExpr) $ \ref -> do
     sc <- gets (ecContext . ocsEvalContext)
-    rhsVal <- liftIO (scFreshGlobal sc "_" tp)
+    mtp <- liftIO $ TC.logicTypeOfActual sc ty
+    rhsVal <- maybe (fail "can't convert") (liftIO . scFreshGlobal sc "_") mtp
     ocModifyResultState $ setArrayValue ref rhsVal
 ocStep (Return expr) = do
   ocEval (evalMixedExpr expr) $ \val ->
@@ -429,23 +440,26 @@ checkClassesInitialized pos nm requiredClasses = do
 execOverride :: JSS.MonadSim (SharedContext s) m
              => SharedContext s
              -> Pos
+             -> Map String TC.JavaExpr
              -> MethodSpecIR s
              -> Maybe JSS.Ref
              -> [JSS.Value (SharedTerm s)]
              -> JSS.Simulator (SharedContext s) m ()
-execOverride sc pos ir mbThis args = do
+execOverride sc pos m ir mbThis args = do
   -- Execute behaviors.
   initPS <- JSS.getPath (PP.text "MethodSpec override")
   let bsl = specBehaviors ir -- Map.lookup (JSS.BreakPC 0) (specBehaviors ir) -- TODO
   let method = specMethod ir
       argLocals = map (JSS.localIndexOfParameter method) [0..] `zip` args
-  let ec = EvalContext { ecContext = sc
-                       , ecLocals =  Map.fromList $
-                           case mbThis of
-                             Just th -> (0, JSS.RValue th) : argLocals
-                             Nothing -> argLocals
-                       , ecPathState = initPS
-                       }
+  let ec0 = EvalContext { ecContext = sc
+                        , ecLocals =  Map.fromList $
+                             case mbThis of
+                               Just th -> (0, JSS.RValue th) : argLocals
+                               Nothing -> argLocals
+                        , ecPathState = initPS
+                        , ecJavaValues = Map.empty
+                        }
+  ec <- addJavaValues m ec0
   -- Check class initialization.
   checkClassesInitialized pos (specName ir) (specInitializedClasses ir)
   -- Execute behavior.
@@ -487,15 +501,16 @@ execOverride sc pos ir mbThis args = do
 overrideFromSpec :: JSS.MonadSim (SharedContext s) m =>
                     SharedContext s
                  -> Pos
+                 -> Map String TC.JavaExpr
                  -> MethodSpecIR s
                  -> JSS.Simulator (SharedContext s) m ()
-overrideFromSpec de pos ir
+overrideFromSpec de pos m ir
   | JSS.methodIsStatic method =
       JSS.overrideStaticMethod cName key $ \args ->
-        execOverride de pos ir Nothing args
+        execOverride de pos m ir Nothing args
   | otherwise =
       JSS.overrideInstanceMethod cName key $ \thisVal args ->
-        execOverride de pos ir (Just thisVal) args
+        execOverride de pos m ir (Just thisVal) args
  where cName = JSS.className (specMethodClass ir)
        method = specMethod ir
        key = JSS.methodKey method
@@ -535,6 +550,7 @@ esdRefName ref esd =
 data ESGState s = ESGState {
          esContext :: SharedContext s
        , esMethod :: JSS.Method
+       , esJavaExprs :: Map String TC.JavaExpr
        , esExprRefMap :: Map TC.JavaExpr JSS.Ref
        , esInitialAssignments :: [(TC.JavaExpr, SharedTerm s)]
        , esInitialPathState :: SpecPathState s
@@ -550,8 +566,10 @@ type ExpectedStateGenerator s = StateT (ESGState s) IO
 esEval :: (EvalContext s -> ExprEvaluator b) -> ExpectedStateGenerator s b
 esEval fn = do
   sc <- gets esContext
+  m <- gets esJavaExprs 
   initPS <- gets esInitialPathState
-  let ec = evalContextFromPathState sc initPS
+  let ec0 = evalContextFromPathState sc initPS
+  ec <- addJavaValues m ec0
   res <- runEval (fn ec)
   case res of
     Left expr -> fail $ "internal: esEval given " ++ show expr ++ "."
@@ -650,17 +668,11 @@ esSetLogicValues sc cl tp lrhs = do
   ty <- liftIO $ scTypeOf sc value
   -- Update value.
   case ty of
-    -- (isVecType -> Just (l, _)) -> undefined
-{-
+    (isVecType (const (return ())) -> Just _) -> do
        refs <- forM cl $ \expr -> do
                  JSS.RValue ref <- esEval $ evalJavaExpr expr
                  return ref
-       let len = mkCInt 32 (toInteger l) 
-       let insertValue r m = Map.insert r (len, value) m
-       esModifyInitialPathState $ \ps -> ps {
-           JSS.arrays = foldr insertValue (JSS.arrays ps) refs
-         }
--}
+       forM_ refs $ \r -> esModifyInitialPathState (setArrayValue r value)
     (asBitvectorType -> Just 32) ->
        mapM_ (flip esSetJavaValue (JSS.IValue value)) cl
     (asBitvectorType -> Just 64) ->
@@ -737,11 +749,12 @@ esStep (ModifyArray refExpr _) = do
 
 initializeVerification :: JSS.MonadSim (SharedContext s) m =>
                           SharedContext s
+                       -> Map String TC.JavaExpr
                        -> MethodSpecIR s
                        -> BehaviorSpec s
                        -> RefEquivConfiguration
                        -> JSS.Simulator (SharedContext s) m (ExpectedStateDef s)
-initializeVerification sc ir bs refConfig = do
+initializeVerification sc m ir bs refConfig = do
   exprRefs <- mapM (JSS.genRef . TC.jssTypeOfActual . snd) refConfig
   let refAssignments = (map fst refConfig `zip` exprRefs)
       clName = JSS.className (specThisClass ir)
@@ -750,6 +763,7 @@ initializeVerification sc ir bs refConfig = do
         where
           mcs' = JSS.pushCallFrame clName
                                    (specMethod ir)
+                                   -- FIXME: this is probably the cause of the empty operand stack
                                    JSS.entryBlock -- TODO: not the right block
                                    Map.empty
                                    cs
@@ -766,6 +780,7 @@ initializeVerification sc ir bs refConfig = do
   initPS <- JSS.getPath (PP.text "initializeVerification")
   let initESG = ESGState { esContext = sc
                          , esMethod = specMethod ir
+                         , esJavaExprs = m
                          , esExprRefMap = Map.fromList
                              [ (e, r) | (cl,r) <- refAssignments, e <- cl ]
                          , esInitialAssignments = []
@@ -779,7 +794,7 @@ initializeVerification sc ir bs refConfig = do
           forM_ refAssignments $ \(cl,r) ->
             forM_ cl $ \e -> esSetJavaValue e (JSS.RValue r)
           -- Set initial logic values.
-          lcs <- liftIO $ bsLogicClasses sc bs refConfig
+          lcs <- liftIO $ bsLogicClasses sc m bs refConfig
           case lcs of
             Nothing ->
               let msg = "Unresolvable cyclic dependencies between assumptions."
@@ -883,7 +898,7 @@ generateVC ir esd (ps, endLoc, res) = do
         PathVC { pvcInitialAssignments = esdInitialAssignments esd
                , pvcStartLoc = esdStartLoc esd
                , pvcEndLoc = endLoc
-               , pvcAssumptions = error "pvcAssumptions" -- JSS.psAssumptions ps -- TODO
+               , pvcAssumptions = ps ^. JSS.pathAssertions
                , pvcStaticErrors = []
                , pvcChecks = []
                }
@@ -960,10 +975,11 @@ mkSpecVC :: JSS.MonadSim (SharedContext s) m =>
          -> JSS.Simulator (SharedContext s) m [PathVC s]
 mkSpecVC sc params esd = do
   let ir = vpSpec params
+      m = vpJavaExprs params
   -- Log execution.
   -- setVerbosity (simverbose (vpOpts params)) -- TODO
   -- Add method spec overrides.
-  mapM_ (overrideFromSpec sc (specPos ir)) (vpOver params)
+  mapM_ (overrideFromSpec sc (specPos ir) m) (vpOver params)
   -- Execute code.
   JSS.run
   returnVal <- JSS.getProgramReturnValue
@@ -998,6 +1014,7 @@ data VerifyParams s = VerifyParams
   , vpOpts    :: Options
   , vpSpec    :: MethodSpecIR s
   , vpOver    :: [MethodSpecIR s]
+  , vpJavaExprs :: Map String TC.JavaExpr
   , vpRules   :: [Rule]
   , vpEnabledRules :: Set String
   }
@@ -1076,6 +1093,7 @@ runValidation params sc esd results = do
           runVerify vs g cmds
 
 
+{-
 -- | Attempt to verify method spec using verification method specified.
 validateMethodSpec :: VerifyParams s -> SymbolicRunHandler s -> IO ()
 validateMethodSpec
@@ -1103,6 +1121,7 @@ validateMethodSpec
       res <- mkSpecVC jsc params esd
       liftIO $ handler jsc esd res
     beFree be
+-}
 
 data VerifyState s = VState {
          vsVCName :: String

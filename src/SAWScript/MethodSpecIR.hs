@@ -16,7 +16,6 @@ module SAWScript.MethodSpecIR
     MethodSpecIR
   , specName
   , specPos
-  , specContext
   , specThisClass
   , specMethod
   , specMethodClass
@@ -25,7 +24,6 @@ module SAWScript.MethodSpecIR
   , specValidationPlan
   , specAddBehaviorCommand
   , specAddVarDecl
-  , specAddVarInput
   , specAddAliasSet
   , initMethodSpec
   --, resolveMethodSpecIR
@@ -36,6 +34,7 @@ module SAWScript.MethodSpecIR
   , bsMayAliasSet
   , RefEquivConfiguration
   , bsRefEquivClasses
+  , bsActualTypeMap
   , bsLogicAssignments
   , bsLogicClasses
   , BehaviorCommand(..)
@@ -72,7 +71,9 @@ import qualified Verifier.Java.Common as JSS
 import qualified Verifier.LLVM.Codebase as LSS
 import qualified Data.JVM.Symbolic.AST as JSS
 
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.CongruenceClosure (CCSet)
@@ -179,7 +180,7 @@ data BehaviorCommand s
    | ModifyInstanceField JavaExpr JSS.FieldId
      -- | Modify the Java array to an arbitrary value.
      -- May point to integral type or array.
-   | ModifyArray JavaExpr (SharedTerm s)
+   | ModifyArray JavaExpr JavaActualType
      -- | Specifies value method returns.
    | Return (MixedExpr s)
   deriving (Show)
@@ -187,8 +188,6 @@ data BehaviorCommand s
 data BehaviorSpec s = BS {
          -- | Program counter for spec.
          bsLoc :: JSS.Breakpoint
-         -- | Maps Java variable access strings to global input variables.
-       , bsVarInputs :: Map.Map String (SharedTerm s)
          -- | Maps all expressions seen along path to actual type.
        , bsActualTypeMap :: ExprActualTypeMap
          -- | Stores which Java expressions must alias each other.
@@ -246,37 +245,39 @@ bsPrimitiveExprs :: BehaviorSpec s -> [JavaExpr]
 bsPrimitiveExprs bs =
   [ e | (e, PrimitiveType _) <- Map.toList (bsActualTypeMap bs) ]
  
-bsLogicEqs :: BehaviorSpec s -> [(JavaExpr, JavaExpr)]
-bsLogicEqs bs = []
-  -- FIXME!
-  {-
+asJavaExpr :: Map String JavaExpr -> LogicExpr s -> Maybe JavaExpr
+asJavaExpr m (asCtor -> Just (i, [e])) =
+  case e of
+    (asStringLit -> Just s) | i == parseIdent "Java.mkValue" -> Map.lookup s m
+    _ -> Nothing
+asJavaExpr _ _ = Nothing
+
+bsLogicEqs :: Map String JavaExpr -> BehaviorSpec s -> [(JavaExpr, JavaExpr)]
+bsLogicEqs m bs =
   [ (lhs,rhs') | (_,lhs,rhs) <- bsLogicAssignments bs
-               , let Just rhs' = asJavaExpr rhs] -}
+               , let Just rhs' = asJavaExpr m rhs]
 
 -- | Returns logic assignments to equivance class.
-bsAssignmentsForClass :: BehaviorSpec s -> JavaExprEquivClass -> [LogicExpr s]
-bsAssignmentsForClass bs cl = res 
+bsAssignmentsForClass :: Map String JavaExpr -> BehaviorSpec s -> JavaExprEquivClass
+                      -> [LogicExpr s]
+bsAssignmentsForClass m bs cl = res 
   where s = Set.fromList cl
-        isJavaExpr _ = False -- error "isJavaExpr" -- FIXME
-        {-
-        isJavaExpr (JavaValue _ _ _) = True
-        isJavaExpr _ = False
-        -}
         res = [ rhs 
               | (_,lhs,rhs) <- bsLogicAssignments bs
               , Set.member lhs s
-              , not (isJavaExpr rhs) ]
+              , not (isJust (asJavaExpr m rhs)) ]
 
 -- | Retuns ordering of Java expressions to corresponding logic value.
 bsLogicClasses :: forall s.
                   SharedContext s
+               -> Map String JavaExpr
                -> BehaviorSpec s
                -> RefEquivConfiguration
                -> IO (Maybe [(JavaExprEquivClass, SharedTerm s, [LogicExpr s])])
-bsLogicClasses sc bs cfg = do
+bsLogicClasses sc m bs cfg = do
   let allClasses = CC.toList
                    -- Add logic equations.
-                   $ flip (foldr (uncurry CC.insertEquation)) (bsLogicEqs bs)
+                   $ flip (foldr (uncurry CC.insertEquation)) (bsLogicEqs m bs)
                    -- Add primitive expression.
                    $ flip (foldr CC.insertTerm) (bsPrimitiveExprs bs)
                    -- Create initial set with references.
@@ -295,13 +296,13 @@ bsLogicClasses sc bs cfg = do
       -- Create edges
       exprNodeMap = Map.fromList [ (e,n) | (n,(cl,_)) <- grNodes, e <- cl ]
       grEdges = [ (s,t,()) | (t,(cl,_)) <- grNodes
-                           , src:_ <- [bsAssignmentsForClass bs cl]
+                           , src:_ <- [bsAssignmentsForClass m bs cl]
                            , se <- Set.toList (logicExprJavaExprs src)
                            , let Just s = Map.lookup se exprNodeMap ]
       -- Compute strongly connected components.
       components = scc (mkGraph grNodes grEdges :: Gr (JavaExprEquivClass, SharedTerm s) ())
   return $ if all (\l -> length l == 1) components
-             then Just [ (cl, at, bsAssignmentsForClass bs cl)
+             then Just [ (cl, at, bsAssignmentsForClass m bs cl)
                        | [n] <- components
                        , let (cl,at) = v V.! n ]
              else Nothing
@@ -787,10 +788,10 @@ mayAliases :: (CC.OrdFoldable f, CC.Traversable f)
 mayAliases l s = foldr splitClass (Set.singleton s) l
 
 
-initMethodSpec :: Pos -> JSS.Codebase -> SharedContext s
+initMethodSpec :: Pos -> JSS.Codebase
                -> String -> String
                -> IO (MethodSpecIR s)
-initMethodSpec pos cb jsc cname mname = do
+initMethodSpec pos cb cname mname = do
   let cname' = JP.dotsToSlashes cname -- TODO: necessary?
   thisClass <- lookupClass cb pos cname'
   (methodClass,method) <- findMethod cb pos mname thisClass
@@ -810,7 +811,6 @@ initMethodSpec pos cb jsc cname mname = do
                   , bsReversedCommands = []
                   }
       initMS = MSIR { specPos = pos
-                    , specContext = jsc
                     , specThisClass = thisClass
                     , specMethodClass = methodClass
                     , specMethod = method
@@ -997,8 +997,6 @@ resolveValidationPlan ruleNames mtc allBehaviors decls =
 
 data MethodSpecIR s = MSIR {
     specPos :: Pos
-    -- | The SharedContext used by JSS for this method
-  , specContext :: SharedContext s
     -- | Class used for this instance.
   , specThisClass :: JSS.Class
     -- | Class where method is defined.
@@ -1029,13 +1027,6 @@ specAddVarDecl expr jt ms = ms { specBehaviors = bs' }
   where bs = specBehaviors ms
         bs' = bs { bsActualTypeMap =
                      Map.insert expr jt (bsActualTypeMap bs) }
-
-specAddVarInput :: String -> SharedTerm s
-                -> MethodSpecIR s -> MethodSpecIR s
-specAddVarInput name inp ms = ms { specBehaviors = bs' }
-  where bs = specBehaviors ms
-        bs' = bs { bsVarInputs =
-                     Map.insert name inp (bsVarInputs bs) }
 
 specAddAliasSet :: [JavaExpr] -> MethodSpecIR s -> MethodSpecIR s
 specAddAliasSet exprs ms = ms { specBehaviors = bs' }
