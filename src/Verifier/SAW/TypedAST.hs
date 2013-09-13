@@ -460,6 +460,7 @@ zipWithFlatTermF f = go
           | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
         go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
         go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
+        go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
         go (ArrayValue tx vx) (ArrayValue ty vy)
           | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
 
