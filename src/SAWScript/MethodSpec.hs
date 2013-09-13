@@ -34,7 +34,7 @@ import Control.Monad.Cont
 import Control.Monad.Error (ErrorT, runErrorT, throwError, MonadError)
 import Control.Monad.State
 import Data.Int
---import Data.List (foldl', intercalate, intersperse)
+import Data.List (intercalate) -- foldl', intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -485,7 +485,7 @@ execOverride sc pos m ir mbThis args = do
   res <- liftIO . execBehavior [bsl] ec =<< JSS.getPath (PP.text "MethodSpec behavior")
   when (null res) $ error "internal: execBehavior returned empty result list."
   -- Create function for generation resume actions.
-  {- FIXME: JSS
+  {- FIXME: update to track failure paths according to current JSS architecture
   let -- Failed run
       resAction (ps, _, Left el) = do
         let msg = "Unsatisified assertions in " ++ specName ir ++ ":\n"
@@ -505,6 +505,7 @@ execOverride sc pos m ir mbThis args = do
           JSS.putPathState $
             case (mval, JSS.frames ps) of
               (Just val, [])   -> ps { JSS.finalResult = JSS.ReturnVal val }
+              -- TODO: the following line is the one that puts the return value on the stack
               (Just val, f:fr) -> ps { JSS.frames = f { JSS.frmOpds = val : JSS.frmOpds f } : fr }
               (Nothing,  [])   -> ps { JSS.finalResult = JSS.Terminated }
               (Nothing,  _:_)  -> ps
@@ -514,7 +515,21 @@ execOverride sc pos m ir mbThis args = do
   mapM_ (JSS.onNewPath . resAction) restRes
   JSS.onCurrPath (resAction firstRes)
   -}
-  return ()
+  case res of
+    [(_, _, Left el)] -> do
+      let msg = "Unsatisified assertions in " ++ specName ir ++ ":\n"
+                ++ intercalate "\n" (map ppOverrideError el)
+      fail msg
+    [(_, _, Right mval)] ->
+      JSS.modifyPathM_ (PP.text "path result") $ \ps ->
+        return $
+        case (mval, ps ^. JSS.pathStack) of
+          (Just val, [])     -> ps & set JSS.pathRetVal (Just val)
+          (Just val, (f:fr)) -> ps & set JSS.pathStack  (f' : fr)
+            where f' = f & JSS.cfOpds %~ (val :)
+          (Nothing,  [])     -> ps & set JSS.pathRetVal Nothing
+          (Nothing,  _:_)    -> ps
+    _ -> fail "More than one path returned from override execution."
 
 -- | Add a method override for the given method to the simulator.
 overrideFromSpec :: JSS.MonadSim (SharedContext s) m =>
