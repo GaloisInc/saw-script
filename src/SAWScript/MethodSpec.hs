@@ -14,7 +14,6 @@ module SAWScript.MethodSpec
   , specName
   , specMethodClass
   , specValidationPlan
-  --, resolveMethodSpecIR
   , SymbolicRunHandler
   , initializeVerification
   , runValidation
@@ -483,42 +482,12 @@ execOverride sc pos m ir mbThis args = do
   checkClassesInitialized pos (specName ir) (specInitializedClasses ir)
   -- Execute behavior.
   res <- liftIO . execBehavior [bsl] ec =<< JSS.getPath (PP.text "MethodSpec behavior")
-  when (null res) $ error "internal: execBehavior returned empty result list."
   -- Create function for generation resume actions.
-  {- FIXME: update to track failure paths according to current JSS architecture
-  let -- Failed run
-      resAction (ps, _, Left el) = do
-        let msg = "Unsatisified assertions in " ++ specName ir ++ ":\n"
-                    ++ intercalate "\n" (map ppOverrideError el)
-        JSS.CustomRA msg $ do
-          verb <- getVerbosity
-          let exc = JSS.SimExtErr { JSS.simExtErrMsg = msg
-                                  , JSS.simExtErrVerbosity = verb
-                                    -- TODO: Determine what to put instead of Map.empty
-                                  , JSS.simExtErrResults = Map.empty
-                                  }
-          JSS.putPathState ps { JSS.finalResult = JSS.Exc exc }
-          return $ JSS.NextInst
-      resAction (ps, _, Right mval) =
-        JSS.CustomRA ("Override execution") $ do
-          --TODO: Investigate if this is right.
-          JSS.putPathState $
-            case (mval, JSS.frames ps) of
-              (Just val, [])   -> ps { JSS.finalResult = JSS.ReturnVal val }
-              -- TODO: the following line is the one that puts the return value on the stack
-              (Just val, f:fr) -> ps { JSS.frames = f { JSS.frmOpds = val : JSS.frmOpds f } : fr }
-              (Nothing,  [])   -> ps { JSS.finalResult = JSS.Terminated }
-              (Nothing,  _:_)  -> ps
-          return $ JSS.NextInst
-  -- Split execution paths.
-  let (firstRes:restRes) = res
-  mapM_ (JSS.onNewPath . resAction) restRes
-  JSS.onCurrPath (resAction firstRes)
-  -}
   case res of
     [(_, _, Left el)] -> do
       let msg = "Unsatisified assertions in " ++ specName ir ++ ":\n"
                 ++ intercalate "\n" (map ppOverrideError el)
+      -- TODO: turn this message into a proper exception
       fail msg
     [(_, _, Right mval)] ->
       JSS.modifyPathM_ (PP.text "path result") $ \ps ->
@@ -529,7 +498,8 @@ execOverride sc pos m ir mbThis args = do
             where f' = f & JSS.cfOpds %~ (val :)
           (Nothing,  [])     -> ps & set JSS.pathRetVal Nothing
           (Nothing,  _:_)    -> ps
-    _ -> fail "More than one path returned from override execution."
+    [] -> fail "Zero paths returned from override execution."
+    _  -> fail "More than one path returned from override execution."
 
 -- | Add a method override for the given method to the simulator.
 overrideFromSpec :: JSS.MonadSim (SharedContext s) m =>
@@ -1050,28 +1020,7 @@ mkSpecVC sc params esd = do
   JSS.run
   returnVal <- JSS.getProgramReturnValue
   ps <- JSS.getPath (PP.text "mkSpecVC")
-{-
-  errPaths <- JSS.getProgramErrorPaths
-  finalPathResults <-
-    forM jssResults $ \(pd, fr) -> do
-      finalPS <- JSS.getPathStateByName pd
-      case fr of
-        JSS.ReturnVal val -> return [(finalPS, Nothing, Right (Just val))]
-        JSS.Terminated ->    return [(finalPS, Nothing, Right Nothing)]
-        JSS.Breakpoint pc -> do
-          -- Execute behavior specs at PC.
-          let Just bsl = Map.lookup pc (specBehaviors ir)
-          let ec = evalContextFromPathState de finalPS
-          liftIO $ execBehavior bsl ec finalPS
-        JSS.Exc JSS.SimExtErr { JSS.simExtErrMsg = msg } ->
-          return [(finalPS, Nothing, Left [SimException msg]) ]
-        JSS.Exc JSS.JavaException{ JSS.excRef = r } ->
-          return [(finalPS, Nothing, Left [JavaException r])]
-        JSS.Aborted ->
-          return [(finalPS, Nothing, Left [Abort])]
-        JSS.Unassigned -> error "internal: run terminated before completing."
--}
-  -- FIXME: include error paths
+  -- TODO: handle exceptional or breakpoint terminations
   return $ map (generateVC ir esd) [(ps, Nothing, Right returnVal)]
 
 data VerifyParams s = VerifyParams
@@ -1126,9 +1075,6 @@ runValidation params sc esd results = do
               VState { vsVCName = nm
                      , vsMethodSpec = ir
                      , vsVerbosity = verb
-                     --, vsRules = vpRules params
-                     --, vsEnabledRules = vpEnabledRules params
-                     -- , vsEnabledOps = vpEnabledOps params
                      -- , vsFromBlock = esdStartLoc esd
                      , vsEvalContext = evalContextFromPathState sc ps
                      , vsInitialAssignments = pvcInitialAssignments pvc
@@ -1141,7 +1087,7 @@ runValidation params sc esd results = do
            g <- scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
            when (verb >= 4) $ do
              putStrLn $ "Checking " ++ vcName vc
-           runVerify vs g cmds
+           -- runVerify vs g cmds -- FIXME
         else do
           let vsName = "an invalid path "
 {-
@@ -1159,7 +1105,7 @@ runValidation params sc esd results = do
             print $ pvcStaticErrors pvc
             putStrLn $ "Calling runVerify to disprove " ++
                      scPrettyTerm (pvcAssumptions pvc)
-          runVerify vs g cmds
+          -- runVerify vs g cmds -- FIXME
 
 
 {-
@@ -1196,8 +1142,6 @@ data VerifyState s = VState {
          vsVCName :: String
        , vsMethodSpec :: MethodSpecIR s
        , vsVerbosity :: Verbosity
-       --, vsRules :: [Rule]
-       --, vsEnabledRules :: Set String
          -- | Starting Block is used for checking VerifyAt commands.
        -- , vsFromBlock :: JSS.BlockId
          -- | Evaluation context used for parsing expressions during
@@ -1215,13 +1159,14 @@ vsSharedContext = ecContext . vsEvalContext
 
 --type VerifyExecutor s = StateT (VerifyState s) IO
 
+{-
 runVerify :: VerifyState s -> SharedTerm s -> [VerifyCommand] -> IO ()
-runVerify _vs _g _cmds = return () -- evalStateT (applyTactics cmds g) vs -- TODO
+runVerify vs g cmds = evalStateT (applyTactics cmds g) vs -- TODO
+-}
 
 -- testRandom {{{2
 
 type Verbosity = Int
-
 {-
 testRandom :: SharedContext s -> Verbosity
            -> MethodSpecIR s -> Int -> Maybe Int -> PathVC s -> IO ()

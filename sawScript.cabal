@@ -60,7 +60,6 @@ library
     SAWScript.ProcessFile
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
-    SAWScript.TIMonad
     SAWScript.REPL
     SAWScript.REPL.GenerateModule
     SAWScript.REPL.Monad
