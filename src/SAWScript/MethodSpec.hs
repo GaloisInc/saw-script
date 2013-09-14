@@ -232,7 +232,8 @@ scRemoveBitvector sc tm = do
 scJavaValue :: SharedContext s -> SharedTerm s -> String -> IO (SharedTerm s)
 scJavaValue sc ty name = do
   s <- scString sc name
-  scCtorApp sc (parseIdent "Java.mkValue") [ty, s]
+  mkValue <- scGlobalDef sc (parseIdent "Java.mkValue")
+  scApplyAll sc mkValue [ty, s]
 
 -- | Evaluates a typed expression in the context of a particular state.
 evalLogicExpr :: TC.LogicExpr s -> EvalContext s -> ExprEvaluator (SharedTerm s)
@@ -248,7 +249,9 @@ evalLogicExpr initExpr ec = liftIO $ do
   putStrLn "evalLogicExpr"
   print rules
   t' <- rewriteSharedTerm sc ss t
-  putStrLn $ show (scPrettyTermDoc t) ++ " -> " ++ show (scPrettyTermDoc t')
+  print (scPrettyTermDoc t)
+  putStrLn "  ===>"
+  print (scPrettyTermDoc t')
   return t'
 
 -- | Return Java value associated with mixed expression.
