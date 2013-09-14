@@ -463,6 +463,8 @@ zipWithFlatTermF f = go
         go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
         go (ArrayValue tx vx) (ArrayValue ty vy)
           | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
+        go (ExtCns (EC xi xn xt)) (ExtCns (EC yi _ yt))
+          | xi == yi = Just (ExtCns (EC xi xn (f xt yt)))
 
         go _ _ = Nothing
 
