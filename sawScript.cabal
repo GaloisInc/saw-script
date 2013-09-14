@@ -58,6 +58,7 @@ library
     SAWScript.Options
     SAWScript.Parser
     SAWScript.ProcessFile
+    SAWScript.Proof
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.REPL
