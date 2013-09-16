@@ -76,36 +76,6 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
---import qualified SMTLib1 as SmtLib
---import qualified SMTLib2 as SmtLib2
-
--- Utilities {{{1
-
-{-
--- | Return first value satisfying predicate if any.
-findM :: Monad m => (a -> m Bool) -> [a] -> m (Maybe a)
-findM _ [] = return Nothing
-findM check (x:xs)  = do ok <- check x
-                         if ok then return (Just x)
-                               else findM check xs
--}
-
--- Verinf Utilities {{{1
-
-scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scEq sc x y = do
-  xty <- scTypeOf sc x
-  -- yty <- scTypeOf sc y
-  eqOp <- scApplyPreludeEq sc
-  res <- eqOp xty x y
-  return res
-
-scImplies :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-scImplies sc x y = do
-  xNot <- scNot sc x
-  orOp <- scApplyPreludeOr sc
-  orOp xNot y
-
 -- JSS Utilities {{{1
 
 type SpecPathState = JSS.Path (SharedContext JSSCtx)
