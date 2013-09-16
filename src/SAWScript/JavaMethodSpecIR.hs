@@ -11,11 +11,11 @@ Point-of-contact : jhendrix, atomb
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module SAWScript.MethodSpecIR 
+module SAWScript.JavaMethodSpecIR 
   ( JavaSetup
   , JavaSetupState(..)
     -- * MethodSpec record
-  , MethodSpecIR
+  , JavaMethodSpecIR
   , specName
   , specPos
   , specThisClass
@@ -90,7 +90,7 @@ import SAWScript.Proof
 
 data JavaSetupState
   = JavaSetupState {
-      jsSpec :: MethodSpecIR
+      jsSpec :: JavaMethodSpecIR
     , jsContext :: SharedContext JSSCtx
     }
 
@@ -271,7 +271,7 @@ bsAddCommand bc bs =
 
 initMethodSpec :: Pos -> JSS.Codebase
                -> String -> String
-               -> IO MethodSpecIR
+               -> IO JavaMethodSpecIR
 initMethodSpec pos cb cname mname = do
   let cname' = JP.dotsToSlashes cname
   thisClass <- lookupClass cb pos cname'
@@ -327,9 +327,9 @@ data ValidationPlan
   -- | GenBlif (Maybe FilePath)
   | RunVerify (ProofScript SAWCtx ProofResult)
 
--- MethodSpecIR {{{1
+-- JavaMethodSpecIR {{{1
 
-data MethodSpecIR = MSIR {
+data JavaMethodSpecIR = MSIR {
     specPos :: Pos
     -- | Class used for this instance.
   , specThisClass :: JSS.Class
@@ -351,14 +351,14 @@ data MethodSpecIR = MSIR {
   }
 
 -- | Return user printable name of method spec (currently the class + method name).
-specName :: MethodSpecIR -> String
+specName :: JavaMethodSpecIR -> String
 specName ir =
  let clName = JSS.className (specThisClass ir)
      mName = JSS.methodName (specMethod ir)
   in JSS.slashesToDots clName ++ ('.' : mName)
 
 specAddVarDecl :: String -> JavaExpr -> JavaActualType
-               -> MethodSpecIR -> MethodSpecIR
+               -> JavaMethodSpecIR -> JavaMethodSpecIR
 specAddVarDecl name expr jt ms = ms { specBehaviors = bs'
                                     , specJavaExprNames = ns' }
   where bs = specBehaviors ms
@@ -366,16 +366,16 @@ specAddVarDecl name expr jt ms = ms { specBehaviors = bs'
                      Map.insert expr jt (bsActualTypeMap bs) }
         ns' = Map.insert name expr (specJavaExprNames ms)
 
-specAddAliasSet :: [JavaExpr] -> MethodSpecIR -> MethodSpecIR
+specAddAliasSet :: [JavaExpr] -> JavaMethodSpecIR -> JavaMethodSpecIR
 specAddAliasSet exprs ms = ms { specBehaviors = bs' }
   where bs = specBehaviors ms
         bs' = bs { bsMayAliasClasses = exprs : bsMayAliasClasses bs }
 
 specAddBehaviorCommand :: BehaviorCommand
-                       -> MethodSpecIR -> MethodSpecIR
+                       -> JavaMethodSpecIR -> JavaMethodSpecIR
 specAddBehaviorCommand bc ms =
   ms { specBehaviors = bsAddCommand bc (specBehaviors ms) }
 
 specSetVerifyTactic :: ProofScript SAWCtx ProofResult
-                    -> MethodSpecIR -> MethodSpecIR
+                    -> JavaMethodSpecIR -> JavaMethodSpecIR
 specSetVerifyTactic script ms = ms { specValidationPlan = RunVerify script }

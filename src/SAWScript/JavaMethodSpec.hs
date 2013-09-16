@@ -6,10 +6,10 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
-module SAWScript.MethodSpec
+module SAWScript.JavaMethodSpec
   ( VerifyCommand
   , ValidationPlan(..)
-  , MethodSpecIR
+  , JavaMethodSpecIR
   , specMethod
   , specName
   , specMethodClass
@@ -54,7 +54,7 @@ import qualified SAWScript.CongruenceClosure as CC
 import qualified SAWScript.JavaExpr as TC
 import SAWScript.Options
 import SAWScript.Utils
-import SAWScript.MethodSpecIR
+import SAWScript.JavaMethodSpecIR
 import SAWScript.Proof
 
 import qualified Verifier.Java.Simulator as JSS
@@ -427,7 +427,7 @@ checkClassesInitialized pos nm requiredClasses = do
 execOverride :: JSS.MonadSim (SharedContext JSSCtx) m
              => SharedContext JSSCtx
              -> Pos
-             -> MethodSpecIR
+             -> JavaMethodSpecIR
              -> Maybe JSS.Ref
              -> [JSS.Value (SharedTerm JSSCtx)]
              -> JSS.Simulator (SharedContext JSSCtx) m ()
@@ -474,7 +474,7 @@ execOverride sc pos ir mbThis args = do
 overrideFromSpec :: JSS.MonadSim (SharedContext JSSCtx) m =>
                     SharedContext JSSCtx
                  -> Pos
-                 -> MethodSpecIR
+                 -> JavaMethodSpecIR
                  -> JSS.Simulator (SharedContext JSSCtx) m ()
 overrideFromSpec de pos ir
   | JSS.methodIsStatic method =
@@ -720,7 +720,7 @@ esStep (ModifyArray refExpr _) = do
 
 initializeVerification :: JSS.MonadSim (SharedContext JSSCtx) m =>
                           SharedContext JSSCtx
-                       -> MethodSpecIR
+                       -> JavaMethodSpecIR
                        -> BehaviorSpec
                        -> RefEquivConfiguration
                        -> JSS.Simulator (SharedContext JSSCtx) m ExpectedStateDef
@@ -893,7 +893,7 @@ pvcgFail msg =
 -- generateVC {{{2
 
 -- | Compare result with expected state.
-generateVC :: MethodSpecIR 
+generateVC :: JavaMethodSpecIR 
            -> ExpectedStateDef -- ^ What is expected
            -> RunResult -- ^ Results of symbolic execution.
            -> PathVC -- ^ Proof oblications
@@ -994,8 +994,8 @@ data VerifyParams = VerifyParams
   { vpCode    :: JSS.Codebase
   , vpContext :: SharedContext JSSCtx
   , vpOpts    :: Options
-  , vpSpec    :: MethodSpecIR
-  , vpOver    :: [MethodSpecIR]
+  , vpSpec    :: JavaMethodSpecIR
+  , vpOver    :: [JavaMethodSpecIR]
   }
 
 {-
@@ -1069,7 +1069,7 @@ runValidation prover params sc esd results = do
 
 data VerifyState = VState {
          vsVCName :: String
-       , vsMethodSpec :: MethodSpecIR
+       , vsMethodSpec :: JavaMethodSpecIR
        , vsVerbosity :: Verbosity
          -- | Starting Block is used for checking VerifyAt commands.
        -- , vsFromBlock :: JSS.BlockId
@@ -1092,7 +1092,7 @@ type Verbosity = Int
 
 {-
 testRandom :: SharedContext s -> Verbosity
-           -> MethodSpecIR s -> Int -> Maybe Int -> PathVC s -> IO ()
+           -> JavaMethodSpecIR s -> Int -> Maybe Int -> PathVC s -> IO ()
 testRandom de v ir test_num lim pvc = return ()
     do when (v >= 3) $
          putStrLn $ "Generating random tests: " ++ specName ir

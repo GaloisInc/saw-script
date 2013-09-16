@@ -51,12 +51,12 @@ library
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.JavaExpr
+    SAWScript.JavaMethodSpec
+    SAWScript.JavaMethodSpecIR
     SAWScript.Lexer
     SAWScript.LLVMExpr
     SAWScript.LLVMMethodSpec
     SAWScript.LLVMMethodSpecIR
-    SAWScript.MethodSpec
-    SAWScript.MethodSpecIR
     SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
