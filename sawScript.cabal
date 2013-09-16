@@ -52,6 +52,9 @@ library
     SAWScript.Interpreter
     SAWScript.JavaExpr
     SAWScript.Lexer
+    SAWScript.LLVMExpr
+    SAWScript.LLVMMethodSpec
+    SAWScript.LLVMMethodSpecIR
     SAWScript.MethodSpec
     SAWScript.MethodSpecIR
     SAWScript.NewAST
