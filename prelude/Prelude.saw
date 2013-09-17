@@ -57,8 +57,9 @@ prim java_double        : JavaType;
 prim java_array         : Int -> JavaType -> JavaType;
 prim java_class         : String -> JavaType;
 
-prim java_var           : String -> JavaType -> JavaSetup ();
 prim java_value         : {a} String -> a;
+prim java_var           : String -> JavaType -> JavaSetup ();
+prim java_may_alias     : {n} [n]String -> JavaSetup ();
 prim java_assert        : Bit -> JavaSetup ();
 prim java_assert_eq     : {a} String -> a -> JavaSetup ();
 prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
@@ -78,8 +79,9 @@ prim llvm_double        : LLVMType;
 prim llvm_ptr           : Int -> LLVMType;
 prim llvm_array         : Int -> LLVMType -> LLVMType;
 
-prim llvm_var           : String -> LLVMType -> LLVMSetup ();
 prim llvm_value         : {a} String -> a;
+prim llvm_var           : String -> LLVMType -> LLVMSetup ();
+prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
 prim llvm_assert        : Bit -> LLVMSetup ();
 prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
