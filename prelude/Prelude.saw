@@ -89,7 +89,7 @@ prim llvm_verify_tactic : ProofScript ProofResult -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
 prim llvm_extract       : {a} String -> String -> LLVMSetup () -> TopLevel a;
-prim llvm_verify        : String -> String -> [n]LLVMMethodSpec
+prim llvm_verify        : {n} String -> String -> [n]LLVMMethodSpec
                        -> LLVMSetup ()
                        -> TopLevel LLVMMethodSpec;
 
