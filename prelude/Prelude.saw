@@ -9,83 +9,96 @@ abstract JavaMethodSpec;
 abstract LLVMType;
 abstract LLVMMethodSpec;
 
-prim return : { m , a } a -> m a;
-prim seq : {a, b} ProofScript a -> ProofScript b -> ProofScript b; //temporary
+prim return             : { m , a } a -> m a;
+prim seq                : {a, b} ProofScript a -> ProofScript b
+                       -> ProofScript b; //temporary
 
-prim define : {a} String -> a -> TopLevel a;
+prim define             : {a} String -> a -> TopLevel a;
 
-prim print      : {a} a -> TopLevel ();
-prim print_term : {a} a -> TopLevel ();
-prim print_type : {a} a -> TopLevel ();
+prim print              : {a} a -> TopLevel ();
+prim print_term         : {a} a -> TopLevel ();
+prim print_type         : {a} a -> TopLevel ();
 
-prim bitSequence : { n } Int -> [n];
+prim bitSequence        : { n } Int -> [n];
 
-prim read_aig  : {a} String -> TopLevel a;
-prim read_sbv  : {a} String -> TopLevel a;
-prim read_core : {a} String -> TopLevel a;
+prim read_aig           : {a} String -> TopLevel a;
+prim read_sbv           : {a} String -> TopLevel a;
+prim read_core          : {a} String -> TopLevel a;
 
-prim write_aig     : {a} String -> a -> TopLevel ();
-prim write_smtlib1 : {a} String -> a -> TopLevel ();
-prim write_smtlib2 : {a} String -> a -> TopLevel ();
-prim write_core    : {a} String -> a -> TopLevel ();
+prim write_aig          : {a} String -> a -> TopLevel ();
+prim write_smtlib1      : {a} String -> a -> TopLevel ();
+prim write_smtlib2      : {a} String -> a -> TopLevel ();
+prim write_core         : {a} String -> a -> TopLevel ();
 
-prim equal  : Term -> Term -> TopLevel Term;
-prim negate : Term -> TopLevel Term;
+prim equal              : Term -> Term -> TopLevel Term;
+prim negate             : Term -> TopLevel Term;
 
-prim prove : {a} ProofScript ProofResult -> a -> TopLevel Theorem;
-prim sat   : {a} ProofScript ProofResult -> a -> TopLevel ();
+prim prove              : {a} ProofScript ProofResult -> a -> TopLevel Theorem;
+prim sat                : {a} ProofScript ProofResult -> a -> TopLevel ();
 
-prim unfolding  : {n} [n]String -> ProofScript ();
-prim simplify   : Simpset -> ProofScript ();
-prim print_goal : ProofScript ();
-prim abc        : ProofScript ProofResult;
+prim unfolding          : {n} [n]String -> ProofScript ();
+prim simplify           : Simpset -> ProofScript ();
+prim print_goal         : ProofScript ();
+prim abc                : ProofScript ProofResult;
 
-prim empty_ss : Simpset;
-prim basic_ss : Simpset;
-prim addsimp : Theorem -> Simpset -> Simpset;
-prim rewrite : {a} Simpset -> a -> TopLevel a;
+prim empty_ss           : Simpset;
+prim basic_ss           : Simpset;
+prim addsimp            : Theorem -> Simpset -> Simpset;
+prim rewrite            : {a} Simpset -> a -> TopLevel a;
 
-prim java_bool    : JavaType;
-prim java_byte    : JavaType;
-prim java_char    : JavaType;
-prim java_short   : JavaType;
-prim java_int     : JavaType;
-prim java_long    : JavaType;
-prim java_float   : JavaType;
-prim java_double  : JavaType;
-prim java_array   : Int -> JavaType -> JavaType;
-prim java_class   : String -> JavaType;
+prim java_bool          : JavaType;
+prim java_byte          : JavaType;
+prim java_char          : JavaType;
+prim java_short         : JavaType;
+prim java_int           : JavaType;
+prim java_long          : JavaType;
+prim java_float         : JavaType;
+prim java_double        : JavaType;
+prim java_array         : Int -> JavaType -> JavaType;
+prim java_class         : String -> JavaType;
 
-prim java_var     : String -> JavaType -> JavaSetup ();
-prim java_value   : {a} String -> a;
-prim java_assert  : Bit -> JavaSetup ();
-prim java_assert_eq : {a} String -> a -> JavaSetup ();
-prim java_ensure_eq : {a} String -> a -> JavaSetup ();
-prim java_modify  : String -> JavaSetup ();
-prim java_return  : {a} a -> JavaSetup ();
+prim java_var           : String -> JavaType -> JavaSetup ();
+prim java_value         : {a} String -> a;
+prim java_assert        : Bit -> JavaSetup ();
+prim java_assert_eq     : {a} String -> a -> JavaSetup ();
+prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
+prim java_modify        : String -> JavaSetup ();
+prim java_return        : {a} a -> JavaSetup ();
 prim java_verify_tactic : ProofScript ProofResult -> JavaSetup ();
-prim java_pure    : JavaSetup ();
+prim java_pure          : JavaSetup ();
 
-prim java_extract : {a} String -> String -> JavaSetup () -> TopLevel a;
-prim java_verify  : {n} String -> String -> [n]JavaMethodSpec -> JavaSetup ()
-                 -> TopLevel JavaMethodSpec;
+prim java_extract       : {a} String -> String -> JavaSetup () -> TopLevel a;
+prim java_verify        : {n} String -> String -> [n]JavaMethodSpec
+                       -> JavaSetup ()
+                       -> TopLevel JavaMethodSpec;
 
-prim llvm_int     : Int -> LLVMType;
-prim llvm_float   : LLVMType;
-prim llvm_double  : LLVMType;
-prim llvm_array   : Int -> LLVMType -> LLVMType;
+prim llvm_int           : Int -> LLVMType;
+prim llvm_float         : LLVMType;
+prim llvm_double        : LLVMType;
+prim llvm_ptr           : Int -> LLVMType;
+prim llvm_array         : Int -> LLVMType -> LLVMType;
 
-prim llvm_pure    : LLVMSetup ();
+prim llvm_var           : String -> LLVMType -> LLVMSetup ();
+prim llvm_value         : {a} String -> a;
+prim llvm_assert        : Bit -> LLVMSetup ();
+prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
+prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
+prim llvm_modify        : String -> LLVMSetup ();
+prim llvm_return        : {a} a -> LLVMSetup ();
+prim llvm_verify_tactic : ProofScript ProofResult -> LLVMSetup ();
+prim llvm_pure          : LLVMSetup ();
 
-prim llvm_extract : {a} String -> String -> LLVMSetup () -> TopLevel a;
-prim llvm_verify  : String -> String -> LLVMSetup ()
-                 -> TopLevel LLVMMethodSpec;
+prim llvm_extract       : {a} String -> String -> LLVMSetup () -> TopLevel a;
+prim llvm_verify        : String -> String -> [n]LLVMMethodSpec
+                       -> LLVMSetup ()
+                       -> TopLevel LLVMMethodSpec;
 
-prim eq : {a} a -> a -> Bit;
+prim eq                 : {a} a -> a -> Bit;
 
-prim not  : Bit -> Bit;
-prim conj : Bit -> Bit -> Bit;
-prim disj : Bit -> Bit -> Bit;
+prim not                : Bit -> Bit;
+prim conj               : Bit -> Bit -> Bit;
+prim disj               : Bit -> Bit -> Bit;
 
-prim complement : {n} [n] -> [n];
-prim add : {n} [n] -> [n] -> [n];
+prim complement         : {n} [n] -> [n];
+prim add                : {n} [n] -> [n] -> [n];
+prim sub                : {n} [n] -> [n] -> [n];
