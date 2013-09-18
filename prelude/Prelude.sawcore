@@ -423,6 +423,13 @@ get_set :: (n :: Nat) -> (e :: sort 0) -> (v :: Vec n e) -> (i j :: Fin n) -> (x
         -> Eq e (get n e (set n e v i x) j) (ite e (eq (Fin n) i j) x (get n e v j));
 get_set n e v i j x = get_generate n e (\(j :: Fin n) -> ite e (eq (Fin n) i j) x (get n e v j)) j;
 
+-- | Return true if two vectors are equal, given a comparison function
+-- for elements.
+vecEq :: (n :: Nat) -> (ty :: sort 0) -> (ty -> ty -> Bool)
+      -> Vec n ty -> Vec n ty -> Bool;
+vecEq n ty eqFn x y =
+  forallFin n (\(i :: Fin n) -> eqFn (get n ty x i) (get n ty y i));
+
 -- | Take a prefix of a vector.
 vMove :: (e :: sort 0)
       -> (x y :: Nat)
