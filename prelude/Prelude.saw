@@ -76,11 +76,11 @@ prim java_verify        : {n} String -> String -> [n]JavaMethodSpec
 prim llvm_int           : Int -> LLVMType;
 prim llvm_float         : LLVMType;
 prim llvm_double        : LLVMType;
-prim llvm_ptr           : Int -> LLVMType;
 prim llvm_array         : Int -> LLVMType -> LLVMType;
 
 prim llvm_value         : {a} String -> a;
 prim llvm_var           : {a} String -> LLVMType -> LLVMSetup a;
+prim llvm_ptr           : {a} String -> LLVMType -> LLVMSetup a;
 //prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
 prim llvm_assert        : Bit -> LLVMSetup ();
 prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
