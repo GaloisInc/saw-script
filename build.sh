@@ -18,6 +18,6 @@ cabal-dev install --force-reinstalls ./build/jvm-parser
 cabal-dev install --force-reinstalls ./build/llvm-pretty
 cabal-dev install --force-reinstalls ../Verinf --enable-tests
 cabal-dev install --force-reinstalls ../SAWCore --enable-tests
-cabal-dev install --force-reinstalls ../Java --constraint="statistics==0.10.3.1" --enable-tests -fuse-saw
+cabal-dev install --force-reinstalls ../Java --enable-tests
 cabal-dev install --force-reinstalls ../LLVM --enable-tests
 cabal-dev install --force-reinstalls --enable-tests
