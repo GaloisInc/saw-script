@@ -98,6 +98,8 @@ module Verifier.SAW.SharedTerm
   , incVars
   , scUnfoldConstants
   , scUnfoldConstants'
+  , scSharedSize
+  , scTreeSize
   ) where
 
 import Control.Applicative
@@ -123,6 +125,7 @@ import qualified Data.Map as StrictMap
 #else
 import qualified Data.Map.Strict as StrictMap
 #endif
+import qualified Data.Set as Set
 import Data.Traversable ()
 import qualified Data.Vector as V
 import Data.Word
@@ -938,3 +941,22 @@ scUnfoldConstants' sc ids t0 = do
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
+
+-- | Return the number of DAG nodes used by the given @SharedTerm@.
+scSharedSize :: SharedTerm s -> Integer
+scSharedSize = fromIntegral . Set.size . go Set.empty
+  where
+    go seen (STApp idx tf)
+      | Set.member idx seen = seen
+      | otherwise = Set.insert idx $ foldl' go seen tf
+
+-- | Return the number of nodes that would be used by the given
+-- @SharedTerm@ if it were represented as a tree instead of a DAG.
+scTreeSize :: SharedTerm s -> Integer
+scTreeSize = fst . go (0, Map.empty)
+  where
+    go (sz, seen) (STApp idx tf) =
+      case Map.lookup idx seen of
+        Just sz' -> (sz + sz', seen)
+        Nothing -> (sz + sz', Map.insert idx sz' seen')
+          where (sz', seen') = foldl' go (1, seen) tf
