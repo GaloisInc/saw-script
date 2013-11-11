@@ -95,6 +95,9 @@ prim llvm_verify        : {n} String -> String -> [n]LLVMMethodSpec
                        -> LLVMSetup ()
                        -> TopLevel LLVMMethodSpec;
 
+prim term_size          : {a} a -> Int;
+prim term_tree_size     : {a} a -> Int;
+
 prim eq                 : {a} a -> a -> Bit;
 
 prim not                : Bit -> Bit;
