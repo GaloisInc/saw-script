@@ -36,6 +36,7 @@ module Verifier.SAW.Recognizer
   , asBoolType
   , Nat
   , asBitvectorType
+  , asVecType
   , isVecType
   , asMux
   ) where
@@ -189,6 +190,9 @@ asBoolType = isDataType "Prelude.Bool" emptyl
 isVecType :: (Monad f, Termlike t)
           => Recognizer f t a -> Recognizer f t (Nat :*: a)
 isVecType tp = isDataType "Prelude.Vec" (asNatLit <:> endl tp)
+
+asVecType :: (Monad f, Termlike t) => Recognizer f t (Nat :*: t)
+asVecType = isVecType return
 
 asBitvectorType :: (Alternative f, Monad f, Termlike t) => Recognizer f t Nat
 asBitvectorType =
