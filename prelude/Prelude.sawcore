@@ -430,6 +430,9 @@ vecEq :: (n :: Nat) -> (ty :: sort 0) -> (ty -> ty -> Bool)
 vecEq n ty eqFn x y =
   forallFin n (\(i :: Fin n) -> eqFn (get n ty x i) (get n ty y i));
 
+eq_Vec :: (n :: Nat) -> (ty :: sort 0)
+       -> Eq (Vec n ty -> Vec n ty -> Bool) (eq (Vec n ty)) (vecEq n ty (eq ty));
+
 -- | Take a prefix of a vector.
 vMove :: (e :: sort 0)
       -> (x y :: Nat)
