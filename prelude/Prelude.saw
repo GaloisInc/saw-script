@@ -40,6 +40,8 @@ prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
 prim print_goal         : ProofScript ();
 prim abc                : ProofScript ProofResult;
+prim offline_aig        : String -> ProofScript ProofResult;
+prim offline_extcore    : String -> ProofScript ProofResult;
 
 prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;
