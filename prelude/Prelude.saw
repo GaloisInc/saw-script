@@ -114,6 +114,5 @@ prim bvSub              : {n} [n] -> [n] -> [n];
 prim bvAnd              : {n} [n] -> [n] -> [n];
 prim bvOr               : {n} [n] -> [n] -> [n];
 prim bvXor              : {n} [n] -> [n] -> [n];
-// TODO: the types of these should be different
-prim bvShl              : {n} [n] -> [n] -> [n];
-prim bvShr              : {n} [n] -> [n] -> [n];
+prim bvShl              : {n} [n] -> Int -> [n];
+prim bvShr              : {n} [n] -> Int -> [n];
