@@ -116,3 +116,12 @@ prim bvOr               : {n} [n] -> [n] -> [n];
 prim bvXor              : {n} [n] -> [n] -> [n];
 prim bvShl              : {n} [n] -> Int -> [n];
 prim bvShr              : {n} [n] -> Int -> [n];
+
+prim bvuge              : {n} [n] -> [n] -> Bit;
+prim bvugt              : {n} [n] -> [n] -> Bit;
+prim bvule              : {n} [n] -> [n] -> Bit;
+prim bvult              : {n} [n] -> [n] -> Bit;
+
+// Awful stuff we need to remove, once we have type-level arithmetic.
+prim ec_join            : [12][32] -> [384];
+prim ec_split           : [384] -> [12][32];
