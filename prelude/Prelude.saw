@@ -103,6 +103,7 @@ prim term_size          : {a} a -> Int;
 prim term_tree_size     : {a} a -> Int;
 
 prim eq                 : {a} a -> a -> Bit;
+prim ite                : {a} Bit -> a -> a -> a;
 
 prim not                : Bit -> Bit;
 prim conj               : Bit -> Bit -> Bit;
@@ -111,6 +112,7 @@ prim disj               : Bit -> Bit -> Bit;
 prim bvNot              : {n} [n] -> [n];
 prim bvAdd              : {n} [n] -> [n] -> [n];
 prim bvSub              : {n} [n] -> [n] -> [n];
+prim bvMul              : {n} [n] -> [n] -> [n];
 prim bvAnd              : {n} [n] -> [n] -> [n];
 prim bvOr               : {n} [n] -> [n] -> [n];
 prim bvXor              : {n} [n] -> [n] -> [n];
