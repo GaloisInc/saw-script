@@ -759,3 +759,30 @@ bveq_same2 :: (n :: Nat)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
+
+--------------------------------------------------------------------------------
+-- Extended natural numbers
+
+data ENat :: sort 0 where {
+    Finite :: Nat -> ENat;
+    Infinity :: ENat;
+  }
+
+addENat :: ENat -> ENat -> ENat;
+addENat (Finite x) (Finite y) = Finite (addNat x y);
+addENat (Finite _) Infinity = Infinity;
+addENat Infinity _ = Infinity;
+
+mulENat :: ENat -> ENat -> ENat;
+mulENat (Finite x) (Finite y) = Finite (mulNat x y);
+mulENat (Finite x) Infinity = ite ENat (equalNat 0 x) (Finite 0) Infinity;
+mulENat Infinity (Finite y) = ite ENat (equalNat 0 y) (Finite 0) Infinity;
+mulENat Infinity Infinity = Infinity;
+
+--------------------------------------------------------------------------------
+-- Possibly infinite sequences
+
+Seq :: ENat -> sort 0 -> sort 0;
+Seq (Finite n) a = Vec n a;
+Seq Infinity a = Nat -> a;
+
