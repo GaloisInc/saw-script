@@ -69,6 +69,7 @@ module Verifier.SAW.SharedTerm
   , scWriteExternal
   , scReadExternal
     -- ** Type checking
+  , scTypeCheck
   , scTypeOf
   , scTypeOfGlobal
     -- ** Prelude operations
@@ -343,6 +344,87 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
         DataTypeApp dt args -> do
           t <- lift $ scTypeOfDataType sc dt
           lift $ foldM (reducePi sc) t args
+        Sort s -> lift $ scSort sc (sortOf s)
+        NatLit _ -> lift $ scNatType sc
+        ArrayValue tp vs -> lift $ do
+          n <- scNat sc (fromIntegral (V.length vs))
+          scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
+        FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
+        DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
+        StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
+        ExtCns ec   -> return $ ecType ec
+
+-- | This version of the type checking function makes sure that the
+-- entire term is well-formed, and that all internal type annotations
+-- are correct. When matching types, it ensures only that they are
+-- equivalent modulo beta-reduction; any non-trivial type equalities
+-- must be indicated explicitly with coercions.
+scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scTypeCheck sc t0 = State.evalStateT (memo t0) Map.empty
+  where
+    memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    memo _t@(STApp i tf) =
+      do table <- State.get
+         case Map.lookup i table of
+           Just x  -> return x
+           Nothing ->
+             do x <- termf tf
+                State.modify (Map.insert i x)
+                return x
+    sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
+    sort t =
+      do tp <- memo t
+         case tp of
+           STApp _ (FTermF (Sort s)) -> return s
+           _ -> fail $ "Not a sort: " ++ show tp
+    reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    reducePi' t@(STApp _ (Pi _ t1 body)) arg =
+      do t2 <- memo arg
+         if t1 == t2 then return ()
+            else do lift $ putStrLn $ "Unsolved: " ++ show t1 ++ " == " ++ show t2
+         lift $ instantiateVar sc 0 arg body
+    reducePi' t _ = fail $ "Not a function type: " ++ show t
+    termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    termf tf =
+      case tf of
+        FTermF ftf -> ftermf ftf
+        App x y ->
+          do tx <- memo x
+             reducePi' tx y
+        Lambda (PVar i _ _) tp rhs ->
+          do rtp <- memo rhs
+             lift $ scTermF sc (Pi i tp rtp)
+        Lambda _ _ _ -> error "scTypeOf Lambda"
+        Pi _ tp rhs ->
+          do ltp <- sort tp
+             rtp <- sort rhs
+             lift $ scSort sc (max ltp rtp)
+        Let defs rhs -> error "scTypeOf Let" defs rhs
+        LocalVar _ tp -> lift $ incVars sc 0 1 tp
+          -- ^ NOTE: this is a workaround for an off-by-one bug
+        Constant _ t -> memo t
+    ftermf :: FlatTermF (SharedTerm s)
+           -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    ftermf tf =
+      case tf of
+        GlobalDef d -> lift $ scTypeOfGlobal sc d
+        TupleValue l -> lift . scTupleType sc =<< traverse memo l
+        TupleType l -> lift . scSort sc . maximum =<< traverse sort l
+        TupleSelector t i -> do
+          STApp _ (FTermF (TupleType ts)) <- memo t
+          return (ts !! (i-1)) -- FIXME test for i < length ts
+        RecordValue m -> lift . scRecordType sc =<< traverse memo m
+        RecordSelector t f -> do
+          STApp _ (FTermF (RecordType m)) <- memo t
+          let Just tp = Map.lookup f m
+          return tp
+        RecordType m -> lift . scSort sc . maximum =<< traverse sort m
+        CtorApp c args -> do
+          t <- lift $ scTypeOfCtor sc c
+          foldM reducePi' t args
+        DataTypeApp dt args -> do
+          t <- lift $ scTypeOfDataType sc dt
+          foldM reducePi' t args
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
