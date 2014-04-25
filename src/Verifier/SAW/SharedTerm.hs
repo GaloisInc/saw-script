@@ -288,8 +288,14 @@ scTypeOfCtor sc ident =
 -- ensuring that it is well-formed. The full typechecking should use
 -- memoization on subterms. Perhaps the fast one won't need to?
 
+-- | Computes the type of a term as quickly as possible, assuming that
+-- the term is well-typed.
 scTypeOf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
-scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
+scTypeOf sc t0 = scTypeOf' sc [] t0
+
+-- | A version for open terms; the list argument encodes the type environment.
+scTypeOf' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo (STApp i t) = do
@@ -301,9 +307,7 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           State.modify (Map.insert i x)
           return x
     sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
-    sort t = do
-      STApp _ (FTermF (Sort s)) <- memo t
-      return s
+    sort t = asSort =<< memo t
     termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     termf tf =
       case tf of
@@ -312,15 +316,17 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
           tx <- memo x
           lift $ reducePi sc tx y
         Lambda (PVar i _ _) tp rhs -> do
-          rtp <- memo rhs
+          rtp <- lift $ scTypeOf' sc (tp : env) rhs
           lift $ scTermF sc (Pi i tp rtp)
         Lambda _ _ _ -> error "scTypeOf Lambda"
         Pi _ tp rhs -> do
           ltp <- sort tp
-          rtp <- sort rhs
+          rtp <- asSort =<< lift (scTypeOf' sc (tp : env) rhs)
           lift $ scSort sc (max ltp rtp)
         Let defs rhs -> error "scTypeOf Let" defs rhs
-        LocalVar _ tp -> return tp
+        LocalVar i _
+          | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
+          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
         Constant _ t -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
@@ -363,7 +369,7 @@ scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scTypeCheck sc t0 = scTypeCheck' sc [] t0
 
 scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
-scTypeCheck' sc ts t0 = State.evalStateT (memo t0) Map.empty
+scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo _t@(STApp i tf) =
@@ -374,11 +380,6 @@ scTypeCheck' sc ts t0 = State.evalStateT (memo t0) Map.empty
              do x <- termf tf
                 State.modify (Map.insert i x)
                 return x
-    asSort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
-    asSort tp =
-      case tp of
-        STApp _ (FTermF (Sort s)) -> return s
-        _ -> fail $ "Not a sort: " ++ show tp
     sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
     sort t = asSort =<< memo t
     reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
@@ -396,17 +397,17 @@ scTypeCheck' sc ts t0 = State.evalStateT (memo t0) Map.empty
           do tx <- memo x
              reducePi' tx y
         Lambda (PVar x _ _) a rhs ->
-          do b <- lift $ scTypeCheck' sc (a : ts) rhs
+          do b <- lift $ scTypeCheck' sc (a : env) rhs
              lift $ scTermF sc (Pi x a b)
         Lambda _ _ _ -> error "scTypeCheck Lambda"
         Pi _ a rhs ->
           do s1 <- asSort =<< memo a
-             s2 <- asSort =<< lift (scTypeCheck' sc (a : ts) rhs)
+             s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
              lift $ scSort sc (max s1 s2)
         Let defs rhs -> error "scTypeCheck Let" defs rhs
         LocalVar i _
-          | i < length ts -> lift $ incVars sc 0 (i + 1) (ts !! i)
-          | otherwise     -> fail $ "Dangling bound variable: " ++ show (i - length ts)
+          | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
+          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
         Constant _ t -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
@@ -439,6 +440,12 @@ scTypeCheck' sc ts t0 = State.evalStateT (memo t0) Map.empty
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
+
+asSort :: Monad m => SharedTerm s -> m Sort
+asSort tp =
+  case tp of
+    STApp _ (FTermF (Sort s)) -> return s
+    _ -> fail $ "Not a sort: " ++ show tp
 
 alphaEquiv :: SharedTerm s -> SharedTerm s -> Bool
 alphaEquiv = term
