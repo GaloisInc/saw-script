@@ -314,10 +314,9 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         App x y -> do
           tx <- memo x
           lift $ reducePi sc tx y
-        Lambda (PVar i _ _) tp rhs -> do
+        Lambda name tp rhs -> do
           rtp <- lift $ scTypeOf' sc (tp : env) rhs
-          lift $ scTermF sc (Pi i tp rtp)
-        Lambda _ _ _ -> error "scTypeOf Lambda"
+          lift $ scTermF sc (Pi name tp rtp)
         Pi _ tp rhs -> do
           ltp <- sort tp
           rtp <- asSort =<< lift (scTypeOf' sc (tp : env) rhs)
@@ -418,7 +417,7 @@ scWriteExternal t0 =
     writeTermF tf =
       case tf of
         App e1 e2    -> unwords ["App", show e1, show e2]
-        Lambda p t e -> unwords ["Lam", writePat p, show t, show e]
+        Lambda s t e -> unwords ["Lam", s, show t, show e]
         Pi s t e     -> unwords ["Pi", s, show t, show e]
         Let ds e     -> unwords ["Def", writeDefs ds, show e]
         LocalVar i   -> unwords ["Var", show i]
@@ -443,9 +442,6 @@ scWriteExternal t0 =
             ExtCns ext         -> unwords ("ExtCns" : writeExtCns ext)
     writeField :: (String, Int) -> String
     writeField (s, e) = unwords [s, show e]
-    writePat :: Pat Int -> String
-    writePat (PVar s 0 _) = s
-    writePat _ = error "unsupported pattern"
     writeDefs = error "unsupported Let expression"
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
@@ -466,7 +462,7 @@ scReadExternal sc input =
     parse tokens =
       case tokens of
         ["App", e1, e2]     -> App (read e1) (read e2)
-        ["Lam", x, t, e]    -> Lambda (PVar x 0 (read t)) (read t) (read e)
+        ["Lam", x, t, e]    -> Lambda x (read t) (read e)
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i]          -> LocalVar (read i)
@@ -744,7 +740,7 @@ scLambda :: SharedContext s
          -> SharedTerm s
          -> SharedTerm s
          -> IO (SharedTerm s)
-scLambda sc varname ty body = scTermF sc (Lambda (PVar varname 0 ty) ty body)
+scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 
 scLambdaList :: SharedContext s
              -> [(String, SharedTerm s)]
