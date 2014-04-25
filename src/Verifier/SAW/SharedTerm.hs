@@ -380,7 +380,7 @@ scTypeCheck sc t0 = State.evalStateT (memo t0) Map.empty
     reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     reducePi' t@(STApp _ (Pi _ t1 body)) arg =
       do t2 <- memo arg
-         if t1 == t2 then return ()
+         if alphaEquiv t1 t2 then return ()
             else do lift $ putStrLn $ "Unsolved: " ++ show t1 ++ " == " ++ show t2
          lift $ instantiateVar sc 0 arg body
     reducePi' t _ = fail $ "Not a function type: " ++ show t
@@ -434,6 +434,20 @@ scTypeCheck sc t0 = State.evalStateT (memo t0) Map.empty
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
+
+alphaEquiv :: SharedTerm s -> SharedTerm s -> Bool
+alphaEquiv = term
+  where
+    term (STApp i1 tf1) (STApp i2 tf2) = i1 == i2 || termf tf1 tf2
+    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
+    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
+    termf (Lambda (PVar _ 0 _) t1 u1) (Lambda (PVar _ 0 _) t2 u2) = term t1 t2 && term u1 u2
+    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
+    termf (LocalVar i1 t1) (LocalVar i2 t2) = i1 == i2 && term t1 t2
+    termf _ _ = False
+    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
+                         Nothing -> False
+                         Just ftf3 -> Data.Foldable.and ftf3
 
 -- | The inverse function to @scSharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
