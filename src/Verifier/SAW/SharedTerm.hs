@@ -400,7 +400,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
              s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
              lift $ scSort sc (max s1 s2)
         Let defs rhs -> error "scTypeCheck Let" defs rhs
-        LocalVar i _
+        LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
         Constant _ t -> memo t
@@ -450,7 +450,7 @@ alphaEquiv = term
     termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
     termf (Lambda (PVar _ 0 _) t1 u1) (Lambda (PVar _ 0 _) t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
-    termf (LocalVar i1 t1) (LocalVar i2 t2) = i1 == i2 && term t1 t2
+    termf (LocalVar i1) (LocalVar i2) = i1 == i2
     termf _ _ = False
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
                          Nothing -> False
