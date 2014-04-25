@@ -283,11 +283,6 @@ scTypeOfCtor sc ident =
       Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (ctorType d)
 
--- TODO: separate versions of typeOf: One fast one that assumes the
--- term is well-formed. Another that completely typechecks a term,
--- ensuring that it is well-formed. The full typechecking should use
--- memoization on subterms. Perhaps the fast one won't need to?
-
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
 scTypeOf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
