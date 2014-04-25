@@ -360,7 +360,10 @@ scTypeOf sc t0 = State.evalStateT (memo t0) Map.empty
 -- equivalent modulo beta-reduction; any non-trivial type equalities
 -- must be indicated explicitly with coercions.
 scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
-scTypeCheck sc t0 = State.evalStateT (memo t0) Map.empty
+scTypeCheck sc t0 = scTypeCheck' sc [] t0
+
+scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+scTypeCheck' sc ts t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo _t@(STApp i tf) =
@@ -371,12 +374,13 @@ scTypeCheck sc t0 = State.evalStateT (memo t0) Map.empty
              do x <- termf tf
                 State.modify (Map.insert i x)
                 return x
+    asSort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
+    asSort tp =
+      case tp of
+        STApp _ (FTermF (Sort s)) -> return s
+        _ -> fail $ "Not a sort: " ++ show tp
     sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
-    sort t =
-      do tp <- memo t
-         case tp of
-           STApp _ (FTermF (Sort s)) -> return s
-           _ -> fail $ "Not a sort: " ++ show tp
+    sort t = asSort =<< memo t
     reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     reducePi' t@(STApp _ (Pi _ t1 body)) arg =
       do t2 <- memo arg
@@ -391,17 +395,18 @@ scTypeCheck sc t0 = State.evalStateT (memo t0) Map.empty
         App x y ->
           do tx <- memo x
              reducePi' tx y
-        Lambda (PVar i _ _) tp rhs ->
-          do rtp <- memo rhs
-             lift $ scTermF sc (Pi i tp rtp)
-        Lambda _ _ _ -> error "scTypeOf Lambda"
-        Pi _ tp rhs ->
-          do ltp <- sort tp
-             rtp <- sort rhs
-             lift $ scSort sc (max ltp rtp)
-        Let defs rhs -> error "scTypeOf Let" defs rhs
-        LocalVar _ tp -> lift $ incVars sc 0 1 tp
-          -- ^ NOTE: this is a workaround for an off-by-one bug
+        Lambda (PVar x _ _) a rhs ->
+          do b <- lift $ scTypeCheck' sc (a : ts) rhs
+             lift $ scTermF sc (Pi x a b)
+        Lambda _ _ _ -> error "scTypeCheck Lambda"
+        Pi _ a rhs ->
+          do s1 <- asSort =<< memo a
+             s2 <- asSort =<< lift (scTypeCheck' sc (a : ts) rhs)
+             lift $ scSort sc (max s1 s2)
+        Let defs rhs -> error "scTypeCheck Let" defs rhs
+        LocalVar i _
+          | i < length ts -> lift $ incVars sc 0 (i + 1) (ts !! i)
+          | otherwise     -> fail $ "Dangling bound variable: " ++ show (i - length ts)
         Constant _ t -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
