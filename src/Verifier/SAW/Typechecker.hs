@@ -386,14 +386,6 @@ data CompletionContext
   = CCGlobal Module
   | CCBinding CompletionContext Term
 
--- | Returns var with index in context or nothing if it not defined.
-ccVarType :: CompletionContext -> DeBruijnIndex -> Maybe Term
-ccVarType cc0 i0 = go cc0 i0
-  where go (CCBinding cc t) i
-          | i == 0 = Just $ incVars 0 (i0+1) t
-          | otherwise = go cc (i-1)
-        go CCGlobal{} _ = Nothing
-
 completeDataType :: CompletionContext
                  -> TCDataType
                  -> TypedDataType
@@ -466,10 +458,8 @@ completeTerm cc (TCLet lcls t) =
         -- Complete equations in new context.
         completeLocal (LocalFnDefGen nm tp eqns) =
           Def nm tp (completeDefEqn cc' <$> eqns)
-completeTerm cc (TCVar i) = Term $ LocalVar i tp
-  where Just tp = ccVarType cc i
-completeTerm cc (TCLocalDef i) = Term $ LocalVar i tp
-  where Just tp = ccVarType cc i
+completeTerm _ (TCVar i) = Term $ LocalVar i
+completeTerm _ (TCLocalDef i) = Term $ LocalVar i
 
 addImportNameStrings :: Un.ImportName -> Set String -> Set String
 addImportNameStrings im s =
@@ -597,7 +587,7 @@ liftTCTerm tc (Term tf) =
     Let lcls r -> do
       (lcls', tc') <- liftLocalDefs tc lcls
       TCLet lcls' <$> liftTCTerm tc' r
-    LocalVar i _ -> return $
+    LocalVar i -> return $
       case resolveBoundInfo i tc of
         BoundVar{} -> TCVar i
         LocalDef{} -> TCLocalDef i

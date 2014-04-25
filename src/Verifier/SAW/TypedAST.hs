@@ -481,7 +481,7 @@ data TermF e
     | Let [LocalDef e] !e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
-    | LocalVar !DeBruijnIndex !e
+    | LocalVar !DeBruijnIndex
     | Constant !Ident !e  -- ^ An abstract constant packaged with its definition.
   deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
@@ -643,7 +643,7 @@ freesTermF tf =
               freesLocalDef (Def _ tp eqs) = 
                 tp : fmap ((`shiftR` n) . freesDefEqn) eqs
               lcls' = freesLocalDef <$> lcls
-      LocalVar i tp -> bit i .|. tp
+      LocalVar i -> bit i
       Constant _ _ -> 0 -- assume rhs is a closed term
 
 freesTerm :: Term -> BitSet
@@ -652,7 +652,7 @@ freesTerm (Term t) = freesTermF (fmap freesTerm t)
 -- | @instantiateVars f l t@ substitutes each dangling bound variable
 -- @LocalVar j t@ with the term @f i j t@, where @i@ is the number of
 -- binders surrounding @LocalVar j t@.
-instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> Term -> Term)
+instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> Term)
                 -> DeBruijnIndex -> Term -> Term
 instantiateVars f initialLevel = go initialLevel
   where goList :: DeBruijnIndex -> [Term] -> [Term]
@@ -684,16 +684,16 @@ instantiateVars f initialLevel = go initialLevel
                             eqs' = procEq <$> eqs
                     procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)
                       where eql = l' + sum (patBoundVarCount <$> pats)
-            LocalVar i tp
-              | i < l -> Term $ LocalVar i (go l tp)
-              | otherwise -> f l i (go l tp)
+            LocalVar i
+              | i < l -> Term $ LocalVar i
+              | otherwise -> f l i
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
 incVars :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
 incVars _ 0 = id
 incVars initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
-  where fn _ i t = Term $ LocalVar (i+j) t
+  where fn _ i = Term $ LocalVar (i+j)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
@@ -705,9 +705,9 @@ instantiateVarList k ts = instantiateVars fn 0
     -- Use terms to memoize instantiated versions of ts.
     terms = [ [ incVars 0 i t | i <- [0..] ] | t <- ts ]
     -- Instantiate variables [k .. k+l-1].
-    fn i j t | j >= i + k + l = Term $ LocalVar (j - l) t
-             | j >= i + k     = (terms !! (j - i - k)) !! i
-             | otherwise      = Term $ LocalVar j t
+    fn i j | j >= i + k + l = Term $ LocalVar (j - l)
+           | j >= i + k     = (terms !! (j - i - k)) !! i
+           | otherwise      = Term $ LocalVar j
 -- ^ Specification in terms of @instantiateVar@ (by example):
 -- @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of @Lam
 -- (Lam (Lam t)) `App` z `App` y `App` x@, i.e. @instantiateVarList 0
@@ -767,12 +767,12 @@ ppTermF' pp lcls p (Let dl u) =
             text " in" <+> u'
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
-ppTermF' pp lcls p (LocalVar i tp) 
-    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
+ppTermF' _pp lcls _p (LocalVar i)
+--    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
     | otherwise = pure d
   where d = lookupDoc lcls i
-        pptc tpd = ppParens (p > PrecNone)
-                            (d <> doublecolon <> tpd)
+--        pptc tpd = ppParens (p > PrecNone)
+--                            (d <> doublecolon <> tpd)
 ppTermF' _ _ _ (Constant i _) = pure $ ppIdent i
 
 instance Show Term where

@@ -91,7 +91,7 @@ first_order_match pat term = match pat term Map.empty
   where
     match x y m =
       case (unwrapTermF x, unwrapTermF y) of
-        (LocalVar i _, _) ->
+        (LocalVar i, _) ->
             case my' of
               Nothing -> Just m'
               Just y' -> if y == y' then Just m' else Nothing
@@ -169,12 +169,11 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
           PVar _ i tp -> do
             (j, m) <- get
             put (j, Map.insert i tp m)
-            let tp' = incVars 0 (n - i) tp
-            return $ Term $ LocalVar (n - 1 - i) tp'
+            return $ Term $ LocalVar (n - 1 - i)
           PUnused i tp -> do
             (j, m) <- get
             put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
-            return $ Term $ LocalVar (n - 1 - j) (incVars 0 (n - i) tp)
+            return $ Term $ LocalVar (n - 1 - j)
           PTuple ps -> (Term . FTermF . TupleValue) <$> traverse termOfPat ps
           PRecord ps -> (Term . FTermF . RecordValue) <$> traverse termOfPat ps
           PCtor c ps -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
