@@ -312,7 +312,7 @@ asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
 
 -- | Returns index of local var if any.
 asLocalVar :: (Termlike t, Monad m) => Matcher m t DeBruijnIndex
-asLocalVar = asVar $ \t -> do (i,_) <- R.asLocalVar t; return i
+asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 
 ----------------------------------------------------------------------
 -- Prelude matchers

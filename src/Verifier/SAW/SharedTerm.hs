@@ -323,7 +323,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           rtp <- asSort =<< lift (scTypeOf' sc (tp : env) rhs)
           lift $ scSort sc (max ltp rtp)
         Let defs rhs -> error "scTypeOf Let" defs rhs
-        LocalVar i _
+        LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
         Constant _ t -> memo t
@@ -421,7 +421,7 @@ scWriteExternal t0 =
         Lambda p t e -> unwords ["Lam", writePat p, show t, show e]
         Pi s t e     -> unwords ["Pi", s, show t, show e]
         Let ds e     -> unwords ["Def", writeDefs ds, show e]
-        LocalVar i e -> unwords ["Var", show i, show e]
+        LocalVar i   -> unwords ["Var", show i]
         Constant i e -> unwords ["Constant", show i, show e]
         FTermF ftf   ->
           case ftf of
@@ -469,7 +469,7 @@ scReadExternal sc input =
         ["Lam", x, t, e]    -> Lambda (PVar x 0 (read t)) (read t) (read e)
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
-        ["Var", i, e]       -> LocalVar (read i) (read e)
+        ["Var", i]          -> LocalVar (read i)
         ["Constant", x, e]  -> Constant (parseIdent x) (read e)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
@@ -508,8 +508,7 @@ looseVars t = State.evalState (go t) Map.empty
             return x
 
 instantiateVars :: forall s. SharedContext s
-                -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-                                  -> ChangeT IO (IO (SharedTerm s)))
+                -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVars sc f initialLevel t0 =
     do cache <- newCache
@@ -533,9 +532,9 @@ instantiateVars sc f initialLevel t0 =
             procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
             procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
               where eql = l' + sum (patBoundVarCount <$> pats)
-    go' l (LocalVar i tp)
-      | i < l     = scTermF sc <$> (LocalVar i <$> go (l-(i+1)) tp)
-      | otherwise = f l i (go (l-(i+1)) tp)
+    go' l (LocalVar i)
+      | i < l     = pure $ scTermF sc (LocalVar i)
+      | otherwise = f l i
     go' _ tf@(Constant _ _) = pure $ scTermF sc tf
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
@@ -546,7 +545,7 @@ incVarsChangeT sc initialLevel j
     | j == 0    = return
     | otherwise = instantiateVars sc fn initialLevel
     where
-      fn _ i t = taint $ scTermF sc <$> (LocalVar (i+j) <$> t)
+      fn _ i = modified $ scTermF sc (LocalVar (i+j))
 
 incVars :: SharedContext s
         -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
@@ -566,11 +565,10 @@ instantiateVarChangeT sc k t0 t =
         term i = useCache ?cache i (incVarsChangeT sc 0 i t0)
         -- Instantiate variable 0.
         fn :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
-              DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-                            -> ChangeT IO (IO (SharedTerm s))
-        fn i j x | j  > i + k = taint $ scTermF sc <$> (LocalVar (j - 1) <$> x)
-                 | j == i + k = taint $ return <$> term i
-                 | otherwise  = scTermF sc <$> (LocalVar j <$> x)
+              DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
+        fn i j | j  > i + k = modified $ scTermF sc (LocalVar (j - 1))
+               | j == i + k = taint $ return <$> term i
+               | otherwise  = pure $ scTermF sc (LocalVar j)
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
@@ -595,11 +593,10 @@ instantiateVarListChangeT sc k ts t =
     term (cache, x) i = useCache cache i (incVarsChangeT sc 0 i x)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)]
-       -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-       -> ChangeT IO (IO (SharedTerm s))
-    fn rs i j x | j >= i + k + l = taint $ scTermF sc <$> (LocalVar (j - l) <$> x)
-                | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
-                | otherwise      = scTermF sc <$> (LocalVar j <$> x)
+       -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
+    fn rs i j | j >= i + k + l = modified $ scTermF sc (LocalVar (j - l))
+              | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
+              | otherwise      = pure $ scTermF sc (LocalVar j)
 
 instantiateVarList :: SharedContext s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
@@ -773,9 +770,8 @@ scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
 scLocalVar :: SharedContext s
            -> DeBruijnIndex
-           -> SharedTerm s
            -> IO (SharedTerm s)
-scLocalVar sc i t = scTermF sc (LocalVar i t)
+scLocalVar sc i = scTermF sc (LocalVar i)
 
 scGlobalApply :: SharedContext s -> Ident -> [SharedTerm s] -> IO (SharedTerm s)
 scGlobalApply sc i ts =

@@ -174,8 +174,8 @@ asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
 
-asLocalVar :: (Monad m, Termlike t) => Recognizer m t (DeBruijnIndex, t)
-asLocalVar (unwrapTermF -> LocalVar i ty) = return (i, ty)
+asLocalVar :: (Monad m, Termlike t) => Recognizer m t DeBruijnIndex
+asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = fail "not a local variable"
 
 -- | Returns term as a constant Boolean if it is one.
