@@ -390,10 +390,9 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         App x y ->
           do tx <- memo x
              reducePi' tx y
-        Lambda (PVar x _ _) a rhs ->
+        Lambda x a rhs ->
           do b <- lift $ scTypeCheck' sc (a : env) rhs
              lift $ scTermF sc (Pi x a b)
-        Lambda _ _ _ -> error "scTypeCheck Lambda"
         Pi _ a rhs ->
           do s1 <- asSort =<< memo a
              s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
@@ -447,7 +446,7 @@ alphaEquiv = term
     term (STApp i1 tf1) (STApp i2 tf2) = i1 == i2 || termf tf1 tf2
     termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
     termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
-    termf (Lambda (PVar _ 0 _) t1 u1) (Lambda (PVar _ 0 _) t2 u2) = term t1 t2 && term u1 u2
+    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
     termf _ _ = False
