@@ -471,7 +471,7 @@ zipWithFlatTermF f = go
 data TermF e
     = FTermF !(FlatTermF e)  -- ^ Global variables are referenced by label.
     | App !e !e
-    | Lambda !(Pat e) !e !e
+    | Lambda !String !e !e
     | Pi !String !e !e
        -- | List of bindings and the let expression itself.
       -- Let expressions introduce variables for each identifier.
@@ -633,8 +633,7 @@ freesTermF tf =
     case tf of
       FTermF ftf -> bitwiseOrOf folded ftf
       App l r -> l .|. r
-      Lambda pat tp rhs ->
-        freesPat pat .|. tp .|. rhs `shiftR` patBoundVarCount pat
+      Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
       Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
       Let lcls rhs ->
           bitwiseOrOf (folded . folded) lcls' .|. rhs `shiftR` n
@@ -739,17 +738,16 @@ ppTermF' :: Applicative f
 ppTermF' pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
 ppTermF' pp lcls p (App l r) =
     ppAppParens p <$> liftA2 (<+>) (pp lcls PrecApp l) (pp lcls PrecArg r)
-ppTermF' pp lcls p (Lambda pat tp rhs) =
+ppTermF' pp lcls p (Lambda name tp rhs) =
     ppLam
-      <$> ppPat (pp lcls') PrecLambda pat
-      <*> pp lcls  PrecLambda tp
+      <$> pp lcls  PrecLambda tp
       <*> pp lcls' PrecLambda rhs
-  where ppLam pat' tp' rhs' =
+  where ppLam tp' rhs' =
           ppParens (p > PrecLambda) $
-            text "\\" <> parens (pat' <> doublecolon <> tp')
+            text "\\" <> parens (text name <> doublecolon <> tp')
                <+> text "->"
                <+> rhs'
-        lcls' = foldl' consBinding lcls (patBoundVars pat)
+        lcls' = consBinding lcls name
 
 ppTermF' pp lcls p (Pi i tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
   where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <+> text "->" <+> rhs'

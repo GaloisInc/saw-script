@@ -438,8 +438,11 @@ completeTerm :: CompletionContext -> TCTerm -> Term
 completeTerm cc (TCF tf) = Term $ FTermF $ fmap (completeTerm cc) tf
 completeTerm cc (TCApp l r) = Term $ App (completeTerm cc l) (completeTerm cc r)
 completeTerm cc (TCLambda pat tp r) =
-    Term $ Lambda pat' (completeTerm cc tp) (completeTerm cc' r)
-  where (pat', cc') = completePat cc pat
+    Term $ Lambda nm (completeTerm cc tp) (completeTerm cc' r)
+  where (_, cc') = completePat cc pat
+        nm = case pat of TCPVar x _ -> x
+                         TCPUnused x _ -> x
+                         TCPatF {} -> internalError "Illegal TCLambda term"
 completeTerm cc (TCPi pat@(TCPVar nm _) tp r) =
     Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
@@ -577,9 +580,10 @@ liftTCTerm tc (Term tf) =
   case tf of
     FTermF ftf -> TCF <$> traverse (liftTCTerm tc) ftf
     App l r -> TCApp <$> liftTCTerm tc l <*> liftTCTerm tc r
-    Lambda pat tp rhs -> do
-       (Identity pat',tc') <- liftTCPatT tc (Identity pat)
-       TCLambda pat' <$> liftTCTerm tc tp <*> liftTCTerm tc' rhs
+    Lambda nm tp rhs -> do
+      tp' <- liftTCTerm tc tp
+      let tc' = consBoundVar nm tp' tc
+      TCLambda (TCPVar nm (0, tp')) tp' <$> liftTCTerm tc' rhs
     Pi nm tp rhs -> do
       tp' <- liftTCTerm tc tp
       let tc' = consBoundVar nm tp' tc

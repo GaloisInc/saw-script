@@ -155,7 +155,7 @@ asStringLit :: (Monad f, Termlike t) => Recognizer f t String
 asStringLit t = do StringLit i <- asFTermF t; return i
 
 asLambda :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
-asLambda (unwrapTermF -> Lambda (PVar s 0 _) ty body) = return (s, ty, body)
+asLambda (unwrapTermF -> Lambda s ty body) = return (s, ty, body)
 asLambda _ = fail "not a lambda"
 
 asLambdaList :: Termlike t => t -> ([(String, t)], t)
