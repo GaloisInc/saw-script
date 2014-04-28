@@ -44,25 +44,25 @@ sym :: (a :: sort 1) -> (x y :: a) -> Eq a x y -> Eq a y x;
 sym _ _ _ (Refl a x) = Refl a x;
 
 -- Unchecked assertion that two types are equal.
-assert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
+unsafeAssert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
 
-coerce :: (y x :: sort 0) -> Eq (sort 0) x y -> x -> y;
+coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
 coerce _ _ (Refl _ _) x = x;
 
-coerce_same :: (a :: sort 0) -> (eq :: Eq (sort 0) a a) -> (x :: a) -> Eq a (coerce a a eq x) x;
+coerce_same :: (a :: sort 0) -> (q :: Eq (sort 0) a a) -> (x :: a) -> Eq a (coerce a a q x) x;
 coerce_same a (Refl _ _) x = Refl a x;
 
-rcoerce :: (y x :: sort 0) -> Eq (sort 0) y x -> x -> y;
-rcoerce y x eq = coerce y x (sym (sort 0) y x eq);
+rcoerce :: (a b :: sort 0) -> Eq (sort 0) a b -> b -> a;
+rcoerce a b q = coerce b a (sym (sort 0) a b q);
 
-rcoerce_same :: (a :: sort 0) -> (eq :: Eq (sort 0) a a) -> (x :: a) -> Eq a (rcoerce a a eq x) x;
-rcoerce_same a eq x = coerce_same a (sym (sort 0) a a eq) x;
+rcoerce_same :: (a :: sort 0) -> (q :: Eq (sort 0) a a) -> (x :: a) -> Eq a (rcoerce a a q x) x;
+rcoerce_same a q x = coerce_same a (sym (sort 0) a a q) x;
 
-unsafeCoerce :: (y x :: sort 0) -> x -> y;
-unsafeCoerce y x = rcoerce y x (assert (sort 0) y x);
+unsafeCoerce :: (a b :: sort 0) -> a -> b;
+unsafeCoerce a b = coerce a b (unsafeAssert (sort 0) a b);
 
 unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
-unsafeCoerce_same a x = rcoerce_same a (assert (sort 0) a a) x;
+unsafeCoerce_same a x = coerce_same a (unsafeAssert (sort 0) a a) x;
 
 piCong0 :: (r x y :: sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
 piCong0 r _ _ (Refl _ tp) = Refl (sort 0) (tp -> r);
@@ -292,8 +292,8 @@ finMax :: (n :: Nat) -> Maybe (Fin n);
 finMax Zero = Nothing (Fin Zero);
 finMax (Succ i) =
    Just (Fin (Succ i)) 
-        (coerce (Fin (Succ i))
-                (Fin (Succ (addNat 0 i)))
+        (coerce (Fin (Succ (addNat 0 i)))
+                (Fin (Succ i))
                 (finCong (Succ (addNat 0 i))
                          (Succ i)
                          (eqNatSucc (addNat 0 i) i (eqNatAdd0 i)))
@@ -304,8 +304,8 @@ finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
 finPred _ (FinVal Zero r) = Nothing (Fin (Succ r));
 finPred _ (FinVal (Succ i) r) =
   Just (Fin (Succ (Succ (addNat r i))))
-       (coerce (Fin (Succ (Succ (addNat r i))))
-               (Fin (Succ (addNat (Succ r) i)))
+       (coerce (Fin (Succ (addNat (Succ r) i)))
+               (Fin (Succ (Succ (addNat r i))))
                (finCong (Succ (addNat (Succ r) i))
                         (Succ (Succ (addNat r i)))
                         (eqNatSucc (addNat (Succ r) i) (Succ (addNat r i))
@@ -315,16 +315,16 @@ finPred _ (FinVal (Succ i) r) =
 -- | Incretement the value and limit of a finite number.
 finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n); 
 finInc i _ (FinVal b r) =
-  unsafeCoerce (Fin (Succ (addNat i (addNat r b))))
-               (Fin (Succ (addNat r (addNat i b))))
+  unsafeCoerce (Fin (Succ (addNat r (addNat i b))))
+               (Fin (Succ (addNat i (addNat r b))))
                (FinVal (addNat i b) r);
 
 -- | Increment the bound of a finite number without changing
 -- the value.
 finIncLim :: (n :: Nat) -> (m :: Nat) -> Fin m -> Fin (addNat m n);
 finIncLim d _ (FinVal x r) =
-  unsafeCoerce (Fin (addNat (Succ (addNat r x)) d))
-               (Fin (Succ (addNat (addNat r d) x)))
+  unsafeCoerce (Fin (Succ (addNat (addNat r d) x)))
+               (Fin (addNat (Succ (addNat r x)) d))
                (FinVal x (addNat r d));
 
 -- | Check property for all numbers less than a given upper bound.
@@ -385,7 +385,7 @@ finProduct _ (FinVal mv mr) _ (FinVal nv nr) =
           (finCong (mulNat (Succ (addNat mr mv)) (Succ (addNat nr nv)))
                    (Succ (addNat (addNat (mulNat mr (Succ (addNat nv nr))) nr)
                          (addNat (mulNat mv (Succ (addNat nv nr))) nv)))
-                   (assert Nat (mulNat (Succ (addNat mr mv)) (Succ (addNat nr nv)))
+                   (unsafeAssert Nat (mulNat (Succ (addNat mr mv)) (Succ (addNat nr nv)))
                                (Succ (addNat (addNat (mulNat mr (Succ (addNat nv nr))) nr)
                                              (addNat (mulNat mv (Succ (addNat nv nr))) nv)))))
           (FinVal (addNat (mulNat mv (Succ (addNat nv nr))) nv)
@@ -475,7 +475,7 @@ vDrop0 :: (e :: sort 0)
        -> (v :: Vec (addNat 0 n) e)
        -> Eq (Vec n e)
              (vDrop e 0 n v) 
-             (unsafeCoerce (Vec n e) (Vec (addNat 0 n) e) v);
+             (unsafeCoerce (Vec (addNat 0 n) e) (Vec n e) v);
 
 -- | Select a range [i,..,i+n] of values from the array.
 slice :: (e :: sort 0)
@@ -626,8 +626,8 @@ bvShl :: (x :: Nat) -> bitvector x -> Nat -> bitvector x;
 bvShl n x j =
   let { go :: (i m :: Nat) -> bitvector m -> NatOrdering i m -> bitvector m;
         go _ _ y (LeNatOrd i ni) =
-          unsafeCoerce (bitvector (addNat ni i))
-                       (bitvector (addNat i ni))
+          unsafeCoerce (bitvector (addNat i ni))
+                       (bitvector (addNat ni i))
                        (append i ni Bool (replicate i Bool False)
                                          (vTake Bool ni i y));
         go _ _ y (GtNatOrd m _) = replicate m Bool False;
