@@ -157,6 +157,9 @@ fst a b (x, y) = x;
 snd :: (a b :: sort 0) -> #(a, b) -> b;
 snd a b (x, y) = y;
 
+uncurry :: (a b c :: sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
+uncurry a b c f = (\(x :: #(a, b)) -> f (x.1) (x.2));
+
 --------------------------------------------------------------------------------
 -- Either
 
@@ -164,6 +167,10 @@ data Either :: sort 0 -> sort 0 -> sort 0 where {
     Left  :: (s t :: sort 0) -> s -> Either s t;
     Right :: (s t :: sort 0) -> t -> Either s t;
   }
+
+either :: (a b c :: sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
+either a b c f g (Left _ _ x) = f x;
+either a b c f g (Right _ _ y) = g y;
 
 eitherCong0 :: (t x y :: sort 0) -> Eq (sort 0) x y -> Eq (sort 0) (Either x t) (Either y t);
 eitherCong0 t x _ (Refl _ _) = Refl (sort 0) (Either x t);
@@ -178,6 +185,10 @@ data Maybe :: sort 0 -> sort 0 where {
     Nothing :: (a :: sort 0) -> Maybe a;
     Just :: (a :: sort 0) -> a -> Maybe a;
   }
+
+maybe :: (a b :: sort 0) -> b -> (a -> b) -> Maybe a -> b;
+maybe _ _ z _ (Nothing _) = z;
+maybe _ _ _ f (Just _ x) = f x;
 
 --------------------------------------------------------------------------------
 -- Nat
