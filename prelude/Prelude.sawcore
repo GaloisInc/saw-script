@@ -294,15 +294,15 @@ coerceFin m n q = coerce (Fin m) (Fin n) (finCong m n q);
 finSucc :: (n :: Nat) -> Fin n -> Fin (Succ n); 
 finSucc _ (FinVal b r) = FinVal (Succ b) r;
 
-finFst :: (n :: Nat) -> Fin n -> Nat;
-finFst _ (FinVal b _) = b;
+finFront :: (n :: Nat) -> Fin n -> Nat;
+finFront _ (FinVal v _) = v;
 
-finSnd :: (n :: Nat) -> Fin n -> Nat;
-finSnd _ (FinVal _ r) = r;
+finBack :: (n :: Nat) -> Fin n -> Nat;
+finBack _ (FinVal _ r) = r;
 
 -- | Axiom: equality on Fin values reduces to equality on first components.
 eq_Fin :: (n :: Nat) -> (i j :: Fin n)
-       -> Eq Bool (eq (Fin n) i j) (equalNat (finFst n i) (finFst n j));
+       -> Eq Bool (eq (Fin n) i j) (equalNat (finFront n i) (finFront n j));
 
 -- | Return maximum finite number less than given bound if any.
 finMax :: (n :: Nat) -> Maybe (Fin n);
