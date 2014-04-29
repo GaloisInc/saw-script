@@ -324,8 +324,8 @@ finInc i _ (FinVal b r) =
 
 -- | Increment the bound of a finite number without changing
 -- the value.
-finIncLim :: (n :: Nat) -> (m :: Nat) -> Fin m -> Fin (addNat m n);
-finIncLim d _ (FinVal x r) =
+finIncLim :: (m n :: Nat) -> Fin m -> Fin (addNat m n);
+finIncLim _ d (FinVal x r) =
   unsafeCoerce (Fin (Succ (addNat (addNat r d) x)))
                (Fin (addNat (Succ (addNat r x)) d))
                (FinVal x (addNat r d));
@@ -450,11 +450,11 @@ get_vMove a m n f v i = get_generate n a (\(j :: Fin n) -> get m a v (f j)) i;
 
 -- | Take a prefix of a vector.
 vTake :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-vTake a m n = vMove a (addNat m n) m (finIncLim n m);
+vTake a m n = vMove a (addNat m n) m (finIncLim m n);
 
 get_vTake :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin m) ->
-             Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim n m i));
-get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim n m) v i;
+             Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim m n i));
+get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim m n) v i;
 
 -- | Simplify take  all elements from a vector.
 vTake0 :: (e :: sort 0)
@@ -489,7 +489,7 @@ slice a m n o v = vDrop a m n (vTake a (addNat m n) o v);
 get_slice :: (e :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat m n) o) e) ->
              (i :: Fin n) ->
              Eq e (get n e (slice e m n o v) i)
-             (get (addNat (addNat m n) o) e v (finIncLim o (addNat m n) (finInc m n i)));
+             (get (addNat (addNat m n) o) e v (finIncLim (addNat m n) o (finInc m n i)));
 -- TODO
 
 -- | Defines a function that maps array elements from one range to another.
