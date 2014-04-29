@@ -277,6 +277,9 @@ data Fin :: (n :: Nat) -> sort 0 where {
 finCong :: (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Fin m) (Fin n);
 finCong _ _ (Refl _ v) = Refl (sort 0) (Fin v);
 
+coerceFin :: (m n :: Nat) -> Eq Nat m n -> Fin m -> Fin n;
+coerceFin m n q = coerce (Fin m) (Fin n) (finCong m n q);
+
 finSucc :: (n :: Nat) -> Fin n -> Fin (Succ n); 
 finSucc _ (FinVal b r) = FinVal (Succ b) r;
 
@@ -295,25 +298,21 @@ finMax :: (n :: Nat) -> Maybe (Fin n);
 finMax Zero = Nothing (Fin Zero);
 finMax (Succ i) =
    Just (Fin (Succ i)) 
-        (coerce (Fin (Succ (addNat 0 i)))
-                (Fin (Succ i))
-                (finCong (Succ (addNat 0 i))
-                         (Succ i)
-                         (eqNatSucc (addNat 0 i) i (eqNatAdd0 i)))
-                (FinVal i 0));
+        (coerceFin (Succ (addNat 0 i))
+                   (Succ i)
+                   (eqNatSucc (addNat 0 i) i (eqNatAdd0 i))
+                   (FinVal i 0));
 
 --
 finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
 finPred _ (FinVal Zero r) = Nothing (Fin (Succ r));
 finPred _ (FinVal (Succ i) r) =
   Just (Fin (Succ (Succ (addNat r i))))
-       (coerce (Fin (Succ (addNat (Succ r) i)))
-               (Fin (Succ (Succ (addNat r i))))
-               (finCong (Succ (addNat (Succ r) i))
-                        (Succ (Succ (addNat r i)))
-                        (eqNatSucc (addNat (Succ r) i) (Succ (addNat r i))
-                                   (eqNatAddS r i)))
-               (FinVal i (Succ r)));
+       (coerceFin (Succ (addNat (Succ r) i))
+                  (Succ (Succ (addNat r i)))
+                  (eqNatSucc (addNat (Succ r) i) (Succ (addNat r i))
+                             (eqNatAddS r i))
+                  (FinVal i (Succ r)));
 
 -- | Incretement the value and limit of a finite number.
 finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n); 
