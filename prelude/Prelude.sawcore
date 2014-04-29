@@ -209,36 +209,36 @@ eqNatPrec _ _ (Refl _ (Succ x)) = Refl Nat x;
 
 -- | Addition
 addNat :: Nat -> Nat -> Nat; 
-addNat x Zero = x;
-addNat x (Succ y) = Succ (addNat x y);
+addNat Zero y = y;
+addNat (Succ x) y = Succ (addNat x y);
 
-eqNatAdd0 :: (x :: Nat) -> eqNat (addNat 0 x) x;
+eqNatAdd0 :: (x :: Nat) -> eqNat (addNat x 0) x;
 eqNatAdd0 Zero = Refl Nat 0;
-eqNatAdd0 (Succ x) = eqNatSucc (addNat 0 x) x (eqNatAdd0 x);
+eqNatAdd0 (Succ x) = eqNatSucc (addNat x 0) x (eqNatAdd0 x);
 
-eqNatAddS :: (x y :: Nat) -> eqNat (addNat (Succ x) y) (Succ (addNat x y));
-eqNatAddS x Zero = Refl Nat (Succ x);
-eqNatAddS x (Succ y) = eqNatSucc (addNat (Succ x) y) (Succ (addNat x y)) (eqNatAddS x y);
+eqNatAddS :: (x y :: Nat) -> eqNat (addNat x (Succ y)) (Succ (addNat x y));
+eqNatAddS Zero y = Refl Nat (Succ y);
+eqNatAddS (Succ x) y = eqNatSucc (addNat x (Succ y)) (Succ (addNat x y)) (eqNatAddS x y);
 
 eqNatAddComm :: (x y :: Nat) -> eqNat (addNat x y) (addNat y x);
-eqNatAddComm Zero y = eqNatAdd0 y;
-eqNatAddComm (Succ x) y = 
+eqNatAddComm x Zero = eqNatAdd0 x;
+eqNatAddComm x (Succ y) = 
   trans Nat
-        (addNat (Succ x) y)
+        (addNat x (Succ y))
         (Succ (addNat x y))
         (Succ (addNat y x))
         (eqNatAddS x y)
         (eqNatSucc (addNat x y) (addNat y x) (eqNatAddComm x y));
 
 addNat_assoc :: (x y z :: Nat) -> eqNat (addNat x (addNat y z)) (addNat (addNat x y) z);
-addNat_assoc x y Zero = Refl Nat (addNat x y);
-addNat_assoc x y (Succ z) =
+addNat_assoc Zero y z = Refl Nat (addNat y z);
+addNat_assoc (Succ x) y z =
     eqNatSucc (addNat x (addNat y z)) (addNat (addNat x y) z) (addNat_assoc x y z);
 
 -- | Multiplication
 mulNat :: Nat -> Nat -> Nat;
-mulNat x Zero = 0;
-mulNat x (Succ y) = addNat x (mulNat x y);
+mulNat Zero y = 0;
+mulNat (Succ x) y = addNat y (mulNat x y);
 
 data NatDiff :: Nat -> sort 0 where {
     Greater :: (n::Nat) -> NatDiff n;
@@ -248,8 +248,8 @@ data NatDiff :: Nat -> sort 0 where {
 natSub :: (n :: Nat) -> Nat -> NatDiff n;
 
 data NatOrdering :: (x y :: Nat) -> sort 0 where {
-    LeNatOrd :: (x z :: Nat) -> NatOrdering x (addNat z x);
-    GtNatOrd :: (x z :: Nat) -> NatOrdering (addNat (Succ z) x) x;  
+    LeNatOrd :: (x z :: Nat) -> NatOrdering x (addNat x z);
+    GtNatOrd :: (x z :: Nat) -> NatOrdering (addNat x (Succ z)) x;
   }
 
 natOrderingCong1 :: (x y z :: Nat) -> eqNat x y -> NatOrdering x z -> NatOrdering y z;
@@ -281,8 +281,8 @@ eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- | Natural numbers less than a given bound.
 data Fin :: (n :: Nat) -> sort 0 where {
-    -- Fin value contains the value x and the number of additional values above it.
-    FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
+    -- Fin value contains the value v and the number r of additional values above it.
+     FinVal :: (v r :: Nat) -> Fin (Succ (addNat v r));
   }
 
 finCong :: (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Fin m) (Fin n);
@@ -291,8 +291,11 @@ finCong _ _ (Refl _ v) = Refl (sort 0) (Fin v);
 coerceFin :: (m n :: Nat) -> Eq Nat m n -> Fin m -> Fin n;
 coerceFin m n q = coerce (Fin m) (Fin n) (finCong m n q);
 
-finSucc :: (n :: Nat) -> Fin n -> Fin (Succ n); 
-finSucc _ (FinVal b r) = FinVal (Succ b) r;
+finZero :: (n :: Nat) -> Fin (Succ n);
+finZero n = FinVal 0 n;
+
+finSucc :: (n :: Nat) -> Fin n -> Fin (Succ n);
+finSucc _ (FinVal v r) = FinVal (Succ v) r;
 
 finFront :: (n :: Nat) -> Fin n -> Nat;
 finFront _ (FinVal v _) = v;
@@ -307,38 +310,51 @@ eq_Fin :: (n :: Nat) -> (i j :: Fin n)
 -- | Return maximum finite number less than given bound if any.
 finMax :: (n :: Nat) -> Maybe (Fin n);
 finMax Zero = Nothing (Fin Zero);
-finMax (Succ i) =
-   Just (Fin (Succ i)) 
-        (coerceFin (Succ (addNat 0 i))
-                   (Succ i)
-                   (eqNatSucc (addNat 0 i) i (eqNatAdd0 i))
-                   (FinVal i 0));
+finMax (Succ n) =
+  Just (Fin (Succ n))
+       (coerceFin (Succ (addNat n 0))
+                  (Succ n)
+                  (eqNatSucc (addNat n 0) n (eqNatAdd0 n))
+                  (FinVal n 0));
 
 --
 finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
 finPred _ (FinVal Zero r) = Nothing (Fin (Succ r));
-finPred _ (FinVal (Succ i) r) =
-  Just (Fin (Succ (Succ (addNat r i))))
-       (coerceFin (Succ (addNat (Succ r) i))
-                  (Succ (Succ (addNat r i)))
-                  (eqNatSucc (addNat (Succ r) i) (Succ (addNat r i))
-                             (eqNatAddS r i))
-                  (FinVal i (Succ r)));
+finPred _ (FinVal (Succ v) r) =
+  Just (Fin (Succ (Succ (addNat v r))))
+       (coerceFin (Succ (addNat v (Succ r)))
+                  (Succ (Succ (addNat v r)))
+                  (eqNatSucc (addNat v (Succ r)) (Succ (addNat v r))
+                             (eqNatAddS v r))
+                  (FinVal v (Succ r)));
 
--- | Incretement the value and limit of a finite number.
-finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n); 
-finInc i _ (FinVal b r) =
-  unsafeCoerce (Fin (Succ (addNat r (addNat i b))))
-               (Fin (Succ (addNat i (addNat r b))))
-               (FinVal (addNat i b) r);
+finIncProof :: (m v r :: Nat)
+  -> Eq Nat (Succ (addNat (addNat m v) r)) (addNat m (Succ (addNat v r)));
+finIncProof Zero v r = Refl Nat (Succ (addNat v r));
+finIncProof (Succ m) v r =
+  eqNatSucc (Succ (addNat (addNat m v) r)) (addNat m (Succ (addNat v r)))
+            (finIncProof m v r);
+
+-- | Increment the value and limit of a finite number.
+finInc :: (m n :: Nat) -> Fin n -> Fin (addNat m n);
+finInc m _ (FinVal v r) =
+  coerceFin (Succ (addNat (addNat m v) r))
+            (addNat m (Succ (addNat v r)))
+            (finIncProof m v r)
+            (FinVal (addNat m v) r);
 
 -- | Increment the bound of a finite number without changing
 -- the value.
 finIncLim :: (m n :: Nat) -> Fin m -> Fin (addNat m n);
-finIncLim _ d (FinVal x r) =
-  unsafeCoerce (Fin (Succ (addNat (addNat r d) x)))
-               (Fin (addNat (Succ (addNat r x)) d))
-               (FinVal x (addNat r d));
+finIncLim _ n (FinVal v r) =
+  coerceFin (Succ (addNat v (addNat r n)))
+            (addNat (Succ (addNat v r)) n)
+            (eqNatSucc (addNat v (addNat r n)) (addNat (addNat v r) n) (addNat_assoc v r n))
+            (FinVal v (addNat r n));
+
+finSum :: (m n :: Nat) -> Either (Fin m) (Fin n) -> Fin (addNat m n);
+finSum m n (Left _ _ i) = finIncLim m n i;
+finSum m n (Right _ _ j) = finInc m n j;
 
 -- | Check property for all numbers less than a given upper bound.
 forallFin :: (n :: Nat) -> (Fin n -> Bool) -> Bool;
@@ -349,63 +365,50 @@ forallFin n p =
       }
    in go (finMax n);
 
+finSplitSucc :: (n :: Nat) -> Fin (Succ n) -> Maybe (Fin n);
+finSplitSucc _ (FinVal Zero r) = Nothing (Fin r);
+finSplitSucc _ (FinVal (Succ v) r) = Just (Fin (Succ (addNat v r))) (FinVal v r);
+
 -- | Given a Fin value @i@ and a number @m@, returns @Left i@ if @i@ is
 -- less than @m@, and @Right (i - m)@ if @i@ > @m@. 
 finSplitSum :: (m n :: Nat) -> Fin (addNat m n) -> Either (Fin m) (Fin n);
-finSplitSum m n = 
-  let { go :: (x :: Nat) -> eqNat (addNat n m) x -> Fin x -> Either (Fin m) (Fin n);
-        go _ eq (FinVal v r) = finSplitSum2 n 0 v m r eq;
-      }
-   in go (addNat m n) (eqNatAddComm n m);
+finSplitSum Zero n i = Right (Fin Zero) (Fin n) i;
+finSplitSum (Succ m) n i =
+  maybe (Fin (addNat m n)) (Either (Fin (Succ m)) (Fin n))
+        (Left (Fin (Succ m)) (Fin n) (finZero m))
+        (\(j :: Fin (addNat m n)) ->
+          either (Fin m) (Fin n) (Either (Fin (Succ m)) (Fin n))
+                 (\(k :: Fin m) -> Left (Fin (Succ m)) (Fin n) (finSucc m k))
+                 (\(k :: Fin n) -> Right (Fin (Succ m)) (Fin n) k)
+                 (finSplitSum m n j))
+        (finSplitSucc (addNat m n) i);
 
-finSplitSum2 :: (n :: Nat)
-             -> (i :: Nat) -- How many times we have iterated.
-             -> (v :: Nat) -- How much of initial value remains.
-             -> (m :: Nat) -- How much of m remains
-             -> (r :: Nat) -- Initial remainer.
-             -> eqNat (addNat n m) (Succ (addNat r v))
-             -> Either (Fin (addNat m i)) (Fin n);
-finSplitSum2 n i v Zero r eq =
-  Right (Fin (addNat Zero i)) (Fin n)
-        (rcoerce (Fin n)
-                 (Fin (Succ (addNat r v)))
-                 (finCong n (Succ (addNat r v)) eq)
-                 (FinVal v r));
-finSplitSum2 n i Zero (Succ p) _ _ =
-  Left (Fin (addNat (Succ p) i)) (Fin n)
-       (rcoerce (Fin (addNat (Succ p) i))
-               (Fin (Succ (addNat p i)))
-               (finCong (addNat (Succ p) i) (Succ (addNat p i))
-                 (eqNatAddS p i))
-               (FinVal i p));
-finSplitSum2 n i (Succ v) (Succ p) r eq =
-  rcoerce (Either (Fin (addNat (Succ p) i)) (Fin n))
-          (Either (Fin (Succ (addNat p i))) (Fin n))          
-          (eitherCong0 (Fin n)
-                       (Fin (addNat (Succ p) i))
-                       (Fin (Succ (addNat p i)))
-                       (finCong (addNat (Succ p) i) (Succ (addNat p i))
-                         (eqNatAddS p i)))
-          (finSplitSum2 n (Succ i) v p r
-            (eqNatPrec (addNat n p) (Succ (addNat r v)) eq));
+finProductProof :: (mv mr nv nr n :: Nat) ->
+  Eq Nat (Succ (addNat (addNat (mulNat mv n) nv) (addNat (mulNat mr n) nr)))
+         (Succ (addNat (addNat nv nr) (mulNat (addNat mv mr) n)));
+-- TODO
 
 -- | Injection from (Fin m, Fin n) into Fin (m * n)
-finProduct :: (m :: Nat) -> Fin m -> (n :: Nat) -> Fin n -> Fin (mulNat m n);
-finProduct _ (FinVal mv mr) _ (FinVal nv nr) =
-  rcoerce (Fin (mulNat (Succ (addNat mr mv)) (Succ (addNat nr nv))))
-          (Fin (Succ (addNat (addNat (mulNat mr (Succ (addNat nv nr))) nr)
-                     (addNat (mulNat mv (Succ (addNat nv nr))) nv))))
-          (finCong (mulNat (Succ (addNat mr mv)) (Succ (addNat nr nv)))
-                   (Succ (addNat (addNat (mulNat mr (Succ (addNat nv nr))) nr)
-                         (addNat (mulNat mv (Succ (addNat nv nr))) nv)))
-                   (unsafeAssert Nat (mulNat (Succ (addNat mr mv)) (Succ (addNat nr nv)))
-                               (Succ (addNat (addNat (mulNat mr (Succ (addNat nv nr))) nr)
-                                             (addNat (mulNat mv (Succ (addNat nv nr))) nv)))))
-          (FinVal (addNat (mulNat mv (Succ (addNat nv nr))) nv)
-                  (addNat (mulNat mr (Succ (addNat nv nr))) nr));
+finProduct :: (m n :: Nat) -> Fin m -> Fin n -> Fin (mulNat m n);
+finProduct _ _ (FinVal mv mr) (FinVal nv nr) =
+  coerceFin (Succ (addNat (addNat (mulNat mv (Succ (addNat nv nr))) nv)
+                          (addNat (mulNat mr (Succ (addNat nv nr))) nr)))
+            (mulNat (Succ (addNat mv mr)) (Succ (addNat nv nr)))
+            (finProductProof mv mr nv nr (Succ (addNat nv nr)))
+            (FinVal (addNat (mulNat mv (Succ (addNat nv nr))) nv)
+                    (addNat (mulNat mr (Succ (addNat nv nr))) nr));
+
+-- | Type 'Fin Zero' is empty.
+finZeroImpossible :: Fin Zero -> (a :: sort 0) -> a;
 
 finSplitProduct :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
---TODO
+finSplitProduct Zero n k = finZeroImpossible k #(Fin Zero, Fin n);
+finSplitProduct (Succ m) n k =
+  either (Fin n) (Fin (mulNat m n)) #(Fin (Succ m), Fin n)
+         (\(i :: Fin n) -> (finZero m, i))
+         (\(j :: Fin (mulNat m n)) -> (finSucc m (finSplitProduct m n j).1,
+                                                 (finSplitProduct m n j).2))
+         (finSplitSum n (mulNat m n) k);
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
@@ -422,8 +425,8 @@ generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
 -- Get and set an individual element in an array.
 get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 get _ _ (ConsVec _ e _ _) (FinVal Zero _) = e;
-get _ tp (ConsVec _ _ _ r) (FinVal (Succ i) j) =
-  get (Succ (addNat j i)) tp r (FinVal i j);
+get _ a (ConsVec _ _ _ r) (FinVal (Succ i) j) =
+  get (Succ (addNat i j)) a r (FinVal i j);
 
 -- | Axiomatic rewrite rule.
 get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n) ->
@@ -466,13 +469,16 @@ get_vTake :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i ::
              Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim m n i));
 get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim m n) v i;
 
+coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
+coerceVec a _ _ (Refl _ x) v = v;
+
 -- | Simplify take  all elements from a vector.
-vTake0 :: (e :: sort 0)
+vTake0 :: (a :: sort 0)
        -> (m :: Nat)
-       -> (v :: Vec m e)
-       -> Eq (Vec m e)
-             (vTake e m 0 v)
-             v;
+       -> (v :: Vec (addNat m 0) a)
+       -> Eq (Vec m a)
+             (vTake a m 0 v)
+             (coerceVec a (addNat m 0) m (eqNatAdd0 m) v);
 
 -- | Returns a suffix of a vector after a given number of elements.
 vDrop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
@@ -483,12 +489,10 @@ get_vDrop :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i ::
 get_vDrop a m n v i = get_vMove a (addNat m n) n (finInc m n) v i;
 
 -- | Simplify drop 0-elements from a vector.
-vDrop0 :: (e :: sort 0)
+vDrop0 :: (a :: sort 0)
        -> (n :: Nat) 
-       -> (v :: Vec (addNat 0 n) e)
-       -> Eq (Vec n e)
-             (vDrop e 0 n v) 
-             (unsafeCoerce (Vec (addNat 0 n) e) (Vec n e) v);
+       -> (v :: Vec (addNat 0 n) a)
+       -> Eq (Vec n a) (vDrop a 0 n v) v;
 
 -- | Select a range [i,..,i+n] of values from the array.
 slice :: (a :: sort 0)
@@ -551,27 +555,17 @@ join m n a v =
 
 -- Split array into list
 split :: ?(m n :: Nat) -> ?(a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
-split  m n e a =
-  let { arrayFn :: Fin m -> Vec n e;
-        arrayFn i =
-         let { eltFn :: Fin n -> e;
-               eltFn j = get (mulNat m n) e a (finProduct m i n j);
-             }
-          in generate n ?e eltFn;
-      }
-   in generate m ?(Vec n e) arrayFn;
+split m n a v =
+  generate m (Vec n a) (\(i :: Fin m) ->
+    generate n a (\(j :: Fin n) ->
+      get (mulNat m n) a v (finProduct m n i j)));
 
 -- Append two arrays together.
 append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-append m n e x y =
-  let { eltFn :: Fin (addNat m n) -> e;
-        eltFn i = compareFn (finSplitSum m n i);
-
-        compareFn :: Either (Fin m) (Fin n) -> e;
-        compareFn (Left _ _ i)  = get m e x i;
-        compareFn (Right _ _ i) = get n e y i;
-      }
-   in generate (addNat m n) e eltFn;
+append m n a x y =
+  generate (addNat m n) a
+    (\(i :: Fin (addNat m n)) ->
+      either (Fin m) (Fin n) a (get m a x) (get n a y) (finSplitSum m n i));
 
 --------------------------------------------------------------------------------
 -- Bitvectors
@@ -637,10 +631,10 @@ bvShl :: (x :: Nat) -> bitvector x -> Nat -> bitvector x;
 bvShl n x j =
   let { go :: (i m :: Nat) -> bitvector m -> NatOrdering i m -> bitvector m;
         go _ _ y (LeNatOrd i ni) =
-          unsafeCoerce (bitvector (addNat i ni))
-                       (bitvector (addNat ni i))
-                       (append i ni Bool (replicate i Bool False)
-                                         (vTake Bool ni i y));
+          append i ni Bool (replicate i Bool False)
+            (vTake Bool ni i
+               (unsafeCoerce (bitvector (addNat i ni))
+                             (bitvector (addNat ni i)) y));
         go _ _ y (GtNatOrd m _) = replicate m Bool False;
       }
    in go j n x (compareNat j n);
