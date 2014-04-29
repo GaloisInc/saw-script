@@ -150,11 +150,12 @@ eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 --------------------------------------------------------------------------------
 -- Pairs
-fst :: (x y :: sort 0) -> #(x,y) -> x;
-fst x y (l,h) = l;
 
-snd :: (x y :: sort 0) -> #(x,y) -> y;
-snd x y (l,h) = h;
+fst :: (a b :: sort 0) -> #(a, b) -> a;
+fst a b (x, y) = x;
+
+snd :: (a b :: sort 0) -> #(a, b) -> b;
+snd a b (x, y) = y;
 
 --------------------------------------------------------------------------------
 -- Either
@@ -172,6 +173,7 @@ eitherCong1 t x _ (Refl _ _) = Refl (sort 0) (Either t x);
 
 --------------------------------------------------------------------------------
 -- Maybe
+
 data Maybe :: sort 0 -> sort 0 where {
     Nothing :: (a :: sort 0) -> Maybe a;
     Just :: (a :: sort 0) -> a -> Maybe a;
@@ -179,6 +181,7 @@ data Maybe :: sort 0 -> sort 0 where {
 
 --------------------------------------------------------------------------------
 -- Nat
+
 data Nat :: sort 0 where {
     Zero :: Nat;
     Succ :: Nat -> Nat;
@@ -332,7 +335,7 @@ forallFin :: (n :: Nat) -> (Fin n -> Bool) -> Bool;
 forallFin n p = 
   let { go :: Maybe (Fin n) -> Bool;
         go (Nothing _) = True;
-        go (Just _ v) = and (p v) (go (finPred n v));
+        go (Just _ i) = and (p i) (go (finPred n i));
       }
    in go (finMax n);
 
@@ -397,17 +400,17 @@ finSplitProduct :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 data Vec :: Nat -> sort 0 -> sort 0 where {
-    EmptyVec :: (tp :: sort 0) -> Vec 0 tp;
-    ConsVec :: (tp :: sort 0) -> tp -> (n::Nat) -> Vec n tp -> Vec (Succ n) tp;
+    EmptyVec :: (a :: sort 0) -> Vec 0 a;
+    ConsVec :: (a :: sort 0) -> a -> (n::Nat) -> Vec n a -> Vec (Succ n) a;
   }
 --TODO
 
 -- Function for generating an array.
-generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
+generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
 --TODO
 
 -- Get and set an individual element in an array.
-get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
+get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 get _ _ (ConsVec _ e _ _) (FinVal Zero _) = e;
 get _ tp (ConsVec _ _ _ r) (FinVal (Succ i) j) =
   get (Succ (addNat j i)) tp r (FinVal i j);
@@ -416,42 +419,42 @@ get _ tp (ConsVec _ _ _ r) (FinVal (Succ i) j) =
 get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n) ->
                 Eq e (get n e (generate n e f) i) (f i);
 
-set :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e -> Vec n e;
-set n e v i x = generate n e (\ (j :: Fin n) -> ite e (eq (Fin n) i j) x (get n e v j));
+set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
+set n a v i x = generate n a (\(j :: Fin n) -> ite a (eq (Fin n) i j) x (get n a v j));
 
-get_set :: (n :: Nat) -> (e :: sort 0) -> (v :: Vec n e) -> (i j :: Fin n) -> (x :: e)
-        -> Eq e (get n e (set n e v i x) j) (ite e (eq (Fin n) i j) x (get n e v j));
-get_set n e v i j x = get_generate n e (\(j :: Fin n) -> ite e (eq (Fin n) i j) x (get n e v j)) j;
+get_set :: (n :: Nat) -> (a :: sort 0) -> (v :: Vec n a) -> (i j :: Fin n) -> (x :: a)
+        -> Eq a (get n a (set n a v i x) j) (ite a (eq (Fin n) i j) x (get n a v j));
+get_set n a v i j x = get_generate n a (\(j :: Fin n) -> ite a (eq (Fin n) i j) x (get n a v j)) j;
 
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
-vecEq :: (n :: Nat) -> (ty :: sort 0) -> (ty -> ty -> Bool)
-      -> Vec n ty -> Vec n ty -> Bool;
-vecEq n ty eqFn x y =
-  forallFin n (\(i :: Fin n) -> eqFn (get n ty x i) (get n ty y i));
+vecEq :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool)
+      -> Vec n a -> Vec n a -> Bool;
+vecEq n a eqFn x y =
+  forallFin n (\(i :: Fin n) -> eqFn (get n a x i) (get n a y i));
 
-eq_Vec :: (n :: Nat) -> (ty :: sort 0)
-       -> Eq (Vec n ty -> Vec n ty -> Bool) (eq (Vec n ty)) (vecEq n ty (eq ty));
-
--- | Take a prefix of a vector.
-vMove :: (e :: sort 0)
-      -> (x y :: Nat)
-      -> (Fin y -> Fin x)
-      -> Vec x e
-      -> Vec y e;
-vMove e x y f a = generate y e (\(j :: Fin y) -> get x e a (f j));
-
-get_vMove :: (e :: sort 0) -> (m n :: Nat) -> (f :: Fin n -> Fin m) -> (v :: Vec m e) ->
-             (i :: Fin n) -> Eq e (get n e (vMove e m n f v) i) (get m e v (f i));
-get_vMove e m n f v i = get_generate n e (\(j :: Fin n) -> get m e v (f j)) i;
+eq_Vec :: (n :: Nat) -> (a :: sort 0)
+       -> Eq (Vec n a -> Vec n a -> Bool) (eq (Vec n a)) (vecEq n a (eq a));
 
 -- | Take a prefix of a vector.
-vTake :: (e :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) e -> Vec m e;
-vTake e n o a = vMove e (addNat n o) n (finIncLim o n) a;
+vMove :: (a :: sort 0)
+      -> (m n :: Nat)
+      -> (Fin n -> Fin m)
+      -> Vec m a
+      -> Vec n a;
+vMove a m n f v = generate n a (\(j :: Fin n) -> get m a v (f j));
 
-get_vTake :: (e :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) e) -> (i :: Fin m) ->
-             Eq e (get m e (vTake e m n v) i) (get (addNat m n) e v (finIncLim n m i));
-get_vTake e m n v i = get_vMove e (addNat m n) m (finIncLim n m) v i;
+get_vMove :: (a :: sort 0) -> (m n :: Nat) -> (f :: Fin n -> Fin m) -> (v :: Vec m a) ->
+             (i :: Fin n) -> Eq a (get n a (vMove a m n f v) i) (get m a v (f i));
+get_vMove a m n f v i = get_generate n a (\(j :: Fin n) -> get m a v (f j)) i;
+
+-- | Take a prefix of a vector.
+vTake :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
+vTake a m n = vMove a (addNat m n) m (finIncLim n m);
+
+get_vTake :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin m) ->
+             Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim n m i));
+get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim n m) v i;
 
 -- | Simplify take  all elements from a vector.
 vTake0 :: (e :: sort 0)
@@ -478,10 +481,10 @@ vDrop0 :: (e :: sort 0)
              (unsafeCoerce (Vec (addNat 0 n) e) (Vec n e) v);
 
 -- | Select a range [i,..,i+n] of values from the array.
-slice :: (e :: sort 0)
-      -> (i n o :: Nat)
-      -> Vec (addNat (addNat i n) o) e -> Vec n e;
-slice e i n o a = vDrop e i n (vTake e (addNat i n) o a); 
+slice :: (a :: sort 0)
+      -> (m n o :: Nat)
+      -> Vec (addNat (addNat m n) o) a -> Vec n a;
+slice a m n o v = vDrop a m n (vTake a (addNat m n) o v);
 
 get_slice :: (e :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat m n) o) e) ->
              (i :: Fin n) ->
@@ -490,52 +493,51 @@ get_slice :: (e :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat m n) o
 -- TODO
 
 -- | Defines a function that maps array elements from one range to another.
-vMap :: (s t :: sort 0) -> (s -> t) -> (n :: Nat) -> Vec n s -> Vec n t;
-vMap s t f n v = generate n t (\(i :: Fin n) -> f (get n s v i));
+vMap :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
+vMap a b f n v = generate n b (\(i :: Fin n) -> f (get n a v i));
 
-get_vMap :: (s t :: sort 0) -> (f :: s -> t) -> (n :: Nat) -> (v :: Vec n s) -> (i :: Fin n) ->
-            Eq t (get n t (vMap s t f n v) i) (f (get n s v i));
-get_vMap s t f n v i = get_generate n t (\(i :: Fin n) -> f (get n s v i)) i;
+get_vMap :: (a b :: sort 0) -> (f :: a -> b) -> (n :: Nat) -> (v :: Vec n a) -> (i :: Fin n) ->
+            Eq b (get n b (vMap a b f n v) i) (f (get n a v i));
+get_vMap a b f n v i = get_generate n b (\(i :: Fin n) -> f (get n a v i)) i;
 
 -- | Defines a function that maps array elements from one range to another.
-vZipWith :: (s t u :: sort 0)
-         -> (s -> t -> u)
-         -> (n :: Nat) -> Vec n s -> Vec n t -> Vec n u;
-vZipWith s t u f n x y = generate n u (\(i :: Fin n) -> f (get n s x i) (get n t y i));
+vZipWith :: (a b c :: sort 0)
+         -> (a -> b -> c)
+         -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
+vZipWith a b c f n x y = generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
 
-get_vZipWith :: (s t u :: sort 0) -> (f :: s -> t -> u) -> (n :: Nat) ->
-                (x :: Vec n s) -> (y :: Vec n t) -> (i :: Fin n) ->
-                Eq u (get n u (vZipWith s t u f n x y) i) (f (get n s x i) (get n t y i));
-get_vZipWith s t u f n x y = get_generate n u (\(i :: Fin n) -> f (get n s x i) (get n t y i));
+get_vZipWith :: (a b c :: sort 0) -> (f :: a -> b -> c) -> (n :: Nat) ->
+                (x :: Vec n a) -> (y :: Vec n b) -> (i :: Fin n) ->
+                Eq c (get n c (vZipWith a b c f n x y) i) (f (get n a x i) (get n b y i));
+get_vZipWith a b c f n x y = get_generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
 
 -- replicate n x returns an array with n copies of x.
-replicate :: (n :: Nat)
-          -> ?(e :: sort 0) -> e -> Vec n e;
-replicate n e v = generate n e (\(_ :: Fin n) -> v);
+replicate :: (n :: Nat) -> ?(a :: sort 0) -> a -> Vec n a;
+replicate n a x = generate n a (\(_ :: Fin n) -> x);
 
-get_replicate :: (n :: Nat) -> (e :: sort 0) -> (x :: e) -> (i :: Fin n) ->
-                 Eq e (get n e (replicate n e x) i) x;
-get_replicate n e x i = get_generate n e (\(_ :: Fin n) -> x) i;
+get_replicate :: (n :: Nat) -> (a :: sort 0) -> (x :: a) -> (i :: Fin n) ->
+                 Eq a (get n a (replicate n a x) i) x;
+get_replicate n a x i = get_generate n a (\(_ :: Fin n) -> x) i;
 
 -- | Create a vector of length 1.
-single :: (e :: sort 0) -> e -> Vec 1 e;
+single :: (a :: sort 0) -> a -> Vec 1 a;
 single = replicate 1;
 
-get_single :: (e :: sort 0) -> (x :: e) -> (i :: Fin 1) -> Eq e (get 1 e (single e x) i) x;
+get_single :: (a :: sort 0) -> (x :: a) -> (i :: Fin 1) -> Eq a (get 1 a (single a x) i) x;
 get_single = get_replicate 1;
 
 -- Concatenate arrays together.
 join  :: (m n :: Nat)
-       -> (e :: sort 0)
-       -> Vec m (Vec n e)
-       -> Vec (mulNat m n) e;
-join m n e a =
-  let { eltFn :: Fin (mulNat m n) -> e;
+       -> (a :: sort 0)
+       -> Vec m (Vec n a)
+       -> Vec (mulNat m n) a;
+join m n a v =
+  let { eltFn :: Fin (mulNat m n) -> a;
         eltFn i = splitFn (finSplitProduct m n i);
-        splitFn :: #(Fin m, Fin n) -> e;
-        splitFn (i,j) = get n e (get m (Vec n e) a i) j;
+        splitFn :: #(Fin m, Fin n) -> a;
+        splitFn (i,j) = get n a (get m (Vec n a) v i) j;
       }
-   in generate (mulNat m n) e eltFn;
+   in generate (mulNat m n) a eltFn;
 
 -- Split array into list
 split :: ?(m n :: Nat) -> ?(e :: sort 0) -> Vec (mulNat m n) e -> Vec m (Vec n e);
