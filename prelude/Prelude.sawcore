@@ -478,9 +478,9 @@ vTake0 :: (e :: sort 0)
 vDrop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
 vDrop a m n = vMove a (addNat m n) n (finInc m n);
 
-get_vDrop :: (e :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) e) -> (i :: Fin n) ->
-             Eq e (get n e (vDrop e m n v) i) (get (addNat m n) e v (finInc m n i));
-get_vDrop e m n v i = get_vMove e (addNat m n) n (finInc m n) v i;
+get_vDrop :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin n) ->
+             Eq a (get n a (vDrop a m n v) i) (get (addNat m n) a v (finInc m n i));
+get_vDrop a m n v i = get_vMove a (addNat m n) n (finInc m n) v i;
 
 -- | Simplify drop 0-elements from a vector.
 vDrop0 :: (e :: sort 0)
