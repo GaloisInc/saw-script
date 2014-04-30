@@ -396,6 +396,9 @@ scImport sc t0 =
     go :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s' -> IO (SharedTerm s)
     go cache (STApp idx tf) = useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
+--------------------------------------------------------------------------------
+-- External text format
+
 -- | Render to external text format
 scWriteExternal :: SharedTerm s -> String
 scWriteExternal t0 =
@@ -489,6 +492,8 @@ scReadExternal sc input =
     readMap (i : e : fs) = Map.insert i (read e) (readMap fs)
     readMap _ = error $ "Parse error"
 
+--------------------------------------------------------------------------------
+
 -- | Returns bitset containing indices of all free local variables.
 looseVars :: forall s. SharedTerm s -> BitSet
 looseVars t = State.evalState (go t) Map.empty
@@ -502,6 +507,9 @@ looseVars t = State.evalState (go t) Map.empty
             x <- freesTermF <$> traverse go tf
             State.modify (Map.insert i x)
             return x
+
+--------------------------------------------------------------------------------
+-- Instantiating variables
 
 instantiateVars :: forall s. SharedContext s
                 -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s)))
@@ -598,57 +606,10 @@ instantiateVarList :: SharedContext s
                    -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
 instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts t)
 
-scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
-scApplyAll sc = foldlM (scApply sc)
-
--- | Returns the defined constant with the given name. Fails if no
--- such constant exists in the module.
-scLookupDef :: SharedContext s -> Ident -> IO (SharedTerm s)
-scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
-
--- | Deprecated. Use scGlobalDef or scLookupDef instead.
-scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
-scDefTerm sc d = scGlobalDef sc (defIdent d)
-
--- TODO: implement version of scCtorApp that looks up the arity of the
--- constructor identifier in the module.
-
--- | Deprecated. Use scCtorApp instead.
-scApplyCtor :: SharedContext s -> TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
-scApplyCtor sc c args = scCtorApp sc (ctorName c) args
-
-scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
-scSort sc s = scFlatTermF sc (Sort s)
-
-scNat :: SharedContext s -> Nat -> IO (SharedTerm s)
-scNat sc n = scFlatTermF sc (NatLit (toInteger n))
-
-scString :: SharedContext s -> String -> IO (SharedTerm s)
-scString sc s = scFlatTermF sc (StringLit s)
-
-scVector :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
-scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
-
-scRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-scRecord sc m = scFlatTermF sc (RecordValue m)
-
-scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
-scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
-
-scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-scRecordType sc m = scFlatTermF sc (RecordType m)
-
-scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
-scTuple sc ts = scFlatTermF sc (TupleValue ts)
-
-scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
-scTupleType sc ts = scFlatTermF sc (TupleType ts)
-
-scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
-scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
+--------------------------------------------------------------------------------
+-- Pretty printing
 
 type SharedTermMap s v = StrictMap.Map (SharedTerm s) v
-
 
 type OccurenceMap s = SharedTermMap s Word64
 
@@ -724,6 +685,58 @@ scPrettyTermDoc t0
 
 scPrettyTerm :: SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDoc t)
+
+--------------------------------------------------------------------------------
+-- Building shared terms
+
+scApplyAll :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
+scApplyAll sc = foldlM (scApply sc)
+
+-- | Returns the defined constant with the given name. Fails if no
+-- such constant exists in the module.
+scLookupDef :: SharedContext s -> Ident -> IO (SharedTerm s)
+scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
+
+-- | Deprecated. Use scGlobalDef or scLookupDef instead.
+scDefTerm :: SharedContext s -> TypedDef -> IO (SharedTerm s)
+scDefTerm sc d = scGlobalDef sc (defIdent d)
+
+-- TODO: implement version of scCtorApp that looks up the arity of the
+-- constructor identifier in the module.
+
+-- | Deprecated. Use scCtorApp instead.
+scApplyCtor :: SharedContext s -> TypedCtor -> [SharedTerm s] -> IO (SharedTerm s)
+scApplyCtor sc c args = scCtorApp sc (ctorName c) args
+
+scSort :: SharedContext s -> Sort -> IO (SharedTerm s)
+scSort sc s = scFlatTermF sc (Sort s)
+
+scNat :: SharedContext s -> Nat -> IO (SharedTerm s)
+scNat sc n = scFlatTermF sc (NatLit (toInteger n))
+
+scString :: SharedContext s -> String -> IO (SharedTerm s)
+scString sc s = scFlatTermF sc (StringLit s)
+
+scVector :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
+scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
+
+scRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
+scRecord sc m = scFlatTermF sc (RecordValue m)
+
+scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
+scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
+
+scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
+scRecordType sc m = scFlatTermF sc (RecordType m)
+
+scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scTuple sc ts = scFlatTermF sc (TupleValue ts)
+
+scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scTupleType sc ts = scFlatTermF sc (TupleType ts)
+
+scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
+scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
 
 scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFun sc a b = do b' <- incVars sc 0 1 b
