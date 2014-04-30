@@ -416,6 +416,12 @@ finSplitProduct (Succ m) n k =
                                                  (finSplitProduct m n j).2))
          (finSplitSum n (mulNat m n) k);
 
+finFst :: (m n :: Nat) -> Fin (mulNat m n) -> Fin m;
+finFst m n i = fst (Fin m) (Fin n) (finSplitProduct m n i);
+
+finSnd :: (m n :: Nat) -> Fin (mulNat m n) -> Fin n;
+finSnd m n i = snd (Fin m) (Fin n) (finSplitProduct m n i);
+
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 data Vec :: Nat -> sort 0 -> sort 0 where {
