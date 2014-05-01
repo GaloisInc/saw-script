@@ -305,6 +305,11 @@ emptyLocalVarDoc = LVD { docModuleName = Map.empty
                        , docUsedMap = Map.empty
                        }
 
+freshVariant :: Map String a -> String -> String
+freshVariant used name
+  | Map.member name used = freshVariant used (name ++ "'")
+  | otherwise = name
+
 consBinding :: LocalVarDoc -> String -> LocalVarDoc
 consBinding lvd i = lvd { docMap = Map.insert lvl (text i) m
                         , docLvl = lvl + 1
@@ -744,17 +749,19 @@ ppTermF' pp lcls p (Lambda name tp rhs) =
       <*> pp lcls' PrecLambda rhs
   where ppLam tp' rhs' =
           ppParens (p > PrecLambda) $
-            text "\\" <> parens (text name <> doublecolon <> tp')
+            text "\\" <> parens (text name' <> doublecolon <> tp')
                <+> text "->"
                <+> rhs'
-        lcls' = consBinding lcls name
+        name' = freshVariant (docUsedMap lcls) name
+        lcls' = consBinding lcls name'
 
-ppTermF' pp lcls p (Pi i tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
+ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
   where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <+> text "->" <+> rhs'
-        lhs | i == "_" = pp lcls PrecApp tp
-            | otherwise = (\tp' -> parens (text i <> doublecolon <> tp'))
+        lhs | name == "_" = pp lcls PrecApp tp
+            | otherwise = (\tp' -> parens (text name' <> doublecolon <> tp'))
                             <$> pp lcls PrecLambda tp
-        lcls' = consBinding lcls i
+        name' = freshVariant (docUsedMap lcls) name
+        lcls' = consBinding lcls name'
 
 ppTermF' pp lcls p (Let dl u) = 
     ppLet <$> traverse (ppLocalDef pp lcls lcls') dl
