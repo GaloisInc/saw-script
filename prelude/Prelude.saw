@@ -9,6 +9,8 @@ abstract JavaMethodSpec;
 abstract LLVMType;
 abstract LLVMMethodSpec;
 
+abstract Fin;
+
 prim return             : { m , a } a -> m a;
 prim seq                : {a, b} ProofScript a -> ProofScript b
                        -> ProofScript b; //temporary
@@ -109,6 +111,9 @@ prim not                : Bit -> Bit;
 prim conj               : Bit -> Bit -> Bit;
 prim disj               : Bit -> Bit -> Bit;
 
+prim get                : {n, a} [n]a -> Fin -> a;
+prim set                : {n, a} [n]a -> Fin -> a -> [n]a;
+
 prim bvNot              : {n} [n] -> [n];
 prim bvAdd              : {n} [n] -> [n] -> [n];
 prim bvSub              : {n} [n] -> [n] -> [n];
@@ -124,7 +129,10 @@ prim bvugt              : {n} [n] -> [n] -> Bit;
 prim bvule              : {n} [n] -> [n] -> Bit;
 prim bvult              : {n} [n] -> [n] -> Bit;
 
+prim finval             : Int -> Int -> Fin;
+
 // Awful stuff we need to remove, once we have type-level arithmetic.
 prim ec_join            : [12][32] -> [384];
 prim ec_split           : [384] -> [12][32];
 prim ec_extend          : [32] -> [384];
+prim long_extend        : [32] -> [64];
