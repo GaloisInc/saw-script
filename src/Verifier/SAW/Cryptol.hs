@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Verifier.SAW.Import.Cryptol where
+module Verifier.SAW.Cryptol where
 
 import Control.Applicative
 import Control.Monad (join)

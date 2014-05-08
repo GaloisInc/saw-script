@@ -1,0 +1,21 @@
+Name: cryptol-verifier
+Description: Representing Cryptol in SAWCore
+Version: 0.1
+Author: Galois, Inc.
+Maintainer: huffman@galois.com
+Build-type: Simple
+cabal-version: >= 1.8
+
+library
+  build-depends:
+    array,
+    base >= 4,
+    containers,
+    cryptol,
+    saw-core
+  hs-source-dirs: src
+  exposed-modules:
+     Verifier.SAW.Cryptol
+     Verifier.SAW.Cryptol.Prelude
+  GHC-options: -Wall
+
