@@ -76,18 +76,18 @@ importKind sc kind =
 importTFun :: SharedContext s -> C.TFun -> IO (SharedTerm s)
 importTFun sc tf =
   case tf of
-    C.TCWidth         -> scGlobalDef sc "Cryptol.TCWidth"
-    C.TCLg2           -> scGlobalDef sc "Cryptol.TCLg2"
-    C.TCAdd           -> scGlobalDef sc "Cryptol.TCAdd"
-    C.TCSub           -> scGlobalDef sc "Cryptol.TCSub"
-    C.TCMul           -> scGlobalDef sc "Cryptol.TCMul"
-    C.TCDiv           -> scGlobalDef sc "Cryptol.TCDiv"
-    C.TCMod           -> scGlobalDef sc "Cryptol.TCMod"
-    C.TCExp           -> scGlobalDef sc "Cryptol.TCExp"
-    C.TCMin           -> scGlobalDef sc "Cryptol.TCMin"
-    C.TCMax           -> scGlobalDef sc "Cryptol.TCMax"
-    C.TCLenFromThen   -> scGlobalDef sc "Cryptol.TCLenFromThen"
-    C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.TCLenFromThenTo"
+    C.TCWidth         -> scGlobalDef sc "Cryptol.tcWidth"
+    C.TCLg2           -> scGlobalDef sc "Cryptol.tcLg2"
+    C.TCAdd           -> scGlobalDef sc "Cryptol.tcAdd"
+    C.TCSub           -> scGlobalDef sc "Cryptol.tcSub"
+    C.TCMul           -> scGlobalDef sc "Cryptol.tcMul"
+    C.TCDiv           -> scGlobalDef sc "Cryptol.tcDiv"
+    C.TCMod           -> scGlobalDef sc "Cryptol.tcMod"
+    C.TCExp           -> scGlobalDef sc "Cryptol.tcExp"
+    C.TCMin           -> scGlobalDef sc "Cryptol.tcMin"
+    C.TCMax           -> scGlobalDef sc "Cryptol.tcMax"
+    C.TCLenFromThen   -> scGlobalDef sc "Cryptol.tcLenFromThen"
+    C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
 
 importType :: SharedContext s -> Env s -> C.Type -> IO (SharedTerm s)
 importType sc env ty =
@@ -181,7 +181,7 @@ proveProp sc env prop =
     -- FIXME: handle arbitrary sized tuples and records
     _ -> case Map.lookup prop (envP env) of
            Just prf -> return prf
-           Nothing -> scGlobalApply sc "Cryptol.EProofApp" =<< sequence [ty prop]
+           Nothing -> scGlobalApply sc "Cryptol.eProofApp" =<< sequence [ty prop]
   where
     ty = importType sc env
     pr = proveProp sc env
@@ -198,64 +198,64 @@ importECon sc econ =
   case econ of
     P.ECTrue        -> scBool sc True
     P.ECFalse       -> scBool sc False
-    P.ECDemote      -> scGlobalDef sc "Cryptol.ECDemote"      -- ^ Converts a numeric type into its corresponding value.
+    P.ECDemote      -> scGlobalDef sc "Cryptol.ecDemote"      -- ^ Converts a numeric type into its corresponding value.
                                                      -- { val, bits } (fin val, fin bits, bits >= width val) => [bits]
-    P.ECPlus        -> scGlobalDef sc "Cryptol.ECPlus"        -- {a} (Arith a) => a -> a -> a
-    P.ECMinus       -> scGlobalDef sc "Cryptol.ECMinus"       -- {a} (Arith a) => a -> a -> a
-    P.ECMul         -> scGlobalDef sc "Cryptol.ECMul"         -- {a} (Arith a) => a -> a -> a
-    P.ECDiv         -> scGlobalDef sc "Cryptol.ECDiv"         -- {a} (Arith a) => a -> a -> a
-    P.ECMod         -> scGlobalDef sc "Cryptol.ECMod"         -- {a} (Arith a) => a -> a -> a
-    P.ECExp         -> scGlobalDef sc "Cryptol.ECExp"         -- {a} (Arith a) => a -> a -> a
-    P.ECLg2         -> scGlobalDef sc "Cryptol.ECLg2"         -- {a} (Arith a) => a -> a
-    P.ECNeg         -> scGlobalDef sc "Cryptol.ECNeg"         -- {a} (Arith a) => a -> a
-    P.ECLt          -> scGlobalDef sc "Cryptol.ECLt"          -- {a} (Cmp a) => a -> a -> Bit
-    P.ECGt          -> scGlobalDef sc "Cryptol.ECGt"          -- {a} (Cmp a) => a -> a -> Bit
-    P.ECLtEq        -> scGlobalDef sc "Cryptol.ECLtEq"        -- {a} (Cmp a) => a -> a -> Bit
-    P.ECGtEq        -> scGlobalDef sc "Cryptol.ECGtEq"        -- {a} (Cmp a) => a -> a -> Bit
-    P.ECEq          -> scGlobalDef sc "Cryptol.ECEq"          -- {a} (Cmp a) => a -> a -> Bit
-    P.ECNotEq       -> scGlobalDef sc "Cryptol.ECNotEq"       -- {a} (Cmp a) => a -> a -> Bit
-    P.ECFunEq       -> scGlobalDef sc "Cryptol.ECFunEq"       -- {a b} (Cmp b) => (a -> b) -> (a -> b) -> a -> Bit
-    P.ECFunNotEq    -> scGlobalDef sc "Cryptol.ECFunNotEq"    -- {a b} (Cmp b) => (a -> b) -> (a -> b) -> a -> Bit
-    P.ECMin         -> scGlobalDef sc "Cryptol.ECMin"         -- {a} (Cmp a) => a -> a -> a
-    P.ECMax         -> scGlobalDef sc "Cryptol.ECMax"         -- {a} (Cmp a) => a -> a -> a
-    P.ECAnd         -> scGlobalDef sc "Cryptol.ECAnd"         -- {a} a -> a -> a        -- Bits a
-    P.ECOr          -> scGlobalDef sc "Cryptol.ECOr"          -- {a} a -> a -> a        -- Bits a
-    P.ECXor         -> scGlobalDef sc "Cryptol.ECXor"         -- {a} a -> a -> a        -- Bits a
-    P.ECCompl       -> scGlobalDef sc "Cryptol.ECCompl"       -- {a} a -> a             -- Bits a
-    P.ECZero        -> scGlobalDef sc "Cryptol.ECZero"        -- {a} a                  -- Bits a
-    P.ECShiftL      -> scGlobalDef sc "Cryptol.ECShiftL"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECShiftR      -> scGlobalDef sc "Cryptol.ECShiftR"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECRotL        -> scGlobalDef sc "Cryptol.ECRotL"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECRotR        -> scGlobalDef sc "Cryptol.ECRotR"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECCat         -> scGlobalDef sc "Cryptol.ECCat"         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
-    P.ECSplitAt     -> scGlobalDef sc "Cryptol.ECSplitAt"     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
-    P.ECJoin        -> scGlobalDef sc "Cryptol.ECJoin"        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
-    P.ECSplit       -> scGlobalDef sc "Cryptol.ECSplit"       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
-    P.ECReverse     -> scGlobalDef sc "Cryptol.ECReverse"     -- {a,b} (fin a) => [a] b -> [a] b
-    P.ECTranspose   -> scGlobalDef sc "Cryptol.ECTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
-    P.ECAt          -> scGlobalDef sc "Cryptol.ECAt"          -- {n,a,m} [n]a -> [m] -> a
-    P.ECAtRange     -> scGlobalDef sc "Cryptol.ECAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
-    P.ECAtBack      -> scGlobalDef sc "Cryptol.ECAtBack"      -- {n,a,m} (fin n) => [n]a -> [m] -> a
-    P.ECAtRangeBack -> scGlobalDef sc "Cryptol.ECAtRangeBack" -- {front,back,a} (fin front) => [front + back]a -> ([front]a, [back]a)
-    P.ECFromThen    -> scGlobalDef sc "Cryptol.ECFromThen"
+    P.ECPlus        -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
+    P.ECMinus       -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
+    P.ECMul         -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Arith a) => a -> a -> a
+    P.ECDiv         -> scGlobalDef sc "Cryptol.ecDiv"         -- {a} (Arith a) => a -> a -> a
+    P.ECMod         -> scGlobalDef sc "Cryptol.ecMod"         -- {a} (Arith a) => a -> a -> a
+    P.ECExp         -> scGlobalDef sc "Cryptol.ecExp"         -- {a} (Arith a) => a -> a -> a
+    P.ECLg2         -> scGlobalDef sc "Cryptol.ecLg2"         -- {a} (Arith a) => a -> a
+    P.ECNeg         -> scGlobalDef sc "Cryptol.ecNeg"         -- {a} (Arith a) => a -> a
+    P.ECLt          -> scGlobalDef sc "Cryptol.ecLt"          -- {a} (Cmp a) => a -> a -> Bit
+    P.ECGt          -> scGlobalDef sc "Cryptol.ecGt"          -- {a} (Cmp a) => a -> a -> Bit
+    P.ECLtEq        -> scGlobalDef sc "Cryptol.ecLtEq"        -- {a} (Cmp a) => a -> a -> Bit
+    P.ECGtEq        -> scGlobalDef sc "Cryptol.ecGtEq"        -- {a} (Cmp a) => a -> a -> Bit
+    P.ECEq          -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Cmp a) => a -> a -> Bit
+    P.ECNotEq       -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
+    P.ECFunEq       -> scGlobalDef sc "Cryptol.ecFunEq"       -- {a b} (Cmp b) => (a -> b) -> (a -> b) -> a -> Bit
+    P.ECFunNotEq    -> scGlobalDef sc "Cryptol.ecFunNotEq"    -- {a b} (Cmp b) => (a -> b) -> (a -> b) -> a -> Bit
+    P.ECMin         -> scGlobalDef sc "Cryptol.ecMin"         -- {a} (Cmp a) => a -> a -> a
+    P.ECMax         -> scGlobalDef sc "Cryptol.ecMax"         -- {a} (Cmp a) => a -> a -> a
+    P.ECAnd         -> scGlobalDef sc "Cryptol.ecAnd"         -- {a} a -> a -> a        -- Bits a
+    P.ECOr          -> scGlobalDef sc "Cryptol.ecOr"          -- {a} a -> a -> a        -- Bits a
+    P.ECXor         -> scGlobalDef sc "Cryptol.ecXor"         -- {a} a -> a -> a        -- Bits a
+    P.ECCompl       -> scGlobalDef sc "Cryptol.ecCompl"       -- {a} a -> a             -- Bits a
+    P.ECZero        -> scGlobalDef sc "Cryptol.ecZero"        -- {a} a                  -- Bits a
+    P.ECShiftL      -> scGlobalDef sc "Cryptol.ecShiftL"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    P.ECShiftR      -> scGlobalDef sc "Cryptol.ecShiftR"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    P.ECRotL        -> scGlobalDef sc "Cryptol.ecRotL"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    P.ECRotR        -> scGlobalDef sc "Cryptol.ecRotR"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    P.ECCat         -> scGlobalDef sc "Cryptol.ecCat"         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
+    P.ECSplitAt     -> scGlobalDef sc "Cryptol.ecSplitAt"     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
+    P.ECJoin        -> scGlobalDef sc "Cryptol.ecJoin"        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
+    P.ECSplit       -> scGlobalDef sc "Cryptol.ecSplit"       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
+    P.ECReverse     -> scGlobalDef sc "Cryptol.ecReverse"     -- {a,b} (fin a) => [a] b -> [a] b
+    P.ECTranspose   -> scGlobalDef sc "Cryptol.ecTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
+    P.ECAt          -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,m} [n]a -> [m] -> a
+    P.ECAtRange     -> scGlobalDef sc "Cryptol.ecAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
+    P.ECAtBack      -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,m} (fin n) => [n]a -> [m] -> a
+    P.ECAtRangeBack -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {front,back,a} (fin front) => [front + back]a -> ([front]a, [back]a)
+    P.ECFromThen    -> scGlobalDef sc "Cryptol.ecFromThen"
                                -- fromThen : {first,next,bits,len}
                                --             ( fin first, fin next, fin bits
                                --             , bits >= width first, bits >= width next
                                --             , lengthFromThen first next bits == len
                                --             )
                                --          => [len] [bits]
-    P.ECFromTo      -> scGlobalDef sc "Cryptol.ECFromTo"
+    P.ECFromTo      -> scGlobalDef sc "Cryptol.ecFromTo"
                                -- fromTo : {first, last, bits}
                                --           ( fin last, fin bits, last >== first, bits >== width last)
                                --        => [1 + (last - first)] [bits]
-    P.ECFromThenTo  -> scGlobalDef sc "Cryptol.ECFromThenTo"
-    P.ECInfFrom     -> scGlobalDef sc "Cryptol.ECInfFrom"     -- {a} (fin a) => [a] -> [inf][a]
-    P.ECInfFromThen -> scGlobalDef sc "Cryptol.ECInfFromThen" -- {a} (fin a) => [a] -> [a] -> [inf][a]
-    P.ECError       -> scGlobalDef sc "Cryptol.ECError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
-    P.ECPMul        -> scGlobalDef sc "Cryptol.ECPMul"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [max 1 (a + b) - 1]
-    P.ECPDiv        -> scGlobalDef sc "Cryptol.ECPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
-    P.ECPMod        -> scGlobalDef sc "Cryptol.ECPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
-    P.ECRandom      -> scGlobalDef sc "Cryptol.ECRandom"      -- {a} => [32] -> a -- Random values
+    P.ECFromThenTo  -> scGlobalDef sc "Cryptol.ecFromThenTo"
+    P.ECInfFrom     -> scGlobalDef sc "Cryptol.ecInfFrom"     -- {a} (fin a) => [a] -> [inf][a]
+    P.ECInfFromThen -> scGlobalDef sc "Cryptol.ecInfFromThen" -- {a} (fin a) => [a] -> [a] -> [inf][a]
+    P.ECError       -> scGlobalDef sc "Cryptol.ecError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
+    P.ECPMul        -> scGlobalDef sc "Cryptol.ecPMul"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [max 1 (a + b) - 1]
+    P.ECPDiv        -> scGlobalDef sc "Cryptol.ecPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
+    P.ECPMod        -> scGlobalDef sc "Cryptol.ecPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
+    P.ECRandom      -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
 
 importExpr :: SharedContext s -> Env s -> C.Expr -> IO (SharedTerm s)
 importExpr sc env expr =
@@ -265,7 +265,7 @@ importExpr sc env expr =
                                       n' <- scNat sc (fromIntegral (length es))
                                       es' <- traverse go es
                                       v' <- scVector sc t' es'
-                                      scGlobalApply sc "Cryptol.EList" [t', n', v']
+                                      scGlobalApply sc "Cryptol.eList" [t', n', v']
     C.ETuple es                 -> scTuple sc =<< traverse go es
     C.ERec _ {-[(Name,Expr)]-}  -> unimplemented "ERec" -- ^ Record value
     C.ESel e sel                ->           -- ^ Elimination for tuple/record/list
@@ -280,12 +280,12 @@ importExpr sc env expr =
                                       n' <- importType sc env n
                                       e' <- importExpr sc env e
                                       i' <- scNat sc (fromIntegral i)
-                                      scGlobalApply sc "Cryptol.EListSel" [a', n', e', i']
+                                      scGlobalApply sc "Cryptol.eListSel" [a', n', e', i']
     C.EIf e1 e2 e3              -> do t' <- importType sc env (fastTypeOf (envC env) e2)
                                       e1' <- importExpr sc env e1
                                       e2' <- importExpr sc env e2
                                       e3' <- importExpr sc env e3
-                                      scGlobalApply sc "Cryptol.EIf" [t', e1', e2', e3']
+                                      scGlobalApply sc "Cryptol.eIf" [t', e1', e2', e3']
     C.EComp t e mss             -> importComp sc env t e mss
     C.EVar qname                    ->
       case Map.lookup qname (envE env) of
@@ -315,7 +315,7 @@ importExpr sc env expr =
                                           t1' <- ty t1
                                           t2' <- ty t2
                                           e1' <- go e1
-                                          scGlobalApply sc "Cryptol.ECast" [t1', t2', e1']
+                                          scGlobalApply sc "Cryptol.eCast" [t1', t2', e1']
     C.EWhere e dgs                  -> do env' <- importDeclGroups sc env dgs
                                           importExpr sc env' e
   where
@@ -352,7 +352,7 @@ importComp sc env listT expr mss =
               a <- importType sc env ty
               (ys, n, b, argss) <- zipAll branches
               zs <- scGlobalApply sc "Cryptol.zip" [a, b, m, n, xs, ys]
-              mn <- scGlobalApply sc "Cryptol.TCMin" [m, n]
+              mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
               return (zs, mn, ab, args : argss)
      (xs, n, a, argss) <- zipAll mss
@@ -363,7 +363,7 @@ importComp sc env listT expr mss =
      -- The resulting type might not match the annotation, so we coerce
      t1 <- scDataTypeApp sc "Cryptol.Seq" [n, b]
      t2 <- importType sc env listT
-     scGlobalApply sc "Cryptol.ECast" [t1, t2, ys]
+     scGlobalApply sc "Cryptol.eCast" [t1, t2, ys]
 
 lambdaTuples :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.QName, C.Type)]] -> IO (SharedTerm s)
 lambdaTuples sc env _ty expr [] = importExpr sc env expr

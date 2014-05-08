@@ -19,41 +19,41 @@ data Num :: sort 0 where {
     TCInf :: Num;
   }
 
-TCWidth :: Num -> Num;
-TCWidth (TCNum n) = TCNum (widthNat n);
-TCWidth TCInf = TCInf;
+tcWidth :: Num -> Num;
+tcWidth (TCNum n) = TCNum (widthNat n);
+tcWidth TCInf = TCInf;
 
-TCLg2 :: Num -> Num;
+tcLg2 :: Num -> Num;
 
-TCAdd :: Num -> Num -> Num;
-TCAdd (TCNum x) (TCNum y) = TCNum (addNat x y);
-TCAdd (TCNum _) TCInf = TCInf;
-TCAdd TCInf _ = TCInf;
+tcAdd :: Num -> Num -> Num;
+tcAdd (TCNum x) (TCNum y) = TCNum (addNat x y);
+tcAdd (TCNum _) TCInf = TCInf;
+tcAdd TCInf _ = TCInf;
 
-TCSub :: Num -> Num -> Num;
-TCSub (TCNum x) (TCNum y) = TCNum (subNat x y);
+tcSub :: Num -> Num -> Num;
+tcSub (TCNum x) (TCNum y) = TCNum (subNat x y);
 -- TODO: other cases
 
-TCMul :: Num -> Num -> Num;
-TCMul (TCNum x) (TCNum y) = TCNum (mulNat x y);
-TCMul (TCNum x) TCInf = ite Num (equalNat 0 x) (TCNum 0) TCInf;
-TCMul TCInf (TCNum y) = ite Num (equalNat 0 y) (TCNum 0) TCInf;
-TCMul TCInf TCInf = TCInf;
+tcMul :: Num -> Num -> Num;
+tcMul (TCNum x) (TCNum y) = TCNum (mulNat x y);
+tcMul (TCNum x) TCInf = ite Num (equalNat 0 x) (TCNum 0) TCInf;
+tcMul TCInf (TCNum y) = ite Num (equalNat 0 y) (TCNum 0) TCInf;
+tcMul TCInf TCInf = TCInf;
 
-TCDiv :: Num -> Num -> Num;
-TCMod :: Num -> Num -> Num;
-TCExp :: Num -> Num -> Num;
+tcDiv :: Num -> Num -> Num;
+tcMod :: Num -> Num -> Num;
+tcExp :: Num -> Num -> Num;
 
-TCMin :: Num -> Num -> Num;
-TCMin (TCNum x) (TCNum y) = TCNum (minNat x y);
-TCMin (TCNum x) TCInf = TCNum x;
-TCMin TCInf (TCNum y) = TCNum y;
-TCMin TCInf TCInf = TCInf;
+tcMin :: Num -> Num -> Num;
+tcMin (TCNum x) (TCNum y) = TCNum (minNat x y);
+tcMin (TCNum x) TCInf = TCNum x;
+tcMin TCInf (TCNum y) = TCNum y;
+tcMin TCInf TCInf = TCInf;
 
-TCMax :: Num -> Num -> Num;
+tcMax :: Num -> Num -> Num;
 
-TCLenFromThen :: Num -> Num -> Num -> Num;
-TCLenFromThenTo :: Num -> Num -> Num -> Num;
+tcLenFromThen :: Num -> Num -> Num -> Num;
+tcLenFromThenTo :: Num -> Num -> Num -> Num;
 
 --------------------------------------------------------------------------------
 -- Possibly unbounded sequence indexes
@@ -69,25 +69,25 @@ unIndexNum _ (IndexNum _ i) = i;
 unIndexInf :: Index TCInf -> Nat;
 unIndexInf (IndexInf i) = i;
 
-indexMinL :: (m n :: Num) -> Index (TCMin m n) -> Index m;
+indexMinL :: (m n :: Num) -> Index (tcMin m n) -> Index m;
 --indexMinL (TCNum m) (TCNum n) i = ...
 indexMinL (TCNum m) TCInf i = i;
 indexMinL TCInf (TCNum n) i = IndexInf (finFront n (unIndexNum n i));
 indexMinL TCInf TCInf i = i;
 
-indexMinR :: (m n :: Num) -> Index (TCMin m n) -> Index n;
+indexMinR :: (m n :: Num) -> Index (tcMin m n) -> Index n;
 --indexMinR (TCNum m) (TCNum n) i = ...
 indexMinR (TCNum m) TCInf i = IndexInf (finFront m (unIndexNum m i));
 indexMinR TCInf (TCNum n) i = i;
 indexMinR TCInf TCInf i = i;
 
-indexSplit :: (m n :: Num) -> Index (TCMul m n) -> #(Index m, Index n);
+indexSplit :: (m n :: Num) -> Index (tcMul m n) -> #(Index m, Index n);
 
-indexFst :: (m n :: Num) -> Index (TCMul m n) -> Index m;
+indexFst :: (m n :: Num) -> Index (tcMul m n) -> Index m;
 indexFst (TCNum m) (TCNum n) i = IndexNum m (finFst m n (unIndexNum (mulNat m n) i));
 -- TODO: more cases
 
-indexSnd :: (m n :: Num) -> Index (TCMul m n) -> Index n;
+indexSnd :: (m n :: Num) -> Index (tcMul m n) -> Index n;
 indexSnd (TCNum m) (TCNum n) i = IndexNum n (finSnd m n (unIndexNum (mulNat m n) i));
 -- TODO: more cases
 
@@ -130,10 +130,10 @@ data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
 
-pfinWidth :: (n :: Num) -> PFin n -> PFin (TCWidth n);
+pfinWidth :: (n :: Num) -> PFin n -> PFin (tcWidth n);
 pfinWidth _ (PFinNum n) = PFinNum (widthNat n);
 
-pfinSub :: (m n :: Num) -> PFin m -> PFin n -> PFin (TCSub m n);
+pfinSub :: (m n :: Num) -> PFin m -> PFin n -> PFin (tcSub m n);
 pfinSub _ _ (PFinNum m) (PFinNum n) = PFinNum (subNat m n);
 
 -- PHas Selector
@@ -159,14 +159,14 @@ theVec :: (m :: Num) -> (a :: sort 0) -> (p :: PFin m) -> Seq m a -> Vec (theNat
 --------------------------------------------------------------------------------
 -- Auxiliary functions
 
-EProofApp :: (a :: sort 0) -> a;
-ECast :: (a b :: sort 0) -> a -> b;
+eProofApp :: (a :: sort 0) -> a;
+eCast :: (a b :: sort 0) -> a -> b;
 
-EList :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Seq (TCNum n) a;
-EList a n v = SeqNum n a v;
+eList :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Seq (TCNum n) a;
+eList a n v = SeqNum n a v;
 
-EListSel :: (a :: sort 0) -> (n :: Num) -> Seq n a -> Nat -> a;
-EIf :: (a :: sort 0) -> Bool -> a -> a -> a;
+eListSel :: (a :: sort 0) -> (n :: Num) -> Seq n a -> Nat -> a;
+eIf :: (a :: sort 0) -> Bool -> a -> a -> a;
 
 --------------------------------------------------------------------------------
 -- List comprehensions
@@ -175,10 +175,10 @@ EIf :: (a :: sort 0) -> Bool -> a -> a -> a;
 uncurry :: (a b c :: sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
 uncurry a b c f = (\(x :: #(a, b)) -> f (x.1) (x.2));
 
-from :: (a b :: sort 0) -> (m n :: Num) -> Seq m a -> (a -> Seq n b) -> Seq (TCMul m n) #(a, b);
+from :: (a b :: sort 0) -> (m n :: Num) -> Seq m a -> (a -> Seq n b) -> Seq (tcMul m n) #(a, b);
 from a b m n xs f =
-  make (TCMul m n) #(a, b)
-    (\(i :: Index (TCMul m n)) ->
+  make (tcMul m n) #(a, b)
+    (\(i :: Index (tcMul m n)) ->
       (peek m a xs (indexFst m n i),
        peek n b (f (peek m a xs (indexFst m n i))) (indexSnd m n i)));
 
@@ -188,10 +188,10 @@ single a x = make (TCNum 1) a (\(i :: Index (TCNum 1)) -> x);
 mlet :: (a b :: sort 0) -> (n :: Num) -> a -> (a -> Seq n b) -> Seq n #(a, b);
 mlet a b n x f = make n #(a, b) (\(i :: Index n) -> (x, peek n b (f x) i));
 
-zip :: (a b :: sort 0) -> (m n :: Num) -> Seq m a -> Seq n b -> Seq (TCMin m n) #(a, b);
+zip :: (a b :: sort 0) -> (m n :: Num) -> Seq m a -> Seq n b -> Seq (tcMin m n) #(a, b);
 zip a b m n xs ys =
-  make (TCMin m n) #(a, b)
-    (\(i :: Index (TCMin m n)) ->
+  make (tcMin m n) #(a, b)
+    (\(i :: Index (tcMin m n)) ->
       (peek m a xs (indexMinL m n i), peek n b ys (indexMinR m n i)));
 
 map :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> Seq n a -> Seq n b;
@@ -220,106 +220,106 @@ arithBinary bvOp _ (PArithPair a b pa pb) =
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ECDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (TCWidth val) -> Seq bits Bool;
-ECDemote _ _ (PFinNum val) (PFinNum bits) _ = bvToSeq bits (bvNat bits val);
+ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> Seq bits Bool;
+ecDemote _ _ (PFinNum val) (PFinNum bits) _ = bvToSeq bits (bvNat bits val);
 
 -- Arith
-ECPlus  :: (a :: sort 0) -> PArith a -> a -> a -> a;
-ECPlus = arithBinary bvAdd;
+ecPlus  :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecPlus = arithBinary bvAdd;
 
-ECMinus :: (a :: sort 0) -> PArith a -> a -> a -> a;
-ECMinus = arithBinary bvSub;
+ecMinus :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMinus = arithBinary bvSub;
 
-ECMul :: (a :: sort 0) -> PArith a -> a -> a -> a;
-ECMul = arithBinary bvMul;
+ecMul :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMul = arithBinary bvMul;
 
-ECDiv   :: (a :: sort 0) -> PArith a -> a -> a -> a;
-ECMod   :: (a :: sort 0) -> PArith a -> a -> a -> a;
-ECExp   :: (a :: sort 0) -> PArith a -> a -> a -> a;
-ECLg2   :: (a :: sort 0) -> PArith a -> a -> a;
-ECNeg   :: (a :: sort 0) -> PArith a -> a -> a;
+ecDiv   :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMod   :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecExp   :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecLg2   :: (a :: sort 0) -> PArith a -> a -> a;
+ecNeg   :: (a :: sort 0) -> PArith a -> a -> a;
 
 -- Cmp
-ECLt    :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
-ECGt    :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
-ECLtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
-ECGtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecLt    :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecGt    :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecLtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecGtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 
-ECEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
-ECEq _ PCmpBit = boolEq;
---ECEq _ (PCmpSeq n a pn pa) = allSeq n 
-ECEq _ (PCmpPair a b pa pb) =
-  (\(x :: #(a, b)) -> \(y :: #(a, b)) -> and (ECEq a pa x.1 y.1) (ECEq b pb x.2 y.2));
+ecEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecEq _ PCmpBit = boolEq;
+--ecEq _ (PCmpSeq n a pn pa) = allSeq n 
+ecEq _ (PCmpPair a b pa pb) =
+  (\(x :: #(a, b)) -> \(y :: #(a, b)) -> and (ecEq a pa x.1 y.1) (ecEq b pb x.2 y.2));
 
-ECNotEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecNotEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 
-ECFunEq    :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
-ECFunEq a b pb f g x = ECEq b pb (f x) (g x);
+ecFunEq    :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
 
-ECFunNotEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
-ECFunNotEq a b pb f g x = ECNotEq b pb (f x) (g x);
+ecFunNotEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
 
-ECMin :: (a :: sort 0) -> PCmp a -> a -> a -> a;
-ECMax :: (a :: sort 0) -> PCmp a -> a -> a -> a;
+ecMin :: (a :: sort 0) -> PCmp a -> a -> a -> a;
+ecMax :: (a :: sort 0) -> PCmp a -> a -> a -> a;
 
 -- Logic
-ECAnd   :: (a :: sort 0) -> a -> a -> a;
-ECOr    :: (a :: sort 0) -> a -> a -> a;
-ECXor   :: (a :: sort 0) -> a -> a -> a;
-ECCompl :: (a :: sort 0) -> a -> a;
-ECZero  :: (a :: sort 0) -> a;
+ecAnd   :: (a :: sort 0) -> a -> a -> a;
+ecOr    :: (a :: sort 0) -> a -> a -> a;
+ecXor   :: (a :: sort 0) -> a -> a -> a;
+ecCompl :: (a :: sort 0) -> a -> a;
+ecZero  :: (a :: sort 0) -> a;
 
 -- Sequences
-ECShiftL :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
-ECShiftR :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
-ECRotL   :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
-ECRotR   :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
+ecShiftL :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
+ecShiftR :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
+ecRotL   :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
+ecRotR   :: (m n :: Num) -> (a :: sort 0) -> Seq m a -> Seq n Bool -> Seq m a;
 
-ECCat :: (m n :: Num) -> (a :: sort 0) -> PFin m -> Seq m a -> Seq n a -> Seq (TCAdd m n) a;
-ECSplitAt :: (m n :: Num) -> (a :: sort 0) -> PFin m -> Seq (TCAdd m n) a -> #(Seq m a, Seq n a);
-ECJoin    :: (m n :: Num) -> (a :: sort 0) -> PFin n -> Seq m (Seq n a) -> Seq (TCMul m n) a;
-ECSplit   :: (m n :: Num) -> (a :: sort 0) -> PFin n -> Seq (TCMul m n) a -> Seq m (Seq n a);
+ecCat :: (m n :: Num) -> (a :: sort 0) -> PFin m -> Seq m a -> Seq n a -> Seq (tcAdd m n) a;
+ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> PFin m -> Seq (tcAdd m n) a -> #(Seq m a, Seq n a);
+ecJoin    :: (m n :: Num) -> (a :: sort 0) -> PFin n -> Seq m (Seq n a) -> Seq (tcMul m n) a;
+ecSplit   :: (m n :: Num) -> (a :: sort 0) -> PFin n -> Seq (tcMul m n) a -> Seq m (Seq n a);
 
-ECReverse   :: (n :: Num) -> (a :: sort 0) -> PFin n -> Seq n a -> Seq n a;
-ECTranspose :: (m n :: Num) -> (a :: sort 0) -> Seq m (Seq n a) -> Seq n (Seq m a);
+ecReverse   :: (n :: Num) -> (a :: sort 0) -> PFin n -> Seq n a -> Seq n a;
+ecTranspose :: (m n :: Num) -> (a :: sort 0) -> Seq m (Seq n a) -> Seq n (Seq m a);
 
-ECAt :: (n :: Num) -> (a :: sort 0) -> (m :: Num) -> Seq n a -> Seq m Bool -> a;
-ECAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin i -> Seq n a -> Seq m (Seq i Bool) -> Seq m a;
-ECAtBack :: (n :: Num) -> (a :: sort 0) -> (m :: Num) -> PFin n -> Seq n a -> Seq m Bool -> a;
-ECAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin n -> Seq n a -> Seq m (Seq i Bool) -> Seq m a;
+ecAt :: (n :: Num) -> (a :: sort 0) -> (m :: Num) -> Seq n a -> Seq m Bool -> a;
+ecAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin i -> Seq n a -> Seq m (Seq i Bool) -> Seq m a;
+ecAtBack :: (n :: Num) -> (a :: sort 0) -> (m :: Num) -> PFin n -> Seq n a -> Seq m Bool -> a;
+ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin n -> Seq n a -> Seq m (Seq i Bool) -> Seq m a;
 
 -- Static word sequences
-ECFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
-           -> PGeq bits (TCWidth first) -> PGeq bits (TCWidth next)
-           -> PEqual (TCLenFromThen first next bits) len
+ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
+           -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next)
+           -> PEqual (tcLenFromThen first next bits) len
            -> Seq len (Seq bits Bool);
 
-ECFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
-         -> PGeq last first -> PGeq bits (TCWidth last)
-         -> Seq (TCAdd (TCNum 1) (TCSub last first)) (Seq bits Bool);
+ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
+         -> PGeq last first -> PGeq bits (tcWidth last)
+         -> Seq (tcAdd (TCNum 1) (tcSub last first)) (Seq bits Bool);
 
 -- Infinite word sequences
-ECInfFrom :: (n :: Num) -> PFin n -> Seq n Bool -> Seq TCInf (Seq n Bool);
-ECInfFrom _ (PFinNum n) (SeqNum _ _ w) =
+ecInfFrom :: (n :: Num) -> PFin n -> Seq n Bool -> Seq TCInf (Seq n Bool);
+ecInfFrom _ (PFinNum n) (SeqNum _ _ w) =
   SeqInf (Seq (TCNum n) Bool) (\(i :: Nat) -> SeqNum n Bool (bvAdd n w (bvNat n i)));
 
-ECInfFromThen :: (n :: Num) -> PFin n -> Seq n Bool -> Seq n Bool -> Seq TCInf (Seq n Bool);
+ecInfFromThen :: (n :: Num) -> PFin n -> Seq n Bool -> Seq n Bool -> Seq TCInf (Seq n Bool);
 
 -- Run-time error
-ECError :: (a :: sort 0) -> (len :: Num) -> PFin len -> Seq len (Seq (TCNum 8) Bool) -> a;
+ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> Seq len (Seq (TCNum 8) Bool) -> a;
 
 -- Polynomials
-ECPMul :: (a b :: Num) -> PFin a -> PFin b -> Seq a Bool -> Seq b Bool
-       -> Seq (TCSub (TCMax (TCNum 1) (TCAdd a b)) (TCNum 1)) Bool;
+ecPMul :: (a b :: Num) -> PFin a -> PFin b -> Seq a Bool -> Seq b Bool
+       -> Seq (tcSub (tcMax (TCNum 1) (tcAdd a b)) (TCNum 1)) Bool;
 
-ECPDiv :: (a b :: Num) -> PFin a -> PFin b
+ecPDiv :: (a b :: Num) -> PFin a -> PFin b
        -> Seq a Bool -> Seq b Bool -> Seq a Bool;
 
-ECPMod :: (a b :: Num) -> PFin a -> PFin b
-       -> Seq a Bool -> Seq (TCAdd (TCNum 1) b) Bool -> Seq b Bool;
+ecPMod :: (a b :: Num) -> PFin a -> PFin b
+       -> Seq a Bool -> Seq (tcAdd (TCNum 1) b) Bool -> Seq b Bool;
 
 -- Random values
-ECRandom :: (a :: sort 0) -> Seq (TCNum 32) Bool -> a;
+ecRandom :: (a :: sort 0) -> Seq (TCNum 32) Bool -> a;
 
 
 --------------------------------------------------------------------------------
@@ -339,36 +339,36 @@ peek_make ::
 -- Num operations
 
 -- Boolean operations
-ECAnd_Bool :: Eq (Bool -> Bool -> Bool) (ECAnd Bool) and;
-ECOr_Bool :: Eq (Bool -> Bool -> Bool) (ECOr Bool) or;
+ecAnd_Bool :: Eq (Bool -> Bool -> Bool) (ecAnd Bool) and;
+ecOr_Bool :: Eq (Bool -> Bool -> Bool) (ecOr Bool) or;
 
 -- Bitvector operations
-ECCompl_Seq_TCNum_Bool :: (n :: Nat) -> (x :: Seq (TCNum n) Bool)
-  -> Eq (Seq (TCNum n) Bool) (ECCompl (Seq (TCNum n) Bool) x) (bvToSeq n (bvNot n (bvOfSeq n x)));
+ecCompl_Seq_TCNum_Bool :: (n :: Nat) -> (x :: Seq (TCNum n) Bool)
+  -> Eq (Seq (TCNum n) Bool) (ecCompl (Seq (TCNum n) Bool) x) (bvToSeq n (bvNot n (bvOfSeq n x)));
 
-ECEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
-  -> Eq Bool (ECEq (Seq (TCNum n) Bool) p x y) (bvEq n (bvOfSeq n x) (bvOfSeq n y));
+ecEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
+  -> Eq Bool (ecEq (Seq (TCNum n) Bool) p x y) (bvEq n (bvOfSeq n x) (bvOfSeq n y));
 
-ECGtEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
-  -> Eq Bool (ECGtEq (Seq (TCNum n) Bool) p x y) (bvuge n (bvOfSeq n x) (bvOfSeq n y));
+ecGtEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
+  -> Eq Bool (ecGtEq (Seq (TCNum n) Bool) p x y) (bvuge n (bvOfSeq n x) (bvOfSeq n y));
 
-ECLt_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
-  -> Eq Bool (ECLt (Seq (TCNum n) Bool) p x y) (bvult n (bvOfSeq n x) (bvOfSeq n y));
+ecLt_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
+  -> Eq Bool (ecLt (Seq (TCNum n) Bool) p x y) (bvult n (bvOfSeq n x) (bvOfSeq n y));
 
-ECLtEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
-  -> Eq Bool (ECLtEq (Seq (TCNum n) Bool) p x y) (bvule n (bvOfSeq n x) (bvOfSeq n y));
+ecLtEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
+  -> Eq Bool (ecLtEq (Seq (TCNum n) Bool) p x y) (bvule n (bvOfSeq n x) (bvOfSeq n y));
 
-ECNotEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
-  -> Eq Bool (ECNotEq (Seq (TCNum n) Bool) p x y) (bvNe n (bvOfSeq n x) (bvOfSeq n y));
+ecNotEq_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PCmp (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
+  -> Eq Bool (ecNotEq (Seq (TCNum n) Bool) p x y) (bvNe n (bvOfSeq n x) (bvOfSeq n y));
 
-ECMinus_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PArith (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
-  -> Eq (Seq (TCNum n) Bool) (ECMinus (Seq (TCNum n) Bool) p x y) (bvToSeq n (bvSub n (bvOfSeq n x) (bvOfSeq n y)));
+ecMinus_Seq_TCNum_Bool :: (n :: Nat) -> (p :: PArith (Seq (TCNum n) Bool)) -> (x y :: Seq (TCNum n) Bool)
+  -> Eq (Seq (TCNum n) Bool) (ecMinus (Seq (TCNum n) Bool) p x y) (bvToSeq n (bvSub n (bvOfSeq n x) (bvOfSeq n y)));
 
-ECZero_Seq_TCNum_Bool :: (n :: Nat) -> Eq (Seq (TCNum n) Bool) (ECZero (Seq (TCNum n) Bool)) (bvToSeq n (bvNat n 0));
+ecZero_Seq_TCNum_Bool :: (n :: Nat) -> Eq (Seq (TCNum n) Bool) (ecZero (Seq (TCNum n) Bool)) (bvToSeq n (bvNat n 0));
 
 --
 
-ECast_same :: (a :: sort 0) -> (x :: a) -> Eq a (ECast a a x) x;
+eCast_same :: (a :: sort 0) -> (x :: a) -> Eq a (eCast a a x) x;
 
 Seq_TCNum :: (n :: Nat) -> (a :: sort 0) -> Eq (sort 0) (Seq (TCNum n) a) (Vec n a);
 Seq_TCNum_Bool :: (n :: Nat) -> Eq (sort 0) (Seq (TCNum n) Bool) (bitvector n);
