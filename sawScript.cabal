@@ -12,6 +12,8 @@ library
     , array
 --    , cmdargs
     , containers
+    , cryptol
+    , cryptol-verifier
     , deepseq
     , either
     , directory
@@ -47,6 +49,7 @@ library
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Compiler
+    SAWScript.CryptolBuiltins
     SAWScript.FileQuote
     SAWScript.Import
     SAWScript.Interpreter

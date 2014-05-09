@@ -50,6 +50,8 @@ prim basic_ss           : Simpset;
 prim addsimp            : Theorem -> Simpset -> Simpset;
 prim rewrite            : {a} Simpset -> a -> TopLevel a;
 
+prim cryptol_extract    : {a} String -> String -> TopLevel a;
+
 prim java_bool          : JavaType;
 prim java_byte          : JavaType;
 prim java_char          : JavaType;
