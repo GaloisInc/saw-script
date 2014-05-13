@@ -6,6 +6,7 @@ module Verifier.SAW.Cryptol where
 
 import Control.Applicative
 import Control.Monad (join)
+import Data.List (findIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
@@ -68,7 +69,7 @@ bindProp sc prop env = do
 importKind :: SharedContext s -> C.Kind -> IO (SharedTerm s)
 importKind sc kind =
   case kind of
-    C.KType       -> scSort sc (mkSort 0)
+    C.KType       -> scDataTypeApp sc "Cryptol.KType" []
     C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
@@ -99,34 +100,39 @@ importType sc env ty =
                               Just t -> return t
                               Nothing -> fail "internal error: importType TVBound"
     C.TUser _ _ t  -> go t
-    C.TRec fs      -> scRecordType sc =<< traverse go (Map.fromList [ (nameToString n, t) | (n, t) <- fs ])
+    C.TRec fs      -> importTCTuple sc env (map snd fs)
     C.TCon tcon tyargs ->
       case tcon of
         C.TC tc ->
           case tc of
-            C.TCNum n    -> do n' <- scNat sc (fromInteger n)
-                               scCtorApp sc "Cryptol.TCNum" [n']
+            C.TCNum n    -> scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger n)]
             C.TCInf      -> scCtorApp sc "Cryptol.TCInf" []
-            C.TCBit      -> scBoolType sc -- null tyargs
-            C.TCSeq      -> join $ scDataTypeApp sc "Cryptol.Seq" <$> traverse go tyargs -- ^ @[_] _@
-            C.TCFun      -> join $ scFun sc <$> go (tyargs !! 0) <*> go (tyargs !! 1) -- ^ @_ -> _@
-            C.TCTuple _n -> join $ scTupleType sc <$> traverse go tyargs -- ^ @(_, _, _)@
+            C.TCBit      -> scCtorApp sc "Cryptol.TCBit" []
+            C.TCSeq      -> scCtorApp sc "Cryptol.TCSeq" =<< traverse go tyargs
+            C.TCFun      -> scCtorApp sc "Cryptol.TCFun" =<< traverse go tyargs
+            C.TCTuple _n -> importTCTuple sc env tyargs
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- ^ user-defined, @T@
         C.PC pc ->
           case pc of
-            C.PEqual         -> join $ scGlobalApply sc "Cryptol.PEqual" <$> traverse go tyargs -- ^ @_ == _@
-            C.PNeq           -> join $ scGlobalApply sc "Cryptol.PNeq"   <$> traverse go tyargs -- ^ @_ /= _@
-            C.PGeq           -> join $ scGlobalApply sc "Cryptol.PGeq"   <$> traverse go tyargs -- ^ @_ >= _@
-            C.PFin           -> join $ scDataTypeApp sc "Cryptol.PFin"   <$> traverse go tyargs -- ^ @fin _@
+            C.PEqual         -> scGlobalApply sc "Cryptol.PEqual" =<< traverse go tyargs -- ^ @_ == _@
+            C.PNeq           -> scGlobalApply sc "Cryptol.PNeq"   =<< traverse go tyargs -- ^ @_ /= _@
+            C.PGeq           -> scGlobalApply sc "Cryptol.PGeq"   =<< traverse go tyargs -- ^ @_ >= _@
+            C.PFin           -> scDataTypeApp sc "Cryptol.PFin"   =<< traverse go tyargs -- ^ @fin _@
             C.PHas _selector -> unimplemented "PHas"
-            C.PArith         -> join $ scDataTypeApp sc "Cryptol.PArith" <$> traverse go tyargs -- ^ @Arith _@
-            C.PCmp           -> join $ scDataTypeApp sc "Cryptol.PCmp"   <$> traverse go tyargs -- ^ @Cmp _@
+            C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- ^ @Arith _@
+            C.PCmp           -> scDataTypeApp sc "Cryptol.PCmp"   =<< traverse go tyargs -- ^ @Cmp _@
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
              scApplyAll sc tf' tyargs'
   where
     go = importType sc env
+
+importTCTuple :: SharedContext s -> Env s -> [C.Type] -> IO (SharedTerm s)
+importTCTuple _sc _env [] = unimplemented "TCTuple []"
+importTCTuple sc env [t] = importType sc env t
+importTCTuple sc env (t : ts) =
+  scCtorApp sc "Cryptol.TCPair" =<< sequence [importType sc env t, importTCTuple sc env ts]
 
 nameToString :: C.Name -> String
 nameToString (C.Name s) = s
@@ -140,7 +146,9 @@ tparamToString :: C.TParam -> String
 tparamToString tp = maybe ("u" ++ show (C.tpUnique tp)) qnameToString (C.tpName tp)
 
 importPropsType :: SharedContext s -> Env s -> [C.Prop] -> C.Type -> IO (SharedTerm s)
-importPropsType sc env [] ty = importType sc env ty
+importPropsType sc env [] ty = do
+  t <- importType sc env ty
+  scGlobalApply sc "Cryptol.ty" [t]
 importPropsType sc env (prop : props) ty = do
   p <- importType sc env prop
   t <- importPropsType sc env props ty
@@ -266,12 +274,16 @@ importExpr sc env expr =
                                       es' <- traverse go es
                                       v' <- scVector sc t' es'
                                       scGlobalApply sc "Cryptol.eList" [t', n', v']
-    C.ETuple es                 -> scTuple sc =<< traverse go es
-    C.ERec _ {-[(Name,Expr)]-}  -> unimplemented "ERec" -- ^ Record value
+    C.ETuple es                 -> scNestedTuple sc =<< traverse go es
+    C.ERec fs                   -> scNestedTuple sc =<< traverse go (map snd fs)
     C.ESel e sel                ->           -- ^ Elimination for tuple/record/list
       case sel of
-        C.TupleSel i _          -> join $ scTupleSelector sc <$> go e <*> pure i
-        C.RecordSel name _      -> join $ scRecordSelect sc <$> go e <*> pure (nameToString name)
+        C.TupleSel i (Just l)   -> scNestedSelector sc i l =<< go e
+        C.TupleSel _ Nothing    -> unimplemented "TupleSel Nothing"
+        C.RecordSel x (Just xs) -> scNestedSelector sc i l =<< go e
+                                     where i = fromJust (findIndex (== x) xs) + 1
+                                           l = length xs
+        C.RecordSel _ Nothing   -> unimplemented "RecordSel Nothing"
         C.ListSel i _maybeLen   -> do let t = fastTypeOf (envC env) e
                                       (n, a) <- case C.tIsSeq t of
                                                   Just (n, a) -> return (n, a)
@@ -300,7 +312,7 @@ importExpr sc env expr =
     C.EAbs x t e                    -> do t' <- ty t
                                           env' <- bindQName sc x (C.Forall [] [] t) env
                                           e' <- importExpr sc env' e
-                                          scLambda sc (qnameToString x) t' e'
+                                          scEAbs sc (qnameToString x) t' e'
     C.EProofAbs prop e1             -> do p <- importType sc env prop
                                           env' <- bindProp sc prop env
                                           e <- importExpr sc env' e1
@@ -321,6 +333,24 @@ importExpr sc env expr =
   where
     go = importExpr sc env
     ty = importType sc env
+
+-- | Creates the term \(x::ty a) -> e
+scEAbs :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scEAbs sc x a e =
+  do t <- scGlobalApply sc "Cryptol.ty" [a]
+     scLambda sc x t e
+
+scNestedTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scNestedTuple _sc [] = unimplemented "ETuple []"
+scNestedTuple _sc [x] = return x
+scNestedTuple sc (x : xs) =
+  do y <- scNestedTuple sc xs
+     scTuple sc [x, y]
+
+scNestedSelector :: SharedContext s -> Int -> Int -> SharedTerm s -> IO (SharedTerm s)
+scNestedSelector sc i l t
+  | i <= 1    = if i < l then scTupleSelector sc t 1 else return t
+  | otherwise = scTupleSelector sc t 2 >>= scNestedSelector sc (i - 1) (l - 1)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
@@ -353,7 +383,7 @@ importComp sc env listT expr mss =
               (ys, n, b, argss) <- zipAll branches
               zs <- scGlobalApply sc "Cryptol.zip" [a, b, m, n, xs, ys]
               mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
-              ab <- scTupleType sc [a, b]
+              ab <- scCtorApp sc "Cryptol.TCPair" [a, b]
               return (zs, mn, ab, args : argss)
      (xs, n, a, argss) <- zipAll mss
      let (_, elemT) = fromJust (C.tIsSeq listT)
@@ -361,7 +391,7 @@ importComp sc env listT expr mss =
      b <- importType sc env elemT
      ys <- scGlobalApply sc "Cryptol.map" [a, b, n, f, xs]
      -- The resulting type might not match the annotation, so we coerce
-     t1 <- scDataTypeApp sc "Cryptol.Seq" [n, b]
+     t1 <- scCtorApp sc "Cryptol.TCSeq" [n, b]
      t2 <- importType sc env listT
      scGlobalApply sc "Cryptol.eCast" [t1, t2, ys]
 
@@ -382,7 +412,7 @@ lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType sc env t
      env' <- bindQName sc x (C.Forall [] [] t) env
      e <- lambdaTuple sc env' ty expr argss args
-     f <- scLambda sc (qnameToString x) a e
+     f <- scEAbs sc (qnameToString x) a e
      if null args
         then return f
         else do b <- importType sc env (tNestedTuple (map snd args))
@@ -419,7 +449,7 @@ importMatches sc env (C.From qname _ty1 expr : matches) = do
   (body, len2, ty2, args) <- importMatches sc env' matches
   n <- importType sc env len2
   b <- importType sc env ty2
-  f <- scLambda sc (qnameToString qname) a body
+  f <- scEAbs sc (qnameToString qname) a body
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
   return (result, (C..*.) len1 len2, C.tTuple [ty1, ty2], (qname, ty1) : args)
 
@@ -442,7 +472,7 @@ importMatches sc env (C.Let decl : matches) =
      (body, len, ty2, args) <- importMatches sc env' matches
      n <- importType sc env len
      b <- importType sc env ty2
-     f <- scLambda sc (qnameToString (C.dName decl)) a body
+     f <- scEAbs sc (qnameToString (C.dName decl)) a body
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
