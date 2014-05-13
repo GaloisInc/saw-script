@@ -336,10 +336,10 @@ ecZero (TCFun a b) = (\(_::ty a) -> ecZero b);
 ecZero (TCPair a b) = (ecZero a, ecZero b);
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: KType) -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
-ecShiftR :: (m n :: Num) -> (a :: KType) -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
-ecRotL   :: (m n :: Num) -> (a :: KType) -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
-ecRotR   :: (m n :: Num) -> (a :: KType) -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
+ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
+ecShiftR :: (m n :: Num) -> (a :: KType) -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
+ecRotL   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
+ecRotR   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
 
 ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> Seq m (ty a) -> Seq n (ty a) -> Seq (tcAdd m n) (ty a);
 ecSplitAt :: (m n :: Num) -> (a :: KType) -> PFin m -> Seq (tcAdd m n) (ty a) -> #(Seq m (ty a), Seq n (ty a));
