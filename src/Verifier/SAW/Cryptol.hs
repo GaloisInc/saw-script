@@ -174,6 +174,8 @@ proveProp sc env prop =
       -> scGlobalApply sc "Cryptol.pfinWidth" =<< sequence [ty n, pr (C.pFin n)]
     (C.pIsFin -> Just (tIsSub -> Just (m, n)))
       -> scGlobalApply sc "Cryptol.pfinSub" =<< sequence [ty m, ty n, pr (C.pFin m), pr (C.pFin n)]
+    (C.pIsFin -> Just (tIsMax -> Just (m, n)))
+      -> scGlobalApply sc "Cryptol.pfinMax" =<< sequence [ty m, ty n, pr (C.pFin m), pr (C.pFin n)]
     (C.pIsArith -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
       -> scCtorApp sc "Cryptol.PArithWord" =<< sequence [ty n, pr (C.pFin n)]
     (C.pIsArith -> Just (C.tIsSeq -> Just (n, t))) | definitelyNotBit t
@@ -489,10 +491,15 @@ importMatches sc env (C.Let decl : matches) =
 
 tIsWidth :: C.Type -> Maybe C.Type
 tIsWidth ty = case C.tNoUser ty of
-                C.TCon (C.TF (C.TCWidth)) [t1] -> Just t1
-                _                              -> Nothing
+                C.TCon (C.TF C.TCWidth) [t1] -> Just t1
+                _                            -> Nothing
 
 tIsSub :: C.Type -> Maybe (C.Type, C.Type)
 tIsSub ty = case C.tNoUser ty of
-              C.TCon (C.TF (C.TCSub)) [t1, t2] -> Just (t1, t2)
-              _                                -> Nothing
+              C.TCon (C.TF C.TCSub) [t1, t2] -> Just (t1, t2)
+              _                              -> Nothing
+
+tIsMax :: C.Type -> Maybe (C.Type, C.Type)
+tIsMax ty = case C.tNoUser ty of
+              C.TCon (C.TF C.TCMax) [t1, t2] -> Just (t1, t2)
+              _                              -> Nothing

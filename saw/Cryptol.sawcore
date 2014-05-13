@@ -10,6 +10,7 @@ import Prelude;
 
 widthNat :: Nat -> Nat;
 subNat :: Nat -> Nat -> Nat;
+maxNat :: Nat -> Nat -> Nat;
 
 mapPair :: (a b c d :: sort 0) -> (a -> b) -> (c -> d) -> #(a, c) -> #(b, d);
 mapPair _ _ _ _ f g (x, y) = (f x, g y);
@@ -59,6 +60,10 @@ tcMin TCInf (TCNum y) = TCNum y;
 tcMin TCInf TCInf = TCInf;
 
 tcMax :: Num -> Num -> Num;
+tcMax (TCNum x) (TCNum y) = TCNum (maxNat x y);
+tcMax (TCNum _) TCInf = TCInf;
+tcMax TCInf (TCNum _) = TCInf;
+tcMax TCInf TCInf = TCInf;
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThenTo :: Num -> Num -> Num -> Num;
@@ -163,6 +168,9 @@ pfinWidth _ (PFinNum n) = PFinNum (widthNat n);
 
 pfinSub :: (m n :: Num) -> PFin m -> PFin n -> PFin (tcSub m n);
 pfinSub _ _ (PFinNum m) (PFinNum n) = PFinNum (subNat m n);
+
+pfinMax :: (m n :: Num) -> PFin m -> PFin n -> PFin (tcMax m n);
+pfinMax _ _ (PFinNum m) (PFinNum n) = PFinNum (maxNat m n);
 
 -- PHas Selector
 
