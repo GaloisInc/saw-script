@@ -358,6 +358,15 @@ scNestedSelector sc i l t
 -- expressions instead.
 importDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
 importDeclGroups _sc env [] = return env
+importDeclGroups sc env (C.Recursive [decl] : dgs) =
+  do env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
+     t' <- importSchema sc env (C.dSignature decl)
+     e' <- importExpr sc env1 (C.dDefinition decl)
+     f' <- scEAbs sc (qnameToString (C.dName decl)) t' e'
+     rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
+     let env' = env { envE = Map.insert (C.dName decl) rhs (envE env)
+                    , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+     importDeclGroups sc env' dgs
 importDeclGroups _sc _env (C.Recursive decls : _) = unimplemented $ "Recursive: " ++ show (map C.dName decls)
 importDeclGroups sc env (C.NonRecursive decl : dgs) =
   do rhs <- importExpr sc env (C.dDefinition decl)

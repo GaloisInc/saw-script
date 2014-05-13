@@ -17,6 +17,8 @@ mapPair _ _ _ _ f g (x, y) = (f x, g y);
 zipWithPair :: (a1 b1 c1 a2 b2 c2 :: sort 0) -> (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) -> #(a1, a2) -> #(b1, b2) -> #(c1, c2);
 zipWithPair _ _ _ _ _ _ f1 f2 (x1, x2) (y1, y2) = (f1 x1 y1, f2 x2 y2);
 
+fix :: (a :: sort 0) -> (a -> a) -> a;
+
 --------------------------------------------------------------------------------
 -- Extended natural numbers
 
