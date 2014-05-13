@@ -241,10 +241,10 @@ importECon sc econ =
     P.ECSplit       -> scGlobalDef sc "Cryptol.ecSplit"       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
     P.ECReverse     -> scGlobalDef sc "Cryptol.ecReverse"     -- {a,b} (fin a) => [a] b -> [a] b
     P.ECTranspose   -> scGlobalDef sc "Cryptol.ecTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
-    P.ECAt          -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,m} [n]a -> [m] -> a
+    P.ECAt          -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,i} (fin i) => [n]a -> [i] -> a
     P.ECAtRange     -> scGlobalDef sc "Cryptol.ecAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
-    P.ECAtBack      -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,m} (fin n) => [n]a -> [m] -> a
-    P.ECAtRangeBack -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {front,back,a} (fin front) => [front + back]a -> ([front]a, [back]a)
+    P.ECAtBack      -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
+    P.ECAtRangeBack -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {n,a,m,i} (fin n, fin i) => [n]a -> [m][i] -> [m]a
     P.ECFromThen    -> scGlobalDef sc "Cryptol.ecFromThen"
                                -- fromThen : {first,next,bits,len}
                                --             ( fin first, fin next, fin bits

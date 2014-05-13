@@ -342,10 +342,15 @@ ecTranspose m n a xss =
   make n (Seq m (ty a)) (\(j::Index n) ->
     make m (ty a) (\(i::Index m) -> peek n (ty a) (peek m (Seq n (ty a)) xss i) j));
 
-ecAt :: (n :: Num) -> (a :: KType) -> (m :: Num) -> Seq n (ty a) -> Seq m Bool -> ty a;
+ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin i -> Seq n (ty a) -> Seq i Bool -> ty a;
+
 ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin i -> Seq n (ty a) -> Seq m (Seq i Bool) -> Seq m (ty a);
-ecAtBack :: (n :: Num) -> (a :: KType) -> (m :: Num) -> PFin n -> Seq n (ty a) -> Seq m Bool -> (ty a);
-ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin n -> Seq n (ty a) -> Seq m (Seq i Bool) -> Seq m (ty a);
+ecAtRange n a m i pi xs = map (TCSeq i TCBit) a m (ecAt n a i pi xs);
+
+ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin n -> PFin i -> Seq n (ty a) -> Seq i Bool -> (ty a);
+
+ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin n -> PFin i -> Seq n (ty a) -> Seq m (Seq i Bool) -> Seq m (ty a);
+ecAtRangeBack n a m i pn pi xs = map (TCSeq i TCBit) a m (ecAtBack n a i pn pi xs);
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
