@@ -283,7 +283,9 @@ importExpr sc env expr =
         C.RecordSel x (Just xs) -> scNestedSelector sc i l =<< go e
                                      where i = fromJust (findIndex (== x) xs) + 1
                                            l = length xs
-        C.RecordSel _ Nothing   -> unimplemented "RecordSel Nothing"
+        C.RecordSel x Nothing   -> case C.tNoUser (fastTypeOf (envC env) e) of
+                                     C.TRec fs -> importExpr sc env (C.ESel e (C.RecordSel x (Just (map fst fs))))
+                                     _ -> fail "Expected record type"
         C.ListSel i _maybeLen   -> do let t = fastTypeOf (envC env) e
                                       (n, a) <- case C.tIsSeq t of
                                                   Just (n, a) -> return (n, a)
