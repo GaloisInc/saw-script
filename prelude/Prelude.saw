@@ -128,6 +128,10 @@ prim bvuge              : {n} [n] -> [n] -> Bit;
 prim bvugt              : {n} [n] -> [n] -> Bit;
 prim bvule              : {n} [n] -> [n] -> Bit;
 prim bvult              : {n} [n] -> [n] -> Bit;
+prim bvsge              : {n} [n] -> [n] -> Bit;
+prim bvsgt              : {n} [n] -> [n] -> Bit;
+prim bvsle              : {n} [n] -> [n] -> Bit;
+prim bvslt              : {n} [n] -> [n] -> Bit;
 
 prim finval             : Int -> Int -> Fin;
 
