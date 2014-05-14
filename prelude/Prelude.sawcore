@@ -708,7 +708,7 @@ bvNe n x y = not (bvEq n x y);
 
 -- | Unsigned and signed comparison functions.
 bvugt bvuge bvult bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
+bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 -- | Truncates a vector a smaller size.
 -- lsb implementation:
