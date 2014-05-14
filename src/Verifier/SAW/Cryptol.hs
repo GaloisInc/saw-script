@@ -366,7 +366,7 @@ importDeclGroups sc env (C.Recursive [decl] : dgs) =
   do env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
      t' <- importSchema sc env (C.dSignature decl)
      e' <- importExpr sc env1 (C.dDefinition decl)
-     f' <- scEAbs sc (qnameToString (C.dName decl)) t' e'
+     f' <- scLambda sc (qnameToString (C.dName decl)) t' e'
      rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
      let env' = env { envE = Map.insert (C.dName decl) rhs (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
