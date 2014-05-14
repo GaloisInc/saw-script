@@ -702,6 +702,9 @@ bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i))
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
+equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
+               Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
+
 -- | Return true if two bitvectors are not equal.
 bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
