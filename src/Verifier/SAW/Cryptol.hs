@@ -271,11 +271,9 @@ importExpr :: SharedContext s -> Env s -> C.Expr -> IO (SharedTerm s)
 importExpr sc env expr =
   case expr of
     C.ECon econ                 -> importECon sc econ -- ^ Built-in constant
-    C.EList es t                -> do t' <- ty t
-                                      n' <- scNat sc (fromIntegral (length es))
+    C.EList es t                -> do t' <- scGlobalApply sc "Cryptol.ty" =<< sequence [ty t]
                                       es' <- traverse go es
-                                      v' <- scVector sc t' es'
-                                      scGlobalApply sc "Cryptol.eList" [t', n', v']
+                                      scVector sc t' es'
     C.ETuple es                 -> scNestedTuple sc =<< traverse go es
     C.ERec fs                   -> scNestedTuple sc =<< traverse go (map snd fs)
     C.ESel e sel                ->           -- ^ Elimination for tuple/record/list
@@ -472,7 +470,7 @@ importMatches sc env [C.Let decl] =
               C.Forall [] [] ty1 -> return ty1
               _ -> unimplemented "polymorphic Let"
      a <- importType sc env ty1
-     result <- scGlobalApply sc "Cryptol.single" [a, e]
+     result <- scGlobalApply sc "Cryptol.eSingle" [a, e]
      return (result, C.tOne, ty1, [(C.dName decl, ty1)])
 
 importMatches sc env (C.Let decl : matches) =

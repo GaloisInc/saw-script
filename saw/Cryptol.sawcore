@@ -13,13 +13,59 @@ lg2Nat :: Nat -> Nat;
 subNat :: Nat -> Nat -> Nat;
 maxNat :: Nat -> Nat -> Nat;
 
-mapPair :: (a b c d :: sort 0) -> (a -> b) -> (c -> d) -> #(a, c) -> #(b, d);
-mapPair _ _ _ _ f g (x, y) = (f x, g y);
+pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) -> #(a1, a2) -> #(b1, b2);
+pairMap _ _ _ _ f g (x, y) = (f x, g y);
 
-zipWithPair :: (a1 b1 c1 a2 b2 c2 :: sort 0) -> (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) -> #(a1, a2) -> #(b1, b2) -> #(c1, c2);
-zipWithPair _ _ _ _ _ _ f1 f2 (x1, x2) (y1, y2) = (f1 x1 y1, f2 x2 y2);
+pairMap2 :: (a1 b1 c1 a2 b2 c2 :: sort 0) -> (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) -> #(a1, a2) -> #(b1, b2) -> #(c1, c2);
+pairMap2 _ _ _ _ _ _ f1 f2 (x1, x2) (y1, y2) = (f1 x1 y1, f2 x2 y2);
+
+compose :: (a b c :: sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
+compose _ _ _ f g x = f (g x);
 
 fix :: (a :: sort 0) -> (a -> a) -> a;
+
+bvExp :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
+
+reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
+
+toFin :: (n :: Nat) -> Nat -> Fin n;
+
+--------------------------------------------------------------------------------
+-- Infinite streams
+-- TODO: Should this belong in the SAWCore prelude?
+
+data Stream :: sort 0 -> sort 0 where {
+    MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
+  }
+
+streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
+streamGet _ (MkStream _ s) i = s i;
+
+streamConst :: (a :: sort 0) -> a -> Stream a;
+streamConst a x = MkStream a (\(i :: Nat) -> x);
+
+streamMap :: (a b :: sort 0) -> (a -> b) -> Stream a -> Stream b;
+streamMap a b f xs = MkStream b (\(i :: Nat) -> f (streamGet a xs i));
+
+streamMap2 :: (a b c :: sort 0) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c;
+streamMap2 a b c f xs ys = MkStream c (\(i :: Nat) -> f (streamGet a xs i) (streamGet b ys i));
+
+streamTake :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Vec n a;
+streamTake a n xs = generate n a (\(i :: Fin n) -> streamGet a xs (finFront n i));
+
+streamDrop :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream a;
+streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
+
+streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
+
+--streamJoin :: (a :: sort 0) -> (n :: Nat) -> Stream (Vec n a) -> ite (sort 0) (equalNat 0 n) #() (Stream a);
+
+streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
+streamSplit a n xs =
+  MkStream (Vec n a) (\(i :: Nat) ->
+    generate n a (\(j :: Fin n) ->
+      streamGet a xs (addNat (mulNat i n) (finFront n j))));
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers
@@ -110,17 +156,15 @@ indexSnd (TCNum m) (TCNum n) i = IndexNum n (finSnd m n (unIndexNum (mulNat m n)
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
-data Seq :: Num -> sort 0 -> sort 0 where {
-    SeqNum :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Seq (TCNum n) a;
-    SeqInf :: (a :: sort 0) -> (Nat -> a) -> Seq TCInf a;
-  }
+seq :: Num -> sort 0 -> sort 0;
+seq (TCNum n) a = Vec n a;
+seq TCInf a = Stream a;
 
-unSeqNum :: (n :: Nat) -> (a :: sort 0) -> Seq (TCNum n) a -> Vec n a;
-unSeqNum _ _ (SeqNum _ _ v) = v;
+seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
+seqMap a b (TCNum n) f = vMap a b f n;
+seqMap a b TCInf f = streamMap a b f;
 
-unSeqInf :: (a :: sort 0) -> Seq TCInf a -> Nat -> a;
-unSeqInf _ (SeqInf _ f) = f;
-
+{-
 make :: (n :: Num) -> (a :: sort 0) -> (Index n -> a) -> Seq n a;
 make (TCNum n) a f = SeqNum n a (Prelude.generate n a (\(i :: Fin n) -> f (IndexNum n i)));
 make TCInf a f = SeqInf a (\(i :: Nat) -> f (IndexInf i));
@@ -128,16 +172,11 @@ make TCInf a f = SeqInf a (\(i :: Nat) -> f (IndexInf i));
 peek :: (n :: Num) -> (a :: sort 0) -> Seq n a -> Index n -> a;
 peek (TCNum n) a v i = Prelude.get n a (unSeqNum n a v) (unIndexNum n i);
 peek TCInf a v i = unSeqInf a v (unIndexInf i);
+-}
 
-constSeq :: (n :: Num) -> (a :: sort 0) -> a -> Seq n a;
-constSeq (TCNum n) a x = SeqNum n a (replicate n a x);
-constSeq TCInf a x = SeqInf a (\(_::Nat) -> x);
-
-bvToSeq :: (n :: Nat) -> bitvector n -> Seq (TCNum n) Bool;
-bvToSeq n x = SeqNum n Bool x;
-
-bvOfSeq :: (n :: Nat) -> Seq (TCNum n) Bool -> bitvector n;
-bvOfSeq n x = unSeqNum n Bool x;
+seqConst :: (n :: Num) -> (a :: sort 0) -> a -> seq n a;
+seqConst (TCNum n) = replicate n;
+seqConst TCInf = streamConst;
 
 --------------------------------------------------------------------------------
 -- Types
@@ -146,13 +185,15 @@ data KType :: sort 0 where {
     TCBit :: KType;
     TCSeq :: Num -> KType -> KType;
     TCFun :: KType -> KType -> KType;
+    TCUnit :: KType;
     TCPair :: KType -> KType -> KType;
   }
 
 ty :: KType -> sort 0;
 ty TCBit = Bool;
-ty (TCSeq n a) = Seq n (ty a);
+ty (TCSeq n a) = seq n (ty a);
 ty (TCFun a b) = ty a -> ty b;
+ty TCUnit = #();
 ty (TCPair a b) = #(ty a, ty b);
 
 --------------------------------------------------------------------------------
@@ -180,6 +221,7 @@ pfinMax _ _ (PFinNum m) (PFinNum n) = PFinNum (maxNat m n);
 data PArith :: KType -> sort 0 where {
     PArithWord :: (n :: Num) -> PFin n -> PArith (TCSeq n TCBit);
     PArithSeq :: (n :: Num) -> (a :: KType) -> PArith a -> PArith (TCSeq n a);
+    PArithFun :: (a b :: KType) -> PArith b -> PArith (TCFun a b);
     PArithPair :: (a b :: KType) -> PArith a -> PArith b -> PArith (TCPair a b);
   }
 
@@ -189,22 +231,15 @@ data PCmp :: KType -> sort 0 where {
     PCmpPair :: (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCPair a b);
   }
 
-theNat :: (m :: Num) -> PFin m -> Nat;
---theNat _ (Instance_PFin_TCNum n) = n;
-
-theVec :: (m :: Num) -> (a :: sort 0) -> (p :: PFin m) -> Seq m a -> Vec (theNat m p) a;
---theVec _ a (Instance_PFin_TCNum n) xs = vecOfSeq a n xs;
-
 --------------------------------------------------------------------------------
 -- Auxiliary functions
 
 eProofApp :: (a :: sort 0) -> a;
 eCast :: (a b :: KType) -> ty a -> ty b;
 
-eList :: (a :: KType) -> (n :: Nat) -> Vec n (ty a) -> Seq (TCNum n) (ty a);
-eList a n v = SeqNum n (ty a) v;
-
-eListSel :: (a :: KType) -> (n :: Num) -> Seq n (ty a) -> Nat -> ty a;
+eListSel :: (a :: KType) -> (n :: Num) -> seq n (ty a) -> Nat -> ty a;
+eListSel a (TCNum n) xs i = get n (ty a) xs (toFin n i);
+eListSel a TCInf xs i = streamGet (ty a) xs i;
 
 eIf :: (a :: KType) -> Bool -> ty a -> ty a -> ty a;
 eIf a = ite (ty a);
@@ -216,53 +251,70 @@ eIf a = ite (ty a);
 uncurry :: (a b c :: KType) -> (ty a -> ty b -> ty c) -> (#(ty a, ty b) -> ty c);
 uncurry a b c f = (\(x :: #(ty a, ty b)) -> f (x.1) (x.2));
 
-from :: (a b :: KType) -> (m n :: Num) -> Seq m (ty a) -> (ty a -> Seq n (ty b)) -> Seq (tcMul m n) #(ty a, ty b);
+from :: (a b :: KType) -> (m n :: Num) -> seq m (ty a) -> (ty a -> seq n (ty b)) -> seq (tcMul m n) #(ty a, ty b);
+{-
 from a b m n xs f =
   make (tcMul m n) #(ty a, ty b)
     (\(i :: Index (tcMul m n)) ->
       (peek m (ty a) xs (indexFst m n i),
        peek n (ty b) (f (peek m (ty a) xs (indexFst m n i))) (indexSnd m n i)));
+-}
 
-single :: (a :: KType) -> ty a -> Seq (TCNum 1) (ty a);
-single a x = make (TCNum 1) (ty a) (\(i :: Index (TCNum 1)) -> x);
+eSingle :: (a :: KType) -> ty a -> Vec 1 (ty a);
+eSingle a = single (ty a);
 
-mlet :: (a b :: KType) -> (n :: Num) -> ty a -> (ty a -> Seq n (ty b)) -> Seq n #(ty a, ty b);
-mlet a b n x f = make n #(ty a, ty b) (\(i :: Index n) -> (x, peek n (ty b) (f x) i));
+mlet :: (a b :: KType) -> (n :: Num) -> ty a -> (ty a -> seq n (ty b)) -> seq n #(ty a, ty b);
+--mlet a b n x f = make n #(ty a, ty b) (\(i :: Index n) -> (x, peek n (ty b) (f x) i));
 
-zip :: (a b :: KType) -> (m n :: Num) -> Seq m (ty a) -> Seq n (ty b) -> Seq (tcMin m n) #(ty a, ty b);
+zip :: (a b :: KType) -> (m n :: Num) -> seq m (ty a) -> seq n (ty b) -> seq (tcMin m n) #(ty a, ty b);
+{-
 zip a b m n xs ys =
   make (tcMin m n) #(ty a, ty b)
     (\(i :: Index (tcMin m n)) ->
       (peek m (ty a) xs (indexMinL m n i), peek n (ty b) ys (indexMinR m n i)));
+-}
 
-map :: (a b :: KType) -> (n :: Num) -> (ty a -> ty b) -> Seq n (ty a) -> Seq n (ty b);
-map a b n f xs = make n (ty b) (\(i :: Index n) -> f (peek n (ty a) xs i));
+map :: (a b :: KType) -> (n :: Num) -> (ty a -> ty b) -> seq n (ty a) -> seq n (ty b);
+map a b (TCNum n) f = vMap (ty a) (ty b) f n;
+map a b TCInf f = streamMap (ty a) (ty b) f;
 
 --------------------------------------------------------------------------------
 -- Arith functions
 
-bvBinary :: (n :: Nat) -> (bitvector n -> bitvector n -> bitvector n)
-  -> Seq (TCNum n) Bool -> Seq (TCNum n) Bool -> Seq (TCNum n) Bool;
-bvBinary n f xs ys = bvToSeq n (f (bvOfSeq n xs) (bvOfSeq n ys));
+seqBinary :: (n :: Num) -> (a :: KType) -> (ty a -> ty a -> ty a) -> seq n (ty a) -> seq n (ty a) -> seq n (ty a);
+seqBinary (TCNum n) a f = vZipWith (ty a) (ty a) (ty a) f n;
+seqBinary TCInf a f = streamMap2 (ty a) (ty a) (ty a) f;
 
-seqBinary :: (n :: Num) -> (a :: KType) -> (ty a -> ty a -> ty a) -> Seq n (ty a) -> Seq n (ty a) -> Seq n (ty a);
-seqBinary n a f xs ys = make n (ty a) (\(i :: Index n) -> f (peek n (ty a) xs i) (peek n (ty a) ys i));
+unitBinary :: #() -> #() -> #();
+unitBinary _ _ = ();
 
 pairBinary :: (a b :: KType) -> (ty a -> ty a -> ty a) -> (ty b -> ty b -> ty b) -> #(ty a, ty b) -> #(ty a, ty b) -> #(ty a, ty b);
 pairBinary a b f g x y = (f x.1 y.1, g x.2 y.2);
 
+funBinary :: (a b :: KType) -> (ty b -> ty b -> ty b) -> (ty a -> ty b) -> (ty a -> ty b) -> (ty a -> ty b);
+funBinary a b op f g x = op (f x) (g x);
+
 arithBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
-         -> (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-arithBinary bvOp _ (PArithWord _ (PFinNum n)) = bvBinary n (bvOp n);
+            -> (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
+arithBinary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
 arithBinary bvOp _ (PArithSeq n a pa) = seqBinary n a (arithBinary bvOp a pa);
+arithBinary bvOp _ (PArithFun a b pb) = funBinary a b (arithBinary bvOp b pb);
 arithBinary bvOp _ (PArithPair a b pa pb) =
   pairBinary a b (arithBinary bvOp a pa) (arithBinary bvOp b pb);
+
+arithUnary :: ((n :: Nat) -> bitvector n -> bitvector n)
+           -> (a :: KType) -> PArith a -> ty a -> ty a;
+arithUnary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
+arithUnary bvOp _ (PArithSeq n a pa) = seqMap (ty a) (ty a) n (arithUnary bvOp a pa);
+arithUnary bvOp _ (PArithFun a b pb) = compose (ty a) (ty b) (ty b) (arithUnary bvOp b pb);
+arithUnary bvOp _ (PArithPair a b pa pb) =
+  pairMap (ty a) (ty a) (ty b) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> Seq bits Bool;
-ecDemote _ _ (PFinNum val) (PFinNum bits) _ = bvToSeq bits (bvNat bits val);
+ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> seq bits Bool;
+ecDemote _ _ (PFinNum val) (PFinNum bits) _ = bvNat bits val;
 
 -- Arith
 ecPlus  :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
@@ -274,11 +326,20 @@ ecMinus = arithBinary bvSub;
 ecMul :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
 ecMul = arithBinary bvMul;
 
-ecDiv   :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMod   :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecExp   :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecLg2   :: (a :: KType) -> PArith a -> ty a -> ty a;
-ecNeg   :: (a :: KType) -> PArith a -> ty a -> ty a;
+ecDiv :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
+ecDiv = arithBinary bvUDiv;
+
+ecMod :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
+ecMod = arithBinary bvURem;
+
+ecExp :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
+ecExp = arithBinary bvExp;
+
+ecLg2 :: (a :: KType) -> PArith a -> ty a -> ty a;
+ecLg2 = arithUnary bvLg2;
+
+ecNeg :: (a :: KType) -> PArith a -> ty a -> ty a;
+ecNeg = arithUnary bvNeg;
 
 -- Cmp
 ecLt    :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
@@ -305,107 +366,128 @@ ecMin :: (a :: KType) -> PCmp a -> ty a -> ty a -> ty a;
 ecMax :: (a :: KType) -> PCmp a -> ty a -> ty a -> ty a;
 
 -- Logic
-ecAnd   :: (a :: KType) -> ty a -> ty a -> ty a;
+ecAnd :: (a :: KType) -> ty a -> ty a -> ty a;
 ecAnd TCBit = and;
 ecAnd (TCSeq n a) = seqBinary n a (ecAnd a);
 --ecAnd (TCFun a b) = 
+ecAnd TCUnit = unitBinary;
 ecAnd (TCPair a b) = pairBinary a b (ecAnd a) (ecAnd b);
 
 ecOr :: (a :: KType) -> ty a -> ty a -> ty a;
 ecOr TCBit = or;
 ecOr (TCSeq n a) = seqBinary n a (ecOr a);
 --ecOr (TCFun a b) = 
+ecOr TCUnit = unitBinary;
 ecOr (TCPair a b) = pairBinary a b (ecOr a) (ecOr b);
 
 ecXor :: (a :: KType) -> ty a -> ty a -> ty a;
 ecXor TCBit = xor;
 ecXor (TCSeq n a) = seqBinary n a (ecXor a);
---ecXor (TCFun a b) = 
+--ecXor (TCFun a b) = funMap2 FIXME
+ecXor TCUnit = unitBinary;
 ecXor (TCPair a b) = pairBinary a b (ecXor a) (ecXor b);
 
 ecCompl :: (a :: KType) -> ty a -> ty a;
 ecCompl TCBit = not;
 ecCompl (TCSeq n a) = map a a n (ecCompl a);
---ecCompl (TCFun a b) = 
---ecCompl (TCPair a b) = 
+ecCompl (TCFun a b) = compose (ty a) (ty b) (ty b) (ecCompl b);
+--ecCompl TCUnit =
+ecCompl (TCPair a b) = pairMap (ty a) (ty a) (ty b) (ty b) (ecCompl a) (ecCompl b);
 
 ecZero  :: (a :: KType) -> ty a;
 ecZero TCBit = False;
-ecZero (TCSeq n a) = constSeq n (ty a) (ecZero a);
+ecZero (TCSeq n a) = seqConst n (ty a) (ecZero a);
 ecZero (TCFun a b) = (\(_::ty a) -> ecZero b);
+ecZero TCUnit = ();
 ecZero (TCPair a b) = (ecZero a, ecZero b);
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
-ecShiftR :: (m n :: Num) -> (a :: KType) -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
-ecRotL   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
-ecRotR   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> Seq m (ty a) -> Seq n Bool -> Seq m (ty a);
+ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+--ecShiftL (TCNum m) _ a (PFinNum n) xs i = TODO
+ecShiftL TCInf _ a (PFinNum n) xs i = streamDrop (ty a) (bvToNat n i) xs;
 
-ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> Seq m (ty a) -> Seq n (ty a) -> Seq (tcAdd m n) (ty a);
-ecSplitAt :: (m n :: Num) -> (a :: KType) -> PFin m -> Seq (tcAdd m n) (ty a) -> #(Seq m (ty a), Seq n (ty a));
-ecJoin    :: (m n :: Num) -> (a :: KType) -> PFin n -> Seq m (Seq n (ty a)) -> Seq (tcMul m n) (ty a);
-ecSplit   :: (m n :: Num) -> (a :: KType) -> PFin n -> Seq (tcMul m n) (ty a) -> Seq m (Seq n (ty a));
+ecShiftR :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecShiftR (TCNum m) _ a (PFinNum n) xs i =
+  vTake (ty a) m (bvToNat n i)
+    (coerceVec (ty a) (addNat (bvToNat n i) m) (addNat m (bvToNat n i)) (eqNatAddComm (bvToNat n i) m)
+      (append (bvToNat n i) m (ty a) (replicate (bvToNat n i) (ty a) (ecZero a)) xs));
+ecShiftR TCInf _ a (PFinNum n) xs i =
+  streamAppend (ty a) (bvToNat n i) (replicate (bvToNat n i) (ty a) (ecZero a)) xs;
 
-ecReverse   :: (n :: Num) -> (a :: KType) -> PFin n -> Seq n (ty a) -> Seq n (ty a);
+ecRotL   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecRotR   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
 
-ecTranspose :: (m n :: Num) -> (a :: KType) -> Seq m (Seq n (ty a)) -> Seq n (Seq m (ty a));
+ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> seq m (ty a) -> seq n (ty a) -> seq (tcAdd m n) (ty a);
+ecCat _ (TCNum n) a (PFinNum m) = append m n (ty a);
+ecCat _ TCInf a (PFinNum m) = streamAppend (ty a) m;
+
+ecSplitAt :: (m n :: Num) -> (a :: KType) -> PFin m -> seq (tcAdd m n) (ty a) -> #(seq m (ty a), seq n (ty a));
+ecSplitAt _ (TCNum n) a (PFinNum m) xs = (vTake (ty a) m n xs, vDrop (ty a) m n xs);
+ecSplitAt _ TCInf a (PFinNum m) xs = (streamTake (ty a) m xs, streamDrop (ty a) m xs);
+
+ecJoin :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (seq n (ty a)) -> seq (tcMul m n) (ty a);
+ecJoin (TCNum m) _ a (PFinNum n) = join m n (ty a);
+-- ecJoin TCInf _ a (PFinNum n) = streamJoin ...
+-- FIXME: cases on whether n = 0.
+
+ecSplit :: (m n :: Num) -> (a :: KType) -> PFin n -> seq (tcMul m n) (ty a) -> seq m (seq n (ty a));
+ecSplit (TCNum m) _ a (PFinNum n) = split m n (ty a);
+--ecSplit TCInf _ a (PFinNum n) = streamSplit n (ty a);
+-- FIXME: cases on whether n = 0.
+
+ecReverse :: (n :: Num) -> (a :: KType) -> PFin n -> seq n (ty a) -> seq n (ty a);
+ecReverse _ a (PFinNum n) = reverse n (ty a);
+
+ecTranspose :: (m n :: Num) -> (a :: KType) -> seq m (seq n (ty a)) -> seq n (seq m (ty a));
+{-
 ecTranspose m n a xss =
-  make n (Seq m (ty a)) (\(j::Index n) ->
-    make m (ty a) (\(i::Index m) -> peek n (ty a) (peek m (Seq n (ty a)) xss i) j));
+  make n (seq m (ty a)) (\(j::Index n) ->
+    make m (ty a) (\(i::Index m) -> peek n (ty a) (peek m (seq n (ty a)) xss i) j));
+-}
 
-ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin i -> Seq n (ty a) -> Seq i Bool -> ty a;
+ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin i -> seq n (ty a) -> seq i Bool -> ty a;
+ecAt n a _ (PFinNum i) xs idx = eListSel a n xs (bvToNat i idx);
 
-ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin i -> Seq n (ty a) -> Seq m (Seq i Bool) -> Seq m (ty a);
+ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin i -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
 ecAtRange n a m i pi xs = map (TCSeq i TCBit) a m (ecAt n a i pi xs);
 
-ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin n -> PFin i -> Seq n (ty a) -> Seq i Bool -> (ty a);
+ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin n -> PFin i -> seq n (ty a) -> seq i Bool -> (ty a);
 
-ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin n -> PFin i -> Seq n (ty a) -> Seq m (Seq i Bool) -> Seq m (ty a);
+ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin n -> PFin i -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
 ecAtRangeBack n a m i pn pi xs = map (TCSeq i TCBit) a m (ecAtBack n a i pn pi xs);
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
            -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next)
            -> PEqual (tcLenFromThen first next bits) len
-           -> Seq len (Seq bits Bool);
+           -> seq len (seq bits Bool);
 
 ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
          -> PGeq last first -> PGeq bits (tcWidth last)
-         -> Seq (tcAdd (TCNum 1) (tcSub last first)) (Seq bits Bool);
+         -> seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
 
 -- Infinite word sequences
-ecInfFrom :: (n :: Num) -> PFin n -> Seq n Bool -> Seq TCInf (Seq n Bool);
-ecInfFrom _ (PFinNum n) (SeqNum _ _ w) =
-  SeqInf (Seq (TCNum n) Bool) (\(i :: Nat) -> SeqNum n Bool (bvAdd n w (bvNat n i)));
+ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
+ecInfFrom _ (PFinNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
 
-ecInfFromThen :: (n :: Num) -> PFin n -> Seq n Bool -> Seq n Bool -> Seq TCInf (Seq n Bool);
+ecInfFromThen :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
 
 -- Run-time error
-ecError :: (a :: KType) -> (len :: Num) -> PFin len -> Seq len (Seq (TCNum 8) Bool) -> ty a;
+ecError :: (a :: KType) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> ty a;
 
 -- Polynomials
-ecPMul :: (a b :: Num) -> PFin a -> PFin b -> Seq a Bool -> Seq b Bool
-       -> Seq (tcSub (tcMax (TCNum 1) (tcAdd a b)) (TCNum 1)) Bool;
+ecPMul :: (a b :: Num) -> PFin a -> PFin b -> seq a Bool -> seq b Bool
+       -> seq (tcSub (tcMax (TCNum 1) (tcAdd a b)) (TCNum 1)) Bool;
 
 ecPDiv :: (a b :: Num) -> PFin a -> PFin b
-       -> Seq a Bool -> Seq b Bool -> Seq a Bool;
+       -> seq a Bool -> seq b Bool -> seq a Bool;
 
 ecPMod :: (a b :: Num) -> PFin a -> PFin b
-       -> Seq a Bool -> Seq (tcAdd (TCNum 1) b) Bool -> Seq b Bool;
+       -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bool;
 
 -- Random values
-ecRandom :: (a :: KType) -> Seq (TCNum 32) Bool -> ty a;
+ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
 
-
---------------------------------------------------------------------------------
--- Extra functions that appear after rewriting
-
-bvOfSeq_bvToSeq ::
-  (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvOfSeq n (bvToSeq n x)) x;
-
-peek_make ::
-  (n :: Num) -> (a :: sort 0) -> (f :: Index n -> a) -> (i :: Index n)
-  -> Eq a (peek n a (make n a f) i) (f i);
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
