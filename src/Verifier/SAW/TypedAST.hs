@@ -130,7 +130,7 @@ commaSepList (d:l) = d <> comma <+> commaSepList l
 
 -- | Add parenthesis around a document if condition is true.
 ppParens :: Bool -> Doc -> Doc
-ppParens b = if b then parens else id
+ppParens b = if b then parens . align else id
 
 newtype ModuleName = ModuleName BS.ByteString -- [String]
   deriving (Eq, Ord, Generic)
@@ -742,7 +742,7 @@ ppTermF' :: Applicative f
          -> f Doc
 ppTermF' pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
 ppTermF' pp lcls p (App l r) =
-    ppAppParens p <$> liftA2 (<+>) (pp lcls PrecApp l) (pp lcls PrecArg r)
+    ppAppParens p <$> liftA2 (</>) (pp lcls PrecApp l) (pp lcls PrecArg r)
 ppTermF' pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp lcls  PrecLambda tp
@@ -751,7 +751,7 @@ ppTermF' pp lcls p (Lambda name tp rhs) =
           ppParens (p > PrecLambda) $
             text "\\" <> parens (text name' <> doublecolon <> tp')
                <+> text "->"
-               <+> rhs'
+               </> rhs'
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
