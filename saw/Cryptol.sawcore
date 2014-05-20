@@ -236,6 +236,7 @@ data PCmp :: KType -> sort 0 where {
 
 eProofApp :: (a :: sort 0) -> a;
 eCast :: (a b :: KType) -> ty a -> ty b;
+eCast a b = unsafeCoerce (ty a) (ty b);
 
 eListSel :: (a :: KType) -> (n :: Num) -> seq n (ty a) -> Nat -> ty a;
 eListSel a (TCNum n) xs i = get n (ty a) xs (toFin n i);
