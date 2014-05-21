@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -128,6 +129,7 @@ import qualified Data.Map.Strict as StrictMap
 #endif
 import qualified Data.Set as Set
 import Data.Traversable ()
+import Data.Typeable
 import qualified Data.Vector as V
 import Data.Word
 import Prelude hiding (mapM, maximum)
@@ -143,6 +145,7 @@ type TermIndex = Int -- Word64
 
 data SharedTerm s
   = STApp {-# UNPACK #-} !TermIndex !(TermF (SharedTerm s))
+  deriving (Typeable)
 
 instance Hashable (SharedTerm s) where
     hashWithSalt x (STApp idx _) = hashWithSalt x idx
