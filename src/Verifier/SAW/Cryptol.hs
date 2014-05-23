@@ -279,7 +279,9 @@ importExpr sc env expr =
     C.ESel e sel                ->           -- ^ Elimination for tuple/record/list
       case sel of
         C.TupleSel i (Just l)   -> scNestedSelector sc i l =<< go e
-        C.TupleSel _ Nothing    -> unimplemented "TupleSel Nothing"
+        C.TupleSel i Nothing    -> case C.tNoUser (fastTypeOf (envC env) e) of
+                                     C.TCon (C.TC (C.TCTuple l)) _ -> scNestedSelector sc i l =<< go e
+                                     _ -> fail "Expected tuple type"
         C.RecordSel x (Just xs) -> scNestedSelector sc i l =<< go e
                                      where i = fromJust (findIndex (== x) xs) + 1
                                            l = length xs
