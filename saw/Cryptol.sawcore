@@ -118,42 +118,6 @@ tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThenTo :: Num -> Num -> Num -> Num;
 
 --------------------------------------------------------------------------------
--- Possibly unbounded sequence indexes
-
-data Index :: Num -> sort 0 where {
-    IndexNum :: (n :: Nat) -> Fin n -> Index (TCNum n);
-    IndexInf :: Nat -> Index TCInf;
-  }
-
-unIndexNum :: (n :: Nat) -> Index (TCNum n) -> Fin n;
-unIndexNum _ (IndexNum _ i) = i;
-
-unIndexInf :: Index TCInf -> Nat;
-unIndexInf (IndexInf i) = i;
-
-indexMinL :: (m n :: Num) -> Index (tcMin m n) -> Index m;
---indexMinL (TCNum m) (TCNum n) i = ...
-indexMinL (TCNum m) TCInf i = i;
-indexMinL TCInf (TCNum n) i = IndexInf (finFront n (unIndexNum n i));
-indexMinL TCInf TCInf i = i;
-
-indexMinR :: (m n :: Num) -> Index (tcMin m n) -> Index n;
---indexMinR (TCNum m) (TCNum n) i = ...
-indexMinR (TCNum m) TCInf i = IndexInf (finFront m (unIndexNum m i));
-indexMinR TCInf (TCNum n) i = i;
-indexMinR TCInf TCInf i = i;
-
-indexSplit :: (m n :: Num) -> Index (tcMul m n) -> #(Index m, Index n);
-
-indexFst :: (m n :: Num) -> Index (tcMul m n) -> Index m;
-indexFst (TCNum m) (TCNum n) i = IndexNum m (finFst m n (unIndexNum (mulNat m n) i));
--- TODO: more cases
-
-indexSnd :: (m n :: Num) -> Index (tcMul m n) -> Index n;
-indexSnd (TCNum m) (TCNum n) i = IndexNum n (finSnd m n (unIndexNum (mulNat m n) i));
--- TODO: more cases
-
---------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
 seq :: Num -> sort 0 -> sort 0;
@@ -163,16 +127,6 @@ seq TCInf a = Stream a;
 seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
 seqMap a b (TCNum n) f = vMap a b f n;
 seqMap a b TCInf f = streamMap a b f;
-
-{-
-make :: (n :: Num) -> (a :: sort 0) -> (Index n -> a) -> Seq n a;
-make (TCNum n) a f = SeqNum n a (Prelude.generate n a (\(i :: Fin n) -> f (IndexNum n i)));
-make TCInf a f = SeqInf a (\(i :: Nat) -> f (IndexInf i));
-
-peek :: (n :: Num) -> (a :: sort 0) -> Seq n a -> Index n -> a;
-peek (TCNum n) a v i = Prelude.get n a (unSeqNum n a v) (unIndexNum n i);
-peek TCInf a v i = unSeqInf a v (unIndexInf i);
--}
 
 seqConst :: (n :: Num) -> (a :: sort 0) -> a -> seq n a;
 seqConst (TCNum n) = replicate n;
