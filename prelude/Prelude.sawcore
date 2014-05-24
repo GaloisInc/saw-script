@@ -311,6 +311,12 @@ finFront _ (FinVal v _) = v;
 finBack :: (n :: Nat) -> Fin n -> Nat;
 finBack _ (FinVal _ r) = r;
 
+finSwap :: (n :: Nat) -> Fin n -> Fin n;
+finSwap _ (FinVal v r) =
+  coerceFin (Succ (addNat r v)) (Succ (addNat v r))
+    (eqNatSucc (addNat r v) (addNat v r) (eqNatAddComm r v))
+    (FinVal r v);
+
 -- | Axiom: equality on Fin values reduces to equality on first components.
 eq_Fin :: (n :: Nat) -> (i j :: Fin n)
        -> Eq Bool (eq (Fin n) i j) (equalNat (finFront n i) (finFront n j));
@@ -693,7 +699,7 @@ get_bvXor = get_bvZipWith xor;
 
 -- | Get bit in vector by index with most significant bit at index 0.
 bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
---bvMbit _ v (FinVal i r) = get (Succ (addNat r i)) Bool v (FinVal r i);
+bvMbit n v i = get n Bool v (finSwap n i);
 
 -- | Return true if two bitvectors are equal.
 bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
