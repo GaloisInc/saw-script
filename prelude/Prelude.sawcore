@@ -584,13 +584,13 @@ append m n a x y =
 --------------------------------------------------------------------------------
 -- Bitvectors
 
--- | Bitvector operations current has least-significant bit first.
+-- | Bitvector operations expect the most-significant bit first.
 bitvector :: (n :: Nat) -> sort 0;
 bitvector n = Vec n Bool;
 
 -- | Returns most-significant bit in a signed bitvector.
 msb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
-msb x v = bvMbit (Succ x) v (FinVal 0 x);
+msb x v = get (Succ x) Bool v (FinVal 0 x);
 
 -- | (bvNat x n) yields (n mod 2^x) as an x-bit vector.
 bvNat :: (x :: Nat) -> Nat -> bitvector x;
@@ -697,7 +697,7 @@ get_bvXor :: (n :: Nat) -> (x :: bitvector n) -> (y :: bitvector n) -> (i :: Fin
              Eq Bool (get n Bool (bvXor n x y) i) (xor (get n Bool x i) (get n Bool y i));
 get_bvXor = get_bvZipWith xor;
 
--- | Get bit in vector by index with most significant bit at index 0.
+-- | Get bit in vector by index with least significant bit at index 0.
 bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
 bvMbit n v i = get n Bool v (finSwap n i);
 
@@ -718,29 +718,29 @@ bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n
 
 -- | Truncates a vector a smaller size.
 -- lsb implementation:
-bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
-bvTrunc x y = vTake Bool y x;
+-- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
+-- bvTrunc x y = vTake Bool y x;
 -- msb implementation:
--- bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
--- bvTrunc = vDrop Bool;
+bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
+bvTrunc = vDrop Bool;
 
 -- | Perform a unsigned extension  of the bitvector.
 -- @bvUExt x y v@ adds x bits of zeros to the most-significant bits of
 -- the y-bit vector v.
 -- lsb implementation:
-bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
-bvUExt x y a = append y x ?Bool a (replicate x Bool False);
+-- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
+-- bvUExt x y a = append y x ?Bool a (replicate x Bool False);
 -- msb implementation:
---bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat x y);
---bvUExt x y a = append x y ?Bool (replicate x Bool False) a;
+bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat x y);
+bvUExt x y a = append x y ?Bool (replicate x Bool False) a;
 
 -- | Perform a signed extension of the bitvector.
 -- lsb implementation:
-bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
-bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
+-- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
+-- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
 -- msb implementation:
---bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
---bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
+bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
+bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
 
 --------------------------------------------------------------------------------
 -- String values
