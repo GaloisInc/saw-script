@@ -293,6 +293,9 @@ maxNat Zero y = y;
 maxNat (Succ x) Zero = Succ x;
 maxNat (Succ x) (Succ y) = Succ (maxNat x y);
 
+-- | Width(n) = 1 + floor(log_2(n))
+widthNat :: Nat -> Nat;
+
 -- | Axiom: equalNat implements *the* equality on type Nat.
 eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
