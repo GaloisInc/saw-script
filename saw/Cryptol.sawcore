@@ -8,7 +8,6 @@ import Prelude;
 --------------------------------------------------------------------------------
 -- Additional operations on Prelude types
 
-widthNat :: Nat -> Nat;
 lg2Nat :: Nat -> Nat;
 
 pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) -> #(a1, a2) -> #(b1, b2);
