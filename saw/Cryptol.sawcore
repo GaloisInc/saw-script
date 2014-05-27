@@ -367,8 +367,11 @@ ecShiftR (TCNum m) _ a (PFinNum n) xs i =
 ecShiftR TCInf _ a (PFinNum n) xs i =
   streamAppend (ty a) (bvToNat n i) (replicate (bvToNat n i) (ty a) (ecZero a)) xs;
 
-ecRotL   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotR   :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecRotL :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecRotL _ _ a (PFinNum m) (PFinNum n) xs i = rotateL m (ty a) xs (bvToNat n i);
+
+ecRotR :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecRotR _ _ a (PFinNum m) (PFinNum n) xs i = rotateR m (ty a) xs (bvToNat n i);
 
 ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> seq m (ty a) -> seq n (ty a) -> seq (tcAdd m n) (ty a);
 ecCat _ (TCNum n) a (PFinNum m) = append m n (ty a);
