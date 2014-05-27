@@ -275,11 +275,23 @@ equalNat Zero (Succ _) = False;
 equalNat (Succ _) Zero = False;
 equalNat (Succ x) (Succ y) = equalNat x y;
 
+-- | Subtraction
+subNat :: Nat -> Nat -> Nat;
+subNat x Zero = x;
+subNat Zero (Succ y) = Zero;
+subNat (Succ x) (Succ y) = subNat x y;
+
 -- | Minimum
 minNat :: Nat -> Nat -> Nat;
 minNat Zero y = Zero;
 minNat (Succ x) Zero = Zero;
 minNat (Succ x) (Succ y) = Succ (minNat x y);
+
+-- | Maximum
+maxNat :: Nat -> Nat -> Nat;
+maxNat Zero y = y;
+maxNat (Succ x) Zero = Succ x;
+maxNat (Succ x) (Succ y) = Succ (maxNat x y);
 
 -- | Axiom: equalNat implements *the* equality on type Nat.
 eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
