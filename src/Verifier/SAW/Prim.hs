@@ -234,17 +234,19 @@ bvsge _ x y = signed x >= signed y
 bvslt _ x y = signed x <  signed y
 bvsle _ x y = signed x <= signed y
 
--- | @get@ specialized to BitVector
--- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
+-- | @get@ specialized to BitVector (big-endian)
+-- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 get_bv :: Int -> () -> BitVector -> Fin -> Bool
-get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
--- ^ Assuming little-endian order
+get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
+-- little-endian version:
+-- get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
 
--- | @append@ specialized to BitVector
--- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
+-- | @append@ specialized to BitVector (big-endian)
+-- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 append_bv :: Int -> Int -> () -> BitVector -> BitVector -> BitVector
-append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
-  -- ^ Assuming little-endian order
+append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)
+-- little-endian version:
+-- append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
 
 -- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
 bvToNat :: Int -> BitVector -> Integer
@@ -300,17 +302,22 @@ bvUExt m n x = BV (m + n) (unsigned x)
 bvSExt :: Int -> Int -> BitVector -> BitVector
 bvSExt m n x = bv (m + n + 1) (signed x)
 
--- vTake :: (e :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) e -> Vec m e;
+-- | @vTake@ specialized to BitVector (big-endian)
+-- vTake :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
 vTake_bv :: () -> Int -> Int -> BitVector -> BitVector
-vTake_bv _ m _ (BV _ x) = bv m x
-  -- ^ Assumes little-endian order
+vTake_bv _ m n (BV _ x) = bv m (x `shiftR` n)
+-- little-endian version:
+-- vTake_bv _ m _ (BV _ x) = bv m x
 
--- vDrop :: (e :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) e -> Vec n e;
+-- | @vDrop@ specialized to BitVector (big-endian)
+-- vDrop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
 vDrop_bv :: () -> Int -> Int -> BitVector -> BitVector
-vDrop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
-  -- ^ Assumes little-endian order
+vDrop_bv _ _ n (BV _ x) = bv n x
+-- little-endian version:
+-- vDrop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
 
 -- | @slice@ specialized to BitVector
 slice_bv :: () -> Int -> Int -> Int -> BitVector -> BitVector
-slice_bv _ i n _ (BV _ x) = BV n (shiftR x i .&. bitMask n)
-  -- ^ Assuming little-endian order
+slice_bv _ _ n o (BV _ x) = bv n (shiftR x o)
+-- little-endian version:
+-- slice_bv _ i n _ (BV _ x) = bv n (shiftR x i)
