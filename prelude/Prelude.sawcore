@@ -605,6 +605,12 @@ append m n a x y =
     (\(i :: Fin (addNat m n)) ->
       either (Fin m) (Fin n) a (get m a x) (get n a y) (finSplitSum m n i));
 
+-- Rotate array to the left.
+rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+
+-- Rotate array to the right.
+rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+
 --------------------------------------------------------------------------------
 -- Bitvectors
 
