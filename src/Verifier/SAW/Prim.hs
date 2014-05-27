@@ -8,7 +8,7 @@ import Data.Vector ( Vector )
 import qualified Data.Vector as V
 
 ------------------------------------------------------------
--- Primitive types
+-- Natural numbers
 
 -- | A natural number.
 newtype Nat = Nat Integer
@@ -86,9 +86,14 @@ instance Bits Nat where
   popCount (Nat x) = popCount x
 #endif
 
--- data Fin :: (n :: Nat) -> sort 0 where {
---     FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
---   }
+-- | width(n) = 1 + floor(log_2(n))
+widthNat :: Nat -> Nat
+widthNat 0 = 0
+widthNat n = 1 + widthNat (n `div` 2)
+
+------------------------------------------------------------
+-- Finite indices
+
 data Fin = FinVal { finVal :: !Nat, finRem :: Nat }
     deriving (Eq, Show)
 
@@ -141,8 +146,9 @@ instance Enum Fin where
 -- data Vec :: (n :: Nat) -> sort 0 -> sort 0
 data Vec t a = Vec t !(Vector a)
 
--- bitvector :: (n :: Nat) -> sort 0;
--- bitvector n = Vec n Bool;
+------------------------------------------------------------
+-- Unsigned, variable-width bit vectors
+
 data BitVector = BV { width :: !Int, unsigned :: !Integer }
     deriving Show
 -- ^ Invariant: BV w x requires that 0 <= x < 2^w.
