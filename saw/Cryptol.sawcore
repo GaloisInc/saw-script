@@ -10,8 +10,6 @@ import Prelude;
 
 widthNat :: Nat -> Nat;
 lg2Nat :: Nat -> Nat;
-subNat :: Nat -> Nat -> Nat;
-maxNat :: Nat -> Nat -> Nat;
 
 pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) -> #(a1, a2) -> #(b1, b2);
 pairMap _ _ _ _ f g (x, y) = (f x, g y);
