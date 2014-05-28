@@ -332,6 +332,9 @@ finFront _ (FinVal v _) = v;
 finBack :: (n :: Nat) -> Fin n -> Nat;
 finBack _ (FinVal _ r) = r;
 
+-- | Partially-defined function satisfying `finOfNat n (finFront n i) = i`.
+finOfNat :: (n :: Nat) -> Nat -> Fin n;
+
 finSwap :: (n :: Nat) -> Fin n -> Fin n;
 finSwap _ (FinVal v r) =
   coerceFin (Succ (addNat r v)) (Succ (addNat v r))
