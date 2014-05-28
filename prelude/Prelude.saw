@@ -114,6 +114,7 @@ prim disj               : Bit -> Bit -> Bit;
 prim get                : {n, a} [n]a -> Fin -> a;
 prim set                : {n, a} [n]a -> Fin -> a -> [n]a;
 
+prim bvEq               : {n} [n] -> [n] -> Bit;
 prim bvNot              : {n} [n] -> [n];
 prim bvAdd              : {n} [n] -> [n] -> [n];
 prim bvSub              : {n} [n] -> [n] -> [n];
