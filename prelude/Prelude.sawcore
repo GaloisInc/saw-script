@@ -775,3 +775,9 @@ bveq_same2 :: (n :: Nat)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
+
+bvNat_bvToNat :: (n :: Nat)
+              -> (x :: bitvector n)
+              -> Eq (bitvector n)
+                    (bvNat n (bvToNat n x))
+                    x;
