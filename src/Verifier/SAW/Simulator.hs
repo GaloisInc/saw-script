@@ -87,6 +87,14 @@ instance Show e => Show (Thunk m e) where
   showsPrec p (Ready v) = showsPrec p v
 
 ------------------------------------------------------------
+-- Simulator configuration
+
+data SimulatorConfig m e =
+  SimulatorConfig
+  { simGlobal :: Ident -> m (Value m e)
+  }
+
+------------------------------------------------------------
 -- Basic operations on values
 
 valTupleSelect :: MonadIO m => Int -> Value m e -> m (Value m e)
@@ -170,12 +178,12 @@ evalDef rec (Def ident _ eqns) = vFuns [] arity
 
 -- | Generic evaluator for TermFs.
 evalTermF :: forall t m e. (Show t, MonadIO m, MonadFix m) =>
-             (Ident -> m (Value m e))             -- ^ Evaluator for global constants
+             SimulatorConfig m e                  -- ^ Evaluator for global constants
           -> ([Thunk m e] -> t -> m (Value m e))  -- ^ Evaluator for subterms under binders
           -> (t -> m (Value m e))                 -- ^ Evaluator for subterms in the same bound variable context
           -> [Thunk m e]                          -- ^ Environment of bound variables
           -> TermF t -> m (Value m e)
-evalTermF global lam rec env tf =
+evalTermF cfg lam rec env tf =
   case tf of
     App t1 t2               -> do v <- rec t1
                                   x <- rec' t2
@@ -190,14 +198,14 @@ evalTermF global lam rec env tf =
     Constant _ t            -> rec t
     FTermF ftf              ->
       case ftf of
-        GlobalDef ident     -> global ident
+        GlobalDef ident     -> simGlobal cfg ident
         TupleValue ts       -> liftM VTuple $ mapM rec' (V.fromList ts)
         TupleType {}        -> return VType
         TupleSelector t j   -> valTupleSelect j =<< rec t
         RecordValue tm      -> liftM VRecord $ mapM rec' tm
         RecordSelector t k  -> valRecordSelect k =<< rec t
         RecordType {}       -> return VType
-        CtorApp ident ts    -> do v <- global ident
+        CtorApp ident ts    -> do v <- simGlobal cfg ident
                                   xs <- mapM rec' ts
                                   foldM apply v xs
         DataTypeApp {}      -> return VType
@@ -214,30 +222,36 @@ evalTermF global lam rec env tf =
 
 
 -- | Evaluator for unshared terms.
-evalTerm :: (MonadIO m, MonadFix m) => (Ident -> m (Value m e)) -> [Thunk m e] -> Term -> m (Value m e)
-evalTerm global env (Term tf) = evalTermF global lam rec env tf
+evalTerm :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> [Thunk m e] -> Term -> m (Value m e)
+evalTerm cfg env (Term tf) = evalTermF cfg lam rec env tf
   where
-    lam = evalTerm global
-    rec = evalTerm global env
+    lam = evalTerm cfg
+    rec = evalTerm cfg env
 
-evalTypedDef :: (MonadIO m, MonadFix m) => (Ident -> m (Value m e)) -> TypedDef -> m (Value m e)
-evalTypedDef global = evalDef (evalTerm global)
+evalTypedDef :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> TypedDef -> m (Value m e)
+evalTypedDef cfg = evalDef (evalTerm cfg)
 
-evalGlobal :: forall m e. (MonadIO m, MonadFix m) => Module -> Map Ident (Value m e) -> Ident -> m (Value m e)
-evalGlobal m prims ident =
-  case Map.lookup ident prims of
-    Just v -> return v
-    Nothing ->
-      case findCtor m ident of
-        Just ct -> return (vCtor [] (ctorType ct))
+evalGlobal :: forall m e. (MonadIO m, MonadFix m) => Module -> Map Ident (Value m e) -> SimulatorConfig m e
+evalGlobal m prims = cfg
+  where
+    cfg :: SimulatorConfig m e
+    cfg = SimulatorConfig global
+
+    global :: Ident -> m (Value m e)
+    global ident =
+      case Map.lookup ident prims of
+        Just v -> return v
         Nothing ->
-          case findDef m ident of
-            Just td | not (null (defEqs td)) -> evalTypedDef (evalGlobal m prims) td
-            _ -> fail $ "Unimplemented global: " ++ show ident
-  where
-    vCtor :: [Thunk m e] -> Term -> Value m e
-    vCtor xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor (x : xs) t))
-    vCtor xs _ = VCtorApp ident (V.fromList (reverse xs))
+          case findCtor m ident of
+            Just ct -> return (vCtor ident [] (ctorType ct))
+            Nothing ->
+              case findDef m ident of
+                Just td | not (null (defEqs td)) -> evalTypedDef cfg td
+                _ -> fail $ "Unimplemented global: " ++ show ident
+
+    vCtor :: Ident -> [Thunk m e] -> Term -> Value m e
+    vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
+    vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
 ------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:
@@ -250,15 +264,15 @@ evalGlobal m prims ident =
 -- we descend under a lambda binder.
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: (MonadIO m, MonadFix m) => (Ident -> m (Value m e)) -> SharedTerm s -> m (Value m e)
-evalSharedTerm global t = do
-  memoClosed <- mkMemoClosed global t
-  evalOpen global memoClosed [] t
+evalSharedTerm :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> SharedTerm s -> m (Value m e)
+evalSharedTerm cfg t = do
+  memoClosed <- mkMemoClosed cfg t
+  evalOpen cfg memoClosed [] t
 
 -- | Precomputing the memo table for closed subterms.
 mkMemoClosed :: forall m e s. (MonadIO m, MonadFix m) =>
-                (Ident -> m (Value m e)) -> SharedTerm s -> m (IntMap (Thunk m e))
-mkMemoClosed global t =
+                SimulatorConfig m e -> SharedTerm s -> m (IntMap (Thunk m e))
+mkMemoClosed cfg t =
   mfix $ \memoClosed -> do
     bref <- liftIO (newIORef IMap.empty)
     xref <- liftIO (newIORef IMap.empty)
@@ -271,7 +285,7 @@ mkMemoClosed global t =
               b <- liftM freesTermF $ mapM go tf
               liftIO (modifyIORef' bref (IMap.insert i b))
               when (b == 0) $ do
-                x <- delay (evalClosedTermF global memoClosed tf)
+                x <- delay (evalClosedTermF cfg memoClosed tf)
                 liftIO (modifyIORef' xref (IMap.insert i x))
               return b
     _ <- go t
@@ -279,12 +293,12 @@ mkMemoClosed global t =
 
 -- | Evaluator for closed terms, used to populate @memoClosed@.
 evalClosedTermF :: (MonadIO m, MonadFix m) =>
-                   (Ident -> m (Value m e))
+                   SimulatorConfig m e
                 -> IntMap (Thunk m e)
                 -> TermF (SharedTerm s) -> m (Value m e)
-evalClosedTermF global memoClosed tf = evalTermF global lam rec [] tf
+evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
   where
-    lam = evalOpen global memoClosed
+    lam = evalOpen cfg memoClosed
     rec (STApp i _) =
       case IMap.lookup i memoClosed of
         Just x -> force x
@@ -292,11 +306,11 @@ evalClosedTermF global memoClosed tf = evalTermF global lam rec [] tf
 
 -- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
 evalOpen :: forall m e s. (MonadIO m, MonadFix m) =>
-            (Ident -> m (Value m e))
+            SimulatorConfig m e
          -> IntMap (Thunk m e)
          -> [Thunk m e]
          -> SharedTerm s -> m (Value m e)
-evalOpen global memoClosed env t =
+evalOpen cfg memoClosed env t =
   do ref <- liftIO (newIORef IMap.empty)
      go ref t
   where
@@ -313,4 +327,4 @@ evalOpen global memoClosed env t =
               liftIO (modifyIORef' ref (IMap.insert i v))
               return v
     evalF :: IORef (IntMap (Value m e)) -> TermF (SharedTerm s) -> m (Value m e)
-    evalF ref tf = evalTermF global (evalOpen global memoClosed) (go ref) env tf
+    evalF ref tf = evalTermF cfg (evalOpen cfg memoClosed) (go ref) env tf
