@@ -417,6 +417,10 @@ ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bi
 ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
          -> PGeq last first -> PGeq bits (tcWidth last)
          -> seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
+ecFromTo (TCNum first) _ _ (PFinNum last) (PFinNum bits) _ _ =
+  generate (addNat 1 (subNat last first)) (Vec bits Bool)
+    (\(i::Fin (addNat 1 (subNat last first))) ->
+      bvNat bits (addNat (finFront (addNat 1 (subNat last first)) i) first));
 
 -- Infinite word sequences
 ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
