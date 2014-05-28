@@ -275,6 +275,12 @@ equalNat Zero (Succ _) = False;
 equalNat (Succ _) Zero = False;
 equalNat (Succ x) (Succ y) = equalNat x y;
 
+-- | Minimum
+minNat :: Nat -> Nat -> Nat;
+minNat Zero y = Zero;
+minNat (Succ x) Zero = Zero;
+minNat (Succ x) (Succ y) = Succ (minNat x y);
+
 -- | Axiom: equalNat implements *the* equality on type Nat.
 eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
