@@ -220,12 +220,10 @@ mlet :: (a b :: KType) -> (n :: Num) -> ty a -> (ty a -> seq n (ty b)) -> seq n 
 --mlet a b n x f = make n #(ty a, ty b) (\(i :: Index n) -> (x, peek n (ty b) (f x) i));
 
 zip :: (a b :: KType) -> (m n :: Num) -> seq m (ty a) -> seq n (ty b) -> seq (tcMin m n) #(ty a, ty b);
-{-
-zip a b m n xs ys =
-  make (tcMin m n) #(ty a, ty b)
-    (\(i :: Index (tcMin m n)) ->
-      (peek m (ty a) xs (indexMinL m n i), peek n (ty b) ys (indexMinR m n i)));
--}
+zip a b (TCNum m) (TCNum n) xs ys = vZip (ty a) (ty b) m n xs ys;
+zip a b (TCNum m) TCInf xs ys = generate m #(ty a, ty b) (\(i :: Fin m) -> (get m (ty a) xs i, streamGet (ty b) ys (finFront m i)));
+zip a b TCInf (TCNum n) xs ys = generate n #(ty a, ty b) (\(i :: Fin n) -> (streamGet (ty a) xs (finFront n i), get n (ty b) ys i));
+zip a b TCInf TCInf xs ys = streamMap2 (ty a) (ty b) #(ty a, ty b) (\(x::ty a) -> \(y::ty b) -> (x, y)) xs ys;
 
 map :: (a b :: KType) -> (n :: Num) -> (ty a -> ty b) -> seq n (ty a) -> seq n (ty b);
 map a b (TCNum n) f = vMap (ty a) (ty b) f n;
