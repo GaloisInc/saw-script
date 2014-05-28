@@ -107,6 +107,12 @@ incFinBy x y
  where r' = toInteger (finRem x) - toInteger y
        x' = FinVal (finVal x + y) (fromInteger r')
 
+-- finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
+finDivMod :: Nat -> Nat -> Fin -> (Fin, Fin)
+finDivMod _ n (FinVal v r) = (FinVal v1 r1, FinVal v2 r2)
+  where (v1, v2) = divMod v n
+        (r1, r2) = divMod r n
+
 instance Enum Fin where
   succ (FinVal _ 0) = error "FinVal has no successor."
   succ (FinVal x r) = FinVal (succ x) (pred r)

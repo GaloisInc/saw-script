@@ -421,14 +421,20 @@ finProduct _ _ (FinVal mv mr) (FinVal nv nr) =
 -- | Type 'Fin Zero' is empty.
 finZeroImpossible :: Fin Zero -> (a :: sort 0) -> a;
 
-finSplitProduct :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
-finSplitProduct Zero n k = finZeroImpossible k #(Fin Zero, Fin n);
-finSplitProduct (Succ m) n k =
+finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
+finDivMod Zero n k = finZeroImpossible k #(Fin Zero, Fin n);
+finDivMod (Succ m) n k =
   either (Fin n) (Fin (mulNat m n)) #(Fin (Succ m), Fin n)
          (\(i :: Fin n) -> (finZero m, i))
-         (\(j :: Fin (mulNat m n)) -> (finSucc m (finSplitProduct m n j).1,
-                                                 (finSplitProduct m n j).2))
+         (\(j :: Fin (mulNat m n)) -> (finSucc m (finDivMod m n j).1,
+                                                 (finDivMod m n j).2))
          (finSplitSum n (mulNat m n) k);
+
+finDiv :: (m n :: Nat) -> Fin (mulNat m n) -> Fin m;
+finDiv m n i = fst (Fin m) (Fin n) (finDivMod m n i);
+
+finMod :: (m n :: Nat) -> Fin (mulNat m n) -> Fin n;
+finMod m n i = snd (Fin m) (Fin n) (finDivMod m n i);
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
@@ -567,7 +573,7 @@ join  :: (m n :: Nat)
        -> Vec (mulNat m n) a;
 join m n a v =
   let { eltFn :: Fin (mulNat m n) -> a;
-        eltFn i = splitFn (finSplitProduct m n i);
+        eltFn i = splitFn (finDivMod m n i);
         splitFn :: #(Fin m, Fin n) -> a;
         splitFn (i,j) = get n a (get m (Vec n a) v i) j;
       }
