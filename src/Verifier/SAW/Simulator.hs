@@ -64,6 +64,9 @@ force (Thunk ref) = do
 delay :: MonadIO m => m (Value m e) -> m (Thunk m e)
 delay m = liftM Thunk $ liftIO (newIORef (Left m))
 
+strictFun :: MonadIO m => (Value m e -> m (Value m e)) -> Value m e
+strictFun f = VFun (\x -> force x >>= f)
+
 instance Show e => Show (Value m e) where
   showsPrec p v =
     case v of
