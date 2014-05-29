@@ -20,6 +20,7 @@ import Verinf.Symbolic.Lit
 -- Values
 
 type BValue l = Value IO (BExtra l)
+type BThunk l = Thunk IO (BExtra l)
 
 data BExtra l
   = BBool l
@@ -150,27 +151,31 @@ iteOp be =
   VFun $ \y -> beLazyMux be muxFn (toBool b) (force x) (force y)
   where
     muxFn :: l -> BValue l -> BValue l -> IO (BValue l)
-    muxFn b (VExtra x) (VExtra y) = VExtra <$> extraFn b x y
-    muxFn _ _ _ = fail "iteOp: unimplemented"
+    muxFn b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxFn b x y)
+    muxFn b (VTuple xv)     (VTuple yv)     = VTuple <$> vectorFn b xv yv
+    muxFn b (VRecord xm)    (VRecord ym)
+      | Map.keys xm == Map.keys ym          = VRecord <$> sequenceA (Map.fromList
+                                                [ (k, thunkFn b x y) | ((k, x), y) <- zip (Map.assocs xm) (Map.elems ym) ])
+    muxFn b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> vectorFn b xv yv
+    muxFn b (VVector xv)    (VVector yv)    = VVector <$> vectorFn b xv yv
+    muxFn _ (VNat m)        (VNat n)        | m == n = return $ VNat m
+    muxFn _ (VString x)     (VString y)     | x == y = return $ VString x
+    muxFn _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
+    muxFn _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
+    muxFn _ VType           VType           = return VType
+    muxFn b (VExtra x)      (VExtra y)      = VExtra <$> extraFn b x y
+    muxFn _ _ _ = fail "iteOp: malformed arguments"
+
+    vectorFn :: l -> V.Vector (BThunk l) -> V.Vector (BThunk l) -> IO (V.Vector (BThunk l))
+    vectorFn b xv yv
+      | V.length xv == V.length yv = V.zipWithM (thunkFn b) xv yv
+      | otherwise                  = fail "iteOp: malformed arguments"
+
+    thunkFn :: l -> BThunk l -> BThunk l -> IO (BThunk l)
+    thunkFn b x y = delay $ do x' <- force x; y' <- force y; muxFn b x' y'
 
     extraFn :: l -> BExtra l -> BExtra l -> IO (BExtra l)
     extraFn b (BBool x) (BBool y) = BBool <$> beMux be b x y
     extraFn b (BWord x) (BWord y) | LV.length x == LV.length y = BWord <$> LV.zipWithM (beMux be b) x y
     extraFn b (BToNat m x) (BToNat n y) | m == n && LV.length x == LV.length y = BToNat m <$> LV.zipWithM (beMux be b) x y
     extraFn _ _ _ = fail "iteOp: malformed arguments"
-{-
-  | BWord (LitVector l) -- ^ Bits in LSB order
-  | BToNat Nat (LitVector l)
-
-                iteFn (BVector x) (BVector y)
-                  | V.length x == V.length y
-                  = BVector <$> V.zipWithM iteFn x y
-                iteFn (BTuple x) (BTuple y)
-                  | length x == length y
-                  = BTuple <$> zipWithM iteFn x y
-                iteFn (BRecord x) (BRecord y)
-                  | Map.keys x == Map.keys y
-                  = fmap BRecord $ sequenceOf traverse 
-                                 $ Map.intersectionWith iteFn x y
-                iteFn _ _ = fail "malformed arguments."
--}
