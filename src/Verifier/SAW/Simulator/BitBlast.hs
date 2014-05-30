@@ -12,7 +12,7 @@ import qualified Data.Vector.Storable as LV
 
 --import Verifier.SAW.Prim (Nat)
 import qualified Verifier.SAW.Simulator as Sim
-import Verifier.SAW.Simulator (Value(..))
+import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
 import Verifier.SAW.SharedTerm
 
@@ -24,8 +24,8 @@ import qualified Verifier.SAW.Recognizer as R
 ------------------------------------------------------------
 -- Values
 
-type BValue l = Sim.Value IO (BExtra l)
-type BThunk l = Sim.Thunk IO (BExtra l)
+type BValue l = Value IO (BExtra l)
+type BThunk l = Thunk IO (BExtra l)
 
 data BExtra l
   = BBool l
@@ -52,17 +52,17 @@ vWord lv = VExtra (BWord lv)
 
 toWord :: LV.Storable l => BValue l -> IO (LitVector l)
 toWord (VExtra (BWord lv)) = return lv
-toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . Sim.force) vv
+toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
 toWord _ = fail "toWord"
 
 wordFun :: LV.Storable l => (LitVector l -> IO (BValue l)) -> BValue l
-wordFun f = Sim.strictFun (\x -> toWord x >>= f)
+wordFun f = strictFun (\x -> toWord x >>= f)
 
 -- | op :: Bool -> Bool -> Bool
 boolBinOp :: (l -> l -> IO l) -> BValue l
 boolBinOp op =
-  Sim.strictFun $ \x -> return $
-  Sim.strictFun $ \y -> vBool <$> op (toBool x) (toBool y)
+  strictFun $ \x -> return $
+  strictFun $ \y -> vBool <$> op (toBool x) (toBool y)
 
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
 binOp :: LV.Storable l => (LitVector l -> LitVector l -> IO (LitVector l)) -> BValue l
@@ -86,7 +86,7 @@ shiftOp :: LV.Storable l =>
 shiftOp bvOp natOp =
   VFun $ \_ -> return $
   wordFun $ \x -> return $
-  Sim.strictFun $ \y ->
+  strictFun $ \y ->
     case y of
       VExtra (BToNat _ lv) -> vWord <$> bvOp x lv
       VNat n               -> return (vWord (natOp x (fromInteger n)))
@@ -115,7 +115,7 @@ beConstMap be = Map.fromList
   -- Boolean
   [ ("Prelude.True"  , vBool (beTrue be))
   , ("Prelude.False" , vBool (beFalse be))
-  , ("Prelude.not"   , Sim.strictFun (return . vBool . beNeg be . toBool))
+  , ("Prelude.not"   , strictFun (return . vBool . beNeg be . toBool))
   , ("Prelude.and"   , boolBinOp (beAnd be))
   , ("Prelude.or"    , boolBinOp (beOr be))
   , ("Prelude.xor"   , boolBinOp (beXor be))
@@ -151,9 +151,9 @@ beConstMap be = Map.fromList
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: forall l. (LV.Storable l) => BitEngine l -> BValue l
 iteOp be =
-  Sim.strictFun $ \b -> return $
+  strictFun $ \b -> return $
   VFun $ \x -> return $
-  VFun $ \y -> beLazyMux be muxFn (toBool b) (Sim.force x) (Sim.force y)
+  VFun $ \y -> beLazyMux be muxFn (toBool b) (force x) (force y)
   where
     muxFn :: l -> BValue l -> BValue l -> IO (BValue l)
     muxFn b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxFn b x y)
@@ -177,7 +177,7 @@ iteOp be =
       | otherwise                  = fail "iteOp: malformed arguments"
 
     thunkFn :: l -> BThunk l -> BThunk l -> IO (BThunk l)
-    thunkFn b x y = Sim.delay $ do x' <- Sim.force x; y' <- Sim.force y; muxFn b x' y'
+    thunkFn b x y = delay $ do x' <- force x; y' <- force y; muxFn b x' y'
 
     extraFn :: l -> BExtra l -> BExtra l -> IO (BExtra l)
     extraFn b (BBool x) (BBool y) = BBool <$> beMux be b x y
@@ -211,7 +211,7 @@ newVars be (TupleShape ts) = VTuple <$> traverse (newVars' be) (V.fromList ts)
 newVars be (RecShape tm) = VRecord <$> traverse (newVars' be) tm
 
 newVars' :: BitEngine l -> BShape -> IO (BThunk l)
-newVars' be shape = Sim.Ready <$> newVars be shape
+newVars' be shape = Ready <$> newVars be shape
 
 ------------------------------------------------------------
 -- Bit-blasting predicates
@@ -227,7 +227,7 @@ bitBlast be sc t = do
   shapes <- traverse (parseShape . snd) argTs
   vars <- traverse (newVars' be) shapes
   bval <- bitBlastBasic be (scModule sc) t
-  bval' <- Sim.applyAll bval vars
+  bval' <- applyAll bval vars
   case bval' of
     VExtra (BBool l) -> return l
     _ -> fail "bitBlast: non-boolean result type."
