@@ -89,7 +89,6 @@ module Verifier.SAW.TypedAST
 import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Lens
-import Control.Monad.Identity (runIdentity)
 import Data.Bits
 import qualified Data.ByteString.UTF8 as BS
 import Data.Char
