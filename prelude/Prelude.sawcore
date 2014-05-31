@@ -275,6 +275,27 @@ equalNat Zero (Succ _) = False;
 equalNat (Succ _) Zero = False;
 equalNat (Succ x) (Succ y) = equalNat x y;
 
+-- | Subtraction
+subNat :: Nat -> Nat -> Nat;
+subNat x Zero = x;
+subNat Zero (Succ y) = Zero;
+subNat (Succ x) (Succ y) = subNat x y;
+
+-- | Minimum
+minNat :: Nat -> Nat -> Nat;
+minNat Zero y = Zero;
+minNat (Succ x) Zero = Zero;
+minNat (Succ x) (Succ y) = Succ (minNat x y);
+
+-- | Maximum
+maxNat :: Nat -> Nat -> Nat;
+maxNat Zero y = y;
+maxNat (Succ x) Zero = Succ x;
+maxNat (Succ x) (Succ y) = Succ (maxNat x y);
+
+-- | Width(n) = 1 + floor(log_2(n))
+widthNat :: Nat -> Nat;
+
 -- | Axiom: equalNat implements *the* equality on type Nat.
 eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
@@ -310,6 +331,15 @@ finFront _ (FinVal v _) = v;
 
 finBack :: (n :: Nat) -> Fin n -> Nat;
 finBack _ (FinVal _ r) = r;
+
+-- | Partially-defined function satisfying `finOfNat n (finFront n i) = i`.
+finOfNat :: (n :: Nat) -> Nat -> Fin n;
+
+finSwap :: (n :: Nat) -> Fin n -> Fin n;
+finSwap _ (FinVal v r) =
+  coerceFin (Succ (addNat r v)) (Succ (addNat v r))
+    (eqNatSucc (addNat r v) (addNat v r) (eqNatAddComm r v))
+    (FinVal r v);
 
 -- | Axiom: equality on Fin values reduces to equality on first components.
 eq_Fin :: (n :: Nat) -> (i j :: Fin n)
@@ -409,14 +439,20 @@ finProduct _ _ (FinVal mv mr) (FinVal nv nr) =
 -- | Type 'Fin Zero' is empty.
 finZeroImpossible :: Fin Zero -> (a :: sort 0) -> a;
 
-finSplitProduct :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
-finSplitProduct Zero n k = finZeroImpossible k #(Fin Zero, Fin n);
-finSplitProduct (Succ m) n k =
+finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
+finDivMod Zero n k = finZeroImpossible k #(Fin Zero, Fin n);
+finDivMod (Succ m) n k =
   either (Fin n) (Fin (mulNat m n)) #(Fin (Succ m), Fin n)
          (\(i :: Fin n) -> (finZero m, i))
-         (\(j :: Fin (mulNat m n)) -> (finSucc m (finSplitProduct m n j).1,
-                                                 (finSplitProduct m n j).2))
+         (\(j :: Fin (mulNat m n)) -> (finSucc m (finDivMod m n j).1,
+                                                 (finDivMod m n j).2))
          (finSplitSum n (mulNat m n) k);
+
+finDiv :: (m n :: Nat) -> Fin (mulNat m n) -> Fin m;
+finDiv m n i = fst (Fin m) (Fin n) (finDivMod m n i);
+
+finMod :: (m n :: Nat) -> Fin (mulNat m n) -> Fin n;
+finMod m n i = snd (Fin m) (Fin n) (finDivMod m n i);
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
@@ -555,7 +591,7 @@ join  :: (m n :: Nat)
        -> Vec (mulNat m n) a;
 join m n a v =
   let { eltFn :: Fin (mulNat m n) -> a;
-        eltFn i = splitFn (finSplitProduct m n i);
+        eltFn i = splitFn (finDivMod m n i);
         splitFn :: #(Fin m, Fin n) -> a;
         splitFn (i,j) = get n a (get m (Vec n a) v i) j;
       }
@@ -575,16 +611,25 @@ append m n a x y =
     (\(i :: Fin (addNat m n)) ->
       either (Fin m) (Fin n) a (get m a x) (get n a y) (finSplitSum m n i));
 
+-- Rotate array to the left.
+rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+
+-- Rotate array to the right.
+rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+
+-- Zip together two lists (truncating the longer of the two).
+vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+
 --------------------------------------------------------------------------------
 -- Bitvectors
 
--- | Bitvector operations current has least-significant bit first.
+-- | Bitvector operations expect the most-significant bit first.
 bitvector :: (n :: Nat) -> sort 0;
 bitvector n = Vec n Bool;
 
 -- | Returns most-significant bit in a signed bitvector.
 msb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
-msb x v = bvMbit (Succ x) v (FinVal 0 x);
+msb x v = get (Succ x) Bool v (FinVal 0 x);
 
 -- | (bvNat x n) yields (n mod 2^x) as an x-bit vector.
 bvNat :: (x :: Nat) -> Nat -> bitvector x;
@@ -683,7 +728,7 @@ get_bvXor :: (n :: Nat) -> (x :: bitvector n) -> (y :: bitvector n) -> (i :: Fin
              Eq Bool (get n Bool (bvXor n x y) i) (xor (get n Bool x i) (get n Bool y i));
 get_bvXor = get_bvZipWith xor;
 
--- | Get bit in vector by index with most significant bit at index 0.
+-- | Get bit in vector by index with least significant bit at index 0.
 bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
 bvMbit n v i = get n Bool v i;
 
@@ -706,6 +751,9 @@ bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n
 -- msb implementation:
 bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
 bvTrunc = vDrop Bool;
+-- lsb implementation:
+-- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
+-- bvTrunc x y = vTake Bool y x;
 
 -- | Perform a unsigned extension  of the bitvector.
 -- @bvUExt x y v@ adds x bits of zeros to the most-significant bits of
@@ -713,11 +761,17 @@ bvTrunc = vDrop Bool;
 -- msb implementation:
 bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat x y);
 bvUExt x y a = append x y ?Bool (replicate x Bool False) a;
+-- lsb implementation:
+-- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
+-- bvUExt x y a = append y x ?Bool a (replicate x Bool False);
 
 -- | Perform a signed extension of the bitvector.
 -- msb implementation:
 bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
 bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
+-- lsb implementation:
+-- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
+-- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
 
 --------------------------------------------------------------------------------
 -- String values

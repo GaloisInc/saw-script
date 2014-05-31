@@ -629,7 +629,7 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               put $ StrictMap.insert t (n+1) m
               rec r
             Nothing -> do
-              put $ StrictMap.insert t 1 m
+              when (looseVars t == 0) $ put (StrictMap.insert t 1 m)
               let (h,args) = asApplyAll t
               case unwrapTermF h of
                 Constant _ _ -> rec (args ++ r)
@@ -645,7 +645,7 @@ scPrettyTermDoc t0
     | otherwise =
         text "let { " <> nest 6 (lineSep lets) <$$>
         text "    }" <$$>
-        text " in " <> ppt lcls0 PrecNone t0
+        text " in " <> align (ppt lcls0 PrecNone t0)
   where lcls0 = emptyLocalVarDoc
         cm = scTermCount t0 -- Occurence map
         -- Return true if variable should be introduced to name term.
