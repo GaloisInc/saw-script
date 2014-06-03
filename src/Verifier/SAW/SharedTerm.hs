@@ -70,6 +70,7 @@ module Verifier.SAW.SharedTerm
   , scWriteExternal
   , scReadExternal
     -- ** Type checking
+  , scTypeCheck
   , scTypeOf
   , scTypeOfGlobal
     -- ** Prelude operations
@@ -285,11 +286,6 @@ scTypeOfCtor sc ident =
       Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (ctorType d)
 
--- TODO: separate versions of typeOf: One fast one that assumes the
--- term is well-formed. Another that completely typechecks a term,
--- ensuring that it is well-formed. The full typechecking should use
--- memoization on subterms. Perhaps the fast one won't need to?
-
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
 scTypeOf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
@@ -361,11 +357,105 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
+-- | This version of the type checking function makes sure that the
+-- entire term is well-formed, and that all internal type annotations
+-- are correct. When matching types, it ensures only that they are
+-- equivalent modulo beta-reduction; any non-trivial type equalities
+-- must be indicated explicitly with coercions.
+scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scTypeCheck sc t0 = scTypeCheck' sc [] t0
+
+scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
+  where
+    memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    memo _t@(STApp i tf) =
+      do table <- State.get
+         case Map.lookup i table of
+           Just x  -> return x
+           Nothing ->
+             do x <- termf tf
+                State.modify (Map.insert i x)
+                return x
+    sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
+    sort t = asSort =<< memo t
+    reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    reducePi' t@(STApp _ (Pi _ t1 body)) arg =
+      do t2 <- memo arg
+         if alphaEquiv t1 t2 then return ()
+            else do lift $ putStrLn $ "Unsolved: " ++ show t1 ++ " == " ++ show t2
+         lift $ instantiateVar sc 0 arg body
+    reducePi' t _ = fail $ "Not a function type: " ++ show t
+    termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    termf tf =
+      case tf of
+        FTermF ftf -> ftermf ftf
+        App x y ->
+          do tx <- memo x
+             reducePi' tx y
+        Lambda x a rhs ->
+          do b <- lift $ scTypeCheck' sc (a : env) rhs
+             lift $ scTermF sc (Pi x a b)
+        Pi _ a rhs ->
+          do s1 <- asSort =<< memo a
+             s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
+             lift $ scSort sc (max s1 s2)
+        Let defs rhs -> error "scTypeCheck Let" defs rhs
+        LocalVar i
+          | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
+          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
+        Constant _ t -> memo t
+    ftermf :: FlatTermF (SharedTerm s)
+           -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
+    ftermf tf =
+      case tf of
+        GlobalDef d -> lift $ scTypeOfGlobal sc d
+        TupleValue l -> lift . scTupleType sc =<< traverse memo l
+        TupleType l -> lift . scSort sc . maximum =<< traverse sort l
+        TupleSelector t i -> do
+          STApp _ (FTermF (TupleType ts)) <- memo t
+          return (ts !! (i-1)) -- FIXME test for i < length ts
+        RecordValue m -> lift . scRecordType sc =<< traverse memo m
+        RecordSelector t f -> do
+          STApp _ (FTermF (RecordType m)) <- memo t
+          let Just tp = Map.lookup f m
+          return tp
+        RecordType m -> lift . scSort sc . maximum =<< traverse sort m
+        CtorApp c args -> do
+          t <- lift $ scTypeOfCtor sc c
+          foldM reducePi' t args
+        DataTypeApp dt args -> do
+          t <- lift $ scTypeOfDataType sc dt
+          foldM reducePi' t args
+        Sort s -> lift $ scSort sc (sortOf s)
+        NatLit _ -> lift $ scNatType sc
+        ArrayValue tp vs -> lift $ do
+          n <- scNat sc (fromIntegral (V.length vs))
+          scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
+        FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
+        DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
+        StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
+        ExtCns ec   -> return $ ecType ec
+
 asSort :: Monad m => SharedTerm s -> m Sort
 asSort tp =
   case tp of
     STApp _ (FTermF (Sort s)) -> return s
     _ -> fail $ "Not a sort: " ++ show tp
+
+alphaEquiv :: SharedTerm s -> SharedTerm s -> Bool
+alphaEquiv = term
+  where
+    term (STApp i1 tf1) (STApp i2 tf2) = i1 == i2 || termf tf1 tf2
+    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
+    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
+    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
+    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
+    termf (LocalVar i1) (LocalVar i2) = i1 == i2
+    termf _ _ = False
+    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
+                         Nothing -> False
+                         Just ftf3 -> Data.Foldable.and ftf3
 
 -- | The inverse function to @scSharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
