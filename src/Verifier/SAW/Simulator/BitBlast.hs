@@ -13,6 +13,7 @@ import qualified Data.Vector.Storable as LV
 --import Verifier.SAW.Prim (Nat)
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
+import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
 import Verifier.SAW.SharedTerm
 
@@ -146,6 +147,20 @@ beConstMap be = Map.fromList
   , ("Prelude.bvShl" , shiftOp (beShl be) (lvShl (beFalse be)))
   , ("Prelude.bvShr" , shiftOp (beUnsignedShr be) (lvShr (beFalse be)))
   , ("Prelude.bvSShr", shiftOp (beSignedShr be) lvSShr)
+  -- Nat
+  , ("Prelude.Succ", Prims.succOp)
+  , ("Prelude.addNat", Prims.addNatOp)
+  , ("Prelude.subNat", Prims.subNatOp)
+  , ("Prelude.mulNat", Prims.mulNatOp)
+  , ("Prelude.minNat", Prims.minNatOp)
+  , ("Prelude.maxNat", Prims.maxNatOp)
+  , ("Prelude.widthNat", Prims.widthNatOp)
+  -- Fin
+  , ("Prelude.finDivMod", Prims.finDivModOp)
+  -- Vectors
+  , ("Prelude.generate", Prims.generateOp)
+  -- Miscellaneous
+  , ("Prelude.coerce", Prims.coerceOp)
   ]
 
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
