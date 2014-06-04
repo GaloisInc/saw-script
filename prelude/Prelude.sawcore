@@ -620,6 +620,21 @@ rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 -- Zip together two lists (truncating the longer of the two).
 vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
+reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
+reverse n a xs = generate n a (\(i :: Fin n) -> get n a xs (finSwap n i));
+
+joinLittleEndian  :: (m n :: Nat)
+                  -> (a :: sort 0)
+                  -> Vec m (Vec n a)
+                  -> Vec (mulNat m n) a;
+joinLittleEndian m n a v = join m n a (reverse m (Vec n a) v);
+
+splitLittleEndian :: (m n :: Nat)
+                  -> (a :: sort 0)
+                  -> Vec (mulNat m n) a
+                  -> Vec m (Vec n a);
+splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
+
 --------------------------------------------------------------------------------
 -- Bitvectors
 
