@@ -69,6 +69,8 @@ module Verifier.SAW.SharedTerm
   , scImport
   , scWriteExternal
   , scReadExternal
+    -- ** Normalization
+  , scWhnf
     -- ** Type checking
   , scTypeCheck
   , scTypeOf
@@ -112,7 +114,8 @@ import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Bits
-import Data.Foldable hiding (sum, elem)
+import qualified Data.Foldable
+import Data.Foldable (foldl', foldlM, foldrM, maximum)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
@@ -264,9 +267,81 @@ getTerm r a =
                      , acNextIdx = acNextIdx s + 1
                      }
 
+--------------------------------------------------------------------------------
+-- Reduction to weak head-normal form
+
+-- | Reduces beta-redexes, tuple/record selectors, and definition
+-- equations at the top level of a term.
+scWhnf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scWhnf sc = go []
+  where
+    go :: [Either (SharedTerm s) (Either Int FieldName)] -> SharedTerm s -> IO (SharedTerm s)
+    go xs                     (asApp            -> Just (t, x)) = go (Left x : xs) t
+    go xs                     (asTupleSelector  -> Just (t, i)) = go (Right (Left i) : xs) t
+    go xs                     (asRecordSelector -> Just (t, n)) = go (Right (Right n) : xs) t
+    go (Left x : xs)          (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
+    go (Right (Left i) : xs)  (asTupleValue -> Just ts)         = go xs (ts !! (i - 1))
+    go (Right (Right i) : xs) (asRecordValue -> Just tm)        = go xs ((Map.!) tm i)
+    go xs                     (asGlobalDef -> Just c)           = tryEqns c xs (maybe [] defEqs (findDef (scModule sc) c))
+    go xs                     t                                 = foldM reapply t xs
+
+    reapply :: SharedTerm s -> Either (SharedTerm s) (Either Int FieldName) -> IO (SharedTerm s)
+    reapply t (Left x) = scApply sc t x
+    reapply t (Right (Left i)) = scTupleSelector sc t i
+    reapply t (Right (Right i)) = scRecordSelect sc t i
+
+    tryEqns :: Ident -> [Either (SharedTerm s) (Either Int FieldName)] -> [DefEqn Term] -> IO (SharedTerm s)
+    tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
+    tryEqns ident xs (DefEqn ps rhs : eqns) = do
+      minst <- matchAll ps xs
+      case minst of
+        Just inst | and (zipWith (==) (Map.keys inst) [0..]) -> do
+          rhs' <- scSharedTerm sc rhs
+          t <- instantiateVarList sc 0 (Map.elems inst) rhs'
+          go (drop (length ps) xs) t
+        _ -> tryEqns ident xs eqns
+
+    matchAll :: [Pat Term] -> [Either (SharedTerm s) (Either Int FieldName)] -> IO (Maybe (Map Int (SharedTerm s)))
+    matchAll [] _ = return $ Just Map.empty
+    matchAll (_ : _) [] = return Nothing
+    matchAll (_ : _) (Right _ : _) = return Nothing
+    matchAll (p : ps) (Left x : xs) = do
+      mm1 <- match p x
+      case mm1 of
+        Nothing -> return Nothing
+        Just m1 -> do
+          mm2 <- matchAll ps xs
+          case mm2 of
+            Nothing -> return Nothing
+            Just m2 -> return $ Just (Map.union m1 m2)
+
+    match :: Pat Term -> SharedTerm s -> IO (Maybe (Map Int (SharedTerm s)))
+    match p x =
+      case p of
+        PVar _ i _  -> return $ Just (Map.singleton i x)
+        PUnused _ _ -> return $ Just Map.empty
+        PTuple ps   -> do v <- scWhnf sc x
+                          case asTupleValue v of
+                            Just xs | length xs == length ps -> matchAll ps (map Left xs)
+                            _ -> return Nothing
+        PRecord pm  -> do v <- scWhnf sc x
+                          case asRecordValue v of
+                            Just xm | Map.keys xm == Map.keys pm -> matchAll (Map.elems pm) (map Left $ Map.elems xm)
+                            _ -> return Nothing
+        PCtor i ps  -> do v <- scWhnf sc x
+                          case asCtor v of
+                            Just (s, xs) | i == s -> matchAll ps (map Left xs)
+                            _ -> return Nothing
+
+--------------------------------------------------------------------------------
+-- Type checking
+
 reducePi :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-reducePi sc (STApp _ (Pi _ _ body)) arg = instantiateVar sc 0 arg body
-reducePi _ _ _ = error "reducePi: not a Pi term"
+reducePi sc t arg = do
+  t' <- scWhnf sc t
+  case asPi t' of
+    Just (_, _, body) -> instantiateVar sc 0 arg body
+    _                 -> fail "reducePi: not a Pi term"
 
 scTypeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfGlobal sc ident =
@@ -456,6 +531,8 @@ alphaEquiv = term
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
                          Nothing -> False
                          Just ftf3 -> Data.Foldable.and ftf3
+
+--------------------------------------------------------------------------------
 
 -- | The inverse function to @scSharedTerm@.
 unshare :: forall s. SharedTerm s -> Term
