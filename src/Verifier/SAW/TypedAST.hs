@@ -89,7 +89,6 @@ module Verifier.SAW.TypedAST
 import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Lens
-import Control.Monad.Identity (runIdentity)
 import Data.Bits
 import qualified Data.ByteString.UTF8 as BS
 import Data.Char
@@ -130,7 +129,7 @@ commaSepList (d:l) = d <> comma <+> commaSepList l
 
 -- | Add parenthesis around a document if condition is true.
 ppParens :: Bool -> Doc -> Doc
-ppParens b = if b then parens else id
+ppParens b = if b then parens . align else id
 
 newtype ModuleName = ModuleName BS.ByteString -- [String]
   deriving (Eq, Ord, Generic)
@@ -304,6 +303,11 @@ emptyLocalVarDoc = LVD { docModuleName = Map.empty
                        , docLvl = 0
                        , docUsedMap = Map.empty
                        }
+
+freshVariant :: Map String a -> String -> String
+freshVariant used name
+  | Map.member name used = freshVariant used (name ++ "'")
+  | otherwise = name
 
 consBinding :: LocalVarDoc -> String -> LocalVarDoc
 consBinding lvd i = lvd { docMap = Map.insert lvl (text i) m
@@ -737,24 +741,26 @@ ppTermF' :: Applicative f
          -> f Doc
 ppTermF' pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
 ppTermF' pp lcls p (App l r) =
-    ppAppParens p <$> liftA2 (<+>) (pp lcls PrecApp l) (pp lcls PrecArg r)
+    ppAppParens p <$> liftA2 (</>) (pp lcls PrecApp l) (pp lcls PrecArg r)
 ppTermF' pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp lcls  PrecLambda tp
       <*> pp lcls' PrecLambda rhs
   where ppLam tp' rhs' =
           ppParens (p > PrecLambda) $
-            text "\\" <> parens (text name <> doublecolon <> tp')
+            text "\\" <> parens (text name' <> doublecolon <> tp')
                <+> text "->"
-               <+> rhs'
-        lcls' = consBinding lcls name
+               </> rhs'
+        name' = freshVariant (docUsedMap lcls) name
+        lcls' = consBinding lcls name'
 
-ppTermF' pp lcls p (Pi i tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
+ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
   where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <+> text "->" <+> rhs'
-        lhs | i == "_" = pp lcls PrecApp tp
-            | otherwise = (\tp' -> parens (text i <> doublecolon <> tp'))
+        lhs | name == "_" = pp lcls PrecApp tp
+            | otherwise = (\tp' -> parens (text name' <> doublecolon <> tp'))
                             <$> pp lcls PrecLambda tp
-        lcls' = consBinding lcls i
+        name' = freshVariant (docUsedMap lcls) name
+        lcls' = consBinding lcls name'
 
 ppTermF' pp lcls p (Let dl u) = 
     ppLet <$> traverse (ppLocalDef pp lcls lcls') dl
