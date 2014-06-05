@@ -105,7 +105,7 @@ prim llvm_verify        : {n} String -> String -> [n]LLVMMethodSpec
 prim term_size          : {a} a -> Int;
 prim term_tree_size     : {a} a -> Int;
 
-prim reverse            : {n a} [n]a -> [n]a;
+prim reverse            : {n, a} [n]a -> [n]a;
 
 prim eq                 : {a} a -> a -> Bit;
 prim ite                : {a} Bit -> a -> a -> a;
