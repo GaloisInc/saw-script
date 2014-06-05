@@ -166,6 +166,7 @@ beConstMap be = Map.fromList
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: forall l. (LV.Storable l) => BitEngine l -> BValue l
 iteOp be =
+  VFun $ \_ -> return $
   strictFun $ \b -> return $
   VFun $ \x -> return $
   VFun $ \y -> beLazyMux be muxFn (toBool b) (force x) (force y)
