@@ -42,6 +42,7 @@ prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
 prim print_goal         : ProofScript ();
 prim abc                : ProofScript ProofResult;
+prim yices              : ProofScript ProofResult;
 prim offline_aig        : String -> ProofScript ProofResult;
 prim offline_extcore    : String -> ProofScript ProofResult;
 prim offline_smtlib1    : String -> ProofScript ProofResult;
@@ -65,9 +66,9 @@ prim java_class         : String -> JavaType;
 
 prim java_value         : {a} String -> a;
 prim java_var           : {a} String -> JavaType -> JavaSetup a;
-//prim java_may_alias     : {n} [n]String -> JavaSetup ();
+prim java_may_alias     : {n} [n]String -> JavaSetup ();
 prim java_assert        : Bit -> JavaSetup ();
-prim java_assert_eq     : {a} String -> a -> JavaSetup ();
+//prim java_assert_eq     : {a} String -> a -> JavaSetup ();
 prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
 prim java_modify        : String -> JavaSetup ();
 prim java_return        : {a} a -> JavaSetup ();
@@ -89,7 +90,7 @@ prim llvm_var           : {a} String -> LLVMType -> LLVMSetup a;
 prim llvm_ptr           : {a} String -> LLVMType -> LLVMSetup a;
 //prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
 prim llvm_assert        : Bit -> LLVMSetup ();
-prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
+//prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_modify        : String -> LLVMSetup ();
 prim llvm_return        : {a} a -> LLVMSetup ();
@@ -104,6 +105,8 @@ prim llvm_verify        : {n} String -> String -> [n]LLVMMethodSpec
 prim term_size          : {a} a -> Int;
 prim term_tree_size     : {a} a -> Int;
 
+prim reverse            : {n a} [n]a -> [n]a;
+
 prim eq                 : {a} a -> a -> Bit;
 prim ite                : {a} Bit -> a -> a -> a;
 
@@ -114,6 +117,7 @@ prim disj               : Bit -> Bit -> Bit;
 prim get                : {n, a} [n]a -> Fin -> a;
 prim set                : {n, a} [n]a -> Fin -> a -> [n]a;
 
+prim bvEq               : {n} [n] -> [n] -> Bit;
 prim bvNot              : {n} [n] -> [n];
 prim bvAdd              : {n} [n] -> [n] -> [n];
 prim bvSub              : {n} [n] -> [n] -> [n];
@@ -128,11 +132,17 @@ prim bvuge              : {n} [n] -> [n] -> Bit;
 prim bvugt              : {n} [n] -> [n] -> Bit;
 prim bvule              : {n} [n] -> [n] -> Bit;
 prim bvult              : {n} [n] -> [n] -> Bit;
+prim bvsge              : {n} [n] -> [n] -> Bit;
+prim bvsgt              : {n} [n] -> [n] -> Bit;
+prim bvsle              : {n} [n] -> [n] -> Bit;
+prim bvslt              : {n} [n] -> [n] -> Bit;
 
 prim finval             : Int -> Int -> Fin;
 
 // Awful stuff we need to remove, once we have type-level arithmetic.
 prim ec_join            : [12][32] -> [384];
+prim ec_join768         : [24][32] -> [768];
 prim ec_split           : [384] -> [12][32];
+prim ec_split768        : [768] -> [24][32];
 prim ec_extend          : [32] -> [384];
 prim long_extend        : [32] -> [64];
