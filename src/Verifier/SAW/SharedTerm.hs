@@ -71,6 +71,7 @@ module Verifier.SAW.SharedTerm
   , scReadExternal
     -- ** Type checking
   , scTypeOf
+  , scTypeOf'
   , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend

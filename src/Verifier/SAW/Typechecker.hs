@@ -17,7 +17,6 @@ import Control.Applicative
 import Control.Arrow ((***), first)
 import Control.Lens hiding (assign)
 import Control.Monad.State
-import Control.Monad.Identity (Identity(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isJust)
