@@ -833,3 +833,25 @@ bvNat_bvToNat :: (n :: Nat)
               -> Eq (bitvector n)
                     (bvNat n (bvToNat n x))
                     x;
+
+data ProofResult :: sort 0 -> sort 0 where {
+    Valid :: (a :: sort 0) -> ProofResult a;
+    Invalid :: (a :: sort 0) -> a -> ProofResult a;
+  }
+
+data SatResult :: sort 0 -> sort 0 where {
+    Unsat :: (a :: sort 0) -> SatResult a;
+    Sat :: (a :: sort 0) -> a -> SatResult a;
+  }
+
+mkValid :: (a :: sort 0) -> ProofResult a;
+mkValid a = Valid a;
+
+mkInvalid :: (a :: sort 0) -> a -> ProofResult a;
+mkInvalid a x = Invalid a x;
+
+mkUnsat :: (a :: sort 0) -> SatResult a;
+mkUnsat a = Unsat a;
+
+mkSat :: (a :: sort 0) -> a -> SatResult a;
+mkSat a x = Sat a x;
