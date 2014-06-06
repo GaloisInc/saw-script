@@ -94,6 +94,8 @@ translateTypeS (In (Inr (Inl ctx))) = return $ A.tMono $
     A.JavaSetupContext    -> A.tContext $ A.JavaSetup
     A.LLVMSetupContext    -> A.tContext $ A.LLVMSetup
     A.ProofScriptContext  -> A.tContext $ A.ProofScript
+    A.ProofResultContext  -> A.tContext $ A.ProofResult
+    A.SatResultContext    -> A.tContext $ A.SatResult
     A.TopLevelContext     -> A.tContext $ A.TopLevel
 
 translateTypeS (In (Inr (Inr ty))) =

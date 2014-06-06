@@ -1,5 +1,4 @@
 abstract Term;
-abstract ProofResult;
 abstract Simpset;
 abstract Theorem;
 
@@ -9,11 +8,13 @@ abstract JavaMethodSpec;
 abstract LLVMType;
 abstract LLVMMethodSpec;
 
+// TODO: create ProofResult a, with concrete syntax
+// TODO: create SatResult a, with concrete syntax
+// TODO: create ProofScript a, with concrete syntax
+
 abstract Fin;
 
 prim return             : { m , a } a -> m a;
-prim seq                : {a, b} ProofScript a -> ProofScript b
-                       -> ProofScript b; //temporary
 
 prim define             : {a} String -> a -> TopLevel a;
 
@@ -35,18 +36,20 @@ prim write_core         : {a} String -> a -> TopLevel ();
 prim equal              : Term -> Term -> TopLevel Term;
 prim negate             : Term -> TopLevel Term;
 
-prim prove              : {a} ProofScript ProofResult -> a -> TopLevel Theorem;
-prim sat                : {a} ProofScript ProofResult -> a -> TopLevel ();
+prim prove              : {a, b} ProofScript b -> a
+                       -> TopLevel (ProofResult a);
+prim sat                : {a, b} ProofScript b -> a
+                       -> TopLevel (SatResult a);
 
 prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
-prim print_goal         : ProofScript ();
-prim abc                : ProofScript ProofResult;
-prim yices              : ProofScript ProofResult;
-prim offline_aig        : String -> ProofScript ProofResult;
-prim offline_extcore    : String -> ProofScript ProofResult;
-prim offline_smtlib1    : String -> ProofScript ProofResult;
-prim offline_smtlib2    : String -> ProofScript ProofResult;
+prim print_goal         : {a} ProofScript ();
+prim abc                : {a} ProofScript a;
+prim yices              : {a} ProofScript a;
+prim offline_aig        : {a} String -> ProofScript a;
+prim offline_extcore    : {a} String -> ProofScript a;
+prim offline_smtlib1    : {a} String -> ProofScript a;
+prim offline_smtlib2    : {a} String -> ProofScript a;
 
 prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;
@@ -72,7 +75,7 @@ prim java_assert        : Bit -> JavaSetup ();
 prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
 prim java_modify        : String -> JavaSetup ();
 prim java_return        : {a} a -> JavaSetup ();
-prim java_verify_tactic : ProofScript ProofResult -> JavaSetup ();
+prim java_verify_tactic : {a} ProofScript a -> JavaSetup ();
 prim java_pure          : JavaSetup ();
 
 prim java_extract       : {a} String -> String -> JavaSetup () -> TopLevel a;
@@ -94,7 +97,7 @@ prim llvm_assert        : Bit -> LLVMSetup ();
 prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_modify        : String -> LLVMSetup ();
 prim llvm_return        : {a} a -> LLVMSetup ();
-prim llvm_verify_tactic : ProofScript ProofResult -> LLVMSetup ();
+prim llvm_verify_tactic : {a} ProofScript a -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
 prim llvm_extract       : {a} String -> String -> LLVMSetup () -> TopLevel a;
@@ -139,6 +142,9 @@ prim bvslt              : {n} [n] -> [n] -> Bit;
 
 prim finval             : Int -> Int -> Fin;
 
+prim join               : {m, n, o, a} [m][n]a -> [o]a;
+prim split              : {m, n, o, a} [m]a -> [n][o]a;
+
 // Awful stuff we need to remove, once we have type-level arithmetic.
 prim ec_join            : [12][32] -> [384];
 prim ec_join768         : [24][32] -> [768];
@@ -146,3 +152,6 @@ prim ec_split           : [384] -> [12][32];
 prim ec_split768        : [768] -> [24][32];
 prim ec_extend          : [32] -> [384];
 prim long_extend        : [32] -> [64];
+
+prim caseSatResult   : {a, b} SatResult a -> (Theorem b) -> (a -> b) -> b;
+prim caseProofResult : {a, b} ProofResult a -> (Theorem b) -> (a -> b) -> b;
