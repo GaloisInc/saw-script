@@ -4,21 +4,22 @@
 module Verifier.SAW.Simulator.BitBlast where
 
 import Control.Applicative
+import Control.Monad (zipWithM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as LV
 
---import Verifier.SAW.Prim (Nat)
+import Verifier.SAW.Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
 import Verifier.SAW.SharedTerm
 
---import qualified Verinf.Symbolic as BE
 import Verinf.Symbolic.Lit
+import Verinf.Symbolic.Lit.Functional (lMuxInteger)
 
 import qualified Verifier.SAW.Recognizer as R
 
@@ -31,7 +32,8 @@ type BThunk l = Thunk IO (BExtra l)
 data BExtra l
   = BBool l
   | BWord (LitVector l) -- ^ Bits in LSB order
-  | BToNat Nat (LitVector l)
+  | BNat (LitVector l)
+  | BFin (LitVector l)
 
 -- | Swap from big-endian to little-endian
 lvFromV :: LV.Storable l => V.Vector l -> LV.Vector l
@@ -89,9 +91,9 @@ shiftOp bvOp natOp =
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VExtra (BToNat _ lv) -> vWord <$> bvOp x lv
-      VNat n               -> return (vWord (natOp x (fromInteger n)))
-      _                    -> error "shiftOp"
+      VExtra (BNat lv) -> vWord <$> bvOp x lv
+      VNat n           -> return (vWord (natOp x (fromInteger n)))
+      _                -> error "shiftOp"
 
 ------------------------------------------------------------
 
@@ -157,10 +159,16 @@ beConstMap be = Map.fromList
   , ("Prelude.widthNat", Prims.widthNatOp)
   -- Fin
   , ("Prelude.finDivMod", Prims.finDivModOp)
+  , ("Prelude.finOfNat", finOfNatOp)
   -- Vectors
   , ("Prelude.generate", Prims.generateOp)
+  , ("Prelude.get", getOp be)
+  , ("Prelude.append", appendOp)
+  , ("Prelude.vZip", vZipOp)
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
+  , ("Prelude.bvNat", bvNatOp be)
+  , ("Prelude.bvToNat", bvToNatOp)
   ]
 
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
@@ -169,37 +177,111 @@ iteOp be =
   VFun $ \_ -> return $
   strictFun $ \b -> return $
   VFun $ \x -> return $
-  VFun $ \y -> beLazyMux be muxFn (toBool b) (force x) (force y)
-  where
-    muxFn :: l -> BValue l -> BValue l -> IO (BValue l)
-    muxFn b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxFn b x y)
-    muxFn b (VTuple xv)     (VTuple yv)     = VTuple <$> vectorFn b xv yv
-    muxFn b (VRecord xm)    (VRecord ym)
-      | Map.keys xm == Map.keys ym          = VRecord <$> sequenceA (Map.fromList
-                                                [ (k, thunkFn b x y) | ((k, x), y) <- zip (Map.assocs xm) (Map.elems ym) ])
-    muxFn b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> vectorFn b xv yv
-    muxFn b (VVector xv)    (VVector yv)    = VVector <$> vectorFn b xv yv
-    muxFn _ (VNat m)        (VNat n)        | m == n = return $ VNat m
-    muxFn _ (VString x)     (VString y)     | x == y = return $ VString x
-    muxFn _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
-    muxFn _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
-    muxFn _ VType           VType           = return VType
-    muxFn b (VExtra x)      (VExtra y)      = VExtra <$> extraFn b x y
-    muxFn _ _ _ = fail "iteOp: malformed arguments"
+  VFun $ \y -> beLazyMux be (muxBVal be) (toBool b) (force x) (force y)
 
-    vectorFn :: l -> V.Vector (BThunk l) -> V.Vector (BThunk l) -> IO (V.Vector (BThunk l))
-    vectorFn b xv yv
-      | V.length xv == V.length yv = V.zipWithM (thunkFn b) xv yv
-      | otherwise                  = fail "iteOp: malformed arguments"
+muxBVal :: LV.Storable l => BitEngine l -> l -> BValue l -> BValue l -> IO (BValue l)
+muxBVal be b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal be b x y)
+muxBVal be b (VTuple xv)     (VTuple yv)     = VTuple <$> muxThunks be b xv yv
+muxBVal be b (VRecord xm)    (VRecord ym)
+  | Map.keys xm == Map.keys ym               = (VRecord . Map.fromList . zip (Map.keys xm)) <$>
+                                                 zipWithM (muxThunk be b) (Map.elems xm) (Map.elems ym)
+muxBVal be b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks be b xv yv
+muxBVal be b (VVector xv)    (VVector yv)    = VVector <$> muxThunks be b xv yv
+muxBVal _  _ (VNat m)        (VNat n)        | m == n = return $ VNat m
+muxBVal _  _ (VString x)     (VString y)     | x == y = return $ VString x
+muxBVal _  _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
+muxBVal _  _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
+muxBVal _  _ VType           VType           = return VType
+muxBVal be b (VExtra x)      (VExtra y)      = VExtra <$> muxBExtra be b x y
+muxBVal _ _ _ _ = fail "iteOp: malformed arguments"
 
-    thunkFn :: l -> BThunk l -> BThunk l -> IO (BThunk l)
-    thunkFn b x y = delay $ do x' <- force x; y' <- force y; muxFn b x' y'
+muxThunks :: LV.Storable l => BitEngine l -> l -> V.Vector (BThunk l) -> V.Vector (BThunk l) -> IO (V.Vector (BThunk l))
+muxThunks be b xv yv
+  | V.length xv == V.length yv = V.zipWithM (muxThunk be b) xv yv
+  | otherwise                  = fail "iteOp: malformed arguments"
 
-    extraFn :: l -> BExtra l -> BExtra l -> IO (BExtra l)
-    extraFn b (BBool x) (BBool y) = BBool <$> beMux be b x y
-    extraFn b (BWord x) (BWord y) | LV.length x == LV.length y = BWord <$> LV.zipWithM (beMux be b) x y
-    extraFn b (BToNat m x) (BToNat n y) | m == n && LV.length x == LV.length y = BToNat m <$> LV.zipWithM (beMux be b) x y
-    extraFn _ _ _ = fail "iteOp: malformed arguments"
+muxThunk :: LV.Storable l => BitEngine l -> l -> BThunk l -> BThunk l -> IO (BThunk l)
+muxThunk be b x y = delay $ do x' <- force x; y' <- force y; muxBVal be b x' y'
+
+muxBExtra :: LV.Storable l => BitEngine l -> l -> BExtra l -> BExtra l -> IO (BExtra l)
+muxBExtra be b (BBool x) (BBool y) = BBool <$> beMux be b x y
+muxBExtra be b (BWord x) (BWord y) | LV.length x == LV.length y = BWord <$> LV.zipWithM (beMux be b) x y
+muxBExtra be b (BNat x)  (BNat y)  | LV.length x == LV.length y = BNat  <$> LV.zipWithM (beMux be b) x y
+muxBExtra be b (BFin x)  (BFin y)  | LV.length x == LV.length y = BFin  <$> LV.zipWithM (beMux be b) x y
+muxBExtra _ _ _ _ = fail "iteOp: malformed arguments"
+
+-- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
+getOp :: LV.Storable l => BitEngine l -> BValue l
+getOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  strictFun $ \i ->
+    case v of
+      VVector xv ->
+        case i of
+          VExtra (BFin ilv) -> force =<< lMuxInteger (beLazyMux be (muxThunk be)) (V.length xv) ilv (return . (V.!) xv)
+          _ -> force =<< (((V.!) xv . fromEnum . finVal) <$> Prims.finFromValue i)
+      VExtra (BWord lv) ->
+        case i of
+          VExtra (BFin ilv) -> vBool <$> lMuxInteger (beLazyMux be (beMux be)) (LV.length lv) ilv (return . (LV.!) (LV.reverse lv))
+          _ -> (vBool . (LV.!) lv . fromEnum . finRem) <$> Prims.finFromValue i
+      _ -> fail "getOp: expected vector"
+
+-- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
+appendOp :: LV.Storable l => BValue l
+appendOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  strictFun $ \ys -> return $
+  case (xs, ys) of
+    (VVector xv, VVector yv)         -> VVector ((V.++) xv yv)
+    (VVector xv, VExtra (BWord ylv)) -> VVector ((V.++) xv (fmap (Ready . vBool) (vFromLV ylv)))
+    (VExtra (BWord xlv), VVector yv) -> VVector ((V.++) (fmap (Ready . vBool) (vFromLV xlv)) yv)
+    (VExtra (BWord xlv), VExtra (BWord ylv)) -> vWord ((LV.++) ylv xlv)
+    _ -> error "appendOp"
+
+-- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+vZipOp :: LV.Storable l => BValue l
+vZipOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  strictFun $ \ys -> return $
+  VVector (V.zipWith (\x y -> Ready (VTuple (V.fromList [x, y]))) (vectorOfBValue xs) (vectorOfBValue ys))
+
+vectorOfBValue :: LV.Storable l => BValue l -> V.Vector (BThunk l)
+vectorOfBValue (VVector xv) = xv
+vectorOfBValue (VExtra (BWord lv)) = fmap (Ready . vBool) (vFromLV lv)
+vectorOfBValue _ = error "vectorOfBValue"
+
+-- bvNat :: (x :: Nat) -> Nat -> bitvector x;
+bvNatOp :: LV.Storable l => BitEngine l -> BValue l
+bvNatOp be =
+  Prims.natFun $ \w -> return $
+  Prims.natFun $ \x -> return $
+  VExtra (BWord (beVectorFromInt be (fromIntegral w) (toInteger x)))
+
+-- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+bvToNatOp :: LV.Storable l => BValue l
+bvToNatOp =
+  VFun $ \_ -> return $
+  wordFun $ \lv -> return $
+  VExtra (BNat lv)
+
+-- finOfNat :: (n :: Nat) -> Nat -> Fin n;
+finOfNatOp :: BValue l
+finOfNatOp =
+  Prims.natFun $ \n -> return $
+  strictFun $ \v -> return $
+    case v of
+      VNat i -> Prims.vFin (finFromBound (fromInteger i) n)
+      VExtra (BNat lv) -> VExtra (BFin lv)
+      _ -> error "finOfNatOp"
 
 ------------------------------------------------------------
 -- Generating variables for arguments
