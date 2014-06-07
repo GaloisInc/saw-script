@@ -123,6 +123,23 @@ finDivModOp =
   let (q, r) = finDivMod m n i
   in VTuple $ V.fromList $ map (Ready . vFin) [q, r]
 
+-- finMax :: (n :: Nat) -> Maybe (Fin n);
+finMaxOp :: MonadIO m => Value m e
+finMaxOp =
+  natFun $ \n -> return $
+  if n == 0
+    then VCtorApp "Prelude.Nothing" (V.fromList [Ready VType])
+    else VCtorApp "Prelude.Just" (V.fromList [Ready VType, Ready (vFin (FinVal (n - 1) 0))])
+
+-- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
+finPredOp :: MonadIO m => Value m e
+finPredOp =
+  VFun $ \_ -> return $
+  finFun $ \i -> return $
+  if finVal i == 0
+    then VCtorApp "Prelude.Nothing" (V.fromList [Ready VType])
+    else VCtorApp "Prelude.Just" (V.fromList [Ready VType, Ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
+
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
 generateOp :: MonadIO m => Value m e
 generateOp =

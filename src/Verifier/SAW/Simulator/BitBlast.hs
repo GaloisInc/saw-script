@@ -159,6 +159,8 @@ beConstMap be = Map.fromList
   , ("Prelude.widthNat", Prims.widthNatOp)
   -- Fin
   , ("Prelude.finDivMod", Prims.finDivModOp)
+  , ("Prelude.finMax", Prims.finMaxOp)
+  , ("Prelude.finPred", Prims.finPredOp)
   , ("Prelude.finOfNat", finOfNatOp)
   -- Vectors
   , ("Prelude.generate", Prims.generateOp)
