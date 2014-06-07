@@ -620,6 +620,10 @@ rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 -- Zip together two lists (truncating the longer of the two).
 vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
+foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+foldr a b _ f z (EmptyVec _) = z;
+foldr a b _ f z (ConsVec _ x n xs) = f x (foldr a b n f z xs);
+
 --------------------------------------------------------------------------------
 -- Bitvectors
 
