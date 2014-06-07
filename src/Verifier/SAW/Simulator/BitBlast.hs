@@ -165,6 +165,7 @@ beConstMap be = Map.fromList
   , ("Prelude.get", getOp be)
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
+  , ("Prelude.foldr", foldrOp)
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp be)
@@ -258,6 +259,22 @@ vectorOfBValue :: LV.Storable l => BValue l -> V.Vector (BThunk l)
 vectorOfBValue (VVector xv) = xv
 vectorOfBValue (VExtra (BWord lv)) = fmap (Ready . vBool) (vFromLV lv)
 vectorOfBValue _ = error "vectorOfBValue"
+
+-- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+foldrOp :: LV.Storable l => BValue l
+foldrOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \f -> return $
+  VFun $ \z -> return $
+  strictFun $ \xs -> do
+    let g x m = do fx <- apply f x
+                   y <- delay m
+                   apply fx y
+    case xs of
+      VVector xv -> V.foldr g (force z) xv
+      _ -> fail "foldrOp"
 
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: LV.Storable l => BitEngine l -> BValue l
