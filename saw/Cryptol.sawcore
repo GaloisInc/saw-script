@@ -262,6 +262,31 @@ arithUnary bvOp _ (PArithPair a b pa pb) =
   pairMap (ty a) (ty a) (ty b) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
 
 --------------------------------------------------------------------------------
+-- Comparisons
+
+cmpBoolEq :: Bool -> Bool -> Bool -> Bool;
+cmpBoolEq x y k = and (boolEq x y) k;
+
+cmpBoolLt :: Bool -> Bool -> Bool -> Bool;
+cmpBoolLt x y k = or (and (not x) y) (cmpBoolEq x y k);
+
+cmpBvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+cmpBvEq n x y k = and (bvEq n x y) k;
+
+cmpBvLt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+cmpBvLt n x y k = or (bvult n x y) (cmpBvEq n x y k);
+
+cmpLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool -> Bool;
+cmpLt _ PCmpBit = cmpBoolLt;
+cmpLt _ (PCmpSeq _ _ (PFinNum n) PCmpBit) = cmpBvLt n;
+cmpLt _ (PCmpSeq _ a (PFinNum n) pa) =
+  (\(xs :: Vec n (ty a)) -> \(ys :: Vec n (ty a)) -> \(k :: Bool) ->
+    foldr (Bool -> Bool) Bool n (\(f :: Bool -> Bool) -> f) k (vZipWith (ty a) (ty a) (Bool -> Bool) (cmpLt a pa) n xs ys));
+cmpLt _ (PCmpPair a b pa pb) =
+  (\(x :: #(ty a, ty b)) -> \(y :: #(ty a, ty b)) -> \(k :: Bool) ->
+    cmpLt a pa x.1 y.1 (cmpLt b pb x.2 y.2 k));
+
+--------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
 ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> seq bits Bool;
@@ -293,14 +318,22 @@ ecNeg :: (a :: KType) -> PArith a -> ty a -> ty a;
 ecNeg = arithUnary bvNeg;
 
 -- Cmp
-ecLt    :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
-ecGt    :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecLt a pa x y = cmpLt a pa x y False;
+
+ecGt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecGt a pa x y = ecLt a pa y x;
+
 ecLtEq  :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecLtEq a pa x y = not (ecLt a pa y x);
+
 ecGtEq  :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecGtEq a pa x y = not (ecLt a pa x y);
 
 ecEq :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
 ecEq _ PCmpBit = boolEq;
---ecEq _ (PCmpSeq n a pn pa) = allSeq n 
+ecEq _ (PCmpSeq _ _ (PFinNum n) PCmpBit) = bvEq n;
+ecEq _ (PCmpSeq _ a (PFinNum n) pa) = vecEq n (ty a) (ecEq a pa);
 ecEq _ (PCmpPair a b pa pb) =
   (\(x :: #(ty a, ty b)) -> \(y :: #(ty a, ty b)) -> and (ecEq a pa x.1 y.1) (ecEq b pb x.2 y.2));
 
