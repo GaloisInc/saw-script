@@ -297,7 +297,7 @@ scWhnf sc = go []
       case minst of
         Just inst | and (zipWith (==) (Map.keys inst) [0..]) -> do
           rhs' <- scSharedTerm sc rhs
-          t <- instantiateVarList sc 0 (Map.elems inst) rhs'
+          t <- instantiateVarList sc 0 (reverse (Map.elems inst)) rhs'
           go (drop (length ps) xs) t
         _ -> tryEqns ident xs eqns
 
