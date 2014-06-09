@@ -311,15 +311,19 @@ data BShape
   | TupleShape [BShape]
   | RecShape (Map FieldName BShape)
 
-parseShape :: (Applicative m, Monad m) => SharedTerm s -> m BShape
-parseShape (R.asBoolType -> Just ()) = return BoolShape
-parseShape (R.isVecType return -> Just (n R.:*: tp)) =
-  VecShape n <$> parseShape tp
-parseShape (R.asBitvectorType -> Just n) = pure (VecShape n BoolShape)
-parseShape (R.asTupleType -> Just ts) = TupleShape <$> traverse parseShape ts
-parseShape (R.asRecordType -> Just tm) = RecShape <$> traverse parseShape tm
-parseShape t = do
-  fail $ "bitBlast: unsupported argument type: " ++ show t
+parseShape :: SharedContext s -> SharedTerm s -> IO BShape
+parseShape sc t = do
+  t' <- scWhnf sc t
+  case t' of
+    (R.asBoolType -> Just ())
+      -> return BoolShape
+    (R.isVecType return -> Just (n R.:*: tp))
+      -> VecShape n <$> parseShape sc tp
+    (R.asTupleType -> Just ts)
+      -> TupleShape <$> traverse (parseShape sc) ts
+    (R.asRecordType -> Just tm)
+       -> RecShape <$> traverse (parseShape sc) tm
+    _ -> fail $ "bitBlast: unsupported argument type: " ++ show t'
 
 newVars :: BitEngine l -> BShape -> IO (BValue l)
 newVars be BoolShape = vBool <$> beMakeInputLit be
@@ -337,11 +341,19 @@ bitBlastBasic :: (Eq l, LV.Storable l) => BitEngine l -> Module -> SharedTerm s 
 bitBlastBasic be m = Sim.evalSharedTerm cfg
   where cfg = Sim.evalGlobal m (beConstMap be)
 
+asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+asPredType sc t = do
+  t' <- scWhnf sc t
+  case t' of
+    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
+    (R.asBoolType -> Just ())    -> return []
+    _                            -> fail $ "non-boolean result type: " ++ show t'
+
 bitBlast :: (Eq l, LV.Storable l) => BitEngine l -> SharedContext s -> SharedTerm s -> IO l
 bitBlast be sc t = do
-  (argTs, _resultT) <- R.asPiList <$> scTypeOf sc t
-  -- TODO: check that resultT is Bool.
-  shapes <- traverse (parseShape . snd) argTs
+  ty <- scTypeOf sc t
+  argTs <- asPredType sc ty
+  shapes <- traverse (parseShape sc) argTs
   vars <- traverse (newVars' be) shapes
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
