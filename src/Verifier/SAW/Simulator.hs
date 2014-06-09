@@ -30,6 +30,8 @@ import Verifier.SAW.TypedAST
 
 import Verifier.SAW.Simulator.Value
 
+import Debug.Trace
+
 ------------------------------------------------------------
 -- Simulator configuration
 
@@ -165,7 +167,7 @@ evalGlobal m prims = cfg
 
     global :: Ident -> m (Value m e)
     global ident =
-      case Map.lookup ident prims of
+      traceShow ident $ case Map.lookup ident prims of
         Just v -> return v
         Nothing ->
           case findCtor m ident of
