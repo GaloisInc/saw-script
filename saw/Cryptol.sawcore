@@ -439,6 +439,7 @@ ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin i -> seq n (ty a
 ecAtRange n a m i pi xs = map (TCSeq i TCBit) a m (ecAt n a i pi xs);
 
 ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin n -> PFin i -> seq n (ty a) -> seq i Bool -> (ty a);
+ecAtBack n a i pn pi xs = ecAt n a i pi (ecReverse n a pn xs);
 
 ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin n -> PFin i -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
 ecAtRangeBack n a m i pn pi xs = map (TCSeq i TCBit) a m (ecAtBack n a i pn pi xs);
