@@ -189,6 +189,10 @@ proveProp sc env prop =
     (C.pIsCmp -> Just (C.tIsTuple -> Just [t1, t2]))
       -> scCtorApp sc "Cryptol.PCmpPair" =<< sequence [ty t1, ty t2, pr (C.pCmp t1), pr (C.pCmp t2)]
     -- FIXME: handle arbitrary sized tuples and records
+    (C.pIsFin -> Just n)
+      -> case Map.lookup prop (envP env) of
+           Just prf -> return prf
+           Nothing -> scGlobalApply sc "Cryptol.ePFin" =<< sequence [ty n]
     _ -> case Map.lookup prop (envP env) of
            Just prf -> return prf
            Nothing -> scGlobalApply sc "Cryptol.eProofApp" =<< sequence [ty prop]

@@ -187,6 +187,11 @@ data PCmp :: KType -> sort 0 where {
 -- Auxiliary functions
 
 eProofApp :: (a :: sort 0) -> a;
+
+ePFin :: (n :: Num) -> PFin n;
+ePFin (TCNum n) = PFinNum n;
+-- ePFin TCInf is undefined
+
 eCast :: (a b :: KType) -> ty a -> ty b;
 eCast a b = unsafeCoerce (ty a) (ty b);
 
