@@ -21,6 +21,7 @@ prim define             : {a} String -> a -> TopLevel a;
 prim print              : {a} a -> TopLevel ();
 prim print_term         : {a} a -> TopLevel ();
 prim print_type         : {a} a -> TopLevel ();
+prim show_term          : {a} a -> String;
 
 prim bitSequence        : { n } Int -> [n];
 
@@ -36,9 +37,9 @@ prim write_core         : {a} String -> a -> TopLevel ();
 prim equal              : Term -> Term -> TopLevel Term;
 prim negate             : Term -> TopLevel Term;
 
-prim prove              : {a, b} ProofScript b -> a
+prim prove              : {a, b} ProofScript b -> (a -> Bit)
                        -> TopLevel (ProofResult a);
-prim sat                : {a, b} ProofScript b -> a
+prim sat                : {a, b} ProofScript b -> (a -> Bit)
                        -> TopLevel (SatResult a);
 
 prim unfolding          : {n} [n]String -> ProofScript ();
@@ -153,5 +154,5 @@ prim ec_split768        : [768] -> [24][32];
 prim ec_extend          : [32] -> [384];
 prim long_extend        : [32] -> [64];
 
-prim caseSatResult   : {a, b} SatResult a -> (Theorem b) -> (a -> b) -> b;
-prim caseProofResult : {a, b} ProofResult a -> (Theorem b) -> (a -> b) -> b;
+prim caseSatResult   : {a, b} SatResult a -> b -> (a -> b) -> b;
+prim caseProofResult : {a, b} ProofResult a -> b -> (a -> b) -> b;
