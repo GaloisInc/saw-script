@@ -159,17 +159,6 @@ data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
 
-pfinWidth :: (n :: Num) -> PFin n -> PFin (tcWidth n);
-pfinWidth _ (PFinNum n) = PFinNum (widthNat n);
-
-pfinSub :: (m n :: Num) -> PFin m -> PFin n -> PFin (tcSub m n);
-pfinSub _ _ (PFinNum m) (PFinNum n) = PFinNum (subNat m n);
-
-pfinMax :: (m n :: Num) -> PFin m -> PFin n -> PFin (tcMax m n);
-pfinMax _ _ (PFinNum m) (PFinNum n) = PFinNum (maxNat m n);
-
--- PHas Selector
-
 data PArith :: KType -> sort 0 where {
     PArithWord :: (n :: Num) -> PFin n -> PArith (TCSeq n TCBit);
     PArithSeq :: (n :: Num) -> (a :: KType) -> PArith a -> PArith (TCSeq n a);
@@ -183,14 +172,35 @@ data PCmp :: KType -> sort 0 where {
     PCmpPair :: (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCPair a b);
   }
 
---------------------------------------------------------------------------------
--- Auxiliary functions
+-- Partial functions to select instances (terms translated from
+-- type-correct Cryptol should never hit the undefined cases)
 
-eProofApp :: (a :: sort 0) -> a;
+ePEqual :: (m n :: Num) -> PEqual m n;
+ePNeq :: (m n :: Num) -> PNeq m n;
+ePGeq :: (m n :: Num) -> PGeq m n;
 
 ePFin :: (n :: Num) -> PFin n;
 ePFin (TCNum n) = PFinNum n;
 -- ePFin TCInf is undefined
+
+illegalPArithTCBit :: PArith TCBit;
+
+ePArith :: (a :: KType) -> PArith a;
+ePArith TCBit = illegalPArithTCBit;
+ePArith (TCSeq n TCBit) = PArithWord n (ePFin n);
+ePArith (TCSeq n (TCSeq m a)) = PArithSeq n (TCSeq m a) (ePArith (TCSeq m a));
+ePArith (TCSeq n (TCFun a b)) = PArithSeq n (TCFun a b) (ePArith (TCFun a b));
+ePArith (TCSeq n (TCPair a b)) = PArithSeq n (TCPair a b) (ePArith (TCPair a b));
+ePArith (TCFun a b) = PArithFun a b (ePArith b);
+ePArith (TCPair a b) = PArithPair a b (ePArith a) (ePArith b);
+
+ePCmp :: (a :: KType) -> PCmp a;
+ePCmp TCBit = PCmpBit;
+ePCmp (TCSeq n a) = PCmpSeq n a (ePFin n) (ePCmp a);
+ePCmp (TCPair a b) = PCmpPair a b (ePCmp a) (ePCmp b);
+
+--------------------------------------------------------------------------------
+-- Auxiliary functions
 
 eCast :: (a b :: KType) -> ty a -> ty b;
 eCast a b = unsafeCoerce (ty a) (ty b);

@@ -167,44 +167,27 @@ importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams 
 
 proveProp :: SharedContext s -> Env s -> C.Prop -> IO (SharedTerm s)
 proveProp sc env prop =
-  case prop of
-    (C.pIsFin -> Just (C.tIsNum -> Just n))
-      -> scCtorApp sc "Cryptol.PFinNum" =<< sequence [scNat sc (fromInteger n)]
-    (C.pIsFin -> Just (tIsWidth -> Just n))
-      -> scGlobalApply sc "Cryptol.pfinWidth" =<< sequence [ty n, pr (C.pFin n)]
-    (C.pIsFin -> Just (tIsSub -> Just (m, n)))
-      -> scGlobalApply sc "Cryptol.pfinSub" =<< sequence [ty m, ty n, pr (C.pFin m), pr (C.pFin n)]
-    (C.pIsFin -> Just (tIsMax -> Just (m, n)))
-      -> scGlobalApply sc "Cryptol.pfinMax" =<< sequence [ty m, ty n, pr (C.pFin m), pr (C.pFin n)]
-    (C.pIsArith -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-      -> scCtorApp sc "Cryptol.PArithWord" =<< sequence [ty n, pr (C.pFin n)]
-    (C.pIsArith -> Just (C.tIsSeq -> Just (n, t))) | definitelyNotBit t
-      -> scCtorApp sc "Cryptol.PArithSeq" =<< sequence [ty n, ty t, pr (C.pArith t)]
-    (C.pIsArith -> Just (C.tIsTuple -> Just [t1, t2]))
-      -> scCtorApp sc "Cryptol.PArithPair" =<< sequence [ty t1, ty t2, pr (C.pArith t1), pr (C.pArith t2)]
-    (C.pIsCmp -> Just (C.tIsBit -> True))
-      -> scCtorApp sc "Cryptol.PCmpBit" []
-    (C.pIsCmp -> Just (C.tIsSeq -> Just (n, t)))
-      -> scCtorApp sc "Cryptol.PCmpSeq" =<< sequence [ty n, ty t, pr (C.pFin n), pr (C.pCmp t)]
-    (C.pIsCmp -> Just (C.tIsTuple -> Just [t1, t2]))
-      -> scCtorApp sc "Cryptol.PCmpPair" =<< sequence [ty t1, ty t2, pr (C.pCmp t1), pr (C.pCmp t2)]
-    -- FIXME: handle arbitrary sized tuples and records
-    (C.pIsFin -> Just n)
-      -> case Map.lookup prop (envP env) of
-           Just prf -> return prf
-           Nothing -> scGlobalApply sc "Cryptol.ePFin" =<< sequence [ty n]
-    _ -> case Map.lookup prop (envP env) of
-           Just prf -> return prf
-           Nothing -> scGlobalApply sc "Cryptol.eProofApp" =<< sequence [ty prop]
+  case Map.lookup prop (envP env) of
+    Just prf -> return prf
+    Nothing ->
+      case prop of
+        (C.pIsFin -> Just n)
+          -> scGlobalApply sc "Cryptol.ePFin" =<< sequence [ty n]
+        (C.pIsArith -> Just t)
+          -> scGlobalApply sc "Cryptol.ePArith" =<< sequence [ty t]
+        (C.pIsCmp -> Just t)
+          -> scGlobalApply sc "Cryptol.ePCmp" =<< sequence [ty t]
+        (C.pIsEq -> Just (m, n))
+          -> scGlobalApply sc "Cryptol.ePEq" =<< sequence [ty m, ty n]
+        (C.pIsEq -> Just (m, n))
+          -> scGlobalApply sc "Cryptol.ePEqual" =<< sequence [ty m, ty n]
+        (C.pIsGeq -> Just (m, n))
+          -> scGlobalApply sc "Cryptol.ePGeq" =<< sequence [ty m, ty n]
+        (pIsNeq -> Just (m, n))
+          -> scGlobalApply sc "Cryptol.ePNeq" =<< sequence [ty m, ty n]
+        _ -> fail "proveProp: unknown proposition"
   where
     ty = importType sc env
-    pr = proveProp sc env
-    definitelyNotBit t =
-      case t of
-        C.TCon tc _    -> tc /= C.TC C.TCBit
-        C.TVar _       -> False
-        C.TUser _ _ t1 -> definitelyNotBit t1
-        C.TRec _       -> True
 
 -- | Convert built-in constants to SAWCore.
 importECon :: SharedContext s -> P.ECon -> IO (SharedTerm s)
@@ -493,17 +476,7 @@ importMatches sc env (C.Let decl : matches) =
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
-tIsWidth :: C.Type -> Maybe C.Type
-tIsWidth ty = case C.tNoUser ty of
-                C.TCon (C.TF C.TCWidth) [t1] -> Just t1
-                _                            -> Nothing
-
-tIsSub :: C.Type -> Maybe (C.Type, C.Type)
-tIsSub ty = case C.tNoUser ty of
-              C.TCon (C.TF C.TCSub) [t1, t2] -> Just (t1, t2)
-              _                              -> Nothing
-
-tIsMax :: C.Type -> Maybe (C.Type, C.Type)
-tIsMax ty = case C.tNoUser ty of
-              C.TCon (C.TF C.TCMax) [t1, t2] -> Just (t1, t2)
-              _                              -> Nothing
+pIsNeq :: C.Type -> Maybe (C.Type, C.Type)
+pIsNeq ty = case C.tNoUser ty of
+              C.TCon (C.PC C.PNeq) [t1, t2] -> Just (t1, t2)
+              _                             -> Nothing
