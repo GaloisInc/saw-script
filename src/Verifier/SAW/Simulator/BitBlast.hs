@@ -41,7 +41,7 @@ vRotate xs i
   | otherwise = (V.++) (V.drop j xs) (V.take j xs)
   where j = i `mod` V.length xs
 
-lvRotate :: LV.Storable l => Litvector l -> Int -> LitVector l
+lvRotate :: LV.Storable l => LitVector l -> Int -> LitVector l
 lvRotate xs i
   | LV.null xs = xs
   | otherwise  = (LV.++) (LV.drop j xs) (LV.take j xs)
