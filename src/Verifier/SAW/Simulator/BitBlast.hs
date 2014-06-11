@@ -24,6 +24,30 @@ import Verinf.Symbolic.Lit.Functional (lMuxInteger)
 import qualified Verifier.SAW.Recognizer as R
 
 ------------------------------------------------------------
+-- Vector operations
+
+-- | Swap from big-endian to little-endian
+lvFromV :: LV.Storable l => V.Vector l -> LV.Vector l
+lvFromV v = LV.generate (V.length v) ((V.!) (V.reverse v))
+
+-- | Swap from little-endian to big-endian
+vFromLV :: LV.Storable l => LV.Vector l -> V.Vector l
+vFromLV lv = V.generate (LV.length lv) ((LV.!) (LV.reverse lv))
+
+-- | Rotates left if i is positive.
+vRotate :: V.Vector a -> Int -> V.Vector a
+vRotate xs i
+  | V.null xs = xs
+  | otherwise = (V.++) (V.drop j xs) (V.take j xs)
+  where j = i `mod` V.length xs
+
+lvRotate :: LV.Storable l => Litvector l -> Int -> LitVector l
+lvRotate xs i
+  | LV.null xs = xs
+  | otherwise  = (LV.++) (LV.drop j xs) (LV.take j xs)
+  where j = (- i) `mod` LV.length xs
+
+------------------------------------------------------------
 -- Values
 
 type BValue l = Value IO (BExtra l)
@@ -35,13 +59,6 @@ data BExtra l
   | BNat (LitVector l)
   | BFin (LitVector l)
 
--- | Swap from big-endian to little-endian
-lvFromV :: LV.Storable l => V.Vector l -> LV.Vector l
-lvFromV v = LV.generate (V.length v) ((V.!) (V.reverse v))
-
--- | Swap from little-endian to big-endian
-vFromLV :: LV.Storable l => LV.Vector l -> V.Vector l
-vFromLV lv = V.generate (LV.length lv) ((LV.!) (LV.reverse lv))
 
 vBool :: l -> BValue l
 vBool l = VExtra (BBool l)
@@ -166,6 +183,7 @@ beConstMap be = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp be)
   , ("Prelude.append", appendOp)
+  , ("Prelude.rotateL", rotateLOp be)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   -- Miscellaneous
@@ -245,6 +263,26 @@ appendOp =
     (VExtra (BWord xlv), VVector yv) -> VVector ((V.++) (fmap (Ready . vBool) (vFromLV xlv)) yv)
     (VExtra (BWord xlv), VExtra (BWord ylv)) -> vWord ((LV.++) ylv xlv)
     _ -> error "appendOp"
+
+-- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateLOp :: LV.Storable l => BitEngine l -> BValue l
+rotateLOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  strictFun $ \y ->
+  case (xs, y) of
+    (VVector xv,         VNat n           ) -> return $ VVector $ vRotate xv (fromIntegral n)
+    (VExtra (BWord xlv), VNat n           ) -> return $ vWord $ lvRotate xlv (fromIntegral n)
+    (VVector xv,         VExtra (BNat ilv)) -> VVector <$>
+                                               lMuxInteger (beLazyMux be (muxThunks be))
+                                                           (2 ^ LV.length ilv - 1) ilv
+                                                           (return . vRotate xv)
+    (VExtra (BWord xlv), VExtra (BNat ilv)) -> vWord <$>
+                                               lMuxInteger (beLazyMux be (LV.zipWithM . beMux be))
+                                                           (2 ^ LV.length ilv - 1) ilv
+                                                           (return . lvRotate xlv)
+    _ -> error "rotateLOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: LV.Storable l => BValue l
