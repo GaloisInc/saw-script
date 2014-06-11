@@ -855,3 +855,13 @@ mkUnsat a = Unsat a;
 
 mkSat :: (a :: sort 0) -> a -> SatResult a;
 mkSat a x = Sat a x;
+
+caseProofResult :: (a :: sort 0) -> (b :: sort 0)
+                -> ProofResult a -> b -> (a -> b) -> b;
+caseProofResult _ _ (Valid _) z _ = z;
+caseProofResult _ _ (Invalid _ x) _ f = f x;
+
+caseSatResult :: (a :: sort 0) -> (b :: sort 0)
+                -> SatResult a -> b -> (a -> b) -> b;
+caseSatResult _ _ (Unsat _) z _ = z;
+caseSatResult _ _ (Sat _ x) _ f = f x;
