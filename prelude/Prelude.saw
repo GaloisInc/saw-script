@@ -145,6 +145,8 @@ prim finval             : Int -> Int -> Fin;
 
 prim join               : {m, n, o, a} [m][n]a -> [o]a;
 prim split              : {m, n, o, a} [m]a -> [n][o]a;
+prim trunc              : {m, n} Int -> [m] -> [n];
+prim extend             : {m, n} Int -> [m] -> [n];
 
 // Awful stuff we need to remove, once we have type-level arithmetic.
 prim ec_join            : [12][32] -> [384];
