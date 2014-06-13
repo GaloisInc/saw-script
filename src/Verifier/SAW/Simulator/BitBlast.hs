@@ -59,6 +59,11 @@ data BExtra l
   | BNat (LitVector l)
   | BFin (LitVector l)
 
+instance Show (BExtra l) where
+  show (BBool _) = "BBool"
+  show (BWord _) = "BWord"
+  show (BNat _ ) = "BNat"
+  show (BFin _) = "BFin"
 
 vBool :: l -> BValue l
 vBool l = VExtra (BBool l)
