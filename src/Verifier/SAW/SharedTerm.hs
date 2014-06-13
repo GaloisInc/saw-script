@@ -74,6 +74,7 @@ module Verifier.SAW.SharedTerm
     -- ** Type checking
   , scTypeCheck
   , scTypeOf
+  , scTypeOf'
   , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend
