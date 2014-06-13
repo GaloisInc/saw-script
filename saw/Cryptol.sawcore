@@ -216,19 +216,17 @@ uncurry :: (a b c :: KType) -> (ty a -> ty b -> ty c) -> (#(ty a, ty b) -> ty c)
 uncurry a b c f = (\(x :: #(ty a, ty b)) -> f (x.1) (x.2));
 
 from :: (a b :: KType) -> (m n :: Num) -> seq m (ty a) -> (ty a -> seq n (ty b)) -> seq (tcMul m n) #(ty a, ty b);
-{-
-from a b m n xs f =
-  make (tcMul m n) #(ty a, ty b)
-    (\(i :: Index (tcMul m n)) ->
-      (peek m (ty a) xs (indexFst m n i),
-       peek n (ty b) (f (peek m (ty a) xs (indexFst m n i))) (indexSnd m n i)));
--}
+from a b (TCNum m) (TCNum n) xs k =
+  join m n #(ty a, ty b)
+  (vMap (ty a) (Vec n #(ty a, ty b))
+    (\(x :: ty a) -> vMap (ty b) #(ty a, ty b) (\(y :: ty b) -> (x, y)) n (k x))
+    m xs);
 
 eSingle :: (a :: KType) -> ty a -> Vec 1 (ty a);
 eSingle a = single (ty a);
 
 mlet :: (a b :: KType) -> (n :: Num) -> ty a -> (ty a -> seq n (ty b)) -> seq n #(ty a, ty b);
---mlet a b n x f = make n #(ty a, ty b) (\(i :: Index n) -> (x, peek n (ty b) (f x) i));
+mlet a b (TCNum n) x f = vMap (ty b) #(ty a, ty b) (\(y :: ty b) -> (x, y)) n (f x);
 
 zip :: (a b :: KType) -> (m n :: Num) -> seq m (ty a) -> seq n (ty b) -> seq (tcMin m n) #(ty a, ty b);
 zip a b (TCNum m) (TCNum n) xs ys = vZip (ty a) (ty b) m n xs ys;
