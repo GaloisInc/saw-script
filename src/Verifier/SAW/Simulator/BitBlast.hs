@@ -357,7 +357,7 @@ finOfNatOp =
 ------------------------------------------------------------
 -- Generating variables for arguments
 
-data BShape 
+data BShape
   = BoolShape
   | VecShape Nat BShape
   | TupleShape [BShape]

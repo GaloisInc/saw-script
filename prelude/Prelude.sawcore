@@ -624,6 +624,21 @@ foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldr a b _ f z (EmptyVec _) = z;
 foldr a b _ f z (ConsVec _ x n xs) = f x (foldr a b n f z xs);
 
+reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
+reverse n a xs = generate n a (\(i :: Fin n) -> get n a xs (finSwap n i));
+
+joinLittleEndian  :: (m n :: Nat)
+                  -> (a :: sort 0)
+                  -> Vec m (Vec n a)
+                  -> Vec (mulNat m n) a;
+joinLittleEndian m n a v = join m n a (reverse m (Vec n a) v);
+
+splitLittleEndian :: (m n :: Nat)
+                  -> (a :: sort 0)
+                  -> Vec (mulNat m n) a
+                  -> Vec m (Vec n a);
+splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
+
 --------------------------------------------------------------------------------
 -- Bitvectors
 
@@ -684,20 +699,12 @@ bvSRem :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x)
 
 -- | Shift left by the given number of bits.
 -- New bits are False.
-bvShl :: (x :: Nat) -> bitvector x -> Nat -> bitvector x;
-bvShl n x j =
-  let { go :: (i m :: Nat) -> bitvector m -> NatOrdering i m -> bitvector m;
-        go _ _ y (LeNatOrd i ni) =
-          append i ni Bool (replicate i Bool False)
-            (vTake Bool ni i
-               (unsafeCoerce (bitvector (addNat i ni))
-                             (bitvector (addNat ni i)) y));
-        go _ _ y (GtNatOrd m _) = replicate m Bool False;
-      }
-   in go j n x (compareNat j n);
+bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+--TODO
 
 -- Logical right shift.  New bits are False.
 bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+--TODO
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
 bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
@@ -742,7 +749,7 @@ get_bvXor = get_bvZipWith xor;
 
 -- | Get bit in vector by index with least significant bit at index 0.
 bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
-bvMbit n v i = get n Bool v (finSwap n i);
+bvMbit n v i = get n Bool v i;
 
 -- | Return true if two bitvectors are equal.
 bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
@@ -751,39 +758,42 @@ bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i))
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
+equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
+               Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
+
 -- | Return true if two bitvectors are not equal.
 bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
 
 -- | Unsigned and signed comparison functions.
 bvugt bvuge bvult bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
+bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 -- | Truncates a vector a smaller size.
--- lsb implementation:
--- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
--- bvTrunc x y = vTake Bool y x;
 -- msb implementation:
 bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
 bvTrunc = vDrop Bool;
+-- lsb implementation:
+-- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
+-- bvTrunc x y = vTake Bool y x;
 
 -- | Perform a unsigned extension  of the bitvector.
 -- @bvUExt x y v@ adds x bits of zeros to the most-significant bits of
 -- the y-bit vector v.
--- lsb implementation:
--- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
--- bvUExt x y a = append y x ?Bool a (replicate x Bool False);
 -- msb implementation:
 bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat x y);
 bvUExt x y a = append x y ?Bool (replicate x Bool False) a;
+-- lsb implementation:
+-- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
+-- bvUExt x y a = append y x ?Bool a (replicate x Bool False);
 
 -- | Perform a signed extension of the bitvector.
--- lsb implementation:
--- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
--- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
 -- msb implementation:
 bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
 bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
+-- lsb implementation:
+-- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
+-- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
 
 --------------------------------------------------------------------------------
 -- String values
@@ -822,4 +832,8 @@ bveq_same2 :: (n :: Nat)
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
 
-
+bvNat_bvToNat :: (n :: Nat)
+              -> (x :: bitvector n)
+              -> Eq (bitvector n)
+                    (bvNat n (bvToNat n x))
+                    x;
