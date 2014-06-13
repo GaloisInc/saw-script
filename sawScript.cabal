@@ -11,7 +11,8 @@ extra-source-files:
 library
   build-depends:
       base >= 4
---    , abcBridge
+    , abcBridge
+    , aig
     , array
 --    , cmdargs
     , containers
