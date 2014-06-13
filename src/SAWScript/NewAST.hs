@@ -25,6 +25,7 @@ data Expr
   -- Accessors
   | Index  Expr Expr
   | Lookup Expr Name
+  | TLookup Expr Integer
   -- LC
   | Var A.ResolvedName
   | Function    Name (Maybe Type) Expr
@@ -59,6 +60,7 @@ translateExpr expr = case expr of
   A.Record fs t          -> sig t =<< (Record . M.fromList <$> mapM translateField fs)
   A.Index ar ix t        -> sig t =<< (Index <$> translateExpr ar <*> translateExpr ix)
   A.Lookup rec fld t     -> sig t =<< (Lookup <$> translateExpr rec <*> pure fld)
+  A.TLookup tpl idx t    -> sig t =<< (TLookup <$> translateExpr tpl <*> pure idx)
   A.Var x t              -> sig t $ (Var x)
   A.Function x xt body t -> sig t =<< (Function x <$> translateMType xt <*> translateExpr body)
   A.Application f v t    -> sig t =<< (Application <$> translateExpr f <*> translateExpr v)
@@ -94,6 +96,8 @@ translateTypeS (In (Inr (Inl ctx))) = return $ A.tMono $
     A.JavaSetupContext    -> A.tContext $ A.JavaSetup
     A.LLVMSetupContext    -> A.tContext $ A.LLVMSetup
     A.ProofScriptContext  -> A.tContext $ A.ProofScript
+    A.ProofResultContext  -> A.tContext $ A.ProofResult
+    A.SatResultContext    -> A.tContext $ A.SatResult
     A.TopLevelContext     -> A.tContext $ A.TopLevel
 
 translateTypeS (In (Inr (Inr ty))) =

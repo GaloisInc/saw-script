@@ -1,5 +1,4 @@
 abstract Term;
-abstract ProofResult;
 abstract Simpset;
 abstract Theorem;
 
@@ -11,17 +10,20 @@ abstract LLVMMethodSpec;
 
 abstract CryptolModuleEnv;
 
+// TODO: create ProofResult a, with concrete syntax
+// TODO: create SatResult a, with concrete syntax
+// TODO: create ProofScript a, with concrete syntax
+
 abstract Fin;
 
 prim return             : { m , a } a -> m a;
-prim seq                : {a, b} ProofScript a -> ProofScript b
-                       -> ProofScript b; //temporary
 
 prim define             : {a} String -> a -> TopLevel a;
 
 prim print              : {a} a -> TopLevel ();
 prim print_term         : {a} a -> TopLevel ();
 prim print_type         : {a} a -> TopLevel ();
+prim show_term          : {a} a -> String;
 
 prim bitSequence        : { n } Int -> [n];
 
@@ -37,18 +39,21 @@ prim write_core         : {a} String -> a -> TopLevel ();
 prim equal              : Term -> Term -> TopLevel Term;
 prim negate             : Term -> TopLevel Term;
 
-prim prove              : {a} ProofScript ProofResult -> a -> TopLevel Theorem;
-prim sat                : {a} ProofScript ProofResult -> a -> TopLevel ();
+prim prove              : {a, b} ProofScript b -> (a -> Bit)
+                       -> TopLevel (ProofResult a);
+prim sat                : {a, b} ProofScript b -> (a -> Bit)
+                       -> TopLevel (SatResult a);
 
 prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
-prim print_goal         : ProofScript ();
-prim abc                : ProofScript ProofResult;
-prim abc2               : ProofScript ProofResult;
-prim offline_aig        : String -> ProofScript ProofResult;
-prim offline_extcore    : String -> ProofScript ProofResult;
-prim offline_smtlib1    : String -> ProofScript ProofResult;
-prim offline_smtlib2    : String -> ProofScript ProofResult;
+prim print_goal         : {a} ProofScript ();
+prim abc                : {a} ProofScript a;
+prim abc2               : {a} ProofScript a;
+prim yices              : {a} ProofScript a;
+prim offline_aig        : {a} String -> ProofScript a;
+prim offline_extcore    : {a} String -> ProofScript a;
+prim offline_smtlib1    : {a} String -> ProofScript a;
+prim offline_smtlib2    : {a} String -> ProofScript a;
 
 prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;
@@ -71,13 +76,13 @@ prim java_class         : String -> JavaType;
 
 prim java_value         : {a} String -> a;
 prim java_var           : {a} String -> JavaType -> JavaSetup a;
-//prim java_may_alias     : {n} [n]String -> JavaSetup ();
+prim java_may_alias     : {n} [n]String -> JavaSetup ();
 prim java_assert        : Bit -> JavaSetup ();
-prim java_assert_eq     : {a} String -> a -> JavaSetup ();
+//prim java_assert_eq     : {a} String -> a -> JavaSetup ();
 prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
 prim java_modify        : String -> JavaSetup ();
 prim java_return        : {a} a -> JavaSetup ();
-prim java_verify_tactic : ProofScript ProofResult -> JavaSetup ();
+prim java_verify_tactic : {a} ProofScript a -> JavaSetup ();
 prim java_pure          : JavaSetup ();
 
 prim java_extract       : {a} String -> String -> JavaSetup () -> TopLevel a;
@@ -95,11 +100,11 @@ prim llvm_var           : {a} String -> LLVMType -> LLVMSetup a;
 prim llvm_ptr           : {a} String -> LLVMType -> LLVMSetup a;
 //prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
 prim llvm_assert        : Bit -> LLVMSetup ();
-prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
+//prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_modify        : String -> LLVMSetup ();
 prim llvm_return        : {a} a -> LLVMSetup ();
-prim llvm_verify_tactic : ProofScript ProofResult -> LLVMSetup ();
+prim llvm_verify_tactic : {a} ProofScript a -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
 prim llvm_extract       : {a} String -> String -> LLVMSetup () -> TopLevel a;
@@ -109,6 +114,8 @@ prim llvm_verify        : {n} String -> String -> [n]LLVMMethodSpec
 
 prim term_size          : {a} a -> Int;
 prim term_tree_size     : {a} a -> Int;
+
+prim reverse            : {n, a} [n]a -> [n]a;
 
 prim eq                 : {a} a -> a -> Bit;
 prim ite                : {a} Bit -> a -> a -> a;
@@ -120,6 +127,7 @@ prim disj               : Bit -> Bit -> Bit;
 prim get                : {n, a} [n]a -> Fin -> a;
 prim set                : {n, a} [n]a -> Fin -> a -> [n]a;
 
+prim bvEq               : {n} [n] -> [n] -> Bit;
 prim bvNot              : {n} [n] -> [n];
 prim bvAdd              : {n} [n] -> [n] -> [n];
 prim bvSub              : {n} [n] -> [n] -> [n];
@@ -134,11 +142,25 @@ prim bvuge              : {n} [n] -> [n] -> Bit;
 prim bvugt              : {n} [n] -> [n] -> Bit;
 prim bvule              : {n} [n] -> [n] -> Bit;
 prim bvult              : {n} [n] -> [n] -> Bit;
+prim bvsge              : {n} [n] -> [n] -> Bit;
+prim bvsgt              : {n} [n] -> [n] -> Bit;
+prim bvsle              : {n} [n] -> [n] -> Bit;
+prim bvslt              : {n} [n] -> [n] -> Bit;
 
 prim finval             : Int -> Int -> Fin;
 
+prim join               : {m, n, o, a} [m][n]a -> [o]a;
+prim split              : {m, n, o, a} [m]a -> [n][o]a;
+prim trunc              : {m, n} Int -> [m] -> [n];
+prim extend             : {m, n} Int -> [m] -> [n];
+
 // Awful stuff we need to remove, once we have type-level arithmetic.
 prim ec_join            : [12][32] -> [384];
+prim ec_join768         : [24][32] -> [768];
 prim ec_split           : [384] -> [12][32];
+prim ec_split768        : [768] -> [24][32];
 prim ec_extend          : [32] -> [384];
 prim long_extend        : [32] -> [64];
+
+prim caseSatResult   : {a, b} SatResult a -> b -> (a -> b) -> b;
+prim caseProofResult : {a, b} ProofResult a -> b -> (a -> b) -> b;

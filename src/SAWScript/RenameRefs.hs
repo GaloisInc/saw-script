@@ -124,6 +124,7 @@ resolveInExpr exp = case exp of
   Record bs t       -> Record <$> mapM resolveInBind bs   <*> pure t
   Index  e1 e2 t    -> Index  <$> resolveInExpr e1        <*> resolveInExpr e2 <*> pure t
   Lookup e n t      -> Lookup <$> resolveInExpr e         <*> pure n           <*> pure t
+  TLookup e i t     -> TLookup <$> resolveInExpr e        <*> pure i           <*> pure t
   Application f v t -> Application   <$> resolveInExpr f  <*> resolveInExpr v  <*> pure t
   -- No-ops
   Bit b t           -> pure $ Bit b t
