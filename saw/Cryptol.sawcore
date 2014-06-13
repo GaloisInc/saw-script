@@ -25,10 +25,6 @@ fix a f = f (fix a f);
 bvExp :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 
--- TODO: move to Prelude.sawcore
-reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
-reverse n a xs = generate n a (\(i :: Fin n) -> get n a xs (finSwap n i));
-
 --------------------------------------------------------------------------------
 -- Infinite streams
 -- TODO: Should this belong in the SAWCore prelude?
