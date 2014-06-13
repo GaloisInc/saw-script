@@ -152,7 +152,8 @@ prim finval             : Int -> Int -> Fin;
 prim join               : {m, n, o, a} [m][n]a -> [o]a;
 prim split              : {m, n, o, a} [m]a -> [n][o]a;
 prim trunc              : {m, n} Int -> [m] -> [n];
-prim extend             : {m, n} Int -> [m] -> [n];
+prim sext               : {m, n} Int -> [m] -> [n];
+prim uext               : {m, n} Int -> [m] -> [n];
 
 // Awful stuff we need to remove, once we have type-level arithmetic.
 prim ec_join            : [12][32] -> [384];
@@ -161,6 +162,7 @@ prim ec_split           : [384] -> [12][32];
 prim ec_split768        : [768] -> [24][32];
 prim ec_extend          : [32] -> [384];
 prim long_extend        : [32] -> [64];
+prim trunc31            : [32] -> [31];
 
 prim caseSatResult   : {a, b} SatResult a -> b -> (a -> b) -> b;
 prim caseProofResult : {a, b} ProofResult a -> b -> (a -> b) -> b;
