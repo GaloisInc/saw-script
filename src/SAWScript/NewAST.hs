@@ -76,7 +76,7 @@ translateBStmt bst = case bst of
   A.Bind (Just (n, t)) ctx e -> Bind (Just n) <$> translateMType t
                                 <*> translateMType ctx <*> translateExpr e
   A.BlockLet bs   -> BlockLet <$> mapM translateField bs
-  --BlockTypeDecl Name             typeT  
+  A.BlockTypeDecl _ _ -> fail "Block type declarations not yet supported."
 
 translateField :: (a,A.Expr A.ResolvedName A.ResolvedT) -> Err (a,Expr)
 translateField (n,e) = (,) <$> pure n <*> translateExpr e

@@ -8,8 +8,6 @@ import SAWScript.Unify.Fix
 import SAWScript.Unify.Goal
 import SAWScript.Unify.Unification
 
-import Control.Monad
-
 class Freshable s t | s -> t where
   fresh :: s -> Goal t
 

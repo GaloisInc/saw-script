@@ -16,6 +16,7 @@ import Data.List (elemIndices, intercalate, nub)
 import Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Map as M
 import qualified Data.Traversable as T
+import Prelude hiding (mod, exp)
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
 renameRefs :: Compiler IncomingModule OutgoingModule
@@ -176,7 +177,7 @@ resolveName un = do
 allExprMaps :: IncomingModule -> ExprMaps
 allExprMaps (Module modNm exprEnv primEnv _ deps) = (modNm,exprEnv,primEnv,foldr f M.empty (M.elems deps))
   where
-  f (Module modNm exprEnv primEnv _ _) = M.insert modNm (exprEnv,primEnv)
+  f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (exprEnv',primEnv')
 
 -- TODO: this will need to change once we can refer to prelude functions
 -- with qualified names.
@@ -187,7 +188,7 @@ resolveUnresolvedName
   un@(UnresolvedName _ns n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
-    Just n -> [n]
+    Just nm -> [nm]
     Nothing -> maybeToList inLocalTop ++ maybeToList inLocalPrim ++ mapMaybe inDepMod (M.assocs rms)
   where
   -- TODO: fix when we have proper modules
