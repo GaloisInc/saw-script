@@ -14,8 +14,6 @@ import SAWScript.Import (LoadedModules (..))
 import Control.Applicative
 import Control.Arrow
 import Control.Monad
---import Control.Monad.State
---import Data.Monoid
 import Data.Foldable (foldrM)
 import qualified Data.Graph as G
 import qualified Data.Map as M
