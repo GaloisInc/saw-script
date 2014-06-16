@@ -5,13 +5,19 @@ Maintainer:    atomb@galois.com
 Build-type:    Simple
 Cabal-version: >= 1.8.0.2
 
+extra-source-files:
+    prelude/Prelude.saw
+
 library
   build-depends:
       base >= 4
     , abcBridge
+    , aig
     , array
 --    , cmdargs
     , containers
+    , cryptol
+    , cryptol-verifier
     , deepseq
     , either
     , directory
@@ -47,6 +53,7 @@ library
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Compiler
+    SAWScript.CryptolBuiltins
     SAWScript.FileQuote
     SAWScript.Import
     SAWScript.Interpreter

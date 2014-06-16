@@ -39,7 +39,7 @@ S1Table = [
 ];
 
 t : [32] -> [31];
-t x = trunc '31 x;
+t x = trunc31 x;
 
 F_spec cry_F = do {
     X0 <- llvm_var "BRC_X0" (llvm_int '32);
@@ -53,8 +53,10 @@ F_spec cry_F = do {
     llvm_assert (S1 == S1Table);
     let res = cry_F ([X0, X1, X2], [R1, R2]) : ([32], [32], [32]);
     llvm_return (res.1);
-    //llvm_ensure_eq "F_R1" (res.2);
-    //llvm_ensure_eq "F_R2" (res.3);
+    llvm_ensure_eq "F_R1" (res.2);
+    llvm_ensure_eq "F_R2" (res.3);
+    //llvm_modify "F_R1";
+    //llvm_modify "F_R2";
     llvm_verify_tactic abc;
 };
 
@@ -76,6 +78,22 @@ BR_spec cry_BR = do {
     (S13 : [32]) <- llvm_var "LFSR_S13" (llvm_int '32);
     (S14 : [32]) <- llvm_var "LFSR_S14" (llvm_int '32);
     (S15 : [32]) <- llvm_var "LFSR_S15" (llvm_int '32);
+    llvm_assert (S0 == (S0 & 0x7FFFFFFF));
+    llvm_assert (S1 == (S1 & 0x7FFFFFFF));
+    llvm_assert (S2 == (S2 & 0x7FFFFFFF));
+    llvm_assert (S3 == (S3 & 0x7FFFFFFF));
+    llvm_assert (S4 == (S4 & 0x7FFFFFFF));
+    llvm_assert (S5 == (S5 & 0x7FFFFFFF));
+    llvm_assert (S6 == (S6 & 0x7FFFFFFF));
+    llvm_assert (S7 == (S7 & 0x7FFFFFFF));
+    llvm_assert (S8 == (S8 & 0x7FFFFFFF));
+    llvm_assert (S9 == (S9 & 0x7FFFFFFF));
+    llvm_assert (S10 == (S10 & 0x7FFFFFFF));
+    llvm_assert (S11 == (S11 & 0x7FFFFFFF));
+    llvm_assert (S12 == (S12 & 0x7FFFFFFF));
+    llvm_assert (S13 == (S13 & 0x7FFFFFFF));
+    llvm_assert (S14 == (S14 & 0x7FFFFFFF));
+    llvm_assert (S15 == (S15 & 0x7FFFFFFF));
     let s = [t S0, t S1, t S2, t S3, t S4, t S5, t S6, t S7,
              t S8, t S9, t S10, t S11, t S12, t S13, t S14, t S15];
     X0 <- llvm_var "BRC_X0" (llvm_int '32);
@@ -83,10 +101,10 @@ BR_spec cry_BR = do {
     X2 <- llvm_var "BRC_X2" (llvm_int '32);
     X3 <- llvm_var "BRC_X3" (llvm_int '32);
     let res = (cry_BR s) : ([32], [32], [32], [32]);
-    //llvm_ensure_eq "BRC_X0" (res.1);
-    //llvm_ensure_eq "BRC_X1" (res.2);
-    //llvm_ensure_eq "BRC_X2" (res.3);
-    //llvm_ensure_eq "BRC_X3" (res.4);
+    llvm_ensure_eq "BRC_X0" (res.1);
+    llvm_ensure_eq "BRC_X1" (res.2);
+    llvm_ensure_eq "BRC_X2" (res.3);
+    llvm_ensure_eq "BRC_X3" (res.4);
     llvm_verify_tactic abc;
 };
 
@@ -104,6 +122,6 @@ main = do {
     llvm_verify "zuc.bc" "BitReorganization" [] (BR_spec ref_BR);
     L1_ov <- llvm_verify "zuc.bc" "L1" [] (L12_spec ref_L1);
     L2_ov <- llvm_verify "zuc.bc" "L2" [] (L12_spec ref_L2);
-    //llvm_verify "zuc.bc" "F" [L1_ov, L2_ov] (F_spec ref_F);
+    llvm_verify "zuc.bc" "F" [L1_ov, L2_ov] (F_spec ref_F);
     print "Done.";
 };
