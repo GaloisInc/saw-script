@@ -1,5 +1,5 @@
 For a simple build:
 
-./build.sh
+./build-sandbox.sh
 
 And then run dist/build/saw/saw
