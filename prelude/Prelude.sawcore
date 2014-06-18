@@ -421,6 +421,15 @@ finSplitSum (Succ m) n i =
                  (finSplitSum m n j))
         (finSplitSucc (addNat m n) i);
 
+natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
+natSplitFin Zero n = Right (Fin Zero) Nat n;
+natSplitFin (Succ m) Zero = Left (Fin (Succ m)) Nat (finZero m);
+natSplitFin (Succ m) (Succ n) =
+  either (Fin m) Nat (Either (Fin (Succ m)) Nat)
+  (\(k :: Fin m) -> Left (Fin (Succ m)) Nat (finSucc m k))
+  (\(k :: Nat) -> Right (Fin (Succ m)) Nat (Succ k))
+  (natSplitFin m n);
+
 finProductProof :: (mv mr nv nr n :: Nat) ->
   Eq Nat (Succ (addNat (addNat (mulNat mv n) nv) (addNat (mulNat mr n) nr)))
          (Succ (addNat (addNat nv nr) (mulNat (addNat mv mr) n)));

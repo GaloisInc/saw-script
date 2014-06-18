@@ -143,6 +143,11 @@ instance Enum Fin where
                    Nothing -> [x]
                    Just x' -> x : go x'
 
+natSplitFin :: Nat -> Nat -> Either Fin Nat
+natSplitFin n i
+  | i < n = Left (FinVal i (pred (n - i)))
+  | otherwise = Right (i - n)
+
 -- data Vec :: (n :: Nat) -> sort 0 -> sort 0
 data Vec t a = Vec t !(Vector a)
 
