@@ -482,12 +482,15 @@ ecError :: (a :: KType) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> 
 -- Polynomials
 ecPMul :: (a b :: Num) -> PFin a -> PFin b -> seq a Bool -> seq b Bool
        -> seq (tcSub (tcMax (TCNum 1) (tcAdd a b)) (TCNum 1)) Bool;
+ecPMul _ _ (PFinNum a) (PFinNum b) = bvPMul a b;
 
 ecPDiv :: (a b :: Num) -> PFin a -> PFin b
        -> seq a Bool -> seq b Bool -> seq a Bool;
+ecPDiv _ _ (PFinNum a) (PFinNum b) = bvPDiv a b;
 
 ecPMod :: (a b :: Num) -> PFin a -> PFin b
        -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bool;
+ecPMod _ _ (PFinNum a) (PFinNum b) = bvPMod a b;
 
 -- Random values
 ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
