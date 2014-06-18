@@ -627,6 +627,11 @@ foldr a b _ f z (ConsVec _ x n xs) = f x (foldr a b n f z xs);
 reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
 reverse n a xs = generate n a (\(i :: Fin n) -> get n a xs (finSwap n i));
 
+transpose :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
+transpose m n a xss =
+  generate n (Vec m a) (\(j :: Fin n) ->
+    generate m a (\(i :: Fin m) -> get n a (get m (Vec n a) xss i) j));
+
 joinLittleEndian  :: (m n :: Nat)
                   -> (a :: sort 0)
                   -> Vec m (Vec n a)
