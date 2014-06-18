@@ -52,6 +52,9 @@ streamDrop :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream a;
 streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
 
 streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
+streamAppend a n xs ys =
+  MkStream a (\(i :: Nat) ->
+    either (Fin n) Nat a (get n a xs) (streamGet a ys) (natSplitFin n i));
 
 --streamJoin :: (a :: sort 0) -> (n :: Nat) -> Stream (Vec n a) -> ite (sort 0) (equalNat 0 n) #() (Stream a);
 
