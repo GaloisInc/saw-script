@@ -199,6 +199,14 @@ finIncLim :: Nat -> Nat -> Fin -> Fin
 finIncLim n _m (FinVal l r) = FinVal l (r + n)
   -- ^ Precondition: m == l + r + 1
 
+-- finMax :: (n :: Nat) -> Maybe (Fin n);
+finMax :: Nat -> Maybe Fin
+finMax n = if n == 0 then Nothing else Just (FinVal (n - 1) 0)
+
+-- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
+finPred :: Nat -> Fin -> Maybe Fin
+finPred _ (FinVal l r) = if l == 0 then Nothing else Just (FinVal (l - 1) (r + 1))
+
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
 generate :: Nat -> () -> (Fin -> a) -> Vector a
 generate n _ f = V.generate (fromEnum n) (\i -> f (finFromBound (fromIntegral i) n))
