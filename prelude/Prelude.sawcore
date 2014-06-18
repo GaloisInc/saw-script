@@ -814,6 +814,16 @@ bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
 -- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
 -- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
 
+-- Polynomial operations
+
+bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n
+       -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
+
+bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+
+bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+
+
 --------------------------------------------------------------------------------
 -- String values
 
