@@ -346,9 +346,12 @@ finSwap _ (FinVal v r) =
     (eqNatSucc (addNat r v) (addNat v r) (eqNatAddComm r v))
     (FinVal r v);
 
+finEq :: (n :: Nat) -> (i j :: Fin n) -> Bool;
+finEq n i j = equalNat (finFront n i) (finFront n j);
+
 -- | Axiom: equality on Fin values reduces to equality on first components.
 eq_Fin :: (n :: Nat) -> (i j :: Fin n)
-       -> Eq Bool (eq (Fin n) i j) (equalNat (finFront n i) (finFront n j));
+       -> Eq Bool (eq (Fin n) i j) (finEq n i j);
 
 -- | Return maximum finite number less than given bound if any.
 finMax :: (n :: Nat) -> Maybe (Fin n);
@@ -491,11 +494,11 @@ get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n)
                 Eq e (get n e (generate n e f) i) (f i);
 
 set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-set n a v i x = generate n a (\(j :: Fin n) -> ite a (eq (Fin n) i j) x (get n a v j));
+set n a v i x = generate n a (\(j :: Fin n) -> ite a (finEq n i j) x (get n a v j));
 
 get_set :: (n :: Nat) -> (a :: sort 0) -> (v :: Vec n a) -> (i j :: Fin n) -> (x :: a)
-        -> Eq a (get n a (set n a v i x) j) (ite a (eq (Fin n) i j) x (get n a v j));
-get_set n a v i j x = get_generate n a (\(j :: Fin n) -> ite a (eq (Fin n) i j) x (get n a v j)) j;
+        -> Eq a (get n a (set n a v i x) j) (ite a (finEq n i j) x (get n a v j));
+get_set n a v i j x = get_generate n a (\(j :: Fin n) -> ite a (finEq n i j) x (get n a v j)) j;
 
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
