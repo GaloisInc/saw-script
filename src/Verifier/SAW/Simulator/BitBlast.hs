@@ -225,7 +225,12 @@ muxBVal _  _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
 muxBVal _  _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
 muxBVal _  _ VType           VType           = return VType
 muxBVal be b (VExtra x)      (VExtra y)      = VExtra <$> muxBExtra be b x y
-muxBVal _ _ _ _ = fail "iteOp: malformed arguments"
+muxBVal be b x@(VExtra (BWord _)) y         =
+  muxBVal be b (VVector (vectorOfBValue x)) y
+muxBVal be b x y@(VExtra (BWord _))         =
+  muxBVal be b x (VVector (vectorOfBValue y))
+muxBVal _ _ x y =
+  fail $ "iteOp: malformed arguments: " ++ show x ++ " " ++ show y
 
 muxThunks :: AIG.IsAIG l g => g s -> l s
           -> V.Vector (BThunk (l s)) -> V.Vector (BThunk (l s)) -> IO (V.Vector (BThunk (l s)))
