@@ -301,6 +301,11 @@ eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- There are implicit constructors from integer literals.
 
+-- Dependent pattern matching combinator for natural numbers
+natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
+natCase p z s Zero = z;
+natCase p z s (Succ n) = s n;
+
 --------------------------------------------------------------------------------
 -- Fin
 
