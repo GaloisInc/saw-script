@@ -530,8 +530,11 @@ get_vTake :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i ::
              Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim m n i));
 get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim m n) v i;
 
+vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Vec m a) (Vec n a);
+vecCong a _ _ (Refl _ v) = Refl (sort 0) (Vec v a);
+
 coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
-coerceVec a _ _ (Refl _ x) v = v;
+coerceVec a m n q = coerce (Vec m a) (Vec n a) (vecCong a m n q);
 
 -- | Simplify take  all elements from a vector.
 vTake0 :: (a :: sort 0)
