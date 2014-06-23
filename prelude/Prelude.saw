@@ -41,8 +41,10 @@ prim negate             : Term -> TopLevel Term;
 
 prim prove              : {a, b} ProofScript b -> (a -> Bit)
                        -> TopLevel (ProofResult a);
+prim prove_print        : {a, b} ProofScript b -> a -> TopLevel Theorem;
 prim sat                : {a, b} ProofScript b -> (a -> Bit)
                        -> TopLevel (SatResult a);
+prim sat_print          : {a, b} ProofScript b -> a -> TopLevel ();
 
 prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
