@@ -55,8 +55,6 @@ F_spec cry_F = do {
     llvm_return (res.1);
     llvm_ensure_eq "F_R1" (res.2);
     llvm_ensure_eq "F_R2" (res.3);
-    //llvm_modify "F_R1";
-    //llvm_modify "F_R2";
     llvm_verify_tactic abc;
 };
 
