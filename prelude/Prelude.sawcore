@@ -831,6 +831,44 @@ bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
 
 
 --------------------------------------------------------------------------------
+-- Infinite streams
+
+data Stream :: sort 0 -> sort 0 where {
+    MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
+  }
+
+streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
+streamGet _ (MkStream _ s) i = s i;
+
+streamConst :: (a :: sort 0) -> a -> Stream a;
+streamConst a x = MkStream a (\(i :: Nat) -> x);
+
+streamMap :: (a b :: sort 0) -> (a -> b) -> Stream a -> Stream b;
+streamMap a b f xs = MkStream b (\(i :: Nat) -> f (streamGet a xs i));
+
+streamMap2 :: (a b c :: sort 0) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c;
+streamMap2 a b c f xs ys = MkStream c (\(i :: Nat) -> f (streamGet a xs i) (streamGet b ys i));
+
+streamTake :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Vec n a;
+streamTake a n xs = generate n a (\(i :: Fin n) -> streamGet a xs (finFront n i));
+
+streamDrop :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream a;
+streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
+
+streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
+streamAppend a n xs ys =
+  MkStream a (\(i :: Nat) ->
+    either (Fin n) Nat a (get n a xs) (streamGet a ys) (natSplitFin n i));
+
+--streamJoin :: (a :: sort 0) -> (n :: Nat) -> Stream (Vec n a) -> ite (sort 0) (equalNat 0 n) #() (Stream a);
+
+streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
+streamSplit a n xs =
+  MkStream (Vec n a) (\(i :: Nat) ->
+    generate n a (\(j :: Fin n) ->
+      streamGet a xs (addNat (mulNat i n) (finFront n j))));
+
+--------------------------------------------------------------------------------
 -- String values
 
 data String :: sort 0 where { }
