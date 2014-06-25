@@ -347,8 +347,9 @@ ecGtEq a pa x y = not (ecLt a pa x y);
 
 ecEq :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
 ecEq _ PCmpBit = boolEq;
+ecEq _ (PCmpSeq _ a (PFinNum n) p) =
+  vecEq n (ty a) (ecEq a p);
 ecEq _ (PCmpSeq _ _ (PFinNum n) PCmpBit) = bvEq n;
-ecEq _ (PCmpSeq _ a (PFinNum n) pa) = vecEq n (ty a) (ecEq a pa);
 ecEq _ (PCmpPair a b pa pb) =
   (\(x :: #(ty a, ty b)) -> \(y :: #(ty a, ty b)) -> and (ecEq a pa x.1 y.1) (ecEq b pb x.2 y.2));
 
@@ -368,6 +369,7 @@ ecMax :: (a :: KType) -> PCmp a -> ty a -> ty a -> ty a;
 ecAnd :: (a :: KType) -> ty a -> ty a -> ty a;
 ecAnd TCBit = and;
 ecAnd (TCSeq n a) = seqBinary n a (ecAnd a);
+ecAnd (TCSeq (TCNum n) TCBit) = bvAnd n;
 --ecAnd (TCFun a b) = 
 ecAnd TCUnit = unitBinary;
 ecAnd (TCPair a b) = pairBinary a b (ecAnd a) (ecAnd b);
@@ -375,6 +377,7 @@ ecAnd (TCPair a b) = pairBinary a b (ecAnd a) (ecAnd b);
 ecOr :: (a :: KType) -> ty a -> ty a -> ty a;
 ecOr TCBit = or;
 ecOr (TCSeq n a) = seqBinary n a (ecOr a);
+ecOr (TCSeq (TCNum n) TCBit) = bvOr n;
 --ecOr (TCFun a b) = 
 ecOr TCUnit = unitBinary;
 ecOr (TCPair a b) = pairBinary a b (ecOr a) (ecOr b);
@@ -382,6 +385,7 @@ ecOr (TCPair a b) = pairBinary a b (ecOr a) (ecOr b);
 ecXor :: (a :: KType) -> ty a -> ty a -> ty a;
 ecXor TCBit = xor;
 ecXor (TCSeq n a) = seqBinary n a (ecXor a);
+ecXor (TCSeq (TCNum n) TCBit) = bvXor n;
 --ecXor (TCFun a b) = funMap2 FIXME
 ecXor TCUnit = unitBinary;
 ecXor (TCPair a b) = pairBinary a b (ecXor a) (ecXor b);
@@ -402,7 +406,7 @@ ecZero (TCPair a b) = (ecZero a, ecZero b);
 
 -- Sequences
 ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
---ecShiftL (TCNum m) _ a (PFinNum n) xs i = TODO
+ecShiftL (TCNum m) _ TCBit (PFinNum n) xs i = bvShl m xs (bvToNat n i);
 ecShiftL TCInf _ a (PFinNum n) xs i = streamDrop (ty a) (bvToNat n i) xs;
 
 ecShiftR :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
