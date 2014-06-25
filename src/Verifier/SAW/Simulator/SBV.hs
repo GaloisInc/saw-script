@@ -353,6 +353,7 @@ toWord _ = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
+toVector (VExtra (SbvWord xv@(SBV (KBounded _ k) _))) = V.fromList (map (Ready . vBool . symTestBit xv) [0..k-1])
 toVector _ = error "this word might be symbolic"
 
 symFromBits :: Vector SBool -> SWord
