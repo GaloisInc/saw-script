@@ -482,6 +482,11 @@ data Vec :: Nat -> sort 0 -> sort 0 where {
   }
 --TODO
 
+at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+at _ _ (ConsVec a x n xs) Zero = x;
+at _ _ (ConsVec a x n xs) (Succ i) = at n a xs i;
+-- Calling 'at' with EmptyVec is an error.
+
 -- Function for generating an array.
 generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
 --TODO
@@ -683,6 +688,9 @@ bvNat :: (x :: Nat) -> Nat -> bitvector x;
 
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+
+bvAt :: (n :: Nat) -> (a :: sort 0) -> (i :: Nat) -> Vec n a -> bitvector i -> a;
+bvAt n a i xs idx = at n a xs (bvToNat i idx);
 
 bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 
