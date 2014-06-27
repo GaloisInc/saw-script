@@ -48,7 +48,9 @@ prim sat_print          : {a, b} ProofScript b -> a -> TopLevel ();
 
 prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
-prim print_goal         : {a} ProofScript ();
+prim print_goal         : ProofScript ();
+prim assume_valid       : {a} ProofScript (ProofResult a);
+prim assume_unsat       : {a} ProofScript (SatResult a);
 prim abc                : {a} ProofScript a;
 prim abc2               : {a} ProofScript a;
 prim yices              : {a} ProofScript a;
