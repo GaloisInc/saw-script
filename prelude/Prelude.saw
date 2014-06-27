@@ -27,6 +27,8 @@ prim show_term          : {a} a -> String;
 
 prim bitSequence        : { n } Int -> [n];
 
+prim term               : {a} a -> Term;
+
 prim read_aig           : {a} String -> TopLevel a;
 prim read_sbv           : {a} String -> TopLevel a;
 prim read_core          : {a} String -> TopLevel a;
