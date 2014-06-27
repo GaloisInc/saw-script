@@ -59,6 +59,7 @@ prim offline_smtlib2    : {a} String -> ProofScript a;
 prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;
 prim addsimp            : Theorem -> Simpset -> Simpset;
+prim addsimp'           : {a} a -> Simpset -> Simpset;
 prim rewrite            : {a} Simpset -> a -> TopLevel a;
 
 prim cryptol_module     : String -> TopLevel CryptolModuleEnv;
