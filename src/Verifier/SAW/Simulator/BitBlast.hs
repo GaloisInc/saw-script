@@ -175,6 +175,7 @@ beConstMap be = Map.fromList
   , ("Prelude.minNat", Prims.minNatOp)
   , ("Prelude.maxNat", Prims.maxNatOp)
   , ("Prelude.widthNat", Prims.widthNatOp)
+  , ("Prelude.natCase", Prims.natCaseOp)
   -- Fin
   , ("Prelude.finDivMod", Prims.finDivModOp)
   , ("Prelude.finMax", Prims.finMaxOp)

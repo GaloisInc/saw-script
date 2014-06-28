@@ -107,6 +107,18 @@ widthNatOp =
   natFun' "widthNat1" $ \n -> return $
   vNat (widthNat n)
 
+-- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
+natCaseOp :: MonadIO m => Value m e
+natCaseOp =
+  VFun $ \_ -> return $
+  VFun $ \z -> return $
+  VFun $ \s -> return $
+  natFun $ \n ->
+    if n == 0
+    then force z
+    else do s' <- force s
+            apply s' (Ready (VNat (fromIntegral n - 1)))
+
 -- finOfNat :: (n :: Nat) -> Nat -> Fin n;
 finOfNatOp :: MonadIO m => Value m e
 finOfNatOp =
