@@ -132,12 +132,9 @@ selectV m f w@(SBV (KBounded _ s) _) = do
       sel offset []       = force (f offset)
       sel offset (b : bs) = do
         let bitOnValue = offset + 2 ^ (length bs)
-        -- if bitOnValue > m
-        --   then sel offset bs
-        --   else do
-        m1 <- sel bitOnValue bs
-        m2 <- sel offset bs
-        myMerge b m1 m2
+        onp <- if bitOnValue >= m then return undefined else sel bitOnValue bs
+        offp <- sel offset bs
+        myMerge b onp offp
   sel 0 bits
 
 myMerge :: SBool -> SValue -> SValue -> IO SValue
