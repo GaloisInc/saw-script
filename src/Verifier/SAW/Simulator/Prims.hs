@@ -152,6 +152,15 @@ finPredOp =
     then VCtorApp "Prelude.Nothing" (V.fromList [Ready VType])
     else VCtorApp "Prelude.Just" (V.fromList [Ready VType, Ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
 
+-- natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
+natSplitFinOp :: MonadIO m => Value m e
+natSplitFinOp =
+  natFun $ \n -> return $
+  natFun $ \i -> return $
+  if i < n
+    then VCtorApp "Prelude.Left" (V.fromList $ map Ready [VType, VType, vFin (FinVal i (pred (n - i)))])
+    else VCtorApp "Prelude.Right" (V.fromList $ map Ready [VType, VType, vNat (i - n)])
+
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
 generateOp :: MonadIO m => Value m e
 generateOp =
