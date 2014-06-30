@@ -406,7 +406,8 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-bitBlast :: AIG.IsAIG l g => g s -> SharedContext t -> SharedTerm t -> IO (l s)
+bitBlast :: AIG.IsAIG l g =>
+            g s -> SharedContext t -> SharedTerm t -> IO ([BShape], l s)
 bitBlast be sc t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
@@ -415,5 +416,5 @@ bitBlast be sc t = do
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
   case bval' of
-    VExtra (BBool l) -> return l
+    VExtra (BBool l) -> return (shapes, l)
     _ -> fail "bitBlast: non-boolean result type."
