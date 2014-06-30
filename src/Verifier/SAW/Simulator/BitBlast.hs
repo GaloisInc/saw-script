@@ -368,6 +368,14 @@ data BShape
   | TupleShape [BShape]
   | RecShape (Map FieldName BShape)
 
+shapeSize :: BShape -> Int
+shapeSize x =
+  case x of
+    BoolShape     -> 1
+    VecShape n x1 -> fromIntegral n * shapeSize x1
+    TupleShape xs -> sum (map shapeSize xs)
+    RecShape xm   -> sum (map shapeSize (Map.elems xm))
+
 parseShape :: SharedContext s -> SharedTerm s -> IO BShape
 parseShape sc t = do
   t' <- scWhnf sc t
