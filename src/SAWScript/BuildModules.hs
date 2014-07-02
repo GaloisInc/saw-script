@@ -81,24 +81,28 @@ ensureExprPresent n met = case met of
 modBuilder :: TopStmtSimple RawT -> ModuleParts UncheckedExpr -> Err (ModuleParts UncheckedExpr)
 modBuilder t (ModuleParts mn ee pe te ds) = case t of
   -- TypeDecls may not fail
-  TopTypeDecl n pt -> case M.lookup n ee of
-                      Just (_,Just _) -> multiDeclErr n
-                      _               -> return $ ModuleParts mn (intoExprEnv (newTypeDecl pt) n ee) pe te ds
+  TopTypeDecl n pt ->
+    case M.lookup (getName n) ee of
+      Just (_,Just _) -> multiDeclErr n
+      _               -> return $ ModuleParts mn (intoExprEnv (newTypeDecl pt) (getName n) ee) pe te ds
   -- Multiple binds to the same name will fail
-  TopBind n e      -> case M.lookup n ee of
-                      Just (Just _,_) -> multiDeclErr n
-                      _               -> return $ ModuleParts mn (intoExprEnv (newBind e) n ee) pe te ds
+  TopBind n e      ->
+    case M.lookup (getName n) ee of
+      Just (Just _,_) -> multiDeclErr n
+      _               -> return $ ModuleParts mn (intoExprEnv (newBind e) (getName n) ee) pe te ds
   -- Multiple declarations of the same type synonym will fail
-  TypeDef n pt     -> if M.member n te
-                      then multiDeclErr n
-                      else return $ ModuleParts mn ee pe (M.insert n (newTypeSyn pt) te) ds
+  TypeDef n pt     ->
+    if M.member (getName n) te
+      then multiDeclErr n
+      else return $ ModuleParts mn ee pe (M.insert (getName n) (newTypeSyn pt) te) ds
   -- Multiple declarations of an abstract type will fail
-  AbsTypeDecl n    -> if M.member n te
-                      then multiDeclErr n
-                      else return $ ModuleParts mn ee pe (M.insert n newAbsType te) ds
-  Prim n ty        -> if M.member n pe
-                      then multiDeclErr n
-                      else return $ ModuleParts mn ee (M.insert n ty pe) te ds
+  AbsTypeDecl  n   ->
+    if M.member (getName n) te
+      then multiDeclErr n
+      else return $ ModuleParts mn ee pe (M.insert (getName n) newAbsType te) ds
+  Prim l@(LName n _) ty -> if M.member n pe
+                         then multiDeclErr l
+                         else return $ ModuleParts mn ee (M.insert n ty pe) te ds
   -- Imports show dependencies
   Import n _ _     -> return $ ModuleParts mn ee pe te (S.insert n ds)
 
@@ -125,8 +129,8 @@ newAbsType = Nothing
 
 -- Error Messages --------------------------------------------------------------
 
-multiDeclErr :: Name -> Err a 
-multiDeclErr n = fail ("Multiple declarations of '" ++ n ++ "'")
+multiDeclErr :: LName -> Err a 
+multiDeclErr n = fail ("Multiple declarations of '" ++ getName n ++ "' at " ++ show (getPos n))
 
 noBindingErr :: Name -> Err a
 noBindingErr n = fail ("The type signature for '" ++ n ++ "' lacks an accompanying binding.")
