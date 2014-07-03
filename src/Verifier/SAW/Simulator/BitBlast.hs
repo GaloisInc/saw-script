@@ -5,6 +5,7 @@ module Verifier.SAW.Simulator.BitBlast where
 
 import Control.Applicative
 import Control.Monad (zipWithM)
+import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable
@@ -54,12 +55,14 @@ type BThunk l = Thunk IO (BExtra l)
 data BExtra l
   = BBool l
   | BWord (LitVector l) -- ^ Bits in LSB order
+  | BStream (Integer -> IO (BValue l)) (IORef (Map Integer (BValue l)))
   | BNat (LitVector l)
   | BFin (LitVector l)
 
 instance Show (BExtra l) where
   show (BBool _) = "BBool"
   show (BWord _) = "BWord"
+  show (BStream _ _) = "BStream"
   show (BNat _ ) = "BNat"
   show (BFin _) = "BFin"
 
@@ -189,6 +192,9 @@ beConstMap be = Map.fromList
   , ("Prelude.rotateL", rotateLOp be)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
+  -- Streams
+  , ("Prelude.MkStream", mkStreamOp)
+  , ("Prelude.streamGet", streamGetOp)
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp be)
@@ -360,6 +366,32 @@ finOfNatOp =
       VNat i -> Prims.vFin (finFromBound (fromInteger i) n)
       VExtra (BNat lv) -> VExtra (BFin lv)
       _ -> error "finOfNatOp"
+----------------------------------------
+
+-- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
+mkStreamOp :: BValue l
+mkStreamOp =
+  VFun $ \_ -> return $
+  strictFun $ \f -> do
+    r <- newIORef Map.empty
+    return $ VExtra (BStream (\n -> apply f (Ready (VNat n))) r)
+
+-- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
+streamGetOp :: BValue l
+streamGetOp =
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  Prims.natFun $ \n -> lookupBStream xs (toInteger n)
+
+lookupBStream :: BValue l -> Integer -> IO (BValue l)
+lookupBStream (VExtra (BStream f r)) n = do
+   m <- readIORef r
+   case Map.lookup n m of
+     Just v  -> return v
+     Nothing -> do v <- f n
+                   writeIORef r (Map.insert n v m)
+                   return v
+lookupBStream _ _ = fail "expected Stream"
 
 ------------------------------------------------------------
 -- Generating variables for arguments
