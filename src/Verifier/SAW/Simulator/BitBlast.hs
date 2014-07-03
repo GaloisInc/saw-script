@@ -19,6 +19,7 @@ import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
 import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Recognizer as R
 
+import Data.AIG (BV)
 import qualified Data.AIG as AIG
 
 
@@ -156,6 +157,8 @@ beConstMap be = Map.fromList
   , ("Prelude.bvURem", binOp (AIG.urem be))
   , ("Prelude.bvSDiv", binOp (AIG.squot be))
   , ("Prelude.bvSRem", binOp (AIG.srem be))
+  , ("Prelude.bvPMul", bvPMulOp be)
+  , ("Prelude.bvPMod", bvPModOp be)
   -- Relations
   , ("Prelude.bvEq"  , binRel (AIG.bvEq be))
   , ("Prelude.bvsle" , binRel (AIG.sle be))
@@ -356,6 +359,87 @@ bvToNatOp =
   VFun $ \_ -> return $
   wordFun $ \lv -> return $
   VExtra (BNat lv)
+
+----------------------------------------
+-- Polynomial operations
+
+-- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+bvPModOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvPModOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  wordFun $ \x -> return $
+  wordFun $ \y -> (vWord . snd) <$> pdivmod be x y
+
+-- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector _;
+bvPMulOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvPMulOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  wordFun $ \x -> return $
+  wordFun $ \y -> vWord <$> pmul be x y
+
+-- TODO: Move polynomial operations to aig package.
+
+-- Polynomial multiplication:
+pmul :: forall l g s. AIG.IsAIG l g => g s -> BV (l s) -> BV (l s) -> IO (BV (l s))
+pmul g p q = (AIG.concat . map (AIG.replicate 1)) <$> go (AIG.bvToList p) (AIG.bvToList q)
+  where
+    go :: [l s] -> [l s] -> IO [l s]
+    go xs [] = return $ tail (map (const (AIG.falseLit g)) xs)
+    go [] ys = return $ tail (map (const (AIG.falseLit g)) ys)
+    go (x : xs) ys = do
+      zs <- go xs ys
+      mux_add x (AIG.falseLit g : zs) ys
+
+    mux_add :: l s -> [l s] -> [l s] -> IO [l s]
+    mux_add c (x : xs) (y : ys) = do z <- lazyMux g (AIG.mux g) c (AIG.xor g x y) (return x)
+                                     zs <- mux_add c xs ys
+                                     return (z : zs)
+    mux_add _ []       (_ : _ ) = fail "pmul: impossible"
+    mux_add _ xs       []       = return xs
+
+-- Polynomial div/mod: resulting lengths are as in Cryptol.
+pdivmod :: forall l g s. AIG.IsAIG l g => g s -> BV (l s) -> BV (l s) -> IO (BV (l s), BV (l s))
+pdivmod g x y = findmsb (AIG.bvToList y)
+  where
+    findmsb :: [l s] -> IO (BV (l s), BV (l s))
+    findmsb (c : cs) = lazyMux g muxPair c (usemask cs) (findmsb cs)
+    findmsb [] = return (x, AIG.replicate (AIG.length y - 1) (AIG.falseLit g)) -- division by zero
+
+    usemask :: [l s] -> IO (BV (l s), BV (l s))
+    usemask mask = do
+      (qs, rs) <- pdivmod_helper g (AIG.bvToList x) mask
+      let z = AIG.falseLit g
+      let qs' = map (const z) rs ++ qs
+      let rs' = replicate (AIG.length y - 1 - length rs) z ++ rs
+      let q = AIG.concat (map (AIG.replicate 1) qs')
+      let r = AIG.concat (map (AIG.replicate 1) rs')
+      return (q, r)
+
+    muxPair :: l s -> (BV (l s), BV (l s)) -> (BV (l s), BV (l s)) -> IO (BV (l s), BV (l s))
+    muxPair c (x1, y1) (x2, y2) = (,) <$> AIG.zipWithM (AIG.mux g c) x1 x2 <*> AIG.zipWithM (AIG.mux g c) y1 y2
+
+-- Divide ds by (1 : mask), giving quotient and remainder. All
+-- arguments and results are big-endian. Remainder has the same length
+-- as mask (but limited by length ds); total length of quotient ++
+-- remainder = length ds.
+pdivmod_helper :: forall l g s. AIG.IsAIG l g => g s -> [l s] -> [l s] -> IO ([l s], [l s])
+pdivmod_helper g ds mask = go (length ds - length mask) ds
+  where
+    go :: Int -> [l s] -> IO ([l s], [l s])
+    go n cs | n <= 0 = return ([], cs)
+    go _ []          = fail "pdivmod: impossible"
+    go n (c : cs)    = do cs' <- mux_add c cs mask
+                          (qs, rs) <- go (n - 1) cs'
+                          return (c : qs, rs)
+
+    mux_add :: l s -> [l s] -> [l s] -> IO [l s]
+    mux_add c (x : xs) (y : ys) = do z <- lazyMux g (AIG.mux g) c (AIG.xor g x y) (return x)
+                                     zs <- mux_add c xs ys
+                                     return (z : zs)
+    mux_add _ []       (_ : _ ) = fail "pdivmod: impossible"
+    mux_add _ xs       []       = return xs
 
 -- finOfNat :: (n :: Nat) -> Nat -> Fin n;
 finOfNatOp :: BValue l
