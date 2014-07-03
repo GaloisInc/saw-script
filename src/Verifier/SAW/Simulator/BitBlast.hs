@@ -34,18 +34,39 @@ lvFromV v = AIG.generate_msb0 (V.length v) ((V.!) v)
 vFromLV :: LitVector l -> V.Vector l
 vFromLV lv = V.generate (AIG.length lv) (AIG.at lv)
 
--- | Rotates left if i is positive.
-vRotate :: V.Vector a -> Int -> V.Vector a
-vRotate xs i
+vRotateL :: V.Vector a -> Int -> V.Vector a
+vRotateL xs i
   | V.null xs = xs
   | otherwise = (V.++) (V.drop j xs) (V.take j xs)
   where j = i `mod` V.length xs
 
-lvRotate :: LitVector l -> Int -> LitVector l
-lvRotate xs i
+vRotateR :: V.Vector a -> Int -> V.Vector a
+vRotateR xs i = vRotateL xs (- i)
+
+vShiftL :: a -> V.Vector a -> Int -> V.Vector a
+vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
+  where j = min i (V.length xs)
+
+vShiftR :: a -> V.Vector a -> Int -> V.Vector a
+vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
+  where j = min i (V.length xs)
+
+lvRotateL :: LitVector l -> Int -> LitVector l
+lvRotateL xs i
   | AIG.length xs == 0 = xs
   | otherwise = (AIG.++) (AIG.drop j xs) (AIG.take j xs)
-  where j = (- i) `mod` AIG.length xs
+  where j = i `mod` AIG.length xs
+
+lvRotateR :: LitVector l -> Int -> LitVector l
+lvRotateR xs i = lvRotateL xs (- i)
+
+lvShiftL :: l -> LitVector l -> Int -> LitVector l
+lvShiftL x xs i = (AIG.++) (AIG.drop j xs) (AIG.replicate j x)
+  where j = min i (AIG.length xs)
+
+lvShiftR :: l -> LitVector l -> Int -> LitVector l
+lvShiftR x xs i = (AIG.++) (AIG.replicate j x) (AIG.take (AIG.length xs - j) xs)
+  where j = min i (AIG.length xs)
 
 ------------------------------------------------------------
 -- Values
@@ -57,15 +78,11 @@ data BExtra l
   = BBool l
   | BWord (LitVector l) -- ^ Bits in LSB order
   | BStream (Integer -> IO (BValue l)) (IORef (Map Integer (BValue l)))
-  | BNat (LitVector l)
-  | BFin (LitVector l)
 
 instance Show (BExtra l) where
   show (BBool _) = "BBool"
   show (BWord _) = "BWord"
   show (BStream _ _) = "BStream"
-  show (BNat _ ) = "BNat"
-  show (BFin _) = "BFin"
 
 vBool :: l -> BValue l
 vBool l = VExtra (BBool l)
@@ -109,12 +126,11 @@ binRel op =
 shiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
         -> (LitVector l -> Nat -> LitVector l)
         -> BValue l
-shiftOp bvOp natOp =
+shiftOp _bvOp natOp =
   VFun $ \_ -> return $
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VExtra (BNat lv) -> vWord <$> bvOp x lv
       VNat n           -> return (vWord (natOp x (fromInteger n)))
       _                -> error "shiftOp"
 
@@ -186,22 +202,26 @@ beConstMap be = Map.fromList
   , ("Prelude.finDivMod", Prims.finDivModOp)
   , ("Prelude.finMax", Prims.finMaxOp)
   , ("Prelude.finPred", Prims.finPredOp)
-  , ("Prelude.finOfNat", finOfNatOp)
   , ("Prelude.natSplitFin", Prims.natSplitFinOp)
   -- Vectors
   , ("Prelude.generate", Prims.generateOp)
-  , ("Prelude.get", getOp be)
+  , ("Prelude.get", getOp)
+  , ("Prelude.at", atOp)
   , ("Prelude.append", appendOp)
-  , ("Prelude.rotateL", rotateLOp be)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
+  , ("Prelude.bvAt", bvAtOp be)
+  , ("Prelude.bvRotateL", bvRotateLOp be)
+  , ("Prelude.bvRotateR", bvRotateROp be)
+  , ("Prelude.bvShiftR", bvShiftROp be)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude.bvStreamGet", bvStreamGetOp be)
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp be)
-  , ("Prelude.bvToNat", bvToNatOp)
+  --, ("Prelude.bvToNat", bvToNatOp)
   ]
 
 -- | Lifts a strict mux operation to a lazy mux
@@ -255,26 +275,45 @@ muxThunk be b x y = delay $ do x' <- force x; y' <- force y; muxBVal be b x' y'
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra be b (BBool x) (BBool y) = BBool <$> AIG.mux be b x y
 muxBExtra be b (BWord x) (BWord y) | AIG.length x == AIG.length y = BWord <$> AIG.zipWithM (AIG.mux be b) x y
-muxBExtra be b (BNat x)  (BNat y)  | AIG.length x == AIG.length y = BNat  <$> AIG.zipWithM (AIG.mux be b) x y
-muxBExtra be b (BFin x)  (BFin y)  | AIG.length x == AIG.length y = BFin  <$> AIG.zipWithM (AIG.mux be b) x y
 muxBExtra _ _ _ _ = fail "iteOp: malformed arguments"
 
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-getOp :: AIG.IsAIG l g => g s -> BValue (l s)
-getOp be =
+getOp :: BValue l
+getOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   strictFun $ \v -> return $
-  strictFun $ \i ->
+  Prims.finFun $ \i ->
+    case v of
+      VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
+      VExtra (BWord lv) -> return (vBool (AIG.at lv (fromEnum (finVal i))))
+      _ -> fail "getOp: expected vector"
+
+-- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+atOp :: BValue l
+atOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.natFun $ \n ->
+    case v of
+      VVector xv -> force ((V.!) xv (fromIntegral n))
+      VExtra (BWord lv) -> return $ vBool $ AIG.at lv (fromIntegral n)
+      _ -> fail "atOp: expected vector"
+
+-- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
+bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvAtOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  wordFun $ \ilv ->
     case v of
       VVector xv ->
-        case i of
-          VExtra (BFin ilv) -> force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv) ilv (return . (V.!) xv)
-          _ -> force =<< (((V.!) xv . fromEnum . finVal) <$> Prims.finFromValue i)
+          force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv) ilv (return . (V.!) xv)
       VExtra (BWord lv) ->
-        case i of
-          VExtra (BFin ilv) -> vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv) ilv (return . AIG.at lv)
-          _ -> (vBool . AIG.at lv . fromEnum . finVal) <$> Prims.finFromValue i
+          vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv) ilv (return . AIG.at lv)
       _ -> fail "getOp: expected vector"
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
@@ -291,28 +330,6 @@ appendOp =
     (VExtra (BWord xlv), VVector yv) -> VVector ((V.++) (fmap (Ready . vBool) (vFromLV xlv)) yv)
     (VExtra (BWord xlv), VExtra (BWord ylv)) -> vWord ((AIG.++) xlv ylv)
     _ -> error "appendOp"
-
--- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateLOp :: AIG.IsAIG l g => g s -> BValue (l s)
-rotateLOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  strictFun $ \xs -> return $
-  strictFun $ \y ->
-  case y of
-    VNat n ->
-      case xs of
-        VVector xv         -> return $ VVector $ vRotate xv (fromIntegral n)
-        VExtra (BWord xlv) -> return $ VExtra $ BWord $ lvRotate xlv (fromIntegral n)
-        _ -> error $ "rotateLOp1: " ++ show (xs, y)
-    VExtra (BNat ilv) -> do
-      let (n, f) = case xs of
-                     VVector xv         -> (V.length xv, VVector . vRotate xv)
-                     VExtra (BWord xlv) -> (AIG.length xlv, VExtra . BWord . lvRotate xlv)
-                     _ -> error $ "rotateLOp2: " ++ show (xs, y)
-      r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
-      AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
-    _ -> error $ "rotateLOp3: " ++ show (xs, y)
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: BValue l
@@ -353,12 +370,51 @@ bvNatOp be =
   Prims.natFun $ \x -> return $
   VExtra (BWord (AIG.bvFromInteger be (fromIntegral w) (toInteger x)))
 
--- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
-bvToNatOp :: BValue l
-bvToNatOp =
+-- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateLOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvRotateLOp be =
   VFun $ \_ -> return $
-  wordFun $ \lv -> return $
-  VExtra (BNat lv)
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \ilv -> do
+    let (n, f) = case xs of
+                   VVector xv         -> (V.length xv, VVector . vRotateL xv)
+                   VExtra (BWord xlv) -> (AIG.length xlv, VExtra . BWord . lvRotateL xlv)
+                   _ -> error $ "rotateROp: " ++ show xs
+    r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
+    AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
+
+-- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateROp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvRotateROp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \ilv -> do
+    let (n, f) = case xs of
+                   VVector xv         -> (V.length xv, VVector . vRotateR xv)
+                   VExtra (BWord xlv) -> (AIG.length xlv, VExtra . BWord . lvRotateR xlv)
+                   _ -> error $ "rotateROp: " ++ show xs
+    r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
+    AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
+
+-- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftROp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvShiftROp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \x -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \ilv -> do
+    (n, f) <- case xs of
+                VVector xv         -> return (V.length xv, VVector . vShiftR x xv)
+                VExtra (BWord xlv) -> do l <- toBool <$> force x
+                                         return (AIG.length xlv, VExtra . BWord . lvShiftR l xlv)
+                _ -> fail $ "bvShiftROp: " ++ show xs
+    AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
 
 ----------------------------------------
 -- Polynomial operations
@@ -441,15 +497,6 @@ pdivmod_helper g ds mask = go (length ds - length mask) ds
     mux_add _ []       (_ : _ ) = fail "pdivmod: impossible"
     mux_add _ xs       []       = return xs
 
--- finOfNat :: (n :: Nat) -> Nat -> Fin n;
-finOfNatOp :: BValue l
-finOfNatOp =
-  Prims.natFun $ \n -> return $
-  strictFun $ \v -> return $
-    case v of
-      VNat i -> Prims.vFin (finFromBound (fromInteger i) n)
-      VExtra (BNat lv) -> VExtra (BFin lv)
-      _ -> error "finOfNatOp"
 ----------------------------------------
 
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
@@ -466,6 +513,15 @@ streamGetOp =
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
   Prims.natFun $ \n -> lookupBStream xs (toInteger n)
+
+-- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
+bvStreamGetOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvStreamGetOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \ilv ->
+  AIG.muxInteger (lazyMux be (muxBVal be)) (2 ^ AIG.length ilv) ilv (lookupBStream xs)
 
 lookupBStream :: BValue l -> Integer -> IO (BValue l)
 lookupBStream (VExtra (BStream f r)) n = do
