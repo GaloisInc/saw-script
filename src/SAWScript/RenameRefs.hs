@@ -175,9 +175,11 @@ resolveName un = do
 
 -- Take a module to its collection of Expr Environments.
 allExprMaps :: IncomingModule -> ExprMaps
-allExprMaps (Module modNm exprEnv primEnv _ deps) = (modNm,exprEnv,primEnv,foldr f M.empty (M.elems deps))
+allExprMaps (Module modNm exprEnv primEnv _ deps)
+  = (modNm, unloc exprEnv, unloc primEnv, foldr f M.empty (M.elems deps))
   where
-  f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (exprEnv',primEnv')
+    f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (unloc exprEnv', unloc primEnv')
+    unloc = M.mapKeys getName
 
 -- TODO: this will need to change once we can refer to prelude functions
 -- with qualified names.

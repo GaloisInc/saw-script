@@ -11,12 +11,14 @@ module SAWScript.REPL.GenerateModule ( wrapBStmt
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import SAWScript.Utils
 import SAWScript.AST (ModuleName(ModuleName),
                       Module(..), ValidModule,
                       Expr(Block),
                       BlockStmt,
                       RawT,
-                      Name)
+                      Name,
+                      LName(..))
 
 wrapBStmt :: Map ModuleName ValidModule
              -> Name
@@ -27,7 +29,7 @@ wrapBStmt modsInScope stmtName stmt =
     {- The expression environment simply maps @it@ to the statement. Statements
     aren't expressions, so I wrap it up in a block (with an unspecified return
     type). -}
-    moduleExprEnv = Map.singleton stmtName (Block [stmt] Nothing) }
+    moduleExprEnv = Map.singleton (LName stmtName (PosInternal replFileName)) (Block [stmt] Nothing) }
 
 scratchpad :: Map ModuleName ValidModule -> Module refT exprT typeT
 scratchpad modsInScope =
