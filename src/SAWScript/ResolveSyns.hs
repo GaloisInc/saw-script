@@ -59,7 +59,7 @@ instance Resolvable Syn where
     found <- getsSynEnv $ lookupLEnv n
     case found of
       Nothing       -> failRS $ "unbound type synonym: " ++ show n
-      Just Nothing  -> return $ abstract (getName n)
+      Just Nothing  -> return $ abstract (getVal n)
       Just (Just t) -> resolveSig t
 
 instance Resolvable TypeF where

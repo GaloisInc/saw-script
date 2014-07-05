@@ -18,7 +18,7 @@ import SAWScript.AST (ModuleName(ModuleName),
                       BlockStmt,
                       RawT,
                       Name,
-                      LName(..))
+                      LName, Located(..))
 
 wrapBStmt :: Map ModuleName ValidModule
              -> Name
@@ -29,7 +29,7 @@ wrapBStmt modsInScope stmtName stmt =
     {- The expression environment simply maps @it@ to the statement. Statements
     aren't expressions, so I wrap it up in a block (with an unspecified return
     type). -}
-    moduleExprEnv = Map.singleton (LName stmtName (PosInternal replFileName)) (Block [stmt] Nothing) }
+    moduleExprEnv = Map.singleton (Located stmtName (PosInternal replFileName)) (Block [stmt] Nothing) }
 
 scratchpad :: Map ModuleName ValidModule -> Module refT exprT typeT
 scratchpad modsInScope =

@@ -130,10 +130,10 @@ newAbsType = Nothing
 -- Error Messages --------------------------------------------------------------
 
 multiDeclErr :: LName -> Err a 
-multiDeclErr n = fail ("Multiple declarations of '" ++ getName n ++ "' at " ++ show (getPos n))
+multiDeclErr n = fail ("Multiple declarations of '" ++ getVal n ++ "' at " ++ show (getPos n))
 
 noBindingErr :: LName -> Err a
-noBindingErr n = fail ("The type signature for '" ++ getName n ++ "' lacks an accompanying binding at " ++ show (getPos n))
+noBindingErr n = fail ("The type signature for '" ++ getVal n ++ "' lacks an accompanying binding at " ++ show (getPos n))
 
 -- Dependency Analysis ---------------------------------------------------------
 

@@ -179,7 +179,7 @@ allExprMaps (Module modNm exprEnv primEnv _ deps)
   = (modNm, unloc exprEnv, unloc primEnv, foldr f M.empty (M.elems deps))
   where
     f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (unloc exprEnv', unloc primEnv')
-    unloc = M.mapKeys getName
+    unloc = M.mapKeys getVal
 
 -- TODO: this will need to change once we can refer to prelude functions
 -- with qualified names.
