@@ -129,7 +129,7 @@ newAbsType = Nothing
 
 -- Error Messages --------------------------------------------------------------
 
-multiDeclErr :: LName -> Err a 
+multiDeclErr :: LName -> Err a
 multiDeclErr n = fail ("Multiple declarations of '" ++ getVal n ++ "' at " ++ show (getPos n))
 
 noBindingErr :: LName -> Err a

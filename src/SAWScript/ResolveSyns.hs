@@ -64,11 +64,10 @@ instance Resolvable Syn where
 
 instance Resolvable TypeF where
   resolveF = return . inject
-    
+
 
 instance Resolvable ContextF where
   resolveF = return . inject
 
 instance Resolvable I where
   resolveF = return . inject
-
