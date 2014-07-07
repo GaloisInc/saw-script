@@ -61,7 +61,7 @@ translateExpr expr = case expr of
   A.Index ar ix t        -> sig t =<< (Index <$> translateExpr ar <*> translateExpr ix)
   A.Lookup rec fld t     -> sig t =<< (Lookup <$> translateExpr rec <*> pure fld)
   A.TLookup tpl idx t    -> sig t =<< (TLookup <$> translateExpr tpl <*> pure idx)
-  A.Var x t              -> sig t $ (Var x)
+  A.Var x t              -> sig t $ (Var $ A.getVal x)
   A.Function x xt body t -> sig t =<< (Function (A.getVal x) <$> translateMType xt <*> translateExpr body)
   A.Application f v t    -> sig t =<< (Application <$> translateExpr f <*> translateExpr v)
   A.LetBlock nes e       ->         Let <$> mapM (translateField . A.toNameDec) nes <*> translateExpr e
