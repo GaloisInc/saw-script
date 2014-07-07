@@ -425,7 +425,7 @@ bvPModOp be =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   wordFun $ \x -> return $
-  wordFun $ \y -> (vWord . snd) <$> pdivmod be x y
+  wordFun $ \y -> vWord <$> AIG.pmod be x y
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector _;
 bvPMulOp :: AIG.IsAIG l g => g s -> BValue (l s)
@@ -433,27 +433,9 @@ bvPMulOp be =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> pmul be x y
+  wordFun $ \y -> vWord <$> AIG.pmul be x y
 
 -- TODO: Move polynomial operations to aig package.
-
--- Polynomial multiplication:
-pmul :: forall l g s. AIG.IsAIG l g => g s -> BV (l s) -> BV (l s) -> IO (BV (l s))
-pmul g p q = (AIG.concat . map (AIG.replicate 1)) <$> go (AIG.bvToList p) (AIG.bvToList q)
-  where
-    go :: [l s] -> [l s] -> IO [l s]
-    go xs [] = return $ tail (map (const (AIG.falseLit g)) xs)
-    go [] ys = return $ tail (map (const (AIG.falseLit g)) ys)
-    go (x : xs) ys = do
-      zs <- go xs ys
-      mux_add x (AIG.falseLit g : zs) ys
-
-    mux_add :: l s -> [l s] -> [l s] -> IO [l s]
-    mux_add c (x : xs) (y : ys) = do z <- lazyMux g (AIG.mux g) c (AIG.xor g x y) (return x)
-                                     zs <- mux_add c xs ys
-                                     return (z : zs)
-    mux_add _ []       (_ : _ ) = fail "pmul: impossible"
-    mux_add _ xs       []       = return xs
 
 -- Polynomial div/mod: resulting lengths are as in Cryptol.
 pdivmod :: forall l g s. AIG.IsAIG l g => g s -> BV (l s) -> BV (l s) -> IO (BV (l s), BV (l s))
