@@ -524,6 +524,14 @@ data BShape
   | TupleShape [BShape]
   | RecShape (Map FieldName BShape)
 
+shapeSize :: BShape -> Int
+shapeSize x =
+  case x of
+    BoolShape     -> 1
+    VecShape n x1 -> fromIntegral n * shapeSize x1
+    TupleShape xs -> sum (map shapeSize xs)
+    RecShape xm   -> sum (map shapeSize (Map.elems xm))
+
 parseShape :: SharedContext s -> SharedTerm s -> IO BShape
 parseShape sc t = do
   t' <- scWhnf sc t
@@ -562,7 +570,8 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-bitBlast :: AIG.IsAIG l g => g s -> SharedContext t -> SharedTerm t -> IO (l s)
+bitBlast :: AIG.IsAIG l g =>
+            g s -> SharedContext t -> SharedTerm t -> IO ([BShape], l s)
 bitBlast be sc t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
@@ -571,5 +580,5 @@ bitBlast be sc t = do
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
   case bval' of
-    VExtra (BBool l) -> return l
+    VExtra (BBool l) -> return (shapes, l)
     _ -> fail "bitBlast: non-boolean result type."
