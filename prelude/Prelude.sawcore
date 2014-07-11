@@ -687,7 +687,7 @@ bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvToNat :: (n :: Nat) -> bitvector n -> Nat;
 
 bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
---bvAt n a w xs i = at n a xs (bvToNat w i);
+bvAt n a w xs i = at n a xs (bvToNat w i);
 
 bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
@@ -882,13 +882,13 @@ streamSplit a n xs =
       streamGet a xs (addNat (mulNat i n) (finFront n j))));
 
 bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
---bvStreamGet a w xs i = streamGet a xs (bvToNat w i);
+bvStreamGet a w xs i = streamGet a xs (bvToNat w i);
 
 bvStreamShiftL :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> Stream a;
---bvStreamShiftL a w xs i = streamDrop a (bvToNat w i) xs;
+bvStreamShiftL a w xs i = streamDrop a (bvToNat w i) xs;
 
 bvStreamShiftR :: (a :: sort 0) -> (w :: Nat) -> a -> Stream a -> bitvector w -> Stream a;
---bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i) a x) xs;
+bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i) a x) xs;
 
 
 --------------------------------------------------------------------------------
