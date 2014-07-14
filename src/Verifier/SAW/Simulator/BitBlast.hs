@@ -211,6 +211,7 @@ beConstMap be = Map.fromList
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvAt", bvAtOp be)
+  , ("Prelude.bvUpd", bvUpdOp be)
   , ("Prelude.bvRotateL", bvRotateLOp be)
   , ("Prelude.bvRotateR", bvRotateROp be)
   , ("Prelude.bvShiftR", bvShiftROp be)
@@ -314,7 +315,29 @@ bvAtOp be =
           force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv) ilv (return . (V.!) xv)
       VExtra (BWord lv) ->
           vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv) ilv (return . AIG.at lv)
-      _ -> fail "getOp: expected vector"
+      _ -> fail "bvAtOp: expected vector"
+
+-- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
+-- NB: this isn't necessarily the most efficient possible implementation.
+bvUpdOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvUpdOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  wordFun $ \ilv -> return $
+  strictFun $ \y ->
+    case v of
+      VVector xv -> do
+        y' <- delay (return y)
+        let upd i = return (VVector (xv V.// [(i, y')]))
+        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv) ilv upd
+      VExtra (BWord lv) -> do
+        AIG.muxInteger (lazyMux be (muxBVal be)) l ilv (\i -> return (vWord (AIG.generate_msb0 l (upd i))))
+          where upd i j | i == j    = toBool y
+                        | otherwise = AIG.at lv j
+                l = AIG.length lv
+      _ -> fail "bvUpdOp: expected vector"
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: BValue l
