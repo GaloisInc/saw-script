@@ -14,8 +14,6 @@ abstract CryptolModuleEnv;
 // TODO: create SatResult a, with concrete syntax
 // TODO: create ProofScript a, with concrete syntax
 
-abstract Fin;
-
 prim return             : { m , a } a -> m a;
 
 prim define             : {a} String -> a -> TopLevel a;
@@ -128,8 +126,8 @@ prim not                : Bit -> Bit;
 prim conj               : Bit -> Bit -> Bit;
 prim disj               : Bit -> Bit -> Bit;
 
-prim get                : {n, a} [n]a -> Fin -> a;
-prim set                : {n, a} [n]a -> Fin -> a -> [n]a;
+prim bvAt               : {n, a, m} [n]a -> [m] -> a;
+prim bvUpd              : {n, a, m} [n]a -> [m] -> a -> [n]a;
 
 prim bvEq               : {n} [n] -> [n] -> Bit;
 prim bvNot              : {n} [n] -> [n];
@@ -150,8 +148,6 @@ prim bvsge              : {n} [n] -> [n] -> Bit;
 prim bvsgt              : {n} [n] -> [n] -> Bit;
 prim bvsle              : {n} [n] -> [n] -> Bit;
 prim bvslt              : {n} [n] -> [n] -> Bit;
-
-prim finval             : Int -> Int -> Fin;
 
 prim join               : {m, n, o, a} [m][n]a -> [o]a;
 prim split              : {m, n, o, a} [m]a -> [n][o]a;
