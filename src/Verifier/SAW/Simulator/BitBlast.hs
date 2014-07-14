@@ -225,7 +225,12 @@ muxBVal _  _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
 muxBVal _  _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
 muxBVal _  _ VType           VType           = return VType
 muxBVal be b (VExtra x)      (VExtra y)      = VExtra <$> muxBExtra be b x y
-muxBVal _ _ _ _ = fail "iteOp: malformed arguments"
+muxBVal be b x@(VExtra (BWord _)) y         =
+  muxBVal be b (VVector (vectorOfBValue x)) y
+muxBVal be b x y@(VExtra (BWord _))         =
+  muxBVal be b x (VVector (vectorOfBValue y))
+muxBVal _ _ x y =
+  fail $ "iteOp: malformed arguments: " ++ show x ++ " " ++ show y
 
 muxThunks :: AIG.IsAIG l g => g s -> l s
           -> V.Vector (BThunk (l s)) -> V.Vector (BThunk (l s)) -> IO (V.Vector (BThunk (l s)))
@@ -357,11 +362,19 @@ finOfNatOp =
 ------------------------------------------------------------
 -- Generating variables for arguments
 
-data BShape 
+data BShape
   = BoolShape
   | VecShape Nat BShape
   | TupleShape [BShape]
   | RecShape (Map FieldName BShape)
+
+shapeSize :: BShape -> Int
+shapeSize x =
+  case x of
+    BoolShape     -> 1
+    VecShape n x1 -> fromIntegral n * shapeSize x1
+    TupleShape xs -> sum (map shapeSize xs)
+    RecShape xm   -> sum (map shapeSize (Map.elems xm))
 
 parseShape :: SharedContext s -> SharedTerm s -> IO BShape
 parseShape sc t = do
@@ -401,7 +414,8 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-bitBlast :: AIG.IsAIG l g => g s -> SharedContext t -> SharedTerm t -> IO (l s)
+bitBlast :: AIG.IsAIG l g =>
+            g s -> SharedContext t -> SharedTerm t -> IO ([BShape], l s)
 bitBlast be sc t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
@@ -410,5 +424,5 @@ bitBlast be sc t = do
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
   case bval' of
-    VExtra (BBool l) -> return l
+    VExtra (BBool l) -> return (shapes, l)
     _ -> fail "bitBlast: non-boolean result type."

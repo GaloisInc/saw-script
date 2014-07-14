@@ -24,6 +24,7 @@ module Verifier.SAW.UnionFind (
   , modifyClassDesc
   ) where
 
+import Control.Applicative (Applicative)
 import Control.Monad.State.Strict
 import Data.List (foldl')
 import Data.Map (Map)
@@ -55,7 +56,7 @@ empty = UFS { ufsCount = 0, ufsMap = Map.empty }
 
 -- | Monad with scoped union find support.
 newtype Action d a = UF { _unUF :: State (UnionFind d) a }
-  deriving (Functor, Monad)
+  deriving (Functor, Applicative, Monad)
 
 -- | Runs union find computation.
 runAction :: UnionFind d -> Action d a -> (a, UnionFind d)

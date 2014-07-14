@@ -24,6 +24,9 @@ module Prelude where
 -- is well formed.  This is used to ensure the index is valid when reading or updating an array.
 
 
+id :: (a :: sort 0) -> a -> a;
+id _ x = x;
+
 --------------------------------------------------------------------------------
 -- The Unit type
 data TUnit :: sort 0 where {
@@ -301,6 +304,11 @@ eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- There are implicit constructors from integer literals.
 
+-- Dependent pattern matching combinator for natural numbers
+natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
+natCase p z s Zero = z;
+natCase p z s (Succ n) = s n;
+
 --------------------------------------------------------------------------------
 -- Fin
 
@@ -341,9 +349,12 @@ finSwap _ (FinVal v r) =
     (eqNatSucc (addNat r v) (addNat v r) (eqNatAddComm r v))
     (FinVal r v);
 
+finEq :: (n :: Nat) -> (i j :: Fin n) -> Bool;
+finEq n i j = equalNat (finFront n i) (finFront n j);
+
 -- | Axiom: equality on Fin values reduces to equality on first components.
 eq_Fin :: (n :: Nat) -> (i j :: Fin n)
-       -> Eq Bool (eq (Fin n) i j) (equalNat (finFront n i) (finFront n j));
+       -> Eq Bool (eq (Fin n) i j) (finEq n i j);
 
 -- | Return maximum finite number less than given bound if any.
 finMax :: (n :: Nat) -> Maybe (Fin n);
@@ -421,6 +432,15 @@ finSplitSum (Succ m) n i =
                  (finSplitSum m n j))
         (finSplitSucc (addNat m n) i);
 
+natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
+natSplitFin Zero n = Right (Fin Zero) Nat n;
+natSplitFin (Succ m) Zero = Left (Fin (Succ m)) Nat (finZero m);
+natSplitFin (Succ m) (Succ n) =
+  either (Fin m) Nat (Either (Fin (Succ m)) Nat)
+  (\(k :: Fin m) -> Left (Fin (Succ m)) Nat (finSucc m k))
+  (\(k :: Nat) -> Right (Fin (Succ m)) Nat (Succ k))
+  (natSplitFin m n);
+
 finProductProof :: (mv mr nv nr n :: Nat) ->
   Eq Nat (Succ (addNat (addNat (mulNat mv n) nv) (addNat (mulNat mr n) nr)))
          (Succ (addNat (addNat nv nr) (mulNat (addNat mv mr) n)));
@@ -462,6 +482,11 @@ data Vec :: Nat -> sort 0 -> sort 0 where {
   }
 --TODO
 
+at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+at _ _ (ConsVec a x n xs) Zero = x;
+at _ _ (ConsVec a x n xs) (Succ i) = at n a xs i;
+-- Calling 'at' with EmptyVec is an error.
+
 -- Function for generating an array.
 generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
 --TODO
@@ -477,11 +502,11 @@ get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n)
                 Eq e (get n e (generate n e f) i) (f i);
 
 set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-set n a v i x = generate n a (\(j :: Fin n) -> ite a (eq (Fin n) i j) x (get n a v j));
+set n a v i x = generate n a (\(j :: Fin n) -> ite a (finEq n i j) x (get n a v j));
 
 get_set :: (n :: Nat) -> (a :: sort 0) -> (v :: Vec n a) -> (i j :: Fin n) -> (x :: a)
-        -> Eq a (get n a (set n a v i x) j) (ite a (eq (Fin n) i j) x (get n a v j));
-get_set n a v i j x = get_generate n a (\(j :: Fin n) -> ite a (eq (Fin n) i j) x (get n a v j)) j;
+        -> Eq a (get n a (set n a v i x) j) (ite a (finEq n i j) x (get n a v j));
+get_set n a v i j x = get_generate n a (\(j :: Fin n) -> ite a (finEq n i j) x (get n a v j)) j;
 
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
@@ -513,8 +538,11 @@ get_vTake :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i ::
              Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim m n i));
 get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim m n) v i;
 
+vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Vec m a) (Vec n a);
+vecCong a _ _ (Refl _ v) = Refl (sort 0) (Vec v a);
+
 coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
-coerceVec a _ _ (Refl _ x) v = v;
+coerceVec a m n q = coerce (Vec m a) (Vec n a) (vecCong a m n q);
 
 -- | Simplify take  all elements from a vector.
 vTake0 :: (a :: sort 0)
@@ -624,6 +652,26 @@ foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldr a b _ f z (EmptyVec _) = z;
 foldr a b _ f z (ConsVec _ x n xs) = f x (foldr a b n f z xs);
 
+reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
+reverse n a xs = generate n a (\(i :: Fin n) -> get n a xs (finSwap n i));
+
+transpose :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
+transpose m n a xss =
+  generate n (Vec m a) (\(j :: Fin n) ->
+    generate m a (\(i :: Fin m) -> get n a (get m (Vec n a) xss i) j));
+
+joinLittleEndian  :: (m n :: Nat)
+                  -> (a :: sort 0)
+                  -> Vec m (Vec n a)
+                  -> Vec (mulNat m n) a;
+joinLittleEndian m n a v = join m n a (reverse m (Vec n a) v);
+
+splitLittleEndian :: (m n :: Nat)
+                  -> (a :: sort 0)
+                  -> Vec (mulNat m n) a
+                  -> Vec m (Vec n a);
+splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
+
 --------------------------------------------------------------------------------
 -- Bitvectors
 
@@ -640,6 +688,9 @@ bvNat :: (x :: Nat) -> Nat -> bitvector x;
 
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+
+bvAt :: (n :: Nat) -> (a :: sort 0) -> (i :: Nat) -> Vec n a -> bitvector i -> a;
+bvAt n a i xs idx = at n a xs (bvToNat i idx);
 
 bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 
@@ -684,20 +735,12 @@ bvSRem :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x)
 
 -- | Shift left by the given number of bits.
 -- New bits are False.
-bvShl :: (x :: Nat) -> bitvector x -> Nat -> bitvector x;
-bvShl n x j =
-  let { go :: (i m :: Nat) -> bitvector m -> NatOrdering i m -> bitvector m;
-        go _ _ y (LeNatOrd i ni) =
-          append i ni Bool (replicate i Bool False)
-            (vTake Bool ni i
-               (unsafeCoerce (bitvector (addNat i ni))
-                             (bitvector (addNat ni i)) y));
-        go _ _ y (GtNatOrd m _) = replicate m Bool False;
-      }
-   in go j n x (compareNat j n);
+bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+--TODO
 
 -- Logical right shift.  New bits are False.
 bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+--TODO
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
 bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
@@ -742,7 +785,7 @@ get_bvXor = get_bvZipWith xor;
 
 -- | Get bit in vector by index with least significant bit at index 0.
 bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
-bvMbit n v i = get n Bool v (finSwap n i);
+bvMbit n v i = get n Bool v i;
 
 -- | Return true if two bitvectors are equal.
 bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
@@ -751,39 +794,90 @@ bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i))
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
+equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
+               Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
+
 -- | Return true if two bitvectors are not equal.
 bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
 
 -- | Unsigned and signed comparison functions.
 bvugt bvuge bvult bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
+bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 -- | Truncates a vector a smaller size.
--- lsb implementation:
--- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
--- bvTrunc x y = vTake Bool y x;
 -- msb implementation:
 bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
 bvTrunc = vDrop Bool;
+-- lsb implementation:
+-- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
+-- bvTrunc x y = vTake Bool y x;
 
 -- | Perform a unsigned extension  of the bitvector.
 -- @bvUExt x y v@ adds x bits of zeros to the most-significant bits of
 -- the y-bit vector v.
--- lsb implementation:
--- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
--- bvUExt x y a = append y x ?Bool a (replicate x Bool False);
 -- msb implementation:
 bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat x y);
 bvUExt x y a = append x y ?Bool (replicate x Bool False) a;
+-- lsb implementation:
+-- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
+-- bvUExt x y a = append y x ?Bool a (replicate x Bool False);
 
 -- | Perform a signed extension of the bitvector.
--- lsb implementation:
--- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
--- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
 -- msb implementation:
 bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
 bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
+-- lsb implementation:
+-- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
+-- bvSExt x y a = append (Succ y) x ?Bool a (replicate x Bool (msb y a));
+
+-- Polynomial operations
+
+bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n
+       -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
+
+bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+
+bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+
+
+--------------------------------------------------------------------------------
+-- Infinite streams
+
+data Stream :: sort 0 -> sort 0 where {
+    MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
+  }
+
+streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
+streamGet _ (MkStream _ s) i = s i;
+
+streamConst :: (a :: sort 0) -> a -> Stream a;
+streamConst a x = MkStream a (\(i :: Nat) -> x);
+
+streamMap :: (a b :: sort 0) -> (a -> b) -> Stream a -> Stream b;
+streamMap a b f xs = MkStream b (\(i :: Nat) -> f (streamGet a xs i));
+
+streamMap2 :: (a b c :: sort 0) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c;
+streamMap2 a b c f xs ys = MkStream c (\(i :: Nat) -> f (streamGet a xs i) (streamGet b ys i));
+
+streamTake :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Vec n a;
+streamTake a n xs = generate n a (\(i :: Fin n) -> streamGet a xs (finFront n i));
+
+streamDrop :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream a;
+streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
+
+streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
+streamAppend a n xs ys =
+  MkStream a (\(i :: Nat) ->
+    either (Fin n) Nat a (get n a xs) (streamGet a ys) (natSplitFin n i));
+
+--streamJoin :: (a :: sort 0) -> (n :: Nat) -> Stream (Vec n a) -> ite (sort 0) (equalNat 0 n) #() (Stream a);
+
+streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
+streamSplit a n xs =
+  MkStream (Vec n a) (\(i :: Nat) ->
+    generate n a (\(j :: Fin n) ->
+      streamGet a xs (addNat (mulNat i n) (finFront n j))));
 
 --------------------------------------------------------------------------------
 -- String values
@@ -822,4 +916,8 @@ bveq_same2 :: (n :: Nat)
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
 
-
+bvNat_bvToNat :: (n :: Nat)
+              -> (x :: bitvector n)
+              -> Eq (bitvector n)
+                    (bvNat n (bvToNat n x))
+                    x;
