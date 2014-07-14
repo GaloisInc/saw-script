@@ -487,6 +487,11 @@ at _ _ (ConsVec a x n xs) Zero = x;
 at _ _ (ConsVec a x n xs) (Succ i) = at n a xs i;
 -- Calling 'at' with EmptyVec is an error.
 
+upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+upd _ _ (ConsVec a x n xs) Zero y = ConsVec a y n xs;
+upd _ _ (ConsVec a x n xs) (Succ i) y = ConsVec a x n (upd n a xs i y);
+-- Calling 'upd' with EmptyVec is an error.
+
 -- Function for generating an array.
 generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
 --TODO
@@ -689,8 +694,13 @@ bvNat :: (x :: Nat) -> Nat -> bitvector x;
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 bvToNat :: (n :: Nat) -> bitvector n -> Nat;
 
-bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
+bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
+     -> a;
 bvAt n a w xs i = at n a xs (bvToNat w i);
+
+bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
+      -> a -> Vec n a;
+bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
 bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
