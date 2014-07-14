@@ -21,7 +21,7 @@ resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds) ->
     Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds
 
 type RS = ReaderT RSEnv Err
-type RSEnv = Env RawT
+type RSEnv = LEnv RawT
 
 evalRS :: RSEnv -> RS a -> Err a
 evalRS e m = runReaderT m e
@@ -56,19 +56,18 @@ instance (Resolvable f, Resolvable g) => Resolvable (f :+: g) where
 
 instance Resolvable Syn where
   resolveF (Syn n) = do
-    found <- getsSynEnv $ lookupEnv n
+    found <- getsSynEnv $ lookupLEnv n
     case found of
       Nothing       -> failRS $ "unbound type synonym: " ++ show n
-      Just Nothing  -> return $ abstract n
+      Just Nothing  -> return $ abstract (getVal n)
       Just (Just t) -> resolveSig t
 
 instance Resolvable TypeF where
   resolveF = return . inject
-    
+
 
 instance Resolvable ContextF where
   resolveF = return . inject
 
 instance Resolvable I where
   resolveF = return . inject
-

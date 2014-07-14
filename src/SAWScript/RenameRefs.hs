@@ -83,16 +83,16 @@ getModule = asks thisModule
 getLocalNameEnv :: RR (Env Name)
 getLocalNameEnv = asks localNameEnv
 
-addName  :: Name -> (Name -> RR a) -> RR a
+addName  :: LName -> (LName -> RR a) -> RR a
 addName n f = do
   i <- incrGen
-  let uniqueN = n ++ "." ++ show i
+  let uniqueN = fmap (++ "." ++ show i) n
   -- shadow any existing reference in the env with the new one
-  local (onLocalNameEnv $ M.alter (const $ Just uniqueN) n)
+  local (onLocalNameEnv $ M.alter (const $ Just $ getVal uniqueN) (getVal n))
     -- pass in the new unique name
     (f uniqueN)
 
-addNamesFromBinds :: [Bind e] -> ([Bind e] -> RR a) -> RR a
+addNamesFromBinds :: [LBind e] -> ([LBind e] -> RR a) -> RR a
 addNamesFromBinds ns f = foldr step f ns []
   where
   step (n,e) f' ns' = addName n $ \n' -> f' ((n',e) : ns')
@@ -110,7 +110,7 @@ resolveInExprs pexp = case pexp of
 resolveInExpr :: IncomingExpr -> RR OutgoingExpr
 resolveInExpr exp = case exp of
   -- Focus of the whole pass
-  Var nm t          -> Var <$> resolveName nm <*> pure t
+  Var nm t          -> Var <$> T.traverse resolveName nm <*> pure t
   -- Binders, which add to the local name environment.
   Function a at e t -> addName a $ \a' ->
                          Function a' at <$> resolveInExpr e  <*> pure t
@@ -139,14 +139,14 @@ duplicateBindingsFail ns = fail $
   where
   str = intercalate ", " $ map show ns
 
-duplicates :: [Bind a] -> [Name]
+duplicates :: [LBind a] -> [Name]
 duplicates bs = nub $ mapMaybe f ns
   where
-  ns = map fst bs
+  ns = map (getVal . fst) bs
   occurenceCount = length . (`elemIndices` ns)
   f n = if occurenceCount n > 1 then Just n else Nothing
 
-resolveInBind :: Bind IncomingExpr -> RR (Bind OutgoingExpr)
+resolveInBind :: (a, IncomingExpr) -> RR (a, OutgoingExpr)
 resolveInBind (n,e) = (,) <$> pure n <*> resolveInExpr e
 
 resolveInBStmts :: [IncomingBStmt] -> RR [OutgoingBStmt]
@@ -175,9 +175,11 @@ resolveName un = do
 
 -- Take a module to its collection of Expr Environments.
 allExprMaps :: IncomingModule -> ExprMaps
-allExprMaps (Module modNm exprEnv primEnv _ deps) = (modNm,exprEnv,primEnv,foldr f M.empty (M.elems deps))
+allExprMaps (Module modNm exprEnv primEnv _ deps)
+  = (modNm, unloc exprEnv, unloc primEnv, foldr f M.empty (M.elems deps))
   where
-  f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (exprEnv',primEnv')
+    f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (unloc exprEnv', unloc primEnv')
+    unloc = M.mapKeys getVal
 
 -- TODO: this will need to change once we can refer to prelude functions
 -- with qualified names.
@@ -228,4 +230,3 @@ enforceResolution un qs = case qs of
   []   -> fail $ "Unbound reference for " ++ renderUnresolvedName un
   qns  -> fail $ "Ambiguous reference for " ++ renderUnresolvedName un
           ++ "\n" ++ unlines (map renderResolvedName qns)
-

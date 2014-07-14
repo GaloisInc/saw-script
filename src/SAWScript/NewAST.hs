@@ -2,7 +2,7 @@
 module SAWScript.NewAST where
 
 import qualified SAWScript.AST as A
-import SAWScript.AST (Bind, Schema(..), Type(..), TyVar(..))
+import SAWScript.AST (Bind, LBind, Schema(..), Type(..), TyVar(..), LName, Located)
 import SAWScript.Compiler
 import SAWScript.Unify
 
@@ -27,18 +27,18 @@ data Expr
   | Lookup Expr Name
   | TLookup Expr Integer
   -- LC
-  | Var A.ResolvedName
-  | Function    Name (Maybe Type) Expr
+  | Var (Located A.ResolvedName)
+  | Function    LName (Maybe Type) Expr
   | Application Expr Expr
   -- Sugar
-  | Let [Bind Expr] Expr
+  | Let [LBind Expr] Expr
   | TSig Expr Schema
   deriving (Show)
 
 data BlockStmt
-  = Bind          (Maybe Name) (Maybe Type) (Maybe Type) Expr
-  -- | BlockTypeDecl Name             typeT  
-  | BlockLet      [Bind Expr]
+  = Bind          (Maybe LName) (Maybe Type) (Maybe Type) Expr
+  -- | BlockTypeDecl Name             typeT
+  | BlockLet      [LBind Expr]
   deriving (Show)
 
 
@@ -73,7 +73,7 @@ translateExpr expr = case expr of
 translateBStmt :: A.BlockStmt A.ResolvedName A.ResolvedT -> Err BlockStmt
 translateBStmt bst = case bst of
   A.Bind Nothing       ctx e -> Bind Nothing Nothing <$> translateMType ctx <*> translateExpr e
-  A.Bind (Just (n, t)) ctx e -> Bind (Just n) <$> translateMType t
+  A.Bind (Just (n, t)) ctx e -> Bind (Just $ n) <$> translateMType t
                                 <*> translateMType ctx <*> translateExpr e
   A.BlockLet bs   -> BlockLet <$> mapM translateField bs
   A.BlockTypeDecl _ _ -> fail "Block type declarations not yet supported."
@@ -134,4 +134,3 @@ importTypeS :: Schema -> Err Schema
 importTypeS = return
 
 -- }}}
-
