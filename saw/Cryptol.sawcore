@@ -167,7 +167,7 @@ eCast :: (a b :: KType) -> ty a -> ty b;
 eCast a b = unsafeCoerce (ty a) (ty b);
 
 eListSel :: (a :: KType) -> (n :: Num) -> seq n (ty a) -> Nat -> ty a;
-eListSel a (TCNum n) xs i = get n (ty a) xs (finOfNat n i);
+eListSel a (TCNum n) xs i = at n (ty a) xs i;
 eListSel a TCInf xs i = streamGet (ty a) xs i;
 
 eIf :: (a :: KType) -> Bool -> ty a -> ty a -> ty a;
@@ -365,22 +365,18 @@ ecZero (TCPair a b) = (ecZero a, ecZero b);
 
 -- Sequences
 ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecShiftL (TCNum m) _ TCBit (PFinNum n) xs i = bvShl m xs (bvToNat n i);
-ecShiftL TCInf _ a (PFinNum n) xs i = streamDrop (ty a) (bvToNat n i) xs;
+ecShiftL (TCNum m) _ a (PFinNum n) = bvShiftL m (ty a) n (ecZero a);
+ecShiftL TCInf _ a (PFinNum n) = bvStreamShiftL (ty a) n;
 
 ecShiftR :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecShiftR (TCNum m) _ a (PFinNum n) xs i =
-  vTake (ty a) m (bvToNat n i)
-    (coerceVec (ty a) (addNat (bvToNat n i) m) (addNat m (bvToNat n i)) (eqNatAddComm (bvToNat n i) m)
-      (append (bvToNat n i) m (ty a) (replicate (bvToNat n i) (ty a) (ecZero a)) xs));
-ecShiftR TCInf _ a (PFinNum n) xs i =
-  streamAppend (ty a) (bvToNat n i) (replicate (bvToNat n i) (ty a) (ecZero a)) xs;
+ecShiftR (TCNum m) _ a (PFinNum n) = bvShiftR m (ty a) n (ecZero a);
+ecShiftR TCInf _ a (PFinNum n) = bvStreamShiftR (ty a) n (ecZero a);
 
 ecRotL :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotL _ _ a (PFinNum m) (PFinNum n) xs i = rotateL m (ty a) xs (bvToNat n i);
+ecRotL _ _ a (PFinNum m) (PFinNum n) = bvRotateL m (ty a) n;
 
 ecRotR :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotR _ _ a (PFinNum m) (PFinNum n) xs i = rotateR m (ty a) xs (bvToNat n i);
+ecRotR _ _ a (PFinNum m) (PFinNum n) = bvRotateR m (ty a) n;
 
 ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> seq m (ty a) -> seq n (ty a) -> seq (tcAdd m n) (ty a);
 ecCat _ (TCNum n) a (PFinNum m) = append m n (ty a);
@@ -410,7 +406,8 @@ ecTranspose (TCNum m) (TCNum n) a = transpose m n (ty a);
 -- TODO: other cases
 
 ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin i -> seq n (ty a) -> seq i Bool -> ty a;
-ecAt n a _ (PFinNum i) xs idx = eListSel a n xs (bvToNat i idx);
+ecAt (TCNum n) a _ (PFinNum i) = bvAt n (ty a) i;
+ecAt TCInf a _ (PFinNum i) = bvStreamGet (ty a) i;
 
 ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin i -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
 ecAtRange n a m i pi xs = map (TCSeq i TCBit) a m (ecAt n a i pi xs);
