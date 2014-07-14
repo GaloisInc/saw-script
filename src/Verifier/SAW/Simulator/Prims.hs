@@ -107,6 +107,18 @@ widthNatOp =
   natFun' "widthNat1" $ \n -> return $
   vNat (widthNat n)
 
+-- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
+natCaseOp :: MonadIO m => Value m e
+natCaseOp =
+  VFun $ \_ -> return $
+  VFun $ \z -> return $
+  VFun $ \s -> return $
+  natFun $ \n ->
+    if n == 0
+    then force z
+    else do s' <- force s
+            apply s' (Ready (VNat (fromIntegral n - 1)))
+
 -- finOfNat :: (n :: Nat) -> Nat -> Fin n;
 finOfNatOp :: MonadIO m => Value m e
 finOfNatOp =
@@ -139,6 +151,15 @@ finPredOp =
   if finVal i == 0
     then VCtorApp "Prelude.Nothing" (V.fromList [Ready VType])
     else VCtorApp "Prelude.Just" (V.fromList [Ready VType, Ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
+
+-- natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
+natSplitFinOp :: MonadIO m => Value m e
+natSplitFinOp =
+  natFun $ \n -> return $
+  natFun $ \i -> return $
+  if i < n
+    then VCtorApp "Prelude.Left" (V.fromList $ map Ready [VType, VType, vFin (FinVal i (pred (n - i)))])
+    else VCtorApp "Prelude.Right" (V.fromList $ map Ready [VType, VType, vNat (i - n)])
 
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
 generateOp :: MonadIO m => Value m e
