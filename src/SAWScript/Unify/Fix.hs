@@ -41,7 +41,7 @@ instance (Functor f, Functor g) => f :<: (f :+: g) where
 instance (Functor f, Functor g, Functor h, f :<: g) => f :<: (h :+: g) where
   inj = Inr . inj
   prj cp = case cp of
-    Inl e -> Nothing
+    Inl _ -> Nothing
     Inr e -> prj e
 
 inject :: (f :<: g) => f (Mu g) -> Mu g

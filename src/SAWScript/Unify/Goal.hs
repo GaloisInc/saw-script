@@ -5,11 +5,9 @@
 module SAWScript.Unify.Goal where
 
 import Control.Applicative
-import Control.Arrow
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Trans.Either
-import Data.Monoid
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
 
@@ -36,7 +34,7 @@ instance MonadPlus Interleave where
       where rest = m2 `mplus` Interleave as'
 
 fromStream :: Maybe Int -> Maybe Int -> Stream a -> Either [String] [a]
-fromStream en rn s = fS en rn $ runInterleave $ runStream s
+fromStream en0 rn0 s = fS en0 rn0 $ runInterleave $ runStream s
   where
     fS en rn as = case (en,rn,as) of
       (Just 0,_,_)            -> Left []  -- convention here?
@@ -49,8 +47,8 @@ fromStream en rn s = fS en rn $ runInterleave $ runStream s
 orEither :: Either a b -> Either [a] [b] -> Either [a] [b]
 orEither x re = case (x,re) of
   (Left e,Left es)   -> Left (e:es)
-  (Left e,Right rs)  -> Right rs
-  (Right r,Left es)  -> Right [r]
+  (Left _e,Right rs)  -> Right rs
+  (Right r,Left _es)  -> Right [r]
   (Right r,Right rs) -> Right (r:rs)
 
 headInterleave :: Interleave a -> Maybe a
@@ -101,7 +99,7 @@ newtype GoalM t a = GoalM { runGoalM :: StateT (GState t) Stream a } deriving (F
 type Goal t = GoalM t ()
 
 instance Show (GoalM t a) where
-  show g = "<goal>"
+  show _ = "<goal>"
 
 instance Monad (GoalM t) where
   return a = GoalM $ return a
@@ -123,6 +121,8 @@ instance Applicative (GoalM t) where
 
 getsG :: (GState t -> a) -> GoalM t a
 getsG = GoalM . gets
+
+getG :: GoalM t (GState t)
 getG = GoalM get
 
 putG :: GState t -> Goal t

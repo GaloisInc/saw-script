@@ -15,8 +15,6 @@ import SAWScript.Unify.Goal
 import Control.Arrow
 import Control.Applicative
 import Control.Monad
-import Control.Monad.State
-import Control.Monad.Error
 import Data.Monoid
 import qualified Data.Foldable as F
 import qualified Data.Traversable as T
@@ -36,7 +34,7 @@ instance Equal Logic where
   equal (LV x) (LV y) = x == y
 
 instance Uni Logic where
-  uni u v = error "unreachable uni"
+  uni _u _v = error "unreachable uni"
   wkS u = return u
   occ ui (LV vi) = return (ui == vi)
   clLV (LV ui) = return [lVar ui]
@@ -61,7 +59,6 @@ unify :: (Unifiable f) => Mu f -> Mu f -> Goal (Mu f)
 unify u v = do
   u'@(In ue) <- walk u
   v'@(In ve) <- walk v
-  s <- GoalM $ gets snd
   mcond $
     [ guard (u' == v') :|:        succeed
     , isVar u'         :>: \ui -> occursCheck ui v' >>= \b -> assert (not b) (cycleErr (show u') (show v')) >> extendS ui v'

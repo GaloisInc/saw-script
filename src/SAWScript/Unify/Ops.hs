@@ -11,13 +11,10 @@ module SAWScript.Unify.Ops where
 import SAWScript.Unify.Fix
 import SAWScript.Unify.Goal
 import SAWScript.Unify.Unification
-import SAWScript.Unify.Fresh
 
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Trans.Either
-import qualified Data.Foldable as F
-import qualified Data.Traversable as T
 
 conj :: [Goal t] -> Goal t
 conj = sequence_
