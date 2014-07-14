@@ -86,6 +86,7 @@ module Verifier.SAW.SharedTerm
     -- *** Bitvector primitives
   , scBitvector
   , scBvNat
+  , scBvAt
   , scBvConst
   , scFinVal
   , scBvAdd, scBvSub, scBvMul
@@ -992,10 +993,15 @@ scSlice :: SharedContext s -> SharedTerm s -> SharedTerm s ->
            SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
 
--- | get :: (n :: Nat) -> (e :: sort 1) -> Vec n e -> Fin n -> e;
+-- | get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
 scGet :: SharedContext s -> SharedTerm s -> SharedTerm s ->
          SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
+
+-- | bvAt :: (n :: Nat) -> (a :: sort 0) -> (i :: Nat) -> Vec n a -> bitvector i -> a;
+scBvAt :: SharedContext s -> SharedTerm s -> SharedTerm s ->
+         SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName "bvAt") [n, a, i, xs, idx]
 
 -- | single :: (e :: sort 1) -> e -> Vec 1 e;
 -- single e x = generate 1 e (\(i :: Fin 1) -> x);
