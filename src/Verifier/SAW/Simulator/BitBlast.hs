@@ -312,9 +312,9 @@ bvAtOp be =
   wordFun $ \ilv ->
     case v of
       VVector xv ->
-          force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv) ilv (return . (V.!) xv)
+          force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv - 1) ilv (return . (V.!) xv)
       VExtra (BWord lv) ->
-          vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv) ilv (return . AIG.at lv)
+          vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv - 1) ilv (return . AIG.at lv)
       _ -> fail "bvAtOp: expected vector"
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
@@ -331,9 +331,9 @@ bvUpdOp be =
       VVector xv -> do
         y' <- delay (return y)
         let upd i = return (VVector (xv V.// [(i, y')]))
-        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv) ilv upd
+        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv - 1) ilv upd
       VExtra (BWord lv) -> do
-        AIG.muxInteger (lazyMux be (muxBVal be)) l ilv (\i -> return (vWord (AIG.generate_msb0 l (upd i))))
+        AIG.muxInteger (lazyMux be (muxBVal be)) (l - 1) ilv (\i -> return (vWord (AIG.generate_msb0 l (upd i))))
           where upd i j | i == j    = toBool y
                         | otherwise = AIG.at lv j
                 l = AIG.length lv
@@ -526,7 +526,7 @@ bvStreamGetOp be =
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
   wordFun $ \ilv ->
-  AIG.muxInteger (lazyMux be (muxBVal be)) (2 ^ AIG.length ilv) ilv (lookupBStream xs)
+  AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length ilv) - 1) ilv (lookupBStream xs)
 
 lookupBStream :: BValue l -> Integer -> IO (BValue l)
 lookupBStream (VExtra (BStream f r)) n = do
