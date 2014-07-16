@@ -10,20 +10,28 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TupleSections #-}
 module Verifier.SAW.Simulator.SBV where
 
-import Data.SBV as S
+import qualified Data.SBV as S
+import Data.SBV (Symbolic, SBool, Predicate)
 import Data.SBV.Internals
 import Data.SBV.LowLevel as L
 
+import Control.Lens
+import Control.Arrow
+
 import Data.Map (Map)
+import Data.IORef
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
 import Data.Traversable as T
 import Control.Applicative
 import Control.Monad.IO.Class
+import Control.Monad.State as ST
 import Control.Monad
 
 import qualified Verifier.SAW.Recognizer as R
@@ -35,25 +43,29 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
 import Verinf.Symbolic.Lit
 
-import Debug.Trace
+import Verifier.SAW.BitBlast (BShape(..))
 
 type SValue = Value IO SbvExtra
 type SThunk = Thunk IO SbvExtra
 
 data SbvExtra =
-  SbvBool SBool |
-  SbvWord SWord deriving Show
+  SBool SBool |
+  SWord SWord |
+  SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
 
+instance Show SbvExtra where
+  show _ = "<symbolic>"
+  
 constMap :: Map Ident SValue
 constMap = Map.fromList [
     -- Boolean
-    ("Prelude.True", VExtra (SbvBool true)),
-    ("Prelude.False", VExtra (SbvBool false)),
-    ("Prelude.not", strictFun (return . vBool . bnot . toBool)),
-    ("Prelude.and", boolBinOp (&&&)),
-    ("Prelude.or", boolBinOp (|||)),
-    ("Prelude.xor", boolBinOp (<+>)) ,
-    ("Prelude.boolEq", boolBinOp (<=>)),
+    ("Prelude.True", VExtra (SBool S.true)),
+    ("Prelude.False", VExtra (SBool S.false)),
+    ("Prelude.not", strictFun (return . vBool . S.bnot . forceBool)),
+    ("Prelude.and", boolBinOp (S.&&&)),
+    ("Prelude.or", boolBinOp (S.|||)),
+    ("Prelude.xor", boolBinOp (S.<+>)) ,
+    ("Prelude.boolEq", boolBinOp (S.<=>)),
     ("Prelude.ite", iteOp),
     -- Arithmetic
     ("Prelude.bvAdd" , binOp L.bvAdd),
@@ -66,6 +78,8 @@ constMap = Map.fromList [
     ("Prelude.bvURem", binOp L.bvURem),
     ("Prelude.bvSDiv", binOp L.bvSDiv),
     ("Prelude.bvSRem", binOp L.bvSRem),
+    ("Prelude.bvPMul", bvPMulOp),
+    ("Prelude.bvPMod", bvPModOp),
     -- Relations 
     ("Prelude.bvEq"  , binRel L.bvEq),
     ("Prelude.bvsle" , binRel L.bvSLe),
@@ -88,48 +102,84 @@ constMap = Map.fromList [
     ("Prelude.minNat", Prims.minNatOp),
     ("Prelude.maxNat", Prims.maxNatOp),
     ("Prelude.widthNat", Prims.widthNatOp),
+    ("Prelude.natCase", Prims.natCaseOp),
     -- Fin
     ("Prelude.finDivMod", Prims.finDivModOp),
     ("Prelude.finMax", Prims.finMaxOp),
     ("Prelude.finPred", Prims.finPredOp),
-    ("Prelude.finOfNat", finOfNatOp),
+    ("Prelude.natSplitFin", Prims.natSplitFinOp),
     -- Vectors
     ("Prelude.generate", Prims.generateOp),
     ("Prelude.get", getOp),
+    ("Prelude.at", atOp),
     ("Prelude.append", appendOp),
-    ("Prelude.rotateL", rotateLOp),
     ("Prelude.vZip", vZipOp),
     ("Prelude.foldr", foldrOp),
+    ("Prelude.bvAt", bvAtOp),
+    ("Prelude.bvRotateL", bvRotateLOp),
+    ("Prelude.bvRotateR", bvRotateROp),
+    ("Prelude.bvShiftR", bvShiftROp),
+     -- Streams
+    ("Prelude.MkStream", mkStreamOp),
+    ("Prelude.streamGet", streamGetOp),
+    ("Prelude.bvStreamGet", bvStreamGetOp),
     -- Miscellaneous
     ("Prelude.coerce", Prims.coerceOp),
-    ("Prelude.bvNat", bvNatOp),
-    ("Prelude.bvToNat", bvToNatOp)
+    ("Prelude.bvNat", bvNatOp)
+    -- ("Prelude.bvToNat", bvToNatOp)
   ]
 
--- | Rotates left if i is positive.
-vRotate :: V.Vector SThunk -> Int -> SValue
-vRotate xs i
-  | V.null xs = VVector xs
-  | otherwise = VVector $ (V.++) (V.drop j xs) (V.take j xs)
-  where j = i `mod` V.length xs
+------------------------------------------------------------
+-- Coersion functions
 
--- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateLOp
-  = 
-    VFun $ \_ -> return $
-    VFun $ \_ -> return $
-    strictFun $ \xs -> return $
-    strictFun $ \y -> wordNatOp eOp wOp eOp cOp xs y
-  where 
-    eOp xv i = error "cann't rotL symbolicly" -- vWord (L.bvRotL xv i)
-    wOp xv i = return $ vWord (L.bvRotLC xv i)
-    cOp xv i = return $ vRotate xv i
+symFromBits :: Vector SBool -> SWord
+symFromBits v
+  = V.foldl (L.bvAdd) (bitVector l 0) $ flip V.imap (V.reverse v) $ \i b->
+      S.ite b (symBit l i) (bitVector l 0)
+  where
+    l = V.length v
 
-selectV :: Int -> (Int -> SThunk) -> SWord -> IO SValue
+symBit :: Int -> Int -> SWord
+symBit l i = bitVector l (S.shiftL 1 i)
+
+toBool :: SValue -> Maybe SBool
+toBool (VExtra (SBool b)) = Just b
+toBool _  = Nothing
+
+forceBool :: SValue -> SBool
+forceBool = fromJust . toBool
+
+toWord :: SValue -> IO (Maybe SWord)
+toWord (VExtra (SWord w)) = return (Just w)
+toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toBool . force) vv
+toWord (VNat n) = return Nothing
+toWord _ = return Nothing
+
+toVector :: SValue -> V.Vector SThunk
+toVector (VVector xv) = xv
+toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) = V.fromList (map (Ready . vBool . symTestBit xv) [0..k-1])
+toVector _ = error "this word might be symbolic"
+
+vWord :: SWord -> SValue
+vWord lv = VExtra (SWord lv)
+
+vBool :: SBool -> SValue
+vBool l = VExtra (SBool l)
+
+------------------------------------------------------------
+-- Function constructors
+
+wordFun :: (Maybe SWord -> IO SValue) -> SValue
+wordFun f = strictFun (\x -> toWord x >>= f)
+
+------------------------------------------------------------
+-- Indexing operations
+
+selectV :: (Num a, Ord a) => a -> (a -> IO SValue) -> SWord -> IO SValue
 selectV m f w@(SBV (KBounded _ s) _) = do
   let bits = map (symTestBit w) [0 .. s-1]
-  let sel :: Int -> [SBool] -> IO SValue
-      sel offset []       = force (f offset)
+  let -- sel :: Int -> [SBool] -> IO SValue
+      sel offset []       = f offset
       sel offset (b : bs) = do
         let bitOnValue = offset + 2 ^ (length bs)
         onp <- if bitOnValue >= m then return undefined else sel bitOnValue bs
@@ -138,8 +188,8 @@ selectV m f w@(SBV (KBounded _ s) _) = do
   sel 0 bits
 
 myMerge :: SBool -> SValue -> SValue -> IO SValue
-myMerge b (VExtra (SbvBool x)) (VExtra (SbvBool y)) = return .vBool $ S.ite b x y
-myMerge b (VExtra (SbvWord x)) (VExtra (SbvWord y)) = return .vWord . unComp $ S.ite b (CompSWord x) (CompSWord y)
+myMerge b (VExtra (SBool x)) (VExtra (SBool y)) = return .vBool $ S.ite b x y
+myMerge b (VExtra (SWord x)) (VExtra (SWord y)) = return .vWord $ S.ite b x y
 myMerge b (VVector xs) (VVector ys) = (VVector <$>) . T.sequence $ V.zipWith zipper xs ys where
   zipper mx my = delay $ do
     x <- force mx
@@ -147,40 +197,182 @@ myMerge b (VVector xs) (VVector ys) = (VVector <$>) . T.sequence $ V.zipWith zip
     myMerge b x y
 myMerge _ _ _ = error "cannot merge SValues"
 
-wordNatOp :: (SWord -> SWord -> IO SValue) ->
-             (SWord -> Int -> IO SValue) ->
-             (V.Vector SThunk -> SWord -> IO SValue) ->
-             (V.Vector SThunk -> Int -> IO SValue) ->
-             SValue -> SValue -> IO SValue
-wordNatOp bothSymOp symWordOp symIndOp constOp xs y = do
-  case y of
-    VNat n -> 
-      case xs of
-        VVector xv          ->  constOp xv (fromIntegral n)
-        VExtra (SbvWord xv) ->  symWordOp xv (fromIntegral n)
-        _ -> error $ "wordNatOp: " ++ show (xs, y)
-    VExtra (SbvWord (SBV _ (Left (cwVal -> CWInteger n)))) -> 
-      case xs of
-        VVector xv          ->  constOp xv (fromIntegral n)
-        VExtra (SbvWord xv) ->  symWordOp xv (fromIntegral n)
-        _ -> error $ "wordNatOp: " ++ show (xs, y)
-    VExtra (SbvWord n) -> do 
-      mw <- toWord xs
-      case (mw, xs) of
-        (Just xv, _) -> bothSymOp xv (nOfSize xv n)
-        (_, VVector xv) -> symIndOp xv n 
-        _ -> error "Something awful happend in wordNatOp"
-    _ -> do
-      ind <- Prims.finFromValue y
-      case xs of
-        VVector xv -> constOp xv . fromEnum . finVal $ ind
-        VExtra (SbvWord xv) -> symWordOp xv . fromEnum . finVal $ ind
-
 nOfSize :: SWord -> SWord -> SWord
 nOfSize (SBV (KBounded _ k) _) ind@(SBV (KBounded _ k2) s)
   | k == k2 = ind
   | Left (cwVal -> CWInteger ival) <- s = bitVector k ival
   | True = L.bvJoin (bitVector (k - k2) 0) ind
+
+symTestSym :: SWord -> SWord -> SValue
+symTestSym w@(SBV (KBounded _ k) _) ind =
+  vBool $ L.bvNeq (bitVector k 0) (L.bvAnd w
+    (L.bvShL (bitVector k 1) (L.bvSub (bitVector k (fromIntegral (k-1))) (nOfSize w ind))))
+
+symTestBit :: SWord -> Int -> SBool
+symTestBit x@(SBV (KBounded _ w) _) i =
+  bvNeq (bitVector w 0) (L.bvAnd x (bitVector w (S.shiftL 1 (w-i-1))))
+symTestBit _ _ = error "SWord must be bounded"
+
+-- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+atOp :: SValue
+atOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.natFun $ \n ->
+    case v of
+      VVector xv -> force ((V.!) xv (fromIntegral n))
+      VExtra (SWord lv) -> return $ vBool $ symTestBit lv (fromIntegral n)
+      _ -> fail "atOp: expected vector"
+
+-- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
+bvAtOp :: SValue
+bvAtOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  wordFun $ \(Just ilv)->
+    case v of
+      VVector xv -> selectV (V.length xv) (force . (V.!) xv) ilv
+      VExtra (SWord lv) -> return $ symTestSym lv ilv
+      _ -> fail "getOp: expected vector"
+
+-- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
+getOp :: SValue
+getOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.finFun $ \i ->
+    case v of
+      VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
+      VExtra (SWord lv) -> return $ vBool $ symTestBit lv (fromEnum (finVal i))
+      _ -> fail "getOp: expected vector"
+
+----------------------------------------
+-- Polynomial operations
+
+-- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+bvPModOp :: SValue
+bvPModOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  wordFun $ \(Just x) -> return $
+  wordFun $ \(Just y) -> error "didn't implement yet"
+
+-- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
+bvPMulOp :: SValue
+bvPMulOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  wordFun $ \x -> return $
+  wordFun $ \y -> error "not done yet"
+
+------------------------------------------------------------
+-- Vector operations
+
+vRotateL :: V.Vector a -> Int -> V.Vector a
+vRotateL xs i
+  | V.null xs = xs
+  | otherwise = (V.++) (V.drop j xs) (V.take j xs)
+  where j = i `mod` V.length xs
+
+vRotateR :: V.Vector a -> Int -> V.Vector a
+vRotateR xs i = vRotateL xs (- i)
+
+vShiftL :: a -> V.Vector a -> Int -> V.Vector a
+vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
+  where j = min i (V.length xs)
+
+vShiftR :: a -> V.Vector a -> Int -> V.Vector a
+vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
+  where j = min i (V.length xs)
+
+------------------------------------------------------------
+-- Rotations and shifts
+
+-- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateLOp :: SValue
+bvRotateLOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \(Just ilv) -> do
+    let (n, f) = case xs of
+                   VVector xv         -> (V.length xv, return . VVector . vRotateL xv)
+                   VExtra (SWord xlv) -> (L.bvLength xlv, return . VExtra . SWord . L.bvRotLC xlv)
+                   _ -> error $ "rotateLOp: " ++ show xs
+    selectV n f ilv
+
+-- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateROp :: SValue
+bvRotateROp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \(Just ilv) -> do
+    let (n, f) = case xs of
+                   VVector xv         -> (V.length xv, return . VVector . vRotateR xv)
+                   VExtra (SWord xlv) -> (L.bvLength xlv, return . VExtra . SWord . L.bvRotRC xlv)
+                   _ -> error $ "rotateROp: " ++ show xs
+    selectV n f ilv
+
+-- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftROp :: SValue
+bvShiftROp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \x -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \(Just ilv) -> do
+    case xs of
+                VVector xv         -> selectV (V.length xv) (return . VVector . vShiftR x xv) ilv
+                VExtra (SWord xlv) -> return $ vWord (L.bvShR xlv ilv)
+                _ -> fail $ "bvShiftROp: " ++ show xs
+
+------------------------------------------------------------
+-- Stream operations
+
+-- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
+mkStreamOp :: SValue
+mkStreamOp =
+  VFun $ \_ -> return $
+  strictFun $ \f -> do
+    r <- newIORef Map.empty
+    return $ VExtra (SStream (\n -> apply f (Ready (VNat n))) r)
+
+-- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
+streamGetOp :: SValue
+streamGetOp =
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  Prims.natFun $ \n -> lookupSStream xs (toInteger n)
+
+-- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
+bvStreamGetOp :: SValue
+bvStreamGetOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \(Just ilv) ->
+  selectV (2 ^ L.bvLength ilv) (lookupSStream xs) ilv
+
+lookupSStream :: SValue -> Integer -> IO SValue
+lookupSStream (VExtra (SStream f r)) n = do
+   m <- readIORef r
+   case Map.lookup n m of
+     Just v  -> return v
+     Nothing -> do v <- f n
+                   writeIORef r (Map.insert n v m)
+                   return v
+lookupSStream _ _ = fail "expected Stream"
+
+------------------------------------------------------------
+-- Misc operations
 
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: SValue
@@ -188,14 +380,6 @@ bvNatOp =
   Prims.natFun $ \w -> return $
   Prims.natFun $ \x -> return $
   vWord (bitVector (fromIntegral w) (toInteger x))
-
--- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
-bvToNatOp :: SValue
-bvToNatOp = 
-  VFun $ \_ -> return $
-  strictFun $ \lv -> do
-    Just w <- toWord lv
-    return (vWord w)
 
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: SValue
@@ -240,41 +424,8 @@ appendOp =
       return $ vWord $ bvJoin v' w'
     _ -> error "appendOp"
 
-traceIt a b = trace (a ++ show b) b
-
--- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-getOp :: SValue
-getOp
-  = VFun $ \_-> return $
-        VFun $ \_-> return $
-        strictFun $ \v-> return $
-        strictFun $ \i-> 
-          wordNatOp bothSymOp symWordOp symIndOp constOp v i
-  where
-    constOp xv i = force ((V.!) xv i)
-    bothSymOp xv i = return (symTestSym xv i)
-    symWordOp xv i = return (vBool (symTestBit xv i))
-    symIndOp xv i = selectV (V.length xv) ((V.!) xv) i
-
-symTestSym :: SWord -> SWord -> SValue
-symTestSym w@(SBV (KBounded _ k) _) ind =
-  vBool $ L.bvNeq (bitVector k 0) (L.bvAnd w
-    (L.bvShL (bitVector k 1) (L.bvSub (bitVector k (fromIntegral (k-1))) (nOfSize w ind))))
-
-symTestBit :: SWord -> Int -> SBool
-symTestBit x@(SBV (KBounded _ w) _) i =
-  bvNeq (bitVector w 0) (L.bvAnd x (bitVector w (shiftL 1 (w-i-1))))
-symTestBit _ _ = error "SWord must be bounded"
-
--- finOfNat :: (n :: Nat) -> Nat -> Fin n;
-finOfNatOp :: SValue
-finOfNatOp =
-  Prims.natFun $ \n -> return $
-  strictFun $ \v -> return $
-    case v of
-      VNat i -> Prims.vFin (finFromBound (fromInteger i) n)
-      VExtra x -> VExtra x
-      _ -> error "finOfNatOp"
+------------------------------------------------------------
+-- Helpers for marshalling into SValues
 
 binOp :: (SWord -> SWord -> SWord) -> SValue
 binOp op = VFun $ \_-> return $
@@ -292,15 +443,23 @@ binRel op = VFun $ \_-> return $
               (Just y) <- toWord my
               return $ vBool $ op x y
 
+boolBinOp :: (SBool -> SBool -> SBool) -> SValue
+boolBinOp op =
+  strictFun $ \x -> return $
+  strictFun $ \y -> return $ vBool $ op (forceBool x) (forceBool y)
+
+------------------------------------------------------------
+-- Ite ops
+
 iteOp :: SValue
 iteOp = 
     VFun $ \_ -> return $
     strictFun $ \b-> return $
     strictFun $ \x-> return $
-    strictFun $ \y-> muxFn (toBool b) x y
+    strictFun $ \y-> muxFn (forceBool b) x y
 muxFn b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxFn b x y)
-muxFn b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> vectorFn b xv yv
-muxFn b (VVector xv)    (VVector yv)    = VVector <$> vectorFn b xv yv
+muxFn b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
+muxFn b (VVector xv)    (VVector yv)    = VVector <$> muxThunks b xv yv
 muxFn _ (VNat m)        (VNat n)        | m == n = return $ VNat m
 muxFn _ (VString x)     (VString y)     | x == y = return $ VString x
 muxFn _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
@@ -309,59 +468,21 @@ muxFn _ VType           VType           = return VType
 muxFn b (VExtra x)      (VExtra y)      = return $ VExtra $ extraFn b x y
 muxFn _ _ _ = fail "iteOp: malformed arguments"
 
-vectorFn :: SBool -> V.Vector SThunk -> V.Vector SThunk -> IO (V.Vector SThunk)
-vectorFn b xv yv
+muxThunks :: SBool -> V.Vector SThunk -> V.Vector SThunk -> IO (V.Vector SThunk)
+muxThunks b xv yv
   | V.length xv == V.length yv = V.zipWithM (thunkFn b) xv yv
   | otherwise                  = fail "iteOp: malformed arguments"
 
 thunkFn :: SBool -> SThunk -> SThunk -> IO SThunk
 thunkFn b x y = delay $ do x' <- force x; y' <- force y; muxFn b x' y'
--- thunkFn b x y = Ready <$> do x' <- force x; y' <- force y; muxFn b x' y'
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
-extraFn b (SbvBool x) (SbvBool y) = SbvBool $ sBranch b x y
-extraFn b (SbvWord x) (SbvWord y) = SbvWord . unComp $ sBranch b (CompSWord x) (CompSWord y)
+extraFn b (SBool x) (SBool y) = SBool $ S.ite b x y
+extraFn b (SWord x) (SWord y) = SWord $ S.ite b x y
 extraFn _ _ _ = error "iteOp: malformed arguments"
 
-boolBinOp :: (SBool -> SBool -> SBool) -> SValue
-boolBinOp op =
-  strictFun $ \x -> return $
-  strictFun $ \y -> return $ vBool $ op (toBool x) (toBool y)
-
-vBool :: SBool -> SValue
-vBool = VExtra . SbvBool
-
-vWord :: SWord -> SValue
-vWord = VExtra . SbvWord
-
-toBool :: SValue -> SBool
-toBool (VExtra (SbvBool b)) = b
-toBool _  = error "toBool"
-
-toLitBool :: SValue -> Maybe SBool
-toLitBool (VExtra (SbvBool b)) = Just b
-toLitBool s = Nothing
-
-toWord :: SValue -> IO (Maybe SWord)
-toWord (VExtra (SbvWord w)) = return (Just w)
-toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toLitBool . force) vv
-toWord (VNat n) = return Nothing
-toWord _ = return Nothing
-
-toVector :: SValue -> V.Vector SThunk
-toVector (VVector xv) = xv
-toVector (VExtra (SbvWord xv@(SBV (KBounded _ k) _))) = V.fromList (map (Ready . vBool . symTestBit xv) [0..k-1])
-toVector _ = error "this word might be symbolic"
-
-symFromBits :: Vector SBool -> SWord
-symFromBits v
-  = V.foldl (L.bvAdd) (bitVector l 0) $ flip V.imap (V.reverse v) $ \i b->
-      unComp (S.ite b (CompSWord (symBit l i)) (CompSWord (bitVector l 0)))
-  where
-    l = V.length v
-
-symBit :: Int -> Int -> SWord
-symBit l i = bitVector l (shiftL 1 i)
+------------------------------------------------------------
+-- External interface
 
 sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
 sbvSolveBasic m = Sim.evalSharedTerm cfg
@@ -375,25 +496,21 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-sbvSolve :: SharedContext s -> SharedTerm s -> Predicate
+sbvSolve :: SharedContext s -> SharedTerm s -> IO ([Labeler], Predicate)
 sbvSolve sc t = do
-  ty <- liftIO $ scTypeOf sc t
-  argTs <- liftIO $ asPredType sc ty
-  shapes <- liftIO $ traverse (parseShape sc) argTs
-  vars <- traverse newVars' shapes
-  bval <- liftIO $ sbvSolveBasic (scModule sc) t
-  bval' <- liftIO $ applyAll bval vars
-  case bval' of
-    VExtra (SbvBool b) -> return b
-    _ -> fail "bitBlast: non-boolean result type."
+  ty <- scTypeOf sc t
+  argTs <- asPredType sc ty
+  shapes <- traverse (parseShape sc) argTs
+  bval <- sbvSolveBasic (scModule sc) t
+  let (labels, vars) = flip evalState 0 $ unzip <$> traverse newVars shapes
+  let pred = do
+              bval' <- traverse (fmap Ready) vars >>= (liftIO . applyAll bval)
+              case bval' of
+                VExtra (SBool b) -> return b
+                _ -> fail "bitBlast: non-boolean result type."
+  return (labels, pred)
 
-data SbvShape
-  = BoolShape
-  | VecShape Nat SbvShape
-  | TupleShape [SbvShape]
-  | RecShape (Map FieldName SbvShape)
-
-parseShape :: SharedContext s -> SharedTerm s -> IO SbvShape
+parseShape :: SharedContext s -> SharedTerm s -> IO BShape
 parseShape sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -407,12 +524,30 @@ parseShape sc t = do
        -> RecShape <$> traverse (parseShape sc) tm
     _ -> fail $ "bitBlast: unsupported argument type: " ++ show t'
 
-newVars :: SbvShape -> Symbolic SValue
-newVars BoolShape = vBool <$> exists_
-newVars (VecShape n BoolShape) = vWord <$> symBitVector (fromIntegral n) EX
-newVars (VecShape n tp) = VVector <$> V.replicateM (fromIntegral n) (newVars' tp)
-newVars (TupleShape ts) = VTuple <$> traverse newVars' (V.fromList ts)
-newVars (RecShape tm) = VRecord <$> traverse newVars' tm
+data Labeler
+   = BoolLabel String
+   | WordLabel String
+   | VecLabel (Vector Labeler)
+   | TupleLabel (Vector Labeler)
+   | RecLabel (Map FieldName Labeler)
+     deriving (Show)
 
-newVars' :: SbvShape -> Symbolic SThunk
-newVars' shape = Ready <$> newVars shape
+nextId :: State Int String
+nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
+
+myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
+myfun = fmap fst &&& fmap snd
+
+newVars :: BShape -> State Int (Labeler, Symbolic SValue)
+newVars BoolShape = nextId <&> \s-> (BoolLabel s, vBool <$> S.exists s)
+newVars (VecShape n BoolShape) =
+  nextId <&> \s-> (WordLabel s, vWord <$> symBitVector (fromIntegral n) EX (Just s))
+newVars (VecShape n tp) = do
+  (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
+  return (VecLabel labels, VVector <$> traverse (fmap Ready) vals)
+newVars (TupleShape ts) = do
+  (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
+  return (TupleLabel labels, VTuple <$> traverse (fmap Ready) vals)
+newVars (RecShape tm) = do
+  (labels, vals) <- myfun <$> (traverse newVars tm :: State Int (Map String (Labeler, Symbolic SValue)))
+  return (RecLabel labels, VRecord <$> traverse (fmap Ready) (vals :: (Map String (Symbolic SValue))))
