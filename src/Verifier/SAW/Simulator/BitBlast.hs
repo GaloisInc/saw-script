@@ -4,7 +4,7 @@
 module Verifier.SAW.Simulator.BitBlast where
 
 import Control.Applicative
-import Control.Monad (zipWithM)
+import Control.Monad (zipWithM, (<=<))
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -98,6 +98,18 @@ toWord :: BValue l -> IO (LitVector l)
 toWord (VExtra (BWord lv)) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
 toWord _ = fail "toWord"
+
+flattenBValue :: BValue l -> IO (LitVector l)
+flattenBValue (VExtra (BBool l)) = return (AIG.replicate 1 l)
+flattenBValue (VExtra (BWord lv)) = return lv
+flattenBValue (VExtra (BStream _ _)) = error "flattenBValue: BStream"
+flattenBValue (VVector vv) =
+  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
+flattenBValue (VTuple vv) =
+  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
+flattenBValue (VRecord m) =
+  AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
+flattenBValue _ = error "flattenBValue: unsupported value"
 
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
 wordFun f = strictFun (\x -> toWord x >>= f)
