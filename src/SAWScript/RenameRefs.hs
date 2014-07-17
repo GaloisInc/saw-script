@@ -110,7 +110,7 @@ resolveInExprs pexp = case pexp of
 resolveInExpr :: IncomingExpr -> RR OutgoingExpr
 resolveInExpr exp = case exp of
   -- Focus of the whole pass
-  Var nm t          -> Var <$> T.traverse resolveName nm <*> pure t
+  Var nm t          -> Var <$> resolveName nm <*> pure t
   -- Binders, which add to the local name environment.
   Function a at e t -> addName a $ \a' ->
                          Function a' at <$> resolveInExpr e  <*> pure t
@@ -163,13 +163,13 @@ resolveInBStmts bsts = case bsts of
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
 --  failing if the UnresolvedName is unbound or ambiguous.
-resolveName :: UnresolvedName -> RR ResolvedName
+resolveName :: Located UnresolvedName -> RR (Located ResolvedName)
 resolveName un = do
   lEnv <- getLocalNameEnv
   mod <- getModule
   let ems = allExprMaps mod
   enforceResolution un $
-    resolveUnresolvedName lEnv ems un
+    resolveUnresolvedName lEnv ems (getVal un)
 
 
 
@@ -224,9 +224,9 @@ inModule (UnresolvedName ns _) (ModuleName mns mn) = ns == (mns ++ [mn])
 
 
 -- Enforce that there is exactly one valid ResolvedName for a variable.
-enforceResolution :: UnresolvedName -> [ResolvedName] -> RR ResolvedName
+enforceResolution :: Located UnresolvedName -> [ResolvedName] -> RR (Located ResolvedName)
 enforceResolution un qs = case qs of
-  [qn] -> return qn
-  []   -> fail $ "Unbound reference for " ++ renderUnresolvedName un
-  qns  -> fail $ "Ambiguous reference for " ++ renderUnresolvedName un
+  [qn] -> return (qn <$ un)
+  []   -> fail $ "Unbound reference for " ++ renderUnresolvedName (getVal un) ++ " at " ++ show (getPos un)
+  qns  -> fail $ "Ambiguous reference for " ++ renderUnresolvedName (getVal un) ++ " at " ++ show (getPos un)
           ++ "\n" ++ unlines (map renderResolvedName qns)
