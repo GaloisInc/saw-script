@@ -49,7 +49,7 @@ prim print_goal         : ProofScript ();
 prim assume_valid       : {a} ProofScript (ProofResult a);
 prim assume_unsat       : {a} ProofScript (SatResult a);
 prim abc                : {a} ProofScript a;
-prim abc2               : {a} ProofScript a;
+prim abc_old            : {a} ProofScript a;
 prim yices              : {a} ProofScript a;
 prim offline_aig        : {a} String -> ProofScript a;
 prim offline_extcore    : {a} String -> ProofScript a;
