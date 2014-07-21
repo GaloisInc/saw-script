@@ -53,9 +53,9 @@ type SThunk = Thunk IO SbvExtra
 
 data SbvExtra =
   SBool SBool |
-  SWord SWord |
+  SWord SWord | 
+  SZero |
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
-  -- need to make a zero bv too
 
 instance Show SbvExtra where
   show _ = "<symbolic>"
@@ -164,6 +164,7 @@ toWord _ = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
+toVector (VExtra SZero) = V.empty
 toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) =
   V.fromList (map (Ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
 toVector _ = error "this word might be symbolic"
@@ -251,13 +252,12 @@ bvAtOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   strictFun $ \v -> return $
-  wordFun $ \(Just ilv)->
-    case v of
-      VVector xv ->
-        -- if the index is concerete, don't selectV
-        -- still it's good for testing
+  wordFun $ \milv -> do
+    case (milv, v) of
+      (Nothing, VVector xv) -> force (xv V.! 0)
+      (Just ilv, VVector xv) ->
         force =<< selectV (lazyMux muxThunk) (V.length xv - 1) (return . (V.!) xv) ilv
-      VExtra (SWord lv) -> trace "v is a word" $ return $ symTestSym lv ilv
+      (Just ilv, VExtra (SWord lv)) -> trace "v is a word" $ return $ symTestSym lv ilv
       _ -> fail "getOp: expected vector"
 
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
@@ -321,13 +321,13 @@ bvRotateLOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
-  wordFun $ \(Just ilv) -> do
-    let (n, f) = case xs of
-                   VVector xv         -> (V.length xv, return . VVector . vRotateL xv)
-                   VExtra (SWord xlv) -> (L.bvLength xlv, return . VExtra . SWord . L.bvRotLC xlv)
-                   _ -> error $ "rotateLOp: " ++ show xs
-    -- if the rotation amount is concrete then don't do it!
-    selectV (lazyMux muxBVal) (n - 1) f ilv
+  wordFun $ \milv ->
+    case (milv, xs) of
+      (Nothing, xv) -> return xv
+      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
+      (Just ilv, VExtra (SWord xlv)) ->
+        selectV (lazyMux muxBVal) (L.bvLength xlv -1) (return . vWord . L.bvRotLC xlv) ilv
+      _ -> error $ "rotateLOp: " ++ show xs
 
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateROp :: SValue
@@ -336,12 +336,13 @@ bvRotateROp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
-  wordFun $ \(Just ilv) -> do
-    let (n, f) = case xs of
-                   VVector xv         -> (V.length xv, return . VVector . vRotateR xv)
-                   VExtra (SWord xlv) -> (L.bvLength xlv, return . VExtra . SWord . L.bvRotRC xlv)
-                   _ -> error $ "rotateROp: " ++ show xs
-    selectV (lazyMux muxBVal) (n - 1) f ilv
+  wordFun $ \milv -> do
+    case (milv, xs) of
+      (Nothing, xv) -> return xv
+      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
+      (Just ilv, VExtra (SWord xlv)) ->
+        selectV (lazyMux muxBVal) (L.bvLength xlv -1) (return . VExtra . SWord . L.bvRotRC xlv) ilv
+      _ -> error $ "rotateROp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: SValue
@@ -351,11 +352,12 @@ bvShiftROp =
   VFun $ \_ -> return $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
-  wordFun $ \(Just ilv) -> do
-    case xs of
-                VVector xv         -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
-                VExtra (SWord xlv) -> return $ vWord (L.bvShR xlv ilv)
-                _ -> fail $ "bvShiftROp: " ++ show xs
+  wordFun $ \milv -> do
+    case (milv, xs) of
+      (Nothing, xv) -> return xv
+      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (L.bvShR xlv ilv)
+      _ -> fail $ "bvShiftROp: " ++ show xs
 
 ------------------------------------------------------------
 -- Stream operations
@@ -402,7 +404,8 @@ bvNatOp :: SValue
 bvNatOp = 
   Prims.natFun $ \w -> return $
   Prims.natFun $ \x -> return $
-  vWord (bitVector (fromIntegral w) (toInteger x))
+  if w == 0 then VExtra SZero
+    else vWord (bitVector (fromIntegral w) (toInteger x))
 
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: SValue
@@ -441,6 +444,8 @@ appendOp =
   strictFun $ \ys ->
   case (xs, ys) of
     (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
+    (VExtra SZero, w) -> return w
+    (v, VExtra SZero) -> return v
     (v, w) -> do
       (Just v') <- toWord v
       (Just w') <- toWord w
@@ -453,10 +458,13 @@ appendOp =
 binOp :: (SWord -> SWord -> SWord) -> SValue
 binOp op = VFun $ \_-> return $
           strictFun $ \mx-> return $
-           strictFun $ \my-> do
-            (Just x) <- toWord mx
-            (Just y) <- toWord my
-            return $ vWord $ op x y
+          strictFun $ \my->
+            case (mx, my) of
+               (VExtra SZero, VExtra SZero) -> return (VExtra SZero)
+               _ -> do
+                 (Just x) <- toWord mx
+                 (Just y) <- toWord my
+                 return $ vWord $ op x y
 
 binRel :: (SWord -> SWord -> SBool) -> SValue
 binRel op = VFun $ \_-> return $
@@ -566,7 +574,9 @@ myfun = fmap fst &&& fmap snd
 newVars :: BShape -> State Int (Labeler, Symbolic SValue)
 newVars BoolShape = nextId <&> \s-> (BoolLabel s, vBool <$> S.exists s)
 newVars (VecShape n BoolShape) =
-  nextId <&> \s-> (WordLabel s, vWord <$> symBitVector (fromIntegral n) EX (Just s))
+  if n == 0
+    then nextId <&> \s-> (WordLabel s, return (VExtra SZero))
+    else nextId <&> \s-> (WordLabel s, vWord <$> symBitVector (fromIntegral n) EX (Just s))
 newVars (VecShape n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
   return (VecLabel labels, VVector <$> traverse (fmap Ready) vals)
