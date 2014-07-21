@@ -17,6 +17,7 @@ import qualified Data.SBV as S
 import Data.SBV (Symbolic, SBool, Predicate)
 import Data.SBV.Internals
 import Data.SBV.LowLevel as L
+import Data.Bits
 
 import Control.Lens
 import Control.Arrow
@@ -43,6 +44,8 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
 import Verinf.Symbolic.Lit
 
+import Debug.Trace
+
 import Verifier.SAW.BitBlast (BShape(..))
 
 type SValue = Value IO SbvExtra
@@ -52,6 +55,7 @@ data SbvExtra =
   SBool SBool |
   SWord SWord |
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
+  -- need to make a zero bv too
 
 instance Show SbvExtra where
   show _ = "<symbolic>"
@@ -116,6 +120,7 @@ constMap = Map.fromList [
     ("Prelude.vZip", vZipOp),
     ("Prelude.foldr", foldrOp),
     ("Prelude.bvAt", bvAtOp),
+    ("Prelude.bvUpd", bvUpdOp),
     ("Prelude.bvRotateL", bvRotateLOp),
     ("Prelude.bvRotateR", bvRotateROp),
     ("Prelude.bvShiftR", bvShiftROp),
@@ -128,6 +133,9 @@ constMap = Map.fromList [
     ("Prelude.bvNat", bvNatOp)
     -- ("Prelude.bvToNat", bvToNatOp)
   ]
+
+
+bvUpdOp = undefined
 
 ------------------------------------------------------------
 -- Coersion functions
@@ -152,12 +160,12 @@ forceBool = fromJust . toBool
 toWord :: SValue -> IO (Maybe SWord)
 toWord (VExtra (SWord w)) = return (Just w)
 toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toBool . force) vv
-toWord (VNat n) = return Nothing
 toWord _ = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
-toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) = V.fromList (map (Ready . vBool . symTestBit xv) [0..k-1])
+toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) =
+  V.fromList (map (Ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
 toVector _ = error "this word might be symbolic"
 
 vWord :: SWord -> SValue
@@ -175,42 +183,53 @@ wordFun f = strictFun (\x -> toWord x >>= f)
 ------------------------------------------------------------
 -- Indexing operations
 
-selectV :: (Num a, Ord a) => a -> (a -> IO SValue) -> SWord -> IO SValue
-selectV m f w@(SBV (KBounded _ s) _) = do
-  let bits = map (symTestBit w) [0 .. s-1]
-  let -- sel :: Int -> [SBool] -> IO SValue
-      sel offset []       = f offset
-      sel offset (b : bs) = do
-        let bitOnValue = offset + 2 ^ (length bs)
-        onp <- if bitOnValue >= m then return undefined else sel bitOnValue bs
-        offp <- sel offset bs
-        myMerge b onp offp
-  sel 0 bits
+-- | Lifts a strict mux operation to a lazy mux
+lazyMux :: (SBool -> a -> a -> IO a) -> (SBool -> IO a -> IO a -> IO a)
+lazyMux muxFn c tm fm
+  | c `S.isConcretely` (== True) = tm
+  | c `S.isConcretely` (== False) = fm
+  | otherwise = do
+      t <- tm
+      f <- fm
+      muxFn c t f
 
-myMerge :: SBool -> SValue -> SValue -> IO SValue
-myMerge b (VExtra (SBool x)) (VExtra (SBool y)) = return .vBool $ S.ite b x y
-myMerge b (VExtra (SWord x)) (VExtra (SWord y)) = return .vWord $ S.ite b x y
-myMerge b (VVector xs) (VVector ys) = (VVector <$>) . T.sequence $ V.zipWith zipper xs ys where
-  zipper mx my = delay $ do
-    x <- force mx
-    y <- force my
-    myMerge b x y
-myMerge _ _ _ = error "cannot merge SValues"
+-- selectV merger maxValue valueFn index returns valueFn v when index has value v
+-- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
+selectV :: (Ord a, Num a, Bits a) => (SBool -> b -> b -> b)
+  -> a -> (a -> b) -> SWord -> b
+selectV merger maxValue valueFn vx@(SBV _ (Left (cwVal -> CWInteger i))) =
+  trace "selecting concretely" $ valueFn (fromIntegral i)
+selectV merger maxValue valueFn vx@(SBV(KBounded _ s) _) = trace "selecting symbolicly" $
+  impl s 0 where
+  impl _ y | y >= maxValue = valueFn maxValue
+  impl 0 y = valueFn y
+  impl i y = merger (symTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
-nOfSize :: SWord -> SWord -> SWord
-nOfSize (SBV (KBounded _ k) _) ind@(SBV (KBounded _ k2) s)
+-- `nOfSize word len` pads word with zeros to be size len
+nOfSize :: SWord -> Int -> SWord
+nOfSize ind@(SBV (KBounded _ k2) s) k
   | k == k2 = ind
   | Left (cwVal -> CWInteger ival) <- s = bitVector k ival
-  | True = L.bvJoin (bitVector (k - k2) 0) ind
+  | k >= k2 = L.bvJoin (bitVector (k - k2) 0) ind
+  | otherwise = error "could not resize index"
 
+-- could use extract instead
+
+-- symTestSym word index gets index ind from vector w
+-- it is the equivalent of cryptol-2 indexing; NOT the same as testBit
 symTestSym :: SWord -> SWord -> SValue
+symTestSym w@(SBV (KBounded _ k) _) (SBV _ (Left (cwVal -> CWInteger i))) = vBool $ symTestBit w (traceIt "conc symtestsym" (k - 1 - fromIntegral i))
 symTestSym w@(SBV (KBounded _ k) _) ind =
-  vBool $ L.bvNeq (bitVector k 0) (L.bvAnd w
-    (L.bvShL (bitVector k 1) (L.bvSub (bitVector k (fromIntegral (k-1))) (nOfSize w ind))))
+  vBool $ L.bvNeq (bitVector k 0) $ L.bvAnd w
+    (L.bvShL (bitVector k 1)
+    (traceIt "sym symtestsym" (L.bvSub (bitVector k (fromIntegral k - 1)) (nOfSize ind k)) ))
 
+traceIt a x = trace (a ++ ": " ++ show x) $ x
+
+-- symTestBit word index gets bit position ind from word w
+-- it is the equivalent of testBit; NOT the same as cryptol-2 indexing
 symTestBit :: SWord -> Int -> SBool
-symTestBit x@(SBV (KBounded _ w) _) i =
-  bvNeq (bitVector w 0) (L.bvAnd x (bitVector w (S.shiftL 1 (w-i-1))))
+symTestBit x@(SBV (KBounded _ w) _) i = bvNeq (bitVector w 0) (L.bvAnd x (bitVector w (bit i)))
 symTestBit _ _ = error "SWord must be bounded"
 
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
@@ -222,7 +241,7 @@ atOp =
   Prims.natFun $ \n ->
     case v of
       VVector xv -> force ((V.!) xv (fromIntegral n))
-      VExtra (SWord lv) -> return $ vBool $ symTestBit lv (fromIntegral n)
+      VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromIntegral n)
       _ -> fail "atOp: expected vector"
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
@@ -234,8 +253,11 @@ bvAtOp =
   strictFun $ \v -> return $
   wordFun $ \(Just ilv)->
     case v of
-      VVector xv -> selectV (V.length xv) (force . (V.!) xv) ilv
-      VExtra (SWord lv) -> return $ symTestSym lv ilv
+      VVector xv ->
+        -- if the index is concerete, don't selectV
+        -- still it's good for testing
+        force =<< selectV (lazyMux muxThunk) (V.length xv - 1) (return . (V.!) xv) ilv
+      VExtra (SWord lv) -> trace "v is a word" $ return $ symTestSym lv ilv
       _ -> fail "getOp: expected vector"
 
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
@@ -247,7 +269,7 @@ getOp =
   Prims.finFun $ \i ->
     case v of
       VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
-      VExtra (SWord lv) -> return $ vBool $ symTestBit lv (fromEnum (finVal i))
+      VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromEnum (finVal i))
       _ -> fail "getOp: expected vector"
 
 ----------------------------------------
@@ -304,7 +326,8 @@ bvRotateLOp =
                    VVector xv         -> (V.length xv, return . VVector . vRotateL xv)
                    VExtra (SWord xlv) -> (L.bvLength xlv, return . VExtra . SWord . L.bvRotLC xlv)
                    _ -> error $ "rotateLOp: " ++ show xs
-    selectV n f ilv
+    -- if the rotation amount is concrete then don't do it!
+    selectV (lazyMux muxBVal) (n - 1) f ilv
 
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateROp :: SValue
@@ -318,7 +341,7 @@ bvRotateROp =
                    VVector xv         -> (V.length xv, return . VVector . vRotateR xv)
                    VExtra (SWord xlv) -> (L.bvLength xlv, return . VExtra . SWord . L.bvRotRC xlv)
                    _ -> error $ "rotateROp: " ++ show xs
-    selectV n f ilv
+    selectV (lazyMux muxBVal) (n - 1) f ilv
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: SValue
@@ -330,7 +353,7 @@ bvShiftROp =
   strictFun $ \xs -> return $
   wordFun $ \(Just ilv) -> do
     case xs of
-                VVector xv         -> selectV (V.length xv) (return . VVector . vShiftR x xv) ilv
+                VVector xv         -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
                 VExtra (SWord xlv) -> return $ vWord (L.bvShR xlv ilv)
                 _ -> fail $ "bvShiftROp: " ++ show xs
 
@@ -359,7 +382,7 @@ bvStreamGetOp =
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
   wordFun $ \(Just ilv) ->
-  selectV (2 ^ L.bvLength ilv) (lookupSStream xs) ilv
+  selectV (lazyMux muxBVal) ((2 ^ L.bvLength ilv) - 1) (lookupSStream xs) ilv
 
 lookupSStream :: SValue -> Integer -> IO SValue
 lookupSStream (VExtra (SStream f r)) n = do
@@ -421,7 +444,7 @@ appendOp =
     (v, w) -> do
       (Just v') <- toWord v
       (Just w') <- toWord w
-      return $ vWord $ bvJoin v' w'
+      return $ vWord $ traceIt "appending" $ bvJoin (traceIt "v" v') (traceIt "w" w')
     _ -> error "appendOp"
 
 ------------------------------------------------------------
@@ -456,25 +479,27 @@ iteOp =
     VFun $ \_ -> return $
     strictFun $ \b-> return $
     strictFun $ \x-> return $
-    strictFun $ \y-> muxFn (forceBool b) x y
-muxFn b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxFn b x y)
-muxFn b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
-muxFn b (VVector xv)    (VVector yv)    = VVector <$> muxThunks b xv yv
-muxFn _ (VNat m)        (VNat n)        | m == n = return $ VNat m
-muxFn _ (VString x)     (VString y)     | x == y = return $ VString x
-muxFn _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
-muxFn _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
-muxFn _ VType           VType           = return VType
-muxFn b (VExtra x)      (VExtra y)      = return $ VExtra $ extraFn b x y
-muxFn _ _ _ = fail "iteOp: malformed arguments"
+    strictFun $ \y-> muxBVal (forceBool b) x y
+
+muxBVal :: SBool -> SValue -> SValue -> IO SValue
+muxBVal b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal b x y)
+muxBVal b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
+muxBVal b (VVector xv)    (VVector yv)    = VVector <$> muxThunks b xv yv
+muxBVal _ (VNat m)        (VNat n)        | m == n = return $ VNat m
+muxBVal _ (VString x)     (VString y)     | x == y = return $ VString x
+muxBVal _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
+muxBVal _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
+muxBVal _ VType           VType           = return VType
+muxBVal b (VExtra x)      (VExtra y)      = return $ VExtra $ extraFn b x y
+muxBVal _ _ _ = fail "iteOp: malformed arguments"
 
 muxThunks :: SBool -> V.Vector SThunk -> V.Vector SThunk -> IO (V.Vector SThunk)
 muxThunks b xv yv
-  | V.length xv == V.length yv = V.zipWithM (thunkFn b) xv yv
+  | V.length xv == V.length yv = V.zipWithM (muxThunk b) xv yv
   | otherwise                  = fail "iteOp: malformed arguments"
 
-thunkFn :: SBool -> SThunk -> SThunk -> IO SThunk
-thunkFn b x y = delay $ do x' <- force x; y' <- force y; muxFn b x' y'
+muxThunk :: SBool -> SThunk -> SThunk -> IO SThunk
+muxThunk b x y = delay $ do x' <- force x; y' <- force y; muxBVal b x' y'
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
 extraFn b (SBool x) (SBool y) = SBool $ S.ite b x y
