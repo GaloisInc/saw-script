@@ -211,7 +211,7 @@ nOfSize :: SWord -> Int -> SWord
 nOfSize ind@(SBV (KBounded _ k2) s) k
   | k == k2 = ind
   | Left (cwVal -> CWInteger ival) <- s = bitVector k ival
-  | k >= k2 = L.bvJoin (bitVector (k - k2) 0) ind
+  | k >= k2 = L.bvJoin ((bitVector (k - k2) 0) :: SWord) ind
   | otherwise = error "could not resize index"
 
 -- could use extract instead
