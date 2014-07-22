@@ -14,6 +14,7 @@
 module Verifier.SAW.Simulator.SBV where
 
 import qualified Data.SBV as S
+import qualified Data.SBV.Tools.Polynomial as Poly
 import Data.SBV (Symbolic, SBool, Predicate)
 import Data.SBV.Internals
 import Data.SBV.LowLevel as L
@@ -280,16 +281,21 @@ bvPModOp :: SValue
 bvPModOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
-  wordFun $ \(Just x) -> return $
-  wordFun $ \(Just y) -> error "didn't implement yet"
+  wordFun $ \(Just x@(SBV (KBounded _ a) _)) -> return $
+  wordFun $ \(Just y@(SBV (KBounded _ b) _)) ->
+    return . vWord . S.fromBitsLE $ take (b-1) (snd (Poly.mdp (S.blastLE x) (S.blastLE y)) ++ repeat S.false)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
 bvPMulOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
-  wordFun $ \x -> return $
-  wordFun $ \y -> error "not done yet"
+  wordFun $ \(Just x@(SBV (KBounded _ a) _)) -> return $
+  wordFun $ \(Just y@(SBV (KBounded _ b) _)) -> do
+    let k = max 1 (a + b) - 1
+    let mul _ [] ps = ps
+        mul as (b:bs) ps = mul (S.false : as) bs (Poly.ites b (as `Poly.addPoly` ps) ps)
+    return . vWord . S.fromBitsLE $ take k $ mul (S.blastLE x) (S.blastLE y) [] ++ repeat S.false
 
 ------------------------------------------------------------
 -- Vector operations
