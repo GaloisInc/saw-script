@@ -34,6 +34,7 @@ prim read_sbv           : {a} String -> TopLevel a;
 prim read_core          : {a} String -> TopLevel a;
 
 prim write_aig          : {a} String -> a -> TopLevel ();
+prim write_cnf          : {a} String -> a -> TopLevel ();
 prim write_smtlib1      : {a} String -> a -> TopLevel ();
 prim write_smtlib2      : {a} String -> a -> TopLevel ();
 prim write_core         : {a} String -> a -> TopLevel ();
