@@ -115,6 +115,7 @@ prim llvm_verify_tactic : {a} ProofScript a -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
 prim llvm_load_module   : String -> TopLevel LLVMModule;
+prim llvm_browse_module : LLVMModule -> TopLevel ();
 prim llvm_module_info   : LLVMModule -> TopLevel ();
 prim llvm_extract       : {a} LLVMModule -> String -> LLVMSetup ()
                        -> TopLevel a;
