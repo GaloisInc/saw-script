@@ -92,6 +92,7 @@ prim java_verify_tactic : {a} ProofScript a -> JavaSetup ();
 prim java_pure          : JavaSetup ();
 
 prim java_load_class    : String -> TopLevel JavaClass;
+prim java_browse_class  : JavaClass -> TopLevel ();
 prim java_class_info    : JavaClass -> TopLevel ();
 prim java_extract       : {a} JavaClass -> String -> JavaSetup () -> TopLevel a;
 prim java_verify        : {n} JavaClass -> String -> [n]JavaMethodSpec
