@@ -13,6 +13,7 @@ library
       base >= 4
     , abcBridge
     , aig
+    , ansi-terminal
     , array
 --    , cmdargs
     , containers
@@ -75,6 +76,7 @@ library
     SAWScript.ResolveSyns
     SAWScript.REPL
     SAWScript.REPL.GenerateModule
+    SAWScript.REPL.Logo
     SAWScript.REPL.Monad
     SAWScript.Token
     SAWScript.MGU
