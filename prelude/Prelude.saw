@@ -9,6 +9,8 @@ abstract LLVMType;
 abstract LLVMMethodSpec;
 
 abstract CryptolModuleEnv;
+abstract JavaClass;
+abstract LLVMModule;
 
 // TODO: create ProofResult a, with concrete syntax
 // TODO: create SatResult a, with concrete syntax
@@ -32,6 +34,7 @@ prim read_sbv           : {a} String -> TopLevel a;
 prim read_core          : {a} String -> TopLevel a;
 
 prim write_aig          : {a} String -> a -> TopLevel ();
+prim write_cnf          : {a} String -> a -> TopLevel ();
 prim write_smtlib1      : {a} String -> a -> TopLevel ();
 prim write_smtlib2      : {a} String -> a -> TopLevel ();
 prim write_core         : {a} String -> a -> TopLevel ();
@@ -49,11 +52,11 @@ prim print_goal         : ProofScript ();
 prim assume_valid       : {a} ProofScript (ProofResult a);
 prim assume_unsat       : {a} ProofScript (SatResult a);
 prim abc                : {a} ProofScript a;
-prim abc2               : {a} ProofScript a;
 prim boolector          : {a} ProofScript a;
 prim cvc4               : {a} ProofScript a;
 prim z3                 : {a} ProofScript a;
 prim mathsat            : {a} ProofScript a;
+prim abc_old            : {a} ProofScript a;
 prim yices              : {a} ProofScript a;
 prim offline_aig        : {a} String -> ProofScript a;
 prim offline_extcore    : {a} String -> ProofScript a;
@@ -67,6 +70,7 @@ prim addsimp'           : {a} a -> Simpset -> Simpset;
 prim rewrite            : {a} Simpset -> a -> TopLevel a;
 
 prim cryptol_module     : String -> TopLevel CryptolModuleEnv;
+prim cryptol_module_info : CryptolModuleEnv -> TopLevel ();
 prim cryptol_extract    : {a} CryptolModuleEnv -> String -> TopLevel a;
 
 prim java_bool          : JavaType;
@@ -91,8 +95,11 @@ prim java_return        : {a} a -> JavaSetup ();
 prim java_verify_tactic : {a} ProofScript a -> JavaSetup ();
 prim java_pure          : JavaSetup ();
 
-prim java_extract       : {a} String -> String -> JavaSetup () -> TopLevel a;
-prim java_verify        : {n} String -> String -> [n]JavaMethodSpec
+prim java_load_class    : String -> TopLevel JavaClass;
+prim java_browse_class  : JavaClass -> TopLevel ();
+prim java_class_info    : JavaClass -> TopLevel ();
+prim java_extract       : {a} JavaClass -> String -> JavaSetup () -> TopLevel a;
+prim java_verify        : {n} JavaClass -> String -> [n]JavaMethodSpec
                        -> JavaSetup ()
                        -> TopLevel JavaMethodSpec;
 
@@ -113,8 +120,12 @@ prim llvm_return        : {a} a -> LLVMSetup ();
 prim llvm_verify_tactic : {a} ProofScript a -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
-prim llvm_extract       : {a} String -> String -> LLVMSetup () -> TopLevel a;
-prim llvm_verify        : {n} String -> String -> [n]LLVMMethodSpec
+prim llvm_load_module   : String -> TopLevel LLVMModule;
+prim llvm_browse_module : LLVMModule -> TopLevel ();
+prim llvm_module_info   : LLVMModule -> TopLevel ();
+prim llvm_extract       : {a} LLVMModule -> String -> LLVMSetup ()
+                       -> TopLevel a;
+prim llvm_verify        : {n} LLVMModule -> String -> [n]LLVMMethodSpec
                        -> LLVMSetup ()
                        -> TopLevel LLVMMethodSpec;
 
@@ -159,7 +170,7 @@ prim trunc              : {m, n} Int -> [m] -> [n];
 prim sext               : {m, n} Int -> [m] -> [n];
 prim uext               : {m, n} Int -> [m] -> [n];
 
-// Awful stuff we need to remove, once we have type-level arithmetic.
+// Awful stuff we need to remove, once generic split and join work.
 prim ec_join            : [12][32] -> [384];
 prim ec_join768         : [24][32] -> [768];
 prim ec_split           : [384] -> [12][32];
