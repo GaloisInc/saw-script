@@ -4,7 +4,7 @@
 module Verifier.SAW.Simulator.BitBlast where
 
 import Control.Applicative
-import Control.Monad (zipWithM)
+import Control.Monad (zipWithM, (<=<))
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -98,6 +98,18 @@ toWord :: BValue l -> IO (LitVector l)
 toWord (VExtra (BWord lv)) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
 toWord _ = fail "toWord"
+
+flattenBValue :: BValue l -> IO (LitVector l)
+flattenBValue (VExtra (BBool l)) = return (AIG.replicate 1 l)
+flattenBValue (VExtra (BWord lv)) = return lv
+flattenBValue (VExtra (BStream _ _)) = error "flattenBValue: BStream"
+flattenBValue (VVector vv) =
+  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
+flattenBValue (VTuple vv) =
+  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
+flattenBValue (VRecord m) =
+  AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
+flattenBValue _ = error "flattenBValue: unsupported value"
 
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
 wordFun f = strictFun (\x -> toWord x >>= f)
@@ -214,6 +226,7 @@ beConstMap be = Map.fromList
   , ("Prelude.bvUpd", bvUpdOp be)
   , ("Prelude.bvRotateL", bvRotateLOp be)
   , ("Prelude.bvRotateR", bvRotateROp be)
+  , ("Prelude.bvShiftL", bvShiftLOp be)
   , ("Prelude.bvShiftR", bvShiftROp be)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
@@ -422,6 +435,22 @@ bvRotateROp be =
                    _ -> error $ "rotateROp: " ++ show xs
     r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
     AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
+
+-- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftLOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvShiftLOp be =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \x -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \ilv -> do
+    (n, f) <- case xs of
+                VVector xv         -> return (V.length xv, VVector . vShiftL x xv)
+                VExtra (BWord xlv) -> do l <- toBool <$> force x
+                                         return (AIG.length xlv, VExtra . BWord . lvShiftL l xlv)
+                _ -> fail $ "bvShiftLOp: " ++ show xs
+    AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: AIG.IsAIG l g => g s -> BValue (l s)

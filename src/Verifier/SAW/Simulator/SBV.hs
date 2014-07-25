@@ -59,7 +59,10 @@ data SbvExtra =
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
 
 instance Show SbvExtra where
-  show _ = "<symbolic>"
+  show (SBool s) = "SBool " ++ show s
+  show (SWord w) = "SWord " ++ show w
+  show SZero = "SZero"
+  show (SStream _ _) = "<SStream>"
   
 constMap :: Map Ident SValue
 constMap = Map.fromList [
@@ -96,9 +99,9 @@ constMap = Map.fromList [
     ("Prelude.bvuge" , binRel L.bvGe),
     ("Prelude.bvugt" , binRel L.bvGt),
     -- Shifts
-    ("Prelude.bvShl" , binOp L.bvShL),
-    ("Prelude.bvShr" , binOp L.bvShR),
-    ("Prelude.bvSShr", binOp L.bvSShR),
+    ("Prelude.bvShl" , bvShLOp),
+    ("Prelude.bvShr" , bvShROp),
+    ("Prelude.bvSShr", bvSShROp),
     -- Nat
     ("Prelude.Succ", Prims.succOp),
     ("Prelude.addNat", Prims.addNatOp),
@@ -161,7 +164,7 @@ forceBool = fromJust . toBool
 toWord :: SValue -> IO (Maybe SWord)
 toWord (VExtra (SWord w)) = return (Just w)
 toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toBool . force) vv
-toWord _ = return Nothing
+toWord x = trace ("could not convert " ++ show x) $ return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
@@ -272,6 +275,31 @@ getOp =
       VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
       VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromEnum (finVal i))
       _ -> fail "getOp: expected vector"
+
+----------------------------------------
+-- Shift operations
+
+-- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+bvShLOp :: SValue
+bvShLOp = 
+  VFun $ \_ -> return $
+  wordFun $ \(Just w) -> return $
+  Prims.natFun $ \n -> return $ vWord $ L.bvShLC w (fromIntegral n)
+
+-- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+bvShROp :: SValue
+bvShROp = 
+  VFun $ \_ -> return $
+  wordFun $ \(Just w) -> return $
+  Prims.natFun $ \n -> return $ vWord $ L.bvShRC w (fromIntegral n)
+
+-- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+bvSShROp :: SValue
+bvSShROp = 
+  VFun $ \_ -> return $
+  wordFun $ \(Just w) -> return $
+  Prims.natFun $ \n -> return $ vWord $ L.bvSShRC w (fromIntegral n)
+
 
 ----------------------------------------
 -- Polynomial operations
