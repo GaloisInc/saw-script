@@ -138,9 +138,6 @@ constMap = Map.fromList [
     -- ("Prelude.bvToNat", bvToNatOp)
   ]
 
-
-bvUpdOp = undefined
-
 ------------------------------------------------------------
 -- Coersion functions
 
@@ -344,6 +341,35 @@ vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
 vShiftR :: a -> V.Vector a -> Int -> V.Vector a
 vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
   where j = min i (V.length xs)
+
+-- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
+bvUpdOp :: SValue
+bvUpdOp = 
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  wordFun $ \milv -> return $
+  strictFun $ \y ->
+    case (milv, v) of
+      (Nothing, VVector xv) -> do
+        y' <- delay (return y)
+        return (VVector (xv V.// [(0, y')]))
+      (Nothing, VExtra (SWord lv@(SBV (KBounded _ w) _)))-> do
+        let (Just b) = toBool y
+        return $ vWord $ S.ite b
+          (L.bvOr lv (L.bvShLC (bitVector w 1) (fromIntegral w - 1)))
+          (L.bvAnd lv (L.bvNot (L.bvShLC (bitVector w 1) (fromIntegral w - 1))))
+      (Just ilv, VVector xv) -> do
+        y' <- delay (return y)
+        let upd i = return (VVector (xv V.// [(i, y')]))
+        selectV (lazyMux muxBVal) (V.length xv - 1) upd ilv
+      (Just ilv, VExtra (SWord lv@(SBV (KBounded _ w) _))) -> do
+        let (Just b) = toBool y
+        return $ vWord $ S.ite b
+          (L.bvOr lv (L.bvShL (bitVector w 1) (L.bvSub (bitVector w (fromIntegral w - 1)) (nOfSize ilv w))))
+          (L.bvAnd lv (L.bvNot (L.bvShL (bitVector w 1) (L.bvSub (bitVector w (fromIntegral w - 1)) (nOfSize ilv w)))))
+      _ -> fail "bvUpdOp: expected vector"
 
 ------------------------------------------------------------
 -- Rotations and shifts
