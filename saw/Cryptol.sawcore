@@ -428,6 +428,15 @@ ecFromTo (TCNum first) _ _ (PFinNum last) (PFinNum bits) _ _ =
     (\(i::Fin (addNat 1 (subNat last first))) ->
       bvNat bits (addNat (finFront (addNat 1 (subNat last first)) i) first));
 
+ecFromThenTo :: (first next last bits len :: Num) -> PFin first -> PFin next -> PFin last -> PFin bits
+             -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next) -> PGeq bits (tcWidth last)
+             -> PEqual (tcLenFromThenTo first next last) len
+             -> seq len (seq bits Bool);
+ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits) _ _ _ _ =
+  generate len (Vec bits Bool)
+    (\(i::Fin len) ->
+      bvNat bits (subNat (addNat first (mulNat (finFront len i) next)) (mulNat (finFront len i) first)));
+
 -- Infinite word sequences
 ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
 ecInfFrom _ (PFinNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
