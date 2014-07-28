@@ -75,9 +75,12 @@ library
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.REPL
+    SAWScript.REPL.Command
     SAWScript.REPL.GenerateModule
+    SAWScript.REPL.Haskeline
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
+    SAWScript.REPL.Trie
     SAWScript.Token
     SAWScript.MGU
     SAWScript.Unify
