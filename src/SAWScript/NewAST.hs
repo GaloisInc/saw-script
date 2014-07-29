@@ -106,7 +106,7 @@ translateTypeS (In (Inr (Inr ty))) =
     A.ZF              -> return $ A.tMono A.tZ
     A.QuoteF          -> return $ A.tMono A.tString
 
-    A.ArrayF tE tL    -> A.tMono <$> (A.tArray <$> translateType tL <*> translateType tE)
+    A.ArrayF tL tE    -> A.tMono <$> (A.tArray <$> translateType tL <*> translateType tE)
     A.BlockF tC tE    -> A.tMono <$> (A.tBlock <$> translateType tC <*> translateType tE)
     A.TupleF ts       -> A.tMono <$> (A.tTuple <$> mapM translateType ts)
     A.RecordF fs      -> A.tMono <$> TyRecord . M.fromList <$> mapM translateTypeField fs
