@@ -35,6 +35,7 @@ library
     , old-time
     , pretty
     , pretty-show
+    , process
     , saw-core
     , smtLib
     , split
