@@ -1,9 +1,0 @@
-main = do {
-  l <- llvm_load_module "ffs.bc";
-  (ffs_ref : [32] -> [32]) <- llvm_extract l "ffs_ref" llvm_pure;
-  (ffs_imp : [32] -> [32]) <- llvm_extract l "ffs_imp" llvm_pure;
-
-  let thm1 x = ffs_ref x == ffs_imp x;
-  prove_print abc thm1;
-  print "Done.";
-};
