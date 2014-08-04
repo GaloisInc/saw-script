@@ -1,7 +1,17 @@
 {-# LANGUAGE CPP #-}
--- | Provides utility functions about general data structured used by SAW.
--- Declarations here should refer primarily to terms defined in other packages.
--- SAW-specific declarations should be stored in separate modules.
+
+{- |
+Module      : Verifier.SAW
+Copyright   : Galois, Inc. 2012-2014
+License     : BSD3
+Maintainer  : jhendrix@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+
+Provides utility functions about general data structured used by SAW.
+Declarations here should refer primarily to terms defined in other packages.
+SAW-specific declarations should be stored in separate modules.
+-}
 module Verifier.SAW.Utils
   ( internalError
   , sumBy

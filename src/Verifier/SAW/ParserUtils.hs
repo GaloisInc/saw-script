@@ -1,6 +1,16 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
+
+{- |
+Module      : Verifier.SAW.ParserUtils
+Copyright   : Galois, Inc. 2012-2014
+License     : BSD3
+Maintainer  : jhendrix@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
+
 module Verifier.SAW.ParserUtils
  ( module Verifier.SAW.TypedAST
    -- * Parser utilities.

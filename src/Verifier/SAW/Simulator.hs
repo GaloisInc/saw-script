@@ -1,7 +1,3 @@
-{-
-Evaluator for SAWCore terms, with lazy evaluation order.
--}
-
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -9,6 +5,17 @@ Evaluator for SAWCore terms, with lazy evaluation order.
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+
+{- |
+Module      : Verifier.SAW.Simulator
+Copyright   : Galois, Inc. 2012-2014
+License     : BSD3
+Maintainer  : jhendrix@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+
+Evaluator for SAWCore terms, with lazy evaluation order.
+-}
 
 module Verifier.SAW.Simulator where
 

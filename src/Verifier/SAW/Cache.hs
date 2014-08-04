@@ -1,4 +1,14 @@
 {-# LANGUAGE ExistentialQuantification #-}
+
+{- |
+Module      : Verifier.SAW.Cache
+Copyright   : Galois, Inc. 2012-2014
+License     : BSD3
+Maintainer  : jhendrix@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
+
 module Verifier.SAW.Cache
   ( Cache
   , newCache
@@ -8,6 +18,7 @@ module Verifier.SAW.Cache
   , newCacheIntMap'
   , useCache
   ) where
+
 
 import Control.Monad (liftM)
 import Control.Monad.Ref
