@@ -378,9 +378,9 @@ ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> seq m (ty a) -> seq n (ty a) 
 ecCat _ (TCNum n) a (PFinNum m) = append m n (ty a);
 ecCat _ TCInf a (PFinNum m) = streamAppend (ty a) m;
 
-ecSplitAt :: (m n :: Num) -> (a :: KType) -> PFin m -> seq (tcAdd m n) (ty a) -> #(seq m (ty a), seq n (ty a));
-ecSplitAt _ (TCNum n) a (PFinNum m) xs = (vTake (ty a) m n xs, vDrop (ty a) m n xs);
-ecSplitAt _ TCInf a (PFinNum m) xs = (streamTake (ty a) m xs, streamDrop (ty a) m xs);
+ecSplitAt :: (m n :: Num) -> (a :: KType) -> PFin m -> seq (tcAdd m n) (ty a) -> #(seq m (ty a), #(seq n (ty a), #()));
+ecSplitAt _ (TCNum n) a (PFinNum m) xs = (vTake (ty a) m n xs, (vDrop (ty a) m n xs, ()));
+ecSplitAt _ TCInf a (PFinNum m) xs = (streamTake (ty a) m xs, (streamDrop (ty a) m xs, ()));
 
 ecJoin :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (seq n (ty a)) -> seq (tcMul m n) (ty a);
 ecJoin (TCNum m) _ a (PFinNum n) = join m n (ty a);
