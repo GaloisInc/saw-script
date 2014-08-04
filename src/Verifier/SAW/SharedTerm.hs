@@ -59,6 +59,9 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
+  , scNestedTuple
+  , scNestedTupleType
+  , scNestedSelector
   , scVector
   , scVecType
   , scTermCount
@@ -909,6 +912,26 @@ scTupleType sc ts = scFlatTermF sc (TupleType ts)
 
 scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
 scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
+
+-- | Nil-terminated nested tuples: [a,b,c,d] -> (a, (b, (c, (d, ()))))
+scNestedTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scNestedTuple sc [] = scTuple sc []
+scNestedTuple sc (x : xs) =
+  do y <- scNestedTuple sc xs
+     scTuple sc [x, y]
+
+scNestedTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
+scNestedTupleType sc [] = scTupleType sc []
+scNestedTupleType sc (x : xs) =
+  do y <- scNestedTupleType sc xs
+     scTupleType sc [x, y]
+
+-- | 1-based indexing
+scNestedSelector :: SharedContext s -> Int -> SharedTerm s -> IO (SharedTerm s)
+scNestedSelector sc i t
+  | i <= 1    = scTupleSelector sc t 1
+  | otherwise = scTupleSelector sc t 2 >>= scNestedSelector sc (i - 1)
+
 
 scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFun sc a b = do b' <- incVars sc 0 1 b
