@@ -55,9 +55,15 @@ prim abc                : {a} ProofScript a;
 prim abc_old            : {a} ProofScript a;
 prim yices              : {a} ProofScript a;
 prim offline_aig        : {a} String -> ProofScript a;
+prim offline_cnf        : {a} String -> ProofScript a;
 prim offline_extcore    : {a} String -> ProofScript a;
 prim offline_smtlib1    : {a} String -> ProofScript a;
 prim offline_smtlib2    : {a} String -> ProofScript a;
+
+prim external_cnf_solver : {n, a} String -> [n]String -> ProofScript a;
+//prim external_aig_solver : {n, a} String -> [n]String -> ProofScript a;
+//prim external_smtlib1_solver : {n, a} String -> [n]String -> ProofScript a;
+//prim external_smtlib2_solver : {n, a} String -> [n]String -> ProofScript a;
 
 prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;

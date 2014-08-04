@@ -13,6 +13,7 @@ library
       base >= 4
     , abcBridge
     , aig
+    , ansi-terminal
     , array
 --    , cmdargs
     , containers
@@ -34,6 +35,7 @@ library
     , old-time
     , pretty
     , pretty-show
+    , process
     , saw-core
     , smtLib
     , split
@@ -75,9 +77,13 @@ library
     SAWScript.RenameRefs
     SAWScript.ResolveSyns
     SAWScript.REPL
+    SAWScript.REPL.Command
     SAWScript.REPL.GenerateModule
+    SAWScript.REPL.Haskeline
+    SAWScript.REPL.Logo
     SAWScript.REPL.Monad
     SAWScript.SBVParser
+    SAWScript.REPL.Trie
     SAWScript.Token
     SAWScript.MGU
     SAWScript.Unify
