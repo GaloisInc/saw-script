@@ -327,19 +327,6 @@ scEAbs sc x a e =
   do t <- scGlobalApply sc "Cryptol.ty" [a]
      scLambda sc x t e
 
--- | Nil-terminated nested tuples: [a,b,c,d] -> #(a, #(b, #(c, #(d, #()))))
-scNestedTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
-scNestedTuple sc [] = scTuple sc []
-scNestedTuple sc (x : xs) =
-  do y <- scNestedTuple sc xs
-     scTuple sc [x, y]
-
--- | 1-based indexing
-scNestedSelector :: SharedContext s -> Int -> SharedTerm s -> IO (SharedTerm s)
-scNestedSelector sc i t
-  | i <= 1    = scTupleSelector sc t 1
-  | otherwise = scTupleSelector sc t 2 >>= scNestedSelector sc (i - 1)
-
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
