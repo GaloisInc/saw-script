@@ -44,7 +44,6 @@ library
     , xdg-basedir
     , wl-pprint
     , GraphSCC
-    , sbv
 
   hs-source-dirs: src
 
