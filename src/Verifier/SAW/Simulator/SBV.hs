@@ -127,6 +127,7 @@ constMap = Map.fromList [
     ("Prelude.bvUpd", bvUpdOp),
     ("Prelude.bvRotateL", bvRotateLOp),
     ("Prelude.bvRotateR", bvRotateROp),
+    ("Prelude.bvShiftL", bvShiftLOp),
     ("Prelude.bvShiftR", bvShiftROp),
      -- Streams
     ("Prelude.MkStream", mkStreamOp),
@@ -407,6 +408,21 @@ bvRotateROp =
       _ -> error $ "rotateROp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftLOp :: SValue
+bvShiftLOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \x -> return $
+  strictFun $ \xs -> return $
+  wordFun $ \milv -> do
+    case (milv, xs) of
+      (Nothing, xv) -> return xv
+      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (sbvShiftLeft xlv ilv)
+      _ -> fail $ "bvShiftROp: " ++ show xs
+
+-- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: SValue
 bvShiftROp =
   VFun $ \_ -> return $
@@ -418,7 +434,7 @@ bvShiftROp =
     case (milv, xs) of
       (Nothing, xv) -> return xv
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
-      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (sbvSignedShiftArithRight xlv ilv)
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (sbvShiftRight xlv ilv)
       _ -> fail $ "bvShiftROp: " ++ show xs
 
 ------------------------------------------------------------
