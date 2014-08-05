@@ -2,6 +2,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
+{- |
+Module      : Verifier.SAW.Cryptol
+Copyright   : Galois, Inc. 2012-2014
+License     : BSD3
+Maintainer  : huffman@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
+
 module Verifier.SAW.Cryptol where
 
 import Control.Applicative

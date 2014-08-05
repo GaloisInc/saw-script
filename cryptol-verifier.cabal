@@ -1,10 +1,17 @@
-Name: cryptol-verifier
-Description: Representing Cryptol in SAWCore
-Version: 0.1
-Author: Galois, Inc.
-Maintainer: huffman@galois.com
-Build-type: Simple
-cabal-version: >= 1.8
+Name:              cryptol-verifier
+Version:           0.1
+Author:            Galois, Inc.
+License:           BSD3
+License-file:      LICENSE
+Maintainer:        huffman@galois.com
+Copyright:         (c) 2014 Galois Inc.
+Build-type:        Simple
+cabal-version:     >= 1.8
+Category:          Formal Methods
+Synopsis:          Representing Cryptol in SAWCore
+Description:
+  Translate Cryptol syntax into SAWCore terms, which can then
+  be analysed by various backend proof systems.
 
 extra-source-files:
     saw/Cryptol.sawcore
@@ -12,7 +19,7 @@ extra-source-files:
 library
   build-depends:
     array,
-    base >= 4,
+    base == 4.*,
     containers,
     cryptol,
     saw-core
