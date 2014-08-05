@@ -37,7 +37,8 @@ import Debug.Trace
 
 data SimulatorConfig m e =
   SimulatorConfig
-  { simGlobal :: Ident -> m (Value m e)
+  { simGlobal :: Ident -> m (Value m e), 
+    simUninterpreted :: Ident -> Maybe (m (Value m e))
   }
 
 ------------------------------------------------------------
@@ -123,7 +124,7 @@ evalTermF cfg lam rec env tf =
                                             return (xs ++ env)
                                   lam env' t
     LocalVar i              -> force (env !! i)
-    Constant _ t            -> rec t
+    Constant i t            -> maybe (rec t) id (simUninterpreted cfg i)
     FTermF ftf              ->
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
@@ -159,15 +160,16 @@ evalTerm cfg env (Term tf) = evalTermF cfg lam rec env tf
 evalTypedDef :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> TypedDef -> m (Value m e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
-evalGlobal :: forall m e. (MonadIO m, MonadFix m) => Module -> Map Ident (Value m e) -> SimulatorConfig m e
-evalGlobal m prims = cfg
+evalGlobal :: forall m e. (MonadIO m, MonadFix m) =>
+              Module -> Map Ident (Value m e) -> (Ident -> Maybe (m (Value m e))) -> SimulatorConfig m e
+evalGlobal m prims uninterpreted = cfg
   where
     cfg :: SimulatorConfig m e
-    cfg = SimulatorConfig global
+    cfg = SimulatorConfig global uninterpreted
 
     global :: Ident -> m (Value m e)
     global ident =
-      traceShow ident $ case Map.lookup ident prims of
+      case Map.lookup ident prims of
         Just v -> return v
         Nothing ->
           case findCtor m ident of

@@ -42,7 +42,7 @@ import Verifier.SAW.Prim hiding (BV, ite, bv)
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
+import Verifier.SAW.TypedAST (FieldName, Ident(..), Module)
 import Verinf.Symbolic.Lit hiding (exists)
 
 import Debug.Trace
@@ -63,7 +63,10 @@ instance Show SbvExtra where
   show (SWord w) = "SWord " ++ show w
   show SZero = "SZero"
   show (SStream _ _) = "<SStream>"
-  
+
+uninterpreted :: Ident -> Maybe (IO SValue)
+uninterpreted ident = Just $ return (vWord (uninterpret (identName ident) :: SWord))
+
 constMap :: Map Ident SValue
 constMap = Map.fromList [
     -- Boolean
@@ -603,7 +606,7 @@ extraFn _ _ _ = error "iteOp: malformed arguments"
 
 sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
 sbvSolveBasic m = Sim.evalSharedTerm cfg
-  where cfg = Sim.evalGlobal m constMap
+  where cfg = Sim.evalGlobal m constMap uninterpreted
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do
