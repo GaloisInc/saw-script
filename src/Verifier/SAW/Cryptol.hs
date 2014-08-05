@@ -138,8 +138,7 @@ importType sc env ty =
     go = importType sc env
 
 importTCTuple :: SharedContext s -> Env s -> [C.Type] -> IO (SharedTerm s)
-importTCTuple _sc _env [] = unimplemented "TCTuple []"
-importTCTuple sc env [t] = importType sc env t
+importTCTuple sc _env [] = scCtorApp sc "Cryptol.TCUnit" []
 importTCTuple sc env (t : ts) =
   scCtorApp sc "Cryptol.TCPair" =<< sequence [importType sc env t, importTCTuple sc env ts]
 
@@ -274,11 +273,8 @@ importExpr sc env expr =
     C.ERec fs                   -> scNestedTuple sc =<< traverse go (map snd fs)
     C.ESel e sel                ->           -- ^ Elimination for tuple/record/list
       case sel of
-        C.TupleSel i (Just l)   -> scNestedSelector sc i l =<< go e
-        C.TupleSel i Nothing    -> case C.tNoUser (fastTypeOf (envC env) e) of
-                                     C.TCon (C.TC (C.TCTuple l)) _ -> scNestedSelector sc i l =<< go e
-                                     _ -> fail "Expected tuple type"
-        C.RecordSel x (Just xs) -> scNestedSelector sc i l =<< go e
+        C.TupleSel i _maybeLen  -> scNestedSelector sc i =<< go e
+        C.RecordSel x (Just xs) -> scNestedSelector sc i =<< go e
                                      where i = fromJust (findIndex (== x) xs) + 1
                                            l = length xs
         C.RecordSel x Nothing   -> case C.tNoUser (fastTypeOf (envC env) e) of
@@ -339,18 +335,6 @@ scEAbs :: SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (Share
 scEAbs sc x a e =
   do t <- scGlobalApply sc "Cryptol.ty" [a]
      scLambda sc x t e
-
-scNestedTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
-scNestedTuple _sc [] = unimplemented "ETuple []"
-scNestedTuple _sc [x] = return x
-scNestedTuple sc (x : xs) =
-  do y <- scNestedTuple sc xs
-     scTuple sc [x, y]
-
-scNestedSelector :: SharedContext s -> Int -> Int -> SharedTerm s -> IO (SharedTerm s)
-scNestedSelector sc i l t
-  | i <= 1    = if i < l then scTupleSelector sc t 1 else return t
-  | otherwise = scTupleSelector sc t 2 >>= scNestedSelector sc (i - 1) (l - 1)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
