@@ -34,44 +34,46 @@ unimplemented name = fail ("unimplemented: " ++ name)
 --------------------------------------------------------------------------------
 -- Type Environments
 
+-- | SharedTerms are paired with a deferred shift amount for loose variables
 data Env s = Env
-  { envT :: Map Int (SharedTerm s)     -- ^ Type variables are referenced by unique id
-  , envE :: Map C.QName (SharedTerm s) -- ^ Term variables are referenced by name
-  , envP :: Map C.Prop (SharedTerm s)  -- ^ Bound propositions are referenced implicitly by their types
-  , envC :: Map C.QName C.Schema       -- ^ Cryptol type environment
+  { envT :: Map Int     (SharedTerm s, Int) -- ^ Type variables are referenced by unique id
+  , envE :: Map C.QName (SharedTerm s, Int) -- ^ Term variables are referenced by name
+  , envP :: Map C.Prop  (SharedTerm s, Int) -- ^ Bound propositions are referenced implicitly by their types
+  , envC :: Map C.QName C.Schema            -- ^ Cryptol type environment
   }
 
 emptyEnv :: Env s
 emptyEnv = Env Map.empty Map.empty Map.empty Map.empty
 
-liftTerm :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
-liftTerm sc = incVars sc 0 1
+liftTerm :: (SharedTerm s, Int) -> (SharedTerm s, Int)
+liftTerm (t, j) = (t, j + 1)
 
 -- | Increment dangling bound variables of all types in environment.
-liftEnv :: SharedContext s -> Env s -> IO (Env s)
-liftEnv sc env =
-  Env <$> traverse (liftTerm sc) (envT env)
-      <*> traverse (liftTerm sc) (envE env)
-      <*> traverse (liftTerm sc) (envP env)
-      <*> pure (envC env)
+liftEnv :: Env s -> Env s
+liftEnv env =
+  Env { envT = fmap liftTerm (envT env)
+      , envE = fmap liftTerm (envE env)
+      , envP = fmap liftTerm (envP env)
+      , envC = envC env
+      }
 
 bindTParam :: SharedContext s -> C.TParam -> Env s -> IO (Env s)
 bindTParam sc tp env = do
-  env' <- liftEnv sc env
+  let env' = liftEnv env
   v <- scLocalVar sc 0
-  return $ env' { envT = Map.insert (C.tpUnique tp) v (envT env') }
+  return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env') }
 
 bindQName :: SharedContext s -> C.QName -> C.Schema -> Env s -> IO (Env s)
 bindQName sc qname schema env = do
-  env' <- liftEnv sc env
+  let env' = liftEnv env
   v <- scLocalVar sc 0
-  return $ env' { envE = Map.insert qname v (envE env'), envC = Map.insert qname schema (envC env') }
+  return $ env' { envE = Map.insert qname (v, 0) (envE env'), envC = Map.insert qname schema (envC env') }
 
 bindProp :: SharedContext s -> C.Prop -> Env s -> IO (Env s)
 bindProp sc prop env = do
-  env' <- liftEnv sc env
+  let env' = liftEnv env
   v <- scLocalVar sc 0
-  return $ env' { envP = Map.insert prop v (envP env') }
+  return $ env' { envP = Map.insert prop (v, 0) (envP env') }
 
 --------------------------------------------------------------------------------
 
@@ -106,7 +108,7 @@ importType sc env ty =
       case tvar of
         C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
         C.TVBound i _k   -> case Map.lookup i (envT env) of
-                              Just t -> return t
+                              Just (t, j) -> incVars sc 0 j t
                               Nothing -> fail "internal error: importType TVBound"
     C.TUser _ _ t  -> go t
     C.TRec fs      -> importTCTuple sc env (map snd fs)
@@ -176,7 +178,7 @@ importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams 
 proveProp :: SharedContext s -> Env s -> C.Prop -> IO (SharedTerm s)
 proveProp sc env prop =
   case Map.lookup prop (envP env) of
-    Just prf -> return prf
+    Just (prf, j) -> incVars sc 0 j prf
     Nothing ->
       case prop of
         (C.pIsFin -> Just n)
@@ -297,7 +299,7 @@ importExpr sc env expr =
     C.EComp t e mss             -> importComp sc env t e mss
     C.EVar qname                    ->
       case Map.lookup qname (envE env) of
-        Just e'                     -> return e'
+        Just (e', j)                -> incVars sc 0 j e'
         Nothing                     -> fail "internal error: unknown variable"
     C.ETAbs tp e                    -> do k <- importKind sc (C.tpKind tp)
                                           env' <- bindTParam sc tp env
@@ -348,13 +350,13 @@ importDeclGroups sc env (C.Recursive [decl] : dgs) =
      e' <- importExpr sc env1 (C.dDefinition decl)
      f' <- scLambda sc (qnameToString (C.dName decl)) t' e'
      rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
-     let env' = env { envE = Map.insert (C.dName decl) rhs (envE env)
+     let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      importDeclGroups sc env' dgs
 importDeclGroups _sc _env (C.Recursive decls : _) = unimplemented $ "Recursive: " ++ show (map C.dName decls)
 importDeclGroups sc env (C.NonRecursive decl : dgs) =
   do rhs <- importExpr sc env (C.dDefinition decl)
-     let env' = env { envE = Map.insert (C.dName decl) rhs (envE env)
+     let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      importDeclGroups sc env' dgs
 
