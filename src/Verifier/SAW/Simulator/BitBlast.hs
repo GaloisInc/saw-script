@@ -612,7 +612,7 @@ newVars' be shape = Ready <$> newVars be shape
 
 bitBlastBasic :: AIG.IsAIG l g => g s -> Module -> SharedTerm t -> IO (BValue (l s))
 bitBlastBasic be m = Sim.evalSharedTerm cfg
-  where cfg = Sim.evalGlobal m (beConstMap be) (const Nothing)
+  where cfg = Sim.evalGlobal m (beConstMap be) (const (const Nothing))
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do

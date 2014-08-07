@@ -8,7 +8,6 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 module Verifier.SAW.Simulator.SBV where
@@ -42,7 +41,7 @@ import Verifier.SAW.Prim hiding (BV, ite, bv)
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, Ident(..), Module)
+import Verifier.SAW.TypedAST (FieldName, Ident(..), Module, Termlike)
 import Verinf.Symbolic.Lit hiding (exists)
 
 import Debug.Trace
@@ -64,8 +63,12 @@ instance Show SbvExtra where
   show SZero = "SZero"
   show (SStream _ _) = "<SStream>"
 
-uninterpreted :: Ident -> Maybe (IO SValue)
-uninterpreted ident = Just $ return (vWord (uninterpret (identName ident) :: SWord))
+-- no, we need shape information
+uninterpreted :: (Show t, Termlike t) => Ident -> t -> Maybe (IO SValue)
+uninterpreted ident t = Just $ return $ parseUninterpreted [] [] t (identName ident)
+
+-- actually...
+-- rewriteSharedTerm
 
 constMap :: Map Ident SValue
 constMap = Map.fromList [
@@ -168,7 +171,7 @@ forceBool = fromJust . toBool
 toWord :: SValue -> IO (Maybe SWord)
 toWord (VExtra (SWord w)) = return (Just w)
 toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toBool . force) vv
-toWord x = trace ("could not convert " ++ show x) $ return Nothing
+toWord x = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
@@ -176,6 +179,20 @@ toVector (VExtra SZero) = V.empty
 toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) =
   V.fromList (map (Ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
 toVector _ = error "this word might be symbolic"
+
+toTuple :: SValue -> IO (Maybe [SBV ()])
+toTuple (VTuple xv) = (fmap concat . T.sequence . V.toList . V.reverse) <$> traverse (force >=> toSBV) xv
+toTuple _ = return Nothing
+
+toSBV :: SValue -> IO (Maybe [SBV ()])
+toSBV v = do
+  t <- toTuple v
+  w <- toWord v
+  return $ (untype <$> toBool v) `mplus` (untype <$> w) `mplus` t
+
+untype :: SBV a -> [SBV ()]
+untype (SBV k e) = [SBV k e]
+
 
 vWord :: SWord -> SValue
 vWord lv = VExtra (SWord lv)
@@ -607,6 +624,21 @@ extraFn _ _ _ = error "iteOp: malformed arguments"
 sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
 sbvSolveBasic m = Sim.evalSharedTerm cfg
   where cfg = Sim.evalGlobal m constMap uninterpreted
+
+parseUninterpreted :: (Show t, Termlike t) => [Kind] -> [SBV ()] -> t -> String -> SValue 
+parseUninterpreted ks cws (R.asBoolType -> Just ()) =
+  vBool . mkUninterpreted (reverse (KBool : ks)) (reverse cws)
+parseUninterpreted ks cws (R.asBitvectorType -> Just n) =
+  vWord . mkUninterpreted (reverse (KBounded False (fromIntegral n) : ks)) (reverse cws)
+parseUninterpreted ks cws (R.asVecType -> Just (n R.:*: (R.asBoolType -> Just ()))) =
+  error "This should never happen"
+parseUninterpreted ks cws (R.asPi -> Just (_, _, t2)) =
+  \s-> strictFun $ \x-> do
+    m <- toSBV x
+    case m of
+      Nothing -> error $ "Could not create sbv argument for " ++ show x
+      Just l -> return $ parseUninterpreted (map (\(SBV k _)-> k) l ++ ks) (l ++ cws) t2 s
+parseUninterpreted _ _ t = error $ "could not create uninterpreted type for " ++ show t
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do

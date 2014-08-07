@@ -38,7 +38,7 @@ import Debug.Trace
 data SimulatorConfig m e =
   SimulatorConfig
   { simGlobal :: Ident -> m (Value m e), 
-    simUninterpreted :: Ident -> Maybe (m (Value m e))
+    simUninterpreted :: forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))
   }
 
 ------------------------------------------------------------
@@ -106,7 +106,7 @@ evalDef rec (Def ident _ eqns) = vFuns [] arity
 -- Evaluation of terms
 
 -- | Generic evaluator for TermFs.
-evalTermF :: forall t m e. (Show t, MonadIO m, MonadFix m) =>
+evalTermF :: forall t m e. (Show t, MonadIO m, MonadFix m, Termlike t) =>
              SimulatorConfig m e                  -- ^ Evaluator for global constants
           -> ([Thunk m e] -> t -> m (Value m e))  -- ^ Evaluator for subterms under binders
           -> (t -> m (Value m e))                 -- ^ Evaluator for subterms in the same bound variable context
@@ -124,7 +124,7 @@ evalTermF cfg lam rec env tf =
                                             return (xs ++ env)
                                   lam env' t
     LocalVar i              -> force (env !! i)
-    Constant i t            -> maybe (rec t) id (simUninterpreted cfg i)
+    Constant i t ty         -> maybe (rec t) id (simUninterpreted cfg i ty)
     FTermF ftf              ->
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
@@ -161,7 +161,9 @@ evalTypedDef :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> TypedDef -> m 
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
 evalGlobal :: forall m e. (MonadIO m, MonadFix m) =>
-              Module -> Map Ident (Value m e) -> (Ident -> Maybe (m (Value m e))) -> SimulatorConfig m e
+              Module -> Map Ident (Value m e) ->
+              (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))) -> 
+              SimulatorConfig m e
 evalGlobal m prims uninterpreted = cfg
   where
     cfg :: SimulatorConfig m e
