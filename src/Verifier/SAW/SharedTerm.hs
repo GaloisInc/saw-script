@@ -40,7 +40,6 @@ module Verifier.SAW.SharedTerm
   , scFreshGlobal
   , scGlobalDef
   , scModule
-  , scConstant
   , scApply
   , scApplyAll
   , SharedTermExt(..)
@@ -155,9 +154,12 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
+import Verifier.SAW.Conversion (natConversions, runConversion, runTermBuilder)
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+
+import Debug.Trace
 
 type TermIndex = Int -- Word64
 
@@ -229,9 +231,6 @@ scFreshGlobal sc sym tp = do
 scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
-scConstant :: SharedContext s -> Ident -> SharedTerm s -> IO (SharedTerm s)
-scConstant sc ident t = scTermF sc (Constant ident t)
-
 scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply sc f = scTermF sc . App f
 
@@ -283,7 +282,7 @@ getTerm r a =
                      }
 
 --------------------------------------------------------------------------------
--- Reduction to weak head-normal form
+-- Reduction to head-normal form
 
 -- | Reduces beta-redexes, tuple/record selectors, and definition
 -- equations at the top level of a term.
@@ -414,7 +413,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant _ t -> memo t
+        Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
@@ -494,7 +493,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant _ t -> memo t
+        Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
@@ -604,13 +603,13 @@ scWriteExternal t0 =
     writeTermF :: TermF Int -> String
     writeTermF tf =
       case tf of
-        App e1 e2    -> unwords ["App", show e1, show e2]
-        Lambda s t e -> unwords ["Lam", s, show t, show e]
-        Pi s t e     -> unwords ["Pi", s, show t, show e]
-        Let ds e     -> unwords ["Def", writeDefs ds, show e]
-        LocalVar i   -> unwords ["Var", show i]
-        Constant i e -> unwords ["Constant", show i, show e]
-        FTermF ftf   ->
+        App e1 e2      -> unwords ["App", show e1, show e2]
+        Lambda s t e   -> unwords ["Lam", s, show t, show e]
+        Pi s t e       -> unwords ["Pi", s, show t, show e]
+        Let ds e       -> unwords ["Def", writeDefs ds, show e]
+        LocalVar i     -> unwords ["Var", show i]
+        Constant i e _ -> unwords ["Constant", show i, show e]
+        FTermF ftf     ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
             TupleValue es      -> unwords ("Tuple" : map show es)
@@ -654,7 +653,7 @@ scReadExternal sc input =
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i]          -> LocalVar (read i)
-        ["Constant", x, e]  -> Constant (parseIdent x) (read e)
+        ["Constant", x, e]  -> Constant (parseIdent x) (read e) undefined
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
         ("TupleT" : es)     -> FTermF (TupleType (map read es))
@@ -724,7 +723,7 @@ instantiateVars sc f initialLevel t0 =
     go' l (LocalVar i)
       | i < l     = pure $ scTermF sc (LocalVar i)
       | otherwise = f l i
-    go' _ tf@(Constant _ _) = pure $ scTermF sc tf
+    go' _ tf@(Constant _ _ _) = pure $ scTermF sc tf
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -814,7 +813,7 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               when (looseVars t == 0) $ put (StrictMap.insert t 1 m)
               let (h,args) = asApplyAll t
               case unwrapTermF h of
-                Constant _ _ -> rec (args ++ r)
+                Constant _ _ _ -> rec (args ++ r)
                 _ -> rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
 --              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
@@ -1149,7 +1148,7 @@ scUnfoldConstants sc ids t0 = do
   let go :: SharedTerm s -> IO (SharedTerm s)
       go t@(STApp idx tf) = useCache cache idx $
         case tf of
-          Constant ident rhs
+          Constant ident rhs _
             | ident `elem` ids -> go rhs
             | otherwise        -> return t
           _ -> scTermF sc =<< traverse go tf
@@ -1162,7 +1161,7 @@ scUnfoldConstants' sc ids t0 = do
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
-          Constant ident rhs
+          Constant ident rhs _
             | ident `elem` ids -> taint (go rhs)
             | otherwise        -> pure t
           _ -> useChangeCache tcache idx $

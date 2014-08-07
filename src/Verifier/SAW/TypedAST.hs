@@ -496,7 +496,7 @@ data TermF e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex
-    | Constant !Ident !e  -- ^ An abstract constant packaged with its definition.
+    | Constant !Ident !e !e  -- ^ An abstract constant packaged with its definition and type.
   deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
@@ -657,7 +657,7 @@ freesTermF tf =
                 tp : fmap ((`shiftR` n) . freesDefEqn) eqs
               lcls' = freesLocalDef <$> lcls
       LocalVar i -> bit i
-      Constant _ _ -> 0 -- assume rhs is a closed term
+      Constant _ _ _ -> 0 -- assume rhs is a closed term
 
 freesTerm :: Term -> BitSet
 freesTerm (Term t) = freesTermF (fmap freesTerm t)
@@ -687,7 +687,7 @@ instantiateVars f initialLevel = go initialLevel
           case tf of
             FTermF ftf ->  Term $ FTermF $ gof l ftf
             App x y         -> Term $ App (go l x) (go l y)
-            Constant _ _rhs -> Term tf -- assume rhs is a closed term, so leave it unchanged
+            Constant _ _rhs _ -> Term tf -- assume rhs is a closed term, so leave it unchanged
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
             Pi i lhs rhs    -> Term $ Pi i (go l lhs) (go (l+1) rhs)
             Let defs r      -> Term $ Let (procDef <$> defs) (go l' r)
@@ -787,7 +787,7 @@ ppTermF' _pp lcls _p (LocalVar i)
   where d = lookupDoc lcls i
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
-ppTermF' _ _ _ (Constant i _) = pure $ ppIdent i
+ppTermF' _ _ _ (Constant i _ _) = pure $ ppIdent i
 
 instance Show Term where
   showsPrec _ t = shows $ ppTerm emptyLocalVarDoc PrecNone t
