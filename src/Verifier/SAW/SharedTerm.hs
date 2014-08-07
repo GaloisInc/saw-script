@@ -159,8 +159,6 @@ import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
-import Debug.Trace
-
 type TermIndex = Int -- Word64
 
 data SharedTerm s

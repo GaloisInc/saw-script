@@ -37,8 +37,6 @@ import Verifier.SAW.TypedAST
 
 import Verifier.SAW.Simulator.Value
 
-import Debug.Trace
-
 ------------------------------------------------------------
 -- Simulator configuration
 
