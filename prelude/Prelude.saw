@@ -92,6 +92,7 @@ prim java_class         : String -> JavaType;
 
 prim java_value         : {a} String -> a;
 prim java_var           : {a} String -> JavaType -> JavaSetup a;
+prim java_class_var     : {a} String -> JavaType -> JavaSetup a;
 prim java_may_alias     : {n} [n]String -> JavaSetup ();
 prim java_assert        : Bit -> JavaSetup ();
 //prim java_assert_eq     : {a} String -> a -> JavaSetup ();
