@@ -1,8 +1,0 @@
-main : TopLevel ();
-main = do {
-  print "Reading add_comm.sbv";
-  (t : [8] -> Bit) <- read_sbv "add_comm.sbv";
-  let t2 x = not (t x);
-  print "Writing add_comm.smt";
-  write_smtlib1 "add_comm.smt" t2;
-};
