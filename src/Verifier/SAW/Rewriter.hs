@@ -17,8 +17,8 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Rewriter
-  -- * Rewrite rules
-  ( RewriteRule
+  ( -- * Rewrite rules
+    RewriteRule
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfPred

@@ -42,12 +42,14 @@ data TCState s = TS { tsErrors :: [FailReason]
 addError :: TCState s -> FailReason -> TCState s
 addError s e = s { tsErrors = e : tsErrors s }
 
+-- NB. Haddock will not parse documentation on GADT
+-- constructors :-(
 data FailReason where
-  -- | This is raised by bugs in the typechecker.
+  -- This is raised by bugs in the typechecker.
   InternalError :: String -> FailReason
-  -- | This is raised when a type error in user code is found.
+  -- This is raised when a type error in user code is found.
   TypeError :: Pos -> String -> FailReason
-  -- | A cyclic dependency is found.  Contains the reference that lead to cycle detection,
+  -- A cyclic dependency is found.  Contains the reference that lead to cycle detection,
   -- the name of the most recent edge, and a STReference that points to the references involved
   -- in the cycle.
   CycleFound :: [CycleEdge] -> FailReason
@@ -82,10 +84,12 @@ ppInternalErrors im =
  where emsg = text $ if length im > 1 then "errors" else "error"
 
 -- | A data type defining what to do next what unifier finishes.
+
+-- Note: Haddock cannot parse documenation on GADT constructors :-(
 data TCCont s a where
-  -- | Applies a function to the input a before passing it to b.
+  --  Applies a function to the input a before passing it to b.
   TCFMap :: (a -> b) -> TCCont s b -> TCCont s a
-  -- | Runs the unifer, and applies its result to the function @f@ passed in
+  --  Runs the unifer, and applies its result to the function @f@ passed in
   -- before calling the continuation argument.  This will also run the
   -- continuation even if an error is passed to this continuation.
   TCApp :: TC s a
@@ -94,17 +98,17 @@ data TCCont s a where
   TCBind :: (a -> TC s b)
          -> TCCont s b
          -> TCCont s a
-  -- | Continuation that resumes computation with failure regardless of whether
+  --  Continuation that resumes computation with failure regardless of whether
   -- current task succeeds or fails.
   TCFail :: TCCont s a -> TCCont s b
-  -- | Continuation for resuming computation after the current task finishes.
+  --  Continuation for resuming computation after the current task finishes.
   TCTry :: TCRef s a
         -> TCCont s (Maybe a)
         -> TCCont s a
-  -- | Set a lazy value when task succeeds, and provide the value to the given continuations.
+  --  Set a lazy value when task succeeds, and provide the value to the given continuations.
   TCSet :: TCRef s a
         -> Maybe (Pos, TCCont s a)
-        -> TC s a -- ^ Action that we are doing for evaluating.
+        -> TC s a --  Action that we are doing for evaluating.
         -> TCCont s a
 
 -- | Called when computation completes succcessfully.

@@ -198,7 +198,7 @@ runArgsMatcher (ArgsMatcher _ f) l = do
 -- | Produces a matcher from an ArgsMatcher and a matcher that yields
 -- subterms.
 resolveArgs :: (Monad m, ArgsMatchable v m t a)
-               -- ^ Given a term, matches arguments to temr.
+               -- Given a term, matches arguments to temr.
             => Matcher m t [t] 
             -> v m t a
             -> Matcher m t a

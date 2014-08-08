@@ -133,12 +133,9 @@ tcEqn tc tp (DefEqnGen unpats@(up:_) unrhs) = do
   DefEqnGen pats <$> tcTerm tc' unrhs rhsTp
 
 tcTerm :: TermContext s
-       -- Typecheck term
-       -> Un.Term
-          -- | Required type type (actual type may be a subtype).
-       -> TCTerm
-       -- Typechecked term.
-       -> TC s TCTerm
+       -> Un.Term     -- ^ Typecheck term
+       -> TCTerm      -- ^ Required type type (actual type may be a subtype).
+       -> TC s TCTerm -- ^ Typechecked term.
 tcTerm tc ut rtp = do
   (v,tp) <- inferTypedValue tc ut
   v <$ checkTypeSubtype tc (pos ut) tp rtp

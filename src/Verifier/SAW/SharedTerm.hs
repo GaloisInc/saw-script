@@ -1100,7 +1100,7 @@ scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
-  vr <- newMVar 0 -- ^ Reference for getting variables.
+  vr <- newMVar 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   return SharedContext {
@@ -1132,10 +1132,10 @@ scInstantiateExt sc vmap t0 = do
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
-          -- | Lookup variable in term if it is bound.
+          -- Lookup variable in term if it is bound.
           FTermF (ExtCns ec) ->
             maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
-          -- | Recurse on other terms.
+          -- Recurse on other terms.
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)

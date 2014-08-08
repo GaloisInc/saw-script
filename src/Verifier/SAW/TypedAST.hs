@@ -339,8 +339,7 @@ lookupDoc lvd i
   where lvl = docLvl lvd - i - 1
 
 data DefEqn e
-  = DefEqn [Pat e]  -- ^ List of patterns
-           e -- ^ Right hand side.
+  = DefEqn [Pat e] e -- ^ List of patterns and a right hand side
   deriving (Functor, Foldable, Traversable, Generic, Show)
 
 instance Hashable e => Hashable (DefEqn e) -- automatically derived
