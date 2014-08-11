@@ -118,6 +118,11 @@ import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Utils (internalError, sumBy)
 
+import qualified Text.PrettyPrint.Leijen as PPL
+
+(<<$>>) :: Doc -> Doc -> Doc
+x <<$>> y = (PPL.<$>) x y
+
 
 instance (Hashable k, Hashable a) => Hashable (Map k a) where
     hashWithSalt x m = hashWithSalt x (Map.assocs m)
@@ -366,7 +371,7 @@ instance Show n => Show (Ctor n tp) where
   show = show . ctorName
 
 ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
-ppCtor f c = ppIdent (ctorName c) <+> doublecolon <+> tp
+ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
   where lcls = emptyLocalVarDoc
         tp = f lcls PrecLambda (ctorType c)
 
@@ -386,9 +391,13 @@ instance Show n => Show (DataType n t) where
   show = show . dtName
 
 ppDataType :: TermPrinter e -> DataType Ident e -> Doc
-ppDataType f dt = text "data" <+> tc <+> text "where" <+> lbrace <$$>
-                    nest 4 (vcat (ppc <$> dtCtors dt)) <$$>
-                    nest 2 rbrace
+ppDataType f dt = 
+  group $ (group ((text "data" <+> tc) <<$>> (text "where" <+> lbrace)))
+          <<$>>
+          vcat ((indent 2 . ppc) <$> dtCtors dt)
+          <$$>
+          rbrace
+
   where lcls = emptyLocalVarDoc
         sym = ppIdent (dtName dt)
         tc = ppTypeConstraint f lcls sym (dtType dt)
@@ -507,12 +516,12 @@ ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
-ppTypeConstraint f lcls sym tp = sym <+> doublecolon <+> f lcls PrecLambda tp
+ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
 
 ppDef :: LocalVarDoc -> Def Term -> Doc
-ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> defEqs d))
+ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> (reverse $ defEqs d)))
   where sym = ppIdent (defIdent d)
-        tpd = ppTypeConstraint ppTerm lcls sym (defType d)
+        tpd = ppTypeConstraint ppTerm lcls sym (defType d) <> semi
 
 ppLocalDef :: Applicative f 
            => (LocalVarDoc -> Prec -> e -> f Doc)
@@ -522,9 +531,9 @@ ppLocalDef :: Applicative f
            -> f Doc
 ppLocalDef pp lcls lcls' (Def nm tp eqs) =
     ppd <$> (pptc <$> pp lcls PrecLambda tp)
-        <*> traverse (ppDefEqnF pp lcls' sym) eqs
+        <*> traverse (ppDefEqnF pp lcls' sym) (reverse eqs)
   where sym = text nm
-        pptc tpd = sym <+> doublecolon <+> tpd
+        pptc tpd = hang 2 $ group (sym <<$>> doublecolon <+> tpd <> semi)
         ppd tpd eqds = vcat (tpd : eqds)
 
 ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
@@ -536,8 +545,10 @@ ppDefEqnF :: Applicative f
           -> LocalVarDoc -> Doc -> DefEqn e -> f Doc
 ppDefEqnF f lcls sym (DefEqn pats rhs) = 
     ppEq <$> traverse ppPat' pats
-         <*> f lcls' PrecLambda rhs
-  where ppEq pd rhs' = sym <+> hsep pd <+> equals <+> rhs'
+-- Is this OK?
+         <*> f lcls' PrecNone rhs
+--         <*> f lcls' PrecLambda rhs
+  where ppEq pd rhs' = group $ nest 2 (sym <+> (hsep (pd++[equals])) <<$>> rhs' <> semi)
         lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
         ppPat' = ppPat (f lcls') PrecArg
 
@@ -574,7 +585,7 @@ type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
 ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
   where ppFld (fld,v) = eqCat (text fld) <$> pp v
-        eqCat x y = x <+> equals <+> y
+        eqCat x y = group $ nest 2 (x <+> equals <<$>> y)
 
 ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
 ppFlatTermF pp prec tf =
@@ -748,9 +759,11 @@ ppTermF' :: Applicative f
          -> Prec
          -> TermF e
          -> f Doc
-ppTermF' pp lcls p (FTermF tf) = ppFlatTermF (pp lcls) p tf
+ppTermF' pp lcls p (FTermF tf) = (group . nest 2) <$> (ppFlatTermF (pp lcls) p tf)
 ppTermF' pp lcls p (App l r) =
-    ppAppParens p <$> liftA2 (</>) (pp lcls PrecApp l) (pp lcls PrecArg r)
+    ppAppParens p <$> liftA2 (</>) ((group . nest 2) <$> (pp lcls PrecApp l))
+                                   ((group . nest 2) <$> (pp lcls PrecArg r))
+
 ppTermF' pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp lcls  PrecLambda tp
@@ -758,15 +771,14 @@ ppTermF' pp lcls p (Lambda name tp rhs) =
   where ppLam tp' rhs' =
           ppParens (p > PrecLambda) $
             text "\\" <> parens (text name' <> doublecolon <> tp')
-               <+> text "->"
-               </> rhs'
+               <+> group (nest 2 (text "->" </> rhs'))
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
 ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
-  where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <+> text "->" <+> rhs'
-        lhs | name == "_" = pp lcls PrecApp tp
-            | otherwise = (\tp' -> parens (text name' <> doublecolon <> tp'))
+  where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <<$>> text "->" <+> rhs'
+        lhs | name == "_" = (align . group . nest 2) <$> pp lcls PrecApp tp
+            | otherwise = (\tp' -> parens (text name' <+> doublecolon <+> align (group (nest 2 tp'))))
                             <$> pp lcls PrecLambda tp
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
@@ -776,7 +788,8 @@ ppTermF' pp lcls p (Let dl u) =
           <*> pp lcls' PrecNone u
   where ppLet dl' u' = 
           ppParens (p > PrecNone) $
-            text "let" <+> vcat dl' <$$>
+            text "let" <+> lbrace <+> align (vcat dl') <$$>
+            indent 4 rbrace <$$>
             text " in" <+> u'
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
@@ -812,11 +825,14 @@ moduleImports :: Simple Lens Module (Map ModuleName Module)
 moduleImports = lens _moduleImports (\m v -> m { _moduleImports = v })
 
 instance Show Module where
-  show m = show $ vcat $ fmap ppImport (Map.keys (m^.moduleImports))
-                        ++ fmap ppdecl   (moduleDecls m)
+  show m = flip displayS "" $ renderPretty 0.8 80 $
+             vcat $ concat $ fmap (map (<> line)) $
+                   [ fmap ppImport (Map.keys (m^.moduleImports))
+                   , fmap ppdecl   (moduleRDecls m)
+                   ]
     where ppImport nm = text $ "import " ++ show nm 
           ppdecl (TypeDecl d) = ppDataType ppTerm d
-          ppdecl (DefDecl d) = ppDef emptyLocalVarDoc d <> char '\n'
+          ppdecl (DefDecl d) = ppDef emptyLocalVarDoc d
 
 emptyModule :: ModuleName -> Module
 emptyModule nm =
