@@ -112,6 +112,8 @@ constMap = Map.fromList [
     ("Prelude.mulNat", Prims.mulNatOp),
     ("Prelude.minNat", Prims.minNatOp),
     ("Prelude.maxNat", Prims.maxNatOp),
+    ("Prelude.divModNat", Prims.divModNatOp),
+    ("Prelude.expNat", Prims.expNatOp),
     ("Prelude.widthNat", Prims.widthNatOp),
     ("Prelude.natCase", Prims.natCaseOp),
     -- Fin

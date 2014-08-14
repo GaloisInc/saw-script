@@ -306,6 +306,22 @@ widthNat :: Nat -> Nat;
 -- | Axiom: equalNat implements *the* equality on type Nat.
 eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
+-- | Natural exponentiation
+expNat :: Nat -> Nat -> Nat;
+expNat b Zero = 1;
+expNat b (Succ x) = mulNat b (expNat b x);
+
+-- | Natural division and modulus
+divModNat :: Nat -> Nat -> #(Nat, Nat);
+divModNat x0 divisor =
+   let { go :: Nat -> Nat -> #(Nat, Nat);
+         go q x = go2 q x (subNat x divisor);
+         go2 :: Nat -> Nat -> Nat -> #(Nat, Nat);
+         go2 q x Zero = (q,x);
+         go2 q x (Succ y) = go (Succ q) (Succ y);
+       }
+    in go Zero x0;
+
 -- There are implicit constructors from integer literals.
 
 -- Dependent pattern matching combinator for natural numbers
