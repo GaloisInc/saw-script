@@ -13,13 +13,14 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
+import Control.Exception (assert)
 import Control.Applicative
-import Control.Monad (join)
+import Control.Monad (join, foldM)
 import Data.List (findIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
-import Data.Traversable hiding (sequence)
+import Data.Maybe (fromMaybe)
+import Data.Traversable hiding (sequence, mapM)
 
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.Prims.Syntax as P
@@ -277,7 +278,7 @@ importExpr sc env expr =
       case sel of
         C.TupleSel i _maybeLen  -> scNestedSelector sc i =<< go e
         C.RecordSel x (Just xs) -> scNestedSelector sc i =<< go e
-                                     where i = fromJust (findIndex (== x) xs) + 1
+                                     where i = fromMaybe (assert False undefined) (findIndex (== x) xs) + 1
                                            l = length xs
         C.RecordSel x Nothing   -> case C.tNoUser (fastTypeOf (envC env) e) of
                                      C.TRec fs -> importExpr sc env (C.ESel e (C.RecordSel x (Just (map fst fs))))
@@ -344,6 +345,7 @@ scEAbs sc x a e =
 -- expressions instead.
 importDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
 importDeclGroups _sc env [] = return env
+
 importDeclGroups sc env (C.Recursive [decl] : dgs) =
   do env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
      t' <- importSchema sc env (C.dSignature decl)
@@ -353,7 +355,55 @@ importDeclGroups sc env (C.Recursive [decl] : dgs) =
      let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      importDeclGroups sc env' dgs
-importDeclGroups _sc _env (C.Recursive decls : _) = unimplemented $ "Recursive: " ++ show (map C.dName decls)
+
+-- - A group of mutually-recursive declarations -
+-- We handle this by "tupling up" all the declarations using a record and
+-- taking the fixpoint at this record type.  The desired declarations are then
+-- achieved by projecting the field names from this record.
+importDeclGroups sc env (C.Recursive decls : dgs) =
+  do -- build the environment for the declaration bodies
+     -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
+     env1 <- foldM (\e d -> bindQName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
+
+     -- shift the environment by one more variable to make room for our recursive record
+     let env2 = liftEnv env1
+     -- grab a reference to the outermost variable; this will be the record in the body
+     -- of the labmda we build later
+     recv <- scLocalVar sc 0
+
+     -- the types of the declarations
+     ts <- mapM (importSchema sc env . C.dSignature) decls
+     -- the type of the recursive record
+     rect <- scRecordType sc $ Map.fromList $ zip (map (qnameToString . C.dName) decls) ts
+
+     -- the raw imported bodies of the declarations
+     es <- mapM (importExpr sc env2 . C.dDefinition) decls
+
+     -- build a list of projections from a record variable
+     projs <- mapM (\d -> scRecordSelect sc recv (qnameToString (C.dName d))) decls
+
+     -- substitute into the imported declaration bodies, replacing bindings by record projections
+     -- NB: start at index 1; index 0 is the variable for the record itself
+     es' <- mapM (instantiateVarList sc 1 projs) es
+
+     -- the body of the recursive record
+     rec <- scRecord sc $ Map.fromList $ zip (map (qnameToString . C.dName) decls) es'
+
+     -- build a lambda from the record body...
+     f <- scLambda sc "fixRecord" rect rec
+
+     -- and take its fixpoint
+     rhs <- scGlobalApply sc "Cryptol.fix" [rect, f]
+
+     -- finally, build projections from the fixed record to shove into the environment
+     rhss <- mapM (\d -> scRecordSelect sc rhs (qnameToString (C.dName d))) decls
+
+     let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss decls
+                    , envC = foldr (\d e -> Map.insert (C.dName d) (C.dSignature d) e) (envC env) decls
+                    }
+
+     importDeclGroups sc env' dgs
+
 importDeclGroups sc env (C.NonRecursive decl : dgs) =
   do rhs <- importExpr sc env (C.dDefinition decl)
      let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
@@ -381,7 +431,7 @@ importComp sc env listT expr mss =
               ab <- scCtorApp sc "Cryptol.TCPair" [a, b]
               return (zs, mn, ab, args : argss)
      (xs, n, a, argss) <- zipAll mss
-     let (_, elemT) = fromJust (C.tIsSeq listT)
+     let (_, elemT) = fromMaybe (assert False undefined) (C.tIsSeq listT)
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
      ys <- scGlobalApply sc "Cryptol.map" [a, b, n, f, xs]
