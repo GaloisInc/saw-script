@@ -58,8 +58,21 @@ tcMul TCInf (TCNum y) = ite Num (equalNat 0 y) (TCNum 0) TCInf;
 tcMul TCInf TCInf = TCInf;
 
 tcDiv :: Num -> Num -> Num;
+tcDiv (TCNum x) (TCNum y) = TCNum ((divModNat x y).1);
+tcDiv (TCNum _) TCInf = TCNum Zero;
+-- other cases undefined
+
 tcMod :: Num -> Num -> Num;
+tcMod (TCNum x) (TCNum y) = TCNum ((divModNat x y).2);
+tcMod (TCNum x) TCInf = TCNum x;
+-- other cases undefined
+
 tcExp :: Num -> Num -> Num;
+tcExp (TCNum Zero) _ = TCNum Zero;
+tcExp (TCNum (Succ Zero)) _ = TCNum (Succ Zero);
+tcExp _ (TCNum Zero) = TCNum (Succ Zero);
+tcExp (TCNum x) (TCNum y) = TCNum (expNat x y);
+-- other cases undefined
 
 tcMin :: Num -> Num -> Num;
 tcMin (TCNum x) (TCNum y) = TCNum (minNat x y);
@@ -75,7 +88,7 @@ tcMax TCInf TCInf = TCInf;
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThenTo :: Num -> Num -> Num -> Num;
-
+		
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
