@@ -25,6 +25,8 @@ prim print_term         : {a} a -> TopLevel ();
 prim print_type         : {a} a -> TopLevel ();
 prim show_term          : {a} a -> String;
 
+prim check_term         : {a} a -> TopLevel Term;
+
 prim bitSequence        : { n } Int -> [n];
 
 prim term               : {a} a -> Term;
