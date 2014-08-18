@@ -645,3 +645,26 @@ bitBlast be sc t = do
   case bval' of
     VExtra (BBool l) -> return (shapes, l)
     _ -> fail "bitBlast: non-boolean result type."
+
+asAIGType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+asAIGType sc t = do
+  t' <- scWhnf sc t
+  case t' of
+    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asAIGType sc t2
+    (R.asBoolType -> Just ())    -> return []
+    (R.asVecType -> Just _)      -> return []
+    (R.asTupleType -> Just _)    -> return []
+    (R.asRecordType -> Just _)   -> return []
+    _                          -> fail $ "invalid AIG type: " ++ show t'
+
+bitBlastTerm :: AIG.IsAIG l g =>
+                g s
+             -> SharedContext t -> SharedTerm t -> IO (LitVector (l s))
+bitBlastTerm be sc t = do
+  ty <- scTypeOf sc t
+  argTs <- asAIGType sc ty
+  shapes <- traverse (parseShape sc) argTs
+  vars <- traverse (newVars' be) shapes
+  bval <- bitBlastBasic be (scModule sc) t
+  bval' <- applyAll bval vars
+  flattenBValue bval'
