@@ -446,9 +446,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
 
 -- | This version of the type checking function makes sure that the
 -- entire term is well-formed, and that all internal type annotations
--- are correct. When matching types, it ensures only that they are
--- equivalent modulo beta-reduction; any non-trivial type equalities
--- must be indicated explicitly with coercions.
+-- are correct.  Types are evaluated to WHNF as necessary.
 scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scTypeCheck sc t0 = scTypeCheck' sc [] t0
 
@@ -466,20 +464,13 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
                 return x
     sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
     sort t = asSort =<< memo t
-    reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
-    reducePi' t@(STApp _ (Pi _ t1 body)) arg =
-      do t2 <- memo arg
-         if alphaEquiv t1 t2 then return ()
-            else do lift $ putStrLn $ "Unsolved: " ++ show t1 ++ " == " ++ show t2
-         lift $ instantiateVar sc 0 arg body
-    reducePi' t _ = fail $ "Not a function type: " ++ show t
     termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     termf tf =
       case tf of
         FTermF ftf -> ftermf ftf
         App x y ->
           do tx <- memo x
-             reducePi' tx y
+             lift (reducePi sc tx y)
         Lambda x a rhs ->
           do b <- lift $ scTypeCheck' sc (a : env) rhs
              lift $ scTermF sc (Pi x a b)
@@ -510,10 +501,10 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         RecordType m -> lift . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- lift $ scTypeOfCtor sc c
-          foldM reducePi' t args
+          foldM (\ a b -> liftIO $ reducePi sc a b) t args
         DataTypeApp dt args -> do
           t <- lift $ scTypeOfDataType sc dt
-          foldM reducePi' t args
+          foldM (\ a b -> liftIO $ reducePi sc a b) t args
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
