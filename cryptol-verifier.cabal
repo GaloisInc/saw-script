@@ -16,6 +16,10 @@ Description:
 extra-source-files:
     saw/Cryptol.sawcore
 
+flag build-css
+  description: Build the css executable
+  default: True
+
 library
   build-depends:
     array,
@@ -28,3 +32,20 @@ library
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Prelude
   GHC-options: -Wall
+
+executable css
+  if !flag(build-css)
+     buildable: False
+
+  build-depends:
+    array,
+    abcBridge,
+    base == 4.*,
+    containers,
+    cryptol,
+    saw-core,
+    cryptol-verifier
+
+  hs-source-dirs : css
+  main-is : Main.hs
+  GHC-options: -Wall -O2 -rtsopts
