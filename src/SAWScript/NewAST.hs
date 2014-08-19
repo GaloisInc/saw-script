@@ -17,6 +17,7 @@ data Expr
   | String String
   | Z Integer
   | Undefined
+  | Code String
   -- Structures
   | Array  [Expr]
   | Block  [BlockStmt]
@@ -54,6 +55,7 @@ translateExpr expr = case expr of
   A.Quote s t            -> sig t $ (String s)
   A.Z i t                -> sig t $ (Z i)
   A.Undefined t          -> sig t $ Undefined
+  A.Code s t             -> sig t $ (Code s)
   A.Array es t           -> sig t =<< (Array <$> mapM translateExpr es)
   A.Block bs t           -> sig t =<< (Block <$> mapM translateBStmt bs)
   A.Tuple es t           -> sig t =<< (Tuple <$> mapM translateExpr es)
@@ -96,8 +98,6 @@ translateTypeS (In (Inr (Inl ctx))) = return $ A.tMono $
     A.JavaSetupContext    -> A.tContext $ A.JavaSetup
     A.LLVMSetupContext    -> A.tContext $ A.LLVMSetup
     A.ProofScriptContext  -> A.tContext $ A.ProofScript
-    A.ProofResultContext  -> A.tContext $ A.ProofResult
-    A.SatResultContext    -> A.tContext $ A.SatResult
     A.TopLevelContext     -> A.tContext $ A.TopLevel
 
 translateTypeS (In (Inr (Inr ty))) =
@@ -105,6 +105,7 @@ translateTypeS (In (Inr (Inr ty))) =
     A.BitF            -> return $ A.tMono A.tBool
     A.ZF              -> return $ A.tMono A.tZ
     A.QuoteF          -> return $ A.tMono A.tString
+    A.TermF           -> return $ A.tMono A.tTerm
 
     A.ArrayF tL tE    -> A.tMono <$> (A.tArray <$> translateType tL <*> translateType tE)
     A.BlockF tC tE    -> A.tMono <$> (A.tBlock <$> translateType tC <*> translateType tE)

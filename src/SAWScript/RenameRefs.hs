@@ -132,6 +132,7 @@ resolveInExpr exp = case exp of
   Quote s t         -> pure $ Quote s t
   Z i t             -> pure $ Z i t
   Undefined t       -> pure $ Undefined t
+  Code s t          -> pure $ Code s t
 
 duplicateBindingsFail :: [Name] -> RR a
 duplicateBindingsFail ns = fail $
