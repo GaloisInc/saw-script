@@ -11,6 +11,7 @@ abstract LLVMMethodSpec;
 abstract CryptolModuleEnv;
 abstract JavaClass;
 abstract LLVMModule;
+abstract Uninterp;
 
 // TODO: create ProofResult a, with concrete syntax
 // TODO: create SatResult a, with concrete syntax
@@ -32,7 +33,9 @@ prim bitSequence        : { n } Int -> [n];
 prim term               : {a} a -> Term;
 
 prim read_aig           : {a} String -> TopLevel a;
-prim read_sbv           : {a} String -> TopLevel a;
+
+prim sbv_undefined      : {a} String -> a -> TopLevel Uninterp;
+prim read_sbv           : {a, n} String -> [n](String, Uninterp) -> TopLevel a;
 prim read_core          : {a} String -> TopLevel a;
 
 prim write_aig          : {a} String -> a -> TopLevel ();
