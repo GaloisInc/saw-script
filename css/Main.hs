@@ -2,8 +2,11 @@
 
 module Main where
 
-import System.Environment( getArgs )
-import System.Exit( exitFailure )
+import           System.Environment( getArgs )
+import           System.Exit( exitFailure )
+import           System.Console.GetOpt
+import           System.IO
+import           Data.Version
 
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.ModuleSystem as CM
@@ -14,24 +17,86 @@ import           Cryptol.Utils.PP
 
 import qualified Verifier.SAW.Cryptol as C
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Cryptol.Prelude
 
 
 import qualified Data.ABC as ABC
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-main :: IO ()
-main = getArgs >>= cssMain
+import qualified Paths_cryptol_verifier as Paths
 
-cssMain :: [String] -> IO ()
-cssMain [] = putStrLn "usage: css <cryptol input> <aig output> <function name>"
-cssMain [f,o,funcName] = do
-    (e,warn) <- CM.loadModuleByPath f
+data CSS = CSS
+  { output :: FilePath
+  , cssMode :: CmdMode
+  } deriving (Show)
+
+data CmdMode
+  = NormalMode
+  | HelpMode
+  | VersionMode
+ deriving (Show, Eq)
+
+emptyCSS :: CSS
+emptyCSS =
+  CSS
+  { output = ""
+  , cssMode = NormalMode
+  }
+
+options :: [OptDescr (CSS -> CSS)]
+options =
+  [ Option ['o'] ["output"]
+     (ReqArg (\x css -> css{ output = x }) "FILE")
+     "output file"
+  , Option ['h'] ["help"]
+     (NoArg (\css -> css{ cssMode = HelpMode }))
+     "display help"
+  , Option ['v'] ["version"]
+     (NoArg (\css -> css{ cssMode = VersionMode }))
+     "version"
+  ]
+
+version_string :: String
+version_string = unlines
+  [ "Cryptol Symbolic Simulator (css) version "++showVersion Paths.version
+  , "Copyright 2014 Galois, Inc.  All rights reserved."
+  ]
+
+header :: String
+header = "css [options] <input module> <function to simulate>"
+
+main :: IO ()
+main = do
+  args <- getArgs
+  case getOpt RequireOrder options args of
+    (flags,optArgs,[]) -> cssMain (foldr ($) emptyCSS flags) optArgs
+
+    (_,_,errs) -> do
+       hPutStr stderr (concat errs ++ usageInfo header options)
+       exitFailure
+
+cssMain :: CSS -> [String] -> IO ()
+cssMain css [inputModule,name] | cssMode css == NormalMode = do
+    let out = if null (output css)
+                 then name++".aig"
+                 else (output css)
+
+    (e,warn) <- CM.loadModuleByPath inputModule
     mapM_ (print . pp) warn
     case e of
        Left msg -> print msg >> exitFailure
-       Right (_,menv) -> processModule menv o funcName
+       Right (_,menv) -> processModule menv out name
+
+cssMain css _ | cssMode css == VersionMode = do
+    hPutStr stdout version_string
+
+cssMain css _ | cssMode css == HelpMode = do
+    hPutStr stdout (usageInfo header options)
+
+cssMain _ _ = do
+    hPutStr stdout (usageInfo header options)
+    exitFailure
+
 
 processModule :: CM.ModuleEnv -> FilePath -> String -> IO ()
 processModule menv fout funcName = do
