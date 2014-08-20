@@ -22,6 +22,7 @@ module Verifier.SAW.Rewriter
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfPred
+  , ruleOfProp
   , ruleOfDefEqn
   , rulesOfTypedDef
   , scDefRewriteRules
@@ -125,6 +126,9 @@ eqIdent = mkIdent (mkModuleName ["Prelude"]) "Eq"
 eqIdent' :: Ident
 eqIdent' = mkIdent (mkModuleName ["Prelude"]) "eq"
 
+ecEqIdent :: Ident
+ecEqIdent = mkIdent (mkModuleName ["Cryptol"]) "ecEq"
+
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Termlike t => t -> RewriteRule t
@@ -148,6 +152,14 @@ ruleOfPred (R.asLambda -> Just (_, ty, body)) =
 ruleOfPred (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfPred _ = error "Predicate not an equation"
+
+-- | Converts a parameterized equality predicate to a RewriteRule.
+ruleOfProp :: SharedTerm s -> RewriteRule (SharedTerm s)
+ruleOfProp (R.asLambda -> Just (_, ty, body)) =
+  let rule = ruleOfProp body in rule { ctxt = ty : ctxt rule }
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
+  RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfProp _ = error "Predicate not an equation"
 
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced
