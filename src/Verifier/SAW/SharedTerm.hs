@@ -20,6 +20,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.SharedTerm
   ( TermF(..)
+  , Uninterp(..)
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
@@ -156,6 +157,8 @@ import Verifier.SAW.Conversion (natConversions, runConversion, runTermBuilder)
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+
+newtype Uninterp s = Uninterp { getUninterp :: (String, SharedTerm s) } deriving Show
 
 type TermIndex = Int -- Word64
 
