@@ -17,7 +17,7 @@ abstract SatResult;
 
 prim return             : { m , a } a -> m a;
 
-prim define             : {a} String -> a -> TopLevel a;
+prim define             : String -> Term -> TopLevel Term;
 
 prim print              : {a} a -> TopLevel ();
 prim print_term         : Term -> TopLevel ();
