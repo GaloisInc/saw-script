@@ -34,8 +34,8 @@ prim term               : {a} a -> Term;
 
 prim read_aig           : {a} String -> TopLevel a;
 
-prim sbv_undefined      : {a} String -> a -> TopLevel Uninterp;
-prim read_sbv           : {a, n} String -> [n](String, Uninterp) -> TopLevel a;
+prim sbv_uninterpreted  : {a} String -> a -> TopLevel Uninterp;
+prim read_sbv           : {a, n} String -> [n]Uninterp -> TopLevel a;
 prim read_core          : {a} String -> TopLevel a;
 
 prim write_aig          : {a} String -> a -> TopLevel ();
