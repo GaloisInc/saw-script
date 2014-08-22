@@ -10,6 +10,7 @@ abstract LLVMMethodSpec;
 abstract CryptolModuleEnv;
 abstract JavaClass;
 abstract LLVMModule;
+abstract Uninterp;
 
 abstract ProofResult;
 abstract SatResult;
@@ -24,10 +25,14 @@ prim print_term         : Term -> TopLevel ();
 prim print_type         : Term -> TopLevel ();
 prim show_term          : Term -> String;
 
+prim check_term         : {a} a -> TopLevel Term;
+
 prim bitSequence        : { n } Int -> [n];
 
+prim sbv_uninterpreted  : String -> Term -> TopLevel Uninterp;
+prim read_sbv           : {n} String -> [n]Uninterp -> TopLevel Term;
+
 prim read_aig           : String -> TopLevel Term;
-prim read_sbv           : String -> TopLevel Term;
 prim read_core          : String -> TopLevel Term;
 
 prim write_aig          : String -> Term -> TopLevel ();
@@ -47,6 +52,10 @@ prim print_goal         : ProofScript ();
 prim assume_valid       : ProofScript ProofResult;
 prim assume_unsat       : ProofScript SatResult;
 prim abc                : {a} ProofScript a;
+prim boolector          : {a} ProofScript a;
+prim cvc4               : {a} ProofScript a;
+prim z3                 : {a} ProofScript a;
+prim mathsat            : {a} ProofScript a;
 prim abc_old            : {a} ProofScript a;
 prim yices              : {a} ProofScript a;
 prim offline_aig        : {a} String -> ProofScript a;
@@ -83,6 +92,7 @@ prim java_class         : String -> JavaType;
 
 prim java_value         : {a} String -> a;
 prim java_var           : {a} String -> JavaType -> JavaSetup a;
+prim java_class_var     : {a} String -> JavaType -> JavaSetup a;
 prim java_may_alias     : {n} [n]String -> JavaSetup ();
 prim java_assert        : Bit -> JavaSetup ();
 //prim java_assert_eq     : {a} String -> a -> JavaSetup ();
