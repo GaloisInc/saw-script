@@ -202,12 +202,12 @@ addNat = (+)
 -- finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n);
 finInc :: Nat -> Nat -> Fin -> Fin
 finInc i _n (FinVal l r) = FinVal (i + l) r
-  -- ^ Precondition: n == l + r + 1
+  -- Precondition: n == l + r + 1  
 
 -- finIncLim :: (n :: Nat) -> (m :: Nat) -> Fin m -> Fin (addNat m n);
 finIncLim :: Nat -> Nat -> Fin -> Fin
 finIncLim n _m (FinVal l r) = FinVal l (r + n)
-  -- ^ Precondition: m == l + r + 1
+  -- Precondition: m == l + r + 1
 
 -- finMax :: (n :: Nat) -> Maybe (Fin n);
 finMax :: Nat -> Maybe Fin

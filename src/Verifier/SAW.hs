@@ -9,9 +9,11 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW 
   ( module Verifier.SAW.SharedTerm
+  , module Verifier.SAW.ExternalFormat
   , Module
   , preludeModule
   ) where
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Prelude
+import Verifier.SAW.ExternalFormat

@@ -125,7 +125,7 @@ import Verifier.SAW.TypedAST
 termToPat :: Termlike t => t -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant d _              -> Net.Atom (identName d)
+      Constant d _ _            -> Net.Atom (identName d)
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
@@ -198,7 +198,7 @@ runArgsMatcher (ArgsMatcher _ f) l = do
 -- | Produces a matcher from an ArgsMatcher and a matcher that yields
 -- subterms.
 resolveArgs :: (Monad m, ArgsMatchable v m t a)
-               -- ^ Given a term, matches arguments to temr.
+               -- Given a term, matches arguments to temr.
             => Matcher m t [t] 
             -> v m t a
             -> Matcher m t a

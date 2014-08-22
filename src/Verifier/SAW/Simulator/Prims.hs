@@ -110,6 +110,21 @@ maxNatOp =
   natFun' "maxNat2" $ \n -> return $
   vNat (max m n)
 
+-- divModNat :: Nat -> Nat -> #(Nat, Nat);
+divModNatOp :: MonadIO m => Value m e
+divModNatOp =
+  natFun' "divModNat1" $ \m -> return $
+  natFun' "divModNat2" $ \n -> return $
+    let (q,r) = divMod m n in
+    VTuple $ V.fromList [Ready $ vNat q, Ready $ vNat r]
+
+-- expNat :: Nat -> Nat -> Nat;
+expNatOp :: MonadIO m => Value m e
+expNatOp =
+  natFun' "expNat1" $ \m -> return $
+  natFun' "expNat2" $ \n -> return $
+  vNat (m ^ n)
+
 -- widthNat :: Nat -> Nat;
 widthNatOp :: MonadIO m => Value m e
 widthNatOp =

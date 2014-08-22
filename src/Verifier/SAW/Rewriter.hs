@@ -17,8 +17,8 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Rewriter
-  -- * Rewrite rules
-  ( RewriteRule
+  ( -- * Rewrite rules
+    RewriteRule
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfPred
@@ -324,7 +324,7 @@ rewriteSharedTerm sc ss t0 =
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
-    traverseTF _ tf@(Constant _ _) = pure tf
+    traverseTF _ tf@(Constant _ _ _) = pure tf
     traverseTF f tf = traverse f tf
     rewriteTop :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)

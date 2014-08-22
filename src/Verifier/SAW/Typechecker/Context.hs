@@ -111,8 +111,7 @@ import qualified Verifier.SAW.UntypedAST as Un
 import Verifier.SAW.Typechecker.Monad
 
 data DefEqnGen p t
-   = DefEqnGen [p]  -- ^ List of patterns
-                t -- ^ Right hand side.
+   = DefEqnGen [p] t -- ^ List of patterns and a right hand side
   deriving (Show)
 
 type TCDefEqn = DefEqnGen TCPat TCTerm
@@ -526,8 +525,9 @@ globalDefEqns :: Ident -> TermContext s -> TCRef s [TCDefEqn]
 globalDefEqns i tc = fromMaybe emsg $ Map.lookup i (gcEqns (globalContext tc))
   where emsg = error $ "Could not find equations for " ++ show i ++ "."
 
+-- Haddock will not parse comments on GADT constructors :-(
 data InferResult where
-  -- | Ctor with identifier argument list and
+  --  Ctor with identifier argument list and
   PartialCtor :: Ident -- Datatype identifier
               -> Ident -- Ctor identifier.
               -> [TCTerm] -- Arguments so far.

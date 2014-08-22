@@ -20,6 +20,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.SharedTerm
   ( TermF(..)
+  , Uninterp(..)
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
@@ -40,7 +41,6 @@ module Verifier.SAW.SharedTerm
   , scFreshGlobal
   , scGlobalDef
   , scModule
-  , scConstant
   , scApply
   , scApplyAll
   , SharedTermExt(..)
@@ -80,8 +80,6 @@ module Verifier.SAW.SharedTerm
   , scGlobalApply
   , scSharedTerm
   , scImport
-  , scWriteExternal
-  , scReadExternal
     -- ** Normalization
   , scWhnf
     -- ** Type checking
@@ -155,9 +153,12 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
+import Verifier.SAW.Conversion (natConversions, runConversion, runTermBuilder)
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+
+newtype Uninterp s = Uninterp { getUninterp :: (String, SharedTerm s) } deriving Show
 
 type TermIndex = Int -- Word64
 
@@ -229,9 +230,6 @@ scFreshGlobal sc sym tp = do
 scGlobalDef :: SharedContext s -> Ident -> IO (SharedTerm s)
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
-scConstant :: SharedContext s -> Ident -> SharedTerm s -> IO (SharedTerm s)
-scConstant sc ident t = scTermF sc (Constant ident t)
-
 scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply sc f = scTermF sc . App f
 
@@ -283,7 +281,7 @@ getTerm r a =
                      }
 
 --------------------------------------------------------------------------------
--- Reduction to weak head-normal form
+-- Reduction to head-normal form
 
 -- | Reduces beta-redexes, tuple/record selectors, and definition
 -- equations at the top level of a term.
@@ -414,7 +412,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant _ t -> memo t
+        Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
@@ -449,9 +447,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
 
 -- | This version of the type checking function makes sure that the
 -- entire term is well-formed, and that all internal type annotations
--- are correct. When matching types, it ensures only that they are
--- equivalent modulo beta-reduction; any non-trivial type equalities
--- must be indicated explicitly with coercions.
+-- are correct.  Types are evaluated to WHNF as necessary.
 scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scTypeCheck sc t0 = scTypeCheck' sc [] t0
 
@@ -469,20 +465,13 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
                 return x
     sort :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO Sort
     sort t = asSort =<< memo t
-    reducePi' :: SharedTerm s -> SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
-    reducePi' t@(STApp _ (Pi _ t1 body)) arg =
-      do t2 <- memo arg
-         if alphaEquiv t1 t2 then return ()
-            else do lift $ putStrLn $ "Unsolved: " ++ show t1 ++ " == " ++ show t2
-         lift $ instantiateVar sc 0 arg body
-    reducePi' t _ = fail $ "Not a function type: " ++ show t
     termf :: TermF (SharedTerm s) -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     termf tf =
       case tf of
         FTermF ftf -> ftermf ftf
         App x y ->
           do tx <- memo x
-             reducePi' tx y
+             lift (reducePi sc tx y)
         Lambda x a rhs ->
           do b <- lift $ scTypeCheck' sc (a : env) rhs
              lift $ scTermF sc (Pi x a b)
@@ -494,7 +483,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant _ t -> memo t
+        Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s)
            -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     ftermf tf =
@@ -513,10 +502,10 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         RecordType m -> lift . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- lift $ scTypeOfCtor sc c
-          foldM reducePi' t args
+          foldM (\ a b -> liftIO $ reducePi sc a b) t args
         DataTypeApp dt args -> do
           t <- lift $ scTypeOfDataType sc dt
-          foldM reducePi' t args
+          foldM (\ a b -> liftIO $ reducePi sc a b) t args
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
@@ -582,102 +571,6 @@ scImport sc t0 =
     go cache (STApp idx tf) = useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
 --------------------------------------------------------------------------------
--- External text format
-
--- | Render to external text format
-scWriteExternal :: SharedTerm s -> String
-scWriteExternal t0 =
-    let (x, (_, output, _)) = State.runState (go t0) (Map.empty, [], 1)
-    in unlines (unwords ["SAWCoreTerm", show x] : reverse output)
-  where
-    go :: SharedTerm s -> State.State (Map TermIndex Int, [String], Int) Int
-    go (STApp i tf) = do
-      (memo, _, _) <- State.get
-      case Map.lookup i memo of
-        Just x -> return x
-        Nothing -> do
-          tf' <- traverse go tf
-          (m, output, x) <- State.get
-          let s = unwords [show x, writeTermF tf']
-          State.put (Map.insert i x m, s : output, x + 1)
-          return x
-    writeTermF :: TermF Int -> String
-    writeTermF tf =
-      case tf of
-        App e1 e2    -> unwords ["App", show e1, show e2]
-        Lambda s t e -> unwords ["Lam", s, show t, show e]
-        Pi s t e     -> unwords ["Pi", s, show t, show e]
-        Let ds e     -> unwords ["Def", writeDefs ds, show e]
-        LocalVar i   -> unwords ["Var", show i]
-        Constant i e -> unwords ["Constant", show i, show e]
-        FTermF ftf   ->
-          case ftf of
-            GlobalDef ident    -> unwords ["Global", show ident]
-            TupleValue es      -> unwords ("Tuple" : map show es)
-            TupleType es       -> unwords ("TupleT" : map show es)
-            TupleSelector e i  -> unwords ["TupleSel", show e, show i]
-            RecordValue m      -> unwords ("Record" : map writeField (Map.assocs m))
-            RecordType m       -> unwords ("RecordT" : map writeField (Map.assocs m))
-            RecordSelector e i -> unwords ["RecordSel", show e, i]
-            CtorApp i es       -> unwords ("Ctor" : show i : map show es)
-            DataTypeApp i es   -> unwords ("Data" : show i : map show es)
-            Sort s             -> unwords ["Sort", show s]
-            NatLit n           -> unwords ["Nat", show n]
-            ArrayValue e v     -> unwords ("Array" : show e : map show (V.toList v))
-            FloatLit x         -> unwords ["Float", show x]
-            DoubleLit x        -> unwords ["Double", show x]
-            StringLit s        -> unwords ["String", show s]
-            ExtCns ext         -> unwords ("ExtCns" : writeExtCns ext)
-    writeField :: (String, Int) -> String
-    writeField (s, e) = unwords [s, show e]
-    writeDefs = error "unsupported Let expression"
-    writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
-
-scReadExternal :: forall s. SharedContext s -> String -> IO (SharedTerm s)
-scReadExternal sc input =
-  case map words (lines input) of
-    (["SAWCoreTerm", read -> final] : rows) ->
-        do m <- foldM go Map.empty rows
-           return $ (Map.!) m final
-    _ -> fail "scReadExternal"
-  where
-    go :: Map Int (SharedTerm s) -> [String] -> IO (Map Int (SharedTerm s))
-    go m (n : tokens) =
-        do t <- scTermF sc (fmap ((Map.!) m) (parse tokens))
-           return (Map.insert (read n) t m)
-    go _ _ = fail "Parse error"
-    parse :: [String] -> TermF Int
-    parse tokens =
-      case tokens of
-        ["App", e1, e2]     -> App (read e1) (read e2)
-        ["Lam", x, t, e]    -> Lambda x (read t) (read e)
-        ["Pi", s, t, e]     -> Pi s (read t) (read e)
-        -- TODO: support LetDef
-        ["Var", i]          -> LocalVar (read i)
-        ["Constant", x, e]  -> Constant (parseIdent x) (read e)
-        ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
-        ("Tuple" : es)      -> FTermF (TupleValue (map read es))
-        ("TupleT" : es)     -> FTermF (TupleType (map read es))
-        ["TupleSel", e, i]  -> FTermF (TupleSelector (read e) (read i))
-        ("Record" : fs)     -> FTermF (RecordValue (readMap fs))
-        ("RecordT" : fs)    -> FTermF (RecordType (readMap fs))
-        ["RecordSel", e, i] -> FTermF (RecordSelector (read e) i)
-        ("Ctor" : i : es)   -> FTermF (CtorApp (parseIdent i) (map read es))
-        ("Data" : i : es)   -> FTermF (DataTypeApp (parseIdent i) (map read es))
-        ["Sort", s]         -> FTermF (Sort (mkSort (read s)))
-        ["Nat", n]          -> FTermF (NatLit (read n))
-        ("Array" : e : es)  -> FTermF (ArrayValue (read e) (V.fromList (map read es)))
-        ["Float", x]        -> FTermF (FloatLit (read x))
-        ["Double", x]       -> FTermF (DoubleLit (read x))
-        ["String", s]       -> FTermF (StringLit (read s))
-        ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
-        _ -> error $ "Parse error: " ++ unwords tokens
-    readMap :: [String] -> Map FieldName Int
-    readMap [] = Map.empty
-    readMap (i : e : fs) = Map.insert i (read e) (readMap fs)
-    readMap _ = error $ "Parse error"
-
---------------------------------------------------------------------------------
 
 -- | Returns bitset containing indices of all free local variables.
 looseVars :: forall s. SharedTerm s -> BitSet
@@ -724,7 +617,7 @@ instantiateVars sc f initialLevel t0 =
     go' l (LocalVar i)
       | i < l     = pure $ scTermF sc (LocalVar i)
       | otherwise = f l i
-    go' _ tf@(Constant _ _) = pure $ scTermF sc tf
+    go' _ tf@(Constant _ _ _) = pure $ scTermF sc tf
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -814,7 +707,7 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               when (looseVars t == 0) $ put (StrictMap.insert t 1 m)
               let (h,args) = asApplyAll t
               case unwrapTermF h of
-                Constant _ _ -> rec (args ++ r)
+                Constant _ _ _ -> rec (args ++ r)
                 _ -> rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
 --              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
 
@@ -1103,7 +996,7 @@ scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
 -- | The default instance of the SharedContext operations.
 mkSharedContext :: Module -> IO (SharedContext s)
 mkSharedContext m = do
-  vr <- newMVar 0 -- ^ Reference for getting variables.
+  vr <- newMVar 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   return SharedContext {
@@ -1135,10 +1028,10 @@ scInstantiateExt sc vmap t0 = do
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
-          -- | Lookup variable in term if it is bound.
+          -- Lookup variable in term if it is bound.
           FTermF (ExtCns ec) ->
             maybe (return t) modified $ Map.lookup (ecVarIndex ec) vmap
-          -- | Recurse on other terms.
+          -- Recurse on other terms.
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
@@ -1149,7 +1042,7 @@ scUnfoldConstants sc ids t0 = do
   let go :: SharedTerm s -> IO (SharedTerm s)
       go t@(STApp idx tf) = useCache cache idx $
         case tf of
-          Constant ident rhs
+          Constant ident rhs _
             | ident `elem` ids -> go rhs
             | otherwise        -> return t
           _ -> scTermF sc =<< traverse go tf
@@ -1162,7 +1055,7 @@ scUnfoldConstants' sc ids t0 = do
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
       go t@(STApp idx tf) =
         case tf of
-          Constant ident rhs
+          Constant ident rhs _
             | ident `elem` ids -> taint (go rhs)
             | otherwise        -> pure t
           _ -> useChangeCache tcache idx $

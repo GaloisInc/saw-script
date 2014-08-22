@@ -374,9 +374,9 @@ indexPiPats :: [Un.Pat] -> TCTerm -> Unifier s ([UPat s], VarIndex s)
 indexPiPats unpats0 tp0 = do
     tc <- gets usGlobalContext
     go [] unpats0 (emptyLocalCtx tc, tp0)
-  where go :: -- | Previous patterns
+  where go :: -- Previous patterns
               [UPat s]
-              -- | Terms for substution.
+              -- Terms for substution.
            -> [Un.Pat]
            -> (UnifyLocalCtx s, TCTerm) -> Unifier s ([UPat s], VarIndex s)
         go ppats [] (lctx, tp) =
@@ -458,8 +458,7 @@ occursCheckFailure nm = fail msg
 
 -- | Function for getting value from cache once.
 uresolveCache :: (Ord k, MonadState s m)
-                 -- | Lens for accessing cache in state.
-              => Simple Lens s (UResolverCache k v)
+              => Simple Lens s (UResolverCache k v) -- ^ Lens for accessing cache in state.
               -> (k -> m v) -- ^ Evaluation function for getting value if key is empty.
               -> String -- ^ Name if occurs check failure occurs.
               -> k -- ^ Value to lookup.
