@@ -44,7 +44,6 @@ library
     , template-haskell
     , transformers
     , vector
-    , Verinf
     , xdg-basedir
     , wl-pprint
     , GraphSCC
