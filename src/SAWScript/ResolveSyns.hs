@@ -9,16 +9,25 @@ import SAWScript.Compiler
 
 import Control.Applicative
 import Control.Monad.Trans.Reader
+import qualified Data.Map as Map
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (Module UnresolvedName RawT      RawT)
                         (Module UnresolvedName ResolvedT ResolvedT)
-resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds cs) ->
-  {- Use 'te' to seed the 'RS' monad while resolving synonyms.  This means only
-  synonyms from this module can be used in this module.  TODO: Support
-  importing synonyms from other modules. -}
-  evalRS te $
-    Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds <*> pure cs
+resolveSyns = compiler "ResolveSyns" resolveCompiler
+
+resolveCompiler :: Module UnresolvedName RawT RawT
+                -> Err (Module UnresolvedName ResolvedT ResolvedT)
+resolveCompiler (Module nm ee pe te ds) =
+  evalRS tes $
+    Module nm <$> traverse (traverse resolve) ee <*>
+                  traverse resolve pe <*>
+                  traverse resolve te <*>
+                  pure ds
+      where tes = Map.unions $ te : map (fixup . moduleTypeEnv) (Map.elems ds)
+            fixup :: LEnv ResolvedT -> LEnv RawT
+            fixup e = Map.fromList
+                      [ (n, Nothing) | (n, Nothing) <- Map.toList e ]
 
 type RS = ReaderT RSEnv Err
 type RSEnv = LEnv RawT
