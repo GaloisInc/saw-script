@@ -43,7 +43,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, Ident(..), Module, Termlike)
 
-import Verifier.SAW.BitBlast (BShape(..))
+import Verifier.SAW.FiniteValue (FiniteType(..))
 
 type SValue = Value IO SbvExtra
 type SThunk = Thunk IO SbvExtra
@@ -659,18 +659,18 @@ sbvSolve sc t = do
                 _ -> fail "bitBlast: non-boolean result type."
   return (labels, pred)
 
-parseShape :: SharedContext s -> SharedTerm s -> IO BShape
+parseShape :: SharedContext s -> SharedTerm s -> IO FiniteType
 parseShape sc t = do
   t' <- scWhnf sc t
   case t' of
     (R.asBoolType -> Just ())
-      -> return BoolShape
+      -> return FTBit
     (R.isVecType return -> Just (n R.:*: tp))
-      -> VecShape n <$> parseShape sc tp
+      -> FTVec n <$> parseShape sc tp
     (R.asTupleType -> Just ts)
-      -> TupleShape <$> traverse (parseShape sc) ts
+      -> FTTuple <$> traverse (parseShape sc) ts
     (R.asRecordType -> Just tm)
-       -> RecShape <$> traverse (parseShape sc) tm
+       -> FTRec <$> traverse (parseShape sc) tm
     _ -> fail $ "bitBlast: unsupported argument type: " ++ show t'
 
 data Labeler
@@ -687,18 +687,18 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
 myfun = fmap fst A.&&& fmap snd
 
-newVars :: BShape -> State Int (Labeler, Symbolic SValue)
-newVars BoolShape = nextId <&> \s-> (BoolLabel s, vBool <$> exists s)
-newVars (VecShape n BoolShape) =
+newVars :: FiniteType -> State Int (Labeler, Symbolic SValue)
+newVars FTBit = nextId <&> \s-> (BoolLabel s, vBool <$> exists s)
+newVars (FTVec n FTBit) =
   if n == 0
     then nextId <&> \s-> (WordLabel s, return (VExtra SZero))
     else nextId <&> \s-> (WordLabel s, vWord <$> existsBV s (fromIntegral n))
-newVars (VecShape n tp) = do
+newVars (FTVec n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
   return (VecLabel labels, VVector <$> traverse (fmap Ready) vals)
-newVars (TupleShape ts) = do
+newVars (FTTuple ts) = do
   (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
   return (TupleLabel labels, VTuple <$> traverse (fmap Ready) vals)
-newVars (RecShape tm) = do
+newVars (FTRec tm) = do
   (labels, vals) <- myfun <$> (traverse newVars tm :: State Int (Map String (Labeler, Symbolic SValue)))
   return (RecLabel labels, VRecord <$> traverse (fmap Ready) (vals :: (Map String (Symbolic SValue))))

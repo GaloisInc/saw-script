@@ -20,6 +20,7 @@ import qualified Data.Map as Map
 import Data.Traversable
 import qualified Data.Vector as V
 
+import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
@@ -581,41 +582,13 @@ lookupBStream _ _ = fail "expected Stream"
 ------------------------------------------------------------
 -- Generating variables for arguments
 
-data BShape
-  = BoolShape
-  | VecShape Nat BShape
-  | TupleShape [BShape]
-  | RecShape (Map FieldName BShape)
+newVars :: AIG.IsAIG l g => g s -> FiniteType -> IO (BValue (l s))
+newVars be FTBit = vBool <$> AIG.newInput be
+newVars be (FTVec n tp) = VVector <$> V.replicateM (fromIntegral n) (newVars' be tp)
+newVars be (FTTuple ts) = VTuple <$> traverse (newVars' be) (V.fromList ts)
+newVars be (FTRec tm) = VRecord <$> traverse (newVars' be) tm
 
-shapeSize :: BShape -> Int
-shapeSize x =
-  case x of
-    BoolShape     -> 1
-    VecShape n x1 -> fromIntegral n * shapeSize x1
-    TupleShape xs -> sum (map shapeSize xs)
-    RecShape xm   -> sum (map shapeSize (Map.elems xm))
-
-parseShape :: SharedContext s -> SharedTerm s -> IO BShape
-parseShape sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asBoolType -> Just ())
-      -> return BoolShape
-    (R.isVecType return -> Just (n R.:*: tp))
-      -> VecShape n <$> parseShape sc tp
-    (R.asTupleType -> Just ts)
-      -> TupleShape <$> traverse (parseShape sc) ts
-    (R.asRecordType -> Just tm)
-       -> RecShape <$> traverse (parseShape sc) tm
-    _ -> fail $ "bitBlast: unsupported argument type: " ++ show t'
-
-newVars :: AIG.IsAIG l g => g s -> BShape -> IO (BValue (l s))
-newVars be BoolShape = vBool <$> AIG.newInput be
-newVars be (VecShape n tp) = VVector <$> V.replicateM (fromIntegral n) (newVars' be tp)
-newVars be (TupleShape ts) = VTuple <$> traverse (newVars' be) (V.fromList ts)
-newVars be (RecShape tm) = VRecord <$> traverse (newVars' be) tm
-
-newVars' :: AIG.IsAIG l g => g s -> BShape -> IO (BThunk (l s))
+newVars' :: AIG.IsAIG l g => g s -> FiniteType -> IO (BThunk (l s))
 newVars' be shape = Ready <$> newVars be shape
 
 ------------------------------------------------------------
@@ -634,11 +607,11 @@ asPredType sc t = do
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
 bitBlast :: AIG.IsAIG l g =>
-            g s -> SharedContext t -> SharedTerm t -> IO ([BShape], l s)
+            g s -> SharedContext t -> SharedTerm t -> IO ([FiniteType], l s)
 bitBlast be sc t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
-  shapes <- traverse (parseShape sc) argTs
+  shapes <- traverse (asFiniteType sc) argTs
   vars <- traverse (newVars' be) shapes
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
@@ -663,7 +636,7 @@ bitBlastTerm :: AIG.IsAIG l g =>
 bitBlastTerm be sc t = do
   ty <- scTypeOf sc t
   argTs <- asAIGType sc ty
-  shapes <- traverse (parseShape sc) argTs
+  shapes <- traverse (asFiniteType sc) argTs
   vars <- traverse (newVars' be) shapes
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
