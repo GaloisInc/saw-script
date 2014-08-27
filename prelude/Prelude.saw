@@ -116,14 +116,14 @@ prim llvm_double        : LLVMType;
 prim llvm_array         : Int -> LLVMType -> LLVMType;
 
 prim llvm_value         : {a} String -> a;
-prim llvm_var           : {a} String -> LLVMType -> LLVMSetup a;
-prim llvm_ptr           : {a} String -> LLVMType -> LLVMSetup a;
+prim llvm_var           : String -> LLVMType -> LLVMSetup Term;
+prim llvm_ptr           : String -> LLVMType -> LLVMSetup Term;
 //prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
-prim llvm_assert        : Bit -> LLVMSetup ();
+prim llvm_assert        : Term -> LLVMSetup ();
 //prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
-prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
+prim llvm_ensure_eq     : String -> Term -> LLVMSetup ();
 prim llvm_modify        : String -> LLVMSetup ();
-prim llvm_return        : {a} a -> LLVMSetup ();
+prim llvm_return        : Term -> LLVMSetup ();
 prim llvm_verify_tactic : {a} ProofScript a -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
