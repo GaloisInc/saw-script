@@ -91,14 +91,14 @@ prim java_array         : Int -> JavaType -> JavaType;
 prim java_class         : String -> JavaType;
 
 prim java_value         : {a} String -> a;
-prim java_var           : {a} String -> JavaType -> JavaSetup a;
+prim java_var           : String -> JavaType -> JavaSetup Term;
 prim java_class_var     : {a} String -> JavaType -> JavaSetup a;
 prim java_may_alias     : {n} [n]String -> JavaSetup ();
-prim java_assert        : Bit -> JavaSetup ();
+prim java_assert        : Term -> JavaSetup ();
 //prim java_assert_eq     : {a} String -> a -> JavaSetup ();
-prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
+prim java_ensure_eq     : String -> Term -> JavaSetup ();
 prim java_modify        : String -> JavaSetup ();
-prim java_return        : {a} a -> JavaSetup ();
+prim java_return        : Term -> JavaSetup ();
 prim java_verify_tactic : {a} ProofScript a -> JavaSetup ();
 prim java_pure          : JavaSetup ();
 
