@@ -40,6 +40,20 @@ instance Show FiniteValue where
       commaSep ss = foldr (.) id (intersperse (showString ",") ss)
       showField (field, v) = showString field . showString " = " . shows v
 
+-- | Smart constructor
+fvVec :: FiniteType -> [FiniteValue] -> FiniteValue
+fvVec t vs =
+  case (t, traverse toBit vs) of
+    (FTBit, Just bs) -> FVWord (fromIntegral (length bs)) (fromBits bs)
+    _ -> FVVec t vs
+  where
+    toBit :: FiniteValue -> Maybe Bool
+    toBit (FVBit b) = Just b
+    toBit _ = Nothing
+
+    fromBits :: [Bool] -> Integer
+    fromBits = foldl (\n b -> 2*n + if b then 1 else 0) 0
+
 finiteTypeOf :: FiniteValue -> FiniteType
 finiteTypeOf fv =
   case fv of
@@ -108,7 +122,7 @@ readFiniteValue' ft =
                      case bs of
                        []      -> S.lift Nothing
                        b : bs' -> S.put bs' >> return (FVBit b)
-    FTVec n t  -> FVVec t <$> S.replicateM (fromIntegral n) (readFiniteValue' t)
+    FTVec n t  -> fvVec t <$> S.replicateM (fromIntegral n) (readFiniteValue' t)
     FTTuple ts -> FVTuple <$> traverse readFiniteValue' ts
     FTRec tm   -> FVRec <$> traverse readFiniteValue' tm
 
