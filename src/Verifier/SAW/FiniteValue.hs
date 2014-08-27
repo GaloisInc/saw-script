@@ -2,6 +2,7 @@ module Verifier.SAW.FiniteValue where
 
 import Control.Applicative
 import qualified Control.Monad.State as S
+import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable
@@ -25,7 +26,19 @@ data FiniteValue
   | FVVec FiniteType [FiniteValue]
   | FVTuple [FiniteValue]
   | FVRec (Map FieldName FiniteValue)
-  deriving (Eq, Show)
+  deriving Eq
+
+instance Show FiniteValue where
+  showsPrec _ fv =
+    case fv of
+      FVBit b -> shows b
+      FVWord _ x -> shows x
+      FVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
+      FVTuple vs -> showString "(" . commaSep (map shows vs) . showString ")"
+      FVRec vm   -> showString "{" . commaSep (map showField (Map.assocs vm)) . showString "}"
+    where
+      commaSep ss = foldr (.) id (intersperse (showString ",") ss)
+      showField (field, v) = showString field . showString " = " . shows v
 
 finiteTypeOf :: FiniteValue -> FiniteType
 finiteTypeOf fv =
