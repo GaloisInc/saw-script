@@ -421,11 +421,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         TupleValue l -> lift . scTupleType sc =<< traverse memo l
         TupleType l -> lift . scSort sc . maximum =<< traverse sort l
         TupleSelector t i -> do
-          STApp _ (FTermF (TupleType ts)) <- memo t
+          STApp _ (FTermF (TupleType ts)) <- memo t >>= liftIO . scWhnf sc
           return (ts !! (i-1)) -- FIXME test for i < length ts
         RecordValue m -> lift . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
-          STApp _ (FTermF (RecordType m)) <- memo t
+          STApp _ (FTermF (RecordType m)) <- memo t >>= liftIO . scWhnf sc
           let Just tp = Map.lookup f m
           return tp
         RecordType m -> lift . scSort sc . maximum =<< traverse sort m

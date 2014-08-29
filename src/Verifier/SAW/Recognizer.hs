@@ -46,6 +46,7 @@ module Verifier.SAW.Recognizer
   , asBoolType
   , Nat
   , asBitvectorType
+  , asVectorType
   , asVecType
   , isVecType
   , asMux
@@ -196,6 +197,11 @@ asBool _ = fail "not bool"
 
 asBoolType :: (Monad f, Termlike t) => Recognizer f t ()
 asBoolType = isDataType "Prelude.Bool" emptyl
+
+asVectorType :: (Monad f, Termlike t) => Recognizer f t (t, t)
+asVectorType = isDataType "Prelude.Vec" r
+  where r [n, t] = return (n, t)
+        r _ = fail "asVectorType: wrong number of arguments"
 
 isVecType :: (Monad f, Termlike t)
           => Recognizer f t a -> Recognizer f t (Nat :*: a)
