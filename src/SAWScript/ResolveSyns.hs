@@ -13,12 +13,12 @@ import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (Module UnresolvedName RawT      RawT)
                         (Module UnresolvedName ResolvedT ResolvedT)
-resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds) ->
+resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds cs) ->
   {- Use 'te' to seed the 'RS' monad while resolving synonyms.  This means only
   synonyms from this module can be used in this module.  TODO: Support
   importing synonyms from other modules. -}
   evalRS te $
-    Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds
+    Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds <*> pure cs
 
 type RS = ReaderT RSEnv Err
 type RSEnv = LEnv RawT

@@ -20,8 +20,8 @@ import Prelude hiding (mod, exp)
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
 renameRefs :: Compiler IncomingModule OutgoingModule
-renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe te ds) -> evalRR m $
-  Module nm <$> T.traverse resolveInExpr ee <*> pure pe <*> pure te <*> pure ds
+renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe te ds cs) -> evalRR m $
+  Module nm <$> T.traverse resolveInExpr ee <*> pure pe <*> pure te <*> pure ds <*> pure cs
 
 -- Types {{{
 
@@ -132,6 +132,7 @@ resolveInExpr exp = case exp of
   Quote s t         -> pure $ Quote s t
   Z i t             -> pure $ Z i t
   Undefined t       -> pure $ Undefined t
+  Code s t          -> pure $ Code s t
 
 duplicateBindingsFail :: [Name] -> RR a
 duplicateBindingsFail ns = fail $
@@ -175,10 +176,10 @@ resolveName un = do
 
 -- Take a module to its collection of Expr Environments.
 allExprMaps :: IncomingModule -> ExprMaps
-allExprMaps (Module modNm exprEnv primEnv _ deps)
+allExprMaps (Module modNm exprEnv primEnv _ deps _)
   = (modNm, unloc exprEnv, unloc primEnv, foldr f M.empty (M.elems deps))
   where
-    f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (unloc exprEnv', unloc primEnv')
+    f (Module modNm' exprEnv' primEnv' _ _ _) = M.insert modNm' (unloc exprEnv', unloc primEnv')
     unloc = M.mapKeys getVal
 
 -- TODO: this will need to change once we can refer to prelude functions

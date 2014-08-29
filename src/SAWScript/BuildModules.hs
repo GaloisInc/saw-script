@@ -34,6 +34,7 @@ data ModuleParts e = ModuleParts
   , modPrimEnv :: LEnv RawT
   , modTypeEnv :: LEnv RawT
   , modDeps    :: S.Set ModuleName
+  , modCryDeps :: [FilePath]
   } deriving (Show)
 
 newtype ModMap e = ModMap
@@ -47,9 +48,9 @@ buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDepe
   $ M.assocs $ modules ms
 
 addPreludeDependency :: ModuleParts UncheckedExpr -> Err (ModuleParts UncheckedExpr)
-addPreludeDependency mparts@(ModuleParts mn ee pe te ds)
+addPreludeDependency mparts@(ModuleParts mn ee pe te ds cs)
   | mn == preludeName = return mparts
-  | otherwise = return $ ModuleParts mn ee pe te $ S.insert preludeName ds
+  | otherwise = return $ ModuleParts mn ee pe te (S.insert preludeName ds) cs
 
 preludeName :: ModuleName
 preludeName = ModuleName [] "Prelude"
@@ -57,11 +58,12 @@ preludeName = ModuleName [] "Prelude"
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
 build :: (ModuleName,[TopStmtSimple RawT]) -> Err (ModuleParts UncheckedExpr)
-build (mn,ts) = foldrM modBuilder (ModuleParts mn M.empty M.empty M.empty S.empty) ts
+build (mn,ts) = foldrM modBuilder (ModuleParts mn M.empty M.empty M.empty S.empty []) ts
 
 -- stage2: force every expression var to have exactly one bound expression.
 check :: ModuleParts UncheckedExpr -> Err (ModuleParts CheckedExpr)
-check (ModuleParts mn ee pe te ds) = ModuleParts mn <$> traverseWithKey ensureExprPresent ee <*> pure pe <*> pure te <*> pure ds
+check (ModuleParts mn ee pe te ds cs) =
+  ModuleParts mn <$> traverseWithKey ensureExprPresent ee <*> pure pe <*> pure te <*> pure ds <*> pure cs
 
 -- stage3: make a module out of the resulting envs
 assemble :: [ModuleParts CheckedExpr] -> Err Outgoing
@@ -79,32 +81,33 @@ ensureExprPresent n met = case met of
 
 
 modBuilder :: TopStmtSimple RawT -> ModuleParts UncheckedExpr -> Err (ModuleParts UncheckedExpr)
-modBuilder t (ModuleParts mn ee pe te ds) = case t of
+modBuilder t (ModuleParts mn ee pe te ds cs) = case t of
   -- TypeDecls may not fail
   TopTypeDecl n pt ->
     case M.lookup n ee of
       Just (_,Just _) -> multiDeclErr n
-      _               -> return $ ModuleParts mn (intoExprEnv (newTypeDecl pt) n ee) pe te ds
+      _               -> return $ ModuleParts mn (intoExprEnv (newTypeDecl pt) n ee) pe te ds cs
   -- Multiple binds to the same name will fail
   TopBind n e      ->
     case M.lookup n ee of
       Just (Just _,_) -> multiDeclErr n
-      _               -> return $ ModuleParts mn (intoExprEnv (newBind e) n ee) pe te ds
+      _               -> return $ ModuleParts mn (intoExprEnv (newBind e) n ee) pe te ds cs
   -- Multiple declarations of the same type synonym will fail
   TypeDef n pt     ->
     if M.member n te
       then multiDeclErr n
-      else return $ ModuleParts mn ee pe (M.insert n (newTypeSyn pt) te) ds
+      else return $ ModuleParts mn ee pe (M.insert n (newTypeSyn pt) te) ds cs
   -- Multiple declarations of an abstract type will fail
   AbsTypeDecl  n   ->
     if M.member n te
       then multiDeclErr n
-      else return $ ModuleParts mn ee pe (M.insert n newAbsType te) ds
+      else return $ ModuleParts mn ee pe (M.insert n newAbsType te) ds cs
   Prim n ty -> if M.member n pe
                          then multiDeclErr n
-                         else return $ ModuleParts mn ee (M.insert n ty pe) te ds
+                         else return $ ModuleParts mn ee (M.insert n ty pe) te ds cs
   -- Imports show dependencies
-  Import n _ _     -> return $ ModuleParts mn ee pe te (S.insert n ds)
+  Import n _ _     -> return $ ModuleParts mn ee pe te (S.insert n ds) cs
+  ImportCry path   -> return $ ModuleParts mn ee pe te ds (path : cs)
 
 -- BuildEnv --------------------------------------------------------------------
 

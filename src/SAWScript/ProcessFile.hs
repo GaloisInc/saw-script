@@ -56,7 +56,7 @@ processModule opts lms modName =
 checkModuleWithDeps :: BM.ModuleParts (ExprSimple RawT)
   -> M.Map ModuleName ValidModule
   -> Err (M.Map ModuleName ValidModule)
-checkModuleWithDeps (BM.ModuleParts mn ee pe te ds) cms =
+checkModuleWithDeps (BM.ModuleParts mn ee pe te ds cs) cms =
   mod >>=
   resolveSyns >>=
   renameRefs  >>=
@@ -68,4 +68,4 @@ checkModuleWithDeps (BM.ModuleParts mn ee pe te ds) cms =
              Nothing -> fail $ "Tried to compile module " ++ show mn ++
                                " before compiling its dependency, " ++ show n
              Just m  -> return (n,m)
-  mod  = Module mn ee pe te <$> deps
+  mod  = Module mn ee pe te <$> deps <*> pure cs

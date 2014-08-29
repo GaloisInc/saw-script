@@ -15,7 +15,8 @@ library
     , aig
     , ansi-terminal
     , array
---    , cmdargs
+    , binary
+    , bytestring
     , containers
     , cryptol
     , cryptol-verifier
@@ -44,7 +45,6 @@ library
     , time
     , transformers
     , vector
-    , Verinf
     , xdg-basedir
     , wl-pprint
     , GraphSCC
@@ -58,6 +58,7 @@ library
     SAWScript.CongruenceClosure
     SAWScript.Compiler
     SAWScript.CryptolBuiltins
+    SAWScript.CryptolEnv
     SAWScript.FileQuote
     SAWScript.Import
     SAWScript.ImportAIG
@@ -85,6 +86,7 @@ library
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
     SAWScript.SBVParser
+    SAWScript.SBVModel
     SAWScript.REPL.Trie
     SAWScript.Token
     SAWScript.MGU

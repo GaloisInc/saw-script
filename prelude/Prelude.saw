@@ -1,4 +1,3 @@
-abstract Term;
 abstract Simpset;
 abstract Theorem;
 
@@ -13,49 +12,45 @@ abstract JavaClass;
 abstract LLVMModule;
 abstract Uninterp;
 
-// TODO: create ProofResult a, with concrete syntax
-// TODO: create SatResult a, with concrete syntax
+abstract ProofResult;
+abstract SatResult;
 // TODO: create ProofScript a, with concrete syntax
 
 prim return             : { m , a } a -> m a;
 
-prim define             : {a} String -> a -> TopLevel a;
+prim define             : String -> Term -> TopLevel Term;
 
 prim print              : {a} a -> TopLevel ();
-prim print_term         : {a} a -> TopLevel ();
-prim print_type         : {a} a -> TopLevel ();
-prim show_term          : {a} a -> String;
+prim print_term         : Term -> TopLevel ();
+prim print_type         : Term -> TopLevel ();
+prim show_term          : Term -> String;
 
-prim check_term         : {a} a -> TopLevel Term;
+prim check_term         : Term -> TopLevel ();
 
 prim bitSequence        : { n } Int -> [n];
 
-prim term               : {a} a -> Term;
+prim sbv_uninterpreted  : String -> Term -> TopLevel Uninterp;
+prim read_sbv           : {n} String -> [n]Uninterp -> TopLevel Term;
 
-prim read_aig           : {a} String -> TopLevel a;
+prim read_aig           : String -> TopLevel Term;
+prim read_core          : String -> TopLevel Term;
 
-prim sbv_uninterpreted  : {a} String -> a -> TopLevel Uninterp;
-prim read_sbv           : {a, n} String -> [n]Uninterp -> TopLevel a;
-prim read_core          : {a} String -> TopLevel a;
+prim write_aig          : String -> Term -> TopLevel ();
+prim write_cnf          : String -> Term -> TopLevel ();
+prim write_smtlib1      : String -> Term -> TopLevel ();
+prim write_smtlib2      : String -> Term -> TopLevel ();
+prim write_core         : String -> Term -> TopLevel ();
 
-prim write_aig          : {a} String -> a -> TopLevel ();
-prim write_cnf          : {a} String -> a -> TopLevel ();
-prim write_smtlib1      : {a} String -> a -> TopLevel ();
-prim write_smtlib2      : {a} String -> a -> TopLevel ();
-prim write_core         : {a} String -> a -> TopLevel ();
-
-prim prove              : {a, b} ProofScript b -> (a -> Bit)
-                       -> TopLevel (ProofResult a);
-prim prove_print        : {a, b} ProofScript b -> a -> TopLevel Theorem;
-prim sat                : {a, b} ProofScript b -> (a -> Bit)
-                       -> TopLevel (SatResult a);
-prim sat_print          : {a, b} ProofScript b -> a -> TopLevel ();
+prim prove              : {b} ProofScript b -> Term -> TopLevel ProofResult;
+prim prove_print        : {b} ProofScript b -> Term -> TopLevel Theorem;
+prim sat                : {b} ProofScript b -> Term -> TopLevel SatResult;
+prim sat_print          : {b} ProofScript b -> Term -> TopLevel ();
 
 prim unfolding          : {n} [n]String -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
 prim print_goal         : ProofScript ();
-prim assume_valid       : {a} ProofScript (ProofResult a);
-prim assume_unsat       : {a} ProofScript (SatResult a);
+prim assume_valid       : ProofScript ProofResult;
+prim assume_unsat       : ProofScript SatResult;
 prim abc                : {a} ProofScript a;
 prim boolector          : {a} ProofScript a;
 prim cvc4               : {a} ProofScript a;
@@ -78,11 +73,11 @@ prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;
 prim addsimp            : Theorem -> Simpset -> Simpset;
 prim addsimp'           : {a} a -> Simpset -> Simpset;
-prim rewrite            : {a} Simpset -> a -> TopLevel a;
+prim rewrite            : Simpset -> Term -> TopLevel Term;
 
-prim cryptol_module     : String -> TopLevel CryptolModuleEnv;
-prim cryptol_module_info : CryptolModuleEnv -> TopLevel ();
-prim cryptol_extract    : {a} CryptolModuleEnv -> String -> TopLevel a;
+//prim cryptol_module     : String -> TopLevel CryptolModuleEnv;
+//prim cryptol_module_info : CryptolModuleEnv -> TopLevel ();
+//prim cryptol_extract    : {a} CryptolModuleEnv -> String -> TopLevel a;
 
 prim java_bool          : JavaType;
 prim java_byte          : JavaType;
@@ -96,14 +91,14 @@ prim java_array         : Int -> JavaType -> JavaType;
 prim java_class         : String -> JavaType;
 
 prim java_value         : {a} String -> a;
-prim java_var           : {a} String -> JavaType -> JavaSetup a;
+prim java_var           : String -> JavaType -> JavaSetup Term;
 prim java_class_var     : {a} String -> JavaType -> JavaSetup a;
 prim java_may_alias     : {n} [n]String -> JavaSetup ();
-prim java_assert        : Bit -> JavaSetup ();
+prim java_assert        : Term -> JavaSetup ();
 //prim java_assert_eq     : {a} String -> a -> JavaSetup ();
-prim java_ensure_eq     : {a} String -> a -> JavaSetup ();
+prim java_ensure_eq     : String -> Term -> JavaSetup ();
 prim java_modify        : String -> JavaSetup ();
-prim java_return        : {a} a -> JavaSetup ();
+prim java_return        : Term -> JavaSetup ();
 prim java_verify_tactic : {a} ProofScript a -> JavaSetup ();
 prim java_pure          : JavaSetup ();
 
@@ -121,75 +116,27 @@ prim llvm_double        : LLVMType;
 prim llvm_array         : Int -> LLVMType -> LLVMType;
 
 prim llvm_value         : {a} String -> a;
-prim llvm_var           : {a} String -> LLVMType -> LLVMSetup a;
-prim llvm_ptr           : {a} String -> LLVMType -> LLVMSetup a;
+prim llvm_var           : String -> LLVMType -> LLVMSetup Term;
+prim llvm_ptr           : String -> LLVMType -> LLVMSetup Term;
 //prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
-prim llvm_assert        : Bit -> LLVMSetup ();
+prim llvm_assert        : Term -> LLVMSetup ();
 //prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
-prim llvm_ensure_eq     : {a} String -> a -> LLVMSetup ();
+prim llvm_ensure_eq     : String -> Term -> LLVMSetup ();
 prim llvm_modify        : String -> LLVMSetup ();
-prim llvm_return        : {a} a -> LLVMSetup ();
+prim llvm_return        : Term -> LLVMSetup ();
 prim llvm_verify_tactic : {a} ProofScript a -> LLVMSetup ();
 prim llvm_pure          : LLVMSetup ();
 
 prim llvm_load_module   : String -> TopLevel LLVMModule;
 prim llvm_browse_module : LLVMModule -> TopLevel ();
 prim llvm_module_info   : LLVMModule -> TopLevel ();
-prim llvm_extract       : {a} LLVMModule -> String -> LLVMSetup ()
-                       -> TopLevel a;
+prim llvm_extract       : LLVMModule -> String -> LLVMSetup () -> TopLevel Term;
 prim llvm_verify        : {n} LLVMModule -> String -> [n]LLVMMethodSpec
                        -> LLVMSetup ()
                        -> TopLevel LLVMMethodSpec;
 
-prim term_size          : {a} a -> Int;
-prim term_tree_size     : {a} a -> Int;
+prim term_size          : Term -> Int;
+prim term_tree_size     : Term -> Int;
 
-prim reverse            : {n, a} [n]a -> [n]a;
-
-prim eq                 : {a} a -> a -> Bit;
-prim ite                : {a} Bit -> a -> a -> a;
-
-prim not                : Bit -> Bit;
-prim conj               : Bit -> Bit -> Bit;
-prim disj               : Bit -> Bit -> Bit;
-
-prim bvAt               : {n, a, m} [n]a -> [m] -> a;
-prim bvUpd              : {n, a, m} [n]a -> [m] -> a -> [n]a;
-
-prim bvEq               : {n} [n] -> [n] -> Bit;
-prim bvNot              : {n} [n] -> [n];
-prim bvAdd              : {n} [n] -> [n] -> [n];
-prim bvSub              : {n} [n] -> [n] -> [n];
-prim bvMul              : {n} [n] -> [n] -> [n];
-prim bvAnd              : {n} [n] -> [n] -> [n];
-prim bvOr               : {n} [n] -> [n] -> [n];
-prim bvXor              : {n} [n] -> [n] -> [n];
-prim bvShl              : {n} [n] -> Int -> [n];
-prim bvShr              : {n} [n] -> Int -> [n];
-
-prim bvuge              : {n} [n] -> [n] -> Bit;
-prim bvugt              : {n} [n] -> [n] -> Bit;
-prim bvule              : {n} [n] -> [n] -> Bit;
-prim bvult              : {n} [n] -> [n] -> Bit;
-prim bvsge              : {n} [n] -> [n] -> Bit;
-prim bvsgt              : {n} [n] -> [n] -> Bit;
-prim bvsle              : {n} [n] -> [n] -> Bit;
-prim bvslt              : {n} [n] -> [n] -> Bit;
-
-prim join               : {m, n, o, a} [m][n]a -> [o]a;
-prim split              : {m, n, o, a} [m]a -> [n][o]a;
-prim trunc              : {m, n} Int -> [m] -> [n];
-prim sext               : {m, n} Int -> [m] -> [n];
-prim uext               : {m, n} Int -> [m] -> [n];
-
-// Awful stuff we need to remove, once generic split and join work.
-prim ec_join            : [12][32] -> [384];
-prim ec_join768         : [24][32] -> [768];
-prim ec_split           : [384] -> [12][32];
-prim ec_split768        : [768] -> [24][32];
-prim ec_extend          : [32] -> [384];
-prim long_extend        : [32] -> [64];
-prim trunc31            : [32] -> [31];
-
-prim caseSatResult   : {a, b} SatResult a -> b -> (a -> b) -> b;
-prim caseProofResult : {a, b} ProofResult a -> b -> (a -> b) -> b;
+prim caseSatResult   : {b} SatResult -> b -> (Term -> b) -> b;
+prim caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b;
