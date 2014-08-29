@@ -15,7 +15,7 @@ module Verifier.SAW.Cryptol where
 
 import Control.Exception (assert)
 import Control.Applicative
-import Control.Monad (join, foldM)
+import Control.Monad (join, foldM, unless)
 import Data.List (findIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -26,8 +26,11 @@ import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.Prims.Syntax as P
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
+import Verifier.SAW.Conversion
+import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST (mkSort)
+import Verifier.SAW.TypedAST (mkSort, mkModuleName, findDef)
+import qualified Verifier.SAW.Recognizer as R
 
 unimplemented :: Monad m => String -> m a
 unimplemented name = fail ("unimplemented: " ++ name)
@@ -525,3 +528,43 @@ pIsNeq :: C.Type -> Maybe (C.Type, C.Type)
 pIsNeq ty = case C.tNoUser ty of
               C.TCon (C.PC C.PNeq) [t1, t2] -> Just (t1, t2)
               _                             -> Nothing
+
+--------------------------------------------------------------------------------
+-- Utilities
+
+scCryptolType :: SharedContext s -> SharedTerm s -> IO C.Type
+scCryptolType sc t = do
+  t' <- scWhnf sc t
+  case t' of
+    (R.asNatLit -> Just n)
+      -> return $ C.tNum n
+    (R.asPi -> Just (_, t1, t2))
+      -> C.tFun <$> scCryptolType sc t1 <*> scCryptolType sc t2
+    (R.asBoolType -> Just ())
+      -> return C.tBit
+    (R.asVectorType -> Just (t1, t2))
+      -> C.tSeq <$> scCryptolType sc t1 <*> scCryptolType sc t2
+    (R.asTupleType -> Just ts)
+      -> C.tTuple <$> traverse (scCryptolType sc) ts
+    (R.asRecordType -> Just tm)
+       -> do tm' <- traverse (scCryptolType sc) tm
+             return $ C.tRec [ (C.Name n, ct) | (n, ct) <- Map.assocs tm' ]
+    _ -> fail $ "scCryptolType: unsupported type " ++ show t'
+
+scCryptolEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scCryptolEq sc x y = do
+  rules <- concat <$> traverse defRewrites (defs1 ++ defs2)
+  let ss = addConvs natConversions (addRules rules emptySimpset)
+  tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
+  ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
+  unless (tx == ty) $ fail $ "scCryptolEq: type mismatch: " ++ show (tx, ty)
+  let expr = C.EProofApp (C.ETApp (C.ECon P.ECEq) tx)
+  eq <- importExpr sc emptyEnv expr
+  scApplyAll sc eq [x, y]
+  where
+    defs1 = map (mkIdent (mkModuleName ["Prelude"])) ["bitvector"]
+    defs2 = map (mkIdent (mkModuleName ["Cryptol"])) ["ty", "seq"]
+    defRewrites ident =
+      case findDef (scModule sc) ident of
+        Nothing -> return []
+        Just def -> scDefRewriteRules sc def
