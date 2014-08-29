@@ -41,6 +41,7 @@ library
     , smtLib
     , split
     , template-haskell
+    , time
     , transformers
     , vector
     , Verinf
