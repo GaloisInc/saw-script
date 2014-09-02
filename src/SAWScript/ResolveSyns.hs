@@ -18,12 +18,13 @@ resolveSyns = compiler "ResolveSyns" resolveCompiler
 
 resolveCompiler :: Module UnresolvedName RawT RawT
                 -> Err (Module UnresolvedName ResolvedT ResolvedT)
-resolveCompiler (Module nm ee pe te ds) =
+resolveCompiler (Module nm ee pe te ds cs) =
   evalRS tes $
     Module nm <$> traverse (traverse resolve) ee <*>
                   traverse resolve pe <*>
                   traverse resolve te <*>
-                  pure ds
+                  pure ds <*>
+                  pure cs
       where tes = Map.unions $ te : map (fixup . moduleTypeEnv) (Map.elems ds)
             fixup :: LEnv ResolvedT -> LEnv RawT
             fixup e = Map.fromList
