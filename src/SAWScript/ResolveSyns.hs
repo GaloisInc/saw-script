@@ -18,7 +18,7 @@ resolveSyns = compiler "ResolveSyns" $ \(Module nm ee pe te ds cs) ->
   synonyms from this module can be used in this module.  TODO: Support
   importing synonyms from other modules. -}
   evalRS te $
-    Module nm <$> traverse (traverse resolve) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds <*> pure cs
+    Module nm <$> traverse (traverse (traverse resolve)) ee <*> traverse resolve pe <*> traverse resolve te <*> pure ds <*> pure cs
 
 type RS = ReaderT RSEnv Err
 type RSEnv = LEnv RawT

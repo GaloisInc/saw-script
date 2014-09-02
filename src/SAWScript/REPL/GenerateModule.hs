@@ -29,15 +29,17 @@ wrapBStmt modsInScope stmtName stmt =
     {- The expression environment simply maps @it@ to the statement. Statements
     aren't expressions, so I wrap it up in a block (with an unspecified return
     type). -}
-    moduleExprEnv = Map.singleton (Located stmtName stmtName (PosInternal replFileName)) (Block [stmt] Nothing) }
+    moduleExprEnv = [(Located stmtName stmtName (PosInternal replFileName), Block [stmt] Nothing)] }
 
 scratchpad :: Map ModuleName ValidModule -> Module refT exprT typeT
 scratchpad modsInScope =
   Module { moduleName = replModuleName
-         , moduleExprEnv = Map.empty -- no expressions yet
+         , moduleExprEnv = [] -- no expressions yet
          , modulePrimEnv = Map.empty -- no 'Prim's in the REPL
          , moduleTypeEnv = Map.empty -- no type synonyms in the REPL
-         , moduleDependencies = modsInScope }
+         , moduleDependencies = modsInScope
+         , moduleCryDeps = []
+         }
 
 -- The name of the REPL, as it should be reported in error messages
 replFileName :: String
