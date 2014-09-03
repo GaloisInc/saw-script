@@ -20,7 +20,7 @@ resolveCompiler :: Module UnresolvedName RawT RawT
                 -> Err (Module UnresolvedName ResolvedT ResolvedT)
 resolveCompiler (Module nm ee pe te ds cs) =
   evalRS tes $
-    Module nm <$> traverse (traverse resolve) ee <*>
+    Module nm <$> traverse (traverse (traverse resolve)) ee <*>
                   traverse resolve pe <*>
                   traverse resolve te <*>
                   pure ds <*>

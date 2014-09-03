@@ -17,7 +17,7 @@ data Expr
   | String String
   | Z Integer
   | Undefined
-  | Code String
+  | Code (Located String)
   -- Structures
   | Array  [Expr]
   | Block  [BlockStmt]
