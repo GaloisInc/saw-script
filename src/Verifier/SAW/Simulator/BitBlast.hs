@@ -313,7 +313,7 @@ getOp =
     case v of
       VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
       VExtra (BWord lv) -> return (vBool (AIG.at lv (fromEnum (finVal i))))
-      _ -> fail "getOp: expected vector"
+      _ -> fail $ "getOp: expected vector, got " ++ show v
 
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: BValue l
@@ -325,7 +325,7 @@ atOp =
     case v of
       VVector xv -> force ((V.!) xv (fromIntegral n))
       VExtra (BWord lv) -> return $ vBool $ AIG.at lv (fromIntegral n)
-      _ -> fail "atOp: expected vector"
+      _ -> fail $ "atOp: expected vector, got " ++ show v
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
@@ -340,7 +340,7 @@ bvAtOp be =
           force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv - 1) ilv (return . (V.!) xv)
       VExtra (BWord lv) ->
           vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv - 1) ilv (return . AIG.at lv)
-      _ -> fail "bvAtOp: expected vector"
+      _ -> fail $ "bvAtOp: expected vector, got " ++ show v
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
 -- NB: this isn't necessarily the most efficient possible implementation.
@@ -362,7 +362,7 @@ bvUpdOp be =
           where upd i j | i == j    = toBool y
                         | otherwise = AIG.at lv j
                 l = AIG.length lv
-      _ -> fail "bvUpdOp: expected vector"
+      _ -> fail $ "bvUpdOp: expected vector, got " ++ show v
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: BValue l
