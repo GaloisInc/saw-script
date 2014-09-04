@@ -161,6 +161,7 @@ resolveInBStmts bsts = case bsts of
   BlockTypeDecl n t : bsts' ->   (:) <$> (pure $ BlockTypeDecl n t)            <*> resolveInBStmts bsts'
   BlockLet bs       : bsts' -> addNamesFromBinds bs $ \bs' ->
                                  (:) <$> (BlockLet <$> mapM resolveInBind bs') <*> resolveInBStmts bsts'
+  BlockCode s       : bsts' ->   (:) (BlockCode s) <$> resolveInBStmts bsts'
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
 --  failing if the UnresolvedName is unbound or ambiguous.
