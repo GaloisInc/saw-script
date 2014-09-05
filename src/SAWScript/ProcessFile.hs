@@ -53,7 +53,7 @@ processModule opts lms modName =
                                  show (M.keys cms))
 
 
-checkModuleWithDeps :: BM.ModuleParts (ExprSimple RawT)
+checkModuleWithDeps :: BM.ModuleParts
   -> M.Map ModuleName ValidModule
   -> Err (M.Map ModuleName ValidModule)
 checkModuleWithDeps (BM.ModuleParts mn ee pe te ds cs) cms =
