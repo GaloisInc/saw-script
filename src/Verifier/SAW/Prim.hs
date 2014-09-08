@@ -229,6 +229,9 @@ get _ _ (Vec _ v) i = v V.! fromEnum i
 append :: Int -> Int -> t -> Vec t e -> Vec t e -> Vec t e
 append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)
 
+-- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+at :: Int -> t -> Vec t e -> Int -> e
+at _ _ (Vec _ v) i = v V.! i
 
 ----------------------------------------
 -- Bitvector operations

@@ -568,11 +568,15 @@ finIncLim_FinVal = globalConv "Prelude.finIncLim" Prim.finIncLim
 
 -- | Conversions for operations on vector literals
 vecConversions :: Termlike t => [Conversion t]
-vecConversions = [get_VecLit, append_VecLit]
+vecConversions = [get_VecLit, at_VecLit, append_VecLit]
 
 get_VecLit :: forall t. Termlike t => Conversion t
 get_VecLit = globalConv "Prelude.get"
     (Prim.get :: Int -> t -> Prim.Vec t t -> Prim.Fin -> t)
+
+at_VecLit :: forall t. Termlike t => Conversion t
+at_VecLit = globalConv "Prelude.at"
+    (Prim.at :: Int -> t -> Prim.Vec t t -> Int -> t)
 
 append_VecLit :: forall t. Termlike t => Conversion t
 append_VecLit = globalConv "Prelude.append"
