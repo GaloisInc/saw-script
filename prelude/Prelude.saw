@@ -16,7 +16,7 @@ abstract ProofResult;
 abstract SatResult;
 // TODO: create ProofScript a, with concrete syntax
 
-prim return             : { m , a } a -> m a;
+prim return             : { m, a } a -> m a;
 
 prim define             : String -> Term -> TopLevel Term;
 
