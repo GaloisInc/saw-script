@@ -27,10 +27,8 @@ prim show_term          : Term -> String;
 
 prim check_term         : Term -> TopLevel ();
 
-prim bitSequence        : { n } Int -> [n];
-
 prim sbv_uninterpreted  : String -> Term -> TopLevel Uninterp;
-prim read_sbv           : {n} String -> [n]Uninterp -> TopLevel Term;
+prim read_sbv           : String -> [Uninterp] -> TopLevel Term;
 
 prim read_aig           : String -> TopLevel Term;
 prim read_core          : String -> TopLevel Term;
@@ -46,7 +44,7 @@ prim prove_print        : {b} ProofScript b -> Term -> TopLevel Theorem;
 prim sat                : {b} ProofScript b -> Term -> TopLevel SatResult;
 prim sat_print          : {b} ProofScript b -> Term -> TopLevel ();
 
-prim unfolding          : {n} [n]String -> ProofScript ();
+prim unfolding          : [String] -> ProofScript ();
 prim simplify           : Simpset -> ProofScript ();
 prim print_goal         : ProofScript ();
 prim assume_valid       : ProofScript ProofResult;
@@ -64,10 +62,10 @@ prim offline_extcore    : {a} String -> ProofScript a;
 prim offline_smtlib1    : {a} String -> ProofScript a;
 prim offline_smtlib2    : {a} String -> ProofScript a;
 
-prim external_cnf_solver : {n, a} String -> [n]String -> ProofScript a;
-//prim external_aig_solver : {n, a} String -> [n]String -> ProofScript a;
-//prim external_smtlib1_solver : {n, a} String -> [n]String -> ProofScript a;
-//prim external_smtlib2_solver : {n, a} String -> [n]String -> ProofScript a;
+prim external_cnf_solver : {a} String -> [String] -> ProofScript a;
+//prim external_aig_solver : {a} String -> [String] -> ProofScript a;
+//prim external_smtlib1_solver : {a} String -> [String] -> ProofScript a;
+//prim external_smtlib2_solver : {a} String -> [String] -> ProofScript a;
 
 prim empty_ss           : Simpset;
 prim basic_ss           : Simpset;
@@ -93,7 +91,7 @@ prim java_class         : String -> JavaType;
 prim java_value         : {a} String -> a;
 prim java_var           : String -> JavaType -> JavaSetup Term;
 prim java_class_var     : {a} String -> JavaType -> JavaSetup a;
-prim java_may_alias     : {n} [n]String -> JavaSetup ();
+prim java_may_alias     : [String] -> JavaSetup ();
 prim java_assert        : Term -> JavaSetup ();
 //prim java_assert_eq     : {a} String -> a -> JavaSetup ();
 prim java_ensure_eq     : String -> Term -> JavaSetup ();
@@ -106,7 +104,7 @@ prim java_load_class    : String -> TopLevel JavaClass;
 prim java_browse_class  : JavaClass -> TopLevel ();
 prim java_class_info    : JavaClass -> TopLevel ();
 prim java_extract       : {a} JavaClass -> String -> JavaSetup () -> TopLevel a;
-prim java_verify        : {n} JavaClass -> String -> [n]JavaMethodSpec
+prim java_verify        : JavaClass -> String -> [JavaMethodSpec]
                        -> JavaSetup ()
                        -> TopLevel JavaMethodSpec;
 
@@ -118,7 +116,7 @@ prim llvm_array         : Int -> LLVMType -> LLVMType;
 prim llvm_value         : {a} String -> a;
 prim llvm_var           : String -> LLVMType -> LLVMSetup Term;
 prim llvm_ptr           : String -> LLVMType -> LLVMSetup Term;
-//prim llvm_may_alias     : {n} [n]String -> LLVMSetup ();
+//prim llvm_may_alias     : [String] -> LLVMSetup ();
 prim llvm_assert        : Term -> LLVMSetup ();
 //prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();
 prim llvm_ensure_eq     : String -> Term -> LLVMSetup ();
@@ -131,7 +129,7 @@ prim llvm_load_module   : String -> TopLevel LLVMModule;
 prim llvm_browse_module : LLVMModule -> TopLevel ();
 prim llvm_module_info   : LLVMModule -> TopLevel ();
 prim llvm_extract       : LLVMModule -> String -> LLVMSetup () -> TopLevel Term;
-prim llvm_verify        : {n} LLVMModule -> String -> [n]LLVMMethodSpec
+prim llvm_verify        : LLVMModule -> String -> [LLVMMethodSpec]
                        -> LLVMSetup ()
                        -> TopLevel LLVMMethodSpec;
 
