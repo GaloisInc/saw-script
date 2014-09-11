@@ -10,24 +10,34 @@ Portability : non-portable (language extensions)
 
 module Main where
 
+import Test.Tasty
+import Test.Tasty.Options
+import Test.Tasty.Ingredients
+import Test.Tasty.Runners.AntXML
+import Data.Proxy
+
 import System.Exit
-
-import Tests.Common
-
 
 import Tests.BitBlast
 import Tests.Parser
 import Tests.SharedTerm
 import Tests.Rewriter
 
-main = do
-  let allTests = [ ("SharedTerm", sharedTermTests)
-                 , ("Parser", parserTests)
-                 , ("BitBlast", bitblastTests)
-                 , ("Rewriter", rewriter_tests)
-                 ]
-  r <- runTestCases allTests
-  if r then
-    putStrLn "All tests successful." >> exitWith ExitSuccess
-  else
-    putStrLn "One or more tests failed." >> exitWith (ExitFailure 1)
+main :: IO ()
+main = defaultMainWithIngredients ingrs tests
+
+ingrs :: [Ingredient]
+ingrs =
+   [ antXMLRunner
+   ]
+   ++
+   defaultIngredients
+
+tests :: TestTree
+tests =
+   testGroup "SAWCore"
+   [ testGroup "SharedTerm" sharedTermTests
+   , testGroup "Parser" parserTests
+   , testGroup "BitBlast" bitblastTests
+   , testGroup "Rewriter" rewriter_tests
+   ]

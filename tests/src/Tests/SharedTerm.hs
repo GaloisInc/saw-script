@@ -15,22 +15,24 @@ import Data.Hashable
 import qualified Data.Map as Map
 
 import Data.Time.Clock
-import Tests.Common
+
+import Test.Tasty
+import Test.Tasty.HUnit
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Prelude
 
 
-sharedTermTests :: [TestCase]
+sharedTermTests :: [TestTree]
 sharedTermTests =
   [ preludeSharedSmokeTest
   ]
 
 -- | Tests that a shared context for the prelude can be created,
 -- along with a single term.
-preludeSharedSmokeTest :: TestCase
+preludeSharedSmokeTest :: TestTree
 preludeSharedSmokeTest =
-  mkTestCase "preludeSharedSmokeTest" $ monadicIO $ run $ do
+  testCase "preludeSharedSmokeTest" $ do
     sc <- mkSharedContext preludeModule
     void $ scPreludeBool sc
     return ()

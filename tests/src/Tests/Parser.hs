@@ -14,11 +14,11 @@ import Control.Monad.Identity
 import Data.Bits
 import Text.PrettyPrint.Leijen hiding ((<$>))
 
-import Tests.Common
-
 import Verifier.SAW.Prelude
 import Verifier.SAW.TypedAST
 
+import Test.Tasty
+import Test.Tasty.HUnit
 
 checkGroundTerm :: Term -> Bool
 checkGroundTerm t = freesTerm t == 0
@@ -26,11 +26,7 @@ checkGroundTerm t = freesTerm t == 0
 namedMsg :: Ident -> String -> String
 namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
 
-
-failWith :: Ident -> String -> Gen a
-failWith sym msg = fail (namedMsg sym msg)
-
-checkEqn :: Ident -> TypedDefEqn -> Property
+checkEqn :: Ident -> TypedDefEqn -> Assertion
 checkEqn sym (DefEqn pats rhs@(Term rtf)) = do
   let nbound = sum $ patBoundVarCount <$> pats
   let lvd = emptyLocalVarDoc
@@ -42,23 +38,21 @@ checkEqn sym (DefEqn pats rhs@(Term rtf)) = do
          ++ show (freesTerm rhs) ++ "\n"
          ++ show (ppTermF (\_ _ -> text . show) lvd PrecNone (freesTerm <$> rtf))
 
-  printTestCase
-    (namedMsg sym msg)
-    (freesTerm rhs `shiftR` nbound == 0)
+  assertEqual (namedMsg sym msg) 0 (freesTerm rhs `shiftR` nbound)
 
-checkDef :: TypedDef -> Property
+checkDef :: TypedDef -> Assertion
 checkDef d = do
   let sym = defIdent d
   let tp = defType d
-  let tpProp = printTestCase (namedMsg sym "Type is not ground.")
-                             (checkGroundTerm tp)
+  let tpProp = assertBool (namedMsg sym "Type is not ground.") (checkGroundTerm tp)
   let eqProps = checkEqn sym <$> defEqs d
-  conjoin (tpProp : eqProps)
 
-checkModule :: Module -> Property
-checkModule m = conjoin $ checkDef <$> moduleDefs m
+  sequence_ (tpProp : eqProps)
 
-parserTests :: [TestCase]
+checkModule :: Module -> Assertion
+checkModule m = sequence_ $ checkDef <$> moduleDefs m
+
+parserTests :: [TestTree]
 parserTests =
-  [ mkTestCase "preludeModule" $ checkModule preludeModule
+  [ testCase "preludeModule" $ checkModule preludeModule
   ]

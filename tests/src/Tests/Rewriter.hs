@@ -19,18 +19,19 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 
-import Tests.Common
+import Test.Tasty
+import Test.Tasty.HUnit
 
 scMkTerm :: SharedContext s -> TermBuilder (SharedTerm s) (SharedTerm s) -> IO (SharedTerm s)
 scMkTerm sc t = runTermBuilder t (scTermF sc)
 
-rewriter_tests :: [TestCase]
+rewriter_tests :: [TestTree]
 rewriter_tests =
   [ prelude_bveq_sameL_test ]
 
-prelude_bveq_sameL_test :: TestCase
-prelude_bveq_sameL_test = 
-  mkTestCase "prelude_bveq_sameL_test" $ monadicIO $ run $ do
+prelude_bveq_sameL_test :: TestTree
+prelude_bveq_sameL_test =
+  testCase "prelude_bveq_sameL_test" $ do
     sc0 <- mkSharedContext preludeModule
     let eqs = [ "Prelude.bveq_sameL" ]
     ss <- scSimpset sc0 [] eqs []
@@ -52,7 +53,4 @@ prelude_bveq_sameL_test =
             `pureApp` z
     lhs_term <- scMkTerm sc lhs
     rhs_term <- scMkTerm sc rhs               
-    unless (lhs_term == rhs_term) $ do
-      fail $ "Incorrect conversion\n"
-          ++ "Result:   " ++ show lhs_term ++ "\n"
-          ++ "Expected: " ++ show rhs_term
+    assertEqual "Incorrect conversion\n" lhs_term rhs_term
