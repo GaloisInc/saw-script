@@ -14,6 +14,7 @@ import Test.Tasty
 import Test.Tasty.Options
 import Test.Tasty.Ingredients
 import Test.Tasty.Runners.AntXML
+import Test.Tasty.QuickCheck
 import Data.Proxy
 
 import System.Exit
@@ -29,6 +30,9 @@ main = defaultMainWithIngredients ingrs tests
 ingrs :: [Ingredient]
 ingrs =
    [ antXMLRunner
+   -- explicitly including this option keeps the test suite from failing due
+   -- to passing the '--quickcheck-tests' option on the command line
+   , includingOptions [ Option (Proxy :: Proxy QuickCheckTests) ]
    ]
    ++
    defaultIngredients
