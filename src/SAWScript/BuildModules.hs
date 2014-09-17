@@ -30,7 +30,6 @@ data ModuleParts = ModuleParts
   { modName :: ModuleName
   , modExprEnv :: [(LName, CheckedExpr)]
   , modPrimEnv :: LEnv RawT
-  , modTypeEnv :: LEnv RawT
   , modDeps    :: S.Set ModuleName
   , modCryDeps :: [FilePath]
   } deriving (Show)
@@ -58,9 +57,9 @@ buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDepe
   $ M.assocs $ modules ms
 
 addPreludeDependency :: ModuleParts -> Err ModuleParts
-addPreludeDependency mparts@(ModuleParts mn ee pe te ds cs)
+addPreludeDependency mparts@(ModuleParts mn ee pe ds cs)
   | mn == preludeName = return mparts
-  | otherwise = return $ ModuleParts mn ee pe te (S.insert preludeName ds) cs
+  | otherwise = return $ ModuleParts mn ee pe (S.insert preludeName ds) cs
 
 preludeName :: ModuleName
 preludeName = ModuleName [] "Prelude"
@@ -68,7 +67,7 @@ preludeName = ModuleName [] "Prelude"
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
 build :: (ModuleName, [TopStmtSimple RawT]) -> Err ModuleParts
-build (mn, ts) = foldrM modBuilder (ModuleParts mn [] M.empty M.empty S.empty []) =<< combineTopTypeDecl ts
+build (mn, ts) = foldrM modBuilder (ModuleParts mn [] M.empty S.empty []) =<< combineTopTypeDecl ts
 
 -- stage3: make a module out of the resulting envs
 assemble :: [ModuleParts] -> Err Outgoing
@@ -77,25 +76,17 @@ assemble mods = return $ buildQueue modM
   modM = ModMap $ M.fromList [ (modName m,m) | m <- mods ]
 
 modBuilder :: TopStmtSimple RawT -> ModuleParts -> Err ModuleParts
-modBuilder t (ModuleParts mn ee pe te ds cs) = case t of
+modBuilder t (ModuleParts mn ee pe ds cs) = case t of
   -- Type signatures should have been translated away by this point
   TopTypeDecl _ _  -> fail "modBuilder: precondition failed (TopTypeDecl)"
   -- Duplicate declarations are listed multiple times; later ones should shadow earlier ones
-  TopBind n e      -> return $ ModuleParts mn ((n, e) : ee) pe te ds cs
+  TopBind n e      -> return $ ModuleParts mn ((n, e) : ee) pe ds cs
   Prim n ty -> if M.member n pe
                          then multiDeclErr n
-                         else return $ ModuleParts mn ee (M.insert n ty pe) te ds cs
+                         else return $ ModuleParts mn ee (M.insert n ty pe) ds cs
   -- Imports show dependencies
-  Import n _ _     -> return $ ModuleParts mn ee pe te (S.insert n ds) cs
-  ImportCry path   -> return $ ModuleParts mn ee pe te ds (path : cs)
-
--- BuildEnv --------------------------------------------------------------------
-
-newTypeSyn :: RawSigT -> RawT
-newTypeSyn = Just
-
-newAbsType :: RawT
-newAbsType = Nothing
+  Import n _ _     -> return $ ModuleParts mn ee pe (S.insert n ds) cs
+  ImportCry path   -> return $ ModuleParts mn ee pe ds (path : cs)
 
 -- Error Messages --------------------------------------------------------------
 

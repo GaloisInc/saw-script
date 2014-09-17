@@ -36,7 +36,6 @@ scratchpad modsInScope =
   Module { moduleName = replModuleName
          , moduleExprEnv = [] -- no expressions yet
          , modulePrimEnv = Map.empty -- no 'Prim's in the REPL
-         , moduleTypeEnv = Map.empty -- no type synonyms in the REPL
          , moduleDependencies = modsInScope
          , moduleCryDeps = []
          }
