@@ -1,20 +1,3 @@
-abstract Simpset;
-abstract Theorem;
-
-abstract JavaType;
-abstract JavaMethodSpec;
-
-abstract LLVMType;
-abstract LLVMMethodSpec;
-
-abstract JavaClass;
-abstract LLVMModule;
-abstract Uninterp;
-
-abstract ProofResult;
-abstract SatResult;
-// TODO: create ProofScript a, with concrete syntax
-
 prim return             : { m, a } a -> m a;
 prim for                : { m, a, b } [a] -> (a -> m b) -> m [b];
 
