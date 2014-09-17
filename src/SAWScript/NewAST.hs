@@ -38,7 +38,6 @@ data Expr
 
 data BlockStmt
   = Bind          (Maybe LName) (Maybe Type) (Maybe Type) Expr
-  -- | BlockTypeDecl Name             typeT
   | BlockLet      [LBind Expr]
   | BlockCode     (Located String)
   deriving (Show)
@@ -79,7 +78,6 @@ translateBStmt bst = case bst of
   A.Bind (Just (n, t)) ctx e -> Bind (Just $ n) <$> translateMType t
                                 <*> translateMType ctx <*> translateExpr e
   A.BlockLet bs   -> BlockLet <$> mapM translateField bs
-  A.BlockTypeDecl _ _ -> fail "Block type declarations not yet supported."
   A.BlockCode s -> pure $ BlockCode s
 
 translateField :: (a,A.Expr A.ResolvedName A.ResolvedT) -> Err (a,Expr)

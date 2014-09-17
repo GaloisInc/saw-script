@@ -158,7 +158,6 @@ resolveInBStmts bsts = case bsts of
   Bind (Just (n, t)) c e : bsts' -> addName n $ \n' ->
                                  (:) <$> (Bind (Just (n', t)) c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
 
-  BlockTypeDecl n t : bsts' ->   (:) <$> (pure $ BlockTypeDecl n t)            <*> resolveInBStmts bsts'
   BlockLet bs       : bsts' -> addNamesFromBinds bs $ \bs' ->
                                  (:) <$> (BlockLet <$> mapM resolveInBind bs') <*> resolveInBStmts bsts'
   BlockCode s       : bsts' ->   (:) (BlockCode s) <$> resolveInBStmts bsts'
