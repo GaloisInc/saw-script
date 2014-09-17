@@ -82,11 +82,6 @@ modBuilder t (ModuleParts mn ee pe te ds cs) = case t of
   TopTypeDecl _ _  -> fail "modBuilder: precondition failed (TopTypeDecl)"
   -- Duplicate declarations are listed multiple times; later ones should shadow earlier ones
   TopBind n e      -> return $ ModuleParts mn ((n, e) : ee) pe te ds cs
-  -- Multiple declarations of the same type synonym will fail
-  TypeDef n pt     ->
-    if M.member n te
-      then multiDeclErr n
-      else return $ ModuleParts mn ee pe (M.insert n (newTypeSyn pt) te) ds cs
   -- Multiple declarations of an abstract type will fail
   AbsTypeDecl  n   ->
     if M.member n te
