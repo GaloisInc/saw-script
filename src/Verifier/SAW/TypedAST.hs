@@ -62,6 +62,7 @@ module Verifier.SAW.TypedAST
  , zipWithFlatTermF
  , freesTerm
  , freesTermF
+ , termToPat
 
  , LocalVarDoc
  , emptyLocalVarDoc
@@ -117,6 +118,7 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Utils (internalError, sumBy)
+import qualified Verifier.SAW.TermNet as Net
 
 import qualified Text.PrettyPrint.Leijen as PPL
 
@@ -511,6 +513,21 @@ instance Hashable e => Hashable (TermF e) -- automatically derived.
 
 class Termlike t where
   unwrapTermF :: t -> TermF t
+
+termToPat :: Termlike t => t -> Net.Pat
+termToPat t =
+    case unwrapTermF t of
+      Constant d _ _            -> Net.Atom (identName d)
+      App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
+      FTermF (GlobalDef d)      -> Net.Atom (identName d)
+      FTermF (Sort s)           -> Net.Atom ('*' : show s)
+      FTermF (NatLit n)         -> Net.Atom (show n)
+      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      _                         -> Net.Var
+
+instance Net.Pattern Term where
+  toPat = termToPat
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)

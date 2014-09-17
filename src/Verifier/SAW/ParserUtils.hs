@@ -26,6 +26,7 @@ module Verifier.SAW.ParserUtils
  , declareSharedCtorApp
  , declareSharedDefApp
  , declareSharedModuleFns
+ , readByteStringExpr
  ) where
 
 import Control.Applicative

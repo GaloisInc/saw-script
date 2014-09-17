@@ -7,7 +7,6 @@ module Verifier.SAW.ExternalFormat (
   ) where
 
 import Verifier.SAW.SharedTerm
-import qualified Data.Foldable
 import Data.Traversable
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 import Verifier.SAW.Constant

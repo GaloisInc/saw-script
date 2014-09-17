@@ -122,20 +122,12 @@ import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.TypedAST
 
-termToPat :: Termlike t => t -> Net.Pat
-termToPat t =
-    case unwrapTermF t of
-      Constant d _ _            -> Net.Atom (identName d)
-      App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (GlobalDef d)      -> Net.Atom (identName d)
-      FTermF (Sort s)           -> Net.Atom ('*' : show s)
-      FTermF (NatLit n)         -> Net.Atom (show n)
-      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      _                         -> Net.Var
+-- | A hack to allow storage of conversions in a term net.
+instance Eq (Conversion t) where
+    x == y = Net.toPat x == Net.toPat y
 
-instance Net.Pattern Term where
-  toPat = termToPat
+instance Show (Conversion t) where
+    show x = show (Net.toPat x)
 
 ----------------------------------------------------------------------
 -- Matchers for terms

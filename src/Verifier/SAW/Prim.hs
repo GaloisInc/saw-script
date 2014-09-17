@@ -89,6 +89,7 @@ instance Bits Nat where
   testBit (Nat x) i = testBit x i
 
   bitSize = error "bitSize(Nat) unsupported."
+  bitSizeMaybe _ = Nothing
 
   isSigned _ = False
 
@@ -359,7 +360,7 @@ slice_bv _ _ n o (BV _ x) = bv n (shiftR x o)
 
 -- | Polynomial GF(2) multiplication for type Nat
 pMulNat :: Nat -> Nat -> Nat
-pMulNat 0 y = 0
+pMulNat 0 _y = 0
 pMulNat x y = if odd x then r `xor` y else r
   where r = pMulNat (x `shiftR` 1) y `shiftL` 1
 

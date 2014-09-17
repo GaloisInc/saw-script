@@ -12,11 +12,9 @@
 {-# LANGUAGE TupleSections #-}
 module Verifier.SAW.Simulator.SBV where
 
-import qualified Data.SBV
 import qualified Data.SBV.Tools.Polynomial as Poly
 import Data.SBV
 import Data.SBV.Internals
-import Data.Bits
 import Cryptol.Symbolic.BitVector
 
 import Control.Lens ((<&>))
@@ -33,7 +31,6 @@ import Data.Traversable as T
 import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.State as ST
-import Control.Monad
 
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
@@ -170,7 +167,7 @@ forceBool = fromJust . toBool
 toWord :: SValue -> IO (Maybe SWord)
 toWord (VExtra (SWord w)) = return (Just w)
 toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toBool . force) vv
-toWord x = return Nothing
+toWord _ = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
@@ -222,7 +219,7 @@ lazyMux muxFn c tm fm
 -- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
 selectV :: (Ord a, Num a, Bits a) => (SBool -> b -> b -> b)
   -> a -> (a -> b) -> SWord -> b
-selectV merger maxValue valueFn vx@(SBV _ (Left (cwVal -> CWInteger i))) =
+selectV _merger _maxValue valueFn _vx@(SBV _ (Left (cwVal -> CWInteger i))) =
   valueFn (fromIntegral i)
 selectV merger maxValue valueFn vx@(SBV(KBounded _ s) _) =
   impl s 0 where
@@ -327,18 +324,18 @@ bvPModOp :: SValue
 bvPModOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
-  wordFun $ \(Just x@(SBV (KBounded _ a) _)) -> return $
-  wordFun $ \(Just y@(SBV (KBounded _ b) _)) ->
-    return . vWord . fromBitsLE $ take (b-1) (snd (Poly.mdp (blastLE x) (blastLE y)) ++ repeat false)
+  wordFun $ \(Just x@(SBV (KBounded _ _k1) _)) -> return $
+  wordFun $ \(Just y@(SBV (KBounded _ k2) _)) ->
+    return . vWord . fromBitsLE $ take (k2-1) (snd (Poly.mdp (blastLE x) (blastLE y)) ++ repeat false)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
 bvPMulOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
-  wordFun $ \(Just x@(SBV (KBounded _ a) _)) -> return $
-  wordFun $ \(Just y@(SBV (KBounded _ b) _)) -> do
-    let k = max 1 (a + b) - 1
+  wordFun $ \(Just x@(SBV (KBounded _ k1) _)) -> return $
+  wordFun $ \(Just y@(SBV (KBounded _ k2) _)) -> do
+    let k = max 1 (k1 + k2) - 1
     let mul _ [] ps = ps
         mul as (b:bs) ps = mul (false : as) bs (Poly.ites b (as `Poly.addPoly` ps) ps)
     return . vWord . fromBitsLE $ take k $ mul (blastLE x) (blastLE y) [] ++ repeat false
@@ -545,7 +542,7 @@ appendOp =
       (Just v') <- toWord v
       (Just w') <- toWord w
       return $ vWord $ cat v' w'
-    _ -> error "appendOp"
+
 
 ------------------------------------------------------------
 -- Helpers for marshalling into SValues
@@ -627,7 +624,7 @@ parseUninterpreted ks cws (R.asBoolType -> Just ()) =
   vBool . mkUninterpreted (reverse (KBool : ks)) (reverse cws)
 parseUninterpreted ks cws (R.asBitvectorType -> Just n) =
   vWord . mkUninterpreted (reverse (KBounded False (fromIntegral n) : ks)) (reverse cws)
-parseUninterpreted ks cws (R.asVecType -> Just (n R.:*: (R.asBoolType -> Just ()))) =
+parseUninterpreted _ks _cws (R.asVecType -> Just (_n R.:*: (R.asBoolType -> Just ()))) =
   error "This should never happen"
 parseUninterpreted ks cws (R.asPi -> Just (_, _, t2)) =
   \s-> strictFun $ \x-> do
@@ -652,12 +649,12 @@ sbvSolve sc t = do
   shapes <- traverse (parseShape sc) argTs
   bval <- sbvSolveBasic (scModule sc) t
   let (labels, vars) = flip evalState 0 $ unzip <$> traverse newVars shapes
-  let pred = do
+  let prd = do
               bval' <- traverse (fmap Ready) vars >>= (liftIO . applyAll bval)
               case bval' of
                 VExtra (SBool b) -> return b
                 _ -> fail "bitBlast: non-boolean result type."
-  return (labels, pred)
+  return (labels, prd)
 
 parseShape :: SharedContext s -> SharedTerm s -> IO FiniteType
 parseShape sc t = do

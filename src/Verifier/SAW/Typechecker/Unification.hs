@@ -28,7 +28,8 @@ import Control.Applicative
 import Control.Arrow hiding ((<+>))
 import Control.Lens
 import Control.Monad (ap, unless, zipWithM, zipWithM_)
-import Control.Monad.Error (ErrorT(..), throwError)
+--import Control.Monad.Error (ErrorT(..), throwError)
+import Control.Monad.Trans.Except( ExceptT(..), throwE, runExceptT )
 import Control.Monad.State (StateT(..), MonadState(..), evalStateT, gets)
 import Control.Monad.Trans
 import Control.Monad.ST
@@ -663,7 +664,7 @@ instUnifyPat (TCPatF pf) =
 -- | Attempt to unify two pats, updating state to map variables to term they are bound to.
 mergeUnifyPats :: UnifyPat s
                -> UnifyPat s
-               -> ErrorT String (Unifier s) ()
+               -> ExceptT String (Unifier s) ()
 mergeUnifyPats (TCPVar _ (_, (v,_))) p2 = do
   lift $ usetEqual v =<< instUnifyPat p2
 mergeUnifyPats p1 (TCPVar _ (_, (v,_))) = do
@@ -675,7 +676,7 @@ mergeUnifyPats p1 (TCPUnused _ (_, (v,_))) = do
 mergeUnifyPats (TCPatF pf1) (TCPatF pf2) = do
   case zipWithPatF mergeUnifyPats pf1 pf2 of
     Just pf -> sequenceOf_ folded pf
-    Nothing -> throwError "Pattern merging failed"
+    Nothing -> throwE "Pattern merging failed"
 
 instPats :: Pos
           -> TermContext s
@@ -687,7 +688,7 @@ instPats p tc _tp (xp,xr) (yp,yr) = do
   runUnifier tc p $ do
     xp' <- convertPat xp
     yp' <- convertPat yp
-    mr <- runErrorT $ mergeUnifyPats xp' yp'
+    mr <- runExceptT $ mergeUnifyPats xp' yp'
     case mr of
       Left{} -> return Nothing
       Right{} -> do

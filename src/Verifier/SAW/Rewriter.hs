@@ -68,21 +68,11 @@ import qualified Verifier.SAW.SharedTerm as S
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
 
-instance Net.Pattern (SharedTerm s) where
-  toPat = termToPat
-
 data RewriteRule t
   = RewriteRule { ctxt :: [t], lhs :: t, rhs :: t }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
-
--- | A hack to allow storage of conversions in a term net.
-instance Eq (Conversion t) where
-    x == y = Net.toPat x == Net.toPat y
-
-instance Show (Conversion t) where
-    show x = show (Net.toPat x)
 
 instance Net.Pattern t => Net.Pattern (RewriteRule t) where
   toPat (RewriteRule _ lhs _) = Net.toPat lhs

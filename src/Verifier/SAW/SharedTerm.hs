@@ -29,6 +29,7 @@ module Verifier.SAW.SharedTerm
   , TermIndex
   , looseVars
   , unshare
+  , alphaEquiv
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
@@ -153,10 +154,10 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
-import Verifier.SAW.Conversion (natConversions, runConversion, runTermBuilder)
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+import qualified Verifier.SAW.TermNet as Net
 
 newtype Uninterp s = Uninterp { getUninterp :: (String, SharedTerm s) } deriving Show
 
@@ -177,6 +178,9 @@ instance Ord (SharedTerm s) where
 
 instance Termlike (SharedTerm s) where
   unwrapTermF (STApp _ tf) = tf
+
+instance Net.Pattern (SharedTerm s) where
+  toPat = termToPat
 
 ------------------------------------------------------------
 -- TermFMaps

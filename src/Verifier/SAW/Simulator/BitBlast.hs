@@ -25,7 +25,7 @@ import Verifier.SAW.Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.TypedAST (FieldName, {-Ident,-} Module)
+import Verifier.SAW.TypedAST (Module)
 import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Recognizer as R
 
