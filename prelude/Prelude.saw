@@ -7,7 +7,6 @@ abstract JavaMethodSpec;
 abstract LLVMType;
 abstract LLVMMethodSpec;
 
-abstract CryptolModuleEnv;
 abstract JavaClass;
 abstract LLVMModule;
 abstract Uninterp;
@@ -73,10 +72,6 @@ prim basic_ss           : Simpset;
 prim addsimp            : Theorem -> Simpset -> Simpset;
 prim addsimp'           : {a} a -> Simpset -> Simpset;
 prim rewrite            : Simpset -> Term -> TopLevel Term;
-
-//prim cryptol_module     : String -> TopLevel CryptolModuleEnv;
-//prim cryptol_module_info : CryptolModuleEnv -> TopLevel ();
-//prim cryptol_extract    : {a} CryptolModuleEnv -> String -> TopLevel a;
 
 prim java_bool          : JavaType;
 prim java_byte          : JavaType;
