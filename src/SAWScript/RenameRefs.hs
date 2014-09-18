@@ -25,15 +25,13 @@ renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe ds cs) -> evalRR m $
 
 -- Types {{{
 
-type IncomingModule = Module UnresolvedName ResolvedT      ResolvedT
--- type IncomingExprs  =        Exprs          UnresolvedName ResolvedT
-type IncomingExpr   =        Expr           UnresolvedName ResolvedT
-type IncomingBStmt  =        BlockStmt      UnresolvedName ResolvedT
+type IncomingModule = Module    UnresolvedName ResolvedT
+type IncomingExpr   = Expr      UnresolvedName ResolvedT
+type IncomingBStmt  = BlockStmt UnresolvedName ResolvedT
 
-type OutgoingModule = Module ResolvedName   ResolvedT      ResolvedT
--- type OutgoingExprs  =        Exprs          ResolvedName   ResolvedT
-type OutgoingExpr   =        Expr           ResolvedName   ResolvedT
-type OutgoingBStmt  =        BlockStmt      ResolvedName   ResolvedT
+type OutgoingModule = Module    ResolvedName   ResolvedT
+type OutgoingExpr   = Expr      ResolvedName   ResolvedT
+type OutgoingBStmt  = BlockStmt ResolvedName   ResolvedT
 
 type RR = StateT Int (ReaderT RREnv Err)
 

@@ -12,12 +12,12 @@ import Control.Monad.Trans.Reader
 import qualified Data.Map as Map
 import Data.Traversable hiding (mapM)
 
-resolveSyns :: Compiler (Module UnresolvedName RawT      RawT)
-                        (Module UnresolvedName ResolvedT ResolvedT)
+resolveSyns :: Compiler (Module UnresolvedName RawT     )
+                        (Module UnresolvedName ResolvedT)
 resolveSyns = compiler "ResolveSyns" resolveCompiler
 
-resolveCompiler :: Module UnresolvedName RawT RawT
-                -> Err (Module UnresolvedName ResolvedT ResolvedT)
+resolveCompiler :: Module UnresolvedName RawT
+                -> Err (Module UnresolvedName ResolvedT)
 resolveCompiler (Module nm ee pe ds cs) =
     Module nm <$> traverse (traverse (traverse resolve)) ee <*>
                   traverse resolve pe <*>
