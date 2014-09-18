@@ -89,7 +89,10 @@ instance Bits Nat where
   testBit (Nat x) i = testBit x i
 
   bitSize = error "bitSize(Nat) unsupported."
+
+#if MIN_VERSION_base(4,7,0)
   bitSizeMaybe _ = Nothing
+#endif
 
   isSigned _ = False
 
