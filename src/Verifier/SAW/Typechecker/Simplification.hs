@@ -27,8 +27,7 @@ module Verifier.SAW.Typechecker.Simplification
 import Control.Applicative
 import Control.Arrow (second)
 import Control.Lens
---import Control.Monad.Error (ErrorT(..), throwError)
-import Control.Monad.Trans.Except( ExceptT(..), throwE, runExceptT )
+import Control.Monad.Error (ErrorT(..), throwError)
 import Control.Monad.State (StateT(..), modify)
 import Control.Monad.Trans
 import Data.Traversable
@@ -49,10 +48,10 @@ extendPatContext tc0 pat = V.foldl (flip $ uncurry consBoundVar) tc0 (patBoundVa
 
 type Subst = Vector TCTerm
 
-type Matcher s = StateT (Map Int TCTerm) (ExceptT String (TC s))
+type Matcher s = StateT (Map Int TCTerm) (ErrorT String (TC s))
 
 runMatcher :: Matcher s a -> TC s (Maybe (a, Subst))
-runMatcher m = fmap finish $ runExceptT $ runStateT m Map.empty
+runMatcher m = fmap finish $ runErrorT $ runStateT m Map.empty
   where finish Left{} = Nothing
         finish (Right p) = Just (second (V.fromList . Map.elems) p)
 
@@ -77,7 +76,7 @@ attemptMatch tc (TCPatF pf) t = do
       | c == preludeSuccIdent && n > 0 ->
       go p (TCF (NatLit (n-1)))
 
-    _ -> lift $ throwE "Pattern match failed."
+    _ -> lift $ throwError "Pattern match failed."
 
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.
