@@ -183,47 +183,22 @@ allExprMaps (Module modNm exprEnv primEnv deps _)
     unloc = M.mapKeys getVal
     unloc' = M.fromList . map (\(n, e) -> (getVal n, e))
 
--- TODO: this will need to change once we can refer to prelude functions
--- with qualified names.
 resolveUnresolvedName :: Env Name -> ExprMaps -> UnresolvedName -> [ResolvedName]
 resolveUnresolvedName
   localAnonEnv
   (localModNm,localTopEnv,localPrimEnv,rms)
-  un@(UnresolvedName _ns n) =
+  un@(UnresolvedName n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
     Just nm -> [nm]
     Nothing -> maybeToList inLocalTop ++ maybeToList inLocalPrim ++ mapMaybe inDepMod (M.assocs rms)
   where
-  -- TODO: fix when we have proper modules
-  -- inPrelude = [ s | s@(TopLevelName _ x) <- map fst preludeEnv, n == x ]
-
   -- If it's in the localAnonEnv, use the unique name.
-  inLocalAnon
-    -- only check the local anon env if the name is unqualified
-    | isUnqualified un         = LocalName                        <$> M.lookup n localAnonEnv
-    | otherwise                = Nothing
-  -- check the local module top level names if either...
-  inLocalTop
-    -- unqualified
-    | isUnqualified un         = TopLevelName localModNm n        <$  M.lookup n localTopEnv
-    -- qualified as local module
-    | un `inModule` localModNm = TopLevelName localModNm n        <$  M.lookup n localTopEnv
-    | otherwise                = Nothing
+  inLocalAnon                  = LocalName                        <$> M.lookup n localAnonEnv
+  inLocalTop                   = TopLevelName localModNm n        <$  M.lookup n localTopEnv
   inLocalPrim                  = TopLevelName localModNm n        <$  M.lookup n localPrimEnv
   inDepMod (mn, (exprEnv,primEnv))
-    -- unqualified
-    | isUnqualified un = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
-    -- qualified as this module
-    | un `inModule` mn = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
-    | otherwise        = Nothing
-
-isUnqualified :: UnresolvedName -> Bool
-isUnqualified (UnresolvedName ns _) = null ns
-
-inModule :: UnresolvedName -> ModuleName -> Bool
-inModule (UnresolvedName ns _) (ModuleName mns mn) = ns == (mns ++ [mn])
-
+    = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
 
 -- Enforce that there is exactly one valid ResolvedName for a variable.
 enforceResolution :: Located UnresolvedName -> [ResolvedName] -> RR (Located ResolvedName)
