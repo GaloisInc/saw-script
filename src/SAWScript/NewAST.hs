@@ -4,7 +4,7 @@ module SAWScript.NewAST where
 import qualified SAWScript.AST as A
 import SAWScript.AST (Bind, LBind, Schema(..), Type(..), TyVar(..), LName, Located)
 import SAWScript.Compiler
-import SAWScript.Unify
+import SAWScript.Unify.Fix
 
 import Control.Applicative
 import qualified Data.Map as M

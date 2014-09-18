@@ -4,7 +4,7 @@
 module SAWScript.ResolveSyns where
 
 import SAWScript.AST
-import SAWScript.Unify
+import SAWScript.Unify.Fix
 import SAWScript.Compiler
 
 import Control.Applicative
