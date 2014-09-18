@@ -46,4 +46,4 @@ replFileName = "<stdin>"
 
 -- The name of the REPL as a 'ModuleName'
 replModuleName :: ModuleName
-replModuleName = ModuleName [] replFileName
+replModuleName = ModuleName replFileName

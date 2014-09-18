@@ -62,7 +62,7 @@ addPreludeDependency mparts@(ModuleParts mn ee pe ds cs)
   | otherwise = return $ ModuleParts mn ee pe (S.insert preludeName ds) cs
 
 preludeName :: ModuleName
-preludeName = ModuleName [] "Prelude"
+preludeName = ModuleName "Prelude"
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
