@@ -47,6 +47,3 @@ instance Resolvable TypeF where
 
 instance Resolvable ContextF where
   resolveF = return . inject
-
-instance Resolvable I where
-  resolveF = return . inject
