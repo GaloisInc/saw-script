@@ -86,7 +86,7 @@ addName n f = do
   i <- incrGen
   let uniqueN = fmap (++ "." ++ show i) n
   -- shadow any existing reference in the env with the new one
-  local (onLocalNameEnv $ M.alter (const $ Just $ getVal uniqueN) (getVal n))
+  local (onLocalNameEnv $ M.insert (getVal n) (getVal uniqueN))
     -- pass in the new unique name
     (f uniqueN)
 
