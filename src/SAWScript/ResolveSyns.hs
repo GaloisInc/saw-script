@@ -8,8 +8,6 @@ import SAWScript.Unify.Fix
 import SAWScript.Compiler
 
 import Control.Applicative
-import Control.Monad.Trans.Reader
-import qualified Data.Map as Map
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (Module UnresolvedName RawT     )
