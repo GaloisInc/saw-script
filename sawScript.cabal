@@ -78,7 +78,6 @@ library
     SAWScript.ProcessFile
     SAWScript.Proof
     SAWScript.RenameRefs
-    SAWScript.ResolveSyns
     SAWScript.REPL
     SAWScript.REPL.Command
     SAWScript.REPL.GenerateModule
@@ -90,7 +89,6 @@ library
     SAWScript.REPL.Trie
     SAWScript.Token
     SAWScript.MGU
-    SAWScript.Unify.Fix
     SAWScript.Utils
     SAWScript.Value
     SAWScript.VerificationCheck
