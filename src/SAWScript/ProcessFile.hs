@@ -18,7 +18,6 @@ import SAWScript.Interpreter
 import SAWScript.MGU (checkModule)
 import SAWScript.Options
 import SAWScript.RenameRefs as RR
-import SAWScript.ResolveSyns
 
 
 
@@ -58,7 +57,6 @@ checkModuleWithDeps :: BM.ModuleParts
   -> Err (M.Map ModuleName ValidModule)
 checkModuleWithDeps (BM.ModuleParts mn ee pe ds cs) cms =
   mod >>=
-  resolveSyns >>=
   renameRefs  >>=
   checkModule >>= \cm -> return $ M.insert mn cm cms
   where
