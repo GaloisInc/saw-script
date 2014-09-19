@@ -4,12 +4,10 @@
 module SAWScript.ResolveSyns where
 
 import SAWScript.AST
-import SAWScript.Unify
+import SAWScript.Unify.Fix
 import SAWScript.Compiler
 
 import Control.Applicative
-import Control.Monad.Trans.Reader
-import qualified Data.Map as Map
 import Data.Traversable hiding (mapM)
 
 resolveSyns :: Compiler (Module UnresolvedName RawT     )
@@ -46,7 +44,4 @@ instance Resolvable TypeF where
 
 
 instance Resolvable ContextF where
-  resolveF = return . inject
-
-instance Resolvable I where
   resolveF = return . inject

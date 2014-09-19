@@ -6,7 +6,7 @@ module SAWScript.RenameRefs
   , OutgoingModule
   ) where
 
-import SAWScript.AST hiding (i)
+import SAWScript.AST
 import SAWScript.Compiler
 
 import Control.Applicative

@@ -4,7 +4,7 @@ module SAWScript.NewAST where
 import qualified SAWScript.AST as A
 import SAWScript.AST (Bind, LBind, Schema(..), Type(..), TyVar(..), LName, Located)
 import SAWScript.Compiler
-import SAWScript.Unify
+import SAWScript.Unify.Fix
 
 import Control.Applicative
 import qualified Data.Map as M
@@ -91,8 +91,7 @@ translateMTypeS (Just t) = translateTypeS t
 translateMTypeS Nothing  = fail "Cannot translate type of prim, received Nothing"
 
 translateTypeS :: A.FullT -> Err Schema
-translateTypeS (In (Inl (A.I n)))   = return $ A.tMono $ A.tNum n
-translateTypeS (In (Inr (Inl ctx))) = return $ A.tMono $
+translateTypeS (In (Inl ctx)) = return $ A.tMono $
   case ctx of
     A.CryptolSetupContext -> A.tContext $ A.CryptolSetup
     A.JavaSetupContext    -> A.tContext $ A.JavaSetup
@@ -100,7 +99,7 @@ translateTypeS (In (Inr (Inl ctx))) = return $ A.tMono $
     A.ProofScriptContext  -> A.tContext $ A.ProofScript
     A.TopLevelContext     -> A.tContext $ A.TopLevel
 
-translateTypeS (In (Inr (Inr ty))) =
+translateTypeS (In (Inr ty)) =
   case ty of
     A.BitF            -> return $ A.tMono A.tBool
     A.ZF              -> return $ A.tMono A.tZ

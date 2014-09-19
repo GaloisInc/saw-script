@@ -90,12 +90,7 @@ library
     SAWScript.REPL.Trie
     SAWScript.Token
     SAWScript.MGU
-    SAWScript.Unify
     SAWScript.Unify.Fix
-    SAWScript.Unify.Fresh
-    SAWScript.Unify.Goal
-    SAWScript.Unify.Ops
-    SAWScript.Unify.Unification
     SAWScript.Utils
     SAWScript.Value
     SAWScript.VerificationCheck
