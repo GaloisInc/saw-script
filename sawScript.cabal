@@ -102,7 +102,9 @@ library
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 
-  build-tools: alex, happy
+  build-tools:
+    alex >= 3.1.3,
+    happy >= 1.9.4
 
 executable saw
   hs-source-dirs: .
