@@ -24,12 +24,12 @@ import qualified Data.Traversable as T
 type Incoming = LoadedModules
 type Outgoing = [ModuleParts]
 
-type CheckedExpr   = Expr RawT
+type CheckedExpr = Expr
 
 data ModuleParts = ModuleParts
   { modName :: ModuleName
   , modExprEnv :: [(LName, CheckedExpr)]
-  , modPrimEnv :: LEnv RawT
+  , modPrimEnv :: LEnv Schema
   , modDeps    :: S.Set ModuleName
   , modCryDeps :: [FilePath]
   } deriving (Show)
@@ -43,10 +43,10 @@ newtype ModMap = ModMap
 -- | Combine every top-level type signature with the immediately
 -- following value binding. The final result contains no occurrences
 -- of TopTypeDecl.
-combineTopTypeDecl :: [TopStmt RawT] -> Err [TopStmt RawT]
+combineTopTypeDecl :: [TopStmt] -> Err [TopStmt]
 combineTopTypeDecl [] = return []
 combineTopTypeDecl (TopTypeDecl name ty : TopBind name' e : stmts)
-  | name == name' = (:) (TopBind name' (updateAnnotation (Just ty) e)) <$> combineTopTypeDecl stmts
+  | name == name' = (:) (TopBind name' (updateAnnotation ty e)) <$> combineTopTypeDecl stmts
 combineTopTypeDecl (TopTypeDecl name _ : _) = noBindingErr name
 combineTopTypeDecl (stmt : stmts) = (:) stmt <$> combineTopTypeDecl stmts
 
@@ -66,7 +66,7 @@ preludeName = ModuleName "Prelude"
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
-build :: (ModuleName, [TopStmt RawT]) -> Err ModuleParts
+build :: (ModuleName, [TopStmt]) -> Err ModuleParts
 build (mn, ts) = foldrM modBuilder (ModuleParts mn [] M.empty S.empty []) =<< combineTopTypeDecl ts
 
 -- stage3: make a module out of the resulting envs
@@ -75,7 +75,7 @@ assemble mods = return $ buildQueue modM
   where
   modM = ModMap $ M.fromList [ (modName m,m) | m <- mods ]
 
-modBuilder :: TopStmt RawT -> ModuleParts -> Err ModuleParts
+modBuilder :: TopStmt -> ModuleParts -> Err ModuleParts
 modBuilder t (ModuleParts mn ee pe ds cs) = case t of
   -- Type signatures should have been translated away by this point
   TopTypeDecl _ _  -> fail "modBuilder: precondition failed (TopTypeDecl)"
