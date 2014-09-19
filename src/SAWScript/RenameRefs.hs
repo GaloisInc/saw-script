@@ -15,23 +15,23 @@ import Control.Monad.Reader
 import Data.List (elemIndices, intercalate, nub)
 import Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Map as M
-import qualified Data.Traversable as T
+import Data.Traversable (traverse)
 import Prelude hiding (mod, exp)
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
 renameRefs :: Compiler IncomingModule OutgoingModule
 renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe ds cs) -> evalRR m $
-  Module nm <$> T.traverse (T.traverse resolveInExpr) ee <*> pure pe <*> pure ds <*> pure cs
+  Module nm <$> traverse (traverse resolveInExpr) ee <*> pure pe <*> pure ds <*> pure cs
 
 -- Types {{{
 
-type IncomingModule = Module    ResolvedT
-type IncomingExpr   = Expr      ResolvedT
-type IncomingBStmt  = BlockStmt ResolvedT
+type IncomingModule = Module
+type IncomingExpr   = Expr
+type IncomingBStmt  = BlockStmt
 
-type OutgoingModule = Module    ResolvedT
-type OutgoingExpr   = Expr      ResolvedT
-type OutgoingBStmt  = BlockStmt ResolvedT
+type OutgoingModule = Module
+type OutgoingExpr   = Expr
+type OutgoingBStmt  = BlockStmt
 
 type RR = StateT Int (ReaderT RREnv Err)
 
@@ -44,8 +44,8 @@ type RR = StateT Int (ReaderT RREnv Err)
 type ExprMaps =
     ( ModuleName
     , Env IncomingExpr
-    , Env ResolvedT
-    , ModuleEnv (Env (Expr Schema), Env Schema)
+    , Env Schema
+    , ModuleEnv (Env Expr, Env Schema)
     )
 
 -- }}}
@@ -108,29 +108,30 @@ resolveInExprs pexp = case pexp of
 resolveInExpr :: IncomingExpr -> RR OutgoingExpr
 resolveInExpr exp = case exp of
   -- Focus of the whole pass
-  Var nm t          -> Var <$> resolveName nm <*> pure t
+  Var nm            -> Var <$> resolveName nm
   -- Binders, which add to the local name environment.
-  Function a at e t -> addName a $ \a' ->
-                         Function a' at <$> resolveInExpr e  <*> pure t
-  LetBlock bs e     -> let ds = duplicates bs in if null ds
+  Function a at e   -> addName a $ \a' ->
+                         Function a' at <$> resolveInExpr e
+  Let bs e          -> let ds = duplicates bs in if null ds
                          then addNamesFromBinds bs $ \bs' ->
-                           LetBlock <$> mapM resolveInBind bs' <*> resolveInExpr e
+                           Let <$> mapM resolveInBind bs' <*> resolveInExpr e
                          else duplicateBindingsFail ds
   -- Recursive structures
-  Array  es t       -> Array  <$> mapM resolveInExpr es   <*> pure t
-  Block  bs t       -> Block  <$> resolveInBStmts bs      <*> pure t
-  Tuple  es t       -> Tuple  <$> mapM resolveInExpr es   <*> pure t
-  Record bs t       -> Record <$> mapM resolveInBind bs   <*> pure t
-  Index  e1 e2 t    -> Index  <$> resolveInExpr e1        <*> resolveInExpr e2 <*> pure t
-  Lookup e n t      -> Lookup <$> resolveInExpr e         <*> pure n           <*> pure t
-  TLookup e i t     -> TLookup <$> resolveInExpr e        <*> pure i           <*> pure t
-  Application f v t -> Application   <$> resolveInExpr f  <*> resolveInExpr v  <*> pure t
+  Array  es         -> Array  <$> mapM resolveInExpr es
+  Block  bs         -> Block  <$> resolveInBStmts bs
+  Tuple  es         -> Tuple  <$> mapM resolveInExpr es
+  Record bs         -> Record <$> traverse resolveInExpr bs
+  Index  e1 e2      -> Index  <$> resolveInExpr e1        <*> resolveInExpr e2
+  Lookup e n        -> Lookup <$> resolveInExpr e         <*> pure n
+  TLookup e i       -> TLookup <$> resolveInExpr e        <*> pure i
+  Application f v   -> Application   <$> resolveInExpr f  <*> resolveInExpr v
   -- No-ops
-  Bit b t           -> pure $ Bit b t
-  Quote s t         -> pure $ Quote s t
-  Z i t             -> pure $ Z i t
-  Undefined t       -> pure $ Undefined t
-  Code s t          -> pure $ Code s t
+  Bit b             -> pure $ Bit b
+  String s          -> pure $ String s
+  Z i               -> pure $ Z i
+  Undefined         -> pure $ Undefined
+  Code s            -> pure $ Code s
+  TSig e t          -> TSig <$> resolveInExpr e <*> pure t
 
 duplicateBindingsFail :: [Name] -> RR a
 duplicateBindingsFail ns = fail $
@@ -152,9 +153,9 @@ resolveInBStmts :: [IncomingBStmt] -> RR [OutgoingBStmt]
 resolveInBStmts bsts = case bsts of
   []                        -> return []
 
-  Bind Nothing c e  : bsts' ->   (:) <$> (Bind Nothing c   <$> resolveInExpr e)       <*> resolveInBStmts bsts'
-  Bind (Just (n, t)) c e : bsts' -> addName n $ \n' ->
-                                 (:) <$> (Bind (Just (n', t)) c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
+  Bind Nothing t c e  : bsts' -> (:) <$> (Bind Nothing t c   <$> resolveInExpr e)       <*> resolveInBStmts bsts'
+  Bind (Just n) t c e : bsts' -> addName n $ \n' ->
+                                 (:) <$> (Bind (Just n') t c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
 
   BlockLet bs       : bsts' -> addNamesFromBinds bs $ \bs' ->
                                  (:) <$> (BlockLet <$> mapM resolveInBind bs') <*> resolveInBStmts bsts'

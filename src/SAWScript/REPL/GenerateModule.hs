@@ -16,22 +16,21 @@ import SAWScript.AST (ModuleName(ModuleName),
                       Module(..), ValidModule,
                       Expr(Block),
                       BlockStmt,
-                      RawT,
                       Name,
                       LName, Located(..))
 
 wrapBStmt :: Map ModuleName ValidModule
              -> Name
-             -> BlockStmt RawT
-             -> Module RawT
+             -> BlockStmt
+             -> Module
 wrapBStmt modsInScope stmtName stmt =
   (scratchpad modsInScope) {
     {- The expression environment simply maps @it@ to the statement. Statements
     aren't expressions, so I wrap it up in a block (with an unspecified return
     type). -}
-    moduleExprEnv = [(Located stmtName stmtName (PosInternal replFileName), Block [stmt] Nothing)] }
+    moduleExprEnv = [(Located stmtName stmtName (PosInternal replFileName), Block [stmt])] }
 
-scratchpad :: Map ModuleName ValidModule -> Module typeT
+scratchpad :: Map ModuleName ValidModule -> Module
 scratchpad modsInScope =
   Module { moduleName = replModuleName
          , moduleExprEnv = [] -- no expressions yet

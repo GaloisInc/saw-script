@@ -72,7 +72,6 @@ library
     SAWScript.LLVMExpr
     SAWScript.LLVMMethodSpec
     SAWScript.LLVMMethodSpecIR
-    SAWScript.NewAST
     SAWScript.Options
     SAWScript.Parser
     SAWScript.ProcessFile
