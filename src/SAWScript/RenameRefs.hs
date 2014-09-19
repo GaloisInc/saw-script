@@ -25,13 +25,13 @@ renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe ds cs) -> evalRR m $
 
 -- Types {{{
 
-type IncomingModule = Module    UnresolvedName ResolvedT
-type IncomingExpr   = Expr      UnresolvedName ResolvedT
-type IncomingBStmt  = BlockStmt UnresolvedName ResolvedT
+type IncomingModule = Module    ResolvedT
+type IncomingExpr   = Expr      ResolvedT
+type IncomingBStmt  = BlockStmt ResolvedT
 
-type OutgoingModule = Module    ResolvedName   ResolvedT
-type OutgoingExpr   = Expr      ResolvedName   ResolvedT
-type OutgoingBStmt  = BlockStmt ResolvedName   ResolvedT
+type OutgoingModule = Module    ResolvedT
+type OutgoingExpr   = Expr      ResolvedT
+type OutgoingBStmt  = BlockStmt ResolvedT
 
 type RR = StateT Int (ReaderT RREnv Err)
 
@@ -45,7 +45,7 @@ type ExprMaps =
     ( ModuleName
     , Env IncomingExpr
     , Env ResolvedT
-    , ModuleEnv (Env (Expr ResolvedName Schema), Env Schema)
+    , ModuleEnv (Env (Expr Schema), Env Schema)
     )
 
 -- }}}
@@ -162,7 +162,7 @@ resolveInBStmts bsts = case bsts of
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
 --  failing if the UnresolvedName is unbound or ambiguous.
-resolveName :: Located UnresolvedName -> RR (Located ResolvedName)
+resolveName :: Located ResolvedName -> RR (Located ResolvedName)
 resolveName un = do
   lEnv <- getLocalNameEnv
   mod <- getModule
@@ -181,11 +181,11 @@ allExprMaps (Module modNm exprEnv primEnv deps _)
     unloc = M.mapKeys getVal
     unloc' = M.fromList . map (\(n, e) -> (getVal n, e))
 
-resolveUnresolvedName :: Env Name -> ExprMaps -> UnresolvedName -> [ResolvedName]
+resolveUnresolvedName :: Env Name -> ExprMaps -> ResolvedName -> [ResolvedName]
 resolveUnresolvedName
   localAnonEnv
   (localModNm,localTopEnv,localPrimEnv,rms)
-  un@(UnresolvedName n) =
+  un@(LocalName n) =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
     Just nm -> [nm]
@@ -199,9 +199,9 @@ resolveUnresolvedName
     = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
 
 -- Enforce that there is exactly one valid ResolvedName for a variable.
-enforceResolution :: Located UnresolvedName -> [ResolvedName] -> RR (Located ResolvedName)
+enforceResolution :: Located ResolvedName -> [ResolvedName] -> RR (Located ResolvedName)
 enforceResolution un qs = case qs of
   [qn] -> return (qn <$ un)
-  []   -> fail $ "Unbound reference for " ++ renderUnresolvedName (getVal un) ++ " at " ++ show (getPos un)
-  qns  -> fail $ "Ambiguous reference for " ++ renderUnresolvedName (getVal un) ++ " at " ++ show (getPos un)
+  []   -> fail $ "Unbound reference for " ++ renderResolvedName (getVal un) ++ " at " ++ show (getPos un)
+  qns  -> fail $ "Ambiguous reference for " ++ renderResolvedName (getVal un) ++ " at " ++ show (getPos un)
           ++ "\n" ++ unlines (map renderResolvedName qns)
