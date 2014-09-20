@@ -108,7 +108,7 @@ resolveInExprs pexp = case pexp of
 resolveInExpr :: IncomingExpr -> RR OutgoingExpr
 resolveInExpr exp = case exp of
   -- Focus of the whole pass
-  Var nm            -> Var <$> resolveName nm
+  Var nm ts         -> Var <$> resolveName nm <*> pure ts
   -- Binders, which add to the local name environment.
   Function a at e   -> addName a $ \a' ->
                          Function a' at <$> resolveInExpr e
