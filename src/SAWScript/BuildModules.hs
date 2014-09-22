@@ -21,9 +21,6 @@ import qualified Data.Traversable as T
 
 -- Types -----------------------------------------------------------------------
 
-type Incoming = LoadedModules
-type Outgoing = [ModuleParts]
-
 type CheckedExpr = Expr
 
 data ModuleParts = ModuleParts
@@ -52,7 +49,7 @@ combineTopTypeDecl (stmt : stmts) = (:) stmt <$> combineTopTypeDecl stmts
 
 -- BuildEnv --------------------------------------------------------------------
 
-buildModules :: Compiler Incoming Outgoing
+buildModules :: LoadedModules -> Err [ModuleParts]
 buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDependency) >=> assemble
   $ M.assocs $ modules ms
 
@@ -70,7 +67,7 @@ build :: (ModuleName, [TopStmt]) -> Err ModuleParts
 build (mn, ts) = foldrM modBuilder (ModuleParts mn [] M.empty S.empty []) =<< combineTopTypeDecl ts
 
 -- stage3: make a module out of the resulting envs
-assemble :: [ModuleParts] -> Err Outgoing
+assemble :: [ModuleParts] -> Err [ModuleParts]
 assemble mods = return $ buildQueue modM
   where
   modM = ModMap $ M.fromList [ (modName m,m) | m <- mods ]
