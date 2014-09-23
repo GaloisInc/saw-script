@@ -163,7 +163,7 @@ resolveInBStmts bsts = case bsts of
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
 --  failing if the UnresolvedName is unbound or ambiguous.
-resolveName :: Located ResolvedName -> RR (Located ResolvedName)
+resolveName :: Located Name -> RR (Located Name)
 resolveName un = do
   lEnv <- getLocalNameEnv
   mod <- getModule
@@ -182,27 +182,27 @@ allExprMaps (Module modNm exprEnv primEnv deps _)
     unloc = M.mapKeys getVal
     unloc' = M.fromList . map (\(n, e) -> (getVal n, e))
 
-resolveUnresolvedName :: Env Name -> ExprMaps -> ResolvedName -> [ResolvedName]
+resolveUnresolvedName :: Env Name -> ExprMaps -> Name -> [Name]
 resolveUnresolvedName
   localAnonEnv
   (localModNm,localTopEnv,localPrimEnv,rms)
-  un@(LocalName n) =
+  n =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
     Just nm -> [nm]
     Nothing -> maybeToList inLocalTop ++ maybeToList inLocalPrim ++ mapMaybe inDepMod (M.assocs rms)
   where
   -- If it's in the localAnonEnv, use the unique name.
-  inLocalAnon                  = LocalName                        <$> M.lookup n localAnonEnv
-  inLocalTop                   = TopLevelName localModNm n        <$  M.lookup n localTopEnv
-  inLocalPrim                  = TopLevelName localModNm n        <$  M.lookup n localPrimEnv
+  inLocalAnon                  = M.lookup n localAnonEnv
+  inLocalTop                   = n <$ M.lookup n localTopEnv
+  inLocalPrim                  = n <$ M.lookup n localPrimEnv
   inDepMod (mn, (exprEnv,primEnv))
-    = (TopLevelName mn n <$ M.lookup n exprEnv) `mplus` (TopLevelName mn n <$ M.lookup n primEnv)
+    = (n <$ M.lookup n exprEnv) `mplus` (n <$ M.lookup n primEnv)
 
 -- Enforce that there is exactly one valid ResolvedName for a variable.
-enforceResolution :: Located ResolvedName -> [ResolvedName] -> RR (Located ResolvedName)
+enforceResolution :: Located Name -> [Name] -> RR (Located Name)
 enforceResolution un qs = case qs of
   [qn] -> return (qn <$ un)
-  []   -> fail $ "Unbound reference for " ++ renderResolvedName (getVal un) ++ " at " ++ show (getPos un)
-  qns  -> fail $ "Ambiguous reference for " ++ renderResolvedName (getVal un) ++ " at " ++ show (getPos un)
-          ++ "\n" ++ unlines (map renderResolvedName qns)
+  []   -> fail $ "Unbound reference for " ++ getVal un ++ " at " ++ show (getPos un)
+  qns  -> fail $ "Ambiguous reference for " ++ getVal un ++ " at " ++ show (getPos un)
+          ++ "\n" ++ unlines qns

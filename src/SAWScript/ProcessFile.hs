@@ -29,27 +29,27 @@ processFile opts file | takeExtensions file == ".saw" = do
   loadPrelude opts $ \lms -> do
     processModule opts lms (ModuleName [] "Prelude")
   -}
-  loadWithPrelude opts file $ \loadedModules -> do
-    let modName = moduleNameFromPath file
-    processModule opts loadedModules modName
+  loadedModules <- loadWithPrelude opts file
+  let modName = moduleNameFromPath file
+  processModule opts loadedModules modName
 
 processFile _ file = putStrLn $ "Don't know how to handle file " ++ file
 
 
 
 processModule :: Options -> LoadedModules -> ModuleName -> IO ()
-processModule opts lms modName =
+processModule opts lms modName = do
   -- TODO: merge the two representations of the prelude into one
   --  that both the renamer and the type checker can understand.
-  runCompiler comp lms (interpretMain opts)
-  where
-  comp =     buildModules
-         >=> F.foldrM checkModuleWithDeps M.empty
-         >=> (\cms -> case M.lookup modName cms of
-               Just cm -> return cm
-               Nothing -> fail $ "Module " ++ show modName ++
-                                 " not found in environment of checkedModules:" ++
-                                 show (M.keys cms))
+  validMod <- reportErrT $ do
+                parts <- buildModules lms
+                cms <- F.foldrM checkModuleWithDeps M.empty parts
+                case M.lookup modName cms of
+                  Just cm -> return cm
+                  Nothing -> fail $ "Module " ++ show modName ++
+                                    " not found in environment of checkedModules:" ++
+                                    show (M.keys cms)
+  interpretMain opts validMod
 
 
 checkModuleWithDeps :: BM.ModuleParts
