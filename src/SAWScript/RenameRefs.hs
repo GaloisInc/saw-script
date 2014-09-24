@@ -21,7 +21,7 @@ import Prelude hiding (mod, exp)
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
 renameRefs :: Compiler IncomingModule OutgoingModule
 renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe ds cs) -> evalRR m $
-  Module nm <$> traverse (traverse resolveInExpr) ee <*> pure pe <*> pure ds <*> pure cs
+  Module nm <$> traverse resolveInDecl ee <*> pure pe <*> pure ds <*> pure cs
 
 -- Types {{{
 
@@ -90,10 +90,12 @@ addName n f = do
     -- pass in the new unique name
     (f uniqueN)
 
-addNamesFromBinds :: [LBind e] -> ([LBind e] -> RR a) -> RR a
-addNamesFromBinds ns f = foldr step f ns []
-  where
-  step (n,e) f' ns' = addName n $ \n' -> f' ((n',e) : ns')
+addNameFromDecl :: Decl -> (Decl -> RR a) -> RR a
+addNameFromDecl (Decl n mt e) f = addName n $ \n' -> f (Decl n' mt e)
+
+addNamesFromDecls :: [Decl] -> ([Decl] -> RR a) -> RR a
+addNamesFromDecls ds f = foldr step f ds []
+  where step d f' ds' = addNameFromDecl d $ \d' -> f' (d' : ds')
 
 -- }}}
 
@@ -112,10 +114,10 @@ resolveInExpr exp = case exp of
   -- Binders, which add to the local name environment.
   Function a at e   -> addName a $ \a' ->
                          Function a' at <$> resolveInExpr e
-  Let bs e          -> let ds = duplicates bs in if null ds
-                         then addNamesFromBinds bs $ \bs' ->
-                           Let <$> mapM resolveInBind bs' <*> resolveInExpr e
-                         else duplicateBindingsFail ds
+  Let ds e          -> let dups = duplicates ds in if null dups
+                         then addNamesFromDecls ds $ \ds' ->
+                           Let <$> mapM resolveInDecl ds' <*> resolveInExpr e
+                         else duplicateBindingsFail dups
   -- Recursive structures
   Array  es         -> Array  <$> mapM resolveInExpr es
   Block  bs         -> Block  <$> resolveInBStmts bs
@@ -139,15 +141,15 @@ duplicateBindingsFail ns = fail $
   where
   str = intercalate ", " $ map show ns
 
-duplicates :: [LBind a] -> [Name]
-duplicates bs = nub $ mapMaybe f ns
+duplicates :: [Decl] -> [Name]
+duplicates ds = nub $ mapMaybe f ns
   where
-  ns = map (getVal . fst) bs
+  ns = map (getVal . dName) ds
   occurenceCount = length . (`elemIndices` ns)
   f n = if occurenceCount n > 1 then Just n else Nothing
 
-resolveInBind :: (a, IncomingExpr) -> RR (a, OutgoingExpr)
-resolveInBind (n,e) = (,) <$> pure n <*> resolveInExpr e
+resolveInDecl :: Decl -> RR Decl
+resolveInDecl (Decl n mt e) = Decl n mt <$> resolveInExpr e
 
 resolveInBStmts :: [IncomingBStmt] -> RR [OutgoingBStmt]
 resolveInBStmts bsts = case bsts of
@@ -157,8 +159,8 @@ resolveInBStmts bsts = case bsts of
   Bind (Just n) t c e : bsts' -> addName n $ \n' ->
                                  (:) <$> (Bind (Just n') t c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
 
-  BlockLet bs       : bsts' -> addNamesFromBinds bs $ \bs' ->
-                                 (:) <$> (BlockLet <$> mapM resolveInBind bs') <*> resolveInBStmts bsts'
+  BlockLet ds       : bsts' -> addNamesFromDecls ds $ \ds' ->
+                                 (:) <$> (BlockLet <$> mapM resolveInDecl ds') <*> resolveInBStmts bsts'
   BlockCode s       : bsts' ->   (:) (BlockCode s) <$> resolveInBStmts bsts'
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
@@ -180,12 +182,12 @@ allExprMaps (Module modNm exprEnv primEnv deps _)
   where
     f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (unloc' exprEnv', unloc primEnv')
     unloc = M.mapKeys getVal
-    unloc' = M.fromList . map (\(n, e) -> (getVal n, e))
+    unloc' = M.fromList . map (\(Decl n _ e) -> (getVal n, e))
 
 resolveUnresolvedName :: Env Name -> ExprMaps -> Name -> [Name]
 resolveUnresolvedName
   localAnonEnv
-  (localModNm,localTopEnv,localPrimEnv,rms)
+  (_localModNm,localTopEnv,localPrimEnv,rms)
   n =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
@@ -196,7 +198,7 @@ resolveUnresolvedName
   inLocalAnon                  = M.lookup n localAnonEnv
   inLocalTop                   = n <$ M.lookup n localTopEnv
   inLocalPrim                  = n <$ M.lookup n localPrimEnv
-  inDepMod (mn, (exprEnv,primEnv))
+  inDepMod (_mn, (exprEnv,primEnv))
     = (n <$ M.lookup n exprEnv) `mplus` (n <$ M.lookup n primEnv)
 
 -- Enforce that there is exactly one valid ResolvedName for a variable.

@@ -25,7 +25,7 @@ type CheckedExpr = Expr
 
 data ModuleParts = ModuleParts
   { modName :: ModuleName
-  , modExprEnv :: [(LName, CheckedExpr)]
+  , modExprEnv :: [Decl]
   , modPrimEnv :: LEnv Schema
   , modDeps    :: S.Set ModuleName
   , modCryDeps :: [FilePath]
@@ -42,8 +42,8 @@ newtype ModMap = ModMap
 -- of TopTypeDecl.
 combineTopTypeDecl :: [TopStmt] -> Err [TopStmt]
 combineTopTypeDecl [] = return []
-combineTopTypeDecl (TopTypeDecl name ty : TopBind name' e : stmts)
-  | name == name' = (:) (TopBind name' (updateAnnotation ty e)) <$> combineTopTypeDecl stmts
+combineTopTypeDecl (TopTypeDecl name ty : TopBind (Decl name' _ e) : stmts)
+  | name == name' = (:) (TopBind (Decl name' (Just ty) e)) <$> combineTopTypeDecl stmts
 combineTopTypeDecl (TopTypeDecl name _ : _) = noBindingErr name
 combineTopTypeDecl (stmt : stmts) = (:) stmt <$> combineTopTypeDecl stmts
 
@@ -77,7 +77,7 @@ modBuilder t (ModuleParts mn ee pe ds cs) = case t of
   -- Type signatures should have been translated away by this point
   TopTypeDecl _ _  -> fail "modBuilder: precondition failed (TopTypeDecl)"
   -- Duplicate declarations are listed multiple times; later ones should shadow earlier ones
-  TopBind n e      -> return $ ModuleParts mn ((n, e) : ee) pe ds cs
+  TopBind d        -> return $ ModuleParts mn (d : ee) pe ds cs
   Prim n ty -> if M.member n pe
                          then multiDeclErr n
                          else return $ ModuleParts mn ee (M.insert n ty pe) ds cs
