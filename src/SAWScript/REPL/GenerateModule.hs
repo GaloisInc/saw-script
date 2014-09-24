@@ -18,7 +18,7 @@ import SAWScript.AST (ModuleName(ModuleName),
                       BlockStmt,
                       Decl(..),
                       Name,
-                      LName, Located(..))
+                      Located(..))
 
 wrapBStmt :: Map ModuleName ValidModule
              -> Name
