@@ -81,7 +81,7 @@ getModule = asks thisModule
 getLocalNameEnv :: RR (Env Name)
 getLocalNameEnv = asks localNameEnv
 
-addName  :: LName -> (LName -> RR a) -> RR a
+addName :: LName -> (LName -> RR a) -> RR a
 addName n f = do
   i <- incrGen
   let uniqueN = fmap (++ "." ++ show i) n
@@ -96,6 +96,11 @@ addNameFromDecl (Decl n mt e) f = addName n $ \n' -> f (Decl n' mt e)
 addNamesFromDecls :: [Decl] -> ([Decl] -> RR a) -> RR a
 addNamesFromDecls ds f = foldr step f ds []
   where step d f' ds' = addNameFromDecl d $ \d' -> f' (d' : ds')
+
+addNamesFromDeclGroup :: DeclGroup -> (DeclGroup -> RR a) -> RR a
+addNamesFromDeclGroup (NonRecursive d) f = addNameFromDecl d (f . NonRecursive)
+addNamesFromDeclGroup (Recursive ds) f = foldr step (f . Recursive) ds []
+  where step d f' ds = addNameFromDecl d $ \d' -> f' (d' : ds)
 
 -- }}}
 
@@ -114,9 +119,9 @@ resolveInExpr exp = case exp of
   -- Binders, which add to the local name environment.
   Function a at e   -> addName a $ \a' ->
                          Function a' at <$> resolveInExpr e
-  Let ds e          -> let dups = duplicates ds in if null dups
-                         then addNamesFromDecls ds $ \ds' ->
-                           Let <$> mapM resolveInDecl ds' <*> resolveInExpr e
+  Let dg e          -> let dups = duplicates dg in if null dups
+                         then addNamesFromDeclGroup dg $ \dg' ->
+                           Let <$> resolveInDeclGroup dg' <*> resolveInExpr e
                          else duplicateBindingsFail dups
   -- Recursive structures
   Array  es         -> Array  <$> mapM resolveInExpr es
@@ -141,8 +146,9 @@ duplicateBindingsFail ns = fail $
   where
   str = intercalate ", " $ map show ns
 
-duplicates :: [Decl] -> [Name]
-duplicates ds = nub $ mapMaybe f ns
+duplicates :: DeclGroup -> [Name]
+duplicates (NonRecursive _) = []
+duplicates (Recursive ds) = nub $ mapMaybe f ns
   where
   ns = map (getVal . dName) ds
   occurenceCount = length . (`elemIndices` ns)
@@ -150,6 +156,10 @@ duplicates ds = nub $ mapMaybe f ns
 
 resolveInDecl :: Decl -> RR Decl
 resolveInDecl (Decl n mt e) = Decl n mt <$> resolveInExpr e
+
+resolveInDeclGroup :: DeclGroup -> RR DeclGroup
+resolveInDeclGroup (NonRecursive d) = NonRecursive <$> resolveInDecl d
+resolveInDeclGroup (Recursive ds) = Recursive <$> mapM resolveInDecl ds
 
 resolveInBStmts :: [IncomingBStmt] -> RR [OutgoingBStmt]
 resolveInBStmts bsts = case bsts of
@@ -159,8 +169,8 @@ resolveInBStmts bsts = case bsts of
   Bind (Just n) t c e : bsts' -> addName n $ \n' ->
                                  (:) <$> (Bind (Just n') t c <$> resolveInExpr e)       <*> resolveInBStmts bsts'
 
-  BlockLet ds       : bsts' -> addNamesFromDecls ds $ \ds' ->
-                                 (:) <$> (BlockLet <$> mapM resolveInDecl ds') <*> resolveInBStmts bsts'
+  BlockLet dg       : bsts' -> addNamesFromDeclGroup dg $ \dg' ->
+                                 (:) <$> (BlockLet <$> resolveInDeclGroup dg') <*> resolveInBStmts bsts'
   BlockCode s       : bsts' ->   (:) (BlockCode s) <$> resolveInBStmts bsts'
 
 -- Given a module as context, find *the* ResolvedName that an unqualified UnresolvedName refers to,
