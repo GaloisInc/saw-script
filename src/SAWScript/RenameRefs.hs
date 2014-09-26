@@ -215,6 +215,6 @@ resolveUnresolvedName
 enforceResolution :: Located Name -> [Name] -> RR (Located Name)
 enforceResolution un qs = case qs of
   [qn] -> return (qn <$ un)
-  []   -> fail $ "Unbound reference for " ++ getVal un ++ " at " ++ show (getPos un)
-  qns  -> fail $ "Ambiguous reference for " ++ getVal un ++ " at " ++ show (getPos un)
+  []   -> fail $ "Unbound reference for '" ++ getVal un ++ "' at " ++ show (getPos un)
+  qns  -> fail $ "Ambiguous reference for '" ++ getVal un ++ "' at " ++ show (getPos un)
           ++ "\n" ++ unlines qns
