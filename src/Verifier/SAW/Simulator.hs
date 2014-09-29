@@ -214,6 +214,7 @@ mkMemoClosed cfg t =
     bref <- liftIO (newIORef IMap.empty)
     xref <- liftIO (newIORef IMap.empty)
     let go :: SharedTerm s -> m BitSet
+        go (Unshared tf) = liftM freesTermF $ mapM go tf
         go (STApp i tf) = do
           bmemo <- liftIO (readIORef bref)
           case IMap.lookup i bmemo of
@@ -236,6 +237,7 @@ evalClosedTermF :: (MonadIO m, MonadFix m) =>
 evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
   where
     lam = evalOpen cfg memoClosed
+    rec (Unshared tf) = evalTermF cfg lam rec [] tf
     rec (STApp i _) =
       case IMap.lookup i memoClosed of
         Just x -> force x
@@ -252,6 +254,7 @@ evalOpen cfg memoClosed env t =
      go ref t
   where
     go :: IORef (IntMap (Value m e)) -> SharedTerm s -> m (Value m e)
+    go ref (Unshared tf) = evalF ref tf
     go ref (STApp i tf) =
       case IMap.lookup i memoClosed of
         Just x -> force x

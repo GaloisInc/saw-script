@@ -311,6 +311,8 @@ rewriteSharedTerm sc ss t0 =
   where
     rewriteAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
+    rewriteAll (Unshared tf) =
+        traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
@@ -349,6 +351,8 @@ rewriteSharedTermToTerm sc ss t0 =
     rewriteAll :: (?cache :: Cache IORef TermIndex Term) => SharedTerm s -> IO Term
     rewriteAll (asBetaRedex -> Just (_, _, body, arg)) =
         instantiateVar sc 0 arg body >>= rewriteAll
+    rewriteAll (Unshared tf) =
+        liftM Term (traverse rewriteAll tf) >>= rewriteTop
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
     rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
@@ -376,6 +380,8 @@ rewriteSharedTermTypeSafe sc ss t0 =
   where
     rewriteAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
                   SharedTerm s -> IO (SharedTerm s)
+    rewriteAll (Unshared tf) =
+        rewriteTermF tf >>= scTermF sc >>= rewriteTop
     rewriteAll (STApp tidx tf) =
         -- putStrLn "Rewriting term:" >> print t >>
         useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
@@ -437,12 +443,13 @@ rewritingSharedContext sc ss = sc'
     sc' = sc { scTermF = rewriteTop }
     rewriteTop :: TermF (SharedTerm s) -> IO (SharedTerm s)
     rewriteTop tf =
-      let t = STApp (-1) tf in
+      let t = Unshared tf in
       case reduceSharedTerm sc' t of
         Nothing -> apply (Net.match_term ss t) t
         Just action -> action
     apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
+    apply [] (Unshared tf) = return (Unshared tf)
     apply [] (STApp _ tf) = scTermF sc tf
     apply (Left (RewriteRule _ l r) : rules) t =
       case first_order_match l t of

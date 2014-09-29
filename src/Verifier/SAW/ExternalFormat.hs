@@ -25,6 +25,12 @@ scWriteExternal t0 =
     in unlines (unwords ["SAWCoreTerm", show x] : reverse output)
   where
     go :: SharedTerm s -> State.State (Map TermIndex Int, [String], Int) Int
+    go (Unshared tf) = do
+      tf' <- traverse go tf
+      (m, output, x) <- State.get
+      let s = unwords [show x, writeTermF tf']
+      State.put (m, s : output, x + 1)
+      return x
     go (STApp i tf) = do
       (memo, _, _) <- State.get
       case Map.lookup i memo of
