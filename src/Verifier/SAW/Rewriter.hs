@@ -449,7 +449,7 @@ rewritingSharedContext sc ss = sc'
         Just action -> action
     apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
-    apply [] (Unshared tf) = return (Unshared tf)
+    apply [] (Unshared tf) = scTermF sc tf
     apply [] (STApp _ tf) = scTermF sc tf
     apply (Left (RewriteRule _ l r) : rules) t =
       case first_order_match l t of
