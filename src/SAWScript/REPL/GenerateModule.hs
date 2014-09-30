@@ -2,34 +2,15 @@
 compiler operates at the module granularity.  This module bridges that gap by
 providing machinery to lift single statements to the module level. -}
 
-module SAWScript.REPL.GenerateModule ( wrapBStmt
-                                     , scratchpad
+module SAWScript.REPL.GenerateModule ( scratchpad
                                      , replFileName
-                                     , replModuleName
                                      ) where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import SAWScript.Utils
 import SAWScript.AST (ModuleName(ModuleName),
-                      Module(..), ValidModule,
-                      Expr(Block),
-                      BlockStmt,
-                      Decl(..),
-                      Name,
-                      Located(..))
-
-wrapBStmt :: Map ModuleName ValidModule
-             -> Name
-             -> BlockStmt
-             -> Module
-wrapBStmt modsInScope stmtName stmt =
-  (scratchpad modsInScope) {
-    {- The expression environment simply maps @it@ to the statement. Statements
-    aren't expressions, so I wrap it up in a block (with an unspecified return
-    type). -}
-    moduleExprEnv = [Decl (Located stmtName stmtName (PosInternal replFileName)) Nothing (Block [stmt])] }
+                      Module(..), ValidModule)
 
 scratchpad :: Map ModuleName ValidModule -> Module
 scratchpad modsInScope =
