@@ -9,7 +9,7 @@ module SAWScript.REPL.GenerateModule ( scratchpad
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import SAWScript.AST (ModuleName(ModuleName),
+import SAWScript.AST (ModuleName,
                       Module(..), ValidModule)
 
 scratchpad :: Map ModuleName ValidModule -> Module
@@ -27,4 +27,4 @@ replFileName = "<stdin>"
 
 -- The name of the REPL as a 'ModuleName'
 replModuleName :: ModuleName
-replModuleName = ModuleName replFileName
+replModuleName = replFileName

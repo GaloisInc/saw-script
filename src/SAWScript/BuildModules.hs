@@ -21,8 +21,6 @@ import qualified Data.Traversable as T
 
 -- Types -----------------------------------------------------------------------
 
-type CheckedExpr = Expr
-
 data ModuleParts = ModuleParts
   { modName :: ModuleName
   , modExprEnv :: [Decl]
@@ -59,7 +57,7 @@ addPreludeDependency mparts@(ModuleParts mn ee pe ds cs)
   | otherwise = return $ ModuleParts mn ee pe (S.insert preludeName ds) cs
 
 preludeName :: ModuleName
-preludeName = ModuleName "Prelude"
+preludeName = "Prelude"
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
