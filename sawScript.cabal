@@ -76,7 +76,6 @@ library
     SAWScript.Parser
     SAWScript.ProcessFile
     SAWScript.Proof
-    SAWScript.RenameRefs
     SAWScript.REPL
     SAWScript.REPL.Command
     SAWScript.REPL.GenerateModule
