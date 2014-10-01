@@ -25,7 +25,7 @@ data ModuleParts = ModuleParts
   { modName :: ModuleName
   , modExprEnv :: [Decl]
   , modDeps    :: S.Set ModuleName
-  , modCryDeps :: [FilePath]
+  , modCryDeps :: [Import]
   } deriving (Show)
 
 newtype ModMap = ModMap
@@ -77,7 +77,7 @@ modBuilder t (ModuleParts mn ee ds cs) = case t of
   TopBind d        -> return $ ModuleParts mn (d : ee) ds cs
   -- Imports show dependencies
   TopImport n      -> return $ ModuleParts mn ee (S.insert n ds) cs
-  ImportCry path   -> return $ ModuleParts mn ee ds (path : cs)
+  ImportCry imp    -> return $ ModuleParts mn ee ds (imp : cs)
 
 -- Error Messages --------------------------------------------------------------
 
