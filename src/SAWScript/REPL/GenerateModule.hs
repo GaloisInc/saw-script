@@ -16,7 +16,6 @@ scratchpad :: Map ModuleName ValidModule -> Module
 scratchpad modsInScope =
   Module { moduleName = replModuleName
          , moduleExprEnv = [] -- no expressions yet
-         , modulePrimEnv = Map.empty -- no 'Prim's in the REPL
          , moduleDependencies = modsInScope
          , moduleCryDeps = []
          }

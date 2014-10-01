@@ -24,7 +24,6 @@ import qualified Data.Traversable as T
 data ModuleParts = ModuleParts
   { modName :: ModuleName
   , modExprEnv :: [Decl]
-  , modPrimEnv :: LEnv Schema
   , modDeps    :: S.Set ModuleName
   , modCryDeps :: [FilePath]
   } deriving (Show)
@@ -52,9 +51,9 @@ buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDepe
   $ M.assocs $ modules ms
 
 addPreludeDependency :: ModuleParts -> Err ModuleParts
-addPreludeDependency mparts@(ModuleParts mn ee pe ds cs)
+addPreludeDependency mparts@(ModuleParts mn ee ds cs)
   | mn == preludeName = return mparts
-  | otherwise = return $ ModuleParts mn ee pe (S.insert preludeName ds) cs
+  | otherwise = return $ ModuleParts mn ee (S.insert preludeName ds) cs
 
 preludeName :: ModuleName
 preludeName = "Prelude"
@@ -62,7 +61,7 @@ preludeName = "Prelude"
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
 build :: (ModuleName, [TopStmt]) -> Err ModuleParts
-build (mn, ts) = foldrM modBuilder (ModuleParts mn [] M.empty S.empty []) =<< combineTopTypeDecl ts
+build (mn, ts) = foldrM modBuilder (ModuleParts mn [] S.empty []) =<< combineTopTypeDecl ts
 
 -- stage3: make a module out of the resulting envs
 assemble :: [ModuleParts] -> Err [ModuleParts]
@@ -71,17 +70,14 @@ assemble mods = return $ buildQueue modM
   modM = ModMap $ M.fromList [ (modName m,m) | m <- mods ]
 
 modBuilder :: TopStmt -> ModuleParts -> Err ModuleParts
-modBuilder t (ModuleParts mn ee pe ds cs) = case t of
+modBuilder t (ModuleParts mn ee ds cs) = case t of
   -- Type signatures should have been translated away by this point
   TopTypeDecl _ _  -> fail "modBuilder: precondition failed (TopTypeDecl)"
   -- Duplicate declarations are listed multiple times; later ones should shadow earlier ones
-  TopBind d        -> return $ ModuleParts mn (d : ee) pe ds cs
-  Prim n ty -> if M.member n pe
-                         then multiDeclErr n
-                         else return $ ModuleParts mn ee (M.insert n ty pe) ds cs
+  TopBind d        -> return $ ModuleParts mn (d : ee) ds cs
   -- Imports show dependencies
-  Import n _ _     -> return $ ModuleParts mn ee pe (S.insert n ds) cs
-  ImportCry path   -> return $ ModuleParts mn ee pe ds (path : cs)
+  Import n _ _     -> return $ ModuleParts mn ee (S.insert n ds) cs
+  ImportCry path   -> return $ ModuleParts mn ee ds (path : cs)
 
 -- Error Messages --------------------------------------------------------------
 

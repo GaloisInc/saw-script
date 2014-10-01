@@ -8,6 +8,7 @@ module SAWScript.RenameRefs
 
 import SAWScript.AST
 import SAWScript.Compiler
+import SAWScript.Interpreter (primTypeEnv)
 
 import Control.Applicative
 import Control.Monad.State
@@ -20,8 +21,8 @@ import Prelude hiding (mod, exp)
 
 -- Traverse over all variable reference @UnresolvedName@s, resolving them to exactly one @ResolvedName@.
 renameRefs :: Compiler IncomingModule OutgoingModule
-renameRefs = compiler "RenameRefs" $ \m@(Module nm ee pe ds cs) -> evalRR m $
-  Module nm <$> traverse resolveInDecl ee <*> pure pe <*> pure ds <*> pure cs
+renameRefs = compiler "RenameRefs" $ \m@(Module nm ee ds cs) -> evalRR m $
+  Module nm <$> traverse resolveInDecl ee <*> pure ds <*> pure cs
 
 -- Types {{{
 
@@ -44,8 +45,7 @@ type RR = StateT Int (ReaderT RREnv Err)
 type ExprMaps =
     ( ModuleName
     , Env IncomingExpr
-    , Env Schema
-    , ModuleEnv (Env Expr, Env Schema)
+    , ModuleEnv (Env Expr)
     )
 
 -- }}}
@@ -187,17 +187,16 @@ resolveName un = do
 
 -- Take a module to its collection of Expr Environments.
 allExprMaps :: IncomingModule -> ExprMaps
-allExprMaps (Module modNm exprEnv primEnv deps _)
-  = (modNm, unloc' exprEnv, unloc primEnv, foldr f M.empty (M.elems deps))
+allExprMaps (Module modNm exprEnv deps _)
+  = (modNm, unloc' exprEnv, foldr f M.empty (M.elems deps))
   where
-    f (Module modNm' exprEnv' primEnv' _ _) = M.insert modNm' (unloc' exprEnv', unloc primEnv')
-    unloc = M.mapKeys getVal
+    f (Module modNm' exprEnv' _ _) = M.insert modNm' (unloc' exprEnv')
     unloc' = M.fromList . map (\(Decl n _ e) -> (getVal n, e))
 
 resolveUnresolvedName :: Env Name -> ExprMaps -> Name -> [Name]
 resolveUnresolvedName
   localAnonEnv
-  (_localModNm,localTopEnv,localPrimEnv,rms)
+  (_localModNm,localTopEnv,rms)
   n =
   -- gather all the possible bindings. Later, we'll check that there is exactly one.
   case inLocalAnon of
@@ -208,8 +207,8 @@ resolveUnresolvedName
   inLocalAnon                  = M.lookup n localAnonEnv
   inLocalTop                   = n <$ M.lookup n localTopEnv
   inLocalPrim                  = n <$ M.lookup n localPrimEnv
-  inDepMod (_mn, (exprEnv,primEnv))
-    = (n <$ M.lookup n exprEnv) `mplus` (n <$ M.lookup n primEnv)
+  inDepMod (_mn, exprEnv)      = n <$ M.lookup n exprEnv
+  localPrimEnv = M.mapKeys getVal primTypeEnv
 
 -- Enforce that there is exactly one valid ResolvedName for a variable.
 enforceResolution :: Located Name -> [Name] -> RR (Located Name)
