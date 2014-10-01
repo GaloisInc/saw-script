@@ -76,7 +76,7 @@ modBuilder t (ModuleParts mn ee ds cs) = case t of
   -- Duplicate declarations are listed multiple times; later ones should shadow earlier ones
   TopBind d        -> return $ ModuleParts mn (d : ee) ds cs
   -- Imports show dependencies
-  Import n _ _     -> return $ ModuleParts mn ee (S.insert n ds) cs
+  TopImport n      -> return $ ModuleParts mn ee (S.insert n ds) cs
   ImportCry path   -> return $ ModuleParts mn ee ds (path : cs)
 
 -- Error Messages --------------------------------------------------------------
