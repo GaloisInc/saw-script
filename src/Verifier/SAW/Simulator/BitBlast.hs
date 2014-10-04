@@ -99,7 +99,7 @@ vBool l = VExtra (BBool l)
 
 toBool :: BValue l -> l
 toBool (VExtra (BBool l)) = l
-toBool _ = error "toBool"
+toBool x = error $ unwords ["Verifier.SAW.Simulator.BitBlast.toBool", show x]
 
 vWord :: LitVector l -> BValue l
 vWord lv = VExtra (BWord lv)
@@ -107,19 +107,19 @@ vWord lv = VExtra (BWord lv)
 toWord :: BValue l -> IO (LitVector l)
 toWord (VExtra (BWord lv)) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
-toWord _ = fail "toWord"
+toWord x = fail $ unwords ["Verifier.SAW.Simulator.BitBlast.toWord", show x]
 
 flattenBValue :: BValue l -> IO (LitVector l)
 flattenBValue (VExtra (BBool l)) = return (AIG.replicate 1 l)
 flattenBValue (VExtra (BWord lv)) = return lv
-flattenBValue (VExtra (BStream _ _)) = error "flattenBValue: BStream"
+flattenBValue (VExtra (BStream _ _)) = error "Verifier.SAW.Simulator.BitBlast.flattenBValue: BStream"
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
 flattenBValue (VTuple vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
 flattenBValue (VRecord m) =
   AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
-flattenBValue _ = error "flattenBValue: unsupported value"
+flattenBValue x = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
 
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
 wordFun f = strictFun (\x -> toWord x >>= f)
@@ -154,7 +154,7 @@ shiftOp _bvOp natOp =
   strictFun $ \y ->
     case y of
       VNat n           -> return (vWord (natOp x (fromInteger n)))
-      _                -> error "shiftOp"
+      x                -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp",show x]
 
 ------------------------------------------------------------
 
@@ -287,13 +287,13 @@ muxBVal be b x@(VExtra (BWord _)) y         =
 muxBVal be b x y@(VExtra (BWord _))         =
   muxBVal be b x (VVector (vectorOfBValue y))
 muxBVal _ _ x y =
-  fail $ "iteOp: malformed arguments: " ++ show x ++ " " ++ show y
+  fail $ "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments: " ++ show x ++ " " ++ show y
 
 muxThunks :: AIG.IsAIG l g => g s -> l s
           -> V.Vector (BThunk (l s)) -> V.Vector (BThunk (l s)) -> IO (V.Vector (BThunk (l s)))
 muxThunks be b xv yv
   | V.length xv == V.length yv = V.zipWithM (muxThunk be b) xv yv
-  | otherwise                  = fail "iteOp: malformed arguments"
+  | otherwise                  = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
 
 muxThunk :: AIG.IsAIG l g => g s -> l s -> BThunk (l s) -> BThunk (l s) -> IO (BThunk (l s))
 muxThunk be b x y = delay $ do x' <- force x; y' <- force y; muxBVal be b x' y'
@@ -301,7 +301,7 @@ muxThunk be b x y = delay $ do x' <- force x; y' <- force y; muxBVal be b x' y'
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra be b (BBool x) (BBool y) = BBool <$> AIG.mux be b x y
 muxBExtra be b (BWord x) (BWord y) | AIG.length x == AIG.length y = BWord <$> AIG.zipWithM (AIG.mux be b) x y
-muxBExtra _ _ _ _ = fail "iteOp: malformed arguments"
+muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
 
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 getOp :: BValue l
@@ -313,7 +313,7 @@ getOp =
     case v of
       VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
       VExtra (BWord lv) -> return (vBool (AIG.at lv (fromEnum (finVal i))))
-      _ -> fail $ "getOp: expected vector, got " ++ show v
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.getOp: expected vector, got " ++ show v
 
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: BValue l
@@ -325,7 +325,7 @@ atOp =
     case v of
       VVector xv -> force ((V.!) xv (fromIntegral n))
       VExtra (BWord lv) -> return $ vBool $ AIG.at lv (fromIntegral n)
-      _ -> fail $ "atOp: expected vector, got " ++ show v
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.atOp: expected vector, got " ++ show v
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
@@ -340,7 +340,7 @@ bvAtOp be =
           force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv - 1) ilv (return . (V.!) xv)
       VExtra (BWord lv) ->
           vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv - 1) ilv (return . AIG.at lv)
-      _ -> fail $ "bvAtOp: expected vector, got " ++ show v
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvAtOp: expected vector, got " ++ show v
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
 -- NB: this isn't necessarily the most efficient possible implementation.
@@ -362,7 +362,7 @@ bvUpdOp be =
           where upd i j | i == j    = toBool y
                         | otherwise = AIG.at lv j
                 l = AIG.length lv
-      _ -> fail $ "bvUpdOp: expected vector, got " ++ show v
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvUpdOp: expected vector, got " ++ show v
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: BValue l
@@ -377,7 +377,7 @@ appendOp =
     (VVector xv, VExtra (BWord ylv)) -> VVector ((V.++) xv (fmap (Ready . vBool) (vFromLV ylv)))
     (VExtra (BWord xlv), VVector yv) -> VVector ((V.++) (fmap (Ready . vBool) (vFromLV xlv)) yv)
     (VExtra (BWord xlv), VExtra (BWord ylv)) -> vWord ((AIG.++) xlv ylv)
-    _ -> error "appendOp"
+    _ -> error "Verifier.SAW.Simulator.BitBlast.appendOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: BValue l
@@ -393,7 +393,7 @@ vZipOp =
 vectorOfBValue :: BValue l -> V.Vector (BThunk l)
 vectorOfBValue (VVector xv) = xv
 vectorOfBValue (VExtra (BWord lv)) = fmap (Ready . vBool) (vFromLV lv)
-vectorOfBValue _ = error "vectorOfBValue"
+vectorOfBValue _ = error "Verifier.SAW.Simulator.BitBlast.vectorOfBValue"
 
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: BValue l
@@ -409,7 +409,7 @@ foldrOp =
                    apply fx y
     case xs of
       VVector xv -> V.foldr g (force z) xv
-      _ -> fail "foldrOp"
+      _ -> fail "Verifier.SAW.Simulator.BitBlast.foldrOp"
 
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: AIG.IsAIG l g => g s -> BValue (l s)
@@ -429,7 +429,7 @@ bvRotateLOp be =
     let (n, f) = case xs of
                    VVector xv         -> (V.length xv, VVector . vRotateL xv)
                    VExtra (BWord xlv) -> (AIG.length xlv, VExtra . BWord . lvRotateL xlv)
-                   _ -> error $ "rotateROp: " ++ show xs
+                   _ -> error $ "Verifier.SAW.Simulator.BitBlast.rotateROp: " ++ show xs
     r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
     AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
 
@@ -444,7 +444,7 @@ bvRotateROp be =
     let (n, f) = case xs of
                    VVector xv         -> (V.length xv, VVector . vRotateR xv)
                    VExtra (BWord xlv) -> (AIG.length xlv, VExtra . BWord . lvRotateR xlv)
-                   _ -> error $ "rotateROp: " ++ show xs
+                   _ -> error $ "Verifier.SAW.Simulator.BitBlast.rotateROp: " ++ show xs
     r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
     AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
 
@@ -461,7 +461,7 @@ bvShiftLOp be =
                 VVector xv         -> return (V.length xv, VVector . vShiftL x xv)
                 VExtra (BWord xlv) -> do l <- toBool <$> force x
                                          return (AIG.length xlv, VExtra . BWord . lvShiftL l xlv)
-                _ -> fail $ "bvShiftLOp: " ++ show xs
+                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvShiftLOp: " ++ show xs
     AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
@@ -477,7 +477,7 @@ bvShiftROp be =
                 VVector xv         -> return (V.length xv, VVector . vShiftR x xv)
                 VExtra (BWord xlv) -> do l <- toBool <$> force x
                                          return (AIG.length xlv, VExtra . BWord . lvShiftR l xlv)
-                _ -> fail $ "bvShiftROp: " ++ show xs
+                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvShiftROp: " ++ show xs
     AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
 
 ----------------------------------------
@@ -531,7 +531,7 @@ pdivmod_helper g ds mask = go (length ds - length mask) ds
   where
     go :: Int -> [l s] -> IO ([l s], [l s])
     go n cs | n <= 0 = return ([], cs)
-    go _ []          = fail "pdivmod: impossible"
+    go _ []          = fail "Verifier.SAW.Simulator.BitBlast.pdivmod: impossible"
     go n (c : cs)    = do cs' <- mux_add c cs mask
                           (qs, rs) <- go (n - 1) cs'
                           return (c : qs, rs)
@@ -540,7 +540,7 @@ pdivmod_helper g ds mask = go (length ds - length mask) ds
     mux_add c (x : xs) (y : ys) = do z <- lazyMux g (AIG.mux g) c (AIG.xor g x y) (return x)
                                      zs <- mux_add c xs ys
                                      return (z : zs)
-    mux_add _ []       (_ : _ ) = fail "pdivmod: impossible"
+    mux_add _ []       (_ : _ ) = fail "Verifier.SAW.Simulator.BitBlast.pdivmod: impossible"
     mux_add _ xs       []       = return xs
 
 ----------------------------------------
@@ -577,7 +577,7 @@ lookupBStream (VExtra (BStream f r)) n = do
      Nothing -> do v <- f n
                    writeIORef r (Map.insert n v m)
                    return v
-lookupBStream _ _ = fail "expected Stream"
+lookupBStream _ _ = fail "Verifier.SAW.Simulator.BitBlast.lookupBStream: expected Stream"
 
 ------------------------------------------------------------
 -- Generating variables for arguments
@@ -604,7 +604,7 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "non-boolean result type: " ++ show t'
+    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ show t'
 
 bitBlast :: AIG.IsAIG l g =>
             g s -> SharedContext t -> SharedTerm t -> IO ([FiniteType], l s)
@@ -617,7 +617,7 @@ bitBlast be sc t = do
   bval' <- applyAll bval vars
   case bval' of
     VExtra (BBool l) -> return (shapes, l)
-    _ -> fail "bitBlast: non-boolean result type."
+    _ -> fail "Verifier.SAW.Simulator.BitBlast.bitBlast: non-boolean result type."
 
 asAIGType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asAIGType sc t = do
@@ -628,7 +628,7 @@ asAIGType sc t = do
     (R.asVecType -> Just _)      -> return []
     (R.asTupleType -> Just _)    -> return []
     (R.asRecordType -> Just _)   -> return []
-    _                          -> fail $ "invalid AIG type: " ++ show t'
+    _                          -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: " ++ show t'
 
 bitBlastTerm :: AIG.IsAIG l g =>
                 g s
