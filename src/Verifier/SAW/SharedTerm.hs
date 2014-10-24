@@ -473,7 +473,13 @@ scTypeCheckError sc t0 = either error id <$> scTypeCheck sc t0
 -- | This version of the type checking function makes sure that the
 -- entire term is well-formed, and that all internal type annotations
 -- are correct.  Types are evaluated to WHNF as necessary.
-scTypeCheck :: forall s. SharedContext s -> SharedTerm s -> IO (Either String (SharedTerm s))
+--
+-- The TODO notes in the body are mostly commented-out checks for type
+-- equivalence that currently tend to fail for two reasons: 1)
+-- functions from the Cryptol module not being evaluated, and 2)
+-- natural number primitives not being evaluated.
+scTypeCheck :: forall s. SharedContext s -> SharedTerm s
+            -> IO (Either String (SharedTerm s))
 scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
 
 scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s
@@ -492,17 +498,30 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
                 return x
     sort :: SharedTerm s -> TCM s Sort
     sort t = asSort =<< memo t
-    eqty = scWhnfEqual
+    eqty x y = io $ scWhnfEqual sc x y
     io = lift . lift
-    -- TODO: make this check that, if x has type A -> B and y has type A', then eqty A A'
-    checkPi sc x y = io $ reducePi sc x y
+    checkPi tx y = do
+      tx' <- io $ scWhnf sc tx
+      y' <- io $ scWhnf sc y
+      ty' <- memo y'
+      case asPi tx' of
+        Just (_, aty, rty) -> do
+          eq <- eqty ty' aty
+          -- TODO
+          --unless eq $ fail $ "Argument has type " ++ show ty' ++
+          --                   " instead of expected type " ++ show aty
+          io $ instantiateVar sc 0 y' rty
+        _ -> fail "Left hand side of application does not have function type"
+    checkEqTy n ty ty' = do
+      eq <- eqty ty ty'
+      unless eq $ return () -- TODO: fail $ "Conflicting types in " ++ n
     termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
     termf tf =
       case tf of
         FTermF ftf -> ftermf ftf
         App x y ->
           do tx <- memo x
-             checkPi sc tx y
+             checkPi tx y
         Lambda x a rhs ->
           do b <- lift $ scTypeCheck' sc (a : env) rhs
              io $ scTermF sc (Pi x a b)
@@ -510,7 +529,10 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           do s1 <- asSort =<< memo a
              s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
              io $ scSort sc (max s1 s2)
-        Let defs rhs -> fail "Let bindings not yet supported" defs rhs
+        -- TODO: this won't support dependent Let bindings
+        -- TODO: should the bindings be reversed?
+        Let defs rhs -> lift $ scTypeCheck' sc (reverse dtys ++ env) rhs
+          where dtys = map defType defs
         LocalVar i
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
@@ -534,15 +556,17 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         RecordType m -> io . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- io $ scTypeOfCtor sc c
-          foldM (\ a b -> checkPi sc a b) t args
+          foldM (\ a b -> checkPi a b) t args
         DataTypeApp dt args -> do
           t <- io $ scTypeOfDataType sc dt
-          foldM (\ a b -> checkPi sc a b) t args
+          foldM (\ a b -> checkPi a b) t args
         Sort s -> io $ scSort sc (sortOf s)
         NatLit _ -> io $ scNatType sc
-        ArrayValue tp vs -> io $ do
-          n <- scNat sc (fromIntegral (V.length vs))
-          scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
+        ArrayValue tp vs -> do
+          n <- io $ scNat sc (fromIntegral (V.length vs))
+          tys <- traverse memo vs
+          V.mapM_ (checkEqTy "array value" tp) tys
+          io $ scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
         FloatLit{}  -> io $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
         DoubleLit{} -> io $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
