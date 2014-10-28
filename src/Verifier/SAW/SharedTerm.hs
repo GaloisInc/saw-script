@@ -84,10 +84,12 @@ module Verifier.SAW.SharedTerm
     -- ** Normalization
   , scWhnf
     -- ** Type checking
-  , scTypeCheck
-  , scTypeCheckError
   , scTypeOf
   , scTypeOf'
+  , asSort
+  , reducePi
+  , scTypeOfCtor
+  , scTypeOfDataType
   , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend
@@ -302,7 +304,8 @@ getTerm r a =
 -- Reduction to head-normal form
 
 -- | Reduces beta-redexes, tuple/record selectors, and definition
--- equations at the top level of a term.
+-- equations at the top level of a term, and evaluates all arguments
+-- to type constructors (including Pi types).
 scWhnf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scWhnf sc = go []
   where
@@ -314,6 +317,13 @@ scWhnf sc = go []
     go (Right (Left i) : xs)  (asTupleValue -> Just ts)         = go xs (ts !! (i - 1))
     go (Right (Right i) : xs) (asRecordValue -> Just tm)        = go xs ((Map.!) tm i)
     go xs                     (asGlobalDef -> Just c)           = tryEqns c xs (maybe [] defEqs (findDef (scModule sc) c))
+    go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- scWhnf sc aty
+                                                                     rty' <- scWhnf sc rty
+                                                                     t' <- scPi sc x aty' rty'
+                                                                     foldM reapply t' xs
+    go xs                     (asDataType -> Just (c,args))     = do args' <- mapM (scWhnf sc) args
+                                                                     t' <- scDataTypeApp sc c args'
+                                                                     foldM reapply t' xs
     go xs                     t                                 = foldM reapply t xs
 
     reapply :: SharedTerm s -> Either (SharedTerm s) (Either Int FieldName) -> IO (SharedTerm s)
@@ -464,114 +474,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
-type TCState s = Map TermIndex (SharedTerm s)
-type TCM s a = State.StateT (TCState s) (ExceptT String IO) a
-
-scTypeCheckError :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
-scTypeCheckError sc t0 = either error id <$> scTypeCheck sc t0
-
--- | This version of the type checking function makes sure that the
--- entire term is well-formed, and that all internal type annotations
--- are correct.  Types are evaluated to WHNF as necessary.
---
--- The TODO notes in the body are mostly commented-out checks for type
--- equivalence that currently tend to fail for two reasons: 1)
--- functions from the Cryptol module not being evaluated, and 2)
--- natural number primitives not being evaluated.
-scTypeCheck :: forall s. SharedContext s -> SharedTerm s
-            -> IO (Either String (SharedTerm s))
-scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
-
-scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s
-             -> ExceptT String IO (SharedTerm s)
-scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
-  where
-    memo :: SharedTerm s -> TCM s (SharedTerm s)
-    memo (Unshared tf) = termf tf
-    memo _t@(STApp i tf) =
-      do table <- State.get
-         case Map.lookup i table of
-           Just x  -> return x
-           Nothing ->
-             do x <- termf tf
-                State.modify (Map.insert i x)
-                return x
-    sort :: SharedTerm s -> TCM s Sort
-    sort t = asSort =<< memo t
-    eqty x y = io $ scWhnfEqual sc x y
-    io = lift . lift
-    checkPi tx y = do
-      tx' <- io $ scWhnf sc tx
-      y' <- io $ scWhnf sc y
-      ty' <- memo y'
-      case asPi tx' of
-        Just (_, aty, rty) -> do
-          eq <- eqty ty' aty
-          -- TODO
-          --unless eq $ fail $ "Argument has type " ++ show ty' ++
-          --                   " instead of expected type " ++ show aty
-          io $ instantiateVar sc 0 y' rty
-        _ -> fail "Left hand side of application does not have function type"
-    checkEqTy n ty ty' = do
-      eq <- eqty ty ty'
-      unless eq $ return () -- TODO: fail $ "Conflicting types in " ++ n
-    termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
-    termf tf =
-      case tf of
-        FTermF ftf -> ftermf ftf
-        App x y ->
-          do tx <- memo x
-             checkPi tx y
-        Lambda x a rhs ->
-          do b <- lift $ scTypeCheck' sc (a : env) rhs
-             io $ scTermF sc (Pi x a b)
-        Pi _ a rhs ->
-          do s1 <- asSort =<< memo a
-             s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
-             io $ scSort sc (max s1 s2)
-        -- TODO: this won't support dependent Let bindings
-        -- TODO: should the bindings be reversed?
-        Let defs rhs -> lift $ scTypeCheck' sc (reverse dtys ++ env) rhs
-          where dtys = map defType defs
-        LocalVar i
-          | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant _ t _ -> memo t
-    ftermf :: FlatTermF (SharedTerm s) -> TCM s (SharedTerm s)
-    ftermf tf =
-      case tf of
-        GlobalDef d -> io $ scTypeOfGlobal sc d
-        TupleValue l -> io . scTupleType sc =<< traverse memo l
-        TupleType l -> io . scSort sc . maximum =<< traverse sort l
-        TupleSelector t i -> do
-          STApp _ (FTermF (TupleType ts)) <- memo t
-          unless (i <= length ts) $ fail $ "Tuple index " ++ show i ++ " out of bounds"
-          return (ts !! (i-1))
-        RecordValue m -> io . scRecordType sc =<< traverse memo m
-        RecordSelector t f -> do
-          STApp _ (FTermF (RecordType m)) <- memo t
-          case Map.lookup f m of
-            Nothing -> fail $ "Record field " ++ f ++ " not found"
-            Just tp -> return tp
-        RecordType m -> io . scSort sc . maximum =<< traverse sort m
-        CtorApp c args -> do
-          t <- io $ scTypeOfCtor sc c
-          foldM (\ a b -> checkPi a b) t args
-        DataTypeApp dt args -> do
-          t <- io $ scTypeOfDataType sc dt
-          foldM (\ a b -> checkPi a b) t args
-        Sort s -> io $ scSort sc (sortOf s)
-        NatLit _ -> io $ scNatType sc
-        ArrayValue tp vs -> do
-          n <- io $ scNat sc (fromIntegral (V.length vs))
-          tys <- traverse memo vs
-          V.mapM_ (checkEqTy "array value" tp) tys
-          io $ scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
-        FloatLit{}  -> io $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
-        DoubleLit{} -> io $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
-        StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
-        ExtCns ec   -> return $ ecType ec
-
 asSort :: Monad m => SharedTerm s -> m Sort
 asSort tp =
   case tp of
@@ -595,12 +497,6 @@ alphaEquiv = term
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
                          Nothing -> False
                          Just ftf3 -> Data.Foldable.and ftf3
-
-scWhnfEqual :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO Bool
-scWhnfEqual sc s t = do
-  s' <- scWhnf sc s
-  t' <- scWhnf sc t
-  return (alphaEquiv s' t')
 
 --------------------------------------------------------------------------------
 

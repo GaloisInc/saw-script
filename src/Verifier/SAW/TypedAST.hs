@@ -29,6 +29,7 @@ module Verifier.SAW.TypedAST
  , moduleDecls
  , TypedDataType
  , moduleDataTypes
+ , moduleImports
  , findDataType
  , TypedCtor
  , moduleCtors
