@@ -18,22 +18,25 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad.State.Strict as State
 
-import Data.Foldable (maximum)
+import Data.Foldable (maximum, and)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable ()
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
+import Verifier.SAW.Conversion (natConversions)
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
 type TCState s = Map TermIndex (SharedTerm s)
 type TCM s a = State.StateT (TCState s) (ExceptT String IO) a
 
-scTypeCheckError :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scTypeCheckError :: forall s. SharedContext s -> SharedTerm s
+                 -> IO (SharedTerm s)
 scTypeCheckError sc t0 = either error id <$> scTypeCheck sc t0
 
 -- | This version of the type checking function makes sure that the
@@ -60,24 +63,34 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
            Just x  -> return x
            Nothing ->
              do x <- termf tf
-                x' <- io $ scWhnf sc x
+                x' <- whnf x
                 State.modify (Map.insert i x')
                 return x'
     sort :: SharedTerm s -> TCM s Sort
     sort t = asSort =<< memo t
     io = lift . lift
-    whnf t = io $ scWhnf sc t
+    whnf t = io $ do
+      t' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) t
+      scWhnf sc t'
+    checkPi :: SharedTerm s -> SharedTerm s -> TCM s (SharedTerm s)
     checkPi tx y = do
       ty <- memo y
       case asPi tx of
         Just (_, aty, rty) -> do
           _ <- sort aty -- TODO: do we care about the level?
           aty' <- whnf aty
-          checkEqTy ty aty' $ "Argument has type " ++ show ty ++
-                              " instead of expected type " ++ show aty'
+          checkEqTy ty aty' $ unlines
+            [ "Argument has type"
+            , "  " ++ show ty
+            , "instead of expected type"
+            , "  " ++ show aty'
+            , "when applying"
+            , "  " ++ show y
+            ]
           io $ instantiateVar sc 0 y rty
-        _ -> fail "Left hand side of application does not have function type"
-    checkEqTy ty ty' msg = unless (alphaEquiv ty ty') (fail msg)
+        _ -> throwError "Left hand side of application does not have function type"
+    checkEqTy :: SharedTerm s -> SharedTerm s -> String -> TCM s ()
+    checkEqTy ty ty' msg = unless (argMatch ty ty') (throwError msg)
     termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
     termf tf =
       case tf of
@@ -99,7 +112,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           where dtys = map defType defs
         LocalVar i
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
+          | otherwise      -> throwError $ "Dangling bound variable: " ++ show (i - length env)
         Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s) -> TCM s (SharedTerm s)
     ftermf tf =
@@ -109,23 +122,25 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           _ <- sort ty
           whnf ty
         TupleValue l -> io . scTupleType sc =<< traverse memo l
+        TupleType [] -> io $ scSort sc (mkSort 0)
         TupleType l -> io . scSort sc . maximum =<< traverse sort l
         TupleSelector t i -> do
           ty <- memo t
           case ty of
             STApp _ (FTermF (TupleType ts)) -> do
-              unless (i <= length ts) $ fail $ "Tuple index " ++ show i ++ " out of bounds"
+              unless (i <= length ts) $ throwError $ "Tuple index " ++ show i ++ " out of bounds"
               whnf (ts !! (i-1))
-            _ -> fail "Left hand side of tuple selector has non-tuple type"
+            _ -> throwError "Left hand side of tuple selector has non-tuple type"
         RecordValue m -> io . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
           ty <- memo t
           case ty of
             STApp _ (FTermF (RecordType m)) -> 
               case Map.lookup f m of
-                Nothing -> fail $ "Record field " ++ f ++ " not found"
+                Nothing -> throwError $ "Record field " ++ f ++ " not found"
                 Just tp -> whnf tp
-            _ -> fail "Left hand side of record selector has non-record type"
+            _ -> throwError "Left hand side of record selector has non-record type"
+        RecordType m | Map.null m -> io $ scSort sc (mkSort 0)
         RecordType m -> io . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- io $ scTypeOfCtor sc c
@@ -151,3 +166,21 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         DoubleLit{} -> io $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> whnf $ ecType ec
+
+argMatch :: SharedTerm s -> SharedTerm s -> Bool
+argMatch = term
+  where
+    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
+    term (Unshared tf1) (STApp _  tf2) = termf tf1 tf2
+    term (STApp _  tf1) (Unshared tf2) = termf tf1 tf2
+    term (STApp i1 tf1) (STApp i2 tf2) = i1 == i2 || termf tf1 tf2
+    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
+    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
+    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
+    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
+    termf (LocalVar i1) (LocalVar i2) = i1 == i2
+    termf _ _ = False
+    ftermf (Sort s) (Sort s') = s <= s'
+    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
+                         Nothing -> False
+                         Just ftf3 -> Data.Foldable.and ftf3
