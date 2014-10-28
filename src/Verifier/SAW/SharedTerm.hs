@@ -149,7 +149,7 @@ import qualified Data.Map as StrictMap
 import qualified Data.Map.Strict as StrictMap
 #endif
 import qualified Data.Set as Set
-import Data.Traversable ()
+import qualified Data.Traversable as T
 import Data.Typeable
 import qualified Data.Vector as V
 import Data.Word
@@ -305,7 +305,7 @@ getTerm r a =
 
 -- | Reduces beta-redexes, tuple/record selectors, and definition
 -- equations at the top level of a term, and evaluates all arguments
--- to type constructors (including Pi types).
+-- to type constructors (including function, record, and tuple types).
 scWhnf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scWhnf sc = go []
   where
@@ -317,6 +317,12 @@ scWhnf sc = go []
     go (Right (Left i) : xs)  (asTupleValue -> Just ts)         = go xs (ts !! (i - 1))
     go (Right (Right i) : xs) (asRecordValue -> Just tm)        = go xs ((Map.!) tm i)
     go xs                     (asGlobalDef -> Just c)           = tryEqns c xs (maybe [] defEqs (findDef (scModule sc) c))
+    go xs                     (asTupleType -> Just ts)          = do ts' <- mapM (scWhnf sc) ts
+                                                                     t' <- scTupleType sc ts'
+                                                                     foldM reapply t' xs
+    go xs                     (asRecordType -> Just m)          = do m' <- T.mapM (scWhnf sc) m
+                                                                     t' <- scRecordType sc m'
+                                                                     foldM reapply t' xs
     go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- scWhnf sc aty
                                                                      rty' <- scWhnf sc rty
                                                                      t' <- scPi sc x aty' rty'
