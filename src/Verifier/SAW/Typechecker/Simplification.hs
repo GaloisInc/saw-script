@@ -27,7 +27,8 @@ module Verifier.SAW.Typechecker.Simplification
 import Control.Applicative
 import Control.Arrow (second)
 import Control.Lens
-import Control.Monad.Error (ErrorT(..), throwError)
+import Control.Monad.Except (throwError)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
 import Control.Monad.State (StateT(..), modify)
 import Control.Monad.Trans
 import Data.Traversable
@@ -48,10 +49,10 @@ extendPatContext tc0 pat = V.foldl (flip $ uncurry consBoundVar) tc0 (patBoundVa
 
 type Subst = Vector TCTerm
 
-type Matcher s = StateT (Map Int TCTerm) (ErrorT String (TC s))
+type Matcher s = StateT (Map Int TCTerm) (ExceptT String (TC s))
 
 runMatcher :: Matcher s a -> TC s (Maybe (a, Subst))
-runMatcher m = fmap finish $ runErrorT $ runStateT m Map.empty
+runMatcher m = fmap finish $ runExceptT $ runStateT m Map.empty
   where finish Left{} = Nothing
         finish (Right p) = Just (second (V.fromList . Map.elems) p)
 
