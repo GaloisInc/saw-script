@@ -7,7 +7,6 @@ module SAWScript.REPL.GenerateModule ( scratchpad
                                      ) where
 
 import Data.Map (Map)
-import qualified Data.Map as Map
 
 import SAWScript.AST (ModuleName,
                       Module(..), ValidModule)
