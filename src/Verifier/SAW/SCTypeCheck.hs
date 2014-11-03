@@ -11,6 +11,12 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.SCTypeCheck
   ( scTypeCheck
   , scTypeCheckError
+  , TCError
+  , prettyTCError
+  {-
+  , LocatedTCError
+  , prettyLocatedTCError
+  -}
   ) where
 
 import Control.Applicative
@@ -33,18 +39,74 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 
 type TCState s = Map TermIndex (SharedTerm s)
-type TCM s a = State.StateT (TCState s) (ExceptT String IO) a
+type TCM s a = State.StateT (TCState s) (ExceptT (TCError s) IO) a
+
+data TCError s
+  = NotSort (SharedTerm s)
+  | NotFuncType (SharedTerm s)
+  | ArgTypeMismatch (SharedTerm s) (SharedTerm s)
+  | NotTupleType (SharedTerm s)
+  | BadTupleIndex Int (SharedTerm s)
+  | NotRecordType (SharedTerm s)
+  | BadRecordField FieldName (SharedTerm s)
+  | ArrayTypeMismatch (SharedTerm s) (SharedTerm s)
+  | DanglingVar Int
+
+prettyTCError :: TCError s -> [String]
+prettyTCError e =
+  case e of
+    NotSort ty ->
+      [ "Not a sort" , ishow ty ]
+    NotFuncType ty ->
+      [ "Function application with non-function type" , ishow ty ]
+    ArgTypeMismatch ety aty ->
+      [ "Function argument type" , ishow aty
+      , "doesn't match expected type" , ishow ety
+      ]
+    NotTupleType ty ->
+      [ "Tuple field projection with non-tuple type" , ishow ty ]
+    BadTupleIndex n ty ->
+      [ "Bad tuple index (" ++ show n ++ ") for type"
+      , ishow ty
+      ]
+    NotRecordType ty ->
+      [ "Record field projection with non-record type" , ishow ty ]
+    BadRecordField n ty ->
+      [ "Bad record field (" ++ show n ++ ") for type"
+      , ishow ty
+      ]
+    ArrayTypeMismatch ety aty ->
+      [ "Array element type" , ishow aty
+      , "doesn't match declared array element type" , ishow ety
+      ]
+    DanglingVar n ->
+      [ "Dangling bound variable index: " ++ show n ]
+  where
+    ishow = (' ':) . (' ':) . show
+
+{-
+data LocatedTCError s
+  = LocatedTCError
+    { errExpr :: (SharedTerm s)
+    , errType :: TCError s
+    }
+
+prettyLocatedTCError :: LocatedTCError s -> String
+prettyLocatedTCError (LocatedTCError expr err ) = unlines $
+  prettyTCError err ++ [ "in expression", "  " ++ show expr ]
+-}
 
 scTypeCheckError :: forall s. SharedContext s -> SharedTerm s
                  -> IO (SharedTerm s)
-scTypeCheckError sc t0 = either error id <$> scTypeCheck sc t0
+scTypeCheckError sc t0 =
+  either (error . unlines . prettyTCError) id <$> scTypeCheck sc t0
 
 -- | This version of the type checking function makes sure that the
 -- entire term is well-formed, and that all internal type annotations
 -- are correct. Types are evaluated to WHNF as necessary, and the
 -- returned type is in WHNF.
 scTypeCheck :: forall s. SharedContext s -> SharedTerm s
-            -> IO (Either String (SharedTerm s))
+            -> IO (Either (TCError s) (SharedTerm s))
 scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
 
 -- The TODO notes in the body are mostly commented-out checks for type
@@ -52,7 +114,7 @@ scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
 -- functions from the Cryptol module not being evaluated, and 2)
 -- natural number primitives not being evaluated.
 scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s
-             -> ExceptT String IO (SharedTerm s)
+             -> ExceptT (TCError s) IO (SharedTerm s)
 scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> TCM s (SharedTerm s)
@@ -79,18 +141,11 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         Just (_, aty, rty) -> do
           _ <- sort aty -- TODO: do we care about the level?
           aty' <- whnf aty
-          checkEqTy ty aty' $ unlines
-            [ "Argument has type"
-            , "  " ++ show ty
-            , "instead of expected type"
-            , "  " ++ show aty'
-            , "when applying"
-            , "  " ++ show y
-            ]
+          checkEqTy ty aty' (ArgTypeMismatch aty' ty)
           io $ instantiateVar sc 0 y rty
-        _ -> throwError "Left hand side of application does not have function type"
-    checkEqTy :: SharedTerm s -> SharedTerm s -> String -> TCM s ()
-    checkEqTy ty ty' msg = unless (argMatch ty ty') (throwError msg)
+        _ -> throwError (NotFuncType tx)
+    checkEqTy :: SharedTerm s -> SharedTerm s -> TCError s -> TCM s ()
+    checkEqTy ty ty' err = unless (argMatch ty ty') (throwError err)
     termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
     termf tf =
       case tf of
@@ -112,7 +167,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           where dtys = map defType defs
         LocalVar i
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> throwError $ "Dangling bound variable: " ++ show (i - length env)
+          | otherwise      -> throwError (DanglingVar (i - length env))
         Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s) -> TCM s (SharedTerm s)
     ftermf tf =
@@ -128,18 +183,18 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           ty <- memo t
           case ty of
             STApp _ (FTermF (TupleType ts)) -> do
-              unless (i <= length ts) $ throwError $ "Tuple index " ++ show i ++ " out of bounds"
+              unless (i <= length ts) $ throwError $ BadTupleIndex i ty
               whnf (ts !! (i-1))
-            _ -> throwError "Left hand side of tuple selector has non-tuple type"
+            _ -> throwError (NotTupleType ty)
         RecordValue m -> io . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
           ty <- memo t
           case ty of
             STApp _ (FTermF (RecordType m)) -> 
               case Map.lookup f m of
-                Nothing -> throwError $ "Record field " ++ f ++ " not found"
+                Nothing -> throwError $ BadRecordField f ty
                 Just tp -> whnf tp
-            _ -> throwError "Left hand side of record selector has non-record type"
+            _ -> throwError (NotRecordType ty)
         RecordType m | Map.null m -> io $ scSort sc (mkSort 0)
         RecordType m -> io . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
@@ -159,8 +214,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           _ <- sort tp -- TODO: do we care about the level?
           tp' <- whnf tp
           tys <- traverse memo vs
-          let msg = "Array elements have differing types. Expected " ++ show tp' ++ " but got "
-          V.mapM_ (\ty -> checkEqTy tp' ty (msg ++ show ty)) tys
+          V.mapM_ (\ty -> checkEqTy ty tp' (ArrayTypeMismatch tp' ty)) tys
           io $ scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp'])
         FloatLit{}  -> io $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
         DoubleLit{} -> io $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
