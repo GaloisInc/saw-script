@@ -229,6 +229,10 @@ generate n _ f = V.generate (fromEnum n) (\i -> f (finFromBound (fromIntegral i)
 get :: Int -> t -> Vec t e -> Fin -> e
 get _ _ (Vec _ v) i = v V.! fromEnum i
 
+-- set :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e -> Vec n e;
+set :: Int -> t -> Vec t e -> Fin -> e -> Vec t e
+set _ _ (Vec t v) i e = Vec t (v V.// [(fromEnum i, e)])
+
 -- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 append :: Int -> Int -> t -> Vec t e -> Vec t e -> Vec t e
 append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)
@@ -236,6 +240,10 @@ append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 at :: Int -> t -> Vec t e -> Int -> e
 at _ _ (Vec _ v) i = v V.! i
+
+-- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+upd :: Int -> t -> Vec t e -> Int -> e -> Vec t e
+upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])
 
 ----------------------------------------
 -- Bitvector operations
@@ -276,6 +284,12 @@ get_bv :: Int -> () -> BitVector -> Fin -> Bool
 get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
 -- little-endian version:
 -- get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
+
+-- | @set@ specialized to BitVector (big-endian)
+-- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
+set_bv :: Int -> () -> BitVector -> Fin -> Bool -> BitVector
+set_bv _ _ x i b = BV (width x) $ /f (unsigned x) (width x - 1 - fromEnum i)
+  where f = if b then setBit else clearBit
 
 -- | @append@ specialized to BitVector (big-endian)
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
