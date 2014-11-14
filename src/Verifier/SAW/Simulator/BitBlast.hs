@@ -230,7 +230,9 @@ beConstMap be = Map.fromList
   -- Vectors
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
+  , ("Prelude.set", setOp)
   , ("Prelude.at", atOp)
+  , ("Prelude.upd", updOp)
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
@@ -315,6 +317,18 @@ getOp =
       VExtra (BWord lv) -> return (vBool (AIG.at lv (fromEnum (finVal i))))
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.getOp: expected vector, got " ++ show v
 
+-- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
+setOp :: BValue l
+setOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.finFun $ \i -> return $
+  VFun $ \y ->
+    case v of
+      VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.setOp: expected vector, got " ++ show v
+
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: BValue l
 atOp =
@@ -341,6 +355,19 @@ bvAtOp be =
       VExtra (BWord lv) ->
           vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv - 1) ilv (return . AIG.at lv)
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvAtOp: expected vector, got " ++ show v
+
+-- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+updOp :: BValue (l s)
+updOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.natFun $ \i -> return $
+  VFun $ \y ->
+    case v of
+      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.updOp: expected vector, got " ++ show v
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
 -- NB: this isn't necessarily the most efficient possible implementation.

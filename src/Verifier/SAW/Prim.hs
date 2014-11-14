@@ -288,7 +288,7 @@ get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
 -- | @set@ specialized to BitVector (big-endian)
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
 set_bv :: Int -> () -> BitVector -> Fin -> Bool -> BitVector
-set_bv _ _ x i b = BV (width x) $ /f (unsigned x) (width x - 1 - fromEnum i)
+set_bv _ _ x i b = BV (width x) $ f (unsigned x) (width x - 1 - fromEnum i)
   where f = if b then setBit else clearBit
 
 -- | @append@ specialized to BitVector (big-endian)

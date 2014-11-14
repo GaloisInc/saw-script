@@ -121,7 +121,9 @@ constMap = Map.fromList [
     -- Vectors
     ("Prelude.generate", Prims.generateOp),
     ("Prelude.get", getOp),
+    ("Prelude.set", setOp),
     ("Prelude.at", atOp),
+    ("Prelude.upd", updOp),
     ("Prelude.append", appendOp),
     ("Prelude.vZip", vZipOp),
     ("Prelude.foldr", foldrOp),
@@ -264,6 +266,18 @@ atOp =
       VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromIntegral n)
       _ -> fail "atOp: expected vector"
 
+-- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+updOp :: SValue
+updOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.natFun $ \n -> return $
+  VFun $ \y ->
+    case v of
+      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral n, y)])
+      _ -> fail "updOp: expected vector"
+
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: SValue
 bvAtOp =
@@ -290,6 +304,18 @@ getOp =
       VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
       VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromEnum (finVal i))
       _ -> fail "getOp: expected vector"
+
+-- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
+setOp :: SValue
+setOp =
+  VFun $ \_ -> return $
+  VFun $ \_ -> return $
+  strictFun $ \v -> return $
+  Prims.finFun $ \i -> return $
+  VFun $ \y ->
+    case v of
+      VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
+      _ -> fail "setOp: expected vector"
 
 ----------------------------------------
 -- Shift operations
