@@ -94,6 +94,7 @@ module Verifier.SAW.SharedTerm
     -- ** Prelude operations
   , scAppend
   , scGet
+  , scAt
   , scNot
   , scIte
   , scSingle
@@ -900,6 +901,11 @@ scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
 scBvAt :: SharedContext s -> SharedTerm s -> SharedTerm s ->
          SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName "bvAt") [n, a, i, xs, idx]
+
+-- | at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+scAt :: SharedContext s -> SharedTerm s -> SharedTerm s ->
+        SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scAt sc n a xs idx = scGlobalApply sc (mkIdent preludeName "at") [n, a, xs, idx]
 
 -- | single :: (e :: sort 1) -> e -> Vec 1 e;
 -- single e x = generate 1 e (\(i :: Fin 1) -> x);
