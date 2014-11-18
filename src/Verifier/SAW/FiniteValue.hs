@@ -74,16 +74,18 @@ sizeFiniteType x =
 asFiniteType :: SharedContext s -> SharedTerm s -> IO FiniteType
 asFiniteType sc t = do
   t' <- scWhnf sc t
-  case t' of
-    (R.asBoolType -> Just ())
-      -> return FTBit
-    (R.isVecType return -> Just (n R.:*: tp))
-      -> FTVec n <$> asFiniteType sc tp
-    (R.asTupleType -> Just ts)
-      -> FTTuple <$> traverse (asFiniteType sc) ts
-    (R.asRecordType -> Just tm)
-      -> FTRec <$> traverse (asFiniteType sc) tm
-    _ -> fail $ "asFiniteType: unsupported argument type: " ++ show t'
+  case asFiniteTypePure t' of
+    Just ft -> return ft
+    Nothing -> fail $ "asFiniteType: unsupported argument type: " ++ show t'
+
+asFiniteTypePure :: (Termlike t) => t -> Maybe FiniteType
+asFiniteTypePure t =
+  case t of
+    (R.asBoolType -> Just ()) -> Just FTBit
+    (R.isVecType return -> Just (n R.:*: tp)) -> FTVec n <$> asFiniteTypePure tp
+    (R.asTupleType -> Just ts) -> FTTuple <$> traverse asFiniteTypePure ts
+    (R.asRecordType -> Just tm) -> FTRec <$> traverse asFiniteTypePure tm
+    _ -> Nothing
 
 -- The definitions of the next two functions depend on the encoding of
 -- tuples that we want to use. Maybe it is better not to include them
