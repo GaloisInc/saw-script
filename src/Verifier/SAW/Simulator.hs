@@ -111,7 +111,7 @@ evalDef rec (Def ident _ eqns) = vFuns [] arity
 -- Evaluation of terms
 
 -- | Generic evaluator for TermFs.
-evalTermF :: forall t m e. (Show t, MonadIO m, MonadFix m, Termlike t) =>
+evalTermF :: forall t m e. (Show t, MonadIO m, MonadFix m, Termlike t, Show e) =>
              SimulatorConfig m e                  -- ^ Evaluator for global constants
           -> ([Thunk m e] -> t -> m (Value m e))  -- ^ Evaluator for subterms under binders
           -> (t -> m (Value m e))                 -- ^ Evaluator for subterms in the same bound variable context
@@ -156,16 +156,18 @@ evalTermF cfg lam rec env tf =
 
 
 -- | Evaluator for unshared terms.
-evalTerm :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> [Thunk m e] -> Term -> m (Value m e)
+evalTerm :: (MonadIO m, MonadFix m, Show e) =>
+            SimulatorConfig m e -> [Thunk m e] -> Term -> m (Value m e)
 evalTerm cfg env (Term tf) = evalTermF cfg lam rec env tf
   where
     lam = evalTerm cfg
     rec = evalTerm cfg env
 
-evalTypedDef :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> TypedDef -> m (Value m e)
+evalTypedDef :: (MonadIO m, MonadFix m, Show e) =>
+                SimulatorConfig m e -> TypedDef -> m (Value m e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
-evalGlobal :: forall m e. (MonadIO m, MonadFix m) =>
+evalGlobal :: forall m e. (MonadIO m, MonadFix m, Show e) =>
               Module -> Map Ident (Value m e) ->
               (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))) -> 
               SimulatorConfig m e
@@ -201,13 +203,14 @@ evalGlobal m prims uninterpreted = cfg
 -- we descend under a lambda binder.
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: (MonadIO m, MonadFix m) => SimulatorConfig m e -> SharedTerm s -> m (Value m e)
+evalSharedTerm :: (MonadIO m, MonadFix m, Show e) =>
+                  SimulatorConfig m e -> SharedTerm s -> m (Value m e)
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
   evalOpen cfg memoClosed [] t
 
 -- | Precomputing the memo table for closed subterms.
-mkMemoClosed :: forall m e s. (MonadIO m, MonadFix m) =>
+mkMemoClosed :: forall m e s. (MonadIO m, MonadFix m, Show e) =>
                 SimulatorConfig m e -> SharedTerm s -> m (IntMap (Thunk m e))
 mkMemoClosed cfg t =
   mfix $ \memoClosed -> do
@@ -230,7 +233,7 @@ mkMemoClosed cfg t =
     liftIO (readIORef xref)
 
 -- | Evaluator for closed terms, used to populate @memoClosed@.
-evalClosedTermF :: (MonadIO m, MonadFix m) =>
+evalClosedTermF :: (MonadIO m, MonadFix m, Show e) =>
                    SimulatorConfig m e
                 -> IntMap (Thunk m e)
                 -> TermF (SharedTerm s) -> m (Value m e)
@@ -244,7 +247,7 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
         Nothing -> fail "evalClosedTermF: internal error"
 
 -- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
-evalOpen :: forall m e s. (MonadIO m, MonadFix m) =>
+evalOpen :: forall m e s. (MonadIO m, MonadFix m, Show e) =>
             SimulatorConfig m e
          -> IntMap (Thunk m e)
          -> [Thunk m e]

@@ -87,13 +87,13 @@ instance Show e => Show (Thunk m e) where
 ------------------------------------------------------------
 -- Basic operations on values
 
-valTupleSelect :: MonadIO m => Int -> Value m e -> m (Value m e)
+valTupleSelect :: (MonadIO m, Show e) => Int -> Value m e -> m (Value m e)
 valTupleSelect i (VTuple xv) = force $ (V.!) xv (i - 1)
-valTupleSelect _ _ = fail "valTupleSelect: Not a tuple value"
+valTupleSelect _ v = fail $ "valTupleSelect: Not a tuple value: " ++ show v
 
-valRecordSelect :: MonadIO m => FieldName -> Value m e -> m (Value m e)
+valRecordSelect :: (MonadIO m, Show e) => FieldName -> Value m e -> m (Value m e)
 valRecordSelect k (VRecord vm) | Just x <- Map.lookup k vm = force x
-valRecordSelect _ _ = fail "valRecordSelect: Not a record value"
+valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
 
 apply :: Monad m => Value m e -> Thunk m e -> m (Value m e)
 apply (VFun f) x = f x
