@@ -141,7 +141,7 @@ ruleOfPred (R.asLambda -> Just (_, ty, body)) =
   let rule = ruleOfPred body in rule { ctxt = ty : ctxt rule }
 ruleOfPred (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
-ruleOfPred _ = error "Predicate not an equation"
+ruleOfPred _ = error "ruleOfPred: Predicate not an equation"
 
 -- | Converts a parameterized equality predicate to a RewriteRule.
 ruleOfProp :: SharedTerm s -> RewriteRule (SharedTerm s)
@@ -149,7 +149,7 @@ ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   let rule = ruleOfProp body in rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
-ruleOfProp _ = error "Predicate not an equation"
+ruleOfProp _ = error "ruleOfProp: Predicate not an equation"
 
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced
