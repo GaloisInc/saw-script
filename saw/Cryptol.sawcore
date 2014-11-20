@@ -141,6 +141,7 @@ data PArith :: KType -> sort 0 where {
   }
 
 data PCmp :: KType -> sort 0 where {
+    PCmpUnit :: PCmp TCUnit;
     PCmpBit :: PCmp TCBit;
     PCmpSeq :: (n :: Num) -> (a :: KType) -> PFin n -> PCmp a -> PCmp (TCSeq n a);
     PCmpPair :: (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCPair a b);
@@ -169,6 +170,7 @@ ePArith (TCFun a b) = PArithFun a b (ePArith b);
 ePArith (TCPair a b) = PArithPair a b (ePArith a) (ePArith b);
 
 ePCmp :: (a :: KType) -> PCmp a;
+ePCmp TCUnit = PCmpUnit;
 ePCmp TCBit = PCmpBit;
 ePCmp (TCSeq n a) = PCmpSeq n a (ePFin n) (ePCmp a);
 ePCmp (TCPair a b) = PCmpPair a b (ePCmp a) (ePCmp b);
@@ -264,6 +266,7 @@ cmpBvLt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
 cmpBvLt n x y k = or (bvult n x y) (cmpBvEq n x y k);
 
 cmpLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool -> Bool;
+cmpLt _ PCmpUnit = \(x::#()) -> \(y::#()) -> \(k::Bool) -> False;
 cmpLt _ PCmpBit = cmpBoolLt;
 cmpLt _ (PCmpSeq _ _ (PFinNum n) PCmpBit) = cmpBvLt n;
 cmpLt _ (PCmpSeq _ a (PFinNum n) pa) =
@@ -318,6 +321,7 @@ ecGtEq  :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
 ecGtEq a pa x y = not (ecLt a pa x y);
 
 ecEq :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecEq _ PCmpUnit = \(x::#()) -> \(y::#()) -> True;
 ecEq _ PCmpBit = boolEq;
 ecEq _ (PCmpSeq _ a (PFinNum n) p) =
   vecEq n (ty a) (ecEq a p);
