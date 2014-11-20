@@ -40,14 +40,15 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, Ident(..), Module, Termlike)
 
-import Verifier.SAW.FiniteValue (FiniteType(..))
+import Verifier.SAW.FiniteValue ( FiniteType(..), sizeFiniteType, asFiniteType
+                                , asFiniteTypePure)
 
 type SValue = Value IO SbvExtra
 type SThunk = Thunk IO SbvExtra
 
 data SbvExtra =
   SBool SBool |
-  SWord SWord | 
+  SWord SWord |
   SZero |
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
 
@@ -59,7 +60,7 @@ instance Show SbvExtra where
 
 -- no, we need shape information
 uninterpreted :: (Show t, Termlike t) => Ident -> t -> Maybe (IO SValue)
-uninterpreted ident t = Just $ return $ parseUninterpreted [] [] t (identName ident)
+uninterpreted ident t = Just $ parseUninterpreted [] [] t (identName ident)
 
 -- actually...
 -- rewriteSharedTerm
@@ -88,7 +89,7 @@ constMap = Map.fromList [
     ("Prelude.bvSRem", sbinOp sRem),
     ("Prelude.bvPMul", bvPMulOp),
     ("Prelude.bvPMod", bvPModOp),
-    -- Relations 
+    -- Relations
     ("Prelude.bvEq"  , binRel (.==)),
     ("Prelude.bvsle" , sbinRel (.<=)),
     ("Prelude.bvslt" , sbinRel (.<)),
@@ -322,21 +323,21 @@ setOp =
 
 -- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShLOp :: SValue
-bvShLOp = 
+bvShLOp =
   VFun $ \_ -> return $
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ shiftL w (fromIntegral n)
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
-bvShROp = 
+bvShROp =
   VFun $ \_ -> return $
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ shiftR w (fromIntegral n)
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
-bvSShROp = 
+bvSShROp =
   VFun $ \_ -> return $
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ unsignCast $ shiftR (signCast w) (fromIntegral n)
@@ -388,7 +389,7 @@ vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
 bvUpdOp :: SValue
-bvUpdOp = 
+bvUpdOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   VFun $ \_ -> return $
@@ -519,7 +520,7 @@ lookupSStream _ _ = fail "expected Stream"
 
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: SValue
-bvNatOp = 
+bvNatOp =
   Prims.natFun $ \w -> return $
   Prims.natFun $ \x -> return $
   if w == 0 then VExtra SZero
@@ -607,7 +608,7 @@ boolBinOp op =
 -- Ite ops
 
 iteOp :: SValue
-iteOp = 
+iteOp =
     VFun $ \_ -> return $
     strictFun $ \b-> return $
     strictFun $ \x-> return $
@@ -616,19 +617,20 @@ iteOp =
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal b x y)
 muxBVal b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
-muxBVal b (VVector xv)    (VVector yv)    = VVector <$> muxThunks b xv yv
+muxBVal b (VVector xv)    y               = VVector <$> muxThunks b xv (toVector y)
+muxBVal b x               (VVector yv)    = VVector <$> muxThunks b (toVector x) yv
 muxBVal _ (VNat m)        (VNat n)        | m == n = return $ VNat m
 muxBVal _ (VString x)     (VString y)     | x == y = return $ VString x
 muxBVal _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
 muxBVal _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
 muxBVal _ VType           VType           = return VType
 muxBVal b (VExtra x)      (VExtra y)      = return $ VExtra $ extraFn b x y
-muxBVal _ _ _ = fail "iteOp: malformed arguments"
+muxBVal _ x y = fail $ "iteOp: malformed arguments (muxBVal): " ++ show x ++ " and " ++ show y
 
 muxThunks :: SBool -> V.Vector SThunk -> V.Vector SThunk -> IO (V.Vector SThunk)
 muxThunks b xv yv
   | V.length xv == V.length yv = V.zipWithM (muxThunk b) xv yv
-  | otherwise                  = fail "iteOp: malformed arguments"
+  | otherwise                  = fail "iteOp: malformed arguments (muxThunks)"
 
 muxThunk :: SBool -> SThunk -> SThunk -> IO SThunk
 muxThunk b x y = delay $ do x' <- force x; y' <- force y; muxBVal b x' y'
@@ -636,7 +638,7 @@ muxThunk b x y = delay $ do x' <- force x; y' <- force y; muxBVal b x' y'
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
 extraFn b (SBool x) (SBool y) = SBool $ ite b x y
 extraFn b (SWord x) (SWord y) = SWord $ ite b x y
-extraFn _ _ _ = error "iteOp: malformed arguments"
+extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 
 ------------------------------------------------------------
 -- External interface
@@ -645,20 +647,57 @@ sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
 sbvSolveBasic m = Sim.evalSharedTerm cfg
   where cfg = Sim.evalGlobal m constMap uninterpreted
 
-parseUninterpreted :: (Show t, Termlike t) => [Kind] -> [SBV ()] -> t -> String -> SValue 
+kindFromType :: (Show t, Termlike t) => t -> Kind
+kindFromType (R.asBoolType -> Just ()) = KBool
+kindFromType (R.asBitvectorType -> Just n) = KBounded False (fromIntegral n)
+kindFromType (R.asVecType -> Just (n R.:*: ety)) =
+  case kindFromType ety of
+    KBounded False m -> KBounded False (fromIntegral n * m)
+    k -> error $ "Unsupported vector element kind: " ++ show k
+kindFromType (R.asTupleType -> Just []) = KBounded False 0
+kindFromType (R.asTupleType -> Just tys) =
+  foldr1 combineKind (map kindFromType tys)
+    where combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
+          combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
+kindFromType ty = error $ "Unsupported type: " ++ show ty
+
+parseUninterpreted :: (Show t, Termlike t) => [Kind] -> [SBV ()] -> t -> String -> IO SValue
 parseUninterpreted ks cws (R.asBoolType -> Just ()) =
-  vBool . mkUninterpreted (reverse (KBool : ks)) (reverse cws)
-parseUninterpreted ks cws (R.asBitvectorType -> Just n) =
-  vWord . mkUninterpreted (reverse (KBounded False (fromIntegral n) : ks)) (reverse cws)
-parseUninterpreted _ks _cws (R.asVecType -> Just (_n R.:*: (R.asBoolType -> Just ()))) =
-  error "This should never happen"
+  return . vBool . mkUninterpreted (reverse (KBool : ks)) (reverse cws)
 parseUninterpreted ks cws (R.asPi -> Just (_, _, t2)) =
-  \s-> strictFun $ \x-> do
+  \s -> return $
+  strictFun $ \x -> do
     m <- toSBV x
     case m of
-      Nothing -> error $ "Could not create sbv argument for " ++ show x
-      Just l -> return $ parseUninterpreted (map (\(SBV k _)-> k) l ++ ks) (l ++ cws) t2 s
-parseUninterpreted _ _ t = error $ "could not create uninterpreted type for " ++ show t
+      Nothing -> fail $ "Could not create sbv argument for " ++ show x
+      Just l -> parseUninterpreted (map (\(SBV k _)-> k) l ++ ks) (l ++ cws) t2 s
+parseUninterpreted ks cws ty =
+  reconstitute ty . vWord . mkUninterpreted (reverse (kindFromType ty : ks)) (reverse cws)
+    where reconstitute (R.asBitvectorType -> (Just _)) v = return v
+          reconstitute (R.asVecType -> (Just (n R.:*: ety))) v = do
+            let xs = toVector v
+            vs <- (reverse . fst) <$> foldM parseTy ([], xs) (replicate (fromIntegral n) ety)
+            return . VVector . V.fromList . map Ready $ vs
+          reconstitute (R.asTupleType -> (Just [])) v = return v
+          reconstitute (R.asTupleType -> (Just tys)) v = do
+            vs <- (reverse . fst) <$> foldM parseTy ([], toVector v) tys
+            return . VTuple . V.fromList . map Ready $ vs
+          reconstitute t _ = fail $ "could not create uninterpreted type for " ++ show t
+          parseTy (vs, bs) ty =
+            case typeSize ty of
+              Just n -> do
+                let vbs = V.take n bs
+                    bs' = V.drop n bs
+                mw <- toWord (VVector vbs)
+                case mw of
+                  Just w -> do
+                    v' <- reconstitute ty (vWord w)
+                    return (v' : vs, bs')
+                  Nothing -> fail $ "Can't convert to word: " ++ show vbs
+              Nothing -> fail $ "Could not calculate the size of type: " ++ show ty
+
+typeSize :: (Termlike t) => t -> Maybe Int
+typeSize t = sizeFiniteType <$> asFiniteTypePure t
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do
@@ -672,7 +711,7 @@ sbvSolve :: SharedContext s -> SharedTerm s -> IO ([Labeler], Predicate)
 sbvSolve sc t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
-  shapes <- traverse (parseShape sc) argTs
+  shapes <- traverse (asFiniteType sc) argTs
   bval <- sbvSolveBasic (scModule sc) t
   let (labels, vars) = flip evalState 0 $ unzip <$> traverse newVars shapes
   let prd = do
@@ -681,20 +720,6 @@ sbvSolve sc t = do
                 VExtra (SBool b) -> return b
                 _ -> fail "bitBlast: non-boolean result type."
   return (labels, prd)
-
-parseShape :: SharedContext s -> SharedTerm s -> IO FiniteType
-parseShape sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asBoolType -> Just ())
-      -> return FTBit
-    (R.isVecType return -> Just (n R.:*: tp))
-      -> FTVec n <$> parseShape sc tp
-    (R.asTupleType -> Just ts)
-      -> FTTuple <$> traverse (parseShape sc) ts
-    (R.asRecordType -> Just tm)
-       -> FTRec <$> traverse (parseShape sc) tm
-    _ -> fail $ "bitBlast: unsupported argument type: " ++ show t'
 
 data Labeler
    = BoolLabel String
