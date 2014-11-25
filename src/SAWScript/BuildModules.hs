@@ -26,6 +26,7 @@ data ModuleParts = ModuleParts
   , modExprEnv :: [Decl]
   , modDeps    :: S.Set ModuleName
   , modCryDeps :: [Import]
+  , modCryDecls :: [Located String]
   } deriving (Show)
 
 newtype ModMap = ModMap
@@ -51,9 +52,9 @@ buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDepe
   $ M.assocs $ modules ms
 
 addPreludeDependency :: ModuleParts -> Err ModuleParts
-addPreludeDependency mparts@(ModuleParts mn ee ds cs)
-  | mn == preludeName = return mparts
-  | otherwise = return $ ModuleParts mn ee (S.insert preludeName ds) cs
+addPreludeDependency mparts
+  | modName mparts == preludeName = return mparts
+  | otherwise = return $ mparts { modDeps = S.insert preludeName (modDeps mparts) }
 
 preludeName :: ModuleName
 preludeName = "Prelude"
@@ -61,7 +62,7 @@ preludeName = "Prelude"
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
 build :: (ModuleName, [TopStmt]) -> Err ModuleParts
-build (mn, ts) = foldrM modBuilder (ModuleParts mn [] S.empty []) =<< combineTopTypeDecl ts
+build (mn, ts) = foldrM modBuilder (ModuleParts mn [] S.empty [] []) =<< combineTopTypeDecl ts
 
 -- stage3: make a module out of the resulting envs
 assemble :: [ModuleParts] -> Err [ModuleParts]
@@ -70,14 +71,15 @@ assemble mods = return $ buildQueue modM
   modM = ModMap $ M.fromList [ (modName m,m) | m <- mods ]
 
 modBuilder :: TopStmt -> ModuleParts -> Err ModuleParts
-modBuilder t (ModuleParts mn ee ds cs) = case t of
+modBuilder t mp = case t of
   -- Type signatures should have been translated away by this point
   TopTypeDecl _ _  -> fail "modBuilder: precondition failed (TopTypeDecl)"
   -- Duplicate declarations are listed multiple times; later ones should shadow earlier ones
-  TopBind d        -> return $ ModuleParts mn (d : ee) ds cs
+  TopBind d        -> return $ mp { modExprEnv = d : modExprEnv mp }
   -- Imports show dependencies
-  TopImport n      -> return $ ModuleParts mn ee (S.insert n ds) cs
-  ImportCry imp    -> return $ ModuleParts mn ee ds (imp : cs)
+  TopImport n      -> return $ mp { modDeps = S.insert n (modDeps mp) }
+  ImportCry imp    -> return $ mp { modCryDeps = imp : modCryDeps mp }
+  TopCode s        -> return $ mp { modCryDecls = s : modCryDecls mp }
 
 -- Error Messages --------------------------------------------------------------
 

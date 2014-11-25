@@ -54,7 +54,7 @@ processModule opts lms modName = do
 checkModuleWithDeps :: BM.ModuleParts
   -> M.Map ModuleName ValidModule
   -> Err (M.Map ModuleName ValidModule)
-checkModuleWithDeps (BM.ModuleParts mn ee ds cs) cms =
+checkModuleWithDeps (BM.ModuleParts mn ee ds cs ss) cms =
   mod >>=
   checkModule >>= \cm -> return $ M.insert mn cm cms
   where
@@ -64,4 +64,4 @@ checkModuleWithDeps (BM.ModuleParts mn ee ds cs) cms =
              Nothing -> fail $ "Tried to compile module " ++ show mn ++
                                " before compiling its dependency, " ++ show n
              Just m  -> return (n,m)
-  mod  = Module mn ee <$> deps <*> pure cs
+  mod  = Module mn ee <$> deps <*> pure cs <*> pure ss
