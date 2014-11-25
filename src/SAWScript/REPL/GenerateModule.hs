@@ -17,6 +17,7 @@ scratchpad modsInScope =
          , moduleExprEnv = [] -- no expressions yet
          , moduleDependencies = modsInScope
          , moduleCryDeps = []
+         , moduleCryDecls = []
          }
 
 -- The name of the REPL, as it should be reported in error messages

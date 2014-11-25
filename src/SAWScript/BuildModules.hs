@@ -83,9 +83,6 @@ modBuilder t mp = case t of
 
 -- Error Messages --------------------------------------------------------------
 
-multiDeclErr :: LName -> Err a
-multiDeclErr n = fail ("Multiple declarations of '" ++ getVal n ++ "' at " ++ show (getPos n))
-
 noBindingErr :: LName -> Err a
 noBindingErr n = fail ("The type signature for '" ++ getVal n ++ "' lacks an accompanying binding at " ++ show (getPos n))
 
