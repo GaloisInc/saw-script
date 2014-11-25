@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE CPP #-}
 
 {- |
@@ -57,6 +58,11 @@ module Verifier.SAW.SharedTerm
   , Nat
   , scNat
   , scNatType
+  , scAddNat
+  , scSubNat
+  , scMulNat
+  , scEqualNat
+
   , scBool
   , scBoolType
   , scFunAll
@@ -96,6 +102,10 @@ module Verifier.SAW.SharedTerm
   , scGet
   , scAt
   , scNot
+  , scAnd
+  , scOr
+  , scXor
+  , scBoolEq
   , scIte
   , scSingle
   , scSlice
@@ -117,6 +127,7 @@ module Verifier.SAW.SharedTerm
   , instantiateVar
   , instantiateVarList
   , scInstantiateExt
+  , scAbstractExts
   , incVars
   , scUnfoldConstants
   , scUnfoldConstants'
@@ -562,7 +573,7 @@ looseVars t = State.evalState (go t) Map.empty
 -- Instantiating variables
 
 instantiateVars :: forall s. SharedContext s
-                -> (DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s)))
+                -> (DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> ChangeT IO (IO (SharedTerm s)))
                 -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
 instantiateVars sc f initialLevel t0 =
     do cache <- newCache
@@ -576,7 +587,8 @@ instantiateVars sc f initialLevel t0 =
 
     go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
-    go' l (FTermF tf) = scFlatTermF sc <$> (traverse (go l) tf)
+    go' l (FTermF (ExtCns ec)) = f l (Left ec)
+    go' l (FTermF tf)       = scFlatTermF sc <$> (traverse (go l) tf)
     go' l (App x y)         = scTermF sc <$> (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
     go' l (Pi i lhs rhs)    = scTermF sc <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
@@ -589,7 +601,7 @@ instantiateVars sc f initialLevel t0 =
               where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i)
       | i < l     = pure $ scTermF sc (LocalVar i)
-      | otherwise = f l i
+      | otherwise = f l (Right i)
     go' _ tf@(Constant _ _ _) = pure $ scTermF sc tf
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
@@ -600,7 +612,8 @@ incVarsChangeT sc initialLevel j
     | j == 0    = return
     | otherwise = instantiateVars sc fn initialLevel
     where
-      fn _ i = modified $ scTermF sc (LocalVar (i+j))
+      fn _ (Left ec) = pure $ scFlatTermF sc $ ExtCns ec
+      fn _ (Right i) = modified $ scTermF sc (LocalVar (i+j))
 
 incVars :: SharedContext s
         -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
@@ -620,8 +633,10 @@ instantiateVarChangeT sc k t0 t =
         term i = useCache ?cache i (incVarsChangeT sc 0 i t0)
         -- Instantiate variable 0.
         fn :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
-              DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
-        fn i j | j  > i + k = modified $ scTermF sc (LocalVar (j - 1))
+              DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
+        fn _ (Left ec) = pure $ scFlatTermF sc $ ExtCns ec
+        fn i (Right j)
+               | j  > i + k = modified $ scTermF sc (LocalVar (j - 1))
                | j == i + k = taint $ return <$> term i
                | otherwise  = pure $ scTermF sc (LocalVar j)
 
@@ -648,8 +663,10 @@ instantiateVarListChangeT sc k ts t =
     term (cache, x) i = useCache cache i (incVarsChangeT sc 0 i x)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)]
-       -> DeBruijnIndex -> DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
-    fn rs i j | j >= i + k + l = modified $ scTermF sc (LocalVar (j - l))
+       -> DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
+    fn _ _ (Left ec) = pure $ scFlatTermF sc $ ExtCns ec
+    fn rs i (Right j)
+              | j >= i + k + l = modified $ scTermF sc (LocalVar (j - l))
               | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
               | otherwise      = pure $ scTermF sc (LocalVar j)
 
@@ -723,7 +740,7 @@ scPrettyTermDoc t0
         lets = [ var n <+> char '=' <+> ppTermF ppt lcls0 PrecNone (unwrapTermF t) <> char ';'
                | (t,n) <- bound `zip` [0..]
                ]
-        
+
         dm :: SharedTermMap s Doc
         dm = Data.Foldable.foldl' insVar StrictMap.empty (bound `zip` [0..])
           where insVar m (t,n) = StrictMap.insert t (var n) m
@@ -877,6 +894,18 @@ scVecType sc n e = scDataTypeApp sc "Prelude.Vec" [n, e]
 scNot :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scNot sc t = scGlobalApply sc "Prelude.not" [t]
 
+scAnd :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scAnd sc x y = scGlobalApply sc "Prelude.and" [x,y]
+
+scOr :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scOr sc x y = scGlobalApply sc "Prelude.or" [x,y]
+
+scXor :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scXor sc x y = scGlobalApply sc "Prelude.xor" [x,y]
+
+scBoolEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBoolEq sc x y = scGlobalApply sc "Prelude.boolEq" [x,y]
+
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext s -> SharedTerm s -> SharedTerm s ->
          SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
@@ -911,6 +940,20 @@ scAt sc n a xs idx = scGlobalApply sc (mkIdent preludeName "at") [n, a, xs, idx]
 -- single e x = generate 1 e (\(i :: Fin 1) -> x);
 scSingle :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
+
+-- Primitive operations on nats
+
+scAddNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scAddNat sc x y = scGlobalApply sc "Prelude.addNat" [x,y]
+
+scSubNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scSubNat sc x y = scGlobalApply sc "Prelude.subNat" [x,y]
+
+scMulNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scMulNat sc x y = scGlobalApply sc "Prelude.mulNat" [x,y]
+
+scEqualNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
 
 -- Primitive operations on bitvectors
 
@@ -996,14 +1039,27 @@ whenModified b f m = ChangeT $ do
     Modified a -> Modified <$> f a
 
 -- | Instantiate some of the external constants
-scInstantiateExt :: forall s 
+scInstantiateExt :: forall s
                   . SharedContext s
                  -> Map VarIndex (SharedTerm s)
                  -> SharedTerm s
                  -> IO (SharedTerm s)
+scInstantiateExt sc vmap = commitChangeT . instantiateVars sc fn 0
+  where fn l (Left ec) =
+            case Map.lookup (ecVarIndex ec) vmap of
+               Just t  -> modified $ incVars sc 0 l t
+               Nothing -> pure $ scFlatTermF sc $ ExtCns ec
+        fn _ (Right i) = pure $ scTermF sc $ LocalVar i
+
+{-
+-- RWD: I'm pretty sure the following implementation gets incorrect results when
+-- the terms being substituted have free deBruijn variables.  The above is a
+-- reimplementation based on instantiateVars that does the necessary deBruijn
+-- shifting.
+
 scInstantiateExt sc vmap t0 = do
   tcache <- newCacheMap' Map.empty
-  let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
+  let go :: SharedTerm s -> ChangeT IO (SharedTerm s)
       go t@(Unshared tf) =
         case tf of
           -- | Lookup variable in term if it is bound.
@@ -1020,6 +1076,21 @@ scInstantiateExt sc vmap t0 = do
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
+-}
+
+-- | Abstract over the given list of external constants by wrapping the given term with
+--   lambdas and replacing the external constant occurences with the appropriate local variables
+scAbstractExts :: forall s. SharedContext s -> [ExtCns (SharedTerm s)] -> SharedTerm s -> IO (SharedTerm s)
+scAbstractExts _ [] x = return x
+scAbstractExts sc exts x =
+   do ls <- sequence [ scTermF sc (LocalVar db) >>= \t -> return ( ecVarIndex ec, t )
+                     | ec <- reverse exts
+                     | db <- [0 .. ]
+                     ]
+      let m = Map.fromList ls
+      let lams = [ ( ecName ec, ecType ec ) | ec <- exts ]
+      scLambdaList sc lams =<< scInstantiateExt sc m x
+
 
 scUnfoldConstants :: forall s. SharedContext s -> [Ident] -> SharedTerm s -> IO (SharedTerm s)
 scUnfoldConstants sc ids t0 = do
@@ -1043,7 +1114,7 @@ scUnfoldConstants sc ids t0 = do
 scUnfoldConstants' :: forall s. SharedContext s -> [Ident] -> SharedTerm s -> IO (SharedTerm s)
 scUnfoldConstants' sc ids t0 = do
   tcache <- newCacheMap' Map.empty
-  let go :: SharedTerm s -> ChangeT IO (SharedTerm s) 
+  let go :: SharedTerm s -> ChangeT IO (SharedTerm s)
       go t@(Unshared tf) =
         case tf of
           Constant ident rhs _
