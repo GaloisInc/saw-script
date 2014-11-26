@@ -4,7 +4,6 @@
 module SAWScript.BuildModules
   ( buildModules
   , ModuleParts (..)
-  , preludeName
   ) where
 
 import SAWScript.AST
@@ -48,16 +47,8 @@ combineTopTypeDecl (stmt : stmts) = (:) stmt <$> combineTopTypeDecl stmts
 -- BuildEnv --------------------------------------------------------------------
 
 buildModules :: LoadedModules -> Err [ModuleParts]
-buildModules = compiler "BuildEnv" $ \ms -> T.traverse (build >=> addPreludeDependency) >=> assemble
+buildModules = compiler "BuildEnv" $ \ms -> T.traverse build >=> assemble
   $ M.assocs $ modules ms
-
-addPreludeDependency :: ModuleParts -> Err ModuleParts
-addPreludeDependency mparts
-  | modName mparts == preludeName = return mparts
-  | otherwise = return $ mparts { modDeps = S.insert preludeName (modDeps mparts) }
-
-preludeName :: ModuleName
-preludeName = "Prelude"
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.

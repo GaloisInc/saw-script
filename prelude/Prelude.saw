@@ -1,5 +1,0 @@
-//prim external_smtlib1_solver : {a} String -> [String] -> ProofScript a;
-//prim external_smtlib2_solver : {a} String -> [String] -> ProofScript a;
-//prim java_assert_eq     : {a} String -> a -> JavaSetup ();
-//prim llvm_may_alias     : [String] -> LLVMSetup ();
-//prim llvm_assert_eq     : {a} String -> a -> LLVMSetup ();

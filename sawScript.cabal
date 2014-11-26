@@ -60,7 +60,6 @@ library
     SAWScript.Compiler
     SAWScript.CryptolBuiltins
     SAWScript.CryptolEnv
-    SAWScript.FileQuote
     SAWScript.Import
     SAWScript.ImportAIG
     SAWScript.Interpreter

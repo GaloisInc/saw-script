@@ -28,7 +28,7 @@ processFile opts file | takeExtensions file == ".saw" = do
   loadPrelude opts $ \lms -> do
     processModule opts lms (ModuleName [] "Prelude")
   -}
-  loadedModules <- loadWithPrelude opts file
+  loadedModules <- loadModule opts file emptyLoadedModules
   let modName = moduleNameFromPath file
   processModule opts loadedModules modName
 
