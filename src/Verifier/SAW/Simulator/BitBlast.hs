@@ -119,7 +119,7 @@ flattenBValue (VTuple vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
 flattenBValue (VRecord m) =
   AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
-flattenBValue x = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
+flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
 
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
 wordFun f = strictFun (\x -> toWord x >>= f)
@@ -154,7 +154,7 @@ shiftOp _bvOp natOp =
   strictFun $ \y ->
     case y of
       VNat n           -> return (vWord (natOp x (fromInteger n)))
-      x                -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp",show x]
+      _                -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
 ------------------------------------------------------------
 
@@ -382,12 +382,12 @@ bvUpdOp be =
     case v of
       VVector xv -> do
         y' <- delay (return y)
-        let upd i = return (VVector (xv V.// [(i, y')]))
-        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv - 1) ilv upd
+        let update i = return (VVector (xv V.// [(i, y')]))
+        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv - 1) ilv update
       VExtra (BWord lv) -> do
-        AIG.muxInteger (lazyMux be (muxBVal be)) (l - 1) ilv (\i -> return (vWord (AIG.generate_msb0 l (upd i))))
-          where upd i j | i == j    = toBool y
-                        | otherwise = AIG.at lv j
+        AIG.muxInteger (lazyMux be (muxBVal be)) (l - 1) ilv (\i -> return (vWord (AIG.generate_msb0 l (update i))))
+          where update i j | i == j    = toBool y
+                           | otherwise = AIG.at lv j
                 l = AIG.length lv
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvUpdOp: expected vector, got " ++ show v
 

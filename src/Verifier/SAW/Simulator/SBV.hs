@@ -229,6 +229,7 @@ selectV merger maxValue valueFn vx@(SBV(KBounded _ s) _) =
   impl _ y | y >= maxValue = valueFn maxValue
   impl 0 y = valueFn y
   impl i y = merger (symTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
+selectV _ _ _ _ = error "selectV: invalid argument"
 
 -- `nOfSize word len` pads word with zeros to be size len
 nOfSize :: SWord -> Int -> SWord
@@ -237,6 +238,7 @@ nOfSize ind@(SBV (KBounded _ k2) s) k
   | Left (cwVal -> CWInteger ival) <- s = bitVector k ival
   | k >= k2 = cat ((bitVector (k - k2) 0) :: SWord) ind
   | otherwise = error "could not resize index"
+nOfSize _ _ = error "nOfSize: invalid argument"
 
 -- could use extract instead
 
@@ -248,6 +250,7 @@ symTestSym w@(SBV (KBounded _ k) _) ind =
   vBool $ bitVector k 0 ./= (w .&.
     (sbvShiftLeft (bitVector k 1)
     ((bitVector k (fromIntegral k - 1)) - (nOfSize ind k)) ))
+symTestSym _ _ = error "symTestSym: invalid argument"
 
 -- symTestBit word index gets bit position ind from word w
 -- it is the equivalent of testBit; NOT the same as cryptol-2 indexing
@@ -407,8 +410,8 @@ bvUpdOp =
           (lv .&. (complement (shiftL (bitVector w 1) (fromIntegral w - 1))))
       (Just ilv, VVector xv) -> do
         y' <- delay (return y)
-        let upd i = return (VVector (xv V.// [(i, y')]))
-        selectV (lazyMux muxBVal) (V.length xv - 1) upd ilv
+        let update i = return (VVector (xv V.// [(i, y')]))
+        selectV (lazyMux muxBVal) (V.length xv - 1) update ilv
       (Just ilv, VExtra (SWord lv@(SBV (KBounded _ w) _))) -> do
         let (Just b) = toBool y
         return $ vWord $ ite b
@@ -683,18 +686,18 @@ parseUninterpreted ks cws ty =
             vs <- (reverse . fst) <$> foldM parseTy ([], toVector v) tys
             return . VTuple . V.fromList . map Ready $ vs
           reconstitute t _ = fail $ "could not create uninterpreted type for " ++ show t
-          parseTy (vs, bs) ty =
-            case typeSize ty of
+          parseTy (vs, bs) ty' =
+            case typeSize ty' of
               Just n -> do
                 let vbs = V.take n bs
                     bs' = V.drop n bs
                 mw <- toWord (VVector vbs)
                 case mw of
                   Just w -> do
-                    v' <- reconstitute ty (vWord w)
+                    v' <- reconstitute ty' (vWord w)
                     return (v' : vs, bs')
                   Nothing -> fail $ "Can't convert to word: " ++ show vbs
-              Nothing -> fail $ "Could not calculate the size of type: " ++ show ty
+              Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
 
 typeSize :: (Termlike t) => t -> Maybe Int
 typeSize t = sizeFiniteType <$> asFiniteTypePure t

@@ -240,7 +240,7 @@ evalClosedTermF :: (MonadIO m, MonadFix m, Show e) =>
 evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
   where
     lam = evalOpen cfg memoClosed
-    rec (Unshared tf) = evalTermF cfg lam rec [] tf
+    rec (Unshared tf') = evalTermF cfg lam rec [] tf'
     rec (STApp i _) =
       case IMap.lookup i memoClosed of
         Just x -> force x
