@@ -282,7 +282,6 @@ importExpr sc env expr =
         C.TupleSel i _maybeLen  -> scNestedSelector sc (i+1) =<< go e
         C.RecordSel x (Just xs) -> scNestedSelector sc i =<< go e
                                      where i = fromMaybe (assert False undefined) (findIndex (== x) xs) + 1
-                                           l = length xs
         C.RecordSel x Nothing   -> case C.tNoUser (fastTypeOf (envC env) e) of
                                      C.TRec fs -> importExpr sc env (C.ESel e (C.RecordSel x (Just (map fst fs))))
                                      _ -> fail "Expected record type"

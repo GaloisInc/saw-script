@@ -31,7 +31,7 @@ library
   exposed-modules:
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Prelude
-  GHC-options: -Wall
+  GHC-options: -Wall -Werror
 
 executable css
   if !flag(build-css)
