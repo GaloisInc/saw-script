@@ -192,8 +192,6 @@ proveProp sc env prop =
         (C.pIsCmp -> Just t)
           -> scGlobalApply sc "Cryptol.ePCmp" =<< sequence [ty t]
         (C.pIsEq -> Just (m, n))
-          -> scGlobalApply sc "Cryptol.ePEq" =<< sequence [ty m, ty n]
-        (C.pIsEq -> Just (m, n))
           -> scGlobalApply sc "Cryptol.ePEqual" =<< sequence [ty m, ty n]
         (C.pIsGeq -> Just (m, n))
           -> scGlobalApply sc "Cryptol.ePGeq" =<< sequence [ty m, ty n]
