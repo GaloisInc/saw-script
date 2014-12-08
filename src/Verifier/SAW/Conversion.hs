@@ -106,6 +106,8 @@ module Verifier.SAW.Conversion
   , slice_bvNat
   , remove_coerce
   , remove_unsafeCoerce
+  , remove_ident_coerce
+  , remove_ident_unsafeCoerce
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<*>))
@@ -654,3 +656,17 @@ remove_unsafeCoerce :: Termlike t => Conversion t
 remove_unsafeCoerce = Conversion $
   return . mixfix_snd <$>
     (asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny)
+
+remove_ident_coerce :: (Eq t, Termlike t) => Conversion t
+remove_ident_coerce = Conversion $ thenMatcher pat action
+  where pat = asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny
+        action (() :*: t :*: f :*: _prf :*: x)
+          | t == f = return (return x)
+          | otherwise = fail "Cannot remove coerce."
+
+remove_ident_unsafeCoerce :: (Eq t, Termlike t) => Conversion t
+remove_ident_unsafeCoerce = Conversion $ thenMatcher pat action
+  where pat = asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny
+        action (() :*: t :*: f :*: x)
+          | t == f = return (return x)
+          | otherwise = fail "Cannot remove unsafeCoerce."
