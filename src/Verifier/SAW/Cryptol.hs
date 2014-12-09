@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
@@ -16,17 +17,23 @@ module Verifier.SAW.Cryptol where
 import Control.Exception (assert)
 import Control.Applicative
 import Control.Monad (join, foldM, unless)
+import qualified Data.IntTrie as IntTrie
 import Data.List (findIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Traversable hiding (sequence, mapM)
+import qualified Data.Vector as Vector
 
+import qualified Cryptol.Eval.Value as V
+import qualified Cryptol.Eval.Env as Env
+import Cryptol.Eval.Type (evalType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.Prims.Syntax as P
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
+import qualified Verifier.SAW.Evaluator as E
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (mkSort, mkModuleName, findDef)
@@ -565,3 +572,43 @@ scCryptolEq sc x y = do
       case findDef (scModule sc) ident of
         Nothing -> return []
         Just def -> scDefRewriteRules sc def
+
+-- | Convert from SAWCore's Value type to Cryptol's, guided by the
+-- Cryptol type schema.
+exportValueWithSchema :: C.Schema -> E.Value -> V.Value
+exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalType Env.emptyEnv ty) v
+exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
+-- ^ TODO: proper support for polymorphic values
+
+exportValue :: V.TValue -> E.Value -> V.Value
+exportValue ty v
+
+  | V.isTBit ty =
+    V.VBit (E.fromValue v)
+
+  | Just (_, e) <- V.isTSeq ty =
+    case v of
+      E.VWord w x -> V.VWord (V.mkBv (toInteger w) x)
+      E.VStream trie -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
+      E.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e) (Vector.toList xs))
+      _ -> error "exportValue"
+
+  -- tuples
+  | Just (_, etys) <- V.isTTuple ty =
+    V.VTuple (exportValues etys v)
+
+  -- records
+  | Just fields <- V.isTRec ty =
+    let m = Map.fromList fields
+    in V.VRecord (zip (Map.keys m) (exportValues (Map.elems m) v))
+
+  -- functions
+  | Just (_aty, _bty) <- V.isTFun ty =
+    V.VFun (error "exportValue: TODO functions")
+
+  | otherwise = error "exportValue"
+
+exportValues :: [V.TValue] -> E.Value -> [V.Value]
+exportValues [] _ = []
+exportValues (t1 : ts) v = exportValue t1 v1 : exportValues ts vs
+  where (v1, vs) = E.fromValue v
