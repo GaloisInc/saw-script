@@ -119,6 +119,9 @@ eqIdent' = mkIdent (mkModuleName ["Prelude"]) "eq"
 ecEqIdent :: Ident
 ecEqIdent = mkIdent (mkModuleName ["Cryptol"]) "ecEq"
 
+bvEqIdent :: Ident
+bvEqIdent = mkIdent (mkModuleName ["Prelude"]) "bvEq"
+
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Termlike t => t -> RewriteRule t
@@ -148,6 +151,8 @@ ruleOfProp :: SharedTerm s -> RewriteRule (SharedTerm s)
 ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   let rule = ruleOfProp body in rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
+  RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp _ = error "ruleOfProp: Predicate not an equation"
 
