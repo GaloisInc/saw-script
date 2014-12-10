@@ -1,5 +1,0 @@
-
-abstract Test;
-
-foo : Test -> Test;
-foo = undefined;
