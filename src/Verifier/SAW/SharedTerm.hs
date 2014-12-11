@@ -126,6 +126,9 @@ module Verifier.SAW.SharedTerm
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
+  , extIdx
+  , extName
+  , getAllExts
   , scInstantiateExt
   , scAbstractExts
   , incVars
@@ -152,6 +155,8 @@ import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef (IORef)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -1037,6 +1042,31 @@ whenModified b f m = ChangeT $ do
   case ca of
     Original{} -> return (Original b)
     Modified a -> Modified <$> f a
+
+extIdx :: SharedTerm s -> Maybe VarIndex
+extIdx (unwrapTermF -> FTermF (ExtCns ec)) = Just (ecVarIndex ec)
+extIdx _ = Nothing
+
+extName :: SharedTerm s -> Maybe String
+extName (unwrapTermF -> FTermF (ExtCns ec)) = Just (ecName ec)
+extName _ = Nothing
+
+-- | Return a list of all ExtCns subterms in the given term, sorted by
+-- index.
+getAllExts :: SharedTerm s -> [SharedTerm s]
+getAllExts t = sortBy (comparing extIdx) $ Set.toList args
+    where (seen, exts) = getExtCns (Set.empty, Set.empty) t
+          tf = unwrapTermF t
+          args = snd $ foldl' getExtCns (seen, exts) tf
+          getExtCns (is, a) (STApp idx _) | Set.member idx is = (is, a)
+          getExtCns (is, a) t'@(STApp idx (FTermF (ExtCns _))) =
+            (Set.insert idx is, Set.insert t' a)
+          getExtCns (is, a) t'@(Unshared (FTermF (ExtCns _))) =
+            (is, Set.insert t' a)
+          getExtCns (is, a) (STApp idx tf') =
+            foldl' getExtCns (Set.insert idx is, a) tf'
+          getExtCns (is, a) (Unshared tf') =
+            foldl' getExtCns (is, a) tf'
 
 -- | Instantiate some of the external constants
 scInstantiateExt :: forall s
