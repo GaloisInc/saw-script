@@ -857,6 +857,13 @@ bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i))
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
+eq_VecBool :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
+
+eq_VecVec :: (n :: Nat) -> (m :: Nat) -> (a :: sort 0)
+          -> Eq (Vec n (Vec m a) -> Vec n (Vec m a) -> Bool)
+                (eq (Vec n (Vec m a)))
+                (vecEq n (Vec m a) (eq (Vec m a)));
+
 equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
 
