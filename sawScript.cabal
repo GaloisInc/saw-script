@@ -86,6 +86,7 @@ library
     SAWScript.SBVModel
     SAWScript.REPL.Trie
     SAWScript.Token
+    SAWScript.TopLevel
     SAWScript.MGU
     SAWScript.TypedTerm
     SAWScript.Utils
