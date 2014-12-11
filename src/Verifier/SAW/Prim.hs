@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 {- |
 Module      : Verifier.SAW.Prim
@@ -13,8 +14,10 @@ module Verifier.SAW.Prim where
 
 import Control.Applicative
 import Control.Exception (assert)
+import qualified Control.Exception as X
 import Data.Bits
-import Data.Vector ( Vector )
+import Data.Typeable (Typeable)
+import Data.Vector (Vector)
 import qualified Data.Vector as V
 
 ------------------------------------------------------------
@@ -67,7 +70,7 @@ instance Integral Nat where
                         | otherwise = (Nat q, Nat r)
     where (q,r) = x `quotRem` y
   divMod = quotRem
-  toInteger (Nat x) = x  
+  toInteger (Nat x) = x
 
 instance Bits Nat where
   Nat x .&. Nat y   = Nat (x .&. y)
@@ -115,7 +118,7 @@ finFromBound :: Nat -> Nat -> Fin
 finFromBound i n
   | i < n = FinVal i (pred (n - i))
   | otherwise = error "finFromBound given out-of-range index."
-                                                                                  
+
 finSize :: Fin -> Nat
 finSize (FinVal x r) = succ (r + x)
 
@@ -146,7 +149,7 @@ instance Enum Fin where
     case incFinBy x (finVal y) of
       Nothing -> [x]
       Just x' -> x : enumFromThen x' y
- 
+
   enumFromTo x z = enumFromThenTo x (FinVal 1 (finSize x)) z
 
   enumFromThenTo x0 y z =
@@ -206,7 +209,7 @@ addNat = (+)
 -- finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n);
 finInc :: Nat -> Nat -> Fin -> Fin
 finInc i _n (FinVal l r) = FinVal (i + l) r
-  -- Precondition: n == l + r + 1  
+  -- Precondition: n == l + r + 1
 
 -- finIncLim :: (n :: Nat) -> (m :: Nat) -> Fin m -> Fin (addNat m n);
 finIncLim :: Nat -> Nat -> Fin -> Fin
@@ -227,7 +230,7 @@ generate n _ f = V.generate (fromEnum n) (\i -> f (finFromBound (fromIntegral i)
 
 -- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
 get :: Int -> t -> Vec t e -> Fin -> e
-get _ _ (Vec _ v) i = v V.! fromEnum i
+get _ _ (Vec _ v) i = v ! fromEnum i
 
 -- set :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e -> Vec n e;
 set :: Int -> t -> Vec t e -> Fin -> e -> Vec t e
@@ -239,11 +242,16 @@ append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)
 
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 at :: Int -> t -> Vec t e -> Int -> e
-at _ _ (Vec _ v) i = v V.! i
+at _ _ (Vec _ v) i = v ! i
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 upd :: Int -> t -> Vec t e -> Int -> e -> Vec t e
 upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])
+
+(!) :: Vector a -> Int -> a
+v ! i = case v V.!? i of
+  Just x -> x
+  Nothing -> invalidIndex (toInteger i)
 
 ----------------------------------------
 -- Bitvector operations
@@ -403,3 +411,33 @@ bvPDiv _ _ (BV m x) (BV _ y) = BV m (unNat (fst (pDivModNat (Nat x) (Nat y))))
 
 bvPMod :: Nat -> Nat -> BitVector -> BitVector -> BitVector
 bvPMod _ _ (BV _ x) (BV n y) = BV (n - 1) (unNat (snd (pDivModNat (Nat x) (Nat y))))
+
+
+----------------------------------------
+-- Errors
+
+data EvalError
+  = InvalidIndex Integer
+  | DivideByZero
+  | UserError String
+  deriving (Eq, Typeable)
+
+instance X.Exception EvalError
+
+instance Show EvalError where
+  show e = case e of
+    InvalidIndex i -> "invalid sequence index: " ++ show i
+    DivideByZero -> "division by 0"
+    UserError msg -> "Run-time error: " ++ msg
+
+-- | A sequencing operation has gotten an invalid index.
+invalidIndex :: Integer -> a
+invalidIndex i = X.throw (InvalidIndex i)
+
+-- | For division by 0.
+divideByZero :: a
+divideByZero = X.throw DivideByZero
+
+-- | For `error`
+userError :: String -> a
+userError msg = X.throw (UserError msg)
