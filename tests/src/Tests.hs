@@ -19,7 +19,6 @@ import Data.Proxy
 
 import System.Exit
 
-import Tests.BitBlast
 import Tests.Parser
 import Tests.SharedTerm
 import Tests.Rewriter
@@ -42,6 +41,5 @@ tests =
    testGroup "SAWCore"
    [ testGroup "SharedTerm" sharedTermTests
    , testGroup "Parser" parserTests
-   , testGroup "BitBlast" bitblastTests
    , testGroup "Rewriter" rewriter_tests
    ]

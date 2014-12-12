@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
-Module      : Verifier.SAW.BitBlast
+Module      : Verifier.SAW.Simulator.BitBlast
 Copyright   : Galois, Inc. 2012-2014
 License     : BSD3
 Maintainer  : jhendrix@galois.com
