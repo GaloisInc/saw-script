@@ -122,6 +122,12 @@ ecEqIdent = mkIdent (mkModuleName ["Cryptol"]) "ecEq"
 bvEqIdent :: Ident
 bvEqIdent = mkIdent (mkModuleName ["Prelude"]) "bvEq"
 
+boolEqIdent :: Ident
+boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
+
+vecEqIdent :: Ident
+vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
+
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Termlike t => t -> RewriteRule t
@@ -153,6 +159,10 @@ ruleOfProp (R.asLambda -> Just (_, ty, body)) =
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) =
+  RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
+  RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp _ = error "ruleOfProp: Predicate not an equation"
 
