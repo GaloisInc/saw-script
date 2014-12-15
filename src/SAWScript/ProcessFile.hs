@@ -1,4 +1,6 @@
-module SAWScript.ProcessFile where
+module SAWScript.ProcessFile
+       ( processFile
+       ) where
 
 import Prelude hiding (mod)
 
