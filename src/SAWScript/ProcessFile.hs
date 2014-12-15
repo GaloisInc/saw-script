@@ -52,13 +52,13 @@ processModule opts lms modName = do
 
 
 checkModuleWithDeps :: BM.ModuleParts
-  -> M.Map ModuleName ValidModule
-  -> Err (M.Map ModuleName ValidModule)
+  -> M.Map ModuleName Module
+  -> Err (M.Map ModuleName Module)
 checkModuleWithDeps (BM.ModuleParts mn ee ds cs ss) cms =
   mod >>=
   checkModule >>= \cm -> return $ M.insert mn cm cms
   where
-  deps :: Err (M.Map ModuleName ValidModule)
+  deps :: Err (M.Map ModuleName Module)
   deps = fmap M.fromList $ forM (S.toList ds) $ \n ->
            case M.lookup n cms of
              Nothing -> fail $ "Tried to compile module " ++ show mn ++

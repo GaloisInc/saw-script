@@ -9,9 +9,9 @@ module SAWScript.REPL.GenerateModule ( scratchpad
 import Data.Map (Map)
 
 import SAWScript.AST (ModuleName,
-                      Module(..), ValidModule)
+                      Module(..))
 
-scratchpad :: Map ModuleName ValidModule -> Module
+scratchpad :: Map ModuleName Module -> Module
 scratchpad modsInScope =
   Module { moduleName = replModuleName
          , moduleExprEnv = [] -- no expressions yet
