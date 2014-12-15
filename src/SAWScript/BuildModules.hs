@@ -21,15 +21,15 @@ import qualified Data.Traversable as T
 -- Types -----------------------------------------------------------------------
 
 data ModuleParts = ModuleParts
-  { modName :: ModuleName
+  { modFile :: FilePath
   , modExprEnv :: [Decl]
-  , modDeps    :: S.Set ModuleName
+  , modDeps    :: S.Set FilePath
   , modCryDeps :: [Import]
   , modCryDecls :: [Located String]
   } deriving (Show)
 
 newtype ModMap = ModMap
-  { modMap :: M.Map ModuleName ModuleParts
+  { modMap :: M.Map FilePath ModuleParts
   } deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -52,14 +52,14 @@ buildModules = compiler "BuildEnv" $ \ms -> T.traverse build >=> assemble
 
 -- stage1: build tentative environment. expression vars may or may not have bound expressions,
 --   but may not have multiple bindings.
-build :: (ModuleName, [TopStmt]) -> Err ModuleParts
-build (mn, ts) = foldrM modBuilder (ModuleParts mn [] S.empty [] []) =<< combineTopTypeDecl ts
+build :: (FilePath, [TopStmt]) -> Err ModuleParts
+build (fn, ts) = foldrM modBuilder (ModuleParts fn [] S.empty [] []) =<< combineTopTypeDecl ts
 
 -- stage3: make a module out of the resulting envs
 assemble :: [ModuleParts] -> Err [ModuleParts]
 assemble mods = return $ buildQueue modM
   where
-  modM = ModMap $ M.fromList [ (modName m,m) | m <- mods ]
+  modM = ModMap $ M.fromList [ (modFile m,m) | m <- mods ]
 
 modBuilder :: TopStmt -> ModuleParts -> Err ModuleParts
 modBuilder t mp = case t of
@@ -96,8 +96,8 @@ buildQueue mm = map (flip findModule mm . (findInMap vertModMap)) depOrder
                , let to   =  findInMap modVertMap toM
                ]
 
-findModule :: ModuleName -> ModMap -> ModuleParts
-findModule mn mm = findInMap (modMap mm) mn
+findModule :: FilePath -> ModMap -> ModuleParts
+findModule fn mm = findInMap (modMap mm) fn
 
 findInMap :: (Ord k, Show k) => M.Map k a -> k -> a
 findInMap m k = case M.lookup k m of

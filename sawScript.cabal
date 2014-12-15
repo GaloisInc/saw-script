@@ -78,7 +78,6 @@ library
     SAWScript.Proof
     SAWScript.REPL
     SAWScript.REPL.Command
-    SAWScript.REPL.GenerateModule
     SAWScript.REPL.Haskeline
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
