@@ -81,7 +81,7 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
                  then name++".aig"
                  else (output css)
 
-    (e,warn) <- CM.loadModuleByPath inputModule
+    (e,warn) <- CM.loadModuleByPath inputModule =<< CM.initialModuleEnv
     mapM_ (print . pp) warn
     case e of
        Left msg -> print msg >> exitFailure
