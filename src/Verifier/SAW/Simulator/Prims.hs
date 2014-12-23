@@ -44,8 +44,8 @@ natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"
 
-vFin :: Fin -> Value m e
-vFin (FinVal i j) = VCtorApp "Prelude.FinVal" $ V.fromList $ map (Ready . vNat) [i, j]
+vFin :: Monad m => Fin -> Value m e
+vFin (FinVal i j) = VCtorApp "Prelude.FinVal" $ V.fromList $ map (ready . vNat) [i, j]
 
 finFromValue :: MonadIO m => Value m e -> m Fin
 finFromValue (VCtorApp "Prelude.FinVal" (V.toList -> [x, y])) = do
@@ -116,7 +116,7 @@ divModNatOp =
   natFun' "divModNat1" $ \m -> return $
   natFun' "divModNat2" $ \n -> return $
     let (q,r) = divMod m n in
-    VTuple $ V.fromList [Ready $ vNat q, Ready $ vNat r]
+    VTuple $ V.fromList [ready $ vNat q, ready $ vNat r]
 
 -- expNat :: Nat -> Nat -> Nat;
 expNatOp :: MonadIO m => Value m e
@@ -141,7 +141,7 @@ natCaseOp =
     if n == 0
     then force z
     else do s' <- force s
-            apply s' (Ready (VNat (fromIntegral n - 1)))
+            apply s' (ready (VNat (fromIntegral n - 1)))
 
 -- finOfNat :: (n :: Nat) -> Nat -> Fin n;
 finOfNatOp :: MonadIO m => Value m e
@@ -157,15 +157,15 @@ finDivModOp =
   natFun $ \n -> return $
   finFun $ \i -> return $
   let (q, r) = finDivMod m n i
-  in VTuple $ V.fromList $ map (Ready . vFin) [q, r]
+  in VTuple $ V.fromList $ map (ready . vFin) [q, r]
 
 -- finMax :: (n :: Nat) -> Maybe (Fin n);
 finMaxOp :: MonadIO m => Value m e
 finMaxOp =
   natFun $ \n -> return $
   if n == 0
-    then VCtorApp "Prelude.Nothing" (V.fromList [Ready VType])
-    else VCtorApp "Prelude.Just" (V.fromList [Ready VType, Ready (vFin (FinVal (n - 1) 0))])
+    then VCtorApp "Prelude.Nothing" (V.fromList [ready VType])
+    else VCtorApp "Prelude.Just" (V.fromList [ready VType, ready (vFin (FinVal (n - 1) 0))])
 
 -- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
 finPredOp :: MonadIO m => Value m e
@@ -173,8 +173,8 @@ finPredOp =
   VFun $ \_ -> return $
   finFun $ \i -> return $
   if finVal i == 0
-    then VCtorApp "Prelude.Nothing" (V.fromList [Ready VType])
-    else VCtorApp "Prelude.Just" (V.fromList [Ready VType, Ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
+    then VCtorApp "Prelude.Nothing" (V.fromList [ready VType])
+    else VCtorApp "Prelude.Just" (V.fromList [ready VType, ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
 
 -- natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
 natSplitFinOp :: MonadIO m => Value m e
@@ -182,8 +182,8 @@ natSplitFinOp =
   natFun $ \n -> return $
   natFun $ \i -> return $
   if i < n
-    then VCtorApp "Prelude.Left" (V.fromList $ map Ready [VType, VType, vFin (FinVal i (pred (n - i)))])
-    else VCtorApp "Prelude.Right" (V.fromList $ map Ready [VType, VType, vNat (i - n)])
+    then VCtorApp "Prelude.Left" (V.fromList $ map ready [VType, VType, vFin (FinVal i (pred (n - i)))])
+    else VCtorApp "Prelude.Right" (V.fromList $ map ready [VType, VType, vNat (i - n)])
 
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
 generateOp :: MonadIO m => Value m e
@@ -191,5 +191,5 @@ generateOp =
   natFun' "generate1" $ \n -> return $
   VFun $ \_ -> return $
   strictFun $ \f -> do
-    let g i = delay $ apply f (Ready (vFin (finFromBound (fromIntegral i) n)))
+    let g i = delay $ apply f (ready (vFin (finFromBound (fromIntegral i) n)))
     liftM VVector $ V.generateM (fromIntegral n) g

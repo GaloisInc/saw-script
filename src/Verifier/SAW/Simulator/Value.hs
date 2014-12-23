@@ -41,23 +41,25 @@ data Value m e
   | VType
   | VExtra e
 
-data Thunk m e
-  = Thunk !(IORef (Either (m (Value m e)) (Value m e)))
-  | Ready !(Value m e)
+type Thunk m e = m (Value m e)
 
-force :: MonadIO m => Thunk m e -> m (Value m e)
-force (Ready v) = return v
-force (Thunk ref) = do
-  r <- liftIO $ readIORef ref
-  case r of
-    Left m -> do
-      v <- m
-      liftIO $ writeIORef ref (Right v)
-      return v
-    Right v -> return v
+force :: Thunk m e -> m (Value m e)
+force thunk = thunk
+
+ready :: Monad m => Value m e -> Thunk m e
+ready x = return x
 
 delay :: MonadIO m => m (Value m e) -> m (Thunk m e)
-delay m = liftM Thunk $ liftIO (newIORef (Left m))
+delay m = liftM pull (liftIO (newIORef Nothing))
+  where
+    pull ref = do
+      r <- liftIO (readIORef ref)
+      case r of
+        Nothing -> do
+          x <- m
+          liftIO (writeIORef ref (Just x))
+          return x
+        Just x -> return x
 
 strictFun :: MonadIO m => (Value m e -> m (Value m e)) -> Value m e
 strictFun f = VFun (\x -> force x >>= f)
@@ -67,31 +69,34 @@ instance Show e => Show (Value m e) where
     case v of
       VFun {}        -> showString "<<fun>>"
       VTuple xv      -> showParen True
-                          (foldr (.) id (intersperse (showString ",") (map shows (V.toList xv))))
+                          (foldr (.) id (intersperse (showString ",") (map shows (toList xv))))
       VRecord _      -> error "unimplemented: show VRecord" -- !(Map FieldName Value)
       VCtorApp s xv
         | V.null xv  -> shows s
-        | otherwise  -> shows s . showList (V.toList xv)
-      VVector xv     -> showList (V.toList xv)
+        | otherwise  -> shows s . showList (toList xv)
+      VVector xv     -> showList (toList xv)
       VNat n         -> shows n
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s
       VType          -> showString "_"
       VExtra x       -> showsPrec p x
+    where
+      toList = map (const Nil) . V.toList
 
-instance Show e => Show (Thunk m e) where
-  showsPrec _ (Thunk _) = showString "<<thunk>>"
-  showsPrec p (Ready v) = showsPrec p v
+data Nil = Nil
+
+instance Show Nil where
+  show Nil = "_"
 
 ------------------------------------------------------------
 -- Basic operations on values
 
-valTupleSelect :: (MonadIO m, Show e) => Int -> Value m e -> m (Value m e)
+valTupleSelect :: (Monad m, Show e) => Int -> Value m e -> m (Value m e)
 valTupleSelect i (VTuple xv) = force $ (V.!) xv (i - 1)
 valTupleSelect _ v = fail $ "valTupleSelect: Not a tuple value: " ++ show v
 
-valRecordSelect :: (MonadIO m, Show e) => FieldName -> Value m e -> m (Value m e)
+valRecordSelect :: (Monad m, Show e) => FieldName -> Value m e -> m (Value m e)
 valRecordSelect k (VRecord vm) | Just x <- Map.lookup k vm = force x
 valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
 

@@ -176,7 +176,7 @@ toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
 toVector (VExtra SZero) = V.empty
 toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) =
-  V.fromList (map (Ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
+  V.fromList (map (ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
 toVector _ = error "this word might be symbolic"
 
 toTuple :: SValue -> IO (Maybe [SBV ()])
@@ -490,7 +490,7 @@ mkStreamOp =
   VFun $ \_ -> return $
   strictFun $ \f -> do
     r <- newIORef Map.empty
-    return $ VExtra (SStream (\n -> apply f (Ready (VNat n))) r)
+    return $ VExtra (SStream (\n -> apply f (ready (VNat n))) r)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: SValue
@@ -554,7 +554,7 @@ vZipOp =
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
-  VVector (V.zipWith (\x y -> Ready (VTuple (V.fromList [x, y]))) (toVector xs) (toVector ys))
+  VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (toVector xs) (toVector ys))
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: SValue
@@ -680,11 +680,11 @@ parseUninterpreted ks cws ty =
           reconstitute (R.asVecType -> (Just (n R.:*: ety))) v = do
             let xs = toVector v
             vs <- (reverse . fst) <$> foldM parseTy ([], xs) (replicate (fromIntegral n) ety)
-            return . VVector . V.fromList . map Ready $ vs
+            return . VVector . V.fromList . map ready $ vs
           reconstitute (R.asTupleType -> (Just [])) v = return v
           reconstitute (R.asTupleType -> (Just tys)) v = do
             vs <- (reverse . fst) <$> foldM parseTy ([], toVector v) tys
-            return . VTuple . V.fromList . map Ready $ vs
+            return . VTuple . V.fromList . map ready $ vs
           reconstitute t _ = fail $ "could not create uninterpreted type for " ++ show t
           parseTy (vs, bs) ty' =
             case typeSize ty' of
@@ -696,7 +696,8 @@ parseUninterpreted ks cws ty =
                   Just w -> do
                     v' <- reconstitute ty' (vWord w)
                     return (v' : vs, bs')
-                  Nothing -> fail $ "Can't convert to word: " ++ show vbs
+                  Nothing -> do vbs' <- traverse force vbs
+                                fail $ "Can't convert to word: " ++ show vbs'
               Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
 
 typeSize :: (Termlike t) => t -> Maybe Int
@@ -718,7 +719,7 @@ sbvSolve sc t = do
   bval <- sbvSolveBasic (scModule sc) t
   let (labels, vars) = flip evalState 0 $ unzip <$> traverse newVars shapes
   let prd = do
-              bval' <- traverse (fmap Ready) vars >>= (liftIO . applyAll bval)
+              bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
               case bval' of
                 VExtra (SBool b) -> return b
                 _ -> fail "bitBlast: non-boolean result type."
@@ -746,10 +747,10 @@ newVars (FTVec n FTBit) =
     else nextId <&> \s-> (WordLabel s, vWord <$> existsBV s (fromIntegral n))
 newVars (FTVec n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
-  return (VecLabel labels, VVector <$> traverse (fmap Ready) vals)
+  return (VecLabel labels, VVector <$> traverse (fmap ready) vals)
 newVars (FTTuple ts) = do
   (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
-  return (TupleLabel labels, VTuple <$> traverse (fmap Ready) vals)
+  return (TupleLabel labels, VTuple <$> traverse (fmap ready) vals)
 newVars (FTRec tm) = do
   (labels, vals) <- myfun <$> (traverse newVars tm :: State Int (Map String (Labeler, Symbolic SValue)))
-  return (RecLabel labels, VRecord <$> traverse (fmap Ready) (vals :: (Map String (Symbolic SValue))))
+  return (RecLabel labels, VRecord <$> traverse (fmap ready) (vals :: (Map String (Symbolic SValue))))

@@ -401,8 +401,8 @@ appendOp =
   strictFun $ \ys -> return $
   case (xs, ys) of
     (VVector xv, VVector yv)         -> VVector ((V.++) xv yv)
-    (VVector xv, VExtra (BWord ylv)) -> VVector ((V.++) xv (fmap (Ready . vBool) (vFromLV ylv)))
-    (VExtra (BWord xlv), VVector yv) -> VVector ((V.++) (fmap (Ready . vBool) (vFromLV xlv)) yv)
+    (VVector xv, VExtra (BWord ylv)) -> VVector ((V.++) xv (fmap (ready . vBool) (vFromLV ylv)))
+    (VExtra (BWord xlv), VVector yv) -> VVector ((V.++) (fmap (ready . vBool) (vFromLV xlv)) yv)
     (VExtra (BWord xlv), VExtra (BWord ylv)) -> vWord ((AIG.++) xlv ylv)
     _ -> error "Verifier.SAW.Simulator.BitBlast.appendOp"
 
@@ -415,11 +415,11 @@ vZipOp =
   VFun $ \_ -> return $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
-  VVector (V.zipWith (\x y -> Ready (VTuple (V.fromList [x, y]))) (vectorOfBValue xs) (vectorOfBValue ys))
+  VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (vectorOfBValue xs) (vectorOfBValue ys))
 
 vectorOfBValue :: BValue l -> V.Vector (BThunk l)
 vectorOfBValue (VVector xv) = xv
-vectorOfBValue (VExtra (BWord lv)) = fmap (Ready . vBool) (vFromLV lv)
+vectorOfBValue (VExtra (BWord lv)) = fmap (ready . vBool) (vFromLV lv)
 vectorOfBValue _ = error "Verifier.SAW.Simulator.BitBlast.vectorOfBValue"
 
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
@@ -578,7 +578,7 @@ mkStreamOp =
   VFun $ \_ -> return $
   strictFun $ \f -> do
     r <- newIORef Map.empty
-    return $ VExtra (BStream (\n -> apply f (Ready (VNat n))) r)
+    return $ VExtra (BStream (\n -> apply f (ready (VNat n))) r)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: BValue l
@@ -616,7 +616,7 @@ newVars be (FTTuple ts) = VTuple <$> traverse (newVars' be) (V.fromList ts)
 newVars be (FTRec tm) = VRecord <$> traverse (newVars' be) tm
 
 newVars' :: AIG.IsAIG l g => g s -> FiniteType -> IO (BThunk (l s))
-newVars' be shape = Ready <$> newVars be shape
+newVars' be shape = ready <$> newVars be shape
 
 ------------------------------------------------------------
 -- Bit-blasting predicates
