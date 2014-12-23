@@ -98,7 +98,7 @@ or (False) b = b;
 
 xor :: Bool -> Bool -> Bool;
 xor (True) b = not b;
-xor (False) b = b; 
+xor (False) b = b;
 
 implies :: Bool -> Bool -> Bool;
 implies a b = or (not a) b;
@@ -247,7 +247,7 @@ eqNatPrec :: (x y :: Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
 eqNatPrec _ _ (Refl _ (Succ x)) = Refl Nat x;
 
 -- | Addition
-addNat :: Nat -> Nat -> Nat; 
+addNat :: Nat -> Nat -> Nat;
 addNat Zero y = y;
 addNat (Succ x) y = Succ (addNat x y);
 
@@ -261,7 +261,7 @@ eqNatAddS (Succ x) y = eqNatSucc (addNat x (Succ y)) (Succ (addNat x y)) (eqNatA
 
 eqNatAddComm :: (x y :: Nat) -> eqNat (addNat x y) (addNat y x);
 eqNatAddComm x Zero = eqNatAdd0 x;
-eqNatAddComm x (Succ y) = 
+eqNatAddComm x (Succ y) =
   trans Nat
         (addNat x (Succ y))
         (Succ (addNat x y))
@@ -455,7 +455,7 @@ finSum m n (Right _ _ j) = finInc m n j;
 
 -- | Check property for all numbers less than a given upper bound.
 forallFin :: (n :: Nat) -> (Fin n -> Bool) -> Bool;
-forallFin n p = 
+forallFin n p =
   let { go :: Maybe (Fin n) -> Bool;
         go (Nothing _) = True;
         go (Just _ i) = and (p i) (go (finPred n i));
@@ -467,7 +467,7 @@ finSplitSucc _ (FinVal Zero r) = Nothing (Fin r);
 finSplitSucc _ (FinVal (Succ v) r) = Just (Fin (Succ (addNat v r))) (FinVal v r);
 
 -- | Given a Fin value @i@ and a number @m@, returns @Left i@ if @i@ is
--- less than @m@, and @Right (i - m)@ if @i@ > @m@. 
+-- less than @m@, and @Right (i - m)@ if @i@ > @m@.
 finSplitSum :: (m n :: Nat) -> Fin (addNat m n) -> Either (Fin m) (Fin n);
 finSplitSum Zero n i = Right (Fin Zero) (Fin n) i;
 finSplitSum (Succ m) n i =
@@ -615,7 +615,7 @@ get_vDrop a m n v i = get_vMove a (addNat m n) n (finInc m n) v i;
 
 -- | Simplify drop 0-elements from a vector.
 vDrop0 :: (a :: sort 0)
-       -> (n :: Nat) 
+       -> (n :: Nat)
        -> (v :: Vec (addNat 0 n) a)
        -> Eq (Vec n a) (vDrop a 0 n v) v;
 
@@ -852,7 +852,7 @@ bvMbit n v i = get n Bool v i;
 
 -- | Return true if two bitvectors are equal.
 bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i)); 
+bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i));
 
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
@@ -979,19 +979,19 @@ doubleToBV :: Double -> bitvector 64;
 
 
 bveq_sameL :: (n :: Nat)
-           -> (x z :: bitvector n) 
+           -> (x z :: bitvector n)
            -> Eq Bool
                  (bvEq n x (bvAdd n x z))
                  (bvEq n (bvNat n 0) z);
 
 bveq_sameR :: (n :: Nat)
-           -> (x y :: bitvector n) 
+           -> (x y :: bitvector n)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) x)
                  (bvEq n y (bvNat n 0));
 
 bveq_same2 :: (n :: Nat)
-           -> (x y z :: bitvector n) 
+           -> (x y z :: bitvector n)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
