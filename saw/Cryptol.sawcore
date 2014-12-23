@@ -88,7 +88,7 @@ tcMax TCInf TCInf = TCInf;
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThenTo :: Num -> Num -> Num -> Num;
-		
+
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
@@ -346,7 +346,7 @@ ecAnd :: (a :: KType) -> ty a -> ty a -> ty a;
 ecAnd TCBit = and;
 ecAnd (TCSeq n a) = seqBinary n a (ecAnd a);
 ecAnd (TCSeq (TCNum n) TCBit) = bvAnd n;
---ecAnd (TCFun a b) = 
+--ecAnd (TCFun a b) =
 ecAnd TCUnit = unitBinary;
 ecAnd (TCPair a b) = pairBinary a b (ecAnd a) (ecAnd b);
 
@@ -354,7 +354,7 @@ ecOr :: (a :: KType) -> ty a -> ty a -> ty a;
 ecOr TCBit = or;
 ecOr (TCSeq n a) = seqBinary n a (ecOr a);
 ecOr (TCSeq (TCNum n) TCBit) = bvOr n;
---ecOr (TCFun a b) = 
+--ecOr (TCFun a b) =
 ecOr TCUnit = unitBinary;
 ecOr (TCPair a b) = pairBinary a b (ecOr a) (ecOr b);
 
