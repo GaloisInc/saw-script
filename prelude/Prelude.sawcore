@@ -188,6 +188,13 @@ eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
 eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 --------------------------------------------------------------------------------
+-- Overloaded operations
+
+zero :: (a :: sort 0) -> a;
+-- Implemented as primitive;
+-- Only defined for boolean, vector, tuple, record, and function types
+
+--------------------------------------------------------------------------------
 -- Pairs
 
 fst :: (a b :: sort 0) -> #(a, b) -> a;
