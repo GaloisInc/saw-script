@@ -9,13 +9,14 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.Value where
+module Verifier.SAW.Simulator.Value
+       ( module Verifier.SAW.Simulator.Value
+       , module Verifier.SAW.Simulator.MonadLazy
+       ) where
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM)
-import Control.Monad.IO.Class
-import Data.IORef
+import Control.Monad (foldM)
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -24,6 +25,8 @@ import qualified Data.Vector as V
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+
+import Verifier.SAW.Simulator.MonadLazy
 
 ------------------------------------------------------------
 -- Values and Thunks
@@ -43,25 +46,7 @@ data Value m e
 
 type Thunk m e = m (Value m e)
 
-force :: Thunk m e -> m (Value m e)
-force thunk = thunk
-
-ready :: Monad m => Value m e -> Thunk m e
-ready x = return x
-
-delay :: MonadIO m => m (Value m e) -> m (Thunk m e)
-delay m = liftM pull (liftIO (newIORef Nothing))
-  where
-    pull ref = do
-      r <- liftIO (readIORef ref)
-      case r of
-        Nothing -> do
-          x <- m
-          liftIO (writeIORef ref (Just x))
-          return x
-        Just x -> return x
-
-strictFun :: MonadIO m => (Value m e -> m (Value m e)) -> Value m e
+strictFun :: Monad m => (Value m e -> m (Value m e)) -> Value m e
 strictFun f = VFun (\x -> force x >>= f)
 
 instance Show e => Show (Value m e) where
