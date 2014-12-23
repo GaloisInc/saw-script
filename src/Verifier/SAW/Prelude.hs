@@ -32,7 +32,7 @@ scFinConst :: SharedContext s
            -> Nat -- ^ Bound n
            -> IO (SharedTerm s)
 scFinConst sc i n | i < n = do
-  fv <- scApplyPreludeFinVal sc
+  fv <- scApplyPrelude_FinVal sc
   join $ fv <$> scNat sc i <*> scNat sc (n - (i + 1))
 scFinConst _ _ _ = error "illegal arguments to scFinConst"
 

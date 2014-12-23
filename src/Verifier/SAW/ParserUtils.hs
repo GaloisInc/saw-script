@@ -37,7 +37,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
 #endif
 import Data.ByteString.Unsafe (unsafePackAddressLen)
-import Data.Char
 import Data.Maybe
 import Language.Haskell.TH
 #if MIN_VERSION_template_haskell(2,7,0)
@@ -61,10 +60,6 @@ stringPrimFromBS b = LitE $ StringPrimL $ BL.unpack b
 #else
 stringPrimFromBS b = LitE $ StringPrimL $ UTF8.toString b
 #endif
-
-camelCase :: String -> String
-camelCase (h:l) = toUpper h : l
-camelCase [] = []
 
 -- | Returns a module containing the standard prelude for SAW.
 readModule :: [Module] -> FilePath -> FilePath -> BL.ByteString -> Module
@@ -140,7 +135,7 @@ defineModuleFromFile modules decNameStr path = do
   -- Run parser.
   let imports = decVal <$> modules
 
-  m <- 
+  m <-
     case Un.parseSAW base nm compile_b of
       (m0,[]) -> do
         case tcModule imports m0 of
@@ -170,7 +165,7 @@ defineModuleFromFile modules decNameStr path = do
                   }
 
 -- | Declare a termf definition referring to a constant with the given name
--- in the module. 
+-- in the module.
 declareDefTermF :: DecExp Module -> String -> DecWriter ()
 declareDefTermF mexp nm = do
   let m = decVal mexp
@@ -314,11 +309,11 @@ declareSharedDefApp nm n def = do
 declareSharedModuleFns :: String -> Module -> DecWriter ()
 declareSharedModuleFns mnm m = do
   forM_ (moduleDataTypes m) $ \dt -> do
-    let nm = "sc" ++ mnm ++ identName (dtName dt)
+    let nm = "sc" ++ mnm ++ "_" ++ identName (dtName dt)
     declareSharedDataTypeApp nm dt
   forM_ (moduleCtors m) $ \c -> do
-    let nm = "scApply" ++ mnm ++ identName (ctorName c)
+    let nm = "scApply" ++ mnm ++ "_" ++ identName (ctorName c)
     declareSharedCtorApp nm c
   forM_ (moduleDefs m) $ \d -> do
-    let nm = "scApply" ++ mnm ++ camelCase (identName (defIdent d))
+    let nm = "scApply" ++ mnm ++ "_" ++ identName (defIdent d)
     declareSharedDefApp nm (piArgCount (defType d)) d
