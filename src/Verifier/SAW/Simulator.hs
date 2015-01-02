@@ -21,10 +21,11 @@ module Verifier.SAW.Simulator where
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM, when)
+import Control.Applicative ((<$>), (*>))
+import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
-import Control.Monad.IO.Class
-import Data.IORef
+import qualified Control.Monad.State as State
+import Data.Foldable (traverse_)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -203,37 +204,35 @@ evalGlobal m prims uninterpreted = cfg
 -- we descend under a lambda binder.
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: (MonadLazy m, MonadIO m, MonadFix m, Show e) =>
+evalSharedTerm :: (MonadLazy m, MonadFix m, Show e) =>
                   SimulatorConfig m e -> SharedTerm s -> m (Value m e)
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
   evalOpen cfg memoClosed [] t
 
 -- | Precomputing the memo table for closed subterms.
-mkMemoClosed :: forall m e s. (MonadLazy m, MonadIO m, MonadFix m, Show e) =>
+mkMemoClosed :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
                 SimulatorConfig m e -> SharedTerm s -> m (IntMap (Thunk m e))
 mkMemoClosed cfg t =
-  mfix $ \memoClosed -> do
-    bref <- liftIO (newIORef IMap.empty)
-    xref <- liftIO (newIORef IMap.empty)
-    let go :: SharedTerm s -> m BitSet
-        go (Unshared tf) = liftM freesTermF $ mapM go tf
-        go (STApp i tf) = do
-          bmemo <- liftIO (readIORef bref)
-          case IMap.lookup i bmemo of
-            Just b -> return b
-            Nothing -> do
-              b <- liftM freesTermF $ mapM go tf
-              liftIO (modifyIORef' bref (IMap.insert i b))
-              when (b == 0) $ do
-                x <- delay (evalClosedTermF cfg memoClosed tf)
-                liftIO (modifyIORef' xref (IMap.insert i x))
-              return b
-    _ <- go t
-    liftIO (readIORef xref)
+  mfix $ \memoClosed -> mapM (delay . evalClosedTermF cfg memoClosed) subterms
+  where
+    -- | Map of all closed subterms of t.
+    subterms :: IntMap (TermF (SharedTerm s))
+    subterms = fmap fst $ IMap.filter ((== 0) . snd) $ State.execState (go t) IMap.empty
+
+    go :: SharedTerm s -> State.State (IntMap (TermF (SharedTerm s), BitSet)) BitSet
+    go (Unshared tf) = freesTermF <$> traverse go tf
+    go (STApp i tf) = do
+      memo <- State.get
+      case IMap.lookup i memo of
+        Just (_, b) -> return b
+        Nothing -> do
+          b <- freesTermF <$> traverse go tf
+          State.modify (IMap.insert i (tf, b))
+          return b
 
 -- | Evaluator for closed terms, used to populate @memoClosed@.
-evalClosedTermF :: (MonadLazy m, MonadIO m, MonadFix m, Show e) =>
+evalClosedTermF :: (MonadLazy m, MonadFix m, Show e) =>
                    SimulatorConfig m e
                 -> IntMap (Thunk m e)
                 -> TermF (SharedTerm s) -> m (Value m e)
@@ -246,28 +245,72 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
         Just x -> force x
         Nothing -> fail "evalClosedTermF: internal error"
 
+-- | Precomputing the memo table for open subterms in the current context.
+mkMemoLocal :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
+               SimulatorConfig m e -> IntMap (Thunk m e) ->
+               [Thunk m e] -> SharedTerm s -> m (IntMap (Thunk m e))
+mkMemoLocal cfg memoClosed env t =
+  mfix $ \memoLocal -> mapM (delay . evalLocalTermF cfg memoClosed memoLocal env) subterms
+  where
+    -- | Map of all shared subterms in the same local variable context.
+    subterms :: IntMap (TermF (SharedTerm s))
+    subterms = State.execState (go t) IMap.empty
+
+    go :: SharedTerm s -> State.State (IntMap (TermF (SharedTerm s))) ()
+    go (Unshared tf) = goTermF tf
+    go (STApp i tf) = do
+      memo <- State.get
+      case IMap.lookup i memo of
+        Just _ -> return ()
+        Nothing -> do
+          goTermF tf
+          State.modify (IMap.insert i tf)
+
+    goTermF :: TermF (SharedTerm s) -> State.State (IntMap (TermF (SharedTerm s))) ()
+    goTermF tf =
+      case tf of
+        FTermF ftf      -> traverse_ go ftf
+        App t1 t2       -> go t1 *> go t2
+        Lambda _ t1 _   -> go t1
+        Pi _ t1 _       -> go t1
+        Let _ _         -> return ()
+        LocalVar _      -> return ()
+        Constant _ t1 _ -> go t1
+
+-- | Evaluator for open terms, used to populate @memoLocal@.
+evalLocalTermF :: (MonadLazy m, MonadFix m, Show e) =>
+                   SimulatorConfig m e
+                -> IntMap (Thunk m e) -> IntMap (Thunk m e)
+                -> [Thunk m e] -> TermF (SharedTerm s) -> m (Value m e)
+evalLocalTermF cfg memoClosed memoLocal env = evalTermF cfg lam rec env
+  where
+    lam = evalOpen cfg memoClosed
+    rec (Unshared tf) = evalTermF cfg lam rec env tf
+    rec (STApp i _) =
+      case IMap.lookup i memoClosed of
+        Just x -> force x
+        Nothing ->
+          case IMap.lookup i memoLocal of
+            Just x -> force x
+            Nothing -> fail "evalLocalTermF: internal error"
+
 -- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
-evalOpen :: forall m e s. (MonadLazy m, MonadIO m, MonadFix m, Show e) =>
+evalOpen :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
             SimulatorConfig m e
          -> IntMap (Thunk m e)
          -> [Thunk m e]
          -> SharedTerm s -> m (Value m e)
-evalOpen cfg memoClosed env t =
-  do ref <- liftIO (newIORef IMap.empty)
-     go ref t
-  where
-    go :: IORef (IntMap (Value m e)) -> SharedTerm s -> m (Value m e)
-    go ref (Unshared tf) = evalF ref tf
-    go ref (STApp i tf) =
-      case IMap.lookup i memoClosed of
-        Just x -> force x
-        Nothing -> do
-          memoLocal <- liftIO (readIORef ref)
-          case IMap.lookup i memoLocal of
-            Just v -> return v
-            Nothing -> do
-              v <- evalF ref tf
-              liftIO (modifyIORef' ref (IMap.insert i v))
-              return v
-    evalF :: IORef (IntMap (Value m e)) -> TermF (SharedTerm s) -> m (Value m e)
-    evalF ref tf = evalTermF cfg (evalOpen cfg memoClosed) (go ref) env tf
+evalOpen cfg memoClosed env t = do
+  memoLocal <- mkMemoLocal cfg memoClosed env t
+  let eval :: SharedTerm s -> m (Value m e)
+      eval (Unshared tf) = evalF tf
+      eval (STApp i tf) =
+        case IMap.lookup i memoClosed of
+          Just x -> force x
+          Nothing -> do
+            case IMap.lookup i memoLocal of
+              Just x -> force x
+              Nothing -> evalF tf
+      evalF :: TermF (SharedTerm s) -> m (Value m e)
+      evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval env tf
+  eval t
