@@ -16,7 +16,7 @@ module Verifier.SAW.Simulator.Value
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, liftM)
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -48,6 +48,9 @@ type Thunk m e = m (Value m e)
 
 strictFun :: Monad m => (Value m e -> m (Value m e)) -> Value m e
 strictFun f = VFun (\x -> force x >>= f)
+
+pureFun :: Monad m => (Value m e -> Value m e) -> Value m e
+pureFun f = VFun (liftM f)
 
 instance Show e => Show (Value m e) where
   showsPrec p v =
