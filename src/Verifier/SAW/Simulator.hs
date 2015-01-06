@@ -87,7 +87,7 @@ matchThunks (p : ps) (x : xs) = do
 -- | Evaluator for pattern-matching function definitions,
 -- parameterized by an evaluator for right-hand sides.
 evalDef :: forall m e n t. (Monad m, Show n) =>
-           ([Thunk m e] -> t -> m (Value m e)) -> GenericDef n t -> m (Value m e)
+           (t -> OpenValue m e) -> GenericDef n t -> m (Value m e)
 evalDef rec (Def ident _ eqns) = vFuns [] arity
   where
     arity :: Int
@@ -109,29 +109,31 @@ evalDef rec (Def ident _ eqns) = vFuns [] arity
       do minst <- matchThunks ps xs
          case minst of
            Nothing -> return Nothing
-           Just inst -> let env = reverse (Map.elems inst) in liftM Just (rec env rhs)
+           Just inst -> let env = reverse (Map.elems inst) in liftM Just (rec rhs env)
 
 ------------------------------------------------------------
 -- Evaluation of terms
 
+-- | Meaning of an open term, parameterized by environment of bound variables
+type OpenValue m e = [m (Value m e)] -> m (Value m e)
+
 -- | Generic evaluator for TermFs.
 evalTermF :: forall t m e. (Show t, MonadLazy m, MonadFix m, Termlike t, Show e) =>
              SimulatorConfig m e                  -- ^ Evaluator for global constants
-          -> ([Thunk m e] -> t -> m (Value m e))  -- ^ Evaluator for subterms under binders
+          -> (t -> OpenValue m e)                 -- ^ Evaluator for subterms under binders
           -> (t -> m (Value m e))                 -- ^ Evaluator for subterms in the same bound variable context
-          -> [Thunk m e]                          -- ^ Environment of bound variables
-          -> TermF t -> m (Value m e)
-evalTermF cfg lam rec env tf =
+          -> TermF t -> OpenValue m e
+evalTermF cfg lam rec tf env =
   case tf of
     App t1 t2               -> do v <- rec t1
                                   x <- rec' t2
                                   apply v x
-    Lambda _ _ t            -> return $ VFun (\x -> lam (x : env) t)
+    Lambda _ _ t            -> return $ VFun (\x -> lam t (x : env))
     Pi {}                   -> return $ VType
     Let ds t                -> do env' <- mfix $ \env' -> do
-                                            xs <- mapM (delay . evalDef (\ys -> lam (ys ++ env'))) (reverse ds)
+                                            xs <- mapM (delay . evalDef (\t' ys -> lam t' (ys ++ env'))) (reverse ds)
                                             return (xs ++ env)
-                                  lam env' t
+                                  lam t env'
     LocalVar i              -> force (env !! i)
     Constant i t ty         -> maybe (rec t) id (simUninterpreted cfg i ty)
     FTermF ftf              ->
@@ -161,11 +163,11 @@ evalTermF cfg lam rec env tf =
 
 -- | Evaluator for unshared terms.
 evalTerm :: (MonadLazy m, MonadFix m, Show e) =>
-            SimulatorConfig m e -> [Thunk m e] -> Term -> m (Value m e)
-evalTerm cfg env (Term tf) = evalTermF cfg lam rec env tf
+            SimulatorConfig m e -> Term -> OpenValue m e
+evalTerm cfg (Term tf) env = evalTermF cfg lam rec tf env
   where
     lam = evalTerm cfg
-    rec = evalTerm cfg env
+    rec t = evalTerm cfg t env
 
 evalTypedDef :: (MonadLazy m, MonadFix m, Show e) =>
                 SimulatorConfig m e -> TypedDef -> m (Value m e)
@@ -217,7 +219,7 @@ evalSharedTerm :: (MonadLazy m, MonadFix m, Show e) =>
                   SimulatorConfig m e -> SharedTerm s -> m (Value m e)
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
-  evalOpen cfg memoClosed [] t
+  evalOpen cfg memoClosed t []
 
 -- | Precomputing the memo table for closed subterms.
 mkMemoClosed :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
@@ -245,10 +247,10 @@ evalClosedTermF :: (MonadLazy m, MonadFix m, Show e) =>
                    SimulatorConfig m e
                 -> IntMap (Thunk m e)
                 -> TermF (SharedTerm s) -> m (Value m e)
-evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
+evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
   where
     lam = evalOpen cfg memoClosed
-    rec (Unshared tf') = evalTermF cfg lam rec [] tf'
+    rec (Unshared tf') = evalTermF cfg lam rec tf' []
     rec (STApp i _) =
       case IMap.lookup i memoClosed of
         Just x -> force x
@@ -257,9 +259,9 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec [] tf
 -- | Precomputing the memo table for open subterms in the current context.
 mkMemoLocal :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
                SimulatorConfig m e -> IntMap (Thunk m e) ->
-               [Thunk m e] -> SharedTerm s -> m (IntMap (Thunk m e))
-mkMemoLocal cfg memoClosed env t =
-  mfix $ \memoLocal -> mapM (delay . evalLocalTermF cfg memoClosed memoLocal env) subterms
+               SharedTerm s -> [Thunk m e] -> m (IntMap (Thunk m e))
+mkMemoLocal cfg memoClosed t env =
+  mfix $ \memoLocal -> mapM (\tf -> delay (evalLocalTermF cfg memoClosed memoLocal tf env)) subterms
   where
     -- | Map of all shared subterms in the same local variable context.
     subterms :: IntMap (TermF (SharedTerm s))
@@ -290,11 +292,11 @@ mkMemoLocal cfg memoClosed env t =
 evalLocalTermF :: (MonadLazy m, MonadFix m, Show e) =>
                    SimulatorConfig m e
                 -> IntMap (Thunk m e) -> IntMap (Thunk m e)
-                -> [Thunk m e] -> TermF (SharedTerm s) -> m (Value m e)
-evalLocalTermF cfg memoClosed memoLocal env = evalTermF cfg lam rec env
+                -> TermF (SharedTerm s) -> OpenValue m e
+evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
   where
     lam = evalOpen cfg memoClosed
-    rec (Unshared tf) = evalTermF cfg lam rec env tf
+    rec (Unshared tf) = evalTermF cfg lam rec tf env
     rec (STApp i _) =
       case IMap.lookup i memoClosed of
         Just x -> force x
@@ -307,10 +309,9 @@ evalLocalTermF cfg memoClosed memoLocal env = evalTermF cfg lam rec env
 evalOpen :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
             SimulatorConfig m e
          -> IntMap (Thunk m e)
-         -> [Thunk m e]
-         -> SharedTerm s -> m (Value m e)
-evalOpen cfg memoClosed env t = do
-  memoLocal <- mkMemoLocal cfg memoClosed env t
+         -> SharedTerm s -> OpenValue m e
+evalOpen cfg memoClosed t env = do
+  memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: SharedTerm s -> m (Value m e)
       eval (Unshared tf) = evalF tf
       eval (STApp i tf) =
@@ -321,5 +322,5 @@ evalOpen cfg memoClosed env t = do
               Just x -> force x
               Nothing -> evalF tf
       evalF :: TermF (SharedTerm s) -> m (Value m e)
-      evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval env tf
+      evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t
