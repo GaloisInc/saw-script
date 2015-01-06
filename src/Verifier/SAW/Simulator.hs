@@ -22,10 +22,13 @@ module Verifier.SAW.Simulator where
 import Prelude hiding (mapM)
 
 import Control.Applicative ((<$>), (*>))
+import Control.Lens ((^.))
 import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
 import qualified Control.Monad.State as State
 import Data.Foldable (traverse_)
+import Data.HashMap.Lazy (HashMap)
+import qualified Data.HashMap.Lazy as HashMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -172,22 +175,28 @@ evalGlobal :: forall m e. (MonadLazy m, MonadFix m, Show e) =>
               Module -> Map Ident (Value m e) ->
               (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))) ->
               SimulatorConfig m e
-evalGlobal m prims uninterpreted = cfg
+evalGlobal m0 prims uninterpreted = cfg
   where
     cfg :: SimulatorConfig m e
     cfg = SimulatorConfig global uninterpreted
 
+    ms :: [Module]
+    ms = m0 : Map.elems (m0^.moduleImports)
+
     global :: Ident -> m (Value m e)
     global ident =
-      case Map.lookup ident prims of
-        Just v -> return v
-        Nothing ->
-          case findCtor m ident of
-            Just ct -> return (vCtor ident [] (ctorType ct))
-            Nothing ->
-              case findDef m ident of
-                Just td | not (null (defEqs td)) -> evalTypedDef cfg td
-                _ -> fail $ "Unimplemented global: " ++ show ident
+      case HashMap.lookup ident globals of
+        Just v -> v
+        Nothing -> fail $ "Unimplemented global: " ++ show ident
+
+    globals :: HashMap Ident (m (Value m e))
+    globals =
+      HashMap.fromList $
+      [ (ctorName ct, return (vCtor (ctorName ct) [] (ctorType ct))) |
+        m <- ms, ct <- moduleCtors m ] ++
+      [ (defIdent td, evalTypedDef cfg td) |
+        m <- ms, td <- moduleDefs m, not (null (defEqs td)) ] ++
+      Map.assocs (fmap return prims) -- Later mappings take precedence
 
     vCtor :: Ident -> [Thunk m e] -> Term -> Value m e
     vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
