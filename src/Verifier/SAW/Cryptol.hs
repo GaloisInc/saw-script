@@ -38,6 +38,7 @@ import qualified Verifier.SAW.Simulator.Concrete as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, mkModuleName, findDef)
 import qualified Verifier.SAW.Recognizer as R
 
@@ -634,7 +635,7 @@ exportValue' ty v
     case v of
       SC.VExtra (SC.CWord w) -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
       SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue' e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
-      SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue' e . SC.runIdentity) (Vector.toList xs))
+      SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue' e . SC.runIdentity . force) (Vector.toList xs))
       _ -> error "exportValue"
 
   -- tuples
@@ -656,5 +657,6 @@ exportValues' :: [V.TValue] -> SC.CValue -> [V.Value]
 exportValues' [] _ = []
 exportValues' (t1 : ts) v = exportValue' t1 v1 : exportValues' ts vs
   where (v1, vs) = case v of
-          SC.VTuple (Vector.toList -> [x, y]) -> (SC.runIdentity x, SC.runIdentity y)
+          SC.VTuple (Vector.toList -> [x, y])
+            -> (SC.runIdentity (force x), SC.runIdentity (force y))
           _ -> error "exportValues': ill-formed tuple/record"
