@@ -872,7 +872,7 @@ insImport :: Module -> Module -> Module
 insImport i = moduleImports . at (moduleName i) ?~ i
 
 insDataType :: Module -> TypedDataType -> Module
-insDataType m dt 
+insDataType m dt
     | identModule (dtName dt) == moduleName m =
         m { moduleTypeMap = Map.insert (identName (dtName dt)) dt (moduleTypeMap m)
           , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
@@ -911,7 +911,7 @@ findDef m i = do
   Map.lookup (identName i) (moduleDefMap m')
 
 insDef :: Module -> Def Term -> Module
-insDef m d 
+insDef m d
   | identModule (defIdent d) == moduleName m =
       m { moduleDefMap = Map.insert (identName (defIdent d)) d (moduleDefMap m)
         , moduleRDecls = DefDecl d : moduleRDecls m
