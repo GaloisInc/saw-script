@@ -4,25 +4,27 @@ import Control.Monad.Identity
 import Control.Monad.IO.Class
 import Data.IORef
 
+newtype Lazy m a = Lazy (m a)
+
 class Monad m => MonadLazy m where
-  delay :: m a -> m (m a)
+  delay :: m a -> m (Lazy m a)
 
-force :: m a -> m a
-force = id
+force :: Lazy m a -> m a
+force (Lazy m) = m
 
-ready :: Monad m => a -> m a
-ready = return
+ready :: Monad m => a -> Lazy m a
+ready x = Lazy (return x)
 
 instance MonadLazy Identity where
-  delay = return
+  delay m = return (Lazy m)
 
 instance MonadLazy IO where
   delay = delayIO
 
-delayIO :: MonadIO m => m a -> m (m a)
+delayIO :: MonadIO m => m a -> m (Lazy m a)
 delayIO m = liftM pull (liftIO (newIORef Nothing))
   where
-    pull ref = do
+    pull ref = Lazy $ do
       r <- liftIO (readIORef ref)
       case r of
         Nothing -> do

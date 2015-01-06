@@ -111,7 +111,7 @@ explodeBitVector (BV w x) = V.reverse (V.generate w (testBit x))
 
 toWord :: CValue -> BitVector
 toWord (VExtra (CWord x)) = x
-toWord (VVector vv) = BV (V.length vv) (bvToInteger (fmap (toBool . runIdentity) vv))
+toWord (VVector vv) = BV (V.length vv) (bvToInteger (fmap (toBool . runIdentity . force) vv))
 toWord x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toWord", show x]
 
 vStream :: IntTrie CValue -> CValue
@@ -122,7 +122,7 @@ toStream (VExtra (CStream x)) = x
 toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x]
 
 toVector :: CValue -> V.Vector CValue
-toVector (VVector xv) = fmap runIdentity xv
+toVector (VVector xv) = fmap (runIdentity . force) xv
 toVector (VExtra (CWord w)) = fmap vBool (explodeBitVector w)
 toVector _ = error "Verifier.SAW.Simulator.Concrete.toVector"
 
@@ -268,7 +268,7 @@ iteOp =
   VFun $ \_ -> return $
   strictFun $ \b -> return $
   VFun $ \x -> return $
-  VFun $ \y -> if toBool b then x else y
+  VFun $ \y -> if toBool b then force x else force y
 
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 getOp :: CValue
@@ -278,7 +278,7 @@ getOp =
   pureFun $ \v ->
   Prims.finFun $ \i ->
     case v of
-      VVector xv -> (V.!) xv (fromEnum (Prim.finVal i))
+      VVector xv -> force $ (V.!) xv (fromEnum (Prim.finVal i))
       VExtra (CWord w) -> return $ vBool (Prim.get_bv undefined undefined w i)
       _ -> fail $ "Verifier.SAW.Simulator.Concrete.getOp: expected vector, got " ++ show v
 
@@ -300,11 +300,11 @@ atOp =
   VFun $ \_ -> return $
   VFun $ \_ -> return $
   pureFun $ \v ->
-  Prims.natFun $ \n -> return $
+  Prims.natFun $ \n ->
     case v of
-      VVector xv -> runIdentity $ (V.!) xv (fromIntegral n)
-      VExtra (CWord w) -> vBool (Prim.get_bv undefined undefined w (Prim.finFromBound n (fromIntegral (width w))))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.atOp: expected vector, got " ++ show v
+      VVector xv -> force $ (V.!) xv (fromIntegral n)
+      VExtra (CWord w) -> return $ vBool (Prim.get_bv undefined undefined w (Prim.finFromBound n (fromIntegral (width w))))
+      _ -> fail $ "Verifier.SAW.Simulator.Concrete.atOp: expected vector, got " ++ show v
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: CValue
@@ -315,7 +315,7 @@ bvAtOp =
   pureFun $ \v ->
   wordFun $ \i ->
     case v of
-      VVector xv -> runIdentity $ (V.!) xv (fromInteger (unsigned i))
+      VVector xv -> runIdentity $ force $ (V.!) xv (fromInteger (unsigned i))
       VExtra (CWord w) -> vBool (Prim.get_bv undefined undefined w (Prim.finFromBound (fromInteger (unsigned i)) (fromIntegral (width w))))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvAtOp: expected vector, got " ++ show v
 

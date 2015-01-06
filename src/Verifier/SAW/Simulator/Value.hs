@@ -44,13 +44,13 @@ data Value m e
   | VType
   | VExtra e
 
-type Thunk m e = m (Value m e)
+type Thunk m e = Lazy m (Value m e)
 
 strictFun :: Monad m => (Value m e -> m (Value m e)) -> Value m e
 strictFun f = VFun (\x -> force x >>= f)
 
 pureFun :: Monad m => (Value m e -> Value m e) -> Value m e
-pureFun f = VFun (liftM f)
+pureFun f = VFun (\x -> liftM f (force x))
 
 instance Show e => Show (Value m e) where
   showsPrec p v =

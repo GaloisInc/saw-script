@@ -115,7 +115,7 @@ evalDef rec (Def ident _ eqns) = vFuns [] arity
 -- Evaluation of terms
 
 -- | Meaning of an open term, parameterized by environment of bound variables
-type OpenValue m e = [m (Value m e)] -> m (Value m e)
+type OpenValue m e = [Thunk m e] -> m (Value m e)
 
 -- | Generic evaluator for TermFs.
 evalTermF :: forall t m e. (Show t, MonadLazy m, MonadFix m, Termlike t, Show e) =>
