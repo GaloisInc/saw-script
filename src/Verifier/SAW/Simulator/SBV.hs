@@ -261,8 +261,8 @@ symTestBit _ _ = error "SWord must be bounded"
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: SValue
 atOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.natFun $ \n ->
     case v of
@@ -273,8 +273,8 @@ atOp =
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 updOp :: SValue
 updOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.natFun $ \n -> return $
   VFun $ \y ->
@@ -285,9 +285,9 @@ updOp =
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: SValue
 bvAtOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   wordFun $ \milv -> do
     case (milv, v) of
@@ -300,8 +300,8 @@ bvAtOp =
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 getOp :: SValue
 getOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.finFun $ \i ->
     case v of
@@ -312,8 +312,8 @@ getOp =
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
 setOp :: SValue
 setOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.finFun $ \i -> return $
   VFun $ \y ->
@@ -327,21 +327,21 @@ setOp =
 -- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShLOp :: SValue
 bvShLOp =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ shiftL w (fromIntegral n)
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
 bvShROp =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ shiftR w (fromIntegral n)
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
 bvSShROp =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ unsignCast $ shiftR (signCast w) (fromIntegral n)
 
@@ -352,8 +352,8 @@ bvSShROp =
 -- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
 bvPModOp :: SValue
 bvPModOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   wordFun $ \(Just x@(SBV (KBounded _ _k1) _)) -> return $
   wordFun $ \(Just y@(SBV (KBounded _ k2) _)) ->
     return . vWord . fromBitsLE $ take (k2-1) (snd (Poly.mdp (blastLE x) (blastLE y)) ++ repeat false)
@@ -361,8 +361,8 @@ bvPModOp =
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
 bvPMulOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   wordFun $ \(Just x@(SBV (KBounded _ k1) _)) -> return $
   wordFun $ \(Just y@(SBV (KBounded _ k2) _)) -> do
     let k = max 1 (k1 + k2) - 1
@@ -393,9 +393,9 @@ vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
 bvUpdOp :: SValue
 bvUpdOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   wordFun $ \milv -> return $
   strictFun $ \y ->
@@ -425,9 +425,9 @@ bvUpdOp =
 -- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateLOp :: SValue
 bvRotateLOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   wordFun $ \milv ->
     case (milv, xs) of
@@ -440,9 +440,9 @@ bvRotateLOp =
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateROp :: SValue
 bvRotateROp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   wordFun $ \milv -> do
     case (milv, xs) of
@@ -454,9 +454,9 @@ bvRotateROp =
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftLOp :: SValue
 bvShiftLOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \milv -> do
@@ -469,9 +469,9 @@ bvShiftLOp =
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: SValue
 bvShiftROp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \milv -> do
@@ -487,7 +487,7 @@ bvShiftROp =
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
 mkStreamOp :: SValue
 mkStreamOp =
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \f -> do
     r <- newIORef Map.empty
     return $ VExtra (SStream (\n -> apply f (ready (VNat n))) r)
@@ -495,15 +495,15 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: SValue
 streamGetOp =
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \xs -> return $
   Prims.natFun $ \n -> lookupSStream xs (toInteger n)
 
 -- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
 bvStreamGetOp :: SValue
 bvStreamGetOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   wordFun $ \(Just ilv) ->
   selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
@@ -532,9 +532,9 @@ bvNatOp =
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: SValue
 foldrOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \f -> return $
   VFun $ \z -> return $
   strictFun $ \xs -> do
@@ -548,10 +548,10 @@ foldrOp =
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: SValue
 vZipOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
   VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (toVector xs) (toVector ys))
@@ -559,9 +559,9 @@ vZipOp =
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: SValue
 appendOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys ->
   case (xs, ys) of
@@ -578,7 +578,7 @@ appendOp =
 -- Helpers for marshalling into SValues
 
 binOp :: (SWord -> SWord -> SWord) -> SValue
-binOp op = VFun $ \_-> return $
+binOp op = constFun $
           strictFun $ \mx-> return $
           strictFun $ \my->
             case (mx, my) of
@@ -592,7 +592,7 @@ sbinOp :: (SWord -> SWord -> SWord) -> SValue
 sbinOp f = binOp (\x y -> f (signCast x) y)
 
 binRel :: (SWord -> SWord -> SBool) -> SValue
-binRel op = VFun $ \_-> return $
+binRel op = constFun $
             strictFun $ \mx-> return $
             strictFun $ \my-> do
               (Just x) <- toWord mx
@@ -612,7 +612,7 @@ boolBinOp op =
 
 iteOp :: SValue
 iteOp =
-    VFun $ \_ -> return $
+    constFun $
     strictFun $ \b-> return $
     strictFun $ \x-> return $
     strictFun $ \y-> muxBVal (forceBool b) x y

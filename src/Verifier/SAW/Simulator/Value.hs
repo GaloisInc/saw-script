@@ -52,6 +52,9 @@ strictFun f = VFun (\x -> force x >>= f)
 pureFun :: Monad m => (Value m e -> Value m e) -> Value m e
 pureFun f = VFun (\x -> liftM f (force x))
 
+constFun :: Monad m => Value m e -> Value m e
+constFun x = VFun (\_ -> return x)
+
 instance Show e => Show (Value m e) where
   showsPrec p v =
     case v of

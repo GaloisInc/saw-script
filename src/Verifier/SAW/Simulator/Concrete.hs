@@ -152,20 +152,20 @@ boolBinOp op =
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
 binOp :: (BitVector -> BitVector -> BitVector) -> CValue
 binOp op =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x ->
   wordFun $ \y -> vWord (op x y)
 
 binOp' :: (BitVector -> BitVector -> Maybe BitVector) -> CValue
 binOp' op =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x ->
   wordFun $ \y -> maybe Prim.divideByZero vWord (op x y)
 
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> Bool
 binRel :: (BitVector -> BitVector -> Bool) -> CValue
 binRel op =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x ->
   wordFun $ \y -> vBool (op x y)
 
@@ -174,7 +174,7 @@ shiftOp :: (BitVector -> BitVector -> BitVector)
         -> (BitVector -> Int -> BitVector)
         -> CValue
 shiftOp _bvOp natOp =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x ->
   pureFun $ \y ->
     case y of
@@ -265,7 +265,7 @@ constMap = Map.fromList
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: CValue
 iteOp =
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \b -> return $
   VFun $ \x -> return $
   VFun $ \y -> if toBool b then force x else force y
@@ -273,8 +273,8 @@ iteOp =
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 getOp :: CValue
 getOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   pureFun $ \v ->
   Prims.finFun $ \i ->
     case v of
@@ -285,8 +285,8 @@ getOp =
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
 setOp :: CValue
 setOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   pureFun $ \v ->
   Prims.finFun $ \i -> return $
   VFun $ \y -> return $
@@ -297,8 +297,8 @@ setOp =
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: CValue
 atOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   pureFun $ \v ->
   Prims.natFun $ \n ->
     case v of
@@ -309,9 +309,9 @@ atOp =
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: CValue
 bvAtOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   pureFun $ \v ->
   wordFun $ \i ->
     case v of
@@ -322,9 +322,9 @@ bvAtOp =
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 updOp :: CValue
 updOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.natFun $ \i -> return $
   VFun $ \y ->
@@ -337,9 +337,9 @@ updOp =
 -- NB: this isn't necessarily the most efficient possible implementation.
 bvUpdOp :: CValue
 bvUpdOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   wordFun $ \ilv -> return $
   strictFun $ \y ->
@@ -359,9 +359,9 @@ bvUpdOp =
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: CValue
 appendOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   pureFun $ \xs ->
   pureFun $ \ys ->
   case (xs, ys) of
@@ -374,10 +374,10 @@ appendOp =
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: CValue
 vZipOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
+  constFun $
   pureFun $ \xs ->
   pureFun $ \ys ->
   VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [ready x, ready y]))) (toVector xs) (toVector ys))
@@ -385,9 +385,9 @@ vZipOp =
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: CValue
 foldrOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \f -> return $
   VFun $ \z -> return $
   strictFun $ \xs -> do
@@ -408,9 +408,9 @@ bvNatOp =
 -- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateLOp :: CValue
 bvRotateLOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   pureFun $ \xs ->
   wordFun $ \i ->
     case xs of
@@ -421,9 +421,9 @@ bvRotateLOp =
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateROp :: CValue
 bvRotateROp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   pureFun $ \xs ->
   wordFun $ \i ->
     case xs of
@@ -435,9 +435,9 @@ bvRotateROp =
 -- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftLOp :: CValue
 bvShiftLOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \ilv -> do
@@ -451,9 +451,9 @@ bvShiftLOp =
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: CValue
 bvShiftROp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun $ \x -> return $
   pureFun $ \xs ->
   wordFun $ \i ->
@@ -468,14 +468,14 @@ bvShiftROp =
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
 mkStreamOp :: CValue
 mkStreamOp =
-  VFun $ \_ -> return $
+  constFun $
   pureFun $ \f ->
   vStream (fmap (\n -> runIdentity (apply f (ready (VNat n)))) IntTrie.identity)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: CValue
 streamGetOp =
-  VFun $ \_ -> return $
+  constFun $
   pureFun $ \xs ->
   Prims.natFun $ \n -> return $
   IntTrie.apply (toStream xs) n
@@ -483,8 +483,8 @@ streamGetOp =
 -- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
 bvStreamGetOp :: CValue
 bvStreamGetOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   pureFun $ \xs ->
   wordFun $ \i ->
   IntTrie.apply (toStream xs) (Prim.unsigned i)

@@ -62,9 +62,9 @@ finFun f = strictFun g
 -- coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
 coerceOp :: Monad m => Value m e
 coerceOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun force
 
 -- Succ :: Nat -> Nat;
@@ -132,7 +132,7 @@ widthNatOp =
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
 natCaseOp :: Monad m => Value m e
 natCaseOp =
-  VFun $ \_ -> return $
+  constFun $
   VFun $ \z -> return $
   VFun $ \s -> return $
   natFun $ \n ->
@@ -168,7 +168,7 @@ finMaxOp =
 -- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
 finPredOp :: Monad m => Value m e
 finPredOp =
-  VFun $ \_ -> return $
+  constFun $
   finFun $ \i -> return $
   if finVal i == 0
     then VCtorApp "Prelude.Nothing" (V.fromList [ready VType])
@@ -187,7 +187,7 @@ natSplitFinOp =
 generateOp :: MonadLazy m => Value m e
 generateOp =
   natFun' "generate1" $ \n -> return $
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \f -> do
     let g i = delay $ apply f (ready (vFin (finFromBound (fromIntegral i) n)))
     liftM VVector $ V.generateM (fromIntegral n) g

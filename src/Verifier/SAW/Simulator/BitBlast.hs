@@ -133,14 +133,14 @@ boolBinOp op =
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
 binOp :: (LitVector l -> LitVector l -> IO (LitVector l)) -> BValue l
 binOp op =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> vWord <$> op x y
 
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> Bool
 binRel :: (LitVector l -> LitVector l -> IO l) -> BValue l
 binRel op =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> vBool <$> op x y
 
@@ -149,7 +149,7 @@ shiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
         -> (LitVector l -> Nat -> LitVector l)
         -> BValue l
 shiftOp _bvOp natOp =
-  VFun $ \_ -> return $
+  constFun $
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
@@ -265,7 +265,7 @@ lazyMux be muxFn c tm fm
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: AIG.IsAIG l g => g s -> BValue (l s)
 iteOp be =
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \b -> return $
   VFun $ \x -> return $
   VFun $ \y -> lazyMux be (muxBVal be) (toBool b) (force x) (force y)
@@ -308,8 +308,8 @@ muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed argum
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 getOp :: BValue l
 getOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.finFun $ \i ->
     case v of
@@ -320,8 +320,8 @@ getOp =
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
 setOp :: BValue l
 setOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.finFun $ \i -> return $
   VFun $ \y ->
@@ -332,8 +332,8 @@ setOp =
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: BValue l
 atOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.natFun $ \n ->
     case v of
@@ -344,9 +344,9 @@ atOp =
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvAtOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   wordFun $ \ilv ->
     case v of
@@ -359,9 +359,9 @@ bvAtOp be =
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 updOp :: BValue (l s)
 updOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   Prims.natFun $ \i -> return $
   VFun $ \y ->
@@ -373,9 +373,9 @@ updOp =
 -- NB: this isn't necessarily the most efficient possible implementation.
 bvUpdOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvUpdOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \v -> return $
   wordFun $ \ilv -> return $
   strictFun $ \y ->
@@ -394,9 +394,9 @@ bvUpdOp be =
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: BValue l
 appendOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
   case (xs, ys) of
@@ -409,10 +409,10 @@ appendOp =
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: BValue l
 vZipOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
   VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (vectorOfBValue xs) (vectorOfBValue ys))
@@ -425,9 +425,9 @@ vectorOfBValue _ = error "Verifier.SAW.Simulator.BitBlast.vectorOfBValue"
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: BValue l
 foldrOp =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \f -> return $
   VFun $ \z -> return $
   strictFun $ \xs -> do
@@ -448,9 +448,9 @@ bvNatOp be =
 -- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateLOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvRotateLOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   wordFun $ \ilv -> do
     let (n, f) = case xs of
@@ -463,9 +463,9 @@ bvRotateLOp be =
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateROp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvRotateROp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   wordFun $ \ilv -> do
     let (n, f) = case xs of
@@ -478,9 +478,9 @@ bvRotateROp be =
 -- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftLOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvShiftLOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \ilv -> do
@@ -494,9 +494,9 @@ bvShiftLOp be =
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvShiftROp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
+  constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \ilv -> do
@@ -513,16 +513,16 @@ bvShiftROp be =
 -- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
 bvPModOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvPModOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> vWord <$> AIG.pmod be x y
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector _;
 bvPMulOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvPMulOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> vWord <$> AIG.pmul be x y
 
@@ -575,7 +575,7 @@ pdivmod_helper g ds mask = go (length ds - length mask) ds
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
 mkStreamOp :: BValue l
 mkStreamOp =
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \f -> do
     r <- newIORef Map.empty
     return $ VExtra (BStream (\n -> apply f (ready (VNat n))) r)
@@ -583,15 +583,15 @@ mkStreamOp =
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGetOp :: BValue l
 streamGetOp =
-  VFun $ \_ -> return $
+  constFun $
   strictFun $ \xs -> return $
   Prims.natFun $ \n -> lookupBStream xs (toInteger n)
 
 -- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
 bvStreamGetOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvStreamGetOp be =
-  VFun $ \_ -> return $
-  VFun $ \_ -> return $
+  constFun $
+  constFun $
   strictFun $ \xs -> return $
   wordFun $ \ilv ->
   AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length ilv) - 1) ilv (lookupBStream xs)
