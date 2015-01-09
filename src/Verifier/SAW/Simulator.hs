@@ -21,13 +21,13 @@ module Verifier.SAW.Simulator where
 
 import Prelude hiding (mapM)
 
-import Control.Applicative ((<$>), (*>))
+import Control.Applicative ((<$>))
 import Control.Lens ((^.))
 import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
-import Data.Foldable (traverse_)
+import Data.Foldable (foldlM)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import Data.Map (Map)
@@ -229,15 +229,16 @@ evalGlobal m0 prims uninterpreted = cfg
     vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
-------------------------------------------------------------
+----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:
 -- The first, @memoClosed@, is precomputed and contains the result of
 -- evaluating all _closed_ subterms. The same @memoClosed@ table is
 -- used for evaluation under lambdas, since the meaning of a closed
 -- term does not depend on the local variable context. The second memo
--- table is @memoLocal@, which caches the result of evaluating _open_
--- terms in the current variable context. It is created anew whenever
--- we descend under a lambda binder.
+-- table is @memoLocal@, which additionally includes the result of
+-- evaluating _open_ terms in the current variable context. It is
+-- reinitialized to @memoClosed@ whenever we descend under a lambda
+-- binder.
 
 {-# SPECIALIZE evalSharedTerm :: Show e => SimulatorConfig Id e -> SharedTerm s -> Id (Value Id e) #-}
 {-# SPECIALIZE evalSharedTerm :: Show e => SimulatorConfig IO e -> SharedTerm s -> IO (Value IO e) #-}
@@ -297,33 +298,29 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
 mkMemoLocal :: forall m e s. (MonadLazy m, MonadFix m, Show e) =>
                SimulatorConfig m e -> IntMap (Thunk m e) ->
                SharedTerm s -> [Thunk m e] -> m (IntMap (Thunk m e))
-mkMemoLocal cfg memoClosed t env =
-  mfix $ \memoLocal -> mapM (\tf -> delay (evalLocalTermF cfg memoClosed memoLocal tf env)) subterms
+mkMemoLocal cfg memoClosed t env = go memoClosed t
   where
-    -- | Map of all shared subterms in the same local variable context.
-    subterms :: IntMap (TermF (SharedTerm s))
-    subterms = State.execState (go t) IMap.empty
-
-    go :: SharedTerm s -> State.State (IntMap (TermF (SharedTerm s))) ()
-    go (Unshared tf) = goTermF tf
-    go (STApp i tf) = do
-      memo <- State.get
+    go :: IntMap (Thunk m e) -> SharedTerm s -> m (IntMap (Thunk m e))
+    go memo (Unshared tf) = goTermF memo tf
+    go memo (STApp i tf) =
       case IMap.lookup i memo of
-        Just _ -> return ()
+        Just _ -> return memo
         Nothing -> do
-          goTermF tf
-          State.modify (IMap.insert i tf)
+          memo' <- goTermF memo tf
+          thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
+          return (IMap.insert i thunk memo')
 
-    goTermF :: TermF (SharedTerm s) -> State.State (IntMap (TermF (SharedTerm s))) ()
-    goTermF tf =
+    goTermF :: IntMap (Thunk m e) -> TermF (SharedTerm s) -> m (IntMap (Thunk m e))
+    goTermF memo tf =
       case tf of
-        FTermF ftf      -> traverse_ go ftf
-        App t1 t2       -> go t1 *> go t2
-        Lambda _ t1 _   -> go t1
-        Pi _ t1 _       -> go t1
-        Let _ _         -> return ()
-        LocalVar _      -> return ()
-        Constant _ t1 _ -> go t1
+        FTermF ftf      -> foldlM go memo ftf
+        App t1 t2       -> do memo' <- go memo t1
+                              go memo' t2
+        Lambda _ t1 _   -> go memo t1
+        Pi _ t1 _       -> go memo t1
+        Let _ _         -> return memo
+        LocalVar _      -> return memo
+        Constant _ t1 _ -> go memo t1
 
 {-# SPECIALIZE evalLocalTermF :: Show e => SimulatorConfig Id e -> IntMap (Thunk Id e) -> IntMap (Thunk Id e) -> TermF (SharedTerm s) -> OpenValue Id e #-}
 {-# SPECIALIZE evalLocalTermF :: Show e => SimulatorConfig IO e -> IntMap (Thunk IO e) -> IntMap (Thunk IO e) -> TermF (SharedTerm s) -> OpenValue IO e #-}
@@ -338,12 +335,9 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
     lam = evalOpen cfg memoClosed
     rec (Unshared tf) = evalTermF cfg lam rec tf env
     rec (STApp i _) =
-      case IMap.lookup i memoClosed of
+      case IMap.lookup i memoLocal of
         Just x -> force x
-        Nothing ->
-          case IMap.lookup i memoLocal of
-            Just x -> force x
-            Nothing -> fail "evalLocalTermF: internal error"
+        Nothing -> fail "evalLocalTermF: internal error"
 
 {-# SPECIALIZE evalOpen :: Show e => SimulatorConfig Id e -> IntMap (Thunk Id e) -> SharedTerm s -> OpenValue Id e #-}
 {-# SPECIALIZE evalOpen :: Show e => SimulatorConfig IO e -> IntMap (Thunk IO e) -> SharedTerm s -> OpenValue IO e #-}
@@ -358,12 +352,9 @@ evalOpen cfg memoClosed t env = do
   let eval :: SharedTerm s -> m (Value m e)
       eval (Unshared tf) = evalF tf
       eval (STApp i tf) =
-        case IMap.lookup i memoClosed of
+        case IMap.lookup i memoLocal of
           Just x -> force x
-          Nothing -> do
-            case IMap.lookup i memoLocal of
-              Just x -> force x
-              Nothing -> evalF tf
+          Nothing -> evalF tf
       evalF :: TermF (SharedTerm s) -> m (Value m e)
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t
