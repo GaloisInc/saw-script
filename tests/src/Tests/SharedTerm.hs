@@ -34,5 +34,5 @@ preludeSharedSmokeTest :: TestTree
 preludeSharedSmokeTest =
   testCase "preludeSharedSmokeTest" $ do
     sc <- mkSharedContext preludeModule
-    void $ scPreludeBool sc
+    void $ scPrelude_Bool sc
     return ()
