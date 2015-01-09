@@ -49,8 +49,9 @@ type Id = Identity
 
 data SimulatorConfig m e =
   SimulatorConfig
-  { simGlobal :: Ident -> m (Value m e),
-    simUninterpreted :: forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))
+  { simGlobal :: Ident -> m (Value m e)
+  , simExtCns :: VarIndex -> String -> m (Value m e)
+  , simUninterpreted :: forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))
   }
 
 ------------------------------------------------------------
@@ -171,7 +172,7 @@ evalTermF cfg lam rec tf env =
         FloatLit float      -> return $ VFloat float
         DoubleLit double    -> return $ VDouble double
         StringLit s         -> return $ VString s
-        ExtCns _            -> fail "evalTermF ExtCns unimplemented"
+        ExtCns ec           -> simExtCns cfg (ecVarIndex ec) (ecName ec)
   where
     rec' :: t -> m (Thunk m e)
     rec' = delay . rec
@@ -205,7 +206,7 @@ evalGlobal :: forall m e. (MonadLazy m, MonadFix m, Show e) =>
 evalGlobal m0 prims uninterpreted = cfg
   where
     cfg :: SimulatorConfig m e
-    cfg = SimulatorConfig global uninterpreted
+    cfg = SimulatorConfig global noExtCns uninterpreted
 
     ms :: [Module]
     ms = m0 : Map.elems (m0^.moduleImports)
@@ -228,6 +229,9 @@ evalGlobal m0 prims uninterpreted = cfg
     vCtor :: Ident -> [Thunk m e] -> Term -> Value m e
     vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
+
+noExtCns :: Monad m => VarIndex -> String -> m (Value m e)
+noExtCns _ name = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:
