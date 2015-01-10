@@ -157,15 +157,15 @@ evalTermF cfg lam rec tf env =
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
         TupleValue ts       -> liftM VTuple $ mapM rec' (V.fromList ts)
-        TupleType {}        -> return VType
+        TupleType ts        -> liftM VTupleType $ mapM rec ts
         TupleSelector t j   -> valTupleSelect j =<< rec t
         RecordValue tm      -> liftM VRecord $ mapM rec' tm
         RecordSelector t k  -> valRecordSelect k =<< rec t
-        RecordType {}       -> return VType
+        RecordType tm       -> liftM VRecordType $ mapM rec tm
         CtorApp ident ts    -> do v <- simGlobal cfg ident
                                   xs <- mapM rec' ts
                                   foldM apply v xs
-        DataTypeApp {}      -> return VType
+        DataTypeApp i ts    -> liftM (VDataType i) $ mapM rec ts
         Sort {}             -> return VType
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM rec' tv

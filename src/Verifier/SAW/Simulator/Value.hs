@@ -41,7 +41,11 @@ data Value m e
   | VString !String
   | VFloat !Float
   | VDouble !Double
-  | VType
+  --  | VPiType !Value !(Value -> Value)
+  | VTupleType [Value m e]
+  | VRecordType !(Map FieldName (Value m e))
+  | VDataType !Ident [Value m e]
+  | VType -- ^ Other unknown type
   | VExtra e
 
 type Thunk m e = Lazy m (Value m e)
@@ -70,6 +74,13 @@ instance Show e => Show (Value m e) where
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s
+      VTupleType vs  -> showString "#" .
+                        showParen True
+                        (foldr (.) id (intersperse (showString ",") (map shows vs)))
+      VRecordType _  -> error "unimplemented: show VRecordType"
+      VDataType s vs
+        | null vs    -> shows s
+        | otherwise  -> shows s . showList vs
       VType          -> showString "_"
       VExtra x       -> showsPrec p x
     where
