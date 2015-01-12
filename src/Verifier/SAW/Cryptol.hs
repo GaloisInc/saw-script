@@ -33,7 +33,6 @@ import qualified Cryptol.Prims.Syntax as P
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
-import qualified Verifier.SAW.Evaluator as E
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
@@ -578,22 +577,22 @@ scCryptolEq sc x y = do
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
-exportValueWithSchema :: C.Schema -> E.Value -> V.Value
+exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalType Env.emptyEnv ty) v
 exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
 -- ^ TODO: proper support for polymorphic values
 
-exportValue :: V.TValue -> E.Value -> V.Value
+exportValue :: V.TValue -> SC.CValue -> V.Value
 exportValue ty v
 
   | V.isTBit ty =
-    V.VBit (E.fromValue v)
+    V.VBit (SC.toBool v)
 
   | Just (_, e) <- V.isTSeq ty =
     case v of
-      E.VWord w x -> V.VWord (V.mkBv (toInteger w) x)
-      E.VStream trie -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
-      E.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e) (Vector.toList xs))
+      SC.VExtra (SC.CWord w) -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
+      SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
+      SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e . SC.runIdentity . force) (Vector.toList xs))
       _ -> error "exportValue"
 
   -- tuples
@@ -611,52 +610,10 @@ exportValue ty v
 
   | otherwise = error "exportValue"
 
-exportValues :: [V.TValue] -> E.Value -> [V.Value]
+exportValues :: [V.TValue] -> SC.CValue -> [V.Value]
 exportValues [] _ = []
 exportValues (t1 : ts) v = exportValue t1 v1 : exportValues ts vs
-  where (v1, vs) = E.fromValue v
-
-------------------------------------------------------------
-
--- | Convert from SAWCore's Value type to Cryptol's, guided by the
--- Cryptol type schema.
-exportValueWithSchema' :: C.Schema -> SC.CValue -> V.Value
-exportValueWithSchema' (C.Forall [] [] ty) v = exportValue' (evalType Env.emptyEnv ty) v
-exportValueWithSchema' _ _ = V.VPoly (error "exportValueWithSchema")
--- ^ TODO: proper support for polymorphic values
-
-exportValue' :: V.TValue -> SC.CValue -> V.Value
-exportValue' ty v
-
-  | V.isTBit ty =
-    V.VBit (SC.toBool v)
-
-  | Just (_, e) <- V.isTSeq ty =
-    case v of
-      SC.VExtra (SC.CWord w) -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
-      SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue' e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
-      SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue' e . SC.runIdentity . force) (Vector.toList xs))
-      _ -> error "exportValue"
-
-  -- tuples
-  | Just (_, etys) <- V.isTTuple ty =
-    V.VTuple (exportValues' etys v)
-
-  -- records
-  | Just fields <- V.isTRec ty =
-    let m = Map.fromList fields
-    in V.VRecord (zip (Map.keys m) (exportValues' (Map.elems m) v))
-
-  -- functions
-  | Just (_aty, _bty) <- V.isTFun ty =
-    V.VFun (error "exportValue: TODO functions")
-
-  | otherwise = error "exportValue"
-
-exportValues' :: [V.TValue] -> SC.CValue -> [V.Value]
-exportValues' [] _ = []
-exportValues' (t1 : ts) v = exportValue' t1 v1 : exportValues' ts vs
   where (v1, vs) = case v of
           SC.VTuple (Vector.toList -> [x, y])
             -> (SC.runIdentity (force x), SC.runIdentity (force y))
-          _ -> error "exportValues': ill-formed tuple/record"
+          _ -> error "exportValues: ill-formed tuple/record"
