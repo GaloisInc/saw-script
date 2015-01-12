@@ -44,8 +44,10 @@ import Verifier.SAW.SharedTerm
 
 -- | Evaluator for shared terms.
 evalSharedTerm :: Module -> SharedTerm s -> CValue
-evalSharedTerm m t = runIdentity (Sim.evalSharedTerm cfg t)
-  where cfg = Sim.evalGlobal m constMap (const (const Nothing))
+evalSharedTerm m t =
+  runIdentity $ do
+    cfg <- Sim.evalGlobal m constMap (const (const Nothing))
+    Sim.evalSharedTerm cfg t
 
 ------------------------------------------------------------
 -- BitVector operations

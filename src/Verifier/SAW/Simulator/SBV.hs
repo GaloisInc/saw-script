@@ -647,8 +647,9 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 -- External interface
 
 sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
-sbvSolveBasic m = Sim.evalSharedTerm cfg
-  where cfg = Sim.evalGlobal m constMap uninterpreted
+sbvSolveBasic m t = do
+  cfg <- Sim.evalGlobal m constMap uninterpreted
+  Sim.evalSharedTerm cfg t
 
 kindFromType :: (Show t, Termlike t) => t -> Kind
 kindFromType (R.asBoolType -> Just ()) = KBool

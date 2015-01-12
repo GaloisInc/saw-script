@@ -196,29 +196,29 @@ evalTypedDef :: (MonadLazy m, MonadFix m, Show e) =>
                 SimulatorConfig m e -> TypedDef -> m (Value m e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
-{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value Id e) -> (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (Id (Value Id e))) -> SimulatorConfig Id e #-}
-{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value IO e) -> (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (IO (Value IO e))) -> SimulatorConfig IO e #-}
+{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value Id e) -> (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (Id (Value Id e))) -> Id (SimulatorConfig Id e) #-}
+{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value IO e) -> (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (IO (Value IO e))) -> IO (SimulatorConfig IO e) #-}
 
 evalGlobal :: forall m e. (MonadLazy m, MonadFix m, Show e) =>
               Module -> Map Ident (Value m e) ->
               (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))) ->
-              SimulatorConfig m e
-evalGlobal m0 prims uninterpreted = cfg
+              m (SimulatorConfig m e)
+evalGlobal m0 prims uninterpreted =
+  mfix $ \cfg -> do
+    thunks <- mapM delay (globals cfg)
+    return (SimulatorConfig (global thunks) noExtCns uninterpreted)
   where
-    cfg :: SimulatorConfig m e
-    cfg = SimulatorConfig global noExtCns uninterpreted
-
     ms :: [Module]
     ms = m0 : Map.elems (m0^.moduleImports)
 
-    global :: Ident -> m (Value m e)
-    global ident =
-      case HashMap.lookup ident globals of
-        Just v -> v
+    global :: HashMap Ident (Thunk m e) -> Ident -> m (Value m e)
+    global thunks ident =
+      case HashMap.lookup ident thunks of
+        Just v -> force v
         Nothing -> fail $ "Unimplemented global: " ++ show ident
 
-    globals :: HashMap Ident (m (Value m e))
-    globals =
+    globals :: SimulatorConfig m e -> HashMap Ident (m (Value m e))
+    globals cfg =
       HashMap.fromList $
       [ (ctorName ct, return (vCtor (ctorName ct) [] (ctorType ct))) |
         m <- ms, ct <- moduleCtors m ] ++

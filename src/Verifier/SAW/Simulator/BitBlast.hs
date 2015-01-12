@@ -622,8 +622,9 @@ newVars' be shape = ready <$> newVars be shape
 -- Bit-blasting predicates
 
 bitBlastBasic :: AIG.IsAIG l g => g s -> Module -> SharedTerm t -> IO (BValue (l s))
-bitBlastBasic be m = Sim.evalSharedTerm cfg
-  where cfg = Sim.evalGlobal m (beConstMap be) (const (const Nothing))
+bitBlastBasic be m t = do
+  cfg <- Sim.evalGlobal m (beConstMap be) (const (const Nothing))
+  Sim.evalSharedTerm cfg t
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do
