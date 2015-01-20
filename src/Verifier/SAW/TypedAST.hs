@@ -408,6 +408,8 @@ ppDataType f dt =
 
 type VarIndex = Word64
 
+-- NB: If you add constructors to FlatTermF, make sure you update
+--     zipWithFlatTermF!
 data FlatTermF e
   = GlobalDef !Ident  -- ^ Global variables are referenced by label.
 
@@ -469,6 +471,8 @@ zipWithFlatTermF f = go
           | length lx == length ly = Just $ TupleValue (zipWith f lx ly)
         go (TupleType lx) (TupleType ly)
           | length lx == length ly = Just $ TupleType (zipWith f lx ly)
+        go (TupleSelector x i) (TupleSelector y j)
+          | i == j = Just $ TupleSelector (f x y) i
 
         go (RecordValue mx) (RecordValue my)
           | Map.keys mx == Map.keys my =
@@ -485,6 +489,10 @@ zipWithFlatTermF f = go
           | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
         go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
         go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
+        go (FloatLit fx) (FloatLit fy)
+          | fx == fy = Just $ FloatLit fx
+        go (DoubleLit fx) (DoubleLit fy)
+          | fx == fy = Just $ DoubleLit fx
         go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
         go (ArrayValue tx vx) (ArrayValue ty vy)
           | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
