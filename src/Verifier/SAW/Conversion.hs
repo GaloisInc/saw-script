@@ -85,6 +85,8 @@ module Verifier.SAW.Conversion
   , Conversion(..)
   , runConversion
     -- ** Prelude conversions
+  , tupleConversion
+  , recordConversion
   , natConversions
   , finConversions
   , vecConversions
@@ -115,6 +117,7 @@ import Control.Lens (view, _1, _2)
 import Control.Monad (ap, liftM, liftM2, unless, (>=>), (<=<))
 import Data.Bits
 import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.Vector as V
 
 import qualified Verifier.SAW.Prim as Prim
@@ -532,6 +535,16 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
+
+-- | Conversion for selector on a tuple
+tupleConversion :: Termlike t => Conversion t
+tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
+  where action (ts, i) = Just (return (ts !! (i - 1)))
+
+-- | Conversion for selector on a record
+recordConversion :: Termlike t => Conversion t
+recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) action
+  where action (m, i) = fmap return (Map.lookup i m)
 
 -- | Conversions for operations on Nat literals
 natConversions :: Termlike t => [Conversion t]
