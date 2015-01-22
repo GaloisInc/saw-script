@@ -317,6 +317,12 @@ equalNat Zero (Succ _) = False;
 equalNat (Succ _) Zero = False;
 equalNat (Succ x) (Succ y) = equalNat x y;
 
+ltNat :: Nat -> Nat -> Bool;
+ltNat Zero Zero = False;
+ltNat Zero (Succ _) = True;
+ltNat (Succ _) Zero = False;
+ltNat (Succ x) (Succ y) = ltNat x y;
+
 -- | Subtraction
 subNat :: Nat -> Nat -> Nat;
 subNat x Zero = x;

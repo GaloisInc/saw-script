@@ -62,6 +62,7 @@ module Verifier.SAW.SharedTerm
   , scSubNat
   , scMulNat
   , scEqualNat
+  , scLtNat
 
   , scBool
   , scBoolType
@@ -112,14 +113,19 @@ module Verifier.SAW.SharedTerm
     -- *** Bitvector primitives
   , scBitvector
   , scBvNat
+  , scBvToNat
   , scBvAt
   , scBvConst
   , scFinVal
-  , scBvAdd, scBvSub, scBvMul
+  , scBvAdd, scBvSub, scBvMul, scBvNeg
+  , scBvURem, scBvUDiv, scBvSRem, scBvSDiv
   , scBvOr, scBvAnd, scBvXor
   , scBvNot
   , scBvEq, scBvUGe, scBvUGt, scBvULe, scBvULt
-  , scBvShl, scBvShr
+  , scBvSGt, scBvSGe, scBvSLt, scBvSLe
+  , scBvShl, scBvShr, scBvSShr
+  , scBvUExt, scBvSExt
+  , scBvTrunc
     -- ** Utilities
 --  , scTrue
 --  , scFalse
@@ -960,6 +966,9 @@ scMulNat sc x y = scGlobalApply sc "Prelude.mulNat" [x,y]
 scEqualNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
 
+scLtNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scLtNat sc x y = scGlobalApply sc "Prelude.ltNat" [x,y]
+
 -- Primitive operations on bitvectors
 
 -- | bitvector :: (n : Nat) -> sort 1
@@ -974,6 +983,12 @@ scBitvector sc size = do
 scBvNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
 
+-- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+scBvToNat :: SharedContext s -> Nat -> SharedTerm s -> IO (SharedTerm s)
+scBvToNat sc n x = do
+    n' <- scNat sc n
+    scGlobalApply sc "Prelude.bvToNat" [n',x]
+
 -- | Returns constant bitvector.
 scBvConst :: SharedContext s -> Nat -> Integer -> IO (SharedTerm s)
 scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
@@ -985,12 +1000,20 @@ scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
 scFinVal :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFinVal sc a b = scCtorApp sc "Prelude.FinVal" [a, b]
 
+-- | bvNeg :: (x::Nat) -> bitvector x -> bitvector x;
+scBvNeg :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvNeg sc n x = scGlobalApply sc "Prelude.bvNeg" [n, x]
+
 -- | bvAdd/Sub/Mul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-scBvAdd, scBvSub, scBvMul
+scBvAdd, scBvSub, scBvMul, scBvURem, scBvUDiv, scBvSRem, scBvSDiv
     :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvAdd sc n x y = scGlobalApply sc "Prelude.bvAdd" [n, x, y]
 scBvSub sc n x y = scGlobalApply sc "Prelude.bvSub" [n, x, y]
 scBvMul sc n x y = scGlobalApply sc "Prelude.bvMul" [n, x, y]
+scBvURem sc n x y = scGlobalApply sc "Prelude.bvURem" [n, x, y]
+scBvUDiv sc n x y = scGlobalApply sc "Prelude.bvUDiv" [n, x, y]
+scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
+scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
 
 -- | bvOr/And/Xor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 scBvOr, scBvAnd, scBvXor
@@ -1012,11 +1035,36 @@ scBvULe sc n x y = scGlobalApply sc "Prelude.bvule" [n, x, y]
 scBvUGt sc n x y = scGlobalApply sc "Prelude.bvugt" [n, x, y]
 scBvULt sc n x y = scGlobalApply sc "Prelude.bvult" [n, x, y]
 
+
+-- | bvsgt/bvsge/bvslt/bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+scBvSGt, scBvSGe, scBvSLt, scBvSLe
+    :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvSGe sc n x y = scGlobalApply sc "Prelude.bvsge" [n, x, y]
+scBvSLe sc n x y = scGlobalApply sc "Prelude.bvsle" [n, x, y]
+scBvSGt sc n x y = scGlobalApply sc "Prelude.bvsgt" [n, x, y]
+scBvSLt sc n x y = scGlobalApply sc "Prelude.bvslt" [n, x, y]
+
 -- | bvShl, bvShr :: (n :: Nat) -> bitvector n -> Nat -> bitvector n;
 scBvShl, scBvShr
     :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvShl sc n x y = scGlobalApply sc "Prelude.bvShl" [n, x, y]
 scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
+
+-- | bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
+scBvSShr :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvSShr sc n x y = scGlobalApply sc "Prelude.bvSShr" [n, x, y]
+
+-- | bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat x y);
+scBvUExt :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvUExt sc n m x = scGlobalApply sc "Prelude.bvUExt" [n,m,x]
+
+-- | bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
+scBvSExt :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvSExt sc n m x = scGlobalApply sc "Prelude.bvSExt" [n,m,x]
+
+-- | bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
+scBvTrunc :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvTrunc sc n m x = scGlobalApply sc "Prelude.bvTrunc" [n,m,x]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
