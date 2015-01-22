@@ -142,7 +142,7 @@ instance Net.Pattern (Matcher m t a) where
 instance Functor m => Functor (Matcher m t) where
   fmap f (Matcher p m) = Matcher p (fmap f . m)
 
--- | @thenMatcher 
+-- | @thenMatcher
 thenMatcher :: Monad m => Matcher m t a -> (a -> m b) -> Matcher m t b
 thenMatcher (Matcher pat match) f = Matcher pat (f <=< match)
 
@@ -193,7 +193,7 @@ runArgsMatcher (ArgsMatcher _ f) l = do
 -- subterms.
 resolveArgs :: (Monad m, ArgsMatchable v m t a)
                -- Given a term, matches arguments to temr.
-            => Matcher m t [t] 
+            => Matcher m t [t]
             -> v m t a
             -> Matcher m t a
 resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
@@ -258,10 +258,10 @@ asAnyRecordValue = asVar R.asRecordValue
 asAnyRecordType :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
 asAnyRecordType = asVar R.asRecordType
 
--- | Matches 
+-- | Matches
 asRecordSelector :: (Functor m, Monad m, Termlike t)
                  => Matcher m t a
-                 -> Matcher m t (a, FieldName) 
+                 -> Matcher m t (a, FieldName)
 asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 
 --TODO: RecordSelector
@@ -293,7 +293,7 @@ asSort :: (Termlike t, Monad m) => Sort -> Matcher m t ()
 asSort s = Matcher (termToPat (Term (FTermF (Sort s)))) fn
   where fn t = do Sort s' <- R.asFTermF t
                   unless (s == s') $ fail "Does not matched expected sort."
-            
+
 -- | Match a Nat literal
 asAnyNatLit :: (Termlike t, Monad m) => Matcher m t Prim.Nat
 asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
@@ -326,7 +326,7 @@ asBoolType = asDataType "Prelude.Bool" asEmpty
 
 asFinValLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Fin
 asFinValLit = (\(i :*: j) -> Prim.FinVal i j)
-  <$> asCtor "Prelude.FinVal" (asAnyNatLit >: asAnyNatLit) 
+  <$> asCtor "Prelude.FinVal" (asAnyNatLit >: asAnyNatLit)
 
 asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
@@ -337,7 +337,7 @@ asBvNatLit =
     (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
 
 checkedIntegerToNonNegInt :: Monad m => Integer -> m Int
-checkedIntegerToNonNegInt x 
+checkedIntegerToNonNegInt x
   | 0 <= x && x <= toInteger (maxBound :: Int) = return (fromInteger x)
   | otherwise = fail "match out of range"
 
@@ -396,7 +396,7 @@ mkTermF tf = TermBuilder (\mk -> mk tf)
 mkGlobalDef :: Ident -> TermBuilder t t
 mkGlobalDef i = mkTermF (FTermF (GlobalDef i))
 
-infixl 9 `mkApp` 
+infixl 9 `mkApp`
 infixl 9 `pureApp`
 
 mkApp :: TermBuilder t t -> TermBuilder t t -> TermBuilder t t
@@ -651,7 +651,7 @@ remove_coerce :: Termlike t => Conversion t
 remove_coerce = Conversion $
   return . mixfix_snd <$>
     (asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny)
- 
+
 remove_unsafeCoerce :: Termlike t => Conversion t
 remove_unsafeCoerce = Conversion $
   return . mixfix_snd <$>
