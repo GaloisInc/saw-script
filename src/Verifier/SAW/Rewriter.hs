@@ -456,12 +456,11 @@ rewritingSharedContext :: forall s. SharedContext s -> Simpset (SharedTerm s) ->
 rewritingSharedContext sc ss = sc'
   where
     sc' = sc { scTermF = rewriteTop }
+
     rewriteTop :: TermF (SharedTerm s) -> IO (SharedTerm s)
-    rewriteTop tf =
-      let t = Unshared tf in
-      case reduceSharedTerm sc' t of
-        Nothing -> apply (Net.match_term ss t) t
-        Just action -> action
+    rewriteTop tf = apply (Net.match_term ss t) t
+      where t = Unshared tf
+
     apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
     apply [] (Unshared tf) = scTermF sc tf
