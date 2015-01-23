@@ -12,7 +12,6 @@
 {-# LANGUAGE TupleSections #-}
 module Verifier.SAW.Simulator.SBV where
 
-import qualified Data.SBV.Tools.Polynomial as Poly
 import Data.SBV
 import Data.SBV.Internals
 import Cryptol.Symbolic.BitVector
@@ -356,7 +355,7 @@ bvPModOp =
   constFun $
   wordFun $ \(Just x@(SBV (KBounded _ _k1) _)) -> return $
   wordFun $ \(Just y@(SBV (KBounded _ k2) _)) ->
-    return . vWord . fromBitsLE $ take (k2-1) (snd (Poly.mdp (blastLE x) (blastLE y)) ++ repeat false)
+    return . vWord . fromBitsLE $ take (k2-1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat false)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
@@ -367,8 +366,64 @@ bvPMulOp =
   wordFun $ \(Just y@(SBV (KBounded _ k2) _)) -> do
     let k = max 1 (k1 + k2) - 1
     let mul _ [] ps = ps
-        mul as (b:bs) ps = mul (false : as) bs (Poly.ites b (as `Poly.addPoly` ps) ps)
+        mul as (b:bs) ps = mul (false : as) bs (ites b (as `addPoly` ps) ps)
     return . vWord . fromBitsLE $ take k $ mul (blastLE x) (blastLE y) [] ++ repeat false
+
+-- TODO: Data.SBV.BitVectors.Polynomials should export ites, addPoly,
+-- and mdp (the following definitions are copied from that module)
+
+-- | Add two polynomials
+addPoly :: [SBool] -> [SBool] -> [SBool]
+addPoly xs    []      = xs
+addPoly []    ys      = ys
+addPoly (x:xs) (y:ys) = x <+> y : addPoly xs ys
+
+ites :: SBool -> [SBool] -> [SBool] -> [SBool]
+ites s xs ys
+ | Just t <- unliteral s
+ = if t then xs else ys
+ | True
+ = go xs ys
+ where go [] []         = []
+       go []     (b:bs) = ite s false b : go [] bs
+       go (a:as) []     = ite s a false : go as []
+       go (a:as) (b:bs) = ite s a b : go as bs
+
+-- conservative over-approximation of the degree
+degree :: [SBool] -> Int
+degree xs = walk (length xs - 1) $ reverse xs
+  where walk n []     = n
+        walk n (b:bs)
+         | Just t <- unliteral b
+         = if t then n else walk (n-1) bs
+         | True
+         = n -- over-estimate
+
+mdp :: [SBool] -> [SBool] -> ([SBool], [SBool])
+mdp xs ys = go (length ys - 1) (reverse ys)
+  where degTop  = degree xs
+        go _ []     = error "SBV.Polynomial.mdp: Impossible happened; exhausted ys before hitting 0"
+        go n (b:bs)
+         | n == 0   = (reverse qs, rs)
+         | True     = let (rqs, rrs) = go (n-1) bs
+                      in (ites b (reverse qs) rqs, ites b rs rrs)
+         where degQuot = degTop - n
+               ys' = replicate degQuot false ++ ys
+               (qs, rs) = divx (degQuot+1) degTop xs ys'
+
+-- return the element at index i; if not enough elements, return false
+-- N.B. equivalent to '(xs ++ repeat false) !! i', but more efficient
+idx :: [SBool] -> Int -> SBool
+idx []     _ = false
+idx (x:_)  0 = x
+idx (_:xs) i = idx xs (i-1)
+
+divx :: Int -> Int -> [SBool] -> [SBool] -> ([SBool], [SBool])
+divx n _ xs _ | n <= 0 = ([], xs)
+divx n i xs ys'        = (q:qs, rs)
+  where q        = xs `idx` i
+        xs'      = ites q (xs `addPoly` ys') xs
+        (qs, rs) = divx (n-1) (i-1) xs' (tail ys')
 
 ------------------------------------------------------------
 -- Vector operations
@@ -700,6 +755,18 @@ parseUninterpreted ks cws ty =
                   Nothing -> do vbs' <- traverse force vbs
                                 fail $ "Can't convert to word: " ++ show vbs'
               Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
+
+mkUninterpreted :: [Kind] -> [SBV ()] -> String -> SBV a
+mkUninterpreted = error "FIXME: mkUninterpreted"
+{- FIXME: export enough from SBV to make this implementable
+mkUninterpreted ks args nm = SBV ka $ Right $ cache result where
+  ka = last ks
+  result st = do
+    newUninterpreted st nm (SBVType ks) Nothing
+    sws <- traverse (sbvToSW st) args
+    mapM_ forceSWArg sws
+    newExpr st ka $ SBVApp (Uninterpreted nm) sws
+-}
 
 typeSize :: (Termlike t) => t -> Maybe Int
 typeSize t = sizeFiniteType <$> asFiniteTypePure t
