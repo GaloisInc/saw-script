@@ -40,6 +40,7 @@ library
     , pretty-show
     , process
     , saw-core
+    , sbv >= 4.0
     , smtLib
     , split
     , template-haskell
