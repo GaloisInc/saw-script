@@ -27,7 +27,7 @@ import Control.Monad.State.Strict as State
 import Data.Foldable (maximum, and)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Traversable ()
+import Data.Traversable (Traversable(..))
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
@@ -145,7 +145,9 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           io $ instantiateVar sc 0 y rty
         _ -> throwError (NotFuncType tx)
     checkEqTy :: SharedTerm s -> SharedTerm s -> TCError s -> TCM s ()
-    checkEqTy ty ty' err = unless (argMatch ty ty') (throwError err)
+    checkEqTy ty ty' err = do
+      ok <- io $ argMatch sc ty ty'
+      unless ok (throwError err)
     termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
     termf tf =
       case tf of
@@ -221,20 +223,39 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> whnf $ ecType ec
 
-argMatch :: SharedTerm s -> SharedTerm s -> Bool
-argMatch = term
+argMatch :: forall s. SharedContext s -> SharedTerm s -> SharedTerm s -> IO Bool
+argMatch sc = term
   where
-    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
-    term (Unshared tf1) (STApp _  tf2) = termf tf1 tf2
-    term (STApp _  tf1) (Unshared tf2) = termf tf1 tf2
-    term (STApp i1 tf1) (STApp i2 tf2) = i1 == i2 || termf tf1 tf2
-    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
-    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
-    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
-    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
-    termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf _ _ = False
-    ftermf (Sort s) (Sort s') = s <= s'
-    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
-                         Nothing -> False
-                         Just ftf3 -> Data.Foldable.and ftf3
+    whnf :: SharedTerm s -> IO (SharedTerm s)
+    whnf t = do
+      t' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) t
+      scWhnf sc t'
+
+    term :: SharedTerm s -> SharedTerm s -> IO Bool
+    term t1 t2 = do
+      t1' <- whnf t1
+      t2' <- whnf t2
+      term' t1' t2'
+
+    term' :: SharedTerm s -> SharedTerm s -> IO Bool
+    term' (Unshared tf1) (Unshared tf2) = termf tf1 tf2
+    term' (Unshared tf1) (STApp _  tf2) = termf tf1 tf2
+    term' (STApp _  tf1) (Unshared tf2) = termf tf1 tf2
+    term' (STApp i1 tf1) (STApp i2 tf2)
+      | i1 == i2  = return True
+      | otherwise = termf tf1 tf2
+
+    termf :: TermF (SharedTerm s) -> TermF (SharedTerm s) -> IO Bool
+    termf (FTermF ftf1)    (FTermF ftf2)    = ftermf ftf1 ftf2
+    termf (App      t1 u1) (App      t2 u2) = (&&) <$> term t1 t2 <*> term u1 u2
+    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = (&&) <$> term t1 t2 <*> term u1 u2
+    termf (Pi     _ t1 u1) (Pi     _ t2 u2) = (&&) <$> term t1 t2 <*> term u1 u2
+    termf (LocalVar i1)    (LocalVar i2)    = return (i1 == i2)
+    termf _ _                               = return False
+
+    ftermf :: FlatTermF (SharedTerm s) -> FlatTermF (SharedTerm s) -> IO Bool
+    ftermf (Sort s) (Sort s') = return (s <= s')
+    ftermf ftf1 ftf2 =
+      case zipWithFlatTermF term ftf1 ftf2 of
+        Nothing -> return False
+        Just ftf3 -> Data.Foldable.and <$> sequenceA ftf3
