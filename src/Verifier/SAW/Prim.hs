@@ -266,6 +266,9 @@ bvAdd _ (BV w x) (BV _ y) = bv w (x + y)
 bvSub _ (BV w x) (BV _ y) = bv w (x - y)
 bvMul _ (BV w x) (BV _ y) = bv w (x * y)
 
+bvNeg :: Nat -> BitVector -> BitVector
+bvNeg _ x@(BV w _) = bv w $ negate $ signed x
+
 bvAnd, bvOr, bvXor :: Int -> BitVector -> BitVector -> BitVector
 bvAnd _ (BV w x) (BV _ y) = BV w (x .&. y)
 bvOr  _ (BV w x) (BV _ y) = BV w (x .|. y)
