@@ -146,7 +146,8 @@ evalTermF cfg lam rec tf env =
                                   x <- rec' t2
                                   apply v x
     Lambda _ _ t            -> return $ VFun (\x -> lam t (x : env))
-    Pi {}                   -> return $ VType
+    Pi _ t1 t2              -> do v <- rec t1
+                                  return $ VPiType v (\x -> lam t2 (x : env))
     Let ds t                -> do env' <- mfix $ \env' -> do
                                             xs <- mapM (delay . evalDef (\t' ys -> lam t' (ys ++ env'))) (reverse ds)
                                             return (xs ++ env)

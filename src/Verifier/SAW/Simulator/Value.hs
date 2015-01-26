@@ -41,7 +41,7 @@ data Value m e
   | VString !String
   | VFloat !Float
   | VDouble !Double
-  --  | VPiType !Value !(Value -> Value)
+  | VPiType !(Value m e) !(Thunk m e -> m (Value m e))
   | VTupleType [Value m e]
   | VRecordType !(Map FieldName (Value m e))
   | VDataType !Ident [Value m e]
@@ -74,6 +74,8 @@ instance Show e => Show (Value m e) where
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s
+      VPiType t _    -> showParen True
+                        (shows t . showString " -> ...")
       VTupleType vs  -> showString "#" .
                         showParen True
                         (foldr (.) id (intersperse (showString ",") (map shows vs)))
