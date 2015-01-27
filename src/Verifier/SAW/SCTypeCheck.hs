@@ -13,10 +13,6 @@ module Verifier.SAW.SCTypeCheck
   , scTypeCheckError
   , TCError
   , prettyTCError
-  {-
-  , LocatedTCError
-  , prettyLocatedTCError
-  -}
   ) where
 
 import Control.Applicative
@@ -84,18 +80,6 @@ prettyTCError e =
   where
     ishow = (' ':) . (' ':) . show
 
-{-
-data LocatedTCError s
-  = LocatedTCError
-    { errExpr :: (SharedTerm s)
-    , errType :: TCError s
-    }
-
-prettyLocatedTCError :: LocatedTCError s -> String
-prettyLocatedTCError (LocatedTCError expr err ) = unlines $
-  prettyTCError err ++ [ "in expression", "  " ++ show expr ]
--}
-
 scTypeCheckError :: forall s. SharedContext s -> SharedTerm s
                  -> IO (SharedTerm s)
 scTypeCheckError sc t0 =
@@ -109,10 +93,6 @@ scTypeCheck :: forall s. SharedContext s -> SharedTerm s
             -> IO (Either (TCError s) (SharedTerm s))
 scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
 
--- The TODO notes in the body are mostly commented-out checks for type
--- equivalence that currently tend to fail for two reasons: 1)
--- functions from the Cryptol module not being evaluated, and 2)
--- natural number primitives not being evaluated.
 scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s
              -> ExceptT (TCError s) IO (SharedTerm s)
 scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
