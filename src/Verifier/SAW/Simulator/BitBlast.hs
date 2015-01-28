@@ -250,6 +250,12 @@ beConstMap be = Map.fromList
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp be)
   --, ("Prelude.bvToNat", bvToNatOp)
+  -- Overloaded
+  --, ("Prelude.zero", zeroOp)
+  , ("Prelude.unary", Prims.unaryOp)
+  , ("Prelude.binary", Prims.binaryOp)
+  --, ("Prelude.eq", eqOp)
+  , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
 -- | Lifts a strict mux operation to a lazy mux

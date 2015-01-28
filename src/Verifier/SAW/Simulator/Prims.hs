@@ -11,7 +11,11 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Simulator.Prims where
 
-import Control.Monad (liftM)
+import Prelude hiding (sequence, mapM)
+
+import Control.Monad (foldM, liftM)
+import qualified Data.Map as Map
+import Data.Traversable
 import qualified Data.Vector as V
 
 import Verifier.SAW.Simulator.Value
@@ -191,3 +195,156 @@ generateOp =
   strictFun $ \f -> do
     let g i = delay $ apply f (ready (vFin (finFromBound (fromIntegral i) n)))
     liftM VVector $ V.generateM (fromIntegral n) g
+
+-- zero :: (a :: sort 0) -> a;
+zeroOp :: (MonadLazy m, Show e) => (Integer -> m (Value m e)) -> m (Value m e) -> Value m e
+zeroOp bvZ boolZ = strictFun go
+  where
+    go t =
+      case t of
+        VPiType _ f -> return $ VFun $ \x -> f x >>= go
+        VTupleType ts -> liftM VTuple $ mapM (delay . go) (V.fromList ts)
+        VRecordType tm -> liftM VRecord $ mapM (delay . go) tm
+        VDataType "Prelude.Bool" [] -> boolZ
+        VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []] -> bvZ n
+        VDataType "Prelude.Vec" [VNat n, t'] -> do
+          liftM (VVector . V.replicate (fromInteger n)) $ delay (go t')
+        _ -> fail $ "zero: invalid type instance: " ++ show t
+-- ^ FIXME: add support for infinite stream type.
+
+--unary :: ((n :: Nat) -> bitvector n -> bitvector n)
+--       -> (Bool -> Bool)
+--       -> (a :: sort 0) -> a -> a;
+unaryOp :: (MonadLazy m, Show e) => Value m e
+unaryOp =
+  pureFun $ \bvOp ->
+  pureFun $ \boolOp ->
+  let go t v =
+        case t of
+          VPiType _ f -> return $ VFun $ \x -> do
+                           y <- apply v x
+                           u <- f x
+                           go u y
+          VTupleType ts ->
+            case v of
+              VTuple vs ->
+                liftM VTuple $ sequence (V.zipWith go' (V.fromList ts) vs)
+              _ -> fail "unary: arguments not tuples"
+          VRecordType tm ->
+            case v of
+              VRecord vm
+                | Map.keys tm == Map.keys vm ->
+                  liftM VRecord $ sequence (Map.intersectionWith go' tm vm)
+              _ -> fail "unary: arguments not records"
+          VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []] ->
+            applyAll bvOp [ready n, ready v]
+          VDataType "Prelude.Vec" [_, t'] ->
+            case v of
+              VVector vv ->
+                liftM VVector $ mapM (go' t') vv
+              _ -> fail "unary: arguments not vectors"
+          VDataType "Prelude.Bool" [] ->
+            apply boolOp (ready v)
+          _ ->
+            fail $ "unary: invalid type instance: " ++ show t
+
+      go' t thunk = delay (force thunk >>= go t)
+
+  in pureFun $ \t -> strictFun $ \v -> go t v
+-- ^ FIXME: add support for infinite stream type.
+
+--binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
+--       -> (Bool -> Bool -> Bool)
+--       -> (a :: sort 0) -> a -> a -> a;
+binaryOp :: (MonadLazy m, Show e) => Value m e
+binaryOp =
+  VFun $ \bvOp' -> return $
+  VFun $ \boolOp' -> return $
+  let bin (VPiType _ f) v1 v2 =
+        return $ VFun $ \x -> do
+          y1 <- apply v1 x
+          y2 <- apply v2 x
+          u <- f x
+          bin u y1 y2
+      bin (VTupleType ts) (VTuple vs1) (VTuple vs2) =
+        liftM VTuple $ sequence (V.zipWith3 bin' (V.fromList ts) vs1 vs2)
+      bin (VRecordType tm) (VRecord vm1) (VRecord vm2)
+        | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
+          liftM VRecord $ sequence
+          (Map.intersectionWith ($) (Map.intersectionWith bin' tm vm1) vm2)
+      bin (VDataType "Prelude.Bool" []) v1 v2 = do
+        boolOp <- force boolOp'
+        applyAll boolOp [ready v1, ready v2]
+      bin (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v1 v2 = do
+        bvOp <- force bvOp'
+        applyAll bvOp [ready n, ready v1, ready v2]
+      bin (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) =
+        liftM VVector $ sequence (V.zipWith (bin' t') vv1 vv2)
+      bin t _ _ =
+        fail $ "binary: invalid type instance: " ++ show t
+
+      bin' t th1 th2 = delay $ do
+        v1 <- force th1
+        v2 <- force th2
+        bin t v1 v2
+
+  in pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> bin t v1 v2
+-- ^ FIXME: add support for infinite stream type.
+
+-- eq :: (a :: sort 0) -> a -> a -> Bool
+eqOp :: (MonadLazy m, Show e) => Value m e
+     -> (Value m e -> Value m e -> m (Value m e))
+     -> (Value m e -> Value m e -> m (Value m e))
+     -> (Integer -> Value m e -> Value m e -> m (Value m e))
+     -> Value m e
+eqOp trueOp andOp boolOp bvOp =
+  pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2
+  where
+    go (VTupleType ts) (VTuple vv1) (VTuple vv2) = do
+      bs <- sequence $ zipWith3 go' ts (V.toList vv1) (V.toList vv2)
+      foldM andOp trueOp bs
+    go (VRecordType tm) (VRecord vm1) (VRecord vm2)
+      | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 = do
+        bs <- sequence $ zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2)
+        foldM andOp trueOp bs
+    go (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) v1 v2 = bvOp n v1 v2
+    go (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) = do
+      bs <- sequence $ zipWith (go' t') (V.toList vv1) (V.toList vv2)
+      foldM andOp trueOp bs
+    go (VDataType "Prelude.Bool" []) v1 v2 = boolOp v1 v2
+    go t _ _ = fail $ "binary: invalid arguments: " ++ show t
+
+    go' t thunk1 thunk2 = do
+      v1 <- force thunk1
+      v2 <- force thunk2
+      go t v1 v2
+
+-- comparison :: (b :: sort 0)
+--            -> ((n :: Nat) -> bitvector n -> bitvector n -> b -> b)
+--            -> (Bool -> Bool -> b -> b)
+--            -> b
+--            -> (a :: sort 0) -> a -> a -> b;
+comparisonOp :: (MonadLazy m, Show e) => Value m e
+comparisonOp =
+  constFun $
+  pureFun $ \bvOp ->
+  pureFun $ \boolOp ->
+  let go (VTupleType ts) (VTuple vv1) (VTuple vv2) k =
+        foldM (flip ($)) k (zipWith3 go' ts (V.toList vv1) (V.toList vv2))
+      go (VRecordType tm) (VRecord vm1) (VRecord vm2) k
+        | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
+          foldM (flip ($)) k (zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2))
+      go (VDataType "Prelude.Bool" []) v1 v2 k = do
+        applyAll boolOp [ready v1, ready v2, ready k]
+      go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v1 v2 k = do
+        applyAll bvOp [ready n, ready v1, ready v2, ready k]
+      go (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) k = do
+        foldM (flip ($)) k (zipWith (go' t') (V.toList vv1) (V.toList vv2))
+      go t _ _ _ = fail $ "comparison: invalid arguments: " ++ show t
+
+      go' t thunk1 thunk2 k = do
+        v1 <- force thunk1
+        v2 <- force thunk2
+        go t v1 v2 k
+
+  in pureFun $ \k -> pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2 k

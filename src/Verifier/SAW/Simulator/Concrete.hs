@@ -262,6 +262,12 @@ constMap = Map.fromList
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp)
   --, ("Prelude.bvToNat", bvToNatOp)
+  -- Overloaded
+  , ("Prelude.zero", zeroOp)
+  , ("Prelude.unary", Prims.unaryOp)
+  , ("Prelude.binary", Prims.binaryOp)
+  , ("Prelude.eq", eqOp)
+  , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
@@ -464,6 +470,18 @@ bvShiftROp =
       VExtra (CWord w) -> vWord (lvShiftR x w (fromInteger (unsigned i)))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftROp: " ++ show xs
 -}
+
+zeroOp :: CValue
+zeroOp = Prims.zeroOp bvZ boolZ
+  where bvZ n = return (vWord (Prim.bv (fromInteger n) 0))
+        boolZ = return (vBool False)
+
+eqOp :: CValue
+eqOp = Prims.eqOp trueOp andOp boolOp bvOp
+  where trueOp = vBool True
+        andOp x y = return (vBool (toBool x && toBool y))
+        boolOp x y = return (vBool (toBool x == toBool y))
+        bvOp _ x y = return (vBool (Prim.bvEq undefined (toWord x) (toWord y)))
 
 ----------------------------------------
 

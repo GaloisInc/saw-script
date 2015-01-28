@@ -190,9 +190,44 @@ eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 --------------------------------------------------------------------------------
 -- Overloaded operations
 
+-- | Implemented as primitive;
+-- Only defined for boolean, vector, stream, tuple, record, and function types
 zero :: (a :: sort 0) -> a;
--- Implemented as primitive;
--- Only defined for boolean, vector, tuple, record, and function types
+
+-- | Implemented as primitive;
+-- Only defined for boolean, vector, stream, tuple, record, and function types
+unary :: ((n :: Nat) -> bitvector n -> bitvector n)
+      -> (Bool -> Bool)
+      -> (a :: sort 0) -> a -> a;
+
+-- | Implemented as primitive;
+-- Only defined for boolean, vector, stream, tuple, record, and function types
+binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
+       -> (Bool -> Bool -> Bool)
+       -> (a :: sort 0) -> a -> a -> a;
+
+-- | Implemented as primitive;
+-- Only defined for boolean, vector, tuple, and record types
+comparison :: (b :: sort 0)
+           -> ((n :: Nat) -> bitvector n -> bitvector n -> b -> b)
+           -> (Bool -> Bool -> b -> b)
+           -> b
+           -> (a :: sort 0) -> a -> a -> b;
+
+cmpBvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+cmpBvEq n x y k = and (bvEq n x y) k;
+
+cmpBvLt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+cmpBvLt n x y k = or (bvult n x y) (cmpBvEq n x y k);
+
+cmpBoolEq :: Bool -> Bool -> Bool -> Bool;
+cmpBoolEq x y k = and (boolEq x y) k;
+
+cmpBoolLt :: Bool -> Bool -> Bool -> Bool;
+cmpBoolLt x y k = or (and (not x) y) (cmpBoolEq x y k);
+
+lt :: (a :: sort 0) -> a -> a -> Bool;
+lt = comparison Bool cmpBvLt cmpBoolLt False;
 
 --------------------------------------------------------------------------------
 -- Pairs
