@@ -100,8 +100,8 @@ scFiniteType sc ft =
     FTVec n t  -> do n' <- scNat sc n
                      t' <- scFiniteType sc t
                      scVecType sc n' t'
-    FTTuple ts -> scNestedTupleType sc =<< traverse (scFiniteType sc) ts
-    FTRec tm   -> scRecordType sc =<< traverse (scFiniteType sc) tm -- FIXME: wrong encoding
+    FTTuple ts -> scTupleType sc =<< traverse (scFiniteType sc) ts
+    FTRec tm   -> scRecordType sc =<< traverse (scFiniteType sc) tm
 
 -- | Convert a finite value to a SharedTerm.
 scFiniteValue :: SharedContext s -> FiniteValue -> IO (SharedTerm s)
@@ -112,8 +112,8 @@ scFiniteValue sc fv =
     FVVec t vs -> do t' <- scFiniteType sc t
                      vs' <- traverse (scFiniteValue sc) vs
                      scVector sc t' vs'
-    FVTuple vs -> scNestedTuple sc =<< traverse (scFiniteValue sc) vs
-    FVRec vm   -> scRecord sc =<< traverse (scFiniteValue sc) vm -- FIXME: wrong encoding
+    FVTuple vs -> scTuple sc =<< traverse (scFiniteValue sc) vs
+    FVRec vm   -> scRecord sc =<< traverse (scFiniteValue sc) vm
 
 -- Parsing values from lists of booleans ---------------------------------------
 
