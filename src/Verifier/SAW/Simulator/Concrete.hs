@@ -126,7 +126,7 @@ toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x
 toVector :: CValue -> V.Vector CValue
 toVector (VVector xv) = fmap (runIdentity . force) xv
 toVector (VExtra (CWord w)) = fmap vBool (explodeBitVector w)
-toVector _ = error "Verifier.SAW.Simulator.Concrete.toVector"
+toVector x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toVector", show x]
 
 {-
 flattenBValue :: CValue -> BitVector
