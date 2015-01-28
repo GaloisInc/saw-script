@@ -87,6 +87,8 @@ module Verifier.SAW.Conversion
     -- ** Prelude conversions
   , tupleConversion
   , recordConversion
+  , eq_Tuple
+  , eq_Record
   , natConversions
   , finConversions
   , vecConversions
@@ -545,6 +547,38 @@ tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) act
 recordConversion :: Termlike t => Conversion t
 recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) action
   where action (m, i) = fmap return (Map.lookup i m)
+
+-- | Conversion for equality on tuple types
+eq_Tuple :: Termlike t => Conversion t
+eq_Tuple = Conversion $ thenMatcher matcher action
+  where
+    matcher = asGlobalDef "Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
+    action (_ :*: ts :*: x :*: y) =
+      Just (foldr mkAnd mkTrue (map mkEq (zip [1 ..] ts)))
+      where
+        mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
+        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
+        sel t i = mkTermF (FTermF (TupleSelector t i))
+        mkEq (i, t) = mkGlobalDef "Prelude.eq"
+                      `mkApp` return t
+                      `mkApp` sel x i
+                      `mkApp` sel y i
+
+-- | Conversion for equality on record types
+eq_Record :: Termlike t => Conversion t
+eq_Record = Conversion $ thenMatcher matcher action
+  where
+    matcher = asGlobalDef "Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
+    action (_ :*: tm :*: x :*: y) =
+      Just (foldr mkAnd mkTrue (map mkEq (Map.assocs tm)))
+      where
+        mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
+        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
+        sel t i = mkTermF (FTermF (RecordSelector t i))
+        mkEq (i, t) = mkGlobalDef "Prelude.eq"
+                      `mkApp` return t
+                      `mkApp` sel x i
+                      `mkApp` sel y i
 
 -- | Conversions for operations on Nat literals
 natConversions :: Termlike t => [Conversion t]
