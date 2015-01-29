@@ -348,8 +348,8 @@ rewriteSharedTerm sc ss t0 =
         Nothing -> apply rules t
         Just inst
           | lhs == rhs ->
-            putStrLn $ "rewriteSharedTerm: skipping reflexive rule: " ++ show lhs
-            apply rules t
+            do putStrLn $ "rewriteSharedTerm: skipping reflexive rule: " ++ show lhs
+               apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
@@ -473,9 +473,9 @@ rewritingSharedContext sc ss = sc'
       case first_order_match l t of
         Nothing -> apply rules t
         Just inst
-          | l == r -> do
-            putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ show l
-            apply rules t
+          | l == r ->
+            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ show l
+               apply rules t
           | otherwise -> S.instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
       case runConversion conv t of
