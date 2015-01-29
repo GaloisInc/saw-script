@@ -346,7 +346,11 @@ rewriteSharedTerm sc ss t0 =
     apply (Left (RewriteRule {lhs, rhs}) : rules) t =
       case first_order_match lhs t of
         Nothing -> apply rules t
-        Just inst ->
+        Just inst
+          | lhs == rhs ->
+            putStrLn $ "rewriteSharedTerm: skipping reflexive rule: " ++ show lhs
+            apply rules t
+          | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
                rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) rhs
@@ -468,7 +472,11 @@ rewritingSharedContext sc ss = sc'
     apply (Left (RewriteRule _ l r) : rules) t =
       case first_order_match l t of
         Nothing -> apply rules t
-        Just inst -> S.instantiateVarList sc' 0 (Map.elems inst) r
+        Just inst
+          | l == r -> do
+            putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ show l
+            apply rules t
+          | otherwise -> S.instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
