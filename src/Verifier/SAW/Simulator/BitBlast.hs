@@ -251,7 +251,7 @@ beConstMap be = Map.fromList
   , ("Prelude.bvNat", bvNatOp be)
   --, ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
-  --, ("Prelude.zero", zeroOp)
+  , ("Prelude.zero", zeroOp be)
   , ("Prelude.unary", Prims.unaryOp)
   , ("Prelude.binary", Prims.binaryOp)
   --, ("Prelude.eq", eqOp)
@@ -513,6 +513,10 @@ bvShiftROp be =
                 _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvShiftROp: " ++ show xs
     AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
 
+zeroOp :: AIG.IsAIG l g => g s -> BValue (l s)
+zeroOp be = Prims.zeroOp bvZ boolZ
+  where bvZ n = return (VExtra (BWord (AIG.bvFromInteger be (fromInteger n) 0)))
+        boolZ = return (vBool (AIG.falseLit be))
 ----------------------------------------
 -- Polynomial operations
 
