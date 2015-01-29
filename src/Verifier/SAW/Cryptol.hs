@@ -92,7 +92,7 @@ bindProp sc prop env = do
 importKind :: SharedContext s -> C.Kind -> IO (SharedTerm s)
 importKind sc kind =
   case kind of
-    C.KType       -> scDataTypeApp sc "Cryptol.KType" []
+    C.KType       -> scSort sc (mkSort 0)
     C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
