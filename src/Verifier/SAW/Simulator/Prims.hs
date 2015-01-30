@@ -197,8 +197,9 @@ generateOp =
     liftM VVector $ V.generateM (fromIntegral n) g
 
 -- zero :: (a :: sort 0) -> a;
-zeroOp :: (MonadLazy m, Show e) => (Integer -> m (Value m e)) -> m (Value m e) -> Value m e
-zeroOp bvZ boolZ = strictFun go
+zeroOp :: (MonadLazy m, Show e) => (Integer -> m (Value m e)) -> m (Value m e)
+       -> Value m e -> Value m e
+zeroOp bvZ boolZ mkStream = strictFun go
   where
     go t =
       case t of
@@ -209,55 +210,52 @@ zeroOp bvZ boolZ = strictFun go
         VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []] -> bvZ n
         VDataType "Prelude.Vec" [VNat n, t'] -> do
           liftM (VVector . V.replicate (fromInteger n)) $ delay (go t')
+        VDataType "Prelude.Stream" [t'] -> do
+          thunk <- delay (go t')
+          applyAll mkStream [ready t', ready (VFun (\_ -> force thunk))]
         _ -> fail $ "zero: invalid type instance: " ++ show t
--- ^ FIXME: add support for infinite stream type.
 
 --unary :: ((n :: Nat) -> bitvector n -> bitvector n)
 --       -> (Bool -> Bool)
 --       -> (a :: sort 0) -> a -> a;
-unaryOp :: (MonadLazy m, Show e) => Value m e
-unaryOp =
+unaryOp :: (MonadLazy m, Show e) => Value m e -> Value m e -> Value m e
+unaryOp mkStream streamGet =
   pureFun $ \bvOp ->
   pureFun $ \boolOp ->
-  let go t v =
-        case t of
-          VPiType _ f -> return $ VFun $ \x -> do
-                           y <- apply v x
-                           u <- f x
-                           go u y
-          VTupleType ts ->
-            case v of
-              VTuple vs ->
-                liftM VTuple $ sequence (V.zipWith go' (V.fromList ts) vs)
-              _ -> fail "unary: arguments not tuples"
-          VRecordType tm ->
-            case v of
-              VRecord vm
-                | Map.keys tm == Map.keys vm ->
-                  liftM VRecord $ sequence (Map.intersectionWith go' tm vm)
-              _ -> fail "unary: arguments not records"
-          VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []] ->
-            applyAll bvOp [ready n, ready v]
-          VDataType "Prelude.Vec" [_, t'] ->
-            case v of
-              VVector vv ->
-                liftM VVector $ mapM (go' t') vv
-              _ -> fail "unary: arguments not vectors"
-          VDataType "Prelude.Bool" [] ->
-            apply boolOp (ready v)
-          _ ->
-            fail $ "unary: invalid type instance: " ++ show t
+  let go (VPiType _ f) v =
+        return $ VFun $ \x -> do
+          y <- apply v x
+          u <- f x
+          go u y
+      go (VTupleType ts) (VTuple vs) =
+        liftM VTuple $ sequence (V.zipWith go' (V.fromList ts) vs)
+      go (VRecordType tm) (VRecord vm)
+        | Map.keys tm == Map.keys vm =
+          liftM VRecord $ sequence (Map.intersectionWith go' tm vm)
+      go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v =
+        applyAll bvOp [ready n, ready v]
+      go (VDataType "Prelude.Vec" [_, t']) (VVector vv) =
+        liftM VVector $ mapM (go' t') vv
+      go (VDataType "Prelude.Bool" []) v =
+        apply boolOp (ready v)
+      go (VDataType "Prelude.Stream" [t']) v =
+        applyAll mkStream [ready t', ready (VFun f)]
+        where
+          f n = do
+            x <- applyAll streamGet [ready t', ready v, n]
+            go t' x
+      go t _ =
+        fail $ "unary: invalid type instance: " ++ show t
 
       go' t thunk = delay (force thunk >>= go t)
 
   in pureFun $ \t -> strictFun $ \v -> go t v
--- ^ FIXME: add support for infinite stream type.
 
 --binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
 --       -> (Bool -> Bool -> Bool)
 --       -> (a :: sort 0) -> a -> a -> a;
-binaryOp :: (MonadLazy m, Show e) => Value m e
-binaryOp =
+binaryOp :: (MonadLazy m, Show e) => Value m e -> Value m e -> Value m e
+binaryOp mkStream streamGet =
   VFun $ \bvOp' -> return $
   VFun $ \boolOp' -> return $
   let bin (VPiType _ f) v1 v2 =
@@ -280,6 +278,13 @@ binaryOp =
         applyAll bvOp [ready n, ready v1, ready v2]
       bin (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) =
         liftM VVector $ sequence (V.zipWith (bin' t') vv1 vv2)
+      bin (VDataType "Prelude.Stream" [t']) v1 v2 =
+        applyAll mkStream [ready t', ready (VFun f)]
+        where
+          f n = do
+            x1 <- applyAll streamGet [ready t', ready v1, n]
+            x2 <- applyAll streamGet [ready t', ready v2, n]
+            bin t' x1 x2
       bin t _ _ =
         fail $ "binary: invalid type instance: " ++ show t
 
@@ -289,7 +294,6 @@ binaryOp =
         bin t v1 v2
 
   in pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> bin t v1 v2
--- ^ FIXME: add support for infinite stream type.
 
 -- eq :: (a :: sort 0) -> a -> a -> Bool
 eqOp :: (MonadLazy m, Show e) => Value m e

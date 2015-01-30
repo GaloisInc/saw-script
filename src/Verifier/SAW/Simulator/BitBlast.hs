@@ -252,8 +252,8 @@ beConstMap be = Map.fromList
   --, ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp be)
-  , ("Prelude.unary", Prims.unaryOp)
-  , ("Prelude.binary", Prims.binaryOp)
+  , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
+  , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
   --, ("Prelude.eq", eqOp)
   , ("Prelude.comparison", Prims.comparisonOp)
   ]
@@ -514,9 +514,10 @@ bvShiftROp be =
     AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
 
 zeroOp :: AIG.IsAIG l g => g s -> BValue (l s)
-zeroOp be = Prims.zeroOp bvZ boolZ
+zeroOp be = Prims.zeroOp bvZ boolZ mkStreamOp
   where bvZ n = return (VExtra (BWord (AIG.bvFromInteger be (fromInteger n) 0)))
         boolZ = return (vBool (AIG.falseLit be))
+
 ----------------------------------------
 -- Polynomial operations
 

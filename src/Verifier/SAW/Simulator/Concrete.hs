@@ -264,8 +264,8 @@ constMap = Map.fromList
   --, ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp)
-  , ("Prelude.unary", Prims.unaryOp)
-  , ("Prelude.binary", Prims.binaryOp)
+  , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
+  , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
   , ("Prelude.eq", eqOp)
   , ("Prelude.comparison", Prims.comparisonOp)
   ]
@@ -472,7 +472,7 @@ bvShiftROp =
 -}
 
 zeroOp :: CValue
-zeroOp = Prims.zeroOp bvZ boolZ
+zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
   where bvZ n = return (vWord (Prim.bv (fromInteger n) 0))
         boolZ = return (vBool False)
 
