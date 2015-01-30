@@ -1077,21 +1077,23 @@ extName (unwrapTermF -> FTermF (ExtCns ec)) = Just (ecName ec)
 extName _ = Nothing
 
 -- | Return a list of all ExtCns subterms in the given term, sorted by
--- index.
+-- index. Does not traverse the unfoldings of @Constant@ terms.
 getAllExts :: SharedTerm s -> [SharedTerm s]
 getAllExts t = sortBy (comparing extIdx) $ Set.toList args
     where (seen, exts) = getExtCns (Set.empty, Set.empty) t
           tf = unwrapTermF t
           args = snd $ foldl' getExtCns (seen, exts) tf
-          getExtCns (is, a) (STApp idx _) | Set.member idx is = (is, a)
+          getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
           getExtCns (is, a) t'@(STApp idx (FTermF (ExtCns _))) =
             (Set.insert idx is, Set.insert t' a)
           getExtCns (is, a) t'@(Unshared (FTermF (ExtCns _))) =
             (is, Set.insert t' a)
+          getExtCns acc (STApp _ (Constant _ _ _)) = acc
+          getExtCns acc (Unshared (Constant _ _ _)) = acc
           getExtCns (is, a) (STApp idx tf') =
             foldl' getExtCns (Set.insert idx is, a) tf'
-          getExtCns (is, a) (Unshared tf') =
-            foldl' getExtCns (is, a) tf'
+          getExtCns acc (Unshared tf') =
+            foldl' getExtCns acc tf'
 
 -- | Instantiate some of the external constants
 scInstantiateExt :: forall s
