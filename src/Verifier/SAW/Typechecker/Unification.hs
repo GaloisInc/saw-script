@@ -28,8 +28,7 @@ import Control.Applicative
 import Control.Arrow hiding ((<+>))
 import Control.Lens
 import Control.Monad (ap, unless, zipWithM, zipWithM_)
-import Control.Monad.Except (throwError)
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.State (StateT(..), MonadState(..), evalStateT, gets)
 import Control.Monad.Trans
 import Control.Monad.ST
@@ -676,7 +675,7 @@ mergeUnifyPats p1 (TCPUnused _ (_, (v,_))) = do
 mergeUnifyPats (TCPatF pf1) (TCPatF pf2) = do
   case zipWithPatF mergeUnifyPats pf1 pf2 of
     Just pf -> sequenceOf_ folded pf
-    Nothing -> throwError "Pattern merging failed"
+    Nothing -> throwE "Pattern merging failed"
 
 instPats :: Pos
           -> TermContext s

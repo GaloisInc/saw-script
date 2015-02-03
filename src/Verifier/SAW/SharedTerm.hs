@@ -146,7 +146,6 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
-import Control.Monad.Except
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Bits

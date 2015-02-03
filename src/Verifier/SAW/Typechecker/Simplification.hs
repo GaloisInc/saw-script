@@ -27,8 +27,7 @@ module Verifier.SAW.Typechecker.Simplification
 import Control.Applicative
 import Control.Arrow (second)
 import Control.Lens
-import Control.Monad.Except (throwError)
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.State (StateT(..), modify)
 import Control.Monad.Trans
 import Data.Traversable
@@ -77,7 +76,7 @@ attemptMatch tc (TCPatF pf) t = do
       | c == preludeSuccIdent && n > 0 ->
       go p (TCF (NatLit (n-1)))
 
-    _ -> lift $ throwError "Pattern match failed."
+    _ -> lift $ throwE "Pattern match failed."
 
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.

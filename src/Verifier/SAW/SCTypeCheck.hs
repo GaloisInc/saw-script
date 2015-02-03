@@ -13,11 +13,12 @@ module Verifier.SAW.SCTypeCheck
   , scTypeCheckError
   , TCError
   , prettyTCError
+  , throwTCError
   ) where
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad.Except
+import Control.Monad.Trans.Except
 import Control.Monad.State.Strict as State
 
 import Data.Foldable (maximum, and)
@@ -47,6 +48,9 @@ data TCError s
   | BadRecordField FieldName (SharedTerm s)
   | ArrayTypeMismatch (SharedTerm s) (SharedTerm s)
   | DanglingVar Int
+
+throwTCError :: TCError s -> TCM s a
+throwTCError = lift . throwE
 
 prettyTCError :: TCError s -> [String]
 prettyTCError e =
@@ -123,11 +127,11 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           aty' <- whnf aty
           checkEqTy ty aty' (ArgTypeMismatch aty' ty)
           io $ instantiateVar sc 0 y rty
-        _ -> throwError (NotFuncType tx)
+        _ -> throwTCError (NotFuncType tx)
     checkEqTy :: SharedTerm s -> SharedTerm s -> TCError s -> TCM s ()
     checkEqTy ty ty' err = do
       ok <- io $ argMatch sc ty ty'
-      unless ok (throwError err)
+      unless ok (throwTCError err)
     termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
     termf tf =
       case tf of
@@ -149,7 +153,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           where dtys = map defType defs
         LocalVar i
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> throwError (DanglingVar (i - length env))
+          | otherwise      -> throwTCError (DanglingVar (i - length env))
         Constant _ t _ -> memo t
     ftermf :: FlatTermF (SharedTerm s) -> TCM s (SharedTerm s)
     ftermf tf =
@@ -165,18 +169,18 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           ty <- memo t
           case ty of
             STApp _ (FTermF (TupleType ts)) -> do
-              unless (i <= length ts) $ throwError $ BadTupleIndex i ty
+              unless (i <= length ts) $ throwTCError $ BadTupleIndex i ty
               whnf (ts !! (i-1))
-            _ -> throwError (NotTupleType ty)
+            _ -> throwTCError (NotTupleType ty)
         RecordValue m -> io . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
           ty <- memo t
           case ty of
             STApp _ (FTermF (RecordType m)) -> 
               case Map.lookup f m of
-                Nothing -> throwError $ BadRecordField f ty
+                Nothing -> throwTCError $ BadRecordField f ty
                 Just tp -> whnf tp
-            _ -> throwError (NotRecordType ty)
+            _ -> throwTCError (NotRecordType ty)
         RecordType m | Map.null m -> io $ scSort sc (mkSort 0)
         RecordType m -> io . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
