@@ -5,9 +5,6 @@ Maintainer:    atomb@galois.com
 Build-type:    Simple
 Cabal-version: >= 1.8.0.2
 
-extra-source-files:
-    prelude/Prelude.saw
-
 library
   build-depends:
       base >= 4
@@ -46,6 +43,7 @@ library
     , template-haskell
     , time
     , transformers
+    , transformers-compat
     , vector
     , xdg-basedir
     , wl-pprint
