@@ -14,7 +14,7 @@ module Verifier.SAW.Simulator.SBV where
 
 import Data.SBV
 import Data.SBV.Internals
-import Cryptol.Symbolic.BitVector
+import Verifier.SAW.Simulator.SBV.SWord
 
 import Control.Lens ((<&>))
 import qualified Control.Arrow as A
@@ -147,7 +147,7 @@ constMap = Map.fromList [
 --
 
 bitVector :: Int -> Integer -> SWord
-bitVector w i = literal $ bv w i
+bitVector w i = literalSWord w i
 
 symFromBits :: Vector SBool -> SWord
 symFromBits v
@@ -812,7 +812,7 @@ newVars FTBit = nextId <&> \s-> (BoolLabel s, vBool <$> exists s)
 newVars (FTVec n FTBit) =
   if n == 0
     then nextId <&> \s-> (WordLabel s, return (VExtra SZero))
-    else nextId <&> \s-> (WordLabel s, vWord <$> existsBV s (fromIntegral n))
+    else nextId <&> \s-> (WordLabel s, vWord <$> existsSWord s (fromIntegral n))
 newVars (FTVec n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
   return (VecLabel labels, VVector <$> traverse (fmap ready) vals)
