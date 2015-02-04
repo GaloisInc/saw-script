@@ -334,16 +334,16 @@ comparisonOp =
   pureFun $ \bvOp ->
   pureFun $ \boolOp ->
   let go (VTupleType ts) (VTuple vv1) (VTuple vv2) k =
-        foldM (flip ($)) k (zipWith3 go' ts (V.toList vv1) (V.toList vv2))
+        foldr (=<<) (return k) (zipWith3 go' ts (V.toList vv1) (V.toList vv2))
       go (VRecordType tm) (VRecord vm1) (VRecord vm2) k
         | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
-          foldM (flip ($)) k (zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2))
+          foldr (=<<) (return k) (zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2))
       go (VDataType "Prelude.Bool" []) v1 v2 k = do
         applyAll boolOp [ready v1, ready v2, ready k]
       go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v1 v2 k = do
         applyAll bvOp [ready n, ready v1, ready v2, ready k]
       go (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) k = do
-        foldM (flip ($)) k (zipWith (go' t') (V.toList vv1) (V.toList vv2))
+        foldr (=<<) (return k) (zipWith (go' t') (V.toList vv1) (V.toList vv2))
       go t _ _ _ = fail $ "comparison: invalid arguments: " ++ show t
 
       go' t thunk1 thunk2 k = do
