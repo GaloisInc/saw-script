@@ -140,6 +140,12 @@ constMap = Map.fromList [
     -- Miscellaneous
     ("Prelude.coerce", Prims.coerceOp),
     ("Prelude.bvNat", bvNatOp)
+  -- Overloaded
+  , ("Prelude.zero", zeroOp)
+  , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
+  , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
+  , ("Prelude.eq", eqOp)
+  , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
 ------------------------------------------------------------
@@ -344,6 +350,19 @@ bvSShROp =
   wordFun $ \(Just w) -> return $
   Prims.natFun $ \n -> return $ vWord $ unsignCast $ shiftR (signCast w) (fromIntegral n)
 
+zeroOp :: SValue
+zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
+  where bvZ n = return (vWord (bitVector (fromInteger n) 0))
+        boolZ = return (VExtra (SBool false))
+
+eqOp :: SValue
+eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp
+  where trueOp       = VExtra (SBool true)
+        andOp    x y = return $ vBool (forceBool x &&& forceBool y)
+        boolEqOp x y = return $ vBool (forceBool x <=> forceBool y)
+        bvEqOp _ x y = do Just x' <- toWord x
+                          Just y' <- toWord y
+                          return $ vBool (x' .== y')
 
 ----------------------------------------
 -- Polynomial operations
