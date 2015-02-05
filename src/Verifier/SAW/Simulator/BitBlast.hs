@@ -254,7 +254,7 @@ beConstMap be = Map.fromList
   , ("Prelude.zero", zeroOp be)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
   , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
-  --, ("Prelude.eq", eqOp)
+  , ("Prelude.eq", eqOp be)
   , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
@@ -517,6 +517,15 @@ zeroOp :: AIG.IsAIG l g => g s -> BValue (l s)
 zeroOp be = Prims.zeroOp bvZ boolZ mkStreamOp
   where bvZ n = return (VExtra (BWord (AIG.bvFromInteger be (fromInteger n) 0)))
         boolZ = return (vBool (AIG.falseLit be))
+
+eqOp :: AIG.IsAIG l g => g s -> BValue (l s)
+eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp
+  where trueOp       = vBool (AIG.trueLit be)
+        andOp    x y = vBool <$> AIG.and be (toBool x) (toBool y)
+        boolEqOp x y = vBool <$> AIG.eq be (toBool x) (toBool y)
+        bvEqOp _ x y = do x' <- toWord x
+                          y' <- toWord y
+                          vBool <$> AIG.bvEq be x' y'
 
 ----------------------------------------
 -- Polynomial operations
