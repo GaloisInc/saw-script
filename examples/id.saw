@@ -1,5 +1,3 @@
-id : {a} a -> a;
-id x = x;
+let id (x : a) : a = x;
 
-main = return ();
-
+return ();
