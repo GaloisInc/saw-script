@@ -89,7 +89,7 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
 
-  GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
+  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
 
   build-tools:
     alex >= 3.1.3,
@@ -98,7 +98,7 @@ library
 executable saw
   hs-source-dirs: .
 
-  GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
+  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
 
   main-is: src/Main.hs
 
