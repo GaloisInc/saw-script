@@ -205,10 +205,7 @@ instance Termlike (SharedTerm s) where
   unwrapTermF (Unshared tf) = tf
 
 instance Eq (SharedTerm s) where
-  STApp i t  == STApp j u  = i == j || t == u
-  STApp _ t  == Unshared u = t == u
-  Unshared t == STApp _  u = t == u
-  Unshared t == Unshared u = t == u
+  (==) = alphaEquiv
 
 instance Ord (SharedTerm s) where
   compare (STApp i _) (STApp j _) | i == j = EQ
