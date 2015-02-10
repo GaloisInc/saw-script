@@ -330,7 +330,10 @@ importExpr sc env expr =
                                           t1' <- ty t1
                                           t2' <- ty t2
                                           e1' <- go e1
-                                          scGlobalApply sc "Prelude.unsafeCoerce" [t1', t2', e1']
+                                          aeq <- pure alphaEquiv <*> scWhnf sc t1' <*> scWhnf sc t2'
+                                          if aeq
+                                             then return e1'
+                                             else scGlobalApply sc "Prelude.unsafeCoerce" [t1', t2', e1']
     C.EWhere e dgs                  -> do env' <- importDeclGroups sc env dgs
                                           importExpr sc env' e
   where
