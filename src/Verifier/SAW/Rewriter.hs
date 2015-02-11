@@ -217,13 +217,16 @@ scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 ----------------------------------------------------------------------
 -- Simpsets
 
+-- | Invariant: 'Simpset's should not contain reflexive rules. We avoid
+-- adding them in 'addRule' below.
 type Simpset t = Net.Net (Either (RewriteRule t) (Conversion t))
 
 emptySimpset :: Simpset t
 emptySimpset = Net.empty
 
 addRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
-addRule rule = Net.insert_term (lhs rule, Left rule)
+addRule rule | lhs rule /= rhs rule = Net.insert_term (lhs rule, Left rule)
+             | otherwise = id
 
 delRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
 delRule rule = Net.delete_term (lhs rule, Left rule)
@@ -341,7 +344,10 @@ rewriteSharedTerm sc ss t0 =
         Nothing -> apply rules t
         Just inst
           | lhs == rhs ->
-            do putStrLn $ "rewriteSharedTerm: skipping reflexive rule: " ++ show lhs
+            -- This should never happen because we avoid inserting
+            -- reflexive rules into simp sets in the first place.
+            do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
+                          "(THE IMPOSSIBLE HAPPENED!): " ++ show lhs
                apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
