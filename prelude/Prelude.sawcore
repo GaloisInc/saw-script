@@ -241,6 +241,7 @@ lt :: (a :: sort 0) -> a -> a -> Bool;
 lt = comparison Bool cmpBvLt cmpBoolLt False;
 
 eq_binary_and :: Eq (Bool -> Bool -> Bool) (binary bvAnd and Bool) and;
+eq_binary_or :: Eq (Bool -> Bool -> Bool) (binary bvOr or Bool) or;
 
 eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
                              (lt (Vec n Bool))
