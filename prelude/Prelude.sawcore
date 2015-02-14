@@ -932,6 +932,15 @@ eq_VecVec :: (n :: Nat) -> (m :: Nat) -> (a :: sort 0)
 equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
 
+-- | Return true if the bitvector is nonzero
+bvNonzero :: (n :: Nat) -> bitvector n -> Bool;
+bvNonzero n x = bvNe n x (bvNat n 0);
+
+-- | Returns the bitvector 1 if the boolean is true,
+--   and returns 0 otherwise
+bvBool :: (n :: Nat) -> Bool -> bitvector n;
+bvBool n b = ite (bitvector n) b (bvNat n 1) (bvNat n 0);
+
 -- | Return true if two bitvectors are not equal.
 bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
