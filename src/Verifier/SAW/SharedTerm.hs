@@ -114,6 +114,7 @@ module Verifier.SAW.SharedTerm
   , scBvAt
   , scBvConst
   , scFinVal
+  , scBvNonzero, scBvBool
   , scBvAdd, scBvSub, scBvMul, scBvNeg
   , scBvURem, scBvUDiv, scBvSRem, scBvSDiv
   , scBvOr, scBvAnd, scBvXor
@@ -972,6 +973,14 @@ scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
 -- | FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
 scFinVal :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFinVal sc a b = scCtorApp sc "Prelude.FinVal" [a, b]
+
+-- | bvBool :: (n :: Nat) -> Bool -> bitvector n;
+scBvBool :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvBool sc n x = scGlobalApply sc "Prelude.bvBool" [n, x]
+
+-- | bvNonzero :: (n :: Nat) -> bitvector n -> Bool;
+scBvNonzero :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvNonzero sc n x = scGlobalApply sc "Prelude.bvNonzero" [n, x]
 
 -- | bvNeg :: (x::Nat) -> bitvector x -> bitvector x;
 scBvNeg :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)

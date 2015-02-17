@@ -79,7 +79,7 @@ scReadExternal sc input =
     (["SAWCoreTerm", read -> final] : rows) ->
         do m <- foldM go Map.empty rows
            return $ (Map.!) m final
-    _ -> fail "scReadExternal"
+    _ -> fail "scReadExternal: failed to parse input file"
   where
     go :: Map Int (SharedTerm s) -> [String] -> IO (Map Int (SharedTerm s))
     go m (n : tokens) =
@@ -88,7 +88,7 @@ scReadExternal sc input =
             (Constant x e _) -> scConstant sc x (m Map.! e)
             termf            -> scTermF sc (fmap ((Map.!) m) termf)
           return (Map.insert (read n) t m)
-    go _ _ = fail "Parse error"
+    go _ _ = fail "scReadExternal: Parse error"
     parse :: [String] -> TermF Int
     parse tokens =
       case tokens of
@@ -118,5 +118,5 @@ scReadExternal sc input =
     readMap :: [String] -> Map FieldName Int
     readMap [] = Map.empty
     readMap (i : e : fs) = Map.insert i (read e) (readMap fs)
-    readMap _ = error $ "Parse error"
+    readMap _ = error $ "scReadExternal: Parse error"
 
