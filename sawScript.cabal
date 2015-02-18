@@ -33,6 +33,7 @@ library
     , mtl >= 2.1
     , old-locale
     , old-time
+    , parsec
     , pretty
     , pretty-show
     , process
