@@ -11,8 +11,7 @@ import System.Random
 import Data.SBV
 import Data.SBV.Internals
 
-panic :: String -> [String] -> a
-panic x xs = error (unlines (x : xs))
+import Verifier.SAW.Utils (panic)
 
 -- Phantom BV type -------------------------------------------------------------
 

@@ -22,7 +22,7 @@ data FiniteType
 -- | Values inhabiting those finite types.
 data FiniteValue
   = FVBit Bool
-  | FVWord Nat Integer
+  | FVWord Nat Integer -- ^ a more efficient special case for 'FVVec FTBit _'.
   | FVVec FiniteType [FiniteValue]
   | FVTuple [FiniteValue]
   | FVRec (Map FieldName FiniteValue)

@@ -14,6 +14,7 @@ SAW-specific declarations should be stored in separate modules.
 -}
 module Verifier.SAW.Utils
   ( internalError
+  , panic
   , sumBy
   ) where
 
@@ -26,3 +27,5 @@ sumBy f = foldl' fn 0
 internalError :: String -> a
 internalError msg = error $ "internal: " ++ msg
 
+panic :: String -> [String] -> a
+panic x xs = error (unlines (x : xs))
