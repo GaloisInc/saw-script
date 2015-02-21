@@ -36,11 +36,12 @@ library
     , pretty
     , pretty-show
     , process
-    , saw-core
+    , saw-core >= 0.1.1
     , sbv >= 4.0
     , smtLib
     , split
     , template-haskell
+    , tf-random
     , time
     , transformers
     , transformers-compat
