@@ -1,3 +1,4 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 -- |
 -- Module      :  Verifier.SAW.Testing.Random
 -- Copyright   :  (c) 2013-2015 Galois, Inc.
@@ -39,23 +40,40 @@ import System.Random (RandomGen, split, random, randomR, newStdGen)
 -- but the implementation did not actually do this.
 type Gen g = Int -> g -> (FiniteValue, g)
 
+-- | Call @scRunTest@ many times, returning the first failure if any.
+scRunTests :: RandomGen g => SharedContext s ->
+  Integer -> SharedTerm s -> [Gen g] -> Int -> g -> IO (Maybe [FiniteValue], g)
+scRunTests sc numTests fun gens sz g =
+  if numTests < 0 then
+    panic "scRunTests:" ["number of tests must be non-negative"]
+  else
+    go numTests g
+  where
+    go 0 g' = return (Nothing, g')
+    go numTests' g' = do
+      (result, g'') <- scRunTest sc fun gens sz g'
+      case result of
+        Nothing -> go (numTests' - 1) g''
+        Just _counterExample -> return (result, g'')
+
 {- | Apply a testable value to some randomly-generated arguments.
      Returns `Nothing` if the function returned `True`, or
      `Just counterexample` if it returned `False`.
+
+    Use @scTestableType@ to compute the input generators.
 
     Please note that this function assumes that the generators match
     the supplied value, otherwise we'll panic.
  -}
 scRunTest :: RandomGen g => SharedContext s ->
-  SharedTerm s -> [Gen g] -> Int -> g -> IO (Maybe [SharedTerm s], g)
+  SharedTerm s -> [Gen g] -> Int -> g -> IO (Maybe [FiniteValue], g)
 scRunTest sc fun gens sz g = do
   let (xs, g') = runGens gens sz g
   result <- apply xs
   case result of
     VExtra (CBool True) -> return $ (Nothing, g')
     VExtra (CBool False) -> do
-      counterExample <- mapM (scFiniteValue sc) xs
-      return $ (Just counterExample, g')
+      return $ (Just xs, g')
     _ -> panic "Type error while running test"
          [ "Expected a boolean, but got:"
          , show result ]
@@ -80,6 +98,8 @@ scTestableType sc ty = do
       return $ (domGen :) <$> rngGens
     (asBoolType -> Just ()) -> return $ Just []
     _ -> return Nothing
+
+----------------------------------------------------------------
 
 -- | Run a sequence of generators from left to right.
 runGens :: RandomGen g => [Gen g] -> Int -> g -> ([FiniteValue], g)
@@ -107,7 +127,6 @@ randomWord :: RandomGen g => Nat -> Gen g
 randomWord w _sz g =
    let (val, g1) = randomR (0,2^(unNat w - 1)) g
    in (FVWord w val, g1)
-
 
 {- | Generate a random vector.  Generally, this should be used for sequences
 other than bits.  For sequences of bits use "randomWord".  The difference
