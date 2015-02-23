@@ -24,30 +24,38 @@ import Verifier.SAW.Simulator.Value (Value(..))
 import Verifier.SAW.TypedAST (FieldName)
 import Verifier.SAW.Utils (panic)
 
-import Control.Applicative ((<$>))
-import Data.List (unfoldr, genericTake)
+import Control.Applicative ((<$>), Applicative)
+import Control.Monad (msum, replicateM)
+import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Monad.Random
 import Data.Map (Map)
-import qualified Data.Map as Map
-import System.Random (RandomGen, split, random, randomR, newStdGen)
+import Data.Traversable (traverse)
+import System.Random.TF (newTFGen, TFGen)
 
--- 'State FiniteValue g' ...
-type Gen g = g -> (FiniteValue, g)
+----------------------------------------------------------------
+-- Interface.
+
+-- | Run @scRunTests@ in 'IO' using 'System.Random.TF.TFGen' for generation.
+--
+-- The caller should use @scTestableType@ to (maybe) compute the 'gens'.
+scRunTestsTFIO ::
+  SharedContext s -> Integer -> SharedTerm s -> [RandT TFGen IO FiniteValue] ->
+  IO (Maybe [FiniteValue])
+scRunTestsTFIO sc numTests fun gens = do
+  g <- newTFGen
+  evalRandT (scRunTests sc numTests fun gens) g
 
 -- | Call @scRunTest@ many times, returning the first failure if any.
-scRunTests :: RandomGen g => SharedContext s ->
-  Integer -> SharedTerm s -> [Gen g] -> g -> IO (Maybe [FiniteValue], g)
-scRunTests sc numTests fun gens g =
+scRunTests :: (Functor m, MonadIO m, MonadRandom m) => SharedContext s ->
+  Integer -> SharedTerm s -> [m FiniteValue] -> m (Maybe [FiniteValue])
+scRunTests sc numTests fun gens =
   if numTests < 0 then
     panic "scRunTests:" ["number of tests must be non-negative"]
-  else
-    go numTests g
-  where
-    go 0 g' = return (Nothing, g')
-    go numTests' g' = do
-      (result, g'') <- scRunTest sc fun gens g'
-      case result of
-        Nothing -> go (numTests' - 1) g''
-        Just _counterExample -> return (result, g'')
+  else do
+    let oneTest = scRunTest sc fun gens
+    -- Use 'msum' to collapse the embedded 'Maybe's, retaining the
+    -- first counter example, if any.
+    msum <$> replicateM (fromIntegral numTests) oneTest
 
 {- | Apply a testable value to some randomly-generated arguments.
      Returns `Nothing` if the function returned `True`, or
@@ -58,15 +66,15 @@ scRunTests sc numTests fun gens g =
     Please note that this function assumes that the generators match
     the supplied value, otherwise we'll panic.
  -}
-scRunTest :: RandomGen g => SharedContext s ->
-  SharedTerm s -> [Gen g] -> g -> IO (Maybe [FiniteValue], g)
-scRunTest sc fun gens g = do
-  let (xs, g') = runGens gens g
-  result <- apply xs
+scRunTest :: (MonadIO m, MonadRandom m) => SharedContext s ->
+  SharedTerm s -> [m FiniteValue] -> m (Maybe [FiniteValue])
+scRunTest sc fun gens = do
+  xs <- sequence gens
+  result <- liftIO $ apply xs
   case result of
-    VExtra (CBool True) -> return $ (Nothing, g')
+    VExtra (CBool True) -> return $ Nothing
     VExtra (CBool False) -> do
-      return $ (Just xs, g')
+      return $ Just xs
     _ -> panic "Type error while running test"
          [ "Expected a boolean, but got:"
          , show result ]
@@ -77,11 +85,15 @@ scRunTest sc fun gens g = do
       app <- scApplyAll sc fun xs'
       return $ evalSharedTerm (scModule sc) app
 
-{- | Given a (function) type, compute generators for
-the function's arguments. Currently we do not support polymorphic functions.
-In principle, we could apply these to random types, and test the results. -}
-scTestableType :: RandomGen g =>
-  SharedContext s -> SharedTerm s -> IO (Maybe [Gen g])
+-- | Given a function type, compute generators for the function's
+-- arguments. The supported function types are of the form
+--
+--   'FiniteType -> ... -> FiniteType -> Bool'
+--
+-- and 'Nothing' is returned when attempting to generate arguments for
+-- functions of unsupported type.
+scTestableType :: (Applicative m, Functor m, MonadRandom m) =>
+  SharedContext s -> SharedTerm s -> IO (Maybe [m FiniteValue])
 scTestableType sc ty = do
   ty' <- scWhnf sc ty
   case ty' of
@@ -94,64 +106,47 @@ scTestableType sc ty = do
 
 ----------------------------------------------------------------
 
--- | Run a sequence of generators from left to right.
-runGens :: RandomGen g => [Gen g] -> g -> ([FiniteValue], g)
-runGens []         g = ([], g)
-runGens (gen:gens) g = (v:vs, g'')
-  where
-  (v, g') = gen g
-  (vs, g'') = runGens gens g'
-
-randomFiniteValue :: RandomGen g => FiniteType -> Gen g
+randomFiniteValue :: (Applicative m, Functor m, MonadRandom m) =>
+  FiniteType -> m FiniteValue
 randomFiniteValue FTBit = randomBit
 randomFiniteValue (FTVec n FTBit) = randomWord n
 randomFiniteValue (FTVec n t) = randomVec n t
 randomFiniteValue (FTTuple ts) = randomTuple ts
 randomFiniteValue (FTRec fields) = randomRec fields
 
+----------------------------------------------------------------
+-- The value generators below follow a pattern made clear in the
+-- definition of 'randomFiniteValue' above: each 'FiniteValue' value
+-- generator takes the same (non-constant) arguments as the
+-- corresponding 'FiniteType' type constructor.
+
 -- | Generate a random bit value.
-randomBit :: RandomGen g => Gen g
-randomBit g =
-  let (b,g1) = random g
-  in (FVBit b, g1)
+randomBit :: (Functor m, MonadRandom m) => m FiniteValue
+randomBit = FVBit <$> getRandom
 
 -- | Generate a random word of the given length (i.e., a value of type @[w]@)
-randomWord :: RandomGen g => Nat -> Gen g
-randomWord w g =
-   let (val, g1) = randomR (0,2^(unNat w - 1)) g
-   in (FVWord w val, g1)
+randomWord :: (Functor m, MonadRandom m) => Nat -> m FiniteValue
+randomWord w = FVWord w <$> getRandomR (0, 2^(unNat w) - 1)
 
 {- | Generate a random vector.  Generally, this should be used for sequences
 other than bits.  For sequences of bits use "randomWord".  The difference
 is mostly about how the results will be displayed. -}
-randomVec :: RandomGen g => Nat -> FiniteType -> Gen g
-randomVec w t g =
-  let (g1,g2) = split g
-      mkElem = randomFiniteValue t
-  in (FVVec t $ genericTake (unNat w) $ unfoldr (Just . mkElem) g1 , g2)
+randomVec :: (Applicative m, Functor m, MonadRandom m) =>
+  Nat -> FiniteType -> m FiniteValue
+randomVec w t =
+  FVVec t <$> replicateM (fromIntegral . unNat $ w) (randomFiniteValue t)
 
 -- | Generate a random tuple value.
-randomTuple :: RandomGen g => [FiniteType] -> Gen g
-randomTuple ts = go [] gens
-  where
-  gens = map randomFiniteValue ts
-  go els [] g = (FVTuple (reverse els), g)
-  go els (mkElem : more) g =
-    let (v, g1) = mkElem g
-    in go (v : els) more g1
+randomTuple :: (Applicative m, Functor m, MonadRandom m) =>
+  [FiniteType] -> m FiniteValue
+randomTuple ts = FVTuple <$> mapM randomFiniteValue ts
 
 -- | Generate a random record value.
-randomRec :: RandomGen g => (Map FieldName FiniteType) -> Gen g
-randomRec fieldTys = go [] gens
-  where
-  gens = Map.toList . Map.map randomFiniteValue $ fieldTys
-  go els [] g = (FVRec (Map.fromList . reverse $ els), g)
-  go els ((l,mkElem) : more) g =
-    let (v, g1) = mkElem g
-    in go ((l,v) : els) more g1
+randomRec :: (Applicative m, Functor m, MonadRandom m) =>
+  Map FieldName FiniteType -> m FiniteValue
+randomRec fieldTys = FVRec <$> traverse randomFiniteValue fieldTys
 
 _test :: IO ()
 _test = do
-  g <- System.Random.newStdGen
-  let (s,_) = randomFiniteValue (FTVec (Nat 16) (FTVec (Nat 1) FTBit)) g
+  s <- evalRandIO $ randomFiniteValue (FTVec (Nat 16) (FTVec (Nat 1) FTBit))
   print s
