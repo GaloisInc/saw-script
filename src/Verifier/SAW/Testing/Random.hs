@@ -30,20 +30,13 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import System.Random (RandomGen, split, random, randomR, newStdGen)
 
--- ??? What is the 'Int' for? Otherwise this looks like 'State g
--- FiniteValue'. The 'Int' is never actually used, but the comment on
--- the original 'randomWord' function said:
---
---   The size parameter is assumed to vary between 1 and 100, and we
---   use it to generate smaller numbers first.
---
--- but the implementation did not actually do this.
-type Gen g = Int -> g -> (FiniteValue, g)
+-- 'State FiniteValue g' ...
+type Gen g = g -> (FiniteValue, g)
 
 -- | Call @scRunTest@ many times, returning the first failure if any.
 scRunTests :: RandomGen g => SharedContext s ->
-  Integer -> SharedTerm s -> [Gen g] -> Int -> g -> IO (Maybe [FiniteValue], g)
-scRunTests sc numTests fun gens sz g =
+  Integer -> SharedTerm s -> [Gen g] -> g -> IO (Maybe [FiniteValue], g)
+scRunTests sc numTests fun gens g =
   if numTests < 0 then
     panic "scRunTests:" ["number of tests must be non-negative"]
   else
@@ -51,7 +44,7 @@ scRunTests sc numTests fun gens sz g =
   where
     go 0 g' = return (Nothing, g')
     go numTests' g' = do
-      (result, g'') <- scRunTest sc fun gens sz g'
+      (result, g'') <- scRunTest sc fun gens g'
       case result of
         Nothing -> go (numTests' - 1) g''
         Just _counterExample -> return (result, g'')
@@ -66,9 +59,9 @@ scRunTests sc numTests fun gens sz g =
     the supplied value, otherwise we'll panic.
  -}
 scRunTest :: RandomGen g => SharedContext s ->
-  SharedTerm s -> [Gen g] -> Int -> g -> IO (Maybe [FiniteValue], g)
-scRunTest sc fun gens sz g = do
-  let (xs, g') = runGens gens sz g
+  SharedTerm s -> [Gen g] -> g -> IO (Maybe [FiniteValue], g)
+scRunTest sc fun gens g = do
+  let (xs, g') = runGens gens g
   result <- apply xs
   case result of
     VExtra (CBool True) -> return $ (Nothing, g')
@@ -102,12 +95,12 @@ scTestableType sc ty = do
 ----------------------------------------------------------------
 
 -- | Run a sequence of generators from left to right.
-runGens :: RandomGen g => [Gen g] -> Int -> g -> ([FiniteValue], g)
-runGens []         _sz g = ([], g)
-runGens (gen:gens)  sz g = (v:vs, g'')
+runGens :: RandomGen g => [Gen g] -> g -> ([FiniteValue], g)
+runGens []         g = ([], g)
+runGens (gen:gens) g = (v:vs, g'')
   where
-  (v, g') = gen sz g
-  (vs, g'') = runGens gens sz g'
+  (v, g') = gen g
+  (vs, g'') = runGens gens g'
 
 randomFiniteValue :: RandomGen g => FiniteType -> Gen g
 randomFiniteValue FTBit = randomBit
@@ -118,13 +111,13 @@ randomFiniteValue (FTRec fields) = randomRec fields
 
 -- | Generate a random bit value.
 randomBit :: RandomGen g => Gen g
-randomBit _ g =
+randomBit g =
   let (b,g1) = random g
   in (FVBit b, g1)
 
 -- | Generate a random word of the given length (i.e., a value of type @[w]@)
 randomWord :: RandomGen g => Nat -> Gen g
-randomWord w _sz g =
+randomWord w g =
    let (val, g1) = randomR (0,2^(unNat w - 1)) g
    in (FVWord w val, g1)
 
@@ -132,33 +125,33 @@ randomWord w _sz g =
 other than bits.  For sequences of bits use "randomWord".  The difference
 is mostly about how the results will be displayed. -}
 randomVec :: RandomGen g => Nat -> FiniteType -> Gen g
-randomVec w t sz g =
+randomVec w t g =
   let (g1,g2) = split g
       mkElem = randomFiniteValue t
-  in (FVVec t $ genericTake (unNat w) $ unfoldr (Just . mkElem sz) g1 , g2)
+  in (FVVec t $ genericTake (unNat w) $ unfoldr (Just . mkElem) g1 , g2)
 
 -- | Generate a random tuple value.
 randomTuple :: RandomGen g => [FiniteType] -> Gen g
-randomTuple ts sz = go [] gens
+randomTuple ts = go [] gens
   where
   gens = map randomFiniteValue ts
   go els [] g = (FVTuple (reverse els), g)
   go els (mkElem : more) g =
-    let (v, g1) = mkElem sz g
+    let (v, g1) = mkElem g
     in go (v : els) more g1
 
 -- | Generate a random record value.
 randomRec :: RandomGen g => (Map FieldName FiniteType) -> Gen g
-randomRec fieldTys sz = go [] gens
+randomRec fieldTys = go [] gens
   where
   gens = Map.toList . Map.map randomFiniteValue $ fieldTys
   go els [] g = (FVRec (Map.fromList . reverse $ els), g)
   go els ((l,mkElem) : more) g =
-    let (v, g1) = mkElem sz g
+    let (v, g1) = mkElem g
     in go ((l,v) : els) more g1
 
 _test :: IO ()
 _test = do
   g <- System.Random.newStdGen
-  let (s,_) = randomFiniteValue (FTVec (Nat 16) (FTVec (Nat 1) FTBit)) 100 g
+  let (s,_) = randomFiniteValue (FTVec (Nat 16) (FTVec (Nat 1) FTBit)) g
   print s
