@@ -41,6 +41,7 @@ library
     , sbv >= 4.0
     , smtLib
     , split
+    , temporary
     , template-haskell
     , time
     , transformers
