@@ -332,7 +332,6 @@ updOp :: CValue
 updOp =
   constFun $
   constFun $
-  constFun $
   strictFun $ \v -> return $
   Prims.natFun $ \i -> return $
   VFun $ \y ->
