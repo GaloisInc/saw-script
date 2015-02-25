@@ -261,7 +261,7 @@ constMap = Map.fromList
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp)
-  --, ("Prelude.bvToNat", bvToNatOp)
+  , ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
@@ -269,6 +269,9 @@ constMap = Map.fromList
   , ("Prelude.eq", eqOp)
   , ("Prelude.comparison", Prims.comparisonOp)
   ]
+
+bvToNatOp :: CValue
+bvToNatOp = constFun $ wordFun $ VNat . unsigned
 
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: CValue
