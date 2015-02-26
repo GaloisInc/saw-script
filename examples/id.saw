@@ -1,3 +1,0 @@
-let id (x : a) : a = x;
-
-return ();
