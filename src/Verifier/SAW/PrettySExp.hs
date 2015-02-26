@@ -71,7 +71,7 @@ ppSharedTermSExpWith cfg tm = doc
           Just (depth, cnt) = Map.lookup i nodeInfos
           doline r =
             case tf of
-              Constant n _ _ -> text (show n)
+              Constant _ _ _ -> call opText r []
               Lambda _ _ _ -> parens (call opText r argDs)
               _ -> call opText r argDs
           call o r [] = r <> o

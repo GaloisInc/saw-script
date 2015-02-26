@@ -280,6 +280,7 @@ lt = comparison Bool cmpBvLt cmpBoolLt False;
 
 eq_binary_and :: Eq (Bool -> Bool -> Bool) (binary bvAnd and Bool) and;
 eq_binary_or :: Eq (Bool -> Bool -> Bool) (binary bvOr or Bool) or;
+eq_unary_not :: Eq (Bool -> Bool) (unary bvNot not Bool) not;
 
 eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
                              (lt (Vec n Bool))
@@ -768,6 +769,8 @@ single = replicate 1;
 
 get_single :: (a :: sort 0) -> (x :: a) -> (i :: Fin 1) -> Eq a (get 1 a (single a x) i) x;
 get_single = get_replicate 1;
+
+at_single :: (a :: sort 0) -> (x :: a) -> (i :: Nat) -> Eq a (at 1 a (single a x) i) x;
 
 -- Concatenate arrays together.
 join  :: (m n :: Nat)

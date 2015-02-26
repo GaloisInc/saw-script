@@ -261,7 +261,7 @@ constMap = Map.fromList
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp)
-  --, ("Prelude.bvToNat", bvToNatOp)
+  , ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
@@ -269,6 +269,9 @@ constMap = Map.fromList
   , ("Prelude.eq", eqOp)
   , ("Prelude.comparison", Prims.comparisonOp)
   ]
+
+bvToNatOp :: CValue
+bvToNatOp = constFun $ wordFun $ VNat . unsigned
 
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: CValue
@@ -308,7 +311,7 @@ atOp =
   constFun $
   constFun $
   pureFun $ \v ->
-  Prims.natFun $ \n ->
+  Prims.natFun'' "atOp" $ \n ->
     case v of
       VVector xv -> force $ (V.!) xv (fromIntegral n)
       VExtra (CWord w) -> return $ vBool (Prim.get_bv undefined undefined w (Prim.finFromBound n (fromIntegral (width w))))
@@ -332,9 +335,8 @@ updOp :: CValue
 updOp =
   constFun $
   constFun $
-  constFun $
   strictFun $ \v -> return $
-  Prims.natFun $ \i -> return $
+  Prims.natFun'' "updOp" $ \i -> return $
   VFun $ \y ->
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
@@ -409,8 +411,8 @@ foldrOp =
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: CValue
 bvNatOp =
-  Prims.natFun $ \w -> return $
-  Prims.natFun $ \x -> return $
+  Prims.natFun'' "bvNatOp1" $ \w -> return $
+  Prims.natFun'' "bvNatOp2"  $ \x -> return $
   VExtra (CWord (Prim.bv (fromIntegral w) (toInteger x)))
 
 -- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
