@@ -584,7 +584,7 @@ type HoistIfs s = (SharedTerm s, [(SharedTerm s, Set (ExtCns (SharedTerm s)))])
 
 
 orderTerms :: SharedContext s -> [SharedTerm s] -> IO [SharedTerm s]
-orderTerms _sc xs = return xs  --FIXME
+orderTerms _sc xs = return $ List.sort xs
 
 doHoistIfs :: forall s. SharedContext s
          -> Simpset (SharedTerm s)
