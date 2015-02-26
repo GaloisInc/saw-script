@@ -87,6 +87,7 @@ module Verifier.SAW.SharedTerm
   , scImport
     -- ** Normalization
   , scWhnf
+  , scConvertable
     -- ** Type checking
   , scTypeOf
   , scTypeOf'
@@ -127,12 +128,15 @@ module Verifier.SAW.SharedTerm
     -- ** Utilities
 --  , scTrue
 --  , scFalse
+   , scOpenTerm
+   , scCloseTerm
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
   , extIdx
   , extName
   , getAllExts
+  , getAllExtSet
   , scInstantiateExt
   , scAbstractExts
   , incVars
@@ -150,7 +154,7 @@ import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Bits
-import qualified Data.Foldable
+import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
@@ -347,6 +351,7 @@ scWhnf sc = go []
     go xs                     (asDataType -> Just (c,args))     = do args' <- mapM (scWhnf sc) args
                                                                      t' <- scDataTypeApp sc c args'
                                                                      foldM reapply t' xs
+    -- FIXME? what about Let?
     go xs                     t                                 = foldM reapply t xs
 
     reapply :: SharedTerm s -> Either (SharedTerm s) (Either Int FieldName) -> IO (SharedTerm s)
@@ -397,6 +402,52 @@ scWhnf sc = go []
                             Just (s, xs) | i == s -> matchAll ps (map Left xs)
                             _ -> return Nothing
 
+
+-- | Test if two terms are convertable; that is, if they are equivalant under evaluation.
+scConvertable :: forall s. SharedContext s
+              -> Bool -- ^ Should abstract constants be unfolded during this check?
+              -> SharedTerm s
+              -> SharedTerm s
+              -> IO Bool
+scConvertable sc unfoldConst tm1 tm2 = do
+   c <- newCache
+   go c tm1 tm2
+
+ where whnf :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s -> IO (TermF (SharedTerm s))
+       whnf _c t@(Unshared _) = unwrapTermF <$> scWhnf sc t
+       whnf c t@(STApp idx _) = unwrapTermF <$> (useCache c idx $ scWhnf sc t)
+
+       go :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s -> SharedTerm s -> IO Bool
+       go _c (STApp idx1 _) (STApp idx2 _)
+           | idx1 == idx2 = return True   -- succeed early case
+       go c t1 t2 = join (goF c <$> whnf c t1 <*> whnf c t2)
+
+       goF :: Cache IORef TermIndex (SharedTerm s) -> TermF (SharedTerm s) -> TermF (SharedTerm s) -> IO Bool
+
+       goF c (Constant _ _ x) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
+       goF c x (Constant _ _ y) | unfoldConst = join (goF c <$> return x <*> whnf c y)
+
+       goF c (FTermF ftf1) (FTermF ftf2) =
+               case zipWithFlatTermF (go c) ftf1 ftf2 of
+                 Nothing -> return False
+                 Just zipped -> Fold.and <$> traverse id zipped
+
+       goF _c (LocalVar i) (LocalVar j) = return (i == j)
+
+       goF c (App f1 x1) (App f2 x2) =
+              pure (&&) <*> go c f1 f2 <*> go c x1 x2
+
+       goF c (Lambda _ ty1 body1) (Lambda _ ty2 body2) =
+              pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
+
+       goF c (Pi _ ty1 body1) (Pi _ ty2 body2) =
+              pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
+
+       -- FIXME? what about Let?
+
+       -- final catch-all case
+       goF _c x y = return $ alphaEquiv (Unshared x) (Unshared y)
+
 --------------------------------------------------------------------------------
 -- Type checking
 
@@ -405,7 +456,7 @@ reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (_, _, body) -> instantiateVar sc 0 arg body
-    _                 -> fail "reducePi: not a Pi term"
+    _                 -> fail $ unlines ["reducePi: not a Pi term", show t']
 
 scTypeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfGlobal sc ident =
@@ -516,10 +567,11 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
+    termf (Constant _ _ tf1) (Constant _ _ tf2) = term tf1 tf2
     termf _ _ = False
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
                          Nothing -> False
-                         Just ftf3 -> Data.Foldable.and ftf3
+                         Just ftf3 -> Fold.and ftf3
 
 --------------------------------------------------------------------------------
 
@@ -703,8 +755,8 @@ scTermCount t0 = execState (rec [t0]) StrictMap.empty
               let (h,args) = asApplyAll t
               case unwrapTermF h of
                 Constant _ _ _ -> rec (args ++ r)
-                _ -> rec (Data.Foldable.foldr' (:) (args++r) (unwrapTermF h))
---              rec (Data.Foldable.foldr' (:) r (unwrapTermF t))
+                _ -> rec (Fold.foldr' (:) (args++r) (unwrapTermF h))
+--              rec (Fold.foldr' (:) r (unwrapTermF t))
 
 lineSep :: [Doc] -> Doc
 lineSep l = hcat (punctuate line l)
@@ -747,7 +799,7 @@ scPrettyTermDoc t0
                ]
 
         dm :: SharedTermMap s Doc
-        dm = Data.Foldable.foldl' insVar StrictMap.empty (bound `zip` [0..])
+        dm = Fold.foldl' insVar StrictMap.empty (bound `zip` [0..])
           where insVar m (t,n) = StrictMap.insert t (var n) m
 
         ppt :: LocalVarDoc -> Prec -> SharedTerm s -> Doc
@@ -1086,13 +1138,34 @@ extName _ = Nothing
 getAllExts :: SharedTerm s -> [SharedTerm s]
 getAllExts t = sortBy (comparing extIdx) $ Set.toList args
     where (seen, exts) = getExtCns (Set.empty, Set.empty) t
+          -- RWD: FIXME? why define and use 'args'?  Why is 'exts' not the right answer?
           tf = unwrapTermF t
           args = snd $ foldl' getExtCns (seen, exts) tf
+
           getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
           getExtCns (is, a) t'@(STApp idx (FTermF (ExtCns _))) =
             (Set.insert idx is, Set.insert t' a)
           getExtCns (is, a) t'@(Unshared (FTermF (ExtCns _))) =
             (is, Set.insert t' a)
+          getExtCns acc (STApp _ (Constant _ _ _)) = acc
+          getExtCns acc (Unshared (Constant _ _ _)) = acc
+          getExtCns (is, a) (STApp idx tf') =
+            foldl' getExtCns (Set.insert idx is, a) tf'
+          getExtCns acc (Unshared tf') =
+            foldl' getExtCns acc tf'
+
+-- | Return a set of all ExtCns subterms in the given term.
+--   Does not traverse the unfoldings of @Constant@ terms.
+getAllExtSet :: SharedTerm s -> Set.Set (ExtCns (SharedTerm s))
+getAllExtSet t = exts
+    where (_seen, exts) = getExtCns (Set.empty, Set.empty) t
+          -- RWD: FIXME? do we need the double call as above?
+
+          getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
+          getExtCns (is, a) (STApp idx (FTermF (ExtCns ec))) =
+            (Set.insert idx is, Set.insert ec a)
+          getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =
+            (is, Set.insert ec a)
           getExtCns acc (STApp _ (Constant _ _ _)) = acc
           getExtCns acc (Unshared (Constant _ _ _)) = acc
           getExtCns (is, a) (STApp idx tf') =
@@ -1215,3 +1288,32 @@ scTreeSize = fst . go (0, Map.empty)
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert idx sz' seen')
           where (sz', seen') = foldl' go (1, seen) tf
+
+
+-- | `openTerm sc nm ty i body` replaces the loose deBruijn variable `i`
+--   with a fresh external constant (with name `nm`, and type `ty`) in `body`.
+scOpenTerm :: SharedContext s
+         -> String
+         -> SharedTerm s
+         -> DeBruijnIndex
+         -> SharedTerm s
+         -> IO (ExtCns (SharedTerm s), SharedTerm s)
+scOpenTerm sc nm tp idx body = do
+    v <- scFreshGlobalVar sc
+    let ec = EC v nm tp
+    ec_term <- scFlatTermF sc (ExtCns ec)
+    body' <- instantiateVar sc idx ec_term body
+    return (ec, body')
+
+-- | `closeTerm closer sc ec body` replaces the external constant `ec` in `body` by
+--   a new deBruijn variable and binds it using the binding form given by 'close'.
+--   The name and type of the new bound variable are given by the name and type of `ec`.
+scCloseTerm :: (SharedContext s -> String -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s))
+          -> SharedContext s
+          -> ExtCns (SharedTerm s)
+          -> SharedTerm s
+          -> IO (SharedTerm s)
+scCloseTerm close sc ec body = do
+    lv <- scLocalVar sc 0
+    body' <- scInstantiateExt sc (Map.insert (ecVarIndex ec) lv Map.empty) =<< incVars sc 0 1 body
+    close sc (ecName ec) (ecType ec) body'

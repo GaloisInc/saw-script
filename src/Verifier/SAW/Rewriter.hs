@@ -3,6 +3,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -45,6 +47,9 @@ module Verifier.SAW.Rewriter
   , rewriteSharedTermTypeSafe
   -- * SharedContext
   , rewritingSharedContext
+
+  , replaceTerm
+  , hoistIfs
   ) where
 
 import Control.Applicative ((<$>), pure, (<*>))
@@ -56,8 +61,13 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 import Data.IORef (IORef)
 import Data.Map (Map)
+import qualified Data.List as List
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Maybe (fromJust)
+import Control.Monad.Trans.Writer.Strict
+
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Conversion
@@ -72,6 +82,7 @@ data RewriteRule t
   deriving (Eq, Show, Functor, Foldable, Traversable)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
+
 
 instance Net.Pattern t => Net.Pattern (RewriteRule t) where
   toPat (RewriteRule _ lhs _) = Net.toPat lhs
@@ -480,3 +491,157 @@ rewritingSharedContext sc ss = sc'
       case runConversion conv t of
         Nothing -> apply rules t
         Just tb -> runTermBuilder tb (scTermF sc')
+
+
+-- FIXME: is there some way to have sensable term replacement in the presence of loose variables
+--  and/or under binders?
+replaceTerm :: SharedContext s
+            -> Simpset (SharedTerm s)        -- ^ A simpset of rewrite rules to apply along with the replacement
+            -> (SharedTerm s, SharedTerm s)  -- ^ (pat,repl) is a tuple of a pattern term to replace and a replacement term
+            -> SharedTerm s                  -- ^ the term in which to perform the replacement
+            -> IO (SharedTerm s)
+replaceTerm sc ss (pat, repl) t = do
+    let fvs = looseVars pat
+    unless (fvs == 0) $ fail $ unwords
+       [ "replaceTerm: term to replace has free variables!", show t ]
+    let rule = ruleOfTerms pat repl
+    let ss' = addRule rule ss
+    rewriteSharedTerm sc ss' t
+
+
+-------------------------------------------------------------------------------
+-- If/then/else hoisting
+
+-- | Find all instances of Prelude.ite in the given term and hoist them
+--   higher.  An if/then/else floats upward until it hits a binder that
+--   binds one of its free variables, or until it bubbles to the top of
+--   the term.  When multiple if/then/else branches bubble to the same
+--   place, they will be nested via a canonical term ordering.  This transformation
+--   also does rewrites by basic boolean identities.
+hoistIfs :: SharedContext s
+         -> SharedTerm s
+         -> IO (SharedTerm s)
+hoistIfs sc t = do
+   cache <- newCache
+
+   let app x y = join (scTermF sc <$> (pure App <*> x <*> y))
+   itePat <-
+          (scFlatTermF sc $ GlobalDef $ "Prelude.ite")
+          `app`
+          (scTermF sc $ LocalVar 0)
+          `app`
+          (scTermF sc $ LocalVar 1)
+          `app`
+          (scTermF sc $ LocalVar 2)
+          `app`
+          (scTermF sc $ LocalVar 3)
+
+   rules <- map ruleOfTerm <$> mapM (scTypeOfGlobal sc)
+              [ "Prelude.ite_true"
+              , "Prelude.ite_false"
+              , "Prelude.ite_not"
+              , "Prelude.ite_nest1"
+              , "Prelude.ite_nest2"
+              , "Prelude.ite_eq"
+              , "Prelude.ite_bit_false_1"
+              , "Prelude.ite_bit_true_1"
+              , "Prelude.ite_bit"
+              , "Prelude.not_not"
+              , "Prelude.and_True"
+              , "Prelude.and_False"
+              , "Prelude.and_True2"
+              , "Prelude.and_False2"
+              , "Prelude.and_idem"
+              , "Prelude.or_True"
+              , "Prelude.or_False"
+              , "Prelude.or_True2"
+              , "Prelude.or_False2"
+              , "Prelude.or_idem"
+              , "Prelude.not_or"
+              , "Prelude.not_and"
+              ]
+   let ss = addRules rules emptySimpset
+
+   (t', conds) <- doHoistIfs sc ss cache itePat =<< rewriteSharedTerm sc ss t
+   splitConds sc ss (map fst conds) t'
+
+
+splitConds :: SharedContext s -> Simpset (SharedTerm s) -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+splitConds _ _ [] = return
+splitConds sc ss (c:cs) = splitCond sc ss c >=> splitConds sc ss cs
+
+splitCond :: SharedContext s -> Simpset (SharedTerm s) -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+splitCond sc ss c t = do
+   ty <- scTypeOf sc t
+   trueTerm  <- scBool sc True
+   falseTerm <- scBool sc False
+
+   then_branch <- replaceTerm sc ss (c, trueTerm) t
+   else_branch <- replaceTerm sc ss (c, falseTerm) t
+   scGlobalApply sc "Prelude.ite" [ty, c, then_branch, else_branch]
+
+type HoistIfs s = (SharedTerm s, [(SharedTerm s, Set (ExtCns (SharedTerm s)))])
+
+
+orderTerms :: SharedContext s -> [SharedTerm s] -> IO [SharedTerm s]
+orderTerms _sc xs = return xs  --FIXME
+
+doHoistIfs :: forall s. SharedContext s
+         -> Simpset (SharedTerm s)
+         -> Cache IORef TermIndex (HoistIfs s)
+         -> SharedTerm s
+         -> SharedTerm s
+         -> IO (HoistIfs s)
+doHoistIfs sc ss hoistCache itePat = go
+
+ where go :: SharedTerm s -> IO (HoistIfs s)
+       go t@(STApp idx tf) = useCache hoistCache idx $ top t tf
+       go t@(Unshared tf)  = top t tf
+
+       top :: SharedTerm s -> TermF (SharedTerm s) -> IO (HoistIfs s)
+       top t tf
+          | Just inst <- first_order_match itePat t = do
+               let Just branch_tp   = Map.lookup 0 inst
+               let Just cond        = Map.lookup 1 inst
+               let Just then_branch = Map.lookup 2 inst
+               let Just else_branch = Map.lookup 3 inst
+
+               (then_branch',conds1) <- go then_branch
+               (else_branch',conds2) <- go else_branch
+
+               t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
+               let ecs = getAllExtSet cond
+               return (t', (cond, ecs) : conds1 ++ conds2)
+
+          | otherwise = goF t tf
+
+       goF :: SharedTerm s -> TermF (SharedTerm s) -> IO (HoistIfs s)
+
+       goF t (LocalVar _)     = return (t, [])
+       goF t (Constant _ _ _) = return (t, [])
+
+       goF _ (FTermF ftf) = do
+                (ftf', conds) <- runWriterT $ traverse WriterT $ (fmap go ftf)
+                t' <- scFlatTermF sc ftf'
+                return (t', conds)
+
+       goF _ (App f x) = do
+           (f', conds1) <- go f
+           (x', conds2) <- go x
+           t' <- scApply sc f' x'
+           return (t', conds1 ++ conds2)
+
+       goF _ (Let _defs _e) = fail "if hoisting through 'let' not implemented"
+       goF _ (Lambda nm tp body) = goBinder scLambda nm tp body
+       goF _ (Pi nm tp body) = goBinder scPi nm tp body
+
+       goBinder close nm tp body = do
+           (ec, body') <- scOpenTerm sc nm tp 0 body
+           (body'', conds) <- go body'
+           let (stuck, float) = List.partition (\(_,ecs) -> Set.member ec ecs) conds
+
+           stuck' <- orderTerms sc (map fst stuck)
+           body''' <- splitConds sc ss stuck' body''
+
+           t' <- scCloseTerm close sc ec body'''
+           return (t', float)
