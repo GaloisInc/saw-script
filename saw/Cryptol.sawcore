@@ -205,6 +205,16 @@ arithBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
             -> (a :: sort 0) -> PArith a -> a -> a -> a;
 arithBinary bvOp a _ = binary bvOp arithBinaryBool a;
 
+eq_binary_bvsub :: (n :: Nat) ->
+                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
+                      (binary bvSub arithBinaryBool (Vec n Bool))
+                      (bvSub n);
+
+eq_binary_bvadd :: (n :: Nat) ->
+                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
+                      (binary bvAdd arithBinaryBool (Vec n Bool))
+                      (bvAdd n);
+
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
