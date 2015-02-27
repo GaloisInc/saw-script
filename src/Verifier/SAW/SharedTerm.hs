@@ -461,19 +461,19 @@ reducePi sc t arg = do
 scTypeOfGlobal :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfGlobal sc ident =
     case findDef (scModule sc) ident of
-      Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+      Nothing -> fail $ "scTypeOfGlobal: failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (defType d)
 
 scTypeOfDataType :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfDataType sc ident =
     case findDataType (scModule sc) ident of
-      Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+      Nothing -> fail $ "scTypeOfDataType: failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (dtType d)
 
 scTypeOfCtor :: SharedContext s -> Ident -> IO (SharedTerm s)
 scTypeOfCtor sc ident =
     case findCtor (scModule sc) ident of
-      Nothing -> fail $ "Failed to find " ++ show ident ++ " in module."
+      Nothing -> fail $ "scTypeOfCtor: failed to find " ++ show ident ++ " in module."
       Just d -> scSharedTerm sc (ctorType d)
 
 -- | Computes the type of a term as quickly as possible, assuming that
