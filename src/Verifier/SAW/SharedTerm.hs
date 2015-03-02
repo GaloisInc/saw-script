@@ -591,7 +591,7 @@ unshare t0 = State.evalState (go t0) Map.empty
           return x
 
 instance Show (SharedTerm s) where
-  show = show . unshare
+  show = scPrettyTerm
 
 scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
