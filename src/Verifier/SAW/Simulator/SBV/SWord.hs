@@ -21,45 +21,45 @@ import Verifier.SAW.Utils (panic)
 data BV
 
 instance Eq BV where
-  (==)         = error "BV"
-  (/=)         = error "BV"
+  (==)         = error "BV (==)"
+  (/=)         = error "BV (/=)"
 
 instance Ord BV where
-  compare      = error "BV"
+  compare      = error "BV (compare)"
 
 instance Num BV where
-  (+)          = error "BV"
-  (*)          = error "BV"
-  abs          = error "BV"
-  signum       = error "BV"
-  negate       = error "BV"
-  fromInteger  = error "BV"
+  (+)          = error "BV (+)"
+  (*)          = error "BV (*)"
+  abs          = error "BV (abs)"
+  signum       = error "BV (signum)"
+  negate       = error "BV (negate)"
+  fromInteger  = error "BV (fromInteger)"
 
 instance Bits BV where
-  (.&.)        = error "BV"
-  (.|.)        = error "BV"
-  xor          = error "BV"
-  complement   = error "BV"
-  shift        = error "BV"
-  rotate       = error "BV"
-  bitSize      = error "BV"
-  bitSizeMaybe = error "BV"
-  isSigned     = error "BV"
-  testBit      = error "BV"
-  bit          = error "BV"
-  popCount     = error "BV"
+  (.&.)        = error "BV (.&.)"
+  (.|.)        = error "BV (.|.)"
+  xor          = error "BV (xor)"
+  complement   = error "BV (complement)"
+  shift        = error "BV (shift)"
+  rotate       = error "BV (rotate)"
+  bitSize      = error "BV (bitSize)"
+  bitSizeMaybe = error "BV (bitSizeMaybe)"
+  isSigned     = error "BV (isSigned)"
+  testBit      = error "BV (testBit)"
+  bit          = error "BV (bit)"
+  popCount     = error "BV (popCount)"
 
 instance HasKind BV where
-  kindOf       = error "BV"
+  kindOf       = error "BV (kindOf)"
 
 instance SymWord BV where
-  literal      = error "BV"
-  fromCW       = error "BV"
-  mkSymWord    = error "BV"
+  literal      = error "BV (literal)"
+  fromCW       = error "BV (fromCW)"
+  mkSymWord    = error "BV (mkSymWord)"
 
 instance SDivisible BV where
-  sQuotRem     = error "BV"
-  sDivMod      = error "BV"
+  sQuotRem     = error "BV (sQuotRem)"
+  sDivMod      = error "BV (sDivMod)"
 
 instance SIntegral BV
 
