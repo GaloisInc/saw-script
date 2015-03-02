@@ -585,7 +585,7 @@ exportValue ty v
       SC.VExtra (SC.CWord w) -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
       SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
       SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e . SC.runIdentity . force) (Vector.toList xs))
-      _ -> error "exportValue"
+      _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
   | Just (_, etys) <- V.isTTuple ty =
@@ -606,4 +606,4 @@ exportValue ty v
   | Just (_aty, _bty) <- V.isTFun ty =
     V.VFun (error "exportValue: TODO functions")
 
-  | otherwise = error "exportValue"
+  | otherwise = error $ "exportValue (on type " ++ show ty ++ ")"
