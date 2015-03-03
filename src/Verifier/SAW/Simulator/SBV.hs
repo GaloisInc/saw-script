@@ -776,8 +776,6 @@ parseUninterpreted ks cws ty =
               Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
 
 mkUninterpreted :: [Kind] -> [SBV ()] -> String -> SBV a
-mkUninterpreted = error "FIXME: mkUninterpreted"
-{- FIXME: export enough from SBV to make this implementable
 mkUninterpreted ks args nm = SBV ka $ Right $ cache result where
   ka = last ks
   result st = do
@@ -785,7 +783,6 @@ mkUninterpreted ks args nm = SBV ka $ Right $ cache result where
     sws <- traverse (sbvToSW st) args
     mapM_ forceSWArg sws
     newExpr st ka $ SBVApp (Uninterpreted nm) sws
--}
 
 typeSize :: (Termlike t) => t -> Maybe Int
 typeSize t = sizeFiniteType <$> asFiniteTypePure t
