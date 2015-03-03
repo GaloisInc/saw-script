@@ -33,6 +33,7 @@ library
     , mtl >= 2.1
     , old-locale
     , old-time
+    , parsec
     , pretty
     , pretty-show
     , process
@@ -40,6 +41,7 @@ library
     , sbv >= 4.0
     , smtLib
     , split
+    , temporary
     , template-haskell
     , time
     , transformers
