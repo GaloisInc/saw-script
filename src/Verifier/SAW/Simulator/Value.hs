@@ -65,7 +65,10 @@ instance Show e => Show (Value m e) where
       VFun {}        -> showString "<<fun>>"
       VTuple xv      -> showParen True
                           (foldr (.) id (intersperse (showString ",") (map shows (toList xv))))
-      VRecord _      -> error "unimplemented: show VRecord" -- !(Map FieldName Value)
+      VRecord xm      -> showString "{" .
+                        foldr (.) id (intersperse (showString ", ")
+                                      (map showField (Map.assocs (fmap (const Nil) xm)))) .
+                        showString "}"
       VCtorApp s xv
         | V.null xv  -> shows s
         | otherwise  -> shows s . showList (toList xv)
@@ -86,6 +89,7 @@ instance Show e => Show (Value m e) where
       VType          -> showString "_"
       VExtra x       -> showsPrec p x
     where
+      showField (name, t) = showString name . showString " = " . shows t
       toList = map (const Nil) . V.toList
 
 data Nil = Nil
