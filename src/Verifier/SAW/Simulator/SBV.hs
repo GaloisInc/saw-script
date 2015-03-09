@@ -10,7 +10,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
-module Verifier.SAW.Simulator.SBV where
+module Verifier.SAW.Simulator.SBV
+  ( sbvSolve
+  , Labeler(..)
+  ) where
 
 import Data.SBV
 import Data.SBV.Internals
@@ -59,7 +62,7 @@ instance Show SbvExtra where
 
 -- no, we need shape information
 uninterpreted :: (Show t, Termlike t) => Ident -> t -> Maybe (IO SValue)
-uninterpreted ident t = Just $ parseUninterpreted [] [] t (identName ident)
+uninterpreted ident t = Just $ parseUninterpreted [] t (identName ident)
 
 -- actually...
 -- rewriteSharedTerm
@@ -149,7 +152,7 @@ constMap = Map.fromList [
   ]
 
 ------------------------------------------------------------
--- Coersion functions
+-- Coercion functions
 --
 
 bitVector :: Int -> Integer -> SWord
@@ -184,19 +187,25 @@ toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) =
   V.fromList (map (ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
 toVector _ = error "this word might be symbolic"
 
-toTuple :: SValue -> IO (Maybe [SBV ()])
-toTuple (VTuple xv) = (fmap concat . T.sequence . V.toList . V.reverse) <$> traverse (force >=> toSBV) xv
-toTuple _ = return Nothing
+untype :: SBV a -> SBV ()
+untype (SBV k e) = SBV k e
 
-toSBV :: SValue -> IO (Maybe [SBV ()])
-toSBV v = do
-  t <- toTuple v
-  w <- toWord v
-  return $ (untype <$> toBool v) `mplus` (untype <$> w) `mplus` t
-
-untype :: SBV a -> [SBV ()]
-untype (SBV k e) = [SBV k e]
-
+-- | Flatten an SValue to a sequence of components, each of which is
+-- either a symbolic word or a symbolic boolean.
+flattenSValue :: SValue -> IO [SBV ()]
+flattenSValue v = do
+  mw <- toWord v
+  case mw of
+    Just w -> return [untype w]
+    Nothing ->
+      case v of
+        VTuple (V.toList -> ts)   -> concat <$> traverse (force >=> flattenSValue) ts
+        VRecord (Map.elems -> ts) -> concat <$> traverse (force >=> flattenSValue) ts
+        VVector (V.toList -> ts)  -> concat <$> traverse (force >=> flattenSValue) ts
+        VExtra (SBool sb)         -> return [untype sb]
+        VExtra (SWord sw)         -> return [untype sw]
+        VExtra SZero              -> return []
+        _ -> fail $ "Could not create sbv argument for " ++ show v
 
 vWord :: SWord -> SValue
 vWord lv = VExtra (SWord lv)
@@ -387,62 +396,6 @@ bvPMulOp =
     let mul _ [] ps = ps
         mul as (b:bs) ps = mul (false : as) bs (ites b (as `addPoly` ps) ps)
     return . vWord . fromBitsLE $ take k $ mul (blastLE x) (blastLE y) [] ++ repeat false
-
--- TODO: Data.SBV.BitVectors.Polynomials should export ites, addPoly,
--- and mdp (the following definitions are copied from that module)
-
--- | Add two polynomials
-addPoly :: [SBool] -> [SBool] -> [SBool]
-addPoly xs    []      = xs
-addPoly []    ys      = ys
-addPoly (x:xs) (y:ys) = x <+> y : addPoly xs ys
-
-ites :: SBool -> [SBool] -> [SBool] -> [SBool]
-ites s xs ys
- | Just t <- unliteral s
- = if t then xs else ys
- | True
- = go xs ys
- where go [] []         = []
-       go []     (b:bs) = ite s false b : go [] bs
-       go (a:as) []     = ite s a false : go as []
-       go (a:as) (b:bs) = ite s a b : go as bs
-
--- conservative over-approximation of the degree
-degree :: [SBool] -> Int
-degree xs = walk (length xs - 1) $ reverse xs
-  where walk n []     = n
-        walk n (b:bs)
-         | Just t <- unliteral b
-         = if t then n else walk (n-1) bs
-         | True
-         = n -- over-estimate
-
-mdp :: [SBool] -> [SBool] -> ([SBool], [SBool])
-mdp xs ys = go (length ys - 1) (reverse ys)
-  where degTop  = degree xs
-        go _ []     = error "SBV.Polynomial.mdp: Impossible happened; exhausted ys before hitting 0"
-        go n (b:bs)
-         | n == 0   = (reverse qs, rs)
-         | True     = let (rqs, rrs) = go (n-1) bs
-                      in (ites b (reverse qs) rqs, ites b rs rrs)
-         where degQuot = degTop - n
-               ys' = replicate degQuot false ++ ys
-               (qs, rs) = divx (degQuot+1) degTop xs ys'
-
--- return the element at index i; if not enough elements, return false
--- N.B. equivalent to '(xs ++ repeat false) !! i', but more efficient
-idx :: [SBool] -> Int -> SBool
-idx []     _ = false
-idx (x:_)  0 = x
-idx (_:xs) i = idx xs (i-1)
-
-divx :: Int -> Int -> [SBool] -> [SBool] -> ([SBool], [SBool])
-divx n _ xs _ | n <= 0 = ([], xs)
-divx n i xs ys'        = (q:qs, rs)
-  where q        = xs `idx` i
-        xs'      = ites q (xs `addPoly` ys') xs
-        (qs, rs) = divx (n-1) (i-1) xs' (tail ys')
 
 ------------------------------------------------------------
 -- Vector operations
@@ -725,6 +678,8 @@ sbvSolveBasic m t = do
   cfg <- Sim.evalGlobal m constMap uninterpreted
   Sim.evalSharedTerm cfg t
 
+-- | SBV Kind corresponding to the result of concatenating all the
+-- bitvector components of the given SAWCore type.
 kindFromType :: (Show t, Termlike t) => t -> Kind
 kindFromType (R.asBoolType -> Just ()) = KBool
 kindFromType (R.asBitvectorType -> Just n) = KBounded False (fromIntegral n)
@@ -739,18 +694,19 @@ kindFromType (R.asTupleType -> Just tys) =
           combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
 kindFromType ty = error $ "Unsupported type: " ++ show ty
 
-parseUninterpreted :: (Show t, Termlike t) => [Kind] -> [SBV ()] -> t -> String -> IO SValue
-parseUninterpreted ks cws (R.asBoolType -> Just ()) =
-  return . vBool . mkUninterpreted (reverse (KBool : ks)) (reverse cws)
-parseUninterpreted ks cws (R.asPi -> Just (_, _, t2)) =
-  \s -> return $
+sbvKind :: SBV a -> Kind
+sbvKind (SBV k _) = k
+
+parseUninterpreted :: (Show t, Termlike t) => [SBV ()] -> t -> String -> IO SValue
+parseUninterpreted cws (R.asBoolType -> Just ()) nm =
+  return $ vBool $ mkUninterpreted KBool cws nm
+parseUninterpreted cws (R.asPi -> Just (_, _, t2)) nm =
+  return $
   strictFun $ \x -> do
-    m <- toSBV x
-    case m of
-      Nothing -> fail $ "Could not create sbv argument for " ++ show x
-      Just l -> parseUninterpreted (map (\(SBV k _)-> k) l ++ ks) (l ++ cws) t2 s
-parseUninterpreted ks cws ty =
-  reconstitute ty . vWord . mkUninterpreted (reverse (kindFromType ty : ks)) (reverse cws)
+    cws' <- flattenSValue x
+    parseUninterpreted (cws ++ cws') t2 nm
+parseUninterpreted cws ty nm =
+  reconstitute ty $ vWord $ mkUninterpreted (kindFromType ty) cws nm
     where reconstitute (R.asBitvectorType -> (Just _)) v = return v
           reconstitute (R.asVecType -> (Just (n R.:*: ety))) v = do
             let xs = toVector v
@@ -775,17 +731,15 @@ parseUninterpreted ks cws ty =
                                 fail $ "Can't convert to word: " ++ show vbs'
               Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
 
-mkUninterpreted :: [Kind] -> [SBV ()] -> String -> SBV a
-mkUninterpreted = error "FIXME: mkUninterpreted"
-{- FIXME: export enough from SBV to make this implementable
-mkUninterpreted ks args nm = SBV ka $ Right $ cache result where
-  ka = last ks
-  result st = do
-    newUninterpreted st nm (SBVType ks) Nothing
-    sws <- traverse (sbvToSW st) args
-    mapM_ forceSWArg sws
-    newExpr st ka $ SBVApp (Uninterpreted nm) sws
--}
+mkUninterpreted :: Kind -> [SBV ()] -> String -> SBV a
+mkUninterpreted k args nm = SBV k $ Right $ cache result
+  where
+    ks = map sbvKind args ++ [k]
+    result st = do
+      newUninterpreted st nm (SBVType ks) Nothing
+      sws <- traverse (sbvToSW st) args
+      mapM_ forceSWArg sws
+      newExpr st k $ SBVApp (Uninterpreted nm) sws
 
 typeSize :: (Termlike t) => t -> Maybe Int
 typeSize t = sizeFiniteType <$> asFiniteTypePure t
