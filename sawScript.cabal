@@ -38,7 +38,7 @@ library
     , pretty-show
     , process
     , saw-core
-    , sbv >= 4.0
+    , sbv >= 4.1
     , smtLib
     , split
     , temporary
