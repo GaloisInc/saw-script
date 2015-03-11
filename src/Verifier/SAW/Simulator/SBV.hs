@@ -676,7 +676,8 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
 sbvSolveBasic m t = do
   cfg <- Sim.evalGlobal m constMap uninterpreted
-  Sim.evalSharedTerm cfg t
+  let cfg' = cfg { Sim.simExtCns = const (parseUninterpreted' []) }
+  Sim.evalSharedTerm cfg' t
 
 -- | SBV Kind corresponding to the result of concatenating all the
 -- bitvector components of the given SAWCore type.
@@ -693,6 +694,23 @@ kindFromType (R.asTupleType -> Just tys) =
     where combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
           combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
 kindFromType ty = error $ "Unsupported type: " ++ show ty
+
+-- | SBV Kind corresponding to the result of concatenating all the
+-- bitvector components of the given type value.
+kindFromType' :: SValue -> Kind
+kindFromType' (VDataType "Prelude.Bool" []) = KBool
+kindFromType' (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) =
+  KBounded False (fromIntegral n)
+kindFromType' (VDataType "Prelude.Vec" [VNat n, ety]) =
+  case kindFromType' ety of
+    KBounded False m -> KBounded False (fromIntegral n * m)
+    k -> error $ "Unsupported vector element kind: " ++ show k
+kindFromType' (VTupleType []) = KBounded False 0
+kindFromType' (VTupleType tys) =
+  foldr1 combineKind (map kindFromType' tys)
+    where combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
+          combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
+kindFromType' ty = error $ "Unsupported type: " ++ show ty
 
 sbvKind :: SBV a -> Kind
 sbvKind (SBV k _) = k
@@ -730,6 +748,37 @@ parseUninterpreted cws ty nm =
                   Nothing -> do vbs' <- traverse force vbs
                                 fail $ "Can't convert to word: " ++ show vbs'
               Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
+
+parseUninterpreted' :: [SBV ()] -> String -> SValue -> IO SValue
+parseUninterpreted' cws nm (VDataType "Prelude.Bool" []) =
+  return $ vBool $ mkUninterpreted KBool cws nm
+parseUninterpreted' cws nm (VPiType _ f) =
+  return $
+  strictFun $ \x -> do
+    cws' <- flattenSValue x
+    t2 <- f (ready x)
+    parseUninterpreted' (cws ++ cws') nm t2
+parseUninterpreted' cws nm ty =
+  ST.evalStateT (parseTy ty) (mkUninterpreted (kindFromType' ty) cws nm)
+  where
+    parseTy :: SValue -> ST.StateT SWord IO SValue
+    parseTy (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) = do
+      v <- ST.get
+      let w = intSizeOf v
+      let v1 = extract (w - 1) (w - fromInteger n) v
+      let v2 = extract (w - fromInteger n - 1) 0 v
+      ST.put v2
+      return (vWord v1)
+    parseTy (VDataType "Prelude.Vec" [VNat n, ety]) = do
+      xs <- traverse parseTy (replicate (fromIntegral n) ety)
+      return (VVector (V.fromList (map ready xs)))
+    parseTy (VTupleType tys) = do
+      xs <- traverse parseTy tys
+      return (VTuple (V.fromList (map ready xs)))
+    parseTy (VRecordType tm) = do
+      xm <- traverse parseTy tm
+      return (VRecord (fmap ready xm))
+    parseTy t = fail $ "could not create uninterpreted type for " ++ show t
 
 mkUninterpreted :: Kind -> [SBV ()] -> String -> SBV a
 mkUninterpreted k args nm = SBV k $ Right $ cache result
