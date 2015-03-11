@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -639,7 +640,12 @@ newVars' :: AIG.IsAIG l g => g s -> FiniteType -> IO (BThunk (l s))
 newVars' be shape = ready <$> newVars be shape
 
 ------------------------------------------------------------
--- Bit-blasting predicates
+-- Bit-blasting primitives.
+--
+-- NB: It doesn't make sense to bit blast more than one term using the
+-- same bit engine, so the primitives 'withBitBlasted*' create their
+-- own bit engine internally, instead of receiving it from the caller,
+-- and pass it to the caller-provided continuation.
 
 bitBlastBasic :: AIG.IsAIG l g => g s -> Module -> SharedTerm t -> IO (BValue (l s))
 bitBlastBasic be m t = do
@@ -654,9 +660,10 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ show t'
 
-bitBlast :: AIG.IsAIG l g =>
-            g s -> SharedContext t -> SharedTerm t -> IO ([FiniteType], l s)
-bitBlast be sc t = do
+withBitBlastedPred :: AIG.IsAIG l g => AIG.Proxy l g ->
+  SharedContext t -> SharedTerm t ->
+  (forall s. g s -> l s -> [FiniteType] -> IO a) -> IO a
+withBitBlastedPred proxy sc t c = AIG.withNewGraph proxy $ \be -> do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
   shapes <- traverse (asFiniteType sc) argTs
@@ -664,7 +671,7 @@ bitBlast be sc t = do
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
   case bval' of
-    VExtra (BBool l) -> return (shapes, l)
+    VExtra (BBool l) -> c be l shapes
     _ -> fail "Verifier.SAW.Simulator.BitBlast.bitBlast: non-boolean result type."
 
 asAIGType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
@@ -678,14 +685,15 @@ asAIGType sc t = do
     (R.asRecordType -> Just _)   -> return []
     _                          -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: " ++ show t'
 
-bitBlastTerm :: AIG.IsAIG l g =>
-                g s
-             -> SharedContext t -> SharedTerm t -> IO (LitVector (l s))
-bitBlastTerm be sc t = do
+withBitBlastedTerm :: AIG.IsAIG l g => AIG.Proxy l g ->
+  SharedContext t -> SharedTerm t ->
+  (forall s. g s -> LitVector (l s) -> IO a) -> IO a
+withBitBlastedTerm proxy sc t c = AIG.withNewGraph proxy $ \be -> do
   ty <- scTypeOf sc t
   argTs <- asAIGType sc ty
   shapes <- traverse (asFiniteType sc) argTs
   vars <- traverse (newVars' be) shapes
   bval <- bitBlastBasic be (scModule sc) t
   bval' <- applyAll bval vars
-  flattenBValue bval'
+  v <- flattenBValue bval'
+  c be v
