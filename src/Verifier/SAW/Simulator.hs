@@ -50,8 +50,8 @@ type Id = Identity
 data SimulatorConfig m e =
   SimulatorConfig
   { simGlobal :: Ident -> m (Value m e)
-  , simExtCns :: VarIndex -> String -> m (Value m e)
-  , simUninterpreted :: forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))
+  , simExtCns :: VarIndex -> String -> Value m e -> m (Value m e)
+  , simUninterpreted :: Ident -> Value m e -> Maybe (m (Value m e))
   }
 
 ------------------------------------------------------------
@@ -153,7 +153,8 @@ evalTermF cfg lam rec tf env =
                                             return (xs ++ env)
                                   lam t env'
     LocalVar i              -> force (env !! i)
-    Constant i t ty         -> maybe (rec t) id (simUninterpreted cfg i ty)
+    Constant i t ty         -> do v <- rec ty
+                                  maybe (rec t) id (simUninterpreted cfg i v)
     FTermF ftf              ->
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
@@ -173,7 +174,8 @@ evalTermF cfg lam rec tf env =
         FloatLit float      -> return $ VFloat float
         DoubleLit double    -> return $ VDouble double
         StringLit s         -> return $ VString s
-        ExtCns ec           -> simExtCns cfg (ecVarIndex ec) (ecName ec)
+        ExtCns ec           -> do v <- rec (ecType ec)
+                                  simExtCns cfg (ecVarIndex ec) (ecName ec) v
   where
     rec' :: t -> m (Thunk m e)
     rec' = delay . rec
@@ -197,12 +199,12 @@ evalTypedDef :: (MonadLazy m, MonadFix m, Show e) =>
                 SimulatorConfig m e -> TypedDef -> m (Value m e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
-{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value Id e) -> (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (Id (Value Id e))) -> Id (SimulatorConfig Id e) #-}
-{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value IO e) -> (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (IO (Value IO e))) -> IO (SimulatorConfig IO e) #-}
+{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value Id e) -> (Ident -> Value Id e -> Maybe (Id (Value Id e))) -> Id (SimulatorConfig Id e) #-}
+{-# SPECIALIZE evalGlobal :: Show e => Module -> Map Ident (Value IO e) -> (Ident -> Value IO e -> Maybe (IO (Value IO e))) -> IO (SimulatorConfig IO e) #-}
 
 evalGlobal :: forall m e. (MonadLazy m, MonadFix m, Show e) =>
               Module -> Map Ident (Value m e) ->
-              (forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))) ->
+              (Ident -> Value m e -> Maybe (m (Value m e))) ->
               m (SimulatorConfig m e)
 evalGlobal m0 prims uninterpreted =
   mfix $ \cfg -> do
@@ -231,8 +233,8 @@ evalGlobal m0 prims uninterpreted =
     vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
-noExtCns :: Monad m => VarIndex -> String -> m (Value m e)
-noExtCns _ name = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
+noExtCns :: Monad m => VarIndex -> String -> Value m e -> m (Value m e)
+noExtCns _ name _ = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:

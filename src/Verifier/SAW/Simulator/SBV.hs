@@ -40,10 +40,9 @@ import Verifier.SAW.Prim hiding (BV, ite, bv)
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, Ident(..), Module, Termlike)
+import Verifier.SAW.TypedAST (FieldName, Ident(..), Module)
 
-import Verifier.SAW.FiniteValue ( FiniteType(..), sizeFiniteType, asFiniteType
-                                , asFiniteTypePure)
+import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 
 type SValue = Value IO SbvExtra
 type SThunk = Thunk IO SbvExtra
@@ -61,8 +60,8 @@ instance Show SbvExtra where
   show (SStream _ _) = "<SStream>"
 
 -- no, we need shape information
-uninterpreted :: (Show t, Termlike t) => Ident -> t -> Maybe (IO SValue)
-uninterpreted ident t = Just $ parseUninterpreted [] t (identName ident)
+uninterpreted :: Ident -> SValue -> Maybe (IO SValue)
+uninterpreted ident t = Just $ parseUninterpreted [] (identName ident) t
 
 -- actually...
 -- rewriteSharedTerm
@@ -676,19 +675,21 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
 sbvSolveBasic m t = do
   cfg <- Sim.evalGlobal m constMap uninterpreted
-  Sim.evalSharedTerm cfg t
+  let cfg' = cfg { Sim.simExtCns = const (parseUninterpreted []) }
+  Sim.evalSharedTerm cfg' t
 
 -- | SBV Kind corresponding to the result of concatenating all the
--- bitvector components of the given SAWCore type.
-kindFromType :: (Show t, Termlike t) => t -> Kind
-kindFromType (R.asBoolType -> Just ()) = KBool
-kindFromType (R.asBitvectorType -> Just n) = KBounded False (fromIntegral n)
-kindFromType (R.asVecType -> Just (n R.:*: ety)) =
+-- bitvector components of the given type value.
+kindFromType :: SValue -> Kind
+kindFromType (VDataType "Prelude.Bool" []) = KBool
+kindFromType (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) =
+  KBounded False (fromIntegral n)
+kindFromType (VDataType "Prelude.Vec" [VNat n, ety]) =
   case kindFromType ety of
     KBounded False m -> KBounded False (fromIntegral n * m)
     k -> error $ "Unsupported vector element kind: " ++ show k
-kindFromType (R.asTupleType -> Just []) = KBounded False 0
-kindFromType (R.asTupleType -> Just tys) =
+kindFromType (VTupleType []) = KBounded False 0
+kindFromType (VTupleType tys) =
   foldr1 combineKind (map kindFromType tys)
     where combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
           combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
@@ -697,39 +698,36 @@ kindFromType ty = error $ "Unsupported type: " ++ show ty
 sbvKind :: SBV a -> Kind
 sbvKind (SBV k _) = k
 
-parseUninterpreted :: (Show t, Termlike t) => [SBV ()] -> t -> String -> IO SValue
-parseUninterpreted cws (R.asBoolType -> Just ()) nm =
+parseUninterpreted :: [SBV ()] -> String -> SValue -> IO SValue
+parseUninterpreted cws nm (VDataType "Prelude.Bool" []) =
   return $ vBool $ mkUninterpreted KBool cws nm
-parseUninterpreted cws (R.asPi -> Just (_, _, t2)) nm =
+parseUninterpreted cws nm (VPiType _ f) =
   return $
   strictFun $ \x -> do
     cws' <- flattenSValue x
-    parseUninterpreted (cws ++ cws') t2 nm
-parseUninterpreted cws ty nm =
-  reconstitute ty $ vWord $ mkUninterpreted (kindFromType ty) cws nm
-    where reconstitute (R.asBitvectorType -> (Just _)) v = return v
-          reconstitute (R.asVecType -> (Just (n R.:*: ety))) v = do
-            let xs = toVector v
-            vs <- (reverse . fst) <$> foldM parseTy ([], xs) (replicate (fromIntegral n) ety)
-            return . VVector . V.fromList . map ready $ vs
-          reconstitute (R.asTupleType -> (Just [])) v = return v
-          reconstitute (R.asTupleType -> (Just tys)) v = do
-            vs <- (reverse . fst) <$> foldM parseTy ([], toVector v) tys
-            return . VTuple . V.fromList . map ready $ vs
-          reconstitute t _ = fail $ "could not create uninterpreted type for " ++ show t
-          parseTy (vs, bs) ty' =
-            case typeSize ty' of
-              Just n -> do
-                let vbs = V.take n bs
-                    bs' = V.drop n bs
-                mw <- toWord (VVector vbs)
-                case mw of
-                  Just w -> do
-                    v' <- reconstitute ty' (vWord w)
-                    return (v' : vs, bs')
-                  Nothing -> do vbs' <- traverse force vbs
-                                fail $ "Can't convert to word: " ++ show vbs'
-              Nothing -> fail $ "Could not calculate the size of type: " ++ show ty'
+    t2 <- f (ready x)
+    parseUninterpreted (cws ++ cws') nm t2
+parseUninterpreted cws nm ty =
+  ST.evalStateT (parseTy ty) (mkUninterpreted (kindFromType ty) cws nm)
+  where
+    parseTy :: SValue -> ST.StateT SWord IO SValue
+    parseTy (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) = do
+      v <- ST.get
+      let w = intSizeOf v
+      let v1 = extract (w - 1) (w - fromInteger n) v
+      let v2 = extract (w - fromInteger n - 1) 0 v
+      ST.put v2
+      return (vWord v1)
+    parseTy (VDataType "Prelude.Vec" [VNat n, ety]) = do
+      xs <- traverse parseTy (replicate (fromIntegral n) ety)
+      return (VVector (V.fromList (map ready xs)))
+    parseTy (VTupleType tys) = do
+      xs <- traverse parseTy tys
+      return (VTuple (V.fromList (map ready xs)))
+    parseTy (VRecordType tm) = do
+      xm <- traverse parseTy tm
+      return (VRecord (fmap ready xm))
+    parseTy t = fail $ "could not create uninterpreted type for " ++ show t
 
 mkUninterpreted :: Kind -> [SBV ()] -> String -> SBV a
 mkUninterpreted k args nm = SBV k $ Right $ cache result
@@ -740,9 +738,6 @@ mkUninterpreted k args nm = SBV k $ Right $ cache result
       sws <- traverse (sbvToSW st) args
       mapM_ forceSWArg sws
       newExpr st k $ SBVApp (Uninterpreted nm) sws
-
-typeSize :: (Termlike t) => t -> Maybe Int
-typeSize t = sizeFiniteType <$> asFiniteTypePure t
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do
