@@ -50,7 +50,7 @@ type Id = Identity
 data SimulatorConfig m e =
   SimulatorConfig
   { simGlobal :: Ident -> m (Value m e)
-  , simExtCns :: VarIndex -> String -> m (Value m e)
+  , simExtCns :: VarIndex -> String -> Value m e -> m (Value m e)
   , simUninterpreted :: forall t. (Termlike t, Show t) => Ident -> t -> Maybe (m (Value m e))
   }
 
@@ -173,7 +173,8 @@ evalTermF cfg lam rec tf env =
         FloatLit float      -> return $ VFloat float
         DoubleLit double    -> return $ VDouble double
         StringLit s         -> return $ VString s
-        ExtCns ec           -> simExtCns cfg (ecVarIndex ec) (ecName ec)
+        ExtCns ec           -> do v <- rec (ecType ec)
+                                  simExtCns cfg (ecVarIndex ec) (ecName ec) v
   where
     rec' :: t -> m (Thunk m e)
     rec' = delay . rec
@@ -231,8 +232,8 @@ evalGlobal m0 prims uninterpreted =
     vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
-noExtCns :: Monad m => VarIndex -> String -> m (Value m e)
-noExtCns _ name = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
+noExtCns :: Monad m => VarIndex -> String -> Value m e -> m (Value m e)
+noExtCns _ name _ = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:
