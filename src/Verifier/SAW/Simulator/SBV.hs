@@ -13,6 +13,7 @@
 module Verifier.SAW.Simulator.SBV
   ( sbvSolve
   , Labeler(..)
+  , sbvCodeGen
   ) where
 
 import Data.SBV
@@ -790,3 +791,60 @@ newVars (FTTuple ts) = do
 newVars (FTRec tm) = do
   (labels, vals) <- myfun <$> (traverse newVars tm :: State Int (Map String (Labeler, Symbolic SValue)))
   return (RecLabel labels, VRecord <$> traverse (fmap ready) (vals :: (Map String (Symbolic SValue))))
+
+------------------------------------------------------------
+-- C Code Generation
+
+newCodeGenVars :: FiniteType -> State Int (SBVCodeGen SValue)
+newCodeGenVars FTBit = nextId <&> \s -> (vBool <$> cgInput s)
+newCodeGenVars (FTVec n FTBit) =
+  if n == 0
+    then nextId <&> \_ -> return (VExtra SZero)
+    else nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)
+newCodeGenVars (FTVec n tp) = do
+  vals <- V.replicateM (fromIntegral n) (newCodeGenVars tp)
+  return (VVector <$> traverse (fmap ready) vals)
+newCodeGenVars (FTTuple ts) = do
+  vals <- traverse newCodeGenVars (V.fromList ts)
+  return (VTuple <$> traverse (fmap ready) vals)
+newCodeGenVars (FTRec tm) = do
+  vals <- traverse newCodeGenVars tm
+  return (VRecord <$> traverse (fmap ready) vals)
+
+sbvCoerce :: SBV a -> SBV b
+sbvCoerce (SBV k c) = SBV k c
+
+cgInputSWord :: String -> Int -> SBVCodeGen SWord
+cgInputSWord s 8  = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord8)
+cgInputSWord s 16 = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord16)
+cgInputSWord s 32 = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord32)
+cgInputSWord s 64 = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord64)
+cgInputSWord s n =
+  fail $ "Invalid codegen bit width for input variable \'" ++ s ++ "\': " ++ show n
+
+argTypes :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+argTypes sc t = do
+  t' <- scWhnf sc t
+  case t' of
+    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> argTypes sc t2
+    _                            -> return []
+
+sbvCodeGen :: SharedContext s -> Maybe FilePath -> String -> SharedTerm s -> IO ()
+sbvCodeGen sc path fname t = do
+  ty <- scTypeOf sc t
+  argTs <- argTypes sc ty
+  shapes <- traverse (asFiniteType sc) argTs
+  bval <- sbvSolveBasic (scModule sc) t
+  let vars = evalState (traverse newCodeGenVars shapes) 0
+  let codegen = do
+        args <- traverse (fmap ready) vars
+        bval' <- liftIO (applyAll bval args)
+        case bval' of
+          VExtra (SBool b) -> cgReturn b
+          VExtra (SWord w)
+            | intSizeOf w == 8  -> cgReturn (sbvCoerce w :: SWord8)
+            | intSizeOf w == 16 -> cgReturn (sbvCoerce w :: SWord16)
+            | intSizeOf w == 32 -> cgReturn (sbvCoerce w :: SWord32)
+            | intSizeOf w == 64 -> cgReturn (sbvCoerce w :: SWord64)
+          _ -> fail "sbvCodeGen: invalid result type: not boolean or bitvector"
+  compileToC path fname codegen
