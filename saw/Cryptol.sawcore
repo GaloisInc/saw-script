@@ -215,6 +215,21 @@ eq_binary_bvadd :: (n :: Nat) ->
                       (binary bvAdd arithBinaryBool (Vec n Bool))
                       (bvAdd n);
 
+eq_binary_bvand :: (n :: Nat) ->
+                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
+                      (binary bvAnd and (Vec n Bool))
+                      (bvAnd n);
+
+eq_binary_bvor :: (n :: Nat) ->
+                  Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
+                     (binary bvOr or (Vec n Bool))
+                     (bvOr n);
+
+eq_binary_bvxor :: (n :: Nat) ->
+                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
+                      (binary bvXor xor (Vec n Bool))
+                      (bvXor n);
+
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
