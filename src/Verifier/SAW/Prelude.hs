@@ -36,3 +36,8 @@ scFinConst sc i n | i < n = do
   join $ fv <$> scNat sc i <*> scNat sc (n - (i + 1))
 scFinConst _ _ _ = error "illegal arguments to scFinConst"
 
+scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scEq sc x y = do
+  xty <- scTypeOf sc x
+  eqOp <- scApplyPrelude_eq sc
+  eqOp xty x y
