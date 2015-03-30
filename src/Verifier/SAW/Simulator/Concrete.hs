@@ -59,6 +59,16 @@ bvRotateL (BV w x) i = Prim.bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))
 bvRotateR :: BitVector -> Int -> BitVector
 bvRotateR w i = bvRotateL w (- i)
 
+bvShiftL :: Bool -> BitVector -> Int -> BitVector
+bvShiftL c (BV w x) i = Prim.bv w ((x `shiftL` i) .|. c')
+  where c' = if c then (1 `shiftL` i) - 1 else 0
+
+bvShiftR :: Bool -> BitVector -> Int -> BitVector
+bvShiftR c (BV w x) i = Prim.bv w (c' .|. (x `shiftR` i))
+  where c' = if c then (full `shiftL` (w - j)) .&. full else 0
+        full = (1 `shiftL` w) - 1
+        j  = min w i
+
 ------------------------------------------------------------
 -- Vector operations
 
@@ -71,12 +81,12 @@ vRotateL xs i
 vRotateR :: V.Vector a -> Int -> V.Vector a
 vRotateR xs i = vRotateL xs (- i)
 
-_vShiftL :: a -> V.Vector a -> Int -> V.Vector a
-_vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
+vShiftL :: a -> V.Vector a -> Int -> V.Vector a
+vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
   where j = min i (V.length xs)
 
-_vShiftR :: a -> V.Vector a -> Int -> V.Vector a
-_vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
+vShiftR :: a -> V.Vector a -> Int -> V.Vector a
+vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
   where j = min i (V.length xs)
 
 ------------------------------------------------------------
@@ -252,8 +262,8 @@ constMap = Map.fromList
   --TODO, ("Prelude.bvUpd", bvUpdOp)
   , ("Prelude.bvRotateL", bvRotateLOp)
   , ("Prelude.bvRotateR", bvRotateROp)
-  --TODO, ("Prelude.bvShiftL", bvShiftLOp)
-  --TODO, ("Prelude.bvShiftR", bvShiftROp)
+  , ("Prelude.bvShiftL", bvShiftLOp)
+  , ("Prelude.bvShiftR", bvShiftROp)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
@@ -441,7 +451,6 @@ bvRotateROp =
       VExtra (CWord w) -> vWord (bvRotateR w (fromInteger (unsigned i)))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvRotateROp: " ++ show xs
 
-{-
 -- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftLOp :: CValue
 bvShiftLOp =
@@ -449,14 +458,13 @@ bvShiftLOp =
   constFun $
   constFun $
   VFun $ \x -> return $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv -> do
-    (n, f) <- case xs of
-                VVector xv         -> return (V.length xv, VVector . vShiftL x xv)
-                VExtra (CWord xlv) -> do l <- toBool <$> force x
-                                         return (AIG.length xlv, VExtra . CWord . lvShiftL l xlv)
-                _ -> fail $ "Verifier.SAW.Simulator.Concrete.bvShiftLOp: " ++ show xs
-    AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
+  pureFun $ \xs ->
+  wordFun $ \i ->
+    case xs of
+      VVector xv       -> VVector (vShiftL x xv (fromInteger (unsigned i)))
+      VExtra (CWord w) -> vWord (bvShiftL c w (fromInteger (unsigned i)))
+                            where c = toBool (runIdentity (force x))
+      _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftLOp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: CValue
@@ -469,9 +477,9 @@ bvShiftROp =
   wordFun $ \i ->
     case xs of
       VVector xv       -> VVector (vShiftR x xv (fromInteger (unsigned i)))
-      VExtra (CWord w) -> vWord (lvShiftR x w (fromInteger (unsigned i)))
+      VExtra (CWord w) -> vWord (bvShiftR c w (fromInteger (unsigned i)))
+                            where c = toBool (runIdentity (force x))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftROp: " ++ show xs
--}
 
 zeroOp :: CValue
 zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
