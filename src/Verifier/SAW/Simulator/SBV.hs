@@ -16,13 +16,14 @@ module Verifier.SAW.Simulator.SBV
   , sbvCodeGen
   ) where
 
-import Data.SBV
-import Data.SBV.Internals
+import Data.SBV.Dynamic
+
 import Verifier.SAW.Simulator.SBV.SWord
 
 import Control.Lens ((<&>))
 import qualified Control.Arrow as A
 
+import Data.Bits
 import Data.Map (Map)
 import Data.IORef
 import qualified Data.Map as Map
@@ -70,37 +71,37 @@ uninterpreted ident t = Just $ parseUninterpreted [] (identName ident) t
 constMap :: Map Ident SValue
 constMap = Map.fromList [
     -- Boolean
-    ("Prelude.True", VExtra (SBool true)),
-    ("Prelude.False", VExtra (SBool false)),
-    ("Prelude.not", strictFun (return . vBool . bnot . forceBool)),
-    ("Prelude.and", boolBinOp (&&&)),
-    ("Prelude.or", boolBinOp (|||)),
-    ("Prelude.xor", boolBinOp (<+>)) ,
-    ("Prelude.boolEq", boolBinOp (<=>)),
+    ("Prelude.True", VExtra (SBool svTrue)),
+    ("Prelude.False", VExtra (SBool svFalse)),
+    ("Prelude.not", strictFun (return . vBool . svNot . forceBool)),
+    ("Prelude.and", boolBinOp svAnd),
+    ("Prelude.or", boolBinOp svOr),
+    ("Prelude.xor", boolBinOp svXOr) ,
+    ("Prelude.boolEq", boolBinOp svEqual),
     ("Prelude.ite", iteOp),
     -- Arithmetic
-    ("Prelude.bvAdd" , binOp (+)),
-    ("Prelude.bvSub" , binOp (-)),
-    ("Prelude.bvMul" , binOp (*)),
-    ("Prelude.bvAnd" , binOp (.&.)),
-    ("Prelude.bvOr"  , binOp (.|.)),
-    ("Prelude.bvXor" , binOp xor),
-    ("Prelude.bvUDiv", binOp sDiv),
-    ("Prelude.bvURem", binOp sRem),
-    ("Prelude.bvSDiv", sbinOp sDiv),
-    ("Prelude.bvSRem", sbinOp sRem),
+    ("Prelude.bvAdd" , binOp svPlus),
+    ("Prelude.bvSub" , binOp svMinus),
+    ("Prelude.bvMul" , binOp svTimes),
+    ("Prelude.bvAnd" , binOp svAnd),
+    ("Prelude.bvOr"  , binOp svOr),
+    ("Prelude.bvXor" , binOp svXOr),
+    ("Prelude.bvUDiv", binOp svQuot),
+    ("Prelude.bvURem", binOp svRem),
+    ("Prelude.bvSDiv", sbinOp svQuot),
+    ("Prelude.bvSRem", sbinOp svRem),
     ("Prelude.bvPMul", bvPMulOp),
     ("Prelude.bvPMod", bvPModOp),
     -- Relations
-    ("Prelude.bvEq"  , binRel (.==)),
-    ("Prelude.bvsle" , sbinRel (.<=)),
-    ("Prelude.bvslt" , sbinRel (.<)),
-    ("Prelude.bvule" , binRel (.<=)),
-    ("Prelude.bvult" , binRel (.<)),
-    ("Prelude.bvsge" , sbinRel (.>=)),
-    ("Prelude.bvsgt" , sbinRel (.>)),
-    ("Prelude.bvuge" , binRel (.>=)),
-    ("Prelude.bvugt" , binRel (.>)),
+    ("Prelude.bvEq"  , binRel svEqual),
+    ("Prelude.bvsle" , sbinRel svLessEq),
+    ("Prelude.bvslt" , sbinRel svLessThan),
+    ("Prelude.bvule" , binRel svLessEq),
+    ("Prelude.bvult" , binRel svLessThan),
+    ("Prelude.bvsge" , sbinRel svGreaterEq),
+    ("Prelude.bvsgt" , sbinRel svGreaterThan),
+    ("Prelude.bvuge" , binRel svGreaterEq),
+    ("Prelude.bvugt" , binRel svGreaterThan),
     -- Shifts
     ("Prelude.bvShl" , bvShLOp),
     ("Prelude.bvShr" , bvShROp),
@@ -159,14 +160,7 @@ bitVector :: Int -> Integer -> SWord
 bitVector w i = literalSWord w i
 
 symFromBits :: Vector SBool -> SWord
-symFromBits v
-  = V.foldl (+) (bitVector l 0) $ flip V.imap (V.reverse v) $ \i b->
-      ite b (symBit l i) (bitVector l 0)
-  where
-    l = V.length v
-
-symBit :: Int -> Int -> SWord
-symBit l i = bitVector l (shiftL 1 i)
+symFromBits v = V.foldl svJoin (bitVector 0 0) (V.map svToWord1 v)
 
 toBool :: SValue -> Maybe SBool
 toBool (VExtra (SBool b)) = Just b
@@ -183,27 +177,25 @@ toWord _ = return Nothing
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
 toVector (VExtra SZero) = V.empty
-toVector (VExtra (SWord xv@(SBV (KBounded _ k) _))) =
-  V.fromList (map (ready . vBool . symTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
+toVector (VExtra (SWord xv)) =
+  V.fromList (map (ready . vBool . svTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
+  where k = svBitSize xv
 toVector _ = error "this word might be symbolic"
-
-untype :: SBV a -> SBV ()
-untype (SBV k e) = SBV k e
 
 -- | Flatten an SValue to a sequence of components, each of which is
 -- either a symbolic word or a symbolic boolean.
-flattenSValue :: SValue -> IO [SBV ()]
+flattenSValue :: SValue -> IO [SVal]
 flattenSValue v = do
   mw <- toWord v
   case mw of
-    Just w -> return [untype w]
+    Just w -> return [w]
     Nothing ->
       case v of
         VTuple (V.toList -> ts)   -> concat <$> traverse (force >=> flattenSValue) ts
         VRecord (Map.elems -> ts) -> concat <$> traverse (force >=> flattenSValue) ts
         VVector (V.toList -> ts)  -> concat <$> traverse (force >=> flattenSValue) ts
-        VExtra (SBool sb)         -> return [untype sb]
-        VExtra (SWord sw)         -> return [untype sw]
+        VExtra (SBool sb)         -> return [sb]
+        VExtra (SWord sw)         -> return [sw]
         VExtra SZero              -> return []
         _ -> fail $ "Could not create sbv argument for " ++ show v
 
@@ -224,53 +216,44 @@ wordFun f = strictFun (\x -> toWord x >>= f)
 
 -- | Lifts a strict mux operation to a lazy mux
 lazyMux :: (SBool -> a -> a -> IO a) -> (SBool -> IO a -> IO a -> IO a)
-lazyMux muxFn c tm fm
-  | c `isConcretely` (== True) = tm
-  | c `isConcretely` (== False) = fm
-  | otherwise = do
+lazyMux muxFn c tm fm =
+  case svAsBool c of
+    Just True  -> tm
+    Just False -> fm
+    Nothing    -> do
       t <- tm
       f <- fm
       muxFn c t f
 
 -- selectV merger maxValue valueFn index returns valueFn v when index has value v
 -- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
-selectV :: (Ord a, Num a, Bits a) => (SBool -> b -> b -> b)
-  -> a -> (a -> b) -> SWord -> b
-selectV _merger _maxValue valueFn _vx@(SBV _ (Left (cwVal -> CWInteger i))) =
-  valueFn (fromIntegral i)
-selectV merger maxValue valueFn vx@(SBV(KBounded _ s) _) =
-  impl s 0 where
-  impl _ y | y >= maxValue = valueFn maxValue
-  impl 0 y = valueFn y
-  impl i y = merger (symTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
-selectV _ _ _ _ = error "selectV: invalid argument"
+selectV :: (Ord a, Num a, Bits a) => (SBool -> b -> b -> b) -> a -> (a -> b) -> SWord -> b
+selectV merger maxValue valueFn vx =
+  case svAsInteger vx of
+    Just i  -> valueFn (fromIntegral i)
+    Nothing -> impl (svBitSize vx) 0
+  where
+    impl _ y | y >= maxValue = valueFn maxValue
+    impl 0 y = valueFn y
+    impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 -- `nOfSize word len` pads word with zeros to be size len
 nOfSize :: SWord -> Int -> SWord
-nOfSize ind@(SBV (KBounded _ k2) s) k
-  | k == k2 = ind
-  | Left (cwVal -> CWInteger ival) <- s = bitVector k ival
-  | k >= k2 = cat ((bitVector (k - k2) 0) :: SWord) ind
-  | otherwise = error "could not resize index"
-nOfSize _ _ = error "nOfSize: invalid argument"
-
--- could use extract instead
+nOfSize ind w
+  | w == w' = ind
+  | w >= w' = svJoin (bitVector (w - w') 0) ind
+  | otherwise = svExtract (w - 1) 0 ind
+  where w' = svBitSize ind
 
 -- symTestSym word index gets index ind from vector w
 -- it is the equivalent of cryptol-2 indexing; NOT the same as testBit
 symTestSym :: SWord -> SWord -> SValue
-symTestSym w@(SBV (KBounded _ k) _) (SBV _ (Left (cwVal -> CWInteger i))) = vBool $ symTestBit w (k - 1 - fromIntegral i)
-symTestSym w@(SBV (KBounded _ k) _) ind =
-  vBool $ bitVector k 0 ./= (w .&.
-    (sbvShiftLeft (bitVector k 1)
-    ((bitVector k (fromIntegral k - 1)) - (nOfSize ind k)) ))
-symTestSym _ _ = error "symTestSym: invalid argument"
-
--- symTestBit word index gets bit position ind from word w
--- it is the equivalent of testBit; NOT the same as cryptol-2 indexing
-symTestBit :: SWord -> Int -> SBool
-symTestBit x@(SBV (KBounded _ w) _) i = (bitVector w 0) ./= (x .&. (bitVector w (bit i)))
-symTestBit _ _ = error "SWord must be bounded"
+symTestSym x (svAsInteger -> Just i) = vBool $ svTestBit x (svBitSize x - 1 - fromInteger i)
+symTestSym x ind =
+  vBool $ svNotEqual (bitVector w 0) (svAnd x
+    (svShiftLeft (bitVector w 1)
+    (svMinus (bitVector w (fromIntegral w - 1)) (nOfSize ind w)) ))
+  where w = svBitSize x
 
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: SValue
@@ -281,7 +264,7 @@ atOp =
   Prims.natFun $ \n ->
     case v of
       VVector xv -> force ((V.!) xv (fromIntegral n))
-      VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromIntegral n)
+      VExtra (SWord lv) -> return $ vBool $ svTestBit lv ((svBitSize lv - 1) - fromIntegral n)
       _ -> fail "atOp: expected vector"
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
@@ -320,7 +303,7 @@ getOp =
   Prims.finFun $ \i ->
     case v of
       VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
-      VExtra (SWord lv@(SBV (KBounded _ k) _)) -> return $ vBool $ symTestBit lv ((k-1) - fromEnum (finVal i))
+      VExtra (SWord lv) -> return $ vBool $ svTestBit lv ((svBitSize lv - 1) - fromEnum (finVal i))
       _ -> fail "getOp: expected vector"
 
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
@@ -343,35 +326,35 @@ bvShLOp :: SValue
 bvShLOp =
   constFun $
   wordFun $ \(Just w) -> return $
-  Prims.natFun $ \n -> return $ vWord $ shiftL w (fromIntegral n)
+  Prims.natFun $ \n -> return $ vWord $ svShl w (fromIntegral n)
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
 bvShROp =
   constFun $
   wordFun $ \(Just w) -> return $
-  Prims.natFun $ \n -> return $ vWord $ shiftR w (fromIntegral n)
+  Prims.natFun $ \n -> return $ vWord $ svShr w (fromIntegral n)
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
 bvSShROp =
   constFun $
   wordFun $ \(Just w) -> return $
-  Prims.natFun $ \n -> return $ vWord $ unsignCast $ shiftR (signCast w) (fromIntegral n)
+  Prims.natFun $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
 
 zeroOp :: SValue
 zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
   where bvZ n = return (vWord (bitVector (fromInteger n) 0))
-        boolZ = return (VExtra (SBool false))
+        boolZ = return (VExtra (SBool svFalse))
 
 eqOp :: SValue
 eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp
-  where trueOp       = VExtra (SBool true)
-        andOp    x y = return $ vBool (forceBool x &&& forceBool y)
-        boolEqOp x y = return $ vBool (forceBool x <=> forceBool y)
+  where trueOp       = VExtra (SBool svTrue)
+        andOp    x y = return $ vBool (svAnd (forceBool x) (forceBool y))
+        boolEqOp x y = return $ vBool (svEqual (forceBool x) (forceBool y))
         bvEqOp _ x y = do Just x' <- toWord x
                           Just y' <- toWord y
-                          return $ vBool (x' .== y')
+                          return $ vBool (svEqual x' y')
 
 ----------------------------------------
 -- Polynomial operations
@@ -381,21 +364,76 @@ bvPModOp :: SValue
 bvPModOp =
   constFun $
   constFun $
-  wordFun $ \(Just x@(SBV (KBounded _ _k1) _)) -> return $
-  wordFun $ \(Just y@(SBV (KBounded _ k2) _)) ->
-    return . vWord . fromBitsLE $ take (k2-1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat false)
+  wordFun $ \ (Just x) -> return $
+  wordFun $ \ (Just y) ->
+    return . vWord . fromBitsLE $ take (svBitSize y - 1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
 bvPMulOp =
   constFun $
   constFun $
-  wordFun $ \(Just x@(SBV (KBounded _ k1) _)) -> return $
-  wordFun $ \(Just y@(SBV (KBounded _ k2) _)) -> do
+  wordFun $ \(Just x) -> return $
+  wordFun $ \(Just y) -> do
+    let k1 = svBitSize x
+    let k2 = svBitSize y
     let k = max 1 (k1 + k2) - 1
     let mul _ [] ps = ps
-        mul as (b:bs) ps = mul (false : as) bs (ites b (as `addPoly` ps) ps)
-    return . vWord . fromBitsLE $ take k $ mul (blastLE x) (blastLE y) [] ++ repeat false
+        mul as (b:bs) ps = mul (svFalse : as) bs (ites b (as `addPoly` ps) ps)
+    return . vWord . fromBitsLE $ take k $ mul (blastLE x) (blastLE y) [] ++ repeat svFalse
+
+-- | Add two polynomials
+addPoly :: [SBool] -> [SBool] -> [SBool]
+addPoly xs    []      = xs
+addPoly []    ys      = ys
+addPoly (x:xs) (y:ys) = svXOr x y : addPoly xs ys
+
+ites :: SBool -> [SBool] -> [SBool] -> [SBool]
+ites s xs ys
+ | Just t <- svAsBool s
+ = if t then xs else ys
+ | True
+ = go xs ys
+ where go [] []         = []
+       go []     (b:bs) = svIte s svFalse b : go [] bs
+       go (a:as) []     = svIte s a svFalse : go as []
+       go (a:as) (b:bs) = svIte s a b : go as bs
+
+-- conservative over-approximation of the degree
+degree :: [SBool] -> Int
+degree xs = walk (length xs - 1) $ reverse xs
+  where walk n []     = n
+        walk n (b:bs)
+         | Just t <- svAsBool b
+         = if t then n else walk (n-1) bs
+         | True
+         = n -- over-estimate
+
+mdp :: [SBool] -> [SBool] -> ([SBool], [SBool])
+mdp xs ys = go (length ys - 1) (reverse ys)
+  where degTop  = degree xs
+        go _ []     = error "SBV.Polynomial.mdp: Impossible happened; exhausted ys before hitting 0"
+        go n (b:bs)
+         | n == 0   = (reverse qs, rs)
+         | True     = let (rqs, rrs) = go (n-1) bs
+                      in (ites b (reverse qs) rqs, ites b rs rrs)
+         where degQuot = degTop - n
+               ys' = replicate degQuot svFalse ++ ys
+               (qs, rs) = divx (degQuot+1) degTop xs ys'
+
+-- return the element at index i; if not enough elements, return false
+-- N.B. equivalent to '(xs ++ repeat false) !! i', but more efficient
+idx :: [SBool] -> Int -> SBool
+idx []     _ = svFalse
+idx (x:_)  0 = x
+idx (_:xs) i = idx xs (i-1)
+
+divx :: Int -> Int -> [SBool] -> [SBool] -> ([SBool], [SBool])
+divx n _ xs _ | n <= 0 = ([], xs)
+divx n i xs ys'        = (q:qs, rs)
+  where q        = xs `idx` i
+        xs'      = ites q (xs `addPoly` ys') xs
+        (qs, rs) = divx (n-1) (i-1) xs' (tail ys')
 
 ------------------------------------------------------------
 -- Vector operations
@@ -430,20 +468,22 @@ bvUpdOp =
       (Nothing, VVector xv) -> do
         y' <- delay (return y)
         return (VVector (xv V.// [(0, y')]))
-      (Nothing, VExtra (SWord lv@(SBV (KBounded _ w) _)))-> do
+      (Nothing, VExtra (SWord lv))-> do
+        let w = svBitSize lv
         let (Just b) = toBool y
-        return $ vWord $ ite b
-          (lv .|. (shiftL (bitVector w 1) (fromIntegral w - 1)))
-          (lv .&. (complement (shiftL (bitVector w 1) (fromIntegral w - 1))))
+        return $ vWord $ svIte b
+          (svOr lv (svShl (bitVector w 1) (w - 1)))
+          (svAnd lv (svNot (svShl (bitVector w 1) (w - 1))))
       (Just ilv, VVector xv) -> do
         y' <- delay (return y)
         let update i = return (VVector (xv V.// [(i, y')]))
         selectV (lazyMux muxBVal) (V.length xv - 1) update ilv
-      (Just ilv, VExtra (SWord lv@(SBV (KBounded _ w) _))) -> do
+      (Just ilv, VExtra (SWord lv)) -> do
+        let w = svBitSize lv
         let (Just b) = toBool y
-        return $ vWord $ ite b
-          (lv .|. (sbvShiftLeft (bitVector w 1) ((bitVector w (fromIntegral w - 1)) - (nOfSize ilv w))))
-          (lv .&. (complement (sbvShiftLeft (bitVector w 1) ((bitVector w (fromIntegral w - 1)) - (nOfSize ilv w)))))
+        return $ vWord $ svIte b
+          (svOr lv (svShiftLeft (bitVector w 1) (svMinus (bitVector w (toInteger w - 1)) (nOfSize ilv w))))
+          (svAnd lv (svNot (svShiftLeft (bitVector w 1) (svMinus (bitVector w (toInteger w - 1)) (nOfSize ilv w)))))
       _ -> fail "bvUpdOp: expected vector"
 
 ------------------------------------------------------------
@@ -460,8 +500,7 @@ bvRotateLOp =
     case (milv, xs) of
       (Nothing, xv) -> return xv
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
-      (Just ilv, VExtra (SWord xlv)) ->
-        selectV (lazyMux muxBVal) (intSizeOf xlv - 1) (return . vWord . rotateL xlv) ilv
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (svRotateLeft xlv ilv)
       _ -> error $ "rotateLOp: " ++ show xs
 
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
@@ -475,7 +514,7 @@ bvRotateROp =
     case (milv, xs) of
       (Nothing, xv) -> return xv
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
-      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (sbvRotateRight xlv ilv)
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (svRotateRight xlv ilv)
       _ -> error $ "rotateROp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
@@ -490,7 +529,7 @@ bvShiftLOp =
     case (milv, xs) of
       (Nothing, xv) -> return xv
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
-      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (sbvShiftLeft xlv ilv)
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (svShiftLeft xlv ilv)
       _ -> fail $ "bvShiftROp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
@@ -505,7 +544,7 @@ bvShiftROp =
     case (milv, xs) of
       (Nothing, xv) -> return xv
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
-      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (sbvShiftRight xlv ilv)
+      (Just ilv, VExtra (SWord xlv)) -> return $ vWord (svShiftRight xlv ilv)
       _ -> fail $ "bvShiftROp: " ++ show xs
 
 ------------------------------------------------------------
@@ -533,7 +572,7 @@ bvStreamGetOp =
   constFun $
   strictFun $ \xs -> return $
   wordFun $ \(Just ilv) ->
-  selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+  selectV (lazyMux muxBVal) ((2 ^ svBitSize ilv) - 1) (lookupSStream xs) ilv
 
 lookupSStream :: SValue -> Integer -> IO SValue
 lookupSStream (VExtra (SStream f r)) n = do
@@ -598,7 +637,7 @@ appendOp =
     (v, w) -> do
       (Just v') <- toWord v
       (Just w') <- toWord w
-      return $ vWord $ cat v' w'
+      return $ vWord $ svJoin v' w'
 
 
 ------------------------------------------------------------
@@ -616,7 +655,7 @@ binOp op = constFun $
                  return $ vWord $ op x y
 
 sbinOp :: (SWord -> SWord -> SWord) -> SValue
-sbinOp f = binOp (\x y -> f (signCast x) y)
+sbinOp f = binOp (\x y -> svUnsign (f (svSign x) (svSign y)))
 
 binRel :: (SWord -> SWord -> SBool) -> SValue
 binRel op = constFun $
@@ -627,7 +666,7 @@ binRel op = constFun $
               return $ vBool $ op x y
 
 sbinRel :: (SWord -> SWord -> SBool) -> SValue
-sbinRel f = binRel (\x y-> signCast x `f` signCast y)
+sbinRel f = binRel (\x y -> svSign x `f` svSign y)
 
 boolBinOp :: (SBool -> SBool -> SBool) -> SValue
 boolBinOp op =
@@ -666,8 +705,8 @@ muxThunk :: SBool -> SThunk -> SThunk -> IO SThunk
 muxThunk b x y = delay $ do x' <- force x; y' <- force y; muxBVal b x' y'
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
-extraFn b (SBool x) (SBool y) = SBool $ ite b x y
-extraFn b (SWord x) (SWord y) = SWord $ ite b x y
+extraFn b (SBool x) (SBool y) = SBool $ svIte b x y
+extraFn b (SWord x) (SWord y) = SWord $ svIte b x y
 extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 
 ------------------------------------------------------------
@@ -696,10 +735,7 @@ kindFromType (VTupleType tys) =
           combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
 kindFromType ty = error $ "Unsupported type: " ++ show ty
 
-sbvKind :: SBV a -> Kind
-sbvKind (SBV k _) = k
-
-parseUninterpreted :: [SBV ()] -> String -> SValue -> IO SValue
+parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
 parseUninterpreted cws nm (VDataType "Prelude.Bool" []) =
   return $ vBool $ mkUninterpreted KBool cws nm
 parseUninterpreted cws nm (VPiType _ f) =
@@ -714,9 +750,9 @@ parseUninterpreted cws nm ty =
     parseTy :: SValue -> ST.StateT SWord IO SValue
     parseTy (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) = do
       v <- ST.get
-      let w = intSizeOf v
-      let v1 = extract (w - 1) (w - fromInteger n) v
-      let v2 = extract (w - fromInteger n - 1) 0 v
+      let w = svBitSize v
+      let v1 = svExtract (w - 1) (w - fromInteger n) v
+      let v2 = svExtract (w - fromInteger n - 1) 0 v
       ST.put v2
       return (vWord v1)
     parseTy (VDataType "Prelude.Vec" [VNat n, ety]) = do
@@ -730,15 +766,8 @@ parseUninterpreted cws nm ty =
       return (VRecord (fmap ready xm))
     parseTy t = fail $ "could not create uninterpreted type for " ++ show t
 
-mkUninterpreted :: Kind -> [SBV ()] -> String -> SBV a
-mkUninterpreted k args nm = SBV k $ Right $ cache result
-  where
-    ks = map sbvKind args ++ [k]
-    result st = do
-      newUninterpreted st nm (SBVType ks) Nothing
-      sws <- traverse (sbvToSW st) args
-      mapM_ forceSWArg sws
-      newExpr st k $ SBVApp (Uninterpreted nm) sws
+mkUninterpreted :: Kind -> [SVal] -> String -> SVal
+mkUninterpreted k args nm = svUninterpreted k nm Nothing args
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do
@@ -748,7 +777,7 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-sbvSolve :: SharedContext s -> SharedTerm s -> IO ([Labeler], Predicate)
+sbvSolve :: SharedContext s -> SharedTerm s -> IO ([Labeler], Symbolic SBool)
 sbvSolve sc t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
@@ -773,11 +802,14 @@ data Labeler
 nextId :: State Int String
 nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
+--unzipMap :: Map k (a, b) -> (Map k a, Map k b)
+--unzipMap m = (fmap fst m, fmap snd m)
+
 myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
 myfun = fmap fst A.&&& fmap snd
 
 newVars :: FiniteType -> State Int (Labeler, Symbolic SValue)
-newVars FTBit = nextId <&> \s-> (BoolLabel s, vBool <$> exists s)
+newVars FTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
 newVars (FTVec n FTBit) =
   if n == 0
     then nextId <&> \s-> (WordLabel s, return (VExtra SZero))
@@ -796,7 +828,7 @@ newVars (FTRec tm) = do
 -- C Code Generation
 
 newCodeGenVars :: FiniteType -> State Int (SBVCodeGen SValue)
-newCodeGenVars FTBit = nextId <&> \s -> (vBool <$> cgInput s)
+newCodeGenVars FTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
 newCodeGenVars (FTVec n FTBit) =
   if n == 0
     then nextId <&> \_ -> return (VExtra SZero)
@@ -811,15 +843,10 @@ newCodeGenVars (FTRec tm) = do
   vals <- traverse newCodeGenVars tm
   return (VRecord <$> traverse (fmap ready) vals)
 
-sbvCoerce :: SBV a -> SBV b
-sbvCoerce (SBV k c) = SBV k c
-
 cgInputSWord :: String -> Int -> SBVCodeGen SWord
-cgInputSWord s 8  = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord8)
-cgInputSWord s 16 = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord16)
-cgInputSWord s 32 = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord32)
-cgInputSWord s 64 = sbvCoerce <$> (cgInput s :: SBVCodeGen SWord64)
-cgInputSWord s n =
+cgInputSWord s n
+  | n `elem` [8,16,32,64] = svCgInput (KBounded False n) s
+  | otherwise =
   fail $ "Invalid codegen bit width for input variable \'" ++ s ++ "\': " ++ show n
 
 argTypes :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
@@ -840,11 +867,10 @@ sbvCodeGen sc path fname t = do
         args <- traverse (fmap ready) vars
         bval' <- liftIO (applyAll bval args)
         case bval' of
-          VExtra (SBool b) -> cgReturn b
+          VExtra (SBool b) -> svCgReturn b
           VExtra (SWord w)
-            | intSizeOf w == 8  -> cgReturn (sbvCoerce w :: SWord8)
-            | intSizeOf w == 16 -> cgReturn (sbvCoerce w :: SWord16)
-            | intSizeOf w == 32 -> cgReturn (sbvCoerce w :: SWord32)
-            | intSizeOf w == 64 -> cgReturn (sbvCoerce w :: SWord64)
+            | n `elem` [8,16,32,64] -> svCgReturn w
+            | otherwise -> fail $ "sbvCodeGen: unsupported bitvector size: " ++ show n
+            where n = svBitSize w
           _ -> fail "sbvCodeGen: invalid result type: not boolean or bitvector"
   compileToC path fname codegen
