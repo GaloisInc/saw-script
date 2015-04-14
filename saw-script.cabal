@@ -1,4 +1,4 @@
-Name:          sawScript
+Name:          saw-script
 Version:       0.1
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
@@ -113,5 +113,5 @@ executable saw
     , haskeline
     , QuickCheck
     , transformers
-    , sawScript
+    , saw-script
     , saw-core
