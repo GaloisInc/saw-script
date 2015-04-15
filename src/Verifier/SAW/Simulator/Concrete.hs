@@ -507,7 +507,7 @@ streamGetOp :: CValue
 streamGetOp =
   constFun $
   pureFun $ \xs ->
-  Prims.natFun $ \n -> return $
+  Prims.natFun'' "streamGetOp" $ \n -> return $
   IntTrie.apply (toStream xs) n
 
 -- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;

@@ -342,7 +342,7 @@ atOp =
   constFun $
   constFun $
   strictFun $ \v -> return $
-  Prims.natFun $ \n ->
+  Prims.natFun'' "at" $ \n ->
     case v of
       VVector xv -> force ((V.!) xv (fromIntegral n))
       VExtra (BWord lv) -> return $ vBool $ AIG.at lv (fromIntegral n)
@@ -370,7 +370,7 @@ updOp =
   constFun $
   constFun $
   strictFun $ \v -> return $
-  Prims.natFun $ \i -> return $
+  Prims.natFun'' "upd" $ \i -> return $
   VFun $ \y ->
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
@@ -448,8 +448,8 @@ foldrOp =
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvNatOp be =
-  Prims.natFun $ \w -> return $
-  Prims.natFun $ \x -> return $
+  Prims.natFun'' "bvNat(1)" $ \w -> return $
+  Prims.natFun'' "bvNat(2)" $ \x -> return $
   VExtra (BWord (AIG.bvFromInteger be (fromIntegral w) (toInteger x)))
 
 -- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
@@ -606,7 +606,7 @@ streamGetOp :: BValue l
 streamGetOp =
   constFun $
   strictFun $ \xs -> return $
-  Prims.natFun $ \n -> lookupBStream xs (toInteger n)
+  Prims.natFun'' "streamGet" $ \n -> lookupBStream xs (toInteger n)
 
 -- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
 bvStreamGetOp :: AIG.IsAIG l g => g s -> BValue (l s)

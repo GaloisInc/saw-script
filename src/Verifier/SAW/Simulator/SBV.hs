@@ -261,7 +261,7 @@ atOp =
   constFun $
   constFun $
   strictFun $ \v -> return $
-  Prims.natFun $ \n ->
+  Prims.natFun'' "atOp" $ \n ->
     case v of
       VVector xv -> force ((V.!) xv (fromIntegral n))
       VExtra (SWord lv) -> return $ vBool $ svTestBit lv ((svBitSize lv - 1) - fromIntegral n)
@@ -273,7 +273,7 @@ updOp =
   constFun $
   constFun $
   strictFun $ \v -> return $
-  Prims.natFun $ \n -> return $
+  Prims.natFun'' "updOp" $ \n -> return $
   VFun $ \y ->
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromIntegral n, y)])
@@ -326,21 +326,21 @@ bvShLOp :: SValue
 bvShLOp =
   constFun $
   wordFun $ \(Just w) -> return $
-  Prims.natFun $ \n -> return $ vWord $ svShl w (fromIntegral n)
+  Prims.natFun'' "bvShlOp" $ \n -> return $ vWord $ svShl w (fromIntegral n)
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
 bvShROp =
   constFun $
   wordFun $ \(Just w) -> return $
-  Prims.natFun $ \n -> return $ vWord $ svShr w (fromIntegral n)
+  Prims.natFun'' "bvShrOp" $ \n -> return $ vWord $ svShr w (fromIntegral n)
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
 bvSShROp =
   constFun $
   wordFun $ \(Just w) -> return $
-  Prims.natFun $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
+  Prims.natFun'' "bvSShrOp" $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
 
 zeroOp :: SValue
 zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
@@ -563,7 +563,7 @@ streamGetOp :: SValue
 streamGetOp =
   constFun $
   strictFun $ \xs -> return $
-  Prims.natFun $ \n -> lookupSStream xs (toInteger n)
+  Prims.natFun'' "streamGetOp" $ \n -> lookupSStream xs (toInteger n)
 
 -- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
 bvStreamGetOp :: SValue
@@ -590,8 +590,8 @@ lookupSStream _ _ = fail "expected Stream"
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: SValue
 bvNatOp =
-  Prims.natFun $ \w -> return $
-  Prims.natFun $ \x -> return $
+  Prims.natFun'' "bvNatOp(1)" $ \w -> return $
+  Prims.natFun'' "bvNatOp(2)" $ \x -> return $
   if w == 0 then VExtra SZero
     else vWord (bitVector (fromIntegral w) (toInteger x))
 
