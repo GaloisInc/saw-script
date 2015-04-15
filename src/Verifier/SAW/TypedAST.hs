@@ -789,18 +789,17 @@ ppTermF' :: Applicative f
          -> TermF e
          -> f Doc
 ppTermF' pp lcls p (FTermF tf) = (group . nest 2) <$> (ppFlatTermF (pp lcls) p tf)
-ppTermF' pp lcls p (App l r) =
-    ppAppParens p <$> liftA2 (</>) ((group . nest 2) <$> (pp lcls PrecApp l))
-                                   ((group . nest 2) <$> (pp lcls PrecArg r))
+ppTermF' pp lcls p (App l r) = ppApp <$> pp lcls PrecApp l <*> pp lcls PrecArg r
+  where ppApp l' r' = ppAppParens p $ group $ hang 2 $ l' Leijen.<$> r'
 
 ppTermF' pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp lcls  PrecLambda tp
       <*> pp lcls' PrecLambda rhs
   where ppLam tp' rhs' =
-          ppParens (p > PrecLambda) $
+          ppParens (p > PrecLambda) $ group $ hang 2 $
             text "\\" <> parens (text name' <> doublecolon <> tp')
-               <+> group (nest 2 (text "->" </> rhs'))
+              <+> text "->" Leijen.<$> rhs'
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
@@ -812,10 +811,10 @@ ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' pp lcls p (Let dl u) = 
+ppTermF' pp lcls p (Let dl u) =
     ppLet <$> traverse (ppLocalDef pp lcls lcls') dl
           <*> pp lcls' PrecNone u
-  where ppLet dl' u' = 
+  where ppLet dl' u' =
           ppParens (p > PrecNone) $
             text "let" <+> lbrace <+> align (vcat dl') <$$>
             indent 4 rbrace <$$>
