@@ -368,7 +368,6 @@ updOp :: BValue (l s)
 updOp =
   constFun $
   constFun $
-  constFun $
   strictFun $ \v -> return $
   Prims.natFun'' "upd" $ \i -> return $
   VFun $ \y ->
