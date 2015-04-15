@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
@@ -79,6 +80,7 @@ module Verifier.SAW.TypedAST
  , ppTermF'
  , ppFlatTermF
  , ppRecordF
+ , ppTermDepth
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
@@ -115,6 +117,7 @@ import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
 import Text.PrettyPrint.Leijen hiding ((<$>))
+import qualified Text.PrettyPrint.Leijen as Leijen ((<$>))
 
 import Prelude hiding (all, foldr, sum)
 
@@ -826,6 +829,19 @@ ppTermF' _pp lcls _p (LocalVar i)
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
 ppTermF' _ _ _ (Constant i _ _) = pure $ ppIdent i
+
+ppTermDepth :: forall t. Termlike t => Int -> t -> Doc
+ppTermDepth d0 = pp d0 emptyLocalVarDoc PrecNone
+  where
+    pp :: Int -> TermPrinter t
+    pp 0 _ _ _ = text "..."
+    pp d lcls p t = case unwrapTermF t of
+      App t1 t2 ->
+        ppAppParens p $ group $ hang 2 $
+        (pp d lcls PrecApp t1) Leijen.<$>
+        (pp (d-1) lcls PrecArg t2)
+      tf ->
+        ppTermF (pp (d-1)) lcls p tf
 
 instance Show Term where
   showsPrec _ t = shows $ ppTerm emptyLocalVarDoc PrecNone t
