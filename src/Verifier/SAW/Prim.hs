@@ -296,6 +296,11 @@ get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
 -- little-endian version:
 -- get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
 
+-- | @at@ specialized to BitVector (big-endian)
+-- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+at_bv :: Int -> () -> BitVector -> Nat -> Bool
+at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)
+
 -- | @set@ specialized to BitVector (big-endian)
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
 set_bv :: Int -> () -> BitVector -> Fin -> Bool -> BitVector
