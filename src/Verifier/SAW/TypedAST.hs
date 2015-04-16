@@ -595,9 +595,6 @@ ppAppList :: Prec -> Doc -> [Doc] -> Doc
 ppAppList _ sym [] = sym
 ppAppList p sym l = ppAppParens p $ hsep (sym : l)
 
-ppTuple :: [Doc] -> Doc
-ppTuple = parens . commaSepList
-
 ppPat :: Applicative f
       => (Prec -> e -> f Doc)
       -> Prec -> Pat e -> f Doc
@@ -606,7 +603,7 @@ ppPat f p pat =
     PVar i _ _ -> pure (text i)
     PUnused{}  -> pure (char '_')
     PCtor c pl -> ppAppList p (ppIdent c) <$> traverse (ppPat f PrecArg) pl
-    PTuple pl  -> ppTuple <$> traverse (ppPat f PrecNone) pl
+    PTuple pl  -> tupled <$> traverse (ppPat f PrecNone) pl
     PRecord m  -> ppRecordF (ppPat f PrecNone) m
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
@@ -620,8 +617,8 @@ ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
-    TupleValue l ->                 ppTuple <$> traverse (pp PrecNone) l
-    TupleType l  -> (char '#' <>) . ppTuple <$> traverse (pp PrecNone) l
+    TupleValue l ->                 tupled <$> traverse (pp PrecNone) l
+    TupleType l  -> (char '#' <>) . tupled <$> traverse (pp PrecNone) l
     TupleSelector t i -> ppParens (prec > PrecArg)
                            . (<> (char '.' <> int i)) <$> pp PrecArg t
 
@@ -635,7 +632,7 @@ ppFlatTermF pp prec tf =
 
     Sort s -> pure $ text (show s)
     NatLit i -> pure $ integer i
-    ArrayValue _ vl -> brackets . commaSepList <$> traverse (pp PrecNone) (V.toList vl)
+    ArrayValue _ vl -> list <$> traverse (pp PrecNone) (V.toList vl)
     FloatLit v  -> pure $ text (show v)
     DoubleLit v -> pure $ text (show v)
     StringLit s -> pure $ text (show s)
@@ -833,7 +830,7 @@ ppTermDepth :: forall t. Termlike t => Int -> t -> Doc
 ppTermDepth d0 = pp d0 emptyLocalVarDoc PrecNone
   where
     pp :: Int -> TermPrinter t
-    pp 0 _ _ _ = text "..."
+    pp 0 _ _ _ = text "_"
     pp d lcls p t = case unwrapTermF t of
       App t1 t2 ->
         ppAppParens p $ group $ hang 2 $
