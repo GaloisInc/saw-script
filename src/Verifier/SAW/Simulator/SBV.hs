@@ -52,13 +52,11 @@ type SThunk = Thunk IO SbvExtra
 data SbvExtra =
   SBool SBool |
   SWord SWord |
-  SZero |
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
 
 instance Show SbvExtra where
   show (SBool s) = "SBool " ++ show s
   show (SWord w) = "SWord " ++ show w
-  show SZero = "SZero"
   show (SStream _ _) = "<SStream>"
 
 -- no, we need shape information
@@ -176,7 +174,6 @@ toWord _ = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
-toVector (VExtra SZero) = V.empty
 toVector (VExtra (SWord xv)) =
   V.fromList (map (ready . vBool . svTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
   where k = svBitSize xv
@@ -195,8 +192,7 @@ flattenSValue v = do
         VRecord (Map.elems -> ts) -> concat <$> traverse (force >=> flattenSValue) ts
         VVector (V.toList -> ts)  -> concat <$> traverse (force >=> flattenSValue) ts
         VExtra (SBool sb)         -> return [sb]
-        VExtra (SWord sw)         -> return [sw]
-        VExtra SZero              -> return []
+        VExtra (SWord sw)         -> return (if svBitSize sw > 0 then [sw] else [])
         _ -> fail $ "Could not create sbv argument for " ++ show v
 
 vWord :: SWord -> SValue
@@ -592,8 +588,7 @@ bvNatOp :: SValue
 bvNatOp =
   Prims.natFun'' "bvNatOp(1)" $ \w -> return $
   Prims.natFun'' "bvNatOp(2)" $ \x -> return $
-  if w == 0 then VExtra SZero
-    else vWord (bitVector (fromIntegral w) (toInteger x))
+  vWord (bitVector (fromIntegral w) (toInteger x))
 
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: SValue
@@ -632,8 +627,6 @@ appendOp =
   strictFun $ \ys ->
   case (xs, ys) of
     (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
-    (VExtra SZero, w) -> return w
-    (v, VExtra SZero) -> return v
     (v, w) -> do
       (Just v') <- toWord v
       (Just w') <- toWord w
@@ -645,14 +638,11 @@ appendOp =
 
 binOp :: (SWord -> SWord -> SWord) -> SValue
 binOp op = constFun $
-          strictFun $ \mx-> return $
-          strictFun $ \my->
-            case (mx, my) of
-               (VExtra SZero, VExtra SZero) -> return (VExtra SZero)
-               _ -> do
-                 (Just x) <- toWord mx
-                 (Just y) <- toWord my
-                 return $ vWord $ op x y
+          strictFun $ \mx -> return $
+          strictFun $ \my -> do
+            (Just x) <- toWord mx
+            (Just y) <- toWord my
+            return $ vWord $ op x y
 
 sbinOp :: (SWord -> SWord -> SWord) -> SValue
 sbinOp f = binOp (\x y -> svUnsign (f (svSign x) (svSign y)))
@@ -812,7 +802,7 @@ newVars :: FiniteType -> State Int (Labeler, Symbolic SValue)
 newVars FTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
 newVars (FTVec n FTBit) =
   if n == 0
-    then nextId <&> \s-> (WordLabel s, return (VExtra SZero))
+    then nextId <&> \s-> (WordLabel s, return (vWord (literalSWord 0 0)))
     else nextId <&> \s-> (WordLabel s, vWord <$> existsSWord s (fromIntegral n))
 newVars (FTVec n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
@@ -831,7 +821,7 @@ newCodeGenVars :: FiniteType -> State Int (SBVCodeGen SValue)
 newCodeGenVars FTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
 newCodeGenVars (FTVec n FTBit) =
   if n == 0
-    then nextId <&> \_ -> return (VExtra SZero)
+    then nextId <&> \_ -> return (vWord (literalSWord 0 0))
     else nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)
 newCodeGenVars (FTVec n tp) = do
   vals <- V.replicateM (fromIntegral n) (newCodeGenVars tp)
