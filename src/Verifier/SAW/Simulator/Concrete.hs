@@ -92,27 +92,23 @@ vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
 ------------------------------------------------------------
 -- Values
 
-type CValue = Value Identity CExtra
+type CValue = Value Identity Bool BitVector CExtra
 
 data CExtra
-  = CBool Bool
-  | CWord BitVector
-  | CStream (IntTrie CValue)
+  = CStream (IntTrie CValue)
 
 instance Show CExtra where
-  show (CBool b) = show b
-  show (CWord (BV w x)) = show x ++ "::[" ++ show w ++ "]"
   show (CStream _) = "<stream>"
 
 vBool :: Bool -> CValue
-vBool b = VExtra (CBool b)
+vBool b = VBool b
 
 toBool :: CValue -> Bool
-toBool (VExtra (CBool b)) = b
+toBool (VBool b) = b
 toBool x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toBool", show x]
 
 vWord :: BitVector -> CValue
-vWord x = VExtra (CWord x)
+vWord x = VWord x
 
 -- | Conversion from list of bits to integer (big-endian)
 bvToInteger :: Vector Bool -> Integer
@@ -122,7 +118,7 @@ explodeBitVector :: BitVector -> Vector Bool
 explodeBitVector (BV w x) = V.reverse (V.generate w (testBit x))
 
 toWord :: CValue -> BitVector
-toWord (VExtra (CWord x)) = x
+toWord (VWord x) = x
 toWord (VVector vv) = BV (V.length vv) (bvToInteger (fmap (toBool . runIdentity . force) vv))
 toWord x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toWord", show x]
 
@@ -135,13 +131,13 @@ toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x
 
 toVector :: CValue -> V.Vector CValue
 toVector (VVector xv) = fmap (runIdentity . force) xv
-toVector (VExtra (CWord w)) = fmap vBool (explodeBitVector w)
+toVector (VWord w) = fmap vBool (explodeBitVector w)
 toVector x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toVector", show x]
 
 {-
 flattenBValue :: CValue -> BitVector
 flattenBValue (VExtra (BBool l)) = return (AIG.replicate 1 l)
-flattenBValue (VExtra (CWord lv)) = return lv
+flattenBValue (VWord lv) = return lv
 flattenBValue (VExtra (CStream _ _)) = error "Verifier.SAW.Simulator.Concrete.flattenBValue: CStream"
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
@@ -300,7 +296,7 @@ getOp =
   Prims.finFun $ \i ->
     case v of
       VVector xv -> force $ (V.!) xv (fromEnum (Prim.finVal i))
-      VExtra (CWord w) -> return $ vBool (Prim.get_bv undefined undefined w i)
+      VWord w -> return $ vBool (Prim.get_bv undefined undefined w i)
       _ -> fail $ "Verifier.SAW.Simulator.Concrete.getOp: expected vector, got " ++ show v
 
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
@@ -324,7 +320,7 @@ atOp =
   Prims.natFun'' "atOp" $ \n ->
     case v of
       VVector xv -> force $ (V.!) xv (fromIntegral n)
-      VExtra (CWord w) -> return $ vBool (Prim.get_bv undefined undefined w (Prim.finFromBound n (fromIntegral (width w))))
+      VWord w -> return $ vBool (Prim.get_bv undefined undefined w (Prim.finFromBound n (fromIntegral (width w))))
       _ -> fail $ "Verifier.SAW.Simulator.Concrete.atOp: expected vector, got " ++ show v
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
@@ -337,7 +333,7 @@ bvAtOp =
   wordFun $ \i ->
     case v of
       VVector xv -> runIdentity $ force $ (V.!) xv (fromInteger (unsigned i))
-      VExtra (CWord w) -> vBool (Prim.get_bv undefined undefined w (Prim.finFromBound (fromInteger (unsigned i)) (fromIntegral (width w))))
+      VWord w -> vBool (Prim.get_bv undefined undefined w (Prim.finFromBound (fromInteger (unsigned i)) (fromIntegral (width w))))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvAtOp: expected vector, got " ++ show v
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
@@ -368,7 +364,7 @@ bvUpdOp =
         y' <- delay (return y)
         let update i = return (VVector (xv V.// [(i, y')]))
         AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv - 1) ilv update
-      VExtra (CWord lv) -> do
+      VWord lv -> do
         AIG.muxInteger (lazyMux be (muxBVal be)) (l - 1) ilv (\i -> return (vWord (AIG.generate_msb0 l (update i))))
           where update i j | i == j    = toBool y
                            | otherwise = AIG.at lv j
@@ -386,9 +382,9 @@ appendOp =
   pureFun $ \ys ->
   case (xs, ys) of
     (VVector xv, VVector yv)         -> VVector ((V.++) xv yv)
-    (VVector xv, VExtra (CWord yw)) -> VVector ((V.++) xv (fmap (ready . vBool) (explodeBitVector yw)))
-    (VExtra (CWord xw), VVector yv) -> VVector ((V.++) (fmap (ready . vBool) (explodeBitVector xw)) yv)
-    (VExtra (CWord xw), VExtra (CWord yw)) -> vWord (Prim.append_bv undefined undefined undefined xw yw)
+    (VVector xv, VWord yw) -> VVector ((V.++) xv (fmap (ready . vBool) (explodeBitVector yw)))
+    (VWord xw, VVector yv) -> VVector ((V.++) (fmap (ready . vBool) (explodeBitVector xw)) yv)
+    (VWord xw, VWord yw) -> vWord (Prim.append_bv undefined undefined undefined xw yw)
     _ -> error "Verifier.SAW.Simulator.Concrete.appendOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
@@ -423,7 +419,7 @@ bvNatOp :: CValue
 bvNatOp =
   Prims.natFun'' "bvNatOp1" $ \w -> return $
   Prims.natFun'' "bvNatOp2"  $ \x -> return $
-  VExtra (CWord (Prim.bv (fromIntegral w) (toInteger x)))
+  VWord (Prim.bv (fromIntegral w) (toInteger x))
 
 -- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateLOp :: CValue
@@ -434,8 +430,8 @@ bvRotateLOp =
   pureFun $ \xs ->
   wordFun $ \i ->
     case xs of
-      VVector xv       -> VVector (vRotateL xv (fromInteger (unsigned i)))
-      VExtra (CWord w) -> vWord (bvRotateL w (fromInteger (unsigned i)))
+      VVector xv -> VVector (vRotateL xv (fromInteger (unsigned i)))
+      VWord w -> vWord (bvRotateL w (fromInteger (unsigned i)))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvRotateLOp: " ++ show xs
 
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
@@ -447,8 +443,8 @@ bvRotateROp =
   pureFun $ \xs ->
   wordFun $ \i ->
     case xs of
-      VVector xv       -> VVector (vRotateR xv (fromInteger (unsigned i)))
-      VExtra (CWord w) -> vWord (bvRotateR w (fromInteger (unsigned i)))
+      VVector xv -> VVector (vRotateR xv (fromInteger (unsigned i)))
+      VWord w -> vWord (bvRotateR w (fromInteger (unsigned i)))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvRotateROp: " ++ show xs
 
 -- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
@@ -461,9 +457,9 @@ bvShiftLOp =
   pureFun $ \xs ->
   wordFun $ \i ->
     case xs of
-      VVector xv       -> VVector (vShiftL x xv (fromInteger (unsigned i)))
-      VExtra (CWord w) -> vWord (bvShiftL c w (fromInteger (unsigned i)))
-                            where c = toBool (runIdentity (force x))
+      VVector xv -> VVector (vShiftL x xv (fromInteger (unsigned i)))
+      VWord w -> vWord (bvShiftL c w (fromInteger (unsigned i)))
+        where c = toBool (runIdentity (force x))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftLOp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
@@ -476,9 +472,9 @@ bvShiftROp =
   pureFun $ \xs ->
   wordFun $ \i ->
     case xs of
-      VVector xv       -> VVector (vShiftR x xv (fromInteger (unsigned i)))
-      VExtra (CWord w) -> vWord (bvShiftR c w (fromInteger (unsigned i)))
-                            where c = toBool (runIdentity (force x))
+      VVector xv -> VVector (vShiftR x xv (fromInteger (unsigned i)))
+      VWord w -> vWord (bvShiftR c w (fromInteger (unsigned i)))
+        where c = toBool (runIdentity (force x))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftROp: " ++ show xs
 
 zeroOp :: CValue

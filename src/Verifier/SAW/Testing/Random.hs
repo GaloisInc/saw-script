@@ -19,7 +19,7 @@ import Verifier.SAW.Prim (Nat(..))
 import Verifier.SAW.Recognizer (asBoolType, asPi)
 import Verifier.SAW.SharedTerm
   (scApplyAll, scModule, scWhnf, SharedContext, SharedTerm)
-import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CExtra(..), CValue)
+import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
 import Verifier.SAW.Simulator.Value (Value(..))
 import Verifier.SAW.TypedAST (FieldName)
 import Verifier.SAW.Utils (panic)
@@ -72,8 +72,8 @@ scRunTest sc fun gens = do
   xs <- sequence gens
   result <- liftIO $ apply xs
   case result of
-    VExtra (CBool True) -> return $ Nothing
-    VExtra (CBool False) -> do
+    VBool True -> return $ Nothing
+    VBool False -> do
       return $ Just xs
     _ -> panic "Type error while running test"
          [ "Expected a boolean, but got:"

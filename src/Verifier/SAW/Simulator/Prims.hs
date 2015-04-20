@@ -24,39 +24,39 @@ import Verifier.SAW.Prim
 ------------------------------------------------------------
 -- Value accessors and constructors
 
-vNat :: Nat -> Value m e
+vNat :: Nat -> Value m b w e
 vNat n = VNat (fromIntegral n)
 
-natFromValue :: Num a => Value m e -> a
+natFromValue :: Num a => Value m b w e -> a
 natFromValue (VNat n) = fromInteger n
 natFromValue _ = error "natFromValue"
 
-natFun'' :: (Monad m, Show e) => String -> (Nat -> m (Value m e)) -> Value m e
+natFun'' :: (Monad m, Show e) => String -> (Nat -> m (Value m b w e)) -> Value m b w e
 natFun'' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g v = fail $ "expected Nat (" ++ s ++ "): " ++ show v
 
-natFun' :: Monad m => String -> (Nat -> m (Value m e)) -> Value m e
+natFun' :: Monad m => String -> (Nat -> m (Value m b w e)) -> Value m b w e
 natFun' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail $ "expected Nat: " ++ s
 
-natFun :: Monad m => (Nat -> m (Value m e)) -> Value m e
+natFun :: Monad m => (Nat -> m (Value m b w e)) -> Value m b w e
 natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"
 
-vFin :: Monad m => Fin -> Value m e
+vFin :: Monad m => Fin -> Value m b w e
 vFin (FinVal i j) = VCtorApp "Prelude.FinVal" $ V.fromList $ map (ready . vNat) [i, j]
 
-finFromValue :: Monad m => Value m e -> m Fin
+finFromValue :: Monad m => Value m b w e -> m Fin
 finFromValue (VCtorApp "Prelude.FinVal" (V.toList -> [x, y])) = do
   i <- liftM natFromValue $ force x
   j <- liftM natFromValue $ force y
   return $ FinVal i j
 finFromValue _ = fail "finFromValue"
 
-finFun :: Monad m => (Fin -> m (Value m e)) -> Value m e
+finFun :: Monad m => (Fin -> m (Value m b w e)) -> Value m b w e
 finFun f = strictFun g
   where g v = finFromValue v >>= f
 
@@ -64,7 +64,7 @@ finFun f = strictFun g
 -- Values for common primitives
 
 -- coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
-coerceOp :: Monad m => Value m e
+coerceOp :: Monad m => Value m b w e
 coerceOp =
   constFun $
   constFun $
@@ -72,48 +72,48 @@ coerceOp =
   VFun force
 
 -- Succ :: Nat -> Nat;
-succOp :: Monad m => Value m e
+succOp :: Monad m => Value m b w e
 succOp =
   natFun' "Succ" $ \n -> return $
   vNat (succ n)
 
 -- addNat :: Nat -> Nat -> Nat;
-addNatOp :: Monad m => Value m e
+addNatOp :: Monad m => Value m b w e
 addNatOp =
   natFun' "addNat1" $ \m -> return $
   natFun' "addNat2" $ \n -> return $
   vNat (m + n)
 
 -- subNat :: Nat -> Nat -> Nat;
-subNatOp :: Monad m => Value m e
+subNatOp :: Monad m => Value m b w e
 subNatOp =
   natFun' "subNat1" $ \m -> return $
   natFun' "subNat2" $ \n -> return $
   vNat (m - n)
 
 -- mulNat :: Nat -> Nat -> Nat;
-mulNatOp :: Monad m => Value m e
+mulNatOp :: Monad m => Value m b w e
 mulNatOp =
   natFun' "mulNat1" $ \m -> return $
   natFun' "mulNat2" $ \n -> return $
   vNat (m * n)
 
 -- minNat :: Nat -> Nat -> Nat;
-minNatOp :: Monad m => Value m e
+minNatOp :: Monad m => Value m b w e
 minNatOp =
   natFun' "minNat1" $ \m -> return $
   natFun' "minNat2" $ \n -> return $
   vNat (min m n)
 
 -- maxNat :: Nat -> Nat -> Nat;
-maxNatOp :: Monad m => Value m e
+maxNatOp :: Monad m => Value m b w e
 maxNatOp =
   natFun' "maxNat1" $ \m -> return $
   natFun' "maxNat2" $ \n -> return $
   vNat (max m n)
 
 -- divModNat :: Nat -> Nat -> #(Nat, Nat);
-divModNatOp :: Monad m => Value m e
+divModNatOp :: Monad m => Value m b w e
 divModNatOp =
   natFun' "divModNat1" $ \m -> return $
   natFun' "divModNat2" $ \n -> return $
@@ -121,20 +121,20 @@ divModNatOp =
     VTuple $ V.fromList [ready $ vNat q, ready $ vNat r]
 
 -- expNat :: Nat -> Nat -> Nat;
-expNatOp :: Monad m => Value m e
+expNatOp :: Monad m => Value m b w e
 expNatOp =
   natFun' "expNat1" $ \m -> return $
   natFun' "expNat2" $ \n -> return $
   vNat (m ^ n)
 
 -- widthNat :: Nat -> Nat;
-widthNatOp :: Monad m => Value m e
+widthNatOp :: Monad m => Value m b w e
 widthNatOp =
   natFun' "widthNat1" $ \n -> return $
   vNat (widthNat n)
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
-natCaseOp :: Monad m => Value m e
+natCaseOp :: Monad m => Value m b w e
 natCaseOp =
   constFun $
   VFun $ \z -> return $
@@ -146,14 +146,14 @@ natCaseOp =
             apply s' (ready (VNat (fromIntegral n - 1)))
 
 -- finOfNat :: (n :: Nat) -> Nat -> Fin n;
-finOfNatOp :: Monad m => Value m e
+finOfNatOp :: Monad m => Value m b w e
 finOfNatOp =
   natFun' "finOfNat1" $ \n -> return $
   natFun' "finOfNat2" $ \i -> return $
   vFin (finFromBound i n)
 
 --finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
-finDivModOp :: Monad m => Value m e
+finDivModOp :: Monad m => Value m b w e
 finDivModOp =
   natFun' "finDivMod1" $ \m -> return $
   natFun' "finDivMod2" $ \n -> return $
@@ -162,7 +162,7 @@ finDivModOp =
   in VTuple $ V.fromList $ map (ready . vFin) [q, r]
 
 -- finMax :: (n :: Nat) -> Maybe (Fin n);
-finMaxOp :: Monad m => Value m e
+finMaxOp :: Monad m => Value m b w e
 finMaxOp =
   natFun' "finMax" $ \n -> return $
   if n == 0
@@ -170,7 +170,7 @@ finMaxOp =
     else VCtorApp "Prelude.Just" (V.fromList [ready VType, ready (vFin (FinVal (n - 1) 0))])
 
 -- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
-finPredOp :: Monad m => Value m e
+finPredOp :: Monad m => Value m b w e
 finPredOp =
   constFun $
   finFun $ \i -> return $
@@ -179,7 +179,7 @@ finPredOp =
     else VCtorApp "Prelude.Just" (V.fromList [ready VType, ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
 
 -- natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
-natSplitFinOp :: Monad m => Value m e
+natSplitFinOp :: Monad m => Value m b w e
 natSplitFinOp =
   natFun' "natSplitFin" $ \n -> return $
   natFun' "natSplitFin" $ \i -> return $
@@ -188,7 +188,7 @@ natSplitFinOp =
     else VCtorApp "Prelude.Right" (V.fromList $ map ready [VType, VType, vNat (i - n)])
 
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
-generateOp :: MonadLazy m => Value m e
+generateOp :: MonadLazy m => Value m b w e
 generateOp =
   natFun' "generate1" $ \n -> return $
   constFun $
@@ -197,8 +197,8 @@ generateOp =
     liftM VVector $ V.generateM (fromIntegral n) g
 
 -- zero :: (a :: sort 0) -> a;
-zeroOp :: (MonadLazy m, Show e) => (Integer -> m (Value m e)) -> m (Value m e)
-       -> Value m e -> Value m e
+zeroOp :: (MonadLazy m, Show e) => (Integer -> m (Value m b w e))
+       -> m (Value m b w e) -> Value m b w e -> Value m b w e
 zeroOp bvZ boolZ mkStream = strictFun go
   where
     go t =
@@ -218,7 +218,7 @@ zeroOp bvZ boolZ mkStream = strictFun go
 --unary :: ((n :: Nat) -> bitvector n -> bitvector n)
 --       -> (Bool -> Bool)
 --       -> (a :: sort 0) -> a -> a;
-unaryOp :: (MonadLazy m, Show e) => Value m e -> Value m e -> Value m e
+unaryOp :: (MonadLazy m, Show e) => Value m b w e -> Value m b w e -> Value m b w e
 unaryOp mkStream streamGet =
   pureFun $ \bvOp ->
   pureFun $ \boolOp ->
@@ -254,7 +254,7 @@ unaryOp mkStream streamGet =
 --binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
 --       -> (Bool -> Bool -> Bool)
 --       -> (a :: sort 0) -> a -> a -> a;
-binaryOp :: (MonadLazy m, Show e) => Value m e -> Value m e -> Value m e
+binaryOp :: (MonadLazy m, Show e) => Value m b w e -> Value m b w e -> Value m b w e
 binaryOp mkStream streamGet =
   VFun $ \bvOp' -> return $
   VFun $ \boolOp' -> return $
@@ -296,11 +296,11 @@ binaryOp mkStream streamGet =
   in pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> bin t v1 v2
 
 -- eq :: (a :: sort 0) -> a -> a -> Bool
-eqOp :: (MonadLazy m, Show e) => Value m e
-     -> (Value m e -> Value m e -> m (Value m e))
-     -> (Value m e -> Value m e -> m (Value m e))
-     -> (Integer -> Value m e -> Value m e -> m (Value m e))
-     -> Value m e
+eqOp :: (MonadLazy m, Show e) => Value m b w e
+     -> (Value m b w e -> Value m b w e -> m (Value m b w e))
+     -> (Value m b w e -> Value m b w e -> m (Value m b w e))
+     -> (Integer -> Value m b w e -> Value m b w e -> m (Value m b w e))
+     -> Value m b w e
 eqOp trueOp andOp boolOp bvOp =
   pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2
   where
@@ -328,7 +328,7 @@ eqOp trueOp andOp boolOp bvOp =
 --            -> (Bool -> Bool -> b -> b)
 --            -> b
 --            -> (a :: sort 0) -> a -> a -> b;
-comparisonOp :: (MonadLazy m, Show e) => Value m e
+comparisonOp :: (MonadLazy m, Show e) => Value m b w e
 comparisonOp =
   constFun $
   pureFun $ \bvOp ->
