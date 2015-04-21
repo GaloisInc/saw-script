@@ -120,8 +120,8 @@ constMap = Map.fromList [
     ("Prelude.generate", Prims.generateOp),
     ("Prelude.get", getOp),
     ("Prelude.set", setOp),
-    ("Prelude.at", atOp),
-    ("Prelude.upd", updOp),
+    ("Prelude.at", Prims.atOp svAt),
+    ("Prelude.upd", Prims.updOp),
     ("Prelude.append", appendOp),
     ("Prelude.vZip", vZipOp),
     ("Prelude.foldr", foldrOp),
@@ -247,29 +247,9 @@ symTestSym x ind =
     (svMinus (bitVector w (fromIntegral w - 1)) (nOfSize ind w)) ))
   where w = svBitSize x
 
--- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-atOp :: SValue
-atOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.natFun'' "atOp" $ \n ->
-    case v of
-      VVector xv -> force ((V.!) xv (fromIntegral n))
-      VWord lv -> return $ vBool $ svTestBit lv ((svBitSize lv - 1) - fromIntegral n)
-      _ -> fail "atOp: expected vector"
-
--- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-updOp :: SValue
-updOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.natFun'' "updOp" $ \n -> return $
-  VFun $ \y ->
-    case v of
-      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral n, y)])
-      _ -> fail "updOp: expected vector"
+-- Big-endian version of svTestBit
+svAt :: SWord -> Int -> SBool
+svAt x i = svTestBit x (svBitSize x - 1 - i)
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: SValue

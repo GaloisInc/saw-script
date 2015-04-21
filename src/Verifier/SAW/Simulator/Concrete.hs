@@ -249,8 +249,8 @@ constMap = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
-  , ("Prelude.at", atOp)
-  , ("Prelude.upd", updOp)
+  , ("Prelude.at", Prims.atOp Prim.bvAt)
+  , ("Prelude.upd", Prims.updOp)
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
@@ -311,18 +311,6 @@ setOp =
       VVector xv -> VVector ((V.//) xv [(fromEnum (Prim.finVal i), y)])
       _ -> error $ "Verifier.SAW.Simulator.Concrete.setOp: expected vector, got " ++ show v
 
--- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-atOp :: CValue
-atOp =
-  constFun $
-  constFun $
-  pureFun $ \v ->
-  Prims.natFun'' "atOp" $ \n ->
-    case v of
-      VVector xv -> force $ (V.!) xv (fromIntegral n)
-      VWord w -> return $ vBool (Prim.get_bv undefined undefined w (Prim.finFromBound n (fromIntegral (width w))))
-      _ -> fail $ "Verifier.SAW.Simulator.Concrete.atOp: expected vector, got " ++ show v
-
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: CValue
 bvAtOp =
@@ -335,18 +323,6 @@ bvAtOp =
       VVector xv -> runIdentity $ force $ (V.!) xv (fromInteger (unsigned i))
       VWord w -> vBool (Prim.get_bv undefined undefined w (Prim.finFromBound (fromInteger (unsigned i)) (fromIntegral (width w))))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvAtOp: expected vector, got " ++ show v
-
--- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-updOp :: CValue
-updOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.natFun'' "updOp" $ \i -> return $
-  VFun $ \y ->
-    case v of
-      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
-      _ -> fail $ "Verifier.SAW.Simulator.Concrete.updOp: expected vector, got " ++ show v
 
 {-
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;

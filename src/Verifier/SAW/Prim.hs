@@ -187,6 +187,9 @@ signed (BV w x)
   | w > 0 && testBit x (w - 1) = x - bit w
   | otherwise                  = x
 
+bvAt :: BitVector -> Int -> Bool
+bvAt (BV w x) i = testBit x (w - 1 - i)
+
 ------------------------------------------------------------
 -- Primitive operations
 

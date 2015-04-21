@@ -352,3 +352,28 @@ comparisonOp =
         go t v1 v2 k
 
   in pureFun $ \k -> pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2 k
+
+-- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+atOp :: (Monad m, Show e) => (w -> Int -> b) -> Value m b w e
+atOp bvOp =
+  constFun $
+  constFun $
+  strictFun $ \v -> return $
+  natFun'' "atOp" $ \n ->
+    case v of
+      VVector vv -> force ((V.!) vv (fromIntegral n))
+      VWord w -> return $ VBool $ bvOp w (fromIntegral n)
+      _ -> fail "atOp: expected vector"
+
+-- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+updOp :: (Monad m, Show e) => Value m b w e
+updOp =
+  constFun $
+  constFun $
+  strictFun $ \v -> return $
+  natFun'' "upd" $ \i -> return $
+  VFun $ \y ->
+    case v of
+      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
+      VWord _ -> fail $ "TODO: updOp VWord"
+      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.updOp: expected vector, got " ++ show v

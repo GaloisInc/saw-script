@@ -228,8 +228,8 @@ beConstMap be = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
-  , ("Prelude.at", atOp)
-  , ("Prelude.upd", updOp)
+  , ("Prelude.at", Prims.atOp AIG.at)
+  , ("Prelude.upd", Prims.updOp)
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
@@ -333,18 +333,6 @@ setOp =
       VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.setOp: expected vector, got " ++ show v
 
--- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-atOp :: BValue l
-atOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.natFun'' "at" $ \n ->
-    case v of
-      VVector xv -> force ((V.!) xv (fromIntegral n))
-      VWord lv -> return $ vBool $ AIG.at lv (fromIntegral n)
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.atOp: expected vector, got " ++ show v
-
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvAtOp be =
@@ -359,18 +347,6 @@ bvAtOp be =
       VWord lv ->
           vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv - 1) ilv (return . AIG.at lv)
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvAtOp: expected vector, got " ++ show v
-
--- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-updOp :: BValue (l s)
-updOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.natFun'' "upd" $ \i -> return $
-  VFun $ \y ->
-    case v of
-      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.updOp: expected vector, got " ++ show v
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
 -- NB: this isn't necessarily the most efficient possible implementation.
