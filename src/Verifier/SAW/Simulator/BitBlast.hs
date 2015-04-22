@@ -335,40 +335,11 @@ setOp =
 
 -- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
 bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvAtOp be =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  wordFun $ \ilv ->
-    case v of
-      VVector xv ->
-          force =<< AIG.muxInteger (lazyMux be (muxThunk be)) (V.length xv - 1) ilv (return . (V.!) xv)
-      VWord lv ->
-          vBool <$> AIG.muxInteger (lazyMux be (AIG.mux be)) (AIG.length lv - 1) ilv (return . AIG.at lv)
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvAtOp: expected vector, got " ++ show v
+bvAtOp be = Prims.bvAtOp vFromLV AIG.at (lazyMux be (muxBVal be))
 
 -- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
--- NB: this isn't necessarily the most efficient possible implementation.
 bvUpdOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvUpdOp be =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  wordFun $ \ilv -> return $
-  strictFun $ \y ->
-    case v of
-      VVector xv -> do
-        y' <- delay (return y)
-        let update i = return (VVector (xv V.// [(i, y')]))
-        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv - 1) ilv update
-      VWord lv -> do
-        AIG.muxInteger (lazyMux be (muxBVal be)) (l - 1) ilv (\i -> return (vWord (AIG.generate_msb0 l (update i))))
-          where update i j | i == j    = toBool y
-                           | otherwise = AIG.at lv j
-                l = AIG.length lv
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvUpdOp: expected vector, got " ++ show v
+bvUpdOp be = Prims.bvUpdOp vFromLV (lazyMux be (muxBVal be))
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: BValue l

@@ -125,8 +125,8 @@ constMap = Map.fromList [
     ("Prelude.append", appendOp),
     ("Prelude.vZip", vZipOp),
     ("Prelude.foldr", foldrOp),
-    ("Prelude.bvAt", bvAtOp),
-    ("Prelude.bvUpd", bvUpdOp),
+    ("Prelude.bvAt", Prims.bvAtOp svUnpack svAt (lazyMux muxBVal)),
+    ("Prelude.bvUpd", Prims.bvUpdOp svUnpack (lazyMux muxBVal)),
     ("Prelude.bvRotateL", bvRotateLOp),
     ("Prelude.bvRotateR", bvRotateROp),
     ("Prelude.bvShiftL", bvShiftLOp),
@@ -229,42 +229,12 @@ selectV merger maxValue valueFn vx =
     impl 0 y = valueFn y
     impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
--- `nOfSize word len` pads word with zeros to be size len
-nOfSize :: SWord -> Int -> SWord
-nOfSize ind w
-  | w == w' = ind
-  | w >= w' = svJoin (bitVector (w - w') 0) ind
-  | otherwise = svExtract (w - 1) 0 ind
-  where w' = svBitSize ind
-
--- symTestSym word index gets index ind from vector w
--- it is the equivalent of cryptol-2 indexing; NOT the same as testBit
-symTestSym :: SWord -> SWord -> SValue
-symTestSym x (svAsInteger -> Just i) = vBool $ svTestBit x (svBitSize x - 1 - fromInteger i)
-symTestSym x ind =
-  vBool $ svNotEqual (bitVector w 0) (svAnd x
-    (svShiftLeft (bitVector w 1)
-    (svMinus (bitVector w (fromIntegral w - 1)) (nOfSize ind w)) ))
-  where w = svBitSize x
-
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
 svAt x i = svTestBit x (svBitSize x - 1 - i)
 
--- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
-bvAtOp :: SValue
-bvAtOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  wordFun $ \milv -> do
-    case (milv, v) of
-      (Nothing, VVector xv) -> force (xv V.! 0)
-      (Just ilv, VVector xv) ->
-        force =<< selectV (lazyMux muxThunk) (V.length xv - 1) (return . (V.!) xv) ilv
-      (Just ilv, VWord lv) -> return $ symTestSym lv ilv
-      _ -> fail "getOp: expected vector"
+svUnpack :: SWord -> Vector SBool
+svUnpack x = V.generate (svBitSize x) (svAt x)
 
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
 getOp :: SValue
@@ -426,37 +396,6 @@ vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
 vShiftR :: a -> V.Vector a -> Int -> V.Vector a
 vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
   where j = min i (V.length xs)
-
--- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
-bvUpdOp :: SValue
-bvUpdOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  wordFun $ \milv -> return $
-  strictFun $ \y ->
-    case (milv, v) of
-      (Nothing, VVector xv) -> do
-        y' <- delay (return y)
-        return (VVector (xv V.// [(0, y')]))
-      (Nothing, VWord lv) -> do
-        let w = svBitSize lv
-        let (Just b) = toBool y
-        return $ vWord $ svIte b
-          (svOr lv (svShl (bitVector w 1) (w - 1)))
-          (svAnd lv (svNot (svShl (bitVector w 1) (w - 1))))
-      (Just ilv, VVector xv) -> do
-        y' <- delay (return y)
-        let update i = return (VVector (xv V.// [(i, y')]))
-        selectV (lazyMux muxBVal) (V.length xv - 1) update ilv
-      (Just ilv, VWord lv) -> do
-        let w = svBitSize lv
-        let (Just b) = toBool y
-        return $ vWord $ svIte b
-          (svOr lv (svShiftLeft (bitVector w 1) (svMinus (bitVector w (toInteger w - 1)) (nOfSize ilv w))))
-          (svAnd lv (svNot (svShiftLeft (bitVector w 1) (svMinus (bitVector w (toInteger w - 1)) (nOfSize ilv w)))))
-      _ -> fail "bvUpdOp: expected vector"
 
 ------------------------------------------------------------
 -- Rotations and shifts

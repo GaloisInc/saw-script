@@ -15,6 +15,7 @@ import Prelude hiding (sequence, mapM)
 
 import Control.Monad (foldM, liftM)
 import qualified Data.Map as Map
+import Data.Bits
 import Data.Traversable
 import qualified Data.Vector as V
 
@@ -59,6 +60,52 @@ finFromValue _ = fail "finFromValue"
 finFun :: Monad m => (Fin -> m (Value m b w e)) -> Value m b w e
 finFun f = strictFun g
   where g v = finFromValue v >>= f
+
+toBool :: Show e => Value m b w e -> b
+toBool (VBool b) = b
+toBool x = error $ unwords ["Verifier.SAW.Simulator.toBool", show x]
+
+toWord :: (Monad m, Show e) => (V.Vector b -> w) -> Value m b w e -> m w
+toWord _ (VWord w) = return w
+toWord pack (VVector vv) = liftM pack $ V.mapM (liftM toBool . force) vv
+toWord _ x = fail $ unwords ["Verifier.SAW.Simulator.toWord", show x]
+
+toBits :: (Monad m, Show e) => (w -> V.Vector b) -> Value m b w e -> m (V.Vector b)
+toBits unpack (VWord w) = return (unpack w)
+toBits _ (VVector v) = V.mapM (liftM toBool . force) v
+toBits _ x = fail $ unwords ["Verifier.SAW.Simulator.toBits", show x]
+
+toVector :: (Monad m, Show e) => (w -> V.Vector b)
+         -> Value m b w e -> V.Vector (Thunk m b w e)
+toVector _ (VVector v) = v
+toVector unpack (VWord w) = fmap (ready . VBool) (unpack w)
+toVector _ x = fail $ unwords ["Verifier.SAW.Simulator.toVector", show x]
+
+wordFun :: (Monad m, Show e) => (V.Vector b -> w) -> (w -> m (Value m b w e)) -> Value m b w e
+wordFun pack f = strictFun (\x -> toWord pack x >>= f)
+
+bitsFun :: (Monad m, Show e) => (w -> V.Vector b)
+        -> (V.Vector b -> m (Value m b w e)) -> Value m b w e
+bitsFun unpack f = strictFun (\x -> toBits unpack x >>= f)
+
+vectorFun :: (Monad m, Show e) => (w -> V.Vector b)
+          -> (V.Vector (Thunk m b w e) -> m (Value m b w e)) -> Value m b w e
+vectorFun unpack f = strictFun (\x -> f (toVector unpack x))
+
+------------------------------------------------------------
+-- Utility functions
+
+-- @selectV mux maxValue valueFn v@ treats the vector @v@ as an
+-- index, represented as a big-endian list of bits. It does a binary
+-- lookup, using @mux@ as an if-then-else operator. If the index is
+-- greater than @maxValue@, then it returns @valueFn maxValue@.
+selectV :: (b -> a -> a -> a) -> Int -> (Int -> a) -> V.Vector b -> a
+selectV mux maxValue valueFn v = impl len 0
+  where
+    len = V.length v
+    impl _ x | x >= maxValue = valueFn maxValue
+    impl 0 x = valueFn x
+    impl i x = mux ((V.!) v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
 
 ------------------------------------------------------------
 -- Values for common primitives
@@ -365,6 +412,21 @@ atOp bvOp =
       VWord w -> return $ VBool $ bvOp w (fromIntegral n)
       _ -> fail "atOp: expected vector"
 
+-- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
+bvAtOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
+       -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
+       -> Value m b w e
+bvAtOp unpack bvOp mux =
+  natFun $ \n -> return $
+  constFun $
+  constFun $
+  strictFun $ \x -> return $
+  bitsFun unpack $ \iv -> do
+    case x of
+      VVector xv -> selectV mux (fromIntegral n - 1) (force . (V.!) xv) iv
+      VWord xw -> selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
+      _ -> fail "bvAtOp: expected vector"
+
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 updOp :: (Monad m, Show e) => Value m b w e
 updOp =
@@ -377,3 +439,18 @@ updOp =
       VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
       VWord _ -> fail $ "TODO: updOp VWord"
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.updOp: expected vector, got " ++ show v
+
+-- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
+bvUpdOp :: (Monad m, Show e) => (w -> V.Vector b)
+        -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
+        -> Value m b w e
+bvUpdOp unpack mux =
+  natFun $ \n -> return $
+  constFun $
+  constFun $
+  vectorFun unpack $ \xv -> return $
+  bitsFun unpack $ \iv -> return $
+  VFun $ \y ->
+    let update i = return (VVector (xv V.// [(i, y)]))
+    in selectV mux (fromIntegral n - 1) update iv
+-- ^ TODO: Instead of a binary lookup, put an equality test in each array element

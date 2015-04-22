@@ -254,8 +254,8 @@ constMap = Map.fromList
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvAt", bvAtOp)
-  --TODO, ("Prelude.bvUpd", bvUpdOp)
+  , ("Prelude.bvAt", Prims.bvAtOp bvUnpack Prim.bvAt ite)
+  , ("Prelude.bvUpd", Prims.bvUpdOp bvUnpack ite)
   , ("Prelude.bvRotateL", bvRotateLOp)
   , ("Prelude.bvRotateR", bvRotateROp)
   , ("Prelude.bvShiftL", bvShiftLOp)
@@ -311,42 +311,11 @@ setOp =
       VVector xv -> VVector ((V.//) xv [(fromEnum (Prim.finVal i), y)])
       _ -> error $ "Verifier.SAW.Simulator.Concrete.setOp: expected vector, got " ++ show v
 
--- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
-bvAtOp :: CValue
-bvAtOp =
-  constFun $
-  constFun $
-  constFun $
-  pureFun $ \v ->
-  wordFun $ \i ->
-    case v of
-      VVector xv -> runIdentity $ force $ (V.!) xv (fromInteger (unsigned i))
-      VWord w -> vBool (Prim.get_bv undefined undefined w (Prim.finFromBound (fromInteger (unsigned i)) (fromIntegral (width w))))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.bvAtOp: expected vector, got " ++ show v
+bvUnpack :: BitVector -> V.Vector Bool
+bvUnpack x = V.generate (Prim.width x) (Prim.bvAt x)
 
-{-
--- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
--- NB: this isn't necessarily the most efficient possible implementation.
-bvUpdOp :: CValue
-bvUpdOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  wordFun $ \ilv -> return $
-  strictFun $ \y ->
-    case v of
-      VVector xv -> do
-        y' <- delay (return y)
-        let update i = return (VVector (xv V.// [(i, y')]))
-        AIG.muxInteger (lazyMux be (muxBVal be)) (V.length xv - 1) ilv update
-      VWord lv -> do
-        AIG.muxInteger (lazyMux be (muxBVal be)) (l - 1) ilv (\i -> return (vWord (AIG.generate_msb0 l (update i))))
-          where update i j | i == j    = toBool y
-                           | otherwise = AIG.at lv j
-                l = AIG.length lv
-      _ -> fail $ "Verifier.SAW.Simulator.Concrete.bvUpdOp: expected vector, got " ++ show v
--}
+ite :: Bool -> a -> a -> a
+ite b x y = if b then x else y
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: CValue
