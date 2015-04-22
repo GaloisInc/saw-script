@@ -74,6 +74,7 @@ constMap = Map.fromList
   , ("Prelude.boolEq", boolBinOp svEqual)
   , ("Prelude.ite", iteOp)
   -- Arithmetic
+  , ("Prelude.bvNeg" , unOp svUNeg)
   , ("Prelude.bvAdd" , binOp svPlus)
   , ("Prelude.bvSub" , binOp svMinus)
   , ("Prelude.bvMul" , binOp svTimes)
@@ -549,6 +550,12 @@ appendOp =
 
 ------------------------------------------------------------
 -- Helpers for marshalling into SValues
+
+unOp :: (SWord -> SWord) -> SValue
+unOp op = constFun $
+          strictFun $ \mx -> do
+            (Just x) <- toWord mx
+            return $ vWord $ op x
 
 binOp :: (SWord -> SWord -> SWord) -> SValue
 binOp op = constFun $

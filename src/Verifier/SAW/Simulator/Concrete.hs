@@ -157,6 +157,12 @@ boolBinOp op =
   pureFun $ \x ->
   pureFun $ \y -> vBool (op (toBool x) (toBool y))
 
+-- | op :: (n :: Nat) -> bitvector n -> bitvector n
+unOp :: (BitVector -> BitVector) -> CValue
+unOp op =
+  constFun $
+  wordFun $ \x -> vWord (op x)
+
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
 binOp :: (BitVector -> BitVector -> BitVector) -> CValue
 binOp op =
@@ -203,6 +209,7 @@ constMap = Map.fromList
   , ("Prelude.boolEq", boolBinOp (==))
   , ("Prelude.ite"   , iteOp)
   -- Arithmetic
+  , ("Prelude.bvNeg" , unOp (Prim.bvNeg undefined))
   , ("Prelude.bvAdd" , binOp (Prim.bvAdd undefined))
   , ("Prelude.bvSub" , binOp (Prim.bvSub undefined))
   , ("Prelude.bvMul" , binOp (Prim.bvMul undefined))

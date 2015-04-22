@@ -127,6 +127,12 @@ boolBinOp op =
   strictFun $ \x -> return $
   strictFun $ \y -> vBool <$> op (toBool x) (toBool y)
 
+-- | op :: (n :: Nat) -> bitvector n -> bitvector n
+unOp :: (LitVector l -> IO (LitVector l)) -> BValue l
+unOp op =
+  constFun $
+  wordFun $ \x -> vWord <$> op x
+
 -- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
 binOp :: (LitVector l -> LitVector l -> IO (LitVector l)) -> BValue l
 binOp op =
@@ -182,6 +188,7 @@ beConstMap be = Map.fromList
   , ("Prelude.boolEq", boolBinOp (AIG.eq be))
   , ("Prelude.ite"   , iteOp be)
   -- Arithmetic
+  , ("Prelude.bvNeg" , unOp (AIG.neg be))
   , ("Prelude.bvAdd" , binOp (AIG.add be))
   , ("Prelude.bvSub" , binOp (AIG.sub be))
   , ("Prelude.bvMul" , binOp (AIG.mul be))

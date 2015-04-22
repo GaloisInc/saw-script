@@ -271,8 +271,8 @@ zeroOp bvZ boolZ mkStream = strictFun go
 --       -> (a :: sort 0) -> a -> a;
 unaryOp :: (MonadLazy m, Show e) => Value m b w e -> Value m b w e -> Value m b w e
 unaryOp mkStream streamGet =
-  pureFun $ \bvOp ->
-  pureFun $ \boolOp ->
+  VFun $ \bvOp' -> return $
+  VFun $ \boolOp' -> return $
   let go (VPiType _ f) v =
         return $ VFun $ \x -> do
           y <- apply v x
@@ -283,11 +283,13 @@ unaryOp mkStream streamGet =
       go (VRecordType tm) (VRecord vm)
         | Map.keys tm == Map.keys vm =
           liftM VRecord $ sequence (Map.intersectionWith go' tm vm)
-      go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v =
+      go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v = do
+        bvOp <- force bvOp'
         applyAll bvOp [ready n, ready v]
       go (VDataType "Prelude.Vec" [_, t']) (VVector vv) =
         liftM VVector $ mapM (go' t') vv
-      go (VDataType "Prelude.Bool" []) v =
+      go (VDataType "Prelude.Bool" []) v = do
+        boolOp <- force boolOp'
         apply boolOp (ready v)
       go (VDataType "Prelude.Stream" [t']) v =
         applyAll mkStream [ready t', ready (VFun f)]
