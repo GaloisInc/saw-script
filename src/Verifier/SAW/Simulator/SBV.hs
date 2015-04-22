@@ -63,81 +63,81 @@ uninterpreted ident t = Just $ parseUninterpreted [] (identName ident) t
 -- rewriteSharedTerm
 
 constMap :: Map Ident SValue
-constMap = Map.fromList [
-    -- Boolean
-    ("Prelude.True", VBool svTrue),
-    ("Prelude.False", VBool svFalse),
-    ("Prelude.not", strictFun (return . vBool . svNot . forceBool)),
-    ("Prelude.and", boolBinOp svAnd),
-    ("Prelude.or", boolBinOp svOr),
-    ("Prelude.xor", boolBinOp svXOr) ,
-    ("Prelude.boolEq", boolBinOp svEqual),
-    ("Prelude.ite", iteOp),
-    -- Arithmetic
-    ("Prelude.bvAdd" , binOp svPlus),
-    ("Prelude.bvSub" , binOp svMinus),
-    ("Prelude.bvMul" , binOp svTimes),
-    ("Prelude.bvAnd" , binOp svAnd),
-    ("Prelude.bvOr"  , binOp svOr),
-    ("Prelude.bvXor" , binOp svXOr),
-    ("Prelude.bvUDiv", binOp svQuot),
-    ("Prelude.bvURem", binOp svRem),
-    ("Prelude.bvSDiv", sbinOp svQuot),
-    ("Prelude.bvSRem", sbinOp svRem),
-    ("Prelude.bvPMul", bvPMulOp),
-    ("Prelude.bvPMod", bvPModOp),
-    -- Relations
-    ("Prelude.bvEq"  , binRel svEqual),
-    ("Prelude.bvsle" , sbinRel svLessEq),
-    ("Prelude.bvslt" , sbinRel svLessThan),
-    ("Prelude.bvule" , binRel svLessEq),
-    ("Prelude.bvult" , binRel svLessThan),
-    ("Prelude.bvsge" , sbinRel svGreaterEq),
-    ("Prelude.bvsgt" , sbinRel svGreaterThan),
-    ("Prelude.bvuge" , binRel svGreaterEq),
-    ("Prelude.bvugt" , binRel svGreaterThan),
-    -- Shifts
-    ("Prelude.bvShl" , bvShLOp),
-    ("Prelude.bvShr" , bvShROp),
-    ("Prelude.bvSShr", bvSShROp),
-    -- Nat
-    ("Prelude.Succ", Prims.succOp),
-    ("Prelude.addNat", Prims.addNatOp),
-    ("Prelude.subNat", Prims.subNatOp),
-    ("Prelude.mulNat", Prims.mulNatOp),
-    ("Prelude.minNat", Prims.minNatOp),
-    ("Prelude.maxNat", Prims.maxNatOp),
-    ("Prelude.divModNat", Prims.divModNatOp),
-    ("Prelude.expNat", Prims.expNatOp),
-    ("Prelude.widthNat", Prims.widthNatOp),
-    ("Prelude.natCase", Prims.natCaseOp),
-    -- Fin
-    ("Prelude.finDivMod", Prims.finDivModOp),
-    ("Prelude.finMax", Prims.finMaxOp),
-    ("Prelude.finPred", Prims.finPredOp),
-    ("Prelude.natSplitFin", Prims.natSplitFinOp),
-    -- Vectors
-    ("Prelude.generate", Prims.generateOp),
-    ("Prelude.get", getOp),
-    ("Prelude.set", setOp),
-    ("Prelude.at", Prims.atOp svAt),
-    ("Prelude.upd", Prims.updOp),
-    ("Prelude.append", appendOp),
-    ("Prelude.vZip", vZipOp),
-    ("Prelude.foldr", foldrOp),
-    ("Prelude.bvAt", Prims.bvAtOp svUnpack svAt (lazyMux muxBVal)),
-    ("Prelude.bvUpd", Prims.bvUpdOp svUnpack (lazyMux muxBVal)),
-    ("Prelude.bvRotateL", bvRotateLOp),
-    ("Prelude.bvRotateR", bvRotateROp),
-    ("Prelude.bvShiftL", bvShiftLOp),
-    ("Prelude.bvShiftR", bvShiftROp),
-     -- Streams
-    ("Prelude.MkStream", mkStreamOp),
-    ("Prelude.streamGet", streamGetOp),
-    ("Prelude.bvStreamGet", bvStreamGetOp),
-    -- Miscellaneous
-    ("Prelude.coerce", Prims.coerceOp),
-    ("Prelude.bvNat", bvNatOp)
+constMap = Map.fromList
+  -- Boolean
+  [ ("Prelude.True", VBool svTrue)
+  , ("Prelude.False", VBool svFalse)
+  , ("Prelude.not", strictFun (return . vBool . svNot . forceBool))
+  , ("Prelude.and", boolBinOp svAnd)
+  , ("Prelude.or", boolBinOp svOr)
+  , ("Prelude.xor", boolBinOp svXOr)
+  , ("Prelude.boolEq", boolBinOp svEqual)
+  , ("Prelude.ite", iteOp)
+  -- Arithmetic
+  , ("Prelude.bvAdd" , binOp svPlus)
+  , ("Prelude.bvSub" , binOp svMinus)
+  , ("Prelude.bvMul" , binOp svTimes)
+  , ("Prelude.bvAnd" , binOp svAnd)
+  , ("Prelude.bvOr"  , binOp svOr)
+  , ("Prelude.bvXor" , binOp svXOr)
+  , ("Prelude.bvUDiv", binOp svQuot)
+  , ("Prelude.bvURem", binOp svRem)
+  , ("Prelude.bvSDiv", sbinOp svQuot)
+  , ("Prelude.bvSRem", sbinOp svRem)
+  , ("Prelude.bvPMul", bvPMulOp)
+  , ("Prelude.bvPMod", bvPModOp)
+  -- Relations
+  , ("Prelude.bvEq"  , binRel svEqual)
+  , ("Prelude.bvsle" , sbinRel svLessEq)
+  , ("Prelude.bvslt" , sbinRel svLessThan)
+  , ("Prelude.bvule" , binRel svLessEq)
+  , ("Prelude.bvult" , binRel svLessThan)
+  , ("Prelude.bvsge" , sbinRel svGreaterEq)
+  , ("Prelude.bvsgt" , sbinRel svGreaterThan)
+  , ("Prelude.bvuge" , binRel svGreaterEq)
+  , ("Prelude.bvugt" , binRel svGreaterThan)
+  -- Shifts
+  , ("Prelude.bvShl" , bvShLOp)
+  , ("Prelude.bvShr" , bvShROp)
+  , ("Prelude.bvSShr", bvSShROp)
+  -- Nat
+  , ("Prelude.Succ", Prims.succOp)
+  , ("Prelude.addNat", Prims.addNatOp)
+  , ("Prelude.subNat", Prims.subNatOp)
+  , ("Prelude.mulNat", Prims.mulNatOp)
+  , ("Prelude.minNat", Prims.minNatOp)
+  , ("Prelude.maxNat", Prims.maxNatOp)
+  , ("Prelude.divModNat", Prims.divModNatOp)
+  , ("Prelude.expNat", Prims.expNatOp)
+  , ("Prelude.widthNat", Prims.widthNatOp)
+  , ("Prelude.natCase", Prims.natCaseOp)
+  -- Fin
+  , ("Prelude.finDivMod", Prims.finDivModOp)
+  , ("Prelude.finMax", Prims.finMaxOp)
+  , ("Prelude.finPred", Prims.finPredOp)
+  , ("Prelude.natSplitFin", Prims.natSplitFinOp)
+  -- Vectors
+  , ("Prelude.generate", Prims.generateOp)
+  , ("Prelude.get", getOp)
+  , ("Prelude.set", setOp)
+  , ("Prelude.at", Prims.atOp svAt)
+  , ("Prelude.upd", Prims.updOp)
+  , ("Prelude.append", appendOp)
+  , ("Prelude.vZip", vZipOp)
+  , ("Prelude.foldr", foldrOp)
+  , ("Prelude.bvAt", Prims.bvAtOp svUnpack svAt (lazyMux muxBVal))
+  , ("Prelude.bvUpd", Prims.bvUpdOp svUnpack (lazyMux muxBVal))
+  , ("Prelude.bvRotateL", bvRotateLOp)
+  , ("Prelude.bvRotateR", bvRotateROp)
+  , ("Prelude.bvShiftL", bvShiftLOp)
+  , ("Prelude.bvShiftR", bvShiftROp)
+  -- Streams
+  , ("Prelude.MkStream", mkStreamOp)
+  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude.bvStreamGet", bvStreamGetOp)
+  -- Miscellaneous
+  , ("Prelude.coerce", Prims.coerceOp)
+  , ("Prelude.bvNat", bvNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
