@@ -228,13 +228,11 @@ beConstMap be = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
-  , ("Prelude.at", Prims.atOp AIG.at)
-  , ("Prelude.upd", Prims.updOp)
+  , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))
+  , ("Prelude.upd", Prims.updOp vFromLV (lazyMux be (muxBVal be)))
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvAt", bvAtOp be)
-  , ("Prelude.bvUpd", bvUpdOp be)
   , ("Prelude.bvRotateL", bvRotateLOp be)
   , ("Prelude.bvRotateR", bvRotateROp be)
   , ("Prelude.bvShiftL", bvShiftLOp be)
@@ -246,7 +244,7 @@ beConstMap be = Map.fromList
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp be)
-  --, ("Prelude.bvToNat", bvToNatOp)
+  , ("Prelude.bvToNat", Prims.bvToNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp be)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
@@ -332,14 +330,6 @@ setOp =
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.setOp: expected vector, got " ++ show v
-
--- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
-bvAtOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvAtOp be = Prims.bvAtOp vFromLV AIG.at (lazyMux be (muxBVal be))
-
--- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
-bvUpdOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvUpdOp be = Prims.bvUpdOp vFromLV (lazyMux be (muxBVal be))
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: BValue l

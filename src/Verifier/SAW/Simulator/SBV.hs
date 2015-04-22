@@ -120,13 +120,11 @@ constMap = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
-  , ("Prelude.at", Prims.atOp svAt)
-  , ("Prelude.upd", Prims.updOp)
+  , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
+  , ("Prelude.upd", Prims.updOp svUnpack (lazyMux muxBVal))
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvAt", Prims.bvAtOp svUnpack svAt (lazyMux muxBVal))
-  , ("Prelude.bvUpd", Prims.bvUpdOp svUnpack (lazyMux muxBVal))
   , ("Prelude.bvRotateL", bvRotateLOp)
   , ("Prelude.bvRotateR", bvRotateROp)
   , ("Prelude.bvShiftL", bvShiftLOp)
@@ -138,6 +136,7 @@ constMap = Map.fromList
   -- Miscellaneous
   , ("Prelude.coerce", Prims.coerceOp)
   , ("Prelude.bvNat", bvNatOp)
+  , ("Prelude.bvToNat", Prims.bvToNatOp)
   -- Overloaded
   , ("Prelude.zero", zeroOp)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)

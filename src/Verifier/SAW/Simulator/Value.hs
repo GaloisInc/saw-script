@@ -39,6 +39,7 @@ data Value m b w e
   | VVector !(Vector (Thunk m b w e))
   | VBool b
   | VWord w
+  | VToNat (Value m b w e)
   | VNat !Integer
   | VString !String
   | VFloat !Float
@@ -77,6 +78,7 @@ instance Show e => Show (Value m b w e) where
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
       VWord _        -> showString "<<bitvector>>"
+      VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
       VFloat float   -> shows float
       VDouble double -> shows double

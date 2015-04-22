@@ -110,6 +110,10 @@ selectV mux maxValue valueFn v = impl len 0
 ------------------------------------------------------------
 -- Values for common primitives
 
+-- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+bvToNatOp :: Monad m => Value m b w e
+bvToNatOp = constFun $ pureFun VToNat
+
 -- coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
 coerceOp :: Monad m => Value m b w e
 coerceOp =
@@ -401,56 +405,43 @@ comparisonOp =
   in pureFun $ \k -> pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2 k
 
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-atOp :: (Monad m, Show e) => (w -> Int -> b) -> Value m b w e
-atOp bvOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  natFun'' "atOp" $ \n ->
-    case v of
-      VVector vv -> force ((V.!) vv (fromIntegral n))
-      VWord w -> return $ VBool $ bvOp w (fromIntegral n)
-      _ -> fail "atOp: expected vector"
-
--- bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a;
-bvAtOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
-       -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
-       -> Value m b w e
-bvAtOp unpack bvOp mux =
+atOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
+     -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
+     -> Value m b w e
+atOp unpack bvOp mux =
   natFun $ \n -> return $
-  constFun $
   constFun $
   strictFun $ \x -> return $
-  bitsFun unpack $ \iv -> do
-    case x of
-      VVector xv -> selectV mux (fromIntegral n - 1) (force . (V.!) xv) iv
-      VWord xw -> selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
-      _ -> fail "bvAtOp: expected vector"
+  strictFun $ \idx ->
+    case idx of
+      VNat i ->
+        case x of
+          VVector xv -> force ((V.!) xv (fromIntegral i))
+          VWord xw -> return $ VBool $ bvOp xw (fromIntegral i)
+          _ -> fail "atOp: expected vector"
+      VToNat i -> do
+        iv <- toBits unpack i
+        case x of
+          VVector xv -> selectV mux (fromIntegral n - 1) (force . (V.!) xv) iv
+          VWord xw -> selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
+          _ -> fail "atOp: expected vector"
+      _ -> fail $ "atOp: expected Nat, got " ++ show idx
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-updOp :: (Monad m, Show e) => Value m b w e
-updOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  natFun'' "upd" $ \i -> return $
-  VFun $ \y ->
-    case v of
-      VVector xv -> return $ VVector ((V.//) xv [(fromIntegral i, y)])
-      VWord _ -> fail $ "TODO: updOp VWord"
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.updOp: expected vector, got " ++ show v
-
--- bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> a -> Vec n a;
-bvUpdOp :: (Monad m, Show e) => (w -> V.Vector b)
-        -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
-        -> Value m b w e
-bvUpdOp unpack mux =
+updOp :: (Monad m, Show e) => (w -> V.Vector b)
+      -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
+      -> Value m b w e
+updOp unpack mux =
   natFun $ \n -> return $
   constFun $
-  constFun $
   vectorFun unpack $ \xv -> return $
-  bitsFun unpack $ \iv -> return $
+  strictFun $ \idx -> return $
   VFun $ \y ->
-    let update i = return (VVector (xv V.// [(i, y)]))
-    in selectV mux (fromIntegral n - 1) update iv
+    case idx of
+      VNat i -> return (VVector (xv V.// [(fromIntegral i, y)]))
+      VToNat val -> do
+        let update i = return (VVector (xv V.// [(i, y)]))
+        iv <- toBits unpack val
+        selectV mux (fromIntegral n - 1) update iv
+      _ -> fail $ "updOp: expected Nat, got " ++ show idx
 -- ^ TODO: Instead of a binary lookup, put an equality test in each array element
