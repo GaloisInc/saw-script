@@ -582,7 +582,7 @@ exportValue ty v
 
   | Just (_, e) <- V.isTSeq ty =
     case v of
-      SC.VExtra (SC.CWord w) -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
+      SC.VWord w -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
       SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
       SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e . SC.runIdentity . force) (Vector.toList xs))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
