@@ -23,6 +23,12 @@ fix :: (a :: sort 0) -> (a -> a) -> a;
 fix a f = f (fix a f);
 
 bvExp :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvExp n x y = foldr Bool (bitvector n) n
+  (\ (b :: Bool) -> \ (a :: bitvector n) ->
+    ite (bitvector n) b (bvMul n x (bvMul n a a)) (bvMul n a a))
+  (bvNat n 1)
+  (reverse n Bool y);
+
 bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 
 --------------------------------------------------------------------------------
