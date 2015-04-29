@@ -462,7 +462,8 @@ lambdaTuple sc env ty expr argss ((x, t) : args) =
      if null args
         then return f
         else do b <- importType sc env (tNestedTuple (map snd args))
-                c <- importType sc env ty
+                let tuple = tNestedTuple (map (tNestedTuple . map snd) argss)
+                c <- importType sc env (if null argss then ty else C.tFun tuple ty)
                 scGlobalApply sc "Prelude.uncurry" [a, b, c, f]
 
 tNestedTuple :: [C.Type] -> C.Type
