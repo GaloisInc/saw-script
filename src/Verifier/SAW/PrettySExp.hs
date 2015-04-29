@@ -22,7 +22,7 @@ import           Data.Maybe
 import qualified Data.Set as Set
 import           Data.Set (Set)
 import           Prelude hiding (foldr)
-import           Text.PrettyPrint.Leijen
+import           Text.PrettyPrint.ANSI.Leijen
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST

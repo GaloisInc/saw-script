@@ -34,7 +34,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Utils (internalError)
 

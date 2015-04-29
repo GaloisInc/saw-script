@@ -41,7 +41,7 @@ import qualified Data.Set as Set
 import Data.STRef
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context

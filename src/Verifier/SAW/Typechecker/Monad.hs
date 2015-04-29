@@ -29,7 +29,7 @@ import Control.Applicative
 import Control.Monad.ST
 import qualified Data.Map as Map
 import Data.STRef
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 

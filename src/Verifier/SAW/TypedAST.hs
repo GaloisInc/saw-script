@@ -116,15 +116,16 @@ import qualified Data.Vector as V
 import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
-import Text.PrettyPrint.Leijen hiding ((<$>))
-import qualified Text.PrettyPrint.Leijen as Leijen ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import qualified Text.PrettyPrint.ANSI.Leijen as Leijen ((<$>))
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Utils (internalError, sumBy)
 import qualified Verifier.SAW.TermNet as Net
 
-import qualified Text.PrettyPrint.Leijen as PPL
+
 
 (<<$>>) :: Doc -> Doc -> Doc
 x <<$>> y = (PPL.<$>) x y

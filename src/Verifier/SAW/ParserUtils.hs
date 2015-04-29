@@ -46,7 +46,7 @@ import System.Directory
 import System.FilePath
 import System.IO.Unsafe (unsafePerformIO)
 
-import Text.PrettyPrint.Leijen (nest)
+import Text.PrettyPrint.ANSI.Leijen (nest)
 
 import qualified Verifier.SAW.Grammar as Un
 import Verifier.SAW.SharedTerm

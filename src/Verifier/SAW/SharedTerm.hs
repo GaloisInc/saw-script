@@ -63,6 +63,8 @@ module Verifier.SAW.SharedTerm
   , scMulNat
   , scEqualNat
   , scLtNat
+  , scMinNat
+  , scMaxNat
 
   , scBool
   , scBoolType
@@ -178,7 +180,7 @@ import Data.Typeable
 import qualified Data.Vector as V
 import Data.Word
 import Prelude hiding (mapM, maximum)
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
@@ -994,6 +996,12 @@ scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
 
 scLtNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scLtNat sc x y = scGlobalApply sc "Prelude.ltNat" [x,y]
+
+scMinNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s) 
+scMinNat sc x y = scGlobalApply sc "Prelude.minNat" [x,y]
+
+scMaxNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s) 
+scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 -- Primitive operations on bitvectors
 

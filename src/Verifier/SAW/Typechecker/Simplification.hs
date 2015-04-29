@@ -35,7 +35,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Data.Vector (Vector)
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.Prelude.Constants
