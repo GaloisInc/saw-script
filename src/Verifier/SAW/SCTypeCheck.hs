@@ -87,7 +87,7 @@ prettyTCError e =
 scTypeCheckError :: forall s. SharedContext s -> SharedTerm s
                  -> IO (SharedTerm s)
 scTypeCheckError sc t0 =
-  either (error . unlines . prettyTCError) id <$> scTypeCheck sc t0
+  either (fail . unlines . prettyTCError) return =<< scTypeCheck sc t0
 
 -- | This version of the type checking function makes sure that the
 -- entire term is well-formed, and that all internal type annotations
