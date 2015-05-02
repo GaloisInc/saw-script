@@ -644,6 +644,7 @@ kindFromType (VTupleType tys) =
   foldr1 combineKind (map kindFromType tys)
     where combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
           combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
+kindFromType (VRecordType m) = kindFromType (VTupleType (Map.elems m))
 kindFromType ty = error $ "Unsupported type: " ++ show ty
 
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue

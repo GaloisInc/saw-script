@@ -88,7 +88,7 @@ instance Show e => Show (Value m b w e) where
       VTupleType vs  -> showString "#" .
                         showParen True
                         (foldr (.) id (intersperse (showString ",") (map shows vs)))
-      VRecordType _  -> error "unimplemented: show VRecordType"
+      VRecordType _  -> showString "<<record type>>"
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
