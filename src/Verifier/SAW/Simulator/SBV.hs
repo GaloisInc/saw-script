@@ -409,7 +409,7 @@ bvRotateLOp =
   strictFun $ \xs -> return $
   wordFun $ \milv ->
     case (milv, xs) of
-      (Nothing, xv) -> return xv
+      (Nothing, xv) -> return xv -- FIXME: this case should be an error
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
       (Just ilv, VWord xlv) -> return $ vWord (svRotateLeft xlv ilv)
       _ -> error $ "rotateLOp: " ++ show xs
@@ -423,7 +423,7 @@ bvRotateROp =
   strictFun $ \xs -> return $
   wordFun $ \milv -> do
     case (milv, xs) of
-      (Nothing, xv) -> return xv
+      (Nothing, xv) -> return xv -- FIXME: this case should be an error
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
       (Just ilv, VWord xlv) -> return $ vWord (svRotateRight xlv ilv)
       _ -> error $ "rotateROp: " ++ show xs
@@ -437,11 +437,10 @@ bvShiftLOp =
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \milv -> do
-    case (milv, xs) of
-      (Nothing, xv) -> return xv
-      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
-      (Just ilv, VWord xlv) -> return $ vWord (svShiftLeft xlv ilv)
-      _ -> fail $ "bvShiftROp: " ++ show xs
+    let xv = toVector xs
+    case milv of
+      Just ilv -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
+      Nothing -> fail $ "bvShiftLOp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: SValue
@@ -452,11 +451,10 @@ bvShiftROp =
   VFun $ \x -> return $
   strictFun $ \xs -> return $
   wordFun $ \milv -> do
-    case (milv, xs) of
-      (Nothing, xv) -> return xv
-      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
-      (Just ilv, VWord xlv) -> return $ vWord (svShiftRight xlv ilv)
-      _ -> fail $ "bvShiftROp: " ++ show xs
+    let xv = toVector xs
+    case milv of
+      Just ilv -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
+      Nothing -> fail $ "bvShiftROp: " ++ show xs
 
 ------------------------------------------------------------
 -- Stream operations
