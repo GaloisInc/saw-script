@@ -151,13 +151,14 @@ binRel op =
 shiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
         -> (LitVector l -> Nat -> LitVector l)
         -> BValue l
-shiftOp _bvOp natOp =
+shiftOp bvOp natOp =
   constFun $
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VNat n           -> return (vWord (natOp x (fromInteger n)))
-      _                -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
+      VNat n   -> return (vWord (natOp x (fromInteger n)))
+      VToNat v -> fmap vWord (bvOp x =<< toWord v)
+      _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
 ------------------------------------------------------------
 
