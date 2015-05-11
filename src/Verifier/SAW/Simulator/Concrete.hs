@@ -257,7 +257,7 @@ constMap = Map.fromList
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
   , ("Prelude.at", Prims.atOp bvUnpack Prim.bvAt ite)
-  , ("Prelude.upd", Prims.updOp bvUnpack ite)
+  , ("Prelude.upd", Prims.updOp bvUnpack (\x y -> return (Prim.bvEq undefined x y)) Prim.bv Prim.width ite)
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)

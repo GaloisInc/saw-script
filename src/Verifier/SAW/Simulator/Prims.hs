@@ -430,10 +430,11 @@ atOp unpack bvOp mux =
       _ -> fail $ "atOp: expected Nat, got " ++ show idx
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-updOp :: (Monad m, Show e) => (w -> V.Vector b)
+updOp :: (MonadLazy m, Show e) => (w -> V.Vector b)
+      -> (w -> w -> m b) -> (Int -> Integer -> w) -> (w -> Int)
       -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
       -> Value m b w e
-updOp unpack mux =
+updOp unpack eq lit bitsize mux =
   natFun $ \n -> return $
   constFun $
   vectorFun unpack $ \xv -> return $
@@ -441,9 +442,13 @@ updOp unpack mux =
   VFun $ \y ->
     case idx of
       VNat i -> return (VVector (xv V.// [(fromIntegral i, y)]))
+      VToNat (VWord w) -> do
+        let f i = do b <- eq w (lit (bitsize w) (toInteger i))
+                     delay (mux b (force y) (force (xv V.! i)))
+        yv <- V.generateM (V.length xv) f
+        return (VVector yv)
       VToNat val -> do
         let update i = return (VVector (xv V.// [(i, y)]))
         iv <- toBits unpack val
         selectV mux (fromIntegral n - 1) update iv
       _ -> fail $ "updOp: expected Nat, got " ++ show idx
--- ^ TODO: Instead of a binary lookup, put an equality test in each array element

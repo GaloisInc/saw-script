@@ -122,7 +122,7 @@ constMap = Map.fromList
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
-  , ("Prelude.upd", Prims.updOp svUnpack (lazyMux muxBVal))
+  , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
   , ("Prelude.append", appendOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
