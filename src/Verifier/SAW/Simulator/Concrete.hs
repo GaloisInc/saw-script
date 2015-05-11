@@ -258,7 +258,7 @@ constMap = Map.fromList
   , ("Prelude.set", setOp)
   , ("Prelude.at", Prims.atOp bvUnpack Prim.bvAt ite)
   , ("Prelude.upd", Prims.updOp bvUnpack (\x y -> return (Prim.bvEq undefined x y)) Prim.bv Prim.width ite)
-  , ("Prelude.append", appendOp)
+  , ("Prelude.append", Prims.appendOp bvUnpack (Prim.append_bv undefined undefined undefined))
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvRotateL", bvRotateLOp)
@@ -321,21 +321,6 @@ bvUnpack x = V.generate (Prim.width x) (Prim.bvAt x)
 
 ite :: Bool -> a -> a -> a
 ite b x y = if b then x else y
-
--- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-appendOp :: CValue
-appendOp =
-  constFun $
-  constFun $
-  constFun $
-  pureFun $ \xs ->
-  pureFun $ \ys ->
-  case (xs, ys) of
-    (VVector xv, VVector yv)         -> VVector ((V.++) xv yv)
-    (VVector xv, VWord yw) -> VVector ((V.++) xv (fmap (ready . vBool) (explodeBitVector yw)))
-    (VWord xw, VVector yv) -> VVector ((V.++) (fmap (ready . vBool) (explodeBitVector xw)) yv)
-    (VWord xw, VWord yw) -> vWord (Prim.append_bv undefined undefined undefined xw yw)
-    _ -> error "Verifier.SAW.Simulator.Concrete.appendOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: CValue

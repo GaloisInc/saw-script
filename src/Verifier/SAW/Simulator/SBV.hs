@@ -123,7 +123,7 @@ constMap = Map.fromList
   , ("Prelude.set", setOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
   , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
-  , ("Prelude.append", appendOp)
+  , ("Prelude.append", Prims.appendOp svUnpack svJoin)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvRotateL", bvRotateLOp)
@@ -529,22 +529,6 @@ vZipOp =
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
   VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (toVector xs) (toVector ys))
-
--- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-appendOp :: SValue
-appendOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \ys ->
-  case (xs, ys) of
-    (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
-    (v, w) -> do
-      (Just v') <- toWord v
-      (Just w') <- toWord w
-      return $ vWord $ svJoin v' w'
-
 
 ------------------------------------------------------------
 -- Helpers for marshalling into SValues

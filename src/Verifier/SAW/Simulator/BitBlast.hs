@@ -238,7 +238,7 @@ beConstMap be = Map.fromList
   , ("Prelude.set", setOp)
   , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))
   , ("Prelude.upd", Prims.updOp vFromLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
-  , ("Prelude.append", appendOp)
+  , ("Prelude.append", Prims.appendOp vFromLV (AIG.++))
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvRotateL", bvRotateLOp be)
@@ -338,21 +338,6 @@ setOp =
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
       _ -> fail $ "Verifier.SAW.Simulator.BitBlast.setOp: expected vector, got " ++ show v
-
--- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-appendOp :: BValue l
-appendOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \ys -> return $
-  case (xs, ys) of
-    (VVector xv, VVector yv)         -> VVector ((V.++) xv yv)
-    (VVector xv, VWord ylv) -> VVector ((V.++) xv (fmap (ready . vBool) (vFromLV ylv)))
-    (VWord xlv, VVector yv) -> VVector ((V.++) (fmap (ready . vBool) (vFromLV xlv)) yv)
-    (VWord xlv, VWord ylv) -> vWord ((AIG.++) xlv ylv)
-    _ -> error "Verifier.SAW.Simulator.BitBlast.appendOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: BValue l

@@ -452,3 +452,18 @@ updOp unpack eq lit bitsize mux =
         iv <- toBits unpack val
         selectV mux (fromIntegral n - 1) update iv
       _ -> fail $ "updOp: expected Nat, got " ++ show idx
+
+-- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
+appendOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w e
+appendOp unpack app =
+  constFun $
+  constFun $
+  constFun $
+  strictFun $ \xs -> return $
+  strictFun $ \ys -> return $
+  case (xs, ys) of
+    (VVector xv, VVector yv) -> VVector ((V.++) xv yv)
+    (VVector xv, VWord yw) -> VVector ((V.++) xv (fmap (ready . VBool) (unpack yw)))
+    (VWord xw, VVector yv) -> VVector ((V.++) (fmap (ready . VBool) (unpack xw)) yv)
+    (VWord xw, VWord yw) -> VWord (app xw yw)
+    _ -> error "Verifier.SAW.Simulator.Prims.appendOp"
