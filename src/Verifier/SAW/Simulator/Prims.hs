@@ -461,9 +461,29 @@ appendOp unpack app =
   constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
+  appV unpack app xs ys
+
+appV :: Monad m => (w -> V.Vector b) -> (w -> w -> w)
+     -> Value m b w e -> Value m b w e -> Value m b w e
+appV unpack app xs ys =
   case (xs, ys) of
+    (VVector xv, _) | V.null xv -> ys
+    (_, VVector yv) | V.null yv -> xs
     (VVector xv, VVector yv) -> VVector ((V.++) xv yv)
     (VVector xv, VWord yw) -> VVector ((V.++) xv (fmap (ready . VBool) (unpack yw)))
     (VWord xw, VVector yv) -> VVector ((V.++) (fmap (ready . VBool) (unpack xw)) yv)
     (VWord xw, VWord yw) -> VWord (app xw yw)
     _ -> error "Verifier.SAW.Simulator.Prims.appendOp"
+
+-- join  :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
+joinOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w e
+joinOp unpack app =
+  constFun $
+  constFun $
+  constFun $
+  strictFun $ \x ->
+  case x of
+    VVector xv -> do
+      vv <- V.mapM force xv
+      return (V.foldr (appV unpack app) (VVector V.empty) vv)
+    _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
