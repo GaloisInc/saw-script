@@ -125,6 +125,7 @@ constMap = Map.fromList
   , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
   , ("Prelude.append", Prims.appendOp svUnpack svJoin)
   , ("Prelude.join", Prims.joinOp svUnpack svJoin)
+  , ("Prelude.split", splitOp)
   , ("Prelude.vZip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvRotateL", bvRotateLOp)
@@ -260,6 +261,22 @@ setOp =
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
       _ -> fail "setOp: expected vector"
+
+-- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+splitOp :: SValue
+splitOp =
+  Prims.natFun $ \(fromIntegral -> m) -> return $
+  Prims.natFun $ \(fromIntegral -> n) -> return $
+  constFun $
+  strictFun $ \x -> return $
+  case x of
+    VVector xv ->
+      let f i = ready (VVector (V.slice (i*n) n xv))
+      in VVector (V.generate m f)
+    VWord xw ->
+      let f i = ready (VWord (svExtract ((m-i)*n-1) ((m-i-1)*n) xw))
+      in VVector (V.generate m f)
+    _ -> error "Verifier.SAW.Simulator.SBV.splitOp"
 
 ----------------------------------------
 -- Shift operations
