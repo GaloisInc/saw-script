@@ -81,6 +81,7 @@ constMap = Map.fromList
   , ("Prelude.bvAnd" , binOp svAnd)
   , ("Prelude.bvOr"  , binOp svOr)
   , ("Prelude.bvXor" , binOp svXOr)
+  , ("Prelude.bvNot" , unOp svNot)
   , ("Prelude.bvUDiv", binOp svQuot)
   , ("Prelude.bvURem", binOp svRem)
   , ("Prelude.bvSDiv", sbinOp svQuot)
