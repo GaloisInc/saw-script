@@ -344,10 +344,9 @@ importExpr sc env expr =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
-importDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
-importDeclGroups _sc env [] = return env
+importDeclGroup :: SharedContext s -> Env s -> C.DeclGroup -> IO (Env s)
 
-importDeclGroups sc env (C.Recursive [decl] : dgs) =
+importDeclGroup sc env (C.Recursive [decl]) =
   do env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
      t' <- importSchema sc env (C.dSignature decl)
      e' <- importExpr sc env1 (C.dDefinition decl)
@@ -355,13 +354,13 @@ importDeclGroups sc env (C.Recursive [decl] : dgs) =
      rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
      let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-     importDeclGroups sc env' dgs
+     return env'
 
 -- - A group of mutually-recursive declarations -
 -- We handle this by "tupling up" all the declarations using a record and
 -- taking the fixpoint at this record type.  The desired declarations are then
 -- achieved by projecting the field names from this record.
-importDeclGroups sc env (C.Recursive decls : dgs) =
+importDeclGroup sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
      -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
      env1 <- foldM (\e d -> bindQName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
@@ -403,13 +402,16 @@ importDeclGroups sc env (C.Recursive decls : dgs) =
                     , envC = foldr (\d e -> Map.insert (C.dName d) (C.dSignature d) e) (envC env) decls
                     }
 
-     importDeclGroups sc env' dgs
+     return env'
 
-importDeclGroups sc env (C.NonRecursive decl : dgs) =
+importDeclGroup sc env (C.NonRecursive decl) =
   do rhs <- importExpr sc env (C.dDefinition decl)
      let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-     importDeclGroups sc env' dgs
+     return env'
+
+importDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
+importDeclGroups sc = foldM (importDeclGroup sc)
 
 --------------------------------------------------------------------------------
 -- List comprehensions
