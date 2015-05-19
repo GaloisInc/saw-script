@@ -344,15 +344,17 @@ importExpr sc env expr =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
-importDeclGroup :: SharedContext s -> Env s -> C.DeclGroup -> IO (Env s)
+importDeclGroup :: Bool -> SharedContext s -> Env s -> C.DeclGroup -> IO (Env s)
 
-importDeclGroup sc env (C.Recursive [decl]) =
+importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
   do env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
      t' <- importSchema sc env (C.dSignature decl)
      e' <- importExpr sc env1 (C.dDefinition decl)
-     f' <- scLambda sc (qnameToString (C.dName decl)) t' e'
+     let x = qnameToString (C.dName decl)
+     f' <- scLambda sc x t' e'
      rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
-     let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
+     rhs' <- if not isTopLevel then return rhs else scTermF sc (Constant x rhs t')
+     let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
 
@@ -360,7 +362,7 @@ importDeclGroup sc env (C.Recursive [decl]) =
 -- We handle this by "tupling up" all the declarations using a record and
 -- taking the fixpoint at this record type.  The desired declarations are then
 -- achieved by projecting the field names from this record.
-importDeclGroup sc env (C.Recursive decls) =
+importDeclGroup isTopLevel sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
      -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
      env1 <- foldM (\e d -> bindQName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
@@ -398,20 +400,30 @@ importDeclGroup sc env (C.Recursive decls) =
      -- finally, build projections from the fixed record to shove into the environment
      rhss <- mapM (\d -> scRecordSelect sc rhs (qnameToString (C.dName d))) decls
 
-     let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss decls
+     -- if toplevel, then wrap each binding with a Constant constructor
+     let wrap d r t = scTermF sc (Constant (qnameToString (C.dName d)) r t)
+     rhss' <- if isTopLevel then sequence (zipWith3 wrap decls rhss ts) else return rhss
+
+     let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss' decls
                     , envC = foldr (\d e -> Map.insert (C.dName d) (C.dSignature d) e) (envC env) decls
                     }
 
      return env'
 
-importDeclGroup sc env (C.NonRecursive decl) =
+importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
   do rhs <- importExpr sc env (C.dDefinition decl)
-     let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
+     rhs' <- if not isTopLevel then return rhs else do
+       t <- importSchema sc env (C.dSignature decl)
+       scTermF sc (Constant (qnameToString (C.dName decl)) rhs t)
+     let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
 
 importDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
-importDeclGroups sc = foldM (importDeclGroup sc)
+importDeclGroups sc = foldM (importDeclGroup False sc)
+
+importTopLevelDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
+importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
 
 --------------------------------------------------------------------------------
 -- List comprehensions
