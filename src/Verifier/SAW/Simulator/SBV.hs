@@ -42,7 +42,7 @@ import Verifier.SAW.Prim hiding (BV, ite, bv)
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, Ident(..), Module)
+import Verifier.SAW.TypedAST (FieldName, Module)
 
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 
@@ -56,8 +56,8 @@ instance Show SbvExtra where
   show (SStream _ _) = "<SStream>"
 
 -- no, we need shape information
-uninterpreted :: Ident -> SValue -> Maybe (IO SValue)
-uninterpreted ident t = Just $ parseUninterpreted [] (identName ident) t
+uninterpreted :: String -> SValue -> Maybe (IO SValue)
+uninterpreted nm t = Just $ parseUninterpreted [] nm t
 
 -- actually...
 -- rewriteSharedTerm

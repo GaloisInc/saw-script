@@ -519,7 +519,7 @@ data TermF e
       -- | Local variables are referenced by deBruijn index.
       -- The type of the var is in the context of when the variable was bound.
     | LocalVar !DeBruijnIndex
-    | Constant !Ident !e !e  -- ^ An abstract constant packaged with its definition and type.
+    | Constant String !e !e  -- ^ An abstract constant packaged with its definition and type.
   deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
@@ -530,7 +530,7 @@ class Termlike t where
 termToPat :: Termlike t => t -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant d _ _            -> Net.Atom (identName d)
+      Constant d _ _            -> Net.Atom d
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
@@ -825,7 +825,7 @@ ppTermF' _pp lcls _p (LocalVar i)
   where d = lookupDoc lcls i
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
-ppTermF' _ _ _ (Constant i _ _) = pure $ ppIdent i
+ppTermF' _ _ _ (Constant i _ _) = pure $ text i
 
 ppTermDepth :: forall t. Termlike t => Int -> t -> Doc
 ppTermDepth d0 = pp d0 emptyLocalVarDoc PrecNone

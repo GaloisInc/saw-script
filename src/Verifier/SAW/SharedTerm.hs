@@ -1235,40 +1235,40 @@ scAbstractExts sc exts x =
       scLambdaList sc lams =<< scInstantiateExt sc m x
 
 
-scUnfoldConstants :: forall s. SharedContext s -> [Ident] -> SharedTerm s -> IO (SharedTerm s)
-scUnfoldConstants sc ids t0 = do
+scUnfoldConstants :: forall s. SharedContext s -> [String] -> SharedTerm s -> IO (SharedTerm s)
+scUnfoldConstants sc names t0 = do
   cache <- newCache
   let go :: SharedTerm s -> IO (SharedTerm s)
       go t@(Unshared tf) =
         case tf of
-          Constant ident rhs _
-            | ident `elem` ids -> go rhs
-            | otherwise        -> return t
+          Constant name rhs _
+            | name `elem` names -> go rhs
+            | otherwise         -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp idx tf) = useCache cache idx $
         case tf of
-          Constant ident rhs _
-            | ident `elem` ids -> go rhs
-            | otherwise        -> return t
+          Constant name rhs _
+            | name `elem` names -> go rhs
+            | otherwise         -> return t
           _ -> scTermF sc =<< traverse go tf
   go t0
 
 -- | TODO: test whether this version is slower or faster.
-scUnfoldConstants' :: forall s. SharedContext s -> [Ident] -> SharedTerm s -> IO (SharedTerm s)
-scUnfoldConstants' sc ids t0 = do
+scUnfoldConstants' :: forall s. SharedContext s -> [String] -> SharedTerm s -> IO (SharedTerm s)
+scUnfoldConstants' sc names t0 = do
   tcache <- newCacheMap' Map.empty
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s)
       go t@(Unshared tf) =
         case tf of
-          Constant ident rhs _
-            | ident `elem` ids -> taint (go rhs)
-            | otherwise        -> pure t
+          Constant name rhs _
+            | name `elem` names -> taint (go rhs)
+            | otherwise         -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp idx tf) =
         case tf of
-          Constant ident rhs _
-            | ident `elem` ids -> taint (go rhs)
-            | otherwise        -> pure t
+          Constant name rhs _
+            | name `elem` names -> taint (go rhs)
+            | otherwise         -> pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)

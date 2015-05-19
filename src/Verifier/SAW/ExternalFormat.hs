@@ -49,7 +49,7 @@ scWriteExternal t0 =
         Pi s t e       -> unwords ["Pi", s, show t, show e]
         Let ds e       -> unwords ["Def", writeDefs ds, show e]
         LocalVar i     -> unwords ["Var", show i]
-        Constant i e _ -> unwords ["Constant", show i, show e]
+        Constant x e _ -> unwords ["Constant", x, show e]
         FTermF ftf     ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
@@ -97,7 +97,7 @@ scReadExternal sc input =
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i]          -> LocalVar (read i)
-        ["Constant", x, e]  -> Constant (parseIdent x) (read e) undefined
+        ["Constant", x, e]  -> Constant x (read e) undefined
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
         ("TupleT" : es)     -> FTermF (TupleType (map read es))

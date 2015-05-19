@@ -51,7 +51,7 @@ data SimulatorConfig m b w e =
   SimulatorConfig
   { simGlobal :: Ident -> m (Value m b w e)
   , simExtCns :: VarIndex -> String -> Value m b w e -> m (Value m b w e)
-  , simUninterpreted :: Ident -> Value m b w e -> Maybe (m (Value m b w e))
+  , simUninterpreted :: String -> Value m b w e -> Maybe (m (Value m b w e))
   }
 
 ------------------------------------------------------------
@@ -199,12 +199,12 @@ evalTypedDef :: (MonadLazy m, MonadFix m, Show e) =>
                 SimulatorConfig m b w e -> TypedDef -> m (Value m b w e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
-{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value Id b w e) -> (Ident -> Value Id b w e -> Maybe (Id (Value Id b w e))) -> Id (SimulatorConfig Id b w e) #-}
-{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value IO b w e) -> (Ident -> Value IO b w e -> Maybe (IO (Value IO b w e))) -> IO (SimulatorConfig IO b w e) #-}
+{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value Id b w e) -> (String -> Value Id b w e -> Maybe (Id (Value Id b w e))) -> Id (SimulatorConfig Id b w e) #-}
+{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value IO b w e) -> (String -> Value IO b w e -> Maybe (IO (Value IO b w e))) -> IO (SimulatorConfig IO b w e) #-}
 
 evalGlobal :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
               Module -> Map Ident (Value m b w e) ->
-              (Ident -> Value m b w e -> Maybe (m (Value m b w e))) ->
+              (String -> Value m b w e -> Maybe (m (Value m b w e))) ->
               m (SimulatorConfig m b w e)
 evalGlobal m0 prims uninterpreted =
   mfix $ \cfg -> do
