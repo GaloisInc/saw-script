@@ -24,10 +24,11 @@ import Control.Lens ((<&>))
 import qualified Control.Arrow as A
 
 import Data.Bits
-import Data.Map (Map)
 import Data.IORef
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
+import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
@@ -54,13 +55,6 @@ data SbvExtra =
 
 instance Show SbvExtra where
   show (SStream _ _) = "<SStream>"
-
--- no, we need shape information
-uninterpreted :: String -> SValue -> Maybe (IO SValue)
-uninterpreted nm t = Just $ parseUninterpreted [] nm t
-
--- actually...
--- rewriteSharedTerm
 
 constMap :: Map Ident SValue
 constMap = Map.fromList
@@ -624,8 +618,14 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 ------------------------------------------------------------
 -- External interface
 
-sbvSolveBasic :: Module -> SharedTerm s -> IO SValue
-sbvSolveBasic m t = do
+-- | Abstract constants with names in the list 'unints' are kept as
+-- uninterpreted constants; all others are unfolded.
+sbvSolveBasic :: Module -> [String] -> SharedTerm s -> IO SValue
+sbvSolveBasic m unints t = do
+  let unintSet = Set.fromList unints
+  let uninterpreted nm ty
+        | Set.member nm unintSet = Just $ parseUninterpreted [] nm ty
+        | otherwise              = Nothing
   cfg <- Sim.evalGlobal m constMap uninterpreted
   let cfg' = cfg { Sim.simExtCns = const (parseUninterpreted []) }
   Sim.evalSharedTerm cfg' t
@@ -690,12 +690,12 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-sbvSolve :: SharedContext s -> SharedTerm s -> IO ([Labeler], Symbolic SBool)
-sbvSolve sc t = do
+sbvSolve :: SharedContext s -> [String] -> SharedTerm s -> IO ([Labeler], Symbolic SBool)
+sbvSolve sc unints t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
   shapes <- traverse (asFiniteType sc) argTs
-  bval <- sbvSolveBasic (scModule sc) t
+  bval <- sbvSolveBasic (scModule sc) unints t
   let (labels, vars) = flip evalState 0 $ unzip <$> traverse newVars shapes
   let prd = do
               bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
@@ -769,12 +769,12 @@ argTypes sc t = do
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> argTypes sc t2
     _                            -> return []
 
-sbvCodeGen :: SharedContext s -> Maybe FilePath -> String -> SharedTerm s -> IO ()
-sbvCodeGen sc path fname t = do
+sbvCodeGen :: SharedContext s -> [String] -> Maybe FilePath -> String -> SharedTerm s -> IO ()
+sbvCodeGen sc unints path fname t = do
   ty <- scTypeOf sc t
   argTs <- argTypes sc ty
   shapes <- traverse (asFiniteType sc) argTs
-  bval <- sbvSolveBasic (scModule sc) t
+  bval <- sbvSolveBasic (scModule sc) unints t
   let vars = evalState (traverse newCodeGenVars shapes) 0
   let codegen = do
         args <- traverse (fmap ready) vars
