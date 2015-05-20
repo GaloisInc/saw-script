@@ -12,7 +12,7 @@ import Control.Applicative
 import Control.Lens
 import Control.Monad.Identity
 import Data.Bits
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.TypedAST
