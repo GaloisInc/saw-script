@@ -1,4 +1,0 @@
-foo : TopLevel Int;
-print : Int -> TopLevel ();
-
-main = do { x <- foo; print x; };
