@@ -49,6 +49,7 @@ module Verifier.SAW.TypedAST
  , Ctor(..)
  , GenericDef(..)
  , Def
+ , DefQualifier(..)
  , LocalDef
  , localVarNames
  , DefEqn(..)
@@ -288,9 +289,18 @@ patBoundVars p =
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
+data DefQualifier
+  = NoQualifier
+  | PrimQualifier
+  | AxiomQualifier
+ deriving (Eq,Ord,Show,Generic)
+
+instance Hashable DefQualifier -- automatically derived
+
 -- | A Definition contains an identifier, the type of the definition, and a list of equations.
 data GenericDef n e =
     Def { defIdent :: n
+        , defQualifier :: DefQualifier
         , defType :: e
         , defEqs :: [DefEqn e]
         }
@@ -302,7 +312,7 @@ type LocalDef = GenericDef String
 instance (Hashable n, Hashable e) => Hashable (GenericDef n e) -- automatically derived
 
 localVarNames :: LocalDef e -> [String]
-localVarNames (Def nm _ _) = [nm]
+localVarNames (Def nm _ _ _) = [nm]
 
 
 data LocalVarDoc = LVD { docModuleName :: Map ModuleName String
@@ -563,7 +573,7 @@ ppLocalDef :: Applicative f
            -> LocalVarDoc -- ^ Context inside let
            -> LocalDef e
            -> f Doc
-ppLocalDef pp lcls lcls' (Def nm tp eqs) =
+ppLocalDef pp lcls lcls' (Def nm _qual tp eqs) =
     ppd <$> (pptc <$> pp lcls PrecLambda tp)
         <*> traverse (ppDefEqnF pp lcls' sym) (reverse eqs)
   where sym = text nm
@@ -694,7 +704,7 @@ freesTermF tf =
           bitwiseOrOf (folded . folded) lcls' .|. rhs `shiftR` n
         where n = length lcls
               freesLocalDef :: LocalDef BitSet -> [BitSet]
-              freesLocalDef (Def _ tp eqs) = 
+              freesLocalDef (Def _ _ tp eqs) = 
                 tp : fmap ((`shiftR` n) . freesDefEqn) eqs
               lcls' = freesLocalDef <$> lcls
       LocalVar i -> bit i
@@ -733,7 +743,7 @@ instantiateVars f initialLevel = go initialLevel
             Pi i lhs rhs    -> Term $ Pi i (go l lhs) (go (l+1) rhs)
             Let defs r      -> Term $ Let (procDef <$> defs) (go l' r)
               where l' = l + length defs
-                    procDef (Def sym tp eqs) = Def sym tp' eqs'
+                    procDef (Def sym qual tp eqs) = Def sym qual tp' eqs'
                       where tp' = go l tp
                             eqs' = procEq <$> eqs
                     procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)

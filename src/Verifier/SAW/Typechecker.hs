@@ -82,7 +82,7 @@ groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
                 fn (PosPair _ nm,tp) = LocalFnDefGen nm tp eqs
                   where eqs = fromMaybe [] $ Map.lookup nm eqMap
         groupDecl :: GroupLocalDeclsState -> Un.Decl -> GroupLocalDeclsState
-        groupDecl (tpMap,eqMap) (Un.TypeDecl idl tp) = (tpMap',eqMap)
+        groupDecl (tpMap,eqMap) (Un.TypeDecl _ idl tp) = (tpMap',eqMap)
           where tpMap' = foldr (\k -> Map.insert (val k) (k,tp)) tpMap idl
         groupDecl (tpMap,eqMap) (Un.TermDef pnm pats rhs) = (tpMap, eqMap')
           where eq = DefEqnGen (snd <$> pats) rhs
@@ -387,9 +387,10 @@ evalDataType (DataTypeGen n tp ctp) =
                 <*> traverse (traverse topEval) ctp
 
 evalDef :: TCRefDef s -> TC s TCDef
-evalDef (DefGen nm tpr elr) =
-  DefGen nm <$> (Identity <$> topEval tpr)
-            <*> (Identity <$> topEval elr)
+evalDef (DefGen nm qual tpr elr) =
+  DefGen nm qual
+     <$> (Identity <$> topEval tpr)
+     <*> (Identity <$> topEval elr)
 
 data CompletionContext
   = CCGlobal Module
@@ -407,11 +408,16 @@ completeDataType cc (DataTypeGen dt tp cl) =
 completeDef :: CompletionContext
             -> TCDef
             -> TypedDef
-completeDef cc (DefGen nm tp el) = def
+completeDef cc (DefGen nm qual tp el) = def
   where def = Def { defIdent = nm
                   , defType = completeTerm cc (runIdentity tp)
+                  , defQualifier = qual'
                   , defEqs = completeDefEqn cc <$> (runIdentity el)
                   }
+        qual' = case qual of
+                    Un.NoQualifier -> NoQualifier
+                    Un.PrimitiveQualifier -> PrimQualifier
+                    Un.AxiomQualifier -> AxiomQualifier
 
 completeDefEqn :: CompletionContext -> TCDefEqn -> TypedDefEqn
 completeDefEqn cc (DefEqnGen pats rhs) = eqn
@@ -469,7 +475,7 @@ completeTerm cc (TCLet lcls t) =
             $ view localDefType <$> lcls'
         -- Complete equations in new context.
         completeLocal (LocalFnDefGen nm tp eqns) =
-          Def nm tp (completeDefEqn cc' <$> eqns)
+          Def nm NoQualifier tp (completeDefEqn cc' <$> eqns)
 completeTerm _ (TCVar i) = Term $ LocalVar i
 completeTerm _ (TCLocalDef i) = Term $ LocalVar i
 
@@ -577,7 +583,7 @@ liftLocalDefs tc0 lcls = do
     traverseOf_ folded ($ tc) pending
     let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> topEval r
     (,tc) <$> traverse mkDef tps
-  where tcLclType (Def nm tp0 eqs) = do
+  where tcLclType (Def nm _ tp0 eqs) = do
           tp <- liftTCTerm tc0 tp0
           r <- newRef nm
           let pendingFn tc = do
@@ -675,18 +681,29 @@ parseDecl :: Map String [UnDefEqn] -> Un.Decl -> Initializer s ()
 parseDecl eqnMap d = do
   mnm <- initModuleName
   case d of
-    Un.TypeDecl idl utp -> do
+    Un.TypeDecl qual idl utp -> do
       let id1:_ = idl
       rtp <- addPending (val id1) (\ uc -> fst <$> tcType uc utp)
       forOf_ folded idl $ \(PosPair p nm) -> do
         let ueqs = fromMaybe [] $ Map.lookup nm eqnMap
+        -- | Check to ensure that primitive and axiom constants have no defining equations
+        --   and that every unqualified identifier has a definition
+        case qual of
+           Un.NoQualifier | null ueqs -> 
+               lift $ tcFail p $ unwords [nm, "has no defining equations"]
+           Un.PrimitiveQualifier | not (null ueqs) ->
+               lift $ tcFail p $ unwords [nm, "declared primitive, but has defining equations"]
+           Un.AxiomQualifier | not (null ueqs) ->
+               lift $ tcFail p $ unwords [nm, "declared an axiom, but has defining equations"]
+           _ -> return ()
         eqs <- addPending ("Equations for " ++ nm) $ \tc -> do
           tp <- eval p rtp
           eqs <- traverse (tcEqn tc tp) ueqs
           return eqs
-        let def = DefGen (mkIdent mnm nm) rtp eqs
+        let def = DefGen (mkIdent mnm nm) qual rtp eqs
         isCtx  %= insertDef [Nothing] True (LocalLoc p) def
         isDefs %= (def:)
+
     Un.DataDecl psym utp ucl -> do
       let dti = mkIdent mnm (val psym)
       dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
@@ -732,9 +749,9 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
         eqr <- addPending inm $ \tc ->
           traverse (liftEqn tc) (defEqs def)
         let addInModule = includeNameInModule mcns (defIdent def)
-        isCtx %= insertDef mnml addInModule loc (DefGen (defIdent def) tpr eqr)
+        isCtx %= insertDef mnml addInModule loc (DefGen (defIdent def) Un.NoQualifier tpr eqr)
 
 _checkDef :: TCDef -> Maybe ()
-_checkDef (DefGen _ (Identity tp) (Identity eqns)) = do
+_checkDef (DefGen _ _ (Identity tp) (Identity eqns)) = do
   checkTCTerm 0 tp
   traverseOf_ folded (checkDefEqn 0) eqns

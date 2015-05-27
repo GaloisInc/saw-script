@@ -204,7 +204,11 @@ data DataTypeGen t c = DataTypeGen { dtgName :: Ident
 type TCDataTypeGen r = DataTypeGen (r TCDTType) (Ctor Ident (r TCCtorType))
 type TCCtorGen r = Ctor Ident (r TCCtorType)
 
-data TCDefGen r = DefGen !Ident !(r TCTerm) !(r [TCDefEqn])
+data TCDefGen r
+  = DefGen !Ident Un.DeclQualifier !(r TCTerm) !(r [TCDefEqn])
+
+defGenIdent :: TCDefGen r -> Ident
+defGenIdent (DefGen i _ _ _) = i
 
 type TCRefDataType s = TCDataTypeGen (TCRef s)
 type TCRefCtor s = TCCtorGen (TCRef s)
@@ -384,7 +388,7 @@ globalBindingDesc gb =
   case gb of
     DataTypeBinding l dt -> (l, dtgName dt)
     CtorBinding l _ c -> (l, ctorName c)
-    DefBinding l (DefGen nm _ _) -> (l, nm)
+    DefBinding l def -> (l, defGenIdent def)
 
 type GlobalContextMap s = Map Un.Ident [GlobalBinding (TCRef s)]
 
@@ -435,7 +439,7 @@ insertDef :: [Maybe ModuleName]
           -> TCRefDef s
           -> GlobalContext s
           -> GlobalContext s
-insertDef mnml vis loc d@(DefGen nm _ eqs) gc =
+insertDef mnml vis loc d@(DefGen nm _ _ eqs) gc =
     gc { gcMap  = insertAllBindings bindings (gcMap gc)
        , gcEqns = Map.insert nm eqs (gcEqns gc)
        }
@@ -582,7 +586,7 @@ resolveIdent tc0 (PosPair p ident) = go tc0
                  pure $ TypedValue (TCF (CtorApp c []))
                                    (TCF (DataTypeApp (dtgName dt) args))
                 FPPi pat tp next -> pure $ PartialCtor (dtgName dt) c [] pat tp next
-            DefBinding _ (DefGen gi rtp _) ->
+            DefBinding _ (DefGen gi _ rtp _) ->
               TypedValue (TCF (GlobalDef gi)) <$> eval p rtp
 
 -- | Return names in context.

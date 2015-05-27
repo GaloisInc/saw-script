@@ -72,7 +72,7 @@ $cntrl     = [$large \@\[\\\]\^\_]
 @punct = "#" | "," | "->" | "." | ".." | ";" | "::" | "=" | "?" | "??" | "???"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}"
 @keywords = "as" | "data" | "hiding" | "import" | "in" | "let" | "module"
-          | "qualified" | "sort" | "where"
+          | "qualified" | "sort" | "where" | "primitive" | "axiom"
 @key = @punct | @keywords
 
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hex)

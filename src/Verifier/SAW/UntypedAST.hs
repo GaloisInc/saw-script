@@ -15,6 +15,7 @@ module Verifier.SAW.UntypedAST
   , ModuleName, mkModuleName
   , Import(..)
   , Decl(..)
+  , DeclQualifier(..)
   , ImportConstraint(..)
   , ImportName(..)
   , CtorDecl(..)
@@ -193,9 +194,15 @@ data Import = Import Bool
                      (Maybe (PosPair String))
                      (Maybe ImportConstraint)
 
+data DeclQualifier
+  = NoQualifier
+  | PrimitiveQualifier
+  | AxiomQualifier
+ deriving (Eq, Show)
+
 -- Data declarations introduce an operator for each constructor, and an operator for the type.
 data Decl
-   = TypeDecl [(PosPair String)] Term
+   = TypeDecl DeclQualifier [(PosPair String)] Term
    | DataDecl (PosPair String) Term [CtorDecl]
    | TermDef (PosPair String) [(ParamType, Pat)] Term
   deriving (Show)

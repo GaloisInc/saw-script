@@ -105,7 +105,7 @@ matchThunks (p : ps) (x : xs) = do
 -- parameterized by an evaluator for right-hand sides.
 evalDef :: forall m b w e n t. (Monad m, Show n) =>
            (t -> OpenValue m b w e) -> GenericDef n t -> m (Value m b w e)
-evalDef rec (Def ident _ eqns) = vFuns [] arity
+evalDef rec (Def ident NoQualifier _ eqns) = vFuns [] arity
   where
     arity :: Int
     arity = lengthDefEqn (head eqns)
@@ -127,6 +127,10 @@ evalDef rec (Def ident _ eqns) = vFuns [] arity
          case minst of
            Nothing -> return Nothing
            Just inst -> let env = reverse (Map.elems inst) in liftM Just (rec rhs env)
+
+evalDef _ (Def ident PrimQualifier _ _) = fail $ unwords ["attempted to evaluate primitive", show ident]
+evalDef _ (Def ident AxiomQualifier _ _) = fail $ unwords ["attempted to evaluate axiom", show ident]
+
 
 ------------------------------------------------------------
 -- Evaluation of terms

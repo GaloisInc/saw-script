@@ -74,6 +74,8 @@ import Verifier.SAW.Lexer
   'qualified' { PosPair _ (TKey "qualified") }
   'sort'      { PosPair _ (TKey "sort") }
   'where'     { PosPair _ (TKey "where") }
+  'axiom'     { PosPair _ (TKey "axiom") }
+  'primitive' { PosPair _ (TKey "primitive") }
   var      { PosPair _ (TVar _) }
   unvar    { PosPair _ (TUnVar _) }
   con      { PosPair _ (TCon _) }
@@ -98,7 +100,11 @@ Import : 'import' opt('qualified') ModuleName opt(AsName) opt(ModuleImports) ';'
 
 SAWDecl :: { Decl }
 SAWDecl : 'data' Con '::' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
-        | SAWEqDecl { $1 }
+          | 'primitive' DeclLhs '::' LTerm ';'
+               {% mkTypeDecl PrimitiveQualifier $2 $4 }
+          | 'axiom' DeclLhs '::' LTerm ';'
+               {% mkTypeDecl AxiomQualifier $2 $4 }
+          | SAWEqDecl { $1 }
 
 AsName :: { PosPair String }
 AsName : 'as' Con { $2 }
@@ -116,7 +122,7 @@ ImportName : Symbol                         { SingleImport $1 }
            | Con '(' sepBy(Symbol, ',') ')' { SelectiveImport $1 $3 }
 
 SAWEqDecl :: { Decl }
-SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl $1 $3 }
+SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl NoQualifier $1 $3 }
           | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
 
 DeclLhs :: { DeclLhs }
@@ -483,8 +489,8 @@ asAppList = \x -> impl x []
 
 type DeclLhs = (PosPair String, [(ParamType, Pat)])
 
-mkTypeDecl :: DeclLhs -> Term -> Parser Decl
-mkTypeDecl (op,args) rhs = fmap (\l -> TypeDecl (op:l) rhs) $ filterArgs args []
+mkTypeDecl :: DeclQualifier -> DeclLhs -> Term -> Parser Decl
+mkTypeDecl qual (op,args) rhs = fmap (\l -> TypeDecl qual (op:l) rhs) $ filterArgs args []
   where filterArgs ((NormalParam,PSimple (PVar (PosPair p i))):l) r =
           filterArgs l (PosPair p i:r)
         filterArgs ((NormalParam,e):l) r = do

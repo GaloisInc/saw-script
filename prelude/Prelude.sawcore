@@ -51,7 +51,7 @@ sym :: (a :: sort 1) -> (x y :: a) -> Eq a x y -> Eq a y x;
 sym _ _ _ (Refl a x) = Refl a x;
 
 -- Unchecked assertion that two types are equal.
-unsafeAssert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
+axiom unsafeAssert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
 
 coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
 coerce _ _ (Refl _ _) x = x;
@@ -186,9 +186,9 @@ ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b (ite 
 ite_nest2 a True x y z = Refl a x;
 ite_nest2 a False x y z = Refl a z;
 
-ite_bit :: (b :: Bool) -> (c :: Bool) -> (d :: Bool) -> Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
-ite_bit_false_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b False c) (and (not b) c);
-ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b True c) (or b c);
+axiom ite_bit :: (b :: Bool) -> (c :: Bool) -> (d :: Bool) -> Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
+axiom ite_bit_false_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b False c) (and (not b) c);
+axiom ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b True c) (or b c);
 
 ite_fold_not :: (b :: Bool) -> Eq Bool (ite Bool b False True) (not b);
 ite_fold_not True = Refl Bool False;
@@ -204,10 +204,10 @@ ite_true a x y = Refl a x;
 ite_false :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a False x y) y;
 ite_false a x y = Refl a y;
 
-ite_eq_cong_1 :: (a :: sort 0)
+axiom ite_eq_cong_1 :: (a :: sort 0)
               -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
               -> Eq Bool (eq a (ite a b x y) z) (ite Bool b (eq a x z) (eq a y z));
-ite_eq_cong_2 :: (a :: sort 0)
+axiom ite_eq_cong_2 :: (a :: sort 0)
               -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
               -> Eq Bool (eq a z (ite a b x y)) (ite Bool b (eq a z x) (eq a z y));
 
@@ -230,34 +230,34 @@ and_triv2 False = Refl Bool False;
 --------------------------------------------------------------------------------
 -- Boolean equality
 
-eq :: (a :: sort 0) -> a -> a -> Bool;
+primitive eq :: (a :: sort 0) -> a -> a -> Bool;
 
-eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
+axiom eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
 
-eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
+axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 --------------------------------------------------------------------------------
 -- Overloaded operations
 
 -- | Implemented as primitive;
 -- Only defined for boolean, vector, stream, tuple, record, and function types
-zero :: (a :: sort 0) -> a;
+primitive zero :: (a :: sort 0) -> a;
 
 -- | Implemented as primitive;
 -- Only defined for boolean, vector, stream, tuple, record, and function types
-unary :: ((n :: Nat) -> bitvector n -> bitvector n)
-      -> (Bool -> Bool)
-      -> (a :: sort 0) -> a -> a;
+primitive unary :: ((n :: Nat) -> bitvector n -> bitvector n)
+                -> (Bool -> Bool)
+                -> (a :: sort 0) -> a -> a;
 
 -- | Implemented as primitive;
 -- Only defined for boolean, vector, stream, tuple, record, and function types
-binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
-       -> (Bool -> Bool -> Bool)
-       -> (a :: sort 0) -> a -> a -> a;
+primitive binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
+                 -> (Bool -> Bool -> Bool)
+                 -> (a :: sort 0) -> a -> a -> a;
 
 -- | Implemented as primitive;
 -- Only defined for boolean, vector, tuple, and record types
-comparison :: (b :: sort 0)
+primitive comparison :: (b :: sort 0)
            -> ((n :: Nat) -> bitvector n -> bitvector n -> b -> b)
            -> (Bool -> Bool -> b -> b)
            -> b
@@ -278,11 +278,11 @@ cmpBoolLt x y k = or (and (not x) y) (cmpBoolEq x y k);
 lt :: (a :: sort 0) -> a -> a -> Bool;
 lt = comparison Bool cmpBvLt cmpBoolLt False;
 
-eq_binary_and :: Eq (Bool -> Bool -> Bool) (binary bvAnd and Bool) and;
-eq_binary_or :: Eq (Bool -> Bool -> Bool) (binary bvOr or Bool) or;
-eq_unary_not :: Eq (Bool -> Bool) (unary bvNot not Bool) not;
+axiom eq_binary_and :: Eq (Bool -> Bool -> Bool) (binary bvAnd and Bool) and;
+axiom eq_binary_or :: Eq (Bool -> Bool -> Bool) (binary bvOr or Bool) or;
+axiom eq_unary_not :: Eq (Bool -> Bool) (unary bvNot not Bool) not;
 
-eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
+axiom eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
                              (lt (Vec n Bool))
                              (bvult n);
 
@@ -383,15 +383,15 @@ data NatDiff :: Nat -> sort 0 where {
     DiffResult :: (d p :: Nat) -> NatDiff (addNat d p);
   }
 
-natSub :: (n :: Nat) -> Nat -> NatDiff n;
+primitive natSub :: (n :: Nat) -> Nat -> NatDiff n;
 
 data NatOrdering :: (x y :: Nat) -> sort 0 where {
     LeNatOrd :: (x z :: Nat) -> NatOrdering x (addNat x z);
     GtNatOrd :: (x z :: Nat) -> NatOrdering (addNat x (Succ z)) x;
   }
 
-natOrderingCong1 :: (x y z :: Nat) -> eqNat x y -> NatOrdering x z -> NatOrdering y z;
-natOrderingCong2 :: (x y z :: Nat) -> eqNat x y -> NatOrdering z x -> NatOrdering z y;
+axiom natOrderingCong1 :: (x y z :: Nat) -> eqNat x y -> NatOrdering x z -> NatOrdering y z;
+axiom natOrderingCong2 :: (x y z :: Nat) -> eqNat x y -> NatOrdering z x -> NatOrdering z y;
 
 succNatOrdering :: (x y :: Nat) -> NatOrdering x y -> NatOrdering (Succ x) (Succ y);
 succNatOrdering _ _ (LeNatOrd x d) = LeNatOrd (Succ x) d;
@@ -434,10 +434,10 @@ maxNat (Succ x) Zero = Succ x;
 maxNat (Succ x) (Succ y) = Succ (maxNat x y);
 
 -- | Width(n) = 1 + floor(log_2(n))
-widthNat :: Nat -> Nat;
+primitive widthNat :: Nat -> Nat;
 
 -- | Axiom: equalNat implements *the* equality on type Nat.
-eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
+axiom eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- | Natural exponentiation
 expNat :: Nat -> Nat -> Nat;
@@ -494,7 +494,7 @@ finBack :: (n :: Nat) -> Fin n -> Nat;
 finBack _ (FinVal _ r) = r;
 
 -- | Partially-defined function satisfying `finOfNat n (finFront n i) = i`.
-finOfNat :: (n :: Nat) -> Nat -> Fin n;
+primitive finOfNat :: (n :: Nat) -> Nat -> Fin n;
 
 finSwap :: (n :: Nat) -> Fin n -> Fin n;
 finSwap _ (FinVal v r) =
@@ -506,7 +506,7 @@ finEq :: (n :: Nat) -> (i j :: Fin n) -> Bool;
 finEq n i j = equalNat (finFront n i) (finFront n j);
 
 -- | Axiom: equality on Fin values reduces to equality on first components.
-eq_Fin :: (n :: Nat) -> (i j :: Fin n)
+axiom eq_Fin :: (n :: Nat) -> (i j :: Fin n)
        -> Eq Bool (eq (Fin n) i j) (finEq n i j);
 
 -- | Return maximum finite number less than given bound if any.
@@ -594,7 +594,7 @@ natSplitFin (Succ m) (Succ n) =
   (\(k :: Nat) -> Right (Fin (Succ m)) Nat (Succ k))
   (natSplitFin m n);
 
-finProductProof :: (mv mr nv nr n :: Nat) ->
+axiom finProductProof :: (mv mr nv nr n :: Nat) ->
   Eq Nat (Succ (addNat (addNat (mulNat mv n) nv) (addNat (mulNat mr n) nr)))
          (Succ (addNat (addNat nv nr) (mulNat (addNat mv mr) n)));
 -- TODO
@@ -610,7 +610,7 @@ finProduct _ _ (FinVal mv mr) (FinVal nv nr) =
                     (addNat (mulNat mr (Succ (addNat nv nr))) nr));
 
 -- | Type 'Fin Zero' is empty.
-finZeroImpossible :: Fin Zero -> (a :: sort 0) -> a;
+axiom finZeroImpossible :: Fin Zero -> (a :: sort 0) -> a;
 
 finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
 finDivMod Zero n k = finZeroImpossible k #(Fin Zero, Fin n);
@@ -646,7 +646,7 @@ upd _ _ (ConsVec a x n xs) (Succ i) y = ConsVec a x n (upd n a xs i y);
 -- Calling 'upd' with EmptyVec is an error.
 
 -- Function for generating an array.
-generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
+primitive generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
 --TODO
 
 -- Get and set an individual element in an array.
@@ -656,7 +656,7 @@ get _ a (ConsVec _ _ _ r) (FinVal (Succ i) j) =
   get (Succ (addNat i j)) a r (FinVal i j);
 
 -- | Axiomatic rewrite rule.
-get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n) ->
+axiom get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n) ->
                 Eq e (get n e (generate n e f) i) (f i);
 
 set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
@@ -673,7 +673,7 @@ vecEq :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool)
 vecEq n a eqFn x y =
   forallFin n (\(i :: Fin n) -> eqFn (get n a x i) (get n a y i));
 
-eq_Vec :: (n :: Nat) -> (a :: sort 0)
+axiom eq_Vec :: (n :: Nat) -> (a :: sort 0)
        -> Eq (Vec n a -> Vec n a -> Bool) (eq (Vec n a)) (vecEq n a (eq a));
 
 -- | Take a prefix of a vector.
@@ -703,7 +703,7 @@ coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
 coerceVec a m n q = coerce (Vec m a) (Vec n a) (vecCong a m n q);
 
 -- | Simplify take  all elements from a vector.
-vTake0 :: (a :: sort 0)
+axiom vTake0 :: (a :: sort 0)
        -> (m :: Nat)
        -> (v :: Vec (addNat m 0) a)
        -> Eq (Vec m a)
@@ -719,7 +719,7 @@ get_vDrop :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i ::
 get_vDrop a m n v i = get_vMove a (addNat m n) n (finInc m n) v i;
 
 -- | Simplify drop 0-elements from a vector.
-vDrop0 :: (a :: sort 0)
+axiom vDrop0 :: (a :: sort 0)
        -> (n :: Nat)
        -> (v :: Vec (addNat 0 n) a)
        -> Eq (Vec n a) (vDrop a 0 n v) v;
@@ -730,7 +730,7 @@ slice :: (a :: sort 0)
       -> Vec (addNat (addNat m n) o) a -> Vec n a;
 slice a m n o v = vDrop a m n (vTake a (addNat m n) o v);
 
-get_slice :: (a :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat m n) o) a) ->
+axiom get_slice :: (a :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat m n) o) a) ->
              (i :: Fin n) ->
              Eq a (get n a (slice a m n o v) i)
              (get (addNat (addNat m n) o) a v (finIncLim (addNat m n) o (finInc m n i)));
@@ -770,7 +770,7 @@ single = replicate 1;
 get_single :: (a :: sort 0) -> (x :: a) -> (i :: Fin 1) -> Eq a (get 1 a (single a x) i) x;
 get_single = get_replicate 1;
 
-at_single :: (a :: sort 0) -> (x :: a) -> (i :: Nat) -> Eq a (at 1 a (single a x) i) x;
+axiom at_single :: (a :: sort 0) -> (x :: a) -> (i :: Nat) -> Eq a (at 1 a (single a x) i) x;
 
 -- Concatenate arrays together.
 join  :: (m n :: Nat)
@@ -800,13 +800,13 @@ append m n a x y =
       either (Fin m) (Fin n) a (get m a x) (get n a y) (finSplitSum m n i));
 
 -- Rotate array to the left.
-rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+primitive rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 
 -- Rotate array to the right.
-rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+primitive rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 
 -- Zip together two lists (truncating the longer of the two).
-vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+primitive vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
 foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldr a b _ f z (EmptyVec _) = z;
@@ -844,10 +844,10 @@ msb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
 msb x v = get (Succ x) Bool v (FinVal 0 x);
 
 -- | (bvNat x n) yields (n mod 2^x) as an x-bit vector.
-bvNat :: (x :: Nat) -> Nat -> bitvector x;
+primitive bvNat :: (x :: Nat) -> Nat -> bitvector x;
 
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
-bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+primitive bvToNat :: (n :: Nat) -> bitvector n -> Nat;
 
 bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
      -> a;
@@ -857,22 +857,22 @@ bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
-bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+primitive bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+primitive bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+primitive bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+primitive bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 
-bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 
-bvAddWithCarry :: (x :: Nat) -> bitvector x -> bitvector x -> #(Bool, bitvector x);
+primitive bvAddWithCarry :: (x :: Nat) -> bitvector x -> bitvector x -> #(Bool, bitvector x);
 --TODO: Implement this
 
-bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
-bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
+primitive bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
+primitive bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
 
-bvNeg :: (x :: Nat) -> bitvector x -> bitvector x;
-bvSub :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvNeg :: (x :: Nat) -> bitvector x -> bitvector x;
+primitive bvSub :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 --TODO
 
 -- Unsigned division and remainder.
@@ -882,8 +882,8 @@ bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 --
 -- These two functions satisfy the property that:
 --   bvAdd x (bvMul x (bvUDiv x u v) v) (bvURem x u v) == u
-bvUDiv :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-bvURem :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvUDiv :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvURem :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 --TODO
 
 -- Signed division.
@@ -898,22 +898,22 @@ bvURem :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 -- bvSDiv and bvSRem satisfy the property that:
 --
 --   bvAdd x (bvMul x (bvSDiv x u v) v) (bvSRem x u v) == u
-bvSDiv :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x) -> bitvector (Succ x);
-bvSRem :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x)
+primitive bvSDiv :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x) -> bitvector (Succ x);
+primitive bvSRem :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x)
        -> bitvector (Succ x);
 --TODO:
 
 -- | Shift left by the given number of bits.
 -- New bits are False.
-bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+primitive bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 --TODO
 
 -- Logical right shift.  New bits are False.
-bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+primitive bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 --TODO
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
-bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
+primitive bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
 --TODO
 
 -- | Zipwith specialized to bitvectors.
@@ -962,16 +962,16 @@ bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i));
 
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
-eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
+axiom eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
-eq_VecBool :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
+axiom eq_VecBool :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
 
-eq_VecVec :: (n :: Nat) -> (m :: Nat) -> (a :: sort 0)
+axiom eq_VecVec :: (n :: Nat) -> (m :: Nat) -> (a :: sort 0)
           -> Eq (Vec n (Vec m a) -> Vec n (Vec m a) -> Bool)
                 (eq (Vec n (Vec m a)))
                 (vecEq n (Vec m a) (eq (Vec m a)));
 
-equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
+axiom equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
 
 -- | Return true if the bitvector is nonzero
@@ -988,8 +988,8 @@ bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
 
 -- | Unsigned and signed comparison functions.
-bvugt bvuge bvult bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvugt bvuge bvult bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 -- | Truncates a vector a smaller size.
 -- msb implementation:
@@ -1019,12 +1019,12 @@ bvSExt x y a = append x (Succ y) ?Bool (replicate x Bool (msb y a)) a;
 
 -- Polynomial operations
 
-bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n
+primitive bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n
        -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 
-bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
 
-bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+primitive bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
 
 
 --------------------------------------------------------------------------------
@@ -1091,45 +1091,45 @@ data String :: sort 0 where { }
 
 data Float :: sort 0 where { }
 
-bvToFloat :: bitvector 32 -> Float;
-floatToBV :: Float -> bitvector 32;
+primitive bvToFloat :: bitvector 32 -> Float;
+primitive floatToBV :: Float -> bitvector 32;
 
 data Double :: sort 0 where { }
 
-bvToDouble :: bitvector 64 -> Double;
-doubleToBV :: Double -> bitvector 64;
+primitive bvToDouble :: bitvector 64 -> Double;
+primitive doubleToBV :: Double -> bitvector 64;
 
 
-bveq_sameL :: (n :: Nat)
+axiom bveq_sameL :: (n :: Nat)
            -> (x z :: bitvector n)
            -> Eq Bool
                  (bvEq n x (bvAdd n x z))
                  (bvEq n (bvNat n 0) z);
 
-bveq_sameR :: (n :: Nat)
+axiom bveq_sameR :: (n :: Nat)
            -> (x y :: bitvector n)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) x)
                  (bvEq n y (bvNat n 0));
 
-bveq_same2 :: (n :: Nat)
+axiom bveq_same2 :: (n :: Nat)
            -> (x y z :: bitvector n)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
 
-bvNat_bvToNat :: (n :: Nat)
+axiom bvNat_bvToNat :: (n :: Nat)
               -> (x :: bitvector n)
               -> Eq (bitvector n)
                     (bvNat n (bvToNat n x))
                     x;
 
-ite_split_cong :: (b :: Bool) -> (x :: Vec 384 Bool) -> (y :: Vec 384 Bool)
+axiom ite_split_cong :: (b :: Bool) -> (x :: Vec 384 Bool) -> (y :: Vec 384 Bool)
                -> Eq (Vec 12 (Vec 32 Bool))
                      (split 12 32 Bool (ite (Vec 384 Bool) b x y))
                      (ite (Vec 12 (Vec 32 Bool)) b (split 12 32 Bool x) (split 12 32 Bool y));
 
-ite_join_cong :: (b :: Bool)
+axiom ite_join_cong :: (b :: Bool)
               -> (x :: Vec 12 (Vec 32 Bool))
               -> (y :: Vec 12 (Vec 32 Bool))
               -> Eq (Vec 384 Bool)
