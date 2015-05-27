@@ -592,6 +592,10 @@ iteOp =
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal b x y)
 muxBVal b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
+muxBVal b (VTuple xv)     (VTuple yv)     = VTuple <$> muxThunks b xv yv
+muxBVal b (VRecord xm)    (VRecord ym)    | Map.keys xm == Map.keys ym =
+                                            VRecord <$> T.sequence
+                                              (Map.intersectionWith (muxThunk b) xm ym)
 muxBVal b (VVector xv)    y               = VVector <$> muxThunks b xv (toVector y)
 muxBVal b x               (VVector yv)    = VVector <$> muxThunks b (toVector x) yv
 muxBVal b (VBool x)       (VBool y)       = return $ VBool $ svIte b x y
