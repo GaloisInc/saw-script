@@ -8,7 +8,7 @@ import Prelude;
 --------------------------------------------------------------------------------
 -- Additional operations on Prelude types
 
-lg2Nat :: Nat -> Nat;
+primitive lg2Nat :: Nat -> Nat;
 
 pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) -> #(a1, a2) -> #(b1, b2);
 pairMap _ _ _ _ f g (x, y) = (f x, g y);
@@ -29,7 +29,7 @@ bvExp n x y = foldr Bool (bitvector n) n
   (bvNat n 1)
   (reverse n Bool y);
 
-bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
+primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers
@@ -92,8 +92,8 @@ tcMax (TCNum _) TCInf = TCInf;
 tcMax TCInf (TCNum _) = TCInf;
 tcMax TCInf TCInf = TCInf;
 
-tcLenFromThen :: Num -> Num -> Num -> Num;
-tcLenFromThenTo :: Num -> Num -> Num -> Num;
+primitive tcLenFromThen :: Num -> Num -> Num -> Num;
+primitive tcLenFromThenTo :: Num -> Num -> Num -> Num;
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
@@ -113,16 +113,17 @@ seqConst TCInf = streamConst;
 --------------------------------------------------------------------------------
 -- Predicate symbols
 
-PEqual :: Num -> Num -> sort 0;
-PNeq   :: Num -> Num -> sort 0;
-PGeq   :: Num -> Num -> sort 0;
+data PEqual :: Num -> Num -> sort 0 where {}
+data PNeq   :: Num -> Num -> sort 0 where {}
+data PGeq   :: Num -> Num -> sort 0 where {}
 
 data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
 
-PArith :: sort 0 -> sort 0;
-PCmp   :: sort 0 -> sort 0;
+data PArith :: sort 0 -> sort 0 where {}
+data PCmp   :: sort 0 -> sort 0 where {}
+
 {-
 data PArith :: sort 0 -> sort 0 where {
     PArithWord :: (n :: Num) -> PFin n -> PArith (seq n Bool);
@@ -142,17 +143,16 @@ data PCmp :: KType -> sort 0 where {
 -- Partial functions to select instances (terms translated from
 -- type-correct Cryptol should never hit the undefined cases)
 
-ePEqual :: (m n :: Num) -> PEqual m n;
-ePNeq :: (m n :: Num) -> PNeq m n;
-ePGeq :: (m n :: Num) -> PGeq m n;
+primitive ePEqual :: (m n :: Num) -> PEqual m n;
+primitive ePNeq :: (m n :: Num) -> PNeq m n;
+primitive ePGeq :: (m n :: Num) -> PGeq m n;
 
 ePFin :: (n :: Num) -> PFin n;
 ePFin (TCNum n) = PFinNum n;
 -- ePFin TCInf is undefined
 
-ePArith :: (a :: sort 0) -> PArith a;
-
-ePCmp :: (a :: sort 0) -> PCmp a;
+primitive ePArith :: (a :: sort 0) -> PArith a;
+primitive ePCmp :: (a :: sort 0) -> PCmp a;
 
 --------------------------------------------------------------------------------
 -- Auxiliary functions
@@ -200,8 +200,8 @@ pairBinary a b f g x y = (f x.1 y.1, g x.2 y.2);
 funBinary :: (a b :: sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
 
-arithUnaryBool :: Bool -> Bool;
-arithBinaryBool :: Bool -> Bool -> Bool;
+primitive arithUnaryBool :: Bool -> Bool;
+primitive arithBinaryBool :: Bool -> Bool -> Bool;
 
 arithUnary :: ((n :: Nat) -> bitvector n -> bitvector n)
            -> (a :: sort 0) -> PArith a -> a -> a;
@@ -211,27 +211,27 @@ arithBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
             -> (a :: sort 0) -> PArith a -> a -> a -> a;
 arithBinary bvOp a _ = binary bvOp arithBinaryBool a;
 
-eq_binary_bvsub :: (n :: Nat) ->
+axiom eq_binary_bvsub :: (n :: Nat) ->
                    Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
                       (binary bvSub arithBinaryBool (Vec n Bool))
                       (bvSub n);
 
-eq_binary_bvadd :: (n :: Nat) ->
+axiom eq_binary_bvadd :: (n :: Nat) ->
                    Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
                       (binary bvAdd arithBinaryBool (Vec n Bool))
                       (bvAdd n);
 
-eq_binary_bvand :: (n :: Nat) ->
+axiom eq_binary_bvand :: (n :: Nat) ->
                    Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
                       (binary bvAnd and (Vec n Bool))
                       (bvAnd n);
 
-eq_binary_bvor :: (n :: Nat) ->
+axiom eq_binary_bvor :: (n :: Nat) ->
                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
                      (binary bvOr or (Vec n Bool))
                      (bvOr n);
 
-eq_binary_bvxor :: (n :: Nat) ->
+axiom eq_binary_bvxor :: (n :: Nat) ->
                    Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
                       (binary bvXor xor (Vec n Bool))
                       (bvXor n);
@@ -293,8 +293,8 @@ ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
 ecFunNotEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
 ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
 
-ecMin :: (a :: sort 0) -> PCmp a -> a -> a -> a;
-ecMax :: (a :: sort 0) -> PCmp a -> a -> a -> a;
+primitive ecMin :: (a :: sort 0) -> PCmp a -> a -> a -> a;
+primitive ecMax :: (a :: sort 0) -> PCmp a -> a -> a -> a;
 
 -- Logic
 ecAnd :: (a :: sort 0) -> a -> a -> a;
@@ -372,7 +372,7 @@ ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin n -> PFin i
 ecAtRangeBack n a m i pn pi xs = map (seq i Bool) a m (ecAtBack n a i pn pi xs);
 
 -- Static word sequences
-ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
+primitive ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
            -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next)
            -> PEqual (tcLenFromThen first next bits) len
            -> seq len (seq bits Bool);
@@ -398,10 +398,10 @@ ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits)
 ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
 ecInfFrom _ (PFinNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
 
-ecInfFromThen :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
+primitive ecInfFromThen :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
 
 -- Run-time error
-ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> a;
+primitive ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> a;
 
 -- Polynomials
 ecPMul :: (a b :: Num) -> PFin a -> PFin b -> seq a Bool -> seq b Bool
@@ -417,21 +417,21 @@ ecPMod :: (a b :: Num) -> PFin a -> PFin b
 ecPMod _ _ (PFinNum a) (PFinNum b) = bvPMod a b;
 
 -- Random values
-ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
+primitive ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
 
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
 
-replicate_False :: (n :: Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
+axiom replicate_False :: (n :: Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
 
-unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
+axiom unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
 
-subNat_0 :: (n :: Nat) -> Eq Nat (subNat n 0) n;
+axiom subNat_0 :: (n :: Nat) -> Eq Nat (subNat n 0) n;
 
 -- TODO: implement these rules more generally with conversions:
-subNat_5_1 :: Eq Nat (subNat 5 1) 4;
-widthNat_4 :: Eq Nat (widthNat 4) 3;
-widthNat_5 :: Eq Nat (widthNat 5) 3;
+axiom subNat_5_1 :: Eq Nat (subNat 5 1) 4;
+axiom widthNat_4 :: Eq Nat (widthNat 4) 3;
+axiom widthNat_5 :: Eq Nat (widthNat 5) 3;
 
 --------------------------------------------------------------------------------
