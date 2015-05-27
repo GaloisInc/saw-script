@@ -239,6 +239,7 @@ beConstMap be = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
+  , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))
   , ("Prelude.upd", Prims.updOp vFromLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
   , ("Prelude.append", Prims.appendOp vFromLV (AIG.++))

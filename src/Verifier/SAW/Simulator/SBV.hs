@@ -119,6 +119,7 @@ constMap = Map.fromList
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)
   , ("Prelude.set", setOp)
+  , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
   , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
   , ("Prelude.append", Prims.appendOp svUnpack svJoin)

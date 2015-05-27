@@ -238,6 +238,15 @@ natSplitFinOp =
     then VCtorApp "Prelude.Left" (V.fromList $ map ready [VType, VType, vFin (FinVal i (pred (n - i)))])
     else VCtorApp "Prelude.Right" (V.fromList $ map ready [VType, VType, vNat (i - n)])
 
+-- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
+genOp :: MonadLazy m => Value m b w e
+genOp =
+  natFun' "gen1" $ \n -> return $
+  constFun $
+  strictFun $ \f -> do
+    let g i = delay $ apply f (ready (VNat (fromIntegral i)))
+    liftM VVector $ V.generateM (fromIntegral n) g
+
 -- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
 generateOp :: MonadLazy m => Value m b w e
 generateOp =
