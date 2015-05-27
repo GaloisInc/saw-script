@@ -1,6 +1,7 @@
 {
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -fno-warn-tabs #-}
 
 {- |
 Module      : Verifier.SAW.Grammar
@@ -271,7 +272,7 @@ data ParserState = PS { psInput :: AlexInput
                       }
 
 newtype Parser a = Parser { _unParser :: State ParserState a }
-  deriving (Functor, Monad)
+  deriving (Applicative, Functor, Monad)
 
 addError :: Pos -> ParseError -> Parser ()
 addError p err = Parser $ modify $ \s -> s { psErrors = PosPair p err : psErrors s }
