@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -15,13 +16,15 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Cryptol where
 
 import Control.Exception (assert)
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+import Data.Traversable hiding (sequence, mapM)
+#endif
 import Control.Monad (join, foldM, unless)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Traversable hiding (sequence, mapM)
 import qualified Data.Vector as Vector
 
 import qualified Cryptol.Eval.Value as V
