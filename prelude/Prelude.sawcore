@@ -1057,7 +1057,13 @@ streamAppend a n xs ys =
   MkStream a (\(i :: Nat) ->
     either (Fin n) Nat a (get n a xs) (streamGet a ys) (natSplitFin n i));
 
---streamJoin :: (a :: sort 0) -> (n :: Nat) -> Stream (Vec n a) -> ite (sort 0) (equalNat 0 n) #() (Stream a);
+streamJoin :: (a :: sort 0) -> (n :: Nat)
+           -> Stream (Vec (Succ n) a)
+           -> (Stream a);
+streamJoin a n s =
+  MkStream a (\ (i::Nat) ->
+     at (Succ n) a (streamGet (Vec (Succ n) a) s ((divModNat i (Succ n)).1))
+                   ((divModNat i (Succ n)).2) );
 
 streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
 streamSplit a n xs =
