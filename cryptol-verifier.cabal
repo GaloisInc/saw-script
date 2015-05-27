@@ -46,6 +46,7 @@ executable css
     containers,
     cryptol,
     saw-core,
+    text,
     cryptol-verifier
 
   hs-source-dirs : css

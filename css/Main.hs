@@ -6,6 +6,7 @@ import           System.Environment( getArgs )
 import           System.Exit( exitFailure )
 import           System.Console.GetOpt
 import           System.IO
+import           Data.Text.Lazy ( pack )
 import           Data.Version
 
 import qualified Cryptol.TypeCheck.AST as T
@@ -115,7 +116,7 @@ extractCryptol sc modEnv input = do
   let declGroups = concatMap T.mDecls (CME.loadedModules modEnv)
   env <- C.importDeclGroups sc C.emptyEnv declGroups
   pexpr <-
-    case P.parseExpr input of
+    case P.parseExpr (pack input) of
       Left err -> fail (show (pp err))
       Right x -> return x
   (exprResult, exprWarnings) <- CM.checkExpr pexpr modEnv
