@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -25,7 +26,9 @@ module Verifier.SAW.Typechecker.Monad
   , tryEval
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Monad.ST
 import qualified Data.Map as Map
 import Data.STRef

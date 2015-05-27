@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 -- |
 -- Module      :  Verifier.SAW.Testing.Random
@@ -24,12 +25,14 @@ import Verifier.SAW.Simulator.Value (Value(..))
 import Verifier.SAW.TypedAST (FieldName)
 import Verifier.SAW.Utils (panic)
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>), Applicative)
+import Data.Traversable (traverse)
+#endif
 import Control.Monad (msum, replicateM)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Random
 import Data.Map (Map)
-import Data.Traversable (traverse)
 import System.Random.TF (newTFGen, TFGen)
 
 ----------------------------------------------------------------

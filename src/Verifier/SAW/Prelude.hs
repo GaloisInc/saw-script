@@ -16,7 +16,9 @@ module Verifier.SAW.Prelude
   , module Verifier.SAW.Prelude.Constants
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>), (<*>))
+#endif
 import Control.Monad (join) 
 import Verifier.SAW.ParserUtils
 import Verifier.SAW.Prelude.Constants

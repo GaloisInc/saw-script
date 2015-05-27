@@ -1,11 +1,14 @@
+{-# LANGUAGE CPP #-}
 module Verifier.SAW.FiniteValue where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+import Data.Traversable
+#endif
 import qualified Control.Monad.State as S
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Traversable
 
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm

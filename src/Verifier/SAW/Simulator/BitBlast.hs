@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -13,12 +14,14 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Simulator.BitBlast where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+import Data.Traversable
+#endif
 import Control.Monad (zipWithM, (<=<))
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Traversable
 import qualified Data.Vector as V
 
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)

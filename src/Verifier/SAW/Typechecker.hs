@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -23,7 +24,9 @@ module Verifier.SAW.Typechecker
   ( tcModule
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Arrow ((***), first)
 import Control.Lens hiding (assign)
 import Control.Monad.State
@@ -308,7 +311,7 @@ inferTerm tc uut = do
     Un.VecLit p [] -> tcFail p "SAWCore parser does not support empty array literals."
     Un.VecLit _ (h:l) -> do
       (v,tp) <- inferTypedValue tc h
-      vl <- traverse (\u -> tcTerm tc u tp) l
+      vl <- traverse (\ u -> tcTerm tc u tp) l
       let vals = V.fromList (v:vl)
       let n = TCF (NatLit (toInteger (V.length vals)))
       return $ TypedValue (TCF (ArrayValue tp vals)) (TCF (DataTypeApp preludeVecIdent [n,tp]))
@@ -674,7 +677,7 @@ parseDecl eqnMap d = do
   case d of
     Un.TypeDecl idl utp -> do
       let id1:_ = idl
-      rtp <- addPending (val id1) (\uc -> fst <$> tcType uc utp)
+      rtp <- addPending (val id1) (\ uc -> fst <$> tcType uc utp)
       forOf_ folded idl $ \(PosPair p nm) -> do
         let ueqs = fromMaybe [] $ Map.lookup nm eqnMap
         eqs <- addPending ("Equations for " ++ nm) $ \tc -> do

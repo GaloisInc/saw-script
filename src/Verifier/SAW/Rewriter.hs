@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -52,12 +53,14 @@ module Verifier.SAW.Rewriter
   , hoistIfs
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>), pure, (<*>))
+import Data.Foldable (Foldable)
+#endif
 import Control.Lens
 import Control.Monad.Identity
 import Control.Monad.State
 import Data.Bits
-import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable
 import Data.IORef (IORef)
 import Data.Map (Map)

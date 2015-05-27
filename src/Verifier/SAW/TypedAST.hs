@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -106,7 +107,10 @@ import Control.Lens
 import Data.Bits
 import qualified Data.ByteString.UTF8 as BS
 import Data.Char
-import Data.Foldable (Foldable, foldl', sum, all)
+#if !MIN_VERSION_base(4,8,0)
+import Data.Foldable (Foldable)
+#endif
+import Data.Foldable (foldl', sum, all)
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)

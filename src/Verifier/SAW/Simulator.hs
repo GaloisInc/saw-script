@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -21,7 +22,9 @@ module Verifier.SAW.Simulator where
 
 import Prelude hiding (mapM)
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
+#endif
 import Control.Lens ((^.))
 import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))

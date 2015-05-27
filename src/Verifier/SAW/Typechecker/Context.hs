@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -92,11 +93,14 @@ module Verifier.SAW.Typechecker.Context
   , checkTCTerm
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+import Data.Foldable (Foldable)
+#endif
+
 import Control.Lens
 import Control.Monad.Identity
 import Control.Monad.State
-import Data.Foldable (Foldable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
@@ -7,7 +8,9 @@ module Verifier.SAW.ExternalFormat (
   ) where
 
 import Verifier.SAW.SharedTerm
+#if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
+#endif
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 import Verifier.SAW.Constant
 import Control.Monad.State.Strict as State

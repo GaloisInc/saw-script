@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
@@ -32,7 +33,9 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.State (StateT(..), MonadState(..), evalStateT, gets)
 import Control.Monad.Trans
 import Control.Monad.ST
+#if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
+#endif
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (isJust)

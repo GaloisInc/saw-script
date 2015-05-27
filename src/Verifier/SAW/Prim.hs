@@ -12,7 +12,9 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Prim where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Exception (assert)
 import qualified Control.Exception as X
 import Data.Bits

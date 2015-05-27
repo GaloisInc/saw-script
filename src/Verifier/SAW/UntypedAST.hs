@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 
 {- |
@@ -29,7 +30,9 @@ module Verifier.SAW.UntypedAST
   , module Verifier.SAW.Position
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
+#endif
 import Control.Exception (assert)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 

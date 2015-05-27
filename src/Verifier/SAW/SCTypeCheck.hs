@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {- |
 Module      : Verifier.SAW.SCTypeCheck
@@ -24,7 +25,9 @@ import Control.Monad.State.Strict as State
 import Data.Foldable (maximum, and)
 import Data.Map (Map)
 import qualified Data.Map as Map
+#if !MIN_VERSION_base(4,8,0)
 import Data.Traversable (Traversable(..))
+#endif
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 

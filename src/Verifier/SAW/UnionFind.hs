@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {- |
 Module      : Verifier.SAW.UnionFind
 Copyright   : Galois, Inc. 2012-2014
@@ -27,7 +28,9 @@ module Verifier.SAW.UnionFind (
   , modifyClassDesc
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
+#endif
 import Control.Monad.State.Strict
 import Data.List (foldl')
 import Data.Map (Map)

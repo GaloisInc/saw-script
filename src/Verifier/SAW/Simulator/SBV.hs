@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -33,7 +34,9 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 
 import Data.Traversable as T
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
 import Control.Monad.IO.Class
 import Control.Monad.State as ST
 

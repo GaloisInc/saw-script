@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
@@ -24,13 +25,15 @@ module Verifier.SAW.Typechecker.Simplification
   , reduceToPiExpr
   ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+import Data.Traversable
+#endif
 import Control.Arrow (second)
 import Control.Lens
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.State (StateT(..), modify)
 import Control.Monad.Trans
-import Data.Traversable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
