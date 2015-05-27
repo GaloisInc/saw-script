@@ -337,8 +337,12 @@ ecSplitAt _ TCInf a (PFinNum m) xs = (streamTake a m xs, streamDrop a m xs);
 
 ecJoin :: (m n :: Num) -> (a :: sort 0) -> PFin n -> seq m (seq n a) -> seq (tcMul m n) a;
 ecJoin (TCNum m) _ a (PFinNum n) = join m n a;
--- ecJoin TCInf _ a (PFinNum n) = streamJoin ...
--- FIXME: cases on whether n = 0.
+ecJoin TCInf _ a (PFinNum n) =
+  natCase
+    (\ (n'::Nat) -> Stream (Vec n' a) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) a)
+      (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
+      (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) -> streamJoin a n' s)
+      n;
 
 ecSplit :: (m n :: Num) -> (a :: sort 0) -> PFin n -> seq (tcMul m n) a -> seq m (seq n a);
 ecSplit (TCNum m) _ a (PFinNum n) = split m n a;
