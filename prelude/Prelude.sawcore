@@ -636,7 +636,7 @@ data Vec :: Nat -> sort 0 -> sort 0 where {
 --TODO
 
 -- Primitive function for generating an array.
-gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
+primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 
 at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 at _ _ (ConsVec a x n xs) Zero = x;
