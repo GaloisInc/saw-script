@@ -122,6 +122,8 @@ constMap = Map.fromList
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
   , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
+  , ("Prelude.take", takeOp)
+  , ("Prelude.drop", dropOp)
   , ("Prelude.append", Prims.appendOp svUnpack svJoin)
   , ("Prelude.join", Prims.joinOp svUnpack svJoin)
   , ("Prelude.split", splitOp)
@@ -260,6 +262,30 @@ setOp =
     case v of
       VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
       _ -> fail "setOp: expected vector"
+
+-- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
+takeOp :: SValue
+takeOp =
+  constFun $
+  Prims.natFun $ \(fromIntegral -> m) -> return $
+  Prims.natFun $ \(fromIntegral -> n) -> return $
+  strictFun $ \v -> return $
+    case v of
+      VVector vv -> VVector (V.take m vv)
+      VWord vw -> VWord (svExtract (m + n - 1) n vw)
+      _ -> error $ "takeOp: " ++ show v
+
+-- drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
+dropOp :: SValue
+dropOp =
+  constFun $
+  Prims.natFun $ \(fromIntegral -> m) -> return $
+  Prims.natFun $ \(fromIntegral -> n) -> return $
+  strictFun $ \v -> return $
+    case v of
+      VVector vv -> VVector (V.drop m vv)
+      VWord vw -> VWord (svExtract (n - 1) 0 vw)
+      _ -> error $ "dropOp: " ++ show v
 
 -- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 splitOp :: SValue
