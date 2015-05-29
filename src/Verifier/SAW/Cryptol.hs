@@ -145,13 +145,13 @@ importType sc env ty =
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- ^ user-defined, @T@
         C.PC pc ->
           case pc of
-            C.PEqual         -> scGlobalApply sc "Cryptol.PEqual" =<< traverse go tyargs -- ^ @_ == _@
-            C.PNeq           -> scGlobalApply sc "Cryptol.PNeq"   =<< traverse go tyargs -- ^ @_ /= _@
-            C.PGeq           -> scGlobalApply sc "Cryptol.PGeq"   =<< traverse go tyargs -- ^ @_ >= _@
+            C.PEqual         -> scDataTypeApp sc "Cryptol.PEqual" =<< traverse go tyargs -- ^ @_ == _@
+            C.PNeq           -> scDataTypeApp sc "Cryptol.PNeq"   =<< traverse go tyargs -- ^ @_ /= _@
+            C.PGeq           -> scDataTypeApp sc "Cryptol.PGeq"   =<< traverse go tyargs -- ^ @_ >= _@
             C.PFin           -> scDataTypeApp sc "Cryptol.PFin"   =<< traverse go tyargs -- ^ @fin _@
             C.PHas _selector -> unimplemented "PHas"
-            C.PArith         -> scGlobalApply sc "Cryptol.PArith" =<< traverse go tyargs -- ^ @Arith _@
-            C.PCmp           -> scGlobalApply sc "Cryptol.PCmp"   =<< traverse go tyargs -- ^ @Cmp _@
+            C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- ^ @Arith _@
+            C.PCmp           -> scDataTypeApp sc "Cryptol.PCmp"   =<< traverse go tyargs -- ^ @Cmp _@
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
