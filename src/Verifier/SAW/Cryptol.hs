@@ -444,7 +444,7 @@ importComp sc env listT expr mss =
               m <- importType sc env len
               a <- importType sc env ty
               (ys, n, b, argss) <- zipAll branches
-              zs <- scGlobalApply sc "Cryptol.zip" [a, b, m, n, xs, ys]
+              zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
               mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
               return (zs, mn, ab, args : argss)
@@ -452,7 +452,7 @@ importComp sc env listT expr mss =
      let (_, elemT) = fromMaybe (assert False undefined) (C.tIsSeq listT)
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
-     ys <- scGlobalApply sc "Cryptol.map" [a, b, n, f, xs]
+     ys <- scGlobalApply sc "Cryptol.seqMap" [a, b, n, f, xs]
      -- The resulting type might not match the annotation, so we coerce
      t1 <- scGlobalApply sc "Cryptol.seq" [n, b]
      t2 <- importType sc env listT

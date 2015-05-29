@@ -103,7 +103,7 @@ seq (TCNum n) a = Vec n a;
 seq TCInf a = Stream a;
 
 seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
-seqMap a b (TCNum n) f = vMap a b f n;
+seqMap a b (TCNum n) f = map a b f n;
 seqMap a b TCInf f = streamMap a b f;
 
 seqConst :: (n :: Num) -> (a :: sort 0) -> a -> seq n a;
@@ -167,28 +167,24 @@ eListSel a TCInf xs i = streamGet a xs i;
 from :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b);
 from a b (TCNum m) (TCNum n) xs k =
   join m n #(a, b)
-  (vMap a (Vec n #(a, b))
-    (\(x :: a) -> vMap b #(a, b) (\(y :: b) -> (x, y)) n (k x))
+  (map a (Vec n #(a, b))
+    (\(x :: a) -> map b #(a, b) (\(y :: b) -> (x, y)) n (k x))
     m xs);
 
 mlet :: (a b :: sort 0) -> (n :: Num) -> a -> (a -> seq n b) -> seq n #(a, b);
-mlet a b (TCNum n) x f = vMap b #(a, b) (\(y :: b) -> (x, y)) n (f x);
+mlet a b (TCNum n) x f = map b #(a, b) (\(y :: b) -> (x, y)) n (f x);
 
-zip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b);
-zip a b (TCNum m) (TCNum n) xs ys = vZip a b m n xs ys;
-zip a b (TCNum m) TCInf xs ys = generate m #(a, b) (\(i :: Fin m) -> (get m a xs i, streamGet b ys (finFront m i)));
-zip a b TCInf (TCNum n) xs ys = generate n #(a, b) (\(i :: Fin n) -> (streamGet a xs (finFront n i), get n b ys i));
-zip a b TCInf TCInf xs ys = streamMap2 a b #(a, b) (\(x::a) -> \(y::b) -> (x, y)) xs ys;
-
-map :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
-map a b (TCNum n) f = vMap a b f n;
-map a b TCInf f = streamMap a b f;
+seqZip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b);
+seqZip a b (TCNum m) (TCNum n) xs ys = zip a b m n xs ys;
+seqZip a b (TCNum m) TCInf xs ys = generate m #(a, b) (\(i :: Fin m) -> (get m a xs i, streamGet b ys (finFront m i)));
+seqZip a b TCInf (TCNum n) xs ys = generate n #(a, b) (\(i :: Fin n) -> (streamGet a xs (finFront n i), get n b ys i));
+seqZip a b TCInf TCInf xs ys = streamMap2 a b #(a, b) (\(x::a) -> \(y::b) -> (x, y)) xs ys;
 
 --------------------------------------------------------------------------------
 -- Arith functions
 
 seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) -> seq n a -> seq n a -> seq n a;
-seqBinary (TCNum n) a f = vZipWith a a a f n;
+seqBinary (TCNum n) a f = zipWith a a a f n;
 seqBinary TCInf a f = streamMap2 a a a f;
 
 unitBinary :: #() -> #() -> #();
@@ -332,7 +328,7 @@ ecCat _ (TCNum n) a (PFinNum m) = append m n a;
 ecCat _ TCInf a (PFinNum m) = streamAppend a m;
 
 ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> PFin m -> seq (tcAdd m n) a -> #(seq m a, seq n a);
-ecSplitAt _ (TCNum n) a (PFinNum m) xs = (vTake a m n xs, vDrop a m n xs);
+ecSplitAt _ (TCNum n) a (PFinNum m) xs = (take a m n xs, drop a m n xs);
 ecSplitAt _ TCInf a (PFinNum m) xs = (streamTake a m xs, streamDrop a m xs);
 
 ecJoin :: (m n :: Num) -> (a :: sort 0) -> PFin n -> seq m (seq n a) -> seq (tcMul m n) a;
@@ -363,13 +359,13 @@ ecAt (TCNum n) a _ (PFinNum i) = bvAt n a i;
 ecAt TCInf a _ (PFinNum i) = bvStreamGet a i;
 
 ecAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin i -> seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRange n a m i pi xs = map (seq i Bool) a m (ecAt n a i pi xs);
+ecAtRange n a m i pi xs = seqMap (seq i Bool) a m (ecAt n a i pi xs);
 
 ecAtBack :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> PFin n -> PFin i -> seq n a -> seq i Bool -> a;
 ecAtBack n a i pn pi xs = ecAt n a i pi (ecReverse n a pn xs);
 
 ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin n -> PFin i -> seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRangeBack n a m i pn pi xs = map (seq i Bool) a m (ecAtBack n a i pn pi xs);
+ecAtRangeBack n a m i pn pi xs = seqMap (seq i Bool) a m (ecAtBack n a i pn pi xs);
 
 -- Static word sequences
 primitive ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
