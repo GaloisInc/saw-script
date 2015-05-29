@@ -125,7 +125,7 @@ constMap = Map.fromList
   , ("Prelude.append", Prims.appendOp svUnpack svJoin)
   , ("Prelude.join", Prims.joinOp svUnpack svJoin)
   , ("Prelude.split", splitOp)
-  , ("Prelude.vZip", vZipOp)
+  , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvRotateL", bvRotateLOp)
   , ("Prelude.bvRotateR", bvRotateROp)

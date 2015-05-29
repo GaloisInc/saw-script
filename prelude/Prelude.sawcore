@@ -692,12 +692,12 @@ get_vMove :: (a :: sort 0) -> (m n :: Nat) -> (f :: Fin n -> Fin m) -> (v :: Vec
 get_vMove a m n f v i = get_generate n a (\(j :: Fin n) -> get m a v (f j)) i;
 
 -- | Take a prefix of a vector.
-vTake :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-vTake a m n = vMove a (addNat m n) m (finIncLim m n);
+take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
+take a m n = vMove a (addNat m n) m (finIncLim m n);
 
-get_vTake :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin m) ->
-             Eq a (get m a (vTake a m n v) i) (get (addNat m n) a v (finIncLim m n i));
-get_vTake a m n v i = get_vMove a (addNat m n) m (finIncLim m n) v i;
+get_take :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin m) ->
+            Eq a (get m a (take a m n v) i) (get (addNat m n) a v (finIncLim m n i));
+get_take a m n v i = get_vMove a (addNat m n) m (finIncLim m n) v i;
 
 vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Vec m a) (Vec n a);
 vecCong a _ _ (Refl _ v) = Refl (sort 0) (Vec v a);
@@ -706,32 +706,32 @@ coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
 coerceVec a m n q = coerce (Vec m a) (Vec n a) (vecCong a m n q);
 
 -- | Simplify take  all elements from a vector.
-axiom vTake0 :: (a :: sort 0)
+axiom take0 :: (a :: sort 0)
        -> (m :: Nat)
        -> (v :: Vec (addNat m 0) a)
        -> Eq (Vec m a)
-             (vTake a m 0 v)
+             (take a m 0 v)
              (coerceVec a (addNat m 0) m (eqNatAdd0 m) v);
 
 -- | Returns a suffix of a vector after a given number of elements.
-vDrop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
-vDrop a m n = vMove a (addNat m n) n (finInc m n);
+drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
+drop a m n = vMove a (addNat m n) n (finInc m n);
 
-get_vDrop :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin n) ->
-             Eq a (get n a (vDrop a m n v) i) (get (addNat m n) a v (finInc m n i));
-get_vDrop a m n v i = get_vMove a (addNat m n) n (finInc m n) v i;
+get_drop :: (a :: sort 0) -> (m n :: Nat) -> (v :: Vec (addNat m n) a) -> (i :: Fin n) ->
+            Eq a (get n a (drop a m n v) i) (get (addNat m n) a v (finInc m n i));
+get_drop a m n v i = get_vMove a (addNat m n) n (finInc m n) v i;
 
 -- | Simplify drop 0-elements from a vector.
-axiom vDrop0 :: (a :: sort 0)
+axiom drop0 :: (a :: sort 0)
        -> (n :: Nat)
        -> (v :: Vec (addNat 0 n) a)
-       -> Eq (Vec n a) (vDrop a 0 n v) v;
+       -> Eq (Vec n a) (drop a 0 n v) v;
 
 -- | Select a range [i,..,i+n] of values from the array.
 slice :: (a :: sort 0)
       -> (m n o :: Nat)
       -> Vec (addNat (addNat m n) o) a -> Vec n a;
-slice a m n o v = vDrop a m n (vTake a (addNat m n) o v);
+slice a m n o v = drop a m n (take a (addNat m n) o v);
 
 axiom get_slice :: (a :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat m n) o) a) ->
              (i :: Fin n) ->
@@ -740,23 +740,23 @@ axiom get_slice :: (a :: sort 0) -> (m n o :: Nat) -> (v :: Vec (addNat (addNat 
 -- TODO
 
 -- | Defines a function that maps array elements from one range to another.
-vMap :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
-vMap a b f n v = generate n b (\(i :: Fin n) -> f (get n a v i));
+map :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
+map a b f n v = generate n b (\(i :: Fin n) -> f (get n a v i));
 
-get_vMap :: (a b :: sort 0) -> (f :: a -> b) -> (n :: Nat) -> (v :: Vec n a) -> (i :: Fin n) ->
-            Eq b (get n b (vMap a b f n v) i) (f (get n a v i));
-get_vMap a b f n v i = get_generate n b (\(i :: Fin n) -> f (get n a v i)) i;
+get_map :: (a b :: sort 0) -> (f :: a -> b) -> (n :: Nat) -> (v :: Vec n a) -> (i :: Fin n) ->
+           Eq b (get n b (map a b f n v) i) (f (get n a v i));
+get_map a b f n v i = get_generate n b (\(i :: Fin n) -> f (get n a v i)) i;
 
 -- | Defines a function that maps array elements from one range to another.
-vZipWith :: (a b c :: sort 0)
-         -> (a -> b -> c)
-         -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
-vZipWith a b c f n x y = generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
+zipWith :: (a b c :: sort 0)
+        -> (a -> b -> c)
+        -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
+zipWith a b c f n x y = generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
 
-get_vZipWith :: (a b c :: sort 0) -> (f :: a -> b -> c) -> (n :: Nat) ->
-                (x :: Vec n a) -> (y :: Vec n b) -> (i :: Fin n) ->
-                Eq c (get n c (vZipWith a b c f n x y) i) (f (get n a x i) (get n b y i));
-get_vZipWith a b c f n x y = get_generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
+get_zipWith :: (a b c :: sort 0) -> (f :: a -> b -> c) -> (n :: Nat) ->
+               (x :: Vec n a) -> (y :: Vec n b) -> (i :: Fin n) ->
+               Eq c (get n c (zipWith a b c f n x y) i) (f (get n a x i) (get n b y i));
+get_zipWith a b c f n x y = get_generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
 
 -- replicate n x returns an array with n copies of x.
 replicate :: (n :: Nat) -> ?(a :: sort 0) -> a -> Vec n a;
@@ -809,7 +809,7 @@ primitive rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 primitive rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 
 -- Zip together two lists (truncating the longer of the two).
-primitive vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
 foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldr a b _ f z (EmptyVec _) = z;
@@ -923,20 +923,20 @@ primitive bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w
 bvZipWith :: (Bool -> Bool -> Bool)
           -> (n :: Nat)
           -> bitvector n -> bitvector n -> bitvector n;
-bvZipWith = vZipWith Bool Bool Bool;
+bvZipWith = zipWith Bool Bool Bool;
 
 get_bvZipWith :: (f :: Bool -> Bool -> Bool) -> (n :: Nat) ->
                  (x :: bitvector n) -> (y :: bitvector n) -> (i :: Fin n) ->
                  Eq Bool (get n Bool (bvZipWith f n x y) i) (f (get n Bool x i) (get n Bool y i));
-get_bvZipWith = get_vZipWith Bool Bool Bool;
+get_bvZipWith = get_zipWith Bool Bool Bool;
 
 -- | Bitwise complement.
 bvNot :: (n :: Nat) -> bitvector n -> bitvector n;
-bvNot = vMap Bool Bool not;
+bvNot = map Bool Bool not;
 
 get_bvNot :: (n :: Nat) -> (v :: bitvector n) -> (i :: Fin n) ->
              Eq Bool (get n Bool (bvNot n v) i) (not (get n Bool v i));
-get_bvNot = get_vMap Bool Bool not;
+get_bvNot = get_map Bool Bool not;
 
 -- | Pairwise conjunction, disjunction, and exclusive or.
 bvAnd bvOr bvXor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
@@ -997,10 +997,10 @@ primitive bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n ->
 -- | Truncates a vector a smaller size.
 -- msb implementation:
 bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
-bvTrunc = vDrop Bool;
+bvTrunc = drop Bool;
 -- lsb implementation:
 -- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
--- bvTrunc x y = vTake Bool y x;
+-- bvTrunc x y = take Bool y x;
 
 -- | Perform a unsigned extension  of the bitvector.
 -- @bvUExt x y v@ adds x bits of zeros to the most-significant bits of

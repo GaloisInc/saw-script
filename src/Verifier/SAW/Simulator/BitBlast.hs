@@ -244,7 +244,7 @@ beConstMap be = Map.fromList
   , ("Prelude.upd", Prims.updOp vFromLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
   , ("Prelude.append", Prims.appendOp vFromLV (AIG.++))
   , ("Prelude.join", Prims.joinOp vFromLV (AIG.++))
-  , ("Prelude.vZip", vZipOp)
+  , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.bvRotateL", bvRotateLOp be)
   , ("Prelude.bvRotateR", bvRotateROp be)
