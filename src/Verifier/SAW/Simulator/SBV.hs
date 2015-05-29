@@ -793,5 +793,6 @@ sbvCodeGen sc unints path fname t = do
             | n `elem` [8,16,32,64] -> svCgReturn w
             | otherwise -> fail $ "sbvCodeGen: unsupported bitvector size: " ++ show n
             where n = svBitSize w
+          VVector _ -> fail "sbvCodeGen: operations not yet supported"
           _ -> fail "sbvCodeGen: invalid result type: not boolean or bitvector"
   compileToC path fname codegen
