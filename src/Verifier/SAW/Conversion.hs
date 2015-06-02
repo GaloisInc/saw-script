@@ -658,7 +658,7 @@ bvConversions =
     , globalConv "Prelude.bvSExt"  Prim.bvSExt
 
     , get_bvNat, at_bvNat, slice_bvNat
-    , vTake_bvNat, vDrop_bvNat
+    , take_bvNat, drop_bvNat
     ]
 
 append_bvNat :: Termlike t => Conversion t
@@ -688,11 +688,11 @@ get_bvNat = globalConv "Prelude.get" Prim.get_bv
 at_bvNat :: Termlike t => Conversion t
 at_bvNat = globalConv "Prelude.at" Prim.at_bv
 
-vTake_bvNat :: Termlike t => Conversion t
-vTake_bvNat = globalConv "Prelude.vTake" Prim.vTake_bv
+take_bvNat :: Termlike t => Conversion t
+take_bvNat = globalConv "Prelude.take" Prim.take_bv
 
-vDrop_bvNat :: Termlike t => Conversion t
-vDrop_bvNat = globalConv "Prelude.vDrop" Prim.vDrop_bv
+drop_bvNat :: Termlike t => Conversion t
+drop_bvNat = globalConv "Prelude.drop" Prim.drop_bv
 
 slice_bvNat :: Termlike t => Conversion t
 slice_bvNat = globalConv "Prelude.slice" Prim.slice_bv

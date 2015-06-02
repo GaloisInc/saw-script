@@ -373,19 +373,19 @@ bvUExt m n x = BV (m + n) (unsigned x)
 bvSExt :: Int -> Int -> BitVector -> BitVector
 bvSExt m n x = bv (m + n + 1) (signed x)
 
--- | @vTake@ specialized to BitVector (big-endian)
--- vTake :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-vTake_bv :: () -> Int -> Int -> BitVector -> BitVector
-vTake_bv _ m n (BV _ x) = bv m (x `shiftR` n)
+-- | @take@ specialized to BitVector (big-endian)
+-- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
+take_bv :: () -> Int -> Int -> BitVector -> BitVector
+take_bv _ m n (BV _ x) = bv m (x `shiftR` n)
 -- little-endian version:
--- vTake_bv _ m _ (BV _ x) = bv m x
+-- take_bv _ m _ (BV _ x) = bv m x
 
 -- | @vDrop@ specialized to BitVector (big-endian)
--- vDrop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
-vDrop_bv :: () -> Int -> Int -> BitVector -> BitVector
-vDrop_bv _ _ n (BV _ x) = bv n x
+-- drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
+drop_bv :: () -> Int -> Int -> BitVector -> BitVector
+drop_bv _ _ n (BV _ x) = bv n x
 -- little-endian version:
--- vDrop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
+-- drop_bv _ m n (BV _ x) = BV n (x `shiftR` m)
 
 -- | @slice@ specialized to BitVector
 slice_bv :: () -> Int -> Int -> Int -> BitVector -> BitVector
