@@ -2,6 +2,14 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
+{- |
+Module      : Verifier.SAW.Simulator.SBV.SWord
+Copyright   : Galois, Inc. 2012-2015
+License     : BSD3
+Maintainer  : huffman@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
 module Verifier.SAW.Simulator.SBV.SWord
   ( SBool, SWord
   , literalSWord

@@ -11,6 +11,15 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+
+{- |
+Module      : Verifier.SAW.Simulator.SBV
+Copyright   : Galois, Inc. 2012-2015
+License     : BSD3
+Maintainer  : huffman@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
 module Verifier.SAW.Simulator.SBV
   ( sbvSolve
   , Labeler(..)

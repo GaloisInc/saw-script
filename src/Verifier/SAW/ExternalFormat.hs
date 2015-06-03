@@ -3,6 +3,14 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 
+{- |
+Module      : Verifier.SAW.ExternalFormat
+Copyright   : Galois, Inc. 2012-2015
+License     : BSD3
+Maintainer  : huffman@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
 module Verifier.SAW.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where

@@ -1,4 +1,13 @@
 {-# LANGUAGE CPP #-}
+
+{- |
+Module      : Verifier.SAW.FiniteValue
+Copyright   : Galois, Inc. 2012-2015
+License     : BSD3
+Maintainer  : huffman@galois.com
+Stability   : experimental
+Portability : non-portable (language extensions)
+-}
 module Verifier.SAW.FiniteValue where
 
 #if !MIN_VERSION_base(4,8,0)

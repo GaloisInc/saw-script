@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {- |
 Module      : Verifier.SAW.SCTypeCheck
-Copyright   : Galois, Inc. 2012-2014
+Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
 Stability   : experimental
