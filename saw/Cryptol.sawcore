@@ -393,7 +393,10 @@ ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits)
 ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
 ecInfFrom _ (PFinNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
 
-primitive ecInfFromThen :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
+ecInfFromThen :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
+ecInfFromThen _ (PFinNum n) first next =
+  MkStream (bitvector n) (\(i :: Nat) ->
+    bvAdd n first (bvMul n (bvSub n next first) (bvNat n i)));
 
 -- Run-time error
 primitive ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> a;
