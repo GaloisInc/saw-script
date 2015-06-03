@@ -176,8 +176,8 @@ mlet a b (TCNum n) x f = map b #(a, b) (\(y :: b) -> (x, y)) n (f x);
 
 seqZip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b);
 seqZip a b (TCNum m) (TCNum n) xs ys = zip a b m n xs ys;
-seqZip a b (TCNum m) TCInf xs ys = generate m #(a, b) (\(i :: Fin m) -> (get m a xs i, streamGet b ys (finFront m i)));
-seqZip a b TCInf (TCNum n) xs ys = generate n #(a, b) (\(i :: Fin n) -> (streamGet a xs (finFront n i), get n b ys i));
+seqZip a b (TCNum m) TCInf xs ys = gen m #(a, b) (\(i :: Nat) -> (at m a xs i, streamGet b ys i));
+seqZip a b TCInf (TCNum n) xs ys = gen n #(a, b) (\(i :: Nat) -> (streamGet a xs i, at n b ys i));
 seqZip a b TCInf TCInf xs ys = streamMap2 a b #(a, b) (\(x::a) -> \(y::b) -> (x, y)) xs ys;
 
 --------------------------------------------------------------------------------
@@ -377,18 +377,17 @@ ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
          -> PGeq last first -> PGeq bits (tcWidth last)
          -> seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
 ecFromTo (TCNum first) _ _ (PFinNum last) (PFinNum bits) _ _ =
-  generate (addNat 1 (subNat last first)) (Vec bits Bool)
-    (\(i::Fin (addNat 1 (subNat last first))) ->
-      bvNat bits (addNat (finFront (addNat 1 (subNat last first)) i) first));
+  gen (addNat 1 (subNat last first)) (Vec bits Bool)
+    (\(i :: Nat) -> bvNat bits (addNat i first));
 
 ecFromThenTo :: (first next last bits len :: Num) -> PFin first -> PFin next -> PFin last -> PFin bits
              -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next) -> PGeq bits (tcWidth last)
              -> PEqual (tcLenFromThenTo first next last) len
              -> seq len (seq bits Bool);
 ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits) _ _ _ _ =
-  generate len (Vec bits Bool)
-    (\(i::Fin len) ->
-      bvNat bits (subNat (addNat first (mulNat (finFront len i) next)) (mulNat (finFront len i) first)));
+  gen len (Vec bits Bool)
+    (\(i :: Nat) ->
+      bvNat bits (subNat (addNat first (mulNat i next)) (mulNat i first)));
 
 -- Infinite word sequences
 ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
