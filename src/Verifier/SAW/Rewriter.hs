@@ -171,6 +171,7 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
 ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ show t
 
 -- Create a rewrite rule from an equation.
