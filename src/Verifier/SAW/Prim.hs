@@ -131,12 +131,6 @@ incFinBy x y
  where r' = toInteger (finRem x) - toInteger y
        x' = FinVal (finVal x + y) (fromInteger r')
 
--- finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
-finDivMod :: Nat -> Nat -> Fin -> (Fin, Fin)
-finDivMod _ n (FinVal v r) = (FinVal v1 r1, FinVal v2 r2)
-  where (v1, v2) = divMod v n
-        (r1, r2) = divMod r n
-
 instance Enum Fin where
   succ (FinVal _ 0) = error "FinVal has no successor."
   succ (FinVal x r) = FinVal (succ x) (pred r)
@@ -161,11 +155,6 @@ instance Enum Fin where
     where go x = case incFinBy x (finVal y) of
                    Nothing -> [x]
                    Just x' -> x : go x'
-
-natSplitFin :: Nat -> Nat -> Either Fin Nat
-natSplitFin n i
-  | i < n = Left (FinVal i (pred (n - i)))
-  | otherwise = Right (i - n)
 
 -- data Vec :: (n :: Nat) -> sort 0 -> sort 0
 data Vec t a = Vec t !(Vector a)
@@ -211,35 +200,9 @@ succNat = succ
 addNat :: Integer -> Integer -> Integer
 addNat = (+)
 
--- finInc :: (i n :: Nat) -> Fin n -> Fin (addNat i n);
-finInc :: Nat -> Nat -> Fin -> Fin
-finInc i _n (FinVal l r) = FinVal (i + l) r
-  -- Precondition: n == l + r + 1
-
--- finIncLim :: (n :: Nat) -> (m :: Nat) -> Fin m -> Fin (addNat m n);
-finIncLim :: Nat -> Nat -> Fin -> Fin
-finIncLim n _m (FinVal l r) = FinVal l (r + n)
-  -- Precondition: m == l + r + 1
-
--- finMax :: (n :: Nat) -> Maybe (Fin n);
-finMax :: Nat -> Maybe Fin
-finMax n = if n == 0 then Nothing else Just (FinVal (n - 1) 0)
-
--- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
-finPred :: Nat -> Fin -> Maybe Fin
-finPred _ (FinVal l r) = if l == 0 then Nothing else Just (FinVal (l - 1) (r + 1))
-
--- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
-generate :: Nat -> () -> (Fin -> a) -> Vector a
-generate n _ f = V.generate (fromEnum n) (\i -> f (finFromBound (fromIntegral i) n))
-
 -- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
 get :: Int -> t -> Vec t e -> Fin -> e
 get _ _ (Vec _ v) i = v ! fromEnum i
-
--- set :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e -> Vec n e;
-set :: Int -> t -> Vec t e -> Fin -> e -> Vec t e
-set _ _ (Vec t v) i e = Vec t (v V.// [(fromEnum i, e)])
 
 -- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 append :: Int -> Int -> t -> Vec t e -> Vec t e -> Vec t e
@@ -356,10 +319,6 @@ bvShr _ (BV w x) i = bv w (x `shiftR` i)
 
 bvSShr :: Int -> BitVector -> Int -> BitVector
 bvSShr _ x i = bv (width x) (signed x `shiftR` i)
-
--- bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
-bvMbit :: Int -> BitVector -> Fin -> Bool
-bvMbit _ (BV _ x) i = testBit x (fromEnum i)
 
 -- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
 bvTrunc :: Int -> Int -> BitVector -> BitVector

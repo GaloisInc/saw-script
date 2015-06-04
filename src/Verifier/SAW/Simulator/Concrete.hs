@@ -247,11 +247,6 @@ constMap = Map.fromList
   , ("Prelude.expNat", Prims.expNatOp)
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
-  -- Fin
-  , ("Prelude.finDivMod", Prims.finDivModOp)
-  , ("Prelude.finMax", Prims.finMaxOp)
-  , ("Prelude.finPred", Prims.finPredOp)
-  , ("Prelude.natSplitFin", Prims.natSplitFinOp)
   -- Vectors
   , ("Prelude.generate", Prims.generateOp)
   , ("Prelude.get", getOp)

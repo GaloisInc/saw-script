@@ -196,48 +196,6 @@ natCaseOp =
     else do s' <- force s
             apply s' (ready (VNat (fromIntegral n - 1)))
 
--- finOfNat :: (n :: Nat) -> Nat -> Fin n;
-finOfNatOp :: Monad m => Value m b w e
-finOfNatOp =
-  natFun' "finOfNat1" $ \n -> return $
-  natFun' "finOfNat2" $ \i -> return $
-  vFin (finFromBound i n)
-
---finDivMod :: (m n :: Nat) -> Fin (mulNat m n) -> #(Fin m, Fin n);
-finDivModOp :: Monad m => Value m b w e
-finDivModOp =
-  natFun' "finDivMod1" $ \m -> return $
-  natFun' "finDivMod2" $ \n -> return $
-  finFun $ \i -> return $
-  let (q, r) = finDivMod m n i
-  in VTuple $ V.fromList $ map (ready . vFin) [q, r]
-
--- finMax :: (n :: Nat) -> Maybe (Fin n);
-finMaxOp :: Monad m => Value m b w e
-finMaxOp =
-  natFun' "finMax" $ \n -> return $
-  if n == 0
-    then VCtorApp "Prelude.Nothing" (V.fromList [ready VType])
-    else VCtorApp "Prelude.Just" (V.fromList [ready VType, ready (vFin (FinVal (n - 1) 0))])
-
--- finPred :: (n :: Nat) -> Fin n -> Maybe (Fin n);
-finPredOp :: Monad m => Value m b w e
-finPredOp =
-  constFun $
-  finFun $ \i -> return $
-  if finVal i == 0
-    then VCtorApp "Prelude.Nothing" (V.fromList [ready VType])
-    else VCtorApp "Prelude.Just" (V.fromList [ready VType, ready (vFin (FinVal (finVal i - 1) (finRem i + 1)))])
-
--- natSplitFin :: (m :: Nat) -> Nat -> Either (Fin m) Nat;
-natSplitFinOp :: Monad m => Value m b w e
-natSplitFinOp =
-  natFun' "natSplitFin" $ \n -> return $
-  natFun' "natSplitFin" $ \i -> return $
-  if i < n
-    then VCtorApp "Prelude.Left" (V.fromList $ map ready [VType, VType, vFin (FinVal i (pred (n - i)))])
-    else VCtorApp "Prelude.Right" (V.fromList $ map ready [VType, VType, vNat (i - n)])
-
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 genOp :: MonadLazy m => Value m b w e
 genOp =

@@ -80,7 +80,6 @@ module Verifier.SAW.Conversion
   , mkVecLit
     -- ** Prelude builders
   , mkBool
-  , mkFinVal
   , mkBvNat
     -- * Conversion
   , Conversion(..)
@@ -91,11 +90,8 @@ module Verifier.SAW.Conversion
   , eq_Tuple
   , eq_Record
   , natConversions
-  , finConversions
   , vecConversions
   , bvConversions
-  , finInc_FinVal
-  , finIncLim_FinVal
   , succ_NatLit
   , addNat_NatLit
   , get_VecLit
@@ -437,9 +433,6 @@ mkBool :: Bool -> TermBuilder t t
 mkBool True  = mkCtor "Prelude.True" []
 mkBool False = mkCtor "Prelude.False" []
 
-mkFinVal :: Prim.Fin -> TermBuilder t t
-mkFinVal (Prim.FinVal i j) = mkCtor "Prelude.FinVal" [mkNatLit i, mkNatLit j]
-
 mkBvNat :: Prim.Nat -> Integer -> TermBuilder t t
 mkBvNat n x = do
   mkGlobalDef "Prelude.bvNat"
@@ -466,9 +459,6 @@ instance Buildable t Int where
 
 instance (Buildable t a, Buildable t b) => Buildable t (a, b) where
   defaultBuilder (x, y) = mkTuple [defaultBuilder x, defaultBuilder y]
-
-instance Buildable t Prim.Fin where
-  defaultBuilder = mkFinVal
 
 instance Buildable t (Prim.Vec t t) where
   defaultBuilder (Prim.Vec t v) = mkVecLit t v
@@ -521,9 +511,6 @@ instance Termlike t => Conversionable t Nat where
     convOfMatcher = defaultConvOfMatcher
 
 instance Termlike t => Conversionable t Integer where
-    convOfMatcher = defaultConvOfMatcher
-
-instance Termlike t => Conversionable t Prim.Fin where
     convOfMatcher = defaultConvOfMatcher
 
 instance Termlike t => Conversionable t Prim.BitVector where
@@ -600,16 +587,6 @@ mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
 equalNat_NatLit :: Termlike t => Conversion t
 equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
 
--- | Conversions for operations on Fin literals
-finConversions :: Termlike t => [Conversion t]
-finConversions = [finInc_FinVal, finIncLim_FinVal]
-
-finInc_FinVal :: Termlike t => Conversion t
-finInc_FinVal = globalConv "Prelude.finInc" Prim.finInc
-
-finIncLim_FinVal :: Termlike t => Conversion t
-finIncLim_FinVal = globalConv "Prelude.finIncLim" Prim.finIncLim
-
 -- | Conversions for operations on vector literals
 vecConversions :: Termlike t => [Conversion t]
 vecConversions = [get_VecLit, at_VecLit, append_VecLit]
@@ -647,7 +624,6 @@ bvConversions =
     , globalConv "Prelude.bvAnd"  Prim.bvAnd
     , globalConv "Prelude.bvOr"   Prim.bvOr
     , globalConv "Prelude.bvXor"  Prim.bvXor
-    , globalConv "Prelude.bvMbit" Prim.bvMbit
     , globalConv "Prelude.bvEq"   Prim.bvEq
 
     , bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat
