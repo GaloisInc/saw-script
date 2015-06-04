@@ -455,6 +455,12 @@ divModNat x0 divisor =
        }
     in go Zero x0;
 
+divNat :: Nat -> Nat -> Nat;
+divNat x y = (divModNat x y).1;
+
+modNat :: Nat -> Nat -> Nat;
+modNat x y = (divModNat x y).2;
+
 -- There are implicit constructors from integer literals.
 
 -- Dependent pattern matching combinator for natural numbers
@@ -653,14 +659,14 @@ upd _ _ (ConsVec a x n xs) (Succ i) y = ConsVec a x n (upd n a xs i y);
 vecEq :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool)
       -> Vec n a -> Vec n a -> Bool;
 vecEq n a eqFn x y =
-  forallFin n (\(i :: Fin n) -> eqFn (get n a x i) (get n a y i));
+  foldr Bool Bool n and True (zipWith a a Bool eqFn n x y);
 
 axiom eq_Vec :: (n :: Nat) -> (a :: sort 0)
        -> Eq (Vec n a -> Vec n a -> Bool) (eq (Vec n a)) (vecEq n a (eq a));
 
 -- | Take a prefix of a vector.
 take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-take a m n = vMove a (addNat m n) m (finIncLim m n);
+take a m n v = gen m a (\(i :: Nat) -> at (addNat m n) a v i);
 
 vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Vec m a) (Vec n a);
 vecCong a _ _ (Refl _ v) = Refl (sort 0) (Vec v a);
@@ -678,7 +684,7 @@ axiom take0 :: (a :: sort 0)
 
 -- | Returns a suffix of a vector after a given number of elements.
 drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
-drop a m n = vMove a (addNat m n) n (finInc m n);
+drop a m n v = gen n a (\(i :: Nat) -> at (addNat m n) a v (addNat m i));
 
 -- | Simplify drop 0-elements from a vector.
 axiom drop0 :: (a :: sort 0)
@@ -694,17 +700,17 @@ slice a m n o v = drop a m n (take a (addNat m n) o v);
 
 -- | Defines a function that maps array elements from one range to another.
 map :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
-map a b f n v = generate n b (\(i :: Fin n) -> f (get n a v i));
+map a b f n v = gen n b (\(i :: Nat) -> f (at n a v i));
 
 -- | Defines a function that maps array elements from one range to another.
 zipWith :: (a b c :: sort 0)
         -> (a -> b -> c)
         -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
-zipWith a b c f n x y = generate n c (\(i :: Fin n) -> f (get n a x i) (get n b y i));
+zipWith a b c f n x y = gen n c (\(i :: Nat) -> f (at n a x i) (at n b y i));
 
 -- replicate n x returns an array with n copies of x.
 replicate :: (n :: Nat) -> ?(a :: sort 0) -> a -> Vec n a;
-replicate n a x = generate n a (\(_ :: Fin n) -> x);
+replicate n a x = gen n a (\(_ :: Nat) -> x);
 
 -- | Create a vector of length 1.
 single :: (a :: sort 0) -> a -> Vec 1 a;
@@ -718,26 +724,22 @@ join  :: (m n :: Nat)
        -> Vec m (Vec n a)
        -> Vec (mulNat m n) a;
 join m n a v =
-  let { eltFn :: Fin (mulNat m n) -> a;
-        eltFn i = splitFn (finDivMod m n i);
-        splitFn :: #(Fin m, Fin n) -> a;
-        splitFn (i,j) = get n a (get m (Vec n a) v i) j;
-      }
-   in generate (mulNat m n) a eltFn;
+  gen (mulNat m n) a (\(i :: Nat) ->
+    at n a (at m (Vec n a) v (divNat i n)) (modNat i n));
 
 -- Split array into list
 split :: ?(m n :: Nat) -> ?(a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 split m n a v =
-  generate m (Vec n a) (\(i :: Fin m) ->
-    generate n a (\(j :: Fin n) ->
-      get (mulNat m n) a v (finProduct m n i j)));
+  gen m (Vec n a) (\(i :: Nat) ->
+    gen n a (\(j :: Nat) ->
+      at (mulNat m n) a v (addNat (mulNat i n) j)));
 
 -- Append two arrays together.
 append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 append m n a x y =
-  generate (addNat m n) a
-    (\(i :: Fin (addNat m n)) ->
-      either (Fin m) (Fin n) a (get m a x) (get n a y) (finSplitSum m n i));
+  gen (addNat m n) a
+    (\(i :: Nat) ->
+      ite a (ltNat i m) (at m a x i) (at n a y (subNat i m)));
 
 -- Rotate array to the left.
 primitive rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
@@ -753,12 +755,12 @@ foldr a b _ f z (EmptyVec _) = z;
 foldr a b _ f z (ConsVec _ x n xs) = f x (foldr a b n f z xs);
 
 reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
-reverse n a xs = generate n a (\(i :: Fin n) -> get n a xs (finSwap n i));
+reverse n a xs = gen n a (\(i :: Nat) -> at n a xs (subNat (subNat n 1) i));
 
 transpose :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
 transpose m n a xss =
-  generate n (Vec m a) (\(j :: Fin n) ->
-    generate m a (\(i :: Fin m) -> get n a (get m (Vec n a) xss i) j));
+  gen n (Vec m a) (\(j :: Nat) ->
+    gen m a (\(i :: Nat) -> at n a (at m (Vec n a) xss i) j));
 
 joinLittleEndian  :: (m n :: Nat)
                   -> (a :: sort 0)
@@ -781,7 +783,7 @@ bitvector n = Vec n Bool;
 
 -- | Returns most-significant bit in a signed bitvector.
 msb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
-msb x v = get (Succ x) Bool v (FinVal 0 x);
+msb x v = at (Succ x) Bool v 0;
 
 -- | (bvNat x n) yields (n mod 2^x) as an x-bit vector.
 primitive bvNat :: (x :: Nat) -> Nat -> bitvector x;
@@ -872,13 +874,9 @@ bvAnd = bvZipWith and;
 bvOr  = bvZipWith or;
 bvXor = bvZipWith xor;
 
--- | Get bit in vector by index with least significant bit at index 0.
-bvMbit :: (n :: Nat) -> bitvector n -> Fin n -> Bool;
-bvMbit n v i = get n Bool v i;
-
 -- | Return true if two bitvectors are equal.
 bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-bvEq n x y = forallFin n (\(i :: Fin n) -> boolEq (bvMbit n x i) (bvMbit n y i));
+bvEq n x y = vecEq n Bool boolEq x y;
 
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 axiom eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
@@ -966,7 +964,7 @@ streamMap2 :: (a b c :: sort 0) -> (a -> b -> c) -> Stream a -> Stream b -> Stre
 streamMap2 a b c f xs ys = MkStream c (\(i :: Nat) -> f (streamGet a xs i) (streamGet b ys i));
 
 streamTake :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Vec n a;
-streamTake a n xs = generate n a (\(i :: Fin n) -> streamGet a xs (finFront n i));
+streamTake a n xs = gen n a (\(i :: Nat) -> streamGet a xs i);
 
 streamDrop :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream a;
 streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
@@ -974,7 +972,7 @@ streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
 streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
 streamAppend a n xs ys =
   MkStream a (\(i :: Nat) ->
-    either (Fin n) Nat a (get n a xs) (streamGet a ys) (natSplitFin n i));
+    ite a (ltNat i n) (at n a xs i) (streamGet a ys (subNat i n)));
 
 streamJoin :: (a :: sort 0) -> (n :: Nat)
            -> Stream (Vec (Succ n) a)
@@ -987,8 +985,8 @@ streamJoin a n s =
 streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
 streamSplit a n xs =
   MkStream (Vec n a) (\(i :: Nat) ->
-    generate n a (\(j :: Fin n) ->
-      streamGet a xs (addNat (mulNat i n) (finFront n j))));
+    gen n a (\(j :: Nat) ->
+      streamGet a xs (addNat (mulNat i n) j)));
 
 bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
 bvStreamGet a w xs i = streamGet a xs (bvToNat w i);
