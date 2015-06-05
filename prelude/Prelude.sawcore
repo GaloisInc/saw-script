@@ -469,21 +469,6 @@ natCase p z s Zero = z;
 natCase p z s (Succ n) = s n;
 
 --------------------------------------------------------------------------------
--- Fin
-
--- | Natural numbers less than a given bound.
-data Fin :: (n :: Nat) -> sort 0 where {
-    -- Fin value contains the value v and the number r of additional values above it.
-     FinVal :: (v r :: Nat) -> Fin (Succ (addNat v r));
-  }
-
-finFront :: (n :: Nat) -> Fin n -> Nat;
-finFront _ (FinVal v _) = v;
-
-finEq :: (n :: Nat) -> (i j :: Fin n) -> Bool;
-finEq n i j = equalNat (finFront n i) (finFront n j);
-
---------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 data Vec :: Nat -> sort 0 -> sort 0 where {
     EmptyVec :: (a :: sort 0) -> Vec 0 a;
@@ -902,30 +887,3 @@ axiom ite_join_cong :: (b :: Bool)
               -> Eq (Vec 384 Bool)
                     (join 12 32 Bool (ite (Vec 12 (Vec 32 Bool)) b x y))
                     (ite (Vec 384 Bool) b (join 12 32 Bool x) (join 12 32 Bool y));
-
---------------------------------------------------------------------------------
--- Deprecated items
-
--- Function for generating an array.
-primitive generate :: (n :: Nat) -> (a :: sort 0) -> (Fin n -> a) -> Vec n a;
-
--- Get and set an individual element in an array.
-get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-get _ _ (ConsVec _ e _ _) (FinVal Zero _) = e;
-get _ a (ConsVec _ _ _ r) (FinVal (Succ i) j) =
-  get (Succ (addNat i j)) a r (FinVal i j);
-
--- | Axiomatic rewrite rule.
-axiom get_generate :: (n :: Nat) -> (e :: sort 0) -> (f :: Fin n -> e) -> (i :: Fin n) ->
-                Eq e (get n e (generate n e f) i) (f i);
-
-set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-set n a v i x = generate n a (\(j :: Fin n) -> ite a (finEq n i j) x (get n a v j));
-
--- | Take a prefix of a vector.
-vMove :: (a :: sort 0)
-      -> (m n :: Nat)
-      -> (Fin n -> Fin m)
-      -> Vec m a
-      -> Vec n a;
-vMove a m n f v = generate n a (\(j :: Fin n) -> get m a v (f j));

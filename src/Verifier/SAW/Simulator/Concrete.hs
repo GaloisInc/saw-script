@@ -248,9 +248,6 @@ constMap = Map.fromList
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
   -- Vectors
-  , ("Prelude.generate", Prims.generateOp)
-  , ("Prelude.get", getOp)
-  , ("Prelude.set", setOp)
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp bvUnpack Prim.bvAt ite)
   , ("Prelude.upd", Prims.updOp bvUnpack (\x y -> return (Prim.bvEq undefined x y)) Prim.bv Prim.width ite)
@@ -288,30 +285,6 @@ iteOp =
   strictFun $ \b -> return $
   VFun $ \x -> return $
   VFun $ \y -> if toBool b then force x else force y
-
--- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-getOp :: CValue
-getOp =
-  constFun $
-  constFun $
-  pureFun $ \v ->
-  Prims.finFun $ \i ->
-    case v of
-      VVector xv -> force $ (V.!) xv (fromEnum (Prim.finVal i))
-      VWord w -> return $ vBool (Prim.get_bv undefined undefined w i)
-      _ -> fail $ "Verifier.SAW.Simulator.Concrete.getOp: expected vector, got " ++ show v
-
--- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-setOp :: CValue
-setOp =
-  constFun $
-  constFun $
-  pureFun $ \v ->
-  Prims.finFun $ \i -> return $
-  VFun $ \y -> return $
-    case v of
-      VVector xv -> VVector ((V.//) xv [(fromEnum (Prim.finVal i), y)])
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.setOp: expected vector, got " ++ show v
 
 bvUnpack :: BitVector -> V.Vector Bool
 bvUnpack x = V.generate (Prim.width x) (Prim.bvAt x)

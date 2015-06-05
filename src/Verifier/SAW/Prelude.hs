@@ -16,10 +16,6 @@ module Verifier.SAW.Prelude
   , module Verifier.SAW.Prelude.Constants
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>), (<*>))
-#endif
-import Control.Monad (join) 
 import Verifier.SAW.ParserUtils
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.SharedTerm
@@ -28,15 +24,6 @@ $(runDecWriter $ do
     prelude <- defineModuleFromFile [] "preludeModule" "prelude/Prelude.sawcore"
     declareSharedModuleFns "Prelude" (decVal prelude)
  )
-
-scFinConst :: SharedContext s
-           -> Nat -- ^ Index
-           -> Nat -- ^ Bound n
-           -> IO (SharedTerm s)
-scFinConst sc i n | i < n = do
-  fv <- scApplyPrelude_FinVal sc
-  join $ fv <$> scNat sc i <*> scNat sc (n - (i + 1))
-scFinConst _ _ _ = error "illegal arguments to scFinConst"
 
 scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scEq sc x y = do

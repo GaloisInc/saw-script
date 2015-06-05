@@ -47,20 +47,6 @@ natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"
 
-vFin :: Monad m => Fin -> Value m b w e
-vFin (FinVal i j) = VCtorApp "Prelude.FinVal" $ V.fromList $ map (ready . vNat) [i, j]
-
-finFromValue :: Monad m => Value m b w e -> m Fin
-finFromValue (VCtorApp "Prelude.FinVal" (V.toList -> [x, y])) = do
-  i <- liftM natFromValue $ force x
-  j <- liftM natFromValue $ force y
-  return $ FinVal i j
-finFromValue _ = fail "finFromValue"
-
-finFun :: Monad m => (Fin -> m (Value m b w e)) -> Value m b w e
-finFun f = strictFun g
-  where g v = finFromValue v >>= f
-
 toBool :: Show e => Value m b w e -> b
 toBool (VBool b) = b
 toBool x = error $ unwords ["Verifier.SAW.Simulator.toBool", show x]
@@ -203,15 +189,6 @@ genOp =
   constFun $
   strictFun $ \f -> do
     let g i = delay $ apply f (ready (VNat (fromIntegral i)))
-    liftM VVector $ V.generateM (fromIntegral n) g
-
--- generate :: (n :: Nat) -> (e :: sort 0) -> (Fin n -> e) -> Vec n e;
-generateOp :: MonadLazy m => Value m b w e
-generateOp =
-  natFun' "generate1" $ \n -> return $
-  constFun $
-  strictFun $ \f -> do
-    let g i = delay $ apply f (ready (vFin (finFromBound (fromIntegral i) n)))
     liftM VVector $ V.generateM (fromIntegral n) g
 
 -- zero :: (a :: sort 0) -> a;

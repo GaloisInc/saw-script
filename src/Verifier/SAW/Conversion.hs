@@ -62,7 +62,6 @@ module Verifier.SAW.Conversion
   , asLocalVar
     -- ** Prelude matchers
   , asBoolType
-  , asFinValLit
   , asSuccLit
   , asBvNatLit
     -- ** Matchable typeclass
@@ -94,7 +93,6 @@ module Verifier.SAW.Conversion
   , bvConversions
   , succ_NatLit
   , addNat_NatLit
-  , get_VecLit
   , append_VecLit
   , append_bvNat
   , bvAdd_bvNat
@@ -103,7 +101,6 @@ module Verifier.SAW.Conversion
   , bvult_bvNat
   , bvsle_bvNat
   , bvslt_bvNat
-  , get_bvNat
   , slice_bvNat
   , remove_coerce
   , remove_unsafeCoerce
@@ -328,10 +325,6 @@ asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 asBoolType :: (Monad m, Termlike t) => Matcher m t ()
 asBoolType = asDataType "Prelude.Bool" asEmpty
 
-asFinValLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Fin
-asFinValLit = (\(i :*: j) -> Prim.FinVal i j)
-  <$> asCtor "Prelude.FinVal" (asAnyNatLit >: asAnyNatLit)
-
 asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
@@ -368,9 +361,6 @@ instance (Monad m, Termlike t) => Matchable m t Int where
 
 instance (Applicative m, Monad m, Termlike t) => Matchable m t Prim.BitVector where
     defaultMatcher = asBvNatLit
-
-instance (Functor m, Monad m, Termlike t) => Matchable m t Prim.Fin where
-    defaultMatcher = asFinValLit
 
 instance (Functor m, Monad m, Termlike t) => Matchable m t (Prim.Vec t t) where
     defaultMatcher = uncurry Prim.Vec <$> asAnyVecLit
@@ -589,11 +579,7 @@ equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
 
 -- | Conversions for operations on vector literals
 vecConversions :: Termlike t => [Conversion t]
-vecConversions = [get_VecLit, at_VecLit, append_VecLit]
-
-get_VecLit :: forall t. Termlike t => Conversion t
-get_VecLit = globalConv "Prelude.get"
-    (Prim.get :: Int -> t -> Prim.Vec t t -> Prim.Fin -> t)
+vecConversions = [at_VecLit, append_VecLit]
 
 at_VecLit :: forall t. Termlike t => Conversion t
 at_VecLit = globalConv "Prelude.at"
@@ -633,7 +619,7 @@ bvConversions =
     , globalConv "Prelude.bvUExt"  Prim.bvUExt
     , globalConv "Prelude.bvSExt"  Prim.bvSExt
 
-    , get_bvNat, at_bvNat, slice_bvNat
+    , at_bvNat, slice_bvNat
     , take_bvNat, drop_bvNat
     ]
 
@@ -657,9 +643,6 @@ bvsgt_bvNat = globalConv "Prelude.bvsgt" Prim.bvsgt
 bvsge_bvNat = globalConv "Prelude.bvsge" Prim.bvsge
 bvslt_bvNat = globalConv "Prelude.bvslt" Prim.bvslt
 bvsle_bvNat = globalConv "Prelude.bvsle" Prim.bvsle
-
-get_bvNat :: Termlike t => Conversion t
-get_bvNat = globalConv "Prelude.get" Prim.get_bv
 
 at_bvNat :: Termlike t => Conversion t
 at_bvNat = globalConv "Prelude.at" Prim.at_bv

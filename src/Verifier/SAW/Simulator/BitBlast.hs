@@ -231,9 +231,6 @@ beConstMap be = Map.fromList
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
   -- Vectors
-  , ("Prelude.generate", Prims.generateOp)
-  , ("Prelude.get", getOp)
-  , ("Prelude.set", setOp)
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))
   , ("Prelude.upd", Prims.updOp vFromLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
@@ -314,30 +311,6 @@ muxThunk be b x y = delay $ do x' <- force x; y' <- force y; muxBVal be b x' y'
 
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
-
--- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-getOp :: BValue l
-getOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.finFun $ \i ->
-    case v of
-      VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
-      VWord lv -> return (vBool (AIG.at lv (fromEnum (finVal i))))
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.getOp: expected vector, got " ++ show v
-
--- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-setOp :: BValue l
-setOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.finFun $ \i -> return $
-  VFun $ \y ->
-    case v of
-      VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
-      _ -> fail $ "Verifier.SAW.Simulator.BitBlast.setOp: expected vector, got " ++ show v
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: BValue l

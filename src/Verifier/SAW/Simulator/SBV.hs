@@ -51,7 +51,6 @@ import Control.Monad.State as ST
 
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
-import Verifier.SAW.Prim hiding (BV, ite, bv)
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
@@ -120,9 +119,6 @@ constMap = Map.fromList
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
   -- Vectors
-  , ("Prelude.generate", Prims.generateOp)
-  , ("Prelude.get", getOp)
-  , ("Prelude.set", setOp)
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
   , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
@@ -242,30 +238,6 @@ svAt x i = svTestBit x (svBitSize x - 1 - i)
 
 svUnpack :: SWord -> Vector SBool
 svUnpack x = V.generate (svBitSize x) (svAt x)
-
--- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-getOp :: SValue
-getOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.finFun $ \i ->
-    case v of
-      VVector xv -> force ((V.!) xv (fromEnum (finVal i)))
-      VWord lv -> return $ vBool $ svTestBit lv ((svBitSize lv - 1) - fromEnum (finVal i))
-      _ -> fail "getOp: expected vector"
-
--- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-setOp :: SValue
-setOp =
-  constFun $
-  constFun $
-  strictFun $ \v -> return $
-  Prims.finFun $ \i -> return $
-  VFun $ \y ->
-    case v of
-      VVector xv -> return $ VVector ((V.//) xv [(fromEnum (finVal i), y)])
-      _ -> fail "setOp: expected vector"
 
 -- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
 takeOp :: SValue

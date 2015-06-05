@@ -15,7 +15,6 @@ module Verifier.SAW.Prim where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Exception (assert)
 import qualified Control.Exception as X
 import Data.Bits
 import Data.Typeable (Typeable)
@@ -110,52 +109,6 @@ widthNat :: Nat -> Nat
 widthNat 0 = 0
 widthNat n = 1 + widthNat (n `div` 2)
 
-------------------------------------------------------------
--- Finite indices
-
-data Fin = FinVal { finVal :: !Nat, finRem :: Nat }
-    deriving (Eq, Show)
-
-finFromBound :: Nat -> Nat -> Fin
-finFromBound i n
-  | i < n = FinVal i (pred (n - i))
-  | otherwise = error "finFromBound given out-of-range index."
-
-finSize :: Fin -> Nat
-finSize (FinVal x r) = succ (r + x)
-
-incFinBy :: Fin -> Nat -> Maybe Fin
-incFinBy x y
-   | r' < 0 = Nothing
-   | otherwise = Just x'
- where r' = toInteger (finRem x) - toInteger y
-       x' = FinVal (finVal x + y) (fromInteger r')
-
-instance Enum Fin where
-  succ (FinVal _ 0) = error "FinVal has no successor."
-  succ (FinVal x r) = FinVal (succ x) (pred r)
-  pred (FinVal 0 _) = error "FinVal has no predecessor."
-  pred (FinVal x r) = FinVal (pred x) (succ r)
-  toEnum x = FinVal (toEnum x) (error "FinVal.toEnum has no bound.")
-  fromEnum = fromEnum . finVal
-  enumFrom x | finRem x == 0 = [x]
-             | otherwise = x : enumFrom (succ x)
-
-  enumFromThen x y =
-    case incFinBy x (finVal y) of
-      Nothing -> [x]
-      Just x' -> x : enumFromThen x' y
-
-  enumFromTo x z = enumFromThenTo x (FinVal 1 (finSize x)) z
-
-  enumFromThenTo x0 y z =
-      assert (finSize x0 == finSize z) $
-      assert (finVal x0 <= finVal z) $
-      go x0
-    where go x = case incFinBy x (finVal y) of
-                   Nothing -> [x]
-                   Just x' -> x : go x'
-
 -- data Vec :: (n :: Nat) -> sort 0 -> sort 0
 data Vec t a = Vec t !(Vector a)
 
@@ -201,8 +154,8 @@ addNat :: Integer -> Integer -> Integer
 addNat = (+)
 
 -- get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
-get :: Int -> t -> Vec t e -> Fin -> e
-get _ _ (Vec _ v) i = v ! fromEnum i
+--get :: Int -> t -> Vec t e -> Fin -> e
+--get _ _ (Vec _ v) i = v ! fromEnum i
 
 -- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 append :: Int -> Int -> t -> Vec t e -> Vec t e -> Vec t e
@@ -259,8 +212,8 @@ bvsle _ x y = signed x <= signed y
 
 -- | @get@ specialized to BitVector (big-endian)
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;
-get_bv :: Int -> () -> BitVector -> Fin -> Bool
-get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
+--get_bv :: Int -> () -> BitVector -> Fin -> Bool
+--get_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromEnum i)
 -- little-endian version:
 -- get_bv _ _ x i = testBit (unsigned x) (fromEnum i)
 
@@ -271,9 +224,9 @@ at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)
 
 -- | @set@ specialized to BitVector (big-endian)
 -- set :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a -> Vec n a;
-set_bv :: Int -> () -> BitVector -> Fin -> Bool -> BitVector
-set_bv _ _ x i b = BV (width x) $ f (unsigned x) (width x - 1 - fromEnum i)
-  where f = if b then setBit else clearBit
+--set_bv :: Int -> () -> BitVector -> Fin -> Bool -> BitVector
+--set_bv _ _ x i b = BV (width x) $ f (unsigned x) (width x - 1 - fromEnum i)
+--  where f = if b then setBit else clearBit
 
 -- | @append@ specialized to BitVector (big-endian)
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
