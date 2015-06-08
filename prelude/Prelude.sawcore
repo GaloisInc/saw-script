@@ -162,7 +162,7 @@ or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
 or_assoc True  _ _ = Refl Bool True;
 or_assoc False y z = Refl Bool (or y z);
 
-or_idem :: (x :: Bool) -> Eq Bool (and x x) x;
+or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
 or_idem True = Refl Bool True;
 or_idem False = Refl Bool False;
 
