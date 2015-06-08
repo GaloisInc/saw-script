@@ -479,7 +479,7 @@ resolveCtor gc (PosPair p nm) argc = do
       else
         tcFail p "Incorrect number of arguments given to constructor."
     DataTypeBinding{} -> tcFail p $ "Pattern matching data type is unsupported."
-    _ -> fail "Unexpected ident type"
+    DefBinding{} -> tcFail p $ "Not a data constructor: " ++ show nm
 
 -- TermContext
 
