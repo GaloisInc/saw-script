@@ -470,24 +470,20 @@ natCase p z s (Succ n) = s n;
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
-data Vec :: Nat -> sort 0 -> sort 0 where {
-    EmptyVec :: (a :: sort 0) -> Vec 0 a;
-    ConsVec :: (a :: sort 0) -> a -> (n::Nat) -> Vec n a -> Vec (Succ n) a;
-  }
---TODO
+data Vec :: Nat -> sort 0 -> sort 0 where { } -- primitive
+
+primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
+primitive ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
 
 -- Primitive function for generating an array.
 primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 
-at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-at _ _ (ConsVec a x n xs) Zero = x;
-at _ _ (ConsVec a x n xs) (Succ i) = at n a xs i;
--- Calling 'at' with EmptyVec is an error.
+primitive at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+-- `at n a v i` has the precondition `ltNat i n`
 
 upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-upd _ _ (ConsVec a x n xs) Zero y = ConsVec a y n xs;
-upd _ _ (ConsVec a x n xs) (Succ i) y = ConsVec a x n (upd n a xs i y);
--- Calling 'upd' with EmptyVec is an error.
+upd n a v j x = gen n a (\(i :: Nat) -> ite a (equalNat i j) x (at n a v i));
+-- TODO: assertion that j < n
 
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
@@ -585,9 +581,7 @@ primitive rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 -- Zip together two lists (truncating the longer of the two).
 primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
-foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
-foldr a b _ f z (EmptyVec _) = z;
-foldr a b _ f z (ConsVec _ x n xs) = f x (foldr a b n f z xs);
+primitive foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 
 reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
 reverse n a xs = gen n a (\(i :: Nat) -> at n a xs (subNat (subNat n 1) i));
