@@ -149,6 +149,20 @@ maxNatOp =
   natFun' "maxNat2" $ \n -> return $
   vNat (max m n)
 
+-- equalNat :: Nat -> Nat -> Bool;
+equalNat :: Monad m => (Bool -> m b) -> Value m b w e
+equalNat lit =
+  natFun' "equalNat1" $ \m -> return $
+  natFun' "equalNat2" $ \n ->
+  VBool <$> lit (m == n)
+
+-- equalNat :: Nat -> Nat -> Bool;
+ltNat :: Monad m => (Bool -> m b) -> Value m b w e
+ltNat lit =
+  natFun' "ltNat1" $ \m -> return $
+  natFun' "ltNat2" $ \n ->
+  VBool <$> lit (m < n)
+
 -- divModNat :: Nat -> Nat -> #(Nat, Nat);
 divModNatOp :: Monad m => Value m b w e
 divModNatOp =

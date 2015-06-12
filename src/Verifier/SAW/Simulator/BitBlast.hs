@@ -230,6 +230,8 @@ beConstMap be = Map.fromList
   , ("Prelude.expNat", Prims.expNatOp)
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
+  , ("Prelude.equalNat", Prims.equalNat (return . AIG.constant be))
+  , ("Prelude.ltNat", Prims.ltNat (return . AIG.constant be))
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))

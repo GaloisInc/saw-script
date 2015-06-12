@@ -247,6 +247,8 @@ constMap = Map.fromList
   , ("Prelude.expNat", Prims.expNatOp)
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
+  , ("Prelude.equalNat", Prims.equalNat return)
+  , ("Prelude.ltNat", Prims.ltNat return)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp bvUnpack Prim.bvAt ite)

@@ -118,6 +118,8 @@ constMap = Map.fromList
   , ("Prelude.expNat", Prims.expNatOp)
   , ("Prelude.widthNat", Prims.widthNatOp)
   , ("Prelude.natCase", Prims.natCaseOp)
+  , ("Prelude.equalNat", Prims.equalNat (return . svBool))
+  , ("Prelude.ltNat", Prims.ltNat (return . svBool))
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
