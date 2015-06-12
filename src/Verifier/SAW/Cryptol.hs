@@ -20,7 +20,7 @@ import Control.Exception (assert)
 import Control.Applicative
 import Data.Traversable hiding (sequence, mapM)
 #endif
-import Control.Monad (join, foldM, unless)
+import Control.Monad (join, foldM, unless, (<=<))
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -31,7 +31,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Env as Env
 import Cryptol.Eval.Type (evalType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.Prims.Syntax as P
+--import qualified Cryptol.Prims.Syntax as P
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
@@ -211,75 +211,74 @@ proveProp sc env prop =
   where
     ty = importType sc env
 
--- | Convert built-in constants to SAWCore.
-importECon :: SharedContext s -> P.ECon -> IO (SharedTerm s)
-importECon sc econ =
-  case econ of
-    P.ECTrue        -> scBool sc True
-    P.ECFalse       -> scBool sc False
-    P.ECDemote      -> scGlobalDef sc "Cryptol.ecDemote"      -- ^ Converts a numeric type into its corresponding value.
+importPrimitive :: SharedContext s -> C.QName -> IO (SharedTerm s)
+importPrimitive sc (C.QName (Just (C.ModName ["Cryptol"])) (C.Name nm)) =
+  case nm of
+    "True"          -> scBool sc True
+    "False"         -> scBool sc False
+    "demote"        -> scGlobalDef sc "Cryptol.ecDemote"      -- ^ Converts a numeric type into its corresponding value.
                                                      -- { val, bits } (fin val, fin bits, bits >= width val) => [bits]
-    P.ECPlus        -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
-    P.ECMinus       -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
-    P.ECMul         -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Arith a) => a -> a -> a
-    P.ECDiv         -> scGlobalDef sc "Cryptol.ecDiv"         -- {a} (Arith a) => a -> a -> a
-    P.ECMod         -> scGlobalDef sc "Cryptol.ecMod"         -- {a} (Arith a) => a -> a -> a
-    P.ECExp         -> scGlobalDef sc "Cryptol.ecExp"         -- {a} (Arith a) => a -> a -> a
-    P.ECLg2         -> scGlobalDef sc "Cryptol.ecLg2"         -- {a} (Arith a) => a -> a
-    P.ECNeg         -> scGlobalDef sc "Cryptol.ecNeg"         -- {a} (Arith a) => a -> a
-    P.ECLt          -> scGlobalDef sc "Cryptol.ecLt"          -- {a} (Cmp a) => a -> a -> Bit
-    P.ECGt          -> scGlobalDef sc "Cryptol.ecGt"          -- {a} (Cmp a) => a -> a -> Bit
-    P.ECLtEq        -> scGlobalDef sc "Cryptol.ecLtEq"        -- {a} (Cmp a) => a -> a -> Bit
-    P.ECGtEq        -> scGlobalDef sc "Cryptol.ecGtEq"        -- {a} (Cmp a) => a -> a -> Bit
-    P.ECEq          -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Cmp a) => a -> a -> Bit
-    P.ECNotEq       -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
-    P.ECFunEq       -> scGlobalDef sc "Cryptol.ecFunEq"       -- {a b} (Cmp b) => (a -> b) -> (a -> b) -> a -> Bit
-    P.ECFunNotEq    -> scGlobalDef sc "Cryptol.ecFunNotEq"    -- {a b} (Cmp b) => (a -> b) -> (a -> b) -> a -> Bit
-    P.ECMin         -> scGlobalDef sc "Cryptol.ecMin"         -- {a} (Cmp a) => a -> a -> a
-    P.ECMax         -> scGlobalDef sc "Cryptol.ecMax"         -- {a} (Cmp a) => a -> a -> a
-    P.ECAnd         -> scGlobalDef sc "Cryptol.ecAnd"         -- {a} a -> a -> a        -- Bits a
-    P.ECOr          -> scGlobalDef sc "Cryptol.ecOr"          -- {a} a -> a -> a        -- Bits a
-    P.ECXor         -> scGlobalDef sc "Cryptol.ecXor"         -- {a} a -> a -> a        -- Bits a
-    P.ECCompl       -> scGlobalDef sc "Cryptol.ecCompl"       -- {a} a -> a             -- Bits a
-    P.ECZero        -> scGlobalDef sc "Cryptol.ecZero"        -- {a} a                  -- Bits a
-    P.ECShiftL      -> scGlobalDef sc "Cryptol.ecShiftL"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECShiftR      -> scGlobalDef sc "Cryptol.ecShiftR"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECRotL        -> scGlobalDef sc "Cryptol.ecRotL"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECRotR        -> scGlobalDef sc "Cryptol.ecRotR"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    P.ECCat         -> scGlobalDef sc "Cryptol.ecCat"         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
-    P.ECSplitAt     -> scGlobalDef sc "Cryptol.ecSplitAt"     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
-    P.ECJoin        -> scGlobalDef sc "Cryptol.ecJoin"        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
-    P.ECSplit       -> scGlobalDef sc "Cryptol.ecSplit"       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
-    P.ECReverse     -> scGlobalDef sc "Cryptol.ecReverse"     -- {a,b} (fin a) => [a] b -> [a] b
-    P.ECTranspose   -> scGlobalDef sc "Cryptol.ecTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
-    P.ECAt          -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,i} (fin i) => [n]a -> [i] -> a
-    P.ECAtRange     -> scGlobalDef sc "Cryptol.ecAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
-    P.ECAtBack      -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
-    P.ECAtRangeBack -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {n,a,m,i} (fin n, fin i) => [n]a -> [m][i] -> [m]a
-    P.ECFromThen    -> scGlobalDef sc "Cryptol.ecFromThen"
+    "+"             -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
+    "-"             -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
+    "*"             -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Arith a) => a -> a -> a
+    "/"             -> scGlobalDef sc "Cryptol.ecDiv"         -- {a} (Arith a) => a -> a -> a
+    "%"             -> scGlobalDef sc "Cryptol.ecMod"         -- {a} (Arith a) => a -> a -> a
+    "^^"            -> scGlobalDef sc "Cryptol.ecExp"         -- {a} (Arith a) => a -> a -> a
+    "lg2"           -> scGlobalDef sc "Cryptol.ecLg2"         -- {a} (Arith a) => a -> a
+    "negate"        -> scGlobalDef sc "Cryptol.ecNeg"         -- {a} (Arith a) => a -> a
+    "<"             -> scGlobalDef sc "Cryptol.ecLt"          -- {a} (Cmp a) => a -> a -> Bit
+    ">"             -> scGlobalDef sc "Cryptol.ecGt"          -- {a} (Cmp a) => a -> a -> Bit
+    "<="            -> scGlobalDef sc "Cryptol.ecLtEq"        -- {a} (Cmp a) => a -> a -> Bit
+    ">="            -> scGlobalDef sc "Cryptol.ecGtEq"        -- {a} (Cmp a) => a -> a -> Bit
+    "=="            -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Cmp a) => a -> a -> Bit
+    "!="            -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
+    "&&"            -> scGlobalDef sc "Cryptol.ecAnd"         -- {a} a -> a -> a        -- Bits a
+    "||"            -> scGlobalDef sc "Cryptol.ecOr"          -- {a} a -> a -> a        -- Bits a
+    "^"             -> scGlobalDef sc "Cryptol.ecXor"         -- {a} a -> a -> a        -- Bits a
+    "complement"    -> scGlobalDef sc "Cryptol.ecCompl"       -- {a} a -> a             -- Bits a
+    "zero"          -> scGlobalDef sc "Cryptol.ecZero"        -- {a} a                  -- Bits a
+    "<<"            -> scGlobalDef sc "Cryptol.ecShiftL"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    ">>"            -> scGlobalDef sc "Cryptol.ecShiftR"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    "<<<"           -> scGlobalDef sc "Cryptol.ecRotL"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    ">>>"           -> scGlobalDef sc "Cryptol.ecRotR"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    "#"             -> scGlobalDef sc "Cryptol.ecCat"         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
+    "splitAt"       -> scGlobalDef sc "Cryptol.ecSplitAt"     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
+    "join"          -> scGlobalDef sc "Cryptol.ecJoin"        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
+    "split"         -> scGlobalDef sc "Cryptol.ecSplit"       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
+    "reverse"       -> scGlobalDef sc "Cryptol.ecReverse"     -- {a,b} (fin a) => [a] b -> [a] b
+    "transpose"     -> scGlobalDef sc "Cryptol.ecTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
+    "@"             -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,i} (fin i) => [n]a -> [i] -> a
+    "@@"            -> scGlobalDef sc "Cryptol.ecAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
+    "!"             -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
+    "!!"            -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {n,a,m,i} (fin n, fin i) => [n]a -> [m][i] -> [m]a
+    "fromThen"      -> scGlobalDef sc "Cryptol.ecFromThen"
                                -- fromThen : {first,next,bits,len}
                                --             ( fin first, fin next, fin bits
                                --             , bits >= width first, bits >= width next
                                --             , lengthFromThen first next bits == len
                                --             )
                                --          => [len] [bits]
-    P.ECFromTo      -> scGlobalDef sc "Cryptol.ecFromTo"
+    "fromTo"        -> scGlobalDef sc "Cryptol.ecFromTo"
                                -- fromTo : {first, last, bits}
                                --           ( fin last, fin bits, last >== first, bits >== width last)
                                --        => [1 + (last - first)] [bits]
-    P.ECFromThenTo  -> scGlobalDef sc "Cryptol.ecFromThenTo"
-    P.ECInfFrom     -> scGlobalDef sc "Cryptol.ecInfFrom"     -- {a} (fin a) => [a] -> [inf][a]
-    P.ECInfFromThen -> scGlobalDef sc "Cryptol.ecInfFromThen" -- {a} (fin a) => [a] -> [a] -> [inf][a]
-    P.ECError       -> scGlobalDef sc "Cryptol.ecError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
-    P.ECPMul        -> scGlobalDef sc "Cryptol.ecPMul"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [max 1 (a + b) - 1]
-    P.ECPDiv        -> scGlobalDef sc "Cryptol.ecPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
-    P.ECPMod        -> scGlobalDef sc "Cryptol.ecPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
-    P.ECRandom      -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
+    "fromThenTo"    -> scGlobalDef sc "Cryptol.ecFromThenTo"
+    "infFrom"       -> scGlobalDef sc "Cryptol.ecInfFrom"     -- {a} (fin a) => [a] -> [inf][a]
+    "infFromThen"   -> scGlobalDef sc "Cryptol.ecInfFromThen" -- {a} (fin a) => [a] -> [a] -> [inf][a]
+    "error"         -> scGlobalDef sc "Cryptol.ecError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
+    "pmult"         -> scGlobalDef sc "Cryptol.ecPMul"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [max 1 (a + b) - 1]
+    "pdiv"          -> scGlobalDef sc "Cryptol.ecPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
+    "pmod"          -> scGlobalDef sc "Cryptol.ecPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
+    "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
+    _ -> fail $ unwords ["Unknown Cryptol primitive name:", show nm]
+
+importPrimitive _ nm =
+  fail $ unwords ["Improper Cryptol primitive name:", show nm]
+
 
 importExpr :: SharedContext s -> Env s -> C.Expr -> IO (SharedTerm s)
 importExpr sc env expr =
   case expr of
-    C.ECon econ                 -> importECon sc econ -- ^ Built-in constant
     C.EList es t                -> do t' <- ty t
                                       es' <- traverse go es
                                       scVector sc t' es'
@@ -350,9 +349,13 @@ importExpr sc env expr =
 importDeclGroup :: Bool -> SharedContext s -> Env s -> C.DeclGroup -> IO (Env s)
 
 importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
-  do env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
+  case C.dDefinition decl of
+    C.DPrim ->
+     fail $ unwords ["Primitive declarations cannot be recursive:", show (C.dName decl)]
+    C.DExpr expr -> do
+     env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
      t' <- importSchema sc env (C.dSignature decl)
-     e' <- importExpr sc env1 (C.dDefinition decl)
+     e' <- importExpr sc env1 expr
      let x = qnameToString (C.dName decl)
      f' <- scLambda sc x t' e'
      rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
@@ -360,6 +363,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
+
 
 -- - A group of mutually-recursive declarations -
 -- We handle this by "tupling up" all the declarations using a record and
@@ -381,8 +385,14 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      -- the type of the recursive record
      rect <- scRecordType sc $ Map.fromList $ zip (map (qnameToString . C.dName) decls) ts
 
+     let extractDeclExpr decl =
+           case C.dDefinition decl of
+             C.DExpr expr -> return expr
+             C.DPrim ->
+                fail $ unwords ["Primitive declarations cannot be recursive:", show (C.dName decl)]
+
      -- the raw imported bodies of the declarations
-     es <- mapM (importExpr sc env2 . C.dDefinition) decls
+     es <- mapM (importExpr sc env2 <=< extractDeclExpr) decls
 
      -- build a list of projections from a record variable
      projs <- mapM (\d -> scRecordSelect sc recv (qnameToString (C.dName d))) decls
@@ -414,7 +424,18 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      return env'
 
 importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
-  do rhs <- importExpr sc env (C.dDefinition decl)
+  case C.dDefinition decl of
+    C.DPrim
+     | isTopLevel -> do
+        rhs <- importPrimitive sc (C.dName decl)
+        let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
+                      , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+        return env'
+     | otherwise -> do
+        fail $ unwords ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
+
+    C.DExpr expr -> do
+     rhs <- importExpr sc env expr
      rhs' <- if not isTopLevel then return rhs else do
        t <- importSchema sc env (C.dSignature decl)
        scTermF sc (Constant (qnameToString (C.dName decl)) rhs t)
@@ -517,8 +538,11 @@ importMatches sc env (C.From qname _ty1 expr : matches) = do
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
   return (result, (C..*.) len1 len2, C.tTuple [ty1, ty2], (qname, ty1) : args)
 
-importMatches sc env [C.Let decl] =
-  do e <- importExpr sc env (C.dDefinition decl)
+importMatches sc env [C.Let decl]
+  | C.DPrim <- C.dDefinition decl = do
+     fail $ unwords ["Primitive declarations not allowed in 'let':", show (C.dName decl)]
+  | C.DExpr expr <- C.dDefinition decl = do
+     e <- importExpr sc env expr
      ty1 <- case C.dSignature decl of
               C.Forall [] [] ty1 -> return ty1
               _ -> unimplemented "polymorphic Let"
@@ -527,7 +551,11 @@ importMatches sc env [C.Let decl] =
      return (result, C.tOne, ty1, [(C.dName decl, ty1)])
 
 importMatches sc env (C.Let decl : matches) =
-  do e <- importExpr sc env (C.dDefinition decl)
+  case C.dDefinition decl of
+    C.DPrim -> do
+     fail $ unwords ["Primitive declarations not allowed in 'let':", show (C.dName decl)]
+    C.DExpr expr -> do
+     e <- importExpr sc env expr
      ty1 <- case C.dSignature decl of
               C.Forall [] [] ty1 -> return ty1
               _ -> unimplemented "polymorphic Let"
@@ -574,7 +602,7 @@ scCryptolEq sc x y = do
   tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
   ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
   unless (tx == ty) $ fail $ "scCryptolEq: type mismatch: " ++ show (tx, ty)
-  let expr = C.EProofApp (C.ETApp (C.ECon P.ECEq) tx)
+  let expr = (C.EProofApp (C.ETApp (C.ePrim "==") tx))
   eq <- importExpr sc emptyEnv expr
   scApplyAll sc eq [x, y]
   where
