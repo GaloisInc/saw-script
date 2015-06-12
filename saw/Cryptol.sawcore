@@ -289,9 +289,6 @@ ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
 ecFunNotEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
 ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
 
-primitive ecMin :: (a :: sort 0) -> PCmp a -> a -> a -> a;
-primitive ecMax :: (a :: sort 0) -> PCmp a -> a -> a -> a;
-
 -- Logic
 ecAnd :: (a :: sort 0) -> a -> a -> a;
 ecAnd = binary bvAnd and;
@@ -368,10 +365,15 @@ ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> PFin n -> PFin i
 ecAtRangeBack n a m i pn pi xs = seqMap (seq i Bool) a m (ecAtBack n a i pn pi xs);
 
 -- Static word sequences
-primitive ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
+ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
            -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next)
            -> PEqual (tcLenFromThen first next bits) len
            -> seq len (seq bits Bool);
+ecFromThen _ _ _ (TCNum len) (PFinNum first) (PFinNum next) (PFinNum bits) _ _ _ =
+  gen len (Vec bits Bool)
+    (\(i :: Nat) -> bvAdd bits (bvNat bits first)
+                          (bvMul bits (bvSub bits (bvNat bits next) (bvNat bits first))
+			              (bvNat bits i)));
 
 ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
          -> PGeq last first -> PGeq bits (tcWidth last)
