@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Prims
