@@ -113,16 +113,16 @@ seqConst TCInf = streamConst;
 --------------------------------------------------------------------------------
 -- Predicate symbols
 
-data PEqual :: Num -> Num -> sort 0 where {}
-data PNeq   :: Num -> Num -> sort 0 where {}
-data PGeq   :: Num -> Num -> sort 0 where {}
+primitive data PEqual :: Num -> Num -> sort 0;
+primitive data PNeq   :: Num -> Num -> sort 0;
+primitive data PGeq   :: Num -> Num -> sort 0;
 
 data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
 
-data PArith :: sort 0 -> sort 0 where {}
-data PCmp   :: sort 0 -> sort 0 where {}
+primitive data PArith :: sort 0 -> sort 0;
+primitive data PCmp   :: sort 0 -> sort 0;
 
 {-
 data PArith :: sort 0 -> sort 0 where {
