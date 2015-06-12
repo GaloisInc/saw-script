@@ -37,7 +37,6 @@ import Data.Bits
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -166,7 +165,10 @@ toBool (VBool b) = Just b
 toBool _  = Nothing
 
 forceBool :: SValue -> SBool
-forceBool = fromJust . toBool
+forceBool sv =
+   case toBool sv of
+      Just x  -> x
+      Nothing -> error $ unwords ["forceBool failed:", show sv]
 
 toWord :: SValue -> IO (Maybe SWord)
 toWord (VWord w) = return (Just w)

@@ -68,7 +68,6 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Maybe (fromJust)
 import Control.Monad.Trans.Writer.Strict
 
 
@@ -390,7 +389,10 @@ rewriteSharedTermToTerm sc ss t0 =
         useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
     rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
     rewriteTop (asTupleRedex -> Just (ts, i)) = return (ts !! (i - 1))
-    rewriteTop (asRecordRedex -> Just (m, i)) = return (fromJust (Map.lookup i m))
+    rewriteTop (asRecordRedex -> Just (m, i)) =
+       case Map.lookup i m of
+         Just x  -> return x
+         Nothing -> fail $ unwords ["failed to find record field ", i, "in", show m]
     rewriteTop t = apply (Net.match_term ss t) t
     apply :: (?cache :: Cache IORef TermIndex Term) =>
              [Either (RewriteRule Term) (Conversion Term)] -> Term -> IO Term
