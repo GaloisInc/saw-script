@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Prims
@@ -13,10 +12,6 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Simulator.Prims where
 
 import Prelude hiding (sequence, mapM)
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>))
-#endif
 
 import Control.Monad (foldM, liftM)
 import qualified Data.Map as Map
@@ -159,14 +154,14 @@ equalNat :: Monad m => (Bool -> m b) -> Value m b w e
 equalNat lit =
   natFun' "equalNat1" $ \m -> return $
   natFun' "equalNat2" $ \n ->
-  VBool <$> lit (m == n)
+  lit (m == n) >>= return . VBool
 
 -- equalNat :: Nat -> Nat -> Bool;
 ltNat :: Monad m => (Bool -> m b) -> Value m b w e
 ltNat lit =
   natFun' "ltNat1" $ \m -> return $
   natFun' "ltNat2" $ \n ->
-  VBool <$> lit (m < n)
+  lit (m < n) >>= return . VBool
 
 -- divModNat :: Nat -> Nat -> #(Nat, Nat);
 divModNatOp :: Monad m => Value m b w e
