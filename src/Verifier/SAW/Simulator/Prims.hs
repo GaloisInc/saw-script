@@ -13,6 +13,10 @@ module Verifier.SAW.Simulator.Prims where
 
 import Prelude hiding (sequence, mapM)
 
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ((<$>))
+#endif
+
 import Control.Monad (foldM, liftM)
 import qualified Data.Map as Map
 import Data.Bits
