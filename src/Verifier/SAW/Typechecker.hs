@@ -88,6 +88,7 @@ groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
           where eq = DefEqnGen (snd <$> pats) rhs
                 eqMap' = Map.insertWith (++) (val pnm) [eq] eqMap
         groupDecl _ Un.DataDecl{} = error "Unexpected data declaration in let binding"
+        groupDecl _ Un.PrimDataDecl{} = error "Unexpected primitive data declaration in let binding"
 
 type TCDataType = DataTypeGen TCDTType (Ctor Ident TCCtorType)
 type TCDef = TCDefGen Identity
@@ -382,9 +383,10 @@ topEval :: TCRef s v -> TC s v
 topEval r = eval (internalError $ "Cyclic error in top level" ++ show r) r
 
 evalDataType :: TCRefDataType s -> TC s TCDataType
-evalDataType (DataTypeGen n tp ctp) =
+evalDataType (DataTypeGen n tp ctp isPrim) =
   DataTypeGen n <$> topEval tp
                 <*> traverse (traverse topEval) ctp
+                <*> pure isPrim
 
 evalDef :: TCRefDef s -> TC s TCDef
 evalDef (DefGen nm qual tpr elr) =
@@ -399,10 +401,11 @@ data CompletionContext
 completeDataType :: CompletionContext
                  -> TCDataType
                  -> TypedDataType
-completeDataType cc (DataTypeGen dt tp cl) =
+completeDataType cc (DataTypeGen dt tp cl isPrim) =
   DataType { dtName = dt
            , dtType = completeTerm cc (termFromTCDTType tp)
            , dtCtors = fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
+           , dtIsPrimitive = isPrim
            }
 
 completeDef :: CompletionContext
@@ -703,14 +706,19 @@ parseDecl eqnMap d = do
         let def = DefGen (mkIdent mnm nm) qual rtp eqs
         isCtx  %= insertDef [Nothing] True (LocalLoc p) def
         isDefs %= (def:)
-
+    Un.PrimDataDecl psym utp -> do
+      let dti = mkIdent mnm (val psym)
+      dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
+      let dt = DataTypeGen dti dtp [] True
+      isCtx %= insertDataType [Nothing] True (LocalLoc (pos psym)) dt
+      isTypes %= (DataTypeGen dti dtp [] True :)
     Un.DataDecl psym utp ucl -> do
       let dti = mkIdent mnm (val psym)
       dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
       cl  <- traverse (parseCtor dti) ucl
-      let dt = DataTypeGen dti dtp cl
+      let dt = DataTypeGen dti dtp cl False
       isCtx   %= insertDataType [Nothing] True (LocalLoc (pos psym)) dt
-      isTypes %= (DataTypeGen dti dtp (view _3 <$> cl):)
+      isTypes %= (DataTypeGen dti dtp (view _3 <$> cl) False :)
     Un.TermDef{} -> return ()
 
 parseImport :: Map ModuleName Module
@@ -740,7 +748,7 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
           let addInModule = includeNameInModule mcns cnm
           (addInModule,loc,) . Ctor cnm <$> addPending (identName cnm) cfn
         let dtuse = includeNameInModule mcns dtnm
-        isCtx %= insertDataType mnml dtuse loc (DataTypeGen dtnm dtr cl)
+        isCtx %= insertDataType mnml dtuse loc (DataTypeGen dtnm dtr cl (dtIsPrimitive dt))
       -- Add definitions to module.
       forOf_ folded (moduleDefs m) $ \def -> do
         let inm = identName (defIdent def)

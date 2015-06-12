@@ -399,6 +399,7 @@ ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
 data DataType n t = DataType { dtName :: n
                              , dtType :: t
                              , dtCtors :: [Ctor n t]
+                             , dtIsPrimitive :: Bool
                              }
   deriving (Functor, Foldable, Traversable)
 

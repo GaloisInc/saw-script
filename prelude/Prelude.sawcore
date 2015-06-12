@@ -470,7 +470,7 @@ natCase p z s (Succ n) = s n;
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
-data Vec :: Nat -> sort 0 -> sort 0 where { } -- primitive
+primitive data Vec :: Nat -> sort 0 -> sort 0;
 
 primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
 primitive ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
@@ -830,17 +830,17 @@ bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i
 --------------------------------------------------------------------------------
 -- String values
 
-data String :: sort 0 where { }
+primitive data String :: sort 0;
 
 --------------------------------------------------------------------------------
 -- Floating-point values
 
-data Float :: sort 0 where { }
+primitive data Float :: sort 0;
 
 primitive bvToFloat :: bitvector 32 -> Float;
 primitive floatToBV :: Float -> bitvector 32;
 
-data Double :: sort 0 where { }
+primitive data Double :: sort 0;
 
 primitive bvToDouble :: bitvector 64 -> Double;
 primitive doubleToBV :: Double -> bitvector 64;

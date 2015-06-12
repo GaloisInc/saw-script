@@ -204,6 +204,7 @@ data DeclQualifier
 data Decl
    = TypeDecl DeclQualifier [(PosPair String)] Term
    | DataDecl (PosPair String) Term [CtorDecl]
+   | PrimDataDecl (PosPair String) Term
    | TermDef (PosPair String) [(ParamType, Pat)] Term
   deriving (Show)
 
