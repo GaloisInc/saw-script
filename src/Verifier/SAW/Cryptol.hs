@@ -31,7 +31,6 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Env as Env
 import Cryptol.Eval.Type (evalType)
 import qualified Cryptol.TypeCheck.AST as C
---import qualified Cryptol.Prims.Syntax as P
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
@@ -602,9 +601,12 @@ scCryptolEq sc x y = do
   tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
   ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
   unless (tx == ty) $ fail $ "scCryptolEq: type mismatch: " ++ show (tx, ty)
-  let expr = (C.EProofApp (C.ETApp (C.ePrim "==") tx))
-  eq <- importExpr sc emptyEnv expr
-  scApplyAll sc eq [x, y]
+
+  -- Actually apply the equality function, along with the bogus "proof" ePCmp
+  t <- scTypeOf sc x
+  cmpPrf <- scGlobalApply sc "Cryptol.ePCmp" [t]
+  scGlobalApply sc "Cryptol.ecEq" [t, cmpPrf, x, y]
+
   where
     defs1 = map (mkIdent (mkModuleName ["Prelude"])) ["bitvector"]
     defs2 = map (mkIdent (mkModuleName ["Cryptol"])) ["seq"]
