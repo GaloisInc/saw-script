@@ -103,7 +103,6 @@ importTFun :: SharedContext s -> C.TFun -> IO (SharedTerm s)
 importTFun sc tf =
   case tf of
     C.TCWidth         -> scGlobalDef sc "Cryptol.tcWidth"
-    C.TCLg2           -> scGlobalDef sc "Cryptol.tcLg2"
     C.TCAdd           -> scGlobalDef sc "Cryptol.tcAdd"
     C.TCSub           -> scGlobalDef sc "Cryptol.tcSub"
     C.TCMul           -> scGlobalDef sc "Cryptol.tcMul"
