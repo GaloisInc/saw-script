@@ -29,6 +29,7 @@ module Verifier.SAW.TypedAST
  , preludeName
  , ModuleDecl(..)
  , moduleDecls
+ , allModuleDecls
  , TypedDataType
  , moduleDataTypes
  , moduleImports
@@ -44,6 +45,12 @@ module Verifier.SAW.TypedAST
  , insImport
  , insDataType
  , insDef
+ , moduleActualDefs
+ , allModuleActualDefs
+ , modulePrimitives
+ , allModulePrimitives
+ , moduleAxioms
+ , allModuleAxioms
    -- * Data types and defintiions.
  , DataType(..)
  , Ctor(..)
@@ -956,3 +963,48 @@ insDef m d
 
 moduleDecls :: Module -> [ModuleDecl]
 moduleDecls = reverse . moduleRDecls
+
+allModuleDecls :: Module -> [ModuleDecl]
+allModuleDecls m = concatMap moduleDecls (m : Map.elems (m^.moduleImports))
+
+modulePrimitives :: Module -> [TypedDef]
+modulePrimitives m =
+    [ def
+    | DefDecl def <- moduleDecls m
+    , defQualifier def == PrimQualifier
+    ]
+
+moduleAxioms :: Module -> [TypedDef]
+moduleAxioms m =
+    [ def
+    | DefDecl def <- moduleDecls m
+    , defQualifier def == AxiomQualifier
+    ]
+
+moduleActualDefs :: Module -> [TypedDef]
+moduleActualDefs m =
+    [ def
+    | DefDecl def <- moduleDecls m
+    , defQualifier def == NoQualifier
+    ]
+
+allModulePrimitives :: Module -> [TypedDef]
+allModulePrimitives m =
+    [ def
+    | DefDecl def <- allModuleDecls m
+    , defQualifier def == PrimQualifier
+    ]
+
+allModuleAxioms :: Module -> [TypedDef]
+allModuleAxioms m =
+    [ def
+    | DefDecl def <- allModuleDecls m
+    , defQualifier def == AxiomQualifier
+    ]
+
+allModuleActualDefs :: Module -> [TypedDef]
+allModuleActualDefs m =
+    [ def
+    | DefDecl def <- allModuleDecls m
+    , defQualifier def == NoQualifier
+    ]
