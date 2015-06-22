@@ -143,16 +143,16 @@ data PCmp :: KType -> sort 0 where {
 -- Partial functions to select instances (terms translated from
 -- type-correct Cryptol should never hit the undefined cases)
 
-primitive ePEqual :: (m n :: Num) -> PEqual m n;
-primitive ePNeq :: (m n :: Num) -> PNeq m n;
-primitive ePGeq :: (m n :: Num) -> PGeq m n;
+axiom ePEqual :: (m n :: Num) -> PEqual m n;
+axiom ePNeq :: (m n :: Num) -> PNeq m n;
+axiom ePGeq :: (m n :: Num) -> PGeq m n;
 
 ePFin :: (n :: Num) -> PFin n;
 ePFin (TCNum n) = PFinNum n;
 -- ePFin TCInf is undefined
 
-primitive ePArith :: (a :: sort 0) -> PArith a;
-primitive ePCmp :: (a :: sort 0) -> PCmp a;
+axiom ePArith :: (a :: sort 0) -> PArith a;
+axiom ePCmp :: (a :: sort 0) -> PCmp a;
 
 --------------------------------------------------------------------------------
 -- Auxiliary functions
