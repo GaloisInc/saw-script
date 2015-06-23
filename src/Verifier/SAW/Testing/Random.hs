@@ -33,6 +33,7 @@ import Control.Monad (msum, replicateM)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Random
 import Data.Map (Map)
+import qualified Data.Map as Map
 import System.Random.TF (newTFGen, TFGen)
 
 ----------------------------------------------------------------
@@ -86,7 +87,7 @@ scRunTest sc fun gens = do
     apply xs = do
       xs' <- mapM (scFiniteValue sc) xs
       app <- scApplyAll sc fun xs'
-      return $ evalSharedTerm (scModule sc) app
+      return $ evalSharedTerm (scModule sc) Map.empty app
 
 -- | Given a function type, compute generators for the function's
 -- arguments. The supported function types are of the form

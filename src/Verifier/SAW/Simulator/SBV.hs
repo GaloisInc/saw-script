@@ -22,8 +22,10 @@ Portability : non-portable (language extensions)
 -}
 module Verifier.SAW.Simulator.SBV
   ( sbvSolve
+  , SValue
   , Labeler(..)
   , sbvCodeGen
+  , module Verifier.SAW.Simulator.SBV.SWord
   ) where
 
 import Data.SBV.Dynamic
@@ -634,13 +636,13 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: Module -> [String] -> SharedTerm s -> IO SValue
-sbvSolveBasic m unints t = do
+sbvSolveBasic :: Module -> Map Ident SValue -> [String] -> SharedTerm s -> IO SValue
+sbvSolveBasic m addlPrims unints t = do
   let unintSet = Set.fromList unints
   let uninterpreted nm ty
         | Set.member nm unintSet = Just $ parseUninterpreted [] nm ty
         | otherwise              = Nothing
-  cfg <- Sim.evalGlobal m constMap uninterpreted
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) uninterpreted
   let cfg' = cfg { Sim.simExtCns = const (parseUninterpreted []) }
   Sim.evalSharedTerm cfg' t
 
@@ -704,12 +706,16 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-sbvSolve :: SharedContext s -> [String] -> SharedTerm s -> IO ([Labeler], Symbolic SBool)
-sbvSolve sc unints t = do
+sbvSolve :: SharedContext s
+         -> Map Ident SValue
+         -> [String]
+         -> SharedTerm s
+         -> IO ([Labeler], Symbolic SBool)
+sbvSolve sc addlPrims unints t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
   shapes <- traverse (asFiniteType sc) argTs
-  bval <- sbvSolveBasic (scModule sc) unints t
+  bval <- sbvSolveBasic (scModule sc) addlPrims unints t
   let (labels, vars) = flip evalState 0 $ unzip <$> traverse newVars shapes
   let prd = do
               bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
@@ -783,12 +789,18 @@ argTypes sc t = do
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> argTypes sc t2
     _                            -> return []
 
-sbvCodeGen :: SharedContext s -> [String] -> Maybe FilePath -> String -> SharedTerm s -> IO ()
-sbvCodeGen sc unints path fname t = do
+sbvCodeGen :: SharedContext s
+           -> Map Ident SValue
+           -> [String]
+           -> Maybe FilePath
+           -> String
+           -> SharedTerm s
+           -> IO ()
+sbvCodeGen sc addlPrims unints path fname t = do
   ty <- scTypeOf sc t
   argTs <- argTypes sc ty
   shapes <- traverse (asFiniteType sc) argTs
-  bval <- sbvSolveBasic (scModule sc) unints t
+  bval <- sbvSolveBasic (scModule sc) addlPrims unints t
   let vars = evalState (traverse newCodeGenVars shapes) 0
   let codegen = do
         args <- traverse (fmap ready) vars
