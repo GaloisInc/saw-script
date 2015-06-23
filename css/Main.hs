@@ -108,7 +108,7 @@ processModule menv fout funcName = do
 
 writeAIG :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
 writeAIG sc f t = do
-  BBSim.withBitBlastedTerm ABC.giaNetwork sc t $ \be ls -> do
+  BBSim.withBitBlastedTerm ABC.giaNetwork sc C.bitblastPrims t $ \be ls -> do
   ABC.writeAiger f (ABC.Network be (ABC.bvToList ls))
 
 extractCryptol :: SharedContext s -> CM.ModuleEnv -> String -> IO (SharedTerm s)
