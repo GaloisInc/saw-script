@@ -15,6 +15,7 @@ module Verifier.SAW.Simulator.Concrete
        , CValue, Value(..)
        , CExtra(..)
        , toBool
+       , toWord
        , runIdentity
        ) where
 

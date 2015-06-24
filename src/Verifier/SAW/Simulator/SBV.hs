@@ -25,6 +25,8 @@ module Verifier.SAW.Simulator.SBV
   , SValue
   , Labeler(..)
   , sbvCodeGen
+  , toWord
+  , toBool
   , module Verifier.SAW.Simulator.SBV.SWord
   ) where
 
