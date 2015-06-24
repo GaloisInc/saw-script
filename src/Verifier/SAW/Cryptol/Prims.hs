@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -12,10 +11,6 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Cryptol.Prims where
-
-#if !MIN_VERSION_base(4,8,0)
-import Data.Functor
-#endif
 
 import GHC.Integer.Logarithms( integerLog2# )
 import GHC.Exts( Int( I# ) )
@@ -77,14 +72,14 @@ lg2Nat asWord wordLg2 =
   strictFun $ \n ->
     case n of
       VNat i   -> return $ VNat $ fromIntegral $ integerLg2 i
-      VToNat v -> (VToNat . VWord) <$> (wordLg2 =<< asWord v)
+      VToNat v -> (return . VToNat . VWord) =<< (wordLg2 =<< asWord v)
       _ -> fail "Cryptol.lg2Nat: illegal argument"
 
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 bvLg2 :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
 bvLg2 asWord wordLg2 =
   natFun' "bvLg2 1" $ \_n -> return $
-  strictFun $ \w -> VWord <$> (wordLg2 =<< asWord w)
+  strictFun $ \w -> (return . VWord) =<< (wordLg2 =<< asWord w)
 
 concreteLg2 :: Monad m => P.BitVector -> m P.BitVector
 concreteLg2 bv = return bv{ P.unsigned = fromIntegral $ integerLg2 $ P.unsigned bv } 
@@ -106,6 +101,7 @@ concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
   [ ("Cryptol.arithBinaryBool", error "Cryptol.arithBinaryBool is deliberately unimplemented" )
   , ("Cryptol.arithUnaryBool" , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
+  , ("Cryptol.ecRandom"       , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"        , ecError bvAsChar )
   , ("Cryptol.lg2Nat"         , lg2Nat (return . C.toWord) concreteLg2 )
   , ("Cryptol.bvLg2"          , bvLg2 (return . C.toWord) concreteLg2 )
@@ -117,6 +113,7 @@ bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
 bitblastPrims g = Map.fromList
   [ ("Cryptol.arithBinaryBool", error "Cryptol.arithBinaryBool is deliberately unimplemented" )
   , ("Cryptol.arithUnaryBool" , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
+  , ("Cryptol.ecRandom"       , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"        , ecError (aigWordAsChar g) )
   , ("Cryptol.lg2Nat"         , lg2Nat BB.toWord (bitblastLg2 g) )
   , ("Cryptol.bvLg2"          , bvLg2 BB.toWord (bitblastLg2 g) )
@@ -126,6 +123,7 @@ sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
   [ ("Cryptol.arithBinaryBool", error "Cryptol.arithBinaryBool is deliberately unimplemented" )
   , ("Cryptol.arithUnaryBool" , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
+  , ("Cryptol.ecRandom"       , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"        , ecError sbvWordAsChar )
   , ("Cryptol.lg2Nat"         , lg2Nat sbvToWord sbvLg2 )
   , ("Cryptol.bvLg2"          , bvLg2 sbvToWord sbvLg2 )
