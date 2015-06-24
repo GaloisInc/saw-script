@@ -33,25 +33,17 @@ import Cryptol.Eval.Type (evalType)
 import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
-import Data.AIG.Interface (IsAIG)
-import Verifier.SAW.Simulator.Value
-import Verifier.SAW.Simulator.BitBlast as BB
-
 import Verifier.SAW.Conversion
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
---import Verifier.SAW.Simulator.MonadLazy (force)
+import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, mkModuleName, findDef)
 import qualified Verifier.SAW.Recognizer as R
 
 unimplemented :: Monad m => String -> m a
 unimplemented name = fail ("unimplemented: " ++ name)
-
-
-bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
-bitblastPrims _g = Map.empty
 
 --------------------------------------------------------------------------------
 -- Type Environments

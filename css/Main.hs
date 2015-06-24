@@ -17,6 +17,7 @@ import           Cryptol.Utils.PP
 
 
 import qualified Verifier.SAW.Cryptol as C
+import           Verifier.SAW.Cryptol.Prims
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Cryptol.Prelude
 
@@ -108,7 +109,7 @@ processModule menv fout funcName = do
 
 writeAIG :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
 writeAIG sc f t = do
-  BBSim.withBitBlastedTerm ABC.giaNetwork sc C.bitblastPrims t $ \be ls -> do
+  BBSim.withBitBlastedTerm ABC.giaNetwork sc bitblastPrims t $ \be ls -> do
   ABC.writeAiger f (ABC.Network be (ABC.bvToList ls))
 
 extractCryptol :: SharedContext s -> CM.ModuleEnv -> String -> IO (SharedTerm s)

@@ -28,12 +28,15 @@ library
     containers,
     cryptol >= 2.3.0,
     data-inttrie,
+    integer-gmp,
     saw-core,
+    sbv,
     vector
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Prelude
+     Verifier.SAW.Cryptol.Prims
   GHC-options: -Wall -Werror
 
 executable css
