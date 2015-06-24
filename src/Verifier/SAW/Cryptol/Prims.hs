@@ -12,6 +12,10 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol.Prims where
 
+#if !MIN_VERSION_base(4,8,0)
+import Data.Functor (<$>)
+#endif
+
 import GHC.Integer.Logarithms( integerLog2# )
 import GHC.Exts( Int( I# ) )
 
