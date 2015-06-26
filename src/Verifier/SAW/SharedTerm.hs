@@ -139,6 +139,7 @@ module Verifier.SAW.SharedTerm
   , extName
   , getAllExts
   , getAllExtSet
+  , getConstantSet
   , scInstantiateExt
   , scAbstractExts
   , incVars
@@ -1180,6 +1181,19 @@ getAllExtSet t = exts
             foldl' getExtCns (Set.insert idx is, a) tf'
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
+
+getConstantSet :: SharedTerm s -> Map String (SharedTerm s, SharedTerm s)
+getConstantSet t = snd $ go (Set.empty, Map.empty) t
+  where
+    go acc@(idxs, names) (STApp i tf)
+      | Set.member i idxs = acc
+      | otherwise         = termf (Set.insert i idxs, names) tf
+    go acc (Unshared tf) = termf acc tf
+
+    termf acc@(idxs, names) tf =
+      case tf of
+        Constant n ty body -> (idxs, Map.insert n (ty, body) names)
+        _ -> foldl' go acc tf
 
 -- | Instantiate some of the external constants
 scInstantiateExt :: forall s
