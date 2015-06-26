@@ -92,8 +92,16 @@ tcMax (TCNum _) TCInf = TCInf;
 tcMax TCInf (TCNum _) = TCInf;
 tcMax TCInf TCInf = TCInf;
 
-primitive tcLenFromThen :: Num -> Num -> Num -> Num;
-primitive tcLenFromThenTo :: Num -> Num -> Num -> Num;
+primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
+primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
+
+tcLenFromThen :: Num -> Num -> Num -> Num;
+tcLenFromThen (TCNum x) (TCNum y) (TCNum w) = TCNum (tcLenFromThen_Nat x y w);
+-- tcLenFromThen is undefined on TCInf
+
+tcLenFromThenTo :: Num -> Num -> Num -> Num;
+tcLenFromThenTo (TCNum x) (TCNum y) (TCNum z) = TCNum (tcLenFromThenTo_Nat x y z);
+-- tcLenFromThenTo is undefined on TCInf
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences

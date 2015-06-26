@@ -1,4 +1,3 @@
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -10,10 +9,11 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Cryptol.Prims where
-
-import GHC.Integer.Logarithms( integerLog2# )
-import GHC.Exts( Int( I# ) )
+module Verifier.SAW.Cryptol.Prims
+( concretePrims
+, bitblastPrims
+, sbvPrims
+) where
 
 import Control.Monad
 import Data.Map (Map)
@@ -22,6 +22,10 @@ import qualified Data.Vector as V
 
 import Data.AIG.Interface (IsAIG)
 import qualified Data.AIG.Operations as AIG
+
+import qualified Cryptol.TypeCheck.Solver.InfNat as CryNat
+import qualified Cryptol.Prims.Eval as CryEval
+import qualified Cryptol.Symbolic.Prims as CrySym
 
 import Data.SBV.Dynamic as SBV
 
@@ -32,11 +36,6 @@ import Verifier.SAW.Simulator.Prims
 import qualified Verifier.SAW.Simulator.BitBlast as BB
 import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Verifier.SAW.Simulator.Concrete as C
-
-integerLg2 :: Integer -> Int
-integerLg2 i
-  | i > 0 = I# (integerLog2# i)
-  | otherwise = error "integerLg2: illegal nonpositive argument"
 
 -- primitive ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> a;
 ecError :: Monad m => (w -> m Char) -> Value m b w e
@@ -71,7 +70,7 @@ lg2Nat :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
 lg2Nat asWord wordLg2 =
   strictFun $ \n ->
     case n of
-      VNat i   -> return $ VNat $ fromIntegral $ integerLg2 i
+      VNat i   -> return $ VNat $ fromInteger $ CryEval.lg2 $ toInteger i
       VToNat v -> (return . VToNat . VWord) =<< (wordLg2 =<< asWord v)
       _ -> fail "Cryptol.lg2Nat: illegal argument"
 
@@ -82,13 +81,17 @@ bvLg2 asWord wordLg2 =
   strictFun $ \w -> (return . VWord) =<< (wordLg2 =<< asWord w)
 
 concreteLg2 :: Monad m => P.BitVector -> m P.BitVector
-concreteLg2 bv = return bv{ P.unsigned = fromIntegral $ integerLg2 $ P.unsigned bv } 
+concreteLg2 bv = return bv{ P.unsigned = CryEval.lg2 $ P.unsigned bv }
 
-bitblastLg2 :: (Monad m, IsAIG l g) => g s -> BB.LitVector (l s) -> m (BB.LitVector (l s))
-bitblastLg2 _g _w = undefined
+-- | rounded-up log base 2, where we complete the function by setting:
+--   lg2 0 = 0
+bitblastLogBase2 :: IsAIG l g => g s -> BB.LitVector (l s) -> IO (BB.LitVector (l s))
+bitblastLogBase2 g x = do
+  z <- AIG.isZero g x
+  AIG.iteM g z (return x) (AIG.logBase2_up g x)
 
-sbvLg2 :: Monad m => SBV.SWord -> m SBV.SWord
-sbvLg2 _w = undefined
+sbvLg2 :: SBV.SWord -> IO SBV.SWord
+sbvLg2 w = return $ CrySym.sLg2 w
 
 sbvToWord :: SBV.SValue -> IO SBV.SWord
 sbvToWord v = do
@@ -97,34 +100,63 @@ sbvToWord v = do
      Just x' -> return x'
      Nothing -> fail "sbvToWord: expected word value"
 
+
+--primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThen_Nat :: Monad m => Value m b w e
+tcLenFromThen_Nat =
+  natFun' "tcLenFromThen_Nat x" $ \x -> return $
+  natFun' "tcLenFromThen_Nat y" $ \y -> return $
+  natFun' "tcLenFromThen_Nat w" $ \w ->
+    case CryNat.nLenFromThen (CryNat.Nat $ fromIntegral x)
+                             (CryNat.Nat $ fromIntegral y)
+                             (CryNat.Nat $ fromIntegral w) of
+      Just (CryNat.Nat ans) -> return $ vNat $ fromIntegral ans
+      _ -> fail "tcLenFromThen_Nat: unable to calculate length"
+
+--primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThenTo_Nat :: Monad m => Value m b w e
+tcLenFromThenTo_Nat =
+  natFun' "tcLenFromThenTo_Nat x" $ \x -> return $
+  natFun' "tcLenFromThenTo_Nat y" $ \y -> return $
+  natFun' "tcLenFromThenTo_Nat z" $ \z ->
+    case CryNat.nLenFromThenTo (CryNat.Nat $ fromIntegral x)
+                               (CryNat.Nat $ fromIntegral y)
+                               (CryNat.Nat $ fromIntegral z) of
+      Just (CryNat.Nat ans) -> return $ vNat $ fromIntegral ans
+      _ -> fail "tcLenFromThenTo_Nat: unable to calculate length"
+
 concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
-  [ ("Cryptol.arithBinaryBool", error "Cryptol.arithBinaryBool is deliberately unimplemented" )
-  , ("Cryptol.arithUnaryBool" , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
-  , ("Cryptol.ecRandom"       , error "Cryptol.ecRandom is depreciated; don't use it")
-  , ("Cryptol.ecError"        , ecError bvAsChar )
-  , ("Cryptol.lg2Nat"         , lg2Nat (return . C.toWord) concreteLg2 )
-  , ("Cryptol.bvLg2"          , bvLg2 (return . C.toWord) concreteLg2 )
--- , ("Cryptol.tcLenFromThen"          , )
--- , ("Cryptol.tcLenFromThenTo"          , )
+  [ ("Cryptol.arithBinaryBool"     , error "Cryptol.arithBinaryBool is deliberately unimplemented" )
+  , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
+  , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
+  , ("Cryptol.ecError"             , ecError bvAsChar )
+  , ("Cryptol.lg2Nat"              , lg2Nat (return . C.toWord) concreteLg2 )
+  , ("Cryptol.bvLg2"               , bvLg2 (return . C.toWord) concreteLg2 )
+  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
+  , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
 bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
 bitblastPrims g = Map.fromList
-  [ ("Cryptol.arithBinaryBool", error "Cryptol.arithBinaryBool is deliberately unimplemented" )
-  , ("Cryptol.arithUnaryBool" , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
-  , ("Cryptol.ecRandom"       , error "Cryptol.ecRandom is depreciated; don't use it")
-  , ("Cryptol.ecError"        , ecError (aigWordAsChar g) )
-  , ("Cryptol.lg2Nat"         , lg2Nat BB.toWord (bitblastLg2 g) )
-  , ("Cryptol.bvLg2"          , bvLg2 BB.toWord (bitblastLg2 g) )
+  [ ("Cryptol.arithBinaryBool"     , error "Cryptol.arithBinaryBool is deliberately unimplemented" )
+  , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
+  , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
+  , ("Cryptol.ecError"             , ecError (aigWordAsChar g) )
+  , ("Cryptol.lg2Nat"              , lg2Nat BB.toWord (bitblastLogBase2 g) )
+  , ("Cryptol.bvLg2"               , bvLg2 BB.toWord (bitblastLogBase2 g) )
+  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
+  , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
 sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
-  [ ("Cryptol.arithBinaryBool", error "Cryptol.arithBinaryBool is deliberately unimplemented" )
-  , ("Cryptol.arithUnaryBool" , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
-  , ("Cryptol.ecRandom"       , error "Cryptol.ecRandom is depreciated; don't use it")
-  , ("Cryptol.ecError"        , ecError sbvWordAsChar )
-  , ("Cryptol.lg2Nat"         , lg2Nat sbvToWord sbvLg2 )
-  , ("Cryptol.bvLg2"          , bvLg2 sbvToWord sbvLg2 )
+  [ ("Cryptol.arithBinaryBool"     , error "Cryptol.arithBinaryBool is deliberately unimplemented" )
+  , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
+  , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
+  , ("Cryptol.ecError"             , ecError sbvWordAsChar )
+  , ("Cryptol.lg2Nat"              , lg2Nat sbvToWord sbvLg2 )
+  , ("Cryptol.bvLg2"               , bvLg2 sbvToWord sbvLg2 )
+  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
+  , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
