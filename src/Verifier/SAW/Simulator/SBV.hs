@@ -138,6 +138,7 @@ constMap = Map.fromList
   , ("Prelude.bvRotateR", bvRotateROp)
   , ("Prelude.bvShiftL", bvShiftLOp)
   , ("Prelude.bvShiftR", bvShiftROp)
+  , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
@@ -439,7 +440,7 @@ bvRotateLOp =
       (Nothing, xv) -> return xv -- FIXME: this case should be an error
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
       (Just ilv, VWord xlv) -> return $ vWord (svRotateLeft xlv ilv)
-      _ -> error $ "rotateLOp: " ++ show xs
+      _ -> error $ "bvRotateLOp: " ++ show xs
 
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateROp :: SValue
@@ -453,7 +454,7 @@ bvRotateROp =
       (Nothing, xv) -> return xv -- FIXME: this case should be an error
       (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
       (Just ilv, VWord xlv) -> return $ vWord (svRotateRight xlv ilv)
-      _ -> error $ "rotateROp: " ++ show xs
+      _ -> error $ "bvRotateROp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftLOp :: SValue

@@ -262,6 +262,7 @@ constMap = Map.fromList
   , ("Prelude.bvRotateR", bvRotateROp)
   , ("Prelude.bvShiftL", bvShiftLOp)
   , ("Prelude.bvShiftR", bvShiftROp)
+  , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)

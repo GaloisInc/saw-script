@@ -411,6 +411,13 @@ updOp unpack eq lit bitsize mux =
         selectV mux (fromIntegral n - 1) update iv
       _ -> fail $ "updOp: expected Nat, got " ++ show idx
 
+
+
+-- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
+emptyVec :: Monad m => Value m b w e
+emptyVec = constFun $ VVector V.empty
+
+
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 appendOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w e
 appendOp unpack app =

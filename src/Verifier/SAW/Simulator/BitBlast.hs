@@ -33,9 +33,7 @@ import Verifier.SAW.TypedAST (Module)
 import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Recognizer as R
 
-import Data.AIG (BV)
 import qualified Data.AIG as AIG
-
 
 type LitVector l = AIG.BV l
 
@@ -205,6 +203,7 @@ beConstMap be = Map.fromList
   , ("Prelude.bvSRem", binOp (AIG.srem be))
   , ("Prelude.bvPMul", bvPMulOp be)
   , ("Prelude.bvPMod", bvPModOp be)
+  , ("Prelude.bvPDiv", bvPDivOp be)
   -- Relations
   , ("Prelude.bvEq"  , binRel (AIG.bvEq be))
   , ("Prelude.bvsle" , binRel (AIG.sle be))
@@ -244,7 +243,8 @@ beConstMap be = Map.fromList
   , ("Prelude.bvRotateR", bvRotateROp be)
   , ("Prelude.bvShiftL", bvShiftLOp be)
   , ("Prelude.bvShiftR", bvShiftROp be)
-  -- Streams
+  , ("Prelude.EmptyVec", Prims.emptyVec)
+-- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
   , ("Prelude.bvStreamGet", bvStreamGetOp be)
@@ -364,7 +364,7 @@ bvRotateLOp be =
     let (n, f) = case xs of
                    VVector xv -> (V.length xv, VVector . vRotateL xv)
                    VWord xlv -> (AIG.length xlv, VWord . lvRotateL xlv)
-                   _ -> error $ "Verifier.SAW.Simulator.BitBlast.rotateROp: " ++ show xs
+                   _ -> error $ "Verifier.SAW.Simulator.BitBlast.bvRotateLOp: " ++ show xs
     r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
     AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
 
@@ -379,7 +379,7 @@ bvRotateROp be =
     let (n, f) = case xs of
                    VVector xv -> (V.length xv, VVector . vRotateR xv)
                    VWord xlv -> (AIG.length xlv, VWord . lvRotateR xlv)
-                   _ -> error $ "Verifier.SAW.Simulator.BitBlast.rotateROp: " ++ show xs
+                   _ -> error $ "Verifier.SAW.Simulator.BitBlast.bvRotateROp: " ++ show xs
     r <- AIG.urem be ilv (AIG.bvFromInteger be (AIG.length ilv) (toInteger n))
     AIG.muxInteger (lazyMux be (muxBVal be)) (n - 1) r (return . f)
 
@@ -434,63 +434,27 @@ eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp
 
 -- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
 bvPModOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvPModOp be =
+bvPModOp g =
   constFun $
   constFun $
   wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> AIG.pmod be x y
+  wordFun $ \y -> vWord <$> AIG.pmod g x y
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector _;
 bvPMulOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvPMulOp be =
+bvPMulOp g =
   constFun $
   constFun $
   wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> AIG.pmul be x y
+  wordFun $ \y -> vWord <$> AIG.pmul g x y
 
--- TODO: Move polynomial operations to aig package.
-
--- Polynomial div/mod: resulting lengths are as in Cryptol.
-pdivmod :: forall l g s. AIG.IsAIG l g => g s -> BV (l s) -> BV (l s) -> IO (BV (l s), BV (l s))
-pdivmod g x y = findmsb (AIG.bvToList y)
-  where
-    findmsb :: [l s] -> IO (BV (l s), BV (l s))
-    findmsb (c : cs) = lazyMux g muxPair c (usemask cs) (findmsb cs)
-    findmsb [] = return (x, AIG.replicate (AIG.length y - 1) (AIG.falseLit g)) -- division by zero
-
-    usemask :: [l s] -> IO (BV (l s), BV (l s))
-    usemask mask = do
-      (qs, rs) <- pdivmod_helper g (AIG.bvToList x) mask
-      let z = AIG.falseLit g
-      let qs' = map (const z) rs ++ qs
-      let rs' = replicate (AIG.length y - 1 - length rs) z ++ rs
-      let q = AIG.concat (map (AIG.replicate 1) qs')
-      let r = AIG.concat (map (AIG.replicate 1) rs')
-      return (q, r)
-
-    muxPair :: l s -> (BV (l s), BV (l s)) -> (BV (l s), BV (l s)) -> IO (BV (l s), BV (l s))
-    muxPair c (x1, y1) (x2, y2) = (,) <$> AIG.zipWithM (AIG.mux g c) x1 x2 <*> AIG.zipWithM (AIG.mux g c) y1 y2
-
--- Divide ds by (1 : mask), giving quotient and remainder. All
--- arguments and results are big-endian. Remainder has the same length
--- as mask (but limited by length ds); total length of quotient ++
--- remainder = length ds.
-pdivmod_helper :: forall l g s. AIG.IsAIG l g => g s -> [l s] -> [l s] -> IO ([l s], [l s])
-pdivmod_helper g ds mask = go (length ds - length mask) ds
-  where
-    go :: Int -> [l s] -> IO ([l s], [l s])
-    go n cs | n <= 0 = return ([], cs)
-    go _ []          = fail "Verifier.SAW.Simulator.BitBlast.pdivmod: impossible"
-    go n (c : cs)    = do cs' <- mux_add c cs mask
-                          (qs, rs) <- go (n - 1) cs'
-                          return (c : qs, rs)
-
-    mux_add :: l s -> [l s] -> [l s] -> IO [l s]
-    mux_add c (x : xs) (y : ys) = do z <- lazyMux g (AIG.mux g) c (AIG.xor g x y) (return x)
-                                     zs <- mux_add c xs ys
-                                     return (z : zs)
-    mux_add _ []       (_ : _ ) = fail "Verifier.SAW.Simulator.BitBlast.pdivmod: impossible"
-    mux_add _ xs       []       = return xs
+-- primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+bvPDivOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvPDivOp g =
+  constFun $
+  constFun $
+  wordFun $ \x -> return $
+  wordFun $ \y -> vWord <$> AIG.pdiv g x y
 
 ----------------------------------------
 

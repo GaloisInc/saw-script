@@ -378,13 +378,6 @@ mulNat :: Nat -> Nat -> Nat;
 mulNat Zero y = 0;
 mulNat (Succ x) y = addNat y (mulNat x y);
 
-data NatDiff :: Nat -> sort 0 where {
-    Greater :: (n::Nat) -> NatDiff n;
-    DiffResult :: (d p :: Nat) -> NatDiff (addNat d p);
-  }
-
-primitive natSub :: (n :: Nat) -> Nat -> NatDiff n;
-
 data NatOrdering :: (x y :: Nat) -> sort 0 where {
     LeNatOrd :: (x z :: Nat) -> NatOrdering x (addNat x z);
     GtNatOrd :: (x z :: Nat) -> NatOrdering (addNat x (Succ z)) x;
@@ -473,7 +466,9 @@ natCase p z s (Succ n) = s n;
 primitive data Vec :: Nat -> sort 0 -> sort 0;
 
 primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
-primitive ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
+
+ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
+ConsVec a x n v = gen (Succ n) a (natCase (\ (i::Nat) -> a) x (at n a v));
 
 -- Primitive function for generating an array.
 primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
@@ -573,10 +568,12 @@ append m n a x y =
       ite a (ltNat i m) (at m a x i) (at n a y (subNat i m)));
 
 -- Rotate array to the left.
-primitive rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateL n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat i j) n));
 
 -- Rotate array to the right.
-primitive rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateR n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat (subNat n i) j) n));
 
 -- Zip together two lists (truncating the longer of the two).
 primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
@@ -635,16 +632,23 @@ primitive bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a 
 
 primitive bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 
-primitive bvAddWithCarry :: (x :: Nat) -> bitvector x -> bitvector x -> #(Bool, bitvector x);
---TODO: Implement this
+bvAddWithCarry :: (x :: Nat) -> bitvector x -> bitvector x -> #(Bool, bitvector x);
+bvAddWithCarry n x y =
+  let { x' :: bitvector (addNat 1 n);
+        x' = append 1 n Bool (single Bool False) x;
+        y' :: bitvector (addNat 1 n);
+        y' = append 1 n Bool (single Bool False) y;
+        z  :: bitvector (addNat 1 n);
+        z  = bvAdd (addNat 1 n) x' y';
+      }
+   in ( msb n z, drop Bool 1 n z );
 
-primitive bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
-primitive bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
+axiom bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
+axiom bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
 
 primitive bvNeg :: (x :: Nat) -> bitvector x -> bitvector x;
 primitive bvSub :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 primitive bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
---TODO
 
 -- Unsigned division and remainder.
 --
@@ -655,7 +659,7 @@ primitive bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 --   bvAdd x (bvMul x (bvUDiv x u v) v) (bvURem x u v) == u
 primitive bvUDiv :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 primitive bvURem :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
---TODO
+
 
 -- Signed division.
 -- When the divisor is 0, bvSDiv returns 2^x - 1 when the dividend
@@ -834,16 +838,17 @@ primitive data String :: sort 0;
 
 --------------------------------------------------------------------------------
 -- Floating-point values
+--    Currently commented out because they are not implemented...
 
 primitive data Float :: sort 0;
 
-primitive bvToFloat :: bitvector 32 -> Float;
-primitive floatToBV :: Float -> bitvector 32;
+-- primitive bvToFloat :: bitvector 32 -> Float;
+-- primitive floatToBV :: Float -> bitvector 32;
 
 primitive data Double :: sort 0;
 
-primitive bvToDouble :: bitvector 64 -> Double;
-primitive doubleToBV :: Double -> bitvector 64;
+-- primitive bvToDouble :: bitvector 64 -> Double;
+-- primitive doubleToBV :: Double -> bitvector 64;
 
 
 axiom bveq_sameL :: (n :: Nat)
