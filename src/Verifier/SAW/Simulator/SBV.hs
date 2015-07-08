@@ -75,7 +75,7 @@ constMap = Map.fromList
   -- Boolean
   [ ("Prelude.True", VBool svTrue)
   , ("Prelude.False", VBool svFalse)
-  , ("Prelude.not", strictFun (return . vBool . svNot . forceBool))
+  , ("Prelude.not", strictFun (return . vBool . svNot . toBool))
   , ("Prelude.and", boolBinOp svAnd)
   , ("Prelude.or", boolBinOp svOr)
   , ("Prelude.xor", boolBinOp svXOr)
@@ -165,20 +165,23 @@ bitVector w i = literalSWord w i
 symFromBits :: Vector SBool -> SWord
 symFromBits v = V.foldl svJoin (bitVector 0 0) (V.map svToWord1 v)
 
-toBool :: SValue -> Maybe SBool
-toBool (VBool b) = Just b
-toBool _  = Nothing
+toMaybeBool :: SValue -> Maybe SBool
+toMaybeBool (VBool b) = Just b
+toMaybeBool _  = Nothing
 
-forceBool :: SValue -> SBool
-forceBool sv =
-   case toBool sv of
-      Just x  -> x
-      Nothing -> error $ unwords ["forceBool failed:", show sv]
+toBool :: SValue -> SBool
+toBool (VBool b) = b
+toBool sv = error $ unwords ["toBool failed:", show sv]
 
-toWord :: SValue -> IO (Maybe SWord)
-toWord (VWord w) = return (Just w)
-toWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toBool . force) vv
-toWord _ = return Nothing
+toWord :: SValue -> IO SWord
+toWord (VWord w) = return w
+toWord (VVector vv) = symFromBits <$> traverse (fmap toBool . force) vv
+toWord x = fail $ unwords ["Verifier.SAW.Simulator.SBV.toWord", show x]
+
+toMaybeWord :: SValue -> IO (Maybe SWord)
+toMaybeWord (VWord w) = return (Just w)
+toMaybeWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toMaybeBool . force) vv
+toMaybeWord _ = return Nothing
 
 toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
@@ -191,7 +194,7 @@ toVector _ = error "this word might be symbolic"
 -- either a symbolic word or a symbolic boolean.
 flattenSValue :: SValue -> IO [SVal]
 flattenSValue v = do
-  mw <- toWord v
+  mw <- toMaybeWord v
   case mw of
     Just w -> return [w]
     Nothing ->
@@ -212,7 +215,7 @@ vBool l = VBool l
 ------------------------------------------------------------
 -- Function constructors
 
-wordFun :: (Maybe SWord -> IO SValue) -> SValue
+wordFun :: (SWord -> IO SValue) -> SValue
 wordFun f = strictFun (\x -> toWord x >>= f)
 
 ------------------------------------------------------------
@@ -295,21 +298,22 @@ splitOp =
 bvShLOp :: SValue
 bvShLOp =
   constFun $
-  wordFun $ \(Just w) -> return $
+  wordFun $ \w -> return $
   Prims.natFun'' "bvShlOp" $ \n -> return $ vWord $ svShl w (fromIntegral n)
+-- FIXME: make this work for bvToNat arguments
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
 bvShROp =
   constFun $
-  wordFun $ \(Just w) -> return $
+  wordFun $ \w -> return $
   Prims.natFun'' "bvShrOp" $ \n -> return $ vWord $ svShr w (fromIntegral n)
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
 bvSShROp =
   constFun $
-  wordFun $ \(Just w) -> return $
+  wordFun $ \w -> return $
   Prims.natFun'' "bvSShrOp" $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
 
 zeroOp :: SValue
@@ -320,10 +324,10 @@ zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
 eqOp :: SValue
 eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp
   where trueOp       = VBool svTrue
-        andOp    x y = return $ vBool (svAnd (forceBool x) (forceBool y))
-        boolEqOp x y = return $ vBool (svEqual (forceBool x) (forceBool y))
-        bvEqOp _ x y = do Just x' <- toWord x
-                          Just y' <- toWord y
+        andOp    x y = return $ vBool (svAnd (toBool x) (toBool y))
+        boolEqOp x y = return $ vBool (svEqual (toBool x) (toBool y))
+        bvEqOp _ x y = do x' <- toWord x
+                          y' <- toWord y
                           return $ vBool (svEqual x' y')
 
 ----------------------------------------
@@ -334,8 +338,8 @@ bvPModOp :: SValue
 bvPModOp =
   constFun $
   constFun $
-  wordFun $ \ (Just x) -> return $
-  wordFun $ \ (Just y) ->
+  wordFun $ \x -> return $
+  wordFun $ \y ->
     return . vWord . fromBitsLE $ take (svBitSize y - 1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
@@ -343,8 +347,8 @@ bvPMulOp :: SValue
 bvPMulOp =
   constFun $
   constFun $
-  wordFun $ \(Just x) -> return $
-  wordFun $ \(Just y) -> do
+  wordFun $ \x -> return $
+  wordFun $ \y -> do
     let k1 = svBitSize x
     let k2 = svBitSize y
     let k = max 1 (k1 + k2) - 1
@@ -435,11 +439,10 @@ bvRotateLOp =
   constFun $
   constFun $
   strictFun $ \xs -> return $
-  wordFun $ \milv ->
-    case (milv, xs) of
-      (Nothing, xv) -> return xv -- FIXME: this case should be an error
-      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
-      (Just ilv, VWord xlv) -> return $ vWord (svRotateLeft xlv ilv)
+  wordFun $ \ilv ->
+    case xs of
+      VVector xv -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
+      VWord xlv -> return $ vWord (svRotateLeft xlv ilv)
       _ -> error $ "bvRotateLOp: " ++ show xs
 
 -- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
@@ -449,11 +452,10 @@ bvRotateROp =
   constFun $
   constFun $
   strictFun $ \xs -> return $
-  wordFun $ \milv -> do
-    case (milv, xs) of
-      (Nothing, xv) -> return xv -- FIXME: this case should be an error
-      (Just ilv, VVector xv) -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
-      (Just ilv, VWord xlv) -> return $ vWord (svRotateRight xlv ilv)
+  wordFun $ \ilv -> do
+    case xs of
+      VVector xv -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
+      VWord xlv -> return $ vWord (svRotateRight xlv ilv)
       _ -> error $ "bvRotateROp: " ++ show xs
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
@@ -464,11 +466,9 @@ bvShiftLOp =
   constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
-  wordFun $ \milv -> do
+  wordFun $ \ilv -> do
     let xv = toVector xs
-    case milv of
-      Just ilv -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
-      Nothing -> fail $ "bvShiftLOp: " ++ show xs
+    selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
 
 -- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftROp :: SValue
@@ -478,11 +478,9 @@ bvShiftROp =
   constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
-  wordFun $ \milv -> do
+  wordFun $ \ilv -> do
     let xv = toVector xs
-    case milv of
-      Just ilv -> selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
-      Nothing -> fail $ "bvShiftROp: " ++ show xs
+    selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
 
 ------------------------------------------------------------
 -- Stream operations
@@ -508,7 +506,7 @@ bvStreamGetOp =
   constFun $
   constFun $
   strictFun $ \xs -> return $
-  wordFun $ \(Just ilv) ->
+  wordFun $ \ilv ->
   selectV (lazyMux muxBVal) ((2 ^ svBitSize ilv) - 1) (lookupSStream xs) ilv
 
 lookupSStream :: SValue -> Integer -> IO SValue
@@ -564,15 +562,15 @@ vZipOp =
 unOp :: (SWord -> SWord) -> SValue
 unOp op = constFun $
           strictFun $ \mx -> do
-            (Just x) <- toWord mx
+            x <- toWord mx
             return $ vWord $ op x
 
 binOp :: (SWord -> SWord -> SWord) -> SValue
 binOp op = constFun $
           strictFun $ \mx -> return $
           strictFun $ \my -> do
-            (Just x) <- toWord mx
-            (Just y) <- toWord my
+            x <- toWord mx
+            y <- toWord my
             return $ vWord $ op x y
 
 sbinOp :: (SWord -> SWord -> SWord) -> SValue
@@ -582,8 +580,8 @@ binRel :: (SWord -> SWord -> SBool) -> SValue
 binRel op = constFun $
             strictFun $ \mx-> return $
             strictFun $ \my-> do
-              (Just x) <- toWord mx
-              (Just y) <- toWord my
+              x <- toWord mx
+              y <- toWord my
               return $ vBool $ op x y
 
 sbinRel :: (SWord -> SWord -> SBool) -> SValue
@@ -592,7 +590,7 @@ sbinRel f = binRel (\x y -> svSign x `f` svSign y)
 boolBinOp :: (SBool -> SBool -> SBool) -> SValue
 boolBinOp op =
   strictFun $ \x -> return $
-  strictFun $ \y -> return $ vBool $ op (forceBool x) (forceBool y)
+  strictFun $ \y -> return $ vBool $ op (toBool x) (toBool y)
 
 ------------------------------------------------------------
 -- Ite ops
@@ -602,7 +600,7 @@ iteOp =
     constFun $
     strictFun $ \b-> return $
     strictFun $ \x-> return $
-    strictFun $ \y-> muxBVal (forceBool b) x y
+    strictFun $ \y-> muxBVal (toBool b) x y
 
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal b x y)
