@@ -93,14 +93,6 @@ bitblastLogBase2 g x = do
 sbvLg2 :: SBV.SWord -> IO SBV.SWord
 sbvLg2 w = return $ CrySym.sLg2 w
 
-sbvToWord :: SBV.SValue -> IO SBV.SWord
-sbvToWord v = do
-  x <- SBV.toWord v
-  case x of
-     Just x' -> return x'
-     Nothing -> fail "sbvToWord: expected word value"
-
-
 --primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat :: Monad m => Value m b w e
 tcLenFromThen_Nat =
@@ -155,8 +147,8 @@ sbvPrims = Map.fromList
   , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
   , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError sbvWordAsChar )
-  , ("Cryptol.lg2Nat"              , lg2Nat sbvToWord sbvLg2 )
-  , ("Cryptol.bvLg2"               , bvLg2 sbvToWord sbvLg2 )
+  , ("Cryptol.lg2Nat"              , lg2Nat SBV.toWord sbvLg2 )
+  , ("Cryptol.bvLg2"               , bvLg2 SBV.toWord sbvLg2 )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
