@@ -294,20 +294,24 @@ splitOp =
 ----------------------------------------
 -- Shift operations
 
+-- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
+shiftOp :: (SWord -> SWord -> SWord) -> (SWord -> Int -> SWord) -> SValue
+shiftOp bvOp natOp =
+  constFun $
+  wordFun $ \x -> return $
+  strictFun $ \y ->
+    case y of
+      VNat n   -> return (vWord (natOp x (fromInteger n)))
+      VToNat v -> fmap (vWord . bvOp x) (toWord v)
+      _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.shiftOp", show y]
+
 -- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShLOp :: SValue
-bvShLOp =
-  constFun $
-  wordFun $ \w -> return $
-  Prims.natFun'' "bvShlOp" $ \n -> return $ vWord $ svShl w (fromIntegral n)
--- FIXME: make this work for bvToNat arguments
+bvShLOp = shiftOp svShiftLeft svShl
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
-bvShROp =
-  constFun $
-  wordFun $ \w -> return $
-  Prims.natFun'' "bvShrOp" $ \n -> return $ vWord $ svShr w (fromIntegral n)
+bvShROp = shiftOp svShiftRight svShr
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
@@ -315,6 +319,7 @@ bvSShROp =
   constFun $
   wordFun $ \w -> return $
   Prims.natFun'' "bvSShrOp" $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
+-- FIXME: make this work for bvToNat arguments
 
 zeroOp :: SValue
 zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
