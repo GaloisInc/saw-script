@@ -78,6 +78,13 @@ vectorFun :: (Monad m, Show e) => (w -> V.Vector b)
           -> (V.Vector (Thunk m b w e) -> m (Value m b w e)) -> Value m b w e
 vectorFun unpack f = strictFun (\x -> f (toVector unpack x))
 
+vecIdx :: String -> V.Vector a -> Int -> a
+vecIdx name v n =
+  case (V.!?) v n of
+    Just a -> a
+    Nothing -> error $ "vecIdx ("  ++ name ++ ") out of bounds (" ++
+                       show n ++ " out of " ++ show (V.length v) ++ ")"
+
 ------------------------------------------------------------
 -- Utility functions
 
@@ -91,7 +98,7 @@ selectV mux maxValue valueFn v = impl len 0
     len = V.length v
     impl _ x | x >= maxValue = valueFn maxValue
     impl 0 x = valueFn x
-    impl i x = mux ((V.!) v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
+    impl i x = mux (vecIdx "selectV" v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
 
 ------------------------------------------------------------
 -- Values for common primitives
@@ -376,14 +383,16 @@ atOp unpack bvOp mux =
     case idx of
       VNat i ->
         case x of
-          VVector xv -> force ((V.!) xv (fromIntegral i))
+          VVector xv -> force (vecIdx "atOp[Nat]" xv (fromIntegral i))
           VWord xw -> return $ VBool $ bvOp xw (fromIntegral i)
           _ -> fail "atOp: expected vector"
       VToNat i -> do
         iv <- toBits unpack i
         case x of
-          VVector xv -> selectV mux (fromIntegral n - 1) (force . (V.!) xv) iv
-          VWord xw -> selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
+          VVector xv ->
+            selectV mux (fromIntegral n - 1) (force . vecIdx "atOp[ToNat]" xv) iv
+          VWord xw ->
+            selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
           _ -> fail "atOp: expected vector"
       _ -> fail $ "atOp: expected Nat, got " ++ show idx
 
@@ -402,7 +411,7 @@ updOp unpack eq lit bitsize mux =
       VNat i -> return (VVector (xv V.// [(fromIntegral i, y)]))
       VToNat (VWord w) -> do
         let f i = do b <- eq w (lit (bitsize w) (toInteger i))
-                     delay (mux b (force y) (force (xv V.! i)))
+                     delay (mux b (force y) (force (vecIdx "updOp" xv i)))
         yv <- V.generateM (V.length xv) f
         return (VVector yv)
       VToNat val -> do
