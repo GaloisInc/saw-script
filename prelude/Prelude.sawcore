@@ -278,8 +278,24 @@ cmpBoolLt x y k = or (and (not x) y) (cmpBoolEq x y k);
 lt :: (a :: sort 0) -> a -> a -> Bool;
 lt = comparison Bool cmpBvLt cmpBoolLt False;
 
+axiom zero_Bool :: Eq Bool (zero Bool) False;
+
+axiom binary_Bool ::
+  -- (f :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)) ->
+  (f :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n) ->
+  (g :: Bool -> Bool -> Bool) ->
+  Eq (Bool -> Bool -> Bool) (binary f g Bool) g;
+
+axiom binary_Vec_Bool ::
+  (f :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)) ->
+  (g :: Bool -> Bool -> Bool) -> (n :: Nat) ->
+  Eq (Vec n Bool -> Vec n Bool -> Vec n Bool) (binary f g (Vec n Bool)) (f n);
+
 axiom eq_binary_and :: Eq (Bool -> Bool -> Bool) (binary bvAnd and Bool) and;
+-- eq_binary_and = binary_Bool bvAnd and; -- for some reason this doesn't typecheck
 axiom eq_binary_or :: Eq (Bool -> Bool -> Bool) (binary bvOr or Bool) or;
+-- eq_binary_or = binary_Bool bvOr or; -- for some reason this doesn't typecheck
+
 axiom eq_unary_not :: Eq (Bool -> Bool) (unary bvNot not Bool) not;
 
 axiom eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
@@ -681,15 +697,20 @@ primitive bvSRem :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x)
 -- | Shift left by the given number of bits.
 -- New bits are False.
 primitive bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
---TODO
 
 -- Logical right shift.  New bits are False.
 primitive bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
---TODO
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
 primitive bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
---TODO
+
+axiom bvShiftL_bvShl ::
+  (n :: Nat) -> (w :: Nat) -> (x :: Vec n Bool) -> (i :: bitvector w) ->
+  Eq (Vec n Bool) (bvShiftL n Bool w False x i) (bvShl n x (bvToNat w i));
+
+axiom bvShiftR_bvShr ::
+  (n :: Nat) -> (w :: Nat) -> (x :: Vec n Bool) -> (i :: bitvector w) ->
+  Eq (Vec n Bool) (bvShiftR n Bool w False x i) (bvShr n x (bvToNat w i));
 
 -- | Zipwith specialized to bitvectors.
 bvZipWith :: (Bool -> Bool -> Bool)
