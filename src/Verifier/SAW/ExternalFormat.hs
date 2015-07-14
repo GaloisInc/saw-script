@@ -20,7 +20,6 @@ import Verifier.SAW.SharedTerm
 import Data.Traversable
 #endif
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
-import Verifier.SAW.Constant
 import Control.Monad.State.Strict as State
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -60,7 +59,7 @@ scWriteExternal t0 =
         Pi s t e       -> unwords ["Pi", s, show t, show e]
         Let ds e       -> unwords ["Def", writeDefs ds, show e]
         LocalVar i     -> unwords ["Var", show i]
-        Constant x e _ -> unwords ["Constant", x, show e]
+        Constant x e t -> unwords ["Constant", x, show e, show t]
         FTermF ftf     ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
@@ -72,7 +71,7 @@ scWriteExternal t0 =
             RecordSelector e i -> unwords ["RecordSel", show e, i]
             CtorApp i es       -> unwords ("Ctor" : show i : map show es)
             DataTypeApp i es   -> unwords ("Data" : show i : map show es)
-            Sort s             -> unwords ["Sort", show s]
+            Sort s             -> unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
             NatLit n           -> unwords ["Nat", show n]
             ArrayValue e v     -> unwords ("Array" : show e : map show (V.toList v))
             FloatLit x         -> unwords ["Float", show x]
@@ -95,9 +94,7 @@ scReadExternal sc input =
     go :: Map Int (SharedTerm s) -> [String] -> IO (Map Int (SharedTerm s))
     go m (n : tokens) =
         do
-          t <- case parse tokens of
-            (Constant x e _) -> scConstant sc x (m Map.! e)
-            termf            -> scTermF sc (fmap ((Map.!) m) termf)
+          t <- scTermF sc (fmap ((Map.!) m) (parse tokens))
           return (Map.insert (read n) t m)
     go _ _ = fail "scReadExternal: Parse error"
     parse :: [String] -> TermF Int
@@ -108,7 +105,7 @@ scReadExternal sc input =
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         -- TODO: support LetDef
         ["Var", i]          -> LocalVar (read i)
-        ["Constant", x, e]  -> Constant x (read e) undefined
+        ["Constant",x,e,t]  -> Constant x (read e) (read t)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
         ("Tuple" : es)      -> FTermF (TupleValue (map read es))
         ("TupleT" : es)     -> FTermF (TupleType (map read es))
