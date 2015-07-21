@@ -26,13 +26,14 @@ import Prelude hiding (mapM)
 import Control.Applicative ((<$>))
 #endif
 import Control.Lens ((^.))
-import Control.Monad (foldM, liftM)
+import Control.Monad (foldM, liftM, when)
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -213,10 +214,11 @@ evalGlobal :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
               Module -> Map Ident (Value m b w e) ->
               (String -> Value m b w e -> Maybe (m (Value m b w e))) ->
               m (SimulatorConfig m b w e)
-evalGlobal m0 prims uninterpreted =
-  mfix $ \cfg -> do
-    thunks <- mapM delay (globals cfg)
-    return (SimulatorConfig (global thunks) noExtCns uninterpreted)
+evalGlobal m0 prims uninterpreted = do
+   checkPrimitives m0 prims
+   mfix $ \cfg -> do
+     thunks <- mapM delay (globals cfg)
+     return (SimulatorConfig (global thunks) noExtCns uninterpreted)
   where
     ms :: [Module]
     ms = m0 : Map.elems (m0^.moduleImports)
@@ -242,6 +244,34 @@ evalGlobal m0 prims uninterpreted =
 
 noExtCns :: Monad m => VarIndex -> String -> Value m b w e -> m (Value m b w e)
 noExtCns _ name _ = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
+
+
+-- | Check that all the primitives declared in the given module
+--   are implemented, and that terms with implementations are not
+--   overridden.
+checkPrimitives :: forall m b w e. (MonadLazy m, MonadFix m, Show e)
+                => Module
+                -> Map Ident (Value m b w e)
+                -> m ()
+checkPrimitives m0 prims = do
+   when (not $ null unimplementedPrims) (fail $ unimplementedMsg)
+--   (if null overridePrims then id else Debug.trace (overrideMsg++"\n")) $
+--   (return ())
+
+   return ()
+
+  where unimplementedMsg = unwords $
+            ("ERROR unimplemented primitives:" : (map show unimplementedPrims))
+        _overrideMsg = unwords $
+            ("WARNING overridden definitions:" : (map show overridePrims))
+
+        primSet = Set.fromList $ map defIdent $ allModulePrimitives m0
+        defSet  = Set.fromList $ map defIdent $ allModuleActualDefs m0
+        implementedPrims = Map.keysSet prims
+
+        unimplementedPrims = Set.toList $ Set.difference primSet implementedPrims
+        overridePrims = Set.toList $ Set.intersection defSet implementedPrims
+
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for SharedTerms involves two memo tables:
