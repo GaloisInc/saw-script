@@ -95,6 +95,7 @@ constMap = Map.fromList
   , ("Prelude.bvSDiv", sbinOp svQuot)
   , ("Prelude.bvSRem", sbinOp svRem)
   , ("Prelude.bvPMul", bvPMulOp)
+  , ("Prelude.bvPDiv", bvPDivOp)
   , ("Prelude.bvPMod", bvPModOp)
   -- Relations
   , ("Prelude.bvEq"  , binRel svEqual)
@@ -346,6 +347,15 @@ bvPModOp =
   wordFun $ \x -> return $
   wordFun $ \y ->
     return . vWord . fromBitsLE $ take (svBitSize y - 1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
+
+-- primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+bvPDivOp :: SValue
+bvPDivOp =
+  constFun $
+  constFun $
+  wordFun $ \x -> return $
+  wordFun $ \y -> do
+    return . vWord . fromBitsLE $ take (svBitSize y - 1) (fst (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
