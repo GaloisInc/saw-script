@@ -124,6 +124,22 @@ constMap = Map.fromList
   , ("Prelude.natCase", Prims.natCaseOp)
   , ("Prelude.equalNat", Prims.equalNat (return . svBool))
   , ("Prelude.ltNat", Prims.ltNat (return . svBool))
+  -- Integers
+  , ("Prelude.intAdd", Prims.intAddOp)
+  , ("Prelude.intSub", Prims.intSubOp)
+  , ("Prelude.intMul", Prims.intMulOp)
+  , ("Prelude.intDiv", Prims.intDivOp)
+  , ("Prelude.intMod", Prims.intModOp)
+  , ("Prelude.intNeg", Prims.intNegOp)
+  , ("Prelude.intEq" , Prims.intEqOp svBool)
+  , ("Prelude.intLe" , Prims.intLeOp svBool)
+  , ("Prelude.intLt" , Prims.intLtOp svBool)
+  , ("Prelude.intToNat", Prims.intToNatOp)
+  , ("Prelude.natToInt", Prims.natToIntOp)
+  , ("Prelude.intToBv" , intToBvOp)
+  , ("Prelude.bvToInt" , bvToIntOp)
+  , ("Prelude.sbvToInt", sbvToIntOp)
+
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
@@ -335,6 +351,32 @@ eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp
         bvEqOp _ x y = do x' <- toWord x
                           y' <- toWord y
                           return $ vBool (svEqual x' y')
+
+-----------------------------------------
+-- Integer/bitvector conversions
+
+-- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+bvToIntOp :: SValue
+bvToIntOp = constFun $ wordFun $ \v ->
+   case svAsInteger v of
+      Just i -> return $ VInt i
+      Nothing -> fail "Cannot convert symbolic bitvector to integer"
+
+-- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+sbvToIntOp :: SValue
+sbvToIntOp = constFun $ wordFun $ \v ->
+   case svAsInteger (svSign v) of
+      Just i -> return $ VInt i
+      Nothing -> fail "Cannot convert symbolic bitvector to integer"
+
+-- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+intToBvOp :: SValue
+intToBvOp =
+  Prims.natFun' "intToBv n" $ \n -> return $
+  Prims.intFun "intToBv x" $ \x -> return $
+    VWord $
+     if n >= 0 then svInteger (KBounded False (fromIntegral n)) x
+               else svUnsign $ svUNeg $ svInteger (KBounded True (fromIntegral n)) (negate x)
 
 ----------------------------------------
 -- Polynomial operations

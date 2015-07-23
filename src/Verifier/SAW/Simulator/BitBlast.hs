@@ -231,6 +231,22 @@ beConstMap be = Map.fromList
   , ("Prelude.natCase", Prims.natCaseOp)
   , ("Prelude.equalNat", Prims.equalNat (return . AIG.constant be))
   , ("Prelude.ltNat", Prims.ltNat (return . AIG.constant be))
+  -- Integers
+  , ("Prelude.intAdd", Prims.intAddOp)
+  , ("Prelude.intSub", Prims.intSubOp)
+  , ("Prelude.intMul", Prims.intMulOp)
+  , ("Prelude.intDiv", Prims.intDivOp)
+  , ("Prelude.intMod", Prims.intModOp)
+  , ("Prelude.intNeg", Prims.intNegOp)
+  , ("Prelude.intEq" , Prims.intEqOp (AIG.constant be))
+  , ("Prelude.intLe" , Prims.intLeOp (AIG.constant be))
+  , ("Prelude.intLt" , Prims.intLtOp (AIG.constant be))
+  , ("Prelude.intToNat", Prims.intToNatOp)
+  , ("Prelude.natToInt", Prims.natToIntOp)
+  , ("Prelude.intToBv" , intToBvOp be)
+  , ("Prelude.bvToInt" , bvToIntOp be)
+  , ("Prelude.sbvToInt", sbvToIntOp be)
+
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))
@@ -428,6 +444,32 @@ eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp
         bvEqOp _ x y = do x' <- toWord x
                           y' <- toWord y
                           vBool <$> AIG.bvEq be x' y'
+
+-----------------------------------------
+-- Integer/bitvector conversions
+
+-- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+bvToIntOp :: AIG.IsAIG l g => g s -> BValue (l s)
+bvToIntOp g = constFun $ wordFun $ \v ->
+   case AIG.asUnsigned g v of
+      Just i -> return $ VInt i
+      Nothing -> fail "Cannot convert symbolic bitvector to integer"
+
+-- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+sbvToIntOp :: AIG.IsAIG l g => g s -> BValue (l s)
+sbvToIntOp g = constFun $ wordFun $ \v ->
+   case AIG.asSigned g v of
+      Just i -> return $ VInt i
+      Nothing -> fail "Cannot convert symbolic bitvector to integer"
+
+-- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+intToBvOp :: AIG.IsAIG l g => g s -> BValue (l s)
+intToBvOp g =
+  Prims.natFun' "intToBv n" $ \n -> return $
+  Prims.intFun "intToBv x" $ \x ->
+    VWord <$>
+     if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
+               else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x))
 
 ----------------------------------------
 -- Polynomial operations

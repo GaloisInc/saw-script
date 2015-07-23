@@ -851,6 +851,35 @@ bvStreamShiftL a w xs i = streamDrop a (bvToNat w i) xs;
 bvStreamShiftR :: (a :: sort 0) -> (w :: Nat) -> a -> Stream a -> bitvector w -> Stream a;
 bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i) a x) xs;
 
+--------------------------------------------------------------------------------
+-- Integer values
+--   integer values of unbounded precision
+
+primitive data Integer :: sort 0;
+
+primitive intAdd :: Integer -> Integer -> Integer;
+primitive intSub :: Integer -> Integer -> Integer;
+primitive intMul :: Integer -> Integer -> Integer;
+primitive intDiv :: Integer -> Integer -> Integer;
+primitive intMod :: Integer -> Integer -> Integer;
+primitive intNeg :: Integer -> Integer;
+primitive intEq  :: Integer -> Integer -> Bool;
+primitive intLe  :: Integer -> Integer -> Bool;
+primitive intLt  :: Integer -> Integer -> Bool;
+
+-- intToNat x == max 0 x
+primitive intToNat :: Integer -> Nat;
+primitive natToInt :: Nat -> Integer;
+
+-- for x >= 0, intToBv n x = x `mod` 2^n
+-- for x <  0, intToBv n x = bvNeg n (-x `mod` 2^n)
+primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+
+-- return the unsigned value of the bitvector as an integer
+primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+
+-- return the 2's complement signed value of the bitvector as an integer
+primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
 
 --------------------------------------------------------------------------------
 -- String values

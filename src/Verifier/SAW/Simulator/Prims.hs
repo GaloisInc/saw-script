@@ -47,6 +47,11 @@ natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"
 
+intFun :: Monad m => String -> (Integer -> m (Value m b w e)) -> Value m b w e
+intFun msg f = strictFun g
+  where g (VInt i) = f i
+        g _ = fail $ "expected Integer "++ msg
+
 toBool :: Show e => Value m b w e -> b
 toBool (VBool b) = b
 toBool x = error $ unwords ["Verifier.SAW.Simulator.toBool", show x]
@@ -461,3 +466,63 @@ joinOp unpack app =
       vv <- V.mapM force xv
       return (V.foldr (appV unpack app) (VVector V.empty) vv)
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
+
+
+intBinOp :: Monad m => String -> (Integer -> Integer -> Integer) -> Value m b w e
+intBinOp nm f =
+  intFun (nm++" x") $ \x -> return $
+  intFun (nm++" y") $ \y -> return $
+    VInt (f x y)
+
+intBinCmp :: Monad m => String -> (Integer -> Integer -> Bool) -> (Bool -> b) -> Value m b w e
+intBinCmp nm f boolLit =
+  intFun (nm++" x") $ \x -> return $
+  intFun (nm++" y") $ \y -> return $
+    VBool $ boolLit (f x y)
+
+-- primitive intAdd :: Integer -> Integer -> Integer;
+intAddOp :: Monad m => Value m b w e
+intAddOp = intBinOp "intAdd" (+)
+
+-- primitive intSub :: Integer -> Integer -> Integer;
+intSubOp :: Monad m => Value m b w e
+intSubOp = intBinOp "intSub" (-)
+
+-- primitive intMul :: Integer -> Integer -> Integer;
+intMulOp :: Monad m => Value m b w e
+intMulOp = intBinOp "intMul" (*)
+
+-- primitive intDiv :: Integer -> Integer -> Integer;
+intDivOp :: Monad m => Value m b w e
+intDivOp = intBinOp "intDiv" div
+
+-- primitive intMod :: Integer -> Integer -> Integer;
+intModOp :: Monad m => Value m b w e
+intModOp = intBinOp "intMod" mod
+
+-- primitive intNeg :: Integer -> Integer;
+intNegOp :: Monad m => Value m b w e
+intNegOp = intFun "intNeg x" $ \x -> return $ VInt (negate x)
+
+-- primitive intEq  :: Integer -> Integer -> Bool;
+intEqOp :: Monad m => (Bool -> b) -> Value m b w e
+intEqOp = intBinCmp "intEq" (==)
+
+-- primitive intLe  :: Integer -> Integer -> Bool;
+intLeOp :: Monad m => (Bool -> b) -> Value m b w e
+intLeOp = intBinCmp "intLe" (<=)
+
+-- primitive intLt  :: Integer -> Integer -> Bool;
+intLtOp :: Monad m => (Bool -> b) -> Value m b w e
+intLtOp = intBinCmp "intLt" (<)
+
+
+-- primitive intToNat :: Integer -> Nat;
+intToNatOp :: Monad m => Value m b w e
+intToNatOp =
+  intFun "intToNat" $ \x -> return $!
+    if x >= 0 then VNat x else VNat 0
+
+--primitive natToInt :: Nat -> Integer;
+natToIntOp :: Monad m => Value m b w e
+natToIntOp = natFun' "natToInt" $ \x -> return $ VNat (fromIntegral x)

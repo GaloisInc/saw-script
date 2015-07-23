@@ -41,6 +41,7 @@ data Value m b w e
   | VWord w
   | VToNat (Value m b w e)
   | VNat !Integer
+  | VInt !Integer
   | VString !String
   | VFloat !Float
   | VDouble !Double
@@ -80,6 +81,7 @@ instance Show e => Show (Value m b w e) where
       VWord _        -> showString "<<bitvector>>"
       VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
+      VInt i         -> shows i
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s

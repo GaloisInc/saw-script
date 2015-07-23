@@ -31,7 +31,7 @@ import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Verifier.SAW.Prim (BitVector(..))
+import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
@@ -250,6 +250,21 @@ constMap = Map.fromList
   , ("Prelude.natCase", Prims.natCaseOp)
   , ("Prelude.equalNat", Prims.equalNat return)
   , ("Prelude.ltNat", Prims.ltNat return)
+  -- Integers
+  , ("Prelude.intAdd", Prims.intAddOp)
+  , ("Prelude.intSub", Prims.intSubOp)
+  , ("Prelude.intMul", Prims.intMulOp)
+  , ("Prelude.intDiv", Prims.intDivOp)
+  , ("Prelude.intMod", Prims.intModOp)
+  , ("Prelude.intNeg", Prims.intNegOp)
+  , ("Prelude.intEq" , Prims.intEqOp id)
+  , ("Prelude.intLe" , Prims.intLeOp id)
+  , ("Prelude.intLt" , Prims.intLtOp id)
+  , ("Prelude.intToNat", Prims.intToNatOp)
+  , ("Prelude.natToInt", Prims.natToIntOp)
+  , ("Prelude.intToBv" , intToBvOp)
+  , ("Prelude.bvToInt" , bvToIntOp)
+  , ("Prelude.sbvToInt", sbvToIntOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp bvUnpack Prim.bvAt ite)
@@ -281,6 +296,23 @@ constMap = Map.fromList
 
 bvToNatOp :: CValue
 bvToNatOp = constFun $ wordFun $ VNat . unsigned
+
+-- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+bvToIntOp :: CValue
+bvToIntOp = constFun $ wordFun $ VInt . unsigned
+
+-- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+sbvToIntOp :: CValue
+sbvToIntOp = constFun $ wordFun $ VInt . signed
+
+-- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+intToBvOp :: CValue
+intToBvOp =
+  Prims.natFun' "intToBv n" $ \n -> return $
+  Prims.intFun "intToBv x" $ \x -> return $
+    VWord $
+     if n >= 0 then bv (fromIntegral n) x
+               else bvNeg n $ bv (fromIntegral n) $ negate x
 
 -- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
 iteOp :: CValue
