@@ -110,6 +110,14 @@ module Verifier.SAW.SharedTerm
   , scIte
   , scSingle
   , scSlice
+  -- *** Integer primitives
+  , scIntAdd, scIntSub, scIntMul
+  , scIntDiv, scIntMod, scIntNeg
+  , scIntMin, scIntMax
+  , scIntEq, scIntLe, scIntLt
+  , scIntToNat, scNatToInt
+  , scIntToBv, scBvToInt, scSbvToInt
+
     -- *** Bitvector primitives
   , scBitvector
   , scBvNat
@@ -1003,6 +1011,57 @@ scMinNat sc x y = scGlobalApply sc "Prelude.minNat" [x,y]
 
 scMaxNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s) 
 scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
+
+-- Primitive operations on Integer
+
+-- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
+scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin
+   :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scIntAdd sc x y = scGlobalApply sc "Prelude.intAdd" [x, y]
+scIntSub sc x y = scGlobalApply sc "Prelude.intSub" [x, y]
+scIntMul sc x y = scGlobalApply sc "Prelude.intMul" [x, y]
+scIntDiv sc x y = scGlobalApply sc "Prelude.intDiv" [x, y]
+scIntMod sc x y = scGlobalApply sc "Prelude.intMod" [x, y]
+scIntMin sc x y = scGlobalApply sc "Prelude.intMin" [x, y]
+scIntMax sc x y = scGlobalApply sc "Prelude.intMax" [x, y]
+
+-- primitive intNeg :: Integer -> Integer;
+scIntNeg
+   :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scIntNeg sc x = scGlobalApply sc "Prelude.intNeg" [x]
+
+-- primitive intEq/intLe/intLt  :: Integer -> Integer -> Bool;
+scIntEq, scIntLe, scIntLt
+   :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scIntEq sc x y = scGlobalApply sc "Prelude.intEq" [x, y]
+scIntLe sc x y = scGlobalApply sc "Prelude.intLe" [x, y]
+scIntLt sc x y = scGlobalApply sc "Prelude.intLt" [x, y]
+
+-- primitive intToNat :: Integer -> Nat;
+scIntToNat
+   :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scIntToNat sc x = scGlobalApply sc "Prelude.intToNat" [x]
+
+-- primitive natToInt :: Nat -> Integer;
+scNatToInt
+   :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scNatToInt sc x = scGlobalApply sc "Prelude.natToInt" [x]
+
+-- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+scIntToBv
+   :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scIntToBv sc n x = scGlobalApply sc "Prelude.intToBv" [n,x]
+
+-- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+scBvToInt
+   :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
+
+-- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+scSbvToInt
+   :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
+
 
 -- Primitive operations on bitvectors
 
