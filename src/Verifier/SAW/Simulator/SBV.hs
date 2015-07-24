@@ -139,7 +139,8 @@ constMap = Map.fromList
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
-
+  , ("Prelude.intMin"  , Prims.intMinOp)
+  , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))

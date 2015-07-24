@@ -862,6 +862,8 @@ primitive intSub :: Integer -> Integer -> Integer;
 primitive intMul :: Integer -> Integer -> Integer;
 primitive intDiv :: Integer -> Integer -> Integer;
 primitive intMod :: Integer -> Integer -> Integer;
+primitive intMin :: Integer -> Integer -> Integer;
+primitive intMax :: Integer -> Integer -> Integer;
 primitive intNeg :: Integer -> Integer;
 primitive intEq  :: Integer -> Integer -> Bool;
 primitive intLe  :: Integer -> Integer -> Bool;

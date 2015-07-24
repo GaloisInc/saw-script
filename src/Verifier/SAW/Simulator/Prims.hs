@@ -500,6 +500,14 @@ intDivOp = intBinOp "intDiv" div
 intModOp :: Monad m => Value m b w e
 intModOp = intBinOp "intMod" mod
 
+-- primitive intMin :: Integer -> Integer -> Integer;
+intMinOp :: Monad m => Value m b w e
+intMinOp = intBinOp "intMin" min
+
+-- primitive intMax :: Integer -> Integer -> Integer;
+intMaxOp :: Monad m => Value m b w e
+intMaxOp = intBinOp "intMax" max
+
 -- primitive intNeg :: Integer -> Integer;
 intNegOp :: Monad m => Value m b w e
 intNegOp = intFun "intNeg x" $ \x -> return $ VInt (negate x)
@@ -515,7 +523,6 @@ intLeOp = intBinCmp "intLe" (<=)
 -- primitive intLt  :: Integer -> Integer -> Bool;
 intLtOp :: Monad m => (Bool -> b) -> Value m b w e
 intLtOp = intBinCmp "intLt" (<)
-
 
 -- primitive intToNat :: Integer -> Nat;
 intToNatOp :: Monad m => Value m b w e
