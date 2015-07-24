@@ -641,106 +641,89 @@ looseVars t = State.evalState (go t) Map.empty
 -- Instantiating variables
 
 instantiateVars :: forall s. SharedContext s
-                -> (DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> ChangeT IO (IO (SharedTerm s)))
-                -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
+                -> (DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> IO (SharedTerm s))
+                -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
 instantiateVars sc f initialLevel t0 =
     do cache <- newCache
        let ?cache = cache in go initialLevel t0
   where
-    go :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
-          DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
-    go l t@(Unshared tf) = preserveChangeT t (go' l tf)
-    go l t@(STApp tidx tf) =
-        ChangeT $ useCache ?cache (tidx, l) (runChangeT $ preserveChangeT t (go' l tf))
+    go :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+          DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
+    go l (Unshared tf) = go' l tf
+    go l (STApp tidx tf) = useCache ?cache (tidx, l) (go' l tf)
 
-    go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (Change (SharedTerm s))) =>
-           DeBruijnIndex -> TermF (SharedTerm s) -> ChangeT IO (IO (SharedTerm s))
+    go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
+           DeBruijnIndex -> TermF (SharedTerm s) -> IO (SharedTerm s)
     go' l (FTermF (ExtCns ec)) = f l (Left ec)
-    go' l (FTermF tf)       = scFlatTermF sc <$> (traverse (go l) tf)
-    go' l (App x y)         = scTermF sc <$> (App <$> go l x <*> go l y)
-    go' l (Lambda i tp rhs) = scTermF sc <$> (Lambda i <$> go l tp <*> go (l+1) rhs)
-    go' l (Pi i lhs rhs)    = scTermF sc <$> (Pi i <$> go l lhs <*> go (l+1) rhs)
-    go' l (Let defs r) = scTermF sc <$> (Let <$> changeList procDef defs <*> go l' r)
+    go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
+    go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
+    go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
+    go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go (l+1) rhs)
+    go' l (Let defs r) = scTermF sc =<< (Let <$> traverse procDef defs <*> go l' r)
       where l' = l + length defs
-            procDef :: LocalDef (SharedTerm s) -> ChangeT IO (LocalDef (SharedTerm s))
-            procDef (Def sym qual tp eqs) = Def sym qual <$> go l tp <*> changeList procEq eqs
-            procEq :: DefEqn (SharedTerm s) -> ChangeT IO (DefEqn (SharedTerm s))
+            procDef :: LocalDef (SharedTerm s) -> IO (LocalDef (SharedTerm s))
+            procDef (Def sym qual tp eqs) = Def sym qual <$> go l tp <*> traverse procEq eqs
+            procEq :: DefEqn (SharedTerm s) -> IO (DefEqn (SharedTerm s))
             procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
               where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i)
-      | i < l     = pure $ scTermF sc (LocalVar i)
+      | i < l     = scTermF sc (LocalVar i)
       | otherwise = f l (Right i)
-    go' _ tf@(Constant _ _ _) = pure $ scTermF sc tf
+    go' _ tf@(Constant _ _ _) = scTermF sc tf
 
--- | @incVars j k t@ increments free variables at least @j@ by @k@.
+-- | @incVars j k t@ increments free variables at least @initialLevel@ by @j@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVarsChangeT :: SharedContext s
-               -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> ChangeT IO (SharedTerm s)
-incVarsChangeT sc initialLevel j
-    | j == 0    = return
-    | otherwise = instantiateVars sc fn initialLevel
-    where
-      fn _ (Left ec) = pure $ scFlatTermF sc $ ExtCns ec
-      fn _ (Right i) = modified $ scTermF sc (LocalVar (i+j))
-
 incVars :: SharedContext s
         -> DeBruijnIndex -> DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
-incVars sc i j t = commitChangeT (incVarsChangeT sc i j t)
+incVars sc initialLevel j
+  | j == 0    = return
+  | otherwise = instantiateVars sc fn initialLevel
+  where
+    fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
+    fn _ (Right i) = scTermF sc (LocalVar (i+j))
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
-instantiateVarChangeT :: forall s. SharedContext s
-                      -> DeBruijnIndex -> SharedTerm s -> SharedTerm s
-                      -> ChangeT IO (SharedTerm s)
-instantiateVarChangeT sc k t0 t =
+instantiateVar :: forall s. SharedContext s
+               -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+instantiateVar sc k t0 t =
     do cache <- newCache
        let ?cache = cache in instantiateVars sc fn 0 t
   where -- Use map reference to memoize instantiated versions of t.
         term :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
-                DeBruijnIndex -> ChangeT IO (SharedTerm s)
-        term i = useCache ?cache i (incVarsChangeT sc 0 i t0)
+                DeBruijnIndex -> IO (SharedTerm s)
+        term i = useCache ?cache i (incVars sc 0 i t0)
         -- Instantiate variable 0.
         fn :: (?cache :: Cache IORef DeBruijnIndex (SharedTerm s)) =>
-              DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
-        fn _ (Left ec) = pure $ scFlatTermF sc $ ExtCns ec
+              DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> IO (SharedTerm s)
+        fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
         fn i (Right j)
-               | j  > i + k = modified $ scTermF sc (LocalVar (j - 1))
-               | j == i + k = taint $ return <$> term i
-               | otherwise  = pure $ scTermF sc (LocalVar j)
-
--- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
--- dangling variables.
-instantiateVar :: SharedContext s
-               -> DeBruijnIndex -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
-instantiateVar sc k t0 t = commitChangeT (instantiateVarChangeT sc k t0 t)
+               | j  > i + k = scTermF sc (LocalVar (j - 1))
+               | j == i + k = term i
+               | otherwise  = scTermF sc (LocalVar j)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
-instantiateVarListChangeT :: forall s. SharedContext s
-                          -> DeBruijnIndex -> [SharedTerm s]
-                          -> SharedTerm s -> ChangeT IO (SharedTerm s)
-instantiateVarListChangeT _ _ [] t = return t
-instantiateVarListChangeT sc k ts t =
+instantiateVarList :: forall s. SharedContext s
+                   -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
+instantiateVarList _ _ [] t = return t
+instantiateVarList sc k ts t =
     do caches <- mapM (const newCache) ts
        instantiateVars sc (fn (zip caches ts)) 0 t
   where
     l = length ts
     -- Memoize instantiated versions of ts.
     term :: (Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)
-         -> DeBruijnIndex -> ChangeT IO (SharedTerm s)
-    term (cache, x) i = useCache cache i (incVarsChangeT sc 0 i x)
+         -> DeBruijnIndex -> IO (SharedTerm s)
+    term (cache, x) i = useCache cache i (incVars sc 0 i x)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache IORef DeBruijnIndex (SharedTerm s), SharedTerm s)]
-       -> DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> ChangeT IO (IO (SharedTerm s))
-    fn _ _ (Left ec) = pure $ scFlatTermF sc $ ExtCns ec
+       -> DeBruijnIndex -> Either (ExtCns (SharedTerm s)) DeBruijnIndex -> IO (SharedTerm s)
+    fn _ _ (Left ec) = scFlatTermF sc $ ExtCns ec
     fn rs i (Right j)
-              | j >= i + k + l = modified $ scTermF sc (LocalVar (j - l))
-              | j >= i + k     = taint $ return <$> term (rs !! (j - i - k)) i
-              | otherwise      = pure $ scTermF sc (LocalVar j)
-
-instantiateVarList :: SharedContext s
-                   -> DeBruijnIndex -> [SharedTerm s] -> SharedTerm s -> IO (SharedTerm s)
-instantiateVarList sc k ts t = commitChangeT (instantiateVarListChangeT sc k ts t)
+              | j >= i + k + l = scTermF sc (LocalVar (j - l))
+              | j >= i + k     = term (rs !! (j - i - k)) i
+              | otherwise      = scTermF sc (LocalVar j)
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -1260,12 +1243,12 @@ scInstantiateExt :: forall s
                  -> Map VarIndex (SharedTerm s)
                  -> SharedTerm s
                  -> IO (SharedTerm s)
-scInstantiateExt sc vmap = commitChangeT . instantiateVars sc fn 0
+scInstantiateExt sc vmap = instantiateVars sc fn 0
   where fn l (Left ec) =
             case Map.lookup (ecVarIndex ec) vmap of
-               Just t  -> modified $ incVars sc 0 l t
-               Nothing -> pure $ scFlatTermF sc $ ExtCns ec
-        fn _ (Right i) = pure $ scTermF sc $ LocalVar i
+               Just t  -> incVars sc 0 l t
+               Nothing -> scFlatTermF sc $ ExtCns ec
+        fn _ (Right i) = scTermF sc $ LocalVar i
 
 {-
 -- RWD: I'm pretty sure the following implementation gets incorrect results when
