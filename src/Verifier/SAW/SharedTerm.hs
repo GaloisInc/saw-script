@@ -143,6 +143,7 @@ module Verifier.SAW.SharedTerm
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
+  , betaNormalize
   , extIdx
   , extName
   , getAllExts
@@ -724,6 +725,39 @@ instantiateVarList sc k ts t =
               | j >= i + k + l = scTermF sc (LocalVar (j - l))
               | j >= i + k     = term (rs !! (j - i - k)) i
               | otherwise      = scTermF sc (LocalVar j)
+
+--------------------------------------------------------------------------------
+-- Beta Normalization
+
+betaNormalize :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+betaNormalize sc t0 =
+  do cache <- newCache
+     let ?cache = cache in go t0
+  where
+    go :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
+    go t = case t of
+      Unshared _ -> go' t
+      STApp i _  -> useCache ?cache i (go' t)
+
+    go' :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
+    go' t = do
+      let (f, args) = asApplyAll t
+      let (params, body) = asLambdaList f
+      let n = length (zip args params)
+      if n == 0 then go3 t else do
+        body' <- go body
+        f' <- scLambdaList sc (drop n params) body'
+        args' <- mapM go args
+        f'' <- instantiateVarList sc 0 (reverse (take n args')) f'
+        scApplyAll sc f'' (drop n args')
+
+    go3 :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
+    go3 (Unshared tf) = Unshared <$> traverseTF go tf
+    go3 (STApp _ tf) = scTermF sc =<< traverseTF go tf
+
+    traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
+    traverseTF _ tf@(Constant _ _ _) = pure tf
+    traverseTF f tf = traverse f tf
 
 --------------------------------------------------------------------------------
 -- Pretty printing
