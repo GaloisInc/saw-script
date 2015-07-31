@@ -138,7 +138,7 @@ subNatOp :: Monad m => Value m b w e
 subNatOp =
   natFun' "subNat1" $ \m -> return $
   natFun' "subNat2" $ \n -> return $
-  vNat (m - n)
+  vNat (if m < n then 0 else m - n)
 
 -- mulNat :: Nat -> Nat -> Nat;
 mulNatOp :: Monad m => Value m b w e
