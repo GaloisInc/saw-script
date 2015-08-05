@@ -92,8 +92,15 @@ tcMax (TCNum _) TCInf = TCInf;
 tcMax TCInf (TCNum _) = TCInf;
 tcMax TCInf TCInf = TCInf;
 
-primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
-primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThen_Nat x y w =
+  tcLenFromThenTo_Nat x y (ite Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
+
+tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThenTo_Nat x y z =
+  ite Nat (ltNat x y)
+    (ite Nat (ltNat z x) 0 (addNat (divNat (subNat z x) (subNat y x)) 1)) -- increasing
+    (ite Nat (ltNat x z) 0 (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThen (TCNum x) (TCNum y) (TCNum w) = TCNum (tcLenFromThen_Nat x y w);
