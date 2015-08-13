@@ -31,6 +31,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Env as Env
 import Cryptol.Eval.Type (evalType)
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.ModuleSystem.Name as C (unpack)
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
@@ -158,7 +159,7 @@ importType sc env ty =
     go = importType sc env
 
 nameToString :: C.Name -> String
-nameToString (C.Name s) = s
+nameToString (C.Name s) = C.unpack s
 nameToString (C.NewName p i) = show p ++ show i
 
 qnameToString :: C.QName -> String
@@ -590,7 +591,7 @@ scCryptolType sc t = do
       -> C.tTuple <$> traverse (scCryptolType sc) ts
     (R.asRecordType -> Just tm)
        -> do tm' <- traverse (scCryptolType sc) tm
-             return $ C.tRec [ (C.Name n, ct) | (n, ct) <- Map.assocs tm' ]
+             return $ C.tRec [ (C.mkName n, ct) | (n, ct) <- Map.assocs tm' ]
     _ -> fail $ "scCryptolType: unsupported type " ++ show t'
 
 scCryptolEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
