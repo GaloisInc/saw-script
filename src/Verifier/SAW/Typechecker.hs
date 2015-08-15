@@ -437,7 +437,7 @@ completePatT cc0 pats = (go <$> pats, cc')
           where tp' = completeTerm cc tp
         (cc', v) =  mapAccumLOf traverse ins cc0 bl
         ctxv = fmap fst v `V.snoc` cc'
-        
+
         go (TCPVar nm (i,_)) = PVar nm i tp
           where Just (_,tp) = v V.!? i
         go (TCPUnused _ (i,tp)) = PUnused i (completeTerm cc tp)
@@ -468,7 +468,7 @@ completeTerm cc (TCPi pat@(TCPUnused nm _) tp r) =
     Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term"
-completeTerm cc (TCLet lcls t) = 
+completeTerm cc (TCLet lcls t) =
     Term $ Let (completeLocal <$> lcls') (completeTerm cc' t)
   where -- Complete types in local defs using outer context.
         lcls' = lcls & traverse . localDefType %~ completeTerm cc
@@ -643,7 +643,7 @@ mkPendingAssign r f a = assignRef r (f a)
 
 data InitState s = IS { _isModule :: Module
                       , _isCtx :: GlobalContext s
-                      , _isTypes :: ![ TCRefDataType s ] 
+                      , _isTypes :: ![ TCRefDataType s ]
                       , _isDefs  :: ![ TCRefDef s ]
                       , _isPending :: [ PendingAction s (TermContext s) ]
                       }
@@ -654,7 +654,7 @@ isModule = lens _isModule (\s v -> s { _isModule = v })
 isCtx :: Simple Lens (InitState s) (GlobalContext s)
 isCtx = lens _isCtx (\s v -> s { _isCtx = v })
 
-isTypes :: Simple Lens (InitState s) [TCRefDataType s] 
+isTypes :: Simple Lens (InitState s) [TCRefDataType s]
 isTypes = lens _isTypes (\s v -> s { _isTypes = v })
 
 isDefs :: Simple Lens (InitState s) [ TCRefDef s ]
@@ -670,7 +670,7 @@ initModuleName = moduleName <$> use isModule
 
 addPending :: NodeName -> (TermContext s -> TC s r) -> Initializer s (TCRef s r)
 addPending nm fn = do
-  r <- lift $ newRef nm  
+  r <- lift $ newRef nm
   r <$ (isPending %= (mkPendingAssign r fn :))
 
 parseCtor :: Ident -> Un.CtorDecl -> Initializer s (Bool, Loc, TCRefCtor s)
@@ -689,10 +689,10 @@ parseDecl eqnMap d = do
       rtp <- addPending (val id1) (\ uc -> fst <$> tcType uc utp)
       forOf_ folded idl $ \(PosPair p nm) -> do
         let ueqs = fromMaybe [] $ Map.lookup nm eqnMap
-        -- | Check to ensure that primitive and axiom constants have no defining equations
-        --   and that every unqualified identifier has a definition
+        -- Check to ensure that primitive and axiom constants have no defining equations
+        -- and that every unqualified identifier has a definition
         case qual of
-           Un.NoQualifier | null ueqs -> 
+           Un.NoQualifier | null ueqs ->
                lift $ tcFail p $ unwords [nm, "has no defining equations"]
            Un.PrimitiveQualifier | not (null ueqs) ->
                lift $ tcFail p $ unwords [nm, "declared primitive, but has defining equations"]
@@ -729,7 +729,7 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
     Nothing -> lift $ tcFail p $ "Cannot find module " ++ show nm ++ "."
     Just m -> do
       let mnm = moduleName m
-      isModule %= insImport m 
+      isModule %= insImport m
       -- Get list of module names to use for local identifiers.
       let mnml | q = [Just qnm]
                | otherwise = [Nothing, Just qnm]
