@@ -221,8 +221,8 @@ constMap = Map.fromList
   , ("Prelude.bvURem", binOp' (Prim.bvURem undefined))
   , ("Prelude.bvSDiv", binOp' (Prim.bvSDiv undefined))
   , ("Prelude.bvSRem", binOp' (Prim.bvSRem undefined))
-  , ("Prelude.bvPMul", binOp (Prim.bvPMul undefined undefined))
-  , ("Prelude.bvPMod", binOp (Prim.bvPDiv undefined undefined))
+  , ("Prelude.bvPMul", constFun $ binOp (Prim.bvPMul undefined undefined))
+  , ("Prelude.bvPMod", constFun $ binOp (Prim.bvPMod undefined undefined))
   -- Relations
   , ("Prelude.bvEq"  , binRel (Prim.bvEq undefined))
   , ("Prelude.bvsle" , binRel (Prim.bvsle undefined))

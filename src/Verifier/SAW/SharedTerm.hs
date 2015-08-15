@@ -111,6 +111,7 @@ module Verifier.SAW.SharedTerm
   , scSingle
   , scSlice
   -- *** Integer primitives
+  , scInteger
   , scIntAdd, scIntSub, scIntMul
   , scIntDiv, scIntMod, scIntNeg
   , scIntMin, scIntMax
@@ -1030,6 +1031,9 @@ scMaxNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 -- Primitive operations on Integer
+
+scInteger :: SharedContext s -> IO (SharedTerm s)
+scInteger sc = scDataTypeApp sc "Prelude.Integer" []
 
 -- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
 scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin
