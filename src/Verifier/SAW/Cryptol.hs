@@ -141,16 +141,16 @@ importType sc env ty =
                                            scFun sc x' y'
                               _      -> error "importType: TCFun: wrong number of arguments"
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- ^ user-defined, @T@
+            C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
         C.PC pc ->
           case pc of
-            C.PEqual         -> scDataTypeApp sc "Cryptol.PEqual" =<< traverse go tyargs -- ^ @_ == _@
-            C.PNeq           -> scDataTypeApp sc "Cryptol.PNeq"   =<< traverse go tyargs -- ^ @_ /= _@
-            C.PGeq           -> scDataTypeApp sc "Cryptol.PGeq"   =<< traverse go tyargs -- ^ @_ >= _@
-            C.PFin           -> scDataTypeApp sc "Cryptol.PFin"   =<< traverse go tyargs -- ^ @fin _@
+            C.PEqual         -> scDataTypeApp sc "Cryptol.PEqual" =<< traverse go tyargs -- @_ == _@
+            C.PNeq           -> scDataTypeApp sc "Cryptol.PNeq"   =<< traverse go tyargs -- @_ /= _@
+            C.PGeq           -> scDataTypeApp sc "Cryptol.PGeq"   =<< traverse go tyargs -- @_ >= _@
+            C.PFin           -> scDataTypeApp sc "Cryptol.PFin"   =<< traverse go tyargs -- @fin _@
             C.PHas _selector -> unimplemented "PHas"
-            C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- ^ @Arith _@
-            C.PCmp           -> scDataTypeApp sc "Cryptol.PCmp"   =<< traverse go tyargs -- ^ @Cmp _@
+            C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- @Arith _@
+            C.PCmp           -> scDataTypeApp sc "Cryptol.PCmp"   =<< traverse go tyargs -- @Cmp _@
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
@@ -215,7 +215,7 @@ importPrimitive sc (C.QName (Just (C.ModName ["Cryptol"])) (C.Name nm)) =
   case nm of
     "True"          -> scBool sc True
     "False"         -> scBool sc False
-    "demote"        -> scGlobalDef sc "Cryptol.ecDemote"      -- ^ Converts a numeric type into its corresponding value.
+    "demote"        -> scGlobalDef sc "Cryptol.ecDemote"      -- Converts a numeric type into its corresponding value.
                                                      -- { val, bits } (fin val, fin bits, bits >= width val) => [bits]
     "+"             -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
     "-"             -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
@@ -284,7 +284,7 @@ importExpr sc env expr =
     C.ETuple es                 -> scTuple sc =<< traverse go es
     C.ERec fs                   -> scRecord sc =<< traverse go (Map.fromList fs')
                                      where fs' = [ (nameToString n, e) | (n, e) <- fs ]
-    C.ESel e sel                ->           -- ^ Elimination for tuple/record/list
+    C.ESel e sel                ->           -- Elimination for tuple/record/list
       case sel of
         C.TupleSel i _maybeLen  -> flip (scTupleSelector sc) (i+1) =<< go e
         C.RecordSel x _         -> flip (scRecordSelect sc) (nameToString x) =<< go e
@@ -620,7 +620,7 @@ scCryptolEq sc x y = do
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalType Env.emptyEnv ty) v
 exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
--- ^ TODO: proper support for polymorphic values
+-- TODO: proper support for polymorphic values
 
 exportValue :: V.TValue -> SC.CValue -> V.Value
 exportValue ty v
