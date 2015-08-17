@@ -26,7 +26,7 @@ import Prelude hiding (mapM)
 import Control.Applicative ((<$>))
 #endif
 import Control.Lens ((^.))
-import Control.Monad (foldM, liftM, when)
+import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
@@ -40,6 +40,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IMap
 import Data.Traversable
 import qualified Data.Vector as V
+import qualified Debug.Trace as Debug
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -254,11 +255,12 @@ checkPrimitives :: forall m b w e. (MonadLazy m, MonadFix m, Show e)
                 -> Map Ident (Value m b w e)
                 -> m ()
 checkPrimitives m0 prims = do
-   when (not $ null unimplementedPrims) (fail $ unimplementedMsg)
+   -- FIXME this is downgraded to a warning temporarily while we work out a
+   -- solution to issue GaloisInc/saw-script#48
+   --   when (not $ null unimplementedPrims) (fail $ unimplementedMsg)
+   (if null unimplementedPrims then id else Debug.trace (unimplementedMsg++"\n")) $
 --   (if null overridePrims then id else Debug.trace (overrideMsg++"\n")) $
---   (return ())
-
-   return ()
+     return ()
 
   where unimplementedMsg = unwords $
             ("ERROR unimplemented primitives:" : (map show unimplementedPrims))
