@@ -188,6 +188,7 @@ from a b (TCNum m) (TCNum n) xs k =
 
 mlet :: (a b :: sort 0) -> (n :: Num) -> a -> (a -> seq n b) -> seq n #(a, b);
 mlet a b (TCNum n) x f = map b #(a, b) (\(y :: b) -> (x, y)) n (f x);
+mlet a b TCInf x f = streamMap b #(a, b) (\(y :: b) -> (x, y)) (f x);
 
 seqZip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b);
 seqZip a b (TCNum m) (TCNum n) xs ys = zip a b m n xs ys;
