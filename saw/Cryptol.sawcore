@@ -180,11 +180,47 @@ eListSel a TCInf xs i = streamGet a xs i;
 -- List comprehensions
 
 from :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b);
-from a b (TCNum m) (TCNum n) xs k =
+from a b (TCNum m) (TCNum n) =
+  \ (xs :: Vec m a) ->
+  \ (k :: a -> Vec n b) ->
   join m n #(a, b)
   (map a (Vec n #(a, b))
     (\(x :: a) -> map b #(a, b) (\(y :: b) -> (x, y)) n (k x))
     m xs);
+
+from a b (TCNum m) TCInf =
+  natCase
+    (\ (m'::Nat) -> (Vec m' a -> (a -> Stream b) ->
+        seq (ite Num (equalNat 0 m') (TCNum 0) TCInf) #(a, b)))
+      (\ (xs :: Vec 0 a) ->
+       \ (k :: a -> Stream b) -> EmptyVec #(a, b))
+      (\ (m' :: Nat) ->
+       \ (xs :: Vec (Succ m') a) ->
+       \ (k :: a -> Stream b) ->
+        (\ (x :: a) -> streamMap b #(a, b) (\ (y::b) -> (x, y)) (k x))
+        (at (Succ m') a xs 0))
+      m;
+
+from a b TCInf (TCNum n) =
+  natCase
+    (\ (n'::Nat) -> (Stream a -> (a -> Vec n' b) ->
+        seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) #(a, b)))
+      (\ (xs :: Stream a) ->
+       \ (k :: a -> Vec 0 b) -> EmptyVec #(a, b))
+      (\ (n' :: Nat) ->
+       \ (xs :: Stream a) ->
+       \ (k :: a -> Vec (Succ n') b) ->
+         streamJoin #(a, b) n'
+         (streamMap a (Vec (Succ n') #(a, b))
+           (\ (x::a) -> map b #(a, b) (\ (y::b) -> (x, y)) (Succ n') (k x))
+           xs))
+      n;
+
+from a b TCInf TCInf =
+  \ (xs :: Stream a) ->
+  \ (k :: a -> Stream b) ->
+    (\ (x :: a) -> streamMap b #(a, b) (\ (y :: b) -> (x, y)) (k x))
+    (streamGet a xs 0);
 
 mlet :: (a b :: sort 0) -> (n :: Num) -> a -> (a -> seq n b) -> seq n #(a, b);
 mlet a b (TCNum n) x f = map b #(a, b) (\(y :: b) -> (x, y)) n (f x);
