@@ -833,8 +833,8 @@ streamJoin :: (a :: sort 0) -> (n :: Nat)
            -> (Stream a);
 streamJoin a n s =
   MkStream a (\ (i::Nat) ->
-     at (Succ n) a (streamGet (Vec (Succ n) a) s ((divModNat i (Succ n)).1))
-                   ((divModNat i (Succ n)).2) );
+     at (Succ n) a (streamGet (Vec (Succ n) a) s (divNat i (Succ n)))
+                   (modNat i (Succ n)) );
 
 streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
 streamSplit a n xs =
