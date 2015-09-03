@@ -227,24 +227,24 @@ x <:>> y = fmap (view _2) $ x <:> y
 
 -- | Matches any tuple.
 asAnyTupleValue :: (Monad m, Termlike t) => Matcher m t [t]
-asAnyTupleValue = asVar $ \t -> do TupleValue l <- R.asFTermF t; return l
+asAnyTupleValue = asVar R.asTupleValue
 
 -- | Matches a tuple with arguments matching constraints.
 asTupleValue :: (Monad m, Termlike t, ArgsMatchable v m t a)
              => v m t a -> Matcher m t a
 asTupleValue (defaultArgsMatcher -> m) = asVar $ \t -> do
-  TupleValue l <- R.asFTermF t
+  l <- R.asTupleValue t
   runArgsMatcher m l
 
 -- | Matches the type of any tuple.
 asAnyTupleType :: (Monad m, Termlike t) => Matcher m t [t]
-asAnyTupleType = asVar $ \t -> do TupleType l <- R.asFTermF t; return l
+asAnyTupleType = asVar R.asTupleType
 
 -- | Matches a tuple type with arguments matching constraints.
 asTupleType :: (Monad m, Termlike t, ArgsMatchable v m t a)
              => v m t a -> Matcher m t a
 asTupleType (defaultArgsMatcher -> m) = asVar $ \t -> do
-  TupleType l <- R.asFTermF t
+  l <- R.asTupleType t
   runArgsMatcher m l
 
 asTupleSelector :: (Functor m, Monad m, Termlike t)
