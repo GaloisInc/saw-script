@@ -636,11 +636,7 @@ exportValue ty v
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
-  | Just (_, etys) <- V.isTTuple ty =
-    case v of
-      SC.VTuple (Vector.toList -> xs) ->
-        V.VTuple (zipWith exportValue etys (map (SC.runIdentity . force) xs))
-      _ -> error "exportValue: expected tuple"
+  | Just (_, etys) <- V.isTTuple ty = V.VTuple (exportTupleValue etys v)
 
   -- records
   | Just fields <- V.isTRec ty =
@@ -655,3 +651,12 @@ exportValue ty v
     V.VFun (error "exportValue: TODO functions")
 
   | otherwise = error $ "exportValue (on type " ++ show ty ++ ")"
+
+exportTupleValue :: [V.TValue] -> SC.CValue -> [V.Value]
+exportTupleValue tys v =
+  case (tys, v) of
+    ([]    , SC.VUnit    ) -> []
+    (t : ts, SC.VPair x y) -> exportValue t (run x) : exportTupleValue ts (run y)
+    _                      -> error $ "exportValue: expected tuple"
+  where
+    run = SC.runIdentity . force
