@@ -260,10 +260,14 @@ indexUnPat upat =
     Un.PSimple (Un.PUnused (PosPair _ nm)) -> do
       tpv <- mkVar ("type of " ++ nm) (UFreeType nm)
       (\v -> (UPUnused v nm tpv, tpv)) <$> mkVar nm (UUnused nm tpv)
-    Un.PTuple p l -> do
-        (up,utp) <- unzip <$> traverse indexUnPat l
-        tpv <-  mkVar (show (Un.ppPat PrecNone upat)) (UTF (TupleType utp))
-        return (UPatF p (UPTuple up), tpv)
+    Un.PUnit p -> do
+        tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF UnitType)
+        return (UPatF p UPUnit, tpv)
+    Un.PPair p x y -> do
+        (xp, xtp) <- indexUnPat x
+        (yp, ytp) <- indexUnPat y
+        tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (PairType xtp ytp))
+        return (UPatF p (UPPair xp yp), tpv)
     Un.PRecord p fpl
         | hasDups (val . fst <$> fpl) ->
            unFail p $ text "Duplicate field names in pattern."
@@ -357,9 +361,9 @@ matchUnPat il itcp iup = do
            second (const m) <$> indexUnPat unpat
         go (TCPatF pf) unpat =
           case (pf, unpat) of
-            (UPTuple pl, Un.PTuple p upl)
-              | length pl == length upl ->
-                 UPatF p . UPTuple <$> zipWithM go pl upl
+            (UPUnit, Un.PUnit p) -> return $ UPatF p UPUnit
+            (UPPair px py, Un.PPair p upx upy) ->
+                 UPatF p <$> (UPPair <$> go px upx <*> go py upy)
             (UPRecord pm, Un.PRecord p fpl)
                 | Map.size um < length fpl -> lift $
                     unFail p $ text "Duplicate field names in pattern."
@@ -730,12 +734,14 @@ checkTypesEqual' p ctx tc x y = do
       | xg == yg && length xa == length ya -> do
         checkAll (zip xa ya)
 
-    ( (TCF (TupleValue xa), []), (TCF (TupleValue ya), []))
-      | length xa == length ya ->
-        checkAll (zip xa ya)
-    ( (TCF (TupleType xa), []), (TCF (TupleType ya), []))
-      | length xa == length ya ->
-        checkAll (zip xa ya)
+    ( (TCF UnitValue, []), (TCF UnitValue, [])) ->
+        checkAll []
+    ( (TCF (PairValue x1 x2), []), (TCF (PairValue y1 y2), [])) ->
+        checkAll [(x1, y1), (x2, y2)]
+    ( (TCF UnitType, []), (TCF UnitType, [])) ->
+        checkAll []
+    ( (TCF (PairType x1 x2), []), (TCF (PairType y1 y2), [])) ->
+        checkAll [(x1, y1), (x2, y2)]
 
     ( (TCF (RecordValue xm), []), (TCF (RecordValue ym), []))
       | Map.keys xm == Map.keys ym ->

@@ -181,7 +181,7 @@ divModNatOp =
   natFun' "divModNat1" $ \m -> return $
   natFun' "divModNat2" $ \n -> return $
     let (q,r) = divMod m n in
-    VTuple $ V.fromList [ready $ vNat q, ready $ vNat r]
+    vTuple [ready $ vNat q, ready $ vNat r]
 
 -- expNat :: Nat -> Nat -> Nat;
 expNatOp :: Monad m => Value m b w e
@@ -225,7 +225,10 @@ zeroOp bvZ boolZ mkStream = strictFun go
     go t =
       case t of
         VPiType _ f -> return $ VFun $ \x -> f x >>= go
-        VTupleType ts -> liftM VTuple $ mapM (delay . go) (V.fromList ts)
+        VUnitType -> return VUnit
+        VPairType t1 t2 -> do z1 <- delay (go t1)
+                              z2 <- delay (go t2)
+                              return (VPair z1 z2)
         VRecordType tm -> liftM VRecord $ mapM (delay . go) tm
         VDataType "Prelude.Bool" [] -> boolZ
         VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []] -> bvZ n
@@ -248,8 +251,11 @@ unaryOp mkStream streamGet =
           y <- apply v x
           u <- f x
           go u y
-      go (VTupleType ts) (VTuple vs) =
-        liftM VTuple $ sequence (V.zipWith go' (V.fromList ts) vs)
+      go VUnitType VUnit = return VUnit
+      go (VPairType t1 t2) (VPair v1 v2) = do
+        x1 <- go' t1 v1
+        x2 <- go' t2 v2
+        return (VPair x1 x2)
       go (VRecordType tm) (VRecord vm)
         | Map.keys tm == Map.keys vm =
           liftM VRecord $ sequence (Map.intersectionWith go' tm vm)
@@ -287,8 +293,11 @@ binaryOp mkStream streamGet =
           y2 <- apply v2 x
           u <- f x
           bin u y1 y2
-      bin (VTupleType ts) (VTuple vs1) (VTuple vs2) =
-        liftM VTuple $ sequence (V.zipWith3 bin' (V.fromList ts) vs1 vs2)
+      bin VUnitType VUnit VUnit = return VUnit
+      bin (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) = do
+        z1 <- bin' t1 x1 y1
+        z2 <- bin' t2 x2 y2
+        return (VPair z1 z2)
       bin (VRecordType tm) (VRecord vm1) (VRecord vm2)
         | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
           liftM VRecord $ sequence
@@ -327,9 +336,11 @@ eqOp :: (MonadLazy m, Show e) => Value m b w e
 eqOp trueOp andOp boolOp bvOp =
   pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2
   where
-    go (VTupleType ts) (VTuple vv1) (VTuple vv2) = do
-      bs <- sequence $ zipWith3 go' ts (V.toList vv1) (V.toList vv2)
-      foldM andOp trueOp bs
+    go VUnitType VUnit VUnit = return trueOp
+    go (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) = do
+      b1 <- go' t1 x1 y1
+      b2 <- go' t2 x2 y2
+      andOp b1 b2
     go (VRecordType tm) (VRecord vm1) (VRecord vm2)
       | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 = do
         bs <- sequence $ zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2)
@@ -356,8 +367,8 @@ comparisonOp =
   constFun $
   pureFun $ \bvOp ->
   pureFun $ \boolOp ->
-  let go (VTupleType ts) (VTuple vv1) (VTuple vv2) k =
-        foldr (=<<) (return k) (zipWith3 go' ts (V.toList vv1) (V.toList vv2))
+  let go VUnitType VUnit VUnit k = return k
+      go (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) k = go' t1 x1 y1 =<< go' t2 x2 y2 k
       go (VRecordType tm) (VRecord vm1) (VRecord vm2) k
         | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
           foldr (=<<) (return k) (zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2))

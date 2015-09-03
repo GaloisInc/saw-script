@@ -165,15 +165,25 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           ty <- io $ scTypeOfGlobal sc d
           _ <- sort ty
           whnf ty
-        TupleValue l -> io . scTupleType sc =<< traverse memo l
-        TupleType [] -> io $ scSort sc (mkSort 0)
-        TupleType l -> io . scSort sc . maximum =<< traverse sort l
-        TupleSelector t i -> do
+        UnitValue -> io $ scUnitType sc
+        UnitType -> io $ scSort sc (mkSort 0)
+        PairValue x y -> do
+          tx <- memo x
+          ty <- memo y
+          io $ scPairType sc tx ty
+        PairType x y -> do
+          sx <- sort x
+          sy <- sort y
+          io $ scSort sc (max sx sy)
+        PairLeft t -> do
           ty <- memo t
           case ty of
-            STApp _ (FTermF (TupleType ts)) -> do
-              unless (i <= length ts) $ throwTCError $ BadTupleIndex i ty
-              whnf (ts !! (i-1))
+            STApp _ (FTermF (PairType t1 _)) -> whnf t1
+            _ -> throwTCError (NotTupleType ty)
+        PairRight t -> do
+          ty <- memo t
+          case ty of
+            STApp _ (FTermF (PairType _ t2)) -> whnf t2
             _ -> throwTCError (NotTupleType ty)
         RecordValue m -> io . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do

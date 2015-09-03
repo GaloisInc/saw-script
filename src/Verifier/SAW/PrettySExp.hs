@@ -87,12 +87,14 @@ ppSharedTermSExpWith cfg tm = doc
           opText =
             case tf of
               FTermF (GlobalDef n) -> text (show n)
-              FTermF (TupleValue _) -> text "tuple"
+              FTermF (UnitValue{}) -> text "tuple"
+              FTermF (PairValue{}) -> text "tuple"
+              FTermF (UnitType{}) -> text "Tuple"
+              FTermF (PairType{}) -> text "Tuple"
+              FTermF (PairLeft{}) -> text "proj" <> (braces (int 1))
+              FTermF (PairRight{}) -> text "proj" <> (braces (int 2))
               FTermF (RecordValue _) -> text "record"
-              FTermF (TupleType _) -> text "Tuple"
               FTermF (RecordType _) -> text "Record"
-              FTermF (TupleSelector _ idx) ->
-                text "proj" <> (braces (int idx))
               FTermF (RecordSelector _ fld) ->
                 text "proj" <> (braces (text fld))
               FTermF (CtorApp n _) -> text (show n)

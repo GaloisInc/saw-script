@@ -25,6 +25,8 @@ module Verifier.SAW.Recognizer
   , asApp
   , (<@>), (@>)
   , asApplyAll
+  , asPairValue
+  , asPairSelector
   , asTupleType
   , asTupleValue
   , asTupleSelector
@@ -130,14 +132,44 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
+asPairValue :: (Monad m, Termlike t) => Recognizer m t (t, t)
+asPairValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    PairValue x y -> return (x, y)
+    _             -> fail "asPairValue"
+
+asPairSelector :: (Monad m, Termlike t) => Recognizer m t (t, Bool)
+asPairSelector t = do
+  ftf <- asFTermF t
+  case ftf of
+    PairLeft x  -> return (x, False)
+    PairRight x -> return (x, True)
+    _           -> fail "asPairSelector"
+
 asTupleType :: (Monad m, Termlike t) => Recognizer m t [t]
-asTupleType t = do TupleType ts <- asFTermF t; return ts
+asTupleType t = do
+  ftf <- asFTermF t
+  case ftf of
+    UnitType     -> return []
+    PairType x y -> do xs <- asTupleType y; return (x : xs)
+    _            -> fail "asTupleType"
 
 asTupleValue :: (Monad m, Termlike t) => Recognizer m t [t]
-asTupleValue t = do TupleValue ts <- asFTermF t; return ts
+asTupleValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    UnitValue     -> return []
+    PairValue x y -> do xs <- asTupleValue y; return (x : xs)
+    _             -> fail "asTupleValue"
 
 asTupleSelector :: (Monad m, Termlike t) => Recognizer m t (t, Int)
-asTupleSelector t = do TupleSelector u i <- asFTermF t; return (u,i)
+asTupleSelector t = do
+  ftf <- asFTermF t
+  case ftf of
+    PairLeft x  -> return (x, 1)
+    PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
+    _           -> fail "asTupleSelector"
 
 asRecordType :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
 asRecordType t = do RecordType m <- asFTermF t; return m

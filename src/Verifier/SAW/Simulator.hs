@@ -71,10 +71,14 @@ matchThunk p x =
   case p of
     PVar _ i _  -> return $ Just (Map.singleton i x)
     PUnused _ _ -> return $ Just Map.empty
-    PTuple ps   -> do v <- force x
+    PUnit       -> do v <- force x
                       case v of
-                        VTuple xv -> matchThunks ps (V.toList xv)
-                        _         -> return Nothing
+                        VUnit -> matchThunks [] []
+                        _ -> return Nothing
+    PPair p1 p2 -> do v <- force x
+                      case v of
+                        VPair x1 x2 -> matchThunks [p1, p2] [x1, x2]
+                        _ -> return Nothing
     PRecord _   -> fail "matchThunk PRecord unimplemented"
     PCtor i ps  -> do v <- force x
                       case v of
@@ -167,9 +171,16 @@ evalTermF cfg lam rec tf env =
     FTermF ftf              ->
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
-        TupleValue ts       -> liftM VTuple $ mapM rec' (V.fromList ts)
-        TupleType ts        -> liftM VTupleType $ mapM rec ts
-        TupleSelector t j   -> valTupleSelect j =<< rec t
+        UnitValue           -> return VUnit
+        UnitType            -> return VUnitType
+        PairValue x y       -> do tx <- rec' x
+                                  ty <- rec' y
+                                  return $ VPair tx ty
+        PairType x y        -> do vx <- rec x
+                                  vy <- rec y
+                                  return $ VPairType vx vy
+        PairLeft x          -> valPairLeft =<< rec x
+        PairRight x         -> valPairRight =<< rec x
         RecordValue tm      -> liftM VRecord $ mapM rec' tm
         RecordSelector t k  -> valRecordSelect k =<< rec t
         RecordType tm       -> liftM VRecordType $ mapM rec tm

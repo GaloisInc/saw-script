@@ -207,7 +207,8 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
             (j, m) <- get
             put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
             return $ Term $ LocalVar (n - 1 - j)
-          PTuple ps -> (Term . FTermF . TupleValue) <$> traverse termOfPat ps
+          PUnit     -> return $ Term (FTermF UnitValue)
+          PPair x y -> (Term . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
           PRecord ps -> (Term . FTermF . RecordValue) <$> traverse termOfPat ps
           PCtor c ps -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
 
@@ -276,11 +277,11 @@ asBetaRedex t =
        (s, ty, body) <- R.asLambda f
        return (s, ty, body, arg)
 
-asTupleRedex :: (Monad m, Termlike t) => R.Recognizer m t ([t], Int)
-asTupleRedex t =
-    do (x, i) <- R.asTupleSelector t
-       ts <- R.asTupleValue x
-       return (ts, i)
+asPairRedex :: (Monad m, Termlike t) => R.Recognizer m t t
+asPairRedex t =
+    do (u, b) <- R.asPairSelector t
+       (x, y) <- R.asPairValue u
+       return (if b then y else x)
 
 asRecordRedex :: (Monad m, Termlike t) => R.Recognizer m t (Map FieldName t, FieldName)
 asRecordRedex t =
@@ -323,7 +324,7 @@ rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
 -- level, if possible.
 reduceSharedTerm :: SharedContext s -> SharedTerm s -> Maybe (IO (SharedTerm s))
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
-reduceSharedTerm _ (asTupleRedex -> Just (ts, i)) = Just (return (ts !! (i - 1)))
+reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
 reduceSharedTerm _ (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
 reduceSharedTerm _ _ = Nothing
 
@@ -388,7 +389,7 @@ rewriteSharedTermToTerm sc ss t0 =
     rewriteAll (STApp tidx tf) =
         useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
     rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
-    rewriteTop (asTupleRedex -> Just (ts, i)) = return (ts !! (i - 1))
+    rewriteTop (asPairRedex -> Just t) = return t
     rewriteTop (asRecordRedex -> Just (m, i)) =
        case Map.lookup i m of
          Just x  -> return x
@@ -439,9 +440,12 @@ rewriteSharedTermTypeSafe sc ss t0 =
                      FlatTermF (SharedTerm s) -> IO (FlatTermF (SharedTerm s))
     rewriteFTermF ftf =
         case ftf of
-          TupleValue{}     -> traverse rewriteAll ftf
-          TupleType{}      -> return ftf -- doesn't matter
-          TupleSelector{}  -> traverse rewriteAll ftf
+          UnitValue        -> return ftf
+          UnitType         -> return ftf
+          PairValue{}      -> traverse rewriteAll ftf
+          PairType{}       -> return ftf -- doesn't matter
+          PairLeft{}       -> traverse rewriteAll ftf
+          PairRight{}      -> traverse rewriteAll ftf
           RecordValue{}    -> traverse rewriteAll ftf
           RecordSelector{} -> traverse rewriteAll ftf
           RecordType{}     -> return ftf -- doesn't matter

@@ -66,8 +66,9 @@ attemptMatch tc (TCPatF pf) t = do
   let go = attemptMatch tc
   rt <- lift $ lift $ reduce tc t
   case (pf, rt) of
-    (UPTuple pl, TCF (TupleValue tl)) | length pl == length tl ->
-      TCF . TupleValue <$> sequenceA (zipWith go pl tl)
+    (UPUnit, TCF UnitValue) -> pure $ TCF UnitValue
+    (UPPair p1 p2, TCF (PairValue t1 t2)) ->
+      TCF <$> (PairValue <$> go p1 t1 <*> go p2 t2)
     (UPRecord pm, TCF (RecordValue tm)) | Map.keys pm == Map.keys tm ->
       TCF . RecordValue <$> sequenceA (Map.intersectionWith go pm tm)
     (UPCtor cp pl, TCF (CtorApp ct tl)) | cp == ct ->

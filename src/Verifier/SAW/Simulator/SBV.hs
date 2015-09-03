@@ -217,7 +217,10 @@ flattenSValue v = do
     Just w -> return [w]
     Nothing ->
       case v of
-        VTuple (V.toList -> ts)   -> concat <$> traverse (force >=> flattenSValue) ts
+        VUnit                     -> return []
+        VPair x y                 -> do xs <- flattenSValue =<< force x
+                                        ys <- flattenSValue =<< force y
+                                        return (xs ++ ys)
         VRecord (Map.elems -> ts) -> concat <$> traverse (force >=> flattenSValue) ts
         VVector (V.toList -> ts)  -> concat <$> traverse (force >=> flattenSValue) ts
         VBool sb                  -> return [sb]
@@ -612,7 +615,7 @@ vZipOp =
   constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
-  VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (toVector xs) (toVector ys))
+  VVector (V.zipWith (\x y -> ready (vTuple [x, y])) (toVector xs) (toVector ys))
 
 ------------------------------------------------------------
 -- Helpers for marshalling into SValues
@@ -663,7 +666,10 @@ iteOp =
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal b x y)
 muxBVal b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
-muxBVal b (VTuple xv)     (VTuple yv)     = VTuple <$> muxThunks b xv yv
+muxBVal _ VUnit           VUnit           = return VUnit
+muxBVal b (VPair x1 x2)   (VPair y1 y2)   = do z1 <- muxThunk b x1 y1
+                                               z2 <- muxThunk b x2 y2
+                                               return (VPair z1 z2)
 muxBVal b (VRecord xm)    (VRecord ym)    | Map.keys xm == Map.keys ym =
                                             VRecord <$> T.sequence
                                               (Map.intersectionWith (muxThunk b) xm ym)
@@ -715,12 +721,12 @@ kindFromType (VDataType "Prelude.Vec" [VNat n, ety]) =
   case kindFromType ety of
     KBounded False m -> KBounded False (fromIntegral n * m)
     k -> error $ "Unsupported vector element kind: " ++ show k
-kindFromType (VTupleType []) = KBounded False 0
-kindFromType (VTupleType tys) =
-  foldr1 combineKind (map kindFromType tys)
+kindFromType VUnitType = KBounded False 0
+kindFromType (VPairType ty1 ty2) =
+  combineKind (kindFromType ty1) (kindFromType ty2)
     where combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
           combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
-kindFromType (VRecordType m) = kindFromType (VTupleType (Map.elems m))
+kindFromType (VRecordType m) = kindFromType (vTupleType (Map.elems m))
 kindFromType ty = error $ "Unsupported type: " ++ show ty
 
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
@@ -746,9 +752,11 @@ parseUninterpreted cws nm ty =
     parseTy (VDataType "Prelude.Vec" [VNat n, ety]) = do
       xs <- traverse parseTy (replicate (fromIntegral n) ety)
       return (VVector (V.fromList (map ready xs)))
-    parseTy (VTupleType tys) = do
-      xs <- traverse parseTy tys
-      return (VTuple (V.fromList (map ready xs)))
+    parseTy VUnitType = return VUnit
+    parseTy (VPairType ty1 ty2) = do
+      x1 <- parseTy ty1
+      x2 <- parseTy ty2
+      return (VPair (ready x1) (ready x2))
     parseTy (VRecordType tm) = do
       xm <- traverse parseTy tm
       return (VRecord (fmap ready xm))
@@ -811,7 +819,7 @@ newVars (FTVec n tp) = do
   return (VecLabel labels, VVector <$> traverse (fmap ready) vals)
 newVars (FTTuple ts) = do
   (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
-  return (TupleLabel labels, VTuple <$> traverse (fmap ready) vals)
+  return (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
 newVars (FTRec tm) = do
   (labels, vals) <- myfun <$> (traverse newVars tm :: State Int (Map String (Labeler, Symbolic SValue)))
   return (RecLabel labels, VRecord <$> traverse (fmap ready) (vals :: (Map String (Symbolic SValue))))
@@ -829,8 +837,8 @@ newCodeGenVars (FTVec n tp) = do
   vals <- V.replicateM (fromIntegral n) (newCodeGenVars tp)
   return (VVector <$> traverse (fmap ready) vals)
 newCodeGenVars (FTTuple ts) = do
-  vals <- traverse newCodeGenVars (V.fromList ts)
-  return (VTuple <$> traverse (fmap ready) vals)
+  vals <- traverse newCodeGenVars ts
+  return (vTuple <$> traverse (fmap ready) vals)
 newCodeGenVars (FTRec tm) = do
   vals <- traverse newCodeGenVars tm
   return (VRecord <$> traverse (fmap ready) vals)

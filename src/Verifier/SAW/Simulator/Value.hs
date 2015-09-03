@@ -33,7 +33,8 @@ import Verifier.SAW.Simulator.MonadLazy
 
 data Value m b w e
   = VFun !(Thunk m b w e -> m (Value m b w e))
-  | VTuple !(Vector (Thunk m b w e))
+  | VUnit
+  | VPair (Thunk m b w e) (Thunk m b w e)
   | VRecord !(Map FieldName (Thunk m b w e))
   | VCtorApp !Ident !(Vector (Thunk m b w e))
   | VVector !(Vector (Thunk m b w e))
@@ -46,7 +47,8 @@ data Value m b w e
   | VFloat !Float
   | VDouble !Double
   | VPiType !(Value m b w e) !(Thunk m b w e -> m (Value m b w e))
-  | VTupleType [Value m b w e]
+  | VUnitType
+  | VPairType (Value m b w e) (Value m b w e)
   | VRecordType !(Map FieldName (Value m b w e))
   | VDataType !Ident [Value m b w e]
   | VType -- ^ Other unknown type
@@ -67,8 +69,8 @@ instance Show e => Show (Value m b w e) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
-      VTuple xv      -> showParen True
-                          (foldr (.) id (intersperse (showString ",") (map shows (toList xv))))
+      VUnit          -> showString "()"
+      VPair{}        -> showString "<<tuple>>"
       VRecord xm      -> showString "{" .
                         foldr (.) id (intersperse (showString ", ")
                                       (map showField (Map.assocs (fmap (const Nil) xm)))) .
@@ -87,9 +89,8 @@ instance Show e => Show (Value m b w e) where
       VString s      -> shows s
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
-      VTupleType vs  -> showString "#" .
-                        showParen True
-                        (foldr (.) id (intersperse (showString ",") (map shows vs)))
+      VUnitType      -> showString "#()"
+      VPairType x y  -> showParen True (shows x . showString " * " . shows y)
       VRecordType _  -> showString "<<record type>>"
       VDataType s vs
         | null vs    -> shows s
@@ -108,9 +109,21 @@ instance Show Nil where
 ------------------------------------------------------------
 -- Basic operations on values
 
-valTupleSelect :: (Monad m, Show e) => Int -> Value m b w e -> m (Value m b w e)
-valTupleSelect i (VTuple xv) = force $ (V.!) xv (i - 1)
-valTupleSelect _ v = fail $ "valTupleSelect: Not a tuple value: " ++ show v
+vTuple :: Monad m => [Thunk m b w e] -> Value m b w e
+vTuple [] = VUnit
+vTuple (x : xs) = VPair x (ready (vTuple xs))
+
+vTupleType :: Monad m => [Value m b w e] -> Value m b w e
+vTupleType [] = VUnitType
+vTupleType (x : xs) = VPairType x (vTupleType xs)
+
+valPairLeft :: (Monad m, Show e) => Value m b w e -> m (Value m b w e)
+valPairLeft (VPair t1 _) = force t1
+valPairLeft v = fail $ "valPairLeft: Not a pair value: " ++ show v
+
+valPairRight :: (Monad m, Show e) => Value m b w e -> m (Value m b w e)
+valPairRight (VPair _ t2) = force t2
+valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
 
 valRecordSelect :: (Monad m, Show e) => FieldName -> Value m b w e -> m (Value m b w e)
 valRecordSelect k (VRecord vm) | Just x <- Map.lookup k vm = force x

@@ -405,7 +405,14 @@ pureApp mx y = do
   mkTermF (App x y)
 
 mkTuple :: [TermBuilder t t] -> TermBuilder t t
-mkTuple l = mkTermF . FTermF . TupleValue =<< sequence l
+mkTuple []       = mkTermF (FTermF UnitValue)
+mkTuple (t : ts) = mkTermF . FTermF =<< (PairValue <$> t <*> mkTuple ts)
+
+mkTupleSelector :: Int -> t -> TermBuilder t t
+mkTupleSelector i t
+  | i == 1 = mkTermF (FTermF (PairLeft t))
+  | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
+  | otherwise = fail "mkTupleSelector: non-positive index"
 
 mkCtor :: Ident -> [TermBuilder t t] -> TermBuilder t t
 mkCtor i l = mkTermF . FTermF . CtorApp i =<< sequence l
@@ -538,11 +545,10 @@ eq_Tuple = Conversion $ thenMatcher matcher action
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
         mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
-        sel t i = mkTermF (FTermF (TupleSelector t i))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t
-                      `mkApp` sel x i
-                      `mkApp` sel y i
+                      `mkApp` mkTupleSelector i x
+                      `mkApp` mkTupleSelector i y
 
 -- | Conversion for equality on record types
 eq_Record :: Termlike t => Conversion t

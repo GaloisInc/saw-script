@@ -168,7 +168,8 @@ type TCPat = AnnPat TCTerm
 
 -- | Pattern functor
 data PatF p
-   = UPTuple [p]
+   = UPUnit
+   | UPPair p p
    | UPRecord (Map FieldName p)
    | UPCtor Ident [p]
   deriving (Functor, Foldable, Traversable, Show)
@@ -182,6 +183,11 @@ tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
 tcAsApp = go []
   where go r (TCApp f v) = go (v:r) f
         go r f = (f,r)
+
+asUPTuple :: AnnPat a -> Maybe [AnnPat a]
+asUPTuple (TCPatF UPUnit)       = return []
+asUPTuple (TCPatF (UPPair x y)) = (x :) <$> asUPTuple y
+asUPTuple _                     = Nothing
 
 -- | A pi type that accepted a statically-determined number of arguments.
 data FixedPiType r
@@ -256,7 +262,8 @@ fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)
 
 -- | Convert pats into equivalent termf.
 termFromPatF :: PatF a -> FlatTermF a
-termFromPatF (UPTuple l)  = TupleValue l
+termFromPatF UPUnit       = UnitValue
+termFromPatF (UPPair x y) = PairValue x y
 termFromPatF (UPRecord m) = RecordValue m
 termFromPatF (UPCtor c l) = CtorApp c l
 
@@ -264,9 +271,8 @@ termFromPatF (UPCtor c l) = CtorApp c l
 zipWithPatF :: (a -> b -> c) -> PatF a -> PatF b -> Maybe (PatF c)
 zipWithPatF f x y =
   case (x,y) of
-    (UPTuple  lx, UPTuple  ly)
-      | length lx == length ly ->
-          Just $ UPTuple (zipWith f lx ly)
+    (UPUnit, UPUnit) -> Just UPUnit
+    (UPPair x1 x2, UPPair y1 y2) -> Just $ UPPair (f x1 y1) (f x2 y2)
     (UPRecord mx, UPRecord my)
       | Map.keys mx == Map.keys my ->
           Just $ UPRecord (Map.intersectionWith f mx my)
@@ -617,10 +623,14 @@ ppTCPat :: AnnPat a -> Doc
 ppTCPat (TCPVar nm _) = text nm
 ppTCPat (TCPUnused nm _) = text nm
 ppTCPat (TCPatF pf) =
-  case pf of
-    UPTuple pl -> parens $ commaSepList (ppTCPat <$> pl)
-    UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
-    UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
+  case asUPTuple (TCPatF pf) of
+    Just pl -> parens $ commaSepList (ppTCPat <$> pl)
+    Nothing ->
+      case pf of
+        UPUnit     -> text "()"
+        UPPair x y -> parens (ppTCPat x <+> text "#" <+> ppTCPat y)
+        UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
+        UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
 
 ppTCTerm :: TermContext s -> Prec -> TCTerm -> Doc
 ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)

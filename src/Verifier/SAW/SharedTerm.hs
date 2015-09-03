@@ -76,6 +76,12 @@ module Verifier.SAW.SharedTerm
   , scLocalVar
   , scLookupDef
   , scSort
+  , scUnitValue
+  , scUnitType
+  , scPairValue
+  , scPairType
+  , scPairLeft
+  , scPairRight
   , scTuple
   , scTupleType
   , scTupleSelector
@@ -402,9 +408,13 @@ scWhnf sc = go []
       case p of
         PVar _ i _  -> return $ Just (Map.singleton i x)
         PUnused _ _ -> return $ Just Map.empty
-        PTuple ps   -> do v <- scWhnf sc x
+        PUnit       -> do v <- scWhnf sc x
                           case asTupleValue v of
-                            Just xs | length xs == length ps -> matchAll ps (map Left xs)
+                            Just [] -> matchAll [] []
+                            _ -> return Nothing
+        PPair p1 p2 -> do v <- scWhnf sc x
+                          case asPairValue v of
+                            Just (v1, v2) -> matchAll [p1, p2] [Left v1, Left v2]
                             _ -> return Nothing
         PRecord pm  -> do v <- scWhnf sc x
                           case asRecordValue v of
@@ -534,11 +544,22 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ scTypeOfGlobal sc d
-        TupleValue l -> lift . scTupleType sc =<< traverse memo l
-        TupleType l -> lift . scSort sc . maximum =<< traverse sort l
-        TupleSelector t i -> do
-          STApp _ (FTermF (TupleType ts)) <- memo t >>= liftIO . scWhnf sc
-          return (ts !! (i-1)) -- FIXME test for i < length ts
+        UnitValue -> lift $ scUnitValue sc
+        UnitType -> lift $ scUnitType sc
+        PairValue x y -> do
+          tx <- memo x
+          ty <- memo y
+          lift $ scPairType sc tx ty
+        PairType x y -> do
+          sx <- sort x
+          sy <- sort y
+          lift $ scSort sc (max sx sy)
+        PairLeft t -> do
+          STApp _ (FTermF (PairType t1 _)) <- memo t >>= liftIO . scWhnf sc
+          return t1
+        PairRight t -> do
+          STApp _ (FTermF (PairType _ t2)) <- memo t >>= liftIO . scWhnf sc
+          return t2
         RecordValue m -> lift . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
           STApp _ (FTermF (RecordType m)) <- memo t >>= liftIO . scWhnf sc
@@ -804,8 +825,8 @@ scPrettyTermDoc t0
         shouldName t c =
           case unwrapTermF t of
             FTermF GlobalDef{} -> False
-            FTermF (TupleValue []) -> False
-            FTermF (TupleType []) -> False
+            FTermF UnitValue -> False
+            FTermF UnitType -> False
             FTermF (CtorApp _ []) -> False
             FTermF (DataTypeApp _ []) -> False
             FTermF NatLit{} -> False
@@ -883,14 +904,38 @@ scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
 scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scRecordType sc m = scFlatTermF sc (RecordType m)
 
+scUnitValue :: SharedContext s -> IO (SharedTerm s)
+scUnitValue sc = scFlatTermF sc UnitValue
+
+scUnitType :: SharedContext s -> IO (SharedTerm s)
+scUnitType sc = scFlatTermF sc UnitType
+
+scPairValue :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scPairValue sc x y = scFlatTermF sc (PairValue x y)
+
+scPairType :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scPairType sc x y = scFlatTermF sc (PairType x y)
+
 scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
-scTuple sc ts = scFlatTermF sc (TupleValue ts)
+scTuple sc [] = scUnitValue sc
+scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 scTupleType :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
-scTupleType sc ts = scFlatTermF sc (TupleType ts)
+scTupleType sc [] = scUnitType sc
+scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
+
+scPairLeft :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scPairLeft sc t = scFlatTermF sc (PairLeft t)
+
+scPairRight :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scPairRight sc t = scFlatTermF sc (PairRight t)
 
 scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
-scTupleSelector sc t i = scFlatTermF sc (TupleSelector t i)
+scTupleSelector sc t i
+  | i == 1    = scPairLeft sc t
+  | i > 1     = do t' <- scPairRight sc t
+                   scTupleSelector sc t' (i - 1)
+  | otherwise = fail "scTupleSelector: non-positive index"
 
 scFun :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFun sc a b = do b' <- incVars sc 0 1 b

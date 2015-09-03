@@ -266,19 +266,27 @@ inferTerm tc uut = do
             first (TCPi pat tp) <$> tcPats tc2 upats (applyExt tc2 (tc1, tp))
       (v',rps) <- tcPats tc upats0 tp0
       return $ TypedValue v' (TCF (Sort (maxSort rps tps)))
-    Un.TupleValue _ tl -> do
-      (vl,tpl) <- unzip <$> traverse (inferTypedValue tc) tl
-      return $ TypedValue (TCF (TupleValue vl)) (TCF (TupleType tpl))
-    Un.TupleType _ tl  -> do
-      (tpl,sl) <- unzip <$> traverse (tcType tc) tl
-      return $ TypedValue (TCF (TupleType tpl))
-                          (TCF (Sort (maximumSortOf folded sl)))
-    Un.TupleSelector ux (PosPair p i) -> do
-      (x,tp) <- inferTypedValue tc ux
-      ts <- reduceToTupleType tc p tp
-      case lookup i (zip [1..] ts) of
-        Nothing -> tcFail p $ "No component number " ++ show i ++ " in tuple."
-        Just ftp -> return $ TypedValue (TCF (TupleSelector x (fromIntegral i))) ftp
+    Un.UnitValue _ -> do
+      return $ TypedValue (TCF UnitValue) (TCF UnitType)
+    Un.PairValue _ t1 t2 -> do
+      (v1, tp1) <- inferTypedValue tc t1
+      (v2, tp2) <- inferTypedValue tc t2
+      return $ TypedValue (TCF (PairValue v1 v2)) (TCF (PairType tp1 tp2))
+    Un.UnitType _ -> do
+      return $ TypedValue (TCF UnitType) (TCF (Sort (mkSort 0)))
+    Un.PairType _ t1 t2 -> do
+      (tp1, s1) <- tcType tc t1
+      (tp2, s2) <- tcType tc t2
+      return $ TypedValue (TCF (PairType tp1 tp2))
+                          (TCF (Sort (maxSort s1 s2)))
+    Un.PairLeft p ux -> do
+      (x, tp) <- inferTypedValue tc ux
+      (t1, _) <- reduceToPairType tc p tp
+      return $ TypedValue (TCF (PairLeft x)) t1
+    Un.PairRight p ux -> do
+      (x, tp) <- inferTypedValue tc ux
+      (_, t2) <- reduceToPairType tc p tp
+      return $ TypedValue (TCF (PairRight x)) t2
 
     Un.RecordValue p (unzip -> (fmap val -> fl,vl))
         | hasDups fl -> tcFail p "Duplicate fields in record"
@@ -371,11 +379,11 @@ reduceToRecordType tc p tp = do
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" <$$>
                        nest 2 (ppTCTerm tc PrecNone rtp)
 
-reduceToTupleType :: TermContext s -> Pos -> TCTerm -> TC s [TCTerm]
-reduceToTupleType tc p tp = do
+reduceToPairType :: TermContext s -> Pos -> TCTerm -> TC s (TCTerm, TCTerm)
+reduceToPairType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
-    TCF (TupleType ts) -> return ts
+    TCF (PairType t1 t2) -> return (t1, t2)
     _ -> tcFailD p $ text "Attempt to dereference component of term with type:" <$$>
                        nest 2 (ppTCTerm tc PrecNone rtp)
 
@@ -444,7 +452,8 @@ completePatT cc0 pats = (go <$> pats, cc')
           where Just cc = ctxv V.!? i
         go (TCPatF pf) =
           case pf of
-            UPTuple l -> PTuple (go <$> l)
+            UPUnit     -> PUnit
+            UPPair x y -> PPair (go x) (go y)
             UPRecord m -> PRecord (go <$> m)
             UPCtor c l -> PCtor c (go <$> l)
 
@@ -540,7 +549,8 @@ patVarInfo :: Pat Term -> VarCollector ()
 patVarInfo = go
   where go (PVar nm i tp) = modify $ Map.insert i (nm,tp)
         go PUnused{} = return ()
-        go (PTuple l)  = traverseOf_ folded go l
+        go PUnit       = return ()
+        go (PPair x y) = go x >> go y
         go (PRecord m) = traverseOf_ folded go m
         go (PCtor _ l) = traverseOf_ folded go l
 
@@ -568,7 +578,8 @@ liftTCPatT tc0 a = do
         let Just tc = tcv V.!? i
         tp' <- liftTCTerm tc tp
         return $ TCPUnused "_" (i,tp')
-      go (PTuple pl)  = TCPatF . UPTuple  <$> traverse go pl
+      go PUnit        = pure $ TCPatF UPUnit
+      go (PPair x y)  = TCPatF <$> (UPPair <$> go x <*> go y)
       go (PRecord pm) = TCPatF . UPRecord <$> traverse go pm
       go (PCtor c pl) = TCPatF . UPCtor c <$> traverse go pl
   (,tcFinal) <$> traverse go a

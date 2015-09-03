@@ -257,7 +257,8 @@ data Pat e = -- | Variable bound by pattern.
              PVar String DeBruijnIndex e
              -- | The
            | PUnused DeBruijnIndex e
-           | PTuple [Pat e]
+           | PUnit
+           | PPair (Pat e) (Pat e)
            | PRecord (Map FieldName (Pat e))
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
@@ -272,7 +273,8 @@ patBoundVarCount p =
     PVar{} -> 1
     PUnused{} -> 0
     PCtor _ l -> sumBy patBoundVarCount l
-    PTuple l  -> sumBy patBoundVarCount l
+    PUnit     -> 0
+    PPair x y -> patBoundVarCount x + patBoundVarCount y
     PRecord m -> sumBy patBoundVarCount m
 
 patUnusedVarCount :: Pat e -> DeBruijnIndex
@@ -281,7 +283,8 @@ patUnusedVarCount p =
     PVar{} -> 0
     PUnused{} -> 1
     PCtor _ l -> sumBy patUnusedVarCount l
-    PTuple l  -> sumBy patUnusedVarCount l
+    PUnit     -> 0
+    PPair x y -> patUnusedVarCount x + patUnusedVarCount y
     PRecord m -> sumBy patUnusedVarCount m
 
 patBoundVars :: Pat e -> [String]
@@ -289,7 +292,8 @@ patBoundVars p =
   case p of
     PVar s _ _ -> [s]
     PCtor _ l -> concatMap patBoundVars l
-    PTuple l -> concatMap patBoundVars l
+    PUnit     -> []
+    PPair x y -> patBoundVars x ++ patBoundVars y
     PRecord m -> concatMapOf folded patBoundVars m
     _ -> []
 
@@ -439,12 +443,14 @@ type VarIndex = Word64
 data FlatTermF e
   = GlobalDef !Ident  -- ^ Global variables are referenced by label.
 
-    -- Tuples may be 0 or 2+ elements.
-    -- A tuple of a single element is not allowed in well-formed expressions.
-  | TupleValue [e]
-  | TupleType [e]
-  | TupleSelector !e !Int
-
+    -- Tuples are represented as nested pairs, grouped to the right,
+    -- terminated with unit at the end.
+  | UnitValue
+  | UnitType
+  | PairValue e e
+  | PairType e e
+  | PairLeft e
+  | PairRight e
   | RecordValue (Map FieldName e)
   | RecordType (Map FieldName e)
   | RecordSelector e FieldName
@@ -493,12 +499,12 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTe
 zipWithFlatTermF f = go
   where go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
 
-        go (TupleValue lx) (TupleValue ly)
-          | length lx == length ly = Just $ TupleValue (zipWith f lx ly)
-        go (TupleType lx) (TupleType ly)
-          | length lx == length ly = Just $ TupleType (zipWith f lx ly)
-        go (TupleSelector x i) (TupleSelector y j)
-          | i == j = Just $ TupleSelector (f x y) i
+        go UnitValue UnitValue = Just UnitValue
+        go UnitType UnitType = Just UnitType
+        go (PairValue x1 x2) (PairValue y1 y2) = Just (PairValue (f x1 y1) (f x2 y2))
+        go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
+        go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
+        go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
         go (RecordValue mx) (RecordValue my)
           | Map.keys mx == Map.keys my =
@@ -626,7 +632,9 @@ ppPat f p pat =
     PVar i _ _ -> pure (text i)
     PUnused{}  -> pure (char '_')
     PCtor c pl -> ppAppList p (ppIdent c) <$> traverse (ppPat f PrecArg) pl
-    PTuple pl  -> tupled <$> traverse (ppPat f PrecNone) pl
+    PUnit      -> pure $ text "()"
+    PPair x y  -> ppParens (p > PrecApp) <$>
+                  (infixDoc "#" <$> ppPat f PrecApp x <*> ppPat f PrecApp y)
     PRecord m  -> ppRecordF (ppPat f PrecNone) m
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
@@ -636,14 +644,27 @@ ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
   where ppFld (fld,v) = eqCat (text fld) <$> pp v
         eqCat x y = group $ nest 2 (x <+> equals <<$>> y)
 
+infixDoc :: String -> Doc -> Doc -> Doc
+infixDoc s x y = x <+> text s <+> y
+
 ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
 ppFlatTermF pp prec tf =
   case tf of
     GlobalDef i -> pure $ ppIdent i
+    UnitValue     -> pure $ text "()"
+    UnitType      -> pure $ text "#()"
+    PairValue x y -> ppParens (prec > PrecApp) <$>
+                       (infixDoc "#" <$> pp PrecApp x <*> pp PrecApp y)
+    PairType x y  -> ppParens (prec > PrecApp) <$>
+                       (infixDoc "*" <$> pp PrecApp x <*> pp PrecApp y)
+    PairLeft t    -> ppParens (prec > PrecArg) . (<> (text ".L")) <$> pp PrecArg t
+    PairRight t   -> ppParens (prec > PrecArg) . (<> (text ".R")) <$> pp PrecArg t
+{-
     TupleValue l ->                 tupled <$> traverse (pp PrecNone) l
     TupleType l  -> (char '#' <>) . tupled <$> traverse (pp PrecNone) l
     TupleSelector t i -> ppParens (prec > PrecArg)
                            . (<> (char '.' <> int i)) <$> pp PrecArg t
+-}
 
     RecordValue m      -> ppRecordF (pp PrecNone) m
     RecordType m       -> (char '#' <>) <$> ppRecordF (pp PrecNone) m
@@ -692,10 +713,11 @@ freesPat p0 =
   case p0 of
     PVar  _ i tp -> tp `shiftR` i
     PUnused i tp -> tp `shiftR` i
-    PTuple  pl -> bitwiseOrOf folded (freesPat <$> pl)
+    PUnit      -> 0
+    PPair x y  -> freesPat x .|. freesPat y
     PRecord pm -> bitwiseOrOf folded (freesPat <$> pm)
     PCtor _ pl -> bitwiseOrOf folded (freesPat <$> pl)
-                  
+
 freesDefEqn :: DefEqn BitSet -> BitSet
 freesDefEqn (DefEqn pl rhs) = 
     bitwiseOrOf folded (freesPat <$> pl) .|. rhs `shiftR` pc
@@ -733,8 +755,10 @@ instantiateVars f initialLevel = go initialLevel
 
         gof l ftf =
           case ftf of
-            TupleValue ll -> TupleValue $ go l <$> ll
-            TupleType ll  -> TupleType $ go l <$> ll
+            PairValue x y -> PairValue (go l x) (go l y)
+            PairType a b  -> PairType (go l a) (go l b)
+            PairLeft x    -> PairLeft (go l x)
+            PairRight x   -> PairRight (go l x)
             RecordValue m -> RecordValue $ go l <$> m
             RecordSelector x fld -> RecordSelector (go l x) fld
             RecordType m      -> RecordType $ go l <$> m

@@ -63,9 +63,12 @@ scWriteExternal t0 =
         FTermF ftf     ->
           case ftf of
             GlobalDef ident    -> unwords ["Global", show ident]
-            TupleValue es      -> unwords ("Tuple" : map show es)
-            TupleType es       -> unwords ("TupleT" : map show es)
-            TupleSelector e i  -> unwords ["TupleSel", show e, show i]
+            UnitValue          -> unwords ["Unit"]
+            UnitType           -> unwords ["UnitT"]
+            PairValue x y      -> unwords ["Pair", show x, show y]
+            PairType x y       -> unwords ["PairT", show x, show y]
+            PairLeft e         -> unwords ["ProjL", show e]
+            PairRight e        -> unwords ["ProjR", show e]
             RecordValue m      -> unwords ("Record" : map writeField (Map.assocs m))
             RecordType m       -> unwords ("RecordT" : map writeField (Map.assocs m))
             RecordSelector e i -> unwords ["RecordSel", show e, i]
@@ -107,9 +110,12 @@ scReadExternal sc input =
         ["Var", i]          -> LocalVar (read i)
         ["Constant",x,e,t]  -> Constant x (read e) (read t)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
-        ("Tuple" : es)      -> FTermF (TupleValue (map read es))
-        ("TupleT" : es)     -> FTermF (TupleType (map read es))
-        ["TupleSel", e, i]  -> FTermF (TupleSelector (read e) (read i))
+        ["Unit"]            -> FTermF UnitValue
+        ["UnitT"]           -> FTermF UnitType
+        ["Pair", x, y]      -> FTermF (PairValue (read x) (read y))
+        ["PairT", x, y]     -> FTermF (PairType (read x) (read y))
+        ["ProjL", x]        -> FTermF (PairLeft (read x))
+        ["ProjR", x]        -> FTermF (PairRight (read x))
         ("Record" : fs)     -> FTermF (RecordValue (readMap fs))
         ("RecordT" : fs)    -> FTermF (RecordType (readMap fs))
         ["RecordSel", e, i] -> FTermF (RecordSelector (read e) i)

@@ -113,8 +113,11 @@ flattenBValue (VWord lv) = return lv
 flattenBValue (VExtra (BStream _ _)) = error "Verifier.SAW.Simulator.BitBlast.flattenBValue: BStream"
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
-flattenBValue (VTuple vv) =
-  AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
+flattenBValue VUnit = return $ AIG.concat []
+flattenBValue (VPair x y) = do
+  vx <- flattenBValue =<< force x
+  vy <- flattenBValue =<< force y
+  return $ AIG.concat [vx, vy]
 flattenBValue (VRecord m) =
   AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
 flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
@@ -297,7 +300,9 @@ iteOp be =
 
 muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
 muxBVal be b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal be b x y)
-muxBVal be b (VTuple xv)     (VTuple yv)     = VTuple <$> muxThunks be b xv yv
+muxBVal _  _ VUnit           VUnit           = return $ VUnit
+muxBVal be b (VPair x1 x2)   (VPair y1 y2)   = VPair <$> muxThunk be b x1 y1
+                                                     <*> muxThunk be b x2 y2
 muxBVal be b (VRecord xm)    (VRecord ym)
   | Map.keys xm == Map.keys ym               = (VRecord . Map.fromList . zip (Map.keys xm)) <$>
                                                  zipWithM (muxThunk be b) (Map.elems xm) (Map.elems ym)
@@ -340,7 +345,7 @@ vZipOp =
   constFun $
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
-  VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [x, y]))) (vectorOfBValue xs) (vectorOfBValue ys))
+  VVector (V.zipWith (\x y -> ready (vTuple [x, y])) (vectorOfBValue xs) (vectorOfBValue ys))
 
 vectorOfBValue :: BValue l -> V.Vector (BThunk l)
 vectorOfBValue (VVector xv) = xv
@@ -541,7 +546,7 @@ lookupBStream _ _ = fail "Verifier.SAW.Simulator.BitBlast.lookupBStream: expecte
 newVars :: AIG.IsAIG l g => g s -> FiniteType -> IO (BValue (l s))
 newVars be FTBit = vBool <$> AIG.newInput be
 newVars be (FTVec n tp) = VVector <$> V.replicateM (fromIntegral n) (newVars' be tp)
-newVars be (FTTuple ts) = VTuple <$> traverse (newVars' be) (V.fromList ts)
+newVars be (FTTuple ts) = vTuple <$> traverse (newVars' be) ts
 newVars be (FTRec tm) = VRecord <$> traverse (newVars' be) tm
 
 newVars' :: AIG.IsAIG l g => g s -> FiniteType -> IO (BThunk (l s))

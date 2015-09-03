@@ -21,8 +21,12 @@ module Verifier.SAW.UntypedAST
   , CtorDecl(..)
   , Term(..)
   , asApp
+  , mkTupleValue
+  , mkTupleType
+  , mkTupleSelector
   , ParamType(..)
   , Pat(..), ppPat
+  , mkPTuple
   , SimplePat(..)
   , FieldName
   , Ident, localIdent, asLocalIdent, mkIdent, identModule, setIdentModule
@@ -97,10 +101,12 @@ data Term
 --  | Pi ParamType [Pat] Term Pos Term
   | Pi ParamType [SimplePat] Term Pos Term
     -- | Tuple expressions and their type.
-  | TupleValue Pos [Term]
-  | TupleType Pos [Term]
-    -- | The value stored in a tuple.
-  | TupleSelector Term (PosPair Integer)
+  | UnitValue Pos
+  | UnitType Pos
+  | PairValue Pos Term Term
+  | PairType Pos Term Term
+  | PairLeft Pos Term
+  | PairRight Pos Term
     -- | A record value.
   | RecordValue Pos [(PosPair FieldName, Term)]
     -- | The value stored in a record.
@@ -128,15 +134,26 @@ data SimplePat
 -- | A pattern used for matching a variable.
 data Pat
   = PSimple SimplePat
-  | PTuple Pos [Pat]
+  | PUnit Pos
+  | PPair Pos Pat Pat
   | PRecord Pos [(PosPair FieldName, Pat)]
   | PCtor (PosPair Ident) [Pat]
   deriving (Eq, Ord, Show)
 
+mkPTuple :: Pos -> [Pat] -> Pat
+mkPTuple p = foldr (PPair p) (PUnit p)
+
+asPTuple :: Pat -> Maybe [Pat]
+asPTuple (PUnit _)     = Just []
+asPTuple (PPair _ x y) = (x :) <$> asPTuple y
+asPTuple _             = Nothing
+
 ppPat :: Prec -> Pat -> Doc
+ppPat _ (asPTuple -> Just l) = parens $ commaSepList (ppPat PrecNone <$> l)
 ppPat _ (PSimple (PVar pnm)) = text (val pnm)
 ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
-ppPat _ (PTuple _ l) = parens $ commaSepList (ppPat PrecNone <$> l)
+ppPat _ (PUnit _) = text "()"
+ppPat _ (PPair _ x y) = parens $ ppPat PrecNone x <+> text "#" <+> ppPat PrecNone y
 ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
   where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecNone v
 ppPat prec (PCtor pnm l) = ppAppParens prec $
@@ -152,9 +169,12 @@ instance Positioned Term where
       Lambda p _ _         -> p
       App x _ _            -> pos x
       Pi _ _ _ p _         -> p
-      TupleValue p _       -> p
-      TupleType p _        -> p
-      TupleSelector _ i    -> pos i
+      UnitValue p          -> p
+      UnitType p           -> p
+      PairValue p _ _      -> p
+      PairType p _ _       -> p
+      PairLeft p _         -> p
+      PairRight p _        -> p
       RecordValue p _      -> p
       RecordSelector _ i   -> pos i
       RecordType p _       -> p
@@ -176,7 +196,8 @@ instance Positioned Pat where
   pos pat =
     case pat of
       PSimple i   -> pos i
-      PTuple p _  -> p
+      PUnit p     -> p
+      PPair p _ _ -> p
       PRecord p _ -> p
       PCtor i _   -> pos i
 
@@ -224,3 +245,16 @@ asApp = go []
   where go l (Paren _ t) = go l t
         go l (App t _ u) = go (u:l) t
         go l t = (t,l)
+
+mkTupleValue :: Pos -> [Term] -> Term
+mkTupleValue p = foldr (PairValue p) (UnitValue p)
+
+mkTupleType :: Pos -> [Term] -> Term
+mkTupleType p = foldr (PairType p) (UnitType p)
+
+mkTupleSelector :: Term -> PosPair Integer -> Term
+mkTupleSelector t i =
+  case compare (val i) 1 of
+    LT -> error "mkTupleSelector: non-positive index"
+    EQ -> PairLeft (_pos i) t
+    GT -> mkTupleSelector (PairRight (_pos i) t) i{ val = val i - 1 }

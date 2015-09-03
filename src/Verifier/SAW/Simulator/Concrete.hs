@@ -339,7 +339,7 @@ vZipOp =
   constFun $
   pureFun $ \xs ->
   pureFun $ \ys ->
-  VVector (V.zipWith (\x y -> ready (VTuple (V.fromList [ready x, ready y]))) (toVector xs) (toVector ys))
+  VVector (V.zipWith (\x y -> ready (vTuple [ready x, ready y])) (toVector xs) (toVector ys))
 
 -- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 foldrOp :: CValue

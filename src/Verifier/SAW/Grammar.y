@@ -143,7 +143,7 @@ Pat : AtomPat           { $1 }
 AtomPat :: { Pat }
 AtomPat : SimplePat                 { PSimple $1 }
         | ConDotList                { PCtor (identFromList1 $1) [] }
-        | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) PTuple (pos $1) $2 }
+        | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) mkPTuple (pos $1) $2 }
         | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
 
 SimplePat :: { SimplePat }
@@ -187,7 +187,7 @@ RecTerm :: { Term }
 RecTerm : AtomTerm              { $1 }
         | ConDotList '.' Var    { Var (identFromList1 ($3 : $1)) }
         | RecTerm '.' FieldName { RecordSelector $1 $3 }
-        | RecTerm '.' nat       { TupleSelector $1 (fmap tokNat $3) }
+        | RecTerm '.' nat       { mkTupleSelector $1 (fmap tokNat $3) }
 
 AtomTerm :: { Term }
 AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
@@ -195,7 +195,7 @@ AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
          | Var                          { Var (fmap localIdent $1) }
          | unvar                        { Unused (fmap tokVar $1) }
          | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
-         |     '(' sepBy(Term, ',') ')'     { parseParen Paren TupleValue (pos $1) $2 }
+         |     '(' sepBy(Term, ',') ')'     { parseParen Paren mkTupleValue (pos $1) $2 }
          | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
          |     '[' sepBy(Term, ',') ']'     { VecLit (pos $1) $2 }
          |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 }
@@ -388,10 +388,13 @@ termAsPat ex = do
       (App{},_) -> error "internal: Unexpected application"
       (Pi{},_) -> badPat "Pi expressions"
 
-      (TupleValue p l,[]) ->
-        fmap (fmap (PTuple p) . sequence) $ mapM termAsPat l
-      (TupleType{}, _) -> badPat "Tuple types"
-
+      (UnitValue p, []) -> return $ Just (PUnit p)
+      (PairValue p x y, []) -> do
+        px <- termAsPat x
+        py <- termAsPat y
+        return (PPair p <$> px <*> py)
+      (UnitType{}, _) -> badPat "Tuple types"
+      (PairType{}, _) -> badPat "Tuple types"
       (RecordValue p l,[]) ->
           fmap (fmap (PRecord p . zip flds) . sequence) $ mapM termAsPat terms
         where (flds,terms) = unzip l
@@ -481,7 +484,7 @@ parseTParen :: Pos -> [Term] -> Parser Term
 parseTParen p [expr] = do
   addParseError p "Tuple may not contain a single value."
   return (badTerm p)
-parseTParen p l = return $ TupleType p l
+parseTParen p l = return $ mkTupleType p l
 
 asAppList :: Term -> (Term,[Term])
 asAppList = \x -> impl x []
