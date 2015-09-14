@@ -640,11 +640,7 @@ exportValue ty v
 
   -- records
   | Just fields <- V.isTRec ty =
-    case v of
-      SC.VRecord (fmap (SC.runIdentity . force) -> vm) ->
-        let tm = Map.fromList fields
-        in V.VRecord (zip (Map.keys tm) (zipWith exportValue (Map.elems tm) (Map.elems vm)))
-      _ -> error "exportValue: expected record"
+      V.VRecord (exportRecordValue (Map.assocs (Map.fromList fields)) v)
 
   -- functions
   | Just (_aty, _bty) <- V.isTFun ty =
@@ -658,5 +654,14 @@ exportTupleValue tys v =
     ([]    , SC.VUnit    ) -> []
     (t : ts, SC.VPair x y) -> exportValue t (run x) : exportTupleValue ts (run y)
     _                      -> error $ "exportValue: expected tuple"
+  where
+    run = SC.runIdentity . force
+
+exportRecordValue :: [(C.Name, V.TValue)] -> SC.CValue -> [(C.Name, V.Value)]
+exportRecordValue fields v =
+  case (fields, v) of
+    ([]         , SC.VEmpty      ) -> []
+    ((n, t) : ts, SC.VField _ x y) -> (n, exportValue t (run x)) : exportRecordValue ts y
+    _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
