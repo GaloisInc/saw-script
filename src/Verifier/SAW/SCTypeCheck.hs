@@ -22,7 +22,7 @@ import Control.Lens
 import Control.Monad.Trans.Except
 import Control.Monad.State.Strict as State
 
-import Data.Foldable (maximum, and)
+import Data.Foldable (and)
 import Data.Map (Map)
 import qualified Data.Map as Map
 #if !MIN_VERSION_base(4,8,0)
@@ -175,6 +175,16 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           sx <- sort x
           sy <- sort y
           io $ scSort sc (max sx sy)
+        EmptyValue -> io $ scEmptyType sc
+        EmptyType -> io $ scSort sc (mkSort 0)
+        FieldValue f x y -> do
+          tx <- memo x
+          ty <- memo y
+          io $ scFieldType sc f tx ty
+        FieldType _ x y -> do
+          sx <- sort x
+          sy <- sort y
+          io $ scSort sc (max sx sy)
         PairLeft t -> do
           ty <- memo t
           case ty of
@@ -185,17 +195,14 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           case ty of
             STApp _ (FTermF (PairType _ t2)) -> whnf t2
             _ -> throwTCError (NotTupleType ty)
-        RecordValue m -> io . scRecordType sc =<< traverse memo m
         RecordSelector t f -> do
           ty <- memo t
-          case ty of
-            STApp _ (FTermF (RecordType m)) -> 
+          case asRecordType ty of
+            Just m ->
               case Map.lookup f m of
                 Nothing -> throwTCError $ BadRecordField f ty
                 Just tp -> whnf tp
             _ -> throwTCError (NotRecordType ty)
-        RecordType m | Map.null m -> io $ scSort sc (mkSort 0)
-        RecordType m -> io . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- io $ scTypeOfCtor sc c
           _ <- sort t -- TODO: do we care about the level?

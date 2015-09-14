@@ -79,7 +79,14 @@ matchThunk p x =
                       case v of
                         VPair x1 x2 -> matchThunks [p1, p2] [x1, x2]
                         _ -> return Nothing
-    PRecord _   -> fail "matchThunk PRecord unimplemented"
+    PEmpty      -> do v <- force x
+                      case v of
+                        VEmpty -> matchThunks [] []
+                        _ -> return Nothing
+    PField f p1 p2 -> do v <- force x
+                         case v of
+                           VField f' x1 x2 | f == f' -> matchThunks [p1, p2] [x1, ready x2]
+                           _ -> return Nothing
     PCtor i ps  -> do v <- force x
                       case v of
                         VCtorApp s xv | i == s -> matchThunks ps (V.toList xv)
@@ -181,9 +188,15 @@ evalTermF cfg lam rec tf env =
                                   return $ VPairType vx vy
         PairLeft x          -> valPairLeft =<< rec x
         PairRight x         -> valPairRight =<< rec x
-        RecordValue tm      -> liftM VRecord $ mapM rec' tm
+        EmptyValue          -> return VEmpty
+        EmptyType           -> return VEmptyType
+        FieldValue f x y    -> do tx <- rec' x
+                                  ty <- rec y
+                                  return $ VField f tx ty
+        FieldType f x y     -> do vx <- rec x
+                                  vy <- rec y
+                                  return $ VFieldType f vx vy
         RecordSelector t k  -> valRecordSelect k =<< rec t
-        RecordType tm       -> liftM VRecordType $ mapM rec tm
         CtorApp ident ts    -> do v <- simGlobal cfg ident
                                   xs <- mapM rec' ts
                                   foldM apply v xs

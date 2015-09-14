@@ -93,8 +93,10 @@ ppSharedTermSExpWith cfg tm = doc
               FTermF (PairType{}) -> text "Tuple"
               FTermF (PairLeft{}) -> text "proj" <> (braces (int 1))
               FTermF (PairRight{}) -> text "proj" <> (braces (int 2))
-              FTermF (RecordValue _) -> text "record"
-              FTermF (RecordType _) -> text "Record"
+              FTermF (EmptyValue{}) -> text "record"
+              FTermF (FieldValue{}) -> text "record"
+              FTermF (EmptyType{}) -> text "Record"
+              FTermF (FieldType{}) -> text "Record"
               FTermF (RecordSelector _ fld) ->
                 text "proj" <> (braces (text fld))
               FTermF (CtorApp n _) -> text (show n)

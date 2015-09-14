@@ -69,8 +69,9 @@ attemptMatch tc (TCPatF pf) t = do
     (UPUnit, TCF UnitValue) -> pure $ TCF UnitValue
     (UPPair p1 p2, TCF (PairValue t1 t2)) ->
       TCF <$> (PairValue <$> go p1 t1 <*> go p2 t2)
-    (UPRecord pm, TCF (RecordValue tm)) | Map.keys pm == Map.keys tm ->
-      TCF . RecordValue <$> sequenceA (Map.intersectionWith go pm tm)
+    (UPEmpty, TCF EmptyValue) -> pure $ TCF EmptyValue
+    (UPField fp p1 p2, TCF (FieldValue ft t1 t2)) | fp == ft ->
+      TCF <$> (FieldValue fp <$> go p1 t1 <*> go p2 t2)
     (UPCtor cp pl, TCF (CtorApp ct tl)) | cp == ct ->
       TCF . CtorApp ct <$> sequenceA (zipWith go pl tl)
 
@@ -116,8 +117,8 @@ reduce tc t =
   case tcAsApp t of
     (TCF (RecordSelector r f), a) -> do
       r' <- reduce tc r
-      case r' of
-        TCF (RecordValue m) ->
+      case tcAsRecordValue r' of
+        Just m ->
           case Map.lookup f m of
             Just v -> reduce tc (tcMkApp v a)
             Nothing -> fail "Missing record field in reduce"

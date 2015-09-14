@@ -249,7 +249,7 @@ upatToTerm (UPUnused v _ _) = pure v
 upatToTerm (UPatF _ pf) =
   mkVar "patf" . UTF . termFromPatF =<< traverse upatToTerm pf
 
--- | Create a upat from a untyped pat, and return and it's type.
+-- | Create a upat from a untyped pat, and return its type.
 indexUnPat :: Un.Pat -> Unifier s (UPat s, VarIndex s)
 indexUnPat upat =
   case upat of
@@ -268,6 +268,15 @@ indexUnPat upat =
         (yp, ytp) <- indexUnPat y
         tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (PairType xtp ytp))
         return (UPatF p (UPPair xp yp), tpv)
+    Un.PEmpty p -> do
+        tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF EmptyType)
+        return (UPatF p UPEmpty, tpv)
+    Un.PField (pf, x) y -> do
+        (xp, xtp) <- indexUnPat x
+        (yp, ytp) <- indexUnPat y
+        tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (PairType xtp ytp))
+        return (UPatF (pos pf) (UPField (val pf) xp yp), tpv)
+{-
     Un.PRecord p fpl
         | hasDups (val . fst <$> fpl) ->
            unFail p $ text "Duplicate field names in pattern."
@@ -276,6 +285,7 @@ indexUnPat upat =
            tpv <- mkVar (show (Un.ppPat PrecNone upat))
                         (UTF $ RecordType (fmap snd rm))
            return (UPatF p (UPRecord (fmap fst rm)), tpv)
+-}
     Un.PCtor pnm pl -> do
       tc <- gets usGlobalContext
       (c,tp) <- lift $ resolveCtor (globalContext tc) pnm (length pl)
@@ -364,12 +374,10 @@ matchUnPat il itcp iup = do
             (UPUnit, Un.PUnit p) -> return $ UPatF p UPUnit
             (UPPair px py, Un.PPair p upx upy) ->
                  UPatF p <$> (UPPair <$> go px upx <*> go py upy)
-            (UPRecord pm, Un.PRecord p fpl)
-                | Map.size um < length fpl -> lift $
-                    unFail p $ text "Duplicate field names in pattern."
-                | Map.keys pm == Map.keys um ->
-                    UPatF p . UPRecord <$> sequenceOf traverse (Map.intersectionWith go pm um)
-              where um = Map.fromList $ first val <$> fpl
+            (UPEmpty, Un.PEmpty p) -> return $ UPatF p UPEmpty
+            (UPField f px py, Un.PField (f', upx) upy)
+              | f == val f' ->
+                 UPatF (pos f') <$> (UPField f <$> go px upx <*> go py upy)
             (UPCtor c pl, Un.PCtor pnm upl) -> do
               tc <- lift $ gets usGlobalContext
               (c',_) <- lift $ lift $ resolveCtor (globalContext tc) pnm (length upl)
@@ -743,15 +751,19 @@ checkTypesEqual' p ctx tc x y = do
     ( (TCF (PairType x1 x2), []), (TCF (PairType y1 y2), [])) ->
         checkAll [(x1, y1), (x2, y2)]
 
-    ( (TCF (RecordValue xm), []), (TCF (RecordValue ym), []))
-      | Map.keys xm == Map.keys ym ->
-        checkAll (Map.intersectionWith (,) xm ym)
+    ( (TCF EmptyValue, []), (TCF EmptyValue, [])) ->
+        checkAll []
+    ( (TCF (FieldValue xf x1 x2), []), (TCF (FieldValue yf y1 y2), []))
+      | xf == yf ->
+        checkAll [(x1, y1), (x2, y2)]
+    ( (TCF EmptyType, []), (TCF EmptyType, [])) ->
+        checkAll []
+    ( (TCF (FieldType xf x1 x2), []), (TCF (FieldType yf y1 y2), []))
+      | xf == yf ->
+        checkAll [(x1, y1), (x2, y2)]
     ( (TCF (RecordSelector xr xf), []), (TCF (RecordSelector yr yf), []))
       | xf == yf ->
         check' tc xr yr
-    ( (TCF (RecordType xm), []), (TCF (RecordType ym), []))
-      | Map.keys xm == Map.keys ym ->
-        checkAll (Map.intersectionWith (,) xm ym)
 
     ( (TCF (CtorApp xc xa), []), (TCF (CtorApp yc ya), []))
       | xc == yc ->

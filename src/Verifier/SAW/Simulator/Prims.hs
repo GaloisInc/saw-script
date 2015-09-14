@@ -14,7 +14,6 @@ module Verifier.SAW.Simulator.Prims where
 import Prelude hiding (sequence, mapM)
 
 import Control.Monad (foldM, liftM)
-import qualified Data.Map as Map
 import Data.Bits
 import Data.Traversable
 import qualified Data.Vector as V
@@ -229,7 +228,10 @@ zeroOp bvZ boolZ mkStream = strictFun go
         VPairType t1 t2 -> do z1 <- delay (go t1)
                               z2 <- delay (go t2)
                               return (VPair z1 z2)
-        VRecordType tm -> liftM VRecord $ mapM (delay . go) tm
+        VEmptyType -> return VEmpty
+        VFieldType f t1 t2 -> do z1 <- delay (go t1)
+                                 v2 <- go t2
+                                 return (VField f z1 v2)
         VDataType "Prelude.Bool" [] -> boolZ
         VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []] -> bvZ n
         VDataType "Prelude.Vec" [VNat n, t'] -> do
@@ -256,9 +258,11 @@ unaryOp mkStream streamGet =
         x1 <- go' t1 v1
         x2 <- go' t2 v2
         return (VPair x1 x2)
-      go (VRecordType tm) (VRecord vm)
-        | Map.keys tm == Map.keys vm =
-          liftM VRecord $ sequence (Map.intersectionWith go' tm vm)
+      go VEmptyType VEmpty = return VEmpty
+      go (VFieldType f t1 t2) (VField f' v1 v2) | f == f' = do
+        x1 <- go' t1 v1
+        x2 <- go t2 v2
+        return (VField f x1 x2)
       go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v = do
         bvOp <- force bvOp'
         applyAll bvOp [ready n, ready v]
@@ -298,10 +302,12 @@ binaryOp mkStream streamGet =
         z1 <- bin' t1 x1 y1
         z2 <- bin' t2 x2 y2
         return (VPair z1 z2)
-      bin (VRecordType tm) (VRecord vm1) (VRecord vm2)
-        | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
-          liftM VRecord $ sequence
-          (Map.intersectionWith ($) (Map.intersectionWith bin' tm vm1) vm2)
+      bin VEmptyType VEmpty VEmpty = return VEmpty
+      bin (VFieldType f t1 t2) (VField xf x1 x2) (VField yf y1 y2)
+        | f == xf && f == yf = do
+          z1 <- bin' t1 x1 y1
+          z2 <- bin t2 x2 y2
+          return (VField f z1 z2)
       bin (VDataType "Prelude.Bool" []) v1 v2 = do
         boolOp <- force boolOp'
         applyAll boolOp [ready v1, ready v2]
@@ -341,10 +347,12 @@ eqOp trueOp andOp boolOp bvOp =
       b1 <- go' t1 x1 y1
       b2 <- go' t2 x2 y2
       andOp b1 b2
-    go (VRecordType tm) (VRecord vm1) (VRecord vm2)
-      | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 = do
-        bs <- sequence $ zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2)
-        foldM andOp trueOp bs
+    go VEmptyType VEmpty VEmpty = return trueOp
+    go (VFieldType f t1 t2) (VField xf x1 x2) (VField yf y1 y2)
+      | f == xf && f == yf = do
+        b1 <- go' t1 x1 y1
+        b2 <- go t2 x2 y2
+        andOp b1 b2
     go (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) v1 v2 = bvOp n v1 v2
     go (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) = do
       bs <- sequence $ zipWith (go' t') (V.toList vv1) (V.toList vv2)
@@ -369,9 +377,9 @@ comparisonOp =
   pureFun $ \boolOp ->
   let go VUnitType VUnit VUnit k = return k
       go (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) k = go' t1 x1 y1 =<< go' t2 x2 y2 k
-      go (VRecordType tm) (VRecord vm1) (VRecord vm2) k
-        | Map.keys tm == Map.keys vm1 && Map.keys tm == Map.keys vm2 =
-          foldr (=<<) (return k) (zipWith3 go' (Map.elems tm) (Map.elems vm1) (Map.elems vm2))
+      go VEmptyType VEmpty VEmpty k = return k
+      go (VFieldType f t1 t2) (VField xf x1 x2) (VField yf y1 y2) k
+        | f == xf && f == yf = go' t1 x1 y1 =<< go t2 x2 y2 k
       go (VDataType "Prelude.Bool" []) v1 v2 k = do
         applyAll boolOp [ready v1, ready v2, ready k]
       go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v1 v2 k = do

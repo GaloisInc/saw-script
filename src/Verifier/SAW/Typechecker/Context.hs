@@ -23,6 +23,7 @@ module Verifier.SAW.Typechecker.Context
   , FlatTermF(..)
   , tcMkApp
   , tcAsApp
+  , tcAsRecordValue
   , Prec, ppTCTerm
   , AnnPat(..)
   , TCPat
@@ -108,6 +109,7 @@ import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Position
@@ -170,7 +172,8 @@ type TCPat = AnnPat TCTerm
 data PatF p
    = UPUnit
    | UPPair p p
-   | UPRecord (Map FieldName p)
+   | UPEmpty
+   | UPField FieldName p p
    | UPCtor Ident [p]
   deriving (Functor, Foldable, Traversable, Show)
 
@@ -183,6 +186,13 @@ tcAsApp :: TCTerm -> (TCTerm, [TCTerm])
 tcAsApp = go []
   where go r (TCApp f v) = go (v:r) f
         go r f = (f,r)
+
+tcAsRecordValue :: TCTerm -> Maybe (Map FieldName TCTerm)
+tcAsRecordValue t =
+  case t of
+    TCF EmptyValue -> return Map.empty
+    TCF (FieldValue f v r) -> Map.insert f v <$> tcAsRecordValue r
+    _ -> Nothing
 
 asUPTuple :: AnnPat a -> Maybe [AnnPat a]
 asUPTuple (TCPatF UPUnit)       = return []
@@ -262,10 +272,11 @@ fmapTCPat fn i (TCPatF pf) = TCPatF (fmapTCPat fn i <$> pf)
 
 -- | Convert pats into equivalent termf.
 termFromPatF :: PatF a -> FlatTermF a
-termFromPatF UPUnit       = UnitValue
-termFromPatF (UPPair x y) = PairValue x y
-termFromPatF (UPRecord m) = RecordValue m
-termFromPatF (UPCtor c l) = CtorApp c l
+termFromPatF UPUnit          = UnitValue
+termFromPatF (UPPair x y)    = PairValue x y
+termFromPatF UPEmpty         = EmptyValue
+termFromPatF (UPField f x y) = FieldValue f x y
+termFromPatF (UPCtor c l)    = CtorApp c l
 
 -- | Attempt to zip two patfs together.
 zipWithPatF :: (a -> b -> c) -> PatF a -> PatF b -> Maybe (PatF c)
@@ -273,9 +284,11 @@ zipWithPatF f x y =
   case (x,y) of
     (UPUnit, UPUnit) -> Just UPUnit
     (UPPair x1 x2, UPPair y1 y2) -> Just $ UPPair (f x1 y1) (f x2 y2)
-    (UPRecord mx, UPRecord my)
-      | Map.keys mx == Map.keys my ->
-          Just $ UPRecord (Map.intersectionWith f mx my)
+    (UPEmpty, UPEmpty) ->
+          Just $ UPEmpty
+    (UPField fx x1 x2, UPField fy y1 y2)
+      | fx == fy ->
+          Just $ UPField fx (f x1 y1) (f x2 y2)
     (UPCtor cx lx, UPCtor cy ly)
       | (cx,length lx) == (cy, length ly) ->
           Just $ UPCtor cx (zipWith f lx ly)
@@ -626,11 +639,14 @@ ppTCPat (TCPatF pf) =
   case asUPTuple (TCPatF pf) of
     Just pl -> parens $ commaSepList (ppTCPat <$> pl)
     Nothing ->
+    -- FIXME: case asUPRecord (TCPatF pf) of
       case pf of
-        UPUnit     -> text "()"
-        UPPair x y -> parens (ppTCPat x <+> text "#" <+> ppTCPat y)
-        UPRecord m -> runIdentity $ ppRecordF (Identity . ppTCPat) m
-        UPCtor c l -> hsep (ppIdent c : fmap ppTCPat l)
+        UPUnit        -> text "()"
+        UPPair x y    -> parens (ppTCPat x <+> text "#" <+> ppTCPat y)
+        UPEmpty       -> text "{}"
+        UPField f x y -> braces (ppFld f (ppTCPat x) <> comma <+> ppFld "..." (ppTCPat y))
+          where ppFld s z = group $ nest 2 (text s <+> equals PPL.<$> z)
+        UPCtor c l    -> hsep (ppIdent c : fmap ppTCPat l)
 
 ppTCTerm :: TermContext s -> Prec -> TCTerm -> Doc
 ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)

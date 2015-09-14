@@ -69,8 +69,10 @@ scWriteExternal t0 =
             PairType x y       -> unwords ["PairT", show x, show y]
             PairLeft e         -> unwords ["ProjL", show e]
             PairRight e        -> unwords ["ProjR", show e]
-            RecordValue m      -> unwords ("Record" : map writeField (Map.assocs m))
-            RecordType m       -> unwords ("RecordT" : map writeField (Map.assocs m))
+            EmptyValue         -> unwords ["Empty"]
+            EmptyType          -> unwords ["EmptyT"]
+            FieldValue f x y   -> unwords ["Record", f, show x, show y]
+            FieldType f x y    -> unwords ["RecordT", f, show x, show y]
             RecordSelector e i -> unwords ["RecordSel", show e, i]
             CtorApp i es       -> unwords ("Ctor" : show i : map show es)
             DataTypeApp i es   -> unwords ("Data" : show i : map show es)
@@ -81,8 +83,6 @@ scWriteExternal t0 =
             DoubleLit x        -> unwords ["Double", show x]
             StringLit s        -> unwords ["String", show s]
             ExtCns ext         -> unwords ("ExtCns" : writeExtCns ext)
-    writeField :: (String, Int) -> String
-    writeField (s, e) = unwords [s, show e]
     writeDefs = error "unsupported Let expression"
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
@@ -116,8 +116,10 @@ scReadExternal sc input =
         ["PairT", x, y]     -> FTermF (PairType (read x) (read y))
         ["ProjL", x]        -> FTermF (PairLeft (read x))
         ["ProjR", x]        -> FTermF (PairRight (read x))
-        ("Record" : fs)     -> FTermF (RecordValue (readMap fs))
-        ("RecordT" : fs)    -> FTermF (RecordType (readMap fs))
+        ["Empty"]           -> FTermF EmptyValue
+        ["EmptyT"]          -> FTermF EmptyType
+        ["Record",f,x,y]    -> FTermF (FieldValue f (read x) (read y))
+        ["RecordT",f,x,y]   -> FTermF (FieldType f (read x) (read y))
         ["RecordSel", e, i] -> FTermF (RecordSelector (read e) i)
         ("Ctor" : i : es)   -> FTermF (CtorApp (parseIdent i) (map read es))
         ("Data" : i : es)   -> FTermF (DataTypeApp (parseIdent i) (map read es))
@@ -129,8 +131,4 @@ scReadExternal sc input =
         ["String", s]       -> FTermF (StringLit (read s))
         ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
         _ -> error $ "Parse error: " ++ unwords tokens
-    readMap :: [String] -> Map FieldName Int
-    readMap [] = Map.empty
-    readMap (i : e : fs) = Map.insert i (read e) (readMap fs)
-    readMap _ = error $ "scReadExternal: Parse error"
 

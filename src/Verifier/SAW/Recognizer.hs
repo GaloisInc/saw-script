@@ -14,7 +14,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Recognizer 
+module Verifier.SAW.Recognizer
   ( Recognizer
   , (<:), emptyl, endl
   , (:*:)(..)
@@ -58,6 +58,7 @@ import Control.Applicative
 import Control.Lens
 import Control.Monad
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Verifier.SAW.Prim
 import Verifier.SAW.TypedAST
 
@@ -172,10 +173,23 @@ asTupleSelector t = do
     _           -> fail "asTupleSelector"
 
 asRecordType :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
-asRecordType t = do RecordType m <- asFTermF t; return m
+asRecordType t = do
+  ftf <- asFTermF t
+  case ftf of
+    EmptyType       -> return Map.empty
+    FieldType f x y -> do m <- asRecordType y; return (Map.insert f x m)
+    _               -> fail $ "asRecordType: " ++ show (Term (FTermF (fmap toTerm ftf)))
+
+toTerm :: Termlike t => t -> Term
+toTerm t = Term (fmap toTerm (unwrapTermF t))
 
 asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
-asRecordValue t = do RecordValue m <- asFTermF t; return m
+asRecordValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    EmptyValue       -> return Map.empty
+    FieldValue f x y -> do m <- asRecordValue y; return (Map.insert f x m)
+    _                -> fail $ "asRecordValue: " ++ show (Term (FTermF (fmap toTerm ftf)))
 
 asRecordSelector :: (Monad m, Termlike t) => Recognizer m t (t, FieldName)
 asRecordSelector t = do RecordSelector u i <- asFTermF t; return (u,i)
@@ -184,7 +198,7 @@ asCtor :: (Monad f, Termlike t) => Recognizer f t (Ident, [t])
 asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
 
 asDataType :: (Monad f, Termlike t) => Recognizer f t (Ident, [t])
-asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l) 
+asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l)
 
 isDataType :: (Monad f, Termlike t) => Ident -> Recognizer f [t] a -> Recognizer f t a
 isDataType i p t = do

@@ -82,6 +82,10 @@ module Verifier.SAW.SharedTerm
   , scPairType
   , scPairLeft
   , scPairRight
+  , scEmptyValue
+  , scEmptyType
+  , scFieldValue
+  , scFieldType
   , scTuple
   , scTupleType
   , scTupleSelector
@@ -174,7 +178,7 @@ import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Bits
 import qualified Data.Foldable as Fold
-import Data.Foldable (foldl', foldlM, foldrM, maximum)
+import Data.Foldable (foldl', foldlM, foldrM)
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
@@ -416,10 +420,15 @@ scWhnf sc = go []
                           case asPairValue v of
                             Just (v1, v2) -> matchAll [p1, p2] [Left v1, Left v2]
                             _ -> return Nothing
-        PRecord pm  -> do v <- scWhnf sc x
-                          case asRecordValue v of
-                            Just xm | Map.keys xm == Map.keys pm -> matchAll (Map.elems pm) (map Left $ Map.elems xm)
+        PEmpty      -> do v <- scWhnf sc x
+                          case asFTermF v of
+                            Just EmptyValue -> return $ Just Map.empty
                             _ -> return Nothing
+        PField f p1 p2 -> do v <- scWhnf sc x
+                             case asFTermF v of
+                               Just (FieldValue f' v1 v2) | f == f' ->
+                                 matchAll [p1, p2] [Left v1, Left v2]
+                               _ -> return Nothing
         PCtor i ps  -> do v <- scWhnf sc x
                           case asCtor v of
                             Just (s, xs) | i == s -> matchAll ps (map Left xs)
@@ -544,8 +553,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
     ftermf tf =
       case tf of
         GlobalDef d -> lift $ scTypeOfGlobal sc d
-        UnitValue -> lift $ scUnitValue sc
-        UnitType -> lift $ scUnitType sc
+        UnitValue -> lift $ scUnitType sc
+        UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do
           tx <- memo x
           ty <- memo y
@@ -560,12 +569,21 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         PairRight t -> do
           STApp _ (FTermF (PairType _ t2)) <- memo t >>= liftIO . scWhnf sc
           return t2
-        RecordValue m -> lift . scRecordType sc =<< traverse memo m
+        EmptyValue -> lift $ scEmptyType sc
+        EmptyType -> lift $ scSort sc (mkSort 0)
+        FieldValue f x y -> do
+          tx <- memo x
+          ty <- memo y
+          lift $ scFieldType sc f tx ty
+        FieldType _ x y -> do
+          sx <- sort x
+          sy <- sort y
+          lift $ scSort sc (max sx sy)
         RecordSelector t f -> do
-          STApp _ (FTermF (RecordType m)) <- memo t >>= liftIO . scWhnf sc
+          t' <- memo t >>= liftIO . scWhnf sc
+          m <- asRecordType t'
           let Just tp = Map.lookup f m
           return tp
-        RecordType m -> lift . scSort sc . maximum =<< traverse sort m
         CtorApp c args -> do
           t <- lift $ scTypeOfCtor sc c
           lift $ foldM (reducePi sc) t args
@@ -896,13 +914,17 @@ scVector :: SharedContext s -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm 
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
 scRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-scRecord sc m = scFlatTermF sc (RecordValue m)
+scRecord sc m = go (Map.assocs m)
+  where go [] = scEmptyValue sc
+        go ((f, x) : xs) = scFieldValue sc f x =<< go xs
 
 scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
 scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
 
 scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
-scRecordType sc m = scFlatTermF sc (RecordType m)
+scRecordType sc m = go (Map.assocs m)
+  where go [] = scEmptyType sc
+        go ((f, x) : xs) = scFieldType sc f x =<< go xs
 
 scUnitValue :: SharedContext s -> IO (SharedTerm s)
 scUnitValue sc = scFlatTermF sc UnitValue
@@ -915,6 +937,18 @@ scPairValue sc x y = scFlatTermF sc (PairValue x y)
 
 scPairType :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scPairType sc x y = scFlatTermF sc (PairType x y)
+
+scEmptyValue :: SharedContext s -> IO (SharedTerm s)
+scEmptyValue sc = scFlatTermF sc EmptyValue
+
+scEmptyType :: SharedContext s -> IO (SharedTerm s)
+scEmptyType sc = scFlatTermF sc EmptyType
+
+scFieldValue :: SharedContext s -> FieldName -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFieldValue sc f x y = scFlatTermF sc (FieldValue f x y)
+
+scFieldType :: SharedContext s -> FieldName -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFieldType sc f x y = scFlatTermF sc (FieldType f x y)
 
 scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)
 scTuple sc [] = scUnitValue sc

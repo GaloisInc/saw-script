@@ -207,10 +207,11 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
             (j, m) <- get
             put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
             return $ Term $ LocalVar (n - 1 - j)
-          PUnit     -> return $ Term (FTermF UnitValue)
-          PPair x y -> (Term . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
-          PRecord ps -> (Term . FTermF . RecordValue) <$> traverse termOfPat ps
-          PCtor c ps -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
+          PUnit        -> return $ Term (FTermF UnitValue)
+          PPair x y    -> (Term . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
+          PEmpty       -> return $ Term (FTermF EmptyValue)
+          PField f x y -> (Term . FTermF) <$> (FieldValue f <$> termOfPat x <*> termOfPat y)
+          PCtor c ps   -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
 
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
@@ -446,9 +447,11 @@ rewriteSharedTermTypeSafe sc ss t0 =
           PairType{}       -> return ftf -- doesn't matter
           PairLeft{}       -> traverse rewriteAll ftf
           PairRight{}      -> traverse rewriteAll ftf
-          RecordValue{}    -> traverse rewriteAll ftf
+          EmptyValue       -> return ftf
+          EmptyType        -> return ftf
+          FieldValue{}     -> traverse rewriteAll ftf
+          FieldType{}      -> return ftf -- doesn't matter
           RecordSelector{} -> traverse rewriteAll ftf
-          RecordType{}     -> return ftf -- doesn't matter
           CtorApp{}        -> return ftf --FIXME
           DataTypeApp{}    -> return ftf -- could treat same as CtorApp
           Sort{}           -> return ftf -- doesn't matter

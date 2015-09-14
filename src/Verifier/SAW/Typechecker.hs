@@ -27,7 +27,7 @@ module Verifier.SAW.Typechecker
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Arrow ((***), first)
+import Control.Arrow (first)
 import Control.Lens hiding (assign)
 import Control.Monad.State
 import Data.Map (Map)
@@ -193,9 +193,6 @@ tcDTType = tcFixedPiType tcSort
 tcCtorType :: Ident -> TermContext s -> Un.Term -> TC s TCCtorType
 tcCtorType i = tcFixedPiType (tcSpecificDataType i)
 
-maximumSortOf :: Fold s Sort -> s -> Sort
-maximumSortOf fold = foldlOf' fold maxSort (mkSort 0)
-
 inferTypedValue :: TermContext s -> Un.Term -> TC s (TCTerm, TCTerm)
 inferTypedValue tc ut = do
   r <- inferTerm tc ut
@@ -288,22 +285,25 @@ inferTerm tc uut = do
       (_, t2) <- reduceToPairType tc p tp
       return $ TypedValue (TCF (PairRight x)) t2
 
-    Un.RecordValue p (unzip -> (fmap val -> fl,vl))
-        | hasDups fl -> tcFail p "Duplicate fields in record"
-        | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (inferTypedValue tc) vl
-      where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
-            mkRes = mkMap RecordValue *** mkMap RecordType
+    Un.EmptyValue _ -> do
+      return $ TypedValue (TCF EmptyValue) (TCF EmptyType)
+    Un.FieldValue (val -> f, t1) t2 -> do
+      (v1, tp1) <- inferTypedValue tc t1
+      (v2, tp2) <- inferTypedValue tc t2
+      return $ TypedValue (TCF (FieldValue f v1 v2)) (TCF (FieldType f tp1 tp2))
+    Un.EmptyType _ -> do
+      return $ TypedValue (TCF EmptyType) (TCF (Sort (mkSort 0)))
+    Un.FieldType (val -> f, t1) t2 -> do
+      (tp1, s1) <- tcType tc t1
+      (tp2, s2) <- tcType tc t2
+      return $ TypedValue (TCF (FieldType f tp1 tp2))
+                          (TCF (Sort (maxSort s1 s2)))
     Un.RecordSelector ux (PosPair p f) -> do
       (x,tp) <- inferTypedValue tc ux
       m <- reduceToRecordType tc p tp
       case Map.lookup f m of
         Nothing -> tcFail p $ "No field named " ++ f ++ " in record."
         Just ftp -> return $ TypedValue (TCF (RecordSelector x f)) ftp
-    Un.RecordType p (unzip -> (fmap val -> fl,vl))
-        | hasDups fl -> tcFail p "Duplicate fields in record"
-        | otherwise -> uncurry TypedValue . mkRes . unzip <$> traverse (tcType tc) vl
-      where mkMap fn vals = TCF (fn (Map.fromList (fl `zip` vals)))
-            mkRes = (mkMap RecordType) *** (TCF . Sort . maximumSortOf folded)
     Un.TypeConstraint ut _ utp -> do
       (tp,_) <- tcType tc utp
       flip TypedValue tp <$> tcTerm tc ut tp
@@ -375,7 +375,8 @@ reduceToRecordType :: TermContext s -> Pos -> TCTerm -> TC s (Map FieldName TCTe
 reduceToRecordType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
-    TCF (RecordType m) -> return m
+    TCF EmptyType         -> return Map.empty
+    TCF (FieldType f x y) -> Map.insert f x <$> reduceToRecordType tc p y
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" <$$>
                        nest 2 (ppTCTerm tc PrecNone rtp)
 
@@ -452,10 +453,11 @@ completePatT cc0 pats = (go <$> pats, cc')
           where Just cc = ctxv V.!? i
         go (TCPatF pf) =
           case pf of
-            UPUnit     -> PUnit
-            UPPair x y -> PPair (go x) (go y)
-            UPRecord m -> PRecord (go <$> m)
-            UPCtor c l -> PCtor c (go <$> l)
+            UPUnit        -> PUnit
+            UPPair x y    -> PPair (go x) (go y)
+            UPEmpty       -> PEmpty
+            UPField f x y -> PField f (go x) (go y)
+            UPCtor c l    -> PCtor c (go <$> l)
 
 completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
 completePat cc0 pat = over _1 runIdentity $ completePatT cc0 (Identity pat)
@@ -548,11 +550,12 @@ type VarCollector = State (Map Int (String, Term))
 patVarInfo :: Pat Term -> VarCollector ()
 patVarInfo = go
   where go (PVar nm i tp) = modify $ Map.insert i (nm,tp)
-        go PUnused{} = return ()
-        go PUnit       = return ()
-        go (PPair x y) = go x >> go y
-        go (PRecord m) = traverseOf_ folded go m
-        go (PCtor _ l) = traverseOf_ folded go l
+        go PUnused{}      = return ()
+        go PUnit          = return ()
+        go (PPair x y)    = go x >> go y
+        go PEmpty         = return ()
+        go (PField _ x y) = go x >> go y
+        go (PCtor _ l)    = traverseOf_ folded go l
 
 -- | Iterators over a structure of Pat Terms and returns corresponding
 -- structure with TCpats.
@@ -580,7 +583,8 @@ liftTCPatT tc0 a = do
         return $ TCPUnused "_" (i,tp')
       go PUnit        = pure $ TCPatF UPUnit
       go (PPair x y)  = TCPatF <$> (UPPair <$> go x <*> go y)
-      go (PRecord pm) = TCPatF . UPRecord <$> traverse go pm
+      go PEmpty       = pure $ TCPatF UPEmpty
+      go (PField f x y) = TCPatF <$> (UPField f <$> go x <*> go y)
       go (PCtor c pl) = TCPatF . UPCtor c <$> traverse go pl
   (,tcFinal) <$> traverse go a
 

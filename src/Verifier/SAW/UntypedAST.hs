@@ -24,9 +24,12 @@ module Verifier.SAW.UntypedAST
   , mkTupleValue
   , mkTupleType
   , mkTupleSelector
+  , mkRecordValue
+  , mkRecordType
   , ParamType(..)
   , Pat(..), ppPat
   , mkPTuple
+  , mkPRecord
   , SimplePat(..)
   , FieldName
   , Ident, localIdent, asLocalIdent, mkIdent, identModule, setIdentModule
@@ -48,7 +51,7 @@ import Verifier.SAW.TypedAST
   , FieldName
   , isIdent
   , Prec(..), ppAppParens
-  , commaSepList, semiTermList
+  , commaSepList
   )
 
 -- | Identifiers represent a compound name (e.g., Prelude.add).
@@ -107,12 +110,16 @@ data Term
   | PairType Pos Term Term
   | PairLeft Pos Term
   | PairRight Pos Term
-    -- | A record value.
-  | RecordValue Pos [(PosPair FieldName, Term)]
+    -- | An empty record value.
+  | EmptyValue Pos
+    -- | A record extended with another field.
+  | FieldValue (PosPair FieldName, Term) Term
     -- | The value stored in a record.
   | RecordSelector Term (PosPair FieldName)
-    -- | Type of a record value.
-  | RecordType  Pos [(PosPair FieldName, Term)]
+    -- | Type of an empty record value.
+  | EmptyType Pos
+    -- | Type of a record extended with another field.
+  | FieldType (PosPair FieldName, Term) Term
     -- | Identifies a type constraint on the term.
   | TypeConstraint Term Pos Term
     -- | Arguments to an array constructor.
@@ -136,17 +143,26 @@ data Pat
   = PSimple SimplePat
   | PUnit Pos
   | PPair Pos Pat Pat
-  | PRecord Pos [(PosPair FieldName, Pat)]
+  | PEmpty Pos
+  | PField (PosPair FieldName, Pat) Pat
   | PCtor (PosPair Ident) [Pat]
   deriving (Eq, Ord, Show)
 
 mkPTuple :: Pos -> [Pat] -> Pat
 mkPTuple p = foldr (PPair p) (PUnit p)
 
+mkPRecord :: Pos -> [(PosPair FieldName, Pat)] -> Pat
+mkPRecord p = foldr PField (PEmpty p)
+
 asPTuple :: Pat -> Maybe [Pat]
 asPTuple (PUnit _)     = Just []
 asPTuple (PPair _ x y) = (x :) <$> asPTuple y
 asPTuple _             = Nothing
+
+asPRecord :: Pat -> Maybe [(PosPair FieldName, Pat)]
+asPRecord (PEmpty _)   = Just []
+asPRecord (PField x y) = (x :) <$> asPRecord y
+asPRecord _            = Nothing
 
 ppPat :: Prec -> Pat -> Doc
 ppPat _ (asPTuple -> Just l) = parens $ commaSepList (ppPat PrecNone <$> l)
@@ -154,8 +170,12 @@ ppPat _ (PSimple (PVar pnm)) = text (val pnm)
 ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
 ppPat _ (PUnit _) = text "()"
 ppPat _ (PPair _ x y) = parens $ ppPat PrecNone x <+> text "#" <+> ppPat PrecNone y
-ppPat _ (PRecord _ fl) = braces $ semiTermList (ppFld <$> fl)
+ppPat _ (asPRecord -> Just fl) = braces $ commaSepList (ppFld <$> fl)
   where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecNone v
+ppPat _ (PEmpty _) = text "{}"
+ppPat _ (PField f p) = braces $ commaSepList [ppFld f, other]
+  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecNone v
+        other = text "..." <+> equals <+> ppPat PrecNone p
 ppPat prec (PCtor pnm l) = ppAppParens prec $
   hsep (text (show (val pnm)) : fmap (ppPat PrecArg) l)
 
@@ -175,9 +195,11 @@ instance Positioned Term where
       PairType p _ _       -> p
       PairLeft p _         -> p
       PairRight p _        -> p
-      RecordValue p _      -> p
+      EmptyValue p         -> p
+      FieldValue _ t'      -> pos t'
       RecordSelector _ i   -> pos i
-      RecordType p _       -> p
+      EmptyType p          -> p
+      FieldType _ t'       -> pos t'
       TypeConstraint _ p _ -> p
       Paren p _            -> p
       LetTerm p _ _        -> p
@@ -198,7 +220,8 @@ instance Positioned Pat where
       PSimple i   -> pos i
       PUnit p     -> p
       PPair p _ _ -> p
-      PRecord p _ -> p
+      PEmpty p    -> p
+      PField f _  -> pos (fst f)
       PCtor i _   -> pos i
 
 badTerm :: Pos -> Term
@@ -258,3 +281,9 @@ mkTupleSelector t i =
     LT -> error "mkTupleSelector: non-positive index"
     EQ -> PairLeft (_pos i) t
     GT -> mkTupleSelector (PairRight (_pos i) t) i{ val = val i - 1 }
+
+mkRecordValue :: Pos -> [(PosPair FieldName, Term)] -> Term
+mkRecordValue p = foldr FieldValue (EmptyValue p)
+
+mkRecordType :: Pos -> [(PosPair FieldName, Term)] -> Term
+mkRecordType p = foldr FieldType (EmptyType p)

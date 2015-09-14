@@ -259,7 +259,8 @@ data Pat e = -- | Variable bound by pattern.
            | PUnused DeBruijnIndex e
            | PUnit
            | PPair (Pat e) (Pat e)
-           | PRecord (Map FieldName (Pat e))
+           | PEmpty
+           | PField FieldName (Pat e) (Pat e)
              -- An arbitrary term that matches anything, but needs to be later
              -- verified to be equivalent.
            | PCtor Ident [Pat e]
@@ -275,7 +276,8 @@ patBoundVarCount p =
     PCtor _ l -> sumBy patBoundVarCount l
     PUnit     -> 0
     PPair x y -> patBoundVarCount x + patBoundVarCount y
-    PRecord m -> sumBy patBoundVarCount m
+    PEmpty    -> 0
+    PField _ x y -> patBoundVarCount x + patBoundVarCount y
 
 patUnusedVarCount :: Pat e -> DeBruijnIndex
 patUnusedVarCount p =
@@ -285,7 +287,8 @@ patUnusedVarCount p =
     PCtor _ l -> sumBy patUnusedVarCount l
     PUnit     -> 0
     PPair x y -> patUnusedVarCount x + patUnusedVarCount y
-    PRecord m -> sumBy patUnusedVarCount m
+    PEmpty    -> 0
+    PField _ x y -> patUnusedVarCount x + patUnusedVarCount y
 
 patBoundVars :: Pat e -> [String]
 patBoundVars p =
@@ -294,7 +297,8 @@ patBoundVars p =
     PCtor _ l -> concatMap patBoundVars l
     PUnit     -> []
     PPair x y -> patBoundVars x ++ patBoundVars y
-    PRecord m -> concatMapOf folded patBoundVars m
+    PEmpty    -> []
+    PField _ x y -> patBoundVars x ++ patBoundVars y
     _ -> []
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
@@ -451,8 +455,10 @@ data FlatTermF e
   | PairType e e
   | PairLeft e
   | PairRight e
-  | RecordValue (Map FieldName e)
-  | RecordType (Map FieldName e)
+  | EmptyValue
+  | EmptyType
+  | FieldValue FieldName e e
+  | FieldType FieldName e e
   | RecordSelector e FieldName
 
   | CtorApp !Ident ![e]
@@ -506,14 +512,16 @@ zipWithFlatTermF f = go
         go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
         go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
 
-        go (RecordValue mx) (RecordValue my)
-          | Map.keys mx == Map.keys my =
-              Just $ RecordValue $ Map.intersectionWith f mx my
+        go EmptyValue EmptyValue = Just EmptyValue
+        go EmptyType EmptyType = Just EmptyType
+        go (FieldValue fx x1 x2) (FieldValue fy y1 y2)
+          | fx == fy =
+              Just $ FieldValue fx (f x1 y1) (f x2 y2)
+        go (FieldType fx x1 x2) (FieldType fy y1 y2)
+          | fx == fy =
+              Just $ FieldType fx (f x1 y1) (f x2 y2)
         go (RecordSelector x fx) (RecordSelector y fy)
           | fx == fy = Just $ RecordSelector (f x y) fx
-        go (RecordType mx) (RecordType my)
-          | Map.keys mx == Map.keys my =
-              Just $ RecordType (Map.intersectionWith f mx my)
 
         go (CtorApp cx lx) (CtorApp cy ly)
           | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
@@ -635,7 +643,8 @@ ppPat f p pat =
     PUnit      -> pure $ text "()"
     PPair x y  -> ppParens (p > PrecApp) <$>
                   (infixDoc "#" <$> ppPat f PrecApp x <*> ppPat f PrecApp y)
-    PRecord m  -> ppRecordF (ppPat f PrecNone) m
+    PEmpty     -> pure $ text "{}"
+    PField n x y -> error "FIXME" n x y
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
@@ -666,8 +675,14 @@ ppFlatTermF pp prec tf =
                            . (<> (char '.' <> int i)) <$> pp PrecArg t
 -}
 
-    RecordValue m      -> ppRecordF (pp PrecNone) m
-    RecordType m       -> (char '#' <>) <$> ppRecordF (pp PrecNone) m
+    EmptyValue         -> pure $ text "{}"
+    EmptyType          -> pure $ text "#{}"
+    FieldValue f x y   -> ppRec <$> pp PrecNone x <*> pp PrecNone y
+      where ppRec a b = braces (eqCat (text f) a <> comma <+> eqCat (text "...") b)
+            eqCat l r = group $ nest 2 (l <+> equals <<$>> r)
+    FieldType f x y    -> ppRec <$> pp PrecNone x <*> pp PrecNone y
+      where ppRec a b = braces (eqCat (text f) a <> comma <+> eqCat (text "...") b)
+            eqCat l r = group $ nest 2 (l <+> colon <<$>> r)
     RecordSelector t f -> ppParens (prec > PrecArg)
                           . (<> (char '.' <> text f)) <$> pp PrecArg t
 
@@ -715,7 +730,8 @@ freesPat p0 =
     PUnused i tp -> tp `shiftR` i
     PUnit      -> 0
     PPair x y  -> freesPat x .|. freesPat y
-    PRecord pm -> bitwiseOrOf folded (freesPat <$> pm)
+    PEmpty     -> 0
+    PField _ x y -> freesPat x .|. freesPat y
     PCtor _ pl -> bitwiseOrOf folded (freesPat <$> pl)
 
 freesDefEqn :: DefEqn BitSet -> BitSet
@@ -759,9 +775,9 @@ instantiateVars f initialLevel = go initialLevel
             PairType a b  -> PairType (go l a) (go l b)
             PairLeft x    -> PairLeft (go l x)
             PairRight x   -> PairRight (go l x)
-            RecordValue m -> RecordValue $ go l <$> m
+            FieldValue fld x y   -> FieldValue fld (go l x) (go l y)
+            FieldType fld x y    -> FieldType fld (go l x) (go l y)
             RecordSelector x fld -> RecordSelector (go l x) fld
-            RecordType m      -> RecordType $ go l <$> m
             CtorApp c ll      -> CtorApp c (goList l ll)
             DataTypeApp dt ll -> DataTypeApp dt (goList l ll)
             _ -> ftf

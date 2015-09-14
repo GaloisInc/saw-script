@@ -144,7 +144,7 @@ AtomPat :: { Pat }
 AtomPat : SimplePat                 { PSimple $1 }
         | ConDotList                { PCtor (identFromList1 $1) [] }
         | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) mkPTuple (pos $1) $2 }
-        | '{' recList('=', Pat) '}' { PRecord (pos $1) $2 }
+        | '{' recList('=', Pat) '}' { mkPRecord (pos $1) $2 }
 
 SimplePat :: { SimplePat }
 SimplePat : unvar { PUnused (fmap tokVar $1) }
@@ -198,8 +198,8 @@ AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
          |     '(' sepBy(Term, ',') ')'     { parseParen Paren mkTupleValue (pos $1) $2 }
          | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
          |     '[' sepBy(Term, ',') ']'     { VecLit (pos $1) $2 }
-         |     '{' recList('=',   Term) '}' { RecordValue (pos $1) $2 }
-         | '#' '{' recList('::', LTerm) '}' { RecordType  (pos $1) $3 }
+         |     '{' recList('=',   Term) '}' { mkRecordValue (pos $1) $2 }
+         | '#' '{' recList('::', LTerm) '}' { mkRecordType  (pos $1) $3 }
 
 PiArg :: { PiArg }
 PiArg : ParamType AppArg {% mkPiArg ($1, $2) }
@@ -395,11 +395,14 @@ termAsPat ex = do
         return (PPair p <$> px <*> py)
       (UnitType{}, _) -> badPat "Tuple types"
       (PairType{}, _) -> badPat "Tuple types"
-      (RecordValue p l,[]) ->
-          fmap (fmap (PRecord p . zip flds) . sequence) $ mapM termAsPat terms
-        where (flds,terms) = unzip l
+      (EmptyValue p, []) -> return $ Just (PEmpty p)
+      (FieldValue (fp, x) y, []) -> do
+        px <- termAsPat x
+        py <- termAsPat y
+        return (curry PField fp <$> px <*> py)
       (RecordSelector{}, []) -> badPat "Record selector"
-      (RecordType{},[]) -> badPat "Record type"
+      (EmptyType{},[]) -> badPat "Record type"
+      (FieldType{},[]) -> badPat "Record type"
 
       (TypeConstraint{}, []) -> badPat "Type constraint"
       (Paren{}, _) -> error "internal: Unexpected paren"

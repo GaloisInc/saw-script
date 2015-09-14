@@ -18,7 +18,7 @@ module Verifier.SAW.Simulator.BitBlast where
 import Control.Applicative
 import Data.Traversable
 #endif
-import Control.Monad (zipWithM, (<=<))
+import Control.Monad ((<=<))
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -118,8 +118,11 @@ flattenBValue (VPair x y) = do
   vx <- flattenBValue =<< force x
   vy <- flattenBValue =<< force y
   return $ AIG.concat [vx, vy]
-flattenBValue (VRecord m) =
-  AIG.concat <$> traverse (flattenBValue <=< force) (Map.elems m)
+flattenBValue VEmpty = return $ AIG.concat []
+flattenBValue (VField _ x y) = do
+  vx <- flattenBValue =<< force x
+  vy <- flattenBValue y
+  return $ AIG.concat [vx, vy]
 flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
 
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
@@ -300,12 +303,13 @@ iteOp be =
 
 muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
 muxBVal be b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal be b x y)
-muxBVal _  _ VUnit           VUnit           = return $ VUnit
+muxBVal _  _ VUnit           VUnit           = return VUnit
 muxBVal be b (VPair x1 x2)   (VPair y1 y2)   = VPair <$> muxThunk be b x1 y1
                                                      <*> muxThunk be b x2 y2
-muxBVal be b (VRecord xm)    (VRecord ym)
-  | Map.keys xm == Map.keys ym               = (VRecord . Map.fromList . zip (Map.keys xm)) <$>
-                                                 zipWithM (muxThunk be b) (Map.elems xm) (Map.elems ym)
+muxBVal _  _ VEmpty          VEmpty          = return VEmpty
+muxBVal be b (VField xf x1 x2) (VField yf y1 y2) | xf == yf
+                                             = VField xf <$> muxThunk be b x1 y1
+                                                         <*> muxBVal be b x2 y2
 muxBVal be b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks be b xv yv
 muxBVal be b (VVector xv)    (VVector yv)    = VVector <$> muxThunks be b xv yv
 muxBVal be b (VBool x)       (VBool y)       = VBool <$> AIG.mux be b x y
@@ -547,7 +551,7 @@ newVars :: AIG.IsAIG l g => g s -> FiniteType -> IO (BValue (l s))
 newVars be FTBit = vBool <$> AIG.newInput be
 newVars be (FTVec n tp) = VVector <$> V.replicateM (fromIntegral n) (newVars' be tp)
 newVars be (FTTuple ts) = vTuple <$> traverse (newVars' be) ts
-newVars be (FTRec tm) = VRecord <$> traverse (newVars' be) tm
+newVars be (FTRec tm) = vRecord <$> traverse (newVars' be) tm
 
 newVars' :: AIG.IsAIG l g => g s -> FiniteType -> IO (BThunk (l s))
 newVars' be shape = ready <$> newVars be shape

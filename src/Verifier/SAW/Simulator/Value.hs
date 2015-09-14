@@ -17,7 +17,6 @@ module Verifier.SAW.Simulator.Value
 import Prelude hiding (mapM)
 
 import Control.Monad (foldM, liftM)
-import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
@@ -34,8 +33,9 @@ import Verifier.SAW.Simulator.MonadLazy
 data Value m b w e
   = VFun !(Thunk m b w e -> m (Value m b w e))
   | VUnit
-  | VPair (Thunk m b w e) (Thunk m b w e)
-  | VRecord !(Map FieldName (Thunk m b w e))
+  | VPair (Thunk m b w e) (Thunk m b w e) -- TODO: should second component be strict?
+  | VEmpty
+  | VField FieldName (Thunk m b w e) !(Value m b w e)
   | VCtorApp !Ident !(Vector (Thunk m b w e))
   | VVector !(Vector (Thunk m b w e))
   | VBool b
@@ -49,7 +49,8 @@ data Value m b w e
   | VPiType !(Value m b w e) !(Thunk m b w e -> m (Value m b w e))
   | VUnitType
   | VPairType (Value m b w e) (Value m b w e)
-  | VRecordType !(Map FieldName (Value m b w e))
+  | VEmptyType
+  | VFieldType FieldName !(Value m b w e) !(Value m b w e)
   | VDataType !Ident [Value m b w e]
   | VType -- ^ Other unknown type
   | VExtra e
@@ -71,10 +72,8 @@ instance Show e => Show (Value m b w e) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VRecord xm      -> showString "{" .
-                        foldr (.) id (intersperse (showString ", ")
-                                      (map showField (Map.assocs (fmap (const Nil) xm)))) .
-                        showString "}"
+      VEmpty         -> showString "{}"
+      VField f _ _   -> showString "{" . showString f . showString " = _, ...}"
       VCtorApp s xv
         | V.null xv  -> shows s
         | otherwise  -> shows s . showList (toList xv)
@@ -91,14 +90,14 @@ instance Show e => Show (Value m b w e) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VRecordType _  -> showString "<<record type>>"
+      VEmptyType {}  -> showString "<<record type>>"
+      VFieldType {}  -> showString "<<record type>>"
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
       VType          -> showString "_"
       VExtra x       -> showsPrec p x
     where
-      showField (name, t) = showString name . showString " = " . shows t
       toList = map (const Nil) . V.toList
 
 data Nil = Nil
@@ -125,8 +124,12 @@ valPairRight :: (Monad m, Show e) => Value m b w e -> m (Value m b w e)
 valPairRight (VPair _ t2) = force t2
 valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
 
+vRecord :: Map FieldName (Thunk m b w e) -> Value m b w e
+vRecord m = foldr (uncurry VField) VEmpty (Map.assocs m)
+
 valRecordSelect :: (Monad m, Show e) => FieldName -> Value m b w e -> m (Value m b w e)
-valRecordSelect k (VRecord vm) | Just x <- Map.lookup k vm = force x
+valRecordSelect k (VField k' x r) = if k == k' then force x else valRecordSelect k r
+valRecordSelect k VEmpty = fail $ "valRecordSelect: record field not found: " ++ k
 valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
 
 apply :: Monad m => Value m b w e -> Thunk m b w e -> m (Value m b w e)
