@@ -70,7 +70,7 @@ $cntrl     = [$large \@\[\\\]\^\_]
 @con = [A-Z] $idchar*
 
 @punct = "#" | "," | "->" | "." | ".." | ";" | "::" | "=" | "?" | "??" | "???"
-       | "\" | "(" | ")" | "[" | "]" | "{" | "}"
+       | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
 @keywords = "as" | "data" | "hiding" | "import" | "in" | "let" | "module"
           | "qualified" | "sort" | "where" | "primitive" | "axiom"
 @key = @punct | @keywords

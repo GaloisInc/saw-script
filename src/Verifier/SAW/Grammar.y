@@ -64,6 +64,7 @@ import Verifier.SAW.Lexer
   ']'     { PosPair _ (TKey "]") }
   '{'     { PosPair _ (TKey "{") }
   '}'     { PosPair _ (TKey "}") }
+  '|'     { PosPair _ (TKey "|") }
   'as'        { PosPair _ (TKey "as") }
   'data'      { PosPair _ (TKey "data") }
   'hiding'    { PosPair _ (TKey "hiding") }
@@ -144,6 +145,7 @@ AtomPat :: { Pat }
 AtomPat : SimplePat                 { PSimple $1 }
         | ConDotList                { PCtor (identFromList1 $1) [] }
         | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) mkPTuple (pos $1) $2 }
+        | '(' Pat '|' Pat ')'       { PPair (pos $1) $2 $4 }
         | '{' recList('=', Pat) '}' { mkPRecord (pos $1) $2 }
 
 SimplePat :: { SimplePat }
@@ -200,6 +202,8 @@ AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
          |     '[' sepBy(Term, ',') ']'     { VecLit (pos $1) $2 }
          |     '{' recList('=',   Term) '}' { mkRecordValue (pos $1) $2 }
          | '#' '{' recList('::', LTerm) '}' { mkRecordType  (pos $1) $3 }
+         |     '(' Term '|' Term ')'        { PairValue (pos $1) $2 $4 }
+         | '#' '(' Term '|' Term ')'        { PairType (pos $1) $3 $5 }
 
 PiArg :: { PiArg }
 PiArg : ParamType AppArg {% mkPiArg ($1, $2) }
