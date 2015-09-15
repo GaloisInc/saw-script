@@ -831,11 +831,11 @@ lineSep l = hcat (punctuate line l)
 
 scPrettyTermDoc :: forall s . SharedTerm s -> Doc
 scPrettyTermDoc t0
-    | null bound = ppt lcls0 PrecNone t0
+    | null bound = ppTermDoc (ppt lcls0 PrecNone t0)
     | otherwise =
         text "let { " <> nest 6 (lineSep lets) <$$>
         text "    }" <$$>
-        text " in " <> align (ppt lcls0 PrecNone t0)
+        text " in " <> align (ppTermDoc (ppt lcls0 PrecNone t0))
   where lcls0 = emptyLocalVarDoc
         cm = scTermCount t0 -- Occurence map
         -- Return true if variable should be introduced to name term.
@@ -862,7 +862,7 @@ scPrettyTermDoc t0
         var :: Word64 -> Doc
         var n = char 'x' <> integer (toInteger n)
 
-        lets = [ var n <+> char '=' <+> ppTermF ppt lcls0 PrecNone (unwrapTermF t) <> char ';'
+        lets = [ var n <+> char '=' <+> ppTermDoc (ppTermF ppt lcls0 PrecNone (unwrapTermF t)) <> char ';'
                | (t,n) <- bound `zip` [0..]
                ]
 
@@ -870,10 +870,10 @@ scPrettyTermDoc t0
         dm = Fold.foldl' insVar StrictMap.empty (bound `zip` [0..])
           where insVar m (t,n) = StrictMap.insert t (var n) m
 
-        ppt :: LocalVarDoc -> Prec -> SharedTerm s -> Doc
+        ppt :: LocalVarDoc -> Prec -> SharedTerm s -> TermDoc
         ppt lcls p t =
           case StrictMap.lookup t dm of
-            Just d -> d
+            Just d -> TermDoc d
             Nothing -> ppTermF ppt lcls p (unwrapTermF t)
 
 scPrettyTerm :: SharedTerm s -> String

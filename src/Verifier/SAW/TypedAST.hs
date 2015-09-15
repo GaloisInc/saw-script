@@ -81,13 +81,15 @@ module Verifier.SAW.TypedAST
  , docShowLocalTypes
 
  , TermPrinter
- 
+ , TermDoc(..)
+ , ppTermDoc
  , Prec(..)
  , ppAppParens
  , ppTerm
  , ppTermF
  , ppTermF'
  , ppFlatTermF
+ , ppFlatTermF'
  , ppRecordF
  , ppTermDepth
    -- * Primitive types.
@@ -152,6 +154,9 @@ instance Hashable a => Hashable (Vector a) where
 doublecolon :: Doc
 doublecolon = colon <> colon
 
+bracesList :: [Doc] -> Doc
+bracesList = encloseSep lbrace rbrace comma
+
 -- | Print a list of items separated by semicolons
 semiTermList :: [Doc] -> Doc
 semiTermList = hsep . fmap (<> semi)
@@ -211,7 +216,7 @@ mkIdent = Ident
 
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
-parseIdent s0 = 
+parseIdent s0 =
     case reverse (breakEach s0) of
       (_:[]) -> internalError $ "parseIdent given empty module name."
       (nm:rMod) -> mkIdent (mkModuleName (reverse rMod)) nm
@@ -224,7 +229,7 @@ parseIdent s0 =
 
 instance IsString Ident where
   fromString = parseIdent
-    
+
 newtype Sort = SortCtor { _sortIndex :: Integer }
   deriving (Eq, Ord, Generic)
 
@@ -428,7 +433,7 @@ instance Show n => Show (DataType n t) where
   show = show . dtName
 
 ppDataType :: TermPrinter e -> DataType Ident e -> Doc
-ppDataType f dt = 
+ppDataType f dt =
   group $ (group ((text "data" <+> tc) <<$>> (text "where" <+> lbrace)))
           <<$>>
           vcat ((indent 2 . ppc) <$> dtCtors dt)
@@ -589,7 +594,7 @@ ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> (reverse $ defEqs d)))
   where sym = ppIdent (defIdent d)
         tpd = ppTypeConstraint ppTerm lcls sym (defType d) <> semi
 
-ppLocalDef :: Applicative f 
+ppLocalDef :: Applicative f
            => (LocalVarDoc -> Prec -> e -> f Doc)
            -> LocalVarDoc -- ^ Context outside let
            -> LocalVarDoc -- ^ Context inside let
@@ -609,14 +614,14 @@ ppDefEqn pp lcls sym eq = runIdentity (ppDefEqnF pp' lcls sym eq)
 ppDefEqnF :: Applicative f
           => (LocalVarDoc -> Prec -> e -> f Doc)
           -> LocalVarDoc -> Doc -> DefEqn e -> f Doc
-ppDefEqnF f lcls sym (DefEqn pats rhs) = 
+ppDefEqnF f lcls sym (DefEqn pats rhs) =
     ppEq <$> traverse ppPat' pats
 -- Is this OK?
          <*> f lcls' PrecNone rhs
 --         <*> f lcls' PrecLambda rhs
   where ppEq pd rhs' = group $ nest 2 (sym <+> (hsep (pd++[equals])) <<$>> rhs' <> semi)
         lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
-        ppPat' = ppPat (f lcls') PrecArg
+        ppPat' = fmap ppTermDoc . ppPat (\p e -> TermDoc <$> f lcls' p e) PrecArg
 
 data Prec
   = PrecNone   -- ^ Nonterminal 'Term'
@@ -625,26 +630,64 @@ data Prec
   | PrecArg    -- ^ Nonterminal 'AppArg'
   deriving (Eq, Ord)
 
+-- | Type TermDoc facilitates the pretty-printing of nested tuple and
+-- record structures using non-nested syntax.
+data TermDoc
+  = TermDoc Doc
+  | TupleDoc [Doc]
+  | TupleTDoc [Doc]
+  | RecordDoc [(FieldName, Doc)]
+  | RecordTDoc [(FieldName, Doc)]
+
+ppTermDoc :: TermDoc -> Doc
+ppTermDoc td =
+  case td of
+    TermDoc doc       -> doc
+    TupleDoc docs     -> tupled docs
+    TupleTDoc docs    -> char '#' <> tupled docs
+    RecordDoc fields  -> bracesList (map (ppField "=") fields)
+    RecordTDoc fields -> char '#' <> bracesList (map (ppField ":") fields)
+  where
+    ppField s (name, rhs) = group (nest 2 (text name <+> text s <<$>> rhs))
+
+ppPairValue :: TermDoc -> TermDoc -> TermDoc
+ppPairValue x (TupleDoc docs) = TupleDoc (ppTermDoc x : docs)
+ppPairValue x y = TermDoc $ parens (ppTermDoc x <+> char '|' <+> ppTermDoc y)
+
+ppPairType :: TermDoc -> TermDoc -> TermDoc
+ppPairType x (TupleTDoc docs) = TupleTDoc (ppTermDoc x : docs)
+ppPairType x y = TermDoc $ char '#' <> parens (ppTermDoc x <+> char '|' <+> ppTermDoc y)
+
+ppFieldValue :: FieldName -> TermDoc -> TermDoc -> TermDoc
+ppFieldValue f x (RecordDoc fields) = RecordDoc ((f, ppTermDoc x) : fields)
+ppFieldValue f x y = TermDoc $ bracesList [eqn f x, eqn "..." y]
+  where eqn l r = group (nest 2 (text l <+> equals <<$>> ppTermDoc r))
+
+ppFieldType :: FieldName -> TermDoc -> TermDoc -> TermDoc
+ppFieldType f x (RecordTDoc fields) = RecordTDoc ((f, ppTermDoc x) : fields)
+ppFieldType f x y = TermDoc $ char '#' <> bracesList [eqn f x, eqn "..." y]
+  where eqn l r = group (nest 2 (text l <+> equals <<$>> ppTermDoc r))
+
 ppAppParens :: Prec -> Doc -> Doc
-ppAppParens p d = ppParens (p > PrecApp) d 
+ppAppParens p d = ppParens (p > PrecApp) d
 
 ppAppList :: Prec -> Doc -> [Doc] -> Doc
 ppAppList _ sym [] = sym
 ppAppList p sym l = ppAppParens p $ hsep (sym : l)
 
 ppPat :: Applicative f
-      => (Prec -> e -> f Doc)
-      -> Prec -> Pat e -> f Doc
+      => (Prec -> e -> f TermDoc)
+      -> Prec -> Pat e -> f TermDoc
 ppPat f p pat =
   case pat of
-    PVar i _ _ -> pure (text i)
-    PUnused{}  -> pure (char '_')
-    PCtor c pl -> ppAppList p (ppIdent c) <$> traverse (ppPat f PrecArg) pl
-    PUnit      -> pure $ text "()"
-    PPair x y  -> ppParens (p > PrecApp) <$>
-                  (infixDoc "#" <$> ppPat f PrecApp x <*> ppPat f PrecApp y)
-    PEmpty     -> pure $ text "{}"
-    PField n x y -> error "FIXME" n x y
+    PVar i _ _ -> pure $ TermDoc $ text i
+    PUnused{}  -> pure $ TermDoc $ char '_'
+    PCtor c pl -> TermDoc . ppAppList p (ppIdent c) . map ppTermDoc <$>
+                  traverse (ppPat f PrecArg) pl
+    PUnit      -> pure $ TermDoc $ text "()"
+    PPair x y  -> ppPairValue <$> ppPat f PrecNone x <*> ppPat f PrecNone y
+    PEmpty     -> pure $ TermDoc $ text "{}"
+    PField n x y -> ppFieldValue n <$> ppPat f PrecNone x <*> ppPat f PrecNone y
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
@@ -653,49 +696,42 @@ ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
   where ppFld (fld,v) = eqCat (text fld) <$> pp v
         eqCat x y = group $ nest 2 (x <+> equals <<$>> y)
 
-infixDoc :: String -> Doc -> Doc -> Doc
-infixDoc s x y = x <+> text s <+> y
-
-ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
-ppFlatTermF pp prec tf =
+ppFlatTermF' :: Applicative f => (Prec -> t -> f TermDoc) -> Prec -> FlatTermF t -> f TermDoc
+ppFlatTermF' pp prec tf =
   case tf of
-    GlobalDef i -> pure $ ppIdent i
-    UnitValue     -> pure $ text "()"
-    UnitType      -> pure $ text "#()"
-    PairValue x y -> ppParens (prec > PrecApp) <$>
-                       (infixDoc "#" <$> pp PrecApp x <*> pp PrecApp y)
-    PairType x y  -> ppParens (prec > PrecApp) <$>
-                       (infixDoc "*" <$> pp PrecApp x <*> pp PrecApp y)
-    PairLeft t    -> ppParens (prec > PrecArg) . (<> (text ".L")) <$> pp PrecArg t
-    PairRight t   -> ppParens (prec > PrecArg) . (<> (text ".R")) <$> pp PrecArg t
-{-
-    TupleValue l ->                 tupled <$> traverse (pp PrecNone) l
-    TupleType l  -> (char '#' <>) . tupled <$> traverse (pp PrecNone) l
-    TupleSelector t i -> ppParens (prec > PrecArg)
-                           . (<> (char '.' <> int i)) <$> pp PrecArg t
--}
+    GlobalDef i   -> pure $ TermDoc $ ppIdent i
+    UnitValue     -> pure $ TupleDoc []
+    UnitType      -> pure $ TupleTDoc []
+    PairValue x y -> ppPairValue <$> pp PrecNone x <*> pp PrecNone y
+    PairType x y  -> ppPairType <$> pp PrecNone x <*> pp PrecNone y
+    PairLeft t    -> TermDoc . ppParens (prec > PrecArg) . (<> (text ".L")) <$> pp' PrecArg t
+    PairRight t   -> TermDoc . ppParens (prec > PrecArg) . (<> (text ".R")) <$> pp' PrecArg t
+    EmptyValue         -> pure $ RecordDoc []
+    EmptyType          -> pure $ RecordTDoc []
+    FieldValue f x y   -> ppFieldValue f <$> pp PrecNone x <*> pp PrecNone y
+    FieldType f x y    -> ppFieldType f <$> pp PrecNone x <*> pp PrecNone y
+    RecordSelector t f -> TermDoc . ppParens (prec > PrecArg)
+                          . (<> (char '.' <> text f)) <$> pp' PrecArg t
 
-    EmptyValue         -> pure $ text "{}"
-    EmptyType          -> pure $ text "#{}"
-    FieldValue f x y   -> ppRec <$> pp PrecNone x <*> pp PrecNone y
-      where ppRec a b = braces (eqCat (text f) a <> comma <+> eqCat (text "...") b)
-            eqCat l r = group $ nest 2 (l <+> equals <<$>> r)
-    FieldType f x y    -> ppRec <$> pp PrecNone x <*> pp PrecNone y
-      where ppRec a b = braces (eqCat (text f) a <> comma <+> eqCat (text "...") b)
-            eqCat l r = group $ nest 2 (l <+> colon <<$>> r)
-    RecordSelector t f -> ppParens (prec > PrecArg)
-                          . (<> (char '.' <> text f)) <$> pp PrecArg t
+    CtorApp c l      -> TermDoc . ppAppList prec (ppIdent c) <$> traverse (pp' PrecArg) l
+    DataTypeApp dt l -> TermDoc . ppAppList prec (ppIdent dt) <$> traverse (pp' PrecArg) l
 
-    CtorApp c l      -> ppAppList prec (ppIdent c) <$> traverse (pp PrecArg) l
-    DataTypeApp dt l -> ppAppList prec (ppIdent dt) <$> traverse (pp PrecArg) l
+    Sort s -> pure $ TermDoc $ text (show s)
+    NatLit i -> pure $ TermDoc $ integer i
+    ArrayValue _ vl -> TermDoc . list <$> traverse (pp' PrecNone) (V.toList vl)
+    FloatLit v  -> pure $ TermDoc $ text (show v)
+    DoubleLit v -> pure $ TermDoc $ text (show v)
+    StringLit s -> pure $ TermDoc $ text (show s)
+    ExtCns (EC _ v _) -> pure $ TermDoc $ text v
+  where
+    pp' p t = ppTermDoc <$> pp p t
 
-    Sort s -> pure $ text (show s)
-    NatLit i -> pure $ integer i
-    ArrayValue _ vl -> list <$> traverse (pp PrecNone) (V.toList vl)
-    FloatLit v  -> pure $ text (show v)
-    DoubleLit v -> pure $ text (show v)
-    StringLit s -> pure $ text (show s)
-    ExtCns (EC _ v _) -> pure $ text v
+-- | This version has the type expected by various modules in
+-- Verifier/SAW/Typechecker, but it does not properly display nested
+-- tuples or records.
+ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
+ppFlatTermF pp prec tf = fmap ppTermDoc (ppFlatTermF' pp' prec tf)
+  where pp' p t = fmap TermDoc (pp p t)
 
 newtype Term = Term (TermF Term)
   deriving (Eq)
@@ -835,72 +871,83 @@ betaReduce s t = instantiateVar 0 t s
 
 -- | Pretty print a term with the given outer precedence.
 ppTerm :: TermPrinter Term
-ppTerm lcls p0 (Term t) = ppTermF ppTerm lcls p0 t
+ppTerm lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
+  where
+    pp :: LocalVarDoc -> Prec -> Term -> TermDoc
+    pp lcls p (Term t) = ppTermF pp lcls p t
 
-ppTermF :: TermPrinter t
-        -> TermPrinter (TermF t)
+ppTermF :: (LocalVarDoc -> Prec -> t -> TermDoc)
+        -> LocalVarDoc -> Prec -> TermF t -> TermDoc
 ppTermF pp lcls p tf = runIdentity (ppTermF' pp' lcls p tf)
   where pp' l' p' t' = pure (pp l' p' t')
 
 ppTermF' :: Applicative f
-         => (LocalVarDoc -> Prec -> e -> f Doc)
+         => (LocalVarDoc -> Prec -> e -> f TermDoc)
          -> LocalVarDoc
          -> Prec
          -> TermF e
-         -> f Doc
-ppTermF' pp lcls p (FTermF tf) = (group . nest 2) <$> (ppFlatTermF (pp lcls) p tf)
-ppTermF' pp lcls p (App l r) = ppApp <$> pp lcls PrecApp l <*> pp lcls PrecArg r
-  where ppApp l' r' = ppAppParens p $ group $ hang 2 $ l' Leijen.<$> r'
+         -> f TermDoc
+ppTermF' pp lcls prec (FTermF tf) = ppFlatTermF' (pp lcls) prec tf
+  --(group . nest 2) <$> (ppFlatTermF' (pp lcls) p tf)
+ppTermF' pp lcls prec (App l r) = ppApp <$> pp lcls PrecApp l <*> pp lcls PrecArg r
+  where ppApp l' r' = TermDoc $ ppAppParens prec $ group $ hang 2 $
+                      ppTermDoc l' Leijen.<$> ppTermDoc r'
 
 ppTermF' pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp lcls  PrecLambda tp
       <*> pp lcls' PrecLambda rhs
-  where ppLam tp' rhs' =
+  where ppLam tp' rhs' = TermDoc $
           ppParens (p > PrecLambda) $ group $ hang 2 $
-            text "\\" <> parens (text name' <> doublecolon <> tp')
-              <+> text "->" Leijen.<$> rhs'
+            text "\\" <> parens (text name' <> doublecolon <> ppTermDoc tp')
+              <+> text "->" Leijen.<$> ppTermDoc rhs'
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
 ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
-  where ppPi lhs' rhs' = ppParens (p > PrecLambda) $ lhs' <<$>> text "->" <+> rhs'
-        lhs | name == "_" = (align . group . nest 2) <$> pp lcls PrecApp tp
-            | otherwise = (\tp' -> parens (text name' <+> doublecolon <+> align (group (nest 2 tp'))))
-                            <$> pp lcls PrecLambda tp
+  where ppPi lhs' rhs' = TermDoc $ ppParens (p > PrecLambda) $
+                         lhs' <<$>> text "->" <+> ppTermDoc rhs'
+        subDoc = align . group . nest 2 . ppTermDoc
+        lhs | name == "_" = subDoc <$> pp lcls PrecApp tp
+            | otherwise = ppArg <$> pp lcls PrecLambda tp
+        ppArg tp' = parens (text name' <+> doublecolon <+> subDoc tp')
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
 ppTermF' pp lcls p (Let dl u) =
-    ppLet <$> traverse (ppLocalDef pp lcls lcls') dl
+    ppLet <$> traverse (ppLocalDef pp' lcls lcls') dl
           <*> pp lcls' PrecNone u
-  where ppLet dl' u' =
+  where ppLet dl' u' = TermDoc $
           ppParens (p > PrecNone) $
             text "let" <+> lbrace <+> align (vcat dl') <$$>
             indent 4 rbrace <$$>
-            text " in" <+> u'
+            text " in" <+> ppTermDoc u'
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
+        pp' a b c = ppTermDoc <$> pp a b c
 ppTermF' _pp lcls _p (LocalVar i)
 --    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
-    | otherwise = pure d
+    | otherwise = pure $ TermDoc d
   where d = lookupDoc lcls i
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
-ppTermF' _ _ _ (Constant i _ _) = pure $ text i
+ppTermF' _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
 
 ppTermDepth :: forall t. Termlike t => Int -> t -> Doc
 ppTermDepth d0 = pp d0 emptyLocalVarDoc PrecNone
   where
     pp :: Int -> TermPrinter t
-    pp 0 _ _ _ = text "_"
-    pp d lcls p t = case unwrapTermF t of
-      App t1 t2 ->
+    pp d lcls p t = ppTermDoc (pp' d lcls p t)
+
+    pp' :: Int -> LocalVarDoc -> Prec -> t -> TermDoc
+    pp' 0 _ _ _ = TermDoc $ text "_"
+    pp' d lcls p t = case unwrapTermF t of
+      App t1 t2 -> TermDoc $
         ppAppParens p $ group $ hang 2 $
         (pp d lcls PrecApp t1) Leijen.<$>
         (pp (d-1) lcls PrecArg t2)
       tf ->
-        ppTermF (pp (d-1)) lcls p tf
+        ppTermF (pp' (d-1)) lcls p tf
 
 instance Show Term where
   showsPrec _ t = shows $ ppTerm emptyLocalVarDoc PrecNone t
