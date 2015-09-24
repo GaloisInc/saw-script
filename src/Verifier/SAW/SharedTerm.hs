@@ -424,14 +424,18 @@ scWhnf sc = go []
                           case asFTermF v of
                             Just EmptyValue -> return $ Just Map.empty
                             _ -> return Nothing
-        PField f p1 p2 -> do v <- scWhnf sc x
-                             case asFTermF v of
-                               Just (FieldValue f' v1 v2) | f == f' ->
-                                 matchAll [p1, p2] [Left v1, Left v2]
-                               _ -> return Nothing
+        PField p1 p2 p3 -> do v <- scWhnf sc x
+                              case asFTermF v of
+                                Just (FieldValue v1 v2 v3) ->
+                                  matchAll [p1, p2, p3] [Left v1, Left v2, Left v3]
+                                _ -> return Nothing
         PCtor i ps  -> do v <- scWhnf sc x
                           case asCtor v of
                             Just (s, xs) | i == s -> matchAll ps (map Left xs)
+                            _ -> return Nothing
+        PString s   -> do v <- scWhnf sc x
+                          case asStringLit v of
+                            Just s' | s == s' -> matchAll [] []
                             _ -> return Nothing
 
 
@@ -580,9 +584,10 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           sy <- sort y
           lift $ scSort sc (max sx sy)
         RecordSelector t f -> do
+          f' <- asStringLit =<< liftIO (scWhnf sc f)
           t' <- memo t >>= liftIO . scWhnf sc
           m <- asRecordType t'
-          let Just tp = Map.lookup f m
+          let Just tp = Map.lookup f' m
           return tp
         CtorApp c args -> do
           t <- lift $ scTypeOfCtor sc c
@@ -916,15 +921,21 @@ scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 scRecord :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scRecord sc m = go (Map.assocs m)
   where go [] = scEmptyValue sc
-        go ((f, x) : xs) = scFieldValue sc f x =<< go xs
+        go ((f, x) : xs) = do l <- scString sc f
+                              r <- go xs
+                              scFieldValue sc l x r
 
 scRecordSelect :: SharedContext s -> SharedTerm s -> FieldName -> IO (SharedTerm s)
-scRecordSelect sc t fname = scFlatTermF sc (RecordSelector t fname)
+scRecordSelect sc t fname = do
+  l <- scString sc fname
+  scFlatTermF sc (RecordSelector t l)
 
 scRecordType :: SharedContext s -> Map FieldName (SharedTerm s) -> IO (SharedTerm s)
 scRecordType sc m = go (Map.assocs m)
   where go [] = scEmptyType sc
-        go ((f, x) : xs) = scFieldType sc f x =<< go xs
+        go ((f, x) : xs) = do l <- scString sc f
+                              r <- go xs
+                              scFieldType sc l x r
 
 scUnitValue :: SharedContext s -> IO (SharedTerm s)
 scUnitValue sc = scFlatTermF sc UnitValue
@@ -944,10 +955,10 @@ scEmptyValue sc = scFlatTermF sc EmptyValue
 scEmptyType :: SharedContext s -> IO (SharedTerm s)
 scEmptyType sc = scFlatTermF sc EmptyType
 
-scFieldValue :: SharedContext s -> FieldName -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFieldValue :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFieldValue sc f x y = scFlatTermF sc (FieldValue f x y)
 
-scFieldType :: SharedContext s -> FieldName -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scFieldType :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scFieldType sc f x y = scFlatTermF sc (FieldType f x y)
 
 scTuple :: SharedContext s -> [SharedTerm s] -> IO (SharedTerm s)

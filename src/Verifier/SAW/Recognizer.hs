@@ -177,7 +177,9 @@ asRecordType t = do
   ftf <- asFTermF t
   case ftf of
     EmptyType       -> return Map.empty
-    FieldType f x y -> do m <- asRecordType y; return (Map.insert f x m)
+    FieldType f x y -> do m <- asRecordType y
+                          s <- asStringLit f
+                          return (Map.insert s x m)
     _               -> fail $ "asRecordType: " ++ show (Term (FTermF (fmap toTerm ftf)))
 
 toTerm :: Termlike t => t -> Term
@@ -188,11 +190,16 @@ asRecordValue t = do
   ftf <- asFTermF t
   case ftf of
     EmptyValue       -> return Map.empty
-    FieldValue f x y -> do m <- asRecordValue y; return (Map.insert f x m)
+    FieldValue f x y -> do m <- asRecordValue y
+                           s <- asStringLit f
+                           return (Map.insert s x m)
     _                -> fail $ "asRecordValue: " ++ show (Term (FTermF (fmap toTerm ftf)))
 
 asRecordSelector :: (Monad m, Termlike t) => Recognizer m t (t, FieldName)
-asRecordSelector t = do RecordSelector u i <- asFTermF t; return (u,i)
+asRecordSelector t = do
+  RecordSelector u i <- asFTermF t
+  s <- asStringLit i
+  return (u, s)
 
 asCtor :: (Monad f, Termlike t) => Recognizer f t (Ident, [t])
 asCtor t = do CtorApp c l <- asFTermF t; return (c,l)

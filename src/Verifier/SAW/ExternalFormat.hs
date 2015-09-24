@@ -71,9 +71,9 @@ scWriteExternal t0 =
             PairRight e        -> unwords ["ProjR", show e]
             EmptyValue         -> unwords ["Empty"]
             EmptyType          -> unwords ["EmptyT"]
-            FieldValue f x y   -> unwords ["Record", f, show x, show y]
-            FieldType f x y    -> unwords ["RecordT", f, show x, show y]
-            RecordSelector e i -> unwords ["RecordSel", show e, i]
+            FieldValue f x y   -> unwords ["Record", show f, show x, show y]
+            FieldType f x y    -> unwords ["RecordT", show f, show x, show y]
+            RecordSelector e i -> unwords ["RecordSel", show e, show i]
             CtorApp i es       -> unwords ("Ctor" : show i : map show es)
             DataTypeApp i es   -> unwords ("Data" : show i : map show es)
             Sort s             -> unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
@@ -118,9 +118,9 @@ scReadExternal sc input =
         ["ProjR", x]        -> FTermF (PairRight (read x))
         ["Empty"]           -> FTermF EmptyValue
         ["EmptyT"]          -> FTermF EmptyType
-        ["Record",f,x,y]    -> FTermF (FieldValue f (read x) (read y))
-        ["RecordT",f,x,y]   -> FTermF (FieldType f (read x) (read y))
-        ["RecordSel", e, i] -> FTermF (RecordSelector (read e) i)
+        ["Record",f,x,y]    -> FTermF (FieldValue (read f) (read x) (read y))
+        ["RecordT",f,x,y]   -> FTermF (FieldType (read f) (read x) (read y))
+        ["RecordSel", e, i] -> FTermF (RecordSelector (read e) (read i))
         ("Ctor" : i : es)   -> FTermF (CtorApp (parseIdent i) (map read es))
         ("Data" : i : es)   -> FTermF (DataTypeApp (parseIdent i) (map read es))
         ["Sort", s]         -> FTermF (Sort (mkSort (read s)))

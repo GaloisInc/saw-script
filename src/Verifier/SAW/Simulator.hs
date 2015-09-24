@@ -83,14 +83,18 @@ matchThunk p x =
                       case v of
                         VEmpty -> matchThunks [] []
                         _ -> return Nothing
-    PField f p1 p2 -> do v <- force x
-                         case v of
-                           VField f' x1 x2 | f == f' -> matchThunks [p1, p2] [x1, ready x2]
-                           _ -> return Nothing
+    PField p1 p2 p3 -> do v <- force x
+                          case v of
+                            VField x1 x2 x3 -> matchThunks [p1, p2, p3] [ready (VString x1), x2, ready x3]
+                            _ -> return Nothing
     PCtor i ps  -> do v <- force x
                       case v of
                         VCtorApp s xv | i == s -> matchThunks ps (V.toList xv)
                         _                      -> return Nothing
+    PString s   -> do v <- force x
+                      case v of
+                        VString s' | s == s' -> matchThunks [] []
+                        _ -> return Nothing
 
 {-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk Id b w e] -> Id (Maybe (Map Int (Thunk Id b w e))) #-}
 {-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk IO b w e] -> IO (Maybe (Map Int (Thunk IO b w e))) #-}
@@ -190,13 +194,17 @@ evalTermF cfg lam rec tf env =
         PairRight x         -> valPairRight =<< rec x
         EmptyValue          -> return VEmpty
         EmptyType           -> return VEmptyType
-        FieldValue f x y    -> do tx <- rec' x
-                                  ty <- rec y
-                                  return $ VField f tx ty
-        FieldType f x y     -> do vx <- rec x
+        FieldValue f x y    -> do VString s <- rec f
+                                  tx <- rec' x
                                   vy <- rec y
-                                  return $ VFieldType f vx vy
-        RecordSelector t k  -> valRecordSelect k =<< rec t
+                                  return $ VField s tx vy
+        FieldType f x y     -> do VString s <- rec f
+                                  vx <- rec x
+                                  vy <- rec y
+                                  return $ VFieldType s vx vy
+        RecordSelector t k  -> do vt <- rec t
+                                  VString s <- rec k
+                                  valRecordSelect s vt
         CtorApp ident ts    -> do v <- simGlobal cfg ident
                                   xs <- mapM rec' ts
                                   foldM apply v xs

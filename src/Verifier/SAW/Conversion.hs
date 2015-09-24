@@ -560,7 +560,7 @@ eq_Record = Conversion $ thenMatcher matcher action
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
         mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
-        sel t i = mkTermF (FTermF (RecordSelector t i))
+        sel t i = mkTermF . FTermF . RecordSelector t =<< mkTermF (FTermF (StringLit i))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t
                       `mkApp` sel x i

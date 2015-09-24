@@ -210,8 +210,9 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
           PUnit        -> return $ Term (FTermF UnitValue)
           PPair x y    -> (Term . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
           PEmpty       -> return $ Term (FTermF EmptyValue)
-          PField f x y -> (Term . FTermF) <$> (FieldValue f <$> termOfPat x <*> termOfPat y)
+          PField f x y -> (Term . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
           PCtor c ps   -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
+          PString s    -> return $ Term (FTermF (StringLit s))
 
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 

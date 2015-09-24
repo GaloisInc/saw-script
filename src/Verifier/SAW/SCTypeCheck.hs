@@ -195,7 +195,8 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           case ty of
             STApp _ (FTermF (PairType _ t2)) -> whnf t2
             _ -> throwTCError (NotTupleType ty)
-        RecordSelector t f -> do
+        RecordSelector t f' -> do
+          f <- asStringLit =<< whnf f'
           ty <- memo t
           case asRecordType ty of
             Just m ->

@@ -26,6 +26,7 @@ module Verifier.SAW.UntypedAST
   , mkTupleSelector
   , mkRecordValue
   , mkRecordType
+  , mkFieldNameTerm
   , ParamType(..)
   , Pat(..), ppPat
   , mkPTuple
@@ -113,13 +114,13 @@ data Term
     -- | An empty record value.
   | EmptyValue Pos
     -- | A record extended with another field.
-  | FieldValue (PosPair FieldName, Term) Term
+  | FieldValue (Term, Term) Term
     -- | The value stored in a record.
-  | RecordSelector Term (PosPair FieldName)
+  | RecordSelector Term Term
     -- | Type of an empty record value.
   | EmptyType Pos
     -- | Type of a record extended with another field.
-  | FieldType (PosPair FieldName, Term) Term
+  | FieldType (Term, Term) Term
     -- | Identifies a type constraint on the term.
   | TypeConstraint Term Pos Term
     -- | Arguments to an array constructor.
@@ -144,22 +145,27 @@ data Pat
   | PUnit Pos
   | PPair Pos Pat Pat
   | PEmpty Pos
-  | PField (PosPair FieldName, Pat) Pat
+  | PField (Pat, Pat) Pat
   | PCtor (PosPair Ident) [Pat]
+  | PString Pos String
   deriving (Eq, Ord, Show)
 
 mkPTuple :: Pos -> [Pat] -> Pat
 mkPTuple p = foldr (PPair p) (PUnit p)
 
 mkPRecord :: Pos -> [(PosPair FieldName, Pat)] -> Pat
-mkPRecord p = foldr PField (PEmpty p)
+mkPRecord p xs = foldr PField (PEmpty p) xs'
+  where xs' = [ (mkFieldNamePat x, y) | (x, y) <- xs ]
+
+mkFieldNamePat :: PosPair FieldName -> Pat
+mkFieldNamePat (PosPair p s) = PString p s
 
 asPTuple :: Pat -> Maybe [Pat]
 asPTuple (PUnit _)     = Just []
 asPTuple (PPair _ x y) = (x :) <$> asPTuple y
 asPTuple _             = Nothing
 
-asPRecord :: Pat -> Maybe [(PosPair FieldName, Pat)]
+asPRecord :: Pat -> Maybe [(Pat, Pat)]
 asPRecord (PEmpty _)   = Just []
 asPRecord (PField x y) = (x :) <$> asPRecord y
 asPRecord _            = Nothing
@@ -171,13 +177,14 @@ ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
 ppPat _ (PUnit _) = text "()"
 ppPat _ (PPair _ x y) = parens $ ppPat PrecNone x <+> text "#" <+> ppPat PrecNone y
 ppPat _ (asPRecord -> Just fl) = braces $ commaSepList (ppFld <$> fl)
-  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecNone v
+  where ppFld (fld,v) = ppPat PrecNone fld <+> equals <+> ppPat PrecNone v
 ppPat _ (PEmpty _) = text "{}"
 ppPat _ (PField f p) = braces $ commaSepList [ppFld f, other]
-  where ppFld (fld,v) = text (val fld) <+> equals <+> ppPat PrecNone v
+  where ppFld (fld,v) = ppPat PrecNone fld <+> equals <+> ppPat PrecNone v
         other = text "..." <+> equals <+> ppPat PrecNone p
 ppPat prec (PCtor pnm l) = ppAppParens prec $
   hsep (text (show (val pnm)) : fmap (ppPat PrecArg) l)
+ppPat _ (PString _ s) = text (show s)
 
 instance Positioned Term where
   pos t =
@@ -223,6 +230,7 @@ instance Positioned Pat where
       PEmpty p    -> p
       PField f _  -> pos (fst f)
       PCtor i _   -> pos i
+      PString p _ -> p
 
 badTerm :: Pos -> Term
 badTerm = BadTerm
@@ -283,7 +291,12 @@ mkTupleSelector t i =
     GT -> mkTupleSelector (PairRight (_pos i) t) i{ val = val i - 1 }
 
 mkRecordValue :: Pos -> [(PosPair FieldName, Term)] -> Term
-mkRecordValue p = foldr FieldValue (EmptyValue p)
+mkRecordValue p xs = foldr FieldValue (EmptyValue p) xs'
+  where xs' = [ (mkFieldNameTerm x, y) | (x, y) <- xs ]
 
 mkRecordType :: Pos -> [(PosPair FieldName, Term)] -> Term
-mkRecordType p = foldr FieldType (EmptyType p)
+mkRecordType p xs = foldr FieldType (EmptyType p) xs'
+  where xs' = [ (mkFieldNameTerm x, y) | (x, y) <- xs ]
+
+mkFieldNameTerm :: PosPair FieldName -> Term
+mkFieldNameTerm (PosPair p s) = StringLit p s

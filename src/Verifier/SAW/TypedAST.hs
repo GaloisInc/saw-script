@@ -265,9 +265,8 @@ data Pat e = -- | Variable bound by pattern.
            | PUnit
            | PPair (Pat e) (Pat e)
            | PEmpty
-           | PField FieldName (Pat e) (Pat e)
-             -- An arbitrary term that matches anything, but needs to be later
-             -- verified to be equivalent.
+           | PField (Pat e) (Pat e) (Pat e) -- ^ Field name, field value, rest of record
+           | PString String
            | PCtor Ident [Pat e]
   deriving (Eq,Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -282,7 +281,8 @@ patBoundVarCount p =
     PUnit     -> 0
     PPair x y -> patBoundVarCount x + patBoundVarCount y
     PEmpty    -> 0
-    PField _ x y -> patBoundVarCount x + patBoundVarCount y
+    PField f x y -> patBoundVarCount f + patBoundVarCount x + patBoundVarCount y
+    PString _ -> 0
 
 patUnusedVarCount :: Pat e -> DeBruijnIndex
 patUnusedVarCount p =
@@ -294,6 +294,7 @@ patUnusedVarCount p =
     PPair x y -> patUnusedVarCount x + patUnusedVarCount y
     PEmpty    -> 0
     PField _ x y -> patUnusedVarCount x + patUnusedVarCount y
+    PString _ -> 0
 
 patBoundVars :: Pat e -> [String]
 patBoundVars p =
@@ -304,7 +305,8 @@ patBoundVars p =
     PPair x y -> patBoundVars x ++ patBoundVars y
     PEmpty    -> []
     PField _ x y -> patBoundVars x ++ patBoundVars y
-    _ -> []
+    PString _ -> []
+    PUnused{} -> []
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
@@ -462,9 +464,9 @@ data FlatTermF e
   | PairRight e
   | EmptyValue
   | EmptyType
-  | FieldValue FieldName e e
-  | FieldType FieldName e e
-  | RecordSelector e FieldName
+  | FieldValue e e e -- Field name, field value, remainder of record
+  | FieldType e e e
+  | RecordSelector e e -- Record value, field name
 
   | CtorApp !Ident ![e]
   | DataTypeApp !Ident ![e]
@@ -519,14 +521,12 @@ zipWithFlatTermF f = go
 
         go EmptyValue EmptyValue = Just EmptyValue
         go EmptyType EmptyType = Just EmptyType
-        go (FieldValue fx x1 x2) (FieldValue fy y1 y2)
-          | fx == fy =
-              Just $ FieldValue fx (f x1 y1) (f x2 y2)
-        go (FieldType fx x1 x2) (FieldType fy y1 y2)
-          | fx == fy =
-              Just $ FieldType fx (f x1 y1) (f x2 y2)
-        go (RecordSelector x fx) (RecordSelector y fy)
-          | fx == fy = Just $ RecordSelector (f x y) fx
+        go (FieldValue x1 x2 x3) (FieldValue y1 y2 y3) =
+          Just $ FieldValue (f x1 y1) (f x2 y2) (f x3 y3)
+        go (FieldType x1 x2 x3) (FieldType y1 y2 y3) =
+          Just $ FieldType (f x1 y1) (f x2 y2) (f x3 y3)
+        go (RecordSelector x1 x2) (RecordSelector y1 y2) =
+          Just $ RecordSelector (f x1 y1) (f x2 y2)
 
         go (CtorApp cx lx) (CtorApp cy ly)
           | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
@@ -638,6 +638,7 @@ data TermDoc
   | TupleTDoc [Doc]
   | RecordDoc [(FieldName, Doc)]
   | RecordTDoc [(FieldName, Doc)]
+  | LabelDoc FieldName
 
 ppTermDoc :: TermDoc -> Doc
 ppTermDoc td =
@@ -647,6 +648,7 @@ ppTermDoc td =
     TupleTDoc docs    -> char '#' <> tupled docs
     RecordDoc fields  -> bracesList (map (ppField "=") fields)
     RecordTDoc fields -> char '#' <> bracesList (map (ppField ":") fields)
+    LabelDoc s        -> text (show s)
   where
     ppField s (name, rhs) = group (nest 2 (text name <+> text s <<$>> rhs))
 
@@ -658,15 +660,19 @@ ppPairType :: TermDoc -> TermDoc -> TermDoc
 ppPairType x (TupleTDoc docs) = TupleTDoc (ppTermDoc x : docs)
 ppPairType x y = TermDoc $ char '#' <> parens (ppTermDoc x <+> char '|' <+> ppTermDoc y)
 
-ppFieldValue :: FieldName -> TermDoc -> TermDoc -> TermDoc
-ppFieldValue f x (RecordDoc fields) = RecordDoc ((f, ppTermDoc x) : fields)
-ppFieldValue f x y = TermDoc $ bracesList [eqn f x, eqn "..." y]
-  where eqn l r = group (nest 2 (text l <+> equals <<$>> ppTermDoc r))
+ppFieldValue :: TermDoc -> TermDoc -> TermDoc -> TermDoc
+ppFieldValue (LabelDoc f) x (RecordDoc fields) = RecordDoc ((f, ppTermDoc x) : fields)
+ppFieldValue f x y = TermDoc $ bracesList [eqn (ppTermDoc f) x, eqn (text "...") y]
+  where eqn l r = group (nest 2 (l <+> equals <<$>> ppTermDoc r))
 
-ppFieldType :: FieldName -> TermDoc -> TermDoc -> TermDoc
-ppFieldType f x (RecordTDoc fields) = RecordTDoc ((f, ppTermDoc x) : fields)
-ppFieldType f x y = TermDoc $ char '#' <> bracesList [eqn f x, eqn "..." y]
-  where eqn l r = group (nest 2 (text l <+> equals <<$>> ppTermDoc r))
+ppFieldType :: TermDoc -> TermDoc -> TermDoc -> TermDoc
+ppFieldType (LabelDoc f) x (RecordTDoc fields) = RecordTDoc ((f, ppTermDoc x) : fields)
+ppFieldType f x y = TermDoc $ char '#' <> bracesList [eqn (ppTermDoc f) x, eqn (text "...") y]
+  where eqn l r = group (nest 2 (l <+> equals <<$>> ppTermDoc r))
+
+ppRecordSelector :: TermDoc -> TermDoc -> TermDoc
+ppRecordSelector x (LabelDoc f) = TermDoc (ppTermDoc x <> char '.' <> text f)
+ppRecordSelector x f = TermDoc (ppTermDoc x <> char '.' <> ppParens True (ppTermDoc f))
 
 ppAppParens :: Prec -> Doc -> Doc
 ppAppParens p d = ppParens (p > PrecApp) d
@@ -687,7 +693,9 @@ ppPat f p pat =
     PUnit      -> pure $ TermDoc $ text "()"
     PPair x y  -> ppPairValue <$> ppPat f PrecNone x <*> ppPat f PrecNone y
     PEmpty     -> pure $ TermDoc $ text "{}"
-    PField n x y -> ppFieldValue n <$> ppPat f PrecNone x <*> ppPat f PrecNone y
+    PField n x y -> ppFieldValue <$> ppPat f PrecNone n
+                    <*> ppPat f PrecNone x <*> ppPat f PrecNone y
+    PString s  -> pure $ LabelDoc s
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
 
@@ -708,10 +716,9 @@ ppFlatTermF' pp prec tf =
     PairRight t   -> TermDoc . ppParens (prec > PrecArg) . (<> (text ".R")) <$> pp' PrecArg t
     EmptyValue         -> pure $ RecordDoc []
     EmptyType          -> pure $ RecordTDoc []
-    FieldValue f x y   -> ppFieldValue f <$> pp PrecNone x <*> pp PrecNone y
-    FieldType f x y    -> ppFieldType f <$> pp PrecNone x <*> pp PrecNone y
-    RecordSelector t f -> TermDoc . ppParens (prec > PrecArg)
-                          . (<> (char '.' <> text f)) <$> pp' PrecArg t
+    FieldValue f x y   -> ppFieldValue <$> pp PrecNone f <*> pp PrecNone x <*> pp PrecNone y
+    FieldType f x y    -> ppFieldType <$> pp PrecNone f <*> pp PrecNone x <*> pp PrecNone y
+    RecordSelector t f -> ppRecordSelector <$> pp PrecArg t <*> pp PrecArg f
 
     CtorApp c l      -> TermDoc . ppAppList prec (ppIdent c) <$> traverse (pp' PrecArg) l
     DataTypeApp dt l -> TermDoc . ppAppList prec (ppIdent dt) <$> traverse (pp' PrecArg) l
@@ -721,7 +728,7 @@ ppFlatTermF' pp prec tf =
     ArrayValue _ vl -> TermDoc . list <$> traverse (pp' PrecNone) (V.toList vl)
     FloatLit v  -> pure $ TermDoc $ text (show v)
     DoubleLit v -> pure $ TermDoc $ text (show v)
-    StringLit s -> pure $ TermDoc $ text (show s)
+    StringLit s -> pure $ LabelDoc s
     ExtCns (EC _ v _) -> pure $ TermDoc $ text v
   where
     pp' p t = ppTermDoc <$> pp p t
@@ -764,14 +771,15 @@ freesPat p0 =
   case p0 of
     PVar  _ i tp -> tp `shiftR` i
     PUnused i tp -> tp `shiftR` i
-    PUnit      -> 0
-    PPair x y  -> freesPat x .|. freesPat y
-    PEmpty     -> 0
+    PUnit        -> 0
+    PPair x y    -> freesPat x .|. freesPat y
+    PEmpty       -> 0
     PField _ x y -> freesPat x .|. freesPat y
-    PCtor _ pl -> bitwiseOrOf folded (freesPat <$> pl)
+    PCtor _ pl   -> bitwiseOrOf folded (freesPat <$> pl)
+    PString _    -> 0
 
 freesDefEqn :: DefEqn BitSet -> BitSet
-freesDefEqn (DefEqn pl rhs) = 
+freesDefEqn (DefEqn pl rhs) =
     bitwiseOrOf folded (freesPat <$> pl) .|. rhs `shiftR` pc
   where pc = sum (patBoundVarCount <$> pl) 
 

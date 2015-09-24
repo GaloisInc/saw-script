@@ -188,7 +188,7 @@ AppArg : RecTerm { $1 }
 RecTerm :: { Term }
 RecTerm : AtomTerm              { $1 }
         | ConDotList '.' Var    { Var (identFromList1 ($3 : $1)) }
-        | RecTerm '.' FieldName { RecordSelector $1 $3 }
+        | RecTerm '.' FieldName { RecordSelector $1 (mkFieldNameTerm $3) }
         | RecTerm '.' nat       { mkTupleSelector $1 (fmap tokNat $3) }
 
 AtomTerm :: { Term }
@@ -400,10 +400,11 @@ termAsPat ex = do
       (UnitType{}, _) -> badPat "Tuple types"
       (PairType{}, _) -> badPat "Tuple types"
       (EmptyValue p, []) -> return $ Just (PEmpty p)
-      (FieldValue (fp, x) y, []) -> do
+      (FieldValue (f, x) y, []) -> do
+        pf <- termAsPat f
         px <- termAsPat x
         py <- termAsPat y
-        return (curry PField fp <$> px <*> py)
+        return (curry PField <$> pf <*> px <*> py)
       (RecordSelector{}, []) -> badPat "Record selector"
       (EmptyType{},[]) -> badPat "Record type"
       (FieldType{},[]) -> badPat "Record type"

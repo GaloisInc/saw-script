@@ -287,22 +287,26 @@ inferTerm tc uut = do
 
     Un.EmptyValue _ -> do
       return $ TypedValue (TCF EmptyValue) (TCF EmptyType)
-    Un.FieldValue (val -> f, t1) t2 -> do
-      (v1, tp1) <- inferTypedValue tc t1
+    Un.FieldValue (t1, t2) t3 -> do
+      (v1, _tp1) <- inferTypedValue tc t1
       (v2, tp2) <- inferTypedValue tc t2
-      return $ TypedValue (TCF (FieldValue f v1 v2)) (TCF (FieldType f tp1 tp2))
+      (v3, tp3) <- inferTypedValue tc t3
+      return $ TypedValue (TCF (FieldValue v1 v2 v3)) (TCF (FieldType v1 tp2 tp3))
     Un.EmptyType _ -> do
       return $ TypedValue (TCF EmptyType) (TCF (Sort (mkSort 0)))
-    Un.FieldType (val -> f, t1) t2 -> do
-      (tp1, s1) <- tcType tc t1
+    Un.FieldType (t1, t2) t3 -> do
+      (v1, _tp1) <- inferTypedValue tc t1
       (tp2, s2) <- tcType tc t2
-      return $ TypedValue (TCF (FieldType f tp1 tp2))
-                          (TCF (Sort (maxSort s1 s2)))
-    Un.RecordSelector ux (PosPair p f) -> do
+      (tp3, s3) <- tcType tc t3
+      return $ TypedValue (TCF (FieldType v1 tp2 tp3))
+                          (TCF (Sort (maxSort s2 s3)))
+    Un.RecordSelector ux uf -> do
       (x,tp) <- inferTypedValue tc ux
+      (f@(TCF (StringLit s)), _) <- inferTypedValue tc uf
+      let p = pos ux
       m <- reduceToRecordType tc p tp
-      case Map.lookup f m of
-        Nothing -> tcFail p $ "No field named " ++ f ++ " in record."
+      case Map.lookup s m of
+        Nothing -> tcFail p $ "No field named " ++ s ++ " in record."
         Just ftp -> return $ TypedValue (TCF (RecordSelector x f)) ftp
     Un.TypeConstraint ut _ utp -> do
       (tp,_) <- tcType tc utp
@@ -375,8 +379,8 @@ reduceToRecordType :: TermContext s -> Pos -> TCTerm -> TC s (Map FieldName TCTe
 reduceToRecordType tc p tp = do
   rtp <- reduce tc tp
   case rtp of
-    TCF EmptyType         -> return Map.empty
-    TCF (FieldType f x y) -> Map.insert f x <$> reduceToRecordType tc p y
+    TCF EmptyType -> return Map.empty
+    TCF (FieldType (TCF (StringLit f)) x y) -> Map.insert f x <$> reduceToRecordType tc p y
     _ -> tcFailD p $ text "Attempt to dereference field of term with type:" <$$>
                        nest 2 (ppTCTerm tc PrecNone rtp)
 
@@ -456,8 +460,9 @@ completePatT cc0 pats = (go <$> pats, cc')
             UPUnit        -> PUnit
             UPPair x y    -> PPair (go x) (go y)
             UPEmpty       -> PEmpty
-            UPField f x y -> PField f (go x) (go y)
+            UPField f x y -> PField (go f) (go x) (go y)
             UPCtor c l    -> PCtor c (go <$> l)
+            UPString s    -> PString s
 
 completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
 completePat cc0 pat = over _1 runIdentity $ completePatT cc0 (Identity pat)
@@ -556,6 +561,7 @@ patVarInfo = go
         go PEmpty         = return ()
         go (PField _ x y) = go x >> go y
         go (PCtor _ l)    = traverseOf_ folded go l
+        go PString{}      = return ()
 
 -- | Iterators over a structure of Pat Terms and returns corresponding
 -- structure with TCpats.
@@ -584,8 +590,9 @@ liftTCPatT tc0 a = do
       go PUnit        = pure $ TCPatF UPUnit
       go (PPair x y)  = TCPatF <$> (UPPair <$> go x <*> go y)
       go PEmpty       = pure $ TCPatF UPEmpty
-      go (PField f x y) = TCPatF <$> (UPField f <$> go x <*> go y)
+      go (PField f x y) = TCPatF <$> (UPField <$> go f <*> go x <*> go y)
       go (PCtor c pl) = TCPatF . UPCtor c <$> traverse go pl
+      go (PString s)  = pure $ TCPatF (UPString s)
   (,tcFinal) <$> traverse go a
 
 

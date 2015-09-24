@@ -23,6 +23,7 @@ module Verifier.SAW.Typechecker.Context
   , FlatTermF(..)
   , tcMkApp
   , tcAsApp
+  , tcAsStringLit
   , tcAsRecordValue
   , Prec, ppTCTerm
   , AnnPat(..)
@@ -173,8 +174,9 @@ data PatF p
    = UPUnit
    | UPPair p p
    | UPEmpty
-   | UPField FieldName p p
+   | UPField p p p
    | UPCtor Ident [p]
+   | UPString String
   deriving (Functor, Foldable, Traversable, Show)
 
 tcMkApp :: TCTerm -> [TCTerm] -> TCTerm
@@ -187,11 +189,17 @@ tcAsApp = go []
   where go r (TCApp f v) = go (v:r) f
         go r f = (f,r)
 
+tcAsStringLit :: TCTerm -> Maybe String
+tcAsStringLit t =
+  case t of
+    TCF (StringLit s) -> Just s
+    _ -> Nothing
+
 tcAsRecordValue :: TCTerm -> Maybe (Map FieldName TCTerm)
 tcAsRecordValue t =
   case t of
     TCF EmptyValue -> return Map.empty
-    TCF (FieldValue f v r) -> Map.insert f v <$> tcAsRecordValue r
+    TCF (FieldValue (TCF (StringLit f)) v r) -> Map.insert f v <$> tcAsRecordValue r
     _ -> Nothing
 
 asUPTuple :: AnnPat a -> Maybe [AnnPat a]
@@ -277,6 +285,7 @@ termFromPatF (UPPair x y)    = PairValue x y
 termFromPatF UPEmpty         = EmptyValue
 termFromPatF (UPField f x y) = FieldValue f x y
 termFromPatF (UPCtor c l)    = CtorApp c l
+termFromPatF (UPString s)    = StringLit s
 
 -- | Attempt to zip two patfs together.
 zipWithPatF :: (a -> b -> c) -> PatF a -> PatF b -> Maybe (PatF c)
@@ -286,9 +295,8 @@ zipWithPatF f x y =
     (UPPair x1 x2, UPPair y1 y2) -> Just $ UPPair (f x1 y1) (f x2 y2)
     (UPEmpty, UPEmpty) ->
           Just $ UPEmpty
-    (UPField fx x1 x2, UPField fy y1 y2)
-      | fx == fy ->
-          Just $ UPField fx (f x1 y1) (f x2 y2)
+    (UPField x1 x2 x3, UPField y1 y2 y3) ->
+          Just $ UPField (f x1 y1) (f x2 y2) (f x3 y3)
     (UPCtor cx lx, UPCtor cy ly)
       | (cx,length lx) == (cy, length ly) ->
           Just $ UPCtor cx (zipWith f lx ly)
@@ -644,9 +652,11 @@ ppTCPat (TCPatF pf) =
         UPUnit        -> text "()"
         UPPair x y    -> parens (ppTCPat x <+> text "#" <+> ppTCPat y)
         UPEmpty       -> text "{}"
-        UPField f x y -> braces (ppFld f (ppTCPat x) <> comma <+> ppFld "..." (ppTCPat y))
-          where ppFld s z = group $ nest 2 (text s <+> equals PPL.<$> z)
+        UPField f x y -> braces (ppFld (ppTCPat f) (ppTCPat x) <> comma <+>
+                                 ppFld (text "...") (ppTCPat y))
+          where ppFld s z = group $ nest 2 (s <+> equals PPL.<$> z)
         UPCtor c l    -> hsep (ppIdent c : fmap ppTCPat l)
+        UPString s    -> text (show s)
 
 ppTCTerm :: TermContext s -> Prec -> TCTerm -> Doc
 ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)

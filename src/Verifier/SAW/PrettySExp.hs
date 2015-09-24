@@ -97,8 +97,7 @@ ppSharedTermSExpWith cfg tm = doc
               FTermF (FieldValue{}) -> text "record"
               FTermF (EmptyType{}) -> text "Record"
               FTermF (FieldType{}) -> text "Record"
-              FTermF (RecordSelector _ fld) ->
-                text "proj" <> (braces (text fld))
+              FTermF (RecordSelector{}) -> text "proj"
               FTermF (CtorApp n _) -> text (show n)
               FTermF (DataTypeApp n _) -> text (show n)
               FTermF (Sort s) -> text (show s)

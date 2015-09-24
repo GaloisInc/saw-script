@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -271,11 +272,12 @@ indexUnPat upat =
     Un.PEmpty p -> do
         tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF EmptyType)
         return (UPatF p UPEmpty, tpv)
-    Un.PField (pf, x) y -> do
+    Un.PField (x, y) z -> do
         (xp, xtp) <- indexUnPat x
         (yp, ytp) <- indexUnPat y
-        tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (PairType xtp ytp))
-        return (UPatF (pos pf) (UPField (val pf) xp yp), tpv)
+        (zp, ztp) <- indexUnPat z
+        tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (FieldType xtp ytp ztp))
+        return (UPatF (pos z) (UPField xp yp zp), tpv)
 {-
     Un.PRecord p fpl
         | hasDups (val . fst <$> fpl) ->
@@ -291,6 +293,9 @@ indexUnPat upat =
       (c,tp) <- lift $ resolveCtor (globalContext tc) pnm (length pl)
       let vfn upl = UPatF (pos pnm) (UPCtor c upl)
       first vfn <$> indexPiPats pl tp
+    Un.PString p s -> do
+      tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (DataTypeApp "Prelude.String" []))
+      return (UPatF p (UPString s), tpv)
 
 -- | Variable, the type, and name, and type.
 type LocalCtxBinding s = (VarIndex s, VarIndex s, String, TCTerm)
@@ -375,9 +380,8 @@ matchUnPat il itcp iup = do
             (UPPair px py, Un.PPair p upx upy) ->
                  UPatF p <$> (UPPair <$> go px upx <*> go py upy)
             (UPEmpty, Un.PEmpty p) -> return $ UPatF p UPEmpty
-            (UPField f px py, Un.PField (f', upx) upy)
-              | f == val f' ->
-                 UPatF (pos f') <$> (UPField f <$> go px upx <*> go py upy)
+            (UPField f px py, Un.PField (f', upx) upy) ->
+                 UPatF (pos f') <$> (UPField <$> go f f' <*> go px upx <*> go py upy)
             (UPCtor c pl, Un.PCtor pnm upl) -> do
               tc <- lift $ gets usGlobalContext
               (c',_) <- lift $ lift $ resolveCtor (globalContext tc) pnm (length upl)
@@ -753,17 +757,14 @@ checkTypesEqual' p ctx tc x y = do
 
     ( (TCF EmptyValue, []), (TCF EmptyValue, [])) ->
         checkAll []
-    ( (TCF (FieldValue xf x1 x2), []), (TCF (FieldValue yf y1 y2), []))
-      | xf == yf ->
-        checkAll [(x1, y1), (x2, y2)]
+    ( (TCF (FieldValue x1 x2 x3), []), (TCF (FieldValue y1 y2 y3), [])) ->
+        checkAll [(x1, y1), (x2, y2), (x3, y3)]
     ( (TCF EmptyType, []), (TCF EmptyType, [])) ->
         checkAll []
-    ( (TCF (FieldType xf x1 x2), []), (TCF (FieldType yf y1 y2), []))
-      | xf == yf ->
-        checkAll [(x1, y1), (x2, y2)]
-    ( (TCF (RecordSelector xr xf), []), (TCF (RecordSelector yr yf), []))
-      | xf == yf ->
-        check' tc xr yr
+    ( (TCF (FieldType x1 x2 x3), []), (TCF (FieldType y1 y2 y3), [])) ->
+        checkAll [(x1, y1), (x2, y2), (x3, y3)]
+    ( (TCF (RecordSelector xr xf), []), (TCF (RecordSelector yr yf), [])) ->
+        checkAll [(xr, yr), (xf, yf)]
 
     ( (TCF (CtorApp xc xa), []), (TCF (CtorApp yc ya), []))
       | xc == yc ->
