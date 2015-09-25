@@ -290,13 +290,11 @@ mkTupleSelector t i =
     EQ -> PairLeft (_pos i) t
     GT -> mkTupleSelector (PairRight (_pos i) t) i{ val = val i - 1 }
 
-mkRecordValue :: Pos -> [(PosPair FieldName, Term)] -> Term
-mkRecordValue p xs = foldr FieldValue (EmptyValue p) xs'
-  where xs' = [ (mkFieldNameTerm x, y) | (x, y) <- xs ]
+mkRecordValue :: Pos -> [(Term, Term)] -> Term
+mkRecordValue p = foldr FieldValue (EmptyValue p)
 
-mkRecordType :: Pos -> [(PosPair FieldName, Term)] -> Term
-mkRecordType p xs = foldr FieldType (EmptyType p) xs'
-  where xs' = [ (mkFieldNameTerm x, y) | (x, y) <- xs ]
+mkRecordType :: Pos -> [(Term, Term)] -> Term
+mkRecordType p = foldr FieldType (EmptyType p)
 
 mkFieldNameTerm :: PosPair FieldName -> Term
 mkFieldNameTerm (PosPair p s) = StringLit p s

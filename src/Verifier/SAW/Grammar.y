@@ -188,7 +188,7 @@ AppArg : RecTerm { $1 }
 RecTerm :: { Term }
 RecTerm : AtomTerm              { $1 }
         | ConDotList '.' Var    { Var (identFromList1 ($3 : $1)) }
-        | RecTerm '.' FieldName { RecordSelector $1 (mkFieldNameTerm $3) }
+        | RecTerm '.' Label     { RecordSelector $1 $3 }
         | RecTerm '.' nat       { mkTupleSelector $1 (fmap tokNat $3) }
 
 AtomTerm :: { Term }
@@ -197,13 +197,15 @@ AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
          | Var                          { Var (fmap localIdent $1) }
          | unvar                        { Unused (fmap tokVar $1) }
          | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
-         |     '(' sepBy(Term, ',') ')'     { parseParen Paren mkTupleValue (pos $1) $2 }
-         | '#' '(' sepBy(Term, ',') ')'    {% parseTParen (pos $1) $3 }
-         |     '[' sepBy(Term, ',') ']'     { VecLit (pos $1) $2 }
-         |     '{' recList('=',   Term) '}' { mkRecordValue (pos $1) $2 }
-         | '#' '{' recList('::', LTerm) '}' { mkRecordType  (pos $1) $3 }
-         |     '(' Term '|' Term ')'        { PairValue (pos $1) $2 $4 }
-         | '#' '(' Term '|' Term ')'        { PairType (pos $1) $3 $5 }
+         |     '(' sepBy(Term, ',') ')'       { parseParen Paren mkTupleValue (pos $1) $2 }
+         | '#' '(' sepBy(Term, ',') ')'       {% parseTParen (pos $1) $3 }
+         |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
+         |     '{' sepBy(FieldValue, ',') '}' { mkRecordValue (pos $1) $2 }
+         | '#' '{' sepBy(FieldType, ',') '}'  { mkRecordType  (pos $1) $3 }
+         |     '(' Term '|' Term ')'          { PairValue (pos $1) $2 $4 }
+         | '#' '(' Term '|' Term ')'          { PairType (pos $1) $3 $5 }
+         |     '{' FieldValue '|' Term '}'    { FieldValue $2 $4 }
+         | '#' '{' FieldType '|' Term '}'     { FieldType $3 $5 }
 
 PiArg :: { PiArg }
 PiArg : ParamType AppArg {% mkPiArg ($1, $2) }
@@ -225,6 +227,16 @@ Var : var { fmap tokVar $1 }
 
 FieldName :: { PosPair FieldName }
 FieldName : var { fmap tokVar $1 }
+
+Label :: { Term }
+Label : FieldName    { mkFieldNameTerm $1 }
+      | '(' Term ')' { $2 }
+
+FieldValue :: { (Term, Term) }
+FieldValue : Label '=' Term { ($1, $3) }
+
+FieldType :: { (Term, Term) }
+FieldType : Label '::' LTerm { ($1, $3) }
 
 opt(q) : { Nothing }
        | q { Just $1 }
