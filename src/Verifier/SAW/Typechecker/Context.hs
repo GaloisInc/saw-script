@@ -652,8 +652,7 @@ ppTCPat (TCPatF pf) =
         UPUnit        -> text "()"
         UPPair x y    -> parens (ppTCPat x <+> text "#" <+> ppTCPat y)
         UPEmpty       -> text "{}"
-        UPField f x y -> braces (ppFld (ppTCPat f) (ppTCPat x) <> comma <+>
-                                 ppFld (text "...") (ppTCPat y))
+        UPField f x y -> braces (ppFld (ppTCPat f) (ppTCPat x) <+> char '|' <+> (ppTCPat y))
           where ppFld s z = group $ nest 2 (s <+> equals PPL.<$> z)
         UPCtor c l    -> hsep (ppIdent c : fmap ppTCPat l)
         UPString s    -> text (show s)

@@ -662,12 +662,12 @@ ppPairType x y = TermDoc $ char '#' <> parens (ppTermDoc x <+> char '|' <+> ppTe
 
 ppFieldValue :: TermDoc -> TermDoc -> TermDoc -> TermDoc
 ppFieldValue (LabelDoc f) x (RecordDoc fields) = RecordDoc ((f, ppTermDoc x) : fields)
-ppFieldValue f x y = TermDoc $ bracesList [eqn (ppTermDoc f) x, eqn (text "...") y]
+ppFieldValue f x y = TermDoc $ braces (eqn (ppTermDoc f) x <+> char '|' <+> ppTermDoc y)
   where eqn l r = group (nest 2 (l <+> equals <<$>> ppTermDoc r))
 
 ppFieldType :: TermDoc -> TermDoc -> TermDoc -> TermDoc
 ppFieldType (LabelDoc f) x (RecordTDoc fields) = RecordTDoc ((f, ppTermDoc x) : fields)
-ppFieldType f x y = TermDoc $ char '#' <> bracesList [eqn (ppTermDoc f) x, eqn (text "...") y]
+ppFieldType f x y = TermDoc $ char '#' <> braces (eqn (ppTermDoc f) x <+> char '|' <+> ppTermDoc y)
   where eqn l r = group (nest 2 (l <+> equals <<$>> ppTermDoc r))
 
 ppRecordSelector :: TermDoc -> TermDoc -> TermDoc
