@@ -31,6 +31,7 @@ module Verifier.SAW.UntypedAST
   , Pat(..), ppPat
   , mkPTuple
   , mkPRecord
+  , mkFieldNamePat
   , SimplePat(..)
   , FieldName
   , Ident, localIdent, asLocalIdent, mkIdent, identModule, setIdentModule
@@ -153,9 +154,8 @@ data Pat
 mkPTuple :: Pos -> [Pat] -> Pat
 mkPTuple p = foldr (PPair p) (PUnit p)
 
-mkPRecord :: Pos -> [(PosPair FieldName, Pat)] -> Pat
-mkPRecord p xs = foldr PField (PEmpty p) xs'
-  where xs' = [ (mkFieldNamePat x, y) | (x, y) <- xs ]
+mkPRecord :: Pos -> [(Pat, Pat)] -> Pat
+mkPRecord p = foldr PField (PEmpty p)
 
 mkFieldNamePat :: PosPair FieldName -> Pat
 mkFieldNamePat (PosPair p s) = PString p s

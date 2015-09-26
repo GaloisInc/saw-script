@@ -142,15 +142,23 @@ Pat : AtomPat           { $1 }
     | ConDotList list1(AtomPat) { PCtor (identFromList1 $1) $2 }
 
 AtomPat :: { Pat }
-AtomPat : SimplePat                 { PSimple $1 }
-        | ConDotList                { PCtor (identFromList1 $1) [] }
-        | '(' sepBy(Pat, ',') ')'   { parseParen (\_ v -> v) mkPTuple (pos $1) $2 }
-        | '(' Pat '|' Pat ')'       { PPair (pos $1) $2 $4 }
-        | '{' recList('=', Pat) '}' { mkPRecord (pos $1) $2 }
+AtomPat : SimplePat                    { PSimple $1 }
+        | ConDotList                   { PCtor (identFromList1 $1) [] }
+        | '(' sepBy(Pat, ',') ')'      { parseParen (\_ v -> v) mkPTuple (pos $1) $2 }
+        | '(' Pat '|' Pat ')'          { PPair (pos $1) $2 $4 }
+        | '{' sepBy(FieldPat, ',') '}' { mkPRecord (pos $1) $2 }
+        | '{' FieldPat '|' Pat '}'     { PField $2 $4 }
 
 SimplePat :: { SimplePat }
 SimplePat : unvar { PUnused (fmap tokVar $1) }
           | Var   { PVar $1 }
+
+LabelPat :: { Pat }
+LabelPat : FieldName   { mkFieldNamePat $1 }
+         | '(' Pat ')' { $2 }
+
+FieldPat :: { (Pat, Pat) }
+FieldPat : LabelPat '=' Pat { ($1, $3) }
 
 Term :: { Term }
 Term : TTerm { $1 }
