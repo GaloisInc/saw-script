@@ -35,6 +35,7 @@ import qualified Cryptol.ModuleSystem.Name as C (unpack)
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
+import Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
@@ -665,3 +666,12 @@ exportRecordValue fields v =
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
+
+exportFiniteValue :: FiniteValue -> V.Value
+exportFiniteValue fv =
+  case fv of
+    FVBit b    -> V.VBit b
+    FVWord w x -> V.VWord (V.mkBv (toInteger w) x)
+    FVVec t vs -> V.VSeq (t == FTBit) (map exportFiniteValue vs)
+    FVTuple vs -> V.VTuple (map exportFiniteValue vs)
+    FVRec vm   -> V.VRecord [ (C.mkName n, exportFiniteValue v) | (n, v) <- Map.assocs vm ]
