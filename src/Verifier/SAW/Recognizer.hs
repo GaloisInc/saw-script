@@ -43,6 +43,7 @@ module Verifier.SAW.Recognizer
   , asPi
   , asPiList
   , asLocalVar
+  , asExtCns
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -241,6 +242,13 @@ asPiList = go []
 asLocalVar :: (Monad m, Termlike t) => Recognizer m t DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = fail "not a local variable"
+
+asExtCns :: (Monad m, Termlike t) => Recognizer m t (ExtCns t)
+asExtCns t = do
+  ftf <- asFTermF t
+  case ftf of
+    ExtCns ec -> return ec
+    _         -> fail "asExtCns"
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: (Monad f, Termlike t) => Recognizer f t Bool
