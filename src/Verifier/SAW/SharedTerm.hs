@@ -155,8 +155,6 @@ module Verifier.SAW.SharedTerm
   , instantiateVar
   , instantiateVarList
   , betaNormalize
-  , extIdx
-  , extName
   , getAllExts
   , getAllExtSet
   , getConstantSet
@@ -185,9 +183,6 @@ import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef (IORef)
-import Data.List (sortBy)
-import Data.Ord (comparing)
-
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -1303,43 +1298,16 @@ whenModified b f m = ChangeT $ do
     Original{} -> return (Original b)
     Modified a -> Modified <$> f a
 
-extIdx :: SharedTerm s -> Maybe VarIndex
-extIdx (unwrapTermF -> FTermF (ExtCns ec)) = Just (ecVarIndex ec)
-extIdx _ = Nothing
-
-extName :: SharedTerm s -> Maybe String
-extName (unwrapTermF -> FTermF (ExtCns ec)) = Just (ecName ec)
-extName _ = Nothing
-
 -- | Return a list of all ExtCns subterms in the given term, sorted by
 -- index. Does not traverse the unfoldings of @Constant@ terms.
-getAllExts :: SharedTerm s -> [SharedTerm s]
-getAllExts t = sortBy (comparing extIdx) $ Set.toList args
-    where (seen, exts) = getExtCns (Set.empty, Set.empty) t
-          -- RWD: FIXME? why define and use 'args'?  Why is 'exts' not the right answer?
-          tf = unwrapTermF t
-          args = snd $ foldl' getExtCns (seen, exts) tf
-
-          getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
-          getExtCns (is, a) t'@(STApp idx (FTermF (ExtCns _))) =
-            (Set.insert idx is, Set.insert t' a)
-          getExtCns (is, a) t'@(Unshared (FTermF (ExtCns _))) =
-            (is, Set.insert t' a)
-          getExtCns acc (STApp _ (Constant _ _ _)) = acc
-          getExtCns acc (Unshared (Constant _ _ _)) = acc
-          getExtCns (is, a) (STApp idx tf') =
-            foldl' getExtCns (Set.insert idx is, a) tf'
-          getExtCns acc (Unshared tf') =
-            foldl' getExtCns acc tf'
+getAllExts :: SharedTerm s -> [ExtCns (SharedTerm s)]
+getAllExts t = Set.toList (getAllExtSet t)
 
 -- | Return a set of all ExtCns subterms in the given term.
 --   Does not traverse the unfoldings of @Constant@ terms.
 getAllExtSet :: SharedTerm s -> Set.Set (ExtCns (SharedTerm s))
-getAllExtSet t = exts
-    where (_seen, exts) = getExtCns (Set.empty, Set.empty) t
-          -- RWD: FIXME? do we need the double call as above?
-
-          getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
+getAllExtSet t = snd $ getExtCns (Set.empty, Set.empty) t
+    where getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
           getExtCns (is, a) (STApp idx (FTermF (ExtCns ec))) =
             (Set.insert idx is, Set.insert ec a)
           getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =
