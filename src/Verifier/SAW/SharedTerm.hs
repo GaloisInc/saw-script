@@ -190,11 +190,6 @@ import Data.Ord (comparing)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-#if __GLASGOW_HASKELL__ < 706
-import qualified Data.Map as StrictMap
-#else
-import qualified Data.Map.Strict as StrictMap
-#endif
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 import Data.Typeable
@@ -807,29 +802,32 @@ betaNormalize sc t0 =
 --------------------------------------------------------------------------------
 -- Pretty printing
 
-type SharedTermMap s v = StrictMap.Map (SharedTerm s) v
-
-type OccurenceMap s = SharedTermMap s Word64
+type OccurrenceMap s = IntMap (SharedTerm s, Word64)
 
 -- | Returns map that associated each term index appearing in the term
--- to the number of occurences in the shared term.
-scTermCount :: SharedTerm s -> OccurenceMap s
-scTermCount t0 = execState (rec [t0]) StrictMap.empty
-  where rec :: [SharedTerm s] -> State (OccurenceMap s) ()
-        rec [] = return ()
-        rec (t:r) = do
-          m <- get
-          case StrictMap.lookup t m of
-            Just n -> do
-              put $ StrictMap.insert t (n+1) m
-              rec r
-            Nothing -> do
-              when (looseVars t == 0) $ put (StrictMap.insert t 1 m)
+-- to the number of occurrences in the shared term.
+scTermCount :: SharedTerm s -> OccurrenceMap s
+scTermCount t0 = execState (go [t0]) IntMap.empty
+  where go :: [SharedTerm s] -> State (OccurrenceMap s) ()
+        go [] = return ()
+        go (t:r) =
+          case t of
+            Unshared _ -> recurse
+            STApp i _ -> do
+              m <- get
+              case IntMap.lookup i m of
+                Just (_, n) -> do
+                  put $ n `seq` IntMap.insert i (t, n+1) m
+                  go r
+                Nothing -> do
+                  when (looseVars t == 0) $ put (IntMap.insert i (t, 1) m)
+                  recurse
+          where
+            recurse = do
               let (h,args) = asApplyAll t
               case unwrapTermF h of
-                Constant _ _ _ -> rec (args ++ r)
-                _ -> rec (Fold.foldr' (:) (args++r) (unwrapTermF h))
---              rec (Fold.foldr' (:) r (unwrapTermF t))
+                Constant{} -> go (args ++ r)
+                tf -> go (Fold.foldr' (:) (args++r) tf)
 
 lineSep :: [Doc] -> Doc
 lineSep l = hcat (punctuate line l)
@@ -842,7 +840,7 @@ scPrettyTermDoc t0
         text "    }" <$$>
         text " in " <> align (ppTermDoc (ppt lcls0 PrecNone t0))
   where lcls0 = emptyLocalVarDoc
-        cm = scTermCount t0 -- Occurence map
+        cm = scTermCount t0 -- Occurrence map
         -- Return true if variable should be introduced to name term.
         shouldName :: SharedTerm s -> Word64 -> Bool
         shouldName t c =
@@ -861,25 +859,26 @@ scPrettyTermDoc t0
             _ -> c > 1
 
         -- Terms bound in map.
-        bound :: [SharedTerm s]
-        bound = [ t | (t,c) <- Map.toList cm, shouldName t c ]
+        bound :: [(TermIndex, SharedTerm s)]
+        bound = [ (i, t) | (i, (t,c)) <- IntMap.assocs cm, shouldName t c ]
 
         var :: Word64 -> Doc
         var n = char 'x' <> integer (toInteger n)
 
         lets = [ var n <+> char '=' <+> ppTermDoc (ppTermF ppt lcls0 PrecNone (unwrapTermF t)) <> char ';'
-               | (t,n) <- bound `zip` [0..]
+               | ((_, t), n) <- bound `zip` [0..]
                ]
 
-        dm :: SharedTermMap s Doc
-        dm = Fold.foldl' insVar StrictMap.empty (bound `zip` [0..])
-          where insVar m (t,n) = StrictMap.insert t (var n) m
+        dm :: IntMap Doc
+        dm = Fold.foldl' insVar IntMap.empty (bound `zip` [0..])
+          where insVar m ((i, _), n) = IntMap.insert i (var n) m
 
         ppt :: LocalVarDoc -> Prec -> SharedTerm s -> TermDoc
-        ppt lcls p t =
-          case StrictMap.lookup t dm of
+        ppt lcls p (Unshared tf) = ppTermF ppt lcls p tf
+        ppt lcls p (STApp i tf) =
+          case IntMap.lookup i dm of
             Just d -> TermDoc d
-            Nothing -> ppTermF ppt lcls p (unwrapTermF t)
+            Nothing -> ppTermF ppt lcls p tf
 
 scPrettyTerm :: SharedTerm s -> String
 scPrettyTerm t = show (scPrettyTermDoc t)
