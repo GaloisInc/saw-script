@@ -241,10 +241,6 @@ axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 -- | Implemented as primitive;
 -- Only defined for boolean, vector, stream, tuple, record, and function types
-primitive zero :: (a :: sort 0) -> a;
-
--- | Implemented as primitive;
--- Only defined for boolean, vector, stream, tuple, record, and function types
 primitive unary :: ((n :: Nat) -> bitvector n -> bitvector n)
                 -> (Bool -> Bool)
                 -> (a :: sort 0) -> a -> a;
@@ -277,8 +273,6 @@ cmpBoolLt x y k = or (and (not x) y) (cmpBoolEq x y k);
 
 lt :: (a :: sort 0) -> a -> a -> Bool;
 lt = comparison Bool cmpBvLt cmpBoolLt False;
-
-axiom zero_Bool :: Eq Bool (zero Bool) False;
 
 axiom binary_Bool ::
   -- (f :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)) ->

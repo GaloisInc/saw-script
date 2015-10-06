@@ -216,31 +216,6 @@ genOp =
     let g i = delay $ apply f (ready (VNat (fromIntegral i)))
     liftM VVector $ V.generateM (fromIntegral n) g
 
--- zero :: (a :: sort 0) -> a;
-zeroOp :: (MonadLazy m, Show e) => (Integer -> m (Value m b w e))
-       -> m (Value m b w e) -> Value m b w e -> Value m b w e
-zeroOp bvZ boolZ mkStream = strictFun go
-  where
-    go t =
-      case t of
-        VPiType _ f -> return $ VFun $ \x -> f x >>= go
-        VUnitType -> return VUnit
-        VPairType t1 t2 -> do z1 <- delay (go t1)
-                              z2 <- delay (go t2)
-                              return (VPair z1 z2)
-        VEmptyType -> return VEmpty
-        VFieldType f t1 t2 -> do z1 <- delay (go t1)
-                                 v2 <- go t2
-                                 return (VField f z1 v2)
-        VDataType "Prelude.Bool" [] -> boolZ
-        VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []] -> bvZ n
-        VDataType "Prelude.Vec" [VNat n, t'] -> do
-          liftM (VVector . V.replicate (fromInteger n)) $ delay (go t')
-        VDataType "Prelude.Stream" [t'] -> do
-          thunk <- delay (go t')
-          applyAll mkStream [ready t', ready (VFun (\_ -> force thunk))]
-        _ -> fail $ "zero: invalid type instance: " ++ show t
-
 --unary :: ((n :: Nat) -> bitvector n -> bitvector n)
 --       -> (Bool -> Bool)
 --       -> (a :: sort 0) -> a -> a;

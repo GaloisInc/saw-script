@@ -166,7 +166,6 @@ constMap = Map.fromList
   , ("Prelude.bvNat", bvNatOp)
   , ("Prelude.bvToNat", Prims.bvToNatOp)
   -- Overloaded
-  , ("Prelude.zero", zeroOp)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
   , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
   , ("Prelude.eq", eqOp)
@@ -344,11 +343,6 @@ bvSShROp =
   wordFun $ \w -> return $
   Prims.natFun'' "bvSShrOp" $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
 -- FIXME: make this work for bvToNat arguments
-
-zeroOp :: SValue
-zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
-  where bvZ n = return (vWord (bitVector (fromInteger n) 0))
-        boolZ = return (VBool svFalse)
 
 eqOp :: SValue
 eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp

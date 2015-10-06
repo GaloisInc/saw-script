@@ -289,7 +289,6 @@ constMap = Map.fromList
   , ("Prelude.bvNat", bvNatOp)
   , ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
-  , ("Prelude.zero", zeroOp)
   , ("Prelude.unary", Prims.unaryOp mkStreamOp streamGetOp)
   , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
   , ("Prelude.eq", eqOp)
@@ -419,11 +418,6 @@ bvShiftROp =
       VWord w -> vWord (bvShiftR c w (fromInteger (unsigned i)))
         where c = toBool (runIdentity (force x))
       _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftROp: " ++ show xs
-
-zeroOp :: CValue
-zeroOp = Prims.zeroOp bvZ boolZ mkStreamOp
-  where bvZ n = return (vWord (Prim.bv (fromInteger n) 0))
-        boolZ = return (vBool False)
 
 eqOp :: CValue
 eqOp = Prims.eqOp trueOp andOp boolOp bvOp
