@@ -379,7 +379,20 @@ ecCompl :: (a :: KType) -> ty a -> ty a;
 ecCompl a = unary bvNot not (ty a);
 
 ecZero :: (a :: KType) -> ty a;
-ecZero a = zero (ty a);
+ecZero TCBit = False;
+ecZero (TCFun a b) = (\(_::ty a) -> ecZero b);
+ecZero TCUnit = ();
+ecZero (TCPair a b) = (ecZero a | ecZero b);
+ecZero TCEmpty = {};
+ecZero (TCField s a b) = { (s) = ecZero a | ecZero b };
+ecZero (TCSeq (TCNum n) TCBit) = bvNat n 0;
+ecZero (TCSeq TCInf TCBit) = streamConst Bool False;
+ecZero (TCSeq n (TCSeq m a)) = seqConst n (seq m (ty a)) (ecZero (TCSeq m a));
+ecZero (TCSeq n (TCFun a b)) = seqConst n (ty a -> ty b) (ecZero (TCFun a b));
+ecZero (TCSeq n TCUnit) = seqConst n #() ();
+ecZero (TCSeq n (TCPair a b)) = seqConst n #(ty a | ty b) (ecZero (TCPair a b));
+ecZero (TCSeq n TCEmpty) = seqConst n #{} {};
+ecZero (TCSeq n (TCField s a b)) = seqConst n #{ (s) :: ty a | ty b } (ecZero (TCField s a b));
 
 -- Sequences
 ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
