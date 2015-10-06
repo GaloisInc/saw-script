@@ -376,7 +376,20 @@ ecXor :: (a :: KType) -> ty a -> ty a -> ty a;
 ecXor a = binary bvXor xor (ty a);
 
 ecCompl :: (a :: KType) -> ty a -> ty a;
-ecCompl a = unary bvNot not (ty a);
+ecCompl TCBit = not;
+ecCompl (TCFun a b) = compose (ty a) (ty b) (ty b) (ecCompl b);
+ecCompl TCUnit = unitUnary;
+ecCompl (TCPair a b) = pairUnary (ty a) (ty b) (ecCompl a) (ecCompl b);
+ecCompl TCEmpty = emptyUnary;
+ecCompl (TCField s a b) = fieldUnary s (ty a) (ty b) (ecCompl a) (ecCompl b);
+ecCompl (TCSeq (TCNum n) TCBit) = bvNot n;
+ecCompl (TCSeq TCInf TCBit) = streamMap Bool Bool not;
+ecCompl (TCSeq n (TCSeq m a)) = seqMap (seq m (ty a)) (seq m (ty a)) n (ecCompl (TCSeq m a));
+ecCompl (TCSeq n (TCFun a b)) = seqMap (ty a -> ty b) (ty a -> ty b) n (ecCompl (TCFun a b));
+ecCompl (TCSeq n TCUnit) = seqMap #() #() n unitUnary;
+ecCompl (TCSeq n (TCPair a b)) = seqMap #(ty a | ty b) #(ty a | ty b) n (ecCompl (TCPair a b));
+ecCompl (TCSeq n TCEmpty) = seqMap #{} #{} n emptyUnary;
+ecCompl (TCSeq n (TCField s a b)) = seqMap (ty (TCField s a b)) (ty (TCField s a b)) n (ecCompl (TCField s a b));
 
 ecZero :: (a :: KType) -> ty a;
 ecZero TCBit = False;
