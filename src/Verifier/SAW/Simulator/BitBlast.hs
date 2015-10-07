@@ -276,7 +276,6 @@ beConstMap be = Map.fromList
   , ("Prelude.bvNat", bvNatOp be)
   , ("Prelude.bvToNat", Prims.bvToNatOp)
   -- Overloaded
-  , ("Prelude.binary", Prims.binaryOp mkStreamOp streamGetOp)
   , ("Prelude.eq", eqOp be)
   , ("Prelude.comparison", Prims.comparisonOp)
   ]
