@@ -189,8 +189,35 @@ ePFin :: (n :: Num) -> PFin n;
 ePFin (TCNum n) = PFinNum n;
 -- ePFin TCInf is undefined
 
-axiom ePArith :: (a :: KType) -> PArith a;
-axiom ePCmp :: (a :: KType) -> PCmp a;
+ePArith :: (a :: KType) -> PArith a;
+--ePArith TCBit = undefined;
+ePArith (TCSeq n TCBit) = PArithWord n (ePFin n);
+ePArith (TCSeq n (TCSeq m a)) = PArithSeq n (TCSeq m a) (ePArith (TCSeq m a));
+ePArith (TCSeq n (TCFun a b)) = PArithSeq n (TCFun a b) (ePArith (TCFun a b));
+ePArith (TCSeq n TCUnit) = PArithSeq n TCUnit (ePArith TCUnit);
+ePArith (TCSeq n (TCPair a b)) = PArithSeq n (TCPair a b) (ePArith (TCPair a b));
+ePArith (TCSeq n TCEmpty) = PArithSeq n TCEmpty (ePArith TCEmpty);
+ePArith (TCSeq n (TCField s a b)) = PArithSeq n (TCField s a b) (ePArith (TCField s a b));
+ePArith (TCFun a b) = PArithFun a b (ePArith b);
+ePArith TCUnit = PArithUnit;
+ePArith (TCPair a b) = PArithPair a b (ePArith a) (ePArith b);
+ePArith TCEmpty = PArithEmpty;
+ePArith (TCField s a b) = PArithField s a b (ePArith a) (ePArith b);
+
+ePCmp :: (a :: KType) -> PCmp a;
+ePCmp (TCSeq n TCBit) = PCmpWord n (ePFin n);
+ePCmp (TCSeq n (TCSeq m a)) = PCmpSeq n (TCSeq m a) (ePFin n) (ePCmp (TCSeq m a));
+--ePCmp (TCSeq n (TCFun a b)) = PCmpSeq n (TCFun a b) (ePFin n) (ePCmp (TCFun a b));
+ePCmp (TCSeq n TCUnit) = PCmpSeq n TCUnit (ePFin n) (ePCmp TCUnit);
+ePCmp (TCSeq n (TCPair a b)) = PCmpSeq n (TCPair a b) (ePFin n) (ePCmp (TCPair a b));
+ePCmp (TCSeq n TCEmpty) = PCmpSeq n TCEmpty (ePFin n) (ePCmp TCEmpty);
+ePCmp (TCSeq n (TCField s a b)) = PCmpSeq n (TCField s a b) (ePFin n) (ePCmp (TCField s a b));
+ePCmp TCBit = PCmpBit;
+--ePCmp (TCFun a b) = undefined;
+ePCmp TCUnit = PCmpUnit;
+ePCmp (TCPair a b) = PCmpPair a b (ePCmp a) (ePCmp b);
+ePCmp TCEmpty = PCmpEmpty;
+ePCmp (TCField s a b) = PCmpField s a b (ePCmp a) (ePCmp b);
 
 --------------------------------------------------------------------------------
 -- Auxiliary functions
@@ -262,11 +289,32 @@ seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) -> seq n a -> seq n a 
 seqBinary (TCNum n) a f = zipWith a a a f n;
 seqBinary TCInf a f = streamMap2 a a a f;
 
+unitUnary :: #() -> #();
+unitUnary _ = ();
+
+emptyUnary :: #{} -> #{};
+emptyUnary _ = {};
+
 unitBinary :: #() -> #() -> #();
 unitBinary _ _ = ();
 
-pairBinary :: (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b) -> #(a, b) -> #(a, b) -> #(a, b);
-pairBinary a b f g x y = (f x.1 y.1, g x.2 y.2);
+pairUnary :: (a b :: sort 0) -> (a -> a) -> (b -> b) -> #(a | b) -> #(a | b);
+pairUnary _ _ f g (x | y) = (f x | g y);
+
+pairBinary :: (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b)
+           -> #(a | b) -> #(a | b) -> #(a | b);
+pairBinary a b f g (x1 | x2) (y1 | y2) = (f x1 y1 | g x2 y2);
+
+emptyBinary :: #{} -> #{} -> #{};
+emptyBinary _ _ = {};
+
+fieldUnary :: (s :: String) -> (a b :: sort 0) -> (a -> a) -> (b -> b)
+         -> #{ (s) :: a | b } -> #{ (s) :: a | b };
+fieldUnary s _ _ f g { (_) = x | y } = { (s) = f x | g y };
+
+fieldBinary :: (s :: String) -> (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b)
+            -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> #{ (s) :: a | b };
+fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g x2 y2 };
 
 funBinary :: (a b :: sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
@@ -276,7 +324,14 @@ primitive arithBinaryBool :: Bool -> Bool -> Bool;
 
 arithUnary :: ((n :: Nat) -> bitvector n -> bitvector n)
            -> (a :: KType) -> PArith a -> ty a -> ty a;
-arithUnary bvOp a _ = unary bvOp arithUnaryBool (ty a);
+arithUnary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
+arithUnary bvOp _ (PArithSeq n a pa) = seqMap (ty a) (ty a) n (arithUnary bvOp a pa);
+arithUnary bvOp _ PArithUnit = unitUnary;
+arithUnary bvOp _ (PArithPair a b pa pb) =
+  pairUnary (ty a) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
+arithUnary bvOp _ PArithEmpty = emptyUnary;
+arithUnary bvOp _ (PArithField s a b pa pb) =
+  fieldUnary s (ty a) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
 
 arithBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
             -> (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
