@@ -336,7 +336,15 @@ arithUnary bvOp _ (PArithField s a b pa pb) =
 
 arithBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
             -> (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-arithBinary bvOp a _ = binary bvOp arithBinaryBool (ty a);
+arithBinary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
+arithBinary bvOp _ (PArithSeq n a pa) = seqBinary n (ty a) (arithBinary bvOp a pa);
+arithBinary bvOp _ (PArithFun a b pb) = funBinary (ty a) (ty b) (arithBinary bvOp b pb);
+arithBinary bvOp _ PArithUnit = unitBinary;
+arithBinary bvOp _ (PArithPair a b pa pb) =
+  pairBinary (ty a) (ty b) (arithBinary bvOp a pa) (arithBinary bvOp b pb);
+arithBinary bvOp _ PArithEmpty = emptyBinary;
+arithBinary bvOp _ (PArithField s a b pa pb) =
+  fieldBinary s (ty a) (ty b) (arithBinary bvOp a pa) (arithBinary bvOp b pb);
 
 axiom eq_binary_bvsub :: (n :: Nat) ->
                    Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
