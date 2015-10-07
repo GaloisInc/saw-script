@@ -326,6 +326,7 @@ arithUnary :: ((n :: Nat) -> bitvector n -> bitvector n)
            -> (a :: KType) -> PArith a -> ty a -> ty a;
 arithUnary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
 arithUnary bvOp _ (PArithSeq n a pa) = seqMap (ty a) (ty a) n (arithUnary bvOp a pa);
+arithUnary bvOp _ (PArithFun a b pb) = compose (ty a) (ty b) (ty b) (arithUnary bvOp b pb);
 arithUnary bvOp _ PArithUnit = unitUnary;
 arithUnary bvOp _ (PArithPair a b pa pb) =
   pairUnary (ty a) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
