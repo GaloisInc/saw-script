@@ -370,31 +370,6 @@ logicBinary bvOp bitOp (TCSeq n TCEmpty) = seqBinary n #{} emptyBinary;
 logicBinary bvOp bitOp (TCSeq n (TCField s a b)) =
    seqBinary n (ty (TCField s a b)) (logicBinary bvOp bitOp (TCField s a b));
 
-axiom eq_binary_bvsub :: (n :: Nat) ->
-                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
-                      (binary bvSub arithBinaryBool (Vec n Bool))
-                      (bvSub n);
-
-axiom eq_binary_bvadd :: (n :: Nat) ->
-                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
-                      (binary bvAdd arithBinaryBool (Vec n Bool))
-                      (bvAdd n);
-
-axiom eq_binary_bvand :: (n :: Nat) ->
-                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
-                      (binary bvAnd and (Vec n Bool))
-                      (bvAnd n);
-
-axiom eq_binary_bvor :: (n :: Nat) ->
-                  Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
-                     (binary bvOr or (Vec n Bool))
-                     (bvOr n);
-
-axiom eq_binary_bvxor :: (n :: Nat) ->
-                   Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
-                      (binary bvXor xor (Vec n Bool))
-                      (bvXor n);
-
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
