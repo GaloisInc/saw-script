@@ -346,6 +346,30 @@ arithBinary bvOp _ PArithEmpty = emptyBinary;
 arithBinary bvOp _ (PArithField s a b pa pb) =
   fieldBinary s (ty a) (ty b) (arithBinary bvOp a pa) (arithBinary bvOp b pb);
 
+logicBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
+            -> (Bool -> Bool -> Bool)
+            -> (a :: KType) -> ty a -> ty a -> ty a;
+logicBinary bvOp bitOp TCBit = bitOp;
+logicBinary bvOp bitOp (TCFun a b) = funBinary (ty a) (ty b) (logicBinary bvOp bitOp b);
+logicBinary bvOp bitOp TCUnit = unitBinary;
+logicBinary bvOp bitOp (TCPair a b) =
+  pairBinary (ty a) (ty b) (logicBinary bvOp bitOp a) (logicBinary bvOp bitOp b);
+logicBinary bvOp bitOp TCEmpty = emptyBinary;
+logicBinary bvOp bitOp (TCField s a b) =
+  fieldBinary s (ty a) (ty b) (logicBinary bvOp bitOp a) (logicBinary bvOp bitOp b);
+logicBinary bvOp bitOp (TCSeq (TCNum n) TCBit) = bvOp n;
+logicBinary bvOp bitOp (TCSeq TCInf TCBit) = streamMap2 Bool Bool Bool bitOp;
+logicBinary bvOp bitOp (TCSeq n (TCSeq m a)) =
+   seqBinary n (seq m (ty a)) (logicBinary bvOp bitOp (TCSeq m a));
+logicBinary bvOp bitOp (TCSeq n (TCFun a b)) =
+   seqBinary n (ty a -> ty b) (logicBinary bvOp bitOp (TCFun a b));
+logicBinary bvOp bitOp (TCSeq n TCUnit) = seqBinary n #() unitBinary;
+logicBinary bvOp bitOp (TCSeq n (TCPair a b)) =
+   seqBinary n #(ty a | ty b) (logicBinary bvOp bitOp (TCPair a b));
+logicBinary bvOp bitOp (TCSeq n TCEmpty) = seqBinary n #{} emptyBinary;
+logicBinary bvOp bitOp (TCSeq n (TCField s a b)) =
+   seqBinary n (ty (TCField s a b)) (logicBinary bvOp bitOp (TCField s a b));
+
 axiom eq_binary_bvsub :: (n :: Nat) ->
                    Eq (Vec n Bool -> Vec n Bool -> Vec n Bool)
                       (binary bvSub arithBinaryBool (Vec n Bool))
@@ -431,13 +455,13 @@ ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
 -- Logic
 
 ecAnd :: (a :: KType) -> ty a -> ty a -> ty a;
-ecAnd a = binary bvAnd and (ty a);
+ecAnd = logicBinary bvAnd and;
 
 ecOr :: (a :: KType) -> ty a -> ty a -> ty a;
-ecOr a = binary bvOr or (ty a);
+ecOr = logicBinary bvOr or;
 
 ecXor :: (a :: KType) -> ty a -> ty a -> ty a;
-ecXor a = binary bvXor xor (ty a);
+ecXor = logicBinary bvXor xor;
 
 ecCompl :: (a :: KType) -> ty a -> ty a;
 ecCompl TCBit = not;
