@@ -277,7 +277,6 @@ beConstMap be = Map.fromList
   , ("Prelude.bvToNat", Prims.bvToNatOp)
   -- Overloaded
   , ("Prelude.eq", eqOp be)
-  , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
 -- | Lifts a strict mux operation to a lazy mux

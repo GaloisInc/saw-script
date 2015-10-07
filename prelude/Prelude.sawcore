@@ -237,36 +237,6 @@ axiom eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
 axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 --------------------------------------------------------------------------------
--- Overloaded operations
-
--- | Implemented as primitive;
--- Only defined for boolean, vector, tuple, and record types
-primitive comparison :: (b :: sort 0)
-           -> ((n :: Nat) -> bitvector n -> bitvector n -> b -> b)
-           -> (Bool -> Bool -> b -> b)
-           -> b
-           -> (a :: sort 0) -> a -> a -> b;
-
-cmpBvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
-cmpBvEq n x y k = and (bvEq n x y) k;
-
-cmpBvLt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
-cmpBvLt n x y k = or (bvult n x y) (cmpBvEq n x y k);
-
-cmpBoolEq :: Bool -> Bool -> Bool -> Bool;
-cmpBoolEq x y k = and (boolEq x y) k;
-
-cmpBoolLt :: Bool -> Bool -> Bool -> Bool;
-cmpBoolLt x y k = or (and (not x) y) (cmpBoolEq x y k);
-
-lt :: (a :: sort 0) -> a -> a -> Bool;
-lt = comparison Bool cmpBvLt cmpBoolLt False;
-
-axiom eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
-                             (lt (Vec n Bool))
-                             (bvult n);
-
---------------------------------------------------------------------------------
 -- Pairs
 
 fst :: (a b :: sort 0) -> #(a, b) -> a;

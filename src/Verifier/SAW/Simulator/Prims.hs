@@ -248,36 +248,6 @@ eqOp trueOp andOp boolOp bvOp =
       v2 <- force thunk2
       go t v1 v2
 
--- comparison :: (b :: sort 0)
---            -> ((n :: Nat) -> bitvector n -> bitvector n -> b -> b)
---            -> (Bool -> Bool -> b -> b)
---            -> b
---            -> (a :: sort 0) -> a -> a -> b;
-comparisonOp :: (MonadLazy m, Show e) => Value m b w e
-comparisonOp =
-  constFun $
-  pureFun $ \bvOp ->
-  pureFun $ \boolOp ->
-  let go VUnitType VUnit VUnit k = return k
-      go (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) k = go' t1 x1 y1 =<< go' t2 x2 y2 k
-      go VEmptyType VEmpty VEmpty k = return k
-      go (VFieldType f t1 t2) (VField xf x1 x2) (VField yf y1 y2) k
-        | f == xf && f == yf = go' t1 x1 y1 =<< go t2 x2 y2 k
-      go (VDataType "Prelude.Bool" []) v1 v2 k = do
-        applyAll boolOp [ready v1, ready v2, ready k]
-      go (VDataType "Prelude.Vec" [n, VDataType "Prelude.Bool" []]) v1 v2 k = do
-        applyAll bvOp [ready n, ready v1, ready v2, ready k]
-      go (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) k = do
-        foldr (=<<) (return k) (zipWith (go' t') (V.toList vv1) (V.toList vv2))
-      go t _ _ _ = fail $ "comparison: invalid arguments: " ++ show t
-
-      go' t thunk1 thunk2 k = do
-        v1 <- force thunk1
-        v2 <- force thunk2
-        go t v1 v2 k
-
-  in pureFun $ \k -> pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2 k
-
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 atOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
      -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))

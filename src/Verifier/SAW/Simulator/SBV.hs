@@ -167,7 +167,6 @@ constMap = Map.fromList
   , ("Prelude.bvToNat", Prims.bvToNatOp)
   -- Overloaded
   , ("Prelude.eq", eqOp)
-  , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
 ------------------------------------------------------------

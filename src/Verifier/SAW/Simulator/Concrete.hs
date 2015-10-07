@@ -290,7 +290,6 @@ constMap = Map.fromList
   , ("Prelude.bvToNat", bvToNatOp)
   -- Overloaded
   , ("Prelude.eq", eqOp)
-  , ("Prelude.comparison", Prims.comparisonOp)
   ]
 
 bvToNatOp :: CValue
