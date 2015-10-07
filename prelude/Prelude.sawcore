@@ -241,12 +241,6 @@ axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 -- | Implemented as primitive;
 -- Only defined for boolean, vector, stream, tuple, record, and function types
-primitive unary :: ((n :: Nat) -> bitvector n -> bitvector n)
-                -> (Bool -> Bool)
-                -> (a :: sort 0) -> a -> a;
-
--- | Implemented as primitive;
--- Only defined for boolean, vector, stream, tuple, record, and function types
 primitive binary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
                  -> (Bool -> Bool -> Bool)
                  -> (a :: sort 0) -> a -> a -> a;
@@ -289,8 +283,6 @@ axiom eq_binary_and :: Eq (Bool -> Bool -> Bool) (binary bvAnd and Bool) and;
 -- eq_binary_and = binary_Bool bvAnd and; -- for some reason this doesn't typecheck
 axiom eq_binary_or :: Eq (Bool -> Bool -> Bool) (binary bvOr or Bool) or;
 -- eq_binary_or = binary_Bool bvOr or; -- for some reason this doesn't typecheck
-
-axiom eq_unary_not :: Eq (Bool -> Bool) (unary bvNot not Bool) not;
 
 axiom eq_bvult :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool)
                              (lt (Vec n Bool))
