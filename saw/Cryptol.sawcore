@@ -371,6 +371,45 @@ logicBinary bvOp bitOp (TCSeq n (TCField s a b)) =
    seqBinary n (ty (TCField s a b)) (logicBinary bvOp bitOp (TCField s a b));
 
 --------------------------------------------------------------------------------
+-- Comparisons
+
+boolCmp :: Bool -> Bool -> Bool -> Bool;
+boolCmp x y k = ite Bool x (and y k) (or y k);
+
+bvCmp :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
+
+vecCmp :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool -> Bool)
+       -> (Vec n a -> Vec n a -> Bool -> Bool);
+vecCmp n a f xs ys k =
+  foldr (Bool -> Bool) Bool n (\(f :: Bool -> Bool) -> f) k
+    (zipWith a a (Bool -> Bool) f n xs ys);
+
+unitCmp :: #() -> #() -> Bool -> Bool;
+unitCmp _ _ _ = False;
+
+emptyCmp :: #{} -> #{} -> Bool -> Bool;
+emptyCmp _ _ _ = False;
+
+pairCmp :: (a b :: sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
+        -> #(a | b) -> #(a | b) -> Bool -> Bool;
+pairCmp a b f g (x1 | x2) (y1 | y2) k = f x1 y1 (g x2 y2 k);
+
+fieldCmp :: (s :: String) -> (a b :: sort 0)
+         -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
+         -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> Bool -> Bool;
+fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
+
+cmpLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool -> Bool;
+cmpLt _ (PCmpWord _ (PFinNum n)) = bvCmp n;
+cmpLt _ PCmpBit = boolCmp;
+cmpLt _ (PCmpSeq _ a (PFinNum n) pa) = vecCmp n (ty a) (cmpLt a pa);
+cmpLt _ PCmpUnit = unitCmp;
+cmpLt _ (PCmpPair a b pa pb) = pairCmp (ty a) (ty b) (cmpLt a pa) (cmpLt b pb);
+cmpLt _ PCmpEmpty = emptyCmp;
+cmpLt _ (PCmpField s a b pa pb) = fieldCmp s (ty a) (ty b) (cmpLt a pa) (cmpLt b pb);
+
+--------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
 ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> seq bits Bool;
@@ -403,8 +442,7 @@ ecNeg = arithUnary bvNeg;
 
 -- Cmp
 ecLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
-ecLt a _ = lt (ty a);
---ecLt a pa x y = cmpLt a pa x y False;
+ecLt a pa x y = cmpLt a pa x y False;
 
 ecGt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
