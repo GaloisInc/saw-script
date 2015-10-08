@@ -1,4 +1,6 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Prims
@@ -13,6 +15,9 @@ module Verifier.SAW.Simulator.Prims where
 
 import Prelude hiding (sequence, mapM)
 
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 import Control.Monad (foldM, liftM)
 import Data.Bits
 import Data.Traversable
@@ -405,3 +410,45 @@ intToNatOp =
 --primitive natToInt :: Nat -> Integer;
 natToIntOp :: Monad m => Value m b w e
 natToIntOp = natFun' "natToInt" $ \x -> return $ VNat (fromIntegral x)
+
+muxValue :: forall m b w e. (MonadLazy m, Applicative m, Show e) =>
+            (w -> V.Vector b)
+         -> (b -> b -> b -> m b)
+         -> (b -> w -> w -> m w)
+         -> (b -> e -> e -> m e)
+         -> b -> Value m b w e -> Value m b w e -> m (Value m b w e)
+muxValue unpack bool word extra b = value
+  where
+    value :: Value m b w e -> Value m b w e -> m (Value m b w e)
+    value (VFun f)          (VFun g)          = return $ VFun $ \a -> do
+                                                  x <- f a
+                                                  y <- g a
+                                                  value x y
+    value VUnit             VUnit             = return VUnit
+    value (VPair x1 x2)     (VPair y1 y2)     = VPair <$> thunk x1 y1 <*> thunk x2 y2
+    value VEmpty            VEmpty            = return VEmpty
+    value (VField xf x1 x2) (VField yf y1 y2) | xf == yf
+                                              = VField xf <$> thunk x1 y1 <*> value x2 y2
+    value (VCtorApp i xv)   (VCtorApp j yv)   | i == j = VCtorApp i <$> thunks xv yv
+    value (VVector xv)      (VVector yv)      = VVector <$> thunks xv yv
+    value (VBool x)         (VBool y)         = VBool <$> bool b x y
+    value (VWord x)         (VWord y)         = VWord <$> word b x y
+    value (VNat m)          (VNat n)          | m == n = return $ VNat m
+    value (VString x)       (VString y)       | x == y = return $ VString x
+    value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
+    value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
+    value VType             VType             = return VType
+    value (VExtra x)        (VExtra y)        = VExtra <$> extra b x y
+    value x@(VWord _)       y                 = value (VVector (toVector unpack x)) y
+    value x                 y@(VWord _)       = value x (VVector (toVector unpack y))
+    value x                 y                 =
+      fail $ "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments: "
+      ++ show x ++ " " ++ show y
+
+    thunks :: V.Vector (Thunk m b w e) -> V.Vector (Thunk m b w e) -> m (V.Vector (Thunk m b w e))
+    thunks xv yv
+      | V.length xv == V.length yv = V.zipWithM thunk xv yv
+      | otherwise                  = fail "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments"
+
+    thunk :: Thunk m b w e -> Thunk m b w e -> m (Thunk m b w e)
+    thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'

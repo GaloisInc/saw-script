@@ -298,40 +298,10 @@ iteOp be =
   VFun $ \y -> lazyMux be (muxBVal be) (toBool b) (force x) (force y)
 
 muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
-muxBVal be b (VFun f)        (VFun g)        = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal be b x y)
-muxBVal _  _ VUnit           VUnit           = return VUnit
-muxBVal be b (VPair x1 x2)   (VPair y1 y2)   = VPair <$> muxThunk be b x1 y1
-                                                     <*> muxThunk be b x2 y2
-muxBVal _  _ VEmpty          VEmpty          = return VEmpty
-muxBVal be b (VField xf x1 x2) (VField yf y1 y2) | xf == yf
-                                             = VField xf <$> muxThunk be b x1 y1
-                                                         <*> muxBVal be b x2 y2
-muxBVal be b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks be b xv yv
-muxBVal be b (VVector xv)    (VVector yv)    = VVector <$> muxThunks be b xv yv
-muxBVal be b (VBool x)       (VBool y)       = VBool <$> AIG.mux be b x y
-muxBVal be b (VWord x)       (VWord y)       | AIG.length x == AIG.length y
-                                             = VWord <$> AIG.zipWithM (AIG.mux be b) x y
-muxBVal _  _ (VNat m)        (VNat n)        | m == n = return $ VNat m
-muxBVal _  _ (VString x)     (VString y)     | x == y = return $ VString x
-muxBVal _  _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
-muxBVal _  _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
-muxBVal _  _ VType           VType           = return VType
-muxBVal be b (VExtra x)      (VExtra y)      = VExtra <$> muxBExtra be b x y
-muxBVal be b x@(VWord _) y         =
-  muxBVal be b (VVector (vectorOfBValue x)) y
-muxBVal be b x y@(VWord _)         =
-  muxBVal be b x (VVector (vectorOfBValue y))
-muxBVal _ _ x y =
-  fail $ "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments: " ++ show x ++ " " ++ show y
-
-muxThunks :: AIG.IsAIG l g => g s -> l s
-          -> V.Vector (BThunk (l s)) -> V.Vector (BThunk (l s)) -> IO (V.Vector (BThunk (l s)))
-muxThunks be b xv yv
-  | V.length xv == V.length yv = V.zipWithM (muxThunk be b) xv yv
-  | otherwise                  = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
-
-muxThunk :: AIG.IsAIG l g => g s -> l s -> BThunk (l s) -> BThunk (l s) -> IO (BThunk (l s))
-muxThunk be b x y = delay $ do x' <- force x; y' <- force y; muxBVal be b x' y'
+muxBVal be = Prims.muxValue vFromLV bool word (muxBExtra be)
+  where
+    bool b = AIG.mux be b
+    word b = AIG.zipWithM (bool b)
 
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"

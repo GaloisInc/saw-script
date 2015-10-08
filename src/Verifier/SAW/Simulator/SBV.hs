@@ -657,38 +657,12 @@ iteOp =
     strictFun $ \x-> return $
     strictFun $ \y-> muxBVal (toBool b) x y
 
--- TODO: write a generic version of this function. It is nearly identical to the ones
--- for the other backends.
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
-muxBVal b (VFun f) (VFun g) = return $ VFun (\a -> do x <- f a; y <- g a; muxBVal b x y)
-muxBVal b (VCtorApp i xv) (VCtorApp j yv) | i == j = VCtorApp i <$> muxThunks b xv yv
-muxBVal _ VUnit           VUnit           = return VUnit
-muxBVal b (VPair x1 x2)   (VPair y1 y2)   = do z1 <- muxThunk b x1 y1
-                                               z2 <- muxThunk b x2 y2
-                                               return (VPair z1 z2)
-muxBVal _ VEmpty          VEmpty          = return VEmpty
-muxBVal b (VField xf x1 x2) (VField yf y1 y2) | xf == yf
-                                          = VField xf <$> muxThunk b x1 y1
-                                                      <*> muxBVal b x2 y2
-muxBVal b (VVector xv)    y               = VVector <$> muxThunks b xv (toVector y)
-muxBVal b x               (VVector yv)    = VVector <$> muxThunks b (toVector x) yv
-muxBVal b (VBool x)       (VBool y)       = return $ VBool $ svIte b x y
-muxBVal b (VWord x)       (VWord y)       = return $ VWord $ svIte b x y
-muxBVal _ (VNat m)        (VNat n)        | m == n = return $ VNat m
-muxBVal _ (VString x)     (VString y)     | x == y = return $ VString x
-muxBVal _ (VFloat x)      (VFloat y)      | x == y = return $ VFloat x
-muxBVal _ (VDouble x)     (VDouble y)     | x == y = return $ VDouble y
-muxBVal _ VType           VType           = return VType
-muxBVal b (VExtra x)      (VExtra y)      = return $ VExtra $ extraFn b x y
-muxBVal _ x y = fail $ "iteOp: malformed arguments (muxBVal): " ++ show x ++ " and " ++ show y
-
-muxThunks :: SBool -> V.Vector SThunk -> V.Vector SThunk -> IO (V.Vector SThunk)
-muxThunks b xv yv
-  | V.length xv == V.length yv = V.zipWithM (muxThunk b) xv yv
-  | otherwise                  = fail "iteOp: malformed arguments (muxThunks)"
-
-muxThunk :: SBool -> SThunk -> SThunk -> IO SThunk
-muxThunk b x y = delay $ do x' <- force x; y' <- force y; muxBVal b x' y'
+muxBVal = Prims.muxValue svUnpack bool word extra
+  where
+    bool b x y = return (svIte b x y)
+    word b x y = return (svIte b x y)
+    extra b x y = return (extraFn b x y)
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
 extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
