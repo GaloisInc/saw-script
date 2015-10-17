@@ -31,7 +31,8 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Env as Env
 import Cryptol.Eval.Type (evalType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.ModuleSystem.Name as C (unpack)
+import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
+import qualified Cryptol.Utils.Ident as C (Ident, packIdent, unpackIdent)
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 
 import Verifier.SAW.Conversion
@@ -52,10 +53,10 @@ unimplemented name = fail ("unimplemented: " ++ name)
 
 -- | SharedTerms are paired with a deferred shift amount for loose variables
 data Env s = Env
-  { envT :: Map Int     (SharedTerm s, Int) -- ^ Type variables are referenced by unique id
-  , envE :: Map C.QName (SharedTerm s, Int) -- ^ Term variables are referenced by name
-  , envP :: Map C.Prop  (SharedTerm s, Int) -- ^ Bound propositions are referenced implicitly by their types
-  , envC :: Map C.QName C.Schema            -- ^ Cryptol type environment
+  { envT :: Map Int    (SharedTerm s, Int) -- ^ Type variables are referenced by unique id
+  , envE :: Map C.Name (SharedTerm s, Int) -- ^ Term variables are referenced by name
+  , envP :: Map C.Prop (SharedTerm s, Int) -- ^ Bound propositions are referenced implicitly by their types
+  , envC :: Map C.Name C.Schema            -- ^ Cryptol type environment
   }
 
 emptyEnv :: Env s
@@ -79,11 +80,11 @@ bindTParam sc tp env = do
   v <- scLocalVar sc 0
   return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env') }
 
-bindQName :: SharedContext s -> C.QName -> C.Schema -> Env s -> IO (Env s)
-bindQName sc qname schema env = do
+bindName :: SharedContext s -> C.Name -> C.Schema -> Env s -> IO (Env s)
+bindName sc name schema env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
-  return $ env' { envE = Map.insert qname (v, 0) (envE env'), envC = Map.insert qname schema (envC env') }
+  return $ env' { envE = Map.insert name (v, 0) (envE env'), envC = Map.insert name schema (envC env') }
 
 bindProp :: SharedContext s -> C.Prop -> Env s -> IO (Env s)
 bindProp sc prop env = do
@@ -154,10 +155,10 @@ importType sc env ty =
   where
     go = importType sc env
 
-importTRec :: SharedContext s -> Env s -> [(C.Name, C.Type)] -> IO (SharedTerm s)
+importTRec :: SharedContext s -> Env s -> [(C.Ident, C.Type)] -> IO (SharedTerm s)
 importTRec sc _env [] = scCtorApp sc "Cryptol.TCEmpty" []
 importTRec sc env ((n, t) : fs) = do
-  n' <- scString sc (nameToString n)
+  n' <- scString sc (C.unpackIdent n)
   t' <- importType sc env t
   fs' <- importTRec sc env fs
   scCtorApp sc "Cryptol.TCField" [n', t', fs']
@@ -170,15 +171,11 @@ importTCTuple sc env (t : ts) = do
   scCtorApp sc "Cryptol.TCPair" [t', ts']
 
 nameToString :: C.Name -> String
-nameToString (C.Name s) = C.unpack s
-nameToString (C.NewName p i) = show p ++ show i
-
-qnameToString :: C.QName -> String
-qnameToString (C.QName _ name) = nameToString name
+nameToString = C.unpackIdent . C.nameIdent
 
 tparamToString :: C.TParam -> String
---tparamToString tp = maybe "_" qnameToString (C.tpName tp)
-tparamToString tp = maybe ("u" ++ show (C.tpUnique tp)) qnameToString (C.tpName tp)
+--tparamToString tp = maybe "_" nameToString (C.tpName tp)
+tparamToString tp = maybe ("u" ++ show (C.tpUnique tp)) nameToString (C.tpName tp)
 
 importType' :: SharedContext s -> Env s -> C.Type -> IO (SharedTerm s)
 importType' sc env t = do
@@ -225,8 +222,8 @@ proveProp sc env prop =
   where
     ty = importType sc env
 
-importPrimitive :: SharedContext s -> C.QName -> IO (SharedTerm s)
-importPrimitive sc (C.QName (Just (C.ModName ["Cryptol"])) (C.Name nm)) =
+importPrimitive :: SharedContext s -> C.Name -> IO (SharedTerm s)
+importPrimitive sc (C.asPrim -> Just nm) =
   case nm of
     "True"          -> scBool sc True
     "False"         -> scBool sc False
@@ -284,7 +281,7 @@ importPrimitive sc (C.QName (Just (C.ModName ["Cryptol"])) (C.Name nm)) =
     "pdiv"          -> scGlobalDef sc "Cryptol.ecPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
     "pmod"          -> scGlobalDef sc "Cryptol.ecPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
     "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
-    _ -> fail $ unwords ["Unknown Cryptol primitive name:", show nm]
+    _ -> fail $ unwords ["Unknown Cryptol primitive name:", C.unpackIdent nm]
 
 importPrimitive _ nm =
   fail $ unwords ["Improper Cryptol primitive name:", show nm]
@@ -298,11 +295,11 @@ importExpr sc env expr =
                                       scVector sc t' es'
     C.ETuple es                 -> scTuple sc =<< traverse go es
     C.ERec fs                   -> scRecord sc =<< traverse go (Map.fromList fs')
-                                     where fs' = [ (nameToString n, e) | (n, e) <- fs ]
+                                     where fs' = [ (C.unpackIdent n, e) | (n, e) <- fs ]
     C.ESel e sel                ->           -- Elimination for tuple/record/list
       case sel of
         C.TupleSel i _maybeLen  -> flip (scTupleSelector sc) (i+1) =<< go e
-        C.RecordSel x _         -> flip (scRecordSelect sc) (nameToString x) =<< go e
+        C.RecordSel x _         -> flip (scRecordSelect sc) (C.unpackIdent x) =<< go e
         C.ListSel i _maybeLen   -> do let t = fastTypeOf (envC env) e
                                       (n, a) <- case C.tIsSeq t of
                                                   Just (n, a) -> return (n, a)
@@ -329,9 +326,9 @@ importExpr sc env expr =
     C.ETApp e t                     -> join $ scApply sc <$> go e <*> ty t
     C.EApp e1 e2                    -> join $ scApply sc <$> go e1 <*> go e2
     C.EAbs x t e                    -> do t' <- importType' sc env t
-                                          env' <- bindQName sc x (C.Forall [] [] t) env
+                                          env' <- bindName sc x (C.Forall [] [] t) env
                                           e' <- importExpr sc env' e
-                                          scLambda sc (qnameToString x) t' e'
+                                          scLambda sc (nameToString x) t' e'
     C.EProofAbs prop e1             -> do p <- importType sc env prop
                                           env' <- bindProp sc prop env
                                           e <- importExpr sc env' e1
@@ -367,10 +364,10 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
     C.DPrim ->
      fail $ unwords ["Primitive declarations cannot be recursive:", show (C.dName decl)]
     C.DExpr expr -> do
-     env1 <- bindQName sc (C.dName decl) (C.dSignature decl) env
+     env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
      t' <- importSchema sc env (C.dSignature decl)
      e' <- importExpr sc env1 expr
-     let x = qnameToString (C.dName decl)
+     let x = nameToString (C.dName decl)
      f' <- scLambda sc x t' e'
      rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
      rhs' <- if not isTopLevel then return rhs else scTermF sc (Constant x rhs t')
@@ -386,7 +383,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
 importDeclGroup isTopLevel sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
      -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
-     env1 <- foldM (\e d -> bindQName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
+     env1 <- foldM (\e d -> bindName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
 
      -- shift the environment by one more variable to make room for our recursive record
      let env2 = liftEnv env1
@@ -397,7 +394,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      -- the types of the declarations
      ts <- mapM (importSchema sc env . C.dSignature) decls
      -- the type of the recursive record
-     rect <- scRecordType sc $ Map.fromList $ zip (map (qnameToString . C.dName) decls) ts
+     rect <- scRecordType sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) ts
 
      let extractDeclExpr decl =
            case C.dDefinition decl of
@@ -409,14 +406,14 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      es <- mapM (importExpr sc env2 <=< extractDeclExpr) decls
 
      -- build a list of projections from a record variable
-     projs <- mapM (\d -> scRecordSelect sc recv (qnameToString (C.dName d))) decls
+     projs <- mapM (\d -> scRecordSelect sc recv (nameToString (C.dName d))) decls
 
      -- substitute into the imported declaration bodies, replacing bindings by record projections
      -- NB: start at index 1; index 0 is the variable for the record itself
      es' <- mapM (instantiateVarList sc 1 projs) es
 
      -- the body of the recursive record
-     rec <- scRecord sc $ Map.fromList $ zip (map (qnameToString . C.dName) decls) es'
+     rec <- scRecord sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) es'
 
      -- build a lambda from the record body...
      f <- scLambda sc "fixRecord" rect rec
@@ -425,10 +422,10 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      rhs <- scGlobalApply sc "Cryptol.fix" [rect, f]
 
      -- finally, build projections from the fixed record to shove into the environment
-     rhss <- mapM (\d -> scRecordSelect sc rhs (qnameToString (C.dName d))) decls
+     rhss <- mapM (\d -> scRecordSelect sc rhs (nameToString (C.dName d))) decls
 
      -- if toplevel, then wrap each binding with a Constant constructor
-     let wrap d r t = scTermF sc (Constant (qnameToString (C.dName d)) r t)
+     let wrap d r t = scTermF sc (Constant (nameToString (C.dName d)) r t)
      rhss' <- if isTopLevel then sequence (zipWith3 wrap decls rhss ts) else return rhss
 
      let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss' decls
@@ -452,7 +449,7 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
      rhs <- importExpr sc env expr
      rhs' <- if not isTopLevel then return rhs else do
        t <- importSchema sc env (C.dSignature decl)
-       scTermF sc (Constant (qnameToString (C.dName decl)) rhs t)
+       scTermF sc (Constant (nameToString (C.dName decl)) rhs t)
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
@@ -493,7 +490,7 @@ importComp sc env listT expr mss =
      t2 <- importType' sc env listT
      scGlobalApply sc "Prelude.unsafeCoerce" [t1, t2, ys]
 
-lambdaTuples :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.QName, C.Type)]] -> IO (SharedTerm s)
+lambdaTuples :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO (SharedTerm s)
 lambdaTuples sc env _ty expr [] = importExpr sc env expr
 lambdaTuples sc env ty expr (args : argss) =
   do f <- lambdaTuple sc env ty expr argss args
@@ -504,13 +501,13 @@ lambdaTuples sc env ty expr (args : argss) =
                c <- importType' sc env ty
                scGlobalApply sc "Prelude.uncurry" [a, b, c, f]
 
-lambdaTuple :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.QName, C.Type)]] -> [(C.QName, C.Type)] -> IO (SharedTerm s)
+lambdaTuple :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> [(C.Name, C.Type)] -> IO (SharedTerm s)
 lambdaTuple sc env ty expr argss [] = lambdaTuples sc env ty expr argss
 lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType' sc env t
-     env' <- bindQName sc x (C.Forall [] [] t) env
+     env' <- bindName sc x (C.Forall [] [] t) env
      e <- lambdaTuple sc env' ty expr argss args
-     f <- scLambda sc (qnameToString x) a e
+     f <- scLambda sc (nameToString x) a e
      if null args
         then return f
         else do b <- importType' sc env (tNestedTuple (map snd args))
@@ -527,30 +524,30 @@ tNestedTuple (t : ts) = C.tTuple [t, tNestedTuple ts]
 -- | Returns the shared term, length type, element tuple type, bound
 -- variables.
 importMatches :: SharedContext s -> Env s -> [C.Match]
-              -> IO (SharedTerm s, C.Type, C.Type, [(C.QName, C.Type)])
+              -> IO (SharedTerm s, C.Type, C.Type, [(C.Name, C.Type)])
 importMatches _sc _env [] = fail "importMatches: empty comprehension branch"
 
-importMatches sc env [C.From qname _ty expr] = do
+importMatches sc env [C.From name _ty expr] = do
   (len, ty) <- case C.tIsSeq (fastTypeOf (envC env) expr) of
                  Just x -> return x
                  Nothing -> fail $ "internal error: From: " ++ show (fastTypeOf (envC env) expr)
   xs <- importExpr sc env expr
-  return (xs, len, ty, [(qname, ty)])
+  return (xs, len, ty, [(name, ty)])
 
-importMatches sc env (C.From qname _ty1 expr : matches) = do
+importMatches sc env (C.From name _ty1 expr : matches) = do
   (len1, ty1) <- case C.tIsSeq (fastTypeOf (envC env) expr) of
                    Just x -> return x
                    Nothing -> fail $ "internal error: From: " ++ show (fastTypeOf (envC env) expr)
   m <- importType sc env len1
   a <- importType' sc env ty1
   xs <- importExpr sc env expr
-  env' <- bindQName sc qname (C.Forall [] [] ty1) env
+  env' <- bindName sc name (C.Forall [] [] ty1) env
   (body, len2, ty2, args) <- importMatches sc env' matches
   n <- importType sc env len2
   b <- importType' sc env ty2
-  f <- scLambda sc (qnameToString qname) a body
+  f <- scLambda sc (nameToString name) a body
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
-  return (result, (C..*.) len1 len2, C.tTuple [ty1, ty2], (qname, ty1) : args)
+  return (result, (C..*.) len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
 
 importMatches sc env [C.Let decl]
   | C.DPrim <- C.dDefinition decl = do
@@ -574,11 +571,11 @@ importMatches sc env (C.Let decl : matches) =
               C.Forall [] [] ty1 -> return ty1
               _ -> unimplemented "polymorphic Let"
      a <- importType' sc env ty1
-     env' <- bindQName sc (C.dName decl) (C.dSignature decl) env
+     env' <- bindName sc (C.dName decl) (C.dSignature decl) env
      (body, len, ty2, args) <- importMatches sc env' matches
      n <- importType sc env len
      b <- importType' sc env ty2
-     f <- scLambda sc (qnameToString (C.dName decl)) a body
+     f <- scLambda sc (nameToString (C.dName decl)) a body
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
@@ -606,7 +603,7 @@ scCryptolType sc t = do
       -> C.tTuple <$> traverse (scCryptolType sc) ts
     (R.asRecordType -> Just tm)
        -> do tm' <- traverse (scCryptolType sc) tm
-             return $ C.tRec [ (C.mkName n, ct) | (n, ct) <- Map.assocs tm' ]
+             return $ C.tRec [ (C.packIdent n, ct) | (n, ct) <- Map.assocs tm' ]
     _ -> fail $ "scCryptolType: unsupported type " ++ show t'
 
 scCryptolEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
@@ -674,7 +671,7 @@ exportTupleValue tys v =
   where
     run = SC.runIdentity . force
 
-exportRecordValue :: [(C.Name, V.TValue)] -> SC.CValue -> [(C.Name, V.Value)]
+exportRecordValue :: [(C.Ident, V.TValue)] -> SC.CValue -> [(C.Ident, V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
     ([]         , SC.VEmpty      ) -> []
@@ -690,4 +687,4 @@ exportFiniteValue fv =
     FVWord w x -> V.VWord (V.mkBv (toInteger w) x)
     FVVec t vs -> V.VSeq (t == FTBit) (map exportFiniteValue vs)
     FVTuple vs -> V.VTuple (map exportFiniteValue vs)
-    FVRec vm   -> V.VRecord [ (C.mkName n, exportFiniteValue v) | (n, v) <- Map.assocs vm ]
+    FVRec vm   -> V.VRecord [ (C.packIdent n, exportFiniteValue v) | (n, v) <- Map.assocs vm ]
