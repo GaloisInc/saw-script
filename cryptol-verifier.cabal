@@ -24,7 +24,8 @@ library
   build-depends:
     aig,
     array,
-    base == 4.*,
+    base,
+    base-compat,
     containers,
     cryptol >= 2.3.0,
     data-inttrie,
@@ -46,7 +47,7 @@ executable css
   build-depends:
     array,
     abcBridge,
-    base == 4.*,
+    base,
     containers,
     cryptol,
     saw-core,
