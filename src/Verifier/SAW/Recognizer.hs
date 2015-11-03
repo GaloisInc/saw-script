@@ -25,11 +25,14 @@ module Verifier.SAW.Recognizer
   , asApp
   , (<@>), (@>)
   , asApplyAll
+  , asPairType
   , asPairValue
   , asPairSelector
   , asTupleType
   , asTupleValue
   , asTupleSelector
+  , asFieldType
+  , asFieldValue
   , asRecordType
   , asRecordValue
   , asRecordSelector
@@ -134,6 +137,13 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
+asPairType :: (Monad m, Termlike t) => Recognizer m t (t, t)
+asPairType t = do
+  ftf <- asFTermF t
+  case ftf of
+    PairType x y -> return (x, y)
+    _            -> fail "asPairType"
+
 asPairValue :: (Monad m, Termlike t) => Recognizer m t (t, t)
 asPairValue t = do
   ftf <- asFTermF t
@@ -172,6 +182,20 @@ asTupleSelector t = do
     PairLeft x  -> return (x, 1)
     PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
     _           -> fail "asTupleSelector"
+
+asFieldType :: (Monad m, Termlike t) => Recognizer m t (t, t, t)
+asFieldType t = do
+  ftf <- asFTermF t
+  case ftf of
+    FieldType x y z -> return (x, y, z)
+    _               -> fail "asFieldType"
+
+asFieldValue :: (Monad m, Termlike t) => Recognizer m t (t, t, t)
+asFieldValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    FieldValue x y z -> return (x, y, z)
+    _                -> fail "asFieldValue"
 
 asRecordType :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
 asRecordType t = do
