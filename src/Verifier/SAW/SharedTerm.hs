@@ -349,9 +349,8 @@ scWhnf sc = go []
     go (Left x : xs)          (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
     go (Right (Left i) : xs)  (asPairValue -> Just (a, b))      = go xs (if i then b else a)
     go (Right (Right i) : xs) (asFieldValue -> Just (s, a, b))  = do s' <- scWhnf sc s
-                                                                     a' <- scWhnf sc a
                                                                      b' <- scWhnf sc b
-                                                                     t' <- scFieldValue sc s' a' b'
+                                                                     t' <- scFieldValue sc s' a b'
                                                                      case asRecordValue t' of
                                                                        Just tm -> go xs ((Map.!) tm i)
                                                                        Nothing -> foldM reapply t' xs
