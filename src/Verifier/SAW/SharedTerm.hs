@@ -186,7 +186,6 @@ import Data.IORef (IORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Traversable as T
 import Data.Typeable
 import qualified Data.Vector as V
 import Data.Word
@@ -343,19 +342,35 @@ getTerm r a =
 scWhnf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scWhnf sc = go []
   where
-    go :: [Either (SharedTerm s) (Either Int FieldName)] -> SharedTerm s -> IO (SharedTerm s)
+    go :: [Either (SharedTerm s) (Either Bool FieldName)] -> SharedTerm s -> IO (SharedTerm s)
     go xs                     (asApp            -> Just (t, x)) = go (Left x : xs) t
-    go xs                     (asTupleSelector  -> Just (t, i)) = go (Right (Left i) : xs) t
+    go xs                     (asPairSelector   -> Just (t, i)) = go (Right (Left i) : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (Right (Right n) : xs) t
     go (Left x : xs)          (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
-    go (Right (Left i) : xs)  (asTupleValue -> Just ts)         = go xs (ts !! (i - 1))
-    go (Right (Right i) : xs) (asRecordValue -> Just tm)        = go xs ((Map.!) tm i)
+    go (Right (Left i) : xs)  (asPairValue -> Just (a, b))      = go xs (if i then b else a)
+    go (Right (Right i) : xs) (asFieldValue -> Just (s, a, b))  = do s' <- scWhnf sc s
+                                                                     a' <- scWhnf sc a
+                                                                     b' <- scWhnf sc b
+                                                                     t' <- scFieldValue sc s' a' b'
+                                                                     case asRecordValue t' of
+                                                                       Just tm -> go xs ((Map.!) tm i)
+                                                                       Nothing -> foldM reapply t' xs
     go xs                     (asGlobalDef -> Just c)           = tryEqns c xs (maybe [] defEqs (findDef (scModule sc) c))
-    go xs                     (asTupleType -> Just ts)          = do ts' <- mapM (scWhnf sc) ts
-                                                                     t' <- scTupleType sc ts'
+    go xs                     (asPairValue -> Just (a, b))      = do b' <- scWhnf sc b
+                                                                     t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
-    go xs                     (asRecordType -> Just m)          = do m' <- T.mapM (scWhnf sc) m
-                                                                     t' <- scRecordType sc m'
+    go xs                     (asFieldValue -> Just (s, a, b))  = do s' <- scWhnf sc s
+                                                                     b' <- scWhnf sc b
+                                                                     t' <- scFieldValue sc s' a b'
+                                                                     foldM reapply t' xs
+    go xs                     (asPairType -> Just (a, b))       = do a' <- scWhnf sc a
+                                                                     b' <- scWhnf sc b
+                                                                     t' <- scPairType sc a' b'
+                                                                     foldM reapply t' xs
+    go xs                     (asFieldType -> Just (s, a, b))   = do s' <- scWhnf sc s
+                                                                     a' <- scWhnf sc a
+                                                                     b' <- scWhnf sc b
+                                                                     t' <- scFieldType sc s' a' b'
                                                                      foldM reapply t' xs
     go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- scWhnf sc aty
                                                                      rty' <- scWhnf sc rty
@@ -367,12 +382,12 @@ scWhnf sc = go []
     -- FIXME? what about Let?
     go xs                     t                                 = foldM reapply t xs
 
-    reapply :: SharedTerm s -> Either (SharedTerm s) (Either Int FieldName) -> IO (SharedTerm s)
+    reapply :: SharedTerm s -> Either (SharedTerm s) (Either Bool FieldName) -> IO (SharedTerm s)
     reapply t (Left x) = scApply sc t x
-    reapply t (Right (Left i)) = scTupleSelector sc t i
+    reapply t (Right (Left i)) = scPairSelector sc t i
     reapply t (Right (Right i)) = scRecordSelect sc t i
 
-    tryEqns :: Ident -> [Either (SharedTerm s) (Either Int FieldName)] -> [DefEqn Term] -> IO (SharedTerm s)
+    tryEqns :: Ident -> [Either (SharedTerm s) (Either Bool FieldName)] -> [DefEqn Term] -> IO (SharedTerm s)
     tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
     tryEqns ident xs (DefEqn ps rhs : eqns) = do
       minst <- matchAll ps xs
@@ -383,7 +398,7 @@ scWhnf sc = go []
           go (drop (length ps) xs) t
         _ -> tryEqns ident xs eqns
 
-    matchAll :: [Pat Term] -> [Either (SharedTerm s) (Either Int FieldName)] -> IO (Maybe (Map Int (SharedTerm s)))
+    matchAll :: [Pat Term] -> [Either (SharedTerm s) (Either Bool FieldName)] -> IO (Maybe (Map Int (SharedTerm s)))
     matchAll [] _ = return $ Just Map.empty
     matchAll (_ : _) [] = return Nothing
     matchAll (_ : _) (Right _ : _) = return Nothing
@@ -968,6 +983,10 @@ scPairLeft sc t = scFlatTermF sc (PairLeft t)
 
 scPairRight :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 scPairRight sc t = scFlatTermF sc (PairRight t)
+
+scPairSelector :: SharedContext s -> SharedTerm s -> Bool -> IO (SharedTerm s)
+scPairSelector sc t False = scPairLeft sc t
+scPairSelector sc t True = scPairRight sc t
 
 scTupleSelector :: SharedContext s -> SharedTerm s -> Int -> IO (SharedTerm s)
 scTupleSelector sc t i
