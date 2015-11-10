@@ -817,6 +817,18 @@ primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
 -- return the 2's complement signed value of the bitvector as an integer
 primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
 
+
+--------------------------------------------------------------------------------
+-- Point-update functions
+
+updNatFun :: (a::sort 0)
+	  -> (Nat -> a) -> Nat -> a -> (Nat -> a);
+updNatFun a f i v x = ite a (equalNat i x) v (f x);
+
+updBvFun :: (n::Nat) -> (a::sort 0)
+	 -> (bitvector n -> a) -> bitvector n -> a -> (bitvector n -> a);
+updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
+
 --------------------------------------------------------------------------------
 -- String values
 

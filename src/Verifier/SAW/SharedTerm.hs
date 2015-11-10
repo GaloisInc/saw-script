@@ -91,6 +91,8 @@ module Verifier.SAW.SharedTerm
   , scTupleSelector
   , scVector
   , scVecType
+  , scUpdNatFun
+  , scUpdBvFun
   , scTermCount
   , scPrettyTerm
   , scPrettyTermDoc
@@ -1290,6 +1292,16 @@ scBvSExt sc n m x = scGlobalApply sc "Prelude.bvSExt" [n,m,x]
 -- | bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
 scBvTrunc :: SharedContext s -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scBvTrunc sc n m x = scGlobalApply sc "Prelude.bvTrunc" [n,m,x]
+
+-- | updNatFun :: (a::sort 0) -> (Nat -> a) -> Nat -> a -> (Nat -> a);
+scUpdNatFun :: SharedContext s -> SharedTerm s -> SharedTerm s
+            -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scUpdNatFun sc a f i v = scGlobalApply sc "Prelude.updNatFun" [a, f, i, v]
+
+-- | updBvFun :: (n::Nat) -> (a::sort 0) -> (bitvector n -> a) -> bitvector n -> a -> (bitvector n -> a);
+scUpdBvFun :: SharedContext s -> SharedTerm s -> SharedTerm s
+           -> SharedTerm s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
