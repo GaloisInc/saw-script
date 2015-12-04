@@ -117,6 +117,7 @@ module Verifier.SAW.SharedTerm
   , scNot
   , scAnd
   , scOr
+  , scImplies
   , scXor
   , scBoolEq
   , scIte
@@ -1069,6 +1070,10 @@ scAnd sc x y = scGlobalApply sc "Prelude.and" [x,y]
 
 scOr :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scOr sc x y = scGlobalApply sc "Prelude.or" [x,y]
+
+scImplies :: SharedContext s -> SharedTerm s -> SharedTerm s
+          -> IO (SharedTerm s)
+scImplies sc x y = scGlobalApply sc "Prelude.implies" [x,y]
 
 scXor :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scXor sc x y = scGlobalApply sc "Prelude.xor" [x,y]
