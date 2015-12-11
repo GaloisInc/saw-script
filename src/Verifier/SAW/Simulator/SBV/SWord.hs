@@ -21,6 +21,7 @@ module Verifier.SAW.Simulator.SBV.SWord
 import Data.List (foldl')
 
 import Data.SBV.Dynamic
+import Data.SBV.Internals (intSizeOf)
 
 type SBool = SVal
 type SWord = SVal

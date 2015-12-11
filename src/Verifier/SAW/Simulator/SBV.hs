@@ -31,6 +31,7 @@ module Verifier.SAW.Simulator.SBV
   ) where
 
 import Data.SBV.Dynamic
+import Data.SBV.Internals (intSizeOf)
 
 import Verifier.SAW.Simulator.SBV.SWord
 
@@ -144,7 +145,7 @@ constMap = Map.fromList
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.at", Prims.atOp svUnpack svAt (lazyMux muxBVal))
-  , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord svBitSize (lazyMux muxBVal))
+  , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord intSizeOf (lazyMux muxBVal))
   , ("Prelude.take", takeOp)
   , ("Prelude.drop", dropOp)
   , ("Prelude.append", Prims.appendOp svUnpack svJoin)
@@ -201,7 +202,7 @@ toVector :: SValue -> V.Vector SThunk
 toVector (VVector xv) = xv
 toVector (VWord xv) =
   V.fromList (map (ready . vBool . svTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
-  where k = svBitSize xv
+  where k = intSizeOf xv
 toVector _ = error "this word might be symbolic"
 
 -- | Flatten an SValue to a sequence of components, each of which is
@@ -223,7 +224,7 @@ flattenSValue v = do
                                         return (xs ++ ys)
         VVector (V.toList -> ts)  -> concat <$> traverse (force >=> flattenSValue) ts
         VBool sb                  -> return [sb]
-        VWord sw                  -> return (if svBitSize sw > 0 then [sw] else [])
+        VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [])
         _ -> fail $ "Could not create sbv argument for " ++ show v
 
 vWord :: SWord -> SValue
@@ -258,7 +259,7 @@ selectV :: (Ord a, Num a, Bits a) => (SBool -> b -> b -> b) -> a -> (a -> b) -> 
 selectV merger maxValue valueFn vx =
   case svAsInteger vx of
     Just i  -> valueFn (fromIntegral i)
-    Nothing -> impl (svBitSize vx) 0
+    Nothing -> impl (intSizeOf vx) 0
   where
     impl _ y | y >= maxValue = valueFn maxValue
     impl 0 y = valueFn y
@@ -266,10 +267,10 @@ selectV merger maxValue valueFn vx =
 
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
-svAt x i = svTestBit x (svBitSize x - 1 - i)
+svAt x i = svTestBit x (intSizeOf x - 1 - i)
 
 svUnpack :: SWord -> Vector SBool
-svUnpack x = V.generate (svBitSize x) (svAt x)
+svUnpack x = V.generate (intSizeOf x) (svAt x)
 
 -- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
 takeOp :: SValue
@@ -386,7 +387,7 @@ bvPModOp =
   constFun $
   wordFun $ \x -> return $
   wordFun $ \y ->
-    return . vWord . fromBitsLE $ take (svBitSize y - 1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
+    return . vWord . fromBitsLE $ take (intSizeOf y - 1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
 
 -- primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
 bvPDivOp :: SValue
@@ -395,7 +396,7 @@ bvPDivOp =
   constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> do
-    return . vWord . fromBitsLE $ take (svBitSize y - 1) (fst (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
+    return . vWord . fromBitsLE $ take (intSizeOf y - 1) (fst (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
@@ -404,8 +405,8 @@ bvPMulOp =
   constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> do
-    let k1 = svBitSize x
-    let k2 = svBitSize y
+    let k1 = intSizeOf x
+    let k2 = intSizeOf y
     let k = max 1 (k1 + k2) - 1
     let mul _ [] ps = ps
         mul as (b:bs) ps = mul (svFalse : as) bs (ites b (as `addPoly` ps) ps)
@@ -562,7 +563,7 @@ bvStreamGetOp =
   constFun $
   strictFun $ \xs -> return $
   wordFun $ \ilv ->
-  selectV (lazyMux muxBVal) ((2 ^ svBitSize ilv) - 1) (lookupSStream xs) ilv
+  selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
 
 lookupSStream :: SValue -> Integer -> IO SValue
 lookupSStream (VExtra (SStream f r)) n = do
@@ -717,7 +718,7 @@ parseUninterpreted cws nm ty =
     parseTy :: SValue -> ST.StateT SWord IO SValue
     parseTy (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) = do
       v <- ST.get
-      let w = svBitSize v
+      let w = intSizeOf v
       let v1 = svExtract (w - 1) (w - fromInteger n) v
       let v2 = svExtract (w - fromInteger n - 1) 0 v
       ST.put v2
@@ -852,7 +853,7 @@ sbvCodeGen sc addlPrims unints path fname t = do
           VWord w
             | n `elem` [8,16,32,64] -> svCgReturn w
             | otherwise -> fail $ "sbvCodeGen: unsupported bitvector size: " ++ show n
-            where n = svBitSize w
+            where n = intSizeOf w
           VVector _ -> fail "sbvCodeGen: operations not yet supported"
           _ -> fail "sbvCodeGen: invalid result type: not boolean or bitvector"
   compileToC path fname codegen
