@@ -26,7 +26,7 @@ type SBool = SVal
 type SWord = SVal
 
 blastLE :: SWord -> [SBool]
-blastLE x = [ svTestBit x i | i <- reverse [0 .. svBitSize x - 1] ]
+blastLE x = [ svTestBit x i | i <- reverse [0 .. intSizeOf x - 1] ]
 
 fromBitsLE :: [SBool] -> SWord
 fromBitsLE bs = foldl' f (literalSWord 0 0) bs
