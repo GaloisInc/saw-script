@@ -884,3 +884,6 @@ axiom ite_join_cong :: (b :: Bool)
               -> Eq (Vec 384 Bool)
                     (join 12 32 Bool (ite (Vec 12 (Vec 32 Bool)) b x y))
                     (ite (Vec 384 Bool) b (join 12 32 Bool x) (join 12 32 Bool y));
+
+axiom map_map :: (a b c :: sort 0) -> (f :: a -> b) -> (g :: b -> c) -> (n :: Nat) -> (xs :: Vec n a)
+  -> Eq (Vec n c) (map b c g n (map a b f n xs)) (map a c (\(x::a) -> g (f x)) n xs);
