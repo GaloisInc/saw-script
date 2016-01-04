@@ -31,7 +31,6 @@ module Verifier.SAW.Simulator.SBV
   ) where
 
 import Data.SBV.Dynamic
-import Data.SBV.Internals (intSizeOf)
 
 import Verifier.SAW.Simulator.SBV.SWord
 
