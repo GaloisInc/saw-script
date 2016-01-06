@@ -568,7 +568,7 @@ eq_Record = Conversion $ thenMatcher matcher action
 
 -- | Conversions for operations on Nat literals
 natConversions :: Termlike t => [Conversion t]
-natConversions = [succ_NatLit, addNat_NatLit, mulNat_NatLit, equalNat_NatLit]
+natConversions = [succ_NatLit, addNat_NatLit, subNat_NatLit, mulNat_NatLit, equalNat_NatLit]
 
 succ_NatLit :: Termlike t => Conversion t
 succ_NatLit =
@@ -576,6 +576,11 @@ succ_NatLit =
 
 addNat_NatLit :: Termlike t => Conversion t
 addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Nat -> Nat -> Nat)
+
+subNat_NatLit :: Termlike t => Conversion t
+subNat_NatLit = Conversion $
+  thenMatcher (asGlobalDef "Prelude.subNat" <:> asAnyNatLit <:> asAnyNatLit)
+    (\(_ :*: x :*: y) -> if x >= y then Just (mkNatLit (x - y)) else Nothing)
 
 mulNat_NatLit :: Termlike t => Conversion t
 mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
