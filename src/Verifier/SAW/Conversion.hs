@@ -609,6 +609,7 @@ bvConversions =
     , bvAdd_bvNat
     , globalConv "Prelude.bvAddWithCarry" Prim.bvAddWithCarry
     , bvSub_bvNat
+    , globalConv "Prelude.bvNeg"  Prim.bvNeg
     , globalConv "Prelude.bvMul"  Prim.bvMul
     , globalConv "Prelude.bvUDiv" Prim.bvUDiv
     , globalConv "Prelude.bvURem" Prim.bvURem
