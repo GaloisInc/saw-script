@@ -42,7 +42,7 @@ library
     pretty,
     random,
     ref-fd,
-    sbv >= 5.7,
+    sbv >= 5.6,
     template-haskell,
     tf-random,
     transformers,
