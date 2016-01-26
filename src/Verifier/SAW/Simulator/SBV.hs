@@ -678,9 +678,10 @@ sbvSolveBasic m addlPrims unints t = do
   let uninterpreted nm ty
         | Set.member nm unintSet = Just $ parseUninterpreted [] nm ty
         | otherwise              = Nothing
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) uninterpreted
-  let cfg' = cfg { Sim.simExtCns = const (parseUninterpreted []) }
-  Sim.evalSharedTerm cfg' t
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
+         (const (parseUninterpreted []))
+         uninterpreted
+  Sim.evalSharedTerm cfg t
 
 -- | SBV Kind corresponding to the result of concatenating all the
 -- bitvector components of the given type value.

@@ -534,8 +534,17 @@ bitBlastBasic :: AIG.IsAIG l g
               -> SharedTerm t
               -> IO (BValue (l s))
 bitBlastBasic be m addlPrims t = do
-  cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be)) (const (const Nothing))
+  cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
+         (const (bitBlastExtCns be))
+         (const (const Nothing))
   Sim.evalSharedTerm cfg t
+
+bitBlastExtCns :: AIG.IsAIG l g => g s -> String -> BValue (l s) -> IO (BValue (l s))
+bitBlastExtCns be name v =
+  case asFiniteTypeValue v of
+    Just ft -> newVars be ft
+    Nothing -> fail $ "Verifier.SAW.Simulator.BitBlast: variable " ++ show name
+               ++ " has non-finite type " ++ show v
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do

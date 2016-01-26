@@ -47,7 +47,8 @@ import Verifier.SAW.SharedTerm
 evalSharedTerm :: Module -> Map Ident CValue -> SharedTerm s -> CValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
-    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) (const (const Nothing))
+    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
+           Sim.noExtCns (const (const Nothing))
     Sim.evalSharedTerm cfg t
 
 ------------------------------------------------------------

@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Value
@@ -22,6 +23,7 @@ import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
+import Verifier.SAW.FiniteValue (FiniteType(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -138,3 +140,26 @@ apply _ _ = fail "Not a function value"
 
 applyAll :: Monad m => Value m b w e -> [Thunk m b w e] -> m (Value m b w e)
 applyAll = foldM apply
+
+asFiniteTypeValue :: Value m b w e -> Maybe FiniteType
+asFiniteTypeValue v =
+  case v of
+    VDataType "Prelude.Bool" [] -> return FTBit
+    VDataType "Prelude.Vec" [VNat n, v1] -> do
+      t1 <- asFiniteTypeValue v1
+      return (FTVec (fromInteger n) t1)
+    VUnitType -> return (FTTuple [])
+    VPairType v1 v2 -> do
+      t1 <- asFiniteTypeValue v1
+      t2 <- asFiniteTypeValue v2
+      case t2 of
+        FTTuple ts -> return (FTTuple (t1 : ts))
+        _ -> Nothing
+    VEmptyType -> return (FTRec Map.empty)
+    VFieldType k v1 v2 -> do
+      t1 <- asFiniteTypeValue v1
+      t2 <- asFiniteTypeValue v2
+      case t2 of
+        FTRec tm -> return (FTRec (Map.insert k t1 tm))
+        _ -> Nothing
+    _ -> Nothing
