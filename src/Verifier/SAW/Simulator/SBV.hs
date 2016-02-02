@@ -653,9 +653,10 @@ boolBinOp op =
 iteOp :: SValue
 iteOp =
     constFun $
-    strictFun $ \b-> return $
-    strictFun $ \x-> return $
-    strictFun $ \y-> muxBVal (toBool b) x y
+    strictFun $ \b -> return $
+    VFun $ \x -> return $
+    VFun $ \y ->
+      lazyMux muxBVal (toBool b) (force x) (force y)
 
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue svUnpack bool word extra
