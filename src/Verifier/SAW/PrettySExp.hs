@@ -57,7 +57,7 @@ ppSharedTermSExpWith cfg tm = doc
     nodeInfos      = collectNodeInfo tm Map.empty
 
     ppN :: [Doc] -> Int -> Visited -> SharedTerm s -> (Visited, Doc)
-    ppN lcls cdepth sofar (STApp i tf)
+    ppN lcls cdepth sofar (STApp{ stAppIndex = i, stAppTermF = tf })
       | maybe False (cdepth >=) maxDepth  = (sofar, text "...")
       | maybe True (depth <=) cutoffDepth = (sofar,  doline empty)
       | i `Set.member` sofar              = (sofar,  nid)
@@ -119,7 +119,7 @@ ppSharedTermSExpWith cfg tm = doc
 
 -- | Collect the occurrence count and depth of nodes
 collectNodeInfo :: SharedTerm s -> NodeInfo -> NodeInfo
-collectNodeInfo (STApp i tf) ni =
+collectNodeInfo (STApp{ stAppIndex = i, stAppTermF = tf }) ni =
   case Map.lookup i ni of
     Just _  -> Map.adjust bumpCnt i ni
     Nothing -> d `seq` Map.insert i (d, 1) ni'
@@ -133,7 +133,7 @@ collectNodeInfo (Unshared _) ni = ni
 -- | Compute the depth of a given node; note that this is a mere look-up from
 -- the map, no computation is actually done
 depthOf :: NodeInfo -> SharedTerm s -> Int
-depthOf ni (STApp i _)
+depthOf ni (STApp{ stAppIndex = i })
   | Just (d, _) <- i `Map.lookup` ni = d
   | True                           =
     error $ "Cannot locate depth info for node: " ++ show i

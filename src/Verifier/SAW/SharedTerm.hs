@@ -210,12 +210,16 @@ newtype Uninterp s = Uninterp { getUninterp :: (String, SharedTerm s) } deriving
 type TermIndex = Int -- Word64
 
 data SharedTerm s
-  = STApp {-# UNPACK #-} !TermIndex !(TermF (SharedTerm s))
+  = STApp
+     { stAppIndex    :: {-# UNPACK #-} !TermIndex
+     , stAppFreeVars :: !BitSet -- Free variables
+     , stAppTermF    :: !(TermF (SharedTerm s))
+     }
   | Unshared !(TermF (SharedTerm s))
   deriving (Typeable)
 
 instance Hashable (SharedTerm s) where
-  hashWithSalt salt (STApp i _)  = salt `combine` 0x00000000 `hashWithSalt` hash i
+  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
 
 -- | Combine two given hash values.  'combine' has zero as a left
@@ -224,14 +228,14 @@ combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 0x01000193) `xor` h2
 
 instance Termlike (SharedTerm s) where
-  unwrapTermF (STApp _ tf) = tf
+  unwrapTermF STApp{ stAppTermF = tf} = tf
   unwrapTermF (Unshared tf) = tf
 
 instance Eq (SharedTerm s) where
   (==) = alphaEquiv
 
 instance Ord (SharedTerm s) where
-  compare (STApp i _) (STApp j _) | i == j = EQ
+  compare (STApp{ stAppIndex = i}) (STApp{ stAppIndex = j}) | i == j = EQ
   compare x y = compare (unwrapTermF x) (unwrapTermF y)
 
 instance Net.Pattern (SharedTerm s) where
@@ -252,14 +256,14 @@ emptyTFM = TermFMap IntMap.empty HMap.empty
 lookupTFM :: TermF (SharedTerm s) -> TermFMap s a -> Maybe a
 lookupTFM tf tfm =
   case tf of
-    App (STApp i _) (STApp j _) ->
+    App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
       IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
     _ -> HMap.lookup tf (hashMapTFM tfm)
 
 insertTFM :: TermF (SharedTerm s) -> a -> TermFMap s a -> TermFMap s a
 insertTFM tf x tfm =
   case tf of
-    App (STApp i _) (STApp j _) ->
+    App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
       let f Nothing = Just (IntMap.singleton j x)
           f (Just m) = Just (IntMap.insert j x m)
       in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
@@ -334,7 +338,10 @@ getTerm r a =
       Just t -> return (s,t)
       Nothing -> do
           seq s' $ return (s',t)
-        where t = STApp (acNextIdx s) a
+        where t = STApp{ stAppIndex = acNextIdx s
+                       , stAppFreeVars = freesTermF (fmap looseVars a)
+                       , stAppTermF = a
+                       }
               s' = s { acBindings = insertTFM a t (acBindings s)
                      , acNextIdx = acNextIdx s + 1
                      }
@@ -461,10 +468,10 @@ scConvertable sc unfoldConst tm1 tm2 = do
 
  where whnf :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s -> IO (TermF (SharedTerm s))
        whnf _c t@(Unshared _) = unwrapTermF <$> scWhnf sc t
-       whnf c t@(STApp idx _) = unwrapTermF <$> (useCache c idx $ scWhnf sc t)
+       whnf c t@(STApp{ stAppIndex = idx}) = unwrapTermF <$> (useCache c idx $ scWhnf sc t)
 
        go :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s -> SharedTerm s -> IO Bool
-       go _c (STApp idx1 _) (STApp idx2 _)
+       go _c (STApp{ stAppIndex = idx1}) (STApp{ stAppIndex = idx2})
            | idx1 == idx2 = return True   -- succeed early case
        go c t1 t2 = join (goF c <$> whnf c t1 <*> whnf c t2)
 
@@ -533,7 +540,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> State.StateT (Map TermIndex (SharedTerm s)) IO (SharedTerm s)
     memo (Unshared t) = termf t
-    memo (STApp i t) = do
+    memo STApp{ stAppIndex = i, stAppTermF = t} = do
       table <- State.get
       case Map.lookup i table of
         Just x  -> return x
@@ -578,10 +585,10 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           sy <- sort y
           lift $ scSort sc (max sx sy)
         PairLeft t -> do
-          STApp _ (FTermF (PairType t1 _)) <- memo t >>= liftIO . scWhnf sc
+          STApp{ stAppTermF = FTermF (PairType t1 _) } <- memo t >>= liftIO . scWhnf sc
           return t1
         PairRight t -> do
-          STApp _ (FTermF (PairType _ t2)) <- memo t >>= liftIO . scWhnf sc
+          STApp{ stAppTermF = FTermF (PairType _ t2) } <- memo t >>= liftIO . scWhnf sc
           return t2
         EmptyValue -> lift $ scEmptyType sc
         EmptyType -> lift $ scSort sc (mkSort 0)
@@ -619,16 +626,17 @@ asSort :: Monad m => SharedTerm s -> m Sort
 asSort tp =
   case tp of
     Unshared (FTermF (Sort s)) -> return s
-    STApp _ (FTermF (Sort s)) -> return s
+    STApp{ stAppTermF = FTermF (Sort s) } -> return s
     _ -> fail $ "Not a sort: " ++ show tp
 
 alphaEquiv :: SharedTerm s -> SharedTerm s -> Bool
 alphaEquiv = term
   where
     term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
-    term (Unshared tf1) (STApp _  tf2) = termf tf1 tf2
-    term (STApp _  tf1) (Unshared tf2) = termf tf1 tf2
-    term (STApp i1 tf1) (STApp i2 tf2) = i1 == i2 || termf tf1 tf2
+    term (Unshared tf1) (STApp{ stAppTermF = tf2}) = termf tf1 tf2
+    term (STApp{ stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
+    term (STApp{ stAppIndex = i1, stAppTermF = tf1})
+         (STApp{ stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
     termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
     termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
@@ -648,7 +656,7 @@ unshare t0 = State.evalState (go t0) Map.empty
   where
     go :: SharedTerm s -> State.State (Map TermIndex Term) Term
     go (Unshared t) = Term <$> traverse go t
-    go (STApp i t) = do
+    go (STApp{ stAppIndex = i, stAppTermF = t}) = do
       memo <- State.get
       case Map.lookup i memo of
         Just x  -> return x
@@ -673,25 +681,17 @@ scImport sc t0 =
        go cache t0
   where
     go :: Cache IORef TermIndex (SharedTerm s) -> SharedTerm s' -> IO (SharedTerm s)
-    go cache (Unshared tf) = Unshared <$> traverse (go cache) tf
-    go cache (STApp idx tf) = useCache cache idx (scTermF sc =<< traverse (go cache) tf)
+    go cache (Unshared tf) =
+          Unshared <$> traverse (go cache) tf
+    go cache (STApp{ stAppIndex = idx, stAppTermF = tf}) =
+          useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
 --------------------------------------------------------------------------------
 
 -- | Returns bitset containing indices of all free local variables.
-looseVars :: forall s. SharedTerm s -> BitSet
-looseVars t = State.evalState (go t) Map.empty
-    where
-      go :: SharedTerm s -> State.State (Map TermIndex BitSet) BitSet
-      go (Unshared tf) = freesTermF <$> traverse go tf
-      go (STApp i tf) = do
-        memo <- State.get
-        case Map.lookup i memo of
-          Just x -> return x
-          Nothing -> do
-            x <- freesTermF <$> traverse go tf
-            State.modify (Map.insert i x)
-            return x
+looseVars :: SharedTerm s -> BitSet
+looseVars STApp{ stAppFreeVars = x } = x
+looseVars (Unshared f) = freesTermF (fmap looseVars f)
 
 --------------------------------------------------------------------------------
 -- Instantiating variables
@@ -705,8 +705,10 @@ instantiateVars sc f initialLevel t0 =
   where
     go :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
           DeBruijnIndex -> SharedTerm s -> IO (SharedTerm s)
-    go l (Unshared tf) = go' l tf
-    go l (STApp tidx tf) = useCache ?cache (tidx, l) (go' l tf)
+    go l (Unshared tf) =
+            go' l tf
+    go l (STApp{ stAppIndex = tidx, stAppTermF = tf}) =
+            useCache ?cache (tidx, l) (go' l tf)
 
     go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) (SharedTerm s)) =>
            DeBruijnIndex -> TermF (SharedTerm s) -> IO (SharedTerm s)
@@ -792,7 +794,7 @@ betaNormalize sc t0 =
     go :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
     go t = case t of
       Unshared _ -> go' t
-      STApp i _  -> useCache ?cache i (go' t)
+      STApp{ stAppIndex = i } -> useCache ?cache i (go' t)
 
     go' :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
     go' t = do
@@ -808,7 +810,7 @@ betaNormalize sc t0 =
 
     go3 :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
     go3 (Unshared tf) = Unshared <$> traverseTF go tf
-    go3 (STApp _ tf) = scTermF sc =<< traverseTF go tf
+    go3 (STApp{ stAppTermF = tf }) = scTermF sc =<< traverseTF go tf
 
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
     traverseTF _ tf@(Constant _ _ _) = pure tf
@@ -828,7 +830,7 @@ scTermCount t0 = execState (go [t0]) IntMap.empty
         go (t:r) =
           case t of
             Unshared _ -> recurse
-            STApp i _ -> do
+            STApp{ stAppIndex = i } -> do
               m <- get
               case IntMap.lookup i m of
                 Just (_, n) -> do
@@ -890,7 +892,7 @@ scPrettyTermDoc t0
 
         ppt :: LocalVarDoc -> Prec -> SharedTerm s -> TermDoc
         ppt lcls p (Unshared tf) = ppTermF ppt lcls p tf
-        ppt lcls p (STApp i tf) =
+        ppt lcls p (STApp{ stAppIndex = i, stAppTermF = tf}) =
           case IntMap.lookup i dm of
             Just d -> TermDoc d
             Nothing -> ppTermF ppt lcls p tf
@@ -1345,14 +1347,14 @@ getAllExts t = Set.toList (getAllExtSet t)
 --   Does not traverse the unfoldings of @Constant@ terms.
 getAllExtSet :: SharedTerm s -> Set.Set (ExtCns (SharedTerm s))
 getAllExtSet t = snd $ getExtCns (Set.empty, Set.empty) t
-    where getExtCns acc@(is, _) (STApp idx _) | Set.member idx is = acc
-          getExtCns (is, a) (STApp idx (FTermF (ExtCns ec))) =
+    where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | Set.member idx is = acc
+          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (ExtCns ec)) }) =
             (Set.insert idx is, Set.insert ec a)
           getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =
             (is, Set.insert ec a)
-          getExtCns acc (STApp _ (Constant _ _ _)) = acc
+          getExtCns acc (STApp{ stAppTermF = Constant _ _ _ }) = acc
           getExtCns acc (Unshared (Constant _ _ _)) = acc
-          getExtCns (is, a) (STApp idx tf') =
+          getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = tf'}) =
             foldl' getExtCns (Set.insert idx is, a) tf'
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
@@ -1360,7 +1362,7 @@ getAllExtSet t = snd $ getExtCns (Set.empty, Set.empty) t
 getConstantSet :: SharedTerm s -> Map String (SharedTerm s, SharedTerm s)
 getConstantSet t = snd $ go (Set.empty, Map.empty) t
   where
-    go acc@(idxs, names) (STApp i tf)
+    go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
       | Set.member i idxs = acc
       | otherwise         = termf (Set.insert i idxs, names) tf
     go acc (Unshared tf) = termf acc tf
@@ -1445,7 +1447,7 @@ scUnfoldConstantSet sc b names t0 = do
             | Set.member name names == b -> go rhs
             | otherwise                  -> return t
           _ -> Unshared <$> traverse go tf
-      go t@(STApp idx tf) = useCache cache idx $
+      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
           Constant name rhs _
             | Set.member name names == b -> go rhs
@@ -1469,7 +1471,7 @@ scUnfoldConstantSet' sc b names t0 = do
             | Set.member name names == b -> taint (go rhs)
             | otherwise                  -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
-      go t@(STApp idx tf) =
+      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
           Constant name rhs _
             | Set.member name names == b -> taint (go rhs)
@@ -1484,7 +1486,7 @@ scSharedSize :: SharedTerm s -> Integer
 scSharedSize = fst . go (0, Set.empty)
   where
     go (sz, seen) (Unshared tf) = foldl' go (strictPair (sz + 1) seen) tf
-    go (sz, seen) (STApp idx tf)
+    go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
       | Set.member idx seen = (sz, seen)
       | otherwise = foldl' go (strictPair (sz + 1) (Set.insert idx seen)) tf
 
@@ -1497,7 +1499,7 @@ scTreeSize :: SharedTerm s -> Integer
 scTreeSize = fst . go (0, Map.empty)
   where
     go (sz, seen) (Unshared tf) = foldl' go (sz + 1, seen) tf
-    go (sz, seen) (STApp idx tf) =
+    go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =
       case Map.lookup idx seen of
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert idx sz' seen')

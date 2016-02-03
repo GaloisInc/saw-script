@@ -106,7 +106,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
     memo :: SharedTerm s -> TCM s (SharedTerm s)
     memo (Unshared tf) = termf tf
-    memo _t@(STApp i tf) =
+    memo _t@(STApp{ stAppIndex = i, stAppTermF = tf}) =
       do table <- State.get
          case Map.lookup i table of
            Just x  -> return x
@@ -188,12 +188,12 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         PairLeft t -> do
           ty <- memo t
           case ty of
-            STApp _ (FTermF (PairType t1 _)) -> whnf t1
+            STApp{ stAppTermF = FTermF (PairType t1 _) } -> whnf t1
             _ -> throwTCError (NotTupleType ty)
         PairRight t -> do
           ty <- memo t
           case ty of
-            STApp _ (FTermF (PairType _ t2)) -> whnf t2
+            STApp{ stAppTermF = FTermF (PairType _ t2) } -> whnf t2
             _ -> throwTCError (NotTupleType ty)
         RecordSelector t f' -> do
           f <- asStringLit =<< whnf f'
@@ -244,9 +244,10 @@ argMatch sc = term
 
     term' :: SharedTerm s -> SharedTerm s -> IO Bool
     term' (Unshared tf1) (Unshared tf2) = termf tf1 tf2
-    term' (Unshared tf1) (STApp _  tf2) = termf tf1 tf2
-    term' (STApp _  tf1) (Unshared tf2) = termf tf1 tf2
-    term' (STApp i1 tf1) (STApp i2 tf2)
+    term' (Unshared tf1) (STApp{ stAppTermF = tf2 }) = termf tf1 tf2
+    term' (STApp{ stAppTermF = tf1 }) (Unshared tf2) = termf tf1 tf2
+    term' (STApp{ stAppIndex = i1, stAppTermF = tf1 })
+          (STApp{ stAppIndex = i2, stAppTermF = tf2 })
       | i1 == i2  = return True
       | otherwise = termf tf1 tf2
 

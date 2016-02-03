@@ -341,7 +341,7 @@ rewriteSharedTerm sc ss t0 =
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (Unshared tf) =
         traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop
-    rewriteAll (STApp tidx tf) =
+    rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
     traverseTF _ tf@(Constant _ _ _) = pure tf
@@ -388,7 +388,7 @@ rewriteSharedTermToTerm sc ss t0 =
         instantiateVar sc 0 arg body >>= rewriteAll
     rewriteAll (Unshared tf) =
         liftM Term (traverse rewriteAll tf) >>= rewriteTop
-    rewriteAll (STApp tidx tf) =
+    rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
     rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
     rewriteTop (asPairRedex -> Just t) = return t
@@ -420,7 +420,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
                   SharedTerm s -> IO (SharedTerm s)
     rewriteAll (Unshared tf) =
         rewriteTermF tf >>= scTermF sc >>= rewriteTop
-    rewriteAll (STApp tidx tf) =
+    rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         -- putStrLn "Rewriting term:" >> print t >>
         useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
     rewriteTermF :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
@@ -492,7 +492,7 @@ rewritingSharedContext sc ss = sc'
     apply :: [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->
              SharedTerm s -> IO (SharedTerm s)
     apply [] (Unshared tf) = scTermF sc tf
-    apply [] (STApp _ tf) = scTermF sc tf
+    apply [] STApp{ stAppTermF = tf } = scTermF sc tf
     apply (Left (RewriteRule _ l r) : rules) t =
       case first_order_match l t of
         Nothing -> apply rules t
@@ -609,7 +609,7 @@ doHoistIfs :: forall s. SharedContext s
 doHoistIfs sc ss hoistCache itePat = go
 
  where go :: SharedTerm s -> IO (HoistIfs s)
-       go t@(STApp idx tf) = useCache hoistCache idx $ top t tf
+       go t@(STApp{ stAppIndex = idx, stAppTermF = tf}) = useCache hoistCache idx $ top t tf
        go t@(Unshared tf)  = top t tf
 
        top :: SharedTerm s -> TermF (SharedTerm s) -> IO (HoistIfs s)

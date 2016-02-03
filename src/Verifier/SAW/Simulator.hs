@@ -344,7 +344,7 @@ mkMemoClosed cfg t =
 
     go :: SharedTerm s -> State.State (IntMap (TermF (SharedTerm s), BitSet)) BitSet
     go (Unshared tf) = freesTermF <$> traverse go tf
-    go (STApp i tf) = do
+    go (STApp{ stAppIndex = i, stAppTermF = tf }) = do
       memo <- State.get
       case IMap.lookup i memo of
         Just (_, b) -> return b
@@ -365,7 +365,7 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
   where
     lam = evalOpen cfg memoClosed
     rec (Unshared tf') = evalTermF cfg lam rec tf' []
-    rec (STApp i _) =
+    rec (STApp{ stAppIndex = i }) =
       case IMap.lookup i memoClosed of
         Just x -> force x
         Nothing -> fail "evalClosedTermF: internal error"
@@ -381,7 +381,7 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
   where
     go :: IntMap (Thunk m b w e) -> SharedTerm s -> m (IntMap (Thunk m b w e))
     go memo (Unshared tf) = goTermF memo tf
-    go memo (STApp i tf) =
+    go memo (STApp{ stAppIndex = i, stAppTermF = tf }) =
       case IMap.lookup i memo of
         Just _ -> return memo
         Nothing -> do
@@ -413,7 +413,7 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
   where
     lam = evalOpen cfg memoClosed
     rec (Unshared tf) = evalTermF cfg lam rec tf env
-    rec (STApp i _) =
+    rec (STApp{ stAppIndex = i }) =
       case IMap.lookup i memoLocal of
         Just x -> force x
         Nothing -> fail "evalLocalTermF: internal error"
@@ -430,7 +430,7 @@ evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: SharedTerm s -> m (Value m b w e)
       eval (Unshared tf) = evalF tf
-      eval (STApp i tf) =
+      eval (STApp{ stAppIndex = i, stAppTermF = tf }) =
         case IMap.lookup i memoLocal of
           Just x -> force x
           Nothing -> evalF tf

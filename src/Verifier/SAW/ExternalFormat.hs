@@ -41,7 +41,7 @@ scWriteExternal t0 =
       let s = unwords [show x, writeTermF tf']
       State.put (m, s : output, x + 1)
       return x
-    go (STApp i tf) = do
+    go STApp{ stAppIndex = i, stAppTermF = tf } = do
       (memo, _, _) <- State.get
       case Map.lookup i memo of
         Just x -> return x
