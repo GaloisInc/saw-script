@@ -166,6 +166,8 @@ module Verifier.SAW.SharedTerm
   , incVars
   , scUnfoldConstants
   , scUnfoldConstants'
+  , scUnfoldConstantSet
+  , scUnfoldConstantSet'
   , scSharedSize
   , scTreeSize
   ) where
@@ -188,6 +190,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef (IORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable
 import qualified Data.Vector as V
@@ -1422,42 +1425,59 @@ scAbstractExts sc exts x =
 
 
 scUnfoldConstants :: forall s. SharedContext s -> [String] -> SharedTerm s -> IO (SharedTerm s)
-scUnfoldConstants sc names t0 = do
+scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
+
+-- | TODO: test whether this version is slower or faster.
+scUnfoldConstants' :: forall s. SharedContext s -> [String] -> SharedTerm s -> IO (SharedTerm s)
+scUnfoldConstants' sc names t0 = scUnfoldConstantSet' sc True (Set.fromList names) t0
+
+scUnfoldConstantSet :: forall s. SharedContext s
+                    -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+                    -> Set String -- ^ Set of constant names
+                    -> SharedTerm s
+                    -> IO (SharedTerm s)
+scUnfoldConstantSet sc b names t0 = do
   cache <- newCache
   let go :: SharedTerm s -> IO (SharedTerm s)
       go t@(Unshared tf) =
         case tf of
           Constant name rhs _
-            | name `elem` names -> go rhs
-            | otherwise         -> return t
+            | Set.member name names == b -> go rhs
+            | otherwise                  -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp idx tf) = useCache cache idx $
         case tf of
           Constant name rhs _
-            | name `elem` names -> go rhs
+            | Set.member name names == b -> go rhs
             | otherwise         -> return t
           _ -> scTermF sc =<< traverse go tf
   go t0
 
+
 -- | TODO: test whether this version is slower or faster.
-scUnfoldConstants' :: forall s. SharedContext s -> [String] -> SharedTerm s -> IO (SharedTerm s)
-scUnfoldConstants' sc names t0 = do
+scUnfoldConstantSet' :: forall s. SharedContext s
+                    -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+                    -> Set String -- ^ Set of constant names
+                    -> SharedTerm s
+                    -> IO (SharedTerm s)
+scUnfoldConstantSet' sc b names t0 = do
   tcache <- newCacheMap' Map.empty
   let go :: SharedTerm s -> ChangeT IO (SharedTerm s)
       go t@(Unshared tf) =
         case tf of
           Constant name rhs _
-            | name `elem` names -> taint (go rhs)
-            | otherwise         -> pure t
+            | Set.member name names == b -> taint (go rhs)
+            | otherwise                  -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp idx tf) =
         case tf of
           Constant name rhs _
-            | name `elem` names -> taint (go rhs)
-            | otherwise         -> pure t
+            | Set.member name names == b -> taint (go rhs)
+            | otherwise                  -> pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
+
 
 -- | Return the number of DAG nodes used by the given @SharedTerm@.
 scSharedSize :: SharedTerm s -> Integer
