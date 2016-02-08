@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -29,6 +30,7 @@ module Verifier.SAW.SharedTerm
   , SharedTerm(..)
   , TermIndex
   , looseVars
+  , smallestFreeVar
   , unshare
   , alphaEquiv
     -- * SharedContext interface for building shared terms
@@ -692,6 +694,23 @@ scImport sc t0 =
 looseVars :: SharedTerm s -> BitSet
 looseVars STApp{ stAppFreeVars = x } = x
 looseVars (Unshared f) = freesTermF (fmap looseVars f)
+
+-- | Compute the value of the smallest variable in the term, if any.
+smallestFreeVar :: SharedTerm s -> Maybe Int
+smallestFreeVar t
+   | fv == 0 = Nothing
+   | fv > 0  = Just $! go 0 fv
+   | otherwise = error "impossible: negative free variable bitset!"
+
+ where fv = looseVars t
+
+       go :: Int -> Integer -> Int
+       go !shft !x
+          | xw == 0   = go (shft+64) (shiftR x 64)
+          | otherwise = shft + countTrailingZeros xw
+
+        where xw :: Word64
+              xw = fromInteger x
 
 --------------------------------------------------------------------------------
 -- Instantiating variables
