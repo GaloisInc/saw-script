@@ -44,6 +44,9 @@ executable css
   if !flag(build-css)
      buildable: False
 
+  other-modules:
+    Paths_cryptol_verifier
+
   build-depends:
     array,
     abcBridge,
