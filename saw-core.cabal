@@ -63,7 +63,6 @@ library
      Verifier.SAW.ParserUtils
      Verifier.SAW.Prelude
      Verifier.SAW.Prelude.Constants
-     Verifier.SAW.PrettySExp
      Verifier.SAW.Prim
      Verifier.SAW.Recognizer
      Verifier.SAW.Rewriter
