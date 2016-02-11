@@ -289,7 +289,7 @@ atOp =
           VVector xv ->
             case i of
               VWord iw -> do
-                xs <- mapM force $ V.toList xv
+                xs <- T.mapM force $ V.toList xv
                 case asWordList xs of
                   Just (w:ws) -> return $ VWord $ svSelect (w:ws) w iw
                   _ -> do

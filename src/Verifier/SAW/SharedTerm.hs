@@ -207,6 +207,16 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
 import qualified Verifier.SAW.TermNet as Net
 
+#if !MIN_VERSION_base(4,8,0)
+countTrailingZeros :: (FiniteBits b) => b -> Int
+countTrailingZeros x = go 0
+  where
+    go i | i >= w      = i
+         | testBit x i = i
+         | otherwise   = go (i+1)
+    w = finiteBitSize x
+#endif
+
 newtype Uninterp s = Uninterp { getUninterp :: (String, SharedTerm s) } deriving Show
 
 type TermIndex = Int -- Word64
