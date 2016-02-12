@@ -13,7 +13,7 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Simulator.SBV.SWord
   ( SBool, SWord
   , literalSWord
-  , blastLE, fromBitsLE
+  , fromBitsLE
   , forallSWord, existsSWord, forallSWord_, existsSWord_
   , forallSBool, existsSBool, forallSBool_, existsSBool_
   ) where
@@ -24,9 +24,6 @@ import Data.SBV.Dynamic
 
 type SBool = SVal
 type SWord = SVal
-
-blastLE :: SWord -> [SBool]
-blastLE x = [ svTestBit x i | i <- reverse [0 .. intSizeOf x - 1] ]
 
 fromBitsLE :: [SBool] -> SWord
 fromBitsLE bs = foldl' f (literalSWord 0 0) bs
