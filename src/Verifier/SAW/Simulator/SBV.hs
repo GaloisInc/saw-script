@@ -428,8 +428,12 @@ bvPModOp =
   constFun $
   constFun $
   wordFun $ \x -> return $
-  wordFun $ \y ->
-    return . vWord . fromBitsLE $ take (intSizeOf y - 1) (snd (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
+  wordFun $ \y -> do
+      let j  = intSizeOf y
+          xs = svBlastLE x
+          ys = svBlastLE y
+          zs = take (j-1) $ snd (mdp xs ys) ++ repeat svFalse
+       in return $ vWord $ svWordFromLE zs
 
 -- primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
 bvPDivOp :: SValue
@@ -438,7 +442,11 @@ bvPDivOp =
   constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> do
-    return . vWord . fromBitsLE $ take (intSizeOf y - 1) (fst (mdp (blastLE x) (blastLE y)) ++ repeat svFalse)
+      let i  = intSizeOf x
+          xs = svBlastLE x
+          ys = svBlastLE y
+          zs = take i $ fst (mdp xs ys) ++ repeat svFalse
+       in return $ vWord $ svWordFromLE $ zs
 
 -- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
 bvPMulOp :: SValue
@@ -447,12 +455,15 @@ bvPMulOp =
   constFun $
   wordFun $ \x -> return $
   wordFun $ \y -> do
-    let k1 = intSizeOf x
-    let k2 = intSizeOf y
-    let k = max 1 (k1 + k2) - 1
-    let mul _ [] ps = ps
-        mul as (b:bs) ps = mul (svFalse : as) bs (ites b (as `addPoly` ps) ps)
-    return . vWord . fromBitsLE $ take k $ mul (blastLE x) (blastLE y) [] ++ repeat svFalse
+      let i = intSizeOf x
+          j = intSizeOf y
+          k = max 1 (i + j) - 1
+          mul _  []     ps = ps
+          mul as (b:bs) ps = mul (svFalse : as) bs (ites b (as `addPoly` ps) ps)
+          xs = svBlastBE x
+          ys = svBlastBE y
+          zs = take k (mul xs ys [] ++ repeat svFalse)
+       in return $ vWord $ svWordFromBE $ zs
 
 -- | Add two polynomials
 addPoly :: [SBool] -> [SBool] -> [SBool]
@@ -506,6 +517,7 @@ divx n i xs ys'        = (q:qs, rs)
   where q        = xs `idx` i
         xs'      = ites q (xs `addPoly` ys') xs
         (qs, rs) = divx (n-1) (i-1) xs' (tail ys')
+
 
 ------------------------------------------------------------
 -- Vector operations
