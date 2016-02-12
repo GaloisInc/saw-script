@@ -460,10 +460,10 @@ bvPMulOp =
           k = max 1 (i + j) - 1
           mul _  []     ps = ps
           mul as (b:bs) ps = mul (svFalse : as) bs (ites b (as `addPoly` ps) ps)
-          xs = svBlastBE x
-          ys = svBlastBE y
+          xs = svBlastLE x
+          ys = svBlastLE y
           zs = take k (mul xs ys [] ++ repeat svFalse)
-       in return $ vWord $ svWordFromBE $ zs
+       in return $ vWord $ svWordFromLE $ zs
 
 -- | Add two polynomials
 addPoly :: [SBool] -> [SBool] -> [SBool]
