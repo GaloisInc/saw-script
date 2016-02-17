@@ -894,6 +894,8 @@ scPrettyTermDoc t0
             FTermF GlobalDef{} -> False
             FTermF UnitValue -> False
             FTermF UnitType -> False
+            FTermF EmptyValue -> False
+            FTermF EmptyType -> False
             FTermF (CtorApp _ []) -> False
             FTermF (DataTypeApp _ []) -> False
             FTermF NatLit{} -> False
