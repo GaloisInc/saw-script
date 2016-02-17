@@ -902,6 +902,7 @@ scPrettyTermDoc t0
             FTermF (ArrayValue _ v) | V.length v == 0 -> False
             FTermF FloatLit{} -> False
             FTermF DoubleLit{} -> False
+            FTermF StringLit{} -> False
             FTermF ExtCns{} -> False
             LocalVar{} -> False
             _ -> c > 1
