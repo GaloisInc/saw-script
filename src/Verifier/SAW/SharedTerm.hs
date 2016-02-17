@@ -365,42 +365,51 @@ getTerm r a =
 -- equations at the top level of a term, and evaluates all arguments
 -- to type constructors (including function, record, and tuple types).
 scWhnf :: forall s. SharedContext s -> SharedTerm s -> IO (SharedTerm s)
-scWhnf sc = go []
+scWhnf sc t0 =
+  do cache <- newCacheIntMap
+     let ?cache = cache in memo t0
   where
-    go :: [Either (SharedTerm s) (Either Bool FieldName)] -> SharedTerm s -> IO (SharedTerm s)
+    memo :: (?cache :: Cache IORef TermIndex (SharedTerm s)) => SharedTerm s -> IO (SharedTerm s)
+    memo t =
+      case t of
+        Unshared _ -> go [] t
+        STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
+
+    go :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
+          [Either (SharedTerm s) (Either Bool FieldName)] -> SharedTerm s -> IO (SharedTerm s)
     go xs                     (asApp            -> Just (t, x)) = go (Left x : xs) t
     go xs                     (asPairSelector   -> Just (t, i)) = go (Right (Left i) : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (Right (Right n) : xs) t
     go (Left x : xs)          (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
     go (Right (Left i) : xs)  (asPairValue -> Just (a, b))      = go xs (if i then b else a)
-    go (Right (Right i) : xs) (asFieldValue -> Just (s, a, b))  = do s' <- scWhnf sc s
-                                                                     b' <- scWhnf sc b
+    go (Right (Right i) : xs) (asFieldValue -> Just (s, a, b))  = do s' <- memo s
+                                                                     b' <- memo b
                                                                      t' <- scFieldValue sc s' a b'
                                                                      case asRecordValue t' of
                                                                        Just tm -> go xs ((Map.!) tm i)
                                                                        Nothing -> foldM reapply t' xs
     go xs                     (asGlobalDef -> Just c)           = tryEqns c xs (maybe [] defEqs (findDef (scModule sc) c))
-    go xs                     (asPairValue -> Just (a, b))      = do b' <- scWhnf sc b
+    go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
-    go xs                     (asFieldValue -> Just (s, a, b))  = do s' <- scWhnf sc s
-                                                                     b' <- scWhnf sc b
+    go xs                     (asFieldValue -> Just (s, a, b))  = do s' <- memo s
+                                                                     b' <- memo b
                                                                      t' <- scFieldValue sc s' a b'
                                                                      foldM reapply t' xs
-    go xs                     (asPairType -> Just (a, b))       = do a' <- scWhnf sc a
-                                                                     b' <- scWhnf sc b
+    go xs                     (asPairType -> Just (a, b))       = do a' <- memo a
+                                                                     b' <- memo b
                                                                      t' <- scPairType sc a' b'
                                                                      foldM reapply t' xs
-    go xs                     (asFieldType -> Just (s, a, b))   = do s' <- scWhnf sc s
-                                                                     a' <- scWhnf sc a
-                                                                     b' <- scWhnf sc b
+    go xs                     (asFieldType -> Just (s, a, b))   = do s' <- memo s
+                                                                     a' <- memo a
+                                                                     b' <- memo b
                                                                      t' <- scFieldType sc s' a' b'
                                                                      foldM reapply t' xs
-    go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- scWhnf sc aty
-                                                                     rty' <- scWhnf sc rty
+    go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- memo aty
+                                                                     rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
                                                                      foldM reapply t' xs
-    go xs                     (asDataType -> Just (c,args))     = do args' <- mapM (scWhnf sc) args
+    go xs                     (asDataType -> Just (c,args))     = do args' <- mapM memo args
                                                                      t' <- scDataTypeApp sc c args'
                                                                      foldM reapply t' xs
     -- FIXME? what about Let?
@@ -411,7 +420,8 @@ scWhnf sc = go []
     reapply t (Right (Left i)) = scPairSelector sc t i
     reapply t (Right (Right i)) = scRecordSelect sc t i
 
-    tryEqns :: Ident -> [Either (SharedTerm s) (Either Bool FieldName)] -> [DefEqn Term] -> IO (SharedTerm s)
+    tryEqns :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
+               Ident -> [Either (SharedTerm s) (Either Bool FieldName)] -> [DefEqn Term] -> IO (SharedTerm s)
     tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
     tryEqns ident xs (DefEqn ps rhs : eqns) = do
       minst <- matchAll ps xs
@@ -422,7 +432,9 @@ scWhnf sc = go []
           go (drop (length ps) xs) t
         _ -> tryEqns ident xs eqns
 
-    matchAll :: [Pat Term] -> [Either (SharedTerm s) (Either Bool FieldName)] -> IO (Maybe (Map Int (SharedTerm s)))
+    matchAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
+                [Pat Term] -> [Either (SharedTerm s) (Either Bool FieldName)]
+                  -> IO (Maybe (Map Int (SharedTerm s)))
     matchAll [] _ = return $ Just Map.empty
     matchAll (_ : _) [] = return Nothing
     matchAll (_ : _) (Right _ : _) = return Nothing
@@ -436,33 +448,34 @@ scWhnf sc = go []
             Nothing -> return Nothing
             Just m2 -> return $ Just (Map.union m1 m2)
 
-    match :: Pat Term -> SharedTerm s -> IO (Maybe (Map Int (SharedTerm s)))
+    match :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
+             Pat Term -> SharedTerm s -> IO (Maybe (Map Int (SharedTerm s)))
     match p x =
       case p of
         PVar _ i _  -> return $ Just (Map.singleton i x)
         PUnused _ _ -> return $ Just Map.empty
-        PUnit       -> do v <- scWhnf sc x
+        PUnit       -> do v <- memo x
                           case asTupleValue v of
                             Just [] -> matchAll [] []
                             _ -> return Nothing
-        PPair p1 p2 -> do v <- scWhnf sc x
+        PPair p1 p2 -> do v <- memo x
                           case asPairValue v of
                             Just (v1, v2) -> matchAll [p1, p2] [Left v1, Left v2]
                             _ -> return Nothing
-        PEmpty      -> do v <- scWhnf sc x
+        PEmpty      -> do v <- memo x
                           case asFTermF v of
                             Just EmptyValue -> return $ Just Map.empty
                             _ -> return Nothing
-        PField p1 p2 p3 -> do v <- scWhnf sc x
+        PField p1 p2 p3 -> do v <- memo x
                               case asFTermF v of
                                 Just (FieldValue v1 v2 v3) ->
                                   matchAll [p1, p2, p3] [Left v1, Left v2, Left v3]
                                 _ -> return Nothing
-        PCtor i ps  -> do v <- scWhnf sc x
+        PCtor i ps  -> do v <- memo x
                           case asCtor v of
                             Just (s, xs) | i == s -> matchAll ps (map Left xs)
                             _ -> return Nothing
-        PString s   -> do v <- scWhnf sc x
+        PString s   -> do v <- memo x
                           case asStringLit v of
                             Just s' | s == s' -> matchAll [] []
                             _ -> return Nothing
