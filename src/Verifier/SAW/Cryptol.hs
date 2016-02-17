@@ -124,7 +124,7 @@ importType sc env ty =
                               Just (t, j) -> incVars sc 0 j t
                               Nothing -> fail "internal error: importType TVBound"
     C.TUser _ _ t  -> go t
-    C.TRec fs      -> importTRec sc env fs
+    C.TRec fs      -> importTRec sc env (Map.assocs (Map.fromList fs))
     C.TCon tcon tyargs ->
       case tcon of
         C.TC tc ->
@@ -152,6 +152,7 @@ importType sc env ty =
   where
     go = importType sc env
 
+-- | Precondition: list argument should be sorted by field name
 importTRec :: SharedContext s -> Env s -> [(C.Ident, C.Type)] -> IO (SharedTerm s)
 importTRec sc _env [] = scCtorApp sc "Cryptol.TCEmpty" []
 importTRec sc env ((n, t) : fs) = do
