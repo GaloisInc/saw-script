@@ -20,7 +20,7 @@ compose :: (a b c :: sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
 
 fix :: (a :: sort 0) -> (a -> a) -> a;
-fix a f = f (fix a f);
+fix a f = let { x :: a; x = f x; } in x;
 
 bvExp :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvExp n x y = foldr Bool (bitvector n) n
