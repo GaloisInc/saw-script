@@ -31,6 +31,8 @@ library
     data-inttrie,
     integer-gmp,
     saw-core,
+    saw-core-aig,
+    saw-core-sbv,
     sbv,
     vector
   hs-source-dirs: src
@@ -54,6 +56,7 @@ executable css
     containers,
     cryptol,
     saw-core,
+    saw-core-aig,
     text,
     cryptol-verifier
 
