@@ -3,8 +3,8 @@ Version:            0.1
 License:            BSD3
 License-file:       LICENSE
 Author:             Galois, Inc.
-Maintainer:         jhendrix@galois.com
-Copyright:          (c) 2012-2014 Galois Inc.
+Maintainer:         huffman@galois.com
+Copyright:          (c) 2012-2016 Galois Inc.
 Category:           Formal Methods
 Build-type:         Simple
 cabal-version:      >= 1.8
@@ -25,7 +25,6 @@ library
 
   build-depends:
     base == 4.*,
-    aig,
     ansi-wl-pprint,
     array,
     binary,
@@ -42,7 +41,6 @@ library
     pretty,
     random,
     ref-fd,
-    sbv >= 5.10,
     template-haskell,
     tf-random,
     transformers,
@@ -68,12 +66,9 @@ library
      Verifier.SAW.Rewriter
      Verifier.SAW.SCTypeCheck
      Verifier.SAW.Simulator
-     Verifier.SAW.Simulator.BitBlast
      Verifier.SAW.Simulator.Concrete
      Verifier.SAW.Simulator.MonadLazy
      Verifier.SAW.Simulator.Prims
-     Verifier.SAW.Simulator.SBV
-     Verifier.SAW.Simulator.SBV.SWord
      Verifier.SAW.Simulator.Value
      Verifier.SAW.SharedTerm
      Verifier.SAW.TermNet
@@ -104,7 +99,6 @@ test-suite test-sawcore
   hs-source-dirs: tests/src
   build-depends:
       base >= 4
-    , abcBridge
     , containers
     , hashable
     , lens
