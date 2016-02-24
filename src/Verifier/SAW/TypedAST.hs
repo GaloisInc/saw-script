@@ -82,6 +82,8 @@ module Verifier.SAW.TypedAST
 
  , TermPrinter
  , TermDoc(..)
+ , PPOpts(..)
+ , defaultPPOpts
  , ppTermDoc
  , Prec(..)
  , ppAppParens
@@ -130,6 +132,7 @@ import qualified Data.Vector as V
 import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
+import Numeric (showIntAtBase)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as Leijen ((<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
@@ -413,6 +416,28 @@ instance Ord n => Ord (Ctor n tp) where
 instance Show n => Show (Ctor n tp) where
   show = show . ctorName
 
+data PPOpts = PPOpts { ppBase :: Int }
+
+defaultPPOpts :: PPOpts
+defaultPPOpts = PPOpts { ppBase = 10 }
+
+ppNat :: PPOpts -> Integer -> Doc
+ppNat opts i
+  | base > 36 = integer i
+  | otherwise = prefix <> text value
+  where
+    base = ppBase opts
+
+    prefix = case base of
+      2  -> text "0b"
+      8  -> text "0o"
+      10 -> empty
+      16 -> text "0x"
+      _  -> text "0"  <> char '<' <> int base <> char '>'
+
+    value  = showIntAtBase (toInteger base) (digits !!) i ""
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+
 ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
 ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
   where lcls = emptyLocalVarDoc
@@ -589,10 +614,10 @@ ppIdent i = text (show i)
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
 
-ppDef :: LocalVarDoc -> Def Term -> Doc
-ppDef lcls d = vcat (tpd : (ppDefEqn ppTerm lcls sym <$> (reverse $ defEqs d)))
+ppDef :: PPOpts -> LocalVarDoc -> Def Term -> Doc
+ppDef opts lcls d = vcat (tpd : (ppDefEqn (ppTerm opts) lcls sym <$> (reverse $ defEqs d)))
   where sym = ppIdent (defIdent d)
-        tpd = ppTypeConstraint ppTerm lcls sym (defType d) <> semi
+        tpd = ppTypeConstraint (ppTerm opts) lcls sym (defType d) <> semi
 
 ppLocalDef :: Applicative f
            => (LocalVarDoc -> Prec -> e -> f Doc)
@@ -704,8 +729,8 @@ ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
   where ppFld (fld,v) = eqCat (text fld) <$> pp v
         eqCat x y = group $ nest 2 (x <+> equals <<$>> y)
 
-ppFlatTermF' :: Applicative f => (Prec -> t -> f TermDoc) -> Prec -> FlatTermF t -> f TermDoc
-ppFlatTermF' pp prec tf =
+ppFlatTermF' :: Applicative f => PPOpts -> (Prec -> t -> f TermDoc) -> Prec -> FlatTermF t -> f TermDoc
+ppFlatTermF' opts pp prec tf =
   case tf of
     GlobalDef i   -> pure $ TermDoc $ ppIdent i
     UnitValue     -> pure $ TupleDoc []
@@ -724,7 +749,7 @@ ppFlatTermF' pp prec tf =
     DataTypeApp dt l -> TermDoc . ppAppList prec (ppIdent dt) <$> traverse (pp' PrecArg) l
 
     Sort s -> pure $ TermDoc $ text (show s)
-    NatLit i -> pure $ TermDoc $ integer i
+    NatLit i -> pure $ TermDoc $ ppNat opts i
     ArrayValue _ vl -> TermDoc . list <$> traverse (pp' PrecNone) (V.toList vl)
     FloatLit v  -> pure $ TermDoc $ text (show v)
     DoubleLit v -> pure $ TermDoc $ text (show v)
@@ -736,8 +761,8 @@ ppFlatTermF' pp prec tf =
 -- | This version has the type expected by various modules in
 -- Verifier/SAW/Typechecker, but it does not properly display nested
 -- tuples or records.
-ppFlatTermF :: Applicative f => (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
-ppFlatTermF pp prec tf = fmap ppTermDoc (ppFlatTermF' pp' prec tf)
+ppFlatTermF :: Applicative f => PPOpts -> (Prec -> t -> f Doc) -> Prec -> FlatTermF t -> f Doc
+ppFlatTermF opts pp prec tf = fmap ppTermDoc (ppFlatTermF' opts pp' prec tf)
   where pp' p t = fmap TermDoc (pp p t)
 
 newtype Term = Term (TermF Term)
@@ -878,30 +903,31 @@ betaReduce s t = instantiateVar 0 t s
 -}
 
 -- | Pretty print a term with the given outer precedence.
-ppTerm :: TermPrinter Term
-ppTerm lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
+ppTerm :: PPOpts -> TermPrinter Term
+ppTerm opts lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
   where
     pp :: LocalVarDoc -> Prec -> Term -> TermDoc
-    pp lcls p (Term t) = ppTermF pp lcls p t
+    pp lcls p (Term t) = ppTermF opts pp lcls p t
 
-ppTermF :: (LocalVarDoc -> Prec -> t -> TermDoc)
+ppTermF :: PPOpts -> (LocalVarDoc -> Prec -> t -> TermDoc)
         -> LocalVarDoc -> Prec -> TermF t -> TermDoc
-ppTermF pp lcls p tf = runIdentity (ppTermF' pp' lcls p tf)
+ppTermF opts pp lcls p tf = runIdentity (ppTermF' opts pp' lcls p tf)
   where pp' l' p' t' = pure (pp l' p' t')
 
 ppTermF' :: Applicative f
-         => (LocalVarDoc -> Prec -> e -> f TermDoc)
+         => PPOpts
+         -> (LocalVarDoc -> Prec -> e -> f TermDoc)
          -> LocalVarDoc
          -> Prec
          -> TermF e
          -> f TermDoc
-ppTermF' pp lcls prec (FTermF tf) = ppFlatTermF' (pp lcls) prec tf
+ppTermF' opts pp lcls prec (FTermF tf) = ppFlatTermF' opts (pp lcls) prec tf
   --(group . nest 2) <$> (ppFlatTermF' (pp lcls) p tf)
-ppTermF' pp lcls prec (App l r) = ppApp <$> pp lcls PrecApp l <*> pp lcls PrecArg r
+ppTermF' _opts pp lcls prec (App l r) = ppApp <$> pp lcls PrecApp l <*> pp lcls PrecArg r
   where ppApp l' r' = TermDoc $ ppAppParens prec $ group $ hang 2 $
                       ppTermDoc l' Leijen.<$> ppTermDoc r'
 
-ppTermF' pp lcls p (Lambda name tp rhs) =
+ppTermF' _opts pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp lcls  PrecLambda tp
       <*> pp lcls' PrecLambda rhs
@@ -912,7 +938,7 @@ ppTermF' pp lcls p (Lambda name tp rhs) =
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
+ppTermF' _opts pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
   where ppPi lhs' rhs' = TermDoc $ ppParens (p > PrecLambda) $
                          lhs' <<$>> text "->" <+> ppTermDoc rhs'
         subDoc = align . group . nest 2 . ppTermDoc
@@ -922,7 +948,7 @@ ppTermF' pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' pp lcls p (Let dl u) =
+ppTermF' _opts pp lcls p (Let dl u) =
     ppLet <$> traverse (ppLocalDef pp' lcls lcls') dl
           <*> pp lcls' PrecNone u
   where ppLet dl' u' = TermDoc $
@@ -933,16 +959,16 @@ ppTermF' pp lcls p (Let dl u) =
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
         pp' a b c = ppTermDoc <$> pp a b c
-ppTermF' _pp lcls _p (LocalVar i)
+ppTermF' _opts _pp lcls _p (LocalVar i)
 --    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
     | otherwise = pure $ TermDoc d
   where d = lookupDoc lcls i
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
-ppTermF' _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
+ppTermF' _ _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
 
-ppTermDepth :: forall t. Termlike t => Int -> t -> Doc
-ppTermDepth d0 = pp d0 emptyLocalVarDoc PrecNone
+ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
+ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
   where
     pp :: Int -> TermPrinter t
     pp d lcls p t = ppTermDoc (pp' d lcls p t)
@@ -955,10 +981,10 @@ ppTermDepth d0 = pp d0 emptyLocalVarDoc PrecNone
         (pp d lcls PrecApp t1) Leijen.<$>
         (pp (d-1) lcls PrecArg t2)
       tf ->
-        ppTermF (pp' (d-1)) lcls p tf
+        ppTermF opts (pp' (d-1)) lcls p tf
 
 instance Show Term where
-  showsPrec _ t = shows $ ppTerm emptyLocalVarDoc PrecNone t
+  showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t
 
 type TypedDataType = DataType Ident Term
 type TypedCtor = Ctor Ident Term
@@ -986,9 +1012,9 @@ instance Show Module where
                    [ fmap ppImport (Map.keys (m^.moduleImports))
                    , fmap ppdecl   (moduleRDecls m)
                    ]
-    where ppImport nm = text $ "import " ++ show nm 
-          ppdecl (TypeDecl d) = ppDataType ppTerm d
-          ppdecl (DefDecl d) = ppDef emptyLocalVarDoc d
+    where ppImport nm = text $ "import " ++ show nm
+          ppdecl (TypeDecl d) = ppDataType (ppTerm defaultPPOpts) d
+          ppdecl (DefDecl d) = ppDef defaultPPOpts emptyLocalVarDoc d
 
 emptyModule :: ModuleName -> Module
 emptyModule nm =

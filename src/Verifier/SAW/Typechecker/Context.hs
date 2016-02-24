@@ -663,7 +663,7 @@ ppTCTerm tc = ppTCTermGen (text <$> contextNames tc)
 -- | Pretty print TC term with doc used for free variables.
 ppTCTermGen :: [Doc] -> Prec -> TCTerm -> Doc
 ppTCTermGen d pr (TCF tf) =
-  runIdentity $ ppFlatTermF (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
+  runIdentity $ ppFlatTermF defaultPPOpts (\pr' t -> return (ppTCTermGen d pr' t)) pr tf
 ppTCTermGen d pr (TCApp x y) = ppAppParens pr $
   ppTCTermGen d PrecApp x <+> ppTCTermGen d PrecArg y
 ppTCTermGen d pr (TCLambda p l r) = ppParens (pr > PrecNone) $

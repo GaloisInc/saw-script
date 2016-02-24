@@ -96,6 +96,8 @@ module Verifier.SAW.SharedTerm
   , scUpdNatFun
   , scUpdBvFun
   , scTermCount
+  , PPOpts(..)
+  , defaultPPOpts
   , scPrettyTerm
   , scPrettyTermDoc
   , scGlobalApply
@@ -691,7 +693,7 @@ unshare t0 = State.evalState (go t0) Map.empty
           return x
 
 instance Show (SharedTerm s) where
-  show = scPrettyTerm
+  show = scPrettyTerm defaultPPOpts
 
 scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
 scSharedTerm sc = go
@@ -891,8 +893,8 @@ scTermCount t0 = execState (go [t0]) IntMap.empty
 lineSep :: [Doc] -> Doc
 lineSep l = hcat (punctuate line l)
 
-scPrettyTermDoc :: forall s . SharedTerm s -> Doc
-scPrettyTermDoc t0
+scPrettyTermDoc :: forall s. PPOpts -> SharedTerm s -> Doc
+scPrettyTermDoc opts t0
     | null bound = ppTermDoc (ppt lcls0 PrecNone t0)
     | otherwise =
         text "let { " <> nest 6 (lineSep lets) <$$>
@@ -927,7 +929,7 @@ scPrettyTermDoc t0
         var :: Word64 -> Doc
         var n = char 'x' <> integer (toInteger n)
 
-        lets = [ var n <+> char '=' <+> ppTermDoc (ppTermF ppt lcls0 PrecNone (unwrapTermF t)) <> char ';'
+        lets = [ var n <+> char '=' <+> ppTermDoc (ppTermF opts ppt lcls0 PrecNone (unwrapTermF t)) <> char ';'
                | ((_, t), n) <- bound `zip` [0..]
                ]
 
@@ -936,14 +938,14 @@ scPrettyTermDoc t0
           where insVar m ((i, _), n) = IntMap.insert i (var n) m
 
         ppt :: LocalVarDoc -> Prec -> SharedTerm s -> TermDoc
-        ppt lcls p (Unshared tf) = ppTermF ppt lcls p tf
+        ppt lcls p (Unshared tf) = ppTermF opts ppt lcls p tf
         ppt lcls p (STApp{ stAppIndex = i, stAppTermF = tf}) =
           case IntMap.lookup i dm of
             Just d -> TermDoc d
-            Nothing -> ppTermF ppt lcls p tf
+            Nothing -> ppTermF opts ppt lcls p tf
 
-scPrettyTerm :: SharedTerm s -> String
-scPrettyTerm t = show (scPrettyTermDoc t)
+scPrettyTerm :: PPOpts -> SharedTerm s -> String
+scPrettyTerm opts t = show (scPrettyTermDoc opts t)
 
 --------------------------------------------------------------------------------
 -- Building shared terms

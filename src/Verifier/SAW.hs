@@ -7,7 +7,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW 
+module Verifier.SAW
   ( module Verifier.SAW.SharedTerm
   , module Verifier.SAW.ExternalFormat
   , Module

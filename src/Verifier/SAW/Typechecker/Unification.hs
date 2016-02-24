@@ -51,7 +51,7 @@ import Verifier.SAW.Position
 import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
 import Verifier.SAW.Typechecker.Simplification
-import Verifier.SAW.TypedAST (ppParens, zipWithFlatTermF, ppFlatTermF, Prec(..))
+import Verifier.SAW.TypedAST (ppParens, zipWithFlatTermF, ppFlatTermF, defaultPPOpts, Prec(..))
 import qualified Verifier.SAW.UntypedAST as Un
 
 -- | Return true if set has duplicates.
@@ -134,7 +134,7 @@ ppUTerm vs0 = evalStateT (go PrecNone vs0) Set.empty
         go pr (UHolTerm (tc,t) []) = pure $ ppTCTerm tc pr t
         go pr (UHolTerm (tc,t) bindings) = ppParens (pr > PrecApp) .
           hsep . (ppTCTerm tc PrecApp t :) <$> traverse (goVar PrecArg) bindings
-        go pr (UTF tf) = ppFlatTermF goVar pr tf
+        go pr (UTF tf) = ppFlatTermF defaultPPOpts goVar pr tf
         go pr (UApp l r) = ppParens (pr > PrecApp) <$> liftA2 (<+>) (goVar PrecApp l) (goVar PrecArg r)
         go _ (UOuterVar nm _) = pure $ text $ "outerv" ++ nm
         go _ (UOuterLet nm _) = pure $ text $ "outerl" ++ nm
