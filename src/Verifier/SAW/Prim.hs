@@ -366,3 +366,14 @@ divideByZero = X.throw DivideByZero
 -- | For `error`
 userError :: String -> a
 userError msg = X.throw (UserError msg)
+
+-- | Convert asynchronous EvalError exceptions into IO exceptions.
+rethrowEvalError :: IO a -> IO a
+rethrowEvalError m = run `X.catch` rethrow
+  where
+    run = do
+      a <- m
+      return $! a
+
+    rethrow :: EvalError -> IO a
+    rethrow exn = fail (show exn) -- X.throwIO (EvalError exn)
