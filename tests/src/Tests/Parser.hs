@@ -33,10 +33,10 @@ checkEqn sym (DefEqn pats rhs@(Term rtf)) = do
           & docShowLocalNames .~ False
           & docShowLocalTypes .~ True
   let msg = "Equation right hand side has unbound variables:\n"
-         ++ show (ppDefEqn ppTerm emptyLocalVarDoc (ppIdent sym) (DefEqn pats rhs)) ++ "\n"
-         ++ show (ppTerm lvd PrecNone rhs) ++ "\n"
+         ++ show (ppDefEqn (ppTerm defaultPPOpts) emptyLocalVarDoc (ppIdent sym) (DefEqn pats rhs)) ++ "\n"
+         ++ show (ppTerm defaultPPOpts lvd PrecNone rhs) ++ "\n"
          ++ show (freesTerm rhs) ++ "\n"
-         ++ show (ppTermDoc (ppTermF (\_ _ -> TermDoc . text . show) lvd PrecNone (freesTerm <$> rtf)))
+         ++ show (ppTermDoc (ppTermF defaultPPOpts (\_ _ -> TermDoc . text . show) lvd PrecNone (freesTerm <$> rtf)))
 
   assertEqual (namedMsg sym msg) 0 (freesTerm rhs `shiftR` nbound)
 
