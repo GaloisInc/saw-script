@@ -669,7 +669,7 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant _ _ tf1) (Constant _ _ tf2) = term tf1 tf2
+    termf (Constant x1 t1 _) (Constant x2 t2 _) = x1 == x2 && term t1 t2
     termf _ _ = False
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
                          Nothing -> False
