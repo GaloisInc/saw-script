@@ -64,6 +64,9 @@ library
      Verifier.SAW.Rewriter
      Verifier.SAW.SCTypeCheck
      Verifier.SAW.Simulator
+     Verifier.SAW.Simulator.ANF
+     Verifier.SAW.Simulator.ANF.Base
+     Verifier.SAW.Simulator.ANF.Vector
      Verifier.SAW.Simulator.Concrete
      Verifier.SAW.Simulator.MonadLazy
      Verifier.SAW.Simulator.Prims
