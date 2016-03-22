@@ -91,7 +91,7 @@ pmod x y = findmsb (V.toList y)
       | otherwise = V.zipWith (ANF.mux c) (usemask cs) (findmsb cs)
 
     usemask :: [ANF] -> ANFV
-    usemask m = zext (V.fromList (go (V.length x - 1) p0 z0)) (length y - 1)
+    usemask m = zext (V.fromList (go (V.length x - 1) p0 z0)) (V.length y - 1)
       where
         zext v r = V.replicate (r - V.length v) ANF.false V.++ v
         msize = length m
