@@ -119,9 +119,7 @@ tcLenFromThenTo_Nat =
 
 concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
-  [ ("Cryptol.arithBinaryBool"     , error "Cryptol.arithBinaryBool is deliberately unimplemented" )
-  , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
-  , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError bvAsChar )
   , ("Cryptol.lg2Nat"              , lg2Nat (return . C.toWord) concreteLg2 )
   , ("Cryptol.bvLg2"               , bvLg2 (return . C.toWord) concreteLg2 )
@@ -131,9 +129,7 @@ concretePrims = Map.fromList
 
 bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
 bitblastPrims g = Map.fromList
-  [ ("Cryptol.arithBinaryBool"     , error "Cryptol.arithBinaryBool is deliberately unimplemented" )
-  , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
-  , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError (aigWordAsChar g) )
   , ("Cryptol.lg2Nat"              , lg2Nat BB.toWord (bitblastLogBase2 g) )
   , ("Cryptol.bvLg2"               , bvLg2 BB.toWord (bitblastLogBase2 g) )
@@ -143,9 +139,7 @@ bitblastPrims g = Map.fromList
 
 sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
-  [ ("Cryptol.arithBinaryBool"     , error "Cryptol.arithBinaryBool is deliberately unimplemented" )
-  , ("Cryptol.arithUnaryBool"      , error "Cryptol.arithUnaryBool is deliberately unimplemented" )
-  , ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError sbvWordAsChar )
   , ("Cryptol.lg2Nat"              , lg2Nat SBV.toWord sbvLg2 )
   , ("Cryptol.bvLg2"               , bvLg2 SBV.toWord sbvLg2 )
