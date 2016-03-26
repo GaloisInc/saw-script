@@ -759,15 +759,63 @@ combineKind :: Kind -> Kind -> Kind
 combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
 combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
 
+-- | If the value is something of type Num or KType (corresponding to
+-- a Cryptol type argument) then return Just applied to a
+-- pretty-printed String.
+asTypeSuffix :: SValue -> IO (Maybe String)
+asTypeSuffix = asTyp
+  where
+    asVCtor (VCtorApp n v) = Just (n, V.toList v)
+    asVCtor _ = Nothing
+
+    prepend s (Just x) (Just y) = Just (s ++ x ++ y)
+    prepend _ _ _ = Nothing
+
+    asTyp v =
+      case asVCtor v of
+        Just ("Cryptol.TCNum", [x0]) -> do
+          VNat n <- force x0
+          return (Just ("_" ++ show n))
+        Just ("Cryptol.TCInf", []) -> return (Just "_inf")
+        Just ("Cryptol.TCBit", []) -> return (Just "_bit")
+        Just ("Cryptol.TCSeq", [x1, x2]) -> do
+          ms1 <- force x1 >>= asTyp
+          ms2 <- force x2 >>= asTyp
+          return (prepend "_seq" ms1 ms2)
+        Just ("Cryptol.TCFun", [x1, x2]) ->  do
+          ms1 <- force x1 >>= asTyp
+          ms2 <- force x2 >>= asTyp
+          return (prepend "_fun" ms1 ms2)
+        Just ("Cryptol.TCUnit", []) -> return (Just "_unit")
+        Just ("Cryptol.TCPair", [x1, x2]) ->  do
+          ms1 <- force x1 >>= asTyp
+          ms2 <- force x2 >>= asTyp
+          return (prepend "_tup" ms1 ms2)
+        Just ("Cryptol.TCEmpty", []) -> return (Just "_nil")
+        Just ("Cryptol.TCField", [x0, x1, x2]) -> do
+          VString s <- force x0
+          ms1 <- force x1 >>= asTyp
+          ms2 <- force x2 >>= asTyp
+          return (prepend ("_rec_" ++ s) ms1 ms2)
+        _ -> return Nothing
+
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
 parseUninterpreted cws nm (VDataType "Prelude.Bool" []) =
   return $ vBool $ mkUninterpreted KBool cws nm
+
 parseUninterpreted cws nm (VPiType _ f) =
   return $
   strictFun $ \x -> do
-    cws' <- flattenSValue x
-    t2 <- f (ready x)
-    parseUninterpreted (cws ++ cws') nm t2
+    ms <- asTypeSuffix x
+    case ms of
+      Just suffix -> do
+        t2 <- f (ready x)
+        parseUninterpreted cws (nm ++ suffix) t2
+      Nothing -> do
+        cws' <- flattenSValue x
+        t2 <- f (ready x)
+        parseUninterpreted (cws ++ cws') nm t2
+
 parseUninterpreted cws nm ty =
   ST.evalStateT (parseTy ty) (mkUninterpreted (kindFromType ty) cws nm)
   where
