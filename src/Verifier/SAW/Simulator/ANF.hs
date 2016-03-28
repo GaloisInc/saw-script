@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -41,6 +42,11 @@ import Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (Module)
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+import Data.Traversable
+#endif
 
 ------------------------------------------------------------
 
