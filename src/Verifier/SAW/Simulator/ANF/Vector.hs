@@ -85,7 +85,11 @@ sub x y =
   V.fromList (snd (ripple_carry_adder (V.toList x) (map ANF.compl (V.toList y)) ANF.true))
 
 mul :: ANFV -> ANFV -> ANFV
-mul = error "unimplemented: mul"
+mul x y = go (fmap (const ANF.false) x) (V.toList y)
+  where
+    go acc [] = acc
+    go acc (c : cs) = go (V.zipWith (ANF.mux c) (add acc2 x) acc2) cs
+      where acc2 = V.drop 1 (acc V.++ V.singleton ANF.false)
 
 udiv :: ANFV -> ANFV -> ANFV
 udiv = error "unimplemented: udiv"
