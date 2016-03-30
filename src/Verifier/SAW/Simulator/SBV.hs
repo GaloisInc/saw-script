@@ -57,7 +57,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, Module)
+import Verifier.SAW.TypedAST (FieldName, Module, identName)
 
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 
@@ -205,25 +205,31 @@ toVector (VWord xv) =
 toVector _ = error "this word might be symbolic"
 
 -- | Flatten an SValue to a sequence of components, each of which is
--- either a symbolic word or a symbolic boolean.
-flattenSValue :: SValue -> IO [SVal]
+-- either a symbolic word or a symbolic boolean. If the SValue
+-- contains any values built from data constructors, then return them
+-- encoded as a String.
+flattenSValue :: SValue -> IO ([SVal], String)
 flattenSValue v = do
   mw <- toMaybeWord v
   case mw of
-    Just w -> return [w]
+    Just w -> return ([w], "")
     Nothing ->
       case v of
-        VUnit                     -> return []
-        VPair x y                 -> do xs <- flattenSValue =<< force x
-                                        ys <- flattenSValue =<< force y
-                                        return (xs ++ ys)
-        VEmpty                    -> return []
-        VField _ x y              -> do xs <- flattenSValue =<< force x
-                                        ys <- flattenSValue y
-                                        return (xs ++ ys)
-        VVector (V.toList -> ts)  -> concat <$> traverse (force >=> flattenSValue) ts
-        VBool sb                  -> return [sb]
-        VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [])
+        VUnit                     -> return ([], "")
+        VPair x y                 -> do (xs, sx) <- flattenSValue =<< force x
+                                        (ys, sy) <- flattenSValue =<< force y
+                                        return (xs ++ ys, sx ++ sy)
+        VEmpty                    -> return ([], "")
+        VField _ x y              -> do (xs, sx) <- flattenSValue =<< force x
+                                        (ys, sy) <- flattenSValue y
+                                        return (xs ++ ys, sx ++ sy)
+        VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
+                                        return (concat xss, concat ss)
+        VBool sb                  -> return ([sb], "")
+        VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
+        VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
+                                        return (concat xss, "_" ++ identName i ++ concat ss)
+        VNat n                    -> return ([], "_" ++ show n)
         _ -> fail $ "Could not create sbv argument for " ++ show v
 
 vWord :: SWord -> SValue
@@ -759,46 +765,6 @@ combineKind :: Kind -> Kind -> Kind
 combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
 combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
 
--- | If the value is something of type Num or KType (corresponding to
--- a Cryptol type argument) then return Just applied to a
--- pretty-printed String.
-asTypeSuffix :: SValue -> IO (Maybe String)
-asTypeSuffix = asTyp
-  where
-    asVCtor (VCtorApp n v) = Just (n, V.toList v)
-    asVCtor _ = Nothing
-
-    prepend s (Just x) (Just y) = Just (s ++ x ++ y)
-    prepend _ _ _ = Nothing
-
-    asTyp v =
-      case asVCtor v of
-        Just ("Cryptol.TCNum", [x0]) -> do
-          VNat n <- force x0
-          return (Just ("_" ++ show n))
-        Just ("Cryptol.TCInf", []) -> return (Just "_inf")
-        Just ("Cryptol.TCBit", []) -> return (Just "_bit")
-        Just ("Cryptol.TCSeq", [x1, x2]) -> do
-          ms1 <- force x1 >>= asTyp
-          ms2 <- force x2 >>= asTyp
-          return (prepend "_seq" ms1 ms2)
-        Just ("Cryptol.TCFun", [x1, x2]) ->  do
-          ms1 <- force x1 >>= asTyp
-          ms2 <- force x2 >>= asTyp
-          return (prepend "_fun" ms1 ms2)
-        Just ("Cryptol.TCUnit", []) -> return (Just "_unit")
-        Just ("Cryptol.TCPair", [x1, x2]) ->  do
-          ms1 <- force x1 >>= asTyp
-          ms2 <- force x2 >>= asTyp
-          return (prepend "_tup" ms1 ms2)
-        Just ("Cryptol.TCEmpty", []) -> return (Just "_nil")
-        Just ("Cryptol.TCField", [x0, x1, x2]) -> do
-          VString s <- force x0
-          ms1 <- force x1 >>= asTyp
-          ms2 <- force x2 >>= asTyp
-          return (prepend ("_rec_" ++ s) ms1 ms2)
-        _ -> return Nothing
-
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
 parseUninterpreted cws nm (VDataType "Prelude.Bool" []) =
   return $ vBool $ mkUninterpreted KBool cws nm
@@ -806,15 +772,9 @@ parseUninterpreted cws nm (VDataType "Prelude.Bool" []) =
 parseUninterpreted cws nm (VPiType _ f) =
   return $
   strictFun $ \x -> do
-    ms <- asTypeSuffix x
-    case ms of
-      Just suffix -> do
-        t2 <- f (ready x)
-        parseUninterpreted cws (nm ++ suffix) t2
-      Nothing -> do
-        cws' <- flattenSValue x
-        t2 <- f (ready x)
-        parseUninterpreted (cws ++ cws') nm t2
+    (cws', suffix) <- flattenSValue x
+    t2 <- f (ready x)
+    parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
 parseUninterpreted cws nm ty =
   ST.evalStateT (parseTy ty) (mkUninterpreted (kindFromType ty) cws nm)
@@ -843,7 +803,8 @@ parseUninterpreted cws nm ty =
     parseTy t = fail $ "could not create uninterpreted type for " ++ show t
 
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
-mkUninterpreted k args nm = svUninterpreted k nm Nothing args
+mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
+  where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
 asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
 asPredType sc t = do
