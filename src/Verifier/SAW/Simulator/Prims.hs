@@ -407,9 +407,18 @@ intToNatOp =
   intFun "intToNat" $ \x -> return $!
     if x >= 0 then VNat x else VNat 0
 
---primitive natToInt :: Nat -> Integer;
+-- primitive natToInt :: Nat -> Integer;
 natToIntOp :: Monad m => Value m b w e
 natToIntOp = natFun' "natToInt" $ \x -> return $ VNat (fromIntegral x)
+
+-- primitive error :: (a :: sort 0) -> String -> a;
+errorOp :: Monad m => Value m b w e
+errorOp =
+  constFun $
+  strictFun $ \x ->
+  case x of
+    VString s -> fail s
+    _ -> fail "unknown error"
 
 muxValue :: forall m b w e. (MonadLazy m, Applicative m, Show e) =>
             (w -> V.Vector b)

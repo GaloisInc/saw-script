@@ -834,6 +834,8 @@ updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 
 primitive data String :: sort 0;
 
+primitive error :: (a :: sort 0) -> String -> a;
+
 --------------------------------------------------------------------------------
 -- Floating-point values
 --    Currently commented out because they are not implemented...
