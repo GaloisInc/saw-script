@@ -135,8 +135,21 @@ udivrem dividend divisor = divStep 0 ANF.false initial
     shiftL1 :: ANFV -> ANF -> ANFV
     shiftL1 v e = V.tail v `V.snoc` e
 
+-- Perform udivrem on the absolute value of the operands.  Then, negate the
+-- quotient if the signs of the operands differ and make the sign of a nonzero
+-- remainder to match that of the dividend.
 sdivrem :: ANFV -> ANFV -> (ANFV, ANFV)
-sdivrem = error "sdivrem"
+sdivrem dividend divisor = (q',r')
+  where
+    sign1 = V.head dividend
+    sign2 = V.head divisor
+    signXor = ANF.xor sign1 sign2
+    negWhen x c = V.zipWith (ANF.mux c) (neg x) x
+    dividend' = negWhen dividend sign1
+    divisor' = negWhen divisor sign2
+    (q, r) = udivrem dividend' divisor'
+    q' = negWhen q signXor
+    r' = negWhen r sign1
 
 -- | Polynomial multiplication. Note that the algorithm works the same
 -- no matter which endianness convention is used. Result length is
