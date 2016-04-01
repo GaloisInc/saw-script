@@ -27,8 +27,6 @@ bvExp n x y = foldr Bool (bitvector n) n
   (bvNat n 1)
   (reverse n Bool y);
 
-primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
-
 --------------------------------------------------------------------------------
 -- Extended natural numbers
 
