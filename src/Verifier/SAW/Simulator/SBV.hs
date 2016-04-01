@@ -58,7 +58,6 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, Module, identName)
-
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 
 type SValue = Value IO SBool SWord SbvExtra
@@ -97,6 +96,7 @@ constMap = Map.fromList
   , ("Prelude.bvPMul", bvPMulOp)
   , ("Prelude.bvPDiv", bvPDivOp)
   , ("Prelude.bvPMod", bvPModOp)
+  , ("Prelude.bvLg2" , Prims.bvLg2Op toWord (return . sLg2))
   -- Relations
   , ("Prelude.bvEq"  , binRel svEqual)
   , ("Prelude.bvsle" , sbinRel svLessEq)
@@ -672,6 +672,14 @@ vZipOp =
   strictFun $ \xs -> return $
   strictFun $ \ys -> return $
   VVector (V.zipWith (\x y -> ready (vTuple [x, y])) (toVector xs) (toVector ys))
+
+-- | Ceiling (log_2 x)
+sLg2 :: SWord -> SWord
+sLg2 x = go 0
+  where
+    lit n = literalSWord (intSizeOf x) n
+    go i | i < intSizeOf x = svIte (svLessEq x (lit (2^i))) (lit (toInteger i)) (go (i + 1))
+         | otherwise       = lit (toInteger i)
 
 ------------------------------------------------------------
 -- Helpers for marshalling into SValues
