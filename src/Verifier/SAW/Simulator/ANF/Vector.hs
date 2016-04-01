@@ -234,7 +234,7 @@ pdivmod x y = findmsb (V.toList y)
     muxPair c a b
       | c == ANF.true = a
       | c == ANF.false = b
-      | otherwise = (V.zipWith (ANF.mux c) (fst a) (fst b), V.zipWith (ANF.mux c) (fst a) (fst b))
+      | otherwise = (V.zipWith (ANF.mux c) (fst a) (fst b), V.zipWith (ANF.mux c) (snd a) (snd b))
 
 -- Divide ds by (1 : mask), giving quotient and remainder. All
 -- arguments and results are big-endian. Remainder has the same length
