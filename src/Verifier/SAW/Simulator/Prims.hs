@@ -411,6 +411,12 @@ intToNatOp =
 natToIntOp :: Monad m => Value m b w e
 natToIntOp = natFun' "natToInt" $ \x -> return $ VNat (fromIntegral x)
 
+-- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
+bvLg2Op :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
+bvLg2Op asWord wordLg2 =
+  natFun' "bvLg2 1" $ \_n -> return $
+  strictFun $ \w -> (return . VWord) =<< (wordLg2 =<< asWord w)
+
 -- primitive error :: (a :: sort 0) -> String -> a;
 errorOp :: Monad m => Value m b w e
 errorOp =

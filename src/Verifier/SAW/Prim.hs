@@ -337,6 +337,17 @@ bvPDiv _ _ (BV m x) (BV _ y) = BV m (unNat (fst (pDivModNat (Nat x) (Nat y))))
 bvPMod :: Nat -> Nat -> BitVector -> BitVector -> BitVector
 bvPMod _ _ (BV _ x) (BV n y) = BV (n - 1) (unNat (snd (pDivModNat (Nat x) (Nat y))))
 
+bvLg2 :: BitVector -> BitVector
+bvLg2 (BV m x) = BV m (if d > 0 then k+1 else k)
+  where (k, d) = lg2rem x
+
+-- | lg2rem n = (k, d) <--> n = 2^k + d, with d < 2^k.
+lg2rem :: Integer -> (Integer, Integer)
+lg2rem 0 = (0, -1)
+lg2rem 1 = (0, 0)
+lg2rem n = (k+1, 2*d+r)
+  where (q, r) = n `divMod` 2
+        (k, d) = lg2rem q
 
 ----------------------------------------
 -- Errors

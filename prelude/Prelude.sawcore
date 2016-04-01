@@ -599,6 +599,7 @@ axiom bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd 
 primitive bvNeg :: (x :: Nat) -> bitvector x -> bitvector x;
 primitive bvSub :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 primitive bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 
 -- Unsigned division and remainder.
 --
