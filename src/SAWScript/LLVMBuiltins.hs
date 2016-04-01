@@ -111,19 +111,21 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
   in startSimulator sc lopts lmod sym $ \scLLVM sbe cb dl md -> do
         setVerbosity (simVerbose opts)
         let verb = simVerbose opts
-        let mkAssign (s, tm, n) = do
+        let mkAssign (s, tm, _n) = do
               e <- failLeft $ runExceptT $ parseLLVMExpr cb md s
-              return (e, tm, n)
+              -- TODO: remove type from this result
+              return (e, tm, lssTypeOfLLVMExpr e)
             mkAllocAssign (s, n) = do
               e <- failLeft $ runExceptT $ parseLLVMExpr cb md s
               case lssTypeOfLLVMExpr e of
-                PtrType (MemType ty) -> do
+                (PtrType (MemType ty)) -> do
                   when (verb >= 2) $ liftIO $ putStrLn $
                     "Allocating " ++ show n ++ " elements of type " ++ show (ppActualType ty)
                   tm <- allocSome sbe dl n ty
                   when (verb >= 2) $ liftIO $ putStrLn $
                     "Allocated address: " ++ show tm
-                  return (e, tm, 1)
+                  -- TODO: remove type from this result
+                  return (e, tm, lssTypeOfLLVMExpr e)
                 _ -> fail $ "Allocation parameter " ++ s ++
                             " does not have pointer type"
             multDefErr i = error $ "Multiple terms given for " ++ ordinal (i + 1) ++
@@ -148,11 +150,12 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
             retReg = (,Ident "__SAWScript_rslt") <$> sdRetType md
         _ <- callDefine' False sym retReg args
         -- TODO: the following line is generating memory errors
+        -- TODO: in the following, use allocs to help determine type
         mapM_ (writeLLVMTerm argVals) otherAssigns
         when (verb >= 2) $ liftIO $ putStrLn $ "Running " ++ fname
         run
         when (verb >= 2) $ liftIO $ putStrLn $ "Finished running " ++ fname
-        outtms <- forM outputs $ \(ostr, n) -> do
+        outtms <- forM outputs $ \(ostr, _n) -> do
           case ostr of
             "$safety" -> do
               mp <- getPath
@@ -161,7 +164,11 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
                 Just p -> return (p ^. pathAssertions)
             _ -> do
               e <- failLeft $ runExceptT $ parseLLVMExpr cb md ostr
-              readLLVMTerm argVals e n
+              -- TODO: in the following, use allocs to help determine type
+              let ty = lssTypeOfLLVMExpr e
+              case lookup ostr allocs of
+                Just n -> readLLVMTerm argVals e (ArrayType (fromIntegral n) ty)
+                Nothing -> readLLVMTerm argVals e ty
         let bundle tms = case tms of
                            [t] -> return t
                            _ -> scTuple scLLVM tms

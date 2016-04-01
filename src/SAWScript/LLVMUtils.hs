@@ -136,29 +136,27 @@ readLLVMTermAddr args (Term e) =
   case e of
     Arg _ _ _ -> fail "Can't read address of argument"
     Global s _ -> evalExprInCC "readLLVMTerm:Global" (SValSymbol s)
-    Deref ae _ -> readLLVMTerm args ae 1
-    StructField ae si idx _ ->
-      structFieldAddr si idx =<< readLLVMTerm args ae 1
+    Deref ae ty -> readLLVMTerm args ae (PtrType (MemType ty))
+    StructField ae si idx _ -> do
+      sa <- readLLVMTerm args ae (PtrType (MemType (StructType si)))
+      structFieldAddr si idx sa
     ReturnValue _ -> fail "Can't read address of return value"
 
 writeLLVMTerm :: (Functor m, Monad m, MonadIO m, Functor sbe) =>
                  [SBETerm sbe]
-              -> (LLVMExpr, SBETerm sbe, Integer)
+              -> (LLVMExpr, SBETerm sbe, LLVMActualType)
               -> Simulator sbe m ()
-writeLLVMTerm args (e, t, cnt) = do
+writeLLVMTerm args (e, t, ty) = do
   addr <- readLLVMTermAddr args e
-  let ty = lssTypeOfLLVMExpr e
-      ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
-          | otherwise = ty
   dl <- getDL
-  store ty' t addr (memTypeAlign dl ty')
+  store ty t addr (memTypeAlign dl ty)
 
 readLLVMTerm :: (Functor m, Monad m, MonadIO m, Functor sbe) =>
                 [SBETerm sbe]
              -> LLVMExpr
-             -> Integer
+             -> LLVMActualType
              -> Simulator sbe m (SBETerm sbe)
-readLLVMTerm args et@(Term e) cnt =
+readLLVMTerm args et@(Term e) ty =
   case e of
     Arg n _ _ -> return (args !! n)
     ReturnValue _ -> do
@@ -167,13 +165,9 @@ readLLVMTerm args et@(Term e) cnt =
         (Just v) -> return v
         Nothing -> fail "Program did not return a value"
     _ -> do
-      let ty = lssTypeOfLLVMExpr et
       addr <- readLLVMTermAddr args et
-      let ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
-              | otherwise = ty
-      -- Type should be type of value, not type of ptr
       dl <- getDL
-      load ty' addr (memTypeAlign dl ty')
+      load ty addr (memTypeAlign dl ty)
 
 freshLLVMArg :: Monad m =>
             (t, MemType) -> Simulator sbe m (MemType, SBETerm sbe)
