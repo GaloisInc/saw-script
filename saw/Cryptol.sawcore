@@ -8,8 +8,6 @@ import Prelude;
 --------------------------------------------------------------------------------
 -- Additional operations on Prelude types
 
-primitive lg2Nat :: Nat -> Nat;
-
 pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) -> #(a1, a2) -> #(b1, b2);
 pairMap _ _ _ _ f g (x, y) = (f x, g y);
 
@@ -42,10 +40,6 @@ data Num :: sort 0 where {
 tcWidth :: Num -> Num;
 tcWidth (TCNum n) = TCNum (widthNat n);
 tcWidth TCInf = TCInf;
-
-tcLg2 :: Num -> Num;
-tcLg2 (TCNum n) = TCNum (lg2Nat n);
-tcLg2 TCInf = TCInf;
 
 tcAdd :: Num -> Num -> Num;
 tcAdd (TCNum x) (TCNum y) = TCNum (addNat x y);

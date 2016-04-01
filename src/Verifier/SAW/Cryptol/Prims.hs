@@ -64,16 +64,6 @@ sbvWordAsChar bv =
     Just i -> return $ toEnum $ fromInteger i
     Nothing -> fail "unable to interpret bitvector as character"
 
-
--- primitive lg2Nat :: Nat -> Nat;
-lg2Nat :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
-lg2Nat asWord wordLg2 =
-  strictFun $ \n ->
-    case n of
-      VNat i   -> return $ VNat $ fromInteger $ CryEval.lg2 $ toInteger i
-      VToNat v -> (return . VToNat . VWord) =<< (wordLg2 =<< asWord v)
-      _ -> fail "Cryptol.lg2Nat: illegal argument"
-
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 bvLg2 :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
 bvLg2 asWord wordLg2 =
@@ -121,7 +111,6 @@ concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError bvAsChar )
-  , ("Cryptol.lg2Nat"              , lg2Nat (return . C.toWord) concreteLg2 )
   , ("Cryptol.bvLg2"               , bvLg2 (return . C.toWord) concreteLg2 )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
@@ -131,7 +120,6 @@ bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
 bitblastPrims g = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError (aigWordAsChar g) )
-  , ("Cryptol.lg2Nat"              , lg2Nat BB.toWord (bitblastLogBase2 g) )
   , ("Cryptol.bvLg2"               , bvLg2 BB.toWord (bitblastLogBase2 g) )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
@@ -141,7 +129,6 @@ sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
   , ("Cryptol.ecError"             , ecError sbvWordAsChar )
-  , ("Cryptol.lg2Nat"              , lg2Nat SBV.toWord sbvLg2 )
   , ("Cryptol.bvLg2"               , bvLg2 SBV.toWord sbvLg2 )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
