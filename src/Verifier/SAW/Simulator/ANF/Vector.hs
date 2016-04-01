@@ -26,6 +26,10 @@ import qualified Data.Vector as V
 
 type ANFV = Vector ANF
 
+-- | Constant integer literals
+integer :: Int -> Integer -> ANFV
+integer width x = V.reverse (V.generate width (ANF.constant . testBit x))
+
 -- | Bitvector equality
 eq :: ANFV -> ANFV -> ANF
 eq x y = V.foldr ANF.conj ANF.true (V.zipWith ANF.iff x y)
@@ -200,8 +204,53 @@ pmod x y = findmsb (V.toList y)
                   p' = next p
               in go (i-1) p' acc'
 
+-- | Polynomial division. Return value has length
+--   equal to the first argument.
 pdiv :: ANFV -> ANFV -> ANFV
-pdiv = error "unimplemented: pdiv"
+pdiv x y = fst (pdivmod x y)
 
-integer :: Int -> Integer -> ANFV
-integer width x = V.reverse (V.generate width (ANF.constant . testBit x))
+-- Polynomial div/mod: resulting lengths are as in Cryptol.
+
+-- TODO: probably this function should be disentangled to only compute
+-- division, given that we have a separate polynomial modulus algorithm.
+pdivmod :: ANFV -> ANFV -> (ANFV, ANFV)
+pdivmod x y = findmsb (V.toList y)
+  where
+    findmsb :: [ANF] -> (ANFV, ANFV)
+    findmsb (c : cs) = muxPair c (usemask cs) (findmsb cs)
+    findmsb [] = (x, V.replicate (V.length y - 1) ANF.false) -- division by zero
+
+    usemask :: [ANF] -> (ANFV, ANFV)
+    usemask mask = (q, r)
+      where
+        (qs, rs) = pdivmod_helper (V.toList x) mask
+        z = ANF.false
+        qs' = map (const z) rs ++ qs
+        rs' = replicate (V.length y - 1 - length rs) z ++ rs
+        q = V.fromList qs'
+        r = V.fromList rs'
+
+    muxPair :: ANF -> (ANFV, ANFV) -> (ANFV, ANFV) -> (ANFV, ANFV)
+    muxPair c a b
+      | c == ANF.true = a
+      | c == ANF.false = b
+      | otherwise = (V.zipWith (ANF.mux c) (fst a) (fst b), V.zipWith (ANF.mux c) (fst a) (fst b))
+
+-- Divide ds by (1 : mask), giving quotient and remainder. All
+-- arguments and results are big-endian. Remainder has the same length
+-- as mask (but limited by length ds); total length of quotient ++
+-- remainder = length ds.
+pdivmod_helper :: [ANF] -> [ANF] -> ([ANF], [ANF])
+pdivmod_helper ds mask = go (length ds - length mask) ds
+  where
+    go :: Int -> [ANF] -> ([ANF], [ANF])
+    go n cs | n <= 0 = ([], cs)
+    go _ []          = error "Data.AIG.Operations.pdiv: impossible"
+    go n (c : cs)    = (c : qs, rs)
+      where cs' = mux_add c cs mask
+            (qs, rs) = go (n - 1) cs'
+
+    mux_add :: ANF -> [ANF] -> [ANF] -> [ANF]
+    mux_add c (x : xs) (y : ys) = ANF.mux c (ANF.xor x y) x : mux_add c xs ys
+    mux_add _ []       (_ : _ ) = error "pdiv: impossible"
+    mux_add _ xs       []       = xs
