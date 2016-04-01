@@ -43,13 +43,18 @@ ule xv yv = go (V.toList xv) (V.toList yv)
 ult :: ANFV -> ANFV -> ANF
 ult x y = ANF.compl (ule y x)
 
+swap_sign :: ANFV -> ANFV
+swap_sign x
+  | V.null x = x
+  | otherwise = V.singleton (ANF.compl (V.head x)) V.++ V.tail x
+
 -- | Signed less-than-or-equal
 sle :: ANFV -> ANFV -> ANF
-sle = error "unimplemented: sle"
+sle x y = ule (swap_sign x) (swap_sign y)
 
 -- | Signed less-than
 slt :: ANFV -> ANFV -> ANF
-slt = error "unimplemented: slt"
+slt x y = ult (swap_sign x) (swap_sign y)
 
 -- | Big-endian bitvector increment with carry
 increment :: [ANF] -> (ANF, [ANF])
@@ -91,17 +96,47 @@ mul x y = V.foldl f zero y
     f acc c = V.zipWith (ANF.mux c) (add acc2 x) acc2
       where acc2 = V.drop 1 (acc V.++ V.singleton ANF.false)
 
+-- | Unsigned bitvector division
 udiv :: ANFV -> ANFV -> ANFV
-udiv = error "unimplemented: udiv"
+udiv x y = fst (udivrem x y)
 
+-- | Unsigned bitvector remainder
 urem :: ANFV -> ANFV -> ANFV
-urem = error "unimplemented: urem"
+urem x y = snd (udivrem x y)
 
+-- | Signed bitvector division
 sdiv :: ANFV -> ANFV -> ANFV
-sdiv = error "unimplemented: sdiv"
+sdiv x y = fst (sdivrem x y)
 
+-- | Signed bitvector remainder
 srem :: ANFV -> ANFV -> ANFV
-srem = error "unimplemented: srem"
+srem x y = snd (sdivrem x y)
+
+udivrem :: ANFV -> ANFV -> (ANFV, ANFV)
+udivrem dividend divisor = divStep 0 ANF.false initial
+  where
+    n :: Int
+    n = V.length dividend
+
+    -- Given an n-bit dividend and divisor, 'initial' is the starting value of
+    -- the 2n-bit "remainder register" that carries both the quotient and remainder;
+    initial :: ANFV
+    initial = integer n 0 V.++ dividend
+
+    divStep :: Int -> ANF -> ANFV -> (ANFV, ANFV)
+    divStep i p rr | i == n = (q `shiftL1` p, r)
+      where (r, q) = V.splitAt n rr
+    divStep i p rr = divStep (i+1) b (V.zipWith (ANF.mux b) (V.fromList s V.++ q) rs)
+      where rs = rr `shiftL1` p
+            (r, q) = V.splitAt n rs
+            -- Subtract the divisor from the left half of the "remainder register"
+            (b, s) = ripple_carry_adder (V.toList r) (map ANF.compl (V.toList divisor)) ANF.true
+
+    shiftL1 :: ANFV -> ANF -> ANFV
+    shiftL1 v e = V.tail v `V.snoc` e
+
+sdivrem :: ANFV -> ANFV -> (ANFV, ANFV)
+sdivrem = error "sdivrem"
 
 -- | Polynomial multiplication. Note that the algorithm works the same
 -- no matter which endianness convention is used. Result length is
