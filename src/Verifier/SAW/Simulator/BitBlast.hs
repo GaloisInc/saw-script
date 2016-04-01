@@ -225,6 +225,7 @@ beConstMap be = Map.fromList
   , ("Prelude.bvPMul", bvPMulOp be)
   , ("Prelude.bvPMod", bvPModOp be)
   , ("Prelude.bvPDiv", bvPDivOp be)
+  , ("Prelude.bvLg2" , Prims.bvLg2Op toWord (bitblastLogBase2 be) )
   -- Relations
   , ("Prelude.bvEq"  , binRel (AIG.bvEq be))
   , ("Prelude.bvsle" , binRel (AIG.sle be))
@@ -416,6 +417,13 @@ eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp
         bvEqOp _ x y = do x' <- toWord x
                           y' <- toWord y
                           vBool <$> AIG.bvEq be x' y'
+
+-- | rounded-up log base 2, where we complete the function by setting:
+--   lg2 0 = 0
+bitblastLogBase2 :: AIG.IsAIG l g => g s -> LitVector (l s) -> IO (LitVector (l s))
+bitblastLogBase2 g x = do
+  z <- AIG.isZero g x
+  AIG.iteM g z (return x) (AIG.logBase2_up g x)
 
 -----------------------------------------
 -- Integer/bitvector conversions
