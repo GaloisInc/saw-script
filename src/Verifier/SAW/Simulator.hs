@@ -40,7 +40,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IMap
 import Data.Traversable
 import qualified Data.Vector as V
-import qualified Debug.Trace as Debug
+--import qualified Debug.Trace as Debug
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -291,12 +291,12 @@ checkPrimitives m0 prims = do
    -- FIXME this is downgraded to a warning temporarily while we work out a
    -- solution to issue GaloisInc/saw-script#48
    --   when (not $ null unimplementedPrims) (fail $ unimplementedMsg)
-   (if null unimplementedPrims then id else Debug.trace (unimplementedMsg++"\n")) $
+   -- (if null unimplementedPrims then id else Debug.trace (unimplementedMsg++"\n")) $
 --   (if null overridePrims then id else Debug.trace (overrideMsg++"\n")) $
      return ()
 
-  where unimplementedMsg = unwords $
-            ("ERROR unimplemented primitives:" : (map show unimplementedPrims))
+  where _unimplementedMsg = unwords $
+            ("WARNING unimplemented primitives:" : (map show unimplementedPrims))
         _overrideMsg = unwords $
             ("WARNING overridden definitions:" : (map show overridePrims))
 
