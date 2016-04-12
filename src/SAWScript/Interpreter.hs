@@ -13,7 +13,7 @@
 {- |
 Module           : $Header$
 Description      :
-License          : Free for non-commercial use. See LICENSE.
+License          : BSD3
 Stability        : provisional
 Point-of-contact : huffman
 -}
@@ -856,9 +856,9 @@ primitives = Map.fromList
     , "anywhere in the argument list will be replaced with the name of the"
     , "temporary file holding the AIG version of the formula."]
 
-  , prim "anf"                 "ProofScript SatResult"
-    (scVal satANF)
-    [ "Prove the current goal by conversion to ANF (Algebraic Normal Form)." ]
+  , prim "rme"                 "ProofScript SatResult"
+    (scVal satRME)
+    [ "Prove the current goal by expansion to Reed-Muller Normal Form." ]
 
   , prim "trivial"             "ProofScript SatResult"
     (pureVal trivial)
