@@ -31,7 +31,7 @@
       function to convert a value to a string without printing it; and
       the ability to use `print` or `show` instead of
       `llvm_browse_module` and `java_browse_class`
-    * New built-in functions for processing lists: TODO names
+    * New built-in functions for processing lists
 
 * New proof backends:
     * A new `rme` proof tactic, based on the
