@@ -1,0 +1,178 @@
+import "test.cry";
+m <- llvm_load_module "tmp/test.bc";
+
+// Verify 'init'.
+//
+// Using 'llvm_symexec' and 'llvm_verify'.
+
+st <- fresh_symbolic "st" {| State |};
+let allocs = [ ("st", 1) ];
+let inputs = [ ("st->0", {{ st.sum }}, 1)
+             , ("st->1", {{ st.len }}, 1)
+             ];
+// ??? How to get resulting 'st' state from output?
+//
+// Update: Aaron said the LLVM+SAW integration doesn't have a way to
+// talk about structs in their entirety. So, we have to break the
+// struct up in to fields, and then reconstruct it.
+//
+// These don't work:
+//
+// - Treats the 'state' struct as flat 64-bit vector (type '[64]')
+//   (UPDATE: wrong! Treats it as a pointer, which makes sense):
+//
+//let outputs = [ ("st", 1) ];
+//
+// - Incomprehensible error:
+//
+//let outputs = [ ("*st", 1) ];
+let outputs = [ ("st->0", 1), ("st->1", 1) ];
+
+// Reconstruct 'state' record from tuple of it's fields.
+let {{ 
+  toState : ([32], [32]) -> State
+  toState t = { sum = t.0, len = t.1 }
+}};
+
+t <- llvm_symexec m "init" allocs inputs outputs true;
+// Would like to do
+//
+//thm <- abstract_symbolic {{ t == init }};
+//
+// but can't talk about entire 'state' struct.
+thm <- abstract_symbolic {{ toState t == init }};
+print "Verifying 'init' using 'llvm_symexec':";
+prove_print abc thm;
+
+// ??? Is there are way to do this without decomposing the struct?
+let init_spec = do {
+  llvm_ptr "st" (llvm_struct "struct.state");
+
+  // Says "Unsupported type in llvm_var: { i32, i32 }
+  //st <- llvm_var "*st" (llvm_struct "struct.state");
+  //llvm_ensure_eq "*st" {{ init }};
+
+  sum <- llvm_var "st->0" (llvm_int 32);
+  len <- llvm_var "st->1" (llvm_int 32);
+
+  llvm_ensure_eq "st->0" {{ init.sum }};
+  llvm_ensure_eq "st->1" {{ init.len }};
+
+  llvm_sat_branches true;
+  llvm_verify_tactic abc;
+};
+print "Verifying 'init' using 'llvm_verify':";
+init_ov <- llvm_verify m "init" [] init_spec;
+
+
+// Verify 'update'.
+
+st <- fresh_symbolic "st" {| State |};
+xs <- fresh_symbolic "xs" {| [3][32] |};
+let allocs = [ ("st", 1), ("xs", 3) ];
+let inputs = [ ("st->0", {{ st.sum }}, 1)
+             , ("st->1", {{ st.len }}, 1)
+             , ("*xs", {{ xs }}, 3)
+             , ("len", {{ 3:[32] }}, 1)
+             ];
+let outputs = [ ("st->0", 1), ("st->1", 1) ];
+t <- llvm_symexec m "update" allocs inputs outputs true;
+thm <- abstract_symbolic {{ toState t == update st xs }};
+prove_print abc thm;
+
+// NOTE: this is for 'update3' right now.
+let update_spec = do {
+  llvm_ptr "st" (llvm_struct "struct.state");
+  llvm_ptr "xs" (llvm_array 3 (llvm_int 32));
+
+  xs <- llvm_var "*xs" (llvm_array 3 (llvm_int 32));
+  //xs_len <- llvm_var "len" (llvm_int 32);
+  sum <- llvm_var "st->0" (llvm_int 32);
+  len <- llvm_var "st->1" (llvm_int 32);
+  //i <- llvm_var "i" (llvm_int 32);
+
+  // Error: "user error (argument assignments not allowed)" ???
+  //
+  //llvm_assert_eq "len" {{ 3:[32] }};
+  //
+  // But this works. Without it, even with no "ensures", we get a
+  // "counterexample". Counterexample to what??? (See copied code
+  // below).
+  //llvm_assert {{ xs_len == (3:[32]) }};
+
+  let {{
+    st = { sum = sum, len = len }
+    res = update st xs
+  }};
+  llvm_ensure_eq "st->0" {{ res.sum }};
+  llvm_ensure_eq "st->1" {{ res.len }};
+  // Also prove that the content of xs is unchanged.
+  //llvm_ensure_eq "*xs" {{ xs }};
+
+  llvm_sat_branches true;
+  //llvm_verify_tactic abc;
+  llvm_verify_tactic do {
+    unfolding ["res", "update", "st"];
+    simplify (cryptol_ss ());
+    simplify (add_prelude_eqs ["eq_refl"] empty_ss);
+    print_goal;
+    //offline_extcore "out";
+    assume_unsat;
+  };
+};
+print "Verifying 'update' using 'llvm_verify':";
+update_ov <- llvm_verify m "update3" [] update_spec;
+
+// Verify 'digest'.
+
+st <- fresh_symbolic "st" {| State |};
+avg <- fresh_symbolic "avg" {| [32] |};
+let allocs = [ ("st", 1), ("avg", 1) ];
+let inputs = [ ("st->0", {{ st.sum }}, 1)
+             , ("st->1", {{ st.len }}, 1)
+             , ("*avg", {{ avg }}, 1)
+             ];
+let outputs = [ ("*avg", 1) ];
+t <- llvm_symexec m "digest" allocs inputs outputs true;
+thm <- abstract_symbolic {{ t == digest st }};
+prove_print abc thm;
+
+let digest_spec = do {
+  llvm_ptr "st" (llvm_struct "struct.state");
+  llvm_ptr "avg" (llvm_int 32);
+
+  sum0 <- llvm_var "st->0" (llvm_int 32);
+  len0 <- llvm_var "st->1" (llvm_int 32);
+  avg0 <- llvm_var "*avg" (llvm_int 32);
+
+  let {{
+    st0 = { sum = sum0, len = len0 }
+  }};
+  llvm_ensure_eq "*avg" {{ digest st0 }};
+  // Also prove that the content of 'st' is unchanged.
+  //llvm_ensure_eq "st->0" {{ sum0 }};
+  //llvm_ensure_eq "st->1" {{ sum1 }};
+
+  llvm_sat_branches true;
+  //llvm_verify_tactic abc;
+  llvm_verify_tactic do {
+    unfolding ["digest", "st0"];
+    simplify (cryptol_ss ());
+    simplify (add_prelude_eqs ["eq_refl"] empty_ss);
+    print_goal;
+    offline_extcore "tmp/out";
+    assume_unsat;
+    //abc;
+  };
+};
+print "Verifying 'digest' using 'llvm_verify':";
+digest_ov <- llvm_verify m "digest" [] digest_spec;
+
+// Verify imperative spec against pure spec.
+
+let check n = do {
+    print (str_concat "Checking imp_correct for byte count " (show n));
+    time (prove_print abc {{ imp_correct`{n} }});
+};
+
+for [0, 32, 64] check;
