@@ -63,7 +63,7 @@ let init_spec = do {
 };
 print "Verifying 'init' using 'llvm_verify':";
 init_ov <- llvm_verify m "init" [] init_spec;
-
+print "";
 
 // Verify 'update'.
 
@@ -78,36 +78,27 @@ let inputs = [ ("st->0", {{ st.sum }}, 1)
 let outputs = [ ("st->0", 1), ("st->1", 1) ];
 t <- llvm_symexec m "update" allocs inputs outputs true;
 thm <- abstract_symbolic {{ toState t == update st xs }};
+print "Verifying 'update' using 'llvm_symexec':";
 prove_print abc thm;
 
-// NOTE: this is for 'update3' right now.
 let update_spec = do {
   llvm_ptr "st" (llvm_struct "struct.state");
   llvm_ptr "xs" (llvm_array 3 (llvm_int 32));
 
   xs <- llvm_var "*xs" (llvm_array 3 (llvm_int 32));
-  //xs_len <- llvm_var "len" (llvm_int 32);
+  xs_len <- llvm_var "len" (llvm_int 32);
   sum <- llvm_var "st->0" (llvm_int 32);
   len <- llvm_var "st->1" (llvm_int 32);
-  //i <- llvm_var "i" (llvm_int 32);
 
-  // Error: "user error (argument assignments not allowed)" ???
-  //
-  //llvm_assert_eq "len" {{ 3:[32] }};
-  //
-  // But this works. Without it, even with no "ensures", we get a
-  // "counterexample". Counterexample to what??? (See copied code
-  // below).
-  //llvm_assert {{ xs_len == (3:[32]) }};
+  llvm_assert_eq "len" {{ 3:[32] }};
 
-  let {{
-    st = { sum = sum, len = len }
-    res = update st xs
-  }};
+  let st = {{ { sum = sum, len = len } }};
+  let res = {{ update st xs }};
+
   llvm_ensure_eq "st->0" {{ res.sum }};
   llvm_ensure_eq "st->1" {{ res.len }};
   // Also prove that the content of xs is unchanged.
-  //llvm_ensure_eq "*xs" {{ xs }};
+  llvm_ensure_eq "*xs" {{ xs }};
 
   llvm_sat_branches true;
   //llvm_verify_tactic abc;
@@ -115,13 +106,15 @@ let update_spec = do {
     unfolding ["res", "update", "st"];
     simplify (cryptol_ss ());
     simplify (add_prelude_eqs ["eq_refl"] empty_ss);
-    print_goal;
+    //print_goal;
     //offline_extcore "out";
-    assume_unsat;
+    //assume_unsat;
+    abc;
   };
 };
 print "Verifying 'update' using 'llvm_verify':";
-update_ov <- llvm_verify m "update3" [] update_spec;
+update_ov <- llvm_verify m "update" [] update_spec;
+print "";
 
 // Verify 'digest'.
 
@@ -135,6 +128,7 @@ let inputs = [ ("st->0", {{ st.sum }}, 1)
 let outputs = [ ("*avg", 1) ];
 t <- llvm_symexec m "digest" allocs inputs outputs true;
 thm <- abstract_symbolic {{ t == digest st }};
+print "Verifying 'update' using 'llvm_symexec':";
 prove_print abc thm;
 
 let digest_spec = do {
@@ -145,28 +139,27 @@ let digest_spec = do {
   len0 <- llvm_var "st->1" (llvm_int 32);
   avg0 <- llvm_var "*avg" (llvm_int 32);
 
-  let {{
-    st0 = { sum = sum0, len = len0 }
-  }};
+  // If we define our Cryptol terms as Cryptol vars, instead of as
+  // SAWScript vars, then the verification fails! Apparently the
+  // problem is related to a bug whereby rewriting does not happen
+  // inside the values of Cryptol-defined variables.
+  //
+  //let {{ st0 = { sum = sum0, len = len0 } }};
+  //
+  // So, use a SAWScript var.
+  let st0 = {{ { sum = sum0, len = len0 } }};
+
   llvm_ensure_eq "*avg" {{ digest st0 }};
   // Also prove that the content of 'st' is unchanged.
-  //llvm_ensure_eq "st->0" {{ sum0 }};
-  //llvm_ensure_eq "st->1" {{ sum1 }};
+  llvm_ensure_eq "st->0" {{ sum0 }};
+  llvm_ensure_eq "st->1" {{ len0 }};
 
   llvm_sat_branches true;
-  //llvm_verify_tactic abc;
-  llvm_verify_tactic do {
-    unfolding ["digest", "st0"];
-    simplify (cryptol_ss ());
-    simplify (add_prelude_eqs ["eq_refl"] empty_ss);
-    print_goal;
-    offline_extcore "tmp/out";
-    assume_unsat;
-    //abc;
-  };
+  llvm_verify_tactic abc;
 };
 print "Verifying 'digest' using 'llvm_verify':";
 digest_ov <- llvm_verify m "digest" [] digest_spec;
+print "";
 
 // Verify imperative spec against pure spec.
 

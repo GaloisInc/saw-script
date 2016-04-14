@@ -31,10 +31,6 @@ void update(state *st, uint32_t *xs, uint32_t len) {
   st->len += len;
 }
 
-void update3(state *st, uint32_t *xs) {
-  update(st, xs, 3);
-}
-
 void digest(state *st, uint32_t *avg) {
   *avg = st->sum / st->len;
 }
