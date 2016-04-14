@@ -441,10 +441,12 @@ initializeVerification' sc ir = do
   -- until later to initialize the fields.
   argAssignments' <- forM argAssignments $ \(expr, mle) ->
     case (expr, mle) of
-      (CC.Term (TC.Arg _ _ _), Just _) ->
-        fail "argument assignments not allowed"
+      (CC.Term (TC.Arg _ _ _), Just le) -> do
+        ps <- fromMaybe (error "initializeVerification: arg with value") <$> getPath
+        tm <- useLogicExprPS ir sc ps [] le
+        return (Just (expr, tm))
       (CC.Term (TC.Arg _ _ ty), Nothing) -> do
-        ps <- fromMaybe (error "initializeVerification") <$> getPath
+        ps <- fromMaybe (error "initializeVerification: arg w/o value") <$> getPath
         (tm, ps') <- liftIO $ createLogicValue cb sbe sc expr ps ty mle
         setPS ps'
         return (Just (expr, tm))
