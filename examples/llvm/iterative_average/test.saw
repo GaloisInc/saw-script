@@ -10,16 +10,15 @@ let allocs = [ ("st", 1) ];
 let inputs = [ ("st->0", {{ st.sum }}, 1)
              , ("st->1", {{ st.len }}, 1)
              ];
-// ??? How to get resulting 'st' state from output?
+// How to get resulting 'st' state from output?
 //
-// Update: Aaron said the LLVM+SAW integration doesn't have a way to
-// talk about structs in their entirety. So, we have to break the
-// struct up in to fields, and then reconstruct it.
+// LLVM+SAW integration doesn't have a way to talk about structs in
+// their entirety. So, we have to break the struct up in to fields,
+// and then reconstruct it.
 //
 // These don't work:
 //
-// - Treats the 'state' struct as flat 64-bit vector (type '[64]')
-//   (UPDATE: wrong! Treats it as a pointer, which makes sense):
+// - References the pointer, not the value:
 //
 //let outputs = [ ("st", 1) ];
 //
@@ -28,7 +27,7 @@ let inputs = [ ("st->0", {{ st.sum }}, 1)
 //let outputs = [ ("*st", 1) ];
 let outputs = [ ("st->0", 1), ("st->1", 1) ];
 
-// Reconstruct 'state' record from tuple of it's fields.
+// Reconstruct 'state' record from tuple of its fields.
 let {{ 
   toState : ([32], [32]) -> State
   toState t = { sum = t.0, len = t.1 }
@@ -44,7 +43,6 @@ thm <- abstract_symbolic {{ toState t == init }};
 print "Verifying 'init' using 'llvm_symexec':";
 prove_print abc thm;
 
-// ??? Is there are way to do this without decomposing the struct?
 let init_spec = do {
   llvm_ptr "st" (llvm_struct "struct.state");
 
@@ -52,8 +50,10 @@ let init_spec = do {
   //st <- llvm_var "*st" (llvm_struct "struct.state");
   //llvm_ensure_eq "*st" {{ init }};
 
-  sum <- llvm_var "st->0" (llvm_int 32);
-  len <- llvm_var "st->1" (llvm_int 32);
+  // We need to declare all vars, even if we don't refer to their
+  // initial values.
+  llvm_var "st->0" (llvm_int 32);
+  llvm_var "st->1" (llvm_int 32);
 
   llvm_ensure_eq "st->0" {{ init.sum }};
   llvm_ensure_eq "st->1" {{ init.len }};
@@ -85,25 +85,25 @@ let update_spec = do {
   llvm_ptr "st" (llvm_struct "struct.state");
   llvm_ptr "xs" (llvm_array 3 (llvm_int 32));
 
-  xs <- llvm_var "*xs" (llvm_array 3 (llvm_int 32));
-  xs_len <- llvm_var "len" (llvm_int 32);
-  sum <- llvm_var "st->0" (llvm_int 32);
-  len <- llvm_var "st->1" (llvm_int 32);
+  xs0 <- llvm_var "*xs" (llvm_array 3 (llvm_int 32));
+  llvm_var "len" (llvm_int 32);
+  sum0 <- llvm_var "st->0" (llvm_int 32);
+  len0 <- llvm_var "st->1" (llvm_int 32);
 
   llvm_assert_eq "len" {{ 3:[32] }};
 
-  let st = {{ { sum = sum, len = len } }};
-  let res = {{ update st xs }};
+  let st0 = {{ { sum = sum0, len = len0 } }};
+  let res = {{ update st0 xs0 }};
 
   llvm_ensure_eq "st->0" {{ res.sum }};
   llvm_ensure_eq "st->1" {{ res.len }};
   // Also prove that the content of xs is unchanged.
-  llvm_ensure_eq "*xs" {{ xs }};
+  llvm_ensure_eq "*xs" {{ xs0 }};
 
   llvm_sat_branches true;
   //llvm_verify_tactic abc;
   llvm_verify_tactic do {
-    unfolding ["res", "update", "st"];
+    unfolding ["res", "update", "st0"];
     simplify (cryptol_ss ());
     simplify (add_prelude_eqs ["eq_refl"] empty_ss);
     //print_goal;
@@ -137,7 +137,7 @@ let digest_spec = do {
 
   sum0 <- llvm_var "st->0" (llvm_int 32);
   len0 <- llvm_var "st->1" (llvm_int 32);
-  avg0 <- llvm_var "*avg" (llvm_int 32);
+  llvm_var "*avg" (llvm_int 32);
 
   // If we define our Cryptol terms as Cryptol vars, instead of as
   // SAWScript vars, then the verification fails! Apparently the
