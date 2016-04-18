@@ -67,13 +67,14 @@ print "";
 
 // Verify 'update'.
 
+let xs_len = 3;
 st <- fresh_symbolic "st" {| State |};
-xs <- fresh_symbolic "xs" {| [3][32] |};
-let allocs = [ ("st", 1), ("xs", 3) ];
+xs <- fresh_symbolic "xs" {| [xs_len][32] |};
+let allocs = [ ("st", 1), ("xs", xs_len) ];
 let inputs = [ ("st->0", {{ st.sum }}, 1)
              , ("st->1", {{ st.len }}, 1)
-             , ("*xs", {{ xs }}, 3)
-             , ("len", {{ 3:[32] }}, 1)
+             , ("*xs", {{ xs }}, xs_len)
+             , ("len", {{ `xs_len:[32] }}, 1)
              ];
 let outputs = [ ("st->0", 1), ("st->1", 1) ];
 t <- llvm_symexec m "update" allocs inputs outputs true;
@@ -81,29 +82,29 @@ thm <- abstract_symbolic {{ toState t == update st xs }};
 print "Verifying 'update' using 'llvm_symexec':";
 prove_print abc thm;
 
-let update_spec = do {
+let update_spec xs_len = do {
   llvm_ptr "st" (llvm_struct "struct.state");
-  llvm_ptr "xs" (llvm_array 3 (llvm_int 32));
+  llvm_ptr "xs" (llvm_array xs_len (llvm_int 32));
 
-  xs0 <- llvm_var "*xs" (llvm_array 3 (llvm_int 32));
+  xs0 <- llvm_var "*xs" (llvm_array xs_len (llvm_int 32));
   llvm_var "len" (llvm_int 32);
   sum0 <- llvm_var "st->0" (llvm_int 32);
   len0 <- llvm_var "st->1" (llvm_int 32);
 
-  llvm_assert_eq "len" {{ 3:[32] }};
+  llvm_assert_eq "len" {{ `xs_len:[32] }};
 
   let st0 = {{ { sum = sum0, len = len0 } }};
-  let res = {{ update st0 xs0 }};
+  let st1 = {{ update st0 xs0 }};
 
-  llvm_ensure_eq "st->0" {{ res.sum }};
-  llvm_ensure_eq "st->1" {{ res.len }};
+  llvm_ensure_eq "st->0" {{ st1.sum }};
+  llvm_ensure_eq "st->1" {{ st1.len }};
   // Also prove that the content of xs is unchanged.
   llvm_ensure_eq "*xs" {{ xs0 }};
 
   llvm_sat_branches true;
   //llvm_verify_tactic abc;
   llvm_verify_tactic do {
-    unfolding ["res", "update", "st0"];
+    unfolding ["st1", "update", "st0"];
     simplify (cryptol_ss ());
     simplify (add_prelude_eqs ["eq_refl"] empty_ss);
     //print_goal;
@@ -113,7 +114,7 @@ let update_spec = do {
   };
 };
 print "Verifying 'update' using 'llvm_verify':";
-update_ov <- llvm_verify m "update" [] update_spec;
+update_ov <- llvm_verify m "update" [] (update_spec 3);
 print "";
 
 // Verify 'digest'.
