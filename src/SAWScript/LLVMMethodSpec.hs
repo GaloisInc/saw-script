@@ -503,7 +503,7 @@ checkFinalState sc ms initPS args = do
   msrv <- case [ e | Return e <- cmds ] of
             [e] -> Just <$> readLLVMMixedExprPS ms sc initPS args e
             [] -> return Nothing
-            _  -> fail "More than one return value specified."
+            _  -> fail "more than one return value specified (multiple 'llvm_return's ?)"
   expectedValues <- forM [ (le, me) | Ensure _ le me <- cmds ] $ \(le, me) -> do
     lhs <- readLLVMTermAddrPS initPS args le
     rhs <- readLLVMMixedExprPS ms sc initPS args me
@@ -520,8 +520,8 @@ checkFinalState sc ms initPS args = do
     case (mrv, msrv) of
       (Nothing,Nothing) -> return ()
       (Just rv, Just srv) -> pvcgAssertEq "return value" rv srv
-      (Just _, Nothing) -> fail "simulator returned value when not expected"
-      (Nothing, Just _) -> fail "simulator did not return value when expected"
+      (Just _, Nothing) -> fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
+      (Nothing, Just _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
 
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.
