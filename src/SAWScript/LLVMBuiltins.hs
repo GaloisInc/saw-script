@@ -45,6 +45,7 @@ import Verifier.SAW.SharedTerm
 
 import SAWScript.CongruenceClosure hiding (mapM)
 import SAWScript.Builtins
+import SAWScript.CryptolEnv (schemaNoUser)
 import SAWScript.LLVMExpr
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMMethodSpec
@@ -56,6 +57,7 @@ import SAWScript.Utils
 import SAWScript.Value as SV
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
+import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
 type Backend = SAWBackend SAWCtx
 type SAWTerm = SharedTerm SAWCtx
@@ -462,10 +464,10 @@ checkCompatibleType msg aty schema = liftIO $ do
       fail $ "Type is not translatable: " ++ show (ppMemType aty) ++
              " (" ++ msg ++ ")"
     Just lt -> do
-      unless (Cryptol.Forall [] [] lt == schema) $ fail $
+      unless (Cryptol.Forall [] [] lt == schemaNoUser schema) $ fail $
         unlines [ "Incompatible type:"
-                , "  Expected: " ++ show lt
-                , "  Got: " ++ show schema
+                , "  Expected: " ++ Cryptol.pretty lt
+                , "  Got: " ++ Cryptol.pretty schema
                 , "  In context: " ++ msg
                 ]
 
