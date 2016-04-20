@@ -64,7 +64,7 @@ import SAWScript.JavaMethodSpec.Evaluator
 import SAWScript.JavaUtils
 import SAWScript.PathVC
 import SAWScript.TypedTerm
-import SAWScript.Value (TopLevel, io)
+import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io)
 import SAWScript.VerificationCheck
 
 import Data.JVM.Symbolic.AST (entryBlock)
@@ -431,6 +431,7 @@ runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
   let ir = vpSpec params
       verb = verbLevel (vpOpts params)
+  opts <- fmap rwPPOpts getTopLevelRW
   forM_ results $ \pvc -> do
     let mkVState nm cfn =
           VState { vsVCName = nm
@@ -441,7 +442,7 @@ runValidation prover params sc results = do
                  }
     if null (pvcStaticErrors pvc) then
      forM_ (pvcChecks pvc) $ \vc -> do
-       let vs = mkVState (vcName vc) (vcCounterexample sc vc)
+       let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
        g <- io $ scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
        when (verb >= 2) $ io $ do
          putStr $ "Checking " ++ vcName vc

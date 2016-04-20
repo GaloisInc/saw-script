@@ -33,6 +33,7 @@ import Verifier.Java.Codebase hiding (lookupClass)
 import Verifier.Java.Simulator as JSS hiding (lookupClass)
 import Verifier.Java.SAWBackend
 
+import Verifier.SAW.Cryptol (exportFiniteValue)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SCTypeCheck
@@ -53,6 +54,7 @@ import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SS
 
+import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
@@ -253,7 +255,7 @@ verifyJava bic opts cls mname overrides setup = do
               r <- evalStateT script (ProofGoal Universal (vsVCName vs) tt)
               case r of
                 SS.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
-                SS.SatMulti vals -> io $ showCexResults jsc ms vs exts vals
+                SS.SatMulti vals -> io $ showCexResults jsc (rwPPOpts rw) ms vs exts vals
         let ovds = vpOver vp
         initPS <- initializeVerification' jsc ms bs cl
         when (verb >= 2) $ liftIO $
@@ -296,16 +298,18 @@ doExtraChecks opts bsc t = do
   when (verb >= 6) $ putStrLn $ "Trying to prove: " ++ show t
 
 showCexResults :: SharedContext SAWCtx
+               -> SS.PPOpts
                -> JavaMethodSpecIR
                -> VerifyState
                -> [ExtCns (SharedTerm SAWCtx)]
                -> [(String, FiniteValue)]
                -> IO ()
-showCexResults sc ms vs exts vals = do
+showCexResults sc opts ms vs exts vals = do
   putStrLn $ "When verifying " ++ specName ms ++ ":"
   putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
-  putStrLn $ "Counterexample: "
-  mapM_ (\(n, v) -> putStrLn ("  " ++ n ++ ": " ++ show v)) vals
+  putStrLn $ "Counterexample:"
+  let showVal v = show (Cryptol.ppValue (cryptolPPOpts opts) (exportFiniteValue v))
+  mapM_ (\(n, v) -> putStrLn ("  " ++ n ++ ": " ++ showVal v)) vals
   if (length exts == length vals)
     then do let cexEval = cexEvalFn sc (zip exts (map snd vals))
             doc <- vsCounterexampleFn vs cexEval

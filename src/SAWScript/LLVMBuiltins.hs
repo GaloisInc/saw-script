@@ -39,6 +39,7 @@ import Verifier.LLVM.Backend.SAW
 import Verifier.LLVM.Simulator
 import Verifier.LLVM.Simulator.Internals
 
+import Verifier.SAW.Cryptol (exportFiniteValue)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
@@ -56,6 +57,7 @@ import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV
 
+import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
@@ -277,23 +279,26 @@ prover :: Options
 prover opts sc ms script vs g = do
   let exts = getAllExts g
       verb = verbLevel opts
+  ppopts <- fmap rwPPOpts getTopLevelRW
   tt <- io (mkTypedTerm sc =<< bindExts sc exts g)
   r <- evalStateT script (ProofGoal Universal (vsVCName vs) tt)
   case r of
     SV.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
-    SV.SatMulti vals -> io $ showCexResults sc ms vs exts vals
+    SV.SatMulti vals -> io $ showCexResults sc ppopts ms vs exts vals
 
 showCexResults :: SharedContext SAWCtx
+               -> SV.PPOpts
                -> LLVMMethodSpecIR
                -> VerifyState
                -> [ExtCns (SharedTerm SAWCtx)]
                -> [(String, FiniteValue)]
                -> IO ()
-showCexResults sc ms vs exts vals = do
+showCexResults sc opts ms vs exts vals = do
   putStrLn $ "When verifying " ++ show (specName ms) ++ ":"
   putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
-  putStrLn $ "Counterexample: "
-  mapM_ (\(n, v) -> putStrLn ("  " ++ n ++ ": " ++ show v)) vals
+  putStrLn $ "Counterexample:"
+  let showVal v = show (Cryptol.ppValue (cryptolPPOpts opts) (exportFiniteValue v))
+  mapM_ (\(n, v) -> putStrLn ("  " ++ n ++ ": " ++ showVal v)) vals
   if (length exts == length vals)
     then vsCounterexampleFn vs (cexEvalFn sc (zip exts (map snd vals))) >>= print
     else putStrLn "ERROR: Can't show result, wrong number of values"
