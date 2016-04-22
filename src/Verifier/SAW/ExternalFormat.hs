@@ -99,7 +99,7 @@ scReadExternal sc input =
         do
           t <- scTermF sc (fmap ((Map.!) m) (parse tokens))
           return (Map.insert (read n) t m)
-    go _ _ = fail "scReadExternal: Parse error"
+    go m [] = return m -- ^ empty lines are ignored
     parse :: [String] -> TermF Int
     parse tokens =
       case tokens of
