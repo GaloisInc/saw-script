@@ -22,6 +22,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Typechecker
   ( tcModule
+  , checkTerm
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -549,6 +550,28 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
                   $ is^.isModule
     mkFinal <$> traverse evalDataType (is^.isTypes)
             <*> traverse evalDef (is^.isDefs)
+
+-- | Typechecks an untyped term.
+checkTerm :: [Module] -> [Un.Import] -> Un.Term -> Either Doc (Term, Term)
+checkTerm ms imps ut = runTC $ do
+  let moduleMap = projMap moduleName ms
+  let gc0 = emptyGlobalContext
+  let nm = mkModuleName ["<none>"]
+  let is0 = IS { _isModule = emptyModule nm
+               , _isCtx = gc0
+               , _isTypes = []
+               , _isDefs = []
+               , _isPending = []
+               }
+  -- Parse imports and declarations.
+  let actions = fmap (parseImport moduleMap) imps
+  is <- execStateT (sequenceOf_ folded actions) is0
+  let tc = emptyTermContext (is^.isCtx)
+  let cc = CCGlobal (is^.isModule)
+  -- Execute pending assignments with final TermContext.
+  sequence_ $ (($ tc) <$> is^.isPending)
+  (t, tp) <- inferTypedValue tc ut
+  return (completeTerm cc t, completeTerm cc tp)
 
 type VarCollector = State (Map Int (String, Term))
 

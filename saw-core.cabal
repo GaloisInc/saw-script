@@ -57,6 +57,7 @@ library
      Verifier.SAW.Grammar
      Verifier.SAW.Lexer
      Verifier.SAW.ParserUtils
+     Verifier.SAW.Position
      Verifier.SAW.Prelude
      Verifier.SAW.Prelude.Constants
      Verifier.SAW.Prim
@@ -76,15 +77,14 @@ library
      Verifier.SAW.Testing.Random
      Verifier.SAW.Typechecker
      Verifier.SAW.TypedAST
+     Verifier.SAW.UntypedAST
      Verifier.SAW.Change
   other-modules:
-     Verifier.SAW.Position
      Verifier.SAW.Typechecker.Context
      Verifier.SAW.Typechecker.Monad
      Verifier.SAW.Typechecker.Simplification
      Verifier.SAW.Typechecker.Unification
      Verifier.SAW.UnionFind
-     Verifier.SAW.UntypedAST
      Verifier.SAW.Utils
   GHC-options: -Wall -Werror
   GHC-prof-options: -auto-all -caf-all
