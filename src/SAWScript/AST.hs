@@ -205,7 +205,8 @@ instance Pretty Expr where
       PP.text name
     Function pat expr ->
       PP.text "\\" PP.<+> PP.pretty pat PP.<+> PP.text "-> " PP.<+> PP.pretty expr
-    Application f a -> PP.pretty f PP.<+> PP.pretty a
+    -- FIXME, use precedence to minimize parentheses
+    Application f a -> PP.parens (PP.pretty f PP.<+> PP.pretty a)
     Let (NonRecursive decl) expr ->
       PP.text "let" PP.<+>
       prettyDef decl PP.</>
@@ -234,7 +235,7 @@ instance Pretty Pattern where
 instance Pretty Stmt where
    pretty = \case
 
-      StmtBind (PVar (Located "" _ _) _leftType) _rightType expr ->
+      StmtBind (PWild _leftType) _rightType expr ->
          PP.pretty expr
       StmtBind pat _rightType expr ->
          PP.pretty pat PP.<+> PP.text "<-" PP.<+> PP.align (PP.pretty expr)
