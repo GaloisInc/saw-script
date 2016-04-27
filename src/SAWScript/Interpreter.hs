@@ -39,6 +39,7 @@ import Data.Traversable hiding ( mapM )
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
+import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
 import SAWScript.AST (Located(..))
@@ -1291,6 +1292,13 @@ primitives = Map.fromList
   , prim "time"                "{a} TopLevel a -> TopLevel a"
     (\_ _ -> toValue timePrim)
     [ "Print the CPU time used by the given TopLevel command." ]
+
+  , prim "exec"               "String -> [String] -> String -> TopLevel String"
+    (\_ _ -> toValue readProcess)
+    [ "Execute an external process with the given executable"
+    , "name, arguments, and standard input. Returns standard"
+    , "output."
+    ]
 
   , prim "eval_bool"           "Term -> Bool"
     (funVal1 eval_bool)
