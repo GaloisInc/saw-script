@@ -686,7 +686,7 @@ primitives = Map.fromList
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_core"          "String -> Term -> TopLevel ()"
-    (pureVal (writeCore :: FilePath -> TypedTerm SAWCtx -> IO ()))
+    (pureVal (writeCore :: FilePath -> SharedTerm SAWCtx -> IO ()))
     [ "Write out a representation of a term in SAWCore external format." ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"

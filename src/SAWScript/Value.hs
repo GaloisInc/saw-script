@@ -207,7 +207,7 @@ showsPrecValue opts _p v =
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset {} -> showString "<<simpset>>"
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' (ttTerm t)))
+    VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)

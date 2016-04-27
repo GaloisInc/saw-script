@@ -280,7 +280,7 @@ prover opts sc ms script vs g = do
   let exts = getAllExts g
       verb = verbLevel opts
   ppopts <- fmap rwPPOpts getTopLevelRW
-  tt <- io (mkTypedTerm sc =<< bindExts sc exts g)
+  tt <- io (bindExts sc exts g)
   r <- evalStateT script (ProofGoal Universal (vsVCName vs) tt)
   case r of
     SV.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."

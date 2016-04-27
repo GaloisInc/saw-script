@@ -7,11 +7,11 @@ Point-of-contact : huffman
 -}
 module SAWScript.Proof where
 
-import SAWScript.TypedTerm
+import Verifier.SAW.SharedTerm
 
 -- | A theorem must contain a boolean term, possibly surrounded by one
 -- or more lambdas which are interpreted as universal quantifiers.
-data Theorem s = Theorem { thmTerm :: TypedTerm s }
+data Theorem s = Theorem { thmTerm :: SharedTerm s }
 
 data Quantification = Existential | Universal
   deriving Eq
@@ -24,5 +24,5 @@ data ProofGoal s =
   ProofGoal
   { goalQuant :: Quantification
   , goalName :: String
-  , goalTerm :: TypedTerm s
+  , goalTerm :: SharedTerm s
   }
