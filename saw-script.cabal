@@ -59,6 +59,7 @@ library
     , time
     , transformers
     , transformers-compat
+    , utf8-string
     , vector
     , xdg-basedir
     , GraphSCC

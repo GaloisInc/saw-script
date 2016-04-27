@@ -27,6 +27,7 @@ import Data.Monoid
 import Control.Lens
 import Control.Monad.State
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
@@ -46,11 +47,13 @@ import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.SAW.Cryptol as Cryptol
 
 import Verifier.SAW.Constant
+import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue ( FiniteType(..), FiniteValue(..)
                                 , scFiniteValue, fvVec, readFiniteValues, readFiniteValue
                                 , finiteTypeOf, asFiniteTypePure, sizeFiniteType
                                 )
+import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
@@ -59,7 +62,9 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
+import qualified Verifier.SAW.Typechecker (checkTerm)
 import Verifier.SAW.TypedAST hiding (instantiateVarList)
+import qualified Verifier.SAW.UntypedAST as UntypedAST
 
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.SBVParser as SBV
@@ -1159,3 +1164,39 @@ headPrim (x : _) = return x
 tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
+
+parseCore :: String -> TopLevel (SharedTerm SAWCtx)
+parseCore input = do
+  sc <- getSharedContext
+  let base = "<interactive>"
+      path = "<interactive>"
+  let (uterm, errs) = parseSAWTerm base path (B.fromString input)
+  io $ mapM_ print errs
+  unless (null errs) $ fail $ show errs
+  let imps = [ UntypedAST.Import False (Position.PosPair pos (mkModuleName ["Prelude"])) Nothing Nothing ]
+      pos = Position.Pos base path 0 0
+  (t, _tp) <- case Verifier.SAW.Typechecker.checkTerm [preludeModule] imps uterm of
+    Left err -> fail (show err)
+    Right x -> return x
+  io $ scSharedTerm sc t
+
+parse_core :: String -> TopLevel (TypedTerm SAWCtx)
+parse_core input = do
+  t <- parseCore input
+  sc <- getSharedContext
+  io $ mkTypedTerm sc t
+
+prove_core :: ProofScript SAWCtx SV.SatResult -> String -> TopLevel (Theorem SAWCtx)
+prove_core script input = do
+  t <- parseCore input
+  r' <- evalStateT script (ProofGoal Universal "prove" t)
+  let r = SV.flipSatResult r'
+  opts <- rwPPOpts <$> getTopLevelRW
+  case r of
+    SV.Valid -> return (Theorem t)
+    _ -> fail (SV.showsProofResult opts r "")
+
+core_axiom :: String -> TopLevel (Theorem SAWCtx)
+core_axiom input = do
+  t <- parseCore input
+  return (Theorem t)

@@ -1306,6 +1306,26 @@ primitives = Map.fromList
     (funVal1 eval_size)
     [ "Convert a Cryptol size type to a SAWScript Int."
     ]
+
+  , prim "parse_core"         "String -> Term"
+    (funVal1 parse_core)
+    [ "Parse a Term from a String in SAWCore syntax."
+    ]
+
+  , prim "prove_core"         "ProofScript SatResult -> String -> TopLevel Theorem"
+    (pureVal prove_core)
+    [ "Use the given proof script to attempt to prove that a term is valid"
+    , "(true for all inputs). The term is specified as a String containing"
+    , "saw-core syntax. Returns a Theorem if successful, and aborts if"
+    , "unsuccessful."
+    ]
+
+  , prim "core_axiom"         "String -> Theorem"
+    (funVal1 core_axiom)
+    [ "Declare the given core expression as an axiomatic rewrite rule."
+    , "The input string contains a proof goal in saw-core syntax. The"
+    , "return value is a Theorem that may be added to a Simpset."
+    ]
   ]
   where
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> [String]
