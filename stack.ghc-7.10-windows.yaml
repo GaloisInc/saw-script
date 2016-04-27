@@ -21,4 +21,4 @@ extra-deps:
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
   - monad-supply-0.6
-resolver: lts-5.1
+resolver: lts-5.14
