@@ -87,12 +87,11 @@ vectorFun :: (Monad m, Show e) => (w -> V.Vector b)
           -> (V.Vector (Thunk m b w e) -> m (Value m b w e)) -> Value m b w e
 vectorFun unpack f = strictFun (\x -> f (toVector unpack x))
 
-vecIdx :: String -> V.Vector a -> Int -> a
-vecIdx name v n =
+vecIdx :: a -> V.Vector a -> Int -> a
+vecIdx err v n =
   case (V.!?) v n of
     Just a -> a
-    Nothing -> error $ "vecIdx ("  ++ name ++ ") out of bounds (" ++
-                       show n ++ " out of " ++ show (V.length v) ++ ")"
+    Nothing -> err
 
 ------------------------------------------------------------
 -- Utility functions
@@ -105,9 +104,10 @@ selectV :: (b -> a -> a -> a) -> Int -> (Int -> a) -> V.Vector b -> a
 selectV mux maxValue valueFn v = impl len 0
   where
     len = V.length v
+    err = error "selectV: impossible"
     impl _ x | x >= maxValue || x < 0 = valueFn maxValue
     impl 0 x = valueFn x
-    impl i x = mux (vecIdx "selectV" v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
+    impl i x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
 
 ------------------------------------------------------------
 -- Values for common primitives
@@ -253,26 +253,27 @@ eqOp trueOp andOp boolOp bvOp =
       v2 <- force thunk2
       go t v1 v2
 
--- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-atOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
+-- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+atWithDefaultOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
      -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
      -> Value m b w e
-atOp unpack bvOp mux =
+atWithDefaultOp unpack bvOp mux =
   natFun $ \n -> return $
   constFun $
+  VFun $ \d -> return $
   strictFun $ \x -> return $
   strictFun $ \idx ->
     case idx of
       VNat i ->
         case x of
-          VVector xv -> force (vecIdx "atOp[Nat]" xv (fromIntegral i))
+          VVector xv -> force (vecIdx d xv (fromIntegral i))
           VWord xw -> return $ VBool $ bvOp xw (fromIntegral i)
           _ -> fail "atOp: expected vector"
       VToNat i -> do
         iv <- toBits unpack i
         case x of
           VVector xv ->
-            selectV mux (fromIntegral n - 1) (force . vecIdx "atOp[ToNat]" xv) iv
+            selectV mux (fromIntegral n - 1) (force . vecIdx d xv) iv
           VWord xw ->
             selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
           _ -> fail "atOp: expected vector"
@@ -293,7 +294,8 @@ updOp unpack eq lit bitsize mux =
       VNat i -> return (VVector (xv V.// [(fromIntegral i, y)]))
       VToNat (VWord w) -> do
         let f i = do b <- eq w (lit (bitsize w) (toInteger i))
-                     delay (mux b (force y) (force (vecIdx "updOp" xv i)))
+                     err <- delay (fail "updOp")
+                     delay (mux b (force y) (force (vecIdx err xv i)))
         yv <- V.generateM (V.length xv) f
         return (VVector yv)
       VToNat val -> do

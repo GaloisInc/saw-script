@@ -423,7 +423,10 @@ ConsVec a x n v = gen (Succ n) a (natCase (\ (i::Nat) -> a) x (at n a v));
 -- Primitive function for generating an array.
 primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 
-primitive at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+primitive atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+
+at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+at n a v i = atWithDefault n a (error a "at: index out of bounds") v i;
 -- `at n a v i` has the precondition `ltNat i n`
 
 upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
@@ -761,7 +764,7 @@ streamDrop a n xs = MkStream a (\(i :: Nat) -> streamGet a xs (addNat n i));
 streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
 streamAppend a n xs ys =
   MkStream a (\(i :: Nat) ->
-    ite a (ltNat i n) (at n a xs i) (streamGet a ys (subNat i n)));
+    atWithDefault n a (streamGet a ys (subNat i n)) xs i);
 
 streamJoin :: (a :: sort 0) -> (n :: Nat)
            -> Stream (Vec (Succ n) a)

@@ -280,7 +280,7 @@ constMap = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.at", Prims.atOp id (V.!) ite)
+  , ("Prelude.atWithDefault", Prims.atWithDefaultOp id (V.!) ite)
   , ("Prelude.upd", Prims.updOp id (\x y -> return (RMEV.eq x y)) RMEV.integer V.length ite)
   , ("Prelude.append", Prims.appendOp id (V.++))
   , ("Prelude.join", Prims.joinOp id (V.++))
