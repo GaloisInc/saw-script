@@ -272,7 +272,7 @@ beConstMap be = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.at", Prims.atOp vFromLV AIG.at (lazyMux be (muxBVal be)))
+  , ("Prelude.atWithDefault", Prims.atWithDefaultOp vFromLV AIG.at (lazyMux be (muxBVal be)))
   , ("Prelude.upd", Prims.updOp vFromLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
   , ("Prelude.append", Prims.appendOp vFromLV (AIG.++))
   , ("Prelude.join", Prims.joinOp vFromLV (AIG.++))
