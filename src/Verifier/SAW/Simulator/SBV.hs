@@ -143,7 +143,7 @@ constMap = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.at", atOp)
+  , ("Prelude.atWithDefault", atWithDefaultOp)
   , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord intSizeOf (lazyMux muxBVal))
   , ("Prelude.take", takeOp)
   , ("Prelude.drop", dropOp)
@@ -278,17 +278,18 @@ svAt x i = svTestBit x (intSizeOf x - 1 - i)
 svUnpack :: SWord -> Vector SBool
 svUnpack x = V.generate (intSizeOf x) (svAt x)
 
--- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-atOp :: SValue
-atOp =
+-- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+atWithDefaultOp :: SValue
+atWithDefaultOp =
   Prims.natFun $ \n -> return $
   constFun $
+  VFun $ \d -> return $
   strictFun $ \x -> return $
   strictFun $ \index ->
     case index of
       VNat i ->
         case x of
-          VVector xv -> force (Prims.vecIdx "atOp[Nat]" xv (fromIntegral i))
+          VVector xv -> force (Prims.vecIdx d xv (fromIntegral i))
           VWord xw -> return $ VBool $ svAt xw (fromIntegral i)
           _ -> fail "atOp: expected vector"
       VToNat i -> do
@@ -300,10 +301,10 @@ atOp =
                 case asWordList xs of
                   Just (w:ws) -> return $ VWord $ svSelect (w:ws) w iw
                   _ -> do
-                    selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx "atOp[ToNat]" xv) iw
+                    selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iw
               _ -> do
                 iv <- Prims.toBits svUnpack i
-                Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx "atOp[ToNat]" xv) iv
+                Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iv
           VWord xw -> do
             case i of
               VWord iw ->
