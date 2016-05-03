@@ -65,6 +65,7 @@ import Data.Bits
 import qualified Data.Foldable as Foldable
 import Data.IORef (IORef)
 import Data.Map (Map)
+import Data.Maybe (fromMaybe)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -93,6 +94,16 @@ instance Net.Pattern t => Net.Pattern (RewriteRule t) where
 ----------------------------------------------------------------------
 -- Matching
 
+data MatchState t =
+  MatchState
+  { substitution :: Map DeBruijnIndex t
+  , constraints :: [(t, Integer)]
+  }
+
+emptyMatchState :: MatchState t
+emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
+
+
 -- First-order matching
 
 -- | Equivalent to @(lookup k t, insert k x t)@.
@@ -120,12 +131,40 @@ first_order_match pat term = match pat term Map.empty
 -- occur as the 2nd argument of an @App@ constructor. This ensures
 -- that instantiations are well-typed.
 
+-- | Normalization with a set of conversions
+bottom_convs :: forall t. Termlike t => [Conversion t] -> t -> TermBuilder t t
+bottom_convs convs t = do
+  t' <-
+    case unwrapTermF t of
+      App t1 t2 -> mkApp (bottom_convs convs t1) (bottom_convs convs t2)
+      _ -> return t
+  fromMaybe (return t') $ msum [ runConversion c t' | c <- convs ]
+
 -- | An enhanced matcher that can handle some patterns containing lambdas.
 scMatch :: forall s. SharedContext s -> SharedTerm s -> SharedTerm s -> MaybeT IO (Map DeBruijnIndex (SharedTerm s))
-scMatch sc pat term = match 0 pat term Map.empty
+scMatch sc pat term = do
+  MatchState inst cs <- match 0 pat term emptyMatchState
+  mapM_ (check inst) cs
+  return inst
   where
-    match :: Int -> SharedTerm s -> SharedTerm s -> Map DeBruijnIndex (SharedTerm s) -> MaybeT IO (Map DeBruijnIndex (SharedTerm s))
-    match depth x y m =
+    check :: Map DeBruijnIndex (SharedTerm s) -> (SharedTerm s, Integer) -> MaybeT IO ()
+    check inst (t, n) = do
+      --lift $ putStrLn $ "checking: " ++ show (t, n)
+      -- apply substitution to the term
+      t' <- lift $ S.instantiateVarList sc 0 (Map.elems inst) t
+      --lift $ putStrLn $ "t': " ++ show t'
+      -- constant-fold nat operations
+      t'' <- lift $ runTermBuilder (bottom_convs natConversions t') (scTermF sc)
+      --lift $ putStrLn $ "t'': " ++ show t''
+      -- ensure that it evaluates to the same number
+      case unwrapTermF t'' of
+        FTermF (NatLit i) | i == n -> return ()
+        _ -> mzero
+
+    match :: Int -> SharedTerm s -> SharedTerm s -> MatchState (SharedTerm s) -> MaybeT IO (MatchState (SharedTerm s))
+    match depth x y s@(MatchState m cs) = do
+      --lift $ putStrLn $ "matching (lhs): " ++ show x
+      --lift $ putStrLn $ "matching (rhs): " ++ show y
       case (unwrapTermF x, unwrapTermF y) of
         -- check that neither x nor y contains bound variables less than `depth`
         (LocalVar i, _) | i >= depth && looseVars y .&. (bit depth - 1) == 0 ->
@@ -133,18 +172,21 @@ scMatch sc pat term = match 0 pat term Map.empty
              y1 <- lift $ S.instantiateVarList sc 0 (replicate depth (error "scMatch: impossible")) y
              let (my2, m') = insertLookup (i - depth) y1 m
              case my2 of
-               Nothing -> return m'
-               Just y2 -> if y == y2 then return m' else mzero
+               Nothing -> return (MatchState m' cs)
+               Just y2 -> if y == y2 then return (MatchState m' cs) else mzero
         (App x1 x2, App y1 y2) ->
-          match depth x1 y1 m >>= match depth x2 y2
+          match depth x1 y1 s >>= match depth x2 y2
         (FTermF xf, FTermF yf) ->
           case zipWithFlatTermF (match depth) xf yf of
             Nothing -> mzero
-            Just zf -> Foldable.foldl (>=>) return zf m
+            Just zf -> Foldable.foldl (>=>) return zf s
         (Lambda _ t1 x1, Lambda _ t2 x2) ->
-          match depth t1 t2 m >>= match (depth + 1) x1 x2
+          match depth t1 t2 s >>= match (depth + 1) x1 x2
+        (App _ _, FTermF (NatLit n)) ->
+          -- add deferred constraint
+          return (MatchState m ((x, n) : cs))
         (_, _) ->
-          if x == y then return m else mzero
+          if x == y then return s else mzero
 
 ----------------------------------------------------------------------
 -- Building rewrite rules
@@ -377,7 +419,7 @@ rewriteSharedTerm sc ss t0 =
                   SharedTerm s -> IO (SharedTerm s)
     rewriteTop t =
         case reduceSharedTerm sc t of
-          Nothing -> apply (Net.match_term ss t) t
+          Nothing -> apply (Net.unify_term ss t) t
           Just io -> rewriteAll =<< io
     apply :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
              [Either (RewriteRule (SharedTerm s)) (Conversion (SharedTerm s))] ->

@@ -600,7 +600,7 @@ termToPat t =
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
-      FTermF (NatLit n)         -> Net.Atom (show n)
+      FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
       FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
       FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
       _                         -> Net.Var
