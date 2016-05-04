@@ -289,7 +289,8 @@ bindIdent ident env = (name, env')
   where
     modEnv = eModuleEnv env
     supply = ME.meSupply modEnv
-    (name, supply') = MN.mkDeclared interactiveName ident P.emptyRange supply
+    fixity = Nothing
+    (name, supply') = MN.mkDeclared interactiveName ident fixity P.emptyRange supply
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
