@@ -1,4 +1,5 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE CPP #-}
 {- |
 Module           : $Header$
@@ -44,26 +45,27 @@ resolveSymType _ ty = ty
 scLLVMValue :: SharedContext s -> SharedTerm s -> String -> IO (SharedTerm s)
 scLLVMValue sc ty name = scFreshGlobal sc name ty
 
-addrPlusOffsetSim :: (Functor m, MonadIO m) =>
-                     SBETerm sbe -> Offset
-                  -> Simulator sbe m (SBETerm sbe)
+addrPlusOffsetSim :: (Monad m, MonadIO m) =>
+                     SpecLLVMValue -> Offset
+                  -> Simulator SpecBackend m SpecLLVMValue
 addrPlusOffsetSim a o = do
   sbe <- gets symBE
-  w <- ptrBitwidth <$> getDL
-  ot <- liftSBE $ termInt sbe w (fromIntegral o)
-  liftSBE $ applyTypedExpr sbe (PtrAdd a ot)
+  dl <- getDL
+  liftIO $ addrPlusOffset sbe dl a o
 
-addrPlusOffset :: DataLayout -> SharedContext SAWCtx -> SpecLLVMValue -> Offset
+addrPlusOffset :: SBE SpecBackend
+               -> DataLayout
+               -> SpecLLVMValue
+               -> Offset
                -> IO SpecLLVMValue
-addrPlusOffset dl sc a o = do
+addrPlusOffset sbe dl a o = do
   let w = fromIntegral (ptrBitwidth dl)
-  ot <- scBvConst sc w (fromIntegral o)
-  wt <- scNat sc w
-  scBvAdd sc wt a ot
+  ot <- sbeRunIO sbe $ termInt sbe w (fromIntegral o)
+  sbeRunIO sbe $ applyTypedExpr sbe (PtrAdd a ot)
 
 structFieldAddr :: (Functor m, MonadIO m) =>
-                   StructInfo -> Int -> SBETerm sbe
-                -> Simulator sbe m (SBETerm sbe)
+                   StructInfo -> Int -> SpecLLVMValue
+                -> Simulator SpecBackend m SpecLLVMValue
 structFieldAddr si idx base =
   case siFieldOffset si idx of
     Just off -> addrPlusOffsetSim base off

@@ -75,8 +75,8 @@ import Text.Read hiding (lift)
 import Verifier.Java.Codebase as JSS
 import Verifier.Java.SAWBackend hiding (basic_ss)
 
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.Utils
@@ -163,7 +163,7 @@ jeVarName = map dotToUnderscore . ppJavaExpr
         dotToUnderscore c = c
 
 asJavaExpr :: SharedTerm s -> Maybe String
-asJavaExpr STApp{ stAppTermF = FTermF (ExtCns ec) } = Just (ecName ec)
+asJavaExpr (asExtCns -> Just ec) = Just (ecName ec)
 asJavaExpr _ = Nothing
 
 isRefJavaExpr :: JavaExpr -> Bool

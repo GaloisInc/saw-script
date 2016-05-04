@@ -106,7 +106,7 @@ evalLLVMExpr expr ec = eval expr
               case siFieldOffset si idx of
                 Just off -> do
                   saddr <- evalLLVMExpr ae ec
-                  addr <- liftIO $ addrPlusOffset (ecDataLayout ec) sc saddr off
+                  addr <- liftIO $ addrPlusOffset sbe (ecDataLayout ec) saddr off
                   -- TODO: don't discard fst
                   snd <$> (liftIO $ loadPathState sbe addr tp ps)
                 Nothing ->
@@ -115,7 +115,7 @@ evalLLVMExpr expr ec = eval expr
               case siFieldOffset si idx of
                 Just off -> do
                   saddr <- evalLLVMRefExpr ve ec
-                  addr <- liftIO $ addrPlusOffset (ecDataLayout ec) sc saddr off
+                  addr <- liftIO $ addrPlusOffset sbe (ecDataLayout ec) saddr off
                   -- TODO: don't discard fst
                   snd <$> (liftIO $ loadPathState sbe addr tp ps)
                 Nothing ->
@@ -123,7 +123,6 @@ evalLLVMExpr expr ec = eval expr
             TC.ReturnValue _ -> fail "return values not yet supported" -- TODO
         sbe = ecBackend ec
         ps = ecPathState ec
-        sc = ecContext ec
 
 -- | Evaluate an LLVM expression, and return the location it describes
 -- (l-value) as an internal term.
@@ -144,19 +143,19 @@ evalLLVMRefExpr expr ec = eval expr
               case siFieldOffset si idx of
                 Just off -> do
                   addr <- evalLLVMExpr ae ec
-                  liftIO $ addrPlusOffset (ecDataLayout ec) sc addr off
+                  liftIO $ addrPlusOffset sbe (ecDataLayout ec) addr off
                 Nothing ->
                   fail $ "Struct field index " ++ show idx ++ " out of bounds"
             TC.StructDirectField ve si idx _ -> do
               case siFieldOffset si idx of
                 Just off -> do
                   addr <- evalLLVMRefExpr ve ec
-                  liftIO $ addrPlusOffset (ecDataLayout ec) sc addr off
+                  liftIO $ addrPlusOffset sbe (ecDataLayout ec) addr off
                 Nothing ->
                   fail $ "Struct field index " ++ show idx ++ " out of bounds"
             TC.ReturnValue _ -> fail "evalLLVMRefExpr: applied to return value"
+        sbe = ecBackend ec
         gm = ecGlobalMap ec
-        sc = ecContext ec
 
 evalDerefLLVMExpr :: (Functor m, MonadIO m) =>
                      TC.LLVMExpr -> EvalContext
@@ -164,7 +163,7 @@ evalDerefLLVMExpr :: (Functor m, MonadIO m) =>
 evalDerefLLVMExpr expr ec = do
   val <- evalLLVMExpr expr ec
   case TC.lssTypeOfLLVMExpr expr of
-    PtrType (MemType tp) -> liftIO $
+    PtrType (MemType tp) -> liftIO $ do
       -- TODO: don't discard fst
       (snd <$> loadPathState (ecBackend ec) val tp (ecPathState ec))
     PtrType _ -> fail "Pointer to weird type."
@@ -176,15 +175,9 @@ evalLogicExpr :: (Functor m, MonadIO m) =>
               -> m SpecLLVMValue
 evalLogicExpr initExpr ec = do
   let sc = ecContext ec
-  t <- liftIO $ TC.useLogicExpr sc initExpr
-  extMap <- forM (getAllExts t) $ \ext -> do
-              let n = ecName ext
-              case Map.lookup n (ecLLVMExprs ec) of
-                Just (_, expr) -> do
-                  lt <- evalLLVMExpr expr ec
-                  return (ecVarIndex ext, lt)
-                Nothing -> fail $ "Name " ++ n ++ " not found."
-  liftIO $ scInstantiateExt sc (Map.fromList extMap) t
+  args <- forM (TC.logicExprLLVMExprs initExpr) $ \expr ->
+          evalLLVMExpr expr ec
+  liftIO $ TC.useLogicExpr sc initExpr args
 
 -- | Return Java value associated with mixed expression.
 evalMixedExpr :: (Functor m, MonadIO m) =>
@@ -313,7 +306,7 @@ execBehavior bsl ec ps = do
        forM_ (Map.toList (bsExprDecls bs)) $ \(lhs, (_ty, mrhs)) ->
          case mrhs of
            Just rhs -> do
-             ocEval (evalDerefLLVMExpr lhs) $ \lhsVal ->
+             ocEval (evalDerefLLVMExpr lhs) $ \lhsVal -> do
                ocEval (evalLogicExpr rhs) $ \rhsVal ->
                  ocAssert (PosInternal "FIXME") "Override value assertion"
                     =<< liftIO (scEq sc lhsVal rhsVal)
@@ -338,6 +331,7 @@ execOverride sc _pos ir args = do
       cb = specCodebase ir
       Just funcDef = lookupDefine func cb
   sbe <- gets symBE
+  --liftIO $ putStrLn $ "Executing override for " ++ show func
   gm <- use globalTerms
   let ec = EvalContext { ecContext = sc
                        , ecDataLayout = cbDataLayout cb
@@ -347,6 +341,7 @@ execOverride sc _pos ir args = do
                        , ecPathState = initPS
                        , ecLLVMExprs = specLLVMExprNames ir
                        }
+  --liftIO $ putStrLn $ "Executing behavior"
   res <- liftIO $ execBehavior [bsl] ec initPS
   case res of
     [(_, _, Left el)] -> do
@@ -375,19 +370,20 @@ overrideFromSpec sc pos ir = do
   -- TODO: check argument types?
   tryRegisterOverride (specFunction ir) (const (Just ovd))
 
-createLogicValue :: Codebase SpecBackend
+createLogicValue :: (MonadIO m, Monad m, Functor m) =>
+                    Codebase SpecBackend
                  -> SBE SpecBackend
                  -> SharedContext SAWCtx
                  -> TC.LLVMExpr
                  -> SpecPathState
                  -> MemType
                  -> Maybe TC.LogicExpr
-                 -> IO (SpecLLVMValue, SpecPathState)
+                 -> Simulator SpecBackend m (SpecLLVMValue, SpecPathState)
 createLogicValue _ _ _ _ _ (PtrType _) (Just _) =
   fail "Pointer variables cannot be given initial values."
 createLogicValue _ _ _ _ _ (StructType _) (Just _) =
   fail "Struct variables cannot be given initial values as a whole."
-createLogicValue cb sbe sc _expr ps (PtrType (MemType mtp)) Nothing = do
+createLogicValue cb sbe sc _expr ps (PtrType (MemType mtp)) Nothing = liftIO $ do
   let dl = cbDataLayout cb
       sz = memTypeSize dl mtp
       w = ptrBitwidth dl
@@ -404,11 +400,11 @@ createLogicValue _ _ _ _ _ (PtrType ty) Nothing =
 createLogicValue _ _ _ _ _ (StructType _) Nothing =
   fail "Non-pointer struct variables not supported."
 createLogicValue _ _ sc expr ps mtp mrhs = do
-  mbltp <- TC.logicTypeOfActual sc mtp
+  mbltp <- liftIO $ TC.logicTypeOfActual sc mtp
   -- Get value of rhs.
   tm <- case (mrhs, mbltp) of
-          (Just v, _) -> TC.useLogicExpr sc v
-          (Nothing, Just tp) -> scFreshGlobal sc (show (TC.ppLLVMExpr expr)) tp
+          (Just v, _) -> useLogicExprPS sc ps [] v -- TODO: args
+          (Nothing, Just tp) -> liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr expr)) tp
           (Nothing, Nothing) -> fail "Can't calculate type for fresh input."
   return (tm, ps)
 
@@ -443,11 +439,11 @@ initializeVerification' sc ir = do
     case (expr, mle) of
       (CC.Term (TC.Arg _ _ _), Just le) -> do
         ps <- fromMaybe (error "initializeVerification: arg with value") <$> getPath
-        tm <- useLogicExprPS ir sc ps [] le
+        tm <- useLogicExprPS sc ps [] le -- TODO: args
         return (Just (expr, tm))
       (CC.Term (TC.Arg _ _ ty), Nothing) -> do
         ps <- fromMaybe (error "initializeVerification: arg w/o value") <$> getPath
-        (tm, ps') <- liftIO $ createLogicValue cb sbe sc expr ps ty mle
+        (tm, ps') <- createLogicValue cb sbe sc expr ps ty mle
         setPS ps'
         return (Just (expr, tm))
       _ -> return Nothing
@@ -472,7 +468,7 @@ initializeVerification' sc ir = do
   let doAssign (expr, mle) = do
         let Just (ty, _) = Map.lookup expr (bsExprDecls bs)
         ps <- fromMaybe (error "initializeVerification") <$> getPath
-        (v, ps') <- liftIO $ createLogicValue cb sbe sc expr ps ty mle
+        (v, ps') <- createLogicValue cb sbe sc expr ps ty mle
         setPS ps'
         writeLLVMTerm (map snd argVals) (expr, v, 1)
 
@@ -499,14 +495,14 @@ checkFinalState sc ms initPS args = do
       cb = specCodebase ms
       dl = cbDataLayout cb
   mrv <- getProgramReturnValue
-  assumptions <- evalAssumptions ms sc initPS args (specAssumptions ms)
+  assumptions <- evalAssumptions sc initPS args (specAssumptions ms)
   msrv <- case [ e | Return e <- cmds ] of
-            [e] -> Just <$> readLLVMMixedExprPS ms sc initPS args e
+            [e] -> Just <$> readLLVMMixedExprPS sc initPS args e
             [] -> return Nothing
             _  -> fail "more than one return value specified (multiple 'llvm_return's ?)"
   expectedValues <- forM [ (le, me) | Ensure _ le me <- cmds ] $ \(le, me) -> do
     lhs <- readLLVMTermAddrPS initPS args le
-    rhs <- readLLVMMixedExprPS ms sc initPS args me
+    rhs <- readLLVMMixedExprPS sc initPS args me
     let Just (tp, _) = Map.lookup le (bsExprDecls (specBehavior ms))
     return (le, lhs, tp, rhs)
   let initState  =
@@ -590,42 +586,33 @@ data VerifyState = VState {
 type Verbosity = Int
 
 readLLVMMixedExprPS :: (Functor m, Monad m, MonadIO m) =>
-                       LLVMMethodSpecIR
-                    -> SharedContext SAWCtx
+                       SharedContext SAWCtx
                     -> SpecPathState -> [SpecLLVMValue] -> TC.MixedExpr
                     -> Simulator SpecBackend m SpecLLVMValue
-readLLVMMixedExprPS ir sc ps args (TC.LogicE le) = do
-  useLogicExprPS ir sc ps args le
-readLLVMMixedExprPS _ir _sc ps args (TC.LLVME le) =
+readLLVMMixedExprPS sc ps args (TC.LogicE le) = do
+  useLogicExprPS sc ps args le
+readLLVMMixedExprPS _sc ps args (TC.LLVME le) =
   readLLVMTermPS ps args le 1
 
 useLogicExprPS :: (Functor m, Monad m, MonadIO m) =>
-                  LLVMMethodSpecIR
-               -> SharedContext SAWCtx
+                  SharedContext SAWCtx
                -> SpecPathState
                -> [SpecLLVMValue]
                -> TC.LogicExpr
                -> Simulator SpecBackend m SpecLLVMValue
-useLogicExprPS ir sc ps args initExpr = do
-  t <- liftIO $ TC.useLogicExpr sc initExpr
-  extMap <- forM (getAllExts t) $ \ext -> do
-              let n = ecName ext
-              case Map.lookup n (specLLVMExprNames ir) of
-                Just (_, expr) -> do
-                  lt <- readLLVMTermPS ps args expr 1
-                  return (ecVarIndex ext, lt)
-                Nothing -> fail $ "Name " ++ n ++ " not found."
-  liftIO $ scInstantiateExt sc (Map.fromList extMap) t
+useLogicExprPS sc ps args initExpr = do
+  leArgs <- forM (TC.logicExprLLVMExprs initExpr) $ \expr ->
+          readLLVMTermPS ps args expr 1
+  liftIO $ TC.useLogicExpr sc initExpr leArgs
 
 evalAssumptions :: (Functor m, Monad m, MonadIO m) =>
-                   LLVMMethodSpecIR
-                -> SharedContext SAWCtx
+                   SharedContext SAWCtx
                 -> SpecPathState
                 -> [SpecLLVMValue]
                 -> [TC.LogicExpr]
                 -> Simulator SpecBackend m (SharedTerm SAWCtx)
-evalAssumptions ir sc ps args as = do
-  assumptionList <- mapM (useLogicExprPS ir sc ps args) as
+evalAssumptions sc ps args as = do
+  assumptionList <- mapM (useLogicExprPS sc ps args) as
   liftIO $ do
     true <- scBool sc True
     foldM (scAnd sc) true assumptionList

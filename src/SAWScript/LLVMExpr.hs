@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {- |
@@ -29,10 +30,10 @@ module SAWScript.LLVMExpr
   , isPtrLLVMExpr
   , isArgLLVMExpr
     -- * Logic expressions
-  , LogicExpr
-  -- , logicExprLLVMExprs
+  , LogicExpr(..)
+  , logicExprLLVMExprs
   , useLogicExpr
-  , mkLogicExpr
+  , asLLVMExpr
     -- * Mixed expressions
   , MixedExpr(..)
     -- * Actual type
@@ -59,6 +60,7 @@ import Text.Read
 import qualified Verifier.LLVM.Codebase as LSS
 
 import Verifier.SAW.Prelude
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
@@ -240,6 +242,10 @@ updateLLVMExprType (CC.Term exprF) tp = CC.Term $
     StructDirectField r si i _ -> StructDirectField r si i tp
     ReturnValue _ -> ReturnValue tp
 
+asLLVMExpr :: SharedTerm s -> Maybe String
+asLLVMExpr (asExtCns -> Just ec) = Just (ecName ec)
+asLLVMExpr _ = Nothing
+
 -- | Returns true if expression is a pointer.
 isPtrLLVMExpr :: LLVMExpr -> Bool
 isPtrLLVMExpr = isActualPtr . lssTypeOfLLVMExpr
@@ -250,14 +256,22 @@ isArgLLVMExpr _ = False
 
 -- LogicExpr {{{1
 
-newtype LogicExpr = LogicExpr (SharedTerm SAWCtx)
+data LogicExpr =
+  LogicExpr { -- | A term, possibly function type, which does _not_
+              -- contain any external constant subexpressions.
+              _leTerm :: SharedTerm SAWCtx
+              -- | The LLVM expressions, if any, that the term should
+              -- be applied to
+            , leLLVMArgs :: [LLVMExpr]
+            }
   deriving (Show)
 
-mkLogicExpr :: SharedTerm SAWCtx -> LogicExpr
-mkLogicExpr = LogicExpr
+useLogicExpr :: SharedContext SAWCtx -> LogicExpr -> [SharedTerm SAWCtx]
+             -> IO (SharedTerm SAWCtx)
+useLogicExpr sc (LogicExpr t _) args = scApplyAll sc t args
 
-useLogicExpr :: SharedContext SAWCtx -> LogicExpr -> IO (SharedTerm SAWCtx)
-useLogicExpr _ (LogicExpr t) = return t
+logicExprLLVMExprs :: LogicExpr -> [LLVMExpr]
+logicExprLLVMExprs = leLLVMArgs
 
 -- MixedExpr {{{1
 

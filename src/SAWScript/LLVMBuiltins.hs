@@ -389,6 +389,19 @@ getLLVMExpr ms name = do
     Just (_, expr) -> return (expr, lssTypeOfLLVMExpr expr)
     Nothing -> fail $ "LLVM name " ++ name ++ " has not been declared."
 
+mkMixedExpr :: LLVMMethodSpecIR
+            -> SharedContext SAWCtx
+            -> SharedTerm SAWCtx
+            -> LLVMSetup MixedExpr
+mkMixedExpr ms _ (asLLVMExpr -> Just s) =
+  (LLVME . fst) <$> getLLVMExpr ms s
+mkMixedExpr ms sc t = do
+  let exts = getAllExts t
+      extNames = map ecName exts
+  les <- mapM (getLLVMExpr ms) extNames
+  fn <- liftIO $ scAbstractExts sc exts t
+  return $ LogicE $ LogicExpr fn (map fst les)
+
 llvmInt :: Int -> SymType
 llvmInt n = MemType (IntType n)
 
@@ -479,34 +492,49 @@ checkCompatibleType msg aty schema = liftIO $ do
 llvmAssert :: BuiltinContext -> Options -> SharedTerm SAWCtx
            -> LLVMSetup ()
 llvmAssert bic _ v = do
-  liftIO $ checkBoolean (biSharedContext bic) v
+  let sc = biSharedContext bic
+  ms <- gets lsSpec
+  liftIO $ checkBoolean sc v
+  me <- mkMixedExpr ms sc v
+  le <- case me of
+          LogicE le -> return le
+          _ -> fail "LLVM expressions not allowed on the right hand side of `llvm_assert`"
   modify $ \st ->
-    st { lsSpec = specAddAssumption (mkLogicExpr v) (lsSpec st) }
+    st { lsSpec = specAddAssumption le (lsSpec st) }
 
-llvmAssertEq :: String -> TypedTerm SAWCtx -> LLVMSetup ()
-llvmAssertEq name (TypedTerm schema t) = do
+llvmAssertEq :: BuiltinContext -> Options -> String -> TypedTerm SAWCtx -> LLVMSetup ()
+llvmAssertEq bic _opts name (TypedTerm schema t) = do
+  let sc = biSharedContext bic
   ms <- gets lsSpec
   (expr, mty) <- getLLVMExpr ms name
+  me <- mkMixedExpr ms sc t
+  le <- case me of
+          LogicE le -> return le
+          _ -> fail "LLVM expressions not allowed on the right hand side of `llvm_assert_eq`"
   checkCompatibleType "llvm_assert_eq" mty schema
   modify $ \st ->
-    st { lsSpec = specAddLogicAssignment fixPos expr (mkLogicExpr t) ms }
+    st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
-llvmEnsureEq :: String -> TypedTerm SAWCtx -> LLVMSetup ()
-llvmEnsureEq name (TypedTerm schema t) = do
+llvmEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm SAWCtx -> LLVMSetup ()
+llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   ms <- gets lsSpec
+  let sc = biSharedContext bic
   (expr, mty) <- getLLVMExpr ms name
   checkCompatibleType "llvm_ensure_eq" mty schema
-  let cmd = Ensure fixPos expr (LogicE (mkLogicExpr t))
+  me <- mkMixedExpr ms sc t
+  let cmd = Ensure fixPos expr me
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 
-llvmReturn :: TypedTerm SAWCtx -> LLVMSetup ()
-llvmReturn (TypedTerm schema t) = do
+llvmReturn :: BuiltinContext -> Options -> TypedTerm SAWCtx -> LLVMSetup ()
+llvmReturn bic _opts (TypedTerm schema t) = do
+  let sc = biSharedContext bic
   ms <- gets lsSpec
+  me <- mkMixedExpr ms sc t
   case sdRetType (specDef ms) of
     Just mty -> do
       checkCompatibleType "llvm_return" mty schema
-      let cmd = Return (LogicE (mkLogicExpr t))
+      let cmd = Return me
       modify $ \st ->
         st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
     Nothing -> fail "llvm_return called on void function"
