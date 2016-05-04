@@ -515,4 +515,5 @@ llvmVerifyTactic :: BuiltinContext -> Options
                  -> ProofScript SAWCtx SV.SatResult
                  -> LLVMSetup ()
 llvmVerifyTactic _ _ script =
+  -- TODO: complain if tactic provided more than once
   modify $ \st -> st { lsTactic = RunVerify script }
