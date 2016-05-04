@@ -45,6 +45,9 @@ import qualified Verifier.SAW.Recognizer as R
 unimplemented :: Monad m => String -> m a
 unimplemented name = fail ("unimplemented: " ++ name)
 
+impossible :: Monad m => String -> m a
+impossible name = fail ("impossible: " ++ name)
+
 --------------------------------------------------------------------------------
 -- Type Environments
 
@@ -138,9 +141,9 @@ importType sc env ty =
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
         C.PC pc ->
           case pc of
-            C.PEqual         -> scDataTypeApp sc "Cryptol.PEqual" =<< traverse go tyargs -- @_ == _@
-            C.PNeq           -> scDataTypeApp sc "Cryptol.PNeq"   =<< traverse go tyargs -- @_ /= _@
-            C.PGeq           -> scDataTypeApp sc "Cryptol.PGeq"   =<< traverse go tyargs -- @_ >= _@
+            C.PEqual         -> impossible "importType PEqual"
+            C.PNeq           -> impossible "importType PNeq"
+            C.PGeq           -> impossible "importType PGeq"
             C.PFin           -> scDataTypeApp sc "Cryptol.PFin"   =<< traverse go tyargs -- @fin _@
             C.PHas _selector -> unimplemented "PHas"
             C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- @Arith _@
@@ -180,12 +183,22 @@ importType' sc env t = do
   t' <- importType sc env t
   scGlobalApply sc "Cryptol.ty" [t']
 
+isErasedProp :: C.Prop -> Bool
+isErasedProp prop =
+  case prop of
+    (C.pIsEq -> Just _) -> True
+    (C.pIsGeq -> Just _) -> True
+    (pIsNeq -> Just _) -> True
+    _ -> False
+
 importPropsType :: SharedContext s -> Env s -> [C.Prop] -> C.Type -> IO (SharedTerm s)
 importPropsType sc env [] ty = importType' sc env ty
-importPropsType sc env (prop : props) ty = do
-  p <- importType sc env prop
-  t <- importPropsType sc env props ty
-  scFun sc p t
+importPropsType sc env (prop : props) ty
+  | isErasedProp prop = importPropsType sc env props ty
+  | otherwise = do
+    p <- importType sc env prop
+    t <- importPropsType sc env props ty
+    scFun sc p t
 
 importPolyType :: SharedContext s -> Env s -> [C.TParam] -> [C.Prop] -> C.Type -> IO (SharedTerm s)
 importPolyType sc env [] props ty = importPropsType sc env props ty
@@ -210,12 +223,6 @@ proveProp sc env prop =
           -> scGlobalApply sc "Cryptol.ePArith" =<< sequence [ty t]
         (C.pIsCmp -> Just t)
           -> scGlobalApply sc "Cryptol.ePCmp" =<< sequence [ty t]
-        (C.pIsEq -> Just (m, n))
-          -> scGlobalApply sc "Cryptol.ePEqual" =<< sequence [ty m, ty n]
-        (C.pIsGeq -> Just (m, n))
-          -> scGlobalApply sc "Cryptol.ePGeq" =<< sequence [ty m, ty n]
-        (pIsNeq -> Just (m, n))
-          -> scGlobalApply sc "Cryptol.ePNeq" =<< sequence [ty m, ty n]
         _ -> fail "proveProp: unknown proposition"
   where
     ty = importType sc env
@@ -327,15 +334,19 @@ importExpr sc env expr =
                                           env' <- bindName sc x (C.Forall [] [] t) env
                                           e' <- importExpr sc env' e
                                           scLambda sc (nameToString x) t' e'
-    C.EProofAbs prop e1             -> do p <- importType sc env prop
+    C.EProofAbs prop e1
+      | isErasedProp prop           -> do importExpr sc env e1
+      | otherwise                   -> do p <- importType sc env prop
                                           env' <- bindProp sc prop env
                                           e <- importExpr sc env' e1
                                           scLambda sc "_P" p e
     C.EProofApp e1                  -> case fastSchemaOf (envC env) e1 of
-                                         C.Forall [] (p1 : _) _ ->
-                                           do e <- importExpr sc env e1
-                                              prf <- proveProp sc env p1
-                                              scApply sc e prf
+                                         C.Forall [] (p1 : _) _
+                                           | isErasedProp p1 -> importExpr sc env e1
+                                           | otherwise ->
+                                             do e <- importExpr sc env e1
+                                                prf <- proveProp sc env p1
+                                                scApply sc e prf
                                          s -> fail $ "EProofApp: invalid type: " ++ show (e1, s)
     C.ECast e1 t2                   -> do let t1 = fastTypeOf (envC env) e1
                                           t1' <- importType' sc env t1

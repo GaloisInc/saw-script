@@ -142,10 +142,6 @@ ty (TCField s a b) = #{ (s) :: ty a | ty b };
 --------------------------------------------------------------------------------
 -- Predicate symbols
 
-primitive data PEqual :: Num -> Num -> sort 0;
-primitive data PNeq   :: Num -> Num -> sort 0;
-primitive data PGeq   :: Num -> Num -> sort 0;
-
 data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
@@ -172,10 +168,6 @@ data PCmp :: KType -> sort 0 where {
 
 -- Partial functions to select instances (terms translated from
 -- type-correct Cryptol should never hit the undefined cases)
-
-axiom ePEqual :: (m n :: Num) -> PEqual m n;
-axiom ePNeq :: (m n :: Num) -> PNeq m n;
-axiom ePGeq :: (m n :: Num) -> PGeq m n;
 
 ePFin :: (n :: Num) -> PFin n;
 ePFin (TCNum n) = PFinNum n;
@@ -401,8 +393,8 @@ cmpLt _ (PCmpField s a b pa pb) = fieldCmp s (ty a) (ty b) (cmpLt a pa) (cmpLt b
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> seq bits Bool;
-ecDemote _ _ (PFinNum val) (PFinNum bits) _ = bvNat bits val;
+ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> seq bits Bool;
+ecDemote _ _ (PFinNum val) (PFinNum bits) = bvNat bits val;
 
 -- Arith
 ecPlus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
@@ -558,27 +550,22 @@ ecAtRangeBack n a m i pn pi xs = seqMap (seq i Bool) (ty a) m (ecAtBack n a i pn
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
-           -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next)
-           -> PEqual (tcLenFromThen first next bits) len
            -> seq len (seq bits Bool);
-ecFromThen _ _ _ (TCNum len) (PFinNum first) (PFinNum next) (PFinNum bits) _ _ _ =
+ecFromThen _ _ _ (TCNum len) (PFinNum first) (PFinNum next) (PFinNum bits) =
   gen len (Vec bits Bool)
     (\(i :: Nat) -> bvAdd bits (bvNat bits first)
                           (bvMul bits (bvSub bits (bvNat bits next) (bvNat bits first))
 			              (bvNat bits i)));
 
 ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
-         -> PGeq last first -> PGeq bits (tcWidth last)
          -> seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
-ecFromTo (TCNum first) _ _ (PFinNum last) (PFinNum bits) _ _ =
+ecFromTo (TCNum first) _ _ (PFinNum last) (PFinNum bits) =
   gen (addNat 1 (subNat last first)) (Vec bits Bool)
     (\(i :: Nat) -> bvNat bits (addNat i first));
 
 ecFromThenTo :: (first next last bits len :: Num) -> PFin first -> PFin next -> PFin last -> PFin bits
-             -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next) -> PGeq bits (tcWidth last)
-             -> PEqual (tcLenFromThenTo first next last) len
              -> seq len (seq bits Bool);
-ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits) _ _ _ _ =
+ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits) =
   gen len (Vec bits Bool)
     (\(i :: Nat) ->
       bvNat bits (subNat (addNat first (mulNat i next)) (mulNat i first)));
