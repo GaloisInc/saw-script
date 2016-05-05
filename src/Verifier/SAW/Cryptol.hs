@@ -144,7 +144,7 @@ importType sc env ty =
             C.PEqual         -> impossible "importType PEqual"
             C.PNeq           -> impossible "importType PNeq"
             C.PGeq           -> impossible "importType PGeq"
-            C.PFin           -> scDataTypeApp sc "Cryptol.PFin"   =<< traverse go tyargs -- @fin _@
+            C.PFin           -> impossible "importType PFin"
             C.PHas _selector -> unimplemented "PHas"
             C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- @Arith _@
             C.PCmp           -> scDataTypeApp sc "Cryptol.PCmp"   =<< traverse go tyargs -- @Cmp _@
@@ -189,6 +189,7 @@ isErasedProp prop =
     (C.pIsEq -> Just _) -> True
     (C.pIsGeq -> Just _) -> True
     (pIsNeq -> Just _) -> True
+    (C.pIsFin -> Just _) -> True
     _ -> False
 
 importPropsType :: SharedContext s -> Env s -> [C.Prop] -> C.Type -> IO (SharedTerm s)
@@ -217,8 +218,6 @@ proveProp sc env prop =
     Just (prf, j) -> incVars sc 0 j prf
     Nothing ->
       case prop of
-        (C.pIsFin -> Just n)
-          -> scGlobalApply sc "Cryptol.ePFin" =<< sequence [ty n]
         (C.pIsArith -> Just t)
           -> scGlobalApply sc "Cryptol.ePArith" =<< sequence [ty t]
         (C.pIsCmp -> Just t)
