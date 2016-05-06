@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TupleSections #-}
@@ -19,10 +20,13 @@ module SAWScript.Value where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
+import qualified Control.Monad as CM
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), get, put)
 import Control.Monad.Trans.Class (lift)
+import qualified Data.IORef as IO
+import Data.IORef ( IORef )
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -273,6 +277,107 @@ forValue (x : xs) f =
        bindValue m2 (VLambda $ \v2 ->
          return $ VReturn (VArray (v1 : fromValue v2))))
 
+-- Stack Traces ----------------------------------------------------------------
+
+-- TODO(conathan):
+--
+-- - [ ] wrap some calls
+-- - [ ] make sure call stack gets reset after errors
+
+type CallStack = [StackFrame]
+type StackFrame = String
+
+emptyCallStack :: CallStack
+emptyCallStack = []
+
+ppCallStack :: CallStack -> String
+ppCallStack cs =
+  unlines [ show i ++ ": " ++ sf | (sf, i) <- zip cs [(0::Integer)..] ]
+
+stmtToFrame :: SS.Stmt -> StackFrame
+stmtToFrame = \case
+  SS.StmtBind pat _ _ -> patternToFrame pat
+  SS.StmtLet dg -> declGroupToFrame dg
+  SS.StmtCode l -> locatedToFrame l
+  SS.StmtImport i -> importToFrame i
+
+patternToFrame :: SS.Pattern -> StackFrame
+patternToFrame pat = case patternToMaybeFrame pat of
+  Nothing -> "<couldn't determine location of 'Pattern'>"
+  Just s -> s
+
+patternToMaybeFrame :: SS.Pattern -> Maybe StackFrame
+patternToMaybeFrame = \case
+  SS.PWild _ -> Nothing
+  SS.PVar l _ -> Just $ locatedToFrame l
+  SS.PTuple ps -> CM.msum $ map patternToMaybeFrame ps
+
+declGroupToFrame :: SS.DeclGroup -> StackFrame
+declGroupToFrame = \case
+  -- XXX: almost surely not the right way to handle recursive decls.
+  SS.Recursive decls -> declToFrame (head decls)
+  SS.NonRecursive decl -> declToFrame decl
+
+declToFrame :: SS.Decl -> StackFrame
+declToFrame decl =
+  case CM.msum $ [exprToMaybeFrame (SS.dDef decl), patternToMaybeFrame (SS.dPat decl)] of
+    Nothing -> error "unreachable"
+    Just sf -> sf
+
+locatedToFrame :: Show a => SS.Located a -> StackFrame
+locatedToFrame = show
+
+importToFrame :: SS.Import -> StackFrame
+importToFrame import_ = "Import: " ++ either show show (SS.iModule import_)
+
+exprToFrame :: SS.Expr -> StackFrame
+exprToFrame expr = case exprToMaybeFrame expr of
+  Nothing -> "<couldn't determine location of 'Expr'>"
+  Just s -> s
+
+exprToMaybeFrame :: SS.Expr -> Maybe StackFrame
+exprToMaybeFrame = \case
+  SS.Bool {} -> Nothing
+  SS.String {} -> Nothing
+  SS.Int {} -> Nothing
+  SS.Code l -> Just $ locatedToFrame l
+  SS.CType l -> Just $ locatedToFrame l
+  SS.Array exprs -> CM.msum $ map exprToMaybeFrame exprs
+  SS.Block _stmts -> Nothing -- We'll get frames for individual statements in 'interpretStmts'.
+  SS.Tuple exprs -> CM.msum $ map exprToMaybeFrame exprs
+  SS.Record {} -> Nothing -- ???
+  SS.Index e1 e2 -> CM.msum $ map exprToMaybeFrame [e1, e2]
+  SS.Lookup e _ -> exprToMaybeFrame e
+  SS.TLookup e _ -> exprToMaybeFrame e
+  SS.Var l -> Just $ locatedToFrame l
+  SS.Function pat e -> CM.msum [patternToMaybeFrame pat, exprToMaybeFrame e]
+  SS.Application e1 e2 -> CM.msum $ map exprToMaybeFrame [e1, e2]
+  SS.Let dg _ -> Just $ declGroupToFrame dg
+  SS.TSig e _ -> exprToMaybeFrame e
+  SS.IfThenElse c t f -> CM.msum $ map exprToMaybeFrame [c, t, f]
+
+----------------------------------------------------------------
+
+withFrame :: StackFrame -> TopLevel a -> TopLevel a
+withFrame sf tl = do
+  pushFrame
+  x <- tl
+  popFrame
+  return x
+  where
+  pushFrame :: TopLevel ()
+  pushFrame = do
+    r <- getCallStackRef
+    io $ IO.modifyIORef' r (sf :)
+    io $ do
+      cs <- IO.readIORef r
+      putStrLn ("Current stack:\n" ++ ppCallStack cs)
+
+  popFrame :: TopLevel ()
+  popFrame = do
+    r <- getCallStackRef
+    io $ IO.modifyIORef' r tail
+
 -- TopLevel Monad --------------------------------------------------------------
 
 -- | TopLevel Read-Only Environment.
@@ -281,6 +386,7 @@ data TopLevelRO =
   { roSharedContext :: SharedContext SAWCtx
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
+  , roCallStackRef  :: IORef CallStack
   }
 
 data TopLevelRW =
@@ -309,6 +415,9 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+getCallStackRef :: TopLevel (IORef CallStack)
+getCallStackRef = TopLevel (asks roCallStackRef)
 
 getTopLevelRO :: TopLevel TopLevelRO
 getTopLevelRO = TopLevel ask

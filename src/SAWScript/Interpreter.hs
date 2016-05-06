@@ -31,12 +31,13 @@ module SAWScript.Interpreter
   , processFile
   )
   where
-
+import Debug.Trace
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
 import Control.Monad (unless, (>=>))
+import qualified Data.IORef as IO
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import System.Process (readProcess)
@@ -152,7 +153,7 @@ bindPatternEnv = bindPatternGeneric extendEnv
 -- Interpretation of SAWScript -------------------------------------------------
 
 interpret :: LocalEnv -> SS.Expr -> TopLevel Value
-interpret env expr =
+interpret env expr = withFrame ("<interpret>: " ++ exprToFrame expr) $
     case expr of
       SS.Bool b              -> return $ VBool b
       SS.String s            -> return $ VString s
@@ -186,7 +187,7 @@ interpret env expr =
       SS.Application e1 e2   -> do v1 <- interpret env e1
                                    v2 <- interpret env e2
                                    case v1 of
-                                     VLambda f -> f v2
+                                     VLambda f -> withFrame ("<App>: " ++ exprToFrame e1) $ f v2
                                      _ -> fail $ "interpret Application: " ++ show v1
       SS.Let dg e            -> do env' <- interpretDeclGroup env dg
                                    interpret env' e
@@ -195,6 +196,21 @@ interpret env expr =
                                    case v1 of
                                      VBool b -> interpret env (if b then e2 else e3)
                                      _ -> fail $ "interpret IfThenElse: " ++ show v1
+
+-- | It's not this simple: we can't do simply turn a TopLevel into an
+-- IO? Or maybe we can!
+--
+--   rw <- getTopLevelRW
+--   ro <- getTopLevelRO
+--   (x, rw') <- liftIO $ <stacky-bracky> $ runTopLevel rw ro mx
+--   putTopLevelRW rw'
+--   return x
+--
+-- To trigger an error, i can do
+--
+--       key0 <- llvm_var "*key" (llvm_array <bad type, e.g. st0> (llvm_int 8));
+--
+-- in hmac_init_spec.
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl pat mt expr) = do
@@ -215,27 +231,34 @@ interpretDeclGroup env (SS.Recursive ds) = return env'
   where
     env' = foldr addDecl env ds
     addDecl (SS.Decl pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
-
+safeHead :: [a] -> Maybe a
+safeHead [] = Nothing
+safeHead (x:_) = Just x
 interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
-interpretStmts env stmts =
+interpretStmts env stmts = trace (show $ safeHead stmts) $
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind (SS.PWild _) _ e] -> interpret env e
+      [SS.StmtBind (SS.PWild _) _ e] -> w (exprToFrame e) $ interpret env e
       SS.StmtBind pat _ e : ss ->
-          do v1 <- interpret env e
+          do v1 <- w (exprToFrame e) $ interpret env e
+                   -- w (patternToFrame pat) $ interpret env e
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue v1 (VLambda f)
-      SS.StmtLet bs : ss -> interpret env (SS.Let bs (SS.Block ss))
-      SS.StmtCode s : ss ->
+      SS.StmtLet bs : ss -> w (declGroupToFrame bs) $
+        interpret env (SS.Let bs (SS.Block ss))
+      SS.StmtCode s : ss -> do
+        w (locatedToFrame s) $
           do sc <- getSharedContext
              rw <- getMergedEnv env
              ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) s
              -- FIXME: Local bindings get saved into the global cryptol environment here.
              -- We should change parseDecls to return only the new bindings instead.
              putTopLevelRW $ rw{rwCryptol = ce'}
-             interpretStmts env ss
+        interpretStmts env ss
       SS.StmtImport _ : _ ->
           do fail "block import unimplemented"
+  where
+  w msg = withFrame ("<interpretStmts>: " ++ msg)
 
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
@@ -287,11 +310,16 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   rw' <- getTopLevelRW
   putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
+{-
+XXX: the stack trace should be set up and torn down here, in the interpreter.
+-}
+
 -- | Interpret a block-level statement in the TopLevel monad.
 interpretStmt :: Bool -> SS.Stmt -> TopLevel ()
-interpretStmt printBinds stmt =
+interpretStmt printBinds stmt = withFrame ("<interpretStmt>: " ++ stmtToFrame stmt) $
   case stmt of
-    SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
+    SS.StmtBind pat mc expr  -> withFrame ("<interpretStmt.bind>: " ++ exprToFrame expr) $
+                                processStmtBind printBinds pat mc expr
     SS.StmtLet dg             -> do rw <- getTopLevelRW
                                     dg' <- io $ reportErrT (checkDeclGroup (rwTypes rw) dg)
                                     env <- interpretDeclGroup emptyLocal dg'
@@ -346,10 +374,12 @@ buildTopLevelEnv opts =
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       csr <- IO.newIORef emptyCallStack
        let ro0 = TopLevelRO
                    { roSharedContext = sc
                    , roJavaCodebase = jcb
                    , roOptions = opts
+                   , roCallStackRef = csr
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc

@@ -77,7 +77,7 @@ mgu _ (TySkolemVar a i) (TySkolemVar b j)
   | (a, i) == (b, j) = return emptySubst
 mgu _ (TyVar a) (TyVar b)
   | a == b = return emptySubst
-mgu m t1 t2 = failMGU $ "type mismatch: " ++ pShow t1 ++ " and " ++ pShow t2 ++ " at " ++ show m
+mgu m t1 t2 = failMGU $ "here 1 type mismatch: " ++ pShow t1 ++ " and " ++ pShow t2 ++ " at " ++ show m
 
 mgus :: LName -> [Type] -> [Type] -> Either String Subst
 mgus _ [] [] = return emptySubst
@@ -85,7 +85,7 @@ mgus m (t1:ts1) (t2:ts2) = do
   s <- mgu m t1 t2
   s' <- mgus m (map (appSubst s) ts1) (map (appSubst s) ts2)
   return (s' @@ s)
-mgus m _ _ = failMGU $ "type mismatch in constructor arity at" ++ show m
+mgus m _ _ = failMGU $ "here 2 type mismatch in constructor arity at" ++ show m
 
 bindVar :: LName -> TypeIndex -> Type -> Either String Subst
 bindVar m i t
@@ -196,7 +196,7 @@ unify m t1 t2 = do
   case mgu m t1' t2' of
     Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
     Left e -> recordError $ unlines
-                [ "type mismatch: " ++ pShow t1' ++ " and " ++ pShow t2'
+                [ "here 3 type mismatch: " ++ pShow t1' ++ " and " ++ pShow t2'
                 , " at " ++ show m
                 , e
                 ]

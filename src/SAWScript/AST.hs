@@ -84,6 +84,18 @@ data Import = Import
   , iSpec      :: Maybe P.ImportSpec
   } deriving (Eq, Show)
 
+{-
+XXX: would be nice to add stack traces to sawscript! we could track frame entry and exit in TopLevel monad, with a custom 'bracket' like operation.
+
+- want to create a frame on entry to all blocks, and get a line number on all lines in the block.
+
+- want to preserve the error that causes the failure, and add the stack trace on top, like in java.
+
+- hope is that running the TopLevel monad will go until the exception, at which point the stack state will be fixed where it was last before the crash.
+
+- we can get location info from the LName's in the Patterns; these are used in 'checkDeclGroup' to generate block-specific error messages.
+-}
+
 data Expr
   -- Constants
   = Bool Bool
