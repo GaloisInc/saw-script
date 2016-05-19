@@ -223,6 +223,9 @@ instance Pretty Expr where
       PP.text "then" PP.<+> PP.pretty e2 PP.<+>
       PP.text "else" PP.<+> PP.pretty e3
 
+instance PrettyPrint Expr where
+  pretty _ e = PP.pretty e
+
 instance Pretty Pattern where
   pretty pat = case pat of
     PWild mType ->

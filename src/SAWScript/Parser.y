@@ -277,6 +277,7 @@ instance Show ParseError where
       UnexpectedEOF     -> "Parse error: unexpected end of file"
       UnexpectedToken t -> "Parse error at line " ++ show ln ++ ", col " ++ show col
         where Pos _ ln col = tokPos t
+      InvalidPattern x  -> "Parse error: invalid pattern " ++ pShow x
 
 parseError :: [Token Pos] -> Either ParseError b
 parseError toks = case toks of
