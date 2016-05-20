@@ -109,7 +109,7 @@ mbImportSpec :: { Maybe P.ImportSpec }
 
 Stmt :: { Stmt }
  : Expression                           { StmtBind (PWild Nothing) Nothing $1   }
- | Expression '<-' Expression           {% fmap (\x -> StmtBind x Nothing $3) (toPattern $1) }
+ | AExpr '<-' Expression                {% fmap (\x -> StmtBind x Nothing $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { StmtLet (Recursive $2)                  }
  | 'let' Declaration                    { StmtLet (NonRecursive $2)               }
  | 'let' Code                           { StmtCode $2                 }
