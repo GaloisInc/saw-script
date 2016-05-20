@@ -251,7 +251,7 @@ verifyJava bic opts cls mname overrides setup = do
               let exts = getAllExts g
               glam <- io $ bindExts jsc exts g
               io $ doExtraChecks opts bsc glam
-              r <- evalStateT script (ProofGoal Universal (vsVCName vs) glam)
+              r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) glam))
               case r of
                 SS.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
                 SS.SatMulti vals -> io $ showCexResults jsc (rwPPOpts rw) ms vs exts vals

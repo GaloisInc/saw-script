@@ -405,8 +405,19 @@ readCore path = do
   sc <- getSharedContext
   io (mkTypedTerm sc =<< scReadExternal sc =<< readFile path)
 
+withFirstGoal :: (ProofGoal s -> TopLevel (a, Maybe (ProofGoal s))) -> ProofScript s a
+withFirstGoal f =
+  StateT $ \(ProofState goals concl) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    g : gs -> do
+      (x, mg') <- f g
+      case mg' of
+        Nothing -> return (x, ProofState gs concl)
+        Just g' -> return (x, ProofState (g' : gs) concl)
+
 quickcheckGoal :: SharedContext s -> Integer -> ProofScript s SV.SatResult
-quickcheckGoal sc n = StateT $ \goal -> io $ do
+quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
   putStr $ "WARNING: using quickcheck to prove goal..."
   hFlush stdout
   let tm = goalTerm goal
@@ -418,26 +429,26 @@ quickcheckGoal sc n = StateT $ \goal -> io $ do
       case result of
         Nothing -> do
           putStrLn $ "checked " ++ show n ++ " cases."
-          return (SV.Unsat, goal)
+          return (SV.Unsat, Nothing)
         -- TODO: use reasonable names here
-        Just cex -> return (SV.SatMulti (zip (repeat "_") cex), goal)
+        Just cex -> return (SV.SatMulti (zip (repeat "_") cex), Just goal)
     Nothing -> fail $ "quickcheck:\n" ++
       "term has non-testable type"
 
 assumeValid :: ProofScript s SV.ProofResult
-assumeValid = StateT $ \goal -> do
+assumeValid = withFirstGoal $ \goal -> do
   io $ putStrLn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
-  return (SV.Valid, goal)
+  return (SV.Valid, Nothing)
 
 assumeUnsat :: ProofScript s SV.SatResult
-assumeUnsat = StateT $ \goal -> do
+assumeUnsat = withFirstGoal $ \goal -> do
   io $ putStrLn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
-  return (SV.Unsat, goal)
+  return (SV.Unsat, Nothing)
 
 trivial :: ProofScript SAWCtx SV.SatResult
-trivial = StateT $ \goal -> do
+trivial = withFirstGoal $ \goal -> do
   checkTrue (goalTerm goal)
-  return (SV.Unsat, goal)
+  return (SV.Unsat, Nothing)
   where
     checkTrue :: SharedTerm SAWCtx -> TopLevel ()
     checkTrue t =
@@ -467,49 +478,49 @@ print_term_depth d t = do
   io $ print (ppTermDepth opts d t)
 
 printGoal :: ProofScript s ()
-printGoal = StateT $ \goal -> do
+printGoal = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
   io $ putStrLn (scPrettyTerm opts (goalTerm goal))
-  return ((), goal)
+  return ((), Just goal)
 
 printGoalDepth :: Int -> ProofScript SAWCtx ()
-printGoalDepth n = StateT $ \goal -> do
+printGoalDepth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts n (goalTerm goal))
-  return ((), goal)
+  return ((), Just goal)
 
 printGoalConsts :: ProofScript SAWCtx ()
-printGoalConsts = StateT $ \goal -> do
+printGoalConsts = withFirstGoal $ \goal -> do
   io $ mapM_ putStrLn $ Map.keys (getConstantSet (goalTerm goal))
-  return ((), goal)
+  return ((), Just goal)
 
 printGoalSize :: ProofScript SAWCtx ()
-printGoalSize = StateT $ \goal -> do
+printGoalSize = withFirstGoal $ \goal -> do
   let t = goalTerm goal
   io $ putStrLn $ "Goal shared size: " ++ show (scSharedSize t)
   io $ putStrLn $ "Goal unshared size: " ++ show (scTreeSize t)
-  return ((), goal)
+  return ((), Just goal)
 
 unfoldGoal :: [String] -> ProofScript SAWCtx ()
-unfoldGoal names = StateT $ \goal -> do
+unfoldGoal names = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ scUnfoldConstants sc names trm
-  return ((), goal { goalTerm = trm' })
+  return ((), Just (goal { goalTerm = trm' }))
 
 simplifyGoal :: Simpset (SharedTerm SAWCtx) -> ProofScript SAWCtx ()
-simplifyGoal ss = StateT $ \goal -> do
+simplifyGoal ss = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ rewriteSharedTerm sc ss trm
-  return ((), goal { goalTerm = trm' })
+  return ((), Just (goal { goalTerm = trm' }))
 
 beta_reduce_goal :: ProofScript SAWCtx ()
-beta_reduce_goal = StateT $ \goal -> do
+beta_reduce_goal = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ betaNormalize sc trm
-  return ((), goal { goalTerm = trm' })
+  return ((), Just (goal { goalTerm = trm' }))
 
 -- | Bit-blast a @SharedTerm@ representing a theorem and check its
 -- satisfiability using ABC.
@@ -570,7 +581,7 @@ checkBooleanSchema s =
 -- | Bit-blast a @SharedTerm@ representing a theorem and check its
 -- satisfiability using ABC.
 satABC :: SharedContext s -> ProofScript s SV.SatResult
-satABC sc = StateT $ \g -> io $ do
+satABC sc = withFirstGoal $ \g -> io $ do
   let t0 = goalTerm g
   TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
   checkBooleanSchema schema
@@ -584,20 +595,23 @@ satABC sc = StateT $ \g -> io $ do
         Universal -> AIG.not lit0
   -- putStrLn "Checking..."
   satRes <- AIG.checkSat be lit
+  ft <- scApplyPrelude_False sc
   case satRes of
-    AIG.Unsat -> do
-      -- putStrLn "UNSAT"
-      ft <- scApplyPrelude_False sc
-      return (SV.Unsat, g { goalTerm = ft })
+    AIG.Unsat ->
+      case goalQuant g of
+        Existential -> return (SV.Unsat, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat, Nothing)
     AIG.Sat cex -> do
       -- putStrLn "SAT"
       let r = liftCexBB shapes cex
-      tt <- scApplyPrelude_True sc
       case r of
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-              return (SV.SatMulti (zip argNames vs), g { goalTerm = tt })
+            let r' = SV.SatMulti (zip argNames vs)
+            case goalQuant g of
+              Existential -> return (r', Nothing)
+              Universal -> return (r', Just (g { goalTerm = ft }))
           | otherwise -> fail $ unwords ["ABC SAT results do not match expected arguments", show argNames, show vs]
     AIG.SatUnknown -> fail "Unknown result from ABC"
 
@@ -615,7 +629,7 @@ parseDimacsSolution vars ls = map lkup vars
 
 satExternal :: Bool -> SharedContext s -> String -> [String]
             -> ProofScript s SV.SatResult
-satExternal doCNF sc execName args = StateT $ \g -> io $ do
+satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
   let cnfName = goalName g ++ ".cnf"
@@ -638,20 +652,24 @@ satExternal doCNF sc execName args = StateT $ \g -> io $ do
   let ls = lines out
       sls = filter ("s " `isPrefixOf`) ls
       vls = filter ("v " `isPrefixOf`) ls
+  ft <- scApplyPrelude_False sc
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
       let bs = parseDimacsSolution vars vls
       let r = liftCexBB shapes bs
-      tt <- scApplyPrelude_True sc
       case r of
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
         Right vs
           | length argNames == length vs -> do
-              return (SV.SatMulti (zip argNames vs), g { goalTerm = tt })
+            let r' = SV.SatMulti (zip argNames vs)
+            case goalQuant g of
+              Universal -> return (r', Just (g { goalTerm = ft }))
+              Existential -> return (r', Nothing)
           | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
-    (["s UNSATISFIABLE"], []) -> do
-      ft <- scApplyPrelude_False sc
-      return (SV.Unsat, g { goalTerm = ft })
+    (["s UNSATISFIABLE"], []) ->
+      case goalQuant g of
+        Universal -> return (SV.Unsat, Nothing)
+        Existential -> return (SV.Unsat, Just (g { goalTerm = ft }))
     _ -> fail $ "Unexpected result from SAT solver:\n" ++ out
 
 writeAIGWithMapping :: GIA.GIA s -> GIA.Lit s -> FilePath -> IO [Int]
@@ -659,12 +677,6 @@ writeAIGWithMapping be l path = do
   nins <- GIA.inputCount be
   ABC.writeAiger path (ABC.Network be [l])
   return [1..nins]
-
-unsatResult :: SharedContext s -> ProofGoal s
-            -> IO (SV.SatResult, ProofGoal s)
-unsatResult sc g = do
-  ft <- scApplyPrelude_False sc
-  return (SV.Unsat, g { goalTerm = ft })
 
 rewriteEqs :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
 rewriteEqs sc t = do
@@ -679,7 +691,7 @@ rewriteEqs sc t = do
 -- | Bit-blast a @SharedTerm@ representing a theorem and check its
 -- satisfiability using the RME library.
 satRME :: SharedContext s -> ProofScript s SV.SatResult
-satRME sc = StateT $ \g -> io $ do
+satRME sc = withFirstGoal $ \g -> io $ do
   let t0 = goalTerm g
   TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
   checkBooleanSchema schema
@@ -693,22 +705,25 @@ satRME sc = StateT $ \g -> io $ do
         Universal -> RME.compl lit0
   -- putStrLn "Checking..."
   case RME.sat lit of
-    Nothing -> do
-      -- putStrLn "UNSAT"
-      ft <- scApplyPrelude_False sc
-      return (SV.Unsat, g { goalTerm = ft })
+    Nothing ->
+      case goalQuant g of
+        Existential -> do ft <- scApplyPrelude_False sc
+                          return (SV.Unsat, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat, Nothing)
     Just cex -> do
       -- putStrLn "SAT"
       let m = Map.fromList cex
       let n = sum (map sizeFiniteType shapes)
       let bs = map (maybe False id . flip Map.lookup m) $ take n [0..]
       let r = liftCexBB shapes bs
-      tt <- scApplyPrelude_True sc
       case r of
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-              return (SV.SatMulti (zip argNames vs), g { goalTerm = tt })
+            let r' = SV.SatMulti (zip argNames vs)
+            case goalQuant g of
+              Existential -> return (r', Nothing)
+              Universal -> return (r', Just g)
           | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
 
 codegenSBV :: SharedContext s -> FilePath -> String -> TypedTerm s -> IO ()
@@ -736,7 +751,7 @@ satSBV conf sc = satUnintSBV conf sc []
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
 satUnintSBV :: SBV.SMTConfig -> SharedContext s -> [String] -> ProofScript s SV.SatResult
-satUnintSBV conf sc unints = StateT $ \g -> io $ do
+satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
   (t', labels, lit0) <- prepSBV sc unints (goalTerm g)
   let lit = case goalQuant g of
         Existential -> lit0
@@ -747,12 +762,17 @@ satUnintSBV conf sc unints = StateT $ \g -> io $ do
   SBV.SatResult r <- SBV.satWith conf lit
   case r of
     SBV.Satisfiable {} -> do
-      tt <- scApplyPrelude_True sc
+      ft <- scApplyPrelude_False sc
       let dict = SBV.getModelDictionary r
-      return (getLabels labels dict argNames, g {goalTerm = tt})
+          r' = getLabels labels dict argNames
+      case goalQuant g of
+        Existential -> return (r', Nothing)
+        Universal -> return (r', Just (g { goalTerm = ft }))
     SBV.Unsatisfiable {} -> do
       ft <- scApplyPrelude_False sc
-      return (SV.Unsat, g { goalTerm = ft })
+      case goalQuant g of
+        Existential -> return (SV.Unsat, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat, Nothing)
     SBV.Unknown {} -> fail "Prover returned Unknown"
     SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
     SBV.TimeOut {} -> fail "Prover timed out"
@@ -825,12 +845,14 @@ satWithExporter :: (SharedContext s -> FilePath -> SharedTerm s -> IO ())
                 -> String
                 -> String
                 -> ProofScript s SV.SatResult
-satWithExporter exporter sc path ext = StateT $ \g -> io $ do
+satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
   t <- case goalQuant g of
          Existential -> return (goalTerm g)
          Universal -> negTerm sc (goalTerm g)
   exporter sc ((path ++ goalName g) ++ ext) t
-  unsatResult sc g
+  case goalQuant g of
+    Existential -> return (SV.Unsat, Just g)
+    Universal -> return (SV.Unsat, Nothing)
 
 satAIG :: SharedContext s -> FilePath -> ProofScript s SV.SatResult
 satAIG sc path = satWithExporter writeAIG sc path ".aig"
@@ -856,23 +878,28 @@ provePrim :: ProofScript SAWCtx SV.SatResult
           -> TypedTerm SAWCtx -> TopLevel SV.ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  r <- evalStateT script (ProofGoal Universal "prove" (ttTerm t))
+  (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
+  case finishProof pstate of
+    Just _ -> return ()
+    Nothing -> io $ putStrLn $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
   return (SV.flipSatResult r)
 
 provePrintPrim :: ProofScript SAWCtx SV.SatResult
                -> TypedTerm SAWCtx -> TopLevel (Theorem SAWCtx)
 provePrintPrim script t = do
-  r <- provePrim script t
+  (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
   opts <- rwPPOpts <$> getTopLevelRW
-  case r of
-    SV.Valid -> io (putStrLn "Valid") >> return (Theorem (ttTerm t))
-    _ -> fail (SV.showsProofResult opts r "")
+  case finishProof pstate of
+    Just thm -> do io $ putStrLn "Valid"
+                   return thm
+    Nothing -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
+               ++ SV.showsProofResult opts (SV.flipSatResult r) ""
 
 satPrim :: ProofScript SAWCtx SV.SatResult -> TypedTerm SAWCtx
         -> TopLevel SV.SatResult
 satPrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  evalStateT script (ProofGoal Existential "sat" (ttTerm t))
+  evalStateT script (startProof (ProofGoal Existential "sat" (ttTerm t)))
 
 satPrintPrim :: ProofScript SAWCtx SV.SatResult
              -> TypedTerm SAWCtx -> TopLevel ()
@@ -1085,8 +1112,10 @@ exitPrim code = Exit.exitWith exitCode
 timePrim :: TopLevel SV.Value -> TopLevel SV.Value
 timePrim a = do
   t1 <- liftIO $ getCurrentTime
+  --liftIO $ print t1
   r <- a
   t2 <- liftIO $ getCurrentTime
+  --liftIO $ print t2
   let diff = diffUTCTime t2 t1
   liftIO $ printf "Time: %s\n" (show diff)
   return r
@@ -1189,12 +1218,13 @@ parse_core input = do
 prove_core :: ProofScript SAWCtx SV.SatResult -> String -> TopLevel (Theorem SAWCtx)
 prove_core script input = do
   t <- parseCore input
-  r' <- evalStateT script (ProofGoal Universal "prove" t)
+  (r', pstate) <- runStateT script (startProof (ProofGoal Universal "prove" t))
   let r = SV.flipSatResult r'
   opts <- rwPPOpts <$> getTopLevelRW
-  case r of
-    SV.Valid -> return (Theorem t)
-    _ -> fail (SV.showsProofResult opts r "")
+  case finishProof pstate of
+    Just thm -> return thm
+    Nothing -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
+               ++ SV.showsProofResult opts r ""
 
 core_axiom :: String -> TopLevel (Theorem SAWCtx)
 core_axiom input = do

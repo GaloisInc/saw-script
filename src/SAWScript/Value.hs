@@ -349,7 +349,7 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
-type ProofScript s a = StateT (ProofGoal s) TopLevel a
+type ProofScript s a = StateT (ProofState s) TopLevel a
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -412,10 +412,10 @@ instance FromValue a => FromValue (TopLevel a) where
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
 
-instance IsValue a => IsValue (StateT (ProofGoal SAWCtx) TopLevel a) where
+instance IsValue a => IsValue (StateT (ProofState SAWCtx) TopLevel a) where
     toValue m = VProofScript (fmap toValue m)
 
-instance FromValue a => FromValue (StateT (ProofGoal SAWCtx) TopLevel a) where
+instance FromValue a => FromValue (StateT (ProofState SAWCtx) TopLevel a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind m1 v2) = do

@@ -281,7 +281,7 @@ prover opts sc ms script vs g = do
       verb = verbLevel opts
   ppopts <- fmap rwPPOpts getTopLevelRW
   tt <- io (bindExts sc exts g)
-  r <- evalStateT script (ProofGoal Universal (vsVCName vs) tt)
+  r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) tt))
   case r of
     SV.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
     SV.SatMulti vals -> io $ showCexResults sc ppopts ms vs exts vals

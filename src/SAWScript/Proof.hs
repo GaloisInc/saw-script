@@ -26,3 +26,20 @@ data ProofGoal s =
   , goalName :: String
   , goalTerm :: SharedTerm s
   }
+
+-- | A ProofState represents a sequent, where the collection of goals
+-- implies the conclusion.
+data ProofState s =
+  ProofState
+  { psGoals :: [ProofGoal s]
+  , psConcl :: ProofGoal s
+  }
+
+startProof :: ProofGoal s -> ProofState s
+startProof g = ProofState [g] g
+
+finishProof :: ProofState s -> Maybe (Theorem s)
+finishProof (ProofState gs concl) =
+  case gs of
+    [] -> Just (Theorem (goalTerm concl))
+    _ : _ -> Nothing
