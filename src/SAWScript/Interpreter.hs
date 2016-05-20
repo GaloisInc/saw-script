@@ -626,7 +626,7 @@ primitives = Map.fromList
 
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
-    [ "Perform a Combinitorial Equivalance Check between two AIGs."
+    [ "Perform a Combinatorial Equivalence Check between two AIGs."
     , "The AIGs must have the same number of inputs and outputs."
     ]
 
