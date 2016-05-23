@@ -39,6 +39,8 @@ import Data.Traversable hiding ( mapM )
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
+import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
+import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -370,13 +372,22 @@ buildTopLevelEnv opts =
 processFile :: Options -> FilePath -> IO ()
 processFile opts file = do
   (_, ro, rw) <- buildTopLevelEnv opts
-  _ <- runTopLevel (interpretFile file >> interpretMain) ro rw
+  oldpath <- getCurrentDirectory
+  file' <- canonicalizePath file
+  setCurrentDirectory (takeDirectory file')
+  _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+  setCurrentDirectory oldpath
   return ()
 
 -- Primitives ------------------------------------------------------------------
 
 include_value :: FilePath -> TopLevel ()
-include_value file = interpretFile file
+include_value file = do
+  oldpath <- io $ getCurrentDirectory
+  file' <- io $ canonicalizePath file
+  io $ setCurrentDirectory (takeDirectory file')
+  interpretFile file'
+  io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
