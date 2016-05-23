@@ -248,19 +248,23 @@ loadCryptolModule sc env path = do
   let env' = env { eModuleEnv = modEnv''
                  , eTermEnv = Map.union newTermEnv oldTermEnv
                  }
-  return (CryptolModule tm', env')
+  let sm' = Map.filterWithKey (\k _ -> Set.member k (P.eTypes (T.mExports m))) (T.mTySyns m)
+  return (CryptolModule sm' tm', env')
 
 bindCryptolModule :: forall s. (P.ModName, CryptolModule s) -> CryptolEnv s -> CryptolEnv s
-bindCryptolModule (modName, CryptolModule tm) env =
-  env { eExtraNames = foldr addName (eExtraNames env) (Map.keys tm)
+bindCryptolModule (modName, CryptolModule sm tm) env =
+  env { eExtraNames = flip (foldr addName) (Map.keys tm) $
+                      flip (foldr addTSyn) (Map.keys sm) $ eExtraNames env
+      , eExtraTSyns = Map.union sm (eExtraTSyns env)
       , eExtraTypes = Map.union (fmap (\(TypedTerm s _) -> s) tm) (eExtraTypes env)
       , eTermEnv    = Map.union (fmap (\(TypedTerm _ t) -> t) tm) (eTermEnv env)
       }
   where
     addName name = MN.shadowing (MN.singletonE (P.mkQual modName (MN.nameIdent name)) name)
+    addTSyn name = MN.shadowing (MN.singletonT (P.mkQual modName (MN.nameIdent name)) name)
 
 lookupCryptolModule :: CryptolModule s -> String -> IO (TypedTerm s)
-lookupCryptolModule (CryptolModule tm) name =
+lookupCryptolModule (CryptolModule _ tm) name =
   case Map.lookup (packIdent name) (Map.mapKeys MN.nameIdent tm) of
     Nothing -> fail $ "Binding not found: " ++ name
     Just t -> return t

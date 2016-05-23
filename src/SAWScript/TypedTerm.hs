@@ -41,11 +41,17 @@ mkTypedTerm sc trm = do
 value. These are represented simply as maps from names to typed
 terms. -}
 
-newtype CryptolModule s = CryptolModule (Map C.Name (TypedTerm s))
+data CryptolModule s =
+  CryptolModule (Map C.Name C.TySyn) (Map C.Name (TypedTerm s))
 
 showCryptolModule :: CryptolModule s -> String
-showCryptolModule (CryptolModule m) =
-  unlines ("Symbols" : "=======" : map showBinding (Map.assocs m))
+showCryptolModule (CryptolModule sm tm) =
+  unlines $
+    (if Map.null sm then [] else
+       "Type Synonyms" : "=============" : map showTSyn (Map.elems sm) ++ [""]) ++
+    "Symbols" : "=======" : map showBinding (Map.assocs tm)
   where
+    showTSyn (C.TySyn name params _props rhs) =
+      "    " ++ unwords (pretty (nameIdent name) : map pretty params) ++ " = " ++ pretty rhs
     showBinding (name, TypedTerm schema _) =
       "    " ++ pretty (nameIdent name) ++ " : " ++ pretty schema
