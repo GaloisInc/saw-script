@@ -38,8 +38,9 @@ import Data.Monoid
 import Data.Traversable
 #endif
 
-import System.Environment.Executable(splitExecutablePath)
-import System.FilePath ((</>), normalise, joinPath, splitPath)
+import System.Environment (lookupEnv)
+import System.Environment.Executable (splitExecutablePath)
+import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
 import Verifier.SAW.SharedTerm (SharedContext, SharedTerm, incVars)
 
@@ -92,7 +93,18 @@ initCryptolEnv sc = do
   -- Set the Cryptol include path (TODO: we may want to do this differently)
   (binDir, _) <- splitExecutablePath
   let instDir = normalise . joinPath . init . splitPath $ binDir
-  let modEnv1 = modEnv0 { ME.meSearchPath =
+  mCryptolPath <- lookupEnv "CRYPTOLPATH"
+  let cryptolPaths =
+        case mCryptolPath of
+          Nothing -> []
+          Just path ->
+#if defined(mingw32_HOST_OS) || defined(__MINGW32__)
+            -- Windows paths search from end to beginning
+            reverse (splitSearchPath path)
+#else
+            splitSearchPath path
+#endif
+  let modEnv1 = modEnv0 { ME.meSearchPath = cryptolPaths ++
                            (instDir </> "lib") : ME.meSearchPath modEnv0 }
 
   -- Load Cryptol prelude
