@@ -41,6 +41,7 @@ import Verifier.LLVM.Simulator.Internals
 
 import Verifier.SAW.Cryptol (exportFiniteValue)
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 
@@ -218,7 +219,7 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
     func <- case lookupDefine (fromString funcname) cb of
       Nothing -> fail $ missingSymMsg file (Symbol funcname)
       Just def -> return def
-    let ms0 = initLLVMMethodSpec pos cb func
+    let ms0 = initLLVMMethodSpec pos sbe cb func
         lsctx0 = LLVMSetupState {
                     lsSpec = ms0
                   , lsTactic = Skip
@@ -395,12 +396,19 @@ mkMixedExpr :: LLVMMethodSpecIR
             -> LLVMSetup MixedExpr
 mkMixedExpr ms _ (asLLVMExpr -> Just s) =
   (LLVME . fst) <$> getLLVMExpr ms s
-mkMixedExpr ms sc t = do
+mkMixedExpr ms sc t = LogicE <$> mkLogicExpr ms sc t
+
+
+mkLogicExpr :: LLVMMethodSpecIR
+            -> SharedContext SAWCtx
+            -> SharedTerm SAWCtx
+            -> LLVMSetup LogicExpr
+mkLogicExpr ms sc t = do
   let exts = getAllExts t
       extNames = map ecName exts
   les <- mapM (getLLVMExpr ms) extNames
   fn <- liftIO $ scAbstractExts sc exts t
-  return $ LogicE $ LogicExpr fn (map fst les)
+  return $ LogicExpr fn (map fst les)
 
 llvmInt :: Int -> SymType
 llvmInt n = MemType (IntType n)
@@ -454,11 +462,13 @@ llvmVar bic _ name sty = do
 
 llvmPtr :: BuiltinContext -> Options -> String -> SymType
         -> LLVMSetup ()
-llvmPtr _ _ name sty = do
+llvmPtr bic _ name sty = do
   lsState <- get
   let ms = lsSpec lsState
       func = specFunction ms
       cb = specCodebase ms
+      sbe = specBackend ms
+      sc = biSharedContext bic
       Just funcDef = lookupDefine func cb
   lty <- case resolveSymType cb sty of
            MemType mty -> return mty
@@ -471,8 +481,17 @@ llvmPtr _ _ name sty = do
   let pty = PtrType (MemType lty)
       -- TODO: check compatibility before updating
       expr' = updateLLVMExprType expr pty
+  mbty <- liftIO $ logicTypeOfActual sc lty
+  le <- case mbty of
+    Just ty -> liftIO $ scLLVMValue sc ty name
+    Nothing -> fail $ "Unsupported type in llvm_ptr: " ++ show (ppMemType lty)
+  nonNullTerm <- liftIO $ do
+    nullPtr <- sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
+    scNot sc =<< scEq sc le nullPtr
+  let ms' = specAddVarDecl fixPos name expr' pty ms
+  nonNullAssumption <- mkLogicExpr ms' sc nonNullTerm
   modify $ \st ->
-    st { lsSpec = specAddVarDecl fixPos name expr' pty (lsSpec st) }
+    st { lsSpec = specAddAssumption nonNullAssumption ms' }
 
 checkCompatibleType :: String -> LLVMActualType -> Cryptol.Schema
                     -> LLVMSetup ()

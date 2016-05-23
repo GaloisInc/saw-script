@@ -18,6 +18,7 @@ module SAWScript.LLVMMethodSpecIR
   , specName
   , specPos
   , specCodebase
+  , specBackend
   , specDef
   , specFunction
   , specBehavior
@@ -47,6 +48,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.SharedTerm
 import qualified Verifier.LLVM.Codebase as LSS
+import Verifier.LLVM.Backend
 import Verifier.LLVM.Backend.SAW
 
 import SAWScript.LLVMExpr
@@ -103,10 +105,11 @@ bsAddAssumption a bs =
 type Backend = SAWBackend SAWCtx
 
 initLLVMMethodSpec :: Pos
+                   -> SBE Backend
                    -> LSS.Codebase Backend
                    -> LSS.SymDefine (SharedTerm SAWCtx)
                    -> LLVMMethodSpecIR
-initLLVMMethodSpec pos cb def =
+initLLVMMethodSpec pos sbe cb def =
   let initBS = BS { bsLoc = LSS.sdEntry def
                   , bsExprDecls = Map.empty
                   , bsAssumptions = []
@@ -114,6 +117,7 @@ initLLVMMethodSpec pos cb def =
                   }
       initMS = MSIR { specPos = pos
                     , specCodebase = cb
+                    , specBackend = sbe
                     , specFunction = LSS.sdName def
                     , specDef = def
                     , specLLVMExprNames = Map.empty
@@ -127,6 +131,8 @@ data LLVMMethodSpecIR = MSIR {
     specPos :: Pos
     -- | Codebase containing function to verify.
   , specCodebase :: LSS.Codebase Backend
+    -- | Backend of symbolic simulator
+  , specBackend :: SBE Backend
     -- | Name of function to verify.
   , specFunction :: LSS.Symbol -- TODO: is this necessary?
     -- | Definition of function to verify.
