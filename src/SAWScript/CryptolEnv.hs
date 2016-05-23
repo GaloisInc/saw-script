@@ -50,7 +50,7 @@ import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
---import qualified Cryptol.TypeCheck.InferTypes as T
+import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
 --import qualified Cryptol.TypeCheck.PP as TP
@@ -369,7 +369,7 @@ parseDecls sc env input = do
   -- Parse
   (decls :: [P.Decl P.PName]) <- ioParseDecls input
 
-  (dgs, modEnv') <- liftModuleM modEnv $ do
+  (tmodule, modEnv') <- liftModuleM modEnv $ do
 
     -- Eliminate patterns
     (npdecls :: [P.Decl P.PName]) <- MM.interactive (MB.noPat decls)
@@ -385,6 +385,9 @@ parseDecls sc env input = do
     let nameEnv = nameEnv1 `MR.shadowing` getNamingEnv env
     (rdecls :: [P.TopDecl T.Name]) <- MM.interactive (MB.rename interactiveName nameEnv (traverse MR.rename topdecls))
 
+    -- Create a Module to contain the declarations
+    let rmodule = P.Module (P.Located P.emptyRange interactiveName) [] rdecls
+
     -- Infer types
     let range = fromMaybe P.emptyRange (P.getLoc rdecls)
     prims <- MB.getPrimMap
@@ -393,15 +396,18 @@ parseDecls sc env input = do
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
 
-    out <- MM.io (T.tcDecls rdecls tcEnv') -- FIXME: instead of using tcDecls,
-                                           -- use something like inferModule,
-                                           -- which also returns TSyns.
-    dgs <- MM.interactive (runInferOutput out)
-    return dgs
+    out <- MM.io (TM.runInferM tcEnv' (TI.inferModule rmodule))
+    tmodule <- MM.interactive (runInferOutput out)
+    return tmodule
 
-  let env' = env { eModuleEnv = modEnv' }
+  -- Add new type synonyms and their name bindings to the environment
+  let syns' = Map.union (eExtraTSyns env) (T.mTySyns tmodule)
+  let addName name = MR.shadowing (MN.singletonT (P.mkUnqual (MN.nameIdent name)) name)
+  let names' = foldr addName (eExtraNames env) (Map.keys (T.mTySyns tmodule))
+  let env' = env { eModuleEnv = modEnv', eExtraNames = names', eExtraTSyns = syns' }
 
   -- Translate
+  let dgs = T.mDecls tmodule
   translateDeclGroups sc env' dgs
 
 parseSchema :: CryptolEnv s -> Located String -> IO T.Schema
