@@ -22,6 +22,9 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Rewriter
   ( -- * Rewrite rules
     RewriteRule
+  , ctxtRewriteRule
+  , lhsRewriteRule
+  , rhsRewriteRule
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfProp
@@ -41,6 +44,7 @@ module Verifier.SAW.Rewriter
   , addConv
   , addConvs
   , scSimpset
+  , listRules
   -- * Term rewriting
   , rewriteTerm
   , rewriteSharedTerm
@@ -87,6 +91,14 @@ data RewriteRule t
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
+ctxtRewriteRule :: RewriteRule t -> [t]
+ctxtRewriteRule = ctxt
+
+lhsRewriteRule :: RewriteRule t -> t
+lhsRewriteRule = lhs
+
+rhsRewriteRule :: RewriteRule t -> t
+rhsRewriteRule = rhs
 
 instance Net.Pattern t => Net.Pattern (RewriteRule t) where
   toPat (RewriteRule _ lhs _) = Net.toPat lhs
@@ -338,6 +350,9 @@ scSimpset sc defs eqIdents convs = do
   defRules <- concat <$> traverse (scDefRewriteRules sc) defs
   eqRules <- mapM (scEqRewriteRule sc) eqIdents
   return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
+
+listRules :: Simpset t -> [RewriteRule t]
+listRules ss = [ r | Left r <- Net.content ss ]
 
 ----------------------------------------------------------------------
 -- Destructors for terms
