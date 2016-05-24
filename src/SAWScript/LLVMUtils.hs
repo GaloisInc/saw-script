@@ -212,7 +212,7 @@ addrBounds :: (SBETerm m ~ SharedTerm s) =>
            -> SharedTerm s
            -> SymType
            -> IO (SharedTerm s, SharedTerm s)
-addrBounds sc sbe dl addrTm sty@(MemType mty) = do
+addrBounds sc sbe dl addrTm sty@(MemType (PtrType (MemType mty))) = do
     let aw = fromIntegral (ptrBitwidth dl)
         maxAddr :: Integer
         maxAddr = (2 ^ aw) - 1
