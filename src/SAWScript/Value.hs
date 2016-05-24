@@ -28,6 +28,7 @@ import qualified Data.Map as M
 import Data.Map ( Map )
 import qualified Text.LLVM as L
 import qualified Text.PrettyPrint.HughesPJ as PP
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.CryptolEnv as CEnv
@@ -45,7 +46,7 @@ import SAWScript.ImportAIG
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Rewriter ( Simpset )
+import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
 import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
 
@@ -185,6 +186,19 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
+showSimpset :: PPOpts -> Simpset (SharedTerm SAWCtx) -> String
+showSimpset opts ss =
+  unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
+  where
+    ppRule r =
+      PPL.char '*' PPL.<+>
+      (PPL.nest 2 $
+       ppTerm (lhsRewriteRule r)
+       PPL.</> PPL.char '=' PPL.<+>
+       ppTerm (rhsRewriteRule r))
+    ppTerm t = scPrettyTermDoc opts' t
+    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
 showsPrecValue opts _p v =
   case v of
@@ -205,7 +219,7 @@ showsPrecValue opts _p v =
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
     VTopLevel {} -> showString "<<TopLevel>>"
-    VSimpset {} -> showString "<<simpset>>"
+    VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
     VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
