@@ -852,6 +852,12 @@ primitives = Map.fromList
     (scVal satSMTLib2)
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
+  , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
+    (scVal satUnintSMTLib2)
+    [ "Write the current goal to the given file in SMT-Lib2 format,"
+    , "leaving the listed functions uninterpreted."
+    ]
+
   , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
     (scVal (satExternal True))
     [ "Use an external SAT solver supporting CNF to prove the current goal."

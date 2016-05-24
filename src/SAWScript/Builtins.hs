@@ -391,7 +391,7 @@ write_cnf sc f (TypedTerm schema t) = do
 -- | Write a @SharedTerm@ representing a theorem to an SMT-Lib version
 -- 2 file.
 writeSMTLib2 :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
-writeSMTLib2 sc f t = writeUnintSMTLib2 sc f [] t
+writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | As above, but check that the type is monomorphic and boolean.
 write_smtlib2 :: SharedContext s -> FilePath -> TypedTerm s -> IO ()
@@ -401,8 +401,8 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 
 -- | Write a @SharedTerm@ representing a theorem to an SMT-Lib version
 -- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: SharedContext s -> FilePath -> [String] -> SharedTerm s -> IO ()
-writeUnintSMTLib2 sc f unints t = do
+writeUnintSMTLib2 :: [String] -> SharedContext s -> FilePath -> SharedTerm s -> IO ()
+writeUnintSMTLib2 unints sc f t = do
   (_, _, l) <- prepSBV sc unints t
   txt <- SBV.compileToSMTLib SBV.SMTLib2 True l
   writeFile f txt
@@ -874,6 +874,9 @@ satExtCore sc path = satWithExporter (const writeCore) sc path ".extcore"
 
 satSMTLib2 :: SharedContext s -> FilePath -> ProofScript s SV.SatResult
 satSMTLib2 sc path = satWithExporter writeSMTLib2 sc path ".smt2"
+
+satUnintSMTLib2 :: SharedContext s -> [String] -> FilePath -> ProofScript s SV.SatResult
+satUnintSMTLib2 sc unints path = satWithExporter (writeUnintSMTLib2 unints) sc path ".smt2"
 
 liftCexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
 liftCexBB tys bs =
