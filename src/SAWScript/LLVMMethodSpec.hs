@@ -411,7 +411,10 @@ createLogicValue _ _ sc expr ps mtp mrhs = do
 initializeVerification' :: (MonadIO m, Monad m, Functor m) =>
                            SharedContext SAWCtx
                         -> LLVMMethodSpecIR
-                        -> Simulator SpecBackend m (SpecPathState, [SpecLLVMValue])
+                        -> Simulator SpecBackend m
+                           (SpecPathState,
+                            [(MemType, SpecLLVMValue)],
+                            [(MemType, SpecLLVMValue)])
 initializeVerification' sc ir = do
   let bs = specBehavior ir
       fn = specFunction ir
@@ -471,9 +474,10 @@ initializeVerification' sc ir = do
         (v, ps') <- createLogicValue cb sbe sc expr ps ty mle
         setPS ps'
         writeLLVMTerm (map snd argVals) (expr, v, 1)
+        return (ty, v)
 
   -- Allocate space for all pointers that aren't directly parameters.
-  forM_ ptrAssignments doAssign
+  otherPtrs <- forM ptrAssignments doAssign
 
   -- Set initial logic values for everything except arguments and
   -- pointers, including values pointed to by pointers from directly
@@ -482,27 +486,35 @@ initializeVerification' sc ir = do
 
   ps <- fromMaybe (error "initializeVerification") <$> getPath
 
-  return (ps, map snd argVals)
+  return (ps, otherPtrs, argVals)
 
 checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
                    SharedContext SAWCtx
                 -> LLVMMethodSpecIR
                 -> SpecPathState
-                -> [SpecLLVMValue]
+                -> [(MemType, SpecLLVMValue)]
+                -> [(MemType, SpecLLVMValue)]
                 -> Simulator SpecBackend m (PathVC SymBlockID)
-checkFinalState sc ms initPS args = do
+checkFinalState sc ms initPS otherPtrs args = do
   let cmds = bsCommands (specBehavior ms)
       cb = specCodebase ms
+      sbe = specBackend ms
       dl = cbDataLayout cb
+      argVals = map snd args
   mrv <- getProgramReturnValue
-  assumptions <- evalAssumptions sc initPS args (specAssumptions ms)
+  directAssumptions <- evalAssumptions sc initPS argVals (specAssumptions ms)
+  let ptrs = otherPtrs ++ [ (ty, tm) | (ty, tm) <- args, TC.isActualPtr ty ]
+  ptrAssumptions <- forM ptrs $ \(ty, ptr) -> liftIO $ do
+    (minBoundTerm, maxBoundTerm) <- addrBounds sc sbe dl ptr (MemType ty)
+    return [minBoundTerm, maxBoundTerm]
+  assumptions <- liftIO $ foldM (scAnd sc) directAssumptions (concat ptrAssumptions)
   msrv <- case [ e | Return e <- cmds ] of
-            [e] -> Just <$> readLLVMMixedExprPS sc initPS args e
+            [e] -> Just <$> readLLVMMixedExprPS sc initPS argVals e
             [] -> return Nothing
             _  -> fail "more than one return value specified (multiple 'llvm_return's ?)"
   expectedValues <- forM [ (le, me) | Ensure _ le me <- cmds ] $ \(le, me) -> do
-    lhs <- readLLVMTermAddrPS initPS args le
-    rhs <- readLLVMMixedExprPS sc initPS args me
+    lhs <- readLLVMTermAddrPS initPS argVals le
+    rhs <- readLLVMMixedExprPS sc initPS argVals me
     let Just (tp, _) = Map.lookup le (bsExprDecls (specBehavior ms))
     return (le, lhs, tp, rhs)
   let initState  =

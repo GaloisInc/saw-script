@@ -41,7 +41,6 @@ import Verifier.LLVM.Simulator.Internals
 
 import Verifier.SAW.Cryptol (exportFiniteValue)
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 
@@ -251,10 +250,10 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
         putStrLn $ "Executing " ++ show (specName ms)
       runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity verb
-        (initPS, args) <- initializeVerification' scLLVM ms
+        (initPS, otherPtrs, args) <- initializeVerification' scLLVM ms
         mapM_ (overrideFromSpec sc (specPos ms)) (vpOver vp)
         run
-        res <- checkFinalState scLLVM ms initPS args
+        res <- checkFinalState scLLVM ms initPS otherPtrs args
         when (verb >= 3) $ liftIO $ do
           putStrLn "Verifying the following:"
           print (ppPathVC res)
@@ -462,13 +461,11 @@ llvmVar bic _ name sty = do
 
 llvmPtr :: BuiltinContext -> Options -> String -> SymType
         -> LLVMSetup ()
-llvmPtr bic _ name sty = do
+llvmPtr _ _ name sty = do
   lsState <- get
   let ms = lsSpec lsState
       func = specFunction ms
       cb = specCodebase ms
-      sbe = specBackend ms
-      sc = biSharedContext bic
       Just funcDef = lookupDefine func cb
   lty <- case resolveSymType cb sty of
            MemType mty -> return mty
@@ -481,17 +478,8 @@ llvmPtr bic _ name sty = do
   let pty = PtrType (MemType lty)
       -- TODO: check compatibility before updating
       expr' = updateLLVMExprType expr pty
-  mbty <- liftIO $ logicTypeOfActual sc lty
-  le <- case mbty of
-    Just ty -> liftIO $ scLLVMValue sc ty name
-    Nothing -> fail $ "Unsupported type in llvm_ptr: " ++ show (ppMemType lty)
-  nonNullTerm <- liftIO $ do
-    nullPtr <- sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
-    scNot sc =<< scEq sc le nullPtr
-  let ms' = specAddVarDecl fixPos name expr' pty ms
-  nonNullAssumption <- mkLogicExpr ms' sc nonNullTerm
   modify $ \st ->
-    st { lsSpec = specAddAssumption nonNullAssumption ms' }
+    st { lsSpec = specAddVarDecl fixPos name expr' pty (lsSpec st) }
 
 checkCompatibleType :: String -> LLVMActualType -> Cryptol.Schema
                     -> LLVMSetup ()

@@ -204,3 +204,26 @@ freshLLVMArg (_, ty@(IntType bw)) = do
   tm <- liftSBE $ freshInt sbe bw
   return (ty, tm)
 freshLLVMArg (_, _) = fail "Only integer arguments are supported for now."
+
+addrBounds :: (SBETerm m ~ SharedTerm s) =>
+              SharedContext s
+           -> SBE m
+           -> DataLayout
+           -> SharedTerm s
+           -> SymType
+           -> IO (SharedTerm s, SharedTerm s)
+addrBounds sc sbe dl addrTm sty@(MemType mty) = do
+    let aw = fromIntegral (ptrBitwidth dl)
+        maxAddr :: Integer
+        maxAddr = (2 ^ aw) - 1
+        aw' = fromIntegral (ptrBitwidth dl)
+    nullPtr <- sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
+    let maxFittingAddr = maxAddr - fromIntegral (memTypeSize dl mty)
+    mpTerm <- scBvConst sc aw maxFittingAddr
+    awTerm <- scNat sc aw
+    maxPtr <- sbeRunIO sbe $ applyTypedExpr sbe (IntToPtr undefined aw' mpTerm sty)
+    minTerm <- scBvUGt sc awTerm addrTm nullPtr
+    maxTerm <- scBvULt sc awTerm addrTm maxPtr
+    return (minTerm, maxTerm)
+addrBounds _ _ _ _ ty =
+    fail $ "Invalid type passed to addrBounds: " ++ show (ppSymType ty)
