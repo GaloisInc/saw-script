@@ -374,7 +374,6 @@ writeAIGComputedLatches ::
 writeAIGComputedLatches sc file term numLatches = do
   writeSAIG sc file term numLatches
 
-
 writeCNF :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
 writeCNF sc f t = do
   AIG.Network be ls <- bitblastPrim sc t
@@ -384,10 +383,21 @@ writeCNF sc f t = do
       return ()
     _ -> fail "writeCNF: non-boolean term"
 
+write_cnf :: SharedContext s -> FilePath -> TypedTerm s -> IO ()
+write_cnf sc f (TypedTerm schema t) = do
+  checkBooleanSchema schema
+  writeCNF sc f t
+
 -- | Write a @SharedTerm@ representing a theorem to an SMT-Lib version
 -- 2 file.
 writeSMTLib2 :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 sc f [] t
+
+-- | As above, but check that the type is monomorphic and boolean.
+write_smtlib2 :: SharedContext s -> FilePath -> TypedTerm s -> IO ()
+write_smtlib2 sc f (TypedTerm schema t) = do
+  checkBooleanSchema schema
+  writeSMTLib2 sc f t
 
 -- | Write a @SharedTerm@ representing a theorem to an SMT-Lib version
 -- 2 file, treating some constants as uninterpreted.
@@ -564,19 +574,18 @@ checkBoolean :: SharedContext s -> SharedTerm s -> IO ()
 checkBoolean sc t = do
   ty <- scTypeCheckError sc t
   unless (returnsBool ty) $
-    fail $ "Attempting to prove a term that returns a non-boolean type: " ++
-           show ty
+    fail $ "Invalid non-boolean type: " ++ show ty
 
 checkBooleanType :: C.Type -> IO ()
 checkBooleanType (C.tIsBit -> True) = return ()
 checkBooleanType (C.tIsFun -> Just (_, ty')) = checkBooleanType ty'
 checkBooleanType ty =
-  fail $ "Attempting to prove a term that returns a non-boolean type: " ++ pretty ty
+  fail $ "Invalid non-boolean type: " ++ pretty ty
 
 checkBooleanSchema :: C.Schema -> IO ()
 checkBooleanSchema (C.Forall [] [] t) = checkBooleanType t
 checkBooleanSchema s =
-  fail $ "Attempting to prove a term with polymorphic type: " ++ pretty s
+  fail $ "Invalid polymorphic type: " ++ pretty s
 
 -- | Bit-blast a @SharedTerm@ representing a theorem and check its
 -- satisfiability using ABC.

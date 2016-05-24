@@ -690,11 +690,11 @@ primitives = Map.fromList
     ]
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
-    (scVal writeCNF)
+    (scVal write_cnf)
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
-    (scVal writeSMTLib2)
+    (scVal write_smtlib2)
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_core"          "String -> Term -> TopLevel ()"
