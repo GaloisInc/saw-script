@@ -70,6 +70,7 @@ import Verifier.SAW.SharedTerm hiding (Ident)
 data EvalContext
   = EvalContext {
       ecContext :: SharedContext SAWCtx
+    , ecOpts :: LSSOpts
     , ecDataLayout :: DataLayout
     , ecBackend :: SBE SpecBackend
     , ecGlobalMap :: GlobalMap SpecBackend
@@ -254,10 +255,19 @@ ocModifyResultStateIO fn = do
 ocAssert :: Pos -> String -> SharedTerm SAWCtx -> OverrideComputation ()
 ocAssert p _nm x = do
   sbe <- (ecBackend . ocsEvalContext) <$> get
-  case asBool x of
+  sc <- gets (ecContext . ocsEvalContext)
+  opts <- gets (ecOpts . ocsEvalContext)
+  x' <- liftIO $ scWhnf sc x
+  case asBool x' of
     Just True -> return ()
     Just False -> ocError (FalseAssertion p)
-    _ -> ocModifyResultStateIO (addAssertion sbe x)
+    _ | optsSatAtBranches opts -> do
+          sr <- liftIO $ sbeRunIO sbe $ termSAT sbe x'
+          case sr of
+            Unsat -> ocError (FalseAssertion p)
+            _ -> return ()
+      | otherwise -> return ()
+  ocModifyResultStateIO (addAssertion sbe x')
 
 ocStep :: BehaviorCommand -> OverrideComputation ()
 ocStep (Ensure _pos lhsExpr rhsExpr) = do
@@ -321,19 +331,22 @@ execBehavior bsl ec ps = do
 execOverride :: (MonadIO m, Functor m) =>
                 SharedContext SAWCtx
              -> Pos
-             -> LLVMMethodSpecIR
+             -> [LLVMMethodSpecIR]
              -> [(MemType, SpecLLVMValue)]
              -> Simulator SpecBackend m (Maybe (SharedTerm SAWCtx))
-execOverride sc _pos ir args = do
+execOverride _ _ [] _ = fail "Empty list of overrides passed to execOverride."
+execOverride sc _pos irs@(ir:_) args = do
   initPS <- fromMaybe (error "no path during override") <$> getPath
-  let bsl = specBehavior ir
-  let func = specFunction ir
+  let bsl = map specBehavior irs
+      func = specFunction ir
       cb = specCodebase ir
       Just funcDef = lookupDefine func cb
   sbe <- gets symBE
   --liftIO $ putStrLn $ "Executing override for " ++ show func
   gm <- use globalTerms
+  opts <- gets lssOpts
   let ec = EvalContext { ecContext = sc
+                       , ecOpts = opts
                        , ecDataLayout = cbDataLayout cb
                        , ecBackend = sbe
                        , ecGlobalMap = gm
@@ -342,31 +355,41 @@ execOverride sc _pos ir args = do
                        , ecLLVMExprs = specLLVMExprNames ir
                        }
   --liftIO $ putStrLn $ "Executing behavior"
-  res <- liftIO $ execBehavior [bsl] ec initPS
-  case res of
-    [(_, _, Left el)] -> do
-      let msg = vcat [ hcat [ text "Unsatisified assertions in "
-                            , specName ir
-                            , char ':'
-                            ]
-                     , vcat (map (text . ppOverrideError) el)
-                     ]
-      -- TODO: turn this message into a proper exception
-      fail (show msg)
-    [(ps, _, Right mval)] -> do
+  res <- liftIO $ execBehavior bsl ec initPS
+  case [ (ps, mval) | (ps, _, Right mval) <- res ] of
+    -- One successful result: use it.
+    [(ps, mval)] -> do
       currentPathOfState .= ps
       return mval
-    [] -> fail "Zero paths returned from override execution."
-    _  -> fail "More than one path returned from override execution."
+    -- No successful results. Are there any unsuccessful ones?
+    [] -> case [ err | (_, _, Left err) <- res ] of
+            [] -> fail $ show $ hcat
+                  [ text "Zero paths returned from override execution for"
+                  , specName ir
+                  ]
+            (el:_) -> fail $ show $ vcat
+                      [ hcat [ text "Unsatisified assertions in "
+                             , specName ir
+                             , char ':'
+                             ]
+                      , vcat (map (text . ppOverrideError) el)
+                      ]
+    -- More than one success. No way to decide which to use.
+    _  ->  fail $ show $ hcat
+                  [ text "More than one successful path returned from override "
+                  , text "execution for " , specName ir
+                  ]
 
 -- | Add a method override for the given method to the simulator.
 overrideFromSpec :: (MonadIO m, Functor m) =>
                     SharedContext SAWCtx
                  -> Pos
-                 -> LLVMMethodSpecIR
+                 -> [LLVMMethodSpecIR]
                  -> Simulator SpecBackend m ()
-overrideFromSpec sc pos ir = do
-  let ovd = Override (\_ _ -> execOverride sc pos ir)
+overrideFromSpec _ _ [] =
+  fail "Called overrideFromSpec with empty list."
+overrideFromSpec sc pos irs@(ir:_) = do
+  let ovd = Override (\_ _ -> execOverride sc pos irs)
   -- TODO: check argument types?
   tryRegisterOverride (specFunction ir) (const (Just ovd))
 

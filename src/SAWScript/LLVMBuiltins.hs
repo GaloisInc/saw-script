@@ -23,7 +23,8 @@ import Control.Applicative hiding (many)
 import Control.Lens
 import Control.Monad.State hiding (mapM)
 import Control.Monad.Trans.Except
-import Data.List (partition)
+import Data.Function (on)
+import Data.List (partition, sortBy, groupBy)
 import qualified Data.Map as Map
 import Data.String
 import qualified Data.Vector as V
@@ -251,7 +252,10 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
       runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity verb
         (initPS, otherPtrs, args) <- initializeVerification' scLLVM ms
-        mapM_ (overrideFromSpec sc (specPos ms)) (vpOver vp)
+        let ovdsByFunction = groupBy ((==) `on` specFunction) $
+                             sortBy (compare `on` specFunction) $
+                             vpOver vp
+        mapM_ (overrideFromSpec sc (specPos ms)) ovdsByFunction
         run
         res <- checkFinalState scLLVM ms initPS otherPtrs args
         when (verb >= 3) $ liftIO $ do
