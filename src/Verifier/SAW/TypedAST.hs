@@ -51,7 +51,7 @@ module Verifier.SAW.TypedAST
  , allModulePrimitives
  , moduleAxioms
  , allModuleAxioms
-   -- * Data types and defintiions.
+   -- * Data types and definitions.
  , DataType(..)
  , Ctor(..)
  , GenericDef(..)
@@ -100,6 +100,7 @@ module Verifier.SAW.TypedAST
  , parseIdent
  , isIdent
  , ppIdent
+ , ppDef
  , ppDefEqn
  , DeBruijnIndex
  , FieldName
@@ -1027,7 +1028,7 @@ insDataType m dt
           , moduleRDecls = TypeDecl dt : moduleRDecls m
           }
     | otherwise = internalError "insDataType given datatype from another module."
-  where insCtor m' c = Map.insert (identName (ctorName c)) c m' 
+  where insCtor m' c = Map.insert (identName (ctorName c)) c m'
 
 -- | Data types defined in module.
 moduleDataTypes :: Module -> [TypedDataType]
