@@ -357,8 +357,12 @@ execOverride sc _pos irs@(ir:_) args = do
   --liftIO $ putStrLn $ "Executing behavior"
   res <- liftIO $ execBehavior bsl ec initPS
   case [ (ps, mval) | (ps, _, Right mval) <- res ] of
-    -- One successful result: use it.
-    [(ps, mval)] -> do
+    -- One or more successful result: use the first.
+    (ps, mval):rest -> do
+      unless (null rest) $ liftIO $ print $ hcat
+        [ text "WARNING: More than one successful path returned from override "
+        , text "execution for " , specName ir
+        ]
       currentPathOfState .= ps
       return mval
     -- No successful results. Are there any unsuccessful ones?
@@ -374,11 +378,6 @@ execOverride sc _pos irs@(ir:_) args = do
                              ]
                       , vcat (map (text . ppOverrideError) el)
                       ]
-    -- More than one success. No way to decide which to use.
-    _  ->  fail $ show $ hcat
-                  [ text "More than one successful path returned from override "
-                  , text "execution for " , specName ir
-                  ]
 
 -- | Add a method override for the given method to the simulator.
 overrideFromSpec :: (MonadIO m, Functor m) =>
