@@ -834,26 +834,10 @@ freesTerm (Term t) = freesTermF (fmap freesTerm t)
 instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> Term)
                 -> DeBruijnIndex -> Term -> Term
 instantiateVars f initialLevel = go initialLevel
-  where goList :: DeBruijnIndex -> [Term] -> [Term]
-        goList _ []  = []
-        goList l (e:r) = go l e : goList (l+1) r
-
-        gof l ftf =
-          case ftf of
-            PairValue x y -> PairValue (go l x) (go l y)
-            PairType a b  -> PairType (go l a) (go l b)
-            PairLeft x    -> PairLeft (go l x)
-            PairRight x   -> PairRight (go l x)
-            FieldValue fld x y   -> FieldValue fld (go l x) (go l y)
-            FieldType fld x y    -> FieldType fld (go l x) (go l y)
-            RecordSelector x fld -> RecordSelector (go l x) fld
-            CtorApp c ll      -> CtorApp c (goList l ll)
-            DataTypeApp dt ll -> DataTypeApp dt (goList l ll)
-            _ -> ftf
-        go :: DeBruijnIndex -> Term -> Term
+  where go :: DeBruijnIndex -> Term -> Term
         go l (Term tf) =
           case tf of
-            FTermF ftf ->  Term $ FTermF $ gof l ftf
+            FTermF ftf      -> Term $ FTermF $ fmap (go l) ftf
             App x y         -> Term $ App (go l x) (go l y)
             Constant _ _rhs _ -> Term tf -- assume rhs is a closed term, so leave it unchanged
             Lambda i tp rhs -> Term $ Lambda i (go l tp) (go (l+1) rhs)
