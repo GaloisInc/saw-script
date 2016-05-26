@@ -105,7 +105,7 @@ module Verifier.SAW.SharedTerm
   , scImport
     -- ** Normalization
   , scWhnf
-  , scConvertable
+  , scConvertible
     -- ** Type checking
   , scTypeOf
   , scTypeOf'
@@ -483,13 +483,13 @@ scWhnf sc t0 =
                             _ -> return Nothing
 
 
--- | Test if two terms are convertable; that is, if they are equivalant under evaluation.
-scConvertable :: forall s. SharedContext s
+-- | Test if two terms are convertible; that is, if they are equivalant under evaluation.
+scConvertible :: forall s. SharedContext s
               -> Bool -- ^ Should abstract constants be unfolded during this check?
               -> SharedTerm s
               -> SharedTerm s
               -> IO Bool
-scConvertable sc unfoldConst tm1 tm2 = do
+scConvertible sc unfoldConst tm1 tm2 = do
    c <- newCache
    go c tm1 tm2
 
