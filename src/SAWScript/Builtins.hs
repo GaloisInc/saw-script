@@ -1043,6 +1043,29 @@ bindAllExts :: SharedContext s
             -> IO (SharedTerm s)
 bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
+lambda :: TypedTerm SAWCtx -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+lambda x = lambdas [x]
+
+lambdas :: [TypedTerm SAWCtx] -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+lambdas vars (TypedTerm schema0 term0) = do
+  (es, ts) <- unzip <$> mapM checkVar vars
+  ty <- checkMono schema0
+  sc <- getSharedContext
+  term' <- io $ scAbstractExts sc es term0
+  let schema' = C.Forall [] [] (foldr C.tFun ty ts)
+  return (TypedTerm schema' term')
+  where
+    checkMono schema =
+      case schema of
+        C.Forall [] [] t -> return t
+        _ -> fail "lambda: cannot abstract over polymorphic variable"
+    checkVar (TypedTerm schema term) = do
+      e <- case asExtCns term of
+             Just e -> return e
+             Nothing -> fail "lambda: argument not a symbolic variable"
+      t <- checkMono schema
+      return (e, t)
+
 -- | Apply the given SharedTerm to the given values, and evaluate to a
 -- final value.
 -- TODO: Take (ExtCns, FiniteValue) instead of (SharedTerm, FiniteValue)

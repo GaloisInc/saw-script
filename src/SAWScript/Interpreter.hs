@@ -582,6 +582,19 @@ primitives = Map.fromList
     , "is used only for pretty-printing."
     ]
 
+  , prim "lambda"              "Term -> Term -> Term"
+    (funVal2 lambda)
+    [ "Take a 'fresh_symbolic' variable and another term containing that"
+    , "variable, and return a new lambda abstraction over that variable."
+    ]
+
+  , prim "lambdas"             "[Term] -> Term -> Term"
+    (funVal2 lambdas)
+    [ "Take a list of 'fresh_symbolic' variable and another term containing"
+    , "those variables, and return a new lambda abstraction over the list of"
+    , "variables."
+    ]
+
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
     [ "Indicate that the given term should be used as the definition of the"
