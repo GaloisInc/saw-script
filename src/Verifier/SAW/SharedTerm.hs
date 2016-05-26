@@ -483,7 +483,7 @@ scWhnf sc t0 =
                             _ -> return Nothing
 
 
--- | Test if two terms are convertible; that is, if they are equivalant under evaluation.
+-- | Test if two terms are convertible; that is, if they are equivalent under evaluation.
 scConvertible :: forall s. SharedContext s
               -> Bool -- ^ Should abstract constants be unfolded during this check?
               -> SharedTerm s
