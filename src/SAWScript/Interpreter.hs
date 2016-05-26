@@ -589,9 +589,9 @@ primitives = Map.fromList
     , "object that can be passed to 'read_sbv'."
     ]
 
-  , prim "check_convertable"  "Term -> Term -> TopLevel ()"
-    (pureVal checkConvertablePrim)
-    [ "Check if two terms are convertable" ]
+  , prim "check_convertible"  "Term -> Term -> TopLevel ()"
+    (pureVal checkConvertiblePrim)
+    [ "Check if two terms are convertible" ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)

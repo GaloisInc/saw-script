@@ -267,9 +267,9 @@ replacePrim pat replace t = do
   io $ do
     ty1 <- scTypeOf sc tpat
     ty2 <- scTypeOf sc trepl
-    c <- scConvertable sc False ty1 ty2
+    c <- scConvertible sc False ty1 ty2
     unless c $ fail $ unlines
-      [ "terms do not have convertable types", show tpat, show ty1, show trepl, show ty2 ]
+      [ "terms do not have convertible types", show tpat, show ty1, show trepl, show ty2 ]
 
   let ss = emptySimpset
   t' <- io $ replaceTerm sc ss (tpat, trepl) (ttTerm t)
@@ -277,7 +277,7 @@ replacePrim pat replace t = do
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
     ty' <- scTypeOf sc t'
-    c' <- scConvertable sc False ty ty'
+    c' <- scConvertible sc False ty ty'
     unless c' $ fail $ unlines
       [ "term does not have the same type after replacement", show ty, show ty' ]
 
@@ -293,7 +293,7 @@ hoistIfsPrim t = do
   io $ do
     ty  <- scTypeOf sc (ttTerm t)
     ty' <- scTypeOf sc t'
-    c' <- scConvertable sc False ty ty'
+    c' <- scConvertible sc False ty ty'
     unless c' $ fail $ unlines
       [ "term does not have the same type after hoisting ifs", show ty, show ty' ]
 
@@ -301,16 +301,16 @@ hoistIfsPrim t = do
 
 
 
-checkConvertablePrim :: TypedTerm SAWCtx
+checkConvertiblePrim :: TypedTerm SAWCtx
                      -> TypedTerm SAWCtx
                      -> TopLevel ()
-checkConvertablePrim x y = do
+checkConvertiblePrim x y = do
    sc <- getSharedContext
    io $ do
-     c <- scConvertable sc False (ttTerm x) (ttTerm y)
+     c <- scConvertible sc False (ttTerm x) (ttTerm y)
      if c
-       then putStrLn "Convertable"
-       else putStrLn "Not convertable"
+       then putStrLn "Convertible"
+       else putStrLn "Not convertible"
 
 -- | Write a @SharedTerm@ representing a theorem or an arbitrary
 -- function to an AIG file.
