@@ -177,7 +177,7 @@ extractJava bic opts cls mname setup = do
         argBinds <- reverse <$> readIORef argsRef
         exts <- mapM asExtCns argBinds
         -- TODO: group argBinds according to the declared types
-        bindExts jsc exts dt >>= mkTypedTerm sc
+        scAbstractExts jsc exts dt >>= mkTypedTerm sc
 
 withSAWBackend :: SharedContext s
                -> Maybe (IORef [SharedTerm s])
@@ -249,7 +249,7 @@ verifyJava bic opts cls mname overrides setup = do
         setVerbosity (simVerbose opts)
         let prover script vs g = do
               let exts = getAllExts g
-              glam <- io $ bindExts jsc exts g
+              glam <- io $ scAbstractExts jsc exts g
               io $ doExtraChecks opts bsc glam
               r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) glam))
               case r of

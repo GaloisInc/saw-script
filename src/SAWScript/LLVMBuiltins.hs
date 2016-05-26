@@ -198,7 +198,7 @@ extractLLVM bic opts lmod func _setup =
     case mrv of
       Nothing -> fail "No return value from simulated function."
       Just rv -> liftIO $ do
-        lamTm <- bindExts scLLVM exts rv
+        lamTm <- scAbstractExts scLLVM exts rv
         scImport sc lamTm >>= mkTypedTerm sc
 
 verifyLLVM :: BuiltinContext
@@ -284,7 +284,7 @@ prover opts sc ms script vs g = do
   let exts = getAllExts g
       verb = verbLevel opts
   ppopts <- fmap rwPPOpts getTopLevelRW
-  tt <- io (bindExts sc exts g)
+  tt <- io (scAbstractExts sc exts g)
   r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) tt))
   case r of
     SV.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."

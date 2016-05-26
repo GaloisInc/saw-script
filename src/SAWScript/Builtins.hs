@@ -746,7 +746,7 @@ prepSBV sc unints t0 = do
   -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
   exts <- filterM nonFun (getAllExts t0)
-  TypedTerm schema t' <- (bindExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
+  TypedTerm schema t' <- (scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
   checkBooleanSchema schema
   (labels, lit) <- SBVSim.sbvSolve sc sbvPrimitives unints t'
   return (t', labels, lit)
@@ -1024,18 +1024,6 @@ check_term t = do
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
 
-bindExts :: SharedContext s
-         -> [ExtCns (SharedTerm s)]
-         -> SharedTerm s
-         -> IO (SharedTerm s)
-bindExts sc exts body = do
-  let types = map ecType exts
-  let is = map ecVarIndex exts
-  let names = map ecName exts
-  locals <- mapM (scLocalVar sc . fst) ([0..] `zip` reverse types)
-  body' <- scInstantiateExt sc (Map.fromList (is `zip` reverse locals)) body
-  scLambdaList sc (names `zip` types) body'
-
 freshSymbolicPrim :: String -> C.Schema -> TopLevel (TypedTerm SAWCtx)
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
@@ -1053,7 +1041,7 @@ abstractSymbolicPrim (TypedTerm _ t) = do
 bindAllExts :: SharedContext s
             -> SharedTerm s
             -> IO (SharedTerm s)
-bindAllExts sc body = bindExts sc (getAllExts body) body
+bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
 -- | Apply the given SharedTerm to the given values, and evaluate to a
 -- final value.
