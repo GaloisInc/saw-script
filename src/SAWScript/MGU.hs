@@ -405,8 +405,8 @@ inferE (ln, expr) = case expr of
                                 ]
                              newType
                  _ -> do recordError $ unlines
-                            [ "We only support simple record lookup for now."
-                            , "Please add type signature on argument."
+                            [ "Record lookup on non-record argument."
+                            , "Field name: " ++ n
                             ]
                          newType
        return (Lookup e1 n, elTy)
@@ -426,8 +426,8 @@ inferE (ln, expr) = case expr of
                                 ]
                              newType
                  _ -> do recordError $ unlines
-                            [ "We only support simple tuple lookup for now."
-                            , "Please add type signature on argument."
+                            [ "Tuple lookup on non-tuple argument."
+                            , "Given index " ++ show i
                             ]
                          newType
        return (TLookup e1 i, elTy)
@@ -485,7 +485,7 @@ inferField m (n,e) = do
   return ((n,e'),(n,t))
 
 inferDeclGroup :: DeclGroup -> TI DeclGroup
-inferDeclGroup (NonRecursive d) = do 
+inferDeclGroup (NonRecursive d) = do
   d' <- inferDecl d
   return (NonRecursive d')
 
