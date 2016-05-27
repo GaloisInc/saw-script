@@ -556,8 +556,9 @@ checkFinalState sc ms initPS otherPtrs args = do
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.
     forM_ expectedValues $ \(e, lhs, tp, rhs) -> do
-      finalValue <- lift $ load tp lhs (memTypeAlign dl tp)
-      pvcgAssertEq (show e) finalValue rhs
+      when (memTypeSize dl tp > 0) $ do
+        finalValue <- lift $ load tp lhs (memTypeAlign dl tp)
+        pvcgAssertEq (show e) finalValue rhs
     -- Check assertions
     ps <- fromMaybe (error "no path in checkFinalState") <$> (lift $ getPath)
     pvcgAssert "final assertions" (ps ^. pathAssertions)
