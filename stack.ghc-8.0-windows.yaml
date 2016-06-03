@@ -1,0 +1,26 @@
+# On Windows the abcBridge package only builds on i386.
+arch: i386
+flags:
+  abcBridge:
+    enable-pthreads: false
+packages:
+  - deps/llvm-pretty/
+  - deps/llvm-pretty-bc-parser/
+  - deps/jvm-parser/
+  - deps/aig/
+  - deps/abcBridge/
+  - deps/cryptol/
+  - deps/saw-core/
+  - deps/saw-core-aig/
+  - deps/saw-core-sbv/
+  - deps/cryptol-verifier/
+  - deps/jvm-verifier/
+  - deps/llvm-verifier/
+  - location: deps/sbv
+      extra-dep: true
+  - .
+extra-deps:
+  - fgl-visualize-0.1.0.1
+  - dotgen-0.4.2
+  - monad-supply-0.6
+resolver: nightly-2016-06-01
