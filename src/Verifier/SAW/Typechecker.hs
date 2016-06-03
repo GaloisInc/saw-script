@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs  #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}

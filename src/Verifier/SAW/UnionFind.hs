@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
 {- |
 Module      : Verifier.SAW.UnionFind
 Copyright   : Galois, Inc. 2012-2015
