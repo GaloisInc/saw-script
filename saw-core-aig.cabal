@@ -25,4 +25,6 @@ library
   exposed-modules:
      Verifier.SAW.Simulator.BitBlast
   GHC-options: -Wall -Werror
+  if impl(ghc == 8.0.1)
+    ghc-options: -Wno-redundant-constraints
   GHC-prof-options: -auto-all -caf-all
