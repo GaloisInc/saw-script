@@ -26,7 +26,7 @@ import Prelude.Compat
 
 import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Env as Env
-import Cryptol.Eval.Type (evalType)
+import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
 import qualified Cryptol.Utils.Ident as C (Ident, packIdent, unpackIdent)
@@ -630,35 +630,39 @@ scCryptolEq sc x y = do
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
-exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalType Env.emptyEnv ty) v
+exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType Env.emptyEnv ty) v
 exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
 -- TODO: proper support for polymorphic values
 
 exportValue :: V.TValue -> SC.CValue -> V.Value
-exportValue ty v
+exportValue ty v = case ty of
 
-  | V.isTBit ty =
+  V.TVBit ->
     V.VBit (SC.toBool v)
 
-  | Just (_, e) <- V.isTSeq ty =
+  V.TVSeq _ e ->
     case v of
       SC.VWord w -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
-      SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
       SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e . SC.runIdentity . force) (Vector.toList xs))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
+  -- infinite streams
+  V.TVStream e ->
+    case v of
+      SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
+      _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
+
   -- tuples
-  | Just (_, etys) <- V.isTTuple ty = V.VTuple (exportTupleValue etys v)
+  V.TVTuple etys -> V.VTuple (exportTupleValue etys v)
 
   -- records
-  | Just fields <- V.isTRec ty =
+  V.TVRec fields ->
       V.VRecord (exportRecordValue (Map.assocs (Map.fromList fields)) v)
 
   -- functions
-  | Just (_aty, _bty) <- V.isTFun ty =
+  V.TVFun _aty _bty ->
     V.VFun (error "exportValue: TODO functions")
 
-  | otherwise = error $ "exportValue (on type " ++ show ty ++ ")"
 
 exportTupleValue :: [V.TValue] -> SC.CValue -> [V.Value]
 exportTupleValue tys v =
