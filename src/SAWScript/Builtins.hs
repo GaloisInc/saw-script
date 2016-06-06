@@ -99,9 +99,10 @@ import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.CrySAT as C (withSolver)
+import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
 import qualified Cryptol.Eval.Type as C (evalType)
-import qualified Cryptol.Eval.Value as C (fromVBit, fromWord, TValue(..))
+import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent)
 import Cryptol.Utils.PP (pretty)
 
@@ -1197,11 +1198,9 @@ eval_size s =
   case s of
     C.Forall [] [] t ->
       case C.evalType mempty t of
-        C.TValue ty ->
-          case ty of
-            C.TCon (C.TC (C.TCNum x)) _ -> return x
-            C.TCon (C.TC C.TCInf) _     -> fail "eval_size: illegal infinite size"
-            _                           -> fail "eval_size: invalid type"
+        Left (C.Nat x) -> return x
+        Left C.Inf     -> fail "eval_size: illegal infinite size"
+        Right _        -> fail "eval_size: not a numeric type"
     _ -> fail "eval_size: unsupported polymorphic type"
 
 nthPrim :: [a] -> Int -> TopLevel a
