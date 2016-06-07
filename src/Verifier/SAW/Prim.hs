@@ -165,6 +165,12 @@ append _ _ _ (Vec t xv) (Vec _ yv) = Vec t ((V.++) xv yv)
 at :: Int -> t -> Vec t e -> Int -> e
 at _ _ (Vec _ v) i = v ! i
 
+-- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+atWithDefault :: Int -> t -> e -> Vec t e -> Int -> e
+atWithDefault _ _ z (Vec _ v) i
+  | i < V.length v = v ! i
+  | otherwise = z
+
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 upd :: Int -> t -> Vec t e -> Int -> e -> Vec t e
 upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])

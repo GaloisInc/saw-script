@@ -189,7 +189,7 @@ runArgsMatcher :: Monad m => ArgsMatcher m t a -> [t] -> m a
 runArgsMatcher (ArgsMatcher _ f) l = do
   (v,[]) <- f l
   return v
- 
+
 -- | Produces a matcher from an ArgsMatcher and a matcher that yields
 -- subterms.
 resolveArgs :: (Monad m, ArgsMatchable v m t a)
@@ -590,11 +590,15 @@ equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
 
 -- | Conversions for operations on vector literals
 vecConversions :: Termlike t => [Conversion t]
-vecConversions = [at_VecLit, append_VecLit]
+vecConversions = [at_VecLit, atWithDefault_VecLit, append_VecLit]
 
 at_VecLit :: forall t. Termlike t => Conversion t
 at_VecLit = globalConv "Prelude.at"
     (Prim.at :: Int -> t -> Prim.Vec t t -> Int -> t)
+
+atWithDefault_VecLit :: forall t. Termlike t => Conversion t
+atWithDefault_VecLit = globalConv "Prelude.atWithDefault"
+    (Prim.atWithDefault :: Int -> t -> t -> Prim.Vec t t -> Int -> t)
 
 append_VecLit :: forall t. Termlike t => Conversion t
 append_VecLit = globalConv "Prelude.append"
@@ -631,7 +635,7 @@ bvConversions =
     , globalConv "Prelude.bvUExt"  Prim.bvUExt
     , globalConv "Prelude.bvSExt"  Prim.bvSExt
 
-    , at_bvNat, slice_bvNat
+    , at_bvNat, atWithDefault_bvNat, slice_bvNat
     , take_bvNat, drop_bvNat
     ]
 
@@ -658,6 +662,14 @@ bvsle_bvNat = globalConv "Prelude.bvsle" Prim.bvsle
 
 at_bvNat :: Termlike t => Conversion t
 at_bvNat = globalConv "Prelude.at" Prim.at_bv
+
+atWithDefault_bvNat :: Termlike t => Conversion t
+atWithDefault_bvNat =
+  Conversion $
+  (\(_ :*: n :*: a :*: d :*: x :*: i) ->
+    if fromIntegral i < width x then mkBool (Prim.at_bv n a x i) else return d) <$>
+  (asGlobalDef "Prelude.atWithDefault" <:>
+   defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
 
 take_bvNat :: Termlike t => Conversion t
 take_bvNat = globalConv "Prelude.take" Prim.take_bv
