@@ -1,18 +1,14 @@
-Verifying Simon & Speck 64/128 and 128/128
-##########################################
+# Simon & Speck (64/128 and 128/128)
 
 To run: `./run.sh`
 
-Cryptol Specification
-=====================
+## Cryptol Specifications
 
 From: https://github.com/GaloisInc/cryptol/tree/master/examples/contrib
 
-C Implementations
-=================
+## C Implementations
 
-simon-X-Y.c
------------
+### simon-X-Y.c
 
 From: https://github.com/kmarquet/bloc
 
@@ -24,8 +20,7 @@ Modifications:
 
 * removed dependencies to external libs
 
-speck.c
--------
+### speck.c
 
 From: https://code.google.com/archive/p/speck-cipher/source/default/source
 
@@ -38,8 +33,7 @@ Modifications:
 * added 128/128 test vector
 
 
-Java Implementations
-====================
+## Java Implementations
 
 From: https://github.com/timw/bc-java/tree/feature/simon-speck/core/src/main/java/org/bouncycastle/crypto/engines
 
@@ -50,20 +44,17 @@ Modifications:
 * Removed Bouncy Castle dependency
  
 
-SimonEngine.java
-----------------
+### SimonEngine.java
 
 TODO
 
 
-SpeckEngine.java
-----------------
+### SpeckEngine.java
 
 TODO
 
 
-Issues & Workaround
-===================
+## Issues & Workarounds
 
 * Bitcode parsing error
 
