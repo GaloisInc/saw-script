@@ -1,6 +1,10 @@
 Verifying Simon & Speck 64/128 and 128/128
 ##########################################
 
+To run:
+
+```./run.sh```
+
 Cryptol Specification
 =====================
 
