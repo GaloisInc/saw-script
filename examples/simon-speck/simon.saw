@@ -1,0 +1,47 @@
+/*
+ * Copyright (c) 2013-2016 Galois, Inc.
+ * Distributed under the terms of the BSD3 license (see LICENSE file)
+ */
+
+print "Importing Simon Cryptol";
+import "simon.cry";
+
+print "Extracting Simon 64/128 C encrypt & decrypt terms";
+l_64_128 <- llvm_load_module "simon-64-128.bc";
+key_64_128 <- fresh_symbolic "key" {| [44][32] |};
+io_64_128 <- fresh_symbolic "io" {| [2][32] |};
+let allocs_64_128 = [ ("text", 2), ("crypt", 2), ("key", 44) ];
+let inputs_64_128 = [ ("*text", io_64_128, 2), ("*crypt", io_64_128, 2), ("*key", key_64_128, 44) ];
+let outputs_64_128 = [ ("*crypt", 2) ];
+encrypt_64_128 <- llvm_symexec l_64_128 "Encrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
+decrypt_64_128 <- llvm_symexec l_64_128 "Decrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
+print "Proving Simon 64/128 C encrypt is equivalent to Cryptol specification";
+encrypt_64_128_thm <- abstract_symbolic {{ 
+  (\(x: [2][32]) (y: ([32],[32])) -> (x@0 == y.0) && (x@1 == y.1)) encrypt_64_128 (Simon64_128 (reverse (take`{4} key_64_128)) (io_64_128@0 , io_64_128@1))
+}} ;
+prove_print abc encrypt_64_128_thm;
+print "Proving Simon 64/128 C decrypt is equivalent to Cryptol specification";
+decrypt_64_128_thm <- abstract_symbolic {{ 
+  (\(x: [2][32]) (y: ([32],[32])) -> (x@0 == y.0) && (x@1 == y.1)) decrypt_64_128 (Simon64_128' (reverse (take`{4} key_64_128)) (io_64_128@0 , io_64_128@1))
+}} ;
+prove_print abc decrypt_64_128_thm;
+
+print "Extracting Simon 128/128 C encrypt & decrypt terms";
+l_128_128 <- llvm_load_module "simon-128-128.bc";
+key_128_128 <- fresh_symbolic "key" {| [68][64] |};
+io_128_128 <- fresh_symbolic "io" {| [2][64] |};
+let allocs_128_128 = [ ("text", 2), ("crypt", 2), ("key", 68) ];
+let inputs_128_128 = [ ("*text", io_128_128, 2), ("*crypt", io_128_128, 2), ("*key", key_128_128, 68) ];
+let outputs_128_128 = [ ("*crypt", 2) ];
+encrypt_128_128 <- llvm_symexec l_128_128 "Encrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
+decrypt_128_128 <- llvm_symexec l_128_128 "Decrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
+print "Proving Simon 128/128 C encrypt is equivalent to Cryptol specification";
+encrypt_128_128_thm <- abstract_symbolic {{ 
+  (\(x: [2][64]) (y: ([64],[64])) -> (x@0 == y.0) && (x@1 == y.1)) encrypt_128_128 (Simon128_128 (reverse (take`{2} key_128_128)) (io_128_128@0 , io_128_128@1))
+}} ;
+prove_print abc encrypt_128_128_thm;
+print "Proving Simon 128/128 C decrypt is equivalent to Cryptol specification";
+decrypt_128_128_thm <- abstract_symbolic {{ 
+  (\(x: [2][64]) (y: ([64],[64])) -> (x@0 == y.0) && (x@1 == y.1)) decrypt_128_128 (Simon128_128' (reverse (take`{2} key_128_128)) (io_128_128@0 , io_128_128@1))
+}} ;
+prove_print abc decrypt_128_128_thm;
