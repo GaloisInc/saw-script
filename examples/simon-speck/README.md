@@ -42,6 +42,10 @@ License: [MIT](https://github.com/timw/bc-java/blob/feature/simon-speck/LICENSE.
 Modifications:
  
 * Removed Bouncy Castle dependency
+
+* Added static encrypt and decrypt helper methods
+
+* Added a main method with test vectors
  
 
 ### SimonEngine.java

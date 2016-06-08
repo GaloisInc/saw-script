@@ -34,6 +34,59 @@ public class SpeckEngine
     public static final int SPECK_128 = 128;
 
     private final SpeckCipher cipher;
+    
+    public static void main(String[] args) {
+      final byte[] key64 = {
+        0x1b, 0x1a, 0x19, 0x18, 0x13, 0x12, 0x11, 0x10, 0x0b, 0x0a, 0x09, 0x08, 0x03, 0x02, 0x01, 0x00
+      };
+      final byte[] io64 = {
+        0x3b, 0x72, 0x65, 0x74, 0x74, 0x75, 0x43, 0x2d
+      };
+      encrypt(SPECK_64, key64, io64);
+      printBytes(io64);
+      decrypt(SPECK_64, key64, io64);
+      printBytes(io64);
+      
+      final byte[] key128 = {
+        0x1f, 0x1e, 0x1d, 0x1c, 0x1b, 0x1a, 0x19, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11, 0x10,
+        0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00
+      };
+      final byte[] io128 = {
+        0x65, 0x73, 0x6f, 0x68, 0x74, 0x20, 0x6e, 0x49, 0x20, 0x2e, 0x72, 0x65, 0x6e, 0x6f, 0x6f, 0x70
+      };
+      encrypt(SPECK_128, key128, io128);
+      printBytes(io128);
+      decrypt(SPECK_128, key128, io128);
+      printBytes(io128);
+    }
+    
+    private static void printBytes(final byte[] data) {
+      for (int i = 0; i < data.length; i++) {
+        System.out.printf("%02X ", data[i]);
+      }
+      System.out.println();
+    }
+    
+    public static void encrypt(final int blockSizeBits,
+                               final byte[] key,
+                               final byte[] io) {
+      crypt(true, blockSizeBits, key, io);
+    }
+    
+    public static void decrypt(final int blockSizeBits,
+                               final byte[] key,
+                               final byte[] io) {
+      crypt(false, blockSizeBits, key, io);
+    }
+    
+    private static void crypt(final boolean forEncryption,
+                              final int blockSizeBits,
+                              final byte[] key,
+                              final byte[] io) {
+      SpeckEngine se = new SpeckEngine(blockSizeBits);
+      se.init(forEncryption, key);
+      se.processBlock(io, 0, io, 0);
+    }
 
     /**
      * Constructs a Speck engine.
