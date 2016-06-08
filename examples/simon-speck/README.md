@@ -50,17 +50,17 @@ Modifications:
 
 ### SimonEngine.java
 
-TODO
+TODO [#126](https://github.com/GaloisInc/saw-script/issues/126)
 
 
 ### SpeckEngine.java
 
-TODO
+TODO [#126](https://github.com/GaloisInc/saw-script/issues/126)
 
 
 ## Issues & Workarounds
 
-* Bitcode parsing error
+* Bitcode parsing error [#122](https://github.com/GaloisInc/saw-script/issues/122)
 
   Workaround: Downgrade XCode Command Line Tools from 7.3 to 7.2
               (http://stackoverflow.com/questions/36250949/revert-apple-clang-version-for-nvcc)
@@ -72,19 +72,17 @@ TODO
   - Run the following command to switch to the old version: 
   
     ```sudo xcode-select --switch /Library/Developer/CommandLineTools```
+
+    to restore:
+    
+    ```sudo xcode-select --switch /Applications/XCode.app```
     
   - Run the following command to quickly check clang version: 
   
     ```clang --version```
 
-* Bit conversion not supported
-
-  Workaround: Disabled test code in speck.c when generating bitcode
-  
-* Bitcode file speck-64-128.bc does not contain symbol `speck_encrypt`
-
-  Workaround: Removed `static` keywords `speck_encrypt` and `speck_decrypt` (and all others)
-  
 * Verifying speck.c decrypt using z3 takes too long (interestingly, verifying encrypt using z3 is fine)
 
   Workaround: Use abc or yices
+
+* Others are filed in [issues](https://github.com/GaloisInc/saw-script/issues/)
