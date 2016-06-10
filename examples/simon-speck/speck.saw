@@ -6,42 +6,44 @@
 print "Importing Speck Cryptol";
 import "speck.cry";
 
+eq <- {{ \x (y, z) -> join x == z # y }};
+
 print "Extracting Speck 64/128 C encrypt & decrypt terms";
 l_64_128 <- llvm_load_module "speck-64-128.bc";
 xK_64_128 <- fresh_symbolic "xK" {| [27][32] |};
 io_64_128 <- fresh_symbolic "io" {| [2][32] |};
-let allocs_64_128 = [ ("io", 2), ("xK", 27) ];
-let inputs_64_128 = [ ("*xK", xK_64_128, 27), ("*io", io_64_128, 2) ];
-let outputs_64_128 = [ ("*io", 2) ];
+allocs_64_128 <- [ ("io", 2), ("xK", 27) ];
+inputs_64_128 <- [ ("*xK", xK_64_128, 27), ("*io", io_64_128, 2) ];
+outputs_64_128 <- [ ("*io", 2) ];
 encrypt_64_128 <- llvm_symexec l_64_128 "speck_encrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
 decrypt_64_128 <- llvm_symexec l_64_128 "speck_decrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
 print "Proving Speck 64/128 C encrypt is equivalent to Cryptol specification";
 encrypt_64_128_thm <- abstract_symbolic {{ 
-  (\(x: [2][32]) (y: ([32],[32])) -> (x@0 == y.1) && (x@1 == y.0)) encrypt_64_128 (Speck64_128 (reverse (take`{4} xK_64_128)) (io_64_128@1 , io_64_128@0))
-}} ;
+  eq encrypt_64_128 (Speck64_128 (reverse (take`{4} xK_64_128)) (io_64_128@1 , io_64_128@0))
+}};
 prove_print abc encrypt_64_128_thm;
 print "Proving Speck 64/128 C decrypt is equivalent to Cryptol specification";
 decrypt_64_128_thm <- abstract_symbolic {{ 
-  (\(x: [2][32]) (y: ([32],[32])) -> (x@0 == y.1) && (x@1 == y.0)) decrypt_64_128 (Speck64_128' (reverse (take`{4} xK_64_128)) (io_64_128@1 , io_64_128@0))
-}} ;
+  eq decrypt_64_128 (Speck64_128' (reverse (take`{4} xK_64_128)) (io_64_128@1 , io_64_128@0))
+}};
 prove_print abc decrypt_64_128_thm;
 
 print "Extracting Speck 128/128 C encrypt & decrypt terms";
 l_128_128 <- llvm_load_module "speck-128-128.bc";
 xK_128_128 <- fresh_symbolic "xK" {| [32][64] |};
 io_128_128 <- fresh_symbolic "io" {| [2][64] |};
-let allocs_128_128 = [ ("io", 2), ("xK", 32) ];
-let inputs_128_128 = [ ("*xK", xK_128_128, 32), ("*io", io_128_128, 2) ];
-let outputs_128_128 = [ ("*io", 2) ];
+allocs_128_128 <- [ ("io", 2), ("xK", 32) ];
+inputs_128_128 <- [ ("*xK", xK_128_128, 32), ("*io", io_128_128, 2) ];
+outputs_128_128 <- [ ("*io", 2) ];
 encrypt_128_128 <- llvm_symexec l_128_128 "speck_encrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
 decrypt_128_128 <- llvm_symexec l_128_128 "speck_decrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
 print "Proving Speck 128/128 C is equivalent to Cryptol specification";
 encrypt_128_128_thm <- abstract_symbolic {{ 
-  (\(x: [2][64]) (y: ([64],[64])) -> (x@0 == y.1) && (x@1 == y.0)) encrypt_128_128 (Speck128_128 (reverse (take`{2} xK_128_128)) (io_128_128@1 , io_128_128@0))
-}} ;
+  eq encrypt_128_128 (Speck128_128 (reverse (take`{2} xK_128_128)) (io_128_128@1 , io_128_128@0))
+}};
 prove_print abc encrypt_64_128_thm;
 print "Proving Speck 128/128 C decrypt is equivalent to Cryptol specification";
 decrypt_128_128_thm <- abstract_symbolic {{ 
-  (\(x: [2][64]) (y: ([64],[64])) -> (x@0 == y.1) && (x@1 == y.0)) decrypt_128_128 (Speck128_128' (reverse (take`{2} xK_128_128)) (io_128_128@1 , io_128_128@0))
-}} ;
+  eq decrypt_128_128 (Speck128_128' (reverse (take`{2} xK_128_128)) (io_128_128@1 , io_128_128@0))
+}};
 prove_print abc decrypt_128_128_thm;
