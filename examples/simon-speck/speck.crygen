@@ -1,0 +1,7 @@
+set outputDirectory = "gen";
+
+import "speck.cry";
+set testVectors = 1000;
+library LLVM "speck" {
+  export {{ Speck64_128 : [4][32] -> ([32], [32]) -> ([32], [32]) }} as "speck_Speck64_128";
+}
