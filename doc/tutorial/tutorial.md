@@ -450,7 +450,7 @@ satisfiability checking tools to automatically find one that does.
 
 And, finally, we can double-check that this is indeed a valid solution.
 
-    sawscript> print (nq8 [3,1,6,2,5,7,4,0])
+    sawscript> print {{ nq8 [3,1,6,2,5,7,4,0] }}
     True
 
 More Sophisticated Imperative Models
