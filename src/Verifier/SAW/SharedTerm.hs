@@ -826,6 +826,11 @@ instantiateVarList sc k ts t =
               | j >= i + k + l = scTermF sc (LocalVar (j - l))
               | j >= i + k     = term (rs !! (j - i - k)) i
               | otherwise      = scTermF sc (LocalVar j)
+-- ^ Specification in terms of @instantiateVar@ (by example):
+-- @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of @Lam
+-- (Lam (Lam t)) `App` z `App` y `App` x@, i.e. @instantiateVarList 0
+-- [x,y,z] t == instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
+-- (instantiateVar 2 (incVars 0 2 z) t))@.
 
 --------------------------------------------------------------------------------
 -- Beta Normalization

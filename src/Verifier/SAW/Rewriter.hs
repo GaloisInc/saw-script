@@ -46,9 +46,7 @@ module Verifier.SAW.Rewriter
   , scSimpset
   , listRules
   -- * Term rewriting
-  , rewriteTerm
   , rewriteSharedTerm
-  , rewriteSharedTermToTerm
   , rewriteSharedTermTypeSafe
   -- * SharedContext
   , rewritingSharedContext
@@ -377,34 +375,6 @@ asRecordRedex t =
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
 
-rewriteTerm :: Simpset Term -> Term -> Term
-rewriteTerm ss = rewriteAll
-  where
-    rewriteAll :: Term -> Term
-    rewriteAll t = rewriteTop (rewriteSubterms t)
-    rewriteSubterms :: Term -> Term
-    rewriteSubterms (Term t) = Term (fmap rewriteAll t)
-    rewriteTop :: Term -> Term
-    rewriteTop t = apply [ r | Left r <- Net.match_term ss t ] t
-    apply :: [RewriteRule Term] -> Term -> Term
-    apply [] t = t
-    apply (rule : rules) t =
-      case first_order_match (lhs rule) t of
-        Nothing -> apply rules t
-        Just inst -> rewriteAll (instantiateVarListTerm 0 (Map.elems inst) (rhs rule))
--- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
--- re-examination of subterms after applying a rewrite
-
--- | Like rewriteTerm, but returns an equality theorem instead of just
--- the right-hand side.
-{-
-rewriteOracle :: Simpset Term -> Term -> Term
-rewriteOracle ss lhs = Term (Oracle "rewriter" (Term (EqType lhs rhs)))
-  where rhs = rewriteTerm ss lhs
--}
--- TODO: add a constant to the SAWCore prelude to replace defunct "Oracle" constructor:
--- rewriterOracle :: (t : sort 1) -> (x y : t) -> Eq t x y
-
 -- | Do a single reduction step (beta, record or tuple selector) at top
 -- level, if possible.
 reduceSharedTerm :: SharedContext s -> SharedTerm s -> Maybe (IO (SharedTerm s))
@@ -460,38 +430,6 @@ rewriteSharedTerm sc ss t0 =
            case runConversion conv t of
              Nothing -> apply rules t
              Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
-
--- | Rewriter for shared terms, returning an unshared term.
-rewriteSharedTermToTerm :: forall s. SharedContext s -> Simpset Term -> SharedTerm s -> IO Term
-rewriteSharedTermToTerm sc ss t0 =
-    do cache <- newCache
-       let ?cache = cache in rewriteAll t0
-  where
-    rewriteAll :: (?cache :: Cache IORef TermIndex Term) => SharedTerm s -> IO Term
-    rewriteAll (asBetaRedex -> Just (_, _, body, arg)) =
-        instantiateVar sc 0 arg body >>= rewriteAll
-    rewriteAll (Unshared tf) =
-        liftM Term (traverse rewriteAll tf) >>= rewriteTop
-    rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
-        useCache ?cache tidx (liftM Term (traverse rewriteAll tf) >>= rewriteTop)
-    rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
-    rewriteTop (asPairRedex -> Just t) = return t
-    rewriteTop (asRecordRedex -> Just (m, i)) =
-       case Map.lookup i m of
-         Just x  -> return x
-         Nothing -> fail $ unwords ["failed to find record field ", i, "in", show m]
-    rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?cache :: Cache IORef TermIndex Term) =>
-             [Either (RewriteRule Term) (Conversion Term)] -> Term -> IO Term
-    apply [] t = return t
-    apply (Left (RewriteRule _ lhs rhs) : rules) t =
-        case first_order_match lhs t of
-          Nothing -> apply rules t
-          Just inst -> return (instantiateVarListTerm 0 (Map.elems inst) rhs)
-    apply (Right conv : rules) t =
-         case runConversion conv t of
-             Nothing -> apply rules t
-             Just tb -> runTermBuilder tb (return . Term)
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe

@@ -104,7 +104,6 @@ module Verifier.SAW.TypedAST
  , ppDefEqn
  , DeBruijnIndex
  , FieldName
- , instantiateVarListTerm
  , ExtCns(..)
  , VarIndex
    -- * Utility functions
@@ -860,32 +859,6 @@ incVarsTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
 incVarsTerm _ 0 = id
 incVarsTerm initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
   where fn _ i = Term $ LocalVar (i+j)
-
--- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
--- decrement all higher loose variables by @length ts@.
-instantiateVarListTerm :: DeBruijnIndex -> [Term] -> Term -> Term
-instantiateVarListTerm _ [] = id
-instantiateVarListTerm k ts = instantiateVars fn 0
-  where
-    l = length ts
-    -- Use terms to memoize instantiated versions of ts.
-    terms = [ [ incVarsTerm 0 i t | i <- [0..] ] | t <- ts ]
-    -- Instantiate variables [k .. k+l-1].
-    fn i j | j >= i + k + l = Term $ LocalVar (j - l)
-           | j >= i + k     = (terms !! (j - i - k)) !! i
-           | otherwise      = Term $ LocalVar j
--- ^ Specification in terms of @instantiateVar@ (by example):
--- @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of @Lam
--- (Lam (Lam t)) `App` z `App` y `App` x@, i.e. @instantiateVarList 0
--- [x,y,z] t == instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
--- (instantiateVar 2 (incVars 0 2 z) t))@.
-
-{-
--- | Substitute @t@ for variable 0 in @s@ and decrement all remaining
--- variables.
-betaReduce :: Term -> Term -> Term
-betaReduce s t = instantiateVar 0 t s
--}
 
 -- | Pretty print a term with the given outer precedence.
 ppTerm :: PPOpts -> TermPrinter Term
