@@ -63,7 +63,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
 import qualified Verifier.SAW.Typechecker (checkTerm)
-import Verifier.SAW.TypedAST hiding (instantiateVarList)
+import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as UntypedAST
 
 import qualified SAWScript.CryptolEnv as CEnv

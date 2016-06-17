@@ -67,7 +67,7 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter ( Simpset, emptySimpset, rewritingSharedContext
                              , scSimpset )
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST hiding ( incVars )
+import Verifier.SAW.TypedAST
 
 import qualified Verifier.Java.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW
