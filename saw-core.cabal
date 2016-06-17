@@ -73,6 +73,8 @@ library
      Verifier.SAW.Simulator.RME.Vector
      Verifier.SAW.Simulator.Value
      Verifier.SAW.SharedTerm
+     Verifier.SAW.Term.Functor
+     Verifier.SAW.Term.Pretty
      Verifier.SAW.TermNet
      Verifier.SAW.Testing.Random
      Verifier.SAW.Typechecker
