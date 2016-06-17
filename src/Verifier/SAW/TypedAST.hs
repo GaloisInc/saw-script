@@ -65,7 +65,7 @@ module Verifier.SAW.TypedAST
  , patUnusedVarCount
    -- * Terms and associated operations.
  , Term(..)
- , incVars
+ , incVarsTerm
  , piArgCount
  , TermF(..)
  , FlatTermF(..)
@@ -104,7 +104,7 @@ module Verifier.SAW.TypedAST
  , ppDefEqn
  , DeBruijnIndex
  , FieldName
- , instantiateVarList
+ , instantiateVarListTerm
  , ExtCns(..)
  , VarIndex
    -- * Utility functions
@@ -856,20 +856,20 @@ instantiateVars f initialLevel = go initialLevel
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVars :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
-incVars _ 0 = id
-incVars initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
+incVarsTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
+incVarsTerm _ 0 = id
+incVarsTerm initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
   where fn _ i = Term $ LocalVar (i+j)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
 -- decrement all higher loose variables by @length ts@.
-instantiateVarList :: DeBruijnIndex -> [Term] -> Term -> Term
-instantiateVarList _ [] = id
-instantiateVarList k ts = instantiateVars fn 0
+instantiateVarListTerm :: DeBruijnIndex -> [Term] -> Term -> Term
+instantiateVarListTerm _ [] = id
+instantiateVarListTerm k ts = instantiateVars fn 0
   where
     l = length ts
     -- Use terms to memoize instantiated versions of ts.
-    terms = [ [ incVars 0 i t | i <- [0..] ] | t <- ts ]
+    terms = [ [ incVarsTerm 0 i t | i <- [0..] ] | t <- ts ]
     -- Instantiate variables [k .. k+l-1].
     fn i j | j >= i + k + l = Term $ LocalVar (j - l)
            | j >= i + k     = (terms !! (j - i - k)) !! i

@@ -492,7 +492,7 @@ completeTerm cc (TCLet lcls t) =
         lcls' = lcls & traverse . localDefType %~ completeTerm cc
         -- Create new context.
         cc' = foldlOf' folded CCBinding cc
-            $ zipWith (incVars 0) [0..]
+            $ zipWith (incVarsTerm 0) [0..]
             $ view localDefType <$> lcls'
         -- Complete equations in new context.
         completeLocal (LocalFnDefGen nm tp eqns) =

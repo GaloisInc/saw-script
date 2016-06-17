@@ -36,7 +36,7 @@ import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+import Verifier.SAW.TypedAST
 
 type TCState s = Map TermIndex (SharedTerm s)
 type TCM s a = State.StateT (TCState s) (ExceptT (TCError s) IO) a

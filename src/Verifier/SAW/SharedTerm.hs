@@ -206,7 +206,7 @@ import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
-import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
 
 #if !MIN_VERSION_base(4,8,0)

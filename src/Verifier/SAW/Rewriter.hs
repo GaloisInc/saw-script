@@ -80,8 +80,7 @@ import Control.Monad.Trans.Writer.Strict
 import Verifier.SAW.Cache
 import Verifier.SAW.Conversion
 import qualified Verifier.SAW.Recognizer as R
-import Verifier.SAW.SharedTerm hiding (instantiateVarList, incVars)
-import qualified Verifier.SAW.SharedTerm as S
+import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
 
@@ -163,7 +162,7 @@ scMatch sc pat term = do
     check inst (t, n) = do
       --lift $ putStrLn $ "checking: " ++ show (t, n)
       -- apply substitution to the term
-      t' <- lift $ S.instantiateVarList sc 0 (Map.elems inst) t
+      t' <- lift $ instantiateVarList sc 0 (Map.elems inst) t
       --lift $ putStrLn $ "t': " ++ show t'
       -- constant-fold nat operations
       t'' <- lift $ runTermBuilder (bottom_convs natConversions t') (scTermF sc)
@@ -181,7 +180,7 @@ scMatch sc pat term = do
         -- check that neither x nor y contains bound variables less than `depth`
         (LocalVar i, _) | i >= depth && looseVars y .&. (bit depth - 1) == 0 ->
           do -- decrement loose variables in y by `depth`
-             y1 <- lift $ S.instantiateVarList sc 0 (replicate depth (error "scMatch: impossible")) y
+             y1 <- lift $ instantiateVarList sc 0 (replicate depth (error "scMatch: impossible")) y
              let (my2, m') = insertLookup (i - depth) y1 m
              case my2 of
                Nothing -> return (MatchState m' cs)
@@ -269,7 +268,7 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
         & docShowLocalTypes .~ True
     _varsUnbound t i = freesTerm t `shiftR` i /= 0
     ruleLhs = foldl mkTermApp (Term (FTermF (GlobalDef ident))) args
-    ruleRhs = incVars 0 nUnused rhs
+    ruleRhs = incVarsTerm 0 nUnused rhs
 
     nBound  = sum $ fmap patBoundVarCount  pats
     nUnused = sum $ fmap patUnusedVarCount pats
@@ -286,7 +285,7 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
             return $ Term $ LocalVar (n - 1 - i)
           PUnused i tp -> do
             (j, m) <- get
-            put (j + 1, Map.insert j (incVars 0 (j - i) tp) m)
+            put (j + 1, Map.insert j (incVarsTerm 0 (j - i) tp) m)
             return $ Term $ LocalVar (n - 1 - j)
           PUnit        -> return $ Term (FTermF UnitValue)
           PPair x y    -> (Term . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
@@ -392,7 +391,7 @@ rewriteTerm ss = rewriteAll
     apply (rule : rules) t =
       case first_order_match (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll (instantiateVarList 0 (Map.elems inst) (rhs rule))
+        Just inst -> rewriteAll (instantiateVarListTerm 0 (Map.elems inst) (rhs rule))
 -- ^ TODO: implement skeletons (as in Isabelle) to prevent unnecessary
 -- re-examination of subterms after applying a rewrite
 
@@ -454,7 +453,7 @@ rewriteSharedTerm sc ss t0 =
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
-               rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) rhs
+               rewriteAll =<< instantiateVarList sc 0 (Map.elems inst) rhs
     apply (Right conv : rules) t =
         do -- putStrLn "REWRITING:"
            -- print (Net.toPat conv)
@@ -488,7 +487,7 @@ rewriteSharedTermToTerm sc ss t0 =
     apply (Left (RewriteRule _ lhs rhs) : rules) t =
         case first_order_match lhs t of
           Nothing -> apply rules t
-          Just inst -> return (instantiateVarList 0 (Map.elems inst) rhs)
+          Just inst -> return (instantiateVarListTerm 0 (Map.elems inst) rhs)
     apply (Right conv : rules) t =
          case runConversion conv t of
              Nothing -> apply rules t
@@ -558,7 +557,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
     apply (Left rule : rules) t =
       case first_order_match (lhs rule) t of
         Nothing -> apply rules t
-        Just inst -> rewriteAll =<< S.instantiateVarList sc 0 (Map.elems inst) (rhs rule)
+        Just inst -> rewriteAll =<< instantiateVarList sc 0 (Map.elems inst) (rhs rule)
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
@@ -585,7 +584,7 @@ rewritingSharedContext sc ss = sc'
           | l == r ->
             do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ show l
                apply rules t
-          | otherwise -> S.instantiateVarList sc' 0 (Map.elems inst) r
+          | otherwise -> instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t

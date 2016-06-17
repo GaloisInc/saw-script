@@ -19,7 +19,7 @@ import Verifier.SAW.SharedTerm
 #if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
 #endif
-import Verifier.SAW.TypedAST hiding (incVars, instantiateVarList)
+import Verifier.SAW.TypedAST
 import Control.Monad.State.Strict as State
 import Data.Map (Map)
 import qualified Data.Map as Map
