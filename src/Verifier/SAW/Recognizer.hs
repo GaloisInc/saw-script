@@ -64,7 +64,8 @@ import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Verifier.SAW.Prim
-import Verifier.SAW.TypedAST
+import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Pretty
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)
@@ -205,10 +206,10 @@ asRecordType t = do
     FieldType f x y -> do m <- asRecordType y
                           s <- asStringLit f
                           return (Map.insert s x m)
-    _               -> fail $ "asRecordType: " ++ show (Term (FTermF (fmap toTerm ftf)))
+    _               -> fail $ "asRecordType: " ++ showTermlike t
 
-toTerm :: Termlike t => t -> Term
-toTerm t = Term (fmap toTerm (unwrapTermF t))
+showTermlike :: Termlike t => t -> String
+showTermlike t = show $ ppTermlike defaultPPOpts emptyLocalVarDoc PrecNone t
 
 asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
 asRecordValue t = do
@@ -218,7 +219,7 @@ asRecordValue t = do
     FieldValue f x y -> do m <- asRecordValue y
                            s <- asStringLit f
                            return (Map.insert s x m)
-    _                -> fail $ "asRecordValue: " ++ show (Term (FTermF (fmap toTerm ftf)))
+    _                -> fail $ "asRecordValue: " ++ showTermlike t
 
 asRecordSelector :: (Monad m, Termlike t) => Recognizer m t (t, FieldName)
 asRecordSelector t = do
