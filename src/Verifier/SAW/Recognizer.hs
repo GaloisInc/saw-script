@@ -208,9 +208,6 @@ asRecordType t = do
                           return (Map.insert s x m)
     _               -> fail $ "asRecordType: " ++ showTermlike t
 
-showTermlike :: Termlike t => t -> String
-showTermlike t = show $ ppTermlike defaultPPOpts emptyLocalVarDoc PrecNone t
-
 asRecordValue :: (Monad m, Termlike t) => Recognizer m t (Map FieldName t)
 asRecordValue t = do
   ftf <- asFTermF t

@@ -37,6 +37,7 @@ module Verifier.SAW.Term.Pretty
  , semiTermList
  , ppParens
  , ppTermlike
+ , showTermlike
  , ppTermDepth
  ) where
 
@@ -389,6 +390,9 @@ ppTermlike opts lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
   where
     pp :: LocalVarDoc -> Prec -> t -> TermDoc
     pp lcls p t = ppTermF opts pp lcls p (unwrapTermF t)
+
+showTermlike :: Termlike t => t -> String
+showTermlike t = show $ ppTermlike defaultPPOpts emptyLocalVarDoc PrecNone t
 
 ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
 ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
