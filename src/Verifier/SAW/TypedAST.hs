@@ -186,10 +186,7 @@ incVarsTerm initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
 
 -- | Pretty print a term with the given outer precedence.
 ppTerm :: PPOpts -> TermPrinter Term
-ppTerm opts lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
-  where
-    pp :: LocalVarDoc -> Prec -> Term -> TermDoc
-    pp lcls p (Term t) = ppTermF opts pp lcls p t
+ppTerm = ppTermlike
 
 instance Show Term where
   showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t

@@ -36,6 +36,7 @@ module Verifier.SAW.Term.Pretty
  , commaSepList
  , semiTermList
  , ppParens
+ , ppTermlike
  , ppTermDepth
  ) where
 
@@ -381,6 +382,13 @@ ppTermF' _opts _pp lcls _p (LocalVar i)
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
 ppTermF' _ _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
+
+-- | Pretty print a term with the given outer precedence.
+ppTermlike :: forall t. Termlike t => PPOpts -> LocalVarDoc -> Prec -> t -> Doc
+ppTermlike opts lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
+  where
+    pp :: LocalVarDoc -> Prec -> t -> TermDoc
+    pp lcls p t = ppTermF opts pp lcls p (unwrapTermF t)
 
 ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
 ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
