@@ -18,7 +18,13 @@ Portability : non-portable (language extensions)
 Evaluator for SAWCore terms, with lazy evaluation order.
 -}
 
-module Verifier.SAW.Simulator where
+module Verifier.SAW.Simulator
+  ( SimulatorConfig(..)
+  , evalSharedTerm
+  , evalGlobal
+  , noExtCns
+  , checkPrimitives
+  ) where
 
 import Prelude hiding (mapM)
 
