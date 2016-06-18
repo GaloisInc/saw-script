@@ -114,7 +114,6 @@ import Data.Foldable (foldl', sum)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-import qualified Text.PrettyPrint.ANSI.Leijen as Leijen ((<$>))
 
 import Prelude hiding (all, foldr, sum)
 
@@ -122,21 +121,6 @@ import Verifier.SAW.Utils (internalError)
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
-
-class Termlike t where
-  unwrapTermF :: t -> TermF t
-
-termToPat :: Termlike t => t -> Net.Pat
-termToPat t =
-    case unwrapTermF t of
-      Constant d _ _            -> Net.Atom d
-      App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (GlobalDef d)      -> Net.Atom (identName d)
-      FTermF (Sort s)           -> Net.Atom ('*' : show s)
-      FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
-      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      _                         -> Net.Var
 
 instance Net.Pattern Term where
   toPat = termToPat
@@ -206,22 +190,6 @@ ppTerm opts lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
   where
     pp :: LocalVarDoc -> Prec -> Term -> TermDoc
     pp lcls p (Term t) = ppTermF opts pp lcls p t
-
-ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
-ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
-  where
-    pp :: Int -> TermPrinter t
-    pp d lcls p t = ppTermDoc (pp' d lcls p t)
-
-    pp' :: Int -> LocalVarDoc -> Prec -> t -> TermDoc
-    pp' 0 _ _ _ = TermDoc $ text "_"
-    pp' d lcls p t = case unwrapTermF t of
-      App t1 t2 -> TermDoc $
-        ppAppParens p $ group $ hang 2 $
-        (pp d lcls PrecApp t1) Leijen.<$>
-        (pp (d-1) lcls PrecArg t2)
-      tf ->
-        ppTermF opts (pp' (d-1)) lcls p tf
 
 instance Show Term where
   showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t

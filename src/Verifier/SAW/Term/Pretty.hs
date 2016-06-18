@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
 Module      : Verifier.SAW.Term.Pretty
@@ -35,6 +36,7 @@ module Verifier.SAW.Term.Pretty
  , commaSepList
  , semiTermList
  , ppParens
+ , ppTermDepth
  ) where
 
 import Control.Applicative hiding (empty)
@@ -379,3 +381,19 @@ ppTermF' _opts _pp lcls _p (LocalVar i)
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
 ppTermF' _ _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
+
+ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
+ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
+  where
+    pp :: Int -> TermPrinter t
+    pp d lcls p t = ppTermDoc (pp' d lcls p t)
+
+    pp' :: Int -> LocalVarDoc -> Prec -> t -> TermDoc
+    pp' 0 _ _ _ = TermDoc $ text "_"
+    pp' d lcls p t = case unwrapTermF t of
+      App t1 t2 -> TermDoc $
+        ppAppParens p $ group $ hang 2 $
+        (pp d lcls PrecApp t1) Leijen.<$>
+        (pp (d-1) lcls PrecArg t2)
+      tf ->
+        ppTermF opts (pp' (d-1)) lcls p tf

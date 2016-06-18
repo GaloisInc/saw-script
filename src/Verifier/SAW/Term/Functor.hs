@@ -43,6 +43,8 @@ module Verifier.SAW.Term.Functor
  , zipWithFlatTermF
  , BitSet
  , freesTermF
+ , Termlike(..)
+ , termToPat
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
@@ -72,6 +74,7 @@ import GHC.Exts (IsString(..))
 
 import Prelude hiding (all, foldr, sum)
 
+import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Utils (internalError, sumBy)
 
 type DeBruijnIndex = Int
@@ -488,3 +491,22 @@ freesTermF tf =
               lcls' = freesLocalDef <$> lcls
       LocalVar i -> bit i
       Constant _ _ _ -> 0 -- assume rhs is a closed term
+
+
+-- Termlike Class --------------------------------------------------------------
+
+class Termlike t where
+  unwrapTermF :: t -> TermF t
+
+termToPat :: Termlike t => t -> Net.Pat
+termToPat t =
+    case unwrapTermF t of
+      Constant d _ _            -> Net.Atom d
+      App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
+      FTermF (GlobalDef d)      -> Net.Atom (identName d)
+      FTermF (Sort s)           -> Net.Atom ('*' : show s)
+      FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
+      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      _                         -> Net.Var
+
