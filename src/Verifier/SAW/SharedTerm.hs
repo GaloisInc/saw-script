@@ -1,15 +1,8 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ParallelListComp #-}
 
 {- |
 Module      : Verifier.SAW.SharedTerm
@@ -207,6 +200,8 @@ import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedAST
+--import Verifier.SAW.Term.Functor
+--import Verifier.SAW.Term.Pretty
 import qualified Verifier.SAW.TermNet as Net
 
 #if !MIN_VERSION_base(4,8,0)
@@ -1190,10 +1185,10 @@ scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
 scLtNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scLtNat sc x y = scGlobalApply sc "Prelude.ltNat" [x,y]
 
-scMinNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s) 
+scMinNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scMinNat sc x y = scGlobalApply sc "Prelude.minNat" [x,y]
 
-scMaxNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s) 
+scMaxNat :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 -- Primitive operations on Integer
