@@ -47,6 +47,7 @@ module Verifier.SAW.Recognizer
   , asPiList
   , asLocalVar
   , asExtCns
+  , asSort
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -271,6 +272,13 @@ asExtCns t = do
   case ftf of
     ExtCns ec -> return ec
     _         -> fail "asExtCns"
+
+asSort :: (Monad m, Termlike t) => Recognizer m t Sort
+asSort t = do
+  ftf <- asFTermF t
+  case ftf of
+    Sort s -> return s
+    _      -> fail $ "asSort: " ++ showTermlike t
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: (Monad f, Termlike t) => Recognizer f t Bool

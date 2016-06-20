@@ -339,7 +339,7 @@ instance Show (TermF (SharedTerm s)) where
   show FTermF{} = "termF fTermF"
   show _ = "termF SharedTerm"
 
--- | Return term for application using existing term in cache if it is avaiable.
+-- | Return term for application using existing term in cache if it is available.
 getTerm :: AppCacheRef s -> TermF (SharedTerm s) -> IO (SharedTerm s)
 getTerm r a =
   modifyMVar r $ \s -> do
@@ -643,13 +643,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
-
-asSort :: Monad m => SharedTerm s -> m Sort
-asSort tp =
-  case tp of
-    Unshared (FTermF (Sort s)) -> return s
-    STApp{ stAppTermF = FTermF (Sort s) } -> return s
-    _ -> fail $ "Not a sort: " ++ show tp
 
 alphaEquiv :: SharedTerm s -> SharedTerm s -> Bool
 alphaEquiv = term
