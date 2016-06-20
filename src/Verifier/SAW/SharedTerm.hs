@@ -40,8 +40,6 @@ module Verifier.SAW.SharedTerm
   , scModule
   , scApply
   , scApplyAll
-  , SharedTermExt(..)
-  , scApplyExt
   , scRecord
   , scRecordSelect
   , scRecordType
@@ -304,15 +302,6 @@ scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
 scApply :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
 scApply sc f = scTermF sc . App f
-
-data SharedTermExt s
-   = SharedTermApp (TermF (SharedTermExt s))
-   | SharedTermVar (SharedTerm s)
-
-scApplyExt :: SharedContext s -> SharedTermExt s -> IO (SharedTerm s)
-scApplyExt _ (SharedTermVar v) = return v
-scApplyExt sc (SharedTermApp tf) =
-  scTermF sc =<< traverse (scApplyExt sc) tf
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
