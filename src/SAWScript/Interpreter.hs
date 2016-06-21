@@ -1038,39 +1038,39 @@ primitives = Map.fromList
     ]
 
   , prim "java_may_alias"      "[String] -> JavaSetup ()"
-    (bicVal javaMayAlias)
+    (pureVal javaMayAlias)
     [ "Indicate that the given set of Java variables are allowed to alias"
     , "each other."
     ]
 
   , prim "java_assert"         "Term -> JavaSetup ()"
-    (bicVal javaAssert)
+    (pureVal javaAssert)
     [ "Assert that the given term should evaluate to true in the initial"
     , "state of a Java method."
     ]
 
   , prim "java_assert_eq"      "String -> Term -> JavaSetup ()"
-    (bicVal javaAssertEq)
+    (pureVal javaAssertEq)
     [ "Assert that the given variable should have the given value in the"
     , "initial state of a Java method."
     ]
 
   , prim "java_ensure_eq"      "String -> Term -> JavaSetup ()"
-    (bicVal javaEnsureEq)
+    (pureVal javaEnsureEq)
     [ "Specify that the given Java variable should have a value equal to the"
     , "given term when execution finishes."
     ]
 
   , prim "java_modify"         "String -> JavaSetup ()"
-    (bicVal javaModify)
+    (pureVal javaModify)
     [ "Indicate that a Java method may modify the named portion of the state." ]
 
   , prim "java_return"         "Term -> JavaSetup ()"
-    (bicVal javaReturn)
+    (pureVal javaReturn)
     [ "Indicate the expected return value of a Java method." ]
 
   , prim "java_verify_tactic"  "ProofScript SatResult -> JavaSetup ()"
-    (bicVal javaVerifyTactic)
+    (pureVal javaVerifyTactic)
     [ "Use the given proof script to prove the specified properties about"
     , "a Java method."
     ]

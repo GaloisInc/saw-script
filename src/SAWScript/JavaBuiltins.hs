@@ -106,7 +106,7 @@ symexecJava bic opts cls mname inputs outputs satBranches = do
       noDefErr i = fail $ "No binding for " ++ ordinal (i + 1) ++
                           " argument in method " ++ methodName meth
       pidx = fromIntegral . localIndexOfParameter meth
-  withSAWBackend jsc Nothing $ \sbe -> io $ do
+  withSAWBackend Nothing $ \sbe -> io $ do
     runSimulator cb sbe defaultSEH (Just fl) $ do
       setVerbosity (simVerbose opts)
       assigns <- mapM mkAssign inputs
@@ -153,8 +153,8 @@ extractJava bic opts cls mname setup = do
       pos = fixPos
       jsc = biSharedContext bic
   argsRef <- io $ newIORef []
-  withSAWBackend jsc (Just argsRef) $ \sbe -> do
-    setupRes <- runJavaSetup pos cb cls mname jsc setup
+  withSAWBackend (Just argsRef) $ \sbe -> do
+    setupRes <- runJavaSetup pos cb cls mname setup
     let fl = defaultSimFlags { alwaysBitBlastBranchTerms =
                                  jsSatBranches setupRes }
         meth = specMethod (jsSpec setupRes)
@@ -179,26 +179,28 @@ extractJava bic opts cls mname setup = do
         -- TODO: group argBinds according to the declared types
         scAbstractExts jsc exts dt >>= mkTypedTerm sc
 
-withSAWBackend :: SharedContext s
-               -> Maybe (IORef [SharedTerm s])
-               -> (Backend (SharedContext s) -> TopLevel a)
+withSAWBackend :: Maybe (IORef [SharedTerm SAWCtx])
+               -> (Backend (SharedContext SAWCtx) -> TopLevel a)
                -> TopLevel a
-withSAWBackend jsc argsRef a = io (sawBackend jsc argsRef sawProxy) >>= a
+withSAWBackend argsRef a = do
+  sc <- getSharedContext
+  io (sawBackend sc argsRef sawProxy) >>= a
 
-runJavaSetup :: Pos -> Codebase -> Class -> String -> SharedContext SAWCtx
+runJavaSetup :: Pos -> Codebase -> Class -> String
              -> StateT JavaSetupState TopLevel a
              -> TopLevel JavaSetupState
-runJavaSetup pos cb cls mname jsc setup = do
+runJavaSetup pos cb cls mname setup = do
+  sc <- getSharedContext
   ms <- io $ initMethodSpec pos cb cls mname
   --putStrLn "Created MethodSpec"
   let setupState = JavaSetupState {
                      jsSpec = ms
-                   , jsContext = jsc
+                   , jsContext = sc
                    , jsTactic = Skip
                    , jsSimulate = True
                    , jsSatBranches = False
                    }
-  snd <$> runStateT setup setupState
+  execStateT setup setupState
 
 verifyJava :: BuiltinContext -> Options -> Class -> String
            -> [JavaMethodSpecIR]
@@ -210,7 +212,7 @@ verifyJava bic opts cls mname overrides setup = do
       cb = biJavaCodebase bic
       bsc = biSharedContext bic
       jsc = bsc
-  setupRes <- runJavaSetup pos cb cls mname jsc setup
+  setupRes <- runJavaSetup pos cb cls mname setup
   --putStrLn "Done running setup"
   let ms = jsSpec setupRes
       vp = VerifyParams {
@@ -239,7 +241,7 @@ verifyJava bic opts cls mname overrides setup = do
     ro <- getTopLevelRO
     rw <- getTopLevelRW
     -- io $ print (length configs)
-    forM_ configs $ \(bs,cl) -> withSAWBackend jsc Nothing $ \sbe -> io $ do
+    forM_ configs $ \(bs,cl) -> withSAWBackend Nothing $ \sbe -> io $ do
       liftIO $ bsCheckAliasTypes pos bs
       when (verb >= 2) $ do
         putStrLn $ "Executing " ++ specName ms ++
@@ -318,12 +320,12 @@ showCexResults sc opts ms vs exts vals = do
             putStrLn $ "Value names: " ++ show (map fst vals)
   fail "Proof failed."
 
-mkMixedExpr :: SharedContext SAWCtx
-            -> SharedTerm SAWCtx
+mkMixedExpr :: SharedTerm SAWCtx
             -> JavaSetup MixedExpr
-mkMixedExpr _ (asJavaExpr -> Just s) =
+mkMixedExpr (asJavaExpr -> Just s) =
   (JE . fst) <$> getJavaExpr "mkMixedExpr" s
-mkMixedExpr sc t = do
+mkMixedExpr t = do
+  sc <- lift getSharedContext
   let exts = getAllExts t
       extNames = map ecName exts
   jes <- mapM (getJavaExpr "mkMixedExpr") extNames
@@ -458,9 +460,8 @@ javaVar bic _ name t = do
     Just lty <- logicTypeOfActual sc aty
     scJavaValue sc lty name >>= mkTypedTerm sc
 
-javaMayAlias :: BuiltinContext -> Options -> [String]
-             -> JavaSetup ()
-javaMayAlias _ _ exprs = do
+javaMayAlias :: [String] -> JavaSetup ()
+javaMayAlias exprs = do
   exprList <- mapM (getJavaExpr "java_may_alias") exprs
   forM_ exprList $ \(e, _) ->
     unless (isRefJavaExpr e) $ fail $
@@ -468,29 +469,26 @@ javaMayAlias _ _ exprs = do
       ppJavaExpr e
   modifySpec (specAddAliasSet (map fst exprList))
 
-javaAssert :: BuiltinContext -> Options -> TypedTerm SAWCtx
-           -> JavaSetup ()
-javaAssert bic _ (TypedTerm schema v) = do
+javaAssert :: TypedTerm SAWCtx -> JavaSetup ()
+javaAssert (TypedTerm schema v) = do
   --liftIO $ putStrLn "javaAssert"
   unless (schemaNoUser schema == Cryptol.Forall [] [] Cryptol.tBit) $
     fail $ "java_assert passed expression of non-boolean type: " ++ show schema
-  me <- mkMixedExpr (biSharedContext bic) v
+  me <- mkMixedExpr v
   case me of
     LE le -> modifySpec (specAddAssumption le)
     JE je -> fail $ "Used java_assert with Java expression: " ++ show je
 
-javaAssertEq :: BuiltinContext -> Options -> String -> TypedTerm SAWCtx
-           -> JavaSetup ()
-javaAssertEq bic _ name (TypedTerm schema t) = do
+javaAssertEq :: String -> TypedTerm SAWCtx -> JavaSetup ()
+javaAssertEq name (TypedTerm schema t) = do
   --liftIO $ putStrLn "javaAssertEq"
   (expr, aty) <- (getJavaExpr "java_assert_eq") name
   checkCompatibleType "java_assert_eq" aty schema
-  me <- mkMixedExpr (biSharedContext bic) t
+  me <- mkMixedExpr t
   modifySpec (specAddLogicAssignment fixPos expr me)
 
-javaEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm SAWCtx
-             -> JavaSetup ()
-javaEnsureEq bic _ name (TypedTerm schema t) = do
+javaEnsureEq :: String -> TypedTerm SAWCtx -> JavaSetup ()
+javaEnsureEq name (TypedTerm schema t) = do
   --liftIO $ putStrLn "javaEnsureEq"
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_ensure_eq") name
@@ -499,7 +497,7 @@ javaEnsureEq bic _ name (TypedTerm schema t) = do
     "The `java_ensure_eq` function cannot be used " ++
     "to set the value of a scalar argument."
   checkCompatibleType "java_ensure_eq" aty schema
-  me <- mkMixedExpr (biSharedContext bic) t
+  me <- mkMixedExpr t
   --liftIO $ putStrLn "Done making MixedExpr"
   cmd <- case (CC.unTerm expr, aty) of
     (_, ArrayInstance _ _) -> return (EnsureArray fixPos expr me)
@@ -508,9 +506,8 @@ javaEnsureEq bic _ name (TypedTerm schema t) = do
     _ -> fail $ "invalid java_ensure target: " ++ name
   modifySpec (specAddBehaviorCommand cmd)
 
-javaModify :: BuiltinContext -> Options -> String
-           -> JavaSetup ()
-javaModify _bic _ name = do
+javaModify :: String -> JavaSetup ()
+javaModify name = do
   --liftIO $ putStrLn "javaModify"
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_modify") name
@@ -524,24 +521,21 @@ javaModify _bic _ name = do
     _ -> fail $ "invalid java_modify target: " ++ name
   modifySpec (specAddBehaviorCommand cmd)
 
-javaReturn :: BuiltinContext -> Options -> TypedTerm SAWCtx
-           -> JavaSetup ()
-javaReturn bic _ (TypedTerm _ t) = do
+javaReturn :: TypedTerm SAWCtx -> JavaSetup ()
+javaReturn (TypedTerm _ t) = do
   --liftIO $ putStrLn "javaReturn"
   ms <- gets jsSpec
   let meth = specMethod ms
   case methodReturnType meth of
     Just _ty -> do
       -- TODO: check that types are compatible
-      me <- mkMixedExpr (biSharedContext bic) t
+      me <- mkMixedExpr t
       modifySpec (specAddBehaviorCommand (ReturnValue me))
     Nothing ->
       fail $ "can't use `java_return` on void method " ++ methodName meth
 
-javaVerifyTactic :: BuiltinContext -> Options
-                 -> ProofScript SAWCtx SatResult
-                 -> JavaSetup ()
-javaVerifyTactic _ _ script =
+javaVerifyTactic :: ProofScript SAWCtx SatResult -> JavaSetup ()
+javaVerifyTactic script =
   modify $ \st -> st { jsTactic = RunVerify script }
 
 javaAllowAlloc :: JavaSetup ()
