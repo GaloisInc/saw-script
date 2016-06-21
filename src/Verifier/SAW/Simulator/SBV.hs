@@ -298,6 +298,13 @@ atWithDefaultOp =
           VVector xv ->
             case i of
               VWord iw -> do
+                selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iw
+              _ -> do
+                iv <- Prims.toBits svUnpack i
+                Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iv
+{-
+            case i of
+              VWord iw -> do
                 xs <- T.mapM force $ V.toList xv
                 case asWordList xs of
                   Just (w:ws) -> return $ VWord $ svSelect (w:ws) w iw
@@ -306,6 +313,7 @@ atWithDefaultOp =
               _ -> do
                 iv <- Prims.toBits svUnpack i
                 Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iv
+-}
           VWord xw -> do
             case i of
               VWord iw ->
