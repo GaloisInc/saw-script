@@ -107,12 +107,12 @@ processModule menv fout funcName = do
    tm <- extractCryptol sc menv funcName
    writeAIG sc fout tm
 
-writeAIG :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
+writeAIG :: SharedContext -> FilePath -> Term -> IO ()
 writeAIG sc f t = do
   BBSim.withBitBlastedTerm ABC.giaNetwork sc bitblastPrims t $ \be ls -> do
   ABC.writeAiger f (ABC.Network be (ABC.bvToList ls))
 
-extractCryptol :: SharedContext s -> CM.ModuleEnv -> String -> IO (SharedTerm s)
+extractCryptol :: SharedContext -> CM.ModuleEnv -> String -> IO Term
 extractCryptol sc modEnv input = do
   let declGroups = concatMap T.mDecls (CME.loadedModules modEnv)
   env <- C.importDeclGroups sc C.emptyEnv declGroups

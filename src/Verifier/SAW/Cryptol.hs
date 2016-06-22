@@ -49,21 +49,21 @@ unimplemented name = fail ("unimplemented: " ++ name)
 -- Type Environments
 
 -- | SharedTerms are paired with a deferred shift amount for loose variables
-data Env s = Env
-  { envT :: Map Int    (SharedTerm s, Int) -- ^ Type variables are referenced by unique id
-  , envE :: Map C.Name (SharedTerm s, Int) -- ^ Term variables are referenced by name
-  , envP :: Map C.Prop (SharedTerm s, Int) -- ^ Bound propositions are referenced implicitly by their types
-  , envC :: Map C.Name C.Schema            -- ^ Cryptol type environment
+data Env = Env
+  { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
+  , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
+  , envP :: Map C.Prop (Term, Int) -- ^ Bound propositions are referenced implicitly by their types
+  , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   }
 
-emptyEnv :: Env s
+emptyEnv :: Env
 emptyEnv = Env Map.empty Map.empty Map.empty Map.empty
 
-liftTerm :: (SharedTerm s, Int) -> (SharedTerm s, Int)
+liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
 
 -- | Increment dangling bound variables of all types in environment.
-liftEnv :: Env s -> Env s
+liftEnv :: Env -> Env
 liftEnv env =
   Env { envT = fmap liftTerm (envT env)
       , envE = fmap liftTerm (envE env)
@@ -71,19 +71,19 @@ liftEnv env =
       , envC = envC env
       }
 
-bindTParam :: SharedContext s -> C.TParam -> Env s -> IO (Env s)
+bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
 bindTParam sc tp env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
   return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env') }
 
-bindName :: SharedContext s -> C.Name -> C.Schema -> Env s -> IO (Env s)
+bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO Env
 bindName sc name schema env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
   return $ env' { envE = Map.insert name (v, 0) (envE env'), envC = Map.insert name schema (envC env') }
 
-bindProp :: SharedContext s -> C.Prop -> Env s -> IO (Env s)
+bindProp :: SharedContext -> C.Prop -> Env -> IO Env
 bindProp sc prop env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
@@ -91,7 +91,7 @@ bindProp sc prop env = do
 
 --------------------------------------------------------------------------------
 
-importKind :: SharedContext s -> C.Kind -> IO (SharedTerm s)
+importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
     C.KType       -> scDataTypeApp sc "Cryptol.KType" []
@@ -99,7 +99,7 @@ importKind sc kind =
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
 
-importTFun :: SharedContext s -> C.TFun -> IO (SharedTerm s)
+importTFun :: SharedContext -> C.TFun -> IO Term
 importTFun sc tf =
   case tf of
     C.TCWidth         -> scGlobalDef sc "Cryptol.tcWidth"
@@ -114,7 +114,7 @@ importTFun sc tf =
     C.TCLenFromThen   -> scGlobalDef sc "Cryptol.tcLenFromThen"
     C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
 
-importType :: SharedContext s -> Env s -> C.Type -> IO (SharedTerm s)
+importType :: SharedContext -> Env -> C.Type -> IO Term
 importType sc env ty =
   case ty of
     C.TVar tvar ->
@@ -153,7 +153,7 @@ importType sc env ty =
     go = importType sc env
 
 -- | Precondition: list argument should be sorted by field name
-importTRec :: SharedContext s -> Env s -> [(C.Ident, C.Type)] -> IO (SharedTerm s)
+importTRec :: SharedContext -> Env -> [(C.Ident, C.Type)] -> IO Term
 importTRec sc _env [] = scCtorApp sc "Cryptol.TCEmpty" []
 importTRec sc env ((n, t) : fs) = do
   n' <- scString sc (C.unpackIdent n)
@@ -161,7 +161,7 @@ importTRec sc env ((n, t) : fs) = do
   fs' <- importTRec sc env fs
   scCtorApp sc "Cryptol.TCField" [n', t', fs']
 
-importTCTuple :: SharedContext s -> Env s -> [C.Type] -> IO (SharedTerm s)
+importTCTuple :: SharedContext -> Env -> [C.Type] -> IO Term
 importTCTuple sc _env [] = scCtorApp sc "Cryptol.TCUnit" []
 importTCTuple sc env (t : ts) = do
   t' <- importType sc env t
@@ -175,19 +175,19 @@ tparamToString :: C.TParam -> String
 --tparamToString tp = maybe "_" nameToString (C.tpName tp)
 tparamToString tp = maybe ("u" ++ show (C.tpUnique tp)) nameToString (C.tpName tp)
 
-importType' :: SharedContext s -> Env s -> C.Type -> IO (SharedTerm s)
+importType' :: SharedContext -> Env -> C.Type -> IO Term
 importType' sc env t = do
   t' <- importType sc env t
   scGlobalApply sc "Cryptol.ty" [t']
 
-importPropsType :: SharedContext s -> Env s -> [C.Prop] -> C.Type -> IO (SharedTerm s)
+importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
 importPropsType sc env [] ty = importType' sc env ty
 importPropsType sc env (prop : props) ty = do
   p <- importType sc env prop
   t <- importPropsType sc env props ty
   scFun sc p t
 
-importPolyType :: SharedContext s -> Env s -> [C.TParam] -> [C.Prop] -> C.Type -> IO (SharedTerm s)
+importPolyType :: SharedContext -> Env -> [C.TParam] -> [C.Prop] -> C.Type -> IO Term
 importPolyType sc env [] props ty = importPropsType sc env props ty
 importPolyType sc env (tp : tps) props ty = do
   k <- importKind sc (C.tpKind tp)
@@ -195,10 +195,10 @@ importPolyType sc env (tp : tps) props ty = do
   t <- importPolyType sc env' tps props ty
   scPi sc (tparamToString tp) k t
 
-importSchema :: SharedContext s -> Env s -> C.Schema -> IO (SharedTerm s)
+importSchema :: SharedContext -> Env -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
 
-proveProp :: SharedContext s -> Env s -> C.Prop -> IO (SharedTerm s)
+proveProp :: SharedContext -> Env -> C.Prop -> IO Term
 proveProp sc env prop =
   case Map.lookup prop (envP env) of
     Just (prf, j) -> incVars sc 0 j prf
@@ -220,7 +220,7 @@ proveProp sc env prop =
   where
     ty = importType sc env
 
-importPrimitive :: SharedContext s -> C.Name -> IO (SharedTerm s)
+importPrimitive :: SharedContext -> C.Name -> IO Term
 importPrimitive sc (C.asPrim -> Just nm) =
   case nm of
     "True"          -> scBool sc True
@@ -285,7 +285,7 @@ importPrimitive _ nm =
   fail $ unwords ["Improper Cryptol primitive name:", show nm]
 
 
-importExpr :: SharedContext s -> Env s -> C.Expr -> IO (SharedTerm s)
+importExpr :: SharedContext -> Env -> C.Expr -> IO Term
 importExpr sc env expr =
   case expr of
     C.EList es t                -> do t' <- importType' sc env t
@@ -355,7 +355,7 @@ importExpr sc env expr =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
-importDeclGroup :: Bool -> SharedContext s -> Env s -> C.DeclGroup -> IO (Env s)
+importDeclGroup :: Bool -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
 importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
@@ -452,16 +452,16 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
 
-importDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
+importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
 importDeclGroups sc = foldM (importDeclGroup False sc)
 
-importTopLevelDeclGroups :: SharedContext s -> Env s -> [C.DeclGroup] -> IO (Env s)
+importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
 importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
 
 --------------------------------------------------------------------------------
 -- List comprehensions
 
-importComp :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[C.Match]] -> IO (SharedTerm s)
+importComp :: SharedContext -> Env -> C.Type -> C.Expr -> [[C.Match]] -> IO Term
 importComp sc env listT expr mss =
   do let zipAll [] = fail "zero-branch list comprehension"
          zipAll [branch] =
@@ -488,7 +488,7 @@ importComp sc env listT expr mss =
      t2 <- importType' sc env listT
      scGlobalApply sc "Prelude.unsafeCoerce" [t1, t2, ys]
 
-lambdaTuples :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO (SharedTerm s)
+lambdaTuples :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
 lambdaTuples sc env _ty expr [] = importExpr sc env expr
 lambdaTuples sc env ty expr (args : argss) =
   do f <- lambdaTuple sc env ty expr argss args
@@ -499,7 +499,7 @@ lambdaTuples sc env ty expr (args : argss) =
                c <- importType' sc env ty
                scGlobalApply sc "Prelude.uncurry" [a, b, c, f]
 
-lambdaTuple :: SharedContext s -> Env s -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> [(C.Name, C.Type)] -> IO (SharedTerm s)
+lambdaTuple :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> [(C.Name, C.Type)] -> IO Term
 lambdaTuple sc env ty expr argss [] = lambdaTuples sc env ty expr argss
 lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType' sc env t
@@ -521,8 +521,8 @@ tNestedTuple (t : ts) = C.tTuple [t, tNestedTuple ts]
 
 -- | Returns the shared term, length type, element tuple type, bound
 -- variables.
-importMatches :: SharedContext s -> Env s -> [C.Match]
-              -> IO (SharedTerm s, C.Type, C.Type, [(C.Name, C.Type)])
+importMatches :: SharedContext -> Env -> [C.Match]
+              -> IO (Term, C.Type, C.Type, [(C.Name, C.Type)])
 importMatches _sc _env [] = fail "importMatches: empty comprehension branch"
 
 importMatches sc env [C.From name _ty expr] = do
@@ -585,7 +585,7 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-scCryptolType :: SharedContext s -> SharedTerm s -> IO C.Type
+scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -604,7 +604,7 @@ scCryptolType sc t = do
              return $ C.tRec [ (C.packIdent n, ct) | (n, ct) <- Map.assocs tm' ]
     _ -> fail $ "scCryptolType: unsupported type " ++ show t'
 
-scCryptolEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y = do
   rules <- concat <$> traverse defRewrites (defs1 ++ defs2)
   let ss = addConvs natConversions (addRules rules emptySimpset)
