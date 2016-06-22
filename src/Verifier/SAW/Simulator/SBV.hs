@@ -753,7 +753,7 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: Module -> Map Ident SValue -> [String] -> SharedTerm s -> IO SValue
+sbvSolveBasic :: Module -> Map Ident SValue -> [String] -> Term -> IO SValue
 sbvSolveBasic m addlPrims unints t = do
   let unintSet = Set.fromList unints
   let uninterpreted nm ty
@@ -825,7 +825,7 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+asPredType :: SharedContext -> Term -> IO [Term]
 asPredType sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -833,10 +833,10 @@ asPredType sc t = do
     (R.asBoolType -> Just ())    -> return []
     _                            -> fail $ "non-boolean result type: " ++ show t'
 
-sbvSolve :: SharedContext s
+sbvSolve :: SharedContext
          -> Map Ident SValue
          -> [String]
-         -> SharedTerm s
+         -> Term
          -> IO ([Labeler], Symbolic SBool)
 sbvSolve sc addlPrims unints t = do
   ty <- scTypeOf sc t
@@ -913,7 +913,7 @@ newCodeGenVars checkSz (FTRec tm) = do
 cgInputSWord :: String -> Int -> SBVCodeGen SWord
 cgInputSWord s n = svCgInput (KBounded False n) s
 
-argTypes :: SharedContext s -> SharedTerm s -> IO ([SharedTerm s],SharedTerm s)
+argTypes :: SharedContext -> Term -> IO ([Term], Term)
 argTypes sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -923,10 +923,10 @@ argTypes sc t = do
     _ -> return ([], t')
 
 sbvCodeGen_definition
-  :: SharedContext s
+  :: SharedContext
   -> Map Ident SValue
   -> [String]
-  -> SharedTerm s
+  -> Term
   -> (Nat -> Bool) -- ^ Allowed word sizes
   -> IO (SBVCodeGen (), [FiniteType], FiniteType)
 sbvCodeGen_definition sc addlPrims unints t checkSz = do
@@ -1005,12 +1005,12 @@ sbvSetOutput _checkSz _ft _v _i = do
    fail "sbvCode gen: type mismatch when setting output values"  
 
 
-sbvCodeGen :: SharedContext s
+sbvCodeGen :: SharedContext
            -> Map Ident SValue
            -> [String]
            -> Maybe FilePath
            -> String
-           -> SharedTerm s
+           -> Term
            -> IO ()
 sbvCodeGen sc addlPrims unints path fname t = do
   -- The SBV C code generator expects only these word sizes
