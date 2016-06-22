@@ -254,8 +254,8 @@ ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ show t
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced
 -- as new variables bound after all the used variables.
-ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule Term
-ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
+ruleOfDefEqn :: Ident -> DefEqn SimpleTerm -> RewriteRule SimpleTerm
+ruleOfDefEqn ident (DefEqn pats rhs@(SimpleTerm _rtf)) =
       RewriteRule { ctxt = Map.elems varmap
                   , lhs = ruleLhs
                   , rhs = ruleRhs
@@ -265,36 +265,36 @@ ruleOfDefEqn ident (DefEqn pats rhs@(Term _rtf)) =
         & docShowLocalNames .~ False
         & docShowLocalTypes .~ True
     _varsUnbound t i = freesTerm t `shiftR` i /= 0
-    ruleLhs = foldl mkTermApp (Term (FTermF (GlobalDef ident))) args
-    ruleRhs = incVarsTerm 0 nUnused rhs
+    ruleLhs = foldl mkTermApp (SimpleTerm (FTermF (GlobalDef ident))) args
+    ruleRhs = incVarsSimpleTerm 0 nUnused rhs
 
     nBound  = sum $ fmap patBoundVarCount  pats
     nUnused = sum $ fmap patUnusedVarCount pats
     n = nBound + nUnused
-    mkTermApp :: Term -> Term -> Term
-    mkTermApp f x = Term (App f x)
+    mkTermApp :: SimpleTerm -> SimpleTerm -> SimpleTerm
+    mkTermApp f x = SimpleTerm (App f x)
 
-    termOfPat :: Pat Term -> State (Int, Map Int Term) Term
+    termOfPat :: Pat SimpleTerm -> State (Int, Map Int SimpleTerm) SimpleTerm
     termOfPat pat =
         case pat of
           PVar _ i tp -> do
             (j, m) <- get
             put (j, Map.insert i tp m)
-            return $ Term $ LocalVar (n - 1 - i)
+            return $ SimpleTerm $ LocalVar (n - 1 - i)
           PUnused i tp -> do
             (j, m) <- get
-            put (j + 1, Map.insert j (incVarsTerm 0 (j - i) tp) m)
-            return $ Term $ LocalVar (n - 1 - j)
-          PUnit        -> return $ Term (FTermF UnitValue)
-          PPair x y    -> (Term . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
-          PEmpty       -> return $ Term (FTermF EmptyValue)
-          PField f x y -> (Term . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
-          PCtor c ps   -> (Term . FTermF . CtorApp c) <$> traverse termOfPat ps
-          PString s    -> return $ Term (FTermF (StringLit s))
+            put (j + 1, Map.insert j (incVarsSimpleTerm 0 (j - i) tp) m)
+            return $ SimpleTerm $ LocalVar (n - 1 - j)
+          PUnit        -> return $ SimpleTerm (FTermF UnitValue)
+          PPair x y    -> (SimpleTerm . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
+          PEmpty       -> return $ SimpleTerm (FTermF EmptyValue)
+          PField f x y -> (SimpleTerm . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
+          PCtor c ps   -> (SimpleTerm . FTermF . CtorApp c) <$> traverse termOfPat ps
+          PString s    -> return $ SimpleTerm (FTermF (StringLit s))
 
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
-rulesOfTypedDef :: TypedDef -> [RewriteRule Term]
+rulesOfTypedDef :: TypedDef -> [RewriteRule SimpleTerm]
 rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
 
 -- | Creates a set of rewrite rules from the defining equations of the named constant.

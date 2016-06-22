@@ -291,7 +291,7 @@ asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
 
 -- | Match a specific sort.
 asSort :: (Termlike t, Monad m) => Sort -> Matcher m t ()
-asSort s = Matcher (termToPat (Term (FTermF (Sort s)))) fn
+asSort s = Matcher (termToPat (SimpleTerm (FTermF (Sort s)))) fn
   where fn t = do s' <- R.asSort t
                   unless (s == s') $ fail "Does not matched expected sort."
 

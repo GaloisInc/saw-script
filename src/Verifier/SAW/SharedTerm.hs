@@ -408,7 +408,7 @@ scWhnf sc t0 =
     reapply t (Right (Right i)) = scRecordSelect sc t i
 
     tryEqns :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
-               Ident -> [Either (SharedTerm s) (Either Bool FieldName)] -> [DefEqn Term] -> IO (SharedTerm s)
+               Ident -> [Either (SharedTerm s) (Either Bool FieldName)] -> [TypedDefEqn] -> IO (SharedTerm s)
     tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
     tryEqns ident xs (DefEqn ps rhs : eqns) = do
       minst <- matchAll ps xs
@@ -420,7 +420,7 @@ scWhnf sc t0 =
         _ -> tryEqns ident xs eqns
 
     matchAll :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
-                [Pat Term] -> [Either (SharedTerm s) (Either Bool FieldName)]
+                [Pat SimpleTerm] -> [Either (SharedTerm s) (Either Bool FieldName)]
                   -> IO (Maybe (Map Int (SharedTerm s)))
     matchAll [] _ = return $ Just Map.empty
     matchAll (_ : _) [] = return Nothing
@@ -436,7 +436,7 @@ scWhnf sc t0 =
             Just m2 -> return $ Just (Map.union m1 m2)
 
     match :: (?cache :: Cache IORef TermIndex (SharedTerm s)) =>
-             Pat Term -> SharedTerm s -> IO (Maybe (Map Int (SharedTerm s)))
+             Pat SimpleTerm -> SharedTerm s -> IO (Maybe (Map Int (SharedTerm s)))
     match p x =
       case p of
         PVar _ i _  -> return $ Just (Map.singleton i x)
@@ -656,26 +656,26 @@ alphaEquiv = term
 --------------------------------------------------------------------------------
 
 -- | The inverse function to @scSharedTerm@.
-unshare :: forall s. SharedTerm s -> Term
+unshare :: forall s. SharedTerm s -> SimpleTerm
 unshare t0 = State.evalState (go t0) Map.empty
   where
-    go :: SharedTerm s -> State.State (Map TermIndex Term) Term
-    go (Unshared t) = Term <$> traverse go t
+    go :: SharedTerm s -> State.State (Map TermIndex SimpleTerm) SimpleTerm
+    go (Unshared t) = SimpleTerm <$> traverse go t
     go (STApp{ stAppIndex = i, stAppTermF = t}) = do
       memo <- State.get
       case Map.lookup i memo of
         Just x  -> return x
         Nothing -> do
-          x <- Term <$> traverse go t
+          x <- SimpleTerm <$> traverse go t
           State.modify (Map.insert i x)
           return x
 
 instance Show (SharedTerm s) where
   show = scPrettyTerm defaultPPOpts
 
-scSharedTerm :: SharedContext s -> Term -> IO (SharedTerm s)
+scSharedTerm :: SharedContext s -> SimpleTerm -> IO (SharedTerm s)
 scSharedTerm sc = go
-    where go (Term termf) = scTermF sc =<< traverse go termf
+    where go (SimpleTerm termf) = scTermF sc =<< traverse go termf
 
 -- | Imports a term built in a different shared context into the given
 -- shared context. The caller must ensure that all the global constants

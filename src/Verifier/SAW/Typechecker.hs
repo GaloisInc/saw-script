@@ -412,7 +412,7 @@ evalDef (DefGen nm qual tpr elr) =
 
 data CompletionContext
   = CCGlobal Module
-  | CCBinding CompletionContext Term
+  | CCBinding CompletionContext SimpleTerm
 
 completeDataType :: CompletionContext
                  -> TCDataType
@@ -446,7 +446,7 @@ completeDefEqn cc (DefEqnGen pats rhs) = eqn
 completePatT :: Traversable f
              => CompletionContext
              -> f TCPat
-             -> (f (Pat Term), CompletionContext)
+             -> (f (Pat SimpleTerm), CompletionContext)
 completePatT cc0 pats = (go <$> pats, cc')
   where bl = patBoundVarsOf folded pats
         ins cc (_,tp) = (CCBinding cc tp', (cc,tp'))
@@ -454,6 +454,7 @@ completePatT cc0 pats = (go <$> pats, cc')
         (cc', v) =  mapAccumLOf traverse ins cc0 bl
         ctxv = fmap fst v `V.snoc` cc'
 
+        go :: TCPat -> Pat SimpleTerm
         go (TCPVar nm (i,_)) = PVar nm i tp
           where Just (_,tp) = v V.!? i
         go (TCPUnused _ (i,tp)) = PUnused i (completeTerm cc tp)
@@ -467,39 +468,39 @@ completePatT cc0 pats = (go <$> pats, cc')
             UPCtor c l    -> PCtor c (go <$> l)
             UPString s    -> PString s
 
-completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
+completePat :: CompletionContext -> TCPat -> (Pat SimpleTerm, CompletionContext)
 completePat cc0 pat = over _1 runIdentity $ completePatT cc0 (Identity pat)
 
 -- | Returns the type of a unification term in the current context.
-completeTerm :: CompletionContext -> TCTerm -> Term
-completeTerm cc (TCF tf) = Term $ FTermF $ fmap (completeTerm cc) tf
-completeTerm cc (TCApp l r) = Term $ App (completeTerm cc l) (completeTerm cc r)
+completeTerm :: CompletionContext -> TCTerm -> SimpleTerm
+completeTerm cc (TCF tf) = SimpleTerm $ FTermF $ fmap (completeTerm cc) tf
+completeTerm cc (TCApp l r) = SimpleTerm $ App (completeTerm cc l) (completeTerm cc r)
 completeTerm cc (TCLambda pat tp r) =
-    Term $ Lambda nm (completeTerm cc tp) (completeTerm cc' r)
+    SimpleTerm $ Lambda nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
         nm = case pat of TCPVar x _ -> x
                          TCPUnused x _ -> x
                          TCPatF {} -> internalError "Illegal TCLambda term"
 completeTerm cc (TCPi pat@(TCPVar nm _) tp r) =
-    Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
+    SimpleTerm $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm cc (TCPi pat@(TCPUnused nm _) tp r) =
-    Term $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
+    SimpleTerm $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term"
 completeTerm cc (TCLet lcls t) =
-    Term $ Let (completeLocal <$> lcls') (completeTerm cc' t)
+    SimpleTerm $ Let (completeLocal <$> lcls') (completeTerm cc' t)
   where -- Complete types in local defs using outer context.
         lcls' = lcls & traverse . localDefType %~ completeTerm cc
         -- Create new context.
         cc' = foldlOf' folded CCBinding cc
-            $ zipWith (incVarsTerm 0) [0..]
+            $ zipWith (incVarsSimpleTerm 0) [0..]
             $ view localDefType <$> lcls'
         -- Complete equations in new context.
         completeLocal (LocalFnDefGen nm tp eqns) =
           Def nm NoQualifier tp (completeDefEqn cc' <$> eqns)
-completeTerm _ (TCVar i) = Term $ LocalVar i
-completeTerm _ (TCLocalDef i) = Term $ LocalVar i
+completeTerm _ (TCVar i) = SimpleTerm $ LocalVar i
+completeTerm _ (TCLocalDef i) = SimpleTerm $ LocalVar i
 
 addImportNameStrings :: Un.ImportName -> Set String -> Set String
 addImportNameStrings im s =
@@ -554,7 +555,7 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
             <*> traverse evalDef (is^.isDefs)
 
 -- | Typechecks an untyped term.
-checkTerm :: [Module] -> [Un.Import] -> Un.Term -> Either Doc (Term, Term)
+checkTerm :: [Module] -> [Un.Import] -> Un.Term -> Either Doc (SimpleTerm, SimpleTerm)
 checkTerm ms imps ut = runTC $ do
   let moduleMap = projMap moduleName ms
   let gc0 = emptyGlobalContext

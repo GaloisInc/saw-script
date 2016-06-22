@@ -228,13 +228,13 @@ evalTermF cfg lam rec tf env =
     rec' = delay . rec
 
 
-{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig Id b w e -> Term -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig IO b w e -> Term -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig Id b w e -> SimpleTerm -> OpenValue Id b w e #-}
+{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig IO b w e -> SimpleTerm -> OpenValue IO b w e #-}
 
 -- | Evaluator for unshared terms.
 evalTerm :: (MonadLazy m, MonadFix m, Show e) =>
-            SimulatorConfig m b w e -> Term -> OpenValue m b w e
-evalTerm cfg (Term tf) env = evalTermF cfg lam rec tf env
+            SimulatorConfig m b w e -> SimpleTerm -> OpenValue m b w e
+evalTerm cfg (SimpleTerm tf) env = evalTermF cfg lam rec tf env
   where
     lam = evalTerm cfg
     rec t = evalTerm cfg t env
@@ -278,8 +278,8 @@ evalGlobal m0 prims extcns uninterpreted = do
         m <- ms, td <- moduleDefs m, not (null (defEqs td)) ] ++
       Map.assocs (fmap return prims) -- Later mappings take precedence
 
-    vCtor :: Ident -> [Thunk m b w e] -> Term -> Value m b w e
-    vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
+    vCtor :: Ident -> [Thunk m b w e] -> SimpleTerm -> Value m b w e
+    vCtor ident xs (SimpleTerm (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
 noExtCns :: Monad m => VarIndex -> String -> Value m b w e -> m (Value m b w e)
