@@ -25,7 +25,7 @@ $(runDecWriter $ do
     declareSharedModuleFns "Prelude" (decVal prelude)
  )
 
-scEq :: SharedContext s -> SharedTerm s -> SharedTerm s -> IO (SharedTerm s)
+scEq :: SharedContext -> Term -> Term -> IO Term
 scEq sc x y = do
   xty <- scTypeOf sc x
   eqOp <- scApplyPrelude_eq sc

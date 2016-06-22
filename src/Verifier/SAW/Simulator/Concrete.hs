@@ -44,7 +44,7 @@ import Verifier.SAW.SharedTerm
 -- type ExtCnsEnv = VarIndex -> String -> CValue
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: Module -> Map Ident CValue -> SharedTerm s -> CValue
+evalSharedTerm :: Module -> Map Ident CValue -> Term -> CValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)

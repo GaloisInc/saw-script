@@ -38,24 +38,24 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
-type TCState s = Map TermIndex (SharedTerm s)
-type TCM s a = State.StateT (TCState s) (ExceptT (TCError s) IO) a
+type TCState = Map TermIndex Term
+type TCM a = State.StateT TCState (ExceptT TCError IO) a
 
-data TCError s
-  = NotSort (SharedTerm s)
-  | NotFuncType (SharedTerm s)
-  | ArgTypeMismatch (SharedTerm s) (SharedTerm s)
-  | NotTupleType (SharedTerm s)
-  | BadTupleIndex Int (SharedTerm s)
-  | NotRecordType (SharedTerm s)
-  | BadRecordField FieldName (SharedTerm s)
-  | ArrayTypeMismatch (SharedTerm s) (SharedTerm s)
+data TCError
+  = NotSort Term
+  | NotFuncType Term
+  | ArgTypeMismatch Term Term
+  | NotTupleType Term
+  | BadTupleIndex Int Term
+  | NotRecordType Term
+  | BadRecordField FieldName Term
+  | ArrayTypeMismatch Term Term
   | DanglingVar Int
 
-throwTCError :: TCError s -> TCM s a
+throwTCError :: TCError -> TCM a
 throwTCError = lift . throwE
 
-prettyTCError :: TCError s -> [String]
+prettyTCError :: TCError -> [String]
 prettyTCError e =
   case e of
     NotSort ty ->
@@ -87,8 +87,8 @@ prettyTCError e =
   where
     ishow = (' ':) . (' ':) . show
 
-scTypeCheckError :: forall s. SharedContext s -> SharedTerm s
-                 -> IO (SharedTerm s)
+scTypeCheckError :: SharedContext -> Term
+                 -> IO Term
 scTypeCheckError sc t0 =
   either (fail . unlines . prettyTCError) return =<< scTypeCheck sc t0
 
@@ -96,15 +96,13 @@ scTypeCheckError sc t0 =
 -- entire term is well-formed, and that all internal type annotations
 -- are correct. Types are evaluated to WHNF as necessary, and the
 -- returned type is in WHNF.
-scTypeCheck :: forall s. SharedContext s -> SharedTerm s
-            -> IO (Either (TCError s) (SharedTerm s))
+scTypeCheck :: SharedContext -> Term -> IO (Either TCError Term)
 scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
 
-scTypeCheck' :: forall s. SharedContext s -> [SharedTerm s] -> SharedTerm s
-             -> ExceptT (TCError s) IO (SharedTerm s)
+scTypeCheck' :: SharedContext -> [Term] -> Term -> ExceptT TCError IO Term
 scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
   where
-    memo :: SharedTerm s -> TCM s (SharedTerm s)
+    memo :: Term -> TCM Term
     memo (Unshared tf) = termf tf
     memo _t@(STApp{ stAppIndex = i, stAppTermF = tf}) =
       do table <- State.get
@@ -115,13 +113,13 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
                 x' <- whnf x
                 State.modify (Map.insert i x')
                 return x'
-    sort :: SharedTerm s -> TCM s Sort
+    sort :: Term -> TCM Sort
     sort t = asSort =<< memo t
     io = lift . lift
     whnf t = io $ do
       t' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) t
       scWhnf sc t'
-    checkPi :: SharedTerm s -> SharedTerm s -> TCM s (SharedTerm s)
+    checkPi :: Term -> Term -> TCM Term
     checkPi tx y = do
       ty <- memo y
       case asPi tx of
@@ -131,11 +129,11 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           checkEqTy ty aty' (ArgTypeMismatch aty' ty)
           io $ instantiateVar sc 0 y rty
         _ -> throwTCError (NotFuncType tx)
-    checkEqTy :: SharedTerm s -> SharedTerm s -> TCError s -> TCM s ()
+    checkEqTy :: Term -> Term -> TCError -> TCM ()
     checkEqTy ty ty' err = do
       ok <- io $ argMatch sc ty ty'
       unless ok (throwTCError err)
-    termf :: TermF (SharedTerm s) -> TCM s (SharedTerm s)
+    termf :: TermF Term -> TCM Term
     termf tf =
       case tf of
         FTermF ftf -> ftermf ftf
@@ -158,7 +156,7 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> throwTCError (DanglingVar (i - length env))
         Constant _ t _ -> memo t
-    ftermf :: FlatTermF (SharedTerm s) -> TCM s (SharedTerm s)
+    ftermf :: FlatTermF Term -> TCM Term
     ftermf tf =
       case tf of
         GlobalDef d -> do
@@ -228,21 +226,21 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> whnf $ ecType ec
 
-argMatch :: forall s. SharedContext s -> SharedTerm s -> SharedTerm s -> IO Bool
+argMatch :: SharedContext -> Term -> Term -> IO Bool
 argMatch sc = term
   where
-    whnf :: SharedTerm s -> IO (SharedTerm s)
+    whnf :: Term -> IO Term
     whnf t = do
       t' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) t
       scWhnf sc t'
 
-    term :: SharedTerm s -> SharedTerm s -> IO Bool
+    term :: Term -> Term -> IO Bool
     term t1 t2 = do
       t1' <- whnf t1
       t2' <- whnf t2
       term' t1' t2'
 
-    term' :: SharedTerm s -> SharedTerm s -> IO Bool
+    term' :: Term -> Term -> IO Bool
     term' (Unshared tf1) (Unshared tf2) = termf tf1 tf2
     term' (Unshared tf1) (STApp{ stAppTermF = tf2 }) = termf tf1 tf2
     term' (STApp{ stAppTermF = tf1 }) (Unshared tf2) = termf tf1 tf2
@@ -251,7 +249,7 @@ argMatch sc = term
       | i1 == i2  = return True
       | otherwise = termf tf1 tf2
 
-    termf :: TermF (SharedTerm s) -> TermF (SharedTerm s) -> IO Bool
+    termf :: TermF Term -> TermF Term -> IO Bool
     termf (FTermF ftf1)    (FTermF ftf2)    = ftermf ftf1 ftf2
     termf (App      t1 u1) (App      t2 u2) = (&&) <$> term t1 t2 <*> term u1 u2
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = (&&) <$> term t1 t2 <*> term u1 u2
@@ -259,7 +257,7 @@ argMatch sc = term
     termf (LocalVar i1)    (LocalVar i2)    = return (i1 == i2)
     termf _ _                               = return False
 
-    ftermf :: FlatTermF (SharedTerm s) -> FlatTermF (SharedTerm s) -> IO Bool
+    ftermf :: FlatTermF Term -> FlatTermF Term -> IO Bool
     ftermf (Sort s) (Sort s') = return (s <= s')
     ftermf ftf1 ftf2 =
       case zipWithFlatTermF term ftf1 ftf2 of

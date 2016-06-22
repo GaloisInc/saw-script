@@ -29,12 +29,12 @@ import qualified Data.Vector as V
 -- External text format
 
 -- | Render to external text format
-scWriteExternal :: SharedTerm s -> String
+scWriteExternal :: Term -> String
 scWriteExternal t0 =
     let (x, (_, output, _)) = State.runState (go t0) (Map.empty, [], 1)
     in unlines (unwords ["SAWCoreTerm", show x] : reverse output)
   where
-    go :: SharedTerm s -> State.State (Map TermIndex Int, [String], Int) Int
+    go :: Term -> State.State (Map TermIndex Int, [String], Int) Int
     go (Unshared tf) = do
       tf' <- traverse go tf
       (m, output, x) <- State.get
@@ -86,7 +86,7 @@ scWriteExternal t0 =
     writeDefs = error "unsupported Let expression"
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
-scReadExternal :: forall s. SharedContext s -> String -> IO (SharedTerm s)
+scReadExternal :: SharedContext -> String -> IO Term
 scReadExternal sc input =
   case map words (lines input) of
     (["SAWCoreTerm", read -> final] : rows) ->
@@ -94,7 +94,7 @@ scReadExternal sc input =
            return $ (Map.!) m final
     _ -> fail "scReadExternal: failed to parse input file"
   where
-    go :: Map Int (SharedTerm s) -> [String] -> IO (Map Int (SharedTerm s))
+    go :: Map Int Term -> [String] -> IO (Map Int Term)
     go m (n : tokens) =
         do
           t <- scTermF sc (fmap ((Map.!) m) (parse tokens))

@@ -22,7 +22,7 @@ import Verifier.SAW.SharedTerm
 import Test.Tasty
 import Test.Tasty.HUnit
 
-scMkTerm :: SharedContext s -> TermBuilder (SharedTerm s) (SharedTerm s) -> IO (SharedTerm s)
+scMkTerm :: SharedContext -> TermBuilder Term Term -> IO Term
 scMkTerm sc t = runTermBuilder t (scTermF sc)
 
 rewriter_tests :: [TestTree]

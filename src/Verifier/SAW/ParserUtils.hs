@@ -185,20 +185,18 @@ declareDefTermF mexp nm = do
 -- applications.
 sharedFunctionType :: Int -> Q Type
 sharedFunctionType 0 =
-    [t| forall s . SharedContext s -> IO (SharedTerm s) |]
-sharedFunctionType n = do
-    s <- newName "s"
-    forallT [PlainTV s] (return [])
-       [t| SharedContext $(varT s) -> IO $(go [t|SharedTerm $(varT s)|] n) |]
-  where go nm 0 = [t| IO $(nm) |]
-        go nm i = [t| $(nm) -> $(go nm (i-1)) |]
+    [t| SharedContext -> IO Term |]
+sharedFunctionType n =
+    [t| SharedContext -> IO $(go n) |]
+  where go 0 = [t| IO Term |]
+        go i = [t| Term -> $(go (i-1)) |]
 
 -- Given a datatype with the type
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
---   :: SharedContext s
---   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
+--   :: SharedContext
+--   -> IO (Term -> ... -> Term -> IO Term)
 declareSharedDataTypeApp :: String
                          -> TypedDataType
                          -> DecWriter ()
@@ -230,8 +228,8 @@ declareSharedDataTypeApp nm tdt = do
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function.
 -- scApply(modulename)(upcase c)
---   :: SharedContext s
---   -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
+--   :: SharedContext
+--   -> IO (Term -> ... -> Term -> IO Term)
 declareSharedCtorApp :: String
                  -> TypedCtor
                  -> DecWriter ()
@@ -263,8 +261,8 @@ declareSharedCtorApp nm c = do
 --   c : T1 -> ... -> TN -> T
 -- This hads a declaration of the function:
 --   scApply(modulename)(upcase c)
---     :: SharedContext s
---     -> IO (SharedTerm s -> ... -> SharedTerm s -> IO (SharedTerm s)
+--     :: SharedContext
+--     -> IO (Term -> ... -> Term -> IO Term)
 declareSharedDefApp :: String
                 -> Int
                 -> TypedDef

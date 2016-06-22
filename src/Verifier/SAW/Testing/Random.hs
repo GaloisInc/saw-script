@@ -19,7 +19,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.Prim (Nat(..))
 import Verifier.SAW.Recognizer (asBoolType, asPi)
 import Verifier.SAW.SharedTerm
-  (scApplyAll, scModule, scWhnf, SharedContext, SharedTerm)
+  (scApplyAll, scModule, scWhnf, SharedContext, Term)
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
 import Verifier.SAW.Simulator.Value (Value(..))
 import Verifier.SAW.TypedAST (FieldName)
@@ -43,15 +43,15 @@ import System.Random.TF (newTFGen, TFGen)
 --
 -- The caller should use @scTestableType@ to (maybe) compute the 'gens'.
 scRunTestsTFIO ::
-  SharedContext s -> Integer -> SharedTerm s -> [RandT TFGen IO FiniteValue] ->
+  SharedContext -> Integer -> Term -> [RandT TFGen IO FiniteValue] ->
   IO (Maybe [FiniteValue])
 scRunTestsTFIO sc numTests fun gens = do
   g <- newTFGen
   evalRandT (scRunTests sc numTests fun gens) g
 
 -- | Call @scRunTest@ many times, returning the first failure if any.
-scRunTests :: (Functor m, MonadIO m, MonadRandom m) => SharedContext s ->
-  Integer -> SharedTerm s -> [m FiniteValue] -> m (Maybe [FiniteValue])
+scRunTests :: (Functor m, MonadIO m, MonadRandom m) => SharedContext ->
+  Integer -> Term -> [m FiniteValue] -> m (Maybe [FiniteValue])
 scRunTests sc numTests fun gens =
   if numTests < 0 then
     panic "scRunTests:" ["number of tests must be non-negative"]
@@ -70,8 +70,8 @@ scRunTests sc numTests fun gens =
     Please note that this function assumes that the generators match
     the supplied value, otherwise we'll panic.
  -}
-scRunTest :: (MonadIO m, MonadRandom m) => SharedContext s ->
-  SharedTerm s -> [m FiniteValue] -> m (Maybe [FiniteValue])
+scRunTest :: (MonadIO m, MonadRandom m) => SharedContext ->
+  Term -> [m FiniteValue] -> m (Maybe [FiniteValue])
 scRunTest sc fun gens = do
   xs <- sequence gens
   result <- liftIO $ apply xs
@@ -97,7 +97,7 @@ scRunTest sc fun gens = do
 -- and 'Nothing' is returned when attempting to generate arguments for
 -- functions of unsupported type.
 scTestableType :: (Applicative m, Functor m, MonadRandom m) =>
-  SharedContext s -> SharedTerm s -> IO (Maybe [m FiniteValue])
+  SharedContext -> Term -> IO (Maybe [m FiniteValue])
 scTestableType sc ty = do
   ty' <- scWhnf sc ty
   case ty' of
