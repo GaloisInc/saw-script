@@ -540,7 +540,7 @@ bitBlastBasic :: AIG.IsAIG l g
               => g s
               -> Module
               -> PrimMap l g
-              -> SharedTerm t
+              -> Term
               -> IO (BValue (l s))
 bitBlastBasic be m addlPrims t = do
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
@@ -555,7 +555,7 @@ bitBlastExtCns be name v =
     Nothing -> fail $ "Verifier.SAW.Simulator.BitBlast: variable " ++ show name
                ++ " has non-finite type " ++ show v
 
-asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+asPredType :: SharedContext -> Term -> IO [Term]
 asPredType sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -564,9 +564,9 @@ asPredType sc t = do
     _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ show t'
 
 withBitBlastedPred :: AIG.IsAIG l g => AIG.Proxy l g ->
-  SharedContext t ->
+  SharedContext ->
   PrimMap l g ->
-  SharedTerm t ->
+  Term ->
   (forall s. g s -> l s -> [FiniteType] -> IO a) -> IO a
 withBitBlastedPred proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
   ty <- scTypeOf sc t
@@ -579,7 +579,7 @@ withBitBlastedPred proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
     VBool l -> c be l shapes
     _ -> fail "Verifier.SAW.Simulator.BitBlast.bitBlast: non-boolean result type."
 
-asAIGType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+asAIGType :: SharedContext -> Term -> IO [Term]
 asAIGType sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -591,9 +591,9 @@ asAIGType sc t = do
     _                          -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: " ++ show t'
 
 withBitBlastedTerm :: AIG.IsAIG l g => AIG.Proxy l g ->
-  SharedContext t ->
+  SharedContext ->
   PrimMap l g ->
-  SharedTerm t ->
+  Term ->
   (forall s. g s -> LitVector (l s) -> IO a) -> IO a
 withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
   ty <- scTypeOf sc t
