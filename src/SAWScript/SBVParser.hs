@@ -29,9 +29,9 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.SharedTerm
 import qualified SAWScript.SBVModel as SBV
 
-type NodeCache s = Map SBV.NodeId (SharedTerm s)
+type NodeCache = Map SBV.NodeId Term
 
-parseSBV :: SharedContext s -> NodeCache s -> SBV.SBV -> IO (Nat, SharedTerm s)
+parseSBV :: SharedContext -> NodeCache -> SBV.SBV -> IO (Nat, Term)
 parseSBV sc _ (SBV.SBV size (Left num)) =
     do t <- scBvConst sc (fromInteger size) num
        return (fromInteger size, t)
@@ -40,10 +40,10 @@ parseSBV _ nodes (SBV.SBV size (Right nodeid)) =
       Just t -> return (fromIntegral size, t)
       Nothing -> fail "parseSBV"
 
-type UnintMap s = String -> Typ -> Maybe (SharedTerm s)
+type UnintMap = String -> Typ -> Maybe Term
 
-parseSBVExpr :: SharedContext s -> UnintMap s -> NodeCache s ->
-                Nat -> SBV.SBVExpr -> IO (SharedTerm s)
+parseSBVExpr :: SharedContext -> UnintMap -> NodeCache ->
+                Nat -> SBV.SBVExpr -> IO Term
 parseSBVExpr sc _unint nodes _size (SBV.SBVAtom sbv) =
     liftM snd $ parseSBV sc nodes sbv
 parseSBVExpr sc unint nodes size (SBV.SBVApp operator sbvs) =
@@ -196,7 +196,7 @@ partitionSBVCommands = foldr select ([], [], [])
                 (assigns, inputs, sbv : outputs)
 
 -- TODO: Should I use a state monad transformer?
-parseSBVAssign :: SharedContext s -> UnintMap s -> NodeCache s -> SBVAssign -> IO (NodeCache s)
+parseSBVAssign :: SharedContext -> UnintMap -> NodeCache -> SBVAssign -> IO NodeCache
 parseSBVAssign sc unint nodes (SBVAssign size nodeid expr) =
     do term <- parseSBVExpr sc unint nodes (fromInteger size) expr
        return (Map.insert nodeid term nodes)
@@ -236,7 +236,7 @@ typSizes (TVec n t) = concat (replicate (fromIntegral n) (typSizes t))
 typSizes (TRecord fields) = concatMap (typSizes . snd) fields
 typSizes (TFun _ _) = error "typSizes: not a first-order type"
 
-scTyp :: SharedContext s -> Typ -> IO (SharedTerm s)
+scTyp :: SharedContext -> Typ -> IO Term
 scTyp sc TBool = scBoolType sc
 scTyp sc (TFun a b) =
     do s <- scTyp sc a
@@ -258,7 +258,7 @@ scTyp sc (TRecord fields) =
 
 -- | projects all the components out of the input term
 -- TODO: rename to splitInput?
-splitInputs :: SharedContext s -> Typ -> SharedTerm s -> IO [SharedTerm s]
+splitInputs :: SharedContext -> Typ -> Term -> IO [Term]
 splitInputs _sc TBool x = return [x]
 splitInputs sc (TTuple ts) x =
     do xs <- mapM (\i -> scTupleSelector sc x i) [1 .. length ts]
@@ -282,20 +282,19 @@ splitInputs sc (TRecord fields) x =
 ----------------------------------------------------------------------
 
 -- | Combines outputs into a data structure according to Typ
-combineOutputs :: forall s. SharedContext s -> Typ -> [(Nat, SharedTerm s)]
-               -> IO (SharedTerm s)
+combineOutputs :: SharedContext -> Typ -> [(Nat, Term)] -> IO Term
 combineOutputs sc ty xs0 =
     do (z, ys) <- runStateT (go ty) xs0
        unless (null ys) (fail $ "combineOutputs: too many outputs: " ++
                                 show (length ys) ++ " remaining")
        return z
     where
-      pop :: StateT [(Nat, SharedTerm s)] IO (Nat, SharedTerm s)
+      pop :: StateT [(Nat, Term)] IO (Nat, Term)
       pop = do xs <- get
                case xs of
                  [] -> fail "combineOutputs: too few outputs"
                  y : ys -> put ys >> return y
-      go :: Typ -> StateT [(Nat, SharedTerm s)] IO (SharedTerm s)
+      go :: Typ -> StateT [(Nat, Term)] IO Term
       go TBool =
           do (_, x) <- pop
              lift (scBv1ToBool sc x)
@@ -330,7 +329,7 @@ combineOutputs sc ty xs0 =
 
 ----------------------------------------------------------------------
 
-parseSBVPgm :: SharedContext s -> UnintMap s -> SBV.SBVPgm -> IO (SharedTerm s)
+parseSBVPgm :: SharedContext -> UnintMap -> SBV.SBVPgm -> IO Term
 parseSBVPgm sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warnings, _uninterps)) =
     do let (TFun inTyp outTyp) = parseIRType irtype
        let cmds = reverse revcmds
@@ -357,7 +356,7 @@ parseSBVPgm sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warnings, _u
 
 -- | bv1ToBool :: bitvector 1 -> Bool
 -- bv1ToBool x = bvAt 1 Bool 1 x (bv 1 0)
-scBv1ToBool :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scBv1ToBool :: SharedContext -> Term -> IO Term
 scBv1ToBool sc x =
     do n0 <- scNat sc 0
        n1 <- scNat sc 1
@@ -366,21 +365,21 @@ scBv1ToBool sc x =
        scBvAt sc n1 b n1 x bv
 
 -- | boolToBv1 :: Bool -> bitvector 1
-scBoolToBv1 :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+scBoolToBv1 :: SharedContext -> Term -> IO Term
 scBoolToBv1 sc x =
     do b <- scBoolType sc
        scSingle sc b x
 
 -- see if it's the same error
-scMultiMux :: SharedContext s -> Nat -> SharedTerm s
-           -> SharedTerm s -> [SharedTerm s] -> IO (SharedTerm s)
+scMultiMux :: SharedContext -> Nat -> Term
+           -> Term -> [Term] -> IO Term
 scMultiMux sc iSize e i args = do
-    vec <- scVector sc e args 
-    w <- scNat sc iSize    
+    vec <- scVector sc e args
+    w <- scNat sc iSize
     m <- scNat sc (fromIntegral (length args))
     scBvAt sc m e w vec i
 
-scAppendAll :: SharedContext s -> [(SharedTerm s, Integer)] -> IO (SharedTerm s)
+scAppendAll :: SharedContext -> [(Term, Integer)] -> IO Term
 scAppendAll _ [] = error "scAppendAll: unimplemented"
 scAppendAll _ [(x, _)] = return x
 scAppendAll sc ((x, size1) : xs) =

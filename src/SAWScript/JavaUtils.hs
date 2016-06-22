@@ -33,38 +33,37 @@ import Verifier.SAW.SharedTerm
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr
 import SAWScript.TypedTerm
-import SAWScript.Utils
 
-type SAWBackend = SharedContext SAWCtx
-type SpecPathState = Path (SharedContext SAWCtx)
-type SpecJavaValue = Value (SharedTerm SAWCtx)
-type SAWJavaSim = Simulator (SharedContext SAWCtx)
+type SAWBackend = SharedContext
+type SpecPathState = Path SharedContext
+type SpecJavaValue = Value Term
+type SAWJavaSim = Simulator SharedContext
 type LocalMap t = Map.Map LocalVariableIndex (Value t)
 
-boolExtend :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+boolExtend :: SharedContext -> Term -> IO Term
 boolExtend sc x = do
   n31 <- scNat sc 31
   n1 <- scNat sc 1
   scBvUExt sc n31 n1 x
 
-boolExtend' :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+boolExtend' :: SharedContext -> Term -> IO Term
 boolExtend' sc x = do
   bool <- scBoolType sc
   x' <- scSingle sc bool x
   boolExtend sc x'
 
-byteExtend :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+byteExtend :: SharedContext -> Term -> IO Term
 byteExtend sc x = do
   n24 <- scNat sc 24
   n8 <- scNat sc 8
   scBvSExt sc n24 n8 x
 
-shortExtend :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+shortExtend :: SharedContext -> Term -> IO Term
 shortExtend sc x = do
   n16 <- scNat sc 16
   scBvSExt sc n16 n16 x
 
-extendToIValue :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+extendToIValue :: SharedContext -> Term -> IO Term
 extendToIValue sc t = do
   ty <- scWhnf sc =<< scTypeOf sc t
   case ty of
@@ -75,7 +74,7 @@ extendToIValue sc t = do
     (asBitvectorType -> Just 32) -> return t
     _ -> fail $ "Invalid type passed to extendToIValue: " ++ show ty
 
-typeOfValue :: SharedContext s -> JSS.Value (SharedTerm s) -> IO JSS.Type
+typeOfValue :: SharedContext -> JSS.Value Term -> IO JSS.Type
 typeOfValue sc (IValue t) = do
   ty <- scWhnf sc =<< scTypeOf sc t
   case ty of
@@ -95,7 +94,7 @@ typeOfValue _ (AValue _) = fail "Can't get type of address value."
 -- SpecPathState {{{1
 
 -- | Add assertion for predicate to path state.
-addAssertionPS :: SharedContext SAWCtx -> SharedTerm SAWCtx
+addAssertionPS :: SharedContext -> Term
                -> SpecPathState
                -> IO SpecPathState
 addAssertionPS sc x p = do
@@ -103,7 +102,7 @@ addAssertionPS sc x p = do
 
 -- | Set value bound to array in path state.
 -- Assumes value is an array with a ground length.
-setArrayValuePS :: Ref -> Int32 -> SharedTerm SAWCtx
+setArrayValuePS :: Ref -> Int32 -> Term
                 -> SpecPathState
                 -> SpecPathState
 setArrayValuePS r n v =
@@ -134,7 +133,7 @@ getStaticFieldValuePS ps f =
   Map.lookup f (ps ^. pathMemory . memStaticFields)
 
 -- | Returns value constructor from node.
-mkJSSValue :: SharedContext s -> Type -> SharedTerm s -> IO (Value (SharedTerm s))
+mkJSSValue :: SharedContext -> Type -> Term -> IO (Value Term)
 mkJSSValue sc BooleanType n = IValue <$> extendToIValue sc n
 mkJSSValue sc ByteType    n = IValue <$> extendToIValue sc n
 mkJSSValue sc CharType    n = IValue <$> extendToIValue sc n
@@ -148,11 +147,11 @@ mkJSSValue sc ShortType   n = IValue <$> extendToIValue sc n
 mkJSSValue _ _ _ = fail "internal: illegal type passed to mkJSSValue"
 
 
-writeJavaTerm :: (MonadSim (SharedContext s) m) =>
-                 SharedContext s
+writeJavaTerm :: (MonadSim SharedContext m) =>
+                 SharedContext
               -> JavaExpr
-              -> TypedTerm s
-              -> Simulator (SharedContext s) m ()
+              -> TypedTerm
+              -> Simulator SharedContext m ()
 writeJavaTerm sc e tm = do
   -- liftIO $ putStrLn "write"
   v <- valueOfTerm sc tm
@@ -170,10 +169,10 @@ writeJavaTerm sc e tm = do
   -}
   writeJavaValue e v
 
-writeJavaValue :: (MonadSim (SharedContext s) m) =>
+writeJavaValue :: (MonadSim SharedContext m) =>
                   JavaExpr
-               -> JSS.Value (SharedTerm s)
-               -> Simulator (SharedContext s) m ()
+               -> JSS.Value Term
+               -> Simulator SharedContext m ()
 writeJavaValue (CC.Term e) v =
   case e of
     ReturnVal _ -> fail "Can't set return value"
@@ -243,10 +242,10 @@ termOfValueSim tp v = do
   ps <- getPath "termOfValueSim"
   termOfValue ps tp v
 
-valueOfTerm :: (MonadSim (SharedContext s) m) =>
-               SharedContext s
-            -> TypedTerm s
-            -> Simulator (SharedContext s) m (JSS.Value (SharedTerm s))
+valueOfTerm :: (MonadSim SharedContext m) =>
+               SharedContext
+            -> TypedTerm
+            -> Simulator SharedContext m (JSS.Value Term)
 valueOfTerm sc (TypedTerm _schema t) = do
   -- TODO: the following is silly since we have @schema@ in scope
   ty <- liftIO $ (scTypeOf sc t >>= scWhnf sc)
@@ -316,10 +315,10 @@ readJavaValueSim e = do
   ps <- getPath "readJavaValueSim"
   readJavaValue ((^. cfLocals) <$> currentCallFrame ps) ps e
 
-logicExprToTerm :: SharedContext SAWCtx
-                -> Maybe (LocalMap (SharedTerm SAWCtx))
-                -> Path' (SharedTerm SAWCtx) -> LogicExpr
-                -> IO (SharedTerm SAWCtx)
+logicExprToTerm :: SharedContext
+                -> Maybe (LocalMap Term)
+                -> Path' Term -> LogicExpr
+                -> IO Term
 logicExprToTerm sc mlocals ps le = do
   let exprs = logicExprJavaExprs le
   args <- forM exprs $ \expr -> do
@@ -330,9 +329,9 @@ logicExprToTerm sc mlocals ps le = do
   useLogicExpr sc le argTerms
 
 -- NB: uses call frame from path
-mixedExprToTerm :: SharedContext SAWCtx
-                -> Path' (SharedTerm SAWCtx) -> MixedExpr
-                -> IO (SharedTerm SAWCtx)
+mixedExprToTerm :: SharedContext
+                -> Path' Term -> MixedExpr
+                -> IO Term
 mixedExprToTerm sc ps me = do
   let mlocals = (^. cfLocals) <$> currentCallFrame ps
   case me of
@@ -340,18 +339,18 @@ mixedExprToTerm sc ps me = do
     JE je -> readJavaTerm mlocals ps je
 
 logicExprToTermSim :: (Functor m, Monad m) =>
-                      SharedContext SAWCtx
+                      SharedContext
                    -> LogicExpr
-                   -> Simulator SAWBackend m (SharedTerm SAWCtx)
+                   -> Simulator SAWBackend m Term
 logicExprToTermSim sc le = do
   ps <- getPath "logicExprToTermSim"
   liftIO $ logicExprToTerm sc ((^. cfLocals) <$> currentCallFrame ps) ps le
 
 freshJavaVal :: (MonadIO m, Functor m) =>
-                Maybe (IORef [SharedTerm SAWCtx])
-             -> SharedContext SAWCtx
+                Maybe (IORef [Term])
+             -> SharedContext
              -> JavaActualType
-             -> Simulator SAWBackend m (JSS.Value (SharedTerm SAWCtx))
+             -> Simulator SAWBackend m (JSS.Value Term)
 freshJavaVal _ _ (PrimitiveType ty) = do
   case ty of
     BooleanType -> withSBE $ \sbe -> IValue <$> freshBool sbe
@@ -396,13 +395,13 @@ refInstanceFields :: (Ord f) =>
 refInstanceFields m r =
   Map.fromList [ (f, v) | ((mr, f), v) <- Map.toList m, mr == r ]
 
-pathRefInstanceFields :: Path (SharedContext SAWCtx)
+pathRefInstanceFields :: Path SharedContext
                       -> Ref
                       -> Map.Map FieldId SpecJavaValue
 pathRefInstanceFields ps =
   refInstanceFields (ps ^. pathMemory . memInstanceFields)
 
-pathArrayRefs :: Path (SharedContext SAWCtx)
+pathArrayRefs :: Path SharedContext
               -> Ref
               -> [Ref]
 pathArrayRefs ps r =
@@ -412,7 +411,7 @@ pathArrayRefs ps r =
   , ar == r
   ]
 
-pathStaticFieldRefs :: Path (SharedContext SAWCtx)
+pathStaticFieldRefs :: Path SharedContext
                     -> [Ref]
 pathStaticFieldRefs ps =
   valueRefs $ map snd $ Map.toList (ps ^. pathMemory . memStaticFields)
@@ -437,17 +436,16 @@ reachableRefs ps vs  =
 valueRefs :: [SpecJavaValue] -> [Ref]
 valueRefs vs = [ r | RValue r <- vs ]
 
-useLogicExprPS :: JSS.Path (SharedContext SAWCtx)
-               -> SharedContext SAWCtx
+useLogicExprPS :: JSS.Path SharedContext
+               -> SharedContext
                -> LogicExpr
-               -> IO (SharedTerm SAWCtx)
+               -> IO Term
 useLogicExprPS ps sc le = do
   let mlocals = (^. cfLocals) <$> currentCallFrame ps
   args <- mapM (readJavaTerm mlocals ps) (logicExprJavaExprs le)
   useLogicExpr sc le args
 
-evalAssumptions :: SharedContext SAWCtx -> SpecPathState -> [LogicExpr]
-                -> IO (SharedTerm SAWCtx)
+evalAssumptions :: SharedContext -> SpecPathState -> [LogicExpr] -> IO Term
 evalAssumptions sc ps as = do
   assumptionList <- mapM (useLogicExprPS ps sc) as
   true <- scBool sc True

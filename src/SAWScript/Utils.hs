@@ -42,9 +42,6 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
-data SAWCtx
-  deriving (Typeable)
-
 data Pos = Pos !FilePath -- file
                !Int      -- line
                !Int      -- col
@@ -209,13 +206,13 @@ findField cb pos tp@(JSS.ClassType clName) nm = impl =<< lift (lookupClass cb po
 findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
 
-defRewrites :: SharedContext s -> Ident -> IO [RewriteRule (SharedTerm s)]
+defRewrites :: SharedContext -> Ident -> IO [RewriteRule Term]
 defRewrites sc ident =
       case findDef (scModule sc) ident of
         Nothing -> return []
         Just def -> scDefRewriteRules sc def
 
-basic_ss :: SharedContext s -> IO (Simpset (SharedTerm s))
+basic_ss :: SharedContext -> IO (Simpset Term)
 basic_ss sc = do
   rs1 <- concat <$> traverse (defRewrites sc) (defs ++ defs')
   rs2 <- scEqsRewriteRules sc eqs

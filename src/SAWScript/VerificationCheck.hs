@@ -18,27 +18,27 @@ import Text.PrettyPrint.ANSI.Leijen
 import Verifier.SAW.Cryptol (scCryptolEq)
 import qualified SAWScript.Value as SV (PPOpts(..), cryptolPPOpts)
 
-data VerificationCheck s
-  = AssertionCheck String (SharedTerm s)
+data VerificationCheck
+  = AssertionCheck String Term
     -- ^ A predicate to check with a name and term.
-  | EqualityCheck String          -- Name of value to compare
-                  (SharedTerm s)  -- Value returned by implementation.
-                  (SharedTerm s)  -- Expected value in Spec.
+  | EqualityCheck String  -- Name of value to compare
+                  Term    -- Value returned by implementation.
+                  Term    -- Expected value in Spec.
     -- ^ Check that equality assertion is true.
 
-vcName :: VerificationCheck s -> String
+vcName :: VerificationCheck -> String
 vcName (AssertionCheck nm _) = nm
 vcName (EqualityCheck nm _ _) = nm
 
 -- | Returns goal that one needs to prove.
-vcGoal :: SharedContext s -> VerificationCheck s -> IO (SharedTerm s)
+vcGoal :: SharedContext -> VerificationCheck -> IO Term
 vcGoal _ (AssertionCheck _ n) = return n
 vcGoal sc (EqualityCheck _ x y) = scCryptolEq sc x y
 
-type CounterexampleFn s = (SharedTerm s -> IO CValue) -> IO Doc
+type CounterexampleFn = (Term -> IO CValue) -> IO Doc
 
 -- | Returns documentation for check that fails.
-vcCounterexample :: SharedContext s -> SV.PPOpts -> VerificationCheck s -> CounterexampleFn s
+vcCounterexample :: SharedContext -> SV.PPOpts -> VerificationCheck -> CounterexampleFn
 vcCounterexample _ opts (AssertionCheck nm n) _ = do
   let opts' = defaultPPOpts { ppBase = SV.ppOptsBase opts }
   return $ text ("Assertion " ++ nm ++ " is unsatisfied:") <+>
@@ -63,7 +63,7 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
         nest 2 (text "Expected:    " <+>
                 text (show (CV.ppValue opts' sv))))
 
-ppCheck :: VerificationCheck s -> Doc
+ppCheck :: VerificationCheck -> Doc
 ppCheck (AssertionCheck nm tm) =
   hsep [ text (nm ++ ":")
        , scPrettyTermDoc defaultPPOpts tm

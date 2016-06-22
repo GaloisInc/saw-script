@@ -84,7 +84,7 @@ import System.Console.ANSI (setTitle)
 import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 
-import Verifier.SAW.SharedTerm (SharedTerm)
+import Verifier.SAW.SharedTerm (Term)
 
 --------------------
 
@@ -95,7 +95,6 @@ import SAWScript.CryptolEnv
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
-import SAWScript.Utils (SAWCtx)
 import Verifier.SAW (SharedContext)
 
 
@@ -107,7 +106,7 @@ data RW = RW
   , eContinue   :: Bool
   , eIsBatch    :: Bool
   , eUserEnv    :: UserEnv     -- ^ User-configured settings from :set commands
-  , sharedContext :: SharedContext SAWCtx
+  , sharedContext :: SharedContext
   , eTopLevelRO :: TopLevelRO
   , environment :: TopLevelRW
   }
@@ -328,13 +327,13 @@ getPropertyNames =
 getName :: T.Name -> String
 getName  = show . pp
 
-getTermEnv :: REPL (Map T.Name (SharedTerm SAWCtx))
+getTermEnv :: REPL (Map T.Name Term)
 getTermEnv = fmap eTermEnv getCryptolEnv
 
-modifyTermEnv :: (Map T.Name (SharedTerm SAWCtx) -> Map T.Name (SharedTerm SAWCtx)) -> REPL ()
+modifyTermEnv :: (Map T.Name Term -> Map T.Name Term) -> REPL ()
 modifyTermEnv f = modifyCryptolEnv $ \ce -> ce { eTermEnv = f (eTermEnv ce) }
 
-setTermEnv :: Map T.Name (SharedTerm SAWCtx) -> REPL ()
+setTermEnv :: Map T.Name Term -> REPL ()
 setTermEnv x = modifyTermEnv (const x)
 
 getExtraTypes :: REPL (Map T.Name T.Schema)
@@ -361,16 +360,16 @@ getModuleEnv  = eModuleEnv `fmap` getCryptolEnv
 setModuleEnv :: M.ModuleEnv -> REPL ()
 setModuleEnv me = modifyCryptolEnv (\ce -> ce { eModuleEnv = me })
 
-getCryptolEnv :: REPL (CryptolEnv SAWCtx)
+getCryptolEnv :: REPL CryptolEnv
 getCryptolEnv = rwCryptol `fmap` getEnvironment
 
-modifyCryptolEnv :: (CryptolEnv SAWCtx -> CryptolEnv SAWCtx) -> REPL ()
+modifyCryptolEnv :: (CryptolEnv -> CryptolEnv) -> REPL ()
 modifyCryptolEnv f = modifyEnvironment (\rw -> rw { rwCryptol = f (rwCryptol rw) })
 
-setCryptolEnv :: CryptolEnv SAWCtx -> REPL ()
+setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)
 
-getSharedContext :: REPL (SharedContext SAWCtx)
+getSharedContext :: REPL SharedContext
 getSharedContext = fmap sharedContext getRW
 
 getTopLevelRO :: REPL TopLevelRO

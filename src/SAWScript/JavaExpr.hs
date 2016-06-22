@@ -162,7 +162,7 @@ jeVarName = map dotToUnderscore . ppJavaExpr
   where dotToUnderscore '.' = '_'
         dotToUnderscore c = c
 
-asJavaExpr :: SharedTerm s -> Maybe String
+asJavaExpr :: Term -> Maybe String
 asJavaExpr (asExtCns -> Just ec) = Just (ecName ec)
 asJavaExpr _ = Nothing
 
@@ -200,14 +200,14 @@ isScalarExpr = JSS.isPrimitiveType . exprType
 data LogicExpr =
   LogicExpr { -- | A term, possibly function type, which does _not_
               -- contain any external constant subexpressions.
-              _leTerm :: SharedTerm SAWCtx
+              _leTerm :: Term
               -- | The Java expressions, if any, that the term should
               -- be applied to
             , leJavaArgs :: [JavaExpr]
             }
   deriving (Show)
 
-scJavaValue :: SharedContext s -> SharedTerm s -> String -> IO (SharedTerm s)
+scJavaValue :: SharedContext -> Term -> String -> IO Term
 scJavaValue sc ty name = do
   scFreshGlobal sc name ty
 
@@ -215,12 +215,11 @@ scJavaValue sc ty name = do
 logicExprJavaExprs :: LogicExpr -> [JavaExpr]
 logicExprJavaExprs = leJavaArgs
 
-useLogicExpr :: SharedContext SAWCtx -> LogicExpr -> [SharedTerm SAWCtx]
-             -> IO (SharedTerm SAWCtx)
+useLogicExpr :: SharedContext -> LogicExpr -> [Term] -> IO Term
 useLogicExpr sc (LogicExpr t _) args = scApplyAll sc t args
 
 -- | Return type of a typed expression.
-typeOfLogicExpr :: SharedContext SAWCtx -> LogicExpr -> IO (SharedTerm SAWCtx)
+typeOfLogicExpr :: SharedContext -> LogicExpr -> IO Term
 typeOfLogicExpr sc (LogicExpr t _) = scTypeOf sc t
 
 -- MixedExpr {{{1
@@ -262,8 +261,8 @@ javaTypeToActual tp
   | JSS.isPrimitiveType tp = Just (PrimitiveType tp)
   | otherwise = Nothing
 
-narrowTypeOfActual :: SharedContext s -> JavaActualType
-                  -> IO (Maybe (SharedTerm s))
+narrowTypeOfActual :: SharedContext -> JavaActualType
+                  -> IO (Maybe Term)
 narrowTypeOfActual _ (ClassInstance _) = return Nothing
 narrowTypeOfActual sc (ArrayInstance l tp) = do
   case javaTypeToActual tp of
@@ -290,8 +289,8 @@ narrowTypeOfActual sc (PrimitiveType JSS.LongType) =
 narrowTypeOfActual _ _ = return Nothing
 
 -- | Returns logical type of actual type if it is an array or primitive type.
-logicTypeOfActual :: SharedContext s -> JavaActualType
-                  -> IO (Maybe (SharedTerm s))
+logicTypeOfActual :: SharedContext -> JavaActualType
+                  -> IO (Maybe Term)
 logicTypeOfActual _ (ClassInstance _) = return Nothing
 logicTypeOfActual sc (ArrayInstance l tp) = do
   elTy <- scBitvector sc (fromIntegral (JSS.stackWidth tp))
@@ -300,8 +299,8 @@ logicTypeOfActual sc (ArrayInstance l tp) = do
 logicTypeOfActual sc (PrimitiveType tp) =
   logicTypeOfJSSType sc tp
 
-logicTypeOfJSSType :: SharedContext s -> JSS.Type
-                   -> IO (Maybe (SharedTerm s))
+logicTypeOfJSSType :: SharedContext -> JSS.Type
+                   -> IO (Maybe Term)
 logicTypeOfJSSType _ (JSS.ArrayType _) = return Nothing
 logicTypeOfJSSType _ (JSS.ClassType _) = return Nothing
 logicTypeOfJSSType sc tp = do

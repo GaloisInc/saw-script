@@ -70,6 +70,7 @@ class ShowFoldable f where
 
 -- | A term with the given operator.
 newtype Term f = Term { unTerm :: f (Term f) }
+-- ^ FIXME: Name clash with saw-core Term type. Rename to something else.
 
 instance EqFoldable f => Eq (Term f) where
   Term x == Term y = x `fequal` y

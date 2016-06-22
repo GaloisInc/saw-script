@@ -42,7 +42,7 @@ import System.Environment (lookupEnv)
 import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
-import Verifier.SAW.SharedTerm (SharedContext, SharedTerm, incVars)
+import Verifier.SAW.SharedTerm (SharedContext, Term, incVars)
 
 import qualified Verifier.SAW.Cryptol as C
 
@@ -75,18 +75,18 @@ import SAWScript.AST (Located(getVal, getPos), Import(..))
 
 --------------------------------------------------------------------------------
 
-data CryptolEnv s = CryptolEnv
-  { eImports    :: [P.Import]                -- ^ Declarations of imported Cryptol modules
-  , eModuleEnv  :: ME.ModuleEnv              -- ^ Imported modules, and state for the ModuleM monad
-  , eExtraNames :: MR.NamingEnv              -- ^ Context for the Cryptol renamer
-  , eExtraTypes :: Map T.Name T.Schema       -- ^ Cryptol types for extra names in scope
-  , eExtraTSyns :: Map T.Name T.TySyn        -- ^ Extra Cryptol type synonyms in scope
-  , eTermEnv    :: Map T.Name (SharedTerm s) -- ^ SAWCore terms for *all* names in scope
+data CryptolEnv = CryptolEnv
+  { eImports    :: [P.Import]           -- ^ Declarations of imported Cryptol modules
+  , eModuleEnv  :: ME.ModuleEnv         -- ^ Imported modules, and state for the ModuleM monad
+  , eExtraNames :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
+  , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
+  , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
+  , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
   }
 
 -- Initialize ------------------------------------------------------------------
 
-initCryptolEnv :: SharedContext s -> IO (CryptolEnv s)
+initCryptolEnv :: SharedContext -> IO CryptolEnv
 initCryptolEnv sc = do
   modEnv0 <- M.initialModuleEnv
 
@@ -156,7 +156,7 @@ ioParseResult res = case res of
 
 -- Rename ----------------------------------------------------------------------
 
-getNamingEnv :: CryptolEnv s -> MR.NamingEnv
+getNamingEnv :: CryptolEnv -> MR.NamingEnv
 getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
   where
     nameEnv = mconcat $ fromMaybe [] $ traverse loadImport (eImports env)
@@ -186,7 +186,7 @@ runInferOutput out =
 
 -- Translate -------------------------------------------------------------------
 
-translateExpr :: SharedContext s -> CryptolEnv s -> T.Expr -> IO (SharedTerm s)
+translateExpr :: SharedContext -> CryptolEnv -> T.Expr -> IO Term
 translateExpr sc env expr = do
   let modEnv = eModuleEnv env
   let ifaceDecls = getAllIfaceDecls modEnv
@@ -203,7 +203,7 @@ translateExpr sc env expr = do
         }
   C.importExpr sc cryEnv expr
 
-translateDeclGroups :: SharedContext s -> CryptolEnv s -> [T.DeclGroup] -> IO (CryptolEnv s)
+translateDeclGroups :: SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env dgs = do
   let modEnv = eModuleEnv env
   let ifaceDecls = getAllIfaceDecls modEnv
@@ -232,7 +232,7 @@ translateDeclGroups sc env dgs = do
         }
 
 -- | Translate all declarations in all loaded modules to SAWCore terms
-genTermEnv :: SharedContext s -> ME.ModuleEnv -> IO (Map T.Name (SharedTerm s))
+genTermEnv :: SharedContext -> ME.ModuleEnv -> IO (Map T.Name Term)
 genTermEnv sc modEnv = do
   let declGroups = concatMap T.mDecls (ME.loadedModules modEnv)
   cryEnv <- C.importTopLevelDeclGroups sc C.emptyEnv declGroups
@@ -240,8 +240,8 @@ genTermEnv sc modEnv = do
 
 --------------------------------------------------------------------------------
 
-loadCryptolModule :: SharedContext s -> CryptolEnv s -> FilePath
-                     -> IO (CryptolModule s, CryptolEnv s)
+loadCryptolModule :: SharedContext -> CryptolEnv -> FilePath
+                     -> IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
@@ -263,7 +263,7 @@ loadCryptolModule sc env path = do
   let sm' = Map.filterWithKey (\k _ -> Set.member k (P.eTypes (T.mExports m))) (T.mTySyns m)
   return (CryptolModule sm' tm', env')
 
-bindCryptolModule :: forall s. (P.ModName, CryptolModule s) -> CryptolEnv s -> CryptolEnv s
+bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
   env { eExtraNames = flip (foldr addName) (Map.keys tm) $
                       flip (foldr addTSyn) (Map.keys sm) $ eExtraNames env
@@ -275,7 +275,7 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
     addName name = MN.shadowing (MN.singletonE (P.mkQual modName (MN.nameIdent name)) name)
     addTSyn name = MN.shadowing (MN.singletonT (P.mkQual modName (MN.nameIdent name)) name)
 
-lookupCryptolModule :: CryptolModule s -> String -> IO (TypedTerm s)
+lookupCryptolModule :: CryptolModule -> String -> IO TypedTerm
 lookupCryptolModule (CryptolModule _ tm) name =
   case Map.lookup (packIdent name) (Map.mapKeys MN.nameIdent tm) of
     Nothing -> fail $ "Binding not found: " ++ name
@@ -283,7 +283,7 @@ lookupCryptolModule (CryptolModule _ tm) name =
 
 --------------------------------------------------------------------------------
 
-importModule :: SharedContext s -> CryptolEnv s -> Import -> IO (CryptolEnv s)
+importModule :: SharedContext -> CryptolEnv -> Import -> IO CryptolEnv
 importModule sc env imp = do
   let modEnv = eModuleEnv env
   path <- case iModule imp of
@@ -300,7 +300,7 @@ importModule sc env imp = do
              , eModuleEnv = modEnv'
              , eTermEnv = Map.union newTermEnv oldTermEnv }
 
-bindIdent :: Ident -> CryptolEnv s -> (T.Name, CryptolEnv s)
+bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
   where
     modEnv = eModuleEnv env
@@ -310,7 +310,7 @@ bindIdent ident env = (name, env')
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
-bindTypedTerm :: (Ident, TypedTerm s) -> CryptolEnv s -> CryptolEnv s
+bindTypedTerm :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
 bindTypedTerm (ident, TypedTerm schema trm) env =
   env' { eExtraNames = MR.shadowing (MN.singletonE pname name) (eExtraNames env)
        , eExtraTypes = Map.insert name schema (eExtraTypes env)
@@ -320,7 +320,7 @@ bindTypedTerm (ident, TypedTerm schema trm) env =
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
 
-bindType :: (Ident, T.Schema) -> CryptolEnv s -> CryptolEnv s
+bindType :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindType (ident, T.Forall [] [] ty) env =
   env' { eExtraNames = MR.shadowing (MN.singletonT pname name) (eExtraNames env)
        , eExtraTSyns = Map.insert name tysyn (eExtraTSyns env)
@@ -331,7 +331,7 @@ bindType (ident, T.Forall [] [] ty) env =
     tysyn = T.TySyn name [] [] ty
 bindType _ env = env -- only monomorphic types may be bound
 
-bindInteger :: (Ident, Integer) -> CryptolEnv s -> CryptolEnv s
+bindInteger :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
 bindInteger (ident, n) env =
   env' { eExtraNames = MR.shadowing (MN.singletonT pname name) (eExtraNames env)
        , eExtraTSyns = Map.insert name tysyn (eExtraTSyns env)
@@ -343,7 +343,7 @@ bindInteger (ident, n) env =
 
 --------------------------------------------------------------------------------
 
-parseTypedTerm :: SharedContext s -> CryptolEnv s -> Located String -> IO (TypedTerm s)
+parseTypedTerm :: SharedContext -> CryptolEnv -> Located String -> IO TypedTerm
 parseTypedTerm sc env input = do
   let modEnv = eModuleEnv env
 
@@ -377,7 +377,7 @@ parseTypedTerm sc env input = do
   trm <- translateExpr sc env' expr
   return (TypedTerm schema trm)
 
-parseDecls :: SharedContext s -> CryptolEnv s -> Located String -> IO (CryptolEnv s)
+parseDecls :: SharedContext -> CryptolEnv -> Located String -> IO CryptolEnv
 parseDecls sc env input = do
   let modEnv = eModuleEnv env
   let ifaceDecls = getAllIfaceDecls modEnv
@@ -426,7 +426,7 @@ parseDecls sc env input = do
   let dgs = T.mDecls tmodule
   translateDeclGroups sc env' dgs
 
-parseSchema :: CryptolEnv s -> Located String -> IO T.Schema
+parseSchema :: CryptolEnv -> Located String -> IO T.Schema
 parseSchema env input = do
   --putStrLn $ "parseSchema: " ++ show input
   let modEnv = eModuleEnv env

@@ -106,9 +106,9 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent)
 import Cryptol.Utils.PP (pretty)
 
-data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext SAWCtx
+data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
-                                     , biBasicSS       :: Simpset (SharedTerm SAWCtx)
+                                     , biBasicSS       :: Simpset Term
                                      }
 
 showPrim :: SV.Value -> TopLevel String
@@ -116,16 +116,16 @@ showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
   return (SV.showsPrecValue opts 0 v "")
 
-definePrim :: String -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+definePrim :: String -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm schema rhs) = do
   sc <- getSharedContext
   t <- io $ scConstant sc name rhs
   return $ TypedTerm schema t
 
-sbvUninterpreted :: String -> SharedTerm SAWCtx -> TopLevel (Uninterp SAWCtx)
+sbvUninterpreted :: String -> Term -> TopLevel Uninterp
 sbvUninterpreted s t = return $ Uninterp (s, t)
 
-readBytes :: FilePath -> TopLevel (TypedTerm SAWCtx)
+readBytes :: FilePath -> TopLevel TypedTerm
 readBytes path = do
   sc <- getSharedContext
   content <- io $ BS.readFile path
@@ -137,7 +137,7 @@ readBytes path = do
   let schema = C.Forall [] [] (C.tSeq (C.tNum len) (C.tSeq (C.tNum (8::Int)) C.tBit))
   return (TypedTerm schema trm)
 
-readSBV :: FilePath -> [Uninterp SAWCtx] -> TopLevel (TypedTerm SAWCtx)
+readSBV :: FilePath -> [Uninterp] -> TopLevel TypedTerm
 readSBV path unintlst =
     do sc <- getSharedContext
        opts <- getOptions
@@ -178,7 +178,7 @@ sawProxy = GIA.proxy
 -- have more examples. It might be an improvement to take SAIGs as
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
-dsecPrint :: SharedContext s -> TypedTerm s -> TypedTerm s -> IO ()
+dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> IO ()
 dsecPrint sc t1 t2 = do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
@@ -221,7 +221,7 @@ saveAIGasCNFPrim f (AIG.Network be ls) =
     _ -> fail "save_aig_as_cnf: non-boolean term"
 
 -- | Tranlsate a SAWCore term into an AIG
-bitblastPrim :: SharedContext s -> SharedTerm s -> IO AIGNetwork
+bitblastPrim :: SharedContext -> Term -> IO AIGNetwork
 bitblastPrim sc t = do
   t' <- rewriteEqs sc t
 {-
@@ -234,9 +234,9 @@ bitblastPrim sc t = do
     return (AIG.Network be (toList ls))
 
 -- | Read an AIG file representing a theorem or an arbitrary function
--- and represent its contents as a @SharedTerm@ lambda term. This is
+-- and represent its contents as a @Term@ lambda term. This is
 -- inefficient but semantically correct.
-readAIGPrim :: FilePath -> TopLevel (TypedTerm SAWCtx)
+readAIGPrim :: FilePath -> TopLevel TypedTerm
 readAIGPrim f = do
   sc <- getSharedContext
   exists <- io $ doesFileExist f
@@ -246,10 +246,7 @@ readAIGPrim f = do
     Left err -> fail $ "Reading AIG failed: " ++ err
     Right t -> io $ mkTypedTerm sc t
 
-replacePrim :: TypedTerm SAWCtx
-            -> TypedTerm SAWCtx
-            -> TypedTerm SAWCtx
-            -> TopLevel (TypedTerm SAWCtx)
+replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
   sc <- getSharedContext
 
@@ -285,8 +282,7 @@ replacePrim pat replace t = do
   return t{ ttTerm = t' }
 
 
-hoistIfsPrim :: TypedTerm SAWCtx
-             -> TopLevel (TypedTerm SAWCtx)
+hoistIfsPrim :: TypedTerm -> TopLevel TypedTerm
 hoistIfsPrim t = do
   sc <- getSharedContext
   t' <- io $ hoistIfs sc (ttTerm t)
@@ -302,9 +298,7 @@ hoistIfsPrim t = do
 
 
 
-checkConvertiblePrim :: TypedTerm SAWCtx
-                     -> TypedTerm SAWCtx
-                     -> TopLevel ()
+checkConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel ()
 checkConvertiblePrim x y = do
    sc <- getSharedContext
    io $ do
@@ -313,9 +307,9 @@ checkConvertiblePrim x y = do
        then putStrLn "Convertible"
        else putStrLn "Not convertible"
 
--- | Write a @SharedTerm@ representing a theorem or an arbitrary
+-- | Write a @Term@ representing a theorem or an arbitrary
 -- function to an AIG file.
-writeAIG :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
+writeAIG :: SharedContext -> FilePath -> Term -> IO ()
 writeAIG sc f t = do
   aig <- bitblastPrim sc t
   ABC.writeAiger f aig
@@ -324,15 +318,14 @@ writeAIG sc f t = do
 -- specifying the number of input and output bits to be interpreted as
 -- latches. Used to implement more friendly SAIG writers
 -- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-writeSAIG :: SharedContext s -> FilePath -> SharedTerm s -> Int -> IO ()
+writeSAIG :: SharedContext -> FilePath -> Term -> Int -> IO ()
 writeSAIG sc file tt numLatches = do
   aig <- bitblastPrim sc tt
   GIA.writeAigerWithLatches file aig numLatches
 
 -- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
 -- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: forall s.
-  SharedContext s -> FilePath -> TypedTerm s -> IO ()
+writeSAIGInferLatches :: SharedContext -> FilePath -> TypedTerm -> IO ()
 writeSAIGInferLatches sc file tt = do
   ty <- scTypeOf sc (ttTerm tt)
   s <- getStateType ty
@@ -347,7 +340,7 @@ writeSAIGInferLatches sc file tt = do
       "but type of term is:\n" ++ (pretty . ttSchema $ tt)
 
     -- Decompose type as '(i, s) -> (o, s)' and return 's'.
-    getStateType :: SharedTerm s -> IO FiniteType
+    getStateType :: Term -> IO FiniteType
     getStateType ty = do
       ty' <- scWhnf sc ty
       case ty' of
@@ -371,11 +364,11 @@ writeSAIGInferLatches sc file tt = do
 -- specifying the number of input and output bits to be interpreted as
 -- latches.
 writeAIGComputedLatches ::
-  SharedContext s -> FilePath -> SharedTerm s -> Int -> IO ()
+  SharedContext -> FilePath -> Term -> Int -> IO ()
 writeAIGComputedLatches sc file term numLatches = do
   writeSAIG sc file term numLatches
 
-writeCNF :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
+writeCNF :: SharedContext -> FilePath -> Term -> IO ()
 writeCNF sc f t = do
   AIG.Network be ls <- bitblastPrim sc t
   case ls of
@@ -384,39 +377,39 @@ writeCNF sc f t = do
       return ()
     _ -> fail "writeCNF: non-boolean term"
 
-write_cnf :: SharedContext s -> FilePath -> TypedTerm s -> IO ()
+write_cnf :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_cnf sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
   writeCNF sc f t
 
--- | Write a @SharedTerm@ representing a theorem to an SMT-Lib version
+-- | Write a @Term@ representing a theorem to an SMT-Lib version
 -- 2 file.
-writeSMTLib2 :: SharedContext s -> FilePath -> SharedTerm s -> IO ()
+writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | As above, but check that the type is monomorphic and boolean.
-write_smtlib2 :: SharedContext s -> FilePath -> TypedTerm s -> IO ()
+write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
   writeSMTLib2 sc f t
 
--- | Write a @SharedTerm@ representing a theorem to an SMT-Lib version
+-- | Write a @Term@ representing a theorem to an SMT-Lib version
 -- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: [String] -> SharedContext s -> FilePath -> SharedTerm s -> IO ()
+writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
 writeUnintSMTLib2 unints sc f t = do
   (_, _, l) <- prepSBV sc unints t
   txt <- SBV.compileToSMTLib SBV.SMTLib2 True l
   writeFile f txt
 
-writeCore :: FilePath -> SharedTerm s -> IO ()
+writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
 
-readCore :: FilePath -> TopLevel (TypedTerm SAWCtx)
+readCore :: FilePath -> TopLevel TypedTerm
 readCore path = do
   sc <- getSharedContext
   io (mkTypedTerm sc =<< scReadExternal sc =<< readFile path)
 
-withFirstGoal :: (ProofGoal s -> TopLevel (a, Maybe (ProofGoal s))) -> ProofScript s a
+withFirstGoal :: (ProofGoal -> TopLevel (a, Maybe ProofGoal)) -> ProofScript a
 withFirstGoal f =
   StateT $ \(ProofState goals concl) ->
   case goals of
@@ -427,7 +420,7 @@ withFirstGoal f =
         Nothing -> return (x, ProofState gs concl)
         Just g' -> return (x, ProofState (g' : gs) concl)
 
-quickcheckGoal :: SharedContext s -> Integer -> ProofScript s SV.SatResult
+quickcheckGoal :: SharedContext -> Integer -> ProofScript SV.SatResult
 quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
   putStr $ "WARNING: using quickcheck to prove goal..."
   hFlush stdout
@@ -446,22 +439,22 @@ quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
     Nothing -> fail $ "quickcheck:\n" ++
       "term has non-testable type"
 
-assumeValid :: ProofScript s SV.ProofResult
+assumeValid :: ProofScript SV.ProofResult
 assumeValid = withFirstGoal $ \goal -> do
   io $ putStrLn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
   return (SV.Valid, Nothing)
 
-assumeUnsat :: ProofScript s SV.SatResult
+assumeUnsat :: ProofScript SV.SatResult
 assumeUnsat = withFirstGoal $ \goal -> do
   io $ putStrLn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
   return (SV.Unsat, Nothing)
 
-trivial :: ProofScript SAWCtx SV.SatResult
+trivial :: ProofScript SV.SatResult
 trivial = withFirstGoal $ \goal -> do
   checkTrue (goalTerm goal)
   return (SV.Unsat, Nothing)
   where
-    checkTrue :: SharedTerm SAWCtx -> TopLevel ()
+    checkTrue :: Term -> TopLevel ()
     checkTrue t =
       case unwrapTermF t of
         Lambda _ _ t' -> checkTrue t'
@@ -473,70 +466,70 @@ getTopLevelPPOpts = do
   rw <- getTopLevelRW
   return defaultPPOpts { ppBase = SV.ppOptsBase (rwPPOpts rw) }
 
-show_term :: SharedTerm SAWCtx -> TopLevel String
+show_term :: Term -> TopLevel String
 show_term t = do
   opts <- getTopLevelPPOpts
   return (scPrettyTerm opts t)
 
-print_term :: SharedTerm SAWCtx -> TopLevel ()
+print_term :: Term -> TopLevel ()
 print_term t = do
   opts <- getTopLevelPPOpts
   io $ putStrLn (scPrettyTerm opts t)
 
-print_term_depth :: Int -> SharedTerm SAWCtx -> TopLevel ()
+print_term_depth :: Int -> Term -> TopLevel ()
 print_term_depth d t = do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts d t)
 
-printGoal :: ProofScript s ()
+printGoal :: ProofScript ()
 printGoal = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
   io $ putStrLn (scPrettyTerm opts (goalTerm goal))
   return ((), Just goal)
 
-printGoalDepth :: Int -> ProofScript SAWCtx ()
+printGoalDepth :: Int -> ProofScript ()
 printGoalDepth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts n (goalTerm goal))
   return ((), Just goal)
 
-printGoalConsts :: ProofScript SAWCtx ()
+printGoalConsts :: ProofScript ()
 printGoalConsts = withFirstGoal $ \goal -> do
   io $ mapM_ putStrLn $ Map.keys (getConstantSet (goalTerm goal))
   return ((), Just goal)
 
-printGoalSize :: ProofScript SAWCtx ()
+printGoalSize :: ProofScript ()
 printGoalSize = withFirstGoal $ \goal -> do
   let t = goalTerm goal
   io $ putStrLn $ "Goal shared size: " ++ show (scSharedSize t)
   io $ putStrLn $ "Goal unshared size: " ++ show (scTreeSize t)
   return ((), Just goal)
 
-unfoldGoal :: [String] -> ProofScript SAWCtx ()
+unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal names = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ scUnfoldConstants sc names trm
   return ((), Just (goal { goalTerm = trm' }))
 
-simplifyGoal :: Simpset (SharedTerm SAWCtx) -> ProofScript SAWCtx ()
+simplifyGoal :: Simpset Term -> ProofScript ()
 simplifyGoal ss = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ rewriteSharedTerm sc ss trm
   return ((), Just (goal { goalTerm = trm' }))
 
-beta_reduce_goal :: ProofScript SAWCtx ()
+beta_reduce_goal :: ProofScript ()
 beta_reduce_goal = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ betaNormalize sc trm
   return ((), Just (goal { goalTerm = trm' }))
 
--- | Bit-blast a @SharedTerm@ representing a theorem and check its
+-- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
 {-
-satABCold :: SharedContext s -> ProofScript s SV.SatResult
+satABCold :: SharedContext -> ProofScript SV.SatResult
 satABCold sc = StateT $ \g -> withBE $ \be -> do
   let t = goalTerm g
   t' <- prepForExport sc t
@@ -567,11 +560,11 @@ satABCold sc = StateT $ \g -> withBE $ \be -> do
     Left err -> fail $ "Can't bitblast: " ++ err
 -}
 
-returnsBool :: SharedTerm s -> Bool
+returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
 returnsBool _ = False
 
-checkBoolean :: SharedContext s -> SharedTerm s -> IO ()
+checkBoolean :: SharedContext -> Term -> IO ()
 checkBoolean sc t = do
   ty <- scTypeCheckError sc t
   unless (returnsBool ty) $
@@ -588,9 +581,9 @@ checkBooleanSchema (C.Forall [] [] t) = checkBooleanType t
 checkBooleanSchema s =
   fail $ "Invalid polymorphic type: " ++ pretty s
 
--- | Bit-blast a @SharedTerm@ representing a theorem and check its
+-- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
-satABC :: SharedContext s -> ProofScript s SV.SatResult
+satABC :: SharedContext -> ProofScript SV.SatResult
 satABC sc = withFirstGoal $ \g -> io $ do
   let t0 = goalTerm g
   TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
@@ -637,8 +630,8 @@ parseDimacsSolution vars ls = map lkup vars
     assgnMap = Map.fromList (map varToPair vs)
     lkup v = Map.findWithDefault False v assgnMap
 
-satExternal :: Bool -> SharedContext s -> String -> [String]
-            -> ProofScript s SV.SatResult
+satExternal :: Bool -> SharedContext -> String -> [String]
+            -> ProofScript SV.SatResult
 satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
@@ -688,7 +681,7 @@ writeAIGWithMapping be l path = do
   ABC.writeAiger path (ABC.Network be [l])
   return [1..nins]
 
-rewriteEqs :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+rewriteEqs :: SharedContext -> Term -> IO Term
 rewriteEqs sc t = do
   let eqs = map (mkIdent preludeName)
             [ "eq_Bool", "eq_Nat", "eq_bitvector", "eq_VecBool"
@@ -698,9 +691,9 @@ rewriteEqs sc t = do
   t' <- rewriteSharedTerm sc ss t
   return t'
 
--- | Bit-blast a @SharedTerm@ representing a theorem and check its
+-- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using the RME library.
-satRME :: SharedContext s -> ProofScript s SV.SatResult
+satRME :: SharedContext -> ProofScript SV.SatResult
 satRME sc = withFirstGoal $ \g -> io $ do
   let t0 = goalTerm g
   TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
@@ -736,13 +729,13 @@ satRME sc = withFirstGoal $ \g -> io $ do
               Universal -> return (r', Just g)
           | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
 
-codegenSBV :: SharedContext s -> FilePath -> String -> TypedTerm s -> IO ()
+codegenSBV :: SharedContext -> FilePath -> String -> TypedTerm -> IO ()
 codegenSBV sc path fname (TypedTerm _schema t) =
   SBVSim.sbvCodeGen sc sbvPrimitives [] mpath fname t
   where mpath = if null path then Nothing else Just path
 
-prepSBV :: SharedContext s -> [String] -> SharedTerm s
-        -> IO (SharedTerm s, [SBVSim.Labeler], SBV.Symbolic SBV.SVal)
+prepSBV :: SharedContext -> [String] -> Term
+        -> IO (Term, [SBVSim.Labeler], SBV.Symbolic SBV.SVal)
 prepSBV sc unints t0 = do
   -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
@@ -752,15 +745,15 @@ prepSBV sc unints t0 = do
   (labels, lit) <- SBVSim.sbvSolve sc sbvPrimitives unints t'
   return (t', labels, lit)
 
--- | Bit-blast a @SharedTerm@ representing a theorem and check its
+-- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
-satSBV :: SBV.SMTConfig -> SharedContext s -> ProofScript s SV.SatResult
+satSBV :: SBV.SMTConfig -> SharedContext -> ProofScript SV.SatResult
 satSBV conf sc = satUnintSBV conf sc []
 
--- | Bit-blast a @SharedTerm@ representing a theorem and check its
+-- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
-satUnintSBV :: SBV.SMTConfig -> SharedContext s -> [String] -> ProofScript s SV.SatResult
+satUnintSBV :: SBV.SMTConfig -> SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
   (t', labels, lit0) <- prepSBV sc unints (goalTerm g)
   let lit = case goalQuant g of
@@ -808,53 +801,53 @@ getLabels ls d argNames =
     getLabel (SBVSim.TupleLabel ns) = FVTuple $ map getLabel (V.toList ns)
     getLabel (SBVSim.RecLabel ns) = FVRec $ fmap getLabel ns
 
-satBoolector :: SharedContext s -> ProofScript s SV.SatResult
+satBoolector :: SharedContext -> ProofScript SV.SatResult
 satBoolector = satSBV SBV.boolector
 
-satZ3 :: SharedContext s -> ProofScript s SV.SatResult
+satZ3 :: SharedContext -> ProofScript SV.SatResult
 satZ3 = satSBV SBV.z3
 
-satCVC4 :: SharedContext s -> ProofScript s SV.SatResult
+satCVC4 :: SharedContext -> ProofScript SV.SatResult
 satCVC4 = satSBV SBV.cvc4
 
-satMathSAT :: SharedContext s -> ProofScript s SV.SatResult
+satMathSAT :: SharedContext -> ProofScript SV.SatResult
 satMathSAT = satSBV SBV.mathSAT
 
-satYices :: SharedContext s -> ProofScript s SV.SatResult
+satYices :: SharedContext -> ProofScript SV.SatResult
 satYices = satSBV SBV.yices
 
-satUnintBoolector :: SharedContext s -> [String] -> ProofScript s SV.SatResult
+satUnintBoolector :: SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintBoolector = satUnintSBV SBV.boolector
 
-satUnintZ3 :: SharedContext s -> [String] -> ProofScript s SV.SatResult
+satUnintZ3 :: SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintZ3 = satUnintSBV SBV.z3
 
-satUnintCVC4 :: SharedContext s -> [String] -> ProofScript s SV.SatResult
+satUnintCVC4 :: SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintCVC4 = satUnintSBV SBV.cvc4
 
-satUnintMathSAT :: SharedContext s -> [String] -> ProofScript s SV.SatResult
+satUnintMathSAT :: SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintMathSAT = satUnintSBV SBV.mathSAT
 
-satUnintYices :: SharedContext s -> [String] -> ProofScript s SV.SatResult
+satUnintYices :: SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintYices = satUnintSBV SBV.yices
 
-negTypedTerm :: SharedContext s -> TypedTerm s -> IO (TypedTerm s)
+negTypedTerm :: SharedContext -> TypedTerm -> IO TypedTerm
 negTypedTerm sc (TypedTerm schema t) = do
   checkBooleanSchema schema
   t' <- negTerm sc t
   return (TypedTerm schema t')
 
-negTerm :: SharedContext s -> SharedTerm s -> IO (SharedTerm s)
+negTerm :: SharedContext -> Term -> IO Term
 negTerm sc tm =
   case unwrapTermF tm of
     Lambda x ty tm' -> scLambda sc x ty =<< negTerm sc tm'
     _               -> scNot sc tm
 
-satWithExporter :: (SharedContext s -> FilePath -> SharedTerm s -> IO ())
-                -> SharedContext s
+satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
+                -> SharedContext
                 -> String
                 -> String
-                -> ProofScript s SV.SatResult
+                -> ProofScript SV.SatResult
 satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
   t <- case goalQuant g of
          Existential -> return (goalTerm g)
@@ -864,19 +857,19 @@ satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
     Existential -> return (SV.Unsat, Just g)
     Universal -> return (SV.Unsat, Nothing)
 
-satAIG :: SharedContext s -> FilePath -> ProofScript s SV.SatResult
+satAIG :: SharedContext -> FilePath -> ProofScript SV.SatResult
 satAIG sc path = satWithExporter writeAIG sc path ".aig"
 
-satCNF :: SharedContext s -> FilePath -> ProofScript s SV.SatResult
+satCNF :: SharedContext -> FilePath -> ProofScript SV.SatResult
 satCNF sc path = satWithExporter writeCNF sc path ".cnf"
 
-satExtCore :: SharedContext s -> FilePath -> ProofScript s SV.SatResult
+satExtCore :: SharedContext -> FilePath -> ProofScript SV.SatResult
 satExtCore sc path = satWithExporter (const writeCore) sc path ".extcore"
 
-satSMTLib2 :: SharedContext s -> FilePath -> ProofScript s SV.SatResult
+satSMTLib2 :: SharedContext -> FilePath -> ProofScript SV.SatResult
 satSMTLib2 sc path = satWithExporter writeSMTLib2 sc path ".smt2"
 
-satUnintSMTLib2 :: SharedContext s -> [String] -> FilePath -> ProofScript s SV.SatResult
+satUnintSMTLib2 :: SharedContext -> [String] -> FilePath -> ProofScript SV.SatResult
 satUnintSMTLib2 sc unints path = satWithExporter (writeUnintSMTLib2 unints) sc path ".smt2"
 
 liftCexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
@@ -885,10 +878,10 @@ liftCexBB tys bs =
     Nothing -> Left "Failed to lift counterexample"
     Just fvs -> Right fvs
 
--- | Translate a @SharedTerm@ representing a theorem for input to the
+-- | Translate a @Term@ representing a theorem for input to the
 -- given validity-checking script and attempt to prove it.
-provePrim :: ProofScript SAWCtx SV.SatResult
-          -> TypedTerm SAWCtx -> TopLevel SV.ProofResult
+provePrim :: ProofScript SV.SatResult
+          -> TypedTerm -> TopLevel SV.ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
   (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
@@ -897,8 +890,8 @@ provePrim script t = do
     Nothing -> io $ putStrLn $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
   return (SV.flipSatResult r)
 
-provePrintPrim :: ProofScript SAWCtx SV.SatResult
-               -> TypedTerm SAWCtx -> TopLevel (Theorem SAWCtx)
+provePrintPrim :: ProofScript SV.SatResult
+               -> TypedTerm -> TopLevel Theorem
 provePrintPrim script t = do
   (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
   opts <- rwPPOpts <$> getTopLevelRW
@@ -908,14 +901,14 @@ provePrintPrim script t = do
     Nothing -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
                ++ SV.showsProofResult opts (SV.flipSatResult r) ""
 
-satPrim :: ProofScript SAWCtx SV.SatResult -> TypedTerm SAWCtx
+satPrim :: ProofScript SV.SatResult -> TypedTerm
         -> TopLevel SV.SatResult
 satPrim script t = do
   io $ checkBooleanSchema (ttSchema t)
   evalStateT script (startProof (ProofGoal Existential "sat" (ttTerm t)))
 
-satPrintPrim :: ProofScript SAWCtx SV.SatResult
-             -> TypedTerm SAWCtx -> TopLevel ()
+satPrintPrim :: ProofScript SV.SatResult
+             -> TypedTerm -> TopLevel ()
 satPrintPrim script t = do
   result <- satPrim script t
   opts <- rwPPOpts <$> getTopLevelRW
@@ -923,7 +916,7 @@ satPrintPrim script t = do
 
 -- | Quick check (random test) a term and print the result. The
 -- 'Integer' parameter is the number of random tests to run.
-quickCheckPrintPrim :: SharedContext s -> Integer -> TypedTerm s -> IO ()
+quickCheckPrintPrim :: SharedContext -> Integer -> TypedTerm -> IO ()
 quickCheckPrintPrim sc numTests tt = do
   let tm = ttTerm tt
   ty <- scTypeOf sc tm
@@ -940,7 +933,7 @@ quickCheckPrintPrim sc numTests tt = do
       "term has non-testable type:\n" ++
       pretty (ttSchema tt)
 
-cryptolSimpset :: TopLevel (Simpset (SharedTerm SAWCtx))
+cryptolSimpset :: TopLevel (Simpset Term)
 cryptolSimpset = do
   sc <- getSharedContext
   io $ scSimpset sc cryptolDefs [] []
@@ -948,24 +941,24 @@ cryptolSimpset = do
                       moduleDefs CryptolSAW.cryptolModule
         excluded d = defIdent d `elem` [ "Cryptol.fix" ]
 
-addPreludeEqs :: [String] -> Simpset (SharedTerm SAWCtx)
-              -> TopLevel (Simpset (SharedTerm SAWCtx))
+addPreludeEqs :: [String] -> Simpset Term
+              -> TopLevel (Simpset Term)
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [String] -> Simpset (SharedTerm SAWCtx)
-              -> TopLevel (Simpset (SharedTerm SAWCtx))
+addCryptolEqs :: [String] -> Simpset Term
+              -> TopLevel (Simpset Term)
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-addPreludeDefs :: [String] -> Simpset (SharedTerm SAWCtx)
-              -> TopLevel (Simpset (SharedTerm SAWCtx))
+addPreludeDefs :: [String] -> Simpset Term
+              -> TopLevel (Simpset Term)
 addPreludeDefs names ss = do
   sc <- getSharedContext
   defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -977,47 +970,47 @@ addPreludeDefs names ss = do
               Just d -> return d
               Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
 
-rewritePrim :: Simpset (SharedTerm SAWCtx) -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+rewritePrim :: Simpset Term -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
   t' <- io $ rewriteSharedTerm sc ss t
   return (TypedTerm schema t')
 
-unfold_term :: [String] -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
 unfold_term names (TypedTerm schema t) = do
   sc <- getSharedContext
   t' <- io $ scUnfoldConstants sc names t
   return (TypedTerm schema t')
 
-beta_reduce_term :: TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+beta_reduce_term :: TypedTerm -> TopLevel TypedTerm
 beta_reduce_term (TypedTerm schema t) = do
   sc <- getSharedContext
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem SAWCtx -> Simpset (SharedTerm SAWCtx)
-        -> Simpset (SharedTerm SAWCtx)
+addsimp :: Theorem -> Simpset Term
+        -> Simpset Term
 addsimp (Theorem t) ss = addRule (ruleOfProp t) ss
 
-addsimp' :: SharedTerm SAWCtx -> Simpset (SharedTerm SAWCtx)
-         -> Simpset (SharedTerm SAWCtx)
+addsimp' :: Term -> Simpset Term
+         -> Simpset Term
 addsimp' t ss = addRule (ruleOfProp t) ss
 
-addsimps :: [Theorem SAWCtx] -> Simpset (SharedTerm SAWCtx)
-         -> Simpset (SharedTerm SAWCtx)
+addsimps :: [Theorem] -> Simpset Term
+         -> Simpset Term
 addsimps thms ss =
   foldr (\thm -> addRule (ruleOfProp (thmTerm thm))) ss thms
 
-addsimps' :: [SharedTerm SAWCtx] -> Simpset (SharedTerm SAWCtx)
-          -> Simpset (SharedTerm SAWCtx)
+addsimps' :: [Term] -> Simpset Term
+          -> Simpset Term
 addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
 
-print_type :: SharedTerm SAWCtx -> TopLevel ()
+print_type :: Term -> TopLevel ()
 print_type t = do
   sc <- getSharedContext
   io (scTypeOf sc t >>= print)
 
-check_term :: SharedTerm SAWCtx -> TopLevel ()
+check_term :: Term -> TopLevel ()
 check_term t = do
   sc <- getSharedContext
   io (scTypeCheckError sc t >>= print)
@@ -1025,7 +1018,7 @@ check_term t = do
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
 
-freshSymbolicPrim :: String -> C.Schema -> TopLevel (TypedTerm SAWCtx)
+freshSymbolicPrim :: String -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
   cty <- io $ Cryptol.importType' sc Cryptol.emptyEnv ct
@@ -1034,20 +1027,18 @@ freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
 freshSymbolicPrim _ _ =
   fail "Can't create fresh symbolic variable of non-ground type."
 
-abstractSymbolicPrim :: TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+abstractSymbolicPrim :: TypedTerm -> TopLevel TypedTerm
 abstractSymbolicPrim (TypedTerm _ t) = do
   sc <- getSharedContext
   io (mkTypedTerm sc =<< bindAllExts sc t)
 
-bindAllExts :: SharedContext s
-            -> SharedTerm s
-            -> IO (SharedTerm s)
+bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
-lambda :: TypedTerm SAWCtx -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+lambda :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 lambda x = lambdas [x]
 
-lambdas :: [TypedTerm SAWCtx] -> TypedTerm SAWCtx -> TopLevel (TypedTerm SAWCtx)
+lambdas :: [TypedTerm] -> TypedTerm -> TopLevel TypedTerm
 lambdas vars (TypedTerm schema0 term0) = do
   (es, ts) <- unzip <$> mapM checkVar vars
   ty <- checkMono schema0
@@ -1067,10 +1058,10 @@ lambdas vars (TypedTerm schema0 term0) = do
       t <- checkMono schema
       return (e, t)
 
--- | Apply the given SharedTerm to the given values, and evaluate to a
+-- | Apply the given Term to the given values, and evaluate to a
 -- final value.
--- TODO: Take (ExtCns, FiniteValue) instead of (SharedTerm, FiniteValue)
-cexEvalFn :: SharedContext s -> [(ExtCns (SharedTerm s), FiniteValue)] -> SharedTerm s
+-- TODO: Take (ExtCns, FiniteValue) instead of (Term, FiniteValue)
+cexEvalFn :: SharedContext -> [(ExtCns Term, FiniteValue)] -> Term
           -> IO Concrete.CValue
 cexEvalFn sc args tm = do
   -- NB: there may be more args than exts, and this is ok. One side of
@@ -1144,7 +1135,7 @@ timePrim a = do
   liftIO $ printf "Time: %s\n" (show diff)
   return r
 
-eval_bool :: TypedTerm SAWCtx -> TopLevel Bool
+eval_bool :: TypedTerm -> TopLevel Bool
 eval_bool t = do
   sc <- getSharedContext
   case ttSchema t of
@@ -1155,7 +1146,7 @@ eval_bool t = do
   v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t
   return (C.fromVBit v)
 
-eval_int :: TypedTerm SAWCtx -> TopLevel Integer
+eval_int :: TypedTerm -> TopLevel Integer
 eval_int t = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
@@ -1170,7 +1161,7 @@ eval_int t = do
   return (C.fromWord v)
 
 -- | Default the values of the type variables in a typed term.
-defaultTypedTerm :: SharedContext s -> C.SolverConfig -> TypedTerm s -> IO (TypedTerm s)
+defaultTypedTerm :: SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
 defaultTypedTerm sc cfg (TypedTerm schema trm) = do
   mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
@@ -1216,7 +1207,7 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCore :: String -> TopLevel (SharedTerm SAWCtx)
+parseCore :: String -> TopLevel Term
 parseCore input = do
   sc <- getSharedContext
   let base = "<interactive>"
@@ -1231,13 +1222,13 @@ parseCore input = do
     Right x -> return x
   io $ scSharedTerm sc t
 
-parse_core :: String -> TopLevel (TypedTerm SAWCtx)
+parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
   t <- parseCore input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
-prove_core :: ProofScript SAWCtx SV.SatResult -> String -> TopLevel (Theorem SAWCtx)
+prove_core :: ProofScript SV.SatResult -> String -> TopLevel Theorem
 prove_core script input = do
   t <- parseCore input
   (r', pstate) <- runStateT script (startProof (ProofGoal Universal "prove" t))
@@ -1248,7 +1239,7 @@ prove_core script input = do
     Nothing -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
                ++ SV.showsProofResult opts r ""
 
-core_axiom :: String -> TopLevel (Theorem SAWCtx)
+core_axiom :: String -> TopLevel Theorem
 core_axiom input = do
   t <- parseCore input
   return (Theorem t)

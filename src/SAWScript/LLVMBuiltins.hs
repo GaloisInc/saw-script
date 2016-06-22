@@ -45,7 +45,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 
-import SAWScript.CongruenceClosure hiding (mapM)
+import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.Builtins
 import SAWScript.CryptolEnv (schemaNoUser)
 import SAWScript.LLVMExpr
@@ -62,8 +62,8 @@ import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
-type Backend = SAWBackend SAWCtx
-type SAWTerm = SharedTerm SAWCtx
+type Backend = SAWBackend
+type SAWTerm = Term
 type SAWDefine = SymDefine SAWTerm
 
 loadLLVMModule :: FilePath -> IO LLVMModule
@@ -71,22 +71,22 @@ loadLLVMModule file = LLVMModule file <$> loadModule file
 
 -- LLVM verification and model extraction commands
 
-type Assign = (LLVMExpr, TypedTerm SAWCtx)
+type Assign = (LLVMExpr, TypedTerm)
 
 missingSymMsg :: String -> Symbol -> String
 missingSymMsg file (Symbol func) =
   "Bitcode file " ++ file ++ " does not contain symbol `" ++ func ++ "`."
 
-startSimulator :: SharedContext s
+startSimulator :: SharedContext
                -> LSSOpts
                -> LLVMModule
                -> Symbol
-               -> (SharedContext s
-                   -> SBE (SAWBackend s)
-                   -> Codebase (SAWBackend s)
+               -> (SharedContext
+                   -> SBE SAWBackend
+                   -> Codebase SAWBackend
                    -> DataLayout
-                   -> SymDefine (SharedTerm s)
-                   -> Simulator (SAWBackend s) IO a)
+                   -> SymDefine Term
+                   -> Simulator SAWBackend IO a)
                -> IO a
 startSimulator sc lopts (LLVMModule file mdl) sym body = do
   let dl = parseDataLayout $ modDataLayout mdl
@@ -103,10 +103,10 @@ symexecLLVM :: BuiltinContext
             -> LLVMModule
             -> String
             -> [(String, Integer)]
-            -> [(String, SharedTerm SAWCtx, Integer)]
+            -> [(String, Term, Integer)]
             -> [(String, Integer)]
             -> Bool
-            -> IO (TypedTerm SAWCtx)
+            -> IO TypedTerm
 symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
   let sym = Symbol fname
       sc = biSharedContext bic
@@ -141,7 +141,7 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
             argMap =
               Map.fromListWithKey
               (\i _ _ -> multDefErr i)
-              [ (idx, (tp, tm)) | (Term (Arg idx _ tp), tm, _) <- argAssigns ]
+              [ (idx, (tp, tm)) | (CC.Term (Arg idx _ tp), tm, _) <- argAssigns ]
         let rargs = [(i, resolveType cb ty) | (i, ty) <- sdArgs md]
         args <- forM (zip [0..] rargs) $ \(i, (_, ty)) ->
                   case (Map.lookup i argMap, ty) of
@@ -182,7 +182,7 @@ extractLLVM :: BuiltinContext
             -> LLVMModule
             -> String
             -> LLVMSetup ()
-            -> IO (TypedTerm SAWCtx)
+            -> IO TypedTerm
 extractLLVM bic opts lmod func _setup =
   let sym = Symbol func
       sc = biSharedContext bic
@@ -274,11 +274,11 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
     return ms
 
 prover :: Options
-       -> SharedContext SAWCtx
+       -> SharedContext
        -> LLVMMethodSpecIR
-       -> ProofScript SAWCtx SV.SatResult
+       -> ProofScript SV.SatResult
        -> VerifyState
-       -> SharedTerm SAWCtx
+       -> Term
        -> TopLevel ()
 prover opts sc ms script vs g = do
   let exts = getAllExts g
@@ -290,11 +290,11 @@ prover opts sc ms script vs g = do
     SV.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
     SV.SatMulti vals -> io $ showCexResults sc ppopts ms vs exts vals
 
-showCexResults :: SharedContext SAWCtx
+showCexResults :: SharedContext
                -> SV.PPOpts
                -> LLVMMethodSpecIR
                -> VerifyState
-               -> [ExtCns (SharedTerm SAWCtx)]
+               -> [ExtCns Term]
                -> [(String, FiniteValue)]
                -> IO ()
 showCexResults sc opts ms vs exts vals = do
@@ -317,34 +317,34 @@ failLeft :: (Monad m, Show s) => m (Either s a) -> m a
 failLeft act = either (fail . show) return =<< act
 
 checkProtoLLVMExpr :: (Monad m) =>
-                      Codebase (SAWBackend SAWCtx)
-                   -> SymDefine (SharedTerm SAWCtx)
+                      Codebase SAWBackend
+                   -> SymDefine Term
                    -> ProtoLLVMExpr
                    -> ExceptT String m LLVMExpr
 checkProtoLLVMExpr cb fn pe =
   case pe of
     PReturn ->
       case sdRetType fn of
-        Just ty -> return (Term (ReturnValue ty))
+        Just ty -> return (CC.Term (ReturnValue ty))
         Nothing -> throwE "Function with void return type used with `return`."
     PVar x -> do
       let nid = fromString x
       case lookup nid numArgs of
-        Just (n, ty) -> return (Term (Arg n nid ty))
+        Just (n, ty) -> return (CC.Term (Arg n nid ty))
         Nothing ->
           case lookupSym (Symbol x) cb of
             Just (Left gb) ->
-              return (Term (Global (CB.globalSym gb) (CB.globalType gb)))
+              return (CC.Term (Global (CB.globalSym gb) (CB.globalType gb)))
             _ -> throwE $ "Unknown variable: " ++ x
     PArg n | n < length numArgs -> do
                let (i, tp) = args !! n
-               return (Term (Arg n i tp))
+               return (CC.Term (Arg n i tp))
            | otherwise ->
                throwE $ "(Zero-based) argument index too large: " ++ show n
     PDeref de -> do
       e <- checkProtoLLVMExpr cb fn de
       case lssTypeOfLLVMExpr e of
-        PtrType (MemType ty) -> return (Term (Deref e ty))
+        PtrType (MemType ty) -> return (CC.Term (Deref e ty))
         ty -> throwE $
               "Attempting to apply * operation to non-pointer, of type " ++
               show (ppActualType ty)
@@ -354,7 +354,7 @@ checkProtoLLVMExpr cb fn pe =
         PtrType (MemType (StructType si))
           | n < siFieldCount si -> do
             let ty = fiType (siFields si V.! n)
-            return (Term (StructField e si n ty))
+            return (CC.Term (StructField e si n ty))
           | otherwise -> throwE $ "Field out of range: " ++ show n
         ty ->
           throwE $ "Left side of -> is not a struct pointer: " ++
@@ -365,7 +365,7 @@ checkProtoLLVMExpr cb fn pe =
         StructType si
           | n < siFieldCount si -> do
             let ty = fiType (siFields si V.! n)
-            return (Term (StructDirectField e si n ty))
+            return (CC.Term (StructDirectField e si n ty))
           | otherwise -> throwE $ "Field out of range: " ++ show n
         ty ->
           throwE $ "Left side of . is not a struct: " ++
@@ -375,8 +375,8 @@ checkProtoLLVMExpr cb fn pe =
     numArgs = zipWith (\(i, ty) n -> (i, (n, ty))) args [(0::Int)..]
 
 parseLLVMExpr :: (Monad m) =>
-                 Codebase (SAWBackend SAWCtx)
-              -> SymDefine (SharedTerm SAWCtx)
+                 Codebase SAWBackend
+              -> SymDefine Term
               -> String
               -> ExceptT String m LLVMExpr
 parseLLVMExpr cb fn str =
@@ -394,8 +394,8 @@ getLLVMExpr ms name = do
     Nothing -> fail $ "LLVM name " ++ name ++ " has not been declared."
 
 mkMixedExpr :: LLVMMethodSpecIR
-            -> SharedContext SAWCtx
-            -> SharedTerm SAWCtx
+            -> SharedContext
+            -> Term
             -> LLVMSetup MixedExpr
 mkMixedExpr ms _ (asLLVMExpr -> Just s) =
   (LLVME . fst) <$> getLLVMExpr ms s
@@ -403,8 +403,8 @@ mkMixedExpr ms sc t = LogicE <$> mkLogicExpr ms sc t
 
 
 mkLogicExpr :: LLVMMethodSpecIR
-            -> SharedContext SAWCtx
-            -> SharedTerm SAWCtx
+            -> SharedContext
+            -> Term
             -> LLVMSetup LogicExpr
 mkLogicExpr ms sc t = do
   let exts = getAllExts t
@@ -437,7 +437,7 @@ llvmSatBranches :: Bool -> LLVMSetup ()
 llvmSatBranches doSat = modify (\s -> s { lsSatBranches = doSat })
 
 llvmVar :: BuiltinContext -> Options -> String -> SymType
-        -> LLVMSetup (TypedTerm SAWCtx)
+        -> LLVMSetup TypedTerm
 llvmVar bic _ name sty = do
   lsState <- get
   let ms = lsSpec lsState
@@ -500,7 +500,7 @@ checkCompatibleType msg aty schema = liftIO $ do
                 , "  In context: " ++ msg
                 ]
 
-llvmAssert :: BuiltinContext -> Options -> SharedTerm SAWCtx
+llvmAssert :: BuiltinContext -> Options -> Term
            -> LLVMSetup ()
 llvmAssert bic _ v = do
   let sc = biSharedContext bic
@@ -513,7 +513,7 @@ llvmAssert bic _ v = do
   modify $ \st ->
     st { lsSpec = specAddAssumption le (lsSpec st) }
 
-llvmAssertEq :: BuiltinContext -> Options -> String -> TypedTerm SAWCtx -> LLVMSetup ()
+llvmAssertEq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
 llvmAssertEq bic _opts name (TypedTerm schema t) = do
   let sc = biSharedContext bic
   ms <- gets lsSpec
@@ -526,7 +526,7 @@ llvmAssertEq bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
-llvmEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm SAWCtx -> LLVMSetup ()
+llvmEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
 llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   ms <- gets lsSpec
   let sc = biSharedContext bic
@@ -537,7 +537,7 @@ llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 
-llvmReturn :: BuiltinContext -> Options -> TypedTerm SAWCtx -> LLVMSetup ()
+llvmReturn :: BuiltinContext -> Options -> TypedTerm -> LLVMSetup ()
 llvmReturn bic _opts (TypedTerm schema t) = do
   let sc = biSharedContext bic
   ms <- gets lsSpec
@@ -551,7 +551,7 @@ llvmReturn bic _opts (TypedTerm schema t) = do
     Nothing -> fail "llvm_return called on void function"
 
 llvmVerifyTactic :: BuiltinContext -> Options
-                 -> ProofScript SAWCtx SV.SatResult
+                 -> ProofScript SV.SatResult
                  -> LLVMSetup ()
 llvmVerifyTactic _ _ script =
   -- TODO: complain if tactic provided more than once

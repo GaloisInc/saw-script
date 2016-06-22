@@ -41,7 +41,7 @@ loadCryptol filepath = do
       Right x -> return x
   return modEnv
 
-extractCryptol :: SharedContext s -> M.ModuleEnv -> String -> IO (TypedTerm s)
+extractCryptol :: SharedContext -> M.ModuleEnv -> String -> IO TypedTerm
 extractCryptol sc modEnv input = do
   let declGroups = concatMap T.mDecls (M.loadedModules modEnv)
   env <- C.importDeclGroups sc C.emptyEnv declGroups

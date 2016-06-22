@@ -37,22 +37,22 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (scNot, scAnd, scOr)
 
-type TypeParser s = StateT (V.Vector (SharedTerm s)) (ExceptT String IO)
+type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
 
 type AIGNetwork = ABC.Network ABC.Lit ABC.GIA
 
-throwTP :: String -> TypeParser s a
+throwTP :: String -> TypeParser a
 throwTP = lift . throwE
 
-runTypeParser :: V.Vector (SharedTerm s)
-              -> TypeParser s a
-              -> ExceptT String IO (a, V.Vector (SharedTerm s))
+runTypeParser :: V.Vector Term
+              -> TypeParser a
+              -> ExceptT String IO (a, V.Vector Term)
 runTypeParser v m = runStateT m v
 
-bitblastSharedTerm :: SharedContext s
-                   -> SharedTerm s -- ^ Term for input variable
-                   -> SharedTerm s -- ^ Term for type.
-                   -> TypeParser s ()
+bitblastSharedTerm :: SharedContext
+                   -> Term -- ^ Term for input variable
+                   -> Term -- ^ Term for type.
+                   -> TypeParser ()
 bitblastSharedTerm _ v (asBoolType -> Just ()) = do
   modify (`V.snoc` v)
 bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
@@ -67,9 +67,9 @@ bitblastSharedTerm _ _ tp = throwTP $ show $
   text "Could not parse AIG input type:" <$$>
   indent 2 (scPrettyTermDoc defaultPPOpts tp)
 
-parseAIGResultType :: SharedContext s
-                   -> SharedTerm s -- ^ Term for type
-                   -> TypeParser s (SharedTerm s)
+parseAIGResultType :: SharedContext
+                   -> Term -- ^ Term for type
+                   -> TypeParser Term
 parseAIGResultType _ (asBoolType -> Just ()) = do
   outputs <- get
   when (V.length outputs == 0) $ do
@@ -94,10 +94,10 @@ parseAIGResultType _ _ = throwTP "Could not parse AIG output type."
 networkAsSharedTerms
     :: AIG.IsAIG l g
     => g x
-    -> SharedContext s
-    -> V.Vector (SharedTerm s) -- ^ Input terms for AIG
+    -> SharedContext
+    -> V.Vector Term -- ^ Input terms for AIG
     -> V.Vector (l x) -- ^ Outputs
-    -> IO (V.Vector (SharedTerm s))
+    -> IO (V.Vector Term)
 networkAsSharedTerms ntk sc inputTerms outputLits = do
   -- Get evaluator
   scNot <- scApplyPrelude_not sc
@@ -125,13 +125,10 @@ networkAsSharedTerms ntk sc inputTerms outputLits = do
   traverse (viewFinish <=< evalFn) outputLits
 
 -- | Create vector for each input literal from expected types.
-bitblastVarsAsInputLits :: forall s
-                       . SharedContext s
-                      -> [SharedTerm s]
-                      -> ExceptT String IO (V.Vector (SharedTerm s))
+bitblastVarsAsInputLits :: SharedContext -> [Term] -> ExceptT String IO (V.Vector Term)
 bitblastVarsAsInputLits sc args = do
   let n = length args
-  let mkLocalVar :: Int -> SharedTerm s -> IO (SharedTerm s)
+  let mkLocalVar :: Int -> Term -> IO Term
       mkLocalVar i _tp = scLocalVar sc idx
           -- Earlier arguments have a higher deBruijn index.
           where idx = (n - i - 1)
@@ -149,12 +146,12 @@ withReadAiger path action = do
       Right ntk -> action ntk
 
 translateNetwork :: AIG.IsAIG l g
-                 => SharedContext s -- ^ Context to build in term.
-                 -> g x             -- ^ Network to bitblast
-                 -> [l x]           -- ^ Outputs for network.
-                 -> [(String, SharedTerm s)] -- ^ Expected types
-                 -> SharedTerm s -- ^ Expected output type.
-                 -> ExceptT String IO (SharedTerm s)
+                 => SharedContext    -- ^ Context to build in term.
+                 -> g x              -- ^ Network to bitblast
+                 -> [l x]            -- ^ Outputs for network.
+                 -> [(String, Term)] -- ^ Expected types
+                 -> Term             -- ^ Expected output type.
+                 -> ExceptT String IO Term
 translateNetwork sc ntk outputLits args resultType = do
   --lift $ putStrLn "inputTerms"
   inputTerms <- bitblastVarsAsInputLits sc (snd <$> args)
@@ -177,11 +174,10 @@ translateNetwork sc ntk outputLits args resultType = do
   lift $ scLambdaList sc args res
 
 readAIGexpect
-        :: forall s
-         . SharedContext s -- ^ Context to build in term.
-        -> FilePath        -- ^ Path to AIG
-        -> SharedTerm s    -- ^ Expected type of term.
-        -> IO (Either String (SharedTerm s))
+        :: SharedContext -- ^ Context to build in term.
+        -> FilePath      -- ^ Path to AIG
+        -> Term          -- ^ Expected type of term.
+        -> IO (Either String Term)
 readAIGexpect sc path aigType =
   withReadAiger path $ \(AIG.Network ntk outputLits) -> do
     --putStrLn "Network outputs"
@@ -196,7 +192,7 @@ loadAIG f = do
       Left e -> return (Left (show (e :: IOException)))
       Right ntk -> return $ Right ntk
 
-readAIG :: SharedContext s -> FilePath -> IO (Either String (SharedTerm s))
+readAIG :: SharedContext -> FilePath -> IO (Either String Term)
 readAIG sc f =
   withReadAiger f $ \(AIG.Network ntk outputLits) -> do
     inputs <- AIG.inputCount ntk

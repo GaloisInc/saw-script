@@ -79,16 +79,16 @@ getActualArgTypes s = mapM getActualType declaredTypes
         [aty] -> Right aty
         _ -> Left $ "More than one actual type given for parameter " ++ show n
 
-type Assign = (JavaExpr, TypedTerm SAWCtx)
+type Assign = (JavaExpr, TypedTerm)
 
 symexecJava :: BuiltinContext
             -> Options
             -> Class
             -> String
-            -> [(String, TypedTerm SAWCtx)]
+            -> [(String, TypedTerm)]
             -> [String]
             -> Bool
-            -> TopLevel (TypedTerm SAWCtx)
+            -> TopLevel TypedTerm
 symexecJava bic opts cls mname inputs outputs satBranches = do
   let cb = biJavaCodebase bic
       pos = fixPos
@@ -147,7 +147,7 @@ symexecJava bic opts cls mname inputs outputs satBranches = do
 
 extractJava :: BuiltinContext -> Options -> Class -> String
             -> JavaSetup ()
-            -> TopLevel (TypedTerm SAWCtx)
+            -> TopLevel TypedTerm
 extractJava bic opts cls mname setup = do
   let cb = biJavaCodebase bic
       pos = fixPos
@@ -179,8 +179,8 @@ extractJava bic opts cls mname setup = do
         -- TODO: group argBinds according to the declared types
         scAbstractExts jsc exts dt >>= mkTypedTerm sc
 
-withSAWBackend :: Maybe (IORef [SharedTerm SAWCtx])
-               -> (Backend (SharedContext SAWCtx) -> TopLevel a)
+withSAWBackend :: Maybe (IORef [Term])
+               -> (Backend SharedContext -> TopLevel a)
                -> TopLevel a
 withSAWBackend argsRef a = do
   sc <- getSharedContext
@@ -286,7 +286,7 @@ verifyJava bic opts cls mname overrides setup = do
     "WARNING: skipping simulation of " ++ specName ms
   return ms
 
-doExtraChecks :: Options -> SharedContext s -> SharedTerm s -> IO ()
+doExtraChecks :: Options -> SharedContext -> Term -> IO ()
 doExtraChecks opts bsc t = do
   let verb = simVerbose opts
   when (extraChecks opts) $ do
@@ -298,11 +298,11 @@ doExtraChecks opts bsc t = do
       Right _ -> when (verb >= 2) $ putStrLn "Done."
   when (verb >= 6) $ putStrLn $ "Trying to prove: " ++ show t
 
-showCexResults :: SharedContext SAWCtx
+showCexResults :: SharedContext
                -> SS.PPOpts
                -> JavaMethodSpecIR
                -> VerifyState
-               -> [ExtCns (SharedTerm SAWCtx)]
+               -> [ExtCns Term]
                -> [(String, FiniteValue)]
                -> IO ()
 showCexResults sc opts ms vs exts vals = do
@@ -320,8 +320,7 @@ showCexResults sc opts ms vs exts vals = do
             putStrLn $ "Value names: " ++ show (map fst vals)
   fail "Proof failed."
 
-mkMixedExpr :: SharedTerm SAWCtx
-            -> JavaSetup MixedExpr
+mkMixedExpr :: Term -> JavaSetup MixedExpr
 mkMixedExpr (asJavaExpr -> Just s) =
   (JE . fst) <$> getJavaExpr "mkMixedExpr" s
 mkMixedExpr t = do
@@ -447,7 +446,7 @@ javaClassVar bic _ name t = do
   modifySpec (specAddVarDecl expr aty)
 
 javaVar :: BuiltinContext -> Options -> String -> JavaType
-        -> JavaSetup (TypedTerm SAWCtx)
+        -> JavaSetup TypedTerm
 javaVar bic _ name t = do
   --liftIO $ putStrLn "javaVar"
   (expr, aty) <- typeJavaExpr bic name t
@@ -469,7 +468,7 @@ javaMayAlias exprs = do
       ppJavaExpr e
   modifySpec (specAddAliasSet (map fst exprList))
 
-javaAssert :: TypedTerm SAWCtx -> JavaSetup ()
+javaAssert :: TypedTerm -> JavaSetup ()
 javaAssert (TypedTerm schema v) = do
   --liftIO $ putStrLn "javaAssert"
   unless (schemaNoUser schema == Cryptol.Forall [] [] Cryptol.tBit) $
@@ -479,7 +478,7 @@ javaAssert (TypedTerm schema v) = do
     LE le -> modifySpec (specAddAssumption le)
     JE je -> fail $ "Used java_assert with Java expression: " ++ show je
 
-javaAssertEq :: String -> TypedTerm SAWCtx -> JavaSetup ()
+javaAssertEq :: String -> TypedTerm -> JavaSetup ()
 javaAssertEq name (TypedTerm schema t) = do
   --liftIO $ putStrLn "javaAssertEq"
   (expr, aty) <- (getJavaExpr "java_assert_eq") name
@@ -487,7 +486,7 @@ javaAssertEq name (TypedTerm schema t) = do
   me <- mkMixedExpr t
   modifySpec (specAddLogicAssignment fixPos expr me)
 
-javaEnsureEq :: String -> TypedTerm SAWCtx -> JavaSetup ()
+javaEnsureEq :: String -> TypedTerm -> JavaSetup ()
 javaEnsureEq name (TypedTerm schema t) = do
   --liftIO $ putStrLn "javaEnsureEq"
   ms <- gets jsSpec
@@ -521,7 +520,7 @@ javaModify name = do
     _ -> fail $ "invalid java_modify target: " ++ name
   modifySpec (specAddBehaviorCommand cmd)
 
-javaReturn :: TypedTerm SAWCtx -> JavaSetup ()
+javaReturn :: TypedTerm -> JavaSetup ()
 javaReturn (TypedTerm _ t) = do
   --liftIO $ putStrLn "javaReturn"
   ms <- gets jsSpec
@@ -534,7 +533,7 @@ javaReturn (TypedTerm _ t) = do
     Nothing ->
       fail $ "can't use `java_return` on void method " ++ methodName meth
 
-javaVerifyTactic :: ProofScript SAWCtx SatResult -> JavaSetup ()
+javaVerifyTactic :: ProofScript SatResult -> JavaSetup ()
 javaVerifyTactic script =
   modify $ \st -> st { jsTactic = RunVerify script }
 

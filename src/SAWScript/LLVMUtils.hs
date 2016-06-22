@@ -24,13 +24,12 @@ import Verifier.LLVM.Codebase.LLVMContext
 import Verifier.LLVM.Simulator
 import Verifier.LLVM.Simulator.Internals
 import Verifier.SAW.SharedTerm
-import SAWScript.CongruenceClosure hiding (mapM)
+import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.LLVMExpr
-import SAWScript.Utils
 
-type SpecBackend = SAWBackend SAWCtx
+type SpecBackend = SAWBackend
 type SpecPathState = Path SpecBackend
-type SpecLLVMValue = SharedTerm SAWCtx
+type SpecLLVMValue = Term
 
 resolveType :: Codebase s -> MemType -> MemType
 resolveType cb (PtrType ty) = PtrType $ resolveSymType cb ty
@@ -42,7 +41,7 @@ resolveSymType cb ty@(Alias i) =
   fromMaybe ty $ lookupAlias i where ?lc = cbLLVMContext cb
 resolveSymType _ ty = ty
 
-scLLVMValue :: SharedContext s -> SharedTerm s -> String -> IO (SharedTerm s)
+scLLVMValue :: SharedContext -> Term -> String -> IO Term
 scLLVMValue sc ty name = scFreshGlobal sc name ty
 
 addrPlusOffsetSim :: (Monad m, MonadIO m) =>
@@ -72,9 +71,9 @@ structFieldAddr si idx base =
     Nothing -> fail $ "Struct field index " ++ show idx ++ " out of bounds"
 
 storePathState :: SBE SpecBackend
-               -> SharedTerm SAWCtx
+               -> Term
                -> MemType
-               -> SharedTerm SAWCtx
+               -> Term
                -> SpecPathState
                -> IO SpecPathState
 storePathState sbe dst tp val ps = do
@@ -84,7 +83,7 @@ storePathState sbe dst tp val ps = do
   return (ps' & pathMem .~ m')
 
 loadPathState :: SBE SpecBackend
-              -> SharedTerm SAWCtx
+              -> Term
               -> MemType
               -> SpecPathState
               -> IO (SpecLLVMValue, SpecLLVMValue)
@@ -116,7 +115,7 @@ storeGlobal sbe gm sym tp v ps = do
     Nothing -> fail $ "Global " ++ show sym ++ " not found"
 
 -- | Add assertion for predicate to path state.
-addAssertion :: SBE SpecBackend -> SharedTerm SAWCtx -> SpecPathState -> IO SpecPathState
+addAssertion :: SBE SpecBackend -> Term -> SpecPathState -> IO SpecPathState
 addAssertion sbe x p = do
   p & pathAssertions %%~ \a -> liftIO (sbeRunIO sbe (applyAnd sbe a x))
 
@@ -135,8 +134,8 @@ allocSome sbe dl n ty = do
 
 readLLVMTermAddrPS :: (Functor m, Monad m, MonadIO m) =>
                       SpecPathState -> [SpecLLVMValue] -> LLVMExpr
-                   -> Simulator SpecBackend m (SpecLLVMValue)
-readLLVMTermAddrPS ps args (Term e) =
+                   -> Simulator SpecBackend m SpecLLVMValue
+readLLVMTermAddrPS ps args (CC.Term e) =
   case e of
     Arg _ _ _ -> fail "Can't read address of argument"
     Global s _ -> evalExprInCC "readLLVMTerm:Global" (SValSymbol s)
@@ -149,8 +148,8 @@ readLLVMTermAddrPS ps args (Term e) =
 
 readLLVMTermPS :: (Functor m, Monad m, MonadIO m) =>
                   SpecPathState -> [SpecLLVMValue] -> LLVMExpr -> Integer
-               -> Simulator SpecBackend m (SpecLLVMValue)
-readLLVMTermPS ps args et@(Term e) cnt =
+               -> Simulator SpecBackend m SpecLLVMValue
+readLLVMTermPS ps args et@(CC.Term e) cnt =
   case e of
     Arg n _ _ -> return (args !! n)
     ReturnValue _ -> do
@@ -192,7 +191,7 @@ readLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
                 [SpecLLVMValue]
              -> LLVMExpr
              -> Integer
-             -> Simulator SpecBackend m (SpecLLVMValue)
+             -> Simulator SpecBackend m SpecLLVMValue
 readLLVMTerm args e cnt = do
   ps <- fromMaybe (error "readLLVMTermAddr") <$> getPath
   readLLVMTermPS ps args e cnt
@@ -205,13 +204,13 @@ freshLLVMArg (_, ty@(IntType bw)) = do
   return (ty, tm)
 freshLLVMArg (_, _) = fail "Only integer arguments are supported for now."
 
-addrBounds :: (SBETerm m ~ SharedTerm s) =>
-              SharedContext s
+addrBounds :: (SBETerm m ~ Term) =>
+              SharedContext
            -> SBE m
            -> DataLayout
-           -> SharedTerm s
+           -> Term
            -> SymType
-           -> IO (SharedTerm s, SharedTerm s)
+           -> IO (Term, Term)
 addrBounds sc sbe dl addrTm sty@(MemType (PtrType (MemType mty))) = do
     let aw = fromIntegral (ptrBitwidth dl)
         maxAddr :: Integer

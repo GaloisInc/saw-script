@@ -70,12 +70,12 @@ import Verifier.SAW.SharedTerm hiding (Ident)
 -- | Contextual information needed to evaluate expressions.
 data EvalContext
   = EvalContext {
-      ecContext :: SharedContext SAWCtx
+      ecContext :: SharedContext
     , ecOpts :: LSSOpts
     , ecDataLayout :: DataLayout
     , ecBackend :: SBE SpecBackend
     , ecGlobalMap :: GlobalMap SpecBackend
-    , ecArgs :: [(Ident, SharedTerm SAWCtx)]
+    , ecArgs :: [(Ident, Term)]
     , ecPathState :: SpecPathState
     , ecLLVMExprs :: Map String (TC.LLVMActualType, TC.LLVMExpr)
     }
@@ -161,7 +161,7 @@ evalLLVMRefExpr expr ec = eval expr
 
 evalDerefLLVMExpr :: (Functor m, MonadIO m) =>
                      TC.LLVMExpr -> EvalContext
-                  -> m (SharedTerm SAWCtx)
+                  -> m Term
 evalDerefLLVMExpr expr ec = do
   val <- evalLLVMExpr expr ec
   case TC.lssTypeOfLLVMExpr expr of
@@ -193,7 +193,7 @@ data OCState = OCState {
          ocsLoc :: SymBlockID
        , ocsEvalContext :: !EvalContext
        , ocsResultState :: !SpecPathState
-       , ocsReturnValue :: !(Maybe (SharedTerm SAWCtx))
+       , ocsReturnValue :: !(Maybe Term)
        , ocsErrors :: [OverrideError]
        }
 
@@ -253,7 +253,7 @@ ocModifyResultStateIO fn = do
   put $! bcs { ocsResultState = new }
 
 -- | Add assumption for predicate.
-ocAssert :: Pos -> String -> SharedTerm SAWCtx -> OverrideComputation ()
+ocAssert :: Pos -> String -> Term -> OverrideComputation ()
 ocAssert p _nm x = do
   sbe <- (ecBackend . ocsEvalContext) <$> get
   sc <- gets (ecContext . ocsEvalContext)
@@ -330,11 +330,11 @@ execBehavior bsl ec ps = do
        mapM_ ocStep (bsCommands bs)
 
 execOverride :: (MonadIO m, Functor m) =>
-                SharedContext SAWCtx
+                SharedContext
              -> Pos
              -> [LLVMMethodSpecIR]
              -> [(MemType, SpecLLVMValue)]
-             -> Simulator SpecBackend m (Maybe (SharedTerm SAWCtx))
+             -> Simulator SpecBackend m (Maybe Term)
 execOverride _ _ [] _ = fail "Empty list of overrides passed to execOverride."
 execOverride sc _pos irs@(ir:_) args = do
   initPS <- fromMaybe (error "no path during override") <$> getPath
@@ -382,7 +382,7 @@ execOverride sc _pos irs@(ir:_) args = do
 
 -- | Add a method override for the given method to the simulator.
 overrideFromSpec :: (MonadIO m, Functor m) =>
-                    SharedContext SAWCtx
+                    SharedContext
                  -> Pos
                  -> [LLVMMethodSpecIR]
                  -> Simulator SpecBackend m ()
@@ -396,7 +396,7 @@ overrideFromSpec sc pos irs@(ir:_) = do
 createLogicValue :: (MonadIO m, Monad m, Functor m) =>
                     Codebase SpecBackend
                  -> SBE SpecBackend
-                 -> SharedContext SAWCtx
+                 -> SharedContext
                  -> TC.LLVMExpr
                  -> SpecPathState
                  -> MemType
@@ -432,7 +432,7 @@ createLogicValue _ _ sc expr ps mtp mrhs = do
   return (tm, ps)
 
 initializeVerification' :: (MonadIO m, Monad m, Functor m) =>
-                           SharedContext SAWCtx
+                           SharedContext
                         -> LLVMMethodSpecIR
                         -> Simulator SpecBackend m
                            (SpecPathState,
@@ -512,7 +512,7 @@ initializeVerification' sc ir = do
   return (ps, otherPtrs, argVals)
 
 checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
-                   SharedContext SAWCtx
+                   SharedContext
                 -> LLVMMethodSpecIR
                 -> SpecPathState
                 -> [(MemType, SpecLLVMValue)]
@@ -566,16 +566,16 @@ checkFinalState sc ms initPS otherPtrs args = do
 
 
 data VerifyParams = VerifyParams
-  { vpCode    :: Codebase (SAWBackend SAWCtx)
-  , vpContext :: SharedContext SAWCtx
+  { vpCode    :: Codebase SAWBackend
+  , vpContext :: SharedContext
   , vpOpts    :: Options
   , vpSpec    :: LLVMMethodSpecIR
   , vpOver    :: [LLVMMethodSpecIR]
   }
 
 type SymbolicRunHandler =
-  SharedContext SAWCtx -> [PathVC SymBlockID] -> TopLevel ()
-type Prover = VerifyState -> SharedTerm SAWCtx -> TopLevel ()
+  SharedContext -> [PathVC SymBlockID] -> TopLevel ()
+type Prover = VerifyState -> Term -> TopLevel ()
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
@@ -615,14 +615,14 @@ data VerifyState = VState {
          vsVCName :: String
        , vsMethodSpec :: LLVMMethodSpecIR
        , vsVerbosity :: Verbosity
-       , vsCounterexampleFn :: CounterexampleFn SAWCtx
+       , vsCounterexampleFn :: CounterexampleFn
        , vsStaticErrors :: [Doc]
        }
 
 type Verbosity = Int
 
 readLLVMMixedExprPS :: (Functor m, Monad m, MonadIO m) =>
-                       SharedContext SAWCtx
+                       SharedContext
                     -> SpecPathState -> [SpecLLVMValue] -> TC.MixedExpr
                     -> Simulator SpecBackend m SpecLLVMValue
 readLLVMMixedExprPS sc ps args (TC.LogicE le) = do
@@ -631,7 +631,7 @@ readLLVMMixedExprPS _sc ps args (TC.LLVME le) =
   readLLVMTermPS ps args le 1
 
 useLogicExprPS :: (Functor m, Monad m, MonadIO m) =>
-                  SharedContext SAWCtx
+                  SharedContext
                -> SpecPathState
                -> [SpecLLVMValue]
                -> TC.LogicExpr
@@ -642,11 +642,11 @@ useLogicExprPS sc ps args initExpr = do
   liftIO $ TC.useLogicExpr sc initExpr leArgs
 
 evalAssumptions :: (Functor m, Monad m, MonadIO m) =>
-                   SharedContext SAWCtx
+                   SharedContext
                 -> SpecPathState
                 -> [SpecLLVMValue]
                 -> [TC.LogicExpr]
-                -> Simulator SpecBackend m (SharedTerm SAWCtx)
+                -> Simulator SpecBackend m Term
 evalAssumptions sc ps args as = do
   assumptionList <- mapM (useLogicExprPS sc ps args) as
   liftIO $ do

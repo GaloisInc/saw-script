@@ -41,7 +41,6 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options)
 import SAWScript.Proof
 import SAWScript.TypedTerm
-import SAWScript.Utils
 import SAWScript.ImportAIG
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
@@ -66,26 +65,26 @@ data Value
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
   | VLambda (Value -> TopLevel Value)
-  | VTerm (TypedTerm SAWCtx)
+  | VTerm TypedTerm
   | VType Cryptol.Schema
   | VReturn Value -- Returned value in unspecified monad
   | VBind Value Value -- Monadic bind in unspecified monad
   | VTopLevel (TopLevel Value)
-  | VProofScript (ProofScript SAWCtx Value)
-  | VSimpset (Simpset (SharedTerm SAWCtx))
-  | VTheorem (Theorem SAWCtx)
+  | VProofScript (ProofScript Value)
+  | VSimpset (Simpset Term)
+  | VTheorem Theorem
   | VJavaSetup (JavaSetup Value)
   | VLLVMSetup (LLVMSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   | VLLVMMethodSpec LIR.LLVMMethodSpecIR
   | VJavaType JavaType
   | VLLVMType LSS.SymType
-  | VCryptolModule (CryptolModule SAWCtx)
+  | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule LLVMModule
   | VSatResult SatResult
   | VProofResult ProofResult
-  | VUninterp (Uninterp SAWCtx)
+  | VUninterp Uninterp
   | VAIG AIGNetwork
 
 data LLVMModule =
@@ -186,7 +185,7 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPOpts -> Simpset (SharedTerm SAWCtx) -> String
+showSimpset :: PPOpts -> Simpset Term -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -261,10 +260,10 @@ tupleLookupValue (VTuple vs) i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
 
-evaluate :: SharedContext s -> SharedTerm s -> Concrete.CValue
+evaluate :: SharedContext -> Term -> Concrete.CValue
 evaluate sc t = Concrete.evalSharedTerm (scModule sc) concretePrimitives t
 
-evaluateTypedTerm :: SharedContext s -> TypedTerm s -> C.Value
+evaluateTypedTerm :: SharedContext -> TypedTerm -> C.Value
 evaluateTypedTerm sc (TypedTerm schema trm) =
   exportValueWithSchema schema (evaluate sc trm)
 
@@ -292,7 +291,7 @@ forValue (x : xs) f =
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
-  { roSharedContext :: SharedContext SAWCtx
+  { roSharedContext :: SharedContext
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   }
@@ -302,7 +301,7 @@ data TopLevelRW =
   { rwValues  :: Map SS.LName Value
   , rwTypes   :: Map SS.LName SS.Schema
   , rwDocs    :: Map SS.Name String
-  , rwCryptol :: CEnv.CryptolEnv SAWCtx
+  , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
   }
 
@@ -315,7 +314,7 @@ runTopLevel (TopLevel m) = runStateT . runReaderT m
 io :: IO a -> TopLevel a
 io = liftIO
 
-getSharedContext :: TopLevel (SharedContext SAWCtx)
+getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel (asks roSharedContext)
 
 getJavaCodebase :: TopLevel JSS.Codebase
@@ -339,12 +338,12 @@ putTopLevelRW rw = TopLevel (put rw)
 -- should stay there.
 data ValidationPlan
   = Skip
-  | RunVerify (ProofScript SAWCtx SatResult)
+  | RunVerify (ProofScript SatResult)
 
 data JavaSetupState
   = JavaSetupState {
       jsSpec :: JIR.JavaMethodSpecIR
-    , jsContext :: SharedContext SAWCtx
+    , jsContext :: SharedContext
     , jsTactic :: ValidationPlan
     , jsSimulate :: Bool
     , jsSatBranches :: Bool
@@ -355,7 +354,7 @@ type JavaSetup a = StateT JavaSetupState TopLevel a
 data LLVMSetupState
   = LLVMSetupState {
       lsSpec :: LIR.LLVMMethodSpecIR
-    , lsContext :: SharedContext SAWCtx
+    , lsContext :: SharedContext
     , lsTactic :: ValidationPlan
     , lsSimulate :: Bool
     , lsSatBranches :: Bool
@@ -363,7 +362,7 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
-type ProofScript s a = StateT (ProofState s) TopLevel a
+type ProofScript a = StateT ProofState TopLevel a
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -426,10 +425,10 @@ instance FromValue a => FromValue (TopLevel a) where
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
 
-instance IsValue a => IsValue (StateT (ProofState SAWCtx) TopLevel a) where
+instance IsValue a => IsValue (StateT ProofState TopLevel a) where
     toValue m = VProofScript (fmap toValue m)
 
-instance FromValue a => FromValue (StateT (ProofState SAWCtx) TopLevel a) where
+instance FromValue a => FromValue (StateT ProofState TopLevel a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind m1 v2) = do
@@ -469,14 +468,14 @@ instance FromValue (AIGNetwork) where
     fromValue (VAIG t) = t
     fromValue _ = error "fromValue AIGNetwork"
 
-instance IsValue (TypedTerm SAWCtx) where
+instance IsValue TypedTerm where
     toValue t = VTerm t
 
-instance FromValue (TypedTerm SAWCtx) where
+instance FromValue TypedTerm where
     fromValue (VTerm t) = t
     fromValue _ = error "fromValue TypedTerm"
 
-instance FromValue (SharedTerm SAWCtx) where
+instance FromValue Term where
     fromValue (VTerm t) = ttTerm t
     fromValue _ = error "fromValue SharedTerm"
 
@@ -517,17 +516,17 @@ instance FromValue Bool where
     fromValue (VBool b) = b
     fromValue _ = error "fromValue Bool"
 
-instance IsValue (Simpset (SharedTerm SAWCtx)) where
+instance IsValue (Simpset Term) where
     toValue ss = VSimpset ss
 
-instance FromValue (Simpset (SharedTerm SAWCtx)) where
+instance FromValue (Simpset Term) where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
 
-instance IsValue (Theorem SAWCtx) where
+instance IsValue Theorem where
     toValue t = VTheorem t
 
-instance FromValue (Theorem SAWCtx) where
+instance FromValue Theorem where
     fromValue (VTheorem t) = t
     fromValue _ = error "fromValue Theorem"
 
@@ -559,17 +558,17 @@ instance FromValue LSS.SymType where
     fromValue (VLLVMType t) = t
     fromValue _ = error "fromValue LLVMType"
 
-instance IsValue (Uninterp SAWCtx) where
+instance IsValue Uninterp where
     toValue me = VUninterp me
 
-instance FromValue (Uninterp SAWCtx) where
+instance FromValue Uninterp where
     fromValue (VUninterp me) = me
     fromValue _ = error "fromValue Uninterp"
 
-instance IsValue (CryptolModule SAWCtx) where
+instance IsValue CryptolModule where
     toValue m = VCryptolModule m
 
-instance FromValue (CryptolModule SAWCtx) where
+instance FromValue CryptolModule where
     fromValue (VCryptolModule m) = m
     fromValue _ = error "fromValue ModuleEnv"
 

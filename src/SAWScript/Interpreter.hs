@@ -76,7 +76,6 @@ import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 import Cryptol.ModuleSystem.Env (meSolverConfig)
-import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
 
@@ -417,7 +416,7 @@ print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   io $ putStrLn (showsPrecValue opts 0 v "")
 
-cryptol_load :: FilePath -> TopLevel (CryptolModule SAWCtx)
+cryptol_load :: FilePath -> TopLevel CryptolModule
 cryptol_load path = do
   sc <- getSharedContext
   rw <- getTopLevelRW
@@ -548,7 +547,7 @@ primitives = Map.fromList
     [ "Print the type of the given term." ]
 
   , prim "type"                "Term -> Type"
-    (pureVal (ttSchema :: TypedTerm SAWCtx -> T.Schema))
+    (pureVal ttSchema)
     [ "Return the type of the given term." ]
 
   , prim "show_term"           "Term -> String"
@@ -560,11 +559,11 @@ primitives = Map.fromList
     [ "Type-check the given term, printing an error message if ill-typed." ]
 
   , prim "term_size"           "Term -> Int"
-    (pureVal (scSharedSize :: SharedTerm SAWCtx -> Integer))
+    (pureVal scSharedSize)
     [ "Return the size of the given term in the number of DAG nodes." ]
 
   , prim "term_tree_size"      "Term -> Int"
-    (pureVal (scTreeSize :: SharedTerm SAWCtx -> Integer))
+    (pureVal scTreeSize)
     [ "Return the size of the given term in the number of nodes it would"
     , "have if treated as a tree instead of a DAG."
     ]
@@ -711,7 +710,7 @@ primitives = Map.fromList
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_core"          "String -> Term -> TopLevel ()"
-    (pureVal (writeCore :: FilePath -> SharedTerm SAWCtx -> IO ()))
+    (pureVal writeCore)
     [ "Write out a representation of a term in SAWCore external format." ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"
@@ -780,7 +779,7 @@ primitives = Map.fromList
     [ "Reduce the current goal to beta-normal form." ]
 
   , prim "print_goal"          "ProofScript ()"
-    (pureVal (printGoal :: ProofScript SAWCtx ()))
+    (pureVal printGoal)
     [ "Print the current goal that a proof script is attempting to prove." ]
 
   , prim "print_goal_depth"    "Int -> ProofScript ()"
@@ -799,11 +798,11 @@ primitives = Map.fromList
     ]
 
   , prim "assume_valid"        "ProofScript ProofResult"
-    (pureVal (assumeValid :: ProofScript SAWCtx ProofResult))
+    (pureVal assumeValid)
     [ "Assume the current goal is valid, completing the proof." ]
 
   , prim "assume_unsat"        "ProofScript SatResult"
-    (pureVal (assumeUnsat :: ProofScript SAWCtx SatResult))
+    (pureVal assumeUnsat)
     [ "Assume the current goal is unsatisfiable, completing the proof." ]
 
   , prim "quickcheck"          "Int -> ProofScript SatResult"
@@ -902,7 +901,7 @@ primitives = Map.fromList
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal (emptySimpset :: Simpset (SharedTerm SAWCtx)))
+    (pureVal (emptySimpset :: Simpset Term))
     [ "The empty simplification rule set, containing no rules." ]
 
   , prim "cryptol_ss"          "() -> Simpset"
@@ -970,7 +969,7 @@ primitives = Map.fromList
     [ "Load the given file as a Cryptol module." ]
 
   , prim "cryptol_extract"     "CryptolModule -> String -> TopLevel Term"
-    (pureVal (CEnv.lookupCryptolModule :: CryptolModule SAWCtx -> String -> IO (TypedTerm SAWCtx)))
+    (pureVal CEnv.lookupCryptolModule)
     [ "Load a single definition from a Cryptol module and translate it into"
     , "a 'Term'."
     ]
@@ -1395,7 +1394,7 @@ primitives = Map.fromList
       fmap toValue (f (fromValue a) (fromValue b))
 
     scVal :: forall t. IsValue t =>
-             (SharedContext SAWCtx -> t) -> Options -> BuiltinContext -> Value
+             (SharedContext -> t) -> Options -> BuiltinContext -> Value
     scVal f _ bic = toValue (f (biSharedContext bic))
 
     bicVal :: forall t. IsValue t =>

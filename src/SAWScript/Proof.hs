@@ -11,7 +11,7 @@ import Verifier.SAW.SharedTerm
 
 -- | A theorem must contain a boolean term, possibly surrounded by one
 -- or more lambdas which are interpreted as universal quantifiers.
-data Theorem s = Theorem { thmTerm :: SharedTerm s }
+data Theorem = Theorem { thmTerm :: Term }
 
 data Quantification = Existential | Universal
   deriving Eq
@@ -20,25 +20,25 @@ data Quantification = Existential | Universal
 -- with a boolean result type. The abstracted arguments are treated as
 -- either existentially or universally quantified, according to the
 -- indicated quantification.
-data ProofGoal s =
+data ProofGoal =
   ProofGoal
   { goalQuant :: Quantification
   , goalName :: String
-  , goalTerm :: SharedTerm s
+  , goalTerm :: Term
   }
 
 -- | A ProofState represents a sequent, where the collection of goals
 -- implies the conclusion.
-data ProofState s =
+data ProofState =
   ProofState
-  { psGoals :: [ProofGoal s]
-  , psConcl :: ProofGoal s
+  { psGoals :: [ProofGoal]
+  , psConcl :: ProofGoal
   }
 
-startProof :: ProofGoal s -> ProofState s
+startProof :: ProofGoal -> ProofState
 startProof g = ProofState [g] g
 
-finishProof :: ProofState s -> Maybe (Theorem s)
+finishProof :: ProofState -> Maybe Theorem
 finishProof (ProofState gs concl) =
   case gs of
     [] -> Just (Theorem (goalTerm concl))

@@ -130,10 +130,10 @@ ppOverrideError (InvalidType ty)     =
 ppOverrideError Abort                = "Path was aborted."
 
 data OverrideResult
-   = SuccessfulRun (Path (SharedContext SAWCtx)) (Maybe Breakpoint) (Maybe SpecJavaValue)
-   | FailedRun (Path (SharedContext SAWCtx)) (Maybe Breakpoint) [OverrideError]
+   = SuccessfulRun (Path SharedContext) (Maybe Breakpoint) (Maybe SpecJavaValue)
+   | FailedRun (Path SharedContext) (Maybe Breakpoint) [OverrideError]
 
-type RunResult = ( Path (SharedContext SAWCtx)
+type RunResult = ( Path SharedContext
                  , Maybe Breakpoint
                  , Either [OverrideError] (Maybe SpecJavaValue)
                  )
@@ -208,7 +208,7 @@ ocSetJavaExpr e v = do
       ocModifyResultState $ setStaticFieldValuePS f v
 
 -- | Add assumption for predicate.
-ocAssert :: Pos -> String -> SharedTerm SAWCtx -> OverrideComputation m ()
+ocAssert :: Pos -> String -> Term -> OverrideComputation m ()
 ocAssert p _nm x = do
   sc <- (ecContext . ocsEvalContext) <$> get
   case asBool x of
@@ -272,7 +272,7 @@ ocStep (ReturnValue expr) = do
 -- Executing overrides {{{2
 
 execBehavior :: BehaviorSpec
-             -> SharedContext SAWCtx
+             -> SharedContext
              -> Maybe Ref
              -> [(LocalVariableIndex, SpecJavaValue)]
              -> SpecPathState
@@ -344,7 +344,7 @@ execBehavior bsl sc mbThis argLocals ps = do
        -- Execute statements.
        mapM_ ocStep (bsCommands bs)
 
-checkClassesInitialized :: MonadSim (SharedContext SAWCtx) m =>
+checkClassesInitialized :: MonadSim SharedContext m =>
                            Pos -> String -> [String]
                         -> SAWJavaSim m ()
 checkClassesInitialized pos nm requiredClasses = do
@@ -358,12 +358,12 @@ checkClassesInitialized pos nm requiredClasses = do
                 "currently support methods that initialize new classes."
        in throwIOExecException pos (ftext msg) ""
 
-execOverride :: MonadSim (SharedContext SAWCtx) m
-             => SharedContext SAWCtx
+execOverride :: MonadSim SharedContext m
+             => SharedContext
              -> Pos
              -> JavaMethodSpecIR
              -> Maybe Ref
-             -> [Value (SharedTerm SAWCtx)]
+             -> [Value Term]
              -> SAWJavaSim m ()
 execOverride sc pos ir mbThis args = do
   -- Execute behaviors.
@@ -399,8 +399,8 @@ execOverride sc pos ir mbThis args = do
     _  -> fail "More than one path returned from override execution."
 
 -- | Add a method override for the given method to the simulator.
-overrideFromSpec :: MonadSim (SharedContext SAWCtx) m =>
-                    SharedContext SAWCtx
+overrideFromSpec :: MonadSim SharedContext m =>
+                    SharedContext
                  -> Pos
                  -> JavaMethodSpecIR
                  -> SAWJavaSim m ()
@@ -417,16 +417,16 @@ overrideFromSpec de pos ir
 
 data VerifyParams = VerifyParams
   { vpCode    :: Codebase
-  , vpContext :: SharedContext SAWCtx
+  , vpContext :: SharedContext
   , vpOpts    :: Options
   , vpSpec    :: JavaMethodSpecIR
   , vpOver    :: [JavaMethodSpecIR]
   }
 
 type SymbolicRunHandler =
-  SharedContext SAWCtx -> [PathVC Breakpoint] -> TopLevel ()
+  SharedContext -> [PathVC Breakpoint] -> TopLevel ()
 type Prover =
-  VerifyState -> SharedTerm SAWCtx -> TopLevel ()
+  VerifyState -> Term -> TopLevel ()
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
@@ -472,14 +472,14 @@ data VerifyState = VState {
          -- | Evaluation context used for parsing expressions during
          -- verification.
        -- , vsEvalContext :: EvalContext
-       , vsCounterexampleFn :: CounterexampleFn SAWCtx
+       , vsCounterexampleFn :: CounterexampleFn
        , vsStaticErrors :: [Doc]
        }
 
 {- Alternative implementation of JavaMethodSpec -}
 
-initializeVerification' :: MonadSim (SharedContext SAWCtx) m
-                        => SharedContext SAWCtx
+initializeVerification' :: MonadSim SharedContext m
+                        => SharedContext
                            -- ^ The SharedContext for creating new symbolic
                            -- expressions.
                         -> JavaMethodSpecIR
@@ -526,9 +526,9 @@ initializeVerification' sc ir bs refConfig = do
     Just assignments -> mapM_ (\(l, t, r) -> setClassValues sc l t r) assignments
   getPath (PP.text "initializeVerification")
 
-evalLogicExpr' :: MonadSim (SharedContext SAWCtx) m =>
-                  SharedContext SAWCtx -> LogicExpr
-               -> SAWJavaSim m (SharedTerm SAWCtx)
+evalLogicExpr' :: MonadSim SharedContext m =>
+                  SharedContext -> LogicExpr
+               -> SAWJavaSim m Term
 evalLogicExpr' sc initExpr = do
   let exprs = logicExprJavaExprs initExpr
   args <- forM exprs $ \expr -> do
@@ -539,12 +539,12 @@ evalLogicExpr' sc initExpr = do
                  logicExprJavaExprs initExpr
   liftIO $ useLogicExpr sc initExpr argTerms
 
-resolveClassRHS :: MonadSim (SharedContext SAWCtx) m =>
-                   SharedContext SAWCtx
+resolveClassRHS :: MonadSim SharedContext m =>
+                   SharedContext
                 -> JavaExpr
                 -> JavaActualType
                 -> [LogicExpr]
-                -> SAWJavaSim m (TypedTerm SAWCtx)
+                -> SAWJavaSim m TypedTerm
 resolveClassRHS sc e tp [] = do
   mlty <- liftIO $ TC.narrowTypeOfActual sc tp
   case (mlty, tp) of
@@ -563,8 +563,8 @@ resolveClassRHS sc _ _ [r] = do
 resolveClassRHS _ _ _ _ =
   fail "Not yet implemented."
 
-setClassValues :: (MonadSim (SharedContext SAWCtx) m) =>
-                  SharedContext SAWCtx
+setClassValues :: (MonadSim SharedContext m) =>
+                  SharedContext
                -> [JavaExpr]
                -> JavaActualType
                -> [LogicExpr]
@@ -576,11 +576,11 @@ setClassValues sc l tp rs =
       writeJavaTerm sc e t
 
 valueEqTerm :: (Functor m, Monad m, MonadIO m) =>
-               SharedContext SAWCtx
+               SharedContext
             -> String
             -> SpecPathState
             -> SpecJavaValue
-            -> SharedTerm SAWCtx
+            -> Term
             -> StateT (PathVC Breakpoint) m ()
 valueEqTerm sc name _ (IValue t) t' = do
   t'' <- liftIO $ extendToIValue sc t'
@@ -593,7 +593,7 @@ valueEqTerm _ name ps (RValue r) t' = do
 valueEqTerm _ name _ _ _ = fail $ "valueEqTerm: " ++ name ++ ": unspported value type"
 
 valueEqValue :: (Functor m, Monad m, MonadIO m) =>
-               SharedContext SAWCtx
+               SharedContext
             -> String
             -> SpecPathState
             -> SpecJavaValue
@@ -618,7 +618,7 @@ valueEqValue _ name _ _ _ _ = fail $ "valueEqValue: " ++ name ++ ": unspported v
 
 readJavaValueVerif :: (Functor m, Monad m) =>
                       VerificationState
-                   -> Path' (SharedTerm SAWCtx)
+                   -> Path' Term
                    -> JavaExpr
                    -> m SpecJavaValue
 readJavaValueVerif vs ps refExpr = do
@@ -661,13 +661,13 @@ checkStep vs ps (EnsureArray _pos refExpr rhsExpr) = do
 checkStep _vs _ps (ModifyArray _refExpr _aty) = return ()
 
 data VerificationState = VerificationState
-                         { vsContext :: SharedContext SAWCtx
+                         { vsContext :: SharedContext
                          , vsSpec :: JavaMethodSpecIR
                          , vsInitialState :: SpecPathState
                          }
 
-checkFinalState :: MonadSim (SharedContext SAWCtx) m =>
-                   SharedContext SAWCtx
+checkFinalState :: MonadSim SharedContext m =>
+                   SharedContext
                 -> JavaMethodSpecIR
                 -> BehaviorSpec
                 -> RefEquivConfiguration

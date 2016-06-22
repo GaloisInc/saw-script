@@ -64,7 +64,6 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
-import SAWScript.Utils
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
 
@@ -242,7 +241,7 @@ updateLLVMExprType (CC.Term exprF) tp = CC.Term $
     StructDirectField r si i _ -> StructDirectField r si i tp
     ReturnValue _ -> ReturnValue tp
 
-asLLVMExpr :: SharedTerm s -> Maybe String
+asLLVMExpr :: Term -> Maybe String
 asLLVMExpr (asExtCns -> Just ec) = Just (ecName ec)
 asLLVMExpr _ = Nothing
 
@@ -259,15 +258,14 @@ isArgLLVMExpr _ = False
 data LogicExpr =
   LogicExpr { -- | A term, possibly function type, which does _not_
               -- contain any external constant subexpressions.
-              _leTerm :: SharedTerm SAWCtx
+              _leTerm :: Term
               -- | The LLVM expressions, if any, that the term should
               -- be applied to
             , leLLVMArgs :: [LLVMExpr]
             }
   deriving (Show)
 
-useLogicExpr :: SharedContext SAWCtx -> LogicExpr -> [SharedTerm SAWCtx]
-             -> IO (SharedTerm SAWCtx)
+useLogicExpr :: SharedContext -> LogicExpr -> [Term] -> IO Term
 useLogicExpr sc (LogicExpr t _) args = scApplyAll sc t args
 
 logicExprLLVMExprs :: LogicExpr -> [LLVMExpr]
@@ -297,8 +295,7 @@ isActualPtr (LSS.PtrType _) = True
 isActualPtr _ = False
 
 -- | Returns logical type of actual type if it is an array or primitive type.
-logicTypeOfActual :: SharedContext s -> LLVMActualType
-                  -> IO (Maybe (SharedTerm s))
+logicTypeOfActual :: SharedContext -> LLVMActualType -> IO (Maybe Term)
 logicTypeOfActual sc (LSS.IntType w) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral w)

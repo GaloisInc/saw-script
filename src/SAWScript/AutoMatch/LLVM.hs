@@ -13,7 +13,6 @@ import Verifier.LLVM.Backend.SAW
 import Verifier.SAW.SharedTerm
 
 import SAWScript.Builtins
-import SAWScript.Utils
 import SAWScript.Value
 
 --import Data.Maybe
@@ -28,7 +27,7 @@ import SAWScript.AutoMatch.Util
 
 -- | Parse an LLVM module into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
-getDeclsLLVM :: SharedContext SAWCtx -> LLVMModule -> IO (Interaction (Maybe [Decl]))
+getDeclsLLVM :: SharedContext -> LLVMModule -> IO (Interaction (Maybe [Decl]))
 getDeclsLLVM sc (LLVMModule file mdl) =
 
   let dataLayout = parseDataLayout $ modDataLayout mdl

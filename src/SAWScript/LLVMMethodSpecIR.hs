@@ -102,12 +102,12 @@ bsAddAssumption :: LogicExpr -> BehaviorSpec -> BehaviorSpec
 bsAddAssumption a bs =
   bs { bsAssumptions = a : bsAssumptions bs }
 
-type Backend = SAWBackend SAWCtx
+type Backend = SAWBackend
 
 initLLVMMethodSpec :: Pos
                    -> SBE Backend
                    -> LSS.Codebase Backend
-                   -> LSS.SymDefine (SharedTerm SAWCtx)
+                   -> LSS.SymDefine Term
                    -> LLVMMethodSpecIR
 initLLVMMethodSpec pos sbe cb def =
   let initBS = BS { bsLoc = LSS.sdEntry def
@@ -136,7 +136,7 @@ data LLVMMethodSpecIR = MSIR {
     -- | Name of function to verify.
   , specFunction :: LSS.Symbol -- TODO: is this necessary?
     -- | Definition of function to verify.
-  , specDef :: LSS.SymDefine (SharedTerm SAWCtx)
+  , specDef :: LSS.SymDefine Term
     -- | Mapping from user-visible LLVM state names to LLVMExprs
   , specLLVMExprNames :: Map String (LLVMActualType, LLVMExpr)
     -- | Behavior specification for method.

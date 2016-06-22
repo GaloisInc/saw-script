@@ -28,7 +28,6 @@ import Data.Maybe (mapMaybe)
 import qualified SAWScript.CongruenceClosure as CC (Term(..))
 import qualified SAWScript.JavaExpr as TC
 import SAWScript.JavaUtils
-import SAWScript.Utils ( SAWCtx )
 
 import Execution.JavaSemantics (AtomicValue(..))
 import Verifier.Java.Codebase (LocalVariableIndex, FieldId)
@@ -42,7 +41,7 @@ import Verifier.SAW.SharedTerm
 
 -- | Contextual information needed to evaluate expressions.
 data EvalContext = EvalContext {
-         ecContext :: SharedContext SAWCtx
+         ecContext :: SharedContext
        , ecLocals :: Map LocalVariableIndex SpecJavaValue
        , ecReturnValue :: Maybe SpecJavaValue
        , ecPathState :: SpecPathState
@@ -112,8 +111,7 @@ setJavaExpr (CC.Term app) v ec =
       return (ec { ecPathState =
                      setStaticFieldValuePS f v (ecPathState ec) })
 
-evalJavaExprAsLogic :: TC.JavaExpr -> EvalContext
-                    -> ExprEvaluator (SharedTerm SAWCtx)
+evalJavaExprAsLogic :: TC.JavaExpr -> EvalContext -> ExprEvaluator Term
 evalJavaExprAsLogic expr ec = do
   val <- evalJavaExpr expr ec
   case val of
@@ -143,8 +141,7 @@ evalMixedExpr (TC.LE expr) ec = do
 evalMixedExpr (TC.JE expr) ec = evalJavaExpr expr ec
 
 -- | Evaluates a typed expression in the context of a particular state.
-evalLogicExpr :: TC.LogicExpr -> EvalContext
-              -> ExprEvaluator (SharedTerm SAWCtx)
+evalLogicExpr :: TC.LogicExpr -> EvalContext -> ExprEvaluator Term
 evalLogicExpr initExpr ec = do
   let sc = ecContext ec
       exprs = TC.logicExprJavaExprs initExpr
@@ -163,7 +160,6 @@ evalJavaRefExpr expr ec = do
     RValue ref -> return ref
     _ -> throwE $ EvalExprBadJavaType "evalJavaRefExpr" expr
 
-evalMixedExprAsLogic :: TC.MixedExpr -> EvalContext
-                     -> ExprEvaluator (SharedTerm SAWCtx)
+evalMixedExprAsLogic :: TC.MixedExpr -> EvalContext -> ExprEvaluator Term
 evalMixedExprAsLogic (TC.LE expr) = evalLogicExpr expr
 evalMixedExprAsLogic (TC.JE expr) = evalJavaExprAsLogic expr
