@@ -198,6 +198,7 @@ import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Unique
 import Verifier.SAW.TypedAST
 --import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
@@ -252,6 +253,7 @@ instance Net.Pattern Term where
 ------------------------------------------------------------
 -- TermFMaps
 
+-- | A TermFMap is a data structure used for hash-consing of terms.
 data TermFMap a
   = TermFMap
   { appMapTFM :: !(IntMap (IntMap a))
@@ -316,14 +318,12 @@ scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
 
 -- SharedContext implementation.
 
-data AppCache = AC { acBindings :: !(TermFMap Term)
-                   , acNextIdx :: !TermIndex
-                   }
+type AppCache = TermFMap Term
 
 type AppCacheRef = MVar AppCache
 
 emptyAppCache :: AppCache
-emptyAppCache = AC emptyTFM 0
+emptyAppCache = emptyTFM
 
 instance Show (TermF Term) where
   show FTermF{} = "termF fTermF"
@@ -333,17 +333,16 @@ instance Show (TermF Term) where
 getTerm :: AppCacheRef -> TermF Term -> IO Term
 getTerm r a =
   modifyMVar r $ \s -> do
-    case lookupTFM a (acBindings s) of
-      Just t -> return (s,t)
+    case lookupTFM a s of
+      Just t -> return (s, t)
       Nothing -> do
-          seq s' $ return (s',t)
-        where t = STApp{ stAppIndex = acNextIdx s
-                       , stAppFreeVars = freesTermF (fmap looseVars a)
-                       , stAppTermF = a
-                       }
-              s' = s { acBindings = insertTFM a t (acBindings s)
-                     , acNextIdx = acNextIdx s + 1
-                     }
+        i <- getUniqueInt
+        let t = STApp { stAppIndex = i
+                      , stAppFreeVars = freesTermF (fmap looseVars a)
+                      , stAppTermF = a
+                      }
+        let s' = insertTFM a t s
+        seq s' $ return (s', t)
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form

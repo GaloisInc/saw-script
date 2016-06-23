@@ -79,6 +79,7 @@ library
      Verifier.SAW.Testing.Random
      Verifier.SAW.Typechecker
      Verifier.SAW.TypedAST
+     Verifier.SAW.Unique
      Verifier.SAW.UntypedAST
      Verifier.SAW.Change
   other-modules:
