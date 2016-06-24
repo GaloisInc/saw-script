@@ -121,7 +121,7 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
               return (e, tm, n)
             mkAllocAssign (s, n) = do
               e <- failLeft $ runExceptT $ parseLLVMExpr cb md s
-              case lssTypeOfLLVMExpr e of
+              case resolveType cb (lssTypeOfLLVMExpr e) of
                 PtrType (MemType ty) -> do
                   when (verb >= 2) $ liftIO $ putStrLn $
                     "Allocating " ++ show n ++ " elements of type " ++ show (ppActualType ty)
@@ -129,8 +129,9 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
                   when (verb >= 2) $ liftIO $ putStrLn $
                     "Allocated address: " ++ show tm
                   return (e, tm, 1)
-                _ -> fail $ "Allocation parameter " ++ s ++
-                            " does not have pointer type"
+                ty -> fail $ "Allocation parameter " ++ s ++
+                             " does not have pointer type. Type is " ++
+                             show (ppActualType ty)
             multDefErr i = error $ "Multiple terms given for " ++ ordinal (i + 1) ++
                                    " argument in function " ++ fname
             isArgAssign (e, _, _) = isArgLLVMExpr e
