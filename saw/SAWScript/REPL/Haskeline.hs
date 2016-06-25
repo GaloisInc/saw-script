@@ -64,11 +64,11 @@ repl mbBatch opts begin =
 
   getInputLines prompt ls =
     do mb <- getInputLine prompt
-       let newPropmpt = map (\_ -> ' ') prompt
+       let newPrompt = map (\_ -> ' ') prompt
        case mb of
           Nothing -> return Nothing
           Just l | not (null l) && last l == '\\' ->
-                                      getInputLines newPropmpt (init l : ls)
+                                      getInputLines newPrompt (init l : ls)
                  | otherwise -> return $ Just $ unlines $ reverse $ l : ls
 
 
