@@ -19,6 +19,8 @@ module SAWScript.Value where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
+import qualified Control.Exception as X
+import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.State (StateT(..), get, put)
@@ -599,3 +601,39 @@ instance IsValue SatResult where
 instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
+
+-- Error handling --------------------------------------------------------------
+
+-- | Implement stack tracing by adding error handlers that rethrow
+-- user errors, prepended with the given string.
+addTrace :: String -> Value -> Value
+addTrace str val =
+  case val of
+    VLambda      f -> VLambda      (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
+    VTopLevel    m -> VTopLevel    (addTrace str `fmap` addTraceTopLevel str m)
+    VProofScript m -> VProofScript (addTrace str `fmap` addTraceStateT str m)
+    VJavaSetup   m -> VJavaSetup   (addTrace str `fmap` addTraceStateT str m)
+    VLLVMSetup   m -> VLLVMSetup   (addTrace str `fmap` addTraceStateT str m)
+    _              -> val
+
+-- | Wrap an action with a handler that catches and rethrows user
+-- errors with an extended message.
+addTraceIO :: String -> IO a -> IO a
+addTraceIO str action = do
+  X.catchJust p action h
+  where
+    -- TODO: Use a custom exception type instead of fail/userError
+    -- init/drop 12 is a hack to remove "user error (" and ")"
+    p e = if IOError.isUserError e then Just (init (drop 12 (show e))) else Nothing
+    h msg = X.throwIO (IOError.userError (str ++ ":\n" ++ msg))
+
+-- | Similar to addTraceIO, but for the TopLevel monad.
+addTraceTopLevel :: String -> TopLevel a -> TopLevel a
+addTraceTopLevel str action =
+  TopLevel $ ReaderT $ \ro -> StateT $ \rw ->
+    addTraceIO str (runTopLevel action ro rw)
+
+-- | Similar to addTraceIO, but for state monads built from TopLevel.
+addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
+addTraceStateT str action =
+  StateT $ \s -> addTraceTopLevel str (runStateT action s)

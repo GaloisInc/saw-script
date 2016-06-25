@@ -181,7 +181,7 @@ interpret env expr =
       SS.Var x               -> do rw <- getMergedEnv env
                                    case Map.lookup x (rwValues rw) of
                                      Nothing -> fail $ "unknown variable: " ++ SS.getVal x
-                                     Just v -> return v
+                                     Just v -> return (addTrace (show x) v)
       SS.Function pat e      -> do let f v = interpret (bindPatternLocal pat Nothing v env) e
                                    return $ VLambda f
       SS.Application e1 e2   -> do v1 <- interpret env e1
