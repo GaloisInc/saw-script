@@ -614,13 +614,13 @@ addTrace str val =
     VProofScript m -> VProofScript (addTrace str `fmap` addTraceStateT str m)
     VJavaSetup   m -> VJavaSetup   (addTrace str `fmap` addTraceStateT str m)
     VLLVMSetup   m -> VLLVMSetup   (addTrace str `fmap` addTraceStateT str m)
+    VBind v1 v2    -> VBind        (addTrace str v1) (addTrace str v2)
     _              -> val
 
 -- | Wrap an action with a handler that catches and rethrows user
 -- errors with an extended message.
 addTraceIO :: String -> IO a -> IO a
-addTraceIO str action = do
-  X.catchJust p action h
+addTraceIO str action = X.catchJust p action h
   where
     -- TODO: Use a custom exception type instead of fail/userError
     -- init/drop 12 is a hack to remove "user error (" and ")"
