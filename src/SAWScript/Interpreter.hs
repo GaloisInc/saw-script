@@ -1369,6 +1369,12 @@ primitives = Map.fromList
     , "The input string contains a proof goal in saw-core syntax. The"
     , "return value is a Theorem that may be added to a Simpset."
     ]
+
+  , prim "get_opt"            "Int -> String"
+    (funVal1 get_opt)
+    [ "Get the nth command-line argument as a String. Index 0 returns"
+    , "the program name; other parameters are numbered starting at 1."
+    ]
   ]
   where
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> [String]

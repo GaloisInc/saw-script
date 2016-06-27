@@ -35,6 +35,7 @@ import Data.Maybe
 import Data.Time.Clock
 import qualified Data.Vector as V
 import System.Directory
+import qualified System.Environment
 import qualified System.Exit as Exit
 import System.IO
 import System.IO.Temp (withSystemTempFile)
@@ -1243,3 +1244,9 @@ core_axiom :: String -> TopLevel Theorem
 core_axiom input = do
   t <- parseCore input
   return (Theorem t)
+
+get_opt :: Int -> TopLevel String
+get_opt n = do
+  prog <- io $ System.Environment.getProgName
+  args <- io $ System.Environment.getArgs
+  nthPrim (prog : args) n
