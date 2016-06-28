@@ -1,0 +1,87 @@
+import "Salsa20.cry";
+
+let quarterround_setup : LLVMSetup() = do {
+    llvm_ptr "y0" (llvm_int 32);
+    llvm_ptr "y1" (llvm_int 32);
+    llvm_ptr "y2" (llvm_int 32);
+    llvm_ptr "y3" (llvm_int 32);
+    y0 <- llvm_var "*y0" (llvm_int 32);
+    y1 <- llvm_var "*y1" (llvm_int 32);
+    y2 <- llvm_var "*y2" (llvm_int 32);
+    y3 <- llvm_var "*y3" (llvm_int 32);
+    let ys = {{ [y0, y1, y2, y3] }};
+
+    llvm_ensure_eq "*y0" {{ (quarterround ys)@0 }};
+    llvm_ensure_eq "*y1" {{ (quarterround ys)@1 }};
+    llvm_ensure_eq "*y2" {{ (quarterround ys)@2 }};
+    llvm_ensure_eq "*y3" {{ (quarterround ys)@3 }};
+    llvm_verify_tactic abc;
+};
+
+let rowround_setup : LLVMSetup() = do {
+    llvm_ptr "y" (llvm_array 16 (llvm_int 32));
+    row <- llvm_var "*y" (llvm_array 16 (llvm_int 32));
+    llvm_ensure_eq "*y" {{ rowround row }};
+    llvm_verify_tactic abc;
+};
+
+let columnround_setup : LLVMSetup() = do {
+    llvm_ptr "x" (llvm_array 16 (llvm_int 32));
+    column <- llvm_var "*x" (llvm_array 16 (llvm_int 32));
+    llvm_ensure_eq "*x" {{ columnround column }};
+    llvm_verify_tactic abc;
+};
+
+let doubleround_setup : LLVMSetup() = do {
+    llvm_ptr "x" (llvm_array 16 (llvm_int 32));
+    arr <- llvm_var "*x" (llvm_array 16 (llvm_int 32));
+    llvm_ensure_eq "*x" {{ doubleround arr }};
+    llvm_verify_tactic abc;
+};
+
+let salsa20_setup : LLVMSetup() = do {
+    llvm_ptr "seq" (llvm_array 64 (llvm_int 8));
+    block <- llvm_var "*seq" (llvm_array 64 (llvm_int 8));
+    llvm_ensure_eq "*seq" {{ Salsa20 block }};
+    llvm_verify_tactic abc;
+};
+
+let salsa20_expansion_32 : LLVMSetup() = do {
+    llvm_ptr "k" (llvm_array 32 (llvm_int 8));
+    llvm_ptr "n" (llvm_array 16 (llvm_int 8));
+    llvm_ptr "keystream" (llvm_array 64 (llvm_int 8));
+    key <-      llvm_var "*k" (llvm_array 32 (llvm_int 8));
+    n <-        llvm_var "*n" (llvm_array 16 (llvm_int 8));
+    keystream <-llvm_var "*keystream" (llvm_array 64 (llvm_int 8));
+    llvm_ensure_eq "*keystream" {{ Salsa20_expansion`{a=2}(key, n)}};
+    llvm_verify_tactic abc;
+};
+
+let s20_encrypt32 : LLVMSetup() = do {
+    llvm_ptr "key" (llvm_array 32 (llvm_int 8));
+    llvm_ptr "nonce" (llvm_array 8 (llvm_int 8));
+    llvm_ptr "buf" (llvm_array 64 (llvm_int 8));
+    key <-      llvm_var "*key" (llvm_array 32 (llvm_int 8));
+    v <-        llvm_var "*nonce" (llvm_array 8 (llvm_int 8));
+    m <-        llvm_var "*buf" (llvm_array 64 (llvm_int 8));
+    buflen <-   llvm_var "buflen" (llvm_int 32);
+    si <-       llvm_var "si" (llvm_int 32);
+    llvm_assert_eq "buflen" {{ 64 : [32] }};
+    llvm_assert_eq "si" {{ 0 : [32] }};
+    llvm_ensure_eq "*buf" {{ Salsa20_encrypt (key, v, m) }};
+    llvm_return {{ 0 : [32] }};
+    llvm_sat_branches true;
+    llvm_verify_tactic abc;
+};
+
+let main : TopLevel () = do {
+    m <- llvm_load_module "salsa20.bc";
+    qr <- llvm_verify m "s20_quarterround" [] quarterround_setup;
+    rr <- llvm_verify m "s20_rowround" [qr] rowround_setup;
+    cr <- llvm_verify m "s20_columnround" [rr] columnround_setup;
+    dr <- llvm_verify m "s20_doubleround" [cr] doubleround_setup;
+    s20 <- llvm_verify m "s20_hash" [dr] salsa20_setup;
+    s20e32 <- llvm_verify m "s20_expand32" [s20] salsa20_expansion_32;
+    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] s20_encrypt32;
+    print "Done!";
+};
