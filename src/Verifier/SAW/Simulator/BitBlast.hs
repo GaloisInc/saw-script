@@ -156,10 +156,10 @@ binRel op =
   wordFun $ \y -> vBool <$> op x y
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
-shiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
-        -> (LitVector l -> Nat -> LitVector l)
-        -> BValue l
-shiftOp bvOp natOp =
+bvShiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
+          -> (LitVector l -> Nat -> LitVector l)
+          -> BValue l
+bvShiftOp bvOp natOp =
   constFun $
   wordFun $ \x -> return $
   strictFun $ \y ->
@@ -237,9 +237,9 @@ beConstMap be = Map.fromList
   , ("Prelude.bvuge" , binRel (flip (AIG.ule be)))
   , ("Prelude.bvugt" , binRel (flip (AIG.ult be)))
   -- Shifts
-  , ("Prelude.bvShl" , shiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
-  , ("Prelude.bvShr" , shiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
-  , ("Prelude.bvSShr", shiftOp (AIG.sshr be) lvSShr)
+  , ("Prelude.bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
+  , ("Prelude.bvShr" , bvShiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
+  , ("Prelude.bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
   -- Nat
   , ("Prelude.Succ", Prims.succOp)
   , ("Prelude.addNat", Prims.addNatOp)
@@ -278,10 +278,10 @@ beConstMap be = Map.fromList
   , ("Prelude.join", Prims.joinOp vFromLV (AIG.++))
   , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvRotateL", bvRotateOp be rol)
-  , ("Prelude.bvRotateR", bvRotateOp be ror)
-  , ("Prelude.bvShiftL", bvShiftLOp be)
-  , ("Prelude.bvShiftR", bvShiftROp be)
+  , ("Prelude.rotateL", rotateOp be rol)
+  , ("Prelude.rotateR", rotateOp be ror)
+  , ("Prelude.shiftL", shiftLOp be)
+  , ("Prelude.shiftR", shiftROp be)
   , ("Prelude.EmptyVec", Prims.emptyVec)
 -- Streams
   , ("Prelude.MkStream", mkStreamOp)
@@ -362,52 +362,54 @@ bvNatOp be =
   Prims.natFun'' "bvNat(2)" $ \x -> return $
   VWord (AIG.bvFromInteger be (fromIntegral w) (toInteger x))
 
--- bvRotate* :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateOp :: AIG.IsAIG l g =>
+-- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateOp :: AIG.IsAIG l g =>
   g s -> (BValue (l s) -> Integer -> BValue (l s)) -> BValue (l s)
-bvRotateOp be op =
-  constFun $
+rotateOp be op =
   constFun $
   constFun $
   strictFun $ \x0 -> return $
-  wordFun $ \ilv -> go x0 (AIG.bvToList ilv)
+  strictFun $ \i ->
+    case i of
+      VNat n   -> return (op x0 n)
+      VToNat v -> toWord v >>= \ilv -> go x0 (AIG.bvToList ilv)
+      _        -> fail $ "Verifier.SAW.Simulator.BitBlast.rotateOp: " ++ show i
   where
     go x [] = return x
     go x (y : ys) = do
       x' <- lazyMux be (muxBVal be) y (return (op x (2 ^ length ys))) (return x)
       go x' ys
 
--- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftLOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvShiftLOp be =
-  constFun $
+-- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: AIG.IsAIG l g => g s
+        -> (BThunk (l s) -> V.Vector (BThunk (l s)) -> Int -> V.Vector (BThunk (l s)))
+        -> (l s -> AIG.BV (l s) -> Int -> LitVector (l s))
+        -> BValue (l s)
+shiftOp be vecOp wordOp =
   constFun $
   constFun $
   VFun $ \x -> return $
   strictFun $ \xs -> return $
-  wordFun $ \ilv -> do
+  strictFun $ \y -> do
     (n, f) <- case xs of
-                VVector xv -> return (V.length xv, VVector . vShiftL x xv)
+                VVector xv -> return (V.length xv, VVector . vecOp x xv)
                 VWord xlv -> do l <- toBool <$> force x
-                                return (AIG.length xlv, VWord . lvShiftL l xlv)
-                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvShiftLOp: " ++ show xs
-    AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
+                                return (AIG.length xlv, VWord . wordOp l xlv)
+                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.shiftOp: " ++ show xs
+    case y of
+      VNat i   -> return (f (fromInteger (i `min` toInteger n)))
+      VToNat v -> do
+        ilv <- toWord v
+        AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
+      _        -> fail $ "Verifier.SAW.Simulator.BitBlast.shiftOp: " ++ show y
 
--- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftROp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvShiftROp be =
-  constFun $
-  constFun $
-  constFun $
-  VFun $ \x -> return $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv -> do
-    (n, f) <- case xs of
-                VVector xv -> return (V.length xv, VVector . vShiftR x xv)
-                VWord xlv -> do l <- toBool <$> force x
-                                return (AIG.length xlv, VWord . lvShiftR l xlv)
-                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.bvShiftROp: " ++ show xs
-    AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
+-- shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftLOp :: AIG.IsAIG l g => g s -> BValue (l s)
+shiftLOp be = shiftOp be vShiftL lvShiftL
+
+-- shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftROp :: AIG.IsAIG l g => g s -> BValue (l s)
+shiftROp be = shiftOp be vShiftR lvShiftR
 
 eqOp :: AIG.IsAIG l g => g s -> BValue (l s)
 eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp
