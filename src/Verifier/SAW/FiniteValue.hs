@@ -83,7 +83,7 @@ sizeFiniteType x =
     FTTuple xs -> sum (map sizeFiniteType xs)
     FTRec xm   -> sum (map sizeFiniteType (Map.elems xm))
 
-asFiniteType :: SharedContext s -> SharedTerm s -> IO FiniteType
+asFiniteType :: SharedContext -> Term -> IO FiniteType
 asFiniteType sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -111,8 +111,8 @@ asFiniteTypePure t =
 -- in this library, and we should have them in the SAWScript project
 -- instead.
 
--- | Convert a finite type to a SharedTerm.
-scFiniteType :: SharedContext s -> FiniteType -> IO (SharedTerm s)
+-- | Convert a finite type to a Term.
+scFiniteType :: SharedContext -> FiniteType -> IO Term
 scFiniteType sc ft =
   case ft of
     FTBit      -> scBoolType sc
@@ -123,7 +123,7 @@ scFiniteType sc ft =
     FTRec tm   -> scRecordType sc =<< traverse (scFiniteType sc) tm
 
 -- | Convert a finite value to a SharedTerm.
-scFiniteValue :: SharedContext s -> FiniteValue -> IO (SharedTerm s)
+scFiniteValue :: SharedContext -> FiniteValue -> IO Term
 scFiniteValue sc fv =
   case fv of
     FVBit b    -> scBool sc b

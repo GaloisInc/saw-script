@@ -11,7 +11,7 @@ Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-scConstant :: SharedContext s -> String -> SharedTerm s -> IO (SharedTerm s)
+scConstant :: SharedContext -> String -> Term -> IO Term
 scConstant sc name t = do
   ty <- scTypeOf sc t
   ty' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) ty

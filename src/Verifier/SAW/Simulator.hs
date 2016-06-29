@@ -228,13 +228,13 @@ evalTermF cfg lam rec tf env =
     rec' = delay . rec
 
 
-{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig Id b w e -> Term -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig IO b w e -> Term -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig Id b w e -> SimpleTerm -> OpenValue Id b w e #-}
+{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig IO b w e -> SimpleTerm -> OpenValue IO b w e #-}
 
 -- | Evaluator for unshared terms.
 evalTerm :: (MonadLazy m, MonadFix m, Show e) =>
-            SimulatorConfig m b w e -> Term -> OpenValue m b w e
-evalTerm cfg (Term tf) env = evalTermF cfg lam rec tf env
+            SimulatorConfig m b w e -> SimpleTerm -> OpenValue m b w e
+evalTerm cfg (SimpleTerm tf) env = evalTermF cfg lam rec tf env
   where
     lam = evalTerm cfg
     rec t = evalTerm cfg t env
@@ -278,8 +278,8 @@ evalGlobal m0 prims extcns uninterpreted = do
         m <- ms, td <- moduleDefs m, not (null (defEqs td)) ] ++
       Map.assocs (fmap return prims) -- Later mappings take precedence
 
-    vCtor :: Ident -> [Thunk m b w e] -> Term -> Value m b w e
-    vCtor ident xs (Term (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
+    vCtor :: Ident -> [Thunk m b w e] -> SimpleTerm -> Value m b w e
+    vCtor ident xs (SimpleTerm (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
 noExtCns :: Monad m => VarIndex -> String -> Value m b w e -> m (Value m b w e)
@@ -325,30 +325,30 @@ checkPrimitives m0 prims = do
 -- reinitialized to @memoClosed@ whenever we descend under a lambda
 -- binder.
 
-{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig Id b w e -> SharedTerm s -> Id (Value Id b w e) #-}
-{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig IO b w e -> SharedTerm s -> IO (Value IO b w e) #-}
+{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig Id b w e -> Term -> Id (Value Id b w e) #-}
+{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig IO b w e -> Term -> IO (Value IO b w e) #-}
 
 -- | Evaluator for shared terms.
 evalSharedTerm :: (MonadLazy m, MonadFix m, Show e) =>
-                  SimulatorConfig m b w e -> SharedTerm s -> m (Value m b w e)
+                  SimulatorConfig m b w e -> Term -> m (Value m b w e)
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
   evalOpen cfg memoClosed t []
 
-{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig Id b w e -> SharedTerm s -> Id (IntMap (Thunk Id b w e)) #-}
-{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig IO b w e -> SharedTerm s -> IO (IntMap (Thunk IO b w e)) #-}
+{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig Id b w e -> Term -> Id (IntMap (Thunk Id b w e)) #-}
+{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig IO b w e -> Term -> IO (IntMap (Thunk IO b w e)) #-}
 
 -- | Precomputing the memo table for closed subterms.
-mkMemoClosed :: forall m b w e s. (MonadLazy m, MonadFix m, Show e) =>
-                SimulatorConfig m b w e -> SharedTerm s -> m (IntMap (Thunk m b w e))
+mkMemoClosed :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
+                SimulatorConfig m b w e -> Term -> m (IntMap (Thunk m b w e))
 mkMemoClosed cfg t =
   mfix $ \memoClosed -> mapM (delay . evalClosedTermF cfg memoClosed) subterms
   where
     -- | Map of all closed subterms of t.
-    subterms :: IntMap (TermF (SharedTerm s))
+    subterms :: IntMap (TermF Term)
     subterms = fmap fst $ IMap.filter ((== 0) . snd) $ State.execState (go t) IMap.empty
 
-    go :: SharedTerm s -> State.State (IntMap (TermF (SharedTerm s), BitSet)) BitSet
+    go :: Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
     go (Unshared tf) = freesTermF <$> traverse go tf
     go (STApp{ stAppIndex = i, stAppTermF = tf }) = do
       memo <- State.get
@@ -359,14 +359,14 @@ mkMemoClosed cfg t =
           State.modify (IMap.insert i (tf, b))
           return b
 
-{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> TermF (SharedTerm s) -> Id (Value Id b w e) #-}
-{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> TermF (SharedTerm s) -> IO (Value IO b w e) #-}
+{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> TermF Term -> Id (Value Id b w e) #-}
+{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> TermF Term -> IO (Value IO b w e) #-}
 
 -- | Evaluator for closed terms, used to populate @memoClosed@.
 evalClosedTermF :: (MonadLazy m, MonadFix m, Show e) =>
                    SimulatorConfig m b w e
                 -> IntMap (Thunk m b w e)
-                -> TermF (SharedTerm s) -> m (Value m b w e)
+                -> TermF Term -> m (Value m b w e)
 evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
   where
     lam = evalOpen cfg memoClosed
@@ -376,16 +376,16 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
         Just x -> force x
         Nothing -> fail "evalClosedTermF: internal error"
 
-{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> SharedTerm s -> [Thunk Id b w e] -> Id (IntMap (Thunk Id b w e)) #-}
-{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> SharedTerm s -> [Thunk IO b w e] -> IO (IntMap (Thunk IO b w e)) #-}
+{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> Term -> [Thunk Id b w e] -> Id (IntMap (Thunk Id b w e)) #-}
+{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> Term -> [Thunk IO b w e] -> IO (IntMap (Thunk IO b w e)) #-}
 
 -- | Precomputing the memo table for open subterms in the current context.
-mkMemoLocal :: forall m b w e s. (MonadLazy m, MonadFix m, Show e) =>
+mkMemoLocal :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
                SimulatorConfig m b w e -> IntMap (Thunk m b w e) ->
-               SharedTerm s -> [Thunk m b w e] -> m (IntMap (Thunk m b w e))
+               Term -> [Thunk m b w e] -> m (IntMap (Thunk m b w e))
 mkMemoLocal cfg memoClosed t env = go memoClosed t
   where
-    go :: IntMap (Thunk m b w e) -> SharedTerm s -> m (IntMap (Thunk m b w e))
+    go :: IntMap (Thunk m b w e) -> Term -> m (IntMap (Thunk m b w e))
     go memo (Unshared tf) = goTermF memo tf
     go memo (STApp{ stAppIndex = i, stAppTermF = tf }) =
       case IMap.lookup i memo of
@@ -395,7 +395,7 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
           thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
           return (IMap.insert i thunk memo')
 
-    goTermF :: IntMap (Thunk m b w e) -> TermF (SharedTerm s) -> m (IntMap (Thunk m b w e))
+    goTermF :: IntMap (Thunk m b w e) -> TermF Term -> m (IntMap (Thunk m b w e))
     goTermF memo tf =
       case tf of
         FTermF ftf      -> foldlM go memo ftf
@@ -407,14 +407,14 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
         LocalVar _      -> return memo
         Constant _ t1 _ -> go memo t1
 
-{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> IntMap (Thunk Id b w e) -> TermF (SharedTerm s) -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> IntMap (Thunk IO b w e) -> TermF (SharedTerm s) -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> IntMap (Thunk Id b w e) -> TermF Term -> OpenValue Id b w e #-}
+{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> IntMap (Thunk IO b w e) -> TermF Term -> OpenValue IO b w e #-}
 
 -- | Evaluator for open terms, used to populate @memoLocal@.
 evalLocalTermF :: (MonadLazy m, MonadFix m, Show e) =>
                    SimulatorConfig m b w e
                 -> IntMap (Thunk m b w e) -> IntMap (Thunk m b w e)
-                -> TermF (SharedTerm s) -> OpenValue m b w e
+                -> TermF Term -> OpenValue m b w e
 evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
   where
     lam = evalOpen cfg memoClosed
@@ -424,22 +424,22 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
         Just x -> force x
         Nothing -> fail "evalLocalTermF: internal error"
 
-{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> SharedTerm s -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> SharedTerm s -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> Term -> OpenValue Id b w e #-}
+{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> Term -> OpenValue IO b w e #-}
 
 -- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
-evalOpen :: forall m b w e s. (MonadLazy m, MonadFix m, Show e) =>
+evalOpen :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
             SimulatorConfig m b w e
          -> IntMap (Thunk m b w e)
-         -> SharedTerm s -> OpenValue m b w e
+         -> Term -> OpenValue m b w e
 evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
-  let eval :: SharedTerm s -> m (Value m b w e)
+  let eval :: Term -> m (Value m b w e)
       eval (Unshared tf) = evalF tf
       eval (STApp{ stAppIndex = i, stAppTermF = tf }) =
         case IMap.lookup i memoLocal of
           Just x -> force x
           Nothing -> evalF tf
-      evalF :: TermF (SharedTerm s) -> m (Value m b w e)
+      evalF :: TermF Term -> m (Value m b w e)
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t

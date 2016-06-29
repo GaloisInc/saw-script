@@ -20,14 +20,14 @@ import Verifier.SAW.TypedAST
 import Test.Tasty
 import Test.Tasty.HUnit
 
-checkGroundTerm :: Term -> Bool
+checkGroundTerm :: SimpleTerm -> Bool
 checkGroundTerm t = freesTerm t == 0
 
 namedMsg :: Ident -> String -> String
 namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
 
 checkEqn :: Ident -> TypedDefEqn -> Assertion
-checkEqn sym (DefEqn pats rhs@(Term rtf)) = do
+checkEqn sym (DefEqn pats rhs@(SimpleTerm rtf)) = do
   let nbound = sum $ patBoundVarCount <$> pats
   let lvd = emptyLocalVarDoc
           & docShowLocalNames .~ False

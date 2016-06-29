@@ -51,7 +51,7 @@ import Data.Traversable
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: Module -> Map Ident RValue -> SharedTerm s -> RValue
+evalSharedTerm :: Module -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
@@ -468,7 +468,7 @@ newVars' shape = ready <$> newVars shape
 
 bitBlastBasic :: Module
               -> Map Ident RValue
-              -> SharedTerm s
+              -> Term
               -> RValue
 bitBlastBasic m addlPrims t = runIdentity $ do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
@@ -476,7 +476,7 @@ bitBlastBasic m addlPrims t = runIdentity $ do
          (const (const Nothing))
   Sim.evalSharedTerm cfg t
 
-asPredType :: SharedContext s -> SharedTerm s -> IO [SharedTerm s]
+asPredType :: SharedContext -> Term -> IO [Term]
 asPredType sc t = do
   t' <- scWhnf sc t
   case t' of
@@ -485,9 +485,9 @@ asPredType sc t = do
     _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ show t'
 
 withBitBlastedPred ::
-  SharedContext s ->
+  SharedContext ->
   Map Ident RValue ->
-  SharedTerm s ->
+  Term ->
   (RME -> [FiniteType] -> IO a) -> IO a
 withBitBlastedPred sc addlPrims t c = do
   ty <- scTypeOf sc t
