@@ -186,16 +186,16 @@ binRel op =
   wordFun $ \y -> vBool (op x y)
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
-shiftOp :: (BitVector -> BitVector -> BitVector)
-        -> (BitVector -> Int -> BitVector)
-        -> CValue
-shiftOp _bvOp natOp =
+bvShiftOp :: (BitVector -> BitVector -> BitVector)
+          -> (BitVector -> Int -> BitVector)
+          -> CValue
+bvShiftOp _bvOp natOp =
   constFun $
   wordFun $ \x ->
   pureFun $ \y ->
     case y of
-      VNat n           -> vWord (natOp x (fromInteger n))
-      _                -> error $ unwords ["Verifier.SAW.Simulator.Concrete.shiftOp", show y]
+      VNat n -> vWord (natOp x (fromInteger n))
+      _      -> error $ unwords ["Verifier.SAW.Simulator.Concrete.shiftOp", show y]
 
 ------------------------------------------------------------
 
@@ -236,9 +236,9 @@ constMap = Map.fromList
   , ("Prelude.bvuge" , binRel (Prim.bvuge undefined))
   , ("Prelude.bvugt" , binRel (Prim.bvugt undefined))
   -- Shifts
-  , ("Prelude.bvShl" , shiftOp undefined (Prim.bvShl undefined))
-  , ("Prelude.bvShr" , shiftOp undefined (Prim.bvShr undefined))
-  , ("Prelude.bvSShr", shiftOp undefined (Prim.bvSShr undefined))
+  , ("Prelude.bvShl" , bvShiftOp undefined (Prim.bvShl undefined))
+  , ("Prelude.bvShr" , bvShiftOp undefined (Prim.bvShr undefined))
+  , ("Prelude.bvSShr", bvShiftOp undefined (Prim.bvSShr undefined))
   -- Nat
   , ("Prelude.Succ", Prims.succOp)
   , ("Prelude.addNat", Prims.addNatOp)
@@ -277,10 +277,10 @@ constMap = Map.fromList
   , ("Prelude.join", Prims.joinOp bvUnpack (Prim.append_bv undefined undefined undefined))
   , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvRotateL", bvRotateLOp)
-  , ("Prelude.bvRotateR", bvRotateROp)
-  , ("Prelude.bvShiftL", bvShiftLOp)
-  , ("Prelude.bvShiftR", bvShiftROp)
+  , ("Prelude.rotateL", rotateLOp)
+  , ("Prelude.rotateR", rotateROp)
+  , ("Prelude.shiftL", shiftLOp)
+  , ("Prelude.shiftR", shiftROp)
   , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
@@ -363,61 +363,61 @@ bvNatOp =
   Prims.natFun'' "bvNatOp2"  $ \x -> return $
   VWord (Prim.bv (fromIntegral w) (toInteger x))
 
--- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateLOp :: CValue
-bvRotateLOp =
+-- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateLOp :: CValue
+rotateLOp =
   constFun $
   constFun $
   constFun $
   pureFun $ \xs ->
-  wordFun $ \i ->
+  Prims.natFun $ \i -> return $
     case xs of
-      VVector xv -> VVector (vRotateL xv (fromInteger (unsigned i)))
-      VWord w -> vWord (bvRotateL w (fromInteger (unsigned i)))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.bvRotateLOp: " ++ show xs
+      VVector xv -> VVector (vRotateL xv (fromIntegral i))
+      VWord w -> vWord (bvRotateL w (fromIntegral i))
+      _ -> error $ "Verifier.SAW.Simulator.Concrete.rotateLOp: " ++ show xs
 
--- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateROp :: CValue
-bvRotateROp =
+-- rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateROp :: CValue
+rotateROp =
   constFun $
   constFun $
   constFun $
   pureFun $ \xs ->
-  wordFun $ \i ->
+  Prims.natFun $ \i -> return $
     case xs of
-      VVector xv -> VVector (vRotateR xv (fromInteger (unsigned i)))
-      VWord w -> vWord (bvRotateR w (fromInteger (unsigned i)))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.bvRotateROp: " ++ show xs
+      VVector xv -> VVector (vRotateR xv (fromIntegral i))
+      VWord w -> vWord (bvRotateR w (fromIntegral i))
+      _ -> error $ "Verifier.SAW.Simulator.Concrete.rotateROp: " ++ show xs
 
--- bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftLOp :: CValue
-bvShiftLOp =
+-- shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftLOp :: CValue
+shiftLOp =
   constFun $
   constFun $
   constFun $
   VFun $ \x -> return $
   pureFun $ \xs ->
-  wordFun $ \i ->
+  Prims.natFun $ \i -> return $
     case xs of
-      VVector xv -> VVector (vShiftL x xv (fromInteger (unsigned i)))
-      VWord w -> vWord (bvShiftL c w (fromInteger (unsigned i)))
+      VVector xv -> VVector (vShiftL x xv (fromIntegral i))
+      VWord w -> vWord (bvShiftL c w (fromIntegral i))
         where c = toBool (runIdentity (force x))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftLOp: " ++ show xs
+      _ -> error $ "Verifier.SAW.Simulator.Concrete.shiftLOp: " ++ show xs
 
--- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftROp :: CValue
-bvShiftROp =
+-- shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftROp :: CValue
+shiftROp =
   constFun $
   constFun $
   constFun $
   VFun $ \x -> return $
   pureFun $ \xs ->
-  wordFun $ \i ->
+  Prims.natFun $ \i -> return $
     case xs of
-      VVector xv -> VVector (vShiftR x xv (fromInteger (unsigned i)))
-      VWord w -> vWord (bvShiftR c w (fromInteger (unsigned i)))
+      VVector xv -> VVector (vShiftR x xv (fromIntegral i))
+      VWord w -> vWord (bvShiftR c w (fromIntegral i))
         where c = toBool (runIdentity (force x))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.bvShiftROp: " ++ show xs
+      _ -> error $ "Verifier.SAW.Simulator.Concrete.shiftROp: " ++ show xs
 
 eqOp :: CValue
 eqOp = Prims.eqOp trueOp andOp boolOp bvOp

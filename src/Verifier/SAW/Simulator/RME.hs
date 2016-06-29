@@ -184,8 +184,8 @@ genShift cond f x0 v = go x0 (V.toList v)
     go x (y : ys) = go (cond y (f x (2 ^ length ys)) x) ys
 
 -- | op :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
-shiftOp :: (Vector RME -> Integer -> Vector RME) -> RValue
-shiftOp op =
+bvShiftOp :: (Vector RME -> Integer -> Vector RME) -> RValue
+bvShiftOp op =
   constFun $
   wordFun $ \x ->
   pureFun $ \y ->
@@ -195,25 +195,31 @@ shiftOp op =
       _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 
 -- | op :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateOp :: (Vector RValue -> Integer -> Vector RValue) -> RValue
-bvRotateOp op =
+rotateOp :: (Vector RValue -> Integer -> Vector RValue) -> RValue
+rotateOp op =
   constFun $
   constFun $
   constFun $
   pureFun $ \(toVector -> x) ->
-  wordFun $ \y ->
-  vVector (genShift (V.zipWith . muxRValue) op x y)
+  pureFun $ \y ->
+  case y of
+    VNat n   -> vVector (op x n)
+    VToNat v -> vVector (genShift (V.zipWith . muxRValue) op x (toWord v))
+    _        -> error $ unwords ["Verifier.SAW.Simulator.RME.rotateOp", show y]
 
--- | op :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftOp :: (RValue -> Vector RValue -> Integer -> Vector RValue) -> RValue
-bvShiftOp op =
+-- | op :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: (RValue -> Vector RValue -> Integer -> Vector RValue) -> RValue
+shiftOp op =
   constFun $
   constFun $
   constFun $
   pureFun $ \z ->
   pureFun $ \(toVector -> x) ->
-  wordFun $ \y ->
-  vVector (genShift (V.zipWith . muxRValue) (op z) x y)
+  pureFun $ \y ->
+  case y of
+    VNat n   -> vVector (op z x n)
+    VToNat v -> vVector (genShift (V.zipWith . muxRValue) (op z) x (toWord v))
+    _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 
 ------------------------------------------------------------
 
@@ -254,9 +260,9 @@ constMap = Map.fromList
   , ("Prelude.bvuge" , binRel (flip RMEV.ule))
   , ("Prelude.bvugt" , binRel (flip RMEV.ult))
   -- Shifts
-  , ("Prelude.bvShl" , shiftOp (vShiftL RME.false))
-  , ("Prelude.bvShr" , shiftOp (vShiftR RME.false))
-  , ("Prelude.bvSShr", shiftOp vSignedShiftR)
+  , ("Prelude.bvShl" , bvShiftOp (vShiftL RME.false))
+  , ("Prelude.bvShr" , bvShiftOp (vShiftR RME.false))
+  , ("Prelude.bvSShr", bvShiftOp vSignedShiftR)
   -- Nat
   , ("Prelude.Succ", Prims.succOp)
   , ("Prelude.addNat", Prims.addNatOp)
@@ -295,10 +301,10 @@ constMap = Map.fromList
   , ("Prelude.join", Prims.joinOp id (V.++))
   , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvRotateL", bvRotateOp vRotateL)
-  , ("Prelude.bvRotateR", bvRotateOp vRotateR)
-  , ("Prelude.bvShiftL", bvShiftOp vShiftL)
-  , ("Prelude.bvShiftR", bvShiftOp vShiftR)
+  , ("Prelude.rotateL", rotateOp vRotateL)
+  , ("Prelude.rotateR", rotateOp vRotateR)
+  , ("Prelude.shiftL", shiftOp vShiftL)
+  , ("Prelude.shiftR", shiftOp vShiftR)
   , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)

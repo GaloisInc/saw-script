@@ -521,12 +521,18 @@ append m n a x y =
       ite a (ltNat i m) (at m a x i) (at n a y (subNat i m)));
 
 -- Rotate array to the left.
-rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateL n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat i j) n));
+primitive rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+-- rotateL n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat i j) n));
 
 -- Rotate array to the right.
-rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateR n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat (subNat n i) j) n));
+primitive rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+-- rotateR n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat (subNat n i) j) n));
+
+-- Shift array to the left.
+primitive shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+
+-- Shift array to the right.
+primitive shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 
 -- Zip together two lists (truncating the longer of the two).
 primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
@@ -578,10 +584,17 @@ bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
-primitive bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-primitive bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-primitive bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-primitive bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateL n a w xs i = rotateL n a xs (bvToNat w i);
+
+bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateR n a w xs i = rotateR n a xs (bvToNat w i);
+
+bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftL n a w z xs i = shiftL n a z xs (bvToNat w i);
+
+bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
 primitive bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 
