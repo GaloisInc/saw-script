@@ -153,10 +153,10 @@ constMap = Map.fromList
   , ("Prelude.split", splitOp)
   , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
-  , ("Prelude.bvRotateL", bvRotateLOp)
-  , ("Prelude.bvRotateR", bvRotateROp)
-  , ("Prelude.bvShiftL", bvShiftLOp)
-  , ("Prelude.bvShiftR", bvShiftROp)
+  , ("Prelude.rotateL", rotateLOp)
+  , ("Prelude.rotateR", rotateROp)
+  , ("Prelude.shiftL", shiftLOp)
+  , ("Prelude.shiftR", shiftROp)
   , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
@@ -199,12 +199,12 @@ toMaybeWord (VWord w) = return (Just w)
 toMaybeWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toMaybeBool . force) vv
 toMaybeWord _ = return Nothing
 
-toVector :: SValue -> V.Vector SThunk
+toVector :: SValue -> Vector SThunk
 toVector (VVector xv) = xv
 toVector (VWord xv) =
   V.fromList (map (ready . vBool . svTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
   where k = intSizeOf xv
-toVector _ = error "this word might be symbolic"
+toVector _ = error "Verifier.SAW.Simulator.SBV.toVector"
 
 -- | Flatten an SValue to a sequence of components, each of which is
 -- either a symbolic word or a symbolic boolean. If the SValue
@@ -271,6 +271,13 @@ selectV merger maxValue valueFn vx =
     impl _ y | y >= maxValue = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
+
+-- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
+shifter :: (SBool -> a -> a -> a) -> (a -> Integer -> a) -> a -> [SBool] -> a
+shifter mux op = go
+  where
+    go x [] = x
+    go x (b : bs) = go (mux b (op x (2 ^ length bs)) x) bs
 
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
@@ -375,23 +382,23 @@ splitOp =
 -- Shift operations
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
-shiftOp :: (SWord -> SWord -> SWord) -> (SWord -> Int -> SWord) -> SValue
-shiftOp bvOp natOp =
+bvShiftOp :: (SWord -> SWord -> SWord) -> (SWord -> Int -> SWord) -> SValue
+bvShiftOp bvOp natOp =
   constFun $
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VNat n   -> return (vWord (natOp x (fromInteger n)))
+      VNat i   -> return (vWord (natOp x (fromInteger i)))
       VToNat v -> fmap (vWord . bvOp x) (toWord v)
-      _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.shiftOp", show y]
+      _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
 -- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShLOp :: SValue
-bvShLOp = shiftOp svShiftLeft svShl
+bvShLOp = bvShiftOp svShiftLeft svShl
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: SValue
-bvShROp = shiftOp svShiftRight svShr
+bvShROp = bvShiftOp svShiftRight svShr
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
@@ -433,7 +440,7 @@ intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $
   Prims.intFun "intToBv x" $ \x -> return $
     VWord $
-     if n >= 0 then svInteger (KBounded False (fromIntegral n)) x
+     if n >= 0 then literalSWord (fromIntegral n) x
                else svUnsign $ svUNeg $ svInteger (KBounded True (fromIntegral n)) (negate x)
 
 ----------------------------------------
@@ -539,75 +546,130 @@ divx n i xs ys'        = (q:qs, rs)
 ------------------------------------------------------------
 -- Vector operations
 
-vRotateL :: V.Vector a -> Int -> V.Vector a
+vRotateL :: Vector a -> Integer -> Vector a
 vRotateL xs i
   | V.null xs = xs
   | otherwise = (V.++) (V.drop j xs) (V.take j xs)
-  where j = i `mod` V.length xs
+  where j = fromInteger (i `mod` toInteger (V.length xs))
 
-vRotateR :: V.Vector a -> Int -> V.Vector a
+vRotateR :: Vector a -> Integer -> Vector a
 vRotateR xs i = vRotateL xs (- i)
 
-vShiftL :: a -> V.Vector a -> Int -> V.Vector a
+vShiftL :: a -> Vector a -> Integer -> Vector a
 vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
-  where j = min i (V.length xs)
+  where j = fromInteger (i `min` toInteger (V.length xs))
 
-vShiftR :: a -> V.Vector a -> Int -> V.Vector a
+vShiftR :: a -> Vector a -> Integer -> Vector a
 vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
-  where j = min i (V.length xs)
+  where j = fromInteger (i `min` toInteger (V.length xs))
 
 ------------------------------------------------------------
 -- Rotations and shifts
 
--- bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateLOp :: SValue
-bvRotateLOp =
-  constFun $
+-- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateOp :: (Vector SThunk -> Integer -> Vector SThunk)
+         -> (SWord -> Integer -> SWord)
+         -> (SWord -> SWord -> SWord)
+         -> SValue
+rotateOp vecOp wordOp svOp =
   constFun $
   constFun $
   strictFun $ \xs -> return $
-  wordFun $ \ilv ->
-    case xs of
-      VVector xv -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateL xv) ilv
-      VWord xlv -> return $ vWord (svRotateLeft xlv ilv)
-      _ -> error $ "bvRotateLOp: " ++ show xs
+  strictFun $ \y ->
+    case y of
+      VNat i -> return $
+        case xs of
+          VVector xv -> VVector (vecOp xv i)
+          VWord xw -> vWord (wordOp xw (fromInteger (i `mod` toInteger (intSizeOf xw))))
+          _ -> error $ "rotateOp: " ++ show xs
+      VToNat (VVector iv) -> do
+        bs <- V.toList <$> traverse (fmap toBool . force) iv
+        case xs of
+          VVector xv -> VVector <$> shifter mux op (return xv) bs
+            where mux = lazyMux (\b v1 v2 -> toVector <$> muxBVal b (VVector v1) (VVector v2))
+                  op xm n = flip vecOp n <$> xm
+          VWord xw -> vWord <$> shifter mux op (return xw) bs
+            where mux = lazyMux (\b w1 w2 -> return (svIte b w1 w2))
+                  op xm n = flip wordOp n <$> xm
+          _ -> error $ "rotateOp: " ++ show xs
+      VToNat (VWord iw) -> do
+        case xs of
+          VVector xv -> do
+            let bs = V.toList (svUnpack iw)
+            VVector <$> shifter mux op (return xv) bs
+            where mux = lazyMux (\b v1 v2 -> toVector <$> muxBVal b (VVector v1) (VVector v2))
+                  op xm n = flip vecOp n <$> xm
+          VWord xw -> return $ vWord (svOp xw iw)
+          _ -> error $ "rotateOp: " ++ show xs
+      _ -> error $ "rotateOp: " ++ show y
 
--- bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
-bvRotateROp :: SValue
-bvRotateROp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv -> do
-    case xs of
-      VVector xv -> selectV (lazyMux muxBVal) (V.length xv -1) (return . VVector . vRotateR xv) ilv
-      VWord xlv -> return $ vWord (svRotateRight xlv ilv)
-      _ -> error $ "bvRotateROp: " ++ show xs
+-- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateLOp :: SValue
+rotateLOp = rotateOp vRotateL rol svRotateLeft
+  where rol x i = svRol x (fromInteger (i `mod` toInteger (intSizeOf x)))
 
--- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftLOp :: SValue
-bvShiftLOp =
-  constFun $
-  constFun $
-  constFun $
-  VFun $ \x -> return $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv -> do
-    let xv = toVector xs
-    selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftL x xv) ilv
+-- rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateROp :: SValue
+rotateROp = rotateOp vRotateR ror svRotateRight
+  where ror x i = svRol x (fromInteger (i `mod` toInteger (intSizeOf x)))
 
--- bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
-bvShiftROp :: SValue
-bvShiftROp =
+-- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: (SThunk -> Vector SThunk -> Integer -> Vector SThunk)
+        -> (SBool -> SWord -> Integer -> SWord)
+        -> (SBool -> SWord -> SWord -> SWord)
+        -> SValue
+shiftOp vecOp wordOp svOp =
   constFun $
   constFun $
-  constFun $
-  VFun $ \x -> return $
+  VFun $ \z -> return $
   strictFun $ \xs -> return $
-  wordFun $ \ilv -> do
-    let xv = toVector xs
-    selectV (lazyMux muxBVal) (V.length xv - 1) (return . VVector . vShiftR x xv) ilv
+  strictFun $ \y ->
+    case y of
+      VNat i ->
+        case xs of
+          VVector xv -> return $ VVector (vecOp z xv i)
+          VWord xw -> do
+            zv <- toBool <$> force z
+            let i' = fromInteger (i `min` toInteger (intSizeOf xw))
+            return $ vWord (wordOp zv xw i')
+          _ -> error $ "shiftOp: " ++ show xs
+      VToNat (VVector iv) -> do
+        bs <- V.toList <$> traverse (fmap toBool . force) iv
+        case xs of
+          VVector xv -> VVector <$> shifter (lazyMux muxVector) op (return xv) bs
+            where op xm n = flip (vecOp z) n <$> xm
+          VWord xw -> do
+            zv <- toBool <$> force z
+            let op xm n = flip (wordOp zv) n <$> xm
+            vWord <$> shifter (lazyMux muxWord) op (return xw) bs
+          _ -> error $ "shiftOp: " ++ show xs
+      VToNat (VWord iw) ->
+        case xs of
+          VVector xv -> do
+            let bs = V.toList (svUnpack iw)
+            VVector <$> shifter (lazyMux muxVector) op (return xv) bs
+            where op xm n = flip (vecOp z) n <$> xm
+          VWord xw -> do
+            zv <- toBool <$> force z
+            return $ vWord (svOp zv xw iw)
+          _ -> error $ "shiftOp: " ++ show xs
+      _ -> error $ "shiftOp: " ++ show y
+
+-- shiftL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+shiftLOp :: SValue
+shiftLOp = shiftOp vShiftL undefined shl
+  where shl b x i = svIte b (svNot (svShiftLeft (svNot x) i)) (svShiftLeft x i)
+
+-- shiftR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+shiftROp :: SValue
+shiftROp = shiftOp vShiftR undefined shr
+  where shr b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
+
+muxWord :: SBool -> SWord -> SWord -> IO SWord
+muxWord b w1 w2 = return (svIte b w1 w2)
+
+muxVector :: SBool -> Vector SThunk -> Vector SThunk -> IO (Vector SThunk)
+muxVector b v1 v2 = toVector <$> muxBVal b (VVector v1) (VVector v2)
 
 ------------------------------------------------------------
 -- Stream operations
