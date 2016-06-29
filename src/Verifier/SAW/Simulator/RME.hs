@@ -98,6 +98,15 @@ vShiftR :: a -> V.Vector a -> Integer -> V.Vector a
 vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
   where j = fromInteger (min i (toInteger (V.length xs)))
 
+-- | Signed shift right simply copies the high order bit
+--   into the shifted places.  We special case the zero
+--   length vector to avoid a possible out-of-bounds error.
+vSignedShiftR :: V.Vector a -> Integer -> V.Vector a
+vSignedShiftR xs i
+  | V.length xs > 0 = vShiftR x xs i
+  | otherwise       = xs
+ where x = xs V.! 0
+
 ------------------------------------------------------------
 -- Values
 
@@ -247,7 +256,7 @@ constMap = Map.fromList
   -- Shifts
   , ("Prelude.bvShl" , shiftOp (vShiftL RME.false))
   , ("Prelude.bvShr" , shiftOp (vShiftR RME.false))
-  --, ("Prelude.bvSShr", shiftOp RMEV.sshr lvSShr)
+  , ("Prelude.bvSShr", shiftOp vSignedShiftR)
   -- Nat
   , ("Prelude.Succ", Prims.succOp)
   , ("Prelude.addNat", Prims.addNatOp)
