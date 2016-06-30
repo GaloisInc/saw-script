@@ -128,7 +128,6 @@ scReadExternal sc input =
         ("Array" : e : es)  -> FTermF (ArrayValue (read e) (V.fromList (map read es)))
         ["Float", x]        -> FTermF (FloatLit (read x))
         ["Double", x]       -> FTermF (DoubleLit (read x))
-        ["String", s]       -> FTermF (StringLit (read s))
+        ("String" : ts)     -> FTermF (StringLit (read (unwords ts)))
         ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
         _ -> error $ "Parse error: " ++ unwords tokens
-
