@@ -847,7 +847,7 @@ betaNormalize sc t0 =
 
 type OccurrenceMap s = IntMap (Term, Word64)
 
--- | Returns map that associated each term index appearing in the term
+-- | Returns map that associates each term index appearing in the term
 -- to the number of occurrences in the shared term.
 scTermCount :: Term -> OccurrenceMap s
 scTermCount t0 = execState (go [t0]) IntMap.empty
@@ -863,7 +863,7 @@ scTermCount t0 = execState (go [t0]) IntMap.empty
                   put $ n `seq` IntMap.insert i (t, n+1) m
                   go r
                 Nothing -> do
-                  when (looseVars t == 0) $ put (IntMap.insert i (t, 1) m)
+                  put (IntMap.insert i (t, 1) m)
                   recurse
           where
             recurse = do
@@ -902,7 +902,7 @@ scPrettyTermDoc opts t0
             FTermF StringLit{} -> False
             FTermF ExtCns{} -> False
             LocalVar{} -> False
-            _ -> c > 1
+            _ -> (c > 1) && (looseVars t == 0)
 
         -- Terms bound in map.
         bound :: [(TermIndex, Term)]
