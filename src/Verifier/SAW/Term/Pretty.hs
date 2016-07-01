@@ -28,7 +28,6 @@ module Verifier.SAW.Term.Pretty
  , ppTermF'
  , ppFlatTermF
  , ppFlatTermF'
- , ppRecordF
  , ppCtor
  , ppDataType
  , ppPat
@@ -284,11 +283,6 @@ ppPat f p pat =
     PField n x y -> ppFieldValue <$> ppPat f PrecNone n
                     <*> ppPat f PrecNone x <*> ppPat f PrecNone y
     PString s  -> pure $ LabelDoc s
-
-ppRecordF :: Applicative f => (t -> f Doc) -> Map String t -> f Doc
-ppRecordF pp m = braces . semiTermList <$> traverse ppFld (Map.toList m)
-  where ppFld (fld,v) = eqCat (text fld) <$> pp v
-        eqCat x y = group $ nest 2 (x <+> equals <<$>> y)
 
 ppFlatTermF' :: Applicative f => PPOpts -> (Prec -> t -> f TermDoc) -> Prec -> FlatTermF t -> f TermDoc
 ppFlatTermF' opts pp prec tf =

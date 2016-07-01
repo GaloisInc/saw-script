@@ -83,7 +83,6 @@ module Verifier.SAW.TypedAST
  , ppTermF'
  , ppFlatTermF
  , ppFlatTermF'
- , ppRecordF
  , ppTermDepth
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
