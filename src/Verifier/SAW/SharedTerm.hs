@@ -872,16 +872,10 @@ scTermCount t0 = execState (go [t0]) IntMap.empty
                 Constant{} -> go (args ++ r)
                 tf -> go (Fold.foldr' (:) (args++r) tf)
 
-lineSep :: [Doc] -> Doc
-lineSep l = hcat (punctuate line l)
-
 scPrettyTermDoc :: PPOpts -> Term -> Doc
 scPrettyTermDoc opts t0
     | null bound = ppTermDoc (ppt lcls0 PrecNone t0)
-    | otherwise =
-        text "let { " <> nest 6 (lineSep lets) <$$>
-        text "    }" <$$>
-        text " in " <> align (ppTermDoc (ppt lcls0 PrecNone t0))
+    | otherwise = ppLetBlock lets (ppTermDoc (ppt lcls0 PrecNone t0))
   where lcls0 = emptyLocalVarDoc
         cm = scTermCount t0 -- Occurrence map
         -- Return true if variable should be introduced to name term.

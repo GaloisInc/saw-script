@@ -32,6 +32,7 @@ module Verifier.SAW.Term.Pretty
  , ppDataType
  , ppPat
  , ppTypeConstraint
+ , ppLetBlock
  , commaSepList
  , semiTermList
  , ppParens
@@ -268,6 +269,12 @@ ppAppList :: Prec -> Doc -> [Doc] -> Doc
 ppAppList _ sym [] = sym
 ppAppList p sym l = ppAppParens p $ hsep (sym : l)
 
+ppLetBlock :: [Doc] -> Doc -> Doc
+ppLetBlock defs body =
+  text "let" <+> lbrace <+> align (vcat defs) <$$>
+  indent 4 rbrace <$$>
+  text " in" <+> body
+
 ppPat :: Applicative f
       => (Prec -> e -> f TermDoc)
       -> Prec -> Pat e -> f TermDoc
@@ -363,10 +370,7 @@ ppTermF' _opts pp lcls p (Let dl u) =
     ppLet <$> traverse (ppLocalDef pp' lcls lcls') dl
           <*> pp lcls' PrecNone u
   where ppLet dl' u' = TermDoc $
-          ppParens (p > PrecNone) $
-            text "let" <+> lbrace <+> align (vcat dl') <$$>
-            indent 4 rbrace <$$>
-            text " in" <+> ppTermDoc u'
+          ppParens (p > PrecNone) $ ppLetBlock dl' (ppTermDoc u')
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
         pp' a b c = ppTermDoc <$> pp a b c
