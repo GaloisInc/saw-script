@@ -101,6 +101,7 @@ module Verifier.SAW.TypedAST
  , commaSepList
  , semiTermList
  , ppParens
+ , ppLetBlock
  ) where
 
 import Control.Applicative hiding (empty)
