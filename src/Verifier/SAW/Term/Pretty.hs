@@ -177,14 +177,14 @@ ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
 
 ppLocalDef :: Applicative f
-           => (LocalVarDoc -> Prec -> e -> f Doc)
+           => (Bool -> LocalVarDoc -> Prec -> e -> f Doc)
            -> LocalVarDoc -- ^ Context outside let
            -> LocalVarDoc -- ^ Context inside let
            -> LocalDef e
            -> f Doc
 ppLocalDef pp lcls lcls' (Def nm _qual tp eqs) =
-    ppd <$> (pptc <$> pp lcls PrecLambda tp)
-        <*> traverse (ppDefEqnF pp lcls' sym) (reverse eqs)
+    ppd <$> (pptc <$> pp False lcls PrecLambda tp)
+        <*> traverse (ppDefEqnF (pp True) lcls' sym) (reverse eqs)
   where sym = text nm
         pptc tpd = hang 2 $ group (sym <<$>> doublecolon <+> tpd <> semi)
         ppd tpd eqds = vcat (tpd : eqds)
@@ -327,28 +327,29 @@ ppFlatTermF :: Applicative f => PPOpts -> (Prec -> t -> f Doc) -> Prec -> FlatTe
 ppFlatTermF opts pp prec tf = fmap ppTermDoc (ppFlatTermF' opts pp' prec tf)
   where pp' p t = fmap TermDoc (pp p t)
 
-ppTermF :: PPOpts -> (LocalVarDoc -> Prec -> t -> TermDoc)
+ppTermF :: PPOpts
+        -> (Bool -> LocalVarDoc -> Prec -> t -> TermDoc) -- ^ Boolean indicates whether term is under a binder
         -> LocalVarDoc -> Prec -> TermF t -> TermDoc
 ppTermF opts pp lcls p tf = runIdentity (ppTermF' opts pp' lcls p tf)
-  where pp' l' p' t' = pure (pp l' p' t')
+  where pp' b' l' p' t' = pure (pp b' l' p' t')
 
 ppTermF' :: Applicative f
          => PPOpts
-         -> (LocalVarDoc -> Prec -> e -> f TermDoc)
+         -> (Bool -> LocalVarDoc -> Prec -> t -> f TermDoc)
          -> LocalVarDoc
          -> Prec
-         -> TermF e
+         -> TermF t
          -> f TermDoc
-ppTermF' opts pp lcls prec (FTermF tf) = ppFlatTermF' opts (pp lcls) prec tf
+ppTermF' opts pp lcls prec (FTermF tf) = ppFlatTermF' opts (pp False lcls) prec tf
   --(group . nest 2) <$> (ppFlatTermF' (pp lcls) p tf)
-ppTermF' _opts pp lcls prec (App l r) = ppApp <$> pp lcls PrecApp l <*> pp lcls PrecArg r
+ppTermF' _opts pp lcls prec (App l r) = ppApp <$> pp False lcls PrecApp l <*> pp False lcls PrecArg r
   where ppApp l' r' = TermDoc $ ppAppParens prec $ group $ hang 2 $
                       ppTermDoc l' Leijen.<$> ppTermDoc r'
 
 ppTermF' _opts pp lcls p (Lambda name tp rhs) =
     ppLam
-      <$> pp lcls  PrecLambda tp
-      <*> pp lcls' PrecLambda rhs
+      <$> pp False lcls PrecLambda tp
+      <*> pp True lcls' PrecLambda rhs
   where ppLam tp' rhs' = TermDoc $
           ppParens (p > PrecLambda) $ group $ hang 2 $
             text "\\" <> parens (text name' <> doublecolon <> ppTermDoc tp')
@@ -356,24 +357,24 @@ ppTermF' _opts pp lcls p (Lambda name tp rhs) =
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' _opts pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp lcls' PrecLambda rhs
+ppTermF' _opts pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp True lcls' PrecLambda rhs
   where ppPi lhs' rhs' = TermDoc $ ppParens (p > PrecLambda) $
                          lhs' <<$>> text "->" <+> ppTermDoc rhs'
         subDoc = align . group . nest 2 . ppTermDoc
-        lhs | name == "_" = subDoc <$> pp lcls PrecApp tp
-            | otherwise = ppArg <$> pp lcls PrecLambda tp
+        lhs | name == "_" = subDoc <$> pp False lcls PrecApp tp
+            | otherwise = ppArg <$> pp False lcls PrecLambda tp
         ppArg tp' = parens (text name' <+> doublecolon <+> subDoc tp')
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
 ppTermF' _opts pp lcls p (Let dl u) =
     ppLet <$> traverse (ppLocalDef pp' lcls lcls') dl
-          <*> pp lcls' PrecNone u
+          <*> pp True lcls' PrecNone u
   where ppLet dl' u' = TermDoc $
           ppParens (p > PrecNone) $ ppLetBlock dl' (ppTermDoc u')
         nms = concatMap localVarNames dl
         lcls' = foldl' consBinding lcls nms
-        pp' a b c = ppTermDoc <$> pp a b c
+        pp' a b c d = ppTermDoc <$> pp a b c d
 ppTermF' _opts _pp lcls _p (LocalVar i)
 --    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
     | otherwise = pure $ TermDoc d
@@ -384,10 +385,10 @@ ppTermF' _ _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
 
 -- | Pretty print a term with the given outer precedence.
 ppTermlike :: forall t. Termlike t => PPOpts -> LocalVarDoc -> Prec -> t -> Doc
-ppTermlike opts lcls0 p0 trm = ppTermDoc (pp lcls0 p0 trm)
+ppTermlike opts lcls0 p0 trm = ppTermDoc (pp False lcls0 p0 trm)
   where
-    pp :: LocalVarDoc -> Prec -> t -> TermDoc
-    pp lcls p t = ppTermF opts pp lcls p (unwrapTermF t)
+    pp :: Bool -> LocalVarDoc -> Prec -> t -> TermDoc
+    pp _ lcls p t = ppTermF opts pp lcls p (unwrapTermF t)
 
 showTermlike :: Termlike t => t -> String
 showTermlike t = show $ ppTermlike defaultPPOpts emptyLocalVarDoc PrecNone t
@@ -396,11 +397,11 @@ ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
 ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
   where
     pp :: Int -> TermPrinter t
-    pp d lcls p t = ppTermDoc (pp' d lcls p t)
+    pp d lcls p t = ppTermDoc (pp' d False lcls p t)
 
-    pp' :: Int -> LocalVarDoc -> Prec -> t -> TermDoc
-    pp' 0 _ _ _ = TermDoc $ text "_"
-    pp' d lcls p t = case unwrapTermF t of
+    pp' :: Int -> Bool -> LocalVarDoc -> Prec -> t -> TermDoc
+    pp' 0 _ _ _ _ = TermDoc $ text "_"
+    pp' d _ lcls p t = case unwrapTermF t of
       App t1 t2 -> TermDoc $
         ppAppParens p $ group $ hang 2 $
         (pp d lcls PrecApp t1) Leijen.<$>

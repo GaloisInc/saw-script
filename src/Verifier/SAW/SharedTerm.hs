@@ -845,12 +845,14 @@ betaNormalize sc t0 =
 --------------------------------------------------------------------------------
 -- Pretty printing
 
-type OccurrenceMap s = IntMap (Term, Word64)
+type OccurrenceMap s = IntMap (Term, Int)
 
 -- | Returns map that associates each term index appearing in the term
--- to the number of occurrences in the shared term.
-scTermCount :: Term -> OccurrenceMap s
-scTermCount t0 = execState (go [t0]) IntMap.empty
+-- to the number of occurrences in the shared term. Subterms that are
+-- on the left-hand side of an application are excluded. The boolean
+-- flag indicates whether to descend under lambdas and other binders.
+scTermCount :: Bool -> Term -> OccurrenceMap s
+scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
   where go :: [Term] -> State (OccurrenceMap s) ()
         go [] = return ()
         go (t:r) =
@@ -868,57 +870,88 @@ scTermCount t0 = execState (go [t0]) IntMap.empty
           where
             recurse = do
               let (h,args) = asApplyAll t
-              case unwrapTermF h of
-                Constant{} -> go (args ++ r)
-                tf -> go (Fold.foldr' (:) (args++r) tf)
+              go (Fold.foldr' (:) (args ++ r) (subterms h))
+        subterms h =
+          case unwrapTermF h of
+            Lambda _ t1 _ | not doBinders -> [t1]
+            Pi _ t1 _     | not doBinders -> [t1]
+            Let{}         | not doBinders -> []
+            Constant{}                    -> []
+            tf                            -> Fold.toList tf
 
 scPrettyTermDoc :: PPOpts -> Term -> Doc
-scPrettyTermDoc opts t0
-    | null bound = ppTermDoc (ppt lcls0 PrecNone t0)
-    | otherwise = ppLetBlock lets (ppTermDoc (ppt lcls0 PrecNone t0))
-  where lcls0 = emptyLocalVarDoc
-        cm = scTermCount t0 -- Occurrence map
-        -- Return true if variable should be introduced to name term.
-        shouldName :: Term -> Word64 -> Bool
-        shouldName t c =
-          case unwrapTermF t of
-            FTermF GlobalDef{} -> False
-            FTermF UnitValue -> False
-            FTermF UnitType -> False
-            FTermF EmptyValue -> False
-            FTermF EmptyType -> False
-            FTermF (CtorApp _ []) -> False
-            FTermF (DataTypeApp _ []) -> False
-            FTermF NatLit{} -> False
-            FTermF (ArrayValue _ v) | V.length v == 0 -> False
-            FTermF FloatLit{} -> False
-            FTermF DoubleLit{} -> False
-            FTermF StringLit{} -> False
-            FTermF ExtCns{} -> False
-            LocalVar{} -> False
-            _ -> (c > 1) && (looseVars t == 0)
+scPrettyTermDoc opts t0 =
+  ppLets lets0 (ppTermDoc (ppt (n0, dm0) False lcls0 PrecNone t0))
+  where
+    lcls0 = emptyLocalVarDoc
 
-        -- Terms bound in map.
-        bound :: [(TermIndex, Term)]
-        bound = [ (i, t) | (i, (t,c)) <- IntMap.assocs cm, shouldName t c ]
+    -- | Terms in top-level let block.
+    cm0 :: IntMap Term
+    cm0 =
+      IntMap.filter (\t -> looseVars t == 0) $ fmap fst $
+      IntMap.filter shouldName (scTermCount True t0) -- ^ Occurrence map
 
-        var :: Word64 -> Doc
-        var n = char 'x' <> integer (toInteger n)
+    -- Terms bound in map.
+    bound0 :: [(TermIndex, Term)]
+    bound0 = IntMap.assocs cm0
 
-        lets = [ var n <+> char '=' <+> ppTermDoc (ppTermF opts ppt lcls0 PrecNone (unwrapTermF t)) <> char ';'
-               | ((_, t), n) <- bound `zip` [0..]
-               ]
+    lets0 = [ ppEqn m (n0, dm0) lcls0 PrecNone t | ((_, t), m) <- bound0 `zip` [0..] ]
 
-        dm :: IntMap Doc
-        dm = Fold.foldl' insVar IntMap.empty (bound `zip` [0..])
-          where insVar m ((i, _), n) = IntMap.insert i (var n) m
+    dm0 :: IntMap Doc
+    dm0 = IntMap.fromList (zip (IntMap.keys cm0) (map var [0..]))
 
-        ppt :: LocalVarDoc -> Prec -> Term -> TermDoc
-        ppt lcls p (Unshared tf) = ppTermF opts ppt lcls p tf
-        ppt lcls p (STApp{ stAppIndex = i, stAppTermF = tf}) =
-          case IntMap.lookup i dm of
-            Just d -> TermDoc d
-            Nothing -> ppTermF opts ppt lcls p tf
+    n0 :: Int
+    n0 = IntMap.size dm0
+
+    ppLets :: [Doc] -> Doc -> Doc
+    ppLets lets doc
+      | null lets = doc
+      | otherwise = ppLetBlock lets doc
+
+    -- | Return true if variable should be introduced to name term.
+    shouldName :: (Term, Int) -> Bool
+    shouldName (t, c) =
+      case unwrapTermF t of
+        FTermF GlobalDef{} -> False
+        FTermF UnitValue -> False
+        FTermF UnitType -> False
+        FTermF EmptyValue -> False
+        FTermF EmptyType -> False
+        FTermF (CtorApp _ []) -> False
+        FTermF (DataTypeApp _ []) -> False
+        FTermF NatLit{} -> False
+        FTermF (ArrayValue _ v) | V.length v == 0 -> False
+        FTermF FloatLit{} -> False
+        FTermF DoubleLit{} -> False
+        FTermF StringLit{} -> False
+        FTermF ExtCns{} -> False
+        LocalVar{} -> False
+        _ -> c > 1
+
+    var :: Int -> Doc
+    var n = char 'x' <> integer (toInteger n)
+
+    ppEqn :: Int -> (Int, IntMap Doc) -> LocalVarDoc -> Prec -> Term -> Doc
+    ppEqn m (n, dm) lcls p t =
+      var m <+> char '=' <+>
+      ppTermDoc (ppTermF opts (ppt (n, dm)) lcls p (unwrapTermF t)) <> char ';'
+
+    ppt :: (Int, IntMap Doc) -> Bool -> LocalVarDoc -> Prec -> Term -> TermDoc
+    ppt (n, dm) False lcls p (Unshared tf) = ppTermF opts (ppt (n, dm)) lcls p tf
+    ppt (n, dm) False lcls p (STApp{stAppIndex = i, stAppTermF = tf}) =
+      case IntMap.lookup i dm of
+        Just d -> TermDoc d
+        Nothing -> ppTermF opts (ppt (n, dm)) lcls p tf
+    ppt (n, dm) True lcls _p t =
+      TermDoc $ ppLets lets (ppTermDoc (ppt (n', dm') False lcls PrecNone t))
+      where
+        cm1 = fmap fst $ IntMap.filter shouldName (scTermCount False t)
+        cm = IntMap.difference cm1 dm0 -- remove already-named entries
+        dm1 = IntMap.fromList (zip (IntMap.keys cm) (map var [n ..]))
+        dm' = IntMap.union dm dm1
+        n' = n + IntMap.size cm
+        lets = [ ppEqn m (n', dm') lcls PrecNone rhs
+               | (rhs, m) <- IntMap.elems cm `zip` [n ..] ]
 
 scPrettyTerm :: PPOpts -> Term -> String
 scPrettyTerm opts t = show (scPrettyTermDoc opts t)
