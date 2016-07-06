@@ -595,12 +595,18 @@ valueEqValue :: (Functor m, Monad m, MonadIO m) =>
             -> SpecPathState
             -> SpecJavaValue
             -> StateT (PathVC Breakpoint) m ()
+valueEqValue _ _ _ (IValue i) _ (IValue i') | i == i' = return ()
+valueEqValue _ _ _ (LValue l) _ (LValue l') | l == l' = return ()
+valueEqValue _ _ _ (DValue d) _ (DValue d') | isNaN d && isNaN d' = return ()
+valueEqValue _ _ _ (DValue d) _ (DValue d') | d == d' = return ()
+valueEqValue _ _ _ (FValue f) _ (FValue f') | isNaN f && isNaN f' = return ()
+valueEqValue _ _ _ (FValue f) _ (FValue f') | f == f' = return ()
+valueEqValue _ _ _ (RValue r) _ (RValue r') | r == r' = return ()
 valueEqValue sc name _ (IValue t) _ (IValue t') = do
   it <- liftIO $ extendToIValue sc t
   it' <- liftIO $ extendToIValue sc t'
   pvcgAssertEq name it it'
 valueEqValue _ name _ (LValue t) _ (LValue t') = pvcgAssertEq name t t'
-valueEqValue _ _ _ (RValue r) _ (RValue r') | r == r' = return ()
 valueEqValue _ name ps (RValue r) ps' (RValue r') = do
   let ma = Map.lookup r (ps ^. pathMemory . memScalarArrays)
       ma' = Map.lookup r' (ps' ^. pathMemory . memScalarArrays)
@@ -609,7 +615,7 @@ valueEqValue _ name ps (RValue r) ps' (RValue r') = do
       | len == len' -> pvcgAssertEq name t t'
       | otherwise -> fail $ "valueEqTerm: array sizes don't match: " ++ show (len, len')
     _ -> fail $ "valueEqTerm: " ++ name ++ ": ref does not point to array"
-valueEqValue _ name _ _ _ _ = fail $ "valueEqValue: " ++ name ++ ": unspported value type"
+valueEqValue _ name _ v _ v' = fail $ "valueEqValue: " ++ name ++ ": unspported value type: " ++ show v ++ ", " ++ show v'
 
 readJavaValueVerif :: (Functor m, Monad m) =>
                       VerificationState
