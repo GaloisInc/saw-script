@@ -376,10 +376,13 @@ The `llvm_symexec` command uses an expression syntax similar to that for
     the expression `e->n`, for some natural number `n`, refers to the
     `n`th field of that `struct`. Unlike the `struct` type in C, the
     LLVM `struct` type does not have named fields, so fields are
-    described positionally. At the moment, there is no way to refer to
-    fields of `struct`s that are referred to without a pointer, which
-    also means that it is impossible to refer to fields of nested
-    `struct`s.
+    described positionally.
+
+  * For any valid expression `e` referring to a `struct` (directly, not
+    via pointer), the expression `e.n`, for some natural number `n`,
+    refers to the `n`th field of that `struct`. This is particularly
+    useful for fields of nested structs, even if the outer struct is
+    passed by pointer.
 
 In addition to the different expression language, the arguments are
 similar but not identical. The third argument, of type
