@@ -54,7 +54,7 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 
-import Language.JVM.Common (ppFldId)
+import Language.JVM.Common (ppFldId, dotsToSlashes)
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr as TC
 import SAWScript.Options
@@ -509,13 +509,8 @@ initializeVerification' sc ir bs refConfig = do
                  entryBlock -- FIXME: not the right block
                  Map.empty
                  cs
+  forM_ (specInitializedClasses ir) (initializeClass . dotsToSlashes)
   modifyCSM_ pushFrame
-  let updateInitializedClasses mem =
-        foldr (flip setInitializationStatus Initialized)
-              mem
-              (specInitializedClasses ir)
-  modifyPathM_ (PP.text "initializeVerification") $
-    return . (pathMemory %~ updateInitializedClasses)
   forM_ refAssignments $ \(r, cl) ->
     forM_ cl $ \e -> writeJavaValue e (RValue r)
   lcs <- liftIO $ bsLogicClasses bs refConfig'
