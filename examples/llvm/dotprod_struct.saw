@@ -45,6 +45,7 @@ let dotprod_wrap_spec = do {
       simplify (cryptol_ss ());
       simplify (add_prelude_defs ["implies"] basic_ss);
       simplify (add_prelude_eqs ["eq_refl"] basic_ss);
+      simplify (add_prelude_eqs ["or_True"] basic_ss);
       trivial;
     };
 };
