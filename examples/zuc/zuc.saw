@@ -242,6 +242,10 @@ caseProofResult r14
             print {{ m1 ce.0 ce.1 }};
             print "init2 =";
             print {{ m2 ce.0 ce.2 }};
+            print "iv1 == iv2?";
+            print {{ ce.0 == ce.1 }};
+            print "init1 == init2?";
+            print {{ m1 ce.0 ce.1 == m2 ce.0 ce.1 }};
           });
 
 print "Done.";
