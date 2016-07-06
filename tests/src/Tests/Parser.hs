@@ -36,7 +36,7 @@ checkEqn sym (DefEqn pats rhs@(SimpleTerm rtf)) = do
          ++ show (ppDefEqn (ppTerm defaultPPOpts) emptyLocalVarDoc (ppIdent sym) (DefEqn pats rhs)) ++ "\n"
          ++ show (ppTerm defaultPPOpts lvd PrecNone rhs) ++ "\n"
          ++ show (freesTerm rhs) ++ "\n"
-         ++ show (ppTermDoc (ppTermF defaultPPOpts (\_ _ -> TermDoc . text . show) lvd PrecNone (freesTerm <$> rtf)))
+         ++ show (ppTermDoc (ppTermF defaultPPOpts (\_ _ _ -> TermDoc . text . show) lvd PrecNone (freesTerm <$> rtf)))
 
   assertEqual (namedMsg sym msg) 0 (freesTerm rhs `shiftR` nbound)
 
