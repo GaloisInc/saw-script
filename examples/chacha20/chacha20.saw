@@ -1,0 +1,31 @@
+import "chacha20.cry" as chacha20;
+
+// -----------------------------------------------------------------------------
+// -- Proofs -------------------------------------------------------------------
+
+print "loading LLVM bitcode...";
+mod <- llvm_load_module "chacha20.bc";
+
+c <- fresh_symbolic "out"     {| [256][8] |};
+k <- fresh_symbolic "key"     {| [32][8]  |};
+n <- fresh_symbolic "nonce"   {| [12][8]  |};
+i <- fresh_symbolic "counter" {| [32] |};
+
+let allocs = [ ("out",   256)
+             , ("key",   32)
+             , ("nonce", 12)
+             ];
+let inits = [ ("*out",   c, 256)
+            , ("olen", {{ 256:[64] }}, 1)
+            , ("counter", i, 1)
+            , ("*key",   k, 32)
+            , ("*nonce", n, 12)
+            ];
+let results = [ ("*out", 256) ];
+
+print "extracting stream function...";
+cstream <- time (llvm_symexec mod "crypto_stream_chacha20" allocs inits results true);
+
+print "checking equality...";
+thm <- abstract_symbolic {{ cstream == chacha20::stream k i n }};
+time (prove_print abc thm);
