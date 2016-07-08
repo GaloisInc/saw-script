@@ -832,18 +832,6 @@ satUnintMathSAT = satUnintSBV SBV.mathSAT
 satUnintYices :: SharedContext -> [String] -> ProofScript SV.SatResult
 satUnintYices = satUnintSBV SBV.yices
 
-negTypedTerm :: SharedContext -> TypedTerm -> IO TypedTerm
-negTypedTerm sc (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  t' <- negTerm sc t
-  return (TypedTerm schema t')
-
-negTerm :: SharedContext -> Term -> IO Term
-negTerm sc tm =
-  case unwrapTermF tm of
-    Lambda x ty tm' -> scLambda sc x ty =<< negTerm sc tm'
-    _               -> scNot sc tm
-
 satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
                 -> SharedContext
                 -> String
@@ -852,11 +840,32 @@ satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
 satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
   t <- case goalQuant g of
          Existential -> return (goalTerm g)
-         Universal -> negTerm sc (goalTerm g)
+         Universal -> do
+           let t0 = goalTerm g
+           ty <- scTypeOf sc t0
+           let (ts, tf) = asPiList ty
+           tf' <- scWhnf sc tf
+           case asBoolType tf' of
+             Nothing -> fail $ "Invalid non-boolean type: " ++ show ty
+             Just () -> return ()
+           negTerm (map snd ts) t0
   exporter sc ((path ++ goalName g) ++ ext) t
   case goalQuant g of
     Existential -> return (SV.Unsat, Just g)
     Universal -> return (SV.Unsat, Nothing)
+  where
+    negTerm :: [Term] -> Term -> IO Term
+    negTerm [] p = scNot sc p
+    negTerm (t1 : ts) p = do
+      (x, ty, p') <-
+        case unwrapTermF p of
+          Lambda x ty p' -> return (x, ty, p')
+          _ -> do
+            p1 <- incVars sc 0 1 p
+            x0 <- scLocalVar sc 0
+            p' <- scApply sc p1 x0
+            return ("x", t1, p')
+      scLambda sc x ty =<< negTerm ts p'
 
 satAIG :: SharedContext -> FilePath -> ProofScript SV.SatResult
 satAIG sc path = satWithExporter writeAIG sc path ".aig"
