@@ -611,6 +611,9 @@ ecPMod _ _ (PFinNum a) (PFinNum b) = bvPMod a b;
 -- Random values
 primitive ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
 
+-- Trace function; simply return the final argument
+ecTrace :: (n :: Num) -> (a b :: KType) -> seq n (bitvector 8) -> ty a -> ty b -> ty b;
+ecTrace _ _ _ _ _ x = x;
 
 --------------------------------------------------------------------------------
 -- Rewrite rules

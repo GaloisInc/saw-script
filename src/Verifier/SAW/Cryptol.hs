@@ -14,18 +14,20 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
-import Control.Exception (assert)
 import Control.Monad (join, foldM, unless, (<=<))
+import qualified Data.Foldable as Fold
+import Data.List
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
+import qualified Data.Sequence as Seq
 import qualified Data.Vector as Vector
 import Prelude ()
 import Prelude.Compat
 
+import qualified Cryptol.Eval.Type as TV
+import qualified Cryptol.Eval.Monad as V
 import qualified Cryptol.Eval.Value as V
-import qualified Cryptol.Eval.Env as Env
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
@@ -279,6 +281,8 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "pdiv"          -> scGlobalDef sc "Cryptol.ecPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
     "pmod"          -> scGlobalDef sc "Cryptol.ecPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
     "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
+    "trace"         -> scGlobalDef sc "Cryptol.ecTrace"       -- {n,a,b} [n][8] -> a -> b -> b
+
     _ -> fail $ unwords ["Unknown Cryptol primitive name:", C.unpackIdent nm]
 
 importPrimitive _ nm =
@@ -312,7 +316,7 @@ importExpr sc env expr =
                                       e2' <- importExpr sc env e2
                                       e3' <- importExpr sc env e3
                                       scGlobalApply sc "Prelude.ite" [t', e1', e2', e3']
-    C.EComp t e mss             -> importComp sc env t e mss
+    C.EComp len eltty e mss         -> importComp sc env len eltty e mss
     C.EVar qname                    ->
       case Map.lookup qname (envE env) of
         Just (e', j)                -> incVars sc 0 j e'
@@ -461,8 +465,8 @@ importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
 --------------------------------------------------------------------------------
 -- List comprehensions
 
-importComp :: SharedContext -> Env -> C.Type -> C.Expr -> [[C.Match]] -> IO Term
-importComp sc env listT expr mss =
+importComp :: SharedContext -> Env -> C.Type -> C.Type -> C.Expr -> [[C.Match]] -> IO Term
+importComp sc env lenT elemT expr mss =
   do let zipAll [] = fail "zero-branch list comprehension"
          zipAll [branch] =
            do (xs, len, ty, args) <- importMatches sc env branch
@@ -479,13 +483,12 @@ importComp sc env listT expr mss =
               ab <- scTupleType sc [a, b]
               return (zs, mn, ab, args : argss)
      (xs, n, a, argss) <- zipAll mss
-     let (_, elemT) = fromMaybe (assert False undefined) (C.tIsSeq listT)
      f <- lambdaTuples sc env elemT expr argss
      b <- importType' sc env elemT
      ys <- scGlobalApply sc "Cryptol.seqMap" [a, b, n, f, xs]
      -- The resulting type might not match the annotation, so we coerce
      t1 <- scGlobalApply sc "Cryptol.seq" [n, b]
-     t2 <- importType' sc env listT
+     t2 <- importType' sc env (C.tSeq lenT elemT)
      scGlobalApply sc "Prelude.unsafeCoerce" [t1, t2, ys]
 
 lambdaTuples :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
@@ -525,14 +528,14 @@ importMatches :: SharedContext -> Env -> [C.Match]
               -> IO (Term, C.Type, C.Type, [(C.Name, C.Type)])
 importMatches _sc _env [] = fail "importMatches: empty comprehension branch"
 
-importMatches sc env [C.From name _ty expr] = do
+importMatches sc env [C.From name _len _eltty expr] = do
   (len, ty) <- case C.tIsSeq (fastTypeOf (envC env) expr) of
                  Just x -> return x
                  Nothing -> fail $ "internal error: From: " ++ show (fastTypeOf (envC env) expr)
   xs <- importExpr sc env expr
   return (xs, len, ty, [(name, ty)])
 
-importMatches sc env (C.From name _ty1 expr : matches) = do
+importMatches sc env (C.From name _len _eltty expr : matches) = do
   (len1, ty1) <- case C.tIsSeq (fastTypeOf (envC env) expr) of
                    Just x -> return x
                    Nothing -> fail $ "internal error: From: " ++ show (fastTypeOf (envC env) expr)
@@ -630,63 +633,74 @@ scCryptolEq sc x y = do
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
-exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType Env.emptyEnv ty) v
+exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType Map.empty ty) v
 exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
 -- TODO: proper support for polymorphic values
 
-exportValue :: V.TValue -> SC.CValue -> V.Value
+exportValue :: TV.TValue -> SC.CValue -> V.Value
 exportValue ty v = case ty of
 
-  V.TVBit ->
+  TV.TVBit ->
     V.VBit (SC.toBool v)
 
-  V.TVSeq _ e ->
+  TV.TVSeq _ e ->
     case v of
-      SC.VWord w -> V.VWord (V.mkBv (toInteger (width w)) (unsigned w))
-      SC.VVector xs -> V.VSeq (V.isTBit e) (map (exportValue e . SC.runIdentity . force) (Vector.toList xs))
+      SC.VWord w -> V.word (toInteger (width w)) (unsigned w)
+      SC.VVector xs
+        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.BitsVal
+                            (Seq.fromList . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
+        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) (V.SeqMap (\i ->
+                            (V.ready . exportValue e . SC.runIdentity . force $ xs Vector.! (fromIntegral i))))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- infinite streams
-  V.TVStream e ->
+  TV.TVStream e ->
     case v of
-      SC.VExtra (SC.CStream trie) -> V.VStream [ exportValue e (IntTrie.apply trie n) | n <- [(0::Integer) ..] ]
+      SC.VExtra (SC.CStream trie) -> V.VStream (V.SeqMap $ \i -> V.ready $ exportValue e (IntTrie.apply trie i))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
-  V.TVTuple etys -> V.VTuple (exportTupleValue etys v)
+  TV.TVTuple etys -> V.VTuple (exportTupleValue etys v)
 
   -- records
-  V.TVRec fields ->
+  TV.TVRec fields ->
       V.VRecord (exportRecordValue (Map.assocs (Map.fromList fields)) v)
 
   -- functions
-  V.TVFun _aty _bty ->
+  TV.TVFun _aty _bty ->
     V.VFun (error "exportValue: TODO functions")
 
 
-exportTupleValue :: [V.TValue] -> SC.CValue -> [V.Value]
+exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
     ([]    , SC.VUnit    ) -> []
-    (t : ts, SC.VPair x y) -> exportValue t (run x) : exportTupleValue ts (run y)
+    (t : ts, SC.VPair x y) -> (V.ready $ exportValue t (run x)) : exportTupleValue ts (run y)
     _                      -> error $ "exportValue: expected tuple"
   where
     run = SC.runIdentity . force
 
-exportRecordValue :: [(C.Ident, V.TValue)] -> SC.CValue -> [(C.Ident, V.Value)]
+exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
     ([]         , SC.VEmpty      ) -> []
-    ((n, t) : ts, SC.VField _ x y) -> (n, exportValue t (run x)) : exportRecordValue ts y
+    ((n, t) : ts, SC.VField _ x y) -> (n, V.ready $ exportValue t (run x)) : exportRecordValue ts y
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
+
+fvAsBool :: FiniteValue -> Bool
+fvAsBool (FVBit b) = b
+fvAsBool _ = error "fvAsBool: expected FVBit value"
 
 exportFiniteValue :: FiniteValue -> V.Value
 exportFiniteValue fv =
   case fv of
     FVBit b    -> V.VBit b
-    FVWord w x -> V.VWord (V.mkBv (toInteger w) x)
-    FVVec t vs -> V.VSeq (t == FTBit) (map exportFiniteValue vs)
-    FVTuple vs -> V.VTuple (map exportFiniteValue vs)
-    FVRec vm   -> V.VRecord [ (C.packIdent n, exportFiniteValue v) | (n, v) <- Map.assocs vm ]
+    FVWord w x -> V.word (toInteger w) x
+    FVVec t vs
+      | t == FTBit -> V.VWord (toInteger (length vs))
+                        (V.ready (V.BitsVal (Seq.fromList . map (V.ready . fvAsBool) $ vs)))
+      | otherwise  -> V.VSeq  (toInteger (length vs)) (V.SeqMap $ \i -> V.ready $ exportFiniteValue (genericIndex vs i))
+    FVTuple vs -> V.VTuple (map (V.ready . exportFiniteValue) vs)
+    FVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFiniteValue v) | (n, v) <- Map.assocs vm ]
