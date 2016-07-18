@@ -9,6 +9,7 @@ module SAWScript.VerificationCheck where
 
 import Control.Monad
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.Eval.Monad as CV
 import qualified Cryptol.Eval.Value as CV
 import Verifier.SAW.Cryptol (exportValueWithSchema, scCryptolType)
 import Verifier.SAW.SharedTerm
@@ -57,11 +58,14 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
          sv = exportValueWithSchema sschema sn
          opts' = SV.cryptolPPOpts opts
      -- Grr. Different pretty-printers.
+     lv_doc <- CV.runEval (CV.ppValue opts' lv)
+     sv_doc <- CV.runEval (CV.ppValue opts' sv)
+
      return (text nm <$$>
         nest 2 (text "Encountered: " <+>
-                text (show (CV.ppValue opts' lv))) <$$>
+                text (show lv_doc)) <$$>
         nest 2 (text "Expected:    " <+>
-                text (show (CV.ppValue opts' sv))))
+                text (show sv_doc)))
 
 ppCheck :: VerificationCheck -> Doc
 ppCheck (AssertionCheck nm tm) =

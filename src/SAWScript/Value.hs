@@ -53,7 +53,7 @@ import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpt
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval.Value as C
-import Verifier.SAW.Cryptol (exportValueWithSchema, exportFiniteValue)
+import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import Cryptol.Utils.PP (pretty)
 
@@ -169,8 +169,8 @@ showsProofResult opts r =
     Valid -> showString "Valid"
     InvalidMulti ts -> showString "Invalid: [" . showMulti "" ts
   where
-    opts' = cryptolPPOpts opts
-    showVal t = shows (C.ppValue opts' (exportFiniteValue t))
+    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    showVal t = shows (ppFiniteValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -181,8 +181,8 @@ showsSatResult opts r =
     Unsat -> showString "Unsat"
     SatMulti ts -> showString "Sat: [" . showMulti "" ts
   where
-    opts' = cryptolPPOpts opts
-    showVal t = shows (C.ppValue opts' (exportFiniteValue t))
+    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    showVal t = shows (ppFiniteValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns

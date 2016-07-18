@@ -58,6 +58,7 @@ import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV
 
+import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
@@ -302,8 +303,9 @@ showCexResults sc opts ms vs exts vals = do
   putStrLn $ "When verifying " ++ show (specName ms) ++ ":"
   putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
   putStrLn $ "Counterexample:"
-  let showVal v = show (Cryptol.ppValue (cryptolPPOpts opts) (exportFiniteValue v))
-  mapM_ (\(n, v) -> putStrLn ("  " ++ n ++ ": " ++ showVal v)) vals
+  let showVal v = show <$> (Cryptol.runEval (Cryptol.ppValue (cryptolPPOpts opts) (exportFiniteValue v)))
+  mapM_ (\(n, v) -> do vdoc <- showVal v
+                       putStrLn ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)
     then vsCounterexampleFn vs (cexEvalFn sc (zip exts (map snd vals))) >>= print
     else putStrLn "ERROR: Can't show result, wrong number of values"

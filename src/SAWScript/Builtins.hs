@@ -102,6 +102,7 @@ import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.CrySAT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
+import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent)
@@ -1168,7 +1169,7 @@ eval_int t = do
     C.Forall [] [] (C.tIsSeq -> Just (_, C.tIsBit -> True)) -> return ()
     _ -> fail "eval_int: not a bitvector type"
   v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t'
-  return (C.fromWord v)
+  io $ C.runEval (C.fromWord "eval_int" v)
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm

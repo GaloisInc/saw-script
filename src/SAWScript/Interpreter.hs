@@ -77,6 +77,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
+import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -411,7 +412,8 @@ print_value (VTerm t) = do
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
                               }
-  io $ rethrowEvalError $ print $ V.ppValue opts' (evaluateTypedTerm sc t')
+  doc <- io $ V.runEval (V.ppValue opts' (evaluateTypedTerm sc t'))
+  io (rethrowEvalError $ print $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   io $ putStrLn (showsPrecValue opts 0 v "")
