@@ -33,6 +33,7 @@ module Verifier.SAW.Term.Pretty
  , ppPat
  , ppTypeConstraint
  , ppLetBlock
+ , ppNat
  , commaSepList
  , semiTermList
  , ppParens

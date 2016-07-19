@@ -22,6 +22,9 @@ import qualified Data.Map as Map
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.Term.Pretty
+
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.
 data FiniteType
@@ -51,6 +54,20 @@ instance Show FiniteValue where
     where
       commaSep ss = foldr (.) id (intersperse (showString ",") ss)
       showField (field, v) = showString field . showString " = " . shows v
+
+ppFiniteValue :: PPOpts -> FiniteValue -> Doc
+ppFiniteValue opts = loop
+ where
+ loop fv = case fv of
+   FVBit b
+     | b         -> text "True"
+     | otherwise -> text "False"
+   FVWord _w i   -> ppNat opts i
+   FVVec _ xs    -> brackets (sep (punctuate comma (map loop xs)))
+   FVTuple xs    -> parens (sep (punctuate comma (map loop xs)))
+   FVRec xs      -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
+      where ppField (f,x) = pretty f <+> char '=' <+> loop x
+
 
 -- | Smart constructor
 fvVec :: FiniteType -> [FiniteValue] -> FiniteValue
