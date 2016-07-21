@@ -1135,6 +1135,18 @@ exitPrim code = Exit.exitWith exitCode
                then Exit.ExitFailure (fromInteger code)
                else Exit.ExitSuccess
 
+-- Run the toplevel command.  Return a tuple containing
+-- the elapsed time to run the command in milliseconds
+-- and the value returned by the action.
+withTimePrim :: TopLevel SV.Value -> TopLevel SV.Value
+withTimePrim a = do
+  t1 <- liftIO $ getCurrentTime
+  r <- a
+  t2 <- liftIO $ getCurrentTime
+  -- diffUTCTime returns a length of time measured seconds
+  let diff = truncate (diffUTCTime t2 t1 * 1000)
+  return $ SV.VTuple [ SV.VInteger diff, r ]
+
 timePrim :: TopLevel SV.Value -> TopLevel SV.Value
 timePrim a = do
   t1 <- liftIO $ getCurrentTime

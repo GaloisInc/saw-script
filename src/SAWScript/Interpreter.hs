@@ -1326,9 +1326,16 @@ primitives = Map.fromList
     [ "Exit SAWScript, returning the supplied exit code to the parent"
     , "process."
     ]
+
   , prim "time"                "{a} TopLevel a -> TopLevel a"
     (\_ _ -> toValue timePrim)
     [ "Print the CPU time used by the given TopLevel command." ]
+
+  , prim "with_time"           "{a} TopLevel a -> TopLevel (Int, a)"
+    (\_ _ -> toValue withTimePrim)
+    [ "Run the given toplevel command.  Return the number of milliseconds"
+    , "elapsed during the execution of the command and its result."
+    ]
 
   , prim "exec"               "String -> [String] -> String -> TopLevel String"
     (\_ _ -> toValue readProcess)
