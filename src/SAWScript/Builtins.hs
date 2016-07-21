@@ -32,6 +32,7 @@ import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Monoid ((<>))
 import Data.Time.Clock
 import qualified Data.Vector as V
 import System.Directory
@@ -74,6 +75,7 @@ import SAWScript.ImportAIG
 import SAWScript.AST (getVal, pShow)
 import SAWScript.Options
 import SAWScript.Proof
+import SAWScript.SolverStats
 import SAWScript.TopLevel
 import SAWScript.TypedTerm
 import SAWScript.Utils
@@ -195,11 +197,12 @@ cecPrim :: AIGNetwork -> AIGNetwork -> TopLevel SV.ProofResult
 cecPrim x y = do
   io $ verifyAIGCompatible x y
   res <- io $ ABC.cec x y
+  let stats = solverStats "ABC" 0 -- TODO, count the size of the networks...
   case res of
-    ABC.Valid -> return $ SV.Valid
+    ABC.Valid -> return $ SV.Valid stats
     ABC.Invalid bs
       | Just ft <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
-           return $ SV.InvalidMulti [("x", ft)]
+           return $ SV.InvalidMulti stats [("x", ft)]
       | otherwise -> fail "cec: impossible, could not parse counterexample"
     ABC.VerifyUnknown -> fail "cec: unknown result "
 
@@ -411,16 +414,16 @@ readCore path = do
   sc <- getSharedContext
   io (mkTypedTerm sc =<< scReadExternal sc =<< readFile path)
 
-withFirstGoal :: (ProofGoal -> TopLevel (a, Maybe ProofGoal)) -> ProofScript a
+withFirstGoal :: (ProofGoal -> TopLevel (a, SolverStats, Maybe ProofGoal)) -> ProofScript a
 withFirstGoal f =
-  StateT $ \(ProofState goals concl) ->
+  StateT $ \(ProofState goals concl stats) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
     g : gs -> do
-      (x, mg') <- f g
+      (x, stats', mg') <- f g
       case mg' of
-        Nothing -> return (x, ProofState gs concl)
-        Just g' -> return (x, ProofState (g' : gs) concl)
+        Nothing -> return (x, ProofState gs concl (stats <> stats'))
+        Just g' -> return (x, ProofState (g' : gs) concl (stats <> stats'))
 
 quickcheckGoal :: SharedContext -> Integer -> ProofScript SV.SatResult
 quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
@@ -429,32 +432,35 @@ quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
   let tm = goalTerm goal
   ty <- scTypeOf sc tm
   maybeInputs <- scTestableType sc ty
+  let stats = solverStats "quickcheck" (scSharedSize tm)
   case maybeInputs of
     Just inputs -> do
       result <- scRunTestsTFIO sc n tm inputs
       case result of
         Nothing -> do
           putStrLn $ "checked " ++ show n ++ " cases."
-          return (SV.Unsat, Nothing)
+          return (SV.Unsat stats, stats, Nothing)
         -- TODO: use reasonable names here
-        Just cex -> return (SV.SatMulti (zip (repeat "_") cex), Just goal)
+        Just cex -> return (SV.SatMulti stats (zip (repeat "_") cex), stats, Just goal)
     Nothing -> fail $ "quickcheck:\n" ++
       "term has non-testable type"
 
 assumeValid :: ProofScript SV.ProofResult
 assumeValid = withFirstGoal $ \goal -> do
   io $ putStrLn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
-  return (SV.Valid, Nothing)
+  let stats = solverStats "ADMITTED" (scSharedSize (goalTerm goal))
+  return (SV.Valid stats, stats, Nothing)
 
 assumeUnsat :: ProofScript SV.SatResult
 assumeUnsat = withFirstGoal $ \goal -> do
   io $ putStrLn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
-  return (SV.Unsat, Nothing)
+  let stats = solverStats "ADMITTED" (scSharedSize (goalTerm goal))
+  return (SV.Unsat stats, stats, Nothing)
 
 trivial :: ProofScript SV.SatResult
 trivial = withFirstGoal $ \goal -> do
   checkTrue (goalTerm goal)
-  return (SV.Unsat, Nothing)
+  return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
     checkTrue t =
@@ -487,46 +493,46 @@ printGoal :: ProofScript ()
 printGoal = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
   io $ putStrLn (scPrettyTerm opts (goalTerm goal))
-  return ((), Just goal)
+  return ((), mempty, Just goal)
 
 printGoalDepth :: Int -> ProofScript ()
 printGoalDepth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts n (goalTerm goal))
-  return ((), Just goal)
+  return ((), mempty, Just goal)
 
 printGoalConsts :: ProofScript ()
 printGoalConsts = withFirstGoal $ \goal -> do
   io $ mapM_ putStrLn $ Map.keys (getConstantSet (goalTerm goal))
-  return ((), Just goal)
+  return ((), mempty, Just goal)
 
 printGoalSize :: ProofScript ()
 printGoalSize = withFirstGoal $ \goal -> do
   let t = goalTerm goal
   io $ putStrLn $ "Goal shared size: " ++ show (scSharedSize t)
   io $ putStrLn $ "Goal unshared size: " ++ show (scTreeSize t)
-  return ((), Just goal)
+  return ((), mempty, Just goal)
 
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal names = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ scUnfoldConstants sc names trm
-  return ((), Just (goal { goalTerm = trm' }))
+  return ((), mempty, Just (goal { goalTerm = trm' }))
 
 simplifyGoal :: Simpset Term -> ProofScript ()
 simplifyGoal ss = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ rewriteSharedTerm sc ss trm
-  return ((), Just (goal { goalTerm = trm' }))
+  return ((), mempty, Just (goal { goalTerm = trm' }))
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
   trm' <- io $ betaNormalize sc trm
-  return ((), Just (goal { goalTerm = trm' }))
+  return ((), mempty, Just (goal { goalTerm = trm' }))
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
@@ -601,11 +607,12 @@ satABC sc = withFirstGoal $ \g -> io $ do
   -- putStrLn "Checking..."
   satRes <- AIG.checkSat be lit
   ft <- scApplyPrelude_False sc
+  let stats = solverStats "ABC" (scSharedSize t0)
   case satRes of
     AIG.Unsat ->
       case goalQuant g of
-        Existential -> return (SV.Unsat, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat, Nothing)
+        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat stats, stats, Nothing)
     AIG.Sat cex -> do
       -- putStrLn "SAT"
       let r = liftCexBB shapes cex
@@ -613,10 +620,10 @@ satABC sc = withFirstGoal $ \g -> io $ do
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames vs)
             case goalQuant g of
-              Existential -> return (r', Nothing)
-              Universal -> return (r', Just (g { goalTerm = ft }))
+              Existential -> return (r', stats, Nothing)
+              Universal -> return (r', stats, Just (g { goalTerm = ft }))
           | otherwise -> fail $ unwords ["ABC SAT results do not match expected arguments", show argNames, show vs]
     AIG.SatUnknown -> fail "Unknown result from ABC"
 
@@ -658,6 +665,7 @@ satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
       sls = filter ("s " `isPrefixOf`) ls
       vls = filter ("v " `isPrefixOf`) ls
   ft <- scApplyPrelude_False sc
+  let stats = solverStats ("external SAT:" ++ execName) (scSharedSize t)
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
       let bs = parseDimacsSolution vars vls
@@ -666,15 +674,15 @@ satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames vs)
             case goalQuant g of
-              Universal -> return (r', Just (g { goalTerm = ft }))
-              Existential -> return (r', Nothing)
+              Universal -> return (r', stats, Just (g { goalTerm = ft }))
+              Existential -> return (r', stats, Nothing)
           | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
     (["s UNSATISFIABLE"], []) ->
       case goalQuant g of
-        Universal -> return (SV.Unsat, Nothing)
-        Existential -> return (SV.Unsat, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat stats, stats, Nothing)
+        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
     _ -> fail $ "Unexpected result from SAT solver:\n" ++ out
 
 writeAIGWithMapping :: GIA.GIA s -> GIA.Lit s -> FilePath -> IO [Int]
@@ -708,13 +716,14 @@ satRME sc = withFirstGoal $ \g -> io $ do
   let lit = case goalQuant g of
         Existential -> lit0
         Universal -> RME.compl lit0
+  let stats = solverStats "RME" (scSharedSize t0)
   -- putStrLn "Checking..."
   case RME.sat lit of
     Nothing ->
       case goalQuant g of
         Existential -> do ft <- scApplyPrelude_False sc
-                          return (SV.Unsat, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat, Nothing)
+                          return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat stats, stats, Nothing)
     Just cex -> do
       -- putStrLn "SAT"
       let m = Map.fromList cex
@@ -725,10 +734,10 @@ satRME sc = withFirstGoal $ \g -> io $ do
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames vs)
             case goalQuant g of
-              Existential -> return (r', Nothing)
-              Universal -> return (r', Just g)
+              Existential -> return (r', stats, Nothing)
+              Universal -> return (r', stats, Just g)
           | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
 
 codegenSBV :: SharedContext -> FilePath -> String -> TypedTerm -> IO ()
@@ -765,27 +774,29 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
   let (args, _) = asPiList tp
       argNames = map fst args
   SBV.SatResult r <- SBV.satWith conf lit
+  let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
+                          (scSharedSize t')
   case r of
     SBV.Satisfiable {} -> do
       ft <- scApplyPrelude_False sc
       let dict = SBV.getModelDictionary r
-          r' = getLabels labels dict argNames
+          r' = getLabels stats labels dict argNames
       case goalQuant g of
-        Existential -> return (r', Nothing)
-        Universal -> return (r', Just (g { goalTerm = ft }))
+        Existential -> return (r', stats, Nothing)
+        Universal -> return (r', stats, Just (g { goalTerm = ft }))
     SBV.Unsatisfiable {} -> do
       ft <- scApplyPrelude_False sc
       case goalQuant g of
-        Existential -> return (SV.Unsat, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat, Nothing)
+        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
+        Universal -> return (SV.Unsat stats, stats, Nothing)
     SBV.Unknown {} -> fail "Prover returned Unknown"
     SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
     SBV.TimeOut {} -> fail "Prover timed out"
 
-getLabels :: [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
-getLabels ls d argNames =
+getLabels :: SolverStats -> [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
+getLabels stats ls d argNames =
   if length argNames == length xs then
-    SV.SatMulti (zip argNames xs)
+    SV.SatMulti stats (zip argNames xs)
   else
     error $ unwords ["SBV SAT results do not match expected arguments", show argNames, show xs]
 
@@ -851,9 +862,11 @@ satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
              Just () -> return ()
            negTerm (map snd ts) t0
   exporter sc ((path ++ goalName g) ++ ext) t
+  let stats = solverStats ("offline:"++ drop 1 ext)
+                          (scSharedSize t)
   case goalQuant g of
-    Existential -> return (SV.Unsat, Just g)
-    Universal -> return (SV.Unsat, Nothing)
+    Existential -> return (SV.Unsat stats, stats, Just g)
+    Universal -> return (SV.Unsat stats, stats, Nothing)
   where
     negTerm :: [Term] -> Term -> IO Term
     negTerm [] p = scNot sc p
@@ -897,8 +910,8 @@ provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
   (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
   case finishProof pstate of
-    Just _ -> return ()
-    Nothing -> io $ putStrLn $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
+    (_stats, Just _)  -> return ()
+    (_stats, Nothing) -> io $ putStrLn $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
   return (SV.flipSatResult r)
 
 provePrintPrim :: ProofScript SV.SatResult
@@ -907,10 +920,10 @@ provePrintPrim script t = do
   (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
-    Just thm -> do io $ putStrLn "Valid"
-                   return thm
-    Nothing -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
-               ++ SV.showsProofResult opts (SV.flipSatResult r) ""
+    (_,Just thm) -> do io $ putStrLn "Valid"
+                       return thm
+    (_,Nothing) -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
+                     ++ SV.showsProofResult opts (SV.flipSatResult r) ""
 
 satPrim :: ProofScript SV.SatResult -> TypedTerm
         -> TopLevel SV.SatResult
@@ -1100,8 +1113,8 @@ caseProofResultPrim :: SV.ProofResult
 caseProofResultPrim pr vValid vInvalid = do
   sc <- getSharedContext
   case pr of
-    SV.Valid -> return vValid
-    SV.InvalidMulti pairs -> do
+    SV.Valid _ -> return vValid
+    SV.InvalidMulti _ pairs -> do
       let fvs = map snd pairs
       ts <- io $ mapM (scFiniteValue sc) fvs
       t <- io $ scTuple sc ts
@@ -1114,8 +1127,8 @@ caseSatResultPrim :: SV.SatResult
 caseSatResultPrim sr vUnsat vSat = do
   sc <- getSharedContext
   case sr of
-    SV.Unsat -> return vUnsat
-    SV.SatMulti pairs -> do
+    SV.Unsat _ -> return vUnsat
+    SV.SatMulti _ pairs -> do
       let fvs = map snd pairs
       ts <- io $ mapM (scFiniteValue sc) fvs
       t <- io $ scTuple sc ts
@@ -1258,9 +1271,9 @@ prove_core script input = do
   let r = SV.flipSatResult r'
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
-    Just thm -> return thm
-    Nothing -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
-               ++ SV.showsProofResult opts r ""
+    (_,Just thm) -> return thm
+    (_,Nothing)  -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
+                      ++ SV.showsProofResult opts r ""
 
 core_axiom :: String -> TopLevel Theorem
 core_axiom input = do

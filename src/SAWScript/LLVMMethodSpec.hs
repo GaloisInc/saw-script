@@ -55,6 +55,7 @@ import Verifier.SAW.Prelude
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMUtils
 import SAWScript.PathVC
+import SAWScript.SolverStats
 import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io)
 import SAWScript.VerificationCheck
 
@@ -574,15 +575,15 @@ data VerifyParams = VerifyParams
   }
 
 type SymbolicRunHandler =
-  SharedContext -> [PathVC SymBlockID] -> TopLevel ()
-type Prover = VerifyState -> Term -> TopLevel ()
+  SharedContext -> [PathVC SymBlockID] -> TopLevel SolverStats
+type Prover = VerifyState -> Term -> TopLevel SolverStats
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
   let ir = vpSpec params
       verb = verbLevel (vpOpts params)
   opts <- fmap rwPPOpts getTopLevelRW
-  forM_ results $ \pvc -> do
+  mconcat <$> (forM results $ \pvc -> do
     let mkVState nm cfn =
           VState { vsVCName = nm
                  , vsMethodSpec = ir
@@ -591,14 +592,14 @@ runValidation prover params sc results = do
                  , vsStaticErrors = pvcStaticErrors pvc
                  }
     if null (pvcStaticErrors pvc) then
-      forM_ (pvcChecks pvc) $ \vc -> do
+      mconcat <$> (forM (pvcChecks pvc) $ \vc -> do
         let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
         g <- io (scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc)
         when (verb >= 3) $ io $ do
           putStr $ "Checking " ++ vcName vc
           when (verb >= 4) $ putStr $ " (" ++ show g ++ ")"
           putStrLn ""
-        prover vs g
+        prover vs g)
     else do
       let vsName = "an invalid path"
       let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
@@ -609,7 +610,7 @@ runValidation prover params sc results = do
         print $ pvcStaticErrors pvc
         putStrLn $ "Calling prover to disprove " ++
                  scPrettyTerm defaultPPOpts (pvcAssumptions pvc)
-      prover vs g
+      prover vs g)
 
 data VerifyState = VState {
          vsVCName :: String

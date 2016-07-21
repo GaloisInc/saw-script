@@ -104,6 +104,7 @@ library
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SAWCorePrimitives
+    SAWScript.SolverStats
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU

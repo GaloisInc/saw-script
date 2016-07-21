@@ -44,6 +44,7 @@ import SAWScript.Options (Options)
 import SAWScript.Proof
 import SAWScript.TypedTerm
 import SAWScript.ImportAIG
+import SAWScript.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.FiniteValue
@@ -121,18 +122,18 @@ showLLVMModule (LLVMModule name m) =
       L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.funGC (L.defAttrs d))
 
 data ProofResult
-  = Valid
-  | InvalidMulti [(String, FiniteValue)]
+  = Valid SolverStats
+  | InvalidMulti SolverStats [(String, FiniteValue)]
     deriving (Show)
 
 data SatResult
-  = Unsat
-  | SatMulti [(String, FiniteValue)]
+  = Unsat SolverStats
+  | SatMulti SolverStats [(String, FiniteValue)]
     deriving (Show)
 
 flipSatResult :: SatResult -> ProofResult
-flipSatResult Unsat = Valid
-flipSatResult (SatMulti t) = InvalidMulti t
+flipSatResult (Unsat stats) = Valid stats
+flipSatResult (SatMulti stats t) = InvalidMulti stats t
 
 isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
@@ -166,8 +167,8 @@ showBraces s = showString "{" . s . showString "}"
 showsProofResult :: PPOpts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
-    Valid -> showString "Valid"
-    InvalidMulti ts -> showString "Invalid: [" . showMulti "" ts
+    Valid _ -> showString "Valid"
+    InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
   where
     opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
     showVal t = shows (ppFiniteValue opts' t)
@@ -178,8 +179,8 @@ showsProofResult opts r =
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
-    Unsat -> showString "Unsat"
-    SatMulti ts -> showString "Sat: [" . showMulti "" ts
+    Unsat _ -> showString "Unsat"
+    SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
   where
     opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
     showVal t = shows (ppFiniteValue opts' t)

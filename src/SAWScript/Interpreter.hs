@@ -1283,6 +1283,16 @@ primitives = Map.fromList
     , "results."
     ]
 
+  , prim "llvm_spec_solvers"  "LLVMMethodSpec -> [String]"
+    (\_ _ -> toValue llvmSpecSolvers)
+    [ "Extract a list of all the solvers used when verifying the given LLVM method spec."
+    ]
+  
+  , prim "llvm_spec_size"  "LLVMMethodSpec -> Int"
+    (\_ _ -> toValue llvmSpecSize)
+    [ "Return a count of the combined size of all verification goals proved as part of the given method spec."
+    ]
+
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
     [ "Branch on the result of SAT solving."

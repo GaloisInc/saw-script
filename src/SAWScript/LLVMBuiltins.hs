@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -26,6 +27,7 @@ import Control.Monad.Trans.Except
 import Data.Function (on)
 import Data.List (partition, sortBy, groupBy)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.String
 import qualified Data.Vector as V
 import Text.Parsec as P
@@ -54,6 +56,7 @@ import SAWScript.LLVMMethodSpec
 import SAWScript.LLVMUtils
 import SAWScript.Options
 import SAWScript.Proof
+import SAWScript.SolverStats
 import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV
@@ -248,10 +251,10 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
                         }
     ro <- getTopLevelRO
     rw <- getTopLevelRW
-    when (lsSimulate lsctx) $ io $ do
+    if lsSimulate lsctx then io $ do
       when (verb >= 3) $ do
         putStrLn $ "Executing " ++ show (specName ms)
-      runSimulator cb sbe mem (Just lopts) $ do
+      ms' <- runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity verb
         (initPS, otherPtrs, args) <- initializeVerification' scLLVM ms
         let ovdsByFunction = groupBy ((==) `on` specFunction) $
@@ -264,16 +267,20 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
           putStrLn "Verifying the following:"
           print (ppPathVC res)
         case lsTactic lsctx of
-          Skip -> liftIO $ putStrLn $
-            "WARNING: skipping verification of " ++ show (specName ms)
-          RunVerify script -> do
-            let prv = prover opts scLLVM ms script
-            liftIO $ fmap fst $ runTopLevel (runValidation prv vp scLLVM [res]) ro rw
-    if lsSimulate lsctx
-       then io $ putStrLn $ "Successfully verified " ++
-                       show (specName ms) ++ overrideText
-       else io $ putStrLn $ "WARNING: skipping simulation of " ++ show (specName ms)
-    return ms
+             Skip -> do
+                liftIO $ putStrLn $
+                   "WARNING: skipping verification of " ++ show (specName ms)
+                return ms
+             RunVerify script -> do
+                let prv = prover opts scLLVM ms script
+                stats <- liftIO $ fmap fst $ runTopLevel (runValidation prv vp scLLVM [res]) ro rw
+                return ms{ specSolverStats = stats }
+      putStrLn $ "Successfully verified " ++
+                   show (specName ms) ++ overrideText
+      return ms'
+    else do
+      io $ putStrLn $ "WARNING: skipping simulation of " ++ show (specName ms)
+      return ms
 
 prover :: Options
        -> SharedContext
@@ -281,7 +288,7 @@ prover :: Options
        -> ProofScript SV.SatResult
        -> VerifyState
        -> Term
-       -> TopLevel ()
+       -> TopLevel SolverStats
 prover opts sc ms script vs g = do
   let exts = getAllExts g
       verb = verbLevel opts
@@ -289,8 +296,12 @@ prover opts sc ms script vs g = do
   tt <- io (scAbstractExts sc exts g)
   r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) tt))
   case r of
-    SV.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
-    SV.SatMulti vals -> io $ showCexResults sc ppopts ms vs exts vals
+    SV.Unsat stats -> do
+        when (verb >= 3) $ io $ putStrLn "Valid."
+        return stats
+    SV.SatMulti _stats vals -> do
+        io $ showCexResults sc ppopts ms vs exts vals
+        return mempty
 
 showCexResults :: SharedContext
                -> SV.PPOpts
@@ -559,3 +570,10 @@ llvmVerifyTactic :: BuiltinContext -> Options
 llvmVerifyTactic _ _ script =
   -- TODO: complain if tactic provided more than once
   modify $ \st -> st { lsTactic = RunVerify script }
+
+
+llvmSpecSolvers :: LLVMMethodSpecIR -> [String]
+llvmSpecSolvers = Set.toList . solverStatsSolvers . specSolverStats
+
+llvmSpecSize :: LLVMMethodSpecIR -> Integer
+llvmSpecSize = solverStatsGoalSize . specSolverStats

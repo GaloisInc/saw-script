@@ -8,6 +8,7 @@ Point-of-contact : huffman
 module SAWScript.Proof where
 
 import Verifier.SAW.SharedTerm
+import SAWScript.SolverStats
 
 -- | A theorem must contain a boolean term, possibly surrounded by one
 -- or more lambdas which are interpreted as universal quantifiers.
@@ -33,13 +34,14 @@ data ProofState =
   ProofState
   { psGoals :: [ProofGoal]
   , psConcl :: ProofGoal
+  , psStats :: SolverStats
   }
 
 startProof :: ProofGoal -> ProofState
-startProof g = ProofState [g] g
+startProof g = ProofState [g] g mempty
 
-finishProof :: ProofState -> Maybe Theorem
-finishProof (ProofState gs concl) =
+finishProof :: ProofState -> (SolverStats, Maybe Theorem)
+finishProof (ProofState gs concl stats) =
   case gs of
-    [] -> Just (Theorem (goalTerm concl))
-    _ : _ -> Nothing
+    []    -> (stats, Just (Theorem (goalTerm concl)))
+    _ : _ -> (stats, Nothing)

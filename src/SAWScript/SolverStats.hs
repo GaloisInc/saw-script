@@ -1,0 +1,33 @@
+{- |
+Module           : $Header$
+Description      : Represents information about solved goals
+Stability        : provisional
+Point-of-contact : atomb
+-}
+
+module SAWScript.SolverStats where
+
+import Data.Set (Set)
+import qualified Data.Set as Set
+
+-- | Data structure for recording useful information about
+--   verification runs on goals.
+data SolverStats
+ = SolverStats
+   { -- | The names of the solvers that proved this goal.  If verifiaction was
+     --   skipped for some reason, this should be the empty list
+     solverStatsSolvers :: Set String
+     -- | The size of the term(s) that represent the proof obligations
+     --   involved in this verifiaction goal.  Usually, this is the size
+     --   of the SAWCore term representing the goal, but it might also
+     --   be the size of an AIG network, etc.
+   , solverStatsGoalSize :: Integer
+   }
+ deriving (Show)
+
+solverStats :: String -> Integer -> SolverStats
+solverStats nm sz = SolverStats (Set.singleton nm) sz
+
+instance Monoid SolverStats where
+  mempty = SolverStats mempty 0
+  mappend (SolverStats xs n) (SolverStats ys m) = SolverStats (mappend xs ys) (n+m)

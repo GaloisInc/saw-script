@@ -20,6 +20,7 @@ module SAWScript.LLVMMethodSpecIR
   , specCodebase
   , specBackend
   , specDef
+  , specSolverStats
   , specFunction
   , specBehavior
   , specAssumptions
@@ -52,6 +53,7 @@ import Verifier.LLVM.Backend
 import Verifier.LLVM.Backend.SAW
 
 import SAWScript.LLVMExpr
+import SAWScript.SolverStats
 import SAWScript.Utils
 
 -- BehaviorSpec {{{1
@@ -122,6 +124,7 @@ initLLVMMethodSpec pos sbe cb def =
                     , specDef = def
                     , specLLVMExprNames = Map.empty
                     , specBehavior = initBS
+                    , specSolverStats = mempty
                     }
   in initMS
 
@@ -141,6 +144,8 @@ data LLVMMethodSpecIR = MSIR {
   , specLLVMExprNames :: Map String (LLVMActualType, LLVMExpr)
     -- | Behavior specification for method.
   , specBehavior :: BehaviorSpec
+    -- | Statistics about the solver that proved this spec
+  , specSolverStats :: SolverStats
   }
 
 -- | Return user printable name of method spec (currently the class +

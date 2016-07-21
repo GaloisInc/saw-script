@@ -256,8 +256,8 @@ verifyJava bic opts cls mname overrides setup = do
               io $ doExtraChecks opts bsc glam
               r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) glam))
               case r of
-                SS.Unsat -> when (verb >= 3) $ io $ putStrLn "Valid."
-                SS.SatMulti vals -> io $ showCexResults jsc (rwPPOpts rw) ms vs exts vals
+                SS.Unsat _ -> when (verb >= 3) $ io $ putStrLn "Valid."
+                SS.SatMulti _ vals -> io $ showCexResults jsc (rwPPOpts rw) ms vs exts vals
         let ovds = vpOver vp
         initPS <- initializeVerification' jsc ms bs cl
         when (verb >= 2) $ liftIO $
