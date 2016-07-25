@@ -225,6 +225,7 @@ data TermDoc
   = TermDoc Doc
   | TupleDoc [Doc]
   | TupleTDoc [Doc]
+  | TupleProjDoc Int Doc
   | RecordDoc [(FieldName, Doc)]
   | RecordTDoc [(FieldName, Doc)]
   | LabelDoc FieldName
@@ -235,6 +236,7 @@ ppTermDoc td =
     TermDoc doc       -> doc
     TupleDoc docs     -> tupled docs
     TupleTDoc docs    -> char '#' <> tupled docs
+    TupleProjDoc i d  -> iterate (<> text ".R") d !! i
     RecordDoc fields  -> bracesList (map (ppField "=") fields)
     RecordTDoc fields -> char '#' <> bracesList (map (ppField ":") fields)
     LabelDoc s        -> text (show s)
@@ -262,6 +264,14 @@ ppFieldType f x y = TermDoc $ char '#' <> braces (eqn (ppTermDoc f) x <+> char '
 ppRecordSelector :: TermDoc -> TermDoc -> TermDoc
 ppRecordSelector x (LabelDoc f) = TermDoc (ppTermDoc x <> char '.' <> text f)
 ppRecordSelector x f = TermDoc (ppTermDoc x <> char '.' <> ppParens True (ppTermDoc f))
+
+ppPairLeft :: TermDoc -> TermDoc
+ppPairLeft (TupleProjDoc i doc) = TermDoc (doc <> char '.' <> int i)
+ppPairLeft x = TermDoc (ppTermDoc x <> text ".0")
+
+ppPairRight :: TermDoc -> TermDoc
+ppPairRight (TupleProjDoc i doc) = TupleProjDoc (i + 1) doc
+ppPairRight x = TupleProjDoc 1 (ppTermDoc x)
 
 ppAppParens :: Prec -> Doc -> Doc
 ppAppParens p d = ppParens (p > PrecApp) d
@@ -300,8 +310,8 @@ ppFlatTermF' opts pp prec tf =
     UnitType      -> pure $ TupleTDoc []
     PairValue x y -> ppPairValue <$> pp PrecNone x <*> pp PrecNone y
     PairType x y  -> ppPairType <$> pp PrecNone x <*> pp PrecNone y
-    PairLeft t    -> TermDoc . ppParens (prec > PrecArg) . (<> (text ".L")) <$> pp' PrecArg t
-    PairRight t   -> TermDoc . ppParens (prec > PrecArg) . (<> (text ".R")) <$> pp' PrecArg t
+    PairLeft t    -> ppPairLeft <$> pp PrecArg t
+    PairRight t   -> ppPairRight <$> pp PrecArg t
     EmptyValue         -> pure $ RecordDoc []
     EmptyType          -> pure $ RecordTDoc []
     FieldValue f x y   -> ppFieldValue <$> pp PrecNone f <*> pp PrecNone x <*> pp PrecNone y
