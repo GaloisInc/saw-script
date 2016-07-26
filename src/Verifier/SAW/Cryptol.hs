@@ -20,6 +20,7 @@ import Data.List
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Vector as Vector
 import Prelude ()
@@ -704,3 +705,28 @@ exportFiniteValue fv =
       | otherwise  -> V.VSeq  (toInteger (length vs)) (V.SeqMap $ \i -> V.ready $ exportFiniteValue (genericIndex vs i))
     FVTuple vs -> V.VTuple (map (V.ready . exportFiniteValue) vs)
     FVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFiniteValue v) | (n, v) <- Map.assocs vm ]
+
+importFiniteValue :: FiniteType -> V.Value -> IO FiniteValue
+importFiniteValue t0 v0 = V.runEval (go t0 v0)
+  where
+  go :: FiniteType -> V.Value -> V.Eval FiniteValue
+  go t v = case (t,v) of
+    (FTBit        , V.VBit b)        -> return (FVBit b)
+    (FTVec _ FTBit, V.VWord w wv)    -> FVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal =<< wv)
+    (FTVec _ ty   , V.VSeq len xs)   -> FVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
+    (FTTuple tys  , V.VTuple xs)     -> FVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
+    (FTRec fs     , V.VRecord xs)    ->
+        do xs' <- Map.fromList <$> mapM importField xs
+           let missing = Set.difference (Map.keysSet fs) (Map.keysSet xs')
+           unless (Set.null missing)
+                  (fail $ unwords $ ["Missing fields while importing finite value:"] ++ Set.toList missing)
+           return $ FVRec $ xs'
+      where
+       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (String, FiniteValue)
+       importField (C.unpackIdent -> nm,x)
+         | Just ty <- Map.lookup nm fs = do
+                x' <- go ty =<< x
+                return (nm, x')
+         | otherwise = fail $ unwords ["Unexpected field name while importing finite value:", show nm]
+
+    _ -> fail $ unwords ["Expected finite value of type:", show t, "but got", show v]
