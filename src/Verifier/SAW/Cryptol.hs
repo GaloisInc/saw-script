@@ -301,8 +301,22 @@ importExpr sc env expr =
                                      where fs' = [ (C.unpackIdent n, e) | (n, e) <- fs ]
     C.ESel e sel                ->           -- Elimination for tuple/record/list
       case sel of
-        C.TupleSel i _maybeLen  -> flip (scTupleSelector sc) (i+1) =<< go e
-        C.RecordSel x _         -> flip (scRecordSelect sc) (C.unpackIdent x) =<< go e
+        C.TupleSel i _maybeLen  -> do
+          let t = fastTypeOf (envC env) e
+          case C.tIsTuple t of
+            Just _  -> flip (scTupleSelector sc) (i+1) =<< go e
+            Nothing -> do
+              e' <- go e
+              f <- mapTupleSelector sc env i t
+              scApply sc f e'
+        C.RecordSel x _         -> do
+          let t = fastTypeOf (envC env) e
+          case t of
+            C.TRec{} -> flip (scRecordSelect sc) (C.unpackIdent x) =<< go e
+            _        -> do
+              e' <- go e
+              f <- mapRecordSelector sc env x t
+              scApply sc f e'
         C.ListSel i _maybeLen   -> do let t = fastTypeOf (envC env) e
                                       (n, a) <- case C.tIsSeq t of
                                                   Just (n, a) -> return (n, a)
@@ -321,7 +335,7 @@ importExpr sc env expr =
     C.EVar qname                    ->
       case Map.lookup qname (envE env) of
         Just (e', j)                -> incVars sc 0 j e'
-        Nothing                     -> fail "internal error: unknown variable"
+        Nothing                     -> fail $ "internal error: unknown variable: " ++ show qname
     C.ETAbs tp e                    -> do k <- importKind sc (C.tpKind tp)
                                           env' <- bindTParam sc tp env
                                           e' <- importExpr sc env' e
@@ -355,6 +369,48 @@ importExpr sc env expr =
   where
     go = importExpr sc env
     ty = importType sc env
+
+mapTupleSelector :: SharedContext -> Env -> Int -> C.Type -> IO Term
+mapTupleSelector sc env i = fmap fst . go
+  where
+    go :: C.Type -> IO (Term, C.Type)
+    go t =
+      case t of
+        (C.tIsSeq -> Just (n, a)) -> do
+          (f, b) <- go a
+          a' <- importType sc env a
+          b' <- importType sc env b
+          n' <- importType sc env n
+          g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
+          return (g, C.tSeq n b)
+        (C.tIsTuple -> Just ts) -> do
+          x <- scLocalVar sc 0
+          y <- scTupleSelector sc x (i+1)
+          t' <- importType sc env t
+          f <- scLambda sc "x" t' y
+          return (f, ts !! i)
+        _ -> fail $ "importExpr: invalid tuple selector"
+
+mapRecordSelector :: SharedContext -> Env -> C.Ident -> C.Type -> IO Term
+mapRecordSelector sc env i = fmap fst . go
+  where
+    go :: C.Type -> IO (Term, C.Type)
+    go t =
+      case t of
+        (C.tIsSeq -> Just (n, a)) -> do
+          (f, b) <- go a
+          a' <- importType sc env a
+          b' <- importType sc env b
+          n' <- importType sc env n
+          g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
+          return (g, C.tSeq n b)
+        C.TRec ts | Just b <- lookup i ts -> do
+          x <- scLocalVar sc 0
+          y <- scRecordSelect sc x (C.unpackIdent i)
+          t' <- importType sc env t
+          f <- scLambda sc "x" t' y
+          return (f, b)
+        _ -> fail $ "importExpr: invalid record selector"
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
