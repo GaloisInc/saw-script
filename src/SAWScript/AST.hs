@@ -30,7 +30,7 @@ module SAWScript.AST
        , Schema(..)
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
-       , tString, tTerm, tType, tBool, tInt, tAIG
+       , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tBlock, tContext, tVar
 
        , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
@@ -165,6 +165,7 @@ data TyCon
   | IntCon
   | BlockCon
   | AIGCon
+  | CFGCon
   | ContextCon Context
   deriving (Eq, Show)
 
@@ -337,6 +338,7 @@ instance PrettyPrint TyCon where
     BoolCon        -> PP.text "Bool"
     IntCon         -> PP.text "Int"
     AIGCon         -> PP.text "AIG"
+    CFGCon         -> PP.text "CFG"
     BlockCon       -> PP.text "<Block>"
     ContextCon cxt -> pretty par cxt
 
@@ -400,6 +402,9 @@ tBool = TyCon BoolCon []
 
 tAIG :: Type
 tAIG = TyCon AIGCon []
+
+tCFG :: Type
+tCFG = TyCon CFGCon []
 
 tInt :: Type
 tInt = TyCon IntCon []

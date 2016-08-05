@@ -14,6 +14,7 @@ module SAWScript.TopLevel
   , getSharedContext
   , getJavaCodebase
   , getOptions
+  , getHandleAlloc
   , getTopLevelRO
   , getTopLevelRW
   , putTopLevelRW

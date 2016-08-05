@@ -38,6 +38,7 @@ import Data.Traversable hiding ( mapM )
 #endif
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
+import Data.IORef
 import Data.Map ( Map )
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
@@ -49,6 +50,7 @@ import SAWScript.Builtins
 import SAWScript.Compiler (reportErrT)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
+import SAWScript.CrucibleBuiltins
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -83,6 +85,8 @@ import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import SAWScript.AutoMatch
+
+import qualified Lang.Crucible.FunctionHandle as Crucible
 
 -- Environment -----------------------------------------------------------------
 
@@ -348,15 +352,19 @@ buildTopLevelEnv opts =
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       Crucible.withHandleAllocator $ \halloc -> do
+       ccRef <- newIORef Nothing
        let ro0 = TopLevelRO
                    { roSharedContext = sc
                    , roJavaCodebase = jcb
                    , roOptions = opts
+                   , roHandleAlloc = halloc
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
                  , biJavaCodebase = jcb
                  , biBasicSS = ss
+                 , biCrucibleContext = ccRef
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
@@ -1394,6 +1402,26 @@ primitives = Map.fromList
     [ "Get the nth command-line argument as a String. Index 0 returns"
     , "the program name; other parameters are numbered starting at 1."
     ]
+
+  , prim "show_cfg"          "CFG -> String"
+    (pureVal show_cfg)
+    [ "Pretty-print a control-flow graph"
+    ]
+
+  , prim "load_crucible_llvm_module" "String -> TopLevel ()"
+    (bicVal load_crucible_llvm_module)
+    [ "Load an LLVM bitcode file into the Crucible symbolic simulator"
+    ]
+
+  , prim "load_llvm_cfg"     "String -> TopLevel CFG"
+    (bicVal load_llvm_cfg)
+    [ "Load a function from the currently-loaded Cruciblie LLVM module."
+    ]
+
+  , prim "extract_crucible_llvm"  "String -> TopLevel Term"
+    (bicVal extract_crucible_llvm)
+    [ "TODO"
+    ] 
   ]
   where
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> [String]

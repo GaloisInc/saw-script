@@ -19,6 +19,7 @@ module SAWScript.Value where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
+import Control.Monad.ST
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -58,6 +59,10 @@ import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import Cryptol.Utils.PP (pretty)
 
+-- import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
+import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.FunctionHandle as Crucible
+
 -- Values ----------------------------------------------------------------------
 
 data Value
@@ -89,6 +94,7 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
+  | VCFG Crucible.AnyCFG
 
 data LLVMModule =
   LLVMModule
@@ -237,6 +243,7 @@ showsPrecValue opts _p v =
     VSatResult r -> showsSatResult opts r
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
+    VCFG _ -> showString "<<CFG>>"
   where
     opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
 
@@ -297,6 +304,7 @@ data TopLevelRO =
   { roSharedContext :: SharedContext
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
+  , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
   }
 
 data TopLevelRW =
@@ -306,6 +314,7 @@ data TopLevelRW =
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
+  -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
@@ -325,6 +334,9 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+getHandleAlloc :: TopLevel (Crucible.HandleAllocator RealWorld)
+getHandleAlloc = TopLevel (asks roHandleAlloc)
 
 getTopLevelRO :: TopLevel TopLevelRO
 getTopLevelRO = TopLevel ask
@@ -463,6 +475,13 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
       m2 <- lift $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue LLVMSetup"
+
+instance IsValue (Crucible.AnyCFG) where
+    toValue t = VCFG t
+
+instance FromValue (Crucible.AnyCFG) where
+    fromValue (VCFG t) = t
+    fromValue _ = error "fromValue CFG"
 
 instance IsValue (AIGNetwork) where
     toValue t = VAIG t

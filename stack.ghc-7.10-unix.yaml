@@ -12,6 +12,10 @@ packages:
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
   - deps/llvm-verifier/
+  - deps/mss/crucible/
+  - deps/mss/galois-matlab/
+  - deps/mss/crucible-saw/
+  - deps/parameterized-utils/
   - .
 extra-deps:
   - fgl-visualize-0.1.0.1

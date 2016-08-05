@@ -23,6 +23,8 @@ library
     , containers
     , cryptol
     , cryptol-verifier
+    , crucible
+    , crucible-saw
     , deepseq
     , either
     , executable-path
@@ -42,6 +44,7 @@ library
     , mtl >= 2.1
     , old-locale
     , old-time
+    , parameterized-utils
     , parsec
     , pretty
     , pretty-show
@@ -79,6 +82,7 @@ library
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Compiler
+    SAWScript.CrucibleBuiltins
     SAWScript.CryptolBuiltins
     SAWScript.CryptolEnv
     SAWScript.Import

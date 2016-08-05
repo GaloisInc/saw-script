@@ -29,6 +29,7 @@ import Control.Monad.State
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
+import Data.IORef
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -110,9 +111,26 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent)
 import Cryptol.Utils.PP (pretty)
 
+--import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.LLVM.Translation as Crucible
+--import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
+import qualified Lang.Crucible.Simulator.MSSim as Crucible
+import qualified Lang.Crucible.Solver.SAWCoreBackend2 as Crucible
+import qualified Data.Parameterized.Nonce as Crucible
+
+type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
+
+data CrucibleContext = CrucibleContext { ccLLVMContext     :: Crucible.LLVMContext
+                                       , ccLLVMModuleTrans :: Crucible.ModuleTranslation
+                                       , ccBackend         :: Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
+                                       , ccSimContext      :: Crucible.SimContext Sym
+                                       , ccGlobals         :: Crucible.SymGlobalState Sym
+                                       }
+
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
                                      , biBasicSS       :: Simpset Term
+                                     , biCrucibleContext :: IORef (Maybe CrucibleContext)
                                      }
 
 showPrim :: SV.Value -> TopLevel String
