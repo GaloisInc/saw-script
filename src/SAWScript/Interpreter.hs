@@ -86,14 +86,17 @@ import SAWScript.AutoMatch
 
 -- Environment -----------------------------------------------------------------
 
-type LocalBinding = (SS.LName, Maybe SS.Schema, Maybe String, Value)
+data LocalBinding
+  = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
+  | LocalTypedef SS.Name SS.Type
+
 type LocalEnv = [LocalBinding]
 
 emptyLocal :: LocalEnv
 emptyLocal = []
 
 extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
-extendLocal x mt md v env = (x, mt, md, v) : env
+extendLocal x mt md v env = LocalLet x mt md v : env
 
 maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
@@ -122,9 +125,13 @@ extendEnv x mt md v rw =
               -> CEnv.bindCryptolModule (modname, m) ce
             _ -> ce
 
+addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
+addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
+
 mergeLocalEnv :: LocalEnv -> TopLevelRW -> TopLevelRW
 mergeLocalEnv env rw = foldr addBinding rw env
-  where addBinding (x, mt, md, v) = extendEnv x mt md v
+  where addBinding (LocalLet x mt md v) = extendEnv x mt md v
+        addBinding (LocalTypedef n ty) = addTypedef n ty
 
 getMergedEnv :: LocalEnv -> TopLevel TopLevelRW
 getMergedEnv env = mergeLocalEnv env `fmap` getTopLevelRW
@@ -238,6 +245,9 @@ interpretStmts env stmts =
              interpretStmts env ss
       SS.StmtImport _ : _ ->
           do fail "block import unimplemented"
+      SS.StmtTypedef name ty : ss ->
+          do let env' = LocalTypedef (getVal name) ty : env
+             interpretStmts env' ss
 
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
@@ -258,7 +268,8 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
-  SS.Decl _ (Just schema) expr'' <- io $ reportErrT $ checkDecl (rwTypes rw) decl
+  SS.Decl _ (Just schema) expr'' <-
+    io $ reportErrT $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -295,7 +306,8 @@ interpretStmt printBinds stmt =
   case stmt of
     SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
     SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- io $ reportErrT (checkDeclGroup (rwTypes rw) dg)
+                                    dg' <- io $ reportErrT $
+                                           checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW
     SS.StmtCode lstr          -> do rw <- getTopLevelRW
@@ -311,6 +323,8 @@ interpretStmt printBinds stmt =
                                     cenv' <- io $ CEnv.importModule sc (rwCryptol rw) imp
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
+    SS.StmtTypedef name ty    -> do rw <- getTopLevelRW
+                                    putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
@@ -363,6 +377,7 @@ buildTopLevelEnv opts =
        let rw0 = TopLevelRW
                    { rwValues   = valueEnv opts bic
                    , rwTypes    = primTypeEnv
+                   , rwTypedef  = Map.empty
                    , rwDocs     = primDocEnv
                    , rwCryptol  = ce0
                    , rwPPOpts   = SAWScript.Value.defaultPPOpts

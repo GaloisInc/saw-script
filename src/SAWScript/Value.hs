@@ -303,6 +303,7 @@ data TopLevelRW =
   TopLevelRW
   { rwValues  :: Map SS.LName Value
   , rwTypes   :: Map SS.LName SS.Schema
+  , rwTypedef :: Map SS.Name SS.Type
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
