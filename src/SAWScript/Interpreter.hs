@@ -991,6 +991,12 @@ primitives = Map.fromList
     , "a 'Term'."
     ]
 
+  , prim "cryptol_prims"       "() -> CryptolModule"
+    (funVal1 (\() -> cryptol_prims))
+    [ "Return a Cryptol module containing extra primitive operations,"
+    , "including array updates, truncate/extend, and signed comparisons."
+    ]
+
   -- Java stuff
 
   , prim "java_bool"           "JavaType"
