@@ -438,9 +438,8 @@ parseSchema env input = do
 
   fmap fst $ liftModuleM modEnv $ do
 
-    nameEnv1 <- MN.liftSupply (MN.namingEnv' pschema)
     -- Resolve names
-    let nameEnv = nameEnv1 `MR.shadowing` getNamingEnv env
+    let nameEnv = getNamingEnv env
     rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
 
     let ifDecls = getAllIfaceDecls modEnv
