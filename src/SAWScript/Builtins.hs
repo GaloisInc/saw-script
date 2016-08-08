@@ -118,12 +118,14 @@ import qualified Lang.Crucible.Simulator.MSSim as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend2 as Crucible
 import qualified Data.Parameterized.Nonce as Crucible
 
+
+data SAWCruciblePersonality sym = SAWCruciblePersonality
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
 data CrucibleContext = CrucibleContext { ccLLVMContext     :: Crucible.LLVMContext
                                        , ccLLVMModuleTrans :: Crucible.ModuleTranslation
-                                       , ccBackend         :: Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
-                                       , ccSimContext      :: Crucible.SimContext Sym
+                                       , ccBackend         :: Sym
+                                       , ccSimContext      :: Crucible.SimContext SAWCruciblePersonality Sym
                                        , ccGlobals         :: Crucible.SymGlobalState Sym
                                        }
 

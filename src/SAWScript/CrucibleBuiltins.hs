@@ -55,14 +55,16 @@ show_cfg (Crucible.AnyCFG cfg) = show cfg
 
 
 -- | Abort the current execution.
-abortTree :: Crucible.SimError -> Crucible.MSS_State sym rtp f args -> IO (Crucible.SimResult sym rtp)
+abortTree :: Crucible.SimError
+          -> Crucible.MSS_State SAWCruciblePersonality sym rtp f args
+          -> IO (Crucible.SimResult SAWCruciblePersonality sym rtp)
 abortTree e s = do
   -- Switch to new frame.
   Crucible.isSolverProof (s^.Crucible.stateContext) $ do
     Crucible.abortExec e s
 
 
-errorHandler :: Crucible.ErrorHandler Crucible.SimContext sym rtp
+errorHandler :: Crucible.ErrorHandler (Crucible.SimContext SAWCruciblePersonality) sym rtp
 errorHandler = Crucible.EH abortTree
 
 
@@ -79,15 +81,14 @@ load_crucible_llvm_module bic _opts bc_file = do
       sym <- Crucible.newSAWCoreBackend sc gen
       cfg <- Crucible.initialConfig 10 []
       let bindings = Crucible.fnBindingsFromList []
-      let cinfo    = Map.empty
-      let cdefs    = Map.empty
-      let hmap     = Map.empty
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
-                        bindings hmap cinfo cdefs []
+                        bindings SAWCruciblePersonality
       mem <- Crucible.initalizeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim Sym (Crucible.RegEntry Sym Crucible.UnitType) Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
+      let setupMem :: Crucible.OverrideSim SAWCruciblePersonality Sym
+                       (Crucible.RegEntry Sym Crucible.UnitType)
+                       Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
           setupMem = do
              -- register the callable override functions
              _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
