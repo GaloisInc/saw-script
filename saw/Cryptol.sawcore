@@ -609,11 +609,60 @@ ecPMod :: (a b :: Num) -> PFin a -> PFin b
 ecPMod _ _ (PFinNum a) (PFinNum b) = bvPMod a b;
 
 -- Random values
-primitive ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
+ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
+ecRandom a _ = error (ty a) "Cryptol.random";
 
 -- Trace function; simply return the final argument
 ecTrace :: (n :: Num) -> (a b :: KType) -> seq n (bitvector 8) -> ty a -> ty b -> ty b;
 ecTrace _ _ _ _ _ x = x;
+
+--------------------------------------------------------------------------------
+-- Extra primitives
+
+-- Array update
+ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num) -> PFin n -> PFin w
+  -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
+ecUpdate (TCNum n) a (TCNum w) _ _ = bvUpd n (ty a) w;
+
+-- Bitvector truncation
+ecTrunc :: (m n :: Num) -> PFin m -> PFin n -> seq (tcAdd m n) Bool -> seq n Bool;
+ecTrunc (TCNum m) (TCNum n) _ _ = bvTrunc m n;
+
+-- Zero extension
+ecUExt :: (m n :: Num) -> PFin m -> PFin n -> seq n Bool -> seq (tcAdd m n) Bool;
+ecUExt (TCNum m) (TCNum n) _ _ = bvUExt m n;
+{-
+-- Sign extension
+ecSExt :: (m n :: Num) -> PFin m -> PFin n -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd m (tcAdd n (TCNum 1))) Bool;
+ecSExt _ _ (PFinNum m) (PFinNum n) = bvSExt m n;
+
+-- Signed integer division
+ecSDiv :: (n :: Num) -> PFin n -> seq (tcAdd n (TCNum 1)) Bool
+  -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
+ecSDiv _ (PFinNum n) = bvSDiv n;
+
+-- Signed integer remainder
+ecSRem :: (n :: Num) -> PFin n -> seq (tcAdd n (TCNum 1)) Bool
+  -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
+ecSRem _ (PFinNum n) = bvSRem n;
+-}
+-- Signed greater-than
+ecSgt :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSgt (TCNum n) _ = bvsgt n;
+
+-- Signed greater-or-equal
+ecSge :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSge (TCNum n) _ = bvsge n;
+
+-- Signed less-than
+ecSlt :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSlt (TCNum n) _ = bvslt n;
+
+-- Signed less-or-equal
+ecSle :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
+ecSle (TCNum n) _ = bvsle n;
+
+-- Prelude.bvSShr
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
