@@ -378,15 +378,22 @@ mapTupleSelector sc env i = fmap fst . go
       case t of
         (C.tIsSeq -> Just (n, a)) -> do
           (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
+          a' <- importType' sc env a
+          b' <- importType' sc env b
           n' <- importType sc env n
           g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
           return (g, C.tSeq n b)
+        (C.tIsFun -> Just (n, a)) -> do
+          (f, b) <- go a
+          a' <- importType' sc env a
+          b' <- importType' sc env b
+          n' <- importType' sc env n
+          g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
+          return (g, C.tFun n b)
         (C.tIsTuple -> Just ts) -> do
           x <- scLocalVar sc 0
           y <- scTupleSelector sc x (i+1)
-          t' <- importType sc env t
+          t' <- importType' sc env t
           f <- scLambda sc "x" t' y
           return (f, ts !! i)
         _ -> fail $ "importExpr: invalid tuple selector"
@@ -399,15 +406,22 @@ mapRecordSelector sc env i = fmap fst . go
       case t of
         (C.tIsSeq -> Just (n, a)) -> do
           (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
+          a' <- importType' sc env a
+          b' <- importType' sc env b
           n' <- importType sc env n
           g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
           return (g, C.tSeq n b)
+        (C.tIsFun -> Just (n, a)) -> do
+          (f, b) <- go a
+          a' <- importType' sc env a
+          b' <- importType' sc env b
+          n' <- importType' sc env n
+          g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
+          return (g, C.tFun n b)
         C.TRec ts | Just b <- lookup i ts -> do
           x <- scLocalVar sc 0
           y <- scRecordSelect sc x (C.unpackIdent i)
-          t' <- importType sc env t
+          t' <- importType' sc env t
           f <- scLambda sc "x" t' y
           return (f, b)
         _ -> fail $ "importExpr: invalid record selector"
