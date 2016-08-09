@@ -34,6 +34,7 @@ import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
 import qualified Cryptol.Utils.Ident as C (Ident, packIdent, unpackIdent)
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
+import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Conversion
 import Verifier.SAW.FiniteValue
@@ -686,7 +687,11 @@ scCryptolEq sc x y = do
   let ss = addConvs natConversions (addRules rules emptySimpset)
   tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
   ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-  unless (tx == ty) $ fail $ "scCryptolEq: type mismatch: " ++ show (tx, ty)
+  unless (tx == ty) $ fail $ unwords [ "scCryptolEq: type mismatch between"
+                                     , pretty tx
+                                     , "and"
+                                     , pretty ty
+                                     ]
 
   -- Actually apply the equality function, along with the bogus "proof" ePCmp
   t <- scTypeOf sc x
