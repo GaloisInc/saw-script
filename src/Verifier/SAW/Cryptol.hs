@@ -377,7 +377,7 @@ mapTupleSelector sc env i = fmap fst . go
   where
     go :: C.Type -> IO (Term, C.Type)
     go t =
-      case t of
+      case C.tNoUser t of
         (C.tIsSeq -> Just (n, a)) -> do
           (f, b) <- go a
           a' <- importType' sc env a
@@ -398,14 +398,14 @@ mapTupleSelector sc env i = fmap fst . go
           t' <- importType' sc env t
           f <- scLambda sc "x" t' y
           return (f, ts !! i)
-        _ -> fail $ "importExpr: invalid tuple selector"
+        _ -> fail $ unwords ["importExpr: invalid tuple selector", show i, show t]
 
 mapRecordSelector :: SharedContext -> Env -> C.Ident -> C.Type -> IO Term
 mapRecordSelector sc env i = fmap fst . go
   where
     go :: C.Type -> IO (Term, C.Type)
     go t =
-      case t of
+      case C.tNoUser t of
         (C.tIsSeq -> Just (n, a)) -> do
           (f, b) <- go a
           a' <- importType' sc env a
@@ -426,7 +426,7 @@ mapRecordSelector sc env i = fmap fst . go
           t' <- importType' sc env t
           f <- scLambda sc "x" t' y
           return (f, b)
-        _ -> fail $ "importExpr: invalid record selector"
+        _ -> fail $ unwords ["importExpr: invalid record selector", show i, show t]
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
