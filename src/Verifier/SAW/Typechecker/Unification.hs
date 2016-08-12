@@ -776,6 +776,7 @@ checkTypesEqual' p ctx tc x y = do
     ( (TCF (Sort xs), []), (TCF (Sort ys), [])) | xs == ys -> return ()
 
     ( (TCF (NatLit xi), []), (TCF (NatLit yi), [])) | xi == yi -> return ()
+    ( (TCF (StringLit xs), []), (TCF (StringLit ys), [])) | xs == ys -> return ()
     ( (TCF (ArrayValue xtp xv), []), (TCF (ArrayValue ytp yv), []))
       | V.length xv == V.length yv ->
          check' tc xtp ytp *> checkAll (V.zip xv yv)
