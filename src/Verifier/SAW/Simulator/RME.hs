@@ -194,10 +194,9 @@ bvShiftOp op =
       VToNat v -> vWord (genShift muxRMEV op x (toWord v))
       _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 
--- | op :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+-- | op :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 rotateOp :: (Vector RValue -> Integer -> Vector RValue) -> RValue
 rotateOp op =
-  constFun $
   constFun $
   constFun $
   pureFun $ \(toVector -> x) ->
@@ -210,7 +209,6 @@ rotateOp op =
 -- | op :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 shiftOp :: (RValue -> Vector RValue -> Integer -> Vector RValue) -> RValue
 shiftOp op =
-  constFun $
   constFun $
   constFun $
   pureFun $ \z ->

@@ -368,7 +368,6 @@ rotateLOp :: CValue
 rotateLOp =
   constFun $
   constFun $
-  constFun $
   pureFun $ \xs ->
   Prims.natFun $ \i -> return $
     case xs of
@@ -379,7 +378,6 @@ rotateLOp =
 -- rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
 rotateROp :: CValue
 rotateROp =
-  constFun $
   constFun $
   constFun $
   pureFun $ \xs ->
@@ -394,7 +392,6 @@ shiftLOp :: CValue
 shiftLOp =
   constFun $
   constFun $
-  constFun $
   VFun $ \x -> return $
   pureFun $ \xs ->
   Prims.natFun $ \i -> return $
@@ -407,7 +404,6 @@ shiftLOp =
 -- shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 shiftROp :: CValue
 shiftROp =
-  constFun $
   constFun $
   constFun $
   VFun $ \x -> return $
