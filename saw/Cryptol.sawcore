@@ -620,9 +620,14 @@ ecTrace _ _ _ _ _ x = x;
 -- Extra primitives
 
 -- Array update
-ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num) -> PFin n -> PFin w
+ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num) -> PFin w
   -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
-ecUpdate (TCNum n) a (TCNum w) _ _ = bvUpd n (ty a) w;
+ecUpdate (TCNum n) a (TCNum w) _ = bvUpd n (ty a) w;
+ecUpdate TCInf     a (TCNum w) _ = bvStreamUpd (ty a) w;
+
+ecUpdateEnd :: (n :: Num) -> (a :: KType) -> (w :: Num) -> PFin n -> PFin w
+  -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
+ecUpdateEnd (TCNum n) a (TCNum w) _ _ xs i y = upd n (ty a) xs (subNat (subNat n 1) (bvToNat w i)) y;
 
 -- Bitvector truncation
 ecTrunc :: (m n :: Num) -> PFin m -> PFin n -> seq (tcAdd m n) Bool -> seq n Bool;

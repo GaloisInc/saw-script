@@ -263,6 +263,8 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "@@"            -> scGlobalDef sc "Cryptol.ecAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
     "!"             -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
     "!!"            -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {n,a,m,i} (fin n, fin i) => [n]a -> [m][i] -> [m]a
+    "update"        -> scGlobalDef sc "Cryptol.ecUpdate"      -- {a,b,c} (fin c) => [a]b -> [c] -> b -> [a]b
+    "updateEnd"     -> scGlobalDef sc "Cryptol.ecUpdateEnd"   -- {a,b,c} (fin a, fin c) => [a]b -> [c] -> b -> [a]b
     "fromThen"      -> scGlobalDef sc "Cryptol.ecFromThen"
                                -- fromThen : {first,next,bits,len}
                                --             ( fin first, fin next, fin bits
@@ -720,14 +722,14 @@ exportValue ty v = case ty of
       SC.VVector xs
         | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.BitsVal
                             (Seq.fromList . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) (V.SeqMap (\i ->
-                            (V.ready . exportValue e . SC.runIdentity . force $ xs Vector.! (fromIntegral i))))
+        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
+                            map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- infinite streams
   TV.TVStream e ->
     case v of
-      SC.VExtra (SC.CStream trie) -> V.VStream (V.SeqMap $ \i -> V.ready $ exportValue e (IntTrie.apply trie i))
+      SC.VExtra (SC.CStream trie) -> V.VStream (V.IndexSeqMap $ \i -> V.ready $ exportValue e (IntTrie.apply trie i))
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
   -- tuples
@@ -772,7 +774,7 @@ exportFiniteValue fv =
     FVVec t vs
       | t == FTBit -> V.VWord (toInteger (length vs))
                         (V.ready (V.BitsVal (Seq.fromList . map (V.ready . fvAsBool) $ vs)))
-      | otherwise  -> V.VSeq  (toInteger (length vs)) (V.SeqMap $ \i -> V.ready $ exportFiniteValue (genericIndex vs i))
+      | otherwise  -> V.VSeq  (toInteger (length vs)) (V.finiteSeqMap (map (V.ready . exportFiniteValue) vs))
     FVTuple vs -> V.VTuple (map (V.ready . exportFiniteValue) vs)
     FVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFiniteValue v) | (n, v) <- Map.assocs vm ]
 
