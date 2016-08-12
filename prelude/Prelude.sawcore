@@ -584,6 +584,10 @@ bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
+bvStreamUpd :: (a :: sort 0) -> (w :: Nat) ->
+     Stream a -> bitvector w -> a -> Stream a;
+bvStreamUpd a w xs i y = streamUpd a xs (bvToNat w i) y;
+
 bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateL n a w xs i = rotateL n a xs (bvToNat w i);
 
@@ -755,6 +759,9 @@ primitive bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvect
 data Stream :: sort 0 -> sort 0 where {
     MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
   }
+
+streamUpd :: (a :: sort 0) -> Stream a -> Nat -> a -> Stream a;
+streamUpd a (MkStream _ s) i y = MkStream a (\(j :: Nat) -> ite a (equalNat i j) y (s j));
 
 streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGet _ (MkStream _ s) i = s i;
