@@ -1291,8 +1291,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
   where
     prims :: [(String, Ident, String)]
     prims =
-      [ ("upd"  , "Cryptol.ecUpdate", "{n, a, w} (fin n, fin w) => [n]a -> [w] -> a -> [n]a")
-      , ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
+      [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
       , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
       , ("sgt"  , "Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
       , ("sge"  , "Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
