@@ -150,16 +150,6 @@ data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
 
-data PArith :: KType -> sort 0 where {
-    PArithWord :: (n :: Num) -> PFin n -> PArith (TCSeq n TCBit);
-    PArithSeq :: (n :: Num) -> (a :: KType) -> PArith a -> PArith (TCSeq n a);
-    PArithFun :: (a b :: KType) -> PArith b -> PArith (TCFun a b);
-    PArithUnit :: PArith TCUnit;
-    PArithPair :: (a b :: KType) -> PArith a -> PArith b -> PArith (TCPair a b);
-    PArithEmpty :: PArith TCEmpty;
-    PArithField :: (s :: String) -> (a b :: KType) -> PArith a -> PArith b -> PArith (TCField s a b);
-  }
-
 data PCmp :: KType -> sort 0 where {
     PCmpWord :: (n :: Num) -> PFin n -> PCmp (TCSeq n TCBit);
     PCmpBit :: PCmp TCBit;
@@ -311,29 +301,101 @@ fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g 
 funBinary :: (a b :: sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
 
-arithUnary :: ((n :: Nat) -> bitvector n -> bitvector n)
-           -> (a :: KType) -> PArith a -> ty a -> ty a;
-arithUnary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
-arithUnary bvOp _ (PArithSeq n a pa) = seqMap (ty a) (ty a) n (arithUnary bvOp a pa);
-arithUnary bvOp _ (PArithFun a b pb) = compose (ty a) (ty b) (ty b) (arithUnary bvOp b pb);
-arithUnary bvOp _ PArithUnit = unitUnary;
-arithUnary bvOp _ (PArithPair a b pa pb) =
-  pairUnary (ty a) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
-arithUnary bvOp _ PArithEmpty = emptyUnary;
-arithUnary bvOp _ (PArithField s a b pa pb) =
-  fieldUnary s (ty a) (ty b) (arithUnary bvOp a pa) (arithUnary bvOp b pb);
+PArith :: KType -> sort 0;
+PArith a =
+  #{ add :: ty a -> ty a -> ty a
+   , sub :: ty a -> ty a -> ty a
+   , mul :: ty a -> ty a -> ty a
+   , div :: ty a -> ty a -> ty a
+   , mod :: ty a -> ty a -> ty a
+   , exp :: ty a -> ty a -> ty a
+   , lg2 :: ty a -> ty a
+   , neg :: ty a -> ty a
+   };
 
-arithBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
-            -> (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-arithBinary bvOp _ (PArithWord _ (PFinNum n)) = bvOp n;
-arithBinary bvOp _ (PArithSeq n a pa) = seqBinary n (ty a) (arithBinary bvOp a pa);
-arithBinary bvOp _ (PArithFun a b pb) = funBinary (ty a) (ty b) (arithBinary bvOp b pb);
-arithBinary bvOp _ PArithUnit = unitBinary;
-arithBinary bvOp _ (PArithPair a b pa pb) =
-  pairBinary (ty a) (ty b) (arithBinary bvOp a pa) (arithBinary bvOp b pb);
-arithBinary bvOp _ PArithEmpty = emptyBinary;
-arithBinary bvOp _ (PArithField s a b pa pb) =
-  fieldBinary s (ty a) (ty b) (arithBinary bvOp a pa) (arithBinary bvOp b pb);
+PArithWord :: (n :: Num) -> PFin n -> PArith (TCSeq n TCBit);
+PArithWord (TCNum n) _ =
+  { add = bvAdd n
+  , sub = bvSub n
+  , mul = bvMul n
+  , div = bvUDiv n
+  , mod = bvURem n
+  , exp = bvExp n
+  , lg2 = bvLg2 n
+  , neg = bvNeg n
+  };
+
+PArithSeq :: (n :: Num) -> (a :: KType) -> PArith a -> PArith (TCSeq n a);
+PArithSeq n a pa =
+  { add = seqBinary n (ty a) pa.add
+  , sub = seqBinary n (ty a) pa.sub
+  , mul = seqBinary n (ty a) pa.mul
+  , div = seqBinary n (ty a) pa.div
+  , mod = seqBinary n (ty a) pa.mod
+  , exp = seqBinary n (ty a) pa.exp
+  , lg2 = seqMap (ty a) (ty a) n pa.lg2
+  , neg = seqMap (ty a) (ty a) n pa.neg
+  };
+
+PArithFun :: (a b :: KType) -> PArith b -> PArith (TCFun a b);
+PArithFun a b pb =
+  { add = funBinary (ty a) (ty b) pb.add
+  , sub = funBinary (ty a) (ty b) pb.sub
+  , mul = funBinary (ty a) (ty b) pb.mul
+  , div = funBinary (ty a) (ty b) pb.div
+  , mod = funBinary (ty a) (ty b) pb.mod
+  , exp = funBinary (ty a) (ty b) pb.exp
+  , lg2 = compose (ty a) (ty b) (ty b) pb.lg2
+  , neg = compose (ty a) (ty b) (ty b) pb.neg
+  };
+
+PArithUnit :: PArith TCUnit;
+PArithUnit =
+  { add = unitBinary
+  , sub = unitBinary
+  , mul = unitBinary
+  , div = unitBinary
+  , mod = unitBinary
+  , exp = unitBinary
+  , lg2 = unitUnary
+  , neg = unitUnary
+  };
+
+PArithPair :: (a b :: KType) -> PArith a -> PArith b -> PArith (TCPair a b);
+PArithPair a b pa pb =
+  { add = pairBinary (ty a) (ty b) pa.add pb.add
+  , sub = pairBinary (ty a) (ty b) pa.sub pb.sub
+  , mul = pairBinary (ty a) (ty b) pa.mul pb.mul
+  , div = pairBinary (ty a) (ty b) pa.div pb.div
+  , mod = pairBinary (ty a) (ty b) pa.mod pb.mod
+  , exp = pairBinary (ty a) (ty b) pa.exp pb.exp
+  , lg2 = pairUnary (ty a) (ty b) pa.lg2 pb.lg2
+  , neg = pairUnary (ty a) (ty b) pa.neg pb.neg
+  };
+
+PArithEmpty :: PArith TCEmpty;
+PArithEmpty =
+  { add = emptyBinary
+  , sub = emptyBinary
+  , mul = emptyBinary
+  , div = emptyBinary
+  , mod = emptyBinary
+  , exp = emptyBinary
+  , lg2 = emptyUnary
+  , neg = emptyUnary
+  };
+
+PArithField :: (s :: String) -> (a b :: KType) -> PArith a -> PArith b -> PArith (TCField s a b);
+PArithField s a b pa pb =
+  { add = fieldBinary s (ty a) (ty b) pa.add pb.add
+  , sub = fieldBinary s (ty a) (ty b) pa.sub pb.sub
+  , mul = fieldBinary s (ty a) (ty b) pa.mul pb.mul
+  , div = fieldBinary s (ty a) (ty b) pa.div pb.div
+  , mod = fieldBinary s (ty a) (ty b) pa.mod pb.mod
+  , exp = fieldBinary s (ty a) (ty b) pa.exp pb.exp
+  , lg2 = fieldUnary s (ty a) (ty b) pa.lg2 pb.lg2
+  , neg = fieldUnary s (ty a) (ty b) pa.neg pb.neg
+  };
 
 logicBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
             -> (Bool -> Bool -> Bool)
@@ -406,28 +468,28 @@ ecDemote _ _ (PFinNum val) (PFinNum bits) _ = bvNat bits val;
 
 -- Arith
 ecPlus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecPlus = arithBinary bvAdd;
+ecPlus a pa = pa.add;
 
 ecMinus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMinus = arithBinary bvSub;
+ecMinus a pa = pa.sub;
 
 ecMul :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMul = arithBinary bvMul;
+ecMul a pa = pa.mul;
 
 ecDiv :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecDiv = arithBinary bvUDiv;
+ecDiv a pa = pa.div;
 
 ecMod :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMod = arithBinary bvURem;
+ecMod a pa = pa.mod;
 
 ecExp :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecExp = arithBinary bvExp;
+ecExp a pa = pa.exp;
 
 ecLg2 :: (a :: KType) -> PArith a -> ty a -> ty a;
-ecLg2 = arithUnary bvLg2;
+ecLg2 a pa = pa.lg2;
 
 ecNeg :: (a :: KType) -> PArith a -> ty a -> ty a;
-ecNeg = arithUnary bvNeg;
+ecNeg a pa = pa.neg;
 
 -- Cmp
 ecLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
