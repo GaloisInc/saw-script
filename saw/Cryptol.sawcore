@@ -586,8 +586,65 @@ ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bo
 ecPMod (TCNum a) (TCNum b) = bvPMod a b;
 
 -- Random values
-primitive ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
+ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
+ecRandom a _ = error (ty a) "Cryptol.random";
 
+-- Trace function; simply return the final argument
+ecTrace :: (n :: Num) -> (a b :: KType) -> seq n (bitvector 8) -> ty a -> ty b -> ty b;
+ecTrace _ _ _ _ _ x = x;
+
+--------------------------------------------------------------------------------
+-- Extra primitives
+
+-- Array update
+ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num)
+  -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
+ecUpdate (TCNum n) a (TCNum w) = bvUpd n (ty a) w;
+ecUpdate TCInf     a (TCNum w) = bvStreamUpd (ty a) w;
+
+ecUpdateEnd :: (n :: Num) -> (a :: KType) -> (w :: Num)
+  -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
+ecUpdateEnd (TCNum n) a (TCNum w) xs i y = upd n (ty a) xs (subNat (subNat n 1) (bvToNat w i)) y;
+
+-- Bitvector truncation
+ecTrunc :: (m n :: Num) -> seq (tcAdd m n) Bool -> seq n Bool;
+ecTrunc (TCNum m) (TCNum n) = bvTrunc m n;
+
+-- Zero extension
+ecUExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
+ecUExt (TCNum m) (TCNum n) = bvUExt m n;
+{-
+-- Sign extension
+ecSExt :: (m n :: Num) -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd m (tcAdd n (TCNum 1))) Bool;
+ecSExt (TCNum m) (TCNum n) = bvSExt m n;
+
+-- Signed integer division
+ecSDiv :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
+  -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
+ecSDiv (TCNum n) = bvSDiv n;
+
+-- Signed integer remainder
+ecSRem :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
+  -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
+ecSRem (TCNum n) = bvSRem n;
+-}
+-- Signed greater-than
+ecSgt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSgt (TCNum n) = bvsgt n;
+
+-- Signed greater-or-equal
+ecSge :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSge (TCNum n) = bvsge n;
+
+-- Signed less-than
+ecSlt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSlt (TCNum n) = bvslt n;
+
+-- Signed less-or-equal
+ecSle :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSle (TCNum n) = bvsle n;
+
+-- Prelude.bvSShr
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
