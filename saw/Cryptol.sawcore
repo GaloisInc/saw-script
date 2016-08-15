@@ -150,16 +150,6 @@ data PFin :: Num -> sort 0 where {
     PFinNum :: (n :: Nat) -> PFin (TCNum n);
   }
 
-data PCmp :: KType -> sort 0 where {
-    PCmpWord :: (n :: Num) -> PFin n -> PCmp (TCSeq n TCBit);
-    PCmpBit :: PCmp TCBit;
-    PCmpSeq :: (n :: Num) -> (a :: KType) -> PFin n -> PCmp a -> PCmp (TCSeq n a);
-    PCmpUnit :: PCmp TCUnit;
-    PCmpPair :: (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCPair a b);
-    PCmpEmpty :: PCmp TCEmpty;
-    PCmpField :: (s :: String) -> (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCField s a b);
-  }
-
 -- Partial functions to select instances (terms translated from
 -- type-correct Cryptol should never hit the undefined cases)
 
@@ -451,14 +441,29 @@ fieldCmp :: (s :: String) -> (a b :: sort 0)
          -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> Bool -> Bool;
 fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
 
-cmpLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool -> Bool;
-cmpLt _ (PCmpWord _ (PFinNum n)) = bvCmp n;
-cmpLt _ PCmpBit = boolCmp;
-cmpLt _ (PCmpSeq _ a (PFinNum n) pa) = vecCmp n (ty a) (cmpLt a pa);
-cmpLt _ PCmpUnit = unitCmp;
-cmpLt _ (PCmpPair a b pa pb) = pairCmp (ty a) (ty b) (cmpLt a pa) (cmpLt b pb);
-cmpLt _ PCmpEmpty = emptyCmp;
-cmpLt _ (PCmpField s a b pa pb) = fieldCmp s (ty a) (ty b) (cmpLt a pa) (cmpLt b pb);
+PCmp :: KType -> sort 0;
+PCmp a = #{ cmpLt :: ty a -> ty a -> Bool -> Bool };
+
+PCmpWord :: (n :: Num) -> PFin n -> PCmp (TCSeq n TCBit);
+PCmpWord (TCNum n) _ = { cmpLt = bvCmp n };
+
+PCmpBit :: PCmp TCBit;
+PCmpBit = { cmpLt = boolCmp };
+
+PCmpSeq :: (n :: Num) -> (a :: KType) -> PFin n -> PCmp a -> PCmp (TCSeq n a);
+PCmpSeq (TCNum n) a _ pa = { cmpLt = vecCmp n (ty a) pa.cmpLt };
+
+PCmpUnit :: PCmp TCUnit;
+PCmpUnit = { cmpLt = unitCmp };
+
+PCmpPair :: (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCPair a b);
+PCmpPair a b pa pb = { cmpLt = pairCmp (ty a) (ty b) pa.cmpLt pb.cmpLt };
+
+PCmpEmpty :: PCmp TCEmpty;
+PCmpEmpty = { cmpLt = emptyCmp };
+
+PCmpField :: (s :: String) -> (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCField s a b);
+PCmpField s a b pa pb = { cmpLt = fieldCmp s (ty a) (ty b) pa.cmpLt pb.cmpLt };
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -493,7 +498,7 @@ ecNeg a pa = pa.neg;
 
 -- Cmp
 ecLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
-ecLt a pa x y = cmpLt a pa x y False;
+ecLt a pa x y = pa.cmpLt x y False;
 
 ecGt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
