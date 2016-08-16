@@ -402,11 +402,10 @@ bvShROp = bvShiftOp svShiftRight svShr
 
 -- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: SValue
-bvSShROp =
-  constFun $
-  wordFun $ \w -> return $
-  Prims.natFun'' "bvSShrOp" $ \n -> return $ vWord $ svUnsign (svShr (svSign w) (fromIntegral n))
--- FIXME: make this work for bvToNat arguments
+bvSShROp = bvShiftOp bvOp natOp
+  where
+    bvOp w x = svUnsign (svShiftRight (svSign w) x)
+    natOp w i = svUnsign (svShr (svSign w) i)
 
 eqOp :: SValue
 eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp
