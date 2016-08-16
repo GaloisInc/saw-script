@@ -388,7 +388,8 @@ bvShiftOp bvOp natOp =
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VNat i   -> return (vWord (natOp x (fromInteger i)))
+      VNat i   -> return (vWord (natOp x j))
+        where j = fromInteger (i `min` toInteger (intSizeOf x))
       VToNat v -> fmap (vWord . bvOp x) (toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
@@ -1063,7 +1064,7 @@ sbvSetOutput checkSz (FTRec fs) (VField fn x rec) i = do
        sbvSetOutput checkSz t x' i >>= sbvSetOutput checkSz (FTRec fs') rec
      Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
 sbvSetOutput _checkSz _ft _v _i = do
-   fail "sbvCode gen: type mismatch when setting output values"  
+   fail "sbvCode gen: type mismatch when setting output values"
 
 
 sbvCodeGen :: SharedContext
