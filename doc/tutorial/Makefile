@@ -1,4 +1,4 @@
-TARGET   = sawScriptTutorial
+TARGET   = tmp/sawScriptTutorial
 SRCS     = ${TARGET}.md ${wildcard *.bib} ${wildcard *.cls} ${wildcard *.sty}
 CODE     = ${wildcard code/*.c} \
            ${wildcard code/*.cry} \
@@ -10,14 +10,14 @@ OLDSPELL = ${TARGET}.SPELLOLD
 SPELL    = aspell -t -l
 AUX      = ${wildcard *.blg} ${wildcard *.bbl} ${wildcard *.aux} \
            ${wildcard *.eps} ${wildcard *.log} ${wildcard *.toc} \
-	   sawScriptTutorial.md
+           ${TARGET}.md
 PDFARGS   = -H tutorial-head.tex \
             -B tutorial-before.tex \
             -A tutorial-after.tex \
-	    --toc \
-	    --listings \
-	    -V documentclass:galois-whitepaper \
-	    -V fontsize:12 \
+            --toc \
+            --listings \
+            -V documentclass:galois-whitepaper \
+            -V fontsize:12 \
             --latex-engine=pdflatex
 HTMLARGS  = --css doc.css \
             -B tutorial-before.html \
@@ -27,28 +27,31 @@ HTMLARGS  = --css doc.css \
 
 all: ${TARGET}.pdf ${TARGET}.html
 
-${TARGET}.pdf: ${SRCS} Makefile
+${TARGET}.pdf: ${SRCS} Makefile | tmp
 	pandoc ${PDFARGS} -o $@ ${TARGET}.md
 
-${TARGET}.html: ${SRCS} Makefile
+${TARGET}.html: ${SRCS} Makefile | tmp
 	pandoc ${HTMLARGS} -o $@ ${TARGET}.md
 
 # Pre-processing step. Right now, does nothing.
-${TARGET}.md: tutorial.md docode.hs ${CODE}
+${TARGET}.md: tutorial.md docode.hs ${CODE} | tmp
 	runhaskell docode.hs < $< > $@
 
-docode: ${TARGET}.md
+docode: ${TARGET}.md | tmp
 
 .PHONY: spellClean superClean clean quickSpell
 
 #run:
 #	sawScript ${TARGET}.tex -c ../../Examples/ECC/build -j ../../jdk1.6/classes.jar
 
+tmp:
+	mkdir -p tmp
+
 clean:
-	rm -f ${AUX}
+	-rm -f ${AUX}
 
 superClean: clean
-	rm -f ${TARGET}.pdf ${TARGET}.html ${TARGET}.md
+	-rm -f ${TARGET}.pdf ${TARGET}.html ${TARGET}.md tmp
 
 spellClean:
 	rm -f ${NEWSPELL} ${OLDSPELL}
