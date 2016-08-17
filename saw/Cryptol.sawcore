@@ -142,28 +142,13 @@ ty (TCField s a b) = #{ (s) :: ty a | ty b };
 --------------------------------------------------------------------------------
 -- Predicate symbols
 
-primitive data PEqual :: Num -> Num -> sort 0;
-primitive data PNeq   :: Num -> Num -> sort 0;
-primitive data PGeq   :: Num -> Num -> sort 0;
-
-data PFin :: Num -> sort 0 where {
-    PFinNum :: (n :: Nat) -> PFin (TCNum n);
-  }
-
 -- Partial functions to select instances (terms translated from
 -- type-correct Cryptol should never hit the undefined cases)
 
-axiom ePEqual :: (m n :: Num) -> PEqual m n;
-axiom ePNeq :: (m n :: Num) -> PNeq m n;
-axiom ePGeq :: (m n :: Num) -> PGeq m n;
-
-ePFin :: (n :: Num) -> PFin n;
-ePFin (TCNum n) = PFinNum n;
--- ePFin TCInf is undefined
-
 ePArith :: (a :: KType) -> PArith a;
 --ePArith TCBit = undefined;
-ePArith (TCSeq n TCBit) = PArithWord n (ePFin n);
+--ePArith (TCSeq TCInf TCBit) = undefined;
+ePArith (TCSeq n TCBit) = PArithWord n;
 ePArith (TCSeq n (TCSeq m a)) = PArithSeq n (TCSeq m a) (ePArith (TCSeq m a));
 ePArith (TCSeq n (TCFun a b)) = PArithSeq n (TCFun a b) (ePArith (TCFun a b));
 ePArith (TCSeq n TCUnit) = PArithSeq n TCUnit (ePArith TCUnit);
@@ -177,13 +162,14 @@ ePArith TCEmpty = PArithEmpty;
 ePArith (TCField s a b) = PArithField s a b (ePArith a) (ePArith b);
 
 ePCmp :: (a :: KType) -> PCmp a;
-ePCmp (TCSeq n TCBit) = PCmpWord n (ePFin n);
-ePCmp (TCSeq n (TCSeq m a)) = PCmpSeq n (TCSeq m a) (ePFin n) (ePCmp (TCSeq m a));
---ePCmp (TCSeq n (TCFun a b)) = PCmpSeq n (TCFun a b) (ePFin n) (ePCmp (TCFun a b));
-ePCmp (TCSeq n TCUnit) = PCmpSeq n TCUnit (ePFin n) (ePCmp TCUnit);
-ePCmp (TCSeq n (TCPair a b)) = PCmpSeq n (TCPair a b) (ePFin n) (ePCmp (TCPair a b));
-ePCmp (TCSeq n TCEmpty) = PCmpSeq n TCEmpty (ePFin n) (ePCmp TCEmpty);
-ePCmp (TCSeq n (TCField s a b)) = PCmpSeq n (TCField s a b) (ePFin n) (ePCmp (TCField s a b));
+--ePCmp (TCSeq TCInf a) = undefined;
+ePCmp (TCSeq n TCBit) = PCmpWord n;
+ePCmp (TCSeq n (TCSeq m a)) = PCmpSeq n (TCSeq m a) (ePCmp (TCSeq m a));
+--ePCmp (TCSeq (TCNum n) (TCFun a b)) = PCmpSeq n (TCFun a b) (ePCmp (TCFun a b));
+ePCmp (TCSeq n TCUnit) = PCmpSeq n TCUnit (ePCmp TCUnit);
+ePCmp (TCSeq n (TCPair a b)) = PCmpSeq n (TCPair a b) (ePCmp (TCPair a b));
+ePCmp (TCSeq n TCEmpty) = PCmpSeq n TCEmpty (ePCmp TCEmpty);
+ePCmp (TCSeq n (TCField s a b)) = PCmpSeq n (TCField s a b) (ePCmp (TCField s a b));
 ePCmp TCBit = PCmpBit;
 --ePCmp (TCFun a b) = undefined;
 ePCmp TCUnit = PCmpUnit;
@@ -303,8 +289,8 @@ PArith a =
    , neg :: ty a -> ty a
    };
 
-PArithWord :: (n :: Num) -> PFin n -> PArith (TCSeq n TCBit);
-PArithWord (TCNum n) _ =
+PArithWord :: (n :: Num) -> PArith (TCSeq n TCBit);
+PArithWord (TCNum n) =
   { add = bvAdd n
   , sub = bvSub n
   , mul = bvMul n
@@ -444,14 +430,14 @@ fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
 PCmp :: KType -> sort 0;
 PCmp a = #{ cmpLt :: ty a -> ty a -> Bool -> Bool };
 
-PCmpWord :: (n :: Num) -> PFin n -> PCmp (TCSeq n TCBit);
-PCmpWord (TCNum n) _ = { cmpLt = bvCmp n };
+PCmpWord :: (n :: Num) -> PCmp (TCSeq n TCBit);
+PCmpWord (TCNum n) = { cmpLt = bvCmp n };
 
 PCmpBit :: PCmp TCBit;
 PCmpBit = { cmpLt = boolCmp };
 
-PCmpSeq :: (n :: Num) -> (a :: KType) -> PFin n -> PCmp a -> PCmp (TCSeq n a);
-PCmpSeq (TCNum n) a _ pa = { cmpLt = vecCmp n (ty a) pa.cmpLt };
+PCmpSeq :: (n :: Num) -> (a :: KType) -> PCmp a -> PCmp (TCSeq n a);
+PCmpSeq (TCNum n) a pa = { cmpLt = vecCmp n (ty a) pa.cmpLt };
 
 PCmpUnit :: PCmp TCUnit;
 PCmpUnit = { cmpLt = unitCmp };
@@ -468,8 +454,8 @@ PCmpField s a b pa pb = { cmpLt = fieldCmp s (ty a) (ty b) pa.cmpLt pb.cmpLt };
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecDemote :: (val bits :: Num) -> PFin val -> PFin bits -> PGeq bits (tcWidth val) -> seq bits Bool;
-ecDemote _ _ (PFinNum val) (PFinNum bits) _ = bvNat bits val;
+ecDemote :: (val bits :: Num) -> seq bits Bool;
+ecDemote (TCNum val) (TCNum bits) = bvNat bits val;
 
 -- Arith
 ecPlus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
@@ -565,115 +551,106 @@ ecZero (TCSeq n TCEmpty) = seqConst n #{} {};
 ecZero (TCSeq n (TCField s a b)) = seqConst n #{ (s) :: ty a | ty b } (ecZero (TCField s a b));
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecShiftL (TCNum m) _ a (PFinNum n) = bvShiftL m (ty a) n (ecZero a);
-ecShiftL TCInf _ a (PFinNum n) = bvStreamShiftL (ty a) n;
+ecShiftL :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecShiftL (TCNum m) (TCNum n) a = bvShiftL m (ty a) n (ecZero a);
+ecShiftL TCInf (TCNum n) a = bvStreamShiftL (ty a) n;
 
-ecShiftR :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecShiftR (TCNum m) _ a (PFinNum n) = bvShiftR m (ty a) n (ecZero a);
-ecShiftR TCInf _ a (PFinNum n) = bvStreamShiftR (ty a) n (ecZero a);
+ecShiftR :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecShiftR (TCNum m) (TCNum n) a = bvShiftR m (ty a) n (ecZero a);
+ecShiftR TCInf (TCNum n) a = bvStreamShiftR (ty a) n (ecZero a);
 
-ecRotL :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotL _ _ a (PFinNum m) (PFinNum n) = bvRotateL m (ty a) n;
+ecRotL :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecRotL (TCNum m) (TCNum n) a = bvRotateL m (ty a) n;
 
-ecRotR :: (m n :: Num) -> (a :: KType) -> PFin m -> PFin n -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotR _ _ a (PFinNum m) (PFinNum n) = bvRotateR m (ty a) n;
+ecRotR :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
+ecRotR (TCNum m) (TCNum n) a = bvRotateR m (ty a) n;
 
-ecCat :: (m n :: Num) -> (a :: KType) -> PFin m -> seq m (ty a) -> seq n (ty a) -> seq (tcAdd m n) (ty a);
-ecCat _ (TCNum n) a (PFinNum m) = append m n (ty a);
-ecCat _ TCInf a (PFinNum m) = streamAppend (ty a) m;
+ecCat :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n (ty a) -> seq (tcAdd m n) (ty a);
+ecCat (TCNum m) (TCNum n) a = append m n (ty a);
+ecCat (TCNum m) TCInf a = streamAppend (ty a) m;
 
-ecSplitAt :: (m n :: Num) -> (a :: KType) -> PFin m -> seq (tcAdd m n) (ty a) -> #(seq m (ty a), seq n (ty a));
-ecSplitAt _ (TCNum n) a (PFinNum m) xs = (take (ty a) m n xs, drop (ty a) m n xs);
-ecSplitAt _ TCInf a (PFinNum m) xs = (streamTake (ty a) m xs, streamDrop (ty a) m xs);
+ecSplitAt :: (m n :: Num) -> (a :: KType) -> seq (tcAdd m n) (ty a) -> #(seq m (ty a), seq n (ty a));
+ecSplitAt (TCNum m) (TCNum n) a xs = (take (ty a) m n xs, drop (ty a) m n xs);
+ecSplitAt (TCNum m) TCInf a xs = (streamTake (ty a) m xs, streamDrop (ty a) m xs);
 
-ecJoin :: (m n :: Num) -> (a :: KType) -> PFin n -> seq m (seq n (ty a)) -> seq (tcMul m n) (ty a);
-ecJoin (TCNum m) _ a (PFinNum n) = join m n (ty a);
-ecJoin TCInf _ a (PFinNum n) =
+ecJoin :: (m n :: Num) -> (a :: KType) -> seq m (seq n (ty a)) -> seq (tcMul m n) (ty a);
+ecJoin (TCNum m) (TCNum n) a = join m n (ty a);
+ecJoin TCInf (TCNum n) a =
   natCase
     (\ (n'::Nat) -> Stream (Vec n' (ty a)) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) (ty a))
       (\ (s::Stream (Vec 0 (ty a))) -> EmptyVec (ty a))
       (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') (ty a))) -> streamJoin (ty a) n' s)
       n;
 
-ecSplit :: (m n :: Num) -> (a :: KType) -> PFin n -> seq (tcMul m n) (ty a) -> seq m (seq n (ty a));
-ecSplit (TCNum m) _ a (PFinNum n) = split m n (ty a);
-ecSplit TCInf _ a (PFinNum n) =
+ecSplit :: (m n :: Num) -> (a :: KType) -> seq (tcMul m n) (ty a) -> seq m (seq n (ty a));
+ecSplit (TCNum m) (TCNum n) a = split m n (ty a);
+ecSplit TCInf (TCNum n) a =
   natCase
   (\(n :: Nat) -> seq (ite Num (equalNat 0 n) (TCNum 0) TCInf) (ty a) -> Stream (Vec n (ty a)))
   (streamConst (Vec 0 (ty a))) (\(n :: Nat) -> streamSplit (ty a) (Succ n)) n;
 
-ecReverse :: (n :: Num) -> (a :: KType) -> PFin n -> seq n (ty a) -> seq n (ty a);
-ecReverse _ a (PFinNum n) = reverse n (ty a);
+ecReverse :: (n :: Num) -> (a :: KType) -> seq n (ty a) -> seq n (ty a);
+ecReverse (TCNum n) a = reverse n (ty a);
 
 ecTranspose :: (m n :: Num) -> (a :: KType) -> seq m (seq n (ty a)) -> seq n (seq m (ty a));
 ecTranspose (TCNum m) (TCNum n) a = transpose m n (ty a);
 -- TODO: other cases
 
-ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin i -> seq n (ty a) -> seq i Bool -> ty a;
-ecAt (TCNum n) a _ (PFinNum i) = bvAt n (ty a) i;
-ecAt TCInf a _ (PFinNum i) = bvStreamGet (ty a) i;
+ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> seq n (ty a) -> seq i Bool -> ty a;
+ecAt (TCNum n) a (TCNum i) = bvAt n (ty a) i;
+ecAt TCInf a (TCNum i) = bvStreamGet (ty a) i;
 
-ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin i -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
-ecAtRange n a m i pi xs = seqMap (seq i Bool) (ty a) m (ecAt n a i pi xs);
+ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
+ecAtRange n a m i xs = seqMap (seq i Bool) (ty a) m (ecAt n a i xs);
 
-ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> PFin n -> PFin i -> seq n (ty a) -> seq i Bool -> ty a;
-ecAtBack n a i pn pi xs = ecAt n a i pi (ecReverse n a pn xs);
+ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> seq n (ty a) -> seq i Bool -> ty a;
+ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
 
-ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> PFin n -> PFin i -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
-ecAtRangeBack n a m i pn pi xs = seqMap (seq i Bool) (ty a) m (ecAtBack n a i pn pi xs);
+ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
+ecAtRangeBack n a m i xs = seqMap (seq i Bool) (ty a) m (ecAtBack n a i xs);
 
 -- Static word sequences
-ecFromThen :: (first next bits len :: Num) -> PFin first -> PFin next -> PFin bits
-           -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next)
-           -> PEqual (tcLenFromThen first next bits) len
-           -> seq len (seq bits Bool);
-ecFromThen _ _ _ (TCNum len) (PFinNum first) (PFinNum next) (PFinNum bits) _ _ _ =
+ecFromThen :: (first next bits len :: Num) -> seq len (seq bits Bool);
+ecFromThen (TCNum first) (TCNum next) (TCNum bits) (TCNum len) =
   gen len (Vec bits Bool)
     (\(i :: Nat) -> bvAdd bits (bvNat bits first)
                           (bvMul bits (bvSub bits (bvNat bits next) (bvNat bits first))
 			              (bvNat bits i)));
 
-ecFromTo :: (first last bits :: Num) -> PFin last -> PFin bits
-         -> PGeq last first -> PGeq bits (tcWidth last)
+ecFromTo :: (first last bits :: Num)
          -> seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
-ecFromTo (TCNum first) _ _ (PFinNum last) (PFinNum bits) _ _ =
+ecFromTo (TCNum first) (TCNum last) (TCNum bits) =
   gen (addNat 1 (subNat last first)) (Vec bits Bool)
     (\(i :: Nat) -> bvNat bits (addNat i first));
 
-ecFromThenTo :: (first next last bits len :: Num) -> PFin first -> PFin next -> PFin last -> PFin bits
-             -> PGeq bits (tcWidth first) -> PGeq bits (tcWidth next) -> PGeq bits (tcWidth last)
-             -> PEqual (tcLenFromThenTo first next last) len
-             -> seq len (seq bits Bool);
-ecFromThenTo _ _ _ _ (TCNum len) (PFinNum first) (PFinNum next) _ (PFinNum bits) _ _ _ _ =
+ecFromThenTo :: (first next last bits len :: Num) -> seq len (seq bits Bool);
+ecFromThenTo (TCNum first) (TCNum next) _ (TCNum bits) (TCNum len) =
   gen len (Vec bits Bool)
     (\(i :: Nat) ->
       bvNat bits (subNat (addNat first (mulNat i next)) (mulNat i first)));
 
 -- Infinite word sequences
-ecInfFrom :: (n :: Num) -> PFin n -> seq n Bool -> seq TCInf (seq n Bool);
-ecInfFrom _ (PFinNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
+ecInfFrom :: (n :: Num) -> seq n Bool -> seq TCInf (seq n Bool);
+ecInfFrom (TCNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
 
-ecInfFromThen :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
-ecInfFromThen _ (PFinNum n) first next =
+ecInfFromThen :: (n :: Num) -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
+ecInfFromThen (TCNum n) first next =
   MkStream (bitvector n) (\(i :: Nat) ->
     bvAdd n first (bvMul n (bvSub n next first) (bvNat n i)));
 
 -- Run-time error
-primitive ecError :: (a :: KType) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> ty a;
+primitive ecError :: (a :: KType) -> (len :: Num) -> seq len (bitvector 8) -> ty a;
 
 -- Polynomials
-ecPMul :: (a b :: Num) -> PFin a -> PFin b -> seq a Bool -> seq b Bool
+ecPMul :: (a b :: Num) -> seq a Bool -> seq b Bool
        -> seq (tcSub (tcMax (TCNum 1) (tcAdd a b)) (TCNum 1)) Bool;
-ecPMul _ _ (PFinNum a) (PFinNum b) = bvPMul a b;
+ecPMul (TCNum a) (TCNum b) = bvPMul a b;
 
-ecPDiv :: (a b :: Num) -> PFin a -> PFin b
-       -> seq a Bool -> seq b Bool -> seq a Bool;
-ecPDiv _ _ (PFinNum a) (PFinNum b) = bvPDiv a b;
+ecPDiv :: (a b :: Num) -> seq a Bool -> seq b Bool -> seq a Bool;
+ecPDiv (TCNum a) (TCNum b) = bvPDiv a b;
 
-ecPMod :: (a b :: Num) -> PFin a -> PFin b
-       -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bool;
-ecPMod _ _ (PFinNum a) (PFinNum b) = bvPMod a b;
+ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bool;
+ecPMod (TCNum a) (TCNum b) = bvPMod a b;
 
 -- Random values
 ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
@@ -687,52 +664,52 @@ ecTrace _ _ _ _ _ x = x;
 -- Extra primitives
 
 -- Array update
-ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num) -> PFin w
+ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num)
   -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
-ecUpdate (TCNum n) a (TCNum w) _ = bvUpd n (ty a) w;
-ecUpdate TCInf     a (TCNum w) _ = bvStreamUpd (ty a) w;
+ecUpdate (TCNum n) a (TCNum w) = bvUpd n (ty a) w;
+ecUpdate TCInf     a (TCNum w) = bvStreamUpd (ty a) w;
 
-ecUpdateEnd :: (n :: Num) -> (a :: KType) -> (w :: Num) -> PFin n -> PFin w
+ecUpdateEnd :: (n :: Num) -> (a :: KType) -> (w :: Num)
   -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
-ecUpdateEnd (TCNum n) a (TCNum w) _ _ xs i y = upd n (ty a) xs (subNat (subNat n 1) (bvToNat w i)) y;
+ecUpdateEnd (TCNum n) a (TCNum w) xs i y = upd n (ty a) xs (subNat (subNat n 1) (bvToNat w i)) y;
 
 -- Bitvector truncation
-ecTrunc :: (m n :: Num) -> PFin m -> PFin n -> seq (tcAdd m n) Bool -> seq n Bool;
-ecTrunc (TCNum m) (TCNum n) _ _ = bvTrunc m n;
+ecTrunc :: (m n :: Num) -> seq (tcAdd m n) Bool -> seq n Bool;
+ecTrunc (TCNum m) (TCNum n) = bvTrunc m n;
 
 -- Zero extension
-ecUExt :: (m n :: Num) -> PFin m -> PFin n -> seq n Bool -> seq (tcAdd m n) Bool;
-ecUExt (TCNum m) (TCNum n) _ _ = bvUExt m n;
+ecUExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
+ecUExt (TCNum m) (TCNum n) = bvUExt m n;
 {-
 -- Sign extension
-ecSExt :: (m n :: Num) -> PFin m -> PFin n -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd m (tcAdd n (TCNum 1))) Bool;
-ecSExt _ _ (PFinNum m) (PFinNum n) = bvSExt m n;
+ecSExt :: (m n :: Num) -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd m (tcAdd n (TCNum 1))) Bool;
+ecSExt (TCNum m) (TCNum n) = bvSExt m n;
 
 -- Signed integer division
-ecSDiv :: (n :: Num) -> PFin n -> seq (tcAdd n (TCNum 1)) Bool
+ecSDiv :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
   -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
-ecSDiv _ (PFinNum n) = bvSDiv n;
+ecSDiv (TCNum n) = bvSDiv n;
 
 -- Signed integer remainder
-ecSRem :: (n :: Num) -> PFin n -> seq (tcAdd n (TCNum 1)) Bool
+ecSRem :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
   -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
-ecSRem _ (PFinNum n) = bvSRem n;
+ecSRem (TCNum n) = bvSRem n;
 -}
 -- Signed greater-than
-ecSgt :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
-ecSgt (TCNum n) _ = bvsgt n;
+ecSgt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSgt (TCNum n) = bvsgt n;
 
 -- Signed greater-or-equal
-ecSge :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
-ecSge (TCNum n) _ = bvsge n;
+ecSge :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSge (TCNum n) = bvsge n;
 
 -- Signed less-than
-ecSlt :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
-ecSlt (TCNum n) _ = bvslt n;
+ecSlt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSlt (TCNum n) = bvslt n;
 
 -- Signed less-or-equal
-ecSle :: (n :: Num) -> PFin n -> seq n Bool -> seq n Bool -> Bool;
-ecSle (TCNum n) _ = bvsle n;
+ecSle :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSle (TCNum n) = bvsle n;
 
 -- Prelude.bvSShr
 
