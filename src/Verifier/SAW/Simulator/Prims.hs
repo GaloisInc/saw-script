@@ -411,7 +411,7 @@ intToNatOp =
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: Monad m => Value m b w e
-natToIntOp = natFun' "natToInt" $ \x -> return $ VNat (fromIntegral x)
+natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (fromIntegral x)
 
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 bvLg2Op :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
