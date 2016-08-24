@@ -273,11 +273,13 @@ selectV merger maxValue valueFn vx =
     impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
-shifter :: (SBool -> a -> a -> a) -> (a -> Integer -> a) -> a -> [SBool] -> a
+shifter :: (SBool -> a -> a -> IO a) -> (a -> Integer -> a) -> a -> [SBool] -> IO a
 shifter mux op = go
   where
-    go x [] = x
-    go x (b : bs) = go (mux b (op x (2 ^ length bs)) x) bs
+    go x [] = return x
+    go x (b : bs) = do
+      x' <- mux b (op x (2 ^ length bs)) x
+      go x' bs
 
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
@@ -585,20 +587,14 @@ rotateOp vecOp wordOp svOp =
       VToNat (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
         case xs of
-          VVector xv -> VVector <$> shifter mux op (return xv) bs
-            where mux = lazyMux (\b v1 v2 -> toVector <$> muxBVal b (VVector v1) (VVector v2))
-                  op xm n = flip vecOp n <$> xm
-          VWord xw -> vWord <$> shifter mux op (return xw) bs
-            where mux = lazyMux (\b w1 w2 -> return (svIte b w1 w2))
-                  op xm n = flip wordOp n <$> xm
+          VVector xv -> VVector <$> shifter muxVector vecOp xv bs
+          VWord xw -> vWord <$> shifter muxWord wordOp xw bs
           _ -> error $ "rotateOp: " ++ show xs
       VToNat (VWord iw) -> do
         case xs of
           VVector xv -> do
             let bs = V.toList (svUnpack iw)
-            VVector <$> shifter mux op (return xv) bs
-            where mux = lazyMux (\b v1 v2 -> toVector <$> muxBVal b (VVector v1) (VVector v2))
-                  op xm n = flip vecOp n <$> xm
+            VVector <$> shifter muxVector vecOp xv bs
           VWord xw -> return $ vWord (svOp xw iw)
           _ -> error $ "rotateOp: " ++ show xs
       _ -> error $ "rotateOp: " ++ show y
@@ -636,19 +632,16 @@ shiftOp vecOp wordOp svOp =
       VToNat (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
         case xs of
-          VVector xv -> VVector <$> shifter (lazyMux muxVector) op (return xv) bs
-            where op xm n = flip (vecOp z) n <$> xm
+          VVector xv -> VVector <$> shifter muxVector (vecOp z) xv bs
           VWord xw -> do
             zv <- toBool <$> force z
-            let op xm n = flip (wordOp zv) n <$> xm
-            vWord <$> shifter (lazyMux muxWord) op (return xw) bs
+            vWord <$> shifter muxWord (wordOp zv) xw bs
           _ -> error $ "shiftOp: " ++ show xs
       VToNat (VWord iw) ->
         case xs of
           VVector xv -> do
             let bs = V.toList (svUnpack iw)
-            VVector <$> shifter (lazyMux muxVector) op (return xv) bs
-            where op xm n = flip (vecOp z) n <$> xm
+            VVector <$> shifter muxVector (vecOp z) xv bs
           VWord xw -> do
             zv <- toBool <$> force z
             return $ vWord (svOp zv xw iw)
