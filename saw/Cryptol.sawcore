@@ -727,4 +727,19 @@ axiom subNat_5_1 :: Eq Nat (subNat 5 1) 4;
 axiom widthNat_4 :: Eq Nat (widthNat 4) 3;
 axiom widthNat_5 :: Eq Nat (widthNat 5) 3;
 
+axiom demote_add_distr
+  :: (w :: Nat)
+  -> (x y :: Num)
+  -> Eq (bitvector w)
+        (ecDemote (tcAdd x y)
+                  (TCNum w)
+                  (ePFin (tcAdd x y))
+                  (PFinNum w)
+                  (ePGeq (TCNum w) (tcWidth (tcAdd x y))))
+        (bvAdd w (ecDemote x (TCNum w) (ePFin x) (PFinNum w)
+                             (ePGeq (TCNum w) (tcWidth x)))
+                 (ecDemote y (TCNum w) (ePFin y) (PFinNum w)
+                             (ePGeq (TCNum w) (tcWidth y)))
+                 );
+
 --------------------------------------------------------------------------------
