@@ -731,15 +731,7 @@ axiom demote_add_distr
   :: (w :: Nat)
   -> (x y :: Num)
   -> Eq (bitvector w)
-        (ecDemote (tcAdd x y)
-                  (TCNum w)
-                  (ePFin (tcAdd x y))
-                  (PFinNum w)
-                  (ePGeq (TCNum w) (tcWidth (tcAdd x y))))
-        (bvAdd w (ecDemote x (TCNum w) (ePFin x) (PFinNum w)
-                             (ePGeq (TCNum w) (tcWidth x)))
-                 (ecDemote y (TCNum w) (ePFin y) (PFinNum w)
-                             (ePGeq (TCNum w) (tcWidth y)))
-                 );
+        (ecDemote (tcAdd x y) (TCNum w))
+        (bvAdd w (ecDemote x (TCNum w)) (ecDemote y (TCNum w)));
 
 --------------------------------------------------------------------------------
