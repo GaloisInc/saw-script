@@ -55,13 +55,14 @@ boolExtend' sc x = do
 byteExtend :: SharedContext -> Term -> IO Term
 byteExtend sc x = do
   n24 <- scNat sc 24
-  n8 <- scNat sc 8
-  scBvSExt sc n24 n8 x
+  n7 <- scNat sc 7
+  scBvSExt sc n24 n7 x
 
 shortExtend :: SharedContext -> Term -> IO Term
 shortExtend sc x = do
+  n15 <- scNat sc 15
   n16 <- scNat sc 16
-  scBvSExt sc n16 n16 x
+  scBvSExt sc n16 n15 x
 
 extendToIValue :: SharedContext -> Term -> IO Term
 extendToIValue sc t = do
