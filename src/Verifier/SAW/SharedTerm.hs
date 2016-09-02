@@ -145,6 +145,7 @@ module Verifier.SAW.SharedTerm
   , scBvShl, scBvShr, scBvSShr
   , scBvUExt, scBvSExt
   , scBvTrunc
+  , scLsb, scMsb
     -- ** Utilities
 --  , scTrue
 --  , scFalse
@@ -1176,6 +1177,12 @@ scAt sc n a xs idx = scGlobalApply sc (mkIdent preludeName "at") [n, a, xs, idx]
 -- single e x = generate 1 e (\(i :: Fin 1) -> x);
 scSingle :: SharedContext -> Term -> Term -> IO Term
 scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
+
+scLsb :: SharedContext -> Term -> Term -> IO Term
+scLsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
+
+scMsb :: SharedContext -> Term -> Term -> IO Term
+scMsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
 -- Primitive operations on nats
 

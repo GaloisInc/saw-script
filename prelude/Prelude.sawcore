@@ -570,6 +570,10 @@ bitvector n = Vec n Bool;
 msb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
 msb x v = at (Succ x) Bool v 0;
 
+-- | Returns least-significant bit in a bitvector.
+lsb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
+lsb x v = at (Succ x) Bool v x;
+
 -- | (bvNat x n) yields (n mod 2^x) as an x-bit vector.
 primitive bvNat :: (x :: Nat) -> Nat -> bitvector x;
 
