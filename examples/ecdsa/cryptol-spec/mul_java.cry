@@ -6,13 +6,13 @@ import bv
 update : {n, a, i} (fin n, fin i, 2^^i >= n) => [n]a -> [i] -> a -> [n]a
 update xs i y = [ if i == j then y else x | x <- xs | j <- [0...] ]
 
-mul_java_inner : ([32], [24][32], [32], [32], [32], [64]) -> { mji_a : [24][32], mji_d : [64]}
+mul_java_inner : (Bit, [24][32], [32], [32], [32], [64]) -> { mji_a : [24][32], mji_d : [64]}
 mul_java_inner (azero, a, ij, xi, yj, d) = { mji_a = a', mji_d = d' >> 32 }
   where
     m        = uext(xi) * uext(yj)
     d'       = d + m + uext(aij)
     a'       = update a ij (drop(d'))
-    aij      = if azero == 0 then a @ ij else 0
+    aij      = if ~azero then a @ ij else 0
 
 /*
 aset : {n, is} (fin n, fin is, n >= is, is >= lg2 n, n >= 32, is >= max(lg2 n, 6)) =>
@@ -45,7 +45,7 @@ mul_java (a0, x, y) = join (reverse (a_final!0))
     a_first : [13]([64],[24][32])
     a_first = [ (zero : [64], a0' : [24][32]) ]
             # [ (res.mji_d, res.mji_a)
-                   where res = mul_java_inner(1, a, j, x'@0, y'@j, d)
+                   where res = mul_java_inner(True, a, j, x'@0, y'@j, d)
               | (d, a) <- a_first
               | j      <- [0..11]
               ]
@@ -62,7 +62,7 @@ mul_java (a0, x, y) = join (reverse (a_final!0))
                    a_inner = [ ( zero : [64] /* d */, a, i) ]
                            # [ (res.mji_d, res.mji_a, ij+1)
                                 where
-                                  res = mul_java_inner(0, ai, ij, x'@i, y'@j, d)
+                                  res = mul_java_inner(False, ai, ij, x'@i, y'@j, d)
                              | (d, ai, ij) <- a_inner
                              | j          <- [0..(12-1)]:[12][32]
                              ]
@@ -106,7 +106,7 @@ sq_java_loop(a0, x) = a_mid!0
                            # [ (res.mji_d, res.mji_a, ij+1)
                                 where
                                   res = if j+i < l then
-                                          mul_java_inner(0, ai, ij, x'@i, x'@(j+i), d)
+                                          mul_java_inner(False, ai, ij, x'@i, x'@(j+i), d)
                                         else zero
                              | (d, ai, ij) <- a_inner
                              | j          <- [1..(12-1)]
@@ -127,14 +127,14 @@ sq_java (a0, x) = join (reverse ad_final_final)
     /* First loop in Java implementation */
     a_first = [ (zero : [64], a0' : [24][32]) ]
             # [ (res.mji_d, res.mji_a)
-                 where res = mul_java_inner(1, a, j, x0, x'@j, d)
+                 where res = mul_java_inner(True, a, j, x0, x'@j, d)
               | (d, a) <- a_first
               | j      <- [1..11]
               ]
     (d_first_final, a_first_final) = a_first!0
     ad_first_final = update a_first_final l (drop(d_first_final))
 
-    mid_res = mul_java_inner(1, sq_java_loop(ad_first_final, x), 0, x0, x0, 0)
+    mid_res = mul_java_inner(True, sq_java_loop(ad_first_final, x), 0, x0, x0, 0)
 
     /* Third loop in Java implementation */
     a_final : [12]([64],[24][32],[32])

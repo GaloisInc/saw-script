@@ -197,7 +197,7 @@ let leq_spec = do {
   x <- ecdsa_arr384 "x";
   y <- ecdsa_arr384 "y";
   java_may_alias [ "x", "y" ];
-  java_return {{ if x <= y then (1:[32]) else (0:[32]) }};
+  java_return {{ x <= y }};
   java_verify_tactic abc;
 };
 
@@ -249,7 +249,7 @@ let add_spec = do {
   java_may_alias ["z", "x", "y"];
   let z = {{ x + y }};
   ecdsa_assign_arr384 "z" {{ z }};
-  java_return {{ (z < x) && (z < y) }};
+  java_return {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }};
   maybe_skip;
   java_verify_tactic abc;
 };
@@ -260,7 +260,7 @@ let dbl_spec = do {
   let z = {{ x + x }};
   java_may_alias ["x", "z"];
   ecdsa_assign_arr384 "z" {{ z }};
-  java_return {{ z < x }};
+  java_return {{ if z < x then (1:[32]) else (0:[32]) }};
   maybe_skip;
   java_verify_tactic abc;
 };
@@ -643,7 +643,7 @@ let ec_mul_aux_spec ss = do {
   ecdsa_uses_a;
   ecdsa_uses_temps;
   java_assert {{ (j >= 0) && (j <= 384) }};
-  java_assert {{ ((j >> 5) < 11) == (i_lt != 0) }};
+  java_assert {{ ((j >> 5) < 11) == i_lt }};
   ecdsa_assign_jacobian "r"
     {{ p384_ec_mul::p384_ec_mul_aux (r, s, j, hi, i_lt, d_at_i, d_at_ip1) }};
   maybe_skip;
