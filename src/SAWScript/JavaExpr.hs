@@ -46,9 +46,8 @@ module SAWScript.JavaExpr
   , jssTypeOfActual
   , javaTypeToActual
   , isActualRef
+  , actualTypeCompatible
   , narrowTypeOfActual
-  , logicTypeOfActual
-  , logicTypeOfJSSType
   , cryptolTypeOfActual
   , typeOfLogicExpr
   , ppActualType
@@ -75,6 +74,7 @@ import Text.Read hiding (lift)
 import Verifier.Java.Codebase as JSS
 import Verifier.Java.SAWBackend hiding (basic_ss)
 
+import Verifier.SAW.Cryptol
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 
@@ -250,6 +250,10 @@ isActualRef ClassInstance{} = True
 isActualRef ArrayInstance{} = True
 isActualRef PrimitiveType{} = False
 
+-- | Check whether a Type and a JavaActualType are compatible.
+actualTypeCompatible :: JSS.Type -> JavaActualType -> Bool
+actualTypeCompatible ty aty = jssTypeOfActual aty == ty
+
 -- | Returns Java symbolic simulator type that actual type represents.
 jssTypeOfActual :: JavaActualType -> JSS.Type
 jssTypeOfActual (ClassInstance x) = JSS.ClassType (JSS.className x)
@@ -275,7 +279,7 @@ narrowTypeOfActual sc (ArrayInstance l tp) = do
         Nothing -> return Nothing
     Nothing -> return Nothing
 narrowTypeOfActual sc (PrimitiveType JSS.BooleanType) =
-  Just <$> scBitvector sc 1
+  Just <$> scBoolType sc
 narrowTypeOfActual sc (PrimitiveType JSS.ByteType) =
   Just <$> scBitvector sc 8
 narrowTypeOfActual sc (PrimitiveType JSS.CharType) =
@@ -288,30 +292,10 @@ narrowTypeOfActual sc (PrimitiveType JSS.LongType) =
   Just <$> scBitvector sc 64
 narrowTypeOfActual _ _ = return Nothing
 
--- | Returns logical type of actual type if it is an array or primitive type.
-logicTypeOfActual :: SharedContext -> JavaActualType
-                  -> IO (Maybe Term)
-logicTypeOfActual _ (ClassInstance _) = return Nothing
-logicTypeOfActual sc (ArrayInstance l tp) = do
-  elTy <- scBitvector sc (fromIntegral (JSS.stackWidth tp))
-  lTm <- scNat sc (fromIntegral l)
-  Just <$> scVecType sc lTm elTy
-logicTypeOfActual sc (PrimitiveType tp) =
-  logicTypeOfJSSType sc tp
-
-logicTypeOfJSSType :: SharedContext -> JSS.Type
-                   -> IO (Maybe Term)
-logicTypeOfJSSType _ (JSS.ArrayType _) = return Nothing
-logicTypeOfJSSType _ (JSS.ClassType _) = return Nothing
-logicTypeOfJSSType sc tp = do
-  Just <$> scBitvector sc (fromIntegral (JSS.stackWidth tp))
-
-cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type
-cryptolTypeOfActual (ClassInstance _) = Nothing
-cryptolTypeOfActual (ArrayInstance l (JSS.stackWidth -> n)) =
-  Just $ Cryptol.tSeq (Cryptol.tNum l) (Cryptol.tSeq (Cryptol.tNum n) Cryptol.tBit)
-cryptolTypeOfActual (PrimitiveType (JSS.stackWidth -> n)) = do
-  Just $ Cryptol.tSeq (Cryptol.tNum n) Cryptol.tBit
+cryptolTypeOfActual :: SharedContext -> JavaActualType -> IO (Maybe Cryptol.Type)
+cryptolTypeOfActual sc ty = do
+  mnty <- narrowTypeOfActual sc ty
+  maybe (return Nothing) (\nty -> Just <$> scCryptolType sc nty) mnty
 
 ppActualType :: JavaActualType -> String
 ppActualType (ClassInstance x) = JSS.slashesToDots (JSS.className x)
