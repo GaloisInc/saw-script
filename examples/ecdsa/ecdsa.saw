@@ -893,7 +893,7 @@ let ecdsa_sign_spec ss = do {
   java_ensure_eq "this.qPoint.x"     {{ split(0 : [384]) : [12][32] }};
   java_ensure_eq "this.qPoint.y"     {{ split(0 : [384]) : [12][32] }};
 
-  java_return {{ (zero # [res.r != 0 && res.s != 0]) : [32] }};
+  java_return {{ res.r != 0 && res.s != 0 }};
   maybe_skip;
   java_verify_tactic do {
     unfolding [ "p384_ecdsa_sign" ];
