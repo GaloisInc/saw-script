@@ -24,7 +24,6 @@ library
     , cryptol
     , cryptol-verifier
     , crucible
-    , crucible-llvm
     , crucible-saw
     , deepseq
     , either

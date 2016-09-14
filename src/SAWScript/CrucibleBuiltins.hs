@@ -56,15 +56,15 @@ show_cfg (Crucible.AnyCFG cfg) = show cfg
 
 -- | Abort the current execution.
 abortTree :: Crucible.SimError
-          -> Crucible.MSS_State SAWCruciblePersonality sym rtp f args
-          -> IO (Crucible.SimResult SAWCruciblePersonality sym rtp)
+          -> Crucible.MSS_State  sym rtp f args
+          -> IO (Crucible.SimResult  sym rtp)
 abortTree e s = do
   -- Switch to new frame.
   Crucible.isSolverProof (s^.Crucible.stateContext) $ do
     Crucible.abortExec e s
 
 
-errorHandler :: Crucible.ErrorHandler (Crucible.SimContext SAWCruciblePersonality) sym rtp
+errorHandler :: Crucible.ErrorHandler Crucible.SimContext sym rtp
 errorHandler = Crucible.EH abortTree
 
 
@@ -82,11 +82,11 @@ load_crucible_llvm_module bic _opts bc_file = do
       cfg <- Crucible.initialConfig 10 []
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
-                        bindings SAWCruciblePersonality
+                        bindings 
       mem <- Crucible.initalizeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim SAWCruciblePersonality Sym
+      let setupMem :: Crucible.OverrideSim Sym
                        (Crucible.RegEntry Sym Crucible.UnitType)
                        Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
           setupMem = do

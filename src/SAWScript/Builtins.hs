@@ -119,13 +119,12 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend2 as Crucible
 import qualified Data.Parameterized.Nonce as Crucible
 
 
-data SAWCruciblePersonality sym = SAWCruciblePersonality
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
 data CrucibleContext = CrucibleContext { ccLLVMContext     :: Crucible.LLVMContext
                                        , ccLLVMModuleTrans :: Crucible.ModuleTranslation
                                        , ccBackend         :: Sym
-                                       , ccSimContext      :: Crucible.SimContext SAWCruciblePersonality Sym
+                                       , ccSimContext      :: Crucible.SimContext Sym
                                        , ccGlobals         :: Crucible.SymGlobalState Sym
                                        }
 
