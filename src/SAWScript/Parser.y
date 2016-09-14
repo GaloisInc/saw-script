@@ -50,6 +50,7 @@ import Control.Applicative
   'if'           { TReserved _ "if"             }
   'then'         { TReserved _ "then"           }
   'else'         { TReserved _ "else"           }
+  'typedef'      { TReserved _ "typedef"        }
   'CryptolSetup' { TReserved _ "CryptolSetup"   }
   'JavaSetup'    { TReserved _ "JavaSetup"      }
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
@@ -115,6 +116,7 @@ Stmt :: { Stmt }
  | 'let' Declaration                    { StmtLet (NonRecursive $2)               }
  | 'let' Code                           { StmtCode $2                 }
  | 'import' Import                      { StmtImport $2               }
+ | 'typedef' name '=' Type              { StmtTypedef (toLName $2) $4 }
 
 Declaration :: { Decl }
  : Arg list(Arg) '=' Expression         { Decl $1 Nothing (buildFunction $2 $4) }

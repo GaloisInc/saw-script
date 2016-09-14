@@ -636,6 +636,33 @@ type checker can specialize the `dotprod` function to the appropriate
 type. ABC can then easily prove the equivalence between the C and
 Cryptol implementations.
 
+Using Additional Cryptol Primitives
+===================================
+
+SAWScript defines some Cryptol primitives that are not in scope by
+default, including signed comparisons (Cryptol’s comparisons are
+unsigned). Here is an example including the available operators and
+their use:
+
+```
+sawscript> let m = cryptol_prims ()
+sawscript> print m
+Symbols
+=======
+    trunc : {m, n} (fin m, fin n) => [m + n] -> [n]
+    uext : {m, n} (fin m, fin n) => [n] -> [m + n]
+    sgt : {n} (fin n) => [n] -> [n] -> Bit
+    sge : {n} (fin n) => [n] -> [n] -> Bit
+    slt : {n} (fin n) => [n] -> [n] -> Bit
+    sle : {n} (fin n) => [n] -> [n] -> Bit
+
+sawscript> print {{ m::sle 0xf 0x5 }}
+True
+```
+
+Note that `m::sle` (signed less-than-or-equal) is used in the Cryptol
+brackets. The `m::` is a module qualification.
+
 Other Examples
 ==============
 

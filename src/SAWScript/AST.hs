@@ -121,6 +121,7 @@ data Stmt
   | StmtLet      DeclGroup
   | StmtCode     (Located String)
   | StmtImport   Import
+  | StmtTypedef  (Located String) Type
   deriving (Eq, Show)
 
 data DeclGroup
@@ -270,6 +271,8 @@ instance Pretty Stmt where
             Just (P.Only names) ->
                PP.space PP.<> PP.tupled (map ppIdent names)
             Nothing -> PP.empty)
+      StmtTypedef (Located name _ _) ty ->
+         PP.text "typedef" PP.<+> PP.text name PP.<+> pretty 0 ty
       --expr -> PP.cyan . PP.text $ show expr
 
       where

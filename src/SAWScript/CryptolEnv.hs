@@ -21,6 +21,7 @@ module SAWScript.CryptolEnv
   , parseTypedTerm
   , parseDecls
   , parseSchema
+  , declareName
   , typeNoUser
   , schemaNoUser
   )
@@ -437,9 +438,8 @@ parseSchema env input = do
 
   fmap fst $ liftModuleM modEnv $ do
 
-    nameEnv1 <- MN.liftSupply (MN.namingEnv' pschema)
     -- Resolve names
-    let nameEnv = nameEnv1 `MR.shadowing` getNamingEnv env
+    let nameEnv = getNamingEnv env
     rschema <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename pschema))
 
     let ifDecls = getAllIfaceDecls modEnv
@@ -458,6 +458,16 @@ parseSchema env input = do
     (schema, _goals) <- MM.interactive (runInferOutput out)
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
+
+declareName :: CryptolEnv -> P.ModName -> String -> IO (T.Name, CryptolEnv)
+declareName env mname input = do
+  let pname = P.mkUnqual (packIdent input)
+  let modEnv = eModuleEnv env
+  (cname, modEnv') <-
+    liftModuleM modEnv $ MM.interactive $
+    MN.liftSupply (MN.mkDeclared mname (P.getIdent pname) Nothing P.emptyRange)
+  let env' = env { eModuleEnv = modEnv' }
+  return (cname, env')
 
 typeNoUser :: T.Type -> T.Type
 typeNoUser t =

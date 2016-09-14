@@ -150,6 +150,7 @@ newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
 
 data RO = RO
   { typeEnv :: M.Map (Located Name) Schema
+  , typedefEnv :: M.Map Name Type
   }
 
 data RW = RW
@@ -191,8 +192,8 @@ recordError err = TI $ modify $ \rw ->
 
 unify :: LName -> Type -> Type -> TI ()
 unify m t1 t2 = do
-  t1' <- appSubstM t1
-  t2' <- appSubstM t2
+  t1' <- appSubstM =<< instantiateM t1
+  t2' <- appSubstM =<< instantiateM t2
   case mgu m t1' t2' of
     Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
     Left e -> recordError $ unlines
@@ -237,6 +238,11 @@ bindPatternSchema pat s@(Forall vs t) m =
         TyCon (TupleCon _) ts -> foldr ($) m
           [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
+
+bindTypedef :: LName -> Type -> TI a -> TI a
+bindTypedef n t m =
+  TI $ local (\ro -> ro { typedefEnv = M.insert (getVal n) t $ typedefEnv ro })
+  $ unTI m
 
 -- FIXME: This function may miss type variables that occur in the type
 -- of a binding that has been shadowed by another value with the same
@@ -319,6 +325,7 @@ instance AppSubst Stmt where
     StmtLet dg           -> StmtLet (appSubst s dg)
     StmtCode str         -> StmtCode str
     StmtImport imp       -> StmtImport imp
+    StmtTypedef name ty  -> StmtTypedef name (appSubst s ty)
 
 instance AppSubst DeclGroup where
   appSubst s (Recursive ds) = Recursive (appSubst s ds)
@@ -347,6 +354,11 @@ instance Instantiate Type where
     TyVar n         -> maybe ty id (lookup n nts)
     TyUnifyVar _    -> ty
     TySkolemVar _ _ -> ty
+
+instantiateM :: Instantiate t => t -> TI t
+instantiateM t = do
+  s <- TI $ asks typedefEnv
+  return $ instantiate (M.assocs s) t
 
 -- }}}
 
@@ -394,7 +406,7 @@ inferE (ln, expr) = case expr of
 
   Lookup e n ->
     do (e1,t) <- inferE (ln, e)
-       t1 <- appSubstM t
+       t1 <- appSubstM =<< instantiateM t
        elTy <- case t1 of
                  TyRecord fs
                     | Just ty <- M.lookup n fs -> return ty
@@ -413,7 +425,7 @@ inferE (ln, expr) = case expr of
 
   TLookup e i ->
     do (e1,t) <- inferE (ln,e)
-       t1 <- appSubstM t
+       t1 <- appSubstM =<< instantiateM t
        elTy <- case t1 of
                  TyCon (TupleCon n) tys
                    | i < n -> return (tys !! fromIntegral i)
@@ -540,6 +552,11 @@ inferStmts m ctx (StmtImport imp : more) = do
   (more', t) <- inferStmts m ctx more
   return (StmtImport imp : more', t)
 
+inferStmts m ctx (StmtTypedef name ty : more) =
+  bindTypedef name ty $ do
+    (more', t) <- inferStmts m ctx more
+    return (StmtTypedef name ty : more', t)
+
 patternLNames :: Pattern -> [LName]
 patternLNames pat =
   case pat of
@@ -614,27 +631,27 @@ checkKind = return
 
 -- Main interface {{{
 
-checkDeclGroup :: Map LName Schema -> DeclGroup -> Err DeclGroup
-checkDeclGroup env dg =
-  case evalTIWithEnv env (inferDeclGroup dg) of
+checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Err DeclGroup
+checkDeclGroup env tenv dg =
+  case evalTIWithEnv env tenv (inferDeclGroup dg) of
     Right dg' -> return dg'
     Left errs -> fail (unlines errs)
 
-checkDecl :: Map LName Schema -> Decl -> Err Decl
-checkDecl env decl =
-  case evalTIWithEnv env (inferDecl decl) of
+checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Err Decl
+checkDecl env tenv decl =
+  case evalTIWithEnv env tenv (inferDecl decl) of
     Right decl' -> return decl'
     Left errs -> fail (unlines errs)
 
-evalTIWithEnv :: Map LName Schema -> TI a -> Either [String] a
-evalTIWithEnv env m = case runTIWithEnv env m of
+evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [String] a
+evalTIWithEnv env tenv m = case runTIWithEnv env tenv m of
   (res,_,[]) -> Right res
   (_,_,errs) -> Left errs
 
-runTIWithEnv :: Map LName Schema -> TI a -> (a, Subst, [String])
-runTIWithEnv env m = (a, subst rw, errors rw)
+runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [String])
+runTIWithEnv env tenv m = (a, subst rw, errors rw)
   where
-  m' = runReaderT (unTI m) (RO env)
+  m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
 
 -- }}}

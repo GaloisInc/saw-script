@@ -73,7 +73,7 @@ import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
-import SAWScript.AST (getVal, pShow)
+import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.SolverStats
@@ -108,7 +108,7 @@ import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
-import qualified Cryptol.Utils.Ident as C (packIdent)
+import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
 --import qualified Lang.Crucible.Core as Crucible
@@ -1305,3 +1305,32 @@ get_opt n = do
   prog <- io $ System.Environment.getProgName
   args <- io $ System.Environment.getArgs
   nthPrim (prog : args) n
+
+cryptol_prims :: TopLevel CryptolModule
+cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim prims
+  where
+    prims :: [(String, Ident, String)]
+    prims =
+      [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
+      , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
+      , ("sgt"  , "Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sge"  , "Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("slt"  , "Cryptol.ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sle"  , "Cryptol.ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      ]
+      -- TODO: sext, sdiv, srem, sshr
+
+    noLoc :: String -> Located String
+    noLoc x = Located x x (PosInternal "cryptol_prims")
+
+    parsePrim :: (String, Ident, String) -> TopLevel (C.Name, TypedTerm)
+    parsePrim (n, i, s) = do
+      sc <- getSharedContext
+      rw <- getTopLevelRW
+      let cenv = rwCryptol rw
+      let mname = C.packModName ["Prims"]
+      (n', cenv') <- io $ CEnv.declareName cenv mname n
+      s' <- io $ CEnv.parseSchema cenv' (noLoc s)
+      t' <- io $ scGlobalDef sc i
+      putTopLevelRW $ rw { rwCryptol = cenv' }
+      return (n', TypedTerm s' t')
