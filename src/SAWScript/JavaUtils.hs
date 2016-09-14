@@ -27,6 +27,7 @@ import Data.Maybe
 import qualified Data.Set as Set
 
 import Verifier.Java.Simulator as JSS
+import Verifier.Java.SAWImport
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 
@@ -40,68 +41,49 @@ type SpecJavaValue = Value Term
 type SAWJavaSim = Simulator SharedContext
 type LocalMap t = Map.Map LocalVariableIndex (Value t)
 
-boolExtend :: SharedContext -> Term -> IO Term
-boolExtend sc x = do
-  bool <- scBoolType sc
-  x' <- scSingle sc bool x
-  boolExtend' sc x'
-
 boolExtend' :: SharedContext -> Term -> IO Term
 boolExtend' sc x = do
   n31 <- scNat sc 31
   n1 <- scNat sc 1
   scBvUExt sc n31 n1 x
 
-byteExtend :: SharedContext -> Term -> IO Term
-byteExtend sc x = do
-  n24 <- scNat sc 24
-  n7 <- scNat sc 7
-  scBvSExt sc n24 n7 x
+extendArray :: SharedContext
+            -> (SharedContext -> IO (Term -> Term -> IO b))
+            -> Term -> IO b
+extendArray sc fn tm = do
+  ty <- scTypeOf sc =<< scWhnf sc tm
+  case ty of
+    (asVecType -> Just (n :*: _)) -> do
+      l <- scNat sc n
+      f <- fn sc
+      f l tm
+    _ -> fail "Invalid type passed to extendArray"
 
-shortExtend :: SharedContext -> Term -> IO Term
-shortExtend sc x = do
-  n15 <- scNat sc 15
-  n16 <- scNat sc 16
-  scBvSExt sc n16 n15 x
-
-charExtend :: SharedContext -> Term -> IO Term
-charExtend sc x = do
-  n16 <- scNat sc 16
-  scBvUExt sc n16 n16 x
-
-boolTrunc :: SharedContext -> Term -> IO Term
-boolTrunc sc x = do
-  n31 <- scNat sc 31
-  scLsb sc n31 x
-
-byteTrunc :: SharedContext -> Term -> IO Term
-byteTrunc sc x = do
-  n24 <- scNat sc 24
-  n8 <- scNat sc 8
-  scBvTrunc sc n24 n8 x
-
-shortTrunc :: SharedContext -> Term -> IO Term
-shortTrunc sc x = do
-  n16 <- scNat sc 16
-  scBvTrunc sc n16 n16 x
+japply :: (SharedContext -> IO (a -> IO b)) -> SharedContext -> a -> IO b
+japply fn sc tm = fn sc >>= \f -> f tm
 
 extendToIValue :: SharedContext -> JSS.Type -> Term -> IO Term
 extendToIValue sc ty tm = do
   case ty of
-    JSS.BooleanType -> boolExtend sc tm
-    JSS.ByteType -> byteExtend sc tm
-    JSS.ShortType -> shortExtend sc tm
-    JSS.CharType -> charExtend sc tm
+    JSS.BooleanType -> japply scApplyJava_boolExtend sc tm
+    JSS.ByteType -> japply scApplyJava_byteExtend sc tm
+    JSS.ShortType -> japply scApplyJava_shortExtend sc tm
+    JSS.CharType -> japply scApplyJava_charExtend sc tm
     JSS.IntType -> return tm
+    JSS.ArrayType JSS.BooleanType -> extendArray sc scApplyJava_extendBoolArray tm
+    JSS.ArrayType JSS.ByteType -> extendArray sc scApplyJava_extendByteArray tm
+    JSS.ArrayType JSS.CharType -> extendArray sc scApplyJava_extendCharArray tm
+    JSS.ArrayType JSS.ShortType -> extendArray sc scApplyJava_extendShortArray tm
+    JSS.ArrayType JSS.IntType -> return tm
     _ -> fail $ "Invalid type passed to extendToIValue: " ++ show ty
 
 truncateIValue :: SharedContext -> JSS.Type -> Term -> IO Term
 truncateIValue sc ty tm = do
   case ty of
-    JSS.BooleanType -> boolTrunc sc tm
-    JSS.ByteType -> byteTrunc sc tm
-    JSS.ShortType -> shortTrunc sc tm
-    JSS.CharType -> shortTrunc sc tm
+    JSS.BooleanType -> japply scApplyJava_boolTrunc sc tm
+    JSS.ByteType -> japply scApplyJava_byteTrunc sc tm
+    JSS.ShortType -> japply scApplyJava_shortTrunc sc tm
+    JSS.CharType -> japply scApplyJava_shortTrunc sc tm
     JSS.IntType -> return tm
     _ -> fail $ "Invalid type passed to truncateIValue: " ++ show ty
 
@@ -272,12 +254,12 @@ valueOfTerm sc jty (TypedTerm _schema t) = do
   -- TODO: the following is silly since we have @schema@ in scope
   ty <- liftIO $ (scTypeOf sc t >>= scWhnf sc)
   case (ty, jty) of
-    (asBoolType -> Just (), JSS.BooleanType) -> IValue <$> (liftIO $ boolExtend sc t)
+    (asBoolType -> Just (), JSS.BooleanType) -> IValue <$> (liftIO $ japply scApplyJava_boolExtend sc t)
     -- TODO: remove the following case when no longer needed
     (asBitvectorType -> Just 1, JSS.BooleanType) -> IValue <$> (liftIO $ boolExtend' sc t)
-    (asBitvectorType -> Just 8, JSS.ByteType) -> IValue <$> (liftIO $ byteExtend sc t)
-    (asBitvectorType -> Just 16, JSS.ShortType) -> IValue <$> (liftIO $ shortExtend sc t)
-    (asBitvectorType -> Just 16, JSS.CharType) -> IValue <$> (liftIO $ charExtend sc t)
+    (asBitvectorType -> Just 8, JSS.ByteType) -> IValue <$> (liftIO $ japply scApplyJava_byteExtend sc t)
+    (asBitvectorType -> Just 16, JSS.ShortType) -> IValue <$> (liftIO $ japply scApplyJava_shortExtend sc t)
+    (asBitvectorType -> Just 16, JSS.CharType) -> IValue <$> (liftIO $ japply scApplyJava_charExtend sc t)
     (asBitvectorType -> Just 32, JSS.IntType) -> return (IValue t)
     (asBitvectorType -> Just 64, JSS.LongType) -> return (LValue t)
     (asVecType -> Just (n :*: _), JSS.ArrayType ety) -> do
