@@ -581,15 +581,9 @@ valueEqTerm :: (Functor m, Monad m, MonadIO m) =>
             -> SpecJavaValue
             -> Term
             -> StateT (PathVC Breakpoint) m ()
-valueEqTerm sc name _ ty (IValue t) t' = do
-  t1 <- liftIO $ truncateIValue sc ty t
-  pvcgAssertEq name t1 t'
-valueEqTerm _ name _ _ (LValue t) t' = pvcgAssertEq name t t'
-valueEqTerm _ name ps _ (RValue r) t' = do
-  case Map.lookup r (ps ^. pathMemory . memScalarArrays) of
-    Just (_, t) -> pvcgAssertEq name t t'
-    Nothing -> fail $ "valueEqTerm: " ++ name ++ ": ref does not point to array"
-valueEqTerm _ name _ _ _ _ = fail $ "valueEqTerm: " ++ name ++ ": unspported value type"
+valueEqTerm sc name ps ty v t = do
+  t' <- termOfValue sc ps ty v
+  pvcgAssertEq name t' t
 
 valueEqValue :: (Functor m, Monad m, MonadIO m) =>
                SharedContext
@@ -607,8 +601,6 @@ valueEqValue _ _ _ (FValue f) _ (FValue f') | isNaN f && isNaN f' = return ()
 valueEqValue _ _ _ (FValue f) _ (FValue f') | f == f' = return ()
 valueEqValue _ _ _ (RValue r) _ (RValue r') | r == r' = return ()
 valueEqValue _sc name _ (IValue t) _ (IValue t') = do
-  --t1 <- truncateIValue sc ty t
-  --t2 <- truncateIValue sc ty' t'
   pvcgAssertEq name t t'
 valueEqValue _ name _ (LValue t) _ (LValue t') =
   pvcgAssertEq name t t'
