@@ -718,14 +718,7 @@ ecSle (TCNum n) = bvsle n;
 
 axiom replicate_False :: (n :: Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
 
-axiom unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
-
 axiom subNat_0 :: (n :: Nat) -> Eq Nat (subNat n 0) n;
-
--- TODO: implement these rules more generally with conversions:
-axiom subNat_5_1 :: Eq Nat (subNat 5 1) 4;
-axiom widthNat_4 :: Eq Nat (widthNat 4) 3;
-axiom widthNat_5 :: Eq Nat (widthNat 5) 3;
 
 axiom demote_add_distr
   :: (w :: Nat)
