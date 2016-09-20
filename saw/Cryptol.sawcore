@@ -122,6 +122,7 @@ seqConst TCInf = streamConst;
 
 data KType :: sort 0 where {
     TCBit :: KType;
+    TCInteger :: KType;
     TCSeq :: Num -> KType -> KType;
     TCFun :: KType -> KType -> KType;
     TCUnit :: KType;
@@ -132,6 +133,7 @@ data KType :: sort 0 where {
 
 ty :: KType -> sort 0;
 ty TCBit = Bool;
+ty TCInteger = Integer;
 ty (TCSeq n a) = seq n (ty a);
 ty (TCFun a b) = ty a -> ty b;
 ty TCUnit = #();
@@ -148,6 +150,7 @@ ty (TCField s a b) = #{ (s) :: ty a | ty b };
 ePArith :: (a :: KType) -> PArith a;
 --ePArith TCBit = undefined;
 --ePArith (TCSeq TCInf TCBit) = undefined;
+ePArith TCInteger = PArithInteger;
 ePArith (TCSeq n TCBit) = PArithWord n;
 ePArith (TCSeq n (TCSeq m a)) = PArithSeq n (TCSeq m a) (ePArith (TCSeq m a));
 ePArith (TCSeq n (TCFun a b)) = PArithSeq n (TCFun a b) (ePArith (TCFun a b));
@@ -164,6 +167,7 @@ ePArith (TCField s a b) = PArithField s a b (ePArith a) (ePArith b);
 ePCmp :: (a :: KType) -> PCmp a;
 --ePCmp (TCSeq TCInf a) = undefined;
 ePCmp (TCSeq n TCBit) = PCmpWord n;
+ePCmp (TCSeq n TCInteger) = PCmpSeq n TCInteger (ePCmp TCInteger);
 ePCmp (TCSeq n (TCSeq m a)) = PCmpSeq n (TCSeq m a) (ePCmp (TCSeq m a));
 --ePCmp (TCSeq (TCNum n) (TCFun a b)) = PCmpSeq n (TCFun a b) (ePCmp (TCFun a b));
 ePCmp (TCSeq n TCUnit) = PCmpSeq n TCUnit (ePCmp TCUnit);
@@ -171,6 +175,7 @@ ePCmp (TCSeq n (TCPair a b)) = PCmpSeq n (TCPair a b) (ePCmp (TCPair a b));
 ePCmp (TCSeq n TCEmpty) = PCmpSeq n TCEmpty (ePCmp TCEmpty);
 ePCmp (TCSeq n (TCField s a b)) = PCmpSeq n (TCField s a b) (ePCmp (TCField s a b));
 ePCmp TCBit = PCmpBit;
+ePCmp TCInteger = PCmpInteger;
 --ePCmp (TCFun a b) = undefined;
 ePCmp TCUnit = PCmpUnit;
 ePCmp (TCPair a b) = PCmpPair a b (ePCmp a) (ePCmp b);
@@ -289,6 +294,18 @@ PArith a =
    , neg :: ty a -> ty a
    };
 
+PArithInteger :: PArith TCInteger;
+PArithInteger =
+  { add = intAdd
+  , sub = intSub
+  , mul = intMul
+  , div = intDiv
+  , mod = intMod
+  , exp = error (Integer -> Integer -> Integer) "unimplemented: intExp"
+  , lg2 = error (Integer -> Integer) "unimplemented: intLg2"
+  , neg = intNeg
+  };
+
 PArithWord :: (n :: Num) -> PArith (TCSeq n TCBit);
 PArithWord (TCNum n) =
   { add = bvAdd n
@@ -377,6 +394,7 @@ logicBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
             -> (Bool -> Bool -> Bool)
             -> (a :: KType) -> ty a -> ty a -> ty a;
 logicBinary bvOp bitOp TCBit = bitOp;
+logicBinary bvOp bitOp TCInteger = error (Integer -> Integer -> Integer) "logicBinary/Integer";
 logicBinary bvOp bitOp (TCFun a b) = funBinary (ty a) (ty b) (logicBinary bvOp bitOp b);
 logicBinary bvOp bitOp TCUnit = unitBinary;
 logicBinary bvOp bitOp (TCPair a b) =
@@ -402,6 +420,9 @@ logicBinary bvOp bitOp (TCSeq n (TCField s a b)) =
 
 boolCmp :: Bool -> Bool -> Bool -> Bool;
 boolCmp x y k = ite Bool x (and y k) (or y k);
+
+integerCmp :: Integer -> Integer -> Bool -> Bool;
+integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 
 bvCmp :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
@@ -436,6 +457,9 @@ PCmpWord (TCNum n) = { cmpLt = bvCmp n };
 PCmpBit :: PCmp TCBit;
 PCmpBit = { cmpLt = boolCmp };
 
+PCmpInteger :: PCmp TCInteger;
+PCmpInteger = { cmpLt = integerCmp };
+
 PCmpSeq :: (n :: Num) -> (a :: KType) -> PCmp a -> PCmp (TCSeq n a);
 PCmpSeq (TCNum n) a pa = { cmpLt = vecCmp n (ty a) pa.cmpLt };
 
@@ -456,6 +480,15 @@ PCmpField s a b pa pb = { cmpLt = fieldCmp s (ty a) (ty b) pa.cmpLt pb.cmpLt };
 
 ecDemote :: (val bits :: Num) -> seq bits Bool;
 ecDemote (TCNum val) (TCNum bits) = bvNat bits val;
+
+ecInteger :: (val :: Num) -> Integer;
+ecInteger (TCNum val) = natToInt val;
+
+ecToInteger :: (n :: Num) -> seq n Bool -> Integer;
+ecToInteger (TCNum n) = bvToInt n;
+
+ecFromInteger :: (n :: Num) -> Integer -> seq n Bool;
+ecFromInteger (TCNum n) = intToBv n;
 
 -- Arith
 ecPlus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
@@ -536,6 +569,7 @@ ecCompl (TCSeq n (TCField s a b)) = seqMap (ty (TCField s a b)) (ty (TCField s a
 
 ecZero :: (a :: KType) -> ty a;
 ecZero TCBit = False;
+ecZero TCInteger = natToInt 0;
 ecZero (TCFun a b) = (\(_::ty a) -> ecZero b);
 ecZero TCUnit = ();
 ecZero (TCPair a b) = (ecZero a | ecZero b);
@@ -543,6 +577,7 @@ ecZero TCEmpty = {};
 ecZero (TCField s a b) = { (s) = ecZero a | ecZero b };
 ecZero (TCSeq (TCNum n) TCBit) = bvNat n 0;
 ecZero (TCSeq TCInf TCBit) = streamConst Bool False;
+ecZero (TCSeq n TCInteger) = seqConst n Integer (ecZero TCInteger);
 ecZero (TCSeq n (TCSeq m a)) = seqConst n (seq m (ty a)) (ecZero (TCSeq m a));
 ecZero (TCSeq n (TCFun a b)) = seqConst n (ty a -> ty b) (ecZero (TCFun a b));
 ecZero (TCSeq n TCUnit) = seqConst n #() ();

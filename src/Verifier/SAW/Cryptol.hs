@@ -139,6 +139,7 @@ importType sc env ty =
             C.TCNum n    -> scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger n)]
             C.TCInf      -> scCtorApp sc "Cryptol.TCInf" []
             C.TCBit      -> scCtorApp sc "Cryptol.TCBit" []
+            C.TCInteger  -> scCtorApp sc "Cryptol.TCInteger" []
             C.TCSeq      -> scCtorApp sc "Cryptol.TCSeq" =<< traverse go tyargs
             C.TCFun      -> scCtorApp sc "Cryptol.TCFun" =<< traverse go tyargs
             C.TCTuple _n -> importTCTuple sc env tyargs
@@ -237,6 +238,9 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "False"         -> scBool sc False
     "demote"        -> scGlobalDef sc "Cryptol.ecDemote"      -- Converts a numeric type into its corresponding value.
                                                      -- { val, bits } (fin val, fin bits, bits >= width val) => [bits]
+    "integer"       -> scGlobalDef sc "Cryptol.ecInteger"     -- {n} (fin n) => Integer
+    "toInteger"     -> scGlobalDef sc "Cryptol.ecToInteger"   -- {n} (fin n) => [n] -> Integer
+    "fromInteger"   -> scGlobalDef sc "Cryptol.ecFromInteger" -- {n} (fin n) => Integer -> [n]
     "+"             -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
     "-"             -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
     "*"             -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Arith a) => a -> a -> a
@@ -730,6 +734,9 @@ exportValue ty v = case ty of
 
   TV.TVBit ->
     V.VBit (SC.toBool v)
+
+  TV.TVInteger ->
+    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
   TV.TVSeq _ e ->
     case v of
