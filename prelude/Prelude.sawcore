@@ -388,15 +388,7 @@ expNat b Zero = 1;
 expNat b (Succ x) = mulNat b (expNat b x);
 
 -- | Natural division and modulus
-divModNat :: Nat -> Nat -> #(Nat, Nat);
-divModNat x0 divisor =
-   let { go :: Nat -> Nat -> #(Nat, Nat);
-         go q x = go2 q x (subNat x divisor);
-         go2 :: Nat -> Nat -> Nat -> #(Nat, Nat);
-         go2 q x Zero = (q,x);
-         go2 q x (Succ y) = go (Succ q) (Succ y);
-       }
-    in go Zero x0;
+primitive divModNat :: Nat -> Nat -> #(Nat, Nat);
 
 divNat :: Nat -> Nat -> Nat;
 divNat x y = (divModNat x y).1;
