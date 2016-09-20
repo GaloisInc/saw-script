@@ -11,8 +11,8 @@ init =
   , len = 0
   }
 
-update : {n} (fin n, 32 >= width n) => State -> [n][32] -> State
-update st xs =
+updatef : {n} (fin n, 32 >= width n) => State -> [n][32] -> State
+updatef st xs =
   { sum = st.sum + sum
   , len = st.len + `n
   }
@@ -34,4 +34,4 @@ avg xs = sum / `n
 // Tests.
 
 imp_correct : {n} (fin n, 32 >= width n) => [n][32] -> Bool
-property imp_correct xs = avg xs == digest (update init xs)
+property imp_correct xs = avg xs == digest (updatef init xs)
