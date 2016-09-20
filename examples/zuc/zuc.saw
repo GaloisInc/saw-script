@@ -72,7 +72,7 @@ let MulPow_spec cry_mulpow = do {
     k <- llvm_var "k" (llvm_int 32);
     llvm_assert {{ x == (x && 0x7FFFFFFF) }};
     llvm_assert {{ k == (k && 0x7FFFFFFF) }};
-    llvm_assert {{ (k >= 8) && (k <= 21) }};
+    llvm_assert {{ (k >= 8) /\ (k <= 21) }};
     llvm_return {{ (0 # (cry_mulpow (t x, t k))) : [32] }};
     llvm_verify_tactic abc;
 };
@@ -184,7 +184,7 @@ init2 <- llvm_symexec zucbc "InitializationOne"
   false;
 
 // Prove that InitializationOne is injective in v1.5.
-r <- time (prove abc {{ iv1 == iv2 || init1 != init2 }});
+r <- time (prove abc {{ iv1 == iv2 \/ init1 != init2 }});
 
 // Pretty-print the results.
 caseProofResult r
@@ -224,7 +224,7 @@ set_base 16;
 
 // Try to prove that InitializationOne is injective in v1.4 (expecting
 // to fail)
-r14 <- time (prove abc {{ iv1 == iv2 || init1_14 != init2_14 }});
+r14 <- time (prove abc {{ iv1 == iv2 \/ init1_14 != init2_14 }});
 
 // Pretty-print the results.
 caseProofResult r14
