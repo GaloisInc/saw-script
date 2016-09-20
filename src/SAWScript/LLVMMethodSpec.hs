@@ -76,7 +76,7 @@ data EvalContext
     , ecDataLayout :: DataLayout
     , ecBackend :: SBE SpecBackend
     , ecGlobalMap :: GlobalMap SpecBackend
-    , ecArgs :: [(Ident, Term)]
+    , ecArgs :: [Term]
     , ecPathState :: SpecPathState
     , ecLLVMExprs :: Map String (TC.LLVMActualType, TC.LLVMExpr)
     }
@@ -92,12 +92,12 @@ evalLLVMExpr :: (Functor m, MonadIO m) =>
                 TC.LLVMExpr -> EvalContext
              -> m SpecLLVMValue
 evalLLVMExpr expr ec = eval expr
-  where eval e@(CC.Term app) =
+  where eval (CC.Term app) =
           case app of
-            TC.Arg _ n _ ->
-              case lookup n (ecArgs ec) of
-                Just v -> return v
-                Nothing -> fail $ "evalLLVMExpr: argument not found: " ++ show e
+            TC.Arg n _ _
+                | n < length (ecArgs ec) -> return (ecArgs ec !! n)
+                | otherwise ->
+                    fail $ "evalLLVMExpr: invalid argument index: " ++ show n
             TC.Global n tp -> do
               -- TODO: don't discard fst
               snd <$> (liftIO $ loadGlobal sbe (ecGlobalMap ec) n tp ps)
@@ -340,9 +340,7 @@ execOverride _ _ [] _ = fail "Empty list of overrides passed to execOverride."
 execOverride sc _pos irs@(ir:_) args = do
   initPS <- fromMaybe (error "no path during override") <$> getPath
   let bsl = map specBehavior irs
-      func = specFunction ir
       cb = specCodebase ir
-      Just funcDef = lookupDefine func cb
   sbe <- gets symBE
   --liftIO $ putStrLn $ "Executing override for " ++ show func
   gm <- use globalTerms
@@ -352,7 +350,7 @@ execOverride sc _pos irs@(ir:_) args = do
                        , ecDataLayout = cbDataLayout cb
                        , ecBackend = sbe
                        , ecGlobalMap = gm
-                       , ecArgs = zip (map fst (sdArgs funcDef)) (map snd args)
+                       , ecArgs = map snd args
                        , ecPathState = initPS
                        , ecLLVMExprs = specLLVMExprNames ir
                        }
