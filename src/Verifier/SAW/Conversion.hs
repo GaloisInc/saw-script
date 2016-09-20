@@ -568,7 +568,9 @@ eq_Record = Conversion $ thenMatcher matcher action
 
 -- | Conversions for operations on Nat literals
 natConversions :: Termlike t => [Conversion t]
-natConversions = [succ_NatLit, addNat_NatLit, subNat_NatLit, mulNat_NatLit, equalNat_NatLit]
+natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit, mulNat_NatLit
+                 , divNat_NatLit, remNat_NatLit, equalNat_NatLit
+                 ]
 
 succ_NatLit :: Termlike t => Conversion t
 succ_NatLit =
@@ -584,6 +586,18 @@ subNat_NatLit = Conversion $
 
 mulNat_NatLit :: Termlike t => Conversion t
 mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
+
+divNat_NatLit :: Termlike t => Conversion t
+divNat_NatLit = Conversion $
+  thenMatcher (asGlobalDef "Prelude.divNat" <:> asAnyNatLit <:> asAnyNatLit)
+    (\(_ :*: x :*: y) ->
+         if y /= 0 then Just (mkNatLit (x `div` y)) else Nothing)
+
+remNat_NatLit :: Termlike t => Conversion t
+remNat_NatLit = Conversion $
+  thenMatcher (asGlobalDef "Prelude.remNat" <:> asAnyNatLit <:> asAnyNatLit)
+    (\(_ :*: x :*: y) ->
+         if y /= 0 then Just (mkNatLit (x `rem` y)) else Nothing)
 
 equalNat_NatLit :: Termlike t => Conversion t
 equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
