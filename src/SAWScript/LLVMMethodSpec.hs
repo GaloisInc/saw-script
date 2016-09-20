@@ -191,8 +191,8 @@ evalMixedExpr (TC.LLVME expr) ec = evalLLVMExpr expr ec
 
 -- | State for running the behavior specifications in a method override.
 data OCState = OCState {
-         ocsLoc :: SymBlockID
-       , ocsEvalContext :: !EvalContext
+         -- ocsLoc :: SymBlockID
+         ocsEvalContext :: !EvalContext
        , ocsResultState :: !SpecPathState
        , ocsReturnValue :: !(Maybe Term)
        , ocsErrors :: [OverrideError]
@@ -296,22 +296,22 @@ execBehavior bsl ec ps = do
   -- Get state of current execution path in simulator.
   fmap orParseResults $ forM bsl $ \bs -> do
     let initOCS =
-          OCState { ocsLoc = bsLoc bs
-                  , ocsEvalContext = ec
+          OCState { -- ocsLoc = bsLoc bs
+                    ocsEvalContext = ec
                   , ocsResultState = ps
                   , ocsReturnValue = Nothing
                   , ocsErrors = []
                   }
     let resCont () = do
-          OCState { ocsLoc = loc
-                  , ocsResultState = resPS
+          OCState { -- ocsLoc = loc
+                    ocsResultState = resPS
                   , ocsReturnValue = v
                   , ocsErrors = l } <- get
           return $
             if null l then
-              SuccessfulRun resPS (Just loc) v
+              SuccessfulRun resPS Nothing v
             else
-              FailedRun resPS (Just loc) l
+              FailedRun resPS Nothing l
     flip evalStateT initOCS $ flip runContT resCont $ do
        let sc = ecContext ec
        -- Verify the initial logic assignments
@@ -434,16 +434,16 @@ createLogicValue _ _ sc expr ps mtp mrhs = do
 
 initializeVerification' :: (MonadIO m, Monad m, Functor m) =>
                            SharedContext
+                        -> String
                         -> LLVMMethodSpecIR
                         -> Simulator SpecBackend m
                            (SpecPathState,
                             [(MemType, SpecLLVMValue)],
                             [(MemType, SpecLLVMValue)])
-initializeVerification' sc ir = do
+initializeVerification' sc file ir = do
   let bs = specBehavior ir
       fn = specFunction ir
       cb = specCodebase ir
-      Just fnDef = lookupDefine fn (specCodebase ir)
       isArgAssgn (CC.Term (TC.Arg _ _ _), _) = True
       isArgAssgn _ = False
       isPtrAssgn (e, _) = TC.isPtrLLVMExpr e
@@ -457,6 +457,9 @@ initializeVerification' sc ir = do
         Just cs <- use ctrlStk
         ctrlStk ?= (cs & currentPath .~ ps)
 
+  fnDef <- case lookupDefine fn (specCodebase ir) of
+             Just def -> return def
+             Nothing -> fail $ missingSymMsg file (specFunction ir)
   sbe <- gets symBE
   -- Create argument list. For pointers, allocate enough space to
   -- store the pointed-to value. For scalar and array types,
@@ -518,7 +521,7 @@ checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
                 -> SpecPathState
                 -> [(MemType, SpecLLVMValue)]
                 -> [(MemType, SpecLLVMValue)]
-                -> Simulator SpecBackend m (PathVC SymBlockID)
+                -> Simulator SpecBackend m (PathVC ())
 checkFinalState sc ms initPS otherPtrs args = do
   let cmds = bsCommands (specBehavior ms)
       cb = specCodebase ms
@@ -542,7 +545,7 @@ checkFinalState sc ms initPS otherPtrs args = do
     let Just (tp, _) = Map.lookup le (bsExprDecls (specBehavior ms))
     return (le, lhs, tp, rhs)
   let initState  =
-        PathVC { pvcStartLoc = bsLoc (specBehavior ms)
+        PathVC { pvcStartLoc = ()
                , pvcEndLoc = Nothing
                , pvcAssumptions = assumptions
                , pvcStaticErrors = []
@@ -575,7 +578,7 @@ data VerifyParams = VerifyParams
   }
 
 type SymbolicRunHandler =
-  SharedContext -> [PathVC SymBlockID] -> TopLevel SolverStats
+  SharedContext -> [PathVC ()] -> TopLevel SolverStats
 type Prover = VerifyState -> Term -> TopLevel SolverStats
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
