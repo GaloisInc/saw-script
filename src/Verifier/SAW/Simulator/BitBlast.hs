@@ -84,8 +84,8 @@ lvShiftR x xs i = (AIG.++) (AIG.replicate j x) (AIG.take (AIG.length xs - j) xs)
 ------------------------------------------------------------
 -- Values
 
-type BValue l = Value IO l (LitVector l) (BExtra l)
-type BThunk l = Thunk IO l (LitVector l) (BExtra l)
+type BValue l = Value IO l (LitVector l) Integer (BExtra l)
+type BThunk l = Thunk IO l (LitVector l) Integer (BExtra l)
 
 data BExtra l
   = BStream (Integer -> IO (BValue l)) (IORef (Map Integer (BValue l)))
