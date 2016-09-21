@@ -194,6 +194,10 @@ toWord (VWord w) = return w
 toWord (VVector vv) = symFromBits <$> traverse (fmap toBool . force) vv
 toWord x = fail $ unwords ["Verifier.SAW.Simulator.SBV.toWord", show x]
 
+fromVInt :: SValue -> Integer
+fromVInt (VInt i) = i
+fromVInt sv = error $ unwords ["fromVInt failed:", show sv]
+
 toMaybeWord :: SValue -> IO (Maybe SWord)
 toMaybeWord (VWord w) = return (Just w)
 toMaybeWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toMaybeBool . force) vv
@@ -411,10 +415,11 @@ bvSShROp = bvShiftOp bvOp natOp
     natOp w i = svUnsign (svShr (svSign w) i)
 
 eqOp :: SValue
-eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp
+eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
   where trueOp       = VBool svTrue
         andOp    x y = return $ vBool (svAnd (toBool x) (toBool y))
         boolEqOp x y = return $ vBool (svEqual (toBool x) (toBool y))
+        intEqOp  x y = return $ vBool (svBool (fromVInt x == fromVInt y))
         bvEqOp _ x y = do x' <- toWord x
                           y' <- toWord y
                           return $ vBool (svEqual x' y')
