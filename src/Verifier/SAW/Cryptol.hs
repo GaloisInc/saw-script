@@ -686,6 +686,8 @@ scCryptolType sc t = do
       -> C.tFun <$> scCryptolType sc t1 <*> scCryptolType sc t2
     (R.asBoolType -> Just ())
       -> return C.tBit
+    (R.asIntegerType -> Just ())
+      -> return C.tInteger
     (R.asVectorType -> Just (t1, t2))
       -> C.tSeq <$> scCryptolType sc t1 <*> scCryptolType sc t2
     (R.asTupleType -> Just ts)
