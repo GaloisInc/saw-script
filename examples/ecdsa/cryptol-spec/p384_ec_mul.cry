@@ -47,7 +47,7 @@ p384_ec_mul (d, s) = res!0
     h : [12][32]
     h = toJavaArray (ini.h)
     r0 = ini.r
-    f (j, r) = p384_ec_mul_aux(r, s, j, h@i, uext([c]), d'@i, d_at_ip1)
+    f (j, r) = p384_ec_mul_aux(r, s, j, h@i, c, d'@i, d_at_ip1)
       where
         i        = j >> 5
         c        = i < 11
@@ -65,12 +65,12 @@ p384_ec_mul (d, s) = res!0
 /* Matches Java implementation */
 p384_ec_mul_aux : ( JacobianPoint [384]
                    , AffinePoint [384]
-                   , [32], [32], [32], [32], [32] ) -> JacobianPoint [384]
+                   , [32], [32], Bit, [32], [32] ) -> JacobianPoint [384]
 p384_ec_mul_aux (r, s, j, hi, i_lt_11, d_at_i, d_at_ip1) = r'
   where
     m = 1 << j
     ki  = d_at_i >> 1
-    ki' = if i_lt_11 != 0 then
+    ki' = if i_lt_11 then
             ((d_at_ip1 && 1) << 31) || ki
           else
             ki
@@ -133,7 +133,7 @@ p384_ec_twin_mul_aux1 :
 p384_ec_twin_mul_aux1(rP, u0_32, u1_32, sPt, s, sMt, t) =
   ec_twin_mul_aux1(p384_point_ops, rP, u0_32, u1_32, sPt, s, sMt, t)
 
-p384_ec_twin_mul_aux2 : ([32],[32],[32],[32],[32],[32],[32],[32],[32]) -> 
+p384_ec_twin_mul_aux2 : ([32],[32],[32],[32],[32],[32],[32],Bit,Bit) ->
   { tma2_u0:[32]
   , tma2_u1:[32]
   , tma2_c0':[32]
@@ -165,8 +165,8 @@ p384_ec_twin_mul_aux2 (c0, c1, e0, e1, sh, d0i, d1i, dv1, dv2) =
 
     h0Less        = h0 < F(h1)
     h1Less        = h1 < F(h0)
-    (e0',e1',sh') = if dv1 != 0 then 
-                      if dv2 != 0 then (d0i, d1i, 31) else (0, 0, 31)
+    (e0',e1',sh') = if dv1 then
+                      if dv2 then (d0i, d1i, 31) else (0, 0, 31)
                     else (e0, e1, sh-1)
 
 // F : [5] -> [5] via original impl
@@ -208,15 +208,13 @@ p384_ec_twin_mul(d0, s, d1, t) =
                 sh'        = aux2.tma2_sh'
                 (d0i, d1i, 
                  dv1, dv2) = if dv1i && dv2i then 
-                               (d0'@ii, d1'@ii, dv1', dv2') 
+                               (d0'@ii, d1'@ii, dv1i, dv2i)
                              else 
-                               (zero, zero, dv1', dv2')
+                               (zero, zero, dv1i, dv2i)
                              where
                                ii    = (k >> 5) - 1
                                dv1i  = (k && `0x1F) == 0
                                dv2i  = ~(ii@0)
-                               dv1' = uext [dv1i] : [32]
-                               dv2' = uext [dv2i] : [32]
            | (r, c0, c1, e0, e1, sh) <- jj
            | k0 <- reverse [0 .. 384]
            ]

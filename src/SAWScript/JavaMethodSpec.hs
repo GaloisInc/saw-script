@@ -61,7 +61,6 @@ import SAWScript.Options
 import SAWScript.Utils
 import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaMethodSpec.Evaluator
---import SAWScript.JavaMethodSpec.ExpectedStateDef
 import SAWScript.JavaUtils
 import SAWScript.PathVC
 import SAWScript.TypedTerm
@@ -221,14 +220,14 @@ ocAssert p _nm x = do
 ocStep :: BehaviorCommand -> OverrideComputation m ()
 ocStep (EnsureInstanceField _pos refExpr f rhsExpr) =
   ocEval (evalJavaRefExpr refExpr) $ \lhsRef ->
-  ocEval (evalMixedExpr rhsExpr) $ \value ->
+  ocEval (evalMixedExpr (fieldIdType f) rhsExpr) $ \value ->
   ocModifyResultState $ setInstanceFieldValuePS lhsRef f value
 ocStep (EnsureStaticField _pos f rhsExpr) =
-  ocEval (evalMixedExpr rhsExpr) $ \value ->
+  ocEval (evalMixedExpr (fieldIdType f) rhsExpr) $ \value ->
   ocModifyResultState $ setStaticFieldValuePS f value
 ocStep (EnsureArray _pos lhsExpr rhsExpr) =
   ocEval (evalJavaRefExpr lhsExpr) $ \lhsRef ->
-  ocEval (evalMixedExprAsLogic rhsExpr) $ \rhsVal -> do
+  ocEval (evalMixedExprAsLogic (exprType lhsExpr) rhsExpr) $ \rhsVal -> do
     sc <- gets (ecContext . ocsEvalContext)
     ty <- liftIO $ scTypeOf sc rhsVal >>= scWhnf sc
     case ty of
@@ -255,29 +254,33 @@ ocStep (ModifyStaticField f) = do
 ocStep (ModifyArray refExpr ty) =
   ocEval (evalJavaRefExpr refExpr) $ \ref -> do
     sc <- gets (ecContext . ocsEvalContext)
-    mtp <- liftIO $ TC.logicTypeOfActual sc ty
-    case mtp of
-      Nothing -> ocError (InvalidType (show ty))
-      Just tp -> do
-        rhsVal <- liftIO $ scFreshGlobal sc (TC.ppJavaExpr refExpr) tp
-        lty <- liftIO $ scTypeOf sc rhsVal >>= scWhnf sc
-        case lty of
-          (isVecType (const (return ())) -> Just (n :*: _)) ->
-            ocModifyResultState $ setArrayValuePS ref (fromIntegral n) rhsVal
-          _ -> ocError (InvalidType (show ty))
+    case ty of
+      ArrayInstance n tp -> do
+        rhsVal <- liftIO $ do
+          elTy <- scBitvector sc (fromIntegral (stackWidth tp))
+          lTm <- scNat sc (fromIntegral n)
+          aty <- scVecType sc lTm elTy
+          scFreshGlobal sc (TC.ppJavaExpr refExpr) aty
+        ocModifyResultState $ setArrayValuePS ref (fromIntegral n) rhsVal
+      _ -> ocError (InvalidType (show ty))
 ocStep (ReturnValue expr) = do
-  ocEval (evalMixedExpr expr) $ \val ->
-    ocSetReturnValue (Just val)
+  mrty <- gets (ecReturnType . ocsEvalContext)
+  case mrty of
+    Just rty ->
+      ocEval (evalMixedExpr rty expr) $ \val ->
+        ocSetReturnValue (Just val)
+    Nothing -> fail "Return type specification given for method of type void."
 
 -- Executing overrides {{{2
 
-execBehavior :: BehaviorSpec
+execBehavior :: Method
+             -> BehaviorSpec
              -> SharedContext
              -> Maybe Ref
              -> [(LocalVariableIndex, SpecJavaValue)]
              -> SpecPathState
              -> SAWJavaSim m [RunResult]
-execBehavior bsl sc mbThis argLocals ps = do
+execBehavior meth bsl sc mbThis argLocals ps = do
 
   -- Get state of current execution path in simulator.
   fmap orParseResults $ forM [bsl] $ \bs -> do
@@ -286,6 +289,7 @@ execBehavior bsl sc mbThis argLocals ps = do
                                        case mbThis of
                                        Just th -> (0, RValue th) : argLocals
                                        Nothing -> argLocals
+                         , ecReturnType = methodReturnType meth
                          , ecReturnValue = Nothing
                          , ecPathState = ps
                          }
@@ -334,7 +338,7 @@ execBehavior bsl sc mbThis argLocals ps = do
        -- Verify the initial logic assignments
        forM_ (bsLogicAssignments bs) $ \(pos, lhs, rhs) -> do
          ocEval (evalJavaExprAsLogic lhs) $ \lhsVal ->
-           ocEval (evalMixedExprAsLogic rhs) $ \rhsVal ->
+           ocEval (evalMixedExprAsLogic (exprType lhs) rhs) $ \rhsVal ->
              ocAssert pos "Override value assertion"
                 =<< liftIO (scEq sc lhsVal rhsVal)
        -- Verify assumptions
@@ -373,7 +377,7 @@ execOverride sc pos ir mbThis args = do
   -- Check class initialization.
   checkClassesInitialized pos (specName ir) (specInitializedClasses ir)
   initPS <- getPath "execOverride"
-  res <- execBehavior bsl sc mbThis argLocals initPS
+  res <- execBehavior method bsl sc mbThis argLocals initPS
   -- Create function for generation resume actions.
   case res of
     [(_, _, Left el)] -> do
@@ -527,7 +531,7 @@ evalLogicExpr' :: MonadSim SharedContext m =>
 evalLogicExpr' sc initExpr = do
   let exprs = logicExprJavaExprs initExpr
   args <- forM exprs $ \expr -> do
-    t <- readJavaTermSim expr
+    t <- readJavaTermSim sc expr
     return (expr, t)
   let argMap = Map.fromList args
       argTerms = mapMaybe (\k -> Map.lookup k argMap) $
@@ -545,7 +549,6 @@ resolveClassRHS sc e tp [] = do
   case (mlty, tp) of
     (Just lty, PrimitiveType pt) | pt /= LongType -> do
       liftIO $ (scFreshGlobal sc (jeVarName e) lty >>=
-                extendToIValue sc >>=
                 mkTypedTerm sc)
     (Just lty, _) -> do
        liftIO $ (scFreshGlobal sc (jeVarName e) lty >>= mkTypedTerm sc)
@@ -574,18 +577,13 @@ valueEqTerm :: (Functor m, Monad m, MonadIO m) =>
                SharedContext
             -> String
             -> SpecPathState
+            -> Type
             -> SpecJavaValue
             -> Term
             -> StateT (PathVC Breakpoint) m ()
-valueEqTerm sc name _ (IValue t) t' = do
-  t'' <- liftIO $ extendToIValue sc t'
-  pvcgAssertEq name t t''
-valueEqTerm _ name _ (LValue t) t' = pvcgAssertEq name t t'
-valueEqTerm _ name ps (RValue r) t' = do
-  case Map.lookup r (ps ^. pathMemory . memScalarArrays) of
-    Just (_, t) -> pvcgAssertEq name t t'
-    Nothing -> fail $ "valueEqTerm: " ++ name ++ ": ref does not point to array"
-valueEqTerm _ name _ _ _ = fail $ "valueEqTerm: " ++ name ++ ": unspported value type"
+valueEqTerm sc name ps ty v t = do
+  t' <- termOfValue sc ps ty v
+  pvcgAssertEq name t' t
 
 valueEqValue :: (Functor m, Monad m, MonadIO m) =>
                SharedContext
@@ -602,19 +600,18 @@ valueEqValue _ _ _ (DValue d) _ (DValue d') | d == d' = return ()
 valueEqValue _ _ _ (FValue f) _ (FValue f') | isNaN f && isNaN f' = return ()
 valueEqValue _ _ _ (FValue f) _ (FValue f') | f == f' = return ()
 valueEqValue _ _ _ (RValue r) _ (RValue r') | r == r' = return ()
-valueEqValue sc name _ (IValue t) _ (IValue t') = do
-  it <- liftIO $ extendToIValue sc t
-  it' <- liftIO $ extendToIValue sc t'
-  pvcgAssertEq name it it'
-valueEqValue _ name _ (LValue t) _ (LValue t') = pvcgAssertEq name t t'
+valueEqValue _sc name _ (IValue t) _ (IValue t') = do
+  pvcgAssertEq name t t'
+valueEqValue _ name _ (LValue t) _ (LValue t') =
+  pvcgAssertEq name t t'
 valueEqValue _ name ps (RValue r) ps' (RValue r') = do
   let ma = Map.lookup r (ps ^. pathMemory . memScalarArrays)
       ma' = Map.lookup r' (ps' ^. pathMemory . memScalarArrays)
   case (ma, ma') of
     (Just (len, t), Just (len', t'))
       | len == len' -> pvcgAssertEq name t t'
-      | otherwise -> fail $ "valueEqTerm: array sizes don't match: " ++ show (len, len')
-    _ -> fail $ "valueEqTerm: " ++ name ++ ": ref does not point to array"
+      | otherwise -> fail $ "valueEqValue: array sizes don't match: " ++ show (len, len')
+    _ -> fail $ "valueEqValue: " ++ name ++ ": ref does not point to array"
 valueEqValue _ name _ v _ v' = fail $ "valueEqValue: " ++ name ++ ": unspported value type: " ++ show v ++ ", " ++ show v'
 
 readJavaValueVerif :: (Functor m, Monad m) =>
@@ -632,10 +629,12 @@ checkStep :: (Functor m, Monad m, MonadIO m) =>
           -> BehaviorCommand
           -> StateT (PathVC Breakpoint) m ()
 checkStep vs ps (ReturnValue expr) = do
+  let mrty = methodReturnType (specMethod (vsSpec vs))
   t <- liftIO $ mixedExprToTerm (vsContext vs) (vsInitialState vs) expr
-  case ps ^. pathRetVal of
-    Just rv -> valueEqTerm (vsContext vs) "return" ps rv t
-    Nothing -> fail "Return specification, but method did not return a value."
+  case (ps ^. pathRetVal, mrty) of
+    (Just rv, Just rty) -> valueEqTerm (vsContext vs) "return" ps rty rv t
+    (Nothing, _) -> fail "Return specification provided, but method did not return a value."
+    (_, Nothing) -> fail "Return specification provided, but method has void type."
 checkStep vs ps (EnsureInstanceField _pos refExpr f rhsExpr) = do
   rv <- readJavaValueVerif vs ps refExpr
   case rv of
@@ -644,21 +643,24 @@ checkStep vs ps (EnsureInstanceField _pos refExpr f rhsExpr) = do
       case mfv of
         Just fv -> do
           ft <- liftIO $ mixedExprToTerm (vsContext vs) (vsInitialState vs) rhsExpr
-          valueEqTerm (vsContext vs) (ppJavaExpr refExpr ++ "." ++ fieldIdName f) ps fv ft
+          valueEqTerm (vsContext vs) (ppJavaExpr refExpr ++ "." ++ fieldIdName f) ps (fieldIdType f) fv ft
         Nothing  -> fail "Invalid instance field in java_ensure_eq."
     _ -> fail "Left-hand side of . did not evaluate to a reference."
 checkStep vs ps (EnsureStaticField _pos f rhsExpr) = do
   let mfv = getStaticFieldValuePS ps f
   ft <- liftIO $ mixedExprToTerm (vsContext vs) (vsInitialState vs) rhsExpr
   case mfv of
-    Just fv -> valueEqTerm (vsContext vs) (ppFldId f) ps fv ft
+    Just fv -> valueEqTerm (vsContext vs) (ppFldId f) ps (fieldIdType f) fv ft
     Nothing -> fail "Invalid static field in java_ensure_eq."
 checkStep _vs _ps (ModifyInstanceField _refExpr _f) = return ()
 checkStep _vs _ps (ModifyStaticField _f) = return ()
 checkStep vs ps (EnsureArray _pos refExpr rhsExpr) = do
   rv <- readJavaValueVerif vs ps refExpr
   t <- liftIO $ mixedExprToTerm (vsContext vs) (vsInitialState vs) rhsExpr
-  valueEqTerm (vsContext vs) (ppJavaExpr refExpr) ps rv t
+  case rv of
+    RValue (Ref _ ty) ->
+      valueEqTerm (vsContext vs) (ppJavaExpr refExpr) ps ty rv t
+    _ -> fail "Non-reference value in EnsureArray"
 checkStep _vs _ps (ModifyArray _refExpr _aty) = return ()
 
 data VerificationState = VerificationState

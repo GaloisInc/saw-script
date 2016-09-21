@@ -30,11 +30,10 @@ import qualified SAWScript.JavaExpr as TC
 import SAWScript.JavaUtils
 
 import Execution.JavaSemantics (AtomicValue(..))
-import Verifier.Java.Codebase (LocalVariableIndex, FieldId)
+import Verifier.Java.Codebase (LocalVariableIndex, FieldId, Type)
 import Verifier.Java.Common
 
 
-import Verifier.SAW.Recognizer (asBoolType, asBitvectorType)
 import Verifier.SAW.SharedTerm
 
 -- EvalContext {{{1
@@ -42,6 +41,7 @@ import Verifier.SAW.SharedTerm
 -- | Contextual information needed to evaluate expressions.
 data EvalContext = EvalContext {
          ecContext :: SharedContext
+       , ecReturnType :: Maybe Type
        , ecLocals :: Map LocalVariableIndex SpecJavaValue
        , ecReturnValue :: Maybe SpecJavaValue
        , ecPathState :: SpecPathState
@@ -120,25 +120,19 @@ evalJavaExprAsLogic expr ec = do
       case Map.lookup r arrs of
         Nothing    -> throwE $ EvalExprUnknownArray expr
         Just (_,n) -> return n
-    IValue n -> return n
+    IValue n -> liftIO $ truncateIValue (ecContext ec) (TC.exprType expr) n
     LValue n -> return n
     _ -> throwE $ EvalExprBadJavaType "evalJavaExprAsLogic" expr
 
 -- | Return Java value associated with mixed expression.
-evalMixedExpr :: TC.MixedExpr -> EvalContext
+evalMixedExpr :: Type
+              -> TC.MixedExpr
+              -> EvalContext
               -> ExprEvaluator SpecJavaValue
-evalMixedExpr (TC.LE expr) ec = do
+evalMixedExpr ty (TC.LE expr) ec = do
   n <- evalLogicExpr expr ec
-  let sc = ecContext ec
-  ty <- liftIO $ scWhnf sc =<< scTypeOf sc n
-  case (asBitvectorType ty, asBoolType ty) of
-    (Just sz, _) | sz <= 32 -> fmap IValue (liftIO (extendToIValue sc n))
-    (Just 64, _) -> return (LValue n)
-    (Just _, _) -> throwE (EvalExprBadLogicType "evalMixedExpr" (show ty))
-    (Nothing, Just _) -> fmap IValue (liftIO (boolExtend' sc n))
-    (Nothing, Nothing) ->
-      throwE (EvalExprBadLogicType "evalMixedExpr" (show ty))
-evalMixedExpr (TC.JE expr) ec = evalJavaExpr expr ec
+  liftIO $ mkJSSValue (ecContext ec) ty n
+evalMixedExpr _ (TC.JE expr) ec = evalJavaExpr expr ec
 
 -- | Evaluates a typed expression in the context of a particular state.
 evalLogicExpr :: TC.LogicExpr -> EvalContext -> ExprEvaluator Term
@@ -160,6 +154,6 @@ evalJavaRefExpr expr ec = do
     RValue ref -> return ref
     _ -> throwE $ EvalExprBadJavaType "evalJavaRefExpr" expr
 
-evalMixedExprAsLogic :: TC.MixedExpr -> EvalContext -> ExprEvaluator Term
-evalMixedExprAsLogic (TC.LE expr) = evalLogicExpr expr
-evalMixedExprAsLogic (TC.JE expr) = evalJavaExprAsLogic expr
+evalMixedExprAsLogic :: Type -> TC.MixedExpr -> EvalContext -> ExprEvaluator Term
+evalMixedExprAsLogic _ (TC.LE expr) = evalLogicExpr expr
+evalMixedExprAsLogic _ (TC.JE expr) = evalJavaExprAsLogic expr

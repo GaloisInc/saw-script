@@ -116,14 +116,14 @@ symexecJava bic opts cls mname inputs outputs satBranches = do
                    [ (idx, tm) | (CC.Term (Local _ idx _), tm) <- argAssigns ]
       argTms <- forM [0..maxArg meth] $ \i ->
                   maybe (noDefErr i) return $ Map.lookup (pidx i) argMap
-      args <- mapM (valueOfTerm jsc) argTms
-      -- TODO: map scTypeOf over argTms and lift to JavaActualType
-      actualArgTys <- liftIO $ mapM (typeOfValue jsc) args
+      actualArgTys <- liftIO $ mapM (scTypeOf jsc . ttTerm) argTms
       let expectedArgTys = methodParameterTypes meth
-      forM_ (zip actualArgTys expectedArgTys) $ \ (aty, ety) ->
-        unless (aty == ety) $ fail $
-        "Passing value of type " ++ show aty ++
-        " to argument expected to be of type " ++ show ety ++ "."
+      forM_ (zip actualArgTys expectedArgTys) $ \ (aty, ety) -> do
+        comp <- liftIO $ termTypeCompatible jsc aty ety
+        unless comp $ fail $
+          "Passing value of type " ++ show aty ++
+          " to argument expected to be of type " ++ show ety ++ "."
+      args <- mapM (uncurry (valueOfTerm jsc)) (zip expectedArgTys argTms)
       mapM_ (uncurry (writeJavaTerm jsc)) otherAssigns
       allArgs <- case methodIsStatic meth of
                    True -> return args
@@ -140,7 +140,7 @@ symexecJava bic opts cls mname inputs outputs satBranches = do
           "$safety" -> return (ps ^. pathAssertions)
           _-> do
             e <- parseJavaExpr' cb cls meth ostr
-            readJavaTerm (Just localMap) ps e
+            readJavaTerm jsc (Just localMap) ps e
       let bundle tms = case tms of
                          [t] -> return t
                          _ -> scTuple jsc tms
@@ -172,7 +172,7 @@ extractJava bic opts cls mname setup = do
       dt <- case (rslt, methodReturnType meth) of
               (Nothing, _) -> fail $ "No return value from " ++ methodName meth
               (_, Nothing) -> fail $ "Return value from void method " ++ methodName meth
-              (Just v, Just tp) -> termOfValueSim tp v
+              (Just v, Just tp) -> termOfValueSim jsc tp v
       liftIO $ do
         let sc = biSharedContext bic
         argBinds <- reverse <$> readIORef argsRef
@@ -363,12 +363,15 @@ exportJavaType cb jty =
       do cls <- liftIO $ lookupClass cb fixPos (dotsToSlashes name)
          return (ClassInstance cls)
 
-checkCompatibleType :: String
+checkCompatibleType :: (Monad m, MonadIO m) =>
+                       SharedContext
+                    -> String
                     -> JavaActualType
                     -> Cryptol.Schema
-                    -> JavaSetup ()
-checkCompatibleType msg aty schema = do
-  case cryptolTypeOfActual aty of
+                    -> m ()
+checkCompatibleType sc msg aty schema = do
+  cty <- liftIO $ cryptolTypeOfActual sc aty
+  case cty of
     Nothing ->
       fail $ "Type is not translatable: " ++ show aty ++ " (" ++ msg ++ ")"
     Just lt -> do
@@ -458,7 +461,7 @@ javaVar bic _ name t = do
   modifySpec (specAddVarDecl expr aty)
   let sc = biSharedContext bic
   liftIO $ do
-    Just lty <- logicTypeOfActual sc aty
+    Just lty <- narrowTypeOfActual sc aty
     scJavaValue sc lty name >>= mkTypedTerm sc
 
 javaMayAlias :: [String] -> JavaSetup ()
@@ -480,16 +483,16 @@ javaAssert (TypedTerm schema v) = do
     LE le -> modifySpec (specAddAssumption le)
     JE je -> fail $ "Used java_assert with Java expression: " ++ show je
 
-javaAssertEq :: String -> TypedTerm -> JavaSetup ()
-javaAssertEq name (TypedTerm schema t) = do
+javaAssertEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
+javaAssertEq bic _ name (TypedTerm schema t) = do
   --liftIO $ putStrLn "javaAssertEq"
   (expr, aty) <- (getJavaExpr "java_assert_eq") name
-  checkCompatibleType "java_assert_eq" aty schema
+  checkCompatibleType (biSharedContext bic) "java_assert_eq" aty schema
   me <- mkMixedExpr t
   modifySpec (specAddLogicAssignment fixPos expr me)
 
-javaEnsureEq :: String -> TypedTerm -> JavaSetup ()
-javaEnsureEq name (TypedTerm schema t) = do
+javaEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
+javaEnsureEq bic _ name (TypedTerm schema t) = do
   --liftIO $ putStrLn "javaEnsureEq"
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_ensure_eq") name
@@ -497,7 +500,7 @@ javaEnsureEq name (TypedTerm schema t) = do
   when (isArg (specMethod ms) expr && isScalarExpr expr) $ fail $
     "The `java_ensure_eq` function cannot be used " ++
     "to set the value of a scalar argument."
-  checkCompatibleType "java_ensure_eq" aty schema
+  checkCompatibleType (biSharedContext bic) "java_ensure_eq" aty schema
   me <- mkMixedExpr t
   --liftIO $ putStrLn "Done making MixedExpr"
   cmd <- case (CC.unTerm expr, aty) of

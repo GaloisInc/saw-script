@@ -19,7 +19,6 @@ module SAWScript.LLVMMethodSpecIR
   , specPos
   , specCodebase
   , specBackend
-  , specDef
   , specSolverStats
   , specFunction
   , specBehavior
@@ -32,7 +31,7 @@ module SAWScript.LLVMMethodSpecIR
   , initLLVMMethodSpec
     -- * Method behavior.
   , BehaviorSpec
-  , bsLoc
+  -- , bsLoc
   , bsExprs
   , bsPtrExprs
   , bsExprDecls
@@ -47,7 +46,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Verifier.SAW.SharedTerm
 import qualified Verifier.LLVM.Codebase as LSS
 import Verifier.LLVM.Backend
 import Verifier.LLVM.Backend.SAW
@@ -73,9 +71,9 @@ data BehaviorCommand
 
 data BehaviorSpec = BS {
          -- | Program counter for spec.
-         bsLoc :: LSS.SymBlockID
+         -- bsLoc :: LSS.SymBlockID
          -- | Declared LLVM expressions, with types and maybe initial values.
-       , bsExprDecls :: Map LLVMExpr (LLVMActualType, Maybe LogicExpr)
+         bsExprDecls :: Map LLVMExpr (LLVMActualType, Maybe LogicExpr)
          -- | Assumptions for this behavior.
        , bsAssumptions :: [LogicExpr]
          -- | Commands to execute in reverse order.
@@ -109,19 +107,18 @@ type Backend = SAWBackend
 initLLVMMethodSpec :: Pos
                    -> SBE Backend
                    -> LSS.Codebase Backend
-                   -> LSS.SymDefine Term
+                   -> LSS.Symbol
                    -> LLVMMethodSpecIR
-initLLVMMethodSpec pos sbe cb def =
-  let initBS = BS { bsLoc = LSS.sdEntry def
-                  , bsExprDecls = Map.empty
+initLLVMMethodSpec pos sbe cb defname =
+  let initBS = BS { -- bsLoc = LSS.sdEntry def
+                    bsExprDecls = Map.empty
                   , bsAssumptions = []
                   , bsReversedCommands = []
                   }
       initMS = MSIR { specPos = pos
                     , specCodebase = cb
                     , specBackend = sbe
-                    , specFunction = LSS.sdName def
-                    , specDef = def
+                    , specFunction = defname
                     , specLLVMExprNames = Map.empty
                     , specBehavior = initBS
                     , specSolverStats = mempty
@@ -138,8 +135,6 @@ data LLVMMethodSpecIR = MSIR {
   , specBackend :: SBE Backend
     -- | Name of function to verify.
   , specFunction :: LSS.Symbol -- TODO: is this necessary?
-    -- | Definition of function to verify.
-  , specDef :: LSS.SymDefine Term
     -- | Mapping from user-visible LLVM state names to LLVMExprs
   , specLLVMExprNames :: Map String (LLVMActualType, LLVMExpr)
     -- | Behavior specification for method.

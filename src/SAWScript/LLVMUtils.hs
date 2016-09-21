@@ -31,6 +31,10 @@ type SpecBackend = SAWBackend
 type SpecPathState = Path SpecBackend
 type SpecLLVMValue = Term
 
+missingSymMsg :: String -> Symbol -> String
+missingSymMsg file (Symbol func) =
+  "Bitcode file " ++ file ++ " does not contain symbol `" ++ func ++ "`."
+
 resolveType :: Codebase s -> MemType -> MemType
 resolveType cb (PtrType ty) = PtrType $ resolveSymType cb ty
 resolveType _ ty = ty
