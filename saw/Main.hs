@@ -22,6 +22,7 @@ import SAWScript.Version (shortVersionText)
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
   argv <- getArgs
   case getOpt Permute options argv of
     (opts, files, []) -> do
