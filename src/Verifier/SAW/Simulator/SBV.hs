@@ -61,8 +61,8 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, Module, identName)
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 
-type SValue = Value IO SBool SWord SbvExtra
-type SThunk = Thunk IO SBool SWord SbvExtra
+type SValue = Value IO SBool SWord Integer SbvExtra
+type SThunk = Thunk IO SBool SWord Integer SbvExtra
 
 data SbvExtra =
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
