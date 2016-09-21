@@ -349,6 +349,11 @@ joinOp unpack app =
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
 
 
+intUnOp :: Monad m => String -> (i -> i) -> Value m b w i e
+intUnOp nm f =
+  intFun nm $ \x -> return $
+    VInt (f x)
+
 intBinOp :: Monad m => String -> (i -> i -> i) -> Value m b w i e
 intBinOp nm f =
   intFun (nm++" x") $ \x -> return $
@@ -391,7 +396,7 @@ intMaxOp = intBinOp "intMax" max
 
 -- primitive intNeg :: Integer -> Integer;
 intNegOp :: Monad m => Value m b w Integer e
-intNegOp = intFun "intNeg x" $ \x -> return $ VInt (negate x)
+intNegOp = intUnOp "intNeg x" negate
 
 -- primitive intEq  :: Integer -> Integer -> Bool;
 intEqOp :: Monad m => (Bool -> b) -> Value m b w Integer e
