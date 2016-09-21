@@ -108,6 +108,10 @@ toWord (VWord lv) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
 toWord x = fail $ unwords ["Verifier.SAW.Simulator.BitBlast.toWord", show x]
 
+fromVInt :: BValue l -> Integer
+fromVInt (VInt i) = i
+fromVInt sv = error $ unwords ["fromVInt failed:", show sv]
+
 flattenBValue :: BValue l -> IO (LitVector l)
 flattenBValue (VBool l) = return (AIG.replicate 1 l)
 flattenBValue (VWord lv) = return lv
@@ -412,13 +416,14 @@ shiftROp :: AIG.IsAIG l g => g s -> BValue (l s)
 shiftROp be = shiftOp be vShiftR lvShiftR
 
 eqOp :: AIG.IsAIG l g => g s -> BValue (l s)
-eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp
+eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
   where trueOp       = vBool (AIG.trueLit be)
         andOp    x y = vBool <$> AIG.and be (toBool x) (toBool y)
         boolEqOp x y = vBool <$> AIG.eq be (toBool x) (toBool y)
         bvEqOp _ x y = do x' <- toWord x
                           y' <- toWord y
                           vBool <$> AIG.bvEq be x' y'
+        intEqOp  x y = return $ vBool (AIG.constant be (fromVInt x == fromVInt y))
 
 -- | rounded-up log base 2, where we complete the function by setting:
 --   lg2 0 = 0
