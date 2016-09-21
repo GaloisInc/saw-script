@@ -51,6 +51,7 @@ module Verifier.SAW.Recognizer
     -- * Prelude recognizers.
   , asBool
   , asBoolType
+  , asIntegerType
   , Nat
   , asBitvectorType
   , asVectorType
@@ -289,6 +290,9 @@ asBool _ = fail "not bool"
 asBoolType :: (Monad f, Termlike t) => Recognizer f t ()
 asBoolType = isDataType "Prelude.Bool" emptyl
 
+asIntegerType :: (Monad f, Termlike t) => Recognizer f t ()
+asIntegerType = isDataType "Prelude.Integer" emptyl
+
 asVectorType :: (Monad f, Termlike t) => Recognizer f t (t, t)
 asVectorType = isDataType "Prelude.Vec" r
   where r [n, t] = return (n, t)
@@ -304,7 +308,7 @@ asVecType = isVecType return
 asBitvectorType :: (Alternative f, Monad f, Termlike t) => Recognizer f t Nat
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNatLit)
-  <> isDataType "Prelude.Vec" 
+  <> isDataType "Prelude.Vec"
                 (asNatLit <: endl (isDataType "Prelude.Bool" emptyl))
 
 asMux :: (Monad f, Termlike t) => Recognizer f t (t :*: t :*: t :*: t)
