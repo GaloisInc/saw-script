@@ -355,7 +355,7 @@ intBinOp nm f =
   intFun (nm++" y") $ \y -> return $
     VInt (f x y)
 
-intBinCmp :: Monad m => String -> (i -> i -> Bool) -> (Bool -> b) -> Value m b w i e
+intBinCmp :: Monad m => String -> (i -> i -> a) -> (a -> b) -> Value m b w i e
 intBinCmp nm f boolLit =
   intFun (nm++" x") $ \x -> return $
   intFun (nm++" y") $ \y -> return $
