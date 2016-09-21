@@ -148,6 +148,10 @@ toVector (VVector xv) = fmap (runIdentity . force) xv
 toVector (VWord w) = fmap vBool w
 toVector x = error $ unwords ["Verifier.SAW.Simulator.RME.toVector", show x]
 
+fromVInt :: RValue -> Integer
+fromVInt (VInt i) = i
+fromVInt x = error $ unwords ["Verifier.SAW.Simulator.RME.fromVInt", show x]
+
 wordFun :: (Vector RME -> RValue) -> RValue
 wordFun f = pureFun (\x -> f (toWord x))
 
@@ -418,12 +422,13 @@ bvNatOp =
   VWord (RMEV.integer (fromIntegral w) (toInteger x))
 
 eqOp :: RValue
-eqOp = Prims.eqOp trueOp andOp boolOp bvOp
+eqOp = Prims.eqOp trueOp andOp boolOp bvOp intOp
   where
     trueOp = vBool RME.true
     andOp x y = return (vBool (RME.conj (toBool x) (toBool y)))
     boolOp x y = return (vBool (RME.iff (toBool x) (toBool y)))
     bvOp _ x y = return (vBool (RMEV.eq (toWord x) (toWord y)))
+    intOp x y = return (vBool (RME.constant (fromVInt x == fromVInt y)))
 
 ----------------------------------------
 

@@ -226,8 +226,9 @@ eqOp :: (MonadLazy m, Show e) => Value m b w i e
      -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
      -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
      -> (Integer -> Value m b w i e -> Value m b w i e -> m (Value m b w i e))
+     -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
      -> Value m b w i e
-eqOp trueOp andOp boolOp bvOp =
+eqOp trueOp andOp boolOp bvOp intOp =
   pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2
   where
     go VUnitType VUnit VUnit = return trueOp
@@ -246,6 +247,7 @@ eqOp trueOp andOp boolOp bvOp =
       bs <- sequence $ zipWith (go' t') (V.toList vv1) (V.toList vv2)
       foldM andOp trueOp bs
     go (VDataType "Prelude.Bool" []) v1 v2 = boolOp v1 v2
+    go (VDataType "Prelude.Integer" []) v1 v2 = intOp v1 v2
     go t _ _ = fail $ "binary: invalid arguments: " ++ show t
 
     go' t thunk1 thunk2 = do

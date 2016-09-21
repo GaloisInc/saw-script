@@ -112,6 +112,10 @@ toBool x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toBool", show x]
 vWord :: BitVector -> CValue
 vWord x = VWord x
 
+fromVInt :: CValue -> Integer
+fromVInt (VInt i) = i
+fromVInt x = error $ unwords ["Verifier.SAW.Simulator.Concrete.fromVInt", show x]
+
 -- | Conversion from list of bits to integer (big-endian)
 bvToInteger :: Vector Bool -> Integer
 bvToInteger = V.foldl' (\x b -> if b then 2*x+1 else 2*x) 0
@@ -416,11 +420,12 @@ shiftROp =
       _ -> error $ "Verifier.SAW.Simulator.Concrete.shiftROp: " ++ show xs
 
 eqOp :: CValue
-eqOp = Prims.eqOp trueOp andOp boolOp bvOp
+eqOp = Prims.eqOp trueOp andOp boolOp bvOp intOp
   where trueOp = vBool True
         andOp x y = return (vBool (toBool x && toBool y))
         boolOp x y = return (vBool (toBool x == toBool y))
         bvOp _ x y = return (vBool (Prim.bvEq undefined (toWord x) (toWord y)))
+        intOp x y = return (vBool (fromVInt x == fromVInt y))
 
 ----------------------------------------
 
