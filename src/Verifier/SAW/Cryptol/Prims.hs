@@ -36,7 +36,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Verifier.SAW.Simulator.Concrete as C
 
 -- primitive ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> a;
-ecError :: Monad m => (w -> m Char) -> Value m b w e
+ecError :: Monad m => (w -> m Char) -> Value m b w i e
 ecError asChar =
   strictFun $ \_a -> return $
     strictFun $ \_len -> return $
@@ -63,7 +63,7 @@ sbvWordAsChar bv =
     Nothing -> fail "unable to interpret bitvector as character"
 
 --primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
-tcLenFromThen_Nat :: Monad m => Value m b w e
+tcLenFromThen_Nat :: Monad m => Value m b w i e
 tcLenFromThen_Nat =
   natFun' "tcLenFromThen_Nat x" $ \x -> return $
   natFun' "tcLenFromThen_Nat y" $ \y -> return $
@@ -75,7 +75,7 @@ tcLenFromThen_Nat =
       _ -> fail "tcLenFromThen_Nat: unable to calculate length"
 
 --primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
-tcLenFromThenTo_Nat :: Monad m => Value m b w e
+tcLenFromThenTo_Nat :: Monad m => Value m b w i e
 tcLenFromThenTo_Nat =
   natFun' "tcLenFromThenTo_Nat x" $ \x -> return $
   natFun' "tcLenFromThenTo_Nat y" $ \y -> return $
