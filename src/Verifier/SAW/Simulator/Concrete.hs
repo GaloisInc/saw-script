@@ -94,7 +94,7 @@ vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
 ------------------------------------------------------------
 -- Values
 
-type CValue = Value Identity Bool BitVector CExtra
+type CValue = Value Identity Bool BitVector Integer CExtra
 
 data CExtra
   = CStream (IntTrie CValue)

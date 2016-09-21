@@ -110,8 +110,8 @@ vSignedShiftR xs i
 ------------------------------------------------------------
 -- Values
 
-type RValue = Value Identity RME (Vector RME) RExtra
-type RThunk = Thunk Identity RME (Vector RME) RExtra
+type RValue = Value Identity RME (Vector RME) Integer RExtra
+type RThunk = Thunk Identity RME (Vector RME) Integer RExtra
 
 data RExtra = AStream (IntTrie RValue)
 

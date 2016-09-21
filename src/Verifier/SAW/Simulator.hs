@@ -58,21 +58,21 @@ type Id = Identity
 ------------------------------------------------------------
 -- Simulator configuration
 
-data SimulatorConfig m b w e =
+data SimulatorConfig m b w i e =
   SimulatorConfig
-  { simGlobal :: Ident -> m (Value m b w e)
-  , simExtCns :: VarIndex -> String -> Value m b w e -> m (Value m b w e)
-  , simUninterpreted :: String -> Value m b w e -> Maybe (m (Value m b w e))
+  { simGlobal :: Ident -> m (Value m b w i e)
+  , simExtCns :: VarIndex -> String -> Value m b w i e -> m (Value m b w i e)
+  , simUninterpreted :: String -> Value m b w i e -> Maybe (m (Value m b w i e))
   }
 
 ------------------------------------------------------------
 -- Evaluation of function definitions
 
-{-# SPECIALIZE matchThunk :: Pat t -> Thunk Id b w e -> Id (Maybe (Map Int (Thunk Id b w e))) #-}
-{-# SPECIALIZE matchThunk :: Pat t -> Thunk IO b w e -> IO (Maybe (Map Int (Thunk IO b w e))) #-}
+{-# SPECIALIZE matchThunk :: Pat t -> Thunk Id b w i e -> Id (Maybe (Map Int (Thunk Id b w i e))) #-}
+{-# SPECIALIZE matchThunk :: Pat t -> Thunk IO b w i e -> IO (Maybe (Map Int (Thunk IO b w i e))) #-}
 
 -- | Pattern matching for values.
-matchThunk :: Monad m => Pat t -> Thunk m b w e -> m (Maybe (Map Int (Thunk m b w e)))
+matchThunk :: Monad m => Pat t -> Thunk m b w i e -> m (Maybe (Map Int (Thunk m b w i e)))
 matchThunk p x =
   case p of
     PVar _ i _  -> return $ Just (Map.singleton i x)
@@ -102,11 +102,11 @@ matchThunk p x =
                         VString s' | s == s' -> matchThunks [] []
                         _ -> return Nothing
 
-{-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk Id b w e] -> Id (Maybe (Map Int (Thunk Id b w e))) #-}
-{-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk IO b w e] -> IO (Maybe (Map Int (Thunk IO b w e))) #-}
+{-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk Id b w i e] -> Id (Maybe (Map Int (Thunk Id b w i e))) #-}
+{-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk IO b w i e] -> IO (Maybe (Map Int (Thunk IO b w i e))) #-}
 
 -- | Simultaneous pattern matching for lists of values.
-matchThunks :: Monad m => [Pat t] -> [Thunk m b w e] -> m (Maybe (Map Int (Thunk m b w e)))
+matchThunks :: Monad m => [Pat t] -> [Thunk m b w i e] -> m (Maybe (Map Int (Thunk m b w i e)))
 matchThunks [] [] = return $ Just Map.empty
 matchThunks [] (_ : _) = return Nothing
 matchThunks (_ : _) [] = return Nothing
@@ -121,30 +121,30 @@ matchThunks (p : ps) (x : xs) = do
         Just m2 -> return $ Just (Map.union m1 m2)
 
 
-{-# SPECIALIZE evalDef :: forall b w e n t. Show n => (t -> OpenValue Id b w e) -> GenericDef n t -> Id (Value Id b w e) #-}
-{-# SPECIALIZE evalDef :: forall b w e n t. Show n => (t -> OpenValue IO b w e) -> GenericDef n t -> IO (Value IO b w e) #-}
+{-# SPECIALIZE evalDef :: forall b w i e n t. Show n => (t -> OpenValue Id b w i e) -> GenericDef n t -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalDef :: forall b w i e n t. Show n => (t -> OpenValue IO b w i e) -> GenericDef n t -> IO (Value IO b w i e) #-}
 
 -- | Evaluator for pattern-matching function definitions,
 -- parameterized by an evaluator for right-hand sides.
-evalDef :: forall m b w e n t. (Monad m, Show n) =>
-           (t -> OpenValue m b w e) -> GenericDef n t -> m (Value m b w e)
+evalDef :: forall m b w i e n t. (Monad m, Show n) =>
+           (t -> OpenValue m b w i e) -> GenericDef n t -> m (Value m b w i e)
 evalDef rec (Def ident NoQualifier _ eqns) = vFuns [] arity
   where
     arity :: Int
     arity = lengthDefEqn (head eqns)
     lengthDefEqn :: DefEqn t -> Int
     lengthDefEqn (DefEqn ps _) = length ps
-    vFuns :: [Thunk m b w e] -> Int -> m (Value m b w e)
+    vFuns :: [Thunk m b w i e] -> Int -> m (Value m b w i e)
     vFuns xs 0 = tryEqns eqns (reverse xs)
     vFuns xs n = return $ VFun (\x -> vFuns (x : xs) (n - 1))
-    tryEqns :: [DefEqn t] -> [Thunk m b w e] -> m (Value m b w e)
+    tryEqns :: [DefEqn t] -> [Thunk m b w i e] -> m (Value m b w i e)
     tryEqns [] _ = fail $ "Pattern match failure: " ++ show ident
     tryEqns (eqn : eqns') xs =
       do mm <- tryEqn eqn xs
          case mm of
            Just m -> return m
            Nothing -> tryEqns eqns' xs
-    tryEqn :: DefEqn t -> [Thunk m b w e] -> m (Maybe (Value m b w e))
+    tryEqn :: DefEqn t -> [Thunk m b w i e] -> m (Maybe (Value m b w i e))
     tryEqn (DefEqn ps rhs) xs =
       do minst <- matchThunks ps xs
          case minst of
@@ -159,17 +159,17 @@ evalDef _ (Def ident AxiomQualifier _ _) = fail $ unwords ["attempted to evaluat
 -- Evaluation of terms
 
 -- | Meaning of an open term, parameterized by environment of bound variables
-type OpenValue m b w e = [Thunk m b w e] -> m (Value m b w e)
+type OpenValue m b w i e = [Thunk m b w i e] -> m (Value m b w i e)
 
-{-# SPECIALIZE evalTermF :: (Show t, Termlike t, Show e) => SimulatorConfig Id b w e -> (t -> OpenValue Id b w e) -> (t -> Id (Value Id b w e)) -> TermF t -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalTermF :: (Show t, Termlike t, Show e) => SimulatorConfig IO b w e -> (t -> OpenValue IO b w e) -> (t -> IO (Value IO b w e)) -> TermF t -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalTermF :: (Show t, Termlike t, Show e) => SimulatorConfig Id b w i e -> (t -> OpenValue Id b w i e) -> (t -> Id (Value Id b w i e)) -> TermF t -> OpenValue Id b w i e #-}
+{-# SPECIALIZE evalTermF :: (Show t, Termlike t, Show e) => SimulatorConfig IO b w i e -> (t -> OpenValue IO b w i e) -> (t -> IO (Value IO b w i e)) -> TermF t -> OpenValue IO b w i e #-}
 
 -- | Generic evaluator for TermFs.
-evalTermF :: forall t m b w e. (Show t, MonadLazy m, MonadFix m, Termlike t, Show e) =>
-             SimulatorConfig m b w e                  -- ^ Evaluator for global constants
-          -> (t -> OpenValue m b w e)                 -- ^ Evaluator for subterms under binders
-          -> (t -> m (Value m b w e))                 -- ^ Evaluator for subterms in the same bound variable context
-          -> TermF t -> OpenValue m b w e
+evalTermF :: forall t m b w i e. (Show t, MonadLazy m, MonadFix m, Termlike t, Show e) =>
+             SimulatorConfig m b w i e                  -- ^ Evaluator for global constants
+          -> (t -> OpenValue m b w i e)                 -- ^ Evaluator for subterms under binders
+          -> (t -> m (Value m b w i e))                 -- ^ Evaluator for subterms in the same bound variable context
+          -> TermF t -> OpenValue m b w i e
 evalTermF cfg lam rec tf env =
   case tf of
     App t1 t2               -> do v <- rec t1
@@ -224,36 +224,36 @@ evalTermF cfg lam rec tf env =
         ExtCns ec           -> do v <- rec (ecType ec)
                                   simExtCns cfg (ecVarIndex ec) (ecName ec) v
   where
-    rec' :: t -> m (Thunk m b w e)
+    rec' :: t -> m (Thunk m b w i e)
     rec' = delay . rec
 
 
-{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig Id b w e -> SimpleTerm -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig IO b w e -> SimpleTerm -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig Id b w i e -> SimpleTerm -> OpenValue Id b w i e #-}
+{-# SPECIALIZE evalTerm :: (Show e) => SimulatorConfig IO b w i e -> SimpleTerm -> OpenValue IO b w i e #-}
 
 -- | Evaluator for unshared terms.
 evalTerm :: (MonadLazy m, MonadFix m, Show e) =>
-            SimulatorConfig m b w e -> SimpleTerm -> OpenValue m b w e
+            SimulatorConfig m b w i e -> SimpleTerm -> OpenValue m b w i e
 evalTerm cfg (SimpleTerm tf) env = evalTermF cfg lam rec tf env
   where
     lam = evalTerm cfg
     rec t = evalTerm cfg t env
 
-{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig Id b w e -> TypedDef -> Id (Value Id b w e) #-}
-{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig IO b w e -> TypedDef -> IO (Value IO b w e) #-}
+{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig Id b w i e -> TypedDef -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig IO b w i e -> TypedDef -> IO (Value IO b w i e) #-}
 
 evalTypedDef :: (MonadLazy m, MonadFix m, Show e) =>
-                SimulatorConfig m b w e -> TypedDef -> m (Value m b w e)
+                SimulatorConfig m b w i e -> TypedDef -> m (Value m b w i e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
-{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value Id b w e) -> (VarIndex -> String -> Value Id b w e -> Id (Value Id b w e)) -> (String -> Value Id b w e -> Maybe (Id (Value Id b w e))) -> Id (SimulatorConfig Id b w e) #-}
-{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value IO b w e) -> (VarIndex -> String -> Value IO b w e -> IO (Value IO b w e)) -> (String -> Value IO b w e -> Maybe (IO (Value IO b w e))) -> IO (SimulatorConfig IO b w e) #-}
+{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value Id b w i e) -> (VarIndex -> String -> Value Id b w i e -> Id (Value Id b w i e)) -> (String -> Value Id b w i e -> Maybe (Id (Value Id b w i e))) -> Id (SimulatorConfig Id b w i e) #-}
+{-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value IO b w i e) -> (VarIndex -> String -> Value IO b w i e -> IO (Value IO b w i e)) -> (String -> Value IO b w i e -> Maybe (IO (Value IO b w i e))) -> IO (SimulatorConfig IO b w i e) #-}
 
-evalGlobal :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
-              Module -> Map Ident (Value m b w e) ->
-              (VarIndex -> String -> Value m b w e -> m (Value m b w e)) ->
-              (String -> Value m b w e -> Maybe (m (Value m b w e))) ->
-              m (SimulatorConfig m b w e)
+evalGlobal :: forall m b w i e. (MonadLazy m, MonadFix m, Show e) =>
+              Module -> Map Ident (Value m b w i e) ->
+              (VarIndex -> String -> Value m b w i e -> m (Value m b w i e)) ->
+              (String -> Value m b w i e -> Maybe (m (Value m b w i e))) ->
+              m (SimulatorConfig m b w i e)
 evalGlobal m0 prims extcns uninterpreted = do
    checkPrimitives m0 prims
    mfix $ \cfg -> do
@@ -263,13 +263,13 @@ evalGlobal m0 prims extcns uninterpreted = do
     ms :: [Module]
     ms = m0 : Map.elems (m0^.moduleImports)
 
-    global :: HashMap Ident (Thunk m b w e) -> Ident -> m (Value m b w e)
+    global :: HashMap Ident (Thunk m b w i e) -> Ident -> m (Value m b w i e)
     global thunks ident =
       case HashMap.lookup ident thunks of
         Just v -> force v
         Nothing -> fail $ "Unimplemented global: " ++ show ident
 
-    globals :: SimulatorConfig m b w e -> HashMap Ident (m (Value m b w e))
+    globals :: SimulatorConfig m b w i e -> HashMap Ident (m (Value m b w i e))
     globals cfg =
       HashMap.fromList $
       [ (ctorName ct, return (vCtor (ctorName ct) [] (ctorType ct))) |
@@ -278,20 +278,20 @@ evalGlobal m0 prims extcns uninterpreted = do
         m <- ms, td <- moduleDefs m, not (null (defEqs td)) ] ++
       Map.assocs (fmap return prims) -- Later mappings take precedence
 
-    vCtor :: Ident -> [Thunk m b w e] -> SimpleTerm -> Value m b w e
+    vCtor :: Ident -> [Thunk m b w i e] -> SimpleTerm -> Value m b w i e
     vCtor ident xs (SimpleTerm (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
-noExtCns :: Monad m => VarIndex -> String -> Value m b w e -> m (Value m b w e)
+noExtCns :: Monad m => VarIndex -> String -> Value m b w i e -> m (Value m b w i e)
 noExtCns _ name _ = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
 
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not
 --   overridden.
-checkPrimitives :: forall m b w e. (MonadLazy m, MonadFix m, Show e)
+checkPrimitives :: forall m b w i e. (MonadLazy m, MonadFix m, Show e)
                 => Module
-                -> Map Ident (Value m b w e)
+                -> Map Ident (Value m b w i e)
                 -> m ()
 checkPrimitives m0 prims = do
    -- FIXME this is downgraded to a warning temporarily while we work out a
@@ -325,22 +325,22 @@ checkPrimitives m0 prims = do
 -- reinitialized to @memoClosed@ whenever we descend under a lambda
 -- binder.
 
-{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig Id b w e -> Term -> Id (Value Id b w e) #-}
-{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig IO b w e -> Term -> IO (Value IO b w e) #-}
+{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig Id b w i e -> Term -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalSharedTerm :: (Show e) => SimulatorConfig IO b w i e -> Term -> IO (Value IO b w i e) #-}
 
 -- | Evaluator for shared terms.
 evalSharedTerm :: (MonadLazy m, MonadFix m, Show e) =>
-                  SimulatorConfig m b w e -> Term -> m (Value m b w e)
+                  SimulatorConfig m b w i e -> Term -> m (Value m b w i e)
 evalSharedTerm cfg t = do
   memoClosed <- mkMemoClosed cfg t
   evalOpen cfg memoClosed t []
 
-{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig Id b w e -> Term -> Id (IntMap (Thunk Id b w e)) #-}
-{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig IO b w e -> Term -> IO (IntMap (Thunk IO b w e)) #-}
+{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig Id b w i e -> Term -> Id (IntMap (Thunk Id b w i e)) #-}
+{-# SPECIALIZE mkMemoClosed :: (Show e) => SimulatorConfig IO b w i e -> Term -> IO (IntMap (Thunk IO b w i e)) #-}
 
 -- | Precomputing the memo table for closed subterms.
-mkMemoClosed :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
-                SimulatorConfig m b w e -> Term -> m (IntMap (Thunk m b w e))
+mkMemoClosed :: forall m b w i e. (MonadLazy m, MonadFix m, Show e) =>
+                SimulatorConfig m b w i e -> Term -> m (IntMap (Thunk m b w i e))
 mkMemoClosed cfg t =
   mfix $ \memoClosed -> mapM (delay . evalClosedTermF cfg memoClosed) subterms
   where
@@ -359,14 +359,14 @@ mkMemoClosed cfg t =
           State.modify (IMap.insert i (tf, b))
           return b
 
-{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> TermF Term -> Id (Value Id b w e) #-}
-{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> TermF Term -> IO (Value IO b w e) #-}
+{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig Id b w i e -> IntMap (Thunk Id b w i e) -> TermF Term -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalClosedTermF :: (Show e) => SimulatorConfig IO b w i e -> IntMap (Thunk IO b w i e) -> TermF Term -> IO (Value IO b w i e) #-}
 
 -- | Evaluator for closed terms, used to populate @memoClosed@.
 evalClosedTermF :: (MonadLazy m, MonadFix m, Show e) =>
-                   SimulatorConfig m b w e
-                -> IntMap (Thunk m b w e)
-                -> TermF Term -> m (Value m b w e)
+                   SimulatorConfig m b w i e
+                -> IntMap (Thunk m b w i e)
+                -> TermF Term -> m (Value m b w i e)
 evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
   where
     lam = evalOpen cfg memoClosed
@@ -376,16 +376,16 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam rec tf []
         Just x -> force x
         Nothing -> fail "evalClosedTermF: internal error"
 
-{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> Term -> [Thunk Id b w e] -> Id (IntMap (Thunk Id b w e)) #-}
-{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> Term -> [Thunk IO b w e] -> IO (IntMap (Thunk IO b w e)) #-}
+{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig Id b w i e -> IntMap (Thunk Id b w i e) -> Term -> [Thunk Id b w i e] -> Id (IntMap (Thunk Id b w i e)) #-}
+{-# SPECIALIZE mkMemoLocal :: (Show e) => SimulatorConfig IO b w i e -> IntMap (Thunk IO b w i e) -> Term -> [Thunk IO b w i e] -> IO (IntMap (Thunk IO b w i e)) #-}
 
 -- | Precomputing the memo table for open subterms in the current context.
-mkMemoLocal :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
-               SimulatorConfig m b w e -> IntMap (Thunk m b w e) ->
-               Term -> [Thunk m b w e] -> m (IntMap (Thunk m b w e))
+mkMemoLocal :: forall m b w i e. (MonadLazy m, MonadFix m, Show e) =>
+               SimulatorConfig m b w i e -> IntMap (Thunk m b w i e) ->
+               Term -> [Thunk m b w i e] -> m (IntMap (Thunk m b w i e))
 mkMemoLocal cfg memoClosed t env = go memoClosed t
   where
-    go :: IntMap (Thunk m b w e) -> Term -> m (IntMap (Thunk m b w e))
+    go :: IntMap (Thunk m b w i e) -> Term -> m (IntMap (Thunk m b w i e))
     go memo (Unshared tf) = goTermF memo tf
     go memo (STApp{ stAppIndex = i, stAppTermF = tf }) =
       case IMap.lookup i memo of
@@ -395,7 +395,7 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
           thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
           return (IMap.insert i thunk memo')
 
-    goTermF :: IntMap (Thunk m b w e) -> TermF Term -> m (IntMap (Thunk m b w e))
+    goTermF :: IntMap (Thunk m b w i e) -> TermF Term -> m (IntMap (Thunk m b w i e))
     goTermF memo tf =
       case tf of
         FTermF ftf      -> foldlM go memo ftf
@@ -407,14 +407,14 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
         LocalVar _      -> return memo
         Constant _ t1 _ -> go memo t1
 
-{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> IntMap (Thunk Id b w e) -> TermF Term -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> IntMap (Thunk IO b w e) -> TermF Term -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig Id b w i e -> IntMap (Thunk Id b w i e) -> IntMap (Thunk Id b w i e) -> TermF Term -> OpenValue Id b w i e #-}
+{-# SPECIALIZE evalLocalTermF :: (Show e) => SimulatorConfig IO b w i e -> IntMap (Thunk IO b w i e) -> IntMap (Thunk IO b w i e) -> TermF Term -> OpenValue IO b w i e #-}
 
 -- | Evaluator for open terms, used to populate @memoLocal@.
 evalLocalTermF :: (MonadLazy m, MonadFix m, Show e) =>
-                   SimulatorConfig m b w e
-                -> IntMap (Thunk m b w e) -> IntMap (Thunk m b w e)
-                -> TermF Term -> OpenValue m b w e
+                   SimulatorConfig m b w i e
+                -> IntMap (Thunk m b w i e) -> IntMap (Thunk m b w i e)
+                -> TermF Term -> OpenValue m b w i e
 evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
   where
     lam = evalOpen cfg memoClosed
@@ -424,22 +424,22 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam rec tf0 env
         Just x -> force x
         Nothing -> fail "evalLocalTermF: internal error"
 
-{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig Id b w e -> IntMap (Thunk Id b w e) -> Term -> OpenValue Id b w e #-}
-{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig IO b w e -> IntMap (Thunk IO b w e) -> Term -> OpenValue IO b w e #-}
+{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig Id b w i e -> IntMap (Thunk Id b w i e) -> Term -> OpenValue Id b w i e #-}
+{-# SPECIALIZE evalOpen :: Show e => SimulatorConfig IO b w i e -> IntMap (Thunk IO b w i e) -> Term -> OpenValue IO b w i e #-}
 
 -- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
-evalOpen :: forall m b w e. (MonadLazy m, MonadFix m, Show e) =>
-            SimulatorConfig m b w e
-         -> IntMap (Thunk m b w e)
-         -> Term -> OpenValue m b w e
+evalOpen :: forall m b w i e. (MonadLazy m, MonadFix m, Show e) =>
+            SimulatorConfig m b w i e
+         -> IntMap (Thunk m b w i e)
+         -> Term -> OpenValue m b w i e
 evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
-  let eval :: Term -> m (Value m b w e)
+  let eval :: Term -> m (Value m b w i e)
       eval (Unshared tf) = evalF tf
       eval (STApp{ stAppIndex = i, stAppTermF = tf }) =
         case IMap.lookup i memoLocal of
           Just x -> force x
           Nothing -> evalF tf
-      evalF :: TermF Term -> m (Value m b w e)
+      evalF :: TermF Term -> m (Value m b w i e)
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t

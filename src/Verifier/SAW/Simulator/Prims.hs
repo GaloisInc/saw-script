@@ -29,62 +29,62 @@ import Verifier.SAW.Prim
 ------------------------------------------------------------
 -- Value accessors and constructors
 
-vNat :: Nat -> Value m b w e
+vNat :: Nat -> Value m b w i e
 vNat n = VNat (fromIntegral n)
 
-natFromValue :: Num a => Value m b w e -> a
+natFromValue :: Num a => Value m b w i e -> a
 natFromValue (VNat n) = fromInteger n
 natFromValue _ = error "natFromValue"
 
-natFun'' :: (Monad m, Show e) => String -> (Nat -> m (Value m b w e)) -> Value m b w e
+natFun'' :: (Monad m, Show e) => String -> (Nat -> m (Value m b w i e)) -> Value m b w i e
 natFun'' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g v = fail $ "expected Nat (" ++ s ++ "): " ++ show v
 
-natFun' :: Monad m => String -> (Nat -> m (Value m b w e)) -> Value m b w e
+natFun' :: Monad m => String -> (Nat -> m (Value m b w i e)) -> Value m b w i e
 natFun' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail $ "expected Nat: " ++ s
 
-natFun :: Monad m => (Nat -> m (Value m b w e)) -> Value m b w e
+natFun :: Monad m => (Nat -> m (Value m b w i e)) -> Value m b w i e
 natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"
 
-intFun :: Monad m => String -> (Integer -> m (Value m b w e)) -> Value m b w e
+intFun :: Monad m => String -> (i -> m (Value m b w i e)) -> Value m b w i e
 intFun msg f = strictFun g
   where g (VInt i) = f i
         g _ = fail $ "expected Integer "++ msg
 
-toBool :: Show e => Value m b w e -> b
+toBool :: Show e => Value m b w i e -> b
 toBool (VBool b) = b
 toBool x = error $ unwords ["Verifier.SAW.Simulator.toBool", show x]
 
-toWord :: (Monad m, Show e) => (V.Vector b -> w) -> Value m b w e -> m w
+toWord :: (Monad m, Show e) => (V.Vector b -> w) -> Value m b w i e -> m w
 toWord _ (VWord w) = return w
 toWord pack (VVector vv) = liftM pack $ V.mapM (liftM toBool . force) vv
 toWord _ x = fail $ unwords ["Verifier.SAW.Simulator.toWord", show x]
 
-toBits :: (Monad m, Show e) => (w -> V.Vector b) -> Value m b w e -> m (V.Vector b)
+toBits :: (Monad m, Show e) => (w -> V.Vector b) -> Value m b w i e -> m (V.Vector b)
 toBits unpack (VWord w) = return (unpack w)
 toBits _ (VVector v) = V.mapM (liftM toBool . force) v
 toBits _ x = fail $ unwords ["Verifier.SAW.Simulator.toBits", show x]
 
 toVector :: (Monad m, Show e) => (w -> V.Vector b)
-         -> Value m b w e -> V.Vector (Thunk m b w e)
+         -> Value m b w i e -> V.Vector (Thunk m b w i e)
 toVector _ (VVector v) = v
 toVector unpack (VWord w) = fmap (ready . VBool) (unpack w)
 toVector _ x = fail $ unwords ["Verifier.SAW.Simulator.toVector", show x]
 
-wordFun :: (Monad m, Show e) => (V.Vector b -> w) -> (w -> m (Value m b w e)) -> Value m b w e
+wordFun :: (Monad m, Show e) => (V.Vector b -> w) -> (w -> m (Value m b w i e)) -> Value m b w i e
 wordFun pack f = strictFun (\x -> toWord pack x >>= f)
 
 bitsFun :: (Monad m, Show e) => (w -> V.Vector b)
-        -> (V.Vector b -> m (Value m b w e)) -> Value m b w e
+        -> (V.Vector b -> m (Value m b w i e)) -> Value m b w i e
 bitsFun unpack f = strictFun (\x -> toBits unpack x >>= f)
 
 vectorFun :: (Monad m, Show e) => (w -> V.Vector b)
-          -> (V.Vector (Thunk m b w e) -> m (Value m b w e)) -> Value m b w e
+          -> (V.Vector (Thunk m b w i e) -> m (Value m b w i e)) -> Value m b w i e
 vectorFun unpack f = strictFun (\x -> f (toVector unpack x))
 
 vecIdx :: a -> V.Vector a -> Int -> a
@@ -113,11 +113,11 @@ selectV mux maxValue valueFn v = impl len 0
 -- Values for common primitives
 
 -- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
-bvToNatOp :: Monad m => Value m b w e
+bvToNatOp :: Monad m => Value m b w i e
 bvToNatOp = constFun $ pureFun VToNat
 
 -- coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
-coerceOp :: Monad m => Value m b w e
+coerceOp :: Monad m => Value m b w i e
 coerceOp =
   constFun $
   constFun $
@@ -125,62 +125,62 @@ coerceOp =
   VFun force
 
 -- Succ :: Nat -> Nat;
-succOp :: Monad m => Value m b w e
+succOp :: Monad m => Value m b w i e
 succOp =
   natFun' "Succ" $ \n -> return $
   vNat (succ n)
 
 -- addNat :: Nat -> Nat -> Nat;
-addNatOp :: Monad m => Value m b w e
+addNatOp :: Monad m => Value m b w i e
 addNatOp =
   natFun' "addNat1" $ \m -> return $
   natFun' "addNat2" $ \n -> return $
   vNat (m + n)
 
 -- subNat :: Nat -> Nat -> Nat;
-subNatOp :: Monad m => Value m b w e
+subNatOp :: Monad m => Value m b w i e
 subNatOp =
   natFun' "subNat1" $ \m -> return $
   natFun' "subNat2" $ \n -> return $
   vNat (if m < n then 0 else m - n)
 
 -- mulNat :: Nat -> Nat -> Nat;
-mulNatOp :: Monad m => Value m b w e
+mulNatOp :: Monad m => Value m b w i e
 mulNatOp =
   natFun' "mulNat1" $ \m -> return $
   natFun' "mulNat2" $ \n -> return $
   vNat (m * n)
 
 -- minNat :: Nat -> Nat -> Nat;
-minNatOp :: Monad m => Value m b w e
+minNatOp :: Monad m => Value m b w i e
 minNatOp =
   natFun' "minNat1" $ \m -> return $
   natFun' "minNat2" $ \n -> return $
   vNat (min m n)
 
 -- maxNat :: Nat -> Nat -> Nat;
-maxNatOp :: Monad m => Value m b w e
+maxNatOp :: Monad m => Value m b w i e
 maxNatOp =
   natFun' "maxNat1" $ \m -> return $
   natFun' "maxNat2" $ \n -> return $
   vNat (max m n)
 
 -- equalNat :: Nat -> Nat -> Bool;
-equalNat :: Monad m => (Bool -> m b) -> Value m b w e
+equalNat :: Monad m => (Bool -> m b) -> Value m b w i e
 equalNat lit =
   natFun' "equalNat1" $ \m -> return $
   natFun' "equalNat2" $ \n ->
   lit (m == n) >>= return . VBool
 
 -- equalNat :: Nat -> Nat -> Bool;
-ltNat :: Monad m => (Bool -> m b) -> Value m b w e
+ltNat :: Monad m => (Bool -> m b) -> Value m b w i e
 ltNat lit =
   natFun' "ltNat1" $ \m -> return $
   natFun' "ltNat2" $ \n ->
   lit (m < n) >>= return . VBool
 
 -- divModNat :: Nat -> Nat -> #(Nat, Nat);
-divModNatOp :: Monad m => Value m b w e
+divModNatOp :: Monad m => Value m b w i e
 divModNatOp =
   natFun' "divModNat1" $ \m -> return $
   natFun' "divModNat2" $ \n -> return $
@@ -188,20 +188,20 @@ divModNatOp =
     vTuple [ready $ vNat q, ready $ vNat r]
 
 -- expNat :: Nat -> Nat -> Nat;
-expNatOp :: Monad m => Value m b w e
+expNatOp :: Monad m => Value m b w i e
 expNatOp =
   natFun' "expNat1" $ \m -> return $
   natFun' "expNat2" $ \n -> return $
   vNat (m ^ n)
 
 -- widthNat :: Nat -> Nat;
-widthNatOp :: Monad m => Value m b w e
+widthNatOp :: Monad m => Value m b w i e
 widthNatOp =
   natFun' "widthNat1" $ \n -> return $
   vNat (widthNat n)
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
-natCaseOp :: Monad m => Value m b w e
+natCaseOp :: Monad m => Value m b w i e
 natCaseOp =
   constFun $
   VFun $ \z -> return $
@@ -213,7 +213,7 @@ natCaseOp =
             apply s' (ready (VNat (fromIntegral n - 1)))
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
-genOp :: MonadLazy m => Value m b w e
+genOp :: MonadLazy m => Value m b w i e
 genOp =
   natFun' "gen1" $ \n -> return $
   constFun $
@@ -222,11 +222,11 @@ genOp =
     liftM VVector $ V.generateM (fromIntegral n) g
 
 -- eq :: (a :: sort 0) -> a -> a -> Bool
-eqOp :: (MonadLazy m, Show e) => Value m b w e
-     -> (Value m b w e -> Value m b w e -> m (Value m b w e))
-     -> (Value m b w e -> Value m b w e -> m (Value m b w e))
-     -> (Integer -> Value m b w e -> Value m b w e -> m (Value m b w e))
-     -> Value m b w e
+eqOp :: (MonadLazy m, Show e) => Value m b w i e
+     -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
+     -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
+     -> (Integer -> Value m b w i e -> Value m b w i e -> m (Value m b w i e))
+     -> Value m b w i e
 eqOp trueOp andOp boolOp bvOp =
   pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2
   where
@@ -255,8 +255,8 @@ eqOp trueOp andOp boolOp bvOp =
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
 atWithDefaultOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
-     -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
-     -> Value m b w e
+     -> (b -> m (Value m b w i e) -> m (Value m b w i e) -> m (Value m b w i e))
+     -> Value m b w i e
 atWithDefaultOp unpack bvOp mux =
   natFun $ \n -> return $
   constFun $
@@ -282,8 +282,8 @@ atWithDefaultOp unpack bvOp mux =
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 updOp :: (MonadLazy m, Show e) => (w -> V.Vector b)
       -> (w -> w -> m b) -> (Int -> Integer -> w) -> (w -> Int)
-      -> (b -> m (Value m b w e) -> m (Value m b w e) -> m (Value m b w e))
-      -> Value m b w e
+      -> (b -> m (Value m b w i e) -> m (Value m b w i e) -> m (Value m b w i e))
+      -> Value m b w i e
 updOp unpack eq lit bitsize mux =
   natFun $ \n -> return $
   constFun $
@@ -307,12 +307,12 @@ updOp unpack eq lit bitsize mux =
 
 
 -- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
-emptyVec :: Monad m => Value m b w e
+emptyVec :: Monad m => Value m b w i e
 emptyVec = constFun $ VVector V.empty
 
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-appendOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w e
+appendOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w i e
 appendOp unpack app =
   constFun $
   constFun $
@@ -322,7 +322,7 @@ appendOp unpack app =
   appV unpack app xs ys
 
 appV :: Monad m => (w -> V.Vector b) -> (w -> w -> w)
-     -> Value m b w e -> Value m b w e -> Value m b w e
+     -> Value m b w i e -> Value m b w i e -> Value m b w i e
 appV unpack app xs ys =
   case (xs, ys) of
     (VVector xv, _) | V.null xv -> ys
@@ -334,7 +334,7 @@ appV unpack app xs ys =
     _ -> error "Verifier.SAW.Simulator.Prims.appendOp"
 
 -- join  :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
-joinOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w e
+joinOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w i e
 joinOp unpack app =
   constFun $
   constFun $
@@ -347,80 +347,80 @@ joinOp unpack app =
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
 
 
-intBinOp :: Monad m => String -> (Integer -> Integer -> Integer) -> Value m b w e
+intBinOp :: Monad m => String -> (i -> i -> i) -> Value m b w i e
 intBinOp nm f =
   intFun (nm++" x") $ \x -> return $
   intFun (nm++" y") $ \y -> return $
     VInt (f x y)
 
-intBinCmp :: Monad m => String -> (Integer -> Integer -> Bool) -> (Bool -> b) -> Value m b w e
+intBinCmp :: Monad m => String -> (i -> i -> Bool) -> (Bool -> b) -> Value m b w i e
 intBinCmp nm f boolLit =
   intFun (nm++" x") $ \x -> return $
   intFun (nm++" y") $ \y -> return $
     VBool $ boolLit (f x y)
 
 -- primitive intAdd :: Integer -> Integer -> Integer;
-intAddOp :: Monad m => Value m b w e
+intAddOp :: Monad m => Value m b w Integer e
 intAddOp = intBinOp "intAdd" (+)
 
 -- primitive intSub :: Integer -> Integer -> Integer;
-intSubOp :: Monad m => Value m b w e
+intSubOp :: Monad m => Value m b w Integer e
 intSubOp = intBinOp "intSub" (-)
 
 -- primitive intMul :: Integer -> Integer -> Integer;
-intMulOp :: Monad m => Value m b w e
+intMulOp :: Monad m => Value m b w Integer e
 intMulOp = intBinOp "intMul" (*)
 
 -- primitive intDiv :: Integer -> Integer -> Integer;
-intDivOp :: Monad m => Value m b w e
+intDivOp :: Monad m => Value m b w Integer e
 intDivOp = intBinOp "intDiv" div
 
 -- primitive intMod :: Integer -> Integer -> Integer;
-intModOp :: Monad m => Value m b w e
+intModOp :: Monad m => Value m b w Integer e
 intModOp = intBinOp "intMod" mod
 
 -- primitive intMin :: Integer -> Integer -> Integer;
-intMinOp :: Monad m => Value m b w e
+intMinOp :: Monad m => Value m b w Integer e
 intMinOp = intBinOp "intMin" min
 
 -- primitive intMax :: Integer -> Integer -> Integer;
-intMaxOp :: Monad m => Value m b w e
+intMaxOp :: Monad m => Value m b w Integer e
 intMaxOp = intBinOp "intMax" max
 
 -- primitive intNeg :: Integer -> Integer;
-intNegOp :: Monad m => Value m b w e
+intNegOp :: Monad m => Value m b w Integer e
 intNegOp = intFun "intNeg x" $ \x -> return $ VInt (negate x)
 
 -- primitive intEq  :: Integer -> Integer -> Bool;
-intEqOp :: Monad m => (Bool -> b) -> Value m b w e
+intEqOp :: Monad m => (Bool -> b) -> Value m b w Integer e
 intEqOp = intBinCmp "intEq" (==)
 
 -- primitive intLe  :: Integer -> Integer -> Bool;
-intLeOp :: Monad m => (Bool -> b) -> Value m b w e
+intLeOp :: Monad m => (Bool -> b) -> Value m b w Integer e
 intLeOp = intBinCmp "intLe" (<=)
 
 -- primitive intLt  :: Integer -> Integer -> Bool;
-intLtOp :: Monad m => (Bool -> b) -> Value m b w e
+intLtOp :: Monad m => (Bool -> b) -> Value m b w Integer e
 intLtOp = intBinCmp "intLt" (<)
 
 -- primitive intToNat :: Integer -> Nat;
-intToNatOp :: Monad m => Value m b w e
+intToNatOp :: Monad m => Value m b w Integer e
 intToNatOp =
   intFun "intToNat" $ \x -> return $!
     if x >= 0 then VNat x else VNat 0
 
 -- primitive natToInt :: Nat -> Integer;
-natToIntOp :: Monad m => Value m b w e
+natToIntOp :: Monad m => Value m b w Integer e
 natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (fromIntegral x)
 
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
-bvLg2Op :: Monad m => (Value m b w e -> m w) -> (w -> m w) -> Value m b w e
+bvLg2Op :: Monad m => (Value m b w i e -> m w) -> (w -> m w) -> Value m b w i e
 bvLg2Op asWord wordLg2 =
   natFun' "bvLg2 1" $ \_n -> return $
   strictFun $ \w -> (return . VWord) =<< (wordLg2 =<< asWord w)
 
 -- primitive error :: (a :: sort 0) -> String -> a;
-errorOp :: Monad m => Value m b w e
+errorOp :: Monad m => Value m b w i e
 errorOp =
   constFun $
   strictFun $ \x ->
@@ -428,15 +428,15 @@ errorOp =
     VString s -> fail s
     _ -> fail "unknown error"
 
-muxValue :: forall m b w e. (MonadLazy m, Applicative m, Show e) =>
+muxValue :: forall m b w i e. (MonadLazy m, Applicative m, Show e) =>
             (w -> V.Vector b)
          -> (b -> b -> b -> m b)
          -> (b -> w -> w -> m w)
          -> (b -> e -> e -> m e)
-         -> b -> Value m b w e -> Value m b w e -> m (Value m b w e)
+         -> b -> Value m b w i e -> Value m b w i e -> m (Value m b w i e)
 muxValue unpack bool word extra b = value
   where
-    value :: Value m b w e -> Value m b w e -> m (Value m b w e)
+    value :: Value m b w i e -> Value m b w i e -> m (Value m b w i e)
     value (VFun f)          (VFun g)          = return $ VFun $ \a -> do
                                                   x <- f a
                                                   y <- g a
@@ -462,10 +462,10 @@ muxValue unpack bool word extra b = value
       fail $ "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
-    thunks :: V.Vector (Thunk m b w e) -> V.Vector (Thunk m b w e) -> m (V.Vector (Thunk m b w e))
+    thunks :: V.Vector (Thunk m b w i e) -> V.Vector (Thunk m b w i e) -> m (V.Vector (Thunk m b w i e))
     thunks xv yv
       | V.length xv == V.length yv = V.zipWithM thunk xv yv
       | otherwise                  = fail "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments"
 
-    thunk :: Thunk m b w e -> Thunk m b w e -> m (Thunk m b w e)
+    thunk :: Thunk m b w i e -> Thunk m b w i e -> m (Thunk m b w i e)
     thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'
