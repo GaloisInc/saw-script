@@ -15,7 +15,6 @@ module Verifier.SAW.Simulator.SBV.Value where
 import Control.Applicative
 import Data.Traversable
 #endif
-import qualified Control.Monad.State as S
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
