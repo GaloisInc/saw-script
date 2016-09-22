@@ -250,11 +250,13 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
       ms' <- runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity verb
         (initPS, otherPtrs, args) <- initializeVerification' scLLVM file ms
+        dumpMem 4 "llvm_verify pre" Nothing
         let ovdsByFunction = groupBy ((==) `on` specFunction) $
                              sortBy (compare `on` specFunction) $
                              vpOver vp
         mapM_ (overrideFromSpec sc (specPos ms)) ovdsByFunction
         run
+        dumpMem 4 "llvm_verify post" Nothing
         res <- checkFinalState scLLVM ms initPS otherPtrs args
         when (verb >= 3) $ liftIO $ do
           putStrLn "Verifying the following:"
