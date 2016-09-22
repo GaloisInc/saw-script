@@ -59,10 +59,10 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, Module, identName)
-import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
+import Verifier.SAW.Simulator.SBV.Value (FiniteType(..), asFiniteType)
 
-type SValue = Value IO SBool SWord Integer SbvExtra
-type SThunk = Thunk IO SBool SWord Integer SbvExtra
+type SValue = Value IO SBool SWord SInteger SbvExtra
+type SThunk = Thunk IO SBool SWord SInteger SbvExtra
 
 data SbvExtra =
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
@@ -126,22 +126,22 @@ constMap = Map.fromList
   , ("Prelude.equalNat", Prims.equalNat (return . svBool))
   , ("Prelude.ltNat", Prims.ltNat (return . svBool))
   -- Integers
-  , ("Prelude.intAdd", Prims.intAddOp)
-  , ("Prelude.intSub", Prims.intSubOp)
-  , ("Prelude.intMul", Prims.intMulOp)
-  , ("Prelude.intDiv", Prims.intDivOp)
-  , ("Prelude.intMod", Prims.intModOp)
-  , ("Prelude.intNeg", Prims.intNegOp)
-  , ("Prelude.intEq" , Prims.intEqOp svBool)
-  , ("Prelude.intLe" , Prims.intLeOp svBool)
-  , ("Prelude.intLt" , Prims.intLtOp svBool)
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.natToInt", Prims.natToIntOp)
+  , ("Prelude.intAdd", Prims.intBinOp "intAdd" svPlus)
+  , ("Prelude.intSub", Prims.intBinOp "intSub" svMinus)
+  , ("Prelude.intMul", Prims.intBinOp "intMul" svTimes)
+  , ("Prelude.intDiv", Prims.intBinOp "intDiv" svQuot)
+  , ("Prelude.intMod", Prims.intBinOp "intMod" svRem)
+  , ("Prelude.intNeg", Prims.intUnOp "intNeg" svUNeg)
+  , ("Prelude.intEq" , Prims.intBinCmp "intEq" svEqual id)
+  , ("Prelude.intLe" , Prims.intBinCmp "intLe" svLessEq id)
+  , ("Prelude.intLt" , Prims.intBinCmp "intLt" svLessThan id)
+  --XXX , ("Prelude.intToNat", Prims.intToNatOp)
+  --XXX , ("Prelude.natToInt", Prims.natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
-  , ("Prelude.intMin"  , Prims.intMinOp)
-  , ("Prelude.intMax"  , Prims.intMaxOp)
+  --XXX , ("Prelude.intMin"  , Prims.intMinOp)
+  --XXX , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
   , ("Prelude.atWithDefault", atWithDefaultOp)
@@ -194,7 +194,7 @@ toWord (VWord w) = return w
 toWord (VVector vv) = symFromBits <$> traverse (fmap toBool . force) vv
 toWord x = fail $ unwords ["Verifier.SAW.Simulator.SBV.toWord", show x]
 
-fromVInt :: SValue -> Integer
+fromVInt :: SValue -> SInteger
 fromVInt (VInt i) = i
 fromVInt sv = error $ unwords ["fromVInt failed:", show sv]
 
@@ -243,6 +243,9 @@ vWord lv = VWord lv
 
 vBool :: SBool -> SValue
 vBool l = VBool l
+
+vInteger :: SInteger -> SValue
+vInteger x = VInt x
 
 ------------------------------------------------------------
 -- Function constructors
@@ -419,7 +422,7 @@ eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
   where trueOp       = VBool svTrue
         andOp    x y = return $ vBool (svAnd (toBool x) (toBool y))
         boolEqOp x y = return $ vBool (svEqual (toBool x) (toBool y))
-        intEqOp  x y = return $ vBool (svBool (fromVInt x == fromVInt y))
+        intEqOp  x y = return $ vBool (svEqual (fromVInt x) (fromVInt y))
         bvEqOp _ x y = do x' <- toWord x
                           y' <- toWord y
                           return $ vBool (svEqual x' y')
@@ -431,24 +434,24 @@ eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
 bvToIntOp :: SValue
 bvToIntOp = constFun $ wordFun $ \v ->
    case svAsInteger v of
-      Just i -> return $ VInt i
+      Just i -> return $ VInt (literalSInteger i)
       Nothing -> fail "Cannot convert symbolic bitvector to integer"
 
 -- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
 sbvToIntOp :: SValue
 sbvToIntOp = constFun $ wordFun $ \v ->
    case svAsInteger (svSign v) of
-      Just i -> return $ VInt i
+      Just i -> return $ VInt (literalSInteger i)
       Nothing -> fail "Cannot convert symbolic bitvector to integer"
 
 -- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
 intToBvOp :: SValue
 intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $
-  Prims.intFun "intToBv x" $ \x -> return $
-    VWord $
-     if n >= 0 then literalSWord (fromIntegral n) x
-               else svUnsign $ svUNeg $ svInteger (KBounded True (fromIntegral n)) (negate x)
+  Prims.intFun "intToBv x" $ \x ->
+    case svAsInteger x of
+      Just i -> return $ VWord $ literalSWord (fromIntegral n) i
+      Nothing -> fail "intToBv: Cannot convert symbolic integer to bitvector"
 
 ----------------------------------------
 -- Polynomial operations
@@ -908,11 +911,12 @@ sbvSolve sc addlPrims unints t = do
               bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
               case bval' of
                 VBool b -> return b
-                _ -> fail "bitBlast: non-boolean result type."
+                _ -> fail $ "sbvSolve: non-boolean result type. " ++ show bval'
   return (labels, prd)
 
 data Labeler
    = BoolLabel String
+   | IntegerLabel String
    | WordLabel String
    | VecLabel (Vector Labeler)
    | TupleLabel (Vector Labeler)
@@ -930,6 +934,7 @@ myfun = fmap fst A.&&& fmap snd
 
 newVars :: FiniteType -> StateT Int IO (Labeler, Symbolic SValue)
 newVars FTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
+newVars FTInteger = nextId <&> \s-> (IntegerLabel s, vInteger <$> existsSInteger s)
 newVars (FTVec n FTBit) =
   if n == 0
     then nextId <&> \s-> (WordLabel s, return (vWord (literalSWord 0 0)))
@@ -949,6 +954,7 @@ newVars (FTRec tm) = do
 
 newCodeGenVars :: (Nat -> Bool) -> FiniteType -> StateT Int IO (SBVCodeGen SValue)
 newCodeGenVars _checkSz FTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
+newCodeGenVars _checkSz FTInteger = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
 newCodeGenVars checkSz (FTVec n FTBit)
   | n == 0    = nextId <&> \_ -> return (vWord (literalSWord 0 0))
   | checkSz n = nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)

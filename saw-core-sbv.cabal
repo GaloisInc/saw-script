@@ -27,5 +27,6 @@ library
   exposed-modules:
      Verifier.SAW.Simulator.SBV
      Verifier.SAW.Simulator.SBV.SWord
+     Verifier.SAW.Simulator.SBV.Value
   GHC-options: -Wall -Werror
   GHC-prof-options: -auto-all -caf-all

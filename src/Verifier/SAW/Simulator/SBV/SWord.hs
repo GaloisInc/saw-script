@@ -11,11 +11,12 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 module Verifier.SAW.Simulator.SBV.SWord
-  ( SBool, SWord
-  , literalSWord
+  ( SBool, SWord, SInteger
+  , literalSWord, literalSInteger
   , fromBitsLE
   , forallSWord, existsSWord, forallSWord_, existsSWord_
   , forallSBool, existsSBool, forallSBool_, existsSBool_
+  , forallSInteger, existsSInteger, forallSInteger_, existsSInteger_
   ) where
 
 import Data.List (foldl')
@@ -24,6 +25,7 @@ import Data.SBV.Dynamic
 
 type SBool = SVal
 type SWord = SVal
+type SInteger = SVal
 
 fromBitsLE :: [SBool] -> SWord
 fromBitsLE bs = foldl' f (literalSWord 0 0) bs
@@ -31,6 +33,9 @@ fromBitsLE bs = foldl' f (literalSWord 0 0) bs
 
 literalSWord :: Int -> Integer -> SWord
 literalSWord w i = svInteger (KBounded False w) i
+
+literalSInteger :: Integer -> SWord
+literalSInteger i = svInteger KUnbounded i
 
 forallSWord :: String -> Int -> Symbolic SWord
 forallSWord nm w = svMkSymVar (Just ALL) (KBounded False w) (Just nm)
@@ -55,3 +60,15 @@ forallSBool_ = svMkSymVar (Just ALL) KBool Nothing
 
 existsSBool_ :: Symbolic SBool
 existsSBool_ = svMkSymVar (Just EX) KBool Nothing
+
+forallSInteger :: String -> Symbolic SInteger
+forallSInteger nm = svMkSymVar (Just ALL) KUnbounded (Just nm)
+
+existsSInteger :: String -> Symbolic SInteger
+existsSInteger nm = svMkSymVar (Just EX) KUnbounded (Just nm)
+
+forallSInteger_ :: Symbolic SInteger
+forallSInteger_ = svMkSymVar (Just ALL) KUnbounded Nothing
+
+existsSInteger_ :: Symbolic SInteger
+existsSInteger_ = svMkSymVar (Just EX) KUnbounded Nothing
