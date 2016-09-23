@@ -136,7 +136,7 @@ constMap = Map.fromList
   , ("Prelude.intLe" , Prims.intBinCmp "intLe" svLessEq id)
   , ("Prelude.intLt" , Prims.intBinCmp "intLt" svLessThan id)
   --XXX , ("Prelude.intToNat", Prims.intToNatOp)
-  --XXX , ("Prelude.natToInt", Prims.natToIntOp)
+  , ("Prelude.natToInt", natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
@@ -429,6 +429,12 @@ eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
 
 -----------------------------------------
 -- Integer/bitvector conversions
+
+-- primitive natToInt :: Nat -> Integer;
+natToIntOp :: SValue
+natToIntOp =
+  Prims.natFun' "natToInt" $ \n -> return $
+    VInt (literalSInteger (toInteger n))
 
 -- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
 bvToIntOp :: SValue
