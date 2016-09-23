@@ -6,6 +6,7 @@
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
 #endif
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -39,6 +40,7 @@ import Data.Traversable hiding ( mapM )
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
+import qualified Data.Set as Set
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -358,7 +360,12 @@ buildTopLevelEnv opts =
                       , remove_ident_coerce
                       , remove_ident_unsafeCoerce
                       ]
-       simps <- scSimpset sc0 [] [] convs
+           cryptolDefs = filter defPred $ allModuleDefs CryptolSAW.cryptolModule
+           defPred d = defIdent d `Set.member` includedDefs
+           includedDefs = Set.fromList
+                          [ "Cryptol.ecDemote"
+                          ]
+       simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
