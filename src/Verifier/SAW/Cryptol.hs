@@ -37,7 +37,7 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Conversion
-import Verifier.SAW.FiniteValue
+import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
@@ -786,39 +786,41 @@ exportRecordValue fields v =
   where
     run = SC.runIdentity . force
 
-fvAsBool :: FiniteValue -> Bool
-fvAsBool (FVBit b) = b
-fvAsBool _ = error "fvAsBool: expected FVBit value"
+fvAsBool :: FirstOrderValue -> Bool
+fvAsBool (FOVBit b) = b
+fvAsBool _ = error "fvAsBool: expected FOVBit value"
 
-exportFiniteValue :: FiniteValue -> V.Value
-exportFiniteValue fv =
+exportFirstOrderValue :: FirstOrderValue -> V.Value
+exportFirstOrderValue fv =
   case fv of
-    FVBit b    -> V.VBit b
-    FVWord w x -> V.word (toInteger w) x
-    FVVec t vs
-      | t == FTBit -> V.VWord (toInteger (length vs))
-                        (V.ready (V.BitsVal (Seq.fromList . map (V.ready . fvAsBool) $ vs)))
-      | otherwise  -> V.VSeq  (toInteger (length vs)) (V.finiteSeqMap (map (V.ready . exportFiniteValue) vs))
-    FVTuple vs -> V.VTuple (map (V.ready . exportFiniteValue) vs)
-    FVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFiniteValue v) | (n, v) <- Map.assocs vm ]
+    FOVBit b    -> V.VBit b
+    FOVInt i    -> V.VInteger i
+    FOVWord w x -> V.word (toInteger w) x
+    FOVVec t vs
+      | t == FOTBit -> V.VWord (toInteger (length vs))
+                         (V.ready (V.BitsVal (Seq.fromList . map (V.ready . fvAsBool) $ vs)))
+      | otherwise  -> V.VSeq  (toInteger (length vs)) (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
+    FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
+    FOVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
-importFiniteValue :: FiniteType -> V.Value -> IO FiniteValue
-importFiniteValue t0 v0 = V.runEval (go t0 v0)
+importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
+importFirstOrderValue t0 v0 = V.runEval (go t0 v0)
   where
-  go :: FiniteType -> V.Value -> V.Eval FiniteValue
+  go :: FirstOrderType -> V.Value -> V.Eval FirstOrderValue
   go t v = case (t,v) of
-    (FTBit        , V.VBit b)        -> return (FVBit b)
-    (FTVec _ FTBit, V.VWord w wv)    -> FVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal =<< wv)
-    (FTVec _ ty   , V.VSeq len xs)   -> FVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
-    (FTTuple tys  , V.VTuple xs)     -> FVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
-    (FTRec fs     , V.VRecord xs)    ->
+    (FOTBit         , V.VBit b)        -> return (FOVBit b)
+    (FOTInt         , V.VInteger i)    -> return (FOVInt i)
+    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal =<< wv)
+    (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
+    (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
+    (FOTRec fs      , V.VRecord xs)    ->
         do xs' <- Map.fromList <$> mapM importField xs
            let missing = Set.difference (Map.keysSet fs) (Map.keysSet xs')
            unless (Set.null missing)
                   (fail $ unwords $ ["Missing fields while importing finite value:"] ++ Set.toList missing)
-           return $ FVRec $ xs'
+           return $ FOVRec $ xs'
       where
-       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (String, FiniteValue)
+       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (String, FirstOrderValue)
        importField (C.unpackIdent -> nm,x)
          | Just ty <- Map.lookup nm fs = do
                 x' <- go ty =<< x
