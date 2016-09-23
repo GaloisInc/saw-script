@@ -38,7 +38,7 @@ import qualified Verifier.SAW.Simulator.RME.Vector as RMEV
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.FiniteValue
+import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (Module)
