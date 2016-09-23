@@ -51,10 +51,13 @@ import qualified Verifier.SAW.Cryptol as Cryptol
 import Verifier.SAW.Constant
 import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
-import Verifier.SAW.FiniteValue ( FiniteType(..), FiniteValue(..)
-                                , scFiniteValue, fvVec, readFiniteValues, readFiniteValue
-                                , finiteTypeOf, asFiniteTypePure, sizeFiniteType
-                                )
+import Verifier.SAW.FiniteValue
+  ( FiniteType(..), FiniteValue(..)
+  , readFiniteValues, readFiniteValue
+  , asFiniteTypePure, sizeFiniteType
+  , FirstOrderValue(..)
+  , toFirstOrderValue, scFirstOrderValue, firstOrderTypeOf, fovVec
+  )
 import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
 import Verifier.SAW.SCTypeCheck
@@ -201,8 +204,8 @@ cecPrim x y = do
   case res of
     ABC.Valid -> return $ SV.Valid stats
     ABC.Invalid bs
-      | Just ft <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
-           return $ SV.InvalidMulti stats [("x", ft)]
+      | Just fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
+           return $ SV.InvalidMulti stats [("x", toFirstOrderValue fv)]
       | otherwise -> fail "cec: impossible, could not parse counterexample"
     ABC.VerifyUnknown -> fail "cec: unknown result "
 
@@ -441,7 +444,7 @@ quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
           putStrLn $ "checked " ++ show n ++ " cases."
           return (SV.Unsat stats, stats, Nothing)
         -- TODO: use reasonable names here
-        Just cex -> return (SV.SatMulti stats (zip (repeat "_") cex), stats, Just goal)
+        Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Just goal)
     Nothing -> fail $ "quickcheck:\n" ++
       "term has non-testable type"
 
@@ -620,7 +623,7 @@ satABC sc = withFirstGoal $ \g -> io $ do
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
             case goalQuant g of
               Existential -> return (r', stats, Nothing)
               Universal -> return (r', stats, Just (g { goalTerm = ft }))
@@ -674,7 +677,7 @@ satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
             case goalQuant g of
               Universal -> return (r', stats, Just (g { goalTerm = ft }))
               Existential -> return (r', stats, Nothing)
@@ -734,7 +737,7 @@ satRME sc = withFirstGoal $ \g -> io $ do
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
             case goalQuant g of
               Existential -> return (r', stats, Nothing)
               Universal -> return (r', stats, Just g)
@@ -802,17 +805,24 @@ getLabels stats ls d argNames =
 
   where
     xs = fmap getLabel ls
-    getLabel :: SBVSim.Labeler -> FiniteValue
-    getLabel (SBVSim.BoolLabel s) = FVBit (SBV.cwToBool (d Map.! s))
+    getLabel :: SBVSim.Labeler -> FirstOrderValue
+    getLabel (SBVSim.BoolLabel s) = FOVBit (SBV.cwToBool (d Map.! s))
+    getLabel (SBVSim.IntegerLabel s) = FOVInt (cwToInteger (d Map.! s))
     getLabel (SBVSim.WordLabel s) = d Map.! s &
-      (\(SBV.KBounded _ n)-> FVWord (fromIntegral n)) . SBV.kindOf <*> (\(SBV.CWInteger i)-> i) . SBV.cwVal
+      (\(SBV.KBounded _ n) -> FOVWord (fromIntegral n)) . SBV.kindOf <*> (\(SBV.CWInteger i)-> i) . SBV.cwVal
     getLabel (SBVSim.VecLabel ns)
       | V.null ns = error "getLabel of empty vector"
-      | otherwise = fvVec t vs
+      | otherwise = fovVec t vs
       where vs = map getLabel (V.toList ns)
-            t = finiteTypeOf (head vs)
-    getLabel (SBVSim.TupleLabel ns) = FVTuple $ map getLabel (V.toList ns)
-    getLabel (SBVSim.RecLabel ns) = FVRec $ fmap getLabel ns
+            t = firstOrderTypeOf (head vs)
+    getLabel (SBVSim.TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
+    getLabel (SBVSim.RecLabel ns) = FOVRec $ fmap getLabel ns
+
+    cwToInteger cw =
+      case SBV.cwVal cw of
+        SBV.CWInteger i -> i
+        _ -> error "cwToInteger"
+
 
 satBoolector :: SharedContext -> ProofScript SV.SatResult
 satBoolector = satSBV SBV.boolector
@@ -1085,14 +1095,14 @@ lambdas vars (TypedTerm schema0 term0) = do
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
 -- TODO: Take (ExtCns, FiniteValue) instead of (Term, FiniteValue)
-cexEvalFn :: SharedContext -> [(ExtCns Term, FiniteValue)] -> Term
+cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
           -> IO Concrete.CValue
 cexEvalFn sc args tm = do
   -- NB: there may be more args than exts, and this is ok. One side of
   -- an equality may have more free variables than the other,
   -- particularly in the case where there is a counter-example.
   let exts = map fst args
-  args' <- mapM (scFiniteValue sc . snd) args
+  args' <- mapM (scFirstOrderValue sc . snd) args
   let is = map ecVarIndex exts
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
@@ -1116,7 +1126,7 @@ caseProofResultPrim pr vValid vInvalid = do
     SV.Valid _ -> return vValid
     SV.InvalidMulti _ pairs -> do
       let fvs = map snd pairs
-      ts <- io $ mapM (scFiniteValue sc) fvs
+      ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
       tt <- io $ mkTypedTerm sc t
       SV.applyValue vInvalid (SV.toValue tt)
@@ -1130,7 +1140,7 @@ caseSatResultPrim sr vUnsat vSat = do
     SV.Unsat _ -> return vUnsat
     SV.SatMulti _ pairs -> do
       let fvs = map snd pairs
-      ts <- io $ mapM (scFiniteValue sc) fvs
+      ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
       tt <- io $ mkTypedTerm sc t
       SV.applyValue vSat (SV.toValue tt)

@@ -47,7 +47,7 @@ import SAWScript.ImportAIG
 import SAWScript.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
-import Verifier.SAW.FiniteValue
+import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
 import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
@@ -123,12 +123,12 @@ showLLVMModule (LLVMModule name m) =
 
 data ProofResult
   = Valid SolverStats
-  | InvalidMulti SolverStats [(String, FiniteValue)]
+  | InvalidMulti SolverStats [(String, FirstOrderValue)]
     deriving (Show)
 
 data SatResult
   = Unsat SolverStats
-  | SatMulti SolverStats [(String, FiniteValue)]
+  | SatMulti SolverStats [(String, FirstOrderValue)]
     deriving (Show)
 
 flipSatResult :: SatResult -> ProofResult
@@ -171,7 +171,7 @@ showsProofResult opts r =
     InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
   where
     opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
-    showVal t = shows (ppFiniteValue opts' t)
+    showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -183,7 +183,7 @@ showsSatResult opts r =
     SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
   where
     opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
-    showVal t = shows (ppFiniteValue opts' t)
+    showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
