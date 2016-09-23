@@ -254,7 +254,7 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
         let ovdsByFunction = groupBy ((==) `on` specFunction) $
                              sortBy (compare `on` specFunction) $
                              vpOver vp
-        mapM_ (overrideFromSpec sc (specPos ms)) ovdsByFunction
+        mapM_ (overrideFromSpec scLLVM (specPos ms)) ovdsByFunction
         run
         dumpMem 4 "llvm_verify post" Nothing
         res <- checkFinalState scLLVM ms initPS otherPtrs args
