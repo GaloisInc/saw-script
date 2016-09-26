@@ -208,6 +208,12 @@ freshLLVMArg (_, ty@(IntType bw)) = do
   return (ty, tm)
 freshLLVMArg (_, _) = fail "Only integer arguments are supported for now."
 
+llvmNullPtr :: (SBETerm m ~ Term) =>
+               SBE m
+            -> SymType
+            -> IO Term
+llvmNullPtr sbe sty = sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
+
 addrBounds :: (SBETerm m ~ Term) =>
               SharedContext
            -> SBE m
@@ -220,7 +226,7 @@ addrBounds sc sbe dl addrTm sty@(MemType (PtrType (MemType mty))) = do
         maxAddr :: Integer
         maxAddr = (2 ^ aw) - 1
         aw' = fromIntegral (ptrBitwidth dl)
-    nullPtr <- sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
+    nullPtr <- llvmNullPtr sbe sty
     let maxFittingAddr = maxAddr - fromIntegral (memTypeSize dl mty)
     mpTerm <- scBvConst sc aw maxFittingAddr
     awTerm <- scNat sc aw

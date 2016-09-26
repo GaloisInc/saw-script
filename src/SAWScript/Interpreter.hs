@@ -1234,6 +1234,11 @@ primitives = Map.fromList
     [ "Specify the initial value of an LLVM variable."
     ]
 
+  , prim "llvm_assert_null"    "String -> LLVMSetup ()"
+    (bicVal llvmAssertNull)
+    [ "Specify that the initial value of an LLVM pointer variable is NULL."
+    ]
+
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
     (bicVal llvmEnsureEq)
     [ "Specify that the LLVM variable should have a value equal to the"

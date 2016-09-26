@@ -538,6 +538,22 @@ llvmAssertEq bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
+llvmAssertNull :: BuiltinContext -> Options -> String -> LLVMSetup ()
+llvmAssertNull _bic _opts name = do
+  ms <- gets lsSpec
+  (expr, mty) <- getLLVMExpr ms name
+  enull <- case mty of
+             PtrType _ -> liftIO $ llvmNullPtr (specBackend ms) (MemType mty)
+             _ -> fail $ unwords
+                  [ "llvm_assert_null called with non-pointer expression"
+                  , name
+                  , "of type"
+                  , show (ppMemType mty)
+                  ]
+  let le = LogicExpr enull []
+  modify $ \st ->
+    st { lsSpec = specAddLogicAssignment fixPos expr le ms }
+
 llvmEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
 llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   ms <- gets lsSpec
