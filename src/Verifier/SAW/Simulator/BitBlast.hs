@@ -319,10 +319,11 @@ iteOp be =
   VFun $ \y -> lazyMux be (muxBVal be) (toBool b) (force x) (force y)
 
 muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
-muxBVal be = Prims.muxValue vFromLV bool word (muxBExtra be)
+muxBVal be = Prims.muxValue vFromLV bool word int (muxBExtra be)
   where
     bool b = AIG.mux be b
     word b = AIG.zipWithM (bool b)
+    int _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
 
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
