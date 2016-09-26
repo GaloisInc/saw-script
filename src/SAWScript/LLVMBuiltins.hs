@@ -459,6 +459,7 @@ llvmVar bic _ name sty = do
   let ms = lsSpec lsState
       func = specFunction ms
       cb = specCodebase ms
+      dl = cbDataLayout cb
   lty <- case resolveSymType cb sty of
            MemType mty -> return mty
            rty -> fail $ "Unsupported type in llvm_var: " ++ show (ppSymType rty)
@@ -471,7 +472,7 @@ llvmVar bic _ name sty = do
   modify $ \st ->
     st { lsSpec = specAddVarDecl fixPos name expr' lty (lsSpec st) }
   let sc = biSharedContext bic
-  mty <- liftIO $ logicTypeOfActual sc lty
+  mty <- liftIO $ logicTypeOfActual dl sc lty
   case mty of
     Just ty -> liftIO $ scLLVMValue sc ty name >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in llvm_var: " ++ show (ppMemType lty)

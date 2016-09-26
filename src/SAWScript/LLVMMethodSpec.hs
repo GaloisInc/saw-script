@@ -283,9 +283,10 @@ ocStep (Ensure _pos lhsExpr rhsExpr) = do
 ocStep (Modify lhsExpr tp) = do
   sbe <- gets (ecBackend . ocsEvalContext)
   sc <- gets (ecContext . ocsEvalContext)
+  dl <- gets (ecDataLayout . ocsEvalContext)
   ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef -> do
     -- TODO: replace this pattern match with a check and possible error during setup
-    Just lty <- liftIO $ TC.logicTypeOfActual sc tp
+    Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
     value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
     ocModifyResultStateIO $
       storePathState sbe lhsRef tp value
@@ -294,9 +295,10 @@ ocStep (Return expr) = do
     modify $ \ocs -> ocs { ocsReturnValue = Just val }
 ocStep (ReturnArbitrary tp) = do
   sc <- gets (ecContext . ocsEvalContext)
+  dl <- gets (ecDataLayout . ocsEvalContext)
   Symbol fname <- gets (ecFunction . ocsEvalContext)
   -- TODO: replace this pattern match with a check and possible error during setup
-  Just lty <- liftIO $ TC.logicTypeOfActual sc tp
+  Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
   value <- liftIO $ scFreshGlobal sc ("lss__return_" ++ fname) lty
   modify $ \ocs -> ocs { ocsReturnValue = Just value }
 
@@ -431,8 +433,8 @@ createLogicValue _ _ _ _ _ (PtrType ty) Nothing =
   fail $ "Pointer to weird type: " ++ show (ppSymType ty)
 createLogicValue _ _ _ _ _ (StructType _) Nothing =
   fail "Non-pointer struct variables not supported."
-createLogicValue _ _ sc expr ps mtp mrhs = do
-  mbltp <- liftIO $ TC.logicTypeOfActual sc mtp
+createLogicValue cb _ sc expr ps mtp mrhs = do
+  mbltp <- liftIO $ TC.logicTypeOfActual (cbDataLayout cb) sc mtp
   -- Get value of rhs.
   tm <- case (mrhs, mbltp) of
           (Just v, _) -> useLogicExprPS sc ps [] v -- TODO: args
