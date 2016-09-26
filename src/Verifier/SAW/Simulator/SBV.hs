@@ -824,62 +824,45 @@ sbvSolveBasic m addlPrims unints t = do
          uninterpreted
   Sim.evalSharedTerm cfg t
 
--- | SBV Kind corresponding to the result of concatenating all the
--- bitvector components of the given type value.
-kindFromType :: SValue -> Kind
-kindFromType (VDataType "Prelude.Bool" []) = KBool
-kindFromType (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) =
-  KBounded False (fromIntegral n)
-kindFromType (VDataType "Prelude.Vec" [VNat n, ety]) =
-  case kindFromType ety of
-    KBounded False m -> KBounded False (fromIntegral n * m)
-    k -> error $ "Unsupported vector element kind: " ++ show k
-kindFromType VUnitType = KBounded False 0
-kindFromType (VPairType ty1 ty2) = combineKind (kindFromType ty1) (kindFromType ty2)
-kindFromType VEmptyType = KBounded False 0
-kindFromType (VFieldType _ ty1 ty2) = combineKind (kindFromType ty1) (kindFromType ty2)
-kindFromType ty = error $ "Unsupported type: " ++ show ty
-
-combineKind :: Kind -> Kind -> Kind
-combineKind (KBounded False m) (KBounded False n) = KBounded False (m + n)
-combineKind k k' = error $ "Can't combine kinds " ++ show k ++ " and " ++ show k'
-
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
-parseUninterpreted cws nm (VDataType "Prelude.Bool" []) =
-  return $ vBool $ mkUninterpreted KBool cws nm
-
-parseUninterpreted cws nm (VPiType _ f) =
-  return $
-  strictFun $ \x -> do
-    (cws', suffix) <- flattenSValue x
-    t2 <- f (ready x)
-    parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
-
 parseUninterpreted cws nm ty =
-  ST.evalStateT (parseTy ty) (mkUninterpreted (kindFromType ty) cws nm)
-  where
-    parseTy :: SValue -> ST.StateT SWord IO SValue
-    parseTy (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) = do
-      v <- ST.get
-      let w = intSizeOf v
-      let v1 = svExtract (w - 1) (w - fromInteger n) v
-      let v2 = svExtract (w - fromInteger n - 1) 0 v
-      ST.put v2
-      return (vWord v1)
-    parseTy (VDataType "Prelude.Vec" [VNat n, ety]) = do
-      xs <- traverse parseTy (replicate (fromIntegral n) ety)
-      return (VVector (V.fromList (map ready xs)))
-    parseTy VUnitType = return VUnit
-    parseTy (VPairType ty1 ty2) = do
-      x1 <- parseTy ty1
-      x2 <- parseTy ty2
-      return (VPair (ready x1) (ready x2))
-    parseTy VEmptyType = return VEmpty
-    parseTy (VFieldType f ty1 ty2) = do
-      x1 <- parseTy ty1
-      x2 <- parseTy ty2
-      return (VField f (ready x1) x2)
-    parseTy t = fail $ "could not create uninterpreted type for " ++ show t
+  case ty of
+    (VPiType _ f)
+      -> return $
+         strictFun $ \x -> do
+           (cws', suffix) <- flattenSValue x
+           t2 <- f (ready x)
+           parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
+
+    (VDataType "Prelude.Bool" [])
+      -> return $ vBool $ mkUninterpreted KBool cws nm
+
+    (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []])
+      -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
+
+    (VDataType "Prelude.Vec" [VNat n, ety])
+      -> do xs <- sequence $
+                  [ parseUninterpreted cws (nm ++ "@" ++ show i) ety
+                  | i <- [0 .. n-1] ]
+            return (VVector (V.fromList (map ready xs)))
+
+    VUnitType
+      -> return VUnit
+
+    (VPairType ty1 ty2)
+      -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
+            x2 <- parseUninterpreted cws (nm ++ ".R") ty2
+            return (VPair (ready x1) (ready x2))
+
+    VEmptyType
+      -> return VEmpty
+
+    (VFieldType f ty1 ty2)
+      -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
+            x2 <- parseUninterpreted cws (nm ++ ".R") ty2
+            return (VField f (ready x1) x2)
+
+    _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
