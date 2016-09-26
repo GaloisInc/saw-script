@@ -413,8 +413,9 @@ createLogicValue :: (MonadIO m, Monad m, Functor m) =>
                  -> MemType
                  -> Maybe TC.LogicExpr
                  -> Simulator SpecBackend m (SpecLLVMValue, SpecPathState)
-createLogicValue _ _ _ _ _ (PtrType _) (Just _) =
-  fail "Pointer variables cannot be given initial values."
+createLogicValue _ _ sc _ ps (PtrType _) (Just le) = do
+  v <- useLogicExprPS sc ps [] le
+  return (v, ps)
 createLogicValue _ _ _ _ _ (StructType _) (Just _) =
   fail "Struct variables cannot be given initial values as a whole."
 createLogicValue cb sbe sc _expr ps (PtrType (MemType mtp)) Nothing = liftIO $ do
