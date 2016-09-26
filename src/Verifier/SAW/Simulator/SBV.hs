@@ -799,10 +799,11 @@ iteOp =
       lazyMux muxBVal (toBool b) (force x) (force y)
 
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
-muxBVal = Prims.muxValue svUnpack bool word extra
+muxBVal = Prims.muxValue svUnpack bool word int extra
   where
     bool b x y = return (svIte b x y)
     word b x y = return (svIte b x y)
+    int _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
     extra b x y = return (extraFn b x y)
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
