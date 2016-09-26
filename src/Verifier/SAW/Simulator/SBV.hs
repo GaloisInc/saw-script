@@ -846,6 +846,9 @@ parseUninterpreted cws nm ty =
     (VDataType "Prelude.Bool" [])
       -> return $ vBool $ mkUninterpreted KBool cws nm
 
+    (VDataType "Prelude.Integer" [])
+      -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
+
     (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []])
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
