@@ -1253,7 +1253,13 @@ primitives = Map.fromList
 
   , prim "llvm_return"         "Term -> LLVMSetup ()"
     (bicVal llvmReturn)
-    [ "Indicate the expected return value of an LLVM function." ]
+    [ "Indicate the expected return value of an LLVM function."
+    ]
+
+  , prim "llvm_return_arbitrary" "LLVMSetup ()"
+    (pureVal llvmReturnArbitrary)
+    [ "Indicate that an LLVM function returns an arbitrary, unspecified value."
+    ]
 
   , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
     (bicVal llvmVerifyTactic)

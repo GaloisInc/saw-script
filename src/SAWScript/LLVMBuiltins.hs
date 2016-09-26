@@ -588,6 +588,18 @@ llvmReturn bic _opts (TypedTerm schema t) = do
     Just Nothing -> fail "llvm_return called on void function"
     Nothing -> fail "llvm_return called inside non-existant function?"
 
+llvmReturnArbitrary :: LLVMSetup ()
+llvmReturnArbitrary = do
+  ms <- gets lsSpec
+  let cb = specCodebase ms
+  case fdRetType <$> lookupFunctionType (specFunction ms) cb of
+    Just (Just mty) -> do
+      let cmd = ReturnArbitrary mty
+      modify $ \st ->
+        st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
+    Just Nothing -> fail "llvm_return_arbitrary called on void function"
+    Nothing -> fail "llvm_return_arbitrary called inside non-existant function?"
+
 llvmVerifyTactic :: BuiltinContext -> Options
                  -> ProofScript SV.SatResult
                  -> LLVMSetup ()

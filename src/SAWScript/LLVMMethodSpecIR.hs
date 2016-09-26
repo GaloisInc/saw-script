@@ -68,6 +68,8 @@ data BehaviorCommand
    | Modify LLVMExpr LLVMActualType
      -- | Specifies return value for a function.
    | Return MixedExpr
+     -- | Specifies an arbitrary return value for a function.
+   | ReturnArbitrary LLVMActualType
 
 data BehaviorSpec = BS {
          -- | Program counter for spec.

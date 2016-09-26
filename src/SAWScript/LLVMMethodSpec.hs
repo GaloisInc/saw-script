@@ -79,6 +79,7 @@ data EvalContext
     , ecArgs :: [Term]
     , ecPathState :: SpecPathState
     , ecLLVMExprs :: Map String (TC.LLVMActualType, TC.LLVMExpr)
+    , ecFunction :: Symbol
     }
 
 type ExprEvaluator a = ExceptT TC.LLVMExpr IO a
@@ -283,6 +284,7 @@ ocStep (Modify lhsExpr tp) = do
   sbe <- gets (ecBackend . ocsEvalContext)
   sc <- gets (ecContext . ocsEvalContext)
   ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef -> do
+    -- TODO: replace this pattern match with a check and possible error during setup
     Just lty <- liftIO $ TC.logicTypeOfActual sc tp
     value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
     ocModifyResultStateIO $
@@ -290,6 +292,13 @@ ocStep (Modify lhsExpr tp) = do
 ocStep (Return expr) = do
   ocEval (evalMixedExpr expr) $ \val ->
     modify $ \ocs -> ocs { ocsReturnValue = Just val }
+ocStep (ReturnArbitrary tp) = do
+  sc <- gets (ecContext . ocsEvalContext)
+  Symbol fname <- gets (ecFunction . ocsEvalContext)
+  -- TODO: replace this pattern match with a check and possible error during setup
+  Just lty <- liftIO $ TC.logicTypeOfActual sc tp
+  value <- liftIO $ scFreshGlobal sc ("lss__return_" ++ fname) lty
+  modify $ \ocs -> ocs { ocsReturnValue = Just value }
 
 execBehavior :: [BehaviorSpec] -> EvalContext -> SpecPathState -> IO [RunResult]
 execBehavior bsl ec ps = do
@@ -353,6 +362,7 @@ execOverride sc _pos irs@(ir:_) args = do
                        , ecArgs = map snd args
                        , ecPathState = initPS
                        , ecLLVMExprs = specLLVMExprNames ir
+                       , ecFunction = specFunction ir
                        }
   --liftIO $ putStrLn $ "Executing behavior"
   res <- liftIO $ execBehavior bsl ec initPS
@@ -550,11 +560,15 @@ checkFinalState sc ms initPS otherPtrs args = do
                , pvcChecks = []
                }
   flip execStateT initState $ do
-    case (mrv, msrv) of
-      (Nothing,Nothing) -> return ()
-      (Just rv, Just srv) -> pvcgAssertEq "return value" rv srv
-      (Just _, Nothing) -> fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
-      (Nothing, Just _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
+    case (mrv, msrv, [ () | ReturnArbitrary _ <- cmds ]) of
+      (_, _, _ : _ : _) -> fail "More than one `llvm_return_arbitrary` statement."
+      (Nothing, Nothing, []) -> return ()
+      (Just rv, Just srv, []) -> pvcgAssertEq "return value" rv srv
+      (Just _, Just _, [_]) -> fail "Both `llvm_return` and `llvm_return_arbitrary` specified."
+      (Just _, Nothing, [_]) -> return () -- Arbitrary return value
+      (Just _, Nothing, []) -> fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
+      (Nothing, Just _, _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
+      (Nothing, _, [_]) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
 
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.
