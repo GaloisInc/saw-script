@@ -354,10 +354,11 @@ muxRMEV :: RME -> Vector RME -> Vector RME -> Vector RME
 muxRMEV b = V.zipWith (RME.mux b)
 
 muxRValue :: RME -> RValue -> RValue -> RValue
-muxRValue b0 x0 y0 = runIdentity $ Prims.muxValue id bool word extra b0 x0 y0
+muxRValue b0 x0 y0 = runIdentity $ Prims.muxValue id bool word int extra b0 x0 y0
   where
     bool b x y = return (RME.mux b x y)
     word b x y = return (muxRMEV b x y)
+    int _ x y = if x == y then return x else fail $ "muxRValue: VInt " ++ show (x, y)
     extra b (AStream xs) (AStream ys) = return (AStream (muxRValue b <$> xs <*> ys))
 
 ----------------------------------------

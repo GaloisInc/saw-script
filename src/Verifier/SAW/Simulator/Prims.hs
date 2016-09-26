@@ -439,9 +439,10 @@ muxValue :: forall m b w i e. (MonadLazy m, Applicative m, Show e) =>
             (w -> V.Vector b)
          -> (b -> b -> b -> m b)
          -> (b -> w -> w -> m w)
+         -> (b -> i -> i -> m i)
          -> (b -> e -> e -> m e)
          -> b -> Value m b w i e -> Value m b w i e -> m (Value m b w i e)
-muxValue unpack bool word extra b = value
+muxValue unpack bool word int extra b = value
   where
     value :: Value m b w i e -> Value m b w i e -> m (Value m b w i e)
     value (VFun f)          (VFun g)          = return $ VFun $ \a -> do
@@ -457,6 +458,7 @@ muxValue unpack bool word extra b = value
     value (VVector xv)      (VVector yv)      = VVector <$> thunks xv yv
     value (VBool x)         (VBool y)         = VBool <$> bool b x y
     value (VWord x)         (VWord y)         = VWord <$> word b x y
+    value (VInt x)          (VInt y)          = VInt <$> int b x y
     value (VNat m)          (VNat n)          | m == n = return $ VNat m
     value (VString x)       (VString y)       | x == y = return $ VString x
     value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
@@ -466,7 +468,7 @@ muxValue unpack bool word extra b = value
     value x@(VWord _)       y                 = value (VVector (toVector unpack x)) y
     value x                 y@(VWord _)       = value x (VVector (toVector unpack y))
     value x                 y                 =
-      fail $ "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments: "
+      fail $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
     thunks :: V.Vector (Thunk m b w i e) -> V.Vector (Thunk m b w i e) -> m (V.Vector (Thunk m b w i e))
