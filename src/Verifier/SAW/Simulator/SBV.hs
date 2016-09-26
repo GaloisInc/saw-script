@@ -812,7 +812,7 @@ muxBVal = Prims.muxValue svUnpack bool word int extra
   where
     bool b x y = return (svIte b x y)
     word b x y = return (svIte b x y)
-    int _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
+    int b x y = return (svIte b x y)
     extra b x y = return (extraFn b x y)
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
