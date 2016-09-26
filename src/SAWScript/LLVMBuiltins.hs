@@ -565,6 +565,14 @@ llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 
+llvmModify :: BuiltinContext -> Options -> String -> LLVMSetup ()
+llvmModify _bic _opts name = do
+  ms <- gets lsSpec
+  (expr, mty) <- getLLVMExpr ms name
+  let cmd = Modify expr mty
+  modify $ \st ->
+    st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
+
 llvmReturn :: BuiltinContext -> Options -> TypedTerm -> LLVMSetup ()
 llvmReturn bic _opts (TypedTerm schema t) = do
   let sc = biSharedContext bic

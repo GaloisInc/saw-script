@@ -1245,6 +1245,12 @@ primitives = Map.fromList
     , "given term when execution finishes."
     ]
 
+  , prim "llvm_modify"         "String -> LLVMSetup ()"
+    (bicVal llvmModify)
+    [ "Specify that the LLVM variable should have a an arbitary, unspecified"
+    , "value when execution finishes."
+    ]
+
   , prim "llvm_return"         "Term -> LLVMSetup ()"
     (bicVal llvmReturn)
     [ "Indicate the expected return value of an LLVM function." ]
