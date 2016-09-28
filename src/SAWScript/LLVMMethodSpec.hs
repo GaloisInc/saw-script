@@ -161,18 +161,6 @@ evalLLVMRefExpr expr ec = eval expr
         sbe = ecBackend ec
         gm = ecGlobalMap ec
 
-evalDerefLLVMExpr :: (Functor m, MonadIO m) =>
-                     TC.LLVMExpr -> EvalContext
-                  -> m Term
-evalDerefLLVMExpr expr ec = do
-  val <- evalLLVMExpr expr ec
-  case TC.lssTypeOfLLVMExpr expr of
-    PtrType (MemType tp) -> liftIO $ do
-      -- TODO: don't discard fst
-      (snd <$> loadPathState (ecBackend ec) val tp (ecPathState ec))
-    PtrType _ -> fail "Pointer to weird type."
-    _ -> return val
-
 -- | Evaluate a typed expression in the context of a particular state.
 evalLogicExpr :: (Functor m, MonadIO m) =>
                  TC.LogicExpr -> EvalContext
@@ -329,7 +317,7 @@ execBehavior bsl ec ps = do
        forM_ (Map.toList (bsExprDecls bs)) $ \(lhs, (_ty, mrhs)) ->
          case mrhs of
            Just rhs -> do
-             ocEval (evalDerefLLVMExpr lhs) $ \lhsVal -> do
+             ocEval (evalLLVMExpr lhs) $ \lhsVal ->
                ocEval (evalLogicExpr rhs) $ \rhsVal ->
                  ocAssert (PosInternal "FIXME") "Override value assertion"
                     =<< liftIO (scEq sc lhsVal rhsVal)
