@@ -111,11 +111,9 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
---import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
---import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.Simulator.MSSim as Crucible
-import qualified Lang.Crucible.Solver.SAWCoreBackend2 as Crucible
+import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Data.Parameterized.Nonce as Crucible
 
 

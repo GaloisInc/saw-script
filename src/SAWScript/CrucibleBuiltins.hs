@@ -36,8 +36,7 @@ import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Solver.SAWCoreBackend2 as Crucible
---import qualified Data.Parameterized.Context as Ctx
+import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Data.Parameterized.TraversableFC as Ctx
 
 import Verifier.SAW.TypedAST
