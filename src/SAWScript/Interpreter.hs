@@ -6,6 +6,7 @@
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
 #endif
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -40,6 +41,7 @@ import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.IORef
 import Data.Map ( Map )
+import qualified Data.Set as Set
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -362,7 +364,12 @@ buildTopLevelEnv opts =
                       , remove_ident_coerce
                       , remove_ident_unsafeCoerce
                       ]
-       simps <- scSimpset sc0 [] [] convs
+           cryptolDefs = filter defPred $ allModuleDefs CryptolSAW.cryptolModule
+           defPred d = defIdent d `Set.member` includedDefs
+           includedDefs = Set.fromList
+                          [ "Cryptol.ecDemote"
+                          ]
+       simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
@@ -1235,15 +1242,32 @@ primitives = Map.fromList
     [ "Specify the initial value of an LLVM variable."
     ]
 
+  , prim "llvm_assert_null"    "String -> LLVMSetup ()"
+    (bicVal llvmAssertNull)
+    [ "Specify that the initial value of an LLVM pointer variable is NULL."
+    ]
+
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
     (bicVal llvmEnsureEq)
     [ "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes."
     ]
 
+  , prim "llvm_modify"         "String -> LLVMSetup ()"
+    (bicVal llvmModify)
+    [ "Specify that the LLVM variable should have a an arbitary, unspecified"
+    , "value when execution finishes."
+    ]
+
   , prim "llvm_return"         "Term -> LLVMSetup ()"
     (bicVal llvmReturn)
-    [ "Indicate the expected return value of an LLVM function." ]
+    [ "Indicate the expected return value of an LLVM function."
+    ]
+
+  , prim "llvm_return_arbitrary" "LLVMSetup ()"
+    (pureVal llvmReturnArbitrary)
+    [ "Indicate that an LLVM function returns an arbitrary, unspecified value."
+    ]
 
   , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
     (bicVal llvmVerifyTactic)

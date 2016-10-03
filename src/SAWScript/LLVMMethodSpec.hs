@@ -79,6 +79,7 @@ data EvalContext
     , ecArgs :: [Term]
     , ecPathState :: SpecPathState
     , ecLLVMExprs :: Map String (TC.LLVMActualType, TC.LLVMExpr)
+    , ecFunction :: Symbol
     }
 
 type ExprEvaluator a = ExceptT TC.LLVMExpr IO a
@@ -159,18 +160,6 @@ evalLLVMRefExpr expr ec = eval expr
             TC.ReturnValue _ -> fail "evalLLVMRefExpr: applied to return value"
         sbe = ecBackend ec
         gm = ecGlobalMap ec
-
-evalDerefLLVMExpr :: (Functor m, MonadIO m) =>
-                     TC.LLVMExpr -> EvalContext
-                  -> m Term
-evalDerefLLVMExpr expr ec = do
-  val <- evalLLVMExpr expr ec
-  case TC.lssTypeOfLLVMExpr expr of
-    PtrType (MemType tp) -> liftIO $ do
-      -- TODO: don't discard fst
-      (snd <$> loadPathState (ecBackend ec) val tp (ecPathState ec))
-    PtrType _ -> fail "Pointer to weird type."
-    _ -> return val
 
 -- | Evaluate a typed expression in the context of a particular state.
 evalLogicExpr :: (Functor m, MonadIO m) =>
@@ -282,14 +271,24 @@ ocStep (Ensure _pos lhsExpr rhsExpr) = do
 ocStep (Modify lhsExpr tp) = do
   sbe <- gets (ecBackend . ocsEvalContext)
   sc <- gets (ecContext . ocsEvalContext)
+  dl <- gets (ecDataLayout . ocsEvalContext)
   ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef -> do
-    Just lty <- liftIO $ TC.logicTypeOfActual sc tp
+    -- TODO: replace this pattern match with a check and possible error during setup
+    Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
     value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
     ocModifyResultStateIO $
       storePathState sbe lhsRef tp value
 ocStep (Return expr) = do
   ocEval (evalMixedExpr expr) $ \val ->
     modify $ \ocs -> ocs { ocsReturnValue = Just val }
+ocStep (ReturnArbitrary tp) = do
+  sc <- gets (ecContext . ocsEvalContext)
+  dl <- gets (ecDataLayout . ocsEvalContext)
+  Symbol fname <- gets (ecFunction . ocsEvalContext)
+  -- TODO: replace this pattern match with a check and possible error during setup
+  Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
+  value <- liftIO $ scFreshGlobal sc ("lss__return_" ++ fname) lty
+  modify $ \ocs -> ocs { ocsReturnValue = Just value }
 
 execBehavior :: [BehaviorSpec] -> EvalContext -> SpecPathState -> IO [RunResult]
 execBehavior bsl ec ps = do
@@ -318,7 +317,7 @@ execBehavior bsl ec ps = do
        forM_ (Map.toList (bsExprDecls bs)) $ \(lhs, (_ty, mrhs)) ->
          case mrhs of
            Just rhs -> do
-             ocEval (evalDerefLLVMExpr lhs) $ \lhsVal -> do
+             ocEval (evalLLVMExpr lhs) $ \lhsVal ->
                ocEval (evalLogicExpr rhs) $ \rhsVal ->
                  ocAssert (PosInternal "FIXME") "Override value assertion"
                     =<< liftIO (scEq sc lhsVal rhsVal)
@@ -353,6 +352,7 @@ execOverride sc _pos irs@(ir:_) args = do
                        , ecArgs = map snd args
                        , ecPathState = initPS
                        , ecLLVMExprs = specLLVMExprNames ir
+                       , ecFunction = specFunction ir
                        }
   --liftIO $ putStrLn $ "Executing behavior"
   res <- liftIO $ execBehavior bsl ec initPS
@@ -401,8 +401,9 @@ createLogicValue :: (MonadIO m, Monad m, Functor m) =>
                  -> MemType
                  -> Maybe TC.LogicExpr
                  -> Simulator SpecBackend m (SpecLLVMValue, SpecPathState)
-createLogicValue _ _ _ _ _ (PtrType _) (Just _) =
-  fail "Pointer variables cannot be given initial values."
+createLogicValue _ _ sc _ ps (PtrType _) (Just le) = do
+  v <- useLogicExprPS sc ps [] le
+  return (v, ps)
 createLogicValue _ _ _ _ _ (StructType _) (Just _) =
   fail "Struct variables cannot be given initial values as a whole."
 createLogicValue cb sbe sc _expr ps (PtrType (MemType mtp)) Nothing = liftIO $ do
@@ -421,8 +422,8 @@ createLogicValue _ _ _ _ _ (PtrType ty) Nothing =
   fail $ "Pointer to weird type: " ++ show (ppSymType ty)
 createLogicValue _ _ _ _ _ (StructType _) Nothing =
   fail "Non-pointer struct variables not supported."
-createLogicValue _ _ sc expr ps mtp mrhs = do
-  mbltp <- liftIO $ TC.logicTypeOfActual sc mtp
+createLogicValue cb _ sc expr ps mtp mrhs = do
+  mbltp <- liftIO $ TC.logicTypeOfActual (cbDataLayout cb) sc mtp
   -- Get value of rhs.
   tm <- case (mrhs, mbltp) of
           (Just v, _) -> useLogicExprPS sc ps [] v -- TODO: args
@@ -550,11 +551,15 @@ checkFinalState sc ms initPS otherPtrs args = do
                , pvcChecks = []
                }
   flip execStateT initState $ do
-    case (mrv, msrv) of
-      (Nothing,Nothing) -> return ()
-      (Just rv, Just srv) -> pvcgAssertEq "return value" rv srv
-      (Just _, Nothing) -> fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
-      (Nothing, Just _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
+    case (mrv, msrv, [ () | ReturnArbitrary _ <- cmds ]) of
+      (_, _, _ : _ : _) -> fail "More than one `llvm_return_arbitrary` statement."
+      (Nothing, Nothing, []) -> return ()
+      (Just rv, Just srv, []) -> pvcgAssertEq "return value" rv srv
+      (Just _, Just _, [_]) -> fail "Both `llvm_return` and `llvm_return_arbitrary` specified."
+      (Just _, Nothing, [_]) -> return () -- Arbitrary return value
+      (Just _, Nothing, []) -> fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
+      (Nothing, Just _, _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
+      (Nothing, _, [_]) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
 
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.

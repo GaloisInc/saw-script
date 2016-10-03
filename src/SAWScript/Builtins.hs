@@ -1208,10 +1208,16 @@ eval_int t = do
     fail "term contains symbolic variables"
   t' <- io $ defaultTypedTerm sc cfg t
   case ttSchema t' of
-    C.Forall [] [] (C.tIsSeq -> Just (_, C.tIsBit -> True)) -> return ()
-    _ -> fail "eval_int: not a bitvector type"
+    C.Forall [] [] (isInteger -> True) -> return ()
+    _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t'
   io $ C.runEval (C.fromWord "eval_int" v)
+
+-- Predicate on Cryptol types true of integer types, i.e. types
+-- @[n]Bit@ for *finite* @n@.
+isInteger :: C.Type -> Bool
+isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
+isInteger _ = False
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm

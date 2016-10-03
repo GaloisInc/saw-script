@@ -294,22 +294,28 @@ isActualPtr :: LLVMActualType -> Bool
 isActualPtr (LSS.PtrType _) = True
 isActualPtr _ = False
 
--- | Returns logical type of actual type if it is an array or primitive type.
-logicTypeOfActual :: SharedContext -> LLVMActualType -> IO (Maybe Term)
-logicTypeOfActual sc (LSS.IntType w) = do
+-- | Returns logical type of actual type if it is an array or primitive
+-- type, or an appropriately-sized bit vector for pointer types.
+logicTypeOfActual :: LSS.DataLayout -> SharedContext -> LLVMActualType
+                  -> IO (Maybe Term)
+logicTypeOfActual _ sc (LSS.IntType w) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral w)
   Just <$> scVecType sc lTm bType
-logicTypeOfActual sc LSS.FloatType = Just <$> scPrelude_Float sc
-logicTypeOfActual sc LSS.DoubleType = Just <$> scPrelude_Double sc
-logicTypeOfActual sc (LSS.ArrayType n ty) = do
-  melTyp <- logicTypeOfActual sc ty
+logicTypeOfActual _ sc LSS.FloatType = Just <$> scPrelude_Float sc
+logicTypeOfActual _ sc LSS.DoubleType = Just <$> scPrelude_Double sc
+logicTypeOfActual dl sc (LSS.ArrayType n ty) = do
+  melTyp <- logicTypeOfActual dl sc ty
   case melTyp of
     Just elTyp -> do
       lTm <- scNat sc (fromIntegral n)
       Just <$> scVecType sc lTm elTyp
     Nothing -> return Nothing
-logicTypeOfActual _ _ = return Nothing
+logicTypeOfActual dl sc (LSS.PtrType _) = do
+  bType <- scBoolType sc
+  lTm <- scNat sc (fromIntegral (LSS.ptrBitwidth dl))
+  Just <$> scVecType sc lTm bType
+logicTypeOfActual _ _ _ = return Nothing
 
 -- | Returns Cryptol type of actual type if it is an array or primitive type.
 cryptolTypeOfActual :: LLVMActualType -> Maybe Cryptol.Type

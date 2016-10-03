@@ -250,11 +250,13 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
       ms' <- runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity verb
         (initPS, otherPtrs, args) <- initializeVerification' scLLVM file ms
+        dumpMem 4 "llvm_verify pre" Nothing
         let ovdsByFunction = groupBy ((==) `on` specFunction) $
                              sortBy (compare `on` specFunction) $
                              vpOver vp
-        mapM_ (overrideFromSpec sc (specPos ms)) ovdsByFunction
+        mapM_ (overrideFromSpec scLLVM (specPos ms)) ovdsByFunction
         run
+        dumpMem 4 "llvm_verify post" Nothing
         res <- checkFinalState scLLVM ms initPS otherPtrs args
         when (verb >= 3) $ liftIO $ do
           putStrLn "Verifying the following:"
@@ -457,6 +459,7 @@ llvmVar bic _ name sty = do
   let ms = lsSpec lsState
       func = specFunction ms
       cb = specCodebase ms
+      dl = cbDataLayout cb
   lty <- case resolveSymType cb sty of
            MemType mty -> return mty
            rty -> fail $ "Unsupported type in llvm_var: " ++ show (ppSymType rty)
@@ -469,7 +472,7 @@ llvmVar bic _ name sty = do
   modify $ \st ->
     st { lsSpec = specAddVarDecl fixPos name expr' lty (lsSpec st) }
   let sc = biSharedContext bic
-  mty <- liftIO $ logicTypeOfActual sc lty
+  mty <- liftIO $ logicTypeOfActual dl sc lty
   case mty of
     Just ty -> liftIO $ scLLVMValue sc ty name >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in llvm_var: " ++ show (ppMemType lty)
@@ -536,6 +539,22 @@ llvmAssertEq bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
+llvmAssertNull :: BuiltinContext -> Options -> String -> LLVMSetup ()
+llvmAssertNull _bic _opts name = do
+  ms <- gets lsSpec
+  (expr, mty) <- getLLVMExpr ms name
+  enull <- case mty of
+             PtrType _ -> liftIO $ llvmNullPtr (specBackend ms) (MemType mty)
+             _ -> fail $ unwords
+                  [ "llvm_assert_null called with non-pointer expression"
+                  , name
+                  , "of type"
+                  , show (ppMemType mty)
+                  ]
+  let le = LogicExpr enull []
+  modify $ \st ->
+    st { lsSpec = specAddLogicAssignment fixPos expr le ms }
+
 llvmEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
 llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   ms <- gets lsSpec
@@ -544,6 +563,14 @@ llvmEnsureEq bic _opts name (TypedTerm schema t) = do
   checkCompatibleType "llvm_ensure_eq" mty schema
   me <- mkMixedExpr ms sc t
   let cmd = Ensure fixPos expr me
+  modify $ \st ->
+    st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
+
+llvmModify :: BuiltinContext -> Options -> String -> LLVMSetup ()
+llvmModify _bic _opts name = do
+  ms <- gets lsSpec
+  (expr, mty) <- getLLVMExpr ms name
+  let cmd = Modify expr mty
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 
@@ -561,6 +588,18 @@ llvmReturn bic _opts (TypedTerm schema t) = do
         st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
     Just Nothing -> fail "llvm_return called on void function"
     Nothing -> fail "llvm_return called inside non-existant function?"
+
+llvmReturnArbitrary :: LLVMSetup ()
+llvmReturnArbitrary = do
+  ms <- gets lsSpec
+  let cb = specCodebase ms
+  case fdRetType <$> lookupFunctionType (specFunction ms) cb of
+    Just (Just mty) -> do
+      let cmd = ReturnArbitrary mty
+      modify $ \st ->
+        st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
+    Just Nothing -> fail "llvm_return_arbitrary called on void function"
+    Nothing -> fail "llvm_return_arbitrary called inside non-existant function?"
 
 llvmVerifyTactic :: BuiltinContext -> Options
                  -> ProofScript SV.SatResult
