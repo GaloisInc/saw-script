@@ -28,8 +28,8 @@ import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
-import qualified Text.LLVM as L
-import qualified Text.PrettyPrint.HughesPJ as PP
+import qualified Text.LLVM    as L
+import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import qualified SAWScript.AST as SS
@@ -109,17 +109,17 @@ showLLVMModule (LLVMModule name m) =
           , showParts ppDefine' (L.modDefines m)
           ]
   where
-    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
+    showParts pp xs = unlines $ map (show . L.ppLLVM . L.nest 2 . pp) xs
     ppGlobal' g =
-      L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
-      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
+      L.ppSymbol (L.globalSym g) L.<+> L.char '=' L.<+>
+      L.ppGlobalAttrs (L.globalAttrs g) L.<+>
       L.ppType (L.globalType g)
     ppDefine' d =
-      L.ppMaybe L.ppLinkage (L.funLinkage (L.defAttrs d)) PP.<+>
-      L.ppType (L.defRetType d) PP.<+>
-      L.ppSymbol (L.defName d) PP.<>
-      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
-      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.funGC (L.defAttrs d))
+      L.ppMaybe L.ppLinkage (L.funLinkage (L.defAttrs d)) L.<+>
+      L.ppType (L.defRetType d) L.<+>
+      L.ppSymbol (L.defName d) L.<>
+      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) L.<+>
+      L.ppMaybe (\gc -> L.text "gc" L.<+> L.ppGC gc) (L.funGC (L.defAttrs d))
 
 data ProofResult
   = Valid SolverStats
