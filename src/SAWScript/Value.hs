@@ -28,7 +28,8 @@ import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
-import qualified Text.LLVM as L
+import qualified Text.LLVM    as L
+import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
