@@ -37,6 +37,7 @@ import qualified SAWScript.AST as SS
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
+import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.LLVM.Codebase as LSS
 import SAWScript.JavaExpr (JavaType(..))
@@ -85,6 +86,11 @@ data Value
   | VLLVMSetup (LLVMSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   | VLLVMMethodSpec LIR.LLVMMethodSpecIR
+  ----- 
+  | VCrucibleSetup (CrucibleSetup Value)
+  | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
+  | VCrucibleSetupValue CIR.SetupValue
+  -----
   | VJavaType JavaType
   | VLLVMType LSS.SymType
   | VCryptolModule CryptolModule
@@ -232,8 +238,11 @@ showsPrecValue opts _p v =
     VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
+    VCrucibleSetup{} -> showString "<<Crucible Setup>>"
+    VCrucibleSetupValue x -> shows x
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMMethodSpec {} -> showString "<<LLVM MethodSpec>>"
+    VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LSS.ppSymType t))
     VCryptolModule m -> showString (showCryptolModule m)
@@ -378,6 +387,8 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
+type CrucibleSetup a = StateT CIR.CrucibleSetupState TopLevel a
+
 type ProofScript a = StateT ProofState TopLevel a
 
 -- IsValue class ---------------------------------------------------------------
@@ -477,12 +488,43 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
       fromValue m2
     fromValue _ = error "fromValue LLVMSetup"
 
+---------------------------------------------------------------------------------
+instance IsValue a => IsValue (StateT CIR.CrucibleSetupState TopLevel a) where
+    toValue m = VCrucibleSetup (fmap toValue m)
+    
+instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) where
+    fromValue (VCrucibleSetup m) = fmap fromValue m
+    fromValue (VReturn v) = return (fromValue v)
+    fromValue (VBind m1 v2) = do
+      v1 <- fromValue m1
+      m2 <- lift $ applyValue v2 v1
+      fromValue m2
+    fromValue _ = error "fromValue CrucibleSetup"
+
+instance IsValue CIR.SetupValue where
+  toValue v = VCrucibleSetupValue v
+  
+instance FromValue CIR.SetupValue where
+  fromValue (VCrucibleSetupValue v) = v
+  fromValue _ = error "fromValue Crucible.SetupValue"
+
 instance IsValue (Crucible.AnyCFG) where
     toValue t = VCFG t
 
 instance FromValue (Crucible.AnyCFG) where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
+
+instance IsValue CIR.CrucibleMethodSpecIR where
+    toValue t = VCrucibleMethodSpec t
+    
+instance FromValue CIR.CrucibleMethodSpecIR where
+    fromValue (VCrucibleMethodSpec t) = t
+    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+
+-----------------------------------------------------------------------------------
+
+
 
 instance IsValue (AIGNetwork) where
     toValue t = VAIG t

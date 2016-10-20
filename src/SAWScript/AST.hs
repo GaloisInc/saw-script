@@ -143,6 +143,7 @@ data Context
   | LLVMSetup
   | ProofScript
   | TopLevel
+  | CrucibleSetup
   deriving (Eq,Show)
 
 data Type
@@ -352,6 +353,7 @@ instance PrettyPrint Context where
     LLVMSetup    -> PP.text "LLVMSetup"
     ProofScript  -> PP.text "ProofScript"
     TopLevel     -> PP.text "TopLevel"
+    CrucibleSetup-> PP.text "CrucibleSetup"
 
 replicateDoc :: Integer -> PP.Doc -> PP.Doc
 replicateDoc n d

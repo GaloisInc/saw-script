@@ -56,6 +56,7 @@ import Control.Applicative
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
   'ProofScript'  { TReserved _ "ProofScript"    }
   'TopLevel'     { TReserved _ "TopLevel"       }
+  'CrucibleSetup'{ TReserved _ "CrucibleSetup"  }
   'Bool'         { TReserved _ "Bool"           }
   'Int'          { TReserved _ "Int"            }
   'String'       { TReserved _ "String"         }
@@ -209,6 +210,7 @@ Context :: { Type }
  | 'LLVMSetup'                          { tContext LLVMSetup      }
  | 'ProofScript'                        { tContext ProofScript    }
  | 'TopLevel'                           { tContext TopLevel       }
+ | 'CrucibleSetup'                      { tContext CrucibleSetup  }
  | name                                 { tVar (tokStr $1)        }
 
 -- Parameterized productions, most come directly from the Happy manual.

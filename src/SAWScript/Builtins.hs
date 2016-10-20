@@ -44,6 +44,7 @@ import System.IO.Temp (withSystemTempFile)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read
+import qualified Text.LLVM.AST as L
 
 
 import qualified Verifier.Java.Codebase as JSS
@@ -120,10 +121,11 @@ import qualified Data.Parameterized.Nonce as Crucible
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
 data CrucibleContext = CrucibleContext { ccLLVMContext     :: Crucible.LLVMContext
+                                       , ccLLVMModule      :: L.Module
                                        , ccLLVMModuleTrans :: Crucible.ModuleTranslation
                                        , ccBackend         :: Sym
-                                       , ccSimContext      :: Crucible.SimContext Sym
-                                       , ccGlobals         :: Crucible.SymGlobalState Sym
+                                       , ccSimContext      :: IORef (Crucible.SimContext Sym)
+                                       , ccGlobals         :: IORef (Crucible.SymGlobalState Sym)
                                        }
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext

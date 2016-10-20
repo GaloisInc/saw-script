@@ -53,6 +53,7 @@ import SAWScript.Compiler (reportErrT)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
+import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -1453,6 +1454,9 @@ primitives = Map.fromList
     [ "Pretty-print a control-flow graph"
     ]
 
+    ---------------------------------------------------------------------
+    -- Experimental Crucible/LLVM interface
+
   , prim "load_crucible_llvm_module" "String -> TopLevel ()"
     (bicVal load_crucible_llvm_module)
     [ "Load an LLVM bitcode file into the Crucible symbolic simulator"
@@ -1467,7 +1471,38 @@ primitives = Map.fromList
     (bicVal extract_crucible_llvm)
     [ "TODO"
     ] 
+
+  , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
+    (bicVal crucible_fresh_var)
+    [ "TODO" ]
+
+  , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc)
+    [ "TODO" ]
+
+  , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_points_to)
+    [ "TODO" ]
+
+  , prim "crucible_equal" "LLVMType -> SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_equal)
+    [ "TODO" ]
+
+  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup SetupValue"
+    (bicVal crucible_execute_func)
+    [ "TODO" ]
+
+  , prim "crucible_llvm_verify"
+    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    (bicVal verifyCrucible)    
+    [ "TODO" ]
+
+  , prim "crucible_term"
+    "Term -> SetupValue"
+    (funVal1 (return . VCrucibleSetupValue . CIR.SetupTerm))
+    [ "TODO" ]
   ]
+
   where
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> [String]
          -> (SS.LName, Primitive)
