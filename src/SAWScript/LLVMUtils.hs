@@ -74,48 +74,52 @@ structFieldAddr si idx base =
     Just off -> addrPlusOffsetSim base off
     Nothing -> fail $ "Struct field index " ++ show idx ++ " out of bounds"
 
-storePathState :: SBE SpecBackend
-               -> Term
+storePathState :: (MonadIO m, Functor m) =>
+                  Term
                -> MemType
                -> Term
                -> SpecPathState
-               -> IO SpecPathState
-storePathState sbe dst tp val ps = do
+               -> Simulator SpecBackend m SpecPathState
+storePathState dst tp val ps = do
+  sbe <- gets symBE
+  dst' <- simplifyAddr dst
   -- TODO: alignment?
-  (c, m') <- sbeRunIO sbe (memStore sbe (ps ^. pathMem) dst tp val 0)
-  ps' <- addAssertion sbe c ps
+  (c, m') <- liftIO $ sbeRunIO sbe (memStore sbe (ps ^. pathMem) dst' tp val 0)
+  ps' <- liftIO $ addAssertion sbe c ps
   return (ps' & pathMem .~ m')
 
-loadPathState :: SBE SpecBackend
-              -> Term
+loadPathState :: (MonadIO m, Functor m) =>
+                 Term
               -> MemType
               -> SpecPathState
-              -> IO (SpecLLVMValue, SpecLLVMValue)
-loadPathState sbe src tp ps =
+              -> Simulator SpecBackend m (SpecLLVMValue, SpecLLVMValue)
+loadPathState src tp ps = do
+  sbe <- gets symBE
+  src' <- simplifyAddr src
   -- TODO: alignment?
-  sbeRunIO sbe (memLoad sbe (ps ^. pathMem) tp src 0)
+  liftIO $ sbeRunIO sbe (memLoad sbe (ps ^. pathMem) tp src' 0)
 
-loadGlobal :: SBE SpecBackend
-           -> GlobalMap SpecBackend
+loadGlobal :: (MonadIO m, Functor m) =>
+              GlobalMap SpecBackend
            -> Symbol
            -> MemType
            -> SpecPathState
-           -> IO (SpecLLVMValue, SpecLLVMValue)
-loadGlobal sbe gm sym tp ps = do
+           -> Simulator SpecBackend m (SpecLLVMValue, SpecLLVMValue)
+loadGlobal gm sym tp ps = do
   case Map.lookup sym gm of
-    Just addr -> loadPathState sbe addr tp ps
+    Just addr -> loadPathState addr tp ps
     Nothing -> fail $ "Global " ++ show sym ++ " not found"
 
-storeGlobal :: SBE SpecBackend
-            -> GlobalMap SpecBackend
+storeGlobal :: (MonadIO m, Functor m) =>
+               GlobalMap SpecBackend
             -> Symbol
             -> MemType
             -> SpecLLVMValue
             -> SpecPathState
-            -> IO SpecPathState
-storeGlobal sbe gm sym tp v ps = do
+            -> Simulator SpecBackend m SpecPathState
+storeGlobal gm sym tp v ps = do
   case Map.lookup sym gm of
-    Just addr -> storePathState sbe addr tp v ps
+    Just addr -> storePathState addr tp v ps
     Nothing -> fail $ "Global " ++ show sym ++ " not found"
 
 -- | Add assertion for predicate to path state.
@@ -167,8 +171,7 @@ readLLVMTermPS ps args et@(CC.Term e) cnt =
       let ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
               | otherwise = ty
       -- Type should be type of value, not type of ptr
-      sbe <- gets symBE
-      (_c, v) <- liftIO $ loadPathState sbe addr ty' ps
+      (_c, v) <- loadPathState addr ty' ps
       -- TODO: use c
       return v
 
