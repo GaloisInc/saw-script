@@ -292,6 +292,8 @@ ocStep (Modify lhsExpr tp) = do
     value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
     ocModifyResultState $
       storePathState lhsRef tp value
+ocStep (Allocate _ _) =
+  ocError (SimException "Allocation in overrides not yet supported")
 ocStep (Return expr) = do
   ocEval (evalMixedExpr expr) $ \val ->
     modify $ \ocs -> ocs { ocsReturnValue = Just val }

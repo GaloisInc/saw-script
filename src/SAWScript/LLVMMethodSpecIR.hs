@@ -66,6 +66,9 @@ data BehaviorCommand
      -- | Modify an LLVM variables to an arbitrary expression.
      -- integral type or array.
    | Modify LLVMExpr LLVMActualType
+     -- | Allocate a new memory region of the given type and store it in
+     -- the location named.
+   | Allocate LLVMExpr LLVMActualType
      -- | Specifies return value for a function.
    | Return MixedExpr
      -- | Specifies an arbitrary return value for a function.

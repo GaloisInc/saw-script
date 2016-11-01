@@ -621,3 +621,11 @@ llvmSpecSolvers = Set.toList . solverStatsSolvers . specSolverStats
 
 llvmSpecSize :: LLVMMethodSpecIR -> Integer
 llvmSpecSize = solverStatsGoalSize . specSolverStats
+
+llvmAllocates :: String -> LLVMSetup ()
+llvmAllocates name = do
+  ms <- gets lsSpec
+  (expr, mty) <- getLLVMExpr ms name
+  let cmd = Allocate expr mty
+  modify $ \st ->
+    st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }

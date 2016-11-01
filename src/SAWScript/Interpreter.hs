@@ -1253,6 +1253,13 @@ primitives = Map.fromList
     , "value when execution finishes."
     ]
 
+  , prim "llvm_allocates"         "String -> LLVMSetup ()"
+    (pureVal llvmAllocates)
+    [ "Specify that the LLVM variable should be updated with a pointer to"
+    , "newly-allocated memory of whatever type the variable has been declared"
+    , "to have."
+    ]
+
   , prim "llvm_return"         "Term -> LLVMSetup ()"
     (bicVal llvmReturn)
     [ "Indicate the expected return value of an LLVM function."
