@@ -363,6 +363,7 @@ data LLVMSetupState
     , lsTactic :: ValidationPlan
     , lsSimulate :: Bool
     , lsSatBranches :: Bool
+    , lsSimplifyAddrs :: Bool
     }
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
