@@ -84,7 +84,7 @@ storePathState dst tp val ps = do
   sbe <- gets symBE
   dst' <- simplifyAddr dst
   -- TODO: alignment?
-  (c, m') <- liftIO $ sbeRunIO sbe (memStore sbe (ps ^. pathMem) dst' tp val 0)
+  (c, m') <- liftSBE $ memStore sbe (ps ^. pathMem) dst' tp val 0
   ps' <- liftIO $ addAssertion sbe c ps
   return (ps' & pathMem .~ m')
 
@@ -97,7 +97,23 @@ loadPathState src tp ps = do
   sbe <- gets symBE
   src' <- simplifyAddr src
   -- TODO: alignment?
-  liftIO $ sbeRunIO sbe (memLoad sbe (ps ^. pathMem) tp src' 0)
+  liftSBE $ memLoad sbe (ps ^. pathMem) tp src' 0
+
+allocPathState :: (MonadIO m, Functor m) =>
+                  MemType
+               -> SpecPathState
+               -> Simulator SpecBackend m (SpecLLVMValue, SpecPathState)
+allocPathState tp ps = do
+  sbe <- gets symBE
+  dl <- getDL
+  let aw = ptrBitwidth dl
+  n <- liftSBE $ termInt sbe aw 1
+  r <- liftSBE $ heapAlloc sbe (ps ^. pathMem) tp aw n 0
+  case r of
+    AResult c p m' -> do
+      ps' <- liftIO $ addAssertion sbe c ps
+      return (p, ps' & pathMem .~ m')
+    AError msg -> errorPath msg
 
 loadGlobal :: (MonadIO m, Functor m) =>
               GlobalMap SpecBackend
