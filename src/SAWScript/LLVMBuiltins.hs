@@ -112,6 +112,7 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
                       , optsSatAtBranches = doSat
+                      , optsSimplifyAddrs = False
                       }
   in startSimulator sc lopts lmod sym $ \scLLVM sbe cb dl md -> do
         setVerbosity (simVerbose opts)
@@ -189,6 +190,7 @@ extractLLVM bic opts lmod func _setup =
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
                       , optsSatAtBranches = True
+                      , optsSimplifyAddrs = False
                       }
   in startSimulator sc lopts lmod sym $ \scLLVM _sbe _cb _dl md -> do
     setVerbosity (simVerbose opts)
@@ -224,6 +226,7 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
                   , lsContext = scLLVM
                   , lsSimulate = True
                   , lsSatBranches = False
+                  , lsSimplifyAddrs = False
                   }
     (_, lsctx) <- runStateT setup lsctx0
     let ms = lsSpec lsctx
@@ -241,6 +244,7 @@ verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
     when (verb >= 2) $ io $ putStrLn $ "Starting verification of " ++ show (specName ms)
     let lopts = LSSOpts { optsErrorPathDetails = True
                         , optsSatAtBranches = lsSatBranches lsctx
+                        , optsSimplifyAddrs = lsSimplifyAddrs lsctx
                         }
     ro <- getTopLevelRO
     rw <- getTopLevelRW
@@ -451,6 +455,9 @@ llvmNoSimulate = modify (\s -> s { lsSimulate = False })
 
 llvmSatBranches :: Bool -> LLVMSetup ()
 llvmSatBranches doSat = modify (\s -> s { lsSatBranches = doSat })
+
+llvmSimplifyAddrs :: Bool -> LLVMSetup ()
+llvmSimplifyAddrs doSimp = modify (\s -> s { lsSimplifyAddrs = doSimp })
 
 llvmVar :: BuiltinContext -> Options -> String -> SymType
         -> LLVMSetup TypedTerm

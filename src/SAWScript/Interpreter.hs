@@ -1275,6 +1275,12 @@ primitives = Map.fromList
     , "symbolic execution."
     ]
 
+  , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
+    (pureVal llvmSimplifyAddrs)
+    [ "Turn on or off simplification of address expressions before loads"
+    , "and stores."
+    ]
+
   , prim "llvm_no_simulate"    "LLVMSetup ()"
     (pureVal llvmNoSimulate)
     [ "Skip symbolic simulation for this LLVM method." ]
