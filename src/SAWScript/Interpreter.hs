@@ -369,6 +369,8 @@ buildTopLevelEnv opts =
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
+                          , "Cryptol.ty"
+                          , "Cryptol.seq"
                           ]
        simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
@@ -1280,6 +1282,12 @@ primitives = Map.fromList
     (pureVal llvmSatBranches)
     [ "Turn on or off satisfiability checking of branch conditions during"
     , "symbolic execution."
+    ]
+
+  , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
+    (pureVal llvmSimplifyAddrs)
+    [ "Turn on or off simplification of address expressions before loads"
+    , "and stores."
     ]
 
   , prim "llvm_no_simulate"    "LLVMSetup ()"

@@ -82,16 +82,18 @@ data EvalContext
     , ecFunction :: Symbol
     }
 
-type ExprEvaluator a = ExceptT TC.LLVMExpr IO a
+type ExprEvaluator m a = ExceptT TC.LLVMExpr (Simulator SpecBackend m) a
 
-runEval :: MonadIO m => ExprEvaluator b -> m (Either TC.LLVMExpr b)
-runEval v = liftIO (runExceptT v)
+runEval :: MonadIO m =>
+           ExprEvaluator m b
+        -> Simulator SpecBackend m (Either TC.LLVMExpr b)
+runEval v = runExceptT v
 
 -- | Evaluate an LLVM expression, and return its value (r-value) as an
 -- internal term.
 evalLLVMExpr :: (Functor m, MonadIO m) =>
                 TC.LLVMExpr -> EvalContext
-             -> m SpecLLVMValue
+             -> ExprEvaluator m SpecLLVMValue
 evalLLVMExpr expr ec = eval expr
   where eval (CC.Term app) =
           case app of
@@ -99,20 +101,20 @@ evalLLVMExpr expr ec = eval expr
                 | n < length (ecArgs ec) -> return (ecArgs ec !! n)
                 | otherwise ->
                     fail $ "evalLLVMExpr: invalid argument index: " ++ show n
-            TC.Global n tp -> do
+            TC.Global n tp -> lift $ do
               -- TODO: don't discard fst
-              snd <$> (liftIO $ loadGlobal sbe (ecGlobalMap ec) n tp ps)
+              snd <$> (loadGlobal (ecGlobalMap ec) n tp ps)
             TC.Deref ae tp -> do
               addr <- evalLLVMExpr ae ec
               -- TODO: don't discard fst
-              snd <$> (liftIO $ loadPathState sbe addr tp ps)
+              snd <$> (lift $ loadPathState addr tp ps)
             TC.StructField ae si idx tp ->
               case siFieldOffset si idx of
                 Just off -> do
                   saddr <- evalLLVMExpr ae ec
                   addr <- liftIO $ addrPlusOffset sbe (ecDataLayout ec) saddr off
                   -- TODO: don't discard fst
-                  snd <$> (liftIO $ loadPathState sbe addr tp ps)
+                  snd <$> (lift $ loadPathState addr tp ps)
                 Nothing ->
                   fail $ "Struct field index " ++ show idx ++ " out of bounds"
             TC.StructDirectField ve si idx tp -> do
@@ -121,7 +123,7 @@ evalLLVMExpr expr ec = eval expr
                   saddr <- evalLLVMRefExpr ve ec
                   addr <- liftIO $ addrPlusOffset sbe (ecDataLayout ec) saddr off
                   -- TODO: don't discard fst
-                  snd <$> (liftIO $ loadPathState sbe addr tp ps)
+                  snd <$> (lift $ loadPathState addr tp ps)
                 Nothing ->
                   fail $ "Struct field index " ++ show idx ++ " out of bounds"
             TC.ReturnValue _ -> fail "return values not yet supported" -- TODO
@@ -132,7 +134,7 @@ evalLLVMExpr expr ec = eval expr
 -- (l-value) as an internal term.
 evalLLVMRefExpr :: (Functor m, MonadIO m) =>
                    TC.LLVMExpr -> EvalContext
-                -> m SpecLLVMValue
+                -> ExprEvaluator m SpecLLVMValue
 evalLLVMRefExpr expr ec = eval expr
   where eval (CC.Term app) =
           case app of
@@ -164,7 +166,7 @@ evalLLVMRefExpr expr ec = eval expr
 -- | Evaluate a typed expression in the context of a particular state.
 evalLogicExpr :: (Functor m, MonadIO m) =>
                  TC.LogicExpr -> EvalContext
-              -> m SpecLLVMValue
+              -> ExprEvaluator m SpecLLVMValue
 evalLogicExpr initExpr ec = do
   let sc = ecContext ec
   args <- forM (TC.logicExprLLVMExprs initExpr) $ \expr ->
@@ -174,7 +176,7 @@ evalLogicExpr initExpr ec = do
 -- | Return Java value associated with mixed expression.
 evalMixedExpr :: (Functor m, MonadIO m) =>
                  TC.MixedExpr -> EvalContext
-              -> m SpecLLVMValue
+              -> ExprEvaluator m SpecLLVMValue
 evalMixedExpr (TC.LogicE expr) ec = evalLogicExpr expr ec
 evalMixedExpr (TC.LLVME expr) ec = evalLLVMExpr expr ec
 
@@ -219,31 +221,44 @@ orParseResults l =
   [ (ps, block, Left  e) | FailedRun     ps block e <- l ] ++
   [ (ps, block, Right v) | SuccessfulRun ps block v <- l ]
 
-type OverrideComputation = ContT OverrideResult (StateT OCState IO)
+type OverrideComputation m =
+    ContT OverrideResult (StateT OCState (Simulator SpecBackend m))
 
-ocError :: OverrideError -> OverrideComputation ()
+ocError :: (Monad m, Functor m) =>
+           OverrideError -> OverrideComputation m ()
 ocError e = modify $ \ocs -> ocs { ocsErrors = e : ocsErrors ocs }
 
 -- | Runs an evaluate within an override computation.
-ocEval :: (EvalContext -> ExprEvaluator b)
-       -> (b -> OverrideComputation ())
-       -> OverrideComputation ()
+ocEval :: (MonadIO m, Functor m) =>
+          (EvalContext -> ExprEvaluator m b)
+       -> (b -> OverrideComputation m ())
+       -> OverrideComputation m ()
 ocEval fn m = do
   ec <- gets ocsEvalContext
-  res <- runEval (fn ec)
+  res <- lift $ lift $ runEval (fn ec)
   case res of
     Left expr -> ocError $ UndefinedExpr expr
     Right v   -> m v
 
-ocModifyResultStateIO :: (SpecPathState -> IO SpecPathState)
-                      -> OverrideComputation ()
+ocModifyResultStateIO :: (MonadIO m, Functor m) =>
+                         (SpecPathState -> IO SpecPathState)
+                      -> OverrideComputation m ()
 ocModifyResultStateIO fn = do
   bcs <- get
   new <- liftIO $ fn $ ocsResultState bcs
   put $! bcs { ocsResultState = new }
 
+ocModifyResultState :: (MonadIO m, Functor m) =>
+                       (SpecPathState -> Simulator SpecBackend m SpecPathState)
+                    -> OverrideComputation m ()
+ocModifyResultState fn = do
+  bcs <- get
+  new <- lift $ lift $ fn $ ocsResultState bcs
+  put $! bcs { ocsResultState = new }
+
 -- | Add assumption for predicate.
-ocAssert :: Pos -> String -> Term -> OverrideComputation ()
+ocAssert :: (MonadIO m, Functor m) =>
+            Pos -> String -> Term -> OverrideComputation m ()
 ocAssert p _nm x = do
   sbe <- (ecBackend . ocsEvalContext) <$> get
   sc <- gets (ecContext . ocsEvalContext)
@@ -260,24 +275,23 @@ ocAssert p _nm x = do
       | otherwise -> return ()
   ocModifyResultStateIO (addAssertion sbe x')
 
-ocStep :: BehaviorCommand -> OverrideComputation ()
+ocStep :: (MonadIO m, Functor m) =>
+          BehaviorCommand -> OverrideComputation m ()
 ocStep (Ensure _pos lhsExpr rhsExpr) = do
-  sbe <- gets (ecBackend . ocsEvalContext)
   ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef ->
     ocEval (evalMixedExpr rhsExpr) $ \value -> do
       let tp = TC.lssTypeOfLLVMExpr lhsExpr
-      ocModifyResultStateIO $
-        storePathState sbe lhsRef tp value
+      ocModifyResultState $
+        storePathState lhsRef tp value
 ocStep (Modify lhsExpr tp) = do
-  sbe <- gets (ecBackend . ocsEvalContext)
   sc <- gets (ecContext . ocsEvalContext)
   dl <- gets (ecDataLayout . ocsEvalContext)
   ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef -> do
     -- TODO: replace this pattern match with a check and possible error during setup
     Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
     value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
-    ocModifyResultStateIO $
-      storePathState sbe lhsRef tp value
+    ocModifyResultState $
+      storePathState lhsRef tp value
 ocStep (Return expr) = do
   ocEval (evalMixedExpr expr) $ \val ->
     modify $ \ocs -> ocs { ocsReturnValue = Just val }
@@ -290,7 +304,9 @@ ocStep (ReturnArbitrary tp) = do
   value <- liftIO $ scFreshGlobal sc ("lss__return_" ++ fname) lty
   modify $ \ocs -> ocs { ocsReturnValue = Just value }
 
-execBehavior :: [BehaviorSpec] -> EvalContext -> SpecPathState -> IO [RunResult]
+execBehavior :: (MonadIO m, Functor m) =>
+                [BehaviorSpec] -> EvalContext -> SpecPathState
+             -> Simulator SpecBackend m [RunResult]
 execBehavior bsl ec ps = do
   -- Get state of current execution path in simulator.
   fmap orParseResults $ forM bsl $ \bs -> do
@@ -355,7 +371,7 @@ execOverride sc _pos irs@(ir:_) args = do
                        , ecFunction = specFunction ir
                        }
   --liftIO $ putStrLn $ "Executing behavior"
-  res <- liftIO $ execBehavior bsl ec initPS
+  res <- execBehavior bsl ec initPS
   case [ (ps, mval) | (ps, _, Right mval) <- res ] of
     -- One or more successful result: use the first.
     (ps, mval):rest -> do
