@@ -157,33 +157,41 @@ allocSome sbe dl n ty = do
 -- LLVM memory operations
 
 readLLVMTermAddrPS :: (Functor m, Monad m, MonadIO m) =>
-                      SpecPathState -> [SpecLLVMValue] -> LLVMExpr
+                      SpecPathState
+                   -> Maybe SpecLLVMValue
+                   -> [SpecLLVMValue]
+                   -> LLVMExpr
                    -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTermAddrPS ps args (CC.Term e) =
+readLLVMTermAddrPS ps mrv args (CC.Term e) =
   case e of
     Arg _ _ _ -> fail "Can't read address of argument"
     Global s _ -> evalExprInCC "readLLVMTerm:Global" (SValSymbol s)
-    Deref ae _ -> readLLVMTermPS ps args ae 1
+    Deref ae _ -> readLLVMTermPS ps mrv args ae 1
     StructField ae si idx _ ->
-      structFieldAddr si idx =<< readLLVMTermPS ps args ae 1
+      structFieldAddr si idx =<< readLLVMTermPS ps mrv args ae 1
     StructDirectField ve si idx _ ->
-      structFieldAddr si idx =<< readLLVMTermAddrPS ps args ve
+      structFieldAddr si idx =<< readLLVMTermAddrPS ps mrv args ve
     ReturnValue _ -> fail "Can't read address of return value"
 
 readLLVMTermPS :: (Functor m, Monad m, MonadIO m) =>
-                  SpecPathState -> [SpecLLVMValue] -> LLVMExpr -> Integer
+                  SpecPathState
+               -> Maybe SpecLLVMValue -- ^ To use instead of current state.
+               -> [SpecLLVMValue]
+               -> LLVMExpr
+               -> Integer
                -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTermPS ps args et@(CC.Term e) cnt =
+readLLVMTermPS ps mrv args et@(CC.Term e) cnt =
   case e of
     Arg n _ _ -> return (args !! n)
     ReturnValue _ -> do
-      rslt <- getProgramReturnValue -- NB: this is always in the current state
-      case rslt of
-        (Just v) -> return v
-        Nothing -> fail "Program did not return a value"
+      rslt <- getProgramReturnValue
+      case (mrv, rslt) of
+        (Just v, _) -> return v
+        (_, Just v) -> return v
+        (Nothing, Nothing) -> fail "Program did not return a value"
     _ -> do
       let ty = lssTypeOfLLVMExpr et
-      addr <- readLLVMTermAddrPS ps args et
+      addr <- readLLVMTermAddrPS ps mrv args et
       let ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
               | otherwise = ty
       -- Type should be type of value, not type of ptr
@@ -192,18 +200,19 @@ readLLVMTermPS ps args et@(CC.Term e) cnt =
       return v
 
 readLLVMTermAddr :: (Functor m, Monad m, MonadIO m) =>
-                    [SpecLLVMValue] -> LLVMExpr
+                    Maybe SpecLLVMValue -> [SpecLLVMValue] -> LLVMExpr
                  -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTermAddr args e = do
+readLLVMTermAddr mrv args e = do
   ps <- fromMaybe (error "readLLVMTermAddr") <$> getPath
-  readLLVMTermAddrPS ps args e
+  readLLVMTermAddrPS ps mrv args e
 
 writeLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
-                 [SpecLLVMValue]
+                 Maybe SpecLLVMValue
+              -> [SpecLLVMValue]
               -> (LLVMExpr, SpecLLVMValue, Integer)
               -> Simulator SpecBackend m ()
-writeLLVMTerm args (e, t, cnt) = do
-  addr <- readLLVMTermAddr args e
+writeLLVMTerm mrv args (e, t, cnt) = do
+  addr <- readLLVMTermAddr mrv args e
   let ty = lssTypeOfLLVMExpr e
       ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
           | otherwise = ty
@@ -211,13 +220,14 @@ writeLLVMTerm args (e, t, cnt) = do
   store ty' t addr (memTypeAlign dl ty')
 
 readLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
-                [SpecLLVMValue]
+                Maybe SpecLLVMValue
+             -> [SpecLLVMValue]
              -> LLVMExpr
              -> Integer
              -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTerm args e cnt = do
+readLLVMTerm mrv args e cnt = do
   ps <- fromMaybe (error "readLLVMTermAddr") <$> getPath
-  readLLVMTermPS ps args e cnt
+  readLLVMTermPS ps mrv args e cnt
 
 freshLLVMArg :: Monad m =>
             (t, MemType) -> Simulator sbe m (MemType, SBETerm sbe)

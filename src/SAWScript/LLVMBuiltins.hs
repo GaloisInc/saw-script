@@ -155,7 +155,7 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
             retReg = (,Ident "__SAWScript_rslt") <$> sdRetType md
         _ <- callDefine' False sym retReg args
         -- TODO: the following line is generating memory errors
-        mapM_ (writeLLVMTerm argVals) otherAssigns
+        mapM_ (writeLLVMTerm Nothing argVals) otherAssigns
         when (verb >= 2) $ liftIO $ putStrLn $ "Running " ++ fname
         run
         when (verb >= 2) $ liftIO $ putStrLn $ "Finished running " ++ fname
@@ -168,7 +168,7 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
                 Just p -> return (p ^. pathAssertions)
             _ -> do
               e <- failLeft $ runExceptT $ parseLLVMExpr cb sym ostr
-              readLLVMTerm argVals e n
+              readLLVMTerm Nothing argVals e n
         let bundle tms = case tms of
                            [t] -> return t
                            _ -> scTuple scLLVM tms
