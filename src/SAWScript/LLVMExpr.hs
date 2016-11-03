@@ -29,6 +29,7 @@ module SAWScript.LLVMExpr
   , updateLLVMExprType
   , isPtrLLVMExpr
   , isArgLLVMExpr
+  , containsReturn
     -- * Logic expressions
   , LogicExpr(..)
   , logicExprLLVMExprs
@@ -252,6 +253,16 @@ isPtrLLVMExpr = isActualPtr . lssTypeOfLLVMExpr
 isArgLLVMExpr :: LLVMExpr -> Bool
 isArgLLVMExpr (CC.Term (Arg _ _ _)) = True
 isArgLLVMExpr _ = False
+
+containsReturn :: LLVMExpr -> Bool
+containsReturn (CC.Term e) =
+  case e of
+    Arg _ _ _ -> False
+    Global _ _ -> False
+    Deref pe _ -> containsReturn pe
+    StructField pe _ _ _ -> containsReturn pe
+    StructDirectField pe _ _ _ -> containsReturn pe
+    ReturnValue _ -> True
 
 -- LogicExpr {{{1
 
