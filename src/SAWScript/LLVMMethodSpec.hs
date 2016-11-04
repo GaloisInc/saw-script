@@ -478,8 +478,8 @@ initializeVerification' :: (MonadIO m, Monad m, Functor m) =>
                         -> LLVMMethodSpecIR
                         -> Simulator SpecBackend m
                            (SpecPathState,
-                            [(MemType, SpecLLVMValue)],
-                            [(MemType, SpecLLVMValue)])
+                            [(TC.LLVMExpr, (MemType, SpecLLVMValue))],
+                            [(TC.LLVMExpr, (MemType, SpecLLVMValue))])
 initializeVerification' sc file ir = do
   let bs = specBehavior ir
       fn = specFunction ir
@@ -524,26 +524,27 @@ initializeVerification' sc file ir = do
 
   let args = flip map argAssignments'' $ \(expr, mle) ->
                case (expr, mle) of
-                 (CC.Term (TC.Arg i _ ty), tm) ->
-                   Just (i, (ty, tm))
+                 (CC.Term (TC.Arg _ _ ty), tm) ->
+                   Just (expr, (ty, tm))
                  _ -> Nothing
 
   --gm <- use globalTerms
   let rreg =  (,Ident "__sawscript_result") <$> sdRetType fnDef
-      cmpFst (i, _) (i', _) =
+      cmpFst (CC.Term (TC.Arg i _ _), _) (CC.Term (TC.Arg i' _ _), _) =
         case i `compare` i' of
           EQ -> error $ "Argument " ++ show i ++ " declared multiple times."
           r -> r
-  let argVals = (map snd (sortBy cmpFst (catMaybes args)))
-  callDefine' False fn rreg argVals
+      cmpFst _ _ = error "Comparing non-arguments?"
+  let argVals = sortBy cmpFst (catMaybes args)
+  callDefine' False fn rreg (map snd argVals)
 
   let doAssign (expr, mle) = do
         let Just (ty, _) = Map.lookup expr (bsExprDecls bs)
         ps <- fromMaybe (error "initializeVerification") <$> getPath
         (v, ps') <- createLogicValue cb sbe sc expr ps ty mle
         setPS ps'
-        writeLLVMTerm Nothing (map snd argVals) (expr, v, 1)
-        return (ty, v)
+        writeLLVMTerm Nothing (map (snd . snd) argVals) (expr, v, 1)
+        return (expr, (ty, v))
 
   -- Allocate space for all pointers that aren't directly parameters.
   otherPtrs <- forM ptrAssignments doAssign
@@ -561,21 +562,25 @@ checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
                    SharedContext
                 -> LLVMMethodSpecIR
                 -> SpecPathState
-                -> [(MemType, SpecLLVMValue)]
-                -> [(MemType, SpecLLVMValue)]
+                -> [(TC.LLVMExpr, (MemType, SpecLLVMValue))]
+                -> [(TC.LLVMExpr, (MemType, SpecLLVMValue))]
                 -> Simulator SpecBackend m (PathVC ())
 checkFinalState sc ms initPS otherPtrs args = do
   let cmds = bsCommands (specBehavior ms)
       cb = specCodebase ms
       sbe = specBackend ms
       dl = cbDataLayout cb
-      argVals = map snd args
+      argVals = map (snd . snd) args
   mrv <- getProgramReturnValue
   directAssumptions <- evalAssumptions sc initPS mrv argVals (specAssumptions ms)
-  let ptrs = otherPtrs ++ [ (ty, tm) | (ty, tm) <- args, TC.isActualPtr ty ]
-  ptrAssumptions <- forM ptrs $ \(ty, ptr) -> liftIO $ do
-    (minBoundTerm, maxBoundTerm) <- addrBounds sc sbe dl ptr (MemType ty)
-    return [minBoundTerm, maxBoundTerm]
+  let ptrs = otherPtrs ++ [ a | a@(_, (ty, _)) <- args, TC.isActualPtr ty ]
+  ptrAssumptions <- forM ptrs $ \(expr, (ty, ptr)) -> liftIO $ do
+    -- TODO: don't add these bounds if there's an initial value for a pointer
+    case specGetLogicAssignment ms expr of
+      Just _ -> return []
+      Nothing -> do
+        (minBoundTerm, maxBoundTerm) <- addrBounds sc sbe dl ptr (MemType ty)
+        return [minBoundTerm, maxBoundTerm]
   assumptions <- liftIO $ foldM (scAnd sc) directAssumptions (concat ptrAssumptions)
   msrv <- case [ e | Return e <- cmds ] of
             [e] -> Just <$> readLLVMMixedExprPS sc initPS Nothing argVals e

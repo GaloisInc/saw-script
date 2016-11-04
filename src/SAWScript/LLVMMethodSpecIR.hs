@@ -27,6 +27,7 @@ module SAWScript.LLVMMethodSpecIR
   , specAddVarDecl
   , specAddLogicAssignment
   , specAddAssumption
+  , specGetLogicAssignment
   , specLLVMExprNames
   , initLLVMMethodSpec
     -- * Method behavior.
@@ -179,6 +180,13 @@ specAddLogicAssignment _pos expr t ms = ms { specBehavior = bs' }
                  Nothing ->
                    error $ "assignment for undeclared variable " ++ show expr
         bs' = bs { bsExprDecls = eds' }
+
+specGetLogicAssignment :: LLVMMethodSpecIR -> LLVMExpr -> Maybe LogicExpr
+specGetLogicAssignment ms expr =
+  case Map.lookup expr (bsExprDecls (specBehavior ms)) of
+    Just (_, Nothing) -> Nothing
+    Just (_, t) -> t
+    Nothing -> Nothing
 
 specAddBehaviorCommand :: BehaviorCommand
                        -> LLVMMethodSpecIR -> LLVMMethodSpecIR
