@@ -285,6 +285,7 @@ ocAssert p _nm x = do
   sbe <- (ecBackend . ocsEvalContext) <$> get
   sc <- gets (ecContext . ocsEvalContext)
   opts <- gets (ecOpts . ocsEvalContext)
+  -- TODO: check statisfiability in context of current assumptions and assertions
   x' <- liftIO $ scWhnf sc x
   case asBool x' of
     Just True -> return ()
@@ -608,6 +609,8 @@ checkFinalState sc ms initPS otherPtrs args = do
 
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.
+    -- TODO: extend this to check that specified allocations have
+    -- actually occurred.
     forM_ expectedValues $ \(e, lhs, tp, rhs) -> do
       when (memTypeSize dl tp > 0) $ do
         finalValue <- lift $ load tp lhs (memTypeAlign dl tp)
