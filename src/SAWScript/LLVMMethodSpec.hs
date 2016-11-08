@@ -247,7 +247,7 @@ ocSetExprValue :: (MonadIO m, Functor m) =>
                   TC.LLVMExpr
                -> SpecLLVMValue
                -> OverrideComputation m ()
-ocSetExprValue expr@(CC.Term app) value =
+ocSetExprValue expr@(CC.Term app) value = do
   case app of
     TC.Arg _ _ _ ->
       ocError $ Misc "Can't assign to argument in override."
@@ -558,6 +558,14 @@ initializeVerification' sc file ir = do
 
   return (ps, otherPtrs, argVals)
 
+nonNullAssumption :: DataLayout -> SharedContext -> SpecLLVMValue -> IO SpecLLVMValue
+nonNullAssumption dl sc addr = do
+  let aw = fromIntegral (ptrBitwidth dl)
+  nullPtr <- scBvConst sc aw 0
+  awTerm <- scNat sc aw
+  nonNullTerm <- scNot sc =<< scBvEq sc awTerm addr nullPtr
+  return nonNullTerm
+
 checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
                    SharedContext
                 -> LLVMMethodSpecIR
@@ -571,17 +579,32 @@ checkFinalState sc ms initPS otherPtrs args = do
       sbe = specBackend ms
       dl = cbDataLayout cb
       argVals = map (snd . snd) args
+      initMem = initPS ^. pathMem
   mrv <- getProgramReturnValue
+  finPS <- fromMaybe (error "no path in checkFinalState") <$> getPath
+  let finMem = finPS ^. pathMem
   directAssumptions <- evalAssumptions sc initPS mrv argVals (specAssumptions ms)
   let ptrs = otherPtrs ++ [ a | a@(_, (ty, _)) <- args, TC.isActualPtr ty ]
   ptrAssumptions <- forM ptrs $ \(expr, (ty, ptr)) -> liftIO $ do
-    -- TODO: don't add these bounds if there's an initial value for a pointer
     case specGetLogicAssignment ms expr of
       Just _ -> return []
       Nothing -> do
         (minBoundTerm, maxBoundTerm) <- addrBounds sc sbe dl ptr (MemType ty)
         return [minBoundTerm, maxBoundTerm]
-  assumptions <- liftIO $ foldM (scAnd sc) directAssumptions (concat ptrAssumptions)
+  allocAssumptions <- forM [ expr | Allocate expr _ <- cmds ] $ \expr -> do
+    addr <- readLLVMTermPS finPS mrv argVals expr 1
+    assm <- liftIO $ nonNullAssumption dl sc addr
+    return [assm]
+  allocAssertions <- forM [ (expr, mty) | Allocate expr mty <- cmds ] $ \(expr, mty) -> do
+    addr <- readLLVMTermPS finPS mrv argVals expr 1
+    let sz = memTypeSize dl mty
+    szTm <- liftIO $ scBvConst sc (fromIntegral (ptrBitwidth dl)) (fromIntegral sz)
+    initCond <- liftIO $ sbeRunIO sbe $ isAllocated sbe initMem addr szTm
+    finCond <- liftIO $ sbeRunIO sbe $ isAllocated sbe finMem addr szTm
+    initCond' <- liftIO $ scNot sc initCond
+    liftIO $ scAnd sc initCond' finCond
+  let allPtrAssumptions = concat (ptrAssumptions ++ allocAssumptions)
+  assumptions <- liftIO $ foldM (scAnd sc) directAssumptions allPtrAssumptions
   msrv <- case [ e | Return e <- cmds ] of
             [e] -> Just <$> readLLVMMixedExprPS sc initPS Nothing argVals e
             [] -> return Nothing
@@ -612,10 +635,9 @@ checkFinalState sc ms initPS otherPtrs args = do
       (Nothing, Just _, _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
       (Nothing, _, [_]) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
 
+    forM_ allocAssertions $ pvcgAssert "allocation assertion"
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.
-    -- TODO: extend this to check that specified allocations have
-    -- actually occurred.
     forM_ expectedValues $ \(e, lhs, tp, rhs) -> do
       when (memTypeSize dl tp > 0) $ do
         finalValue <- lift $ load tp lhs (memTypeAlign dl tp)
