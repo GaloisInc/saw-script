@@ -1242,9 +1242,16 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal llvmEnsureEq)
+    (bicVal (llvmEnsureEq False))
     [ "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes."
+    ]
+
+  , prim "llvm_ensure_eq_post"      "String -> Term -> LLVMSetup ()"
+    (bicVal (llvmEnsureEq True))
+    [ "Specify that the LLVM variable should have a value equal to the"
+    , "given term when execution finishes, evaluating the expression in"
+    , "the final state instead of the initial state."
     ]
 
   , prim "llvm_modify"         "String -> LLVMSetup ()"

@@ -300,7 +300,7 @@ ocAssert p _nm x = do
 
 ocStep :: (MonadIO m, Functor m) =>
           BehaviorCommand -> OverrideComputation m ()
-ocStep (Ensure _pos lhsExpr rhsExpr) = do
+ocStep (Ensure _ _pos lhsExpr rhsExpr) = do
   ocEval (evalMixedExpr rhsExpr) $ \value -> do
     ocSetExprValue lhsExpr value
 ocStep (Modify lhsExpr tp) = do
@@ -586,8 +586,8 @@ checkFinalState sc ms initPS otherPtrs args = do
             [e] -> Just <$> readLLVMMixedExprPS sc initPS Nothing argVals e
             [] -> return Nothing
             _  -> fail "more than one return value specified (multiple 'llvm_return's ?)"
-  expectedValues <- forM [ (le, me) | Ensure _ le me <- cmds ] $ \(le, me) -> do
-    lhs <- readLLVMTermAddrPS initPS mrv argVals le
+  expectedValues <- forM [ (post, le, me) | Ensure post _ le me <- cmds ] $ \(post, le, me) -> do
+    lhs <- readLLVMTermAddrPS (if post then finPS else initPS) mrv argVals le
     rhs <- readLLVMMixedExprPS sc initPS mrv argVals me
     let Just (tp, _) = Map.lookup le (bsExprDecls (specBehavior ms))
     return (le, lhs, tp, rhs)

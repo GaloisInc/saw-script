@@ -562,14 +562,14 @@ llvmAssertNull _bic _opts name = do
   modify $ \st ->
     st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
-llvmEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
-llvmEnsureEq bic _opts name (TypedTerm schema t) = do
+llvmEnsureEq :: Bool -> BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
+llvmEnsureEq post bic _opts name (TypedTerm schema t) = do
   ms <- gets lsSpec
   let sc = biSharedContext bic
   (expr, mty) <- getLLVMExpr ms name
   checkCompatibleType "llvm_ensure_eq" mty schema
   me <- mkMixedExpr ms sc t
-  let cmd = Ensure fixPos expr me
+  let cmd = Ensure post fixPos expr me
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 

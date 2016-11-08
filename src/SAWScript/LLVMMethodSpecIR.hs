@@ -63,7 +63,7 @@ import SAWScript.Utils
 -- used.
 data BehaviorCommand
      -- | Assign an LLVM variables the value given by the mixed expression.
-   = Ensure Pos LLVMExpr MixedExpr
+   = Ensure Bool Pos LLVMExpr MixedExpr
      -- | Modify an LLVM variables to an arbitrary expression.
      -- integral type or array.
    | Modify LLVMExpr LLVMActualType
