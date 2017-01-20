@@ -70,8 +70,8 @@ type Backend = SAWBackend
 type SAWTerm = Term
 type SAWDefine = SymDefine SAWTerm
 
-loadLLVMModule :: FilePath -> IO LLVMModule
-loadLLVMModule file = LLVMModule file <$> loadModule file
+llvm_load_module :: FilePath -> IO LLVMModule
+llvm_load_module file = LLVMModule file <$> loadModule file
 
 -- LLVM verification and model extraction commands
 
@@ -98,16 +98,16 @@ startSimulator sc lopts (LLVMModule file mdl) sym body = do
     Just md -> runSimulator cb sbe mem (Just lopts) $
                body scLLVM sbe cb dl md
 
-symexecLLVM :: BuiltinContext
-            -> Options
-            -> LLVMModule
-            -> String
-            -> [(String, Integer)]
-            -> [(String, Term, Integer)]
-            -> [(String, Integer)]
-            -> Bool
-            -> IO TypedTerm
-symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
+llvm_symexec :: BuiltinContext
+             -> Options
+             -> LLVMModule
+             -> String
+             -> [(String, Integer)]
+             -> [(String, Term, Integer)]
+             -> [(String, Integer)]
+             -> Bool
+             -> IO TypedTerm
+llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
   let sym = Symbol fname
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
@@ -179,13 +179,13 @@ symexecLLVM bic opts lmod fname allocs inputs outputs doSat =
 -- given bitcode file. This code creates fresh inputs for all arguments and
 -- returns a lambda term representing the return value as a function of the
 -- arguments. Many verifications will require more complex execution contexts.
-extractLLVM :: BuiltinContext
-            -> Options
-            -> LLVMModule
-            -> String
-            -> LLVMSetup ()
-            -> IO TypedTerm
-extractLLVM bic opts lmod func _setup =
+llvm_extract :: BuiltinContext
+             -> Options
+             -> LLVMModule
+             -> String
+             -> LLVMSetup ()
+             -> IO TypedTerm
+llvm_extract bic opts lmod func _setup =
   let sym = Symbol func
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
@@ -204,14 +204,14 @@ extractLLVM bic opts lmod func _setup =
         lamTm <- scAbstractExts scLLVM exts rv
         scImport sc lamTm >>= mkTypedTerm sc
 
-verifyLLVM :: BuiltinContext
-           -> Options
-           -> LLVMModule
-           -> String
-           -> [LLVMMethodSpecIR]
-           -> LLVMSetup ()
-           -> TopLevel LLVMMethodSpecIR
-verifyLLVM bic opts (LLVMModule file mdl) funcname overrides setup =
+llvm_verify :: BuiltinContext
+            -> Options
+            -> LLVMModule
+            -> String
+            -> [LLVMMethodSpecIR]
+            -> LLVMSetup ()
+            -> TopLevel LLVMMethodSpecIR
+llvm_verify bic opts (LLVMModule file mdl) funcname overrides setup =
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
@@ -321,8 +321,8 @@ showCexResults sc opts ms vs exts vals = do
     else putStrLn "ERROR: Can't show result, wrong number of values"
   fail "Proof failed."
 
-llvmPure :: LLVMSetup ()
-llvmPure = return ()
+llvm_pure :: LLVMSetup ()
+llvm_pure = return ()
 
 type LLVMExprParser a = ParsecT String () IO a
 
@@ -433,35 +433,35 @@ mkLogicExpr ms sc t = do
   fn <- liftIO $ scAbstractExts sc exts t
   return $ LogicExpr fn (map fst les)
 
-llvmInt :: Int -> SymType
-llvmInt n = MemType (IntType n)
+llvm_int :: Int -> SymType
+llvm_int n = MemType (IntType n)
 
-llvmFloat :: SymType
-llvmFloat = MemType FloatType
+llvm_float :: SymType
+llvm_float = MemType FloatType
 
-llvmDouble :: SymType
-llvmDouble = MemType DoubleType
+llvm_double :: SymType
+llvm_double = MemType DoubleType
 
-llvmArray :: Int -> SymType -> SymType
-llvmArray n (MemType t) = MemType (ArrayType n t)
-llvmArray _ t =
+llvm_array :: Int -> SymType -> SymType
+llvm_array n (MemType t) = MemType (ArrayType n t)
+llvm_array _ t =
   error $ "Unsupported array element type: " ++ show (ppSymType t)
 
-llvmStruct :: String -> SymType
-llvmStruct n = Alias (fromString n)
+llvm_struct :: String -> SymType
+llvm_struct n = Alias (fromString n)
 
-llvmNoSimulate :: LLVMSetup ()
-llvmNoSimulate = modify (\s -> s { lsSimulate = False })
+llvm_no_simulate :: LLVMSetup ()
+llvm_no_simulate = modify (\s -> s { lsSimulate = False })
 
-llvmSatBranches :: Bool -> LLVMSetup ()
-llvmSatBranches doSat = modify (\s -> s { lsSatBranches = doSat })
+llvm_sat_branches :: Bool -> LLVMSetup ()
+llvm_sat_branches doSat = modify (\s -> s { lsSatBranches = doSat })
 
-llvmSimplifyAddrs :: Bool -> LLVMSetup ()
-llvmSimplifyAddrs doSimp = modify (\s -> s { lsSimplifyAddrs = doSimp })
+llvm_simplify_addrs :: Bool -> LLVMSetup ()
+llvm_simplify_addrs doSimp = modify (\s -> s { lsSimplifyAddrs = doSimp })
 
-llvmVar :: BuiltinContext -> Options -> String -> SymType
-        -> LLVMSetup TypedTerm
-llvmVar bic _ name sty = do
+llvm_var :: BuiltinContext -> Options -> String -> SymType
+         -> LLVMSetup TypedTerm
+llvm_var bic _ name sty = do
   lsState <- get
   let ms = lsSpec lsState
       func = specFunction ms
@@ -484,9 +484,9 @@ llvmVar bic _ name sty = do
     Just ty -> liftIO $ scLLVMValue sc ty name >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in llvm_var: " ++ show (ppMemType lty)
 
-llvmPtr :: BuiltinContext -> Options -> String -> SymType
+llvm_ptr :: BuiltinContext -> Options -> String -> SymType
         -> LLVMSetup ()
-llvmPtr _ _ name sty = do
+llvm_ptr _ _ name sty = do
   lsState <- get
   let ms = lsSpec lsState
       func = specFunction ms
@@ -520,9 +520,9 @@ checkCompatibleType msg aty schema = liftIO $ do
                 , "  In context: " ++ msg
                 ]
 
-llvmAssert :: BuiltinContext -> Options -> Term
-           -> LLVMSetup ()
-llvmAssert bic _ v = do
+llvm_assert :: BuiltinContext -> Options -> Term
+            -> LLVMSetup ()
+llvm_assert bic _ v = do
   let sc = biSharedContext bic
   ms <- gets lsSpec
   liftIO $ checkBoolean sc v
@@ -533,8 +533,8 @@ llvmAssert bic _ v = do
   modify $ \st ->
     st { lsSpec = specAddAssumption le (lsSpec st) }
 
-llvmAssertEq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
-llvmAssertEq bic _opts name (TypedTerm schema t) = do
+llvm_assert_eq :: BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
+llvm_assert_eq bic _opts name (TypedTerm schema t) = do
   let sc = biSharedContext bic
   ms <- gets lsSpec
   (expr, mty) <- getLLVMExpr ms name
@@ -546,8 +546,8 @@ llvmAssertEq bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
-llvmAssertNull :: BuiltinContext -> Options -> String -> LLVMSetup ()
-llvmAssertNull _bic _opts name = do
+llvm_assert_null :: BuiltinContext -> Options -> String -> LLVMSetup ()
+llvm_assert_null _bic _opts name = do
   ms <- gets lsSpec
   (expr, mty) <- getLLVMExpr ms name
   enull <- case mty of
@@ -562,8 +562,8 @@ llvmAssertNull _bic _opts name = do
   modify $ \st ->
     st { lsSpec = specAddLogicAssignment fixPos expr le ms }
 
-llvmEnsureEq :: Bool -> BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
-llvmEnsureEq post bic _opts name (TypedTerm schema t) = do
+llvm_ensure_eq :: Bool -> BuiltinContext -> Options -> String -> TypedTerm -> LLVMSetup ()
+llvm_ensure_eq post bic _opts name (TypedTerm schema t) = do
   ms <- gets lsSpec
   let sc = biSharedContext bic
   (expr, mty) <- getLLVMExpr ms name
@@ -573,16 +573,16 @@ llvmEnsureEq post bic _opts name (TypedTerm schema t) = do
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 
-llvmModify :: BuiltinContext -> Options -> String -> LLVMSetup ()
-llvmModify _bic _opts name = do
+llvm_modify :: BuiltinContext -> Options -> String -> LLVMSetup ()
+llvm_modify _bic _opts name = do
   ms <- gets lsSpec
   (expr, mty) <- getLLVMExpr ms name
   let cmd = Modify expr mty
   modify $ \st ->
     st { lsSpec = specAddBehaviorCommand cmd (lsSpec st) }
 
-llvmReturn :: BuiltinContext -> Options -> TypedTerm -> LLVMSetup ()
-llvmReturn bic _opts (TypedTerm schema t) = do
+llvm_return :: BuiltinContext -> Options -> TypedTerm -> LLVMSetup ()
+llvm_return bic _opts (TypedTerm schema t) = do
   let sc = biSharedContext bic
   ms <- gets lsSpec
   let cb = specCodebase ms
@@ -596,8 +596,8 @@ llvmReturn bic _opts (TypedTerm schema t) = do
     Just Nothing -> fail "llvm_return called on void function"
     Nothing -> fail "llvm_return called inside non-existant function?"
 
-llvmReturnArbitrary :: LLVMSetup ()
-llvmReturnArbitrary = do
+llvm_return_arbitrary :: LLVMSetup ()
+llvm_return_arbitrary = do
   ms <- gets lsSpec
   let cb = specCodebase ms
   case fdRetType <$> lookupFunctionType (specFunction ms) cb of
@@ -608,22 +608,22 @@ llvmReturnArbitrary = do
     Just Nothing -> fail "llvm_return_arbitrary called on void function"
     Nothing -> fail "llvm_return_arbitrary called inside non-existant function?"
 
-llvmVerifyTactic :: BuiltinContext -> Options
+llvm_verify_tactic :: BuiltinContext -> Options
                  -> ProofScript SV.SatResult
                  -> LLVMSetup ()
-llvmVerifyTactic _ _ script =
+llvm_verify_tactic _ _ script =
   -- TODO: complain if tactic provided more than once
   modify $ \st -> st { lsTactic = RunVerify script }
 
 
-llvmSpecSolvers :: LLVMMethodSpecIR -> [String]
-llvmSpecSolvers = Set.toList . solverStatsSolvers . specSolverStats
+llvm_spec_solvers :: LLVMMethodSpecIR -> [String]
+llvm_spec_solvers = Set.toList . solverStatsSolvers . specSolverStats
 
-llvmSpecSize :: LLVMMethodSpecIR -> Integer
-llvmSpecSize = solverStatsGoalSize . specSolverStats
+llvm_spec_size :: LLVMMethodSpecIR -> Integer
+llvm_spec_size = solverStatsGoalSize . specSolverStats
 
-llvmAllocates :: String -> LLVMSetup ()
-llvmAllocates name = do
+llvm_allocates :: String -> LLVMSetup ()
+llvm_allocates name = do
   ms <- gets lsSpec
   (expr, mty) <- getLLVMExpr ms name
   let cmd = Allocate expr mty

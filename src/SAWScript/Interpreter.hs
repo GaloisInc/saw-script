@@ -1183,30 +1183,30 @@ primitives = Map.fromList
     [ "Experimental code. Don't expect this to work reliably. " ]
 
   , prim "llvm_int"            "Int -> LLVMType"
-    (pureVal llvmInt)
+    (pureVal llvm_int)
     [ "The type of LLVM integers, of the given bit width." ]
 
   , prim "llvm_float"          "LLVMType"
-    (pureVal llvmFloat)
+    (pureVal llvm_float)
     [ "The type of single-precision floating point numbers in LLVM." ]
 
   , prim "llvm_double"         "LLVMType"
-    (pureVal llvmDouble)
+    (pureVal llvm_double)
     [ "The type of double-precision floating point numbers in LLVM." ]
 
   , prim "llvm_array"          "Int -> LLVMType -> LLVMType"
-    (pureVal llvmArray)
+    (pureVal llvm_array)
     [ "The type of LLVM arrays with the given number of elements of the"
     , "given type."
     ]
 
   , prim "llvm_struct"         "String -> LLVMType"
-    (pureVal llvmStruct)
+    (pureVal llvm_struct)
     [ "The type of an LLVM struct of the given name."
     ]
 
   , prim "llvm_var"            "String -> LLVMType -> LLVMSetup Term"
-    (bicVal llvmVar)
+    (bicVal llvm_var)
     [ "Return a term corresponding to the initial value of the named LLVM"
     , "variable, which should have the given type. The returned term can be"
     , "used to construct more complex expressions. For example it can be used"
@@ -1215,7 +1215,7 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_ptr"            "String -> LLVMType -> LLVMSetup ()"
-    (bicVal llvmPtr)
+    (bicVal llvm_ptr)
     [ "Declare that the named LLVM variable should point to a value of the"
     , "given type. This command makes the given variable visible later, so"
     , "the use of 'llvm_ptr \"p\" ...' is necessary before using, for"
@@ -1226,92 +1226,92 @@ primitives = Map.fromList
   --  (bicVal llvmMayAlias)
 
   , prim "llvm_assert"         "Term -> LLVMSetup ()"
-    (bicVal llvmAssert)
+    (bicVal llvm_assert)
     [ "Assert that the given term should evaluate to true in the initial"
     , "state of an LLVM function."
     ]
 
   , prim "llvm_assert_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal llvmAssertEq)
+    (bicVal llvm_assert_eq)
     [ "Specify the initial value of an LLVM variable."
     ]
 
   , prim "llvm_assert_null"    "String -> LLVMSetup ()"
-    (bicVal llvmAssertNull)
+    (bicVal llvm_assert_null)
     [ "Specify that the initial value of an LLVM pointer variable is NULL."
     ]
 
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal (llvmEnsureEq False))
+    (bicVal (llvm_ensure_eq False))
     [ "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes."
     ]
 
   , prim "llvm_ensure_eq_post"      "String -> Term -> LLVMSetup ()"
-    (bicVal (llvmEnsureEq True))
+    (bicVal (llvm_ensure_eq True))
     [ "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes, evaluating the expression in"
     , "the final state instead of the initial state."
     ]
 
   , prim "llvm_modify"         "String -> LLVMSetup ()"
-    (bicVal llvmModify)
+    (bicVal llvm_modify)
     [ "Specify that the LLVM variable should have a an arbitary, unspecified"
     , "value when execution finishes."
     ]
 
   , prim "llvm_allocates"         "String -> LLVMSetup ()"
-    (pureVal llvmAllocates)
+    (pureVal llvm_allocates)
     [ "Specify that the LLVM variable should be updated with a pointer to"
     , "newly-allocated memory of whatever type the variable has been declared"
     , "to have."
     ]
 
   , prim "llvm_return"         "Term -> LLVMSetup ()"
-    (bicVal llvmReturn)
+    (bicVal llvm_return)
     [ "Indicate the expected return value of an LLVM function."
     ]
 
   , prim "llvm_return_arbitrary" "LLVMSetup ()"
-    (pureVal llvmReturnArbitrary)
+    (pureVal llvm_return_arbitrary)
     [ "Indicate that an LLVM function returns an arbitrary, unspecified value."
     ]
 
   , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
-    (bicVal llvmVerifyTactic)
+    (bicVal llvm_verify_tactic)
     [ "Use the given proof script to prove the specified properties about"
     , "an LLVM function."
     ]
 
   , prim "llvm_sat_branches"   "Bool -> LLVMSetup ()"
-    (pureVal llvmSatBranches)
+    (pureVal llvm_sat_branches)
     [ "Turn on or off satisfiability checking of branch conditions during"
     , "symbolic execution."
     ]
 
   , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
-    (pureVal llvmSimplifyAddrs)
+    (pureVal llvm_simplify_addrs)
     [ "Turn on or off simplification of address expressions before loads"
     , "and stores."
     ]
 
   , prim "llvm_no_simulate"    "LLVMSetup ()"
-    (pureVal llvmNoSimulate)
+    (pureVal llvm_no_simulate)
     [ "Skip symbolic simulation for this LLVM method." ]
 
   , prim "llvm_pure"           "LLVMSetup ()"
-    (pureVal llvmPure)
+    (pureVal llvm_pure)
     [ "The empty specification for 'llvm_verify'. Equivalent to 'return ()'." ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
-    (pureVal loadLLVMModule)
+    (pureVal llvm_load_module)
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
   --, prim "llvm_module_info"    "LLVMModule -> TopLevel ()"
 
   , prim "llvm_extract"
     "LLVMModule -> String -> LLVMSetup () -> TopLevel Term"
-    (bicVal extractLLVM)
+    (bicVal llvm_extract)
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
     , "value will be the return value of the functions. Only functions with"
@@ -1321,7 +1321,7 @@ primitives = Map.fromList
 
   , prim "llvm_symexec"
     "LLVMModule -> String -> [(String, Int)] -> [(String, Term, Int)] -> [(String, Int)] -> Bool -> TopLevel Term"
-    (bicVal symexecLLVM)
+    (bicVal llvm_symexec)
     [ "Symbolically execute an LLVM function and construct a Term corresponding"
     , "to its result. The first list describes what allocations should be"
     , "performed before execution. Each name given is allocated to point to"
@@ -1337,7 +1337,7 @@ primitives = Map.fromList
 
   , prim "llvm_verify"
     "LLVMModule -> String -> [LLVMMethodSpec] -> LLVMSetup () -> TopLevel LLVMMethodSpec"
-    (bicVal verifyLLVM)
+    (bicVal llvm_verify)
     [ "Verify an LLVM function against a specification. The first two"
     , "arguments are the same as for 'llvm_extract' and 'llvm_symexec'."
     , "The list of LLVMMethodSpec values in the third argument makes it"
@@ -1351,12 +1351,12 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_spec_solvers"  "LLVMMethodSpec -> [String]"
-    (\_ _ -> toValue llvmSpecSolvers)
+    (\_ _ -> toValue llvm_spec_solvers)
     [ "Extract a list of all the solvers used when verifying the given LLVM method spec."
     ]
-  
+
   , prim "llvm_spec_size"  "LLVMMethodSpec -> Int"
-    (\_ _ -> toValue llvmSpecSize)
+    (\_ _ -> toValue llvm_spec_size)
     [ "Return a count of the combined size of all verification goals proved as part of the given method spec."
     ]
 
