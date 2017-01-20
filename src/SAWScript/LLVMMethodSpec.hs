@@ -461,8 +461,6 @@ createLogicValue cb sbe sc _expr ps (PtrType (MemType mtp)) Nothing = liftIO $ d
       return (addr, ps')
 createLogicValue _ _ _ _ _ (PtrType ty) Nothing =
   fail $ "Pointer to weird type: " ++ show (ppSymType ty)
-createLogicValue _ _ _ _ _ (StructType _) Nothing =
-  fail "Non-pointer struct variables not supported."
 createLogicValue cb _ sc expr ps mtp mrhs = do
   mbltp <- liftIO $ TC.logicTypeOfActual (cbDataLayout cb) sc mtp
   -- Get value of rhs.

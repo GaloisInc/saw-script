@@ -54,6 +54,7 @@ import Control.Applicative
 #endif
 -- import Data.Set (Set)
 import Data.Functor.Identity
+import qualified Data.Vector as Vector (toList)
 import Text.Parsec as P
 import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>))
 import Text.Read
@@ -326,6 +327,12 @@ logicTypeOfActual dl sc (LSS.PtrType _) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral (LSS.ptrBitwidth dl))
   Just <$> scVecType sc lTm bType
+logicTypeOfActual dl sc (LSS.StructType si) = do
+  let actuals = map LSS.fiType (Vector.toList (LSS.siFields si))
+  melTyps <- mapM (logicTypeOfActual dl sc) actuals
+  case sequence melTyps of
+    Just elTyps -> Just <$> scTupleType sc elTyps
+    Nothing -> return Nothing
 logicTypeOfActual _ _ _ = return Nothing
 
 -- | Returns Cryptol type of actual type if it is an array or primitive type.
@@ -335,6 +342,10 @@ cryptolTypeOfActual (LSS.IntType w) =
 cryptolTypeOfActual (LSS.ArrayType n ty) = do
   elty <- cryptolTypeOfActual ty
   return $ Cryptol.tSeq (Cryptol.tNum n) elty
+cryptolTypeOfActual (LSS.StructType si) = do
+  let actuals = map LSS.fiType (Vector.toList (LSS.siFields si))
+  eltys <- mapM cryptolTypeOfActual actuals
+  return $ Cryptol.tTuple eltys
 cryptolTypeOfActual _ = Nothing
 
 ppActualType :: LLVMActualType -> Doc
