@@ -135,7 +135,7 @@ verifyObligations cc mspec assumes asserts = do
   goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
   --let prf = satZ3 -- FIXME
   let prf = satABC
-  let nm  = show (L.ppSymbol (L.defName (csDefine mspec)))
+  let nm  = show (LSS.ppSymbol (L.defName (csDefine mspec)))
   r      <- evalStateT (prf sc) (startProof (ProofGoal Universal nm goal'))
   case r of
     Unsat _stats -> do
