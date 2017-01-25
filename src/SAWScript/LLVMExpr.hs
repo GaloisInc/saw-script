@@ -29,6 +29,7 @@ module SAWScript.LLVMExpr
   , updateLLVMExprType
   , isPtrLLVMExpr
   , isArgLLVMExpr
+  , containsReturn
     -- * Logic expressions
   , LogicExpr(..)
   , logicExprLLVMExprs
@@ -53,6 +54,7 @@ import Control.Applicative
 #endif
 -- import Data.Set (Set)
 import Data.Functor.Identity
+import qualified Data.Vector as Vector (toList)
 import Text.Parsec as P
 import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>))
 import Text.Read
@@ -253,6 +255,16 @@ isArgLLVMExpr :: LLVMExpr -> Bool
 isArgLLVMExpr (CC.Term (Arg _ _ _)) = True
 isArgLLVMExpr _ = False
 
+containsReturn :: LLVMExpr -> Bool
+containsReturn (CC.Term e) =
+  case e of
+    Arg _ _ _ -> False
+    Global _ _ -> False
+    Deref pe _ -> containsReturn pe
+    StructField pe _ _ _ -> containsReturn pe
+    StructDirectField pe _ _ _ -> containsReturn pe
+    ReturnValue _ -> True
+
 -- LogicExpr {{{1
 
 data LogicExpr =
@@ -315,6 +327,12 @@ logicTypeOfActual dl sc (LSS.PtrType _) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral (LSS.ptrBitwidth dl))
   Just <$> scVecType sc lTm bType
+logicTypeOfActual dl sc (LSS.StructType si) = do
+  let actuals = map LSS.fiType (Vector.toList (LSS.siFields si))
+  melTyps <- mapM (logicTypeOfActual dl sc) actuals
+  case sequence melTyps of
+    Just elTyps -> Just <$> scTupleType sc elTyps
+    Nothing -> return Nothing
 logicTypeOfActual _ _ _ = return Nothing
 
 -- | Returns Cryptol type of actual type if it is an array or primitive type.
@@ -324,6 +342,10 @@ cryptolTypeOfActual (LSS.IntType w) =
 cryptolTypeOfActual (LSS.ArrayType n ty) = do
   elty <- cryptolTypeOfActual ty
   return $ Cryptol.tSeq (Cryptol.tNum n) elty
+cryptolTypeOfActual (LSS.StructType si) = do
+  let actuals = map LSS.fiType (Vector.toList (LSS.siFields si))
+  eltys <- mapM cryptolTypeOfActual actuals
+  return $ Cryptol.tTuple eltys
 cryptolTypeOfActual _ = Nothing
 
 ppActualType :: LLVMActualType -> Doc

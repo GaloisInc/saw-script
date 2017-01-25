@@ -9,6 +9,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module           : $Header$
@@ -194,6 +195,7 @@ data OverrideError
    | FalseAssertion Pos
    | AliasingInputs !TC.LLVMExpr !TC.LLVMExpr
    | SimException String
+   | Misc String
    | Abort
    deriving (Show)
 
@@ -205,6 +207,7 @@ ppOverrideError (AliasingInputs x y) =
  "The expressions " ++ show (TC.ppLLVMExpr x) ++ " and " ++ show (TC.ppLLVMExpr y)
     ++ " point to the same memory location, but are not allowed to alias each other."
 ppOverrideError (SimException s)     = "Simulation exception: " ++ s ++ "."
+ppOverrideError (Misc s)             = "Other error: " ++ s ++ "."
 ppOverrideError Abort                = "Path was aborted."
 
 data OverrideResult
@@ -240,6 +243,25 @@ ocEval fn m = do
     Left expr -> ocError $ UndefinedExpr expr
     Right v   -> m v
 
+ocSetExprValue :: (MonadIO m, Functor m) =>
+                  TC.LLVMExpr
+               -> SpecLLVMValue
+               -> OverrideComputation m ()
+ocSetExprValue expr@(CC.Term app) value = do
+  case app of
+    TC.Arg _ _ _ ->
+      ocError $ Misc "Can't assign to argument in override."
+    TC.ReturnValue _ ->
+      modify $ \ocs -> ocs { ocsReturnValue = Just value }
+    _ -> do
+      ec <- gets ocsEvalContext
+      mrv <- gets ocsReturnValue
+      ps <- gets ocsResultState
+      ps' <- lift $ lift $ do
+        addr <- readLLVMTermAddrPS ps mrv (ecArgs ec) expr
+        storePathState addr (TC.lssTypeOfLLVMExpr expr) value ps
+      ocModifyResultState $ const $ return ps'
+
 ocModifyResultStateIO :: (MonadIO m, Functor m) =>
                          (SpecPathState -> IO SpecPathState)
                       -> OverrideComputation m ()
@@ -263,6 +285,7 @@ ocAssert p _nm x = do
   sbe <- (ecBackend . ocsEvalContext) <$> get
   sc <- gets (ecContext . ocsEvalContext)
   opts <- gets (ecOpts . ocsEvalContext)
+  -- TODO: check statisfiability in context of current assumptions and assertions
   x' <- liftIO $ scWhnf sc x
   case asBool x' of
     Just True -> return ()
@@ -277,21 +300,23 @@ ocAssert p _nm x = do
 
 ocStep :: (MonadIO m, Functor m) =>
           BehaviorCommand -> OverrideComputation m ()
-ocStep (Ensure _pos lhsExpr rhsExpr) = do
-  ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef ->
-    ocEval (evalMixedExpr rhsExpr) $ \value -> do
-      let tp = TC.lssTypeOfLLVMExpr lhsExpr
-      ocModifyResultState $
-        storePathState lhsRef tp value
+ocStep (Ensure _ _pos lhsExpr rhsExpr) = do
+  ocEval (evalMixedExpr rhsExpr) $ \value -> do
+    ocSetExprValue lhsExpr value
 ocStep (Modify lhsExpr tp) = do
   sc <- gets (ecContext . ocsEvalContext)
   dl <- gets (ecDataLayout . ocsEvalContext)
-  ocEval (evalLLVMRefExpr lhsExpr) $ \lhsRef -> do
-    -- TODO: replace this pattern match with a check and possible error during setup
-    Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
-    value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
-    ocModifyResultState $
-      storePathState lhsRef tp value
+  -- TODO: replace this pattern match with a check and possible error during setup
+  Just lty <- liftIO $ TC.logicTypeOfActual dl sc tp
+  value <- liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr lhsExpr)) lty
+  ocSetExprValue lhsExpr value
+ocStep (Allocate lhsExpr (PtrType (MemType tp))) = do
+  ps <- gets ocsResultState
+  (ptr, ps') <- lift $ lift $ allocPathState tp ps
+  ocModifyResultState (const (return ps'))
+  ocSetExprValue lhsExpr ptr
+ocStep (Allocate _ tp) = do
+  ocError $ Misc $ show $ "Unsupported allocation type:" <+> ppMemType tp
 ocStep (Return expr) = do
   ocEval (evalMixedExpr expr) $ \val ->
     modify $ \ocs -> ocs { ocsReturnValue = Just val }
@@ -418,7 +443,7 @@ createLogicValue :: (MonadIO m, Monad m, Functor m) =>
                  -> Maybe TC.LogicExpr
                  -> Simulator SpecBackend m (SpecLLVMValue, SpecPathState)
 createLogicValue _ _ sc _ ps (PtrType _) (Just le) = do
-  v <- useLogicExprPS sc ps [] le
+  v <- useLogicExprPS sc ps Nothing [] le -- TODO: mrv, args?
   return (v, ps)
 createLogicValue _ _ _ _ _ (StructType _) (Just _) =
   fail "Struct variables cannot be given initial values as a whole."
@@ -436,13 +461,11 @@ createLogicValue cb sbe sc _expr ps (PtrType (MemType mtp)) Nothing = liftIO $ d
       return (addr, ps')
 createLogicValue _ _ _ _ _ (PtrType ty) Nothing =
   fail $ "Pointer to weird type: " ++ show (ppSymType ty)
-createLogicValue _ _ _ _ _ (StructType _) Nothing =
-  fail "Non-pointer struct variables not supported."
 createLogicValue cb _ sc expr ps mtp mrhs = do
   mbltp <- liftIO $ TC.logicTypeOfActual (cbDataLayout cb) sc mtp
   -- Get value of rhs.
   tm <- case (mrhs, mbltp) of
-          (Just v, _) -> useLogicExprPS sc ps [] v -- TODO: args
+          (Just v, _) -> useLogicExprPS sc ps Nothing [] v -- TODO: mrv, args?
           (Nothing, Just tp) -> liftIO $ scFreshGlobal sc (show (TC.ppLLVMExpr expr)) tp
           (Nothing, Nothing) -> fail "Can't calculate type for fresh input."
   return (tm, ps)
@@ -453,21 +476,23 @@ initializeVerification' :: (MonadIO m, Monad m, Functor m) =>
                         -> LLVMMethodSpecIR
                         -> Simulator SpecBackend m
                            (SpecPathState,
-                            [(MemType, SpecLLVMValue)],
-                            [(MemType, SpecLLVMValue)])
+                            [(TC.LLVMExpr, (MemType, SpecLLVMValue))],
+                            [(TC.LLVMExpr, (MemType, SpecLLVMValue))])
 initializeVerification' sc file ir = do
   let bs = specBehavior ir
       fn = specFunction ir
       cb = specCodebase ir
-      isArgAssgn (CC.Term (TC.Arg _ _ _), _) = True
-      isArgAssgn _ = False
+      isArgAssgn (e, _) = TC.isArgLLVMExpr e
       isPtrAssgn (e, _) = TC.isPtrLLVMExpr e
+      isRetAssgn (e, _) = TC.containsReturn e
       assignments = map getAssign $ Map.toList (bsExprDecls bs)
       getAssign (e, (_, v)) = (e, v)
       argAssignments = filter isArgAssgn assignments
-      ptrAssignments = filter (\a -> isPtrAssgn a && not (isArgAssgn a)) assignments
+      ptrAssignments = filter (\a -> isPtrAssgn a &&
+                                     not (isArgAssgn a) &&
+                                     not (isRetAssgn a)) assignments
       otherAssignments =
-        filter (\a -> not (isArgAssgn a || isPtrAssgn a)) assignments
+        filter (\a -> not (isArgAssgn a || isPtrAssgn a || isRetAssgn a)) assignments
       setPS ps = do
         Just cs <- use ctrlStk
         ctrlStk ?= (cs & currentPath .~ ps)
@@ -484,7 +509,7 @@ initializeVerification' sc file ir = do
     case (expr, mle) of
       (CC.Term (TC.Arg _ _ _), Just le) -> do
         ps <- fromMaybe (error "initializeVerification: arg with value") <$> getPath
-        tm <- useLogicExprPS sc ps [] le -- TODO: args
+        tm <- useLogicExprPS sc ps Nothing [] le
         return (Just (expr, tm))
       (CC.Term (TC.Arg _ _ ty), Nothing) -> do
         ps <- fromMaybe (error "initializeVerification: arg w/o value") <$> getPath
@@ -497,26 +522,27 @@ initializeVerification' sc file ir = do
 
   let args = flip map argAssignments'' $ \(expr, mle) ->
                case (expr, mle) of
-                 (CC.Term (TC.Arg i _ ty), tm) ->
-                   Just (i, (ty, tm))
+                 (CC.Term (TC.Arg _ _ ty), tm) ->
+                   Just (expr, (ty, tm))
                  _ -> Nothing
 
   --gm <- use globalTerms
   let rreg =  (,Ident "__sawscript_result") <$> sdRetType fnDef
-      cmpFst (i, _) (i', _) =
+      cmpFst (CC.Term (TC.Arg i _ _), _) (CC.Term (TC.Arg i' _ _), _) =
         case i `compare` i' of
           EQ -> error $ "Argument " ++ show i ++ " declared multiple times."
           r -> r
-  let argVals = (map snd (sortBy cmpFst (catMaybes args)))
-  callDefine' False fn rreg argVals
+      cmpFst _ _ = error "Comparing non-arguments?"
+  let argVals = sortBy cmpFst (catMaybes args)
+  callDefine' False fn rreg (map snd argVals)
 
   let doAssign (expr, mle) = do
         let Just (ty, _) = Map.lookup expr (bsExprDecls bs)
         ps <- fromMaybe (error "initializeVerification") <$> getPath
         (v, ps') <- createLogicValue cb sbe sc expr ps ty mle
         setPS ps'
-        writeLLVMTerm (map snd argVals) (expr, v, 1)
-        return (ty, v)
+        writeLLVMTerm Nothing (map (snd . snd) argVals) (expr, v, 1)
+        return (expr, (ty, v))
 
   -- Allocate space for all pointers that aren't directly parameters.
   otherPtrs <- forM ptrAssignments doAssign
@@ -530,33 +556,60 @@ initializeVerification' sc file ir = do
 
   return (ps, otherPtrs, argVals)
 
+nonNullAssumption :: DataLayout -> SharedContext -> SpecLLVMValue -> IO SpecLLVMValue
+nonNullAssumption dl sc addr = do
+  let aw = fromIntegral (ptrBitwidth dl)
+  nullPtr <- scBvConst sc aw 0
+  awTerm <- scNat sc aw
+  nonNullTerm <- scNot sc =<< scBvEq sc awTerm addr nullPtr
+  return nonNullTerm
+
 checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
                    SharedContext
                 -> LLVMMethodSpecIR
                 -> SpecPathState
-                -> [(MemType, SpecLLVMValue)]
-                -> [(MemType, SpecLLVMValue)]
+                -> [(TC.LLVMExpr, (MemType, SpecLLVMValue))]
+                -> [(TC.LLVMExpr, (MemType, SpecLLVMValue))]
                 -> Simulator SpecBackend m (PathVC ())
 checkFinalState sc ms initPS otherPtrs args = do
   let cmds = bsCommands (specBehavior ms)
       cb = specCodebase ms
       sbe = specBackend ms
       dl = cbDataLayout cb
-      argVals = map snd args
+      argVals = map (snd . snd) args
+      initMem = initPS ^. pathMem
   mrv <- getProgramReturnValue
-  directAssumptions <- evalAssumptions sc initPS argVals (specAssumptions ms)
-  let ptrs = otherPtrs ++ [ (ty, tm) | (ty, tm) <- args, TC.isActualPtr ty ]
-  ptrAssumptions <- forM ptrs $ \(ty, ptr) -> liftIO $ do
-    (minBoundTerm, maxBoundTerm) <- addrBounds sc sbe dl ptr (MemType ty)
-    return [minBoundTerm, maxBoundTerm]
-  assumptions <- liftIO $ foldM (scAnd sc) directAssumptions (concat ptrAssumptions)
+  finPS <- fromMaybe (error "no path in checkFinalState") <$> getPath
+  let finMem = finPS ^. pathMem
+  directAssumptions <- evalAssumptions sc initPS mrv argVals (specAssumptions ms)
+  let ptrs = otherPtrs ++ [ a | a@(_, (ty, _)) <- args, TC.isActualPtr ty ]
+  ptrAssumptions <- forM ptrs $ \(expr, (ty, ptr)) -> liftIO $ do
+    case specGetLogicAssignment ms expr of
+      Just _ -> return []
+      Nothing -> do
+        (minBoundTerm, maxBoundTerm) <- addrBounds sc sbe dl ptr (MemType ty)
+        return [minBoundTerm, maxBoundTerm]
+  allocAssumptions <- forM [ expr | Allocate expr _ <- cmds ] $ \expr -> do
+    addr <- readLLVMTermPS finPS mrv argVals expr 1
+    assm <- liftIO $ nonNullAssumption dl sc addr
+    return [assm]
+  allocAssertions <- forM [ (expr, mty) | Allocate expr mty <- cmds ] $ \(expr, mty) -> do
+    addr <- readLLVMTermPS finPS mrv argVals expr 1
+    let sz = memTypeSize dl mty
+    szTm <- liftIO $ scBvConst sc (fromIntegral (ptrBitwidth dl)) (fromIntegral sz)
+    initCond <- liftIO $ sbeRunIO sbe $ isAllocated sbe initMem addr szTm
+    finCond <- liftIO $ sbeRunIO sbe $ isAllocated sbe finMem addr szTm
+    initCond' <- liftIO $ scNot sc initCond
+    liftIO $ scAnd sc initCond' finCond
+  let allPtrAssumptions = concat (ptrAssumptions ++ allocAssumptions)
+  assumptions <- liftIO $ foldM (scAnd sc) directAssumptions allPtrAssumptions
   msrv <- case [ e | Return e <- cmds ] of
-            [e] -> Just <$> readLLVMMixedExprPS sc initPS argVals e
+            [e] -> Just <$> readLLVMMixedExprPS sc initPS Nothing argVals e
             [] -> return Nothing
             _  -> fail "more than one return value specified (multiple 'llvm_return's ?)"
-  expectedValues <- forM [ (le, me) | Ensure _ le me <- cmds ] $ \(le, me) -> do
-    lhs <- readLLVMTermAddrPS initPS argVals le
-    rhs <- readLLVMMixedExprPS sc initPS argVals me
+  expectedValues <- forM [ (post, le, me) | Ensure post _ le me <- cmds ] $ \(post, le, me) -> do
+    lhs <- readLLVMTermAddrPS (if post then finPS else initPS) mrv argVals le
+    rhs <- readLLVMMixedExprPS sc initPS mrv argVals me
     let Just (tp, _) = Map.lookup le (bsExprDecls (specBehavior ms))
     return (le, lhs, tp, rhs)
   let initState  =
@@ -566,6 +619,7 @@ checkFinalState sc ms initPS otherPtrs args = do
                , pvcStaticErrors = []
                , pvcChecks = []
                }
+      allocReturn = not (null [ () | Allocate (CC.Term (TC.ReturnValue _)) _ <- cmds ])
   flip execStateT initState $ do
     case (mrv, msrv, [ () | ReturnArbitrary _ <- cmds ]) of
       (_, _, _ : _ : _) -> fail "More than one `llvm_return_arbitrary` statement."
@@ -573,10 +627,13 @@ checkFinalState sc ms initPS otherPtrs args = do
       (Just rv, Just srv, []) -> pvcgAssertEq "return value" rv srv
       (Just _, Just _, [_]) -> fail "Both `llvm_return` and `llvm_return_arbitrary` specified."
       (Just _, Nothing, [_]) -> return () -- Arbitrary return value
-      (Just _, Nothing, []) -> fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
+      (Just _, Nothing, []) ->
+        unless allocReturn $
+          fail "simulator returned value when not expected (add an 'llvm_return' statement?)"
       (Nothing, Just _, _) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
       (Nothing, _, [_]) -> fail "simulator did not return value when return value expected (remove an 'llvm_return' statement?)"
 
+    forM_ allocAssertions $ pvcgAssert "allocation assertion"
     -- Check that expected state modifications have occurred.
     -- TODO: extend this to check that nothing else has changed.
     forM_ expectedValues $ \(e, lhs, tp, rhs) -> do
@@ -646,32 +703,37 @@ type Verbosity = Int
 
 readLLVMMixedExprPS :: (Functor m, Monad m, MonadIO m) =>
                        SharedContext
-                    -> SpecPathState -> [SpecLLVMValue] -> TC.MixedExpr
+                    -> SpecPathState
+                    -> Maybe SpecLLVMValue
+                    -> [SpecLLVMValue]
+                    -> TC.MixedExpr
                     -> Simulator SpecBackend m SpecLLVMValue
-readLLVMMixedExprPS sc ps args (TC.LogicE le) = do
-  useLogicExprPS sc ps args le
-readLLVMMixedExprPS _sc ps args (TC.LLVME le) =
-  readLLVMTermPS ps args le 1
+readLLVMMixedExprPS sc ps mrv args (TC.LogicE le) = do
+  useLogicExprPS sc ps mrv args le
+readLLVMMixedExprPS _sc ps mrv args (TC.LLVME le) =
+  readLLVMTermPS ps mrv args le 1
 
 useLogicExprPS :: (Functor m, Monad m, MonadIO m) =>
                   SharedContext
                -> SpecPathState
+               -> Maybe SpecLLVMValue
                -> [SpecLLVMValue]
                -> TC.LogicExpr
                -> Simulator SpecBackend m SpecLLVMValue
-useLogicExprPS sc ps args initExpr = do
+useLogicExprPS sc ps mrv args initExpr = do
   leArgs <- forM (TC.logicExprLLVMExprs initExpr) $ \expr ->
-          readLLVMTermPS ps args expr 1
+          readLLVMTermPS ps mrv args expr 1
   liftIO $ TC.useLogicExpr sc initExpr leArgs
 
 evalAssumptions :: (Functor m, Monad m, MonadIO m) =>
                    SharedContext
                 -> SpecPathState
+                -> Maybe SpecLLVMValue
                 -> [SpecLLVMValue]
                 -> [TC.LogicExpr]
                 -> Simulator SpecBackend m Term
-evalAssumptions sc ps args as = do
-  assumptionList <- mapM (useLogicExprPS sc ps args) as
+evalAssumptions sc ps mrv args as = do
+  assumptionList <- mapM (useLogicExprPS sc ps mrv args) as
   liftIO $ do
     true <- scBool sc True
     foldM (scAnd sc) true assumptionList

@@ -27,6 +27,7 @@ module SAWScript.LLVMMethodSpecIR
   , specAddVarDecl
   , specAddLogicAssignment
   , specAddAssumption
+  , specGetLogicAssignment
   , specLLVMExprNames
   , initLLVMMethodSpec
     -- * Method behavior.
@@ -62,10 +63,13 @@ import SAWScript.Utils
 -- used.
 data BehaviorCommand
      -- | Assign an LLVM variables the value given by the mixed expression.
-   = Ensure Pos LLVMExpr MixedExpr
+   = Ensure Bool Pos LLVMExpr MixedExpr
      -- | Modify an LLVM variables to an arbitrary expression.
      -- integral type or array.
    | Modify LLVMExpr LLVMActualType
+     -- | Allocate a new memory region of the given type and store it in
+     -- the location named.
+   | Allocate LLVMExpr LLVMActualType
      -- | Specifies return value for a function.
    | Return MixedExpr
      -- | Specifies an arbitrary return value for a function.
@@ -176,6 +180,13 @@ specAddLogicAssignment _pos expr t ms = ms { specBehavior = bs' }
                  Nothing ->
                    error $ "assignment for undeclared variable " ++ show expr
         bs' = bs { bsExprDecls = eds' }
+
+specGetLogicAssignment :: LLVMMethodSpecIR -> LLVMExpr -> Maybe LogicExpr
+specGetLogicAssignment ms expr =
+  case Map.lookup expr (bsExprDecls (specBehavior ms)) of
+    Just (_, Nothing) -> Nothing
+    Just (_, t) -> t
+    Nothing -> Nothing
 
 specAddBehaviorCommand :: BehaviorCommand
                        -> LLVMMethodSpecIR -> LLVMMethodSpecIR
