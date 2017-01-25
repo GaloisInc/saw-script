@@ -12,9 +12,9 @@ packages:
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
   - deps/llvm-verifier/
-  - ../crucible-public/crucible/
-  - ../crucible-public/crucible-saw/
-  - ../crucible-public/galois-matlab/
+  - deps/crucible/crucible/
+  - deps/crucible/crucible-saw/
+  - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
   - .
 extra-deps:
