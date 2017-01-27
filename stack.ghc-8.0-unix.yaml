@@ -14,8 +14,9 @@ packages:
   - deps/llvm-verifier/
   - .
 extra-deps:
+  - QuickCheck-2.9.2
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
   - monad-supply-0.6
-  - sbv-5.13
-resolver: lts-7.1
+  - sbv-5.14
+resolver: lts-7.17
