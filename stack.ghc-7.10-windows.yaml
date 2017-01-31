@@ -18,7 +18,8 @@ packages:
   - deps/llvm-verifier/
   - .
 extra-deps:
-  - CrackNum-1.9
+  - crackNum-1.9
+  - FloatingHex-0.4
   - QuickCheck-2.9.2
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
