@@ -4,7 +4,7 @@ set -v
 set -e
 
 TESTABLE="saw-core jvm-verifier llvm-verifier"
-PATH=$PATH:`stack path --local-bin`
+PATH=$PATH:`stack path --local-bin-path`
 
 dotests="false"
 dopull="false"
