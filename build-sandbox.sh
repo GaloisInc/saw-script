@@ -41,13 +41,24 @@ if [ ! -e ./deps -o "${dopull}" == "true" ] ; then
   ./get-dependencies.sh
 fi
 
+LOCALBINPATH=$(stack path --local-bin-path | tr -d '\r\n')
 if [ "${OS}" == "Windows_NT" ] ; then
     HERE=$(cygpath -w $(pwd))
+    PATH=$PATH:$(cygpath -u -a $LOCALBINPATH)
 else
     HERE=$(pwd)
+    PATH=$PATH:$LOCALBINPATH
 fi
 
 stack="stack $jobs"
+
+${stack} install alex
+${stack} install happy
+${stack} install c2hs
+
+which alex
+which happy
+which c2hs
 
 ./mk-gitrev.sh
 

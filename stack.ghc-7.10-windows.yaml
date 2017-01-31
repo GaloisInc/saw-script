@@ -22,8 +22,11 @@ packages:
   - deps/parameterized-utils/
   - .
 extra-deps:
+  - crackNum-1.9
+  - FloatingHex-0.4
+  - QuickCheck-2.9.2
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
   - monad-supply-0.6
-  - sbv-5.13
-resolver: lts-6.18
+  - sbv-5.15
+resolver: lts-6.28
