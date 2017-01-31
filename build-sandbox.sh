@@ -41,7 +41,7 @@ if [ ! -e ./deps -o "${dopull}" == "true" ] ; then
   ./get-dependencies.sh
 fi
 
-LOCALBINPATH=$(stack path --local-bin-path)
+LOCALBINPATH=$(stack path --local-bin-path | tr -d '\r\n')
 if [ "${OS}" == "Windows_NT" ] ; then
     HERE=$(cygpath -w $(pwd))
     PATH=$PATH:$(cygpath -u -a $LOCALBINPATH)
