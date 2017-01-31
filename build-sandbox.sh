@@ -4,6 +4,7 @@ set -v
 set -e
 
 TESTABLE="saw-core jvm-verifier llvm-verifier"
+PATH=$PATH:`stack path --local-bin`
 
 dotests="false"
 dopull="false"
@@ -36,6 +37,12 @@ if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
     echo "    ln -s stack.<ghc version and os>.yaml stack.yaml"
     exit 1
 fi
+
+stack install alex happy c2hs
+
+which alex
+which happy
+which c2hs
 
 if [ ! -e ./deps -o "${dopull}" == "true" ] ; then
   ./get-dependencies.sh
