@@ -51,7 +51,9 @@ PATH=$PATH:`stack path --local-bin-path`
 
 stack="stack $jobs"
 
-${stack} install alex happy c2hs
+${stack} install alex
+${stack} install happy
+${stack} install c2hs
 
 which alex
 which happy
