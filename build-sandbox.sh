@@ -38,12 +38,6 @@ if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
     exit 1
 fi
 
-stack install alex happy c2hs
-
-which alex
-which happy
-which c2hs
-
 if [ ! -e ./deps -o "${dopull}" == "true" ] ; then
   ./get-dependencies.sh
 fi
@@ -55,6 +49,12 @@ else
 fi
 
 stack="stack $jobs"
+
+${stack} install alex happy c2hs
+
+which alex
+which happy
+which c2hs
 
 ./mk-gitrev.sh
 
