@@ -41,13 +41,14 @@ if [ ! -e ./deps -o "${dopull}" == "true" ] ; then
   ./get-dependencies.sh
 fi
 
+LOCALBINPATH=$(stack path --local-bin-path)
 if [ "${OS}" == "Windows_NT" ] ; then
     HERE=$(cygpath -w $(pwd))
+    PATH=$PATH:$(cygpath -u -a $LOCALBINPATH)
 else
     HERE=$(pwd)
+    PATH=$PATH:$LOCALBINPATH
 fi
-
-PATH=$PATH:`stack path --local-bin-path`
 
 stack="stack $jobs"
 
