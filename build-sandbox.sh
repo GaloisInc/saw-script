@@ -4,7 +4,6 @@ set -v
 set -e
 
 TESTABLE="saw-core jvm-verifier llvm-verifier"
-PATH=$PATH:`stack path --local-bin-path`
 
 dotests="false"
 dopull="false"
@@ -47,6 +46,8 @@ if [ "${OS}" == "Windows_NT" ] ; then
 else
     HERE=$(pwd)
 fi
+
+PATH=$PATH:`stack path --local-bin-path`
 
 stack="stack $jobs"
 
