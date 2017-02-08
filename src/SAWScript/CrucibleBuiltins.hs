@@ -91,6 +91,10 @@ abortTree e s = do
 errorHandler :: Crucible.ErrorHandler Crucible.SimContext sym rtp
 errorHandler = Crucible.EH abortTree
 
+ppAbortedResult :: Crucible.AbortedResult (Crucible.MSS_State Sym) -> String
+ppAbortedResult (Crucible.AbortedExec err _) = show err
+ppAbortedResult (Crucible.AbortedBranch _ _ _) = "Aborted branch"
+
 verifyCrucible
            :: BuiltinContext
            -> Options
@@ -408,7 +412,10 @@ verifySimulate cc mspec _prestate args _assumes _lemmas = do
                    (Crucible.regType  (gp^.Crucible.gpValue))
                    (Crucible.regValue (gp^.Crucible.gpValue))
 
-          Crucible.AbortedResult _ _ -> fail "Symbolic execution failed on all paths!"
+          Crucible.AbortedResult _ ar ->
+            fail $ unlines [ "Symbolic execution failed."
+                           , ppAbortedResult ar
+                           ]
 
  where
   prepareArgs :: Ctx.Assignment Crucible.TypeRepr xs
@@ -564,7 +571,10 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
         t' <- scAbstractExts sc (toList ecs) t
         tt <- mkTypedTerm sc t'
         return tt
-    Crucible.AbortedResult _ _ -> fail "Symbolic execution failed on all paths!"
+    Crucible.AbortedResult _ ar ->
+      fail $ unlines [ "Symbolic execution failed."
+                     , ppAbortedResult ar
+                     ]
 
 
 extract_crucible_llvm :: BuiltinContext -> Options -> String -> TopLevel TypedTerm
