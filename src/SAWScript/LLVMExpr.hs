@@ -104,12 +104,7 @@ parseProtoLLVMExpr :: String
                    -> Either ParseError ProtoLLVMExpr
 parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
   where
-    parseExpr = P.choice
-                [ parseDerefField
-                , parseDirectField
-                , parseDeref
-                , parseAExpr
-                ]
+    parseExpr = parseDeref <|> parseFieldsExpr
     parseAExpr = P.choice
                  [ parseReturn
                  , parseArgs
@@ -125,7 +120,7 @@ parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
     parseReturn :: Parser ProtoLLVMExpr
     parseReturn = try (P.string "return") >> return PReturn
     parseDeref :: Parser ProtoLLVMExpr
-    parseDeref = PDeref <$> (try (P.string "*") *> parseAExpr)
+    parseDeref = PDeref <$> (try (P.string "*") *> parseExpr)
     parseArgs :: Parser ProtoLLVMExpr
     parseArgs = do
       _ <- try (P.string "args[")
@@ -136,20 +131,23 @@ parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
                unexpected $ "Using `args` with non-numeric parameter: " ++ ns
       _ <- P.string "]"
       return e
-    parseDerefField :: Parser ProtoLLVMExpr
+    parseFieldsExpr :: Parser ProtoLLVMExpr
+    parseFieldsExpr = do
+      e <- parseAExpr
+      fs <- many (parseDerefField <|> parseDirectField)
+      return (foldl (flip ($)) e fs)
+    parseDerefField :: Parser (ProtoLLVMExpr -> ProtoLLVMExpr)
     parseDerefField = do
-      re <- try (parseAExpr <* P.string "->")
-      ns <- many1 digit
+      ns <- try (P.string "->") *> many1 digit
       case readMaybe ns of
-        Just (n :: Int) -> return (PField n re)
+        Just (n :: Int) -> return (\e -> PField n e)
         Nothing -> unexpected $
           "Attempting to apply -> operation to non-integer field ID: " ++ ns
-    parseDirectField :: Parser ProtoLLVMExpr
+    parseDirectField :: Parser (ProtoLLVMExpr -> ProtoLLVMExpr)
     parseDirectField = do
-      re <- try (parseAExpr <* P.string ".")
-      ns <- many1 digit
+      ns <- try (P.string ".") *> many1 digit
       case readMaybe ns of
-        Just (n :: Int) -> return (PDirectField n re)
+        Just (n :: Int) -> return (\e -> PDirectField n e)
         Nothing -> unexpected $
           "Attempting to apply . operation to non-integer field ID: " ++ ns
 
