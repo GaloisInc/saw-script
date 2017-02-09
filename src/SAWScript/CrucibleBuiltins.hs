@@ -59,6 +59,8 @@ import qualified Data.Parameterized.Context as Ctx
 
 import qualified Verifier.LLVM.Codebase as LSS
 
+import qualified Language.Go.Parser as Go
+
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -789,3 +791,17 @@ crucible_execute_func bic _opt args = do
       return (SetupReturn retTy')
 
     _ -> fail $ unlines ["Function signature not supported:", show def]
+
+load_go_file :: BuiltinContext -> Options -> String -> TopLevel GoPackage
+load_go_file _ _ file = do
+  epkg <- io $ Go.parseFile file
+  case epkg of
+    Left err -> fail $ "Error loading " ++ file ++ ": " ++ err
+    Right pkg -> return pkg
+
+load_go_package :: BuiltinContext -> Options -> String -> TopLevel GoPackage
+load_go_package _ _ dir = do
+  epkg <- io $ Go.parsePackage dir
+  case epkg of
+    Left err -> fail $ "Error loading package from " ++ dir ++ ": " ++ err
+    Right pkg -> return pkg

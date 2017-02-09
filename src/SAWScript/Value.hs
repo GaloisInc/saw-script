@@ -65,6 +65,9 @@ import Cryptol.Utils.PP (pretty)
 import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
+import qualified Language.Go.AST as Go
+import qualified Language.Go.Parser as Go
+
 -- Values ----------------------------------------------------------------------
 
 data Value
@@ -95,6 +98,7 @@ data Value
   | VJavaType JavaType
   | VLLVMType LSS.SymType
   | VCryptolModule CryptolModule
+  | VGoPackage GoPackage
   | VJavaClass JSS.Class
   | VLLVMModule LLVMModule
   | VSatResult SatResult
@@ -102,6 +106,11 @@ data Value
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
+
+type GoPackage = Go.Package Go.ParserAnnotation
+
+showGoPackage :: GoPackage -> String
+showGoPackage _ = "Go package (TODO)"
 
 data LLVMModule =
   LLVMModule
@@ -247,6 +256,7 @@ showsPrecValue opts _p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LSS.ppSymType t))
     VCryptolModule m -> showString (showCryptolModule m)
+    VGoPackage p -> showString (showGoPackage p)
     VLLVMModule m -> showString (showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
@@ -526,7 +536,12 @@ instance FromValue CIR.CrucibleMethodSpecIR where
 
 -----------------------------------------------------------------------------------
 
+instance IsValue GoPackage where
+    toValue m = VGoPackage m
 
+instance FromValue GoPackage where
+    fromValue (VGoPackage m) = m
+    fromValue _ = error "fromValue GoPackage"
 
 instance IsValue (AIGNetwork) where
     toValue t = VAIG t
