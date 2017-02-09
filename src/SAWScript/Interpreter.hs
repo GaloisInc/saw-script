@@ -1547,6 +1547,16 @@ primitives = Map.fromList
     "Term -> SetupValue"
     (pureVal CIR.SetupTerm)
     [ "TODO" ]
+
+  , prim "load_go_file"
+    "String -> TopLevel GoPackage"
+    (bicVal load_go_file)
+    [ "Parse the specified Go source file as a one-file package." ]
+
+  , prim "load_go_package"
+    "String -> TopLevel GoPackage"
+    (bicVal load_go_package)
+    [ "Parse the Go package contained within the given directory." ]
   ]
 
   where

@@ -20,8 +20,10 @@ packages:
   - deps/crucible/crucible-saw/
   - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
+  - deps/golang
   - .
 extra-deps:
+  - alex-tools-0.1.1.0
   - crackNum-1.9
   - FloatingHex-0.4
   - QuickCheck-2.9.2
