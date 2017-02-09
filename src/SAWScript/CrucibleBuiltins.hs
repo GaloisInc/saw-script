@@ -32,6 +32,8 @@ import qualified Data.Vector as V
 
 import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
+import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+
 
 import qualified Data.Parameterized.Nonce as Crucible
 import qualified Lang.Crucible.Config as Crucible
@@ -91,9 +93,14 @@ abortTree e s = do
 errorHandler :: Crucible.ErrorHandler Crucible.SimContext sym rtp
 errorHandler = Crucible.EH abortTree
 
-ppAbortedResult :: Crucible.AbortedResult (Crucible.MSS_State Sym) -> String
-ppAbortedResult (Crucible.AbortedExec err _) = show err
-ppAbortedResult (Crucible.AbortedBranch _ _ _) = "Aborted branch"
+ppAbortedResult :: CrucibleContext
+                -> Crucible.AbortedResult (Crucible.MSS_State Sym)
+                -> IO Doc
+ppAbortedResult cc (Crucible.AbortedExec err gp) = do
+  memDoc <- ppGlobalPair cc gp
+  return (Crucible.ppSimError err <$$> memDoc)
+ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
+    return (text "Aborted branch")
 
 verifyCrucible
            :: BuiltinContext
@@ -372,6 +379,17 @@ withMem cc f = do
       writeIORef (ccGlobals cc) globals'
       return x
 
+ppGlobalPair :: CrucibleContext
+             -> Crucible.GlobalPair (Crucible.MSS_State Sym) a
+             -> IO Doc
+ppGlobalPair cc gp =
+  let memOps = Crucible.memModelOps (ccLLVMContext cc)
+      sym = ccBackend cc
+      globals = gp ^. Crucible.gpGlobals in
+  case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals of
+    Nothing -> return (text "LLVM Memory global variable not initialized")
+    Just mem -> Crucible.ppMem sym mem
+
 verifySimulate :: (?lc :: TyCtx.LLVMContext)
                => CrucibleContext
                -> CrucibleMethodSpecIR
@@ -412,9 +430,10 @@ verifySimulate cc mspec _prestate args _assumes _lemmas = do
                    (Crucible.regType  (gp^.Crucible.gpValue))
                    (Crucible.regValue (gp^.Crucible.gpValue))
 
-          Crucible.AbortedResult _ ar ->
+          Crucible.AbortedResult _ ar -> do
+            resultDoc <- ppAbortedResult cc ar
             fail $ unlines [ "Symbolic execution failed."
-                           , ppAbortedResult ar
+                           , show resultDoc
                            ]
 
  where
@@ -571,9 +590,10 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
         t' <- scAbstractExts sc (toList ecs) t
         tt <- mkTypedTerm sc t'
         return tt
-    Crucible.AbortedResult _ ar ->
+    Crucible.AbortedResult _ ar -> do
+      resultDoc <- ppAbortedResult cc ar
       fail $ unlines [ "Symbolic execution failed."
-                     , ppAbortedResult ar
+                     , show resultDoc
                      ]
 
 
