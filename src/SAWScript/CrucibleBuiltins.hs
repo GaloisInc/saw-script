@@ -314,7 +314,7 @@ resolveSetupVal cc rs tp0 val = case val of
                     let f i = do i_tm <- scNat sc (fromIntegral i)
                                  tm' <- scAt sc sz_tm tp_tm tm i_tm
                                  resolveSAWTerm tp' tm'
-                    Crucible.LLVMValArray tp . V.fromList <$> mapM f [ 0 .. (sz-1) ]
+                    Crucible.LLVMValArray tp' . V.fromList <$> mapM f [ 0 .. (sz-1) ]
 
       Crucible.Struct _flds -> fail "FIXME: resolveSAWTerm for structs"
 
