@@ -1492,7 +1492,7 @@ primitives = Map.fromList
   , prim "extract_crucible_llvm"  "String -> TopLevel Term"
     (bicVal extract_crucible_llvm)
     [ "TODO"
-    ] 
+    ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
@@ -1516,7 +1516,17 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_verify"
     "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
-    (bicVal verifyCrucible)    
+    (bicVal verifyCrucible)
+    [ "TODO" ]
+
+  , prim "crucible_array"
+    "[SetupValue] -> SetupValue"
+    (pureVal CIR.SetupArray)
+    [ "TODO" ]
+
+  , prim "crucible_struct"
+    "[SetupValue] -> SetupValue"
+    (pureVal CIR.SetupStruct)
     [ "TODO" ]
 
   , prim "crucible_term"

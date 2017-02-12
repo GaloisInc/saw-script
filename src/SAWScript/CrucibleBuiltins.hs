@@ -282,14 +282,25 @@ resolveSetupVal :: CrucibleContext
 resolveSetupVal cc rs tp0 val = case val of
     SetupReturn _ ->
       case resolvedRetVal rs of
-        Nothing -> fail "return value not avaliable"
+        Nothing -> fail "return value not available"
         Just v  -> return v
     SetupVar i
       | Just val' <- Map.lookup i (resolvedVarMap rs) -> return val'
       | otherwise -> fail ("Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveSAWTerm tp0 tm
-    SetupStruct _vs -> fail "FIXME resolveSetupVal: SetupStruct"
-    SetupArray _vs  -> fail "FIXME resolveSetupVal: SetupStruct"
+    SetupStruct vs ->
+      case Crucible.typeF tp0 of
+        Crucible.Struct flds -> do
+          let tps = fmap (^. Crucible.fieldVal) flds
+          vals <- V.zipWithM (resolveSetupVal cc rs) tps (V.fromList vs)
+          return $ Crucible.LLVMValStruct (V.zip flds vals)
+        _ -> fail "resolveSetupVal: expected struct type"
+    SetupArray vs ->
+      case Crucible.typeF tp0 of
+        Crucible.Array _sz tp -> do
+          vals <- V.mapM (resolveSetupVal cc rs tp) (V.fromList vs)
+          return $ Crucible.LLVMValArray tp vals
+        _ -> fail "resolveSetupVal: expected array type"
 
  where
  sym = ccBackend cc
