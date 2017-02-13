@@ -40,6 +40,8 @@ data SetupValue where
   SetupTerm   :: Term -> SetupValue
   SetupStruct :: [SetupValue] -> SetupValue
   SetupArray  :: [SetupValue] -> SetupValue
+  SetupNull   :: SetupValue
+  SetupGlobal :: String -> SetupValue
  deriving (Show)
 
 

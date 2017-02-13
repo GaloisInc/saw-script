@@ -1529,6 +1529,16 @@ primitives = Map.fromList
     (pureVal CIR.SetupStruct)
     [ "TODO" ]
 
+  , prim "crucible_null"
+    "SetupValue"
+    (pureVal CIR.SetupNull)
+    [ "TODO" ]
+
+  , prim "crucible_global"
+    "String -> SetupValue"
+    (pureVal CIR.SetupGlobal)
+    [ "TODO" ]
+
   , prim "crucible_term"
     "Term -> SetupValue"
     (funVal1 (return . VCrucibleSetupValue . CIR.SetupTerm))

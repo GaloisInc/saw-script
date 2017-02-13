@@ -279,7 +279,8 @@ resolveSetupVal :: CrucibleContext
                 -> Crucible.Type
                 -> SetupValue
                 -> IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
-resolveSetupVal cc rs tp0 val = case val of
+resolveSetupVal cc rs tp0 val =
+  case val of
     SetupReturn _ ->
       case resolvedRetVal rs of
         Nothing -> fail "return value not available"
@@ -301,10 +302,19 @@ resolveSetupVal cc rs tp0 val = case val of
           vals <- V.mapM (resolveSetupVal cc rs tp) (V.fromList vs)
           return $ Crucible.LLVMValArray tp vals
         _ -> fail "resolveSetupVal: expected array type"
+    SetupNull ->
+      case Crucible.typeF tp0 of
+        Crucible.Bitvector _sz -> do
+          Crucible.packMemValue sym tp0 Crucible.llvmPointerRepr =<< Crucible.mkNullPointer sym
+        _ -> fail "resolveSetupVal: expected pointer type"
+    SetupGlobal name -> withMem cc $ \_sym impl -> do
+      r <- Crucible.doResolveGlobal sym impl (L.Symbol name)
+      v <- Crucible.packMemValue sym tp0 Crucible.llvmPointerRepr r
+      return (v, impl)
 
- where
- sym = ccBackend cc
- resolveSAWTerm tp tm =
+  where
+  sym = ccBackend cc
+  resolveSAWTerm tp tm =
     case Crucible.typeF tp of
       Crucible.Bitvector bytes ->
           case Crucible.someNat (fromIntegral (bytes*8)) of
