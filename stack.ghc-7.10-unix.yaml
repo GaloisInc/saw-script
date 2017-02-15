@@ -17,6 +17,7 @@ packages:
   - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
   - deps/golang
+  - deps/anastasia
   - .
 extra-deps:
   - alex-tools-0.1.1.0
