@@ -1,9 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
 Module           : $Header$
@@ -28,6 +30,7 @@ import qualified Data.Sequence as Seq
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+--import qualified Data.Text as Text
 import qualified Data.Vector as V
 
 import qualified Data.LLVM.BitCode as L
@@ -39,6 +42,7 @@ import qualified Data.Parameterized.Nonce as Crucible
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
+--import qualified Lang.Crucible.FunctionName as Crucible
 import qualified Lang.Crucible.Simulator.CallFns as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.MSSim as Crucible
@@ -54,6 +58,7 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
+-- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
@@ -411,6 +416,32 @@ ppGlobalPair cc gp =
     Nothing -> return (text "LLVM Memory global variable not initialized")
     Just mem -> Crucible.ppMem sym mem
 
+methodSpecHandler :: CrucibleMethodSpecIR
+                  -> Crucible.MSS_State Sym rtp (Crucible.OverrideLang args ret) 'Nothing
+                  -> IO (Crucible.SimResult Sym rtp)
+methodSpecHandler cs _s = do
+  let (L.Symbol fsym) = L.defName (csDefine cs)
+  putStrLn $ "Executing override for `" ++ fsym ++ "` (TODO)"
+  return undefined
+
+registerOverride :: forall rtp args ret .
+                    CrucibleContext
+                 -> Crucible.SimContext Sym
+                 -> CrucibleMethodSpecIR
+                 -> Crucible.OverrideSim Sym rtp args ret ()
+registerOverride cc _ctx cs = do
+  let s@(L.Symbol fsym) = L.defName (csDefine cs)
+      llvmctx = ccLLVMContext cc
+  liftIO $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
+  case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
+    Just (Crucible.LLVMHandleInfo _decl' h) -> do
+      -- TODO: check that decl' matches (csDefine cs)
+      let o = Crucible.Override { Crucible.overrideName = Crucible.handleName h
+                                , Crucible.overrideHandler = methodSpecHandler cs
+                                }
+      Crucible.registerFnBinding h (Crucible.UseOverride o)
+    Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
+
 verifySimulate :: (?lc :: TyCtx.LLVMContext)
                => CrucibleContext
                -> CrucibleMethodSpecIR
@@ -419,17 +450,19 @@ verifySimulate :: (?lc :: TyCtx.LLVMContext)
                -> [Term]
                -> [CrucibleMethodSpecIR]
                -> TopLevel (Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth))
-verifySimulate cc mspec _prestate args _assumes _lemmas = do
+verifySimulate cc mspec _prestate args _assumes lemmas = do
    let nm = L.defName (csDefine mspec)
    case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
       Nothing  -> fail $ unwords ["function", show nm, "not found"]
       Just (Crucible.AnyCFG cfg) -> io $ do
         let h   = Crucible.cfgHandle cfg
+            rty = Crucible.handleReturnType h
         args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
         simCtx  <- readIORef (ccSimContext cc)
         globals <- readIORef (ccGlobals cc)
-        res  <- Crucible.run simCtx globals errorHandler (Crucible.handleReturnType h)
-                   (Crucible.regValue <$> (Crucible.callCFG cfg args'))
+        res  <- Crucible.run simCtx globals errorHandler rty $ do
+                  mapM_ (registerOverride cc simCtx) lemmas
+                  Crucible.regValue <$> (Crucible.callCFG cfg args')
         case res of
           Crucible.FinishedExecution st pr -> do
              gp <- case pr of
