@@ -84,6 +84,11 @@ data CrucibleMethodSpecIR =
   }
  deriving (Show)
 
+csPreconditions :: CrucibleMethodSpecIR -> [SetupCondition]
+csPreconditions cs = [ c | (PreState, c) <- csConditions cs ]
+
+csPostconditions :: CrucibleMethodSpecIR -> [SetupCondition]
+csPostconditions cs = [ c | (PostState, c) <- csConditions cs ]
 
 data CrucibleSetupState =
   CrucibleSetupState
