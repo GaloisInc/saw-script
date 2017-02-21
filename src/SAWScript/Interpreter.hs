@@ -1541,7 +1541,7 @@ primitives = Map.fromList
 
   , prim "crucible_term"
     "Term -> SetupValue"
-    (funVal1 (return . VCrucibleSetupValue . CIR.SetupTerm))
+    (pureVal CIR.SetupTerm)
     [ "TODO" ]
   ]
 
