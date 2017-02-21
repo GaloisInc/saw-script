@@ -59,14 +59,14 @@ let s20_encrypt32 : CrucibleSetup() = do {
     (key, pkey) <- ptr_to_fresh "key" (llvm_array 32 (llvm_int 8));
     (v, pv) <- ptr_to_fresh "nonce" (llvm_array 8 (llvm_int 8));
     (m, pm) <- ptr_to_fresh "buf" (llvm_array 64 (llvm_int 8));
-    crucible_execute_func [ pkey
-                          , pv
-                          , crucible_term {{ 0 : [32] }}
-                          , pm
-                          , crucible_term {{ 64 : [32] }}
-                          ];
+    r <- crucible_execute_func [ pkey
+                               , pv
+                               , crucible_term {{ 0 : [32] }}
+                               , pm
+                               , crucible_term {{ 64 : [32] }}
+                               ];
     crucible_points_to pm (crucible_term {{ Salsa20_encrypt (key, v, m) }});
-    //crucible_return {{ 0 : [32] }};
+    crucible_equal (llvm_int 32) r (crucible_term {{ 0 : [32] }});
 };
 
 let main : TopLevel () = do {
