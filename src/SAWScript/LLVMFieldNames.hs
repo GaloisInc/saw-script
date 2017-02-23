@@ -1,3 +1,4 @@
+{-# Language TransformListComp, MonadComprehensions #-}
 {- |
 Module           : $Header$
 Description      : This module interprets the DWARF information associated
@@ -9,7 +10,7 @@ Point-of-contact : emertens
 -}
 module SAWScript.LLVMFieldNames
   ( -- * Definition type analyzer
-    Info(..), analyzeDefine, valMdToInfo
+    Info(..), computeFunctionTypes, valMdToInfo
 
   -- * Metadata lookup
   , mkMdMap
@@ -20,16 +21,21 @@ module SAWScript.LLVMFieldNames
   , fieldIndexByName
   ) where
 
+import           Control.Applicative    ((<|>))
 import           Control.Monad          ((<=<))
 import           Data.IntMap            (IntMap)
 import qualified Data.IntMap as IntMap
 import           Data.List              (elemIndex)
 import qualified Data.Map    as Map
+import           Data.Maybe             (fromMaybe, listToMaybe, maybeToList)
 import           Data.Word              (Word16)
 import           Text.LLVM.AST
 
 dbgKind :: String
 dbgKind = "dbg"
+
+llvmDbgCuKey :: String
+llvmDbgCuKey = "llvm.dbg.cu"
 
 dwarfPointer, dwarfStruct, dwarfTypedef, dwarfUnion, dwarfBasetype :: Word16
 dwarfPointer  = 0x0f
@@ -116,36 +122,90 @@ debugInfoToField mdMap di =
      Just (fieldName, valMdToInfo' mdMap (didtBaseType dt))
 
 
-analyzeDefine ::
-  IntMap ValMd {- ^ unnamed metadata      -} ->
-  Define       {- ^ definition to inspect -} ->
-  Maybe [Info] {- ^ structural information about return type and argument types -}
-analyzeDefine mdMap def =
-  do dbgMd <- Map.lookup dbgKind (defMetadata def)
-     DebugInfoSubprogram     sp <- getDebugInfo mdMap dbgMd
-     DebugInfoSubroutineType st <- getDebugInfo mdMap =<< dispType sp
-     types                      <- getList mdMap =<< distTypeArray st
-     let processType = maybe (BaseType "void") (valMdToInfo mdMap)
-     return (map processType types)
+-- | Compute the structures of a function's return and argument types
+-- using DWARF information metadata of the LLVM module. Different
+-- versions of LLVM make this information available via different
+-- paths. This function attempts to support the variations.
+computeFunctionTypes ::
+  Module       {- ^ module to search                     -} ->
+  Symbol       {- ^ function symbol                      -} ->
+  Maybe [Info] {- ^ return and argument type information -}
+computeFunctionTypes m sym =
+  [ maybe (BaseType "void") (valMdToInfo mdMap) <$> types
+     | let mdMap = mkMdMap m
+     , sp <- findSubprogramViaDefine mdMap m sym
+         <|> findSubprogramViaCu     mdMap m sym
+     , DebugInfoSubroutineType st <- getDebugInfo mdMap =<< dispType sp
+     , types                      <- getList mdMap      =<< distTypeArray st
+     ]
+
+
+-- | This method of computing argument type information works on at least LLVM 3.8
+findSubprogramViaDefine ::
+  IntMap ValMd       {- ^ unnamed metadata                             -} ->
+  Module             {- ^ module to search                             -} ->
+  Symbol             {- ^ function symbol to find                      -} ->
+  Maybe DISubprogram {- ^ debug information related to function symbol -}
+findSubprogramViaDefine mdMap m sym =
+  [ sp
+     | def                    <- modDefines m
+     , defName def == sym
+     , then listToMaybe ----- commits to a choice -----
+     , dbgMd                  <- Map.lookup dbgKind (defMetadata def)
+     , DebugInfoSubprogram sp <- getDebugInfo mdMap dbgMd
+     ]
+
+
+-- | This method of computing function debugging information works on LLVM 3.7
+findSubprogramViaCu ::
+  MdMap              {- ^ map of unnamed metadata                -} ->
+  Module             {- ^ module to search                       -} ->
+  Symbol             {- ^ function symbol to search for          -} ->
+  Maybe DISubprogram {- ^ debugging information for given symbol -}
+findSubprogramViaCu mdMap m (Symbol sym) = listToMaybe
+  [ sp
+    | md                      <- modNamedMd m
+    , nmName md == llvmDbgCuKey
+    , ref                     <- nmValues md
+    , DebugInfoCompileUnit cu <- maybeToList  $ getDebugInfo mdMap $ ValMdRef ref
+    , Just entry              <- fromMaybe [] $ getList mdMap =<< dicuSubprograms cu
+    , DebugInfoSubprogram sp  <- maybeToList  $ getDebugInfo mdMap entry
+    , dispName sp == Just sym
+    ]
+
 
 ------------------------------------------------------------------------
 
-derefInfo :: Info -> Info
+-- | If the argument describes a pointer, return the information for the
+-- type that it points do.
+derefInfo ::
+  Info {- ^ pointer type information                -} ->
+  Info {- ^ type information of pointer's base type -}
 derefInfo (Pointer x) = x
 derefInfo _           = Unknown
 
-fieldIndexByPosition :: Int -> Info -> Info
+-- | If the argument describes a composite type, returns the type of the
+-- field by zero-based index into the list of fields.
+fieldIndexByPosition ::
+  Int  {- ^ zero-based field index               -} ->
+  Info {- ^ composite type information           -} ->
+  Info {- ^ type information for specified field -}
 fieldIndexByPosition i info =
   case info of
     Structure xs -> go xs
     Union     xs -> go xs
-    _            -> error "bad find index"
+    _            -> Unknown
   where
     go xs = case drop i xs of
-              []  -> error "bad index"
+              []  -> Unknown
               x:_ -> snd x
 
-fieldIndexByName :: String -> Info -> Maybe Int
+-- | If the argument describes a composite type, return the first, zero-based
+-- index of the field in that type that matches the given name.
+fieldIndexByName ::
+  String    {- ^ field name                                  -} ->
+  Info      {- ^ composite type info                         -} ->
+  Maybe Int {- ^ zero-based index of field matching the name -}
 fieldIndexByName n info =
   case info of
     Structure xs -> go xs

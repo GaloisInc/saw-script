@@ -25,7 +25,7 @@ import Control.Lens
 import Control.Monad.State hiding (mapM)
 import Control.Monad.Trans.Except
 import Data.Function (on)
-import Data.List (partition, sortBy, groupBy,find)
+import Data.List (partition, sortBy, groupBy)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -34,7 +34,6 @@ import qualified Data.Vector as V
 import Text.Parsec as P
 
 import Text.LLVM (modDataLayout)
-import qualified Text.LLVM as L
 import Verifier.LLVM.Backend
 import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent
                                      , globalSym, globalType
@@ -422,12 +421,8 @@ parseLLVMExpr lmod cb fn str = do
               Just fd -> return fd
               Nothing -> fail $ "Function " ++ show fn ++ " neither declared nor defined."
 
-  let m     = modMod lmod
-      mdMap = LF.mkMdMap m
-  let retInfo:argInfos
-        = fromMaybe (repeat LF.Unknown)
-        $ LF.analyzeDefine mdMap
-          =<< find (\define -> L.defName define == fn) (L.modDefines m)
+  let retInfo:argInfos = fromMaybe [] (LF.computeFunctionTypes (modMod lmod) fn)
+                      ++ repeat LF.Unknown
 
   let margs = case lookupDefine fn cb of
                 Just fd -> Just (zip (fst <$> sdArgs fd) argInfos)
