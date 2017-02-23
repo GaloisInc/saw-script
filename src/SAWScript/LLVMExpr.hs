@@ -22,6 +22,7 @@ module SAWScript.LLVMExpr
     LLVMExprF(..)
   , LLVMExpr
   , ProtoLLVMExpr(..)
+  , ProtoLLVMField(..)
   , parseProtoLLVMExpr
   , ppProtoLLVMExpr
   , ppLLVMExpr
@@ -82,11 +83,16 @@ data ProtoLLVMExpr
   = PVar String
   | PArg Int
   | PDeref ProtoLLVMExpr
-  | PField Int ProtoLLVMExpr -- Recursive arg is _address_
-  | PDirectField Int ProtoLLVMExpr -- Recursive arg is _value_
+  | PField ProtoLLVMField ProtoLLVMExpr -- Recursive arg is _address_
+  | PDirectField ProtoLLVMField ProtoLLVMExpr -- Recursive arg is _value_
   | PReturn
   -- PIndex ProtoLLVMExpr ProtoLLVMExpr
     deriving (Show)
+
+data ProtoLLVMField
+  = FieldIndex Int
+  | FieldName String
+    deriving Show
 
 ppProtoLLVMExpr :: ProtoLLVMExpr -> Doc
 ppProtoLLVMExpr (PVar x) = text x
@@ -94,11 +100,15 @@ ppProtoLLVMExpr PReturn = text "return"
 ppProtoLLVMExpr (PArg n) = PP.string "args[" <> int n <> PP.string "]"
 ppProtoLLVMExpr (PDeref e) = PP.text "*" <> PP.parens (ppProtoLLVMExpr e)
 ppProtoLLVMExpr (PField n e) =
-  PP.parens (ppProtoLLVMExpr e) <> text "->" <> int n
+  PP.parens (ppProtoLLVMExpr e) <> text "->" <> ppProtoLLVMField n
 ppProtoLLVMExpr (PDirectField n e) =
-  PP.parens (ppProtoLLVMExpr e) <> text "." <> int n
+  PP.parens (ppProtoLLVMExpr e) <> text "." <> ppProtoLLVMField n
 --ppProtoLLVMExpr (PIndex n e) =
 --  ppProtoLLVMExpr e <> text "[" <> ppProtoLLVMExpr n <> text "]"
+
+ppProtoLLVMField :: ProtoLLVMField -> Doc
+ppProtoLLVMField (FieldIndex i) = int i
+ppProtoLLVMField (FieldName  n) = PP.text n
 
 parseProtoLLVMExpr :: String
                    -> Either ParseError ProtoLLVMExpr
@@ -138,18 +148,15 @@ parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
       return (foldl (flip ($)) e fs)
     parseDerefField :: Parser (ProtoLLVMExpr -> ProtoLLVMExpr)
     parseDerefField = do
-      ns <- try (P.string "->") *> many1 digit
-      case readMaybe ns of
-        Just (n :: Int) -> return (\e -> PField n e)
-        Nothing -> unexpected $
-          "Attempting to apply -> operation to non-integer field ID: " ++ ns
+      n <- try (P.string "->") *> parseField
+      return (\e -> PField n e)
     parseDirectField :: Parser (ProtoLLVMExpr -> ProtoLLVMExpr)
     parseDirectField = do
-      ns <- try (P.string ".") *> many1 digit
-      case readMaybe ns of
-        Just (n :: Int) -> return (\e -> PDirectField n e)
-        Nothing -> unexpected $
-          "Attempting to apply . operation to non-integer field ID: " ++ ns
+      n <- P.string "." *> parseField
+      return (\e -> PDirectField n e)
+
+    parseField = FieldIndex . read <$> many1 digit
+             <|> FieldName         <$> parseIdent
 
 -- NB: the types listed in each of these should be the type of the
 -- entire expression. So "Deref v tp" means "*v has type tp".

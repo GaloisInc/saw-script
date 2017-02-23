@@ -358,12 +358,13 @@ type JavaSetup a = StateT JavaSetupState TopLevel a
 
 data LLVMSetupState
   = LLVMSetupState {
-      lsSpec :: LIR.LLVMMethodSpecIR
-    , lsContext :: SharedContext
-    , lsTactic :: ValidationPlan
-    , lsSimulate :: Bool
-    , lsSatBranches :: Bool
+      lsSpec          :: LIR.LLVMMethodSpecIR
+    , lsContext       :: SharedContext
+    , lsTactic        :: ValidationPlan
+    , lsSimulate      :: Bool
+    , lsSatBranches   :: Bool
     , lsSimplifyAddrs :: Bool
+    , lsModule        :: LLVMModule
     }
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
