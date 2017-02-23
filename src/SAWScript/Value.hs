@@ -40,7 +40,8 @@ import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import qualified Verifier.Java.Codebase as JSS
-import qualified Verifier.LLVM.Codebase as LSS
+import qualified Text.LLVM.AST as LLVM (Type)
+import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options)
@@ -87,13 +88,13 @@ data Value
   | VLLVMSetup (LLVMSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   | VLLVMMethodSpec LIR.LLVMMethodSpecIR
-  ----- 
+  -----
   | VCrucibleSetup (CrucibleSetup Value)
   | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
   | VCrucibleSetupValue CIR.SetupValue
   -----
   | VJavaType JavaType
-  | VLLVMType LSS.SymType
+  | VLLVMType LLVM.Type
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule LLVMModule
@@ -245,7 +246,7 @@ showsPrecValue opts _p v =
     VLLVMMethodSpec {} -> showString "<<LLVM MethodSpec>>"
     VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
-    VLLVMType t -> showString (show (LSS.ppSymType t))
+    VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule m -> showString (showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
@@ -618,10 +619,10 @@ instance FromValue JavaType where
     fromValue (VJavaType t) = t
     fromValue _ = error "fromValue JavaType"
 
-instance IsValue LSS.SymType where
+instance IsValue LLVM.Type where
     toValue t = VLLVMType t
 
-instance FromValue LSS.SymType where
+instance FromValue LLVM.Type where
     fromValue (VLLVMType t) = t
     fromValue _ = error "fromValue LLVMType"
 

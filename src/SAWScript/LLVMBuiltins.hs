@@ -33,11 +33,14 @@ import qualified Data.Vector as V
 import Text.Parsec as P
 
 import Text.LLVM (modDataLayout)
+import qualified Text.LLVM.AST as LLVM
+import qualified Text.LLVM.PP as LLVM
 import Verifier.LLVM.Backend
 import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent
                                      , globalSym, globalType
                                      )
 import qualified Verifier.LLVM.Codebase as CB
+import Verifier.LLVM.Codebase.LLVMContext (liftMemType)
 import Verifier.LLVM.Backend.SAW
 import Verifier.LLVM.Simulator
 import Verifier.LLVM.Simulator.Internals
@@ -433,22 +436,20 @@ mkLogicExpr ms sc t = do
   fn <- liftIO $ scAbstractExts sc exts t
   return $ LogicExpr fn (map fst les)
 
-llvm_int :: Int -> SymType
-llvm_int n = MemType (IntType n)
+llvm_int :: Int -> LLVM.Type
+llvm_int n = LLVM.PrimType (LLVM.Integer (fromIntegral n))
 
-llvm_float :: SymType
-llvm_float = MemType FloatType
+llvm_float :: LLVM.Type
+llvm_float = LLVM.PrimType (LLVM.FloatType LLVM.Float)
 
-llvm_double :: SymType
-llvm_double = MemType DoubleType
+llvm_double :: LLVM.Type
+llvm_double = LLVM.PrimType (LLVM.FloatType LLVM.Double)
 
-llvm_array :: Int -> SymType -> SymType
-llvm_array n (MemType t) = MemType (ArrayType n t)
-llvm_array _ t =
-  error $ "Unsupported array element type: " ++ show (ppSymType t)
+llvm_array :: Int -> LLVM.Type -> LLVM.Type
+llvm_array n t = LLVM.Array (fromIntegral n) t
 
-llvm_struct :: String -> SymType
-llvm_struct n = Alias (fromString n)
+llvm_struct :: String -> LLVM.Type
+llvm_struct n = LLVM.Alias (fromString n)
 
 llvm_no_simulate :: LLVMSetup ()
 llvm_no_simulate = modify (\s -> s { lsSimulate = False })
@@ -459,7 +460,7 @@ llvm_sat_branches doSat = modify (\s -> s { lsSatBranches = doSat })
 llvm_simplify_addrs :: Bool -> LLVMSetup ()
 llvm_simplify_addrs doSimp = modify (\s -> s { lsSimplifyAddrs = doSimp })
 
-llvm_var :: BuiltinContext -> Options -> String -> SymType
+llvm_var :: BuiltinContext -> Options -> String -> LLVM.Type
          -> LLVMSetup TypedTerm
 llvm_var bic _ name sty = do
   lsState <- get
@@ -467,9 +468,10 @@ llvm_var bic _ name sty = do
       func = specFunction ms
       cb = specCodebase ms
       dl = cbDataLayout cb
-  lty <- case resolveSymType cb sty of
-           MemType mty -> return mty
-           rty -> fail $ "Unsupported type in llvm_var: " ++ show (ppSymType rty)
+  let ?lc = cbLLVMContext cb
+  lty <- case liftMemType sty of
+           Just mty -> return mty
+           Nothing -> fail $ "Unsupported type in llvm_var: " ++ show (LLVM.ppType sty)
   expr <- failLeft $ runExceptT $ parseLLVMExpr cb func name
   when (isPtrLLVMExpr expr) $ fail $
     "Used `llvm_var` for pointer expression `" ++ name ++
@@ -484,17 +486,17 @@ llvm_var bic _ name sty = do
     Just ty -> liftIO $ scLLVMValue sc ty name >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in llvm_var: " ++ show (ppMemType lty)
 
-llvm_ptr :: BuiltinContext -> Options -> String -> SymType
+llvm_ptr :: BuiltinContext -> Options -> String -> LLVM.Type
         -> LLVMSetup ()
 llvm_ptr _ _ name sty = do
   lsState <- get
   let ms = lsSpec lsState
       func = specFunction ms
       cb = specCodebase ms
-  lty <- case resolveSymType cb sty of
-           MemType mty -> return mty
-           Alias i -> fail $ "Unexpected type alias in llvm_ptr: " ++ show i
-           rty -> fail $ "Unsupported type in llvm_ptr: " ++ show (ppSymType rty)
+  let ?lc = cbLLVMContext cb
+  lty <- case liftMemType sty of
+           Just mty -> return mty
+           Nothing -> fail $ "Unsupported type in llvm_ptr: " ++ show (LLVM.ppType sty)
   expr <- failLeft $ runExceptT $ parseLLVMExpr cb func name
   unless (isPtrLLVMExpr expr) $ fail $
     "Used `llvm_ptr` for non-pointer expression `" ++ name ++

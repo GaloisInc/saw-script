@@ -35,6 +35,7 @@ import qualified Data.Vector as V
 
 import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 
@@ -61,8 +62,6 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
-
-import qualified Verifier.LLVM.Codebase as LSS
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
@@ -151,7 +150,7 @@ verifyObligations cc mspec assumes asserts = do
   goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
   --let prf = satZ3 -- FIXME
   let prf = satABC
-  let nm  = show (LSS.ppSymbol (L.defName (csDefine mspec)))
+  let nm  = show (L.ppSymbol (L.defName (csDefine mspec)))
   r      <- evalStateT (prf sc) (startProof (ProofGoal Universal nm goal'))
   case r of
     Unsat _stats -> do
@@ -677,45 +676,12 @@ load_llvm_cfg bic _opts fn_name = do
 --------------------------------------------------------------------------------
 -- Setup builtins
 
--- These translations are pretty gross... it would be nice if llvm-verifier
--- and crucible instead shared common code so this wasn't necessary...
-
-mungeSymType :: (?dl :: Crucible.DataLayout) => LSS.SymType -> Crucible.SymType
-mungeSymType t = case t of
-  LSS.MemType m  -> Crucible.MemType (mungeMemType m)
-  LSS.Alias i    -> Crucible.Alias i
-  LSS.FunType d  -> Crucible.FunType (mungeFunDecl d)
-  LSS.VoidType   -> Crucible.VoidType
-  LSS.OpaqueType -> Crucible.OpaqueType
-  LSS.UnsupportedType lt -> Crucible.UnsupportedType lt
-
-mungeMemType :: (?dl :: Crucible.DataLayout) => LSS.MemType -> Crucible.MemType
-mungeMemType t = case t of
-  LSS.IntType w      -> Crucible.IntType (fromIntegral w)
-  LSS.PtrType st     -> Crucible.PtrType (mungeSymType st)
-  LSS.FloatType      -> Crucible.FloatType
-  LSS.DoubleType     -> Crucible.DoubleType
-  LSS.ArrayType i mt -> Crucible.ArrayType i (mungeMemType mt)
-  LSS.VecType i mt   -> Crucible.VecType i (mungeMemType mt)
-  LSS.StructType si  -> Crucible.StructType (mungeStructInfo si)
-
-mungeFunDecl :: (?dl :: Crucible.DataLayout) => LSS.FunDecl -> Crucible.FunDecl
-mungeFunDecl (LSS.FunDecl ret args var) =
-  Crucible.FunDecl (fmap mungeMemType ret) (fmap mungeMemType args) var
-
-mungeStructInfo :: (?dl :: Crucible.DataLayout) => LSS.StructInfo -> Crucible.StructInfo
-mungeStructInfo si =
-  Crucible.mkStructInfo
-      ?dl
-      (LSS.siIsPacked si)
-      (fmap mungeMemType (V.toList (LSS.siFieldTypes si)))
-
 getCrucibleContext :: BuiltinContext -> CrucibleSetup CrucibleContext
 getCrucibleContext bic =
   lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
 
 freshBinding :: (?dl :: Crucible.DataLayout)
-             => LSS.SymType
+             => Crucible.SymType
              -> VarBinding
              -> CrucibleSetup SetupValue
 freshBinding tp vb = do
@@ -723,8 +689,7 @@ freshBinding tp vb = do
   let n  = csVarCounter st
       n' = n + 1
       spec  = csMethodSpec st
-      tp' = mungeSymType tp
-      spec' = spec{ csSetupBindings = SetupBindings (Map.insert n (BP tp' vb) (setupBindings (csSetupBindings spec))) }
+      spec' = spec{ csSetupBindings = SetupBindings (Map.insert n (BP tp vb) (setupBindings (csSetupBindings spec))) }
   put st{ csVarCounter = n'
         , csMethodSpec = spec'
         }
@@ -740,22 +705,22 @@ addCondition cond = do
 
 -- | Returns logical type of actual type if it is an array or primitive
 -- type, or an appropriately-sized bit vector for pointer types.
-logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> LSS.MemType
+logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
                   -> IO (Maybe Term)
-logicTypeOfActual _ sc (LSS.IntType w) = do
+logicTypeOfActual _ sc (Crucible.IntType w) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral w)
   Just <$> scVecType sc lTm bType
-logicTypeOfActual _ sc LSS.FloatType = Just <$> scPrelude_Float sc
-logicTypeOfActual _ sc LSS.DoubleType = Just <$> scPrelude_Double sc
-logicTypeOfActual dl sc (LSS.ArrayType n ty) = do
+logicTypeOfActual _ sc Crucible.FloatType = Just <$> scPrelude_Float sc
+logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scPrelude_Double sc
+logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
   melTyp <- logicTypeOfActual dl sc ty
   case melTyp of
     Just elTyp -> do
       lTm <- scNat sc (fromIntegral n)
       Just <$> scVecType sc lTm elTyp
     Nothing -> return Nothing
-logicTypeOfActual dl sc (LSS.PtrType _) = do
+logicTypeOfActual dl sc (Crucible.PtrType _) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral (Crucible.ptrBitwidth dl))
   Just <$> scVecType sc lTm bType
@@ -765,33 +730,38 @@ logicTypeOfActual _ _ _ = return Nothing
 crucible_fresh_var :: BuiltinContext
                    -> Options
                    -> String
-                   -> LSS.SymType
+                   -> L.Type
                    -> CrucibleSetup TypedTerm
 crucible_fresh_var bic _opts name lty = do
   cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
   let sc = biSharedContext bic
   let lc = ccLLVMContext cctx
+  let ?lc = Crucible.llvmTypeCtx lc
   let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx lc)
-  lty' <- case lty of
-            LSS.MemType m -> return m
-            _ -> fail ("unsupported type in crucible_fresh_var: " ++ show (LSS.ppSymType lty))
+  lty' <- case TyCtx.liftMemType lty of
+            Just m -> return m
+            Nothing -> fail ("unsupported type in crucible_fresh_var: " ++ show (L.ppType lty))
   mty <- liftIO $ logicTypeOfActual dl sc lty'
   case mty of
     Just ty -> liftIO $ scLLVMValue sc ty name >>= mkTypedTerm sc
-    Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (LSS.ppSymType lty)
+    Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
 
   --freshBinding lty (VarBind_Value (SetupFresh name))
 
 
 crucible_alloc :: BuiltinContext
                -> Options
-               -> LSS.SymType
+               -> L.Type
                -> CrucibleSetup SetupValue
 crucible_alloc bic _opt lty = do
   cctx <- getCrucibleContext bic
   let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
   let ?dl = TyCtx.llvmDataLayout lc
-  freshBinding (LSS.MemType (LSS.PtrType lty)) (VarBind_Alloc (mungeSymType lty))
+  let ?lc = lc
+  lty' <- case TyCtx.liftType lty of
+            Just m -> return m
+            Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
+  freshBinding (Crucible.MemType (Crucible.PtrType lty')) (VarBind_Alloc lty')
 
 crucible_points_to :: BuiltinContext
                    -> Options
@@ -803,7 +773,7 @@ crucible_points_to _bic _opt ptr val = do
 
 crucible_equal :: BuiltinContext
                    -> Options
-                   -> LSS.SymType
+                   -> L.Type
                    -> SetupValue
                    -> SetupValue
                    -> CrucibleSetup ()
@@ -811,7 +781,11 @@ crucible_equal bic _opt lty val1 val2 = do
   cctx <- getCrucibleContext bic
   let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
   let ?dl = TyCtx.llvmDataLayout lc
-  addCondition (SetupCond_Equal (mungeSymType lty) val1 val2)
+  let ?lc = lc
+  lty' <- case TyCtx.liftType lty of
+            Just m -> return m
+            Nothing -> fail ("unsupported type in crucible_equal: " ++ show (L.ppType lty))
+  addCondition (SetupCond_Equal lty' val1 val2)
 
 
 crucible_execute_func :: BuiltinContext
