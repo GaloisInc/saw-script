@@ -26,6 +26,7 @@ import Control.Monad.State hiding (mapM)
 import Control.Monad.Trans.Except
 import Data.Function (on)
 import Data.List (partition, sortBy, groupBy)
+import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.String
@@ -57,6 +58,7 @@ import SAWScript.LLVMExpr
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMMethodSpec
 import SAWScript.LLVMUtils
+import qualified SAWScript.LLVMFieldNames as LF
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.SolverStats
@@ -121,10 +123,10 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
         setVerbosity (simVerbose opts)
         let verb = simVerbose opts
         let mkAssign (s, tm, n) = do
-              e <- failLeft $ runExceptT $ parseLLVMExpr cb sym s
+              e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
               return (e, tm, n)
             mkAllocAssign (s, n) = do
-              e <- failLeft $ runExceptT $ parseLLVMExpr cb sym s
+              e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
               case resolveType cb (lssTypeOfLLVMExpr e) of
                 PtrType (MemType ty) -> do
                   when (verb >= 2) $ liftIO $ putStrLn $
@@ -170,7 +172,7 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
                 Nothing -> fail "No final path for safety condition."
                 Just p -> return (p ^. pathAssertions)
             _ -> do
-              e <- failLeft $ runExceptT $ parseLLVMExpr cb sym ostr
+              e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym ostr
               readLLVMTerm Nothing argVals e n
         let bundle tms = case tms of
                            [t] -> return t
@@ -214,7 +216,7 @@ llvm_verify :: BuiltinContext
             -> [LLVMMethodSpecIR]
             -> LLVMSetup ()
             -> TopLevel LLVMMethodSpecIR
-llvm_verify bic opts (LLVMModule file mdl) funcname overrides setup =
+llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
@@ -230,6 +232,7 @@ llvm_verify bic opts (LLVMModule file mdl) funcname overrides setup =
                   , lsSimulate = True
                   , lsSatBranches = False
                   , lsSimplifyAddrs = False
+                  , lsModule        = lmod
                   }
     (_, lsctx) <- runStateT setup lsctx0
     let ms = lsSpec lsctx
@@ -332,80 +335,105 @@ type LLVMExprParser a = ParsecT String () IO a
 failLeft :: (Monad m, Show s) => m (Either s a) -> m a
 failLeft act = either (fail . show) return =<< act
 
-checkProtoLLVMExpr :: (Monad m) =>
-                      Codebase SAWBackend
-                   -> FunDecl
-                   -> Maybe [CB.Ident]
-                   -> ProtoLLVMExpr
-                   -> ExceptT String m LLVMExpr
-checkProtoLLVMExpr cb fnDecl margs pe =
+checkProtoLLVMExpr ::
+  Monad m =>
+  Codebase SAWBackend         {- ^ current codebase                -} ->
+  FunDecl                     {- ^ function declaration            -} ->
+  LF.Info                     {- ^ return type information         -} ->
+  Maybe [(CB.Ident, LF.Info)] {- ^ argument type information       -} ->
+  ProtoLLVMExpr               {- ^ parsed expression               -} ->
+  ExceptT String m (LLVMExpr, LF.Info)
+checkProtoLLVMExpr cb fnDecl retinfo margs pe =
   case pe of
     PReturn ->
       case fdRetType fnDecl of
-        Just ty -> return (CC.Term (ReturnValue ty))
+        Just ty -> return (CC.Term (ReturnValue ty), retinfo)
         Nothing -> throwE "Function with void return type used with `return`."
     PVar x -> do
       let nid = fromString x
-      case join (lookup nid <$> namedArgs) of
-        Just (n, ty) -> return (CC.Term (Arg n nid ty))
+      case lookup nid =<< namedArgs of
+        Just (n,ty,info) ->
+          return (CC.Term (Arg n nid ty),info)
         Nothing ->
           case lookupSym (Symbol x) cb of
             Just (Left gb) ->
-              return (CC.Term (Global (CB.globalSym gb) (CB.globalType gb)))
+              return (CC.Term (Global (CB.globalSym gb) (CB.globalType gb)), LF.Unknown) -- XXX: info missing for globals
             _ -> throwE $ "Unknown variable: " ++ x
     PArg n | n < length argTys ->
-               return (CC.Term (Arg n (fromString ("args[" ++ show n ++ "]")) (argTys !! n)))
+               return (CC.Term (Arg n (fromString ("args[" ++ show n ++ "]")) (argTys !! n)), LF.Unknown)
            | otherwise ->
                throwE $ "(Zero-based) argument index too large: " ++ show n
     PDeref de -> do
-      e <- checkProtoLLVMExpr cb fnDecl margs de
+      (e,info) <- checkProtoLLVMExpr cb fnDecl retinfo margs de
       case lssTypeOfLLVMExpr e of
-        PtrType (MemType ty) -> return (CC.Term (Deref e ty))
+        PtrType (MemType ty) -> return (CC.Term (Deref e ty), LF.derefInfo info)
         ty -> throwE $
               "Attempting to apply * operation to non-pointer, of type " ++
               show (ppActualType ty)
     PField n se -> do
-      e <- checkProtoLLVMExpr cb fnDecl margs se
+      (e,info) <- checkProtoLLVMExpr cb fnDecl retinfo margs se
+      let info1 = LF.derefInfo info
+
+      i <- resolveField info1 n
+
       case resolveType cb (lssTypeOfLLVMExpr e) of
         PtrType (MemType (StructType si))
-          | n < siFieldCount si -> do
-            let ty = fiType (siFields si V.! n)
-            return (CC.Term (StructField e si n ty))
-          | otherwise -> throwE $ "Field out of range: " ++ show n
+          | i < siFieldCount si -> do
+            let ty = fiType (siFields si V.! i)
+            return (CC.Term (StructField e si i ty), LF.fieldIndexByPosition i info1)
+          | otherwise -> throwE $ "Field out of range: " ++ show i
         ty ->
           throwE $ "Left side of -> is not a struct pointer: " ++
                    show (ppActualType ty)
     PDirectField n se -> do
-      e <- checkProtoLLVMExpr cb fnDecl margs se
+      (e,info) <- checkProtoLLVMExpr cb fnDecl retinfo margs se
+
+      i <- resolveField info n
+
       case resolveType cb (lssTypeOfLLVMExpr e) of
         StructType si
-          | n < siFieldCount si -> do
-            let ty = fiType (siFields si V.! n)
-            return (CC.Term (StructDirectField e si n ty))
-          | otherwise -> throwE $ "Field out of range: " ++ show n
+          | i < siFieldCount si -> do
+            let ty = fiType (siFields si V.! i)
+            return (CC.Term (StructDirectField e si i ty), LF.fieldIndexByPosition i info)
+          | otherwise -> throwE $ "Field out of range: " ++ show i
         ty ->
           throwE $ "Left side of . is not a struct: " ++
                    show (ppActualType ty)
   where
     argTys = map (resolveType cb) (fdArgTypes fnDecl)
     numArgs = zip [(0::Int)..] argTys
-    namedArgs = flip zip numArgs <$> margs
+    namedArgs = (\xs -> [ (name, (i, ty, info)) | ((name,info),(i,ty)) <- zip xs numArgs]) <$> margs
 
-parseLLVMExpr :: (Monad m) =>
-                 Codebase SAWBackend
-              -> Symbol
-              -> String
-              -> ExceptT String m LLVMExpr
-parseLLVMExpr cb fn str = do
+    resolveField _ (FieldIndex i) = return i
+    resolveField LF.Unknown (FieldName name) =
+      throwE ("Field names not available for resolving: " ++ name)
+    resolveField info (FieldName name) =
+      case LF.fieldIndexByName name info of
+        Nothing -> throwE ("Unknown field: " ++ name)
+        Just i  -> return i
+
+parseLLVMExpr ::
+  Monad m =>
+  LLVMModule          {- ^ current module   -} ->
+  Codebase SAWBackend {- ^ current codebase -} ->
+  Symbol              {- ^ function name    -} ->
+  String              {- ^ expression       -} ->
+  ExceptT String m LLVMExpr
+parseLLVMExpr lmod cb fn str = do
   fnDecl <- case lookupFunctionType fn cb of
               Just fd -> return fd
               Nothing -> fail $ "Function " ++ show fn ++ " neither declared nor defined."
+
+  let retInfo:argInfos = fromMaybe [] (LF.computeFunctionTypes (modMod lmod) fn)
+                      ++ repeat LF.Unknown
+
   let margs = case lookupDefine fn cb of
-                Just fd -> Just (map fst (sdArgs fd))
+                Just fd -> Just (zip (fst <$> sdArgs fd) argInfos)
                 Nothing -> Nothing
+
   case parseProtoLLVMExpr str of
     Left err -> throwE ("Parse error: " ++ show err)
-    Right e -> checkProtoLLVMExpr cb fnDecl margs e
+    Right e -> fst <$> checkProtoLLVMExpr cb fnDecl retInfo margs e
 
 getLLVMExpr :: Monad m =>
                LLVMMethodSpecIR -> String
@@ -464,15 +492,16 @@ llvm_var :: BuiltinContext -> Options -> String -> LLVM.Type
          -> LLVMSetup TypedTerm
 llvm_var bic _ name sty = do
   lsState <- get
-  let ms = lsSpec lsState
+  let lmod = lsModule lsState
+      ms   = lsSpec lsState
       func = specFunction ms
-      cb = specCodebase ms
-      dl = cbDataLayout cb
-  let ?lc = cbLLVMContext cb
+      cb   = specCodebase ms
+      dl   = cbDataLayout cb
+  let ?lc  = cbLLVMContext cb
   lty <- case liftMemType sty of
            Just mty -> return mty
            Nothing -> fail $ "Unsupported type in llvm_var: " ++ show (LLVM.ppType sty)
-  expr <- failLeft $ runExceptT $ parseLLVMExpr cb func name
+  expr <- failLeft $ runExceptT $ parseLLVMExpr lmod cb func name
   when (isPtrLLVMExpr expr) $ fail $
     "Used `llvm_var` for pointer expression `" ++ name ++
     "`. Use `llvm_ptr` instead."
@@ -490,14 +519,15 @@ llvm_ptr :: BuiltinContext -> Options -> String -> LLVM.Type
         -> LLVMSetup ()
 llvm_ptr _ _ name sty = do
   lsState <- get
-  let ms = lsSpec lsState
+  let ms   = lsSpec lsState
       func = specFunction ms
-      cb = specCodebase ms
-  let ?lc = cbLLVMContext cb
+      cb   = specCodebase ms
+      lmod = lsModule lsState
+  let ?lc  = cbLLVMContext cb
   lty <- case liftMemType sty of
            Just mty -> return mty
            Nothing -> fail $ "Unsupported type in llvm_ptr: " ++ show (LLVM.ppType sty)
-  expr <- failLeft $ runExceptT $ parseLLVMExpr cb func name
+  expr <- failLeft $ runExceptT $ parseLLVMExpr lmod cb func name
   unless (isPtrLLVMExpr expr) $ fail $
     "Used `llvm_ptr` for non-pointer expression `" ++ name ++
     "`. Use `llvm_var` instead."
