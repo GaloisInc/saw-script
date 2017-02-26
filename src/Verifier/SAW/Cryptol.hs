@@ -152,10 +152,14 @@ importType sc env ty =
             C.PHas _selector -> unimplemented "PHas"
             C.PArith         -> scDataTypeApp sc "Cryptol.PArith" =<< traverse go tyargs -- @Arith _@
             C.PCmp           -> scDataTypeApp sc "Cryptol.PCmp"   =<< traverse go tyargs -- @Cmp _@
+            C.PAnd           -> impossible "importType PAnd"
+            C.PTrue          -> impossible "importType PTrue"
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
              scApplyAll sc tf' tyargs'
+        C.TError _k _msg ->
+          impossible "importType TError"
   where
     go = importType sc env
 
@@ -190,11 +194,9 @@ importType' sc env t = do
 isErasedProp :: C.Prop -> Bool
 isErasedProp prop =
   case prop of
-    (C.pIsEq -> Just _) -> True
-    (C.pIsGeq -> Just _) -> True
-    (pIsNeq -> Just _) -> True
-    (C.pIsFin -> Just _) -> True
-    _ -> False
+    (C.pIsArith -> Just _) -> False
+    (C.pIsCmp   -> Just _) -> False
+    _ -> True
 
 importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
 importPropsType sc env [] ty = importType' sc env ty
@@ -369,6 +371,7 @@ importExpr sc env expr =
                                                 prf <- proveProp sc env p1
                                                 scApply sc e prf
                                          s -> fail $ "EProofApp: invalid type: " ++ show (e1, s)
+{-
     C.ECast e1 t2                   -> do let t1 = fastTypeOf (envC env) e1
                                           t1' <- importType' sc env t1
                                           t2' <- importType' sc env t2
@@ -377,6 +380,7 @@ importExpr sc env expr =
                                           if aeq
                                              then return e1'
                                              else scGlobalApply sc "Prelude.unsafeCoerce" [t1', t2', e1']
+-}
     C.EWhere e dgs                  -> do env' <- importDeclGroups sc env dgs
                                           importExpr sc env' e
   where
@@ -632,7 +636,7 @@ importMatches sc env (C.From name _len _eltty expr : matches) = do
   b <- importType' sc env ty2
   f <- scLambda sc (nameToString name) a body
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
-  return (result, (C..*.) len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
+  return (result, C.tMul len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
 
 importMatches sc env [C.Let decl]
   | C.DPrim <- C.dDefinition decl = do
