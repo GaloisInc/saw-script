@@ -27,17 +27,17 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 
 
-import           Lang.Crucible.LLVM.DataLayout
+import           Lang.Crucible.LLVM.MemType
 import qualified Text.LLVM.AST as L
 
 --import qualified Verifier.LLVM.Codebase as LSS
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
-import Verifier.SAW.SharedTerm -- hiding (PPOpts(..), defaultPPOpts)
+import SAWScript.TypedTerm
 
 data SetupValue where
   SetupReturn :: RetType -> SetupValue
   SetupVar    :: Integer -> SetupValue
-  SetupTerm   :: Term -> SetupValue
+  SetupTerm   :: TypedTerm -> SetupValue
   SetupStruct :: [SetupValue] -> SetupValue
   SetupArray  :: [SetupValue] -> SetupValue
   SetupNull   :: SetupValue
