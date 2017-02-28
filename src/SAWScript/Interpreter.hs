@@ -1191,6 +1191,10 @@ primitives = Map.fromList
     (bicVal verifyJava)
     [ "Experimental code. Don't expect this to work reliably. " ]
 
+  , prim "llvm_type"           "String -> LLVMType"
+    (funVal1 llvm_type)
+    [ "Parse the given string as LLVM type syntax." ]
+
   , prim "llvm_int"            "Int -> LLVMType"
     (pureVal llvm_int)
     [ "The type of LLVM integers, of the given bit width." ]
