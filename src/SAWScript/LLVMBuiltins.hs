@@ -36,6 +36,7 @@ import Text.Parsec as P
 import Text.LLVM (modDataLayout)
 import qualified Text.LLVM.AST as LLVM
 import qualified Text.LLVM.PP as LLVM
+import qualified Text.LLVM.Parser as LLVM (parseType)
 import Verifier.LLVM.Backend
 import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent
                                      , globalSym, globalType
@@ -463,6 +464,12 @@ mkLogicExpr ms sc t = do
   les <- mapM (getLLVMExpr ms) extNames
   fn <- liftIO $ scAbstractExts sc exts t
   return $ LogicExpr fn (map fst les)
+
+llvm_type :: String -> TopLevel LLVM.Type
+llvm_type str =
+  case LLVM.parseType str of
+    Left e -> fail (show e)
+    Right t -> return t
 
 llvm_int :: Int -> LLVM.Type
 llvm_int n = LLVM.PrimType (LLVM.Integer (fromIntegral n))
