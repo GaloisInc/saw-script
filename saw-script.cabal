@@ -97,7 +97,6 @@ library
     SAWScript.LLVMMethodSpec
     SAWScript.LLVMMethodSpecIR
     SAWScript.LLVMUtils
-    SAWScript.LLVMFieldNames
     SAWScript.Options
     SAWScript.Parser
     SAWScript.PathVC
