@@ -217,8 +217,8 @@ setupPrestateConditions
               -> [(PrePost, SetupCondition)]
               -> TopLevel ([Term], ResolvedState)
 setupPrestateConditions mspec cc rs0 conds =
-   foldM go ([],rs0) [ cond | (PreState, cond) <- conds ]
- where
+  foldM go ([],rs0) [ cond | (PreState, cond) <- conds ]
+  where
   go (cs,rs) (SetupCond_PointsTo (SetupVar v) val)
     | Just (Crucible.LLVMValPtr blk end off) <- Map.lookup v (resolvedVarMap rs)
     , Just (BP _ (VarBind_Alloc tp)) <- Map.lookup v (setupBindings (csSetupBindings mspec))
@@ -240,6 +240,18 @@ setupPrestateConditions mspec cc rs0 conds =
                           , resolvedVarMap   = Map.insert v (Crucible.LLVMValPtr blk end off) (resolvedVarMap rs)
                           }
               return ((cs,rs'), mem')
+
+  go (cs,rs) (SetupCond_PointsTo (SetupGlobal name) val) =
+    io $ withMem cc $ \sym mem -> do
+      r <- Crucible.doResolveGlobal sym mem (L.Symbol name)
+      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+      let ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
+      Crucible.LLVMValPtr blk end off <- Crucible.packMemValue sym ptrType Crucible.llvmPointerRepr r
+      let ptr = Crucible.LLVMPtr blk end off
+      val' <- resolveSetupVal cc rs val
+      let tp' = typeOfLLVMVal dl val'
+      mem' <- Crucible.storeRaw sym mem ptr tp' val'
+      return ((cs,rs), mem')
 
   go _ (SetupCond_PointsTo _ _) = fail "Non-pointer value found in points-to assertion"
 
@@ -572,7 +584,6 @@ verifyPoststate cc mspec prestate ret = do
         _ -> fail "Non-pointer value found in points-to assertion"
       val' <- resolveSetupVal cc rs val
       let tp' = typeOfLLVMVal dl val'
-      print tp'
       withMem cc $ \sym mem -> do
          x <- Crucible.loadRaw sym mem ptr tp'
          c <- assertEqualVals cc x val'
