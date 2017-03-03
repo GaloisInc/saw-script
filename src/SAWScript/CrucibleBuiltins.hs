@@ -70,6 +70,8 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NatRepr
 
 import qualified Language.Go.Parser as Go
+import qualified Language.Go.AST as Go
+import Data.List.NonEmpty (NonEmpty(..))
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
@@ -893,10 +895,10 @@ crucible_execute_func bic _opt args = do
 
 load_go_file :: BuiltinContext -> Options -> String -> TopLevel GoPackage
 load_go_file _ _ file = do
-  epkg <- io $ Go.parseFile file
-  case epkg of
+  efile <- io $ Go.parseFile file
+  case efile of
     Left err -> fail $ "Error loading " ++ file ++ ": " ++ err
-    Right pkg -> return pkg
+    Right f@(Go.File a _ pname _ _) -> return $ Go.Package a pname $ f :| []
 
 load_go_package :: BuiltinContext -> Options -> String -> TopLevel GoPackage
 load_go_package _ _ dir = do

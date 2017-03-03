@@ -67,7 +67,6 @@ import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
 import qualified Language.Go.AST as Go
-import qualified Language.Go.Parser as Go
 
 -- Values ----------------------------------------------------------------------
 
@@ -108,7 +107,7 @@ data Value
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
 
-type GoPackage = Go.Package Go.ParserAnnotation
+type GoPackage = Go.Package Go.SourceRange
 
 showGoPackage :: GoPackage -> String
 showGoPackage _ = "Go package (TODO)"
