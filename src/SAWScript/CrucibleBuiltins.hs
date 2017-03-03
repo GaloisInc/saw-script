@@ -73,6 +73,8 @@ import qualified Language.Go.Parser as Go
 import qualified Language.Go.AST as Go
 import Data.List.NonEmpty (NonEmpty(..))
 
+import qualified Language.Go.Parser as Go
+
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
