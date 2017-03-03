@@ -31,7 +31,7 @@ import qualified Data.Sequence as Seq
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
---import qualified Data.Text as Text
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 
 import qualified Data.LLVM.BitCode as L
@@ -70,10 +70,10 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NatRepr
 
 import qualified Language.Go.Parser as Go
-import qualified Language.Go.AST as Go
+import qualified Language.Go.AST    as Go
+import qualified Lang.Crucible.Go.Translation as GT
 import Data.List.NonEmpty (NonEmpty(..))
-
-import qualified Language.Go.Parser as Go
+import           Data.Generics.Uniplate.Data
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
@@ -908,3 +908,13 @@ load_go_package _ _ dir = do
   case epkg of
     Left err -> fail $ "Error loading package from " ++ dir ++ ": " ++ err
     Right pkg -> return pkg
+
+make_go_cfg :: GoPackage -> String -> TopLevel Crucible.AnyCFG
+make_go_cfg pkg fname =
+  case lookup_go_function pkg fname of
+    Nothing -> fail $ "Can't find a definition for a function named " ++ fname
+    Just (fid, params, returns, body) -> return $ runST $ GT.translateFunction fid params returns body
+
+lookup_go_function :: GoPackage -> String -> Maybe (Go.Id Go.SourceRange, Go.ParameterList Go.SourceRange, Go.ReturnList Go.SourceRange, [Go.Statement Go.SourceRange])
+lookup_go_function pkg name =
+  find (\((Go.Id _ _ fname), _, _, _) -> Text.unpack fname == name) [(ident, params, returns, body)|(Go.FunctionDecl _ ident params returns (Just body)) <- universeBi pkg]
