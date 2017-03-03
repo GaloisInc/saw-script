@@ -107,11 +107,7 @@ data Value
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
 
-<<<<<<< HEAD
 type GoPackage = Go.Package Go.SourceRange
-=======
-type GoPackage = Go.Package Go.ParserAnnotation
->>>>>>> abc5bc10b9b01c7aef1974ed2487302f516d06af
 
 showGoPackage :: GoPackage -> String
 showGoPackage _ = "Go package (TODO)"
