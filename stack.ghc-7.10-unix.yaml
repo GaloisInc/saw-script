@@ -13,6 +13,7 @@ packages:
   - deps/jvm-verifier/
   - deps/llvm-verifier/
   - deps/crucible/crucible/
+  - deps/crucible/go-crucible/
   - deps/crucible/crucible-saw/
   - deps/crucible/galois-matlab/
   - deps/parameterized-utils/

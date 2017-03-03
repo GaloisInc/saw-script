@@ -33,6 +33,7 @@ library
     , filepath
     , free
     , golang
+    , go-crucible
     , haskeline
     , IfElse
     , jvm-parser
