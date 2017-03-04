@@ -31,6 +31,7 @@ module SAWScript.LLVMExpr
   , isPtrLLVMExpr
   , isArgLLVMExpr
   , containsReturn
+  , exprDepth
     -- * Logic expressions
   , LogicExpr(..)
   , logicExprLLVMExprs
@@ -170,6 +171,7 @@ data LLVMExprF v
   | ReturnValue LLVMActualType
   deriving (Functor, CC.Foldable, CC.Traversable)
 
+
 instance CC.EqFoldable LLVMExprF where
   fequal (Arg i _ _)(Arg j _ _) = i == j
   fequal (Global x _)(Global y _) = x == y
@@ -215,6 +217,16 @@ instance CC.ShowFoldable LLVMExprF where
 
 -- | Typechecked LLVMExpr
 type LLVMExpr = CC.Term LLVMExprF
+
+exprDepth :: LLVMExpr -> Int
+exprDepth = CC.foldTerm $ \e ->
+  case e of
+    Arg{}                     -> 0
+    Global{}                  -> 0
+    ReturnValue{}             -> 0
+    Deref r _                 -> r+1
+    StructField       r _ _ _ -> r+1
+    StructDirectField r _ _ _ -> r
 
 -- | Pretty print a LLVM expression.
 ppLLVMExpr :: LLVMExpr -> Doc

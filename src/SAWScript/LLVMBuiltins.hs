@@ -25,7 +25,7 @@ import Control.Lens
 import Control.Monad.State hiding (mapM)
 import Control.Monad.Trans.Except
 import Data.Function (on)
-import Data.List (partition, sortBy, groupBy)
+import Data.List (find, partition, sortBy, groupBy)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -36,6 +36,7 @@ import Text.Parsec as P
 import Text.LLVM (modDataLayout)
 import qualified Text.LLVM.AST as LLVM
 import qualified Text.LLVM.PP as LLVM
+import qualified Text.LLVM.DebugUtils as DU
 import qualified Text.LLVM.Parser as LLVM (parseType)
 import Verifier.LLVM.Backend
 import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent
@@ -59,7 +60,6 @@ import SAWScript.LLVMExpr
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMMethodSpec
 import SAWScript.LLVMUtils
-import qualified SAWScript.LLVMFieldNames as LF
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.SolverStats
@@ -340,17 +340,19 @@ checkProtoLLVMExpr ::
   Monad m =>
   Codebase SAWBackend         {- ^ current codebase                -} ->
   FunDecl                     {- ^ function declaration            -} ->
-  LF.Info                     {- ^ return type information         -} ->
-  Maybe [(CB.Ident, LF.Info)] {- ^ argument type information       -} ->
+  Map.Map CB.Ident CB.Ident   {- ^ function argument map           -} ->
+  DU.Info                     {- ^ return type information         -} ->
+  Maybe [(CB.Ident, DU.Info)] {- ^ argument type information       -} ->
   ProtoLLVMExpr               {- ^ parsed expression               -} ->
-  ExceptT String m (LLVMExpr, LF.Info)
-checkProtoLLVMExpr cb fnDecl retinfo margs pe =
+  ExceptT String m (LLVMExpr, DU.Info)
+checkProtoLLVMExpr cb fnDecl dbgArgNames retinfo margs pe =
   case pe of
     PReturn ->
       case fdRetType fnDecl of
         Just ty -> return (CC.Term (ReturnValue ty), retinfo)
         Nothing -> throwE "Function with void return type used with `return`."
-    PVar x -> do
+    PVar x0 -> do
+      let CB.Ident x = Map.findWithDefault (Ident x0) (Ident x0) dbgArgNames
       let nid = fromString x
       case lookup nid =<< namedArgs of
         Just (n,ty,info) ->
@@ -358,22 +360,22 @@ checkProtoLLVMExpr cb fnDecl retinfo margs pe =
         Nothing ->
           case lookupSym (Symbol x) cb of
             Just (Left gb) ->
-              return (CC.Term (Global (CB.globalSym gb) (CB.globalType gb)), LF.Unknown) -- XXX: info missing for globals
+              return (CC.Term (Global (CB.globalSym gb) (CB.globalType gb)), DU.Unknown) -- XXX: info missing for globals
             _ -> throwE $ "Unknown variable: " ++ x
     PArg n | n < length argTys ->
-               return (CC.Term (Arg n (fromString ("args[" ++ show n ++ "]")) (argTys !! n)), LF.Unknown)
+               return (CC.Term (Arg n (fromString ("args[" ++ show n ++ "]")) (argTys !! n)), DU.Unknown)
            | otherwise ->
                throwE $ "(Zero-based) argument index too large: " ++ show n
     PDeref de -> do
-      (e,info) <- checkProtoLLVMExpr cb fnDecl retinfo margs de
+      (e,info) <- checkProtoLLVMExpr cb fnDecl dbgArgNames retinfo margs de
       case lssTypeOfLLVMExpr e of
-        PtrType (MemType ty) -> return (CC.Term (Deref e ty), LF.derefInfo info)
+        PtrType (MemType ty) -> return (CC.Term (Deref e ty), DU.derefInfo info)
         ty -> throwE $
               "Attempting to apply * operation to non-pointer, of type " ++
               show (ppActualType ty)
     PField n se -> do
-      (e,info) <- checkProtoLLVMExpr cb fnDecl retinfo margs se
-      let info1 = LF.derefInfo info
+      (e,info) <- checkProtoLLVMExpr cb fnDecl dbgArgNames retinfo margs se
+      let info1 = DU.derefInfo info
 
       i <- resolveField info1 n
 
@@ -381,13 +383,13 @@ checkProtoLLVMExpr cb fnDecl retinfo margs pe =
         PtrType (MemType (StructType si))
           | i < siFieldCount si -> do
             let ty = fiType (siFields si V.! i)
-            return (CC.Term (StructField e si i ty), LF.fieldIndexByPosition i info1)
+            return (CC.Term (StructField e si i ty), DU.fieldIndexByPosition i info1)
           | otherwise -> throwE $ "Field out of range: " ++ show i
         ty ->
           throwE $ "Left side of -> is not a struct pointer: " ++
                    show (ppActualType ty)
     PDirectField n se -> do
-      (e,info) <- checkProtoLLVMExpr cb fnDecl retinfo margs se
+      (e,info) <- checkProtoLLVMExpr cb fnDecl dbgArgNames retinfo margs se
 
       i <- resolveField info n
 
@@ -395,7 +397,7 @@ checkProtoLLVMExpr cb fnDecl retinfo margs pe =
         StructType si
           | i < siFieldCount si -> do
             let ty = fiType (siFields si V.! i)
-            return (CC.Term (StructDirectField e si i ty), LF.fieldIndexByPosition i info)
+            return (CC.Term (StructDirectField e si i ty), DU.fieldIndexByPosition i info)
           | otherwise -> throwE $ "Field out of range: " ++ show i
         ty ->
           throwE $ "Left side of . is not a struct: " ++
@@ -406,12 +408,13 @@ checkProtoLLVMExpr cb fnDecl retinfo margs pe =
     namedArgs = (\xs -> [ (name, (i, ty, info)) | ((name,info),(i,ty)) <- zip xs numArgs]) <$> margs
 
     resolveField _ (FieldIndex i) = return i
-    resolveField LF.Unknown (FieldName name) =
+    resolveField DU.Unknown (FieldName name) =
       throwE ("Field names not available for resolving: " ++ name)
     resolveField info (FieldName name) =
-      case LF.fieldIndexByName name info of
+      case DU.fieldIndexByName name info of
         Nothing -> throwE ("Unknown field: " ++ name)
         Just i  -> return i
+
 
 parseLLVMExpr ::
   Monad m =>
@@ -425,16 +428,24 @@ parseLLVMExpr lmod cb fn str = do
               Just fd -> return fd
               Nothing -> fail $ "Function " ++ show fn ++ " neither declared nor defined."
 
-  let retInfo:argInfos = fromMaybe [] (LF.computeFunctionTypes (modMod lmod) fn)
-                      ++ repeat LF.Unknown
+  let retInfo:argInfos = fromMaybe [] (DU.computeFunctionTypes (modMod lmod) fn)
+                      ++ repeat DU.Unknown
 
-  let margs = case lookupDefine fn cb of
-                Just fd -> Just (zip (fst <$> sdArgs fd) argInfos)
-                Nothing -> Nothing
+  let margs = fmap (\fd -> zip (fst <$> sdArgs fd) argInfos)
+                   (lookupDefine fn cb)
+
+      argDbgNames = localVarMap (modMod lmod) fn
 
   case parseProtoLLVMExpr str of
     Left err -> throwE ("Parse error: " ++ show err)
-    Right e -> fst <$> checkProtoLLVMExpr cb fnDecl retInfo margs e
+    Right e -> fst <$> checkProtoLLVMExpr cb fnDecl argDbgNames retInfo margs e
+
+localVarMap :: LLVM.Module -> Symbol -> Map.Map CB.Ident CB.Ident
+localVarMap m fn =
+  case find (\def -> LLVM.defName def == fn) (LLVM.modDefines m) of
+    Nothing -> Map.empty
+    Just def -> DU.localVariableNameDeclarations (DU.mkMdMap m) def
+
 
 getLLVMExpr :: Monad m =>
                LLVMMethodSpecIR -> String
