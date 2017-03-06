@@ -47,6 +47,7 @@ import Text.Read
 
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Constant
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -1045,7 +1046,7 @@ fixPos = PosInternal "FIXME"
 freshSymbolicPrim :: String -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
-  cty <- io $ Cryptol.importType' sc Cryptol.emptyEnv ct
+  cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
   tm <- io $ scFreshGlobal sc x cty
   return $ TypedTerm schema tm
 freshSymbolicPrim _ _ =
@@ -1214,11 +1215,18 @@ defaultTypedTerm sc cfg (TypedTerm schema trm) = do
       let vars = C.sVars schema
       let nms = C.addTNames vars IntMap.empty
       mapM_ (warnDefault nms) (zip vars tys)
-      xs <- mapM (Cryptol.importType sc Cryptol.emptyEnv) tys
-      let tm = Map.fromList [ (C.tpUnique tp, (t, 0)) | (tp, t) <- zip (C.sVars schema) xs ]
-      let env = Cryptol.emptyEnv { Cryptol.envT = tm }
-      ys <- mapM (Cryptol.proveProp sc env) (C.sProps schema)
-      trm' <- scApplyAll sc trm (xs ++ ys)
+      let applyType :: Term -> Cryptol.Type -> IO Term
+          applyType t ty = do
+            case Cryptol.kindOf ty of
+              Cryptol.KType -> do
+                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+                ops <- Cryptol.importOps sc Cryptol.emptyEnv ty
+                scApplyAll sc t [ty', ops]
+              Cryptol.KNum -> do
+                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+                scApply sc t ty'
+              _ -> return t
+      trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
       return (TypedTerm schema' trm')
