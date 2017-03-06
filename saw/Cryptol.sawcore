@@ -118,66 +118,6 @@ seqConst (TCNum n) = replicate n;
 seqConst TCInf = streamConst;
 
 --------------------------------------------------------------------------------
--- Types
-
-data KType :: sort 0 where {
-    TCBit :: KType;
-    TCSeq :: Num -> KType -> KType;
-    TCFun :: KType -> KType -> KType;
-    TCUnit :: KType;
-    TCPair :: KType -> KType -> KType;
-    TCEmpty :: KType;
-    TCField :: String -> KType -> KType -> KType;
-  }
-
-ty :: KType -> sort 0;
-ty TCBit = Bool;
-ty (TCSeq n a) = seq n (ty a);
-ty (TCFun a b) = ty a -> ty b;
-ty TCUnit = #();
-ty (TCPair a b) = #(ty a | ty b);
-ty TCEmpty = #{};
-ty (TCField s a b) = #{ (s) :: ty a | ty b };
-
---------------------------------------------------------------------------------
--- Predicate symbols
-
--- Partial functions to select instances (terms translated from
--- type-correct Cryptol should never hit the undefined cases)
-
-ePArith :: (a :: KType) -> PArith a;
---ePArith TCBit = undefined;
---ePArith (TCSeq TCInf TCBit) = undefined;
-ePArith (TCSeq n TCBit) = PArithWord n;
-ePArith (TCSeq n (TCSeq m a)) = PArithSeq n (TCSeq m a) (ePArith (TCSeq m a));
-ePArith (TCSeq n (TCFun a b)) = PArithSeq n (TCFun a b) (ePArith (TCFun a b));
-ePArith (TCSeq n TCUnit) = PArithSeq n TCUnit (ePArith TCUnit);
-ePArith (TCSeq n (TCPair a b)) = PArithSeq n (TCPair a b) (ePArith (TCPair a b));
-ePArith (TCSeq n TCEmpty) = PArithSeq n TCEmpty (ePArith TCEmpty);
-ePArith (TCSeq n (TCField s a b)) = PArithSeq n (TCField s a b) (ePArith (TCField s a b));
-ePArith (TCFun a b) = PArithFun a b (ePArith b);
-ePArith TCUnit = PArithUnit;
-ePArith (TCPair a b) = PArithPair a b (ePArith a) (ePArith b);
-ePArith TCEmpty = PArithEmpty;
-ePArith (TCField s a b) = PArithField s a b (ePArith a) (ePArith b);
-
-ePCmp :: (a :: KType) -> PCmp a;
---ePCmp (TCSeq TCInf a) = undefined;
-ePCmp (TCSeq n TCBit) = PCmpWord n;
-ePCmp (TCSeq n (TCSeq m a)) = PCmpSeq n (TCSeq m a) (ePCmp (TCSeq m a));
---ePCmp (TCSeq (TCNum n) (TCFun a b)) = PCmpSeq n (TCFun a b) (ePCmp (TCFun a b));
-ePCmp (TCSeq n TCUnit) = PCmpSeq n TCUnit (ePCmp TCUnit);
-ePCmp (TCSeq n (TCPair a b)) = PCmpSeq n (TCPair a b) (ePCmp (TCPair a b));
-ePCmp (TCSeq n TCEmpty) = PCmpSeq n TCEmpty (ePCmp TCEmpty);
-ePCmp (TCSeq n (TCField s a b)) = PCmpSeq n (TCField s a b) (ePCmp (TCField s a b));
-ePCmp TCBit = PCmpBit;
---ePCmp (TCFun a b) = undefined;
-ePCmp TCUnit = PCmpUnit;
-ePCmp (TCPair a b) = PCmpPair a b (ePCmp a) (ePCmp b);
-ePCmp TCEmpty = PCmpEmpty;
-ePCmp (TCField s a b) = PCmpField s a b (ePCmp a) (ePCmp b);
-
---------------------------------------------------------------------------------
 -- Auxiliary functions
 
 eListSel :: (a :: sort 0) -> (n :: Num) -> seq n a -> Nat -> a;
@@ -241,7 +181,7 @@ seqZip a b TCInf (TCNum n) xs ys = gen n #(a, b) (\(i :: Nat) -> (streamGet a xs
 seqZip a b TCInf TCInf xs ys = streamMap2 a b #(a, b) (\(x::a) -> \(y::b) -> (x, y)) xs ys;
 
 --------------------------------------------------------------------------------
--- Arith functions
+-- Arith and Logic functions
 
 seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) -> seq n a -> seq n a -> seq n a;
 seqBinary (TCNum n) a f = zipWith a a a f n;
@@ -277,125 +217,11 @@ fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g 
 funBinary :: (a b :: sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
 
-PArith :: KType -> sort 0;
-PArith a =
-  #{ add :: ty a -> ty a -> ty a
-   , sub :: ty a -> ty a -> ty a
-   , mul :: ty a -> ty a -> ty a
-   , div :: ty a -> ty a -> ty a
-   , mod :: ty a -> ty a -> ty a
-   , exp :: ty a -> ty a -> ty a
-   , lg2 :: ty a -> ty a
-   , neg :: ty a -> ty a
-   };
+errorUnary :: (a :: sort 0) -> a -> a;
+errorUnary a _ = error a "invalid class instance";
 
-PArithWord :: (n :: Num) -> PArith (TCSeq n TCBit);
-PArithWord (TCNum n) =
-  { add = bvAdd n
-  , sub = bvSub n
-  , mul = bvMul n
-  , div = bvUDiv n
-  , mod = bvURem n
-  , exp = bvExp n
-  , lg2 = bvLg2 n
-  , neg = bvNeg n
-  };
-
-PArithSeq :: (n :: Num) -> (a :: KType) -> PArith a -> PArith (TCSeq n a);
-PArithSeq n a pa =
-  { add = seqBinary n (ty a) pa.add
-  , sub = seqBinary n (ty a) pa.sub
-  , mul = seqBinary n (ty a) pa.mul
-  , div = seqBinary n (ty a) pa.div
-  , mod = seqBinary n (ty a) pa.mod
-  , exp = seqBinary n (ty a) pa.exp
-  , lg2 = seqMap (ty a) (ty a) n pa.lg2
-  , neg = seqMap (ty a) (ty a) n pa.neg
-  };
-
-PArithFun :: (a b :: KType) -> PArith b -> PArith (TCFun a b);
-PArithFun a b pb =
-  { add = funBinary (ty a) (ty b) pb.add
-  , sub = funBinary (ty a) (ty b) pb.sub
-  , mul = funBinary (ty a) (ty b) pb.mul
-  , div = funBinary (ty a) (ty b) pb.div
-  , mod = funBinary (ty a) (ty b) pb.mod
-  , exp = funBinary (ty a) (ty b) pb.exp
-  , lg2 = compose (ty a) (ty b) (ty b) pb.lg2
-  , neg = compose (ty a) (ty b) (ty b) pb.neg
-  };
-
-PArithUnit :: PArith TCUnit;
-PArithUnit =
-  { add = unitBinary
-  , sub = unitBinary
-  , mul = unitBinary
-  , div = unitBinary
-  , mod = unitBinary
-  , exp = unitBinary
-  , lg2 = unitUnary
-  , neg = unitUnary
-  };
-
-PArithPair :: (a b :: KType) -> PArith a -> PArith b -> PArith (TCPair a b);
-PArithPair a b pa pb =
-  { add = pairBinary (ty a) (ty b) pa.add pb.add
-  , sub = pairBinary (ty a) (ty b) pa.sub pb.sub
-  , mul = pairBinary (ty a) (ty b) pa.mul pb.mul
-  , div = pairBinary (ty a) (ty b) pa.div pb.div
-  , mod = pairBinary (ty a) (ty b) pa.mod pb.mod
-  , exp = pairBinary (ty a) (ty b) pa.exp pb.exp
-  , lg2 = pairUnary (ty a) (ty b) pa.lg2 pb.lg2
-  , neg = pairUnary (ty a) (ty b) pa.neg pb.neg
-  };
-
-PArithEmpty :: PArith TCEmpty;
-PArithEmpty =
-  { add = emptyBinary
-  , sub = emptyBinary
-  , mul = emptyBinary
-  , div = emptyBinary
-  , mod = emptyBinary
-  , exp = emptyBinary
-  , lg2 = emptyUnary
-  , neg = emptyUnary
-  };
-
-PArithField :: (s :: String) -> (a b :: KType) -> PArith a -> PArith b -> PArith (TCField s a b);
-PArithField s a b pa pb =
-  { add = fieldBinary s (ty a) (ty b) pa.add pb.add
-  , sub = fieldBinary s (ty a) (ty b) pa.sub pb.sub
-  , mul = fieldBinary s (ty a) (ty b) pa.mul pb.mul
-  , div = fieldBinary s (ty a) (ty b) pa.div pb.div
-  , mod = fieldBinary s (ty a) (ty b) pa.mod pb.mod
-  , exp = fieldBinary s (ty a) (ty b) pa.exp pb.exp
-  , lg2 = fieldUnary s (ty a) (ty b) pa.lg2 pb.lg2
-  , neg = fieldUnary s (ty a) (ty b) pa.neg pb.neg
-  };
-
-logicBinary :: ((n :: Nat) -> bitvector n -> bitvector n -> bitvector n)
-            -> (Bool -> Bool -> Bool)
-            -> (a :: KType) -> ty a -> ty a -> ty a;
-logicBinary bvOp bitOp TCBit = bitOp;
-logicBinary bvOp bitOp (TCFun a b) = funBinary (ty a) (ty b) (logicBinary bvOp bitOp b);
-logicBinary bvOp bitOp TCUnit = unitBinary;
-logicBinary bvOp bitOp (TCPair a b) =
-  pairBinary (ty a) (ty b) (logicBinary bvOp bitOp a) (logicBinary bvOp bitOp b);
-logicBinary bvOp bitOp TCEmpty = emptyBinary;
-logicBinary bvOp bitOp (TCField s a b) =
-  fieldBinary s (ty a) (ty b) (logicBinary bvOp bitOp a) (logicBinary bvOp bitOp b);
-logicBinary bvOp bitOp (TCSeq (TCNum n) TCBit) = bvOp n;
-logicBinary bvOp bitOp (TCSeq TCInf TCBit) = streamMap2 Bool Bool Bool bitOp;
-logicBinary bvOp bitOp (TCSeq n (TCSeq m a)) =
-   seqBinary n (seq m (ty a)) (logicBinary bvOp bitOp (TCSeq m a));
-logicBinary bvOp bitOp (TCSeq n (TCFun a b)) =
-   seqBinary n (ty a -> ty b) (logicBinary bvOp bitOp (TCFun a b));
-logicBinary bvOp bitOp (TCSeq n TCUnit) = seqBinary n #() unitBinary;
-logicBinary bvOp bitOp (TCSeq n (TCPair a b)) =
-   seqBinary n #(ty a | ty b) (logicBinary bvOp bitOp (TCPair a b));
-logicBinary bvOp bitOp (TCSeq n TCEmpty) = seqBinary n #{} emptyBinary;
-logicBinary bvOp bitOp (TCSeq n (TCField s a b)) =
-   seqBinary n (ty (TCField s a b)) (logicBinary bvOp bitOp (TCField s a b));
+errorBinary :: (a :: sort 0) -> a -> a -> a;
+errorBinary a _ _ = error a "invalid class instance";
 
 --------------------------------------------------------------------------------
 -- Comparisons
@@ -427,29 +253,226 @@ fieldCmp :: (s :: String) -> (a b :: sort 0)
          -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> Bool -> Bool;
 fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
 
-PCmp :: KType -> sort 0;
-PCmp a = #{ cmpLt :: ty a -> ty a -> Bool -> Bool };
+errorCmp :: (a :: sort 0) -> a -> a -> Bool -> Bool;
+errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
 
-PCmpWord :: (n :: Num) -> PCmp (TCSeq n TCBit);
-PCmpWord (TCNum n) = { cmpLt = bvCmp n };
+--------------------------------------------------------------------------------
+-- Dictionaries and overloading
 
-PCmpBit :: PCmp TCBit;
-PCmpBit = { cmpLt = boolCmp };
+Dict :: sort 0 -> sort 0;
+Dict a =
+  #{ and  :: a -> a -> a
+   , or   :: a -> a -> a
+   , xor  :: a -> a -> a
+   , not  :: a -> a
+   , zero :: a
+   , cmp  :: a -> a -> Bool -> Bool
+   , add  :: a -> a -> a
+   , sub  :: a -> a -> a
+   , mul  :: a -> a -> a
+   , div  :: a -> a -> a
+   , mod  :: a -> a -> a
+   , exp  :: a -> a -> a
+   , lg2  :: a -> a
+   , neg  :: a -> a
+   };
 
-PCmpSeq :: (n :: Num) -> (a :: KType) -> PCmp a -> PCmp (TCSeq n a);
-PCmpSeq (TCNum n) a pa = { cmpLt = vecCmp n (ty a) pa.cmpLt };
+DictBit :: Dict Bool;
+DictBit =
+  { and  = and
+  , or   = or
+  , xor  = xor
+  , not  = not
+  , zero = False
+  , cmp  = boolCmp
+  , add = errorBinary Bool
+  , sub = errorBinary Bool
+  , mul = errorBinary Bool
+  , div = errorBinary Bool
+  , mod = errorBinary Bool
+  , exp = errorBinary Bool
+  , lg2 = errorUnary Bool
+  , neg = errorUnary Bool
+  };
 
-PCmpUnit :: PCmp TCUnit;
-PCmpUnit = { cmpLt = unitCmp };
+DictVec :: (a :: sort 0) -> Dict a -> (n :: Nat) -> Dict (Vec n a);
+DictVec a pa n =
+  { and  = zipWith a a a pa.and n
+  , or   = zipWith a a a pa.or  n
+  , xor  = zipWith a a a pa.xor n
+  , not  = map a a pa.not n
+  , zero = replicate n a pa.zero
+  , cmp  = vecCmp n a pa.cmp
+  , add = zipWith a a a pa.add n
+  , sub = zipWith a a a pa.sub n
+  , mul = zipWith a a a pa.mul n
+  , div = zipWith a a a pa.div n
+  , mod = zipWith a a a pa.mod n
+  , exp = zipWith a a a pa.exp n
+  , lg2 = map a a pa.lg2 n
+  , neg = map a a pa.neg n
+  };
 
-PCmpPair :: (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCPair a b);
-PCmpPair a b pa pb = { cmpLt = pairCmp (ty a) (ty b) pa.cmpLt pb.cmpLt };
+DictStream :: (a :: sort 0) -> Dict a -> Dict (Stream a);
+DictStream a pa =
+  { and  = streamMap2 a a a pa.and
+  , or   = streamMap2 a a a pa.or
+  , xor  = streamMap2 a a a pa.xor
+  , not  = streamMap a a pa.not
+  , zero = streamConst a pa.zero
+  , cmp  = errorCmp (Stream a)
+  , add = streamMap2 a a a pa.add
+  , sub = streamMap2 a a a pa.sub
+  , mul = streamMap2 a a a pa.mul
+  , div = streamMap2 a a a pa.div
+  , mod = streamMap2 a a a pa.mod
+  , exp = streamMap2 a a a pa.exp
+  , lg2 = streamMap a a pa.lg2
+  , neg = streamMap a a pa.neg
+  };
 
-PCmpEmpty :: PCmp TCEmpty;
-PCmpEmpty = { cmpLt = emptyCmp };
+DictWord :: (n :: Nat) -> Dict (Vec n Bool);
+DictWord n =
+  { and  = bvAnd n
+  , or   = bvOr  n
+  , xor  = bvXor n
+  , not  = bvNot n
+  , zero = bvNat n 0
+  , cmp  = bvCmp n
+  , add = bvAdd n
+  , sub = bvSub n
+  , mul = bvMul n
+  , div = bvUDiv n
+  , mod = bvURem n
+  , exp = bvExp n
+  , lg2 = bvLg2 n
+  , neg = bvNeg n
+  };
 
-PCmpField :: (s :: String) -> (a b :: KType) -> PCmp a -> PCmp b -> PCmp (TCField s a b);
-PCmpField s a b pa pb = { cmpLt = fieldCmp s (ty a) (ty b) pa.cmpLt pb.cmpLt };
+DictFun :: (a b :: sort 0) -> Dict b -> Dict (a -> b);
+DictFun a b pb =
+  { and  = funBinary a b pb.and
+  , or   = funBinary a b pb.or
+  , xor  = funBinary a b pb.xor
+  , not  = compose a b b pb.not
+  , zero = (\(_ :: a) -> pb.zero)
+  , cmp  = errorCmp (a -> b)
+  , add = funBinary a b pb.add
+  , sub = funBinary a b pb.sub
+  , mul = funBinary a b pb.mul
+  , div = funBinary a b pb.div
+  , mod = funBinary a b pb.mod
+  , exp = funBinary a b pb.exp
+  , lg2 = compose a b b pb.lg2
+  , neg = compose a b b pb.neg
+  };
+
+DictUnit :: Dict #();
+DictUnit =
+  { and  = unitBinary
+  , or   = unitBinary
+  , xor  = unitBinary
+  , not  = unitUnary
+  , zero = ()
+  , cmp  = unitCmp
+  , add = unitBinary
+  , sub = unitBinary
+  , mul = unitBinary
+  , div = unitBinary
+  , mod = unitBinary
+  , exp = unitBinary
+  , lg2 = unitUnary
+  , neg = unitUnary
+  };
+
+DictPair :: (a b :: sort 0) -> Dict a -> Dict b -> Dict #(a | b);
+DictPair a b pa pb =
+  { and  = pairBinary a b pa.and pb.and
+  , or   = pairBinary a b pa.or  pb.or
+  , xor  = pairBinary a b pa.xor pb.xor
+  , not  = pairUnary a b pa.not pb.not
+  , zero = (pa.zero | pb.zero)
+  , cmp  = pairCmp a b pa.cmp pb.cmp
+  , add = pairBinary a b pa.add pb.add
+  , sub = pairBinary a b pa.sub pb.sub
+  , mul = pairBinary a b pa.mul pb.mul
+  , div = pairBinary a b pa.div pb.div
+  , mod = pairBinary a b pa.mod pb.mod
+  , exp = pairBinary a b pa.exp pb.exp
+  , lg2 = pairUnary a b pa.lg2 pb.lg2
+  , neg = pairUnary a b pa.neg pb.neg
+  };
+
+DictEmpty :: Dict #{};
+DictEmpty =
+  { and  = emptyBinary
+  , or   = emptyBinary
+  , xor  = emptyBinary
+  , not  = emptyUnary
+  , zero = {}
+  , cmp  = emptyCmp
+  , add = emptyBinary
+  , sub = emptyBinary
+  , mul = emptyBinary
+  , div = emptyBinary
+  , mod = emptyBinary
+  , exp = emptyBinary
+  , lg2 = emptyUnary
+  , neg = emptyUnary
+  };
+
+DictField :: (s :: String) -> (a b :: sort 0) -> Dict a -> Dict b -> Dict #{ (s) :: a | b };
+DictField s a b pa pb =
+  { and  = fieldBinary s a b pa.and pb.and
+  , or   = fieldBinary s a b pa.or  pb.or
+  , xor  = fieldBinary s a b pa.xor pb.xor
+  , not  = fieldUnary s a b pa.not pb.not
+  , zero = { (s) = pa.zero | pb.zero }
+  , cmp  = fieldCmp s a b pa.cmp pb.cmp
+  , add = fieldBinary s a b pa.add pb.add
+  , sub = fieldBinary s a b pa.sub pb.sub
+  , mul = fieldBinary s a b pa.mul pb.mul
+  , div = fieldBinary s a b pa.div pb.div
+  , mod = fieldBinary s a b pa.mod pb.mod
+  , exp = fieldBinary s a b pa.exp pb.exp
+  , lg2 = fieldUnary s a b pa.lg2 pb.lg2
+  , neg = fieldUnary s a b pa.neg pb.neg
+  };
+
+Ops :: sort 0 -> sort 0;
+Ops a = #{ this :: Dict a, vec :: (n :: Nat) -> Dict (Vec n a) };
+
+OpsBit :: Ops Bool;
+OpsBit = { this = DictBit, vec = DictWord };
+
+OpsSeq :: (n :: Num) -> (a :: sort 0) -> Ops a -> Ops (seq n a);
+OpsSeq (TCNum n) a pa =
+  { this = pa.vec n
+  , vec = DictVec (Vec n a) (pa.vec n) };
+OpsSeq TCInf a pa =
+  { this = DictStream a pa.this
+  , vec = DictVec (Stream a) (DictStream a pa.this) };
+
+OpsFun :: (a b :: sort 0) -> Ops b -> Ops (a -> b);
+OpsFun a b pb =
+  { this = DictFun a b pb.this
+  , vec = DictVec (a -> b) (DictFun a b pb.this) };
+
+OpsUnit :: Ops #();
+OpsUnit = { this = DictUnit, vec = DictVec #() DictUnit };
+
+OpsPair :: (a b :: sort 0) -> Ops a -> Ops b -> Ops #(a | b);
+OpsPair a b pa pb =
+  { this = DictPair a b pa.this pb.this
+  , vec = DictVec #(a | b) (DictPair a b pa.this pb.this) };
+
+OpsEmpty :: Ops #{};
+OpsEmpty = { this = DictEmpty, vec = DictVec #{} DictEmpty };
+
+OpsField :: (s :: String) -> (a b :: sort 0) -> Ops a -> Ops b -> Ops #{ (s) :: a | b };
+OpsField s a b pa pb =
+  { this = DictField s a b pa.this pb.this
+  , vec = DictVec #{ (s) :: a | b } (DictField s a b pa.this pb.this) };
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -458,156 +481,130 @@ ecDemote :: (val bits :: Num) -> seq bits Bool;
 ecDemote (TCNum val) (TCNum bits) = bvNat bits val;
 
 -- Arith
-ecPlus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecPlus a pa = pa.add;
+ecPlus :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecPlus a pa = pa.this.add;
 
-ecMinus :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMinus a pa = pa.sub;
+ecMinus :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecMinus a pa = pa.this.sub;
 
-ecMul :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMul a pa = pa.mul;
+ecMul :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecMul a pa = pa.this.mul;
 
-ecDiv :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecDiv a pa = pa.div;
+ecDiv :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecDiv a pa = pa.this.div;
 
-ecMod :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecMod a pa = pa.mod;
+ecMod :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecMod a pa = pa.this.mod;
 
-ecExp :: (a :: KType) -> PArith a -> ty a -> ty a -> ty a;
-ecExp a pa = pa.exp;
+ecExp :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecExp a pa = pa.this.exp;
 
-ecLg2 :: (a :: KType) -> PArith a -> ty a -> ty a;
-ecLg2 a pa = pa.lg2;
+ecLg2 :: (a :: sort 0) -> Ops a -> a -> a;
+ecLg2 a pa = pa.this.lg2;
 
-ecNeg :: (a :: KType) -> PArith a -> ty a -> ty a;
-ecNeg a pa = pa.neg;
+ecNeg :: (a :: sort 0) -> Ops a -> a -> a;
+ecNeg a pa = pa.this.neg;
 
 -- Cmp
-ecLt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
-ecLt a pa x y = pa.cmpLt x y False;
+ecLt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecLt a pa x y = pa.this.cmp x y False;
 
-ecGt :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecGt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
 
-ecLtEq  :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecLtEq  :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecLtEq a pa x y = not (ecLt a pa y x);
 
-ecGtEq  :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecGtEq  :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecGtEq a pa x y = not (ecLt a pa x y);
 
-ecEq :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
-ecEq a _ = eq (ty a);
+ecEq :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecEq a _ = eq a;
 
-ecNotEq :: (a :: KType) -> PCmp a -> ty a -> ty a -> Bool;
+ecNotEq :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecNotEq a pa x y = not (ecEq a pa x y);
 
-ecFunEq :: (a b :: KType) -> PCmp b -> (ty a -> ty b) -> (ty a -> ty b) -> ty a -> Bool;
-ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
+ecFunEq :: (a :: sort 0) -> Ops a -> (b :: sort 0) -> Ops b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunEq a _ b pb f g x = ecEq b pb (f x) (g x);
 
-ecFunNotEq :: (a b :: KType) -> PCmp b -> (ty a -> ty b) -> (ty a -> ty b) -> ty a -> Bool;
-ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
+ecFunNotEq :: (a :: sort 0) -> Ops a -> (b :: sort 0) -> Ops b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunNotEq a _ b pb f g x = ecNotEq b pb (f x) (g x);
 
 -- Logic
 
-ecAnd :: (a :: KType) -> ty a -> ty a -> ty a;
-ecAnd = logicBinary bvAnd and;
+ecAnd :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecAnd a pa = pa.this.and;
 
-ecOr :: (a :: KType) -> ty a -> ty a -> ty a;
-ecOr = logicBinary bvOr or;
+ecOr :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecOr a pa = pa.this.or;
 
-ecXor :: (a :: KType) -> ty a -> ty a -> ty a;
-ecXor = logicBinary bvXor xor;
+ecXor :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecXor a pa = pa.this.xor;
 
-ecCompl :: (a :: KType) -> ty a -> ty a;
-ecCompl TCBit = not;
-ecCompl (TCFun a b) = compose (ty a) (ty b) (ty b) (ecCompl b);
-ecCompl TCUnit = unitUnary;
-ecCompl (TCPair a b) = pairUnary (ty a) (ty b) (ecCompl a) (ecCompl b);
-ecCompl TCEmpty = emptyUnary;
-ecCompl (TCField s a b) = fieldUnary s (ty a) (ty b) (ecCompl a) (ecCompl b);
-ecCompl (TCSeq (TCNum n) TCBit) = bvNot n;
-ecCompl (TCSeq TCInf TCBit) = streamMap Bool Bool not;
-ecCompl (TCSeq n (TCSeq m a)) = seqMap (seq m (ty a)) (seq m (ty a)) n (ecCompl (TCSeq m a));
-ecCompl (TCSeq n (TCFun a b)) = seqMap (ty a -> ty b) (ty a -> ty b) n (ecCompl (TCFun a b));
-ecCompl (TCSeq n TCUnit) = seqMap #() #() n unitUnary;
-ecCompl (TCSeq n (TCPair a b)) = seqMap #(ty a | ty b) #(ty a | ty b) n (ecCompl (TCPair a b));
-ecCompl (TCSeq n TCEmpty) = seqMap #{} #{} n emptyUnary;
-ecCompl (TCSeq n (TCField s a b)) = seqMap (ty (TCField s a b)) (ty (TCField s a b)) n (ecCompl (TCField s a b));
+ecCompl :: (a :: sort 0) -> Ops a -> a -> a;
+ecCompl a pa = pa.this.not;
 
-ecZero :: (a :: KType) -> ty a;
-ecZero TCBit = False;
-ecZero (TCFun a b) = (\(_::ty a) -> ecZero b);
-ecZero TCUnit = ();
-ecZero (TCPair a b) = (ecZero a | ecZero b);
-ecZero TCEmpty = {};
-ecZero (TCField s a b) = { (s) = ecZero a | ecZero b };
-ecZero (TCSeq (TCNum n) TCBit) = bvNat n 0;
-ecZero (TCSeq TCInf TCBit) = streamConst Bool False;
-ecZero (TCSeq n (TCSeq m a)) = seqConst n (seq m (ty a)) (ecZero (TCSeq m a));
-ecZero (TCSeq n (TCFun a b)) = seqConst n (ty a -> ty b) (ecZero (TCFun a b));
-ecZero (TCSeq n TCUnit) = seqConst n #() ();
-ecZero (TCSeq n (TCPair a b)) = seqConst n #(ty a | ty b) (ecZero (TCPair a b));
-ecZero (TCSeq n TCEmpty) = seqConst n #{} {};
-ecZero (TCSeq n (TCField s a b)) = seqConst n #{ (s) :: ty a | ty b } (ecZero (TCField s a b));
+ecZero :: (a :: sort 0) -> Ops a -> a;
+ecZero a pa = pa.this.zero;
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecShiftL (TCNum m) (TCNum n) a = bvShiftL m (ty a) n (ecZero a);
-ecShiftL TCInf (TCNum n) a = bvStreamShiftL (ty a) n;
+ecShiftL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
+ecShiftL (TCNum m) (TCNum n) a pa = bvShiftL m a n (ecZero a pa);
+ecShiftL TCInf (TCNum n) a _ = bvStreamShiftL a n;
 
-ecShiftR :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecShiftR (TCNum m) (TCNum n) a = bvShiftR m (ty a) n (ecZero a);
-ecShiftR TCInf (TCNum n) a = bvStreamShiftR (ty a) n (ecZero a);
+ecShiftR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
+ecShiftR (TCNum m) (TCNum n) a pa = bvShiftR m a n (ecZero a pa);
+ecShiftR TCInf (TCNum n) a pa = bvStreamShiftR a n (ecZero a pa);
 
-ecRotL :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotL (TCNum m) (TCNum n) a = bvRotateL m (ty a) n;
+ecRotL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
+ecRotL (TCNum m) (TCNum n) a _ = bvRotateL m a n;
 
-ecRotR :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n Bool -> seq m (ty a);
-ecRotR (TCNum m) (TCNum n) a = bvRotateR m (ty a) n;
+ecRotR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
+ecRotR (TCNum m) (TCNum n) a _ = bvRotateR m a n;
 
-ecCat :: (m n :: Num) -> (a :: KType) -> seq m (ty a) -> seq n (ty a) -> seq (tcAdd m n) (ty a);
-ecCat (TCNum m) (TCNum n) a = append m n (ty a);
-ecCat (TCNum m) TCInf a = streamAppend (ty a) m;
+ecCat :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n a -> seq (tcAdd m n) a;
+ecCat (TCNum m) (TCNum n) a _ = append m n a;
+ecCat (TCNum m) TCInf a _ = streamAppend a m;
 
-ecSplitAt :: (m n :: Num) -> (a :: KType) -> seq (tcAdd m n) (ty a) -> #(seq m (ty a), seq n (ty a));
-ecSplitAt (TCNum m) (TCNum n) a xs = (take (ty a) m n xs, drop (ty a) m n xs);
-ecSplitAt (TCNum m) TCInf a xs = (streamTake (ty a) m xs, streamDrop (ty a) m xs);
+ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcAdd m n) a -> #(seq m a, seq n a);
+ecSplitAt (TCNum m) (TCNum n) a _ xs = (take a m n xs, drop a m n xs);
+ecSplitAt (TCNum m) TCInf a _ xs = (streamTake a m xs, streamDrop a m xs);
 
-ecJoin :: (m n :: Num) -> (a :: KType) -> seq m (seq n (ty a)) -> seq (tcMul m n) (ty a);
-ecJoin (TCNum m) (TCNum n) a = join m n (ty a);
-ecJoin TCInf (TCNum n) a =
+ecJoin :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m (seq n a) -> seq (tcMul m n) a;
+ecJoin (TCNum m) (TCNum n) a _ = join m n a;
+ecJoin TCInf (TCNum n) a _ =
   natCase
-    (\ (n'::Nat) -> Stream (Vec n' (ty a)) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) (ty a))
-      (\ (s::Stream (Vec 0 (ty a))) -> EmptyVec (ty a))
-      (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') (ty a))) -> streamJoin (ty a) n' s)
+    (\ (n'::Nat) -> Stream (Vec n' a) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) a)
+      (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
+      (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) -> streamJoin a n' s)
       n;
 
-ecSplit :: (m n :: Num) -> (a :: KType) -> seq (tcMul m n) (ty a) -> seq m (seq n (ty a));
-ecSplit (TCNum m) (TCNum n) a = split m n (ty a);
-ecSplit TCInf (TCNum n) a =
+ecSplit :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcMul m n) a -> seq m (seq n a);
+ecSplit (TCNum m) (TCNum n) a _ = split m n a;
+ecSplit TCInf (TCNum n) a _ =
   natCase
-  (\(n :: Nat) -> seq (ite Num (equalNat 0 n) (TCNum 0) TCInf) (ty a) -> Stream (Vec n (ty a)))
-  (streamConst (Vec 0 (ty a))) (\(n :: Nat) -> streamSplit (ty a) (Succ n)) n;
+  (\(n :: Nat) -> seq (ite Num (equalNat 0 n) (TCNum 0) TCInf) a -> Stream (Vec n a))
+  (streamConst (Vec 0 a)) (\(n :: Nat) -> streamSplit a (Succ n)) n;
 
-ecReverse :: (n :: Num) -> (a :: KType) -> seq n (ty a) -> seq n (ty a);
-ecReverse (TCNum n) a = reverse n (ty a);
+ecReverse :: (n :: Num) -> (a :: sort 0) -> Ops a -> seq n a -> seq n a;
+ecReverse (TCNum n) a _ = reverse n a;
 
-ecTranspose :: (m n :: Num) -> (a :: KType) -> seq m (seq n (ty a)) -> seq n (seq m (ty a));
-ecTranspose (TCNum m) (TCNum n) a = transpose m n (ty a);
+ecTranspose :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m (seq n a) -> seq n (seq m a);
+ecTranspose (TCNum m) (TCNum n) a _ = transpose m n a;
 -- TODO: other cases
 
-ecAt :: (n :: Num) -> (a :: KType) -> (i :: Num) -> seq n (ty a) -> seq i Bool -> ty a;
-ecAt (TCNum n) a (TCNum i) = bvAt n (ty a) i;
-ecAt TCInf a (TCNum i) = bvStreamGet (ty a) i;
+ecAt :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAt (TCNum n) a _ (TCNum i) = bvAt n a i;
+ecAt TCInf a _ (TCNum i) = bvStreamGet a i;
 
-ecAtRange :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
-ecAtRange n a m i xs = seqMap (seq i Bool) (ty a) m (ecAt n a i xs);
+ecAtRange :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
+ecAtRange n a pa m i xs = seqMap (seq i Bool) a m (ecAt n a pa i xs);
 
-ecAtBack :: (n :: Num) -> (a :: KType) -> (i :: Num) -> seq n (ty a) -> seq i Bool -> ty a;
-ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
+ecAtBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAtBack n a pa i xs = ecAt n a pa i (ecReverse n a pa xs);
 
-ecAtRangeBack :: (n :: Num) -> (a :: KType) -> (m i :: Num) -> seq n (ty a) -> seq m (seq i Bool) -> seq m (ty a);
-ecAtRangeBack n a m i xs = seqMap (seq i Bool) (ty a) m (ecAtBack n a i xs);
+ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
+ecAtRangeBack n a pa m i xs = seqMap (seq i Bool) a m (ecAtBack n a pa i xs);
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> seq len (seq bits Bool);
@@ -639,7 +636,7 @@ ecInfFromThen (TCNum n) first next =
     bvAdd n first (bvMul n (bvSub n next first) (bvNat n i)));
 
 -- Run-time error
-primitive ecError :: (a :: KType) -> (len :: Num) -> seq len (bitvector 8) -> ty a;
+primitive ecError :: (a :: sort 0) -> Ops a -> (len :: Num) -> seq len (bitvector 8) -> a;
 
 -- Polynomials
 ecPMul :: (a b :: Num) -> seq a Bool -> seq b Bool
@@ -653,25 +650,25 @@ ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bo
 ecPMod (TCNum a) (TCNum b) = bvPMod a b;
 
 -- Random values
-ecRandom :: (a :: KType) -> bitvector 32 -> ty a;
-ecRandom a _ = error (ty a) "Cryptol.random";
+ecRandom :: (a :: sort 0) -> Ops a -> bitvector 32 -> a;
+ecRandom a _ _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
-ecTrace :: (n :: Num) -> (a b :: KType) -> seq n (bitvector 8) -> ty a -> ty b -> ty b;
-ecTrace _ _ _ _ _ x = x;
+ecTrace :: (n :: Num) -> (a :: sort 0) -> Ops a -> (b :: sort 0) -> Ops b -> seq n (bitvector 8) -> a -> b -> b;
+ecTrace _ _ _ _ _ _ _ x = x;
 
 --------------------------------------------------------------------------------
 -- Extra primitives
 
 -- Array update
-ecUpdate :: (n :: Num) -> (a :: KType) -> (w :: Num)
-  -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
-ecUpdate (TCNum n) a (TCNum w) = bvUpd n (ty a) w;
-ecUpdate TCInf     a (TCNum w) = bvStreamUpd (ty a) w;
+ecUpdate :: (n :: Num) -> (a :: sort 0) -> Ops a -> (w :: Num)
+  -> seq n a -> seq w Bool -> a -> seq n a;
+ecUpdate (TCNum n) a _ (TCNum w) = bvUpd n a w;
+ecUpdate TCInf     a _ (TCNum w) = bvStreamUpd a w;
 
-ecUpdateEnd :: (n :: Num) -> (a :: KType) -> (w :: Num)
-  -> seq n (ty a) -> seq w Bool -> ty a -> seq n (ty a);
-ecUpdateEnd (TCNum n) a (TCNum w) xs i y = upd n (ty a) xs (subNat (subNat n 1) (bvToNat w i)) y;
+ecUpdateEnd :: (n :: Num) -> (a :: sort 0) -> Ops a -> (w :: Num)
+  -> seq n a -> seq w Bool -> a -> seq n a;
+ecUpdateEnd (TCNum n) a _ (TCNum w) xs i y = upd n a xs (subNat (subNat n 1) (bvToNat w i)) y;
 
 -- Bitvector truncation
 ecTrunc :: (m n :: Num) -> seq (tcAdd m n) Bool -> seq n Bool;
