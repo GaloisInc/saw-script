@@ -198,8 +198,8 @@ translateExpr sc env expr = do
   let terms = eTermEnv env
   let cryEnv = C.Env
         { C.envT = Map.empty
+        , C.envD = Map.empty
         , C.envE = fmap (\t -> (t, 0)) terms
-        , C.envP = Map.empty
         , C.envC = types'
         }
   C.importExpr sc cryEnv expr
@@ -215,8 +215,8 @@ translateDeclGroups sc env dgs = do
   let terms = eTermEnv env
   let cryEnv = C.Env
         { C.envT = Map.empty
+        , C.envD = Map.empty
         , C.envE = fmap (\t -> (t, 0)) terms
-        , C.envP = Map.empty
         , C.envC = types'
         }
   cryEnv' <- C.importTopLevelDeclGroups sc cryEnv dgs
