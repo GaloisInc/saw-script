@@ -8,6 +8,7 @@ ec_mul (m, d, s) = res!0
   where
     k = d # [False, False]
     h = k + (k + k)
+    res : [gv+3](JacobianPoint fv)
     res = [(ec_zero_point(m.field))]
           #  [ if hi && ~ki then
                  m.add(m.double(r), s)
