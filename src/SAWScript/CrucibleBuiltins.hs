@@ -72,7 +72,7 @@ import qualified Data.Parameterized.NatRepr as NatRepr
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
-import Verifier.SAW.Cryptol (importType', emptyEnv)
+import Verifier.SAW.Cryptol (importType, emptyEnv)
 
 import SAWScript.Builtins
 import SAWScript.Options
@@ -350,7 +350,7 @@ resolveSetupVal cc rs val =
       Cryptol.TVSeq sz tp' ->
         do sc    <- Crucible.saw_ctx <$> (readIORef (Crucible.sbStateManager sym))
            sz_tm <- scNat sc (fromIntegral sz)
-           tp_tm <- importType' sc emptyEnv (Cryptol.tValTy tp')
+           tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
            let f i = do i_tm <- scNat sc (fromIntegral i)
                         tm' <- scAt sc sz_tm tp_tm tm i_tm
                         resolveSAWTerm tp' tm'
