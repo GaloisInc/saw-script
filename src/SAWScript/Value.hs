@@ -129,11 +129,11 @@ showLLVMModule (LLVMModule name m) =
       L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
       L.ppType (L.globalType g)
     ppDefine' d =
-      L.ppMaybe L.ppLinkage (L.funLinkage (L.defAttrs d)) PP.<+>
+      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
       L.ppType (L.defRetType d) PP.<+>
       L.ppSymbol (L.defName d) PP.<>
       L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
-      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.funGC (L.defAttrs d))
+      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
 
 data ProofResult
   = Valid SolverStats
