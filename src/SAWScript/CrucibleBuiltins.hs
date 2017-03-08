@@ -714,10 +714,11 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
                   return gp
         writeIORef (ccSimContext cc) st
         writeIORef (ccGlobals cc) (gp^.Crucible.gpGlobals)
-        t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (Crucible.toSC sym)
-                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
+        t <- extractReturnValue sym sc(gp^.Crucible.gpValue)
+          -- Crucible.asSymExpr
+          --          (gp^.Crucible.gpValue)
+          --          (Crucible.toSC sym)
+          --          (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
         t' <- scAbstractExts sc (toList ecs) t
         tt <- mkTypedTerm sc t'
         return tt
@@ -727,6 +728,13 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
                      , show resultDoc
                      ]
 
+extractReturnValue :: forall tp. Sym -> SharedContext -> Crucible.RegEntry Sym tp -> IO Term
+extractReturnValue sym shctx v0@(Crucible.RegEntry tp v) =
+  case tp of
+    Crucible.StructRepr ctx -> do terms <- sequence $ Ctx.toListFC (extractReturnValue sym shctx :: forall tp''. Crucible.RegEntry Sym tp'' -> IO Term) $ Ctx.zipWith (\x (Crucible.RV y) -> Crucible.RegEntry x y) ctx v
+                                  scTuple shctx terms
+    _                       -> Crucible.asSymExpr v0 (Crucible.toSC sym)
+                               (fail $ unwords ["Unexpected return type:", show tp])
 
 extract_crucible_llvm :: BuiltinContext -> Options -> String -> TopLevel TypedTerm
 extract_crucible_llvm bic _opts fn_name = do
