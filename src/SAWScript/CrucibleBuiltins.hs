@@ -113,14 +113,15 @@ ppAbortedResult cc (Crucible.AbortedExec err gp) = do
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
     return (text "Aborted branch")
 
-verifyCrucible
-           :: BuiltinContext
-           -> Options
-           -> String
-           -> [CrucibleMethodSpecIR]
-           -> CrucibleSetup ()
-           -> TopLevel CrucibleMethodSpecIR
-verifyCrucible bic _opts nm lemmas setup = do
+crucible_llvm_verify
+  :: BuiltinContext
+  -> Options
+  -> String
+  -> [CrucibleMethodSpecIR]
+  -> CrucibleSetup ()
+  -> ProofScript SatResult
+  -> TopLevel CrucibleMethodSpecIR
+crucible_llvm_verify bic _opts nm lemmas setup tactic = do
   let _sc = biSharedContext bic
   cc <- io $ readIORef (biCrucibleContext bic) >>= \case
            Nothing -> fail "No Crucible LLVM module loaded"
@@ -138,15 +139,16 @@ verifyCrucible bic _opts nm lemmas setup = do
   (args, assumes, prestate) <- verifyPrestate cc methodSpec
   ret <- verifySimulate cc methodSpec prestate args assumes lemmas
   asserts <- verifyPoststate cc methodSpec prestate ret
-  verifyObligations cc methodSpec assumes asserts
+  verifyObligations cc methodSpec tactic assumes asserts
   return methodSpec
 
 verifyObligations :: CrucibleContext
                   -> CrucibleMethodSpecIR
+                  -> ProofScript SatResult
                   -> [Term]
                   -> [Term]
                   -> TopLevel ()
-verifyObligations cc mspec assumes asserts = do
+verifyObligations cc mspec tactic assumes asserts = do
   let sym = ccBackend cc
   st     <- io $ readIORef $ Crucible.sbStateManager sym
   let sc  = Crucible.saw_ctx st
@@ -155,10 +157,8 @@ verifyObligations cc mspec assumes asserts = do
   assert <- io $ foldM (scAnd sc) t asserts
   goal   <- io $ scImplies sc assume assert
   goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
-  --let prf = satZ3 -- FIXME
-  let prf = satABC
   let nm  = show (L.ppSymbol (L.defName (csDefine mspec)))
-  r      <- evalStateT (prf sc) (startProof (ProofGoal Universal nm goal'))
+  r      <- evalStateT tactic (startProof (ProofGoal Universal nm goal'))
   case r of
     Unsat _stats -> do
       io $ putStrLn $ unwords ["Proof succeeded!", nm]

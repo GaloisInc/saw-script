@@ -1519,8 +1519,8 @@ primitives = Map.fromList
     [ "TODO" ]
 
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
-    (bicVal verifyCrucible)
+    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_verify)
     [ "TODO" ]
 
   , prim "crucible_array"
