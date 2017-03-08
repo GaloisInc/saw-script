@@ -1562,6 +1562,11 @@ primitives = Map.fromList
     "GoPackage -> String -> TopLevel AnyCFG"
     (bicVal make_go_cfg)
     [ "Translate a top-level Go function identified by name in the Go package." ]
+
+  , prim "symexec_cfg"
+    "AnyCFG -> TopLevel TypedTerm"
+    (bicVal symexec_cfg)
+    [ "Symbolically execute a crucible CFG. (Won't work with LLVM.)"  ]
   ]
 
   where

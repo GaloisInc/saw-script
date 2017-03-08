@@ -68,6 +68,7 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NatRepr
+import qualified Data.Parameterized.Map as MapF
 
 import qualified Language.Go.Parser as Go
 import qualified Language.Go.AST    as Go
@@ -918,3 +919,28 @@ make_go_cfg _ _ pkg fname =
 lookup_go_function :: GoPackage -> String -> Maybe (Go.Id Go.SourceRange, Go.ParameterList Go.SourceRange, Go.ReturnList Go.SourceRange, [Go.Statement Go.SourceRange])
 lookup_go_function pkg name =
   find (\((Go.Id _ _ fname), _, _, _) -> Text.unpack fname == name) [(ident, params, returns, body)|(Go.FunctionDecl _ ident params returns (Just body)) <- universeBi pkg]
+
+symexec_cfg :: BuiltinContext -> Options -> Crucible.AnyCFG -> TopLevel TypedTerm
+symexec_cfg bic _ cfg = do cc <- mkSimpleCrucibleContext bic
+                           io $ extractFromCFG (biSharedContext bic) cc cfg
+
+mkSimpleCrucibleContext :: BuiltinContext -> TopLevel CrucibleContext
+mkSimpleCrucibleContext bic = 
+  do halloc <- getHandleAlloc
+     io$ do let gen = Crucible.globalNonceGenerator
+            let sc  = biSharedContext bic
+            sym <- Crucible.newSAWCoreBackend sc gen
+            let verbosity = 10
+            cfg <- Crucible.initialConfig verbosity []
+            let bindings = Crucible.fnBindingsFromList []
+            let simctx   = Crucible.initSimContext sym MapF.empty cfg halloc stdout bindings
+            let globals  = Crucible.emptyGlobals
+            refSimctx <- newIORef simctx
+            refGlobals <- newIORef globals
+            return $ CrucibleContext { ccBackend = sym
+                                     , ccSimContext = refSimctx
+                                     , ccGlobals = refGlobals
+                                     , ccLLVMContext = undefined
+                                     , ccLLVMModule = undefined
+                                     , ccLLVMModuleTrans = undefined
+                                     }
