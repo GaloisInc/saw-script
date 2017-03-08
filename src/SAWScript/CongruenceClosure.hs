@@ -27,6 +27,7 @@ module SAWScript.CongruenceClosure
   , insertTerm
   , insertEquation
   , insertEquivalenceClass
+  , foldTerm
   , union
   , fromSet
   , toSet
@@ -84,6 +85,10 @@ instance ShowFoldable app => Show (Term app) where
 -- | Evaluate a term using the given monadic computation.
 evalTermM :: (Monad m, Traversable f) => (f v -> m v) -> Term f -> m v
 evalTermM fn (Term t) = fn =<< mapM (evalTermM fn) t
+
+foldTerm :: Functor f => (f r -> r) -> Term f -> r
+foldTerm f = go
+  where go (Term x) = f (fmap go x)
 
 -- Class {{{1
 

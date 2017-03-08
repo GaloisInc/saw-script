@@ -42,7 +42,9 @@ import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.State
 import Control.Monad.Trans.Except
+import Data.Foldable (traverse_)
 import Data.List (sortBy)
+import Data.Ord (comparing)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -520,11 +522,10 @@ initializeVerification' sc file ir = do
 
   let argAssignments'' = catMaybes argAssignments'
 
-  let args = flip map argAssignments'' $ \(expr, mle) ->
-               case (expr, mle) of
-                 (CC.Term (TC.Arg _ _ ty), tm) ->
-                   Just (expr, (ty, tm))
-                 _ -> Nothing
+  let args = flip map argAssignments'' $ \(expr, tm) ->
+               case expr of
+                 CC.Term (TC.Arg _ _ ty) -> Just (expr, (ty, tm))
+                 _                       -> Nothing
 
   --gm <- use globalTerms
   let rreg =  (,Ident "__sawscript_result") <$> sdRetType fnDef
@@ -536,7 +537,7 @@ initializeVerification' sc file ir = do
   let argVals = sortBy cmpFst (catMaybes args)
   callDefine' False fn rreg (map snd argVals)
 
-  let doAssign (expr, mle) = do
+  let doAlloc (expr, mle) = do
         let Just (ty, _) = Map.lookup expr (bsExprDecls bs)
         ps <- fromMaybe (error "initializeVerification") <$> getPath
         (v, ps') <- createLogicValue cb sbe sc expr ps ty mle
@@ -545,12 +546,13 @@ initializeVerification' sc file ir = do
         return (expr, (ty, v))
 
   -- Allocate space for all pointers that aren't directly parameters.
-  otherPtrs <- forM ptrAssignments doAssign
+  otherPtrs <- traverse doAlloc
+             $ sortBy (comparing (TC.exprDepth . fst)) ptrAssignments
 
   -- Set initial logic values for everything except arguments and
   -- pointers, including values pointed to by pointers from directly
   -- above, and fields of structures from anywhere.
-  forM_ otherAssignments doAssign
+  traverse_ doAlloc otherAssignments
 
   ps <- fromMaybe (error "initializeVerification") <$> getPath
 

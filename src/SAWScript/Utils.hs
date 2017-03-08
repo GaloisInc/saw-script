@@ -229,7 +229,7 @@ basic_ss sc = do
       , "bitvector"
       ]
     defs' = map (mkIdent (mkModuleName ["Cryptol"]))
-            ["ty", "seq", "ecEq", "ecNotEq", "ePCmp"]
+            ["seq", "ecEq", "ecNotEq"]
     procs = bvConversions ++ natConversions ++ vecConversions
 
 -- | Convert a non-negative integer to to an ordinal string.

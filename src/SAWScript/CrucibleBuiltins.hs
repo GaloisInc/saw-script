@@ -78,7 +78,7 @@ import           Data.Generics.Uniplate.Data
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
-import Verifier.SAW.Cryptol (importType', emptyEnv)
+import Verifier.SAW.Cryptol (importType, emptyEnv)
 
 import SAWScript.Builtins
 import SAWScript.Options
@@ -356,7 +356,7 @@ resolveSetupVal cc rs val =
       Cryptol.TVSeq sz tp' ->
         do sc    <- Crucible.saw_ctx <$> (readIORef (Crucible.sbStateManager sym))
            sz_tm <- scNat sc (fromIntegral sz)
-           tp_tm <- importType' sc emptyEnv (Cryptol.tValTy tp')
+           tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
            let f i = do i_tm <- scNat sc (fromIntegral i)
                         tm' <- scAt sc sz_tm tp_tm tm i_tm
                         resolveSAWTerm tp' tm'
@@ -494,8 +494,7 @@ methodSpecHandler cs _s = do
   putStrLn $ "Executing override for `" ++ fsym ++ "` (TODO)"
   return undefined
 
-registerOverride :: forall rtp args ret .
-                    CrucibleContext
+registerOverride :: CrucibleContext
                  -> Crucible.SimContext Sym
                  -> CrucibleMethodSpecIR
                  -> Crucible.OverrideSim Sym rtp args ret ()
@@ -506,9 +505,10 @@ registerOverride cc _ctx cs = do
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
     Just (Crucible.LLVMHandleInfo _decl' h) -> do
       -- TODO: check that decl' matches (csDefine cs)
-      let o = Crucible.Override { Crucible.overrideName = Crucible.handleName h
-                                , Crucible.overrideHandler = methodSpecHandler cs
-                                }
+      let o = Crucible.Override
+              { Crucible.overrideName = Crucible.handleName h
+              , Crucible.overrideHandler = methodSpecHandler cs
+              }
       Crucible.registerFnBinding h (Crucible.UseOverride o)
     Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
 
