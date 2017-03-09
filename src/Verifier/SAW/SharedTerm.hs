@@ -890,7 +890,7 @@ scPrettyTermDoc opts t0 =
     cm0 :: IntMap Term
     cm0 =
       IntMap.filter (\t -> looseVars t == 0) $ fmap fst $
-      IntMap.filter shouldName (scTermCount True t0) -- ^ Occurrence map
+      IntMap.filter shouldName (scTermCount True t0) -- Occurrence map
 
     -- Terms bound in map.
     bound0 :: [(TermIndex, Term)]
