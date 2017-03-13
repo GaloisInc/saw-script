@@ -1559,7 +1559,7 @@ primitives = Map.fromList
     [ "Parse the Go package contained within the given directory." ]
 
   , prim "make_go_cfg"
-    "GoPackage -> String -> TopLevel AnyCFG"
+    "Int -> GoPackage -> String -> TopLevel AnyCFG"
     (bicVal make_go_cfg)
     [ "Translate a top-level Go function identified by name in the Go package." ]
 

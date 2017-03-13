@@ -918,8 +918,9 @@ load_go_package _ _ dir = do
     Left err -> fail $ "Error loading package from " ++ dir ++ ": " ++ err
     Right pkg -> return pkg
 
-make_go_cfg :: BuiltinContext -> Options -> GoPackage -> String -> TopLevel Crucible.AnyCFG
-make_go_cfg _ _ pkg fname =
+make_go_cfg :: BuiltinContext -> Options -> Int -> GoPackage -> String -> TopLevel Crucible.AnyCFG
+make_go_cfg _ _ mww pkg fname =
+  let ?machineWordWidth = mww in
   case lookup_go_function pkg fname of
     Nothing -> fail $ "Can't find a definition for a function named " ++ fname
     Just (fid, params, returns, body) -> return $ runST $ GT.translateFunction fid params returns body
