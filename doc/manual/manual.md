@@ -430,7 +430,7 @@ to use the various term transformation features available in SAW.
 ## Rewriting
 
 Rewriting a `Term` consists of applying one or more *rewrite rules* to
-it, resulting in a new `Term`. Each of the rules generally consists of
+it, resulting in a new `Term`. Each of the rules logically consists of
 two patterns, each of which which may contain free variables
 (essentially holes in the patterns, which may match any sub-term). The
 left-hand pattern describes a term to match (which may be a sub-term of
@@ -438,6 +438,10 @@ the full term being rewritten), and the right-hand pattern describes a
 term to replace it with. Any free variable in the right-hand pattern
 must also appear in the left-hand pattern and will be instantiated with
 whatever sub-term matched that variable in the original term.
+
+TODO: Concretely, a rewrite rule is just a `Term`.
+
+TODO: One or more `Term` values can be collected together into a `Simpset`
 
 The general philosophy of rewriting is that the left and right patterns,
 while syntactically different, should be semantically equivalent.
@@ -462,29 +466,84 @@ To make this more concrete, consider the following example term:
 
 * TODO: show how simplifying it with `cryptol_ss` affects it
 
-* TODO: talk about `basic_ss`
-
 * TODO: show another example of rewriting with a Cryptol lemma
 
 * TODO: show how to get at built-in rules
 
-    add_cryptol_eqs : [String] -> Simpset -> Simpset
-    add_prelude_defs : [String] -> Simpset -> Simpset
-    add_prelude_eqs : [String] -> Simpset -> Simpset
-    addsimp : Theorem -> Simpset -> Simpset
-    addsimp' : Term -> Simpset -> Simpset
-    addsimps : [Theorem] -> Simpset -> Simpset
-    addsimps' : [Term] -> Simpset -> Simpset
+A few pre-defined `Simpset` values exist:
+
+~~~
+empty_ss : Simpset
+basic_ss : Simpset
+cryptol_ss : () -> Simpset
+~~~
+
+The first is the empty set of rules. Rewriting with it should have no
+effect, but it is useful as an argument to some of the functions that
+construct larger `Simpset` values. The `basic_ss` constant is a
+collection of rules that will be useful in most proof scripts. The
+`cryptol_ss` value includes a collection of Cryptol-specific rules,
+including rules to simplify away the abstractions introduced in the
+translation from Cryptol to SAWCore, which can be useful when proving
+equivalence between Cryptol and non-Cryptol code. When comparing Cryptol
+to Cryptol code, leaving these abstractions in place can be most
+appropriate, however, so `cryptol_ss` is not included in `basic_ss`.
+
+The next set of functions add either a single rule or a list of rules to
+an existing `Simpset`.
+
+~~~~
+addsimp : Theorem -> Simpset -> Simpset
+addsimp' : Term -> Simpset -> Simpset
+addsimps : [Theorem] -> Simpset -> Simpset
+addsimps' : [Term] -> Simpset -> Simpset
+~~~~
+
+The functions that take a `Theorem` type work with rewrite rules that
+are proved to be correct. The `prove_print` function returns a `Theorem`
+when successful, and any such theorem that is an equality statement can
+be used as a rewrite rule. The behavior is that any instance of the
+left-hand side of this equality in the goal is replaced with the
+right-hand side of the equality.
+
+The functions above that take `Term` arguments work with terms of the
+same shape, but which haven't been proven to be correct. When using
+these functions, the soundness of the proof process depends on the
+correctness of these rules as a side condition.
+
+Finally, there are some built-in rules that are not included in either
+`basic_ss` and `cryptol_ss` because they are not always beneficial, but
+can sometimes be helpful or essential.
+
+~~~~
+add_cryptol_eqs : [String] -> Simpset -> Simpset
+add_prelude_defs : [String] -> Simpset -> Simpset
+add_prelude_eqs : [String] -> Simpset -> Simpset
+~~~~
+
+
+TODO: transition
+
+A rewrite rule in SAW can be specified in multiple ways, the third due
+to the dependent type system used in SAWCore:
+
+  * as the definition of functions that can be unfolded,
+  * as a term of boolean type (or a function returning a boolean) that
+    is an equality statement, and
+  * as a term of _equality type_ whose body encodes a proof that the
+    equality in the type is valid.
+
+The `cryptol_ss` simpset includes rewrite rules to unfold all
+definitions in the `Cryptol` SAWCore module, but does not include any of
+the terms of equality type. The `add_cryptol_eqs` function adds the
+terms of equality type with the given names to the given `Simpset`. The
+`add_prelude_defs` and `add_prelude_eqs` functions add definition
+unfolding rules and equality-typed terms, respectively, from the SAWCore
+`Prelude` module.
+
+TODO: talk about this command
 
     core_axiom : String -> Theorem
-
-## Fresh Symbolic Variables
-
-* TODO: talk about `fresh_symbolic`
-
-## Abstraction
-
-* TODO: talk about `abstract_symbolic`, others
 
 ## Folding and Unfolding
 
@@ -496,27 +555,162 @@ To make this more concrete, consider the following example term:
 
 * TODO: talk about `hoist_ifs`, `beta_reduce_term`, `replace`
 
-# Proofs About Terms
+# Proofs about Terms
 
-* TODO pull from java_llvm document and expand
+TODO: what are proof scripts
 
-## Proof Commands
+TODO: `prove`, `sat`, and related commands
 
-## Rewriting to True
+## Automated Tactics
 
-## Other Transformation Tactics
+The simplest proof scripts just indicate which automated prover to use.
+The `ProofScript` values `abc` and `z3` select the ABC and Z3 theorem
+provers, respectively, and are typically good choices. In addition to
+these, the `boolector`, `cvc4`, `mathsat`, and `yices` provers are
+available.
 
-## Finishing Off with Automated Provers
+In more complex cases, some pre-processing can be helpful or necessary
+before handing the problem off to an automated prover. The
+pre-processing can involve rewriting, beta reduction, unfolding, the use
+of provers that require slightly more configuration, or the use of
+provers that do very little real work.
 
-## Offline Proofs
+## Rewriting in Proof Scripts
 
-* TODO: talk about `offline_*` commands
+* TODO
 
-* TODO: talk about `write_*` commands
+## Other Transformations
 
-# Obtaining Terms from Files
+Some useful transformations are not easily specified using equality
+statements, and instead have special tactics.
 
-* TODO: talk about `read_*` commands
+~~~~
+beta_reduce_goal : ProofScript ()
+unfolding : [String] -> ProofScript ()
+~~~~
+
+The `beta_reduce_goal` tactic takes any sub-expression of the form `(\x
+-> t) v` and replaces it with a transformed version of `t` in which all
+instances of `x` are replaced by `v`.
+
+The `unfolding` tactic works with "opaque constants". Each of these is a
+named subterm in a SAWCore term that can be treated as "folded", in
+which case it is just an opaque name (essentially an uninterpreted
+function), or "unfolded", in which case it looks just like any other
+subterm. The `unfolding` tactic unfolds any instances of opaque
+constants with the any of the given names.
+
+Using `unfolding` is mostly useful for proofs based entirely on
+rewriting, since default behavior for automated provers is to unfold all
+opaque constants before sending a goal to a prover. However, with Z3 and
+CVC4, it is possible to indicate that specific constants should be left
+folded (uninterpreted).
+
+~~~~
+unint_cvc4 : [String] -> ProofScript SatResult
+unint_z3 : [String] -> ProofScript SatResult
+~~~~
+
+The list of `String` arguments in these two cases indicates the names of
+the constants to leave folded, and therefore present as uninterpreted
+functions to the prover. To determine which folded constants appear in a
+goal, use the `print_goal_consts` function described below.
+
+Ultimately, we plan to implement a more generic tactic that leaves
+certain constants uninterpreted in whatever prover is ultimately used
+(provided that uninterpreted functions are expressible in the prover).
+
+## Other External Provers
+
+In addition to the built-in automated provers already discussed, SAW
+supports more generic interfaces to other arbitrary theorem provers
+supporting specific interfaces.
+
+~~~~
+external_aig_solver : String -> [String] -> ProofScript SatResult
+
+external_cnf_solver : String -> [String] -> ProofScript SatResult
+~~~~
+
+The `external_aig_solver` function supports theorem provers that can
+take input as a single-output AIGER file. The first argument is the name
+of the executable to run. The second argument is the list of parameters
+to pass to that executable. Within this list, any element that consists
+simply of `%f` is replaced with the name of the temporary AIGER file
+generated for the proof goal. The output from the solver is expected to
+be in DIMACS solution format.
+
+The `external_cnf_solver` function works similarly but for SAT solvers
+that take input in DIMACS CNF format and produce output in DIMACS
+solution format.
+
+## Offline Provers
+
+For provers that must be invoked in more complex ways, or to defer proof
+until a later time, there are functions to write the current goal to a
+file in various formats, and then assume that the goal is valid through
+the rest of the script.
+
+~~~~
+offline_aig : String -> ProofScript SatResult
+offline_cnf : String -> ProofScript SatResult
+offline_extcore : String -> ProofScript SatResult
+offline_smtlib2 : String -> ProofScript SatResult
+~~~~
+
+These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
+formats, respectively. The shared representation for SAWCore is
+described [in the `saw-script` repository](../extcore.txt).
+
+## Proof Script Diagnostics
+
+During development of a proof, it can be useful to print various
+information about the current goal. The following tactics are useful in
+that context.
+
+~~~~
+print_goal : ProofScript ()
+print_goal_consts : ProofScript ()
+print_goal_depth : Int -> ProofScript ()
+print_goal_size : ProofScript ()
+~~~~
+
+The `print_goal` tactic prints the entire goal in SAWCore syntax. The
+`print_goal_depth` is intended for especially large goals. It takes an
+integer argument, `n`, and prints the goal up to depth `n`. Any elided
+subterms are printed with a `...` notation. The `print_goal_consts`
+tactic prints a list of the opaque constants that are folded in the
+current goal, and `print_goal_size` prints the number of nodes in the
+DAG representation of the goal.
+
+## Miscellaneous Tactics
+
+Some proofs can be completed using unsound placeholders, or using
+techniques that do not require significant computation.
+
+~~~~
+assume_unsat : ProofScript SatResult
+assume_valid : ProofScript ProofResult
+quickcheck : Int -> ProofScript SatResult
+trivial : ProofScript SatResult
+~~~~
+
+The `assume_unsat` and `assume_valid` tactics indicate that the current
+goal should be considered unsatisfiable or valid, depending on whether
+the proof script is checking satisfiability or validity. At the moment,
+`java_verify` and `llvm_verify` run their proofs in the a
+satisfiability-checking context, so `assume_unsat` is currently the
+appropriate tactic. This is likely to change in the future.
+
+The `quickcheck` tactic runs the goal on the given number of random
+inputs, and succeeds if the result of evaluation is always `True`. This
+is unsound, but can be helpful during proof development, or as a way to
+provide some evidence for the validity of a specification believed to be
+true but difficult or infeasible to prove.
+
+The `trivial` tactic states that the current goal should be trivially
+true (i.e., the constant `True` or a function that immediately returns
+`True`). It fails if that is not the case.
 
 # Symbolic Execution
 
@@ -752,6 +946,8 @@ number of integral parameters, returns an integral result, and does not
 access any dynamically-allocated memory (although temporary memory
 allocated during execution and not visible afterward is allowed).
 
+TODO: note safety conditions
+
 # Creating Symbolic Variables
 
 The direct extraction process just discussed automatically introduces
@@ -789,6 +985,8 @@ follows:
 ~~~~
 x <- fresh_symbolic "x" {| [32] |};
 ~~~~
+
+TODO: talk about `abstract_symbolic` and its ilk.
 
 # Monolithic Symbolic Execution
 
@@ -930,10 +1128,14 @@ the number of elements allocated or written in the initial state.
 However, reading past the end of an object or reading a location that
 has not been initialized will lead to an error.
 
+TODO: note safety variables
+
 ## Examples
 
 The following code is a complete example of using the `java_symexec`
 function.
+
+TODO: add safety variable to the following
 
 ~~~~
 // show that add(x,y) == add(y,x) for all x and y
@@ -960,7 +1162,7 @@ Finally, it proves that the resulting function is commutative.
 Running this script through `saw` gives the following output:
 
 ~~~~
-% saw -j <path to>rt.jar java_symexec.saw 
+% saw -j <path to>rt.jar java_symexec.saw
 Loading module Cryptol
 Loading file "java_symexec.saw"
 let { x0 = Cryptol.ty
@@ -1221,230 +1423,7 @@ Both of these take a proof script as an argument, which specifies how to
 perform the proof. If the setup block does not call one of these
 functions, SAW will print a warning message and skip the proof (which
 can sometimes be a useful behavior during debugging, or in compositional
-verification as described later). The next section describes the
-structure of proof scripts, which are also useful with the standalone
-`proof` and `sat` functions within SAWScript, regardless of whether Java
-or LLVM code is involved.
-
-# Proof Scripts
-
-The simplest proof scripts just indicate which automated prover to use.
-The `ProofScript` values `abc` and `z3` select the ABC and Z3 theorem
-provers, respectively, and are typically good choices. In addition to
-these, the `boolector`, `cvc4`, `mathsat`, and `yices` provers are
-available.
-
-In more complex cases, some pre-processing can be helpful or necessary
-before handing the problem off to an automated prover. The
-pre-processing can involve rewriting, beta reduction, unfolding, the use
-of provers that require slightly more configuration, or the use of 
-provers that do very little real work.
-
-## Rewriting
-
-The basic concept involved in rewriting `Term`s is that of a `Simpset`,
-which includes a collection of rewrite rules. A few basic, pre-defined
-values of this type exist:
-
-~~~
-empty_ss : Simpset
-basic_ss : Simpset
-cryptol_ss : () -> Simpset
-~~~
-
-The first is the empty set of rules. Rewriting with it should have no
-effect, but it is useful as an argument to some of the functions that
-construct larger `Simpset` values. The `basic_ss` constant is a
-collection of rules that will be useful in most proof scripts. The
-`cryptol_ss` value includes a collection of Cryptol-specific rules,
-including rules to simplify away the abstractions introduced in the
-translation from Cryptol to SAWCore, which can be useful when proving
-equivalence between Cryptol and non-Cryptol code. When comparing Cryptol
-to Cryptol code, leaving these abstractions in place can be most
-appropriate, however, so `cryptol_ss` is not included in `basic_ss`.
-
-The next set of functions add either a single rule or a list of rules to
-an existing `Simpset`.
-
-~~~~
-addsimp : Theorem -> Simpset -> Simpset
-addsimp' : Term -> Simpset -> Simpset
-addsimps : [Theorem] -> Simpset -> Simpset
-addsimps' : [Term] -> Simpset -> Simpset
-~~~~
-
-The functions that take a `Theorem` type work with rewrite rules that
-are proved to be correct. The `prove_print` function returns a `Theorem`
-when successful, and any such theorem that is an equality statement can
-be used as a rewrite rule. The behavior is that any instance of the
-left-hand side of this equality in the goal is replaced with the
-right-hand side of the equality.
-
-The functions above that take `Term` arguments work with terms of the
-same shape, but which haven't been proven to be correct. When using
-these functions, the soundness of the proof process depends on the
-correctness of these rules as a side condition.
-
-Finally, there are some built-in rules that are not included in either
-`basic_ss` and `cryptol_ss` because they are not always beneficial, but
-can sometimes be helpful or essential.
-
-~~~~
-add_cryptol_eqs : [String] -> Simpset -> Simpset
-add_prelude_defs : [String] -> Simpset -> Simpset
-add_prelude_eqs : [String] -> Simpset -> Simpset
-~~~~
-
-A rewrite rule in SAW can be
-specified in multiple ways, the third due to the dependent type system
-used in SAWCore:
-
-  * as the definition of functions that can be unfolded,
-  * as a term of boolean type (or a function returning a boolean) that
-    is an equality statement, and
-  * as a term of _equality type_ whose body encodes a proof that the
-    equality in the type is valid.
-
-The `cryptol_ss` simpset includes rewrite rules to unfold all
-definitions in the `Cryptol` SAWCore module, but does not include any of
-the terms of equality type. The `add_cryptol_eqs` function adds the
-terms of equality type with the given names to the given `Simpset`. The
-`add_prelude_defs` and `add_prelude_eqs` functions add definition
-unfolding rules and equality-typed terms, respectively, from the SAWCore
-`Prelude` module.
-
-## Other Transformations
-
-Some useful transformations are not easily specified using equality
-statements, and instead have special tactics.
-
-~~~~
-beta_reduce_goal : ProofScript ()
-unfolding : [String] -> ProofScript ()
-~~~~
-
-The `beta_reduce_goal` tactic takes any sub-expression of the form `(\x
--> t) v` and replaces it with a transformed version of `t` in which all
-instances of `x` are replaced by `v`.
-
-The `unfolding` tactic works with "opaque constants". Each of these is a
-named subterm in a SAWCore term that can be treated as "folded", in
-which case it is just an opaque name (essentially an uninterpreted
-function), or "unfolded", in which case it looks just like any other
-subterm. The `unfolding` tactic unfolds any instances of opaque
-constants with the any of the given names.
-
-Using `unfolding` is mostly useful for proofs based entirely on
-rewriting, since default behavior for automated provers is to unfold all
-opaque constants before sending a goal to a prover. However, with Z3 and
-CVC4, it is possible to indicate that specific constants should be left
-folded (uninterpreted).
-
-~~~~
-unint_cvc4 : [String] -> ProofScript SatResult
-unint_z3 : [String] -> ProofScript SatResult
-~~~~
-
-The list of `String` arguments in these two cases indicates the names of
-the constants to leave folded, and therefore present as uninterpreted
-functions to the prover. To determine which folded constants appear in a
-goal, use the `print_goal_consts` function described below.
-
-Ultimately, we plan to implement a more generic tactic that leaves
-certain constants uninterpreted in whatever prover is ultimately used
-(provided that uninterpreted functions are expressible in the prover).
-
-## Other External Provers
-
-In addition to the built-in automated provers already discussed, SAW
-supports more generic interfaces to other arbitrary theorem provers
-supporting specific interfaces.
-
-~~~~
-external_aig_solver : String -> [String] -> ProofScript SatResult
-
-external_cnf_solver : String -> [String] -> ProofScript SatResult
-~~~~
-
-The `external_aig_solver` function supports theorem provers that can
-take input as a single-output AIGER file. The first argument is the name
-of the executable to run. The second argument is the list of parameters
-to pass to that executable. Within this list, any element that consists
-simply of `%f` is replaced with the name of the temporary AIGER file
-generated for the proof goal. The output from the solver is expected to
-be in DIMACS solution format.
-
-The `external_cnf_solver` function works similarly but for SAT solvers
-that take input in DIMACS CNF format and produce output in DIMACS
-solution format.
-
-## Offline Provers
-
-For provers that must be invoked in more complex ways, or to defer proof
-until a later time, there are functions to write the current goal to a
-file in various formats, and then assume that the goal is valid through
-the rest of the script.
-
-~~~~
-offline_aig : String -> ProofScript SatResult
-offline_cnf : String -> ProofScript SatResult
-offline_extcore : String -> ProofScript SatResult
-offline_smtlib2 : String -> ProofScript SatResult
-~~~~
-
-These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
-formats, respectively. The shared representation for SAWCore is
-described [in the `saw-script` repository](../extcore.txt).
-
-## Proof Script Diagnostics
-
-During development of a proof, it can be useful to print various
-information about the current goal. The following tactics are useful in
-that context.
-
-~~~~
-print_goal : ProofScript ()
-print_goal_consts : ProofScript ()
-print_goal_depth : Int -> ProofScript ()
-print_goal_size : ProofScript ()
-~~~~
-
-The `print_goal` tactic prints the entire goal in SAWCore syntax. The
-`print_goal_depth` is intended for especially large goals. It takes an
-integer argument, `n`, and prints the goal up to depth `n`. Any elided
-subterms are printed with a `...` notation. The `print_goal_consts`
-tactic prints a list of the opaque constants that are folded in the
-current goal, and `print_goal_size` prints the number of nodes in the
-DAG representation of the goal.
-
-## Miscellaneous Tactics
-
-Some proofs can be completed using unsound placeholders, or using
-techniques that do not require significant computation.
-
-~~~~
-assume_unsat : ProofScript SatResult
-assume_valid : ProofScript ProofResult
-quickcheck : Int -> ProofScript SatResult
-trivial : ProofScript SatResult
-~~~~
-
-The `assume_unsat` and `assume_valid` tactics indicate that the current
-goal should be considered unsatisfiable or valid, depending on whether
-the proof script is checking satisfiability or validity. At the moment,
-`java_verify` and `llvm_verify` run their proofs in the a
-satisfiability-checking context, so `assume_unsat` is currently the
-appropriate tactic. This is likely to change in the future.
-
-The `quickcheck` tactic runs the goal on the given number of random
-inputs, and succeeds if the result of evaluation is always `True`. This
-is unsound, but can be helpful during proof development, or as a way to
-provide some evidence for the validity of a specification believed to be
-true but difficult or infeasible to prove.
-
-The `trivial` tactic states that the current goal should be trivially
-true (i.e., the constant `True` or a function that immediately returns
-`True`). It fails if that is not the case.
+verification as described later).
 
 # Compositional Verification
 

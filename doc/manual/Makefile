@@ -13,7 +13,6 @@ PDFARGS   = -H head.tex \
             -V fontsize:12 \
             --latex-engine=pdflatex
 HTMLARGS  = --css doc.css \
-            -B before.html \
             --standalone \
             --self-contained
 
@@ -22,6 +21,9 @@ all: pdf
 pdf: ${TARGET}.pdf
 
 ${TARGET}.pdf: ${TARGET}.md Makefile galois-whitepaper.cls
+	pandoc ${PDFARGS} -o $@ ${TARGET}.md
+
+${TARGET}.tex: ${TARGET}.md Makefile galois-whitepaper.cls
 	pandoc ${PDFARGS} -o $@ ${TARGET}.md
 
 ${TARGET}.html: ${TARGET}.md Makefile
