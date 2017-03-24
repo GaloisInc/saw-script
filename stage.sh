@@ -56,8 +56,8 @@ cp "$BIN"/llvm-disasm                         ${TARGET}/bin
 cp "$BIN"/lss                                 ${TARGET}/bin
 cp "$BIN"/saw                                 ${TARGET}/bin
 cp doc/extcore.txt                            ${TARGET}/doc
-cp doc/tutorial/sawScriptTutorial.pdf         ${TARGET}/doc
-cp doc/java-llvm/java-llvm.pdf                ${TARGET}/doc
+cp doc/tutorial/sawScriptTutorial.pdf         ${TARGET}/doc/tutorial.pdf
+cp doc/manual/manual.pdf                      ${TARGET}/doc/manual.pdf
 cp -r doc/tutorial/code                       ${TARGET}/doc
 cp deps/jvm-verifier/support/galois.jar       ${TARGET}/lib
 cp -r deps/cryptol/lib/*                      ${TARGET}/lib
