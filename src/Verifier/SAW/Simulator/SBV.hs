@@ -22,6 +22,7 @@ Portability : non-portable (language extensions)
 -}
 module Verifier.SAW.Simulator.SBV
   ( sbvSolve
+  , sbvSolveBasic
   , SValue
   , Labeler(..)
   , sbvCodeGen_definition
