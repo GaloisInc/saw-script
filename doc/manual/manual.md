@@ -104,40 +104,40 @@ semicolon. For example, the `print` command displays a textual
 representation of its argument. For example, suppose the following text
 is stored in the file `print.saw`:
 
-````
+~~~~
 print 3;
-````
+~~~~
 
 Then the command `saw print.saw` will yield output similar to the
 following:
 
-````
+~~~~
 Loading module Cryptol
 Loading file "/Users/atomb/galois/saw-script/doc/print.saw"
 3
-````
+~~~~
 
 Similarly, the same code can be run from the interactive REPL:
 
-````
+~~~~
 sawscript> print 3;
 3
-````
+~~~~
 
 At the REPL, terminating semicolons can be omitted:
 
-````
+~~~~
 sawscript> print 3
 3
-````
+~~~~
 
 To make common use cases simpler, bare values at the REPL are treated as
 if they were arguments to `print`:
 
-````
+~~~~
 sawscript> 3
 3
-````
+~~~~
 
 ## Basic Types and Values
 
@@ -185,21 +185,21 @@ One of the key forms of top-level command in SAWScript is a *binding*,
 introduced with the `let` keyword, which gives a name to a value. For
 example:
 
-````
+~~~~
 sawscript> let x = 5
 sawscript> x
 5
-````
+~~~~
 
 Bindings can have parameters, in which case they define functions. For
 instance, the following function takes one parameter and constructs a
 list containing that parameter as its single element.
 
-````
+~~~~
 sawscript> let f x = [x]
 sawscript> f "text"
 ["text"]
-````
+~~~~
 
 Functions themselves are values, and have types. The type of a function
 that takes an argument of type `a` and returns a result of type `b` is
@@ -209,35 +209,35 @@ the given argument, and it's possible to create a list of any element
 type, `f` can be applied to an argument of any type. We say, therefore,
 that it's *polymorphic*. This means we can also apply it to `10`:
 
-````
+~~~~
 sawscript> f 10
 [10]
-````
+~~~~
 
 However, we may want to specify that a function operates at a more
 specific type than the most general type possible. In this case, we
 could restrict `f` to operate only on `Int` parameters.
 
-````
+~~~~
 sawscript> let f (x : Int) = [x]
-````
+~~~~
 
 This will work identically to the original `f` on an `Int` parameter:
 
-````
+~~~~
 sawscript> f 10
 [10]
-````
+~~~~
 
 But it will fail for a `String` parameter.
 
-````
+~~~~
 sawscript> f "text"
 
 type mismatch: String -> t.0 and Int -> [Int]
  at "_" (REPL)
 mismatched type constructors: String and Int
-````
+~~~~
 
 Type annotations can be applied to any expression. The notation `(e :
 t)` indicates that the expression `e` is expected to have type `t`, and
@@ -267,12 +267,12 @@ It can sometimes be useful to bind together a sequence of commands in a
 unit. This can be accomplished with the `do { ... }` construct. For
 example:
 
-````
+~~~~
 sawscript> let print_two = do { print "first"; print "second"; }
 sawscript> print_two
 first
 second
-````
+~~~~
 
 The bound value, `print_two`, has type `TopLevel ()`, since that is the
 type of its last command.
@@ -318,17 +318,17 @@ braces (`{{` and `}}`), resulting in a value of type `Term`. As a very
 simple example, there is no built-in integer addition operation in
 SAWScript, but there is in Cryptol, and we can use it as follows:
 
-````
+~~~~
 sawscript> let t = {{ 0x22 + 0x33 }}
 sawscript> print t
 85
-````
+~~~~
 
 Note, however, that although it printed out in the same way as an `Int`,
 `t` actually has type `Term`. We can see how this term is represented
 internally, before being evaluated, with the `print_term` function.
 
-````
+~~~~
 sawscript> print_term t
 Cryptol.ecPlus
   (Prelude.Vec 8 Prelude.Bool)
@@ -338,7 +338,7 @@ Cryptol.ecPlus
      Cryptol.OpsBit)
   (Prelude.bvNat 8 34)
   (Prelude.bvNat 8 51)
-````
+~~~~
 
 For the moment, don't try to understand what this output means. We show
 it simply to clarify that `Term` values have their own internal
@@ -349,7 +349,7 @@ A `Term` that represents an integer can be translated into a SAWScript
 function will return an `Int` if the `Term` can be represented as one,
 and will fail at runtime otherwise.
 
-````
+~~~~
 sawscript> print (eval_int t)
 85
 sawscript> print (eval_int {{ True }})
@@ -358,18 +358,20 @@ sawscript> print (eval_int {{ True }})
 eval_int: argument is not a finite bitvector
 sawscript> print (eval_int {{ [True] }})
 1
-````
+~~~~
 
 Similarly, values of type `Bit` in Cryptol can be translated into values
 of type `Bool` in SAWScript using the `eval_bool` function:
 
-````
+~~~~
 sawscript> let b = {{ True }}
 sawscript> print_term b
 Prelude.True
 sawscript> print (eval_bool b)
 true
-````
+~~~~
+
+TODO: talk about `eval_size`
 
 In addition to being able to extract integer and Boolean values from
 Cryptol expressions, `Term` values can be injected into Cryptol
@@ -393,26 +395,26 @@ To make these rules more concrete, consider the following examples.
 
 TODO: examples
 
-````
+~~~~
 sawscript> let n = 8
 sawscript> let {{ f (x : [n]) = x + 1 }}
 sawscript> print {{ f 2 }}
 3
 sawscript> print (f 2)
 TODO: error
-````
+~~~~
 
 TODO: talk about values bound *inside* Cryptol context
 
-````
+~~~~
 sawscript> let b = true
 sawscript> let t {{ [b, b] }}
-````
+~~~~
 
-````
+~~~~
 sawscript> let t1 = {{ ... }}
 sawscript> let t2 = {{ ... }}
-````
+~~~~
 
     cryptol_extract : CryptolModule -> String -> TopLevel Term
     cryptol_load : String -> TopLevel CryptolModule
@@ -577,7 +579,7 @@ provers that do very little real work.
 
 ## Rewriting in Proof Scripts
 
-* TODO
+* TODO: `simplify` command
 
 ## Other Transformations
 
@@ -608,6 +610,7 @@ folded (uninterpreted).
 
 ~~~~
 unint_cvc4 : [String] -> ProofScript SatResult
+unint_yices : [String] -> ProofScript SatResult
 unint_z3 : [String] -> ProofScript SatResult
 ~~~~
 
@@ -656,6 +659,7 @@ offline_aig : String -> ProofScript SatResult
 offline_cnf : String -> ProofScript SatResult
 offline_extcore : String -> ProofScript SatResult
 offline_smtlib2 : String -> ProofScript SatResult
+offline_unint_smtlib2 : [String] -> String -> ProofScript SatResult
 ~~~~
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
@@ -1069,12 +1073,12 @@ The `llvm_symexec` command uses an expression syntax similar to that for
 `java_symexec`, but not identical. The syntax is as follows:
 
   * Arguments to the function being analyzed can be referred to by name
-    (if the name is reflected in the LLVM code, as it generally is with
-    code generated by Clang). The expression referring to the value of
-    the argument `x` in the `max` example is simply `x`. For LLVM
-    functions that do not have named arguments (such as those generated
-    by the Rust compiler, for instance), arguments can be named
-    positionally with `args[0]`, `args[1]` and so on.
+    (if the name is reflected in the LLVM code, as it is with code
+    generated by some versions of Clang). The expression referring to
+    the value of the argument `x` in the `max` example is simply `x`.
+    For LLVM functions that do not have named arguments (such as those
+    generated by the Rust compiler, for instance), arguments can be
+    named positionally with `args[0]`, `args[1]` and so on.
 
   * Global variables can be referred to directly by name.
 
@@ -1160,6 +1164,8 @@ function that takes concrete values for those variables as arguments.
 Finally, it proves that the resulting function is commutative.
 
 Running this script through `saw` gives the following output:
+
+TODO: update output
 
 ~~~~
 % saw -j <path to>rt.jar java_symexec.saw
@@ -1272,6 +1278,7 @@ use the same syntax described earlier for `java_symexec` and
 `llvm_symexec`. The types are built up using the following functions:
 
 ~~~~
+java_bool : JavaType
 java_byte : JavaType
 java_char : JavaType
 java_short : JavaType
@@ -1490,3 +1497,93 @@ llvm_sat_branches : Bool -> LLVMSetup ()
 
 The `Bool` parameter has the same effect as the `Bool` parameter passed
 to `java_symexec` and `llvm_symexec`.
+
+
+# TODO
+
+Commands to mention somewhere:
+
+AIG operations:
+
+~~~~
+bitblast : Term -> TopLevel AIG
+cec : AIG -> AIG -> TopLevel ProofResult
+load_aig : String -> TopLevel AIG
+save_aig : String -> AIG -> TopLevel ()
+save_aig_as_cnf : String -> AIG -> TopLevel ()
+~~~~
+
+
+Generic proofs:
+~~~~
+caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b
+caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
+~~~~
+
+Term manipulation and inspection:
+
+~~~~
+check_convertible : Term -> Term -> TopLevel ()
+check_term : Term -> TopLevel ()
+hoist_ifs : Term -> TopLevel Term
+lambda : Term -> Term -> Term
+lambdas : [Term] -> Term -> Term
+show_term : Term -> String
+term_size : Term -> Int
+term_tree_size : Term -> Int
+type : Term -> Type
+~~~~
+
+Obtaining terms:
+~~~~
+parse_core : String -> Term
+read_aig : String -> TopLevel Term
+read_bytes : String -> TopLevel Term
+read_core : String -> TopLevel Term
+read_sbv : String -> [Uninterp] -> TopLevel Term
+~~~~
+
+Exporting terms:
+~~~~
+write_aig : String -> Term -> TopLevel ()
+write_cnf : String -> Term -> TopLevel ()
+write_core : String -> Term -> TopLevel ()
+write_saig : String -> Term -> TopLevel ()
+write_saig' : String -> Term -> Int -> TopLevel ()
+write_smtlib2 : String -> Term -> TopLevel ()
+~~~~
+
+Basic data types:
+~~~~
+concat : {a} [a] -> [a] -> [a]
+for : {m, a, b} [a] -> (a -> m b) -> m [b]
+head : {a} [a] -> a
+nth : {a} [a] -> Int -> a
+null : {a} [a] -> Bool
+~~~~
+
+TODO:
+~~~~
+cryptol_extract : CryptolModule -> String -> TopLevel Term
+cryptol_load : String -> TopLevel CryptolModule
+cryptol_prims : () -> CryptolModule
+dsec_print : Term -> Term -> TopLevel ()
+exec : String -> [String] -> String -> TopLevel String
+exit : Int -> TopLevel ()
+get_opt : Int -> String
+include : String -> TopLevel ()
+java_requires_class : String -> JavaSetup ()
+length : {a} [a] -> Int
+llvm_allocates : String -> LLVMSetup ()
+llvm_assert_null : String -> LLVMSetup ()
+llvm_return_arbitrary : LLVMSetup ()
+llvm_simplify_addrs : Bool -> LLVMSetup ()
+llvm_type : String -> LLVMType
+return : {m, a} a -> m a
+rme : ProofScript SatResult
+set_ascii : Bool -> TopLevel ()
+set_base : Int -> TopLevel ()
+show : {a} a -> String
+time : {a} TopLevel a -> TopLevel a
+with_time : {a} TopLevel a -> TopLevel (Int, a)
+~~~~
