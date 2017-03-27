@@ -23,10 +23,9 @@ support for sequencing of imperative commmands.
 The rest of this document first describes how SAW can be invoked and
 outlines the structure of the SAWScript language and its relationship
 with Cryptol. It then follows up with a description of the commands in
-SAWScript that can transform functional models (`Term` values) and prove
-properties about them. Finally, it describes the specific commands
-available for constructing models from imperative programs in a variety
-of languages.
+SAWScript that can transform functional models and prove properties
+about them. Finally, it describes the specific commands available for
+constructing models from imperative programs in a variety of languages.
 
 # Invoking SAW
 
@@ -140,10 +139,11 @@ sawscript> 3
 ~~~~
 
 One SAWScript file can be included in another using the `include`
-command, which takes the name of the file to be included as an argument:
+command, which takes the name of the file to be included as an argument.
+For example:
 
 ~~~~
-include : String -> TopLevel ()
+include "print.saw";
 ~~~~
 
 ## Basic Types and Values
@@ -214,11 +214,12 @@ that takes an argument of type `a` and returns a result of type `b` is
 
 Typically, the types of functions are inferred. As in the example `f`
 above. In this case, because `f` only creates a list with the given
-argument, and it's possible to create a list of any element type, `f`
-can be applied to an argument of any type. We say, therefore, that it's
-*polymorphic*. Concretely, we write the type of `f` as `{a} a -> [a]`,
-meaning it takes a value of any type and returns a list containing
-elements of that same type. This means we can also apply it to `10`:
+argument, and because it's possible to create a list of any element
+type, `f` can be applied to an argument of any type. We say, therefore,
+that `f` is *polymorphic*. Concretely, we write the type of `f` as `{a}
+a -> [a]`, meaning it takes a value of any type (call it `a`) and
+returns a list containing elements of that same type. This means we can
+also apply it to `10`:
 
 ~~~~
 sawscript> f 10
@@ -286,19 +287,16 @@ type mismatch: Bool -> t.0 and Int -> [Int]
 mismatched type constructors: Bool and Int
 ~~~~
 
-In the text so far, we have used the terms *function* and *command*, and
-we take these to mean slightly different things. A function is any value
-with a function type (e.g., `Int -> [Int]`). A command is a function in
-which the result type is one of a specific set of *parameterized* types,
-or types that take other types as parameters. We have seen one of these
-so far: the list type, such as the type `[Bool]` indicating lists of
-Boolean values, though this type is not used to construct commands.
+In the text so far we have used two related terms, *function* and
+*command*, and we take these to mean slightly different things. A
+function is any value with a function type (e.g., `Int -> [Int]`). A
+command is a function in which the result type is one of a specific set
+of special types. These special types are *parameterized* (similarly to
+how the list type is parameterized), and allow us to restrict commands
+to be usable only in specific contexts.
 
-TODO: don't use lists as an example of parameterized types, since they
-work somewhat differently?
-
-The most important parameterized type is the `TopLevel` type, indicating
-a command that can run at the top level (directly at the REPL, or as one
+The most important command type is the `TopLevel` type, indicating a
+command that can run at the top level (directly at the REPL, or as one
 of the top level commands listed in a script file). The `print` command
 has the type `{a} a -> TopLevel ()`, where `TopLevel ()` means that it
 is a command that runs in the `TopLevel` context and returns a value of
@@ -323,16 +321,64 @@ type of its last command.
 
 Note that in the previous example the printing doesn't occur until
 `print_two` directly appears at the REPL. The `let` expression does not
-cause those commands to run. 
-
-TODO: binding the results of commands, and the distinction between let
-and <-
-
-TODO: `return`
+cause those commands to run. The construct that *runs* a command is
+written using the `<-` operator. This operator works like `let` except
+that it says to run the command listed on the right hand side and bind
+the result, rather than binding the variable to the command itself.
+Using `<-` instead of `let` in the previous example yields:
 
 ~~~~
-return : {m, a} a -> m a
+sawscript> print_two <- do { print "first"; print "second"; }
+first
+second
+sawscript> print_two
+()
 ~~~~
+
+Here, the `print` commands run first, and then `print_two` gets the
+value returned by the second `print` command, namely `()`. Any command
+listed alone at the REPL, the top level in a script, or inside a `do`
+block is treated as implicitly having a `<-` that binds its result to an
+unnamed variable (that is, discarded).
+
+In some cases it can be useful to have more control over the value
+returned by a `do` block. The `return` command allows us to do this. For
+example, say we wanted to write a function that would print a message
+before and after running some arbitrary command, and then return the
+result of that command. We could write:
+
+~~~~
+let run_with_message c =
+  do {
+    print "Starting.";
+    res <- c;
+    print "Done.";
+    return res;
+  };
+
+x <- run_with_message (print "Printing.");
+print x;
+~~~~
+
+If we put this script in `run.saw` and run it with `saw`, we get
+something like:
+
+~~~~
+Loading module Cryptol
+Loading file "run.saw"
+Starting.
+Printing.
+Done.
+()
+~~~~
+
+Note that it ran the first `print` command, then the caller-specified
+command, then the second `print` command. The result stored in `x` at
+the end is the result of the third `print` command.
+
+TODO: make the previous actually return something interesting from `c`.
+But we haven't introduced any commands that return anything interesting
+yet...
 
 ## Other Basic Functions
 
@@ -345,17 +391,17 @@ The following functions work on lists:
 ~~~~
 concat : {a} [a] -> [a] -> [a]
 
-for : {m, a, b} [a] -> (a -> m b) -> m [b]
-
 head : {a} [a] -> a
+
+tail : {a} [a] -> [a]
 
 length : {a} [a] -> Int
 
-nth : {a} [a] -> Int -> a
-
 null : {a} [a] -> Bool
 
-tail : {a} [a] -> [a]
+nth : {a} [a] -> Int -> a
+
+for : {m, a, b} [a] -> (a -> m b) -> m [b]
 ~~~~
 
 The `concat` function takes two lists and returns the concatenation of
@@ -364,7 +410,10 @@ the `tail` function returns everything except the first element. The
 `length` function counts the number of elements in a list, and the
 `null` function indicates whether a list is empty (has zero elements).
 The `nth` function returns the element at the given position, with `nth
-l 0` being equivalent to `head l`.
+l 0` being equivalent to `head l`. The `for` function takes a list and a
+function that runs in some command context. The passed function will be
+called once for every element of the list, in order, and `for` will
+ultimately return a list of all of the results produced by the function.
 
 For interacting with the operating system, we have:
 
@@ -416,9 +465,9 @@ the built-in types of most other languages, is the `Term` type.
 Essentially, a value of type `Term` precisely describes all of the
 possible computations performed by some program. And, in particular, if
 two `Term` values are *equivalent*, then the programs that they
-represent perform equivalent computations. We will say more later about
-what exactly it means for two terms to be equivalent, and how to
-determine whether two terms are equivalent.
+represent will always compute the same results given the same inputs. We
+will say more later about what exactly it means for two terms to be
+equivalent, and how to determine whether two terms are equivalent.
 
 Before we dig into the `Term` type more deeply, it will be useful to
 describe the role of the Cryptol language in SAW.
@@ -437,10 +486,14 @@ integrated into SAW, it has its own manual, which you can find here:
 * <http://cryptol.net/files/ProgrammingCryptol.pdf>
 
 SAW includes deep support for Cryptol, and in fact requires the use of
-Cryptol for most non-trivial tasks. The primary use of Cryptol is to
-construct values of type `Term`. Although `Term` values can be
-constructed from various sources, inline Cryptol expressions are the
-most direct and convenient way to create them.
+Cryptol for most non-trivial tasks. So to fully understand the rest of
+this manual you'll need to develop at least a rudimentary understanding
+of Cryptol.
+
+The primary use of Cryptol is to construct values of type `Term`.
+Although `Term` values can be constructed from various sources, inline
+Cryptol expressions are the most direct and convenient way to create
+them.
 
 Specifically, a Cryptol expression can be placed inside double curly
 braces (`{{` and `}}`), resulting in a value of type `Term`. As a very
@@ -471,12 +524,38 @@ Cryptol.ecPlus
 
 For the moment, don't try to understand what this output means. We show
 it simply to clarify that `Term` values have their own internal
-structure that goes beyond what exists in SAWScript.
+structure that goes beyond what exists in SAWScript. The text
+constructed by `print_term` can be accessed programmatically, instead of
+printing it to the screen, using the `show_term` function, which returns
+a `String`. The `show_term` function is not a command, so it executes
+directly and does not need `<-` to bind its result. Therefore, the
+following will have the same result as the `print_term` command above:
 
-A `Term` that represents an integer can be translated into a SAWScript
-`Int` using the `eval_int` function, of type `Term -> Int`. This
-function will return an `Int` if the `Term` can be represented as one,
-and will fail at runtime otherwise.
+~~~~
+sawscript> let s = show_term t
+sawscript> print s
+~~~~
+
+When printing terms, numbers are printed in decimal notation by default,
+but the following two commands can change that behavior.
+
+~~~~
+set_ascii : Bool -> TopLevel ()
+
+set_base : Int -> TopLevel ()
+~~~~
+
+The `set_ascii` command, when passed `true`, makes subsequent
+`print_term` or `show_term` commands print sequences of bytes as ASCII
+strings (and doesn't affect printing of anything else). The `set_base`
+command prints all bit vectors in the given base. Any base from 2
+through 36 (inclusive) is supported.
+
+A `Term` that represents an integer (any bit vector, as affected by
+`set_base`) can be translated into a SAWScript `Int` using the
+`eval_int` function, of type `Term -> Int`. This function will return an
+`Int` if the `Term` can be represented as one, and will fail at runtime
+otherwise.
 
 ~~~~
 sawscript> print (eval_int t)
@@ -498,18 +577,6 @@ sawscript> print_term b
 Prelude.True
 sawscript> print (eval_bool b)
 true
-~~~~
-
-TODO: talk about displaying terms in general
-
-~~~~
-print_term : Term -> TopLevel ()
-
-show_term : Term -> String
-
-set_ascii : Bool -> TopLevel ()
-
-set_base : Int -> TopLevel ()
 ~~~~
 
 In addition to being able to extract integer and Boolean values from
@@ -554,6 +621,14 @@ sawscript> let t {{ [b, b] }}
 sawscript> let t1 = {{ ... }}
 sawscript> let t2 = {{ ... }}
 ~~~~
+
+One subtlety of dealing with `Term`s constructed from Cryptol is that
+because the Cryptol expressions themselves are type checked by the
+Cryptol type checker, and because they may make use of other `Term`
+values already in scope, they are not type checked until the Cryptol
+brackets are evaluated. So type errors at the Cryptol level may occur at
+runtime from the SAWScript perspective (though they occur before the
+Cryptol expressions are run).
 
 So far, we have talked about using Cryptol *value* expressions. However,
 SAWScript can also work with Cryptol *types*. The most direct way to
@@ -622,7 +697,19 @@ sle : {n} (fin n) => [n] -> [n] -> Bit
 
 These perform bit-vector operations of truncation (`trunc`), unsigned
 extension (`uext`), and signed comparison (`sgt`, `sge`, `slt`, and
-`sle`).
+`sle`). These definitions are typically accessed through binding
+`cryptol_prims` to a local variable, as typically done with
+`cryptol_load`:
+
+~~~~
+sawscript> set_base 16
+sawscript> let m = cryptol_prims ()
+sawscript> let x = {{ (m::trunc 0x23) : [4] }}
+sawscript> print x
+0x3
+~~~~
+
+We truncated the 8-bit value `0x23` to a 4-bit value `0x3`.
 
 # Transforming Term Values
 
@@ -640,7 +727,7 @@ it, resulting in a new `Term`. A rewrite rule in SAW can be specified in
 multiple ways, the third due to the dependent type system used in
 SAWCore:
 
-  * as the definition of functions that can be unfolded,
+  * as the definition of a function that can be unfolded,
   * as a term of boolean type (or a function returning a boolean) that
     is an equality statement, and
   * as a term of _equality type_ whose body encodes a proof that the
@@ -657,11 +744,13 @@ with. Any variable in the right-hand pattern must also appear in the
 left-hand pattern and will be instantiated with whatever sub-term
 matched that variable in the original term.
 
+TODO: simple example here
+
 The general philosophy of rewriting is that the left and right patterns,
 while syntactically different, should be semantically equivalent.
 Therefore, applying a set of rewrite rules should not change the
 fundamental meaning of the term being rewritten. SAW is particularly
-focused on the task of proving that some logical statement, expressed as
+focused on the task of proving that some logical statement expressed as
 a `Term` is always true. If that is in fact the case, then the entire
 term can be replace by the term `True` without changing its meaning. The
 rewriting process can in some cases, by repeatedly applying rules that
@@ -694,6 +783,15 @@ equivalence between Cryptol and non-Cryptol code. When comparing Cryptol
 to Cryptol code, leaving these abstractions in place can be most
 appropriate, however, so `cryptol_ss` is not included in `basic_ss`.
 
+The next set of functions add either a single rule or a list of rules to
+an existing `Simpset`.
+
+~~~~
+addsimp' : Term -> Simpset -> Simpset
+
+addsimps' : [Term] -> Simpset -> Simpset
+~~~~
+
 To make this more concrete, consider the following example term:
 
 * TODO: show the term before for 0x22 + 0x33, explain it
@@ -702,36 +800,36 @@ To make this more concrete, consider the following example term:
 
 * TODO: show how simplifying it with `cryptol_ss` affects it
 
-The next set of functions add either a single rule or a list of rules to
-an existing `Simpset`.
+* TODO: show another example of rewriting with a Cryptol lemma and `addsimp'`
+
+Note that `addsimp'` and `addsimps'` take a `Term` or list of `Term`s,
+which could in principle be anything, not necessarily terms representing
+logically valid equalities. This is why they have `'` suffixes: they are
+not intended to be the primary interface to rewriting. When using these
+functions, the soundness of the proof process depends on the correctness
+of these rules as a side condition.
+
+The primary interface to rewriting uses the `Theorem` type instead of
+the `Term` type, as shown in the signatures for `addsimp` and
+`addsimps`.
 
 ~~~~
 addsimp : Theorem -> Simpset -> Simpset
 
-addsimp' : Term -> Simpset -> Simpset
-
 addsimps : [Theorem] -> Simpset -> Simpset
-
-addsimps' : [Term] -> Simpset -> Simpset
 ~~~~
 
-The functions that take a `Theorem` type work with rewrite rules that
-are proved to be correct. The `prove_print` function returns a `Theorem`
-when successful, and any such theorem that is an equality statement can
-be used as a rewrite rule. The behavior is that any instance of the
-left-hand side of this equality in the goal is replaced with the
-right-hand side of the equality.
+A `Theorem` is essentially just a `Term` that is proven correct in some
+way. In general, a `Theorem` can be any statement, and may not be useful
+as a rewrite rule. However, if it has the shape described earlier, it
+can be used for rewriting. When we get to the "Proofs about Terms"
+section, we'll describe how to construct `Theorem` values from `Term`
+values.
 
-The functions above that take `Term` arguments work with terms of the
-same shape, but which haven't been proven to be correct. When using
-these functions, the soundness of the proof process depends on the
-correctness of these rules as a side condition.
-
-* TODO: show another example of rewriting with a Cryptol lemma and `addsimp'`
-
-Finally, there are some built-in rules that are not included in either
-`basic_ss` and `cryptol_ss` because they are not always beneficial, but
-can sometimes be helpful or essential.
+In the absence of user-constructed `Theorem` values, there are some
+additional built-in rules that are not included in either `basic_ss` and
+`cryptol_ss` because they are not always beneficial, but can sometimes
+be helpful or essential.
 
 ~~~~
 add_cryptol_eqs : [String] -> Simpset -> Simpset
@@ -741,8 +839,6 @@ add_prelude_defs : [String] -> Simpset -> Simpset
 add_prelude_eqs : [String] -> Simpset -> Simpset
 ~~~~
 
-TODO: transition
-
 The `cryptol_ss` simpset includes rewrite rules to unfold all
 definitions in the `Cryptol` SAWCore module, but does not include any of
 the terms of equality type. The `add_cryptol_eqs` function adds the
@@ -751,15 +847,67 @@ terms of equality type with the given names to the given `Simpset`. The
 unfolding rules and equality-typed terms, respectively, from the SAWCore
 `Prelude` module.
 
-TODO: talk about this command
+Finally, it's possible to construct a theorem from an arbitrary SAWCore
+expression (rather than a Cryptol expression), using the `core_axiom`
+function.
 
-    core_axiom : String -> Theorem
+~~~~
+core_axiom : String -> Theorem
+~~~~
+
+Any `Theorem` introduced by this function is assumed to be correct, so
+use it with caution.
 
 ## Folding and Unfolding
 
-    define : String -> Term -> TopLevel Term
+A SAWCore term can be given a name using the `define` function, and is
+then by default printed as that name alone. A named subterm can then be
+"unfolded" so that the original definition appears again.
 
-    unfold_term : [String] -> Term -> Term
+~~~~
+define : String -> Term -> TopLevel Term
+
+unfold_term : [String] -> Term -> Term
+~~~~
+
+For example:
+
+~~~~
+sawscript> let t = {{ 0x22 }}
+sawscript> print_term t
+Prelude.bvNat 8 34
+sawscript> t' <- define "t" t
+sawscript> print_term t'
+t
+sawscript> let t'' = unfold_term ["t"] t'
+sawscript> print_term t''
+Prelude.bvNat 8 34
+~~~~
+
+This process of folding and unfolding is useful both to make large terms
+easier for humans to work with and to make automated proofs more
+tractable. We'll get into the latter purpose when we talk about
+interacting with external provers.
+
+Folding happens automatically when constructing Cryptol expressions in
+some cases. Consider the following example:
+
+~~~~
+sawscript> let t = {{ 0x22 }}
+sawscript> print_term t
+Prelude.bvNat 8 34
+sawscript> let {{ t = 0x22 }}
+sawscript> print_term {{ t }}
+t
+~~~~
+
+This illustrates that a bare expression in Cryptol braces gets
+translated directly to a SAWCore term. However, a Cryptol *definition*
+gets translated into a *folded* SAWCore term. In addition, because the
+second definition of `t` occurs at the Cryptol level, rather than the
+SAWScript level, it is visible only inside Cryptol braces. Definitions
+imported from Cryptol source files are also initially folded and can be
+unfolded as needed.
 
 ## Other Built-in Transformation and Inspection Functions
 
@@ -794,6 +942,7 @@ type : Term -> Type
 ## Loading and Storing Terms
 
 TODO: Obtaining terms:
+
 ~~~~
 parse_core : String -> Term
 
@@ -807,6 +956,7 @@ read_sbv : String -> [Uninterp] -> TopLevel Term
 ~~~~
 
 TODO: Exporting terms:
+
 ~~~~
 write_aig : String -> Term -> TopLevel ()
 
@@ -823,33 +973,98 @@ write_smtlib2 : String -> Term -> TopLevel ()
 
 # Proofs about Terms
 
-TODO: what are proof scripts
+Ultimately, the goal of SAW is to allow for proofs about the behavior of
+programs. It may be useful to prove some small fact to use as a rewrite
+rule in later proofs, but ultimately these rewrite rules come together
+into a proof of some higher-level property about a software system.
 
-TODO: `prove`, `sat`, and related commands
+Whether proving small lemmas (in the form of rewrite rules) or a
+top-level theorem, the process builds on the idea of a *proof script*
+which is then ultimately run by one of the top level proof commands.
 
-TODO: `ProofResult` and `SatResult` types
-
-TODO: Inspecting proof results:
 ~~~~
-caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b
+prove_print : ProofScript SatResult -> Term -> TopLevel Theorem
 
-caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
+sat_print : ProofScript SatResult -> Term -> TopLevel ()
 ~~~~
+
+The `prove_print` command takes a proof script (which we'll describe
+next) and a `Term`. The `Term` should be of function type with a return
+value of `Bool` (`Bit` at the Cryptol level). It will then use the proof
+script to attempt to show that the `Term` returns `True` for all
+possible inputs. If it is successful, it will print `Valid` and return
+a `Theorem`. If not, it will abort.
+
+The `sat_print` command is similar except that it looks for a *single*
+value for which the `Term` evaluates to `True` and prints out that
+value, returning nothing.
 
 ## Automated Tactics
 
 The simplest proof scripts just indicate which automated prover to use.
 The `ProofScript` values `abc` and `z3` select the ABC and Z3 theorem
-provers, respectively, and are typically good choices. In addition to
-these, the `boolector`, `cvc4`, `mathsat`, and `yices` provers are
-available. The internal decision procedure `rme`, short for Reed-Muller
-Expansion, is an automated prover that works particularly well on TODO.
+provers, respectively, and are typically good choices.
+
+For example, combining `prove_print` with `abc`:
+
+~~~~
+sawscript> t <- prove_print abc {{ \(x:[8]) -> x+x == x*2 }}
+Valid
+sawscript> t
+Theorem (let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+      x1 = Cryptol.ePArith x0;
+    }
+ in \(x::Prelude.Vec 8 Prelude.Bool) ->
+      Cryptol.ecEq x0
+        (Cryptol.ePCmp x0)
+        (Cryptol.ecPlus x0 x1 x x)
+        (Cryptol.ecMul x0 x1 x
+           (Prelude.bvNat 8 2)))
+~~~~
+
+Similarly, `sat_print` will show that the function returns `True` for
+one specific input (which it should, since we already know it returns
+`True` for all inputs):
+
+~~~~
+sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
+Sat: [x = 0]
+~~~~
+
+In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
+provers are available. The internal decision procedure `rme`, short for
+Reed-Muller Expansion, is an automated prover that works particularly
+well on TODO.
 
 In more complex cases, some pre-processing can be helpful or necessary
 before handing the problem off to an automated prover. The
 pre-processing can involve rewriting, beta reduction, unfolding, the use
 of provers that require slightly more configuration, or the use of
 provers that do very little real work.
+
+## Proof Script Diagnostics
+
+During development of a proof, it can be useful to print various
+information about the current goal. The following tactics are useful in
+that context.
+
+~~~~
+print_goal : ProofScript ()
+
+print_goal_consts : ProofScript ()
+
+print_goal_depth : Int -> ProofScript ()
+
+print_goal_size : ProofScript ()
+~~~~
+
+The `print_goal` tactic prints the entire goal in SAWCore syntax. The
+`print_goal_depth` is intended for especially large goals. It takes an
+integer argument, `n`, and prints the goal up to depth `n`. Any elided
+subterms are printed with a `...` notation. The `print_goal_consts`
+tactic prints a list of the names of subterms that are folded in the
+current goal, and `print_goal_size` prints the number of nodes in the
+DAG representation of the goal.
 
 ## Rewriting in Proof Scripts
 
@@ -878,18 +1093,12 @@ The `beta_reduce_goal` tactic takes any sub-expression of the form `(\x
 -> t) v` and replaces it with a transformed version of `t` in which all
 instances of `x` are replaced by `v`.
 
-The `unfolding` tactic works with "opaque constants". Each of these is a
-named subterm in a SAWCore term that can be treated as "folded", in
-which case it is just an opaque name (essentially an uninterpreted
-function), or "unfolded", in which case it looks just like any other
-subterm. The `unfolding` tactic unfolds any instances of opaque
-constants with the any of the given names.
-
-Using `unfolding` is mostly useful for proofs based entirely on
-rewriting, since default behavior for automated provers is to unfold all
-opaque constants before sending a goal to a prover. However, with Z3 and
-CVC4, it is possible to indicate that specific constants should be left
-folded (uninterpreted).
+The `unfolding` tactic works like `unfold_term` but on the current goal.
+Using `unfolding` is mostly valuable for proofs based entirely on
+rewriting, since default behavior for automated provers is to unfold
+everything before sending a goal to a prover. However, with Z3 and CVC4,
+it is possible to indicate that specific named subterms be represented
+as uninterpreted functions.
 
 ~~~~
 unint_cvc4 : [String] -> ProofScript SatResult
@@ -899,10 +1108,10 @@ unint_yices : [String] -> ProofScript SatResult
 unint_z3 : [String] -> ProofScript SatResult
 ~~~~
 
-The list of `String` arguments in these two cases indicates the names of
-the constants to leave folded, and therefore present as uninterpreted
+The list of `String` arguments in these cases indicates the names of the
+subterms to leave folded, and therefore present as uninterpreted
 functions to the prover. To determine which folded constants appear in a
-goal, use the `print_goal_consts` function described below.
+goal, use the `print_goal_consts` function described above.
 
 Ultimately, we plan to implement a more generic tactic that leaves
 certain constants uninterpreted in whatever prover is ultimately used
@@ -922,11 +1131,11 @@ external_cnf_solver : String -> [String] -> ProofScript SatResult
 
 The `external_aig_solver` function supports theorem provers that can
 take input as a single-output AIGER file. The first argument is the name
-of the executable to run. The second argument is the list of parameters
-to pass to that executable. Within this list, any element that consists
-simply of `%f` is replaced with the name of the temporary AIGER file
-generated for the proof goal. The output from the solver is expected to
-be in DIMACS solution format.
+of the executable to run. The second argument is the list of
+command-line parameters to pass to that executable. Within this list,
+any element that consists of `%f` on its own is replaced with the name
+of the temporary AIGER file generated for the proof goal. The output
+from the solver is expected to be in DIMACS solution format.
 
 The `external_cnf_solver` function works similarly but for SAT solvers
 that take input in DIMACS CNF format and produce output in DIMACS
@@ -953,31 +1162,9 @@ offline_unint_smtlib2 : [String] -> String -> ProofScript SatResult
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
-described [in the `saw-script` repository](../extcore.txt).
-
-## Proof Script Diagnostics
-
-During development of a proof, it can be useful to print various
-information about the current goal. The following tactics are useful in
-that context.
-
-~~~~
-print_goal : ProofScript ()
-
-print_goal_consts : ProofScript ()
-
-print_goal_depth : Int -> ProofScript ()
-
-print_goal_size : ProofScript ()
-~~~~
-
-The `print_goal` tactic prints the entire goal in SAWCore syntax. The
-`print_goal_depth` is intended for especially large goals. It takes an
-integer argument, `n`, and prints the goal up to depth `n`. Any elided
-subterms are printed with a `...` notation. The `print_goal_consts`
-tactic prints a list of the opaque constants that are folded in the
-current goal, and `print_goal_size` prints the number of nodes in the
-DAG representation of the goal.
+described [in the `saw-script` repository](../extcore.txt). The
+`offline_unint_smtlib2` command represents the folded subterms listed in
+its first argument as uninterpreted functions.
 
 ## Miscellaneous Tactics
 
@@ -1010,6 +1197,22 @@ true but difficult or infeasible to prove.
 The `trivial` tactic states that the current goal should be trivially
 true (i.e., the constant `True` or a function that immediately returns
 `True`). It fails if that is not the case.
+
+## Proof Failure and Satisfying Assignments
+
+TODO: `prove`, `sat`, and related commands
+
+TODO: `ProofResult` and `SatResult` types
+
+~~~~
+prove : ProofScript SatResult -> Term -> TopLevel ProofResult
+
+sat : ProofScript SatResult -> Term -> TopLevel SatResult
+    
+caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b
+
+caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
+~~~~
 
 ## AIG Values and Proofs
 
@@ -1263,8 +1466,6 @@ number of integral parameters, returns an integral result, and does not
 access any dynamically-allocated memory (although temporary memory
 allocated during execution and not visible afterward is allowed).
 
-TODO: note safety conditions
-
 # Creating Symbolic Variables
 
 The direct extraction process just discussed automatically introduces
@@ -1460,7 +1661,7 @@ TODO: note safety variables
 The following code is a complete example of using the `java_symexec`
 function.
 
-TODO: add safety variable to the following
+TODO: add safety variable to the following, and make sure it's up-to-date
 
 ~~~~
 // show that add(x,y) == add(y,x) for all x and y
@@ -1504,7 +1705,7 @@ Done.
 ## Limitations
 
 Although the `symexec` functions are more flexible than the `extract`
-functions, they also have some limitations and assumptions.
+functions, they still have some limitations and assumptions.
 
 * When allocating memory for objects or arrays, each allocation is done
   independently. Therefore, there is currently no way to create data
@@ -1626,6 +1827,7 @@ other sizes. The `llvm_int` function also takes an `Int` parameter
 indicating the variable's bit width.
 
 TODO
+
 ~~~~
 llvm_type : String -> LLVMType
 ~~~~
@@ -1696,17 +1898,19 @@ involves a separate proof for each possible aliasing configuration. At
 the moment, LLVM heaps must be completely disjoint.
 
 TODO
+
 ~~~~
 java_requires_class : String -> JavaSetup ()
 ~~~~
 
 TODO
+
 ~~~~
 llvm_allocates : String -> LLVMSetup ()
 llvm_assert_null : String -> LLVMSetup ()
 ~~~~
 
-## Checking the Final State
+## Specifying the Final State
 
 The simplest statement about the expected final state of the method or
 function under analysis is to declare what value it should return
@@ -1775,6 +1979,8 @@ functions, SAW will print a warning message and skip the proof (which
 can sometimes be a useful behavior during debugging, or in compositional
 verification as described later).
 
+TODO: mention that this automatically checks the safety condition
+
 # Compositional Verification
 
 The primary advantage of the specification-based approach to
@@ -1825,6 +2031,8 @@ If allocation is not a concern in a particular application, the
 `java_allow_alloc` function makes allocation within legal within the
 method being specified.
 
+TODO: example
+
 # Controlling Symbolic Execution
 
 One other set of commands is available to control the symbolic execution
@@ -1842,6 +2050,7 @@ The `Bool` parameter has the same effect as the `Bool` parameter passed
 to `java_symexec` and `llvm_symexec`.
 
 TODO: explain
+
 ~~~~
 llvm_simplify_addrs : Bool -> LLVMSetup ()
 ~~~~
