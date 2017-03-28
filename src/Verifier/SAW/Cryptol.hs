@@ -139,7 +139,7 @@ importType sc env ty =
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scFun sc a b
-            C.TCTuple _n -> scTuple sc =<< traverse go tyargs
+            C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
         C.PC _pc ->
           impossible "importType Prop"
