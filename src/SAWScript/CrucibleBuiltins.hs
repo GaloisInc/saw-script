@@ -124,7 +124,6 @@ crucible_llvm_verify
   -> ProofScript SatResult
   -> TopLevel CrucibleMethodSpecIR
 crucible_llvm_verify bic _opts nm lemmas setup tactic = do
-  let sc = biSharedContext bic
   cc <- io $ readIORef (biCrucibleContext bic) >>= \case
            Nothing -> fail "No Crucible LLVM module loaded"
            Just cc -> return cc
@@ -139,7 +138,7 @@ crucible_llvm_verify bic _opts nm lemmas setup tactic = do
   let methodSpec = csMethodSpec st
   --io $ putStrLn $ unlines [ "Method Spec:", show methodSpec]
   (args, assumes, prestate) <- verifyPrestate cc methodSpec
-  ret <- verifySimulate sc cc methodSpec prestate args assumes lemmas
+  ret <- verifySimulate cc methodSpec prestate args assumes lemmas
   asserts <- verifyPoststate cc methodSpec prestate ret
   verifyObligations cc methodSpec tactic assumes asserts
   return methodSpec
@@ -494,16 +493,19 @@ ppGlobalPair cc gp =
 
 registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
-  SharedContext              ->
   CrucibleContext            ->
   Crucible.SimContext Sym    ->
   CrucibleMethodSpecIR       ->
   Crucible.OverrideSim Sym rtp args ret ()
-registerOverride sc cc _ctx cs = do
+registerOverride cc _ctx cs = do
+  let sym = ccBackend cc
+  sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
   let s@(L.Symbol fsym) = L.defName (csDefine cs)
       llvmctx = ccLLVMContext cc
   liftIO $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
+    -- LLVMHandleInfo constructor has two existential type arguments,
+    -- which are bound here. h :: FnHandle args' ret'
     Just (Crucible.LLVMHandleInfo _decl' h) -> do
       -- TODO: check that decl' matches (csDefine cs)
       let retType = Crucible.handleReturnType h
@@ -516,15 +518,14 @@ registerOverride sc cc _ctx cs = do
     Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
 
 verifySimulate :: (?lc :: TyCtx.LLVMContext)
-               => SharedContext
-               -> CrucibleContext
+               => CrucibleContext
                -> CrucibleMethodSpecIR
                -> ResolvedState
                -> [(Crucible.MemType, Crucible.LLVMVal Sym Crucible.PtrWidth)]
                -> [Term]
                -> [CrucibleMethodSpecIR]
                -> TopLevel (Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth))
-verifySimulate sc cc mspec _prestate args _assumes lemmas = do
+verifySimulate cc mspec _prestate args _assumes lemmas = do
    let nm = L.defName (csDefine mspec)
    case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
       Nothing  -> fail $ unwords ["function", show nm, "not found"]
@@ -535,7 +536,7 @@ verifySimulate sc cc mspec _prestate args _assumes lemmas = do
         simCtx  <- readIORef (ccSimContext cc)
         globals <- readIORef (ccGlobals cc)
         res  <- Crucible.run simCtx globals errorHandler rty $ do
-                  mapM_ (registerOverride sc cc simCtx) lemmas
+                  mapM_ (registerOverride cc simCtx) lemmas
                   Crucible.regValue <$> (Crucible.callCFG cfg args')
         case res of
           Crucible.FinishedExecution st pr -> do
