@@ -83,6 +83,7 @@ library
     SAWScript.CongruenceClosure
     SAWScript.Compiler
     SAWScript.CrucibleBuiltins
+    SAWScript.CrucibleOverride
     SAWScript.CrucibleMethodSpecIR
     SAWScript.CryptolBuiltins
     SAWScript.CryptolEnv
