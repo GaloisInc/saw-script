@@ -19,15 +19,19 @@ let oneptr_update_func n ty f = do {
 };
 
 let quarterround_setup : CrucibleSetup () = do {
-    ys <- crucible_fresh_var "ys" (llvm_array 4 (llvm_int 32));
-    p0 <- alloc_init (llvm_int 32) {{ ys@0 }};
-    p1 <- alloc_init (llvm_int 32) {{ ys@1 }};
-    p2 <- alloc_init (llvm_int 32) {{ ys@2 }};
-    p3 <- alloc_init (llvm_int 32) {{ ys@3 }};
+    //ys <- crucible_fresh_var "ys" (llvm_array 4 (llvm_int 32));
+    y0 <- crucible_fresh_var "ys" (llvm_int 32);
+    y1 <- crucible_fresh_var "ys" (llvm_int 32);
+    y2 <- crucible_fresh_var "ys" (llvm_int 32);
+    y3 <- crucible_fresh_var "ys" (llvm_int 32);
+    p0 <- alloc_init (llvm_int 32) {{ y0 }};
+    p1 <- alloc_init (llvm_int 32) {{ y1 }};
+    p2 <- alloc_init (llvm_int 32) {{ y2 }};
+    p3 <- alloc_init (llvm_int 32) {{ y3 }};
 
     crucible_execute_func [p0, p1, p2, p3];
 
-    let zs = {{ quarterround ys }};
+    let zs = {{ quarterround [y0,y1,y2,y3] }};
     crucible_points_to p0 (crucible_term {{ zs@0 }});
     crucible_points_to p1 (crucible_term {{ zs@1 }});
     crucible_points_to p2 (crucible_term {{ zs@2 }});
@@ -71,12 +75,12 @@ let s20_encrypt32 : CrucibleSetup() = do {
 
 let main : TopLevel () = do {
     load_crucible_llvm_module "salsa20.bc";
-    qr <- crucible_llvm_verify "s20_quarterround" [] quarterround_setup;
-    rr <- crucible_llvm_verify "s20_rowround" [] rowround_setup;
-    cr <- crucible_llvm_verify "s20_columnround" [] columnround_setup;
-    dr <- crucible_llvm_verify "s20_doubleround" [] doubleround_setup;
-    s20 <- crucible_llvm_verify "s20_hash" [] salsa20_setup;
-    s20e32 <- crucible_llvm_verify "s20_expand32" [] salsa20_expansion_32;
-    //s20encrypt <- crucible_llvm_verify "s20_crypt32" [] s20_encrypt32;
+    qr     <- crucible_llvm_verify "s20_quarterround" []   quarterround_setup   z3;
+    rr     <- crucible_llvm_verify "s20_rowround"     [qr] rowround_setup       z3;
+    cr     <- crucible_llvm_verify "s20_columnround"  [qr] columnround_setup    z3;
+    dr     <- crucible_llvm_verify "s20_doubleround"  []   doubleround_setup    z3;
+    s20    <- crucible_llvm_verify "s20_hash"         []   salsa20_setup        z3;
+    s20e32 <- crucible_llvm_verify "s20_expand32"     []   salsa20_expansion_32 z3;
+    //s20encrypt <- crucible_llvm_verify "s20_crypt32" [] s20_encrypt32 z3;
     print "Done!";
 };

@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
 Module           : $Header$

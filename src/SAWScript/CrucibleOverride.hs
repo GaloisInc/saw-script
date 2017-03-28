@@ -6,15 +6,15 @@
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RankNTypes #-}
 
 module SAWScript.CrucibleOverride (methodSpecHandler) where
 
 import           Control.Lens
+import           Control.Exception
 import           Control.Monad.State
 import           Data.Foldable (traverse_)
-import           Data.Traversable
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
@@ -42,29 +42,55 @@ import           Verifier.SAW.TypedAST
 
 import           SAWScript.Builtins
 import           SAWScript.CrucibleMethodSpecIR
+--import           SAWScript.CrucibleResolveSetupValue
 import           SAWScript.TypedTerm
 
 -- | The 'OverrideMatcher' type provides the operations that are needed
 -- to match a specification's arguments with the arguments provided by
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
-newtype OverrideMatcher rtp l r a
-  = OverrideMatcher
-      (StateT
-        OverrideState
-        (Crucible.OverrideSim Sym rtp l r)
-        a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+newtype OverrideMatcher a
+  = OM { unOM :: forall rtp l.
+        StateT
+          OverrideState
+          (Crucible.MSSim Sym rtp l 'Nothing)
+          a }
 
 data OverrideState = OverrideState
   { _setupValueSub :: Map Integer (Crucible.MemType, Crucible.AnyValue Sym)
   , _termSub       :: Map VarIndex Term
   }
 
+data OverrideFailure
+  = BadSymType Crucible.SymType
+
+  deriving Show
+
+instance Exception OverrideFailure
+
+instance Functor     OverrideMatcher where fmap   = liftM
+instance Applicative OverrideMatcher where pure x = OM (pure x)
+                                           (<*>)  = ap
+instance Monad       OverrideMatcher where return = pure
+                                           m >>= f = OM (unOM . f =<< unOM m)
+instance MonadIO     OverrideMatcher where liftIO io = OM (liftIO io)
+
+
 makeLenses ''OverrideState
 
+------------------------------------------------------------------------
+
+-- | The initial override matching state starts with an empty substitution
+-- and no assertions or assumptions.
 initialState :: OverrideState
 initialState = OverrideState Map.empty Map.empty
+
+------------------------------------------------------------------------
+
+-- | Abort the current computation by raising the given 'OverrideFailure'
+-- exception.
+failure :: OverrideFailure -> OverrideMatcher a
+failure e = OM (liftIO (throwIO e))
 
 ------------------------------------------------------------------------
 
@@ -82,34 +108,45 @@ methodSpecHandler sc cc cs retTy = do
 
   Crucible.RegMap args <- Crucible.getOverrideArgs
   runOverrideMatcher $
-    do args' <- for (Map.elems (csArgBindings cs)) $ \(ty,val) ->
-                        do ty' <- maybe (fail "Not a mem type") return
-                                $ TyCtx.asMemType ty
-                           return (ty',val)
+    do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
 
        zipWithM_ matchArg (assignmentToList args) args'
        traverse_ (learnSetupCondition   sc cc) (csPreconditions  cs)
        traverse_ (executeSetupCondition sc cc) (csPostconditions cs)
-       computeReturnValue sc retTy (csRetValue cs)
+       computeReturnValue cc sc retTy (csRetValue cs)
+
+------------------------------------------------------------------------
+
+-- | Compute the 'Crucible.MemType' for a given 'Crucible.SymType' or throw
+-- an error.
+resolveMemType ::
+  (?lc :: TyCtx.LLVMContext) =>
+  Crucible.SymType           ->
+  OverrideMatcher Crucible.MemType
+resolveMemType ty =
+  case TyCtx.asMemType ty of
+    Nothing    -> failure (BadSymType ty)
+    Just memTy -> return memTy
 
 ------------------------------------------------------------------------
 
 computeReturnValue ::
+  CrucibleContext       {- ^ context of the crucible simulation     -} ->
   SharedContext         {- ^ context for generating saw terms       -} ->
   Crucible.TypeRepr ret {- ^ representation of function return type -} ->
   Maybe BindingPair     {- ^ optional symbolic return value         -} ->
-  OverrideMatcher rtp l r (Crucible.RegValue Sym ret)
+  OverrideMatcher (Crucible.RegValue Sym ret)
                         {- ^ concrete return value                  -}
 
-computeReturnValue _ Crucible.UnitRepr _ = return ()
+computeReturnValue _ _ Crucible.UnitRepr _ = return ()
 
-computeReturnValue sc ty (Just (BP _symTy (VarBind_Value val))) =
-  do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue sc val
+computeReturnValue cc sc ty (Just (BP _symTy (VarBind_Value val))) =
+  do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue cc sc val
      case NatRepr.testEquality ty xty of
        Just NatRepr.Refl -> return xval
        Nothing   -> fail "computeReturnValue: Unexpected return type"
 
-computeReturnValue _ _ _ = fail "computeReturnValue: unsupported return value"
+computeReturnValue _ _ _ _ = fail "computeReturnValue: unsupported return value"
 
 
 ------------------------------------------------------------------------
@@ -122,16 +159,16 @@ assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x
 
 ------------------------------------------------------------------------
 
-liftSim :: Crucible.OverrideSim Sym rtp l r a -> OverrideMatcher rtp l r a
-liftSim = OverrideMatcher . lift
+liftSim :: (forall rtp l. Crucible.MSSim Sym rtp l 'Nothing a) -> OverrideMatcher a
+liftSim m = OM (lift m)
 
 ------------------------------------------------------------------------
 
 -- | "Run" function for OverrideMatcher.
 runOverrideMatcher ::
-  OverrideMatcher rtp l r a ->
+  OverrideMatcher a ->
   Crucible.OverrideSim Sym rtp l r a
-runOverrideMatcher (OverrideMatcher m) = evalStateT m initialState
+runOverrideMatcher (OM m) = evalStateT m initialState
 
 ------------------------------------------------------------------------
 
@@ -139,11 +176,10 @@ assignVar ::
   Integer               {- ^ variable index -} ->
   Crucible.MemType      {- ^ LLVM type      -} ->
   Crucible.AnyValue Sym {- ^ concrete value -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 
 assignVar var memTy val =
-  OverrideMatcher             $
-  zoom (setupValueSub . at var) $
+  OM $ zoom (setupValueSub . at var) $
 
   do old <- get
      case old of
@@ -156,11 +192,10 @@ assignVar var memTy val =
 assignTerm ::
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 
 assignTerm var val =
-  OverrideMatcher $
-  zoom (termSub . at var) $
+  OM $ zoom (termSub . at var) $
 
   do old <- get
      case old of
@@ -173,7 +208,7 @@ assignTerm var val =
 matchArg ::
   Crucible.AnyValue Sym          {- ^ concrete simulation value    -} ->
   (Crucible.MemType, SetupValue) {- ^ expected specification value -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 matchArg (Crucible.AnyValue ty val) (memTy, setupVal) = matchArg' ty memTy val setupVal
 
 matchArg' ::
@@ -181,7 +216,7 @@ matchArg' ::
   Crucible.MemType         {- ^ expected type       -} ->
   Crucible.RegValue Sym tp {- ^ actual value        -} ->
   SetupValue               {- ^ expected value      -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 
 matchArg' ty memTy val (SetupVar var) =
   assignVar var memTy (Crucible.AnyValue ty val)
@@ -218,7 +253,7 @@ matchArg' realTy expectedTy _ expected =
 matchTerm ::
   Term {- ^ exported concrete term      -} ->
   Term {- ^ expected specification term -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 
 matchTerm real expect =
   case (unwrapTermF real, unwrapTermF expect) of
@@ -235,7 +270,7 @@ learnSetupCondition ::
   SharedContext              ->
   CrucibleContext            ->
   SetupCondition             ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 learnSetupCondition sc cc (SetupCond_PointsTo ptr val)   = learnPointsTo sc cc ptr val
 learnSetupCondition _  _  (SetupCond_Equal ty val1 val2) = learnEqual ty val1 val2
 
@@ -249,11 +284,11 @@ learnPointsTo ::
   CrucibleContext            ->
   SetupValue {- ^ pointer -} ->
   SetupValue {- ^ value   -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 learnPointsTo sc cc ptr val =
   do liftIO $ putStrLn $ "Checking points to: " ++
                          show ptr ++ " -> " ++ show val
-     (memTy,ptr1) <- asPointer =<< resolveSetupValue sc ptr
+     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc ptr
      storTy <- Crucible.toStorableType memTy
      sym    <- liftSim Crucible.getSymInterface
 
@@ -272,7 +307,7 @@ learnEqual ::
   Crucible.SymType {- ^ type of values to be compared for equality -} ->
   SetupValue       {- ^ first value to compare                     -} ->
   SetupValue       {- ^ second value to compare                    -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 learnEqual _ _ _ = fail "learnEqual: incomplete"
 
 
@@ -285,7 +320,7 @@ executeSetupCondition ::
   SharedContext              ->
   CrucibleContext            ->
   SetupCondition             ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 executeSetupCondition sc cc (SetupCond_PointsTo ptr val)   = executePointsTo sc cc ptr val
 executeSetupCondition _  _  (SetupCond_Equal ty val1 val2) = executeEqual ty val1 val2
 
@@ -297,14 +332,14 @@ executePointsTo ::
   CrucibleContext            ->
   SetupValue {- ^ pointer -} ->
   SetupValue {- ^ value   -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 executePointsTo sc cc ptr val =
   do liftIO $ putStrLn $ "Executing points to: " ++
                          show ptr ++ " -> " ++ show val
-     (memTy,ptr1) <- asPointer =<< resolveSetupValue sc ptr
+     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc ptr
      sym    <- liftSim Crucible.getSymInterface
 
-     (memTy1, val1) <- resolveSetupValue sc val
+     (memTy1, val1) <- resolveSetupValue cc sc val
 
      unless (memTy == memTy1) (fail "Mismatched store type")
 
@@ -324,25 +359,26 @@ executeEqual ::
   Crucible.SymType {- ^ type of values          -} ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
-  OverrideMatcher rtp l r ()
+  OverrideMatcher ()
 executeEqual _ _ _ = fail "executeEqual: incomplete"
 
 
 ------------------------------------------------------------------------
 
 resolveSetupValue ::
-  SharedContext ->
-  SetupValue    ->
-  OverrideMatcher rtp l r (Crucible.MemType, Crucible.AnyValue Sym)
+  CrucibleContext ->
+  SharedContext   ->
+  SetupValue      ->
+  OverrideMatcher (Crucible.MemType, Crucible.AnyValue Sym)
 
-resolveSetupValue _ (SetupVar i) =
-  do v <- OverrideMatcher (use (setupValueSub . at i))
+resolveSetupValue _ _ (SetupVar i) =
+  do v <- OM (use (setupValueSub . at i))
      case v of
        Nothing -> fail "Unknown variable"
        Just x  -> return x
 
 resolveSetupValue
-  sc
+  _cc sc
   (SetupTerm
      (TypedTerm
        (Cryptol.Forall [] []
@@ -355,16 +391,15 @@ resolveSetupValue
   , Just Crucible.LeqProof <- Crucible.isPosNat w
   =
 
-  do s   <- OverrideMatcher (use termSub)
+  do s   <- OM (use termSub)
      sym <- liftSim Crucible.getSymInterface
      t'  <- liftIO (scInstantiateExt sc s t)
      let ty = Crucible.BaseBVRepr w
      elt <- liftIO (Crucible.bindSAWTerm sym ty t')
      return (Crucible.IntType (fromInteger sz), Crucible.AnyValue (Crucible.BVRepr w) elt)
 
-resolveSetupValue _ v =
+resolveSetupValue _ _ v =
    fail $ "resolveSetupValue: not implemented: " ++ show v
-
 
 ------------------------------------------------------------------------
 
@@ -372,8 +407,7 @@ resolveSetupValue _ v =
 asPointer ::
   (?lc :: TyCtx.LLVMContext) =>
   (Crucible.MemType, Crucible.AnyValue Sym) ->
-  OverrideMatcher rtp l r
-    (Crucible.MemType, Crucible.RegValue Sym Crucible.LLVMPointerType)
+  OverrideMatcher (Crucible.MemType, Crucible.RegValue Sym Crucible.LLVMPointerType)
 
 asPointer
   (Crucible.PtrType pty,

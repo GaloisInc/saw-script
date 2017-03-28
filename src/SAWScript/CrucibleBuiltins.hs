@@ -19,17 +19,13 @@ module SAWScript.CrucibleBuiltins where
 import Control.Lens
 import Control.Monad.ST
 import Control.Monad.State
-import Data.Maybe (fromMaybe, fromJust)
+import Data.Maybe (fromMaybe)
 import Data.Foldable (toList, find)
 import Data.IORef
 import Data.String
-import Data.Word (Word64)
 import System.IO
-import           Data.Map (Map)
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import           Data.Set (Set)
-import qualified Data.Set as Set
 import qualified Data.Map as Map
 --import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -38,9 +34,6 @@ import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-
-import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 
 import qualified Data.Parameterized.Nonce as Crucible
 import qualified Lang.Crucible.Config as Crucible
@@ -53,7 +46,6 @@ import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
-import qualified Lang.Crucible.Utils.Arithmetic as Crucible
 
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
@@ -66,15 +58,10 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.NatRepr as NatRepr
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
-import Verifier.SAW.Cryptol (importType, emptyEnv)
-
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
 import SAWScript.Builtins
 import SAWScript.Options
@@ -85,6 +72,7 @@ import SAWScript.Value
 
 import SAWScript.CrucibleMethodSpecIR
 import SAWScript.CrucibleOverride
+import SAWScript.CrucibleResolveSetupValue
 import SAWScript.LLVMUtils
 
 --import qualified SAWScript.LLVMBuiltins as LB
@@ -193,23 +181,6 @@ resolveArguments cc mspec rs = mapM resolveArg [0..(nArgs-1)]
       Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
 
 
-data ResolvedState =
-  ResolvedState
-  { resolvedArgMap   :: Map Integer (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  , resolvedVarMap   :: Map Integer (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  , resolvedRetVal   :: Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  , resolvedPointers :: Set Integer
-  }
-
-initialResolvedState :: ResolvedState
-initialResolvedState =
-  ResolvedState
-  { resolvedArgMap = Map.empty
-  , resolvedVarMap = Map.empty
-  , resolvedRetVal = Nothing
-  , resolvedPointers = Set.empty
-  }
-
 setupPrestateConditions
               :: (?lc :: TyCtx.LLVMContext)
               => CrucibleMethodSpecIR
@@ -227,7 +198,7 @@ setupPrestateConditions mspec cc rs0 conds =
       let tp' = fromMaybe
                    (error ("Expected memory type:" ++ show tp))
                    (Crucible.toStorableType =<< TyCtx.asMemType tp) in
-      if Set.member v (resolvedPointers rs) then do
+      if Map.member v (resolvedVarMap rs) then do
            io $ withMem cc $ \sym mem -> do
               x <- Crucible.loadRaw sym mem ptr tp'
               val' <- resolveSetupVal cc rs val
@@ -237,8 +208,8 @@ setupPrestateConditions mspec cc rs0 conds =
            io $ withMem cc $ \sym mem -> do
               val' <- resolveSetupVal cc rs val
               mem' <- Crucible.storeRaw sym mem ptr tp' val'
-              let rs' = rs{ resolvedPointers = Set.insert v (resolvedPointers rs)
-                          , resolvedVarMap   = Map.insert v (Crucible.LLVMValPtr blk end off) (resolvedVarMap rs)
+              let rs' = rs{ resolvedVarMap = Map.insert v (Crucible.LLVMValPtr blk end off)
+                                                          (resolvedVarMap rs)
                           }
               return ((cs,rs'), mem')
 
@@ -294,130 +265,6 @@ assertEqualVals cc v1 v2 = Crucible.toSC sym =<< go (v1, v2)
 
   sym = ccBackend cc
 
-resolveSetupVal :: CrucibleContext
-                -> ResolvedState
-                -> SetupValue
-                -> IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
-resolveSetupVal cc rs val =
-  case val of
-    SetupReturn _ ->
-      case resolvedRetVal rs of
-        Nothing -> fail "return value not available"
-        Just v  -> return v
-    SetupVar i
-      | Just val' <- Map.lookup i (resolvedVarMap rs) -> return val'
-      | otherwise -> fail ("Unresolved prestate variable:" ++ show i)
-    SetupTerm tm ->
-      case ttSchema tm of
-        Cryptol.Forall [] [] ty ->
-          resolveSAWTerm (Cryptol.evalValType Map.empty ty) (ttTerm tm)
-        _ -> fail "resolveSetupVal: expected monomorphic term"
-    SetupStruct vs -> do
-      vals <- mapM (resolveSetupVal cc rs) vs
-      let tps = map (typeOfLLVMVal dl) vals
-      let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields 0 0 tps))) of
-            Crucible.Struct v -> v
-            _ -> error "impossible"
-      return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
-    SetupArray [] -> fail "resolveSetupVal: invalid empty array"
-    SetupArray vs -> do
-      vals <- V.mapM (resolveSetupVal cc rs) (V.fromList vs)
-      let tp = typeOfLLVMVal dl (V.head vals)
-      return $ Crucible.LLVMValArray tp vals
-    SetupNull ->
-      Crucible.packMemValue sym ptrType Crucible.llvmPointerRepr =<< Crucible.mkNullPointer sym
-    SetupGlobal name -> withMem cc $ \_sym impl -> do
-      r <- Crucible.doResolveGlobal sym impl (L.Symbol name)
-      v <- Crucible.packMemValue sym ptrType Crucible.llvmPointerRepr r
-      return (v, impl)
-
-  where
-  sym = ccBackend cc
-  dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-  ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
-
-  resolveSAWTerm :: Cryptol.TValue -> Term -> IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  resolveSAWTerm tp tm =
-    case tp of
-      Cryptol.TVBit ->
-        fail "resolveSAWTerm: unimplemented type Bit (FIXME)"
-      Cryptol.TVSeq sz Cryptol.TVBit ->
-        case Crucible.someNat sz of
-          Just (Crucible.Some w)
-            | Just Crucible.LeqProof <- Crucible.isPosNat w ->
-              do sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
-                 -- Evaluate in SBV to test whether 'tm' is a concrete value
-                 sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm
-                 case SBV.svAsInteger sbv of
-                   Just x -> do
-                     loc <- Crucible.curProgramLoc sym
-                     let v = Crucible.BVElt w x loc
-                     return (Crucible.LLVMValInt w v)
-                   Nothing -> do
-                     v <- Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm
-                     return (Crucible.LLVMValInt w v)
-          _ -> fail ("Invalid bitvector width: " ++ show sz)
-      Cryptol.TVSeq sz tp' ->
-        do sc    <- Crucible.saw_ctx <$> (readIORef (Crucible.sbStateManager sym))
-           sz_tm <- scNat sc (fromIntegral sz)
-           tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
-           let f i = do i_tm <- scNat sc (fromIntegral i)
-                        tm' <- scAt sc sz_tm tp_tm tm i_tm
-                        resolveSAWTerm tp' tm'
-           case toLLVMType tp' of
-             Nothing -> fail "resolveSAWTerm: invalid type"
-             Just mt -> do
-               gt <- Crucible.toStorableType mt
-               Crucible.LLVMValArray gt . V.fromList <$> mapM f [ 0 .. (sz-1) ]
-      Cryptol.TVStream _tp' ->
-        fail "resolveSAWTerm: invalid infinite stream type"
-      Cryptol.TVTuple _tps ->
-        fail "resolveSAWTerm: unimplemented tuple type (FIXME)"
-      Cryptol.TVRec _flds ->
-        fail "resolveSAWTerm: unimplemented record type (FIXME)"
-      Cryptol.TVFun _ _ ->
-        fail "resolveSAWTerm: invalid function type"
-
-  toLLVMType :: Cryptol.TValue -> Maybe Crucible.MemType
-  toLLVMType tp =
-    case tp of
-      Cryptol.TVBit -> Nothing -- FIXME
-      Cryptol.TVSeq n Cryptol.TVBit
-        | n > 0 -> Just (Crucible.IntType (fromInteger n))
-        | otherwise -> Nothing
-      Cryptol.TVSeq n t -> do
-        t' <- toLLVMType t
-        let n' = fromIntegral n
-        Just (Crucible.ArrayType n' t')
-      Cryptol.TVStream _tp' -> Nothing
-      Cryptol.TVTuple tps -> do
-        tps' <- mapM toLLVMType tps
-        let si = Crucible.mkStructInfo dl False tps'
-        return (Crucible.StructType si)
-      Cryptol.TVRec _flds -> Nothing -- FIXME
-      Cryptol.TVFun _ _ -> Nothing
-
-  mkFields :: Crucible.Alignment -> Word64
-           -> [Crucible.Type] -> [(Crucible.Type, Word64)]
-  mkFields _ _ [] = []
-  mkFields a off (ty : tys) = (ty, pad) : mkFields a' off' tys
-    where
-      end = off + Crucible.typeSize ty
-      off' = Crucible.nextPow2Multiple end (fromIntegral nextAlign)
-      pad = off' - end
-      a' = max a (typeAlignment dl ty)
-      nextAlign = case tys of
-        [] -> a'
-        (ty' : _) -> typeAlignment dl ty'
-
-typeAlignment :: Crucible.DataLayout -> Crucible.Type -> Crucible.Alignment
-typeAlignment dl ty =
-  case Crucible.typeF ty of
-    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromIntegral (bytes*8))
-    Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
-    Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
-    Crucible.Array _sz ty'   -> typeAlignment dl ty'
-    Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
 asSAWType :: SharedContext
           -> Crucible.Type
@@ -604,19 +451,6 @@ verifyPoststate cc mspec prestate ret = do
       val1' <- resolveSetupVal cc rs val1
       val2' <- resolveSetupVal cc rs val2
       assertEqualVals cc val1' val2'
-
-typeOfLLVMVal :: Crucible.DataLayout -> Crucible.LLVMVal Sym Crucible.PtrWidth -> Crucible.Type
-typeOfLLVMVal dl val =
-  case val of
-    Crucible.LLVMValPtr {}      -> ptrType
-    Crucible.LLVMValFunPtr {}   -> ptrType
-    Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w)))
-    Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
-    Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
-    Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
-  where
-    ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
-    fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 
 load_crucible_llvm_module :: BuiltinContext -> Options -> String -> TopLevel ()
 load_crucible_llvm_module bic _opts bc_file = do
