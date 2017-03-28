@@ -356,7 +356,7 @@ let run_with_message c =
     return res;
   };
 
-x <- run_with_message (print "Printing.");
+x <- run_with_message (return 3);
 print x;
 ~~~~
 
@@ -367,18 +367,13 @@ something like:
 Loading module Cryptol
 Loading file "run.saw"
 Starting.
-Printing.
 Done.
-()
+3
 ~~~~
 
 Note that it ran the first `print` command, then the caller-specified
 command, then the second `print` command. The result stored in `x` at
-the end is the result of the third `print` command.
-
-TODO: make the previous actually return something interesting from `c`.
-But we haven't introduced any commands that return anything interesting
-yet...
+the end is the result of the `return` command passed in as an argument.
 
 ## Other Basic Functions
 
@@ -597,9 +592,16 @@ and `}}` delimiters, it does so with several extra bindings in scope:
   `Term` does not need to have originally been derived from a Cryptol
   expression.
 
-To make these rules more concrete, consider the following examples.
+In addition to these rules, bindings created at the Cryptol level,
+either from included files or inside Cryptol quoting brackets, are
+visible only to later Cryptol expressions, and not as SAWScript
+variables.
 
-TODO: examples
+To make these rules more concrete, consider the following examples. If
+we bind a SAWScript `Int`, we can use it as a Cryptol type variable. If
+we create a `Term` variable which internally has function type, we can
+apply it to an argument within a Cryptol expression, but not at the
+SAWScript level:
 
 ~~~~
 sawscript> let n = 8
@@ -607,19 +609,22 @@ sawscript> let {{ f (x : [n]) = x + 1 }}
 sawscript> print {{ f 2 }}
 3
 sawscript> print (f 2)
-TODO: error
+
+unbound variable: "f" (<stdin>:1:8)
 ~~~~
 
-TODO: talk about values bound *inside* Cryptol context
+If `f` was a binding of a SAWScript variable to a `Term` of function
+type, we would get a different error:
 
 ~~~~
-sawscript> let b = true
-sawscript> let t {{ [b, b] }}
-~~~~
+sawscript> let f = {{ \(x : [n]) -> x + 1 }}
+sawscript> print {{ f 2 }}
+3
+sawscript> print (f 2)
 
-~~~~
-sawscript> let t1 = {{ ... }}
-sawscript> let t2 = {{ ... }}
+type mismatch: Int -> t.0 and Term
+ at "_" (REPL)
+ mismatched type constructors: (->) and Term
 ~~~~
 
 One subtlety of dealing with `Term`s constructed from Cryptol is that
@@ -659,25 +664,15 @@ In addition to the use of brackets to write Cryptol expressions inline,
 several built-in functions can extract `Term` values from Cryptol files
 in other ways. The `import` command at the top level imports all
 top-level definitions from a Cryptol file and places them in scope
-within later bracketed expressions. The `cryptol_load` command behaves
-similarly, but returns a `CryptolModule` instead. If any `CryptolModule`
-is in scope, its contents are available qualified with the name of the
-`CryptolModule` variable. TODO: example
+within later bracketed expressions.
 
-Alternatively, a specific definition can be extracted from a
-`CryptolModule` more explicitly using the `cryptol_extract` command:
-
-~~~~
-cryptol_extract : CryptolModule -> String -> TopLevel Term
-~~~~
-
-Finally, the `cryptol_prims` function returns a built-in module
+The `cryptol_load` command behaves similarly, but returns a
+`CryptolModule` instead. If any `CryptolModule` is in scope, its
+contents are available qualified with the name of the `CryptolModule`
+variable. To see how this works, consider the `cryptol_prims` function,
+of type `() -> CryptolModule`. This function returns a built-in module
 containing a collection of useful Cryptol definitions that are not
 available in the standard Cryptol Prelude.
-
-~~~~
-cryptol_prims : () -> CryptolModule
-~~~~
 
 The definitions in this module include (in Cryptol syntax):
 
@@ -710,6 +705,13 @@ sawscript> print x
 ~~~~
 
 We truncated the 8-bit value `0x23` to a 4-bit value `0x3`.
+
+Finally, a specific definition can be extracted from a `CryptolModule`
+more explicitly using the `cryptol_extract` command:
+
+~~~~
+cryptol_extract : CryptolModule -> String -> TopLevel Term
+~~~~
 
 # Transforming Term Values
 
@@ -744,7 +746,8 @@ with. Any variable in the right-hand pattern must also appear in the
 left-hand pattern and will be instantiated with whatever sub-term
 matched that variable in the original term.
 
-TODO: simple example here
+TODO: simple example here, entirely in Cryptol syntax (not actually
+executable)
 
 The general philosophy of rewriting is that the left and right patterns,
 while syntactically different, should be semantically equivalent.
@@ -792,15 +795,17 @@ addsimp' : Term -> Simpset -> Simpset
 addsimps' : [Term] -> Simpset -> Simpset
 ~~~~
 
+Given a `Simpset`, the `rewrite` command applies it to an existing
+`Term` to produce a new `Term`.
+
+~~~~
+rewrite : Simpset -> Term -> Term
+~~~~
+
 To make this more concrete, consider the following example term:
 
-* TODO: show the term before for 0x22 + 0x33, explain it
-
-* TODO: introduce the `rewrite` command
-
-* TODO: show how simplifying it with `cryptol_ss` affects it
-
-* TODO: show another example of rewriting with a Cryptol lemma and `addsimp'`
+* TODO: show an example of using `rewrite` with `cryptol_ss` and
+  `addsimp`, displaying things in SAWCore syntax
 
 Note that `addsimp'` and `addsimps'` take a `Term` or list of `Term`s,
 which could in principle be anything, not necessarily terms representing
@@ -911,15 +916,21 @@ unfolded as needed.
 
 ## Other Built-in Transformation and Inspection Functions
 
-* TODO: talk about `hoist_ifs`, `beta_reduce_term`, `replace`
+In addition to the `Term` transformation functions described so far, a
+miscellaneous variety of others also exist.
 
 ~~~~
 beta_reduce_term : Term -> Term
 
-hoist_ifs : Term -> TopLevel Term
-
 replace : Term -> Term -> Term -> TopLevel Term
 ~~~~
+
+The `beta_reduce_term` function takes any sub-expression of the form
+`(\x -> t) v` in the given `Term` and replaces it with a transformed
+version of `t` in which all instances of `x` are replaced by `v`.
+
+The `replace` function replaces arbitrary subterms. A call to `replace x
+y t` replaces any instance of `x` inside `t` with `y`.
 
 * TODO: talk about inspecting terms
 
@@ -941,7 +952,9 @@ type : Term -> Type
 
 ## Loading and Storing Terms
 
-TODO: Obtaining terms:
+Most frequently, `Term` values in SAWScript come from Cryptol, JVM, or
+LLVM programs, or some transformation thereof. However, it is also
+possible to obtain them from various other sources.
 
 ~~~~
 parse_core : String -> Term
@@ -951,11 +964,22 @@ read_aig : String -> TopLevel Term
 read_bytes : String -> TopLevel Term
 
 read_core : String -> TopLevel Term
-
-read_sbv : String -> [Uninterp] -> TopLevel Term
 ~~~~
 
-TODO: Exporting terms:
+The `parse_core` function parses a `String` containing a term in SAWCore
+syntax, returning a `Term`. The `read_core` command is similar, but
+obtains the text from the given file and expects it to be in the simpler
+SAWCore external representation format, rather than the human-readable
+syntax shown so far. The `read_aig` command returns a `Term`
+representation of an And-Inverter-Graph (AIG) file in AIGER format. The
+`read_bytes` command reads a constant sequence of bytes from a file and
+represents it as a `Term`. Its result will always have Cryptol type
+`[n][8]` for some `n`.
+
+It is also possible to write `Term` values into files in various
+formats, including: AIGER (`write_aig`), CNF (`write_cnf`), SAWCore
+external representation (`write_core`), and SMT-Lib version 2
+(`write_smtlib2`).
 
 ~~~~
 write_aig : String -> Term -> TopLevel ()
@@ -963,10 +987,6 @@ write_aig : String -> Term -> TopLevel ()
 write_cnf : String -> Term -> TopLevel ()
 
 write_core : String -> Term -> TopLevel ()
-
-write_saig : String -> Term -> TopLevel ()
-
-write_saig' : String -> Term -> Int -> TopLevel ()
 
 write_smtlib2 : String -> Term -> TopLevel ()
 ~~~~
@@ -998,6 +1018,13 @@ a `Theorem`. If not, it will abort.
 The `sat_print` command is similar except that it looks for a *single*
 value for which the `Term` evaluates to `True` and prints out that
 value, returning nothing.
+
+A similar command to `prove_print`, `prove_core` can produce a `Theorem`
+from a string containing a SAWCore term.
+
+~~~~
+prove_core : ProofScript SatResult -> String -> TopLevel Theorem
+~~~~
 
 ## Automated Tactics
 
@@ -1034,7 +1061,7 @@ Sat: [x = 0]
 In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
 provers are available. The internal decision procedure `rme`, short for
 Reed-Muller Expansion, is an automated prover that works particularly
-well on TODO.
+well on the Galois field operations that show up, for example, in AES.
 
 In more complex cases, some pre-processing can be helpful or necessary
 before handing the problem off to an automated prover. The
@@ -1200,25 +1227,53 @@ true (i.e., the constant `True` or a function that immediately returns
 
 ## Proof Failure and Satisfying Assignments
 
-TODO: `prove`, `sat`, and related commands
+The `prove_print` and `sat_print` commands print out their essential
+results (potentially returning a `Theorem` in the case of
+`prove_print`). In some cases, though, one may want to act
+programmatically on the result of a proof, rather than display it.
 
-TODO: `ProofResult` and `SatResult` types
+The `prove` and `sat` commands allow this sort of programmatic analysis
+of proof results. To allow this, they use two types we haven't mentioned
+yet: `ProofResult` and `SatResult`. These are different from the other
+types in SAWScript because they encode the possibility of two outcomes.
+In the case of `ProofResult`, a statement may be valid or there may be a
+counter-example. In the case of `SatResult`, there may be a satisfying
+assignment, or the statement may be unsatisfiable.
 
 ~~~~
 prove : ProofScript SatResult -> Term -> TopLevel ProofResult
 
 sat : ProofScript SatResult -> Term -> TopLevel SatResult
-    
+~~~~
+
+To operate on these new types, SAWScript includes a pair of functions:
+
+~~~~
 caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b
 
 caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
 ~~~~
 
+The `caseProofResult` function takes a `ProofResult`, a value to return
+in the case that the statement is valid, and a function to run on the
+counter-example, if there is one. The `caseSatResult` function has the
+same shape: it returns its first argument if the result represents an
+unsatisfiable statement, or its second argument applied to a satisfying
+assignment if it finds one.
+
 ## AIG Values and Proofs
 
-TODO: talk about AIG values
+Most SAWScript programs operate on `Term` values, and in most cases this
+is the appropriate representation. It is possible, however, to represent
+the same function that a `Term` may represent using a different data
+structure: an And-Inverter-Graph (AIG). An AIG is a representation of a
+Boolean function as a circuit composed entirely of AND gates and
+inverters. Hardware synthesis and verification tools, including the ABC
+tool that SAW has built in, can do efficient verification and
+particularly equivalence checking on AIGs.
 
-AIG operations:
+To take advantage of this capability, a handful of built-in commands can
+operate on AIGs.
 
 ~~~~
 bitblast : Term -> TopLevel AIG
@@ -1231,6 +1286,15 @@ save_aig : String -> AIG -> TopLevel ()
 
 save_aig_as_cnf : String -> AIG -> TopLevel ()
 ~~~~
+
+The `bitblast` command represents a `Term` as an `AIG` by "blasting" all
+of its primitive operations (things like bit-vector addition) down to
+the level of individual bits. The `cec` command, for Combinational
+Equivalence Check, will compare two AIGs, returning a `ProofResult`
+representing whether the two are equivalent. The `load_aig` and
+`save_aig` commands work with external representations of AIG data
+structures in the AIGER format. Finally, `save_aig_as_cnf` will write an
+AIG out in CNF format for input into a standard SAT solver.
 
 # Symbolic Execution
 
@@ -1504,7 +1568,11 @@ follows:
 x <- fresh_symbolic "x" {| [32] |};
 ~~~~
 
-TODO: talk about `abstract_symbolic` and its ilk.
+Although symbolic execution works best on symbolic variables, which are
+"unbound" or "free", most of the proof infrastructure within SAW uses
+variables that are *bound* by an enclosing lambda expression. Given a
+`Term` with free symbolic variables, we can construct a lambda term that
+binds them in several ways.
 
 ~~~~
 abstract_symbolic : Term -> Term
@@ -1512,6 +1580,106 @@ abstract_symbolic : Term -> Term
 lambda : Term -> Term -> Term
 
 lambdas : [Term] -> Term -> Term
+~~~~
+
+The `abstract_symbolic` function is the simplest, but gives you the
+least control. It finds all symbolic variables in the `Term` and
+constructs a lamba expression binding each one, in some order. The
+result is a function of some number of arguments, one for each symbolic
+variable.
+
+~~~~
+sawscript> x <- fresh_symbolic "x" {| [8] |}
+sawscript> let t = {{ x + x }}
+sawscript> print_term t
+let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+    }
+ in Cryptol.ecPlus x0
+      (Cryptol.ePArith x0)
+      x
+      x
+sawscript> let f = abstract_symbolic t
+sawscript> print_term f
+let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+    }
+ in \(x::Prelude.Vec 8 Prelude.Bool) ->
+      Cryptol.ecPlus x0
+        (Cryptol.ePArith x0)
+        x
+        x
+~~~~
+
+If there are multiple symbolic variables in the `Term` passed to
+`abstract_symbolic`, the ordering of parameters can be hard to predict.
+In some cases (such as when a proof is the immediate next step, and it's
+expected to succeed) the order isn't important. In others, it's nice to
+have more control over the order.
+
+The building block for controlled binding is `lambda`. It takes two
+terms: the one to transform, and the portion of the term to abstract
+over. Generally, the first `Term` is one obtained from `fresh_symbolic`
+and the second is a `Term` that would be passed to `abstract_symbolic`.
+
+~~~~
+sawscript> let f = lambda x t
+sawscript> print_term f
+let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+    }
+ in \(x::Prelude.Vec 8 Prelude.Bool) ->
+      Cryptol.ecPlus x0
+        (Cryptol.ePArith x0)
+        x
+        x
+~~~~
+
+For `Term`s with more than one symbolic variable, `lambdas` allows you
+to list the order in which they should be bound. Consider, for example,
+a `Term` which adds two symbolic variables:
+
+~~~~
+sawscript> x1 <- fresh_symbolic "x1" {| [8] |}
+sawscript> x2 <- fresh_symbolic "x2" {| [8] |}
+sawscript> let t = {{ x1 + x2 }}
+sawscript> print_term t
+let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+      x1 = Prelude.Vec 8 Prelude.Bool;
+    }
+ in Cryptol.ecPlus x0
+      (Cryptol.ePArith x0)
+      x1
+      x2
+~~~~
+
+We can turn this into a function that takes `x1` followed by `x2`:
+
+~~~~
+sawscript> let f1 = lambdas [x1, x2] t
+sawscript> print_term f1
+let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+      x1 = Prelude.Vec 8 Prelude.Bool;
+    }
+ in \(x1::x1) ->
+      \(x2::x1) ->
+        Cryptol.ecPlus x0
+          (Cryptol.ePArith x0)
+          x1
+          x2
+~~~~
+
+Or we can turn `t` into a function that takes `x2` followed by `x1`:
+
+~~~~
+sawscript> let f1 = lambdas [x2, x1] t
+sawscript> print_term f1
+let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+      x1 = Prelude.Vec 8 Prelude.Bool;
+    }
+ in \(x2::x1) ->
+      \(x1::x1) ->
+        Cryptol.ecPlus x0
+          (Cryptol.ePArith x0)
+          x1
+          x2
 ~~~~
 
 # Monolithic Symbolic Execution
@@ -1652,9 +1820,12 @@ should be a value expression, and the `Int` parameter indicates how many
 elements to read. The number of elements does not need to be the same as
 the number of elements allocated or written in the initial state.
 However, reading past the end of an object or reading a location that
-has not been initialized will lead to an error.
-
-TODO: note safety variables
+has not been initialized will lead to an error. In this list, the
+special name `$safety` refers to a `Term` describing the conditions
+under which the result of symbolic execution is well-defined. It can be
+useful to obtain this `Term` and prove that it's always valid (that the
+program is always safe), or that it's valid under the expected
+preconditions.
 
 ## Examples
 
@@ -1826,11 +1997,14 @@ that any arrays have the specific size indicated, and may not hold for
 other sizes. The `llvm_int` function also takes an `Int` parameter
 indicating the variable's bit width.
 
-TODO
+LLVM types can also be specified in LLVM syntax directly, by using the
+`llvm_type` function.
 
 ~~~~
 llvm_type : String -> LLVMType
 ~~~~
+
+For example, `llvm_type "i32"` yields the same result as `llvm_int 32`.
 
 The `Term` returned by `java_var` and `llvm_var` is a representation of
 the _initial value_ of the variable being declared. It can be used in
@@ -1897,13 +2071,13 @@ Because this is a may-alias relationship, the verification process
 involves a separate proof for each possible aliasing configuration. At
 the moment, LLVM heaps must be completely disjoint.
 
-TODO
+TODO: explain
 
 ~~~~
 java_requires_class : String -> JavaSetup ()
 ~~~~
 
-TODO
+TODO: explain
 
 ~~~~
 llvm_allocates : String -> LLVMSetup ()
@@ -1979,7 +2153,10 @@ functions, SAW will print a warning message and skip the proof (which
 can sometimes be a useful behavior during debugging, or in compositional
 verification as described later).
 
-TODO: mention that this automatically checks the safety condition
+The process of verification checks all user-specified postconditions,
+but also checks that the safety condition (as referred to by `$safety`
+in `*_symexec`) is valid, and therefore that symbolic execution is
+always well defined (under the supplied pre-conditions).
 
 # Compositional Verification
 
@@ -2031,8 +2208,6 @@ If allocation is not a concern in a particular application, the
 `java_allow_alloc` function makes allocation within legal within the
 method being specified.
 
-TODO: example
-
 # Controlling Symbolic Execution
 
 One other set of commands is available to control the symbolic execution
@@ -2049,7 +2224,13 @@ llvm_sat_branches : Bool -> LLVMSetup ()
 The `Bool` parameter has the same effect as the `Bool` parameter passed
 to `java_symexec` and `llvm_symexec`.
 
-TODO: explain
+Finally, in some cases, pointers in LLVM can become what look like
+complex symbolic values during symbolic simulation, even though they can
+be simplified down to constants. Using these complex pointers directly
+is slow, and simplifying them can greatly speed up symbolic execution of
+some programs. For other programs, however, the simplification is wasted
+effort. Therefore, the `llvm_simplify_addrs` command turns the
+simplification of pointer expressions on or off.
 
 ~~~~
 llvm_simplify_addrs : Bool -> LLVMSetup ()
