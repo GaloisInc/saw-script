@@ -23,12 +23,13 @@ sending them to external provers is orchestrated using a special purpose
 language called SAWScript. SAWScript is a typed functional language with
 support for sequencing of imperative commmands.
 
-The rest of this document first describes how to use the saw tool SAW and
-outlines the structure of the SAWScript language and its relationship
-with Cryptol. It then follows up with a description of the commands in
-SAWScript that can transform functional models and prove properties
-about them. Finally, it describes the specific commands available for
-constructing models from imperative programs in a variety of languages.
+The rest of this document first describes how to use the SAW tool,
+`saw`, and outlines the structure of the SAWScript language and its
+relationship with Cryptol. It then follows up with a description of the
+commands in SAWScript that can transform functional models and prove
+properties about them. Finally, it describes the specific commands
+available for constructing models from imperative programs in a variety
+of languages.
 
 # Invoking SAW
 
@@ -729,16 +730,13 @@ to use the various term transformation features available in SAW.
 
 Rewriting a `Term` consists of applying one or more *rewrite rules* to
 it, resulting in a new `Term`. A rewrite rule in SAW can be specified in
-multiple ways, the third due to the dependent type system used in
-SAWCore:
-
-[comment]: <> (dylan: "the third due..." is confusing - maybe explain afterwards?)
+multiple ways:
 
   * as the definition of a function that can be unfolded,
-  * as a term of boolean type (or a function returning a boolean) that
+  * as a term of Boolean type (or a function returning a Boolean) that
     is an equality statement, and
-  * as a term of _equality type_ whose body encodes a proof that the
-    equality in the type is valid.
+  * as a term of _equality type_ with a body that encodes a proof that
+    the equality in the type is valid.
     
 Each of these forms is a `Term` of a diffent shape. And in each case the
 term logically consists of two parts, each of which which may contain
@@ -937,7 +935,8 @@ version of `t` in which all instances of `x` are replaced by `v`.
 The `replace` function replaces arbitrary subterms. A call to `replace x
 y t` replaces any instance of `x` inside `t` with `y`.
 
-* TODO: talk about inspecting terms
+Assessing the size of a term can be useful during benchmarking, in
+particular. SAWScript provides two mechanisms for this.
 
 ~~~~
 term_size : Term -> Int
@@ -945,7 +944,16 @@ term_size : Term -> Int
 term_tree_size : Term -> Int
 ~~~~
 
-* TODO: talk about type-checking terms
+The first, `term_size` calculates the number of nodes in the DAG
+representation of a `Term` used internally by SAW. This is the most
+appropriate way of determining the rsource use of a particular term. The
+second, `term_tree_size`, calculates how large a `Term` would be if it
+were represented by a tree instead of a DAG. This can, in general, be
+much, much larger than the number returned by `term_size`, and serves
+primarily as a way of assessing how much benefit there is to the term
+sharing used by the DAG representation, for a specific term.
+
+TODO: describe type checking
 
 ~~~~
 check_convertible : Term -> Term -> TopLevel ()
@@ -1062,7 +1070,8 @@ one specific input (which it should, since we already know it returns
 sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
-[comment]: <> (dylan: more impressive example above?)
+
+TODO: (dylan: more impressive example above?)
 
 In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
 provers are available. The internal decision procedure `rme`, short for
@@ -1108,8 +1117,6 @@ current (unnamed) goal rather than taking a `Term` as a parameter.
 ~~~~
 simplify : Simpset -> ProofScript ()
 ~~~~
-
-TODO: example
 
 ## Other Transformations
 
@@ -1538,14 +1545,13 @@ allocated during execution and not visible afterward is allowed).
 
 # Creating Symbolic Variables
 
-[comment]: <> (dylan: this does yield a SAWScript term, right? The verbiage before sounded too vague.)
 The direct extraction process just discussed automatically introduces
 symbolic variables and then abstracts over them, yielding a SAWScript
-`Term` that reflects the semantics of the
-original Java or LLVM code. For simple functions, this is often the most
-convenient interface. For more complex code, however, it can be
-necessary (or more natural) to specifically introduce fresh variables
-and indicate what portions of the program state they correspond to.
+`Term` that reflects the semantics of the original Java or LLVM code.
+For simple functions, this is often the most convenient interface. For
+more complex code, however, it can be necessary (or more natural) to
+specifically introduce fresh variables and indicate what portions of the
+program state they correspond to.
 
 The function `fresh_symbolic` is responsible for creating new variables
 in this context.
@@ -1839,17 +1845,20 @@ preconditions.
 The following code is a complete example of using the `java_symexec`
 function.
 
-TODO: add safety variable to the following, and make sure it's up-to-date
-
 ~~~~
 // show that add(x,y) == add(y,x) for all x and y
 cadd <- java_load_class "Add";
 x <- fresh_symbolic "x" {| [32] |};
 y <- fresh_symbolic "y" {| [32] |};
-ja <- java_symexec cadd "add" [("x", x), ("y", y)] ["return"] true;
-print_term ja;
-ja' <- abstract_symbolic ja;
-prove_print abc {{ \a b -> ja' a b == ja' b a }};
+res <- java_symexec cadd "add" [("x", x), ("y", y)] ["return", "$safety"] true;
+let jadd = {{ res.0 }};
+let safe = {{ res.1 }};
+jadd' <- abstract_symbolic jadd;
+print_term jadd';
+print "Proving commutivity:";
+prove_print abc {{ \a b -> jadd' a b == jadd' b a }};
+print "Proving safety:";
+prove_print abc safe;
 print "Done.";
 ~~~~
 
@@ -1865,16 +1874,16 @@ Finally, it proves that the resulting function is commutative.
 
 Running this script through `saw` gives the following output:
 
-TODO: update output
-
 ~~~~
 % saw -j <path to>rt.jar java_symexec.saw
-Loading module Cryptol
 Loading file "java_symexec.saw"
-let { x0 = Cryptol.ty
-             (Cryptol.TCSeq (Cryptol.TCNum 32) Cryptol.TCBit);
+let { x0 = Prelude.Vec 32 Prelude.Bool;
     }
- in Prelude.bvAdd 32 x y
+ in \(x::x0) ->
+      \(y::x0) -> Prelude.bvAdd 32 x y
+Proving commutivity:
+Valid
+Proving safety:
 Valid
 Done.
 ~~~~
@@ -2078,16 +2087,25 @@ Because this is a may-alias relationship, the verification process
 involves a separate proof for each possible aliasing configuration. At
 the moment, LLVM heaps must be completely disjoint.
 
-TODO: explain
+Another precondition relevant only to Java concerns the set of classes
+that are initialized before execution of a particular method. To state
+that the proof of the mmethod being specified assumes that a class `C`
+is already initialized, use `java_requires_class "C"`.
 
 ~~~~
 java_requires_class : String -> JavaSetup ()
 ~~~~
 
-TODO: explain
+During verification, the `java_requires_class` clause instructs the
+simulator to initialized the named class before executing the method to
+be verified. When used as an override, it instead checks that the named
+class has already been initialized.
+
+Finally, one more precondition is relevant only to LLVM programs. The
+`llvm_assert_null` function works like `llvm_assert_eq` except that it
+works only on pointer variables and assigns the implicit value `NULL`.
 
 ~~~~
-llvm_allocates : String -> LLVMSetup ()
 llvm_assert_null : String -> LLVMSetup ()
 ~~~~
 
@@ -2139,6 +2157,18 @@ java_ensure_eq "return.f" v;
 
 llvm_ensure_eq "return->0" v;
 ~~~~
+
+Finally, for LLVM programs it is possible to state that the function
+being analyzed is expected to allocate a new object, stored in the given
+location.
+
+~~~~
+llvm_allocates : String -> LLVMSetup ()
+~~~~
+
+When executing an override containing `llvm_allocates`, the override
+will allocate a new object of the appropriate type and store a pointer
+it in the given location.
 
 ## Running Proofs
 
