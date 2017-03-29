@@ -76,6 +76,8 @@ import qualified Lang.Crucible.Go.Translation as GT
 import Data.List.NonEmpty (NonEmpty(..))
 import           Data.Generics.Uniplate.Data
 
+--import Lang.Crucible.Analysis.Taint (cfgTaintAnalysis, Tainted (..))
+
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -953,3 +955,6 @@ mkSimpleCrucibleContext bic =
                                      , ccLLVMModule = undefined
                                      , ccLLVMModuleTrans = undefined
                                      }
+              
+taint_flow_cfg :: BuiltinContext -> Options -> [Bool] -> Crucible.AnyCFG -> TopLevel Bool
+taint_flow_cfg _ _ _taints _cfg = undefined

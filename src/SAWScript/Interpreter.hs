@@ -1567,6 +1567,11 @@ primitives = Map.fromList
     "AnyCFG -> TopLevel Term"
     (bicVal symexec_cfg)
     [ "Symbolically execute a crucible CFG. (Won't work with LLVM.)"  ]
+    
+  , prim "taint_flow_cfg"
+    "[Bool] -> AnyCFG -> TopLevel Bool"
+    (bicVal taint_flow_cfg)
+    [ "Perform taint analysis on a single crucible CFG. Taint assignment is provided as a list of booleans, where true is interpreted as tainted, and false is interpreted as untainted. Returns the taint of the return value as a boolean." ]
   ]
 
   where
