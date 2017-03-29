@@ -639,6 +639,12 @@ logicTypeOfActual dl sc (Crucible.PtrType _) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral (Crucible.ptrBitwidth dl))
   Just <$> scVecType sc lTm bType
+logicTypeOfActual dl sc (Crucible.StructType si) = do
+  let memtypes = V.toList (Crucible.siFieldTypes si)
+  melTyps <- traverse (logicTypeOfActual dl sc) memtypes
+  case sequence melTyps of
+    Just elTyps -> Just <$> scTupleType sc elTyps
+    Nothing -> return Nothing
 logicTypeOfActual _ _ _ = return Nothing
 
 
