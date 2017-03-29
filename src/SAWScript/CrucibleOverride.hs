@@ -441,13 +441,12 @@ resolveSetupValue
   _cc sc
   (SetupTerm
      (TypedTerm
-       (Cryptol.Forall [] []
-          (Cryptol.TCon
-             (Cryptol.TC Cryptol.TCSeq)
-             [Cryptol.TCon (Cryptol.TC (Cryptol.TCNum sz)) [],
-              Cryptol.TCon (Cryptol.TC Cryptol.TCBit) []]))
+       (Cryptol.Forall [] [] cty)
        t))
-  | Just (Crucible.Some w) <- Crucible.someNat sz
+  | Just (n, a) <- Cryptol.tIsSeq cty
+  , Just sz <- Cryptol.tIsNum n
+  , Cryptol.tIsBit a
+  , Just (Crucible.Some w) <- Crucible.someNat sz
   , Just Crucible.LeqProof <- Crucible.isPosNat w
   =
 
