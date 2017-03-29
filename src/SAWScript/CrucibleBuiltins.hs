@@ -73,7 +73,6 @@ import SAWScript.Value
 import SAWScript.CrucibleMethodSpecIR
 import SAWScript.CrucibleOverride
 import SAWScript.CrucibleResolveSetupValue
-import SAWScript.LLVMUtils
 
 --import qualified SAWScript.LLVMBuiltins as LB
 
@@ -659,7 +658,7 @@ crucible_fresh_var bic _opts name lty = do
             Nothing -> fail ("unsupported type in crucible_fresh_var: " ++ show (L.ppType lty))
   mty <- liftIO $ logicTypeOfActual dl sc lty'
   case mty of
-    Just ty -> liftIO $ scLLVMValue sc ty name >>= mkTypedTerm sc
+    Just ty -> liftIO $ scFreshGlobal sc name ty >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
 
   --freshBinding lty (VarBind_Value (SetupFresh name))
