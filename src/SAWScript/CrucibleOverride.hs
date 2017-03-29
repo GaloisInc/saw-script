@@ -17,6 +17,8 @@ import           Control.Monad.State
 import           Data.Foldable (traverse_)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Vector as V
 
 import qualified Text.LLVM.AST as L
@@ -110,10 +112,68 @@ methodSpecHandler sc cc cs retTy = do
   runOverrideMatcher $
     do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
 
+       -- todo: fail if list lengths mismatch
        zipWithM_ matchArg (assignmentToList args) args'
-       traverse_ (learnSetupCondition   sc cc) (csPreconditions  cs)
+       processPreconditions sc cc (csPreconditions  cs)
        traverse_ (executeSetupCondition sc cc) (csPostconditions cs)
        computeReturnValue cc sc retTy (csRetValue cs)
+
+------------------------------------------------------------------------
+
+processPreconditions ::
+  (?lc :: TyCtx.LLVMContext) =>
+  SharedContext    {- ^ term construction context -} ->
+  CrucibleContext  {- ^ simulator context         -} ->
+  [SetupCondition] {- ^ preconditions             -} ->
+  OverrideMatcher ()
+processPreconditions sc cc = go False []
+  where
+    go ::
+      Bool             {- progress indicator -} ->
+      [SetupCondition] {- delayed conditions -} ->
+      [SetupCondition] {- queued conditions  -} ->
+      OverrideMatcher ()
+
+    -- all conditions processed, success
+    go _ [] [] = return ()
+
+    -- not all conditions processed, no progress, failure
+    go False _delayed [] = fail "processPreconditions: Ambiguous preconditions"
+
+    -- not all conditions processed, progress made, resume delayed conditions
+    go True delayed [] = go False [] delayed
+
+    -- progress the next precondition in the work queue
+    go progress delayed (c:cs) =
+      do ready <- checkSetupCondition c
+         if ready then
+           do learnSetupCondition sc cc c
+              go True delayed cs
+         else
+           do go progress (c:delayed) cs
+
+    -- determine if a precondition is ready to be checked
+    checkSetupCondition :: SetupCondition -> OverrideMatcher Bool
+    checkSetupCondition (SetupCond_PointsTo p _) = checkSetupValue p
+    checkSetupCondition SetupCond_Equal{}        = pure True
+
+    checkSetupValue :: SetupValue -> OverrideMatcher Bool
+    checkSetupValue v =
+      do m <- OM (use setupValueSub)
+         return (all (`Map.member` m) (setupVars v))
+
+    -- Compute the set of variable identifiers in a 'SetupValue'
+    setupVars :: SetupValue -> Set Integer
+    setupVars v =
+      case v of
+        SetupVar    i  -> Set.singleton i
+        SetupStruct xs -> foldMap setupVars xs
+        SetupArray  xs -> foldMap setupVars xs
+        SetupReturn _  -> Set.empty
+        SetupTerm   _  -> Set.empty
+        SetupNull      -> Set.empty
+        SetupGlobal _  -> Set.empty
+
 
 ------------------------------------------------------------------------
 
