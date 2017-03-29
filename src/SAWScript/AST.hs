@@ -8,7 +8,7 @@
 
 {- |
 Module           : $Header$
-Description      :
+Description      : Datatypes representing SAWScript statements, expressions, and types.
 License          : BSD3
 Stability        : provisional
 Point-of-contact : huffman
