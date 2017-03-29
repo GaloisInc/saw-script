@@ -401,7 +401,7 @@ executePointsTo sc cc ptr val =
 
      (memTy1, val1) <- resolveSetupValue cc sc val
 
-     unless (memTy == memTy1) (fail "Mismatched store type")
+     unless (TyCtx.compatMemTypes memTy memTy1) (fail "Mismatched store type")
 
      storTy <- Crucible.toStorableType memTy1
 
