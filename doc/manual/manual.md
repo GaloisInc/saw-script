@@ -14,13 +14,16 @@ properties about it. Models can be constructed from arbitrary Cryptol
 programs, and can typically be constructed from C and Java programs that
 have fixed-size inputs and outputs, and that terminate after a fixed
 number of iterations of any loop (or a fixed number of recursive calls).
+One common use case is to verify the equivalence of an implementation
+of an algorithm with its specification in Cryptol.
 
-The process of extracting models from programs, manipulating them, and
+The process of extracting models from programs, manipulating them,
+forming queries about them, and
 sending them to external provers is orchestrated using a special purpose
 language called SAWScript. SAWScript is a typed functional language with
 support for sequencing of imperative commmands.
 
-The rest of this document first describes how SAW can be invoked and
+The rest of this document first describes how to use the saw tool SAW and
 outlines the structure of the SAWScript language and its relationship
 with Cryptol. It then follows up with a description of the commands in
 SAWScript that can transform functional models and prove properties
@@ -76,16 +79,16 @@ command-line options:
 
   ~ Set verbosity level of the SAWScript interpreter.
 
-It also uses several environment variables for configuration:
+SAW also uses several environment variables for configuration:
 
 `CRYPTOLPATH`
 
-  ~ Specify a colon-delimited list of paths to search for Cryptol
+  ~ Specify a colon-delimited list of directory paths to search for Cryptol
   imports (including the Cryptol prelude).
 
 `SAW_IMPORT_PATH`
 
-  ~ Specify a colon-delimited list of paths to search for imports.
+  ~ Specify a colon-delimited list of directory paths to search for imports.
 
 `SAW_JDK_JAR`
 
@@ -472,8 +475,8 @@ describe the role of the Cryptol language in SAW.
 Cyptol is a domain-specific language originally designed for the
 high-level specification of cryptographic algorithms. It is general
 enough, however, to describe a wider variety of programs, and is
-particularly applicable to describing computations that operate on data
-of some fixed size.
+particularly applicable to describing computations that operate on
+streams of data of some fixed size.
 
 Because Cryptol is a stand-alone language in addition to being
 integrated into SAW, it has its own manual, which you can find here:
@@ -517,7 +520,7 @@ Cryptol.ecPlus
   (Prelude.bvNat 8 51)
 ~~~~
 
-For the moment, don't try to understand what this output means. We show
+For the moment, it's not important to understand what this output means. We show
 it simply to clarify that `Term` values have their own internal
 structure that goes beyond what exists in SAWScript. The text
 constructed by `print_term` can be accessed programmatically, instead of
@@ -583,7 +586,7 @@ and `}}` delimiters, it does so with several extra bindings in scope:
   expressions as a value of type `Bit`.
 
 * Any value in scope of SAWScript type `Int` is visible in Cryptol
-  expressions as *type variable*. Type variables can be demoted to
+  expressions as a *type variable*. Type variables can be demoted to
   numeric bit vector values using the backtick (`\``) operator.
 
 * Any value in scope of SAWScript type `Term` is visible in Cryptol
@@ -729,6 +732,8 @@ it, resulting in a new `Term`. A rewrite rule in SAW can be specified in
 multiple ways, the third due to the dependent type system used in
 SAWCore:
 
+[comment]: <> (dylan: "the third due..." is confusing - maybe explain afterwards?)
+
   * as the definition of a function that can be unfolded,
   * as a term of boolean type (or a function returning a boolean) that
     is an equality statement, and
@@ -755,7 +760,7 @@ Therefore, applying a set of rewrite rules should not change the
 fundamental meaning of the term being rewritten. SAW is particularly
 focused on the task of proving that some logical statement expressed as
 a `Term` is always true. If that is in fact the case, then the entire
-term can be replace by the term `True` without changing its meaning. The
+term can be replaced by the term `True` without changing its meaning. The
 rewriting process can in some cases, by repeatedly applying rules that
 themselves are known to be valid, reduce a complex term entirely to
 `True`, which constitutes a proof of the original statement. In other
@@ -1057,6 +1062,7 @@ one specific input (which it should, since we already know it returns
 sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
+[comment]: <> (dylan: more impressive example above?)
 
 In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
 provers are available. The internal decision procedure `rme`, short for
@@ -1532,9 +1538,10 @@ allocated during execution and not visible afterward is allowed).
 
 # Creating Symbolic Variables
 
+[comment]: <> (dylan: this does yield a SAWScript term, right? The verbiage before sounded too vague.)
 The direct extraction process just discussed automatically introduces
-symbolic variables and then abstracts over them, yielding a function in
-the intermediate language of SAW that reflects the semantics of the
+symbolic variables and then abstracts over them, yielding a SAWScript
+`Term` that reflects the semantics of the
 original Java or LLVM code. For simple functions, this is often the most
 convenient interface. For more complex code, however, it can be
 necessary (or more natural) to specifically introduce fresh variables
