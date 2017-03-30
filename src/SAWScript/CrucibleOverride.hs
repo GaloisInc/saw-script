@@ -457,8 +457,29 @@ resolveSetupValue
      elt <- liftIO (Crucible.bindSAWTerm sym ty t')
      return (Crucible.IntType (fromInteger sz), Crucible.AnyValue (Crucible.BVRepr w) elt)
 
+resolveSetupValue cc sc (SetupStruct vs) =
+  do (memtys, vs') <- unzip <$> mapM (resolveSetupValue cc sc) vs
+     let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+     let si = Crucible.mkStructInfo dl False memtys
+     v' <- liftIO $ unpackStruct vs' Ctx.empty Ctx.empty $
+       \ctx fls -> return $ Crucible.AnyValue (Crucible.StructRepr ctx) $ fls
+     return (Crucible.StructType si, v')
+
 resolveSetupValue _ _ v =
    fail $ "resolveSetupValue: not implemented: " ++ show v
+
+-- 'unpackStruct' copied from Crucible.LLVM.MemModel
+unpackStruct
+   :: [Crucible.AnyValue sym]
+   -> Crucible.CtxRepr ctx0
+   -> Ctx.Assignment (Crucible.RegValue' sym) ctx0
+   -> (forall ctx. Crucible.CtxRepr ctx -> Ctx.Assignment (Crucible.RegValue' sym) ctx -> IO x)
+   -> IO x
+unpackStruct [] ctx fls k = k ctx fls
+unpackStruct (v:vs) ctx fls k =
+  case v of
+    Crucible.AnyValue tpr x ->
+      unpackStruct vs (ctx Ctx.%> tpr) (fls Ctx.%> Crucible.RV x) k
 
 ------------------------------------------------------------------------
 
