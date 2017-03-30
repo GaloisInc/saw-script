@@ -343,7 +343,7 @@ Here, the `print` commands run first, and then `print_two` gets the
 value returned by the second `print` command, namely `()`. Any command
 listed alone at the REPL, the top level in a script, or inside a `do`
 block is treated as implicitly having a `<-` that binds its result to an
-unnamed variable (that is, discarded).
+unnamed variable (that is, discards it).
 
 In some cases it can be useful to have more control over the value
 returned by a `do` block. The `return` command allows us to do this. For
@@ -409,10 +409,10 @@ the `tail` function returns everything except the first element. The
 `length` function counts the number of elements in a list, and the
 `null` function indicates whether a list is empty (has zero elements).
 The `nth` function returns the element at the given position, with `nth
-l 0` being equivalent to `head l`. The `for` function takes a list and a
-function that runs in some command context. The passed function will be
+l 0` being equivalent to `head l`. The `for` command takes a list and a
+function that runs in some command context. The passed command will be
 called once for every element of the list, in order, and `for` will
-ultimately return a list of all of the results produced by the function.
+ultimately return a list of all of the results produced by the command.
 
 For interacting with the operating system, we have:
 
@@ -482,7 +482,9 @@ streams of data of some fixed size.
 Because Cryptol is a stand-alone language in addition to being
 integrated into SAW, it has its own manual, which you can find here:
 
-* <http://cryptol.net/files/ProgrammingCryptol.pdf>
+~~~~
+http://cryptol.net/files/ProgrammingCryptol.pdf
+~~~~
 
 SAW includes deep support for Cryptol, and in fact requires the use of
 Cryptol for most non-trivial tasks. So to fully understand the rest of
@@ -521,14 +523,18 @@ Cryptol.ecPlus
   (Prelude.bvNat 8 51)
 ~~~~
 
-For the moment, it's not important to understand what this output means. We show
-it simply to clarify that `Term` values have their own internal
-structure that goes beyond what exists in SAWScript. The text
-constructed by `print_term` can be accessed programmatically, instead of
-printing it to the screen, using the `show_term` function, which returns
-a `String`. The `show_term` function is not a command, so it executes
-directly and does not need `<-` to bind its result. Therefore, the
-following will have the same result as the `print_term` command above:
+For the moment, it's not important to understand what this output means.
+We show it simply to clarify that `Term` values have their own internal
+structure that goes beyond what exists in SAWScript. The internal
+representation of `Term` values is in a language called SAWCore. The
+full sematics of SAWCore are beyond the scope of this document.
+
+The text constructed by `print_term` can also be accessed
+programmatically, instead of printing it to the screen, using the
+`show_term` function, which returns a `String`. The `show_term` function
+is not a command, so it executes directly and does not need `<-` to bind
+its result. Therefore, the following will have the same result as the
+`print_term` command above:
 
 ~~~~
 sawscript> let s = show_term t
@@ -588,7 +594,7 @@ and `}}` delimiters, it does so with several extra bindings in scope:
 
 * Any value in scope of SAWScript type `Int` is visible in Cryptol
   expressions as a *type variable*. Type variables can be demoted to
-  numeric bit vector values using the backtick (`\``) operator.
+  numeric bit vector values using the backtick (`` ` ``) operator.
 
 * Any value in scope of SAWScript type `Term` is visible in Cryptol
   expressions as a value with the Cryptol type corresponding to the
@@ -749,8 +755,27 @@ with. Any variable in the right-hand pattern must also appear in the
 left-hand pattern and will be instantiated with whatever sub-term
 matched that variable in the original term.
 
-TODO: simple example here, entirely in Cryptol syntax (not actually
-executable)
+For example, say we have the following Cryptol function:
+
+~~~~
+ \(x:[8]) -> (x * 2) + 1
+~~~~
+
+We might for some reason want to replace multiplication by a power of
+two with a shift. We can describe this replacement by an equality
+statement in Cryptol:
+
+~~~~
+\(y:[8]) -> (y * 2) == (y << 1)
+~~~~
+
+Interpreting this as a rewrite rule, it says that for any 8-bit vector
+(call it `y` for now), we can replace `y * 2` with `y << 1`. Applying
+this rule to the earlier expression would then yield:
+
+~~~~
+ \(x:[8]) -> (x << 1) + 1
+~~~~
 
 The general philosophy of rewriting is that the left and right patterns,
 while syntactically different, should be semantically equivalent.
@@ -770,7 +795,7 @@ to prove, by applying reasoning steps (rewrite rules) that are not
 available to the automated provers.
 
 To use rewrite rules in practice, they can be aggregated into `Simpset`
-values in SAWCore. A few pre-defined `Simpset` values exist:
+values in SAWScript. A few pre-defined `Simpset` values exist:
 
 ~~~
 empty_ss : Simpset
@@ -805,10 +830,54 @@ Given a `Simpset`, the `rewrite` command applies it to an existing
 rewrite : Simpset -> Term -> Term
 ~~~~
 
-To make this more concrete, consider the following example term:
+To make this more concrete, we can now look at how the rewriting example
+sketched above, to convert multiplication into shift, can work in
+practice. We'll simplify everything with `cryptol_ss` as we go along so
+that the `Term`s don't get too cluttered. First, let's declare the term
+to be transformed:
 
-* TODO: show an example of using `rewrite` with `cryptol_ss` and
-  `addsimp`, displaying things in SAWCore syntax
+~~~~
+sawscript> let term = rewrite (cryptol_ss ()) {{ \(x:[8]) -> (x * 2) + 1 }};
+sawscript> print_term term;
+\(x::Prelude.Vec 8 Prelude.Bool) ->
+  Prelude.bvAdd 8
+    (Prelude.bvMul 8 x
+       (Prelude.bvNat 8 2))
+    (Prelude.bvNat 8 1)
+~~~~
+
+Now, let's declare the rewrite rule:
+
+~~~~
+sawscript> let rule = rewrite (cryptol_ss ()) {{ \(y:[8]) -> (y * 2) == (y << 1) }};
+sawscript> print_term rule;
+let { x0 = Prelude.Vec 8 Prelude.Bool;
+    }
+ in \(y::x0) ->
+      Prelude.eq x0
+        (Prelude.bvMul 8 y
+           (Prelude.bvNat 8 2))
+        (Prelude.bvShiftL 8 Prelude.Bool
+           1
+           Prelude.False
+           y
+           (Prelude.bvNat 1 1))
+~~~~
+
+Finally, we can apply the rule to the target term:
+
+~~~~
+sawscript> let result = rewrite (addsimp' rule empty_ss) term;
+sawscript> print_term result;
+\(x::Prelude.Vec 8 Prelude.Bool) ->
+  Prelude.bvAdd 8
+    (Prelude.bvShiftL 8 Prelude.Bool
+       1
+       Prelude.False
+       x
+       (Prelude.bvNat 1 1))
+    (Prelude.bvNat 8 1)
+~~~~
 
 Note that `addsimp'` and `addsimps'` take a `Term` or list of `Term`s,
 which could in principle be anything, not necessarily terms representing
@@ -904,8 +973,8 @@ some cases. Consider the following example:
 sawscript> let t = {{ 0x22 }}
 sawscript> print_term t
 Prelude.bvNat 8 34
-sawscript> let {{ t = 0x22 }}
-sawscript> print_term {{ t }}
+sawscript> let {{ t' = 0x22 }}
+sawscript> print_term {{ t' }}
 t
 ~~~~
 
@@ -944,24 +1013,30 @@ term_size : Term -> Int
 term_tree_size : Term -> Int
 ~~~~
 
-The first, `term_size` calculates the number of nodes in the DAG
-representation of a `Term` used internally by SAW. This is the most
-appropriate way of determining the rsource use of a particular term. The
-second, `term_tree_size`, calculates how large a `Term` would be if it
-were represented by a tree instead of a DAG. This can, in general, be
-much, much larger than the number returned by `term_size`, and serves
-primarily as a way of assessing how much benefit there is to the term
-sharing used by the DAG representation, for a specific term.
+The first, `term_size`, calculates the number of nodes in the Directed
+Acyclic Graph (DAG) representation of a `Term` used internally by SAW.
+This is the most appropriate way of determining the resource use of a
+particular term. The second, `term_tree_size`, calculates how large a
+`Term` would be if it were represented by a tree instead of a DAG. This
+can, in general, be much, much larger than the number returned by
+`term_size`, and serves primarily as a way of assessing how much benefit
+there is to the term sharing used by the DAG representation, for a
+specific term.
 
-TODO: describe type checking
+Finally, a few commands exist related to the internal SAWCore type of a
+`Term`.
 
 ~~~~
-check_convertible : Term -> Term -> TopLevel ()
-
 check_term : Term -> TopLevel ()
 
 type : Term -> Type
 ~~~~
+
+The `check_term` command checks that the internal structure of a `Term`
+is well-formed, and that it passes all of the rules of the SAWCore type
+checker. The `type` function returns the type of a particular `Term`,
+which can then be used to, for example, construct a new fresh variable
+with `fresh_symbolic`.
 
 ## Loading and Storing Terms
 
@@ -1070,8 +1145,6 @@ one specific input (which it should, since we already know it returns
 sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
-
-TODO: (dylan: more impressive example above?)
 
 In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
 provers are available. The internal decision procedure `rme`, short for
@@ -1527,7 +1600,7 @@ llvm_extract : LLVMModule -> String -> LLVMSetup () -> TopLevel Term
 The structure of these two functions is essentially identical. The first
 argument describes where to look for code (in either a Java class or an
 LLVM module, loaded as described in the previous section). The second
-argument is the name of the function or method to extract.
+argument is the name of the method or function to extract.
 
 The third argument provides the ability to configure other aspects of
 the symbolic execution process. At the moment, only one option possible:
@@ -1770,7 +1843,12 @@ The fourth argument of `java_symexec` is a list of expressions
 describing the elements of the state to return as outputs. The returned
 `Term` will be of tuple type if this list contains more than one
 element, or simply the value of the one state element if the list
-contains only one.
+contains only one. In addition to the expressions listed above, this
+list can contain the special variable `$safety`, which refers to a
+`Term` describing the conditions under which the result of symbolic
+execution is well-defined. It can be useful to obtain this `Term` and
+prove that it's always valid (that the program is always safe), or that
+it's valid under the expected preconditions.
 
 The `llvm_symexec` command uses an expression syntax similar to that for
 `java_symexec`, but not identical. The syntax is as follows:
@@ -1799,16 +1877,17 @@ The `llvm_symexec` command uses an expression syntax similar to that for
 
   * For any valid expression `e` referring to a pointer to a `struct`,
     the expression `e->n`, for some natural number `n`, refers to the
-    `n`th field of that `struct`. Unlike the `struct` type in C, the
-    LLVM `struct` type does not have named fields, so fields are
-    described positionally.
+    `n`th field of that `struct`. If the LLVM file contains debugging
+    information, the field names used in the original C types are also
+    allowed.
 
   * For any valid expression `e` referring to a `struct` (directly, not
     via pointer), the expression `e.n`, for some natural number `n`,
     refers to the `n`th field of that `struct`. This is particularly
     useful for fields of nested structs, even if the outer struct is
-    passed by pointer.
-
+    passed by pointer. As for indirect fields, names are allowed if
+    debugging information is present.
+  
 In addition to the different expression language, the arguments are
 similar but not identical. The third argument, of type
 `[(String, Int)]`, indicates for each pointer how many elements it
@@ -1834,11 +1913,7 @@ elements to read. The number of elements does not need to be the same as
 the number of elements allocated or written in the initial state.
 However, reading past the end of an object or reading a location that
 has not been initialized will lead to an error. In this list, the
-special name `$safety` refers to a `Term` describing the conditions
-under which the result of symbolic execution is well-defined. It can be
-useful to obtain this `Term` and prove that it's always valid (that the
-program is always safe), or that it's valid under the expected
-preconditions.
+special name `$safety` works in the same was as for LLVM.
 
 ## Examples
 
@@ -1855,7 +1930,7 @@ let jadd = {{ res.0 }};
 let safe = {{ res.1 }};
 jadd' <- abstract_symbolic jadd;
 print_term jadd';
-print "Proving commutivity:";
+print "Proving commutativity:";
 prove_print abc {{ \a b -> jadd' a b == jadd' b a }};
 print "Proving safety:";
 prove_print abc safe;
@@ -2089,7 +2164,7 @@ the moment, LLVM heaps must be completely disjoint.
 
 Another precondition relevant only to Java concerns the set of classes
 that are initialized before execution of a particular method. To state
-that the proof of the mmethod being specified assumes that a class `C`
+that the proof of the method being specified assumes that a class `C`
 is already initialized, use `java_requires_class "C"`.
 
 ~~~~
@@ -2097,9 +2172,8 @@ java_requires_class : String -> JavaSetup ()
 ~~~~
 
 During verification, the `java_requires_class` clause instructs the
-simulator to initialized the named class before executing the method to
-be verified. When used as an override, it instead checks that the named
-class has already been initialized.
+simulator to initialize the named class before executing the method to
+be verified.
 
 Finally, one more precondition is relevant only to LLVM programs. The
 `llvm_assert_null` function works like `llvm_assert_eq` except that it
@@ -2191,7 +2265,7 @@ can sometimes be a useful behavior during debugging, or in compositional
 verification as described later).
 
 The process of verification checks all user-specified postconditions,
-but also checks that the safety condition (as referred to by `$safety`
+and also checks that the safety condition (as referred to by `$safety`
 in `*_symexec`) is valid, and therefore that symbolic execution is
 always well defined (under the supplied pre-conditions).
 
@@ -2239,9 +2313,8 @@ with `java_ensure_eq` or `java_modify` are allowed. For many
 cryptographic applications, this behavior is ideal, because it is
 important to know whether, for instance, temporary variables storing key
 material have been cleared after use. Garbage on the heap that has been
-collected but not cleared could let confidential information leak.
-
-If allocation is not a concern in a particular application, the
+collected but not cleared could let confidential information leak. If
+allocation is not a concern in a particular application, the
 `java_allow_alloc` function makes allocation within legal within the
 method being specified.
 
