@@ -77,10 +77,10 @@ data SetupCondition where
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
   { csDefine         :: L.Define
-  , csSetupBindings  :: SetupBindings -- ^ allocated vars
-  , csConditions     :: [(PrePost,SetupCondition)] -- ^ points-to and equality statements
+  , csSetupBindings  :: SetupBindings                     -- ^ allocated vars
+  , csConditions     :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
-  , csRetValue       :: Maybe BindingPair
+  , csRetValue       :: Maybe SetupValue                  -- ^ function return value
   }
  deriving (Show)
 

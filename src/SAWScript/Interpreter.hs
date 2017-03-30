@@ -1515,8 +1515,12 @@ primitives = Map.fromList
     (bicVal crucible_equal)
     [ "TODO" ]
 
-  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup SetupValue"
+  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
+    [ "TODO" ]
+
+  , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_return)
     [ "TODO" ]
 
   , prim "crucible_llvm_verify"

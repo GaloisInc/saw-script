@@ -191,22 +191,24 @@ resolveMemType ty =
 ------------------------------------------------------------------------
 
 computeReturnValue ::
+  (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext       {- ^ context of the crucible simulation     -} ->
   SharedContext         {- ^ context for generating saw terms       -} ->
   Crucible.TypeRepr ret {- ^ representation of function return type -} ->
-  Maybe BindingPair     {- ^ optional symbolic return value         -} ->
+  Maybe SetupValue      {- ^ optional symbolic return value         -} ->
   OverrideMatcher (Crucible.RegValue Sym ret)
                         {- ^ concrete return value                  -}
 
-computeReturnValue _ _ Crucible.UnitRepr _ = return ()
+computeReturnValue _ _ ty Nothing =
+  case ty of
+    Crucible.UnitRepr -> return ()
+    _ -> fail "computeReturnValue: missing crucible_return specification"
 
-computeReturnValue cc sc ty (Just (BP _symTy (VarBind_Value val))) =
+computeReturnValue cc sc ty (Just val) =
   do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue cc sc val
      case NatRepr.testEquality ty xty of
        Just NatRepr.Refl -> return xval
-       Nothing   -> fail "computeReturnValue: Unexpected return type"
-
-computeReturnValue _ _ _ _ = fail "computeReturnValue: unsupported return value"
+       Nothing -> fail "computeReturnValue: Unexpected return type"
 
 
 ------------------------------------------------------------------------

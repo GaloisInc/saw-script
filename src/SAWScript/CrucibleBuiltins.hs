@@ -711,7 +711,7 @@ crucible_equal bic _opt lty val1 val2 = do
 crucible_execute_func :: BuiltinContext
                       -> Options
                       -> [SetupValue]
-                      -> CrucibleSetup SetupValue
+                      -> CrucibleSetup ()
 crucible_execute_func bic _opt args = do
   cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
   st <- get
@@ -719,10 +719,9 @@ crucible_execute_func bic _opt args = do
   let ?dl   = TyCtx.llvmDataLayout ?lc
   let def   = csDefine (csMethodSpec st)
   let tps   = map L.typedType (L.defArgs def)
-  let retTy = L.defRetType def
   let spec  = csMethodSpec st
-  case (traverse TyCtx.liftType tps, TyCtx.liftRetType retTy) of
-    (Just tps', Just retTy') -> do
+  case traverse TyCtx.liftType tps of
+    Just tps' -> do
       let spec' = spec{ csArgBindings =
                           Map.fromList $
                             [ (i, (t,a))
@@ -734,6 +733,17 @@ crucible_execute_func bic _opt args = do
       put st{ csPrePost = PostState
             , csMethodSpec = spec'
             }
-      return (SetupReturn retTy')
 
     _ -> fail $ unlines ["Function signature not supported:", show def]
+
+
+crucible_return :: BuiltinContext
+                -> Options
+                -> SetupValue
+                -> CrucibleSetup ()
+crucible_return _bic _opt retval = do
+  st <- get
+  let spec = csMethodSpec st
+  case csRetValue spec of
+    Just _ -> fail "crucible_return: duplicate return value specification"
+    Nothing -> put st{ csMethodSpec = spec{ csRetValue = Just retval } }
