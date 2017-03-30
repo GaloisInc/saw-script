@@ -65,7 +65,7 @@ data OverrideState = OverrideState
 
 data OverrideFailure
   = BadSymType Crucible.SymType
-
+  | AmbiguousPrecondition [SetupCondition]
   deriving Show
 
 instance Exception OverrideFailure
@@ -138,7 +138,7 @@ processPreconditions sc cc = go False []
     go _ [] [] = return ()
 
     -- not all conditions processed, no progress, failure
-    go False _delayed [] = fail "processPreconditions: Ambiguous preconditions"
+    go False delayed [] = failure (AmbiguousPrecondition delayed)
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
