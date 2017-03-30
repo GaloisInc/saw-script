@@ -27,6 +27,7 @@ import System.IO
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 --import qualified Data.Text as Text
 import qualified Data.Vector as V
 
@@ -197,7 +198,7 @@ setupPrestateConditions mspec cc rs0 conds =
       let tp' = fromMaybe
                    (error ("Expected memory type:" ++ show tp))
                    (Crucible.toStorableType =<< TyCtx.asMemType tp) in
-      if Map.member v (resolvedVarMap rs) then do
+      if Set.member v (resolvedPointers rs) then do
            io $ withMem cc $ \sym mem -> do
               x <- Crucible.loadRaw sym mem ptr tp'
               val' <- resolveSetupVal cc rs val
@@ -207,9 +208,7 @@ setupPrestateConditions mspec cc rs0 conds =
            io $ withMem cc $ \sym mem -> do
               val' <- resolveSetupVal cc rs val
               mem' <- Crucible.storeRaw sym mem ptr tp' val'
-              let rs' = rs{ resolvedVarMap = Map.insert v (Crucible.LLVMValPtr blk end off)
-                                                          (resolvedVarMap rs)
-                          }
+              let rs' = rs{ resolvedPointers = Set.insert v (resolvedPointers rs) }
               return ((cs,rs'), mem')
 
   go (cs,rs) (SetupCond_PointsTo (SetupGlobal name) val) =

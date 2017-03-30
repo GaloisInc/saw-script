@@ -12,6 +12,8 @@ import Data.IORef
 import Data.Word (Word64)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Vector as V
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
@@ -48,6 +50,7 @@ data ResolvedState =
   ResolvedState
   { resolvedVarMap   :: Map Integer (Crucible.LLVMVal Sym Crucible.PtrWidth)
   , resolvedRetVal   :: Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  , resolvedPointers :: Set Integer
   }
 
 initialResolvedState :: ResolvedState
@@ -55,6 +58,7 @@ initialResolvedState =
   ResolvedState
   { resolvedVarMap = Map.empty
   , resolvedRetVal = Nothing
+  , resolvedPointers = Set.empty
   }
 
 
