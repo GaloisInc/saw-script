@@ -56,10 +56,10 @@ instance Show VarBinding where
   show (VarBind_Alloc tp) = "{{ " ++ show (ppSymType tp) ++ " }}"
 
 data BindingPair
-  = BP !SymType !VarBinding
+  = BP !VarBinding
 
 instance Show BindingPair where
-  show (BP tp bd) = "(" ++ show (ppSymType tp) ++  ", " ++ show bd ++ ")"
+  show (BP bd) = "(" ++ show bd ++ ")"
 
 newtype SetupBindings =
   SetupBindings { setupBindings :: Map Integer BindingPair }

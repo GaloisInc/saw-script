@@ -193,7 +193,7 @@ setupPrestateConditions mspec cc rs0 conds =
   where
   go (cs,rs) (SetupCond_PointsTo (SetupVar v) val)
     | Just (Crucible.LLVMValPtr blk end off) <- Map.lookup v (resolvedVarMap rs)
-    , Just (BP _ (VarBind_Alloc tp)) <- Map.lookup v (setupBindings (csSetupBindings mspec))
+    , Just (BP (VarBind_Alloc tp)) <- Map.lookup v (setupBindings (csSetupBindings mspec))
     = let ptr = Crucible.LLVMPtr blk end off in
       let tp' = fromMaybe
                    (error ("Expected memory type:" ++ show tp))
@@ -286,7 +286,7 @@ setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     -> TopLevel ResolvedState
 setupVerifyPrestate cc bnds = foldM resolveOne initialResolvedState . Map.assocs . setupBindings $ bnds
  where
-  resolveOne rs (i, BP _tp bnd)
+  resolveOne rs (i, BP bnd)
     | Just _ <- Map.lookup i (resolvedVarMap rs) = return rs
     | otherwise = case bnd of
           VarBind_Alloc alloc_tp
@@ -597,15 +597,14 @@ getCrucibleContext bic =
   lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
 
 freshBinding :: (?dl :: Crucible.DataLayout)
-             => Crucible.SymType
-             -> VarBinding
+             => VarBinding
              -> CrucibleSetup SetupValue
-freshBinding tp vb = do
+freshBinding vb = do
   st <- get
   let n  = csVarCounter st
       n' = n + 1
       spec  = csMethodSpec st
-      spec' = spec{ csSetupBindings = SetupBindings (Map.insert n (BP tp vb) (setupBindings (csSetupBindings spec))) }
+      spec' = spec{ csSetupBindings = SetupBindings (Map.insert n (BP vb) (setupBindings (csSetupBindings spec))) }
   put st{ csVarCounter = n'
         , csMethodSpec = spec'
         }
@@ -681,7 +680,7 @@ crucible_alloc bic _opt lty = do
   lty' <- case TyCtx.liftType lty of
             Just m -> return m
             Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
-  freshBinding (Crucible.MemType (Crucible.PtrType lty')) (VarBind_Alloc lty')
+  freshBinding (VarBind_Alloc lty')
 
 crucible_points_to :: BuiltinContext
                    -> Options
