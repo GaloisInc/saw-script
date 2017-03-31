@@ -1491,7 +1491,7 @@ primitives = Map.fromList
 
   , prim "load_llvm_cfg"     "String -> TopLevel CFG"
     (bicVal load_llvm_cfg)
-    [ "Load a function from the currently-loaded Cruciblie LLVM module."
+    [ "Load a function from the currently-loaded Crucible LLVM module."
     ]
 
   , prim "extract_crucible_llvm"  "String -> TopLevel Term"
