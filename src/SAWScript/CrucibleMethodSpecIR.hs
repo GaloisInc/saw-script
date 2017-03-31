@@ -49,22 +49,6 @@ data PrePost
  deriving (Show)
 
 
-data VarBinding where
-  VarBind_Alloc       :: SymType -> VarBinding
-
-instance Show VarBinding where
-  show (VarBind_Alloc tp) = "{{ " ++ show (ppSymType tp) ++ " }}"
-
-data BindingPair
-  = BP !VarBinding
-
-instance Show BindingPair where
-  show (BP bd) = "(" ++ show bd ++ ")"
-
-newtype SetupBindings =
-  SetupBindings { setupBindings :: Map Integer BindingPair }
- deriving (Show)
-
 data SetupCondition where
   SetupCond_PointsTo :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Equal    :: SymType -> SetupValue -> SetupValue -> SetupCondition
@@ -74,7 +58,7 @@ data SetupCondition where
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
   { csDefine         :: L.Define
-  , csSetupBindings  :: SetupBindings                     -- ^ allocated vars
+  , csAllocations    :: Map Integer SymType               -- ^ allocated vars
   , csConditions     :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue       :: Maybe SetupValue                  -- ^ function return value
@@ -102,7 +86,7 @@ initialCrucibleSetupState def =
   , csMethodSpec =
     CrucibleMethodSpec
     { csDefine        = def
-    , csSetupBindings = SetupBindings Map.empty
+    , csAllocations   = Map.empty
     , csConditions    = []
     , csArgBindings   = Map.empty
     , csRetValue      = Nothing
