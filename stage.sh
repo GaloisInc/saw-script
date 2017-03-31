@@ -55,7 +55,7 @@ cp "$BIN"/jss                                 ${TARGET}/bin
 cp "$BIN"/llvm-disasm                         ${TARGET}/bin
 cp "$BIN"/lss                                 ${TARGET}/bin
 cp "$BIN"/saw                                 ${TARGET}/bin
-cp doc/extcore.txt                            ${TARGET}/doc
+cp doc/extcore.md                             ${TARGET}/doc
 cp doc/tutorial/sawScriptTutorial.pdf         ${TARGET}/doc/tutorial.pdf
 cp doc/manual/manual.pdf                      ${TARGET}/doc/manual.pdf
 cp -r doc/tutorial/code                       ${TARGET}/doc
