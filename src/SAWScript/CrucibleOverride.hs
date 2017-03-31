@@ -114,7 +114,7 @@ methodSpecHandler sc cc cs retTy = do
 
        -- todo: fail if list lengths mismatch
        zipWithM_ matchArg (assignmentToList args) args'
-       processPreconditions sc cc (csPreconditions  cs)
+       processPreconditions sc cc (csPreconditions cs)
        traverse_ (executeSetupCondition sc cc) (csPostconditions cs)
        computeReturnValue cc sc retTy (csRetValue cs)
 
@@ -339,7 +339,9 @@ learnSetupCondition _  _  (SetupCond_Equal ty val1 val2) = learnEqual ty val1 va
 
 ------------------------------------------------------------------------
 
-
+-- | Process a "points_to" statement from the precondition section of
+-- the CrucibleSetup block. First, load the value from the address
+-- indicated by 'ptr', and then match it against the pattern 'val'.
 learnPointsTo ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
@@ -365,6 +367,8 @@ learnPointsTo sc cc ptr val =
 ------------------------------------------------------------------------
 
 
+-- | Process a "crucible_equal" statement from the precondition
+-- section of the CrucibleSetup block.
 learnEqual ::
   Crucible.SymType {- ^ type of values to be compared for equality -} ->
   SetupValue       {- ^ first value to compare                     -} ->
@@ -388,6 +392,9 @@ executeSetupCondition _  _  (SetupCond_Equal ty val1 val2) = executeEqual ty val
 
 ------------------------------------------------------------------------
 
+-- | Process a "points_to" statement from the postcondition section of
+-- the CrucibleSetup block. First we compute the value indicated by
+-- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
@@ -417,6 +424,8 @@ executePointsTo sc cc ptr val =
 ------------------------------------------------------------------------
 
 
+-- | Process a "crucible_equal" statement from the postcondition
+-- section of the CrucibleSetup block.
 executeEqual ::
   Crucible.SymType {- ^ type of values          -} ->
   SetupValue       {- ^ first value to compare  -} ->
