@@ -34,8 +34,14 @@ import qualified Text.LLVM.AST as L
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
 import SAWScript.TypedTerm
 
+newtype AllocIndex = AllocIndex Int
+  deriving (Eq, Ord, Show)
+
+nextAllocIndex :: AllocIndex -> AllocIndex
+nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
+
 data SetupValue where
-  SetupVar    :: Integer -> SetupValue
+  SetupVar    :: AllocIndex -> SetupValue
   SetupTerm   :: TypedTerm -> SetupValue
   SetupStruct :: [SetupValue] -> SetupValue
   SetupArray  :: [SetupValue] -> SetupValue
@@ -58,7 +64,7 @@ data SetupCondition where
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
   { csDefine         :: L.Define
-  , csAllocations    :: Map Integer SymType               -- ^ allocated vars
+  , csAllocations    :: Map AllocIndex SymType            -- ^ allocated vars
   , csConditions     :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue       :: Maybe SetupValue                  -- ^ function return value
@@ -73,7 +79,7 @@ csPostconditions cs = [ c | (PostState, c) <- csConditions cs ]
 
 data CrucibleSetupState =
   CrucibleSetupState
-  { csVarCounter    :: !Integer
+  { csVarCounter    :: !AllocIndex
   , csPrePost       :: PrePost
   , csMethodSpec    :: CrucibleMethodSpecIR
   }
@@ -81,7 +87,7 @@ data CrucibleSetupState =
 initialCrucibleSetupState :: L.Define -> CrucibleSetupState
 initialCrucibleSetupState def =
   CrucibleSetupState
-  { csVarCounter = 0
+  { csVarCounter = AllocIndex 0
   , csPrePost    = PreState
   , csMethodSpec =
     CrucibleMethodSpec

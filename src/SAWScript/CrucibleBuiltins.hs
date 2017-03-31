@@ -282,7 +282,7 @@ asSAWType sc t = case Crucible.typeF t of
 
 setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     => CrucibleContext
-                    -> Map.Map Integer Crucible.SymType
+                    -> Map.Map AllocIndex Crucible.SymType
                     -> TopLevel ResolvedState
 setupVerifyPrestate cc allocs = foldM resolveOne initialResolvedState (Map.assocs allocs)
  where
@@ -666,10 +666,9 @@ crucible_alloc bic _opt lty = do
     Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
   st <- get
   let n  = csVarCounter st
-      n' = n + 1
       spec  = csMethodSpec st
       spec' = spec{ csAllocations = Map.insert n symTy (csAllocations spec) }
-  put st{ csVarCounter = n'
+  put st{ csVarCounter = nextAllocIndex n
         , csMethodSpec = spec'
         }
   return (SetupVar n)

@@ -59,7 +59,7 @@ newtype OverrideMatcher a
           a }
 
 data OverrideState = OverrideState
-  { _setupValueSub :: Map Integer (Crucible.MemType, Crucible.AnyValue Sym)
+  { _setupValueSub :: Map AllocIndex (Crucible.MemType, Crucible.AnyValue Sym)
   , _termSub       :: Map VarIndex Term
   }
 
@@ -163,7 +163,7 @@ processPreconditions sc cc = go False []
          return (all (`Map.member` m) (setupVars v))
 
     -- Compute the set of variable identifiers in a 'SetupValue'
-    setupVars :: SetupValue -> Set Integer
+    setupVars :: SetupValue -> Set AllocIndex
     setupVars v =
       case v of
         SetupVar    i  -> Set.singleton i
@@ -234,7 +234,7 @@ runOverrideMatcher (OM m) = evalStateT m initialState
 ------------------------------------------------------------------------
 
 assignVar ::
-  Integer               {- ^ variable index -} ->
+  AllocIndex            {- ^ variable index -} ->
   Crucible.MemType      {- ^ LLVM type      -} ->
   Crucible.AnyValue Sym {- ^ concrete value -} ->
   OverrideMatcher ()

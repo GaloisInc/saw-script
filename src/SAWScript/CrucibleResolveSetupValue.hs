@@ -48,8 +48,8 @@ import SAWScript.CrucibleMethodSpecIR
 
 data ResolvedState =
   ResolvedState
-  { resolvedVarMap   :: Map Integer (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  , resolvedPointers :: Set Integer
+  { resolvedVarMap   :: Map AllocIndex (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  , resolvedPointers :: Set AllocIndex
   }
 
 initialResolvedState :: ResolvedState
