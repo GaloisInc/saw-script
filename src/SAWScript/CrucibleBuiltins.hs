@@ -427,13 +427,20 @@ verifyPoststate :: (?lc :: TyCtx.LLVMContext)
                 -> ResolvedState
                 -> Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth)
                 -> TopLevel [Term]
-verifyPoststate cc mspec prestate ret = do
-  let poststate = prestate{ resolvedRetVal = ret }
-  io $ mapM (verifyPostCond poststate) [ c | (PostState, c) <- csConditions mspec ]
-
+verifyPoststate cc mspec rs ret = io $
+  do goals <- mapM verifyPostCond [ c | (PostState, c) <- csConditions mspec ]
+     case (ret, csRetValue mspec) of
+       (Nothing, Nothing) -> return goals
+       (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
+       (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
+       (Just ret', Just val) ->
+         do val' <- resolveSetupVal cc rs val
+            goal <- assertEqualVals cc ret' val'
+            return (goal : goals)
   where
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-    verifyPostCond rs (SetupCond_PointsTo lhs val) = do
+
+    verifyPostCond (SetupCond_PointsTo lhs val) = do
       lhs' <- resolveSetupVal cc rs lhs
       ptr <- case lhs' of
         Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
@@ -445,7 +452,7 @@ verifyPoststate cc mspec prestate ret = do
          c <- assertEqualVals cc x val'
          return (c, mem)
 
-    verifyPostCond rs (SetupCond_Equal _tp val1 val2) = do
+    verifyPostCond (SetupCond_Equal _tp val1 val2) = do
       val1' <- resolveSetupVal cc rs val1
       val2' <- resolveSetupVal cc rs val2
       assertEqualVals cc val1' val2'
