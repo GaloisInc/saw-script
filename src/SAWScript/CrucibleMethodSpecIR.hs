@@ -50,11 +50,9 @@ data PrePost
 
 
 data VarBinding where
-  VarBind_Value       :: SetupValue -> VarBinding
   VarBind_Alloc       :: SymType -> VarBinding
 
 instance Show VarBinding where
-  show (VarBind_Value v)  = ":= " ++ show v
   show (VarBind_Alloc tp) = "{{ " ++ show (ppSymType tp) ++ " }}"
 
 data BindingPair

@@ -286,7 +286,7 @@ setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     -> TopLevel ResolvedState
 setupVerifyPrestate cc bnds = foldM resolveOne initialResolvedState . Map.assocs . setupBindings $ bnds
  where
-  resolveOne rs (i, BP tp bnd)
+  resolveOne rs (i, BP _tp bnd)
     | Just _ <- Map.lookup i (resolvedVarMap rs) = return rs
     | otherwise = case bnd of
           VarBind_Alloc alloc_tp
@@ -295,8 +295,6 @@ setupVerifyPrestate cc bnds = foldM resolveOne initialResolvedState . Map.assocs
                  return $ rs{ resolvedVarMap = Map.insert i ptr (resolvedVarMap rs) }
             | otherwise ->
                  fail $ unwords ["Not a valid memory type:", show alloc_tp]
-          VarBind_Value v -> do
-            resolveValue rs i tp v
 
   dl = TyCtx.llvmDataLayout ?lc
 
@@ -305,9 +303,6 @@ setupVerifyPrestate cc bnds = foldM resolveOne initialResolvedState . Map.assocs
       sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
       (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
       return (Crucible.LLVMValPtr blk end x, mem')
-
-  resolveValue _rs _i _tp _v =
-    fail "resolveValue"
 
 withMem :: CrucibleContext
         -> (Sym -> Crucible.MemImpl Sym Crucible.PtrWidth -> IO (a, Crucible.MemImpl Sym Crucible.PtrWidth))
@@ -672,8 +667,6 @@ crucible_fresh_var bic _opts name lty = do
   case mty of
     Just ty -> liftIO $ scFreshGlobal sc name ty >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
-
-  --freshBinding lty (VarBind_Value (SetupFresh name))
 
 
 crucible_alloc :: BuiltinContext
