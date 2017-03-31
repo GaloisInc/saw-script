@@ -284,21 +284,17 @@ setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     => CrucibleContext
                     -> Map.Map AllocIndex Crucible.MemType
                     -> TopLevel ResolvedState
-setupVerifyPrestate cc allocs = foldM resolveOne initialResolvedState (Map.assocs allocs)
- where
-  resolveOne rs (i, alloc_mtp)
-    | Just _ <- Map.lookup i (resolvedVarMap rs) = return rs
-    | otherwise =
-      do ptr <- doAlloc alloc_mtp
-         return $ rs{ resolvedVarMap = Map.insert i ptr (resolvedVarMap rs) }
+setupVerifyPrestate cc allocs = io $
+  do allocs' <- traverse doAlloc allocs
+     return initialResolvedState{ resolvedVarMap = allocs' }
+  where
+    dl = TyCtx.llvmDataLayout ?lc
 
-  dl = TyCtx.llvmDataLayout ?lc
-
-  doAlloc tp = io $
-    withMem cc $ \sym mem -> do
-      sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
-      (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
-      return (Crucible.LLVMValPtr blk end x, mem')
+    doAlloc :: Crucible.MemType -> IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+    doAlloc tp = withMem cc $ \sym mem ->
+      do sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
+         (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
+         return (Crucible.LLVMValPtr blk end x, mem')
 
 withMem :: CrucibleContext
         -> (Sym -> Crucible.MemImpl Sym Crucible.PtrWidth -> IO (a, Crucible.MemImpl Sym Crucible.PtrWidth))
