@@ -49,7 +49,6 @@ import SAWScript.CrucibleMethodSpecIR
 data ResolvedState =
   ResolvedState
   { resolvedVarMap   :: Map Integer (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  , resolvedRetVal   :: Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth)
   , resolvedPointers :: Set Integer
   }
 
@@ -57,7 +56,6 @@ initialResolvedState :: ResolvedState
 initialResolvedState =
   ResolvedState
   { resolvedVarMap = Map.empty
-  , resolvedRetVal = Nothing
   , resolvedPointers = Set.empty
   }
 
@@ -69,10 +67,6 @@ resolveSetupVal ::
   IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
 resolveSetupVal cc rs val =
   case val of
-    SetupReturn _ ->
-      case resolvedRetVal rs of
-        Nothing -> fail "return value not available"
-        Just v  -> return v
     SetupVar i
       | Just val' <- Map.lookup i (resolvedVarMap rs) -> return val'
       | otherwise -> fail ("Unresolved prestate variable:" ++ show i)

@@ -35,7 +35,6 @@ import qualified Text.LLVM.AST as L
 import SAWScript.TypedTerm
 
 data SetupValue where
-  SetupReturn :: RetType -> SetupValue
   SetupVar    :: Integer -> SetupValue
   SetupTerm   :: TypedTerm -> SetupValue
   SetupStruct :: [SetupValue] -> SetupValue

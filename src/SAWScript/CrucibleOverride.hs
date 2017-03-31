@@ -169,7 +169,6 @@ processPreconditions sc cc = go False []
         SetupVar    i  -> Set.singleton i
         SetupStruct xs -> foldMap setupVars xs
         SetupArray  xs -> foldMap setupVars xs
-        SetupReturn _  -> Set.empty
         SetupTerm   _  -> Set.empty
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty
