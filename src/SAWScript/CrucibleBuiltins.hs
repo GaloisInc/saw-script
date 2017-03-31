@@ -76,7 +76,7 @@ import qualified Lang.Crucible.Go.Translation as GT
 import Data.List.NonEmpty (NonEmpty(..))
 import           Data.Generics.Uniplate.Data
 
---import Lang.Crucible.Analysis.Taint (cfgTaintAnalysis, Tainted (..))
+import Lang.Crucible.Analysis.Taint (cfgTaintAnalysis, Tainted (..))
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
@@ -957,4 +957,18 @@ mkSimpleCrucibleContext bic =
                                      }
               
 taint_flow_cfg :: BuiltinContext -> Options -> [Bool] -> Crucible.AnyCFG -> TopLevel Bool
-taint_flow_cfg _ _ _taints _cfg = undefined
+taint_flow_cfg _ _ taints (Crucible.AnyCFG cfg) =
+  let argCtxRepr     = Crucible.handleArgTypes $ Crucible.cfgHandle cfg in
+    do argTaintAssign <- if length taints == Ctx.sizeInt (Ctx.size argCtxRepr) then
+                         return $ Ctx.generate (Ctx.size argCtxRepr)
+                         (\ind -> taintedFromBool (taints !! Ctx.indexVal ind))
+                         else fail "The number of taint values does not match the number of function arguments"
+       return $ taintedToBool $ cfgTaintAnalysis argTaintAssign cfg
+
+taintedToBool :: Tainted tp -> Bool
+taintedToBool Tainted = True
+taintedToBool Untainted = False
+
+taintedFromBool :: Bool -> Tainted tp
+taintedFromBool True = Tainted
+taintedFromBool False = Untainted
