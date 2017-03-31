@@ -64,7 +64,7 @@ data SetupCondition where
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
   { csDefine         :: L.Define
-  , csAllocations    :: Map AllocIndex SymType            -- ^ allocated vars
+  , csAllocations    :: Map AllocIndex MemType            -- ^ allocated vars
   , csConditions     :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue       :: Maybe SetupValue                  -- ^ function return value

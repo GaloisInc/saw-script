@@ -197,7 +197,7 @@ setupPrestateConditions mspec cc rs0 conds =
     = let ptr = Crucible.LLVMPtr blk end off in
       let tp' = fromMaybe
                    (error ("Expected memory type:" ++ show tp))
-                   (Crucible.toStorableType =<< TyCtx.asMemType tp) in
+                   (Crucible.toStorableType tp) in
       if Set.member v (resolvedPointers rs) then do
            io $ withMem cc $ \sym mem -> do
               x <- Crucible.loadRaw sym mem ptr tp'
@@ -282,17 +282,15 @@ asSAWType sc t = case Crucible.typeF t of
 
 setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     => CrucibleContext
-                    -> Map.Map AllocIndex Crucible.SymType
+                    -> Map.Map AllocIndex Crucible.MemType
                     -> TopLevel ResolvedState
 setupVerifyPrestate cc allocs = foldM resolveOne initialResolvedState (Map.assocs allocs)
  where
-  resolveOne rs (i, alloc_tp)
+  resolveOne rs (i, alloc_mtp)
     | Just _ <- Map.lookup i (resolvedVarMap rs) = return rs
-    | Just alloc_mtp <- TyCtx.asMemType alloc_tp =
+    | otherwise =
       do ptr <- doAlloc alloc_mtp
          return $ rs{ resolvedVarMap = Map.insert i ptr (resolvedVarMap rs) }
-    | otherwise =
-      fail $ unwords ["Not a valid memory type:", show alloc_tp]
 
   dl = TyCtx.llvmDataLayout ?lc
 
@@ -661,13 +659,13 @@ crucible_alloc bic _opt lty = do
   let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
   let ?dl = TyCtx.llvmDataLayout lc
   let ?lc = lc
-  symTy <- case TyCtx.liftType lty of
+  memTy <- case TyCtx.liftMemType lty of
     Just m -> return m
     Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
   st <- get
   let n  = csVarCounter st
       spec  = csMethodSpec st
-      spec' = spec{ csAllocations = Map.insert n symTy (csAllocations spec) }
+      spec' = spec{ csAllocations = Map.insert n memTy (csAllocations spec) }
   put st{ csVarCounter = nextAllocIndex n
         , csMethodSpec = spec'
         }
