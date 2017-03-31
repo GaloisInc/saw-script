@@ -594,20 +594,6 @@ getCrucibleContext :: BuiltinContext -> CrucibleSetup CrucibleContext
 getCrucibleContext bic =
   lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
 
-freshBinding :: (?dl :: Crucible.DataLayout)
-             => Crucible.SymType
-             -> CrucibleSetup SetupValue
-freshBinding symTy = do
-  st <- get
-  let n  = csVarCounter st
-      n' = n + 1
-      spec  = csMethodSpec st
-      spec' = spec{ csAllocations = Map.insert n symTy (csAllocations spec) }
-  put st{ csVarCounter = n'
-        , csMethodSpec = spec'
-        }
-  return (SetupVar n)
-
 addCondition :: SetupCondition
              -> CrucibleSetup ()
 addCondition cond = do
@@ -675,10 +661,18 @@ crucible_alloc bic _opt lty = do
   let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
   let ?dl = TyCtx.llvmDataLayout lc
   let ?lc = lc
-  lty' <- case TyCtx.liftType lty of
-            Just m -> return m
-            Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
-  freshBinding lty'
+  symTy <- case TyCtx.liftType lty of
+    Just m -> return m
+    Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
+  st <- get
+  let n  = csVarCounter st
+      n' = n + 1
+      spec  = csMethodSpec st
+      spec' = spec{ csAllocations = Map.insert n symTy (csAllocations spec) }
+  put st{ csVarCounter = n'
+        , csMethodSpec = spec'
+        }
+  return (SetupVar n)
 
 crucible_points_to :: BuiltinContext
                    -> Options
