@@ -190,7 +190,7 @@ importOps sc env ty =
   where
     -- | Precondition: list argument should be sorted by field name
     importTRec :: [(String, C.Type)] -> IO Term
-    importTRec [] = scCtorApp sc "Cryptol.TCEmpty" []
+    importTRec [] = scCtorApp sc "Cryptol.OpsEmpty" []
     importTRec ((n, t) : fs) = do
       s <- scString sc n
       a <- importType sc env t
@@ -204,7 +204,7 @@ importOps sc env ty =
     importTCTuple (t : ts) = do
       a <- importType sc env t
       pa <- importOps sc env t
-      b <- scTuple sc =<< traverse (importType sc env) ts
+      b <- scTupleType sc =<< traverse (importType sc env) ts
       pb <- importTCTuple ts
       scGlobalApply sc "Cryptol.OpsPair" [a, b, pa, pb]
 
