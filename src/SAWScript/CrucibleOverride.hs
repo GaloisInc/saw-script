@@ -15,6 +15,7 @@ import           Control.Lens
 import           Control.Exception
 import           Control.Monad.State
 import           Data.Foldable (traverse_)
+import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -34,6 +35,8 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
+import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
+import qualified Lang.Crucible.ProgramLoc as Crucible
 
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
@@ -59,7 +62,9 @@ newtype OverrideMatcher a
           a }
 
 data OverrideState = OverrideState
-  { _setupValueSub :: Map AllocIndex (Crucible.MemType, Crucible.AnyValue Sym)
+  { _setupValueSub :: Map AllocIndex
+                        (Crucible.MemType,
+                         Crucible.RegValue Sym Crucible.LLVMPointerType)
   , _termSub       :: Map VarIndex Term
   }
 
@@ -115,8 +120,34 @@ methodSpecHandler sc cc cs retTy = do
        -- todo: fail if list lengths mismatch
        zipWithM_ matchArg (assignmentToList args) args'
        processPreconditions sc cc (csPreconditions cs)
+       enforceDisjointness cc
        traverse_ (executeSetupCondition sc cc) (csPostconditions cs)
        computeReturnValue cc sc retTy (csRetValue cs)
+
+------------------------------------------------------------------------
+
+-- | Generate assertions that all of the memory allocations matched by
+-- an override's precondition are disjoint.
+enforceDisjointness :: CrucibleContext -> OverrideMatcher ()
+enforceDisjointness cc =
+  do sym <- liftSim Crucible.getSymInterface
+     m   <- Map.elems <$> OM (use setupValueSub)
+
+     let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+
+         sz p = Crucible.BVElt
+                  Crucible.ptrWidth
+                  (fromIntegral (Crucible.memTypeSize dl p))
+                  Crucible.initializationLoc
+
+     liftIO $ sequence_
+        [ Crucible.assertDisjointRegions'
+            sym Crucible.ptrWidth
+            p (sz pty)
+            q (sz qty)
+        | (pty,p):ps <- tails m
+        , (qty,q)    <- ps
+        ]
 
 ------------------------------------------------------------------------
 
@@ -234,9 +265,9 @@ runOverrideMatcher (OM m) = evalStateT m initialState
 ------------------------------------------------------------------------
 
 assignVar ::
-  AllocIndex            {- ^ variable index -} ->
-  Crucible.MemType      {- ^ LLVM type      -} ->
-  Crucible.AnyValue Sym {- ^ concrete value -} ->
+  AllocIndex                                     {- ^ variable index -} ->
+  Crucible.MemType                               {- ^ LLVM type      -} ->
+  Crucible.RegValue Sym Crucible.LLVMPointerType {- ^ concrete value -} ->
   OverrideMatcher ()
 
 assignVar var memTy val =
@@ -245,7 +276,7 @@ assignVar var memTy val =
   do old <- get
      case old of
        Nothing -> put (Just (memTy, val))
-       Just _  -> fail "Unifying multiple occurrences of variables not yet supported"
+       Just _ -> fail "Unifying multiple occurrences of variables not yet supported"
 
 ------------------------------------------------------------------------
 
@@ -280,7 +311,9 @@ matchArg' ::
   OverrideMatcher ()
 
 matchArg' ty memTy val (SetupVar var) =
-  assignVar var memTy (Crucible.AnyValue ty val)
+  case toPointer ty val of
+    Nothing -> fail "matchArg': expected pointer value"
+    Just p  -> assignVar var memTy p
 
 -- match the fields of struct point-wise
 matchArg'
@@ -445,7 +478,7 @@ resolveSetupValue _ _ (SetupVar i) =
   do v <- OM (use (setupValueSub . at i))
      case v of
        Nothing -> fail "Unknown variable"
-       Just x  -> return x
+       Just (m,p) -> return (m, Crucible.AnyValue Crucible.llvmPointerRepr p)
 
 resolveSetupValue
   _cc sc
@@ -493,6 +526,13 @@ unpackStruct (v:vs) ctx fls k =
 
 ------------------------------------------------------------------------
 
+toPointer ::
+  Crucible.TypeRepr t ->
+  Crucible.RegValue Sym t ->
+  Maybe (Crucible.RegValue Sym Crucible.LLVMPointerType)
+toPointer ty val =
+  do Crucible.Refl <- Crucible.testEquality ty Crucible.llvmPointerRepr
+     return val
 
 asPointer ::
   (?lc :: TyCtx.LLVMContext) =>
@@ -501,11 +541,9 @@ asPointer ::
 
 asPointer
   (Crucible.PtrType pty,
-   Crucible.AnyValue (Crucible.RecursiveRepr ty) val)
-  | Just pty'          <- TyCtx.asMemType pty
-  , Just Crucible.Refl <-
-        Crucible.testEquality ty
-          (Crucible.knownSymbol :: Crucible.SymbolRepr "LLVM_pointer")
-  = return (pty', val)
+   Crucible.AnyValue ty val)
+  | Just pty' <- TyCtx.asMemType pty
+  , Just val' <- toPointer ty val
+  = return (pty', val')
 
 asPointer _ = fail "Not a pointer"
