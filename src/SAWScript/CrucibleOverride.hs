@@ -142,6 +142,7 @@ enforceDisjointness cc =
 
      liftIO $ sequence_
         [ Crucible.assertDisjointRegions'
+            "enforcing disjoint allocations"
             sym Crucible.ptrWidth
             p (sz pty)
             q (sz qty)
