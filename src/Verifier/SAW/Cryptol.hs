@@ -14,7 +14,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
-import Control.Monad (join, foldM, unless, (<=<))
+import Control.Monad (foldM, unless, (<=<))
 import qualified Data.Foldable as Fold
 import Data.List
 import qualified Data.IntTrie as IntTrie
@@ -61,10 +61,11 @@ data Env = Env
   , envD :: Map Int    (Term, Int) -- ^ Dictionaries are referenced by unique id
   , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
+  , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty []
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -76,6 +77,7 @@ liftEnv env =
       , envD = fmap liftTerm (envD env)
       , envE = fmap liftTerm (envE env)
       , envC = envC env
+      , envS = envS env
       }
 
 bindKTypeParam :: SharedContext -> C.TParam -> Env -> IO Env
@@ -84,19 +86,24 @@ bindKTypeParam sc tp env = do
   v <- scLocalVar sc 1
   d <- scLocalVar sc 0
   return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env')
-                , envD = Map.insert (C.tpUnique tp) (d, 0) (envD env') }
+                , envD = Map.insert (C.tpUnique tp) (d, 0) (envD env')
+                , envS = error "bindKTypeParam 1" : error "bindKTypeParam 2" : envS env }
 
 bindKNumParam :: SharedContext -> C.TParam -> Env -> IO Env
 bindKNumParam sc tp env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
-  return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env') }
+  return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env')
+                , envS = error "bindKNumParam" : envS env }
 
 bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO Env
 bindName sc name schema env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
-  return $ env' { envE = Map.insert name (v, 0) (envE env'), envC = Map.insert name schema (envC env') }
+  t <- importSchema sc env schema
+  return $ env' { envE = Map.insert name (v, 0) (envE env')
+                , envC = Map.insert name schema (envC env')
+                , envS = t : envS env' }
 
 --------------------------------------------------------------------------------
 
@@ -380,7 +387,19 @@ importExpr sc env expr =
                                                scApply sc e' t'
                                              _ -> impossible "importExpr ETApp: invalid kind"
                                          _ -> impossible "importExpr ETApp: monomorphic type"
-    C.EApp e1 e2                    -> join $ scApply sc <$> go e1 <*> go e2
+    C.EApp e1 e2                    -> do e1' <- go e1
+                                          e2' <- go e2
+                                          t1 <- scTypeOf' sc (envS env) e1' >>= scWhnf sc
+                                          t2 <- scTypeOf' sc (envS env) e2' >>= scWhnf sc
+                                          t1a <-
+                                            case R.asPi t1 of
+                                              Just (_, t1a, _) -> return t1a
+                                              Nothing -> fail "importExpr: internal error: expected function type"
+                                          e2'' <-
+                                            if alphaEquiv t1a t2
+                                            then return e2'
+                                            else scGlobalApply sc "Prelude.unsafeCoerce" [t2, t1a, e2']
+                                          scApply sc e1' e2''
     C.EAbs x t e                    -> do t' <- importType sc env t
                                           env' <- bindName sc x (C.Forall [] [] t) env
                                           e' <- importExpr sc env' e
@@ -493,7 +512,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      -- shift the environment by one more variable to make room for our recursive record
      let env2 = liftEnv env1
      -- grab a reference to the outermost variable; this will be the record in the body
-     -- of the labmda we build later
+     -- of the lambda we build later
      recv <- scLocalVar sc 0
 
      -- the types of the declarations
