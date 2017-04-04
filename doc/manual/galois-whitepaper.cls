@@ -94,7 +94,7 @@
 \rhead{\sffamily \textit{\@title{}}}
 \makeatother
 
-\lfoot{\sffamily\color{lightgray}\small\copyright{} 2016 Galois, Inc.}
+\lfoot{\sffamily\color{lightgray}\small\copyright{} 2017 Galois, Inc.}
 
 \rfoot{
   % \sffamily \color{galoislightgray}\small

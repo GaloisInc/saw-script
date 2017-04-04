@@ -87,7 +87,7 @@ md5 msg = md5output finalState
       finalState = foldl initialMD5State processBlock blocks
 
       blocks : [b][512]
-      blocks = groupBy`{512} (pad msg)
+      blocks = groupBy`{512} (pad `{a,p} msg)
 
       add : MD5State -> MD5State -> MD5State
       add (a, b, c, d) (e, f, g, h) = (a + e, b + f, c + g, d + h)

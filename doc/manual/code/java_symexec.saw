@@ -1,0 +1,14 @@
+// show that add(x,y) == add(y,x) for all x and y
+cadd <- java_load_class "Add";
+x <- fresh_symbolic "x" {| [32] |};
+y <- fresh_symbolic "y" {| [32] |};
+res <- java_symexec cadd "add" [("x", x), ("y", y)] ["return", "$safety"] true;
+let jadd = rewrite basic_ss {{ res.0 }};
+let safe = {{ res.1 }};
+jadd' <- abstract_symbolic jadd;
+print_term jadd';
+print "Proving commutivity:";
+prove_print abc {{ \a b -> jadd' a b == jadd' b a }};
+print "Proving safety:";
+prove_print abc safe;
+print "Done.";

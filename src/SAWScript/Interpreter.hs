@@ -1187,11 +1187,6 @@ primitives = Map.fromList
     , "results."
     ]
 
-  , prim "java_verify_exp"
-    "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
-    (bicVal verifyJava)
-    [ "Experimental code. Don't expect this to work reliably. " ]
-
   , prim "llvm_type"           "String -> LLVMType"
     (funVal1 llvm_type)
     [ "Parse the given string as LLVM type syntax." ]
