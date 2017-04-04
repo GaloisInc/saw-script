@@ -509,8 +509,6 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
      env1 <- foldM (\e d -> bindName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
 
-     -- shift the environment by one more variable to make room for our recursive record
-     let env2 = liftEnv env1
      -- grab a reference to the outermost variable; this will be the record in the body
      -- of the lambda we build later
      recv <- scLocalVar sc 0
@@ -519,6 +517,8 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      ts <- mapM (importSchema sc env . C.dSignature) decls
      -- the type of the recursive record
      rect <- scRecordType sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) ts
+     -- shift the environment by one more variable to make room for our recursive record
+     let env2 = liftEnv env1 { envS = rect : envS env1 }
 
      let extractDeclExpr decl =
            case C.dDefinition decl of
