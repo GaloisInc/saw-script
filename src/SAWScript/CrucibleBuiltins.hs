@@ -19,6 +19,7 @@ module SAWScript.CrucibleBuiltins where
 import Control.Lens
 import Control.Monad.ST
 import Control.Monad.State
+import Control.Applicative
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList, find)
 import Data.IORef
@@ -131,6 +132,25 @@ crucible_llvm_verify bic _opts nm lemmas setup tactic = do
   verifyObligations cc methodSpec tactic assumes asserts
   return methodSpec
 
+crucible_llvm_unsafe_assume_spec ::
+  BuiltinContext   ->
+  Options          ->
+  String           ->
+  CrucibleSetup () ->
+  TopLevel CrucibleMethodSpecIR
+crucible_llvm_unsafe_assume_spec bic _opts nm setup = do
+  cc <- io $ readIORef (biCrucibleContext bic) >>= \case
+           Nothing -> fail "No Crucible LLVM module loaded"
+           Just cc -> return cc
+  let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
+  let nm' = fromString nm
+  let llmod = ccLLVMModule cc
+  st0 <- case initialCrucibleSetupState     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <|>
+              initialCrucibleSetupStateDecl <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) of
+                 Nothing -> fail ("Could not find function named" ++ show nm)
+                 Just st0 -> return st0
+  csMethodSpec <$> execStateT setup st0
+
 verifyObligations :: CrucibleContext
                   -> CrucibleMethodSpecIR
                   -> ProofScript SatResult
@@ -146,7 +166,7 @@ verifyObligations cc mspec tactic assumes asserts = do
   assert <- io $ foldM (scAnd sc) t asserts
   goal   <- io $ scImplies sc assume assert
   goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
-  let nm  = show (L.ppSymbol (L.defName (csDefine mspec)))
+  let nm  = show (L.ppSymbol (csName mspec))
   r      <- evalStateT tactic (startProof (ProofGoal Universal nm goal'))
   case r of
     Unsat _stats -> do
@@ -171,7 +191,7 @@ resolveArguments :: (?lc :: TyCtx.LLVMContext)
                  -> TopLevel [(Crucible.MemType, Crucible.LLVMVal Sym Crucible.PtrWidth)]
 resolveArguments cc mspec rs = mapM resolveArg [0..(nArgs-1)]
  where
-  nArgs = toInteger (length (L.defArgs (csDefine mspec)))
+  nArgs = toInteger (length (csArgs mspec))
   resolveArg i =
     case Map.lookup i (csArgBindings mspec) of
       Just (tp, sv) -> do
@@ -332,7 +352,7 @@ registerOverride ::
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
-  let s@(L.Symbol fsym) = L.defName (csDefine cs)
+  let s@(L.Symbol fsym) = csName cs
       llvmctx = ccLLVMContext cc
   liftIO $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
@@ -358,7 +378,7 @@ verifySimulate :: (?lc :: TyCtx.LLVMContext)
                -> [CrucibleMethodSpecIR]
                -> TopLevel (Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth))
 verifySimulate cc mspec _prestate args _assumes lemmas = do
-   let nm = L.defName (csDefine mspec)
+   let nm = csName mspec
    case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
       Nothing  -> fail $ unwords ["function", show nm, "not found"]
       Just (Crucible.AnyCFG cfg) -> io $ do
@@ -379,7 +399,7 @@ verifySimulate cc mspec _prestate args _assumes lemmas = do
                        return gp
              writeIORef (ccSimContext cc) st
              writeIORef (ccGlobals cc) (gp^.Crucible.gpGlobals)
-             let ret_ty = L.defRetType (csDefine mspec)
+             let ret_ty = csRet mspec
              let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
                                (TyCtx.liftRetType ret_ty)
              case ret_ty' of
@@ -701,8 +721,8 @@ crucible_execute_func bic _opt args = do
   st <- get
   let ?lc   = Crucible.llvmTypeCtx (ccLLVMContext cctx)
   let ?dl   = TyCtx.llvmDataLayout ?lc
-  let def   = csDefine (csMethodSpec st)
-  let tps   = map L.typedType (L.defArgs def)
+  let cs    = csMethodSpec st
+  let tps   = csArgs cs
   let spec  = csMethodSpec st
   case traverse TyCtx.liftType tps of
     Just tps' -> do
@@ -718,7 +738,7 @@ crucible_execute_func bic _opt args = do
             , csMethodSpec = spec'
             }
 
-    _ -> fail $ unlines ["Function signature not supported:", show def]
+    _ -> fail $ unlines ["Function signature not supported:", show (csArgs cs)]
 
 
 crucible_return :: BuiltinContext

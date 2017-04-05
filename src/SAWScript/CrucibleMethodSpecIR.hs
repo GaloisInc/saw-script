@@ -63,7 +63,9 @@ data SetupCondition where
 
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
-  { csDefine         :: L.Define
+  { csName           :: L.Symbol
+  , csArgs           :: [L.Type]
+  , csRet            :: L.Type
   , csAllocations    :: Map AllocIndex MemType            -- ^ allocated vars
   , csConditions     :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
@@ -91,7 +93,26 @@ initialCrucibleSetupState def =
   , csPrePost    = PreState
   , csMethodSpec =
     CrucibleMethodSpec
-    { csDefine        = def
+    { csName          = L.defName def
+    , csArgs          = L.typedType <$> L.defArgs def
+    , csRet           = L.defRetType def
+    , csAllocations   = Map.empty
+    , csConditions    = []
+    , csArgBindings   = Map.empty
+    , csRetValue      = Nothing
+    }
+  }
+
+initialCrucibleSetupStateDecl :: L.Declare -> CrucibleSetupState
+initialCrucibleSetupStateDecl dec =
+  CrucibleSetupState
+  { csVarCounter = AllocIndex 0
+  , csPrePost    = PreState
+  , csMethodSpec =
+    CrucibleMethodSpec
+    { csName          = L.decName dec
+    , csArgs          = L.decArgs dec
+    , csRet           = L.decRetType dec
     , csAllocations   = Map.empty
     , csConditions    = []
     , csArgBindings   = Map.empty

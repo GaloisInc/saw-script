@@ -1528,6 +1528,11 @@ primitives = Map.fromList
     (bicVal crucible_llvm_verify)
     [ "TODO" ]
 
+  , prim "crucible_llvm_unsafe_assume_spec"
+    "String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_unsafe_assume_spec)
+    [ "TODO" ]
+
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupArray)

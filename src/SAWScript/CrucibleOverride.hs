@@ -110,7 +110,7 @@ methodSpecHandler ::
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim Sym rtp args ret (Crucible.RegValue Sym ret)
 methodSpecHandler sc cc cs retTy = do
-  let (L.Symbol fsym) = L.defName (csDefine cs)
+  let L.Symbol fsym = csName cs
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "` (TODO)"
 
   Crucible.RegMap args <- Crucible.getOverrideArgs
