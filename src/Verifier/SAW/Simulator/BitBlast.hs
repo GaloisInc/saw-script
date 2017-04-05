@@ -25,13 +25,14 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 
-import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
+import Verifier.SAW.FiniteValue (FiniteType(..))
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.TypedAST (Module)
 import Verifier.SAW.SharedTerm
+import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Verifier.SAW.Recognizer as R
 
 import qualified Data.AIG as AIG
@@ -612,3 +613,9 @@ withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
   bval' <- applyAll bval vars
   v <- flattenBValue bval'
   c be v
+
+asFiniteType :: SharedContext -> Term -> IO FiniteType
+asFiniteType sc t =
+  case asFiniteTypeValue (Concrete.evalSharedTerm (scModule sc) Map.empty t) of
+    Just ft -> return ft
+    Nothing -> fail $ "asFiniteType: unsupported type " ++ show t
