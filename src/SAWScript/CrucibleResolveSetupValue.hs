@@ -3,6 +3,7 @@ module SAWScript.CrucibleResolveSetupValue
   , resolveSetupVal
   , initialResolvedState
   , typeOfLLVMVal
+  , typeOfSetupValue
   , resolveTypedTerm
   ) where
 
@@ -59,6 +60,42 @@ initialResolvedState =
   , resolvedPointers = Set.empty
   }
 
+typeOfSetupValue ::
+  Crucible.DataLayout ->
+  Map AllocIndex Crucible.MemType ->
+  SetupValue ->
+  IO Crucible.MemType
+typeOfSetupValue dl env val =
+  case val of
+    SetupVar i ->
+      case Map.lookup i env of
+        Nothing -> fail ("Unresolved prestate variable:" ++ show i)
+        Just memTy -> return memTy
+    SetupTerm tt ->
+      case ttSchema tt of
+        Cryptol.Forall [] [] ty ->
+          case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
+            Nothing -> fail "typeOfSetupValue: non-representable type"
+            Just memTy -> return memTy
+        _ -> fail "typeOfSetupValue: expected monomorphic term"
+    SetupStruct vs ->
+      do memTys <- traverse (typeOfSetupValue dl env) vs
+         let si = Crucible.mkStructInfo dl False memTys
+         return (Crucible.StructType si)
+    SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
+    SetupArray (v : vs) ->
+      do memTy <- typeOfSetupValue dl env v
+         _memTys <- traverse (typeOfSetupValue dl env) vs
+         -- TODO: check that all memTys are compatible with memTy
+         return (Crucible.ArrayType (length (v:vs)) memTy)
+    SetupNull ->
+      -- We arbitrarily set the type of NULL to void*, because a) it
+      -- is memory-compatible with any type that NULL can be used at,
+      -- and b) it prevents us from doing a type-safe dereference
+      -- operation.
+      return (Crucible.PtrType Crucible.VoidType)
+    SetupGlobal _name ->
+      do fail "typeOfSetupValue: unimplemented SetupGlobal"
 
 resolveSetupVal ::
   CrucibleContext ->

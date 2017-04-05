@@ -35,8 +35,8 @@ let simpleWrap2_spec = do {
 };
 
 c <- java_load_class "Return";
-fill_ov <- java_verify_exp c "fill" [] fill_spec;
-java_verify_exp c "fillwrap" [fill_ov] fill_spec;
-newSimple_ov <- java_verify_exp c "newSimple" [] newSimple_spec;
-java_verify_exp c "newSimpleWrap" [newSimple_ov] newSimple_spec;
-java_verify_exp c "newSimpleWrap2" [newSimple_ov] simpleWrap2_spec;
+fill_ov <- java_verify c "fill" [] fill_spec;
+java_verify c "fillwrap" [fill_ov] fill_spec;
+newSimple_ov <- java_verify c "newSimple" [] newSimple_spec;
+java_verify c "newSimpleWrap" [newSimple_ov] newSimple_spec;
+java_verify c "newSimpleWrap2" [newSimple_ov] simpleWrap2_spec;
