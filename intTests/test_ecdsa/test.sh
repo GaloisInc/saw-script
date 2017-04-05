@@ -2,8 +2,8 @@
 set -e
 
 mkdir -p tmp
-cp -r ../../Examples/ecdsa/* tmp
+cp -r ../../examples/ecdsa/* tmp
 cd tmp
-${SAW} -j ecdsa.jar ecdsa.saw
+SAW=${SAW} make verify
 cd ..
 rm -r tmp
