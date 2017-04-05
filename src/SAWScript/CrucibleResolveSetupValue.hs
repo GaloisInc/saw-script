@@ -121,7 +121,7 @@ resolveSetupVal cc rs val =
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupNull ->
-      Crucible.packMemValue sym ptrType Crucible.llvmPointerRepr =<< Crucible.mkNullPointer sym
+      Crucible.packMemValue sym ptrType Crucible.LLVMPointerRepr =<< Crucible.mkNullPointer sym
     SetupGlobal _name -> fail "SetupGlobal not implemented"
 --    SetupGlobal name -> withMem cc $ \_sym impl -> do
 --      r <- Crucible.doResolveGlobal sym impl (L.Symbol name)

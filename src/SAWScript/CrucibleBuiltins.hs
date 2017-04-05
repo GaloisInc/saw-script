@@ -236,7 +236,7 @@ setupPrestateConditions mspec cc rs0 conds =
       r <- Crucible.doResolveGlobal sym mem (L.Symbol name)
       let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
       let ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
-      Crucible.LLVMValPtr blk end off <- Crucible.packMemValue sym ptrType Crucible.llvmPointerRepr r
+      Crucible.LLVMValPtr blk end off <- Crucible.packMemValue sym ptrType Crucible.LLVMPointerRepr r
       let ptr = Crucible.LLVMPtr blk end off
       val' <- resolveSetupVal cc rs val
       let tp' = typeOfLLVMVal dl val'

@@ -310,9 +310,9 @@ matchArg' ::
   OverrideMatcher ()
 
 matchArg' ty memTy val (SetupVar var) =
-  case toPointer ty val of
-    Nothing -> fail "matchArg': expected pointer value"
-    Just p  -> assignVar var memTy p
+  case ty of
+    Crucible.LLVMPointerRepr -> assignVar var memTy val
+    _ -> fail "matchArg': expected pointer value"
 
 -- match the fields of struct point-wise
 matchArg'
@@ -515,14 +515,6 @@ packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
 
 ------------------------------------------------------------------------
 
-toPointer ::
-  Crucible.TypeRepr t ->
-  Crucible.RegValue Sym t ->
-  Maybe (Crucible.RegValue Sym Crucible.LLVMPointerType)
-toPointer ty val =
-  do Crucible.Refl <- Crucible.testEquality ty Crucible.llvmPointerRepr
-     return val
-
 asPointer ::
   (?lc :: TyCtx.LLVMContext) =>
   (Crucible.MemType, Crucible.AnyValue Sym) ->
@@ -530,9 +522,8 @@ asPointer ::
 
 asPointer
   (Crucible.PtrType pty,
-   Crucible.AnyValue ty val)
+   Crucible.AnyValue Crucible.LLVMPointerRepr val)
   | Just pty' <- TyCtx.asMemType pty
-  , Just val' <- toPointer ty val
-  = return (pty', val')
+  = return (pty', val)
 
 asPointer _ = fail "Not a pointer"
