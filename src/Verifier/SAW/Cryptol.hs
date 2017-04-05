@@ -710,24 +710,43 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
+asCryptolTypeValue :: SC.CValue -> Maybe C.Type
+asCryptolTypeValue v =
+  case v of
+    SC.VDataType "Prelude.Bool" [] -> return C.tBit
+    SC.VDataType "Prelude.Vec" [SC.VNat n, v2] -> do
+      t2 <- asCryptolTypeValue v2
+      return (C.tSeq (C.tNum n) t2)
+    SC.VDataType "Prelude.Stream" [v1] -> do
+      t1 <- asCryptolTypeValue v1
+      return (C.tSeq C.tInf t1)
+    SC.VUnitType -> return (C.tTuple [])
+    SC.VPairType v1 v2 -> do
+      t1 <- asCryptolTypeValue v1
+      ts <- asCryptolTypeValue v2 >>= C.tIsTuple
+      return (C.tTuple (t1 : ts))
+    SC.VEmptyType -> return (C.tRec [])
+    SC.VFieldType k v1 v2 -> do
+      let name = C.packIdent k
+      t1 <- asCryptolTypeValue v1
+      fs <- asCryptolTypeValue v2 >>= tIsRec
+      return (C.tRec ((name, t1) : fs))
+    SC.VPiType v1 f -> do
+      let msg = "asCryptolTypeValue: internal error: expected non-dependent type"
+      let v2 = SC.runIdentity (f (error msg))
+      t1 <- asCryptolTypeValue v1
+      t2 <- asCryptolTypeValue v2
+      return (C.tFun t1 t2)
+    _ -> Nothing
+  where
+    tIsRec (C.TRec fs) = Just fs
+    tIsRec _           = Nothing
+
 scCryptolType :: SharedContext -> Term -> IO C.Type
-scCryptolType sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asNatLit -> Just n)
-      -> return $ C.tNum n
-    (R.asPi -> Just (_, t1, t2))
-      -> C.tFun <$> scCryptolType sc t1 <*> scCryptolType sc t2
-    (R.asBoolType -> Just ())
-      -> return C.tBit
-    (R.asVectorType -> Just (t1, t2))
-      -> C.tSeq <$> scCryptolType sc t1 <*> scCryptolType sc t2
-    (R.asTupleType -> Just ts)
-      -> C.tTuple <$> traverse (scCryptolType sc) ts
-    (R.asRecordType -> Just tm)
-       -> do tm' <- traverse (scCryptolType sc) tm
-             return $ C.tRec [ (C.packIdent n, ct) | (n, ct) <- Map.assocs tm' ]
-    _ -> fail $ "scCryptolType: unsupported type " ++ show t'
+scCryptolType sc t =
+  case asCryptolTypeValue (SC.evalSharedTerm (scModule sc) Map.empty t) of
+    Just ty -> return ty
+    Nothing -> fail $ "scCryptolType: unsupported type " ++ show t
 
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y = do
