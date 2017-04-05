@@ -636,7 +636,10 @@ ecInfFromThen (TCNum n) first next =
     bvAdd n first (bvMul n (bvSub n next first) (bvNat n i)));
 
 -- Run-time error
-primitive ecError :: (a :: sort 0) -> Ops a -> (len :: Num) -> seq len (bitvector 8) -> a;
+primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
+
+ecError :: (a :: sort 0) -> Ops a -> (len :: Num) -> seq len (bitvector 8) -> a;
+ecError a _ (TCNum n) = cryError a n;
 
 -- Polynomials
 ecPMul :: (a b :: Num) -> seq a Bool -> seq b Bool

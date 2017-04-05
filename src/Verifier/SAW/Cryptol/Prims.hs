@@ -35,17 +35,16 @@ import qualified Verifier.SAW.Simulator.BitBlast as BB
 import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Verifier.SAW.Simulator.Concrete as C
 
--- primitive ecError :: (a :: sort 0) -> (len :: Num) -> PFin len -> seq len (bitvector 8) -> a;
-ecError :: Monad m => (w -> m Char) -> Value m b w i e
-ecError asChar =
+-- primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
+cryError :: Monad m => (w -> m Char) -> Value m b w i e
+cryError asChar =
   strictFun $ \_a -> return $
-    strictFun $ \_len -> return $
-      strictFun $ \_pfin -> return $
-        strictFun $ \(VVector msgChars) -> do
-          let toChar (VWord w) = asChar w
-              toChar _ = fail "Cryptol.ecError: unable to print message"
-          msg <- mapM (toChar <=< force) $ V.toList $ msgChars
-          fail $ "Cryptol.ecError: " ++ msg
+  strictFun $ \_n -> return $
+  strictFun $ \(VVector msgChars) -> do
+    let toChar (VWord w) = asChar w
+        toChar _ = fail "Cryptol.cryError: unable to print message"
+    msg <- mapM (toChar <=< force) $ V.toList $ msgChars
+    fail $ "Cryptol.cryError: " ++ msg
 
 bvAsChar :: Monad m => P.BitVector -> m Char
 bvAsChar w = return $ toEnum $ fromInteger $ P.unsigned $ w
@@ -88,24 +87,24 @@ tcLenFromThenTo_Nat =
 
 concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
-  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
-  , ("Cryptol.ecError"             , ecError bvAsChar )
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
+  , ("Cryptol.cryError"            , cryError bvAsChar )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
 bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
 bitblastPrims g = Map.fromList
-  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
-  , ("Cryptol.ecError"             , ecError (aigWordAsChar g) )
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
+  , ("Cryptol.cryError"            , cryError (aigWordAsChar g) )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
 sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
-  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is depreciated; don't use it")
-  , ("Cryptol.ecError"             , ecError sbvWordAsChar )
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
+  , ("Cryptol.cryError"            , cryError sbvWordAsChar )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
