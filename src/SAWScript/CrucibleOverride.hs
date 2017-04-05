@@ -24,8 +24,6 @@ import qualified Data.Vector as V
 
 import qualified Text.LLVM.AST as L
 
-import qualified Cryptol.TypeCheck.AST as Cryptol
-
 import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.Simulator.MSSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
@@ -47,7 +45,7 @@ import           Verifier.SAW.TypedAST
 
 import           SAWScript.Builtins
 import           SAWScript.CrucibleMethodSpecIR
---import           SAWScript.CrucibleResolveSetupValue
+import           SAWScript.CrucibleResolveSetupValue
 import           SAWScript.TypedTerm
 
 -- | The 'OverrideMatcher' type provides the operations that are needed
@@ -469,61 +467,51 @@ executeEqual _ _ _ = fail "executeEqual: incomplete"
 
 ------------------------------------------------------------------------
 
+-- | Map the given substitution over all 'SetupTerm' constructors in
+-- the given 'SetupValue'.
+instantiateSetupValue ::
+  SharedContext     ->
+  Map VarIndex Term ->
+  SetupValue        ->
+  IO SetupValue
+instantiateSetupValue sc s v =
+  case v of
+    SetupVar _     -> return v
+    SetupTerm tt   -> SetupTerm <$> doTerm tt
+    SetupStruct vs -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
+    SetupArray  vs -> SetupArray <$> mapM (instantiateSetupValue sc s) vs
+    SetupNull      -> return v
+    SetupGlobal _  -> return v
+  where
+    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
+
+------------------------------------------------------------------------
+
 resolveSetupValue ::
   CrucibleContext ->
   SharedContext   ->
   SetupValue      ->
   OverrideMatcher (Crucible.MemType, Crucible.AnyValue Sym)
-
-resolveSetupValue _ _ (SetupVar i) =
-  do v <- OM (use (setupValueSub . at i))
-     case v of
-       Nothing -> fail "Unknown variable"
-       Just (m,p) -> return (m, Crucible.AnyValue Crucible.llvmPointerRepr p)
-
-resolveSetupValue
-  _cc sc
-  (SetupTerm
-     (TypedTerm
-       (Cryptol.Forall [] [] cty)
-       t))
-  | Just (n, a) <- Cryptol.tIsSeq cty
-  , Just sz <- Cryptol.tIsNum n
-  , Cryptol.tIsBit a
-  , Just (Crucible.Some w) <- Crucible.someNat sz
-  , Just Crucible.LeqProof <- Crucible.isPosNat w
-  =
-
-  do s   <- OM (use termSub)
-     sym <- liftSim Crucible.getSymInterface
-     t'  <- liftIO (scInstantiateExt sc s t)
-     let ty = Crucible.BaseBVRepr w
-     elt <- liftIO (Crucible.bindSAWTerm sym ty t')
-     return (Crucible.IntType (fromInteger sz), Crucible.AnyValue (Crucible.BVRepr w) elt)
-
-resolveSetupValue cc sc (SetupStruct vs) =
-  do (memtys, vs') <- unzip <$> mapM (resolveSetupValue cc sc) vs
+resolveSetupValue cc sc sval =
+  do m <- OM (use setupValueSub)
+     s <- OM (use termSub)
      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-     let si = Crucible.mkStructInfo dl False memtys
-     v' <- liftIO $ unpackStruct vs' Ctx.empty Ctx.empty $
-       \ctx fls -> return $ Crucible.AnyValue (Crucible.StructRepr ctx) $ fls
-     return (Crucible.StructType si, v')
+     memTy <- liftIO $ typeOfSetupValue dl (fmap fst m) sval
+     sval' <- liftIO $ instantiateSetupValue sc s sval
+     let rs = ResolvedState (fmap (packPointer . snd) m) Set.empty
+     lval <- liftIO $ resolveSetupVal cc rs sval'
+     sym <- liftSim Crucible.getSymInterface
+     aval <- liftIO $ Crucible.unpackMemValue sym lval
+     return (memTy, aval)
 
-resolveSetupValue _ _ v =
-   fail $ "resolveSetupValue: not implemented: " ++ show v
-
--- 'unpackStruct' copied from Crucible.LLVM.MemModel
-unpackStruct
-   :: [Crucible.AnyValue sym]
-   -> Crucible.CtxRepr ctx0
-   -> Ctx.Assignment (Crucible.RegValue' sym) ctx0
-   -> (forall ctx. Crucible.CtxRepr ctx -> Ctx.Assignment (Crucible.RegValue' sym) ctx -> IO x)
-   -> IO x
-unpackStruct [] ctx fls k = k ctx fls
-unpackStruct (v:vs) ctx fls k =
-  case v of
-    Crucible.AnyValue tpr x ->
-      unpackStruct vs (ctx Ctx.%> tpr) (fls Ctx.%> Crucible.RV x) k
+packPointer ::
+  Crucible.RegValue Sym Crucible.LLVMPointerType ->
+  Crucible.LLVMVal Sym Crucible.PtrWidth
+packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
+  where
+    Crucible.RV blk = xs^._1
+    Crucible.RV end = xs^._2
+    Crucible.RV off = xs^._3
 
 ------------------------------------------------------------------------
 
