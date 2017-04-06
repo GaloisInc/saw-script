@@ -8,6 +8,7 @@ module SAWScript.CrucibleResolveSetupValue
   ) where
 
 import Control.Lens
+import Control.Monad (zipWithM)
 import Data.Maybe (fromJust)
 import Data.IORef
 import Data.Word (Word64)
@@ -184,8 +185,19 @@ resolveSAWTerm cc tp tm =
                Crucible.LLVMValArray gt . V.fromList <$> mapM f [ 0 .. (sz-1) ]
       Cryptol.TVStream _tp' ->
         fail "resolveSAWTerm: invalid infinite stream type"
-      Cryptol.TVTuple _tps ->
-        fail "resolveSAWTerm: unimplemented tuple type (FIXME)"
+      Cryptol.TVTuple tps ->
+        do sc <- Crucible.saw_ctx <$> (readIORef (Crucible.sbStateManager sym))
+           tms <- mapM (scTupleSelector sc tm) [1 .. length tps]
+           vals <- zipWithM (resolveSAWTerm cc) tps tms
+           storTy <-
+             case toLLVMType dl tp of
+               Just memTy -> Crucible.toStorableType memTy
+               _ -> fail "resolveSAWTerm: invalid tuple type"
+           fields <-
+             case Crucible.typeF storTy of
+               Crucible.Struct fields -> return fields
+               _ -> fail "resolveSAWTerm: impossible: expected struct"
+           return (Crucible.LLVMValStruct (V.zip fields (V.fromList vals)))
       Cryptol.TVRec _flds ->
         fail "resolveSAWTerm: unimplemented record type (FIXME)"
       Cryptol.TVFun _ _ ->
