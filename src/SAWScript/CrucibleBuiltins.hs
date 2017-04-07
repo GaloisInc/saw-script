@@ -329,15 +329,21 @@ setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     => CrucibleContext
                     -> Map AllocIndex Crucible.MemType
                     -> TopLevel (Map AllocIndex LLVMVal)
-setupVerifyPrestate cc allocs = io $ traverse doAlloc allocs
+setupVerifyPrestate cc allocs = io $ traverse (doAlloc cc) allocs
+
+-- | Allocate space on the LLVM heap to store a value of the given
+-- type. Returns the pointer to the allocated memory.
+doAlloc ::
+  (?lc :: TyCtx.LLVMContext) =>
+  CrucibleContext            ->
+  Crucible.MemType           ->
+  IO LLVMVal
+doAlloc cc tp = withMem cc $ \sym mem ->
+  do sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
+     (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
+     return (Crucible.LLVMValPtr blk end x, mem')
   where
     dl = TyCtx.llvmDataLayout ?lc
-
-    doAlloc :: Crucible.MemType -> IO LLVMVal
-    doAlloc tp = withMem cc $ \sym mem ->
-      do sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
-         (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
-         return (Crucible.LLVMValPtr blk end x, mem')
 
 --------------------------------------------------------------------------------
 
