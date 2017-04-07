@@ -176,7 +176,7 @@ verifyObligations cc mspec tactic assumes asserts = do
 
 verifyPrestate :: CrucibleContext
                -> CrucibleMethodSpecIR
-               -> TopLevel ([(Crucible.MemType, Crucible.LLVMVal Sym Crucible.PtrWidth)], [Term], ResolvedState)
+               -> TopLevel ([(Crucible.MemType, LLVMVal)], [Term], ResolvedState)
 verifyPrestate cc mspec = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   prestate <- setupVerifyPrestate cc (csAllocations mspec)
@@ -188,7 +188,7 @@ resolveArguments :: (?lc :: TyCtx.LLVMContext)
                  => CrucibleContext
                  -> CrucibleMethodSpecIR
                  -> ResolvedState
-                 -> TopLevel [(Crucible.MemType, Crucible.LLVMVal Sym Crucible.PtrWidth)]
+                 -> TopLevel [(Crucible.MemType, LLVMVal)]
 resolveArguments cc mspec rs = mapM resolveArg [0..(nArgs-1)]
  where
   nArgs = toInteger (length (csArgs mspec))
@@ -251,13 +251,14 @@ setupPrestateConditions mspec cc rs0 conds =
     c <- assertEqualVals cc val1' val2'
     return (c:cs,rs)
 
-assertEqualVals :: CrucibleContext
-                -> Crucible.LLVMVal Sym Crucible.PtrWidth
-                -> Crucible.LLVMVal Sym Crucible.PtrWidth
-                -> IO Term
+assertEqualVals ::
+  CrucibleContext ->
+  LLVMVal ->
+  LLVMVal ->
+  IO Term
 assertEqualVals cc v1 v2 = Crucible.toSC sym =<< go (v1, v2)
  where
-  go :: (Crucible.LLVMVal Sym Crucible.PtrWidth, Crucible.LLVMVal Sym Crucible.PtrWidth) -> IO (Crucible.Pred Sym)
+  go :: (LLVMVal, LLVMVal) -> IO (Crucible.Pred Sym)
 
   go (Crucible.LLVMValPtr blk1 _end1 off1, Crucible.LLVMValPtr blk2 _end2 off2)
        = do blk_eq <- Crucible.natEq sym blk1 blk2
@@ -310,7 +311,7 @@ setupVerifyPrestate cc allocs = io $
   where
     dl = TyCtx.llvmDataLayout ?lc
 
-    doAlloc :: Crucible.MemType -> IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+    doAlloc :: Crucible.MemType -> IO LLVMVal
     doAlloc tp = withMem cc $ \sym mem ->
       do sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
          (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
@@ -373,10 +374,10 @@ verifySimulate :: (?lc :: TyCtx.LLVMContext)
                => CrucibleContext
                -> CrucibleMethodSpecIR
                -> ResolvedState
-               -> [(Crucible.MemType, Crucible.LLVMVal Sym Crucible.PtrWidth)]
+               -> [(Crucible.MemType, LLVMVal)]
                -> [Term]
                -> [CrucibleMethodSpecIR]
-               -> TopLevel (Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth))
+               -> TopLevel (Maybe LLVMVal)
 verifySimulate cc mspec _prestate args _assumes lemmas = do
    let nm = csName mspec
    case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
@@ -419,7 +420,7 @@ verifySimulate cc mspec _prestate args _assumes lemmas = do
 
  where
   prepareArgs :: Ctx.Assignment Crucible.TypeRepr xs
-              -> [Crucible.LLVMVal Sym Crucible.PtrWidth]
+              -> [LLVMVal]
               -> IO (Crucible.RegMap Sym xs)
   prepareArgs ctx x = Crucible.RegMap <$>
     Ctx.traverseWithIndex (\idx tr -> do
@@ -428,12 +429,13 @@ verifySimulate cc mspec _prestate args _assumes lemmas = do
       return (Crucible.RegEntry tr v))
     ctx
 
-verifyPoststate :: (?lc :: TyCtx.LLVMContext)
-                => CrucibleContext
-                -> CrucibleMethodSpecIR
-                -> ResolvedState
-                -> Maybe (Crucible.LLVMVal Sym Crucible.PtrWidth)
-                -> TopLevel [Term]
+verifyPoststate ::
+  (?lc :: TyCtx.LLVMContext) =>
+  CrucibleContext ->
+  CrucibleMethodSpecIR ->
+  ResolvedState ->
+  Maybe LLVMVal ->
+  TopLevel [Term]
 verifyPoststate cc mspec rs ret = io $
   do goals <- mapM verifyPostCond [ c | (PostState, c) <- csConditions mspec ]
      case (ret, csRetValue mspec) of

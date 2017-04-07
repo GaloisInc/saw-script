@@ -1,5 +1,6 @@
 module SAWScript.CrucibleResolveSetupValue
-  ( ResolvedState(..)
+  ( LLVMVal
+  , ResolvedState(..)
   , resolveSetupVal
   , initialResolvedState
   , typeOfLLVMVal
@@ -48,9 +49,11 @@ import SAWScript.CrucibleMethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
 
+type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
+
 data ResolvedState =
   ResolvedState
-  { resolvedVarMap   :: Map AllocIndex (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  { resolvedVarMap   :: Map AllocIndex LLVMVal
   , resolvedPointers :: Set AllocIndex
   }
 
@@ -102,7 +105,7 @@ resolveSetupVal ::
   CrucibleContext ->
   ResolvedState   ->
   SetupValue      ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  IO LLVMVal
 resolveSetupVal cc rs val =
   case val of
     SetupVar i
@@ -138,7 +141,7 @@ resolveSetupVal cc rs val =
 resolveTypedTerm ::
   CrucibleContext ->
   TypedTerm       ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  IO LLVMVal
 resolveTypedTerm cc tm =
   case ttSchema tm of
     Cryptol.Forall [] [] ty ->
@@ -150,7 +153,7 @@ resolveSAWTerm ::
   CrucibleContext ->
   Cryptol.TValue ->
   Term ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  IO LLVMVal
 resolveSAWTerm cc tp tm =
     case tp of
       Cryptol.TVBit ->
@@ -253,7 +256,7 @@ typeAlignment dl ty =
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
     Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
-typeOfLLVMVal :: Crucible.DataLayout -> Crucible.LLVMVal Sym Crucible.PtrWidth -> Crucible.Type
+typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal dl val =
   case val of
     Crucible.LLVMValPtr {}      -> ptrType
