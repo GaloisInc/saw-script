@@ -104,14 +104,14 @@ ppAbortedResult cc (Crucible.AbortedExec err gp) = do
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
     return (text "Aborted branch")
 
-crucible_llvm_verify
-  :: BuiltinContext
-  -> Options
-  -> String
-  -> [CrucibleMethodSpecIR]
-  -> CrucibleSetup ()
-  -> ProofScript SatResult
-  -> TopLevel CrucibleMethodSpecIR
+crucible_llvm_verify ::
+  BuiltinContext         ->
+  Options                ->
+  String                 ->
+  [CrucibleMethodSpecIR] ->
+  CrucibleSetup ()       ->
+  ProofScript SatResult  ->
+  TopLevel CrucibleMethodSpecIR
 crucible_llvm_verify bic _opts nm lemmas setup tactic = do
   cc <- io $ readIORef (biCrucibleContext bic) >>= \case
            Nothing -> fail "No Crucible LLVM module loaded"
@@ -174,6 +174,21 @@ verifyObligations cc mspec tactic assumes asserts = do
     SatMulti _stats _vals ->
       io $ putStrLn $ unwords ["Proof failed!", nm]
 
+-- | Evaluate the precondition part of a Crucible method spec:
+--
+-- * Allocate heap space for each 'crucible_alloc' statement.
+--
+-- * Record an equality precondition for each 'crucible_equal'
+-- statement.
+--
+-- * Write to memory for each 'crucible_points_to' statement. (Writes
+-- to already-initialized locations are transformed into equality
+-- preconditions.)
+--
+-- * Evaluate the function arguments from the 'crucible_execute_func'
+-- statement.
+--
+-- Returns a tuple of (arguments, preconditions, initialized pointers).
 verifyPrestate :: CrucibleContext
                -> CrucibleMethodSpecIR
                -> TopLevel ([(Crucible.MemType, LLVMVal)], [Term], ResolvedState)
@@ -200,14 +215,15 @@ resolveArguments cc mspec rs = mapM resolveArg [0..(nArgs-1)]
         return (mt, v)
       Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
 
+--------------------------------------------------------------------------------
 
-setupPrestateConditions
-              :: (?lc :: TyCtx.LLVMContext)
-              => CrucibleMethodSpecIR
-              -> CrucibleContext
-              -> ResolvedState
-              -> [(PrePost, SetupCondition)]
-              -> TopLevel ([Term], ResolvedState)
+setupPrestateConditions ::
+  (?lc :: TyCtx.LLVMContext) =>
+  CrucibleMethodSpecIR       ->
+  CrucibleContext            ->
+  ResolvedState              ->
+  [SetupCondition]           ->
+  TopLevel ([Term], ResolvedState)
 setupPrestateConditions mspec cc rs0 conds =
   foldM go ([],rs0) [ cond | (PreState, cond) <- conds ]
   where
@@ -251,6 +267,9 @@ setupPrestateConditions mspec cc rs0 conds =
     c <- assertEqualVals cc val1' val2'
     return (c:cs,rs)
 
+--------------------------------------------------------------------------------
+
+-- | Create a SAWCore formula asserting that two 'LLVMVal's are equal.
 assertEqualVals ::
   CrucibleContext ->
   LLVMVal ->
@@ -284,6 +303,7 @@ assertEqualVals cc v1 v2 = Crucible.toSC sym =<< go (v1, v2)
 
   sym = ccBackend cc
 
+--------------------------------------------------------------------------------
 
 asSAWType :: SharedContext
           -> Crucible.Type
@@ -300,6 +320,7 @@ asSAWType sc t = case Crucible.typeF t of
     do flds' <- mapM (asSAWType sc . (^. Crucible.fieldVal)) $ V.toList flds
        scTupleType sc flds'
 
+--------------------------------------------------------------------------------
 
 setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
                     => CrucibleContext
@@ -317,6 +338,8 @@ setupVerifyPrestate cc allocs = io $
          (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
          return (Crucible.LLVMValPtr blk end x, mem')
 
+--------------------------------------------------------------------------------
+
 withMem :: CrucibleContext
         -> (Sym -> Crucible.MemImpl Sym Crucible.PtrWidth -> IO (a, Crucible.MemImpl Sym Crucible.PtrWidth))
         -> IO a
@@ -332,6 +355,8 @@ withMem cc f = do
       writeIORef (ccGlobals cc) globals'
       return x
 
+--------------------------------------------------------------------------------
+
 ppGlobalPair :: CrucibleContext
              -> Crucible.GlobalPair (Crucible.MSS_State Sym) a
              -> IO Doc
@@ -343,6 +368,8 @@ ppGlobalPair cc gp =
     Nothing -> return (text "LLVM Memory global variable not initialized")
     Just mem -> Crucible.ppMem sym mem
 
+
+--------------------------------------------------------------------------------
 
 registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
@@ -369,6 +396,8 @@ registerOverride cc _ctx cs = do
             retType
             (methodSpecHandler sc cc cs retType)
     Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
+
+--------------------------------------------------------------------------------
 
 verifySimulate :: (?lc :: TyCtx.LLVMContext)
                => CrucibleContext
@@ -429,6 +458,8 @@ verifySimulate cc mspec _prestate args _assumes lemmas = do
       return (Crucible.RegEntry tr v))
     ctx
 
+--------------------------------------------------------------------------------
+
 verifyPoststate ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext ->
@@ -465,6 +496,8 @@ verifyPoststate cc mspec rs ret = io $
       val1' <- resolveSetupVal cc rs val1
       val2' <- resolveSetupVal cc rs val2
       assertEqualVals cc val1' val2'
+
+--------------------------------------------------------------------------------
 
 load_crucible_llvm_module :: BuiltinContext -> Options -> String -> TopLevel ()
 load_crucible_llvm_module bic _opts bc_file = do
@@ -517,6 +550,8 @@ load_crucible_llvm_module bic _opts bc_file = do
                         , ccGlobals = globRef
                         }
 
+--------------------------------------------------------------------------------
+
 setupArg :: SharedContext
          -> Sym
          -> IORef (Seq (ExtCns Term))
@@ -547,6 +582,8 @@ setupArgs sc sym fn = do
   regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
   ecs    <- readIORef ecRef
   return (ecs, regmap)
+
+--------------------------------------------------------------------------------
 
 extractFromCFG :: SharedContext -> CrucibleContext -> Crucible.AnyCFG -> IO TypedTerm
 extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
@@ -579,6 +616,7 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
                      , show resultDoc
                      ]
 
+--------------------------------------------------------------------------------
 
 extract_crucible_llvm :: BuiltinContext -> Options -> String -> TopLevel TypedTerm
 extract_crucible_llvm bic _opts fn_name = do
