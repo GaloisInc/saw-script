@@ -48,10 +48,11 @@ import SAWScript.CrucibleMethodSpecIR
 type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
 
 typeOfSetupValue ::
+  Monad m =>
   Crucible.DataLayout ->
   Map AllocIndex Crucible.MemType ->
   SetupValue ->
-  IO Crucible.MemType
+  m Crucible.MemType
 typeOfSetupValue dl env val =
   case val of
     SetupVar i ->
