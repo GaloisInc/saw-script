@@ -195,7 +195,7 @@ verifyPrestate :: CrucibleContext
 verifyPrestate cc mspec = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   prestate <- setupVerifyPrestate cc (csAllocations mspec)
-  (cs, prestate') <- setupPrestateConditions mspec cc prestate (csConditions mspec)
+  (cs, prestate') <- setupPrestateConditions mspec cc prestate (csPreconditions mspec)
   args <- resolveArguments cc mspec prestate'
   return (args, cs, prestate')
 
@@ -225,7 +225,7 @@ setupPrestateConditions ::
   [SetupCondition]           ->
   TopLevel ([Term], ResolvedState)
 setupPrestateConditions mspec cc rs0 conds =
-  foldM go ([],rs0) [ cond | (PreState, cond) <- conds ]
+  foldM go ([],rs0) conds
   where
   go (cs,rs) (SetupCond_PointsTo (SetupVar v) val)
     | Just (Crucible.LLVMValPtr blk end off) <- Map.lookup v (resolvedVarMap rs)
@@ -468,7 +468,7 @@ verifyPoststate ::
   Maybe LLVMVal ->
   TopLevel [Term]
 verifyPoststate cc mspec rs ret = io $
-  do goals <- mapM verifyPostCond [ c | (PostState, c) <- csConditions mspec ]
+  do goals <- mapM verifyPostCond (csPostconditions mspec)
      case (ret, csRetValue mspec) of
        (Nothing, Nothing) -> return goals
        (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
