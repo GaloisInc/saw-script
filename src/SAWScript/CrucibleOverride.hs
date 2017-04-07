@@ -498,8 +498,8 @@ resolveSetupValue cc sc sval =
      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
      memTy <- liftIO $ typeOfSetupValue dl (fmap fst m) sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
-     let rs = ResolvedState (fmap (packPointer . snd) m) Set.empty
-     lval <- liftIO $ resolveSetupVal cc rs sval'
+     let env = fmap (packPointer . snd) m
+     lval <- liftIO $ resolveSetupVal cc env sval'
      sym <- liftSim Crucible.getSymInterface
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)

@@ -1,8 +1,6 @@
 module SAWScript.CrucibleResolveSetupValue
   ( LLVMVal
-  , ResolvedState(..)
   , resolveSetupVal
-  , initialResolvedState
   , typeOfLLVMVal
   , typeOfSetupValue
   , resolveTypedTerm
@@ -15,8 +13,6 @@ import Data.IORef
 import Data.Word (Word64)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
-import qualified Data.Set as Set
 import qualified Data.Vector as V
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
@@ -50,19 +46,6 @@ import SAWScript.CrucibleMethodSpecIR
 --import qualified SAWScript.LLVMBuiltins as LB
 
 type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
-
-data ResolvedState =
-  ResolvedState
-  { resolvedVarMap   :: Map AllocIndex LLVMVal
-  , resolvedPointers :: Set AllocIndex
-  }
-
-initialResolvedState :: ResolvedState
-initialResolvedState =
-  ResolvedState
-  { resolvedVarMap = Map.empty
-  , resolvedPointers = Set.empty
-  }
 
 typeOfSetupValue ::
   Crucible.DataLayout ->
@@ -102,18 +85,18 @@ typeOfSetupValue dl env val =
       do fail "typeOfSetupValue: unimplemented SetupGlobal"
 
 resolveSetupVal ::
-  CrucibleContext ->
-  ResolvedState   ->
-  SetupValue      ->
+  CrucibleContext        ->
+  Map AllocIndex LLVMVal ->
+  SetupValue             ->
   IO LLVMVal
-resolveSetupVal cc rs val =
+resolveSetupVal cc env val =
   case val of
     SetupVar i
-      | Just val' <- Map.lookup i (resolvedVarMap rs) -> return val'
+      | Just val' <- Map.lookup i env -> return val'
       | otherwise -> fail ("Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
-      vals <- mapM (resolveSetupVal cc rs) vs
+      vals <- mapM (resolveSetupVal cc env) vs
       let tps = map (typeOfLLVMVal dl) vals
       let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields dl 0 0 tps))) of
             Crucible.Struct v -> v
@@ -121,7 +104,7 @@ resolveSetupVal cc rs val =
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupArray [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray vs -> do
-      vals <- V.mapM (resolveSetupVal cc rs) (V.fromList vs)
+      vals <- V.mapM (resolveSetupVal cc env) (V.fromList vs)
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupNull ->
