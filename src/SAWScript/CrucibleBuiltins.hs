@@ -196,7 +196,8 @@ verifyPrestate :: CrucibleContext
                -> TopLevel ([(Crucible.MemType, LLVMVal)], [Term], Map AllocIndex LLVMVal)
 verifyPrestate cc mspec = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
-  env <- setupVerifyPrestate cc (csAllocations mspec)
+  -- Allocate LLVM memory for each 'crucible_alloc'
+  env <- io $ traverse (doAlloc cc) (csAllocations mspec)
   cs <- setupPrestateConditions mspec cc env (csPreconditions mspec)
   args <- resolveArguments cc mspec env
   return (args, cs, env)
@@ -324,12 +325,6 @@ asSAWType sc t = case Crucible.typeF t of
        scTupleType sc flds'
 
 --------------------------------------------------------------------------------
-
-setupVerifyPrestate :: (?lc :: TyCtx.LLVMContext)
-                    => CrucibleContext
-                    -> Map AllocIndex Crucible.MemType
-                    -> TopLevel (Map AllocIndex LLVMVal)
-setupVerifyPrestate cc allocs = io $ traverse (doAlloc cc) allocs
 
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
