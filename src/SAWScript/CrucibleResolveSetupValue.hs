@@ -58,7 +58,7 @@ typeOfSetupValue dl env val =
     SetupVar i ->
       case Map.lookup i env of
         Nothing -> fail ("Unresolved prestate variable:" ++ show i)
-        Just memTy -> return memTy
+        Just memTy -> return (Crucible.PtrType (Crucible.MemType memTy))
     SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
