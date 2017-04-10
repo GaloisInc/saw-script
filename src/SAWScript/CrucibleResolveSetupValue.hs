@@ -1,7 +1,6 @@
 module SAWScript.CrucibleResolveSetupValue
-  ( ResolvedState(..)
+  ( LLVMVal
   , resolveSetupVal
-  , initialResolvedState
   , typeOfLLVMVal
   , typeOfSetupValue
   , resolveTypedTerm
@@ -14,8 +13,6 @@ import Data.IORef
 import Data.Word (Word64)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
-import qualified Data.Set as Set
 import qualified Data.Vector as V
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
@@ -48,30 +45,20 @@ import SAWScript.CrucibleMethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
 
-data ResolvedState =
-  ResolvedState
-  { resolvedVarMap   :: Map AllocIndex (Crucible.LLVMVal Sym Crucible.PtrWidth)
-  , resolvedPointers :: Set AllocIndex
-  }
-
-initialResolvedState :: ResolvedState
-initialResolvedState =
-  ResolvedState
-  { resolvedVarMap = Map.empty
-  , resolvedPointers = Set.empty
-  }
+type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
 
 typeOfSetupValue ::
+  Monad m =>
   Crucible.DataLayout ->
   Map AllocIndex Crucible.MemType ->
   SetupValue ->
-  IO Crucible.MemType
+  m Crucible.MemType
 typeOfSetupValue dl env val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
         Nothing -> fail ("Unresolved prestate variable:" ++ show i)
-        Just memTy -> return memTy
+        Just memTy -> return (Crucible.PtrType (Crucible.MemType memTy))
     SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
@@ -99,18 +86,18 @@ typeOfSetupValue dl env val =
       do fail "typeOfSetupValue: unimplemented SetupGlobal"
 
 resolveSetupVal ::
-  CrucibleContext ->
-  ResolvedState   ->
-  SetupValue      ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
-resolveSetupVal cc rs val =
+  CrucibleContext        ->
+  Map AllocIndex LLVMVal ->
+  SetupValue             ->
+  IO LLVMVal
+resolveSetupVal cc env val =
   case val of
     SetupVar i
-      | Just val' <- Map.lookup i (resolvedVarMap rs) -> return val'
+      | Just val' <- Map.lookup i env -> return val'
       | otherwise -> fail ("Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
-      vals <- mapM (resolveSetupVal cc rs) vs
+      vals <- mapM (resolveSetupVal cc env) vs
       let tps = map (typeOfLLVMVal dl) vals
       let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields dl 0 0 tps))) of
             Crucible.Struct v -> v
@@ -118,7 +105,7 @@ resolveSetupVal cc rs val =
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupArray [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray vs -> do
-      vals <- V.mapM (resolveSetupVal cc rs) (V.fromList vs)
+      vals <- V.mapM (resolveSetupVal cc env) (V.fromList vs)
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupNull ->
@@ -138,7 +125,7 @@ resolveSetupVal cc rs val =
 resolveTypedTerm ::
   CrucibleContext ->
   TypedTerm       ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  IO LLVMVal
 resolveTypedTerm cc tm =
   case ttSchema tm of
     Cryptol.Forall [] [] ty ->
@@ -150,7 +137,7 @@ resolveSAWTerm ::
   CrucibleContext ->
   Cryptol.TValue ->
   Term ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  IO LLVMVal
 resolveSAWTerm cc tp tm =
     case tp of
       Cryptol.TVBit ->
@@ -253,7 +240,7 @@ typeAlignment dl ty =
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
     Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
-typeOfLLVMVal :: Crucible.DataLayout -> Crucible.LLVMVal Sym Crucible.PtrWidth -> Crucible.Type
+typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal dl val =
   case val of
     Crucible.LLVMValPtr {}      -> ptrType
