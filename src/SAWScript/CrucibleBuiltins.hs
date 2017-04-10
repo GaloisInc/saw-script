@@ -642,6 +642,51 @@ load_llvm_cfg bic _opts fn_name = do
         Nothing  -> fail $ unwords ["function", fn_name, "not found"]
         Just cfg -> return cfg
 
+--------------------------------------------------------------------------------
+
+diffMemTypes ::
+  Crucible.MemType ->
+  Crucible.MemType ->
+  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
+diffMemTypes x0 y0 =
+  case (x0, y0) of
+    (Crucible.IntType x, Crucible.IntType y) | x == y -> []
+    (Crucible.FloatType, Crucible.FloatType) -> []
+    (Crucible.DoubleType, Crucible.DoubleType) -> []
+    (Crucible.PtrType{}, Crucible.PtrType{}) -> []
+    (Crucible.IntType 64, Crucible.PtrType{}) -> []
+    (Crucible.PtrType{}, Crucible.IntType 64) -> []
+    (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
+      | xn == yn ->
+        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
+    (Crucible.VecType xn xt, Crucible.VecType yn yt)
+      | xn == yn ->
+        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
+    (Crucible.StructType x, Crucible.StructType y)
+      | Crucible.siIsPacked x == Crucible.siIsPacked y
+        && V.length (Crucible.siFields x) == V.length (Crucible.siFields y) ->
+          let xts = Crucible.siFieldTypes x
+              yts = Crucible.siFieldTypes y
+          in diffMemTypesList 1 (V.toList (V.zip xts yts))
+    _ -> [([], x0, y0)]
+
+diffMemTypesList ::
+  Int ->
+  [(Crucible.MemType, Crucible.MemType)] ->
+  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
+diffMemTypesList _ [] = []
+diffMemTypesList i ((x, y) : ts) =
+  [ (Just i : path, l , r) | (path, l, r) <- diffMemTypes x y ]
+  ++ diffMemTypesList (i+1) ts
+
+showMemTypeDiff :: ([Maybe Int], Crucible.MemType, Crucible.MemType) -> String
+showMemTypeDiff (path, l, r) = showPath path
+  where
+    showStep Nothing = "element type"
+    showStep (Just i) = "field " ++ show i
+    showPath [] = ""
+    showPath [x] = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
+    showPath (x : xs) = showStep x ++ " -> " ++ showPath xs
 
 --------------------------------------------------------------------------------
 -- Setup builtins
@@ -749,8 +794,12 @@ crucible_points_to bic _opt ptr val =
            Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
        _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
      valTy <- typeOfSetupValue dl env val
-     unless (TyCtx.compatMemTypes lhsTy valTy) $
-       fail $ unlines ["types not memory-compatible:", show lhsTy, show valTy]
+     case diffMemTypes lhsTy valTy of
+       [] -> return ()
+       diffs ->
+         fail $ unlines $
+         ["types not memory-compatible:", show lhsTy, show valTy]
+         ++ map showMemTypeDiff diffs
      addCondition (SetupCond_PointsTo ptr val)
 
 crucible_equal :: BuiltinContext
