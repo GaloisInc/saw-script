@@ -248,10 +248,6 @@ setupPrestateConditions mspec cc env conds =
          else do
            withMem cc $ \sym mem -> do
               val' <- resolveSetupVal cc env val
-              let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-              tp2 <- typeOfSetupValue dl (csAllocations mspec) val
-              unless (TyCtx.compatMemTypes tp tp2) $
-                putStrLn $ unlines ["setupPrestateConditions: types not memory-compatible:", show tp, show tp2]
               mem' <- Crucible.storeRaw sym mem ptr tp' val'
               let rs' = Set.insert v rs
               return ((cs,rs'), mem')
@@ -733,13 +729,29 @@ crucible_alloc bic _opt lty = do
         }
   return (SetupVar n)
 
-crucible_points_to :: BuiltinContext
-                   -> Options
-                   -> SetupValue
-                   -> SetupValue
-                   -> CrucibleSetup ()
-crucible_points_to _bic _opt ptr val = do
-  addCondition (SetupCond_PointsTo ptr val)
+crucible_points_to ::
+  BuiltinContext ->
+  Options        ->
+  SetupValue     ->
+  SetupValue     ->
+  CrucibleSetup ()
+crucible_points_to bic _opt ptr val =
+  do cc <- getCrucibleContext bic
+     let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
+     let dl = TyCtx.llvmDataLayout ?lc
+     st <- get
+     let env = csAllocations (csMethodSpec st)
+     ptrTy <- typeOfSetupValue dl env ptr
+     lhsTy <- case ptrTy of
+       Crucible.PtrType symTy ->
+         case TyCtx.asMemType symTy of
+           Just lhsTy -> return lhsTy
+           Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
+       _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
+     valTy <- typeOfSetupValue dl env val
+     unless (TyCtx.compatMemTypes lhsTy valTy) $
+       fail $ unlines ["types not memory-compatible:", show lhsTy, show valTy]
+     addCondition (SetupCond_PointsTo ptr val)
 
 crucible_equal :: BuiltinContext
                    -> Options
