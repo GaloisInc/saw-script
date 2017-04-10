@@ -676,13 +676,14 @@ instance FromValue SatResult where
 addTrace :: String -> Value -> Value
 addTrace str val =
   case val of
-    VLambda      f -> VLambda      (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
-    VTopLevel    m -> VTopLevel    (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript m -> VProofScript (addTrace str `fmap` addTraceStateT str m)
-    VJavaSetup   m -> VJavaSetup   (addTrace str `fmap` addTraceStateT str m)
-    VLLVMSetup   m -> VLLVMSetup   (addTrace str `fmap` addTraceStateT str m)
-    VBind v1 v2    -> VBind        (addTrace str v1) (addTrace str v2)
-    _              -> val
+    VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
+    VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
+    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
+    VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
+    VLLVMSetup     m -> VLLVMSetup     (addTrace str `fmap` addTraceStateT str m)
+    VCrucibleSetup m -> VCrucibleSetup (addTrace str `fmap` addTraceStateT str m)
+    VBind v1 v2      -> VBind          (addTrace str v1) (addTrace str v2)
+    _                -> val
 
 -- | Wrap an action with a handler that catches and rethrows user
 -- errors with an extended message.
