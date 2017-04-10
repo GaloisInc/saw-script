@@ -16,11 +16,14 @@ import           Control.Exception
 import           Control.Monad.State
 import           Data.Foldable (traverse_)
 import           Data.List (tails)
+import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+
+import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified Text.LLVM.AST as L
 
@@ -32,6 +35,7 @@ import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 import qualified Lang.Crucible.ProgramLoc as Crucible
@@ -115,8 +119,16 @@ methodSpecHandler sc cc cs retTy = do
   runOverrideMatcher $
     do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
 
+       sym <- liftSim Crucible.getSymInterface
+
+       let aux memTy (Crucible.AnyValue tyrep val) =
+             do storTy <- Crucible.toStorableType memTy
+                Crucible.packMemValue sym storTy tyrep val
+
+       xs <- liftIO (zipWithM aux (map fst args') (assignmentToList args))
+
        -- todo: fail if list lengths mismatch
-       zipWithM_ matchArg (assignmentToList args) args'
+       sequence_ [ matchArg x y z | (x,(y,z)) <- zip xs args' ]
        processPreconditions sc cc (csPreconditions cs)
        enforceDisjointness cc
        traverse_ (executeSetupCondition sc cc) (csPostconditions cs)
@@ -297,49 +309,83 @@ assignTerm var val =
 ------------------------------------------------------------------------
 
 matchArg ::
-  Crucible.AnyValue Sym          {- ^ concrete simulation value    -} ->
-  (Crucible.MemType, SetupValue) {- ^ expected specification value -} ->
-  OverrideMatcher ()
-matchArg (Crucible.AnyValue ty val) (memTy, setupVal) = matchArg' ty memTy val setupVal
-
-matchArg' ::
-  Crucible.TypeRepr tp     {- ^ actual type         -} ->
-  Crucible.MemType         {- ^ expected type       -} ->
-  Crucible.RegValue Sym tp {- ^ actual value        -} ->
-  SetupValue               {- ^ expected value      -} ->
+  Crucible.LLVMVal Sym Crucible.PtrWidth {- ^ concrete simulation value    -} ->
+  Crucible.MemType                       {- ^ expected memory type         -} ->
+  SetupValue                             {- ^ expected specification value -} ->
   OverrideMatcher ()
 
-matchArg' ty memTy val (SetupVar var) =
-  case ty of
-    Crucible.LLVMPointerRepr -> assignVar var memTy val
-    _ -> fail "matchArg': expected pointer value"
+matchArg (Crucible.LLVMValPtr blk end off) memTy (SetupVar var) =
+  assignVar var memTy
+    $ Crucible.RolledType (Ctx.empty Ctx.%> Crucible.RV blk Ctx.%> Crucible.RV end Ctx.%> Crucible.RV off)
 
 -- match the fields of struct point-wise
-matchArg'
-  (Crucible.StructRepr xs) (Crucible.StructType fields)
-  ys                       (SetupStruct zs) =
-  zipWithM_
-    matchArg
-    (assignmentToList $
-     Ctx.zipWith (\x (Crucible.RV y) -> Crucible.RegEntry x y) xs ys)
-    (zip (V.toList (Crucible.fiType <$> Crucible.siFields fields)) zs)
+matchArg (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+  sequence_
+    [ matchArg x y z
+       | ((_,x),y,z) <- zip3 (V.toList xs) (V.toList (Crucible.fiType <$> Crucible.siFields fields)) zs ]
 
-matchArg'
-  realTy _
-  realVal (SetupTerm (TypedTerm _expectedTermTy expectedTerm)) =
+matchArg
+  realVal _
+  (SetupTerm (TypedTerm _expectedTermTy expectedTerm)) =
 
-  case Crucible.asBaseType realTy of
-    Crucible.NotBaseType  -> fail "Unable to export value to SAW term"
-    Crucible.AsBaseType _ ->
-      do sym      <- liftSim Crucible.getSymInterface
-         realTerm <- liftIO (Crucible.toSC sym realVal)
-         matchTerm realTerm expectedTerm
+  do sym      <- liftSim Crucible.getSymInterface
+     realTerm <- liftIO (valueToSC sym realVal)
+     matchTerm realTerm expectedTerm
 
-matchArg' realTy expectedTy _ expected =
+matchArg actual expectedTy expected =
   fail $ "Argument mismatch: " ++
-          show realTy ++ ", " ++
+          show actual ++ ", " ++
           show expected ++ " : " ++ show expectedTy
 
+------------------------------------------------------------------------
+
+valueToSC ::
+  Crucible.SAWCoreBackend Nonce.GlobalNonceGenerator ->
+  Crucible.LLVMVal Sym Crucible.PtrWidth ->
+  IO Term
+
+valueToSC sym (Crucible.LLVMValInt _ bv) =
+  Crucible.toSC sym bv
+
+valueToSC sym (Crucible.LLVMValStruct vals) =
+  do terms <- V.toList <$> traverse (valueToSC sym . snd) vals
+     sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+     scTuple sc terms
+
+valueToSC sym (Crucible.LLVMValPtr base sz off) =
+  do base' <- Crucible.toSC sym base
+     sz'   <- Crucible.toSC sym sz
+     off'  <- Crucible.toSC sym off
+     sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+     scTuple sc [base', sz', off']
+
+valueToSC _ (Crucible.LLVMValFunPtr _ctx _ty _fn) =
+  fail "valueToSC: Function pointer not supported"
+
+valueToSC sym (Crucible.LLVMValArray ty vals) =
+  do terms <- V.toList <$> traverse (valueToSC sym) vals
+     sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+     t     <- typeToSC sc ty
+     scVector sc t terms
+
+valueToSC _ Crucible.LLVMValReal{} =
+  fail "valueToSC: Real not supported"
+
+------------------------------------------------------------------------
+
+typeToSC :: SharedContext -> Crucible.Type -> IO Term
+typeToSC sc t =
+  case Crucible.typeF t of
+    Crucible.Bitvector sz -> scBitvector sc (fromIntegral sz)
+    Crucible.Float -> fail "typeToSC: float not supported"
+    Crucible.Double -> fail "typeToSC: double not supported"
+    Crucible.Array sz ty ->
+      do n <- scNat sc (fromIntegral sz)
+         ty' <- typeToSC sc ty
+         scVecType sc n ty'
+    Crucible.Struct fields ->
+      do fields' <- V.toList <$> traverse (typeToSC sc . view Crucible.fieldVal) fields
+         scTuple sc fields'
 
 ------------------------------------------------------------------------
 
@@ -391,8 +437,8 @@ learnPointsTo sc cc ptr val =
              $ Crucible.readGlobal $ Crucible.llvmMemVar
              $ Crucible.memModelOps $ ccLLVMContext cc
 
-     v      <- liftIO (Crucible.doLoad sym mem ptr1 storTy)
-     matchArg v (memTy, val)
+     v      <- liftIO (Crucible.loadRaw sym mem (packPointer' ptr1) storTy)
+     matchArg v memTy val
 
 
 ------------------------------------------------------------------------
@@ -508,6 +554,15 @@ packPointer ::
   Crucible.RegValue Sym Crucible.LLVMPointerType ->
   Crucible.LLVMVal Sym Crucible.PtrWidth
 packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
+  where
+    Crucible.RV blk = xs^._1
+    Crucible.RV end = xs^._2
+    Crucible.RV off = xs^._3
+
+packPointer' ::
+  Crucible.RegValue Sym Crucible.LLVMPointerType ->
+  Crucible.LLVMPtrExpr (Crucible.SymExpr Sym) Crucible.PtrWidth
+packPointer' (Crucible.RolledType xs) = Crucible.LLVMPtr blk end off
   where
     Crucible.RV blk = xs^._1
     Crucible.RV end = xs^._2
