@@ -248,6 +248,10 @@ setupPrestateConditions mspec cc env conds =
          else do
            withMem cc $ \sym mem -> do
               val' <- resolveSetupVal cc env val
+              let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+              tp2 <- typeOfSetupValue dl (csAllocations mspec) val
+              unless (TyCtx.compatMemTypes tp tp2) $
+                fail $ unlines ["setupPrestateConditions: types not memory-compatible:", show tp, show tp2]
               mem' <- Crucible.storeRaw sym mem ptr tp' val'
               let rs' = Set.insert v rs
               return ((cs,rs'), mem')
