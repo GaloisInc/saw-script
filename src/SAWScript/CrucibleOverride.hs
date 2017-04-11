@@ -410,8 +410,8 @@ learnSetupCondition ::
   CrucibleContext            ->
   SetupCondition             ->
   OverrideMatcher ()
-learnSetupCondition sc cc (SetupCond_PointsTo ptr val)   = learnPointsTo sc cc ptr val
-learnSetupCondition _  _  (SetupCond_Equal ty val1 val2) = learnEqual ty val1 val2
+learnSetupCondition sc cc (SetupCond_PointsTo ptr val) = learnPointsTo sc cc ptr val
+learnSetupCondition _  _  (SetupCond_Equal val1 val2)  = learnEqual val1 val2
 
 
 ------------------------------------------------------------------------
@@ -447,11 +447,10 @@ learnPointsTo sc cc ptr val =
 -- | Process a "crucible_equal" statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
-  Crucible.SymType {- ^ type of values to be compared for equality -} ->
   SetupValue       {- ^ first value to compare                     -} ->
   SetupValue       {- ^ second value to compare                    -} ->
   OverrideMatcher ()
-learnEqual _ _ _ = fail "learnEqual: incomplete"
+learnEqual _ _ = fail "learnEqual: incomplete"
 
 
 ------------------------------------------------------------------------
@@ -464,8 +463,8 @@ executeSetupCondition ::
   CrucibleContext            ->
   SetupCondition             ->
   OverrideMatcher ()
-executeSetupCondition sc cc (SetupCond_PointsTo ptr val)   = executePointsTo sc cc ptr val
-executeSetupCondition _  _  (SetupCond_Equal ty val1 val2) = executeEqual ty val1 val2
+executeSetupCondition sc cc (SetupCond_PointsTo ptr val) = executePointsTo sc cc ptr val
+executeSetupCondition _  _  (SetupCond_Equal val1 val2)  = executeEqual val1 val2
 
 ------------------------------------------------------------------------
 
@@ -504,11 +503,10 @@ executePointsTo sc cc ptr val =
 -- | Process a "crucible_equal" statement from the postcondition
 -- section of the CrucibleSetup block.
 executeEqual ::
-  Crucible.SymType {- ^ type of values          -} ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher ()
-executeEqual _ _ _ = fail "executeEqual: incomplete"
+executeEqual _ _ = fail "executeEqual: incomplete"
 
 
 ------------------------------------------------------------------------

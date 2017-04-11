@@ -47,18 +47,18 @@ data SetupValue where
   SetupArray  :: [SetupValue] -> SetupValue
   SetupNull   :: SetupValue
   SetupGlobal :: String -> SetupValue
- deriving (Show)
+  deriving (Show)
 
 
 data PrePost
   = PreState | PostState
- deriving (Show)
+  deriving (Show)
 
 
 data SetupCondition where
   SetupCond_PointsTo :: SetupValue -> SetupValue -> SetupCondition
-  SetupCond_Equal    :: SymType -> SetupValue -> SetupValue -> SetupCondition
- deriving (Show)
+  SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
+  deriving (Show)
 
 
 data CrucibleMethodSpecIR =
@@ -71,7 +71,7 @@ data CrucibleMethodSpecIR =
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue       :: Maybe SetupValue                  -- ^ function return value
   }
- deriving (Show)
+  deriving (Show)
 
 csPreconditions :: CrucibleMethodSpecIR -> [SetupCondition]
 csPreconditions cs = [ c | (PreState, c) <- csConditions cs ]

@@ -266,7 +266,7 @@ setupPrestateConditions mspec cc env conds =
 
   go _ (SetupCond_PointsTo _ _) = fail "Non-pointer value found in points-to assertion"
 
-  go (cs,rs) (SetupCond_Equal _tp val1 val2) = do
+  go (cs,rs) (SetupCond_Equal val1 val2) = do
     val1' <- resolveSetupVal cc env val1
     val2' <- resolveSetupVal cc env val2
     c <- assertEqualVals cc val1' val2'
@@ -494,7 +494,7 @@ verifyPoststate cc mspec env ret =
          c <- assertEqualVals cc x val'
          return (c, mem)
 
-    verifyPostCond (SetupCond_Equal _tp val1 val2) = do
+    verifyPostCond (SetupCond_Equal val1 val2) = do
       val1' <- resolveSetupVal cc env val1
       val2' <- resolveSetupVal cc env val2
       assertEqualVals cc val1' val2'
@@ -688,6 +688,20 @@ showMemTypeDiff (path, l, r) = showPath path
     showPath [x] = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
     showPath (x : xs) = showStep x ++ " -> " ++ showPath xs
 
+-- | Succeed if the types have compatible memory layouts. Otherwise,
+-- fail with a detailed message indicating how the types differ.
+checkMemTypeCompatibility ::
+  Crucible.MemType ->
+  Crucible.MemType ->
+  CrucibleSetup ()
+checkMemTypeCompatibility t1 t2 =
+  case diffMemTypes t1 t2 of
+    [] -> return ()
+    diffs ->
+      fail $ unlines $
+      ["types not memory-compatible:", show t1, show t2]
+      ++ map showMemTypeDiff diffs
+
 --------------------------------------------------------------------------------
 -- Setup builtins
 
@@ -794,29 +808,25 @@ crucible_points_to bic _opt ptr val =
            Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
        _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
      valTy <- typeOfSetupValue dl env val
-     case diffMemTypes lhsTy valTy of
-       [] -> return ()
-       diffs ->
-         fail $ unlines $
-         ["types not memory-compatible:", show lhsTy, show valTy]
-         ++ map showMemTypeDiff diffs
+     checkMemTypeCompatibility lhsTy valTy
      addCondition (SetupCond_PointsTo ptr val)
 
-crucible_equal :: BuiltinContext
-                   -> Options
-                   -> L.Type
-                   -> SetupValue
-                   -> SetupValue
-                   -> CrucibleSetup ()
-crucible_equal bic _opt lty val1 val2 = do
-  cctx <- getCrucibleContext bic
-  let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
-  let ?dl = TyCtx.llvmDataLayout lc
-  let ?lc = lc
-  lty' <- case TyCtx.liftType lty of
-            Just m -> return m
-            Nothing -> fail ("unsupported type in crucible_equal: " ++ show (L.ppType lty))
-  addCondition (SetupCond_Equal lty' val1 val2)
+crucible_equal ::
+  BuiltinContext ->
+  Options        ->
+  SetupValue     ->
+  SetupValue     ->
+  CrucibleSetup ()
+crucible_equal bic _opt val1 val2 =
+  do cc <- getCrucibleContext bic
+     let lc  = Crucible.llvmTypeCtx (ccLLVMContext cc)
+     let dl = TyCtx.llvmDataLayout lc
+     st <- get
+     let env = csAllocations (csMethodSpec st)
+     ty1 <- typeOfSetupValue dl env val1
+     ty2 <- typeOfSetupValue dl env val2
+     checkMemTypeCompatibility ty1 ty2
+     addCondition (SetupCond_Equal val1 val2)
 
 
 crucible_execute_func :: BuiltinContext

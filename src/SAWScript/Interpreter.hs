@@ -1506,7 +1506,7 @@ primitives = Map.fromList
     (bicVal crucible_points_to)
     [ "TODO" ]
 
-  , prim "crucible_equal" "LLVMType -> SetupValue -> SetupValue -> CrucibleSetup ()"
+  , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
     [ "TODO" ]
 
