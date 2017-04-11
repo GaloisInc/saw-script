@@ -19,6 +19,7 @@ module SAWScript.Value where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
+import Control.Monad.ST
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -37,6 +38,7 @@ import qualified SAWScript.AST as SS
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
+import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
@@ -60,6 +62,10 @@ import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import Cryptol.Utils.PP (pretty)
 
+-- import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
+import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.FunctionHandle as Crucible
+
 -- Values ----------------------------------------------------------------------
 
 data Value
@@ -82,6 +88,11 @@ data Value
   | VLLVMSetup (LLVMSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   | VLLVMMethodSpec LIR.LLVMMethodSpecIR
+  -----
+  | VCrucibleSetup (CrucibleSetup Value)
+  | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
+  | VCrucibleSetupValue CIR.SetupValue
+  -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
   | VCryptolModule CryptolModule
@@ -91,6 +102,7 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
+  | VCFG Crucible.AnyCFG
 
 data LLVMModule =
   LLVMModule
@@ -117,14 +129,11 @@ showLLVMModule (LLVMModule name m) =
       L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
       L.ppType (L.globalType g)
     ppDefine' d =
-      --L.ppMaybe L.ppLinkage (L.funLinkage (L.defAttrs d)) PP.<+>
+      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
       L.ppType (L.defRetType d) PP.<+>
       L.ppSymbol (L.defName d) PP.<>
-      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d))
-      {-
-      PP.<+>
-      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.funGC (L.defAttrs d))
-      -}
+      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
+      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
 
 data ProofResult
   = Valid SolverStats
@@ -231,8 +240,11 @@ showsPrecValue opts _p v =
     VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
+    VCrucibleSetup{} -> showString "<<Crucible Setup>>"
+    VCrucibleSetupValue x -> shows x
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMMethodSpec {} -> showString "<<LLVM MethodSpec>>"
+    VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
@@ -242,6 +254,7 @@ showsPrecValue opts _p v =
     VSatResult r -> showsSatResult opts r
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
+    VCFG _ -> showString "<<CFG>>"
   where
     opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
 
@@ -302,6 +315,7 @@ data TopLevelRO =
   { roSharedContext :: SharedContext
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
+  , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
   }
 
 data TopLevelRW =
@@ -312,6 +326,7 @@ data TopLevelRW =
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
+  -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
@@ -331,6 +346,9 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+getHandleAlloc :: TopLevel (Crucible.HandleAllocator RealWorld)
+getHandleAlloc = TopLevel (asks roHandleAlloc)
 
 getTopLevelRO :: TopLevel TopLevelRO
 getTopLevelRO = TopLevel ask
@@ -372,6 +390,8 @@ data LLVMSetupState
     }
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
+
+type CrucibleSetup a = StateT CIR.CrucibleSetupState TopLevel a
 
 type ProofScript a = StateT ProofState TopLevel a
 
@@ -471,6 +491,44 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
       m2 <- lift $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue LLVMSetup"
+
+---------------------------------------------------------------------------------
+instance IsValue a => IsValue (StateT CIR.CrucibleSetupState TopLevel a) where
+    toValue m = VCrucibleSetup (fmap toValue m)
+    
+instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) where
+    fromValue (VCrucibleSetup m) = fmap fromValue m
+    fromValue (VReturn v) = return (fromValue v)
+    fromValue (VBind m1 v2) = do
+      v1 <- fromValue m1
+      m2 <- lift $ applyValue v2 v1
+      fromValue m2
+    fromValue _ = error "fromValue CrucibleSetup"
+
+instance IsValue CIR.SetupValue where
+  toValue v = VCrucibleSetupValue v
+  
+instance FromValue CIR.SetupValue where
+  fromValue (VCrucibleSetupValue v) = v
+  fromValue _ = error "fromValue Crucible.SetupValue"
+
+instance IsValue (Crucible.AnyCFG) where
+    toValue t = VCFG t
+
+instance FromValue (Crucible.AnyCFG) where
+    fromValue (VCFG t) = t
+    fromValue _ = error "fromValue CFG"
+
+instance IsValue CIR.CrucibleMethodSpecIR where
+    toValue t = VCrucibleMethodSpec t
+    
+instance FromValue CIR.CrucibleMethodSpecIR where
+    fromValue (VCrucibleMethodSpec t) = t
+    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+
+-----------------------------------------------------------------------------------
+
+
 
 instance IsValue (AIGNetwork) where
     toValue t = VAIG t
@@ -618,13 +676,14 @@ instance FromValue SatResult where
 addTrace :: String -> Value -> Value
 addTrace str val =
   case val of
-    VLambda      f -> VLambda      (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
-    VTopLevel    m -> VTopLevel    (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript m -> VProofScript (addTrace str `fmap` addTraceStateT str m)
-    VJavaSetup   m -> VJavaSetup   (addTrace str `fmap` addTraceStateT str m)
-    VLLVMSetup   m -> VLLVMSetup   (addTrace str `fmap` addTraceStateT str m)
-    VBind v1 v2    -> VBind        (addTrace str v1) (addTrace str v2)
-    _              -> val
+    VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
+    VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
+    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
+    VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
+    VLLVMSetup     m -> VLLVMSetup     (addTrace str `fmap` addTraceStateT str m)
+    VCrucibleSetup m -> VCrucibleSetup (addTrace str `fmap` addTraceStateT str m)
+    VBind v1 v2      -> VBind          (addTrace str v1) (addTrace str v2)
+    _                -> val
 
 -- | Wrap an action with a handler that catches and rethrows user
 -- errors with an extended message.

@@ -28,6 +28,7 @@ data TypedTerm =
   { ttSchema :: C.Schema
   , ttTerm :: Term
   }
+  deriving Show
 
 mkTypedTerm :: SharedContext -> Term -> IO TypedTerm
 mkTypedTerm sc trm = do
