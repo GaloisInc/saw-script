@@ -517,7 +517,7 @@ load_crucible_llvm_module bic _opts bc_file = do
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
                         bindings
-      mem <- Crucible.initalizeMemory sym ctx llvm_mod
+      mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
       let setupMem :: Crucible.OverrideSim Sym
@@ -527,7 +527,7 @@ load_crucible_llvm_module bic _opts bc_file = do
              -- register the callable override functions
              _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
 
-             -- initalize LLVM global variables
+             -- initialize LLVM global variables
              _ <- case Crucible.initMemoryCFG mtrans of
                      Crucible.SomeCFG initCFG ->
                        Crucible.callCFG initCFG Crucible.emptyRegMap
