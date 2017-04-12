@@ -64,9 +64,7 @@ newtype OverrideMatcher a
           a }
 
 data OverrideState = OverrideState
-  { _setupValueSub :: Map AllocIndex
-                        (Crucible.MemType,
-                         Crucible.RegValue Sym Crucible.LLVMPointerType)
+  { _setupValueSub :: Map AllocIndex (Crucible.RegValue Sym Crucible.LLVMPointerType)
   , _termSub       :: Map VarIndex Term
   }
 
@@ -130,7 +128,7 @@ methodSpecHandler sc cc cs retTy = do
        -- todo: fail if list lengths mismatch
        sequence_ [ matchArg x y z | (x,(y,z)) <- zip xs args' ]
        processPreconditions sc cc cs (csPreconditions cs)
-       enforceDisjointness cc
+       enforceDisjointness cc cs
        traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
        computeReturnValue cc sc cs retTy (csRetValue cs)
 
@@ -138,10 +136,11 @@ methodSpecHandler sc cc cs retTy = do
 
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
-enforceDisjointness :: CrucibleContext -> OverrideMatcher ()
-enforceDisjointness cc =
+enforceDisjointness :: CrucibleContext -> CrucibleMethodSpecIR -> OverrideMatcher ()
+enforceDisjointness cc spec =
   do sym <- liftSim Crucible.getSymInterface
-     m   <- Map.elems <$> OM (use setupValueSub)
+     sub <- OM (use setupValueSub)
+     let m = Map.elems $ Map.intersectionWith (,) (csAllocations spec) sub
 
      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
@@ -279,16 +278,15 @@ runOverrideMatcher (OM m) = evalStateT m initialState
 
 assignVar ::
   AllocIndex                                     {- ^ variable index -} ->
-  Crucible.MemType                               {- ^ LLVM type      -} ->
   Crucible.RegValue Sym Crucible.LLVMPointerType {- ^ concrete value -} ->
   OverrideMatcher ()
 
-assignVar var memTy val =
+assignVar var val =
   OM $ zoom (setupValueSub . at var) $
 
   do old <- get
      case old of
-       Nothing -> put (Just (memTy, val))
+       Nothing -> put (Just val)
        Just _ -> fail "Unifying multiple occurrences of variables not yet supported"
 
 ------------------------------------------------------------------------
@@ -316,8 +314,8 @@ matchArg ::
   SetupValue                             {- ^ expected specification value -} ->
   OverrideMatcher ()
 
-matchArg (Crucible.LLVMValPtr blk end off) memTy (SetupVar var) =
-  assignVar var memTy
+matchArg (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
+  assignVar var
     $ Crucible.RolledType (Ctx.empty Ctx.%> Crucible.RV blk Ctx.%> Crucible.RV end Ctx.%> Crucible.RV off)
 
 -- match the fields of struct point-wise
@@ -548,7 +546,7 @@ resolveSetupValue cc sc spec sval =
      s <- OM (use termSub)
      memTy <- liftIO $ typeOfSetupValue cc (csAllocations spec) sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
-     let env = fmap (packPointer . snd) m
+     let env = fmap packPointer m
      lval <- liftIO $ resolveSetupVal cc env sval'
      sym <- liftSim Crucible.getSymInterface
      aval <- liftIO $ Crucible.unpackMemValue sym lval
