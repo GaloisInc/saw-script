@@ -129,10 +129,10 @@ methodSpecHandler sc cc cs retTy = do
 
        -- todo: fail if list lengths mismatch
        sequence_ [ matchArg x y z | (x,(y,z)) <- zip xs args' ]
-       processPreconditions sc cc (csPreconditions cs)
+       processPreconditions sc cc cs (csPreconditions cs)
        enforceDisjointness cc
-       traverse_ (executeSetupCondition sc cc) (csPostconditions cs)
-       computeReturnValue cc sc retTy (csRetValue cs)
+       traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
+       computeReturnValue cc sc cs retTy (csRetValue cs)
 
 ------------------------------------------------------------------------
 
@@ -166,9 +166,10 @@ processPreconditions ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext    {- ^ term construction context -} ->
   CrucibleContext  {- ^ simulator context         -} ->
+  CrucibleMethodSpecIR                               ->
   [SetupCondition] {- ^ preconditions             -} ->
   OverrideMatcher ()
-processPreconditions sc cc = go False []
+processPreconditions sc cc spec = go False []
   where
     go ::
       Bool             {- progress indicator -} ->
@@ -189,7 +190,7 @@ processPreconditions sc cc = go False []
     go progress delayed (c:cs) =
       do ready <- checkSetupCondition c
          if ready then
-           do learnSetupCondition sc cc c
+           do learnSetupCondition sc cc spec c
               go True delayed cs
          else
            do go progress (c:delayed) cs
@@ -235,18 +236,19 @@ computeReturnValue ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext       {- ^ context of the crucible simulation     -} ->
   SharedContext         {- ^ context for generating saw terms       -} ->
+  CrucibleMethodSpecIR  {- ^ method specification                   -} ->
   Crucible.TypeRepr ret {- ^ representation of function return type -} ->
   Maybe SetupValue      {- ^ optional symbolic return value         -} ->
   OverrideMatcher (Crucible.RegValue Sym ret)
                         {- ^ concrete return value                  -}
 
-computeReturnValue _ _ ty Nothing =
+computeReturnValue _ _ _ ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
     _ -> fail "computeReturnValue: missing crucible_return specification"
 
-computeReturnValue cc sc ty (Just val) =
-  do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue cc sc val
+computeReturnValue cc sc spec ty (Just val) =
+  do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue cc sc spec val
      case NatRepr.testEquality ty xty of
        Just NatRepr.Refl -> return xval
        Nothing -> fail "computeReturnValue: Unexpected return type"
@@ -408,10 +410,11 @@ learnSetupCondition ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
   CrucibleContext            ->
+  CrucibleMethodSpecIR       ->
   SetupCondition             ->
   OverrideMatcher ()
-learnSetupCondition sc cc (SetupCond_PointsTo ptr val) = learnPointsTo sc cc ptr val
-learnSetupCondition _  _  (SetupCond_Equal val1 val2)  = learnEqual val1 val2
+learnSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = learnPointsTo sc cc spec ptr val
+learnSetupCondition _  _  _    (SetupCond_Equal val1 val2)  = learnEqual val1 val2
 
 
 ------------------------------------------------------------------------
@@ -423,13 +426,14 @@ learnPointsTo ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
   CrucibleContext            ->
+  CrucibleMethodSpecIR       ->
   SetupValue {- ^ pointer -} ->
   SetupValue {- ^ value   -} ->
   OverrideMatcher ()
-learnPointsTo sc cc ptr val =
+learnPointsTo sc cc spec ptr val =
   do liftIO $ putStrLn $ "Checking points to: " ++
                          show ptr ++ " -> " ++ show val
-     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc ptr
+     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      storTy <- Crucible.toStorableType memTy
      sym    <- liftSim Crucible.getSymInterface
 
@@ -461,10 +465,11 @@ executeSetupCondition ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
   CrucibleContext            ->
+  CrucibleMethodSpecIR       ->
   SetupCondition             ->
   OverrideMatcher ()
-executeSetupCondition sc cc (SetupCond_PointsTo ptr val) = executePointsTo sc cc ptr val
-executeSetupCondition _  _  (SetupCond_Equal val1 val2)  = executeEqual val1 val2
+executeSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = executePointsTo sc cc spec ptr val
+executeSetupCondition _  _  _    (SetupCond_Equal val1 val2)  = executeEqual val1 val2
 
 ------------------------------------------------------------------------
 
@@ -475,16 +480,17 @@ executePointsTo ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
   CrucibleContext            ->
+  CrucibleMethodSpecIR       ->
   SetupValue {- ^ pointer -} ->
   SetupValue {- ^ value   -} ->
   OverrideMatcher ()
-executePointsTo sc cc ptr val =
+executePointsTo sc cc spec ptr val =
   do liftIO $ putStrLn $ "Executing points to: " ++
                          show ptr ++ " -> " ++ show val
-     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc ptr
+     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      sym    <- liftSim Crucible.getSymInterface
 
-     (memTy1, val1) <- resolveSetupValue cc sc val
+     (memTy1, val1) <- resolveSetupValue cc sc spec val
 
      unless (TyCtx.compatMemTypes memTy memTy1) (fail "Mismatched store type")
 
@@ -532,14 +538,15 @@ instantiateSetupValue sc s v =
 ------------------------------------------------------------------------
 
 resolveSetupValue ::
-  CrucibleContext ->
-  SharedContext   ->
-  SetupValue      ->
+  CrucibleContext      ->
+  SharedContext        ->
+  CrucibleMethodSpecIR ->
+  SetupValue           ->
   OverrideMatcher (Crucible.MemType, Crucible.AnyValue Sym)
-resolveSetupValue cc sc sval =
+resolveSetupValue cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     memTy <- liftIO $ typeOfSetupValue cc (fmap fst m) sval
+     memTy <- liftIO $ typeOfSetupValue cc (csAllocations spec) sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap (packPointer . snd) m
      lval <- liftIO $ resolveSetupVal cc env sval'
