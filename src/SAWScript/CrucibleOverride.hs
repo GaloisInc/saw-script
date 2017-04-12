@@ -539,23 +539,13 @@ resolveSetupValue ::
 resolveSetupValue cc sc sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-     memTy <- liftIO $ typeOfSetupValue dl (fmap fst m) sval
+     memTy <- liftIO $ typeOfSetupValue cc (fmap fst m) sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap (packPointer . snd) m
      lval <- liftIO $ resolveSetupVal cc env sval'
      sym <- liftSim Crucible.getSymInterface
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)
-
-packPointer ::
-  Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  Crucible.LLVMVal Sym Crucible.PtrWidth
-packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
-  where
-    Crucible.RV blk = xs^._1
-    Crucible.RV end = xs^._2
-    Crucible.RV off = xs^._3
 
 packPointer' ::
   Crucible.RegValue Sym Crucible.LLVMPointerType ->

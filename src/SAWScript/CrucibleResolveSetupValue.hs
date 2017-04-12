@@ -1,9 +1,12 @@
+{-# LANGUAGE ImplicitParams #-}
+
 module SAWScript.CrucibleResolveSetupValue
   ( LLVMVal
   , resolveSetupVal
   , typeOfLLVMVal
   , typeOfSetupValue
   , resolveTypedTerm
+  , packPointer
   ) where
 
 import Control.Lens
@@ -14,6 +17,8 @@ import Data.Word (Word64)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
+
+import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
@@ -28,6 +33,7 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.NatRepr as NatRepr
@@ -49,11 +55,11 @@ type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
 
 typeOfSetupValue ::
   Monad m =>
-  Crucible.DataLayout ->
+  CrucibleContext ->
   Map AllocIndex Crucible.MemType ->
   SetupValue ->
   m Crucible.MemType
-typeOfSetupValue dl env val =
+typeOfSetupValue cc env val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
@@ -67,13 +73,13 @@ typeOfSetupValue dl env val =
             Just memTy -> return memTy
         _ -> fail "typeOfSetupValue: expected monomorphic term"
     SetupStruct vs ->
-      do memTys <- traverse (typeOfSetupValue dl env) vs
+      do memTys <- traverse (typeOfSetupValue cc env) vs
          let si = Crucible.mkStructInfo dl False memTys
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
-      do memTy <- typeOfSetupValue dl env v
-         _memTys <- traverse (typeOfSetupValue dl env) vs
+      do memTy <- typeOfSetupValue cc env v
+         _memTys <- traverse (typeOfSetupValue cc env) vs
          -- TODO: check that all memTys are compatible with memTy
          return (Crucible.ArrayType (length (v:vs)) memTy)
     SetupNull ->
@@ -82,8 +88,17 @@ typeOfSetupValue dl env val =
       -- and b) it prevents us from doing a type-safe dereference
       -- operation.
       return (Crucible.PtrType Crucible.VoidType)
-    SetupGlobal _name ->
-      do fail "typeOfSetupValue: unimplemented SetupGlobal"
+    SetupGlobal name ->
+      do let tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals (ccLLVMModule cc) ]
+         case lookup (L.Symbol name) tys of
+           Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
+           Just ty ->
+             case let ?lc = lc in TyCtx.liftType ty of
+               Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
+               Just symTy -> return (Crucible.PtrType symTy)
+  where
+    lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
+    dl = TyCtx.llvmDataLayout lc
 
 resolveSetupVal ::
   CrucibleContext        ->
@@ -109,18 +124,14 @@ resolveSetupVal cc env val =
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupNull ->
-      Crucible.packMemValue sym ptrType Crucible.LLVMPointerRepr =<< Crucible.mkNullPointer sym
-    SetupGlobal _name -> fail "SetupGlobal not implemented"
---    SetupGlobal name -> withMem cc $ \_sym impl -> do
---      r <- Crucible.doResolveGlobal sym impl (L.Symbol name)
---      v <- Crucible.packMemValue sym ptrType Crucible.llvmPointerRepr r
---      return (v, impl)
-
+      packPointer <$> Crucible.mkNullPointer sym
+    SetupGlobal name ->
+      do let mem = ccEmptyMemImpl cc
+         ptr <- Crucible.doResolveGlobal sym mem (L.Symbol name)
+         return (packPointer ptr)
   where
-  sym = ccBackend cc
-  dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-  ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
-
+    sym = ccBackend cc
+    dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
 resolveTypedTerm ::
   CrucibleContext ->
@@ -192,6 +203,15 @@ resolveSAWTerm cc tp tm =
   where
     sym = ccBackend cc
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+
+packPointer ::
+  Crucible.RegValue Sym Crucible.LLVMPointerType ->
+  Crucible.LLVMVal Sym Crucible.PtrWidth
+packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
+  where
+    Crucible.RV blk = xs^._1
+    Crucible.RV end = xs^._2
+    Crucible.RV off = xs^._3
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =

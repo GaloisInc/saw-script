@@ -548,6 +548,7 @@ load_crucible_llvm_module bic _opts bc_file = do
                         , ccLLVMModuleTrans = mtrans
                         , ccLLVMModule = llvm_mod
                         , ccBackend = sym
+                        , ccEmptyMemImpl = mem
                         , ccSimContext = simRef
                         , ccGlobals = globRef
                         }
@@ -797,17 +798,16 @@ crucible_points_to ::
 crucible_points_to bic _opt ptr val =
   do cc <- getCrucibleContext bic
      let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
-     let dl = TyCtx.llvmDataLayout ?lc
      st <- get
      let env = csAllocations (csMethodSpec st)
-     ptrTy <- typeOfSetupValue dl env ptr
+     ptrTy <- typeOfSetupValue cc env ptr
      lhsTy <- case ptrTy of
        Crucible.PtrType symTy ->
          case TyCtx.asMemType symTy of
            Just lhsTy -> return lhsTy
            Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
        _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-     valTy <- typeOfSetupValue dl env val
+     valTy <- typeOfSetupValue cc env val
      checkMemTypeCompatibility lhsTy valTy
      addCondition (SetupCond_PointsTo ptr val)
 
@@ -819,12 +819,10 @@ crucible_equal ::
   CrucibleSetup ()
 crucible_equal bic _opt val1 val2 =
   do cc <- getCrucibleContext bic
-     let lc  = Crucible.llvmTypeCtx (ccLLVMContext cc)
-     let dl = TyCtx.llvmDataLayout lc
      st <- get
      let env = csAllocations (csMethodSpec st)
-     ty1 <- typeOfSetupValue dl env val1
-     ty2 <- typeOfSetupValue dl env val2
+     ty1 <- typeOfSetupValue cc env val1
+     ty2 <- typeOfSetupValue cc env val2
      checkMemTypeCompatibility ty1 ty2
      addCondition (SetupCond_Equal val1 val2)
 

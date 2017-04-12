@@ -114,6 +114,7 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.MSSim as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
@@ -122,13 +123,16 @@ import qualified Data.Parameterized.Nonce as Crucible
 
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
-data CrucibleContext = CrucibleContext { ccLLVMContext     :: Crucible.LLVMContext
-                                       , ccLLVMModule      :: L.Module
-                                       , ccLLVMModuleTrans :: Crucible.ModuleTranslation
-                                       , ccBackend         :: Sym
-                                       , ccSimContext      :: IORef (Crucible.SimContext Sym)
-                                       , ccGlobals         :: IORef (Crucible.SymGlobalState Sym)
-                                       }
+data CrucibleContext =
+  CrucibleContext
+  { ccLLVMContext     :: Crucible.LLVMContext
+  , ccLLVMModule      :: L.Module
+  , ccLLVMModuleTrans :: Crucible.ModuleTranslation
+  , ccBackend         :: Sym
+  , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
+  , ccSimContext      :: IORef (Crucible.SimContext Sym)
+  , ccGlobals         :: IORef (Crucible.SymGlobalState Sym)
+  }
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
