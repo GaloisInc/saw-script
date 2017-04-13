@@ -305,10 +305,7 @@ setupPrestateConditions mspec cc env conds =
            Just storTy -> return storTy
            Nothing -> fail $ "Expected memory type: " ++ show lhsTy
          if testResolved ptr rs
-           then withMem cc $ \sym mem ->
-             do lhs' <- Crucible.loadRaw sym mem ptr'' storTy
-                c <- assertEqualVals cc lhs' val'
-                return ((c:cs,rs), mem)
+           then fail "Multiple points-to specifications on same pointer"
            else withMem cc $ \sym mem ->
              do mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
                 let rs' = markResolved ptr rs
