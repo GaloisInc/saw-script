@@ -199,7 +199,7 @@ verifyPrestate cc mspec = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   -- Allocate LLVM memory for each 'crucible_alloc'
   env1 <- traverse (doAlloc cc) (csAllocations mspec)
-  env2 <- traverse (const (setupFreshPointer cc)) (csFreshPointers mspec)
+  env2 <- Map.traverseWithKey (\k _ -> setupFreshPointer cc k) (csFreshPointers mspec)
   let env = Map.union env1 env2
   cs <- setupPrestateConditions mspec cc env (csPreconditions mspec)
   args <- resolveArguments cc mspec env
@@ -208,12 +208,16 @@ verifyPrestate cc mspec = do
 
 -- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
 -- be NULL.
-setupFreshPointer :: CrucibleContext -> IO LLVMVal
-setupFreshPointer cc =
+setupFreshPointer ::
+  CrucibleContext {- ^ Crucible context       -} ->
+  AllocIndex      {- ^ SetupVar id            -} ->
+  IO LLVMVal      {- ^ Symbolic pointer value -}
+setupFreshPointer cc (AllocIndex i) =
   do let sym = ccBackend cc
-     blk <- Crucible.freshConstant sym (Crucible.systemSymbol "blk!") Crucible.BaseNatRepr
-     end <- Crucible.freshConstant sym (Crucible.systemSymbol "end!") (Crucible.BaseBVRepr Crucible.ptrWidth)
-     off <- Crucible.freshConstant sym (Crucible.systemSymbol "off!") (Crucible.BaseBVRepr Crucible.ptrWidth)
+         mkName base = Crucible.systemSymbol (base ++ show i ++ "!")
+     blk <- Crucible.freshConstant sym (mkName "blk") Crucible.BaseNatRepr
+     end <- Crucible.freshConstant sym (mkName "end") (Crucible.BaseBVRepr Crucible.ptrWidth)
+     off <- Crucible.freshConstant sym (mkName "off") (Crucible.BaseBVRepr Crucible.ptrWidth)
      return (Crucible.LLVMValPtr blk end off)
 
 resolveArguments ::
