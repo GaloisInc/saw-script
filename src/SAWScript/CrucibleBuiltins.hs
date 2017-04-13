@@ -174,8 +174,10 @@ verifyObligations cc mspec tactic assumes asserts = do
   case r of
     Unsat _stats -> do
       io $ putStrLn $ unwords ["Proof succeeded!", nm]
-    SatMulti _stats _vals ->
+    SatMulti stats vals -> do
       io $ putStrLn $ unwords ["Proof failed!", nm]
+      io $ print stats
+      io $ mapM_ print vals
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -239,6 +241,43 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 
 --------------------------------------------------------------------------------
 
+-- | A datatype to keep track of which parts of the simulator state
+-- have been initialized already.
+data ResolvedState =
+  ResolvedState
+  { rsAllocs :: Set AllocIndex
+  , rsGlobals :: Set String
+  }
+
+emptyResolvedState :: ResolvedState
+emptyResolvedState = ResolvedState Set.empty Set.empty
+
+-- | Record the initialization of the pointer represented by the given
+-- SetupValue.
+markResolved ::
+  SetupValue ->
+  ResolvedState ->
+  ResolvedState
+markResolved val rs =
+  case val of
+    SetupVar i    -> rs { rsAllocs = Set.insert i (rsAllocs rs) }
+    SetupGlobal n -> rs { rsGlobals = Set.insert n (rsGlobals rs) }
+    _             -> rs
+
+-- | Test whether the pointer represented by the given SetupValue has
+-- been initialized already.
+testResolved ::
+  SetupValue ->
+  ResolvedState ->
+  Bool
+testResolved val rs =
+  case val of
+    SetupVar i    -> Set.member i (rsAllocs rs)
+    SetupGlobal n -> Set.member n (rsGlobals rs)
+    _             -> False
+
+--------------------------------------------------------------------------------
+
 setupPrestateConditions ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleMethodSpecIR       ->
@@ -247,48 +286,39 @@ setupPrestateConditions ::
   [SetupCondition]           ->
   IO [Term]
 setupPrestateConditions mspec cc env conds =
-  fst <$> foldM go ([], Set.empty) conds
+  fst <$> foldM go ([], emptyResolvedState) conds
   where
-  go :: ([Term], Set AllocIndex) -> SetupCondition -> IO ([Term], Set AllocIndex)
-  go (cs,rs) (SetupCond_PointsTo (SetupVar v) val)
-    | Just (Crucible.LLVMValPtr blk end off) <- Map.lookup v env
-    , Just tp <- Map.lookup v (csAllocations mspec)
-    = let ptr = Crucible.LLVMPtr blk end off in
-      let tp' = fromMaybe
-                   (error ("Expected memory type:" ++ show tp))
-                   (Crucible.toStorableType tp) in
-      if Set.member v rs then do
-           withMem cc $ \sym mem -> do
-              x <- Crucible.loadRaw sym mem ptr tp'
-              val' <- resolveSetupVal cc env val
-              c <- assertEqualVals cc x val'
-              return ((c:cs,rs), mem)
-         else do
-           withMem cc $ \sym mem -> do
-              val' <- resolveSetupVal cc env val
-              mem' <- Crucible.storeRaw sym mem ptr tp' val'
-              let rs' = Set.insert v rs
-              return ((cs,rs'), mem')
+    go :: ([Term], ResolvedState) -> SetupCondition -> IO ([Term], ResolvedState)
+    go (cs,rs) (SetupCond_PointsTo ptr val) =
+      do val' <- resolveSetupVal cc env val
+         ptr' <- resolveSetupVal cc env ptr
+         ptr'' <- case ptr' of
+           Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
+           _ -> fail "Non-pointer value found in points-to assertion"
+         lhsTy <- case typeOfSetupValue cc (csAllocations mspec) ptr of
+           Just (Crucible.PtrType symTy) ->
+             case TyCtx.asMemType symTy of
+               Just lhsTy -> return lhsTy
+               Nothing -> fail $ "lhs not a valid pointer type: " ++ show symTy
+           _ -> fail $ "lhs not a pointer type"
+         storTy <- case Crucible.toStorableType lhsTy of
+           Just storTy -> return storTy
+           Nothing -> fail $ "Expected memory type: " ++ show lhsTy
+         if testResolved ptr rs
+           then withMem cc $ \sym mem ->
+             do lhs' <- Crucible.loadRaw sym mem ptr'' storTy
+                c <- assertEqualVals cc lhs' val'
+                return ((c:cs,rs), mem)
+           else withMem cc $ \sym mem ->
+             do mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
+                let rs' = markResolved ptr rs
+                return ((cs,rs'), mem')
 
-  go (cs,rs) (SetupCond_PointsTo (SetupGlobal name) val) =
-    withMem cc $ \sym mem -> do
-      r <- Crucible.doResolveGlobal sym mem (L.Symbol name)
-      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-      let ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
-      Crucible.LLVMValPtr blk end off <- Crucible.packMemValue sym ptrType Crucible.LLVMPointerRepr r
-      let ptr = Crucible.LLVMPtr blk end off
-      val' <- resolveSetupVal cc env val
-      let tp' = typeOfLLVMVal dl val'
-      mem' <- Crucible.storeRaw sym mem ptr tp' val'
-      return ((cs,rs), mem')
-
-  go _ (SetupCond_PointsTo _ _) = fail "Non-pointer value found in points-to assertion"
-
-  go (cs,rs) (SetupCond_Equal val1 val2) = do
-    val1' <- resolveSetupVal cc env val1
-    val2' <- resolveSetupVal cc env val2
-    c <- assertEqualVals cc val1' val2'
-    return (c:cs,rs)
+    go (cs,rs) (SetupCond_Equal val1 val2) = do
+      val1' <- resolveSetupVal cc env val1
+      val2' <- resolveSetupVal cc env val2
+      c <- assertEqualVals cc val1' val2'
+      return (c:cs,rs)
 
 --------------------------------------------------------------------------------
 
