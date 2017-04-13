@@ -544,7 +544,9 @@ resolveSetupValue ::
 resolveSetupValue cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     memTy <- liftIO $ typeOfSetupValue cc (csAllocations spec) sval
+     let pointerTypes = Map.union (csAllocations spec)
+                                  (csFreshPointers spec)
+     memTy <- liftIO $ typeOfSetupValue cc pointerTypes sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap packPointer m
      lval <- liftIO $ resolveSetupVal cc env sval'

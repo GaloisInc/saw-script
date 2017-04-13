@@ -50,6 +50,7 @@ import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
+import qualified Lang.Crucible.Solver.Symbol as Crucible
 
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
@@ -197,10 +198,23 @@ verifyPrestate :: CrucibleContext
 verifyPrestate cc mspec = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   -- Allocate LLVM memory for each 'crucible_alloc'
-  env <- traverse (doAlloc cc) (csAllocations mspec)
+  env1 <- traverse (doAlloc cc) (csAllocations mspec)
+  env2 <- traverse (const (setupFreshPointer cc)) (csFreshPointers mspec)
+  let env = Map.union env1 env2
   cs <- setupPrestateConditions mspec cc env (csPreconditions mspec)
   args <- resolveArguments cc mspec env
   return (args, cs, env)
+
+
+-- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
+-- be NULL.
+setupFreshPointer :: CrucibleContext -> IO LLVMVal
+setupFreshPointer cc =
+  do let sym = ccBackend cc
+     blk <- Crucible.freshConstant sym (Crucible.systemSymbol "blk!") Crucible.BaseNatRepr
+     end <- Crucible.freshConstant sym (Crucible.systemSymbol "end!") (Crucible.BaseBVRepr Crucible.ptrWidth)
+     off <- Crucible.freshConstant sym (Crucible.systemSymbol "off!") (Crucible.BaseBVRepr Crucible.ptrWidth)
+     return (Crucible.LLVMValPtr blk end off)
 
 resolveArguments ::
   (?lc :: TyCtx.LLVMContext) =>
@@ -789,6 +803,28 @@ crucible_alloc bic _opt lty = do
         }
   return (SetupVar n)
 
+crucible_fresh_pointer ::
+  BuiltinContext ->
+  Options        ->
+  L.Type         ->
+  CrucibleSetup SetupValue
+crucible_fresh_pointer bic _opt lty = do
+  cctx <- getCrucibleContext bic
+  let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
+  let ?dl = TyCtx.llvmDataLayout lc
+  let ?lc = lc
+  memTy <- case TyCtx.liftMemType lty of
+    Just m -> return m
+    Nothing -> fail ("unsupported type in crucible_fresh_pointer: " ++ show (L.ppType lty))
+  st <- get
+  let n  = csVarCounter st
+      spec  = csMethodSpec st
+      spec' = spec{ csFreshPointers = Map.insert n memTy (csFreshPointers spec) }
+  put st{ csVarCounter = nextAllocIndex n
+        , csMethodSpec = spec'
+        }
+  return (SetupVar n)
+
 crucible_points_to ::
   BuiltinContext ->
   Options        ->
@@ -807,7 +843,9 @@ crucible_points_to bic _opt ptr val =
            Just lhsTy -> return lhsTy
            Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
        _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-     valTy <- typeOfSetupValue cc env val
+     let valenv = Map.union (csAllocations (csMethodSpec st))
+                            (csFreshPointers (csMethodSpec st))
+     valTy <- typeOfSetupValue cc valenv val
      checkMemTypeCompatibility lhsTy valTy
      addCondition (SetupCond_PointsTo ptr val)
 
@@ -820,7 +858,8 @@ crucible_equal ::
 crucible_equal bic _opt val1 val2 =
   do cc <- getCrucibleContext bic
      st <- get
-     let env = csAllocations (csMethodSpec st)
+     let env = Map.union (csAllocations (csMethodSpec st))
+                         (csFreshPointers (csMethodSpec st))
      ty1 <- typeOfSetupValue cc env val1
      ty2 <- typeOfSetupValue cc env val2
      checkMemTypeCompatibility ty1 ty2

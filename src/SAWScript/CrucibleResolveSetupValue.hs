@@ -63,7 +63,7 @@ typeOfSetupValue cc env val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
-        Nothing -> fail ("Unresolved prestate variable:" ++ show i)
+        Nothing -> fail ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
         Just memTy -> return (Crucible.PtrType (Crucible.MemType memTy))
     SetupTerm tt ->
       case ttSchema tt of
@@ -109,7 +109,7 @@ resolveSetupVal cc env val =
   case val of
     SetupVar i
       | Just val' <- Map.lookup i env -> return val'
-      | otherwise -> fail ("Unresolved prestate variable:" ++ show i)
+      | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
       vals <- mapM (resolveSetupVal cc env) vs

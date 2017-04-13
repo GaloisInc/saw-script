@@ -67,6 +67,7 @@ data CrucibleMethodSpecIR =
   , csArgs           :: [L.Type]
   , csRet            :: L.Type
   , csAllocations    :: Map AllocIndex MemType            -- ^ allocated vars
+  , csFreshPointers  :: Map AllocIndex MemType
   , csConditions     :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
   , csArgBindings    :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue       :: Maybe SetupValue                  -- ^ function return value
@@ -97,6 +98,7 @@ initialCrucibleSetupState def =
     , csArgs          = L.typedType <$> L.defArgs def
     , csRet           = L.defRetType def
     , csAllocations   = Map.empty
+    , csFreshPointers = Map.empty
     , csConditions    = []
     , csArgBindings   = Map.empty
     , csRetValue      = Nothing
@@ -114,6 +116,7 @@ initialCrucibleSetupStateDecl dec =
     , csArgs          = L.decArgs dec
     , csRet           = L.decRetType dec
     , csAllocations   = Map.empty
+    , csFreshPointers = Map.empty
     , csConditions    = []
     , csArgBindings   = Map.empty
     , csRetValue      = Nothing
