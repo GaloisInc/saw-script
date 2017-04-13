@@ -550,7 +550,7 @@ verifyPoststate cc mspec env ret =
 --------------------------------------------------------------------------------
 
 load_crucible_llvm_module :: BuiltinContext -> Options -> String -> TopLevel ()
-load_crucible_llvm_module bic _opts bc_file = do
+load_crucible_llvm_module bic opts bc_file = do
   halloc <- getHandleAlloc
   let r = biCrucibleContext bic
   io (L.parseBitCodeFromFile bc_file) >>= \case
@@ -560,7 +560,7 @@ load_crucible_llvm_module bic _opts bc_file = do
       let gen = Crucible.globalNonceGenerator
       let sc  = biSharedContext bic
       sym <- Crucible.newSAWCoreBackend sc gen
-      let verbosity = 10
+      let verbosity = simVerbose opts
       cfg <- Crucible.initialConfig verbosity []
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
