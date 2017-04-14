@@ -581,10 +581,10 @@ load_crucible_llvm_module bic opts bc_file = do
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
       res <- Crucible.run simctx globals errorHandler Crucible.UnitRepr setupMem
-      globals' <-
+      (globals', simctx') <-
           case res of
-            Crucible.FinishedExecution _ (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals)
-            Crucible.FinishedExecution _ (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals)
+            Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
+            Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
       globRef <- newIORef globals'
       writeIORef r $ Just
@@ -593,7 +593,7 @@ load_crucible_llvm_module bic opts bc_file = do
                         , ccLLVMModule = llvm_mod
                         , ccBackend = sym
                         , ccEmptyMemImpl = mem
-                        , ccSimContext = simctx
+                        , ccSimContext = simctx'
                         , ccGlobals = globRef
                         }
 
