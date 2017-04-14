@@ -200,7 +200,8 @@ verifyPrestate :: CrucibleContext
 verifyPrestate cc mspec = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   -- Allocate LLVM memory for each 'crucible_alloc'
-  env1 <- traverse (doAlloc cc) (csAllocations mspec)
+  env1 <- withMem cc $ \_sym mem ->
+    runStateT (traverse (doAlloc cc) (csAllocations mspec)) mem
   env2 <- Map.traverseWithKey (\k _ -> setupFreshPointer cc k) (csFreshPointers mspec)
   let env = Map.union env1 env2
   cs <- setupPrestateConditions mspec cc env (csPreconditions mspec)
@@ -378,13 +379,13 @@ doAlloc ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
   Crucible.MemType           ->
-  IO LLVMVal
-doAlloc cc tp = withMem cc $ \sym mem ->
-  do sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
+  StateT (Crucible.MemImpl Sym Crucible.PtrWidth) IO LLVMVal
+doAlloc cc tp = StateT $ \mem ->
+  do let sym = ccBackend cc
+     let dl = TyCtx.llvmDataLayout ?lc
+     sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
      (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
      return (Crucible.LLVMValPtr blk end x, mem')
-  where
-    dl = TyCtx.llvmDataLayout ?lc
 
 --------------------------------------------------------------------------------
 
