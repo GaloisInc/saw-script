@@ -77,6 +77,9 @@ import SAWScript.CrucibleMethodSpecIR
 import SAWScript.CrucibleOverride
 import SAWScript.CrucibleResolveSetupValue
 
+
+type MemImpl = Crucible.MemImpl Sym Crucible.PtrWidth
+
 --import qualified SAWScript.LLVMBuiltins as LB
 
 show_cfg :: Crucible.AnyCFG -> String
@@ -202,7 +205,7 @@ verifyPrestate cc mspec = do
     runStateT (traverse (doAlloc cc) (csAllocations mspec)) mem
   env2 <- Map.traverseWithKey (\k _ -> setupFreshPointer cc k) (csFreshPointers mspec)
   let env = Map.union env1 env2
-  cs <- setupPrestateConditions mspec cc env (csPreconditions mspec)
+  cs <- withMem cc $ \_sym -> setupPrestateConditions mspec cc env (csPreconditions mspec)
   args <- resolveArguments cc mspec env
   return (args, cs, env)
 
@@ -246,12 +249,13 @@ setupPrestateConditions ::
   CrucibleContext            ->
   Map AllocIndex LLVMVal     ->
   [SetupCondition]           ->
-  IO [Term]
-setupPrestateConditions mspec cc env conds =
-  foldM go [] conds
+  MemImpl                    ->
+  IO ([Term], MemImpl)
+setupPrestateConditions mspec cc env conds mem0 =
+  foldM go ([], mem0) conds
   where
-    go :: [Term] -> SetupCondition -> IO [Term]
-    go cs (SetupCond_PointsTo ptr val) =
+    go :: ([Term], MemImpl) -> SetupCondition -> IO ([Term], MemImpl)
+    go (cs, mem) (SetupCond_PointsTo ptr val) =
       do val' <- resolveSetupVal cc env val
          ptr' <- resolveSetupVal cc env ptr
          ptr'' <- case ptr' of
@@ -266,15 +270,15 @@ setupPrestateConditions mspec cc env conds =
          storTy <- case Crucible.toStorableType lhsTy of
            Just storTy -> return storTy
            Nothing -> fail $ "Expected memory type: " ++ show lhsTy
-         withMem cc $ \sym mem ->
-           do mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
-              return (cs, mem')
+         let sym = ccBackend cc
+         mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
+         return (cs, mem')
 
-    go cs (SetupCond_Equal val1 val2) =
+    go (cs, mem) (SetupCond_Equal val1 val2) =
       do val1' <- resolveSetupVal cc env val1
          val2' <- resolveSetupVal cc env val2
          c <- assertEqualVals cc val1' val2'
-         return (c : cs)
+         return (c : cs, mem)
 
 --------------------------------------------------------------------------------
 
@@ -337,7 +341,7 @@ doAlloc ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
   Crucible.MemType           ->
-  StateT (Crucible.MemImpl Sym Crucible.PtrWidth) IO LLVMVal
+  StateT MemImpl IO LLVMVal
 doAlloc cc tp = StateT $ \mem ->
   do let sym = ccBackend cc
      let dl = TyCtx.llvmDataLayout ?lc
@@ -348,7 +352,7 @@ doAlloc cc tp = StateT $ \mem ->
 --------------------------------------------------------------------------------
 
 withMem :: CrucibleContext
-        -> (Sym -> Crucible.MemImpl Sym Crucible.PtrWidth -> IO (a, Crucible.MemImpl Sym Crucible.PtrWidth))
+        -> (Sym -> MemImpl -> IO (a, MemImpl))
         -> IO a
 withMem cc f = do
   let sym = ccBackend cc
