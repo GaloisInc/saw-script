@@ -462,19 +462,18 @@ verifySimulate cc mspec args _assumes lemmas = do
         let h   = Crucible.cfgHandle cfg
             rty = Crucible.handleReturnType h
         args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
-        simCtx  <- readIORef (ccSimContext cc)
+        let simCtx = ccSimContext cc
         globals <- readIORef (ccGlobals cc)
         res  <- Crucible.run simCtx globals errorHandler rty $ do
                   mapM_ (registerOverride cc simCtx) lemmas
                   Crucible.regValue <$> (Crucible.callCFG cfg args')
         case res of
-          Crucible.FinishedExecution st pr -> do
+          Crucible.FinishedExecution _ pr -> do
              gp <- case pr of
                      Crucible.TotalRes gp -> return gp
                      Crucible.PartialRes _ gp _ -> do
                        putStrLn "Symbolic simulation failed along some paths!"
                        return gp
-             writeIORef (ccSimContext cc) st
              writeIORef (ccGlobals cc) (gp^.Crucible.gpGlobals)
              let ret_ty = csRet mspec
              let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
@@ -581,20 +580,19 @@ load_crucible_llvm_module bic opts bc_file = do
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
       res <- Crucible.run simctx globals errorHandler Crucible.UnitRepr setupMem
-      (globals',simctx') <-
+      globals' <-
           case res of
-            Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
+            Crucible.FinishedExecution _ (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals)
+            Crucible.FinishedExecution _ (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals)
             Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
       globRef <- newIORef globals'
-      simRef  <- newIORef simctx'
       writeIORef r $ Just
          CrucibleContext{ ccLLVMContext = ctx
                         , ccLLVMModuleTrans = mtrans
                         , ccLLVMModule = llvm_mod
                         , ccBackend = sym
                         , ccEmptyMemImpl = mem
-                        , ccSimContext = simRef
+                        , ccSimContext = simctx
                         , ccGlobals = globRef
                         }
 
@@ -638,18 +636,17 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
   let sym = ccBackend cc
   let h   = Crucible.cfgHandle cfg
   (ecs, args) <- setupArgs sc sym h
-  simCtx  <- readIORef (ccSimContext cc)
+  let simCtx = ccSimContext cc
   globals <- readIORef (ccGlobals cc)
   res  <- Crucible.run simCtx globals errorHandler (Crucible.handleReturnType h)
              (Crucible.regValue <$> (Crucible.callCFG cfg args))
   case res of
-    Crucible.FinishedExecution st pr -> do
+    Crucible.FinishedExecution _ pr -> do
         gp <- case pr of
                 Crucible.TotalRes gp -> return gp
                 Crucible.PartialRes _ gp _ -> do
                   putStrLn "Symbolic simulation failed along some paths!"
                   return gp
-        writeIORef (ccSimContext cc) st
         writeIORef (ccGlobals cc) (gp^.Crucible.gpGlobals)
         t <- Crucible.asSymExpr
                    (gp^.Crucible.gpValue)
