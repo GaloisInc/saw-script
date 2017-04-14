@@ -56,15 +56,17 @@ import qualified Data.Map as Map
 import qualified SAWScript.AST as SS
     (pShow,
      Import(..),
-     Located(..))
+     Located(..),
+     Decl(..),
+     Pattern(..))
 import qualified SAWScript.CryptolEnv as CEnv
-import SAWScript.Compiler (liftParser)
+import SAWScript.Compiler (liftParser, reportErrT)
+import SAWScript.MGU (checkDecl)
 import SAWScript.Interpreter
     (interpretStmt,
-     primDocEnv,
-     primTypeEnv)
+     primDocEnv)
 import qualified SAWScript.Lexer (scan)
-import qualified SAWScript.Parser (parseStmtSemi)
+import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
 import qualified SAWScript.Value (evaluate)
 import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
 import SAWScript.TypedTerm
@@ -347,21 +349,14 @@ qcCmd str =
 -}
 
 typeOfCmd :: String -> REPL ()
-typeOfCmd str = do
-  let str' = SS.Located str str PosREPL
-  txt <- case Map.lookup str' primTypeEnv of
-           Just ty -> return (text (SS.pShow ty))
-           Nothing -> do
-             sc <- getSharedContext
-             cenv <- getCryptolEnv
-             TypedTerm schema _ <- io (CEnv.parseTypedTerm sc cenv str')
-             -- TODO: export functions to let us get the expr
-
-             -- XXX need more warnings from the module system
-             --io (mapM_ printWarning ws)
-             --io $ print $ pp expr <+> text ":" <+> pp sig
-             return (pp schema)
-  io $ print $ text str <+> text ":" <+> txt
+typeOfCmd str =
+  do tokens <- err $ SAWScript.Lexer.scan replFileName str
+     expr <- err $ liftParser SAWScript.Parser.parseExpression tokens
+     let decl = SS.Decl (SS.PWild Nothing) Nothing expr
+     rw <- getEnvironment
+     SS.Decl _ (Just schema) _expr' <-
+       io $ reportErrT $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+     io $ putStrLn $ SS.pShow schema
 
 {-
 reloadCmd :: REPL ()

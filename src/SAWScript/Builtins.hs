@@ -130,8 +130,8 @@ data CrucibleContext =
   , ccLLVMModuleTrans :: Crucible.ModuleTranslation
   , ccBackend         :: Sym
   , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , ccSimContext      :: IORef (Crucible.SimContext Sym)
-  , ccGlobals         :: IORef (Crucible.SymGlobalState Sym)
+  , ccSimContext      :: Crucible.SimContext Sym
+  , ccGlobals         :: Crucible.SymGlobalState Sym
   }
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext

@@ -25,6 +25,8 @@ where
 
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Set (Set)
+import qualified Data.Set as Set
 
 
 import           Lang.Crucible.LLVM.MemType
@@ -52,7 +54,7 @@ data SetupValue where
 
 data PrePost
   = PreState | PostState
-  deriving (Show)
+  deriving (Eq, Show)
 
 
 data SetupCondition where
@@ -84,15 +86,17 @@ data CrucibleSetupState =
   CrucibleSetupState
   { csVarCounter    :: !AllocIndex
   , csPrePost       :: PrePost
+  , csResolvedState :: ResolvedState
   , csMethodSpec    :: CrucibleMethodSpecIR
   }
 
 initialCrucibleSetupState :: L.Define -> CrucibleSetupState
 initialCrucibleSetupState def =
   CrucibleSetupState
-  { csVarCounter = AllocIndex 0
-  , csPrePost    = PreState
-  , csMethodSpec =
+  { csVarCounter    = AllocIndex 0
+  , csPrePost       = PreState
+  , csResolvedState = emptyResolvedState
+  , csMethodSpec    =
     CrucibleMethodSpec
     { csName          = L.defName def
     , csArgs          = L.typedType <$> L.defArgs def
@@ -108,9 +112,10 @@ initialCrucibleSetupState def =
 initialCrucibleSetupStateDecl :: L.Declare -> CrucibleSetupState
 initialCrucibleSetupStateDecl dec =
   CrucibleSetupState
-  { csVarCounter = AllocIndex 0
-  , csPrePost    = PreState
-  , csMethodSpec =
+  { csVarCounter    = AllocIndex 0
+  , csPrePost       = PreState
+  , csResolvedState = emptyResolvedState
+  , csMethodSpec    =
     CrucibleMethodSpec
     { csName          = L.decName dec
     , csArgs          = L.decArgs dec
@@ -122,3 +127,40 @@ initialCrucibleSetupStateDecl dec =
     , csRetValue      = Nothing
     }
   }
+
+--------------------------------------------------------------------------------
+
+-- | A datatype to keep track of which parts of the simulator state
+-- have been initialized already.
+data ResolvedState =
+  ResolvedState
+  { rsAllocs :: Set AllocIndex
+  , rsGlobals :: Set String
+  }
+
+emptyResolvedState :: ResolvedState
+emptyResolvedState = ResolvedState Set.empty Set.empty
+
+-- | Record the initialization of the pointer represented by the given
+-- SetupValue.
+markResolved ::
+  SetupValue ->
+  ResolvedState ->
+  ResolvedState
+markResolved val rs =
+  case val of
+    SetupVar i    -> rs { rsAllocs = Set.insert i (rsAllocs rs) }
+    SetupGlobal n -> rs { rsGlobals = Set.insert n (rsGlobals rs) }
+    _             -> rs
+
+-- | Test whether the pointer represented by the given SetupValue has
+-- been initialized already.
+testResolved ::
+  SetupValue ->
+  ResolvedState ->
+  Bool
+testResolved val rs =
+  case val of
+    SetupVar i    -> Set.member i (rsAllocs rs)
+    SetupGlobal n -> Set.member n (rsGlobals rs)
+    _             -> False
