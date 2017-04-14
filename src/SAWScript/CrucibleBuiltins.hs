@@ -29,8 +29,6 @@ import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
-import qualified Data.Set as Set
 --import qualified Data.Text as Text
 import qualified Data.Vector as V
 
@@ -239,43 +237,6 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
         v <- resolveSetupVal cc env sv
         return (mt, v)
       Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
-
---------------------------------------------------------------------------------
-
--- | A datatype to keep track of which parts of the simulator state
--- have been initialized already.
-data ResolvedState =
-  ResolvedState
-  { rsAllocs :: Set AllocIndex
-  , rsGlobals :: Set String
-  }
-
-emptyResolvedState :: ResolvedState
-emptyResolvedState = ResolvedState Set.empty Set.empty
-
--- | Record the initialization of the pointer represented by the given
--- SetupValue.
-markResolved ::
-  SetupValue ->
-  ResolvedState ->
-  ResolvedState
-markResolved val rs =
-  case val of
-    SetupVar i    -> rs { rsAllocs = Set.insert i (rsAllocs rs) }
-    SetupGlobal n -> rs { rsGlobals = Set.insert n (rsGlobals rs) }
-    _             -> rs
-
--- | Test whether the pointer represented by the given SetupValue has
--- been initialized already.
-testResolved ::
-  SetupValue ->
-  ResolvedState ->
-  Bool
-testResolved val rs =
-  case val of
-    SetupVar i    -> Set.member i (rsAllocs rs)
-    SetupGlobal n -> Set.member n (rsGlobals rs)
-    _             -> False
 
 --------------------------------------------------------------------------------
 
@@ -864,6 +825,10 @@ crucible_points_to bic _opt ptr val =
   do cc <- getCrucibleContext bic
      let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
      st <- get
+     let rs = csResolvedState st
+     if csPrePost st == PreState && testResolved ptr rs
+       then fail "Multiple points-to preconditions on same pointer"
+       else put st{ csResolvedState = markResolved ptr rs }
      let env = csAllocations (csMethodSpec st)
      ptrTy <- typeOfSetupValue cc env ptr
      lhsTy <- case ptrTy of
