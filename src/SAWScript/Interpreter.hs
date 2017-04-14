@@ -1506,6 +1506,10 @@ primitives = Map.fromList
     (bicVal crucible_fresh_pointer)
     [ "TODO" ]
 
+  , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_fresh_expanded_val)
+    [ "TODO" ]
+
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_points_to)
     [ "TODO" ]

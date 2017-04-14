@@ -740,10 +740,7 @@ addCondition cond = do
 -- type, or an appropriately-sized bit vector for pointer types.
 logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
                   -> IO (Maybe Term)
-logicTypeOfActual _ sc (Crucible.IntType w) = do
-  bType <- scBoolType sc
-  lTm <- scNat sc (fromIntegral w)
-  Just <$> scVecType sc lTm bType
+logicTypeOfActual _ sc (Crucible.IntType w) = Just <$> logicTypeForInt sc w
 logicTypeOfActual _ sc Crucible.FloatType = Just <$> scPrelude_Float sc
 logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scPrelude_Double sc
 logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
@@ -766,24 +763,81 @@ logicTypeOfActual dl sc (Crucible.StructType si) = do
 logicTypeOfActual _ _ _ = return Nothing
 
 
+logicTypeForInt :: SharedContext -> Crucible.Nat -> IO Term
+logicTypeForInt sc w =
+  do bType <- scBoolType sc
+     lTm <- scNat sc (fromIntegral w)
+     scVecType sc lTm bType
+
+
 crucible_fresh_var :: BuiltinContext
                    -> Options
                    -> String
                    -> L.Type
                    -> CrucibleSetup TypedTerm
 crucible_fresh_var bic _opts name lty = do
+  lty' <- memTypeForLLVMType bic lty
   cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
   let sc = biSharedContext bic
   let lc = ccLLVMContext cctx
-  let ?lc = Crucible.llvmTypeCtx lc
   let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx lc)
-  lty' <- case TyCtx.liftMemType lty of
-            Just m -> return m
-            Nothing -> fail ("unsupported type in crucible_fresh_var: " ++ show (L.ppType lty))
   mty <- liftIO $ logicTypeOfActual dl sc lty'
   case mty of
     Just ty -> liftIO $ scFreshGlobal sc name ty >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
+
+
+
+crucible_fresh_expanded_val ::
+  BuiltinContext ->
+  Options        ->
+  L.Type         ->
+  CrucibleSetup SetupValue
+crucible_fresh_expanded_val bic _opts lty =
+  do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+     let sc = biSharedContext bic
+         lc = ccLLVMContext cctx
+     let ?lc = Crucible.llvmTypeCtx lc
+     lty' <- memTypeForLLVMType bic lty
+     constructExpandedSetupValue sc lty'
+
+
+memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup Crucible.MemType
+memTypeForLLVMType bic lty =
+  do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+     let lc = ccLLVMContext cctx
+     let ?lc = Crucible.llvmTypeCtx lc
+     case TyCtx.liftMemType lty of
+       Just m -> return m
+       Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
+
+
+constructExpandedSetupValue ::
+  (?lc::TyCtx.LLVMContext) =>
+  SharedContext            ->
+  Crucible.MemType         ->
+  CrucibleSetup SetupValue
+constructExpandedSetupValue sc t =
+  case t of
+    Crucible.IntType w -> liftIO $
+      do ty <- logicTypeForInt sc w
+         SetupTerm <$> (scFreshGlobal sc "" ty >>= mkTypedTerm sc)
+
+    Crucible.StructType si ->
+       SetupStruct . toList <$> traverse (constructExpandedSetupValue sc) (Crucible.siFieldTypes si)
+
+    Crucible.PtrType symTy ->
+      case TyCtx.asMemType symTy of
+        Just memTy ->  constructFreshPointer memTy
+        Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
+
+    Crucible.ArrayType n memTy ->
+       SetupArray <$> replicateM n (constructExpandedSetupValue sc memTy)
+
+    Crucible.FloatType    -> fail "crucible_fresh_expanded_var: Float not supported"
+    Crucible.DoubleType   -> fail "crucible_fresh_expanded_var: Double not supported"
+    Crucible.MetadataType -> fail "crucible_fresh_expanded_var: Metadata not supported"
+    Crucible.VecType{}    -> fail "crucible_fresh_expanded_var: Vec not supported"
 
 
 crucible_alloc :: BuiltinContext
@@ -807,27 +861,27 @@ crucible_alloc bic _opt lty = do
         }
   return (SetupVar n)
 
+
 crucible_fresh_pointer ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
   CrucibleSetup SetupValue
-crucible_fresh_pointer bic _opt lty = do
-  cctx <- getCrucibleContext bic
-  let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
-  let ?dl = TyCtx.llvmDataLayout lc
-  let ?lc = lc
-  memTy <- case TyCtx.liftMemType lty of
-    Just m -> return m
-    Nothing -> fail ("unsupported type in crucible_fresh_pointer: " ++ show (L.ppType lty))
-  st <- get
-  let n  = csVarCounter st
-      spec  = csMethodSpec st
-      spec' = spec{ csFreshPointers = Map.insert n memTy (csFreshPointers spec) }
-  put st{ csVarCounter = nextAllocIndex n
-        , csMethodSpec = spec'
-        }
-  return (SetupVar n)
+crucible_fresh_pointer bic _opt lty =
+  do memTy <- memTypeForLLVMType bic lty
+     constructFreshPointer memTy
+
+constructFreshPointer :: Crucible.MemType -> CrucibleSetup SetupValue
+constructFreshPointer memTy =
+  do st <- get
+     let n  = csVarCounter st
+         spec  = csMethodSpec st
+         spec' = spec{ csFreshPointers = Map.insert n memTy (csFreshPointers spec) }
+     put st{ csVarCounter = nextAllocIndex n
+           , csMethodSpec = spec'
+           }
+     return (SetupVar n)
+
 
 crucible_points_to ::
   BuiltinContext ->
