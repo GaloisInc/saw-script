@@ -248,10 +248,10 @@ setupPrestateConditions ::
   [SetupCondition]           ->
   IO [Term]
 setupPrestateConditions mspec cc env conds =
-  fst <$> foldM go ([], emptyResolvedState) conds
+  foldM go [] conds
   where
-    go :: ([Term], ResolvedState) -> SetupCondition -> IO ([Term], ResolvedState)
-    go (cs,rs) (SetupCond_PointsTo ptr val) =
+    go :: [Term] -> SetupCondition -> IO [Term]
+    go cs (SetupCond_PointsTo ptr val) =
       do val' <- resolveSetupVal cc env val
          ptr' <- resolveSetupVal cc env ptr
          ptr'' <- case ptr' of
@@ -266,18 +266,15 @@ setupPrestateConditions mspec cc env conds =
          storTy <- case Crucible.toStorableType lhsTy of
            Just storTy -> return storTy
            Nothing -> fail $ "Expected memory type: " ++ show lhsTy
-         if testResolved ptr rs
-           then fail "Multiple points-to specifications on same pointer"
-           else withMem cc $ \sym mem ->
-             do mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
-                let rs' = markResolved ptr rs
-                return ((cs,rs'), mem')
+         withMem cc $ \sym mem ->
+           do mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
+              return (cs, mem')
 
-    go (cs,rs) (SetupCond_Equal val1 val2) = do
-      val1' <- resolveSetupVal cc env val1
-      val2' <- resolveSetupVal cc env val2
-      c <- assertEqualVals cc val1' val2'
-      return (c:cs,rs)
+    go cs (SetupCond_Equal val1 val2) =
+      do val1' <- resolveSetupVal cc env val1
+         val2' <- resolveSetupVal cc env val2
+         c <- assertEqualVals cc val1' val2'
+         return (c : cs)
 
 --------------------------------------------------------------------------------
 
