@@ -2304,7 +2304,9 @@ use it to specify some code that either doesn't exist or is hard to
 prove. In those cases, the `java_no_simulate` or `llvm_no_simulate`
 functions can be used to indicate not to even try to simulate the code
 being specified, and instead return a `MethodSpec` that is assumed to be
-correct.
+correct. A `MethodSpec` with `*_no_simulate` can be used to provide a
+specification for a function or method that is declared but not defined
+within the code being analyzed.
 
 The default behavior of `java_verify` disallows allocation within the
 method being analyzed. This restriction makes it possible to reason
