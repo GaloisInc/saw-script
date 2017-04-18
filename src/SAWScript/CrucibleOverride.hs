@@ -211,6 +211,7 @@ processPreconditions sc cc spec = go False []
         SetupVar    i  -> Set.singleton i
         SetupStruct xs -> foldMap setupVars xs
         SetupArray  xs -> foldMap setupVars xs
+        SetupElem x _  -> setupVars x
         SetupTerm   _  -> Set.empty
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty
@@ -528,6 +529,7 @@ instantiateSetupValue sc s v =
     SetupTerm tt   -> SetupTerm <$> doTerm tt
     SetupStruct vs -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
     SetupArray  vs -> SetupArray <$> mapM (instantiateSetupValue sc s) vs
+    SetupElem _ _  -> return v
     SetupNull      -> return v
     SetupGlobal _  -> return v
   where
@@ -549,7 +551,8 @@ resolveSetupValue cc sc spec sval =
      memTy <- liftIO $ typeOfSetupValue cc pointerTypes sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap packPointer m
-     lval <- liftIO $ resolveSetupVal cc env sval'
+     let tyenv = csAllocations spec -- should we also merge csFreshPointers?
+     lval <- liftIO $ resolveSetupVal cc env tyenv sval'
      sym <- liftSim Crucible.getSymInterface
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)
