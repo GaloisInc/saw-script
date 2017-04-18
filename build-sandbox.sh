@@ -6,15 +6,11 @@ set -e
 TESTABLE="saw-core jvm-verifier llvm-verifier"
 
 dotests="false"
-dopull="false"
 jobs=""
 while getopts "tpfj:" opt; do
     case $opt in
         t)
             dotests="true"
-            ;;
-        p)
-            dopull="true"
             ;;
         j)
             jobs="-j$OPTARG"
@@ -25,6 +21,9 @@ while getopts "tpfj:" opt; do
             ;;
     esac
 done
+
+git submodule init
+git submodule update
 
 if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
     set +x
@@ -37,9 +36,7 @@ if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
     exit 1
 fi
 
-if [ ! -e ./deps -o "${dopull}" == "true" ] ; then
-  ./get-dependencies.sh
-fi
+stack setup
 
 LOCALBINPATH=$(stack path --local-bin-path | tr -d '\r\n')
 if [ "${OS}" == "Windows_NT" ] ; then
