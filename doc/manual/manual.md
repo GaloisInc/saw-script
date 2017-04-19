@@ -5,17 +5,17 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The
-models take the form of typed functional programs, so in a sense SAW can
-be considered a translator from imperative programs to their functional
-equivalents. Given a functional model in SAW, various external proof
-tools, including a variety of SAT and SMT solvers, can be used to prove
-properties about it. Models can be constructed from arbitrary Cryptol
-programs, and can typically be constructed from C and Java programs that
-have fixed-size inputs and outputs, and that terminate after a fixed
-number of iterations of any loop (or a fixed number of recursive calls).
-One common use case is to verify the equivalence of an implementation
-of an algorithm with its specification in Cryptol.
+Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The models
+take the form of typed functional programs, so in a sense SAW can be
+considered a translator from imperative programs to their functional
+equivalents. Various external proof tools, including a variety of SAT and
+SMT solvers, can be used to prove properties about SAW functional models.
+Models can be constructed from arbitrary Cryptol programs, and can typically
+be constructed from C and Java programs that have fixed-size inputs and
+outputs and that terminate after a fixed number of iterations of any loop
+(or a fixed number of recursive calls). One common use case is to verify
+that an algorithm specification in Cryptol is equivalent to an algorithm
+implementation in C or Java.
 
 The process of extracting models from programs, manipulating them,
 forming queries about them, and
@@ -25,8 +25,8 @@ support for sequencing of imperative commmands.
 
 The rest of this document first describes how to use the SAW tool,
 `saw`, and outlines the structure of the SAWScript language and its
-relationship with Cryptol. It then follows up with a description of the
-commands in SAWScript that can transform functional models and prove
+relationship to Cryptol. It then presents the SAWScript commands that
+transform functional models and prove
 properties about them. Finally, it describes the specific commands
 available for constructing models from imperative programs in a variety
 of languages.
@@ -35,10 +35,10 @@ of languages.
 
 The primary mechanism for interacting with SAW is through the `saw`
 executable included as part of the standard binary distribution. With no
-arguments, `saw` starts a read-evaluate-print loop (REPL) which allows
-the user to interactively evaluate commands in the SAWScript language,
-described in more detail in the following section. With one file name
-argument, it executes the specified file as a SAWScript program.
+arguments, `saw` starts a read-evaluate-print loop (REPL) that allows
+the user to interactively evaluate commands in the SAWScript language.
+With one file name argument, it executes the specified file as a SAWScript
+program.
 
 In addition to a file name, the `saw` executable accepts several
 command-line options:
@@ -78,7 +78,7 @@ command-line options:
 
 `-v num, --verbose=num`
 
-  ~ Set verbosity level of the SAWScript interpreter.
+  ~ Set the verbosity level of the SAWScript interpreter.
 
 SAW also uses several environment variables for configuration:
 
@@ -96,8 +96,8 @@ SAW also uses several environment variables for configuration:
   ~ Specify the path of the `.jar` file containing the core Java
   libraries.
 
-All of the command-line options and environment variables that accept
-colon-delimited lists use semicolon-delimited lists on Windows.
+On Windows, semicolon-delimited lists are used instead of colon-delimited
+lists.
 
 # Structure of SAWScript
 
@@ -111,7 +111,7 @@ the file `print.saw`:
 print 3;
 ~~~~
 
-Then the command `saw print.saw` will yield output similar to the
+The command `saw print.saw` will then yield output similar to the
 following:
 
 ~~~~
@@ -120,7 +120,7 @@ Loading file "print.saw"
 3
 ~~~~
 
-Similarly, the same code can be run from the interactive REPL:
+The same code can be run from the interactive REPL:
 
 ~~~~
 sawscript> print 3;
@@ -181,13 +181,13 @@ The basic types available are similar to those in many other languages.
 * Strings of textual characters can be represented in the `String` type.
   For example, the value `"example"` has type `String`.
 
-* The "unit" type, written `()` is essentially a placeholder. It has
+* The "unit" type, written `()`, is essentially a placeholder. It has
   only one value, also written `()`. Values of type `()` convey no
   information. We will show in later sections several cases where this
   is useful.
 
-SAWScript also includes some more specialized types which do not have a
-straightforward counterpart in most other languages. These will appear
+SAWScript also includes some more specialized types that do not have
+straightforward counterparts in most other languages. These will appear
 in later sections.
 
 ## Basic Expression Forms
@@ -212,27 +212,27 @@ sawscript> f "text"
 ["text"]
 ~~~~
 
-Functions themselves are values, and have types. The type of a function
+Functions themselves are values and have types. The type of a function
 that takes an argument of type `a` and returns a result of type `b` is
 `a -> b`.
 
-Typically, the types of functions are inferred. As in the example `f`
+Function types are typically inferred, as in the example `f`
 above. In this case, because `f` only creates a list with the given
-argument, and because it's possible to create a list of any element
+argument, and because it is possible to create a list of any element
 type, `f` can be applied to an argument of any type. We say, therefore,
 that `f` is *polymorphic*. Concretely, we write the type of `f` as `{a}
-a -> [a]`, meaning it takes a value of any type (call it `a`) and
+a -> [a]`, meaning it takes a value of any type (denoted `a`) and
 returns a list containing elements of that same type. This means we can
-also apply it to `10`:
+also apply `f` to `10`:
 
 ~~~~
 sawscript> f 10
 [10]
 ~~~~
 
-However, we may want to specify that a function operates at a more
-specific type than the most general type possible. In this case, we
-could restrict `f` to operate only on `Int` parameters.
+However, we may want to specify that a function has a more
+specific type. In this case, we could restrict `f` to operate only on
+`Int` parameters.
 
 ~~~~
 sawscript> let f (x : Int) = [x]
@@ -245,7 +245,7 @@ sawscript> f 10
 [10]
 ~~~~
 
-But it will fail for a `String` parameter.
+However, it will fail for a `String` parameter:
 
 ~~~~
 sawscript> f "text"
@@ -256,13 +256,13 @@ mismatched type constructors: String and Int
 ~~~~
 
 Type annotations can be applied to any expression. The notation `(e :
-t)` indicates that the expression `e` is expected to have type `t`, and
-that it is an error for it to have a different type. Most types in
-SAWScript are inferred automatically, but it can sometimes be valuable
-for readability to specify them explicitly.
+t)` indicates that expression `e` is expected to have type `t` and
+that it is an error for `e` to have a different type. Most types in
+SAWScript are inferred automatically, but specifying them explicitly can
+sometimes enhance readability.
 
 Because functions are values, functions can return other functions. We
-make use of this feature for writing functions of multiple arguments.
+make use of this feature when writing functions of multiple arguments.
 Consider the function `g`, similar to `f` but with two arguments:
 
 ~~~~
@@ -291,25 +291,24 @@ type mismatch: Bool -> t.0 and Int -> [Int]
 mismatched type constructors: Bool and Int
 ~~~~
 
-In the text so far we have used two related terms, *function* and
+So far we have used two related terms, *function* and
 *command*, and we take these to mean slightly different things. A
 function is any value with a function type (e.g., `Int -> [Int]`). A
-command is a function in which the result type is one of a specific set
-of special types. These special types are *parameterized* (similarly to
-how the list type is parameterized), and allow us to restrict commands
-to be usable only in specific contexts.
+command is a function where the result type is one of a specific set
+of special types. These special types are *parameterized* (like the list
+type), and allow us to restrict command usage to specific contexts.
 
 The most important command type is the `TopLevel` type, indicating a
 command that can run at the top level (directly at the REPL, or as one
-of the top level commands listed in a script file). The `print` command
+of the top level commands in a script file). The `print` command
 has the type `{a} a -> TopLevel ()`, where `TopLevel ()` means that it
 is a command that runs in the `TopLevel` context and returns a value of
 type `()` (that is, no useful information). In other words, it has a
-side effect (printing some text to the screen), but doesn't produce any
+side effect (printing some text to the screen) but doesn't produce any
 information to use in the rest of the SAWScript program. This is the
-primary place where you'll see the `()` type used.
+primary usage of the `()` type.
 
-It can sometimes be useful to bind together a sequence of commands in a
+It can sometimes be useful to bind a sequence of commands together in a
 unit. This can be accomplished with the `do { ... }` construct. For
 example:
 
@@ -348,7 +347,7 @@ unnamed variable (that is, discards it).
 In some cases it can be useful to have more control over the value
 returned by a `do` block. The `return` command allows us to do this. For
 example, say we wanted to write a function that would print a message
-before and after running some arbitrary command, and then return the
+before and after running some arbitrary command and then return the
 result of that command. We could write:
 
 ~~~~
@@ -381,8 +380,8 @@ the end is the result of the `return` command passed in as an argument.
 
 ## Other Basic Functions
 
-Besides the functions we have listed so far, a number of other
-operations exist for working with basic data structures and interacting
+Aside from the functions we have listed so far, there are a number of other
+operations for working with basic data structures and interacting
 with the operating system.
 
 The following functions work on lists:
@@ -425,7 +424,7 @@ exit : Int -> TopLevel ()
 ~~~~
 
 The `get_opt` function returns the command-line argument to `saw` at the
-given index. Argument 0 will always be the name of the `saw` executable
+given index. Argument 0 is always the name of the `saw` executable
 itself, and higher indices represent later arguments. The `exec` command
 runs an external program given, respectively, an executable name, a list
 of arguments, and a string to send to the standard input of the program.
@@ -434,7 +433,7 @@ executes and prints standard error to the screen. Finally, the `exit`
 command stops execution of the current script and returns the given
 exit code to the operating system.
 
-Finally, a few miscellaneous functions and commands exist. The `show`
+Finally, there are a few miscellaneous functions and commands. The `show`
 function computes the textual representation of its argument in the same
 way as `print`, but instead of displaying the value it returns it as a
 `String` value for later use in the program. This can be useful for
@@ -743,7 +742,7 @@ multiple ways:
     is an equality statement, and
   * as a term of _equality type_ with a body that encodes a proof that
     the equality in the type is valid.
-    
+
 Each of these forms is a `Term` of a diffent shape. And in each case the
 term logically consists of two parts, each of which which may contain
 variables (bound by enclosing lambda expressions). By thinking of the
@@ -1887,7 +1886,7 @@ The `llvm_symexec` command uses an expression syntax similar to that for
     useful for fields of nested structs, even if the outer struct is
     passed by pointer. As for indirect fields, names are allowed if
     debugging information is present.
-  
+
 In addition to the different expression language, the arguments are
 similar but not identical. The third argument, of type
 `[(String, Int)]`, indicates for each pointer how many elements it
