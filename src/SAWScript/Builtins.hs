@@ -494,6 +494,24 @@ trivial = withFirstGoal $ \goal -> do
         FTermF (CtorApp "Prelude.True" []) -> return ()
         _ -> fail "trivial: not a trivial goal"
 
+split_goal :: ProofScript ()
+split_goal =
+  StateT $ \(ProofState goals concl stats) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    (ProofGoal Existential _ _) : _ -> fail "not a universally-quantified goal"
+    (ProofGoal Universal name prop) : gs ->
+      let (vars, body) = asLambdaList prop in
+      case (isGlobalDef "Prelude.and" <@> return <@> return) body of
+        Nothing -> fail "split_goal: goal not of form 'Prelude.and _ _'"
+        Just (_ :*: p1 :*: p2) ->
+          do sc <- getSharedContext
+             t1 <- io $ scLambdaList sc vars p1
+             t2 <- io $ scLambdaList sc vars p2
+             let g1 = ProofGoal Universal (name ++ ".left") t1
+             let g2 = ProofGoal Universal (name ++ ".right") t2
+             return ((), ProofState (g1 : g2 : gs) concl stats)
+
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do
   rw <- getTopLevelRW

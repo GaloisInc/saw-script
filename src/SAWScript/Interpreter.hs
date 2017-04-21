@@ -936,6 +936,11 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
+  , prim "split_goal"          "ProofScript ()"
+    (pureVal split_goal)
+    [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
+    ,  "goals 'prop1' and 'prop2'." ]
+
   , prim "empty_ss"            "Simpset"
     (pureVal (emptySimpset :: Simpset Term))
     [ "The empty simplification rule set, containing no rules." ]
