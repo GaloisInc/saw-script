@@ -395,6 +395,7 @@ matchTerm ::
   Term {- ^ expected specification term -} ->
   OverrideMatcher ()
 
+matchTerm real expect | real == expect = return ()
 matchTerm real expect =
   case (unwrapTermF real, unwrapTermF expect) of
     (_, FTermF (ExtCns ec)) -> assignTerm (ecVarIndex ec) real
