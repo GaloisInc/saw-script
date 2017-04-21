@@ -111,7 +111,7 @@ methodSpecHandler ::
   Crucible.OverrideSim Sym rtp args ret (Crucible.RegValue Sym ret)
 methodSpecHandler sc cc cs retTy = do
   let L.Symbol fsym = csName cs
-  liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "` (TODO)"
+  liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
 
   Crucible.RegMap args <- Crucible.getOverrideArgs
   runOverrideMatcher $
