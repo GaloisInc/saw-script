@@ -198,6 +198,7 @@ processPreconditions sc cc spec = go False []
     checkSetupCondition :: SetupCondition -> OverrideMatcher Bool
     checkSetupCondition (SetupCond_PointsTo p _) = checkSetupValue p
     checkSetupCondition SetupCond_Equal{}        = pure True
+    checkSetupCondition SetupCond_Pred{}         = pure True
 
     checkSetupValue :: SetupValue -> OverrideMatcher Bool
     checkSetupValue v =
@@ -415,6 +416,7 @@ learnSetupCondition ::
   OverrideMatcher ()
 learnSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = learnPointsTo sc cc spec ptr val
 learnSetupCondition _  _  _    (SetupCond_Equal val1 val2)  = learnEqual val1 val2
+learnSetupCondition _  _  _    (SetupCond_Pred tm)          = learnPred tm
 
 
 ------------------------------------------------------------------------
@@ -457,6 +459,14 @@ learnEqual ::
 learnEqual _ _ = fail "learnEqual: incomplete"
 
 
+-- | Process a "crucible_precond" statement from the precondition
+-- section of the CrucibleSetup block.
+learnPred ::
+  TypedTerm        {- ^ the precondition to learn                  -} ->
+  OverrideMatcher ()
+learnPred _ = fail "learnPred: incomplete" -- TODO: addAssertion
+
+
 ------------------------------------------------------------------------
 
 -- | Use the current state to learn about variable assignments based on
@@ -470,6 +480,7 @@ executeSetupCondition ::
   OverrideMatcher ()
 executeSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = executePointsTo sc cc spec ptr val
 executeSetupCondition _  _  _    (SetupCond_Equal val1 val2)  = executeEqual val1 val2
+executeSetupCondition _  _  _    (SetupCond_Pred tm)          = executePred tm
 
 ------------------------------------------------------------------------
 
@@ -514,6 +525,12 @@ executeEqual ::
   OverrideMatcher ()
 executeEqual _ _ = fail "executeEqual: incomplete"
 
+-- | Process a "crucible_postcond" statement from the postcondition
+-- section of the CrucibleSetup block.
+executePred ::
+  TypedTerm        {- ^ the term to assert as a postcondition -} ->
+  OverrideMatcher ()
+executePred _ = fail "executePred: incomplete" -- TODO: addAssumption
 
 ------------------------------------------------------------------------
 

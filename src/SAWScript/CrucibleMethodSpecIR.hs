@@ -59,6 +59,7 @@ data PrePost
 data SetupCondition where
   SetupCond_PointsTo :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
+  SetupCond_Pred     :: TypedTerm -> SetupCondition
   deriving (Show)
 
 

@@ -289,7 +289,19 @@ setupPrestateConditions mspec cc env conds mem0 =
          c <- assertEqualVals cc val1' val2'
          return (c : cs, mem)
 
+    go (cs, mem) (SetupCond_Pred tm) =
+      do val1 <- resolveTypedTerm cc tm
+         c <- assertTrue cc val1
+         return (c : cs, mem)
+
 --------------------------------------------------------------------------------
+
+-- | Create a SAWCore formula asserting that an 'LLVMVal' is true.
+assertTrue ::
+  CrucibleContext ->
+  LLVMVal ->
+  IO Term
+assertTrue = undefined
 
 -- | Create a SAWCore formula asserting that two 'LLVMVal's are equal.
 assertEqualVals ::
@@ -423,8 +435,9 @@ verifySimulate cc mspec args _assumes lemmas mem =
             let globals = Crucible.llvmGlobals (ccLLVMContext cc) mem
             res <-
               Crucible.run simCtx globals errorHandler rty $
-              do mapM_ (registerOverride cc simCtx) lemmas
-                 Crucible.regValue <$> (Crucible.callCFG cfg args')
+                do mapM_ (registerOverride cc simCtx) lemmas
+                   --liftIO $ mapM_ (Crucible.addAssumption (ccBackend cc)) assumes
+                   Crucible.regValue <$> (Crucible.callCFG cfg args')
             case res of
               Crucible.FinishedExecution _ pr ->
                 do Crucible.GlobalPair retval globals' <-
@@ -508,6 +521,10 @@ verifyPoststate cc mspec env mem ret =
       val1' <- resolveSetupVal cc env tyenv val1
       val2' <- resolveSetupVal cc env tyenv val2
       assertEqualVals cc val1' val2'
+
+    verifyPostCond (SetupCond_Pred tm) = do
+      val1 <- resolveTypedTerm cc tm
+      assertTrue cc val1
 
 --------------------------------------------------------------------------------
 
