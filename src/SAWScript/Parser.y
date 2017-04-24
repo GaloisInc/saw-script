@@ -10,6 +10,7 @@ module SAWScript.Parser
   ( parseModule
   , parseStmt
   , parseStmtSemi
+  , parseExpression
   , parseSchema
   , ParseError(..)
   ) where
@@ -33,6 +34,7 @@ import Control.Applicative
 %name parseModule Stmts
 %name parseStmt Stmt
 %name parseStmtSemi StmtSemi
+%name parseExpression Expression
 %name parseSchema PolyType
 %error { parseError }
 %tokentype { Token Pos }

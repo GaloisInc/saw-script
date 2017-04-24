@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
 Module           : $Header$
@@ -113,6 +114,7 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.MSSim as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
@@ -121,13 +123,16 @@ import qualified Data.Parameterized.Nonce as Crucible
 
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
-data CrucibleContext = CrucibleContext { ccLLVMContext     :: Crucible.LLVMContext
-                                       , ccLLVMModule      :: L.Module
-                                       , ccLLVMModuleTrans :: Crucible.ModuleTranslation
-                                       , ccBackend         :: Sym
-                                       , ccSimContext      :: IORef (Crucible.SimContext Sym)
-                                       , ccGlobals         :: IORef (Crucible.SymGlobalState Sym)
-                                       }
+data CrucibleContext =
+  CrucibleContext
+  { ccLLVMContext     :: Crucible.LLVMContext
+  , ccLLVMModule      :: L.Module
+  , ccLLVMModuleTrans :: Crucible.ModuleTranslation
+  , ccBackend         :: Sym
+  , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
+  , ccSimContext      :: Crucible.SimContext Sym
+  , ccGlobals         :: Crucible.SymGlobalState Sym
+  }
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
@@ -488,6 +493,24 @@ trivial = withFirstGoal $ \goal -> do
         Lambda _ _ t' -> checkTrue t'
         FTermF (CtorApp "Prelude.True" []) -> return ()
         _ -> fail "trivial: not a trivial goal"
+
+split_goal :: ProofScript ()
+split_goal =
+  StateT $ \(ProofState goals concl stats) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    (ProofGoal Existential _ _) : _ -> fail "not a universally-quantified goal"
+    (ProofGoal Universal name prop) : gs ->
+      let (vars, body) = asLambdaList prop in
+      case (isGlobalDef "Prelude.and" <@> return <@> return) body of
+        Nothing -> fail "split_goal: goal not of form 'Prelude.and _ _'"
+        Just (_ :*: p1 :*: p2) ->
+          do sc <- getSharedContext
+             t1 <- io $ scLambdaList sc vars p1
+             t2 <- io $ scLambdaList sc vars p2
+             let g1 = ProofGoal Universal (name ++ ".left") t1
+             let g2 = ProofGoal Universal (name ++ ".right") t2
+             return ((), ProofState (g1 : g2 : gs) concl stats)
 
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do

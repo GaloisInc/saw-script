@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
 Module           : $Header$
@@ -935,6 +936,11 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
+  , prim "split_goal"          "ProofScript ()"
+    (pureVal split_goal)
+    [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
+    ,  "goals 'prop1' and 'prop2'." ]
+
   , prim "empty_ss"            "Simpset"
     (pureVal (emptySimpset :: Simpset Term))
     [ "The empty simplification rule set, containing no rules." ]
@@ -1185,11 +1191,6 @@ primitives = Map.fromList
     , "the tactics to use to verify that the method produces the expected"
     , "results."
     ]
-
-  , prim "java_verify_exp"
-    "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
-    (bicVal verifyJava)
-    [ "Experimental code. Don't expect this to work reliably. " ]
 
   , prim "llvm_type"           "String -> LLVMType"
     (funVal1 llvm_type)
@@ -1490,7 +1491,7 @@ primitives = Map.fromList
 
   , prim "load_llvm_cfg"     "String -> TopLevel CFG"
     (bicVal load_llvm_cfg)
-    [ "Load a function from the currently-loaded Cruciblie LLVM module."
+    [ "Load a function from the currently-loaded Crucible LLVM module."
     ]
 
   , prim "extract_crucible_llvm"  "String -> TopLevel Term"
@@ -1506,21 +1507,34 @@ primitives = Map.fromList
     (bicVal crucible_alloc)
     [ "TODO" ]
 
+  , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_fresh_pointer)
+    [ "TODO" ]
+
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_points_to)
     [ "TODO" ]
 
-  , prim "crucible_equal" "LLVMType -> SetupValue -> SetupValue -> CrucibleSetup ()"
+  , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
     [ "TODO" ]
 
-  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup SetupValue"
+  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
     [ "TODO" ]
 
+  , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_return)
+    [ "TODO" ]
+
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
-    (bicVal verifyCrucible)
+    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_verify)
+    [ "TODO" ]
+
+  , prim "crucible_llvm_unsafe_assume_spec"
+    "String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_unsafe_assume_spec)
     [ "TODO" ]
 
   , prim "crucible_array"
@@ -1532,6 +1546,12 @@ primitives = Map.fromList
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupStruct)
     [ "TODO" ]
+
+  , prim "crucible_elem"
+    "SetupValue -> Int -> SetupValue"
+    (pureVal CIR.SetupElem)
+    [ "Turn a SetupValue representing a struct or array pointer into"
+    , "a pointer to an element of the struct or array." ]
 
   , prim "crucible_null"
     "SetupValue"

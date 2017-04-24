@@ -1,6 +1,2 @@
 crucible go-frontend
-llvm-pretty cea1fc101a9489e0337e13858fc8f6514f3939bd
-llvm-pretty-bc-parser 9cb4fb391b3e7e6981895d8348a372ba5667ff40
-llvm-verifier 304f629035c942d4e8585606e48d8f21c2cfbec0
 golang 1c8bddad7f0db47e813939a750f690e24bc75583
-cryptol-verifier 854487417748e8499a17db12e38da064b74da99b
