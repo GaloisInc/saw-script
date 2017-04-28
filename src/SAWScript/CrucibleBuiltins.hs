@@ -239,11 +239,12 @@ resolveArguments ::
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
  where
   nArgs = toInteger (length (csArgs mspec))
+  tyenv = csAllocations mspec
   resolveArg i =
     case Map.lookup i (csArgBindings mspec) of
       Just (tp, sv) -> do
         let mt = fromMaybe (error ("Expected memory type:" ++ show tp)) (TyCtx.asMemType tp)
-        v <- resolveSetupVal cc env sv
+        v <- resolveSetupVal cc env tyenv sv
         return (mt, v)
       Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
 
@@ -260,10 +261,12 @@ setupPrestateConditions ::
 setupPrestateConditions mspec cc env conds mem0 =
   foldM go ([], mem0) conds
   where
+    tyenv = csAllocations mspec
+
     go :: ([Term], MemImpl) -> SetupCondition -> IO ([Term], MemImpl)
     go (cs, mem) (SetupCond_PointsTo ptr val) =
-      do val' <- resolveSetupVal cc env val
-         ptr' <- resolveSetupVal cc env ptr
+      do val' <- resolveSetupVal cc env tyenv val
+         ptr' <- resolveSetupVal cc env tyenv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
            _ -> fail "Non-pointer value found in points-to assertion"
@@ -281,8 +284,8 @@ setupPrestateConditions mspec cc env conds mem0 =
          return (cs, mem')
 
     go (cs, mem) (SetupCond_Equal val1 val2) =
-      do val1' <- resolveSetupVal cc env val1
-         val2' <- resolveSetupVal cc env val2
+      do val1' <- resolveSetupVal cc env tyenv val1
+         val2' <- resolveSetupVal cc env tyenv val2
          c <- assertEqualVals cc val1' val2'
          return (c : cs, mem)
 
@@ -483,26 +486,27 @@ verifyPoststate cc mspec env mem ret =
        (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
        (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
        (Just ret', Just val) ->
-         do val' <- resolveSetupVal cc env val
+         do val' <- resolveSetupVal cc env tyenv val
             goal <- assertEqualVals cc ret' val'
             return (goal : goals)
   where
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+    tyenv = csAllocations mspec
 
     verifyPostCond (SetupCond_PointsTo lhs val) = do
-      lhs' <- resolveSetupVal cc env lhs
+      lhs' <- resolveSetupVal cc env tyenv lhs
       ptr <- case lhs' of
         Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
         _ -> fail "Non-pointer value found in points-to assertion"
-      val' <- resolveSetupVal cc env val
+      val' <- resolveSetupVal cc env tyenv val
       let tp' = typeOfLLVMVal dl val'
       let sym = ccBackend cc
       x <- Crucible.loadRaw sym mem ptr tp'
       assertEqualVals cc x val'
 
     verifyPostCond (SetupCond_Equal val1 val2) = do
-      val1' <- resolveSetupVal cc env val1
-      val2' <- resolveSetupVal cc env val2
+      val1' <- resolveSetupVal cc env tyenv val1
+      val2' <- resolveSetupVal cc env tyenv val2
       assertEqualVals cc val1' val2'
 
 --------------------------------------------------------------------------------

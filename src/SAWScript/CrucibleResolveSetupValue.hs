@@ -34,6 +34,7 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
+import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.NatRepr as NatRepr
@@ -82,6 +83,24 @@ typeOfSetupValue cc env val =
          _memTys <- traverse (typeOfSetupValue cc env) vs
          -- TODO: check that all memTys are compatible with memTy
          return (Crucible.ArrayType (length (v:vs)) memTy)
+    SetupElem v i ->
+      do memTy <- typeOfSetupValue cc env v
+         let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array"
+         case memTy of
+           Crucible.PtrType symTy ->
+             case let ?lc = lc in TyCtx.asMemType symTy of
+               Just memTy' ->
+                 case memTy' of
+                   Crucible.ArrayType n memTy''
+                     | i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | otherwise -> fail $ "typeOfSetupValue: array type index out of bounds: " ++ show (i, n)
+                   Crucible.StructType si ->
+                     case Crucible.siFieldInfo si i of
+                       Just fi -> return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))
+                       Nothing -> fail $ "typeOfSetupValue: struct type index out of bounds: " ++ show i
+                   _ -> fail msg
+               Nothing -> fail msg
+           _ -> fail msg
     SetupNull ->
       -- We arbitrarily set the type of NULL to void*, because a) it
       -- is memory-compatible with any type that NULL can be used at,
@@ -103,16 +122,17 @@ typeOfSetupValue cc env val =
 resolveSetupVal ::
   CrucibleContext        ->
   Map AllocIndex LLVMVal ->
+  Map AllocIndex Crucible.MemType ->
   SetupValue             ->
   IO LLVMVal
-resolveSetupVal cc env val =
+resolveSetupVal cc env tyenv val =
   case val of
     SetupVar i
       | Just val' <- Map.lookup i env -> return val'
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
-      vals <- mapM (resolveSetupVal cc env) vs
+      vals <- mapM (resolveSetupVal cc env tyenv) vs
       let tps = map (typeOfLLVMVal dl) vals
       let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields dl 0 0 tps))) of
             Crucible.Struct v -> v
@@ -120,9 +140,33 @@ resolveSetupVal cc env val =
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupArray [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray vs -> do
-      vals <- V.mapM (resolveSetupVal cc env) (V.fromList vs)
+      vals <- V.mapM (resolveSetupVal cc env tyenv) (V.fromList vs)
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
+    SetupElem v i ->
+      do memTy <- typeOfSetupValue cc tyenv v
+         let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array"
+         delta <- case memTy of
+           Crucible.PtrType symTy ->
+             case let ?lc = lc in TyCtx.asMemType symTy of
+               Just memTy' ->
+                 case memTy' of
+                   Crucible.ArrayType n memTy''
+                     | i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                   Crucible.StructType si ->
+                     case Crucible.siFieldOffset si i of
+                       Just d -> return d
+                       Nothing -> fail $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
+                   _ -> fail msg
+               Nothing -> fail msg
+           _ -> fail msg
+         ptr <- resolveSetupVal cc env tyenv v
+         case ptr of
+           Crucible.LLVMValPtr blk end off ->
+             do delta' <- Crucible.bvLit sym Crucible.knownNat (toInteger delta)
+                off' <- Crucible.bvAdd sym off delta'
+                return (Crucible.LLVMValPtr blk end off')
+           _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
     SetupNull ->
       packPointer <$> Crucible.mkNullPointer sym
     SetupGlobal name ->
@@ -131,7 +175,8 @@ resolveSetupVal cc env val =
          return (packPointer ptr)
   where
     sym = ccBackend cc
-    dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+    lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
+    dl = TyCtx.llvmDataLayout lc
 
 resolveTypedTerm ::
   CrucibleContext ->
