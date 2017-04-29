@@ -1,2 +1,2 @@
 crucible go-frontend
-golang f72191a13fade57c7beaa4bc38b1dd501ea82364
+golang master
