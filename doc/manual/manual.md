@@ -5,17 +5,17 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The
-models take the form of typed functional programs, so in a sense SAW can
-be considered a translator from imperative programs to their functional
-equivalents. Given a functional model in SAW, various external proof
-tools, including a variety of SAT and SMT solvers, can be used to prove
-properties about it. Models can be constructed from arbitrary Cryptol
-programs, and can typically be constructed from C and Java programs that
-have fixed-size inputs and outputs, and that terminate after a fixed
-number of iterations of any loop (or a fixed number of recursive calls).
-One common use case is to verify the equivalence of an implementation
-of an algorithm with its specification in Cryptol.
+Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The models
+take the form of typed functional programs, so in a sense SAW can be
+considered a translator from imperative programs to their functional
+equivalents. Various external proof tools, including a variety of SAT and
+SMT solvers, can be used to prove properties about SAW functional models.
+Models can be constructed from arbitrary Cryptol programs, and can typically
+be constructed from C and Java programs that have fixed-size inputs and
+outputs and that terminate after a fixed number of iterations of any loop
+(or a fixed number of recursive calls). One common use case is to verify
+that an algorithm specification in Cryptol is equivalent to an algorithm
+implementation in C or Java.
 
 The process of extracting models from programs, manipulating them,
 forming queries about them, and
@@ -25,8 +25,8 @@ support for sequencing of imperative commmands.
 
 The rest of this document first describes how to use the SAW tool,
 `saw`, and outlines the structure of the SAWScript language and its
-relationship with Cryptol. It then follows up with a description of the
-commands in SAWScript that can transform functional models and prove
+relationship to Cryptol. It then presents the SAWScript commands that
+transform functional models and prove
 properties about them. Finally, it describes the specific commands
 available for constructing models from imperative programs in a variety
 of languages.
@@ -35,10 +35,10 @@ of languages.
 
 The primary mechanism for interacting with SAW is through the `saw`
 executable included as part of the standard binary distribution. With no
-arguments, `saw` starts a read-evaluate-print loop (REPL) which allows
-the user to interactively evaluate commands in the SAWScript language,
-described in more detail in the following section. With one file name
-argument, it executes the specified file as a SAWScript program.
+arguments, `saw` starts a read-evaluate-print loop (REPL) that allows
+the user to interactively evaluate commands in the SAWScript language.
+With one file name argument, it executes the specified file as a SAWScript
+program.
 
 In addition to a file name, the `saw` executable accepts several
 command-line options:
@@ -78,7 +78,7 @@ command-line options:
 
 `-v num, --verbose=num`
 
-  ~ Set verbosity level of the SAWScript interpreter.
+  ~ Set the verbosity level of the SAWScript interpreter.
 
 SAW also uses several environment variables for configuration:
 
@@ -96,8 +96,8 @@ SAW also uses several environment variables for configuration:
   ~ Specify the path of the `.jar` file containing the core Java
   libraries.
 
-All of the command-line options and environment variables that accept
-colon-delimited lists use semicolon-delimited lists on Windows.
+On Windows, semicolon-delimited lists are used instead of colon-delimited
+lists.
 
 # Structure of SAWScript
 
@@ -111,7 +111,7 @@ the file `print.saw`:
 print 3;
 ~~~~
 
-Then the command `saw print.saw` will yield output similar to the
+The command `saw print.saw` will then yield output similar to the
 following:
 
 ~~~~
@@ -120,7 +120,7 @@ Loading file "print.saw"
 3
 ~~~~
 
-Similarly, the same code can be run from the interactive REPL:
+The same code can be run from the interactive REPL:
 
 ~~~~
 sawscript> print 3;
@@ -181,13 +181,13 @@ The basic types available are similar to those in many other languages.
 * Strings of textual characters can be represented in the `String` type.
   For example, the value `"example"` has type `String`.
 
-* The "unit" type, written `()` is essentially a placeholder. It has
+* The "unit" type, written `()`, is essentially a placeholder. It has
   only one value, also written `()`. Values of type `()` convey no
   information. We will show in later sections several cases where this
   is useful.
 
-SAWScript also includes some more specialized types which do not have a
-straightforward counterpart in most other languages. These will appear
+SAWScript also includes some more specialized types that do not have
+straightforward counterparts in most other languages. These will appear
 in later sections.
 
 ## Basic Expression Forms
@@ -212,27 +212,27 @@ sawscript> f "text"
 ["text"]
 ~~~~
 
-Functions themselves are values, and have types. The type of a function
+Functions themselves are values and have types. The type of a function
 that takes an argument of type `a` and returns a result of type `b` is
 `a -> b`.
 
-Typically, the types of functions are inferred. As in the example `f`
+Function types are typically inferred, as in the example `f`
 above. In this case, because `f` only creates a list with the given
-argument, and because it's possible to create a list of any element
+argument, and because it is possible to create a list of any element
 type, `f` can be applied to an argument of any type. We say, therefore,
 that `f` is *polymorphic*. Concretely, we write the type of `f` as `{a}
-a -> [a]`, meaning it takes a value of any type (call it `a`) and
+a -> [a]`, meaning it takes a value of any type (denoted `a`) and
 returns a list containing elements of that same type. This means we can
-also apply it to `10`:
+also apply `f` to `10`:
 
 ~~~~
 sawscript> f 10
 [10]
 ~~~~
 
-However, we may want to specify that a function operates at a more
-specific type than the most general type possible. In this case, we
-could restrict `f` to operate only on `Int` parameters.
+However, we may want to specify that a function has a more
+specific type. In this case, we could restrict `f` to operate only on
+`Int` parameters.
 
 ~~~~
 sawscript> let f (x : Int) = [x]
@@ -245,7 +245,7 @@ sawscript> f 10
 [10]
 ~~~~
 
-But it will fail for a `String` parameter.
+However, it will fail for a `String` parameter:
 
 ~~~~
 sawscript> f "text"
@@ -256,13 +256,13 @@ mismatched type constructors: String and Int
 ~~~~
 
 Type annotations can be applied to any expression. The notation `(e :
-t)` indicates that the expression `e` is expected to have type `t`, and
-that it is an error for it to have a different type. Most types in
-SAWScript are inferred automatically, but it can sometimes be valuable
-for readability to specify them explicitly.
+t)` indicates that expression `e` is expected to have type `t` and
+that it is an error for `e` to have a different type. Most types in
+SAWScript are inferred automatically, but specifying them explicitly can
+sometimes enhance readability.
 
 Because functions are values, functions can return other functions. We
-make use of this feature for writing functions of multiple arguments.
+make use of this feature when writing functions of multiple arguments.
 Consider the function `g`, similar to `f` but with two arguments:
 
 ~~~~
@@ -291,25 +291,24 @@ type mismatch: Bool -> t.0 and Int -> [Int]
 mismatched type constructors: Bool and Int
 ~~~~
 
-In the text so far we have used two related terms, *function* and
+So far we have used two related terms, *function* and
 *command*, and we take these to mean slightly different things. A
 function is any value with a function type (e.g., `Int -> [Int]`). A
-command is a function in which the result type is one of a specific set
-of special types. These special types are *parameterized* (similarly to
-how the list type is parameterized), and allow us to restrict commands
-to be usable only in specific contexts.
+command is a function where the result type is one of a specific set
+of special types. These special types are *parameterized* (like the list
+type), and allow us to restrict command usage to specific contexts.
 
 The most important command type is the `TopLevel` type, indicating a
 command that can run at the top level (directly at the REPL, or as one
-of the top level commands listed in a script file). The `print` command
+of the top level commands in a script file). The `print` command
 has the type `{a} a -> TopLevel ()`, where `TopLevel ()` means that it
 is a command that runs in the `TopLevel` context and returns a value of
 type `()` (that is, no useful information). In other words, it has a
-side effect (printing some text to the screen), but doesn't produce any
+side effect (printing some text to the screen) but doesn't produce any
 information to use in the rest of the SAWScript program. This is the
-primary place where you'll see the `()` type used.
+primary usage of the `()` type.
 
-It can sometimes be useful to bind together a sequence of commands in a
+It can sometimes be useful to bind a sequence of commands together in a
 unit. This can be accomplished with the `do { ... }` construct. For
 example:
 
@@ -348,7 +347,7 @@ unnamed variable (that is, discards it).
 In some cases it can be useful to have more control over the value
 returned by a `do` block. The `return` command allows us to do this. For
 example, say we wanted to write a function that would print a message
-before and after running some arbitrary command, and then return the
+before and after running some arbitrary command and then return the
 result of that command. We could write:
 
 ~~~~
@@ -381,8 +380,8 @@ the end is the result of the `return` command passed in as an argument.
 
 ## Other Basic Functions
 
-Besides the functions we have listed so far, a number of other
-operations exist for working with basic data structures and interacting
+Aside from the functions we have listed so far, there are a number of other
+operations for working with basic data structures and interacting
 with the operating system.
 
 The following functions work on lists:
@@ -425,7 +424,7 @@ exit : Int -> TopLevel ()
 ~~~~
 
 The `get_opt` function returns the command-line argument to `saw` at the
-given index. Argument 0 will always be the name of the `saw` executable
+given index. Argument 0 is always the name of the `saw` executable
 itself, and higher indices represent later arguments. The `exec` command
 runs an external program given, respectively, an executable name, a list
 of arguments, and a string to send to the standard input of the program.
@@ -434,7 +433,7 @@ executes and prints standard error to the screen. Finally, the `exit`
 command stops execution of the current script and returns the given
 exit code to the operating system.
 
-Finally, a few miscellaneous functions and commands exist. The `show`
+Finally, there are a few miscellaneous functions and commands. The `show`
 function computes the textual representation of its argument in the same
 way as `print`, but instead of displaying the value it returns it as a
 `String` value for later use in the program. This can be useful for
@@ -461,45 +460,46 @@ with_time : {a} TopLevel a -> TopLevel (Int, a)
 
 Perhaps the most important type in SAWScript, and the one most unlike
 the built-in types of most other languages, is the `Term` type.
-Essentially, a value of type `Term` precisely describes all of the
-possible computations performed by some program. And, in particular, if
+Essentially, a value of type `Term` precisely describes all
+possible computations performed by some program. In particular, if
 two `Term` values are *equivalent*, then the programs that they
 represent will always compute the same results given the same inputs. We
-will say more later about what exactly it means for two terms to be
+will say more later about exactly what it means for two terms to be
 equivalent, and how to determine whether two terms are equivalent.
 
-Before we dig into the `Term` type more deeply, it will be useful to
-describe the role of the Cryptol language in SAW.
+Before exploring the `Term` type more deeply, it is important to
+understand the role of the Cryptol language in SAW.
 
 # Cryptol and its Role in SAW
 
 Cyptol is a domain-specific language originally designed for the
 high-level specification of cryptographic algorithms. It is general
-enough, however, to describe a wider variety of programs, and is
+enough, however, to describe a wide variety of programs, and is
 particularly applicable to describing computations that operate on
 streams of data of some fixed size.
 
-Because Cryptol is a stand-alone language in addition to being
-integrated into SAW, it has its own manual, which you can find here:
+In addition to being integrated into SAW, Cryptol is a standalone
+language with its own manual:
 
 ~~~~
 http://cryptol.net/files/ProgrammingCryptol.pdf
 ~~~~
 
 SAW includes deep support for Cryptol, and in fact requires the use of
-Cryptol for most non-trivial tasks. So to fully understand the rest of
-this manual you'll need to develop at least a rudimentary understanding
-of Cryptol.
+Cryptol for most non-trivial tasks. To fully understand the rest of
+this manual and to effectively use SAW, you will need to develop at least
+a rudimentary understanding of Cryptol.
 
-The primary use of Cryptol is to construct values of type `Term`.
-Although `Term` values can be constructed from various sources, inline
-Cryptol expressions are the most direct and convenient way to create
+The primary use of Cryptol within SAWScript is to construct values of type
+`Term`. Although `Term` values can be constructed from various sources,
+inline Cryptol expressions are the most direct and convenient way to create
 them.
 
 Specifically, a Cryptol expression can be placed inside double curly
 braces (`{{` and `}}`), resulting in a value of type `Term`. As a very
 simple example, there is no built-in integer addition operation in
-SAWScript, but there is in Cryptol, and we can use it as follows:
+SAWScript. However, we can use Cryptol's built-in integer addition operator
+within SAWScript as follows:
 
 ~~~~
 sawscript> let t = {{ 0x22 + 0x33 }}
@@ -507,9 +507,10 @@ sawscript> print t
 85
 ~~~~
 
-Note, however, that although it printed out in the same way as an `Int`,
-`t` actually has type `Term`. We can see how this term is represented
-internally, before being evaluated, with the `print_term` function.
+Although it printed out in the same way as an `Int`, it is important to
+note that `t` actually has type `Term`. We can see how this term is
+represented internally, before being evaluated, with the `print_term`
+function.
 
 ~~~~
 sawscript> print_term t
@@ -524,13 +525,13 @@ Cryptol.ecPlus
 ~~~~
 
 For the moment, it's not important to understand what this output means.
-We show it simply to clarify that `Term` values have their own internal
+We show it only to clarify that `Term` values have their own internal
 structure that goes beyond what exists in SAWScript. The internal
 representation of `Term` values is in a language called SAWCore. The
-full sematics of SAWCore are beyond the scope of this document.
+full semantics of SAWCore are beyond the scope of this manual.
 
 The text constructed by `print_term` can also be accessed
-programmatically, instead of printing it to the screen, using the
+programmatically (instead of printing to the screen) using the
 `show_term` function, which returns a `String`. The `show_term` function
 is not a command, so it executes directly and does not need `<-` to bind
 its result. Therefore, the following will have the same result as the
@@ -541,7 +542,7 @@ sawscript> let s = show_term t
 sawscript> print s
 ~~~~
 
-When printing terms, numbers are printed in decimal notation by default,
+Numbers are printed in decimal notation by default when printing terms,
 but the following two commands can change that behavior.
 
 ~~~~
@@ -553,13 +554,13 @@ set_base : Int -> TopLevel ()
 The `set_ascii` command, when passed `true`, makes subsequent
 `print_term` or `show_term` commands print sequences of bytes as ASCII
 strings (and doesn't affect printing of anything else). The `set_base`
-command prints all bit vectors in the given base. Any base from 2
-through 36 (inclusive) is supported.
+command, which supports any base from 2 through 36 (inclusive), prints
+all bit vectors in the given base.
 
 A `Term` that represents an integer (any bit vector, as affected by
 `set_base`) can be translated into a SAWScript `Int` using the
-`eval_int` function, of type `Term -> Int`. This function will return an
-`Int` if the `Term` can be represented as one, and will fail at runtime
+`eval_int : Term -> Int` function. This function returns an
+`Int` if the `Term` can be represented as one, and fails at runtime
 otherwise.
 
 ~~~~
@@ -574,7 +575,7 @@ sawscript> print (eval_int {{ [True] }})
 ~~~~
 
 Similarly, values of type `Bit` in Cryptol can be translated into values
-of type `Bool` in SAWScript using the `eval_bool` function:
+of type `Bool` in SAWScript using the `eval_bool : Term -> Bool` function:
 
 ~~~~
 sawscript> let b = {{ True }}
@@ -609,7 +610,7 @@ variables.
 
 To make these rules more concrete, consider the following examples. If
 we bind a SAWScript `Int`, we can use it as a Cryptol type variable. If
-we create a `Term` variable which internally has function type, we can
+we create a `Term` variable that internally has function type, we can
 apply it to an argument within a Cryptol expression, but not at the
 SAWScript level:
 
@@ -703,8 +704,7 @@ sle : {n} (fin n) => [n] -> [n] -> Bit
 These perform bit-vector operations of truncation (`trunc`), unsigned
 extension (`uext`), and signed comparison (`sgt`, `sge`, `slt`, and
 `sle`). These definitions are typically accessed through binding
-`cryptol_prims` to a local variable, as typically done with
-`cryptol_load`:
+`cryptol_prims` to a local variable:
 
 ~~~~
 sawscript> set_base 16
@@ -714,7 +714,7 @@ sawscript> print x
 0x3
 ~~~~
 
-We truncated the 8-bit value `0x23` to a 4-bit value `0x3`.
+The 8-bit value `0x23` was truncated to a 4-bit value `0x3`.
 
 Finally, a specific definition can be extracted from a `CryptolModule`
 more explicitly using the `cryptol_extract` command:
@@ -727,9 +727,9 @@ cryptol_extract : CryptolModule -> String -> TopLevel Term
 
 The three primary functions of SAW are *extracting* models (`Term`
 values) from programs, *transforming* those models, and *proving*
-properties about models using external provers. So far, we've shown how
-to construct `Term` values from Cryptol programs (and later sections
-will describe how to extract them from other programs). Now we show how
+properties about models using external provers. So far we've shown how
+to construct `Term` values from Cryptol programs; later sections
+will describe how to extract them from other programs. Now we show how
 to use the various term transformation features available in SAW.
 
 ## Rewriting
@@ -743,11 +743,11 @@ multiple ways:
     is an equality statement, and
   * as a term of _equality type_ with a body that encodes a proof that
     the equality in the type is valid.
-    
-Each of these forms is a `Term` of a diffent shape. And in each case the
-term logically consists of two parts, each of which which may contain
+
+Each of these forms is a `Term` of a different shape. In each case the
+term logically consists of two parts, each of which may contain
 variables (bound by enclosing lambda expressions). By thinking of the
-variables as holes which may match any sub-term, the two parts of each
+variables as holes that may match any sub-term, the two parts of each
 term can both be seen as *patterns*. The left-hand pattern describes a
 term to match (which may be a sub-term of the full term being
 rewritten), and the right-hand pattern describes a term to replace it
@@ -762,7 +762,7 @@ For example, say we have the following Cryptol function:
 ~~~~
 
 We might for some reason want to replace multiplication by a power of
-two with a shift. We can describe this replacement by an equality
+two with a shift. We can describe this replacement using an equality
 statement in Cryptol:
 
 ~~~~
@@ -787,14 +787,14 @@ term can be replaced by the term `True` without changing its meaning. The
 rewriting process can in some cases, by repeatedly applying rules that
 themselves are known to be valid, reduce a complex term entirely to
 `True`, which constitutes a proof of the original statement. In other
-cases, rewriting can simplify terms before sending them to external,
-automated provers, which can then finish the job. Sometimes this
+cases, rewriting can simplify terms before sending them to external
+automated provers that can then finish the job. Sometimes this
 simplification can help the automated provers run more quickly, and
 sometimes it can help them prove things they would otherwise be unable
-to prove, by applying reasoning steps (rewrite rules) that are not
+to prove by applying reasoning steps (rewrite rules) that are not
 available to the automated provers.
 
-To use rewrite rules in practice, they can be aggregated into `Simpset`
+In practical use, rewrite rules can be aggregated into `Simpset`
 values in SAWScript. A few pre-defined `Simpset` values exist:
 
 ~~~
@@ -806,13 +806,13 @@ cryptol_ss : () -> Simpset
 The first is the empty set of rules. Rewriting with it should have no
 effect, but it is useful as an argument to some of the functions that
 construct larger `Simpset` values. The `basic_ss` constant is a
-collection of rules that will be useful in most proof scripts. The
-`cryptol_ss` value includes a collection of Cryptol-specific rules,
-including rules to simplify away the abstractions introduced in the
+collection of rules that are useful in most proof scripts. The
+`cryptol_ss` value includes a collection of Cryptol-specific rules. Some of
+these simplify away the abstractions introduced in the
 translation from Cryptol to SAWCore, which can be useful when proving
-equivalence between Cryptol and non-Cryptol code. When comparing Cryptol
-to Cryptol code, leaving these abstractions in place can be most
-appropriate, however, so `cryptol_ss` is not included in `basic_ss`.
+equivalence between Cryptol and non-Cryptol code. Leaving these
+abstractions in place is appropriate when comparing only Cryptol code,
+however, so `cryptol_ss` is not included in `basic_ss`.
 
 The next set of functions add either a single rule or a list of rules to
 an existing `Simpset`.
@@ -830,10 +830,10 @@ Given a `Simpset`, the `rewrite` command applies it to an existing
 rewrite : Simpset -> Term -> Term
 ~~~~
 
-To make this more concrete, we can now look at how the rewriting example
+To make this more concrete, we examine how the rewriting example
 sketched above, to convert multiplication into shift, can work in
-practice. We'll simplify everything with `cryptol_ss` as we go along so
-that the `Term`s don't get too cluttered. First, let's declare the term
+practice. We simplify everything with `cryptol_ss` as we go along so
+that the `Term`s don't get too cluttered. First, we declare the term
 to be transformed:
 
 ~~~~
@@ -846,7 +846,7 @@ sawscript> print_term term;
     (Prelude.bvNat 8 1)
 ~~~~
 
-Now, let's declare the rewrite rule:
+Next, we declare the rewrite rule:
 
 ~~~~
 sawscript> let rule = rewrite (cryptol_ss ()) {{ \(y:[8]) -> (y * 2) == (y << 1) }};
@@ -864,7 +864,7 @@ let { x0 = Prelude.Vec 8 Prelude.Bool;
            (Prelude.bvNat 1 1))
 ~~~~
 
-Finally, we can apply the rule to the target term:
+Finally, we apply the rule to the target term:
 
 ~~~~
 sawscript> let result = rewrite (addsimp' rule empty_ss) term;
@@ -879,12 +879,12 @@ sawscript> print_term result;
     (Prelude.bvNat 8 1)
 ~~~~
 
-Note that `addsimp'` and `addsimps'` take a `Term` or list of `Term`s,
-which could in principle be anything, not necessarily terms representing
-logically valid equalities. This is why they have `'` suffixes: they are
-not intended to be the primary interface to rewriting. When using these
-functions, the soundness of the proof process depends on the correctness
-of these rules as a side condition.
+Note that `addsimp'` and `addsimps'` take a `Term` or list of `Term`s;
+these could in principle be anything, and are not necessarily terms
+representing logically valid equalities. They have `'` suffixes because
+they are not intended to be the primary interface to rewriting. When using
+these functions, the soundness of the proof process depends on the
+correctness of these rules as a side condition.
 
 The primary interface to rewriting uses the `Theorem` type instead of
 the `Term` type, as shown in the signatures for `addsimp` and
@@ -896,16 +896,15 @@ addsimp : Theorem -> Simpset -> Simpset
 addsimps : [Theorem] -> Simpset -> Simpset
 ~~~~
 
-A `Theorem` is essentially just a `Term` that is proven correct in some
+A `Theorem` is essentially a `Term` that is proven correct in some
 way. In general, a `Theorem` can be any statement, and may not be useful
 as a rewrite rule. However, if it has the shape described earlier, it
-can be used for rewriting. When we get to the "Proofs about Terms"
-section, we'll describe how to construct `Theorem` values from `Term`
-values.
+can be used for rewriting. In the "Proofs about Terms" section, we'll
+describe how to construct `Theorem` values from `Term` values.
 
 In the absence of user-constructed `Theorem` values, there are some
 additional built-in rules that are not included in either `basic_ss` and
-`cryptol_ss` because they are not always beneficial, but can sometimes
+`cryptol_ss` because they are not always beneficial, but that can sometimes
 be helpful or essential.
 
 ~~~~
@@ -938,7 +937,7 @@ use it with caution.
 ## Folding and Unfolding
 
 A SAWCore term can be given a name using the `define` function, and is
-then by default printed as that name alone. A named subterm can then be
+then by default printed as that name alone. A named subterm can be
 "unfolded" so that the original definition appears again.
 
 ~~~~
@@ -963,11 +962,11 @@ Prelude.bvNat 8 34
 
 This process of folding and unfolding is useful both to make large terms
 easier for humans to work with and to make automated proofs more
-tractable. We'll get into the latter purpose when we talk about
+tractable. We'll describe the latter in more detail when we discuss
 interacting with external provers.
 
-Folding happens automatically when constructing Cryptol expressions in
-some cases. Consider the following example:
+In some cases, folding happens automatically when constructing Cryptol
+expressions. Consider the following example:
 
 ~~~~
 sawscript> let t = {{ 0x22 }}
@@ -989,7 +988,7 @@ unfolded as needed.
 ## Other Built-in Transformation and Inspection Functions
 
 In addition to the `Term` transformation functions described so far, a
-miscellaneous variety of others also exist.
+variety of others also exist.
 
 ~~~~
 beta_reduce_term : Term -> Term
@@ -1004,8 +1003,8 @@ version of `t` in which all instances of `x` are replaced by `v`.
 The `replace` function replaces arbitrary subterms. A call to `replace x
 y t` replaces any instance of `x` inside `t` with `y`.
 
-Assessing the size of a term can be useful during benchmarking, in
-particular. SAWScript provides two mechanisms for this.
+Assessing the size of a term can be particularly useful during benchmarking.
+SAWScript provides two mechanisms for this.
 
 ~~~~
 term_size : Term -> Int
@@ -1019,11 +1018,11 @@ This is the most appropriate way of determining the resource use of a
 particular term. The second, `term_tree_size`, calculates how large a
 `Term` would be if it were represented by a tree instead of a DAG. This
 can, in general, be much, much larger than the number returned by
-`term_size`, and serves primarily as a way of assessing how much benefit
-there is to the term sharing used by the DAG representation, for a
-specific term.
+`term_size`, and serves primarily as a way of assessing, for a specific
+term, how much benefit there is to the term sharing used by the DAG
+representation.
 
-Finally, a few commands exist related to the internal SAWCore type of a
+Finally, there are a few commands related to the internal SAWCore type of a
 `Term`.
 
 ~~~~
@@ -1033,7 +1032,7 @@ type : Term -> Type
 ~~~~
 
 The `check_term` command checks that the internal structure of a `Term`
-is well-formed, and that it passes all of the rules of the SAWCore type
+is well-formed and that it passes all of the rules of the SAWCore type
 checker. The `type` function returns the type of a particular `Term`,
 which can then be used to, for example, construct a new fresh variable
 with `fresh_symbolic`.
@@ -1081,14 +1080,14 @@ write_smtlib2 : String -> Term -> TopLevel ()
 
 # Proofs about Terms
 
-Ultimately, the goal of SAW is to allow for proofs about the behavior of
+The goal of SAW is to facilitate proofs about the behavior of
 programs. It may be useful to prove some small fact to use as a rewrite
 rule in later proofs, but ultimately these rewrite rules come together
 into a proof of some higher-level property about a software system.
 
 Whether proving small lemmas (in the form of rewrite rules) or a
 top-level theorem, the process builds on the idea of a *proof script*
-which is then ultimately run by one of the top level proof commands.
+that is run by one of the top level proof commands.
 
 ~~~~
 prove_print : ProofScript SatResult -> Term -> TopLevel Theorem
@@ -1107,7 +1106,7 @@ The `sat_print` command is similar except that it looks for a *single*
 value for which the `Term` evaluates to `True` and prints out that
 value, returning nothing.
 
-A similar command to `prove_print`, `prove_core` can produce a `Theorem`
+A similar command to `prove_print`, `prove_core`, can produce a `Theorem`
 from a string containing a SAWCore term.
 
 ~~~~
@@ -1116,7 +1115,7 @@ prove_core : ProofScript SatResult -> String -> TopLevel Theorem
 
 ## Automated Tactics
 
-The simplest proof scripts just indicate which automated prover to use.
+The simplest proof scripts just specify the automated prover to use.
 The `ProofScript` values `abc` and `z3` select the ABC and Z3 theorem
 provers, respectively, and are typically good choices.
 
@@ -1210,8 +1209,8 @@ The `unfolding` tactic works like `unfold_term` but on the current goal.
 Using `unfolding` is mostly valuable for proofs based entirely on
 rewriting, since default behavior for automated provers is to unfold
 everything before sending a goal to a prover. However, with Z3 and CVC4,
-it is possible to indicate that specific named subterms be represented
-as uninterpreted functions.
+it is possible to indicate that specific named subterms should be
+represented as uninterpreted functions.
 
 ~~~~
 unint_cvc4 : [String] -> ProofScript SatResult
@@ -1316,7 +1315,7 @@ true (i.e., the constant `True` or a function that immediately returns
 The `prove_print` and `sat_print` commands print out their essential
 results (potentially returning a `Theorem` in the case of
 `prove_print`). In some cases, though, one may want to act
-programmatically on the result of a proof, rather than display it.
+programmatically on the result of a proof rather than displaying it.
 
 The `prove` and `sat` commands allow this sort of programmatic analysis
 of proof results. To allow this, they use two types we haven't mentioned
@@ -1324,7 +1323,7 @@ yet: `ProofResult` and `SatResult`. These are different from the other
 types in SAWScript because they encode the possibility of two outcomes.
 In the case of `ProofResult`, a statement may be valid or there may be a
 counter-example. In the case of `SatResult`, there may be a satisfying
-assignment, or the statement may be unsatisfiable.
+assignment or the statement may be unsatisfiable.
 
 ~~~~
 prove : ProofScript SatResult -> Term -> TopLevel ProofResult
@@ -1887,7 +1886,7 @@ The `llvm_symexec` command uses an expression syntax similar to that for
     useful for fields of nested structs, even if the outer struct is
     passed by pointer. As for indirect fields, names are allowed if
     debugging information is present.
-  
+
 In addition to the different expression language, the arguments are
 similar but not identical. The third argument, of type
 `[(String, Int)]`, indicates for each pointer how many elements it

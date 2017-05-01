@@ -936,6 +936,11 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
+  , prim "split_goal"          "ProofScript ()"
+    (pureVal split_goal)
+    [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
+    ,  "goals 'prop1' and 'prop2'." ]
+
   , prim "empty_ss"            "Simpset"
     (pureVal (emptySimpset :: Simpset Term))
     [ "The empty simplification rule set, containing no rules." ]
@@ -1506,6 +1511,10 @@ primitives = Map.fromList
     (bicVal crucible_fresh_pointer)
     [ "TODO" ]
 
+  , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_fresh_expanded_val)
+    [ "TODO" ]
+
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_points_to)
     [ "TODO" ]
@@ -1541,6 +1550,12 @@ primitives = Map.fromList
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupStruct)
     [ "TODO" ]
+
+  , prim "crucible_elem"
+    "SetupValue -> Int -> SetupValue"
+    (pureVal CIR.SetupElem)
+    [ "Turn a SetupValue representing a struct or array pointer into"
+    , "a pointer to an element of the struct or array." ]
 
   , prim "crucible_null"
     "SetupValue"

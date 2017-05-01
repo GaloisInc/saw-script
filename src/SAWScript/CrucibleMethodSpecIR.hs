@@ -20,13 +20,11 @@ Point-of-contact : atomb
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
-module SAWScript.CrucibleMethodSpecIR
-where
+module SAWScript.CrucibleMethodSpecIR where
 
+import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
-import qualified Data.Set as Set
 
 
 import           Lang.Crucible.LLVM.MemType
@@ -47,6 +45,7 @@ data SetupValue where
   SetupTerm   :: TypedTerm -> SetupValue
   SetupStruct :: [SetupValue] -> SetupValue
   SetupArray  :: [SetupValue] -> SetupValue
+  SetupElem   :: SetupValue -> Int -> SetupValue
   SetupNull   :: SetupValue
   SetupGlobal :: String -> SetupValue
   deriving (Show)
@@ -131,15 +130,17 @@ initialCrucibleSetupStateDecl dec =
 --------------------------------------------------------------------------------
 
 -- | A datatype to keep track of which parts of the simulator state
--- have been initialized already.
+-- have been initialized already. For each allocation unit or global,
+-- we keep a list of element-paths that identify the initialized
+-- sub-components.
 data ResolvedState =
   ResolvedState
-  { rsAllocs :: Set AllocIndex
-  , rsGlobals :: Set String
+  { rsAllocs :: Map AllocIndex [[Int]]
+  , rsGlobals :: Map String [[Int]]
   }
 
 emptyResolvedState :: ResolvedState
-emptyResolvedState = ResolvedState Set.empty Set.empty
+emptyResolvedState = ResolvedState Map.empty Map.empty
 
 -- | Record the initialization of the pointer represented by the given
 -- SetupValue.
@@ -147,11 +148,17 @@ markResolved ::
   SetupValue ->
   ResolvedState ->
   ResolvedState
-markResolved val rs =
-  case val of
-    SetupVar i    -> rs { rsAllocs = Set.insert i (rsAllocs rs) }
-    SetupGlobal n -> rs { rsGlobals = Set.insert n (rsGlobals rs) }
-    _             -> rs
+markResolved val0 rs = go [] val0
+  where
+    go path val =
+      case val of
+        SetupVar n    -> rs { rsAllocs = Map.alter (ins path) n (rsAllocs rs) }
+        SetupGlobal c -> rs { rsGlobals = Map.alter (ins path) c (rsGlobals rs) }
+        SetupElem v i -> go (i : path) v
+        _             -> rs
+
+    ins path Nothing = Just [path]
+    ins path (Just paths) = Just (path : paths)
 
 -- | Test whether the pointer represented by the given SetupValue has
 -- been initialized already.
@@ -159,8 +166,14 @@ testResolved ::
   SetupValue ->
   ResolvedState ->
   Bool
-testResolved val rs =
-  case val of
-    SetupVar i    -> Set.member i (rsAllocs rs)
-    SetupGlobal n -> Set.member n (rsGlobals rs)
-    _             -> False
+testResolved val0 rs = go [] val0
+  where
+    go path val =
+      case val of
+        SetupVar n    -> test path (Map.lookup n (rsAllocs rs))
+        SetupGlobal c -> test path (Map.lookup c (rsGlobals rs))
+        SetupElem v i -> go (i : path) v
+        _             -> False
+
+    test _ Nothing = False
+    test path (Just paths) = any (`isPrefixOf` path) paths
