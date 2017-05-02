@@ -41,9 +41,9 @@ import qualified Data.Parameterized.Nonce as Crucible
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
-import qualified Lang.Crucible.Simulator.CallFns as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
-import qualified Lang.Crucible.Simulator.MSSim as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
@@ -86,27 +86,18 @@ show_cfg :: Crucible.AnyCFG -> String
 show_cfg (Crucible.AnyCFG cfg) = show cfg
 
 
--- | Abort the current execution.
-abortTree :: Crucible.SimError
-          -> Crucible.MSS_State  sym rtp f args
-          -> IO (Crucible.SimResult  sym rtp)
-abortTree e s = do
-  -- Switch to new frame.
-  Crucible.isSolverProof (s^.Crucible.stateContext) $ do
-    Crucible.abortExec e s
-
-
-errorHandler :: Crucible.ErrorHandler Crucible.SimContext sym rtp
-errorHandler = Crucible.EH abortTree
-
 ppAbortedResult :: CrucibleContext
-                -> Crucible.AbortedResult (Crucible.MSS_State Sym)
+                -> Crucible.AbortedResult Sym
                 -> IO Doc
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
   memDoc <- ppGlobalPair cc gp
   return (Crucible.ppSimError err <$$> memDoc)
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
     return (text "Aborted branch")
+ppAbortedResult _ Crucible.AbortedInfeasible =
+    return (text "Infeasible branch")
+ppAbortedResult _ (Crucible.AbortedExit ec) =
+    return (text "Branch exited:" <+> text (show ec))
 
 crucible_llvm_verify ::
   BuiltinContext         ->
@@ -361,7 +352,7 @@ doAlloc cc tp = StateT $ \mem ->
 --------------------------------------------------------------------------------
 
 ppGlobalPair :: CrucibleContext
-             -> Crucible.GlobalPair (Crucible.MSS_State Sym) a
+             -> Crucible.GlobalPair Sym a
              -> IO Doc
 ppGlobalPair cc gp =
   let memOps = Crucible.memModelOps (ccLLVMContext cc)
@@ -377,9 +368,9 @@ ppGlobalPair cc gp =
 registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
-  Crucible.SimContext Sym    ->
+  Crucible.SimContext SAWCruciblePersonality Sym  ->
   CrucibleMethodSpecIR       ->
-  Crucible.OverrideSim Sym rtp args ret ()
+  Crucible.OverrideSim SAWCruciblePersonality Sym rtp args ret ()
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -392,7 +383,7 @@ registerOverride cc _ctx cs = do
     Just (Crucible.LLVMHandleInfo _decl' h) -> do
       -- TODO: check that decl' matches (csDefine cs)
       let retType = Crucible.handleReturnType h
-      Crucible.registerFnBinding h
+      Crucible.bindFnHandle h
         $ Crucible.UseOverride
         $ Crucible.mkOverride'
             (Crucible.handleName h)
@@ -421,10 +412,11 @@ verifySimulate cc mspec args _assumes lemmas mem =
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
             let simCtx = ccSimContext cc
             let globals = Crucible.llvmGlobals (ccLLVMContext cc) mem
+            let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
             res <-
-              Crucible.run simCtx globals errorHandler rty $
-              do mapM_ (registerOverride cc simCtx) lemmas
-                 Crucible.regValue <$> (Crucible.callCFG cfg args')
+              Crucible.runOverrideSim simSt rty $
+                do mapM_ (registerOverride cc simCtx) lemmas
+                   Crucible.regValue <$> (Crucible.callCFG cfg args')
             case res of
               Crucible.FinishedExecution _ pr ->
                 do Crucible.GlobalPair retval globals' <-
@@ -526,11 +518,11 @@ load_crucible_llvm_module bic opts bc_file = do
       cfg <- Crucible.initialConfig verbosity []
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
-                        bindings
+                        bindings SAWCruciblePersonality
       mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim Sym
+      let setupMem :: Crucible.OverrideSim SAWCruciblePersonality Sym
                        (Crucible.RegEntry Sym Crucible.UnitType)
                        Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
           setupMem = do
@@ -545,7 +537,8 @@ load_crucible_llvm_module bic opts bc_file = do
              -- register all the functions defined in the LLVM module
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
-      res <- Crucible.run simctx globals errorHandler Crucible.UnitRepr setupMem
+      let simSt = Crucible.initSimState simctx globals Crucible.defaultErrorHandler
+      res <- Crucible.runOverrideSim simSt Crucible.UnitRepr setupMem
       (globals', simctx') <-
           case res of
             Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
@@ -603,7 +596,8 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
   (ecs, args) <- setupArgs sc sym h
   let simCtx = ccSimContext cc
   let globals = ccGlobals cc
-  res  <- Crucible.run simCtx globals errorHandler (Crucible.handleReturnType h)
+  let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
+  res  <- Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
              (Crucible.regValue <$> (Crucible.callCFG cfg args))
   case res of
     Crucible.FinishedExecution _ pr -> do
