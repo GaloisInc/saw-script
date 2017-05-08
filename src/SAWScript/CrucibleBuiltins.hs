@@ -380,9 +380,9 @@ ppGlobalPair cc gp =
 registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
-  Crucible.SimContext SAWCruciblePersonality Sym  ->
+  Crucible.SimContext Crucible.SAWCruciblePersonality Sym  ->
   CrucibleMethodSpecIR       ->
-  Crucible.OverrideSim SAWCruciblePersonality Sym rtp args ret ()
+  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret ()
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -428,7 +428,7 @@ verifySimulate cc mspec args _assumes lemmas mem =
             res <-
               Crucible.runOverrideSim simSt rty $
                 do mapM_ (registerOverride cc simCtx) lemmas
-                   --liftIO $ mapM_ (Crucible.addAssumption (ccBackend cc)) assumes
+                   -- liftIO $ mapM_ (Crucible.addAssumption (ccBackend cc)) assumes
                    Crucible.regValue <$> (Crucible.callCFG cfg args')
             case res of
               Crucible.FinishedExecution _ pr ->
@@ -530,16 +530,16 @@ load_crucible_llvm_module bic opts bc_file = do
       (ctx, mtrans) <- stToIO $ Crucible.translateModule halloc llvm_mod
       let gen = Crucible.globalNonceGenerator
       let sc  = biSharedContext bic
-      sym <- Crucible.newSAWCoreBackend sc gen
       let verbosity = simVerbose opts
-      cfg <- Crucible.initialConfig verbosity []
+      cfg <- Crucible.initialConfig verbosity Crucible.sawOptions
+      sym <- Crucible.newSAWCoreBackend sc gen cfg
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
-                        bindings SAWCruciblePersonality
+                        bindings Crucible.SAWCruciblePersonality
       mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim SAWCruciblePersonality Sym
+      let setupMem :: Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym
                        (Crucible.RegEntry Sym Crucible.UnitType)
                        Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
           setupMem = do

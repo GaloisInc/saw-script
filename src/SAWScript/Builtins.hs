@@ -121,10 +121,7 @@ import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Data.Parameterized.Nonce as Crucible
 
-
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
-
-data SAWCruciblePersonality sym = SAWCruciblePersonality
 
 data CrucibleContext =
   CrucibleContext
@@ -133,7 +130,7 @@ data CrucibleContext =
   , ccLLVMModuleTrans :: Crucible.ModuleTranslation
   , ccBackend         :: Sym
   , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , ccSimContext      :: Crucible.SimContext SAWCruciblePersonality Sym
+  , ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
   , ccGlobals         :: Crucible.SymGlobalState Sym
   }
 
