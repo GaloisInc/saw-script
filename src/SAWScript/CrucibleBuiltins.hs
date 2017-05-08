@@ -291,33 +291,8 @@ assertEqualVals ::
   LLVMVal ->
   LLVMVal ->
   IO Term
-assertEqualVals cc v1 v2 = Crucible.toSC sym =<< go (v1, v2)
- where
-  go :: (LLVMVal, LLVMVal) -> IO (Crucible.Pred Sym)
-
-  go (Crucible.LLVMValPtr blk1 _end1 off1, Crucible.LLVMValPtr blk2 _end2 off2)
-       = do blk_eq <- Crucible.natEq sym blk1 blk2
-            off_eq <- Crucible.bvEq sym off1 off2
-            Crucible.andPred sym blk_eq off_eq
-  go (Crucible.LLVMValFunPtr _ _ _fn1, Crucible.LLVMValFunPtr _ _ _fn2)
-       = fail "Cannot compare function pointers for equality FIXME"
-  go (Crucible.LLVMValInt wx x, Crucible.LLVMValInt wy y)
-       | Just Crucible.Refl <- Crucible.testEquality wx wy
-       = Crucible.bvEq sym x y
-  go (Crucible.LLVMValReal x, Crucible.LLVMValReal y)
-       = Crucible.realEq sym x y
-  go (Crucible.LLVMValStruct xs, Crucible.LLVMValStruct ys)
-       | V.length xs == V.length ys
-       = do cs <- mapM go (zip (map snd (toList xs)) (map snd (toList ys)))
-            foldM (Crucible.andPred sym) (Crucible.truePred sym) cs
-  go (Crucible.LLVMValArray _tpx xs, Crucible.LLVMValArray _tpy ys)
-       | V.length xs == V.length ys
-       = do cs <- mapM go (zip (toList xs) (toList ys))
-            foldM (Crucible.andPred sym) (Crucible.truePred sym) cs
-
-  go _ = return (Crucible.falsePred sym)
-
-  sym = ccBackend cc
+assertEqualVals cc v1 v2 =
+  Crucible.toSC (ccBackend cc) =<< equalValsPred cc v1 v2
 
 --------------------------------------------------------------------------------
 
@@ -405,7 +380,7 @@ verifySimulate ::
   [CrucibleMethodSpecIR] ->
   MemImpl ->
   IO (Maybe LLVMVal, MemImpl)
-verifySimulate cc mspec args _assumes lemmas mem =
+verifySimulate cc mspec args assumes lemmas mem =
   do let nm = csName mspec
      case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
        Nothing -> fail $ unwords ["function", show nm, "not found"]
@@ -419,7 +394,9 @@ verifySimulate cc mspec args _assumes lemmas mem =
             res <-
               Crucible.runOverrideSim simSt rty $
                 do mapM_ (registerOverride cc simCtx) lemmas
-                   -- liftIO $ mapM_ (Crucible.addAssumption (ccBackend cc)) assumes
+                   liftIO $ do
+                     preds <- mapM (resolveSAWPred cc) assumes
+                     mapM_ (Crucible.addAssumption sym) preds
                    Crucible.regValue <$> (Crucible.callCFG cfg args')
             case res of
               Crucible.FinishedExecution _ pr ->
@@ -439,7 +416,7 @@ verifySimulate cc mspec args _assumes lemmas mem =
                    retval' <- case ret_ty' of
                      Nothing -> return Nothing
                      Just ret_mt -> Just <$>
-                       Crucible.packMemValue (ccBackend cc)
+                       Crucible.packMemValue sym
                          (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
                               (Crucible.toStorableType ret_mt))
                          (Crucible.regType  retval)
@@ -453,6 +430,7 @@ verifySimulate cc mspec args _assumes lemmas mem =
                                   ]
 
   where
+    sym = ccBackend cc
     prepareArgs ::
       Ctx.Assignment Crucible.TypeRepr xs ->
       [LLVMVal] ->
@@ -460,8 +438,8 @@ verifySimulate cc mspec args _assumes lemmas mem =
     prepareArgs ctx x =
       Crucible.RegMap <$>
       Ctx.traverseWithIndex (\idx tr ->
-        do a <- Crucible.unpackMemValue (ccBackend cc) (x !! Ctx.indexVal idx)
-           v <- Crucible.coerceAny (ccBackend cc) tr a
+        do a <- Crucible.unpackMemValue sym (x !! Ctx.indexVal idx)
+           v <- Crucible.coerceAny sym tr a
            return (Crucible.RegEntry tr v))
       ctx
 

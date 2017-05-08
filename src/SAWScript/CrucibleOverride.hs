@@ -30,6 +30,7 @@ import qualified Text.LLVM.AST as L
 import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
+import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
@@ -415,8 +416,8 @@ learnSetupCondition ::
   SetupCondition             ->
   OverrideMatcher ()
 learnSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = learnPointsTo sc cc spec ptr val
-learnSetupCondition _  _  _    (SetupCond_Equal val1 val2)  = learnEqual val1 val2
-learnSetupCondition _  _  _    (SetupCond_Pred tm)          = learnPred tm
+learnSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = learnEqual sc cc spec val1 val2
+learnSetupCondition _  cc _    (SetupCond_Pred tm)          = learnPred cc tm
 
 
 ------------------------------------------------------------------------
@@ -453,18 +454,26 @@ learnPointsTo sc cc spec ptr val =
 -- | Process a "crucible_equal" statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
+  SharedContext                                                       ->
+  CrucibleContext                                                     ->
+  CrucibleMethodSpecIR                                                ->
   SetupValue       {- ^ first value to compare                     -} ->
   SetupValue       {- ^ second value to compare                    -} ->
   OverrideMatcher ()
-learnEqual _ _ = fail "learnEqual: incomplete"
+learnEqual _ _ _ _ _ = do
+  fail "learnEqual: incomplete"
 
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
 learnPred ::
+  CrucibleContext                                                     ->
   TypedTerm        {- ^ the precondition to learn                  -} ->
   OverrideMatcher ()
-learnPred _ = fail "learnPred: incomplete" -- TODO: addAssertion
+learnPred cc tt = liftIO $ do
+  p <- resolveSAWPred cc (ttTerm tt)
+  let rsn = Crucible.AssertFailureSimError "precondition"
+  Crucible.sbAddAssertion (ccBackend cc) p rsn
 
 
 ------------------------------------------------------------------------
@@ -479,8 +488,8 @@ executeSetupCondition ::
   SetupCondition             ->
   OverrideMatcher ()
 executeSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = executePointsTo sc cc spec ptr val
-executeSetupCondition _  _  _    (SetupCond_Equal val1 val2)  = executeEqual val1 val2
-executeSetupCondition _  _  _    (SetupCond_Pred tm)          = executePred tm
+executeSetupCondition _  cc _    (SetupCond_Equal val1 val2)  = executeEqual cc val1 val2
+executeSetupCondition _  cc _    (SetupCond_Pred tm)          = executePred cc tm
 
 ------------------------------------------------------------------------
 
@@ -520,17 +529,21 @@ executePointsTo sc cc spec ptr val =
 -- | Process a "crucible_equal" statement from the postcondition
 -- section of the CrucibleSetup block.
 executeEqual ::
+  CrucibleContext                                  ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher ()
-executeEqual _ _ = fail "executeEqual: incomplete"
+executeEqual _ _ _ =
+  fail "executeEqual: incomplete"
 
 -- | Process a "crucible_postcond" statement from the postcondition
 -- section of the CrucibleSetup block.
 executePred ::
+  CrucibleContext                                  ->
   TypedTerm        {- ^ the term to assert as a postcondition -} ->
   OverrideMatcher ()
-executePred _ = fail "executePred: incomplete" -- TODO: addAssumption
+executePred cc tt = liftIO $
+  Crucible.sbAddAssumption (ccBackend cc) =<< resolveSAWPred cc (ttTerm tt)
 
 ------------------------------------------------------------------------
 
