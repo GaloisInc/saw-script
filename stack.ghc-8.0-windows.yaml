@@ -17,6 +17,7 @@ packages:
   - deps/jvm-verifier/
   - deps/llvm-verifier/
   - deps/crucible/crucible/
+  - deps/crucible/crucible-llvm/
   - deps/crucible/crucible-saw/
   - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
@@ -30,4 +31,5 @@ extra-deps:
   - monad-supply-0.6
   - sbv-5.15
   - simple-smt-0.7.0
+  - th-abstraction-0.1.0.0
 resolver: lts-8.2

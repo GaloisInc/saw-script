@@ -116,12 +116,15 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Simulator.MSSim as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Data.Parameterized.Nonce as Crucible
 
 
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
+
+data SAWCruciblePersonality sym = SAWCruciblePersonality
 
 data CrucibleContext =
   CrucibleContext
@@ -130,7 +133,7 @@ data CrucibleContext =
   , ccLLVMModuleTrans :: Crucible.ModuleTranslation
   , ccBackend         :: Sym
   , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , ccSimContext      :: Crucible.SimContext Sym
+  , ccSimContext      :: Crucible.SimContext SAWCruciblePersonality Sym
   , ccGlobals         :: Crucible.SymGlobalState Sym
   }
 

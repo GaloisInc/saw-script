@@ -28,7 +28,7 @@ import qualified Data.Parameterized.Nonce as Nonce
 import qualified Text.LLVM.AST as L
 
 import qualified Lang.Crucible.Core as Crucible
-import qualified Lang.Crucible.Simulator.MSSim as Crucible
+import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 
 import qualified Lang.Crucible.LLVM.MemType as Crucible
@@ -57,10 +57,10 @@ import           SAWScript.TypedTerm
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher a
-  = OM { unOM :: forall rtp l.
+  = OM { unOM :: forall rtp l ret.
         StateT
           OverrideState
-          (Crucible.MSSim Sym rtp l 'Nothing)
+          (Crucible.OverrideSim SAWCruciblePersonality Sym rtp l ret)
           a }
 
 data OverrideState = OverrideState
@@ -108,7 +108,7 @@ methodSpecHandler ::
   CrucibleContext          {- ^ context for interacting with Crucible        -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
-  Crucible.OverrideSim Sym rtp args ret (Crucible.RegValue Sym ret)
+  Crucible.OverrideSim SAWCruciblePersonality Sym rtp args ret (Crucible.RegValue Sym ret)
 methodSpecHandler sc cc cs retTy = do
   let L.Symbol fsym = csName cs
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
@@ -265,7 +265,7 @@ assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x
 
 ------------------------------------------------------------------------
 
-liftSim :: (forall rtp l. Crucible.MSSim Sym rtp l 'Nothing a) -> OverrideMatcher a
+liftSim :: (forall rtp l ret. Crucible.OverrideSim SAWCruciblePersonality Sym rtp l ret a) -> OverrideMatcher a
 liftSim m = OM (lift m)
 
 ------------------------------------------------------------------------
@@ -273,7 +273,7 @@ liftSim m = OM (lift m)
 -- | "Run" function for OverrideMatcher.
 runOverrideMatcher ::
   OverrideMatcher a ->
-  Crucible.OverrideSim Sym rtp l r a
+  Crucible.OverrideSim SAWCruciblePersonality Sym rtp l r a
 runOverrideMatcher (OM m) = evalStateT m initialState
 
 ------------------------------------------------------------------------

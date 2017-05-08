@@ -41,9 +41,9 @@ import qualified Data.Parameterized.Nonce as Crucible
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
-import qualified Lang.Crucible.Simulator.CallFns as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
-import qualified Lang.Crucible.Simulator.MSSim as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
@@ -86,27 +86,18 @@ show_cfg :: Crucible.AnyCFG -> String
 show_cfg (Crucible.AnyCFG cfg) = show cfg
 
 
--- | Abort the current execution.
-abortTree :: Crucible.SimError
-          -> Crucible.MSS_State  sym rtp f args
-          -> IO (Crucible.SimResult  sym rtp)
-abortTree e s = do
-  -- Switch to new frame.
-  Crucible.isSolverProof (s^.Crucible.stateContext) $ do
-    Crucible.abortExec e s
-
-
-errorHandler :: Crucible.ErrorHandler Crucible.SimContext sym rtp
-errorHandler = Crucible.EH abortTree
-
 ppAbortedResult :: CrucibleContext
-                -> Crucible.AbortedResult (Crucible.MSS_State Sym)
+                -> Crucible.AbortedResult Sym
                 -> IO Doc
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
   memDoc <- ppGlobalPair cc gp
   return (Crucible.ppSimError err <$$> memDoc)
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
     return (text "Aborted branch")
+ppAbortedResult _ Crucible.AbortedInfeasible =
+    return (text "Infeasible branch")
+ppAbortedResult _ (Crucible.AbortedExit ec) =
+    return (text "Branch exited:" <+> text (show ec))
 
 crucible_llvm_verify ::
   BuiltinContext         ->
@@ -373,7 +364,7 @@ doAlloc cc tp = StateT $ \mem ->
 --------------------------------------------------------------------------------
 
 ppGlobalPair :: CrucibleContext
-             -> Crucible.GlobalPair (Crucible.MSS_State Sym) a
+             -> Crucible.GlobalPair Sym a
              -> IO Doc
 ppGlobalPair cc gp =
   let memOps = Crucible.memModelOps (ccLLVMContext cc)
@@ -389,9 +380,9 @@ ppGlobalPair cc gp =
 registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
-  Crucible.SimContext Sym    ->
+  Crucible.SimContext SAWCruciblePersonality Sym  ->
   CrucibleMethodSpecIR       ->
-  Crucible.OverrideSim Sym rtp args ret ()
+  Crucible.OverrideSim SAWCruciblePersonality Sym rtp args ret ()
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -404,7 +395,7 @@ registerOverride cc _ctx cs = do
     Just (Crucible.LLVMHandleInfo _decl' h) -> do
       -- TODO: check that decl' matches (csDefine cs)
       let retType = Crucible.handleReturnType h
-      Crucible.registerFnBinding h
+      Crucible.bindFnHandle h
         $ Crucible.UseOverride
         $ Crucible.mkOverride'
             (Crucible.handleName h)
@@ -433,8 +424,9 @@ verifySimulate cc mspec args _assumes lemmas mem =
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
             let simCtx = ccSimContext cc
             let globals = Crucible.llvmGlobals (ccLLVMContext cc) mem
+            let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
             res <-
-              Crucible.run simCtx globals errorHandler rty $
+              Crucible.runOverrideSim simSt rty $
                 do mapM_ (registerOverride cc simCtx) lemmas
                    --liftIO $ mapM_ (Crucible.addAssumption (ccBackend cc)) assumes
                    Crucible.regValue <$> (Crucible.callCFG cfg args')
@@ -543,11 +535,11 @@ load_crucible_llvm_module bic opts bc_file = do
       cfg <- Crucible.initialConfig verbosity []
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym Crucible.llvmIntrinsicTypes cfg halloc stdout
-                        bindings
+                        bindings SAWCruciblePersonality
       mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim Sym
+      let setupMem :: Crucible.OverrideSim SAWCruciblePersonality Sym
                        (Crucible.RegEntry Sym Crucible.UnitType)
                        Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
           setupMem = do
@@ -562,7 +554,8 @@ load_crucible_llvm_module bic opts bc_file = do
              -- register all the functions defined in the LLVM module
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
-      res <- Crucible.run simctx globals errorHandler Crucible.UnitRepr setupMem
+      let simSt = Crucible.initSimState simctx globals Crucible.defaultErrorHandler
+      res <- Crucible.runOverrideSim simSt Crucible.UnitRepr setupMem
       (globals', simctx') <-
           case res of
             Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
@@ -620,7 +613,8 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
   (ecs, args) <- setupArgs sc sym h
   let simCtx = ccSimContext cc
   let globals = ccGlobals cc
-  res  <- Crucible.run simCtx globals errorHandler (Crucible.handleReturnType h)
+  let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
+  res  <- Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
              (Crucible.regValue <$> (Crucible.callCFG cfg args))
   case res of
     Crucible.FinishedExecution _ pr -> do
@@ -745,10 +739,7 @@ addCondition cond = do
 -- type, or an appropriately-sized bit vector for pointer types.
 logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
                   -> IO (Maybe Term)
-logicTypeOfActual _ sc (Crucible.IntType w) = do
-  bType <- scBoolType sc
-  lTm <- scNat sc (fromIntegral w)
-  Just <$> scVecType sc lTm bType
+logicTypeOfActual _ sc (Crucible.IntType w) = Just <$> logicTypeForInt sc w
 logicTypeOfActual _ sc Crucible.FloatType = Just <$> scPrelude_Float sc
 logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scPrelude_Double sc
 logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
@@ -771,24 +762,81 @@ logicTypeOfActual dl sc (Crucible.StructType si) = do
 logicTypeOfActual _ _ _ = return Nothing
 
 
+logicTypeForInt :: SharedContext -> Crucible.Nat -> IO Term
+logicTypeForInt sc w =
+  do bType <- scBoolType sc
+     lTm <- scNat sc (fromIntegral w)
+     scVecType sc lTm bType
+
+
 crucible_fresh_var :: BuiltinContext
                    -> Options
                    -> String
                    -> L.Type
                    -> CrucibleSetup TypedTerm
 crucible_fresh_var bic _opts name lty = do
+  lty' <- memTypeForLLVMType bic lty
   cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
   let sc = biSharedContext bic
   let lc = ccLLVMContext cctx
-  let ?lc = Crucible.llvmTypeCtx lc
   let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx lc)
-  lty' <- case TyCtx.liftMemType lty of
-            Just m -> return m
-            Nothing -> fail ("unsupported type in crucible_fresh_var: " ++ show (L.ppType lty))
   mty <- liftIO $ logicTypeOfActual dl sc lty'
   case mty of
     Just ty -> liftIO $ scFreshGlobal sc name ty >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
+
+
+
+crucible_fresh_expanded_val ::
+  BuiltinContext ->
+  Options        ->
+  L.Type         ->
+  CrucibleSetup SetupValue
+crucible_fresh_expanded_val bic _opts lty =
+  do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+     let sc = biSharedContext bic
+         lc = ccLLVMContext cctx
+     let ?lc = Crucible.llvmTypeCtx lc
+     lty' <- memTypeForLLVMType bic lty
+     constructExpandedSetupValue sc lty'
+
+
+memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup Crucible.MemType
+memTypeForLLVMType bic lty =
+  do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+     let lc = ccLLVMContext cctx
+     let ?lc = Crucible.llvmTypeCtx lc
+     case TyCtx.liftMemType lty of
+       Just m -> return m
+       Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
+
+
+constructExpandedSetupValue ::
+  (?lc::TyCtx.LLVMContext) =>
+  SharedContext            ->
+  Crucible.MemType         ->
+  CrucibleSetup SetupValue
+constructExpandedSetupValue sc t =
+  case t of
+    Crucible.IntType w -> liftIO $
+      do ty <- logicTypeForInt sc w
+         SetupTerm <$> (scFreshGlobal sc "" ty >>= mkTypedTerm sc)
+
+    Crucible.StructType si ->
+       SetupStruct . toList <$> traverse (constructExpandedSetupValue sc) (Crucible.siFieldTypes si)
+
+    Crucible.PtrType symTy ->
+      case TyCtx.asMemType symTy of
+        Just memTy ->  constructFreshPointer memTy
+        Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
+
+    Crucible.ArrayType n memTy ->
+       SetupArray <$> replicateM n (constructExpandedSetupValue sc memTy)
+
+    Crucible.FloatType    -> fail "crucible_fresh_expanded_var: Float not supported"
+    Crucible.DoubleType   -> fail "crucible_fresh_expanded_var: Double not supported"
+    Crucible.MetadataType -> fail "crucible_fresh_expanded_var: Metadata not supported"
+    Crucible.VecType{}    -> fail "crucible_fresh_expanded_var: Vec not supported"
 
 
 crucible_alloc :: BuiltinContext
@@ -812,27 +860,27 @@ crucible_alloc bic _opt lty = do
         }
   return (SetupVar n)
 
+
 crucible_fresh_pointer ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
   CrucibleSetup SetupValue
-crucible_fresh_pointer bic _opt lty = do
-  cctx <- getCrucibleContext bic
-  let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
-  let ?dl = TyCtx.llvmDataLayout lc
-  let ?lc = lc
-  memTy <- case TyCtx.liftMemType lty of
-    Just m -> return m
-    Nothing -> fail ("unsupported type in crucible_fresh_pointer: " ++ show (L.ppType lty))
-  st <- get
-  let n  = csVarCounter st
-      spec  = csMethodSpec st
-      spec' = spec{ csFreshPointers = Map.insert n memTy (csFreshPointers spec) }
-  put st{ csVarCounter = nextAllocIndex n
-        , csMethodSpec = spec'
-        }
-  return (SetupVar n)
+crucible_fresh_pointer bic _opt lty =
+  do memTy <- memTypeForLLVMType bic lty
+     constructFreshPointer memTy
+
+constructFreshPointer :: Crucible.MemType -> CrucibleSetup SetupValue
+constructFreshPointer memTy =
+  do st <- get
+     let n  = csVarCounter st
+         spec  = csMethodSpec st
+         spec' = spec{ csFreshPointers = Map.insert n memTy (csFreshPointers spec) }
+     put st{ csVarCounter = nextAllocIndex n
+           , csMethodSpec = spec'
+           }
+     return (SetupVar n)
+
 
 crucible_points_to ::
   BuiltinContext ->
