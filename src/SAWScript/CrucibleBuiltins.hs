@@ -281,18 +281,9 @@ setupPrestateConditions mspec cc env conds mem0 =
          return (c : cs, mem)
 
     go (cs, mem) (SetupCond_Pred tm) =
-      do val1 <- resolveTypedTerm cc tm
-         c <- assertTrue cc val1
-         return (c : cs, mem)
+      return (ttTerm tm : cs, mem)
 
 --------------------------------------------------------------------------------
-
--- | Create a SAWCore formula asserting that an 'LLVMVal' is true.
-assertTrue ::
-  CrucibleContext ->
-  LLVMVal ->
-  IO Term
-assertTrue = undefined
 
 -- | Create a SAWCore formula asserting that two 'LLVMVal's are equal.
 assertEqualVals ::
@@ -514,9 +505,7 @@ verifyPoststate cc mspec env mem ret =
       val2' <- resolveSetupVal cc env tyenv val2
       assertEqualVals cc val1' val2'
 
-    verifyPostCond (SetupCond_Pred tm) = do
-      val1 <- resolveTypedTerm cc tm
-      assertTrue cc val1
+    verifyPostCond (SetupCond_Pred tm) = return (ttTerm tm)
 
 --------------------------------------------------------------------------------
 
