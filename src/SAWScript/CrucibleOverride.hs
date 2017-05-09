@@ -460,9 +460,13 @@ learnEqual ::
   SetupValue       {- ^ first value to compare                     -} ->
   SetupValue       {- ^ second value to compare                    -} ->
   OverrideMatcher ()
-learnEqual _ _ _ _ _ = do
-  fail "learnEqual: incomplete"
-
+learnEqual sc cc spec v1 v2 = do
+  (_, val1) <- resolveSetupValueLLVM cc sc spec v1
+  (_, val2) <- resolveSetupValueLLVM cc sc spec v2
+  liftIO $ do
+    p <- equalValsPred cc val1 val2
+    let err = Crucible.AssertFailureSimError "equality precondition"
+    Crucible.sbAddAssertion (ccBackend cc) p err
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -472,8 +476,8 @@ learnPred ::
   OverrideMatcher ()
 learnPred cc tt = liftIO $ do
   p <- resolveSAWPred cc (ttTerm tt)
-  let rsn = Crucible.AssertFailureSimError "precondition"
-  Crucible.sbAddAssertion (ccBackend cc) p rsn
+  let err = Crucible.AssertFailureSimError "precondition"
+  Crucible.sbAddAssertion (ccBackend cc) p err
 
 
 ------------------------------------------------------------------------
@@ -488,7 +492,7 @@ executeSetupCondition ::
   SetupCondition             ->
   OverrideMatcher ()
 executeSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = executePointsTo sc cc spec ptr val
-executeSetupCondition _  cc _    (SetupCond_Equal val1 val2)  = executeEqual cc val1 val2
+executeSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = executeEqual sc cc spec val1 val2
 executeSetupCondition _  cc _    (SetupCond_Pred tm)          = executePred cc tm
 
 ------------------------------------------------------------------------
@@ -529,12 +533,18 @@ executePointsTo sc cc spec ptr val =
 -- | Process a "crucible_equal" statement from the postcondition
 -- section of the CrucibleSetup block.
 executeEqual ::
+  SharedContext                                    ->
   CrucibleContext                                  ->
+  CrucibleMethodSpecIR                             ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher ()
-executeEqual _ _ _ =
-  fail "executeEqual: incomplete"
+executeEqual sc cc spec v1 v2 = do
+  (_, val1) <- resolveSetupValueLLVM cc sc spec v1
+  (_, val2) <- resolveSetupValueLLVM cc sc spec v2
+  liftIO $ do
+    p <- equalValsPred cc val1 val2
+    Crucible.sbAddAssumption (ccBackend cc) p
 
 -- | Process a "crucible_postcond" statement from the postcondition
 -- section of the CrucibleSetup block.
@@ -568,13 +578,13 @@ instantiateSetupValue sc s v =
 
 ------------------------------------------------------------------------
 
-resolveSetupValue ::
+resolveSetupValueLLVM ::
   CrucibleContext      ->
   SharedContext        ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
-  OverrideMatcher (Crucible.MemType, Crucible.AnyValue Sym)
-resolveSetupValue cc sc spec sval =
+  OverrideMatcher (Crucible.MemType, LLVMVal)
+resolveSetupValueLLVM cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let pointerTypes = Map.union (csAllocations spec)
@@ -584,6 +594,16 @@ resolveSetupValue cc sc spec sval =
      let env = fmap packPointer m
      let tyenv = csAllocations spec -- should we also merge csFreshPointers?
      lval <- liftIO $ resolveSetupVal cc env tyenv sval'
+     return (memTy, lval)
+
+resolveSetupValue ::
+  CrucibleContext      ->
+  SharedContext        ->
+  CrucibleMethodSpecIR ->
+  SetupValue           ->
+  OverrideMatcher (Crucible.MemType, Crucible.AnyValue Sym)
+resolveSetupValue cc sc spec sval =
+  do (memTy, lval) <- resolveSetupValueLLVM cc sc spec sval
      sym <- liftSim Crucible.getSymInterface
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)
