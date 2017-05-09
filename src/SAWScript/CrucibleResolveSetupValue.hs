@@ -321,7 +321,6 @@ typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal dl val =
   case val of
     Crucible.LLVMValPtr {}      -> ptrType
-    Crucible.LLVMValFunPtr {}   -> ptrType
     Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w)))
     Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
@@ -343,8 +342,6 @@ equalValsPred cc v1 v2 = go (v1, v2)
        = do blk_eq <- Crucible.natEq sym blk1 blk2
             off_eq <- Crucible.bvEq sym off1 off2
             Crucible.andPred sym blk_eq off_eq
-  go (Crucible.LLVMValFunPtr _ _ _fn1, Crucible.LLVMValFunPtr _ _ _fn2)
-       = fail "Cannot compare function pointers for equality FIXME"
   go (Crucible.LLVMValInt wx x, Crucible.LLVMValInt wy y)
        | Just Crucible.Refl <- Crucible.testEquality wx wy
        = Crucible.bvEq sym x y

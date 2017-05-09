@@ -88,16 +88,15 @@ show_cfg (Crucible.AnyCFG cfg) = show cfg
 
 ppAbortedResult :: CrucibleContext
                 -> Crucible.AbortedResult Sym
-                -> IO Doc
+                -> Doc
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
-  memDoc <- ppGlobalPair cc gp
-  return (Crucible.ppSimError err <$$> memDoc)
+  Crucible.ppSimError err <$$> ppGlobalPair cc gp
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
-    return (text "Aborted branch")
+  text "Aborted branch"
 ppAbortedResult _ Crucible.AbortedInfeasible =
-    return (text "Infeasible branch")
+  text "Infeasible branch"
 ppAbortedResult _ (Crucible.AbortedExit ec) =
-    return (text "Branch exited:" <+> text (show ec))
+  text "Branch exited:" <+> text (show ec)
 
 crucible_llvm_verify ::
   BuiltinContext         ->
@@ -331,13 +330,13 @@ doAlloc cc tp = StateT $ \mem ->
 
 ppGlobalPair :: CrucibleContext
              -> Crucible.GlobalPair Sym a
-             -> IO Doc
+             -> Doc
 ppGlobalPair cc gp =
   let memOps = Crucible.memModelOps (ccLLVMContext cc)
       sym = ccBackend cc
       globals = gp ^. Crucible.gpGlobals in
   case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals of
-    Nothing -> return (text "LLVM Memory global variable not initialized")
+    Nothing -> text "LLVM Memory global variable not initialized"
     Just mem -> Crucible.ppMem sym mem
 
 
@@ -424,7 +423,7 @@ verifySimulate cc mspec args assumes lemmas mem =
                    return (retval', mem')
 
               Crucible.AbortedResult _ ar ->
-                do resultDoc <- ppAbortedResult cc ar
+                do let resultDoc = ppAbortedResult cc ar
                    fail $ unlines [ "Symbolic execution failed."
                                   , show resultDoc
                                   ]
@@ -598,7 +597,7 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
         tt <- mkTypedTerm sc t'
         return tt
     Crucible.AbortedResult _ ar -> do
-      resultDoc <- ppAbortedResult cc ar
+      let resultDoc = ppAbortedResult cc ar
       fail $ unlines [ "Symbolic execution failed."
                      , show resultDoc
                      ]

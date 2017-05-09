@@ -362,9 +362,6 @@ valueToSC sym (Crucible.LLVMValPtr base sz off) =
      sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
      scTuple sc [base', sz', off']
 
-valueToSC _ (Crucible.LLVMValFunPtr _ctx _ty _fn) =
-  fail "valueToSC: Function pointer not supported"
-
 valueToSC sym (Crucible.LLVMValArray ty vals) =
   do terms <- V.toList <$> traverse (valueToSC sym) vals
      sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
@@ -610,7 +607,7 @@ resolveSetupValue cc sc spec sval =
 
 packPointer' ::
   Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  Crucible.LLVMPtrExpr (Crucible.SymExpr Sym) Crucible.PtrWidth
+  Crucible.LLVMPtr Sym Crucible.PtrWidth
 packPointer' (Crucible.RolledType xs) = Crucible.LLVMPtr blk end off
   where
     Crucible.RV blk = xs^._1
