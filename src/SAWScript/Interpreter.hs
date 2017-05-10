@@ -1523,6 +1523,14 @@ primitives = Map.fromList
     (bicVal crucible_equal)
     [ "TODO" ]
 
+  , prim "crucible_precond" "Term -> CrucibleSetup ()"
+    (pureVal crucible_precond)
+    [ "TODO" ]
+
+  , prim "crucible_postcond" "Term -> CrucibleSetup ()"
+    (pureVal crucible_postcond)
+    [ "TODO" ]
+
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
     [ "TODO" ]
@@ -1532,7 +1540,7 @@ primitives = Map.fromList
     [ "TODO" ]
 
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> Bool -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
     [ "TODO" ]
 

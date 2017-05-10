@@ -19,6 +19,7 @@ module SAWScript.CrucibleBuiltins where
 import Control.Lens
 import Control.Monad.ST
 import Control.Monad.State
+import qualified Control.Monad.Trans.State.Strict as SState
 import Control.Applicative
 import Data.Maybe (fromMaybe)
 import Data.Foldable (toList, find)
@@ -104,9 +105,10 @@ crucible_llvm_verify ::
   String                 ->
   [CrucibleMethodSpecIR] ->
   CrucibleSetup ()       ->
+  Bool                   ->
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
-crucible_llvm_verify bic _opts nm lemmas setup tactic =
+crucible_llvm_verify bic _opts nm lemmas setup checkSat tactic =
   do cc <- io $ readIORef (biCrucibleContext bic) >>= \case
               Nothing -> fail "No Crucible LLVM module loaded"
               Just cc -> return cc
@@ -125,7 +127,7 @@ crucible_llvm_verify bic _opts nm lemmas setup tactic =
        Just mem0 -> return mem0
      --io $ putStrLn $ unlines [ "Method Spec:", show methodSpec]
      (args, assumes, env, mem1) <- io $ verifyPrestate cc methodSpec mem0
-     (ret, mem2) <- io $ verifySimulate cc methodSpec args assumes lemmas mem1
+     (ret, mem2) <- io $ verifySimulate cc methodSpec args assumes lemmas mem1 checkSat
      asserts <- io $ verifyPoststate cc methodSpec env mem2 ret
      verifyObligations cc methodSpec tactic assumes asserts
      return methodSpec
@@ -378,8 +380,9 @@ verifySimulate ::
   [Term] ->
   [CrucibleMethodSpecIR] ->
   MemImpl ->
+  Bool ->
   IO (Maybe LLVMVal, MemImpl)
-verifySimulate cc mspec args assumes lemmas mem =
+verifySimulate cc mspec args assumes lemmas mem checkSat =
   do let nm = csName mspec
      case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
        Nothing -> fail $ unwords ["function", show nm, "not found"]
@@ -388,8 +391,11 @@ verifySimulate cc mspec args assumes lemmas mem =
                 rty = Crucible.handleReturnType h
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
             let simCtx = ccSimContext cc
-            let globals = Crucible.llvmGlobals (ccLLVMContext cc) mem
-            let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
+                conf = Crucible.simConfig simCtx
+                globals = Crucible.llvmGlobals (ccLLVMContext cc) mem
+            simCtx' <- flip SState.execStateT simCtx $
+                       Crucible.setConfigValue Crucible.sawCheckPathSat conf checkSat
+            let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
                 do mapM_ (registerOverride cc simCtx) lemmas
@@ -405,6 +411,7 @@ verifySimulate cc mspec args assumes lemmas mem =
                        Crucible.PartialRes _ gp _ ->
                          do putStrLn "Symbolic simulation failed along some paths!"
                             return gp
+                   liftIO $ putStrLn "Done executing"
                    let memOps = Crucible.memModelOps (ccLLVMContext cc)
                    mem' <- case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals' of
                      Nothing -> fail "internal error: LLVM Memory global not found"
@@ -412,6 +419,7 @@ verifySimulate cc mspec args assumes lemmas mem =
                    let ret_ty = csRet mspec
                    let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
                                  (TyCtx.liftRetType ret_ty)
+                   liftIO $ putStrLn "About to pack"
                    retval' <- case ret_ty' of
                      Nothing -> return Nothing
                      Just ret_mt -> Just <$>
@@ -892,6 +900,23 @@ crucible_equal bic _opt val1 val2 =
      checkMemTypeCompatibility ty1 ty2
      addCondition (SetupCond_Equal val1 val2)
 
+crucible_precond ::
+  TypedTerm      ->
+  CrucibleSetup ()
+crucible_precond p = do
+  st <- get
+  when (csPrePost st == PostState) $
+    fail "attempt to use `crucible_precond` in post state"
+  addCondition (SetupCond_Pred p)
+
+crucible_postcond ::
+  TypedTerm      ->
+  CrucibleSetup ()
+crucible_postcond p = do
+  st <- get
+  when (csPrePost st == PreState) $
+    fail "attempt to use `crucible_postcond` in pre state"
+  addCondition (SetupCond_Pred p)
 
 crucible_execute_func :: BuiltinContext
                       -> Options
