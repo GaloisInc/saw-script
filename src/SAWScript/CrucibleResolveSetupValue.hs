@@ -114,7 +114,10 @@ typeOfSetupValue cc env val =
       -- operation.
       return (Crucible.PtrType Crucible.VoidType)
     SetupGlobal name ->
-      do let tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals (ccLLVMModule cc) ]
+      do let m = ccLLVMModule cc
+             tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
+                   [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
+                   [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
          case lookup (L.Symbol name) tys of
            Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
            Just ty ->
