@@ -16,6 +16,7 @@ module SAWScript.REPL.Monad (
   , raise
   , stop
   , catch
+  , catchIO
   , catchFail
 
     -- ** Errors
@@ -211,9 +212,17 @@ instance PP REPLException where
 raise :: REPLException -> REPL a
 raise exn = io (X.throwIO exn)
 
+-- | Handle any exception type in 'REPL' actions.
+catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
+catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 
+-- | Handle 'IOError' exceptions in 'REPL' actions.
+catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
+catchIO = catchEx
+
+-- | Handle 'REPLException' exceptions in 'REPL' actions.
 catch :: REPL a -> (REPLException -> REPL a) -> REPL a
-catch m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
+catch = catchEx
 
 -- | Similar to 'catch' above, but catches generic IO exceptions from 'fail'.
 catchFail :: REPL a -> (String -> REPL a) -> REPL a
