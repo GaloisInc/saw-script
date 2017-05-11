@@ -273,7 +273,7 @@ selectV merger maxValue valueFn vx =
     Just i  -> valueFn (fromIntegral i)
     Nothing -> impl (intSizeOf vx) 0
   where
-    impl _ y | y >= maxValue = valueFn maxValue
+    impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
