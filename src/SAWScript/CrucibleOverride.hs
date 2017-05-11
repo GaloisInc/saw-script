@@ -9,7 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
 
-module SAWScript.CrucibleOverride (methodSpecHandler) where
+module SAWScript.CrucibleOverride (methodSpecHandler, valueToSC) where
 
 import           Control.Lens
 import           Control.Exception
@@ -342,6 +342,8 @@ matchArg actual expectedTy expected =
 
 ------------------------------------------------------------------------
 
+-- TODO: this seems general enough that it could go in the Crucible
+-- SAWCore backend
 valueToSC ::
   Crucible.SAWCoreBackend Nonce.GlobalNonceGenerator ->
   Crucible.LLVMVal Sym Crucible.PtrWidth ->
