@@ -411,7 +411,6 @@ verifySimulate cc mspec args assumes lemmas mem checkSat =
                        Crucible.PartialRes _ gp _ ->
                          do putStrLn "Symbolic simulation failed along some paths!"
                             return gp
-                   liftIO $ putStrLn "Done executing"
                    let memOps = Crucible.memModelOps (ccLLVMContext cc)
                    mem' <- case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals' of
                      Nothing -> fail "internal error: LLVM Memory global not found"
@@ -419,7 +418,6 @@ verifySimulate cc mspec args assumes lemmas mem checkSat =
                    let ret_ty = csRet mspec
                    let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
                                  (TyCtx.liftRetType ret_ty)
-                   liftIO $ putStrLn "About to pack"
                    retval' <- case ret_ty' of
                      Nothing -> return Nothing
                      Just ret_mt -> Just <$>
