@@ -105,7 +105,7 @@ selectV mux maxValue valueFn v = impl len 0
   where
     len = V.length v
     err = error "selectV: impossible"
-    impl _ x | x >= maxValue || x < 0 = valueFn maxValue
+    impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 x = valueFn x
     impl i x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
 
