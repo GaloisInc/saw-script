@@ -128,7 +128,7 @@ crucible_llvm_verify bic _opts nm lemmas setup checkSat tactic =
      --io $ putStrLn $ unlines [ "Method Spec:", show methodSpec]
      (args, assumes, env, mem1) <- io $ verifyPrestate cc methodSpec mem0
      (ret, mem2) <- io $ verifySimulate cc methodSpec args assumes lemmas mem1 checkSat
-     asserts <- io $ verifyPoststate cc methodSpec env mem2 ret
+     asserts <- io $ verifyPoststate (biSharedContext bic) cc methodSpec env mem2 ret
      verifyObligations cc methodSpec tactic assumes asserts
      return methodSpec
 
@@ -312,6 +312,25 @@ asSAWType sc t = case Crucible.typeF t of
     do flds' <- mapM (asSAWType sc . (^. Crucible.fieldVal)) $ V.toList flds
        scTupleType sc flds'
 
+memTypeToType :: Crucible.MemType -> Maybe Crucible.Type
+memTypeToType mt = Crucible.mkType <$> go mt
+  where
+  go (Crucible.IntType w) = Just (Crucible.Bitvector (fromIntegral w `div` 8))
+  -- Pointers can't be converted to SAWCore, so no need to translate
+  -- their types.
+  go (Crucible.PtrType _) = Nothing
+  go Crucible.FloatType = Just Crucible.Float
+  go Crucible.DoubleType = Just Crucible.Double
+  go (Crucible.ArrayType n et) = Crucible.Array (fromIntegral n) <$> memTypeToType et
+  go (Crucible.VecType n et) = Crucible.Array (fromIntegral n) <$> memTypeToType et
+  go (Crucible.StructType si) =
+    Crucible.Struct <$> mapM goField (Crucible.siFields si)
+  go Crucible.MetadataType  = Nothing
+  goField f =
+    Crucible.mkField (Crucible.fiOffset f) <$>
+                     memTypeToType (Crucible.fiType f) <*>
+                     pure (Crucible.fiPadding f)
+
 --------------------------------------------------------------------------------
 
 -- | Allocate space on the LLVM heap to store a value of the given
@@ -452,13 +471,14 @@ verifySimulate cc mspec args assumes lemmas mem checkSat =
 
 verifyPoststate ::
   (?lc :: TyCtx.LLVMContext) =>
+  SharedContext ->
   CrucibleContext ->
   CrucibleMethodSpecIR ->
   Map AllocIndex LLVMVal ->
   MemImpl ->
   Maybe LLVMVal ->
   IO [Term]
-verifyPoststate cc mspec env mem ret =
+verifyPoststate sc cc mspec env mem ret =
   do goals <- mapM verifyPostCond (csPostconditions mspec)
      case (ret, csRetValue mspec) of
        (Nothing, Nothing) -> return goals
@@ -477,11 +497,20 @@ verifyPoststate cc mspec env mem ret =
       ptr <- case lhs' of
         Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
         _ -> fail "Non-pointer value found in points-to assertion"
-      val' <- resolveSetupVal cc env tyenv val
-      let tp' = typeOfLLVMVal dl val'
       let sym = ccBackend cc
-      x <- Crucible.loadRaw sym mem ptr tp'
-      assertEqualVals cc x val'
+      case val of
+        -- Avoid translating the term into an LLVM value if not necessary
+        SetupTerm tm -> do
+          tp <- typeOfSetupValue cc (csAllocations mspec) val
+          cty <- maybe (fail "can't translate type") return (memTypeToType tp)
+          x <- Crucible.loadRaw sym mem ptr cty
+          tVal <- valueToSC sym x
+          scEq sc tVal (ttTerm tm)
+        _ -> do
+          val' <- resolveSetupVal cc env tyenv val
+          let tp' = typeOfLLVMVal dl val'
+          x <- Crucible.loadRaw sym mem ptr tp'
+          assertEqualVals cc x val'
 
     verifyPostCond (SetupCond_Equal val1 val2) = do
       val1' <- resolveSetupVal cc env tyenv val1
