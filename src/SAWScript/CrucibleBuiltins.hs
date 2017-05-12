@@ -155,7 +155,7 @@ verifyObligations :: CrucibleContext
                   -> CrucibleMethodSpecIR
                   -> ProofScript SatResult
                   -> [Term]
-                  -> [Term]
+                  -> [(String, Term)]
                   -> TopLevel ()
 verifyObligations cc mspec tactic assumes asserts = do
   let sym = ccBackend cc
@@ -163,18 +163,20 @@ verifyObligations cc mspec tactic assumes asserts = do
   let sc  = Crucible.saw_ctx st
   t      <- io $ scBool sc True
   assume <- io $ foldM (scAnd sc) t assumes
-  assert <- io $ foldM (scAnd sc) t asserts
-  goal   <- io $ scImplies sc assume assert
-  goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
   let nm  = show (L.ppSymbol (csName mspec))
-  r      <- evalStateT tactic (startProof (ProofGoal Universal nm goal'))
-  case r of
-    Unsat _stats -> do
-      io $ putStrLn $ unwords ["Proof succeeded!", nm]
-    SatMulti stats vals -> do
-      io $ putStrLn $ unwords ["Proof failed!", nm]
-      io $ print stats
-      io $ mapM_ print vals
+  r <- forM asserts $ \(msg, assert) -> do
+    goal   <- io $ scImplies sc assume assert
+    goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
+    r      <- evalStateT tactic (startProof (ProofGoal Universal nm goal'))
+    case r of
+      Unsat _stats -> return True
+      SatMulti stats vals -> do
+        io $ putStrLn $ unwords ["Subgoal failed:", nm, msg]
+        io $ print stats
+        io $ mapM_ print vals
+        return False
+  let msg = if and r then "Proof succeeded!" else "Proof failed!"
+  io $ putStrLn $ unwords [msg, nm]
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -477,7 +479,7 @@ verifyPoststate ::
   Map AllocIndex LLVMVal ->
   MemImpl ->
   Maybe LLVMVal ->
-  IO [Term]
+  IO [(String, Term)]
 verifyPoststate sc cc mspec env mem ret =
   do postconds <- mapM verifyPostCond (csPostconditions mspec)
      obligations <- Crucible.getProofObligations (ccBackend cc)
@@ -490,7 +492,7 @@ verifyPoststate sc cc mspec env mem ret =
        (Just ret', Just val) ->
          do val' <- resolveSetupVal cc env tyenv val
             goal <- assertEqualVals cc ret' val'
-            return (goal : goals)
+            return (("return value", goal) : goals)
   where
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
     tyenv = csAllocations mspec
@@ -498,11 +500,12 @@ verifyPoststate sc cc mspec env mem ret =
 
     verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
       fail "Found an assumption in final proof obligation list"
-    verifyObligation (hyps, (Crucible.Assertion _ concl (Just _))) = do
+    verifyObligation (hyps, (Crucible.Assertion _ concl (Just err))) = do
       true <- scBool sc True
       hypTerm <- foldM (scAnd sc) true =<< mapM (Crucible.toSC sym) hyps
       conclTerm <- Crucible.toSC sym concl
-      scImplies sc hypTerm conclTerm
+      obligation <- scImplies sc hypTerm conclTerm
+      return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
     verifyPostCond (SetupCond_PointsTo lhs val) = do
       lhs' <- resolveSetupVal cc env tyenv lhs
@@ -516,19 +519,23 @@ verifyPoststate sc cc mspec env mem ret =
           cty <- maybe (fail "can't translate type") return (memTypeToType tp)
           x <- Crucible.loadRaw sym mem ptr cty
           tVal <- valueToSC sym x
-          scEq sc tVal (ttTerm tm)
+          g <- scEq sc tVal (ttTerm tm)
+          return ("points-to assertion", g)
         _ -> do
           val' <- resolveSetupVal cc env tyenv val
           let tp' = typeOfLLVMVal dl val'
           x <- Crucible.loadRaw sym mem ptr tp'
-          assertEqualVals cc x val'
+          g <- assertEqualVals cc x val'
+          return ("points-to assertion", g)
 
     verifyPostCond (SetupCond_Equal val1 val2) = do
       val1' <- resolveSetupVal cc env tyenv val1
       val2' <- resolveSetupVal cc env tyenv val2
-      assertEqualVals cc val1' val2'
+      g <- assertEqualVals cc val1' val2'
+      return ("equality assertion", g)
 
-    verifyPostCond (SetupCond_Pred tm) = return (ttTerm tm)
+    verifyPostCond (SetupCond_Pred tm) =
+      return ("predicate assertion", ttTerm tm)
 
 --------------------------------------------------------------------------------
 
