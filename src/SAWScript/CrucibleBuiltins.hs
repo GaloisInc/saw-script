@@ -479,7 +479,10 @@ verifyPoststate ::
   Maybe LLVMVal ->
   IO [Term]
 verifyPoststate sc cc mspec env mem ret =
-  do goals <- mapM verifyPostCond (csPostconditions mspec)
+  do postconds <- mapM verifyPostCond (csPostconditions mspec)
+     obligations <- Crucible.getProofObligations (ccBackend cc)
+     obligationTerms <- mapM verifyObligation obligations
+     let goals = postconds ++ obligationTerms
      case (ret, csRetValue mspec) of
        (Nothing, Nothing) -> return goals
        (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
@@ -491,13 +494,21 @@ verifyPoststate sc cc mspec env mem ret =
   where
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
     tyenv = csAllocations mspec
+    sym = ccBackend cc
+
+    verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
+      fail "Found an assumption in final proof obligation list"
+    verifyObligation (hyps, (Crucible.Assertion _ concl (Just _))) = do
+      true <- scBool sc True
+      hypTerm <- foldM (scAnd sc) true =<< mapM (Crucible.toSC sym) hyps
+      conclTerm <- Crucible.toSC sym concl
+      scImplies sc hypTerm conclTerm
 
     verifyPostCond (SetupCond_PointsTo lhs val) = do
       lhs' <- resolveSetupVal cc env tyenv lhs
       ptr <- case lhs' of
         Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
         _ -> fail "Non-pointer value found in points-to assertion"
-      let sym = ccBackend cc
       case val of
         -- Avoid translating the term into an LLVM value if not necessary
         SetupTerm tm -> do
