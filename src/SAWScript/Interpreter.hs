@@ -1486,7 +1486,7 @@ primitives = Map.fromList
 
   , prim "load_crucible_llvm_module" "String -> TopLevel ()"
     (bicVal load_crucible_llvm_module)
-    [ "Load an LLVM bitcode file into the Crucible symbolic simulator"
+    [ "Load an LLVM bitcode file into the Crucible symbolic simulator."
     ]
 
   , prim "load_llvm_cfg"     "String -> TopLevel CFG"
@@ -1517,7 +1517,14 @@ primitives = Map.fromList
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_points_to)
-    [ "TODO" ]
+    [ "Declare that the memory location indicated by the given pointer (first"
+    , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
@@ -1533,11 +1540,20 @@ primitives = Map.fromList
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
-    [ "TODO" ]
+    [ "Specify the given list of values as the arguments of the function."
+    ,  ""
+    , "The crucible_execute_func statement also serves to separate the pre-state"
+    , "section of the spec (before crucible_execute_func) from the post-state"
+    , "section (after crucible_execute_func). The effects of some CrucibleSetup"
+    , "statements depend on whether they occur in the pre-state or post-state"
+    , "section."
+    ]
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
     (bicVal crucible_return)
-    [ "TODO" ]
+    [ "Specify the given value as the return value of the function. A"
+    , "crucible_return statement is required if and only if the function"
+    , "has a non-void return type." ]
 
   , prim "crucible_llvm_verify"
     "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> Bool -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
@@ -1552,12 +1568,14 @@ primitives = Map.fromList
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupArray)
-    [ "TODO" ]
+    [ "Create a SetupValue representing an array, with the given list of"
+    , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupStruct)
-    [ "TODO" ]
+    [ "Create a SetupValue representing a struct, with the given list of"
+    , "values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
@@ -1568,12 +1586,13 @@ primitives = Map.fromList
   , prim "crucible_null"
     "SetupValue"
     (pureVal CIR.SetupNull)
-    [ "TODO" ]
+    [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
     (pureVal CIR.SetupGlobal)
-    [ "TODO" ]
+    [ "Return a SetupValue representing a pointer to the named global."
+    , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_term"
     "Term -> SetupValue"
