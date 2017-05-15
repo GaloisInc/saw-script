@@ -483,6 +483,7 @@ verifyPoststate ::
 verifyPoststate sc cc mspec env mem ret =
   do postconds <- mapM verifyPostCond (csPostconditions mspec)
      obligations <- Crucible.getProofObligations (ccBackend cc)
+     Crucible.setProofObligations (ccBackend cc) []
      obligationTerms <- mapM verifyObligation obligations
      let goals = postconds ++ obligationTerms
      case (ret, csRetValue mspec) of
