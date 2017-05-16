@@ -815,11 +815,11 @@ primitives = Map.fromList
     [ "Reduce the current goal to beta-normal form." ]
 
   , prim "print_goal"          "ProofScript ()"
-    (pureVal printGoal)
+    (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]
 
   , prim "print_goal_depth"    "Int -> ProofScript ()"
-    (pureVal printGoalDepth)
+    (pureVal print_goal_depth)
     [ "Print the current goal that a proof script is attempting to prove,"
     , "limited to a maximum depth."
     ]

@@ -532,15 +532,17 @@ print_term_depth d t = do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts d t)
 
-printGoal :: ProofScript ()
-printGoal = withFirstGoal $ \goal -> do
+print_goal :: ProofScript ()
+print_goal = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  io $ putStrLn ("Goal " ++ goalName goal ++ ":")
   io $ putStrLn (scPrettyTerm opts (goalTerm goal))
   return ((), mempty, Just goal)
 
-printGoalDepth :: Int -> ProofScript ()
-printGoalDepth n = withFirstGoal $ \goal -> do
+print_goal_depth :: Int -> ProofScript ()
+print_goal_depth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  io $ putStrLn ("Goal " ++ goalName goal ++ ":")
   io $ print (ppTermDepth opts n (goalTerm goal))
   return ((), mempty, Just goal)
 
