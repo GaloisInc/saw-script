@@ -37,6 +37,7 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.Solver.Interface as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 import qualified Lang.Crucible.ProgramLoc as Crucible
@@ -130,6 +131,7 @@ methodSpecHandler sc cc cs retTy = do
        sequence_ [ matchArg x y z | (x,(y,z)) <- zip xs args' ]
        processPreconditions sc cc cs (csPreconditions cs)
        enforceDisjointness cc cs
+       traverse_ (executePostAllocation cc) (Map.assocs (csPostAllocations cs))
        traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
        computeReturnValue cc sc cs retTy (csRetValue cs)
 
@@ -481,8 +483,31 @@ learnPred cc tt = liftIO $ do
 
 ------------------------------------------------------------------------
 
--- | Use the current state to learn about variable assignments based on
--- preconditions for a procedure specification.
+-- | Perform an allocation as indicated by a 'crucible_alloc'
+-- statement from the postcondition section.
+executePostAllocation ::
+  (?lc :: TyCtx.LLVMContext) =>
+  CrucibleContext            ->
+  (AllocIndex, Crucible.MemType)      ->
+  OverrideMatcher ()
+executePostAllocation cc (var, memTy) =
+  do let sym = ccBackend cc
+     let dl = TyCtx.llvmDataLayout ?lc
+     liftIO $ putStrLn $ unwords ["executePostAllocation:", show var, show memTy]
+     let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
+     let w = Crucible.memTypeSize dl memTy
+     ptr <- liftSim $
+       do mem <- Crucible.readGlobal memVar
+          sz <- liftIO $ Crucible.bvLit sym Crucible.ptrWidth (fromIntegral w)
+          (ptr, mem') <- liftIO (Crucible.doMalloc sym mem sz)
+          Crucible.writeGlobal memVar mem'
+          return ptr
+     assignVar var ptr
+
+------------------------------------------------------------------------
+
+-- | Update the simulator state based on the postconditions from the
+-- procedure specification.
 executeSetupCondition ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext              ->
@@ -591,7 +616,7 @@ resolveSetupValueLLVM cc sc spec sval =
      memTy <- liftIO $ typeOfSetupValue cc pointerTypes sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap packPointer m
-     let tyenv = csAllocations spec -- should we also merge csFreshPointers?
+     let tyenv = csPreAllocations spec -- should we also merge csFreshPointers?
      lval <- liftIO $ resolveSetupVal cc env tyenv sval'
      return (memTy, lval)
 

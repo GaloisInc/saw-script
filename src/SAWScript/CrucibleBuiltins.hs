@@ -202,7 +202,7 @@ verifyPrestate ::
 verifyPrestate cc mspec mem = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   -- Allocate LLVM memory for each 'crucible_alloc'
-  (env1, mem') <- runStateT (traverse (doAlloc cc) (csAllocations mspec)) mem
+  (env1, mem') <- runStateT (traverse (doAlloc cc) (csPreAllocations mspec)) mem
   env2 <- Map.traverseWithKey (\k _ -> setupFreshPointer cc k) (csFreshPointers mspec)
   let env = Map.union env1 env2
   (cs, mem'') <- setupPrestateConditions mspec cc env (csPreconditions mspec) mem'
@@ -231,16 +231,16 @@ resolveArguments ::
   Map AllocIndex LLVMVal     ->
   IO [(Crucible.MemType, LLVMVal)]
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
- where
-  nArgs = toInteger (length (csArgs mspec))
-  tyenv = csAllocations mspec
-  resolveArg i =
-    case Map.lookup i (csArgBindings mspec) of
-      Just (tp, sv) -> do
-        let mt = fromMaybe (error ("Expected memory type:" ++ show tp)) (TyCtx.asMemType tp)
-        v <- resolveSetupVal cc env tyenv sv
-        return (mt, v)
-      Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
+  where
+    nArgs = toInteger (length (csArgs mspec))
+    tyenv = csPreAllocations mspec
+    resolveArg i =
+      case Map.lookup i (csArgBindings mspec) of
+        Just (tp, sv) -> do
+          let mt = fromMaybe (error ("Expected memory type:" ++ show tp)) (TyCtx.asMemType tp)
+          v <- resolveSetupVal cc env tyenv sv
+          return (mt, v)
+        Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
 
 --------------------------------------------------------------------------------
 
@@ -255,7 +255,7 @@ setupPrestateConditions ::
 setupPrestateConditions mspec cc env conds mem0 =
   foldM go ([], mem0) conds
   where
-    tyenv = csAllocations mspec
+    tyenv = csPreAllocations mspec
 
     go :: ([Term], MemImpl) -> SetupCondition -> IO ([Term], MemImpl)
     go (cs, mem) (SetupCond_PointsTo ptr val) =
@@ -264,7 +264,7 @@ setupPrestateConditions mspec cc env conds mem0 =
          ptr'' <- case ptr' of
            Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
            _ -> fail "Non-pointer value found in points-to assertion"
-         lhsTy <- case typeOfSetupValue cc (csAllocations mspec) ptr of
+         lhsTy <- case typeOfSetupValue cc (csPreAllocations mspec) ptr of
            Just (Crucible.PtrType symTy) ->
              case TyCtx.asMemType symTy of
                Just lhsTy -> return lhsTy
@@ -863,22 +863,24 @@ crucible_alloc :: BuiltinContext
                -> Options
                -> L.Type
                -> CrucibleSetup SetupValue
-crucible_alloc bic _opt lty = do
-  cctx <- getCrucibleContext bic
-  let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
-  let ?dl = TyCtx.llvmDataLayout lc
-  let ?lc = lc
-  memTy <- case TyCtx.liftMemType lty of
-    Just m -> return m
-    Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
-  st <- get
-  let n  = csVarCounter st
-      spec  = csMethodSpec st
-      spec' = spec{ csAllocations = Map.insert n memTy (csAllocations spec) }
-  put st{ csVarCounter = nextAllocIndex n
-        , csMethodSpec = spec'
-        }
-  return (SetupVar n)
+crucible_alloc bic _opt lty =
+  do cctx <- getCrucibleContext bic
+     let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
+     let ?dl = TyCtx.llvmDataLayout lc
+     let ?lc = lc
+     memTy <- case TyCtx.liftMemType lty of
+       Just m -> return m
+       Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
+     st <- get
+     let n  = csVarCounter st
+         spec  = csMethodSpec st
+         spec' = case csPrePost st of
+           PreState -> spec{ csPreAllocations = Map.insert n memTy (csPreAllocations spec) }
+           PostState -> spec{ csPostAllocations = Map.insert n memTy (csPostAllocations spec) }
+     put st{ csVarCounter = nextAllocIndex n
+           , csMethodSpec = spec'
+           }
+     return (SetupVar n)
 
 
 crucible_fresh_pointer ::
