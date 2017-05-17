@@ -112,6 +112,7 @@ crucible_llvm_verify bic _opts nm lemmas setup checkSat tactic =
   do cc <- io $ readIORef (biCrucibleContext bic) >>= \case
               Nothing -> fail "No Crucible LLVM module loaded"
               Just cc -> return cc
+     let sym = ccBackend cc
      let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
      let nm' = fromString nm
      let llmod = ccLLVMModule cc
@@ -127,8 +128,12 @@ crucible_llvm_verify bic _opts nm lemmas setup checkSat tactic =
        Just mem0 -> return mem0
      --io $ putStrLn $ unlines [ "Method Spec:", show methodSpec]
      (args, assumes, env, mem1) <- io $ verifyPrestate cc methodSpec mem0
+     -- save initial path condition
+     pathstate <- io $ Crucible.getCurrentState sym
      (ret, mem2) <- io $ verifySimulate cc methodSpec args assumes lemmas mem1 checkSat
      asserts <- io $ verifyPoststate (biSharedContext bic) cc methodSpec env mem2 ret
+     -- restore initial path condition
+     io $ Crucible.resetCurrentState sym pathstate
      verifyObligations cc methodSpec tactic assumes asserts
      return methodSpec
 
