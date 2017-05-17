@@ -552,7 +552,7 @@ processPostconditions sc cc tyenv env0 mem conds0 =
            Just x -> return x
          -- cty <- maybe (fail "can't translate type") return (memTypeToType memTy)
          x <- liftIO $ Crucible.loadRaw sym mem ptr cty
-         gs <- match x val
+         gs <- match sc cc tyenv x val
          return [ ("points-to assertion", g) | g <- gs ]
 
     verifyPostCond (SetupCond_Equal val1 val2) =
@@ -565,34 +565,52 @@ processPostconditions sc cc tyenv env0 mem conds0 =
     verifyPostCond (SetupCond_Pred tm) =
       return [("predicate assertion", ttTerm tm)]
 
-    match :: LLVMVal -> SetupValue -> StateT (Map AllocIndex LLVMVal) IO [Term]
-    match x (SetupVar i) =
-      do env <- get
-         case Map.lookup i env of
-           Just y  -> do t <- liftIO $ assertEqualVals cc x y
-                         return [t]
-           Nothing -> do put (Map.insert i x env)
-                         return []
-    match (Crucible.LLVMValStruct fields) (SetupStruct vs) =
-      matchList (map snd (V.toList fields)) vs
-    match (Crucible.LLVMValArray _ty xs) (SetupArray vs) =
-      matchList (V.toList xs) vs
-    match x (SetupTerm tm) =
-      do tVal <- liftIO $ valueToSC sym x
-         g <- liftIO $ scEq sc tVal (ttTerm tm)
-         return [g]
-    match x v =
-      do env <- get
-         v' <- liftIO $ resolveSetupVal cc env tyenv v
-         g <- liftIO $ assertEqualVals cc x v'
-         return [g]
+--------------------------------------------------------------------------------
 
-    matchList :: [LLVMVal] -> [SetupValue] -> StateT (Map AllocIndex LLVMVal) IO [Term]
-    matchList xs vs = -- precondition: length xs = length vs
-      do gs <- concat <$> sequence [ match x v | (x, v) <- zip xs vs ]
-         g <- liftIO $ scAndList sc gs
-         return (if null gs then [] else [g])
+-- | Match an 'LLVMVal' with a 'SetupValue', producing a list of
+-- equality constraints, and accumulating bindings for
+-- previously-unbound 'SetupVar's on the right-hand side.
+match ::
+  SharedContext   {- ^ term construction context -} ->
+  CrucibleContext {- ^ simulator context         -} ->
+  Map AllocIndex Crucible.MemType {- ^ type env  -} ->
+  LLVMVal       ->
+  SetupValue    ->
+  StateT (Map AllocIndex LLVMVal) IO [Term]
+match _sc cc _tyenv x (SetupVar i) =
+  do env <- get
+     case Map.lookup i env of
+       Just y  -> do t <- liftIO $ assertEqualVals cc x y
+                     return [t]
+       Nothing -> do put (Map.insert i x env)
+                     return []
+match sc cc tyenv (Crucible.LLVMValStruct fields) (SetupStruct vs) =
+  matchList sc cc tyenv (map snd (V.toList fields)) vs
+match sc cc tyenv (Crucible.LLVMValArray _ty xs) (SetupArray vs) =
+  matchList sc cc tyenv (V.toList xs) vs
+match sc cc _tyenv x (SetupTerm tm) =
+  do tVal <- liftIO $ valueToSC (ccBackend cc) x
+     g <- liftIO $ scEq sc tVal (ttTerm tm)
+     return [g]
+match _sc cc tyenv x v =
+  do env <- get
+     v' <- liftIO $ resolveSetupVal cc env tyenv v
+     g <- liftIO $ assertEqualVals cc x v'
+     return [g]
 
+matchList ::
+  SharedContext   {- ^ term construction context -} ->
+  CrucibleContext {- ^ simulator context         -} ->
+  Map AllocIndex Crucible.MemType {- ^ type env  -} ->
+  [LLVMVal]                                         ->
+  [SetupValue]                                      ->
+  StateT (Map AllocIndex LLVMVal) IO [Term]
+matchList sc cc tyenv xs vs = -- precondition: length xs = length vs
+  do gs <- concat <$> sequence [ match sc cc tyenv x v | (x, v) <- zip xs vs ]
+     g <- liftIO $ scAndList sc gs
+     return (if null gs then [] else [g])
+
+-- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
 scAndList sc [] = scBool sc True
 scAndList _sc [x] = return x
@@ -609,20 +627,20 @@ verifyPoststate ::
   MemImpl ->
   Maybe LLVMVal ->
   IO [(String, Term)]
-verifyPoststate sc cc mspec env mem ret =
-  do postconds <- processPostconditions sc cc tyenv env mem (csPostconditions mspec)
+verifyPoststate sc cc mspec env0 mem ret =
+  do (retgoals, env) <-
+       case (ret, csRetValue mspec) of
+         (Nothing, Nothing) -> return ([], env0)
+         (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
+         (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
+         (Just ret', Just val) ->
+           do (goals, env) <- runStateT (match sc cc tyenv ret' val) env0
+              return ([ ("return value", goal) | goal <- goals ], env)
+     postconds <- processPostconditions sc cc tyenv env mem (csPostconditions mspec)
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
      obligationTerms <- mapM verifyObligation obligations
-     let goals = postconds ++ obligationTerms
-     case (ret, csRetValue mspec) of
-       (Nothing, Nothing) -> return goals
-       (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
-       (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
-       (Just ret', Just val) ->
-         do val' <- resolveSetupVal cc env tyenv val
-            goal <- assertEqualVals cc ret' val'
-            return (("return value", goal) : goals)
+     return (retgoals ++ postconds ++ obligationTerms)
   where
     tyenv = Map.union (csAllocations mspec) (csFreshPointers mspec)
     sym = ccBackend cc
