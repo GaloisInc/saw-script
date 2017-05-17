@@ -174,7 +174,8 @@ verifyObligations cc mspec tactic assumes asserts = do
   r <- forM asserts $ \(msg, assert) -> do
     goal   <- io $ scImplies sc assume assert
     goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
-    r      <- evalStateT tactic (startProof (ProofGoal Universal nm goal'))
+    let goalname = concat [nm, " (", msg, ")"]
+    r      <- evalStateT tactic (startProof (ProofGoal Universal goalname goal'))
     case r of
       Unsat _stats -> return True
       SatMulti stats vals -> do
