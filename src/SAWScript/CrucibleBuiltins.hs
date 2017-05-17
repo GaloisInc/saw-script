@@ -26,10 +26,12 @@ import Data.Foldable (toList, find)
 import Data.IORef
 import Data.String
 import System.IO
-import           Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Set (Set)
+import qualified Data.Set as Set
+import           Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 --import qualified Data.Text as Text
 import qualified Data.Vector as V
 
@@ -476,6 +478,128 @@ verifySimulate cc mspec args assumes lemmas mem checkSat =
 
 --------------------------------------------------------------------------------
 
+processPostconditions ::
+  (?lc :: TyCtx.LLVMContext) =>
+  SharedContext                   {- ^ term construction context -} ->
+  CrucibleContext                 {- ^ simulator context         -} ->
+  Map AllocIndex Crucible.MemType {- ^ type env                  -} ->
+  Map AllocIndex LLVMVal          {- ^ pointer environment       -} ->
+  MemImpl                         {- ^ LLVM heap                 -} ->
+  [SetupCondition]                {- ^ postconditions            -} ->
+  IO [(String, Term)]
+processPostconditions sc cc tyenv env0 mem conds0 =
+  evalStateT (go False [] conds0) env0
+  where
+    sym = ccBackend cc
+
+    go ::
+      Bool             {- progress indicator -} ->
+      [SetupCondition] {- delayed conditions -} ->
+      [SetupCondition] {- queued conditions  -} ->
+      StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
+
+    -- all conditions processed, success
+    go _ [] [] = return []
+
+    -- not all conditions processed, no progress, failure
+    go False _delayed [] = fail "processPostconditions: unprocessed conditions"
+
+    -- not all conditions processed, progress made, resume delayed conditions
+    go True delayed [] = go False [] delayed
+
+    -- progress the next precondition in the work queue
+    go progress delayed (c:cs) =
+      do ready <- checkSetupCondition c
+         if ready then
+           do goals1 <- verifyPostCond c
+              goals2 <- go True delayed cs
+              return (goals1 ++ goals2)
+           else go progress (c:delayed) cs
+
+    -- determine if a precondition is ready to be checked
+    checkSetupCondition :: SetupCondition -> StateT (Map AllocIndex LLVMVal) IO Bool
+    checkSetupCondition (SetupCond_PointsTo p _) = checkSetupValue p
+    checkSetupCondition SetupCond_Equal{}        = return True
+    checkSetupCondition SetupCond_Pred{}         = return True
+
+    checkSetupValue :: SetupValue -> StateT (Map AllocIndex LLVMVal) IO Bool
+    checkSetupValue v =
+      do m <- get
+         return (all (`Map.member` m) (setupVars v))
+
+    -- Compute the set of variable identifiers in a 'SetupValue'
+    setupVars :: SetupValue -> Set AllocIndex
+    setupVars v =
+      case v of
+        SetupVar    i  -> Set.singleton i
+        SetupStruct xs -> foldMap setupVars xs
+        SetupArray  xs -> foldMap setupVars xs
+        SetupElem x _  -> setupVars x
+        SetupTerm   _  -> Set.empty
+        SetupNull      -> Set.empty
+        SetupGlobal _  -> Set.empty
+
+    verifyPostCond :: SetupCondition -> StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
+    verifyPostCond (SetupCond_PointsTo lhs val) =
+      do env <- get
+         lhs' <- liftIO $ resolveSetupVal cc env tyenv lhs
+         ptr <- case lhs' of
+           Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
+           _ -> fail "Non-pointer value found in points-to assertion"
+         memTy <- liftIO $ typeOfSetupValue cc tyenv val
+         cty <- case Crucible.toStorableType memTy of
+           Nothing -> fail $ "can't translate type: " ++ show memTy
+           Just x -> return x
+         -- cty <- maybe (fail "can't translate type") return (memTypeToType memTy)
+         x <- liftIO $ Crucible.loadRaw sym mem ptr cty
+         gs <- match x val
+         return [ ("points-to assertion", g) | g <- gs ]
+
+    verifyPostCond (SetupCond_Equal val1 val2) =
+      do env <- get
+         val1' <- liftIO $ resolveSetupVal cc env tyenv val1
+         val2' <- liftIO $ resolveSetupVal cc env tyenv val2
+         g <- liftIO $ assertEqualVals cc val1' val2'
+         return [("equality assertion", g)]
+
+    verifyPostCond (SetupCond_Pred tm) =
+      return [("predicate assertion", ttTerm tm)]
+
+    match :: LLVMVal -> SetupValue -> StateT (Map AllocIndex LLVMVal) IO [Term]
+    match x (SetupVar i) =
+      do env <- get
+         case Map.lookup i env of
+           Just y  -> do t <- liftIO $ assertEqualVals cc x y
+                         return [t]
+           Nothing -> do put (Map.insert i x env)
+                         return []
+    match (Crucible.LLVMValStruct fields) (SetupStruct vs) =
+      matchList (map snd (V.toList fields)) vs
+    match (Crucible.LLVMValArray _ty xs) (SetupArray vs) =
+      matchList (V.toList xs) vs
+    match x (SetupTerm tm) =
+      do tVal <- liftIO $ valueToSC sym x
+         g <- liftIO $ scEq sc tVal (ttTerm tm)
+         return [g]
+    match x v =
+      do env <- get
+         v' <- liftIO $ resolveSetupVal cc env tyenv v
+         g <- liftIO $ assertEqualVals cc x v'
+         return [g]
+
+    matchList :: [LLVMVal] -> [SetupValue] -> StateT (Map AllocIndex LLVMVal) IO [Term]
+    matchList xs vs = -- precondition: length xs = length vs
+      do gs <- concat <$> sequence [ match x v | (x, v) <- zip xs vs ]
+         g <- liftIO $ scAndList sc gs
+         return (if null gs then [] else [g])
+
+scAndList :: SharedContext -> [Term] -> IO Term
+scAndList sc [] = scBool sc True
+scAndList _sc [x] = return x
+scAndList sc (x : xs) = scAnd sc x =<< scAndList sc xs
+
+--------------------------------------------------------------------------------
+
 verifyPoststate ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext ->
@@ -486,7 +610,7 @@ verifyPoststate ::
   Maybe LLVMVal ->
   IO [(String, Term)]
 verifyPoststate sc cc mspec env mem ret =
-  do postconds <- mapM verifyPostCond (csPostconditions mspec)
+  do postconds <- processPostconditions sc cc tyenv env mem (csPostconditions mspec)
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
      obligationTerms <- mapM verifyObligation obligations
@@ -500,8 +624,7 @@ verifyPoststate sc cc mspec env mem ret =
             goal <- assertEqualVals cc ret' val'
             return (("return value", goal) : goals)
   where
-    dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
-    tyenv = csAllocations mspec
+    tyenv = Map.union (csAllocations mspec) (csFreshPointers mspec)
     sym = ccBackend cc
 
     verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
@@ -513,35 +636,7 @@ verifyPoststate sc cc mspec env mem ret =
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
-    verifyPostCond (SetupCond_PointsTo lhs val) = do
-      lhs' <- resolveSetupVal cc env tyenv lhs
-      ptr <- case lhs' of
-        Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
-        _ -> fail "Non-pointer value found in points-to assertion"
-      case val of
-        -- Avoid translating the term into an LLVM value if not necessary
-        SetupTerm tm -> do
-          tp <- typeOfSetupValue cc (csAllocations mspec) val
-          cty <- maybe (fail "can't translate type") return (memTypeToType tp)
-          x <- Crucible.loadRaw sym mem ptr cty
-          tVal <- valueToSC sym x
-          g <- scEq sc tVal (ttTerm tm)
-          return ("points-to assertion", g)
-        _ -> do
-          val' <- resolveSetupVal cc env tyenv val
-          let tp' = typeOfLLVMVal dl val'
-          x <- Crucible.loadRaw sym mem ptr tp'
-          g <- assertEqualVals cc x val'
-          return ("points-to assertion", g)
 
-    verifyPostCond (SetupCond_Equal val1 val2) = do
-      val1' <- resolveSetupVal cc env tyenv val1
-      val2' <- resolveSetupVal cc env tyenv val2
-      g <- assertEqualVals cc val1' val2'
-      return ("equality assertion", g)
-
-    verifyPostCond (SetupCond_Pred tm) =
-      return ("predicate assertion", ttTerm tm)
 
 --------------------------------------------------------------------------------
 
