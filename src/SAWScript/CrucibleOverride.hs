@@ -418,7 +418,7 @@ learnSetupCondition ::
   OverrideMatcher ()
 learnSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = learnPointsTo sc cc spec ptr val
 learnSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = learnEqual sc cc spec val1 val2
-learnSetupCondition _  cc _    (SetupCond_Pred tm)          = learnPred cc tm
+learnSetupCondition sc cc _    (SetupCond_Pred tm)          = learnPred sc cc tm
 
 
 ------------------------------------------------------------------------
@@ -472,14 +472,16 @@ learnEqual sc cc spec v1 v2 = do
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
 learnPred ::
+  SharedContext                                                       ->
   CrucibleContext                                                     ->
   TypedTerm        {- ^ the precondition to learn                  -} ->
   OverrideMatcher ()
-learnPred cc tt = liftIO $ do
-  p <- resolveSAWPred cc (ttTerm tt)
-  let err = Crucible.AssertFailureSimError "precondition"
-  Crucible.sbAddAssertion (ccBackend cc) p err
-
+learnPred sc cc tt =
+  do s <- OM (use termSub)
+     t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
+     p <- liftIO $ resolveSAWPred cc t
+     let err = Crucible.AssertFailureSimError "precondition"
+     liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
 ------------------------------------------------------------------------
 
@@ -517,7 +519,7 @@ executeSetupCondition ::
   OverrideMatcher ()
 executeSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = executePointsTo sc cc spec ptr val
 executeSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = executeEqual sc cc spec val1 val2
-executeSetupCondition _  cc _    (SetupCond_Pred tm)          = executePred cc tm
+executeSetupCondition sc cc _    (SetupCond_Pred tm)          = executePred sc cc tm
 
 ------------------------------------------------------------------------
 
@@ -573,11 +575,15 @@ executeEqual sc cc spec v1 v2 = do
 -- | Process a "crucible_postcond" statement from the postcondition
 -- section of the CrucibleSetup block.
 executePred ::
+  SharedContext     ->
   CrucibleContext                                  ->
   TypedTerm        {- ^ the term to assert as a postcondition -} ->
   OverrideMatcher ()
-executePred cc tt = liftIO $
-  Crucible.sbAddAssumption (ccBackend cc) =<< resolveSAWPred cc (ttTerm tt)
+executePred sc cc tt =
+  do s <- OM (use termSub)
+     t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
+     p <- liftIO $ resolveSAWPred cc t
+     liftIO $ Crucible.sbAddAssumption (ccBackend cc) p
 
 ------------------------------------------------------------------------
 
