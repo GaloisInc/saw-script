@@ -128,7 +128,7 @@ methodSpecHandler sc cc cs retTy = do
        xs <- liftIO (zipWithM aux (map fst args') (assignmentToList args))
 
        -- todo: fail if list lengths mismatch
-       sequence_ [ matchArg x y z | (x,(y,z)) <- zip xs args' ]
+       sequence_ [ matchArg cc x y z | (x,(y,z)) <- zip xs args' ]
        processPreconditions sc cc cs (csPreconditions cs)
        enforceDisjointness cc cs
        traverse_ (executePostAllocation cc) (Map.assocs (csPostAllocations cs))
@@ -314,22 +314,23 @@ assignTerm var val =
 ------------------------------------------------------------------------
 
 matchArg ::
+  CrucibleContext                                                             ->
   Crucible.LLVMVal Sym Crucible.PtrWidth {- ^ concrete simulation value    -} ->
   Crucible.MemType                       {- ^ expected memory type         -} ->
   SetupValue                             {- ^ expected specification value -} ->
   OverrideMatcher ()
 
-matchArg (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
-  assignVar var
-    $ Crucible.RolledType (Ctx.empty Ctx.%> Crucible.RV blk Ctx.%> Crucible.RV end Ctx.%> Crucible.RV off)
+matchArg _cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
+  assignVar var (unpackPointer (Crucible.LLVMPtr blk end off))
 
 -- match the fields of struct point-wise
-matchArg (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+matchArg cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
   sequence_
-    [ matchArg x y z
+    [ matchArg cc x y z
        | ((_,x),y,z) <- zip3 (V.toList xs) (V.toList (Crucible.fiType <$> Crucible.siFields fields)) zs ]
 
 matchArg
+  _cc
   realVal _
   (SetupTerm (TypedTerm _expectedTermTy expectedTerm)) =
 
@@ -337,7 +338,14 @@ matchArg
      realTerm <- liftIO (valueToSC sym realVal)
      matchTerm realTerm expectedTerm
 
-matchArg actual expectedTy expected =
+matchArg cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
+  do sym <- liftSim Crucible.getSymInterface
+     let ptr = Crucible.LLVMPtr blk end off
+     p <- liftIO $ Crucible.isNullPointer sym (unpackPointer ptr)
+     let err = Crucible.AssertFailureSimError "equality precondition"
+     liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+
+matchArg _cc actual expectedTy expected =
   fail $ "Argument mismatch: " ++
           show actual ++ ", " ++
           show expected ++ " : " ++ show expectedTy
@@ -446,7 +454,7 @@ learnPointsTo sc cc spec ptr val =
              $ Crucible.memModelOps $ ccLLVMContext cc
 
      v      <- liftIO (Crucible.loadRaw sym mem (packPointer' ptr1) storTy)
-     matchArg v memTy val
+     matchArg cc v memTy val
 
 
 ------------------------------------------------------------------------
@@ -646,6 +654,13 @@ packPointer' (Crucible.RolledType xs) = Crucible.LLVMPtr blk end off
     Crucible.RV blk = xs^._1
     Crucible.RV end = xs^._2
     Crucible.RV off = xs^._3
+
+unpackPointer ::
+  Crucible.LLVMPtr Sym Crucible.PtrWidth ->
+  Crucible.RegValue Sym Crucible.LLVMPointerType
+unpackPointer (Crucible.LLVMPtr blk end off) =
+  Crucible.RolledType
+  (Ctx.empty Ctx.%> Crucible.RV blk Ctx.%> Crucible.RV end Ctx.%> Crucible.RV off)
 
 ------------------------------------------------------------------------
 
