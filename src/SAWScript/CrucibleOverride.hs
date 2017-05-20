@@ -342,7 +342,18 @@ matchArg cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
   do sym <- liftSim Crucible.getSymInterface
      let ptr = Crucible.LLVMPtr blk end off
      p <- liftIO $ Crucible.isNullPointer sym (unpackPointer ptr)
-     let err = Crucible.AssertFailureSimError "equality precondition"
+     let err = Crucible.AssertFailureSimError "null-equality precondition"
+     liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+
+matchArg cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
+  do sym <- liftSim Crucible.getSymInterface
+     let mem = ccEmptyMemImpl cc
+     ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+     let (Crucible.LLVMPtr blk2 _ off2) = packPointer' ptr2
+     p1 <- liftIO $ Crucible.natEq sym blk1 blk2
+     p2 <- liftIO $ Crucible.bvEq sym off1 off2
+     p <- liftIO $ Crucible.andPred sym p1 p2
+     let err = Crucible.AssertFailureSimError "global-equality precondition"
      liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
 matchArg _cc actual expectedTy expected =
