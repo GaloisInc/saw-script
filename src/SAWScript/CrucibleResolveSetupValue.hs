@@ -217,10 +217,14 @@ resolveSAWTerm cc tp tm =
         case Crucible.someNat sz of
           Just (Crucible.Some w)
             | Just Crucible.LeqProof <- Crucible.isPosNat w ->
-              do sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
-                 -- Evaluate in SBV to test whether 'tm' is a concrete value
-                 sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm
-                 case SBV.svAsInteger sbv of
+              do mx <- case getAllExts tm of
+                         [] -> do
+                           sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+                           -- Evaluate in SBV to test whether 'tm' is a concrete value
+                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm
+                           return (SBV.svAsInteger sbv)
+                         _ -> return Nothing
+                 case mx of
                    Just x -> do
                      loc <- Crucible.curProgramLoc sym
                      let v = Crucible.BVElt w x loc
