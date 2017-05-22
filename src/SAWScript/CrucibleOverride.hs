@@ -636,12 +636,10 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     let pointerTypes = Map.union (csAllocations spec)
-                                  (csFreshPointers spec)
-     memTy <- liftIO $ typeOfSetupValue cc pointerTypes sval
+     let tyenv = Map.union (csAllocations spec) (csFreshPointers spec)
+     memTy <- liftIO $ typeOfSetupValue cc tyenv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap packPointer m
-     let tyenv = csPreAllocations spec -- should we also merge csFreshPointers?
      lval <- liftIO $ resolveSetupVal cc env tyenv sval'
      return (memTy, lval)
 
