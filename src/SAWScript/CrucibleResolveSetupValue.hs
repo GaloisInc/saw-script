@@ -45,6 +45,7 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.NatRepr as NatRepr
 
+import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 
@@ -53,6 +54,7 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
 import SAWScript.Builtins
 import SAWScript.TypedTerm
+import SAWScript.Utils
 
 import SAWScript.CrucibleMethodSpecIR
 
@@ -217,11 +219,13 @@ resolveSAWTerm cc tp tm =
         case Crucible.someNat sz of
           Just (Crucible.Some w)
             | Just Crucible.LeqProof <- Crucible.isPosNat w ->
-              do mx <- case getAllExts tm of
+              do sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+                 ss <- basic_ss sc
+                 tm' <- rewriteSharedTerm sc ss tm
+                 mx <- case getAllExts tm' of
                          [] -> do
-                           sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
                            -- Evaluate in SBV to test whether 'tm' is a concrete value
-                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm
+                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm'
                            return (SBV.svAsInteger sbv)
                          _ -> return Nothing
                  case mx of
@@ -230,7 +234,7 @@ resolveSAWTerm cc tp tm =
                      let v = Crucible.BVElt w x loc
                      return (Crucible.LLVMValInt w v)
                    Nothing -> do
-                     v <- Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm
+                     v <- Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm'
                      return (Crucible.LLVMValInt w v)
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
