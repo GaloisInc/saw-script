@@ -56,8 +56,10 @@ data PrePost
   deriving (Eq, Show)
 
 
+data PointsTo = PointsTo SetupValue SetupValue
+  deriving (Show)
+
 data SetupCondition where
-  SetupCond_PointsTo :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Pred     :: TypedTerm -> SetupCondition
   deriving (Show)
@@ -71,7 +73,9 @@ data CrucibleMethodSpecIR =
   , csPreAllocations  :: Map AllocIndex MemType            -- ^ vars allocated before the function runs
   , csPostAllocations :: Map AllocIndex MemType            -- ^ vars allocated by the function itself
   , csFreshPointers   :: Map AllocIndex MemType
-  , csConditions      :: [(PrePost,SetupCondition)]        -- ^ points-to and equality statements
+  , csPrePointsTos    :: [PointsTo]                        -- ^ points-to statements from the pre-state section
+  , csPostPointsTos   :: [PointsTo]                        -- ^ points-to statements from the post-state section
+  , csConditions      :: [(PrePost, SetupCondition)]       -- ^ equality and precond/postcond statements
   , csArgBindings     :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue        :: Maybe SetupValue                  -- ^ function return value
   }
@@ -108,6 +112,8 @@ initialCrucibleSetupState def =
     , csPreAllocations  = Map.empty
     , csPostAllocations = Map.empty
     , csFreshPointers   = Map.empty
+    , csPrePointsTos    = []
+    , csPostPointsTos   = []
     , csConditions      = []
     , csArgBindings     = Map.empty
     , csRetValue        = Nothing
@@ -128,6 +134,8 @@ initialCrucibleSetupStateDecl dec =
     , csPreAllocations  = Map.empty
     , csPostAllocations = Map.empty
     , csFreshPointers   = Map.empty
+    , csPrePointsTos    = []
+    , csPostPointsTos   = []
     , csConditions      = []
     , csArgBindings     = Map.empty
     , csRetValue        = Nothing

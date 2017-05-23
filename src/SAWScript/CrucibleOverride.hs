@@ -72,7 +72,7 @@ data OverrideState = OverrideState
 
 data OverrideFailure
   = BadSymType Crucible.SymType
-  | AmbiguousPrecondition [SetupCondition]
+  | AmbiguousPrecondition [PointsTo]
   deriving Show
 
 instance Exception OverrideFailure
@@ -129,9 +129,11 @@ methodSpecHandler sc cc cs retTy = do
 
        -- todo: fail if list lengths mismatch
        sequence_ [ matchArg cc x y z | (x,(y,z)) <- zip xs args' ]
-       processPreconditions sc cc cs (csPreconditions cs)
+       processPrePointsTos sc cc cs (csPrePointsTos cs)
+       traverse_ (learnSetupCondition sc cc cs) (csPreconditions cs)
        enforceDisjointness cc cs
        traverse_ (executePostAllocation cc) (Map.assocs (csPostAllocations cs))
+       traverse_ (executePointsTo sc cc cs) (csPostPointsTos cs)
        traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
        computeReturnValue cc sc cs retTy (csRetValue cs)
 
@@ -164,19 +166,24 @@ enforceDisjointness cc spec =
 
 ------------------------------------------------------------------------
 
-processPreconditions ::
+-- | For each points-to statement from the precondition section of an
+-- override spec, read the memory value through the given pointer
+-- (lhs) and match the value against the given pattern (rhs).
+-- Statements are processed in dependency order: a points-to statement
+-- cannot be executed until bindings for any/all lhs variables exist.
+processPrePointsTos ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext    {- ^ term construction context -} ->
   CrucibleContext  {- ^ simulator context         -} ->
   CrucibleMethodSpecIR                               ->
-  [SetupCondition] {- ^ preconditions             -} ->
+  [PointsTo]       {- ^ points-to preconditions   -} ->
   OverrideMatcher ()
-processPreconditions sc cc spec = go False []
+processPrePointsTos sc cc spec = go False []
   where
     go ::
-      Bool             {- progress indicator -} ->
-      [SetupCondition] {- delayed conditions -} ->
-      [SetupCondition] {- queued conditions  -} ->
+      Bool       {- progress indicator -} ->
+      [PointsTo] {- delayed conditions -} ->
+      [PointsTo] {- queued conditions  -} ->
       OverrideMatcher ()
 
     -- all conditions processed, success
@@ -188,20 +195,18 @@ processPreconditions sc cc spec = go False []
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
 
-    -- progress the next precondition in the work queue
+    -- progress the next points-to in the work queue
     go progress delayed (c:cs) =
-      do ready <- checkSetupCondition c
+      do ready <- checkPointsTo c
          if ready then
-           do learnSetupCondition sc cc spec c
+           do learnPointsTo sc cc spec c
               go True delayed cs
          else
            do go progress (c:delayed) cs
 
     -- determine if a precondition is ready to be checked
-    checkSetupCondition :: SetupCondition -> OverrideMatcher Bool
-    checkSetupCondition (SetupCond_PointsTo p _) = checkSetupValue p
-    checkSetupCondition SetupCond_Equal{}        = pure True
-    checkSetupCondition SetupCond_Pred{}         = pure True
+    checkPointsTo :: PointsTo -> OverrideMatcher Bool
+    checkPointsTo (PointsTo p _) = checkSetupValue p
 
     checkSetupValue :: SetupValue -> OverrideMatcher Bool
     checkSetupValue v =
@@ -435,7 +440,6 @@ learnSetupCondition ::
   CrucibleMethodSpecIR       ->
   SetupCondition             ->
   OverrideMatcher ()
-learnSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = learnPointsTo sc cc spec ptr val
 learnSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = learnEqual sc cc spec val1 val2
 learnSetupCondition sc cc _    (SetupCond_Pred tm)          = learnPred sc cc tm
 
@@ -450,10 +454,9 @@ learnPointsTo ::
   SharedContext              ->
   CrucibleContext            ->
   CrucibleMethodSpecIR       ->
-  SetupValue {- ^ pointer -} ->
-  SetupValue {- ^ value   -} ->
+  PointsTo                   ->
   OverrideMatcher ()
-learnPointsTo sc cc spec ptr val =
+learnPointsTo sc cc spec (PointsTo ptr val) =
   do liftIO $ putStrLn $ "Checking points to: " ++
                          show ptr ++ " -> " ++ show val
      (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
@@ -536,7 +539,6 @@ executeSetupCondition ::
   CrucibleMethodSpecIR       ->
   SetupCondition             ->
   OverrideMatcher ()
-executeSetupCondition sc cc spec (SetupCond_PointsTo ptr val) = executePointsTo sc cc spec ptr val
 executeSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = executeEqual sc cc spec val1 val2
 executeSetupCondition sc cc _    (SetupCond_Pred tm)          = executePred sc cc tm
 
@@ -550,10 +552,9 @@ executePointsTo ::
   SharedContext              ->
   CrucibleContext            ->
   CrucibleMethodSpecIR       ->
-  SetupValue {- ^ pointer -} ->
-  SetupValue {- ^ value   -} ->
+  PointsTo                   ->
   OverrideMatcher ()
-executePointsTo sc cc spec ptr val =
+executePointsTo sc cc spec (PointsTo ptr val) =
   do liftIO $ putStrLn $ "Executing points to: " ++
                          show ptr ++ " -> " ++ show val
      (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr

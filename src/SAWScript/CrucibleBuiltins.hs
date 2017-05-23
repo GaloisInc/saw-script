@@ -213,7 +213,8 @@ verifyPrestate cc mspec mem = do
   (env1, mem') <- runStateT (traverse (doAlloc cc) (csPreAllocations mspec)) mem
   env2 <- Map.traverseWithKey (\k _ -> setupFreshPointer cc k) (csFreshPointers mspec)
   let env = Map.union env1 env2
-  (cs, mem'') <- setupPrestateConditions mspec cc env (csPreconditions mspec) mem'
+  mem'' <- setupPrePointsTos mspec cc env (csPrePointsTos mspec) mem'
+  cs <- setupPrestateConditions mspec cc env (csPreconditions mspec)
   args <- resolveArguments cc mspec env
   return (args, cs, env, mem'')
 
@@ -252,21 +253,23 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 
 --------------------------------------------------------------------------------
 
-setupPrestateConditions ::
+-- | For each points-to constraint in the pre-state section of the
+-- function spec, write the given value to the address of the given
+-- pointer.
+setupPrePointsTos ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleMethodSpecIR       ->
   CrucibleContext            ->
   Map AllocIndex LLVMVal     ->
-  [SetupCondition]           ->
+  [PointsTo]                 ->
   MemImpl                    ->
-  IO ([Term], MemImpl)
-setupPrestateConditions mspec cc env conds mem0 =
-  foldM go ([], mem0) conds
+  IO MemImpl
+setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
     tyenv = csPreAllocations mspec
 
-    go :: ([Term], MemImpl) -> SetupCondition -> IO ([Term], MemImpl)
-    go (cs, mem) (SetupCond_PointsTo ptr val) =
+    go :: MemImpl -> PointsTo -> IO MemImpl
+    go mem (PointsTo ptr val) =
       do val' <- resolveSetupVal cc env tyenv val
          ptr' <- resolveSetupVal cc env tyenv ptr
          ptr'' <- case ptr' of
@@ -283,16 +286,26 @@ setupPrestateConditions mspec cc env conds mem0 =
            Nothing -> fail $ "Expected memory type: " ++ show lhsTy
          let sym = ccBackend cc
          mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
-         return (cs, mem')
+         return mem'
 
-    go (cs, mem) (SetupCond_Equal val1 val2) =
+setupPrestateConditions ::
+  (?lc :: TyCtx.LLVMContext) =>
+  CrucibleMethodSpecIR       ->
+  CrucibleContext            ->
+  Map AllocIndex LLVMVal     ->
+  [SetupCondition]           ->
+  IO [Term]
+setupPrestateConditions mspec cc env conds = mapM go conds
+  where
+    tyenv = csPreAllocations mspec
+
+    go (SetupCond_Equal val1 val2) =
       do val1' <- resolveSetupVal cc env tyenv val1
          val2' <- resolveSetupVal cc env tyenv val2
-         c <- assertEqualVals cc val1' val2'
-         return (c : cs, mem)
+         assertEqualVals cc val1' val2'
 
-    go (cs, mem) (SetupCond_Pred tm) =
-      return (ttTerm tm : cs, mem)
+    go (SetupCond_Pred tm) =
+      return (ttTerm tm)
 
 --------------------------------------------------------------------------------
 
@@ -481,22 +494,47 @@ verifySimulate cc mspec args assumes lemmas mem checkSat =
 
 processPostconditions ::
   (?lc :: TyCtx.LLVMContext) =>
+  CrucibleContext                 {- ^ simulator context         -} ->
+  Map AllocIndex Crucible.MemType {- ^ type env                  -} ->
+  Map AllocIndex LLVMVal          {- ^ pointer environment       -} ->
+  [SetupCondition]                {- ^ postconditions            -} ->
+  IO [(String, Term)]
+processPostconditions cc tyenv env conds = mapM verifyPostCond conds
+  where
+    verifyPostCond :: SetupCondition -> IO (String, Term)
+    verifyPostCond (SetupCond_Equal val1 val2) =
+      do val1' <- resolveSetupVal cc env tyenv val1
+         val2' <- resolveSetupVal cc env tyenv val2
+         g <- assertEqualVals cc val1' val2'
+         return ("equality assertion", g)
+    verifyPostCond (SetupCond_Pred tm) =
+      return ("predicate assertion", ttTerm tm)
+
+------------------------------------------------------------------------
+
+-- | For each points-to statement from the postcondition section of a
+-- function spec, read the memory value through the given pointer
+-- (lhs) and match the value against the given pattern (rhs).
+-- Statements are processed in dependency order: a points-to statement
+-- cannot be executed until bindings for any/all lhs variables exist.
+processPostPointsTos ::
+  (?lc :: TyCtx.LLVMContext) =>
   SharedContext                   {- ^ term construction context -} ->
   CrucibleContext                 {- ^ simulator context         -} ->
   Map AllocIndex Crucible.MemType {- ^ type env                  -} ->
   Map AllocIndex LLVMVal          {- ^ pointer environment       -} ->
   MemImpl                         {- ^ LLVM heap                 -} ->
-  [SetupCondition]                {- ^ postconditions            -} ->
-  IO [(String, Term)]
-processPostconditions sc cc tyenv env0 mem conds0 =
+  [PointsTo]                      {- ^ points-to postconditions  -} ->
+  IO [(String, Term)]             {- ^ equality constraints      -}
+processPostPointsTos sc cc tyenv env0 mem conds0 =
   evalStateT (go False [] conds0) env0
   where
     sym = ccBackend cc
 
     go ::
-      Bool             {- progress indicator -} ->
-      [SetupCondition] {- delayed conditions -} ->
-      [SetupCondition] {- queued conditions  -} ->
+      Bool       {- progress indicator -} ->
+      [PointsTo] {- delayed conditions -} ->
+      [PointsTo] {- queued conditions  -} ->
       StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
 
     -- all conditions processed, success
@@ -510,7 +548,7 @@ processPostconditions sc cc tyenv env0 mem conds0 =
 
     -- progress the next precondition in the work queue
     go progress delayed (c:cs) =
-      do ready <- checkSetupCondition c
+      do ready <- checkPointsTo c
          if ready then
            do goals1 <- verifyPostCond c
               goals2 <- go True delayed cs
@@ -518,10 +556,8 @@ processPostconditions sc cc tyenv env0 mem conds0 =
            else go progress (c:delayed) cs
 
     -- determine if a precondition is ready to be checked
-    checkSetupCondition :: SetupCondition -> StateT (Map AllocIndex LLVMVal) IO Bool
-    checkSetupCondition (SetupCond_PointsTo p _) = checkSetupValue p
-    checkSetupCondition SetupCond_Equal{}        = return True
-    checkSetupCondition SetupCond_Pred{}         = return True
+    checkPointsTo :: PointsTo -> StateT (Map AllocIndex LLVMVal) IO Bool
+    checkPointsTo (PointsTo p _) = checkSetupValue p
 
     checkSetupValue :: SetupValue -> StateT (Map AllocIndex LLVMVal) IO Bool
     checkSetupValue v =
@@ -540,8 +576,8 @@ processPostconditions sc cc tyenv env0 mem conds0 =
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty
 
-    verifyPostCond :: SetupCondition -> StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
-    verifyPostCond (SetupCond_PointsTo lhs val) =
+    verifyPostCond :: PointsTo -> StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
+    verifyPostCond (PointsTo lhs val) =
       do env <- get
          lhs' <- liftIO $ resolveSetupVal cc env tyenv lhs
          ptr <- case lhs' of
@@ -555,16 +591,6 @@ processPostconditions sc cc tyenv env0 mem conds0 =
          x <- liftIO $ Crucible.loadRaw sym mem ptr cty
          gs <- match sc cc tyenv x val
          return [ ("points-to assertion", g) | g <- gs ]
-
-    verifyPostCond (SetupCond_Equal val1 val2) =
-      do env <- get
-         val1' <- liftIO $ resolveSetupVal cc env tyenv val1
-         val2' <- liftIO $ resolveSetupVal cc env tyenv val2
-         g <- liftIO $ assertEqualVals cc val1' val2'
-         return [("equality assertion", g)]
-
-    verifyPostCond (SetupCond_Pred tm) =
-      return [("predicate assertion", ttTerm tm)]
 
 --------------------------------------------------------------------------------
 
@@ -637,11 +663,12 @@ verifyPoststate sc cc mspec env0 mem ret =
          (Just ret', Just val) ->
            do (goals, env) <- runStateT (match sc cc tyenv ret' val) env0
               return ([ ("return value", goal) | goal <- goals ], env)
-     postconds <- processPostconditions sc cc tyenv env mem (csPostconditions mspec)
+     pointsgoals <- processPostPointsTos sc cc tyenv env mem (csPostPointsTos mspec)
+     postconds <- processPostconditions cc tyenv env (csPostconditions mspec)
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
      obligationTerms <- mapM verifyObligation obligations
-     return (retgoals ++ postconds ++ obligationTerms)
+     return (retgoals ++ pointsgoals ++ postconds ++ obligationTerms)
   where
     tyenv = Map.union (csAllocations mspec) (csFreshPointers mspec)
     sym = ccBackend cc
@@ -866,6 +893,15 @@ getCrucibleContext :: BuiltinContext -> CrucibleSetup CrucibleContext
 getCrucibleContext bic =
   lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
 
+addPointsTo :: PointsTo -> CrucibleSetup ()
+addPointsTo pt = do
+  st <- get
+  let spec = csMethodSpec st
+      spec' = case csPrePost st of
+        PreState -> spec { csPrePointsTos = pt : csPrePointsTos spec }
+        PostState -> spec { csPostPointsTos = pt : csPostPointsTos spec }
+  put st{ csMethodSpec = spec' }
+
 addCondition :: SetupCondition
              -> CrucibleSetup ()
 addCondition cond = do
@@ -1049,7 +1085,7 @@ crucible_points_to bic _opt ptr val =
                             (csFreshPointers (csMethodSpec st))
      valTy <- typeOfSetupValue cc valenv val
      checkMemTypeCompatibility lhsTy valTy
-     addCondition (SetupCond_PointsTo ptr val)
+     addPointsTo (PointsTo ptr val)
 
 crucible_equal ::
   BuiltinContext ->
