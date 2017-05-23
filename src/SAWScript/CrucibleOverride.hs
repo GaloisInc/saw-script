@@ -47,6 +47,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NatRepr
 
 import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
 
 import           SAWScript.Builtins
@@ -128,7 +129,7 @@ methodSpecHandler sc cc cs retTy = do
        xs <- liftIO (zipWithM aux (map fst args') (assignmentToList args))
 
        -- todo: fail if list lengths mismatch
-       sequence_ [ matchArg cc x y z | (x,(y,z)) <- zip xs args' ]
+       sequence_ [ matchArg sc cc x y z | (x,(y,z)) <- zip xs args' ]
        processPrePointsTos sc cc cs (csPrePointsTos cs)
        traverse_ (learnSetupCondition sc cc cs) (csPreconditions cs)
        enforceDisjointness cc cs
@@ -319,38 +320,35 @@ assignTerm var val =
 ------------------------------------------------------------------------
 
 matchArg ::
-  CrucibleContext                                                             ->
+  SharedContext                 {- ^ context for constructing SAW terms    -} ->
+  CrucibleContext               {- ^ context for interacting with Crucible -} ->
   Crucible.LLVMVal Sym Crucible.PtrWidth {- ^ concrete simulation value    -} ->
   Crucible.MemType                       {- ^ expected memory type         -} ->
   SetupValue                             {- ^ expected specification value -} ->
   OverrideMatcher ()
 
-matchArg _cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
+matchArg _sc _cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
   assignVar var (unpackPointer (Crucible.LLVMPtr blk end off))
 
 -- match the fields of struct point-wise
-matchArg cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+matchArg sc cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
   sequence_
-    [ matchArg cc x y z
+    [ matchArg sc cc x y z
        | ((_,x),y,z) <- zip3 (V.toList xs) (V.toList (Crucible.fiType <$> Crucible.siFields fields)) zs ]
 
-matchArg
-  _cc
-  realVal _
-  (SetupTerm (TypedTerm _expectedTermTy expectedTerm)) =
-
+matchArg sc cc realVal _ (SetupTerm expected) =
   do sym      <- liftSim Crucible.getSymInterface
      realTerm <- liftIO (valueToSC sym realVal)
-     matchTerm realTerm expectedTerm
+     matchTerm sc cc realTerm (ttTerm expected)
 
-matchArg cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
+matchArg _sc cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
   do sym <- liftSim Crucible.getSymInterface
      let ptr = Crucible.LLVMPtr blk end off
      p <- liftIO $ Crucible.isNullPointer sym (unpackPointer ptr)
      let err = Crucible.AssertFailureSimError "null-equality precondition"
      liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
-matchArg cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
+matchArg _sc cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
   do sym <- liftSim Crucible.getSymInterface
      let mem = ccEmptyMemImpl cc
      ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
@@ -361,7 +359,7 @@ matchArg cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
      let err = Crucible.AssertFailureSimError "global-equality precondition"
      liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
-matchArg _cc actual expectedTy expected =
+matchArg _sc _cc actual expectedTy expected =
   fail $ "Argument mismatch: " ++
           show actual ++ ", " ++
           show expected ++ " : " ++ show expectedTy
@@ -418,16 +416,26 @@ typeToSC sc t =
 ------------------------------------------------------------------------
 
 matchTerm ::
-  Term {- ^ exported concrete term      -} ->
-  Term {- ^ expected specification term -} ->
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  CrucibleContext {- ^ context for interacting with Crucible -} ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
   OverrideMatcher ()
 
-matchTerm real expect | real == expect = return ()
-matchTerm real expect =
-  case (unwrapTermF real, unwrapTermF expect) of
-    (_, FTermF (ExtCns ec)) -> assignTerm (ecVarIndex ec) real
-    _                       -> fail $ "matchTerm: Unable to match (" ++ show real ++
-                               ") with (" ++ show expect ++ ")"
+matchTerm _ _ real expect | real == expect = return ()
+matchTerm sc cc real expect =
+  case unwrapTermF expect of
+    FTermF (ExtCns ec) -> assignTerm (ecVarIndex ec) real
+
+    -- test whether the pattern is a concrete term
+    _ | Set.null (getAllExtSet expect) ->
+      do t <- liftIO $ scEq sc real expect
+         p <- liftIO $ resolveSAWPred cc t
+         let err = Crucible.AssertFailureSimError "literal equality precondition"
+         liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+
+    _ -> fail $ "matchTerm: Unable to match (" ++ show real ++
+         ") with (" ++ show expect ++ ")"
 
 ------------------------------------------------------------------------
 
@@ -468,7 +476,7 @@ learnPointsTo sc cc spec (PointsTo ptr val) =
              $ Crucible.memModelOps $ ccLLVMContext cc
 
      v      <- liftIO (Crucible.loadRaw sym mem (packPointer' ptr1) storTy)
-     matchArg cc v memTy val
+     matchArg sc cc v memTy val
 
 
 ------------------------------------------------------------------------
