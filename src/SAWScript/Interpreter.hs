@@ -1516,7 +1516,7 @@ primitives = Map.fromList
     [ "TODO" ]
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_points_to)
+    (bicVal (crucible_points_to True))
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the given value (second argument)."
     , ""
@@ -1524,6 +1524,13 @@ primitives = Map.fromList
     , "the initial memory layout before function execution. In the post-state"
     , "section (after crucible_execute_func), this specifies an assertion"
     , "about the final memory state after running the function."
+    ]
+
+  , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_points_to False))
+    [ "A variant of crucible_points_to that does not check for compatibility"
+    , "between the pointer type and the value type. This may be useful when"
+    , "reading or writing a prefix of larger array, for example."
     ]
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"

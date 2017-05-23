@@ -1060,12 +1060,13 @@ constructFreshPointer memTy =
 
 
 crucible_points_to ::
+  Bool {- ^ whether to check type compatibility -} ->
   BuiltinContext ->
   Options        ->
   SetupValue     ->
   SetupValue     ->
   CrucibleSetup ()
-crucible_points_to bic _opt ptr val =
+crucible_points_to typed bic _opt ptr val =
   do cc <- getCrucibleContext bic
      let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
      st <- get
@@ -1084,7 +1085,7 @@ crucible_points_to bic _opt ptr val =
      let valenv = Map.union (csAllocations (csMethodSpec st))
                             (csFreshPointers (csMethodSpec st))
      valTy <- typeOfSetupValue cc valenv val
-     checkMemTypeCompatibility lhsTy valTy
+     when typed (checkMemTypeCompatibility lhsTy valTy)
      addPointsTo (PointsTo ptr val)
 
 crucible_equal ::

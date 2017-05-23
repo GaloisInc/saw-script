@@ -557,13 +557,10 @@ executePointsTo ::
 executePointsTo sc cc spec (PointsTo ptr val) =
   do liftIO $ putStrLn $ "Executing points to: " ++
                          show ptr ++ " -> " ++ show val
-     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
+     (_, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      sym    <- liftSim Crucible.getSymInterface
 
      (memTy1, val1) <- resolveSetupValue cc sc spec val
-
-     unless (TyCtx.compatMemTypes memTy memTy1) (fail "Mismatched store type")
-
      storTy <- Crucible.toStorableType memTy1
 
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
