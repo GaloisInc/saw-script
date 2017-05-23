@@ -287,18 +287,25 @@ runOverrideMatcher (OM m) = evalStateT m initialState
 
 ------------------------------------------------------------------------
 
+-- | Assign the given pointer value to the given allocation index in
+-- the current substitution. If there is already a binding for this
+-- index, then add a pointer-equality constraint.
 assignVar ::
+  CrucibleContext         {- ^ context for interacting with Crucible -} ->
   AllocIndex                                     {- ^ variable index -} ->
   Crucible.RegValue Sym Crucible.LLVMPointerType {- ^ concrete value -} ->
   OverrideMatcher ()
 
-assignVar var val =
+assignVar cc var val =
   OM $ zoom (setupValueSub . at var) $
 
   do old <- get
      case old of
        Nothing -> put (Just val)
-       Just _ -> fail "Unifying multiple occurrences of variables not yet supported"
+       Just val' ->
+         do p <- liftIO $ equalValsPred cc (packPointer val') (packPointer val)
+            let err = Crucible.AssertFailureSimError "equality of aliased pointers"
+            liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
 ------------------------------------------------------------------------
 
@@ -327,8 +334,8 @@ matchArg ::
   SetupValue                             {- ^ expected specification value -} ->
   OverrideMatcher ()
 
-matchArg _sc _cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
-  assignVar var (unpackPointer (Crucible.LLVMPtr blk end off))
+matchArg _sc cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
+  assignVar cc var (unpackPointer (Crucible.LLVMPtr blk end off))
 
 -- match the fields of struct point-wise
 matchArg sc cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
@@ -534,7 +541,7 @@ executePostAllocation cc (var, memTy) =
           (ptr, mem') <- liftIO (Crucible.doMalloc sym mem sz)
           Crucible.writeGlobal memVar mem'
           return ptr
-     assignVar var ptr
+     assignVar cc var ptr
 
 ------------------------------------------------------------------------
 
