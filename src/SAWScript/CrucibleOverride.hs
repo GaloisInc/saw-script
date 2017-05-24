@@ -474,7 +474,11 @@ learnPointsTo ::
 learnPointsTo sc cc spec (PointsTo ptr val) =
   do liftIO $ putStrLn $ "Checking points to: " ++
                          show ptr ++ " -> " ++ show val
-     (memTy,ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
+     let tyenv = Map.union (csAllocations spec) (csFreshPointers spec)
+     memTy <- liftIO $ typeOfSetupValue cc tyenv val
+     (_memTy, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
+     -- In case the types are different (from crucible_points_to_untyped)
+     -- then the load type should be determined by the rhs.
      storTy <- Crucible.toStorableType memTy
      sym    <- liftSim Crucible.getSymInterface
 
@@ -575,6 +579,8 @@ executePointsTo sc cc spec (PointsTo ptr val) =
      (_, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      sym    <- liftSim Crucible.getSymInterface
 
+     -- In case the types are different (from crucible_points_to_untyped)
+     -- then the load type should be determined by the rhs.
      (memTy1, val1) <- resolveSetupValue cc sc spec val
      storTy <- Crucible.toStorableType memTy1
 

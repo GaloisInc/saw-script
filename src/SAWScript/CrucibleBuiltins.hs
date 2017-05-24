@@ -275,15 +275,10 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          ptr'' <- case ptr' of
            Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
            _ -> fail "Non-pointer value found in points-to assertion"
-         lhsTy <- case typeOfSetupValue cc (csPreAllocations mspec) ptr of
-           Just (Crucible.PtrType symTy) ->
-             case TyCtx.asMemType symTy of
-               Just lhsTy -> return lhsTy
-               Nothing -> fail $ "lhs not a valid pointer type: " ++ show symTy
-           _ -> fail $ "lhs not a pointer type"
-         storTy <- case Crucible.toStorableType lhsTy of
-           Just storTy -> return storTy
-           Nothing -> fail $ "Expected memory type: " ++ show lhsTy
+         -- In case the types are different (from crucible_points_to_untyped)
+         -- then the store type should be determined by the rhs.
+         memTy <- typeOfSetupValue cc tyenv val
+         storTy <- Crucible.toStorableType memTy
          let sym = ccBackend cc
          mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
          return mem'
@@ -583,12 +578,11 @@ processPostPointsTos sc cc tyenv env0 mem conds0 =
          ptr <- case lhs' of
            Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
            _ -> fail "Non-pointer value found in points-to assertion"
+         -- In case the types are different (from crucible_points_to_untyped)
+         -- then the load type should be determined by the rhs.
          memTy <- liftIO $ typeOfSetupValue cc tyenv val
-         cty <- case Crucible.toStorableType memTy of
-           Nothing -> fail $ "can't translate type: " ++ show memTy
-           Just x -> return x
-         -- cty <- maybe (fail "can't translate type") return (memTypeToType memTy)
-         x <- liftIO $ Crucible.loadRaw sym mem ptr cty
+         storTy <- Crucible.toStorableType memTy
+         x <- liftIO $ Crucible.loadRaw sym mem ptr storTy
          gs <- match sc cc tyenv x val
          return [ ("points-to assertion", g) | g <- gs ]
 
