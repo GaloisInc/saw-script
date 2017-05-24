@@ -27,7 +27,7 @@ import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified Text.LLVM.AST as L
 
-import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible

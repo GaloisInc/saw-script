@@ -28,7 +28,7 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 
 import qualified Lang.Crucible.BaseTypes as Crucible
-import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 import qualified Lang.Crucible.Utils.Arithmetic as Crucible

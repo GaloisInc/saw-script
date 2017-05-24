@@ -62,9 +62,8 @@ import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import Cryptol.Utils.PP (pretty)
 
--- import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
-import qualified Lang.Crucible.Core as Crucible
-import qualified Lang.Crucible.FunctionHandle as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
+import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 -- Values ----------------------------------------------------------------------
 
@@ -495,7 +494,7 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
 ---------------------------------------------------------------------------------
 instance IsValue a => IsValue (StateT CIR.CrucibleSetupState TopLevel a) where
     toValue m = VCrucibleSetup (fmap toValue m)
-    
+
 instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) where
     fromValue (VCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
@@ -507,7 +506,7 @@ instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) whe
 
 instance IsValue CIR.SetupValue where
   toValue v = VCrucibleSetupValue v
-  
+
 instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
@@ -521,7 +520,7 @@ instance FromValue (Crucible.AnyCFG) where
 
 instance IsValue CIR.CrucibleMethodSpecIR where
     toValue t = VCrucibleMethodSpec t
-    
+
 instance FromValue CIR.CrucibleMethodSpecIR where
     fromValue (VCrucibleMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"

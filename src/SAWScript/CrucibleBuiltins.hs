@@ -42,7 +42,9 @@ import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.Parameterized.Nonce as Crucible
 import qualified Lang.Crucible.Config as Crucible
-import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible
+  (AnyCFG(..), SomeCFG(..), BaseTypeRepr(..), TypeRepr(..), cfgHandle,
+   UnitType, EmptyCtx, asBaseType, AsBaseType(..))
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
