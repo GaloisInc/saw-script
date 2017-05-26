@@ -11,8 +11,8 @@ let ptr_to_fresh n ty = do {
 };
 
 load_crucible_llvm_module "ptrcheck.bc";
-crucible_llvm_verify "f" [] do {
+crucible_llvm_verify "f" [] false do {
     (s, p) <- ptr_to_fresh "s" (llvm_struct "struct.s");
     crucible_execute_func [p];
     crucible_return (crucible_term {{ 0 : [32] }});
-} false abc;
+} abc;

@@ -142,9 +142,9 @@ load_crucible_llvm_module "zuc.bc";
 zuccry <- cryptol_load "zuc.cry";
 
 print "Proving equivalence with Cryptol spec.";
-AddM_ov <- crucible_llvm_verify "AddM" [] (AddM_spec {{ zuccry::add }}) false abc;
-mulpow_ov <- crucible_llvm_verify "MulByPow2" [] (MulPow_spec {{ zuccry::mulpow }}) false abc;
-BR_ov <- crucible_llvm_verify "BitReorganization" [] (BR_spec zuccry) false abc;
+AddM_ov <- crucible_llvm_verify "AddM" [] false (AddM_spec {{ zuccry::add }}) abc;
+mulpow_ov <- crucible_llvm_verify "MulByPow2" [] false (MulPow_spec {{ zuccry::mulpow }}) abc;
+BR_ov <- crucible_llvm_verify "BitReorganization" [] false (BR_spec zuccry) abc;
 /*
 L1_ov <- crucible_llvm_verify "L1" [] (L12_spec {{ zuccry::L1 }});
 L2_ov <- crucible_llvm_verify "L2" [] (L12_spec {{ zuccry::L2 }});

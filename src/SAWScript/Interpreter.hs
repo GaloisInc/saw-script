@@ -1563,7 +1563,7 @@ primitives = Map.fromList
     , "has a non-void return type." ]
 
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> Bool -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    "String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
     [ "TODO" ]
 

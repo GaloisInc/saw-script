@@ -14,7 +14,7 @@ let set_setup = do {
 
 let main : TopLevel () = do {
     m <- load_crucible_llvm_module "global.bc";
-    crucible_llvm_verify "clear" [] clear_setup false abc;
-    crucible_llvm_verify "set" [] set_setup false abc;
+    crucible_llvm_verify "clear" [] false clear_setup abc;
+    crucible_llvm_verify "set" [] false set_setup abc;
     print "Done.";
 };

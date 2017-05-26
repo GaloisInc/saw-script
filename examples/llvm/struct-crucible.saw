@@ -33,6 +33,6 @@ let id_spec = do {
 };
 
 load_crucible_llvm_module "struct.bc";
-crucible_llvm_verify "set_indirect" [] set_spec false abc;
-crucible_llvm_verify "add_indirect" [] add_spec false abc;
-crucible_llvm_verify "s_id" [] id_spec false abc;
+crucible_llvm_verify "set_indirect" [] false set_spec abc;
+crucible_llvm_verify "add_indirect" [] false add_spec abc;
+crucible_llvm_verify "s_id" [] false id_spec abc;

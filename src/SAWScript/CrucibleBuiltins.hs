@@ -108,11 +108,11 @@ crucible_llvm_verify ::
   Options                ->
   String                 ->
   [CrucibleMethodSpecIR] ->
-  CrucibleSetup ()       ->
   Bool                   ->
+  CrucibleSetup ()       ->
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
-crucible_llvm_verify bic _opts nm lemmas setup checkSat tactic =
+crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
   do cc <- io $ readIORef (biCrucibleContext bic) >>= \case
               Nothing -> fail "No Crucible LLVM module loaded"
               Just cc -> return cc
