@@ -1565,7 +1565,14 @@ primitives = Map.fromList
   , prim "crucible_llvm_verify"
     "String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
-    [ "TODO" ]
+    [ "Verify the LLVM function named by the first parameter. The second"
+    , "parameter lists the CrucibleMethodSpec values returned by previous"
+    , "calls to use as overrides. The third (Bool) parameter enables or"
+    , "disables path satisfiability checking. The fourth describes how"
+    , "to set up the symbolic execution engine before verification. And the"
+    , "last gives the script to use to prove the validity of the resulting"
+    , "verification conditions."
+    ]
 
   , prim "crucible_llvm_unsafe_assume_spec"
     "String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
