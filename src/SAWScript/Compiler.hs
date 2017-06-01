@@ -8,7 +8,7 @@ License          : BSD3
 Stability        : provisional
 Point-of-contact : atomb
 -}
-module SAWScript.Compiler ( Compiler, compiler
+module SAWScript.Compiler ( Compiler
                           , Err, runErr
                           , ErrT, runErrT, mapErrT
                           , reportErrT
@@ -21,11 +21,10 @@ import Control.Applicative (Alternative, Applicative)
 import Control.Applicative (Alternative)
 #endif
 import Control.Monad (MonadPlus)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Class (MonadTrans)
 import Control.Monad.Trans.Except (ExceptT, mapExceptT, runExceptT)
 
-import SAWScript.AST (PrettyPrint, pShow)
 import SAWScript.Parser (ParseError)
 
 -- | Run an ErrT computation; fail with a formatted message upon error.
@@ -63,13 +62,6 @@ runErrT = runExceptT . extractExceptT
 
 mapErrT :: (m (Either String a) -> n (Either String b)) -> ErrT m a -> ErrT n b
 mapErrT f = ErrT . mapExceptT f . extractExceptT
-
-compiler :: PrettyPrint a => String -> Compiler a b -> Compiler a b
-compiler _name comp input = do
-  result <- liftIO $ runExceptT $ extractExceptT $ comp input
-  ErrT $ case result of
-    Left err -> fail $ err ++ " in " ++ pShow input
-    Right r -> return r
 
 liftParser :: (a -> Either ParseError b) -> Compiler a b
 liftParser p x =
