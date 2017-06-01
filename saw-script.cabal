@@ -83,7 +83,6 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
     SAWScript.CongruenceClosure
-    SAWScript.Compiler
     SAWScript.CrucibleBuiltins
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue

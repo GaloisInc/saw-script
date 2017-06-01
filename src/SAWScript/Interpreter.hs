@@ -50,7 +50,6 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import SAWScript.AST (Located(..))
 import SAWScript.Builtins
-import SAWScript.Compiler (reportErrT)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
@@ -277,7 +276,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let opts = rwPPOpts rw
 
   SS.Decl _ (Just schema) expr'' <-
-    io $ reportErrT $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+    either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -314,7 +313,7 @@ interpretStmt printBinds stmt =
   case stmt of
     SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
     SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- io $ reportErrT $
+                                    dg' <- either fail return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW

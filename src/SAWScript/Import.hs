@@ -12,11 +12,10 @@ module SAWScript.Import
   , findAndLoadFile
   ) where
 
-import Control.Monad ((>=>), when)
+import Control.Monad (when)
 
 import SAWScript.AST
-import SAWScript.Compiler
-import SAWScript.Lexer
+import SAWScript.Lexer (lexSAW)
 import SAWScript.Options
 import SAWScript.Parser
 
@@ -26,10 +25,13 @@ loadFile :: Options -> FilePath -> IO [Stmt]
 loadFile opts fname = do
   when (verbLevel opts > 0) $ putStrLn $ "Loading file " ++ show fname
   ftext <- readFile fname
-  reportErrT (parseFile fname ftext)
+  either fail return (parseFile fname ftext)
 
-parseFile :: FilePath -> Compiler String [Stmt]
-parseFile fname = scan fname >=> liftParser parseModule
+parseFile :: FilePath -> String -> Either String [Stmt]
+parseFile fname input =
+  case parseModule (lexSAW fname input) of
+    Left err -> Left ("Error\n  " ++ show err)
+    Right stmts -> Right stmts
 
 findAndLoadFile :: Options -> FilePath -> IO [Stmt]
 findAndLoadFile opts fp = do

@@ -18,7 +18,6 @@ module SAWScript.MGU
        ) where
 
 import SAWScript.AST
-import SAWScript.Compiler
 import SAWScript.Utils (Pos(..))
 
 #if !MIN_VERSION_base(4,8,0)
@@ -631,22 +630,23 @@ checkKind = return
 
 -- Main interface {{{
 
-checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Err DeclGroup
+checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either String DeclGroup
 checkDeclGroup env tenv dg =
   case evalTIWithEnv env tenv (inferDeclGroup dg) of
-    Right dg' -> return dg'
-    Left errs -> fail (unlines errs)
+    Left errs -> Left ("Error\n" ++ unlines (map ("  " ++) errs))
+    Right dg' -> Right dg'
 
-checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Err Decl
+checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either String Decl
 checkDecl env tenv decl =
   case evalTIWithEnv env tenv (inferDecl decl) of
-    Right decl' -> return decl'
-    Left errs -> fail (unlines errs)
+    Left errs -> Left ("Error\n" ++ unlines (map ("  " ++) errs))
+    Right decl' -> Right decl'
 
 evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [String] a
-evalTIWithEnv env tenv m = case runTIWithEnv env tenv m of
-  (res,_,[]) -> Right res
-  (_,_,errs) -> Left errs
+evalTIWithEnv env tenv m =
+  case runTIWithEnv env tenv m of
+    (res, _, []) -> Right res
+    (_, _, errs) -> Left errs
 
 runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [String])
 runTIWithEnv env tenv m = (a, subst rw, errors rw)
