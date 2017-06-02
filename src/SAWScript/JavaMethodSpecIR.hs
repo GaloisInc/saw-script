@@ -1,9 +1,9 @@
 {- |
-Module           : $Header$
-Description      : Provides typechecked representation for method specifications and function for creating it from AST representation.
-License          : BSD3
-Stability        : provisional
-Point-of-contact : jhendrix, atomb
+Module      : $Header$
+Description : Provides typechecked representation for method specifications and function for creating it from AST representation.
+License     : BSD3
+Maintainer  : jhendrix, atomb
+Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}

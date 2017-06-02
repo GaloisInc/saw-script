@@ -11,11 +11,11 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Interface to the Java symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.JavaMethodSpec
   ( JavaMethodSpecIR

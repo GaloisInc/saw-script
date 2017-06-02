@@ -2,13 +2,13 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Congruence closure library.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
-module SAWScript.CongruenceClosure 
+module SAWScript.CongruenceClosure
   ( -- * Functor type classes
     EqFoldable(..)
   , OrdFoldable(..)
@@ -145,7 +145,7 @@ findEquivalent t cc =
     Nothing -> Set.empty
 
 -- | Returns true if the two terms are considered equivalent.
-areEquivalent :: (OrdFoldable f, Traversable f) 
+areEquivalent :: (OrdFoldable f, Traversable f)
               => Term f -> Term f -> CCSet f -> Bool
 areEquivalent x y cc =
   flip MTL.evalState cc $ do
@@ -155,7 +155,7 @@ areEquivalent x y cc =
 
 -- | Checks that all terms in the list are equivalent, and returns
 -- a pair of inequivalent terms if a counterexample is found.
-checkEquivalence :: (OrdFoldable f, Traversable f) 
+checkEquivalence :: (OrdFoldable f, Traversable f)
                  => [Term f] -> CCSet f -> Maybe (Term f, Term f)
 checkEquivalence (x:y:r) cc
   | areEquivalent x y cc = checkEquivalence (y:r) cc
@@ -232,7 +232,7 @@ processEquivalences ((x,y):rest) cc
        yCl = Map.findWithDefault y y repMap
        mapFn z = if z == xCl then yCl else z
        appClassListMap = Map.fromListWith (++)
-         [ (ClassApp (mapFn <$> app), [mapFn cl]) 
+         [ (ClassApp (mapFn <$> app), [mapFn cl])
          | (ClassApp app,cl) <- Map.toList (ccAppMap cc) ]
 
 type Comp f = MTL.State (CCSet f)
@@ -241,7 +241,7 @@ type Comp f = MTL.State (CCSet f)
 addTerm :: OrdFoldable f => Class -> Term f -> Comp f ()
 addTerm cl t = do
   MTL.modify $ \cc ->
-    cc { ccElementMap 
+    cc { ccElementMap
           = Map.insertWith Set.union cl (Set.singleton t)
           $ ccElementMap cc }
 

@@ -1,8 +1,8 @@
 {- |
-Module           : $Header$
-Description      : Represents information about solved goals
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Represents information about solved goals.
+Maintainer  : atomb
+Stability   : provisional
 -}
 
 module SAWScript.SolverStats where

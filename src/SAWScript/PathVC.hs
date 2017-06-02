@@ -1,9 +1,9 @@
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Assumptions and assertions for symbolic execution paths.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.PathVC where
 
