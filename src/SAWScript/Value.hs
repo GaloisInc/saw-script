@@ -6,6 +6,7 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DataKinds #-}
 
 {- |
 Module           : $Header$
@@ -62,7 +63,7 @@ import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, GlobalVar, IntrinsicType)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 -- Values ----------------------------------------------------------------------
@@ -102,6 +103,7 @@ data Value
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
+  | VGhostVar (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue"))
 
 data LLVMModule =
   LLVMModule
@@ -215,7 +217,7 @@ showSimpset opts ss =
     opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
-showsPrecValue opts _p v =
+showsPrecValue opts p v =
   case v of
     VBool True -> showString "true"
     VBool False -> showString "false"
@@ -254,6 +256,8 @@ showsPrecValue opts _p v =
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
     VCFG _ -> showString "<<CFG>>"
+    VGhostVar x -> showParen (p > 10)
+                 $ showString "Ghost " . showsPrec 11 x
   where
     opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
 
@@ -667,6 +671,13 @@ instance IsValue SatResult where
 instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
+
+instance IsValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+  toValue = VGhostVar
+
+instance FromValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+  fromValue (VGhostVar r) = r
+  fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
 -- Error handling --------------------------------------------------------------
 

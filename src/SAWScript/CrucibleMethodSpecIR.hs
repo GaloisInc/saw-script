@@ -11,7 +11,7 @@ Point-of-contact : atomb
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
@@ -29,10 +29,18 @@ import qualified Data.Map as Map
 
 import           Lang.Crucible.LLVM.MemType
 import qualified Text.LLVM.AST as L
+import           Data.IORef
 
+import qualified Lang.Crucible.Types as Crucible
+import qualified Lang.Crucible.CFG.Common as Crucible
 --import qualified Verifier.LLVM.Codebase as LSS
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
 import SAWScript.TypedTerm
+
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
+import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
+import Verifier.SAW.SharedTerm
 
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
@@ -62,6 +70,9 @@ data PointsTo = PointsTo SetupValue SetupValue
 data SetupCondition where
   SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Pred     :: TypedTerm -> SetupCondition
+  SetupCond_Ghost    :: Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+                        TypedTerm ->
+                        SetupCondition
   deriving (Show)
 
 
@@ -192,3 +203,15 @@ testResolved val0 rs = go [] val0
 
     test _ Nothing = False
     test path (Just paths) = any (`isPrefixOf` path) paths
+
+
+type GhostValue = "GhostValue"
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n) GhostValue = TypedTerm
+  muxIntrinsic sym _namerep prd thn els =
+    do st <- readIORef (Crucible.sbStateManager sym)
+       let sc  = Crucible.saw_ctx st
+       prd' <- Crucible.toSC sym prd
+       typ  <- scTypeOf sc (ttTerm thn)
+       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
+       return thn { ttTerm = res }

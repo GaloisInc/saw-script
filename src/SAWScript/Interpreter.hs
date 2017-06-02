@@ -1611,6 +1611,18 @@ primitives = Map.fromList
     "Term -> SetupValue"
     (pureVal CIR.SetupTerm)
     [ "TODO" ]
+
+  -- Ghost state support
+  , prim "crucible_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (bicVal crucible_declare_ghost_state)
+    [ "Allocates a unique ghost variable" ]
+
+  , prim "crucible_ghost_value"
+    "Ghost -> Term -> String -> CrucibleSetup ()"
+    (bicVal crucible_ghost_value)
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
   ]
 
   where

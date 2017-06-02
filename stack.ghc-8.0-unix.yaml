@@ -29,4 +29,4 @@ extra-deps:
   - sbv-5.15
   - simple-smt-0.7.0
   - th-abstraction-0.1.0.0
-resolver: lts-8.2
+resolver: lts-8.14
