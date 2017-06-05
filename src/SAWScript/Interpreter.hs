@@ -1619,7 +1619,7 @@ primitives = Map.fromList
     [ "Allocates a unique ghost variable" ]
 
   , prim "crucible_ghost_value"
-    "Ghost -> Term -> String -> CrucibleSetup ()"
+    "Ghost -> Term -> CrucibleSetup ()"
     (bicVal crucible_ghost_value)
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]

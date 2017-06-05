@@ -30,6 +30,9 @@ data TypedTerm =
   }
   deriving Show
 
+ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
+ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))
+
 mkTypedTerm :: SharedContext -> Term -> IO TypedTerm
 mkTypedTerm sc trm = do
   ty <- scTypeOf sc trm

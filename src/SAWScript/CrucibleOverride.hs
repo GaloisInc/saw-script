@@ -471,10 +471,7 @@ learnGhost ::
   OverrideMatcher ()
 learnGhost sc cc var expected =
   do actual <- liftSim (Crucible.readGlobal var)
-     eq     <- liftIO $ do sctx <- Crucible.saw_ctx
-                               <$> readIORef (Crucible.sbStateManager (ccBackend cc))
-                           scEq sctx (ttTerm expected) (ttTerm actual)
-     learnPred sc cc eq
+     matchTerm sc cc (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
 
@@ -577,15 +574,19 @@ executeSetupCondition ::
   OverrideMatcher ()
 executeSetupCondition sc cc spec (SetupCond_Equal val1 val2) = executeEqual sc cc spec val1 val2
 executeSetupCondition sc cc _    (SetupCond_Pred tm)         = executePred sc cc tm
-executeSetupCondition _  _  _    (SetupCond_Ghost var val)   = executeGhost var val
+executeSetupCondition sc _  _    (SetupCond_Ghost var val)   = executeGhost sc var val
 
 ------------------------------------------------------------------------
 
 executeGhost ::
+  SharedContext ->
   Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
   TypedTerm ->
   OverrideMatcher ()
-executeGhost var val = liftSim (Crucible.writeGlobal var val)
+executeGhost sc var val =
+  do s <- OM (use termSub)
+     t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
+     liftSim (Crucible.writeGlobal var t)
 
 ------------------------------------------------------------------------
 
