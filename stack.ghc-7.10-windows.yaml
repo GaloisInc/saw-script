@@ -12,6 +12,7 @@ packages:
   - deps/cryptol/
   - deps/saw-core/
   - deps/saw-core-aig/
+  - deps/saw-core-easycrypt/
   - deps/saw-core-sbv/
   - deps/cryptol-verifier/
   - deps/jvm-verifier/

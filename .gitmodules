@@ -40,3 +40,6 @@
 [submodule "deps/saw-core"]
 	path = deps/saw-core
 	url = https://github.com/GaloisInc/saw-core.git
+[submodule "deps/saw-core-easycrypt"]
+	path = deps/saw-core-easycrypt
+	url = https://github.com/GaloisInc/saw-core-easycrypt.git
