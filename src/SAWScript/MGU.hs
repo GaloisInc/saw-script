@@ -6,11 +6,11 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : diatchki
+Module      : $Header$
+Description : SAW-Script type checking.
+License     : BSD3
+Maintainer  : diatchki
+Stability   : provisional
 -}
 module SAWScript.MGU
        ( checkDecl

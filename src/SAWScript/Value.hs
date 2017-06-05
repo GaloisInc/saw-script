@@ -9,11 +9,11 @@
 {-# LANGUAGE DataKinds #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Value datatype for SAW-Script interpreter.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.Value where
 

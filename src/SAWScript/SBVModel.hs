@@ -1,8 +1,8 @@
 {- |
-Module           : $Header$
-Description      :
-Stability        : provisional
-Point-of-contact : jhendrix
+Module      : $Header$
+Description : Abstract representation for .sbv file format.
+Maintainer  : jhendrix
+Stability   : provisional
 -}
 
 {-# LANGUAGE TypeSynonymInstances #-}

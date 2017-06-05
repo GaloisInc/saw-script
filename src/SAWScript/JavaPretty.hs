@@ -1,9 +1,9 @@
 {- |
-Module           : $Header$
-Description      : Pretty printer for Java Class datatype.
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Pretty printer for Java Class datatype.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 
 module SAWScript.JavaPretty where

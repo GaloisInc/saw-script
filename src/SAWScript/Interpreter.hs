@@ -13,11 +13,11 @@
 {-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Interpreter for SAW-Script files and statements.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.Interpreter
   ( interpret
