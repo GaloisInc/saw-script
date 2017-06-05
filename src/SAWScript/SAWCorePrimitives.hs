@@ -1,9 +1,9 @@
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Collections of primitives for various SAW-Core backends.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.SAWCorePrimitives
 ( concretePrimitives

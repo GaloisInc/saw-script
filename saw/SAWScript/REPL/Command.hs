@@ -3,11 +3,11 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description :
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.REPL.Command (
     -- * Commands
@@ -60,12 +60,11 @@ import qualified SAWScript.AST as SS
      Decl(..),
      Pattern(..))
 import qualified SAWScript.CryptolEnv as CEnv
-import SAWScript.Compiler (liftParser, reportErrT)
 import SAWScript.MGU (checkDecl)
 import SAWScript.Interpreter
     (interpretStmt,
      primDocEnv)
-import qualified SAWScript.Lexer (scan)
+import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
 import qualified SAWScript.Value (evaluate)
 import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
@@ -352,12 +351,14 @@ qcCmd str =
 
 typeOfCmd :: String -> REPL ()
 typeOfCmd str =
-  do tokens <- err $ SAWScript.Lexer.scan replFileName str
-     expr <- err $ liftParser SAWScript.Parser.parseExpression tokens
+  do let tokens = SAWScript.Lexer.lexSAW replFileName str
+     expr <- case SAWScript.Parser.parseExpression tokens of
+       Left err -> fail (show err)
+       Right expr -> return expr
      let decl = SS.Decl (SS.PWild Nothing) Nothing expr
      rw <- getEnvironment
      SS.Decl _ (Just schema) _expr' <-
-       io $ reportErrT $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+       either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
 
 {-
@@ -577,8 +578,10 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
-  tokens <- err $ SAWScript.Lexer.scan replFileName str
-  stmt <- err $ liftParser SAWScript.Parser.parseStmtSemi tokens
+  let tokens = SAWScript.Lexer.lexSAW replFileName str
+  stmt <- case SAWScript.Parser.parseStmtSemi tokens of
+    Left err -> fail (show err)
+    Right stmt -> return stmt
   ro <- getTopLevelRO
   ie <- getEnvironment
   ((), ie') <- io $ runTopLevel (interpretStmt True stmt) ro ie

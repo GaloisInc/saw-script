@@ -2,10 +2,10 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {- |
-Module           : $Header$
-Description      :
-Stability        : provisional
-Point-of-contact : jhendrix, atomb
+Module      : $Header$
+Description : Miscellaneous utilities.
+Maintainer  : jhendrix, atomb
+Stability   : provisional
 -}
 
 {-# LANGUAGE DeriveDataTypeable  #-}

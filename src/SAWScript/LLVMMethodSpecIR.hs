@@ -1,10 +1,10 @@
 {- |
-Module           : $Header$
-Description      : Provides typechecked representation for LLVM function
-                   specifications and function for creating it from AST
-                   representation.
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Provides typechecked representation for LLVM function
+              specifications and function for creating it from AST
+              representation.
+Maintainer  : atomb
+Stability   : provisional
 -}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NamedFieldPuns #-}

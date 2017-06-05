@@ -10,11 +10,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Data structures for Java expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.JavaExpr
   (-- * Java Expressions

@@ -2,11 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Context for interpreting Cryptol within SAW-Script.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.CryptolEnv
   ( CryptolEnv(..)

@@ -27,7 +27,8 @@ import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified Text.LLVM.AST as L
 
-import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
+import qualified Lang.Crucible.CFG.Core as Crucible
+                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar)
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
@@ -456,8 +457,21 @@ learnSetupCondition ::
   SetupCondition             ->
   OverrideMatcher ()
 learnSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = learnEqual sc cc spec val1 val2
-learnSetupCondition sc cc _    (SetupCond_Pred tm)          = learnPred sc cc tm
+learnSetupCondition sc cc _    (SetupCond_Pred tm)          = learnPred sc cc (ttTerm tm)
+learnSetupCondition sc cc _    (SetupCond_Ghost var val)    = learnGhost sc cc var val
 
+
+------------------------------------------------------------------------
+
+learnGhost ::
+  SharedContext                                          ->
+  CrucibleContext                                        ->
+  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  TypedTerm                                              ->
+  OverrideMatcher ()
+learnGhost sc cc var expected =
+  do actual <- liftSim (Crucible.readGlobal var)
+     matchTerm sc cc (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
 
@@ -515,12 +529,12 @@ learnEqual sc cc spec v1 v2 = do
 learnPred ::
   SharedContext                                                       ->
   CrucibleContext                                                     ->
-  TypedTerm        {- ^ the precondition to learn                  -} ->
+  Term             {- ^ the precondition to learn                  -} ->
   OverrideMatcher ()
-learnPred sc cc tt =
+learnPred sc cc t =
   do s <- OM (use termSub)
-     t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
-     p <- liftIO $ resolveSAWPred cc t
+     u <- liftIO $ scInstantiateExt sc s t
+     p <- liftIO $ resolveSAWPred cc u
      let err = Crucible.AssertFailureSimError "precondition"
      liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
@@ -558,8 +572,21 @@ executeSetupCondition ::
   CrucibleMethodSpecIR       ->
   SetupCondition             ->
   OverrideMatcher ()
-executeSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = executeEqual sc cc spec val1 val2
-executeSetupCondition sc cc _    (SetupCond_Pred tm)          = executePred sc cc tm
+executeSetupCondition sc cc spec (SetupCond_Equal val1 val2) = executeEqual sc cc spec val1 val2
+executeSetupCondition sc cc _    (SetupCond_Pred tm)         = executePred sc cc tm
+executeSetupCondition sc _  _    (SetupCond_Ghost var val)   = executeGhost sc var val
+
+------------------------------------------------------------------------
+
+executeGhost ::
+  SharedContext ->
+  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  TypedTerm ->
+  OverrideMatcher ()
+executeGhost sc var val =
+  do s <- OM (use termSub)
+     t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
+     liftSim (Crucible.writeGlobal var t)
 
 ------------------------------------------------------------------------
 
