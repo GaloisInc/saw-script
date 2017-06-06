@@ -829,6 +829,7 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
       case goalQuant g of
         Existential -> return (r', stats, Nothing)
         Universal -> return (r', stats, Just (g { goalTerm = ft }))
+    SBV.SatExtField {} -> fail "Prover returned model in extension field"
     SBV.Unsatisfiable {} -> do
       ft <- scApplyPrelude_False sc
       case goalQuant g of
