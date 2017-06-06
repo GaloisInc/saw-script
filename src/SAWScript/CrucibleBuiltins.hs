@@ -197,7 +197,7 @@ verifyObligations cc mspec tactic assumes asserts = do
         io $ putStrLn $ unwords ["Subgoal failed:", nm, msg]
         io $ print stats
         io $ mapM_ print vals
-        return False
+        io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
   let msg = if and r then "Proof succeeded!" else "Proof failed!"
   io $ putStrLn $ unwords [msg, nm]
 
