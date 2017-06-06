@@ -18,16 +18,17 @@ Stability   : provisional
 -}
 module SAWScript.CrucibleBuiltins where
 
-import Control.Lens
-import Control.Monad.ST
-import Control.Monad.State
+import           Control.Lens
+import           Control.Monad.ST
+import           Control.Monad.State
 import qualified Control.Monad.Trans.State.Strict as SState
-import Control.Applicative
-import Data.Maybe (fromMaybe)
-import Data.Foldable (toList, find)
-import Data.IORef
-import Data.String
-import System.IO
+import           Control.Applicative
+import           Data.Foldable (toList, find)
+import           Data.Function
+import           Data.IORef
+import           Data.List
+import           Data.Maybe (fromMaybe)
+import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -36,6 +37,7 @@ import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import           System.IO
 
 import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
@@ -414,12 +416,12 @@ registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
   Crucible.SimContext Crucible.SAWCruciblePersonality Sym  ->
-  CrucibleMethodSpecIR       ->
+  [CrucibleMethodSpecIR]     ->
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret ()
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
-  let s@(L.Symbol fsym) = csName cs
+  let s@(L.Symbol fsym) = csName (head cs)
       llvmctx = ccLLVMContext cc
   liftIO $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
@@ -463,7 +465,8 @@ verifySimulate cc mspec args assumes lemmas globals checkSat =
             let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
-                do mapM_ (registerOverride cc simCtx) lemmas
+                do mapM_ (registerOverride cc simCtx)
+                         (groupOn csName lemmas)
                    liftIO $ do
                      preds <- mapM (resolveSAWPred cc) assumes
                      mapM_ (Crucible.addAssumption sym) preds
@@ -1218,3 +1221,12 @@ crucible_ghost_value ::
   CrucibleSetup ()
 crucible_ghost_value _bic _opt ghost val =
   addCondition (SetupCond_Ghost ghost val)
+
+--------------------------------------------------------------------------------
+
+-- | Sort a list of things and group them into equivalence classes.
+groupOn ::
+  Ord b =>
+  (a -> b) {- ^ equivalence class projection -} ->
+  [a] -> [[a]]
+groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)

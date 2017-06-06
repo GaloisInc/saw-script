@@ -75,6 +75,14 @@ data OverrideState = OverrideState
 data OverrideFailure
   = BadSymType Crucible.SymType
   | AmbiguousPrecondition [PointsTo]
+  | BadTermMatch Term Term -- ^ simulated and specified terms did not match
+  | BadPointerCast -- ^ Pointer required to process points-to
+  | BadReturnSpecification
+  | NonlinearPatternNotSupported
+  | StructuralMismatch (Crucible.LLVMVal Sym Crucible.PtrWidth)
+                       SetupValue
+                       Crucible.MemType
+                        -- ^ simulated value, specified value, specified type
   deriving Show
 
 instance Exception OverrideFailure
@@ -110,10 +118,10 @@ methodSpecHandler ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext          {- ^ context for interacting with Crucible        -} ->
-  CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
+  [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret (Crucible.RegValue Sym ret)
-methodSpecHandler sc cc cs retTy = do
+methodSpecHandler sc cc [cs] retTy = do
   let L.Symbol fsym = csName cs
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
 
@@ -138,6 +146,8 @@ methodSpecHandler sc cc cs retTy = do
        traverse_ (executePointsTo sc cc cs) (csPostPointsTos cs)
        traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
        computeReturnValue cc sc cs retTy (csRetValue cs)
+
+methodSpecHandler _sc _cc _cs _retTy = fail "PANIC: too many method specs"
 
 ------------------------------------------------------------------------
 
@@ -256,13 +266,13 @@ computeReturnValue ::
 computeReturnValue _ _ _ ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
-    _ -> fail "computeReturnValue: missing crucible_return specification"
+    _ -> failure BadReturnSpecification
 
 computeReturnValue cc sc spec ty (Just val) =
   do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue cc sc spec val
      case NatRepr.testEquality ty xty of
        Just NatRepr.Refl -> return xval
-       Nothing -> fail "computeReturnValue: Unexpected return type"
+       Nothing -> failure BadReturnSpecification
 
 
 ------------------------------------------------------------------------
@@ -317,12 +327,10 @@ assignTerm ::
   OverrideMatcher ()
 
 assignTerm var val =
-  OM $ zoom (termSub . at var) $
-
-  do old <- get
+  do old <- OM (termSub . at var <<.= Just val)
      case old of
-       Nothing -> put (Just val)
-       Just _  -> fail "Unifying multiple occurrences of variables not yet supported"
+       Nothing -> return ()
+       Just _  -> failure NonlinearPatternNotSupported
 
 
 ------------------------------------------------------------------------
@@ -368,9 +376,7 @@ matchArg _sc cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
      liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
 matchArg _sc _cc actual expectedTy expected =
-  fail $ "Argument mismatch: " ++
-          show actual ++ ", " ++
-          show expected ++ " : " ++ show expectedTy
+  failure (StructuralMismatch actual expected expectedTy)
 
 ------------------------------------------------------------------------
 
@@ -442,8 +448,7 @@ matchTerm sc cc real expect =
          let err = Crucible.AssertFailureSimError "literal equality precondition"
          liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
 
-    _ -> fail $ "matchTerm: Unable to match (" ++ show real ++
-         ") with (" ++ show expect ++ ")"
+    _ -> failure (BadTermMatch real expect)
 
 ------------------------------------------------------------------------
 
@@ -730,4 +735,4 @@ asPointer
   | Just pty' <- TyCtx.asMemType pty
   = return (pty', val)
 
-asPointer _ = fail "Not a pointer"
+asPointer _ = failure BadPointerCast
