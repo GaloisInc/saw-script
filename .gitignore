@@ -12,3 +12,5 @@ build-sandbox-version-pins.txt
 .stack-work
 stack.yaml
 .DS_Store
+.ghc.environment*
+dist-newstyle

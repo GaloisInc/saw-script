@@ -14,7 +14,7 @@ module SAWScript.CrucibleOverride (methodSpecHandler, valueToSC) where
 import           Control.Lens
 import           Control.Exception
 import           Control.Monad.State
-import           Data.Foldable (traverse_)
+import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.IORef (readIORef)
 import           Data.Map (Map)
@@ -70,6 +70,8 @@ newtype OverrideMatcher a
 data OverrideState = OverrideState
   { _setupValueSub :: Map AllocIndex (Crucible.RegValue Sym Crucible.LLVMPointerType)
   , _termSub       :: Map VarIndex Term
+  , _asserts       :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
+  , _assumes       :: [Crucible.Pred Sym]
   }
 
 data OverrideFailure
@@ -102,7 +104,20 @@ makeLenses ''OverrideState
 -- | The initial override matching state starts with an empty substitution
 -- and no assertions or assumptions.
 initialState :: OverrideState
-initialState = OverrideState Map.empty Map.empty
+initialState = OverrideState Map.empty Map.empty [] []
+
+------------------------------------------------------------------------
+
+addAssert ::
+  Crucible.Pred Sym       {- ^ property -} ->
+  Crucible.SimErrorReason {- ^ reason   -} ->
+  OverrideMatcher ()
+addAssert p r = OM (asserts %= cons (p,r))
+
+addAssume ::
+  Crucible.Pred Sym       {- ^ property -} ->
+  OverrideMatcher ()
+addAssume p = OM (assumes %= cons p)
 
 ------------------------------------------------------------------------
 
@@ -126,7 +141,7 @@ methodSpecHandler sc cc [cs] retTy = do
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
 
   Crucible.RegMap args <- Crucible.getOverrideArgs
-  runOverrideMatcher $
+  runOverrideMatcher cc $
     do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
 
        sym <- liftSim Crucible.getSymInterface
@@ -292,9 +307,17 @@ liftSim m = OM (lift m)
 
 -- | "Run" function for OverrideMatcher.
 runOverrideMatcher ::
+  CrucibleContext   ->
   OverrideMatcher a ->
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l r a
-runOverrideMatcher (OM m) = evalStateT m initialState
+runOverrideMatcher cc (OM m) =
+  do (res, finalState) <- runStateT m initialState
+     liftIO $
+       do for_ (view assumes finalState) $ \p ->
+            Crucible.sbAddAssumption (ccBackend cc) p
+          for_ (view asserts finalState) $ \(p,r) ->
+            Crucible.sbAddAssertion (ccBackend cc) p r
+     return res
 
 ------------------------------------------------------------------------
 
@@ -308,15 +331,10 @@ assignVar ::
   OverrideMatcher ()
 
 assignVar cc var val =
-  OM $ zoom (setupValueSub . at var) $
-
-  do old <- get
-     case old of
-       Nothing -> put (Just val)
-       Just val' ->
-         do p <- liftIO $ equalValsPred cc (packPointer val') (packPointer val)
-            let err = Crucible.AssertFailureSimError "equality of aliased pointers"
-            liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+  do old <- OM (setupValueSub . at var <<.= Just val)
+     for_ old $ \val' ->
+       do p <- liftIO (equalValsPred cc (packPointer val') (packPointer val))
+          addAssert p (Crucible.AssertFailureSimError "equality of aliased pointers")
 
 ------------------------------------------------------------------------
 
@@ -328,19 +346,19 @@ assignTerm ::
 
 assignTerm var val =
   do old <- OM (termSub . at var <<.= Just val)
-     case old of
-       Nothing -> return ()
-       Just _  -> failure NonlinearPatternNotSupported
+     for_ old $ \_ ->
+       failure NonlinearPatternNotSupported
 
 
 ------------------------------------------------------------------------
 
 matchArg ::
-  SharedContext                 {- ^ context for constructing SAW terms    -} ->
-  CrucibleContext               {- ^ context for interacting with Crucible -} ->
-  Crucible.LLVMVal Sym Crucible.PtrWidth {- ^ concrete simulation value    -} ->
-  Crucible.MemType                       {- ^ expected memory type         -} ->
-  SetupValue                             {- ^ expected specification value -} ->
+  SharedContext      {- ^ context for constructing SAW terms    -} ->
+  CrucibleContext    {- ^ context for interacting with Crucible -} ->
+  Crucible.LLVMVal Sym Crucible.PtrWidth
+                     {- ^ concrete simulation value             -} ->
+  Crucible.MemType   {- ^ expected memory type                  -} ->
+  SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher ()
 
 matchArg _sc cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
@@ -357,23 +375,21 @@ matchArg sc cc realVal _ (SetupTerm expected) =
      realTerm <- liftIO (valueToSC sym realVal)
      matchTerm sc cc realTerm (ttTerm expected)
 
-matchArg _sc cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
+matchArg _sc _cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
   do sym <- liftSim Crucible.getSymInterface
      let ptr = Crucible.LLVMPtr blk end off
-     p <- liftIO $ Crucible.isNullPointer sym (unpackPointer ptr)
-     let err = Crucible.AssertFailureSimError "null-equality precondition"
-     liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+     p <- liftIO (Crucible.isNullPointer sym (unpackPointer ptr))
+     addAssert p (Crucible.AssertFailureSimError "null-equality precondition")
 
 matchArg _sc cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
   do sym <- liftSim Crucible.getSymInterface
      let mem = ccEmptyMemImpl cc
      ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
      let (Crucible.LLVMPtr blk2 _ off2) = packPointer' ptr2
-     p1 <- liftIO $ Crucible.natEq sym blk1 blk2
-     p2 <- liftIO $ Crucible.bvEq sym off1 off2
-     p <- liftIO $ Crucible.andPred sym p1 p2
-     let err = Crucible.AssertFailureSimError "global-equality precondition"
-     liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+     p1 <- liftIO (Crucible.natEq sym blk1 blk2)
+     p2 <- liftIO (Crucible.bvEq sym off1 off2)
+     p  <- liftIO (Crucible.andPred sym p1 p2)
+     addAssert p (Crucible.AssertFailureSimError "global-equality precondition")
 
 matchArg _sc _cc actual expectedTy expected =
   failure (StructuralMismatch actual expected expectedTy)
@@ -445,8 +461,7 @@ matchTerm sc cc real expect =
     _ | Set.null (getAllExtSet expect) ->
       do t <- liftIO $ scEq sc real expect
          p <- liftIO $ resolveSAWPred cc t
-         let err = Crucible.AssertFailureSimError "literal equality precondition"
-         liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+         addAssert p (Crucible.AssertFailureSimError "literal equality precondition")
 
     _ -> failure (BadTermMatch real expect)
 
@@ -505,7 +520,8 @@ learnPointsTo sc cc spec (PointsTo ptr val) =
              $ Crucible.readGlobal $ Crucible.llvmMemVar
              $ Crucible.memModelOps $ ccLLVMContext cc
 
-     v      <- liftIO (Crucible.loadRaw sym mem (packPointer' ptr1) storTy)
+     (p,r,v) <- liftIO (Crucible.loadRawWithCondition sym mem (packPointer' ptr1) storTy)
+     addAssert p r
      matchArg sc cc v memTy val
 
 
@@ -515,19 +531,17 @@ learnPointsTo sc cc spec (PointsTo ptr val) =
 -- | Process a "crucible_equal" statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
-  SharedContext                                                       ->
-  CrucibleContext                                                     ->
-  CrucibleMethodSpecIR                                                ->
-  SetupValue       {- ^ first value to compare                     -} ->
-  SetupValue       {- ^ second value to compare                    -} ->
+  SharedContext                                    ->
+  CrucibleContext                                  ->
+  CrucibleMethodSpecIR                             ->
+  SetupValue       {- ^ first value to compare  -} ->
+  SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher ()
 learnEqual sc cc spec v1 v2 = do
   (_, val1) <- resolveSetupValueLLVM cc sc spec v1
   (_, val2) <- resolveSetupValueLLVM cc sc spec v2
-  liftIO $ do
-    p <- equalValsPred cc val1 val2
-    let err = Crucible.AssertFailureSimError "equality precondition"
-    Crucible.sbAddAssertion (ccBackend cc) p err
+  p         <- liftIO (equalValsPred cc val1 val2)
+  addAssert p (Crucible.AssertFailureSimError "equality precondition")
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -540,8 +554,7 @@ learnPred sc cc t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveSAWPred cc u
-     let err = Crucible.AssertFailureSimError "precondition"
-     liftIO $ Crucible.sbAddAssertion (ccBackend cc) p err
+     addAssert p (Crucible.AssertFailureSimError "precondition")
 
 ------------------------------------------------------------------------
 
@@ -638,9 +651,8 @@ executeEqual ::
 executeEqual sc cc spec v1 v2 = do
   (_, val1) <- resolveSetupValueLLVM cc sc spec v1
   (_, val2) <- resolveSetupValueLLVM cc sc spec v2
-  liftIO $ do
-    p <- equalValsPred cc val1 val2
-    Crucible.sbAddAssumption (ccBackend cc) p
+  p         <- liftIO (equalValsPred cc val1 val2)
+  addAssume p
 
 -- | Process a "crucible_postcond" statement from the postcondition
 -- section of the CrucibleSetup block.
@@ -653,7 +665,7 @@ executePred sc cc tt =
   do s <- OM (use termSub)
      t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
      p <- liftIO $ resolveSAWPred cc t
-     liftIO $ Crucible.sbAddAssumption (ccBackend cc) p
+     addAssume p
 
 ------------------------------------------------------------------------
 
