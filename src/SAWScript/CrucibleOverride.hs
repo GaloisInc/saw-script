@@ -13,7 +13,12 @@ module SAWScript.CrucibleOverride (methodSpecHandler, valueToSC) where
 
 import           Control.Lens
 import           Control.Exception
-import           Control.Monad.State
+import           Control.Monad.Trans.State
+import           Control.Monad.Trans.Except
+import           Control.Monad.Trans.Class
+import           Control.Monad.IO.Class
+import           Control.Monad
+import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.IORef (readIORef)
@@ -64,7 +69,8 @@ newtype OverrideMatcher a
   = OM { unOM :: forall rtp l ret.
         StateT
           OverrideState
-          (Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l ret)
+          (ExceptT OverrideFailure
+            (Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l ret))
           a }
 
 data OverrideState = OverrideState
@@ -79,8 +85,9 @@ data OverrideFailure
   | AmbiguousPrecondition [PointsTo]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
-  | BadReturnSpecification
+  | BadReturnSpecification -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
+  | BadPointerLoad String -- ^ loadRaw failed due to type error
   | StructuralMismatch (Crucible.LLVMVal Sym Crucible.PtrWidth)
                        SetupValue
                        Crucible.MemType
@@ -124,7 +131,7 @@ addAssume p = OM (assumes %= cons p)
 -- | Abort the current computation by raising the given 'OverrideFailure'
 -- exception.
 failure :: OverrideFailure -> OverrideMatcher a
-failure e = OM (liftIO (throwIO e))
+failure e = OM (lift (throwE e))
 
 ------------------------------------------------------------------------
 
@@ -135,13 +142,40 @@ methodSpecHandler ::
   CrucibleContext          {- ^ context for interacting with Crucible        -} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret (Crucible.RegValue Sym ret)
-methodSpecHandler sc cc [cs] retTy = do
-  let L.Symbol fsym = csName cs
+  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret
+     (Crucible.RegValue Sym ret)
+methodSpecHandler sc cc css retTy = do
+  let L.Symbol fsym = csName (head css)
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
-
   Crucible.RegMap args <- Crucible.getOverrideArgs
-  runOverrideMatcher cc $
+
+  matches
+     <- traverse (runOverrideMatcher . methodSpecHandler1 sc cc args retTy) css
+
+  (res,finalState)
+    <- case partitionEithers matches of
+         (_,[success]) -> return success
+         (e,[]       ) -> fail ("All overrides failed: " ++ show e)
+         _             -> fail "TODO: Too many overrides matched"
+
+  liftIO $
+    do for_ (view assumes finalState) $ \p ->
+           Crucible.sbAddAssumption (ccBackend cc) p
+       for_ (view asserts finalState) $ \(p,r) ->
+           Crucible.sbAddAssertion (ccBackend cc) p r
+       return res
+
+methodSpecHandler1 ::
+  forall ret ctx.
+  (?lc :: TyCtx.LLVMContext) =>
+  SharedContext            {- ^ context for constructing SAW terms           -} ->
+  CrucibleContext          {- ^ context for interacting with Crucible        -} ->
+  Ctx.Assignment (Crucible.RegEntry Sym) ctx
+           {- ^ type representation of function return value -} ->
+  Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
+  CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
+  OverrideMatcher (Crucible.RegValue Sym ret)
+methodSpecHandler1 sc cc args retTy cs =
     do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
 
        sym <- liftSim Crucible.getSymInterface
@@ -161,8 +195,6 @@ methodSpecHandler sc cc [cs] retTy = do
        traverse_ (executePointsTo sc cc cs) (csPostPointsTos cs)
        traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
        computeReturnValue cc sc cs retTy (csRetValue cs)
-
-methodSpecHandler _sc _cc _cs _retTy = fail "PANIC: too many method specs"
 
 ------------------------------------------------------------------------
 
@@ -300,24 +332,20 @@ assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x
 
 ------------------------------------------------------------------------
 
-liftSim :: (forall rtp l ret. Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l ret a) -> OverrideMatcher a
-liftSim m = OM (lift m)
+liftSim ::
+  (forall rtp l ret.
+     Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l ret a) ->
+  OverrideMatcher a
+liftSim m = OM (lift (lift m))
 
 ------------------------------------------------------------------------
 
 -- | "Run" function for OverrideMatcher.
 runOverrideMatcher ::
-  CrucibleContext   ->
-  OverrideMatcher a ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l r a
-runOverrideMatcher cc (OM m) =
-  do (res, finalState) <- runStateT m initialState
-     liftIO $
-       do for_ (view assumes finalState) $ \p ->
-            Crucible.sbAddAssumption (ccBackend cc) p
-          for_ (view asserts finalState) $ \(p,r) ->
-            Crucible.sbAddAssertion (ccBackend cc) p r
-     return res
+   OverrideMatcher a ->
+   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l r
+     (Either OverrideFailure (a, OverrideState))
+runOverrideMatcher (OM m) = runExceptT (runStateT m initialState)
 
 ------------------------------------------------------------------------
 
@@ -520,7 +548,10 @@ learnPointsTo sc cc spec (PointsTo ptr val) =
              $ Crucible.readGlobal $ Crucible.llvmMemVar
              $ Crucible.memModelOps $ ccLLVMContext cc
 
-     (p,r,v) <- liftIO (Crucible.loadRawWithCondition sym mem (packPointer' ptr1) storTy)
+     res  <- liftIO (Crucible.loadRawWithCondition sym mem (packPointer' ptr1) storTy)
+     (p,r,v) <- case res of
+                  Left e  -> failure (BadPointerLoad e)
+                  Right x -> return x
      addAssert p r
      matchArg sc cc v memTy val
 
