@@ -35,6 +35,7 @@ import qualified Text.LLVM.AST as L
 import qualified Lang.Crucible.CFG.Core as Crucible
                    (TypeRepr(UnitRepr), IntrinsicType, GlobalVar)
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
@@ -66,18 +67,15 @@ import           SAWScript.TypedTerm
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher a
-  = OM { unOM :: forall rtp l ret.
-        StateT
-          OverrideState
-          (ExceptT OverrideFailure
-            (Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l ret))
-          a }
+  = OM { unOM :: StateT OverrideState (ExceptT OverrideFailure IO) a }
 
 data OverrideState = OverrideState
   { _setupValueSub :: Map AllocIndex (Crucible.RegValue Sym Crucible.LLVMPointerType)
   , _termSub       :: Map VarIndex Term
   , _asserts       :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
   , _assumes       :: [Crucible.Pred Sym]
+  , _syminterface  :: Sym
+  , _overrideGlobals :: Crucible.SymGlobalState Sym
   }
 
 data OverrideFailure
@@ -110,7 +108,10 @@ makeLenses ''OverrideState
 
 -- | The initial override matching state starts with an empty substitution
 -- and no assertions or assumptions.
-initialState :: OverrideState
+initialState ::
+  Sym ->
+  Crucible.SymGlobalState Sym ->
+  OverrideState
 initialState = OverrideState Map.empty Map.empty [] []
 
 ------------------------------------------------------------------------
@@ -125,6 +126,21 @@ addAssume ::
   Crucible.Pred Sym       {- ^ property -} ->
   OverrideMatcher ()
 addAssume p = OM (assumes %= cons p)
+
+readGlobal ::
+  Crucible.GlobalVar tp ->
+  OverrideMatcher (Crucible.RegValue Sym tp)
+readGlobal k =
+  do mb <- OM (uses overrideGlobals (Crucible.lookupGlobal k))
+     case mb of
+       Nothing -> fail ("No such global: " ++ show k)
+       Just v  -> return v
+
+writeGlobal ::
+  Crucible.GlobalVar    tp ->
+  Crucible.RegValue Sym tp ->
+  OverrideMatcher ()
+writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 
 ------------------------------------------------------------------------
 
@@ -148,16 +164,20 @@ methodSpecHandler sc cc css retTy = do
   let L.Symbol fsym = csName (head css)
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
   Crucible.RegMap args <- Crucible.getOverrideArgs
+  globals <- Crucible.readGlobals
+  sym <- Crucible.getSymInterface
 
   matches
-     <- traverse (runOverrideMatcher . methodSpecHandler1 sc cc args retTy) css
+     <- liftIO $
+        traverse (runOverrideMatcher sym globals . methodSpecHandler1 sc cc args retTy) css
 
   (res,finalState)
     <- case partitionEithers matches of
-         (_,[success]) -> return success
          (e,[]       ) -> fail ("All overrides failed: " ++ show e)
-         _             -> fail "TODO: Too many overrides matched"
+         (_,[success]) -> return success
+         (_,_        ) -> fail "Too many matches"
 
+  Crucible.writeGlobals (view overrideGlobals finalState)
   liftIO $
     do for_ (view assumes finalState) $ \p ->
            Crucible.sbAddAssumption (ccBackend cc) p
@@ -178,7 +198,7 @@ methodSpecHandler1 ::
 methodSpecHandler1 sc cc args retTy cs =
     do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
 
-       sym <- liftSim Crucible.getSymInterface
+       sym <- getSymInterface
 
        let aux memTy (Crucible.AnyValue tyrep val) =
              do storTy <- Crucible.toStorableType memTy
@@ -202,7 +222,7 @@ methodSpecHandler1 sc cc args retTy cs =
 -- an override's precondition are disjoint.
 enforceDisjointness :: CrucibleContext -> CrucibleMethodSpecIR -> OverrideMatcher ()
 enforceDisjointness cc spec =
-  do sym <- liftSim Crucible.getSymInterface
+  do sym <- getSymInterface
      sub <- OM (use setupValueSub)
      let m = Map.elems $ Map.intersectionWith (,) (csAllocations spec) sub
 
@@ -332,20 +352,18 @@ assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x
 
 ------------------------------------------------------------------------
 
-liftSim ::
-  (forall rtp l ret.
-     Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l ret a) ->
-  OverrideMatcher a
-liftSim m = OM (lift (lift m))
+getSymInterface :: OverrideMatcher Sym
+getSymInterface = OM (use syminterface)
 
 ------------------------------------------------------------------------
 
 -- | "Run" function for OverrideMatcher.
 runOverrideMatcher ::
+   Sym ->
+   Crucible.SymGlobalState Sym ->
    OverrideMatcher a ->
-   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp l r
-     (Either OverrideFailure (a, OverrideState))
-runOverrideMatcher (OM m) = runExceptT (runStateT m initialState)
+   IO (Either OverrideFailure (a, OverrideState))
+runOverrideMatcher sym g (OM m) = runExceptT (runStateT m (initialState sym g))
 
 ------------------------------------------------------------------------
 
@@ -399,18 +417,18 @@ matchArg sc cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupSt
        | ((_,x),y,z) <- zip3 (V.toList xs) (V.toList (Crucible.fiType <$> Crucible.siFields fields)) zs ]
 
 matchArg sc cc realVal _ (SetupTerm expected) =
-  do sym      <- liftSim Crucible.getSymInterface
+  do sym      <- getSymInterface
      realTerm <- liftIO (valueToSC sym realVal)
      matchTerm sc cc realTerm (ttTerm expected)
 
 matchArg _sc _cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
-  do sym <- liftSim Crucible.getSymInterface
+  do sym <- getSymInterface
      let ptr = Crucible.LLVMPtr blk end off
      p <- liftIO (Crucible.isNullPointer sym (unpackPointer ptr))
      addAssert p (Crucible.AssertFailureSimError "null-equality precondition")
 
 matchArg _sc cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
-  do sym <- liftSim Crucible.getSymInterface
+  do sym <- getSymInterface
      let mem = ccEmptyMemImpl cc
      ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
      let (Crucible.LLVMPtr blk2 _ off2) = packPointer' ptr2
@@ -518,7 +536,7 @@ learnGhost ::
   TypedTerm                                              ->
   OverrideMatcher ()
 learnGhost sc cc var expected =
-  do actual <- liftSim (Crucible.readGlobal var)
+  do actual <- readGlobal var
      matchTerm sc cc (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
@@ -542,11 +560,11 @@ learnPointsTo sc cc spec (PointsTo ptr val) =
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
      storTy <- Crucible.toStorableType memTy
-     sym    <- liftSim Crucible.getSymInterface
+     sym    <- getSymInterface
 
-     mem    <- liftSim
-             $ Crucible.readGlobal $ Crucible.llvmMemVar
-             $ Crucible.memModelOps $ ccLLVMContext cc
+     mem    <- readGlobal $ Crucible.llvmMemVar
+                          $ Crucible.memModelOps
+                          $ ccLLVMContext cc
 
      res  <- liftIO (Crucible.loadRawWithCondition sym mem (packPointer' ptr1) storTy)
      (p,r,v) <- case res of
@@ -602,12 +620,10 @@ executePostAllocation cc (var, memTy) =
      liftIO $ putStrLn $ unwords ["executePostAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
      let w = Crucible.memTypeSize dl memTy
-     ptr <- liftSim $
-       do mem <- Crucible.readGlobal memVar
-          sz <- liftIO $ Crucible.bvLit sym Crucible.ptrWidth (fromIntegral w)
-          (ptr, mem') <- liftIO (Crucible.doMalloc sym mem sz)
-          Crucible.writeGlobal memVar mem'
-          return ptr
+     mem <- readGlobal memVar
+     sz <- liftIO $ Crucible.bvLit sym Crucible.ptrWidth (fromIntegral w)
+     (ptr, mem') <- liftIO (Crucible.doMalloc sym mem sz)
+     writeGlobal memVar mem'
      assignVar cc var ptr
 
 ------------------------------------------------------------------------
@@ -635,7 +651,7 @@ executeGhost ::
 executeGhost sc var val =
   do s <- OM (use termSub)
      t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
-     liftSim (Crucible.writeGlobal var t)
+     writeGlobal var t
 
 ------------------------------------------------------------------------
 
@@ -653,7 +669,7 @@ executePointsTo sc cc spec (PointsTo ptr val) =
   do liftIO $ putStrLn $ "Executing points to: " ++
                          show ptr ++ " -> " ++ show val
      (_, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
-     sym    <- liftSim Crucible.getSymInterface
+     sym    <- getSymInterface
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
@@ -661,10 +677,9 @@ executePointsTo sc cc spec (PointsTo ptr val) =
      storTy <- Crucible.toStorableType memTy1
 
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
-     liftSim $
-       do mem  <- Crucible.readGlobal memVar
-          mem' <- liftIO (Crucible.doStore sym mem ptr1 storTy val1)
-          Crucible.writeGlobal memVar mem'
+     mem  <- readGlobal memVar
+     mem' <- liftIO (Crucible.doStore sym mem ptr1 storTy val1)
+     writeGlobal memVar mem'
 
 
 ------------------------------------------------------------------------
@@ -745,7 +760,7 @@ resolveSetupValue ::
   OverrideMatcher (Crucible.MemType, Crucible.AnyValue Sym)
 resolveSetupValue cc sc spec sval =
   do (memTy, lval) <- resolveSetupValueLLVM cc sc spec sval
-     sym <- liftSim Crucible.getSymInterface
+     sym <- getSymInterface
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)
 

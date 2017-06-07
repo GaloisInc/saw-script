@@ -1,0 +1,17 @@
+let identity_spec n : CrucibleSetup () = do {
+  crucible_execute_func [crucible_term n];
+  crucible_return (crucible_term n);
+};
+
+let example_spec : CrucibleSetup () = do {
+  crucible_execute_func [];
+  crucible_return (crucible_term {{3:[32]}});
+};
+
+let main : TopLevel () = do {
+    load_crucible_llvm_module "source.bc";
+    id1 <- crucible_llvm_verify "identity" [] false (identity_spec {{1:[32]}}) abc;
+    id2 <- crucible_llvm_verify "identity" [] false (identity_spec {{2:[32]}}) abc;
+    crucible_llvm_verify "example" [id1,id2] false example_spec (do { print_goal; abc; });
+    print "done";
+};
