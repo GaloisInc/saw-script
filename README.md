@@ -8,9 +8,8 @@ languages such as C, Java, and Cryptol.
 
 ## Documentation
 
-The SAWScript tutorial, [doc/tutorial/]
-(https://github.com/GaloisInc/saw-script/raw/master/doc/tutorial),
-gives an introduction to using the SAWScript interpreter.
+The [SAWScript tutorial](https://saw.galois.com/tutorial.html) gives
+an introduction to using the SAWScript interpreter.
 
 ## Precompiled Binaries
 
