@@ -16,9 +16,10 @@ unsigned int example_sums(void) {
 
 int myglobal;
 
-void set_myglobal(int x) { myglobal = x; }
+void add_myglobal(int x) { myglobal = myglobal * myglobal; myglobal += x; }
 int myglobal_example(void) {
-  set_myglobal(10);
-  set_myglobal(20);
+  myglobal = 0;
+  add_myglobal(10);
+  add_myglobal(20);
   return myglobal;
 }
