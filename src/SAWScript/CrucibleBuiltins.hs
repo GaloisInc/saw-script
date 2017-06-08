@@ -45,7 +45,6 @@ import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.Parameterized.Nonce as Crucible
-import qualified Data.Parameterized.Map as MapF
 
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
@@ -55,7 +54,6 @@ import qualified Lang.Crucible.CFG.Core as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
@@ -732,11 +730,6 @@ load_crucible_llvm_module bic opts bc_file = do
       cfg <- Crucible.initialConfig verbosity Crucible.sawOptions
       sym <- Crucible.newSAWCoreBackend sc gen cfg
       let bindings = Crucible.fnBindingsFromList []
-      let intrinsics =
-            MapF.insert
-              (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
-              Crucible.IntrinsicMuxFn
-              Crucible.llvmIntrinsicTypes
       let simctx   = Crucible.initSimContext sym intrinsics cfg halloc stdout
                         bindings Crucible.SAWCruciblePersonality
       mem <- Crucible.initializeMemory sym ctx llvm_mod

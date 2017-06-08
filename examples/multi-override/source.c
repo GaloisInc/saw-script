@@ -13,3 +13,12 @@ unsigned int example_sums(void) {
         unsigned int nums[10] = {0,1,2,3,4,6,7,8,9};
         return sum(nums, 10) + sum(nums+2,6);
 }
+
+int myglobal;
+
+void set_myglobal(int x) { myglobal = x; }
+int myglobal_example(void) {
+  set_myglobal(10);
+  set_myglobal(20);
+  return myglobal;
+}

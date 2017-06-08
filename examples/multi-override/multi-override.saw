@@ -34,6 +34,17 @@ let example_sums : CrucibleSetup() = do {
   crucible_return (crucible_term {{ 70:[32] }});
 };
 
+let set_myglobal n : CrucibleSetup() = do {
+  let m = crucible_term {{ `n : [32] }};
+  crucible_execute_func[m];
+  crucible_points_to (crucible_global "myglobal") m;
+};
+
+let myglobal_example : CrucibleSetup() = do {
+  crucible_execute_func[];
+  crucible_return (crucible_term {{ 20 : [32] }});
+};
+
 let main : TopLevel () = do {
 
     load_crucible_llvm_module "source.bc";
@@ -45,5 +56,13 @@ let main : TopLevel () = do {
     sum6  <- crucible_llvm_verify "sum" [] false (sum_spec  6) z3;
     sum10 <- crucible_llvm_verify "sum" [] false (sum_spec 10) z3;
     crucible_llvm_verify "example_sums" [sum6,sum10] false example_sums z3;
+
+    set10 <- crucible_llvm_verify "set_myglobal" [] false (set_myglobal 10) z3;
+    set20 <- crucible_llvm_verify "set_myglobal" [] false (set_myglobal 20) z3;
+    set30 <- crucible_llvm_verify "set_myglobal" [] false (set_myglobal 30) z3;
+    crucible_llvm_verify  "myglobal_example" [set10,set20,set30] false myglobal_example z3;
+    crucible_llvm_verify  "myglobal_example" [set20,set30,set10] false myglobal_example z3;
+    crucible_llvm_verify  "myglobal_example" [set30,set10,set20] false myglobal_example
+        (do { print_goal; abc;});
     print "done";
 };

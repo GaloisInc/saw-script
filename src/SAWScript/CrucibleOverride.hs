@@ -21,6 +21,7 @@ import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
+import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -29,18 +30,15 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 
 import qualified Data.Parameterized.Nonce as Nonce
-import qualified Data.Parameterized.Map as MapF
 
 import qualified Text.LLVM.AST as L
 
 import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr),
-                    IntrinsicType, GlobalVar, SymbolRepr, knownSymbol)
+                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar)
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
@@ -170,16 +168,18 @@ methodSpecHandler sc cc css retTy = do
   globals <- Crucible.readGlobals
   sym     <- Crucible.getSymInterface
 
+  gs <- liftIO (buildGlobalsList sym (length css) globals)
+
   matches
      <- liftIO $
-        traverse (runOverrideMatcher sym globals . methodSpecHandler1 sc cc args retTy) css
+        zipWithM (\g cs -> runOverrideMatcher sym g
+                             (methodSpecHandler1 sc cc args retTy cs)) gs css
 
-  outputs
-    <- case partitionEithers matches of
-         (e,[]       ) -> fail ("All overrides failed: " ++ show e)
-         (_,successes) -> return successes
+  outputs <- case partitionEithers matches of
+               (e,[]  ) -> fail ("All overrides failed: " ++ show e)
+               (_,s:ss) -> return (s:|ss)
 
-  Crucible.writeGlobals =<< liftIO (muxGlobal sym (map snd outputs))
+  Crucible.writeGlobals =<< liftIO (muxGlobal sym (fmap snd outputs))
 
   liftIO $
     do -- assert the disjunction of all the preconditions
@@ -190,48 +190,67 @@ methodSpecHandler sc cc css retTy = do
 
        -- Postcondition can be used if precondition holds
        for_ outputs $ \(_,output) ->
-         do p       <- conjunction sym (map fst (view asserts output))
+         do p       <- conjunction sym (toListOf (asserts . folded . _1) output)
             q       <- conjunction sym (view assumes output)
             p_imp_q <- Crucible.impliesPred sym p q
             Crucible.sbAddAssumption (ccBackend cc) p_imp_q
 
        muxReturnValue sym retTy outputs
 
-conjunction :: Sym -> [Crucible.Pred Sym] -> IO (Crucible.Pred Sym)
+-- | When two global states are merged, only the writes since the last branch
+-- are actually merged. Therefore we need to add enough branches to the global
+-- states so that as we merge all of the results of applying overrides that there
+-- are enough branches left over at the end to mux.
+buildGlobalsList :: Sym -> Int -> Crucible.SymGlobalState Sym ->
+  IO [Crucible.SymGlobalState Sym]
+buildGlobalsList _   1 g = return [g]
+buildGlobalsList sym n g =
+  do g1 <- Crucible.globalPushBranch sym intrinsics g
+     gs <- buildGlobalsList sym (n-1) g1
+     return (g1:gs)
+
+conjunction :: Foldable t => Sym -> t (Crucible.Pred Sym) -> IO (Crucible.Pred Sym)
 conjunction sym = foldM (Crucible.andPred sym) (Crucible.truePred sym)
 
-disjunction :: Sym -> [Crucible.Pred Sym] -> IO (Crucible.Pred Sym)
+disjunction :: Foldable t => Sym -> t (Crucible.Pred Sym) -> IO (Crucible.Pred Sym)
 disjunction sym = foldM (Crucible.orPred sym) (Crucible.falsePred sym)
 
+-- | Compute the return value from a list of structurally matched
+-- overrides. The result will be a muxed value guarded by the
+-- preconditions of each of the overrides.
 muxReturnValue ::
-  Sym ->
-  Crucible.TypeRepr ret ->
-  [(Crucible.RegValue Sym ret, OverrideState)] ->
-  IO (Crucible.RegValue Sym ret)
-muxReturnValue _   _     []        = fail "PANIC: muxReturnValue"
-muxReturnValue _   _     [(val,_)] = return val
-muxReturnValue sym retTy ((val,x):xs) =
-  do ys   <- muxReturnValue sym retTy xs
+  Sym                   {- ^ symbolic simulator parameters -} ->
+  Crucible.TypeRepr ret {- ^ type of return value          -} ->
+  NonEmpty (Crucible.RegValue Sym ret, OverrideState)
+                        {- ^ possible overrides            -} ->
+  IO (Crucible.RegValue Sym ret) {- ^ muxed return value   -}
+muxReturnValue _   _     ((val,_):|[]) = return val
+muxReturnValue sym retTy ((val,x):|y:z) =
+  do ys   <- muxReturnValue sym retTy (y:|z)
      here <- conjunction sym (map fst (view asserts x))
      Crucible.muxRegForType sym intrinsics retTy here val ys
 
-muxGlobal :: Sym -> [OverrideState] -> IO (Crucible.SymGlobalState Sym)
-muxGlobal _ [] = fail "PANIC: muxGlobal"
-muxGlobal _ [x] = return (view overrideGlobals x)
-muxGlobal sym (x:xs) =
-  do ys   <- muxGlobal sym xs
-     here <- conjunction sym (map fst (view asserts x))
+muxGlobal :: Sym -> NonEmpty OverrideState -> IO (Crucible.SymGlobalState Sym)
+muxGlobal _ (x:|[]) = return (view overrideGlobals x)
+muxGlobal sym (x:|y:z) =
+  do ys   <- muxGlobal sym (y:|z)
+     here <- conjunction sym (toListOf (asserts . folded . _1) x)
+     globalMuxUnleveled sym here (view overrideGlobals x) ys
 
-     b1 <- Crucible.globalPushBranch sym intrinsics (view overrideGlobals x)
-     b2 <- Crucible.globalPushBranch sym intrinsics ys
-     Crucible.globalMuxFn sym intrinsics here b1 b2
-
-intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
-intrinsics =
-  MapF.insert
-    (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
-    Crucible.IntrinsicMuxFn
-    Crucible.llvmIntrinsicTypes
+-- | This mux function can handle cases wher the right-hand side has
+-- more branches that the left-hand side. This can happen when an
+-- override specification was aborted due to structural mismatch.
+globalMuxUnleveled ::
+  Sym                         {- ^ symbolic simulator params -} ->
+  Crucible.Pred Sym           {- ^ branch condition          -} ->
+  Crucible.SymGlobalState Sym {- ^ possibly shorter globals  -} ->
+  Crucible.SymGlobalState Sym {- ^ possibly taller globals   -} ->
+  IO (Crucible.SymGlobalState Sym) {- ^ muxed globals -}
+globalMuxUnleveled sym p l r
+  | Crucible._globalPendingBranches l < Crucible._globalPendingBranches r =
+     do r' <- Crucible.globalAbortBranch sym intrinsics r
+        globalMuxUnleveled sym p l r'
+  | otherwise = Crucible.globalMuxFn sym intrinsics p l r
 
 ------------------------------------------------------------------------
 

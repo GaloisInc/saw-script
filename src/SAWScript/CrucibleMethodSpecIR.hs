@@ -31,6 +31,10 @@ import           Lang.Crucible.LLVM.MemType
 import qualified Text.LLVM.AST as L
 import           Data.IORef
 
+import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Nonce as Crucible
+
+import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.CFG.Common as Crucible
 --import qualified Verifier.LLVM.Codebase as LSS
@@ -215,3 +219,11 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
        typ  <- scTypeOf sc (ttTerm thn)
        res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
        return thn { ttTerm = res }
+
+intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn
+                (Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator))
+intrinsics =
+  MapF.insert
+    (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
+    Crucible.IntrinsicMuxFn
+    Crucible.llvmIntrinsicTypes
