@@ -12,6 +12,7 @@ let main : TopLevel () = do {
     load_crucible_llvm_module "source.bc";
     id1 <- crucible_llvm_verify "identity" [] false (identity_spec {{1:[32]}}) abc;
     id2 <- crucible_llvm_verify "identity" [] false (identity_spec {{2:[32]}}) abc;
-    crucible_llvm_verify "example" [id1,id2] false example_spec (do { print_goal; abc; });
+    crucible_llvm_verify "example"     [id1,id2] false example_spec (do { print_goal; z3; });
+    crucible_llvm_verify "bad_example" [id1,id2] false example_spec (do { print_goal; assume_unsat; });
     print "done";
 };

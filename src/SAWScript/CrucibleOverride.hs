@@ -29,15 +29,18 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 
 import qualified Data.Parameterized.Nonce as Nonce
+import qualified Data.Parameterized.Map as MapF
 
 import qualified Text.LLVM.AST as L
 
 import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar)
+                   (TypeRepr(UnitRepr),
+                    IntrinsicType, GlobalVar, SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
@@ -165,25 +168,72 @@ methodSpecHandler sc cc css retTy = do
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
   Crucible.RegMap args <- Crucible.getOverrideArgs
   globals <- Crucible.readGlobals
-  sym <- Crucible.getSymInterface
+  sym     <- Crucible.getSymInterface
 
   matches
      <- liftIO $
         traverse (runOverrideMatcher sym globals . methodSpecHandler1 sc cc args retTy) css
 
-  (res,finalState)
+  outputs
     <- case partitionEithers matches of
          (e,[]       ) -> fail ("All overrides failed: " ++ show e)
-         (_,[success]) -> return success
-         (_,_        ) -> fail "Too many matches"
+         (_,successes) -> return successes
 
-  Crucible.writeGlobals (view overrideGlobals finalState)
+  Crucible.writeGlobals =<< liftIO (muxGlobal sym (map snd outputs))
+
   liftIO $
-    do for_ (view assumes finalState) $ \p ->
-           Crucible.sbAddAssumption (ccBackend cc) p
-       for_ (view asserts finalState) $ \(p,r) ->
-           Crucible.sbAddAssertion (ccBackend cc) p r
-       return res
+    do -- assert the disjunction of all the preconditions
+       do ps <- traverse (conjunction sym . toListOf (_2 . asserts . folded . _1)) outputs
+          p  <- disjunction sym ps
+          Crucible.sbAddAssertion (ccBackend cc) p
+            (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
+
+       -- Postcondition can be used if precondition holds
+       for_ outputs $ \(_,output) ->
+         do p       <- conjunction sym (map fst (view asserts output))
+            q       <- conjunction sym (view assumes output)
+            p_imp_q <- Crucible.impliesPred sym p q
+            Crucible.sbAddAssumption (ccBackend cc) p_imp_q
+
+       muxReturnValue sym retTy outputs
+
+conjunction :: Sym -> [Crucible.Pred Sym] -> IO (Crucible.Pred Sym)
+conjunction sym = foldM (Crucible.andPred sym) (Crucible.truePred sym)
+
+disjunction :: Sym -> [Crucible.Pred Sym] -> IO (Crucible.Pred Sym)
+disjunction sym = foldM (Crucible.orPred sym) (Crucible.falsePred sym)
+
+muxReturnValue ::
+  Sym ->
+  Crucible.TypeRepr ret ->
+  [(Crucible.RegValue Sym ret, OverrideState)] ->
+  IO (Crucible.RegValue Sym ret)
+muxReturnValue _   _     []        = fail "PANIC: muxReturnValue"
+muxReturnValue _   _     [(val,_)] = return val
+muxReturnValue sym retTy ((val,x):xs) =
+  do ys   <- muxReturnValue sym retTy xs
+     here <- conjunction sym (map fst (view asserts x))
+     Crucible.muxRegForType sym intrinsics retTy here val ys
+
+muxGlobal :: Sym -> [OverrideState] -> IO (Crucible.SymGlobalState Sym)
+muxGlobal _ [] = fail "PANIC: muxGlobal"
+muxGlobal _ [x] = return (view overrideGlobals x)
+muxGlobal sym (x:xs) =
+  do ys   <- muxGlobal sym xs
+     here <- conjunction sym (map fst (view asserts x))
+
+     b1 <- Crucible.globalPushBranch sym intrinsics (view overrideGlobals x)
+     b2 <- Crucible.globalPushBranch sym intrinsics ys
+     Crucible.globalMuxFn sym intrinsics here b1 b2
+
+intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
+intrinsics =
+  MapF.insert
+    (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
+    Crucible.IntrinsicMuxFn
+    Crucible.llvmIntrinsicTypes
+
+------------------------------------------------------------------------
 
 methodSpecHandler1 ::
   forall ret ctx.
@@ -552,9 +602,7 @@ learnPointsTo ::
   PointsTo                   ->
   OverrideMatcher ()
 learnPointsTo sc cc spec (PointsTo ptr val) =
-  do liftIO $ putStrLn $ "Checking points to: " ++
-                         show ptr ++ " -> " ++ show val
-     let tyenv = Map.union (csAllocations spec) (csFreshPointers spec)
+  do let tyenv = Map.union (csAllocations spec) (csFreshPointers spec)
      memTy <- liftIO $ typeOfSetupValue cc tyenv val
      (_memTy, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      -- In case the types are different (from crucible_points_to_untyped)
@@ -666,9 +714,7 @@ executePointsTo ::
   PointsTo                   ->
   OverrideMatcher ()
 executePointsTo sc cc spec (PointsTo ptr val) =
-  do liftIO $ putStrLn $ "Executing points to: " ++
-                         show ptr ++ " -> " ++ show val
-     (_, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
+  do (_, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      sym    <- getSymInterface
 
      -- In case the types are different (from crucible_points_to_untyped)
