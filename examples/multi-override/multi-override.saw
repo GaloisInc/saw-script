@@ -60,7 +60,7 @@ let main : TopLevel () = do {
     sum6  <- crucible_llvm_verify "sum" [] false (sum_spec  6) z3;
     sum10 <- crucible_llvm_verify "sum" [] false (sum_spec 10) z3;
     sum12 <- crucible_llvm_verify "sum" [] false (sum_spec 12) z3;
-    crucible_llvm_verify "example_sums" [sum3,sum6,sum10,sum12] false example_sums z3;
+    crucible_llvm_verify "example_sums" [sum3,sum12, sum6,sum10] false example_sums z3;
 
     set10 <- crucible_llvm_verify "add_myglobal" [] false (set_myglobal 10) z3;
     set20 <- crucible_llvm_verify "add_myglobal" [] false (set_myglobal 20) z3;
