@@ -87,7 +87,6 @@ library
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
-    SAWScript.CryptolBuiltins
     SAWScript.CryptolEnv
     SAWScript.Import
     SAWScript.ImportAIG
