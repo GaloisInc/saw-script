@@ -155,8 +155,8 @@ crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
   Options          ->
-  String           ->
-  CrucibleSetup () ->
+  String          {- ^ Name of the function -} ->
+  CrucibleSetup () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
 crucible_llvm_unsafe_assume_spec bic _opts nm setup = do
   cc <- io $ readIORef (biCrucibleContext bic) >>= \case
