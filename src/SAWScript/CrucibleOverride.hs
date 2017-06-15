@@ -246,10 +246,7 @@ globalMuxUnleveled ::
   Sym -> Crucible.MuxFn (Crucible.Pred Sym) (Crucible.SymGlobalState Sym)
 globalMuxUnleveled sym p l r
   | Crucible._globalPendingBranches l < Crucible._globalPendingBranches r =
-     -- I'm merging the globals with themselves instead of aborting
-     -- becauase I don't want to discard this branch, I just want to
-     -- shorten it.
-     do r' <- Crucible.globalMuxFn sym intrinsics (Crucible.truePred sym) r r
+     do r' <- Crucible.globalAbortBranch sym intrinsics r
         globalMuxUnleveled sym p l r'
   | otherwise = Crucible.globalMuxFn sym intrinsics p l r
 
