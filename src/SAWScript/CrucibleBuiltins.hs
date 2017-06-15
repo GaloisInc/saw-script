@@ -974,11 +974,14 @@ logicTypeForInt sc w =
      scVecType sc lTm bType
 
 
-crucible_fresh_var :: BuiltinContext
-                   -> Options
-                   -> String
-                   -> L.Type
-                   -> CrucibleSetup TypedTerm
+-- | Generate a fresh variable term. The name will be used when
+-- pretty-printing the variable in debug output.
+crucible_fresh_var ::
+  BuiltinContext          {- ^ context          -} ->
+  Options                 {- ^ options          -} ->
+  String                  {- ^ variable name    -} ->
+  L.Type                  {- ^ variable type    -} ->
+  CrucibleSetup TypedTerm {- ^ fresh typed term -}
 crucible_fresh_var bic _opts name lty = do
   lty' <- memTypeForLLVMType bic lty
   cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
@@ -991,12 +994,17 @@ crucible_fresh_var bic _opts name lty = do
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
 
 
-
+-- | Use the given LLVM type to compute a setup value that
+-- covers expands all of the struct, array, and pointer
+-- components of the LLVM type. Only the primitive types
+-- suitable for import as SAW core terms will be matched
+-- against fresh variables.
 crucible_fresh_expanded_val ::
-  BuiltinContext ->
-  Options        ->
-  L.Type         ->
+  BuiltinContext {- ^ context                -} ->
+  Options        {- ^ options                -} ->
+  L.Type         {- ^ variable type          -} ->
   CrucibleSetup SetupValue
+                 {- ^ elaborated setup value -}
 crucible_fresh_expanded_val bic _opts lty =
   do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
      let sc = biSharedContext bic
@@ -1015,12 +1023,15 @@ memTypeForLLVMType bic lty =
        Just m -> return m
        Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
 
-
+-- | See 'crucible_fresh_expanded_val'
+--
+-- This is the recursively-called worker function.
 constructExpandedSetupValue ::
   (?lc::TyCtx.LLVMContext) =>
-  SharedContext            ->
-  Crucible.MemType         ->
+  SharedContext    {- ^ shared context             -} ->
+  Crucible.MemType {- ^ LLVM mem type              -} ->
   CrucibleSetup SetupValue
+                   {- ^ fresh expanded setup value -}
 constructExpandedSetupValue sc t =
   case t of
     Crucible.IntType w -> liftIO $

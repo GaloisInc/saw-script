@@ -209,9 +209,11 @@ buildGlobalsList sym n g =
      gs <- buildGlobalsList sym (n-1) g1
      return (g1:gs)
 
+-- | Compute the conjunction of a set of predicates.
 conjunction :: Foldable t => Sym -> t (Crucible.Pred Sym) -> IO (Crucible.Pred Sym)
 conjunction sym = foldM (Crucible.andPred sym) (Crucible.truePred sym)
 
+-- | Compute the disjunction of a set of predicates.
 disjunction :: Foldable t => Sym -> t (Crucible.Pred Sym) -> IO (Crucible.Pred Sym)
 disjunction sym = foldM (Crucible.orPred sym) (Crucible.falsePred sym)
 
@@ -241,11 +243,7 @@ muxGlobal sym (x:|y:z) =
 -- more branches that the left-hand side. This can happen when an
 -- override specification was aborted due to structural mismatch.
 globalMuxUnleveled ::
-  Sym                         {- ^ symbolic simulator params -} ->
-  Crucible.Pred Sym           {- ^ branch condition          -} ->
-  Crucible.SymGlobalState Sym {- ^ possibly shorter globals  -} ->
-  Crucible.SymGlobalState Sym {- ^ possibly taller globals   -} ->
-  IO (Crucible.SymGlobalState Sym) {- ^ muxed globals -}
+  Sym -> Crucible.MuxFn (Crucible.Pred Sym) (Crucible.SymGlobalState Sym)
 globalMuxUnleveled sym p l r
   | Crucible._globalPendingBranches l < Crucible._globalPendingBranches r =
      -- I'm merging the globals with themselves instead of aborting
