@@ -20,17 +20,11 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 module SAWScript.Interpreter
-  ( interpret
-  , interpretDeclGroup
-  , interpretStmt
+  ( interpretStmt
   , interpretFile
-  , buildTopLevelEnv
-  , extendEnv
-  , Value, isVUnit
-  , IsValue(..)
-  , primTypeEnv
-  , primDocEnv
   , processFile
+  , buildTopLevelEnv
+  , primDocEnv
   )
   where
 
@@ -308,7 +302,10 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in the TopLevel monad.
-interpretStmt :: Bool -> SS.Stmt -> TopLevel ()
+interpretStmt ::
+  Bool {-^ whether to print non-unit result values -} ->
+  SS.Stmt ->
+  TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
     SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
@@ -1663,6 +1660,8 @@ valueEnv :: Options -> BuiltinContext -> Map SS.LName Value
 valueEnv opts bic = fmap f primitives
   where f p = (primFn p) opts bic
 
+-- | Map containing the formatted documentation string for each
+-- saw-script primitive.
 primDocEnv :: Map SS.Name String
 primDocEnv =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]
