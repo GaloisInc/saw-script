@@ -1,0 +1,20 @@
+let inc_spec : CrucibleSetup () = do {
+  m <- crucible_alloc (llvm_struct "struct.my_struct");
+  counter <- crucible_fresh_var "counter" (llvm_int 32);
+  crucible_points_to (crucible_elem m 0) (crucible_term counter);
+  crucible_execute_func [m];
+  crucible_points_to (crucible_elem m 0) (crucible_term {{counter+1}});
+};
+
+let use_inc_spec : CrucibleSetup () = do {
+  crucible_execute_func [];
+  crucible_return (crucible_term {{1:[32]}});
+};
+
+let main : TopLevel () = do {
+
+    load_crucible_llvm_module "source.bc";
+    inc <- crucible_llvm_verify "inc" [] false inc_spec abc;
+    crucible_llvm_verify "use_inc" [inc] false use_inc_spec abc;
+    print "done";
+};
