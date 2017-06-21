@@ -39,6 +39,7 @@ import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.CFG.Common as Crucible
 --import qualified Verifier.LLVM.Codebase as LSS
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
+import SAWScript.SolverStats
 import SAWScript.TypedTerm
 
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
@@ -93,6 +94,7 @@ data CrucibleMethodSpecIR =
   , csConditions      :: [(PrePost, SetupCondition)]       -- ^ equality and precond/postcond statements
   , csArgBindings     :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , csRetValue        :: Maybe SetupValue                  -- ^ function return value
+  , csSolverStats     :: SolverStats                       -- ^ statistics about the proof that produced this
   }
   deriving (Show)
 
@@ -132,6 +134,7 @@ initialCrucibleSetupState def =
     , csConditions      = []
     , csArgBindings     = Map.empty
     , csRetValue        = Nothing
+    , csSolverStats     = mempty
     }
   }
 
@@ -154,6 +157,7 @@ initialCrucibleSetupStateDecl dec =
     , csConditions      = []
     , csArgBindings     = Map.empty
     , csRetValue        = Nothing
+    , csSolverStats     = mempty
     }
   }
 

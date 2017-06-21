@@ -1620,6 +1620,17 @@ primitives = Map.fromList
     (bicVal crucible_ghost_value)
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]
+
+  , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
+    (\_ _ -> toValue crucible_spec_solvers)
+    [ "Extract a list of all the solvers used when verifying the given method spec."
+    ]
+
+  , prim "crucible_spec_size"  "CrucibleMethodSpec -> Int"
+    (\_ _ -> toValue crucible_spec_size)
+    [ "Return a count of the combined size of all verification goals proved as part of"
+    , "the given method spec."
+    ]
   ]
 
   where

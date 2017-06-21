@@ -82,6 +82,7 @@ import Verifier.SAW.TypedAST
 import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof
+import SAWScript.SolverStats
 import SAWScript.TypedTerm
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -149,8 +150,8 @@ crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
                        methodSpec env globals3 ret
      -- restore initial path condition
      io $ Crucible.resetCurrentState sym pathstate
-     verifyObligations cc methodSpec tactic assumes asserts
-     return methodSpec
+     stats <- verifyObligations cc methodSpec tactic assumes asserts
+     return methodSpec { csSolverStats = stats }
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -176,7 +177,7 @@ verifyObligations :: CrucibleContext
                   -> ProofScript SatResult
                   -> [Term]
                   -> [(String, Term)]
-                  -> TopLevel ()
+                  -> TopLevel SolverStats
 verifyObligations cc mspec tactic assumes asserts = do
   let sym = ccBackend cc
   st     <- io $ readIORef $ Crucible.sbStateManager sym
@@ -184,20 +185,20 @@ verifyObligations cc mspec tactic assumes asserts = do
   t      <- io $ scBool sc True
   assume <- io $ foldM (scAnd sc) t assumes
   let nm  = show (L.ppSymbol (csName mspec))
-  r <- forM asserts $ \(msg, assert) -> do
+  stats <- forM asserts $ \(msg, assert) -> do
     goal   <- io $ scImplies sc assume assert
     goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
     let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
     r      <- evalStateT tactic (startProof (ProofGoal Universal goalname goal'))
     case r of
-      Unsat _stats -> return True
+      Unsat stats -> return stats
       SatMulti stats vals -> do
         io $ putStrLn $ unwords ["Subgoal failed:", nm, msg]
         io $ print stats
         io $ mapM_ print vals
         io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
-  let msg = if and r then "Proof succeeded!" else "Proof failed!"
-  io $ putStrLn $ unwords [msg, nm]
+  io $ putStrLn $ unwords ["Proof succeeded!", nm]
+  return (mconcat stats)
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -1226,6 +1227,11 @@ crucible_ghost_value ::
 crucible_ghost_value _bic _opt ghost val =
   addCondition (SetupCond_Ghost ghost val)
 
+crucible_spec_solvers :: CrucibleMethodSpecIR -> [String]
+crucible_spec_solvers = Set.toList . solverStatsSolvers . csSolverStats
+
+crucible_spec_size :: CrucibleMethodSpecIR -> Integer
+crucible_spec_size = solverStatsGoalSize . csSolverStats
 --------------------------------------------------------------------------------
 
 -- | Sort a list of things and group them into equivalence classes.
