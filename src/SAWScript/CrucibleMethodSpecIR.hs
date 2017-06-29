@@ -25,7 +25,9 @@ module SAWScript.CrucibleMethodSpecIR where
 import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-
+import           Control.Monad ((>=>))
+import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans (lift)
 
 import           Lang.Crucible.LLVM.MemType
 import qualified Text.LLVM.AST as L
@@ -63,6 +65,25 @@ data SetupValue where
   SetupGlobal :: String -> SetupValue
   deriving (Show)
 
+-- | Convert a setup value to a typed term. This is a partial
+-- function, as certain setup values ---SetupVar, SetupNull and
+-- SetupGlobal--- don't have semantics outside of the symbolic
+-- simulator.
+setupToTypedTerm :: SharedContext -> SetupValue -> MaybeT IO TypedTerm
+setupToTypedTerm sc sv =
+  case sv of
+    SetupTerm term -> return term
+    SetupStruct fields -> do tts <- mapM (setupToTypedTerm sc) fields
+                             let ts = map ttTerm tts
+                             lift $ scTuple sc ts >>= mkTypedTerm sc
+    SetupArray elems   ->
+      do tts <- mapM (setupToTypedTerm sc) elems
+         let ts = map ttTerm tts
+         lent <- lift $ scNat sc $ fromInteger $ toInteger $ length ts
+         lift $ scVector sc lent ts >>= mkTypedTerm sc
+    SetupElem array index -> undefined
+    -- SetupVar, SetupNull, SetupGlobal
+    _ -> MaybeT $ return Nothing
 
 data PrePost
   = PreState | PostState
