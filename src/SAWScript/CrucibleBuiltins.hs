@@ -1237,19 +1237,19 @@ lookup_go_function pkg name =
   find (\((Go.Id _ _ fname), _, _, _) -> Text.unpack fname == name) [(ident, params, returns, body)|(Go.FunctionDecl _ ident params returns (Just body)) <- universeBi pkg]
 
 symexec_cfg :: BuiltinContext -> Options -> Crucible.AnyCFG -> TopLevel TypedTerm
-symexec_cfg bic _ cfg = do cc <- mkSimpleCrucibleContext bic
-                           io $ extractFromCFG (biSharedContext bic) cc cfg
+symexec_cfg bic opts cfg = do cc <- mkSimpleCrucibleContext bic opts
+                              io $ extractFromCFG (biSharedContext bic) cc cfg
 
-mkSimpleCrucibleContext :: BuiltinContext -> TopLevel CrucibleContext
-mkSimpleCrucibleContext bic = 
+mkSimpleCrucibleContext :: BuiltinContext -> Options -> TopLevel CrucibleContext
+mkSimpleCrucibleContext bic opts =
   do halloc <- getHandleAlloc
      io$ do let gen = Crucible.globalNonceGenerator
             let sc  = biSharedContext bic
-            sym <- Crucible.newSAWCoreBackend sc gen
-            let verbosity = 10
-            cfg <- Crucible.initialConfig verbosity []
+            cfg <- Crucible.initialConfig (simVerbose opts) Crucible.sawOptions
+            sym <- Crucible.newSAWCoreBackend sc gen cfg
             let bindings = Crucible.fnBindingsFromList []
             let simctx   = Crucible.initSimContext sym MapF.empty cfg halloc stdout bindings
+                           Crucible.SAWCruciblePersonality
             let globals  = Crucible.emptyGlobals
             return $ CrucibleContext { ccBackend = sym
                                      , ccSimContext = simctx
@@ -1259,7 +1259,7 @@ mkSimpleCrucibleContext bic =
                                      , ccLLVMModuleTrans = undefined
                                      , ccEmptyMemImpl = undefined
                                      }
-              
+
 taint_flow_cfg :: BuiltinContext -> Options -> [Bool] -> Crucible.AnyCFG -> TopLevel Bool
 taint_flow_cfg _ _ taints (Crucible.AnyCFG cfg) =
   let argCtxRepr     = Crucible.handleArgTypes $ Crucible.cfgHandle cfg in

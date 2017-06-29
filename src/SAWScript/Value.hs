@@ -257,7 +257,7 @@ showsPrecValue opts p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
-    VGoPackage p -> showString (showGoPackage p)
+    VGoPackage pkg -> showString (showGoPackage pkg)
     VLLVMModule m -> showString (showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
