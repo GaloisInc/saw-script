@@ -24,7 +24,7 @@ library
     , containers
     , cryptol
     , cryptol-verifier
-    , crucible
+    , crucible >= 0.3 && < 0.4
     , crucible-llvm
     , crucible-saw
     , deepseq
@@ -56,7 +56,7 @@ library
     , saw-core
     , saw-core-aig
     , saw-core-sbv
-    , sbv >= 4.3
+    , sbv >= 6
     , smtLib
     , split
     , temporary
@@ -86,12 +86,10 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
     SAWScript.CongruenceClosure
-    SAWScript.Compiler
     SAWScript.CrucibleBuiltins
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
-    SAWScript.CryptolBuiltins
     SAWScript.CryptolEnv
     SAWScript.Import
     SAWScript.ImportAIG

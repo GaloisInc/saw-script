@@ -8,9 +8,8 @@ languages such as C, Java, and Cryptol.
 
 ## Documentation
 
-The SAWScript tutorial, [doc/tutorial/]
-(https://github.com/GaloisInc/saw-script/raw/master/doc/tutorial),
-gives an introduction to using the SAWScript interpreter.
+The [SAWScript tutorial](https://saw.galois.com/tutorial.html) gives
+an introduction to using the SAWScript interpreter.
 
 ## Precompiled Binaries
 
@@ -33,30 +32,6 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
   * Ensure that you have the programs `javac` and `z3` on your
     `PATH`. Z3 binaries are available at
     https://github.com/Z3Prover/z3/releases
-
-  * **Developers**:
-    optionally, create a `build-sandbox-version-pins.txt` and pin the
-    revisions of dependencies as necessary by adding lines like
-
-        <dependency name> <committish>
-
-    See the `pin` function in `build-sandbox.sh` for more details. The release
-    branches already include a known-to-work `build-sandbox-versions-pins.txt`,
-    so you can get a stable build by checking out a release branch (e.g.
-    `git checkout release-0.2`).
-
-    To create a `build-sandbox-versions-pins.txt` for the current
-    state of the dependencies, do
-
-        for d in deps/*; \
-          do (cd $d && echo -n "$(basename "$d") "; git rev-parse HEAD); \
-        done > build-sandbox-version-pins.txt
-
-    and then
-
-        git add --force build-sandbox-version-pins.txt
-
-    if you are in a new release branch.
 
   * Setup a `stack.yaml` for your OS and preferred GHC.
 
@@ -85,11 +60,7 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
 
   * Build SAWScript by running
 
-        ./build-sandbox.sh -p
-
-    The `-p` flag tells it to pull the latest updates from any
-    dependency repositories. You can omit `-p`, and speed up the
-    build slightly, if you know that they haven't changed.
+        ./build.sh
 
     The SAWScript executables will be created in
 

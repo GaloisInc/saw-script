@@ -3,7 +3,6 @@ src/SAWScript/Parser.hs
 saw/GitRev.hs
 bin
 cabal.sandbox.config
-deps
 dist
 build
 build-tests
@@ -12,3 +11,5 @@ tmp
 .stack-work
 stack.yaml
 .DS_Store
+.ghc.environment*
+dist-newstyle

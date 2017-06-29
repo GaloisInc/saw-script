@@ -11,11 +11,11 @@
 {-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Implementations of SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.Builtins where
 
@@ -116,10 +116,10 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Simulator.MSSim as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Data.Parameterized.Nonce as Crucible
-
 
 type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
@@ -130,7 +130,7 @@ data CrucibleContext =
   , ccLLVMModuleTrans :: Crucible.ModuleTranslation
   , ccBackend         :: Sym
   , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , ccSimContext      :: Crucible.SimContext Sym
+  , ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
   , ccGlobals         :: Crucible.SymGlobalState Sym
   }
 
@@ -532,15 +532,17 @@ print_term_depth d t = do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts d t)
 
-printGoal :: ProofScript ()
-printGoal = withFirstGoal $ \goal -> do
+print_goal :: ProofScript ()
+print_goal = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  io $ putStrLn ("Goal " ++ goalName goal ++ ":")
   io $ putStrLn (scPrettyTerm opts (goalTerm goal))
   return ((), mempty, Just goal)
 
-printGoalDepth :: Int -> ProofScript ()
-printGoalDepth n = withFirstGoal $ \goal -> do
+print_goal_depth :: Int -> ProofScript ()
+print_goal_depth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  io $ putStrLn ("Goal " ++ goalName goal ++ ":")
   io $ print (ppTermDepth opts n (goalTerm goal))
   return ((), mempty, Just goal)
 
@@ -827,6 +829,7 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
       case goalQuant g of
         Existential -> return (r', stats, Nothing)
         Universal -> return (r', stats, Just (g { goalTerm = ft }))
+    SBV.SatExtField {} -> fail "Prover returned model in extension field"
     SBV.Unsatisfiable {} -> do
       ft <- scApplyPrelude_False sc
       case goalQuant g of

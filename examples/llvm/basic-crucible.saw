@@ -13,7 +13,7 @@ let dbl_setup = do {
 
 let main : TopLevel () = do {
     load_crucible_llvm_module "basic.bc";
-    add_ms <- crucible_llvm_verify "add" [] add_setup abc;
-    crucible_llvm_verify "dbl" [add_ms] dbl_setup abc;
+    add_ms <- crucible_llvm_verify "add" [] false add_setup abc;
+    crucible_llvm_verify "dbl" [add_ms] false dbl_setup abc;
     print "Done.";
 };

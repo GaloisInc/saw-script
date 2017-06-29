@@ -6,13 +6,14 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DataKinds #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Value datatype for SAW-Script interpreter.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.Value where
 
@@ -62,9 +63,8 @@ import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import Cryptol.Utils.PP (pretty)
 
--- import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
-import qualified Lang.Crucible.Core as Crucible
-import qualified Lang.Crucible.FunctionHandle as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, GlobalVar, IntrinsicType)
+import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 import qualified Language.Go.AST as Go
 
@@ -106,6 +106,7 @@ data Value
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
+  | VGhostVar (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue"))
 
 type GoPackage = Go.Package Go.SourceRange
 
@@ -224,7 +225,7 @@ showSimpset opts ss =
     opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
-showsPrecValue opts _p v =
+showsPrecValue opts p v =
   case v of
     VBool True -> showString "true"
     VBool False -> showString "false"
@@ -264,6 +265,8 @@ showsPrecValue opts _p v =
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
     VCFG _ -> showString "<<CFG>>"
+    VGhostVar x -> showParen (p > 10)
+                 $ showString "Ghost " . showsPrec 11 x
   where
     opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
 
@@ -504,7 +507,7 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
 ---------------------------------------------------------------------------------
 instance IsValue a => IsValue (StateT CIR.CrucibleSetupState TopLevel a) where
     toValue m = VCrucibleSetup (fmap toValue m)
-    
+
 instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) where
     fromValue (VCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
@@ -516,7 +519,7 @@ instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) whe
 
 instance IsValue CIR.SetupValue where
   toValue v = VCrucibleSetupValue v
-  
+
 instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
@@ -530,7 +533,7 @@ instance FromValue (Crucible.AnyCFG) where
 
 instance IsValue CIR.CrucibleMethodSpecIR where
     toValue t = VCrucibleMethodSpec t
-    
+
 instance FromValue CIR.CrucibleMethodSpecIR where
     fromValue (VCrucibleMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
@@ -682,6 +685,13 @@ instance IsValue SatResult where
 instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
+
+instance IsValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+  toValue = VGhostVar
+
+instance FromValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+  fromValue (VGhostVar r) = r
+  fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
 -- Error handling --------------------------------------------------------------
 

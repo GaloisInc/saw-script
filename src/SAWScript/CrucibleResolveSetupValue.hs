@@ -1,4 +1,5 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE GADTs #-}
 
 module SAWScript.CrucibleResolveSetupValue
   ( LLVMVal
@@ -6,11 +7,14 @@ module SAWScript.CrucibleResolveSetupValue
   , typeOfLLVMVal
   , typeOfSetupValue
   , resolveTypedTerm
+  , resolveSAWPred
+  , equalValsPred
   , packPointer
   ) where
 
 import Control.Lens
-import Control.Monad (zipWithM)
+import Control.Monad (zipWithM, foldM)
+import Data.Foldable (toList)
 import Data.Maybe (fromJust)
 import Data.IORef
 import Data.Word (Word64)
@@ -23,7 +27,9 @@ import qualified Text.LLVM.AST as L
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 
-import qualified Lang.Crucible.Core as Crucible
+import qualified Lang.Crucible.BaseTypes as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
+import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 import qualified Lang.Crucible.Utils.Arithmetic as Crucible
 
@@ -34,11 +40,12 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
-import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd)
+import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.NatRepr as NatRepr
 
+import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 
@@ -47,6 +54,7 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
 import SAWScript.Builtins
 import SAWScript.TypedTerm
+import SAWScript.Utils
 
 import SAWScript.CrucibleMethodSpecIR
 
@@ -108,7 +116,10 @@ typeOfSetupValue cc env val =
       -- operation.
       return (Crucible.PtrType Crucible.VoidType)
     SetupGlobal name ->
-      do let tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals (ccLLVMModule cc) ]
+      do let m = ccLLVMModule cc
+             tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
+                   [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
+                   [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
          case lookup (L.Symbol name) tys of
            Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
            Just ty ->
@@ -188,6 +199,12 @@ resolveTypedTerm cc tm =
       resolveSAWTerm cc (Cryptol.evalValType Map.empty ty) (ttTerm tm)
     _ -> fail "resolveSetupVal: expected monomorphic term"
 
+resolveSAWPred ::
+  CrucibleContext ->
+  Term ->
+  IO (Crucible.Pred Sym)
+resolveSAWPred cc tm =
+  Crucible.bindSAWTerm (ccBackend cc) Crucible.BaseBoolRepr tm
 
 resolveSAWTerm ::
   CrucibleContext ->
@@ -203,15 +220,21 @@ resolveSAWTerm cc tp tm =
           Just (Crucible.Some w)
             | Just Crucible.LeqProof <- Crucible.isPosNat w ->
               do sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
-                 -- Evaluate in SBV to test whether 'tm' is a concrete value
-                 sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm
-                 case SBV.svAsInteger sbv of
+                 ss <- basic_ss sc
+                 tm' <- rewriteSharedTerm sc ss tm
+                 mx <- case getAllExts tm' of
+                         [] -> do
+                           -- Evaluate in SBV to test whether 'tm' is a concrete value
+                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm'
+                           return (SBV.svAsInteger sbv)
+                         _ -> return Nothing
+                 case mx of
                    Just x -> do
                      loc <- Crucible.curProgramLoc sym
                      let v = Crucible.BVElt w x loc
                      return (Crucible.LLVMValInt w v)
                    Nothing -> do
-                     v <- Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm
+                     v <- Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm'
                      return (Crucible.LLVMValInt w v)
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
@@ -309,7 +332,6 @@ typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal dl val =
   case val of
     Crucible.LLVMValPtr {}      -> ptrType
-    Crucible.LLVMValFunPtr {}   -> ptrType
     Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w)))
     Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
@@ -317,3 +339,34 @@ typeOfLLVMVal dl val =
   where
     ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
+
+equalValsPred ::
+  CrucibleContext ->
+  LLVMVal ->
+  LLVMVal ->
+  IO (Crucible.Pred Sym)
+equalValsPred cc v1 v2 = go (v1, v2)
+  where
+  go :: (LLVMVal, LLVMVal) -> IO (Crucible.Pred Sym)
+
+  go (Crucible.LLVMValPtr blk1 _end1 off1, Crucible.LLVMValPtr blk2 _end2 off2)
+       = do blk_eq <- Crucible.natEq sym blk1 blk2
+            off_eq <- Crucible.bvEq sym off1 off2
+            Crucible.andPred sym blk_eq off_eq
+  go (Crucible.LLVMValInt wx x, Crucible.LLVMValInt wy y)
+       | Just Crucible.Refl <- Crucible.testEquality wx wy
+       = Crucible.bvEq sym x y
+  go (Crucible.LLVMValReal x, Crucible.LLVMValReal y)
+       = Crucible.realEq sym x y
+  go (Crucible.LLVMValStruct xs, Crucible.LLVMValStruct ys)
+       | V.length xs == V.length ys
+       = do cs <- mapM go (zip (map snd (toList xs)) (map snd (toList ys)))
+            foldM (Crucible.andPred sym) (Crucible.truePred sym) cs
+  go (Crucible.LLVMValArray _tpx xs, Crucible.LLVMValArray _tpy ys)
+       | V.length xs == V.length ys
+       = do cs <- mapM go (zip (toList xs) (toList ys))
+            foldM (Crucible.andPred sym) (Crucible.truePred sym) cs
+
+  go _ = return (Crucible.falsePred sym)
+
+  sym = ccBackend cc

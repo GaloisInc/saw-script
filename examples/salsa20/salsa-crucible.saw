@@ -53,7 +53,7 @@ let salsa20_setup =
 let salsa20_expansion_32 : CrucibleSetup() = do {
     (k, pk) <- ptr_to_fresh "k" (llvm_array 32 (llvm_int 8));
     (n, pn) <- ptr_to_fresh "n" (llvm_array 16 (llvm_int 8));
-    (ks, pks) <- ptr_to_fresh "keystream" (llvm_array 64 (llvm_int 8));
+    pks <- crucible_alloc (llvm_array 64 (llvm_int 8));
     crucible_execute_func [pk, pn, pks];
     let rks = {{ Salsa20_expansion`{a=2}(k, n)}};
     crucible_points_to pks (crucible_term rks);
@@ -75,12 +75,12 @@ let s20_encrypt32 : CrucibleSetup() = do {
 
 let main : TopLevel () = do {
     load_crucible_llvm_module "salsa20.bc";
-    qr     <- crucible_llvm_verify "s20_quarterround" []      quarterround_setup   abc;
-    rr     <- crucible_llvm_verify "s20_rowround"     [qr]    rowround_setup       abc;
-    cr     <- crucible_llvm_verify "s20_columnround"  [qr]    columnround_setup    abc;
-    dr     <- crucible_llvm_verify "s20_doubleround"  [cr,rr] doubleround_setup    abc;
-    s20    <- crucible_llvm_verify "s20_hash"         [dr]    salsa20_setup        abc;
-    s20e32 <- crucible_llvm_verify "s20_expand32"     [s20]   salsa20_expansion_32 abc;
-    //s20encrypt <- crucible_llvm_verify "s20_crypt32"  [s20e32] s20_encrypt32       abc;
+    qr     <- crucible_llvm_verify "s20_quarterround" []      false quarterround_setup   abc;
+    rr     <- crucible_llvm_verify "s20_rowround"     [qr]    false rowround_setup       abc;
+    cr     <- crucible_llvm_verify "s20_columnround"  [qr]    false columnround_setup    abc;
+    dr     <- crucible_llvm_verify "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
+    s20    <- crucible_llvm_verify "s20_hash"         [dr]    false salsa20_setup        abc;
+    s20e32 <- crucible_llvm_verify "s20_expand32"     [s20]   true salsa20_expansion_32 abc;
+    s20encrypt <- crucible_llvm_verify "s20_crypt32"  [s20e32] true s20_encrypt32       abc;
     print "Done!";
 };

@@ -2,10 +2,10 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {- |
-Module           : $Header$
-Description      :
-Stability        : provisional
-Point-of-contact : jhendrix, atomb
+Module      : $Header$
+Description : Miscellaneous utilities.
+Maintainer  : jhendrix, atomb
+Stability   : provisional
 -}
 
 {-# LANGUAGE DeriveDataTypeable  #-}
@@ -230,7 +230,8 @@ basic_ss sc = do
       ]
     defs' = map (mkIdent (mkModuleName ["Cryptol"]))
             ["seq", "ecEq", "ecNotEq"]
-    procs = bvConversions ++ natConversions ++ vecConversions
+    procs = [tupleConversion, recordConversion] ++
+            bvConversions ++ natConversions ++ vecConversions
 
 -- | Convert a non-negative integer to to an ordinal string.
 --

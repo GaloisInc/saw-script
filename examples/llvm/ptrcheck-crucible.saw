@@ -1,0 +1,18 @@
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p (crucible_term v);
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty x;
+    return (x, p);
+};
+
+load_crucible_llvm_module "ptrcheck.bc";
+crucible_llvm_verify "f" [] false do {
+    (s, p) <- ptr_to_fresh "s" (llvm_struct "struct.s");
+    crucible_execute_func [p];
+    crucible_return (crucible_term {{ 0 : [32] }});
+} abc;

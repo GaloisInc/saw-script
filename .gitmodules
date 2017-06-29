@@ -1,0 +1,48 @@
+[submodule "deps/abcBridge"]
+	path = deps/abcBridge
+	url = https://github.com/GaloisInc/abcBridge.git
+[submodule "deps/aig"]
+	path = deps/aig
+	url = https://github.com/GaloisInc/aig.git
+[submodule "deps/crucible"]
+	path = deps/crucible
+	url = https://github.com/GaloisInc/crucible.git
+[submodule "deps/cryptol-verifier"]
+	path = deps/cryptol-verifier
+	url = https://github.com/GaloisInc/cryptol-verifier.git
+[submodule "deps/cryptol"]
+	path = deps/cryptol
+	url = https://github.com/GaloisInc/cryptol.git
+[submodule "deps/jvm-parser"]
+	path = deps/jvm-parser
+	url = https://github.com/GaloisInc/jvm-parser.git
+[submodule "deps/jvm-verifier"]
+	path = deps/jvm-verifier
+	url = https://github.com/GaloisInc/jvm-verifier.git
+[submodule "deps/llvm-pretty"]
+	path = deps/llvm-pretty
+	url = https://github.com/GaloisInc/llvm-pretty.git
+[submodule "deps/llvm-pretty-bc-parser"]
+	path = deps/llvm-pretty-bc-parser
+	url = https://github.com/GaloisInc/llvm-pretty-bc-parser.git
+[submodule "deps/llvm-verifier"]
+	path = deps/llvm-verifier
+	url = https://github.com/GaloisInc/llvm-verifier.git
+[submodule "deps/parameterized-utils"]
+	path = deps/parameterized-utils
+	url = https://github.com/GaloisInc/parameterized-utils.git
+[submodule "deps/saw-core-aig"]
+	path = deps/saw-core-aig
+	url = https://github.com/GaloisInc/saw-core-aig.git
+[submodule "deps/saw-core-sbv"]
+	path = deps/saw-core-sbv
+	url = https://github.com/GaloisInc/saw-core-sbv.git
+[submodule "deps/saw-core"]
+	path = deps/saw-core
+	url = https://github.com/GaloisInc/saw-core.git
+[submodule "deps/anastasia"]
+	path = deps/anastasia
+	url = https://github.com/GaloisInc/anastasia.git
+[submodule "deps/golang"]
+	path = deps/golang
+	url = https://github.com/GaloisInc/golang.git

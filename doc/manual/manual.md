@@ -1383,17 +1383,17 @@ AIG out in CNF format for input into a standard SAT solver.
 
 # Symbolic Execution
 
-Analysis of Java and LLVM within SAWScript builds heavily on *symbolic
+Analysis of Java and LLVM within SAWScript relies heavily on *symbolic
 execution*, so some background on how this process works can help with
 understanding the behavior of the available built-in functions.
 
 At the most abstract level, symbolic execution works like normal program
-execution except that the values of all variables within the program can
-be arbitrary *expressions*, rather than concrete values, potentially
-containing free variables. Therefore, each symbolic execution
-corresponds to some set of possible concrete executions.
+execution except that the values of all variables within the program can be
+arbitrary *expressions*, potentially containing free variables, rather than
+concrete values. Therefore, each symbolic execution corresponds to some set
+of possible concrete executions.
 
-As a concrete example, consider the following C program, which returns
+As a concrete example, consider the following C program that returns
 the maximum of two values:
 
 ~~~~ {.c}
@@ -1412,9 +1412,8 @@ If you call this function with two concrete inputs, like this:
 int r = max(5, 4);
 ~~~~
 
-then it will assign the value `5` to `r`. However, we can consider what
-it will do for *arbitrary* inputs, as well. Consider the following
-example:
+then it will assign the value `5` to `r`. However, we can also consider what
+it will do for *arbitrary* inputs. Consider the following example:
 
 ~~~~ {.c}
 int r = max(a, b);
@@ -1428,21 +1427,21 @@ and `b`. The following expression describes the value of `r`:
 ite (b > a) b a
 ~~~~
 
-where `ite` is the "if-then-else" mathematical function that, based on
-the value of its first argument returns either the second or third. One
+where `ite` is the "if-then-else" mathematical function, which based on
+the value of the first argument returns either the second or third. One
 subtlety of constructing this expression, however, is the treatment of
 conditionals in the original program. For any concrete values of `a` and
 `b`, only one branch of the `if` statement will execute. During symbolic
 execution, on the other hand, it is necessary to execute *both*
 branches, track two different program states (each composed of symbolic
-values), and then to *merge* those states after executing the `if`
+values), and then *merge* those states after executing the `if`
 statement. This merging process takes into account the original branch
 condition and introduces the `ite` expression.
 
 A symbolic execution system, then, is very similar to an interpreter
-with a different notion of what constitutes a value, and which executes
+that has a different notion of what constitutes a value and executes
 *all* paths through the program instead of just one. Therefore, the
-execution process follows a similar process to that of a normal
+execution process is similar to that of a normal
 interpreter, and the process of generating a model for a piece of code
 is similar to building a test harness for that same code.
 
@@ -1459,7 +1458,7 @@ the following form:
   completes.
 
 Accordingly, three pieces of information are particularly relevant to
-the symbolic execution process, and therefore needed as input to the
+the symbolic execution process, and are therefore needed as input to the
 symbolic execution system:
 
 * The initial (potentially symbolic) state of the system.
@@ -1510,7 +1509,7 @@ As a more complex example, consider the following function:
 ~~~~ {.c}
 uint8_t f(uint8_t i) {
   int done = 0;
-  while (!done){
+  while (!done) {
     if (i % 8 == 0) done = 1;
     i += 5;
   }
@@ -1526,7 +1525,7 @@ case is eventually reached for all inputs to a recursive program.
 In this particular case, however, the code *is* guaranteed to terminate
 after a fixed number of iterations (where the number of possible
 iterations is a function of the number of bits in the integers being
-used). To show that the last iteration is in fact the last possible,
+used). To show that the last iteration is in fact the last possible one,
 it's necessary to do more than just compare the branch condition with a
 constant. Instead, we can use the same proof tools that we use to
 ultimately analyze the generated models to, early in the process, prove
@@ -1539,7 +1538,7 @@ a branch may be feasible. However, each form of analysis allows branch
 satisfiability checking to be turned on if needed, in which case
 functions like `f` above will terminate.
 
-Now let's get into the details of the specific commands available to
+Now, we examine the details of the specific commands available to
 analyze JVM and LLVM programs.
 
 # Loading Code
@@ -1559,13 +1558,13 @@ described below to perform analysis of specific LLVM functions.
 Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, two flags
 control where to look for classes. The `-j` flag takes the name of a JAR
-file as an argument, and adds the contents of that file to the class
-database. The `-c` flag takes the name of a directory as an argument,
+file as an argument and adds the contents of that file to the class
+database. The `-c` flag takes the name of a directory as an argument
 and adds all class files found in that directory (and its
 subdirectories) to the class database. By default, the current directory
 is included in the class path. However, the Java runtime and standard library
 (usually called `rt.jar`) is generally required for any non-trivial Java
-code, and is installed in a wide variety of different locations.
+code, and can be installed in a wide variety of different locations.
 Therefore, for most Java analysis, you must provide a `-j` argument
 specifying where to find this file.
 
@@ -1582,7 +1581,7 @@ described below to perform analysis of specific Java methods.
 # Direct Extraction
 
 In the case of the `max` function described earlier, the relevant inputs
-and outputs are directly apparent. The function takes two integer
+and outputs are immediately apparent. The function takes two integer
 arguments, always uses both of them, and returns a single integer value,
 making no other changes to the program state.
 
@@ -1602,7 +1601,7 @@ LLVM module, loaded as described in the previous section). The second
 argument is the name of the method or function to extract.
 
 The third argument provides the ability to configure other aspects of
-the symbolic execution process. At the moment, only one option possible:
+the symbolic execution process. At the moment, only one option is available:
 pass in `java_pure` or `llvm_pure`, for Java and LLVM respectively, and
 the default extraction process is simply to set both arguments to fresh
 symbolic variables.
@@ -1643,9 +1642,9 @@ x <- fresh_symbolic "x" ty;
 However, using the same name is not required.
 
 The second argument to `fresh_symbolic` is the type of the fresh
-variable. Ultimately, this will be a SAWCore type, however it it usually
-convenient to specify it using Cryptol syntax using the type quoting
-brackets `{|` and `|}`. So, for example, creating a 32-bit integer, as
+variable. Ultimately, this will be a SAWCore type; however, it is usually
+convenient to specify it using Cryptol syntax with the type quoting
+brackets `{|` and `|}`. For example, creating a 32-bit integer, as
 might be used to represent a Java `int` or an LLVM `i32`, can be done as
 follows:
 
@@ -1669,7 +1668,7 @@ lambdas : [Term] -> Term -> Term
 
 The `abstract_symbolic` function is the simplest, but gives you the
 least control. It finds all symbolic variables in the `Term` and
-constructs a lamba expression binding each one, in some order. The
+constructs a lambda expression binding each one, in some order. The
 result is a function of some number of arguments, one for each symbolic
 variable.
 
@@ -1735,7 +1734,7 @@ let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
       x2
 ~~~~
 
-We can turn this into a function that takes `x1` followed by `x2`:
+We can turn `t` into a function that takes `x1` followed by `x2`:
 
 ~~~~
 sawscript> let f1 = lambdas [x1, x2] t
@@ -1817,7 +1816,7 @@ variables returned by `fresh_symbolic`).
 The syntax of these expressions is as follows:
 
   * Arguments to the method being analyzed can be referred to by name
-    (if the `.class` file contains debugging information, as it will be
+    (if the `.class` file contains debugging information, as it will
     if compiled with `javac -g`). The expression referring to the
     value of the argument `x` in the `max` example is simply `x`. For
     Java methods that do not have debugging information, arguments can
@@ -1835,7 +1834,7 @@ The syntax of these expressions is as follows:
     field `f` of the object described by `e`.
 
   * The value of an expression of array type is the entire contents of
-    the array. At the moment, there is no way to refer to individual
+    the array. There is currently no way to refer to individual
     elements of an array.
 
 The fourth argument of `java_symexec` is a list of expressions
@@ -1857,7 +1856,7 @@ The `llvm_symexec` command uses an expression syntax similar to that for
     generated by some versions of Clang). The expression referring to
     the value of the argument `x` in the `max` example is simply `x`.
     For LLVM functions that do not have named arguments (such as those
-    generated by the Rust compiler, for instance), arguments can be
+    generated by the Rust compiler), arguments can be
     named positionally with `args[0]`, `args[1]` and so on.
 
   * Global variables can be referred to directly by name.
@@ -1895,7 +1894,7 @@ elements of the static type of the given expression. The strings given
 here should be expressions identifying *pointers* rather than the values
 of those pointers.
 
-The fourth argument, of type `[(String, Term, Int)]` indicates the
+The fourth argument, of type `[(String, Term, Int)]`, indicates the
 initial values to write to the program state before execution. The
 elements of this list should include *value* expressions. For example,
 if a function has an argument named `p` of type `int *`, the allocation
@@ -1905,14 +1904,14 @@ list might contain the element `("*p", v, 1)`, for some value `v`. The
 with Cryptol type `[n]a`, the `Int` argument should be `n`. In the
 future we expect this value to be inferred.
 
-Finally, the fifth argument, of type `[(String, Int)]` indicates the
+Finally, the fifth argument, of type `[(String, Int)]`, indicates the
 elements to read from the final state. For each entry, the `String`
-should be a value expression, and the `Int` parameter indicates how many
+should be a value expression and the `Int` parameter indicates how many
 elements to read. The number of elements does not need to be the same as
 the number of elements allocated or written in the initial state.
 However, reading past the end of an object or reading a location that
 has not been initialized will lead to an error. In this list, the
-special name `$safety` works in the same was as for LLVM.
+special name `$safety` works in the same way as for Java.
 
 ## Examples
 
@@ -1936,13 +1935,13 @@ prove_print abc safe;
 print "Done.";
 ~~~~
 
-It first loads the `Add` class and creates two 32-bit symbolic
-variables, `x` and `y`. It then symbolically execute the `add` method
-with the symbolic variables just created passed in as its two arguments,
+This code first loads the `Add` class and creates two 32-bit symbolic
+variables, `x` and `y`. It then symbolically executes the `add` method
+with the symbolic variables just created as its two arguments,
 and returns the symbolic expression denoting the method's return value.
 
-Once the script has a `Term` in hand (the variable `ja`), it prints it
-out and then translates the version containing symbolic variables into a
+Once the script has a `Term` in hand (the variable `ja`), it prints the
+term and then translates the version containing symbolic variables into a
 function that takes concrete values for those variables as arguments.
 Finally, it proves that the resulting function is commutative.
 
@@ -1969,11 +1968,11 @@ Although the `symexec` functions are more flexible than the `extract`
 functions, they still have some limitations and assumptions.
 
 * When allocating memory for objects or arrays, each allocation is done
-  independently. Therefore, there is currently no way to create data
+  independently. There is currently no way to create data
   structures that share sub-structures. No aliasing is possible.
   Therefore, it is important to take into account that any proofs
   performed on the results of symbolic execution will not necessarily
-  reflect the behavior of the code being analyzed if it is called in a
+  reflect the behavior of the code being analyzed if it is run in a
   context where its inputs involve aliasing or overlapping memory
   regions.
 
@@ -1991,11 +1990,11 @@ functions, they still have some limitations and assumptions.
 # Specification-Based Verification
 
 The built-in functions described so far work by extracting models of
-code which can then be used for a variety of purposes, including proofs
+code that can then be used for a variety of purposes, including proofs
 about the properties of the code.
 
 When the goal is to prove equivalence between some Java or LLVM code and
-a specification, however, sometimes a more declarative approach is
+a specification, however, a more declarative approach is sometimes
 convenient. The following two functions allow for combined model
 extraction and verification.
 
@@ -2016,18 +2015,18 @@ llvm_verify : LLVMModule ->
 Like all of the functions for Java and LLVM analysis, the first two
 parameters indicate what code to analyze. The third parameter is used
 for compositional verification, as described in the next section. For
-now, the empty list works fine. The final parameter
-describes the specification of the code to be analyzed, built out of
+now, we will use the empty list. The final parameter
+describes the specification of the code to be analyzed, comprised of
 commands of type `JavaSetup` or `LLVMSetup`. In most cases, this
-parameter will be a `do` block containing a sequence of commands of this
-type. Specifications are slightly different between Java and LLVM, but
+parameter will be a `do` block containing a sequence of commands of the
+appropriate type. Java and LLVM specifications are slightly different, but
 make use of largely the same set of concepts.
 
 * Several commands are available to configure the contents of the
-  initial state, before symbolic execution.
+  initial state before symbolic execution.
 
-* Several commands are available to describe what to check of the final
-  state, after symbolic execution.
+* Several commands are available to describe what to check in the final
+  state after symbolic execution.
 
 * One final command describes how to prove that the code under analysis
   matches the specification.
@@ -2039,17 +2038,17 @@ that the final state actually satisfies those properties.
 ## Configuring the Initial State
 
 The first step in configuring the initial state is to specify which
-program variables are important, and to specify their types more
-precisely. The symbolic execution system currently expects the layout of
-memory before symbolic execution to be completely specified. As in
+program variables are important, and to specify the types of those variables
+more precisely. The symbolic execution system currently expects the layout
+of memory before symbolic execution to be completely specified. As in
 `llvm_symexec`, SAW needs information about how much space every pointer
-or reference variable points to. And, with one exception, SAW assumes
+or reference variable points to. With one exception, SAW assumes
 that every pointer points to a distinct region of memory.
 
-Because of this structure, the are separate functions used to describe
-variables with values of base types versus variables of pointer type.
+Because of this structure, separate functions are used to describe
+variables with values of base types and variables of pointer type.
 
-For simple integer values, use `java_var` or `llvm_var`.
+For simple integer values, we use `java_var` or `llvm_var`.
 
 ~~~~
 java_var : String -> JavaType -> JavaSetup Term
@@ -2082,12 +2081,12 @@ llvm_double : LLVMType
 
 Most of these types are straightforward mappings to the standard Java
 and LLVM types. The one key difference is that arrays must have a fixed,
-concrete size. Therefore, all analysis results are under the assumption
-that any arrays have the specific size indicated, and may not hold for
-other sizes. The `llvm_int` function also takes an `Int` parameter
+concrete size. Therefore, all analysis results are valid only under the
+assumption that any arrays have the specific size indicated, and may not
+hold for other sizes. The `llvm_int` function also takes an `Int` parameter
 indicating the variable's bit width.
 
-LLVM types can also be specified in LLVM syntax directly, by using the
+LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
 
 ~~~~
@@ -2102,9 +2101,9 @@ any later expression.
 
 While `java_var` and `llvm_var` declare elements of the program state
 that have values representable in the logic of SAW, pointers and
-references exist only inside the simulator: they are not representable
-before or after symbolic execution. Because of this, different functions
-are available to declare variables of pointer or reference type.
+references exist only inside the simulator; they are not representable
+before or after symbolic execution. Different functions are used to declare
+variables of pointer or reference type.
 
 ~~~~
 java_class_var : String -> JavaType -> JavaSetup ()
@@ -2112,8 +2111,8 @@ java_class_var : String -> JavaType -> JavaSetup ()
 llvm_ptr : String -> LLVMType -> LLVMSetup ()
 ~~~~
 
-For both functions, the first argument is the name of the state element
-that they refer to. For `java_class_var`, the second argument is the
+The first argument of each function is the name of the state element
+it refers to. For `java_class_var`, the second argument is the
 type of the object, which should always be the result of the
 `java_class` function called with an appropriate class name. Arrays in
 Java are treated as if they were values, rather than references, since
@@ -2121,8 +2120,8 @@ their values are directly representable in SAWCore. For `llvm_ptr`, the
 second argument is the type of the value pointed to. Both functions
 return no useful value (the unit type `()`), since the values of
 pointers are not meaningful in SAWCore. In LLVM, arrays are represented
-as pointers, and therefore the pointer and the value pointed to must be
-declared separately:
+as pointers; therefore, the pointer and the value pointed to must be
+declared separately.
 
 ~~~~
 llvm_ptr "a" (llvm_array 10 (llvm_int 32));
@@ -2130,8 +2129,8 @@ a <- llvm_var "*a" (llvm_array 10 (llvm_int 32));
 ~~~~
 
 The `java_assert` and `llvm_assert` functions take a `Term` of boolean
-type as an argument which states a condition that must be true in the
-initial state, before the function under analysis executes. The term can
+type as an argument, which states a condition that must be true in the
+initial state before the function under analysis executes. The term can
 refer to the initial values of any declared program variables.
 
 When the condition required of an initial state is that a variable
@@ -2148,7 +2147,7 @@ the latter can make symbolic termination more likely.
 Finally, although the default configuration of the symbolic simulators
 in SAW is to make every pointer or reference refer to a fresh region of
 memory separate from all other pointers, it is possible to override this
-behavior for Java programs by declaring that a set references can alias
+behavior for Java programs by declaring that a set of references can alias
 each other.
 
 ~~~~
@@ -2185,7 +2184,7 @@ llvm_assert_null : String -> LLVMSetup ()
 ## Specifying the Final State
 
 The simplest statement about the expected final state of the method or
-function under analysis is to declare what value it should return
+function under analysis is a declaration of what value it should return
 (generally as a function of the variables declared as part of the
 initial state).
 
@@ -2200,9 +2199,9 @@ llvm_return_arbitrary : LLVMSetup ()
 The `llvm_return_arbitrary` command indicates that the function *does*
 return a value, but that we don't want to specify what value it returns.
 
-For side effects, the following two functions allow declaration of the
-final expected value of that the program state should contain when
-execution finishes.
+To account for side effects, the following two functions allow declaration
+of the final expected value that the program state should contain for a
+specific pvariable when execution finishes.
 
 ~~~~
 java_ensure_eq : String -> Term -> JavaSetup ()
@@ -2213,17 +2212,17 @@ llvm_ensure_eq : String -> Term -> LLVMSetup ()
 For the most part, these two functions may refer to the same set of
 variables used to set up the initial state. However, for functions that
 return pointers or objects, the special name `return` is also available.
-It can be used in `java_class_var` and `llvm_ptr` calls, to declare the
+It can be used in `java_class_var` and `llvm_ptr` calls to declare the
 more specific object or array type of a return value, and in the
 `..._ensure_eq` function to declare the associated values. For LLVM
-arrays, typical use is like this:
+arrays, the typical usage is as follows.
 
 ~~~~
 llvm_ensure_eq "*return" v;
 ~~~~
 
 The `return` expression is also useful for fields of returned objects or
-structs:
+structs.
 
 ~~~~
 java_ensure_eq "return.f" v;
@@ -2232,7 +2231,7 @@ llvm_ensure_eq "return->0" v;
 ~~~~
 
 Finally, for LLVM programs it is possible to state that the function
-being analyzed is expected to allocate a new object, stored in the given
+being analyzed is expected to allocate a new object, stored in a given
 location.
 
 ~~~~
@@ -2240,7 +2239,7 @@ llvm_allocates : String -> LLVMSetup ()
 ~~~~
 
 When executing an override containing `llvm_allocates`, the override
-will allocate a new object of the appropriate type and store a pointer
+allocates a new object of the appropriate type and stores a pointer to
 it in the given location.
 
 ## Running Proofs
@@ -2249,7 +2248,7 @@ Once the constraints on the initial and final states have been declared,
 what remains is to prove that the code under analysis actually meets
 these specifications. The goal of SAW is to automate this proof as much
 as possible, but some degree of input into the proof process is
-sometimes necessary, and can be provided with the following functions:
+occasionally necessary, and can be provided with the following functions.
 
 ~~~~
 java_verify_tactic : ProofScript SatResult -> JavaSetup ()
@@ -2257,11 +2256,11 @@ java_verify_tactic : ProofScript SatResult -> JavaSetup ()
 llvm_verify_tactic : ProofScript SatResult -> LLVMSetup ()
 ~~~~
 
-Both of these take a proof script as an argument, which specifies how to
+The proof script argument to these functions specifies how to
 perform the proof. If the setup block does not call one of these
-functions, SAW will print a warning message and skip the proof (which
+functions, SAW prints a warning message and skips the proof; this
 can sometimes be a useful behavior during debugging, or in compositional
-verification as described later).
+verification as described later.
 
 The process of verification checks all user-specified postconditions,
 and also checks that the safety condition (as referred to by `$safety`
@@ -2272,15 +2271,15 @@ always well defined (under the supplied pre-conditions).
 
 The primary advantage of the specification-based approach to
 verification is that it allows for compositional reasoning. That is,
-when proving something about a given method or function, we can make use
-of things we have already proved about its callees, rather than
-analyzing them afresh. This enables us to reason about much larger
+when proving properties of a given method or function, we can make use
+of properties we have already proved about its callees rather than
+analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
 The `java_verify` and `llvm_verify` functions returns values of type
 `JavaMethodSpec` and `LLVMMethodSpec`, respectively. These values are
-opaque objects that internally contain all of the information provided
-in the associated `JavaSetup` or `LLVMSetup` blocks, along with the
+opaque objects that internally contain both the information provided
+in the associated `JavaSetup` or `LLVMSetup` blocks and the
 results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
@@ -2291,17 +2290,17 @@ steps:
 
 * Check that all `..._assert` and `..._assert_eq` statements in the
   specification are satisfied.
-* Check that any aliasing is compatible with the aliasing restricted
-  stated with `java_may_alias`, for Java programs.
-* Check that all classes required by the target method have already been
-  initialized, for Java programs.
+* For Java programs, check that any aliasing is compatible with the
+  aliasing restrictions stated with `java_may_alias`.
+* For Java programs, check that all classes required by the target method
+  have already been initialized\.
 * Update the simulator state as described in the specification.
 
-Normally, a `MethodSpec` comes as the result of both simulation and
+Normally, a `MethodSpec` is the result of both simulation and
 proof of the target code. However, in some cases, it can be useful to
-use it to specify some code that either doesn't exist or is hard to
-prove. In those cases, the `java_no_simulate` or `llvm_no_simulate`
-functions can be used to indicate not to even try to simulate the code
+use a `MethodSpec` to specify some code that either doesn't exist or is
+hard to prove. In those cases, the `java_no_simulate` or `llvm_no_simulate`
+function can be used to indicate not to even try to simulate the code
 being specified, and instead return a `MethodSpec` that is assumed to be
 correct. A `MethodSpec` with `*_no_simulate` can be used to provide a
 specification for a function or method that is declared but not defined
@@ -2316,14 +2315,14 @@ important to know whether, for instance, temporary variables storing key
 material have been cleared after use. Garbage on the heap that has been
 collected but not cleared could let confidential information leak. If
 allocation is not a concern in a particular application, the
-`java_allow_alloc` function makes allocation within legal within the
+`java_allow_alloc` function makes allocation legal within the
 method being specified.
 
 # Controlling Symbolic Execution
 
 One other set of commands is available to control the symbolic execution
-process. These control the use of satisfiability checking to determine
-whether both paths are feasible when encountering branches in the
+process. These commands control the use of satisfiability checking to
+determine whether both paths are feasible when encountering branches in the
 program, which is particularly relevant for branches controlling the
 iteration of loops.
 
@@ -2341,7 +2340,8 @@ be simplified down to constants. Using these complex pointers directly
 is slow, and simplifying them can greatly speed up symbolic execution of
 some programs. For other programs, however, the simplification is wasted
 effort. Therefore, the `llvm_simplify_addrs` command turns the
-simplification of pointer expressions on or off.
+simplification of pointer expressions on (with parameter `true`) or off
+(with parameter `false`).
 
 ~~~~
 llvm_simplify_addrs : Bool -> LLVMSetup ()

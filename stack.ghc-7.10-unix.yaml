@@ -14,6 +14,7 @@ packages:
   - deps/llvm-verifier/
   - deps/crucible/crucible/
   - deps/crucible/go-crucible/
+  - deps/crucible/crucible-abc/
   - deps/crucible/crucible-llvm/
   - deps/crucible/crucible-saw/
   - deps/crucible/galois-matlab/
@@ -29,7 +30,7 @@ extra-deps:
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
   - monad-supply-0.6
-  - sbv-5.15
+  - sbv-6.1
   - simple-smt-0.7.0
   - th-abstraction-0.1.0.0
 resolver: lts-6.28

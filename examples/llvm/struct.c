@@ -1,5 +1,5 @@
 typedef struct {
-    int *x;
+    unsigned int *x;
 } s;
 
 int add_indirect(s *o) {

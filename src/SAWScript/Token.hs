@@ -1,8 +1,8 @@
 {- |
-Module           : $Header$
-Description      :
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Token type for SAW-Script lexer.
+Maintainer  : atomb
+Stability   : provisional
 -}
 
 {-# LANGUAGE DeriveFunctor #-}

@@ -11,11 +11,11 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Data structures for LLVM expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.LLVMExpr
   (-- * LLVM Expressions

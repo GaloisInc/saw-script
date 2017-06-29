@@ -13,24 +13,18 @@
 {-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Interpreter for SAW-Script files and statements.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.Interpreter
-  ( interpret
-  , interpretDeclGroup
-  , interpretStmt
+  ( interpretStmt
   , interpretFile
-  , buildTopLevelEnv
-  , extendEnv
-  , Value, isVUnit
-  , IsValue(..)
-  , primTypeEnv
-  , primDocEnv
   , processFile
+  , buildTopLevelEnv
+  , primDocEnv
   )
   where
 
@@ -50,7 +44,6 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import SAWScript.AST (Located(..))
 import SAWScript.Builtins
-import SAWScript.Compiler (reportErrT)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
@@ -277,7 +270,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let opts = rwPPOpts rw
 
   SS.Decl _ (Just schema) expr'' <-
-    io $ reportErrT $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+    either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -309,12 +302,15 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in the TopLevel monad.
-interpretStmt :: Bool -> SS.Stmt -> TopLevel ()
+interpretStmt ::
+  Bool {-^ whether to print non-unit result values -} ->
+  SS.Stmt ->
+  TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
     SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
     SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- io $ reportErrT $
+                                    dg' <- either fail return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW
@@ -815,11 +811,11 @@ primitives = Map.fromList
     [ "Reduce the current goal to beta-normal form." ]
 
   , prim "print_goal"          "ProofScript ()"
-    (pureVal printGoal)
+    (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]
 
   , prim "print_goal_depth"    "Int -> ProofScript ()"
-    (pureVal printGoalDepth)
+    (pureVal print_goal_depth)
     [ "Print the current goal that a proof script is attempting to prove,"
     , "limited to a maximum depth."
     ]
@@ -1486,7 +1482,7 @@ primitives = Map.fromList
 
   , prim "load_crucible_llvm_module" "String -> TopLevel ()"
     (bicVal load_crucible_llvm_module)
-    [ "Load an LLVM bitcode file into the Crucible symbolic simulator"
+    [ "Load an LLVM bitcode file into the Crucible symbolic simulator."
     ]
 
   , prim "load_llvm_cfg"     "String -> TopLevel CFG"
@@ -1511,26 +1507,68 @@ primitives = Map.fromList
     (bicVal crucible_fresh_pointer)
     [ "TODO" ]
 
-  , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_points_to)
+  , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_fresh_expanded_val)
     [ "TODO" ]
+
+  , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_points_to True))
+    [ "Declare that the memory location indicated by the given pointer (first"
+    , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_points_to False))
+    [ "A variant of crucible_points_to that does not check for compatibility"
+    , "between the pointer type and the value type. This may be useful when"
+    , "reading or writing a prefix of larger array, for example."
+    ]
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
     [ "TODO" ]
 
+  , prim "crucible_precond" "Term -> CrucibleSetup ()"
+    (pureVal crucible_precond)
+    [ "TODO" ]
+
+  , prim "crucible_postcond" "Term -> CrucibleSetup ()"
+    (pureVal crucible_postcond)
+    [ "TODO" ]
+
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
-    [ "TODO" ]
+    [ "Specify the given list of values as the arguments of the function."
+    ,  ""
+    , "The crucible_execute_func statement also serves to separate the pre-state"
+    , "section of the spec (before crucible_execute_func) from the post-state"
+    , "section (after crucible_execute_func). The effects of some CrucibleSetup"
+    , "statements depend on whether they occur in the pre-state or post-state"
+    , "section."
+    ]
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
     (bicVal crucible_return)
-    [ "TODO" ]
+    [ "Specify the given value as the return value of the function. A"
+    , "crucible_return statement is required if and only if the function"
+    , "has a non-void return type." ]
 
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    "String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
-    [ "TODO" ]
+    [ "Verify the LLVM function named by the first parameter. The second"
+    , "parameter lists the CrucibleMethodSpec values returned by previous"
+    , "calls to use as overrides. The third (Bool) parameter enables or"
+    , "disables path satisfiability checking. The fourth describes how"
+    , "to set up the symbolic execution engine before verification. And the"
+    , "last gives the script to use to prove the validity of the resulting"
+    , "verification conditions."
+    ]
 
   , prim "crucible_llvm_unsafe_assume_spec"
     "String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
@@ -1540,12 +1578,14 @@ primitives = Map.fromList
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupArray)
-    [ "TODO" ]
+    [ "Create a SetupValue representing an array, with the given list of"
+    , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupStruct)
-    [ "TODO" ]
+    [ "Create a SetupValue representing a struct, with the given list of"
+    , "values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
@@ -1556,12 +1596,13 @@ primitives = Map.fromList
   , prim "crucible_null"
     "SetupValue"
     (pureVal CIR.SetupNull)
-    [ "TODO" ]
+    [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
     (pureVal CIR.SetupGlobal)
-    [ "TODO" ]
+    [ "Return a SetupValue representing a pointer to the named global."
+    , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_term"
     "Term -> SetupValue"
@@ -1592,6 +1633,29 @@ primitives = Map.fromList
     "[Bool] -> AnyCFG -> TopLevel Bool"
     (bicVal taint_flow_cfg)
     [ "Perform taint analysis on a single crucible CFG. Taint assignment is provided as a list of booleans, where true is interpreted as tainted, and false is interpreted as untainted. Returns the taint of the return value as a boolean." ]
+
+  -- Ghost state support
+  , prim "crucible_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (bicVal crucible_declare_ghost_state)
+    [ "Allocates a unique ghost variable" ]
+
+  , prim "crucible_ghost_value"
+    "Ghost -> Term -> CrucibleSetup ()"
+    (bicVal crucible_ghost_value)
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
+    (\_ _ -> toValue crucible_spec_solvers)
+    [ "Extract a list of all the solvers used when verifying the given method spec."
+    ]
+
+  , prim "crucible_spec_size"  "CrucibleMethodSpec -> Int"
+    (\_ _ -> toValue crucible_spec_size)
+    [ "Return a count of the combined size of all verification goals proved as part of"
+    , "the given method spec."
+    ]
   ]
 
   where
@@ -1632,6 +1696,8 @@ valueEnv :: Options -> BuiltinContext -> Map SS.LName Value
 valueEnv opts bic = fmap f primitives
   where f p = (primFn p) opts bic
 
+-- | Map containing the formatted documentation string for each
+-- saw-script primitive.
 primDocEnv :: Map SS.Name String
 primDocEnv =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]
