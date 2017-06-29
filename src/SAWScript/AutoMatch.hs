@@ -276,7 +276,7 @@ loadDecls (TaggedSourceFile lang path) = do
    sc <- getSharedContext
    case lang of
       Cryptol -> io $ getDeclsCryptol path
-      LLVM    -> io $ llvm_load_module path >>= getDeclsLLVM sc
+      LLVM    -> llvm_load_module path >>= io . getDeclsLLVM sc
       JVM     -> loadJavaClassTopLevel (dropExtension path) >>= io . getDeclsJVM
    where
       loadJavaClassTopLevel cls = do

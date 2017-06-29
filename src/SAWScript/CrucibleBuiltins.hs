@@ -39,7 +39,6 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           System.IO
 
-import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
@@ -80,6 +79,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
 import SAWScript.Builtins
+import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.SolverStats
@@ -719,11 +719,14 @@ verifyPoststate sc cc mspec env0 globals ret =
 
 load_crucible_llvm_module :: BuiltinContext -> Options -> String -> TopLevel ()
 load_crucible_llvm_module bic opts bc_file = do
+  m <- llvm_load_module bc_file
+  cc <- setupCrucibleContext bic opts m
+  io $ writeIORef (biCrucibleContext bic) (Just cc)
+
+setupCrucibleContext :: BuiltinContext -> Options -> LLVMModule -> TopLevel CrucibleContext
+setupCrucibleContext bic opts (LLVMModule _ llvm_mod) = do
   halloc <- getHandleAlloc
-  let r = biCrucibleContext bic
-  io (L.parseBitCodeFromFile bc_file) >>= \case
-    Left err -> fail (L.formatError err)
-    Right llvm_mod -> io $ do
+  io $ do
       (ctx, mtrans) <- stToIO $ Crucible.translateModule halloc llvm_mod
       let gen = Crucible.globalNonceGenerator
       let sc  = biSharedContext bic
@@ -758,7 +761,7 @@ load_crucible_llvm_module bic opts bc_file = do
             Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
-      writeIORef r $ Just
+      return $
          CrucibleContext{ ccLLVMContext = ctx
                         , ccLLVMModuleTrans = mtrans
                         , ccLLVMModule = llvm_mod

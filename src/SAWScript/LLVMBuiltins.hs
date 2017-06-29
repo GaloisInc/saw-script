@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : $Header$
@@ -35,6 +36,7 @@ import Text.Parsec as P
 
 import Text.LLVM (modDataLayout)
 import qualified Text.LLVM.AST as LLVM
+import qualified Data.LLVM.BitCode as LLVM
 import qualified Text.LLVM.PP as LLVM
 import qualified Text.LLVM.DebugUtils as DU
 import qualified Text.LLVM.Parser as LLVM (parseType)
@@ -76,8 +78,11 @@ type Backend = SAWBackend
 type SAWTerm = Term
 type SAWDefine = SymDefine SAWTerm
 
-llvm_load_module :: FilePath -> IO LLVMModule
-llvm_load_module file = LLVMModule file <$> loadModule file
+llvm_load_module :: FilePath -> TopLevel LLVMModule
+llvm_load_module file =
+  io (LLVM.parseBitCodeFromFile file) >>= \case
+    Left err -> fail (LLVM.formatError err)
+    Right llvm_mod -> return (LLVMModule file llvm_mod)
 
 -- LLVM verification and model extraction commands
 
