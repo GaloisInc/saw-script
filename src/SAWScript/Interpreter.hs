@@ -34,7 +34,6 @@ import Data.Traversable hiding ( mapM )
 #endif
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
-import Data.IORef
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
@@ -374,7 +373,6 @@ buildTopLevelEnv opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
        Crucible.withHandleAllocator $ \halloc -> do
-       ccRef <- newIORef Nothing
        let ro0 = TopLevelRO
                    { roSharedContext = sc
                    , roJavaCodebase = jcb
@@ -385,7 +383,6 @@ buildTopLevelEnv opts =
                    biSharedContext = sc
                  , biJavaCodebase = jcb
                  , biBasicSS = ss
-                 , biCrucibleContext = ccRef
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
@@ -1480,17 +1477,12 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
     -- Experimental Crucible/LLVM interface
 
-  , prim "load_crucible_llvm_module" "String -> TopLevel ()"
-    (bicVal load_crucible_llvm_module)
-    [ "Load an LLVM bitcode file into the Crucible symbolic simulator."
-    ]
-
-  , prim "load_llvm_cfg"     "String -> TopLevel CFG"
+  , prim "load_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
     (bicVal load_llvm_cfg)
-    [ "Load a function from the currently-loaded Crucible LLVM module."
+    [ "Load a function from the given LLVM module."
     ]
 
-  , prim "extract_crucible_llvm"  "String -> TopLevel Term"
+  , prim "extract_crucible_llvm"  "LLVMModule -> String -> TopLevel Term"
     (bicVal extract_crucible_llvm)
     [ "TODO"
     ]
@@ -1559,19 +1551,19 @@ primitives = Map.fromList
     , "has a non-void return type." ]
 
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
-    [ "Verify the LLVM function named by the first parameter. The second"
-    , "parameter lists the CrucibleMethodSpec values returned by previous"
-    , "calls to use as overrides. The third (Bool) parameter enables or"
-    , "disables path satisfiability checking. The fourth describes how"
-    , "to set up the symbolic execution engine before verification. And the"
-    , "last gives the script to use to prove the validity of the resulting"
+    [ "Verify the LLVM function named by the second parameter in the module"
+    , "specified by the first. The third parameter lists the CrucibleMethodSpec"
+    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    , "parameter enables or disables path satisfiability checking. The fifth"
+    , "describes how to set up the symbolic execution engine before verification."
+    , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
     ]
 
   , prim "crucible_llvm_unsafe_assume_spec"
-    "String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_unsafe_assume_spec)
     [ "TODO" ]
 

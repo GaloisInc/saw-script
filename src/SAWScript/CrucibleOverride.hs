@@ -58,7 +58,6 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
 
-import           SAWScript.Builtins
 import           SAWScript.CrucibleMethodSpecIR
 import           SAWScript.CrucibleResolveSetupValue
 import           SAWScript.TypedTerm
