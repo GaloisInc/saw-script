@@ -25,7 +25,6 @@ module SAWScript.CrucibleMethodSpecIR where
 import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Control.Monad ((>=>))
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 
@@ -73,15 +72,23 @@ setupToTypedTerm :: SharedContext -> SetupValue -> MaybeT IO TypedTerm
 setupToTypedTerm sc sv =
   case sv of
     SetupTerm term -> return term
-    SetupStruct fields -> do tts <- mapM (setupToTypedTerm sc) fields
-                             let ts = map ttTerm tts
-                             lift $ scTuple sc ts >>= mkTypedTerm sc
-    SetupArray elems   ->
-      do tts <- mapM (setupToTypedTerm sc) elems
-         let ts = map ttTerm tts
-         lent <- lift $ scNat sc $ fromInteger $ toInteger $ length ts
-         lift $ scVector sc lent ts >>= mkTypedTerm sc
-    SetupElem array index -> undefined
+    _ -> do t <- setupToUntypedTerm sc sv
+            lift $ mkTypedTerm sc t
+
+setupToUntypedTerm :: SharedContext -> SetupValue -> MaybeT IO Term
+setupToUntypedTerm sc sv =
+  let intToNat = fromInteger . toInteger 
+  in case sv of
+    SetupTerm term -> return (ttTerm term)
+    SetupStruct fields -> do ts <- mapM (setupToUntypedTerm sc) fields
+                             lift $ scTuple sc ts
+    SetupArray elems -> do ts <- mapM (setupToUntypedTerm sc) elems
+                           lent <- lift $ scNat sc $ intToNat $ length ts
+                           lift $ scVector sc lent ts
+    SetupElem array index ->
+      do art <- setupToUntypedTerm sc array
+         ixt <- lift $ scNat sc $ intToNat index
+         lift $ scAt sc undefined undefined {- TODO what are the semantics of the 2nd and 3rd parameters? -} art ixt
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
 
