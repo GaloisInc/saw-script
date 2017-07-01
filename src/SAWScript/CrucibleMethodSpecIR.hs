@@ -85,10 +85,16 @@ setupToUntypedTerm sc sv =
     SetupArray elems -> do ts <- mapM (setupToUntypedTerm sc) elems
                            lent <- lift $ scNat sc $ intToNat $ length ts
                            lift $ scVector sc lent ts
-    SetupElem array index ->
-      do art <- setupToUntypedTerm sc array
-         ixt <- lift $ scNat sc $ intToNat index
-         lift $ scAt sc undefined undefined {- TODO what are the semantics of the 2nd and 3rd parameters? -} art ixt
+    SetupElem base index ->
+      case base of
+        SetupArray elems@(e:_) -> do art <- setupToUntypedTerm sc base
+                                     ixt <- lift $ scNat sc $ intToNat index
+                                     lent <- lift $ scNat sc $ intToNat $ length elems
+                                     et <- setupToUntypedTerm sc e
+                                     typ <- lift $ scTypeOf sc et
+                                     lift $ scAt sc lent typ art ixt
+        _                -> do st <- setupToUntypedTerm sc base
+                               lift $ scTupleSelector sc st index
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
 
