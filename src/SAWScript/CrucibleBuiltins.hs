@@ -43,6 +43,7 @@ import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import qualified Control.Monad.Trans.Maybe as MaybeT
 
 import qualified Data.Parameterized.Nonce as Crucible
 
@@ -1232,6 +1233,14 @@ crucible_spec_solvers = Set.toList . solverStatsSolvers . csSolverStats
 
 crucible_spec_size :: CrucibleMethodSpecIR -> Integer
 crucible_spec_size = solverStatsGoalSize . csSolverStats
+
+crucible_setup_val_to_typed_term :: BuiltinContext -> Options -> SetupValue -> TopLevel TypedTerm
+crucible_setup_val_to_typed_term bic _opt sval = do
+  mtt <- io $ MaybeT.runMaybeT $ setupToTypedTerm (biSharedContext bic) sval
+  case mtt of
+    Nothing -> fail $ "Could not convert a setup value to a term: " ++ show sval
+    Just tt -> return tt
+
 --------------------------------------------------------------------------------
 
 -- | Sort a list of things and group them into equivalence classes.
