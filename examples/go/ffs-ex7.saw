@@ -1,0 +1,6 @@
+gf <- load_go_file "ffs.go";
+imp_cfg <- make_go_cfg 32 gf "ffs_imp";
+imp_term <- symexec_cfg imp_cfg;
+print "Checking non-interference from argument to return of ffs_imp";
+prove_print abc {{ \x y -> imp_term x == imp_term y }};
+print "Done";

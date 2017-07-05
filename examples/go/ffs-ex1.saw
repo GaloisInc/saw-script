@@ -1,0 +1,8 @@
+gf <- load_go_file "ffs.go";
+ref_cfg <- make_go_cfg 32 gf "ffs_ref";
+imp_cfg <- make_go_cfg 32 gf "ffs_imp";
+ref_term <- symexec_cfg ref_cfg;
+imp_term <- symexec_cfg imp_cfg;
+print "Proving Go ffs_ref equivalent to Go ffs_imp";
+prove_print abc {{ \x -> (ref_term x).0 == (imp_term x).0 }};
+print "Done";

@@ -1,0 +1,7 @@
+gf <- load_go_file "ffs.go";
+ref_cfg <- make_go_cfg 32 gf "ffs_ref";
+ref_term <- symexec_cfg ref_cfg;
+print "Checking direct information flow from arg to return of ffs_ref";
+t2 <- taint_flow_cfg [true] ref_cfg;
+print t2;
+print "Done";

@@ -1,0 +1,7 @@
+import "ffs.cry";
+gf <- load_go_file "ffs.go";
+ref_cfg <- make_go_cfg 32 gf "ffs_ref";
+ref_term <- symexec_cfg ref_cfg;
+print "Proving Go ffs_ref equivalent to its Cryptol spec";
+prove_print abc {{ \x -> (ref_term x).0 == ffs_ref x }};
+print "Done";

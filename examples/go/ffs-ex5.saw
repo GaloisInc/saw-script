@@ -1,0 +1,7 @@
+gf <- load_go_file "ffs.go";
+imp_cfg <- make_go_cfg 32 gf "ffs_imp";
+imp_term <- symexec_cfg imp_cfg;
+print "Checking direct information flow from arg to return of ffs_imp";
+t1 <- taint_flow_cfg [true] imp_cfg;
+print t1;
+print "Done";

@@ -1,0 +1,6 @@
+gf <- load_go_file "ffs.go";
+ref_cfg <- make_go_cfg 32 gf "ffs_ref";
+ref_term <- symexec_cfg ref_cfg;
+print "Checking non-interference from argument to return of ffs_ref";
+prove_print abc {{ \x y -> ref_term x == ref_term y }};
+print "Done";

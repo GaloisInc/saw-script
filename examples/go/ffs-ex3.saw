@@ -1,0 +1,7 @@
+import "ffs.cry";
+gf <- load_go_file "ffs.go";
+imp_cfg <- make_go_cfg 32 gf "ffs_imp";
+imp_term <- symexec_cfg imp_cfg;
+print "Proving Go ffs_imp equivalent to its Cryptol spec";
+prove_print abc {{ \x -> (imp_term x).0 == ffs_imp x }};
+print "Done";
