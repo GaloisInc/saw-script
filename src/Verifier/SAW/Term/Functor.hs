@@ -323,7 +323,7 @@ instance Show n => Show (DataType n t) where
 type VarIndex = Word64
 
 -- | An external constant with a name.
--- Names are necessarily unique, but the var index should be.
+-- Names are not necessarily unique, but the var index should be.
 data ExtCns e =
   EC
   { ecVarIndex :: !VarIndex
