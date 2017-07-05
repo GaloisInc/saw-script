@@ -732,11 +732,25 @@ asCryptolTypeValue v =
       fs <- asCryptolTypeValue v2 >>= tIsRec
       return (C.tRec ((name, t1) : fs))
     SC.VPiType v1 f -> do
-      let msg = "asCryptolTypeValue: internal error: expected non-dependent type"
-      let v2 = SC.runIdentity (f (error msg))
-      t1 <- asCryptolTypeValue v1
-      t2 <- asCryptolTypeValue v2
-      return (C.tFun t1 t2)
+      case v1 of
+        -- if we see that the parameter is a Cryptol.Num, it's a
+        -- pretty good guess that it originally was a
+        -- polimorphic number type.
+        SC.VDataType "Cryptol.Num" [] ->
+          let msg= unwords ["asCryptolTypeValue: can't infer a polymorphic Cryptol"
+                           ,"type. Please, make sure all numeric types are"
+                           ,"specialized before constructing a typed term."
+                           ]
+          in error msg
+            -- otherwise we issue a generic error about dependent type inference
+        _ -> do
+          let msg = unwords ["asCryptolTypeValue: can't infer a Cryptol type"
+                            ,"for a dependent SAW-Core type."
+                            ]
+          let v2 = SC.runIdentity (f (error msg))
+          t1 <- asCryptolTypeValue v1
+          t2 <- asCryptolTypeValue v2
+          return (C.tFun t1 t2)
     _ -> Nothing
   where
     tIsRec (C.TRec fs) = Just fs
