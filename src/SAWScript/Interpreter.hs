@@ -1612,8 +1612,9 @@ primitives = Map.fromList
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (bicVal crucible_setup_val_to_typed_term)
-    [ "Convert from a setup value to a typed term. This can only be done for a subset "
-    , "of setup values. Fails if a setup value is a global, variable or null."]
+    [ "Convert from a setup value to a typed term. This can only be done for a"
+    , "subset of setup values. Fails if a setup value is a global, variable or null."
+    ]
 
   -- Ghost state support
   , prim "crucible_declare_ghost_state"
