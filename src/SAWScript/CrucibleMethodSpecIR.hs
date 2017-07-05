@@ -64,36 +64,40 @@ data SetupValue where
   SetupGlobal :: String -> SetupValue
   deriving (Show)
 
--- | Convert a setup value to a typed term. This is a partial
--- function, as certain setup values ---SetupVar, SetupNull and
--- SetupGlobal--- don't have semantics outside of the symbolic
--- simulator.
 setupToTypedTerm :: SharedContext -> SetupValue -> MaybeT IO TypedTerm
 setupToTypedTerm sc sv =
   case sv of
     SetupTerm term -> return term
-    _ -> do t <- setupToUntypedTerm sc sv
+    _ -> do t <- setupToTerm sc sv
             lift $ mkTypedTerm sc t
 
-setupToUntypedTerm :: SharedContext -> SetupValue -> MaybeT IO Term
-setupToUntypedTerm sc sv =
+-- | Convert a setup value to a SAW-Core term. This is a partial
+-- function, as certain setup values ---SetupVar, SetupNull and
+-- SetupGlobal--- don't have semantics outside of the symbolic
+-- simulator.
+setupToTerm :: SharedContext -> SetupValue -> MaybeT IO Term
+setupToTerm sc sv =
   let intToNat = fromInteger . toInteger 
   in case sv of
     SetupTerm term -> return (ttTerm term)
-    SetupStruct fields -> do ts <- mapM (setupToUntypedTerm sc) fields
+    SetupStruct fields -> do ts <- mapM (setupToTerm sc) fields
                              lift $ scTuple sc ts
-    SetupArray elems -> do ts <- mapM (setupToUntypedTerm sc) elems
-                           lent <- lift $ scNat sc $ intToNat $ length ts
-                           lift $ scVector sc lent ts
+    SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm sc) elems
+                                 typt <- lift $ scTypeOf sc t
+                                 vec <- lift $ scVector sc typt ts
+                                 typ <- lift $ scTypeOf sc vec
+                                 lift $ print $ vec
+                                 lift $ print $ typ
+                                 return vec
     SetupElem base index ->
       case base of
-        SetupArray elems@(e:_) -> do art <- setupToUntypedTerm sc base
+        SetupArray elems@(e:_) -> do art <- setupToTerm sc base
                                      ixt <- lift $ scNat sc $ intToNat index
                                      lent <- lift $ scNat sc $ intToNat $ length elems
-                                     et <- setupToUntypedTerm sc e
+                                     et <- setupToTerm sc e
                                      typ <- lift $ scTypeOf sc et
                                      lift $ scAt sc lent typ art ixt
-        _                -> do st <- setupToUntypedTerm sc base
+        _                -> do st <- setupToTerm sc base
                                lift $ scTupleSelector sc st index
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
