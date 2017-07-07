@@ -79,8 +79,34 @@ So, as a general rule, if symbolic execution does not seem to be
 terminating on the program under analysis, consider enabling branch
 satisfiability checking.
 
-TODO: specifics on how to enable path sat checking, how to know if
-symbolic execution isn't terminating.
+# Identifying and Resolving Non-Termination
+
+To determine whether path satisfiability checking will be helpful when
+verification is taking a long time, several debugging flags can help
+determine where execution is getting stuck. In general, most cases of
+slow verification come from one of three sources: slow execution of
+individual instructions, usually due to memory loads or stores at
+symbolic addresses; slow execution of an external theorem prover; or
+re-executing the body of a loop a large or unbounded number of times.
+Path satisfiability checking only affects the last of these three.
+
+The first step in determining what might be causing performance problems
+is to trace execution of individual instructions, enabled with the `-d`
+flag followed by a specific verbosity level to enable. For the older
+LLVM-based interface (`llvm_extract`, `llvm_symexec` and `llvm_verify`)
+use `-d2`. For Java analysis, or Crucible-based LLVM analysis, use
+`-d4`.
+
+If you see the output pause after execution of a load or store
+instruction, then complex symbolic addresses are probably to blame. If
+you see the output pause after a return instruction, then a slow
+external prover is probably to blame (and it may be worth trying a
+different prover). If you see a steady stream of instructions being
+executed, however, then either the code being analyzed is large and it
+simply hasn't reached the end yet (which could mean that loops have
+constant but large iteration bounds), or it could mean that symbolic
+execution is getting stuck in an infinite loop. In this case, path
+satisfiability checking may allow it to terminate.
 
 # Fixed-size Inputs and Outputs
 
@@ -138,18 +164,77 @@ Native methods are generally not supported, unless there's a special
 case in the simulator to provide alternative semantics for them. The
 methods currently supported by the simulator include:
 
-* TODO
+* `System.out.print`
+* `System.out.println`
+* `java.lang.Boolean.valueOf`
+* `java.lang.Byte.valueOf`
+* `java.lang.Short.valueOf`
+* `java.lang.Integer.valueOf`
+* `java.lang.Long.valueOf`
+* `java.lang.Class.desiredAssertionStatus0`
+* `java.lang.Class.getClassLoader`
+* `java.lang.Class.getComponentType`
+* `java.lang.Class.getPrimitiveClass`
+* `java.lang.Class.isArray`
+* `java.lang.Class.isPrimitive`
+* `java.lang.Class.registerNatives`
+* `java.lang.ClassLoader.registerNatives`
+* `java.lang.Double.doubleToRawLongBits`
+* `java.lang.Float.floatToRawIntBits`
+* `java.lang.Runtime.gc`
+* `java.lang.String.intern`
+* `java.lang.StringBuilder.append`
+* `java.lang.System.arraycopy`
+* `java.lang.System.exit`
+* `java.lang.System.nanoTime`
+* `java.lang.System.currentTimeMillis`
+* `java.lang.System.identityHashCode`
+* `java.lang.Thread.registerNatives`
+* `java.lang.Throwable.fillInStackTrace`
+* `java.io.BufferedOutputStream.flush`
+* `java.io.FileInputStream.initIDs`
+* `java.io.FileOutputStream.initIDs`
+* `java.io.ObjectStreamClass.initIDs`
+* `java.io.RandomAccessFile.initIDs`
+* `java.security.AccessController.doPrivileged`
+* `java.util.Arrays.fill`
 
 # Other LLVM Limitations
 
 Only a subset of the LLVM intrinsic functions are supported. These
 include:
 
-* TODO
+* `llvm.bswap.i16`
+* `llvm.bswap.i32`
+* `llvm.bswap.i48`
+* `llvm.bswap.i64`
+* `llvm.expect.i32`
+* `llvm.expect.i64`
+* `llvm.lifetime.start`
+* `llvm.lifetime.end`
+* `llvm.memcpy.p0i8.p0i8.i32`
+* `llvm.memcpy.p0i8.p0i8.i64`
+* `llvm.memset.p0i8.i32`
+* `llvm.memset.p0i8.i64`
+* `llvm.objectsize.i32.p0i8`
+* `llvm.objectsize.i64.p0i8`
+* `llvm.sadd.with.overflow`
+* `llvm.uadd.with.overflow`
+
+And a subset of the C standard library is supported:
+
+* `__assert_fail`
+* `__assert_rtn`
+* `__memset_chk`
+* `__memcpy_chk`
+* `alloca`
+* `calloc`
+* `free`
+* `malloc`
+* `printf`
 
 Casts between pointers and integers are limited. The constant 0 is
 allowed to be a value of pointer type, and it is never equal to any
-non-zero pointer. Pointers can be cast to integers only for temporary
+normal pointer. Pointers can be cast to integers only for temporary
 storage and subsequent conversion back to pointer type without
-modification. (TODO: is addition or subtraction allowed on a
-pointer-as-integer?)
+modification.
