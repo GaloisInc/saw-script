@@ -1497,7 +1497,9 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
-    [ "TODO" ]
+    [ "Create a fresh symbolic variable that can be used in Crucible."
+    , "The first parameter is the name of the variable that is only used"
+    , "for debug printing." ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc)
