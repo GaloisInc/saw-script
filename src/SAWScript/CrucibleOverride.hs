@@ -81,7 +81,7 @@ data OverrideState = OverrideState
 
 data OverrideFailure
   = BadSymType Crucible.SymType
-  | AmbiguousPrecondition [PointsTo]
+  | AmbiguousPointsTos [PointsTo]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification -- ^ type mismatch in return specification
@@ -162,7 +162,7 @@ methodSpecHandler ::
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler sc cc css retTy = do
-  let L.Symbol fsym = csName (head css)
+  let L.Symbol fsym = (head css)^.csName 
   liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
   Crucible.RegMap args <- Crucible.getOverrideArgs
   globals <- Crucible.readGlobals
@@ -263,26 +263,50 @@ methodSpecHandler1 ::
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
   OverrideMatcher (Crucible.RegValue Sym ret)
 methodSpecHandler1 sc cc args retTy cs =
-    do args' <- (traverse . _1) resolveMemType (Map.elems (csArgBindings cs))
+    do expectedArgTypes <- (traverse . _1) resolveMemType (Map.elems (cs^.csArgBindings))
 
        sym <- getSymInterface
 
-       let aux memTy (Crucible.AnyValue tyrep val) =
+       let aux (memTy, setupVal) (Crucible.AnyValue tyrep val) =
              do storTy <- Crucible.toStorableType memTy
-                Crucible.packMemValue sym storTy tyrep val
-
-       xs <- liftIO (zipWithM aux (map fst args') (assignmentToList args))
+                pmv <- Crucible.packMemValue sym storTy tyrep val
+                return (pmv, memTy, setupVal)
 
        -- todo: fail if list lengths mismatch
-       sequence_ [ matchArg sc cc x y z | (x,(y,z)) <- zip xs args' ]
-       processPrePointsTos sc cc cs (csPrePointsTos cs)
-       traverse_ (learnSetupCondition sc cc cs) (csPreconditions cs)
-       enforceDisjointness cc cs
-       traverse_ (executePostAllocation cc) (Map.assocs (csPostAllocations cs))
-       traverse_ (executePointsTo sc cc cs) (csPostPointsTos cs)
-       traverse_ (executeSetupCondition sc cc cs) (csPostconditions cs)
-       computeReturnValue cc sc cs retTy (csRetValue cs)
+       xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
+       sequence_ [ matchArg sc cc x y z | (x, y, z) <- xs]
+
+       learnCond sc cc cs (cs^.csPreState)
+
+       executeCond sc cc cs (cs^.csPostState)
+
+       computeReturnValue cc sc cs retTy (cs^.csRetValue)
+
+-- learn pre/post condition
+learnCond :: (?lc :: TyCtx.LLVMContext)
+          => SharedContext
+          -> CrucibleContext
+          -> CrucibleMethodSpecIR
+          -> StateSpec
+          -> OverrideMatcher ()
+learnCond sc cc cs ss = do
+  matchPointsTos sc cc cs (ss^.csPointsTos)
+  traverse_ (learnSetupCondition sc cc cs) (ss^.csConditions)
+  enforceDisjointness cc cs
+
+-- execute a pre/post condition
+executeCond :: (?lc :: TyCtx.LLVMContext)
+            => SharedContext
+            -> CrucibleContext
+            -> CrucibleMethodSpecIR
+            -> StateSpec
+            -> OverrideMatcher ()
+executeCond sc cc cs ss = do
+  traverse_ (executeAllocation cc) (Map.assocs (ss^.csAllocs))
+  traverse_ (executePointsTo sc cc cs) (ss^.csPointsTos)
+  traverse_ (executeSetupCondition sc cc cs) (ss^.csConditions)
+  
 ------------------------------------------------------------------------
 
 -- | Generate assertions that all of the memory allocations matched by
@@ -312,19 +336,19 @@ enforceDisjointness cc spec =
 
 ------------------------------------------------------------------------
 
--- | For each points-to statement from the precondition section of an
--- override spec, read the memory value through the given pointer
--- (lhs) and match the value against the given pattern (rhs).
--- Statements are processed in dependency order: a points-to statement
--- cannot be executed until bindings for any/all lhs variables exist.
-processPrePointsTos ::
+-- | For each points-to statement read the memory value through the
+-- given pointer (lhs) and match the value against the given pattern
+-- (rhs).  Statements are processed in dependency order: a points-to
+-- statement cannot be executed until bindings for any/all lhs
+-- variables exist.
+matchPointsTos ::
   (?lc :: TyCtx.LLVMContext) =>
   SharedContext    {- ^ term construction context -} ->
   CrucibleContext  {- ^ simulator context         -} ->
   CrucibleMethodSpecIR                               ->
-  [PointsTo]       {- ^ points-to preconditions   -} ->
+  [PointsTo]       {- ^ points-tos                -} ->
   OverrideMatcher ()
-processPrePointsTos sc cc spec = go False []
+matchPointsTos sc cc spec = go False []
   where
     go ::
       Bool       {- progress indicator -} ->
@@ -336,7 +360,7 @@ processPrePointsTos sc cc spec = go False []
     go _ [] [] = return ()
 
     -- not all conditions processed, no progress, failure
-    go False delayed [] = failure (AmbiguousPrecondition delayed)
+    go False delayed [] = failure (AmbiguousPointsTos delayed)
 
     -- not all conditions processed, progress made, resume delayed conditions
     go True delayed [] = go False [] delayed
@@ -619,7 +643,7 @@ learnPointsTo ::
   PointsTo                   ->
   OverrideMatcher ()
 learnPointsTo sc cc spec (PointsTo ptr val) =
-  do let tyenv = Map.union (csAllocations spec) (csFreshPointers spec)
+  do let tyenv = Map.union (csAllocations spec) (spec^.csFreshPointers)
      memTy <- liftIO $ typeOfSetupValue cc tyenv val
      (_memTy, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      -- In case the types are different (from crucible_points_to_untyped)
@@ -674,15 +698,15 @@ learnPred sc cc t =
 
 -- | Perform an allocation as indicated by a 'crucible_alloc'
 -- statement from the postcondition section.
-executePostAllocation ::
+executeAllocation ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
   (AllocIndex, Crucible.MemType)      ->
   OverrideMatcher ()
-executePostAllocation cc (var, memTy) =
+executeAllocation cc (var, memTy) =
   do let sym = ccBackend cc
      let dl = TyCtx.llvmDataLayout ?lc
-     liftIO $ putStrLn $ unwords ["executePostAllocation:", show var, show memTy]
+     liftIO $ putStrLn $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
@@ -808,7 +832,7 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     let tyenv = Map.union (csAllocations spec) (csFreshPointers spec)
+     let tyenv = Map.union (csAllocations spec) (spec^.csFreshPointers)
      memTy <- liftIO $ typeOfSetupValue cc tyenv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      let env = fmap packPointer m

@@ -19,6 +19,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 module SAWScript.CrucibleMethodSpecIR where
 
@@ -27,6 +28,7 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
+import           Control.Lens
 
 import           Lang.Crucible.LLVM.MemType
 import qualified Text.LLVM.AST as L
@@ -89,16 +91,16 @@ setupToTerm sc sv =
                                  lift $ print $ vec
                                  lift $ print $ typ
                                  return vec
-    SetupElem base index ->
+    SetupElem base ind ->
       case base of
         SetupArray elems@(e:_) -> do art <- setupToTerm sc base
-                                     ixt <- lift $ scNat sc $ intToNat index
+                                     ixt <- lift $ scNat sc $ intToNat ind
                                      lent <- lift $ scNat sc $ intToNat $ length elems
                                      et <- setupToTerm sc e
                                      typ <- lift $ scTypeOf sc et
                                      lift $ scAt sc lent typ art ixt
         _                -> do st <- setupToTerm sc base
-                               lift $ scTupleSelector sc st index
+                               lift $ scTupleSelector sc st ind
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
 
@@ -118,85 +120,74 @@ data SetupCondition where
                         SetupCondition
   deriving (Show)
 
+-- | Verification state (either pre- or post-) specification
+data StateSpec = StateSpec {_csAllocs     :: Map AllocIndex MemType -- ^ allocated vars
+                           ,_csPointsTos  :: [PointsTo] -- ^ points-to statements
+                           ,_csConditions :: [SetupCondition] -- ^ equality and assertion/assumptuon statements
+                           }
+                 deriving (Show)
 
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
-  { csName            :: L.Symbol
-  , csArgs            :: [L.Type]
-  , csRet             :: L.Type
-  , csPreAllocations  :: Map AllocIndex MemType            -- ^ vars allocated before the function runs
-  , csPostAllocations :: Map AllocIndex MemType            -- ^ vars allocated by the function itself
-  , csFreshPointers   :: Map AllocIndex MemType
-  , csPrePointsTos    :: [PointsTo]                        -- ^ points-to statements from the pre-state section
-  , csPostPointsTos   :: [PointsTo]                        -- ^ points-to statements from the post-state section
-  , csConditions      :: [(PrePost, SetupCondition)]       -- ^ equality and precond/postcond statements
-  , csArgBindings     :: Map Integer (SymType, SetupValue) -- ^ function arguments
-  , csRetValue        :: Maybe SetupValue                  -- ^ function return value
-  , csSolverStats     :: SolverStats                       -- ^ statistics about the proof that produced this
+  { _csName            :: L.Symbol
+  , _csArgs            :: [L.Type]
+  , _csRet             :: L.Type
+  , _csPreState        :: StateSpec -- ^ state before the function runs
+  , _csPostState       :: StateSpec -- ^ state after the function runs
+  , _csFreshPointers   :: Map AllocIndex MemType
+  , _csArgBindings     :: Map Integer (SymType, SetupValue) -- ^ function arguments
+  , _csRetValue        :: Maybe SetupValue                  -- ^ function return value
+  , _csSolverStats     :: SolverStats                       -- ^ statistics about the proof that produced this
   }
   deriving (Show)
 
+type GhostValue = "GhostValue"
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n) GhostValue = TypedTerm
+  muxIntrinsic sym _namerep prd thn els =
+    do st <- readIORef (Crucible.sbStateManager sym)
+       let sc  = Crucible.saw_ctx st
+       prd' <- Crucible.toSC sym prd
+       typ  <- scTypeOf sc (ttTerm thn)
+       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
+       return thn { ttTerm = res }
+
+makeLenses ''CrucibleMethodSpecIR
+makeLenses ''StateSpec
+
 csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex MemType
-csAllocations cs = Map.union (csPreAllocations cs) (csPostAllocations cs)
+csAllocations cs = Map.union (_csAllocs $ _csPreState cs) (_csAllocs $ _csPostState cs)
 
-csPreconditions :: CrucibleMethodSpecIR -> [SetupCondition]
-csPreconditions cs = [ c | (PreState, c) <- csConditions cs ]
+-- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core. 
+methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
+methodSpecToTerm sc spec =
+      -- 1. fill in the post-state user variable holes with final
+      -- symbolic state
+  let _ppts = _csPointsTos $ _csPostState $ instantiateUserVars spec
+      -- 2. get the free variables in post points to's (note: these
+      -- should be contained in variables bound by pre-points-tos)
 
-csPostconditions :: CrucibleMethodSpecIR -> [SetupCondition]
-csPostconditions cs = [ c | (PostState, c) <- csConditions cs ]
+      -- 3. abstract the free variables in each post-points-to
+      
+      -- 4. put every abstracted post-points-to in a tuple
+
+      -- 5. Create struct type with fields being names of free variables
+
+      -- 6. Create a lambda term bound to a struct-typed variable that returns the tuple
+  in lift $ scLambda sc undefined undefined undefined
+
+-- | Rewrite the `csPostPointsTos` to substitute the elements of the
+-- final symbolic state for the fresh variables created by the user in
+-- the post-state.
+instantiateUserVars :: CrucibleMethodSpecIR -> CrucibleMethodSpecIR
+instantiateUserVars _spec = undefined
 
 data CrucibleSetupState =
   CrucibleSetupState
-  { csVarCounter    :: !AllocIndex
-  , csPrePost       :: PrePost
-  , csResolvedState :: ResolvedState
-  , csMethodSpec    :: CrucibleMethodSpecIR
-  }
-
-initialCrucibleSetupState :: L.Define -> CrucibleSetupState
-initialCrucibleSetupState def =
-  CrucibleSetupState
-  { csVarCounter    = AllocIndex 0
-  , csPrePost       = PreState
-  , csResolvedState = emptyResolvedState
-  , csMethodSpec    =
-    CrucibleMethodSpec
-    { csName            = L.defName def
-    , csArgs            = L.typedType <$> L.defArgs def
-    , csRet             = L.defRetType def
-    , csPreAllocations  = Map.empty
-    , csPostAllocations = Map.empty
-    , csFreshPointers   = Map.empty
-    , csPrePointsTos    = []
-    , csPostPointsTos   = []
-    , csConditions      = []
-    , csArgBindings     = Map.empty
-    , csRetValue        = Nothing
-    , csSolverStats     = mempty
-    }
-  }
-
-initialCrucibleSetupStateDecl :: L.Declare -> CrucibleSetupState
-initialCrucibleSetupStateDecl dec =
-  CrucibleSetupState
-  { csVarCounter    = AllocIndex 0
-  , csPrePost       = PreState
-  , csResolvedState = emptyResolvedState
-  , csMethodSpec    =
-    CrucibleMethodSpec
-    { csName            = L.decName dec
-    , csArgs            = L.decArgs dec
-    , csRet             = L.decRetType dec
-    , csPreAllocations  = Map.empty
-    , csPostAllocations = Map.empty
-    , csFreshPointers   = Map.empty
-    , csPrePointsTos    = []
-    , csPostPointsTos   = []
-    , csConditions      = []
-    , csArgBindings     = Map.empty
-    , csRetValue        = Nothing
-    , csSolverStats     = mempty
-    }
+  {_csVarCounter    :: !AllocIndex
+  ,_csPrePost       :: PrePost
+  ,_csResolvedState :: ResolvedState
+  ,_csMethodSpec    :: CrucibleMethodSpecIR
   }
 
 --------------------------------------------------------------------------------
@@ -207,9 +198,12 @@ initialCrucibleSetupStateDecl dec =
 -- sub-components.
 data ResolvedState =
   ResolvedState
-  { rsAllocs :: Map AllocIndex [[Int]]
-  , rsGlobals :: Map String [[Int]]
+  {_rsAllocs :: Map AllocIndex [[Int]]
+  ,_rsGlobals :: Map String [[Int]]
   }
+
+makeLenses ''CrucibleSetupState
+makeLenses ''ResolvedState
 
 emptyResolvedState :: ResolvedState
 emptyResolvedState = ResolvedState Map.empty Map.empty
@@ -224,8 +218,8 @@ markResolved val0 rs = go [] val0
   where
     go path val =
       case val of
-        SetupVar n    -> rs { rsAllocs = Map.alter (ins path) n (rsAllocs rs) }
-        SetupGlobal c -> rs { rsGlobals = Map.alter (ins path) c (rsGlobals rs) }
+        SetupVar n    -> rs {_rsAllocs = Map.alter (ins path) n (_rsAllocs rs) }
+        SetupGlobal c -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
         SetupElem v i -> go (i : path) v
         _             -> rs
 
@@ -242,25 +236,14 @@ testResolved val0 rs = go [] val0
   where
     go path val =
       case val of
-        SetupVar n    -> test path (Map.lookup n (rsAllocs rs))
-        SetupGlobal c -> test path (Map.lookup c (rsGlobals rs))
+        SetupVar n    -> test path (Map.lookup n (_rsAllocs rs))
+        SetupGlobal c -> test path (Map.lookup c (_rsGlobals rs))
         SetupElem v i -> go (i : path) v
         _             -> False
 
     test _ Nothing = False
     test path (Just paths) = any (`isPrefixOf` path) paths
 
-
-type GhostValue = "GhostValue"
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n) GhostValue = TypedTerm
-  muxIntrinsic sym _namerep prd thn els =
-    do st <- readIORef (Crucible.sbStateManager sym)
-       let sc  = Crucible.saw_ctx st
-       prd' <- Crucible.toSC sym prd
-       typ  <- scTypeOf sc (ttTerm thn)
-       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
-       return thn { ttTerm = res }
 
 intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn
                 (Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator))
@@ -269,3 +252,59 @@ intrinsics =
     (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
     Crucible.IntrinsicMuxFn
     Crucible.llvmIntrinsicTypes
+
+-------------------------------------------------------------------------------
+
+initialStateSpec :: StateSpec
+initialStateSpec =  StateSpec {_csAllocs = Map.empty
+                              ,_csPointsTos = []
+                              ,_csConditions = []
+                              }
+
+initialDefCrucibleMethodSpecIR :: L.Define -> CrucibleMethodSpecIR
+initialDefCrucibleMethodSpecIR def =
+  CrucibleMethodSpec
+  {_csName            = L.defName def
+  ,_csArgs            = L.typedType <$> L.defArgs def
+  ,_csRet             = L.defRetType def
+  ,_csPreState        = initialStateSpec
+  ,_csPostState       = initialStateSpec
+  ,_csFreshPointers   = Map.empty
+  ,_csArgBindings     = Map.empty
+  ,_csRetValue        = Nothing
+  ,_csSolverStats     = mempty
+  }
+
+initialDeclCrucibleMethodSpecIR :: L.Declare -> CrucibleMethodSpecIR
+initialDeclCrucibleMethodSpecIR dec =
+  CrucibleMethodSpec
+  {_csName            = L.decName dec
+  ,_csArgs            = L.decArgs dec
+  ,_csRet             = L.decRetType dec
+  ,_csPreState        = initialStateSpec
+  ,_csPostState       = initialStateSpec
+  ,_csFreshPointers   = Map.empty
+  ,_csArgBindings     = Map.empty
+  ,_csRetValue        = Nothing
+  ,_csSolverStats     = mempty
+  }
+
+initialCrucibleSetupState :: L.Define -> CrucibleSetupState
+initialCrucibleSetupState def =
+  CrucibleSetupState
+  {_csVarCounter    = AllocIndex 0
+  ,_csPrePost       = PreState
+  ,_csResolvedState = emptyResolvedState
+  ,_csMethodSpec    = initialDefCrucibleMethodSpecIR def
+  }
+
+initialCrucibleSetupStateDecl :: L.Declare -> CrucibleSetupState
+initialCrucibleSetupStateDecl dec =
+  CrucibleSetupState
+  {_csVarCounter    = AllocIndex 0
+  ,_csPrePost       = PreState
+  ,_csResolvedState = emptyResolvedState
+  ,_csMethodSpec    = initialDeclCrucibleMethodSpecIR dec
+  }
+
+
