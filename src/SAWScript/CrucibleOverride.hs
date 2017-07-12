@@ -57,6 +57,7 @@ import qualified Data.Parameterized.NatRepr as NatRepr
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
+import           Verifier.SAW.Recognizer
 
 import           SAWScript.Builtins
 import           SAWScript.CrucibleMethodSpecIR
@@ -82,6 +83,7 @@ data OverrideState = OverrideState
 data OverrideFailure
   = BadSymType Crucible.SymType
   | AmbiguousPointsTos [PointsTo]
+  | AmbiguousVars [TypedTerm]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification -- ^ type mismatch in return specification
@@ -294,6 +296,34 @@ learnCond sc cc cs ss = do
   matchPointsTos sc cc cs (ss^.csPointsTos)
   traverse_ (learnSetupCondition sc cc cs) (ss^.csConditions)
   enforceDisjointness cc cs
+  enforceCompleteSubstitution ss
+
+
+-- | Verify that all of the fresh variables for the given
+-- state spec have been "learned". If not, throws
+-- 'AmbiguousVars' exception.
+enforceCompleteSubstitution :: StateSpec -> OverrideMatcher ()
+enforceCompleteSubstitution ss =
+
+  do sub <- OM (use termSub)
+
+     let -- predicate matches terms that are not covered by the computed
+         -- term substitution
+         isMissing tt = termId (ttTerm tt) `Map.notMember` sub
+
+         -- list of all terms not covered by substitution
+         missing = filter isMissing (view csFreshVars ss)
+
+     unless (null missing) (failure (AmbiguousVars missing))
+
+
+-- | Given a 'Term' that must be an external constant, extract the 'VarIndex'.
+termId :: Term -> VarIndex
+termId t =
+  case asExtCns t of
+    Just ec -> ecVarIndex ec
+    _       -> error "termId expected a variable"
+
 
 -- execute a pre/post condition
 executeCond :: (?lc :: TyCtx.LLVMContext)
@@ -303,10 +333,28 @@ executeCond :: (?lc :: TyCtx.LLVMContext)
             -> StateSpec
             -> OverrideMatcher ()
 executeCond sc cc cs ss = do
+  refreshTerms sc ss
   traverse_ (executeAllocation cc) (Map.assocs (ss^.csAllocs))
   traverse_ (executePointsTo sc cc cs) (ss^.csPointsTos)
   traverse_ (executeSetupCondition sc cc cs) (ss^.csConditions)
-  
+
+
+-- | Allocate fresh variables for all of the "fresh" vars
+-- used in this phase and add them to the term substitution.
+refreshTerms ::
+  SharedContext {- ^ shared context -} ->
+  StateSpec     {- ^ current phase spec -} ->
+  OverrideMatcher ()
+refreshTerms sc ss =
+  do extension <- Map.fromList <$> traverse freshenTerm (view csFreshVars ss)
+     OM (termSub %= Map.union extension)
+  where
+    freshenTerm tt =
+      case asExtCns (ttTerm tt) of
+        Just ec -> do new <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc (ecName ec) (ecType ec))
+                      return (termId (ttTerm tt), ttTerm new)
+        Nothing -> error "refreshTerms: not a variable"
+
 ------------------------------------------------------------------------
 
 -- | Generate assertions that all of the memory allocations matched by

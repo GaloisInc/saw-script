@@ -992,8 +992,20 @@ crucible_fresh_var bic _opts name lty = do
   let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx lc)
   mty <- liftIO $ logicTypeOfActual dl sc lty'
   case mty of
-    Just ty -> liftIO $ scFreshGlobal sc name ty >>= mkTypedTerm sc
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
+    Just ty -> freshVariable sc name ty
+
+-- | Allocated a fresh variable and record this allocation in the
+-- setup state.
+freshVariable ::
+  SharedContext {- ^ shared context -} ->
+  String        {- ^ variable name  -} ->
+  Term          {- ^ variable type  -} ->
+  CrucibleSetup TypedTerm
+freshVariable sc name ty =
+  do tt <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc name ty)
+     currentState . csFreshVars %= cons tt
+     return tt
 
 
 -- | Use the given LLVM type to compute a setup value that
@@ -1036,9 +1048,9 @@ constructExpandedSetupValue ::
                    {- ^ fresh expanded setup value -}
 constructExpandedSetupValue sc t =
   case t of
-    Crucible.IntType w -> liftIO $
-      do ty <- logicTypeForInt sc w
-         SetupTerm <$> (scFreshGlobal sc "" ty >>= mkTypedTerm sc)
+    Crucible.IntType w ->
+      do ty <- liftIO (logicTypeForInt sc w)
+         SetupTerm <$> freshVariable sc "" ty
 
     Crucible.StructType si ->
        SetupStruct . toList <$> traverse (constructExpandedSetupValue sc) (Crucible.siFieldTypes si)
