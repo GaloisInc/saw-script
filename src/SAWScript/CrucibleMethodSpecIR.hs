@@ -124,6 +124,7 @@ data SetupCondition where
 data StateSpec = StateSpec {_csAllocs     :: Map AllocIndex MemType -- ^ allocated vars
                            ,_csPointsTos  :: [PointsTo] -- ^ points-to statements
                            ,_csConditions :: [SetupCondition] -- ^ equality and assertion/assumptuon statements
+                           ,_csFreshVars  :: [TypedTerm] -- ^ fresh variables created in this state
                            }
                  deriving (Show)
 
@@ -259,6 +260,7 @@ initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec {_csAllocs = Map.empty
                               ,_csPointsTos = []
                               ,_csConditions = []
+                              ,_csFreshVars = []
                               }
 
 initialDefCrucibleMethodSpecIR :: L.Define -> CrucibleMethodSpecIR
