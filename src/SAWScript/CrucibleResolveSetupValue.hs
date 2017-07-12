@@ -130,6 +130,8 @@ typeOfSetupValue cc env val =
     lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
     dl = TyCtx.llvmDataLayout lc
 
+-- | Translate a SetupValue into a Crucible LLVM value, resolving
+-- references
 resolveSetupVal ::
   CrucibleContext        ->
   Map AllocIndex LLVMVal ->

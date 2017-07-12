@@ -489,6 +489,7 @@ assignTerm var val =
 
 ------------------------------------------------------------------------
 
+-- | Match the value of a function argument with a symbolic `SetupValue`.
 matchArg ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   CrucibleContext    {- ^ context for interacting with Crucible -} ->

@@ -134,6 +134,7 @@ crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
                     Nothing -> fail ("Could not find function named" ++ show nm)
                     Just decl -> return decl
      let st0 = initialCrucibleSetupState def
+     -- execute commands of the method spec
      methodSpec <- (view csMethodSpec) <$> execStateT setup st0
      let globals = ccGlobals cc
      let memOps = Crucible.memModelOps (ccLLVMContext cc)
@@ -142,15 +143,19 @@ crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem0
      --io $ putStrLn $ unlines [ "Method Spec:", show methodSpec]
+     -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
      -- save initial path condition
      pathstate <- io $ Crucible.getCurrentState sym
+     -- run the symbolic execution
      (ret, globals3)
         <- io $ verifySimulate cc methodSpec args assumes lemmas globals2 checkSat
+     -- collect the proof obligations
      asserts <- io $ verifyPoststate (biSharedContext bic) cc
                        methodSpec env globals3 ret
      -- restore initial path condition
      io $ Crucible.resetCurrentState sym pathstate
+     -- attempt to verify the proof obligations
      stats <- verifyObligations cc methodSpec tactic assumes asserts
      return (methodSpec & csSolverStats .~ stats)
 
