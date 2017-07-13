@@ -11,9 +11,7 @@ let dbl_setup = do {
     crucible_return (crucible_term {{ x + x : [32] }});
 };
 
-let main : TopLevel () = do {
-    load_crucible_llvm_module "basic.bc";
-    add_ms <- crucible_llvm_verify "add" [] false add_setup abc;
-    crucible_llvm_verify "dbl" [add_ms] false dbl_setup abc;
-    print "Done.";
-};
+m <- llvm_load_module "basic.bc";
+add_ms <- crucible_llvm_verify m "add" [] false add_setup abc;
+crucible_llvm_verify m "dbl" [add_ms] false dbl_setup abc;
+print "Done.";
