@@ -54,7 +54,7 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 
-import Language.JVM.Common (ppFldId, dotsToSlashes)
+import Language.JVM.Common (ppFldId)
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr as TC
 import SAWScript.Options
@@ -513,7 +513,7 @@ initializeVerification' sc ir bs refConfig = do
                  entryBlock -- FIXME: not the right block
                  Map.empty
                  cs
-  forM_ (specInitializedClasses ir) (initializeClass . dotsToSlashes)
+  forM_ (specInitializedClasses ir) initializeClass
   modifyCSM_ pushFrame
   forM_ refAssignments $ \(r, cl) ->
     forM_ cl $ \e -> writeJavaValue e (RValue r)
