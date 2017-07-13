@@ -1,15 +1,16 @@
-import "imports.cry";
-
 let whoknows_spec : CrucibleSetup () = do {
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [crucible_term x];
+  crucible_execute_func [];
   y <- crucible_fresh_var "y" (llvm_int 32);
   crucible_return (crucible_term y);
 };
 
 let example_spec : CrucibleSetup () = do {
-  a <- crucible_fresh_var "a" (llvm_int 32);
-  crucible_execute_func [crucible_term a];
+  crucible_execute_func [];
+  crucible_return (crucible_term {{0:[32]}});
+};
+
+let bad_spec : CrucibleSetup () = do {
+  crucible_execute_func [];
   crucible_return (crucible_term {{0:[32]}});
 };
 
@@ -18,6 +19,8 @@ let main : TopLevel () = do {
     load_crucible_llvm_module "source.bc";
     whoknows <- crucible_llvm_unsafe_assume_spec "whoknows" whoknows_spec;
     crucible_llvm_verify "example" [whoknows] false example_spec
+      ( do { print_goal; abc; } );
+    crucible_llvm_verify "bad" [whoknows] false bad_spec
       ( do { print_goal; abc; } );
     print "done";
 };

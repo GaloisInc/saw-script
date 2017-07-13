@@ -1,6 +1,12 @@
-extern int whoknows(int);
+extern int whoknows(void);
 
-int example(int x) {
-  int y = whoknows(x);
+int example(void) {
+  int y = whoknows();
   return y-y;
+}
+
+int bad(void) {
+  int x = whoknows();
+  int y = whoknows();
+  return x-y;
 }
