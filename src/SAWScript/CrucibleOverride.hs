@@ -8,8 +8,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module SAWScript.CrucibleOverride (methodSpecHandler, valueToSC) where
+module SAWScript.CrucibleOverride (OverrideMatcher(..), unpackPointer, setupValueSub, _asserts, learnCond, runOverrideMatcher, matchArg, methodSpecHandler, valueToSC) where
 
 import           Control.Lens
 import           Control.Exception
@@ -52,7 +53,6 @@ import qualified Lang.Crucible.ProgramLoc as Crucible
 
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.NatRepr as NatRepr
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
@@ -68,15 +68,29 @@ import           SAWScript.TypedTerm
 -- to match a specification's arguments with the arguments provided by
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
-newtype OverrideMatcher a
-  = OM { unOM :: StateT OverrideState (ExceptT OverrideFailure IO) a }
+newtype OverrideMatcher a =
+  OM (StateT OverrideState (ExceptT OverrideFailure IO) a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+type PointerValue = Crucible.RegValue Sym Crucible.LLVMPointerType
 
 data OverrideState = OverrideState
-  { _setupValueSub :: Map AllocIndex (Crucible.RegValue Sym Crucible.LLVMPointerType)
-  , _termSub       :: Map VarIndex Term
-  , _asserts       :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
-  , _assumes       :: [Crucible.Pred Sym]
-  , _syminterface  :: Sym
+  { -- | Substitution for memory allocations
+    _setupValueSub :: Map AllocIndex PointerValue
+
+    -- | Substitution for SAW Core external constants
+  , _termSub :: Map VarIndex Term
+
+    -- | Accumulated assertions
+  , _asserts :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
+
+    -- | Accumulated assumptions
+  , _assumes :: [Crucible.Pred Sym]
+
+    -- | Symbolic simulation state
+  , _syminterface :: Sym
+
+    -- | Global variables
   , _overrideGlobals :: Crucible.SymGlobalState Sym
   }
 
@@ -97,14 +111,6 @@ data OverrideFailure
 
 instance Exception OverrideFailure
 
-instance Functor     OverrideMatcher where fmap   = liftM
-instance Applicative OverrideMatcher where pure x = OM (pure x)
-                                           (<*>)  = ap
-instance Monad       OverrideMatcher where return = pure
-                                           m >>= f = OM (unOM . f =<< unOM m)
-instance MonadIO     OverrideMatcher where liftIO io = OM (liftIO io)
-
-
 makeLenses ''OverrideState
 
 ------------------------------------------------------------------------
@@ -112,10 +118,19 @@ makeLenses ''OverrideState
 -- | The initial override matching state starts with an empty substitution
 -- and no assertions or assumptions.
 initialState ::
-  Sym ->
-  Crucible.SymGlobalState Sym ->
+  Sym                          {- ^ simulator                      -} ->
+  Crucible.SymGlobalState Sym  {- ^ initial global variables       -} ->
+  Map AllocIndex PointerValue  {- ^ initial allocation substituion -} ->
+  Map VarIndex Term            {- ^ initial term substituion       -} ->
   OverrideState
-initialState = OverrideState Map.empty Map.empty [] []
+initialState sym globals allocs terms = OverrideState
+  { _asserts         = []
+  , _assumes         = []
+  , _syminterface    = sym
+  , _overrideGlobals = globals
+  , _termSub         = terms
+  , _setupValueSub   = allocs
+  }
 
 ------------------------------------------------------------------------
 
@@ -164,8 +179,7 @@ methodSpecHandler ::
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler sc cc css retTy = do
-  let L.Symbol fsym = (head css)^.csName 
-  liftIO $ putStrLn $ "Executing override for `" ++ fsym ++ "`"
+  let L.Symbol fsym = (head css)^.csName
   Crucible.RegMap args <- Crucible.getOverrideArgs
   globals <- Crucible.readGlobals
   sym     <- Crucible.getSymInterface
@@ -174,7 +188,7 @@ methodSpecHandler sc cc css retTy = do
 
   matches
      <- liftIO $
-        zipWithM (\g cs -> runOverrideMatcher sym g
+        zipWithM (\g cs -> runOverrideMatcher sym g Map.empty Map.empty
                              (methodSpecHandler1 sc cc args retTy cs)) gs css
 
   outputs <- case partitionEithers matches of
@@ -476,8 +490,8 @@ computeReturnValue _ _ _ ty Nothing =
 
 computeReturnValue cc sc spec ty (Just val) =
   do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue cc sc spec val
-     case NatRepr.testEquality ty xty of
-       Just NatRepr.Refl -> return xval
+     case Crucible.testEquality ty xty of
+       Just Crucible.Refl -> return xval
        Nothing -> failure BadReturnSpecification
 
 
@@ -496,13 +510,16 @@ getSymInterface = OM (use syminterface)
 
 ------------------------------------------------------------------------
 
--- | "Run" function for OverrideMatcher.
+-- | "Run" function for OverrideMatcher. The final result and state
+-- are returned. The state will contain the updated globals and substitutions
 runOverrideMatcher ::
-   Sym ->
-   Crucible.SymGlobalState Sym ->
-   OverrideMatcher a ->
+   Sym                         {- ^ simulator                       -} ->
+   Crucible.SymGlobalState Sym {- ^ initial global variables        -} ->
+   Map AllocIndex PointerValue {- ^ initial allocation substitution -} ->
+   Map VarIndex Term           {- ^ initial term substitution       -} ->
+   OverrideMatcher a           {- ^ matching action                 -} ->
    IO (Either OverrideFailure (a, OverrideState))
-runOverrideMatcher sym g (OM m) = runExceptT (runStateT m (initialState sym g))
+runOverrideMatcher sym g a t (OM m) = runExceptT (runStateT m (initialState sym g a t))
 
 ------------------------------------------------------------------------
 
@@ -537,7 +554,7 @@ assignTerm var val =
 
 ------------------------------------------------------------------------
 
--- | Match the value of a function argument with a symbolic `SetupValue`.
+-- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   CrucibleContext    {- ^ context for interacting with Crucible -} ->
@@ -547,35 +564,43 @@ matchArg ::
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher ()
 
-matchArg _sc cc (Crucible.LLVMValPtr blk end off) _memTy (SetupVar var) =
-  assignVar cc var (unpackPointer (Crucible.LLVMPtr blk end off))
-
--- match the fields of struct point-wise
-matchArg sc cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
-  sequence_
-    [ matchArg sc cc x y z
-       | ((_,x),y,z) <- zip3 (V.toList xs) (V.toList (Crucible.fiType <$> Crucible.siFields fields)) zs ]
-
 matchArg sc cc realVal _ (SetupTerm expected) =
   do sym      <- getSymInterface
      realTerm <- liftIO (valueToSC sym realVal)
      matchTerm sc cc realTerm (ttTerm expected)
 
-matchArg _sc _cc (Crucible.LLVMValPtr blk end off) _ SetupNull =
-  do sym <- getSymInterface
-     let ptr = Crucible.LLVMPtr blk end off
-     p <- liftIO (Crucible.isNullPointer sym (unpackPointer ptr))
-     addAssert p (Crucible.AssertFailureSimError "null-equality precondition")
+-- match the fields of struct point-wise
+matchArg sc cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+  sequence_
+    [ matchArg sc cc x y z
+       | ((_,x),y,z) <- zip3 (V.toList xs)
+                             (V.toList (Crucible.fiType <$> Crucible.siFields fields))
+                             zs ]
 
-matchArg _sc cc (Crucible.LLVMValPtr blk1 _ off1) _ (SetupGlobal name) =
-  do sym <- getSymInterface
-     let mem = ccEmptyMemImpl cc
-     ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
-     let (Crucible.LLVMPtr blk2 _ off2) = packPointer' ptr2
-     p1 <- liftIO (Crucible.natEq sym blk1 blk2)
-     p2 <- liftIO (Crucible.bvEq sym off1 off2)
-     p  <- liftIO (Crucible.andPred sym p1 p2)
-     addAssert p (Crucible.AssertFailureSimError "global-equality precondition")
+matchArg _sc cc actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
+  let ptr = Crucible.LLVMPtr blk end off in
+  case setupval of
+    SetupVar var ->
+      do assignVar cc var (unpackPointer ptr)
+
+    SetupNull ->
+      do sym <- getSymInterface
+         p   <- liftIO (Crucible.isNullPointer sym (unpackPointer ptr))
+         addAssert p (Crucible.AssertFailureSimError "null-equality precondition")
+
+    SetupGlobal name ->
+      do let mem = ccEmptyMemImpl cc
+         sym  <- getSymInterface
+         ptr' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+         let (Crucible.LLVMPtr blk' _ off') = packPointer' ptr'
+
+         p1 <- liftIO (Crucible.natEq sym blk blk')
+         p2 <- liftIO (Crucible.bvEq sym off off')
+         p  <- liftIO (Crucible.andPred sym p1 p2)
+         addAssert p (Crucible.AssertFailureSimError "global-equality precondition")
+
+    _ ->
+      do failure (StructuralMismatch actual setupval expectedTy)
 
 matchArg _sc _cc actual expectedTy expected =
   failure (StructuralMismatch actual expected expectedTy)
@@ -643,13 +668,10 @@ matchTerm sc cc real expect =
   case unwrapTermF expect of
     FTermF (ExtCns ec) -> assignTerm (ecVarIndex ec) real
 
-    -- test whether the pattern is a concrete term
-    _ | Set.null (getAllExtSet expect) ->
+    _ ->
       do t <- liftIO $ scEq sc real expect
          p <- liftIO $ resolveSAWPred cc t
          addAssert p (Crucible.AssertFailureSimError "literal equality precondition")
-
-    _ -> failure (BadTermMatch real expect)
 
 ------------------------------------------------------------------------
 
@@ -750,7 +772,7 @@ learnPred sc cc t =
 executeAllocation ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
-  (AllocIndex, Crucible.MemType)      ->
+  (AllocIndex, Crucible.MemType) ->
   OverrideMatcher ()
 executeAllocation cc (var, memTy) =
   do let sym = ccBackend cc

@@ -14,12 +14,18 @@ let bad_spec : CrucibleSetup () = do {
   crucible_return (crucible_term {{0:[32]}});
 };
 
+let one_spec : CrucibleSetup () = do {
+  crucible_execute_func [];
+  x <- crucible_fresh_var "x" (llvm_int 32);
+  crucible_return (crucible_term x);
+};
+
 let main : TopLevel () = do {
 
     load_crucible_llvm_module "source.bc";
     whoknows <- crucible_llvm_unsafe_assume_spec "whoknows" whoknows_spec;
-    crucible_llvm_verify "example" [whoknows] false example_spec
-      ( do { print_goal; abc; } );
+    crucible_llvm_verify "example" [whoknows] false example_spec abc;
+    crucible_llvm_verify "one" [] false one_spec ( do { print_goal; abc; } );
     crucible_llvm_verify "bad" [whoknows] false bad_spec
       ( do { print_goal; abc; } );
     print "done";

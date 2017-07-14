@@ -18,12 +18,13 @@ Stability   : provisional
 -}
 module SAWScript.CrucibleBuiltins where
 
+import           Control.Exception (throwIO)
 import           Control.Lens
 import           Control.Monad.ST
 import           Control.Monad.State
 import qualified Control.Monad.Trans.State.Strict as SState
 import           Control.Applicative
-import           Data.Foldable (toList, find)
+import           Data.Foldable (toList, find, for_)
 import           Data.Function
 import           Data.IORef
 import           Data.List
@@ -454,7 +455,7 @@ verifySimulate ::
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
-  IO (Maybe LLVMVal, Crucible.SymGlobalState Sym)
+  IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate cc mspec args assumes lemmas globals checkSat =
   do let nm = mspec^.csName
      case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
@@ -489,12 +490,13 @@ verifySimulate cc mspec args assumes lemmas globals checkSat =
                                  (TyCtx.liftRetType ret_ty)
                    retval' <- case ret_ty' of
                      Nothing -> return Nothing
-                     Just ret_mt -> Just <$>
-                       Crucible.packMemValue sym
-                         (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
-                              (Crucible.toStorableType ret_mt))
-                         (Crucible.regType  retval)
-                         (Crucible.regValue retval)
+                     Just ret_mt ->
+                       do v <- Crucible.packMemValue sym
+                                 (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
+                                      (Crucible.toStorableType ret_mt))
+                                 (Crucible.regType  retval)
+                                 (Crucible.regValue retval)
+                          return (Just (ret_mt, v))
 
                    return (retval', globals1)
 
@@ -687,35 +689,47 @@ verifyPoststate ::
   CrucibleMethodSpecIR ->
   Map AllocIndex LLVMVal ->
   Crucible.SymGlobalState Sym ->
-  Maybe LLVMVal ->
+  Maybe (Crucible.MemType, LLVMVal) ->
   IO [(String, Term)]
 verifyPoststate sc cc mspec env0 globals ret =
-  do (retgoals, env) <-
-       case (ret, mspec^.csRetValue) of
-         (Nothing, Nothing) -> return ([], env0)
-         (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
-         (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
-         (Just ret', Just val) ->
-           do (goals, env) <- runStateT (match sc cc tyenv ret' val) env0
-              return ([ ("return value", goal) | goal <- goals ], env)
-     let lvar = Crucible.llvmMemVar (Crucible.memModelOps (ccLLVMContext cc))
-     let Just mem = Crucible.lookupGlobal lvar globals
-     pointsgoals <- processPostPointsTos sc cc tyenv env mem (mspec^.csPostState.csPointsTos)
-     postconds <- processPostconditions cc tyenv env globals (mspec^.csPostState.csConditions)
+
+  do let fixPointer (Crucible.LLVMValPtr blk end off) = unpackPointer (Crucible.LLVMPtr blk end off)
+         fixPointer _ = error "bad pointer in env"
+         allocations  = fixPointer <$> env0
+
+     overrideResult <- runOverrideMatcher sym globals allocations Map.empty $
+       do case (ret, mspec ^. csRetValue) of
+            (Nothing     , Just _ ) -> fail "verifyPoststate: unexpected crucible_return specification"
+            (Just _      , Nothing) -> fail "verifyPoststate: missing crucible_return specification"
+            (Nothing     , Nothing) -> return ()
+            (Just (rty,r), Just expect) -> matchArg sc cc r rty expect
+          learnCond sc cc mspec (mspec ^. csPostState)
+
+     st <- case overrideResult of
+             Right ((), st) -> return st
+             Left e -> throwIO e
+
+     for_ (_asserts st) $ \(p, r) ->
+        Crucible.sbAddAssertion (ccBackend cc) p r
+
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
      obligationTerms <- mapM verifyObligation obligations
-     return (retgoals ++ pointsgoals ++ postconds ++ obligationTerms)
+     return obligationTerms
   where
-    tyenv = Map.union (csAllocations mspec) (mspec^.csFreshPointers)
     sym = ccBackend cc
+
+    scAll f xs = scAndN =<< traverse f xs
+
+    scAndN xs =
+      do true <- scBool sc True
+         foldM (scAnd sc) true xs
 
     verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
       fail "Found an assumption in final proof obligation list"
     verifyObligation (hyps, (Crucible.Assertion _ concl (Just err))) = do
-      true <- scBool sc True
-      hypTerm <- foldM (scAnd sc) true =<< mapM (Crucible.toSC sym) hyps
-      conclTerm <- Crucible.toSC sym concl
+      hypTerm    <- scAll (Crucible.toSC sym) hyps
+      conclTerm  <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
