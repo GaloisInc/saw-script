@@ -229,7 +229,7 @@ verifyPrestate ::
   Crucible.SymGlobalState Sym ->
   IO ([(Crucible.MemType, LLVMVal)],
       [Term],
-      Map AllocIndex LLVMVal,
+      Map AllocIndex LLVMPtr,
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals = do
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
@@ -254,20 +254,20 @@ verifyPrestate cc mspec globals = do
 setupFreshPointer ::
   CrucibleContext {- ^ Crucible context       -} ->
   AllocIndex      {- ^ SetupVar id            -} ->
-  IO LLVMVal      {- ^ Symbolic pointer value -}
+  IO LLVMPtr      {- ^ Symbolic pointer value -}
 setupFreshPointer cc (AllocIndex i) =
   do let sym = ccBackend cc
          mkName base = Crucible.systemSymbol (base ++ show i ++ "!")
      blk <- Crucible.freshConstant sym (mkName "blk") Crucible.BaseNatRepr
      end <- Crucible.freshConstant sym (mkName "end") (Crucible.BaseBVRepr Crucible.ptrWidth)
      off <- Crucible.freshConstant sym (mkName "off") (Crucible.BaseBVRepr Crucible.ptrWidth)
-     return (Crucible.LLVMValPtr blk end off)
+     return (Crucible.LLVMPtr blk end off)
 
 resolveArguments ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
   CrucibleMethodSpecIR       ->
-  Map AllocIndex LLVMVal     ->
+  Map AllocIndex LLVMPtr     ->
   IO [(Crucible.MemType, LLVMVal)]
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
@@ -290,7 +290,7 @@ setupPrePointsTos ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleMethodSpecIR       ->
   CrucibleContext            ->
-  Map AllocIndex LLVMVal     ->
+  Map AllocIndex LLVMPtr     ->
   [PointsTo]                 ->
   MemImpl                    ->
   IO MemImpl
@@ -317,7 +317,7 @@ setupPrestateConditions ::
   (?lc :: TyCtx.LLVMContext)  =>
   CrucibleMethodSpecIR        ->
   CrucibleContext             ->
-  Map AllocIndex LLVMVal      ->
+  Map AllocIndex LLVMPtr      ->
   Crucible.SymGlobalState Sym ->
   [SetupCondition]            ->
   IO (Crucible.SymGlobalState Sym, [Term])
@@ -394,13 +394,12 @@ doAlloc ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
   Crucible.MemType           ->
-  StateT MemImpl IO LLVMVal
+  StateT MemImpl IO LLVMPtr
 doAlloc cc tp = StateT $ \mem ->
   do let sym = ccBackend cc
      let dl = TyCtx.llvmDataLayout ?lc
      sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
-     (Crucible.LLVMPtr blk end x, mem') <- Crucible.mallocRaw sym mem sz
-     return (Crucible.LLVMValPtr blk end x, mem')
+     Crucible.mallocRaw sym mem sz
 
 --------------------------------------------------------------------------------
 
@@ -526,7 +525,7 @@ processPostconditions ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext                 {- ^ simulator context         -} ->
   Map AllocIndex Crucible.MemType {- ^ type env                  -} ->
-  Map AllocIndex LLVMVal          {- ^ pointer environment       -} ->
+  Map AllocIndex LLVMPtr          {- ^ pointer environment       -} ->
   Crucible.SymGlobalState Sym     {- ^ final global variables    -} ->
   [SetupCondition]                {- ^ postconditions            -} ->
   IO [(String, Term)]
@@ -560,7 +559,7 @@ processPostPointsTos ::
   SharedContext                   {- ^ term construction context -} ->
   CrucibleContext                 {- ^ simulator context         -} ->
   Map AllocIndex Crucible.MemType {- ^ type env                  -} ->
-  Map AllocIndex LLVMVal          {- ^ pointer environment       -} ->
+  Map AllocIndex LLVMPtr          {- ^ pointer environment       -} ->
   MemImpl                         {- ^ LLVM heap                 -} ->
   [PointsTo]                      {- ^ points-to postconditions  -} ->
   IO [(String, Term)]             {- ^ equality constraints      -}
@@ -573,7 +572,7 @@ processPostPointsTos sc cc tyenv env0 mem conds0 =
       Bool       {- progress indicator -} ->
       [PointsTo] {- delayed conditions -} ->
       [PointsTo] {- queued conditions  -} ->
-      StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
+      StateT (Map AllocIndex LLVMPtr) IO [(String, Term)]
 
     -- all conditions processed, success
     go _ [] [] = return []
@@ -594,10 +593,10 @@ processPostPointsTos sc cc tyenv env0 mem conds0 =
            else go progress (c:delayed) cs
 
     -- determine if a precondition is ready to be checked
-    checkPointsTo :: PointsTo -> StateT (Map AllocIndex LLVMVal) IO Bool
+    checkPointsTo :: PointsTo -> StateT (Map AllocIndex LLVMPtr) IO Bool
     checkPointsTo (PointsTo p _) = checkSetupValue p
 
-    checkSetupValue :: SetupValue -> StateT (Map AllocIndex LLVMVal) IO Bool
+    checkSetupValue :: SetupValue -> StateT (Map AllocIndex LLVMPtr) IO Bool
     checkSetupValue v =
       do m <- get
          return (all (`Map.member` m) (setupVars v))
@@ -614,7 +613,7 @@ processPostPointsTos sc cc tyenv env0 mem conds0 =
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty
 
-    verifyPostCond :: PointsTo -> StateT (Map AllocIndex LLVMVal) IO [(String, Term)]
+    verifyPostCond :: PointsTo -> StateT (Map AllocIndex LLVMPtr) IO [(String, Term)]
     verifyPostCond (PointsTo lhs val) =
       do env <- get
          lhs' <- liftIO $ resolveSetupVal cc env tyenv lhs
@@ -640,13 +639,13 @@ match ::
   Map AllocIndex Crucible.MemType {- ^ type env  -} ->
   LLVMVal       ->
   SetupValue    ->
-  StateT (Map AllocIndex LLVMVal) IO [Term]
-match _sc cc _tyenv x (SetupVar i) =
+  StateT (Map AllocIndex LLVMPtr) IO [Term]
+match _sc cc _tyenv x@(Crucible.LLVMValPtr blk off end) (SetupVar i) =
   do env <- get
      case Map.lookup i env of
-       Just y  -> do t <- liftIO $ assertEqualVals cc x y
+       Just y  -> do t <- liftIO $ assertEqualVals cc x (ptrToVal y)
                      return [t]
-       Nothing -> do put (Map.insert i x env)
+       Nothing -> do put (Map.insert i (Crucible.LLVMPtr blk off end) env)
                      return []
 match sc cc tyenv (Crucible.LLVMValStruct fields) (SetupStruct vs) =
   matchList sc cc tyenv (map snd (V.toList fields)) vs
@@ -668,7 +667,7 @@ matchList ::
   Map AllocIndex Crucible.MemType {- ^ type env  -} ->
   [LLVMVal]                                         ->
   [SetupValue]                                      ->
-  StateT (Map AllocIndex LLVMVal) IO [Term]
+  StateT (Map AllocIndex LLVMPtr) IO [Term]
 matchList sc cc tyenv xs vs = -- precondition: length xs = length vs
   do gs <- concat <$> sequence [ match sc cc tyenv x v | (x, v) <- zip xs vs ]
      g <- liftIO $ scAndList sc gs
@@ -684,20 +683,16 @@ scAndList sc (x : xs) = scAnd sc x =<< scAndList sc xs
 
 verifyPoststate ::
   (?lc :: TyCtx.LLVMContext) =>
-  SharedContext ->
-  CrucibleContext ->
-  CrucibleMethodSpecIR ->
-  Map AllocIndex LLVMVal ->
-  Crucible.SymGlobalState Sym ->
-  Maybe (Crucible.MemType, LLVMVal) ->
-  IO [(String, Term)]
+  SharedContext                     {- ^ saw core context                             -} ->
+  CrucibleContext                   {- ^ crucible context                             -} ->
+  CrucibleMethodSpecIR              {- ^ specification                                -} ->
+  Map AllocIndex LLVMPtr            {- ^ allocation substitution                      -} ->
+  Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
+  Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value                        -} ->
+  IO [(String, Term)]               {- ^ generated labels and verification conditions -}
 verifyPoststate sc cc mspec env0 globals ret =
 
-  do let fixPointer (Crucible.LLVMValPtr blk end off) = unpackPointer (Crucible.LLVMPtr blk end off)
-         fixPointer _ = error "bad pointer in env"
-         allocations  = fixPointer <$> env0
-
-     overrideResult <- runOverrideMatcher sym globals allocations Map.empty $
+  do overrideResult <- runOverrideMatcher sym globals env0 Map.empty $
        do case (ret, mspec ^. csRetValue) of
             (Nothing     , Just _ ) -> fail "verifyPoststate: unexpected crucible_return specification"
             (Just _      , Nothing) -> fail "verifyPoststate: missing crucible_return specification"

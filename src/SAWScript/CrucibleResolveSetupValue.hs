@@ -2,7 +2,7 @@
 {-# LANGUAGE GADTs #-}
 
 module SAWScript.CrucibleResolveSetupValue
-  ( LLVMVal
+  ( LLVMVal, LLVMPtr
   , resolveSetupVal
   , typeOfLLVMVal
   , typeOfSetupValue
@@ -10,6 +10,7 @@ module SAWScript.CrucibleResolveSetupValue
   , resolveSAWPred
   , equalValsPred
   , packPointer
+  , ptrToVal
   ) where
 
 import Control.Lens
@@ -61,6 +62,7 @@ import SAWScript.CrucibleMethodSpecIR
 --import qualified SAWScript.LLVMBuiltins as LB
 
 type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
+type LLVMPtr = Crucible.LLVMPtr Sym Crucible.PtrWidth
 
 typeOfSetupValue ::
   Monad m =>
@@ -134,14 +136,15 @@ typeOfSetupValue cc env val =
 -- references
 resolveSetupVal ::
   CrucibleContext        ->
-  Map AllocIndex LLVMVal ->
+  Map AllocIndex LLVMPtr ->
   Map AllocIndex Crucible.MemType ->
   SetupValue             ->
   IO LLVMVal
 resolveSetupVal cc env tyenv val =
   case val of
     SetupVar i
-      | Just val' <- Map.lookup i env -> return val'
+      | Just (Crucible.LLVMPtr blk end off) <- Map.lookup i env ->
+                return (Crucible.LLVMValPtr blk end off)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
@@ -273,6 +276,9 @@ resolveSAWTerm cc tp tm =
   where
     sym = ccBackend cc
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+
+ptrToVal :: LLVMPtr -> LLVMVal
+ptrToVal (Crucible.LLVMPtr blk end off) = Crucible.LLVMValPtr blk end off
 
 packPointer ::
   Crucible.RegValue Sym Crucible.LLVMPointerType ->

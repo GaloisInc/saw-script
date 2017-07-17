@@ -72,11 +72,9 @@ newtype OverrideMatcher a =
   OM (StateT OverrideState (ExceptT OverrideFailure IO) a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-type PointerValue = Crucible.RegValue Sym Crucible.LLVMPointerType
-
 data OverrideState = OverrideState
   { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex PointerValue
+    _setupValueSub :: Map AllocIndex LLVMPtr
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
@@ -120,7 +118,7 @@ makeLenses ''OverrideState
 initialState ::
   Sym                          {- ^ simulator                      -} ->
   Crucible.SymGlobalState Sym  {- ^ initial global variables       -} ->
-  Map AllocIndex PointerValue  {- ^ initial allocation substituion -} ->
+  Map AllocIndex LLVMPtr       {- ^ initial allocation substituion -} ->
   Map VarIndex Term            {- ^ initial term substituion       -} ->
   OverrideState
 initialState sym globals allocs terms = OverrideState
@@ -390,8 +388,8 @@ enforceDisjointness cc spec =
         [ Crucible.assertDisjointRegions'
             "enforcing disjoint allocations"
             sym Crucible.ptrWidth
-            p (sz pty)
-            q (sz qty)
+            (unpackPointer p) (sz pty)
+            (unpackPointer q) (sz qty)
         | (pty,p):ps <- tails m
         , (qty,q)    <- ps
         ]
@@ -515,7 +513,7 @@ getSymInterface = OM (use syminterface)
 runOverrideMatcher ::
    Sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState Sym {- ^ initial global variables        -} ->
-   Map AllocIndex PointerValue {- ^ initial allocation substitution -} ->
+   Map AllocIndex LLVMPtr      {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
    OverrideMatcher a           {- ^ matching action                 -} ->
    IO (Either OverrideFailure (a, OverrideState))
@@ -527,15 +525,15 @@ runOverrideMatcher sym g a t (OM m) = runExceptT (runStateT m (initialState sym 
 -- the current substitution. If there is already a binding for this
 -- index, then add a pointer-equality constraint.
 assignVar ::
-  CrucibleContext         {- ^ context for interacting with Crucible -} ->
-  AllocIndex                                     {- ^ variable index -} ->
-  Crucible.RegValue Sym Crucible.LLVMPointerType {- ^ concrete value -} ->
+  CrucibleContext {- ^ context for interacting with Crucible -} ->
+  AllocIndex      {- ^ variable index -} ->
+  LLVMPtr         {- ^ concrete value -} ->
   OverrideMatcher ()
 
 assignVar cc var val =
   do old <- OM (setupValueSub . at var <<.= Just val)
      for_ old $ \val' ->
-       do p <- liftIO (equalValsPred cc (packPointer val') (packPointer val))
+       do p <- liftIO (equalValsPred cc (ptrToVal val') (ptrToVal val))
           addAssert p (Crucible.AssertFailureSimError "equality of aliased pointers")
 
 ------------------------------------------------------------------------
@@ -581,7 +579,7 @@ matchArg _sc cc actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
   let ptr = Crucible.LLVMPtr blk end off in
   case setupval of
     SetupVar var ->
-      do assignVar cc var (unpackPointer ptr)
+      do assignVar cc var ptr
 
     SetupNull ->
       do sym <- getSymInterface
@@ -782,7 +780,7 @@ executeAllocation cc (var, memTy) =
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
      sz <- liftIO $ Crucible.bvLit sym Crucible.ptrWidth (fromIntegral w)
-     (ptr, mem') <- liftIO (Crucible.doMalloc sym mem sz)
+     (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz)
      writeGlobal memVar mem'
      assignVar cc var ptr
 
@@ -906,8 +904,7 @@ resolveSetupValueLLVM cc sc spec sval =
      let tyenv = Map.union (csAllocations spec) (spec^.csFreshPointers)
      memTy <- liftIO $ typeOfSetupValue cc tyenv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
-     let env = fmap packPointer m
-     lval <- liftIO $ resolveSetupVal cc env tyenv sval'
+     lval  <- liftIO $ resolveSetupVal cc m tyenv sval'
      return (memTy, lval)
 
 resolveSetupValue ::
