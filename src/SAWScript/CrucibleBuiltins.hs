@@ -40,7 +40,6 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           System.IO
 
-import qualified Data.LLVM.BitCode as L
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
@@ -117,16 +116,15 @@ ppAbortedResult _ (Crucible.AbortedExit ec) =
 crucible_llvm_verify ::
   BuiltinContext         ->
   Options                ->
+  LLVMModule             ->
   String                 ->
   [CrucibleMethodSpecIR] ->
   Bool                   ->
   CrucibleSetup ()       ->
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
-crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
-  do cc <- io $ readIORef (biCrucibleContext bic) >>= \case
-              Nothing -> fail "No Crucible LLVM module loaded"
-              Just cc -> return cc
+crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
+  do cc <- setupCrucibleContext bic opts lm
      let sym = ccBackend cc
      let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
      let nm' = fromString nm
@@ -134,9 +132,9 @@ crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
      def <- case find (\d -> L.defName d == nm') (L.modDefines llmod) of
                     Nothing -> fail ("Could not find function named" ++ show nm)
                     Just decl -> return decl
-     let st0 = initialCrucibleSetupState def
+     let st0 = initialCrucibleSetupState cc def
      -- execute commands of the method spec
-     methodSpec <- (view csMethodSpec) <$> execStateT setup st0
+     methodSpec <- view csMethodSpec <$> execStateT setup st0
      let globals = ccGlobals cc
      let memOps = Crucible.memModelOps (ccLLVMContext cc)
      mem0 <- case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals of
@@ -163,18 +161,17 @@ crucible_llvm_verify bic _opts nm lemmas checkSat setup tactic =
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
   Options          ->
+  LLVMModule       ->
   String          {- ^ Name of the function -} ->
   CrucibleSetup () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
-crucible_llvm_unsafe_assume_spec bic _opts nm setup = do
-  cc <- io $ readIORef (biCrucibleContext bic) >>= \case
-           Nothing -> fail "No Crucible LLVM module loaded"
-           Just cc -> return cc
+crucible_llvm_unsafe_assume_spec bic opts lm nm setup = do
+  cc <- setupCrucibleContext bic opts lm
   let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
   let nm' = fromString nm
   let llmod = ccLLVMModule cc
-  st0 <- case initialCrucibleSetupState     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <|>
-              initialCrucibleSetupStateDecl <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) of
+  st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <|>
+              initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) of
                  Nothing -> fail ("Could not find function named" ++ show nm)
                  Just st0 -> return st0
   (view csMethodSpec) <$> execStateT setup st0
@@ -732,13 +729,10 @@ verifyPoststate sc cc mspec env0 globals ret =
 
 --------------------------------------------------------------------------------
 
-load_crucible_llvm_module :: BuiltinContext -> Options -> String -> TopLevel ()
-load_crucible_llvm_module bic opts bc_file = do
+setupCrucibleContext :: BuiltinContext -> Options -> LLVMModule -> TopLevel CrucibleContext
+setupCrucibleContext bic opts (LLVMModule _ llvm_mod) = do
   halloc <- getHandleAlloc
-  let r = biCrucibleContext bic
-  io (L.parseBitCodeFromFile bc_file) >>= \case
-    Left err -> fail (L.formatError err)
-    Right llvm_mod -> io $ do
+  io $ do
       (ctx, mtrans) <- stToIO $ Crucible.translateModule halloc llvm_mod
       let gen = Crucible.globalNonceGenerator
       let sc  = biSharedContext bic
@@ -773,7 +767,7 @@ load_crucible_llvm_module bic opts bc_file = do
             Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
-      writeIORef r $ Just
+      return $
          CrucibleContext{ ccLLVMContext = ctx
                         , ccLLVMModuleTrans = mtrans
                         , ccLLVMModule = llvm_mod
@@ -850,27 +844,19 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
 
 --------------------------------------------------------------------------------
 
-extract_crucible_llvm :: BuiltinContext -> Options -> String -> TopLevel TypedTerm
-extract_crucible_llvm bic _opts fn_name = do
-  let r  = biCrucibleContext bic
-  let sc = biSharedContext bic
-  io (readIORef r) >>= \case
-    Nothing -> fail "No Crucible LLVM module loaded"
-    Just cc ->
-      case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
-        Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-        Just cfg -> io $ do
-           extractFromCFG sc cc cfg
+extract_crucible_llvm :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel TypedTerm
+extract_crucible_llvm bic opts lm fn_name = do
+  cc <- setupCrucibleContext bic opts lm
+  case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+    Nothing  -> fail $ unwords ["function", fn_name, "not found"]
+    Just cfg -> io $ extractFromCFG (biSharedContext bic) cc cfg
 
-load_llvm_cfg :: BuiltinContext -> Options -> String -> TopLevel Crucible.AnyCFG
-load_llvm_cfg bic _opts fn_name = do
-  let r = biCrucibleContext bic
-  io (readIORef r) >>= \case
-    Nothing -> fail "No Crucible LLVM module loaded"
-    Just cc ->
-      case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
-        Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-        Just cfg -> return cfg
+load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel Crucible.AnyCFG
+load_llvm_cfg bic opts lm fn_name = do
+  cc <- setupCrucibleContext bic opts lm
+  case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+    Nothing  -> fail $ unwords ["function", fn_name, "not found"]
+    Just cfg -> return cfg
 
 --------------------------------------------------------------------------------
 
@@ -935,9 +921,8 @@ checkMemTypeCompatibility t1 t2 =
 --------------------------------------------------------------------------------
 -- Setup builtins
 
-getCrucibleContext :: BuiltinContext -> CrucibleSetup CrucibleContext
-getCrucibleContext bic =
-  lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+getCrucibleContext :: CrucibleSetup CrucibleContext
+getCrucibleContext = view csCrucibleContext <$> get
 
 currentState :: Lens' CrucibleSetupState StateSpec
 currentState f x = case x^.csPrePost of
@@ -995,7 +980,7 @@ crucible_fresh_var ::
   CrucibleSetup TypedTerm {- ^ fresh typed term -}
 crucible_fresh_var bic _opts name lty = do
   lty' <- memTypeForLLVMType bic lty
-  cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+  cctx <- getCrucibleContext
   let sc = biSharedContext bic
   let lc = ccLLVMContext cctx
   let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx lc)
@@ -1029,7 +1014,7 @@ crucible_fresh_expanded_val ::
   CrucibleSetup SetupValue
                  {- ^ elaborated setup value -}
 crucible_fresh_expanded_val bic _opts lty =
-  do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+  do cctx <- getCrucibleContext
      let sc = biSharedContext bic
          lc = ccLLVMContext cctx
      let ?lc = Crucible.llvmTypeCtx lc
@@ -1038,8 +1023,8 @@ crucible_fresh_expanded_val bic _opts lty =
 
 
 memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup Crucible.MemType
-memTypeForLLVMType bic lty =
-  do cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
+memTypeForLLVMType _bic lty =
+  do cctx <- getCrucibleContext
      let lc = ccLLVMContext cctx
      let ?lc = Crucible.llvmTypeCtx lc
      case TyCtx.liftMemType lty of
@@ -1081,8 +1066,8 @@ crucible_alloc :: BuiltinContext
                -> Options
                -> L.Type
                -> CrucibleSetup SetupValue
-crucible_alloc bic _opt lty =
-  do cctx <- getCrucibleContext bic
+crucible_alloc _bic _opt lty =
+  do cctx <- getCrucibleContext
      let lc  = Crucible.llvmTypeCtx (ccLLVMContext cctx)
      let ?dl = TyCtx.llvmDataLayout lc
      let ?lc = lc
@@ -1116,8 +1101,8 @@ crucible_points_to ::
   SetupValue     ->
   SetupValue     ->
   CrucibleSetup ()
-crucible_points_to typed bic _opt ptr val =
-  do cc <- getCrucibleContext bic
+crucible_points_to typed _bic _opt ptr val =
+  do cc <- getCrucibleContext
      let ?lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
      st <- get
      let rs = st^.csResolvedState
@@ -1144,8 +1129,8 @@ crucible_equal ::
   SetupValue     ->
   SetupValue     ->
   CrucibleSetup ()
-crucible_equal bic _opt val1 val2 =
-  do cc <- getCrucibleContext bic
+crucible_equal _bic _opt val1 val2 =
+  do cc <- getCrucibleContext
      st <- get
      let env = Map.union (csAllocations (st^.csMethodSpec))
                          (st^.csMethodSpec.csFreshPointers)
@@ -1176,9 +1161,8 @@ crucible_execute_func :: BuiltinContext
                       -> Options
                       -> [SetupValue]
                       -> CrucibleSetup ()
-crucible_execute_func bic _opt args = do
-  cctx <- lift (io (readIORef (biCrucibleContext bic))) >>= maybe (fail "No Crucible LLVM module loaded") return
-  -- ????
+crucible_execute_func _bic _opt args = do
+  cctx <- getCrucibleContext
   let ?lc   = Crucible.llvmTypeCtx (ccLLVMContext cctx)
   let ?dl   = TyCtx.llvmDataLayout ?lc
   tps <- use (csMethodSpec.csArgs)

@@ -74,13 +74,13 @@ let s20_encrypt32 : CrucibleSetup() = do {
 };
 
 let main : TopLevel () = do {
-    load_crucible_llvm_module "salsa20.bc";
-    qr     <- crucible_llvm_verify "s20_quarterround" []      false quarterround_setup   abc;
-    rr     <- crucible_llvm_verify "s20_rowround"     [qr]    false rowround_setup       abc;
-    cr     <- crucible_llvm_verify "s20_columnround"  [qr]    false columnround_setup    abc;
-    dr     <- crucible_llvm_verify "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
-    s20    <- crucible_llvm_verify "s20_hash"         [dr]    false salsa20_setup        abc;
-    s20e32 <- crucible_llvm_verify "s20_expand32"     [s20]   true salsa20_expansion_32 abc;
-    s20encrypt <- crucible_llvm_verify "s20_crypt32"  [s20e32] true s20_encrypt32       abc;
+    m <- llvm_load_module "salsa20.bc";
+    qr     <- crucible_llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
+    rr     <- crucible_llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
+    cr     <- crucible_llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
+    dr     <- crucible_llvm_verify m "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
+    s20    <- crucible_llvm_verify m "s20_hash"         [dr]    false salsa20_setup        abc;
+    s20e32 <- crucible_llvm_verify m "s20_expand32"     [s20]   true salsa20_expansion_32 abc;
+    s20encrypt <- crucible_llvm_verify m "s20_crypt32"  [s20e32] true s20_encrypt32       abc;
     print "Done!";
 };

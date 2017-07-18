@@ -53,7 +53,6 @@ import Verifier.SAW.Cryptol (importType, emptyEnv)
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
-import SAWScript.Builtins
 import SAWScript.TypedTerm
 import SAWScript.Utils
 

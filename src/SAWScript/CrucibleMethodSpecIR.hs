@@ -45,6 +45,10 @@ import qualified Lang.Crucible.CFG.Common as Crucible
 import SAWScript.SolverStats
 import SAWScript.TypedTerm
 
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
+import qualified Lang.Crucible.LLVM.Translation as Crucible
+import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
@@ -169,7 +173,7 @@ methodSpecToTerm sc spec =
       -- should be contained in variables bound by pre-points-tos)
 
       -- 3. abstract the free variables in each post-points-to
-      
+
       -- 4. put every abstracted post-points-to in a tuple
 
       -- 5. Create struct type with fields being names of free variables
@@ -189,7 +193,22 @@ data CrucibleSetupState =
   ,_csPrePost       :: PrePost
   ,_csResolvedState :: ResolvedState
   ,_csMethodSpec    :: CrucibleMethodSpecIR
+  ,_csCrucibleContext :: CrucibleContext
   }
+
+type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
+
+data CrucibleContext =
+  CrucibleContext
+  { ccLLVMContext     :: Crucible.LLVMContext
+  , ccLLVMModule      :: L.Module
+  , ccLLVMModuleTrans :: Crucible.ModuleTranslation
+  , ccBackend         :: Sym
+  , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
+  , ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
+  , ccGlobals         :: Crucible.SymGlobalState Sym
+  }
+
 
 --------------------------------------------------------------------------------
 
@@ -291,22 +310,22 @@ initialDeclCrucibleMethodSpecIR dec =
   ,_csSolverStats     = mempty
   }
 
-initialCrucibleSetupState :: L.Define -> CrucibleSetupState
-initialCrucibleSetupState def =
-  CrucibleSetupState
-  {_csVarCounter    = AllocIndex 0
-  ,_csPrePost       = PreState
-  ,_csResolvedState = emptyResolvedState
-  ,_csMethodSpec    = initialDefCrucibleMethodSpecIR def
+initialCrucibleSetupState :: CrucibleContext -> L.Define -> CrucibleSetupState
+initialCrucibleSetupState cc def = CrucibleSetupState
+  { _csVarCounter      = AllocIndex 0
+  , _csPrePost         = PreState
+  , _csResolvedState   = emptyResolvedState
+  , _csMethodSpec      = initialDefCrucibleMethodSpecIR def
+  , _csCrucibleContext = cc
   }
 
-initialCrucibleSetupStateDecl :: L.Declare -> CrucibleSetupState
-initialCrucibleSetupStateDecl dec =
-  CrucibleSetupState
-  {_csVarCounter    = AllocIndex 0
-  ,_csPrePost       = PreState
-  ,_csResolvedState = emptyResolvedState
-  ,_csMethodSpec    = initialDeclCrucibleMethodSpecIR dec
+initialCrucibleSetupStateDecl :: CrucibleContext -> L.Declare -> CrucibleSetupState
+initialCrucibleSetupStateDecl cc dec = CrucibleSetupState
+  { _csVarCounter      = AllocIndex 0
+  , _csPrePost         = PreState
+  , _csResolvedState   = emptyResolvedState
+  , _csMethodSpec      = initialDeclCrucibleMethodSpecIR dec
+  , _csCrucibleContext = cc
   }
 
 
