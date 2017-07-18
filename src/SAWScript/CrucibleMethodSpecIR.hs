@@ -1,6 +1,6 @@
 {- |
 Module      : $Header$
-Description : Provides typechecked representation for Crucible/LLVM function
+Description : Provides type-checked representation for Crucible/LLVM function
               specifications and function for creating it from AST
               representation.
 Maintainer  : atomb
@@ -33,6 +33,7 @@ import           Control.Lens
 import           Lang.Crucible.LLVM.MemType
 import qualified Text.LLVM.AST as L
 import           Data.IORef
+import           Data.Monoid ((<>))
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
@@ -125,12 +126,19 @@ data SetupCondition where
   deriving (Show)
 
 -- | Verification state (either pre- or post-) specification
-data StateSpec = StateSpec {_csAllocs     :: Map AllocIndex MemType -- ^ allocated vars
-                           ,_csPointsTos  :: [PointsTo] -- ^ points-to statements
-                           ,_csConditions :: [SetupCondition] -- ^ equality and assertion/assumptuon statements
-                           ,_csFreshVars  :: [TypedTerm] -- ^ fresh variables created in this state
-                           }
-                 deriving (Show)
+data StateSpec = StateSpec
+  -- | Allocated pointers
+  { _csAllocs        :: Map AllocIndex MemType
+  -- | Symbolic pointers
+  , _csFreshPointers :: Map AllocIndex MemType
+  -- | points-to statements
+  , _csPointsTos     :: [PointsTo]
+  -- | equality, propositions, and ghost-variable conditions
+  , _csConditions    :: [SetupCondition]
+  -- | faresh variables created in this state
+  , _csFreshVars     :: [TypedTerm]
+  }
+  deriving (Show)
 
 data CrucibleMethodSpecIR =
   CrucibleMethodSpec
@@ -139,7 +147,6 @@ data CrucibleMethodSpecIR =
   , _csRet             :: L.Type
   , _csPreState        :: StateSpec -- ^ state before the function runs
   , _csPostState       :: StateSpec -- ^ state after the function runs
-  , _csFreshPointers   :: Map AllocIndex MemType
   , _csArgBindings     :: Map Integer (SymType, SetupValue) -- ^ function arguments
   , _csRetValue        :: Maybe SetupValue                  -- ^ function return value
   , _csSolverStats     :: SolverStats                       -- ^ statistics about the proof that produced this
@@ -161,7 +168,9 @@ makeLenses ''CrucibleMethodSpecIR
 makeLenses ''StateSpec
 
 csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex MemType
-csAllocations cs = Map.union (_csAllocs $ _csPreState cs) (_csAllocs $ _csPostState cs)
+csAllocations
+  = Map.unions
+  . toListOf ((csPreState <> csPostState) . (csAllocs <> csFreshPointers))
 
 -- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core. 
 methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
@@ -276,11 +285,13 @@ intrinsics =
 -------------------------------------------------------------------------------
 
 initialStateSpec :: StateSpec
-initialStateSpec =  StateSpec {_csAllocs = Map.empty
-                              ,_csPointsTos = []
-                              ,_csConditions = []
-                              ,_csFreshVars = []
-                              }
+initialStateSpec =  StateSpec
+  { _csAllocs        = Map.empty
+  , _csFreshPointers = Map.empty
+  , _csPointsTos     = []
+  , _csConditions    = []
+  , _csFreshVars     = []
+  }
 
 initialDefCrucibleMethodSpecIR :: L.Define -> CrucibleMethodSpecIR
 initialDefCrucibleMethodSpecIR def =
@@ -290,7 +301,6 @@ initialDefCrucibleMethodSpecIR def =
   ,_csRet             = L.defRetType def
   ,_csPreState        = initialStateSpec
   ,_csPostState       = initialStateSpec
-  ,_csFreshPointers   = Map.empty
   ,_csArgBindings     = Map.empty
   ,_csRetValue        = Nothing
   ,_csSolverStats     = mempty
@@ -304,7 +314,6 @@ initialDeclCrucibleMethodSpecIR dec =
   ,_csRet             = L.decRetType dec
   ,_csPreState        = initialStateSpec
   ,_csPostState       = initialStateSpec
-  ,_csFreshPointers   = Map.empty
   ,_csArgBindings     = Map.empty
   ,_csRetValue        = Nothing
   ,_csSolverStats     = mempty

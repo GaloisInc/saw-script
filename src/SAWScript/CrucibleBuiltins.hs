@@ -49,7 +49,7 @@ import qualified Data.Parameterized.Nonce as Crucible
 
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
-  (AnyCFG(..), SomeCFG(..), BaseTypeRepr(..), TypeRepr(..), cfgHandle,
+  (AnyCFG(..), SomeCFG(..), TypeRepr(..), cfgHandle,
    UnitType, EmptyCtx, asBaseType, AsBaseType(..), IntrinsicType, GlobalVar,
    SymbolRepr, knownSymbol, freshGlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible
@@ -61,7 +61,6 @@ import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
-import qualified Lang.Crucible.Solver.Symbol as Crucible
 
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
@@ -236,7 +235,9 @@ verifyPrestate cc mspec globals = do
 
   -- Allocate LLVM memory for each 'crucible_alloc'
   (env1, mem') <- runStateT (traverse (doAlloc cc) (mspec^.csPreState.csAllocs)) mem
-  env2 <- Map.traverseWithKey (\k _ -> setupFreshPointer cc k) (mspec^.csFreshPointers)
+  env2 <- Map.traverseWithKey
+            (\k _ -> executeFreshPointer cc k)
+            (mspec^.csPreState.csFreshPointers)
   let env = Map.union env1 env2
 
   mem'' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem'
@@ -245,20 +246,6 @@ verifyPrestate cc mspec globals = do
   args <- resolveArguments cc mspec env
   return (args, cs, env, globals2)
 
-
--- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
--- be NULL.
-setupFreshPointer ::
-  CrucibleContext {- ^ Crucible context       -} ->
-  AllocIndex      {- ^ SetupVar id            -} ->
-  IO LLVMPtr      {- ^ Symbolic pointer value -}
-setupFreshPointer cc (AllocIndex i) =
-  do let sym = ccBackend cc
-         mkName base = Crucible.systemSymbol (base ++ show i ++ "!")
-     blk <- Crucible.freshConstant sym (mkName "blk") Crucible.BaseNatRepr
-     end <- Crucible.freshConstant sym (mkName "end") (Crucible.BaseBVRepr Crucible.ptrWidth)
-     off <- Crucible.freshConstant sym (mkName "off") (Crucible.BaseBVRepr Crucible.ptrWidth)
-     return (Crucible.LLVMPtr blk end off)
 
 resolveArguments ::
   (?lc :: TyCtx.LLVMContext) =>
@@ -690,19 +677,15 @@ verifyPoststate ::
 verifyPoststate sc cc mspec env0 globals ret =
 
   do overrideResult <- runOverrideMatcher sym globals env0 Map.empty $
-       do case (ret, mspec ^. csRetValue) of
-            (Nothing     , Just _ ) -> fail "verifyPoststate: unexpected crucible_return specification"
-            (Just _      , Nothing) -> fail "verifyPoststate: missing crucible_return specification"
-            (Nothing     , Nothing) -> return ()
-            (Just (rty,r), Just expect) -> matchArg sc cc r rty expect
+       do matchResult
           learnCond sc cc mspec (mspec ^. csPostState)
 
      st <- case overrideResult of
              Right ((), st) -> return st
              Left e -> throwIO e
 
-     for_ (_asserts st) $ \(p, r) ->
-        Crucible.sbAddAssertion (ccBackend cc) p r
+     for_ (view osAsserts st) $ \(p, r) ->
+       Crucible.sbAddAssertion (ccBackend cc) p r
 
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
@@ -725,6 +708,12 @@ verifyPoststate sc cc mspec env0 globals ret =
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
+    matchResult =
+      case (ret, mspec ^. csRetValue) of
+        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
+        (Just _      , Nothing)     -> fail "verifyPoststate: missing crucible_return specification"
+        (Nothing     , Nothing)     -> return ()
+        (Just (rty,r), Just expect) -> matchArg sc cc r rty expect
 
 
 --------------------------------------------------------------------------------
@@ -898,10 +887,10 @@ diffMemTypesList i ((x, y) : ts) =
 showMemTypeDiff :: ([Maybe Int], Crucible.MemType, Crucible.MemType) -> String
 showMemTypeDiff (path, l, r) = showPath path
   where
-    showStep Nothing = "element type"
+    showStep Nothing  = "element type"
     showStep (Just i) = "field " ++ show i
-    showPath [] = ""
-    showPath [x] = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
+    showPath []       = ""
+    showPath [x]      = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
     showPath (x : xs) = showStep x ++ " -> " ++ showPath xs
 
 -- | Succeed if the types have compatible memory layouts. Otherwise,
@@ -1091,7 +1080,7 @@ crucible_fresh_pointer bic _opt lty =
 constructFreshPointer :: Crucible.MemType -> CrucibleSetup SetupValue
 constructFreshPointer memTy =
   do n <- csVarCounter <<%= nextAllocIndex
-     csMethodSpec.csFreshPointers.at n ?= memTy
+     currentState.csFreshPointers.at n ?= memTy
      return (SetupVar n)
 
 crucible_points_to ::
@@ -1117,9 +1106,7 @@ crucible_points_to typed _bic _opt ptr val =
            Just lhsTy -> return lhsTy
            Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
        _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-     let valenv = Map.union (csAllocations (st^.csMethodSpec))
-                            (st^.csMethodSpec.csFreshPointers)
-     valTy <- typeOfSetupValue cc valenv val
+     valTy <- typeOfSetupValue cc env val
      when typed (checkMemTypeCompatibility lhsTy valTy)
      addPointsTo (PointsTo ptr val)
 
@@ -1132,8 +1119,7 @@ crucible_equal ::
 crucible_equal _bic _opt val1 val2 =
   do cc <- getCrucibleContext
      st <- get
-     let env = Map.union (csAllocations (st^.csMethodSpec))
-                         (st^.csMethodSpec.csFreshPointers)
+     let env = csAllocations (st^.csMethodSpec)
      ty1 <- typeOfSetupValue cc env val1
      ty2 <- typeOfSetupValue cc env val2
      checkMemTypeCompatibility ty1 ty2

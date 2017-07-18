@@ -10,7 +10,21 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module SAWScript.CrucibleOverride (OverrideMatcher(..), unpackPointer, setupValueSub, _asserts, learnCond, runOverrideMatcher, matchArg, methodSpecHandler, valueToSC) where
+module SAWScript.CrucibleOverride
+  ( OverrideMatcher(..)
+  , runOverrideMatcher
+
+  , unpackPointer
+
+  , setupValueSub
+  , executeFreshPointer
+  , osAsserts
+
+  , learnCond
+  , matchArg
+  , methodSpecHandler
+  , valueToSC
+  ) where
 
 import           Control.Lens
 import           Control.Exception
@@ -35,7 +49,8 @@ import qualified Data.Parameterized.Nonce as Nonce
 import qualified Text.LLVM.AST as L
 
 import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar)
+                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar,
+                    BaseTypeRepr(..))
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
@@ -49,6 +64,7 @@ import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
+import qualified Lang.Crucible.Solver.Symbol as Crucible
 import qualified Lang.Crucible.ProgramLoc as Crucible
 
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -79,10 +95,10 @@ data OverrideState = OverrideState
   , _termSub :: Map VarIndex Term
 
     -- | Accumulated assertions
-  , _asserts :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
+  , _osAsserts :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
 
     -- | Accumulated assumptions
-  , _assumes :: [Crucible.Pred Sym]
+  , _osAssumes :: [Crucible.Pred Sym]
 
     -- | Symbolic simulation state
   , _syminterface :: Sym
@@ -121,8 +137,8 @@ initialState ::
   Map VarIndex Term            {- ^ initial term substituion       -} ->
   OverrideState
 initialState sym globals allocs terms = OverrideState
-  { _asserts         = []
-  , _assumes         = []
+  { _osAsserts       = []
+  , _osAssumes       = []
   , _syminterface    = sym
   , _overrideGlobals = globals
   , _termSub         = terms
@@ -135,12 +151,12 @@ addAssert ::
   Crucible.Pred Sym       {- ^ property -} ->
   Crucible.SimErrorReason {- ^ reason   -} ->
   OverrideMatcher ()
-addAssert p r = OM (asserts %= cons (p,r))
+addAssert p r = OM (osAsserts %= cons (p,r))
 
 addAssume ::
   Crucible.Pred Sym       {- ^ property -} ->
   OverrideMatcher ()
-addAssume p = OM (assumes %= cons p)
+addAssume p = OM (osAssumes %= cons p)
 
 readGlobal ::
   Crucible.GlobalVar tp ->
@@ -196,15 +212,15 @@ methodSpecHandler sc cc css retTy = do
 
   liftIO $
     do -- assert the disjunction of all the preconditions
-       do ps <- traverse (conjunction sym . toListOf (_2 . asserts . folded . _1)) outputs
+       do ps <- traverse (conjunction sym . toListOf (_2 . osAsserts . folded . _1)) outputs
           p  <- disjunction sym ps
           Crucible.sbAddAssertion (ccBackend cc) p
             (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
 
        -- Postcondition can be used if precondition holds
        for_ outputs $ \(_,output) ->
-         do p       <- conjunction sym (toListOf (asserts . folded . _1) output)
-            q       <- conjunction sym (view assumes output)
+         do p       <- conjunction sym (toListOf (osAsserts . folded . _1) output)
+            q       <- conjunction sym (view osAssumes output)
             p_imp_q <- Crucible.impliesPred sym p q
             Crucible.sbAddAssumption (ccBackend cc) p_imp_q
 
@@ -242,14 +258,14 @@ muxReturnValue ::
 muxReturnValue _   _     ((val,_):|[]) = return val
 muxReturnValue sym retTy ((val,x):|y:z) =
   do ys   <- muxReturnValue sym retTy (y:|z)
-     here <- conjunction sym (map fst (view asserts x))
+     here <- conjunction sym (map fst (view osAsserts x))
      Crucible.muxRegForType sym intrinsics retTy here val ys
 
 muxGlobal :: Sym -> NonEmpty OverrideState -> IO (Crucible.SymGlobalState Sym)
 muxGlobal _ (x:|[]) = return (view overrideGlobals x)
 muxGlobal sym (x:|y:z) =
   do ys   <- muxGlobal sym (y:|z)
-     here <- conjunction sym (toListOf (asserts . folded . _1) x)
+     here <- conjunction sym (toListOf (osAsserts . folded . _1) x)
      globalMuxUnleveled sym here (view overrideGlobals x) ys
 
 -- | This mux function can handle cases wher the right-hand side has
@@ -306,7 +322,7 @@ learnCond :: (?lc :: TyCtx.LLVMContext)
 learnCond sc cc cs ss = do
   matchPointsTos sc cc cs (ss^.csPointsTos)
   traverse_ (learnSetupCondition sc cc cs) (ss^.csConditions)
-  enforceDisjointness cc cs
+  enforceDisjointness cc ss
   enforceCompleteSubstitution ss
 
 
@@ -345,6 +361,12 @@ executeCond :: (?lc :: TyCtx.LLVMContext)
             -> OverrideMatcher ()
 executeCond sc cc cs ss = do
   refreshTerms sc ss
+
+  ptrs <- liftIO $ Map.traverseWithKey
+            (\k _memty -> executeFreshPointer cc k)
+            (ss^.csFreshPointers)
+  OM (setupValueSub %= Map.union ptrs)
+
   traverse_ (executeAllocation cc) (Map.assocs (ss^.csAllocs))
   traverse_ (executePointsTo sc cc cs) (ss^.csPointsTos)
   traverse_ (executeSetupCondition sc cc cs) (ss^.csConditions)
@@ -370,11 +392,12 @@ refreshTerms sc ss =
 
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
-enforceDisjointness :: CrucibleContext -> CrucibleMethodSpecIR -> OverrideMatcher ()
-enforceDisjointness cc spec =
+enforceDisjointness ::
+  CrucibleContext -> StateSpec -> OverrideMatcher ()
+enforceDisjointness cc ss =
   do sym <- getSymInterface
      sub <- OM (use setupValueSub)
-     let m = Map.elems $ Map.intersectionWith (,) (csAllocations spec) sub
+     let m = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
 
      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
@@ -711,7 +734,7 @@ learnPointsTo ::
   PointsTo                   ->
   OverrideMatcher ()
 learnPointsTo sc cc spec (PointsTo ptr val) =
-  do let tyenv = Map.union (csAllocations spec) (spec^.csFreshPointers)
+  do let tyenv = csAllocations spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv val
      (_memTy, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
      -- In case the types are different (from crucible_points_to_untyped)
@@ -870,6 +893,22 @@ executePred sc cc tt =
 
 ------------------------------------------------------------------------
 
+-- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
+-- be NULL.
+executeFreshPointer ::
+  CrucibleContext {- ^ Crucible context       -} ->
+  AllocIndex      {- ^ SetupVar allocation ID -} ->
+  IO LLVMPtr      {- ^ Symbolic pointer value -}
+executeFreshPointer cc (AllocIndex i) =
+  do let mkName base = Crucible.systemSymbol (base ++ show i ++ "!")
+         sym         = ccBackend cc
+     blk <- Crucible.freshConstant sym (mkName "blk") Crucible.BaseNatRepr
+     end <- Crucible.freshConstant sym (mkName "end") (Crucible.BaseBVRepr Crucible.ptrWidth)
+     off <- Crucible.freshConstant sym (mkName "off") (Crucible.BaseBVRepr Crucible.ptrWidth)
+     return (Crucible.LLVMPtr blk end off)
+
+------------------------------------------------------------------------
+
 -- | Map the given substitution over all 'SetupTerm' constructors in
 -- the given 'SetupValue'.
 instantiateSetupValue ::
@@ -900,7 +939,7 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     let tyenv = Map.union (csAllocations spec) (spec^.csFreshPointers)
+     let tyenv = csAllocations spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      lval  <- liftIO $ resolveSetupVal cc m tyenv sval'
