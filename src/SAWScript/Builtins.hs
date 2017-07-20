@@ -405,7 +405,7 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
 writeUnintSMTLib2 unints sc f t = do
   (_, _, l) <- prepSBV sc unints t
-  txt <- SBV.compileToSMTLib SBV.SMTLib2 True l
+  txt <- SBV.generateSMTBenchmark True l
   writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()
@@ -814,7 +814,6 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
         Universal -> return (SV.Unsat stats, stats, Nothing)
     SBV.Unknown {} -> fail "Prover returned Unknown"
     SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
-    SBV.TimeOut {} -> fail "Prover timed out"
 
 getLabels :: SolverStats -> [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
 getLabels stats ls d argNames =

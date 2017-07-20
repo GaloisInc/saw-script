@@ -71,7 +71,6 @@ import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 
 import Lang.Crucible.Utils.MonadST
--- import           Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
@@ -93,8 +92,6 @@ import SAWScript.CrucibleResolveSetupValue
 
 
 type MemImpl = Crucible.MemImpl Sym Crucible.PtrWidth
-
---import qualified SAWScript.LLVMBuiltins as LB
 
 show_cfg :: Crucible.AnyCFG -> String
 show_cfg (Crucible.AnyCFG cfg) = show cfg
@@ -140,7 +137,6 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
        Nothing -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem0
-     --io $ putStrLn $ unlines [ "Method Spec:", show methodSpec]
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
      -- save initial path condition
@@ -185,8 +181,7 @@ verifyObligations cc mspec tactic assumes asserts = do
   let sym = ccBackend cc
   st     <- io $ readIORef $ Crucible.sbStateManager sym
   let sc  = Crucible.saw_ctx st
-  t      <- io $ scBool sc True
-  assume <- io $ foldM (scAnd sc) t assumes
+  assume <- io $ scAndList sc assumes
   let nm  = show (L.ppSymbol (mspec^.csName))
   stats <- forM asserts $ \(msg, assert) -> do
     goal   <- io $ scImplies sc assume assert
@@ -659,9 +654,8 @@ matchList sc cc tyenv xs vs = -- precondition: length xs = length vs
 
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
-scAndList sc [] = scBool sc True
-scAndList _sc [x] = return x
-scAndList sc (x : xs) = scAnd sc x =<< scAndList sc xs
+scAndList sc []       = scBool sc True
+scAndList sc (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
 
@@ -694,16 +688,10 @@ verifyPoststate sc cc mspec env0 globals ret =
   where
     sym = ccBackend cc
 
-    scAll f xs = scAndN =<< traverse f xs
-
-    scAndN xs =
-      do true <- scBool sc True
-         foldM (scAnd sc) true xs
-
     verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
       fail "Found an assumption in final proof obligation list"
     verifyObligation (hyps, (Crucible.Assertion _ concl (Just err))) = do
-      hypTerm    <- scAll (Crucible.toSC sym) hyps
+      hypTerm    <- scAndList sc =<< traverse (Crucible.toSC sym) hyps
       conclTerm  <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)

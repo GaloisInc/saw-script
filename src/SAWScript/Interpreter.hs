@@ -1489,17 +1489,25 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
-    [ "Create a fresh symbolic variable that can be used in Crucible."
-    , "The first parameter is the name of the variable that is only used"
-    , "for debug printing." ]
+    [ "Create a fresh variable for use within a Crucible specification. The"
+    , "name is used only for pretty-printing."
+    ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc)
-    [ "TODO" ]
+    [ "Declare that an object of the given type should be allocated in a"
+    , "Crucible specification. Before `crucible_execute_func`, this states"
+    , "that the function expects the object to be allocated before it runs."
+    , "After `crucible_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
-    [ "TODO" ]
+    [ "Create a fresh pointer value for use in a Crucible specification."
+    , "This works like `crucible_alloc` except that the pointer is not"
+    , "required to point to allocated memory."
+    ]
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_expanded_val)
@@ -1525,15 +1533,23 @@ primitives = Map.fromList
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
-    [ "TODO" ]
+    [ "State that two Crucible values should be equal. Can be used as either"
+    , "a pre-condition or a post-condition. It is semantically equivalent to"
+    , "a `crucible_precond` or `crucible_postcond` statement which is an"
+    , "equality predicate, but potentially more efficient."
+    ]
 
   , prim "crucible_precond" "Term -> CrucibleSetup ()"
     (pureVal crucible_precond)
-    [ "TODO" ]
+    [ "State that the given predicate is a pre-condition on execution of the"
+    , "function being verified."
+    ]
 
   , prim "crucible_postcond" "Term -> CrucibleSetup ()"
     (pureVal crucible_postcond)
-    [ "TODO" ]
+    [ "State that the given predicate is a post-condition of execution of the"
+    , "function being verified."
+    ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
@@ -1601,7 +1617,7 @@ primitives = Map.fromList
   , prim "crucible_term"
     "Term -> SetupValue"
     (pureVal CIR.SetupTerm)
-    [ "TODO" ]
+    [ "Construct a `SetupValue` from a `Term`." ]
 
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
