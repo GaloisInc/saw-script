@@ -2,7 +2,7 @@
 {-# LANGUAGE GADTs #-}
 
 module SAWScript.CrucibleResolveSetupValue
-  ( LLVMVal
+  ( LLVMVal, LLVMPtr
   , resolveSetupVal
   , typeOfLLVMVal
   , typeOfSetupValue
@@ -10,6 +10,7 @@ module SAWScript.CrucibleResolveSetupValue
   , resolveSAWPred
   , equalValsPred
   , packPointer
+  , ptrToVal
   ) where
 
 import Control.Lens
@@ -60,6 +61,7 @@ import SAWScript.CrucibleMethodSpecIR
 --import qualified SAWScript.LLVMBuiltins as LB
 
 type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
+type LLVMPtr = Crucible.LLVMPtr Sym Crucible.PtrWidth
 
 typeOfSetupValue ::
   Monad m =>
@@ -82,7 +84,7 @@ typeOfSetupValue cc env val =
         _ -> fail "typeOfSetupValue: expected monomorphic term"
     SetupStruct vs ->
       do memTys <- traverse (typeOfSetupValue cc env) vs
-         let si = Crucible.mkStructInfo dl False memTys
+         let si = Crucible.mkStructInfo dl False memTys []
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
@@ -129,16 +131,19 @@ typeOfSetupValue cc env val =
     lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
     dl = TyCtx.llvmDataLayout lc
 
+-- | Translate a SetupValue into a Crucible LLVM value, resolving
+-- references
 resolveSetupVal ::
   CrucibleContext        ->
-  Map AllocIndex LLVMVal ->
+  Map AllocIndex LLVMPtr ->
   Map AllocIndex Crucible.MemType ->
   SetupValue             ->
   IO LLVMVal
 resolveSetupVal cc env tyenv val =
   case val of
     SetupVar i
-      | Just val' <- Map.lookup i env -> return val'
+      | Just (Crucible.LLVMPtr blk end off) <- Map.lookup i env ->
+                return (Crucible.LLVMValPtr blk end off)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
@@ -271,6 +276,9 @@ resolveSAWTerm cc tp tm =
     sym = ccBackend cc
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
+ptrToVal :: LLVMPtr -> LLVMVal
+ptrToVal (Crucible.LLVMPtr blk end off) = Crucible.LLVMValPtr blk end off
+
 packPointer ::
   Crucible.RegValue Sym Crucible.LLVMPointerType ->
   Crucible.LLVMVal Sym Crucible.PtrWidth
@@ -294,7 +302,7 @@ toLLVMType dl tp =
       Cryptol.TVStream _tp' -> Nothing
       Cryptol.TVTuple tps -> do
         tps' <- mapM (toLLVMType dl) tps
-        let si = Crucible.mkStructInfo dl False tps'
+        let si = Crucible.mkStructInfo dl False tps' []
         return (Crucible.StructType si)
       Cryptol.TVRec _flds -> Nothing -- FIXME
       Cryptol.TVFun _ _ -> Nothing
