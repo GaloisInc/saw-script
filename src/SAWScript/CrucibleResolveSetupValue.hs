@@ -84,7 +84,7 @@ typeOfSetupValue cc env val =
         _ -> fail "typeOfSetupValue: expected monomorphic term"
     SetupStruct vs ->
       do memTys <- traverse (typeOfSetupValue cc env) vs
-         let si = Crucible.mkStructInfo dl False memTys
+         let si = Crucible.mkStructInfo dl False memTys []
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
@@ -302,7 +302,7 @@ toLLVMType dl tp =
       Cryptol.TVStream _tp' -> Nothing
       Cryptol.TVTuple tps -> do
         tps' <- mapM (toLLVMType dl) tps
-        let si = Crucible.mkStructInfo dl False tps'
+        let si = Crucible.mkStructInfo dl False tps' []
         return (Crucible.StructType si)
       Cryptol.TVRec _flds -> Nothing -- FIXME
       Cryptol.TVFun _ _ -> Nothing
