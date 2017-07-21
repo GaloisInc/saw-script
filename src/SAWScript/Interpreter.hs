@@ -1654,6 +1654,13 @@ primitives = Map.fromList
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
+
+  , prim "generate_easycrypt"
+    "Term -> TopLevel ()"
+    (pureVal generate_easycrypt)
+    [ "Print out a rendering of the given term in EasyCrypt syntax, if"
+    , "possible, or an error message otherwise."
+    ]
   ]
 
   where

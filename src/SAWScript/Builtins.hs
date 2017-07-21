@@ -52,6 +52,7 @@ import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Constant
 import Verifier.SAW.Grammar (parseSAWTerm)
+import qualified Verifier.SAW.Export.EasyCrypt as EC
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue ( FiniteType(..), FiniteValue(..)
                                 , scFiniteValue, fvVec, readFiniteValues, readFiniteValue
@@ -1349,3 +1350,9 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
       return (n', TypedTerm s' t')
+
+generate_easycrypt :: TypedTerm -> TopLevel ()
+generate_easycrypt t =
+    case EC.translateTermDoc (ttTerm t) of
+      Left err -> io $ putStrLn $ "Error translating term: " ++ show err
+      Right doc -> io $ putStrLn $ show doc
