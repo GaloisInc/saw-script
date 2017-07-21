@@ -2346,3 +2346,325 @@ simplification of pointer expressions on (with parameter `true`) or off
 ~~~~
 llvm_simplify_addrs : Bool -> LLVMSetup ()
 ~~~~
+
+# LLVM Verification Using Crucible
+
+The verification commands presented for Java and LLVM so far use
+language-specific symbolic execution infrastructure. More recently, we
+have developed a new library for symbolic execution of imperative
+programs that is intended to be relatively agnostic to the specific
+source language in question. It exposes an intermediate representation
+based on control-flow graphs containing relatively simple instructions
+that can be used as the target of translation from a variety of source
+languages. We have successfully used it for LLVM, Matlab, and a variety
+of machine code ISAs, and have ongoing efforts to use it for several
+other languages.
+
+In addition to being language-agnostic, Crucible has a larger feature
+set and generally better performance than the previous symbolic
+execution engines for Java and LLVM.
+
+As an alternative to the LLVM verification commands presented earlier,
+an experimental set of commands for doing verification using Crucible
+also exist. At the moment, the key command is `crucible_llvm_verify`,
+with roughly similar functionality to `llvm_verify`. Counterparts of
+`llvm_extract` and `llvm_symexec` do not currently exist, but are
+planned.
+
+As with `llvm_verify`, `crucible_llvm_verify` requires a specification
+as input, describing what the function under analysis is intended to do.
+The mechanism for setting up a specification is similar to that for
+`llvm_verify`, but uses a slightly different set of commands.
+
+The most significant difference is that creating fresh symbolic values,
+describing allocation, and describing the initial value of allocated
+memory are distinct operations. This can sometimes result in more
+verbose specifications, but is more flexible and more amenable to
+abstraction. So, with a good set of common patterns encapsulated in
+functions, specifications can ultimately become more concise and
+understandable.
+
+## Running a Verification
+
+Verification with Crucible is controlled by the `crucible_llvm_verify`
+command.
+
+~~~~
+crucible_llvm_verify : LLVMModule ->
+                       String ->
+                       [CrucibleMethodSpec] ->
+                       Bool ->
+                       CrucibleSetup () ->
+                       ProofScript SatResult ->
+                       TopLevel CrucibleMethodSpec
+~~~~
+
+The first two arguments specify the module and function name to verify,
+as with `llvm_verify`. The third argument specifies the list of
+already-verified specifications to use as overrides for compositional
+verification (though note that the types of specifications used by
+`llvm_verify` and `crucible_llvm_verify` are different, so they can't be
+used interchangeably). The fourth argument specifies whether to do path
+satisfiability checking, and the fifth gives the specification of the
+function to be verified. Finally, the last argument gives the proof
+script to use for verification (which is separated from the
+specification itself, unlike `llvm_verify`). The result is a proved
+specification that can be used to simplify verification of functions
+that call this one.
+
+Now we describe how to construct a value of type `CrucibleSetup ()`.
+
+## Structure of a Specification
+
+A specifications for Crucible consists of three logical components:
+
+* A specification of the initial state before execution of the function.
+
+* A description of how to call the function within that state.
+
+* A specification of the expected final value of the program state.
+
+These three portions of the specification are written in sequence within
+a `do` block of `CrucibleSetup` type. The command
+`crucible_execute_func` separates the specification of the initial state
+from the specification of the final state, and specifies the arguments
+to the function in terms of the initial state. Most of the commands
+available for state description will work either before or after
+`crucible_execute_func`, though with slightly different meaning.
+
+## Creating Fresh Variables
+
+In any case where you want to prove a property of a function for an
+entire class of inputs (perhaps all inputs) rather than concrete values,
+the initial values of at least some elements of the program state must
+contain fresh variables. These are created in a specification with the
+`crucible_fresh_var` command.
+
+~~~~
+crucible_fresh_var : String -> LLVMType -> CrucibleSetup Term
+~~~~
+
+The first parameter is a name, used only for presentation. It's possible
+(though not recommended) to create multiple variables with the same
+name, but SAW will distinguish between them internally. The second
+parameter is the LLVM type of the variable. The resulting `Term` can be
+used in various subsequent commands.
+
+## The SetupValue Type
+
+Many specifications require reasoning about both pure values and about
+the configuration of the heap. The `SetupValue` type corresponds to
+values that can occur during symbolic execution, which includes both
+`Term` values, pointers, and composite types consisting of either of
+these (both structures and arrays).
+
+The `crucible_term` function creates a `SetupValue` from a `Term`:
+
+~~~~
+crucible_term : Term -> SetupValue
+~~~~
+
+## Executing
+
+Once the initial state has been configured, the `crucible_execute_func`
+command specifies the parameters of the function being analyzed in terms
+of the state elements already configured.
+
+~~~~
+crucible_execute_func : [SetupValue] -> CrucibleSetup ()
+~~~~
+
+## Return Values
+
+The `crucible_points_to` command can be used to specify changes to
+portions of the memory accessed by pointer. For return values, however,
+use the `crucible_return` command instead.
+
+~~~~
+crucible_return : SetupValue -> CrucibleSetup ()
+~~~~
+
+## A First Simple Example
+
+The commands introuduced so far are sufficient to verify simple programs
+that do not use pointers (or that use them only internally). Consider,
+for instance the program that adds its two arguments together:
+
+~~~~
+uint32_t add(uint32_t x, uint32_t y) {
+    return x + y;
+}
+~~~~
+
+We can specify this function's expected behavior as follows:
+
+~~~~
+let add_setup = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    crucible_execute_func [crucible_term x, crucible_term y];
+    crucible_return (crucible_term {{ x + y : [32] }});
+};
+~~~~
+
+We can then compile the C file `add.c` into the bitcode file `add.bc`
+and verify it with ABC:
+
+~~~~
+m <- llvm_load_module "add.bc";
+add_ms <- crucible_llvm_verify m "add" [] false add_setup abc;
+~~~~
+
+Now say we have a doubling function written in terms of `add`:
+
+~~~~
+uint32_t dbl(uint32_t x) {
+    return add(x, x);
+}
+~~~~
+
+It has a similar specification:
+
+~~~~
+let dbl_setup = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    crucible_execute_func [crucible_term x];
+    crucible_return (crucible_term {{ x + x : [32] }});
+};
+~~~~
+
+And we can verify it using what we've already proved about `add`:
+
+~~~~
+crucible_llvm_verify m "dbl" [add_ms] false dbl_setup abc;
+~~~~
+
+In this case, doing the verification compositionally doesn't save much,
+since the functions are so simple, but it illustrates the approach.
+
+## Specifying Heap Layout
+
+Most functions that operate on pointers expect that certain pointers
+point to allocated memory before they are called. The `crucible_alloc`
+command allows you to specify that a function expects a particular
+pointer to refer to an allocated region appropriate for a specific type.
+
+~~~~
+crucible_alloc : LLVMType -> CrucibleSetup SetupValue
+~~~~
+
+This command returns a `SetupValue` consisting of a pointer to the
+allocated space, which can be used wherever a pointer-valued
+`SetupValue` can be used.
+
+In the initial state, `crucible_alloc` specifies that the function
+expects a pointer to allocated space to exist. In the final state, it
+specifies that the function itself performs an allocation.
+
+It's also possible to construct fresh pointers that do not point to
+allocated memory (which can be useful for functions that manipulate
+pointers but not the values they point to):
+
+~~~~
+crucible_fresh_pointer : LLVMType -> CrucibleSetup SetupValue
+~~~~
+
+The NULL pointer is called `crucible_null`:
+
+~~~~
+crucible_null : SetupValue
+~~~~
+
+Pointers to global variables or functions can be accessed with
+`crucible_global`:
+
+~~~~
+crucible_global : String -> SetupValue
+~~~~
+
+## Specifying Heap Values
+
+Pointers returned by `crucible_alloc` don't, initially, point to
+anything. So if you pass such a pointer directly into a function that
+tried to dereference it, symbolic execution will fail with a message
+about an invalid load. For some functions, such as those that are
+intended to initialize data structures (writing to the memory pointed
+to, but never reading from it), this sort of uninitialized memory is
+appropriate. In most cases, however, it's more useful to state that a
+pointer points to some specific (usually symbolic) value, which you can
+do with the `crucible_points_to` command.
+
+~~~~
+crucible_points_to : SetupValue -> SetupValue -> CrucibleSetup ()
+~~~~
+
+This command takes two `SetupValue` arguments, the first of which must
+be a pointer, and states that the memory specified by that pointer
+should contain the value given in the second argument (which may be any
+type of `SetupValue`).
+
+When used in the final state, `crucible_points_to` specifies that the
+given pointer *should* point to the given value when the function
+finishes.
+
+## Working with Compound Types
+
+The commands mentioned so far give us no way to specify the values of
+compound types (arrays or `struct`s). Compound values can be dealt with
+either piecewise or in their entirety. To access them piecewise, the
+`crucible_elem` function yields a pointer to an internal element of a
+compound value.
+
+~~~~
+crucible_elem : SetupValue -> Int -> SetupValue
+~~~~
+
+For arrays, the `Int` parameter is the array index. For `struct` values,
+it is the field index. For `struct` values, it can be more convenient to
+use field names. If debugging information is available in the bitcode
+file, the `crucible_field` function yields a pointer to a particular
+named field:
+
+~~~~
+crucible_field : SetupValue -> String -> SetupValue
+~~~~
+
+Either of these functions can be used with `crucible_points_to` to
+specify the value of a particular array element or `struct` field.
+Sometimes, however, it is more convenient to specify all array elemnts
+or field values at onces. The `crucible_array` and `crucible_struct`
+functions construct compound values from lists of element values.
+
+~~~~
+crucible_array : [SetupValue] -> SetupValue
+crucible_struct : [SetupValue] -> SetupValue
+~~~~
+
+## Preconditions and Postconditions
+
+Sometimes a function is only well-defined under certain conditions, or
+sometimes you may be interested in certain initial conditions that give
+rise to specific final conditions. For these cases, you can specify an
+arbitrary predicate as a pre-condition or post-condition, using any
+values in scope at the time.
+
+~~~~
+crucible_precond : Term -> CrucibleSetup ()
+crucible_postcond : Term -> CrucibleSetup ()
+~~~~
+
+These two commands take `Term` arguments, and therefore cannot describe
+the values of pointers. The `crucible_equal` command states that two
+`SetupValue`s should be equal, and can be used in either the initial or
+the final state.
+
+~~~~
+crucible_equal : SetupValue -> SetupValue -> CrucibleSetup ()
+~~~~
+
+The use of `crucible_equal` can also sometimes lead to more efficient
+symbolic execution when the predicate of interest is an equality.
+
+## A Heap-Based Example
+
+TODO

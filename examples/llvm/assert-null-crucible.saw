@@ -9,6 +9,6 @@ let f_spec2 = do {
     crucible_return (crucible_term {{ 1 : [32] }});
 };
 
-load_crucible_llvm_module "assert-null.bc";
-crucible_llvm_verify "f" [] false f_spec1 abc;
-crucible_llvm_verify "f" [] false f_spec2 abc;
+m <- llvm_load_module "assert-null.bc";
+crucible_llvm_verify m "f" [] false f_spec1 abc;
+crucible_llvm_verify m "f" [] false f_spec2 abc;

@@ -30,7 +30,6 @@ import Control.Monad.State
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
-import Data.IORef
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -45,7 +44,6 @@ import System.IO.Temp (withSystemTempFile)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read
-import qualified Text.LLVM.AST as L
 
 
 import qualified Verifier.Java.Codebase as JSS
@@ -114,30 +112,9 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
-import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
-import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
-import qualified Data.Parameterized.Nonce as Crucible
-
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
-
-data CrucibleContext =
-  CrucibleContext
-  { ccLLVMContext     :: Crucible.LLVMContext
-  , ccLLVMModule      :: L.Module
-  , ccLLVMModuleTrans :: Crucible.ModuleTranslation
-  , ccBackend         :: Sym
-  , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
-  , ccGlobals         :: Crucible.SymGlobalState Sym
-  }
-
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
                                      , biBasicSS       :: Simpset Term
-                                     , biCrucibleContext :: IORef (Maybe CrucibleContext)
                                      }
 
 showPrim :: SV.Value -> TopLevel String
@@ -428,7 +405,7 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
 writeUnintSMTLib2 unints sc f t = do
   (_, _, l) <- prepSBV sc unints t
-  txt <- SBV.compileToSMTLib SBV.SMTLib2 True l
+  txt <- SBV.generateSMTBenchmark True l
   writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()
@@ -829,6 +806,7 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
       case goalQuant g of
         Existential -> return (r', stats, Nothing)
         Universal -> return (r', stats, Just (g { goalTerm = ft }))
+    SBV.SatExtField {} -> fail "Prover returned model in extension field"
     SBV.Unsatisfiable {} -> do
       ft <- scApplyPrelude_False sc
       case goalQuant g of
@@ -836,7 +814,6 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
         Universal -> return (SV.Unsat stats, stats, Nothing)
     SBV.Unknown {} -> fail "Prover returned Unknown"
     SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
-    SBV.TimeOut {} -> fail "Prover timed out"
 
 getLabels :: SolverStats -> [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
 getLabels stats ls d argNames =

@@ -55,7 +55,7 @@ library
     , saw-core-aig
     , saw-core-easycrypt
     , saw-core-sbv
-    , sbv >= 4.3
+    , sbv >= 7.0
     , smtLib
     , split
     , temporary
@@ -88,7 +88,6 @@ library
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
-    SAWScript.CryptolBuiltins
     SAWScript.CryptolEnv
     SAWScript.Import
     SAWScript.ImportAIG
