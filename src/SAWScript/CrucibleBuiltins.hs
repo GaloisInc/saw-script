@@ -588,6 +588,7 @@ processPostPointsTos sc cc tyenv env0 mem conds0 =
         SetupStruct xs -> foldMap setupVars xs
         SetupArray  xs -> foldMap setupVars xs
         SetupElem x _  -> setupVars x
+        SetupField x _ -> setupVars x
         SetupTerm   _  -> Set.empty
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty

@@ -473,6 +473,7 @@ matchPointsTos sc cc spec = go False []
         SetupStruct xs -> foldMap setupVars xs
         SetupArray  xs -> foldMap setupVars xs
         SetupElem x _  -> setupVars x
+        SetupField x _ -> setupVars x
         SetupTerm   _  -> Set.empty
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty
@@ -923,6 +924,7 @@ instantiateSetupValue sc s v =
     SetupStruct vs -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
     SetupArray  vs -> SetupArray <$> mapM (instantiateSetupValue sc s) vs
     SetupElem _ _  -> return v
+    SetupField _ _ -> return v
     SetupNull      -> return v
     SetupGlobal _  -> return v
   where

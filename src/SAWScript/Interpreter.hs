@@ -1601,7 +1601,13 @@ primitives = Map.fromList
     "SetupValue -> Int -> SetupValue"
     (pureVal CIR.SetupElem)
     [ "Turn a SetupValue representing a struct or array pointer into"
-    , "a pointer to an element of the struct or array." ]
+    , "a pointer to an element of the struct or array by field index" ]
+
+  , prim "crucible_field"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.SetupField)
+    [ "Turn a SetupValue representing a struct pointer into"
+    , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"

@@ -67,6 +67,7 @@ data SetupValue where
   SetupStruct :: [SetupValue] -> SetupValue
   SetupArray  :: [SetupValue] -> SetupValue
   SetupElem   :: SetupValue -> Int -> SetupValue
+  SetupField  :: SetupValue -> String -> SetupValue
   SetupNull   :: SetupValue
   SetupGlobal :: String -> SetupValue
   deriving (Show)
