@@ -213,7 +213,7 @@ lookup (Net {}) [] = error "impossible"
 net_skip :: Net a -> [Net a] -> [Net a]
 net_skip (Leaf _) nets = nets
 net_skip (Net {comb, var, atoms}) nets =
-  foldr net_skip (Map.fold (:) (var : nets) atoms) (net_skip comb [])
+  foldr net_skip (Map.foldr (:) (var : nets) atoms) (net_skip comb [])
 
 {-* Matching and Unification *-}
 
