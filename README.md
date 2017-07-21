@@ -1,3 +1,6 @@
+[![Build
+Status](https://travis-ci.org/GaloisInc/saw-script.svg?branch=master)](https://travis-ci.org/GaloisInc/saw-script)
+
 # SAWScript
 
 This repository contains the code for SAWScript, the scripting
