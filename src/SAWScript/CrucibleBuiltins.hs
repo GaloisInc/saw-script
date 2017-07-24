@@ -673,7 +673,7 @@ verifyPoststate sc cc mspec env0 globals ret =
 
   do overrideResult <- runOverrideMatcher sym globals env0 Map.empty $
        do matchResult
-          learnCond sc cc mspec (mspec ^. csPostState)
+          learnCond sc cc mspec PostState (mspec ^. csPostState)
 
      st <- case overrideResult of
              Right ((), st) -> return st
@@ -702,7 +702,7 @@ verifyPoststate sc cc mspec env0 globals ret =
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
         (Just _      , Nothing)     -> fail "verifyPoststate: missing crucible_return specification"
         (Nothing     , Nothing)     -> return ()
-        (Just (rty,r), Just expect) -> matchArg sc cc r rty expect
+        (Just (rty,r), Just expect) -> matchArg sc cc PostState r rty expect
 
 
 --------------------------------------------------------------------------------
