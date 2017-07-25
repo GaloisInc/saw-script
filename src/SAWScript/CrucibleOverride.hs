@@ -393,11 +393,17 @@ refreshTerms sc ss =
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
+  (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext -> StateSpec -> OverrideMatcher ()
 enforceDisjointness cc ss =
   do sym <- getSymInterface
      sub <- OM (use setupValueSub)
-     let m = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
+     let syms = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
+
+     let resolve s = case TyCtx.asMemType s of
+                       Nothing -> fail "enforceDisjointness: not memtype"
+                       Just m  -> return m
+     mems <- traverse (_1 resolve) syms
 
      let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
@@ -412,7 +418,7 @@ enforceDisjointness cc ss =
             sym Crucible.ptrWidth
             (unpackPointer p) (sz pty)
             (unpackPointer q) (sz qty)
-        | (pty,p):ps <- tails m
+        | (pty,p):ps <- tails mems
         , (qty,q)    <- ps
         ]
 
@@ -793,11 +799,14 @@ learnPred sc cc t =
 executeAllocation ::
   (?lc :: TyCtx.LLVMContext) =>
   CrucibleContext            ->
-  (AllocIndex, Crucible.MemType) ->
+  (AllocIndex, Crucible.SymType) ->
   OverrideMatcher ()
-executeAllocation cc (var, memTy) =
+executeAllocation cc (var, symTy) =
   do let sym = ccBackend cc
      let dl = TyCtx.llvmDataLayout ?lc
+     memTy <- case TyCtx.asMemType symTy of
+                Just memTy -> return memTy
+                Nothing    -> fail "executAllocation: failed to resolve type"
      liftIO $ putStrLn $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
      let w = Crucible.memTypeSize dl memTy
@@ -941,7 +950,7 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     let tyenv = csAllocations spec
+     let tyenv = csAllocations spec :: Map AllocIndex Crucible.SymType
      memTy <- liftIO $ typeOfSetupValue cc tyenv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      lval  <- liftIO $ resolveSetupVal cc m tyenv sval'
