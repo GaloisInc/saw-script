@@ -304,9 +304,9 @@ methodSpecHandler1 sc cc args retTy cs =
        -- todo: fail if list lengths mismatch
        xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
-       sequence_ [ matchArg sc cc x y z | (x, y, z) <- xs]
+       sequence_ [ matchArg sc cc PreState x y z | (x, y, z) <- xs]
 
-       learnCond sc cc cs (cs^.csPreState)
+       learnCond sc cc cs PreState (cs^.csPreState)
 
        executeCond sc cc cs (cs^.csPostState)
 
@@ -317,11 +317,12 @@ learnCond :: (?lc :: TyCtx.LLVMContext)
           => SharedContext
           -> CrucibleContext
           -> CrucibleMethodSpecIR
+          -> PrePost
           -> StateSpec
           -> OverrideMatcher ()
-learnCond sc cc cs ss = do
-  matchPointsTos sc cc cs (ss^.csPointsTos)
-  traverse_ (learnSetupCondition sc cc cs) (ss^.csConditions)
+learnCond sc cc cs prepost ss = do
+  matchPointsTos sc cc cs prepost (ss^.csPointsTos)
+  traverse_ (learnSetupCondition sc cc cs prepost) (ss^.csConditions)
   enforceDisjointness cc ss
   enforceCompleteSubstitution ss
 
@@ -434,9 +435,10 @@ matchPointsTos ::
   SharedContext    {- ^ term construction context -} ->
   CrucibleContext  {- ^ simulator context         -} ->
   CrucibleMethodSpecIR                               ->
+  PrePost                                            ->
   [PointsTo]       {- ^ points-tos                -} ->
   OverrideMatcher ()
-matchPointsTos sc cc spec = go False []
+matchPointsTos sc cc spec prepost = go False []
   where
     go ::
       Bool       {- progress indicator -} ->
@@ -457,7 +459,7 @@ matchPointsTos sc cc spec = go False []
     go progress delayed (c:cs) =
       do ready <- checkPointsTo c
          if ready then
-           do learnPointsTo sc cc spec c
+           do learnPointsTo sc cc spec prepost c
               go True delayed cs
          else
            do go progress (c:delayed) cs
@@ -585,26 +587,27 @@ assignTerm var val =
 matchArg ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   CrucibleContext    {- ^ context for interacting with Crucible -} ->
+  PrePost                                                          ->
   Crucible.LLVMVal Sym Crucible.PtrWidth
                      {- ^ concrete simulation value             -} ->
   Crucible.MemType   {- ^ expected memory type                  -} ->
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher ()
 
-matchArg sc cc realVal _ (SetupTerm expected) =
+matchArg sc cc prepost realVal _ (SetupTerm expected) =
   do sym      <- getSymInterface
      realTerm <- liftIO (valueToSC sym realVal)
-     matchTerm sc cc realTerm (ttTerm expected)
+     matchTerm sc cc prepost realTerm (ttTerm expected)
 
 -- match the fields of struct point-wise
-matchArg sc cc (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+matchArg sc cc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
   sequence_
-    [ matchArg sc cc x y z
+    [ matchArg sc cc prepost x y z
        | ((_,x),y,z) <- zip3 (V.toList xs)
                              (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                              zs ]
 
-matchArg _sc cc actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
+matchArg _sc cc prepost actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
   let ptr = Crucible.LLVMPtr blk end off in
   case setupval of
     SetupVar var ->
@@ -613,7 +616,7 @@ matchArg _sc cc actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
     SetupNull ->
       do sym <- getSymInterface
          p   <- liftIO (Crucible.isNullPointer sym (unpackPointer ptr))
-         addAssert p (Crucible.AssertFailureSimError "null-equality precondition")
+         addAssert p (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost))
 
     SetupGlobal name ->
       do let mem = ccEmptyMemImpl cc
@@ -624,12 +627,12 @@ matchArg _sc cc actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
          p1 <- liftIO (Crucible.natEq sym blk blk')
          p2 <- liftIO (Crucible.bvEq sym off off')
          p  <- liftIO (Crucible.andPred sym p1 p2)
-         addAssert p (Crucible.AssertFailureSimError "global-equality precondition")
+         addAssert p (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost))
 
     _ ->
       do failure (StructuralMismatch actual setupval expectedTy)
 
-matchArg _sc _cc actual expectedTy expected =
+matchArg _sc _cc _prepost actual expectedTy expected =
   failure (StructuralMismatch actual expected expectedTy)
 
 ------------------------------------------------------------------------
@@ -686,19 +689,20 @@ typeToSC sc t =
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   CrucibleContext {- ^ context for interacting with Crucible -} ->
+  PrePost                                                       ->
   Term            {- ^ exported concrete term                -} ->
   Term            {- ^ expected specification term           -} ->
   OverrideMatcher ()
 
-matchTerm _ _ real expect | real == expect = return ()
-matchTerm sc cc real expect =
+matchTerm _ _ _ real expect | real == expect = return ()
+matchTerm sc cc prepost real expect =
   case unwrapTermF expect of
     FTermF (ExtCns ec) -> assignTerm (ecVarIndex ec) real
 
     _ ->
       do t <- liftIO $ scEq sc real expect
          p <- liftIO $ resolveSAWPred cc t
-         addAssert p (Crucible.AssertFailureSimError "literal equality precondition")
+         addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
 
 ------------------------------------------------------------------------
 
@@ -709,11 +713,12 @@ learnSetupCondition ::
   SharedContext              ->
   CrucibleContext            ->
   CrucibleMethodSpecIR       ->
+  PrePost                    ->
   SetupCondition             ->
   OverrideMatcher ()
-learnSetupCondition sc cc spec (SetupCond_Equal val1 val2)  = learnEqual sc cc spec val1 val2
-learnSetupCondition sc cc _    (SetupCond_Pred tm)          = learnPred sc cc (ttTerm tm)
-learnSetupCondition sc cc _    (SetupCond_Ghost var val)    = learnGhost sc cc var val
+learnSetupCondition sc cc spec prepost (SetupCond_Equal val1 val2)  = learnEqual sc cc spec prepost val1 val2
+learnSetupCondition sc cc _    prepost (SetupCond_Pred tm)          = learnPred sc cc prepost (ttTerm tm)
+learnSetupCondition sc cc _    prepost (SetupCond_Ghost var val)    = learnGhost sc cc prepost var val
 
 
 ------------------------------------------------------------------------
@@ -721,12 +726,13 @@ learnSetupCondition sc cc _    (SetupCond_Ghost var val)    = learnGhost sc cc v
 learnGhost ::
   SharedContext                                          ->
   CrucibleContext                                        ->
+  PrePost                                                ->
   Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
   TypedTerm                                              ->
   OverrideMatcher ()
-learnGhost sc cc var expected =
+learnGhost sc cc prepost var expected =
   do actual <- readGlobal var
-     matchTerm sc cc (ttTerm actual) (ttTerm expected)
+     matchTerm sc cc prepost (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
 
@@ -738,9 +744,10 @@ learnPointsTo ::
   SharedContext              ->
   CrucibleContext            ->
   CrucibleMethodSpecIR       ->
+  PrePost                    ->
   PointsTo                   ->
   OverrideMatcher ()
-learnPointsTo sc cc spec (PointsTo ptr val) =
+learnPointsTo sc cc spec prepost (PointsTo ptr val) =
   do let tyenv = csAllocations spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv val
      (_memTy, ptr1) <- asPointer =<< resolveSetupValue cc sc spec ptr
@@ -758,11 +765,14 @@ learnPointsTo sc cc spec (PointsTo ptr val) =
                   Left e  -> failure (BadPointerLoad e)
                   Right x -> return x
      addAssert p r
-     matchArg sc cc v memTy val
+     matchArg sc cc prepost v memTy val
 
 
 ------------------------------------------------------------------------
 
+stateCond :: PrePost -> String
+stateCond PreState = "precondition"
+stateCond PostState = "postcondition"
 
 -- | Process a "crucible_equal" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -770,27 +780,30 @@ learnEqual ::
   SharedContext                                    ->
   CrucibleContext                                  ->
   CrucibleMethodSpecIR                             ->
+  PrePost                                          ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher ()
-learnEqual sc cc spec v1 v2 = do
+learnEqual sc cc spec prepost v1 v2 = do
   (_, val1) <- resolveSetupValueLLVM cc sc spec v1
   (_, val2) <- resolveSetupValueLLVM cc sc spec v2
   p         <- liftIO (equalValsPred cc val1 val2)
-  addAssert p (Crucible.AssertFailureSimError "equality precondition")
+  let name = "equality " ++ stateCond prepost
+  addAssert p (Crucible.AssertFailureSimError name)
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
 learnPred ::
   SharedContext                                                       ->
   CrucibleContext                                                     ->
+  PrePost                                                             ->
   Term             {- ^ the precondition to learn                  -} ->
   OverrideMatcher ()
-learnPred sc cc t =
+learnPred sc cc prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveSAWPred cc u
-     addAssert p (Crucible.AssertFailureSimError "precondition")
+     addAssert p (Crucible.AssertFailureSimError (stateCond prepost))
 
 ------------------------------------------------------------------------
 
