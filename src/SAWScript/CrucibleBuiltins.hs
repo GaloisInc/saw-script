@@ -18,13 +18,12 @@ Stability   : provisional
 -}
 module SAWScript.CrucibleBuiltins where
 
-import           Control.Exception (throwIO)
 import           Control.Lens
 import           Control.Monad.ST
 import           Control.Monad.State
 import qualified Control.Monad.Trans.State.Strict as SState
 import           Control.Applicative
-import           Data.Foldable (toList, find, for_)
+import           Data.Foldable (toList, find)
 import           Data.Function
 import           Data.IORef
 import           Data.List
@@ -672,38 +671,36 @@ verifyPoststate ::
   IO [(String, Term)]               {- ^ generated labels and verification conditions -}
 verifyPoststate sc cc mspec env0 globals ret =
 
-  do overrideResult <- runOverrideMatcher sym globals env0 Map.empty $
-       do matchResult
-          learnCond sc cc mspec PostState (mspec ^. csPostState)
+  do (retgoals, env) <-
+       case (ret, mspec^.csRetValue) of
+         (Nothing, Nothing) -> return ([], env0)
+         (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
+         (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
+         (Just (_,ret'), Just val) ->
+           do (goals, env) <- runStateT (match sc cc tyenv ret' val) env0
+              return ([ ("return value", goal) | goal <- goals ], env)
+     let lvar = Crucible.llvmMemVar (Crucible.memModelOps (ccLLVMContext cc))
+     let Just mem = Crucible.lookupGlobal lvar globals
+     pointsgoals <- processPostPointsTos sc cc tyenv env mem (mspec^.csPostState.csPointsTos)
+     postconds <- processPostconditions cc tyenv env globals (mspec^.csPostState.csConditions)
 
-     st <- case overrideResult of
-             Right ((), st) -> return st
-             Left e -> throwIO e
-
-     for_ (view osAsserts st) $ \(p, r) ->
-       Crucible.sbAddAssertion (ccBackend cc) p r
 
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
      obligationTerms <- mapM verifyObligation obligations
-     return obligationTerms
+     return (retgoals ++ pointsgoals ++ postconds ++ obligationTerms)
   where
+    tyenv = csAllocations mspec
     sym = ccBackend cc
 
     verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
       fail "Found an assumption in final proof obligation list"
     verifyObligation (hyps, (Crucible.Assertion _ concl (Just err))) = do
-      hypTerm    <- scAndList sc =<< traverse (Crucible.toSC sym) hyps
-      conclTerm  <- Crucible.toSC sym concl
+      true <- scBool sc True
+      hypTerm <- foldM (scAnd sc) true =<< mapM (Crucible.toSC sym) hyps
+      conclTerm <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
-
-    matchResult =
-      case (ret, mspec ^. csRetValue) of
-        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
-        (Just _      , Nothing)     -> fail "verifyPoststate: missing crucible_return specification"
-        (Nothing     , Nothing)     -> return ()
-        (Just (rty,r), Just expect) -> matchArg sc cc PostState r rty expect
 
 
 --------------------------------------------------------------------------------
