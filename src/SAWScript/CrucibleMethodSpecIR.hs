@@ -129,9 +129,9 @@ data SetupCondition where
 -- | Verification state (either pre- or post-) specification
 data StateSpec = StateSpec
   -- | Allocated pointers
-  { _csAllocs        :: Map AllocIndex MemType
+  { _csAllocs        :: Map AllocIndex SymType
   -- | Symbolic pointers
-  , _csFreshPointers :: Map AllocIndex MemType
+  , _csFreshPointers :: Map AllocIndex SymType
   -- | points-to statements
   , _csPointsTos     :: [PointsTo]
   -- | equality, propositions, and ghost-variable conditions
@@ -168,7 +168,7 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
 makeLenses ''CrucibleMethodSpecIR
 makeLenses ''StateSpec
 
-csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex MemType
+csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex SymType
 csAllocations
   = Map.unions
   . toListOf ((csPreState <> csPostState) . (csAllocs <> csFreshPointers))
