@@ -162,3 +162,4 @@ executable saw
     , transformers
     , saw-script
     , saw-core
+    , saw-core-easycrypt
