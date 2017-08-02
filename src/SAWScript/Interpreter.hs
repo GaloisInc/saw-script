@@ -632,7 +632,7 @@ primitives = Map.fromList
 
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
-    [ "Check if two terms are convertible" ]
+    [ "Check if two terms are convertible." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
@@ -987,7 +987,7 @@ primitives = Map.fromList
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
     [ "Rewrite a term using a specific simplification rule set, returning"
-    , "the rewritten term"
+    , "the rewritten term."
     ]
 
   , prim "unfold_term"         "[String] -> Term -> Term"
@@ -1471,7 +1471,7 @@ primitives = Map.fromList
 
   , prim "show_cfg"          "CFG -> String"
     (pureVal show_cfg)
-    [ "Pretty-print a control-flow graph"
+    [ "Pretty-print a control-flow graph."
     ]
 
     ---------------------------------------------------------------------
@@ -1601,7 +1601,7 @@ primitives = Map.fromList
     "SetupValue -> Int -> SetupValue"
     (pureVal CIR.SetupElem)
     [ "Turn a SetupValue representing a struct or array pointer into"
-    , "a pointer to an element of the struct or array by field index" ]
+    , "a pointer to an element of the struct or array by field index." ]
 
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
@@ -1636,7 +1636,7 @@ primitives = Map.fromList
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
     (bicVal crucible_declare_ghost_state)
-    [ "Allocates a unique ghost variable" ]
+    [ "Allocates a unique ghost variable." ]
 
   , prim "crucible_ghost_value"
     "Ghost -> Term -> CrucibleSetup ()"
