@@ -68,7 +68,7 @@ library
     , vector
     , xdg-basedir
     , GraphSCC
-    , haskmir
+    , mir-verifier
 
   hs-source-dirs: src
 
