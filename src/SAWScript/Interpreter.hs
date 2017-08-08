@@ -456,11 +456,16 @@ cryptol_load path = do
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
-load_mir :: SharedContext -> FilePath -> TopLevel [(String, TypedTerm)]
-load_mir sc fp = do
-    rustmod <- io $ Mir.loadMIR sc fp
-    j <- io $ mapM (\(k,v) -> do {t <- mkTypedTerm sc v; return (Text.unpack k, t)}) $ Map.toList (Mir.rmTerms rustmod)
-    return j
+mir_load :: SharedContext -> FilePath -> TopLevel RustModule
+mir_load sc fp = do
+    rustmod_ <- io $ Mir.loadMIR sc fp
+    rustmod <- io $ mapM (\(k,v) -> do {t <- mkTypedTerm sc v; return (Text.unpack k, t)}) $ Map.toList (Mir.rmTerms rustmod_)
+    return $ RustModule $ Map.fromList rustmod
+
+mir_extract :: RustModule -> String -> TopLevel TypedTerm
+mir_extract (RustModule m) n = case Map.lookup n m of
+                                 Just t -> return t
+                                 Nothing -> fail $ "Ident not found: " ++ n
 
 
 readSchema :: String -> SS.Schema
@@ -1664,10 +1669,14 @@ primitives = Map.fromList
     , "the given method spec."
     ]
   
-  , prim "load_mir" "String -> TopLevel [(String,Term)]"
-    (scVal load_mir)
+  , prim "mir_load" "String -> TopLevel RustModule"
+    (scVal mir_load)
     [ "Load a collection of MIR functions from a JSON file."
     ]
+
+  , prim "mir_extract" "RustModule -> String -> TopLevel Term"
+    (\_ _ -> toValue mir_extract)
+    [ "Load ident from rust module." ]
   ]
 
   where

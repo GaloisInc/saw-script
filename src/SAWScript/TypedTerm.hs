@@ -59,3 +59,16 @@ showCryptolModule (CryptolModule sm tm) =
       "    " ++ unwords (pretty (nameIdent name) : map pretty params) ++ " = " ++ pretty rhs
     showBinding (name, TypedTerm schema _) =
       "    " ++ pretty (nameIdent name) ++ " : " ++ pretty schema
+
+
+data RustModule = 
+    RustModule (Map String TypedTerm)
+
+showRustModule :: RustModule -> String
+showRustModule (RustModule tm) =
+    unlines $
+        "Symbols" : "======" : map showBinding (Map.assocs tm)
+  where
+      showBinding (name, TypedTerm schema _) = 
+         "    " ++ (name) ++ " : " ++ pretty schema 
+
