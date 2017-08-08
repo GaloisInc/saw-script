@@ -48,6 +48,7 @@ import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
+import qualified Mir.SAWInterface as Mir
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
@@ -79,6 +80,7 @@ import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Data.Text as Text
 
 import SAWScript.AutoMatch
 
@@ -453,6 +455,13 @@ cryptol_load path = do
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
+
+load_mir :: SharedContext -> FilePath -> TopLevel [(String, TypedTerm)]
+load_mir sc fp = do
+    rustmod <- io $ Mir.loadMIR sc fp
+    j <- io $ mapM (\(k,v) -> do {t <- mkTypedTerm sc v; return (Text.unpack k, t)}) $ Map.toList (Mir.rmTerms rustmod)
+    return j
+
 
 readSchema :: String -> SS.Schema
 readSchema str =
@@ -1653,6 +1662,11 @@ primitives = Map.fromList
     (\_ _ -> toValue crucible_spec_size)
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
+    ]
+  
+  , prim "load_mir" "String -> TopLevel [(String,Term)]"
+    (scVal load_mir)
+    [ "Load a collection of MIR functions from a JSON file."
     ]
   ]
 
