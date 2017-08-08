@@ -7,9 +7,17 @@ l <- llvm_load_module "ffs.bc";
 c_ffs_ref <- llvm_extract l "ffs_ref" llvm_pure;
 c_ffs_imp <- llvm_extract l "ffs_imp" llvm_pure;
 
+r <- mir_load "ffs.json";
+r_ffs_ref <- mir_extract r "ffs_ref";
+r_ffs_imp <- mir_extract r "ffs_imp";
+
 print "java ref <-> java imp";
 let thm1 = {{ \x -> java_ffs_ref x == java_ffs_imp x }};
 prove_print abc thm1;
+
+print "rust ref <-> rust imp";
+let thm6 = {{ r_ffs_ref === r_ffs_imp }};
+prove_print abc thm6;
 
 print "c ref <-> c imp";
 let thm2 = {{ \x -> c_ffs_ref x == c_ffs_imp x }};
@@ -18,6 +26,10 @@ prove_print abc thm2;
 print "java imp <-> c imp";
 let thm3 = {{ \x -> java_ffs_imp x == c_ffs_imp x }};
 prove_print abc thm3;
+
+print "rust imp <-> c imp";
+let thm7 = {{ c_ffs_imp === r_ffs_imp }};
+prove_print abc thm7;
 
 print "cryptol imp <-> c imp";
 let thm4 = {{ \x -> ffs_imp x == c_ffs_imp x }};
