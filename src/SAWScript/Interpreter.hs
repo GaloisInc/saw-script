@@ -80,7 +80,6 @@ import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import qualified Data.Text as Text
 
 import SAWScript.AutoMatch
 
@@ -457,15 +456,12 @@ cryptol_load path = do
   return m
 
 mir_load :: SharedContext -> FilePath -> TopLevel RustModule
-mir_load sc fp = do
-    rustmod_ <- io $ Mir.loadMIR sc fp
-    rustmod <- io $ mapM (\(k,v) -> do {t <- mkTypedTerm sc v; return (Text.unpack k, t)}) $ Map.toList (Mir.rmTerms rustmod_)
-    return $ RustModule $ Map.fromList rustmod
+mir_load sc fp = io $ Mir.loadMIR sc fp
 
-mir_extract :: RustModule -> String -> TopLevel TypedTerm
-mir_extract (RustModule m) n = case Map.lookup n m of
-                                 Just t -> return t
-                                 Nothing -> fail $ "Ident not found: " ++ n
+mir_extract :: SharedContext -> RustModule -> String -> TopLevel TypedTerm
+mir_extract sc rm s = do
+    t <- io $ Mir.extractMIR sc rm s
+    io $ mkTypedTerm sc t
 
 
 readSchema :: String -> SS.Schema
@@ -1675,7 +1671,7 @@ primitives = Map.fromList
     ]
 
   , prim "mir_extract" "RustModule -> String -> TopLevel Term"
-    (\_ _ -> toValue mir_extract)
+    (scVal mir_extract)
     [ "Load ident from rust module." ]
   ]
 
