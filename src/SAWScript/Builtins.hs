@@ -1352,7 +1352,10 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       return (n', TypedTerm s' t')
 
 generate_easycrypt :: TypedTerm -> TopLevel ()
-generate_easycrypt t =
-    case EC.translateTermDoc (ttTerm t) of
+generate_easycrypt t = do
+    sc <- getSharedContext
+    ss <- cryptolSimpset
+    t' <- io $ rewriteSharedTerm sc ss (ttTerm t)
+    case EC.translateTermDoc t' of
       Left err -> io $ putStrLn $ "Error translating term: " ++ show err
       Right doc -> io $ putStrLn $ show doc
