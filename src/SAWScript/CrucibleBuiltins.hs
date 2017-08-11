@@ -1007,6 +1007,15 @@ memTypeForLLVMType _bic lty =
        Just m -> return m
        Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
 
+symTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup Crucible.SymType
+symTypeForLLVMType _bic lty =
+  do cctx <- getCrucibleContext
+     let lc = ccLLVMContext cctx
+     let ?lc = Crucible.llvmTypeCtx lc
+     case TyCtx.liftType lty of
+       Just m -> return m
+       Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
+
 -- | See 'crucible_fresh_expanded_val'
 --
 -- This is the recursively-called worker function.
@@ -1027,7 +1036,7 @@ constructExpandedSetupValue sc t =
 
     Crucible.PtrType symTy ->
       case TyCtx.asMemType symTy of
-        Just memTy ->  constructFreshPointer memTy
+        Just memTy ->  constructFreshPointer (Crucible.MemType memTy)
         Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
 
     Crucible.ArrayType n memTy ->
@@ -1061,13 +1070,13 @@ crucible_fresh_pointer ::
   L.Type         ->
   CrucibleSetup SetupValue
 crucible_fresh_pointer bic _opt lty =
-  do memTy <- memTypeForLLVMType bic lty
-     constructFreshPointer memTy
+  do symTy <- symTypeForLLVMType bic lty
+     constructFreshPointer symTy
 
-constructFreshPointer :: Crucible.MemType -> CrucibleSetup SetupValue
-constructFreshPointer memTy =
+constructFreshPointer :: Crucible.SymType -> CrucibleSetup SetupValue
+constructFreshPointer symTy =
   do n <- csVarCounter <<%= nextAllocIndex
-     currentState.csFreshPointers.at n ?= Crucible.MemType memTy
+     currentState.csFreshPointers.at n ?= symTy
      return (SetupVar n)
 
 crucible_points_to ::
