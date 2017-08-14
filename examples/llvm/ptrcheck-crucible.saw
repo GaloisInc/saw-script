@@ -10,8 +10,8 @@ let ptr_to_fresh n ty = do {
     return (x, p);
 };
 
-load_crucible_llvm_module "ptrcheck.bc";
-crucible_llvm_verify "f" [] false do {
+m <- llvm_load_module "ptrcheck.bc";
+crucible_llvm_verify m "f" [] false do {
     (s, p) <- ptr_to_fresh "s" (llvm_struct "struct.s");
     crucible_execute_func [p];
     crucible_return (crucible_term {{ 0 : [32] }});

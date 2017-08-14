@@ -1,3 +1,6 @@
+[![Build
+Status](https://travis-ci.org/GaloisInc/saw-script.svg?branch=master)](https://travis-ci.org/GaloisInc/saw-script)
+
 # SAWScript
 
 This repository contains the code for SAWScript, the scripting
@@ -14,6 +17,20 @@ an introduction to using the SAWScript interpreter.
 ## Precompiled Binaries
 
 Precompiled SAWScript binaries for a variety of platforms are available on the [releases page](https://github.com/GaloisInc/saw-script/releases).
+
+## Getting Z3
+
+SAW can use many theorem provers, but because of its use of Cryptol it
+always needs to have Microsoft Research's [Z3 SMT
+solver](https://github.com/Z3Prover/z3) installed.  You can download Z3
+binaries for a variety of platforms from their [releases
+page](https://github.com/Z3Prover/z3/releases).
+
+SAW generally requires the most recent version of Z3, which at the
+time of writing this file is 4.5.0.
+
+After installation, make sure that `z3` (or `z3.exe` on Windows)
+is on your PATH.
 
 ## Manual Installation
 

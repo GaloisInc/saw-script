@@ -579,13 +579,13 @@ caveats:
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
   let tokens = SAWScript.Lexer.lexSAW replFileName str
-  stmt <- case SAWScript.Parser.parseStmtSemi tokens of
-    Left err -> fail (show err)
-    Right stmt -> return stmt
-  ro <- getTopLevelRO
-  ie <- getEnvironment
-  ((), ie') <- io $ runTopLevel (interpretStmt True stmt) ro ie
-  putEnvironment ie'
+  case SAWScript.Parser.parseStmtSemi tokens of
+    Left err -> io $ print err
+    Right stmt ->
+      do ro <- getTopLevelRO
+         ie <- getEnvironment
+         ((), ie') <- io $ runTopLevel (interpretStmt True stmt) ro ie
+         putEnvironment ie'
 
 replFileName :: String
 replFileName = "<stdin>"

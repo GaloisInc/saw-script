@@ -104,10 +104,17 @@ expected_p384_ds_et =
               0x307f758d, 0x4aee684b, 0xeff26f67, 0x42f597e2, 0x585c86da, 0x908f7186]
   }
 
-test_all : Bit
-test_all =
-     test_p384_s_plus_t  == expected_p384_s_plus_t
-  && test_p384_s_minus_t == expected_p384_s_minus_t
-  && test_p384_double_s  == expected_p384_double_s
-  && test_p384_ds    == expected_p384_ds
-  && test_p384_ds_et == expected_p384_ds_et
+property test_plus =
+  test_p384_s_plus_t  == expected_p384_s_plus_t
+
+property test_minus =
+  test_p384_s_minus_t == expected_p384_s_minus_t
+
+property test_double =
+  test_p384_double_s  == expected_p384_double_s
+
+property test_ds =
+  test_p384_ds    == expected_p384_ds
+
+property test_ds_et =
+  test_p384_ds_et == expected_p384_ds_et

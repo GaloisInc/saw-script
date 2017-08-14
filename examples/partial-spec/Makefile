@@ -10,4 +10,4 @@ clean:
 	clang -O0 -g -emit-llvm -c -o $@ $^
 
 %.ll: %.c
-	clang -O0 -emit-llvm -c -S -o $@ $^
+	clang -O0 -g -emit-llvm -c -S -o $@ $^

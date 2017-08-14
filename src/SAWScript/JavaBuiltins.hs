@@ -438,7 +438,7 @@ javaSatBranches doSat = modify (\s -> s { jsSatBranches = doSat })
 
 javaRequiresClass :: String -> JavaSetup ()
 javaRequiresClass cls = modifySpec $ \ms ->
-  let clss' = cls : specInitializedClasses ms in
+  let clss' = dotsToSlashes cls : specInitializedClasses ms in
   ms { specInitializedClasses = clss' }
 
 javaClassVar :: BuiltinContext -> Options -> String -> JavaType

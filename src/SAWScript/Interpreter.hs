@@ -34,7 +34,6 @@ import Data.Traversable hiding ( mapM )
 #endif
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
-import Data.IORef
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
@@ -374,7 +373,6 @@ buildTopLevelEnv opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
        Crucible.withHandleAllocator $ \halloc -> do
-       ccRef <- newIORef Nothing
        let ro0 = TopLevelRO
                    { roSharedContext = sc
                    , roJavaCodebase = jcb
@@ -385,7 +383,6 @@ buildTopLevelEnv opts =
                    biSharedContext = sc
                  , biJavaCodebase = jcb
                  , biBasicSS = ss
-                 , biCrucibleContext = ccRef
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
@@ -635,7 +632,7 @@ primitives = Map.fromList
 
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
-    [ "Check if two terms are convertible" ]
+    [ "Check if two terms are convertible." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
@@ -990,7 +987,7 @@ primitives = Map.fromList
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
     [ "Rewrite a term using a specific simplification rule set, returning"
-    , "the rewritten term"
+    , "the rewritten term."
     ]
 
   , prim "unfold_term"         "[String] -> Term -> Term"
@@ -1474,38 +1471,43 @@ primitives = Map.fromList
 
   , prim "show_cfg"          "CFG -> String"
     (pureVal show_cfg)
-    [ "Pretty-print a control-flow graph"
+    [ "Pretty-print a control-flow graph."
     ]
 
     ---------------------------------------------------------------------
     -- Experimental Crucible/LLVM interface
 
-  , prim "load_crucible_llvm_module" "String -> TopLevel ()"
-    (bicVal load_crucible_llvm_module)
-    [ "Load an LLVM bitcode file into the Crucible symbolic simulator."
-    ]
-
-  , prim "load_llvm_cfg"     "String -> TopLevel CFG"
+  , prim "load_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
     (bicVal load_llvm_cfg)
-    [ "Load a function from the currently-loaded Crucible LLVM module."
+    [ "Load a function from the given LLVM module."
     ]
 
-  , prim "extract_crucible_llvm"  "String -> TopLevel Term"
+  , prim "extract_crucible_llvm"  "LLVMModule -> String -> TopLevel Term"
     (bicVal extract_crucible_llvm)
     [ "TODO"
     ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
-    [ "TODO" ]
+    [ "Create a fresh variable for use within a Crucible specification. The"
+    , "name is used only for pretty-printing."
+    ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc)
-    [ "TODO" ]
+    [ "Declare that an object of the given type should be allocated in a"
+    , "Crucible specification. Before `crucible_execute_func`, this states"
+    , "that the function expects the object to be allocated before it runs."
+    , "After `crucible_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
-    [ "TODO" ]
+    [ "Create a fresh pointer value for use in a Crucible specification."
+    , "This works like `crucible_alloc` except that the pointer is not"
+    , "required to point to allocated memory."
+    ]
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_expanded_val)
@@ -1531,15 +1533,23 @@ primitives = Map.fromList
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
-    [ "TODO" ]
+    [ "State that two Crucible values should be equal. Can be used as either"
+    , "a pre-condition or a post-condition. It is semantically equivalent to"
+    , "a `crucible_precond` or `crucible_postcond` statement which is an"
+    , "equality predicate, but potentially more efficient."
+    ]
 
   , prim "crucible_precond" "Term -> CrucibleSetup ()"
     (pureVal crucible_precond)
-    [ "TODO" ]
+    [ "State that the given predicate is a pre-condition on execution of the"
+    , "function being verified."
+    ]
 
   , prim "crucible_postcond" "Term -> CrucibleSetup ()"
     (pureVal crucible_postcond)
-    [ "TODO" ]
+    [ "State that the given predicate is a post-condition of execution of the"
+    , "function being verified."
+    ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
@@ -1559,19 +1569,19 @@ primitives = Map.fromList
     , "has a non-void return type." ]
 
   , prim "crucible_llvm_verify"
-    "String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
-    [ "Verify the LLVM function named by the first parameter. The second"
-    , "parameter lists the CrucibleMethodSpec values returned by previous"
-    , "calls to use as overrides. The third (Bool) parameter enables or"
-    , "disables path satisfiability checking. The fourth describes how"
-    , "to set up the symbolic execution engine before verification. And the"
-    , "last gives the script to use to prove the validity of the resulting"
+    [ "Verify the LLVM function named by the second parameter in the module"
+    , "specified by the first. The third parameter lists the CrucibleMethodSpec"
+    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    , "parameter enables or disables path satisfiability checking. The fifth"
+    , "describes how to set up the symbolic execution engine before verification."
+    , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
     ]
 
   , prim "crucible_llvm_unsafe_assume_spec"
-    "String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_unsafe_assume_spec)
     [ "TODO" ]
 
@@ -1591,7 +1601,13 @@ primitives = Map.fromList
     "SetupValue -> Int -> SetupValue"
     (pureVal CIR.SetupElem)
     [ "Turn a SetupValue representing a struct or array pointer into"
-    , "a pointer to an element of the struct or array." ]
+    , "a pointer to an element of the struct or array by field index." ]
+
+  , prim "crucible_field"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.SetupField)
+    [ "Turn a SetupValue representing a struct pointer into"
+    , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"
@@ -1607,7 +1623,14 @@ primitives = Map.fromList
   , prim "crucible_term"
     "Term -> SetupValue"
     (pureVal CIR.SetupTerm)
-    [ "TODO" ]
+    [ "Construct a `SetupValue` from a `Term`." ]
+
+  , prim "crucible_setup_val_to_term"
+    " SetupValue -> TopLevel Term"
+    (bicVal crucible_setup_val_to_typed_term)
+    [ "Convert from a setup value to a typed term. This can only be done for a"
+    , "subset of setup values. Fails if a setup value is a global, variable or null."
+    ]
 
   , prim "load_go_file"
     "String -> TopLevel GoPackage"
@@ -1638,7 +1661,7 @@ primitives = Map.fromList
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
     (bicVal crucible_declare_ghost_state)
-    [ "Allocates a unique ghost variable" ]
+    [ "Allocates a unique ghost variable." ]
 
   , prim "crucible_ghost_value"
     "Ghost -> Term -> CrucibleSetup ()"

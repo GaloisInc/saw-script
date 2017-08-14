@@ -264,7 +264,7 @@ llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
       when (verb >= 3) $ do
         putStrLn $ "Executing " ++ show (specName ms)
       ms' <- runSimulator cb sbe mem (Just lopts) $ do
-        setVerbosity verb
+        setVerbosity (simVerbose opts)
         (initPS, otherPtrs, args) <- initializeVerification' scLLVM file ms
         dumpMem 4 "llvm_verify pre" Nothing
         let ovdsByFunction = groupBy ((==) `on` specFunction) $
