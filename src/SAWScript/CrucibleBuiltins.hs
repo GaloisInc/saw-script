@@ -37,6 +37,7 @@ import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import           Numeric.Natural
 import           System.IO
 
 import qualified Text.LLVM.AST as L
@@ -939,7 +940,7 @@ logicTypeOfActual dl sc (Crucible.StructType si) = do
 logicTypeOfActual _ _ _ = return Nothing
 
 
-logicTypeForInt :: SharedContext -> Crucible.Nat -> IO Term
+logicTypeForInt :: SharedContext -> Natural -> IO Term
 logicTypeForInt sc w =
   do bType <- scBoolType sc
      lTm <- scNat sc (fromIntegral w)
