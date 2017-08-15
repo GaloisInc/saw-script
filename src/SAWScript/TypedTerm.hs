@@ -9,13 +9,14 @@ module SAWScript.TypedTerm where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-
+import Data.Text (unpack)
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Cryptol (scCryptolType)
 import Verifier.SAW.SharedTerm
+import qualified Mir.SAWInterface as Mir
 
 -- Typed terms -----------------------------------------------------------------
 
@@ -59,3 +60,12 @@ showCryptolModule (CryptolModule sm tm) =
       "    " ++ unwords (pretty (nameIdent name) : map pretty params) ++ " = " ++ pretty rhs
     showBinding (name, TypedTerm schema _) =
       "    " ++ pretty (nameIdent name) ++ " : " ++ pretty schema
+
+
+type RustModule = Mir.RustModule
+
+showRustModule :: RustModule -> String
+showRustModule rm =
+    unlines $
+        "Symbols" : "======" :  (map unpack $ Map.keys $ Mir.rmCFGs rm)
+

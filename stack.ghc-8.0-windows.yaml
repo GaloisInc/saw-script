@@ -10,6 +10,7 @@ packages:
   - deps/aig/
   - deps/abcBridge/
   - deps/cryptol/
+  - deps/mir-verifier/
   - deps/saw-core/
   - deps/saw-core-aig/
   - deps/saw-core-sbv/

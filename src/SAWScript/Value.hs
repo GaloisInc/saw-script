@@ -96,6 +96,7 @@ data Value
   | VJavaType JavaType
   | VLLVMType LLVM.Type
   | VCryptolModule CryptolModule
+  | VRustModule RustModule
   | VJavaClass JSS.Class
   | VLLVMModule LLVMModule
   | VSatResult SatResult
@@ -249,6 +250,7 @@ showsPrecValue opts p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
+    VRustModule m -> showString (showRustModule m)
     VLLVMModule m -> showString (showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
@@ -640,9 +642,16 @@ instance FromValue Uninterp where
 instance IsValue CryptolModule where
     toValue m = VCryptolModule m
 
+instance IsValue RustModule where
+    toValue m = VRustModule m
+
 instance FromValue CryptolModule where
     fromValue (VCryptolModule m) = m
     fromValue _ = error "fromValue ModuleEnv"
+
+instance FromValue RustModule where
+    fromValue (VRustModule m) = m
+    fromValue _ = error "fromValue RustModule"
 
 instance IsValue JSS.Class where
     toValue c = VJavaClass c

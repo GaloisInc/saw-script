@@ -46,7 +46,6 @@ library
     , mtl >= 2.1
     , old-locale
     , old-time
-    , parameterized-utils
     , parsec
     , pretty
     , pretty-show
@@ -56,6 +55,7 @@ library
     , saw-core-sbv
     , sbv >= 7.0
     , smtLib
+    , parameterized-utils
     , split
     , temporary
     , template-haskell
@@ -68,6 +68,7 @@ library
     , vector
     , xdg-basedir
     , GraphSCC
+    , mir-verifier
 
   hs-source-dirs: src
 

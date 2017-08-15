@@ -48,6 +48,7 @@ import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
+import qualified Mir.SAWInterface as Mir
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
@@ -453,6 +454,15 @@ cryptol_load path = do
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
+
+mir_load :: SharedContext -> FilePath -> TopLevel RustModule
+mir_load sc fp = io $ Mir.loadMIR sc fp
+
+mir_extract :: SharedContext -> RustModule -> String -> TopLevel TypedTerm
+mir_extract sc rm s = do
+    t <- io $ Mir.extractMIR sc rm s
+    io $ mkTypedTerm sc t
+
 
 readSchema :: String -> SS.Schema
 readSchema str =
@@ -1654,6 +1664,15 @@ primitives = Map.fromList
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
+  
+  , prim "mir_load" "String -> TopLevel RustModule"
+    (scVal mir_load)
+    [ "Load a collection of MIR functions from a JSON file."
+    ]
+
+  , prim "mir_extract" "RustModule -> String -> TopLevel Term"
+    (scVal mir_extract)
+    [ "Load ident from rust module." ]
   ]
 
   where
