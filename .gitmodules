@@ -42,4 +42,4 @@
 	url = https://github.com/GaloisInc/saw-core.git
 [submodule "deps/mir-verifier"]
 	path = deps/mir-verifier
-	url = https://github.com/gancherj/mir-verifier
+	url = https://github.com/GaloisInc/mir-verifier
