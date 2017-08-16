@@ -18,13 +18,6 @@ DATE=`date +%F`
 # Get 'Version' from the .cabal file.
 VERSION=`grep Version saw-script.cabal | awk '{print $2}'`
 
-# HACK: On the 64-bit Windows slave we cross compile a 32-bit binary,
-# so change the description. The architecture is determined by the
-# "arch" seeting in the Stack YAML file, but I can't find a way to get
-# Stack to tell me what arch it's using.
-if [ "$SYSTEM_DESC" == "Windows7Pro-64" ]; then
-  SYSTEM_DESC=Windows7Pro-32
-fi
 # Warn if 'SYSTEM_DESC' is not defined. The 'SYSTEM_DESC' env var is
 # defined as part of the Jenkins node configuration on the Linux
 # nodes.
@@ -46,7 +39,9 @@ echo Staging ...
 # https://github.com/commercialhaskell/stack/issues/604.
 BIN=$(stack path | sed -ne 's/local-install-root: //p')/bin
 
-strip "$BIN"/*
+if [ "${OS}" != "Windows_NT" ]; then
+  strip "$BIN"/*
+fi
 
 cp deps/abcBridge/abc-build/copyright.txt     ${TARGET}/ABC_LICENSE
 cp LICENSE                                    ${TARGET}/LICENSE
