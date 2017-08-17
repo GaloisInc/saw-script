@@ -21,7 +21,6 @@ import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Sequence as Seq
 import qualified Data.Vector as Vector
 import Prelude ()
 import Prelude.Compat
@@ -806,8 +805,8 @@ exportValue ty v = case ty of
     case v of
       SC.VWord w -> V.word (toInteger (width w)) (unsigned w)
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.BitsVal
-                            (Seq.fromList . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
+        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.BitsVal (fromIntegral (Vector.length xs))
+                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
         | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
                             map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
@@ -858,9 +857,9 @@ exportFiniteValue fv =
     FVBit b    -> V.VBit b
     FVWord w x -> V.word (toInteger w) x
     FVVec t vs
-      | t == FTBit -> V.VWord (toInteger (length vs))
-                        (V.ready (V.BitsVal (Seq.fromList . map (V.ready . fvAsBool) $ vs)))
-      | otherwise  -> V.VSeq  (toInteger (length vs)) (V.finiteSeqMap (map (V.ready . exportFiniteValue) vs))
+        | t == FTBit -> V.VWord len (V.ready (V.BitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
+        | otherwise  -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFiniteValue) vs))
+      where len = toInteger (length vs)
     FVTuple vs -> V.VTuple (map (V.ready . exportFiniteValue) vs)
     FVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFiniteValue v) | (n, v) <- Map.assocs vm ]
 
