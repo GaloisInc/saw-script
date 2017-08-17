@@ -14,6 +14,7 @@ packages:
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
   - deps/llvm-verifier/
+  - deps/mir-verifier/
   - deps/crucible/crucible/
   - deps/crucible/crucible-abc/
   - deps/crucible/crucible-llvm/
