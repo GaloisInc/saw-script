@@ -128,16 +128,16 @@ data SetupCondition where
 
 -- | Verification state (either pre- or post-) specification
 data StateSpec = StateSpec
-  -- | Allocated pointers
   { _csAllocs        :: Map AllocIndex SymType
-  -- | Symbolic pointers
+    -- ^ allocated pointers
   , _csFreshPointers :: Map AllocIndex SymType
-  -- | points-to statements
+    -- ^ symbolic pointers
   , _csPointsTos     :: [PointsTo]
-  -- | equality, propositions, and ghost-variable conditions
+    -- ^ points-to statements
   , _csConditions    :: [SetupCondition]
-  -- | faresh variables created in this state
+    -- ^ equality, propositions, and ghost-variable conditions
   , _csFreshVars     :: [TypedTerm]
+    -- ^ fresh variables created in this state
   }
   deriving (Show)
 
