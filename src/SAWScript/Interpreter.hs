@@ -59,6 +59,7 @@ import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value
 import Verifier.SAW.Conversion
+import Verifier.SAW.Lean (lean_extract)
 import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -1653,6 +1654,12 @@ primitives = Map.fromList
     (\_ _ -> toValue crucible_spec_size)
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
+    ]
+
+  , prim "lean_extract"  "String -> String -> TopLevel Term"
+    (scVal $ \sc mname name -> lean_extract sc mname name >>= mkTypedTerm sc)
+    [ "Extract a term defined in a Lean module. The first parameter is the name of the"
+    , "module. The second parameter is the name of the constant to extract."
     ]
   ]
 

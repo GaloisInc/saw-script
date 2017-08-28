@@ -11,6 +11,8 @@ packages:
   - deps/saw-core-sbv/
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
+  - deps/lean-haskell-bindings/
+  - deps/lean-saw-core/
   - deps/llvm-verifier/
   - deps/crucible/crucible/
   - deps/crucible/crucible-abc/
