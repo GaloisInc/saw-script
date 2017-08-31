@@ -399,6 +399,7 @@ scWhnf sc t0 =
     go xs                     (asDataType -> Just (c,args))     = do args' <- mapM memo args
                                                                      t' <- scDataTypeApp sc c args'
                                                                      foldM reapply t' xs
+    go xs                     (asConstant -> Just (_,body,_))   = do go xs body
     -- FIXME? what about Let?
     go xs                     t                                 = foldM reapply t xs
 
