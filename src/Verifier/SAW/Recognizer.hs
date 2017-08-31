@@ -46,6 +46,7 @@ module Verifier.SAW.Recognizer
   , asPi
   , asPiList
   , asLocalVar
+  , asConstant
   , asExtCns
   , asSort
     -- * Prelude recognizers.
@@ -266,6 +267,10 @@ asPiList = go []
 asLocalVar :: (Monad m, Termlike t) => Recognizer m t DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = fail "not a local variable"
+
+asConstant :: (Monad m, Termlike t) => Recognizer m t (String, t, t)
+asConstant (unwrapTermF -> Constant s x t) = return (s, x, t)
+asConstant _ = fail "asConstant: not a defined constant"
 
 asExtCns :: (Monad m, Termlike t) => Recognizer m t (ExtCns t)
 asExtCns t = do
