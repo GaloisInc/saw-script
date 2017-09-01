@@ -92,7 +92,7 @@ library
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
-  GHC-prof-options: -auto-all -caf-all
+  GHC-prof-options: -fprof-auto -fprof-cafs
   extensions:
     DeriveFunctor
     GeneralizedNewtypeDeriving
