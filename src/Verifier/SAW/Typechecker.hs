@@ -353,18 +353,27 @@ tcLocalDecls tc0 p lcls = do
 
 -- | @checkTypeSubtype tc p x y@ checks that @x@ is a subtype of @y@.
 checkTypeSubtype :: forall s . TermContext s -> Pos -> TCTerm -> TCTerm -> TC s ()
-checkTypeSubtype tc p x y = do
-  xr <- reduce tc x
-  yr <- reduce tc y
-  let ppFailure = tcFailD p msg
-        where msg = ppTCTerm tc PrecNone xr
-                    <+> text "is not a subtype of"
-                    <+> ppTCTerm tc PrecNone yr <> char '.'
-  case (tcAsApp xr, tcAsApp yr) of
-    ( (TCF (Sort xs), []), (TCF (Sort ys), []) )
-      | xs <= ys -> return ()
-      | otherwise -> ppFailure
-    _ -> checkTypesEqual' p [] tc xr yr
+checkTypeSubtype tc p x y =
+  do xr <- reduce tc x
+     yr <- reduce tc y
+     let ppFailure = tcFailD p (ppTCTerm tc PrecNone xr
+                                <+> text "is not a subtype of"
+                                <+> ppTCTerm tc PrecNone yr <> char '.')
+     case (xr, yr) of
+       -- Sorts are related iff the left-hand one is <= the right-hand one
+       (TCF (Sort s1), TCF (Sort s2))
+         | s1 <= s2 -> return ()
+         | otherwise -> ppFailure
+       -- Pi types are related iff the domain types are equal and the return
+       -- types are related
+       (TCPi pat1 dom1 ret1, TCPi pat2 dom2 ret2) ->
+         do checkTypesEqual p [] tc dom1 dom2
+            mr <- instPats p tc dom1 (pat1,ret1) (pat2,ret2)
+            case mr of
+              Just (tc', ret1', ret2') -> checkTypeSubtype tc' p ret1' ret2'
+              Nothing -> ppFailure
+       -- Everything else must be equal
+       _ -> checkTypesEqual' p [] tc xr yr
 
 -- | Match untyped term against pattern, returning variables in reverse order.
 -- so that last-bound variable is first.  Also returns the term after it was matched.

@@ -30,6 +30,7 @@ module Verifier.SAW.Typechecker.Context
   , TCPat
   , PatF(..)
   , tcPatVarCount
+  , tcPatVarName
   , tcApply
   , tcPatApply
   , ppTCPat
@@ -328,6 +329,13 @@ tcPatVarCount :: TCPat -> Int
 tcPatVarCount TCPVar{} = 1
 tcPatVarCount TCPUnused{} = 0
 tcPatVarCount (TCPatF pf) = sumOf folded (tcPatVarCount <$> pf)
+
+-- | Return the 'String' name of the sole variable bound by a pattern (even if
+-- it is unused), for patterns that are just a single variable
+tcPatVarName :: TCPat -> Maybe String
+tcPatVarName (TCPVar nm _) = Just nm
+tcPatVarName (TCPUnused nm _) = Just nm
+tcPatVarName _ = Nothing
 
 -- | Increment free vars in TC term by given amount if the index is at least the given level.
 -- This is used for inserting extra variables to a context.

@@ -24,6 +24,7 @@ module Verifier.SAW.Typechecker.Unification
   , typecheckPiPats
   , checkTypesEqual
   , checkTypesEqual'
+  , instPats
   ) where
 
 import Control.Applicative
