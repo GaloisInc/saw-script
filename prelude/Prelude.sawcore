@@ -587,16 +587,11 @@ bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
 primitive bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 
-bvAddWithCarry :: (x :: Nat) -> bitvector x -> bitvector x -> #(Bool, bitvector x);
-bvAddWithCarry n x y =
-  let { x' :: bitvector (addNat 1 n);
-        x' = append 1 n Bool (single Bool False) x;
-        y' :: bitvector (addNat 1 n);
-        y' = append 1 n Bool (single Bool False) y;
-        z  :: bitvector (addNat 1 n);
-        z  = bvAdd (addNat 1 n) x' y';
-      }
-   in ( msb n z, drop Bool 1 n z );
+bvCarry :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+bvCarry n x y = bvult n (bvAdd n x y) x;
+
+bvAddWithCarry :: (n :: Nat) -> bitvector n -> bitvector n -> #(Bool, bitvector n);
+bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
 axiom bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
 axiom bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
