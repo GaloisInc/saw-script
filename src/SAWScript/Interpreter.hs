@@ -71,6 +71,7 @@ import Verifier.SAW.TypedAST
 import qualified Verifier.Java.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
+import qualified Verifier.SAW.Lean.Prelude as LeanSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
@@ -352,6 +353,7 @@ buildTopLevelEnv opts =
                  insImport JavaSAW.javaModule $
                  insImport LLVMSAW.llvmModule $
                  insImport CryptolSAW.cryptolModule $
+                 insImport LeanSAW.leanModule $
                  emptyModule mn
        sc0 <- mkSharedContext scm
        let convs = natConversions
