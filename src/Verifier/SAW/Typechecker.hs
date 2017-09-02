@@ -68,30 +68,6 @@ multiMap = foldlOf' folded fn Map.empty
 
 -- | Type synonyms in untyped world.
 type UnDefEqn = DefEqnGen Un.Pat Un.Term
-type UnLocalDef = LocalDefGen Un.Term [UnDefEqn]
-
--- | Organizes information about local declarations.
-type LocalDeclsGroup = [UnLocalDef]
-
-type GroupLocalDeclsState = ( Map String (PosPair String, Un.Term)
-                            , Map String [UnDefEqn]
-                            )
-
-groupLocalDecls :: [Un.Decl] -> LocalDeclsGroup
-groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
-  where finalize :: GroupLocalDeclsState -> LocalDeclsGroup
-        finalize (tpMap,eqMap) = fn <$> Map.elems tpMap
-          where fn :: (PosPair String, Un.Term) -> UnLocalDef
-                fn (PosPair _ nm,tp) = LocalFnDefGen nm tp eqs
-                  where eqs = fromMaybe [] $ Map.lookup nm eqMap
-        groupDecl :: GroupLocalDeclsState -> Un.Decl -> GroupLocalDeclsState
-        groupDecl (tpMap,eqMap) (Un.TypeDecl _ idl tp) = (tpMap',eqMap)
-          where tpMap' = foldr (\k -> Map.insert (val k) (k,tp)) tpMap idl
-        groupDecl (tpMap,eqMap) (Un.TermDef pnm pats rhs) = (tpMap, eqMap')
-          where eq = DefEqnGen pats rhs
-                eqMap' = Map.insertWith (++) (val pnm) [eq] eqMap
-        groupDecl _ Un.DataDecl{} = error "Unexpected data declaration in let binding"
-        groupDecl _ Un.PrimDataDecl{} = error "Unexpected primitive data declaration in let binding"
 
 type TCDataType = DataTypeGen TCDTType (Ctor Ident TCCtorType)
 type TCDef = TCDefGen Identity
@@ -315,10 +291,6 @@ inferTerm tc uut = do
       (tp,_) <- tcType tc utp
       flip TypedValue tp <$> tcTerm tc ut tp
     Un.Paren _ t -> uncurry TypedValue <$> inferTypedValue tc t
-    Un.LetTerm p udl urhs -> do
-      (tc', lcls) <- tcLocalDecls tc p udl
-      (rhs,rhsTp) <- inferTypedValue tc' urhs
-      return $ TypedValue (TCLet lcls rhs) (TCLet lcls rhsTp)
     Un.NatLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
                   | otherwise -> pure $ TypedValue (TCF (NatLit i)) nattp
       where nattp = TCF (DataTypeApp preludeNatIdent [])
@@ -332,24 +304,6 @@ inferTerm tc uut = do
       let n = TCF (NatLit (toInteger (V.length vals)))
       return $ TypedValue (TCF (ArrayValue tp vals)) (TCF (DataTypeApp preludeVecIdent [n,tp]))
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
-
-tcLocalDecls :: TermContext s
-             -> Pos
-             -> [Un.Decl]
-             -> TC s (TermContext s, [TCLocalDef])
-tcLocalDecls tc0 p lcls = do
-    (lclDefs,pending) <- unzip <$> traverse tcLclType (groupLocalDecls lcls)
-    let tc = consLocalDefs lclDefs tc0
-    traverseOf_ folded ($ tc) pending
-    let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> eval p r
-    (tc,) <$> traverse mkDef lclDefs
-  where tcLclType (LocalFnDefGen nm utp ueqs) = do
-          (tp,_) <- tcType tc0 utp
-          r <- newRef nm
-          let pendingFn tc = do
-                let tp' = applyExt tc (tc0,tp)
-                assignRef r (traverse (tcEqn tc tp') ueqs)
-          return (LocalFnDefGen nm tp r, pendingFn)
 
 -- | @checkTypeSubtype tc p x y@ checks that @x@ is a subtype of @y@.
 checkTypeSubtype :: forall s . TermContext s -> Pos -> TCTerm -> TCTerm -> TC s ()

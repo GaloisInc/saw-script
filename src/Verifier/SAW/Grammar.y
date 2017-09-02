@@ -157,12 +157,8 @@ FieldPat :: { (Pat, Pat) }
 FieldPat : LabelPat '=' Pat { ($1, $3) }
 
 Term :: { Term }
-Term : TTerm { $1 }
-     | 'let' '{' list(SAWEqDecl) '}' 'in' Term { LetTerm (pos $1) $3 $6 }
-
-TTerm :: { Term }
-TTerm : LTerm { $1 }
-      | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
+Term : LTerm { $1 }
+     | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
 
 -- Term with uses of pi and lambda, but no typing.
 LTerm :: { Term }
@@ -399,7 +395,6 @@ termAsPat ex = do
 
       (TypeConstraint{}, []) -> badPat "Type constraint"
       (Paren{}, _) -> error "internal: Unexpected paren"
-      (LetTerm{}, _) -> badPat "Let expression"
       (BadTerm{}, _) -> return Nothing
       (_, h:_) -> err (pos h) "Unexpected expression"
   where ret r = return (Just r)

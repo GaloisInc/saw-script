@@ -116,7 +116,6 @@ data Term
   | TypeConstraint Term Pos Term
     -- | Arguments to an array constructor.
   | Paren Pos Term
-  | LetTerm Pos [Decl] Term
   | NatLit Pos Integer
   | StringLit Pos String
     -- | Vector literal.
@@ -199,7 +198,6 @@ instance Positioned Term where
       FieldType _ t'       -> pos t'
       TypeConstraint _ p _ -> p
       Paren p _            -> p
-      LetTerm p _ _        -> p
       NatLit p _           -> p
       StringLit p _        -> p
       VecLit p _           -> p
