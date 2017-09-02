@@ -229,6 +229,9 @@ boolCmp x y k = ite Bool x (and y k) (or y k);
 bvCmp :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
 
+bvSCmp :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+bvSCmp n x y k = or (bvslt n x y) (and (bvEq n x y) k);
+
 vecCmp :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool -> Bool)
        -> (Vec n a -> Vec n a -> Bool -> Bool);
 vecCmp n a f xs ys k =
@@ -264,6 +267,7 @@ Dict a =
    , not  :: a -> a
    , zero :: a
    , cmp  :: a -> a -> Bool -> Bool
+   , scmp :: a -> a -> Bool -> Bool
    , add  :: a -> a -> a
    , sub  :: a -> a -> a
    , mul  :: a -> a -> a
@@ -272,6 +276,8 @@ Dict a =
    , exp  :: a -> a -> a
    , lg2  :: a -> a
    , neg  :: a -> a
+   , sdiv :: a -> a -> a
+   , smod :: a -> a -> a
    };
 
 DictBit :: Dict Bool;
@@ -282,6 +288,7 @@ DictBit =
   , not  = not
   , zero = False
   , cmp  = boolCmp
+  , scmp = errorCmp Bool
   , add = errorBinary Bool
   , sub = errorBinary Bool
   , mul = errorBinary Bool
@@ -290,6 +297,8 @@ DictBit =
   , exp = errorBinary Bool
   , lg2 = errorUnary Bool
   , neg = errorUnary Bool
+  , sdiv = errorBinary Bool
+  , smod = errorBinary Bool
   };
 
 DictVec :: (a :: sort 0) -> Dict a -> (n :: Nat) -> Dict (Vec n a);
@@ -300,6 +309,7 @@ DictVec a pa n =
   , not  = map a a pa.not n
   , zero = replicate n a pa.zero
   , cmp  = vecCmp n a pa.cmp
+  , scmp = vecCmp n a pa.scmp
   , add = zipWith a a a pa.add n
   , sub = zipWith a a a pa.sub n
   , mul = zipWith a a a pa.mul n
@@ -308,6 +318,8 @@ DictVec a pa n =
   , exp = zipWith a a a pa.exp n
   , lg2 = map a a pa.lg2 n
   , neg = map a a pa.neg n
+  , sdiv = zipWith a a a pa.sdiv n
+  , smod = zipWith a a a pa.smod n
   };
 
 DictStream :: (a :: sort 0) -> Dict a -> Dict (Stream a);
@@ -318,6 +330,7 @@ DictStream a pa =
   , not  = streamMap a a pa.not
   , zero = streamConst a pa.zero
   , cmp  = errorCmp (Stream a)
+  , scmp = errorCmp (Stream a)
   , add = streamMap2 a a a pa.add
   , sub = streamMap2 a a a pa.sub
   , mul = streamMap2 a a a pa.mul
@@ -326,6 +339,8 @@ DictStream a pa =
   , exp = streamMap2 a a a pa.exp
   , lg2 = streamMap a a pa.lg2
   , neg = streamMap a a pa.neg
+  , sdiv = streamMap2 a a a pa.sdiv
+  , smod = streamMap2 a a a pa.smod
   };
 
 DictWord :: (n :: Nat) -> Dict (Vec n Bool);
@@ -336,6 +351,7 @@ DictWord n =
   , not  = bvNot n
   , zero = bvNat n 0
   , cmp  = bvCmp n
+  , scmp = bvSCmp n
   , add = bvAdd n
   , sub = bvSub n
   , mul = bvMul n
@@ -344,6 +360,10 @@ DictWord n =
   , exp = bvExp n
   , lg2 = bvLg2 n
   , neg = bvNeg n
+  , sdiv = natCase (\(w::Nat) -> bitvector w -> bitvector w -> bitvector w)
+           (errorBinary (bitvector 0)) bvSDiv n
+  , smod = natCase (\(w::Nat) -> bitvector w -> bitvector w -> bitvector w)
+           (errorBinary (bitvector 0)) bvSRem n
   };
 
 DictFun :: (a b :: sort 0) -> Dict b -> Dict (a -> b);
@@ -354,6 +374,7 @@ DictFun a b pb =
   , not  = compose a b b pb.not
   , zero = (\(_ :: a) -> pb.zero)
   , cmp  = errorCmp (a -> b)
+  , scmp = errorCmp (a -> b)
   , add = funBinary a b pb.add
   , sub = funBinary a b pb.sub
   , mul = funBinary a b pb.mul
@@ -362,6 +383,8 @@ DictFun a b pb =
   , exp = funBinary a b pb.exp
   , lg2 = compose a b b pb.lg2
   , neg = compose a b b pb.neg
+  , sdiv = funBinary a b pb.sdiv
+  , smod = funBinary a b pb.smod
   };
 
 DictUnit :: Dict #();
@@ -372,6 +395,7 @@ DictUnit =
   , not  = unitUnary
   , zero = ()
   , cmp  = unitCmp
+  , scmp = unitCmp
   , add = unitBinary
   , sub = unitBinary
   , mul = unitBinary
@@ -380,6 +404,8 @@ DictUnit =
   , exp = unitBinary
   , lg2 = unitUnary
   , neg = unitUnary
+  , sdiv = unitBinary
+  , smod = unitBinary
   };
 
 DictPair :: (a b :: sort 0) -> Dict a -> Dict b -> Dict #(a | b);
@@ -390,6 +416,7 @@ DictPair a b pa pb =
   , not  = pairUnary a b pa.not pb.not
   , zero = (pa.zero | pb.zero)
   , cmp  = pairCmp a b pa.cmp pb.cmp
+  , scmp = pairCmp a b pa.scmp pb.scmp
   , add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
   , mul = pairBinary a b pa.mul pb.mul
@@ -398,6 +425,8 @@ DictPair a b pa pb =
   , exp = pairBinary a b pa.exp pb.exp
   , lg2 = pairUnary a b pa.lg2 pb.lg2
   , neg = pairUnary a b pa.neg pb.neg
+  , sdiv = pairBinary a b pa.sdiv pb.sdiv
+  , smod = pairBinary a b pa.smod pb.smod
   };
 
 DictEmpty :: Dict #{};
@@ -408,6 +437,7 @@ DictEmpty =
   , not  = emptyUnary
   , zero = {}
   , cmp  = emptyCmp
+  , scmp = emptyCmp
   , add = emptyBinary
   , sub = emptyBinary
   , mul = emptyBinary
@@ -416,6 +446,8 @@ DictEmpty =
   , exp = emptyBinary
   , lg2 = emptyUnary
   , neg = emptyUnary
+  , sdiv = emptyBinary
+  , smod = emptyBinary
   };
 
 DictField :: (s :: String) -> (a b :: sort 0) -> Dict a -> Dict b -> Dict #{ (s) :: a | b };
@@ -426,6 +458,7 @@ DictField s a b pa pb =
   , not  = fieldUnary s a b pa.not pb.not
   , zero = { (s) = pa.zero | pb.zero }
   , cmp  = fieldCmp s a b pa.cmp pb.cmp
+  , scmp = fieldCmp s a b pa.scmp pb.scmp
   , add = fieldBinary s a b pa.add pb.add
   , sub = fieldBinary s a b pa.sub pb.sub
   , mul = fieldBinary s a b pa.mul pb.mul
@@ -434,6 +467,8 @@ DictField s a b pa pb =
   , exp = fieldBinary s a b pa.exp pb.exp
   , lg2 = fieldUnary s a b pa.lg2 pb.lg2
   , neg = fieldUnary s a b pa.neg pb.neg
+  , sdiv = fieldBinary s a b pa.sdiv pb.sdiv
+  , smod = fieldBinary s a b pa.smod pb.smod
   };
 
 Ops :: sort 0 -> sort 0;
@@ -502,6 +537,12 @@ ecLg2 a pa = pa.this.lg2;
 ecNeg :: (a :: sort 0) -> Ops a -> a -> a;
 ecNeg a pa = pa.this.neg;
 
+ecSDiv :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecSDiv a pa = pa.this.sdiv;
+
+ecSMod :: (a :: sort 0) -> Ops a -> a -> a -> a;
+ecSMod a pa = pa.this.smod;
+
 -- Cmp
 ecLt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecLt a pa x y = pa.this.cmp x y False;
@@ -514,6 +555,9 @@ ecLtEq a pa x y = not (ecLt a pa y x);
 
 ecGtEq  :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecGtEq a pa x y = not (ecLt a pa x y);
+
+ecSLt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecSLt a pa x y = pa.this.scmp x y False;
 
 ecEq :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
 ecEq a _ = eq a;
@@ -552,6 +596,22 @@ ecShiftL TCInf (TCNum n) a _ = bvStreamShiftL a n;
 ecShiftR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
 ecShiftR (TCNum m) (TCNum n) a pa = bvShiftR m a n (ecZero a pa);
 ecShiftR TCInf (TCNum n) a pa = bvStreamShiftR a n (ecZero a pa);
+
+ecSShiftR :: (n k :: Num) -> seq n Bool -> seq k Bool -> seq n Bool;
+ecSShiftR (TCNum n) (TCNum k) =
+  natCase (\(w :: Nat) -> bitvector w -> bitvector k -> bitvector w)
+  (\(x :: bitvector 0) -> \(i :: bitvector k) -> x)
+  (\(w :: Nat) -> \(x :: bitvector (Succ w)) -> \(i :: bitvector k) -> bvSShr w x (bvToNat k i))
+  n;
+
+ecCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecCarry (TCNum n) = bvCarry n;
+
+ecSCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSCarry (TCNum n) =
+  natCase (\(w :: Nat) -> bitvector w -> bitvector w -> Bool)
+  (\(_ :: bitvector 0) (_ :: bitvector 0) -> error Bool "invalid SCarry instance")
+  bvSCarry n;
 
 ecRotL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
 ecRotL (TCNum m) (TCNum n) a _ = bvRotateL m a n;
