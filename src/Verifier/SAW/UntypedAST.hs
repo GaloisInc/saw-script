@@ -27,7 +27,6 @@ module Verifier.SAW.UntypedAST
   , mkRecordValue
   , mkRecordType
   , mkFieldNameTerm
-  , ParamType(..)
   , Pat(..), ppPat
   , mkPTuple
   , mkPRecord
@@ -86,24 +85,16 @@ setIdentModule :: Ident -> ModuleName -> Ident
 setIdentModule (LocalIdent nm) m = Ident m nm
 setIdentModule (Ident _ nm) m = Ident m nm
 
--- | Parameter type
-data ParamType
-  = NormalParam
-  | ImplicitParam
-  | InstanceParam
-  | ProofParam
-  deriving (Eq, Ord, Show)
-
 data Term
   = Var (PosPair Ident)
   | Unused (PosPair String)
     -- | References a constructor.
   | Con (PosPair Ident)
   | Sort Pos Sort
-  | Lambda Pos [(ParamType,[SimplePat],Term)] Term
-  | App Term ParamType Term
+  | Lambda Pos [([SimplePat],Term)] Term
+  | App Term Term
     -- | Pi is the type of a lambda expression.
-  | Pi ParamType [SimplePat] Term Pos Term
+  | Pi [SimplePat] Term Pos Term
     -- | Tuple expressions and their type.
   | UnitValue Pos
   | UnitType Pos
@@ -193,8 +184,8 @@ instance Positioned Term where
       Con i                -> pos i
       Sort p _             -> p
       Lambda p _ _         -> p
-      App x _ _            -> pos x
-      Pi _ _ _ p _         -> p
+      App x _              -> pos x
+      Pi _ _ p _           -> p
       UnitValue p          -> p
       UnitType p           -> p
       PairValue p _ _      -> p
@@ -256,7 +247,7 @@ data Decl
    = TypeDecl DeclQualifier [(PosPair String)] Term
    | DataDecl (PosPair String) Term [CtorDecl]
    | PrimDataDecl (PosPair String) Term
-   | TermDef (PosPair String) [(ParamType, Pat)] Term
+   | TermDef (PosPair String) [Pat] Term
   deriving (Show)
 
 data ImportConstraint
@@ -273,7 +264,7 @@ data ImportName
 asApp :: Term -> (Term,[Term])
 asApp = go []
   where go l (Paren _ t) = go l t
-        go l (App t _ u) = go (u:l) t
+        go l (App t u)   = go (u:l) t
         go l t = (t,l)
 
 mkTupleValue :: Pos -> [Term] -> Term

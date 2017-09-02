@@ -15,17 +15,6 @@ module Prelude where
 --   "f :: n : Integer -> Signed n -> Signed n"
 -- This  indicates "f" is a function that takes an integer argument "n", and returns a function
 -- that takes "n"-bit signed integer and returns another "n"-bit signed integer.
---
--- We prefix the parameter with a single question mark (e.g., "?(n : Integer)") to indicate
--- the parameter is not passed explicitly, but should be inferred by type unification.
---
--- We prefix the parameter with two question marks (e.g., "??(Ord a)") to indicate the
--- parameter is not passed explicitly, but should be obtained by finding a unique term with
--- that type in the surrounding context.  If there are multiple such terms, then fail.
---
--- We use a parameter with three question marks (e.g., "???(assert (eq x y))") to denote
--- parameters that are not explicitly passed, but must be found to show that the expression
--- is well formed.  This is used to ensure the index is valid when reading or updating an array.
 
 
 id :: (a :: sort 0) -> a -> a;
@@ -108,7 +97,7 @@ boolEq True b = b;
 boolEq False b = not b;
 
 -- Could be derived from data declaration.
-ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
+ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 ite _ (True)  t _ = t;
 ite _ (False) _ f = f;
 
@@ -480,7 +469,7 @@ zipWith :: (a b c :: sort 0)
 zipWith a b c f n x y = gen n c (\(i :: Nat) -> f (at n a x i) (at n b y i));
 
 -- replicate n x returns an array with n copies of x.
-replicate :: (n :: Nat) -> ?(a :: sort 0) -> a -> Vec n a;
+replicate :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a;
 replicate n a x = gen n a (\(_ :: Nat) -> x);
 
 -- | Create a vector of length 1.
@@ -499,7 +488,7 @@ join m n a v =
     at n a (at m (Vec n a) v (divNat i n)) (modNat i n));
 
 -- Split array into list
-split :: ?(m n :: Nat) -> ?(a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 split m n a v =
   gen m (Vec n a) (\(i :: Nat) ->
     gen n a (\(j :: Nat) ->

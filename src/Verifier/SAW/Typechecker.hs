@@ -88,7 +88,7 @@ groupLocalDecls = finalize . foldl groupDecl (Map.empty,Map.empty)
         groupDecl (tpMap,eqMap) (Un.TypeDecl _ idl tp) = (tpMap',eqMap)
           where tpMap' = foldr (\k -> Map.insert (val k) (k,tp)) tpMap idl
         groupDecl (tpMap,eqMap) (Un.TermDef pnm pats rhs) = (tpMap, eqMap')
-          where eq = DefEqnGen (snd <$> pats) rhs
+          where eq = DefEqnGen pats rhs
                 eqMap' = Map.insertWith (++) (val pnm) [eq] eqMap
         groupDecl _ Un.DataDecl{} = error "Unexpected data declaration in let binding"
         groupDecl _ Un.PrimDataDecl{} = error "Unexpected primitive data declaration in let binding"
@@ -177,7 +177,7 @@ tcSpecificDataType expected tc ut = do
 tcFixedPiType :: forall r s . (TermContext s -> Un.Term -> TC s r)
               -> TermContext s -> Un.Term -> TC s (FixedPiType r)
 tcFixedPiType fn = go
-  where go tc (Un.Pi _ upats0 utp _ rhs) = do
+  where go tc (Un.Pi upats0 utp _ rhs) = do
           (tp0, _) <- tcType tc utp
           let tcPats :: TermContext s
                      -> [Un.SimplePat]
@@ -207,7 +207,7 @@ inferTypedValue tc ut = do
     TypedValue v tp -> pure (v, tp)
 
 inferLambda  :: TermContext s
-             -> [(Un.ParamType, [Un.SimplePat], Un.Term)] -- Patterns.
+             -> [([Un.SimplePat], Un.Term)] -- Patterns.
              -> Un.Term -- Right hand side of lambda expression
              -> TC s InferResult
 inferLambda tc0 pl0 urhs = go [] tc0 pl0
@@ -215,7 +215,7 @@ inferLambda tc0 pl0 urhs = go [] tc0 pl0
           where mkRes (v,tp) = TypedValue v' tp'
                   where v'  = foldr (uncurry TCLambda) v args
                         tp' = foldr (uncurry TCPi) tp args
-        go args tc1 ((_,patl,utp):l) = do
+        go args tc1 ((patl,utp):l) = do
           (tp,_) <- tcType tc1 utp
           (pl,tc') <- typecheckPats tc1 (map Un.PSimple patl) tp
           let typedPL = (,tp) <$> pl
@@ -229,7 +229,7 @@ inferTerm tc uut = do
     Un.Con i -> resolveIdent tc i
     Un.Sort _ s -> return $ TypedValue (TCF (Sort s)) (TCF (Sort (sortOf s)))
     Un.Lambda _ pl r -> inferLambda tc pl r
-    Un.App uf _ ua -> mkRes =<< inferTerm tc uf
+    Un.App uf ua -> mkRes =<< inferTerm tc uf
       where mkRes (PartialCtor dt i rargs pat tp cur) = do
               (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua tp
               let tc1 = extendPatContext tc pat
@@ -256,8 +256,8 @@ inferTerm tc uut = do
               (args, a) <- matchPat tc (pos ua) pat =<< tcTerm tc ua patTp
               let tc1 = extendPatContext tc pat
               return $ TypedValue (TCApp v a) (tcApply tc (tc1,tp) (tc, args))
-    Un.Pi _ [] _ _ _ -> fail "Pi with no paramters encountered."
-    Un.Pi _ upats0 utp _ rhs -> do
+    Un.Pi [] _ _ _ -> fail "Pi with no paramters encountered."
+    Un.Pi upats0 utp _ rhs -> do
       (tp0,tps) <- tcType tc utp
       let tcPats :: TermContext s -> [Un.SimplePat] -> TCTerm -> TC s (TCTerm, Sort)
           tcPats tc1 [] _ = tcType tc1 rhs
@@ -545,7 +545,7 @@ tcModule ml (Un.Module (PosPair _ nm) iml d) = do
                  , _isDefs = []
                  , _isPending = []
                  }
-    let eqnMap = multiMap [ (val psym, DefEqnGen (snd <$> lhs) rhs)
+    let eqnMap = multiMap [ (val psym, DefEqnGen lhs rhs)
                           | Un.TermDef psym lhs rhs <- d
                           ]
     -- Parse imports and declarations.
