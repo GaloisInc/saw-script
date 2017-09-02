@@ -457,6 +457,7 @@ termAsSimplePat ex = do
         case asLocalIdent (val i) of
           Just nm -> ret $ PVar (PosPair (pos i) nm)
           _ -> badPat "Imported expressions"
+      (Unused i, []) -> ret $ PUnused i
       (BadTerm{}, _) -> return Nothing
       (_, h:_) -> err (pos h) "Unexpected expression"
   where ret r = return (Just r)
@@ -496,7 +497,7 @@ mkLambda :: Pos -> [(ParamType, Term)] -> Term -> Parser Term
 mkLambda ptp lhs rhs = parseLhs lhs []
   where parseLhs [] r = return $ Lambda ptp r rhs
         parseLhs ((ppt,Paren _ (TypeConstraint ux _ ut)):ul) r = do
-          pl <- exprAsPatList ux
+          pl <- exprAsSimplePatList ux
           parseLhs ul ((ppt,pl, ut):r)
 
 -- | Parse a parenthesized expression which may actually be a tuple.

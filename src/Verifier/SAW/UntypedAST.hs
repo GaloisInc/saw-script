@@ -100,10 +100,9 @@ data Term
     -- | References a constructor.
   | Con (PosPair Ident)
   | Sort Pos Sort
-  | Lambda Pos [(ParamType,[Pat],Term)] Term
+  | Lambda Pos [(ParamType,[SimplePat],Term)] Term
   | App Term ParamType Term
     -- | Pi is the type of a lambda expression.
---  | Pi ParamType [Pat] Term Pos Term
   | Pi ParamType [SimplePat] Term Pos Term
     -- | Tuple expressions and their type.
   | UnitValue Pos

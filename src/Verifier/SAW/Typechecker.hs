@@ -207,7 +207,7 @@ inferTypedValue tc ut = do
     TypedValue v tp -> pure (v, tp)
 
 inferLambda  :: TermContext s
-             -> [(Un.ParamType, [Un.Pat], Un.Term)] -- Patterns.
+             -> [(Un.ParamType, [Un.SimplePat], Un.Term)] -- Patterns.
              -> Un.Term -- Right hand side of lambda expression
              -> TC s InferResult
 inferLambda tc0 pl0 urhs = go [] tc0 pl0
@@ -217,7 +217,7 @@ inferLambda tc0 pl0 urhs = go [] tc0 pl0
                         tp' = foldr (uncurry TCPi) tp args
         go args tc1 ((_,patl,utp):l) = do
           (tp,_) <- tcType tc1 utp
-          (pl,tc') <- typecheckPats tc1 patl tp
+          (pl,tc') <- typecheckPats tc1 (map Un.PSimple patl) tp
           let typedPL = (,tp) <$> pl
           go (args ++ typedPL) tc' l
 
