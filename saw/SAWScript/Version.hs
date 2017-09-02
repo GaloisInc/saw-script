@@ -20,7 +20,7 @@ module SAWScript.Version (
   ) where
 
 import Paths_saw_script (version)
-import qualified GitRev
+import qualified SAWScript.GitRev as GitRev
 import Data.Version (showVersion)
 
 commitHash :: String

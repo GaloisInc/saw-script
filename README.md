@@ -96,10 +96,25 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
 
   * Optionally, run ./stage.sh to create a binary tarball.
 
+## Notes on LLVM
+
+SAW can analyze LLVM programs (usually derived from C, but potentially
+for other languages). The only tool strictly required for this is a
+compiler that can generate LLVM bitcode, such as `clang`. However,
+having the full LLVM tool suite available can be useful. We have tested
+SAW with LLVM and `clang` versions from 3.5 to 4.0, as well as the
+version of `clang` bundled with Apple Xcode. We welcome bug reports on
+any failure to parse bitcode from LLVM versions in that range.
+
+Note that successful parsing doesn't necessarily mean that verification
+will be possible for all language constructs. There are various
+instructions that are not supported during verification. However,
+any failure during `llvm_load_module` should be considered a bug.
+
 ## Related Packages
 
 Many dependencies are automatically downloaded into `deps/` when you
-build using `build-sandbox.sh`; see
+build using `build.sh`; see
 [Manual Installation](#manual-installation) above. Key automatically
 downloaded dependencies include:
 
