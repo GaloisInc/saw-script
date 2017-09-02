@@ -492,7 +492,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
      e' <- importExpr sc env1 expr
      let x = nameToString (C.dName decl)
      f' <- scLambda sc x t' e'
-     rhs <- scGlobalApply sc "Cryptol.fix" [t', f']
+     rhs <- scGlobalApply sc "Prelude.fix" [t', f']
      rhs' <- if not isTopLevel then return rhs else scTermF sc (Constant x rhs t')
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
@@ -542,7 +542,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      f <- scLambda sc "fixRecord" rect rec
 
      -- and take its fixpoint
-     rhs <- scGlobalApply sc "Cryptol.fix" [rect, f]
+     rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
      -- finally, build projections from the fixed record to shove into the environment
      rhss <- mapM (\d -> scRecordSelect sc rhs (nameToString (C.dName d))) decls
