@@ -592,6 +592,9 @@ primitive bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
 bvCarry :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
 
+bvSCarry :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
+bvSCarry n x y = and (boolEq (msb n x) (msb n y)) (xor (msb n x) (msb n (bvAdd (Succ n) x y)));
+
 bvAddWithCarry :: (n :: Nat) -> bitvector n -> bitvector n -> #(Bool, bitvector n);
 bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
