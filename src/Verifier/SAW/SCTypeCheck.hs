@@ -147,11 +147,6 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           do s1 <- asSort =<< memo a
              s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
              io $ scSort sc (max s1 s2)
-        -- TODO: this won't support dependent Let bindings
-        -- TODO: should the bindings be reversed?
-        -- TODO: check that all defs have the annotated type
-        Let defs rhs -> lift $ scTypeCheck' sc (reverse dtys ++ env) rhs
-          where dtys = map defType defs
         LocalVar i
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> throwTCError (DanglingVar (i - length env))

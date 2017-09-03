@@ -40,13 +40,6 @@ module Verifier.SAW.Typechecker.Context
   , zipWithPatF
   , termFromPatF
 
-  , LocalDefGen(..)
-  , localDefType
-  , TCRefLocalDef
-  , TCLocalDef
-  , fmapTCLocalDefs
-  , localVarNamesCount
-
   , TCDefGen(..)
   , TCRefDef
 
@@ -76,7 +69,6 @@ module Verifier.SAW.Typechecker.Context
   , globalContext
   , emptyTermContext
   , consBoundVar
-  , consLocalDefs
   , InferResult(..)
   , resolveIdent
   , BoundInfo(..)
@@ -92,7 +84,6 @@ module Verifier.SAW.Typechecker.Context
     -- * Checking terms
   , checkTCPatOf
   , checkDefEqn
-  , checkLocalDefs
   , checkTCTerm
   ) where
 
@@ -124,40 +115,13 @@ data DefEqnGen p t
 
 type TCDefEqn = DefEqnGen TCPat TCTerm
 
--- | Local definition in its most generic form.
--- n is the identifier for name, p is the pattern, and t is the type.
--- The
--- The equations are typed in the context after all local variables are
-data LocalDefGen t e
-   = -- | A Local function definition with position, name, type, and equations.
-     -- Type is typed in context before let bindings.
-     -- Equations are typed in context after let bindings.
-    LocalFnDefGen String t e
-  deriving (Show)
-
-localVarNamesGen :: [LocalDefGen t e] -> [String]
-localVarNamesGen = fmap go
-  where go (LocalFnDefGen nm _ _) = nm
-
-localDefType :: Lens (LocalDefGen a e) (LocalDefGen b e) a b
-localDefType f (LocalFnDefGen nm tp rhs) = g <$> f tp
-  where g tp' = LocalFnDefGen nm tp' rhs
-
-localVarNamesCount :: [LocalDefGen t e] -> Int
-localVarNamesCount = length
-
-type TCLocalDef = LocalDefGen TCTerm [TCDefEqn]
-
 data TCTerm
   = TCF !(FlatTermF TCTerm)
   | TCApp !TCTerm !TCTerm
   | TCLambda !TCPat !TCTerm !TCTerm
   | TCPi !TCPat !TCTerm !TCTerm
-  | TCLet [TCLocalDef] TCTerm
     -- | A local variable with its deBruijn index and type in the current context.
   | TCVar DeBruijnIndex
-    -- | A reference to a let bound function with equations.
-  | TCLocalDef DeBruijnIndex
 
 data AnnPat a
     -- | Variable with its annotation.
@@ -240,7 +204,6 @@ defGenIdent (DefGen i _ _ _) = i
 type TCRefDataType s = TCDataTypeGen (TCRef s)
 type TCRefCtor s = TCCtorGen (TCRef s)
 type TCRefDef s = TCDefGen (TCRef s)
-type TCRefLocalDef s = LocalDefGen TCTerm (TCRef s [TCDefEqn])
 
 -- | State monad for recording variables found in patterns.
 type PatVarParser a = State (Int,Map Int (String,a))
@@ -303,19 +266,6 @@ zipWithPatF f x y =
           Just $ UPCtor cx (zipWith f lx ly)
     _ -> Nothing
 
-fmapTCLocalDefs :: (Int -> TCTerm -> TCTerm)
-                -> Int -> [TCLocalDef] -> [TCLocalDef]
-fmapTCLocalDefs tfn i defs = go <$> defs
-  where i' = i + length defs
-        go (LocalFnDefGen nm tp eqs) = LocalFnDefGen nm (tfn i tp) eqs'
-          where eqs' = fmapTCDefEqn tfn i' <$> eqs
-
-fmapTCDefEqn :: (Int -> TCTerm -> TCTerm)
-             -> Int -> TCDefEqn -> TCDefEqn
-fmapTCDefEqn tfn l (DefEqnGen pl r) = DefEqnGen pl' r'
-  where pl' = fmapTCPat tfn l <$> pl
-        r' = tfn (l+ sum (tcPatVarCount <$> pl)) r
-
 termFromTCDTType :: TCDTType -> TCTerm
 termFromTCDTType (FPResult s) = TCF (Sort s)
 termFromTCDTType (FPPi p tp r) = TCPi p tp (termFromTCDTType r)
@@ -349,10 +299,7 @@ incTCVars j = go
           where r' = go (i+tcPatVarCount p) r
         go i (TCPi p tp r) = TCPi (pfn i p) (go i tp) r'
           where r' = go (i+tcPatVarCount p) r
-        go i (TCLet lcls t) = TCLet (fmapTCLocalDefs go i lcls) t'
-          where t' = go (i+localVarNamesCount lcls) t
         go i (TCVar l) = TCVar $ if l >= i then l+j else l
-        go i (TCLocalDef l) = TCLocalDef $ if l >= i then l+j else l
 
 
 -- | @tcApply t n args@ substitutes free variables [n..length args-1] with args.
@@ -387,15 +334,9 @@ tcApplyImpl vd v = go
           where r' = go (i + tcPatVarCount p) r
         go i (TCPi p tp r) = TCPi (fmapTCPat go i p) (go i tp) r'
           where r' = go (i + tcPatVarCount p) r
-        go i (TCLet lcls r) = TCLet (fmapTCLocalDefs go i lcls) r'
-          where r' = go (i + length lcls) r
         go i (TCVar j) | j < i = TCVar j -- Variable bound
                        | j - i < fd = incTCVars i 0 (v V.! (j - i)) -- Variable instantiated.
                        | otherwise = TCVar (vd + j - fd) -- Variable in new extended context.
-        go i (TCLocalDef j)
-          | j < i = TCLocalDef j
-          | j - i < fd = error "Attempt to instantiate let bound definition."
-          | otherwise = TCLocalDef (vd + j - fd)
 
 -- | Extend a term with the context from the given pair to the extended context.
 applyExt :: TermContext s -> (TermContext s,TCTerm) -> TCTerm
@@ -408,7 +349,7 @@ applyExtSafe tc1 (tc0,t) = (\d -> incTCVars d 0 t) <$> boundVarDiff tc1 tc0
 
 -- Global context stuff
 
--- | Location contains 
+-- | Location contains
 data Loc
   = ImportedLoc ModuleName Pos
   | LocalLoc Pos
@@ -466,7 +407,7 @@ insertDataType mnml vis loc (DataTypeGen dtnm dtp cl isPrim) gc =
     gc { gcMap = insertAllBindings bindings (gcMap gc) }
   where dt = DataTypeGen dtnm dtp (view _3 <$> cl) isPrim
         dtBindings = untypedBindings vis mnml (identName dtnm) (DataTypeBinding loc dt)
-        cBindings (b, cloc, c@(Ctor cnm _)) = 
+        cBindings (b, cloc, c@(Ctor cnm _)) =
           untypedBindings b mnml (identName cnm) (CtorBinding cloc dt c)
         bindings = dtBindings ++ concatMap cBindings cl
 
@@ -522,7 +463,6 @@ resolveCtor gc (PosPair p nm) argc = do
 
 data TermContext s where
   TopContext :: GlobalContext s -> TermContext s
-  LetContext :: TermContext s -> [TCRefLocalDef s] -> TermContext s
   BindContext :: TermContext s -> String -> TCTerm -> TermContext s
 
 boundVarDiff :: TermContext s -> TermContext s -> Maybe Int
@@ -533,7 +473,6 @@ boundVarDiff tc1 tc0
 
 termBoundCount :: TermContext s -> Int
 termBoundCount TopContext{} = 0
-termBoundCount (LetContext tc lcls) = termBoundCount tc + length lcls
 termBoundCount (BindContext tc _ _) = termBoundCount tc + 1
 
 -- | Empty term context.
@@ -544,26 +483,16 @@ emptyTermContext = TopContext
 consBoundVar :: String -> TCTerm -> TermContext s -> TermContext s
 consBoundVar nm tp ctx = BindContext ctx nm tp
 
--- | Add local definitions to context.
-consLocalDefs :: [TCRefLocalDef s] -> TermContext s -> TermContext s
-consLocalDefs = flip LetContext
-
 globalContext :: TermContext s -> GlobalContext s
 globalContext (BindContext tc _ _) = globalContext tc
-globalContext (LetContext tc _) = globalContext tc
 globalContext (TopContext gc) = gc
 
 data BoundInfo where
   BoundVar :: String -> BoundInfo
-  LocalDef :: String -> BoundInfo
 
 resolveBoundInfo :: DeBruijnIndex -> TermContext s -> BoundInfo
 resolveBoundInfo 0 (BindContext _ nm _) = BoundVar nm
 resolveBoundInfo i (BindContext tc _ _) = resolveBoundInfo (i-1) tc
-resolveBoundInfo i0 (LetContext tc lcls) = lclFn i0 (reverse lcls)
-  where lclFn 0 (LocalFnDefGen nm _ _:_) = LocalDef nm
-        lclFn i (_:r) = lclFn (i-1) r
-        lclFn i [] = resolveBoundInfo i tc
 resolveBoundInfo _ TopContext{} = error "resolveBoundInfo given invalid index."
 
 globalDefEqns :: Ident -> TermContext s -> TCRef s [TCDefEqn]
@@ -601,13 +530,6 @@ resolveIdent tc0 (PosPair p ident) = go tc0
                 pure $ TypedValue (applyExt tc0 (tc1,TCVar 0))
                                   (applyExt tc0 (tc,tp))
             | otherwise = go tc
-        go tc1@(LetContext tc lcls) = lclFn 0 (reverse lcls)
-          where lclFn i (LocalFnDefGen nm tp _ : r)
-                    | matchName nm ident =
-                        pure $ TypedValue (applyExt tc0 (tc1, TCLocalDef i))
-                                          (applyExt tc0 (tc,tp))
-                    | otherwise = lclFn (i+1) r
-                lclFn _ [] = go tc
         go (TopContext gc) = do
           gb <- resolveGlobalIdent gc (PosPair p ident)
           case gb of
@@ -615,7 +537,7 @@ resolveIdent tc0 (PosPair p ident) = go tc0
               ftp <- eval p rtp
               case ftp of
                 FPResult s -> pure $ TypedValue (TCF (DataTypeApp dt [])) (TCF (Sort s))
-                FPPi pat tp next -> pure $ PartialDataType dt [] pat tp next 
+                FPPi pat tp next -> pure $ PartialDataType dt [] pat tp next
             CtorBinding _ dt (Ctor c rtp) -> do
               ftp <- eval p rtp
               case ftp of
@@ -629,8 +551,6 @@ resolveIdent tc0 (PosPair p ident) = go tc0
 -- | Return names in context.
 contextNames :: TermContext s -> [String]
 contextNames (BindContext tc nm _) = nm : contextNames tc
-contextNames (LetContext tc lcls) = fmap lclName lcls ++ contextNames tc
-  where lclName (LocalFnDefGen nm _ _) = nm
 contextNames TopContext{} = []
 
 -- Pretty printing
@@ -640,11 +560,6 @@ ppTermContext :: TermContext s -> Doc
 ppTermContext (BindContext tc nm tp) =
   text ("bind " ++ nm) <+> text "::" <+> ppTCTerm tc PrecLambda tp <$$>
   ppTermContext tc
-ppTermContext (LetContext tc lcls) =
-    text "let" <+> (nest 4 (vcat (ppLcl <$> lcls))) <$$>
-    ppTermContext tc
-  where ppLcl (LocalFnDefGen nm tp _) =
-         text nm <+> text "::" <+> ppTCTerm tc PrecLambda tp
 ppTermContext TopContext{} = text "top"
 
 -- | Pretty print a pat
@@ -681,15 +596,8 @@ ppTCTermGen d pr (TCLambda p l r) = ppParens (pr > PrecNone) $
 ppTCTermGen d pr (TCPi p l r) = ppParens (pr > PrecNone) $
   parens (ppTCPat p <+> colon <+> ppTCTermGen d PrecLambda l)
     <+> text "->" <+> ppTCTermGen (d ++ fmap text (V.toList $ patVarNames p)) PrecLambda r
-ppTCTermGen d pr (TCLet lcls t) = ppParens (pr > PrecNone) $
-    text "let " <> nest 4 (vcat (ppLcl <$> lcls)) <$$>
-    text " in " <> nest 4 (ppTCTermGen (d ++ fmap text (localVarNamesGen lcls)) PrecNone t)
-  where ppLcl (LocalFnDefGen nm tp _) =
-          text nm <+> text "::" <+> ppTCTermGen d PrecLambda tp
 ppTCTermGen d _ (TCVar i) | 0 <= i && i < length d = d !! i
                           | otherwise = text $ "Bad variable index " ++ show i
-ppTCTermGen d _ (TCLocalDef i) | 0 <= i && i < length d = d !! i
-                               | otherwise = text $ "Bad local var index " ++ show i
 
 -- | Bound the free variables in the term with pi quantifiers.
 boundFreeVarsWithPi :: (TermContext s, TCTerm) -> TermContext s -> TCTerm
@@ -725,13 +633,6 @@ checkDefEqn c (DefEqnGen pl r) = do
   c' <- checkTCPatOf c traverse pl
   checkTCTerm c' r
 
-checkLocalDefs :: Int -> [TCLocalDef] -> Maybe Int
-checkLocalDefs c l = traverseOf_ folded checkFn l >> return (c+length l)
-  where c' = c + length l
-        checkFn (LocalFnDefGen _ tp eqns) = do
-          checkTCTerm c tp
-          traverseOf_ folded (checkDefEqn c') eqns
-
 -- | Check that term does not reference free variables out of given range.
 checkTCTerm :: Int -> TCTerm -> Maybe ()
 checkTCTerm c t0 =
@@ -748,8 +649,4 @@ checkTCTerm c t0 =
       checkTCTerm c tp
       c' <- checkTCPatOf c id p
       checkTCTerm c' r
-    TCLet lcls r -> do
-      c' <- checkLocalDefs c lcls
-      checkTCTerm c' r
     TCVar i -> unless (i < c) $ error "Illegal var index"
-    TCLocalDef i -> unless (i < c) $ error "Illegal local def index"

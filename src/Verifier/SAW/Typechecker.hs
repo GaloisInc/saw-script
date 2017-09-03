@@ -451,19 +451,7 @@ completeTerm cc (TCPi pat@(TCPUnused nm _) tp r) =
     SimpleTerm $ Pi nm (completeTerm cc tp) (completeTerm cc' r)
   where (_, cc') = completePat cc pat
 completeTerm _ (TCPi TCPatF{} _ _) = internalError "Illegal TCPi term"
-completeTerm cc (TCLet lcls t) =
-    SimpleTerm $ Let (completeLocal <$> lcls') (completeTerm cc' t)
-  where -- Complete types in local defs using outer context.
-        lcls' = lcls & traverse . localDefType %~ completeTerm cc
-        -- Create new context.
-        cc' = foldlOf' folded CCBinding cc
-            $ zipWith (incVarsSimpleTerm 0) [0..]
-            $ view localDefType <$> lcls'
-        -- Complete equations in new context.
-        completeLocal (LocalFnDefGen nm tp eqns) =
-          Def nm NoQualifier tp (completeDefEqn cc' <$> eqns)
 completeTerm _ (TCVar i) = SimpleTerm $ LocalVar i
-completeTerm _ (TCLocalDef i) = SimpleTerm $ LocalVar i
 
 addImportNameStrings :: Un.ImportName -> Set String -> Set String
 addImportNameStrings im s =
@@ -588,20 +576,6 @@ liftEqn tc0 (DefEqn pl r) = do
   (pl', tc) <- liftTCPatT tc0 pl
   DefEqnGen pl' <$> liftTCTerm tc r
 
-liftLocalDefs :: Termlike t => TermContext s -> [LocalDef t] -> TC s ([TCLocalDef], TermContext s)
-liftLocalDefs tc0 lcls = do
-    (tps,pending) <- unzip <$> traverse tcLclType lcls
-    let tc = consLocalDefs tps tc0
-    traverseOf_ folded ($ tc) pending
-    let mkDef (LocalFnDefGen nm tp r) = LocalFnDefGen nm tp <$> topEval r
-    (,tc) <$> traverse mkDef tps
-  where tcLclType (Def nm _ tp0 eqs) = do
-          tp <- liftTCTerm tc0 tp0
-          r <- newRef nm
-          let pendingFn tc = do
-                assignRef r (traverse (liftEqn tc) eqs)
-          return (LocalFnDefGen nm tp r, pendingFn)
-
 liftTCTerm :: Termlike t => TermContext s -> t -> TC s TCTerm
 liftTCTerm tc trm =
   case unwrapTermF trm of
@@ -615,13 +589,9 @@ liftTCTerm tc trm =
       tp' <- liftTCTerm tc tp
       let tc' = consBoundVar nm tp' tc
       TCPi (TCPVar nm (0, tp')) tp' <$> liftTCTerm tc' rhs
-    Let lcls r -> do
-      (lcls', tc') <- liftLocalDefs tc lcls
-      TCLet lcls' <$> liftTCTerm tc' r
     LocalVar i -> return $
       case resolveBoundInfo i tc of
         BoundVar{} -> TCVar i
-        LocalDef{} -> TCLocalDef i
     Constant {} -> error "liftTCTerm"
 
 

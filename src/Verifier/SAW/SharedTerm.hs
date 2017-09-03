@@ -400,7 +400,6 @@ scWhnf sc t0 =
                                                                      t' <- scDataTypeApp sc c args'
                                                                      foldM reapply t' xs
     go xs                     (asConstant -> Just (_,body,_))   = do go xs body
-    -- FIXME? what about Let?
     go xs                     t                                 = foldM reapply t xs
 
     reapply :: Term -> Either Term (Either Bool FieldName) -> IO Term
@@ -509,8 +508,6 @@ scConvertible sc unfoldConst tm1 tm2 = do
        goF c (Pi _ ty1 body1) (Pi _ ty2 body2) =
               pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
 
-       -- FIXME? what about Let?
-
        -- final catch-all case
        goF _c x y = return $ alphaEquiv (Unshared x) (Unshared y)
 
@@ -577,7 +574,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           ltp <- sort tp
           rtp <- asSort =<< lift (scTypeOf' sc (tp : env) rhs)
           lift $ scSort sc (max ltp rtp)
-        Let defs rhs -> error "scTypeOf Let" defs rhs
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
@@ -740,13 +736,6 @@ instantiateVars sc f initialLevel t0 =
     go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
     go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go (l+1) rhs)
-    go' l (Let defs r) = scTermF sc =<< (Let <$> traverse procDef defs <*> go l' r)
-      where l' = l + length defs
-            procDef :: LocalDef Term -> IO (LocalDef Term)
-            procDef (Def sym qual tp eqs) = Def sym qual <$> go l tp <*> traverse procEq eqs
-            procEq :: DefEqn Term -> IO (DefEqn Term)
-            procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
-              where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i)
       | i < l     = scTermF sc (LocalVar i)
       | otherwise = f l (Right i)
@@ -877,7 +866,6 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders -> [t1]
             Pi _ t1 _     | not doBinders -> [t1]
-            Let{}         | not doBinders -> []
             Constant{}                    -> []
             tf                            -> Fold.toList tf
 

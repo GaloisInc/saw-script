@@ -110,12 +110,12 @@ import Control.Lens
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import Data.Foldable (foldl', sum)
+import Data.Foldable (foldl')
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Prelude hiding (all, foldr, sum)
+import Prelude hiding (all, foldr)
 
 import Verifier.SAW.Utils (internalError)
 import qualified Verifier.SAW.TermNet as Net
@@ -166,13 +166,6 @@ instantiateVars f initialLevel = go initialLevel
             Constant{}      -> SimpleTerm tf -- assume rhs is a closed term, so leave it unchanged
             Lambda i tp rhs -> SimpleTerm $ Lambda i (go l tp) (go (l+1) rhs)
             Pi i lhs rhs    -> SimpleTerm $ Pi i (go l lhs) (go (l+1) rhs)
-            Let defs r      -> SimpleTerm $ Let (procDef <$> defs) (go l' r)
-              where l' = l + length defs
-                    procDef (Def sym qual tp eqs) = Def sym qual tp' eqs'
-                      where tp' = go l tp
-                            eqs' = procEq <$> eqs
-                    procEq (DefEqn pats rhs) = DefEqn pats (go eql rhs)
-                      where eql = l' + sum (patBoundVarCount <$> pats)
             LocalVar i
               | i < l -> SimpleTerm $ LocalVar i
               | otherwise -> f l i

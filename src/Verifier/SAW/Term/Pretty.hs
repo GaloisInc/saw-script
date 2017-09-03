@@ -177,19 +177,6 @@ ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
 
-ppLocalDef :: Applicative f
-           => (Bool -> LocalVarDoc -> Prec -> e -> f Doc)
-           -> LocalVarDoc -- ^ Context outside let
-           -> LocalVarDoc -- ^ Context inside let
-           -> LocalDef e
-           -> f Doc
-ppLocalDef pp lcls lcls' (Def nm _qual tp eqs) =
-    ppd <$> (pptc <$> pp False lcls PrecLambda tp)
-        <*> traverse (ppDefEqnF (pp True) lcls' sym) (reverse eqs)
-  where sym = text nm
-        pptc tpd = hang 2 $ group (sym <<$>> doublecolon <+> tpd <> semi)
-        ppd tpd eqds = vcat (tpd : eqds)
-
 ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
 ppDefEqn pp lcls sym eq = runIdentity (ppDefEqnF pp' lcls sym eq)
   where pp' l' p' e' = pure (pp l' p' e')
@@ -378,14 +365,6 @@ ppTermF' _opts pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp True lcls' PrecL
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' _opts pp lcls p (Let dl u) =
-    ppLet <$> traverse (ppLocalDef pp' lcls lcls') dl
-          <*> pp True lcls' PrecNone u
-  where ppLet dl' u' = TermDoc $
-          ppParens (p > PrecNone) $ ppLetBlock dl' (ppTermDoc u')
-        nms = concatMap localVarNames dl
-        lcls' = foldl' consBinding lcls nms
-        pp' a b c d = ppTermDoc <$> pp a b c d
 ppTermF' _opts _pp lcls _p (LocalVar i)
 --    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
     | otherwise = pure $ TermDoc d

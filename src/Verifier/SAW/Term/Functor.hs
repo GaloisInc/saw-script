@@ -52,7 +52,6 @@ module Verifier.SAW.Term.Functor
  , isIdent
  ) where
 
-import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Lens
 import Data.Bits
@@ -61,7 +60,7 @@ import Data.Char
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import Data.Foldable (sum, all)
+import Data.Foldable (all)
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
@@ -433,12 +432,6 @@ data TermF e
     | App !e !e
     | Lambda !String !e !e
     | Pi !String !e !e
-    | Let [LocalDef e] !e
-      -- ^ List of bindings and the let expression itself.
-      -- Let expressions introduce variables for each identifier.
-      -- Let definitions are bound in the order they appear, e.g., the first symbol
-      -- is referred to by the largest deBruijnIndex within the let, and the last
-      -- symbol has index 0 within the let.
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
     | Constant String !e !e
@@ -458,23 +451,6 @@ bitwiseOrOf fld = foldlOf' fld (.|.) 0
 -- Bit n is a 1 iff n is in the set.
 type BitSet = Integer
 
-freesPat :: Pat BitSet -> BitSet
-freesPat p0 =
-  case p0 of
-    PVar  _ i tp -> tp `shiftR` i
-    PUnused i tp -> tp `shiftR` i
-    PUnit        -> 0
-    PPair x y    -> freesPat x .|. freesPat y
-    PEmpty       -> 0
-    PField _ x y -> freesPat x .|. freesPat y
-    PCtor _ pl   -> bitwiseOrOf folded (freesPat <$> pl)
-    PString _    -> 0
-
-freesDefEqn :: DefEqn BitSet -> BitSet
-freesDefEqn (DefEqn pl rhs) =
-    bitwiseOrOf folded (freesPat <$> pl) .|. rhs `shiftR` pc
-  where pc = sum (patBoundVarCount <$> pl)
-
 freesTermF :: TermF BitSet -> BitSet
 freesTermF tf =
     case tf of
@@ -482,13 +458,6 @@ freesTermF tf =
       App l r -> l .|. r
       Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
       Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
-      Let lcls rhs ->
-          bitwiseOrOf (folded . folded) lcls' .|. rhs `shiftR` n
-        where n = length lcls
-              freesLocalDef :: LocalDef BitSet -> [BitSet]
-              freesLocalDef (Def _ _ tp eqs) =
-                tp : fmap ((`shiftR` n) . freesDefEqn) eqs
-              lcls' = freesLocalDef <$> lcls
       LocalVar i -> bit i
       Constant _ _ _ -> 0 -- assume rhs is a closed term
 

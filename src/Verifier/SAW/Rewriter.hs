@@ -663,7 +663,6 @@ doHoistIfs sc ss hoistCache itePat = go
            t' <- scApply sc f' x'
            return (t', conds1 ++ conds2)
 
-       goF _ (Let _defs _e) = fail "if hoisting through 'let' not implemented"
        goF _ (Lambda nm tp body) = goBinder scLambda nm tp body
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
 
