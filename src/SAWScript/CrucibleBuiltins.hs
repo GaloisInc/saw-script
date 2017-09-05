@@ -450,7 +450,7 @@ verifySimulate cc mspec args assumes lemmas globals checkSat =
             let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
-                do mapM_ (registerOverride cc simCtx)
+                do mapM_ (registerOverride cc simCtx')
                          (groupOn (view csName) lemmas)
                    liftIO $ do
                      preds <- mapM (resolveSAWPred cc) assumes
