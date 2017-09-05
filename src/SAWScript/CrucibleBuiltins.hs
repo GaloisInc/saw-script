@@ -405,10 +405,13 @@ registerOverride ::
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret ()
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
+      cfg = Crucible.simConfig (ccSimContext cc)
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
   let s@(L.Symbol fsym) = (head cs)^.csName
       llvmctx = ccLLVMContext cc
-  liftIO $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
+  liftIO $ do
+    verb <- Crucible.getConfigValue Crucible.verbosity cfg
+    when (verb >= 2) $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
     -- LLVMHandleInfo constructor has two existential type arguments,
     -- which are bound here. h :: FnHandle args' ret'
