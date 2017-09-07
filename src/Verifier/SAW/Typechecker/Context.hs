@@ -192,8 +192,8 @@ data DataTypeGen t c =
                , dtgIsPrimitive :: Bool
                }
 
-type TCDataTypeGen r = DataTypeGen (r TCDTType) (Ctor Ident (r TCCtorType))
-type TCCtorGen r = Ctor Ident (r TCCtorType)
+type TCDataTypeGen r = DataTypeGen (r TCDTType) (Ctor (r TCCtorType))
+type TCCtorGen r = Ctor (r TCCtorType)
 
 data TCDefGen r
   = DefGen !Ident Un.DeclQualifier !(r TCTerm) !(r [TCDefEqn])

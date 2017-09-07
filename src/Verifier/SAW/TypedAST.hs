@@ -181,8 +181,8 @@ ppTerm = ppTermlike
 instance Show SimpleTerm where
   showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t
 
-type TypedDataType = DataType Ident SimpleTerm
-type TypedCtor = Ctor Ident SimpleTerm
+type TypedDataType = DataType SimpleTerm
+type TypedCtor = Ctor SimpleTerm
 type TypedDef = Def SimpleTerm
 type TypedDefEqn = DefEqn SimpleTerm
 

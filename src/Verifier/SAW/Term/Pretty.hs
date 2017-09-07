@@ -168,7 +168,7 @@ ppNat opts i
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
-ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
+ppCtor :: TermPrinter e -> Ctor e -> Doc
 ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
   where
     lcls = emptyLocalVarDoc
@@ -193,7 +193,7 @@ ppDefEqnF f lcls sym (DefEqn pats rhs) =
         lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
         ppPat' = fmap ppTermDoc . ppPat (\p e -> TermDoc <$> f lcls' p e) PrecArg
 
-ppDataType :: TermPrinter e -> DataType Ident e -> Doc
+ppDataType :: TermPrinter e -> DataType e -> Doc
 ppDataType f dt =
   group $ (group ((text "data" <+> tc) <<$>> (text "where" <+> lbrace)))
           <<$>>

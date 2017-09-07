@@ -174,6 +174,7 @@ maxSort :: Sort -> Sort -> Sort
 maxSort (SortCtor x) (SortCtor y) = SortCtor (max x y)
 
 
+
 -- Patterns --------------------------------------------------------------------
 
 -- Patterns are used to match equations.
@@ -267,9 +268,9 @@ instance (Ord e) => Ord (DefEqn e) where
 
 -- Constructors ----------------------------------------------------------------
 
-data Ctor n tp =
+data Ctor tp =
   Ctor
-  { ctorName :: !n
+  { ctorName :: !Ident
   , ctorType :: tp -- ^ The type of the constructor (should contain no free variables).
   }
   deriving (Functor, Foldable, Traversable)
@@ -277,34 +278,34 @@ data Ctor n tp =
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
-instance Eq n => Eq (Ctor n tp) where
+instance Eq (Ctor tp) where
   (==) = lift2 ctorName (==)
 
-instance Ord n => Ord (Ctor n tp) where
+instance Ord (Ctor tp) where
   compare = lift2 ctorName compare
 
-instance Show n => Show (Ctor n tp) where
+instance Show (Ctor tp) where
   show = show . ctorName
 
 
 -- Datatypes -------------------------------------------------------------------
 
-data DataType n t =
+data DataType t =
   DataType
-  { dtName :: n
+  { dtName :: Ident
   , dtType :: t
-  , dtCtors :: [Ctor n t]
+  , dtCtors :: [Ctor t]
   , dtIsPrimitive :: Bool
   }
   deriving (Functor, Foldable, Traversable)
 
-instance Eq n => Eq (DataType n t) where
+instance Eq (DataType t) where
   (==) = lift2 dtName (==)
 
-instance Ord n => Ord (DataType n t) where
+instance Ord (DataType t) where
   compare = lift2 dtName compare
 
-instance Show n => Show (DataType n t) where
+instance Show (DataType t) where
   show = show . dtName
 
 

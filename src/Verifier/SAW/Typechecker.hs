@@ -69,7 +69,7 @@ multiMap = foldlOf' folded fn Map.empty
 -- | Type synonyms in untyped world.
 type UnDefEqn = DefEqnGen Un.Pat Un.Term
 
-type TCDataType = DataTypeGen TCDTType (Ctor Ident TCCtorType)
+type TCDataType = DataTypeGen TCDTType (Ctor TCCtorType)
 type TCDef = TCDefGen Identity
 
 fmapTCApply :: Functor f
