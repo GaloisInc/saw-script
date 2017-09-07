@@ -58,6 +58,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import Prelude hiding (all, foldr, sum)
 
+import Verifier.SAW.Module
 import Verifier.SAW.Term.Functor
 
 data Prec

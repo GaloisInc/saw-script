@@ -114,6 +114,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Prelude hiding (all, foldr)
 
+import Verifier.SAW.Module
 import Verifier.SAW.Utils (internalError)
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Term.Functor
