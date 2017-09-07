@@ -27,11 +27,9 @@ module Verifier.SAW.Term.Functor
  , GenericDef(..)
  , Def
  , DefQualifier(..)
- , LocalDef
  , ExtCns(..)
  , VarIndex
  , DefEqn(..)
- , localVarNames
    -- * Patterns.
  , Pat(..)
  , patBoundVars
@@ -254,12 +252,8 @@ data GenericDef n e =
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 type Def = GenericDef Ident
-type LocalDef = GenericDef String
 
 instance (Hashable n, Hashable e) => Hashable (GenericDef n e) -- automatically derived
-
-localVarNames :: LocalDef e -> [String]
-localVarNames (Def nm _ _ _) = [nm]
 
 data DefEqn e
   = DefEqn [Pat e] e -- ^ List of patterns and a right hand side

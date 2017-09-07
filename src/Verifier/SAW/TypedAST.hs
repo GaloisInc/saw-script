@@ -48,8 +48,6 @@ module Verifier.SAW.TypedAST
  , GenericDef(..)
  , Def
  , DefQualifier(..)
- , LocalDef
- , localVarNames
  , DefEqn(..)
  , Pat(..)
  , patBoundVarCount
