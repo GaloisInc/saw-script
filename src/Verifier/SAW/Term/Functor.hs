@@ -24,8 +24,7 @@ module Verifier.SAW.Term.Functor
  , FieldName
  , DataType(..)
  , Ctor(..)
- , GenericDef(..)
- , Def
+ , Def(..)
  , DefQualifier(..)
  , ExtCns(..)
  , VarIndex
@@ -242,18 +241,16 @@ data DefQualifier
 instance Hashable DefQualifier -- automatically derived
 
 -- | A Definition contains an identifier, the type of the definition, and a list of equations.
-data GenericDef n e =
+data Def e =
   Def
-  { defIdent :: n
+  { defIdent :: Ident
   , defQualifier :: DefQualifier
   , defType :: e
   , defEqs :: [DefEqn e]
   }
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
-type Def = GenericDef Ident
-
-instance (Hashable n, Hashable e) => Hashable (GenericDef n e) -- automatically derived
+instance (Hashable e) => Hashable (Def e) -- automatically derived
 
 data DefEqn e
   = DefEqn [Pat e] e -- ^ List of patterns and a right hand side

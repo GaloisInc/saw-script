@@ -121,13 +121,13 @@ matchThunks (p : ps) (x : xs) = do
         Just m2 -> return $ Just (Map.union m1 m2)
 
 
-{-# SPECIALIZE evalDef :: forall b w i e n t. Show n => (t -> OpenValue Id b w i e) -> GenericDef n t -> Id (Value Id b w i e) #-}
-{-# SPECIALIZE evalDef :: forall b w i e n t. Show n => (t -> OpenValue IO b w i e) -> GenericDef n t -> IO (Value IO b w i e) #-}
+{-# SPECIALIZE evalDef :: forall b w i e t. (t -> OpenValue Id b w i e) -> Def t -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalDef :: forall b w i e t. (t -> OpenValue IO b w i e) -> Def t -> IO (Value IO b w i e) #-}
 
 -- | Evaluator for pattern-matching function definitions,
 -- parameterized by an evaluator for right-hand sides.
-evalDef :: forall m b w i e n t. (Monad m, Show n) =>
-           (t -> OpenValue m b w i e) -> GenericDef n t -> m (Value m b w i e)
+evalDef :: forall m b w i e t. Monad m =>
+           (t -> OpenValue m b w i e) -> Def t -> m (Value m b w i e)
 evalDef rec (Def ident NoQualifier _ eqns) = vFuns [] arity
   where
     arity :: Int
