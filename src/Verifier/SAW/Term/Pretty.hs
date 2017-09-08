@@ -11,36 +11,39 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Term.Pretty
- ( Prec(..)
- , LocalVarDoc
- , emptyLocalVarDoc
- , TermDoc(..)
- , ppTermDoc
- , docShowLocalNames
- , docShowLocalTypes
- , TermPrinter
- , PPOpts(..)
- , defaultPPOpts
- , ppAppParens
- , ppIdent
- , ppDefEqn
- , ppTermF
- , ppTermF'
- , ppFlatTermF
- , ppFlatTermF'
- , ppCtor
- , ppDataType
- , ppPat
- , ppTypeConstraint
- , ppLetBlock
- , ppNat
- , commaSepList
- , semiTermList
- , ppParens
- , ppTerm
- , showTerm
- , ppTermDepth
- ) where
+  ( Prec(..)
+  , LocalVarDoc
+  , emptyLocalVarDoc
+  , TermDoc(..)
+  , ppTermDoc
+  , docShowLocalNames
+  , docShowLocalTypes
+  , TermPrinter
+  , PPOpts(..)
+  , defaultPPOpts
+  , ppAppParens
+  , ppIdent
+  , ppDef
+  , ppDefEqn
+  , ppTermF
+  , ppTermF'
+  , ppFlatTermF
+  , ppFlatTermF'
+  , ppCtor
+  , ppDataType
+  , ppPat
+  , ppTypeConstraint
+  , ppLetBlock
+  , ppNat
+  , commaSepList
+  , semiTermList
+  , ppParens
+  , ppTerm
+  , showTerm
+  , ppTermDepth
+  , ppModule
+  , showModule
+  ) where
 
 import Control.Applicative hiding (empty)
 import Control.Lens
@@ -177,6 +180,11 @@ ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
 
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
+
+ppDef :: PPOpts -> LocalVarDoc -> Def -> Doc
+ppDef opts lcls d = vcat (tpd : (ppDefEqn (ppTerm opts) lcls sym <$> (reverse $ defEqs d)))
+  where sym = ppIdent (defIdent d)
+        tpd = ppTypeConstraint (ppTerm opts) lcls sym (defType d) <> semi
 
 ppDefEqn :: TermPrinter Term -> LocalVarDoc -> Doc -> DefEqn -> Doc
 ppDefEqn pp lcls sym eq = runIdentity (ppDefEqnF pp' lcls sym eq)
@@ -399,3 +407,18 @@ ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
         (pp (d-1) lcls PrecArg t2)
       tf ->
         ppTermF opts (pp' (d-1)) lcls p tf
+
+ppModule :: PPOpts -> Module -> Doc
+ppModule opts m =
+  vcat $ concat $ fmap (map (<> line)) $
+  [ fmap ppImport (Map.keys (m^.moduleImports))
+  , fmap ppDecl   (moduleDecls m)
+  ]
+  where
+    ppImport nm = text $ "import " ++ show nm
+    ppDecl (TypeDecl d) = ppDataType (ppTerm opts) d
+    ppDecl (DefDecl d) = ppDef opts emptyLocalVarDoc d
+
+showModule :: Module -> String
+showModule m =
+  flip displayS "" $ renderPretty 0.8 80 $ ppModule defaultPPOpts m

@@ -23,20 +23,48 @@ module Verifier.SAW.Module
   , Def(..)
   , DefEqn(..)
   , Ctor(..)
+  , TypedCtor
   , DataType(..)
+    -- * Modules
+  , Module
+  , ModuleDecl(..)
+  , moduleName
+  , moduleImports
+  , emptyModule
+  , findDataType
+  , insImport
+  , insDataType
+  , moduleDataTypes
+  , moduleCtors
+  , findCtor
+  , moduleDefs
+  , allModuleDefs
+  , findDef
+  , insDef
+  , moduleDecls
+  , allModuleDecls
+  , modulePrimitives
+  , allModulePrimitives
+  , moduleAxioms
+  , allModuleAxioms
+  , moduleActualDefs
+  , allModuleActualDefs
   ) where
 
 import Control.Lens
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
+import Data.Foldable (foldl')
 import Data.Hashable
+import Data.Map (Map)
+import qualified Data.Map as Map
 import GHC.Generics (Generic)
 
 import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Utils (sumBy)
+import Verifier.SAW.Utils (sumBy, internalError)
 
 -- Patterns --------------------------------------------------------------------
 
@@ -124,6 +152,8 @@ instance Hashable DefEqn -- automatically derived
 
 -- Constructors ----------------------------------------------------------------
 
+type TypedCtor = Ctor Term
+
 data Ctor tp =
   Ctor
   { ctorName :: !Ident
@@ -162,3 +192,135 @@ instance Ord DataType where
 
 instance Show DataType where
   show = show . dtName
+
+
+-- Modules ---------------------------------------------------------------------
+
+data ModuleDecl = TypeDecl DataType
+                | DefDecl Def
+
+data Module = Module {
+          moduleName    :: !ModuleName
+        , _moduleImports :: !(Map ModuleName Module)
+        , moduleTypeMap :: !(Map String DataType)
+        , moduleCtorMap :: !(Map String TypedCtor)
+        , moduleDefMap  :: !(Map String Def)
+        , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
+        }
+
+moduleImports :: Simple Lens Module (Map ModuleName Module)
+moduleImports = lens _moduleImports (\m v -> m { _moduleImports = v })
+
+emptyModule :: ModuleName -> Module
+emptyModule nm =
+  Module { moduleName = nm
+         , _moduleImports = Map.empty
+         , moduleTypeMap = Map.empty
+         , moduleCtorMap = Map.empty
+         , moduleDefMap  = Map.empty
+         , moduleRDecls = []
+         }
+
+findDataType :: Module -> Ident -> Maybe DataType
+findDataType m i = do
+  m' <- findDeclaringModule m (identModule i)
+  Map.lookup (identName i) (moduleTypeMap m')
+
+-- | @insImport i m@ returns module obtained by importing @i@ into @m@.
+insImport :: Module -> Module -> Module
+insImport i = moduleImports . at (moduleName i) ?~ i
+
+insDataType :: Module -> DataType -> Module
+insDataType m dt
+    | identModule (dtName dt) == moduleName m =
+        m { moduleTypeMap = Map.insert (identName (dtName dt)) dt (moduleTypeMap m)
+          , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
+          , moduleRDecls = TypeDecl dt : moduleRDecls m
+          }
+    | otherwise = internalError "insDataType given datatype from another module."
+  where insCtor m' c = Map.insert (identName (ctorName c)) c m'
+
+-- | Data types defined in module.
+moduleDataTypes :: Module -> [DataType]
+moduleDataTypes = Map.elems . moduleTypeMap
+
+-- | Ctors defined in module.
+moduleCtors :: Module -> [TypedCtor]
+moduleCtors = Map.elems . moduleCtorMap
+
+findDeclaringModule :: Module -> ModuleName -> Maybe Module
+findDeclaringModule m nm
+  | moduleName m == nm = Just m
+  | otherwise = m^.moduleImports^.at nm
+
+findCtor :: Module -> Ident -> Maybe TypedCtor
+findCtor m i = do
+  m' <- findDeclaringModule m (identModule i)
+  Map.lookup (identName i) (moduleCtorMap m')
+
+moduleDefs :: Module -> [Def]
+moduleDefs = Map.elems . moduleDefMap
+
+allModuleDefs :: Module -> [Def]
+allModuleDefs m = concatMap moduleDefs (m : Map.elems (m^.moduleImports))
+
+findDef :: Module -> Ident -> Maybe Def
+findDef m i = do
+  m' <- findDeclaringModule m (identModule i)
+  Map.lookup (identName i) (moduleDefMap m')
+
+insDef :: Module -> Def -> Module
+insDef m d
+  | identModule (defIdent d) == moduleName m =
+      m { moduleDefMap = Map.insert (identName (defIdent d)) d (moduleDefMap m)
+        , moduleRDecls = DefDecl d : moduleRDecls m
+        }
+  | otherwise = internalError "insDef given def from another module."
+
+moduleDecls :: Module -> [ModuleDecl]
+moduleDecls = reverse . moduleRDecls
+
+allModuleDecls :: Module -> [ModuleDecl]
+allModuleDecls m = concatMap moduleDecls (m : Map.elems (m^.moduleImports))
+
+modulePrimitives :: Module -> [Def]
+modulePrimitives m =
+    [ def
+    | DefDecl def <- moduleDecls m
+    , defQualifier def == PrimQualifier
+    ]
+
+moduleAxioms :: Module -> [Def]
+moduleAxioms m =
+    [ def
+    | DefDecl def <- moduleDecls m
+    , defQualifier def == AxiomQualifier
+    ]
+
+moduleActualDefs :: Module -> [Def]
+moduleActualDefs m =
+    [ def
+    | DefDecl def <- moduleDecls m
+    , defQualifier def == NoQualifier
+    ]
+
+allModulePrimitives :: Module -> [Def]
+allModulePrimitives m =
+    [ def
+    | DefDecl def <- allModuleDecls m
+    , defQualifier def == PrimQualifier
+    ]
+
+allModuleAxioms :: Module -> [Def]
+allModuleAxioms m =
+    [ def
+    | DefDecl def <- allModuleDecls m
+    , defQualifier def == AxiomQualifier
+    ]
+
+allModuleActualDefs :: Module -> [Def]
+allModuleActualDefs m =
+    [ def
+    | DefDecl def <- allModuleDecls m
+    , defQualifier def == NoQualifier
+    ]

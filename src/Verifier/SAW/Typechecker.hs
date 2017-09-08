@@ -52,7 +52,6 @@ import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
 import Verifier.SAW.Typechecker.Simplification
 import Verifier.SAW.Typechecker.Unification
-import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as Un
 
 -- | Given a project function returning a key and a list of values, return a map
