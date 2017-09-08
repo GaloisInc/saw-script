@@ -43,6 +43,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Utils (internalError)
 
+import Verifier.SAW.Module
 import Verifier.SAW.Position
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Term.Functor
@@ -57,7 +58,7 @@ import qualified Verifier.SAW.UntypedAST as Un
 -- | Given a project function returning a key and a list of values, return a map
 -- from the keys to values.
 projMap :: Ord k => (a -> k) -> [a] -> Map k a
-projMap f l = Map.fromList [ (f e,e) | e <- l ]
+projMap f l = Map.fromList [ (f e, e) | e <- l ]
 
 -- | Given a list of keys and values, construct a map that maps each key to the list
 -- of values.
@@ -380,7 +381,7 @@ data CompletionContext
 
 completeDataType :: CompletionContext
                  -> TCDataType
-                 -> TypedDataType
+                 -> DataType
 completeDataType cc (DataTypeGen dt tp cl isPrim) =
   DataType { dtName = dt
            , dtType = completeTerm cc (termFromTCDTType tp)
@@ -388,9 +389,7 @@ completeDataType cc (DataTypeGen dt tp cl isPrim) =
            , dtIsPrimitive = isPrim
            }
 
-completeDef :: CompletionContext
-            -> TCDef
-            -> TypedDef
+completeDef :: CompletionContext -> TCDef -> Def
 completeDef cc (DefGen nm qual tp el) = def
   where def = Def { defIdent = nm
                   , defType = completeTerm cc (runIdentity tp)
@@ -402,7 +401,7 @@ completeDef cc (DefGen nm qual tp el) = def
                     Un.PrimitiveQualifier -> PrimQualifier
                     Un.AxiomQualifier -> AxiomQualifier
 
-completeDefEqn :: CompletionContext -> TCDefEqn -> TypedDefEqn
+completeDefEqn :: CompletionContext -> TCDefEqn -> DefEqn
 completeDefEqn cc (DefEqnGen pats rhs) = eqn
   where (pats',cc') = completePatT cc pats
         eqn = DefEqn pats' (completeTerm cc' rhs)
@@ -572,7 +571,7 @@ liftTCPatT tc0 a = do
   (,tcFinal) <$> traverse go a
 
 
-liftEqn :: TermContext s -> DefEqn Term -> TC s TCDefEqn
+liftEqn :: TermContext s -> DefEqn -> TC s TCDefEqn
 liftEqn tc0 (DefEqn pl r) = do
   (pl', tc) <- liftTCPatT tc0 pl
   DefEqnGen pl' <$> liftTCTerm tc r

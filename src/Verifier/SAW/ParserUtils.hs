@@ -198,7 +198,7 @@ sharedFunctionType n =
 --   :: SharedContext
 --   -> IO (Term -> ... -> Term -> IO Term)
 declareSharedDataTypeApp :: String
-                         -> TypedDataType
+                         -> DataType
                          -> DecWriter ()
 declareSharedDataTypeApp nm tdt = do
   let sym = show (dtName tdt)
@@ -259,14 +259,11 @@ declareSharedCtorApp nm c = do
 
 -- Given a ctor with the type
 --   c : T1 -> ... -> TN -> T
--- This hads a declaration of the function:
+-- This adds a declaration of the function:
 --   scApply(modulename)(upcase c)
 --     :: SharedContext
 --     -> IO (Term -> ... -> Term -> IO Term)
-declareSharedDefApp :: String
-                -> Int
-                -> TypedDef
-                -> DecWriter ()
+declareSharedDefApp :: String -> Int -> Def -> DecWriter ()
 declareSharedDefApp nm n def = do
   let iName = show (defIdent def)
   -- Get type of result.

@@ -367,7 +367,7 @@ scWhnf sc t0 =
     reapply t (Right (Right i)) = scRecordSelect sc t i
 
     tryEqns :: (?cache :: Cache IORef TermIndex Term) =>
-               Ident -> [Either Term (Either Bool FieldName)] -> [TypedDefEqn] -> IO Term
+               Ident -> [Either Term (Either Bool FieldName)] -> [DefEqn] -> IO Term
     tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
     tryEqns ident xs (DefEqn ps rhs : eqns) = do
       minst <- matchAll ps xs
@@ -896,7 +896,7 @@ scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
-scDefTerm :: SharedContext -> TypedDef -> IO Term
+scDefTerm :: SharedContext -> Def -> IO Term
 scDefTerm sc d = scGlobalDef sc (defIdent d)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the

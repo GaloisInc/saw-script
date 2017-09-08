@@ -257,7 +257,7 @@ ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced
 -- as new variables bound after all the used variables.
-ruleOfDefEqn :: Ident -> DefEqn Term -> RewriteRule
+ruleOfDefEqn :: Ident -> DefEqn -> RewriteRule
 ruleOfDefEqn ident (DefEqn pats rhs) =
       RewriteRule { ctxt = Map.elems varmap
                   , lhs = ruleLhs
@@ -297,11 +297,11 @@ ruleOfDefEqn ident (DefEqn pats rhs) =
 
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
-rulesOfTypedDef :: TypedDef -> [RewriteRule]
+rulesOfTypedDef :: Def -> [RewriteRule]
 rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
 
 -- | Creates a set of rewrite rules from the defining equations of the named constant.
-scDefRewriteRules :: SharedContext -> TypedDef -> IO [RewriteRule]
+scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
 scDefRewriteRules sc def =
   traverse (traverseRhs (scSharedTerm sc)) (rulesOfTypedDef def)
 
@@ -344,8 +344,7 @@ addConv conv = Net.insert_term (conv, Right conv)
 addConvs :: [Conversion] -> Simpset -> Simpset
 addConvs convs ss = foldr addConv ss convs
 
-scSimpset :: SharedContext -> [TypedDef] -> [Ident] -> [Conversion] ->
-             IO (Simpset)
+scSimpset :: SharedContext -> [Def] -> [Ident] -> [Conversion] -> IO Simpset
 scSimpset sc defs eqIdents convs = do
   defRules <- concat <$> traverse (scDefRewriteRules sc) defs
   eqRules <- mapM (scEqRewriteRule sc) eqIdents

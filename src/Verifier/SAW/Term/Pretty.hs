@@ -178,13 +178,13 @@ ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
 
-ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
+ppDefEqn :: TermPrinter Term -> LocalVarDoc -> Doc -> DefEqn -> Doc
 ppDefEqn pp lcls sym eq = runIdentity (ppDefEqnF pp' lcls sym eq)
   where pp' l' p' e' = pure (pp l' p' e')
 
 ppDefEqnF :: Applicative f
-          => (LocalVarDoc -> Prec -> e -> f Doc)
-          -> LocalVarDoc -> Doc -> DefEqn e -> f Doc
+          => (LocalVarDoc -> Prec -> Term -> f Doc)
+          -> LocalVarDoc -> Doc -> DefEqn -> f Doc
 ppDefEqnF f lcls sym (DefEqn pats rhs) =
     ppEq <$> traverse ppPat' pats
 -- Is this OK?
@@ -194,7 +194,7 @@ ppDefEqnF f lcls sym (DefEqn pats rhs) =
         lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
         ppPat' = fmap ppTermDoc . ppPat (\p e -> TermDoc <$> f lcls' p e) PrecArg
 
-ppDataType :: TermPrinter e -> DataType e -> Doc
+ppDataType :: TermPrinter Term -> DataType -> Doc
 ppDataType f dt =
   group $ (group ((text "data" <+> tc) <<$>> (text "where" <+> lbrace)))
           <<$>>

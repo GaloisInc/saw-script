@@ -121,30 +121,34 @@ matchThunks (p : ps) (x : xs) = do
         Just m2 -> return $ Just (Map.union m1 m2)
 
 
-{-# SPECIALIZE evalDef :: forall b w i e t. (t -> OpenValue Id b w i e) -> Def t -> Id (Value Id b w i e) #-}
-{-# SPECIALIZE evalDef :: forall b w i e t. (t -> OpenValue IO b w i e) -> Def t -> IO (Value IO b w i e) #-}
+{-# SPECIALIZE evalDef :: forall b w i e. (Term -> OpenValue Id b w i e) -> Def -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalDef :: forall b w i e. (Term -> OpenValue IO b w i e) -> Def -> IO (Value IO b w i e) #-}
 
 -- | Evaluator for pattern-matching function definitions,
 -- parameterized by an evaluator for right-hand sides.
-evalDef :: forall m b w i e t. Monad m =>
-           (t -> OpenValue m b w i e) -> Def t -> m (Value m b w i e)
+evalDef :: forall m b w i e. Monad m =>
+           (Term -> OpenValue m b w i e) -> Def -> m (Value m b w i e)
 evalDef rec (Def ident NoQualifier _ eqns) = vFuns [] arity
   where
     arity :: Int
     arity = lengthDefEqn (head eqns)
-    lengthDefEqn :: DefEqn t -> Int
+
+    lengthDefEqn :: DefEqn -> Int
     lengthDefEqn (DefEqn ps _) = length ps
+
     vFuns :: [Thunk m b w i e] -> Int -> m (Value m b w i e)
     vFuns xs 0 = tryEqns eqns (reverse xs)
     vFuns xs n = return $ VFun (\x -> vFuns (x : xs) (n - 1))
-    tryEqns :: [DefEqn t] -> [Thunk m b w i e] -> m (Value m b w i e)
+
+    tryEqns :: [DefEqn] -> [Thunk m b w i e] -> m (Value m b w i e)
     tryEqns [] _ = fail $ "Pattern match failure: " ++ show ident
     tryEqns (eqn : eqns') xs =
       do mm <- tryEqn eqn xs
          case mm of
            Just m -> return m
            Nothing -> tryEqns eqns' xs
-    tryEqn :: DefEqn t -> [Thunk m b w i e] -> m (Maybe (Value m b w i e))
+
+    tryEqn :: DefEqn -> [Thunk m b w i e] -> m (Maybe (Value m b w i e))
     tryEqn (DefEqn ps rhs) xs =
       do minst <- matchThunks ps xs
          case minst of
@@ -235,11 +239,11 @@ evalTerm cfg t env = evalTermF cfg lam rec (unwrapTermF t) env
     lam = evalTerm cfg
     rec t' = evalTerm cfg t' env
 
-{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig Id b w i e -> TypedDef -> Id (Value Id b w i e) #-}
-{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig IO b w i e -> TypedDef -> IO (Value IO b w i e) #-}
+{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig Id b w i e -> Def -> Id (Value Id b w i e) #-}
+{-# SPECIALIZE evalTypedDef :: (Show e) => SimulatorConfig IO b w i e -> Def -> IO (Value IO b w i e) #-}
 
 evalTypedDef :: (MonadLazy m, MonadFix m, Show e) =>
-                SimulatorConfig m b w i e -> TypedDef -> m (Value m b w i e)
+                SimulatorConfig m b w i e -> Def -> m (Value m b w i e)
 evalTypedDef cfg = evalDef (evalTerm cfg)
 
 {-# SPECIALIZE evalGlobal :: (Show e) => Module -> Map Ident (Value Id b w i e) -> (VarIndex -> String -> Value Id b w i e -> Id (Value Id b w i e)) -> (String -> Value Id b w i e -> Maybe (Id (Value Id b w i e))) -> Id (SimulatorConfig Id b w i e) #-}

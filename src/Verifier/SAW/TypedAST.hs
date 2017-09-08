@@ -21,15 +21,12 @@ module Verifier.SAW.TypedAST
  , ModuleDecl(..)
  , moduleDecls
  , allModuleDecls
- , TypedDataType
  , moduleDataTypes
  , moduleImports
  , findDataType
  , TypedCtor
  , moduleCtors
  , findCtor
- , TypedDef
- , TypedDefEqn
  , moduleDefs
  , allModuleDefs
  , findDef
@@ -118,7 +115,7 @@ import Verifier.SAW.Utils (internalError)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 
-ppDef :: PPOpts -> LocalVarDoc -> Def Term -> Doc
+ppDef :: PPOpts -> LocalVarDoc -> Def -> Doc
 ppDef opts lcls d = vcat (tpd : (ppDefEqn (ppTerm opts) lcls sym <$> (reverse $ defEqs d)))
   where sym = ppIdent (defIdent d)
         tpd = ppTypeConstraint (ppTerm opts) lcls sym (defType d) <> semi
@@ -165,20 +162,17 @@ incVarsSimpleTerm _ 0 = id
 incVarsSimpleTerm initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
   where fn _ i = Unshared $ LocalVar (i+j)
 
-type TypedDataType = DataType Term
 type TypedCtor = Ctor Term
-type TypedDef = Def Term
-type TypedDefEqn = DefEqn Term
 
-data ModuleDecl = TypeDecl TypedDataType
-                | DefDecl TypedDef
+data ModuleDecl = TypeDecl DataType
+                | DefDecl Def
 
 data Module = Module {
           moduleName    :: !ModuleName
         , _moduleImports :: !(Map ModuleName Module)
-        , moduleTypeMap :: !(Map String TypedDataType)
+        , moduleTypeMap :: !(Map String DataType)
         , moduleCtorMap :: !(Map String TypedCtor)
-        , moduleDefMap  :: !(Map String TypedDef)
+        , moduleDefMap  :: !(Map String Def)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
 
@@ -205,7 +199,7 @@ emptyModule nm =
          , moduleRDecls = []
          }
 
-findDataType :: Module -> Ident -> Maybe TypedDataType
+findDataType :: Module -> Ident -> Maybe DataType
 findDataType m i = do
   m' <- findDeclaringModule m (identModule i)
   Map.lookup (identName i) (moduleTypeMap m')
@@ -214,7 +208,7 @@ findDataType m i = do
 insImport :: Module -> Module -> Module
 insImport i = moduleImports . at (moduleName i) ?~ i
 
-insDataType :: Module -> TypedDataType -> Module
+insDataType :: Module -> DataType -> Module
 insDataType m dt
     | identModule (dtName dt) == moduleName m =
         m { moduleTypeMap = Map.insert (identName (dtName dt)) dt (moduleTypeMap m)
@@ -225,7 +219,7 @@ insDataType m dt
   where insCtor m' c = Map.insert (identName (ctorName c)) c m'
 
 -- | Data types defined in module.
-moduleDataTypes :: Module -> [TypedDataType]
+moduleDataTypes :: Module -> [DataType]
 moduleDataTypes = Map.elems . moduleTypeMap
 
 -- | Ctors defined in module.
@@ -242,18 +236,18 @@ findCtor m i = do
   m' <- findDeclaringModule m (identModule i)
   Map.lookup (identName i) (moduleCtorMap m')
 
-moduleDefs :: Module -> [TypedDef]
+moduleDefs :: Module -> [Def]
 moduleDefs = Map.elems . moduleDefMap
 
-allModuleDefs :: Module -> [TypedDef]
+allModuleDefs :: Module -> [Def]
 allModuleDefs m = concatMap moduleDefs (m : Map.elems (m^.moduleImports))
 
-findDef :: Module -> Ident -> Maybe TypedDef
+findDef :: Module -> Ident -> Maybe Def
 findDef m i = do
   m' <- findDeclaringModule m (identModule i)
   Map.lookup (identName i) (moduleDefMap m')
 
-insDef :: Module -> Def Term -> Module
+insDef :: Module -> Def -> Module
 insDef m d
   | identModule (defIdent d) == moduleName m =
       m { moduleDefMap = Map.insert (identName (defIdent d)) d (moduleDefMap m)
@@ -267,42 +261,42 @@ moduleDecls = reverse . moduleRDecls
 allModuleDecls :: Module -> [ModuleDecl]
 allModuleDecls m = concatMap moduleDecls (m : Map.elems (m^.moduleImports))
 
-modulePrimitives :: Module -> [TypedDef]
+modulePrimitives :: Module -> [Def]
 modulePrimitives m =
     [ def
     | DefDecl def <- moduleDecls m
     , defQualifier def == PrimQualifier
     ]
 
-moduleAxioms :: Module -> [TypedDef]
+moduleAxioms :: Module -> [Def]
 moduleAxioms m =
     [ def
     | DefDecl def <- moduleDecls m
     , defQualifier def == AxiomQualifier
     ]
 
-moduleActualDefs :: Module -> [TypedDef]
+moduleActualDefs :: Module -> [Def]
 moduleActualDefs m =
     [ def
     | DefDecl def <- moduleDecls m
     , defQualifier def == NoQualifier
     ]
 
-allModulePrimitives :: Module -> [TypedDef]
+allModulePrimitives :: Module -> [Def]
 allModulePrimitives m =
     [ def
     | DefDecl def <- allModuleDecls m
     , defQualifier def == PrimQualifier
     ]
 
-allModuleAxioms :: Module -> [TypedDef]
+allModuleAxioms :: Module -> [Def]
 allModuleAxioms m =
     [ def
     | DefDecl def <- allModuleDecls m
     , defQualifier def == AxiomQualifier
     ]
 
-allModuleActualDefs :: Module -> [TypedDef]
+allModuleActualDefs :: Module -> [Def]
 allModuleActualDefs m =
     [ def
     | DefDecl def <- allModuleDecls m

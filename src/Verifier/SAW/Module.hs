@@ -53,7 +53,7 @@ data Pat e = -- | Variable bound by pattern.
            | PField (Pat e) (Pat e) (Pat e) -- ^ Field name, field value, rest of record
            | PString String
            | PCtor Ident [Pat e]
-  deriving (Eq,Ord, Show, Functor, Foldable, Traversable, Generic)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (Pat e) -- automatically derived
 
@@ -100,33 +100,27 @@ data DefQualifier
   = NoQualifier
   | PrimQualifier
   | AxiomQualifier
- deriving (Eq, Ord, Show, Generic)
+ deriving (Eq, Show, Generic)
 
 instance Hashable DefQualifier -- automatically derived
 
 -- | A Definition contains an identifier, the type of the definition, and a list of equations.
-data Def e =
+data Def =
   Def
   { defIdent :: Ident
   , defQualifier :: DefQualifier
-  , defType :: e
-  , defEqs :: [DefEqn e]
+  , defType :: Term
+  , defEqs :: [DefEqn]
   }
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+  deriving (Eq, Show, Generic)
 
-instance (Hashable e) => Hashable (Def e) -- automatically derived
+instance Hashable Def -- automatically derived
 
-data DefEqn e
-  = DefEqn [Pat e] e -- ^ List of patterns and a right hand side
-  deriving (Functor, Foldable, Traversable, Generic, Show)
+data DefEqn
+  = DefEqn [Pat Term] Term -- ^ List of patterns and a right hand side
+  deriving (Eq, Show, Generic)
 
-instance Hashable e => Hashable (DefEqn e) -- automatically derived
-
-instance (Eq e) => Eq (DefEqn e) where
-  DefEqn xp xr == DefEqn yp yr = xp == yp && xr == yr
-
-instance (Ord e) => Ord (DefEqn e) where
-  compare (DefEqn xp xr) (DefEqn yp yr) = compare (xp,xr) (yp,yr)
+instance Hashable DefEqn -- automatically derived
 
 
 -- Constructors ----------------------------------------------------------------
@@ -153,20 +147,19 @@ instance Show (Ctor tp) where
 
 -- Datatypes -------------------------------------------------------------------
 
-data DataType t =
+data DataType =
   DataType
   { dtName :: Ident
-  , dtType :: t
-  , dtCtors :: [Ctor t]
+  , dtType :: Term
+  , dtCtors :: [Ctor Term]
   , dtIsPrimitive :: Bool
   }
-  deriving (Functor, Foldable, Traversable)
 
-instance Eq (DataType t) where
+instance Eq DataType where
   (==) = lift2 dtName (==)
 
-instance Ord (DataType t) where
+instance Ord DataType where
   compare = lift2 dtName compare
 
-instance Show (DataType t) where
+instance Show DataType where
   show = show . dtName
