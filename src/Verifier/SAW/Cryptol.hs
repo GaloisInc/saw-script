@@ -765,7 +765,7 @@ scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   case asCryptolTypeValue (SC.evalSharedTerm (scModule sc) Map.empty t) of
     Just ty -> return ty
-    Nothing -> fail $ "scCryptolType: unsupported type " ++ show t
+    Nothing -> fail $ "scCryptolType: unsupported type " ++ scPrettyTerm defaultPPOpts t
 
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y = do
