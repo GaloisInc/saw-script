@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 
 {- |
@@ -16,28 +17,31 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Term.Functor
- ( -- * Names.
-   ModuleName, mkModuleName
- , preludeName
-   -- * Data types and definitions.
- , DeBruijnIndex
- , FieldName
- , ExtCns(..)
- , VarIndex
-   -- * Terms and associated operations.
- , TermF(..)
- , FlatTermF(..)
- , zipWithFlatTermF
- , BitSet
- , freesTermF
- , Termlike(..)
- , termToPat
-   -- * Primitive types.
- , Sort, mkSort, sortOf, maxSort
- , Ident(identModule, identName), mkIdent
- , parseIdent
- , isIdent
- ) where
+  ( -- * Names.
+    ModuleName, mkModuleName
+  , preludeName
+    -- * Data types and definitions.
+  , DeBruijnIndex
+  , FieldName
+  , ExtCns(..)
+  , VarIndex
+    -- * Terms and associated operations.
+  , TermIndex
+  , Term(..)
+  , TermF(..)
+  , FlatTermF(..)
+  , zipWithFlatTermF
+  , BitSet
+  , freesTermF
+  , Termlike(..)
+  , termToPat
+  , alphaEquiv
+    -- * Primitive types.
+  , Sort, mkSort, sortOf, maxSort
+  , Ident(identModule, identName), mkIdent
+  , parseIdent
+  , isIdent
+  ) where
 
 import Control.Exception (assert)
 import Control.Lens
@@ -47,18 +51,17 @@ import Data.Char
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import Data.Foldable (all)
+import qualified Data.Foldable as Foldable (all, and)
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
-
-import Prelude hiding (all, foldr, sum)
 
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Utils (internalError)
@@ -87,7 +90,7 @@ instance Show ModuleName where
 -- module name given first.
 mkModuleName :: [String] -> ModuleName
 mkModuleName [] = error "internal: mkModuleName given empty module name"
-mkModuleName nms = assert (all isCtor nms) $ ModuleName (BS.fromString s)
+mkModuleName nms = assert (Foldable.all isCtor nms) $ ModuleName (BS.fromString s)
   where s = intercalate "." (reverse nms)
 
 preludeName :: ModuleName
@@ -128,11 +131,11 @@ instance IsString Ident where
   fromString = parseIdent
 
 isIdent :: String -> Bool
-isIdent (c:l) = isAlpha c && all isIdChar l
+isIdent (c:l) = isAlpha c && Foldable.all isIdChar l
 isIdent [] = False
 
 isCtor :: String -> Bool
-isCtor (c:l) = isUpper c && all isIdChar l
+isCtor (c:l) = isUpper c && Foldable.all isIdChar l
 isCtor [] = False
 
 -- | Returns true if character can appear in identifier.
@@ -176,7 +179,7 @@ data ExtCns e =
   , ecName :: !String
   , ecType :: !e
   }
-  deriving (Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable)
 
 instance Eq (ExtCns e) where
   x == y = ecVarIndex x == ecVarIndex y
@@ -228,7 +231,7 @@ data FlatTermF e
 
     -- | An external constant with a name.
   | ExtCns !(ExtCns e)
-  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
@@ -284,7 +287,7 @@ data TermF e
     | Constant String !e !e
       -- ^ An abstract constant packaged with its definition and type.
       -- The body and type should be closed terms.
-  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
 
@@ -307,6 +310,67 @@ freesTermF tf =
       Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
       LocalVar i -> bit i
       Constant _ _ _ -> 0 -- assume rhs is a closed term
+
+
+-- Term Datatype ---------------------------------------------------------------
+
+type TermIndex = Int -- Word64
+
+data Term
+  = STApp
+     { stAppIndex    :: {-# UNPACK #-} !TermIndex
+     , stAppFreeVars :: !BitSet -- Free variables
+     , stAppTermF    :: !(TermF Term)
+     }
+  | Unshared !(TermF Term)
+  deriving (Show, Typeable)
+
+instance Hashable Term where
+  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
+  hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
+
+-- | Combine two given hash values.  'combine' has zero as a left
+-- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
+combine :: Int -> Int -> Int
+combine h1 h2 = (h1 * 0x01000193) `xor` h2
+
+instance Termlike Term where
+  unwrapTermF STApp{stAppTermF = tf} = tf
+  unwrapTermF (Unshared tf) = tf
+
+instance Eq Term where
+  (==) = alphaEquiv
+
+alphaEquiv :: Term -> Term -> Bool
+alphaEquiv = term
+  where
+    term :: Term -> Term -> Bool
+    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
+    term (Unshared tf1) (STApp{stAppTermF = tf2}) = termf tf1 tf2
+    term (STApp{stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
+    term (STApp{stAppIndex = i1, stAppTermF = tf1})
+         (STApp{stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
+
+    termf :: TermF Term -> TermF Term -> Bool
+    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
+    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
+    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
+    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
+    termf (LocalVar i1) (LocalVar i2) = i1 == i2
+    termf (Constant x1 t1 _) (Constant x2 t2 _) = x1 == x2 && term t1 t2
+    termf _ _ = False
+
+    ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
+    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
+                         Nothing -> False
+                         Just ftf3 -> Foldable.and ftf3
+
+instance Ord Term where
+  compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | i == j = EQ
+  compare x y = compare (unwrapTermF x) (unwrapTermF y)
+
+instance Net.Pattern Term where
+  toPat = termToPat
 
 
 -- Termlike Class --------------------------------------------------------------

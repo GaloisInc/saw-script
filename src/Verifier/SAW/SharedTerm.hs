@@ -179,7 +179,6 @@ import Control.Monad.State.Strict as State
 import Data.Bits
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM)
-import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
@@ -189,7 +188,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Typeable
 import qualified Data.Vector as V
 import Data.Word
 import Prelude hiding (mapM, maximum)
@@ -199,11 +197,10 @@ import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Unique
-import Verifier.SAW.TypedAST
---import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
-import qualified Verifier.SAW.TermNet as Net
+import Verifier.SAW.TypedAST
+import Verifier.SAW.Unique
 
 #if !MIN_VERSION_base(4,8,0)
 countTrailingZeros :: (FiniteBits b) => b -> Int
@@ -216,40 +213,6 @@ countTrailingZeros x = go 0
 #endif
 
 newtype Uninterp = Uninterp { getUninterp :: (String, Term) } deriving Show
-
-type TermIndex = Int -- Word64
-
-data Term
-  = STApp
-     { stAppIndex    :: {-# UNPACK #-} !TermIndex
-     , stAppFreeVars :: !BitSet -- Free variables
-     , stAppTermF    :: !(TermF Term)
-     }
-  | Unshared !(TermF Term)
-  deriving (Typeable)
-
-instance Hashable Term where
-  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
-  hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
-
--- | Combine two given hash values.  'combine' has zero as a left
--- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
-combine :: Int -> Int -> Int
-combine h1 h2 = (h1 * 0x01000193) `xor` h2
-
-instance Termlike Term where
-  unwrapTermF STApp{ stAppTermF = tf} = tf
-  unwrapTermF (Unshared tf) = tf
-
-instance Eq Term where
-  (==) = alphaEquiv
-
-instance Ord Term where
-  compare (STApp{ stAppIndex = i}) (STApp{ stAppIndex = j}) | i == j = EQ
-  compare x y = compare (unwrapTermF x) (unwrapTermF y)
-
-instance Net.Pattern Term where
-  toPat = termToPat
 
 ------------------------------------------------------------
 -- TermFMaps
@@ -325,10 +288,6 @@ type AppCacheRef = MVar AppCache
 
 emptyAppCache :: AppCache
 emptyAppCache = emptyTFM
-
-instance Show (TermF Term) where
-  show FTermF{} = "termF fTermF"
-  show _ = "termF Term"
 
 -- | Return term for application using existing term in cache if it is available.
 getTerm :: AppCacheRef -> TermF Term -> IO Term
@@ -519,7 +478,7 @@ reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (_, _, body) -> instantiateVar sc 0 arg body
-    _                 -> fail $ unlines ["reducePi: not a Pi term", show t']
+    _                 -> fail $ unlines ["reducePi: not a Pi term", scPrettyTerm defaultPPOpts t']
 
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
@@ -631,25 +590,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
-alphaEquiv :: Term -> Term -> Bool
-alphaEquiv = term
-  where
-    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
-    term (Unshared tf1) (STApp{ stAppTermF = tf2}) = termf tf1 tf2
-    term (STApp{ stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
-    term (STApp{ stAppIndex = i1, stAppTermF = tf1})
-         (STApp{ stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
-    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
-    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
-    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
-    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
-    termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1 t1 _) (Constant x2 t2 _) = x1 == x2 && term t1 t2
-    termf _ _ = False
-    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
-                         Nothing -> False
-                         Just ftf3 -> Fold.and ftf3
-
 --------------------------------------------------------------------------------
 
 -- | The inverse function to @scSharedTerm@.
@@ -666,9 +606,6 @@ unshare t0 = State.evalState (go t0) Map.empty
           x <- SimpleTerm <$> traverse go t
           State.modify (Map.insert i x)
           return x
-
-instance Show Term where
-  show = scPrettyTerm defaultPPOpts
 
 scSharedTerm :: SharedContext -> SimpleTerm -> IO Term
 scSharedTerm sc = go
