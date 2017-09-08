@@ -571,7 +571,8 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ show t'
+    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: "
+                                    ++ scPrettyTerm defaultPPOpts t'
 
 withBitBlastedPred :: AIG.IsAIG l g => AIG.Proxy l g ->
   SharedContext ->
@@ -598,7 +599,8 @@ asAIGType sc t = do
     (R.asVecType -> Just _)      -> return []
     (R.asTupleType -> Just _)    -> return []
     (R.asRecordType -> Just _)   -> return []
-    _                          -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: " ++ show t'
+    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: "
+                                    ++ scPrettyTerm defaultPPOpts t'
 
 withBitBlastedTerm :: AIG.IsAIG l g => AIG.Proxy l g ->
   SharedContext ->
@@ -619,4 +621,4 @@ asFiniteType :: SharedContext -> Term -> IO FiniteType
 asFiniteType sc t =
   case asFiniteTypeValue (Concrete.evalSharedTerm (scModule sc) Map.empty t) of
     Just ft -> return ft
-    Nothing -> fail $ "asFiniteType: unsupported type " ++ show t
+    Nothing -> fail $ "asFiniteType: unsupported type " ++ scPrettyTerm defaultPPOpts t
