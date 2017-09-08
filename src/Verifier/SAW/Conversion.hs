@@ -123,7 +123,7 @@ import Verifier.SAW.Recognizer ((:*:)(..))
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
-import Verifier.SAW.TypedAST
+import Verifier.SAW.Term.Functor
 
 -- | A hack to allow storage of conversions in a term net.
 instance Eq (Conversion t) where
@@ -291,7 +291,7 @@ asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
 
 -- | Match a specific sort.
 asSort :: (Termlike t, Monad m) => Sort -> Matcher m t ()
-asSort s = Matcher (termToPat (SimpleTerm (FTermF (Sort s)))) fn
+asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
   where fn t = do s' <- R.asSort t
                   unless (s == s') $ fail "Does not matched expected sort."
 

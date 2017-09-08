@@ -52,7 +52,6 @@ module Verifier.SAW.TypedAST
  , patBoundVarCount
  , patUnusedVarCount
    -- * Terms and associated operations.
- , SimpleTerm(..)
  , incVarsSimpleTerm
  , piArgCount
  , TermF(..)
@@ -81,6 +80,7 @@ module Verifier.SAW.TypedAST
  , ppFlatTermF
  , ppFlatTermF'
  , ppTermDepth
+ , showTerm
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
@@ -116,20 +116,10 @@ import Prelude hiding (all, foldr)
 
 import Verifier.SAW.Module
 import Verifier.SAW.Utils (internalError)
-import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 
-newtype SimpleTerm = SimpleTerm (TermF SimpleTerm)
-  deriving (Eq)
-
-instance Termlike SimpleTerm where
-  unwrapTermF (SimpleTerm tf) = tf
-
-instance Net.Pattern SimpleTerm where
-  toPat = termToPat
-
-ppDef :: PPOpts -> LocalVarDoc -> Def SimpleTerm -> Doc
+ppDef :: PPOpts -> LocalVarDoc -> Def Term -> Doc
 ppDef opts lcls d = vcat (tpd : (ppDefEqn (ppTerm opts) lcls sym <$> (reverse $ defEqs d)))
   where sym = ppIdent (defIdent d)
         tpd = ppTypeConstraint (ppTerm opts) lcls sym (defType d) <> semi
@@ -142,50 +132,54 @@ asApp = go []
 -}
 
 -- | Returns the number of nested pi expressions.
-piArgCount :: SimpleTerm -> Int
+piArgCount :: Term -> Int
 piArgCount = go 0
-  where go i (SimpleTerm (Pi _ _ rhs)) = go (i+1) rhs
-        go i _ = i
+  where go i t = case unwrapTermF t of
+          Pi _ _ rhs -> go (i+1) rhs
+          _          -> i
 
-freesTerm :: SimpleTerm -> BitSet
-freesTerm (SimpleTerm t) = freesTermF (fmap freesTerm t)
+freesTerm :: Term -> BitSet
+freesTerm (unwrapTermF -> t) = freesTermF (fmap freesTerm t)
 
 -- | @instantiateVars f l t@ substitutes each dangling bound variable
 -- @LocalVar j t@ with the term @f i j t@, where @i@ is the number of
 -- binders surrounding @LocalVar j t@.
-instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> SimpleTerm)
-                -> DeBruijnIndex -> SimpleTerm -> SimpleTerm
+instantiateVars :: (DeBruijnIndex -> DeBruijnIndex -> Term)
+                -> DeBruijnIndex -> Term -> Term
 instantiateVars f initialLevel = go initialLevel
-  where go :: DeBruijnIndex -> SimpleTerm -> SimpleTerm
-        go l (SimpleTerm tf) =
+  where go :: DeBruijnIndex -> Term -> Term
+        go l (unwrapTermF -> tf) =
           case tf of
-            FTermF ftf      -> SimpleTerm $ FTermF $ fmap (go l) ftf
-            App x y         -> SimpleTerm $ App (go l x) (go l y)
-            Constant{}      -> SimpleTerm tf -- assume rhs is a closed term, so leave it unchanged
-            Lambda i tp rhs -> SimpleTerm $ Lambda i (go l tp) (go (l+1) rhs)
-            Pi i lhs rhs    -> SimpleTerm $ Pi i (go l lhs) (go (l+1) rhs)
+            FTermF ftf      -> Unshared $ FTermF $ fmap (go l) ftf
+            App x y         -> Unshared $ App (go l x) (go l y)
+            Constant{}      -> Unshared tf -- assume rhs is a closed term, so leave it unchanged
+            Lambda i tp rhs -> Unshared $ Lambda i (go l tp) (go (l+1) rhs)
+            Pi i lhs rhs    -> Unshared $ Pi i (go l lhs) (go (l+1) rhs)
             LocalVar i
-              | i < l -> SimpleTerm $ LocalVar i
+              | i < l -> Unshared $ LocalVar i
               | otherwise -> f l i
 
 -- | @incVars j k t@ increments free variables at least @j@ by @k@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
-incVarsSimpleTerm :: DeBruijnIndex -> DeBruijnIndex -> SimpleTerm -> SimpleTerm
+incVarsSimpleTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
 incVarsSimpleTerm _ 0 = id
 incVarsSimpleTerm initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
-  where fn _ i = SimpleTerm $ LocalVar (i+j)
+  where fn _ i = Unshared $ LocalVar (i+j)
 
 -- | Pretty print a term with the given outer precedence.
-ppTerm :: PPOpts -> TermPrinter SimpleTerm
+ppTerm :: PPOpts -> TermPrinter Term
 ppTerm = ppTermlike
 
-instance Show SimpleTerm where
-  showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t
+showTerm :: Term -> String
+showTerm t = show (ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t)
 
-type TypedDataType = DataType SimpleTerm
-type TypedCtor = Ctor SimpleTerm
-type TypedDef = Def SimpleTerm
-type TypedDefEqn = DefEqn SimpleTerm
+--instance Show SimpleTerm where
+--  showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t
+
+type TypedDataType = DataType Term
+type TypedCtor = Ctor Term
+type TypedDef = Def Term
+type TypedDefEqn = DefEqn Term
 
 data ModuleDecl = TypeDecl TypedDataType
                 | DefDecl TypedDef
@@ -270,7 +264,7 @@ findDef m i = do
   m' <- findDeclaringModule m (identModule i)
   Map.lookup (identName i) (moduleDefMap m')
 
-insDef :: Module -> Def SimpleTerm -> Module
+insDef :: Module -> Def Term -> Module
 insDef m d
   | identModule (defIdent d) == moduleName m =
       m { moduleDefMap = Map.insert (identName (defIdent d)) d (moduleDefMap m)

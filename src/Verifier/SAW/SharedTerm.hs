@@ -379,7 +379,7 @@ scWhnf sc t0 =
         _ -> tryEqns ident xs eqns
 
     matchAll :: (?cache :: Cache IORef TermIndex Term) =>
-                [Pat SimpleTerm] -> [Either Term (Either Bool FieldName)]
+                [Pat Term] -> [Either Term (Either Bool FieldName)]
                   -> IO (Maybe (Map Int Term))
     matchAll [] _ = return $ Just Map.empty
     matchAll (_ : _) [] = return Nothing
@@ -395,7 +395,7 @@ scWhnf sc t0 =
             Just m2 -> return $ Just (Map.union m1 m2)
 
     match :: (?cache :: Cache IORef TermIndex Term) =>
-             Pat SimpleTerm -> Term -> IO (Maybe (Map Int Term))
+             Pat Term -> Term -> IO (Maybe (Map Int Term))
     match p x =
       case p of
         PVar _ i _  -> return $ Just (Map.singleton i x)
@@ -593,23 +593,24 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
 --------------------------------------------------------------------------------
 
 -- | The inverse function to @scSharedTerm@.
-unshare :: Term -> SimpleTerm
+unshare :: Term -> Term
 unshare t0 = State.evalState (go t0) Map.empty
   where
-    go :: Term -> State.State (Map TermIndex SimpleTerm) SimpleTerm
-    go (Unshared t) = SimpleTerm <$> traverse go t
+    go :: Term -> State.State (Map TermIndex Term) Term
+    go (Unshared t) = Unshared <$> traverse go t
     go (STApp{ stAppIndex = i, stAppTermF = t}) = do
       memo <- State.get
       case Map.lookup i memo of
         Just x  -> return x
         Nothing -> do
-          x <- SimpleTerm <$> traverse go t
+          x <- Unshared <$> traverse go t
           State.modify (Map.insert i x)
           return x
 
-scSharedTerm :: SharedContext -> SimpleTerm -> IO Term
+-- | Perform hash-consing at every AST node to obtain maximal sharing.
+scSharedTerm :: SharedContext -> Term -> IO Term
 scSharedTerm sc = go
-    where go (SimpleTerm termf) = scTermF sc =<< traverse go termf
+    where go t = scTermF sc =<< traverse go (unwrapTermF t)
 
 -- | Imports a term built in a different shared context into the given
 -- shared context. The caller must ensure that all the global constants
