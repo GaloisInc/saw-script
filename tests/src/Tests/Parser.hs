@@ -27,7 +27,7 @@ checkGroundTerm t = freesTerm t == 0
 namedMsg :: Ident -> String -> String
 namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
 
-checkEqn :: Ident -> TypedDefEqn -> Assertion
+checkEqn :: Ident -> DefEqn -> Assertion
 checkEqn sym (DefEqn pats rhs) = do
   let nbound = sum $ patBoundVarCount <$> pats
   let lvd = emptyLocalVarDoc
@@ -41,7 +41,7 @@ checkEqn sym (DefEqn pats rhs) = do
 
   assertEqual (namedMsg sym msg) 0 (freesTerm rhs `shiftR` nbound)
 
-checkDef :: TypedDef -> Assertion
+checkDef :: Def -> Assertion
 checkDef d = do
   let sym = defIdent d
   let tp = defType d
