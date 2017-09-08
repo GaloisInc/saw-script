@@ -62,8 +62,7 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
-import Verifier.SAW.Rewriter ( Simpset, emptySimpset, rewritingSharedContext
-                             , scSimpset )
+import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -935,7 +934,7 @@ primitives = Map.fromList
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal (emptySimpset :: Simpset Term))
+    (pureVal emptySimpset)
     [ "The empty simplification rule set, containing no rules." ]
 
   , prim "cryptol_ss"          "() -> Simpset"

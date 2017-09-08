@@ -82,7 +82,7 @@ data Value
   | VBind Value Value -- Monadic bind in unspecified monad
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
-  | VSimpset (Simpset Term)
+  | VSimpset Simpset
   | VTheorem Theorem
   | VJavaSetup (JavaSetup Value)
   | VLLVMSetup (LLVMSetup Value)
@@ -203,7 +203,7 @@ showsSatResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-showSimpset :: PPOpts -> Simpset Term -> String
+showSimpset :: PPOpts -> Simpset -> String
 showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
@@ -588,10 +588,10 @@ instance FromValue Bool where
     fromValue (VBool b) = b
     fromValue _ = error "fromValue Bool"
 
-instance IsValue (Simpset Term) where
+instance IsValue Simpset where
     toValue ss = VSimpset ss
 
-instance FromValue (Simpset Term) where
+instance FromValue Simpset where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
 

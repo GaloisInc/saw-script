@@ -212,7 +212,7 @@ defRewrites sc ident =
         Nothing -> return []
         Just def -> scDefRewriteRules sc def
 
-basic_ss :: SharedContext -> IO (Simpset Term)
+basic_ss :: SharedContext -> IO Simpset
 basic_ss sc = do
   rs1 <- concat <$> traverse (defRewrites sc) (defs ++ defs')
   rs2 <- scEqsRewriteRules sc eqs
