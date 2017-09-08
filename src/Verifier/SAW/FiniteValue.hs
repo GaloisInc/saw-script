@@ -199,7 +199,7 @@ asFirstOrderType sc t = do
       -> FOTRec <$> traverse (asFirstOrderType sc) tm
     _ -> fail $ "asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t'
 
-asFiniteTypePure :: (Termlike t) => t -> Maybe FiniteType
+asFiniteTypePure :: Term -> Maybe FiniteType
 asFiniteTypePure t =
   case t of
     (R.asBoolType -> Just ()) -> Just FTBit

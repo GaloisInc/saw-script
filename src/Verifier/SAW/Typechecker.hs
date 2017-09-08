@@ -542,11 +542,11 @@ patVarInfo = go
 
 -- | Iterators over a structure of Pat Terms and returns corresponding
 -- structure with TCpats.
-liftTCPatT :: forall s f t. (Traversable f, Termlike t)
+liftTCPatT :: forall s f. (Traversable f)
            => TermContext s
-           -> f (Pat t) -> TC s (f TCPat, TermContext s)
+           -> f (Pat Term) -> TC s (f TCPat, TermContext s)
 liftTCPatT tc0 a = do
-  let vinfo :: Vector (String, t)
+  let vinfo :: Vector (String, Term)
       vinfo = V.fromList $ Map.elems $ execState (traverse patVarInfo a) Map.empty
       fn (nm,tp) = do
         tc <- get
@@ -556,7 +556,7 @@ liftTCPatT tc0 a = do
   (pairs,tcFinal) <- runStateT (traverse fn vinfo) tc0
   let boundTps = fst <$> pairs
       tcv = fmap snd pairs `V.snoc` tcFinal
-  let go :: Pat t -> TC s TCPat
+  let go :: Pat Term -> TC s TCPat
       go (PVar nm i _) = return $ TCPVar nm (i, tp)
         where Just tp = boundTps V.!? i
       go (PUnused i tp) = do
@@ -572,12 +572,12 @@ liftTCPatT tc0 a = do
   (,tcFinal) <$> traverse go a
 
 
-liftEqn :: Termlike t => TermContext s -> DefEqn t -> TC s TCDefEqn
+liftEqn :: TermContext s -> DefEqn Term -> TC s TCDefEqn
 liftEqn tc0 (DefEqn pl r) = do
   (pl', tc) <- liftTCPatT tc0 pl
   DefEqnGen pl' <$> liftTCTerm tc r
 
-liftTCTerm :: Termlike t => TermContext s -> t -> TC s TCTerm
+liftTCTerm :: TermContext s -> Term -> TC s TCTerm
 liftTCTerm tc trm =
   case unwrapTermF trm of
     FTermF ftf -> TCF <$> traverse (liftTCTerm tc) ftf
@@ -596,25 +596,24 @@ liftTCTerm tc trm =
     Constant {} -> error "liftTCTerm"
 
 
-liftFixedType :: Termlike t
-              => (TermContext s -> t -> TC s (FixedPiType r))
-              -> (TermContext s -> t -> TC s (FixedPiType r))
+liftFixedType :: (TermContext s -> Term -> TC s (FixedPiType r))
+              -> (TermContext s -> Term -> TC s (FixedPiType r))
 liftFixedType fn tc (unwrapTermF -> Pi nm t r) = do
   t' <- liftTCTerm tc t
   let tc' = consBoundVar nm t' tc
   FPPi (TCPVar nm (0, t')) t' <$> liftFixedType fn tc' r
 liftFixedType fn tc t = fn tc t
 
-liftTCDataType :: Termlike t => TermContext s -> t -> TC s TCDTType
+liftTCDataType :: TermContext s -> Term -> TC s TCDTType
 liftTCDataType = liftFixedType fn
   where fn _ (unwrapTermF -> FTermF (Sort s)) = return (FPResult s)
         fn _ _ = fail "Unexpected term to liftTCDataType"
 
-liftTCCtorType :: Termlike t => Ident -> TermContext s -> t -> TC s TCCtorType
+liftTCCtorType :: Ident -> TermContext s -> Term -> TC s TCCtorType
 liftTCCtorType dt tc0 t0 = liftFixedType fn tc0 t0
   where fn tc (unwrapTermF -> FTermF (DataTypeApp i tl)) | dt == i = do
           FPResult <$> traverse (liftTCTerm tc) tl
-        fn _ _ = fail $ "Unexpected term to liftTCCtorType " ++ show dt ++ ":\n  " ++ showTermlike t0
+        fn _ _ = fail $ "Unexpected term to liftTCCtorType " ++ show dt ++ ":\n  " ++ showTerm t0
 
 -- | Typechecker computation that needs input before running.
 type PendingAction s a = a -> TC s ()

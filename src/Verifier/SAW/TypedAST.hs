@@ -56,7 +56,7 @@ module Verifier.SAW.TypedAST
  , piArgCount
  , TermF(..)
  , FlatTermF(..)
- , Termlike(..)
+ , unwrapTermF
  , zipWithFlatTermF
  , freesTerm
  , freesTermF
@@ -80,7 +80,6 @@ module Verifier.SAW.TypedAST
  , ppFlatTermF
  , ppFlatTermF'
  , ppTermDepth
- , showTerm
    -- * Primitive types.
  , Sort, mkSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
@@ -165,16 +164,6 @@ incVarsSimpleTerm :: DeBruijnIndex -> DeBruijnIndex -> Term -> Term
 incVarsSimpleTerm _ 0 = id
 incVarsSimpleTerm initialLevel j = assert (j > 0) $ instantiateVars fn initialLevel
   where fn _ i = Unshared $ LocalVar (i+j)
-
--- | Pretty print a term with the given outer precedence.
-ppTerm :: PPOpts -> TermPrinter Term
-ppTerm = ppTermlike
-
-showTerm :: Term -> String
-showTerm t = show (ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t)
-
---instance Show SimpleTerm where
---  showsPrec _ t = shows $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t
 
 type TypedDataType = DataType Term
 type TypedCtor = Ctor Term

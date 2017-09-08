@@ -119,7 +119,7 @@ emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
 insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
 
-first_order_match :: (Eq t, Termlike t) => t -> t -> Maybe (Map DeBruijnIndex t)
+first_order_match :: Term -> Term -> Maybe (Map DeBruijnIndex Term)
 first_order_match pat term = match pat term Map.empty
   where
     match x y m =
@@ -127,7 +127,7 @@ first_order_match pat term = match pat term Map.empty
         (LocalVar i, _) ->
             case my' of
               Nothing -> Just m'
-              Just y' -> if y == y' then Just m' else Nothing
+              Just y' -> if alphaEquiv y y' then Just m' else Nothing
             where (my', m') = insertLookup i y m
         (App x1 x2, App y1 y2) ->
             match x1 y1 m >>= match x2 y2
@@ -135,13 +135,13 @@ first_order_match pat term = match pat term Map.empty
             do zf <- zipWithFlatTermF match xf yf
                Foldable.foldl (>=>) Just zf m
         (_, _) ->
-            if x == y then Just m else Nothing
+            if alphaEquiv x y then Just m else Nothing
 -- ^ Precondition: Every loose variable in the pattern @pat@ must
 -- occur as the 2nd argument of an @App@ constructor. This ensures
 -- that instantiations are well-typed.
 
 -- | Normalization with a set of conversions
-bottom_convs :: forall t. Termlike t => [Conversion t] -> t -> TermBuilder t t
+bottom_convs :: [Conversion Term] -> Term -> TermBuilder Term Term
 bottom_convs convs t = do
   t' <-
     case unwrapTermF t of
@@ -220,7 +220,7 @@ vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
-ruleOfTerm :: Termlike t => t -> RewriteRule t
+ruleOfTerm :: Term -> RewriteRule Term
 ruleOfTerm t =
     case unwrapTermF t of
       FTermF (DataTypeApp ident [_, x, y])
@@ -231,7 +231,7 @@ ruleOfTerm t =
 
 -- | Converts a universally quantified equality proposition between the
 -- two given terms to a RewriteRule.
-ruleOfTerms :: Termlike t => t -> t -> RewriteRule t
+ruleOfTerms :: Term -> Term -> RewriteRule Term
 ruleOfTerms l r = RewriteRule { ctxt = [], lhs = l, rhs = r }
 
 -- | Converts a parameterized equality predicate to a RewriteRule.
@@ -314,59 +314,59 @@ scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 
 -- | Invariant: 'Simpset's should not contain reflexive rules. We avoid
 -- adding them in 'addRule' below.
-type Simpset t = Net.Net (Either (RewriteRule t) (Conversion t))
+type Simpset = Net.Net (Either (RewriteRule Term) (Conversion Term))
 
-emptySimpset :: Simpset t
+emptySimpset :: Simpset
 emptySimpset = Net.empty
 
-addRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
+addRule :: RewriteRule Term -> Simpset -> Simpset
 addRule rule | lhs rule /= rhs rule = Net.insert_term (lhs rule, Left rule)
              | otherwise = id
 
-delRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
+delRule :: RewriteRule Term -> Simpset -> Simpset
 delRule rule = Net.delete_term (lhs rule, Left rule)
 
-addRules :: (Eq t, Net.Pattern t) => [RewriteRule t] -> Simpset t -> Simpset t
+addRules :: [RewriteRule Term] -> Simpset -> Simpset
 addRules rules ss = foldr addRule ss rules
 
-addSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
+addSimp :: Term -> Simpset -> Simpset
 addSimp prop = addRule (ruleOfTerm prop)
 
-delSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
+delSimp :: Term -> Simpset -> Simpset
 delSimp prop = delRule (ruleOfTerm prop)
 
-addConv :: Eq t => Conversion t -> Simpset t -> Simpset t
+addConv :: Conversion Term -> Simpset -> Simpset
 addConv conv = Net.insert_term (conv, Right conv)
 
-addConvs :: Eq t => [Conversion t] -> Simpset t -> Simpset t
+addConvs :: [Conversion Term] -> Simpset -> Simpset
 addConvs convs ss = foldr addConv ss convs
 
 scSimpset :: SharedContext -> [TypedDef] -> [Ident] -> [Conversion Term] ->
-             IO (Simpset Term)
+             IO (Simpset)
 scSimpset sc defs eqIdents convs = do
   defRules <- concat <$> traverse (scDefRewriteRules sc) defs
   eqRules <- mapM (scEqRewriteRule sc) eqIdents
   return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
-listRules :: Simpset t -> [RewriteRule t]
+listRules :: Simpset -> [RewriteRule Term]
 listRules ss = [ r | Left r <- Net.content ss ]
 
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asBetaRedex :: (Monad m, Termlike t) => R.Recognizer m t (String, t, t, t)
+asBetaRedex :: (Monad m) => R.Recognizer m Term (String, Term, Term, Term)
 asBetaRedex t =
     do (f, arg) <- R.asApp t
        (s, ty, body) <- R.asLambda f
        return (s, ty, body, arg)
 
-asPairRedex :: (Monad m, Termlike t) => R.Recognizer m t t
+asPairRedex :: (Monad m) => R.Recognizer m Term Term
 asPairRedex t =
     do (u, b) <- R.asPairSelector t
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
-asRecordRedex :: (Monad m, Termlike t) => R.Recognizer m t (Map FieldName t, FieldName)
+asRecordRedex :: (Monad m) => R.Recognizer m Term (Map FieldName Term, FieldName)
 asRecordRedex t =
     do (x, i) <- R.asRecordSelector t
        ts <- R.asRecordValue x
@@ -384,7 +384,7 @@ reduceSharedTerm _ (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms
-rewriteSharedTerm :: SharedContext -> Simpset Term -> Term -> IO Term
+rewriteSharedTerm :: SharedContext -> Simpset -> Term -> IO Term
 rewriteSharedTerm sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
@@ -429,7 +429,7 @@ rewriteSharedTerm sc ss t0 =
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
-    :: SharedContext -> Simpset Term -> Term -> IO Term
+    :: SharedContext -> Simpset -> Term -> IO Term
 rewriteSharedTermTypeSafe sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
@@ -498,7 +498,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
         Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
 
 -- | Generate a new SharedContext that normalizes terms as it builds them.
-rewritingSharedContext :: SharedContext -> Simpset Term -> SharedContext
+rewritingSharedContext :: SharedContext -> Simpset -> SharedContext
 rewritingSharedContext sc ss = sc'
   where
     sc' = sc { scTermF = rewriteTop }
@@ -528,7 +528,7 @@ rewritingSharedContext sc ss = sc'
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables
 --  and/or under binders?
 replaceTerm :: SharedContext
-            -> Simpset Term        -- ^ A simpset of rewrite rules to apply along with the replacement
+            -> Simpset        -- ^ A simpset of rewrite rules to apply along with the replacement
             -> (Term, Term)  -- ^ (pat,repl) is a tuple of a pattern term to replace and a replacement term
             -> Term                  -- ^ the term in which to perform the replacement
             -> IO Term
@@ -598,11 +598,11 @@ hoistIfs sc t = do
    splitConds sc ss (map fst conds) t'
 
 
-splitConds :: SharedContext -> Simpset Term -> [Term] -> Term -> IO Term
+splitConds :: SharedContext -> Simpset -> [Term] -> Term -> IO Term
 splitConds _ _ [] = return
 splitConds sc ss (c:cs) = splitCond sc ss c >=> splitConds sc ss cs
 
-splitCond :: SharedContext -> Simpset Term -> Term -> Term -> IO Term
+splitCond :: SharedContext -> Simpset -> Term -> Term -> IO Term
 splitCond sc ss c t = do
    ty <- scTypeOf sc t
    trueTerm  <- scBool sc True
@@ -619,7 +619,7 @@ orderTerms :: SharedContext -> [Term] -> IO [Term]
 orderTerms _sc xs = return $ List.sort xs
 
 doHoistIfs :: SharedContext
-         -> Simpset Term
+         -> Simpset
          -> Cache IORef TermIndex (HoistIfs s)
          -> Term
          -> Term

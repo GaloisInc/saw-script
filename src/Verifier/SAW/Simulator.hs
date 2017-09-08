@@ -161,15 +161,15 @@ evalDef _ (Def ident AxiomQualifier _ _) = fail $ unwords ["attempted to evaluat
 -- | Meaning of an open term, parameterized by environment of bound variables
 type OpenValue m b w i e = [Thunk m b w i e] -> m (Value m b w i e)
 
-{-# SPECIALIZE evalTermF :: (Termlike t, Show e) => SimulatorConfig Id b w i e -> (t -> OpenValue Id b w i e) -> (t -> Id (Value Id b w i e)) -> TermF t -> OpenValue Id b w i e #-}
-{-# SPECIALIZE evalTermF :: (Termlike t, Show e) => SimulatorConfig IO b w i e -> (t -> OpenValue IO b w i e) -> (t -> IO (Value IO b w i e)) -> TermF t -> OpenValue IO b w i e #-}
+{-# SPECIALIZE evalTermF :: (Show e) => SimulatorConfig Id b w i e -> (Term -> OpenValue Id b w i e) -> (Term -> Id (Value Id b w i e)) -> TermF Term -> OpenValue Id b w i e #-}
+{-# SPECIALIZE evalTermF :: (Show e) => SimulatorConfig IO b w i e -> (Term -> OpenValue IO b w i e) -> (Term -> IO (Value IO b w i e)) -> TermF Term -> OpenValue IO b w i e #-}
 
 -- | Generic evaluator for TermFs.
-evalTermF :: forall t m b w i e. (MonadLazy m, MonadFix m, Termlike t, Show e) =>
-             SimulatorConfig m b w i e                  -- ^ Evaluator for global constants
-          -> (t -> OpenValue m b w i e)                 -- ^ Evaluator for subterms under binders
-          -> (t -> m (Value m b w i e))                 -- ^ Evaluator for subterms in the same bound variable context
-          -> TermF t -> OpenValue m b w i e
+evalTermF :: forall m b w i e. (MonadLazy m, MonadFix m, Show e) =>
+             SimulatorConfig m b w i e          -- ^ Evaluator for global constants
+          -> (Term -> OpenValue m b w i e)      -- ^ Evaluator for subterms under binders
+          -> (Term -> m (Value m b w i e))      -- ^ Evaluator for subterms in the same bound variable context
+          -> TermF Term -> OpenValue m b w i e
 evalTermF cfg lam rec tf env =
   case tf of
     App t1 t2               -> do v <- rec t1
@@ -220,7 +220,7 @@ evalTermF cfg lam rec tf env =
         ExtCns ec           -> do v <- rec (ecType ec)
                                   simExtCns cfg (ecVarIndex ec) (ecName ec) v
   where
-    rec' :: t -> m (Thunk m b w i e)
+    rec' :: Term -> m (Thunk m b w i e)
     rec' = delay . rec
 
 

@@ -33,7 +33,7 @@ module Verifier.SAW.Term.Functor
   , zipWithFlatTermF
   , BitSet
   , freesTermF
-  , Termlike(..)
+  , unwrapTermF
   , termToPat
   , alphaEquiv
     -- * Primitive types.
@@ -334,10 +334,6 @@ instance Hashable Term where
 combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 0x01000193) `xor` h2
 
-instance Termlike Term where
-  unwrapTermF STApp{stAppTermF = tf} = tf
-  unwrapTermF (Unshared tf) = tf
-
 instance Eq Term where
   (==) = alphaEquiv
 
@@ -372,13 +368,7 @@ instance Ord Term where
 instance Net.Pattern Term where
   toPat = termToPat
 
-
--- Termlike Class --------------------------------------------------------------
-
-class Termlike t where
-  unwrapTermF :: t -> TermF t
-
-termToPat :: Termlike t => t -> Net.Pat
+termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
       Constant d _ _            -> Net.Atom d
@@ -390,3 +380,6 @@ termToPat t =
       FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
       _                         -> Net.Var
 
+unwrapTermF :: Term -> TermF Term
+unwrapTermF STApp{stAppTermF = tf} = tf
+unwrapTermF (Unshared tf) = tf
