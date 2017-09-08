@@ -41,23 +41,22 @@ import Verifier.SAW.Utils (sumBy)
 -- Patterns --------------------------------------------------------------------
 
 -- Patterns are used to match equations.
-data Pat e = -- | Variable bound by pattern.
-             -- Variables may be bound in context in a different order than
-             -- a left-to-right traversal.  The DeBruijnIndex indicates the order.
-             PVar String DeBruijnIndex e
-             -- | The
-           | PUnused DeBruijnIndex e
-           | PUnit
-           | PPair (Pat e) (Pat e)
-           | PEmpty
-           | PField (Pat e) (Pat e) (Pat e) -- ^ Field name, field value, rest of record
-           | PString String
-           | PCtor Ident [Pat e]
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+data Pat = -- | Variable bound by pattern.
+           -- Variables may be bound in context in a different order than
+           -- a left-to-right traversal.  The DeBruijnIndex indicates the order.
+           PVar String DeBruijnIndex Term
+         | PUnused DeBruijnIndex Term
+         | PUnit
+         | PPair Pat Pat
+         | PEmpty
+         | PField Pat Pat Pat -- ^ Field name, field value, rest of record
+         | PString String
+         | PCtor Ident [Pat]
+  deriving (Eq, Ord, Show, Generic)
 
-instance Hashable e => Hashable (Pat e) -- automatically derived
+instance Hashable Pat -- automatically derived
 
-patBoundVarCount :: Pat e -> DeBruijnIndex
+patBoundVarCount :: Pat -> DeBruijnIndex
 patBoundVarCount p =
   case p of
     PVar{} -> 1
@@ -69,7 +68,7 @@ patBoundVarCount p =
     PField f x y -> patBoundVarCount f + patBoundVarCount x + patBoundVarCount y
     PString _ -> 0
 
-patUnusedVarCount :: Pat e -> DeBruijnIndex
+patUnusedVarCount :: Pat -> DeBruijnIndex
 patUnusedVarCount p =
   case p of
     PVar{}       -> 0
@@ -81,7 +80,7 @@ patUnusedVarCount p =
     PField _ x y -> patUnusedVarCount x + patUnusedVarCount y
     PString _    -> 0
 
-patBoundVars :: Pat e -> [String]
+patBoundVars :: Pat -> [String]
 patBoundVars p =
   case p of
     PVar s _ _   -> [s]
@@ -117,7 +116,7 @@ data Def =
 instance Hashable Def -- automatically derived
 
 data DefEqn
-  = DefEqn [Pat Term] Term -- ^ List of patterns and a right hand side
+  = DefEqn [Pat] Term -- ^ List of patterns and a right hand side
   deriving (Eq, Show, Generic)
 
 instance Hashable DefEqn -- automatically derived

@@ -277,7 +277,7 @@ ruleOfDefEqn ident (DefEqn pats rhs) =
     mkTermApp :: Term -> Term -> Term
     mkTermApp f x = Unshared (App f x)
 
-    termOfPat :: Pat Term -> State (Int, Map Int Term) Term
+    termOfPat :: Pat -> State (Int, Map Int Term) Term
     termOfPat pat =
         case pat of
           PVar _ i tp -> do

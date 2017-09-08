@@ -68,11 +68,11 @@ data SimulatorConfig m b w i e =
 ------------------------------------------------------------
 -- Evaluation of function definitions
 
-{-# SPECIALIZE matchThunk :: Pat t -> Thunk Id b w i e -> Id (Maybe (Map Int (Thunk Id b w i e))) #-}
-{-# SPECIALIZE matchThunk :: Pat t -> Thunk IO b w i e -> IO (Maybe (Map Int (Thunk IO b w i e))) #-}
+{-# SPECIALIZE matchThunk :: Pat -> Thunk Id b w i e -> Id (Maybe (Map Int (Thunk Id b w i e))) #-}
+{-# SPECIALIZE matchThunk :: Pat -> Thunk IO b w i e -> IO (Maybe (Map Int (Thunk IO b w i e))) #-}
 
 -- | Pattern matching for values.
-matchThunk :: Monad m => Pat t -> Thunk m b w i e -> m (Maybe (Map Int (Thunk m b w i e)))
+matchThunk :: Monad m => Pat -> Thunk m b w i e -> m (Maybe (Map Int (Thunk m b w i e)))
 matchThunk p x =
   case p of
     PVar _ i _  -> return $ Just (Map.singleton i x)
@@ -102,11 +102,11 @@ matchThunk p x =
                         VString s' | s == s' -> matchThunks [] []
                         _ -> return Nothing
 
-{-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk Id b w i e] -> Id (Maybe (Map Int (Thunk Id b w i e))) #-}
-{-# SPECIALIZE matchThunks :: [Pat t] -> [Thunk IO b w i e] -> IO (Maybe (Map Int (Thunk IO b w i e))) #-}
+{-# SPECIALIZE matchThunks :: [Pat] -> [Thunk Id b w i e] -> Id (Maybe (Map Int (Thunk Id b w i e))) #-}
+{-# SPECIALIZE matchThunks :: [Pat] -> [Thunk IO b w i e] -> IO (Maybe (Map Int (Thunk IO b w i e))) #-}
 
 -- | Simultaneous pattern matching for lists of values.
-matchThunks :: Monad m => [Pat t] -> [Thunk m b w i e] -> m (Maybe (Map Int (Thunk m b w i e)))
+matchThunks :: Monad m => [Pat] -> [Thunk m b w i e] -> m (Maybe (Map Int (Thunk m b w i e)))
 matchThunks [] [] = return $ Just Map.empty
 matchThunks [] (_ : _) = return Nothing
 matchThunks (_ : _) [] = return Nothing

@@ -275,8 +275,8 @@ ppLetBlock defs body =
   text " in" <+> body
 
 ppPat :: Applicative f
-      => (Prec -> e -> f TermDoc)
-      -> Prec -> Pat e -> f TermDoc
+      => (Prec -> Term -> f TermDoc)
+      -> Prec -> Pat -> f TermDoc
 ppPat f p pat =
   case pat of
     PVar i _ _ -> pure $ TermDoc $ text i

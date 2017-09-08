@@ -379,7 +379,7 @@ scWhnf sc t0 =
         _ -> tryEqns ident xs eqns
 
     matchAll :: (?cache :: Cache IORef TermIndex Term) =>
-                [Pat Term] -> [Either Term (Either Bool FieldName)]
+                [Pat] -> [Either Term (Either Bool FieldName)]
                   -> IO (Maybe (Map Int Term))
     matchAll [] _ = return $ Just Map.empty
     matchAll (_ : _) [] = return Nothing
@@ -395,7 +395,7 @@ scWhnf sc t0 =
             Just m2 -> return $ Just (Map.union m1 m2)
 
     match :: (?cache :: Cache IORef TermIndex Term) =>
-             Pat Term -> Term -> IO (Maybe (Map Int Term))
+             Pat -> Term -> IO (Maybe (Map Int Term))
     match p x =
       case p of
         PVar _ i _  -> return $ Just (Map.singleton i x)

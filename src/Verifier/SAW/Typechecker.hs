@@ -409,7 +409,7 @@ completeDefEqn cc (DefEqnGen pats rhs) = eqn
 completePatT :: Traversable f
              => CompletionContext
              -> f TCPat
-             -> (f (Pat Term), CompletionContext)
+             -> (f Pat, CompletionContext)
 completePatT cc0 pats = (go <$> pats, cc')
   where bl = patBoundVarsOf folded pats
         ins cc (_,tp) = (CCBinding cc tp', (cc,tp'))
@@ -417,7 +417,7 @@ completePatT cc0 pats = (go <$> pats, cc')
         (cc', v) =  mapAccumLOf traverse ins cc0 bl
         ctxv = fmap fst v `V.snoc` cc'
 
-        go :: TCPat -> Pat Term
+        go :: TCPat -> Pat
         go (TCPVar nm (i,_)) = PVar nm i tp
           where Just (_,tp) = v V.!? i
         go (TCPUnused _ (i,tp)) = PUnused i (completeTerm cc tp)
@@ -431,7 +431,7 @@ completePatT cc0 pats = (go <$> pats, cc')
             UPCtor c l    -> PCtor c (go <$> l)
             UPString s    -> PString s
 
-completePat :: CompletionContext -> TCPat -> (Pat Term, CompletionContext)
+completePat :: CompletionContext -> TCPat -> (Pat, CompletionContext)
 completePat cc0 pat = over _1 runIdentity $ completePatT cc0 (Identity pat)
 
 -- | Returns the type of a unification term in the current context.
@@ -528,7 +528,7 @@ checkTerm ms imps ut = runTC $ do
   return (completeTerm cc t, completeTerm cc tp)
 
 
-patVarInfo :: Pat t -> State (Map Int (String, t)) ()
+patVarInfo :: Pat -> State (Map Int (String, Term)) ()
 patVarInfo = go
   where go (PVar nm i tp) = modify $ Map.insert i (nm,tp)
         go PUnused{}      = return ()
@@ -539,11 +539,11 @@ patVarInfo = go
         go (PCtor _ l)    = traverseOf_ folded go l
         go PString{}      = return ()
 
--- | Iterators over a structure of Pat Terms and returns corresponding
+-- | Iterators over a structure of Pats and returns corresponding
 -- structure with TCpats.
 liftTCPatT :: forall s f. (Traversable f)
            => TermContext s
-           -> f (Pat Term) -> TC s (f TCPat, TermContext s)
+           -> f Pat -> TC s (f TCPat, TermContext s)
 liftTCPatT tc0 a = do
   let vinfo :: Vector (String, Term)
       vinfo = V.fromList $ Map.elems $ execState (traverse patVarInfo a) Map.empty
@@ -555,7 +555,7 @@ liftTCPatT tc0 a = do
   (pairs,tcFinal) <- runStateT (traverse fn vinfo) tc0
   let boundTps = fst <$> pairs
       tcv = fmap snd pairs `V.snoc` tcFinal
-  let go :: Pat Term -> TC s TCPat
+  let go :: Pat -> TC s TCPat
       go (PVar nm i _) = return $ TCPVar nm (i, tp)
         where Just tp = boundTps V.!? i
       go (PUnused i tp) = do
