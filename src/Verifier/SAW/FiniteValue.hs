@@ -181,7 +181,7 @@ asFiniteType sc t = do
       -> FTTuple <$> traverse (asFiniteType sc) ts
     (R.asRecordType -> Just tm)
       -> FTRec <$> traverse (asFiniteType sc) tm
-    _ -> fail $ "asFiniteType: unsupported argument type: " ++ show t'
+    _ -> fail $ "asFiniteType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t'
 
 asFirstOrderType :: SharedContext -> Term -> IO FirstOrderType
 asFirstOrderType sc t = do
@@ -197,7 +197,7 @@ asFirstOrderType sc t = do
       -> FOTTuple <$> traverse (asFirstOrderType sc) ts
     (R.asRecordType -> Just tm)
       -> FOTRec <$> traverse (asFirstOrderType sc) tm
-    _ -> fail $ "asFirstOrderType: unsupported argument type: " ++ show t'
+    _ -> fail $ "asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t'
 
 asFiniteTypePure :: (Termlike t) => t -> Maybe FiniteType
 asFiniteTypePure t =

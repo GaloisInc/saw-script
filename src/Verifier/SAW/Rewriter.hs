@@ -249,7 +249,7 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
-ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ show t
+ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm defaultPPOpts t
 
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced
@@ -414,7 +414,7 @@ rewriteSharedTerm sc ss t0 =
             -- This should never happen because we avoid inserting
             -- reflexive rules into simp sets in the first place.
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
-                          "(THE IMPOSSIBLE HAPPENED!): " ++ show lhs
+                          "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm defaultPPOpts lhs
                apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
@@ -516,7 +516,7 @@ rewritingSharedContext sc ss = sc'
         Nothing -> apply rules t
         Just inst
           | l == r ->
-            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ show l
+            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ scPrettyTerm defaultPPOpts l
                apply rules t
           | otherwise -> instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
@@ -535,7 +535,7 @@ replaceTerm :: SharedContext
 replaceTerm sc ss (pat, repl) t = do
     let fvs = looseVars pat
     unless (fvs == 0) $ fail $ unwords
-       [ "replaceTerm: term to replace has free variables!", show t ]
+       [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
     rewriteSharedTerm sc ss' t

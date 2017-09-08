@@ -85,7 +85,7 @@ prettyTCError e =
     DanglingVar n ->
       [ "Dangling bound variable index: " ++ show n ]
   where
-    ishow = (' ':) . (' ':) . show
+    ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
 scTypeCheckError :: SharedContext -> Term
                  -> IO Term
