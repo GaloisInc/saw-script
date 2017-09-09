@@ -37,6 +37,11 @@ data TUnit :: sort 0 where {
     Unit :: TUnit;
   }
 
+-- The eliminator for the Unit type at sort 0
+TUnit_rec :: (p :: TUnit -> sort 0) -> p Unit -> (u :: TUnit) -> p u;
+TUnit_rec p f1 Unit = f1;
+
+
 --------------------------------------------------------------------------------
 -- Equality proofs.
 
@@ -44,38 +49,71 @@ data Eq :: (t :: sort 1) -> t -> t -> sort 1 where {
     Refl :: (u :: sort 1) -> (x :: u) -> Eq u x x;
   }
 
-trans :: (a :: sort 1) -> (x y z :: a) -> Eq a x y -> Eq a y z -> Eq a x z;
-trans _ _ _ _ (Refl _ _) eq = eq;
+-- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
+-- structure of the Eq type
+Eq_rec :: (t :: sort 1) -> (x :: t) -> (p :: (y :: t) -> Eq t x y -> sort 1) ->
+          p x (Refl t x) -> (y :: t) -> (e :: Eq t x y) -> p y e;
+Eq_rec t x p f1 _ (Refl _ _) = f1;
+
+-- Congruence closure for equality
+eq_cong :: (t :: sort 1) -> (x :: t) -> (y :: t) -> Eq t x y ->
+           (u :: sort 1) -> (f :: t -> u) -> Eq u (f x) (f y);
+eq_cong t x y eq u f =
+  Eq_rec t x (\ (y'::t) -> \ (eq'::Eq t x y') -> Eq u (f x) (f y'))
+         (Refl u (f x)) y eq;
 
 sym :: (a :: sort 1) -> (x y :: a) -> Eq a x y -> Eq a y x;
-sym _ _ _ (Refl a x) = Refl a x;
+sym a x y eq =
+  Eq_rec a x (\(y'::a) -> \(eq'::Eq a x y') -> Eq a y' x) (Refl a x) y eq;
+
+trans :: (a :: sort 1) -> (x y z :: a) -> Eq a x y -> Eq a y z -> Eq a x z;
+trans a x y z eq1 eq2 =
+  Eq_rec a y (\(y'::a) -> \(eq'::Eq a y y') -> Eq a x y') eq1 z eq2;
 
 -- Unchecked assertion that two types are equal.
 axiom unsafeAssert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
 
 coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
-coerce _ _ (Refl _ _) x = x;
+coerce a b eq x =
+  Eq_rec (sort 0) a (\(b'::sort 0) -> \(eq'::Eq (sort 0) a b') -> b') x b eq;
 
+-- NOTE: this is equivalent to UIP / Axiom K
+{-
 coerce_same :: (a :: sort 0) -> (q :: Eq (sort 0) a a) -> (x :: a) -> Eq a (coerce a a q x) x;
 coerce_same a (Refl _ _) x = Refl a x;
+-}
 
 rcoerce :: (a b :: sort 0) -> Eq (sort 0) a b -> b -> a;
 rcoerce a b q = coerce b a (sym (sort 0) a b q);
 
+-- NOTE: this is equivalent to UIP / Axiom K
+{-
 rcoerce_same :: (a :: sort 0) -> (q :: Eq (sort 0) a a) -> (x :: a) -> Eq a (rcoerce a a q x) x;
 rcoerce_same a q x = coerce_same a (sym (sort 0) a a q) x;
+-}
 
 unsafeCoerce :: (a b :: sort 0) -> a -> b;
 unsafeCoerce a b = coerce a b (unsafeAssert (sort 0) a b);
 
+-- NOTE: this could be added because it relies on unsafeAssert anyway...
+{-
 unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
 unsafeCoerce_same a x = coerce_same a (unsafeAssert (sort 0) a a) x;
+-}
 
 piCong0 :: (r x y :: sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
-piCong0 r _ _ (Refl _ tp) = Refl (sort 0) (tp -> r);
+piCong0 r x y eq =
+  Eq_rec
+    (sort 0) x
+    (\(y':: sort 0) -> \(eq':: Eq (sort 0) x y') -> Eq (sort 0) (x -> r) (y' -> r))
+    (Refl (sort 0) (x -> r)) y eq;
 
 piCong1 :: (r x y :: sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (r -> x) (r -> y));
-piCong1 r _ _ (Refl _ tp) = Refl (sort 0) (r -> tp);
+piCong1 r x y eq =
+  Eq_rec
+    (sort 0) x
+    (\(y':: sort 0) -> \(eq':: Eq (sort 0) x y') -> Eq (sort 0) (r -> x) (r -> y'))
+    (Refl (sort 0) (r -> x)) y eq;
 
 --------------------------------------------------------------------------------
 -- Booleans
@@ -84,125 +122,183 @@ data Bool :: sort 0 where {
     False :: Bool;
   }
 
+Bool_rec :: (p :: Bool -> sort 1) -> (p True) -> (p False) -> (b::Bool) -> p b;
+Bool_rec p f1 f2 (True) = f1;
+Bool_rec p f1 f2 (False) = f2;
+
 not :: Bool -> Bool;
-not (True) = False;
-not (False) = True;
+not b = Bool_rec (\(b::Bool) -> Bool) False True b;
 
 and :: Bool -> Bool -> Bool;
-and (True) b = b;
-and (False) b = False;
+and b1 b2 = Bool_rec (\(b::Bool) -> Bool) b2 False b1;
 
 or :: Bool -> Bool -> Bool;
-or (True) b = True;
-or (False) b = b;
+or b1 b2 = Bool_rec (\(b::Bool) -> Bool) True b2 b1;
 
 xor :: Bool -> Bool -> Bool;
-xor (True) b = not b;
-xor (False) b = b;
+xor b1 b2 = Bool_rec (\(b::Bool) -> Bool) (not b2) b2 b1;
 
 implies :: Bool -> Bool -> Bool;
 implies a b = or (not a) b;
 
 boolEq :: Bool -> Bool -> Bool;
-boolEq True b = b;
-boolEq False b = not b;
+boolEq b1 b2 = Bool_rec (\(b::Bool) -> Bool) b2 (not b2) b1;
 
 -- Could be derived from data declaration.
 ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
-ite _ (True)  t _ = t;
-ite _ (False) _ f = f;
+ite a b a1 a2 = Bool_rec (\ (b::Bool) -> a) a1 a2 b;
 
 -- Rewrite rules for booleans.
 
 not_not :: (x :: Bool) -> Eq Bool (not (not x)) x;
-not_not True = Refl Bool True;
-not_not False = Refl Bool False;
+not_not x = Bool_rec (\ (x::Bool) -> Eq Bool (not (not x)) x)
+                     (Refl Bool True) (Refl Bool False) x;
 
 and_True :: (x :: Bool) -> Eq Bool (and x True) x;
-and_True True = Refl Bool True;
-and_True False = Refl Bool False;
+and_True x = Bool_rec (\(x::Bool) -> Eq Bool (and x True) x)
+                      (Refl Bool True) (Refl Bool False) x;
 
 and_False :: (x :: Bool) -> Eq Bool (and x False) False;
-and_False True = Refl Bool False;
-and_False False = Refl Bool False;
+and_False x = Bool_rec (\(x::Bool) -> Eq Bool (and x False) False)
+                       (Refl Bool False) (Refl Bool False) x;
 
 and_True2 :: (x :: Bool) -> Eq Bool (and True x) x;
-and_True2 True = Refl Bool True;
-and_True2 False = Refl Bool False;
+and_True2 x = Refl Bool x;
 
 and_False2 :: (x :: Bool) -> Eq Bool (and False x) False;
-and_False2 True = Refl Bool False;
-and_False2 False = Refl Bool False;
+and_False2 x = Refl Bool False;
 
 and_assoc :: (x y z :: Bool) -> Eq Bool (and x (and y z)) (and (and x y) z);
-and_assoc True y z = Refl Bool (and y z);
-and_assoc False _ _ = Refl Bool False;
+and_assoc x y z =
+  Bool_rec (\ (b::Bool) -> Eq Bool (and b (and y z)) (and (and b y) z))
+           (Refl Bool (and y z))
+           (Refl Bool False)
+           x;
 
 and_idem :: (x :: Bool) -> Eq Bool (and x x) x;
-and_idem True = Refl Bool True;
-and_idem False = Refl Bool False;
+and_idem x = Bool_rec (\ (b::Bool) -> Eq Bool (and b b) b)
+                      (Refl Bool True) (Refl Bool False) x;
 
 or_True :: (x :: Bool) -> Eq Bool (or x True) True;
-or_True True  = Refl Bool True;
-or_True False = Refl Bool True;
+or_True x = Bool_rec (\(b::Bool) -> Eq Bool (or b True) True)
+                     (Refl Bool True) (Refl Bool True) x;
 
 or_False :: (x :: Bool) -> Eq Bool (or x False) x;
-or_False True  = Refl Bool True;
-or_False False = Refl Bool False;
+or_False x = Bool_rec (\(b::Bool) -> Eq Bool (or b False) b)
+                      (Refl Bool True) (Refl Bool False) x;
 
 or_True2 :: (x :: Bool) -> Eq Bool (or True x) True;
-or_True2 True  = Refl Bool True;
-or_True2 False = Refl Bool True;
+or_True2 x = Refl Bool True;
 
 or_False2 :: (x :: Bool) -> Eq Bool (or False x) x;
-or_False2 True  = Refl Bool True;
-or_False2 False = Refl Bool False;
+or_False2 x = Refl Bool x;
 
 or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
-or_assoc True  _ _ = Refl Bool True;
-or_assoc False y z = Refl Bool (or y z);
+or_assoc x y z =
+  Bool_rec (\ (b::Bool) -> Eq Bool (or b (or y z)) (or (or b y) z))
+           (Refl Bool True)
+           (Refl Bool (or y z)) x;
 
 or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
-or_idem True = Refl Bool True;
-or_idem False = Refl Bool False;
+or_idem x = Bool_rec (\ (b::Bool) -> Eq Bool (or b b) b)
+                     (Refl Bool True) (Refl Bool False) x;
 
 not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
-not_or True _ = Refl Bool False;
-not_or False y = Refl Bool (not y);
+not_or x y =
+  Bool_rec (\ (b::Bool) -> Eq Bool (not (or b y)) (and (not b) (not y)))
+           (Refl Bool False)
+           (Refl Bool (not y)) x;
 
 not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
-not_and True y = Refl Bool (not y);
-not_and False _ = Refl Bool True;
+not_and x y =
+  Bool_rec (\ (b::Bool) -> Eq Bool (not (and b y)) (or (not b) (not y)))
+           (Refl Bool (not y))
+           (Refl Bool True) x;
 
-ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) -> Eq a (ite a (not b) x y) (ite a b y x);
-ite_not a True _ y = Refl a y;
-ite_not a False x _ = Refl a x;
+ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) ->
+           Eq a (ite a (not b) x y) (ite a b y x);
+ite_not a b x y =
+  Bool_rec (\ (b'::Bool) -> Eq a (ite a (not b') x y) (ite a b' y x))
+           (Refl a y) (Refl a x) b;
 
-ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b x (ite a b y z)) (ite a b x z);
-ite_nest1 a True x y z = Refl a x;
-ite_nest1 a False x y z = Refl a z;
+ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+             Eq a (ite a b x (ite a b y z)) (ite a b x z);
+ite_nest1 a b x y z =
+  Bool_rec (\ (b'::Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
+           (Refl a x) (Refl a z) b;
 
-ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b (ite a b x y) z) (ite a b x z);
-ite_nest2 a True x y z = Refl a x;
-ite_nest2 a False x y z = Refl a z;
+ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+             Eq a (ite a b (ite a b x y) z) (ite a b x z);
+ite_nest2 a b x y z =
+  Bool_rec (\ (b'::Bool) -> Eq a (ite a b' (ite a b' x y) z) (ite a b' x z))
+           (Refl a x) (Refl a z) b;
 
-axiom ite_bit :: (b :: Bool) -> (c :: Bool) -> (d :: Bool) -> Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
-axiom ite_bit_false_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b False c) (and (not b) c);
-axiom ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b True c) (or b c);
+ite_bit :: (b :: Bool) -> (c :: Bool) -> (d :: Bool) ->
+           Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
+ite_bit b c d =
+  Bool_rec (\ (b'::Bool) ->
+              Eq Bool (ite Bool b' c d) (and (or (not b') c) (or b' d)))
+           (sym Bool (and c True) c (and_True c)) (Refl Bool d) b;
+
+ite_bit_false_1 :: (b :: Bool) -> (c :: Bool) ->
+                   Eq Bool (ite Bool b False c) (and (not b) c);
+ite_bit_false_1 b c =
+  Bool_rec (\ (b'::Bool) -> Eq Bool (ite Bool b' False c) (and (not b') c))
+           (Refl Bool False) (Refl Bool c) b;
+
+ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) ->
+                  Eq Bool (ite Bool b True c) (or b c);
+ite_bit_true_1 b c =
+  Bool_rec (\ (b'::Bool) -> Eq Bool (ite Bool b' True c) (or b' c))
+           (Refl Bool True) (Refl Bool c) b;
 
 ite_fold_not :: (b :: Bool) -> Eq Bool (ite Bool b False True) (not b);
-ite_fold_not True = Refl Bool False;
-ite_fold_not False = Refl Bool True;
+ite_fold_not b =
+  Bool_rec (\ (b'::Bool) -> Eq Bool (ite Bool b' False True) (not b'))
+           (Refl Bool False) (Refl Bool True) b;
 
 ite_eq :: (a :: sort 1) -> (b :: Bool) -> (x :: a) -> Eq a (ite a b x x) x;
-ite_eq a True x = Refl a x;
-ite_eq a False x = Refl a x;
+ite_eq a b x =
+  Bool_rec (\ (b'::Bool) -> Eq a (ite a b' x x) x) (Refl a x) (Refl a x) b;
 
 ite_true :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a True x y) x;
 ite_true a x y = Refl a x;
 
 ite_false :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a False x y) y;
 ite_false a x y = Refl a y;
+
+or_triv1 :: (x :: Bool) -> Eq Bool (or x (not x)) True;
+or_triv1 x =
+  Bool_rec (\ (b::Bool) -> Eq Bool (or b (not b)) True)
+           (Refl Bool True) (Refl Bool True) x;
+
+or_triv2 :: (x :: Bool) -> Eq Bool (or (not x) x) True;
+or_triv2 x =
+  Bool_rec (\ (b::Bool) -> Eq Bool (or (not b) b) True)
+           (Refl Bool True) (Refl Bool True) x;
+
+and_triv1 :: (x :: Bool) -> Eq Bool (and x (not x)) False;
+and_triv1 x =
+  Bool_rec (\ (b::Bool) -> Eq Bool (and b (not b)) False)
+           (Refl Bool False) (Refl Bool False) x;
+
+and_triv2 :: (x :: Bool) -> Eq Bool (and (not x) x) False;
+and_triv2 x =
+  Bool_rec (\ (b::Bool) -> Eq Bool (and (not b) b) False)
+           (Refl Bool False) (Refl Bool False) x;
+
+
+--------------------------------------------------------------------------------
+-- Decidable equality
+
+-- FIXME: replace universal decidable equality with a typeclass that determines
+-- which types have an equality tester
+
+primitive eq :: (a :: sort 0) -> a -> a -> Bool;
+
+axiom eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
+
+axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 axiom ite_eq_cong_1 :: (a :: sort 0)
               -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
@@ -211,33 +307,11 @@ axiom ite_eq_cong_2 :: (a :: sort 0)
               -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
               -> Eq Bool (eq a z (ite a b x y)) (ite Bool b (eq a z x) (eq a z y));
 
-or_triv1 :: (x :: Bool) -> Eq Bool (or x (not x)) True;
-or_triv1 True = Refl Bool True;
-or_triv1 False = Refl Bool True;
-
-or_triv2 :: (x :: Bool) -> Eq Bool (or (not x) x) True;
-or_triv2 True = Refl Bool True;
-or_triv2 False = Refl Bool True;
-
-and_triv1 :: (x :: Bool) -> Eq Bool (and x (not x)) False;
-and_triv1 True = Refl Bool False;
-and_triv1 False = Refl Bool False;
-
-and_triv2 :: (x :: Bool) -> Eq Bool (and (not x) x) False;
-and_triv2 True = Refl Bool False;
-and_triv2 False = Refl Bool False;
-
---------------------------------------------------------------------------------
--- Boolean equality
-
-primitive eq :: (a :: sort 0) -> a -> a -> Bool;
-
-axiom eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
-
-axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
 --------------------------------------------------------------------------------
 -- Pairs
+
+-- FIXME: replace built-in pairs with a data structure
 
 fst :: (a b :: sort 0) -> #(a, b) -> a;
 fst a b (x, y) = x;
@@ -256,15 +330,27 @@ data Either :: sort 0 -> sort 0 -> sort 0 where {
     Right :: (s t :: sort 0) -> t -> Either s t;
   }
 
+Either_rec :: (s t :: sort 0) -> (p :: Either s t -> sort 0) ->
+              ((l :: s) -> p (Left s t l)) ->
+              ((r :: t) -> p (Right s t r)) ->
+              (e :: Either s t) -> p e;
+Either_rec s t p f1 f2 (Left _ _ l) = f1 l;
+Either_rec s t p f1 f2 (Right _ _ r) = f2 r;
+
 either :: (a b c :: sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
-either a b c f g (Left _ _ x) = f x;
-either a b c f g (Right _ _ y) = g y;
+either a b c f g e =
+  Either_rec a b (\ (p:: Either a b) -> c) f g e;
 
-eitherCong0 :: (t x y :: sort 0) -> Eq (sort 0) x y -> Eq (sort 0) (Either x t) (Either y t);
-eitherCong0 t x _ (Refl _ _) = Refl (sort 0) (Either x t);
+eitherCong0 :: (t x y :: sort 0) -> Eq (sort 0) x y ->
+               Eq (sort 0) (Either x t) (Either y t);
+eitherCong0 t x y eq =
+  eq_cong (sort 0) x y eq (sort 0) (\ (y'::sort 0) -> Either y' t);
 
-eitherCong1 :: (t x y :: sort 0) -> Eq (sort 0) x y -> Eq (sort 0) (Either t x) (Either t y);
-eitherCong1 t x _ (Refl _ _) = Refl (sort 0) (Either t x);
+eitherCong1 :: (t x y :: sort 0) -> Eq (sort 0) x y ->
+               Eq (sort 0) (Either t x) (Either t y);
+eitherCong1 t x y eq =
+  eq_cong (sort 0) x y eq (sort 0) (\ (y'::sort 0) -> Either t y');
+
 
 --------------------------------------------------------------------------------
 -- Maybe
@@ -274,9 +360,14 @@ data Maybe :: sort 0 -> sort 0 where {
     Just :: (a :: sort 0) -> a -> Maybe a;
   }
 
+Maybe_rec :: (a :: sort 0) -> (p :: (Maybe a) -> sort 0) ->
+             p (Nothing a) -> ((x::a) -> p (Just a x)) -> (m :: Maybe a) -> p m;
+Maybe_rec a p f1 f2 (Nothing _) = f1;
+Maybe_rec a p f1 f2 (Just _ x) = f2 x;
+
 maybe :: (a b :: sort 0) -> b -> (a -> b) -> Maybe a -> b;
-maybe _ _ z _ (Nothing _) = z;
-maybe _ _ _ f (Just _ x) = f x;
+maybe a b f1 f2 m = Maybe_rec a (\ (m'::Maybe a) -> b) f1 f2 m;
+
 
 --------------------------------------------------------------------------------
 -- Nat
@@ -286,95 +377,131 @@ data Nat :: sort 0 where {
     Succ :: Nat -> Nat;
   }
 
+Nat_rec :: (p :: Nat -> sort 1) -> p Zero -> ((n::Nat) -> p n -> p (Succ n)) ->
+           (n::Nat) -> p n;
+Nat_rec p f1 f2 Zero = f1;
+Nat_rec p f1 f2 (Succ n) = f2 n (Nat_rec p f1 f2 n);
+
+Nat_cases :: (a::sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
+Nat_cases a f1 f2 n = Nat_rec (\ (n::Nat) -> a) f1 f2 n;
+
+-- Build a binary function for Nats that satisfies:
+--   Nat_cases2 a f1 f2 f3 Zero y = f1 y
+--   Nat_cases2 a f1 f2 f3 (Succ x) Zero = f2 x
+--   Nat_cases2 a f1 f2 f3 (Succ x) (Succ y) = f3 x y (Nat_cases2 ... x y)
+Nat_cases2 :: (a::sort 1) -> (Nat -> a) -> (Nat -> a) ->
+              (Nat -> Nat -> a -> a) -> Nat -> Nat -> a;
+Nat_cases2 a f1 f2 f3 n m =
+  Nat_rec (\ (n::Nat) -> Nat -> a) f1
+          (\ (n::Nat) -> \ (f_rec :: Nat -> a) -> \ (m::Nat) ->
+             Nat_rec (\ (m'::Nat) -> a) (f2 n)
+                     (\ (m'::Nat) -> \ (frec'::a) -> f3 n m' (f_rec m')) m) n m;
+
 eqNat :: Nat -> Nat -> sort 1;
 eqNat x y = Eq Nat x y;
 
 eqNatSucc :: (x y :: Nat) -> eqNat x y -> eqNat (Succ x) (Succ y);
-eqNatSucc _ _ (Refl _ x) = Refl Nat (Succ x);
+eqNatSucc x y eq = eq_cong Nat x y eq Nat (\ (n::Nat) -> Succ n);
+
+-- Predecessor
+pred :: Nat -> Nat;
+pred x = Nat_cases Nat Zero (\ (n::Nat) -> \ (m::Nat) -> n) x;
 
 eqNatPrec :: (x y :: Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
-eqNatPrec _ _ (Refl _ (Succ x)) = Refl Nat x;
+eqNatPrec x y eq' =
+  eq_cong Nat (Succ x) (Succ y) eq' Nat pred;
 
 -- | Addition
 addNat :: Nat -> Nat -> Nat;
-addNat Zero y = y;
-addNat (Succ x) y = Succ (addNat x y);
+addNat x y =
+  Nat_cases Nat y (\ (_::Nat) -> \ (prev_sum::Nat) -> Succ prev_sum) x;
 
 eqNatAdd0 :: (x :: Nat) -> eqNat (addNat x 0) x;
-eqNatAdd0 Zero = Refl Nat 0;
-eqNatAdd0 (Succ x) = eqNatSucc (addNat x 0) x (eqNatAdd0 x);
+eqNatAdd0 x =
+  Nat_rec (\ (n::Nat) -> eqNat (addNat n 0) n)
+          (Refl Nat 0)
+          (\ (n::Nat) -> eqNatSucc (addNat n 0) n)
+          x;
 
 eqNatAddS :: (x y :: Nat) -> eqNat (addNat x (Succ y)) (Succ (addNat x y));
-eqNatAddS Zero y = Refl Nat (Succ y);
-eqNatAddS (Succ x) y = eqNatSucc (addNat x (Succ y)) (Succ (addNat x y)) (eqNatAddS x y);
+eqNatAddS x y =
+  Nat_rec (\ (x'::Nat) -> (y'::Nat) ->
+             eqNat (addNat x' (Succ y')) (Succ (addNat x' y')))
+          (\ (y'::Nat) -> Refl Nat (Succ y'))
+          (\ (x'::Nat) ->
+           \ (eqF :: (y'::Nat) ->
+                     eqNat (addNat x' (Succ y')) (Succ (addNat x' y'))) ->
+           \ (y'::Nat) ->
+             eqNatSucc (addNat x' (Succ y')) (Succ (addNat x' y')) (eqF y'))
+          x y;
 
 eqNatAddComm :: (x y :: Nat) -> eqNat (addNat x y) (addNat y x);
-eqNatAddComm x Zero = eqNatAdd0 x;
-eqNatAddComm x (Succ y) =
-  trans Nat
-        (addNat x (Succ y))
-        (Succ (addNat x y))
-        (Succ (addNat y x))
-        (eqNatAddS x y)
-        (eqNatSucc (addNat x y) (addNat y x) (eqNatAddComm x y));
+eqNatAddComm x y =
+  Nat_rec (\ (y'::Nat) -> (x'::Nat) -> eqNat (addNat x' y') (addNat y' x'))
+          (\ (x'::Nat) -> eqNatAdd0 x')
+          (\ (y'::Nat) ->
+           \ (eqF :: (x'::Nat) -> eqNat (addNat x' y') (addNat y' x')) ->
+           \ (x'::Nat) ->
+             trans Nat
+                   (addNat x' (Succ y'))
+                   (Succ (addNat x' y'))
+                   (Succ (addNat y' x'))
+                   (eqNatAddS x' y')
+                   (eqNatSucc (addNat x' y') (addNat y' x') (eqNatAddComm x' y')))
+          y x;
 
-addNat_assoc :: (x y z :: Nat) -> eqNat (addNat x (addNat y z)) (addNat (addNat x y) z);
-addNat_assoc Zero y z = Refl Nat (addNat y z);
-addNat_assoc (Succ x) y z =
-    eqNatSucc (addNat x (addNat y z)) (addNat (addNat x y) z) (addNat_assoc x y z);
+addNat_assoc :: (x y z :: Nat) ->
+                eqNat (addNat x (addNat y z)) (addNat (addNat x y) z);
+addNat_assoc x y z =
+  Nat_rec (\ (x'::Nat) -> eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z))
+          (Refl Nat (addNat y z))
+          (\ (x'::Nat) ->
+           \ (eq :: eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z)) ->
+             eqNatSucc (addNat x' (addNat y z)) (addNat (addNat x' y) z) eq)
+          x;
 
 -- | Multiplication
 mulNat :: Nat -> Nat -> Nat;
-mulNat Zero y = 0;
-mulNat (Succ x) y = addNat y (mulNat x y);
+mulNat x y =
+  Nat_rec (\ (x'::Nat) -> Nat) 0 (\ (x'::Nat) -> \ (prod::Nat) -> addNat y prod) x;
 
-data NatOrdering :: (x y :: Nat) -> sort 0 where {
-    LeNatOrd :: (x z :: Nat) -> NatOrdering x (addNat x z);
-    GtNatOrd :: (x z :: Nat) -> NatOrdering (addNat x (Succ z)) x;
-  }
-
-axiom natOrderingCong1 :: (x y z :: Nat) -> eqNat x y -> NatOrdering x z -> NatOrdering y z;
-axiom natOrderingCong2 :: (x y z :: Nat) -> eqNat x y -> NatOrdering z x -> NatOrdering z y;
-
-succNatOrdering :: (x y :: Nat) -> NatOrdering x y -> NatOrdering (Succ x) (Succ y);
-succNatOrdering _ _ (LeNatOrd x d) = LeNatOrd (Succ x) d;
-succNatOrdering _ _ (GtNatOrd x d) = GtNatOrd (Succ x) d;
-
--- | Comparison
-compareNat :: (x y :: Nat) -> NatOrdering x y;
-compareNat Zero y = LeNatOrd Zero y;
-compareNat (Succ x) Zero = GtNatOrd Zero x;
-compareNat (Succ x) (Succ y) = succNatOrdering x y (compareNat x y);
+equal0Nat :: Nat -> Bool;
+equal0Nat n =
+  Nat_cases Bool True (\ (n::Nat) -> \ (b::Bool) -> False) n;
 
 equalNat :: Nat -> Nat -> Bool;
-equalNat Zero Zero = True;
-equalNat Zero (Succ _) = False;
-equalNat (Succ _) Zero = False;
-equalNat (Succ x) (Succ y) = equalNat x y;
+equalNat x y =
+  Nat_cases (Nat -> Bool) equal0Nat
+            (\ (n'::Nat) -> \ (eqN :: Nat -> Bool) -> \ (m::Nat) ->
+               Nat_cases Bool False
+                         (\ (m'::Nat) -> \ (b::Bool) -> eqN m') m) x y;
 
 ltNat :: Nat -> Nat -> Bool;
-ltNat Zero Zero = False;
-ltNat Zero (Succ _) = True;
-ltNat (Succ _) Zero = False;
-ltNat (Succ x) (Succ y) = ltNat x y;
+ltNat x y =
+  Nat_cases2 Bool (\ (x'::Nat) -> False)
+             (\ (y'::Nat) -> True)
+             (\ (y'::Nat) -> \ (x'::Nat) -> \ (lt_mn::Bool) -> lt_mn) y x;
 
 -- | Subtraction
 subNat :: Nat -> Nat -> Nat;
-subNat x Zero = x;
-subNat Zero (Succ y) = Zero;
-subNat (Succ x) (Succ y) = subNat x y;
+subNat x y =
+  Nat_cases2 Nat (\ (x'::Nat) -> x')
+             (\ (y'::Nat) -> Zero)
+             (\ (y'::Nat) -> \ (x'::Nat) -> \ (sub_xy::Nat) -> sub_xy) y x;
 
 -- | Minimum
 minNat :: Nat -> Nat -> Nat;
-minNat Zero y = Zero;
-minNat (Succ x) Zero = Zero;
-minNat (Succ x) (Succ y) = Succ (minNat x y);
+minNat x y =
+  Nat_cases2 Nat (\ (y'::Nat) -> Zero)
+             (\ (x'::Nat) -> Zero)
+             (\ (x'::Nat) -> \ (y'::Nat) -> \ (min_xy::Nat) -> Succ min_xy) x y;
 
 -- | Maximum
 maxNat :: Nat -> Nat -> Nat;
-maxNat Zero y = y;
-maxNat (Succ x) Zero = Succ x;
-maxNat (Succ x) (Succ y) = Succ (maxNat x y);
+maxNat x y =
+  Nat_cases2 Nat (\ (x'::Nat) -> x')
+             (\ (y'::Nat) -> Succ y')
+             (\ (y'::Nat) -> \ (x'::Nat) -> \ (sub_xy::Nat) -> sub_xy) y x;
 
 -- | Width(n) = 1 + floor(log_2(n))
 primitive widthNat :: Nat -> Nat;
@@ -384,8 +511,8 @@ axiom eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- | Natural exponentiation
 expNat :: Nat -> Nat -> Nat;
-expNat b Zero = 1;
-expNat b (Succ x) = mulNat b (expNat b x);
+expNat b e =
+  Nat_cases Nat 1 (\ (e'::Nat) -> \ (exp_b_e::Nat) -> mulNat b exp_b_e) e;
 
 -- | Natural division and modulus
 primitive divModNat :: Nat -> Nat -> #(Nat, Nat);
@@ -399,18 +526,23 @@ modNat x y = (divModNat x y).2;
 -- There are implicit constructors from integer literals.
 
 -- Dependent pattern matching combinator for natural numbers
-natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
+{- Nat_rec is more general...
+natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) ->
+           (n :: Nat) -> p n;
 natCase p z s Zero = z;
 natCase p z s (Succ n) = s n;
+-}
+
+--------------------------------------------------------------------------------
+-- String values
+
+primitive data String :: sort 0;
+
+primitive error :: (a :: sort 0) -> String -> a;
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 primitive data Vec :: Nat -> sort 0 -> sort 0;
-
-primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
-
-ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
-ConsVec a x n v = gen (Succ n) a (natCase (\ (i::Nat) -> a) x (at n a v));
 
 -- Primitive function for generating an array.
 primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
@@ -420,6 +552,12 @@ primitive atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat ->
 at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 at n a v i = atWithDefault n a (error a "at: index out of bounds") v i;
 -- `at n a v i` has the precondition `ltNat i n`
+
+primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
+
+ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
+ConsVec a x n v =
+  gen (Succ n) a (Nat_cases a x (\ (i::Nat) -> \ (a'::a) -> at n a v i));
 
 upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 upd n a v j x = gen n a (\(i :: Nat) -> ite a (equalNat i j) x (at n a v i));
@@ -439,8 +577,9 @@ axiom eq_Vec :: (n :: Nat) -> (a :: sort 0)
 take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
 take a m n v = gen m a (\(i :: Nat) -> at (addNat m n) a v i);
 
-vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Eq (sort 0) (Vec m a) (Vec n a);
-vecCong a _ _ (Refl _ v) = Refl (sort 0) (Vec v a);
+vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n ->
+           Eq (sort 0) (Vec m a) (Vec n a);
+vecCong a m n eq = eq_cong Nat m n eq (sort 0) (\ (i::Nat) -> Vec i a);
 
 coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
 coerceVec a m n q = coerce (Vec m a) (Vec n a) (vecCong a m n q);
@@ -756,11 +895,19 @@ data Stream :: sort 0 -> sort 0 where {
     MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
   }
 
+Stream_rec :: (a::sort 0) -> (p::Stream a -> sort 0) ->
+              ((f::Nat -> a) -> p (MkStream a f)) -> (s::Stream a) -> p s;
+Stream_rec a p f1 (MkStream _ f) = f1 f;
+
 streamUpd :: (a :: sort 0) -> Stream a -> Nat -> a -> Stream a;
-streamUpd a (MkStream _ s) i y = MkStream a (\(j :: Nat) -> ite a (equalNat i j) y (s j));
+streamUpd a strm i y =
+  Stream_rec a (\ (strm'::Stream a) -> Stream a)
+             (\ (s::Nat -> a) ->
+                MkStream a (\ (j :: Nat) -> ite a (equalNat i j) y (s j))) strm;
 
 streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGet _ (MkStream _ s) i = s i;
+streamGet a strm i =
+  Stream_rec a (\ (strm'::Stream a) -> a) (\ (s::Nat -> a) -> s i) strm;
 
 streamConst :: (a :: sort 0) -> a -> Stream a;
 streamConst a x = MkStream a (\(i :: Nat) -> x);
@@ -848,13 +995,6 @@ updNatFun a f i v x = ite a (equalNat i x) v (f x);
 updBvFun :: (n::Nat) -> (a::sort 0)
 	 -> (bitvector n -> a) -> bitvector n -> a -> (bitvector n -> a);
 updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
-
---------------------------------------------------------------------------------
--- String values
-
-primitive data String :: sort 0;
-
-primitive error :: (a :: sort 0) -> String -> a;
 
 --------------------------------------------------------------------------------
 -- Floating-point values
