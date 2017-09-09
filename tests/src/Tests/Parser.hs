@@ -14,15 +14,17 @@ import Control.Monad.Identity
 import Data.Bits
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import Verifier.SAW.Module
 import Verifier.SAW.Prelude
+import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.TypedAST
+import Verifier.SAW.Term.Pretty
 
 import Test.Tasty
 import Test.Tasty.HUnit
 
 checkGroundTerm :: Term -> Bool
-checkGroundTerm t = freesTerm t == 0
+checkGroundTerm t = looseVars t == 0
 
 namedMsg :: Ident -> String -> String
 namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
@@ -36,10 +38,10 @@ checkEqn sym (DefEqn pats rhs) = do
   let msg = "Equation right hand side has unbound variables:\n"
          ++ show (ppDefEqn (ppTerm defaultPPOpts) emptyLocalVarDoc (ppIdent sym) (DefEqn pats rhs)) ++ "\n"
          ++ show (ppTerm defaultPPOpts lvd PrecNone rhs) ++ "\n"
-         ++ show (freesTerm rhs) ++ "\n"
-         ++ show (ppTermDoc (ppTermF defaultPPOpts (\_ _ _ -> TermDoc . text . show) lvd PrecNone (freesTerm <$> unwrapTermF rhs)))
+         ++ show (looseVars rhs) ++ "\n"
+         ++ show (ppTermDoc (ppTermF defaultPPOpts (\_ _ _ -> TermDoc . text . show) lvd PrecNone (looseVars <$> unwrapTermF rhs)))
 
-  assertEqual (namedMsg sym msg) 0 (freesTerm rhs `shiftR` nbound)
+  assertEqual (namedMsg sym msg) 0 (looseVars rhs `shiftR` nbound)
 
 checkDef :: Def -> Assertion
 checkDef d = do

@@ -267,7 +267,7 @@ ruleOfDefEqn ident (DefEqn pats rhs) =
     _lvd = emptyLocalVarDoc
         & docShowLocalNames .~ False
         & docShowLocalTypes .~ True
-    _varsUnbound t i = freesTerm t `shiftR` i /= 0
+    _varsUnbound t i = looseVars t `shiftR` i /= 0
     ruleLhs = foldl mkTermApp (Unshared (FTermF (GlobalDef ident))) args
     ruleRhs = incVarsSimpleTerm 0 nUnused rhs
 

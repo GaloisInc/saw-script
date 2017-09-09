@@ -55,7 +55,6 @@ module Verifier.SAW.TypedAST
  , FlatTermF(..)
  , unwrapTermF
  , zipWithFlatTermF
- , freesTerm
  , freesTermF
  , termToPat
 
@@ -111,9 +110,6 @@ piArgCount = go 0
   where go i t = case unwrapTermF t of
           Pi _ _ rhs -> go (i+1) rhs
           _          -> i
-
-freesTerm :: Term -> BitSet
-freesTerm (unwrapTermF -> t) = freesTermF (fmap freesTerm t)
 
 -- | @instantiateVars f l t@ substitutes each dangling bound variable
 -- @LocalVar j t@ with the term @f i j t@, where @i@ is the number of
