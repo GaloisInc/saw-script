@@ -227,38 +227,44 @@ FieldValue : Label '=' Term { ($1, $3) }
 FieldType :: { (Term, Term) }
 FieldType : Label '::' LTerm { ($1, $3) }
 
-opt(q) : { Nothing }
-       | q { Just $1 }
+opt(q) :: { Maybe q }
+  : { Nothing }
+  | q { Just $1 }
 
 -- Two elements p and r separated by q and terminated by s
-sepPair(p,q,r,s) : p q r s { ($1,$3) }
+sepPair(p,q,r,s) :: { (p,r) }
+  : p q r s { ($1,$3) }
 
 -- A list of record fields with the given separator and element type.
-recList(q,r) : list(sepPair(FieldName,q,r,';')) { $1 }
+recList(q,r) :: { [(FieldName,r)] }
+  : list(sepPair(FieldName,q,r,';')) { $1 }
 
 -- A possibly-empty list of p's separated by q.
-sepBy(p,q) : {- empty -} { [] }
-           | sepBy1(p,q) { $1 }
+sepBy(p,q) :: { [p] }
+  : {- empty -} { [] }
+  | sepBy1(p,q) { $1 }
 
 -- A possibly-empty list of p's separated by q.
-sepBy1(p,q) : rsepBy1(p,q) { reverse $1 }
+sepBy1(p,q) :: { [p] }
+  : rsepBy1(p,q) { reverse $1 }
 
-rsepBy1(p,q) : p { [$1] }
-             | rsepBy1(p,q) q p { $3 : $1 }
-
--- A list of 0 or more p's, terminated by q's
-list(p) : {- empty -} { [] }
-        | rlist1(p) { reverse $1 }
+rsepBy1(p,q) :: { [p] }
+  : p { [$1] }
+  | rsepBy1(p,q) q p { $3 : $1 }
 
 -- A list of 0 or more p's, terminated by q's
-list1(p) : rlist1(p) { reverse $1 }
+list(p) :: { [p] }
+  : {- empty -} { [] }
+  | rlist1(p) { reverse $1 }
+
+-- A list of 0 or more p's, terminated by q's
+list1(p) :: { [p] }
+  : rlist1(p) { reverse $1 }
 
 -- A reversed list of at least 1 p's
-rlist1(p) : p           { [$1]    }
-          | rlist1(p) p { $2 : $1 }
-
--- A list of at least 1 p's
-list1(p) : rlist1(p) { reverse $1 }
+rlist1(p) :: { [p] }
+  : p           { [$1]    }
+  | rlist1(p) p { $2 : $1 }
 
 {
 data ParseError
