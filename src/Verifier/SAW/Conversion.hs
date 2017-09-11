@@ -134,40 +134,40 @@ instance Show Conversion where
 ----------------------------------------------------------------------
 -- Matchers for terms
 
-data Matcher m t a = Matcher { matcherPat :: Net.Pat, runMatcher :: t -> m a }
+data Matcher m a = Matcher { matcherPat :: Net.Pat, runMatcher :: Term -> m a }
 
-instance Net.Pattern (Matcher m t a) where
+instance Net.Pattern (Matcher m a) where
     toPat = matcherPat
 
-instance Functor m => Functor (Matcher m t) where
+instance Functor m => Functor (Matcher m) where
   fmap f (Matcher p m) = Matcher p (fmap f . m)
 
 -- | @thenMatcher
-thenMatcher :: Monad m => Matcher m t a -> (a -> m b) -> Matcher m t b
+thenMatcher :: Monad m => Matcher m a -> (a -> m b) -> Matcher m b
 thenMatcher (Matcher pat match) f = Matcher pat (f <=< match)
 
-asVar :: (t -> m a) -> Matcher m t a
+asVar :: (Term -> m a) -> Matcher m a
 asVar = Matcher Net.Var
 
-asAny :: Applicative m => Matcher m t t
+asAny :: Applicative m => Matcher m Term
 asAny = asVar pure
 
 -- | Match a list of terms as arguments to a term.
 -- Note that the pats and arguments are in reverse order.
-data ArgsMatcher m t a = ArgsMatcher [Net.Pat] ([t] -> m (a,[t]))
+data ArgsMatcher m a = ArgsMatcher [Net.Pat] ([Term] -> m (a, [Term]))
 
-class ArgsMatchable v m t a where
-  defaultArgsMatcher :: v m t a -> ArgsMatcher m t a
+class ArgsMatchable v m a where
+  defaultArgsMatcher :: v m a -> ArgsMatcher m a
 
-instance Monad m => ArgsMatchable Matcher m t a where
+instance Monad m => ArgsMatchable Matcher m a where
   defaultArgsMatcher (Matcher p f) = ArgsMatcher [p] match
     where match (h:r) = do v <- f h; return (v,r)
           match [] = fail "empty"
 
-instance ArgsMatchable ArgsMatcher m t a where
+instance ArgsMatchable ArgsMatcher m a where
   defaultArgsMatcher = id
 
-consArgsMatcher :: (Monad m) => ArgsMatcher m t a -> Matcher m t b -> ArgsMatcher m t (a :*: b)
+consArgsMatcher :: (Monad m) => ArgsMatcher m a -> Matcher m b -> ArgsMatcher m (a :*: b)
 consArgsMatcher (ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (pl ++ [p]) match
   where match l = do
           (a,l1) <- f l
@@ -175,27 +175,27 @@ consArgsMatcher (ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (pl ++ [p]) match
             (h:l2) -> do b <- g h; return (a :*: b, l2)
             [] ->  fail "empty"
 
-asEmpty :: (Monad m) => ArgsMatcher m t ()
+asEmpty :: (Monad m) => ArgsMatcher m ()
 asEmpty = ArgsMatcher [] (\l -> return ((),l))
 
 infixl 9 >:
 
 -- | @x >: y@ appends @y@ to the list of arguments to match.
-(>:) :: (Monad m, ArgsMatchable v m t a) => v m t a -> Matcher m t b -> ArgsMatcher m t (a :*: b)
+(>:) :: (Monad m, ArgsMatchable v m a) => v m a -> Matcher m b -> ArgsMatcher m (a :*: b)
 (>:) = consArgsMatcher . defaultArgsMatcher
 
-runArgsMatcher :: Monad m => ArgsMatcher m t a -> [t] -> m a
+runArgsMatcher :: Monad m => ArgsMatcher m a -> [Term] -> m a
 runArgsMatcher (ArgsMatcher _ f) l = do
   (v,[]) <- f l
   return v
 
 -- | Produces a matcher from an ArgsMatcher and a matcher that yields
 -- subterms.
-resolveArgs :: (Monad m, ArgsMatchable v m t a)
+resolveArgs :: (Monad m, ArgsMatchable v m a)
                -- Given a term, matches arguments to temr.
-            => Matcher m t [t]
-            -> v m t a
-            -> Matcher m t a
+            => Matcher m [Term]
+            -> v m a
+            -> Matcher m a
 resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
   Matcher (foldl Net.App p pl) (m >=> runArgsMatcher args)
 
@@ -203,7 +203,7 @@ resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
 -- Term matchers
 
 -- | Match a global definition.
-asGlobalDef :: (Monad m) => Ident -> Matcher m Term ()
+asGlobalDef :: (Monad m) => Ident -> Matcher m ()
 asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
         f _ = fail (show ident ++ " match failed.")
@@ -212,7 +212,7 @@ infixl 8 <:>
 
 -- | Match an application
 (<:>) :: (Applicative m, Monad m)
-      => Matcher m Term a -> Matcher m Term b -> Matcher m Term (a :*: b)
+      => Matcher m a -> Matcher m b -> Matcher m (a :*: b)
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
     where
       match (unwrapTermF -> App t1 t2) = liftM2 (:*:) (f1 t1) (f2 t2)
@@ -220,55 +220,55 @@ infixl 8 <:>
 
 -- | Match an application and return second term.
 (<:>>) :: (Applicative m, Monad m)
-       => Matcher m Term a -> Matcher m Term b -> Matcher m Term b
+       => Matcher m a -> Matcher m b -> Matcher m b
 x <:>> y = fmap (view _2) $ x <:> y
 
 
 -- | Matches any tuple.
-asAnyTupleValue :: (Monad m) => Matcher m Term [Term]
+asAnyTupleValue :: (Monad m) => Matcher m [Term]
 asAnyTupleValue = asVar R.asTupleValue
 
 -- | Matches a tuple with arguments matching constraints.
-asTupleValue :: (Monad m, ArgsMatchable v m Term a)
-             => v m Term a -> Matcher m Term a
+asTupleValue :: (Monad m, ArgsMatchable v m a)
+             => v m a -> Matcher m a
 asTupleValue (defaultArgsMatcher -> m) = asVar $ \t -> do
   l <- R.asTupleValue t
   runArgsMatcher m l
 
 -- | Matches the type of any tuple.
-asAnyTupleType :: (Monad m) => Matcher m Term [Term]
+asAnyTupleType :: (Monad m) => Matcher m [Term]
 asAnyTupleType = asVar R.asTupleType
 
 -- | Matches a tuple type with arguments matching constraints.
-asTupleType :: (Monad m, ArgsMatchable v m Term a)
-             => v m Term a -> Matcher m Term a
+asTupleType :: (Monad m, ArgsMatchable v m a)
+             => v m a -> Matcher m a
 asTupleType (defaultArgsMatcher -> m) = asVar $ \t -> do
   l <- R.asTupleType t
   runArgsMatcher m l
 
 asTupleSelector :: (Functor m, Monad m)
-                => Matcher m Term a -> Matcher m Term (a, Int)
+                => Matcher m a -> Matcher m (a, Int)
 asTupleSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asTupleSelector t
 
 -- | Matches record values, and returns fields.
-asAnyRecordValue :: (Monad m) => Matcher m Term (Map FieldName Term)
+asAnyRecordValue :: (Monad m) => Matcher m (Map FieldName Term)
 asAnyRecordValue = asVar R.asRecordValue
 
 -- | Matches record types, and returns fields.
-asAnyRecordType :: (Monad m) => Matcher m Term (Map FieldName Term)
+asAnyRecordType :: (Monad m) => Matcher m (Map FieldName Term)
 asAnyRecordType = asVar R.asRecordType
 
 -- | Matches
 asRecordSelector :: (Functor m, Monad m)
-                 => Matcher m Term a
-                 -> Matcher m Term (a, FieldName)
+                 => Matcher m a
+                 -> Matcher m (a, FieldName)
 asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 
 --TODO: RecordSelector
 
 -- | Match a constructor
-asCtor :: (Monad m, ArgsMatchable v m Term a)
-       => Ident -> v m Term a -> Matcher m Term a
+asCtor :: (Monad m, ArgsMatchable v m a)
+       => Ident -> v m a -> Matcher m a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
           CtorApp c l <- R.asFTermF t
@@ -276,8 +276,8 @@ asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
           return l
 
 -- | Match a datatype.
-asDataType :: (Monad m, ArgsMatchable v m Term a)
-           => Ident -> v m Term a -> Matcher m Term a
+asDataType :: (Monad m, ArgsMatchable v m a)
+           => Ident -> v m a -> Matcher m a
 asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
           DataTypeApp dt l <- R.asFTermF t
@@ -285,49 +285,49 @@ asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
           return l
 
 -- | Match any sort.
-asAnySort :: (Monad m) => Matcher m Term Sort
+asAnySort :: (Monad m) => Matcher m Sort
 asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
 
 -- | Match a specific sort.
-asSort :: (Monad m) => Sort -> Matcher m Term ()
+asSort :: (Monad m) => Sort -> Matcher m ()
 asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
   where fn t = do s' <- R.asSort t
                   unless (s == s') $ fail "Does not matched expected sort."
 
 -- | Match a Nat literal
-asAnyNatLit :: (Monad m) => Matcher m Term Prim.Nat
+asAnyNatLit :: (Monad m) => Matcher m Prim.Nat
 asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
 
 -- | Match a Vec literal
-asAnyVecLit :: (Monad m) => Matcher m Term (Term, V.Vector Term)
+asAnyVecLit :: (Monad m) => Matcher m (Term, V.Vector Term)
 asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
 -- | Match a Float literal
-asAnyFloatLit :: (Monad m) => Matcher m Term Float
+asAnyFloatLit :: (Monad m) => Matcher m Float
 asAnyFloatLit = asVar $ \t -> do FloatLit i <- R.asFTermF t; return i
 
 -- | Match a Double literal
-asAnyDoubleLit :: (Monad m) => Matcher m Term Double
+asAnyDoubleLit :: (Monad m) => Matcher m Double
 asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
 
 -- | Match any external constant.
-asExtCns :: (Monad m) => Matcher m Term (ExtCns Term)
+asExtCns :: (Monad m) => Matcher m (ExtCns Term)
 asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
 
 -- | Returns index of local var if any.
-asLocalVar :: (Monad m) => Matcher m Term DeBruijnIndex
+asLocalVar :: (Monad m) => Matcher m DeBruijnIndex
 asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 
 ----------------------------------------------------------------------
 -- Prelude matchers
 
-asBoolType :: (Monad m) => Matcher m Term ()
+asBoolType :: (Monad m) => Matcher m ()
 asBoolType = asDataType "Prelude.Bool" asEmpty
 
-asSuccLit :: (Functor m, Monad m) => Matcher m Term Prim.Nat
+asSuccLit :: (Functor m, Monad m) => Matcher m Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
-asBvNatLit :: (Applicative m, Monad m) => Matcher m Term Prim.BitVector
+asBvNatLit :: (Applicative m, Monad m) => Matcher m Prim.BitVector
 asBvNatLit =
   (\(_ :*: n :*: x) -> Prim.bv (fromIntegral n) (toInteger x)) <$>
     (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
@@ -341,7 +341,7 @@ checkedIntegerToNonNegInt x
 -- Matchable
 
 class Matchable m a where
-    defaultMatcher :: Matcher m Term a
+    defaultMatcher :: Matcher m a
 
 instance Applicative m => Matchable m () where
     defaultMatcher = asVar (const (pure ()))
@@ -470,7 +470,7 @@ instance Buildable Prim.BitVector where
 -- rewritten term. We use conversions to model the behavior of
 -- primitive operations in SAWCore.
 
-newtype Conversion = Conversion (Matcher Maybe Term (TermBuilder Term))
+newtype Conversion = Conversion (Matcher Maybe (TermBuilder Term))
 
 instance Net.Pattern Conversion where
     toPat (Conversion m) = Net.toPat m
@@ -485,7 +485,7 @@ runConversion (Conversion m) = runMatcher m
 -- its arguments and builds the result.
 
 class Conversionable a where
-    convOfMatcher :: Matcher Maybe Term a -> Conversion
+    convOfMatcher :: Matcher Maybe a -> Conversion
 
 instance (Matchable Maybe a, Conversionable b) => Conversionable (a -> b) where
     convOfMatcher m = convOfMatcher
@@ -494,7 +494,7 @@ instance (Matchable Maybe a, Conversionable b) => Conversionable (a -> b) where
 instance Buildable a => Conversionable (Maybe a) where
     convOfMatcher m = Conversion (thenMatcher m (fmap defaultBuilder))
 
-defaultConvOfMatcher :: Buildable a => Matcher Maybe Term a -> Conversion
+defaultConvOfMatcher :: Buildable a => Matcher Maybe a -> Conversion
 defaultConvOfMatcher m = Conversion (thenMatcher m (Just . defaultBuilder))
 
 instance Conversionable Term where
