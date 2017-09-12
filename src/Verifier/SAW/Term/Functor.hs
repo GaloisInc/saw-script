@@ -17,15 +17,19 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Term.Functor
-  ( -- * Names.
+  ( -- * Module Names
     ModuleName, mkModuleName
   , preludeName
-    -- * Data types and definitions.
+    -- * Identifiers
+  , Ident(identModule, identName), mkIdent
+  , parseIdent
+  , isIdent
+    -- * Data types and definitions
   , DeBruijnIndex
   , FieldName
   , ExtCns(..)
   , VarIndex
-    -- * Terms and associated operations.
+    -- * Terms and associated operations
   , TermIndex
   , Term(..)
   , TermF(..)
@@ -36,11 +40,8 @@ module Verifier.SAW.Term.Functor
   , unwrapTermF
   , termToPat
   , alphaEquiv
-    -- * Primitive types.
+    -- * Sorts
   , Sort, mkSort, sortOf, maxSort
-  , Ident(identModule, identName), mkIdent
-  , parseIdent
-  , isIdent
   ) where
 
 import Control.Exception (assert)
