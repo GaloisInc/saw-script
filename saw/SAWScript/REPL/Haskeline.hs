@@ -2,11 +2,11 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description :
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.REPL.Haskeline where
 

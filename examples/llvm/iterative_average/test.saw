@@ -78,7 +78,7 @@ let inputs = [ ("st->0", {{ st.sum }}, 1)
              ];
 let outputs = [ ("st->0", 1), ("st->1", 1) ];
 t <- llvm_symexec m "update" allocs inputs outputs true;
-thm <- abstract_symbolic {{ toState t == update st xs }};
+thm <- abstract_symbolic {{ toState t == updatef st xs }};
 print "Verifying 'update' using 'llvm_symexec':";
 prove_print abc thm;
 
@@ -94,7 +94,7 @@ let update_spec xs_len = do {
   llvm_assert_eq "len" {{ `xs_len:[32] }};
 
   let st0 = {{ { sum = sum0, len = len0 } }};
-  let st1 = {{ update st0 xs0 }};
+  let st1 = {{ updatef st0 xs0 }};
 
   llvm_ensure_eq "st->0" {{ st1.sum }};
   llvm_ensure_eq "st->1" {{ st1.len }};
@@ -104,7 +104,7 @@ let update_spec xs_len = do {
   llvm_sat_branches true;
   //llvm_verify_tactic abc;
   llvm_verify_tactic do {
-    unfolding ["st1", "update", "st0"];
+    unfolding ["st1", "updatef", "st0"];
     simplify (cryptol_ss ());
     simplify (add_prelude_eqs ["eq_refl"] empty_ss);
     //print_goal;

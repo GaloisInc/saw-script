@@ -6,29 +6,25 @@
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
 #endif
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Interpreter for SAW-Script files and statements.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.Interpreter
-  ( interpret
-  , interpretDeclGroup
-  , interpretStmt
+  ( interpretStmt
   , interpretFile
-  , buildTopLevelEnv
-  , extendEnv
-  , Value, isVUnit
-  , IsValue(..)
-  , primTypeEnv
-  , primDocEnv
   , processFile
+  , buildTopLevelEnv
+  , primDocEnv
   )
   where
 
@@ -39,6 +35,7 @@ import Data.Traversable hiding ( mapM )
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
+import qualified Data.Set as Set
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -46,9 +43,10 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import SAWScript.AST (Located(..))
 import SAWScript.Builtins
-import SAWScript.Compiler (reportErrT)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
+import SAWScript.CrucibleBuiltins
+import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -64,8 +62,7 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
-import Verifier.SAW.Rewriter ( Simpset, emptySimpset, rewritingSharedContext
-                             , scSimpset )
+import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -83,6 +80,8 @@ import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import SAWScript.AutoMatch
+
+import qualified Lang.Crucible.FunctionHandle as Crucible
 
 -- Environment -----------------------------------------------------------------
 
@@ -269,7 +268,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let opts = rwPPOpts rw
 
   SS.Decl _ (Just schema) expr'' <-
-    io $ reportErrT $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+    either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -301,12 +300,15 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in the TopLevel monad.
-interpretStmt :: Bool -> SS.Stmt -> TopLevel ()
+interpretStmt ::
+  Bool {-^ whether to print non-unit result values -} ->
+  SS.Stmt ->
+  TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
     SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
     SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- io $ reportErrT $
+                                    dg' <- either fail return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW
@@ -358,14 +360,23 @@ buildTopLevelEnv opts =
                       , remove_ident_coerce
                       , remove_ident_unsafeCoerce
                       ]
-       simps <- scSimpset sc0 [] [] convs
+           cryptolDefs = filter defPred $ allModuleDefs CryptolSAW.cryptolModule
+           defPred d = defIdent d `Set.member` includedDefs
+           includedDefs = Set.fromList
+                          [ "Cryptol.ecDemote"
+                          , "Cryptol.ty"
+                          , "Cryptol.seq"
+                          ]
+       simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
                    , roJavaCodebase = jcb
                    , roOptions = opts
+                   , roHandleAlloc = halloc
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -620,7 +631,7 @@ primitives = Map.fromList
 
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
-    [ "Check if two terms are convertible" ]
+    [ "Check if two terms are convertible." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
@@ -796,11 +807,11 @@ primitives = Map.fromList
     [ "Reduce the current goal to beta-normal form." ]
 
   , prim "print_goal"          "ProofScript ()"
-    (pureVal printGoal)
+    (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]
 
   , prim "print_goal_depth"    "Int -> ProofScript ()"
-    (pureVal printGoalDepth)
+    (pureVal print_goal_depth)
     [ "Print the current goal that a proof script is attempting to prove,"
     , "limited to a maximum depth."
     ]
@@ -917,8 +928,13 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
+  , prim "split_goal"          "ProofScript ()"
+    (pureVal split_goal)
+    [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
+    ,  "goals 'prop1' and 'prop2'." ]
+
   , prim "empty_ss"            "Simpset"
-    (pureVal (emptySimpset :: Simpset Term))
+    (pureVal emptySimpset)
     [ "The empty simplification rule set, containing no rules." ]
 
   , prim "cryptol_ss"          "() -> Simpset"
@@ -970,7 +986,7 @@ primitives = Map.fromList
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
     [ "Rewrite a term using a specific simplification rule set, returning"
-    , "the rewritten term"
+    , "the rewritten term."
     ]
 
   , prim "unfold_term"         "[String] -> Term -> Term"
@@ -1168,36 +1184,35 @@ primitives = Map.fromList
     , "results."
     ]
 
-  , prim "java_verify_exp"
-    "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
-    (bicVal verifyJava)
-    [ "Experimental code. Don't expect this to work reliably. " ]
+  , prim "llvm_type"           "String -> LLVMType"
+    (funVal1 llvm_type)
+    [ "Parse the given string as LLVM type syntax." ]
 
   , prim "llvm_int"            "Int -> LLVMType"
-    (pureVal llvmInt)
+    (pureVal llvm_int)
     [ "The type of LLVM integers, of the given bit width." ]
 
   , prim "llvm_float"          "LLVMType"
-    (pureVal llvmFloat)
+    (pureVal llvm_float)
     [ "The type of single-precision floating point numbers in LLVM." ]
 
   , prim "llvm_double"         "LLVMType"
-    (pureVal llvmDouble)
+    (pureVal llvm_double)
     [ "The type of double-precision floating point numbers in LLVM." ]
 
   , prim "llvm_array"          "Int -> LLVMType -> LLVMType"
-    (pureVal llvmArray)
+    (pureVal llvm_array)
     [ "The type of LLVM arrays with the given number of elements of the"
     , "given type."
     ]
 
   , prim "llvm_struct"         "String -> LLVMType"
-    (pureVal llvmStruct)
+    (pureVal llvm_struct)
     [ "The type of an LLVM struct of the given name."
     ]
 
   , prim "llvm_var"            "String -> LLVMType -> LLVMSetup Term"
-    (bicVal llvmVar)
+    (bicVal llvm_var)
     [ "Return a term corresponding to the initial value of the named LLVM"
     , "variable, which should have the given type. The returned term can be"
     , "used to construct more complex expressions. For example it can be used"
@@ -1206,7 +1221,7 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_ptr"            "String -> LLVMType -> LLVMSetup ()"
-    (bicVal llvmPtr)
+    (bicVal llvm_ptr)
     [ "Declare that the named LLVM variable should point to a value of the"
     , "given type. This command makes the given variable visible later, so"
     , "the use of 'llvm_ptr \"p\" ...' is necessary before using, for"
@@ -1217,55 +1232,92 @@ primitives = Map.fromList
   --  (bicVal llvmMayAlias)
 
   , prim "llvm_assert"         "Term -> LLVMSetup ()"
-    (bicVal llvmAssert)
+    (bicVal llvm_assert)
     [ "Assert that the given term should evaluate to true in the initial"
     , "state of an LLVM function."
     ]
 
   , prim "llvm_assert_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal llvmAssertEq)
+    (bicVal llvm_assert_eq)
     [ "Specify the initial value of an LLVM variable."
     ]
 
+  , prim "llvm_assert_null"    "String -> LLVMSetup ()"
+    (bicVal llvm_assert_null)
+    [ "Specify that the initial value of an LLVM pointer variable is NULL."
+    ]
+
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal llvmEnsureEq)
+    (bicVal (llvm_ensure_eq False))
     [ "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes."
     ]
 
+  , prim "llvm_ensure_eq_post"      "String -> Term -> LLVMSetup ()"
+    (bicVal (llvm_ensure_eq True))
+    [ "Specify that the LLVM variable should have a value equal to the"
+    , "given term when execution finishes, evaluating the expression in"
+    , "the final state instead of the initial state."
+    ]
+
+  , prim "llvm_modify"         "String -> LLVMSetup ()"
+    (bicVal llvm_modify)
+    [ "Specify that the LLVM variable should have a an arbitary, unspecified"
+    , "value when execution finishes."
+    ]
+
+  , prim "llvm_allocates"         "String -> LLVMSetup ()"
+    (pureVal llvm_allocates)
+    [ "Specify that the LLVM variable should be updated with a pointer to"
+    , "newly-allocated memory of whatever type the variable has been declared"
+    , "to have."
+    ]
+
   , prim "llvm_return"         "Term -> LLVMSetup ()"
-    (bicVal llvmReturn)
-    [ "Indicate the expected return value of an LLVM function." ]
+    (bicVal llvm_return)
+    [ "Indicate the expected return value of an LLVM function."
+    ]
+
+  , prim "llvm_return_arbitrary" "LLVMSetup ()"
+    (pureVal llvm_return_arbitrary)
+    [ "Indicate that an LLVM function returns an arbitrary, unspecified value."
+    ]
 
   , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
-    (bicVal llvmVerifyTactic)
+    (bicVal llvm_verify_tactic)
     [ "Use the given proof script to prove the specified properties about"
     , "an LLVM function."
     ]
 
   , prim "llvm_sat_branches"   "Bool -> LLVMSetup ()"
-    (pureVal llvmSatBranches)
+    (pureVal llvm_sat_branches)
     [ "Turn on or off satisfiability checking of branch conditions during"
     , "symbolic execution."
     ]
 
+  , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
+    (pureVal llvm_simplify_addrs)
+    [ "Turn on or off simplification of address expressions before loads"
+    , "and stores."
+    ]
+
   , prim "llvm_no_simulate"    "LLVMSetup ()"
-    (pureVal llvmNoSimulate)
+    (pureVal llvm_no_simulate)
     [ "Skip symbolic simulation for this LLVM method." ]
 
   , prim "llvm_pure"           "LLVMSetup ()"
-    (pureVal llvmPure)
+    (pureVal llvm_pure)
     [ "The empty specification for 'llvm_verify'. Equivalent to 'return ()'." ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
-    (pureVal loadLLVMModule)
+    (pureVal llvm_load_module)
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
   --, prim "llvm_module_info"    "LLVMModule -> TopLevel ()"
 
   , prim "llvm_extract"
     "LLVMModule -> String -> LLVMSetup () -> TopLevel Term"
-    (bicVal extractLLVM)
+    (bicVal llvm_extract)
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
     , "value will be the return value of the functions. Only functions with"
@@ -1275,7 +1327,7 @@ primitives = Map.fromList
 
   , prim "llvm_symexec"
     "LLVMModule -> String -> [(String, Int)] -> [(String, Term, Int)] -> [(String, Int)] -> Bool -> TopLevel Term"
-    (bicVal symexecLLVM)
+    (bicVal llvm_symexec)
     [ "Symbolically execute an LLVM function and construct a Term corresponding"
     , "to its result. The first list describes what allocations should be"
     , "performed before execution. Each name given is allocated to point to"
@@ -1291,7 +1343,7 @@ primitives = Map.fromList
 
   , prim "llvm_verify"
     "LLVMModule -> String -> [LLVMMethodSpec] -> LLVMSetup () -> TopLevel LLVMMethodSpec"
-    (bicVal verifyLLVM)
+    (bicVal llvm_verify)
     [ "Verify an LLVM function against a specification. The first two"
     , "arguments are the same as for 'llvm_extract' and 'llvm_symexec'."
     , "The list of LLVMMethodSpec values in the third argument makes it"
@@ -1305,12 +1357,12 @@ primitives = Map.fromList
     ]
 
   , prim "llvm_spec_solvers"  "LLVMMethodSpec -> [String]"
-    (\_ _ -> toValue llvmSpecSolvers)
+    (\_ _ -> toValue llvm_spec_solvers)
     [ "Extract a list of all the solvers used when verifying the given LLVM method spec."
     ]
-  
+
   , prim "llvm_spec_size"  "LLVMMethodSpec -> Int"
-    (\_ _ -> toValue llvmSpecSize)
+    (\_ _ -> toValue llvm_spec_size)
     [ "Return a count of the combined size of all verification goals proved as part of the given method spec."
     ]
 
@@ -1415,7 +1467,194 @@ primitives = Map.fromList
     [ "Get the nth command-line argument as a String. Index 0 returns"
     , "the program name; other parameters are numbered starting at 1."
     ]
+
+  , prim "show_cfg"          "CFG -> String"
+    (pureVal show_cfg)
+    [ "Pretty-print a control-flow graph."
+    ]
+
+    ---------------------------------------------------------------------
+    -- Experimental Crucible/LLVM interface
+
+  , prim "load_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
+    (bicVal load_llvm_cfg)
+    [ "Load a function from the given LLVM module."
+    ]
+
+  , prim "extract_crucible_llvm"  "LLVMModule -> String -> TopLevel Term"
+    (bicVal extract_crucible_llvm)
+    [ "TODO"
+    ]
+
+  , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
+    (bicVal crucible_fresh_var)
+    [ "Create a fresh variable for use within a Crucible specification. The"
+    , "name is used only for pretty-printing."
+    ]
+
+  , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc)
+    [ "Declare that an object of the given type should be allocated in a"
+    , "Crucible specification. Before `crucible_execute_func`, this states"
+    , "that the function expects the object to be allocated before it runs."
+    , "After `crucible_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
+
+  , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_fresh_pointer)
+    [ "Create a fresh pointer value for use in a Crucible specification."
+    , "This works like `crucible_alloc` except that the pointer is not"
+    , "required to point to allocated memory."
+    ]
+
+  , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_fresh_expanded_val)
+    [ "TODO" ]
+
+  , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_points_to True))
+    [ "Declare that the memory location indicated by the given pointer (first"
+    , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_points_to False))
+    [ "A variant of crucible_points_to that does not check for compatibility"
+    , "between the pointer type and the value type. This may be useful when"
+    , "reading or writing a prefix of larger array, for example."
+    ]
+
+  , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_equal)
+    [ "State that two Crucible values should be equal. Can be used as either"
+    , "a pre-condition or a post-condition. It is semantically equivalent to"
+    , "a `crucible_precond` or `crucible_postcond` statement which is an"
+    , "equality predicate, but potentially more efficient."
+    ]
+
+  , prim "crucible_precond" "Term -> CrucibleSetup ()"
+    (pureVal crucible_precond)
+    [ "State that the given predicate is a pre-condition on execution of the"
+    , "function being verified."
+    ]
+
+  , prim "crucible_postcond" "Term -> CrucibleSetup ()"
+    (pureVal crucible_postcond)
+    [ "State that the given predicate is a post-condition of execution of the"
+    , "function being verified."
+    ]
+
+  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
+    (bicVal crucible_execute_func)
+    [ "Specify the given list of values as the arguments of the function."
+    ,  ""
+    , "The crucible_execute_func statement also serves to separate the pre-state"
+    , "section of the spec (before crucible_execute_func) from the post-state"
+    , "section (after crucible_execute_func). The effects of some CrucibleSetup"
+    , "statements depend on whether they occur in the pre-state or post-state"
+    , "section."
+    ]
+
+  , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_return)
+    [ "Specify the given value as the return value of the function. A"
+    , "crucible_return statement is required if and only if the function"
+    , "has a non-void return type." ]
+
+  , prim "crucible_llvm_verify"
+    "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_verify)
+    [ "Verify the LLVM function named by the second parameter in the module"
+    , "specified by the first. The third parameter lists the CrucibleMethodSpec"
+    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    , "parameter enables or disables path satisfiability checking. The fifth"
+    , "describes how to set up the symbolic execution engine before verification."
+    , "And the last gives the script to use to prove the validity of the resulting"
+    , "verification conditions."
+    ]
+
+  , prim "crucible_llvm_unsafe_assume_spec"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_unsafe_assume_spec)
+    [ "TODO" ]
+
+  , prim "crucible_array"
+    "[SetupValue] -> SetupValue"
+    (pureVal CIR.SetupArray)
+    [ "Create a SetupValue representing an array, with the given list of"
+    , "values as elements. The list must be non-empty." ]
+
+  , prim "crucible_struct"
+    "[SetupValue] -> SetupValue"
+    (pureVal CIR.SetupStruct)
+    [ "Create a SetupValue representing a struct, with the given list of"
+    , "values as elements." ]
+
+  , prim "crucible_elem"
+    "SetupValue -> Int -> SetupValue"
+    (pureVal CIR.SetupElem)
+    [ "Turn a SetupValue representing a struct or array pointer into"
+    , "a pointer to an element of the struct or array by field index." ]
+
+  , prim "crucible_field"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.SetupField)
+    [ "Turn a SetupValue representing a struct pointer into"
+    , "a pointer to an element of the struct by field name." ]
+
+  , prim "crucible_null"
+    "SetupValue"
+    (pureVal CIR.SetupNull)
+    [ "A SetupValue representing a null pointer value." ]
+
+  , prim "crucible_global"
+    "String -> SetupValue"
+    (pureVal CIR.SetupGlobal)
+    [ "Return a SetupValue representing a pointer to the named global."
+    , "The String may be either the name of a global value or a function name." ]
+
+  , prim "crucible_term"
+    "Term -> SetupValue"
+    (pureVal CIR.SetupTerm)
+    [ "Construct a `SetupValue` from a `Term`." ]
+
+  , prim "crucible_setup_val_to_term"
+    " SetupValue -> TopLevel Term"
+    (bicVal crucible_setup_val_to_typed_term)
+    [ "Convert from a setup value to a typed term. This can only be done for a"
+    , "subset of setup values. Fails if a setup value is a global, variable or null."
+    ]
+
+  -- Ghost state support
+  , prim "crucible_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (bicVal crucible_declare_ghost_state)
+    [ "Allocates a unique ghost variable." ]
+
+  , prim "crucible_ghost_value"
+    "Ghost -> Term -> CrucibleSetup ()"
+    (bicVal crucible_ghost_value)
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
+    (\_ _ -> toValue crucible_spec_solvers)
+    [ "Extract a list of all the solvers used when verifying the given method spec."
+    ]
+
+  , prim "crucible_spec_size"  "CrucibleMethodSpec -> Int"
+    (\_ _ -> toValue crucible_spec_size)
+    [ "Return a count of the combined size of all verification goals proved as part of"
+    , "the given method spec."
+    ]
   ]
+
   where
     prim :: String -> String -> (Options -> BuiltinContext -> Value) -> [String]
          -> (SS.LName, Primitive)
@@ -1454,6 +1693,8 @@ valueEnv :: Options -> BuiltinContext -> Map SS.LName Value
 valueEnv opts bic = fmap f primitives
   where f p = (primFn p) opts bic
 
+-- | Map containing the formatted documentation string for each
+-- saw-script primitive.
 primDocEnv :: Map SS.Name String
 primDocEnv =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]

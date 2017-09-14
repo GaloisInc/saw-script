@@ -5,11 +5,11 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : And-Inverter Graphs.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.ImportAIG
   ( readAIGexpect

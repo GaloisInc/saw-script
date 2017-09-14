@@ -8,4 +8,4 @@ let init_spec = do {
 };
 
 c <- java_load_class "ArrayField";
-java_verify_exp c "init" [] init_spec;
+java_verify c "init" [] init_spec;

@@ -1,3 +1,6 @@
+[![Build
+Status](https://travis-ci.org/GaloisInc/saw-script.svg?branch=master)](https://travis-ci.org/GaloisInc/saw-script)
+
 # SAWScript
 
 This repository contains the code for SAWScript, the scripting
@@ -8,13 +11,26 @@ languages such as C, Java, and Cryptol.
 
 ## Documentation
 
-The SAWScript tutorial, [doc/tutorial/]
-(https://github.com/GaloisInc/saw-script/raw/master/doc/tutorial),
-gives an introduction to using the SAWScript interpreter.
+The [SAWScript tutorial](https://saw.galois.com/tutorial.html) gives
+an introduction to using the SAWScript interpreter.
 
 ## Precompiled Binaries
 
 Precompiled SAWScript binaries for a variety of platforms are available on the [releases page](https://github.com/GaloisInc/saw-script/releases).
+
+## Getting Z3
+
+SAW can use many theorem provers, but because of its use of Cryptol it
+always needs to have Microsoft Research's [Z3 SMT
+solver](https://github.com/Z3Prover/z3) installed.  You can download Z3
+binaries for a variety of platforms from their [releases
+page](https://github.com/Z3Prover/z3/releases).
+
+SAW generally requires the most recent version of Z3, which at the
+time of writing this file is 4.5.0.
+
+After installation, make sure that `z3` (or `z3.exe` on Windows)
+is on your PATH.
 
 ## Manual Installation
 
@@ -33,30 +49,6 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
   * Ensure that you have the programs `javac` and `z3` on your
     `PATH`. Z3 binaries are available at
     https://github.com/Z3Prover/z3/releases
-
-  * **Developers**:
-    optionally, create a `build-sandbox-version-pins.txt` and pin the
-    revisions of dependencies as necessary by adding lines like
-
-        <dependency name> <committish>
-
-    See the `pin` function in `build-sandbox.sh` for more details. The release
-    branches already include a known-to-work `build-sandbox-versions-pins.txt`,
-    so you can get a stable build by checking out a release branch (e.g.
-    `git checkout release-0.2`).
-
-    To create a `build-sandbox-versions-pins.txt` for the current
-    state of the dependencies, do
-
-        for d in deps/*; \
-          do (cd $d && echo -n "$(basename "$d") "; git rev-parse HEAD); \
-        done > build-sandbox-version-pins.txt
-
-    and then
-
-        git add --force build-sandbox-version-pins.txt
-
-    if you are in a new release branch.
 
   * Setup a `stack.yaml` for your OS and preferred GHC.
 
@@ -85,11 +77,7 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
 
   * Build SAWScript by running
 
-        ./build-sandbox.sh -p
-
-    The `-p` flag tells it to pull the latest updates from any
-    dependency repositories. You can omit `-p`, and speed up the
-    build slightly, if you know that they haven't changed.
+        ./build.sh
 
     The SAWScript executables will be created in
 
@@ -108,10 +96,25 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
 
   * Optionally, run ./stage.sh to create a binary tarball.
 
+## Notes on LLVM
+
+SAW can analyze LLVM programs (usually derived from C, but potentially
+for other languages). The only tool strictly required for this is a
+compiler that can generate LLVM bitcode, such as `clang`. However,
+having the full LLVM tool suite available can be useful. We have tested
+SAW with LLVM and `clang` versions from 3.5 to 4.0, as well as the
+version of `clang` bundled with Apple Xcode. We welcome bug reports on
+any failure to parse bitcode from LLVM versions in that range.
+
+Note that successful parsing doesn't necessarily mean that verification
+will be possible for all language constructs. There are various
+instructions that are not supported during verification. However,
+any failure during `llvm_load_module` should be considered a bug.
+
 ## Related Packages
 
 Many dependencies are automatically downloaded into `deps/` when you
-build using `build-sandbox.sh`; see
+build using `build.sh`; see
 [Manual Installation](#manual-installation) above. Key automatically
 downloaded dependencies include:
 

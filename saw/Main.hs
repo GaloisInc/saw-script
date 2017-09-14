@@ -1,9 +1,9 @@
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description :
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module Main where
 
@@ -22,6 +22,7 @@ import SAWScript.Version (shortVersionText)
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
   argv <- getArgs
   case getOpt Permute options argv of
     (opts, files, []) -> do

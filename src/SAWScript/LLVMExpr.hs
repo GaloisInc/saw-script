@@ -11,17 +11,18 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Data structures for LLVM expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.LLVMExpr
   (-- * LLVM Expressions
     LLVMExprF(..)
   , LLVMExpr
   , ProtoLLVMExpr(..)
+  , ProtoLLVMField(..)
   , parseProtoLLVMExpr
   , ppProtoLLVMExpr
   , ppLLVMExpr
@@ -29,6 +30,8 @@ module SAWScript.LLVMExpr
   , updateLLVMExprType
   , isPtrLLVMExpr
   , isArgLLVMExpr
+  , containsReturn
+  , exprDepth
     -- * Logic expressions
   , LogicExpr(..)
   , logicExprLLVMExprs
@@ -53,6 +56,7 @@ import Control.Applicative
 #endif
 -- import Data.Set (Set)
 import Data.Functor.Identity
+import qualified Data.Vector as Vector (toList)
 import Text.Parsec as P
 import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>))
 import Text.Read
@@ -80,11 +84,16 @@ data ProtoLLVMExpr
   = PVar String
   | PArg Int
   | PDeref ProtoLLVMExpr
-  | PField Int ProtoLLVMExpr -- Recursive arg is _address_
-  | PDirectField Int ProtoLLVMExpr -- Recursive arg is _value_
+  | PField ProtoLLVMField ProtoLLVMExpr -- Recursive arg is _address_
+  | PDirectField ProtoLLVMField ProtoLLVMExpr -- Recursive arg is _value_
   | PReturn
   -- PIndex ProtoLLVMExpr ProtoLLVMExpr
     deriving (Show)
+
+data ProtoLLVMField
+  = FieldIndex Int
+  | FieldName String
+    deriving Show
 
 ppProtoLLVMExpr :: ProtoLLVMExpr -> Doc
 ppProtoLLVMExpr (PVar x) = text x
@@ -92,22 +101,21 @@ ppProtoLLVMExpr PReturn = text "return"
 ppProtoLLVMExpr (PArg n) = PP.string "args[" <> int n <> PP.string "]"
 ppProtoLLVMExpr (PDeref e) = PP.text "*" <> PP.parens (ppProtoLLVMExpr e)
 ppProtoLLVMExpr (PField n e) =
-  PP.parens (ppProtoLLVMExpr e) <> text "->" <> int n
+  PP.parens (ppProtoLLVMExpr e) <> text "->" <> ppProtoLLVMField n
 ppProtoLLVMExpr (PDirectField n e) =
-  PP.parens (ppProtoLLVMExpr e) <> text "." <> int n
+  PP.parens (ppProtoLLVMExpr e) <> text "." <> ppProtoLLVMField n
 --ppProtoLLVMExpr (PIndex n e) =
 --  ppProtoLLVMExpr e <> text "[" <> ppProtoLLVMExpr n <> text "]"
+
+ppProtoLLVMField :: ProtoLLVMField -> Doc
+ppProtoLLVMField (FieldIndex i) = int i
+ppProtoLLVMField (FieldName  n) = PP.text n
 
 parseProtoLLVMExpr :: String
                    -> Either ParseError ProtoLLVMExpr
 parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
   where
-    parseExpr = P.choice
-                [ parseDerefField
-                , parseDirectField
-                , parseDeref
-                , parseAExpr
-                ]
+    parseExpr = parseDeref <|> parseFieldsExpr
     parseAExpr = P.choice
                  [ parseReturn
                  , parseArgs
@@ -123,7 +131,7 @@ parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
     parseReturn :: Parser ProtoLLVMExpr
     parseReturn = try (P.string "return") >> return PReturn
     parseDeref :: Parser ProtoLLVMExpr
-    parseDeref = PDeref <$> (try (P.string "*") *> parseAExpr)
+    parseDeref = PDeref <$> (try (P.string "*") *> parseExpr)
     parseArgs :: Parser ProtoLLVMExpr
     parseArgs = do
       _ <- try (P.string "args[")
@@ -134,22 +142,22 @@ parseProtoLLVMExpr = runIdentity . runParserT (parseExpr <* eof) () "expr"
                unexpected $ "Using `args` with non-numeric parameter: " ++ ns
       _ <- P.string "]"
       return e
-    parseDerefField :: Parser ProtoLLVMExpr
+    parseFieldsExpr :: Parser ProtoLLVMExpr
+    parseFieldsExpr = do
+      e <- parseAExpr
+      fs <- many (parseDerefField <|> parseDirectField)
+      return (foldl (flip ($)) e fs)
+    parseDerefField :: Parser (ProtoLLVMExpr -> ProtoLLVMExpr)
     parseDerefField = do
-      re <- try (parseAExpr <* P.string "->")
-      ns <- many1 digit
-      case readMaybe ns of
-        Just (n :: Int) -> return (PField n re)
-        Nothing -> unexpected $
-          "Attempting to apply -> operation to non-integer field ID: " ++ ns
-    parseDirectField :: Parser ProtoLLVMExpr
+      n <- try (P.string "->") *> parseField
+      return (\e -> PField n e)
+    parseDirectField :: Parser (ProtoLLVMExpr -> ProtoLLVMExpr)
     parseDirectField = do
-      re <- try (parseAExpr <* P.string ".")
-      ns <- many1 digit
-      case readMaybe ns of
-        Just (n :: Int) -> return (PDirectField n re)
-        Nothing -> unexpected $
-          "Attempting to apply . operation to non-integer field ID: " ++ ns
+      n <- P.string "." *> parseField
+      return (\e -> PDirectField n e)
+
+    parseField = FieldIndex . read <$> many1 digit
+             <|> FieldName         <$> parseIdent
 
 -- NB: the types listed in each of these should be the type of the
 -- entire expression. So "Deref v tp" means "*v has type tp".
@@ -162,6 +170,7 @@ data LLVMExprF v
   | StructDirectField v LSS.StructInfo Int LLVMActualType -- Recursive arg is _value_
   | ReturnValue LLVMActualType
   deriving (Functor, CC.Foldable, CC.Traversable)
+
 
 instance CC.EqFoldable LLVMExprF where
   fequal (Arg i _ _)(Arg j _ _) = i == j
@@ -209,6 +218,16 @@ instance CC.ShowFoldable LLVMExprF where
 -- | Typechecked LLVMExpr
 type LLVMExpr = CC.Term LLVMExprF
 
+exprDepth :: LLVMExpr -> Int
+exprDepth = CC.foldTerm $ \e ->
+  case e of
+    Arg{}                     -> 0
+    Global{}                  -> 0
+    ReturnValue{}             -> 0
+    Deref r _                 -> r+1
+    StructField       r _ _ _ -> r+1
+    StructDirectField r _ _ _ -> r
+
 -- | Pretty print a LLVM expression.
 ppLLVMExpr :: LLVMExpr -> Doc
 ppLLVMExpr (CC.Term exprF) =
@@ -253,6 +272,16 @@ isArgLLVMExpr :: LLVMExpr -> Bool
 isArgLLVMExpr (CC.Term (Arg _ _ _)) = True
 isArgLLVMExpr _ = False
 
+containsReturn :: LLVMExpr -> Bool
+containsReturn (CC.Term e) =
+  case e of
+    Arg _ _ _ -> False
+    Global _ _ -> False
+    Deref pe _ -> containsReturn pe
+    StructField pe _ _ _ -> containsReturn pe
+    StructDirectField pe _ _ _ -> containsReturn pe
+    ReturnValue _ -> True
+
 -- LogicExpr {{{1
 
 data LogicExpr =
@@ -294,22 +323,34 @@ isActualPtr :: LLVMActualType -> Bool
 isActualPtr (LSS.PtrType _) = True
 isActualPtr _ = False
 
--- | Returns logical type of actual type if it is an array or primitive type.
-logicTypeOfActual :: SharedContext -> LLVMActualType -> IO (Maybe Term)
-logicTypeOfActual sc (LSS.IntType w) = do
+-- | Returns logical type of actual type if it is an array or primitive
+-- type, or an appropriately-sized bit vector for pointer types.
+logicTypeOfActual :: LSS.DataLayout -> SharedContext -> LLVMActualType
+                  -> IO (Maybe Term)
+logicTypeOfActual _ sc (LSS.IntType w) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral w)
   Just <$> scVecType sc lTm bType
-logicTypeOfActual sc LSS.FloatType = Just <$> scPrelude_Float sc
-logicTypeOfActual sc LSS.DoubleType = Just <$> scPrelude_Double sc
-logicTypeOfActual sc (LSS.ArrayType n ty) = do
-  melTyp <- logicTypeOfActual sc ty
+logicTypeOfActual _ sc LSS.FloatType = Just <$> scPrelude_Float sc
+logicTypeOfActual _ sc LSS.DoubleType = Just <$> scPrelude_Double sc
+logicTypeOfActual dl sc (LSS.ArrayType n ty) = do
+  melTyp <- logicTypeOfActual dl sc ty
   case melTyp of
     Just elTyp -> do
       lTm <- scNat sc (fromIntegral n)
       Just <$> scVecType sc lTm elTyp
     Nothing -> return Nothing
-logicTypeOfActual _ _ = return Nothing
+logicTypeOfActual dl sc (LSS.PtrType _) = do
+  bType <- scBoolType sc
+  lTm <- scNat sc (fromIntegral (LSS.ptrBitwidth dl))
+  Just <$> scVecType sc lTm bType
+logicTypeOfActual dl sc (LSS.StructType si) = do
+  let actuals = map LSS.fiType (Vector.toList (LSS.siFields si))
+  melTyps <- mapM (logicTypeOfActual dl sc) actuals
+  case sequence melTyps of
+    Just elTyps -> Just <$> scTupleType sc elTyps
+    Nothing -> return Nothing
+logicTypeOfActual _ _ _ = return Nothing
 
 -- | Returns Cryptol type of actual type if it is an array or primitive type.
 cryptolTypeOfActual :: LLVMActualType -> Maybe Cryptol.Type
@@ -318,6 +359,10 @@ cryptolTypeOfActual (LSS.IntType w) =
 cryptolTypeOfActual (LSS.ArrayType n ty) = do
   elty <- cryptolTypeOfActual ty
   return $ Cryptol.tSeq (Cryptol.tNum n) elty
+cryptolTypeOfActual (LSS.StructType si) = do
+  let actuals = map LSS.fiType (Vector.toList (LSS.siFields si))
+  eltys <- mapM cryptolTypeOfActual actuals
+  return $ Cryptol.tTuple eltys
 cryptolTypeOfActual _ = Nothing
 
 ppActualType :: LLVMActualType -> Doc

@@ -2,11 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Context for interpreting Cryptol within SAW-Script.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.CryptolEnv
   ( CryptolEnv(..)
@@ -196,10 +196,8 @@ translateExpr sc env expr = do
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims ifaceDecls
   let types' = Map.union (eExtraTypes env) types
   let terms = eTermEnv env
-  let cryEnv = C.Env
-        { C.envT = Map.empty
-        , C.envE = fmap (\t -> (t, 0)) terms
-        , C.envP = Map.empty
+  let cryEnv = C.emptyEnv
+        { C.envE = fmap (\t -> (t, 0)) terms
         , C.envC = types'
         }
   C.importExpr sc cryEnv expr
@@ -213,10 +211,8 @@ translateDeclGroups sc env dgs = do
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims ifaceDecls
   let types' = Map.union (eExtraTypes env) types
   let terms = eTermEnv env
-  let cryEnv = C.Env
-        { C.envT = Map.empty
-        , C.envE = fmap (\t -> (t, 0)) terms
-        , C.envP = Map.empty
+  let cryEnv = C.emptyEnv
+        { C.envE = fmap (\t -> (t, 0)) terms
         , C.envC = types'
         }
   cryEnv' <- C.importTopLevelDeclGroups sc cryEnv dgs

@@ -11,6 +11,13 @@ let unit_setup : JavaSetup () = do {
     java_verify_tactic abc;
 };
 
+let clear_setup : JavaSetup () = do {
+    java_requires_class "java.util.Arrays";
+    java_var "a" (java_array 10 java_int);
+    java_ensure_eq "a" {{ zero : [10][32] }};
+    java_verify_tactic abc;
+};
+
 let sum_setup : JavaSetup () = do {
     a <- java_var "a" (java_array 10 java_int);
     // Silly way to write it, but works as a test.
@@ -33,6 +40,7 @@ let main : TopLevel () = do {
     c <- java_load_class "ArrayTest";
     copy_ms <- java_verify c "copy" [] copy_setup;
     unit_ms <- java_verify c "unit" [] unit_setup;
+    clear_ms <- java_verify c "clear" [] clear_setup;
     sum_ms <- java_verify c "sum" [] sum_setup;
     comp_ms <- java_verify c "comp" [unit_ms] comp_setup;
     print "Extracting model of sum, which has type:";

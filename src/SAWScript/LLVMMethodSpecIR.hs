@@ -1,10 +1,10 @@
 {- |
-Module           : $Header$
-Description      : Provides typechecked representation for LLVM function
-                   specifications and function for creating it from AST
-                   representation.
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Provides typechecked representation for LLVM function
+              specifications and function for creating it from AST
+              representation.
+Maintainer  : atomb
+Stability   : provisional
 -}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -19,7 +19,6 @@ module SAWScript.LLVMMethodSpecIR
   , specPos
   , specCodebase
   , specBackend
-  , specDef
   , specSolverStats
   , specFunction
   , specBehavior
@@ -28,11 +27,12 @@ module SAWScript.LLVMMethodSpecIR
   , specAddVarDecl
   , specAddLogicAssignment
   , specAddAssumption
+  , specGetLogicAssignment
   , specLLVMExprNames
   , initLLVMMethodSpec
     -- * Method behavior.
   , BehaviorSpec
-  , bsLoc
+  -- , bsLoc
   , bsExprs
   , bsPtrExprs
   , bsExprDecls
@@ -47,7 +47,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Verifier.SAW.SharedTerm
 import qualified Verifier.LLVM.Codebase as LSS
 import Verifier.LLVM.Backend
 import Verifier.LLVM.Backend.SAW
@@ -64,18 +63,23 @@ import SAWScript.Utils
 -- used.
 data BehaviorCommand
      -- | Assign an LLVM variables the value given by the mixed expression.
-   = Ensure Pos LLVMExpr MixedExpr
+   = Ensure Bool Pos LLVMExpr MixedExpr
      -- | Modify an LLVM variables to an arbitrary expression.
      -- integral type or array.
    | Modify LLVMExpr LLVMActualType
+     -- | Allocate a new memory region of the given type and store it in
+     -- the location named.
+   | Allocate LLVMExpr LLVMActualType
      -- | Specifies return value for a function.
    | Return MixedExpr
+     -- | Specifies an arbitrary return value for a function.
+   | ReturnArbitrary LLVMActualType
 
 data BehaviorSpec = BS {
          -- | Program counter for spec.
-         bsLoc :: LSS.SymBlockID
+         -- bsLoc :: LSS.SymBlockID
          -- | Declared LLVM expressions, with types and maybe initial values.
-       , bsExprDecls :: Map LLVMExpr (LLVMActualType, Maybe LogicExpr)
+         bsExprDecls :: Map LLVMExpr (LLVMActualType, Maybe LogicExpr)
          -- | Assumptions for this behavior.
        , bsAssumptions :: [LogicExpr]
          -- | Commands to execute in reverse order.
@@ -109,19 +113,18 @@ type Backend = SAWBackend
 initLLVMMethodSpec :: Pos
                    -> SBE Backend
                    -> LSS.Codebase Backend
-                   -> LSS.SymDefine Term
+                   -> LSS.Symbol
                    -> LLVMMethodSpecIR
-initLLVMMethodSpec pos sbe cb def =
-  let initBS = BS { bsLoc = LSS.sdEntry def
-                  , bsExprDecls = Map.empty
+initLLVMMethodSpec pos sbe cb defname =
+  let initBS = BS { -- bsLoc = LSS.sdEntry def
+                    bsExprDecls = Map.empty
                   , bsAssumptions = []
                   , bsReversedCommands = []
                   }
       initMS = MSIR { specPos = pos
                     , specCodebase = cb
                     , specBackend = sbe
-                    , specFunction = LSS.sdName def
-                    , specDef = def
+                    , specFunction = defname
                     , specLLVMExprNames = Map.empty
                     , specBehavior = initBS
                     , specSolverStats = mempty
@@ -138,8 +141,6 @@ data LLVMMethodSpecIR = MSIR {
   , specBackend :: SBE Backend
     -- | Name of function to verify.
   , specFunction :: LSS.Symbol -- TODO: is this necessary?
-    -- | Definition of function to verify.
-  , specDef :: LSS.SymDefine Term
     -- | Mapping from user-visible LLVM state names to LLVMExprs
   , specLLVMExprNames :: Map String (LLVMActualType, LLVMExpr)
     -- | Behavior specification for method.
@@ -179,6 +180,13 @@ specAddLogicAssignment _pos expr t ms = ms { specBehavior = bs' }
                  Nothing ->
                    error $ "assignment for undeclared variable " ++ show expr
         bs' = bs { bsExprDecls = eds' }
+
+specGetLogicAssignment :: LLVMMethodSpecIR -> LLVMExpr -> Maybe LogicExpr
+specGetLogicAssignment ms expr =
+  case Map.lookup expr (bsExprDecls (specBehavior ms)) of
+    Just (_, Nothing) -> Nothing
+    Just (_, t) -> t
+    Nothing -> Nothing
 
 specAddBehaviorCommand :: BehaviorCommand
                        -> LLVMMethodSpecIR -> LLVMMethodSpecIR

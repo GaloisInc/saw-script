@@ -7,11 +7,11 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description : Datatypes representing SAWScript statements, expressions, and types.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.AST
        ( Name
@@ -30,7 +30,7 @@ module SAWScript.AST
        , Schema(..)
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
-       , tString, tTerm, tType, tBool, tInt, tAIG
+       , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tBlock, tContext, tVar
 
        , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
@@ -143,6 +143,7 @@ data Context
   | LLVMSetup
   | ProofScript
   | TopLevel
+  | CrucibleSetup
   deriving (Eq,Show)
 
 data Type
@@ -166,6 +167,7 @@ data TyCon
   | IntCon
   | BlockCon
   | AIGCon
+  | CFGCon
   | ContextCon Context
   deriving (Eq, Show)
 
@@ -340,6 +342,7 @@ instance PrettyPrint TyCon where
     BoolCon        -> PP.text "Bool"
     IntCon         -> PP.text "Int"
     AIGCon         -> PP.text "AIG"
+    CFGCon         -> PP.text "CFG"
     BlockCon       -> PP.text "<Block>"
     ContextCon cxt -> pretty par cxt
 
@@ -350,6 +353,7 @@ instance PrettyPrint Context where
     LLVMSetup    -> PP.text "LLVMSetup"
     ProofScript  -> PP.text "ProofScript"
     TopLevel     -> PP.text "TopLevel"
+    CrucibleSetup-> PP.text "CrucibleSetup"
 
 replicateDoc :: Integer -> PP.Doc -> PP.Doc
 replicateDoc n d
@@ -403,6 +407,9 @@ tBool = TyCon BoolCon []
 
 tAIG :: Type
 tAIG = TyCon AIGCon []
+
+tCFG :: Type
+tCFG = TyCon CFGCon []
 
 tInt :: Type
 tInt = TyCon IntCon []

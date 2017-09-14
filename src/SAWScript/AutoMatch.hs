@@ -99,7 +99,7 @@ checkSignatureCompat = do
    when ((uncurry (/=) . both (fmap Set.size . typeBins)) r) $ do
       warning $
          "The signatures for '" ++ declName left ++
-         "' and '" ++ declName right ++ 
+         "' and '" ++ declName right ++
          "' cannot be aligned by permutation."
       confirmOrQuit "Proceed with matching anyway?"
 
@@ -263,7 +263,7 @@ autoMatchFiles :: TaggedSourceFile -> TaggedSourceFile -> TopLevel (Interaction 
 autoMatchFiles leftSource@(TaggedSourceFile _ leftPath) rightSource@(TaggedSourceFile _ rightPath) = do
    leftModInteract  <- loadDecls leftSource
    rightModInteract <- loadDecls rightSource
-   return . frame (separator SuperThickSep) $ do 
+   return . frame (separator SuperThickSep) $ do
       info Nothing $ "Aligning declarations between " ++ leftPath ++ corresponds ++ rightPath
       separator ThickSep
       maybe (return $ MatchResult [] Nothing False False)
@@ -276,17 +276,17 @@ loadDecls (TaggedSourceFile lang path) = do
    sc <- getSharedContext
    case lang of
       Cryptol -> io $ getDeclsCryptol path
-      LLVM    -> io $ loadLLVMModule path >>= getDeclsLLVM sc
+      LLVM    -> llvm_load_module path >>= io . getDeclsLLVM sc
       JVM     -> loadJavaClassTopLevel (dropExtension path) >>= io . getDeclsJVM
    where
-      loadJavaClassTopLevel cls = do 
+      loadJavaClassTopLevel cls = do
          javaCodebase <- getJavaCodebase
          io . lookupClass javaCodebase fixPos . dotsToSlashes $ cls
 
 -- A description of the result of matching: some generated SAWScript, and some flags determining what to do now
 data MatchResult =
    MatchResult { generatedScript   :: [SAWScript.Stmt]
-               , afterMatchSave    :: Maybe FilePath 
+               , afterMatchSave    :: Maybe FilePath
                , afterMatchPrint   :: Bool
                , afterMatchExecute :: Bool }
 
@@ -313,7 +313,7 @@ actAfterMatch interpretStmts MatchResult{..} =
 autoMatch :: StmtInterpreter -> FilePath -> FilePath -> TopLevel ()
 autoMatch interpreter leftFile rightFile =
    autoTagSourceFiles leftFile rightFile &
-      (either (io . putStrLn) $ 
+      (either (io . putStrLn) $
          uncurry autoMatchFiles >=> io . interactIO >=> actAfterMatch interpreter)
 
 #if !MIN_VERSION_base(4,8,0)
@@ -325,7 +325,7 @@ type ScriptWriter = WriterT [SAWScript.Stmt] (Supply String)
 
 -- | Given two tagged source files and a bunch of matchings of declarations,
 --   generate an interaction which asks the user what to do after the matching
---   and gives the appropriate MatchResult. Contains the logic for generating 
+--   and gives the appropriate MatchResult. Contains the logic for generating
 --   SAWScript based upon the assignments.
 processResults :: TaggedSourceFile -> TaggedSourceFile
                -> [(Decl, Decl, Assignments)]

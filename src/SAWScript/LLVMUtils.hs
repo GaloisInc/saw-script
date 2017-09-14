@@ -2,11 +2,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE CPP #-}
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Miscellaneous utilities for LLVM.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.LLVMUtils where
 
@@ -30,6 +30,10 @@ import SAWScript.LLVMExpr
 type SpecBackend = SAWBackend
 type SpecPathState = Path SpecBackend
 type SpecLLVMValue = Term
+
+missingSymMsg :: String -> Symbol -> String
+missingSymMsg file (Symbol func) =
+  "Bitcode file " ++ file ++ " does not contain symbol `" ++ func ++ "`."
 
 resolveType :: Codebase s -> MemType -> MemType
 resolveType cb (PtrType ty) = PtrType $ resolveSymType cb ty
@@ -70,48 +74,68 @@ structFieldAddr si idx base =
     Just off -> addrPlusOffsetSim base off
     Nothing -> fail $ "Struct field index " ++ show idx ++ " out of bounds"
 
-storePathState :: SBE SpecBackend
-               -> Term
+storePathState :: (MonadIO m, Functor m) =>
+                  Term
                -> MemType
                -> Term
                -> SpecPathState
-               -> IO SpecPathState
-storePathState sbe dst tp val ps = do
+               -> Simulator SpecBackend m SpecPathState
+storePathState dst tp val ps = do
+  sbe <- gets symBE
+  dst' <- simplifyAddr dst
   -- TODO: alignment?
-  (c, m') <- sbeRunIO sbe (memStore sbe (ps ^. pathMem) dst tp val 0)
-  ps' <- addAssertion sbe c ps
+  (c, m') <- liftSBE $ memStore sbe (ps ^. pathMem) dst' tp val 0
+  ps' <- liftIO $ addAssertion sbe c ps
   return (ps' & pathMem .~ m')
 
-loadPathState :: SBE SpecBackend
-              -> Term
+loadPathState :: (MonadIO m, Functor m) =>
+                 Term
               -> MemType
               -> SpecPathState
-              -> IO (SpecLLVMValue, SpecLLVMValue)
-loadPathState sbe src tp ps =
+              -> Simulator SpecBackend m (SpecLLVMValue, SpecLLVMValue)
+loadPathState src tp ps = do
+  sbe <- gets symBE
+  src' <- simplifyAddr src
   -- TODO: alignment?
-  sbeRunIO sbe (memLoad sbe (ps ^. pathMem) tp src 0)
+  liftSBE $ memLoad sbe (ps ^. pathMem) tp src' 0
 
-loadGlobal :: SBE SpecBackend
-           -> GlobalMap SpecBackend
+allocPathState :: (MonadIO m, Functor m) =>
+                  MemType
+               -> SpecPathState
+               -> Simulator SpecBackend m (SpecLLVMValue, SpecPathState)
+allocPathState tp ps = do
+  sbe <- gets symBE
+  dl <- getDL
+  let aw = ptrBitwidth dl
+  n <- liftSBE $ termInt sbe aw 1
+  r <- liftSBE $ heapAlloc sbe (ps ^. pathMem) tp aw n 0
+  case r of
+    AResult c p m' -> do
+      ps' <- liftIO $ addAssertion sbe c ps
+      return (p, ps' & pathMem .~ m')
+    AError msg -> errorPath msg
+
+loadGlobal :: (MonadIO m, Functor m) =>
+              GlobalMap SpecBackend
            -> Symbol
            -> MemType
            -> SpecPathState
-           -> IO (SpecLLVMValue, SpecLLVMValue)
-loadGlobal sbe gm sym tp ps = do
+           -> Simulator SpecBackend m (SpecLLVMValue, SpecLLVMValue)
+loadGlobal gm sym tp ps = do
   case Map.lookup sym gm of
-    Just addr -> loadPathState sbe addr tp ps
+    Just addr -> loadPathState addr tp ps
     Nothing -> fail $ "Global " ++ show sym ++ " not found"
 
-storeGlobal :: SBE SpecBackend
-            -> GlobalMap SpecBackend
+storeGlobal :: (MonadIO m, Functor m) =>
+               GlobalMap SpecBackend
             -> Symbol
             -> MemType
             -> SpecLLVMValue
             -> SpecPathState
-            -> IO SpecPathState
-storeGlobal sbe gm sym tp v ps = do
+            -> Simulator SpecBackend m SpecPathState
+storeGlobal gm sym tp v ps = do
   case Map.lookup sym gm of
-    Just addr -> storePathState sbe addr tp v ps
+    Just addr -> storePathState addr tp v ps
     Nothing -> fail $ "Global " ++ show sym ++ " not found"
 
 -- | Add assertion for predicate to path state.
@@ -133,54 +157,62 @@ allocSome sbe dl n ty = do
 -- LLVM memory operations
 
 readLLVMTermAddrPS :: (Functor m, Monad m, MonadIO m) =>
-                      SpecPathState -> [SpecLLVMValue] -> LLVMExpr
+                      SpecPathState
+                   -> Maybe SpecLLVMValue
+                   -> [SpecLLVMValue]
+                   -> LLVMExpr
                    -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTermAddrPS ps args (CC.Term e) =
+readLLVMTermAddrPS ps mrv args (CC.Term e) =
   case e of
     Arg _ _ _ -> fail "Can't read address of argument"
     Global s _ -> evalExprInCC "readLLVMTerm:Global" (SValSymbol s)
-    Deref ae _ -> readLLVMTermPS ps args ae 1
+    Deref ae _ -> readLLVMTermPS ps mrv args ae 1
     StructField ae si idx _ ->
-      structFieldAddr si idx =<< readLLVMTermPS ps args ae 1
+      structFieldAddr si idx =<< readLLVMTermPS ps mrv args ae 1
     StructDirectField ve si idx _ ->
-      structFieldAddr si idx =<< readLLVMTermAddrPS ps args ve
+      structFieldAddr si idx =<< readLLVMTermAddrPS ps mrv args ve
     ReturnValue _ -> fail "Can't read address of return value"
 
 readLLVMTermPS :: (Functor m, Monad m, MonadIO m) =>
-                  SpecPathState -> [SpecLLVMValue] -> LLVMExpr -> Integer
+                  SpecPathState
+               -> Maybe SpecLLVMValue -- ^ To use instead of current state.
+               -> [SpecLLVMValue]
+               -> LLVMExpr
+               -> Integer
                -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTermPS ps args et@(CC.Term e) cnt =
+readLLVMTermPS ps mrv args et@(CC.Term e) cnt =
   case e of
     Arg n _ _ -> return (args !! n)
     ReturnValue _ -> do
-      rslt <- getProgramReturnValue -- NB: this is always in the current state
-      case rslt of
-        (Just v) -> return v
-        Nothing -> fail "Program did not return a value"
+      rslt <- getProgramReturnValue
+      case (mrv, rslt) of
+        (Just v, _) -> return v
+        (_, Just v) -> return v
+        (Nothing, Nothing) -> fail "Program did not return a value"
     _ -> do
       let ty = lssTypeOfLLVMExpr et
-      addr <- readLLVMTermAddrPS ps args et
+      addr <- readLLVMTermAddrPS ps mrv args et
       let ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
               | otherwise = ty
       -- Type should be type of value, not type of ptr
-      sbe <- gets symBE
-      (_c, v) <- liftIO $ loadPathState sbe addr ty' ps
+      (_c, v) <- loadPathState addr ty' ps
       -- TODO: use c
       return v
 
 readLLVMTermAddr :: (Functor m, Monad m, MonadIO m) =>
-                    [SpecLLVMValue] -> LLVMExpr
+                    Maybe SpecLLVMValue -> [SpecLLVMValue] -> LLVMExpr
                  -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTermAddr args e = do
+readLLVMTermAddr mrv args e = do
   ps <- fromMaybe (error "readLLVMTermAddr") <$> getPath
-  readLLVMTermAddrPS ps args e
+  readLLVMTermAddrPS ps mrv args e
 
 writeLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
-                 [SpecLLVMValue]
+                 Maybe SpecLLVMValue
+              -> [SpecLLVMValue]
               -> (LLVMExpr, SpecLLVMValue, Integer)
               -> Simulator SpecBackend m ()
-writeLLVMTerm args (e, t, cnt) = do
-  addr <- readLLVMTermAddr args e
+writeLLVMTerm mrv args (e, t, cnt) = do
+  addr <- readLLVMTermAddr mrv args e
   let ty = lssTypeOfLLVMExpr e
       ty' | cnt > 1 = ArrayType (fromIntegral cnt) ty
           | otherwise = ty
@@ -188,13 +220,14 @@ writeLLVMTerm args (e, t, cnt) = do
   store ty' t addr (memTypeAlign dl ty')
 
 readLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
-                [SpecLLVMValue]
+                Maybe SpecLLVMValue
+             -> [SpecLLVMValue]
              -> LLVMExpr
              -> Integer
              -> Simulator SpecBackend m SpecLLVMValue
-readLLVMTerm args e cnt = do
+readLLVMTerm mrv args e cnt = do
   ps <- fromMaybe (error "readLLVMTermAddr") <$> getPath
-  readLLVMTermPS ps args e cnt
+  readLLVMTermPS ps mrv args e cnt
 
 freshLLVMArg :: Monad m =>
             (t, MemType) -> Simulator sbe m (MemType, SBETerm sbe)
@@ -203,6 +236,12 @@ freshLLVMArg (_, ty@(IntType bw)) = do
   tm <- liftSBE $ freshInt sbe bw
   return (ty, tm)
 freshLLVMArg (_, _) = fail "Only integer arguments are supported for now."
+
+llvmNullPtr :: (SBETerm m ~ Term) =>
+               SBE m
+            -> SymType
+            -> IO Term
+llvmNullPtr sbe sty = sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
 
 addrBounds :: (SBETerm m ~ Term) =>
               SharedContext
@@ -216,7 +255,7 @@ addrBounds sc sbe dl addrTm sty@(MemType (PtrType (MemType mty))) = do
         maxAddr :: Integer
         maxAddr = (2 ^ aw) - 1
         aw' = fromIntegral (ptrBitwidth dl)
-    nullPtr <- sbeRunIO sbe $ applyTypedExpr sbe (SValNull sty)
+    nullPtr <- llvmNullPtr sbe sty
     let maxFittingAddr = maxAddr - fromIntegral (memTypeSize dl mty)
     mpTerm <- scBvConst sc aw maxFittingAddr
     awTerm <- scNat sc aw

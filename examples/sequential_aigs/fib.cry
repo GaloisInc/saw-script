@@ -46,7 +46,7 @@ mk_buggy_fib_no_init magic (_, (fn, fn1, k)) = (fn', (fn1, fn2, k+1))
   where
   fn2 = fn + fn1
   // Change output when state has magic value.
-  fn' = fn + if k == magic then 1 else 0
+  fn' = fn + (if k == magic then 1 else 0)
 
 mk_buggy_fib magic = init_with (0, 1, 0) (mk_buggy_fib_no_init magic)
 count_buggy_state_bits : {a} (fin a, width a <= 7) => [a] -> [8]

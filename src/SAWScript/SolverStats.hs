@@ -1,8 +1,8 @@
 {- |
-Module           : $Header$
-Description      : Represents information about solved goals
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Represents information about solved goals.
+Maintainer  : atomb
+Stability   : provisional
 -}
 
 module SAWScript.SolverStats where
@@ -14,11 +14,11 @@ import qualified Data.Set as Set
 --   verification runs on goals.
 data SolverStats
  = SolverStats
-   { -- | The names of the solvers that proved this goal.  If verifiaction was
-     --   skipped for some reason, this should be the empty list
+   { -- | The names of the solvers that proved this goal.  If verification was
+     --   skipped for some reason, this should be the empty list.
      solverStatsSolvers :: Set String
      -- | The size of the term(s) that represent the proof obligations
-     --   involved in this verifiaction goal.  Usually, this is the size
+     --   involved in this verification goal.  Usually, this is the size
      --   of the SAWCore term representing the goal, but it might also
      --   be the size of an AIG network, etc.
    , solverStatsGoalSize :: Integer

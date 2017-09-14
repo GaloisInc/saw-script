@@ -11,8 +11,8 @@ else
   dirty="True"
 fi
 
-cat > saw/GitRev.hs <<END
-module GitRev (hash, branch, dirty) where
+cat > saw/SAWScript/GitRev.hs <<END
+module SAWScript.GitRev (hash, branch, dirty) where
 
 hash :: String
 hash = "$rev"

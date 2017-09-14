@@ -79,7 +79,6 @@ tupleLambdaBindings (AST.EAbs tupleName _ whereClause) = do
          return (index, dName)
 tupleLambdaBindings (AST.ETAbs _ expr)     = tupleLambdaBindings expr   --   \
 tupleLambdaBindings (AST.EProofAbs _ expr) = tupleLambdaBindings expr   --    >- drill down past casts & type abstractions
-tupleLambdaBindings (AST.ECast expr _)     = tupleLambdaBindings expr   --   /
 tupleLambdaBindings _ = Nothing
 
 -- | If the type given is of the form @(a,b,...,y) -> z@ then give the pair of arguments and result

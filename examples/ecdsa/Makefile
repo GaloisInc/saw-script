@@ -23,6 +23,10 @@ clean :
 run64 :
 	java -cp build -d64 com.galois.ecc.ECC
 
+
+ecdsa.jar: build
+	cd build && jar -cf ../ecdsa.jar com
+
 # Run the SAWScript verification
 verify : build
 	${SAW} -j "${JDK}" -c build ecdsa.saw

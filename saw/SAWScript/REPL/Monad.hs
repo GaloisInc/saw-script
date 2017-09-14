@@ -3,11 +3,11 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : huffman
+Module      : $Header$
+Description :
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
 -}
 module SAWScript.REPL.Monad (
     -- * REPL Monad
@@ -16,6 +16,7 @@ module SAWScript.REPL.Monad (
   , raise
   , stop
   , catch
+  , catchIO
   , catchFail
 
     -- ** Errors
@@ -52,8 +53,6 @@ module SAWScript.REPL.Monad (
   , getTopLevelRO
   , getEnvironment, modifyEnvironment, putEnvironment
   , getSAWScriptNames
-  , err
-
   ) where
 
 import SAWScript.REPL.Trie
@@ -90,7 +89,6 @@ import Verifier.SAW.SharedTerm (Term)
 
 import SAWScript.AST (Located(getVal))
 import SAWScript.Builtins (BuiltinContext(..))
-import SAWScript.Compiler (ErrT, runErrT)
 import SAWScript.CryptolEnv
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
@@ -211,9 +209,17 @@ instance PP REPLException where
 raise :: REPLException -> REPL a
 raise exn = io (X.throwIO exn)
 
+-- | Handle any exception type in 'REPL' actions.
+catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
+catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 
+-- | Handle 'IOError' exceptions in 'REPL' actions.
+catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
+catchIO = catchEx
+
+-- | Handle 'REPLException' exceptions in 'REPL' actions.
 catch :: REPL a -> (REPLException -> REPL a) -> REPL a
-catch m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
+catch = catchEx
 
 -- | Similar to 'catch' above, but catches generic IO exceptions from 'fail'.
 catchFail :: REPL a -> (String -> REPL a) -> REPL a
@@ -391,11 +397,6 @@ getSAWScriptNames = do
   env <- getEnvironment
   let rnames = Map.keys (rwValues env)
   return (map getVal rnames)
-
--- Lifting computations --
-
-err :: ErrT IO a -> REPL a
-err m = io $ runErrT m >>= either fail return
 
 -- User Environment Interaction ------------------------------------------------
 

@@ -7,11 +7,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Implementations of Java-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.JavaBuiltins where
 
@@ -438,7 +438,7 @@ javaSatBranches doSat = modify (\s -> s { jsSatBranches = doSat })
 
 javaRequiresClass :: String -> JavaSetup ()
 javaRequiresClass cls = modifySpec $ \ms ->
-  let clss' = cls : specInitializedClasses ms in
+  let clss' = dotsToSlashes cls : specInitializedClasses ms in
   ms { specInitializedClasses = clss' }
 
 javaClassVar :: BuiltinContext -> Options -> String -> JavaType

@@ -8,13 +8,14 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 
 {- |
-Module           : $Header$
-Description      :
-License          : BSD3
-Stability        : provisional
-Point-of-contact : atomb
+Module      : $Header$
+Description : Implementations of SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
 -}
 module SAWScript.Builtins where
 
@@ -47,6 +48,7 @@ import Text.Read
 
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Constant
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -115,7 +117,7 @@ import Cryptol.Utils.PP (pretty)
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
-                                     , biBasicSS       :: Simpset Term
+                                     , biBasicSS       :: Simpset
                                      }
 
 showPrim :: SV.Value -> TopLevel String
@@ -406,7 +408,7 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
 writeUnintSMTLib2 unints sc f t = do
   (_, _, l) <- prepSBV sc unints t
-  txt <- SBV.compileToSMTLib SBV.SMTLib2 True l
+  txt <- SBV.generateSMTBenchmark True l
   writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()
@@ -472,6 +474,24 @@ trivial = withFirstGoal $ \goal -> do
         FTermF (CtorApp "Prelude.True" []) -> return ()
         _ -> fail "trivial: not a trivial goal"
 
+split_goal :: ProofScript ()
+split_goal =
+  StateT $ \(ProofState goals concl stats) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    (ProofGoal Existential _ _) : _ -> fail "not a universally-quantified goal"
+    (ProofGoal Universal name prop) : gs ->
+      let (vars, body) = asLambdaList prop in
+      case (isGlobalDef "Prelude.and" <@> return <@> return) body of
+        Nothing -> fail "split_goal: goal not of form 'Prelude.and _ _'"
+        Just (_ :*: p1 :*: p2) ->
+          do sc <- getSharedContext
+             t1 <- io $ scLambdaList sc vars p1
+             t2 <- io $ scLambdaList sc vars p2
+             let g1 = ProofGoal Universal (name ++ ".left") t1
+             let g2 = ProofGoal Universal (name ++ ".right") t2
+             return ((), ProofState (g1 : g2 : gs) concl stats)
+
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do
   rw <- getTopLevelRW
@@ -492,15 +512,17 @@ print_term_depth d t = do
   opts <- getTopLevelPPOpts
   io $ print (ppTermDepth opts d t)
 
-printGoal :: ProofScript ()
-printGoal = withFirstGoal $ \goal -> do
+print_goal :: ProofScript ()
+print_goal = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  io $ putStrLn ("Goal " ++ goalName goal ++ ":")
   io $ putStrLn (scPrettyTerm opts (goalTerm goal))
   return ((), mempty, Just goal)
 
-printGoalDepth :: Int -> ProofScript ()
-printGoalDepth n = withFirstGoal $ \goal -> do
+print_goal_depth :: Int -> ProofScript ()
+print_goal_depth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  io $ putStrLn ("Goal " ++ goalName goal ++ ":")
   io $ print (ppTermDepth opts n (goalTerm goal))
   return ((), mempty, Just goal)
 
@@ -523,7 +545,7 @@ unfoldGoal names = withFirstGoal $ \goal -> do
   trm' <- io $ scUnfoldConstants sc names trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
-simplifyGoal :: Simpset Term -> ProofScript ()
+simplifyGoal :: Simpset -> ProofScript ()
 simplifyGoal ss = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
@@ -787,6 +809,7 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
       case goalQuant g of
         Existential -> return (r', stats, Nothing)
         Universal -> return (r', stats, Just (g { goalTerm = ft }))
+    SBV.SatExtField {} -> fail "Prover returned model in extension field"
     SBV.Unsatisfiable {} -> do
       ft <- scApplyPrelude_False sc
       case goalQuant g of
@@ -794,7 +817,6 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
         Universal -> return (SV.Unsat stats, stats, Nothing)
     SBV.Unknown {} -> fail "Prover returned Unknown"
     SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
-    SBV.TimeOut {} -> fail "Prover timed out"
 
 getLabels :: SolverStats -> [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
 getLabels stats ls d argNames =
@@ -967,7 +989,7 @@ quickCheckPrintPrim sc numTests tt = do
       "term has non-testable type:\n" ++
       pretty (ttSchema tt)
 
-cryptolSimpset :: TopLevel (Simpset Term)
+cryptolSimpset :: TopLevel Simpset
 cryptolSimpset = do
   sc <- getSharedContext
   io $ scSimpset sc cryptolDefs [] []
@@ -975,24 +997,24 @@ cryptolSimpset = do
                       moduleDefs CryptolSAW.cryptolModule
         excluded d = defIdent d `elem` [ "Cryptol.fix" ]
 
-addPreludeEqs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addPreludeEqs :: [String] -> Simpset
+              -> TopLevel Simpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addCryptolEqs :: [String] -> Simpset
+              -> TopLevel Simpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-addPreludeDefs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addPreludeDefs :: [String] -> Simpset
+              -> TopLevel Simpset
 addPreludeDefs names ss = do
   sc <- getSharedContext
   defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -1004,7 +1026,7 @@ addPreludeDefs names ss = do
               Just d -> return d
               Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
 
-rewritePrim :: Simpset Term -> TypedTerm -> TopLevel TypedTerm
+rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
   t' <- io $ rewriteSharedTerm sc ss t
@@ -1022,21 +1044,17 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset Term
-        -> Simpset Term
+addsimp :: Theorem -> Simpset -> Simpset
 addsimp (Theorem t) ss = addRule (ruleOfProp t) ss
 
-addsimp' :: Term -> Simpset Term
-         -> Simpset Term
+addsimp' :: Term -> Simpset -> Simpset
 addsimp' t ss = addRule (ruleOfProp t) ss
 
-addsimps :: [Theorem] -> Simpset Term
-         -> Simpset Term
+addsimps :: [Theorem] -> Simpset -> Simpset
 addsimps thms ss =
   foldr (\thm -> addRule (ruleOfProp (thmTerm thm))) ss thms
 
-addsimps' :: [Term] -> Simpset Term
-          -> Simpset Term
+addsimps' :: [Term] -> Simpset -> Simpset
 addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
 
 print_type :: Term -> TopLevel ()
@@ -1055,7 +1073,7 @@ fixPos = PosInternal "FIXME"
 freshSymbolicPrim :: String -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
   sc <- getSharedContext
-  cty <- io $ Cryptol.importType' sc Cryptol.emptyEnv ct
+  cty <- io $ Cryptol.importType sc Cryptol.emptyEnv ct
   tm <- io $ scFreshGlobal sc x cty
   return $ TypedTerm schema tm
 freshSymbolicPrim _ _ =
@@ -1201,10 +1219,16 @@ eval_int t = do
     fail "term contains symbolic variables"
   t' <- io $ defaultTypedTerm sc cfg t
   case ttSchema t' of
-    C.Forall [] [] (C.tIsSeq -> Just (_, C.tIsBit -> True)) -> return ()
-    _ -> fail "eval_int: not a bitvector type"
+    C.Forall [] [] (isInteger -> True) -> return ()
+    _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t'
   io $ C.runEval (C.fromWord "eval_int" v)
+
+-- Predicate on Cryptol types true of integer types, i.e. types
+-- @[n]Bit@ for *finite* @n@.
+isInteger :: C.Type -> Bool
+isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
+isInteger _ = False
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
@@ -1218,11 +1242,18 @@ defaultTypedTerm sc cfg (TypedTerm schema trm) = do
       let vars = C.sVars schema
       let nms = C.addTNames vars IntMap.empty
       mapM_ (warnDefault nms) (zip vars tys)
-      xs <- mapM (Cryptol.importType sc Cryptol.emptyEnv) tys
-      let tm = Map.fromList [ (C.tpUnique tp, (t, 0)) | (tp, t) <- zip (C.sVars schema) xs ]
-      let env = Cryptol.emptyEnv { Cryptol.envT = tm }
-      ys <- mapM (Cryptol.proveProp sc env) (C.sProps schema)
-      trm' <- scApplyAll sc trm (xs ++ ys)
+      let applyType :: Term -> Cryptol.Type -> IO Term
+          applyType t ty = do
+            case Cryptol.kindOf ty of
+              Cryptol.KType -> do
+                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+                ops <- Cryptol.importOps sc Cryptol.emptyEnv ty
+                scApplyAll sc t [ty', ops]
+              Cryptol.KNum -> do
+                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+                scApply sc t ty'
+              _ -> return t
+      trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
       return (TypedTerm schema' trm')

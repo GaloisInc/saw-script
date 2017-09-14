@@ -78,8 +78,8 @@ let main : TopLevel () = do {
     m <- llvm_load_module "salsa20.bc";
     qr <- llvm_verify m "s20_quarterround" [] quarterround_setup;
     rr <- llvm_verify m "s20_rowround" [qr] rowround_setup;
-    cr <- llvm_verify m "s20_columnround" [rr] columnround_setup;
-    dr <- llvm_verify m "s20_doubleround" [cr] doubleround_setup;
+    cr <- llvm_verify m "s20_columnround" [qr] columnround_setup;
+    dr <- llvm_verify m "s20_doubleround" [cr,rr] doubleround_setup;
     s20 <- llvm_verify m "s20_hash" [dr] salsa20_setup;
     s20e32 <- llvm_verify m "s20_expand32" [s20] salsa20_expansion_32;
     s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] s20_encrypt32;
