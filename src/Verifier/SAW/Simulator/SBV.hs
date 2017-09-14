@@ -22,6 +22,7 @@ Portability : non-portable (language extensions)
 -}
 module Verifier.SAW.Simulator.SBV
   ( sbvSolve
+  , sbvSolveBasic
   , SValue
   , Labeler(..)
   , sbvCodeGen_definition
@@ -167,6 +168,7 @@ constMap = Map.fromList
   , ("Prelude.bvNat", bvNatOp)
   , ("Prelude.bvToNat", Prims.bvToNatOp)
   , ("Prelude.error", Prims.errorOp)
+  , ("Prelude.fix", Prims.fixOp)
   -- Overloaded
   , ("Prelude.eq", eqOp)
   ]
@@ -275,7 +277,7 @@ selectV merger maxValue valueFn vx =
     Just i  -> valueFn (fromIntegral i)
     Nothing -> impl (intSizeOf vx) 0
   where
-    impl _ y | y >= maxValue = valueFn maxValue
+    impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
@@ -887,7 +889,7 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "non-boolean result type: " ++ show t'
+    _                            -> fail $ "non-boolean result type: " ++ scPrettyTerm defaultPPOpts t'
 
 sbvSolve :: SharedContext
          -> Map Ident SValue

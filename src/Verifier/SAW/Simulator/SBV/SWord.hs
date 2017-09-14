@@ -19,6 +19,7 @@ module Verifier.SAW.Simulator.SBV.SWord
   , forallSInteger, existsSInteger, forallSInteger_, existsSInteger_
   ) where
 
+import Control.Monad.Reader
 import Data.List (foldl')
 
 import Data.SBV.Dynamic
@@ -38,37 +39,37 @@ literalSInteger :: Integer -> SWord
 literalSInteger i = svInteger KUnbounded i
 
 forallSWord :: String -> Int -> Symbolic SWord
-forallSWord nm w = svMkSymVar (Just ALL) (KBounded False w) (Just nm)
+forallSWord nm w = ask >>= liftIO . svMkSymVar (Just ALL) (KBounded False w) (Just nm)
 
 forallSWord_ :: Int -> Symbolic SWord
-forallSWord_ w = svMkSymVar (Just ALL) (KBounded False w) Nothing
+forallSWord_ w = ask >>= liftIO . svMkSymVar (Just ALL) (KBounded False w) Nothing
 
 existsSWord :: String -> Int -> Symbolic SWord
-existsSWord nm w = svMkSymVar (Just EX) (KBounded False w) (Just nm)
+existsSWord nm w = ask >>= liftIO . svMkSymVar (Just EX) (KBounded False w) (Just nm)
 
 existsSWord_ :: Int -> Symbolic SWord
-existsSWord_ w = svMkSymVar (Just EX) (KBounded False w) Nothing
+existsSWord_ w = ask >>= liftIO . svMkSymVar (Just EX) (KBounded False w) Nothing
 
 forallSBool :: String -> Symbolic SBool
-forallSBool nm = svMkSymVar (Just ALL) KBool (Just nm)
+forallSBool nm = ask >>= liftIO . svMkSymVar (Just ALL) KBool (Just nm)
 
 existsSBool :: String -> Symbolic SBool
-existsSBool nm = svMkSymVar (Just EX) KBool (Just nm)
+existsSBool nm = ask >>= liftIO . svMkSymVar (Just EX) KBool (Just nm)
 
 forallSBool_ :: Symbolic SBool
-forallSBool_ = svMkSymVar (Just ALL) KBool Nothing
+forallSBool_ = ask >>= liftIO . svMkSymVar (Just ALL) KBool Nothing
 
 existsSBool_ :: Symbolic SBool
-existsSBool_ = svMkSymVar (Just EX) KBool Nothing
+existsSBool_ = ask >>= liftIO . svMkSymVar (Just EX) KBool Nothing
 
 forallSInteger :: String -> Symbolic SInteger
-forallSInteger nm = svMkSymVar (Just ALL) KUnbounded (Just nm)
+forallSInteger nm = ask >>= liftIO . svMkSymVar (Just ALL) KUnbounded (Just nm)
 
 existsSInteger :: String -> Symbolic SInteger
-existsSInteger nm = svMkSymVar (Just EX) KUnbounded (Just nm)
+existsSInteger nm = ask >>= liftIO . svMkSymVar (Just EX) KUnbounded (Just nm)
 
 forallSInteger_ :: Symbolic SInteger
-forallSInteger_ = svMkSymVar (Just ALL) KUnbounded Nothing
+forallSInteger_ = ask >>= liftIO . svMkSymVar (Just ALL) KUnbounded Nothing
 
 existsSInteger_ :: Symbolic SInteger
-existsSInteger_ = svMkSymVar (Just EX) KUnbounded Nothing
+existsSInteger_ = ask >>= liftIO . svMkSymVar (Just EX) KUnbounded Nothing
