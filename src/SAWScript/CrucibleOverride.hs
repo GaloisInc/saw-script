@@ -19,11 +19,13 @@ module SAWScript.CrucibleOverride
   , setupValueSub
   , executeFreshPointer
   , osAsserts
+  , termSub
 
   , learnCond
   , matchArg
   , methodSpecHandler
   , valueToSC
+  , termId
   ) where
 
 import           Control.Lens
@@ -94,6 +96,9 @@ data OverrideState = OverrideState
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
 
+    -- | Free variables available for unification
+  , _osFree :: Set VarIndex
+
     -- | Accumulated assertions
   , _osAsserts :: [(Crucible.Pred Sym, Crucible.SimErrorReason)]
 
@@ -135,13 +140,15 @@ initialState ::
   Crucible.SymGlobalState Sym  {- ^ initial global variables       -} ->
   Map AllocIndex LLVMPtr       {- ^ initial allocation substituion -} ->
   Map VarIndex Term            {- ^ initial term substituion       -} ->
+  Set VarIndex                 {- ^ initial free terms             -} ->
   OverrideState
-initialState sym globals allocs terms = OverrideState
+initialState sym globals allocs terms free = OverrideState
   { _osAsserts       = []
   , _osAssumes       = []
   , _syminterface    = sym
   , _overrideGlobals = globals
   , _termSub         = terms
+  , _osFree          = free
   , _setupValueSub   = allocs
   }
 
@@ -201,8 +208,13 @@ methodSpecHandler sc cc css retTy = do
 
   matches
      <- liftIO $
-        zipWithM (\g cs -> runOverrideMatcher sym g Map.empty Map.empty
-                             (methodSpecHandler1 sc cc args retTy cs)) gs css
+        zipWithM
+          (\g cs ->
+             let initialFree = Set.fromList (map (termId . ttTerm)
+                                                 (view (csPreState.csFreshVars) cs))
+             in runOverrideMatcher sym g Map.empty Map.empty initialFree
+                  (methodSpecHandler1 sc cc args retTy cs))
+          gs css
 
   outputs <- case partitionEithers matches of
                (e,[]  ) -> fail ("All overrides failed: " ++ show e)
@@ -552,9 +564,10 @@ runOverrideMatcher ::
    Crucible.SymGlobalState Sym {- ^ initial global variables        -} ->
    Map AllocIndex LLVMPtr      {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
+   Set VarIndex                {- ^ initial free variables          -} ->
    OverrideMatcher a           {- ^ matching action                 -} ->
    IO (Either OverrideFailure (a, OverrideState))
-runOverrideMatcher sym g a t (OM m) = runExceptT (runStateT m (initialState sym g a t))
+runOverrideMatcher sym g a t free (OM m) = runExceptT (runStateT m (initialState sym g a t free))
 
 ------------------------------------------------------------------------
 
@@ -577,14 +590,23 @@ assignVar cc var val =
 
 
 assignTerm ::
+  SharedContext      {- ^ context for constructing SAW terms    -} ->
+  CrucibleContext    {- ^ context for interacting with Crucible -} ->
+  PrePost                                                          ->
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
   OverrideMatcher ()
 
-assignTerm var val =
-  do old <- OM (termSub . at var <<.= Just val)
-     for_ old $ \_ ->
-       failure NonlinearPatternNotSupported
+assignTerm sc cc prepost var val =
+  do mb <- OM (use (termSub . at var))
+     case mb of
+       Nothing -> OM (termSub . at var ?= val)
+       Just old ->
+         matchTerm sc cc prepost val old
+
+--          do t <- liftIO $ scEq sc old val
+--             p <- liftIO $ resolveSAWPred cc t
+--             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
 
 
 ------------------------------------------------------------------------
@@ -702,13 +724,16 @@ matchTerm ::
 
 matchTerm _ _ _ real expect | real == expect = return ()
 matchTerm sc cc prepost real expect =
-  case unwrapTermF expect of
-    FTermF (ExtCns ec) -> assignTerm (ecVarIndex ec) real
+  do free <- OM (use osFree)
+     case unwrapTermF expect of
+       FTermF (ExtCns ec)
+         | Set.member (ecVarIndex ec) free ->
+         do assignTerm sc cc prepost (ecVarIndex ec) real
 
-    _ ->
-      do t <- liftIO $ scEq sc real expect
-         p <- liftIO $ resolveSAWPred cc t
-         addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
+       _ ->
+         do t <- liftIO $ scEq sc real expect
+            p <- liftIO $ resolveSAWPred cc t
+            addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
 
 ------------------------------------------------------------------------
 
