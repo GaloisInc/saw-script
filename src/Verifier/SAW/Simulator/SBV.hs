@@ -443,14 +443,14 @@ bvToIntOp :: SValue
 bvToIntOp = constFun $ wordFun $ \v ->
    case svAsInteger v of
       Just i -> return $ VInt (literalSInteger i)
-      Nothing -> fail "Cannot convert symbolic bitvector to integer"
+      Nothing -> return $ VInt (svFromIntegral KUnbounded v)
 
 -- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
 sbvToIntOp :: SValue
 sbvToIntOp = constFun $ wordFun $ \v ->
    case svAsInteger (svSign v) of
       Just i -> return $ VInt (literalSInteger i)
-      Nothing -> fail "Cannot convert symbolic bitvector to integer"
+      Nothing -> return $ VInt (svFromIntegral KUnbounded (svSign v))
 
 -- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
 intToBvOp :: SValue
@@ -459,7 +459,7 @@ intToBvOp =
   Prims.intFun "intToBv x" $ \x ->
     case svAsInteger x of
       Just i -> return $ VWord $ literalSWord (fromIntegral n) i
-      Nothing -> fail "intToBv: Cannot convert symbolic integer to bitvector"
+      Nothing -> return $ VWord $ svFromIntegral (KBounded False (fromIntegral n)) x
 
 ----------------------------------------
 -- Polynomial operations
