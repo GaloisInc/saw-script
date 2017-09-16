@@ -259,16 +259,125 @@ errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
 
-Dict :: sort 0 -> sort 0;
-Dict a =
+-- Zero class
+
+PZero :: sort 0 -> sort 0;
+PZero a = #{ zero :: a };
+
+PZeroBit :: PZero Bool;
+PZeroBit = { zero = False };
+
+PZeroVec :: (a :: sort 0) -> PZero a -> (n :: Nat) -> PZero (Vec n a);
+PZeroVec a pa n = { zero = replicate n a pa.zero };
+
+PZeroStream :: (a :: sort 0) -> PZero a -> PZero (Stream a);
+PZeroStream a pa = { zero = streamConst a pa.zero };
+
+PZeroWord :: (n :: Nat) -> PZero (Vec n Bool);
+PZeroWord n = { zero = bvNat n 0 };
+
+PZeroFun :: (a b :: sort 0) -> PZero b -> PZero (a -> b);
+PZeroFun a b pb = { zero = (\(_ :: a) -> pb.zero) };
+
+PZeroUnit :: PZero #();
+PZeroUnit = { zero = () };
+
+PZeroPair :: (a b :: sort 0) -> PZero a -> PZero b -> PZero #(a | b);
+PZeroPair a b pa pb = { zero = (pa.zero | pb.zero) };
+
+PZeroEmpty :: PZero #{};
+PZeroEmpty = { zero = {} };
+
+PZeroField :: (s :: String) -> (a b :: sort 0) -> PZero a -> PZero b -> PZero #{ (s) :: a | b };
+PZeroField s a b pa pb = { zero = { (s) = pa.zero | pb.zero } };
+
+-- Logic class
+
+PLogic :: sort 0 -> sort 0;
+PLogic a =
   #{ and  :: a -> a -> a
    , or   :: a -> a -> a
    , xor  :: a -> a -> a
    , not  :: a -> a
-   , zero :: a
-   , cmp  :: a -> a -> Bool -> Bool
-   , scmp :: a -> a -> Bool -> Bool
-   , add  :: a -> a -> a
+   };
+
+PLogicBit :: PLogic Bool;
+PLogicBit =
+  { and  = and
+  , or   = or
+  , xor  = xor
+  , not  = not
+  };
+
+PLogicVec :: (a :: sort 0) -> PLogic a -> (n :: Nat) -> PLogic (Vec n a);
+PLogicVec a pa n =
+  { and  = zipWith a a a pa.and n
+  , or   = zipWith a a a pa.or  n
+  , xor  = zipWith a a a pa.xor n
+  , not  = map a a pa.not n
+  };
+
+PLogicStream :: (a :: sort 0) -> PLogic a -> PLogic (Stream a);
+PLogicStream a pa =
+  { and  = streamMap2 a a a pa.and
+  , or   = streamMap2 a a a pa.or
+  , xor  = streamMap2 a a a pa.xor
+  , not  = streamMap a a pa.not
+  };
+
+PLogicWord :: (n :: Nat) -> PLogic (Vec n Bool);
+PLogicWord n =
+  { and  = bvAnd n
+  , or   = bvOr  n
+  , xor  = bvXor n
+  , not  = bvNot n
+  };
+
+PLogicFun :: (a b :: sort 0) -> PLogic b -> PLogic (a -> b);
+PLogicFun a b pb =
+  { and  = funBinary a b pb.and
+  , or   = funBinary a b pb.or
+  , xor  = funBinary a b pb.xor
+  , not  = compose a b b pb.not
+  };
+
+PLogicUnit :: PLogic #();
+PLogicUnit =
+  { and  = unitBinary
+  , or   = unitBinary
+  , xor  = unitBinary
+  , not  = unitUnary
+  };
+
+PLogicPair :: (a b :: sort 0) -> PLogic a -> PLogic b -> PLogic #(a | b);
+PLogicPair a b pa pb =
+  { and  = pairBinary a b pa.and pb.and
+  , or   = pairBinary a b pa.or  pb.or
+  , xor  = pairBinary a b pa.xor pb.xor
+  , not  = pairUnary a b pa.not pb.not
+  };
+
+PLogicEmpty :: PLogic #{};
+PLogicEmpty =
+  { and  = emptyBinary
+  , or   = emptyBinary
+  , xor  = emptyBinary
+  , not  = emptyUnary
+  };
+
+PLogicField :: (s :: String) -> (a b :: sort 0) -> PLogic a -> PLogic b -> PLogic #{ (s) :: a | b };
+PLogicField s a b pa pb =
+  { and  = fieldBinary s a b pa.and pb.and
+  , or   = fieldBinary s a b pa.or  pb.or
+  , xor  = fieldBinary s a b pa.xor pb.xor
+  , not  = fieldUnary s a b pa.not pb.not
+  };
+
+-- Arith class
+
+PArith :: sort 0 -> sort 0;
+PArith a =
+  #{ add  :: a -> a -> a
    , sub  :: a -> a -> a
    , mul  :: a -> a -> a
    , div  :: a -> a -> a
@@ -280,37 +389,9 @@ Dict a =
    , smod :: a -> a -> a
    };
 
-DictBit :: Dict Bool;
-DictBit =
-  { and  = and
-  , or   = or
-  , xor  = xor
-  , not  = not
-  , zero = False
-  , cmp  = boolCmp
-  , scmp = errorCmp Bool
-  , add = errorBinary Bool
-  , sub = errorBinary Bool
-  , mul = errorBinary Bool
-  , div = errorBinary Bool
-  , mod = errorBinary Bool
-  , exp = errorBinary Bool
-  , lg2 = errorUnary Bool
-  , neg = errorUnary Bool
-  , sdiv = errorBinary Bool
-  , smod = errorBinary Bool
-  };
-
-DictVec :: (a :: sort 0) -> Dict a -> (n :: Nat) -> Dict (Vec n a);
-DictVec a pa n =
-  { and  = zipWith a a a pa.and n
-  , or   = zipWith a a a pa.or  n
-  , xor  = zipWith a a a pa.xor n
-  , not  = map a a pa.not n
-  , zero = replicate n a pa.zero
-  , cmp  = vecCmp n a pa.cmp
-  , scmp = vecCmp n a pa.scmp
-  , add = zipWith a a a pa.add n
+PArithVec :: (a :: sort 0) -> PArith a -> (n :: Nat) -> PArith (Vec n a);
+PArithVec a pa n =
+  { add = zipWith a a a pa.add n
   , sub = zipWith a a a pa.sub n
   , mul = zipWith a a a pa.mul n
   , div = zipWith a a a pa.div n
@@ -322,16 +403,9 @@ DictVec a pa n =
   , smod = zipWith a a a pa.smod n
   };
 
-DictStream :: (a :: sort 0) -> Dict a -> Dict (Stream a);
-DictStream a pa =
-  { and  = streamMap2 a a a pa.and
-  , or   = streamMap2 a a a pa.or
-  , xor  = streamMap2 a a a pa.xor
-  , not  = streamMap a a pa.not
-  , zero = streamConst a pa.zero
-  , cmp  = errorCmp (Stream a)
-  , scmp = errorCmp (Stream a)
-  , add = streamMap2 a a a pa.add
+PArithStream :: (a :: sort 0) -> PArith a -> PArith (Stream a);
+PArithStream a pa =
+  { add = streamMap2 a a a pa.add
   , sub = streamMap2 a a a pa.sub
   , mul = streamMap2 a a a pa.mul
   , div = streamMap2 a a a pa.div
@@ -343,16 +417,9 @@ DictStream a pa =
   , smod = streamMap2 a a a pa.smod
   };
 
-DictWord :: (n :: Nat) -> Dict (Vec n Bool);
-DictWord n =
-  { and  = bvAnd n
-  , or   = bvOr  n
-  , xor  = bvXor n
-  , not  = bvNot n
-  , zero = bvNat n 0
-  , cmp  = bvCmp n
-  , scmp = bvSCmp n
-  , add = bvAdd n
+PArithWord :: (n :: Nat) -> PArith (Vec n Bool);
+PArithWord n =
+  { add = bvAdd n
   , sub = bvSub n
   , mul = bvMul n
   , div = bvUDiv n
@@ -366,16 +433,9 @@ DictWord n =
            (errorBinary (bitvector 0)) bvSRem n
   };
 
-DictFun :: (a b :: sort 0) -> Dict b -> Dict (a -> b);
-DictFun a b pb =
-  { and  = funBinary a b pb.and
-  , or   = funBinary a b pb.or
-  , xor  = funBinary a b pb.xor
-  , not  = compose a b b pb.not
-  , zero = (\(_ :: a) -> pb.zero)
-  , cmp  = errorCmp (a -> b)
-  , scmp = errorCmp (a -> b)
-  , add = funBinary a b pb.add
+PArithFun :: (a b :: sort 0) -> PArith b -> PArith (a -> b);
+PArithFun a b pb =
+  { add = funBinary a b pb.add
   , sub = funBinary a b pb.sub
   , mul = funBinary a b pb.mul
   , div = funBinary a b pb.div
@@ -387,16 +447,9 @@ DictFun a b pb =
   , smod = funBinary a b pb.smod
   };
 
-DictUnit :: Dict #();
-DictUnit =
-  { and  = unitBinary
-  , or   = unitBinary
-  , xor  = unitBinary
-  , not  = unitUnary
-  , zero = ()
-  , cmp  = unitCmp
-  , scmp = unitCmp
-  , add = unitBinary
+PArithUnit :: PArith #();
+PArithUnit =
+  { add = unitBinary
   , sub = unitBinary
   , mul = unitBinary
   , div = unitBinary
@@ -408,16 +461,9 @@ DictUnit =
   , smod = unitBinary
   };
 
-DictPair :: (a b :: sort 0) -> Dict a -> Dict b -> Dict #(a | b);
-DictPair a b pa pb =
-  { and  = pairBinary a b pa.and pb.and
-  , or   = pairBinary a b pa.or  pb.or
-  , xor  = pairBinary a b pa.xor pb.xor
-  , not  = pairUnary a b pa.not pb.not
-  , zero = (pa.zero | pb.zero)
-  , cmp  = pairCmp a b pa.cmp pb.cmp
-  , scmp = pairCmp a b pa.scmp pb.scmp
-  , add = pairBinary a b pa.add pb.add
+PArithPair :: (a b :: sort 0) -> PArith a -> PArith b -> PArith #(a | b);
+PArithPair a b pa pb =
+  { add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
   , mul = pairBinary a b pa.mul pb.mul
   , div = pairBinary a b pa.div pb.div
@@ -429,16 +475,9 @@ DictPair a b pa pb =
   , smod = pairBinary a b pa.smod pb.smod
   };
 
-DictEmpty :: Dict #{};
-DictEmpty =
-  { and  = emptyBinary
-  , or   = emptyBinary
-  , xor  = emptyBinary
-  , not  = emptyUnary
-  , zero = {}
-  , cmp  = emptyCmp
-  , scmp = emptyCmp
-  , add = emptyBinary
+PArithEmpty :: PArith #{};
+PArithEmpty =
+  { add = emptyBinary
   , sub = emptyBinary
   , mul = emptyBinary
   , div = emptyBinary
@@ -450,16 +489,9 @@ DictEmpty =
   , smod = emptyBinary
   };
 
-DictField :: (s :: String) -> (a b :: sort 0) -> Dict a -> Dict b -> Dict #{ (s) :: a | b };
-DictField s a b pa pb =
-  { and  = fieldBinary s a b pa.and pb.and
-  , or   = fieldBinary s a b pa.or  pb.or
-  , xor  = fieldBinary s a b pa.xor pb.xor
-  , not  = fieldUnary s a b pa.not pb.not
-  , zero = { (s) = pa.zero | pb.zero }
-  , cmp  = fieldCmp s a b pa.cmp pb.cmp
-  , scmp = fieldCmp s a b pa.scmp pb.scmp
-  , add = fieldBinary s a b pa.add pb.add
+PArithField :: (s :: String) -> (a b :: sort 0) -> PArith a -> PArith b -> PArith #{ (s) :: a | b };
+PArithField s a b pa pb =
+  { add = fieldBinary s a b pa.add pb.add
   , sub = fieldBinary s a b pa.sub pb.sub
   , mul = fieldBinary s a b pa.mul pb.mul
   , div = fieldBinary s a b pa.div pb.div
@@ -471,40 +503,57 @@ DictField s a b pa pb =
   , smod = fieldBinary s a b pa.smod pb.smod
   };
 
-Ops :: sort 0 -> sort 0;
-Ops a = #{ this :: Dict a, vec :: (n :: Nat) -> Dict (Vec n a) };
+-- Cmp class
 
-OpsBit :: Ops Bool;
-OpsBit = { this = DictBit, vec = DictWord };
+PCmp :: sort 0 -> sort 0;
+PCmp a = #{ cmp :: a -> a -> Bool -> Bool };
 
-OpsSeq :: (n :: Num) -> (a :: sort 0) -> Ops a -> Ops (seq n a);
-OpsSeq (TCNum n) a pa =
-  { this = pa.vec n
-  , vec = DictVec (Vec n a) (pa.vec n) };
-OpsSeq TCInf a pa =
-  { this = DictStream a pa.this
-  , vec = DictVec (Stream a) (DictStream a pa.this) };
+PCmpBit :: PCmp Bool;
+PCmpBit = { cmp = boolCmp };
 
-OpsFun :: (a b :: sort 0) -> Ops b -> Ops (a -> b);
-OpsFun a b pb =
-  { this = DictFun a b pb.this
-  , vec = DictVec (a -> b) (DictFun a b pb.this) };
+PCmpVec :: (a :: sort 0) -> PCmp a -> (n :: Nat) -> PCmp (Vec n a);
+PCmpVec a pa n = { cmp = vecCmp n a pa.cmp };
 
-OpsUnit :: Ops #();
-OpsUnit = { this = DictUnit, vec = DictVec #() DictUnit };
+PCmpStream :: (a :: sort 0) -> PCmp a -> PCmp (Stream a);
+PCmpStream a pa = { cmp = errorCmp (Stream a) };
 
-OpsPair :: (a b :: sort 0) -> Ops a -> Ops b -> Ops #(a | b);
-OpsPair a b pa pb =
-  { this = DictPair a b pa.this pb.this
-  , vec = DictVec #(a | b) (DictPair a b pa.this pb.this) };
+PCmpWord :: (n :: Nat) -> PCmp (Vec n Bool);
+PCmpWord n = { cmp = bvCmp n };
 
-OpsEmpty :: Ops #{};
-OpsEmpty = { this = DictEmpty, vec = DictVec #{} DictEmpty };
+PCmpUnit :: PCmp #();
+PCmpUnit = { cmp = unitCmp };
 
-OpsField :: (s :: String) -> (a b :: sort 0) -> Ops a -> Ops b -> Ops #{ (s) :: a | b };
-OpsField s a b pa pb =
-  { this = DictField s a b pa.this pb.this
-  , vec = DictVec #{ (s) :: a | b } (DictField s a b pa.this pb.this) };
+PCmpPair :: (a b :: sort 0) -> PCmp a -> PCmp b -> PCmp #(a | b);
+PCmpPair a b pa pb = { cmp = pairCmp a b pa.cmp pb.cmp };
+
+PCmpEmpty :: PCmp #{};
+PCmpEmpty = { cmp = emptyCmp };
+
+PCmpField :: (s :: String) -> (a b :: sort 0) -> PCmp a -> PCmp b -> PCmp #{ (s) :: a | b };
+PCmpField s a b pa pb = { cmp = fieldCmp s a b pa.cmp pb.cmp };
+
+-- SignedCmp class
+
+PSignedCmp :: sort 0 -> sort 0;
+PSignedCmp a = #{ scmp :: a -> a -> Bool -> Bool };
+
+PSignedCmpVec :: (a :: sort 0) -> PSignedCmp a -> (n :: Nat) -> PSignedCmp (Vec n a);
+PSignedCmpVec a pa n = { scmp = vecCmp n a pa.scmp };
+
+PSignedCmpWord :: (n :: Nat) -> PSignedCmp (Vec n Bool);
+PSignedCmpWord n = { scmp = bvSCmp n };
+
+PSignedCmpUnit :: PSignedCmp #();
+PSignedCmpUnit = { scmp = unitCmp };
+
+PSignedCmpPair :: (a b :: sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #(a | b);
+PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
+
+PSignedCmpEmpty :: PSignedCmp #{};
+PSignedCmpEmpty = { scmp = emptyCmp };
+
+PSignedCmpField :: (s :: String) -> (a b :: sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #{ (s) :: a | b };
+PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -513,87 +562,86 @@ ecDemote :: (val bits :: Num) -> seq bits Bool;
 ecDemote (TCNum val) (TCNum bits) = bvNat bits val;
 
 -- Arith
-ecPlus :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecPlus a pa = pa.this.add;
+ecPlus :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecPlus a pa = pa.add;
 
-ecMinus :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecMinus a pa = pa.this.sub;
+ecMinus :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMinus a pa = pa.sub;
 
-ecMul :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecMul a pa = pa.this.mul;
+ecMul :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMul a pa = pa.mul;
 
-ecDiv :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecDiv a pa = pa.this.div;
+ecDiv :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecDiv a pa = pa.div;
 
-ecMod :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecMod a pa = pa.this.mod;
+ecMod :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMod a pa = pa.mod;
 
-ecExp :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecExp a pa = pa.this.exp;
+ecExp :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecExp a pa = pa.exp;
 
-ecLg2 :: (a :: sort 0) -> Ops a -> a -> a;
-ecLg2 a pa = pa.this.lg2;
+ecLg2 :: (a :: sort 0) -> PArith a -> a -> a;
+ecLg2 a pa = pa.lg2;
 
-ecNeg :: (a :: sort 0) -> Ops a -> a -> a;
-ecNeg a pa = pa.this.neg;
+ecNeg :: (a :: sort 0) -> PArith a -> a -> a;
+ecNeg a pa = pa.neg;
 
-ecSDiv :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecSDiv a pa = pa.this.sdiv;
+ecSDiv :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecSDiv a pa = pa.sdiv;
 
-ecSMod :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecSMod a pa = pa.this.smod;
+ecSMod :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecSMod a pa = pa.smod;
 
 -- Cmp
-ecLt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
-ecLt a pa x y = pa.this.cmp x y False;
+ecLt :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecLt a pa x y = pa.cmp x y False;
 
-ecGt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecGt :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
 
-ecLtEq  :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecLtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 ecLtEq a pa x y = not (ecLt a pa y x);
 
-ecGtEq  :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecGtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 ecGtEq a pa x y = not (ecLt a pa x y);
 
-ecSLt :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
-ecSLt a pa x y = pa.this.scmp x y False;
+ecSLt :: (a :: sort 0) -> PSignedCmp a -> a -> a -> Bool;
+ecSLt a pa x y = pa.scmp x y False;
 
-ecEq :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 ecEq a _ = eq a;
 
-ecNotEq :: (a :: sort 0) -> Ops a -> a -> a -> Bool;
+ecNotEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
 ecNotEq a pa x y = not (ecEq a pa x y);
 
-ecFunEq :: (a :: sort 0) -> Ops a -> (b :: sort 0) -> Ops b -> (a -> b) -> (a -> b) -> a -> Bool;
-ecFunEq a _ b pb f g x = ecEq b pb (f x) (g x);
+ecFunEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
 
-ecFunNotEq :: (a :: sort 0) -> Ops a -> (b :: sort 0) -> Ops b -> (a -> b) -> (a -> b) -> a -> Bool;
-ecFunNotEq a _ b pb f g x = ecNotEq b pb (f x) (g x);
+ecFunNotEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
 
 -- Logic
+ecAnd :: (a :: sort 0) -> PLogic a -> a -> a -> a;
+ecAnd a pa = pa.and;
 
-ecAnd :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecAnd a pa = pa.this.and;
+ecOr :: (a :: sort 0) -> PLogic a -> a -> a -> a;
+ecOr a pa = pa.or;
 
-ecOr :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecOr a pa = pa.this.or;
+ecXor :: (a :: sort 0) -> PLogic a -> a -> a -> a;
+ecXor a pa = pa.xor;
 
-ecXor :: (a :: sort 0) -> Ops a -> a -> a -> a;
-ecXor a pa = pa.this.xor;
+ecCompl :: (a :: sort 0) -> PLogic a -> a -> a;
+ecCompl a pa = pa.not;
 
-ecCompl :: (a :: sort 0) -> Ops a -> a -> a;
-ecCompl a pa = pa.this.not;
-
-ecZero :: (a :: sort 0) -> Ops a -> a;
-ecZero a pa = pa.this.zero;
+ecZero :: (a :: sort 0) -> PZero a -> a;
+ecZero a pa = pa.zero;
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
+ecShiftL :: (m n :: Num) -> (a :: sort 0) -> PZero a -> seq m a -> seq n Bool -> seq m a;
 ecShiftL (TCNum m) (TCNum n) a pa = bvShiftL m a n (ecZero a pa);
 ecShiftL TCInf (TCNum n) a _ = bvStreamShiftL a n;
 
-ecShiftR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
+ecShiftR :: (m n :: Num) -> (a :: sort 0) -> PZero a -> seq m a -> seq n Bool -> seq m a;
 ecShiftR (TCNum m) (TCNum n) a pa = bvShiftR m a n (ecZero a pa);
 ecShiftR TCInf (TCNum n) a pa = bvStreamShiftR a n (ecZero a pa);
 
@@ -613,55 +661,55 @@ ecSCarry (TCNum n) =
   (\(_ :: bitvector 0) (_ :: bitvector 0) -> error Bool "invalid SCarry instance")
   bvSCarry n;
 
-ecRotL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
-ecRotL (TCNum m) (TCNum n) a _ = bvRotateL m a n;
+ecRotL :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool -> seq m a;
+ecRotL (TCNum m) (TCNum n) a = bvRotateL m a n;
 
-ecRotR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
-ecRotR (TCNum m) (TCNum n) a _ = bvRotateR m a n;
+ecRotR :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool -> seq m a;
+ecRotR (TCNum m) (TCNum n) a = bvRotateR m a n;
 
-ecCat :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n a -> seq (tcAdd m n) a;
-ecCat (TCNum m) (TCNum n) a _ = append m n a;
-ecCat (TCNum m) TCInf a _ = streamAppend a m;
+ecCat :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n a -> seq (tcAdd m n) a;
+ecCat (TCNum m) (TCNum n) a = append m n a;
+ecCat (TCNum m) TCInf a = streamAppend a m;
 
-ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcAdd m n) a -> #(seq m a, seq n a);
-ecSplitAt (TCNum m) (TCNum n) a _ xs = (take a m n xs, drop a m n xs);
-ecSplitAt (TCNum m) TCInf a _ xs = (streamTake a m xs, streamDrop a m xs);
+ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> seq (tcAdd m n) a -> #(seq m a, seq n a);
+ecSplitAt (TCNum m) (TCNum n) a xs = (take a m n xs, drop a m n xs);
+ecSplitAt (TCNum m) TCInf a xs = (streamTake a m xs, streamDrop a m xs);
 
-ecJoin :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m (seq n a) -> seq (tcMul m n) a;
-ecJoin (TCNum m) (TCNum n) a _ = join m n a;
-ecJoin TCInf (TCNum n) a _ =
+ecJoin :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
+ecJoin (TCNum m) (TCNum n) a = join m n a;
+ecJoin TCInf (TCNum n) a =
   natCase
     (\ (n'::Nat) -> Stream (Vec n' a) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) a)
       (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
       (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) -> streamJoin a n' s)
       n;
 
-ecSplit :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcMul m n) a -> seq m (seq n a);
-ecSplit (TCNum m) (TCNum n) a _ = split m n a;
-ecSplit TCInf (TCNum n) a _ =
+ecSplit :: (m n :: Num) -> (a :: sort 0) -> seq (tcMul m n) a -> seq m (seq n a);
+ecSplit (TCNum m) (TCNum n) a = split m n a;
+ecSplit TCInf (TCNum n) a =
   natCase
   (\(n :: Nat) -> seq (ite Num (equalNat 0 n) (TCNum 0) TCInf) a -> Stream (Vec n a))
   (streamConst (Vec 0 a)) (\(n :: Nat) -> streamSplit a (Succ n)) n;
 
-ecReverse :: (n :: Num) -> (a :: sort 0) -> Ops a -> seq n a -> seq n a;
-ecReverse (TCNum n) a _ = reverse n a;
+ecReverse :: (n :: Num) -> (a :: sort 0) -> seq n a -> seq n a;
+ecReverse (TCNum n) a = reverse n a;
 
-ecTranspose :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m (seq n a) -> seq n (seq m a);
-ecTranspose (TCNum m) (TCNum n) a _ = transpose m n a;
+ecTranspose :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) -> seq n (seq m a);
+ecTranspose (TCNum m) (TCNum n) a = transpose m n a;
 -- TODO: other cases
 
-ecAt :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a -> seq i Bool -> a;
-ecAt (TCNum n) a _ (TCNum i) = bvAt n a i;
-ecAt TCInf a _ (TCNum i) = bvStreamGet a i;
+ecAt :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAt (TCNum n) a (TCNum i) = bvAt n a i;
+ecAt TCInf a (TCNum i) = bvStreamGet a i;
 
-ecAtRange :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRange n a pa m i xs = seqMap (seq i Bool) a m (ecAt n a pa i xs);
+ecAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
+ecAtRange n a m i xs = seqMap (seq i Bool) a m (ecAt n a i xs);
 
-ecAtBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a -> seq i Bool -> a;
-ecAtBack n a pa i xs = ecAt n a pa i (ecReverse n a pa xs);
+ecAtBack :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
 
-ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRangeBack n a pa m i xs = seqMap (seq i Bool) a m (ecAtBack n a pa i xs);
+ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
+ecAtRangeBack n a m i xs = seqMap (seq i Bool) a m (ecAtBack n a i xs);
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> seq len (seq bits Bool);
@@ -695,8 +743,8 @@ ecInfFromThen (TCNum n) first next =
 -- Run-time error
 primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
 
-ecError :: (a :: sort 0) -> Ops a -> (len :: Num) -> seq len (bitvector 8) -> a;
-ecError a _ (TCNum n) = cryError a n;
+ecError :: (a :: sort 0) -> (len :: Num) -> seq len (bitvector 8) -> a;
+ecError a (TCNum n) = cryError a n;
 
 -- Polynomials
 ecPMul :: (a b :: Num) -> seq a Bool -> seq b Bool
@@ -710,25 +758,25 @@ ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bo
 ecPMod (TCNum a) (TCNum b) = bvPMod a b;
 
 -- Random values
-ecRandom :: (a :: sort 0) -> Ops a -> bitvector 32 -> a;
-ecRandom a _ _ = error a "Cryptol.random";
+ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
+ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
-ecTrace :: (n :: Num) -> (a :: sort 0) -> Ops a -> (b :: sort 0) -> Ops b -> seq n (bitvector 8) -> a -> b -> b;
-ecTrace _ _ _ _ _ _ _ x = x;
+ecTrace :: (n :: Num) -> (a b :: sort 0) -> seq n (bitvector 8) -> a -> b -> b;
+ecTrace _ _ _ _ _ x = x;
 
 --------------------------------------------------------------------------------
 -- Extra primitives
 
 -- Array update
-ecUpdate :: (n :: Num) -> (a :: sort 0) -> Ops a -> (w :: Num)
+ecUpdate :: (n :: Num) -> (a :: sort 0) -> (w :: Num)
   -> seq n a -> seq w Bool -> a -> seq n a;
-ecUpdate (TCNum n) a _ (TCNum w) = bvUpd n a w;
-ecUpdate TCInf     a _ (TCNum w) = bvStreamUpd a w;
+ecUpdate (TCNum n) a (TCNum w) = bvUpd n a w;
+ecUpdate TCInf     a (TCNum w) = bvStreamUpd a w;
 
-ecUpdateEnd :: (n :: Num) -> (a :: sort 0) -> Ops a -> (w :: Num)
+ecUpdateEnd :: (n :: Num) -> (a :: sort 0) -> (w :: Num)
   -> seq n a -> seq w Bool -> a -> seq n a;
-ecUpdateEnd (TCNum n) a _ (TCNum w) xs i y = upd n a xs (subNat (subNat n 1) (bvToNat w i)) y;
+ecUpdateEnd (TCNum n) a (TCNum w) xs i y = upd n a xs (subNat (subNat n 1) (bvToNat w i)) y;
 
 -- Bitvector truncation
 ecTrunc :: (m n :: Num) -> seq (tcAdd m n) Bool -> seq n Bool;
