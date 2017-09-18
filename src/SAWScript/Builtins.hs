@@ -1234,15 +1234,8 @@ defaultTypedTerm sc cfg (TypedTerm schema trm) = do
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> Cryptol.Type -> IO Term
           applyType t ty = do
-            case Cryptol.kindOf ty of
-              Cryptol.KType -> do
-                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
-                ops <- Cryptol.importOps sc Cryptol.emptyEnv ty
-                scApplyAll sc t [ty', ops]
-              Cryptol.KNum -> do
-                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
-                scApply sc t ty'
-              _ -> return t
+            ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+            scApply sc t ty'
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
