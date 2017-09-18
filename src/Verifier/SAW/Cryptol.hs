@@ -222,8 +222,7 @@ importSchema :: SharedContext -> Env -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
 
 proveProp :: SharedContext -> Env -> C.Prop -> IO Term
-proveProp sc env prop = do
-  putStrLn $ "proveProp: " ++ show prop
+proveProp sc env prop =
   case Map.lookup prop (envP env) of
     Just (prf, j) -> incVars sc 0 j prf
     Nothing ->
@@ -576,7 +575,6 @@ importExpr sc env expr =
                                            | isErasedProp p -> importExpr sc env e
                                            | otherwise ->
                                              do e' <- importExpr sc env e
-                                                putStrLn $ "importExpr EProofApp: " ++ show p
                                                 prf <- proveProp sc env p
                                                 scApply sc e' prf
                                          s -> impossible $ "EProofApp: invalid type: " ++ show (e, s)
