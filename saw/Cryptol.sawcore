@@ -267,14 +267,12 @@ PZero a = #{ zero :: a };
 PZeroBit :: PZero Bool;
 PZeroBit = { zero = False };
 
-PZeroVec :: (a :: sort 0) -> PZero a -> (n :: Nat) -> PZero (Vec n a);
-PZeroVec a pa n = { zero = replicate n a pa.zero };
+PZeroSeq :: (n :: Num) -> (a :: sort 0) -> PZero a -> PZero (seq n a);
+PZeroSeq n a pa = { zero = seqConst n a pa.zero };
 
-PZeroStream :: (a :: sort 0) -> PZero a -> PZero (Stream a);
-PZeroStream a pa = { zero = streamConst a pa.zero };
-
-PZeroWord :: (n :: Nat) -> PZero (Vec n Bool);
-PZeroWord n = { zero = bvNat n 0 };
+PZeroSeqBool :: (n :: Num) -> PZero (seq n Bool);
+PZeroSeqBool (TCNum n) = { zero = bvNat n 0 };
+PZeroSeqBool TCInf = { zero = streamConst Bool False };
 
 PZeroFun :: (a b :: sort 0) -> PZero b -> PZero (a -> b);
 PZeroFun a b pb = { zero = (\(_ :: a) -> pb.zero) };
@@ -309,8 +307,8 @@ PLogicBit =
   , not  = not
   };
 
-PLogicVec :: (a :: sort 0) -> PLogic a -> (n :: Nat) -> PLogic (Vec n a);
-PLogicVec a pa n =
+PLogicVec :: (n :: Nat) -> (a :: sort 0) -> PLogic a -> PLogic (Vec n a);
+PLogicVec n a pa =
   { and  = zipWith a a a pa.and n
   , or   = zipWith a a a pa.or  n
   , xor  = zipWith a a a pa.xor n
@@ -325,6 +323,10 @@ PLogicStream a pa =
   , not  = streamMap a a pa.not
   };
 
+PLogicSeq :: (n :: Num) -> (a :: sort 0) -> PLogic a -> PLogic (seq n a);
+PLogicSeq (TCNum n) = PLogicVec n;
+PLogicSeq TCInf = PLogicStream;
+
 PLogicWord :: (n :: Nat) -> PLogic (Vec n Bool);
 PLogicWord n =
   { and  = bvAnd n
@@ -332,6 +334,10 @@ PLogicWord n =
   , xor  = bvXor n
   , not  = bvNot n
   };
+
+PLogicSeqBool :: (n :: Num) -> PLogic (seq n Bool);
+PLogicSeqBool (TCNum n) = PLogicWord n;
+PLogicSeqBool TCInf = PLogicStream Bool PLogicBit;
 
 PLogicFun :: (a b :: sort 0) -> PLogic b -> PLogic (a -> b);
 PLogicFun a b pb =
@@ -389,8 +395,8 @@ PArith a =
    , smod :: a -> a -> a
    };
 
-PArithVec :: (a :: sort 0) -> PArith a -> (n :: Nat) -> PArith (Vec n a);
-PArithVec a pa n =
+PArithVec :: (n :: Nat) -> (a :: sort 0) -> PArith a -> PArith (Vec n a);
+PArithVec n a pa =
   { add = zipWith a a a pa.add n
   , sub = zipWith a a a pa.sub n
   , mul = zipWith a a a pa.mul n
@@ -417,6 +423,10 @@ PArithStream a pa =
   , smod = streamMap2 a a a pa.smod
   };
 
+PArithSeq :: (n :: Num) -> (a :: sort 0) -> PArith a -> PArith (seq n a);
+PArithSeq (TCNum n) = PArithVec n;
+PArithSeq TCInf = PArithStream;
+
 PArithWord :: (n :: Nat) -> PArith (Vec n Bool);
 PArithWord n =
   { add = bvAdd n
@@ -432,6 +442,9 @@ PArithWord n =
   , smod = natCase (\(w::Nat) -> bitvector w -> bitvector w -> bitvector w)
            (errorBinary (bitvector 0)) bvSRem n
   };
+
+PArithSeqBool :: (n :: Num) -> PArith (seq n Bool);
+PArithSeqBool (TCNum n) = PArithWord n;
 
 PArithFun :: (a b :: sort 0) -> PArith b -> PArith (a -> b);
 PArithFun a b pb =
@@ -511,14 +524,19 @@ PCmp a = #{ cmp :: a -> a -> Bool -> Bool };
 PCmpBit :: PCmp Bool;
 PCmpBit = { cmp = boolCmp };
 
-PCmpVec :: (a :: sort 0) -> PCmp a -> (n :: Nat) -> PCmp (Vec n a);
-PCmpVec a pa n = { cmp = vecCmp n a pa.cmp };
+PCmpVec :: (n :: Nat) -> (a :: sort 0) -> PCmp a -> PCmp (Vec n a);
+PCmpVec n a pa = { cmp = vecCmp n a pa.cmp };
 
-PCmpStream :: (a :: sort 0) -> PCmp a -> PCmp (Stream a);
-PCmpStream a pa = { cmp = errorCmp (Stream a) };
+PCmpSeq :: (n :: Num) -> (a :: sort 0) -> PCmp a -> PCmp (seq n a);
+PCmpSeq (TCNum n) a pa = PCmpVec n a pa;
+PCmpSeq TCInf a pa = { cmp = errorCmp (Stream a) };
 
 PCmpWord :: (n :: Nat) -> PCmp (Vec n Bool);
 PCmpWord n = { cmp = bvCmp n };
+
+PCmpSeqBool :: (n :: Num) -> PCmp (seq n Bool);
+PCmpSeqBool (TCNum n) = PCmpWord n;
+PCmpSeqBool TCInf = { cmp = errorCmp (Stream Bool) };
 
 PCmpUnit :: PCmp #();
 PCmpUnit = { cmp = unitCmp };
@@ -537,8 +555,8 @@ PCmpField s a b pa pb = { cmp = fieldCmp s a b pa.cmp pb.cmp };
 PSignedCmp :: sort 0 -> sort 0;
 PSignedCmp a = #{ scmp :: a -> a -> Bool -> Bool };
 
-PSignedCmpVec :: (a :: sort 0) -> PSignedCmp a -> (n :: Nat) -> PSignedCmp (Vec n a);
-PSignedCmpVec a pa n = { scmp = vecCmp n a pa.scmp };
+PSignedCmpVec :: (n :: Nat) -> (a :: sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
+PSignedCmpVec n a pa = { scmp = vecCmp n a pa.scmp };
 
 PSignedCmpWord :: (n :: Nat) -> PSignedCmp (Vec n Bool);
 PSignedCmpWord n = { scmp = bvSCmp n };

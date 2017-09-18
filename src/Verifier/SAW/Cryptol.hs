@@ -14,7 +14,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
-import Control.Monad (foldM, unless, (<=<))
+import Control.Monad (foldM, join, unless, (<=<))
 import qualified Data.Foldable as Fold
 import Data.List
 import qualified Data.IntTrie as IntTrie
@@ -57,8 +57,8 @@ impossible name = fail ("impossible: " ++ name)
 -- | SharedTerms are paired with a deferred shift amount for loose variables
 data Env = Env
   { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
-  , envD :: Map Int    (Term, Int) -- ^ Dictionaries are referenced by unique id
   , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
+  , envP :: Map C.Prop (Term, Int) -- ^ Bound propositions are referenced implicitly by their types
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   }
@@ -73,27 +73,19 @@ liftTerm (t, j) = (t, j + 1)
 liftEnv :: Env -> Env
 liftEnv env =
   Env { envT = fmap liftTerm (envT env)
-      , envD = fmap liftTerm (envD env)
       , envE = fmap liftTerm (envE env)
+      , envP = fmap liftTerm (envP env)
       , envC = envC env
       , envS = envS env
       }
 
-bindKTypeParam :: SharedContext -> C.TParam -> Env -> IO Env
-bindKTypeParam sc tp env = do
-  let env' = liftEnv (liftEnv env)
-  v <- scLocalVar sc 1
-  d <- scLocalVar sc 0
-  return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env')
-                , envD = Map.insert (C.tpUnique tp) (d, 0) (envD env')
-                , envS = error "bindKTypeParam 1" : error "bindKTypeParam 2" : envS env }
-
-bindKNumParam :: SharedContext -> C.TParam -> Env -> IO Env
-bindKNumParam sc tp env = do
+bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
+bindTParam sc tp env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
+  k <- importKind sc (C.tpKind tp)
   return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env')
-                , envS = error "bindKNumParam" : envS env }
+                , envS = k : envS env }
 
 bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO Env
 bindName sc name schema env = do
@@ -104,7 +96,23 @@ bindName sc name schema env = do
                 , envC = Map.insert name schema (envC env')
                 , envS = t : envS env' }
 
+bindProp :: SharedContext -> C.Prop -> Env -> IO Env
+bindProp sc prop env = do
+  let env' = liftEnv env
+  v <- scLocalVar sc 0
+  k <- scSort sc (mkSort 0)
+  return $ env' { envP = Map.insert prop (v, 0) (envP env')
+                , envS = k : envS env' }
+
 --------------------------------------------------------------------------------
+
+importKind :: SharedContext -> C.Kind -> IO Term
+importKind sc kind =
+  case kind of
+    C.KType       -> scSort sc (mkSort 0)
+    C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
+    C.KProp       -> scSort sc (mkSort 0)
+    (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
 
 importTFun :: SharedContext -> C.TFun -> IO Term
 importTFun sc tf =
@@ -120,6 +128,22 @@ importTFun sc tf =
     C.TCMax           -> scGlobalDef sc "Cryptol.tcMax"
     C.TCLenFromThen   -> scGlobalDef sc "Cryptol.tcLenFromThen"
     C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
+
+importPC :: SharedContext -> C.PC -> IO Term
+importPC sc pc =
+  case pc of
+    C.PEqual     -> impossible "importPC PEqual"
+    C.PNeq       -> impossible "importPC PNeq"
+    C.PGeq       -> impossible "importPC PGeq"
+    C.PFin       -> impossible "importPC PFin"
+    C.PHas _     -> impossible "importPC PHas"
+    C.PZero      -> scGlobalDef sc "Cryptol.PZero"
+    C.PLogic     -> scGlobalDef sc "Cryptol.PLogic"
+    C.PArith     -> scGlobalDef sc "Cryptol.PArith"
+    C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
+    C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
+    C.PAnd       -> impossible "importPC PAnd"
+    C.PTrue      -> impossible "importPC PTrue"
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
 importType :: SharedContext -> Env -> C.Type -> IO Term
@@ -147,8 +171,10 @@ importType sc env ty =
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
-        C.PC _pc ->
-          impossible "importType Prop"
+        C.PC pc ->
+          do pc' <- importPC sc pc
+             tyargs' <- traverse go tyargs
+             scApplyAll sc pc' tyargs'
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
@@ -158,61 +184,24 @@ importType sc env ty =
   where
     go = importType sc env
 
--- | Translate value types to SAW dictionaries of type Ops a.
-importOps :: SharedContext -> Env -> C.Type -> IO Term
-importOps sc env ty =
-  case ty of
-    C.TVar tvar ->
-      case tvar of
-        C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "importOps TVFree"
-        C.TVBound i _k   -> case Map.lookup i (envD env) of
-                              Just (t, j) -> incVars sc 0 j t
-                              Nothing -> fail "internal error: importOps TVBound"
-    C.TUser _ _ t  -> importOps sc env t
-    C.TRec fs -> importTRec [ (C.unpackIdent n, t) | (n, t) <- fs ]
-    C.TCon tcon tyargs ->
-      case tcon of
-        C.TC tc ->
-          case tc of
-            C.TCNum _n   -> impossible "importOps TCNum"
-            C.TCInf      -> impossible "importOps TCInf"
-            C.TCBit      -> scGlobalApply sc "Cryptol.OpsBit" []
-            C.TCSeq      -> do n <- importType sc env (tyargs !! 0)
-                               a <- importType sc env (tyargs !! 1)
-                               pa <- importOps sc env (tyargs !! 1)
-                               scGlobalApply sc "Cryptol.OpsSeq" [n, a, pa]
-            C.TCFun      -> do a <- importType sc env (tyargs !! 0)
-                               b <- importType sc env (tyargs !! 1)
-                               pb <- importOps sc env (tyargs !! 1)
-                               scGlobalApply sc "Cryptol.OpsFun" [a, b, pb]
-            C.TCTuple _n -> importTCTuple tyargs
-            C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
-        C.PC _pc ->
-          impossible "importOps Prop"
-        C.TF _tf ->
-          impossible "importOps TF"
-        C.TError _k _msg ->
-          impossible "importOps TError"
-  where
-    -- | Precondition: list argument should be sorted by field name
-    importTRec :: [(String, C.Type)] -> IO Term
-    importTRec [] = scCtorApp sc "Cryptol.OpsEmpty" []
-    importTRec ((n, t) : fs) = do
-      s <- scString sc n
-      a <- importType sc env t
-      pa <- importOps sc env t
-      b <- scRecordType sc =<< traverse (importType sc env) (Map.fromList fs)
-      pb <- importTRec fs
-      scGlobalApply sc "Cryptol.OpsField" [s, a, b, pa, pb]
+isErasedProp :: C.Prop -> Bool
+isErasedProp prop =
+  case prop of
+    C.TCon (C.PC C.PZero     ) _ -> False
+    C.TCon (C.PC C.PLogic    ) _ -> False
+    C.TCon (C.PC C.PArith    ) _ -> False
+    C.TCon (C.PC C.PCmp      ) _ -> False
+    C.TCon (C.PC C.PSignedCmp) _ -> False
+    _ -> True
 
-    importTCTuple :: [C.Type] -> IO Term
-    importTCTuple [] = scGlobalApply sc "Cryptol.OpsUnit" []
-    importTCTuple (t : ts) = do
-      a <- importType sc env t
-      pa <- importOps sc env t
-      b <- scTupleType sc =<< traverse (importType sc env) ts
-      pb <- importTCTuple ts
-      scGlobalApply sc "Cryptol.OpsPair" [a, b, pa, pb]
+importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
+importPropsType sc env [] ty = importType sc env ty
+importPropsType sc env (prop : props) ty
+  | isErasedProp prop = importPropsType sc env props ty
+  | otherwise =
+    do p <- importType sc env prop
+       t <- importPropsType sc env props ty
+       scFun sc p t
 
 nameToString :: C.Name -> String
 nameToString = C.unpackIdent . C.nameIdent
@@ -221,26 +210,215 @@ tparamToString :: C.TParam -> String
 --tparamToString tp = maybe "_" nameToString (C.tpName tp)
 tparamToString tp = maybe ("u" ++ show (C.tpUnique tp)) nameToString (C.tpName tp)
 
-importPolyType :: SharedContext -> Env -> [C.TParam] -> C.Type -> IO Term
-importPolyType sc env [] ty = importType sc env ty
-importPolyType sc env (tp : tps) ty =
-  case C.tpKind tp of
-    C.KType       -> do env' <- bindKTypeParam sc tp env
-                        k1 <- scSort sc (mkSort 0)
-                        v0 <- scLocalVar sc 0
-                        k2 <- scGlobalApply sc "Cryptol.Ops" [v0]
-                        ty' <- importPolyType sc env' tps ty
-                        let s = tparamToString tp
-                        scPi sc s k1 =<< scPi sc ("_" ++ s) k2 ty'
-    C.KNum        -> do env' <- bindKNumParam sc tp env
-                        k <- scDataTypeApp sc "Cryptol.Num" []
-                        ty' <- importPolyType sc env' tps ty
-                        scPi sc (tparamToString tp) k ty'
-    C.KProp       -> impossible "importPolyType: KProp"
-    (C.:->) _ _   -> impossible "importPolyType: arrow kind"
+importPolyType :: SharedContext -> Env -> [C.TParam] -> [C.Prop] -> C.Type -> IO Term
+importPolyType sc env [] props ty = importPropsType sc env props ty
+importPolyType sc env (tp : tps) props ty =
+  do k <- importKind sc (C.tpKind tp)
+     env' <- bindTParam sc tp env
+     t <- importPolyType sc env' tps props ty
+     scPi sc (tparamToString tp) k t
 
 importSchema :: SharedContext -> Env -> C.Schema -> IO Term
-importSchema sc env (C.Forall tparams _props ty) = importPolyType sc env tparams ty
+importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
+
+proveProp :: SharedContext -> Env -> C.Prop -> IO Term
+proveProp sc env prop = do
+  putStrLn $ "proveProp: " ++ show prop
+  case Map.lookup prop (envP env) of
+    Just (prf, j) -> incVars sc 0 j prf
+    Nothing ->
+      case prop of
+        -- instance Zero Bit
+        (C.pIsZero -> Just (C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PZeroBit" []
+        -- instance Zero [n]
+        (C.pIsZero -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PZeroSeqBool" [n']
+        -- instance (Zero a) => Zero [n]a
+        (C.pIsZero -> Just (C.tIsSeq -> Just (n, a)))
+          -> do n' <- importType sc env n
+                a' <- importType sc env a
+                pa <- proveProp sc env (C.pZero a)
+                scGlobalApply sc "Cryptol.PZeroSeq" [n', a', pa]
+        -- instance (Zero b) => Zero (a -> b)
+        (C.pIsZero -> Just (C.tIsFun -> Just (a, b)))
+          -> do a' <- importType sc env a
+                b' <- importType sc env b
+                pb <- proveProp sc env (C.pZero b)
+                scGlobalApply sc "Cryptol.PZeroFun" [a', b', pb]
+        -- instance Zero ()
+        (C.pIsZero -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PZeroUnit" []
+        -- instance (Zero a, Zero b) => Zero (a, b)
+        (C.pIsZero -> Just (C.tIsTuple -> Just (t : ts)))
+          -> do a <- importType sc env t
+                b <- importType sc env (C.tTuple ts)
+                pa <- proveProp sc env (C.pZero t)
+                pb <- proveProp sc env (C.pZero (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PZeroPair" [a, b, pa, pb]
+        -- instance Zero {}
+        (C.pIsZero -> Just (C.TRec []))
+          -> do scGlobalApply sc "Cryptol.PZeroEmpty" []
+        -- instance (Zero a, Zero b) => instance Zero { x : a, y : b }
+        (C.pIsZero -> Just (C.TRec ((n, t) : fs)))
+          -> do s <- scString sc (C.unpackIdent n)
+                a <- importType sc env t
+                b <- importType sc env (C.TRec fs)
+                pa <- proveProp sc env (C.pZero t)
+                pb <- proveProp sc env (C.pZero (C.TRec fs))
+                scGlobalApply sc "Cryptol.PZeroField" [s, a, b, pa, pb]
+
+        -- instance Logic Bit
+        (C.pIsLogic -> Just (C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PLogicBit" []
+        -- instance Logic [n]
+        (C.pIsLogic -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLogicSeqBool" [n']
+        -- instance (Logic a) => Logic [n]a
+        (C.pIsLogic -> Just (C.tIsSeq -> Just (n, a)))
+          -> do n' <- importType sc env n
+                a' <- importType sc env a
+                pa <- proveProp sc env (C.pLogic a)
+                scGlobalApply sc "Cryptol.PLogicSeq" [n', a', pa]
+        -- instance (Logic b) => Logic (a -> b)
+        (C.pIsLogic -> Just (C.tIsFun -> Just (a, b)))
+          -> do a' <- importType sc env a
+                b' <- importType sc env b
+                pb <- proveProp sc env (C.pLogic b)
+                scGlobalApply sc "Cryptol.PLogicFun" [a', b', pb]
+        -- instance Logic ()
+        (C.pIsLogic -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PLogicUnit" []
+        -- instance (Logic a, Logic b) => Logic (a, b)
+        (C.pIsLogic -> Just (C.tIsTuple -> Just (t : ts)))
+          -> do a <- importType sc env t
+                b <- importType sc env (C.tTuple ts)
+                pa <- proveProp sc env (C.pLogic t)
+                pb <- proveProp sc env (C.pLogic (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
+        -- instance Logic {}
+        (C.pIsLogic -> Just (C.TRec []))
+          -> do scGlobalApply sc "Cryptol.PLogicEmpty" []
+        -- instance (Logic a, Logic b) => instance Logic { x : a, y : b }
+        (C.pIsLogic -> Just (C.TRec ((n, t) : fs)))
+          -> do s <- scString sc (C.unpackIdent n)
+                a <- importType sc env t
+                b <- importType sc env (C.TRec fs)
+                pa <- proveProp sc env (C.pLogic t)
+                pb <- proveProp sc env (C.pLogic (C.TRec fs))
+                scGlobalApply sc "Cryptol.PLogicField" [s, a, b, pa, pb]
+
+        -- instance (fin n) => Arith [n]
+        (C.pIsArith -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PArithSeqBool" [n']
+        -- instance (Arith a) => Arith [n]a
+        (C.pIsArith -> Just (C.tIsSeq -> Just (n, a)))
+          -> do n' <- importType sc env n
+                a' <- importType sc env a
+                pa <- proveProp sc env (C.pArith a)
+                scGlobalApply sc "Cryptol.PArithSeq" [n', a', pa]
+        -- instance (Arith b) => Arith (a -> b)
+        (C.pIsArith -> Just (C.tIsFun -> Just (a, b)))
+          -> do a' <- importType sc env a
+                b' <- importType sc env b
+                pb <- proveProp sc env (C.pArith b)
+                scGlobalApply sc "Cryptol.PArithFun" [a', b', pb]
+        -- instance Arith ()
+        (C.pIsArith -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PArithUnit" []
+        -- instance (Arith a, Arith b) => Arith (a, b)
+        (C.pIsArith -> Just (C.tIsTuple -> Just (t : ts)))
+          -> do a <- importType sc env t
+                b <- importType sc env (C.tTuple ts)
+                pa <- proveProp sc env (C.pArith t)
+                pb <- proveProp sc env (C.pArith (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PArithPair" [a, b, pa, pb]
+        -- instance Arith {}
+        (C.pIsArith -> Just (C.TRec []))
+          -> do scGlobalApply sc "Cryptol.PArithEmpty" []
+        -- instance (Arith a, Arith b) => instance Arith { x : a, y : b }
+        (C.pIsArith -> Just (C.TRec ((n, t) : fs)))
+          -> do s <- scString sc (C.unpackIdent n)
+                a <- importType sc env t
+                b <- importType sc env (C.TRec fs)
+                pa <- proveProp sc env (C.pArith t)
+                pb <- proveProp sc env (C.pArith (C.TRec fs))
+                scGlobalApply sc "Cryptol.PArithField" [s, a, b, pa, pb]
+
+        -- instance Cmp Bit
+        (C.pIsCmp -> Just (C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PCmpBit" []
+        -- instance (fin n) => Cmp [n]
+        (C.pIsCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PCmpSeqBool" [n']
+        -- instance (fin n, Cmp a) => Cmp [n]a
+        (C.pIsCmp -> Just (C.tIsSeq -> Just (n, a)))
+          -> do n' <- importType sc env n
+                a' <- importType sc env a
+                pa <- proveProp sc env (C.pCmp a)
+                scGlobalApply sc "Cryptol.PCmpSeq" [n', a', pa]
+        -- instance Cmp ()
+        (C.pIsCmp -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PCmpUnit" []
+        -- instance (Cmp a, Cmp b) => Cmp (a, b)
+        (C.pIsCmp -> Just (C.tIsTuple -> Just (t : ts)))
+          -> do a <- importType sc env t
+                b <- importType sc env (C.tTuple ts)
+                pa <- proveProp sc env (C.pCmp t)
+                pb <- proveProp sc env (C.pCmp (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
+        -- instance Cmp {}
+        (C.pIsCmp -> Just (C.TRec []))
+          -> do scGlobalApply sc "Cryptol.PCmpEmpty" []
+        -- instance (Cmp a, Cmp b) => instance Cmp { x : a, y : b }
+        (C.pIsCmp -> Just (C.TRec ((n, t) : fs)))
+          -> do s <- scString sc (C.unpackIdent n)
+                a <- importType sc env t
+                b <- importType sc env (C.TRec fs)
+                pa <- proveProp sc env (C.pCmp t)
+                pb <- proveProp sc env (C.pCmp (C.TRec fs))
+                scGlobalApply sc "Cryptol.PCmpField" [s, a, b, pa, pb]
+
+        -- instance SignedCmp Bit
+        (C.pIsSignedCmp -> Just (C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PSignedCmpBit" []
+        -- instance (fin n) => SignedCmp [n]
+        (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PSignedCmpSeqBool" [n']
+        -- instance (fin n, SignedCmp a) => SignedCmp [n]a
+        (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, a)))
+          -> do n' <- importType sc env n
+                a' <- importType sc env a
+                pa <- proveProp sc env (C.pSignedCmp a)
+                scGlobalApply sc "Cryptol.PSignedCmpSeq" [n', a', pa]
+        -- instance SignedCmp ()
+        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
+        -- instance (SignedCmp a, SignedCmp b) => SignedCmp (a, b)
+        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just (t : ts)))
+          -> do a <- importType sc env t
+                b <- importType sc env (C.tTuple ts)
+                pa <- proveProp sc env (C.pSignedCmp t)
+                pb <- proveProp sc env (C.pSignedCmp (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
+        -- instance SignedCmp {}
+        (C.pIsSignedCmp -> Just (C.TRec []))
+          -> do scGlobalApply sc "Cryptol.PSignedCmpEmpty" []
+        -- instance (SignedCmp a, SignedCmp b) => instance SignedCmp { x : a, y : b }
+        (C.pIsSignedCmp -> Just (C.TRec ((n, t) : fs)))
+          -> do s <- scString sc (C.unpackIdent n)
+                a <- importType sc env t
+                b <- importType sc env (C.TRec fs)
+                pa <- proveProp sc env (C.pSignedCmp t)
+                pb <- proveProp sc env (C.pSignedCmp (C.TRec fs))
+                scGlobalApply sc "Cryptol.PSignedCmpField" [s, a, b, pa, pb]
+
+        _ -> do fail $ "proveProp: " ++ show prop
 
 importPrimitive :: SharedContext -> C.Name -> IO Term
 importPrimitive sc (C.asPrim -> Just nm) =
@@ -267,15 +445,15 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "!="            -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
     "<$"            -> scGlobalDef sc "Cryptol.ecSLt"         -- {a} (SignedCmp a) => a -> a -> Bit
     ">>$"           -> scGlobalDef sc "Cryptol.ecSShiftR"     -- {n, k} (fin n, n >= 1, fin k) => [n] -> [k] -> [n]
-    "&&"            -> scGlobalDef sc "Cryptol.ecAnd"         -- {a} a -> a -> a        -- Bits a
-    "||"            -> scGlobalDef sc "Cryptol.ecOr"          -- {a} a -> a -> a        -- Bits a
-    "^"             -> scGlobalDef sc "Cryptol.ecXor"         -- {a} a -> a -> a        -- Bits a
-    "complement"    -> scGlobalDef sc "Cryptol.ecCompl"       -- {a} a -> a             -- Bits a
-    "zero"          -> scGlobalDef sc "Cryptol.ecZero"        -- {a} a                  -- Bits a
+    "&&"            -> scGlobalDef sc "Cryptol.ecAnd"         -- {a} (Logic a) => a -> a -> a
+    "||"            -> scGlobalDef sc "Cryptol.ecOr"          -- {a} (Logic a) => a -> a -> a
+    "^"             -> scGlobalDef sc "Cryptol.ecXor"         -- {a} (Logic a) => a -> a -> a
+    "complement"    -> scGlobalDef sc "Cryptol.ecCompl"       -- {a} (Logic a) => a -> a
+    "zero"          -> scGlobalDef sc "Cryptol.ecZero"        -- {a} (Zero a) => a
     "carry"         -> scGlobalDef sc "Cryptol.ecCarry"       -- {n} (fin n) => [n] -> [n] -> Bit
     "scarry"        -> scGlobalDef sc "Cryptol.ecSCarry"      -- {n} (fin n, n >= 1) => [n] -> [n] -> Bit
-    "<<"            -> scGlobalDef sc "Cryptol.ecShiftL"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    ">>"            -> scGlobalDef sc "Cryptol.ecShiftR"      -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+    "<<"            -> scGlobalDef sc "Cryptol.ecShiftL"      -- {m,n,a} (fin n, Zero a) => [m] a -> [n] -> [m] a
+    ">>"            -> scGlobalDef sc "Cryptol.ecShiftR"      -- {m,n,a} (fin n, Zero a) => [m] a -> [n] -> [m] a
     "<<<"           -> scGlobalDef sc "Cryptol.ecRotL"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
     ">>>"           -> scGlobalDef sc "Cryptol.ecRotR"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
     "#"             -> scGlobalDef sc "Cryptol.ecCat"         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
@@ -363,35 +541,13 @@ importExpr sc env expr =
       case Map.lookup qname (envE env) of
         Just (e', j)                -> incVars sc 0 j e'
         Nothing                     -> fail $ "internal error: unknown variable: " ++ show qname
-    C.ETAbs tp e                    -> case C.tpKind tp of
-                                         C.KType -> do
-                                           env' <- bindKTypeParam sc tp env
-                                           k1 <- scSort sc (mkSort 0)
-                                           v0 <- scLocalVar sc 0
-                                           k2 <- scGlobalApply sc "Cryptol.Ops" [v0]
-                                           e' <- importExpr sc env' e
-                                           let s = tparamToString tp
-                                           scLambda sc s k1 =<< scLambda sc ("_" ++ s) k2 e'
-                                         C.KNum -> do
-                                           env' <- bindKNumParam sc tp env
-                                           k <- scDataTypeApp sc "Cryptol.Num" []
-                                           e' <- importExpr sc env' e
-                                           scLambda sc (tparamToString tp) k e'
-                                         _ -> impossible "importExpr ETAbs: invalid kind"
-    C.ETApp e t                     -> case fastSchemaOf (envC env) e of
-                                         C.Forall (tp1 : _) _ _ ->
-                                           case C.tpKind tp1 of
-                                             C.KType -> do
-                                               e' <- importExpr sc env e
-                                               t' <- importType sc env t
-                                               d' <- importOps sc env t
-                                               scApplyAll sc e' [t', d']
-                                             C.KNum -> do
-                                               e' <- importExpr sc env e
-                                               t' <- importType sc env t
-                                               scApply sc e' t'
-                                             _ -> impossible "importExpr ETApp: invalid kind"
-                                         _ -> impossible "importExpr ETApp: monomorphic type"
+    C.ETAbs tp e                    -> do env' <- bindTParam sc tp env
+                                          k <- importKind sc (C.tpKind tp)
+                                          e' <- importExpr sc env' e
+                                          scLambda sc (tparamToString tp) k e'
+    C.ETApp e t                     -> do e' <- importExpr sc env e
+                                          t' <- importType sc env t
+                                          scApply sc e' t'
     C.EApp e1 e2                    -> do e1' <- go e1
                                           e2' <- go e2
                                           t1 <- scTypeOf' sc (envS env) e1' >>= scWhnf sc
@@ -409,8 +565,21 @@ importExpr sc env expr =
                                           env' <- bindName sc x (C.Forall [] [] t) env
                                           e' <- importExpr sc env' e
                                           scLambda sc (nameToString x) t' e'
-    C.EProofAbs _prop e1            -> importExpr sc env e1
-    C.EProofApp e1                  -> importExpr sc env e1
+    C.EProofAbs prop e
+      | isErasedProp prop           -> do importExpr sc env e
+      | otherwise                   -> do p' <- importType sc env prop
+                                          env' <- bindProp sc prop env
+                                          e' <- importExpr sc env' e
+                                          scLambda sc "_P" p' e'
+    C.EProofApp e                   -> case fastSchemaOf (envC env) e of
+                                         C.Forall [] (p : _) _
+                                           | isErasedProp p -> importExpr sc env e
+                                           | otherwise ->
+                                             do e' <- importExpr sc env e
+                                                putStrLn $ "importExpr EProofApp: " ++ show p
+                                                prf <- proveProp sc env p
+                                                scApply sc e' prf
+                                         s -> impossible $ "EProofApp: invalid type: " ++ show (e, s)
 {-
     C.ECast e1 t2                   -> do let t1 = fastTypeOf (envC env) e1
                                           t1' <- importType sc env t1
