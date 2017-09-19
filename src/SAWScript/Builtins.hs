@@ -115,7 +115,7 @@ import Cryptol.Utils.PP (pretty)
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
-                                     , biBasicSS       :: Simpset Term
+                                     , biBasicSS       :: Simpset
                                      }
 
 showPrim :: SV.Value -> TopLevel String
@@ -543,7 +543,7 @@ unfoldGoal names = withFirstGoal $ \goal -> do
   trm' <- io $ scUnfoldConstants sc names trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
-simplifyGoal :: Simpset Term -> ProofScript ()
+simplifyGoal :: Simpset -> ProofScript ()
 simplifyGoal ss = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
@@ -980,7 +980,7 @@ quickCheckPrintPrim sc numTests tt = do
       "term has non-testable type:\n" ++
       pretty (ttSchema tt)
 
-cryptolSimpset :: TopLevel (Simpset Term)
+cryptolSimpset :: TopLevel Simpset
 cryptolSimpset = do
   sc <- getSharedContext
   io $ scSimpset sc cryptolDefs [] []
@@ -988,24 +988,24 @@ cryptolSimpset = do
                       moduleDefs CryptolSAW.cryptolModule
         excluded d = defIdent d `elem` [ "Cryptol.fix" ]
 
-addPreludeEqs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addPreludeEqs :: [String] -> Simpset
+              -> TopLevel Simpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addCryptolEqs :: [String] -> Simpset
+              -> TopLevel Simpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-addPreludeDefs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addPreludeDefs :: [String] -> Simpset
+              -> TopLevel Simpset
 addPreludeDefs names ss = do
   sc <- getSharedContext
   defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -1017,7 +1017,7 @@ addPreludeDefs names ss = do
               Just d -> return d
               Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
 
-rewritePrim :: Simpset Term -> TypedTerm -> TopLevel TypedTerm
+rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
   t' <- io $ rewriteSharedTerm sc ss t
@@ -1035,21 +1035,17 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset Term
-        -> Simpset Term
+addsimp :: Theorem -> Simpset -> Simpset
 addsimp (Theorem t) ss = addRule (ruleOfProp t) ss
 
-addsimp' :: Term -> Simpset Term
-         -> Simpset Term
+addsimp' :: Term -> Simpset -> Simpset
 addsimp' t ss = addRule (ruleOfProp t) ss
 
-addsimps :: [Theorem] -> Simpset Term
-         -> Simpset Term
+addsimps :: [Theorem] -> Simpset -> Simpset
 addsimps thms ss =
   foldr (\thm -> addRule (ruleOfProp (thmTerm thm))) ss thms
 
-addsimps' :: [Term] -> Simpset Term
-          -> Simpset Term
+addsimps' :: [Term] -> Simpset -> Simpset
 addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
 
 print_type :: Term -> TopLevel ()

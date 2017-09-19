@@ -37,6 +37,7 @@ import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import           Numeric.Natural
 import           System.IO
 
 import qualified Text.LLVM.AST as L
@@ -404,10 +405,13 @@ registerOverride ::
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret ()
 registerOverride cc _ctx cs = do
   let sym = ccBackend cc
+      cfg = Crucible.simConfig (ccSimContext cc)
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
   let s@(L.Symbol fsym) = (head cs)^.csName
       llvmctx = ccLLVMContext cc
-  liftIO $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
+  liftIO $ do
+    verb <- Crucible.getConfigValue Crucible.verbosity cfg
+    when (verb >= 2) $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
     -- LLVMHandleInfo constructor has two existential type arguments,
     -- which are bound here. h :: FnHandle args' ret'
@@ -449,7 +453,7 @@ verifySimulate cc mspec args assumes lemmas globals checkSat =
             let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
-                do mapM_ (registerOverride cc simCtx)
+                do mapM_ (registerOverride cc simCtx')
                          (groupOn (view csName) lemmas)
                    liftIO $ do
                      preds <- mapM (resolveSAWPred cc) assumes
@@ -939,7 +943,7 @@ logicTypeOfActual dl sc (Crucible.StructType si) = do
 logicTypeOfActual _ _ _ = return Nothing
 
 
-logicTypeForInt :: SharedContext -> Crucible.Nat -> IO Term
+logicTypeForInt :: SharedContext -> Natural -> IO Term
 logicTypeForInt sc w =
   do bType <- scBoolType sc
      lTm <- scNat sc (fromIntegral w)

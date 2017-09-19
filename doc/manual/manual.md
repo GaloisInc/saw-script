@@ -2667,4 +2667,101 @@ symbolic execution when the predicate of interest is an equality.
 
 ## A Heap-Based Example
 
-TODO
+To tie all of the command descriptions from the previous sections
+together, consider the case of verifying the correctness of a C program
+that computes the dot product of two vectors, where the length and value
+of each vector are encapsulated together in a `struct`.
+
+The dot product can be concisely specified in Cryptol as follows:
+
+~~~~
+dotprod : {n, a} (fin n, fin a) => [n][a] -> [n][a] -> [a]
+dotprod xs ys = sum (zip (*) xs ys)
+~~~~
+
+To implement this in C, let's first consider the type of vectors:
+
+~~~~ .c
+typedef struct {
+    uint32_t *elts;
+    uint32_t size;
+} vec_t;
+~~~~
+
+This struct contains a pointer to an array of 32-bit elements, and a
+32-bit value indicating how many elements that array has.
+
+We can compute the dot product of two of these vectors with the
+following C code (which uses the size of the shorter vector if they
+differ in size).
+
+~~~~ .c
+uint32_t dotprod_struct(vec_t *x, vec_t *y) {
+    uint32_t size = MIN(x->size, y->size);
+    uint32_t res = 0;
+    for(size_t i = 0; i < size; i++) {
+        res += x->elts[i] * y->elts[i];
+    }
+    return res;
+}
+~~~~
+
+The entirety of this implementation can be found in the
+`examples/llvm/dotprod_struct.c` file in the `saw-script` repository.
+
+To verify this program in SAW, it will be convenient to define a couple
+of utility functions (which are generally useful for many
+heap-manipulating programs). First, combining allocation and
+initialization to a specific value can make many scripts more concise:
+
+~~~~
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+~~~~
+
+This creates a pointer `p` pointing to enough space to store type `ty`,
+and then indicates that the pointer points to value `v` (which should be
+of that same type).
+
+A common case for allocation and initialization together is when the
+initial value should be entirely symbolic.
+
+~~~~
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+~~~~
+
+This function returns the pointer just allocated along with the fresh
+symbolic value it points to.
+
+Given these two utility functions, the `dotprod_struct` function can be
+specified as follows:
+
+~~~~
+let dotprod_spec n = do {
+    let nt = crucible_term {{ `n : [32] }};
+    (xs, xsp) <- ptr_to_fresh "xs" (llvm_array n (llvm_int 32));
+    (ys, ysp) <- ptr_to_fresh "ys" (llvm_array n (llvm_int 32));
+    let xval = crucible_struct [ xsp, nt ];
+    let yval = crucible_struct [ ysp, nt ];
+    xp <- alloc_init (llvm_struct "struct.vec_t") xval;
+    yp <- alloc_init (llvm_struct "struct.vec_t") yval;
+    crucible_execute_func [xp, yp];
+    crucible_return (crucible_term {{ dotprod xs ys }});
+};
+~~~~
+
+Any instantiation of this specification is for a specific vector length
+`n`, and assumes that both input vectors have that length. That length
+`n` automatically becomes a type variable in the subsequent Cryptol
+expressions, and the backtick operator is used to reify that type as a
+bit vector of length 32.
+
+The entire script can be found in the `dotprod_struct-crucible.saw` file
+alongside `dotprod_struct.c`.

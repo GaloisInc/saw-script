@@ -72,7 +72,7 @@ else
 fi
 
 if [ -z "${TEST_TIMEOUT}" ]; then
-  TEST_TIMEOUT=300
+  TEST_TIMEOUT=500
 fi
 
 if [ -z "${XML_FILE}" ]; then

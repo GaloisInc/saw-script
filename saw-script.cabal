@@ -138,8 +138,8 @@ executable saw
   main-is: Main.hs
 
   other-modules:
-    GitRev
     Paths_saw_script
+    SAWScript.GitRev
     SAWScript.REPL
     SAWScript.REPL.Command
     SAWScript.REPL.Haskeline
