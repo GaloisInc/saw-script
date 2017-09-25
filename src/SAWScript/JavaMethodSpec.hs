@@ -736,8 +736,10 @@ checkFinalState sc ms bs cl initPS = do
         initRefArrays = initMem ^. memRefArrays
         finalRefArrays = finalMem ^. memRefArrays
     when (initMem ^. memInitialization /= finalMem ^. memInitialization) $
+      let newClasses = Map.keys ((finalMem ^. memInitialization) `Map.difference`
+                                 (initMem ^. memInitialization)) in
       unless (specAllowAlloc ms) $
-        pvcgFail "Initializes an extra class."
+        pvcgFail (text ("Initializes extra classes " ++ show newClasses))
     when (initMem ^. memClassObjects /= finalMem ^. memClassObjects) $
       pvcgFail "Allocates a class object."
     when (Map.keys initRefArrays /= Map.keys finalRefArrays) $
