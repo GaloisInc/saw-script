@@ -103,7 +103,7 @@ import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
-import qualified Cryptol.TypeCheck.Solver.CrySAT as C (withSolver)
+import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
