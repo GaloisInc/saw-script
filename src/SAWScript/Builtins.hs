@@ -106,7 +106,7 @@ import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
-import qualified Cryptol.TypeCheck.Solver.CrySAT as C (withSolver)
+import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
@@ -1060,12 +1060,16 @@ addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
 print_type :: Term -> TopLevel ()
 print_type t = do
   sc <- getSharedContext
-  io (scTypeOf sc t >>= print)
+  opts <- getTopLevelPPOpts
+  ty <- io $ scTypeOf sc t
+  io $ putStrLn (scPrettyTerm opts ty)
 
 check_term :: Term -> TopLevel ()
 check_term t = do
   sc <- getSharedContext
-  io (scTypeCheckError sc t >>= print)
+  opts <- getTopLevelPPOpts
+  ty <- io $ scTypeCheckError sc t
+  io $ putStrLn (scPrettyTerm opts ty)
 
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
@@ -1244,15 +1248,8 @@ defaultTypedTerm sc cfg (TypedTerm schema trm) = do
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> Cryptol.Type -> IO Term
           applyType t ty = do
-            case Cryptol.kindOf ty of
-              Cryptol.KType -> do
-                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
-                ops <- Cryptol.importOps sc Cryptol.emptyEnv ty
-                scApplyAll sc t [ty', ops]
-              Cryptol.KNum -> do
-                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
-                scApply sc t ty'
-              _ -> return t
+            ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+            scApply sc t ty'
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
