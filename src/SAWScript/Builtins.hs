@@ -1050,12 +1050,16 @@ addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
 print_type :: Term -> TopLevel ()
 print_type t = do
   sc <- getSharedContext
-  io (scTypeOf sc t >>= print)
+  opts <- getTopLevelPPOpts
+  ty <- io $ scTypeOf sc t
+  io $ putStrLn (scPrettyTerm opts ty)
 
 check_term :: Term -> TopLevel ()
 check_term t = do
   sc <- getSharedContext
-  io (scTypeCheckError sc t >>= print)
+  opts <- getTopLevelPPOpts
+  ty <- io $ scTypeCheckError sc t
+  io $ putStrLn (scPrettyTerm opts ty)
 
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
