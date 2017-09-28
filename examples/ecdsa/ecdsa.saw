@@ -390,7 +390,7 @@ let inc_dec_FieldPrime_spec ss f = do {
   x <- ecdsa_arr384 "x";
   let r = {{ f x }};
   ecdsa_assign_arr384 "x" {{ r.rslt }};
-  java_return {{ r.carry }};
+  java_return {{ r.carrybits }};
   maybe_skip;
   java_verify_tactic abc; // Faster than Yices
 };
