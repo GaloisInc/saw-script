@@ -364,7 +364,6 @@ buildTopLevelEnv opts =
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
-                          , "Cryptol.ty"
                           , "Cryptol.seq"
                           ]
        simps <- scSimpset sc0 cryptolDefs [] convs
