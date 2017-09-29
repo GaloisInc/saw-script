@@ -458,7 +458,7 @@ browseTSyns pfx = do
   unless (Map.null tsyns') $ io $ do
     putStrLn "Type Synonyms"
     putStrLn "============="
-    let ppSyn (qn,T.TySyn _ ps cs ty) = pp (T.TySyn qn ps cs ty)
+    let ppSyn (qn,T.TySyn _ ps cs ty doc) = pp (T.TySyn qn ps cs ty doc)
     print (nest 4 (vcat (map ppSyn (Map.toList tsyns'))))
     putStrLn ""
 
