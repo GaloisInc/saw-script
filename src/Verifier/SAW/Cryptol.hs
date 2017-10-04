@@ -126,6 +126,8 @@ importTFun sc tf =
     C.TCExp           -> scGlobalDef sc "Cryptol.tcExp"
     C.TCMin           -> scGlobalDef sc "Cryptol.tcMin"
     C.TCMax           -> scGlobalDef sc "Cryptol.tcMax"
+    C.TCCeilDiv       -> scGlobalDef sc "Cryptol.tcCeilDiv"
+    C.TCCeilMod       -> scGlobalDef sc "Cryptol.tcCeilMod"
     C.TCLenFromThen   -> scGlobalDef sc "Cryptol.tcLenFromThen"
     C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
 
