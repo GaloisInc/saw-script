@@ -995,7 +995,7 @@ exportValue ty v = case ty of
     case v of
       SC.VWord w -> V.word (toInteger (width w)) (unsigned w)
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.BitsVal (fromIntegral (Vector.length xs))
+        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
                             (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
         | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
                             map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
@@ -1048,7 +1048,7 @@ exportFirstOrderValue fv =
     FOVInt i    -> V.VInteger i
     FOVWord w x -> V.word (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len (V.ready (V.BitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
+      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
       | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
       where len = toInteger (length vs)
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
