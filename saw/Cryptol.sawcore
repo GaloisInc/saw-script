@@ -81,6 +81,20 @@ tcMax (TCNum _) TCInf = TCInf;
 tcMax TCInf (TCNum _) = TCInf;
 tcMax TCInf TCInf = TCInf;
 
+ceilDivNat :: Nat -> Nat -> Nat;
+ceilDivNat x y = divNat (addNat x (subNat y 1)) y;
+
+ceilModNat :: Nat -> Nat -> Nat;
+ceilModNat x y = subNat (mulNat (ceilDivNat x y) y) x;
+
+tcCeilDiv :: Num -> Num -> Num;
+tcCeilDiv (TCNum x) (TCNum y) = TCNum (ceilDivNat x y);
+-- other cases undefined
+
+tcCeilMod :: Num -> Num -> Num;
+tcCeilMod (TCNum x) (TCNum y) = TCNum (ceilModNat x y);
+-- other cases undefined
+
 tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat x y w =
   tcLenFromThenTo_Nat x y (ite Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
