@@ -26,6 +26,7 @@ before_install:
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
 
 script:
+  - cabal update
   - cabal install -j alex
   - cabal install -j happy
   - cabal install -j c2hs
