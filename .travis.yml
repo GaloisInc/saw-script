@@ -19,7 +19,7 @@ matrix:
 
 before_install:
   - unset CC
-  - export PATH=$HOME/.cabal/bin:$PATH
+  - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
 
 script:
   - cabal install -j alex
