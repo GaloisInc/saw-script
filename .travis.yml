@@ -31,4 +31,4 @@ script:
   - cabal install -j happy
   - cabal install -j c2hs
   - ./mk-gitrev.sh
-  - cabal new-build
+  - cabal new-build -j
