@@ -20,7 +20,7 @@ matrix:
 before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
     then
-        brew install ghc cabal-install z3;
+        brew install ghc cabal-install;
     fi
   - unset CC
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
