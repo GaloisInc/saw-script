@@ -765,9 +765,9 @@ satRME sc = withFirstGoal $ \g -> io $ do
               Universal -> return (r', stats, Just g)
           | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
 
-codegenSBV :: SharedContext -> FilePath -> String -> TypedTerm -> IO ()
-codegenSBV sc path fname (TypedTerm _schema t) =
-  SBVSim.sbvCodeGen sc sbvPrimitives [] mpath fname t
+codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
+codegenSBV sc path unints fname (TypedTerm _schema t) =
+  SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
 prepSBV :: SharedContext -> [String] -> Term

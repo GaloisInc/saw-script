@@ -782,13 +782,14 @@ primitives = Map.fromList
     , "and print the results. The 'Int' arg specifies how many tests to run."
     ]
 
-  , prim "codegen"             "String -> String -> Term -> TopLevel ()"
+  , prim "codegen"             "String -> [String] -> String -> Term -> TopLevel ()"
     (scVal codegenSBV)
     [ "Generate straight-line C code for the given term using SBV."
     , ""
     , "First argument is directory path (\"\" for stdout) for generating files."
-    , "Second argument is C function name."
-    , "Third argument is the term to generated code for. It must be a"
+    , "Second argument is the list of function names to leave uninterpreted."
+    , "Third argument is C function name."
+    , "Fourth argument is the term to generated code for. It must be a"
     , "first-order function whose arguments and result are all of type"
     , "Bit, [8], [16], [32], or [64]."
     ]
