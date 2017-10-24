@@ -7,7 +7,7 @@ l <- llvm_load_module "ffs.bc";
 c_ffs_ref <- llvm_extract l "ffs_ref" llvm_pure;
 c_ffs_imp <- llvm_extract l "ffs_imp" llvm_pure;
 
-r <- mir_load "ffs.json";
+r <- mir_load "ffs.mir";
 r_ffs_ref <- mir_extract r "ffs_ref";
 r_ffs_imp <- mir_extract r "ffs_imp";
 
