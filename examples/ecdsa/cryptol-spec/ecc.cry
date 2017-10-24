@@ -102,7 +102,7 @@ ecdsa_public_verify_imp :
 ecdsa_public_verify_imp(c, e, (r, s), q)
    = in_range(r) && in_range(s) &&
      ~is_zero(r2.z) &&
-     (g.is_equal(j, r2.x) || ((carry == False) && (g.is_equal(k, r2.x))))
+     (g.is_equal(j, r2.x) || ((carrybits == False) && (g.is_equal(k, r2.x))))
   where
     f = c.point_ops.field
     g = c.point_ops.group_field
@@ -117,23 +117,23 @@ ecdsa_public_verify_imp(c, e, (r, s), q)
     r2zsq = f.sq(r2.z)
     j = f.mul(r, r2zsq)
     sum = r + p384_group_size
-    carry = (sum < r) && (sum < p384_group_size)
+    carrybits = (sum < r) && (sum < p384_group_size)
     k = f.mul(sum, r2zsq)
 
 /* P384 reference definitions {{{1 */
 
 /* Utility functions {{{2 */ 
 
-type RsltWithCarry a b = { carry : a , rslt : b }
+type RsltWithCarry a b = { carrybits : a , rslt : b }
 
 p384_incFieldPrime : [384] -> RsltWithCarry [32] [384]
-p384_incFieldPrime x = { carry = zero # [(bs @ 0)]
+p384_incFieldPrime x = { carrybits = zero # [(bs @ 0)]
                        , rslt = drop(bs) : [384]
                        }
   where bs = safe_add(x, p384_prime)
 
 p384_decFieldPrime : [384] -> RsltWithCarry [32] [384]
-p384_decFieldPrime x = { carry = if (bs @ 0) then -1 else 0
+p384_decFieldPrime x = { carrybits = if (bs @ 0) then -1 else 0
                        , rslt = drop(bs) : [384]
                        }
   where bs = safe_sub(x, p384_prime)

@@ -206,13 +206,13 @@ findField cb pos tp@(JSS.ClassType clName) nm = impl =<< lift (lookupClass cb po
 findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
 
-defRewrites :: SharedContext -> Ident -> IO [RewriteRule Term]
+defRewrites :: SharedContext -> Ident -> IO [RewriteRule]
 defRewrites sc ident =
       case findDef (scModule sc) ident of
         Nothing -> return []
         Just def -> scDefRewriteRules sc def
 
-basic_ss :: SharedContext -> IO (Simpset Term)
+basic_ss :: SharedContext -> IO Simpset
 basic_ss sc = do
   rs1 <- concat <$> traverse (defRewrites sc) (defs ++ defs')
   rs2 <- scEqsRewriteRules sc eqs

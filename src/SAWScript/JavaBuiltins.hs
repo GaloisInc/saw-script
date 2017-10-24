@@ -33,9 +33,9 @@ import Verifier.Java.Codebase hiding (lookupClass)
 import Verifier.Java.Simulator as JSS hiding (lookupClass)
 import Verifier.Java.SAWBackend
 
-import Verifier.SAW.Cryptol (exportFiniteValue)
+import Verifier.SAW.Cryptol (exportFirstOrderValue)
 import Verifier.SAW.Recognizer
-import Verifier.SAW.FiniteValue
+import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 
@@ -304,13 +304,13 @@ showCexResults :: SharedContext
                -> JavaMethodSpecIR
                -> VerifyState
                -> [ExtCns Term]
-               -> [(String, FiniteValue)]
+               -> [(String, FirstOrderValue)]
                -> IO ()
 showCexResults sc opts ms vs exts vals = do
   putStrLn $ "When verifying " ++ specName ms ++ ":"
   putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
   putStrLn $ "Counterexample:"
-  let showVal v = show <$> (Cryptol.runEval (Cryptol.ppValue (cryptolPPOpts opts) (exportFiniteValue v)))
+  let showVal v = show <$> (Cryptol.runEval (Cryptol.ppValue (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
                        putStrLn ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)

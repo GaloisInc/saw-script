@@ -287,6 +287,8 @@ resolveSAWTerm cc tp tm =
     case tp of
       Cryptol.TVBit ->
         fail "resolveSAWTerm: unimplemented type Bit (FIXME)"
+      Cryptol.TVInteger ->
+        fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
       Cryptol.TVSeq sz Cryptol.TVBit ->
         case Crucible.someNat sz of
           Just (Crucible.Some w)
@@ -360,6 +362,7 @@ toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =
     case tp of
       Cryptol.TVBit -> Nothing -- FIXME
+      Cryptol.TVInteger -> Nothing
       Cryptol.TVSeq n Cryptol.TVBit
         | n > 0 -> Just (Crucible.IntType (fromInteger n))
         | otherwise -> Nothing

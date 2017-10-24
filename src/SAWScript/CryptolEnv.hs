@@ -325,7 +325,7 @@ bindType (ident, T.Forall [] [] ty) env =
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
-    tysyn = T.TySyn name [] [] ty
+    tysyn = T.TySyn name [] [] ty Nothing
 bindType _ env = env -- only monomorphic types may be bound
 
 bindInteger :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
@@ -336,7 +336,7 @@ bindInteger (ident, n) env =
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
-    tysyn = T.TySyn name [] [] (T.tNum n)
+    tysyn = T.TySyn name [] [] (T.tNum n) Nothing
 
 --------------------------------------------------------------------------------
 

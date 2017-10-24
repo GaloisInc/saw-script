@@ -50,8 +50,8 @@ import Verifier.LLVM.Backend.SAW
 import Verifier.LLVM.Simulator
 import Verifier.LLVM.Simulator.Internals
 
-import Verifier.SAW.Cryptol (exportFiniteValue)
-import Verifier.SAW.FiniteValue
+import Verifier.SAW.Cryptol (exportFirstOrderValue)
+import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 
@@ -319,13 +319,13 @@ showCexResults :: SharedContext
                -> LLVMMethodSpecIR
                -> VerifyState
                -> [ExtCns Term]
-               -> [(String, FiniteValue)]
+               -> [(String, FirstOrderValue)]
                -> IO ()
 showCexResults sc opts ms vs exts vals = do
   putStrLn $ "When verifying " ++ show (specName ms) ++ ":"
   putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
   putStrLn $ "Counterexample:"
-  let showVal v = show <$> (Cryptol.runEval (Cryptol.ppValue (cryptolPPOpts opts) (exportFiniteValue v)))
+  let showVal v = show <$> (Cryptol.runEval (Cryptol.ppValue (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
                        putStrLn ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)

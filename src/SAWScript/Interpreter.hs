@@ -63,8 +63,7 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
-import Verifier.SAW.Rewriter ( Simpset, emptySimpset, rewritingSharedContext
-                             , scSimpset )
+import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -366,7 +365,6 @@ buildTopLevelEnv opts =
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
-                          , "Cryptol.ty"
                           , "Cryptol.seq"
                           ]
        simps <- scSimpset sc0 cryptolDefs [] convs
@@ -794,13 +792,14 @@ primitives = Map.fromList
     , "and print the results. The 'Int' arg specifies how many tests to run."
     ]
 
-  , prim "codegen"             "String -> String -> Term -> TopLevel ()"
+  , prim "codegen"             "String -> [String] -> String -> Term -> TopLevel ()"
     (scVal codegenSBV)
     [ "Generate straight-line C code for the given term using SBV."
     , ""
     , "First argument is directory path (\"\" for stdout) for generating files."
-    , "Second argument is C function name."
-    , "Third argument is the term to generated code for. It must be a"
+    , "Second argument is the list of function names to leave uninterpreted."
+    , "Third argument is C function name."
+    , "Fourth argument is the term to generated code for. It must be a"
     , "first-order function whose arguments and result are all of type"
     , "Bit, [8], [16], [32], or [64]."
     ]
@@ -945,7 +944,7 @@ primitives = Map.fromList
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
-    (pureVal (emptySimpset :: Simpset Term))
+    (pureVal emptySimpset)
     [ "The empty simplification rule set, containing no rules." ]
 
   , prim "cryptol_ss"          "() -> Simpset"

@@ -53,10 +53,13 @@ import qualified Cryptol.TypeCheck.AST as Cryptol
 import Verifier.SAW.Constant
 import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
-import Verifier.SAW.FiniteValue ( FiniteType(..), FiniteValue(..)
-                                , scFiniteValue, fvVec, readFiniteValues, readFiniteValue
-                                , finiteTypeOf, asFiniteTypePure, sizeFiniteType
-                                )
+import Verifier.SAW.FiniteValue
+  ( FiniteType(..), FiniteValue(..)
+  , readFiniteValues, readFiniteValue
+  , asFiniteTypePure, sizeFiniteType
+  , FirstOrderValue(..)
+  , toFirstOrderValue, scFirstOrderValue, firstOrderTypeOf, fovVec
+  )
 import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
 import Verifier.SAW.SCTypeCheck
@@ -103,7 +106,7 @@ import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
-import qualified Cryptol.TypeCheck.Solver.CrySAT as C (withSolver)
+import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
@@ -114,7 +117,7 @@ import Cryptol.Utils.PP (pretty)
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biJavaCodebase  :: JSS.Codebase
-                                     , biBasicSS       :: Simpset Term
+                                     , biBasicSS       :: Simpset
                                      }
 
 showPrim :: SV.Value -> TopLevel String
@@ -203,8 +206,8 @@ cecPrim x y = do
   case res of
     ABC.Valid -> return $ SV.Valid stats
     ABC.Invalid bs
-      | Just ft <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
-           return $ SV.InvalidMulti stats [("x", ft)]
+      | Just fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
+           return $ SV.InvalidMulti stats [("x", toFirstOrderValue fv)]
       | otherwise -> fail "cec: impossible, could not parse counterexample"
     ABC.VerifyUnknown -> fail "cec: unknown result "
 
@@ -443,7 +446,7 @@ quickcheckGoal sc n = withFirstGoal $ \goal -> io $ do
           putStrLn $ "checked " ++ show n ++ " cases."
           return (SV.Unsat stats, stats, Nothing)
         -- TODO: use reasonable names here
-        Just cex -> return (SV.SatMulti stats (zip (repeat "_") cex), stats, Just goal)
+        Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Just goal)
     Nothing -> fail $ "quickcheck:\n" ++
       "term has non-testable type"
 
@@ -542,7 +545,7 @@ unfoldGoal names = withFirstGoal $ \goal -> do
   trm' <- io $ scUnfoldConstants sc names trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
-simplifyGoal :: Simpset Term -> ProofScript ()
+simplifyGoal :: Simpset -> ProofScript ()
 simplifyGoal ss = withFirstGoal $ \goal -> do
   sc <- getSharedContext
   let trm = goalTerm goal
@@ -642,7 +645,7 @@ satABC sc = withFirstGoal $ \g -> io $ do
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
             case goalQuant g of
               Existential -> return (r', stats, Nothing)
               Universal -> return (r', stats, Just (g { goalTerm = ft }))
@@ -696,7 +699,7 @@ satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
             case goalQuant g of
               Universal -> return (r', stats, Just (g { goalTerm = ft }))
               Existential -> return (r', stats, Nothing)
@@ -756,15 +759,15 @@ satRME sc = withFirstGoal $ \g -> io $ do
         Left err -> fail $ "Can't parse counterexample: " ++ err
         Right vs
           | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames vs)
+            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
             case goalQuant g of
               Existential -> return (r', stats, Nothing)
               Universal -> return (r', stats, Just g)
           | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
 
-codegenSBV :: SharedContext -> FilePath -> String -> TypedTerm -> IO ()
-codegenSBV sc path fname (TypedTerm _schema t) =
-  SBVSim.sbvCodeGen sc sbvPrimitives [] mpath fname t
+codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
+codegenSBV sc path unints fname (TypedTerm _schema t) =
+  SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
 prepSBV :: SharedContext -> [String] -> Term
@@ -824,17 +827,24 @@ getLabels stats ls d argNames =
 
   where
     xs = fmap getLabel ls
-    getLabel :: SBVSim.Labeler -> FiniteValue
-    getLabel (SBVSim.BoolLabel s) = FVBit (SBV.cwToBool (d Map.! s))
+    getLabel :: SBVSim.Labeler -> FirstOrderValue
+    getLabel (SBVSim.BoolLabel s) = FOVBit (SBV.cwToBool (d Map.! s))
+    getLabel (SBVSim.IntegerLabel s) = FOVInt (cwToInteger (d Map.! s))
     getLabel (SBVSim.WordLabel s) = d Map.! s &
-      (\(SBV.KBounded _ n)-> FVWord (fromIntegral n)) . SBV.kindOf <*> (\(SBV.CWInteger i)-> i) . SBV.cwVal
+      (\(SBV.KBounded _ n) -> FOVWord (fromIntegral n)) . SBV.kindOf <*> (\(SBV.CWInteger i)-> i) . SBV.cwVal
     getLabel (SBVSim.VecLabel ns)
       | V.null ns = error "getLabel of empty vector"
-      | otherwise = fvVec t vs
+      | otherwise = fovVec t vs
       where vs = map getLabel (V.toList ns)
-            t = finiteTypeOf (head vs)
-    getLabel (SBVSim.TupleLabel ns) = FVTuple $ map getLabel (V.toList ns)
-    getLabel (SBVSim.RecLabel ns) = FVRec $ fmap getLabel ns
+            t = firstOrderTypeOf (head vs)
+    getLabel (SBVSim.TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
+    getLabel (SBVSim.RecLabel ns) = FOVRec $ fmap getLabel ns
+
+    cwToInteger cw =
+      case SBV.cwVal cw of
+        SBV.CWInteger i -> i
+        _ -> error "cwToInteger"
+
 
 satBoolector :: SharedContext -> ProofScript SV.SatResult
 satBoolector = satSBV SBV.boolector
@@ -979,7 +989,7 @@ quickCheckPrintPrim sc numTests tt = do
       "term has non-testable type:\n" ++
       pretty (ttSchema tt)
 
-cryptolSimpset :: TopLevel (Simpset Term)
+cryptolSimpset :: TopLevel Simpset
 cryptolSimpset = do
   sc <- getSharedContext
   io $ scSimpset sc cryptolDefs [] []
@@ -987,24 +997,24 @@ cryptolSimpset = do
                       moduleDefs CryptolSAW.cryptolModule
         excluded d = defIdent d `elem` [ "Cryptol.fix" ]
 
-addPreludeEqs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addPreludeEqs :: [String] -> Simpset
+              -> TopLevel Simpset
 addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
 
-addCryptolEqs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addCryptolEqs :: [String] -> Simpset
+              -> TopLevel Simpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-addPreludeDefs :: [String] -> Simpset Term
-              -> TopLevel (Simpset Term)
+addPreludeDefs :: [String] -> Simpset
+              -> TopLevel Simpset
 addPreludeDefs names ss = do
   sc <- getSharedContext
   defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
@@ -1016,7 +1026,7 @@ addPreludeDefs names ss = do
               Just d -> return d
               Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
 
-rewritePrim :: Simpset Term -> TypedTerm -> TopLevel TypedTerm
+rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
   sc <- getSharedContext
   t' <- io $ rewriteSharedTerm sc ss t
@@ -1034,32 +1044,32 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset Term
-        -> Simpset Term
+addsimp :: Theorem -> Simpset -> Simpset
 addsimp (Theorem t) ss = addRule (ruleOfProp t) ss
 
-addsimp' :: Term -> Simpset Term
-         -> Simpset Term
+addsimp' :: Term -> Simpset -> Simpset
 addsimp' t ss = addRule (ruleOfProp t) ss
 
-addsimps :: [Theorem] -> Simpset Term
-         -> Simpset Term
+addsimps :: [Theorem] -> Simpset -> Simpset
 addsimps thms ss =
   foldr (\thm -> addRule (ruleOfProp (thmTerm thm))) ss thms
 
-addsimps' :: [Term] -> Simpset Term
-          -> Simpset Term
+addsimps' :: [Term] -> Simpset -> Simpset
 addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
 
 print_type :: Term -> TopLevel ()
 print_type t = do
   sc <- getSharedContext
-  io (scTypeOf sc t >>= print)
+  opts <- getTopLevelPPOpts
+  ty <- io $ scTypeOf sc t
+  io $ putStrLn (scPrettyTerm opts ty)
 
 check_term :: Term -> TopLevel ()
 check_term t = do
   sc <- getSharedContext
-  io (scTypeCheckError sc t >>= print)
+  opts <- getTopLevelPPOpts
+  ty <- io $ scTypeCheckError sc t
+  io $ putStrLn (scPrettyTerm opts ty)
 
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
@@ -1107,14 +1117,14 @@ lambdas vars (TypedTerm schema0 term0) = do
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
 -- TODO: Take (ExtCns, FiniteValue) instead of (Term, FiniteValue)
-cexEvalFn :: SharedContext -> [(ExtCns Term, FiniteValue)] -> Term
+cexEvalFn :: SharedContext -> [(ExtCns Term, FirstOrderValue)] -> Term
           -> IO Concrete.CValue
 cexEvalFn sc args tm = do
   -- NB: there may be more args than exts, and this is ok. One side of
   -- an equality may have more free variables than the other,
   -- particularly in the case where there is a counter-example.
   let exts = map fst args
-  args' <- mapM (scFiniteValue sc . snd) args
+  args' <- mapM (scFirstOrderValue sc . snd) args
   let is = map ecVarIndex exts
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
@@ -1138,7 +1148,7 @@ caseProofResultPrim pr vValid vInvalid = do
     SV.Valid _ -> return vValid
     SV.InvalidMulti _ pairs -> do
       let fvs = map snd pairs
-      ts <- io $ mapM (scFiniteValue sc) fvs
+      ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
       tt <- io $ mkTypedTerm sc t
       SV.applyValue vInvalid (SV.toValue tt)
@@ -1152,7 +1162,7 @@ caseSatResultPrim sr vUnsat vSat = do
     SV.Unsat _ -> return vUnsat
     SV.SatMulti _ pairs -> do
       let fvs = map snd pairs
-      ts <- io $ mapM (scFiniteValue sc) fvs
+      ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
       tt <- io $ mkTypedTerm sc t
       SV.applyValue vSat (SV.toValue tt)
@@ -1238,15 +1248,8 @@ defaultTypedTerm sc cfg (TypedTerm schema trm) = do
       mapM_ (warnDefault nms) (zip vars tys)
       let applyType :: Term -> Cryptol.Type -> IO Term
           applyType t ty = do
-            case Cryptol.kindOf ty of
-              Cryptol.KType -> do
-                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
-                ops <- Cryptol.importOps sc Cryptol.emptyEnv ty
-                scApplyAll sc t [ty', ops]
-              Cryptol.KNum -> do
-                ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
-                scApply sc t ty'
-              _ -> return t
+            ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
+            scApply sc t ty'
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))

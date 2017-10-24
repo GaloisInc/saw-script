@@ -57,16 +57,16 @@ let salsa20_expansion_32 : LLVMSetup() = do {
     llvm_verify_tactic abc;
 };
 
-let s20_encrypt32 : LLVMSetup() = do {
+let s20_encrypt32 n = do {
     llvm_ptr "key" (llvm_array 32 (llvm_int 8));
     llvm_ptr "nonce" (llvm_array 8 (llvm_int 8));
-    llvm_ptr "buf" (llvm_array 64 (llvm_int 8));
+    llvm_ptr "buf" (llvm_array n (llvm_int 8));
     key <-      llvm_var "*key" (llvm_array 32 (llvm_int 8));
     v <-        llvm_var "*nonce" (llvm_array 8 (llvm_int 8));
-    m <-        llvm_var "*buf" (llvm_array 64 (llvm_int 8));
+    m <-        llvm_var "*buf" (llvm_array n (llvm_int 8));
     buflen <-   llvm_var "buflen" (llvm_int 32);
     si <-       llvm_var "si" (llvm_int 32);
-    llvm_assert_eq "buflen" {{ 64 : [32] }};
+    llvm_assert_eq "buflen" {{ `n : [32] }};
     llvm_assert_eq "si" {{ 0 : [32] }};
     llvm_ensure_eq "*buf" {{ Salsa20_encrypt (key, v, m) }};
     llvm_return {{ 0 : [32] }};
@@ -82,6 +82,8 @@ let main : TopLevel () = do {
     dr <- llvm_verify m "s20_doubleround" [cr,rr] doubleround_setup;
     s20 <- llvm_verify m "s20_hash" [dr] salsa20_setup;
     s20e32 <- llvm_verify m "s20_expand32" [s20] salsa20_expansion_32;
-    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] s20_encrypt32;
+    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 63);
+    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 64);
+    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 65);
     print "Done!";
 };

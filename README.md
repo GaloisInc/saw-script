@@ -114,7 +114,7 @@ any failure during `llvm_load_module` should be considered a bug.
 ## Related Packages
 
 Many dependencies are automatically downloaded into `deps/` when you
-build using `build-sandbox.sh`; see
+build using `build.sh`; see
 [Manual Installation](#manual-installation) above. Key automatically
 downloaded dependencies include:
 
