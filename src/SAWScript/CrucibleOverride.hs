@@ -406,20 +406,26 @@ enforceDisjointness cc ss =
                        Just m  -> return m
      mems <- traverse (_1 resolve) syms
 
-     let dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
+     sequence_
+        [ do c <- liftIO
+                $ Crucible.buildDisjointRegionsAssertion
+                    sym Crucible.ptrWidth
+                    (unpackPointer p) (sz pty)
+                    (unpackPointer q) (sz qty)
+             addAssert c a
 
-         sz p = Crucible.BVElt
-                  Crucible.ptrWidth
-                  (fromIntegral (Crucible.memTypeSize dl p))
-                  Crucible.initializationLoc
+        | let dl = TyCtx.llvmDataLayout
+                     (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
-     liftIO $ sequence_
-        [ Crucible.assertDisjointRegions'
-            "enforcing disjoint allocations"
-            sym Crucible.ptrWidth
-            (unpackPointer p) (sz pty)
-            (unpackPointer q) (sz qty)
-        | (pty,p):ps <- tails mems
+              sz p = Crucible.BVElt
+                       Crucible.ptrWidth
+                       (fromIntegral (Crucible.memTypeSize dl p))
+                       Crucible.initializationLoc
+
+              a = Crucible.AssertFailureSimError
+                    "Memory regions not disjoint"
+
+        , (pty,p):ps <- tails mems
         , (qty,q)    <- ps
         ]
 
