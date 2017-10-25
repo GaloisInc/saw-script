@@ -20,6 +20,7 @@ matrix:
 before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
     then
+        brew update;
         brew install ghc cabal-install;
     fi
   - unset CC
