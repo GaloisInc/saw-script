@@ -429,7 +429,7 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pSignedCmp (C.TRec fs))
                 scGlobalApply sc "Cryptol.PSignedCmpField" [s, a, b, pa, pb]
 
-        _ -> do fail $ "proveProp: " ++ show prop
+        _ -> do fail $ "proveProp: " ++ pretty prop
 
 importPrimitive :: SharedContext -> C.Name -> IO Term
 importPrimitive sc (C.asPrim -> Just nm) =
