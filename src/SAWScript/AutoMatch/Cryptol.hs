@@ -15,9 +15,11 @@ import Data.List hiding (sort)
 import Data.Maybe
 import Data.Ord
 
+import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
 import qualified Cryptol.ModuleSystem as M
 import Cryptol.ModuleSystem.Name
 import Cryptol.Utils.Ident (unpackIdent)
+import Cryptol.Utils.Logger (quietLogger)
 import qualified Cryptol.TypeCheck.AST as AST
 import Cryptol.Utils.PP
 
@@ -25,7 +27,9 @@ import Cryptol.Utils.PP
 --   Yields an Interaction so that we can talk to the user about what went wrong
 getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
-   (result, warnings) <- M.loadModuleByPath path =<< M.initialModuleEnv
+   let evalOpts = EvalOpts quietLogger defaultPPOpts
+   modEnv <- M.initialModuleEnv
+   (result, warnings) <- M.loadModuleByPath path (evalOpts, modEnv)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of
