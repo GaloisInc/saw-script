@@ -37,7 +37,7 @@ import SAWScript.REPL.Trie
 
 import qualified Cryptol.ModuleSystem as M
 
-import qualified Cryptol.Eval.Value as E
+import qualified Cryptol.Eval as E (PPOpts(..))
 import Cryptol.Parser (ParseError())
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.ModuleSystem.Name as T (nameIdent)

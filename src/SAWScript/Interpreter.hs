@@ -36,6 +36,7 @@ import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
+import Data.Text (pack)
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -74,8 +75,9 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
+import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
-import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
+import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -111,7 +113,7 @@ extendEnv x mt md v rw =
   where
     name = x
     ident = T.packIdent (getOrig x)
-    modname = T.packModName [getOrig x]
+    modname = T.packModName [pack (getOrig x)]
     ce = rwCryptol rw
     ce' = case v of
             VTerm t
@@ -437,7 +439,7 @@ print_value (VTerm t) = do
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
                               }
-  doc <- io $ V.runEval (V.ppValue opts' (evaluateTypedTerm sc t'))
+  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' (evaluateTypedTerm sc t'))
   io (rethrowEvalError $ print $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
