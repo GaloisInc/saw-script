@@ -305,10 +305,10 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pLogic (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance Logic {}
-        (C.pIsLogic -> Just (C.TRec []))
+        (C.pIsLogic -> Just (C.tIsRec -> Just []))
           -> do scGlobalApply sc "Cryptol.PLogicEmpty" []
         -- instance (Logic a, Logic b) => instance Logic { x : a, y : b }
-        (C.pIsLogic -> Just (C.TRec ((n, t) : fs)))
+        (C.pIsLogic -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
                 a <- importType sc env t
                 b <- importType sc env (C.TRec fs)
@@ -346,10 +346,10 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pArith (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PArithPair" [a, b, pa, pb]
         -- instance Arith {}
-        (C.pIsArith -> Just (C.TRec []))
+        (C.pIsArith -> Just (C.tIsRec -> Just []))
           -> do scGlobalApply sc "Cryptol.PArithEmpty" []
         -- instance (Arith a, Arith b) => instance Arith { x : a, y : b }
-        (C.pIsArith -> Just (C.TRec ((n, t) : fs)))
+        (C.pIsArith -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
                 a <- importType sc env t
                 b <- importType sc env (C.TRec fs)
@@ -384,10 +384,10 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance Cmp {}
-        (C.pIsCmp -> Just (C.TRec []))
+        (C.pIsCmp -> Just (C.tIsRec -> Just []))
           -> do scGlobalApply sc "Cryptol.PCmpEmpty" []
         -- instance (Cmp a, Cmp b) => instance Cmp { x : a, y : b }
-        (C.pIsCmp -> Just (C.TRec ((n, t) : fs)))
+        (C.pIsCmp -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
                 a <- importType sc env t
                 b <- importType sc env (C.TRec fs)
@@ -419,10 +419,10 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pSignedCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance SignedCmp {}
-        (C.pIsSignedCmp -> Just (C.TRec []))
+        (C.pIsSignedCmp -> Just (C.tIsRec -> Just []))
           -> do scGlobalApply sc "Cryptol.PSignedCmpEmpty" []
         -- instance (SignedCmp a, SignedCmp b) => instance SignedCmp { x : a, y : b }
-        (C.pIsSignedCmp -> Just (C.TRec ((n, t) : fs)))
+        (C.pIsSignedCmp -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
                 a <- importType sc env t
                 b <- importType sc env (C.TRec fs)
