@@ -32,7 +32,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
-import Data.Text.Lazy (Text, pack)
+import Data.Text (Text, pack)
 
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
@@ -47,6 +47,7 @@ import Verifier.SAW.SharedTerm (SharedContext, Term, incVars)
 
 import qualified Verifier.SAW.Cryptol as C
 
+import qualified Cryptol.Eval as E
 import qualified Cryptol.Parser as P
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.Position as P
@@ -68,6 +69,7 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import Cryptol.Utils.PP
 import Cryptol.Utils.Ident (Ident, preludeName, packIdent, interactiveName)
+import Cryptol.Utils.Logger (quietLogger)
 
 --import SAWScript.REPL.Monad (REPLException(..))
 import SAWScript.TypedTerm
@@ -325,7 +327,7 @@ bindType (ident, T.Forall [] [] ty) env =
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
-    tysyn = T.TySyn name [] [] ty
+    tysyn = T.TySyn name [] [] ty Nothing
 bindType _ env = env -- only monomorphic types may be bound
 
 bindInteger :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
@@ -336,7 +338,7 @@ bindInteger (ident, n) env =
   where
     pname = P.mkUnqual ident
     (name, env') = bindIdent ident env
-    tysyn = T.TySyn name [] [] (T.tNum n)
+    tysyn = T.TySyn name [] [] (T.tNum n) Nothing
 
 --------------------------------------------------------------------------------
 
@@ -479,7 +481,10 @@ schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
 ------------------------------------------------------------
 
 liftModuleM :: ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
-liftModuleM env m = MM.runModuleM env m >>= moduleCmdResult
+liftModuleM env m = MM.runModuleM (defaultEvalOpts, env) m >>= moduleCmdResult
+
+defaultEvalOpts :: E.EvalOpts
+defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do

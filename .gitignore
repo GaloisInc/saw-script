@@ -3,6 +3,7 @@ src/SAWScript/Parser.hs
 saw/SAWScript/GitRev.hs
 bin
 cabal.sandbox.config
+cabal.project.local
 dist
 build
 build-tests

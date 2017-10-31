@@ -37,7 +37,7 @@ import SAWScript.REPL.Trie
 
 import qualified Cryptol.ModuleSystem as M
 
-import qualified Cryptol.Eval.Value as E
+import qualified Cryptol.Eval as E (PPOpts(..))
 import Cryptol.Parser (ParseError())
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.ModuleSystem.Name as T (nameIdent)
@@ -458,7 +458,7 @@ browseTSyns pfx = do
   unless (Map.null tsyns') $ io $ do
     putStrLn "Type Synonyms"
     putStrLn "============="
-    let ppSyn (qn,T.TySyn _ ps cs ty) = pp (T.TySyn qn ps cs ty)
+    let ppSyn (qn,T.TySyn _ ps cs ty doc) = pp (T.TySyn qn ps cs ty doc)
     print (nest 4 (vcat (map ppSyn (Map.toList tsyns'))))
     putStrLn ""
 

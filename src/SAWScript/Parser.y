@@ -17,6 +17,7 @@ module SAWScript.Parser
 
 import Data.List
 import qualified Data.Map as Map (fromList)
+import Data.Text (pack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
@@ -104,7 +105,7 @@ Import :: { Import }
  -- TODO: allow imports by module name instead of path
 
 mbAs :: { Maybe P.ModName }
- : 'as' name                            { Just (P.packModName [tokStr $2]) }
+ : 'as' name                            { Just (P.packModName [pack (tokStr $2)]) }
  | {- empty -}                          { Nothing }
 
 mbImportSpec :: { Maybe P.ImportSpec }

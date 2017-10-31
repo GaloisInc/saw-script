@@ -23,7 +23,7 @@ import           Control.Monad.ST
 import           Control.Monad.State
 import qualified Control.Monad.Trans.State.Strict as SState
 import           Control.Applicative
-import           Data.Foldable (toList, find)
+import           Data.Foldable (for_, toList, find)
 import           Data.Function
 import           Data.IORef
 import           Data.List
@@ -77,6 +77,7 @@ import qualified Data.Parameterized.Context as Ctx
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.Recognizer
 
 import SAWScript.Builtins
 import SAWScript.Options
@@ -675,36 +676,45 @@ verifyPoststate ::
   IO [(String, Term)]               {- ^ generated labels and verification conditions -}
 verifyPoststate sc cc mspec env0 globals ret =
 
-  do (retgoals, env) <-
-       case (ret, mspec^.csRetValue) of
-         (Nothing, Nothing) -> return ([], env0)
-         (Nothing, Just _) -> fail "verifyPoststate: unexpected crucible_return specification"
-         (Just _, Nothing) -> fail "verifyPoststate: missing crucible_return specification"
-         (Just (_,ret'), Just val) ->
-           do (goals, env) <- runStateT (match sc cc tyenv ret' val) env0
-              return ([ ("return value", goal) | goal <- goals ], env)
-     let lvar = Crucible.llvmMemVar (Crucible.memModelOps (ccLLVMContext cc))
-     let Just mem = Crucible.lookupGlobal lvar globals
-     pointsgoals <- processPostPointsTos sc cc tyenv env mem (mspec^.csPostState.csPointsTos)
-     postconds <- processPostconditions cc tyenv env globals (mspec^.csPostState.csConditions)
+  do let terms0 = Map.fromList
+           [ (ecVarIndex ec, ttTerm tt)
+           | tt <- mspec^.csPreState.csFreshVars
+           , let Just ec = asExtCns (ttTerm tt) ]
 
+     let initialFree = Set.fromList (map (termId . ttTerm)
+                                    (view (csPostState.csFreshVars) mspec))
+     matchPost <-
+          runOverrideMatcher sym globals env0 terms0 initialFree $
+           do matchResult
+              learnCond sc cc mspec PostState (mspec ^. csPostState)
+
+     st <- case matchPost of
+             Left err      -> fail (show err)
+             Right (_, st) -> return st
+     for_ (view osAsserts st) $ \(p, r) ->
+       Crucible.sbAddAssertion (ccBackend cc) p r
 
      obligations <- Crucible.getProofObligations (ccBackend cc)
      Crucible.setProofObligations (ccBackend cc) []
-     obligationTerms <- mapM verifyObligation obligations
-     return (retgoals ++ pointsgoals ++ postconds ++ obligationTerms)
+     mapM verifyObligation obligations
+
   where
-    tyenv = csAllocations mspec
     sym = ccBackend cc
 
     verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
       fail "Found an assumption in final proof obligation list"
     verifyObligation (hyps, (Crucible.Assertion _ concl (Just err))) = do
-      true <- scBool sc True
-      hypTerm <- foldM (scAnd sc) true =<< mapM (Crucible.toSC sym) hyps
-      conclTerm <- Crucible.toSC sym concl
+      hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) hyps
+      conclTerm  <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
+
+    matchResult =
+      case (ret, mspec ^. csRetValue) of
+        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
+        (Just _      , Nothing)     -> fail "verifyPoststate: missing crucible_return specification"
+        (Nothing     , Nothing)     -> return ()
+        (Just (rty,r), Just expect) -> matchArg sc cc PostState r rty expect
 
 
 --------------------------------------------------------------------------------

@@ -52,15 +52,17 @@ import SAWScript.ImportAIG
 import SAWScript.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
-import Verifier.SAW.FiniteValue
+import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
 import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
+import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Value as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, GlobalVar, IntrinsicType)
@@ -138,12 +140,12 @@ showLLVMModule (LLVMModule name m) =
 
 data ProofResult
   = Valid SolverStats
-  | InvalidMulti SolverStats [(String, FiniteValue)]
+  | InvalidMulti SolverStats [(String, FirstOrderValue)]
     deriving (Show)
 
 data SatResult
   = Unsat SolverStats
-  | SatMulti SolverStats [(String, FiniteValue)]
+  | SatMulti SolverStats [(String, FirstOrderValue)]
     deriving (Show)
 
 flipSatResult :: SatResult -> ProofResult
@@ -170,6 +172,9 @@ cryptolPPOpts opts =
     , C.useBase = ppOptsBase opts
     }
 
+quietEvalOpts :: C.EvalOpts
+quietEvalOpts = C.EvalOpts C.quietLogger C.defaultPPOpts
+
 commaSep :: [ShowS] -> ShowS
 commaSep ss = foldr (.) id (intersperse (showString ",") ss)
 
@@ -186,7 +191,7 @@ showsProofResult opts r =
     InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
   where
     opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
-    showVal t = shows (ppFiniteValue opts' t)
+    showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
@@ -198,7 +203,7 @@ showsSatResult opts r =
     SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
   where
     opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
-    showVal t = shows (ppFiniteValue opts' t)
+    showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
