@@ -42,5 +42,4 @@
 	url = https://github.com/GaloisInc/saw-core.git
 [submodule "deps/saw-core-easycrypt"]
 	path = deps/saw-core-easycrypt
-	url = git@github.com:GaloisInc/saw-core-easycrypt.git
-#	url = https://github.com/GaloisInc/saw-core-easycrypt.git
+	url = https://github.com/GaloisInc/saw-core-easycrypt.git
