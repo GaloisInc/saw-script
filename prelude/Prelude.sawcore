@@ -139,11 +139,6 @@ boolEq b1 b2 = Bool_rec (\(b::Bool) -> Bool) b2 (not b2) b1;
 -- Could be derived from data declaration.
 ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 ite a b a1 a2 = Bool_rec (\ (b::Bool) -> a) a1 a2 b;
-=======
-ite :: (a :: sort 1) -> Bool -> a -> a -> a;
-ite _ (True)  t _ = t;
-ite _ (False) _ f = f;
->>>>>>> master
 
 -- Rewrite rules for booleans.
 
@@ -522,13 +517,10 @@ modNat x y = (divModNat x y).2;
 
 -- There are implicit constructors from integer literals.
 
--- Dependent pattern matching combinator for natural numbers
-{- Nat_rec is more general...
+-- Dependent, non-recursive pattern matching combinator for natural numbers
 natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) ->
            (n :: Nat) -> p n;
-natCase p z s Zero = z;
-natCase p z s (Succ n) = s n;
--}
+natCase p z s = Nat_rec p z (\ (n::Nat) -> \ (r::p n) -> s n);
 
 --------------------------------------------------------------------------------
 -- String values
