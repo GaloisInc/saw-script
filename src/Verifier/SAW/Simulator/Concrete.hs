@@ -295,6 +295,7 @@ constMap = Map.fromList
   , ("Prelude.bvNat", bvNatOp)
   , ("Prelude.bvToNat", bvToNatOp)
   , ("Prelude.error", Prims.errorOp)
+  , ("Prelude.fix", Prims.fixOp)
   -- Overloaded
   , ("Prelude.eq", eqOp)
   ]

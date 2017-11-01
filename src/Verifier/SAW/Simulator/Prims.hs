@@ -19,6 +19,7 @@ import Prelude hiding (sequence, mapM)
 import Control.Applicative
 #endif
 import Control.Monad (foldM, liftM)
+import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Traversable
 import qualified Data.Vector as V
@@ -478,3 +479,10 @@ muxValue unpack bool word int extra b = value
 
     thunk :: Thunk m b w i e -> Thunk m b w i e -> m (Thunk m b w i e)
     thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'
+
+-- fix :: (a :: sort 0) -> (a -> a) -> a;
+fixOp :: (MonadLazy m, MonadFix m) => Value m b w i e
+fixOp =
+  constFun $
+  strictFun $ \f ->
+  force =<< mfix (\x -> delay (apply f x))
