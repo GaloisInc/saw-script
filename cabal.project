@@ -18,3 +18,4 @@ packages:
     deps/crucible/crucible-saw
     deps/crucible/galois-matlab
     deps/parameterized-utils
+    deps/saw-core-easycrypt
