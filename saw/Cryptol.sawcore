@@ -32,54 +32,85 @@ data Num :: sort 0 where {
     TCInf :: Num;
   }
 
+Num_rec :: (p:: Num -> sort 1) -> ((n::Nat) -> p (TCNum n)) -> p TCInf ->
+           (n::Num) -> p n;
+Num_rec p f1 f2 (TCNum n) = f1 n;
+Num_rec p f1 f2 TCInf = f2;
+
 tcWidth :: Num -> Num;
-tcWidth (TCNum n) = TCNum (widthNat n);
-tcWidth TCInf = TCInf;
+tcWidth n = Num_rec (\ (n::Num) -> Num)
+                    (\ (x::Nat) -> TCNum (widthNat x)) TCInf n;
+
+-- Build a binary function on Nums by lifting a binary function on Nats (the
+-- first argument) and using additional cases for: when the first argument is a
+-- Nat and the second is infinite; when the second is a Nat and the first is
+-- infinite; and when both are infinite
+binaryNumFun :: (Nat -> Nat -> Nat) -> (Nat -> Num) -> (Nat -> Num) -> Num ->
+                Num -> Num -> Num;
+binaryNumFun f1 f2 f3 f4 num1 num2 =
+  Num_rec (\ (num1'::Num) -> Num)
+          (\ (n1::Nat) ->
+             Num_rec (\ (num2'::Num) -> Num)
+                     (\ (n2::Nat) -> TCNum (f1 n1 n2))
+                     (f2 n1) num2)
+          (Num_rec (\ (num2'::Num) -> Num) f3 f4 num2)
+          num1;
 
 tcAdd :: Num -> Num -> Num;
-tcAdd (TCNum x) (TCNum y) = TCNum (addNat x y);
-tcAdd (TCNum _) TCInf = TCInf;
-tcAdd TCInf _ = TCInf;
+tcAdd =
+  binaryNumFun addNat (\ (x::Nat) -> TCInf) (\ (y::Nat) -> TCInf) TCInf;
 
 tcSub :: Num -> Num -> Num;
-tcSub (TCNum x) (TCNum y) = TCNum (subNat x y);
-tcSub TCInf (TCNum _) = TCInf;
--- other cases are undefined
+tcSub =
+  binaryNumFun subNat
+               -- x - infinity = 0
+               (\ (x::Nat) -> TCNum 0)
+               -- infinity - y = infinity
+               (\ (y::Nat) -> TCInf)
+               -- infinity - infinity = 0
+               (TCNum 0);
 
 tcMul :: Num -> Num -> Num;
-tcMul (TCNum x) (TCNum y) = TCNum (mulNat x y);
-tcMul (TCNum x) TCInf = ite Num (equalNat 0 x) (TCNum 0) TCInf;
-tcMul TCInf (TCNum y) = ite Num (equalNat 0 y) (TCNum 0) TCInf;
-tcMul TCInf TCInf = TCInf;
+tcMul =
+  binaryNumFun mulNat
+               (\ (x::Nat) -> ite Num (equalNat 0 x) (TCNum 0) TCInf)
+               (\ (y::Nat) -> ite Num (equalNat 0 y) (TCNum 0) TCInf)
+               TCInf;
 
 tcDiv :: Num -> Num -> Num;
-tcDiv (TCNum x) (TCNum y) = TCNum ((divModNat x y).1);
-tcDiv (TCNum _) TCInf = TCNum Zero;
--- other cases undefined
+tcDiv =
+  binaryNumFun (\ (x::Nat) -> \ (y::Nat) -> (divModNat x y).1)
+               (\ (x::Nat) -> TCNum 0)
+               (\ (y::Nat) -> TCInf)
+               -- infinity / infinity = 1
+               (TCNum 1);
 
 tcMod :: Num -> Num -> Num;
-tcMod (TCNum x) (TCNum y) = TCNum ((divModNat x y).2);
-tcMod (TCNum x) TCInf = TCNum x;
--- other cases undefined
+tcMod =
+  binaryNumFun (\ (x::Nat) -> \ (y::Nat) -> (divModNat x y).2)
+               (\ (x::Nat) -> TCNum 0)
+               -- infinity % y = 0, since y*infinity + 0 = infinity
+               (\ (y::Nat) -> TCNum 0)
+               -- infinity % infinity = 0
+               (TCNum 0);
 
 tcExp :: Num -> Num -> Num;
-tcExp (TCNum Zero) _ = TCNum Zero;
-tcExp (TCNum (Succ Zero)) _ = TCNum (Succ Zero);
-tcExp _ (TCNum Zero) = TCNum (Succ Zero);
-tcExp (TCNum x) (TCNum y) = TCNum (expNat x y);
--- other cases undefined
+tcExp =
+  binaryNumFun expNat
+               (\ (x::Nat) ->
+                  ite Num (equalNat 0 x) (TCNum 0)
+                  (ite Num (equalNat 1 x) (TCNum 1) TCInf))
+               (\ (y::Nat) ->
+                  ite Num (equalNat 0 y) (TCNum 1) TCInf)
+               TCInf;
 
 tcMin :: Num -> Num -> Num;
-tcMin (TCNum x) (TCNum y) = TCNum (minNat x y);
-tcMin (TCNum x) TCInf = TCNum x;
-tcMin TCInf (TCNum y) = TCNum y;
-tcMin TCInf TCInf = TCInf;
+tcMin =
+  binaryNumFun minNat (\ (x::Nat) -> TCNum x) (\ (y::Nat) -> TCNum y) TCInf;
 
 tcMax :: Num -> Num -> Num;
-tcMax (TCNum x) (TCNum y) = TCNum (maxNat x y);
-tcMax (TCNum _) TCInf = TCInf;
-tcMax TCInf (TCNum _) = TCInf;
-tcMax TCInf TCInf = TCInf;
+tcMax =
+  binaryNumFun maxNat (\ (x::Nat) -> TCInf) (\ (y::Nat) -> TCInf) TCInf;
 
 tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat x y w =
