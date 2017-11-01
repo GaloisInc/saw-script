@@ -9,7 +9,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Prelude.Constants where
 
-import Verifier.SAW.TypedAST
+import Verifier.SAW.Term.Functor
 
 preludeModuleName :: ModuleName
 preludeModuleName = mkModuleName ["Prelude"]

@@ -179,7 +179,6 @@ import Control.Monad.State.Strict as State
 import Data.Bits
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM)
-import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
@@ -189,7 +188,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Typeable
 import qualified Data.Vector as V
 import Data.Word
 import Prelude hiding (mapM, maximum)
@@ -199,11 +197,10 @@ import Verifier.SAW.Cache
 import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Unique
-import Verifier.SAW.TypedAST
---import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
-import qualified Verifier.SAW.TermNet as Net
+import Verifier.SAW.TypedAST
+import Verifier.SAW.Unique
 
 #if !MIN_VERSION_base(4,8,0)
 countTrailingZeros :: (FiniteBits b) => b -> Int
@@ -216,40 +213,6 @@ countTrailingZeros x = go 0
 #endif
 
 newtype Uninterp = Uninterp { getUninterp :: (String, Term) } deriving Show
-
-type TermIndex = Int -- Word64
-
-data Term
-  = STApp
-     { stAppIndex    :: {-# UNPACK #-} !TermIndex
-     , stAppFreeVars :: !BitSet -- Free variables
-     , stAppTermF    :: !(TermF Term)
-     }
-  | Unshared !(TermF Term)
-  deriving (Typeable)
-
-instance Hashable Term where
-  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
-  hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
-
--- | Combine two given hash values.  'combine' has zero as a left
--- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
-combine :: Int -> Int -> Int
-combine h1 h2 = (h1 * 0x01000193) `xor` h2
-
-instance Termlike Term where
-  unwrapTermF STApp{ stAppTermF = tf} = tf
-  unwrapTermF (Unshared tf) = tf
-
-instance Eq Term where
-  (==) = alphaEquiv
-
-instance Ord Term where
-  compare (STApp{ stAppIndex = i}) (STApp{ stAppIndex = j}) | i == j = EQ
-  compare x y = compare (unwrapTermF x) (unwrapTermF y)
-
-instance Net.Pattern Term where
-  toPat = termToPat
 
 ------------------------------------------------------------
 -- TermFMaps
@@ -326,10 +289,6 @@ type AppCacheRef = MVar AppCache
 emptyAppCache :: AppCache
 emptyAppCache = emptyTFM
 
-instance Show (TermF Term) where
-  show FTermF{} = "termF fTermF"
-  show _ = "termF Term"
-
 -- | Return term for application using existing term in cache if it is available.
 getTerm :: AppCacheRef -> TermF Term -> IO Term
 getTerm r a =
@@ -399,7 +358,7 @@ scWhnf sc t0 =
     go xs                     (asDataType -> Just (c,args))     = do args' <- mapM memo args
                                                                      t' <- scDataTypeApp sc c args'
                                                                      foldM reapply t' xs
-    -- FIXME? what about Let?
+    go xs                     (asConstant -> Just (_,body,_))   = do go xs body
     go xs                     t                                 = foldM reapply t xs
 
     reapply :: Term -> Either Term (Either Bool FieldName) -> IO Term
@@ -408,7 +367,7 @@ scWhnf sc t0 =
     reapply t (Right (Right i)) = scRecordSelect sc t i
 
     tryEqns :: (?cache :: Cache IORef TermIndex Term) =>
-               Ident -> [Either Term (Either Bool FieldName)] -> [TypedDefEqn] -> IO Term
+               Ident -> [Either Term (Either Bool FieldName)] -> [DefEqn] -> IO Term
     tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
     tryEqns ident xs (DefEqn ps rhs : eqns) = do
       minst <- matchAll ps xs
@@ -420,7 +379,7 @@ scWhnf sc t0 =
         _ -> tryEqns ident xs eqns
 
     matchAll :: (?cache :: Cache IORef TermIndex Term) =>
-                [Pat SimpleTerm] -> [Either Term (Either Bool FieldName)]
+                [Pat] -> [Either Term (Either Bool FieldName)]
                   -> IO (Maybe (Map Int Term))
     matchAll [] _ = return $ Just Map.empty
     matchAll (_ : _) [] = return Nothing
@@ -436,7 +395,7 @@ scWhnf sc t0 =
             Just m2 -> return $ Just (Map.union m1 m2)
 
     match :: (?cache :: Cache IORef TermIndex Term) =>
-             Pat SimpleTerm -> Term -> IO (Maybe (Map Int Term))
+             Pat -> Term -> IO (Maybe (Map Int Term))
     match p x =
       case p of
         PVar _ i _  -> return $ Just (Map.singleton i x)
@@ -508,8 +467,6 @@ scConvertible sc unfoldConst tm1 tm2 = do
        goF c (Pi _ ty1 body1) (Pi _ ty2 body2) =
               pure (&&) <*> go c ty1 ty2 <*> go c body1 body2
 
-       -- FIXME? what about Let?
-
        -- final catch-all case
        goF _c x y = return $ alphaEquiv (Unshared x) (Unshared y)
 
@@ -521,7 +478,7 @@ reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (_, _, body) -> instantiateVar sc 0 arg body
-    _                 -> fail $ unlines ["reducePi: not a Pi term", show t']
+    _                 -> fail $ unlines ["reducePi: not a Pi term", scPrettyTerm defaultPPOpts t']
 
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
@@ -576,7 +533,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           ltp <- sort tp
           rtp <- asSort =<< lift (scTypeOf' sc (tp : env) rhs)
           lift $ scSort sc (max ltp rtp)
-        Let defs rhs -> error "scTypeOf Let" defs rhs
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
@@ -634,48 +590,27 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
-alphaEquiv :: Term -> Term -> Bool
-alphaEquiv = term
-  where
-    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
-    term (Unshared tf1) (STApp{ stAppTermF = tf2}) = termf tf1 tf2
-    term (STApp{ stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
-    term (STApp{ stAppIndex = i1, stAppTermF = tf1})
-         (STApp{ stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
-    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
-    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
-    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
-    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
-    termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1 t1 _) (Constant x2 t2 _) = x1 == x2 && term t1 t2
-    termf _ _ = False
-    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
-                         Nothing -> False
-                         Just ftf3 -> Fold.and ftf3
-
 --------------------------------------------------------------------------------
 
 -- | The inverse function to @scSharedTerm@.
-unshare :: Term -> SimpleTerm
+unshare :: Term -> Term
 unshare t0 = State.evalState (go t0) Map.empty
   where
-    go :: Term -> State.State (Map TermIndex SimpleTerm) SimpleTerm
-    go (Unshared t) = SimpleTerm <$> traverse go t
+    go :: Term -> State.State (Map TermIndex Term) Term
+    go (Unshared t) = Unshared <$> traverse go t
     go (STApp{ stAppIndex = i, stAppTermF = t}) = do
       memo <- State.get
       case Map.lookup i memo of
         Just x  -> return x
         Nothing -> do
-          x <- SimpleTerm <$> traverse go t
+          x <- Unshared <$> traverse go t
           State.modify (Map.insert i x)
           return x
 
-instance Show Term where
-  show = scPrettyTerm defaultPPOpts
-
-scSharedTerm :: SharedContext -> SimpleTerm -> IO Term
+-- | Perform hash-consing at every AST node to obtain maximal sharing.
+scSharedTerm :: SharedContext -> Term -> IO Term
 scSharedTerm sc = go
-    where go (SimpleTerm termf) = scTermF sc =<< traverse go termf
+    where go t = scTermF sc =<< traverse go (unwrapTermF t)
 
 -- | Imports a term built in a different shared context into the given
 -- shared context. The caller must ensure that all the global constants
@@ -739,13 +674,6 @@ instantiateVars sc f initialLevel t0 =
     go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
     go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
     go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go (l+1) rhs)
-    go' l (Let defs r) = scTermF sc =<< (Let <$> traverse procDef defs <*> go l' r)
-      where l' = l + length defs
-            procDef :: LocalDef Term -> IO (LocalDef Term)
-            procDef (Def sym qual tp eqs) = Def sym qual <$> go l tp <*> traverse procEq eqs
-            procEq :: DefEqn Term -> IO (DefEqn Term)
-            procEq (DefEqn pats rhs) = DefEqn pats <$> go eql rhs
-              where eql = l' + sum (patBoundVarCount <$> pats)
     go' l (LocalVar i)
       | i < l     = scTermF sc (LocalVar i)
       | otherwise = f l (Right i)
@@ -876,7 +804,6 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
           case unwrapTermF h of
             Lambda _ t1 _ | not doBinders -> [t1]
             Pi _ t1 _     | not doBinders -> [t1]
-            Let{}         | not doBinders -> []
             Constant{}                    -> []
             tf                            -> Fold.toList tf
 
@@ -969,7 +896,7 @@ scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
 
 -- | Deprecated. Use scGlobalDef or scLookupDef instead.
-scDefTerm :: SharedContext -> TypedDef -> IO Term
+scDefTerm :: SharedContext -> Def -> IO Term
 scDefTerm sc d = scGlobalDef sc (defIdent d)
 
 -- TODO: implement version of scCtorApp that looks up the arity of the

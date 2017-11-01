@@ -128,11 +128,7 @@ SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl NoQualifier $1 $3 }
           | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
 
 DeclLhs :: { DeclLhs }
-DeclLhs : Symbol list(LhsArg) { ($1, $2) }
-
-LhsArg :: { (ParamType, Pat) }
-LhsArg : AtomPat           { (NormalParam, $1) }
-       | ParamType AtomPat { ($1, $2) }
+DeclLhs : Symbol list(AtomPat) { ($1, $2) }
 
 CtorDecl :: { CtorDecl }
 CtorDecl : Con '::' CtorType ';' { Ctor $1 $3 }
@@ -161,33 +157,24 @@ FieldPat :: { (Pat, Pat) }
 FieldPat : LabelPat '=' Pat { ($1, $3) }
 
 Term :: { Term }
-Term : TTerm { $1 }
-     | 'let' '{' list(SAWEqDecl) '}' 'in' Term { LetTerm (pos $1) $3 $6 }
-
-TTerm :: { Term }
-TTerm : LTerm { $1 }
-      | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
+Term : LTerm { $1 }
+     | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
 
 -- Term with uses of pi and lambda, but no typing.
 LTerm :: { Term }
 LTerm : AppTerm                          {  $1 }
       | PiArg '->' LTerm                 {  mkPi (pos $2) $1 $3 }
-      | '\\' list1(LambdaArg) '->' LTerm {% mkLambda (pos $1) $2 $4 }
+      | '\\' list1(AtomTerm) '->' LTerm {% mkLambda (pos $1) $2 $4 }
 
 -- Term with uses of pi and lambda, but no typing.
 CtorType :: { Term }
 CtorType : AppTerm             { $1 }
          | PiArg '->' CtorType { mkPi (pos $2) $1 $3 }
 
-LambdaArg :: { (ParamType, Term) }
-LambdaArg : AtomTerm           { (NormalParam, $1) }
-          | ParamType AtomTerm { ($1, $2) }
-
 -- Term formed from applications of atomic expressions.
 AppTerm :: { Term }
 AppTerm : AppArg                   { $1 }
-        | AppTerm AppArg           { App $1 NormalParam $2 }
-        | AppTerm ParamType AppArg { App $1 $2 $3 }
+        | AppTerm AppArg           { App $1 $2 }
 
 AppArg :: { Term }
 AppArg : RecTerm { $1 }
@@ -216,13 +203,7 @@ AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
          | '#' '{' FieldType '|' Term '}'     { FieldType $3 $5 }
 
 PiArg :: { PiArg }
-PiArg : ParamType AppArg {% mkPiArg ($1, $2) }
-      | AppTerm          {% mkPiArg (NormalParam, $1) }
-
-ParamType :: { ParamType }
-ParamType : '?'   { ImplicitParam }
-          | '??'  { InstanceParam }
-          | '???' { ProofParam    }
+PiArg : AppTerm  {% mkPiArg $1 }
 
 Symbol :: { PosPair String }
 Symbol : Con { $1 } | Var { $1 }
@@ -280,14 +261,6 @@ rlist1(p) : p           { [$1]    }
 list1(p) : rlist1(p) { reverse $1 }
 
 {
-paramTypeToken :: ParamType -> String
-paramTypeToken tp =
-  case tp of
-    NormalParam -> ""
-    ImplicitParam -> "?"
-    InstanceParam -> "??"
-    ProofParam -> "???"
-
 data ParseError
   = UnexpectedLex [Word8]
   | UnexpectedEndOfBlockComment
@@ -376,10 +349,6 @@ unexpectedIntLiteral :: Pos -> Integer -> String -> Parser ()
 unexpectedIntLiteral p _ ctxt = do
   addParseError p $ "Unexpected integer literal when parsing " ++ ctxt ++ "."
 
-unexpectedParameterAnnotation :: Pos -> ParamType -> Parser ()
-unexpectedParameterAnnotation p _ =
-  addParseError p "Multiple parameter annotations are not supported."
-
 unexpectedTypeConstraint :: Pos -> Parser ()
 unexpectedTypeConstraint p = addParseError p "Unexpected type constraint."
 
@@ -391,11 +360,6 @@ unexpectedLambda p = addParseError p "Unexpected lambda expression"
 
 unexpectedOpenParen :: Pos -> Parser ()
 unexpectedOpenParen p = addParseError p "Unexpected parenthesis"
-
-mergeParamType :: ParamType -> Pos -> ParamType -> Parser ParamType
-mergeParamType NormalParam _ tp = return tp
-mergeParamType pt p mpt = do
-  unexpectedParameterAnnotation p mpt >> return pt
 
 termAsPat :: Term -> Parser (Maybe Pat)
 termAsPat ex = do
@@ -431,7 +395,6 @@ termAsPat ex = do
 
       (TypeConstraint{}, []) -> badPat "Type constraint"
       (Paren{}, _) -> error "internal: Unexpected paren"
-      (LetTerm{}, _) -> badPat "Let expression"
       (BadTerm{}, _) -> return Nothing
       (_, h:_) -> err (pos h) "Unexpected expression"
   where ret r = return (Just r)
@@ -443,7 +406,7 @@ termAsPat ex = do
 -- Will return a value on all expressions, but may add errors to parser state.
 exprAsPatList :: Term -> Parser [Pat]
 exprAsPatList ex = go ex []
-  where go (App x _ y) r = do
+  where go (App x y) r = do
           mp <- termAsPat y
           go x (maybe r (:r) mp)
         go x r = do
@@ -457,6 +420,7 @@ termAsSimplePat ex = do
         case asLocalIdent (val i) of
           Just nm -> ret $ PVar (PosPair (pos i) nm)
           _ -> badPat "Imported expressions"
+      (Unused i, []) -> ret $ PUnused i
       (BadTerm{}, _) -> return Nothing
       (_, h:_) -> err (pos h) "Unexpected expression"
   where ret r = return (Just r)
@@ -467,7 +431,7 @@ termAsSimplePat ex = do
 -- Will return a value on all expressions, but may add errors to parser state.
 exprAsSimplePatList :: Term -> Parser [SimplePat]
 exprAsSimplePatList ex = go ex []
-  where go (App x _ y) r = do
+  where go (App x y) r = do
           mp <- termAsSimplePat y
           go x (maybe r (:r) mp)
         go x r = do
@@ -475,29 +439,29 @@ exprAsSimplePatList ex = go ex []
           return (maybe r (:r) mp)
 
 
-type PiArg = (ParamType,[SimplePat],Term)
+type PiArg = ([SimplePat], Term)
 
 -- | Pi expressions should have one of the forms:
--- * opt(ParamType) '(' list(Pat) '::' LTerm ')' '->' LTerm
--- * opt(ParamType) AppTerm '->' LTerm
-mkPiArg :: (ParamType, Term) -> Parser PiArg
-mkPiArg (ppt, Paren _ (TypeConstraint x _ t)) =
-  (\pats -> (ppt, pats, t)) <$> exprAsSimplePatList x
-mkPiArg (ppt,lhs) =
-  return (ppt, [PUnused (PosPair (pos lhs) "_")], lhs)
+-- * '(' list(Pat) '::' LTerm ')' '->' LTerm
+-- * AppTerm '->' LTerm
+mkPiArg :: Term -> Parser PiArg
+mkPiArg (Paren _ (TypeConstraint x _ t)) =
+  (\pats -> (pats, t)) <$> exprAsSimplePatList x
+mkPiArg lhs =
+  return ([PUnused (PosPair (pos lhs) "_")], lhs)
 
 -- | Pi expressions should have one of the forms:
--- * opt(ParamType) '(' list(Pat) '::' LTerm ')' '->' LTerm
--- * opt(ParamType) AppTerm '->' LTerm
+-- * '(' list(Pat) '::' LTerm ')' '->' LTerm
+-- * AppTerm '->' LTerm
 mkPi :: Pos -> PiArg -> Term -> Term
-mkPi ptp (ppt,pats,tp) r = Pi ppt pats tp ptp r
+mkPi ptp (pats,tp) r = Pi pats tp ptp r
 
-mkLambda :: Pos -> [(ParamType, Term)] -> Term -> Parser Term
+mkLambda :: Pos -> [Term] -> Term -> Parser Term
 mkLambda ptp lhs rhs = parseLhs lhs []
   where parseLhs [] r = return $ Lambda ptp r rhs
-        parseLhs ((ppt,Paren _ (TypeConstraint ux _ ut)):ul) r = do
-          pl <- exprAsPatList ux
-          parseLhs ul ((ppt,pl, ut):r)
+        parseLhs ((Paren _ (TypeConstraint ux _ ut)):ul) r = do
+          pl <- exprAsSimplePatList ux
+          parseLhs ul ((pl, ut):r)
 
 -- | Parse a parenthesized expression which may actually be a tuple.
 parseParen :: (Pos -> a -> b) -- ^ singleton case.
@@ -516,20 +480,17 @@ parseTParen p l = return $ mkTupleType p l
 
 asAppList :: Term -> (Term,[Term])
 asAppList = \x -> impl x []
-  where impl (App x _ y) r = impl x (y:r)
+  where impl (App x y) r = impl x (y:r)
         impl x r = (x,r)
 
-type DeclLhs = (PosPair String, [(ParamType, Pat)])
+type DeclLhs = (PosPair String, [Pat])
 
 mkTypeDecl :: DeclQualifier -> DeclLhs -> Term -> Parser Decl
 mkTypeDecl qual (op,args) rhs = fmap (\l -> TypeDecl qual (op:l) rhs) $ filterArgs args []
-  where filterArgs ((NormalParam,PSimple (PVar (PosPair p i))):l) r =
+  where filterArgs ((PSimple (PVar (PosPair p i))):l) r =
           filterArgs l (PosPair p i:r)
-        filterArgs ((NormalParam,e):l) r = do
+        filterArgs (e:l) r = do
           addParseError (pos e) "Expected variable identifier in type declaration."
-          filterArgs l r
-        filterArgs ((pt,e):l) r = do
-          addParseError (pos e) $ "Unexpected token " ++ paramTypeToken pt ++ "."
           filterArgs l r
         filterArgs [] r = return (reverse r)
 

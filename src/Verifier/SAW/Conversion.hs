@@ -24,7 +24,6 @@ module Verifier.SAW.Conversion
   ( (:*:)(..)
   , Net.toPat
   , termToPat
-  , Termlike
     -- * Matcher
   , Matcher
   , matcherPat
@@ -123,13 +122,13 @@ import Verifier.SAW.Recognizer ((:*:)(..))
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
-import Verifier.SAW.TypedAST
+import Verifier.SAW.Term.Functor
 
 -- | A hack to allow storage of conversions in a term net.
-instance Eq (Conversion t) where
+instance Eq Conversion where
     x == y = Net.toPat x == Net.toPat y
 
-instance Show (Conversion t) where
+instance Show Conversion where
     show x = show (Net.toPat x)
 
 ----------------------------------------------------------------------
@@ -204,7 +203,7 @@ resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
 -- Term matchers
 
 -- | Match a global definition.
-asGlobalDef :: (Termlike t, Monad m) => Ident -> Matcher m t ()
+asGlobalDef :: (Monad m) => Ident -> Matcher m Term ()
 asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
         f _ = fail (show ident ++ " match failed.")
@@ -212,64 +211,64 @@ asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
 infixl 8 <:>
 
 -- | Match an application
-(<:>) :: (Termlike t, Applicative m, Monad m)
-      => Matcher m t a -> Matcher m t b -> Matcher m t (a :*: b)
+(<:>) :: (Applicative m, Monad m)
+      => Matcher m Term a -> Matcher m Term b -> Matcher m Term (a :*: b)
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
     where
       match (unwrapTermF -> App t1 t2) = liftM2 (:*:) (f1 t1) (f2 t2)
       match _ = fail "internal: <:> net failed"
 
 -- | Match an application and return second term.
-(<:>>) :: (Termlike t, Applicative m, Monad m)
-       => Matcher m t a -> Matcher m t b -> Matcher m t b
+(<:>>) :: (Applicative m, Monad m)
+       => Matcher m Term a -> Matcher m Term b -> Matcher m Term b
 x <:>> y = fmap (view _2) $ x <:> y
 
 
 -- | Matches any tuple.
-asAnyTupleValue :: (Monad m, Termlike t) => Matcher m t [t]
+asAnyTupleValue :: (Monad m) => Matcher m Term [Term]
 asAnyTupleValue = asVar R.asTupleValue
 
 -- | Matches a tuple with arguments matching constraints.
-asTupleValue :: (Monad m, Termlike t, ArgsMatchable v m t a)
-             => v m t a -> Matcher m t a
+asTupleValue :: (Monad m, ArgsMatchable v m Term a)
+             => v m Term a -> Matcher m Term a
 asTupleValue (defaultArgsMatcher -> m) = asVar $ \t -> do
   l <- R.asTupleValue t
   runArgsMatcher m l
 
 -- | Matches the type of any tuple.
-asAnyTupleType :: (Monad m, Termlike t) => Matcher m t [t]
+asAnyTupleType :: (Monad m) => Matcher m Term [Term]
 asAnyTupleType = asVar R.asTupleType
 
 -- | Matches a tuple type with arguments matching constraints.
-asTupleType :: (Monad m, Termlike t, ArgsMatchable v m t a)
-             => v m t a -> Matcher m t a
+asTupleType :: (Monad m, ArgsMatchable v m Term a)
+             => v m Term a -> Matcher m Term a
 asTupleType (defaultArgsMatcher -> m) = asVar $ \t -> do
   l <- R.asTupleType t
   runArgsMatcher m l
 
-asTupleSelector :: (Functor m, Monad m, Termlike t)
-                => Matcher m t a -> Matcher m t (a, Int)
+asTupleSelector :: (Functor m, Monad m)
+                => Matcher m Term a -> Matcher m Term (a, Int)
 asTupleSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asTupleSelector t
 
 -- | Matches record values, and returns fields.
-asAnyRecordValue :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
+asAnyRecordValue :: (Monad m) => Matcher m Term (Map FieldName Term)
 asAnyRecordValue = asVar R.asRecordValue
 
 -- | Matches record types, and returns fields.
-asAnyRecordType :: (Monad m, Termlike t) => Matcher m t (Map FieldName t)
+asAnyRecordType :: (Monad m) => Matcher m Term (Map FieldName Term)
 asAnyRecordType = asVar R.asRecordType
 
 -- | Matches
-asRecordSelector :: (Functor m, Monad m, Termlike t)
-                 => Matcher m t a
-                 -> Matcher m t (a, FieldName)
+asRecordSelector :: (Functor m, Monad m)
+                 => Matcher m Term a
+                 -> Matcher m Term (a, FieldName)
 asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 
 --TODO: RecordSelector
 
 -- | Match a constructor
-asCtor :: (Monad m, Termlike t, ArgsMatchable v m t a)
-       => Ident -> v m t a -> Matcher m t a
+asCtor :: (Monad m, ArgsMatchable v m Term a)
+       => Ident -> v m Term a -> Matcher m Term a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
           CtorApp c l <- R.asFTermF t
@@ -277,8 +276,8 @@ asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
           return l
 
 -- | Match a datatype.
-asDataType :: (Monad m, Termlike t, ArgsMatchable v m t a)
-           => Ident -> v m t a -> Matcher m t a
+asDataType :: (Monad m, ArgsMatchable v m Term a)
+           => Ident -> v m Term a -> Matcher m Term a
 asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
           DataTypeApp dt l <- R.asFTermF t
@@ -286,49 +285,49 @@ asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
           return l
 
 -- | Match any sort.
-asAnySort :: (Termlike t, Monad m) => Matcher m t Sort
+asAnySort :: (Monad m) => Matcher m Term Sort
 asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
 
 -- | Match a specific sort.
-asSort :: (Termlike t, Monad m) => Sort -> Matcher m t ()
-asSort s = Matcher (termToPat (SimpleTerm (FTermF (Sort s)))) fn
+asSort :: (Monad m) => Sort -> Matcher m Term ()
+asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
   where fn t = do s' <- R.asSort t
                   unless (s == s') $ fail "Does not matched expected sort."
 
 -- | Match a Nat literal
-asAnyNatLit :: (Termlike t, Monad m) => Matcher m t Prim.Nat
+asAnyNatLit :: (Monad m) => Matcher m Term Prim.Nat
 asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
 
 -- | Match a Vec literal
-asAnyVecLit :: (Termlike t, Monad m) => Matcher m t (t, V.Vector t)
+asAnyVecLit :: (Monad m) => Matcher m Term (Term, V.Vector Term)
 asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
 -- | Match a Float literal
-asAnyFloatLit :: (Termlike t, Monad m) => Matcher m t Float
+asAnyFloatLit :: (Monad m) => Matcher m Term Float
 asAnyFloatLit = asVar $ \t -> do FloatLit i <- R.asFTermF t; return i
 
 -- | Match a Double literal
-asAnyDoubleLit :: (Termlike t, Monad m) => Matcher m t Double
+asAnyDoubleLit :: (Monad m) => Matcher m Term Double
 asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
 
 -- | Match any external constant.
-asExtCns :: (Termlike t, Monad m) => Matcher m t (ExtCns t)
+asExtCns :: (Monad m) => Matcher m Term (ExtCns Term)
 asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
 
 -- | Returns index of local var if any.
-asLocalVar :: (Termlike t, Monad m) => Matcher m t DeBruijnIndex
+asLocalVar :: (Monad m) => Matcher m Term DeBruijnIndex
 asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 
 ----------------------------------------------------------------------
 -- Prelude matchers
 
-asBoolType :: (Monad m, Termlike t) => Matcher m t ()
+asBoolType :: (Monad m) => Matcher m Term ()
 asBoolType = asDataType "Prelude.Bool" asEmpty
 
-asSuccLit :: (Functor m, Monad m, Termlike t) => Matcher m t Prim.Nat
+asSuccLit :: (Functor m, Monad m) => Matcher m Term Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
-asBvNatLit :: (Applicative m, Monad m, Termlike t) => Matcher m t Prim.BitVector
+asBvNatLit :: (Applicative m, Monad m) => Matcher m Term Prim.BitVector
 asBvNatLit =
   (\(_ :*: n :*: x) -> Prim.bv (fromIntegral n) (toInteger x)) <$>
     (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
@@ -341,126 +340,126 @@ checkedIntegerToNonNegInt x
 ----------------------------------------------------------------------
 -- Matchable
 
-class Matchable m t a where
-    defaultMatcher :: Matcher m t a
+class Matchable m a where
+    defaultMatcher :: Matcher m Term a
 
-instance Applicative m => Matchable m t () where
+instance Applicative m => Matchable m () where
     defaultMatcher = asVar (const (pure ()))
 
-instance Applicative m => Matchable m t t where
+instance Applicative m => Matchable m Term where
     defaultMatcher = asAny
 
-instance (Monad m, Termlike t) => Matchable m t Prim.Nat where
+instance (Monad m) => Matchable m Prim.Nat where
     defaultMatcher = asAnyNatLit
 
-instance (Functor m, Monad m, Termlike t) => Matchable m t Integer where
+instance (Functor m, Monad m) => Matchable m Integer where
     defaultMatcher = toInteger <$> asAnyNatLit
 
-instance (Monad m, Termlike t) => Matchable m t Int where
+instance (Monad m) => Matchable m Int where
     defaultMatcher = thenMatcher asAnyNatLit (checkedIntegerToNonNegInt . toInteger)
 
-instance (Applicative m, Monad m, Termlike t) => Matchable m t Prim.BitVector where
+instance (Applicative m, Monad m) => Matchable m Prim.BitVector where
     defaultMatcher = asBvNatLit
 
-instance (Functor m, Monad m, Termlike t) => Matchable m t (Prim.Vec t t) where
+instance (Functor m, Monad m) => Matchable m (Prim.Vec Term Term) where
     defaultMatcher = uncurry Prim.Vec <$> asAnyVecLit
 
 ----------------------------------------------------------------------
 -- Term builders
 
-newtype TermBuilder t v =
-    TermBuilder { runTermBuilder :: forall m. Monad m => (TermF t -> m t) -> m v }
+newtype TermBuilder v =
+    TermBuilder { runTermBuilder :: forall m. Monad m => (TermF Term -> m Term) -> m v }
 
-instance Monad (TermBuilder t) where
+instance Monad TermBuilder where
   m >>= h = TermBuilder $ \mk -> do
     r <- runTermBuilder m mk
     runTermBuilder (h r) mk
   return v = TermBuilder $ \_ -> return v
 
-instance Functor (TermBuilder t) where
+instance Functor TermBuilder where
     fmap = liftM
 
-instance Applicative (TermBuilder t) where
+instance Applicative TermBuilder where
     pure = return
     (<*>) = ap
 
-mkTermF :: TermF t -> TermBuilder t t
+mkTermF :: TermF Term -> TermBuilder Term
 mkTermF tf = TermBuilder (\mk -> mk tf)
 
-mkGlobalDef :: Ident -> TermBuilder t t
+mkGlobalDef :: Ident -> TermBuilder Term
 mkGlobalDef i = mkTermF (FTermF (GlobalDef i))
 
 infixl 9 `mkApp`
 infixl 9 `pureApp`
 
-mkApp :: TermBuilder t t -> TermBuilder t t -> TermBuilder t t
+mkApp :: TermBuilder Term -> TermBuilder Term -> TermBuilder Term
 mkApp mx my = do
   x <- mx
   y <- my
   mkTermF (App x y)
 
-pureApp :: TermBuilder t t -> t -> TermBuilder t t
+pureApp :: TermBuilder Term -> Term -> TermBuilder Term
 pureApp mx y = do
   x <- mx
   mkTermF (App x y)
 
-mkTuple :: [TermBuilder t t] -> TermBuilder t t
+mkTuple :: [TermBuilder Term] -> TermBuilder Term
 mkTuple []       = mkTermF (FTermF UnitValue)
 mkTuple (t : ts) = mkTermF . FTermF =<< (PairValue <$> t <*> mkTuple ts)
 
-mkTupleSelector :: Int -> t -> TermBuilder t t
+mkTupleSelector :: Int -> Term -> TermBuilder Term
 mkTupleSelector i t
   | i == 1 = mkTermF (FTermF (PairLeft t))
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
   | otherwise = fail "mkTupleSelector: non-positive index"
 
-mkCtor :: Ident -> [TermBuilder t t] -> TermBuilder t t
+mkCtor :: Ident -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i l = mkTermF . FTermF . CtorApp i =<< sequence l
 
-mkDataType :: Ident -> [TermBuilder t t] -> TermBuilder t t
+mkDataType :: Ident -> [TermBuilder Term] -> TermBuilder Term
 mkDataType i l = mkTermF . FTermF . DataTypeApp i =<< sequence l
 
-mkNatLit :: Prim.Nat -> TermBuilder t t
+mkNatLit :: Prim.Nat -> TermBuilder Term
 mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
 
-mkVecLit :: t -> V.Vector t -> TermBuilder t t
+mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 
-mkBool :: Bool -> TermBuilder t t
+mkBool :: Bool -> TermBuilder Term
 mkBool True  = mkCtor "Prelude.True" []
 mkBool False = mkCtor "Prelude.False" []
 
-mkBvNat :: Prim.Nat -> Integer -> TermBuilder t t
+mkBvNat :: Prim.Nat -> Integer -> TermBuilder Term
 mkBvNat n x = do
   mkGlobalDef "Prelude.bvNat"
     `mkApp` (mkNatLit n)
     `mkApp` (mkNatLit $ fromInteger $ x .&. bitMask (fromIntegral n))
 
-class Buildable t a where
-  defaultBuilder :: a -> TermBuilder t t
+class Buildable a where
+  defaultBuilder :: a -> TermBuilder Term
 
-instance Buildable t t where
+instance Buildable Term where
   defaultBuilder = return
 
-instance Buildable t Bool where
+instance Buildable Bool where
   defaultBuilder = mkBool
 
-instance Buildable t Nat where
+instance Buildable Nat where
   defaultBuilder = mkNatLit
 
-instance Buildable t Integer where
+instance Buildable Integer where
   defaultBuilder = mkNatLit . fromInteger
 
-instance Buildable t Int where
+instance Buildable Int where
   defaultBuilder = mkNatLit . fromIntegral
 
-instance (Buildable t a, Buildable t b) => Buildable t (a, b) where
+instance (Buildable a, Buildable b) => Buildable (a, b) where
   defaultBuilder (x, y) = mkTuple [defaultBuilder x, defaultBuilder y]
 
-instance Buildable t (Prim.Vec t t) where
+instance Buildable (Prim.Vec Term Term) where
   defaultBuilder (Prim.Vec t v) = mkVecLit t v
 
-instance Buildable t Prim.BitVector where
+instance Buildable Prim.BitVector where
   defaultBuilder (Prim.BV w x) = mkBvNat (fromIntegral w) x
 
 ----------------------------------------------------------------------
@@ -471,72 +470,72 @@ instance Buildable t Prim.BitVector where
 -- rewritten term. We use conversions to model the behavior of
 -- primitive operations in SAWCore.
 
-newtype Conversion t = Conversion (Matcher Maybe t (TermBuilder t t))
+newtype Conversion = Conversion (Matcher Maybe Term (TermBuilder Term))
 
-instance Net.Pattern (Conversion t) where
+instance Net.Pattern Conversion where
     toPat (Conversion m) = Net.toPat m
 
-runConversion :: Conversion t -> t -> Maybe (TermBuilder t t)
+runConversion :: Conversion -> Term -> Maybe (TermBuilder Term)
 runConversion (Conversion m) = runMatcher m
 
 -- | This class is meant to include n-ary function types whose
--- arguments are all in class @Matchable t@ and whose result type is
--- in class @Buildable t@. Given a matcher for the global constant
+-- arguments are all in class @Matchable m@ and whose result type is
+-- in class @Buildable@. Given a matcher for the global constant
 -- itself, we can construct a conversion that applies the function to
 -- its arguments and builds the result.
 
-class Conversionable t a where
-    convOfMatcher :: Matcher Maybe t a -> Conversion t
+class Conversionable a where
+    convOfMatcher :: Matcher Maybe Term a -> Conversion
 
-instance (Termlike t, Matchable Maybe t a, Conversionable t b) => Conversionable t (a -> b) where
+instance (Matchable Maybe a, Conversionable b) => Conversionable (a -> b) where
     convOfMatcher m = convOfMatcher
         (thenMatcher (m <:> defaultMatcher) (\(f :*: x) -> Just (f x)))
 
-instance Buildable t a => Conversionable t (Maybe a) where
+instance Buildable a => Conversionable (Maybe a) where
     convOfMatcher m = Conversion (thenMatcher m (fmap defaultBuilder))
 
-defaultConvOfMatcher :: Buildable t a => Matcher Maybe t a -> Conversion t
+defaultConvOfMatcher :: Buildable a => Matcher Maybe Term a -> Conversion
 defaultConvOfMatcher m = Conversion (thenMatcher m (Just . defaultBuilder))
 
-instance Conversionable t t where
+instance Conversionable Term where
     convOfMatcher = defaultConvOfMatcher
 
-instance Termlike t => Conversionable t Bool where
+instance Conversionable Bool where
     convOfMatcher = defaultConvOfMatcher
 
-instance Termlike t => Conversionable t Nat where
+instance Conversionable Nat where
     convOfMatcher = defaultConvOfMatcher
 
-instance Termlike t => Conversionable t Integer where
+instance Conversionable Integer where
     convOfMatcher = defaultConvOfMatcher
 
-instance Termlike t => Conversionable t Prim.BitVector where
+instance Conversionable Prim.BitVector where
     convOfMatcher = defaultConvOfMatcher
 
-instance Termlike t => Conversionable t (Prim.Vec t t) where
+instance Conversionable (Prim.Vec Term Term) where
     convOfMatcher = defaultConvOfMatcher
 
-instance (Termlike t, Buildable t a, Buildable t b) => Conversionable t (a, b) where
+instance (Buildable a, Buildable b) => Conversionable (a, b) where
     convOfMatcher = defaultConvOfMatcher
 
-globalConv :: (Termlike t, Conversionable t a) => Ident -> a -> Conversion t
+globalConv :: (Conversionable a) => Ident -> a -> Conversion
 globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just f)))
 
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
 
 -- | Conversion for selector on a tuple
-tupleConversion :: Termlike t => Conversion t
+tupleConversion :: Conversion
 tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
   where action (ts, i) = Just (return (ts !! (i - 1)))
 
 -- | Conversion for selector on a record
-recordConversion :: Termlike t => Conversion t
+recordConversion :: Conversion
 recordConversion = Conversion $ thenMatcher (asRecordSelector asAnyRecordValue) action
   where action (m, i) = fmap return (Map.lookup i m)
 
 -- | Conversion for equality on tuple types
-eq_Tuple :: Termlike t => Conversion t
+eq_Tuple :: Conversion
 eq_Tuple = Conversion $ thenMatcher matcher action
   where
     matcher = asGlobalDef "Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
@@ -551,7 +550,7 @@ eq_Tuple = Conversion $ thenMatcher matcher action
                       `mkApp` mkTupleSelector i y
 
 -- | Conversion for equality on record types
-eq_Record :: Termlike t => Conversion t
+eq_Record :: Conversion
 eq_Record = Conversion $ thenMatcher matcher action
   where
     matcher = asGlobalDef "Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
@@ -567,63 +566,63 @@ eq_Record = Conversion $ thenMatcher matcher action
                       `mkApp` sel y i
 
 -- | Conversions for operations on Nat literals
-natConversions :: Termlike t => [Conversion t]
+natConversions :: [Conversion]
 natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit, mulNat_NatLit
                  , expNat_NatLit, divNat_NatLit, remNat_NatLit, equalNat_NatLit
                  ]
 
-succ_NatLit :: Termlike t => Conversion t
+succ_NatLit :: Conversion
 succ_NatLit =
     Conversion $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
 
-addNat_NatLit :: Termlike t => Conversion t
+addNat_NatLit :: Conversion
 addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Nat -> Nat -> Nat)
 
-subNat_NatLit :: Termlike t => Conversion t
+subNat_NatLit :: Conversion
 subNat_NatLit = Conversion $
   thenMatcher (asGlobalDef "Prelude.subNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) -> if x >= y then Just (mkNatLit (x - y)) else Nothing)
 
-mulNat_NatLit :: Termlike t => Conversion t
+mulNat_NatLit :: Conversion
 mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
 
-expNat_NatLit :: Termlike t => Conversion t
+expNat_NatLit :: Conversion
 expNat_NatLit = globalConv "Prelude.expNat" ((^) :: Nat -> Nat -> Nat)
 
-divNat_NatLit :: Termlike t => Conversion t
+divNat_NatLit :: Conversion
 divNat_NatLit = Conversion $
   thenMatcher (asGlobalDef "Prelude.divNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
          if y /= 0 then Just (mkNatLit (x `div` y)) else Nothing)
 
-remNat_NatLit :: Termlike t => Conversion t
+remNat_NatLit :: Conversion
 remNat_NatLit = Conversion $
   thenMatcher (asGlobalDef "Prelude.remNat" <:> asAnyNatLit <:> asAnyNatLit)
     (\(_ :*: x :*: y) ->
          if y /= 0 then Just (mkNatLit (x `rem` y)) else Nothing)
 
-equalNat_NatLit :: Termlike t => Conversion t
+equalNat_NatLit :: Conversion
 equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
 
 -- | Conversions for operations on vector literals
-vecConversions :: Termlike t => [Conversion t]
+vecConversions :: [Conversion]
 vecConversions = [at_VecLit, atWithDefault_VecLit, append_VecLit]
 
-at_VecLit :: forall t. Termlike t => Conversion t
+at_VecLit :: Conversion
 at_VecLit = globalConv "Prelude.at"
-    (Prim.at :: Int -> t -> Prim.Vec t t -> Int -> t)
+    (Prim.at :: Int -> Term -> Prim.Vec Term Term -> Int -> Term)
 
-atWithDefault_VecLit :: forall t. Termlike t => Conversion t
+atWithDefault_VecLit :: Conversion
 atWithDefault_VecLit = globalConv "Prelude.atWithDefault"
-    (Prim.atWithDefault :: Int -> t -> t -> Prim.Vec t t -> Int -> t)
+    (Prim.atWithDefault :: Int -> Term -> Term -> Prim.Vec Term Term -> Int -> Term)
 
-append_VecLit :: forall t. Termlike t => Conversion t
+append_VecLit :: Conversion
 append_VecLit = globalConv "Prelude.append"
-    (Prim.append :: Int -> Int -> t -> Prim.Vec t t -> Prim.Vec t t -> Prim.Vec t t)
+    (Prim.append :: Int -> Int -> Term -> Prim.Vec Term Term -> Prim.Vec Term Term -> Prim.Vec Term Term)
 
 
 -- | Conversions for operations on bitvector literals
-bvConversions :: Termlike t => [Conversion t]
+bvConversions :: [Conversion]
 bvConversions =
     [ globalConv "Prelude.bvToNat" Prim.bvToNat
     , append_bvNat
@@ -656,31 +655,31 @@ bvConversions =
     , take_bvNat, drop_bvNat
     ]
 
-append_bvNat :: Termlike t => Conversion t
+append_bvNat :: Conversion
 append_bvNat = globalConv "Prelude.append" Prim.append_bv
 
-bvAdd_bvNat :: Termlike t => Conversion t
+bvAdd_bvNat :: Conversion
 bvAdd_bvNat = globalConv "Prelude.bvAdd" Prim.bvAdd
 
-bvSub_bvNat :: Termlike t => Conversion t
+bvSub_bvNat :: Conversion
 bvSub_bvNat = globalConv "Prelude.bvSub" Prim.bvSub
 
-bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Termlike t => Conversion t
+bvugt_bvNat, bvuge_bvNat, bvult_bvNat, bvule_bvNat :: Conversion
 bvugt_bvNat = globalConv "Prelude.bvugt" Prim.bvugt
 bvuge_bvNat = globalConv "Prelude.bvuge" Prim.bvuge
 bvult_bvNat = globalConv "Prelude.bvult" Prim.bvult
 bvule_bvNat = globalConv "Prelude.bvule" Prim.bvule
 
-bvsgt_bvNat, bvsge_bvNat, bvslt_bvNat, bvsle_bvNat :: Termlike t => Conversion t
+bvsgt_bvNat, bvsge_bvNat, bvslt_bvNat, bvsle_bvNat :: Conversion
 bvsgt_bvNat = globalConv "Prelude.bvsgt" Prim.bvsgt
 bvsge_bvNat = globalConv "Prelude.bvsge" Prim.bvsge
 bvslt_bvNat = globalConv "Prelude.bvslt" Prim.bvslt
 bvsle_bvNat = globalConv "Prelude.bvsle" Prim.bvsle
 
-at_bvNat :: Termlike t => Conversion t
+at_bvNat :: Conversion
 at_bvNat = globalConv "Prelude.at" Prim.at_bv
 
-atWithDefault_bvNat :: Termlike t => Conversion t
+atWithDefault_bvNat :: Conversion
 atWithDefault_bvNat =
   Conversion $
   (\(_ :*: n :*: a :*: d :*: x :*: i) ->
@@ -688,38 +687,38 @@ atWithDefault_bvNat =
   (asGlobalDef "Prelude.atWithDefault" <:>
    defaultMatcher <:> defaultMatcher <:> asAny <:> asBvNatLit <:> asAnyNatLit)
 
-take_bvNat :: Termlike t => Conversion t
+take_bvNat :: Conversion
 take_bvNat = globalConv "Prelude.take" Prim.take_bv
 
-drop_bvNat :: Termlike t => Conversion t
+drop_bvNat :: Conversion
 drop_bvNat = globalConv "Prelude.drop" Prim.drop_bv
 
-slice_bvNat :: Termlike t => Conversion t
+slice_bvNat :: Conversion
 slice_bvNat = globalConv "Prelude.slice" Prim.slice_bv
 
 mixfix_snd :: (a :*: b) -> b
 mixfix_snd (_ :*: y) = y
 
-remove_coerce :: Termlike t => Conversion t
+remove_coerce :: Conversion
 remove_coerce = Conversion $
   return . mixfix_snd <$>
     (asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny)
 
-remove_unsafeCoerce :: Termlike t => Conversion t
+remove_unsafeCoerce :: Conversion
 remove_unsafeCoerce = Conversion $
   return . mixfix_snd <$>
     (asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny)
 
-remove_ident_coerce :: (Eq t, Termlike t) => Conversion t
+remove_ident_coerce :: Conversion
 remove_ident_coerce = Conversion $ thenMatcher pat action
   where pat = asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny
         action (() :*: t :*: f :*: _prf :*: x)
-          | t == f = return (return x)
+          | alphaEquiv t f = return (return x)
           | otherwise = fail "Cannot remove coerce."
 
-remove_ident_unsafeCoerce :: (Eq t, Termlike t) => Conversion t
+remove_ident_unsafeCoerce :: Conversion
 remove_ident_unsafeCoerce = Conversion $ thenMatcher pat action
   where pat = asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny
         action (() :*: t :*: f :*: x)
-          | t == f = return (return x)
+          | alphaEquiv t f = return (return x)
           | otherwise = fail "Cannot remove unsafeCoerce."

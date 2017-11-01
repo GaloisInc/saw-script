@@ -62,10 +62,6 @@ hasDups l = Set.size (Set.fromList l) < length l
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
-evaluatedRefLocalDef :: [TCLocalDef] -> TC s [TCRefLocalDef s]
-evaluatedRefLocalDef lcls = traverse go lcls
-   where go (LocalFnDefGen nm tp eqns) = LocalFnDefGen nm tp <$> evaluatedRef nm eqns
-
 -- | Rigid variable used during pattern unification.
 data RigidVarRef s
    = RigidVarRef { rvrIndex :: !Int
@@ -115,8 +111,6 @@ data UVarState s
   | UApp (VarIndex s) (VarIndex s)
   | UOuterVar String Int
 
-  | UOuterLet String Int -- DeBruijnIndex in outer context.
-
 ppUTerm :: UVarState s -> TC s Doc
 ppUTerm vs0 = evalStateT (go PrecNone vs0) Set.empty
   where goVar :: Prec -> VarIndex s -> StateT (Set (VarIndex s)) (TC s) Doc
@@ -138,7 +132,6 @@ ppUTerm vs0 = evalStateT (go PrecNone vs0) Set.empty
         go pr (UTF tf) = ppFlatTermF defaultPPOpts goVar pr tf
         go pr (UApp l r) = ppParens (pr > PrecApp) <$> liftA2 (<+>) (goVar PrecApp l) (goVar PrecArg r)
         go _ (UOuterVar nm _) = pure $ text $ "outerv" ++ nm
-        go _ (UOuterLet nm _) = pure $ text $ "outerl" ++ nm
 
 data UPat s
   = UPVar (VarIndex s)
@@ -234,7 +227,6 @@ usetEqual vx vy = do
       -- Set vx to point to vy.
       lift $ liftST $ writeSTRef (viRef vx) (UVar vy)
     (UOuterVar _ xi, UOuterVar _ yi) | xi == yi -> pure ()
-    (UOuterLet _ xi, UOuterLet _ yi) | xi == yi -> pure ()
     _ -> do
       xd <- lift $ ppUTerm x
       yd <- lift $ ppUTerm y
@@ -342,15 +334,11 @@ mkUnifyTerm l t =
       TCApp x y -> mkTermVar =<< (UApp <$> mkUnifyTerm l x <*> mkUnifyTerm l y)
       TCLambda{} -> holTerm
       TCPi{} -> holTerm
-      TCLet{} -> holTerm
       TCVar i -> do
           case lookupLocalCtxVar l i of
             Just v -> return v
             Nothing -> mkTermVar (UOuterVar nm (i - localCtxSize l))
         where BoundVar nm = resolveBoundInfo i (ulcTC l)
-      TCLocalDef i | i >= localCtxSize l -> mkTermVar (UOuterLet nm (i - localCtxSize l))
-                   | otherwise -> error "mkUnifyTerm encountered unexpected local def."
-        where LocalDef nm = resolveBoundInfo i (ulcTC l)
   where holTerm = mkTermVar (mkHolTerm l t)
         mkTermVar = mkVar "intermediate term"
 
@@ -586,9 +574,6 @@ resolveUTerm' v = do
     UOuterVar _ i -> do
       tc <- gets urOuterContext
       return (tc, TCVar i)
-    UOuterLet _ i   -> do
-      tc <- gets urOuterContext
-      return (tc, TCLocalDef i)
 
 -- | Typecheck pat against given expected type.
 typecheckPat :: TermContext s
@@ -799,20 +784,7 @@ checkTypesEqual' p ctx tc x y = do
          Just (tc', xr', yr') ->
            check' tc' xr' yr'
 
-    ( (TCLet lcls xv, xa), _) -> do
-       rlcls <- evaluatedRefLocalDef lcls
-       let tc' = consLocalDefs rlcls tc
-       let x' = tcMkApp xv (applyExt tc' . (tc,) <$> xa)
-       check' tc' x' (applyExt tc' (tc,y))
-    (_, (TCLet lcls yv, ya)) -> do
-       rlcls <- evaluatedRefLocalDef lcls
-       let tc' = consLocalDefs rlcls tc
-       let y' = tcMkApp yv (applyExt tc' . (tc,) <$> ya)
-       check' tc' (applyExt tc' (tc,x)) y'
     ( (TCVar xi, xa), (TCVar yi, ya))
-      | xi == yi && length xa == length ya ->
-        checkAll (zip xa ya)
-    ( (TCLocalDef xi, xa), (TCLocalDef yi, ya))
       | xi == yi && length xa == length ya ->
         checkAll (zip xa ya)
 

@@ -57,7 +57,6 @@ scWriteExternal t0 =
         App e1 e2      -> unwords ["App", show e1, show e2]
         Lambda s t e   -> unwords ["Lam", s, show t, show e]
         Pi s t e       -> unwords ["Pi", s, show t, show e]
-        Let ds e       -> unwords ["Def", writeDefs ds, show e]
         LocalVar i     -> unwords ["Var", show i]
         Constant x e t -> unwords ["Constant", x, show e, show t]
         FTermF ftf     ->
@@ -83,7 +82,6 @@ scWriteExternal t0 =
             DoubleLit x        -> unwords ["Double", show x]
             StringLit s        -> unwords ["String", show s]
             ExtCns ext         -> unwords ("ExtCns" : writeExtCns ext)
-    writeDefs = error "unsupported Let expression"
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
 scReadExternal :: SharedContext -> String -> IO Term
@@ -106,7 +104,6 @@ scReadExternal sc input =
         ["App", e1, e2]     -> App (read e1) (read e2)
         ["Lam", x, t, e]    -> Lambda x (read t) (read e)
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
-        -- TODO: support LetDef
         ["Var", i]          -> LocalVar (read i)
         ["Constant",x,e,t]  -> Constant x (read e) (read t)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))

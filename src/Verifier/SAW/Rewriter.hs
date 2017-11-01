@@ -82,34 +82,37 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
 
-data RewriteRule t
-  = RewriteRule { ctxt :: [t], lhs :: t, rhs :: t }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+data RewriteRule
+  = RewriteRule { ctxt :: [Term], lhs :: Term, rhs :: Term }
+  deriving (Eq, Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
 
-ctxtRewriteRule :: RewriteRule t -> [t]
+traverseRhs :: Functor f => (Term -> f Term) -> RewriteRule -> f RewriteRule
+traverseRhs f (RewriteRule c l r) = RewriteRule c l <$> f r
+
+ctxtRewriteRule :: RewriteRule -> [Term]
 ctxtRewriteRule = ctxt
 
-lhsRewriteRule :: RewriteRule t -> t
+lhsRewriteRule :: RewriteRule -> Term
 lhsRewriteRule = lhs
 
-rhsRewriteRule :: RewriteRule t -> t
+rhsRewriteRule :: RewriteRule -> Term
 rhsRewriteRule = rhs
 
-instance Net.Pattern t => Net.Pattern (RewriteRule t) where
+instance Net.Pattern RewriteRule where
   toPat (RewriteRule _ lhs _) = Net.toPat lhs
 
 ----------------------------------------------------------------------
 -- Matching
 
-data MatchState t =
+data MatchState =
   MatchState
-  { substitution :: Map DeBruijnIndex t
-  , constraints :: [(t, Integer)]
+  { substitution :: Map DeBruijnIndex Term
+  , constraints :: [(Term, Integer)]
   }
 
-emptyMatchState :: MatchState t
+emptyMatchState :: MatchState
 emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
 
 
@@ -119,7 +122,7 @@ emptyMatchState = MatchState { substitution = Map.empty, constraints = [] }
 insertLookup :: Ord k => k -> a -> Map k a -> (Maybe a, Map k a)
 insertLookup k x t = Map.insertLookupWithKey (\_ a _ -> a) k x t
 
-first_order_match :: (Eq t, Termlike t) => t -> t -> Maybe (Map DeBruijnIndex t)
+first_order_match :: Term -> Term -> Maybe (Map DeBruijnIndex Term)
 first_order_match pat term = match pat term Map.empty
   where
     match x y m =
@@ -127,7 +130,7 @@ first_order_match pat term = match pat term Map.empty
         (LocalVar i, _) ->
             case my' of
               Nothing -> Just m'
-              Just y' -> if y == y' then Just m' else Nothing
+              Just y' -> if alphaEquiv y y' then Just m' else Nothing
             where (my', m') = insertLookup i y m
         (App x1 x2, App y1 y2) ->
             match x1 y1 m >>= match x2 y2
@@ -135,13 +138,13 @@ first_order_match pat term = match pat term Map.empty
             do zf <- zipWithFlatTermF match xf yf
                Foldable.foldl (>=>) Just zf m
         (_, _) ->
-            if x == y then Just m else Nothing
+            if alphaEquiv x y then Just m else Nothing
 -- ^ Precondition: Every loose variable in the pattern @pat@ must
 -- occur as the 2nd argument of an @App@ constructor. This ensures
 -- that instantiations are well-typed.
 
 -- | Normalization with a set of conversions
-bottom_convs :: forall t. Termlike t => [Conversion t] -> t -> TermBuilder t t
+bottom_convs :: [Conversion] -> Term -> TermBuilder Term
 bottom_convs convs t = do
   t' <-
     case unwrapTermF t of
@@ -170,7 +173,7 @@ scMatch sc pat term = do
         FTermF (NatLit i) | i == n -> return ()
         _ -> mzero
 
-    match :: Int -> Term -> Term -> MatchState Term -> MaybeT IO (MatchState Term)
+    match :: Int -> Term -> Term -> MatchState -> MaybeT IO MatchState
     match depth x y s@(MatchState m cs) = do
       --lift $ putStrLn $ "matching (lhs): " ++ show x
       --lift $ putStrLn $ "matching (rhs): " ++ show y
@@ -220,7 +223,7 @@ vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
-ruleOfTerm :: Termlike t => t -> RewriteRule t
+ruleOfTerm :: Term -> RewriteRule
 ruleOfTerm t =
     case unwrapTermF t of
       FTermF (DataTypeApp ident [_, x, y])
@@ -231,11 +234,11 @@ ruleOfTerm t =
 
 -- | Converts a universally quantified equality proposition between the
 -- two given terms to a RewriteRule.
-ruleOfTerms :: Termlike t => t -> t -> RewriteRule t
+ruleOfTerms :: Term -> Term -> RewriteRule
 ruleOfTerms l r = RewriteRule { ctxt = [], lhs = l, rhs = r }
 
 -- | Converts a parameterized equality predicate to a RewriteRule.
-ruleOfProp :: Term -> RewriteRule Term
+ruleOfProp :: Term -> RewriteRule
 ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   let rule = ruleOfProp body in rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
@@ -249,13 +252,13 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
-ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ show t
+ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm defaultPPOpts t
 
 -- Create a rewrite rule from an equation.
 -- Terms do not have unused variables, so unused variables are introduced
 -- as new variables bound after all the used variables.
-ruleOfDefEqn :: Ident -> DefEqn SimpleTerm -> RewriteRule SimpleTerm
-ruleOfDefEqn ident (DefEqn pats rhs@(SimpleTerm _rtf)) =
+ruleOfDefEqn :: Ident -> DefEqn -> RewriteRule
+ruleOfDefEqn ident (DefEqn pats rhs) =
       RewriteRule { ctxt = Map.elems varmap
                   , lhs = ruleLhs
                   , rhs = ruleRhs
@@ -264,49 +267,49 @@ ruleOfDefEqn ident (DefEqn pats rhs@(SimpleTerm _rtf)) =
     _lvd = emptyLocalVarDoc
         & docShowLocalNames .~ False
         & docShowLocalTypes .~ True
-    _varsUnbound t i = freesTerm t `shiftR` i /= 0
-    ruleLhs = foldl mkTermApp (SimpleTerm (FTermF (GlobalDef ident))) args
+    _varsUnbound t i = looseVars t `shiftR` i /= 0
+    ruleLhs = foldl mkTermApp (Unshared (FTermF (GlobalDef ident))) args
     ruleRhs = incVarsSimpleTerm 0 nUnused rhs
 
     nBound  = sum $ fmap patBoundVarCount  pats
     nUnused = sum $ fmap patUnusedVarCount pats
     n = nBound + nUnused
-    mkTermApp :: SimpleTerm -> SimpleTerm -> SimpleTerm
-    mkTermApp f x = SimpleTerm (App f x)
+    mkTermApp :: Term -> Term -> Term
+    mkTermApp f x = Unshared (App f x)
 
-    termOfPat :: Pat SimpleTerm -> State (Int, Map Int SimpleTerm) SimpleTerm
+    termOfPat :: Pat -> State (Int, Map Int Term) Term
     termOfPat pat =
         case pat of
           PVar _ i tp -> do
             (j, m) <- get
             put (j, Map.insert i tp m)
-            return $ SimpleTerm $ LocalVar (n - 1 - i)
+            return $ Unshared $ LocalVar (n - 1 - i)
           PUnused i tp -> do
             (j, m) <- get
             put (j + 1, Map.insert j (incVarsSimpleTerm 0 (j - i) tp) m)
-            return $ SimpleTerm $ LocalVar (n - 1 - j)
-          PUnit        -> return $ SimpleTerm (FTermF UnitValue)
-          PPair x y    -> (SimpleTerm . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
-          PEmpty       -> return $ SimpleTerm (FTermF EmptyValue)
-          PField f x y -> (SimpleTerm . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
-          PCtor c ps   -> (SimpleTerm . FTermF . CtorApp c) <$> traverse termOfPat ps
-          PString s    -> return $ SimpleTerm (FTermF (StringLit s))
+            return $ Unshared $ LocalVar (n - 1 - j)
+          PUnit        -> return $ Unshared (FTermF UnitValue)
+          PPair x y    -> (Unshared . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
+          PEmpty       -> return $ Unshared (FTermF EmptyValue)
+          PField f x y -> (Unshared . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
+          PCtor c ps   -> (Unshared . FTermF . CtorApp c) <$> traverse termOfPat ps
+          PString s    -> return $ Unshared (FTermF (StringLit s))
 
     (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
 
-rulesOfTypedDef :: TypedDef -> [RewriteRule SimpleTerm]
+rulesOfTypedDef :: Def -> [RewriteRule]
 rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
 
 -- | Creates a set of rewrite rules from the defining equations of the named constant.
-scDefRewriteRules :: SharedContext -> TypedDef -> IO [RewriteRule Term]
+scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
 scDefRewriteRules sc def =
-  (traverse . traverse) (scSharedTerm sc) (rulesOfTypedDef def)
+  traverse (traverseRhs (scSharedTerm sc)) (rulesOfTypedDef def)
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
-scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule Term]
+scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule]
 scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 
-scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule Term)
+scEqRewriteRule :: SharedContext -> Ident -> IO RewriteRule
 scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 
 ----------------------------------------------------------------------
@@ -314,59 +317,58 @@ scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 
 -- | Invariant: 'Simpset's should not contain reflexive rules. We avoid
 -- adding them in 'addRule' below.
-type Simpset t = Net.Net (Either (RewriteRule t) (Conversion t))
+type Simpset = Net.Net (Either RewriteRule Conversion)
 
-emptySimpset :: Simpset t
+emptySimpset :: Simpset
 emptySimpset = Net.empty
 
-addRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
+addRule :: RewriteRule -> Simpset -> Simpset
 addRule rule | lhs rule /= rhs rule = Net.insert_term (lhs rule, Left rule)
              | otherwise = id
 
-delRule :: (Eq t, Net.Pattern t) => RewriteRule t -> Simpset t -> Simpset t
+delRule :: RewriteRule -> Simpset -> Simpset
 delRule rule = Net.delete_term (lhs rule, Left rule)
 
-addRules :: (Eq t, Net.Pattern t) => [RewriteRule t] -> Simpset t -> Simpset t
+addRules :: [RewriteRule] -> Simpset -> Simpset
 addRules rules ss = foldr addRule ss rules
 
-addSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
+addSimp :: Term -> Simpset -> Simpset
 addSimp prop = addRule (ruleOfTerm prop)
 
-delSimp :: (Eq t, Termlike t, Net.Pattern t) => t -> Simpset t -> Simpset t
+delSimp :: Term -> Simpset -> Simpset
 delSimp prop = delRule (ruleOfTerm prop)
 
-addConv :: Eq t => Conversion t -> Simpset t -> Simpset t
+addConv :: Conversion -> Simpset -> Simpset
 addConv conv = Net.insert_term (conv, Right conv)
 
-addConvs :: Eq t => [Conversion t] -> Simpset t -> Simpset t
+addConvs :: [Conversion] -> Simpset -> Simpset
 addConvs convs ss = foldr addConv ss convs
 
-scSimpset :: SharedContext -> [TypedDef] -> [Ident] -> [Conversion Term] ->
-             IO (Simpset Term)
+scSimpset :: SharedContext -> [Def] -> [Ident] -> [Conversion] -> IO Simpset
 scSimpset sc defs eqIdents convs = do
   defRules <- concat <$> traverse (scDefRewriteRules sc) defs
   eqRules <- mapM (scEqRewriteRule sc) eqIdents
   return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
-listRules :: Simpset t -> [RewriteRule t]
+listRules :: Simpset -> [RewriteRule]
 listRules ss = [ r | Left r <- Net.content ss ]
 
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asBetaRedex :: (Monad m, Termlike t) => R.Recognizer m t (String, t, t, t)
+asBetaRedex :: (Monad m) => R.Recognizer m Term (String, Term, Term, Term)
 asBetaRedex t =
     do (f, arg) <- R.asApp t
        (s, ty, body) <- R.asLambda f
        return (s, ty, body, arg)
 
-asPairRedex :: (Monad m, Termlike t) => R.Recognizer m t t
+asPairRedex :: (Monad m) => R.Recognizer m Term Term
 asPairRedex t =
     do (u, b) <- R.asPairSelector t
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
-asRecordRedex :: (Monad m, Termlike t) => R.Recognizer m t (Map FieldName t, FieldName)
+asRecordRedex :: (Monad m) => R.Recognizer m Term (Map FieldName Term, FieldName)
 asRecordRedex t =
     do (x, i) <- R.asRecordSelector t
        ts <- R.asRecordValue x
@@ -384,7 +386,7 @@ reduceSharedTerm _ (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms
-rewriteSharedTerm :: SharedContext -> Simpset Term -> Term -> IO Term
+rewriteSharedTerm :: SharedContext -> Simpset -> Term -> IO Term
 rewriteSharedTerm sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
@@ -403,7 +405,7 @@ rewriteSharedTerm sc ss t0 =
           Nothing -> apply (Net.unify_term ss t) t
           Just io -> rewriteAll =<< io
     apply :: (?cache :: Cache IORef TermIndex Term) =>
-             [Either (RewriteRule Term) (Conversion Term)] -> Term -> IO Term
+             [Either RewriteRule Conversion] -> Term -> IO Term
     apply [] t = return t
     apply (Left (RewriteRule {lhs, rhs}) : rules) t = do
       result <- runMaybeT (scMatch sc lhs t)
@@ -414,7 +416,7 @@ rewriteSharedTerm sc ss t0 =
             -- This should never happen because we avoid inserting
             -- reflexive rules into simp sets in the first place.
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
-                          "(THE IMPOSSIBLE HAPPENED!): " ++ show lhs
+                          "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm defaultPPOpts lhs
                apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
@@ -429,7 +431,7 @@ rewriteSharedTerm sc ss t0 =
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
-    :: SharedContext -> Simpset Term -> Term -> IO Term
+    :: SharedContext -> Simpset -> Term -> IO Term
 rewriteSharedTermTypeSafe sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
@@ -485,7 +487,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
                   Term -> IO Term
     rewriteTop t = apply (Net.match_term ss t) t
     apply :: (?cache :: Cache IORef TermIndex Term) =>
-             [Either (RewriteRule Term) (Conversion Term)] ->
+             [Either RewriteRule Conversion] ->
              Term -> IO Term
     apply [] t = return t
     apply (Left rule : rules) t =
@@ -498,7 +500,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
         Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
 
 -- | Generate a new SharedContext that normalizes terms as it builds them.
-rewritingSharedContext :: SharedContext -> Simpset Term -> SharedContext
+rewritingSharedContext :: SharedContext -> Simpset -> SharedContext
 rewritingSharedContext sc ss = sc'
   where
     sc' = sc { scTermF = rewriteTop }
@@ -507,7 +509,7 @@ rewritingSharedContext sc ss = sc'
     rewriteTop tf = apply (Net.match_term ss t) t
       where t = Unshared tf
 
-    apply :: [Either (RewriteRule Term) (Conversion Term)] ->
+    apply :: [Either RewriteRule Conversion] ->
              Term -> IO Term
     apply [] (Unshared tf) = scTermF sc tf
     apply [] STApp{ stAppTermF = tf } = scTermF sc tf
@@ -516,7 +518,7 @@ rewritingSharedContext sc ss = sc'
         Nothing -> apply rules t
         Just inst
           | l == r ->
-            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ show l
+            do putStrLn $ "rewritingSharedContext: skipping reflexive rule: " ++ scPrettyTerm defaultPPOpts l
                apply rules t
           | otherwise -> instantiateVarList sc' 0 (Map.elems inst) r
     apply (Right conv : rules) t =
@@ -528,14 +530,14 @@ rewritingSharedContext sc ss = sc'
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables
 --  and/or under binders?
 replaceTerm :: SharedContext
-            -> Simpset Term        -- ^ A simpset of rewrite rules to apply along with the replacement
+            -> Simpset        -- ^ A simpset of rewrite rules to apply along with the replacement
             -> (Term, Term)  -- ^ (pat,repl) is a tuple of a pattern term to replace and a replacement term
             -> Term                  -- ^ the term in which to perform the replacement
             -> IO Term
 replaceTerm sc ss (pat, repl) t = do
     let fvs = looseVars pat
     unless (fvs == 0) $ fail $ unwords
-       [ "replaceTerm: term to replace has free variables!", show t ]
+       [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
     rewriteSharedTerm sc ss' t
@@ -598,11 +600,11 @@ hoistIfs sc t = do
    splitConds sc ss (map fst conds) t'
 
 
-splitConds :: SharedContext -> Simpset Term -> [Term] -> Term -> IO Term
+splitConds :: SharedContext -> Simpset -> [Term] -> Term -> IO Term
 splitConds _ _ [] = return
 splitConds sc ss (c:cs) = splitCond sc ss c >=> splitConds sc ss cs
 
-splitCond :: SharedContext -> Simpset Term -> Term -> Term -> IO Term
+splitCond :: SharedContext -> Simpset -> Term -> Term -> IO Term
 splitCond sc ss c t = do
    ty <- scTypeOf sc t
    trueTerm  <- scBool sc True
@@ -619,7 +621,7 @@ orderTerms :: SharedContext -> [Term] -> IO [Term]
 orderTerms _sc xs = return $ List.sort xs
 
 doHoistIfs :: SharedContext
-         -> Simpset Term
+         -> Simpset
          -> Cache IORef TermIndex (HoistIfs s)
          -> Term
          -> Term
@@ -663,7 +665,6 @@ doHoistIfs sc ss hoistCache itePat = go
            t' <- scApply sc f' x'
            return (t', conds1 ++ conds2)
 
-       goF _ (Let _defs _e) = fail "if hoisting through 'let' not implemented"
        goF _ (Lambda nm tp body) = goBinder scLambda nm tp body
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
 

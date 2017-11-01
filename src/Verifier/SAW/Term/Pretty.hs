@@ -11,36 +11,39 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Term.Pretty
- ( Prec(..)
- , LocalVarDoc
- , emptyLocalVarDoc
- , TermDoc(..)
- , ppTermDoc
- , docShowLocalNames
- , docShowLocalTypes
- , TermPrinter
- , PPOpts(..)
- , defaultPPOpts
- , ppAppParens
- , ppIdent
- , ppDefEqn
- , ppTermF
- , ppTermF'
- , ppFlatTermF
- , ppFlatTermF'
- , ppCtor
- , ppDataType
- , ppPat
- , ppTypeConstraint
- , ppLetBlock
- , ppNat
- , commaSepList
- , semiTermList
- , ppParens
- , ppTermlike
- , showTermlike
- , ppTermDepth
- ) where
+  ( Prec(..)
+  , LocalVarDoc
+  , emptyLocalVarDoc
+  , TermDoc(..)
+  , ppTermDoc
+  , docShowLocalNames
+  , docShowLocalTypes
+  , TermPrinter
+  , PPOpts(..)
+  , defaultPPOpts
+  , ppAppParens
+  , ppIdent
+  , ppDef
+  , ppDefEqn
+  , ppTermF
+  , ppTermF'
+  , ppFlatTermF
+  , ppFlatTermF'
+  , ppCtor
+  , ppDataType
+  , ppPat
+  , ppTypeConstraint
+  , ppLetBlock
+  , ppNat
+  , commaSepList
+  , semiTermList
+  , ppParens
+  , ppTerm
+  , showTerm
+  , ppTermDepth
+  , ppModule
+  , showModule
+  ) where
 
 import Control.Applicative hiding (empty)
 import Control.Lens
@@ -58,6 +61,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import Prelude hiding (all, foldr, sum)
 
+import Verifier.SAW.Module
 import Verifier.SAW.Term.Functor
 
 data Prec
@@ -168,7 +172,7 @@ ppNat opts i
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
-ppCtor :: TermPrinter e -> Ctor Ident e -> Doc
+ppCtor :: TermPrinter e -> Ctor e -> Doc
 ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
   where
     lcls = emptyLocalVarDoc
@@ -177,26 +181,18 @@ ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
 ppTypeConstraint :: TermPrinter e -> LocalVarDoc -> Doc -> e -> Doc
 ppTypeConstraint f lcls sym tp = hang 2 $ group (sym <<$>> doublecolon <+> f lcls PrecLambda tp)
 
-ppLocalDef :: Applicative f
-           => (Bool -> LocalVarDoc -> Prec -> e -> f Doc)
-           -> LocalVarDoc -- ^ Context outside let
-           -> LocalVarDoc -- ^ Context inside let
-           -> LocalDef e
-           -> f Doc
-ppLocalDef pp lcls lcls' (Def nm _qual tp eqs) =
-    ppd <$> (pptc <$> pp False lcls PrecLambda tp)
-        <*> traverse (ppDefEqnF (pp True) lcls' sym) (reverse eqs)
-  where sym = text nm
-        pptc tpd = hang 2 $ group (sym <<$>> doublecolon <+> tpd <> semi)
-        ppd tpd eqds = vcat (tpd : eqds)
+ppDef :: PPOpts -> LocalVarDoc -> Def -> Doc
+ppDef opts lcls d = vcat (tpd : (ppDefEqn (ppTerm opts) lcls sym <$> (reverse $ defEqs d)))
+  where sym = ppIdent (defIdent d)
+        tpd = ppTypeConstraint (ppTerm opts) lcls sym (defType d) <> semi
 
-ppDefEqn :: TermPrinter e -> LocalVarDoc -> Doc -> DefEqn e -> Doc
+ppDefEqn :: TermPrinter Term -> LocalVarDoc -> Doc -> DefEqn -> Doc
 ppDefEqn pp lcls sym eq = runIdentity (ppDefEqnF pp' lcls sym eq)
   where pp' l' p' e' = pure (pp l' p' e')
 
 ppDefEqnF :: Applicative f
-          => (LocalVarDoc -> Prec -> e -> f Doc)
-          -> LocalVarDoc -> Doc -> DefEqn e -> f Doc
+          => (LocalVarDoc -> Prec -> Term -> f Doc)
+          -> LocalVarDoc -> Doc -> DefEqn -> f Doc
 ppDefEqnF f lcls sym (DefEqn pats rhs) =
     ppEq <$> traverse ppPat' pats
 -- Is this OK?
@@ -206,7 +202,7 @@ ppDefEqnF f lcls sym (DefEqn pats rhs) =
         lcls' = foldl' consBinding lcls (concatMap patBoundVars pats)
         ppPat' = fmap ppTermDoc . ppPat (\p e -> TermDoc <$> f lcls' p e) PrecArg
 
-ppDataType :: TermPrinter e -> DataType Ident e -> Doc
+ppDataType :: TermPrinter Term -> DataType -> Doc
 ppDataType f dt =
   group $ (group ((text "data" <+> tc) <<$>> (text "where" <+> lbrace)))
           <<$>>
@@ -287,8 +283,8 @@ ppLetBlock defs body =
   text " in" <+> body
 
 ppPat :: Applicative f
-      => (Prec -> e -> f TermDoc)
-      -> Prec -> Pat e -> f TermDoc
+      => (Prec -> Term -> f TermDoc)
+      -> Prec -> Pat -> f TermDoc
 ppPat f p pat =
   case pat of
     PVar i _ _ -> pure $ TermDoc $ text i
@@ -378,14 +374,6 @@ ppTermF' _opts pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp True lcls' PrecL
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' _opts pp lcls p (Let dl u) =
-    ppLet <$> traverse (ppLocalDef pp' lcls lcls') dl
-          <*> pp True lcls' PrecNone u
-  where ppLet dl' u' = TermDoc $
-          ppParens (p > PrecNone) $ ppLetBlock dl' (ppTermDoc u')
-        nms = concatMap localVarNames dl
-        lcls' = foldl' consBinding lcls nms
-        pp' a b c d = ppTermDoc <$> pp a b c d
 ppTermF' _opts _pp lcls _p (LocalVar i)
 --    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
     | otherwise = pure $ TermDoc d
@@ -395,22 +383,22 @@ ppTermF' _opts _pp lcls _p (LocalVar i)
 ppTermF' _ _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
 
 -- | Pretty print a term with the given outer precedence.
-ppTermlike :: forall t. Termlike t => PPOpts -> LocalVarDoc -> Prec -> t -> Doc
-ppTermlike opts lcls0 p0 trm = ppTermDoc (pp False lcls0 p0 trm)
+ppTerm :: PPOpts -> LocalVarDoc -> Prec -> Term -> Doc
+ppTerm opts lcls0 p0 trm = ppTermDoc (pp False lcls0 p0 trm)
   where
-    pp :: Bool -> LocalVarDoc -> Prec -> t -> TermDoc
+    pp :: Bool -> LocalVarDoc -> Prec -> Term -> TermDoc
     pp _ lcls p t = ppTermF opts pp lcls p (unwrapTermF t)
 
-showTermlike :: Termlike t => t -> String
-showTermlike t = show $ ppTermlike defaultPPOpts emptyLocalVarDoc PrecNone t
+showTerm :: Term -> String
+showTerm t = show $ ppTerm defaultPPOpts emptyLocalVarDoc PrecNone t
 
-ppTermDepth :: forall t. Termlike t => PPOpts -> Int -> t -> Doc
+ppTermDepth :: PPOpts -> Int -> Term -> Doc
 ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
   where
-    pp :: Int -> TermPrinter t
+    pp :: Int -> TermPrinter Term
     pp d lcls p t = ppTermDoc (pp' d False lcls p t)
 
-    pp' :: Int -> Bool -> LocalVarDoc -> Prec -> t -> TermDoc
+    pp' :: Int -> Bool -> LocalVarDoc -> Prec -> Term -> TermDoc
     pp' 0 _ _ _ _ = TermDoc $ text "_"
     pp' d _ lcls p t = case unwrapTermF t of
       App t1 t2 -> TermDoc $
@@ -419,3 +407,18 @@ ppTermDepth opts d0 = pp d0 emptyLocalVarDoc PrecNone
         (pp (d-1) lcls PrecArg t2)
       tf ->
         ppTermF opts (pp' (d-1)) lcls p tf
+
+ppModule :: PPOpts -> Module -> Doc
+ppModule opts m =
+  vcat $ concat $ fmap (map (<> line)) $
+  [ fmap ppImport (Map.keys (m^.moduleImports))
+  , fmap ppDecl   (moduleDecls m)
+  ]
+  where
+    ppImport nm = text $ "import " ++ show nm
+    ppDecl (TypeDecl d) = ppDataType (ppTerm opts) d
+    ppDecl (DefDecl d) = ppDef opts emptyLocalVarDoc d
+
+showModule :: Module -> String
+showModule m =
+  flip displayS "" $ renderPretty 0.8 80 $ ppModule defaultPPOpts m

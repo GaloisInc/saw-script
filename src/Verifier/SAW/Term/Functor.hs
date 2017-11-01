@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 
 {- |
@@ -16,43 +17,32 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Term.Functor
- ( -- * Names.
-   ModuleName, mkModuleName
- , preludeName
-   -- * Data types and definitions.
- , DeBruijnIndex
- , FieldName
- , DataType(..)
- , Ctor(..)
- , GenericDef(..)
- , Def
- , DefQualifier(..)
- , LocalDef
- , ExtCns(..)
- , VarIndex
- , DefEqn(..)
- , localVarNames
-   -- * Patterns.
- , Pat(..)
- , patBoundVars
- , patBoundVarCount
- , patUnusedVarCount
-   -- * Terms and associated operations.
- , TermF(..)
- , FlatTermF(..)
- , zipWithFlatTermF
- , BitSet
- , freesTermF
- , Termlike(..)
- , termToPat
-   -- * Primitive types.
- , Sort, mkSort, sortOf, maxSort
- , Ident(identModule, identName), mkIdent
- , parseIdent
- , isIdent
- ) where
+  ( -- * Names.
+    ModuleName, mkModuleName
+  , preludeName
+    -- * Data types and definitions.
+  , DeBruijnIndex
+  , FieldName
+  , ExtCns(..)
+  , VarIndex
+    -- * Terms and associated operations.
+  , TermIndex
+  , Term(..)
+  , TermF(..)
+  , FlatTermF(..)
+  , zipWithFlatTermF
+  , BitSet
+  , freesTermF
+  , unwrapTermF
+  , termToPat
+  , alphaEquiv
+    -- * Primitive types.
+  , Sort, mkSort, sortOf, maxSort
+  , Ident(identModule, identName), mkIdent
+  , parseIdent
+  , isIdent
+  ) where
 
-import Control.Applicative hiding (empty)
 import Control.Exception (assert)
 import Control.Lens
 import Data.Bits
@@ -61,21 +51,20 @@ import Data.Char
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import Data.Foldable (sum, all)
+import qualified Data.Foldable as Foldable (all, and)
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
 
-import Prelude hiding (all, foldr, sum)
-
 import qualified Verifier.SAW.TermNet as Net
-import Verifier.SAW.Utils (internalError, sumBy)
+import Verifier.SAW.Utils (internalError)
 
 type DeBruijnIndex = Int
 type FieldName = String
@@ -101,7 +90,7 @@ instance Show ModuleName where
 -- module name given first.
 mkModuleName :: [String] -> ModuleName
 mkModuleName [] = error "internal: mkModuleName given empty module name"
-mkModuleName nms = assert (all isCtor nms) $ ModuleName (BS.fromString s)
+mkModuleName nms = assert (Foldable.all isCtor nms) $ ModuleName (BS.fromString s)
   where s = intercalate "." (reverse nms)
 
 preludeName :: ModuleName
@@ -142,11 +131,11 @@ instance IsString Ident where
   fromString = parseIdent
 
 isIdent :: String -> Bool
-isIdent (c:l) = isAlpha c && all isIdChar l
+isIdent (c:l) = isAlpha c && Foldable.all isIdChar l
 isIdent [] = False
 
 isCtor :: String -> Bool
-isCtor (c:l) = isUpper c && all isIdChar l
+isCtor (c:l) = isUpper c && Foldable.all isIdChar l
 isCtor [] = False
 
 -- | Returns true if character can appear in identifier.
@@ -178,146 +167,6 @@ maxSort :: Sort -> Sort -> Sort
 maxSort (SortCtor x) (SortCtor y) = SortCtor (max x y)
 
 
--- Patterns --------------------------------------------------------------------
-
--- Patterns are used to match equations.
-data Pat e = -- | Variable bound by pattern.
-             -- Variables may be bound in context in a different order than
-             -- a left-to-right traversal.  The DeBruijnIndex indicates the order.
-             PVar String DeBruijnIndex e
-             -- | The
-           | PUnused DeBruijnIndex e
-           | PUnit
-           | PPair (Pat e) (Pat e)
-           | PEmpty
-           | PField (Pat e) (Pat e) (Pat e) -- ^ Field name, field value, rest of record
-           | PString String
-           | PCtor Ident [Pat e]
-  deriving (Eq,Ord, Show, Functor, Foldable, Traversable, Generic)
-
-instance Hashable e => Hashable (Pat e) -- automatically derived
-
-patBoundVarCount :: Pat e -> DeBruijnIndex
-patBoundVarCount p =
-  case p of
-    PVar{} -> 1
-    PUnused{} -> 0
-    PCtor _ l -> sumBy patBoundVarCount l
-    PUnit     -> 0
-    PPair x y -> patBoundVarCount x + patBoundVarCount y
-    PEmpty    -> 0
-    PField f x y -> patBoundVarCount f + patBoundVarCount x + patBoundVarCount y
-    PString _ -> 0
-
-patUnusedVarCount :: Pat e -> DeBruijnIndex
-patUnusedVarCount p =
-  case p of
-    PVar{}       -> 0
-    PUnused{}    -> 1
-    PCtor _ l    -> sumBy patUnusedVarCount l
-    PUnit        -> 0
-    PPair x y    -> patUnusedVarCount x + patUnusedVarCount y
-    PEmpty       -> 0
-    PField _ x y -> patUnusedVarCount x + patUnusedVarCount y
-    PString _    -> 0
-
-patBoundVars :: Pat e -> [String]
-patBoundVars p =
-  case p of
-    PVar s _ _   -> [s]
-    PCtor _ l    -> concatMap patBoundVars l
-    PUnit        -> []
-    PPair x y    -> patBoundVars x ++ patBoundVars y
-    PEmpty       -> []
-    PField _ x y -> patBoundVars x ++ patBoundVars y
-    PString _    -> []
-    PUnused{}    -> []
-
-
--- Definitions -----------------------------------------------------------------
-
-data DefQualifier
-  = NoQualifier
-  | PrimQualifier
-  | AxiomQualifier
- deriving (Eq, Ord, Show, Generic)
-
-instance Hashable DefQualifier -- automatically derived
-
--- | A Definition contains an identifier, the type of the definition, and a list of equations.
-data GenericDef n e =
-  Def
-  { defIdent :: n
-  , defQualifier :: DefQualifier
-  , defType :: e
-  , defEqs :: [DefEqn e]
-  }
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
-
-type Def = GenericDef Ident
-type LocalDef = GenericDef String
-
-instance (Hashable n, Hashable e) => Hashable (GenericDef n e) -- automatically derived
-
-localVarNames :: LocalDef e -> [String]
-localVarNames (Def nm _ _ _) = [nm]
-
-data DefEqn e
-  = DefEqn [Pat e] e -- ^ List of patterns and a right hand side
-  deriving (Functor, Foldable, Traversable, Generic, Show)
-
-instance Hashable e => Hashable (DefEqn e) -- automatically derived
-
-instance (Eq e) => Eq (DefEqn e) where
-  DefEqn xp xr == DefEqn yp yr = xp == yp && xr == yr
-
-instance (Ord e) => Ord (DefEqn e) where
-  compare (DefEqn xp xr) (DefEqn yp yr) = compare (xp,xr) (yp,yr)
-
-
--- Constructors ----------------------------------------------------------------
-
-data Ctor n tp =
-  Ctor
-  { ctorName :: !n
-  , ctorType :: tp -- ^ The type of the constructor (should contain no free variables).
-  }
-  deriving (Functor, Foldable, Traversable)
-
-lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
-lift2 f h x y = h (f x) (f y)
-
-instance Eq n => Eq (Ctor n tp) where
-  (==) = lift2 ctorName (==)
-
-instance Ord n => Ord (Ctor n tp) where
-  compare = lift2 ctorName compare
-
-instance Show n => Show (Ctor n tp) where
-  show = show . ctorName
-
-
--- Datatypes -------------------------------------------------------------------
-
-data DataType n t =
-  DataType
-  { dtName :: n
-  , dtType :: t
-  , dtCtors :: [Ctor n t]
-  , dtIsPrimitive :: Bool
-  }
-  deriving (Functor, Foldable, Traversable)
-
-instance Eq n => Eq (DataType n t) where
-  (==) = lift2 dtName (==)
-
-instance Ord n => Ord (DataType n t) where
-  compare = lift2 dtName compare
-
-instance Show n => Show (DataType n t) where
-  show = show . dtName
-
-
 -- External Constants ----------------------------------------------------------
 
 type VarIndex = Word64
@@ -330,7 +179,7 @@ data ExtCns e =
   , ecName :: !String
   , ecType :: !e
   }
-  deriving (Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable)
 
 instance Eq (ExtCns e) where
   x == y = ecVarIndex x == ecVarIndex y
@@ -382,7 +231,7 @@ data FlatTermF e
 
     -- | An external constant with a name.
   | ExtCns !(ExtCns e)
-  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
@@ -433,18 +282,12 @@ data TermF e
     | App !e !e
     | Lambda !String !e !e
     | Pi !String !e !e
-    | Let [LocalDef e] !e
-      -- ^ List of bindings and the let expression itself.
-      -- Let expressions introduce variables for each identifier.
-      -- Let definitions are bound in the order they appear, e.g., the first symbol
-      -- is referred to by the largest deBruijnIndex within the let, and the last
-      -- symbol has index 0 within the let.
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
     | Constant String !e !e
       -- ^ An abstract constant packaged with its definition and type.
       -- The body and type should be closed terms.
-  deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
 
@@ -458,23 +301,6 @@ bitwiseOrOf fld = foldlOf' fld (.|.) 0
 -- Bit n is a 1 iff n is in the set.
 type BitSet = Integer
 
-freesPat :: Pat BitSet -> BitSet
-freesPat p0 =
-  case p0 of
-    PVar  _ i tp -> tp `shiftR` i
-    PUnused i tp -> tp `shiftR` i
-    PUnit        -> 0
-    PPair x y    -> freesPat x .|. freesPat y
-    PEmpty       -> 0
-    PField _ x y -> freesPat x .|. freesPat y
-    PCtor _ pl   -> bitwiseOrOf folded (freesPat <$> pl)
-    PString _    -> 0
-
-freesDefEqn :: DefEqn BitSet -> BitSet
-freesDefEqn (DefEqn pl rhs) =
-    bitwiseOrOf folded (freesPat <$> pl) .|. rhs `shiftR` pc
-  where pc = sum (patBoundVarCount <$> pl)
-
 freesTermF :: TermF BitSet -> BitSet
 freesTermF tf =
     case tf of
@@ -482,23 +308,67 @@ freesTermF tf =
       App l r -> l .|. r
       Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
       Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
-      Let lcls rhs ->
-          bitwiseOrOf (folded . folded) lcls' .|. rhs `shiftR` n
-        where n = length lcls
-              freesLocalDef :: LocalDef BitSet -> [BitSet]
-              freesLocalDef (Def _ _ tp eqs) =
-                tp : fmap ((`shiftR` n) . freesDefEqn) eqs
-              lcls' = freesLocalDef <$> lcls
       LocalVar i -> bit i
       Constant _ _ _ -> 0 -- assume rhs is a closed term
 
 
--- Termlike Class --------------------------------------------------------------
+-- Term Datatype ---------------------------------------------------------------
 
-class Termlike t where
-  unwrapTermF :: t -> TermF t
+type TermIndex = Int -- Word64
 
-termToPat :: Termlike t => t -> Net.Pat
+data Term
+  = STApp
+     { stAppIndex    :: {-# UNPACK #-} !TermIndex
+     , stAppFreeVars :: !BitSet -- Free variables
+     , stAppTermF    :: !(TermF Term)
+     }
+  | Unshared !(TermF Term)
+  deriving (Show, Typeable)
+
+instance Hashable Term where
+  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
+  hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
+
+-- | Combine two given hash values.  'combine' has zero as a left
+-- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
+combine :: Int -> Int -> Int
+combine h1 h2 = (h1 * 0x01000193) `xor` h2
+
+instance Eq Term where
+  (==) = alphaEquiv
+
+alphaEquiv :: Term -> Term -> Bool
+alphaEquiv = term
+  where
+    term :: Term -> Term -> Bool
+    term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
+    term (Unshared tf1) (STApp{stAppTermF = tf2}) = termf tf1 tf2
+    term (STApp{stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
+    term (STApp{stAppIndex = i1, stAppTermF = tf1})
+         (STApp{stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
+
+    termf :: TermF Term -> TermF Term -> Bool
+    termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
+    termf (App t1 u1) (App t2 u2) = term t1 t2 && term u1 u2
+    termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
+    termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
+    termf (LocalVar i1) (LocalVar i2) = i1 == i2
+    termf (Constant x1 t1 _) (Constant x2 t2 _) = x1 == x2 && term t1 t2
+    termf _ _ = False
+
+    ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
+    ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
+                         Nothing -> False
+                         Just ftf3 -> Foldable.and ftf3
+
+instance Ord Term where
+  compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | i == j = EQ
+  compare x y = compare (unwrapTermF x) (unwrapTermF y)
+
+instance Net.Pattern Term where
+  toPat = termToPat
+
+termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
       Constant d _ _            -> Net.Atom d
@@ -510,3 +380,6 @@ termToPat t =
       FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
       _                         -> Net.Var
 
+unwrapTermF :: Term -> TermF Term
+unwrapTermF STApp{stAppTermF = tf} = tf
+unwrapTermF (Unshared tf) = tf

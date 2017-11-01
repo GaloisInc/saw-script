@@ -22,7 +22,7 @@ import Verifier.SAW.SharedTerm
 import Test.Tasty
 import Test.Tasty.HUnit
 
-scMkTerm :: SharedContext -> TermBuilder Term Term -> IO Term
+scMkTerm :: SharedContext -> TermBuilder Term -> IO Term
 scMkTerm sc t = runTermBuilder t (scTermF sc)
 
 rewriter_tests :: [TestTree]
@@ -46,11 +46,11 @@ prelude_bveq_sameL_test =
             `pureApp` n
             `pureApp` x
             `mkApp` (mkGlobalDef "Prelude.bvAdd" `pureApp` n `pureApp` x `pureApp` z)
-    let rhs = 
+    let rhs =
           mkGlobalDef "Prelude.bvEq"
             `pureApp` n
             `mkApp` (mkGlobalDef "Prelude.bvNat" `pureApp` n `mkApp` mkNatLit 0)
             `pureApp` z
     lhs_term <- scMkTerm sc lhs
-    rhs_term <- scMkTerm sc rhs               
+    rhs_term <- scMkTerm sc rhs
     assertEqual "Incorrect conversion\n" lhs_term rhs_term
