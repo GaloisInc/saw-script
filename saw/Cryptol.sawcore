@@ -8,11 +8,17 @@ import Prelude;
 --------------------------------------------------------------------------------
 -- Additional operations on Prelude types
 
-pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) -> #(a1, a2) -> #(b1, b2);
-pairMap _ _ _ _ f g (x, y) = (f x, g y);
+{-
+pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) ->
+           #(a1, a2) -> #(b1, b2);
+pairMap a1 _ a2 _ f g xy = (f (fst a1 a2 xy), g (snd a1 a2 xy));
 
-pairMap2 :: (a1 b1 c1 a2 b2 c2 :: sort 0) -> (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) -> #(a1, a2) -> #(b1, b2) -> #(c1, c2);
-pairMap2 _ _ _ _ _ _ f1 f2 (x1, x2) (y1, y2) = (f1 x1 y1, f2 x2 y2);
+pairMap2 :: (a1 b1 c1 a2 b2 c2 :: sort 0) ->
+            (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) ->
+            #(a1, a2) -> #(b1, b2) -> #(c1, c2);
+pairMap2 a1 b1 _ a2 b2 _ f1 f2 x12 y12 =
+  (f1 (fst a1 a2 x12) (fst b1 b2 y12), f2 (snd a1 a2 x12) (snd b1 b2 y12));
+-}
 
 compose :: (a b c :: sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
@@ -23,6 +29,7 @@ bvExp n x y = foldr Bool (bitvector n) n
     ite (bitvector n) b (bvMul n x (bvMul n a a)) (bvMul n a a))
   (bvNat n 1)
   (reverse n Bool y);
+
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers
@@ -55,6 +62,24 @@ binaryNumFun f1 f2 f3 f4 num1 num2 =
                      (f2 n1) num2)
           (Num_rec (\ (num2'::Num) -> Num) f3 f4 num2)
           num1;
+
+-- Build a trinary function on Nums by lifting a trinary function on Nats, with
+-- a single default case if any of the Nums is infinite
+trinaryNumFun :: (Nat -> Nat -> Nat -> Nat) -> Num ->
+                 Num -> Num -> Num -> Num;
+trinaryNumFun f1 f2 num1 num2 num3 =
+  Num_rec
+    (\ (num1'::Num) -> Num)
+    (\ (n1::Nat) ->
+       Num_rec
+         (\ (num2'::Num) -> Num)
+         (\ (n2::Nat) ->
+            Num_rec
+              (\ (num3'::Num) -> Num)
+              (\ (n3::Nat) -> TCNum (f1 n1 n2 n3))
+              f2 num3)
+         f2 num2)
+    f2 num1;
 
 tcAdd :: Num -> Num -> Num;
 tcAdd =
@@ -123,97 +148,137 @@ tcLenFromThenTo_Nat x y z =
     (ite Nat (ltNat x z) 0 (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
-tcLenFromThen (TCNum x) (TCNum y) (TCNum w) = TCNum (tcLenFromThen_Nat x y w);
--- tcLenFromThen is undefined on TCInf
+tcLenFromThen = trinaryNumFun tcLenFromThen_Nat TCInf;
 
 tcLenFromThenTo :: Num -> Num -> Num -> Num;
-tcLenFromThenTo (TCNum x) (TCNum y) (TCNum z) = TCNum (tcLenFromThenTo_Nat x y z);
--- tcLenFromThenTo is undefined on TCInf
+tcLenFromThenTo = trinaryNumFun tcLenFromThenTo_Nat TCInf;
+
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
 seq :: Num -> sort 0 -> sort 0;
-seq (TCNum n) a = Vec n a;
-seq TCInf a = Stream a;
+seq num a =
+  Num_rec (\ (num::Num) -> sort 0) (\ (n::Nat) -> Vec n a) (Stream a) num;
 
 seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
-seqMap a b (TCNum n) f = map a b f n;
-seqMap a b TCInf f = streamMap a b f;
+seqMap a b num f =
+  Num_rec (\ (n::Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
 
 seqConst :: (n :: Num) -> (a :: sort 0) -> a -> seq n a;
-seqConst (TCNum n) = replicate n;
-seqConst TCInf = streamConst;
+seqConst =
+  Num_rec (\ (n::Num) -> (a :: sort 0) -> a -> seq n a) replicate streamConst;
+
 
 --------------------------------------------------------------------------------
 -- Auxiliary functions
 
 eListSel :: (a :: sort 0) -> (n :: Num) -> seq n a -> Nat -> a;
-eListSel a (TCNum n) xs i = at n a xs i;
-eListSel a TCInf xs i = streamGet a xs i;
+eListSel a =
+  Num_rec (\ (num::Num) -> seq num a -> Nat -> a)
+          (\ (n::Nat) -> at n a) (streamGet a);
+
 
 --------------------------------------------------------------------------------
 -- List comprehensions
 
-from :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b);
-from a b (TCNum m) (TCNum n) =
-  \ (xs :: Vec m a) ->
-  \ (k :: a -> Vec n b) ->
-  join m n #(a, b)
-  (map a (Vec n #(a, b))
-    (\(x :: a) -> map b #(a, b) (\(y :: b) -> (x, y)) n (k x))
-    m xs);
+from :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> (a -> seq n b) ->
+        seq (tcMul m n) #(a, b);
+from a b =
+  Num_rec
+    (\ (m::Num) -> (n :: Num) -> seq m a -> (a -> seq n b) ->
+                   seq (tcMul m n) #(a, b))
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> Vec m a -> (a -> seq n b) ->
+                        seq (tcMul (TCNum m) n) #(a, b))
+         -- Case 1: (TCNum m, TCNum n)
+         (\ (n::Nat) ->
+            \ (xs :: Vec m a) ->
+            \ (k :: a -> Vec n b) ->
+              join m n #(a, b)
+                   (map a (Vec n #(a, b))
+                        (\ (x :: a) ->
+                           map b #(a, b) (\ (y :: b) -> (x, y)) n (k x))
+                        m xs))
+         -- Case 2: n = (TCNum m, TCInf)
+         (natCase
+            (\ (m'::Nat) -> (Vec m' a -> (a -> Stream b) ->
+               seq (ite Num (equalNat 0 m') (TCNum 0) TCInf) #(a, b)))
+            (\ (xs :: Vec 0 a) ->
+             \ (k :: a -> Stream b) -> EmptyVec #(a, b))
+            (\ (m' :: Nat) ->
+             \ (xs :: Vec (Succ m') a) ->
+             \ (k :: a -> Stream b) ->
+               (\ (x :: a) -> streamMap b #(a, b) (\ (y::b) -> (x, y)) (k x))
+               (at (Succ m') a xs 0))
+            m))
+    (Num_rec
+       (\ (n::Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) #(a, b))
+       -- Case 3: (TCInf, TCNum n)
+       (\ (n::Nat) ->
+          natCase
+            (\ (n'::Nat) -> (Stream a -> (a -> Vec n' b) ->
+                seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) #(a, b)))
+            (\ (xs :: Stream a) ->
+             \ (k :: a -> Vec 0 b) -> EmptyVec #(a, b))
+            (\ (n' :: Nat) ->
+             \ (xs :: Stream a) ->
+             \ (k :: a -> Vec (Succ n') b) ->
+               streamJoin
+                 #(a, b) n'
+                 (streamMap
+                    a (Vec (Succ n') #(a, b))
+                    (\ (x::a) ->
+                       map b #(a, b) (\ (y::b) -> (x, y)) (Succ n') (k x))
+                    xs))
+            n)
+       -- Case 4: (TCInf, TCInf)
+       (\ (xs :: Stream a) ->
+        \ (k :: a -> Stream b) ->
+          (\ (x :: a) -> streamMap b #(a, b) (\ (y :: b) -> (x, y)) (k x))
+          (streamGet a xs 0)));
 
-from a b (TCNum m) TCInf =
-  natCase
-    (\ (m'::Nat) -> (Vec m' a -> (a -> Stream b) ->
-        seq (ite Num (equalNat 0 m') (TCNum 0) TCInf) #(a, b)))
-      (\ (xs :: Vec 0 a) ->
-       \ (k :: a -> Stream b) -> EmptyVec #(a, b))
-      (\ (m' :: Nat) ->
-       \ (xs :: Vec (Succ m') a) ->
-       \ (k :: a -> Stream b) ->
-        (\ (x :: a) -> streamMap b #(a, b) (\ (y::b) -> (x, y)) (k x))
-        (at (Succ m') a xs 0))
-      m;
-
-from a b TCInf (TCNum n) =
-  natCase
-    (\ (n'::Nat) -> (Stream a -> (a -> Vec n' b) ->
-        seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) #(a, b)))
-      (\ (xs :: Stream a) ->
-       \ (k :: a -> Vec 0 b) -> EmptyVec #(a, b))
-      (\ (n' :: Nat) ->
-       \ (xs :: Stream a) ->
-       \ (k :: a -> Vec (Succ n') b) ->
-         streamJoin #(a, b) n'
-         (streamMap a (Vec (Succ n') #(a, b))
-           (\ (x::a) -> map b #(a, b) (\ (y::b) -> (x, y)) (Succ n') (k x))
-           xs))
-      n;
-
-from a b TCInf TCInf =
-  \ (xs :: Stream a) ->
-  \ (k :: a -> Stream b) ->
-    (\ (x :: a) -> streamMap b #(a, b) (\ (y :: b) -> (x, y)) (k x))
-    (streamGet a xs 0);
 
 mlet :: (a b :: sort 0) -> (n :: Num) -> a -> (a -> seq n b) -> seq n #(a, b);
-mlet a b (TCNum n) x f = map b #(a, b) (\(y :: b) -> (x, y)) n (f x);
-mlet a b TCInf x f = streamMap b #(a, b) (\(y :: b) -> (x, y)) (f x);
+mlet a b =
+  Num_rec
+    (\ (n::Num) -> a -> (a -> seq n b) -> seq n #(a, b))
+    (\ (n::Nat) -> \ (x::a) -> \ (f::a -> Vec n b) ->
+       map b #(a, b) (\ (y :: b) -> (x, y)) n (f x))
+    (\ (x::a) -> \ (f::a -> Stream b) ->
+       streamMap b #(a, b) (\ (y :: b) -> (x, y)) (f x));
 
-seqZip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b);
-seqZip a b (TCNum m) (TCNum n) xs ys = zip a b m n xs ys;
-seqZip a b (TCNum m) TCInf xs ys = gen m #(a, b) (\(i :: Nat) -> (at m a xs i, streamGet b ys i));
-seqZip a b TCInf (TCNum n) xs ys = gen n #(a, b) (\(i :: Nat) -> (streamGet a xs i, at n b ys i));
-seqZip a b TCInf TCInf xs ys = streamMap2 a b #(a, b) (\(x::a) -> \(y::b) -> (x, y)) xs ys;
+seqZip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b ->
+          seq (tcMin m n) #(a, b);
+seqZip a b =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
+         (\ (n::Nat) -> zip a b m n)
+         (\ (xs::Vec m a) -> \ (ys::Stream b) ->
+            gen m #(a, b) (\ (i :: Nat) -> (at m a xs i, streamGet b ys i))))
+    (Num_rec
+       (\ (n::Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
+       (\ (n::Nat) ->
+        \ (xs::Stream a) -> \ (ys::Vec n b) ->
+          gen n #(a, b) (\ (i :: Nat) -> (streamGet a xs i, at n b ys i)))
+       (streamMap2 a b #(a, b) (\ (x::a) -> \ (y::b) -> (x, y))));
+
 
 --------------------------------------------------------------------------------
 -- Arith and Logic functions
 
-seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) -> seq n a -> seq n a -> seq n a;
-seqBinary (TCNum n) a f = zipWith a a a f n;
-seqBinary TCInf a f = streamMap2 a a a f;
+seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) ->
+             seq n a -> seq n a -> seq n a;
+seqBinary num a f =
+  Num_rec
+    (\ (n::Num) -> seq n a -> seq n a -> seq n a)
+    (\ (n::Nat) -> zipWith a a a f n)
+    (streamMap2 a a a f)
+    num;
 
 unitUnary :: #() -> #();
 unitUnary _ = ();
@@ -225,11 +290,12 @@ unitBinary :: #() -> #() -> #();
 unitBinary _ _ = ();
 
 pairUnary :: (a b :: sort 0) -> (a -> a) -> (b -> b) -> #(a | b) -> #(a | b);
-pairUnary _ _ f g (x | y) = (f x | g y);
+pairUnary a b f g xy = (f (fst a b xy) | g (snd a b xy));
 
 pairBinary :: (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b)
            -> #(a | b) -> #(a | b) -> #(a | b);
-pairBinary a b f g (x1 | x2) (y1 | y2) = (f x1 y1 | g x2 y2);
+pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12) |
+                              g (snd a b x12) (snd a b y12));
 
 emptyBinary :: #{} -> #{} -> #{};
 emptyBinary _ _ = {};
@@ -277,7 +343,8 @@ emptyCmp _ _ _ = False;
 
 pairCmp :: (a b :: sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
         -> #(a | b) -> #(a | b) -> Bool -> Bool;
-pairCmp a b f g (x1 | x2) (y1 | y2) k = f x1 y1 (g x2 y2 k);
+pairCmp a b f g x12 y12 k =
+  f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
 
 fieldCmp :: (s :: String) -> (a b :: sort 0)
          -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
@@ -541,7 +608,18 @@ OpsField s a b pa pb =
 -- Primitive Cryptol functions
 
 ecDemote :: (val bits :: Num) -> seq bits Bool;
-ecDemote (TCNum val) (TCNum bits) = bvNat bits val;
+ecDemote valnum bitsnum =
+  Num_rec (\ (bits::Num) -> seq bits Bool)
+          (\ (bits::Nat) ->
+             Num_rec (\ (val::Num) -> Vec bits Bool)
+                     (\ (val::Nat) -> bvNat bits val)
+                     -- Dummy case (this used to be undefined anyway): treat
+                     -- infinity mod 2^bits as 0 (but it doesn't matter)
+                     (bvNat bits 0) valnum)
+          -- Dummy case (this used to be undefined anyway): return the infinite
+          -- stream of 0s (i.e., Falses)
+          (streamConst Bool False)
+          bitsnum;
 
 -- Arith
 ecPlus :: (a :: sort 0) -> Ops a -> a -> a -> a;
@@ -620,54 +698,220 @@ ecZero :: (a :: sort 0) -> Ops a -> a;
 ecZero a pa = pa.this.zero;
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
-ecShiftL (TCNum m) (TCNum n) a pa = bvShiftL m a n (ecZero a pa);
-ecShiftL TCInf (TCNum n) a _ = bvStreamShiftL a n;
 
-ecShiftR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
-ecShiftR (TCNum m) (TCNum n) a pa = bvShiftR m a n (ecZero a pa);
-ecShiftR TCInf (TCNum n) a pa = bvStreamShiftR a n (ecZero a pa);
+ecShiftL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool ->
+            seq m a;
+ecShiftL =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a :: sort 0) -> Ops a -> seq m a ->
+       seq n Bool -> seq m a)
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a :: sort 0) -> Ops a -> Vec m a -> seq n Bool ->
+            Vec m a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (pa::Ops a) ->
+            bvShiftL m a n (ecZero a pa))
+         -- Error case for (TCNum m, infinity)
+         (\ (a::sort 0) -> \ (pa::Ops a) -> \ (v::Vec m a) ->
+          \ (s::Stream Bool) ->
+            error (Vec m a) "invalid ShiftL instance"))
+    (Num_rec
+       (\ (n::Num) -> (a::sort 0) -> Ops a -> Stream a -> seq n Bool ->
+          Stream a)
+       -- Case for (infinity, TCNum n)
+       (\ (n::Nat) -> \ (a::sort 0) -> \ (pa::Ops a) ->
+          bvStreamShiftL a n)
+       -- Error case for (infinity, infinity)
+       (\ (a::sort 0) -> \ (pa::Ops a) -> \ (s1::Stream a) ->
+        \ (s2 :: Stream Bool) ->
+          error (Stream a) "invalid ShiftL instance"));
+
+ecShiftR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool ->
+            seq m a;
+ecShiftR =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a :: sort 0) -> Ops a -> seq m a ->
+       seq n Bool -> seq m a)
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a :: sort 0) -> Ops a -> Vec m a -> seq n Bool ->
+            Vec m a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (pa::Ops a) ->
+            bvShiftR m a n (ecZero a pa))
+         -- Error case for (TCNum m, infinity)
+         (\ (a::sort 0) -> \ (pa::Ops a) -> \ (v::Vec m a) ->
+          \ (s::Stream Bool) ->
+            error (Vec m a) "invalid ShiftL instance"))
+    (Num_rec
+       (\ (n::Num) -> (a::sort 0) -> Ops a -> Stream a -> seq n Bool ->
+          Stream a)
+       -- Case for (infinity, TCNum n)
+       (\ (n::Nat) -> \ (a::sort 0) -> \ (pa::Ops a) ->
+          bvStreamShiftR a n (ecZero a pa))
+       -- Error case for (infinity, infinity)
+       (\ (a::sort 0) -> \ (pa::Ops a) -> \ (s1::Stream a) ->
+        \ (s2 :: Stream Bool) ->
+          error (Stream a) "invalid ShiftL instance"));
 
 ecSShiftR :: (n k :: Num) -> seq n Bool -> seq k Bool -> seq n Bool;
-ecSShiftR (TCNum n) (TCNum k) =
-  natCase (\(w :: Nat) -> bitvector w -> bitvector k -> bitvector w)
-  (\(x :: bitvector 0) -> \(i :: bitvector k) -> x)
-  (\(w :: Nat) -> \(x :: bitvector (Succ w)) -> \(i :: bitvector k) -> bvSShr w x (bvToNat k i))
-  n;
+ecSShiftR =
+  Num_rec
+    (\ (n::Num) -> (k::Num) -> seq n Bool -> seq k Bool -> seq n Bool)
+    (\ (n::Nat) ->
+       Num_rec
+         (\ (k::Num) -> Vec n Bool -> seq k Bool -> Vec n Bool)
+         -- Case for (TCNum n, TCNum k)
+         (\ (k::Nat) ->
+            natCase
+              (\ (w :: Nat) -> bitvector w -> bitvector k -> bitvector w)
+              (\ (x :: bitvector 0) -> \ (i :: bitvector k) -> x)
+              (\ (w :: Nat) -> \ (x :: bitvector (Succ w)) ->
+               \ (i :: bitvector k) -> bvSShr w x (bvToNat k i))
+              n)
+         -- Error case for (TCNum n, infinity)
+         (\ (v::Vec n Bool) -> \ (s::Stream Bool) ->
+            error (Vec n Bool) "invalid SShiftR instance"))
+    -- Error case for (infinity, any m)
+    (\ (k::Num) -> \ (s1::Stream Bool) -> \ (s2::seq k Bool) ->
+       error (Stream Bool) "invalid SShiftR instance");
 
 ecCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
-ecCarry (TCNum n) = bvCarry n;
+ecCarry =
+  Num_rec (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool)
+          bvCarry
+          -- Error case for infinity
+          (\ (s1::Stream Bool) -> \ (s2::Stream Bool) ->
+             error Bool "invalid Carry instance");
 
 ecSCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSCarry (TCNum n) =
-  natCase (\(w :: Nat) -> bitvector w -> bitvector w -> Bool)
-  (\(_ :: bitvector 0) (_ :: bitvector 0) -> error Bool "invalid SCarry instance")
-  bvSCarry n;
+ecSCarry =
+  Num_rec
+    (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool)
+    (\ (n::Nat) ->
+       natCase
+         (\ (w :: Nat) -> bitvector w -> bitvector w -> Bool)
+         (\ (_ :: bitvector 0) (_ :: bitvector 0) ->
+            error Bool "invalid SCarry instance")
+         bvSCarry n)
+    (\ (_::Stream Bool) -> \ (_::Stream Bool) ->
+       error Bool "invalid SCarry instance");
 
-ecRotL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
-ecRotL (TCNum m) (TCNum n) a _ = bvRotateL m a n;
+ecRotL :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool ->
+          seq m a;
+ecRotL =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> Ops a -> seq m a -> seq n Bool ->
+       seq m a)
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a::sort 0) -> Ops a -> Vec m a -> seq n Bool ->
+            Vec m a)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (ops::Ops a) -> bvRotateL m a n)
+         -- Error case for (TCNum m, infinity)
+         (\ (a::sort 0) -> \ (ops::Ops a) -> \ (v::Vec m a) ->
+          \ (s::Stream Bool) ->
+          error (Vec m a) "invalid RotL instance"))
+    -- Error case for n = infinity
+    (\ (n::Num) -> \ (a::sort 0) -> \ (ops::Ops a) -> \ (s1::Stream a) ->
+     \ (s2::seq n Bool) ->
+     error (Stream a) "invalid RotL instance");
 
-ecRotR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool -> seq m a;
-ecRotR (TCNum m) (TCNum n) a _ = bvRotateR m a n;
 
-ecCat :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n a -> seq (tcAdd m n) a;
-ecCat (TCNum m) (TCNum n) a _ = append m n a;
-ecCat (TCNum m) TCInf a _ = streamAppend a m;
+ecRotR :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n Bool ->
+          seq m a;
+ecRotR =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> Ops a -> seq m a -> seq n Bool ->
+       seq m a)
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a::sort 0) -> Ops a -> Vec m a -> seq n Bool ->
+            Vec m a)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (ops::Ops a) -> bvRotateR m a n)
+         -- Error case for (TCNum m, infinity)
+         (\ (a::sort 0) -> \ (ops::Ops a) -> \ (v::Vec m a) ->
+          \ (s::Stream Bool) ->
+          error (Vec m a) "invalid RotR instance"))
+    -- Error case for n = infinity
+    (\ (n::Num) -> \ (a::sort 0) -> \ (ops::Ops a) -> \ (s1::Stream a) ->
+     \ (s2::seq n Bool) ->
+     error (Stream a) "invalid RotR instance");
 
-ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcAdd m n) a -> #(seq m a, seq n a);
-ecSplitAt (TCNum m) (TCNum n) a _ xs = (take a m n xs, drop a m n xs);
-ecSplitAt (TCNum m) TCInf a _ xs = (streamTake a m xs, streamDrop a m xs);
+ecCat :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m a -> seq n a ->
+         seq (tcAdd m n) a;
+ecCat =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> Ops a -> seq m a -> seq n a ->
+       seq (tcAdd m n) a)
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a::sort 0) -> Ops a -> Vec m a -> seq n a ->
+            seq (tcAdd (TCNum m) n) a)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (ops::Ops a) -> append m n a)
+         (\ (a::sort 0) -> \ (ops::Ops a) -> streamAppend a m))
+    -- Error case for m = infinity
+    (\ (n::Num) -> \ (a::sort 0) -> \ (ops::Ops a) -> \ (s1::Stream a) ->
+     \ (s2::seq n a) ->
+     error (seq (tcAdd TCInf n) a) "invalid Cat instance");
 
-ecJoin :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m (seq n a) -> seq (tcMul m n) a;
-ecJoin (TCNum m) (TCNum n) a _ = join m n a;
-ecJoin TCInf (TCNum n) a _ =
-  natCase
-    (\ (n'::Nat) -> Stream (Vec n' a) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) a)
-      (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
-      (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) -> streamJoin a n' s)
-      n;
+ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcAdd m n) a ->
+             #(seq m a, seq n a);
+ecSplitAt =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> Ops a -> seq (tcAdd m n) a ->
+       #(seq m a, seq n a))
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a::sort 0) -> Ops a -> seq (tcAdd (TCNum m) n) a ->
+            #(Vec m a, seq n a))
+         -- The case (TCNum n, TCNum m)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (ops::Ops a) ->
+          \ (xs:: Vec (addNat m n) a) ->
+            (take a m n xs, drop a m n xs))
+         -- The case (TCNum m, infinity)
+         (\ (a::sort 0) -> \ (ops::Ops a) -> \ (xs:: Stream a) ->
+            (streamTake a m xs, streamDrop a m xs)))
+    -- Error case for m = infinity
+    (\ (n::Num) -> \ (a::sort 0) -> \ (ops::Ops a) ->
+     \ (xs:: seq (tcAdd TCInf n) a) ->
+       error #(Stream a, seq n a) "invalid SplitAt instance");
 
-ecSplit :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcMul m n) a -> seq m (seq n a);
+ecJoin :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq m (seq n a) ->
+          seq (tcMul m n) a;
+ecJoin =
+  Num_rec
+    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> Ops a -> seq m (seq n a) ->
+       seq (tcMul m n) a)
+    (\ (m::Nat) ->
+       Num_rec
+         (\ (n::Num) -> (a::sort 0) -> Ops a -> Vec m (seq n a) ->
+            seq (tcMul (TCNum m) n) a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n::Nat) -> \ (a::sort 0) -> \ (_::Ops a) ->
+            join m n a)
+         -- Error case for (TCNum m, TCInf)
+         (\ (a::sort 0) -> \ (_::Ops a) -> \ (_::Vec m (Stream a)) ->
+            error (seq (tcMul (TCNum m) TCInf) a) "invalid Join instance"))
+    (Num_rec
+       (\ (n::Num) -> (a::sort 0) -> Ops a -> Stream (seq n a) ->
+          seq (tcMul TCInf n) a)
+       -- Case for (TCInf, TCNum n)
+       (\ (n::Nat) -> \ (a::sort 0) -> \ (_::Ops a) ->
+          natCase
+            (\ (n'::Nat) -> Stream (Vec n' a) ->
+               seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) a)
+            (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
+            (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) ->
+               streamJoin a n' s)
+            n)
+       -- Error case for (TCInf, TCInf)
+       (\ (a::sort 0) -> \ (_::Ops a) -> \ (_::Stream (Stream a)) ->
+          error (Stream a) "invalid Join instance"));
+
+ecSplit :: (m n :: Num) -> (a :: sort 0) -> Ops a -> seq (tcMul m n) a ->
+           seq m (seq n a);
 ecSplit (TCNum m) (TCNum n) a _ = split m n a;
 ecSplit TCInf (TCNum n) a _ =
   natCase
@@ -685,13 +929,16 @@ ecAt :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a -> seq i B
 ecAt (TCNum n) a _ (TCNum i) = bvAt n a i;
 ecAt TCInf a _ (TCNum i) = bvStreamGet a i;
 
-ecAtRange :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
+ecAtRange :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a ->
+             seq m (seq i Bool) -> seq m a;
 ecAtRange n a pa m i xs = seqMap (seq i Bool) a m (ecAt n a pa i xs);
 
-ecAtBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAtBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a ->
+            seq i Bool -> a;
 ecAtBack n a pa i xs = ecAt n a pa i (ecReverse n a pa xs);
 
-ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
+ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) ->
+                 seq n a -> seq m (seq i Bool) -> seq m a;
 ecAtRangeBack n a pa m i xs = seqMap (seq i Bool) a m (ecAtBack n a pa i xs);
 
 -- Static word sequences
