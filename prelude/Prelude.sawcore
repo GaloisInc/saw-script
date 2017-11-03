@@ -23,15 +23,85 @@ id _ x = x;
 -- FIXME: We eventually need to remove this, as it violates soundness...
 primitive fix :: (a :: sort 0) -> (a -> a) -> a;
 
+
+-- FIXME: below are some defined data-types that could be used in place of
+-- the SAW primitive types
+
 --------------------------------------------------------------------------------
 -- The Unit type
-data TUnit :: sort 0 where {
-    Unit :: TUnit;
+
+data UnitType :: sort 0 where {
+    Unit :: UnitType;
   }
 
--- The eliminator for the Unit type at sort 0
-TUnit_rec :: (p :: TUnit -> sort 0) -> p Unit -> (u :: TUnit) -> p u;
-TUnit_rec p f1 Unit = f1;
+-- The recursor for the Unit type at sort 0
+UnitType_rec :: (p :: UnitType -> sort 0) -> p Unit -> (u :: UnitType) -> p u;
+UnitType_rec p f1 Unit = f1;
+
+
+--------------------------------------------------------------------------------
+-- Pair types
+
+data PairType :: (a b :: sort 0) -> sort 0 where {
+  PairValue :: (a b :: sort 0) -> a -> b -> PairType a b;
+}
+
+-- The recursor for primitive pair types at sort 1
+Pair_rec :: (a b :: sort 0) -> (p :: PairType a b -> sort 0) ->
+            ((x::a) -> (y::b) -> p (PairValue a b x y)) ->
+            (pair :: PairType a b) -> p pair;
+Pair_rec _ _ _ f (PairValue _ _ x y) = f x y;
+
+Pair_fst :: (a b :: sort 0) -> PairType a b -> a;
+Pair_fst a b = Pair_rec a b (\ (p::PairType a b) -> a)
+                            (\ (x::a) -> \ (y:: b) -> x);
+
+Pair_snd :: (a b :: sort 0) -> PairType a b -> b;
+Pair_snd a b = Pair_rec a b (\ (p::PairType a b) -> b)
+                            (\ (x::a) -> \ (y::b) -> y);
+
+fst :: (a b :: sort 0) -> #(a | b) -> a;
+fst a b (x | y) = x;
+
+snd :: (a b :: sort 0) -> #(a | b) -> b;
+snd a b (x | y) = y;
+
+uncurry :: (a b c :: sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
+uncurry a b c f =
+  (\ (x :: #(a, b)) -> f x.1 x.2);
+
+
+--------------------------------------------------------------------------------
+-- Record types
+
+-- The empty record
+data EmptyType :: sort 0 where {
+  Empty :: EmptyType;
+}
+
+-- The recursor for the empty type at sort 0
+EmptyType_rec :: (p :: EmptyType -> sort 0) -> p Empty -> (u :: EmptyType) -> p u;
+EmptyType_rec p f1 Empty = f1;
+
+-- Add a named field to a record type
+data RecordType :: (s::String) -> (a b ::sort 0) -> sort 0 where {
+  RecordValue :: (s::String) -> (a b ::sort 0) -> a -> b -> RecordType s a b;
+}
+
+-- The recursor for record types at sort 0
+RecordType_rec :: (s::String) -> (a b ::sort 0) ->
+                  (p:: RecordType s a b -> sort 1) ->
+                  ((x::a) -> (y::b) -> p (RecordValue s a b x y)) ->
+                  (r::RecordType s a b) -> p r;
+RecordType_rec _ _ _ _ f1 (RecordValue _ _ _ x y) = f1 x y;
+
+
+--------------------------------------------------------------------------------
+-- String values
+
+primitive data String :: sort 0;
+
+primitive error :: (a :: sort 0) -> String -> a;
 
 
 --------------------------------------------------------------------------------
@@ -301,20 +371,6 @@ axiom ite_eq_cong_2 :: (a :: sort 0)
 
 
 --------------------------------------------------------------------------------
--- Pairs
-
--- FIXME: replace built-in pairs with a data structure
-
-fst :: (a b :: sort 0) -> #(a, b) -> a;
-fst a b (x, y) = x;
-
-snd :: (a b :: sort 0) -> #(a, b) -> b;
-snd a b (x, y) = y;
-
-uncurry :: (a b c :: sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
-uncurry a b c f = (\(x :: #(a, b)) -> f (x.1) (x.2));
-
---------------------------------------------------------------------------------
 -- Either
 
 data Either :: sort 0 -> sort 0 -> sort 0 where {
@@ -523,13 +579,6 @@ natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) ->
 natCase p z s = Nat_rec p z (\ (n::Nat) -> \ (r::p n) -> s n);
 
 --------------------------------------------------------------------------------
--- String values
-
-primitive data String :: sort 0;
-
-primitive error :: (a :: sort 0) -> String -> a;
-
---------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 primitive data Vec :: Nat -> sort 0 -> sort 0;
 
@@ -707,10 +756,6 @@ bvAt n a w xs i = at n a xs (bvToNat w i);
 bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
-
-bvStreamUpd :: (a :: sort 0) -> (w :: Nat) ->
-     Stream a -> bitvector w -> a -> Stream a;
-bvStreamUpd a w xs i y = streamUpd a xs (bvToNat w i) y;
 
 bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateL n a w xs i = rotateL n a xs (bvToNat w i);
@@ -891,6 +936,10 @@ streamUpd a strm i y =
   Stream_rec a (\ (strm'::Stream a) -> Stream a)
              (\ (s::Nat -> a) ->
                 MkStream a (\ (j :: Nat) -> ite a (equalNat i j) y (s j))) strm;
+
+bvStreamUpd :: (a :: sort 0) -> (w :: Nat) ->
+     Stream a -> bitvector w -> a -> Stream a;
+bvStreamUpd a w xs i y = streamUpd a xs (bvToNat w i) y;
 
 streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
 streamGet a strm i =
