@@ -422,8 +422,8 @@ enforceDisjointness cc ss =
         [ do c <- liftIO
                 $ Crucible.buildDisjointRegionsAssertion
                     sym Crucible.ptrWidth
-                    (unpackPointer p) (sz pty)
-                    (unpackPointer q) (sz qty)
+                    (unpackPointer sym p) (sz pty)
+                    (unpackPointer sym q) (sz qty)
              addAssert c a
 
         | let dl = TyCtx.llvmDataLayout
@@ -643,14 +643,14 @@ matchArg _sc cc prepost actual@(Crucible.LLVMValPtr blk end off) expectedTy setu
 
     SetupNull ->
       do sym <- getSymInterface
-         p   <- liftIO (Crucible.isNullPointer sym (unpackPointer ptr))
+         p   <- liftIO (Crucible.isNullPointer sym (unpackPointer sym ptr))
          addAssert p (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost))
 
     SetupGlobal name ->
       do let mem = ccEmptyMemImpl cc
          sym  <- getSymInterface
          ptr' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
-         let (Crucible.LLVMPtr blk' _ off') = packPointer' ptr'
+         Crucible.LLVMPtr blk' _ off' <- liftIO (Crucible.projectLLVM_pointer sym ptr')
 
          p1 <- liftIO (Crucible.natEq sym blk blk')
          p2 <- liftIO (Crucible.bvEq sym off off')
@@ -701,7 +701,7 @@ valueToSC _ Crucible.LLVMValReal{} =
 typeToSC :: SharedContext -> Crucible.Type -> IO Term
 typeToSC sc t =
   case Crucible.typeF t of
-    Crucible.Bitvector sz -> scBitvector sc (fromIntegral sz)
+    Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
     Crucible.Float -> fail "typeToSC: float not supported"
     Crucible.Double -> fail "typeToSC: double not supported"
     Crucible.Array sz ty ->
@@ -791,7 +791,8 @@ learnPointsTo sc cc spec prepost (PointsTo ptr val) =
                           $ Crucible.memModelOps
                           $ ccLLVMContext cc
 
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem (packPointer' ptr1) storTy)
+     ptr2 <- liftIO (Crucible.projectLLVM_pointer sym ptr1)
+     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr2 storTy)
      (p,r,v) <- case res of
                   Left e  -> failure (BadPointerLoad e)
                   Right x -> return x
@@ -1012,21 +1013,12 @@ resolveSetupValue cc sc spec sval =
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)
 
-packPointer' ::
-  Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  Crucible.LLVMPtr Sym Crucible.PtrWidth
-packPointer' (Crucible.RolledType xs) = Crucible.LLVMPtr blk end off
-  where
-    Crucible.RV blk = xs^._1
-    Crucible.RV end = xs^._2
-    Crucible.RV off = xs^._3
-
 unpackPointer ::
+  Sym ->
   Crucible.LLVMPtr Sym Crucible.PtrWidth ->
   Crucible.RegValue Sym Crucible.LLVMPointerType
-unpackPointer (Crucible.LLVMPtr blk end off) =
-  Crucible.RolledType
-  (Ctx.empty Ctx.%> Crucible.RV blk Ctx.%> Crucible.RV end Ctx.%> Crucible.RV off)
+unpackPointer sym (Crucible.LLVMPtr blk end off) =
+  Crucible.llvmPointer sym blk end off
 
 ------------------------------------------------------------------------
 

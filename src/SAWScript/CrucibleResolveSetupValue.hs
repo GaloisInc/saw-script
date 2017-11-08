@@ -19,7 +19,6 @@ import Control.Monad (zipWithM, foldM)
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
-import Data.Word (Word64)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
@@ -41,6 +40,7 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
@@ -251,11 +251,11 @@ resolveSetupVal cc env tyenv val =
                 return (Crucible.LLVMValPtr blk end off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
     SetupNull ->
-      packPointer <$> Crucible.mkNullPointer sym
+      packPointer sym =<< Crucible.mkNullPointer sym
     SetupGlobal name ->
       do let mem = ccEmptyMemImpl cc
          ptr <- Crucible.doResolveGlobal sym mem (L.Symbol name)
-         return (packPointer ptr)
+         packPointer sym ptr
   where
     sym = ccBackend cc
     lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
@@ -350,13 +350,10 @@ ptrToVal :: LLVMPtr -> LLVMVal
 ptrToVal (Crucible.LLVMPtr blk end off) = Crucible.LLVMValPtr blk end off
 
 packPointer ::
+  Sym ->
   Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  Crucible.LLVMVal Sym Crucible.PtrWidth
-packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
-  where
-    Crucible.RV blk = xs^._1
-    Crucible.RV end = xs^._2
-    Crucible.RV off = xs^._3
+  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+packPointer sym x = Crucible.ptrToPtrVal <$> Crucible.projectLLVM_pointer sym x
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =
@@ -381,14 +378,14 @@ toLLVMType dl tp =
 mkFields ::
   Crucible.DataLayout ->
   Crucible.Alignment ->
-  Word64 ->
+  Crucible.Bytes ->
   [Crucible.Type] ->
-  [(Crucible.Type, Word64)]
+  [(Crucible.Type, Crucible.Bytes)]
 mkFields _ _ _ [] = []
 mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
     where
       end = off + Crucible.typeSize ty
-      off' = Crucible.nextPow2Multiple end (fromIntegral nextAlign)
+      off' = Crucible.toBytes $ Crucible.nextPow2Multiple (Crucible.bytesToInteger end) (fromIntegral nextAlign)
       pad = off' - end
       a' = max a (typeAlignment dl ty)
       nextAlign = case tys of
@@ -400,7 +397,7 @@ mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
 typeAlignment :: Crucible.DataLayout -> Crucible.Type -> Crucible.Alignment
 typeAlignment dl ty =
   case Crucible.typeF ty of
-    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromIntegral (bytes*8))
+    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
@@ -410,12 +407,12 @@ typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal dl val =
   case val of
     Crucible.LLVMValPtr {}      -> ptrType
-    Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w)))
+    Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.toBytes (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w))))
     Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
   where
-    ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
+    ptrType = Crucible.bitvectorType (Crucible.toBytes (dl^.Crucible.ptrSize))
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 
 equalValsPred ::
