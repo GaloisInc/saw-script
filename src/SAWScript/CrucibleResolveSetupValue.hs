@@ -41,6 +41,7 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
@@ -254,11 +255,11 @@ resolveSetupVal cc env tyenv val =
                 return (Crucible.LLVMValPtr blk end off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
     SetupNull ->
-      packPointer <$> Crucible.mkNullPointer sym
+      packPointer sym =<< Crucible.mkNullPointer sym
     SetupGlobal name ->
       do let mem = ccEmptyMemImpl cc
          ptr <- Crucible.doResolveGlobal sym mem (L.Symbol name)
-         return (packPointer ptr)
+         packPointer sym ptr
   where
     sym = ccBackend cc
     lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
@@ -353,13 +354,10 @@ ptrToVal :: LLVMPtr -> LLVMVal
 ptrToVal (Crucible.LLVMPtr blk end off) = Crucible.LLVMValPtr blk end off
 
 packPointer ::
+  Sym ->
   Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  Crucible.LLVMVal Sym Crucible.PtrWidth
-packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
-  where
-    Crucible.RV blk = xs^._1
-    Crucible.RV end = xs^._2
-    Crucible.RV off = xs^._3
+  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
+packPointer sym x = Crucible.ptrToPtrVal <$> Crucible.projectLLVM_pointer sym x
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =
