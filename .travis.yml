@@ -28,5 +28,4 @@ before_install:
 
 script:
   - cabal update
-  - ./mk-gitrev.sh
   - cabal new-build -j --disable-optimization
