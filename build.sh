@@ -57,7 +57,7 @@ which alex
 which happy
 which c2hs
 
-./mk-gitrev.sh
+# ./mk-gitrev.sh
 
 if [ "${dotests}" == "true" ] ; then
   if [ -z ${TEST_TIMEOUT} ]; then
