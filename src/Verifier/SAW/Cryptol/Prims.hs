@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol
@@ -36,7 +37,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Verifier.SAW.Simulator.Concrete as C
 
 -- primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
-cryError :: Monad m => (w -> m Char) -> Value m b w i e
+cryError :: VMonad l => (VWord l -> EvalM l Char) -> Value l
 cryError asChar =
   strictFun $ \_a -> return $
   strictFun $ \_n -> return $
@@ -62,7 +63,7 @@ sbvWordAsChar bv =
     Nothing -> fail "unable to interpret bitvector as character"
 
 --primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
-tcLenFromThen_Nat :: Monad m => Value m b w i e
+tcLenFromThen_Nat :: VMonad l => Value l
 tcLenFromThen_Nat =
   natFun' "tcLenFromThen_Nat x" $ \x -> return $
   natFun' "tcLenFromThen_Nat y" $ \y -> return $
@@ -74,7 +75,7 @@ tcLenFromThen_Nat =
       _ -> fail "tcLenFromThen_Nat: unable to calculate length"
 
 --primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
-tcLenFromThenTo_Nat :: Monad m => Value m b w i e
+tcLenFromThenTo_Nat :: VMonad l => Value l
 tcLenFromThenTo_Nat =
   natFun' "tcLenFromThenTo_Nat x" $ \x -> return $
   natFun' "tcLenFromThenTo_Nat y" $ \y -> return $
