@@ -11,6 +11,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE EmptyDataDecls #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.SBV
@@ -62,8 +64,14 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, Module, identName)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), asFirstOrderType)
 
-type SValue = Value IO SBool SWord SInteger SbvExtra
-type SThunk = Thunk IO SBool SWord SInteger SbvExtra
+data SBV
+type instance VBool SBV = SBool
+type instance VWord SBV = SWord
+type instance VInt  SBV = SInteger
+type instance Extra SBV = SbvExtra
+
+type SValue = Value (WithM IO SBV)
+type SThunk = Thunk (WithM IO SBV)
 
 data SbvExtra =
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
