@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.BitBlast
@@ -85,8 +87,14 @@ lvShiftR x xs i = (AIG.++) (AIG.replicate j x) (AIG.take (AIG.length xs - j) xs)
 ------------------------------------------------------------
 -- Values
 
-type BValue l = Value IO l (LitVector l) Integer (BExtra l)
-type BThunk l = Thunk IO l (LitVector l) Integer (BExtra l)
+data BitBlast l
+type instance VBool (BitBlast l) = l
+type instance VWord (BitBlast l) = LitVector l
+type instance VInt  (BitBlast l) = Integer
+type instance Extra (BitBlast l) = BExtra l
+
+type BValue l = Value (WithM IO (BitBlast l))
+type BThunk l = Thunk (WithM IO (BitBlast l))
 
 data BExtra l
   = BStream (Integer -> IO (BValue l)) (IORef (Map Integer (BValue l)))
