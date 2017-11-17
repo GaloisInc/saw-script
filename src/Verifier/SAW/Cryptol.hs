@@ -155,9 +155,9 @@ importType sc env ty =
     C.TVar tvar ->
       case tvar of
         C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
-        C.TVBound i _k   -> case Map.lookup i (envT env) of
-                              Just (t, j) -> incVars sc 0 j t
-                              Nothing -> fail "internal error: importType TVBound"
+        C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
+                         Just (t, j) -> incVars sc 0 j t
+                         Nothing -> fail "internal error: importType TVBound"
     C.TUser _ _ t  -> go t
     C.TRec fs -> scRecordType sc =<< traverse go tm
       where tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- fs ]
