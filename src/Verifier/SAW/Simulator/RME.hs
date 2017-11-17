@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.RME
@@ -110,8 +112,14 @@ vSignedShiftR xs i
 ------------------------------------------------------------
 -- Values
 
-type RValue = Value Identity RME (Vector RME) Integer RExtra
-type RThunk = Thunk Identity RME (Vector RME) Integer RExtra
+data ReedMuller
+type instance VBool ReedMuller = RME
+type instance VWord ReedMuller = Vector RME
+type instance VInt  ReedMuller = Integer
+type instance Extra ReedMuller = RExtra
+
+type RValue = Value (WithM Identity ReedMuller)
+type RThunk = Thunk (WithM Identity ReedMuller)
 
 data RExtra = AStream (IntTrie RValue)
 

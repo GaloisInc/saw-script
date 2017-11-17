@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Concrete
@@ -94,7 +96,14 @@ vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
 ------------------------------------------------------------
 -- Values
 
-type CValue = Value Identity Bool BitVector Integer CExtra
+data Concrete
+
+type instance VBool Concrete = Bool
+type instance VWord Concrete = BitVector
+type instance VInt  Concrete = Integer
+type instance Extra Concrete = CExtra
+
+type CValue = Value (WithM Identity Concrete)
 
 data CExtra
   = CStream (IntTrie CValue)
