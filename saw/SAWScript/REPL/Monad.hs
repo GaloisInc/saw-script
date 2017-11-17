@@ -294,7 +294,7 @@ builtIns = map unpackIdent (Map.keys primTable)
 getVars :: REPL (Map.Map T.Name M.IfaceDecl)
 getVars  = do
   me <- getModuleEnv
-  let (decls, _namingenv, _namedisp) = M.focusedEnv me
+  let (_params, decls, _namingenv, _namedisp) = M.focusedEnv me
   let vars1 = M.ifDecls decls
   extras <- getExtraTypes
   let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl q s [] False Nothing Nothing) extras
@@ -303,13 +303,13 @@ getVars  = do
 getTSyns :: REPL (Map.Map T.Name T.TySyn)
 getTSyns  = do
   me <- getModuleEnv
-  let (decls, _namingenv, _namedisp) = M.focusedEnv me
+  let (_params, decls, _namingenv, _namedisp) = M.focusedEnv me
   return (M.ifTySyns decls)
 
 getNewtypes :: REPL (Map.Map T.Name T.Newtype)
 getNewtypes = do
   me <- getModuleEnv
-  let (decls, _namingenv, _namedisp) = M.focusedEnv me
+  let (_params, decls, _namingenv, _namedisp) = M.focusedEnv me
   return (M.ifNewtypes decls)
 
 -- | Get visible variable names.

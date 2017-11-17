@@ -51,7 +51,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           Text.PrettyPrint.ANSI.Leijen (Pretty)
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
-import qualified Cryptol.Utils.Ident as P (unpackIdent, unpackModName)
+import qualified Cryptol.Utils.Ident as P (unpackIdent, modNameChunks)
 
 -- Names {{{
 
@@ -277,7 +277,7 @@ instance Pretty Stmt where
       --expr -> PP.cyan . PP.text $ show expr
 
       where
-        ppModName mn = PP.text (intercalate "." (P.unpackModName mn))
+        ppModName mn = PP.text (intercalate "." (P.modNameChunks mn))
         ppIdent i = PP.text (P.unpackIdent i)
         --ppName n = ppIdent (P.nameIdent n)
 
