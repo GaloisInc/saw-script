@@ -123,7 +123,7 @@ extractCryptol sc modEnv input = do
   env <- C.importDeclGroups sc C.emptyEnv declGroups
   pexpr <-
     case P.parseExpr (pack input) of
-      Left err -> fail (show (pp err))
+      Left err -> fail (show (P.ppError err))
       Right x -> return x
   (exprResult, exprWarnings) <- CM.checkExpr pexpr (defaultEvalOpts, modEnv)
   mapM_ (print . pp) exprWarnings
