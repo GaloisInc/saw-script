@@ -27,6 +27,8 @@ import Data.Monoid
 #endif
 import Control.Lens
 import Control.Monad.State
+import Control.Monad.Reader (ask)
+import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
@@ -1202,6 +1204,18 @@ timePrim a = do
   let diff = diffUTCTime t2 t1
   liftIO $ printf "Time: %s\n" (show diff)
   return r
+
+failsPrim :: TopLevel SV.Value -> TopLevel ()
+failsPrim m = TopLevel $ do
+  topRO <- ask
+  topRW <- Control.Monad.State.get
+  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
+  case x of
+    Left (ex :: Ex.SomeException) ->
+      do liftIO $ putStrLn "== Anticipated failure message =="
+         liftIO $ print ex
+    Right _ ->
+      do liftIO $ fail "Expected failure, but succeeded instead!"
 
 eval_bool :: TypedTerm -> TopLevel Bool
 eval_bool t = do
