@@ -162,6 +162,9 @@ instance Monad REPL where
     x <- unREPL m ref
     unREPL (f x) ref
 
+  {-# INLINE fail #-}
+  fail msg = REPL (\_ -> fail msg)
+
 instance Applicative REPL where
   {-# INLINE pure #-}
   pure = return
