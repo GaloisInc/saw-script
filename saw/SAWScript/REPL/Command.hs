@@ -72,39 +72,6 @@ import SAWScript.TypedTerm
 import SAWScript.Utils (Pos(..))
 
 
-{-
-#if __GLASGOW_HASKELL__ < 706
-import Control.Monad (liftM)
-import qualified Text.ParserCombinators.ReadP as P
-import Text.Read hiding (step)
-import System.Environment (getEnvironment)
-
-lookupEnv :: String -> IO (Maybe String)
-lookupEnv key = lookup key `liftM` getEnvironment
-
-readEither :: Read a => String -> Either String a
-readEither s =
-  case [ x | (x,"") <- readPrec_to_S read' minPrec s ] of
-    [x] -> Right x
-    []  -> Left "Prelude.read: no parse"
-    _   -> Left "Prelude.read: ambiguous parse"
- where
-  read' =
-    do x <- readPrec
-       lift P.skipSpaces
-       return x
-
--- | Parse a string using the 'Read' instance.
--- Succeeds if there is exactly one valid result.
-readMaybe :: Read a => String -> Maybe a
-readMaybe s = case readEither s of
-                Left _  -> Nothing
-                Right a -> Just a
-#else
-import System.Environment (lookupEnv)
-#endif
--}
-
 -- Commands --------------------------------------------------------------------
 
 -- | Commands.
@@ -166,10 +133,6 @@ nbCommandList  =
     "display a brief description about a built-in operator"
   , CommandDescr ":help"   (ExprArg helpCmd)
     "display a brief description about a built-in operator"
-  {-
-  , CommandDescr ":set" (OptionArg setOptionCmd)
-    "set an environmental option (:set on its own displays current values)"
-  -}
   ]
 
 commandList :: [CommandDescr]
@@ -181,29 +144,8 @@ commandList  =
     "load a module"
   , CommandDescr ":add"    (FilenameArg addCmd)
     "load an additional module"
-{-
-  , CommandDescr ":reload" (NoArg reloadCmd)
-    "reload the currently loaded module"
-  , CommandDescr ":edit"   (FilenameArg editCmd)
-    "edit the currently loaded module"
-  , CommandDescr ":!" (ShellArg runShellCmd)
-    "execute a command in the shell"
--}
   , CommandDescr ":cd" (FilenameArg cdCmd)
     "set the current working directory"
-{-
-  , CommandDescr ":module" (FilenameArg moduleCmd)
-    "load a module"
-
-  , CommandDescr ":check" (ExprArg qcCmd)
-    "use random testing to check that the argument always returns true"
-  , CommandDescr ":prove" (ExprArg proveCmd)
-    "use an external solver to prove that the argument always returns true"
-  , CommandDescr ":sat" (ExprArg satCmd)
-    "use a solver to find a satisfying assignment for which the argument returns true"
-  , CommandDescr ":debug_specialize" (ExprArg specializeCmd)
-    "do type specialization on a closed expression"
--}
   ]
 
 genHelp :: [CommandDescr] -> [String]
@@ -257,98 +199,6 @@ evalCmd str = do
   let val = SAWScript.Value.evaluate sc sharedterm
   io $ rethrowEvalError $ print val
 
-{-
-  (val,_ty) <- replEvalExpr str
-  ppOpts <- getPPValOpts
-  io $ rethrowEvalError $ print $ pp $ E.WithBase ppOpts val
--}
-
-{-
-qcCmd :: String -> REPL ()
-qcCmd "" =
-  do xs <- getPropertyNames
-     if null xs
-        then io $ putStrLn "There are no properties in scope."
-        else forM_ xs $ \x ->
-               do io $ putStr $ "property " ++ x ++ " "
-                  qcCmd x
-
-qcCmd str =
-  do (val,ty) <- replEvalExpr str
-     EnvNum testNum  <- getUser "tests"
-     case TestX.testableType ty of
-       Just (sz,vss) | sz <= toInteger testNum ->
-         do io $ putStrLn "Using exhaustive testing."
-            let doTest _ [] = panic "We've unexpectedly run out of test cases"
-                                    []
-                doTest _ (vs : vss1) =
-                    if TestX.runTest val vs
-                        then (Nothing, vss1)
-                        else (Just vs, vss1)
-            ok <- go doTest sz 0 vss
-            when ok $ io $ putStrLn "QED"
-
-       n -> case TestR.testableType ty of
-              Nothing   -> raise (TypeNotTestable ty)
-              Just gens ->
-                do io $ putStrLn "Using random testing."
-                   prt testingMsg
-                   g <- io newStdGen
-                   ok <- go (TestR.runTest val gens) testNum 0 g
-                   when ok $
-                     case n of
-                       Just (valNum,_) ->
-                         do let valNumD = fromIntegral valNum :: Double
-                                percent = fromIntegral (testNum * 100)
-                                        / valNumD
-                                showValNum
-                                   | valNum > 2 ^ (20::Integer) =
-                                       "2^^" ++ show (round $ logBase 2 valNumD :: Integer)
-                                   | otherwise = show valNum
-                            io $ putStrLn $ "Coverage: "
-                                     ++ showFFloat (Just 2) percent "% ("
-                                     ++ show testNum ++ " of "
-                                     ++ showValNum ++ " values)"
-                       Nothing -> return ()
-
-  where
-  testingMsg = "testing..."
-
-  totProgressWidth = 4    -- 100%
-
-  prt msg   = io (putStr msg >> hFlush stdout)
-  prtLn msg = io (putStrLn msg >> hFlush stdout)
-
-  ppProgress this tot =
-    let percent = show (div (100 * this) tot) ++ "%"
-        width   = length percent
-        pad     = replicate (totProgressWidth - width) ' '
-    in prt (pad ++ percent)
-
-  del n       = prt (replicate n '\BS')
-  delTesting  = del (length testingMsg)
-  delProgress = del totProgressWidth
-
-  go _ totNum testNum _
-     | testNum >= totNum =
-         do delTesting
-            prtLn $ "passed " ++ show totNum ++ " tests."
-            return True
-
-  go doTest totNum testNum st =
-     do ppProgress testNum totNum
-        case doTest (div (100 * (1 + testNum)) totNum) st of
-          (Nothing, st1) -> do delProgress
-                               go doTest totNum (testNum + 1) st1
-          (Just vs, _g1) ->
-             do opts <- getPPValOpts
-                do delProgress
-                   delTesting
-                   prtLn "FAILED for the following inputs:"
-                   io $ mapM_ (print . pp . E.WithBase opts) vs
-                   return False
--}
-
 typeOfCmd :: String -> REPL ()
 typeOfCmd str =
   do let tokens = SAWScript.Lexer.lexSAW replFileName str
@@ -360,53 +210,6 @@ typeOfCmd str =
      SS.Decl _ (Just schema) _expr' <-
        either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
-
-{-
-reloadCmd :: REPL ()
-reloadCmd  = do
-  mb <- getLoadedMod
-  case mb of
-    Just m  -> loadCmd (lPath m)
-    Nothing -> return ()
--}
-
-{-
-editCmd :: String -> REPL ()
-editCmd path
-  | null path = do
-      mb <- getLoadedMod
-      case mb of
-
-        Just m -> do
-          success <- replEdit (lPath m)
-          if success
-             then loadCmd (lPath m)
-             else return ()
-
-        Nothing   -> do
-          io (putStrLn "No files to edit.")
-          return ()
-
-  | otherwise = do
-      _  <- replEdit path
-      mb <- getLoadedMod
-      case mb of
-        Nothing -> loadCmd path
-        Just _  -> return ()
--}
-
-{-
-moduleCmd :: String -> REPL ()
-moduleCmd modString
-  | null modString = return ()
-  | otherwise      = do
-      case parseModName modString of
-        Just m -> loadCmd =<< liftModuleCmd (M.findModule m)
-        Nothing -> io $ putStrLn "Invalid module name."
-
-loadPrelude :: REPL ()
-loadPrelude  = moduleCmd $ show $ pp MB.preludeName
--}
 
 loadCmd :: FilePath -> REPL ()
 loadCmd path
@@ -538,14 +341,6 @@ helpCmd cmd
                    typeOfCmd cmd
 
 
-{-
-runShellCmd :: String -> REPL ()
-runShellCmd cmd
-  = io $ do h <- Process.runCommand cmd
-            _ <- waitForProcess h
-            return ()
--}
-
 cdCmd :: FilePath -> REPL ()
 cdCmd f | null f = io $ putStrLn $ "[error] :cd requires a path argument"
         | otherwise = do
@@ -601,14 +396,6 @@ handleCtrlC  = io (putStrLn "Ctrl-C")
 
 isNamePrefix :: String -> T.Name -> Bool
 isNamePrefix pfx n = pfx `isPrefixOf` T.unpackIdent (T.nameIdent n)
-
-{-
-printWarning :: (Range,Warning) -> IO ()
-printWarning = print . ppWarning
-
-printError :: (Range,Error) -> IO ()
-printError = print . ppError
--}
 
 -- | Lift a parsing action into the REPL monad.
 replParse :: (String -> Either ParseError a) -> String -> REPL a
