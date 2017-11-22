@@ -701,7 +701,7 @@ valueToSC _ Crucible.LLVMValReal{} =
 typeToSC :: SharedContext -> Crucible.Type -> IO Term
 typeToSC sc t =
   case Crucible.typeF t of
-    Crucible.Bitvector sz -> scBitvector sc (fromIntegral sz)
+    Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
     Crucible.Float -> fail "typeToSC: float not supported"
     Crucible.Double -> fail "typeToSC: double not supported"
     Crucible.Array sz ty ->
