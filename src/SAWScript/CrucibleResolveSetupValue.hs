@@ -28,6 +28,7 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.BaseTypes as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
@@ -141,7 +142,10 @@ typeOfSetupValue' cc env val =
           case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
             Nothing -> fail "typeOfSetupValue: non-representable type"
             Just memTy -> return (Crucible.MemType memTy)
-        _ -> fail "typeOfSetupValue: expected monomorphic term"
+        s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
+                            , "instead got:"
+                            , show (Cryptol.pp s)
+                            ]
     SetupStruct vs ->
       do memTys <- traverse (typeOfSetupValue cc env) vs
          let si = Crucible.mkStructInfo dl False memTys
