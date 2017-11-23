@@ -156,19 +156,24 @@ completeType (l,_) = do
       vars = filter (n `isPrefixOf`) ns
   return (l,map (nameComp n) vars)
 
-data LexerMode = ModeNormal | ModeCryptol | ModeQuote
+data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
 
 lexerMode :: String -> LexerMode
 lexerMode = normal
   where
     normal [] = ModeNormal
     normal ('{' : '{' : s) = cryptol s
+    normal ('{' : '|' : s) = crytype s
     normal ('\"' : s) = quote s
     normal (_ : s) = normal s
 
     cryptol [] = ModeCryptol
     cryptol ('}' : '}' : s) = normal s
     cryptol (_ : s) = cryptol s
+
+    crytype [] = ModeCryType
+    crytype ('|' : '}' : s) = normal s
+    crytype (_ : s) = crytype s
 
     quote [] = ModeQuote
     quote ('\"' : s) = normal s
@@ -182,11 +187,13 @@ completeSAWScript :: CompletionFunc REPL
 completeSAWScript cursor@(l, _) = do
   ns1 <- getSAWScriptNames
   ns2 <- getExprNames
+  ns3 <- getTypeNames
   let n = reverse (takeWhile isIdentChar l)
       nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
   case lexerMode (reverse l) of
     ModeNormal  -> return (l, nameComps n ns1)
     ModeCryptol -> return (l, nameComps n ns2)
+    ModeCryType -> return (l, nameComps n ns3)
     ModeQuote   -> completeFilename cursor
 
 -- | Generate a completion from a prefix and a name.

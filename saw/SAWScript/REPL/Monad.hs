@@ -30,7 +30,6 @@ module SAWScript.REPL.Monad (
   , getExprNames
   , getTypeNames
   , getPropertyNames
-  , builtIns
   , getPrompt
   , shouldContinue
   , unlessBatch
@@ -47,11 +46,10 @@ module SAWScript.REPL.Monad (
   , getSAWScriptNames
   ) where
 
-import Cryptol.Prims.Eval(primTable)
 import Cryptol.Eval (EvalError)
 import qualified Cryptol.ModuleSystem as M
+import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import Cryptol.ModuleSystem.NamingEnv (NamingEnv)
-import Cryptol.Utils.Ident (unpackIdent)
 import Cryptol.Parser (ParseError,ppError)
 import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
 import Cryptol.Parser.NoPat (Error)
@@ -252,13 +250,10 @@ setREPLTitle  = unlessBatch $ do
   rw <- getRW
   io (setTitle (mkTitle rw))
 
-builtIns :: [String]
-builtIns = map unpackIdent (Map.keys primTable)
-
 getVars :: REPL (Map.Map T.Name M.IfaceDecl)
 getVars  = do
   me <- getModuleEnv
-  let (_params, decls, _namingenv, _namedisp) = M.focusedEnv me
+  let decls = getAllIfaceDecls me
   let vars1 = M.ifDecls decls
   extras <- getExtraTypes
   let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl q s [] False Nothing Nothing) extras
@@ -267,26 +262,26 @@ getVars  = do
 getTSyns :: REPL (Map.Map T.Name T.TySyn)
 getTSyns  = do
   me <- getModuleEnv
-  let (_params, decls, _namingenv, _namedisp) = M.focusedEnv me
+  let decls = getAllIfaceDecls me
   return (M.ifTySyns decls)
 
 getNewtypes :: REPL (Map.Map T.Name T.Newtype)
 getNewtypes = do
   me <- getModuleEnv
-  let (_params, decls, _namingenv, _namedisp) = M.focusedEnv me
+  let decls = getAllIfaceDecls me
   return (M.ifNewtypes decls)
 
 -- | Get visible variable names.
 getExprNames :: REPL [String]
-getExprNames  = do as <- (map getName . Map.keys) `fmap` getVars
-                   return (builtIns ++ as)
+getExprNames =
+  do fNames <- fmap getNamingEnv getCryptolEnv
+     return (map (show . pp) (Map.keys (MN.neExprs fNames)))
 
 -- | Get visible type signature names.
 getTypeNames :: REPL [String]
 getTypeNames  =
-  do tss <- getTSyns
-     nts <- getNewtypes
-     return $ map getName $ Map.keys tss ++ Map.keys nts
+  do fNames <- fmap getNamingEnv getCryptolEnv
+     return (map (show . pp) (Map.keys (MN.neTypes fNames)))
 
 getPropertyNames :: REPL [String]
 getPropertyNames =

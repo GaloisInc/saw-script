@@ -24,6 +24,8 @@ module SAWScript.CryptolEnv
   , declareName
   , typeNoUser
   , schemaNoUser
+  , getNamingEnv
+  , getAllIfaceDecls
   )
   where
 
