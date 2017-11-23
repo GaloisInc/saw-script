@@ -12,7 +12,6 @@ module SAWScript.REPL.Haskeline where
 
 import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
-import SAWScript.REPL.Trie
 
 import Control.Monad (when)
 import Data.Char (isAlphaNum, isSpace)
@@ -205,18 +204,3 @@ nameComp prefix c = Completion
   (_,acs) <- as cursor
   (_,bcs) <- bs cursor
   return (fst cursor, sortBy (compare `on` replacement) (acs ++ bcs))
-
-
--- | Complete an option from the options environment.
---
--- XXX this can do better, as it has access to the expected form of the value
-completeOption :: CompletionFunc REPL
-completeOption cursor@(l,_) = return (fst cursor, map comp opts)
-  where
-  n        = reverse l
-  opts     = lookupTrie n userOptions
-  comp opt = Completion
-    { replacement = drop (length n) (optName opt)
-    , display     = optName opt
-    , isFinished  = False
-    }

@@ -33,7 +33,6 @@ module SAWScript.REPL.Command (
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
 
-import qualified Cryptol.Eval as E (PPOpts(..))
 import Cryptol.Parser (ParseError())
 import Cryptol.Utils.PP
 
@@ -154,17 +153,6 @@ runCommand c = case c of
     putStrLn (cmd ++ " is ambiguous, it could mean one of:")
     putStrLn ("\t" ++ intercalate ", " cmds)
 
-
--- Get the setting we should use for displaying values.
-_getPPValOpts :: REPL E.PPOpts
-_getPPValOpts =
-  do EnvNum base      <- getUser "base"
-     EnvBool ascii    <- getUser "ascii"
-     EnvNum infLength <- getUser "infLength"
-     return E.PPOpts { E.useBase      = base
-                     , E.useAscii     = ascii
-                     , E.useInfLength = infLength
-                     }
 
 typeOfCmd :: String -> REPL ()
 typeOfCmd str =
