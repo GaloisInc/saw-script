@@ -18,8 +18,6 @@ module SAWScript.REPL.Command (
   , findCommand
   , findNbCommand
 
-  -- , moduleCmd, loadCmd, loadPrelude
-
     -- Misc utilities
   , handleCtrlC
   , sanitize
@@ -35,19 +33,14 @@ module SAWScript.REPL.Command (
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
 
-import qualified Cryptol.ModuleSystem as M
-
 import qualified Cryptol.Eval as E (PPOpts(..))
 import Cryptol.Parser (ParseError())
-import qualified Cryptol.TypeCheck.AST as T
-import qualified Cryptol.ModuleSystem.Name as T (nameIdent)
-import qualified Cryptol.Utils.Ident as T (unpackIdent)
 import Cryptol.Utils.PP
 
-import Control.Monad (guard, unless, when)
+import Control.Monad (guard)
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
-import Data.List (intercalate,isPrefixOf)
+import Data.List (intercalate)
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
@@ -55,21 +48,16 @@ import qualified Data.Map as Map
 -- SAWScript imports
 import qualified SAWScript.AST as SS
     (pShow,
-     Import(..),
      Located(..),
      Decl(..),
      Pattern(..))
-import qualified SAWScript.CryptolEnv as CEnv
 import SAWScript.MGU (checkDecl)
 import SAWScript.Interpreter
     (interpretStmt,
      primDocEnv)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
-import qualified SAWScript.Value (evaluate)
 import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
-import SAWScript.TypedTerm
-import SAWScript.Utils (Pos(..))
 
 
 -- Commands --------------------------------------------------------------------
@@ -99,9 +87,7 @@ instance Ord CommandDescr where
 
 data CommandBody
   = ExprArg     (String   -> REPL ())
-  | ExprTypeArg (String   -> REPL ())
   | FilenameArg (FilePath -> REPL ())
-  | OptionArg   (String   -> REPL ())
   | ShellArg    (String   -> REPL ())
   | NoArg       (REPL ())
 
@@ -121,14 +107,10 @@ nbCommands  = foldl insert emptyTrie nbCommandList
 -- | A subset of commands safe for Notebook execution
 nbCommandList :: [CommandDescr]
 nbCommandList  =
-  [ CommandDescr ":env" (ExprTypeArg envCmd)
+  [ CommandDescr ":env"    (NoArg envCmd)
     "display the current sawscript environment"
   , CommandDescr ":type"   (ExprArg typeOfCmd)
     "check the type of an expression"
-  , CommandDescr ":browse" (ExprTypeArg browseCmd)
-    "display the current environment"
-  , CommandDescr ":eval" (ExprArg evalCmd)
-    "evaluate an expression and print the result"
   , CommandDescr ":?"      (ExprArg helpCmd)
     "display a brief description about a built-in operator"
   , CommandDescr ":help"   (ExprArg helpCmd)
@@ -140,10 +122,6 @@ commandList  =
   nbCommandList ++
   [ CommandDescr ":quit"   (NoArg quitCmd)
     "exit the REPL"
-  , CommandDescr ":load"   (FilenameArg loadCmd)
-    "load a module"
-  , CommandDescr ":add"    (FilenameArg addCmd)
-    "load an additional module"
   , CommandDescr ":cd" (FilenameArg cdCmd)
     "set the current working directory"
   ]
@@ -188,17 +166,6 @@ _getPPValOpts =
                      , E.useInfLength = infLength
                      }
 
-evalCmd :: String -> REPL ()
-evalCmd str = do
-  let str' = SS.Located str str PosREPL
-  sc <- getSharedContext
-  cenv <- getCryptolEnv
-  TypedTerm _schema sharedterm <- io (CEnv.parseTypedTerm sc cenv str')
-
-  -- Evaluate and print
-  let val = SAWScript.Value.evaluate sc sharedterm
-  io $ rethrowEvalError $ print val
-
 typeOfCmd :: String -> REPL ()
 typeOfCmd str =
   do let tokens = SAWScript.Lexer.lexSAW replFileName str
@@ -211,122 +178,15 @@ typeOfCmd str =
        either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
 
-loadCmd :: FilePath -> REPL ()
-loadCmd path
-  | null path = return ()
-  | otherwise = do
-      sc <- getSharedContext
-      cenv <- getCryptolEnv
-      cenv' <- io (CEnv.importModule sc cenv (SS.Import (Left path) Nothing Nothing))
-      setCryptolEnv cenv'
-      --whenDebug (io (putStrLn (dump m)))
-
-addCmd :: FilePath -> REPL ()
-addCmd path
-  | null path = return ()
-  | otherwise = do
-      sc <- getSharedContext
-      cenv <- getCryptolEnv
-      cenv' <- io (CEnv.importModule sc cenv (SS.Import (Left path) Nothing Nothing))
-      setCryptolEnv cenv'
-      --whenDebug (io (putStrLn (dump m)))
-
 quitCmd :: REPL ()
 quitCmd  = stop
 
 
-envCmd :: String -> REPL ()
-envCmd _pfx = do
+envCmd :: REPL ()
+envCmd = do
   env <- getEnvironment
   let showLName = SS.getVal
-{-
-  io $ putStrLn "\nTerms:\n"
-  io $ sequence_ [ putStrLn (showLName x ++ " = " ++ show v) | (x, v) <- Map.assocs (interpretEnvShared env) ]
-  io $ putStrLn "\nValues:\n"
-  io $ sequence_ [ putStrLn (showLName x ++ " = " ++ show v) | (x, v) <- Map.assocs (interpretEnvValues env) ]
-  io $ putStrLn "\nTypes:\n"
--}
   io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
-
-browseCmd :: String -> REPL ()
-browseCmd pfx = do
-  browseTSyns pfx
-  browseNewtypes pfx
-  browseVars pfx
-
-browseTSyns :: String -> REPL ()
-browseTSyns pfx = do
-  tsyns <- getTSyns
-  let tsyns' = Map.filterWithKey (\k _ -> pfx `isNamePrefix` k) tsyns
-  unless (Map.null tsyns') $ io $ do
-    putStrLn "Type Synonyms"
-    putStrLn "============="
-    let ppSyn (qn,T.TySyn _ ps cs ty doc) = pp (T.TySyn qn ps cs ty doc)
-    print (nest 4 (vcat (map ppSyn (Map.toList tsyns'))))
-    putStrLn ""
-
-browseNewtypes :: String -> REPL ()
-browseNewtypes pfx = do
-  nts <- getNewtypes
-  let nts' = Map.filterWithKey (\k _ -> pfx `isNamePrefix` k) nts
-  unless (Map.null nts') $ io $ do
-    putStrLn "Newtypes"
-    putStrLn "========"
-    let ppNT (qn,nt) = T.ppNewtypeShort (nt { T.ntName = qn })
-    print (nest 4 (vcat (map ppNT (Map.toList nts'))))
-    putStrLn ""
-
-browseVars :: String -> REPL ()
-browseVars pfx = do
-  vars  <- getVars
-  let allNames = vars
-          {- This shows the built-ins as well:
-             Map.union vars
-                  (Map.fromList [ (Name x,t) | (x,(_,t)) <- builtIns ]) -}
-      vars' = Map.filterWithKey (\k _ -> pfx `isNamePrefix` k) allNames
-
-      isProp p     = T.PragmaProperty `elem` (M.ifDeclPragmas p)
-      (props,syms) = Map.partition isProp vars'
-
-  ppBlock "Properties" props
-  ppBlock "Symbols" syms
-
-  where
-  ppBlock name xs =
-    unless (Map.null xs) $ io $ do
-      putStrLn name
-      putStrLn (replicate (length name) '=')
-      let step k d acc =
-              pp k <+> char ':' <+> pp (M.ifDeclSig d) : acc
-      print (nest 4 (vcat (Map.foldrWithKey step [] xs)))
-      putStrLn ""
-
-
-
-_setOptionCmd :: String -> REPL ()
-_setOptionCmd str
-  | Just value <- mbValue = setUser key value
-  | null key              = mapM_ (describe . optName) (leaves userOptions)
-  | otherwise             = describe key
-  where
-  (before,after) = break (== '=') str
-  key   = trim before
-  mbValue = case after of
-              _ : stuff -> Just (trim stuff)
-              _         -> Nothing
-
-  describe k = do
-    ev <- tryGetUser k
-    io $ case ev of
-           Just (EnvString s)   -> putStrLn (k ++ " = " ++ s)
-           Just (EnvNum n)      -> putStrLn (k ++ " = " ++ show n)
-           Just (EnvBool True)  -> putStrLn (k ++ " = on")
-           Just (EnvBool False) -> putStrLn (k ++ " = off")
-           Nothing              -> do putStrLn ("Unknown user option: `" ++ k ++ "`")
-                                      when (any isSpace k) $ do
-                                        let (k1, k2) = break isSpace k
-                                        putStrLn ("Did you mean: `:set " ++ k1 ++ " =" ++ k2 ++ "`?")
-
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
@@ -394,9 +254,6 @@ handleCtrlC  = io (putStrLn "Ctrl-C")
 
 -- Utilities -------------------------------------------------------------------
 
-isNamePrefix :: String -> T.Name -> Bool
-isNamePrefix pfx n = pfx `isPrefixOf` T.unpackIdent (T.nameIdent n)
-
 -- | Lift a parsing action into the REPL monad.
 replParse :: (String -> Either ParseError a) -> String -> REPL a
 replParse parse str = case parse str of
@@ -415,9 +272,6 @@ sanitize  = dropWhile isSpace
 -- | Strip trailing space.
 sanitizeEnd :: String -> String
 sanitizeEnd = reverse . sanitize . reverse
-
-trim :: String -> String
-trim = sanitizeEnd . sanitize
 
 -- | Split at the first word boundary.
 splitCommand :: String -> Maybe (String,String)
@@ -456,9 +310,7 @@ parseCommand findCmd line = do
   case findCmd cmd of
     [c] -> case cBody c of
       ExprArg     body -> Just (Command (body args'))
-      ExprTypeArg body -> Just (Command (body args'))
       FilenameArg body -> Just (Command (body =<< expandHome args'))
-      OptionArg   body -> Just (Command (body args'))
       ShellArg    body -> Just (Command (body args'))
       NoArg       body -> Just (Command  body)
 

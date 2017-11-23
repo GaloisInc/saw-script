@@ -136,11 +136,9 @@ cmdComp prefix c = Completion
 -- command is expecting.
 cmdArgument :: CommandBody -> CompletionFunc REPL
 cmdArgument ct cursor@(l,_) = case ct of
-  ExprArg     _ -> completeExpr cursor
-  ExprTypeArg _ -> (completeExpr +++ completeType) cursor
+  ExprArg     _ -> completeSAWScript cursor
   FilenameArg _ -> completeFilename cursor
   ShellArg _    -> completeFilename cursor
-  OptionArg _   -> completeOption cursor
   NoArg       _ -> return (l,[])
 
 -- | Complete a name from the expression environment.
