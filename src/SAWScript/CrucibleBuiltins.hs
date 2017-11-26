@@ -337,7 +337,7 @@ asSAWType :: SharedContext
           -> Crucible.Type
           -> IO Term
 asSAWType sc t = case Crucible.typeF t of
-  Crucible.Bitvector bytes -> scBitvector sc (fromIntegral (bytes*8))
+  Crucible.Bitvector bytes -> scBitvector sc (fromInteger (Crucible.bytesToBits bytes))
   Crucible.Float           -> scGlobalDef sc (fromString "Prelude.Float")  -- FIXME??
   Crucible.Double          -> scGlobalDef sc (fromString "Prelude.Double") -- FIXME??
   Crucible.Array sz s ->
@@ -351,7 +351,7 @@ asSAWType sc t = case Crucible.typeF t of
 memTypeToType :: Crucible.MemType -> Maybe Crucible.Type
 memTypeToType mt = Crucible.mkType <$> go mt
   where
-  go (Crucible.IntType w) = Just (Crucible.Bitvector (fromIntegral w `div` 8))
+  go (Crucible.IntType w) = Just (Crucible.Bitvector (Crucible.bitsToBytes w))
   -- Pointers can't be converted to SAWCore, so no need to translate
   -- their types.
   go (Crucible.PtrType _) = Nothing
@@ -363,9 +363,9 @@ memTypeToType mt = Crucible.mkType <$> go mt
     Crucible.Struct <$> mapM goField (Crucible.siFields si)
   go Crucible.MetadataType  = Nothing
   goField f =
-    Crucible.mkField (Crucible.fiOffset f) <$>
+    Crucible.mkField (Crucible.toBytes (Crucible.fiOffset f)) <$>
                      memTypeToType (Crucible.fiType f) <*>
-                     pure (Crucible.fiPadding f)
+                     pure (Crucible.toBytes (Crucible.fiPadding f))
 
 --------------------------------------------------------------------------------
 
