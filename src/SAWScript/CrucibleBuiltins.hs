@@ -214,7 +214,8 @@ verifyObligations cc mspec tactic assumes asserts = do
       SatMulti stats vals -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
         printOutLnTop Info (show stats)
-        mapM_ (printOutLnTop Info . show) vals
+        printOutLnTop OnlyCounterExamples "----------Counterexample----------"
+        mapM_ (printOutLnTop OnlyCounterExamples . show) vals
         io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
