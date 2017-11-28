@@ -38,6 +38,7 @@ import Numeric(showFFloat)
 
 import qualified Verifier.Java.Codebase as JSS
 
+import SAWScript.Options
 import Verifier.SAW.Conversion
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -251,6 +252,9 @@ ordinal n | n < 0 = error "Only non-negative cardinals are supported."
              3 -> "rd"
              _ -> "th"
     inTens = (n `mod` 100) `div` 10 == 1
+
+handleException :: Options -> CE.SomeException -> IO a
+handleException opts e = printOutLn opts Error (show e) >> exitProofUnknown
 
 exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
 exitProofFalse = exitWith (ExitFailure 1)

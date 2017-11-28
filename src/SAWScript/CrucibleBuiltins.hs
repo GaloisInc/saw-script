@@ -166,7 +166,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      (ret, globals3)
         <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
      -- collect the proof obligations
-     asserts <- io $ verifyPoststate (biSharedContext bic) cc
+     asserts <- io $ verifyPoststate opts (biSharedContext bic) cc
                        methodSpec env globals3 ret
      -- restore initial path condition
      io $ Crucible.resetCurrentState sym pathstate
@@ -541,6 +541,7 @@ scAndList sc (x : xs) = foldM (scAnd sc) x xs
 
 verifyPoststate ::
   (?lc :: TyCtx.LLVMContext) =>
+  Options                           {- ^ saw script debug and print options           -} ->
   SharedContext                     {- ^ saw core context                             -} ->
   CrucibleContext                   {- ^ crucible context                             -} ->
   CrucibleMethodSpecIR              {- ^ specification                                -} ->
@@ -548,7 +549,7 @@ verifyPoststate ::
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value                        -} ->
   IO [(String, Term)]               {- ^ generated labels and verification conditions -}
-verifyPoststate sc cc mspec env0 globals ret =
+verifyPoststate opts sc cc mspec env0 globals ret =
 
   do let terms0 = Map.fromList
            [ (ecVarIndex ec, ttTerm tt)
@@ -560,7 +561,7 @@ verifyPoststate sc cc mspec env0 globals ret =
      matchPost <-
           runOverrideMatcher sym globals env0 terms0 initialFree $
            do matchResult
-              learnCond sc cc mspec PostState (mspec ^. csPostState)
+              learnCond opts sc cc mspec PostState (mspec ^. csPostState)
 
      st <- case matchPost of
              Left err      -> fail (show err)

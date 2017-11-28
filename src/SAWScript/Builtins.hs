@@ -78,7 +78,7 @@ import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
 import SAWScript.AST (getVal, pShow, Located(..))
-import SAWScript.Options
+import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.SolverStats
 import SAWScript.TopLevel
@@ -1216,7 +1216,8 @@ eval_int t = do
   let cfg = C.meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
-  t' <- io $ defaultTypedTerm sc cfg t
+  opts <- getOptions
+  t' <- io $ defaultTypedTerm opts sc cfg t
   case ttSchema t' of
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
@@ -1230,8 +1231,8 @@ isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
 isInteger _ = False
 
 -- | Default the values of the type variables in a typed term.
-defaultTypedTerm :: SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
-defaultTypedTerm sc cfg (TypedTerm schema trm) = do
+defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
+defaultTypedTerm opts sc cfg (TypedTerm schema trm) = do
   mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
                 mapM (`lookup` soln) (C.sVars schema)
@@ -1251,7 +1252,7 @@ defaultTypedTerm sc cfg (TypedTerm schema trm) = do
       return (TypedTerm schema' trm')
   where
     warnDefault ns (x,t) =
-      print $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
+      printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =
@@ -1282,7 +1283,7 @@ parseCore input = do
   let base = "<interactive>"
       path = "<interactive>"
   let (uterm, errs) = parseSAWTerm base path (B.fromString input)
-  io $ mapM_ print errs
+  mapM_ (printOutLnTop Opts.Error . show) errs
   unless (null errs) $ fail $ show errs
   let imps = [ UntypedAST.Import False (Position.PosPair pos (mkModuleName ["Prelude"])) Nothing Nothing ]
       pos = Position.Pos base path 0 0
