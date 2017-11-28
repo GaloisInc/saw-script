@@ -35,6 +35,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
+import Control.Monad(when)
 
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
@@ -246,11 +247,20 @@ genTermEnv sc modEnv = do
 
 --------------------------------------------------------------------------------
 
+checkNotParametrized :: T.Module -> IO ()
+checkNotParametrized m =
+  when (T.isParametrizedModule m) $
+    fail $ unlines [ "Cannot load parameterized modules directly."
+                   , "Either use a ` import, or make a module instantiation."
+                   ]
+
+
 loadCryptolModule :: SharedContext -> CryptolEnv -> FilePath
                      -> IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  checkNotParametrized m
 
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
@@ -296,6 +306,7 @@ importModule sc env imp = do
             Left path -> return path
             Right mn -> fst `fmap` liftModuleM modEnv (MB.findModule mn)
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  checkNotParametrized m
 
   -- Regenerate SharedTerm environment. TODO: preserve old
   -- values, only translate decls from new module.
