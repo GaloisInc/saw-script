@@ -32,6 +32,7 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
+import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -402,7 +403,12 @@ processFile opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
+  let handler :: X.SomeException -> IO a
+      handler e =
+        do printOutFn opts Error (show e)
+           exitProofUnknown
   _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+            `X.catch` handler
   setCurrentDirectory oldpath
   return ()
 
@@ -434,7 +440,8 @@ print_value (VTerm t) = do
   let cfg = meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
-  t' <- io $ defaultTypedTerm sc cfg t
+  sawopts <- getOptions
+  t' <- io $ defaultTypedTerm sawopts sc cfg t
   opts <- fmap rwPPOpts getTopLevelRW
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
