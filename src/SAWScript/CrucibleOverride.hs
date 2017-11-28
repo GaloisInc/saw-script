@@ -80,6 +80,7 @@ import           Verifier.SAW.Recognizer
 import           SAWScript.CrucibleMethodSpecIR
 import           SAWScript.CrucibleResolveSetupValue
 import           SAWScript.TypedTerm
+import           SAWScript.Options
 
 -- | The 'OverrideMatcher' type provides the operations that are needed
 -- to match a specification's arguments with the arguments provided by
@@ -192,13 +193,14 @@ failure e = OM (lift (throwE e))
 methodSpecHandler ::
   forall rtp args ret.
   (?lc :: TyCtx.LLVMContext) =>
+  Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext          {- ^ context for interacting with Crucible        -} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler sc cc css retTy = do
+methodSpecHandler opts sc cc css retTy = do
   let L.Symbol fsym = (head css)^.csName
   Crucible.RegMap args <- Crucible.getOverrideArgs
   globals <- Crucible.readGlobals
@@ -213,7 +215,7 @@ methodSpecHandler sc cc css retTy = do
              let initialFree = Set.fromList (map (termId . ttTerm)
                                                  (view (csPreState.csFreshVars) cs))
              in runOverrideMatcher sym g Map.empty Map.empty initialFree
-                  (methodSpecHandler1 sc cc args retTy cs))
+                  (methodSpecHandler1 opts sc cc args retTy cs))
           gs css
 
   outputs <- case partitionEithers matches of
@@ -296,6 +298,7 @@ globalMuxUnleveled sym p l r
 methodSpecHandler1 ::
   forall ret ctx.
   (?lc :: TyCtx.LLVMContext) =>
+  Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext          {- ^ context for interacting with Crucible        -} ->
   Ctx.Assignment (Crucible.RegEntry Sym) ctx
@@ -303,7 +306,7 @@ methodSpecHandler1 ::
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
   OverrideMatcher (Crucible.RegValue Sym ret)
-methodSpecHandler1 sc cc args retTy cs =
+methodSpecHandler1 opts sc cc args retTy cs =
     do expectedArgTypes <- (traverse . _1) resolveMemType (Map.elems (cs^.csArgBindings))
 
        sym <- getSymInterface
@@ -320,7 +323,7 @@ methodSpecHandler1 sc cc args retTy cs =
 
        learnCond sc cc cs PreState (cs^.csPreState)
 
-       executeCond sc cc cs (cs^.csPostState)
+       executeCond opts sc cc cs (cs^.csPostState)
 
        computeReturnValue cc sc cs retTy (cs^.csRetValue)
 
@@ -367,12 +370,13 @@ termId t =
 
 -- execute a pre/post condition
 executeCond :: (?lc :: TyCtx.LLVMContext)
-            => SharedContext
+            => Options
+            -> SharedContext
             -> CrucibleContext
             -> CrucibleMethodSpecIR
             -> StateSpec
             -> OverrideMatcher ()
-executeCond sc cc cs ss = do
+executeCond opts sc cc cs ss = do
   refreshTerms sc ss
 
   ptrs <- liftIO $ Map.traverseWithKey
@@ -380,7 +384,7 @@ executeCond sc cc cs ss = do
             (ss^.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
 
-  traverse_ (executeAllocation cc) (Map.assocs (ss^.csAllocs))
+  traverse_ (executeAllocation opts cc) (Map.assocs (ss^.csAllocs))
   traverse_ (executePointsTo sc cc cs) (ss^.csPointsTos)
   traverse_ (executeSetupCondition sc cc cs) (ss^.csConditions)
 
@@ -841,17 +845,18 @@ learnPred sc cc prepost t =
 -- | Perform an allocation as indicated by a 'crucible_alloc'
 -- statement from the postcondition section.
 executeAllocation ::
-  (?lc :: TyCtx.LLVMContext) =>
-  CrucibleContext            ->
+  (?lc :: TyCtx.LLVMContext)     =>
+  Options                        ->
+  CrucibleContext                ->
   (AllocIndex, Crucible.SymType) ->
   OverrideMatcher ()
-executeAllocation cc (var, symTy) =
+executeAllocation opts cc (var, symTy) =
   do let sym = ccBackend cc
      let dl = TyCtx.llvmDataLayout ?lc
      memTy <- case TyCtx.asMemType symTy of
                 Just memTy -> return memTy
                 Nothing    -> fail "executAllocation: failed to resolve type"
-     liftIO $ putStrLn $ unwords ["executeAllocation:", show var, show memTy]
+     liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar

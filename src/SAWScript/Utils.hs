@@ -31,6 +31,7 @@ import System.Directory(makeRelativeToCurrentDirectory)
 import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
 import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff, toCalendarTime, formatCalendarTime)
 import System.Locale(defaultTimeLocale)
+import System.Exit
 import Text.PrettyPrint.ANSI.Leijen hiding ((</>), (<$>))
 import Text.Printf
 import Numeric(showFFloat)
@@ -250,3 +251,8 @@ ordinal n | n < 0 = error "Only non-negative cardinals are supported."
              3 -> "rd"
              _ -> "th"
     inTens = (n `mod` 100) `div` 10 == 1
+
+exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
+exitProofFalse = exitWith (ExitFailure 1)
+exitProofUnknown = exitWith (ExitFailure 2)
+exitProofSuccess = exitSuccess

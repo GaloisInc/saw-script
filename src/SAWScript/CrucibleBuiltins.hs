@@ -144,7 +144,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      pathstate <- io $ Crucible.getCurrentState sym
      -- run the symbolic execution
      (ret, globals3)
-        <- io $ verifySimulate cc methodSpec args assumes lemmas globals2 checkSat
+        <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
      -- collect the proof obligations
      asserts <- io $ verifyPoststate (biSharedContext bic) cc
                        methodSpec env globals3 ret
@@ -192,11 +192,11 @@ verifyObligations cc mspec tactic assumes asserts = do
     case r of
       Unsat stats -> return stats
       SatMulti stats vals -> do
-        io $ putStrLn $ unwords ["Subgoal failed:", nm, msg]
-        io $ print stats
-        io $ mapM_ print vals
+        printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
+        printOutLnTop Info (show stats)
+        mapM_ (printOutLnTop Info . show) vals
         io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
-  io $ putStrLn $ unwords ["Proof succeeded!", nm]
+  printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
 
 -- | Evaluate the precondition part of a Crucible method spec:
@@ -400,19 +400,18 @@ ppGlobalPair cc gp =
 
 registerOverride ::
   (?lc :: TyCtx.LLVMContext) =>
+  Options                    ->
   CrucibleContext            ->
   Crucible.SimContext Crucible.SAWCruciblePersonality Sym  ->
   [CrucibleMethodSpecIR]     ->
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret ()
-registerOverride cc _ctx cs = do
+registerOverride opts cc _ctx cs = do
   let sym = ccBackend cc
-      cfg = Crucible.simConfig (ccSimContext cc)
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
   let s@(L.Symbol fsym) = (head cs)^.csName
       llvmctx = ccLLVMContext cc
-  liftIO $ do
-    verb <- Crucible.getConfigValue Crucible.verbosity cfg
-    when (verb >= 2) $ putStrLn $ "Registering override for `" ++ fsym ++ "`"
+  liftIO $
+    printOutLn opts Info $ "Registering override for `" ++ fsym ++ "`"
   case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
     -- LLVMHandleInfo constructor has two existential type arguments,
     -- which are bound here. h :: FnHandle args' ret'
@@ -424,13 +423,14 @@ registerOverride cc _ctx cs = do
         $ Crucible.mkOverride'
             (Crucible.handleName h)
             retType
-            (methodSpecHandler sc cc cs retType)
+            (methodSpecHandler opts sc cc cs retType)
     Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
 
 --------------------------------------------------------------------------------
 
 verifySimulate ::
   (?lc :: TyCtx.LLVMContext)    =>
+  Options                       ->
   CrucibleContext               ->
   CrucibleMethodSpecIR          ->
   [(Crucible.MemType, LLVMVal)] ->
@@ -439,7 +439,7 @@ verifySimulate ::
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate cc mspec args assumes lemmas globals checkSat =
+verifySimulate opts cc mspec args assumes lemmas globals checkSat =
   do let nm = mspec^.csName
      case Map.lookup nm (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
        Nothing -> fail $ unwords ["function", show nm, "not found"]
@@ -454,7 +454,7 @@ verifySimulate cc mspec args assumes lemmas globals checkSat =
             let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
-                do mapM_ (registerOverride cc simCtx')
+                do mapM_ (registerOverride opts cc simCtx')
                          (groupOn (view csName) lemmas)
                    liftIO $ do
                      preds <- mapM (resolveSAWPred cc) assumes
@@ -466,7 +466,7 @@ verifySimulate cc mspec args assumes lemmas globals checkSat =
                      case pr of
                        Crucible.TotalRes gp -> return gp
                        Crucible.PartialRes _ gp _ ->
-                         do putStrLn "Symbolic simulation failed along some paths!"
+                         do printOutLn opts Error "Symbolic simulation failed along some paths!"
                             return gp
                    let ret_ty = mspec^.csRet
                    let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
@@ -802,8 +802,8 @@ setupArgs sc sym fn = do
 
 --------------------------------------------------------------------------------
 
-extractFromCFG :: SharedContext -> CrucibleContext -> Crucible.AnyCFG -> IO TypedTerm
-extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
+extractFromCFG :: Options -> SharedContext -> CrucibleContext -> Crucible.AnyCFG -> IO TypedTerm
+extractFromCFG opts sc cc (Crucible.AnyCFG cfg) = do
   let sym = ccBackend cc
   let h   = Crucible.cfgHandle cfg
   (ecs, args) <- setupArgs sc sym h
@@ -817,7 +817,7 @@ extractFromCFG sc cc (Crucible.AnyCFG cfg) = do
         gp <- case pr of
                 Crucible.TotalRes gp -> return gp
                 Crucible.PartialRes _ gp _ -> do
-                  putStrLn "Symbolic simulation failed along some paths!"
+                  printOutLn opts Error "Symbolic simulation failed along some paths!"
                   return gp
         t <- Crucible.asSymExpr
                    (gp^.Crucible.gpValue)
@@ -839,7 +839,7 @@ extract_crucible_llvm bic opts lm fn_name = do
   cc <- setupCrucibleContext bic opts lm
   case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
     Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-    Just cfg -> io $ extractFromCFG (biSharedContext bic) cc cfg
+    Just cfg -> io $ extractFromCFG opts (biSharedContext bic) cc cfg
 
 load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel Crucible.AnyCFG
 load_llvm_cfg bic opts lm fn_name = do
