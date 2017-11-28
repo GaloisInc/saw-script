@@ -16,7 +16,29 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-module SAWScript.CrucibleBuiltins where
+module SAWScript.CrucibleBuiltins
+    ( load_llvm_cfg
+    , show_cfg
+    , extract_crucible_llvm
+    , crucible_llvm_verify
+    , crucible_setup_val_to_typed_term
+    , crucible_spec_size
+    , crucible_spec_solvers
+    , crucible_ghost_value
+    , crucible_return
+    , crucible_declare_ghost_state
+    , crucible_execute_func
+    , crucible_postcond
+    , crucible_precond
+    , crucible_equal
+    , crucible_points_to
+    , crucible_fresh_pointer
+    , crucible_llvm_unsafe_assume_spec
+    , crucible_fresh_var
+    , crucible_alloc
+    , crucible_fresh_expanded_val
+    , match
+    ) where
 
 import           Control.Lens
 import           Control.Monad.ST
@@ -31,7 +53,6 @@ import           Data.Maybe (fromMaybe)
 import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -68,7 +89,6 @@ import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 
 import Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -333,42 +353,6 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
-asSAWType :: SharedContext
-          -> Crucible.Type
-          -> IO Term
-asSAWType sc t = case Crucible.typeF t of
-  Crucible.Bitvector bytes -> scBitvector sc (fromInteger (Crucible.bytesToBits bytes))
-  Crucible.Float           -> scGlobalDef sc (fromString "Prelude.Float")  -- FIXME??
-  Crucible.Double          -> scGlobalDef sc (fromString "Prelude.Double") -- FIXME??
-  Crucible.Array sz s ->
-    do s' <- asSAWType sc s
-       sz_tm <- scNat sc (fromIntegral sz)
-       scVecType sc sz_tm s'
-  Crucible.Struct flds ->
-    do flds' <- mapM (asSAWType sc . (^. Crucible.fieldVal)) $ V.toList flds
-       scTupleType sc flds'
-
-memTypeToType :: Crucible.MemType -> Maybe Crucible.Type
-memTypeToType mt = Crucible.mkType <$> go mt
-  where
-  go (Crucible.IntType w) = Just (Crucible.Bitvector (Crucible.bitsToBytes w))
-  -- Pointers can't be converted to SAWCore, so no need to translate
-  -- their types.
-  go (Crucible.PtrType _) = Nothing
-  go Crucible.FloatType = Just Crucible.Float
-  go Crucible.DoubleType = Just Crucible.Double
-  go (Crucible.ArrayType n et) = Crucible.Array (fromIntegral n) <$> memTypeToType et
-  go (Crucible.VecType n et) = Crucible.Array (fromIntegral n) <$> memTypeToType et
-  go (Crucible.StructType si) =
-    Crucible.Struct <$> mapM goField (Crucible.siFields si)
-  go Crucible.MetadataType  = Nothing
-  goField f =
-    Crucible.mkField (Crucible.toBytes (Crucible.fiOffset f)) <$>
-                     memTypeToType (Crucible.fiType f) <*>
-                     pure (Crucible.toBytes (Crucible.fiPadding f))
-
---------------------------------------------------------------------------------
-
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
 doAlloc ::
@@ -502,116 +486,6 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
            v <- Crucible.coerceAny sym tr a
            return (Crucible.RegEntry tr v))
       ctx
-
---------------------------------------------------------------------------------
-
-processPostconditions ::
-  (?lc :: TyCtx.LLVMContext) =>
-  CrucibleContext                 {- ^ simulator context         -} ->
-  Map AllocIndex Crucible.SymType {- ^ type env                  -} ->
-  Map AllocIndex LLVMPtr          {- ^ pointer environment       -} ->
-  Crucible.SymGlobalState Sym     {- ^ final global variables    -} ->
-  [SetupCondition]                {- ^ postconditions            -} ->
-  IO [(String, Term)]
-processPostconditions cc tyenv env globals = traverse verifyPostCond
-  where
-    verifyPostCond :: SetupCondition -> IO (String, Term)
-    verifyPostCond (SetupCond_Equal val1 val2) =
-      do val1' <- resolveSetupVal cc env tyenv val1
-         val2' <- resolveSetupVal cc env tyenv val2
-         g <- assertEqualVals cc val1' val2'
-         return ("equality assertion", g)
-    verifyPostCond (SetupCond_Pred tm) =
-      return ("predicate assertion", ttTerm tm)
-    verifyPostCond (SetupCond_Ghost var val) =
-      do sc <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager (ccBackend cc))
-         v  <- case Crucible.lookupGlobal var globals of
-                 Nothing   -> scBool sc False
-                 Just term -> scEq sc (ttTerm term) (ttTerm val)
-         return ("ghost assertion", v)
-
-
-------------------------------------------------------------------------
-
--- | For each points-to statement from the postcondition section of a
--- function spec, read the memory value through the given pointer
--- (lhs) and match the value against the given pattern (rhs).
--- Statements are processed in dependency order: a points-to statement
--- cannot be executed until bindings for any/all lhs variables exist.
-processPostPointsTos ::
-  (?lc :: TyCtx.LLVMContext) =>
-  SharedContext                   {- ^ term construction context -} ->
-  CrucibleContext                 {- ^ simulator context         -} ->
-  Map AllocIndex Crucible.SymType {- ^ type env                  -} ->
-  Map AllocIndex LLVMPtr          {- ^ pointer environment       -} ->
-  MemImpl                         {- ^ LLVM heap                 -} ->
-  [PointsTo]                      {- ^ points-to postconditions  -} ->
-  IO [(String, Term)]             {- ^ equality constraints      -}
-processPostPointsTos sc cc tyenv env0 mem conds0 =
-  evalStateT (go False [] conds0) env0
-  where
-    sym = ccBackend cc
-
-    go ::
-      Bool       {- progress indicator -} ->
-      [PointsTo] {- delayed conditions -} ->
-      [PointsTo] {- queued conditions  -} ->
-      StateT (Map AllocIndex LLVMPtr) IO [(String, Term)]
-
-    -- all conditions processed, success
-    go _ [] [] = return []
-
-    -- not all conditions processed, no progress, failure
-    go False _delayed [] = fail "processPostconditions: unprocessed conditions"
-
-    -- not all conditions processed, progress made, resume delayed conditions
-    go True delayed [] = go False [] delayed
-
-    -- progress the next precondition in the work queue
-    go progress delayed (c:cs) =
-      do ready <- checkPointsTo c
-         if ready then
-           do goals1 <- verifyPostCond c
-              goals2 <- go True delayed cs
-              return (goals1 ++ goals2)
-           else go progress (c:delayed) cs
-
-    -- determine if a precondition is ready to be checked
-    checkPointsTo :: PointsTo -> StateT (Map AllocIndex LLVMPtr) IO Bool
-    checkPointsTo (PointsTo p _) = checkSetupValue p
-
-    checkSetupValue :: SetupValue -> StateT (Map AllocIndex LLVMPtr) IO Bool
-    checkSetupValue v =
-      do m <- get
-         return (all (`Map.member` m) (setupVars v))
-
-    -- Compute the set of variable identifiers in a 'SetupValue'
-    setupVars :: SetupValue -> Set AllocIndex
-    setupVars v =
-      case v of
-        SetupVar    i  -> Set.singleton i
-        SetupStruct xs -> foldMap setupVars xs
-        SetupArray  xs -> foldMap setupVars xs
-        SetupElem x _  -> setupVars x
-        SetupField x _ -> setupVars x
-        SetupTerm   _  -> Set.empty
-        SetupNull      -> Set.empty
-        SetupGlobal _  -> Set.empty
-
-    verifyPostCond :: PointsTo -> StateT (Map AllocIndex LLVMPtr) IO [(String, Term)]
-    verifyPostCond (PointsTo lhs val) =
-      do env <- get
-         lhs' <- liftIO $ resolveSetupVal cc env tyenv lhs
-         ptr <- case lhs' of
-           Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
-           _ -> fail "Non-pointer value found in points-to assertion"
-         -- In case the types are different (from crucible_points_to_untyped)
-         -- then the load type should be determined by the rhs.
-         memTy <- liftIO $ typeOfSetupValue cc tyenv val
-         storTy <- Crucible.toStorableType memTy
-         x <- liftIO $ Crucible.loadRaw sym mem ptr storTy
-         gs <- match sc cc tyenv x val
-         return [ ("points-to assertion", g) | g <- gs ]
 
 --------------------------------------------------------------------------------
 
@@ -1196,7 +1070,6 @@ crucible_declare_ghost_state _bic _opt name =
                                   (Crucible.IntrinsicRepr
                                      (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue))))
      return (VGhostVar global)
-
 
 crucible_ghost_value ::
   BuiltinContext                      ->
