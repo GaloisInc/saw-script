@@ -131,8 +131,8 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
                  (TFun inTyp outTyp) = typ
              unless (sum (typSizes inTyp) == sum (map fromIntegral inSizes)) $ do
                printOutLn opts Error ("ERROR parseSBVPgm: input size mismatch in " ++ name)
-               print inTyp
-               print inSizes
+               printOutFn opts Error (show inTyp)
+               printOutFn opts Error (show inSizes)
              argument <- combineOutputs sc inTyp args
              result <- scApply sc t argument
              results <- splitInputs sc outTyp result

@@ -1089,7 +1089,8 @@ crucible_spec_size = solverStatsGoalSize . (view csSolverStats)
 
 crucible_setup_val_to_typed_term :: BuiltinContext -> Options -> SetupValue -> TopLevel TypedTerm
 crucible_setup_val_to_typed_term bic _opt sval = do
-  mtt <- io $ MaybeT.runMaybeT $ setupToTypedTerm (biSharedContext bic) sval
+  opts <- getOptions
+  mtt <- io $ MaybeT.runMaybeT $ setupToTypedTerm opts (biSharedContext bic) sval
   case mtt of
     Nothing -> fail $ "Could not convert a setup value to a term: " ++ show sval
     Just tt -> return tt
