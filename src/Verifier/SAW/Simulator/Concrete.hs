@@ -337,8 +337,8 @@ iteOp =
   VFun $ \x -> return $
   VFun $ \y -> if toBool b then force x else force y
 
-bvUnpack :: BitVector -> V.Vector Bool
-bvUnpack x = V.generate (Prim.width x) (Prim.bvAt x)
+bvUnpack :: BitVector -> Identity (V.Vector Bool)
+bvUnpack x = Identity (V.generate (Prim.width x) (Prim.bvAt x))
 
 ite :: Bool -> a -> a -> a
 ite b x y = if b then x else y

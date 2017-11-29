@@ -63,24 +63,24 @@ toBool :: Show (Extra l) => Value l -> VBool l
 toBool (VBool b) = b
 toBool x = error $ unwords ["Verifier.SAW.Simulator.toBool", show x]
 
-type Pack l   = V.Vector (VBool l) -> VWord l
-type Unpack l = VWord l -> V.Vector (VBool l)
+type Pack l   = V.Vector (VBool l) -> MWord l
+type Unpack l = VWord l -> EvalM l (V.Vector (VBool l))
 
 toWord :: (VMonad l, Show (Extra l)) => Pack l -> Value l -> MWord l
 toWord _ (VWord w) = return w
-toWord pack (VVector vv) = liftM pack $ V.mapM (liftM toBool . force) vv
+toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
 toWord _ x = fail $ unwords ["Verifier.SAW.Simulator.toWord", show x]
 
 toBits :: (VMonad l, Show (Extra l)) => Unpack l -> Value l ->
                                                   EvalM l (V.Vector (VBool l))
-toBits unpack (VWord w) = return (unpack w)
+toBits unpack (VWord w) = unpack w
 toBits _ (VVector v) = V.mapM (liftM toBool . force) v
 toBits _ x = fail $ unwords ["Verifier.SAW.Simulator.toBits", show x]
 
 toVector :: (VMonad l, Show (Extra l)) => Unpack l
-         -> Value l -> V.Vector (Thunk l)
-toVector _ (VVector v) = v
-toVector unpack (VWord w) = fmap (ready . VBool) (unpack w)
+         -> Value l -> EvalM l (V.Vector (Thunk l))
+toVector _ (VVector v) = return v
+toVector unpack (VWord w) = liftM (fmap (ready . VBool)) (unpack w)
 toVector _ x = fail $ unwords ["Verifier.SAW.Simulator.toVector", show x]
 
 wordFun :: (VMonad l, Show (Extra l)) => Pack l -> (VWord l -> MValue l) -> Value l
@@ -92,7 +92,7 @@ bitsFun unpack f = strictFun (\x -> toBits unpack x >>= f)
 
 vectorFun :: (VMonad l, Show (Extra l)) =>
   Unpack l -> (V.Vector (Thunk l) -> MValue l) -> Value l
-vectorFun unpack f = strictFun (\x -> f (toVector unpack x))
+vectorFun unpack f = strictFun (\x -> toVector unpack x >>= f)
 
 vecIdx :: a -> V.Vector a -> Int -> a
 vecIdx err v n =
@@ -335,24 +335,24 @@ appendOp unpack app =
   constFun $
   constFun $
   strictFun $ \xs -> return $
-  strictFun $ \ys -> return $
+  strictFun $ \ys ->
   appV unpack app xs ys
 
 appV :: VMonad l =>
   Unpack l ->
-  (VWord l -> VWord l -> VWord l) ->
+  (VWord l -> VWord l -> VWord l) -> -- FIXME: make monadic
   Value l ->
   Value l ->
-  Value l
+  MValue l
 appV unpack app xs ys =
   case (xs, ys) of
-    (VVector xv, _) | V.null xv -> ys
-    (_, VVector yv) | V.null yv -> xs
-    (VVector xv, VVector yv) -> VVector ((V.++) xv yv)
-    (VVector xv, VWord yw) -> VVector ((V.++) xv (fmap (ready . VBool) (unpack yw)))
-    (VWord xw, VVector yv) -> VVector ((V.++) (fmap (ready . VBool) (unpack xw)) yv)
-    (VWord xw, VWord yw) -> VWord (app xw yw)
-    _ -> error "Verifier.SAW.Simulator.Prims.appendOp"
+    (VVector xv, _) | V.null xv -> return ys
+    (_, VVector yv) | V.null yv -> return xs
+    (VWord xw, VWord yw) -> return (VWord (app xw yw))
+    (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
+    (VVector xv, VWord yw) -> liftM (\yv -> VVector ((V.++) xv (fmap (ready . VBool) yv))) (unpack yw)
+    (VWord xw, VVector yv) -> liftM (\xv -> VVector ((V.++) (fmap (ready . VBool) xv) yv)) (unpack xw)
+    _ -> fail "Verifier.SAW.Simulator.Prims.appendOp"
 
 -- join  :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
 joinOp :: VMonad l =>
@@ -367,9 +367,8 @@ joinOp unpack app =
   case x of
     VVector xv -> do
       vv <- V.mapM force xv
-      return (V.foldr (appV unpack app) (VVector V.empty) vv)
+      V.foldM (appV unpack app) (VVector V.empty) vv
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
-
 
 intUnOp :: VMonad l => String -> (VInt l -> VInt l) -> Value l
 intUnOp nm f =
@@ -488,8 +487,8 @@ muxValue unpack bool word int extra b = value
     value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
     value VType             VType             = return VType
     value (VExtra x)        (VExtra y)        = VExtra <$> extra b x y
-    value x@(VWord _)       y                 = value (VVector (toVector unpack x)) y
-    value x                 y@(VWord _)       = value x (VVector (toVector unpack y))
+    value x@(VWord _)       y                 = toVector unpack x >>= \xv -> value (VVector xv) y
+    value x                 y@(VWord _)       = toVector unpack y >>= \yv -> value x (VVector yv)
     value x                 y                 =
       fail $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y

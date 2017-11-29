@@ -305,10 +305,10 @@ constMap = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", Prims.atWithDefaultOp id (V.!) ite)
-  , ("Prelude.upd", Prims.updOp id (\x y -> return (RMEV.eq x y)) RMEV.integer V.length ite)
-  , ("Prelude.append", Prims.appendOp id (V.++))
-  , ("Prelude.join", Prims.joinOp id (V.++))
+  , ("Prelude.atWithDefault", Prims.atWithDefaultOp Identity (V.!) ite)
+  , ("Prelude.upd", Prims.updOp Identity (\x y -> return (RMEV.eq x y)) RMEV.integer V.length ite)
+  , ("Prelude.append", Prims.appendOp Identity (V.++))
+  , ("Prelude.join", Prims.joinOp Identity (V.++))
   , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.rotateL", rotateOp vRotateL)
@@ -362,7 +362,7 @@ muxRMEV :: RME -> Vector RME -> Vector RME -> Vector RME
 muxRMEV b = V.zipWith (RME.mux b)
 
 muxRValue :: RME -> RValue -> RValue -> RValue
-muxRValue b0 x0 y0 = runIdentity $ Prims.muxValue id bool word int extra b0 x0 y0
+muxRValue b0 x0 y0 = runIdentity $ Prims.muxValue Identity bool word int extra b0 x0 y0
   where
     bool b x y = return (RME.mux b x y)
     word b x y = return (muxRMEV b x y)
