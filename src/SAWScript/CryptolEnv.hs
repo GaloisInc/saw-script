@@ -453,12 +453,10 @@ parseDecls sc env input = do
 
 parseSchema :: CryptolEnv -> Located String -> IO T.Schema
 parseSchema env input = do
-  --putStrLn $ "parseSchema: " ++ show input
   let modEnv = eModuleEnv env
 
   -- Parse
   pschema <- ioParseSchema input
-  --putStrLn $ "ioParseSchema: " ++ show pschema
 
   fmap fst $ liftModuleM modEnv $ do
 

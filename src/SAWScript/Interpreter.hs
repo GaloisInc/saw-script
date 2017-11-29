@@ -32,6 +32,7 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
+import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -290,12 +291,12 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      io $ putStrLn (showsPrecValue opts 0 result "")
+      printOutLnTop Info (showsPrecValue opts 0 result "")
     _ -> return ()
 
   -- Print function type if result was a function
   case ty of
-    SS.TyCon SS.FunCon _ -> io $ putStrLn $ getVal lname ++ " : " ++ SS.pShow ty
+    SS.TyCon SS.FunCon _ -> printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
     _ -> return ()
 
   rw' <- getTopLevelRW
@@ -402,7 +403,12 @@ processFile opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
+  let handler :: X.SomeException -> IO a
+      handler e =
+        do printOutFn opts Error (show e)
+           exitProofUnknown
   _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+            `X.catch` handler
   setCurrentDirectory oldpath
   return ()
 
@@ -427,14 +433,15 @@ set_base b = do
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsBase = b } }
 
 print_value :: Value -> TopLevel ()
-print_value (VString s) = io $ putStrLn s
+print_value (VString s) = printOutLnTop Info s
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
   let cfg = meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
-  t' <- io $ defaultTypedTerm sc cfg t
+  sawopts <- getOptions
+  t' <- io $ defaultTypedTerm sawopts sc cfg t
   opts <- fmap rwPPOpts getTopLevelRW
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
@@ -443,7 +450,7 @@ print_value (VTerm t) = do
   io (rethrowEvalError $ print $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  io $ putStrLn (showsPrecValue opts 0 v "")
+  printOutLnTop Info (showsPrecValue opts 0 v "")
 
 cryptol_load :: FilePath -> TopLevel CryptolModule
 cryptol_load path = do
@@ -779,7 +786,7 @@ primitives = Map.fromList
     ]
 
   , prim "qc_print"            "Int -> Term -> TopLevel ()"
-    (scVal quickCheckPrintPrim)
+    (\a -> scVal (quickCheckPrintPrim a) a)
     [ "Quick Check a term by applying it to a sequence of random inputs"
     , "and print the results. The 'Int' arg specifies how many tests to run."
     ]
