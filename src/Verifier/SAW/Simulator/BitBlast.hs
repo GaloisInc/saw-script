@@ -50,6 +50,9 @@ lvFromV v = AIG.generate_msb0 (V.length v) ((V.!) v)
 vFromLV :: LitVector l -> V.Vector l
 vFromLV lv = V.generate (AIG.length lv) (AIG.at lv)
 
+unpackLV :: LitVector l -> IO (V.Vector l)
+unpackLV lv = return (vFromLV lv)
+
 vRotateL :: V.Vector a -> Integer -> V.Vector a
 vRotateL xs i
   | V.null xs = xs
@@ -285,10 +288,10 @@ beConstMap be = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", Prims.atWithDefaultOp vFromLV AIG.at (lazyMux be (muxBVal be)))
-  , ("Prelude.upd", Prims.updOp vFromLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
-  , ("Prelude.append", Prims.appendOp vFromLV (AIG.++))
-  , ("Prelude.join", Prims.joinOp vFromLV (AIG.++))
+  , ("Prelude.atWithDefault", Prims.atWithDefaultOp unpackLV AIG.at (lazyMux be (muxBVal be)))
+  , ("Prelude.upd", Prims.updOp unpackLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
+  , ("Prelude.append", Prims.appendOp unpackLV (AIG.++))
+  , ("Prelude.join", Prims.joinOp unpackLV (AIG.++))
   , ("Prelude.zip", vZipOp)
   , ("Prelude.foldr", foldrOp)
   , ("Prelude.rotateL", rotateOp be rol)
@@ -329,7 +332,7 @@ iteOp be =
   VFun $ \y -> lazyMux be (muxBVal be) (toBool b) (force x) (force y)
 
 muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
-muxBVal be = Prims.muxValue vFromLV bool word int (muxBExtra be)
+muxBVal be = Prims.muxValue unpackLV bool word int (muxBExtra be)
   where
     bool b = AIG.mux be b
     word b = AIG.zipWithM (bool b)
