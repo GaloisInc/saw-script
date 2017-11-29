@@ -241,7 +241,9 @@ translateDeclGroups sc env dgs = do
 -- | Translate all declarations in all loaded modules to SAWCore terms
 genTermEnv :: SharedContext -> ME.ModuleEnv -> IO (Map T.Name Term)
 genTermEnv sc modEnv = do
-  let declGroups = concatMap T.mDecls (ME.loadedModules modEnv)
+  let declGroups = concatMap T.mDecls
+                 $ filter (not . T.isParametrizedModule)
+                 $ ME.loadedModules modEnv
   cryEnv <- C.importTopLevelDeclGroups sc C.emptyEnv declGroups
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
