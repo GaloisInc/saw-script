@@ -302,8 +302,8 @@ shifter mux op = go
 svAt :: SWord -> Int -> SBool
 svAt x i = svTestBit x (intSizeOf x - 1 - i)
 
-svUnpack :: SWord -> Vector SBool
-svUnpack x = V.generate (intSizeOf x) (svAt x)
+svUnpack :: SWord -> IO (Vector SBool)
+svUnpack x = return (V.generate (intSizeOf x) (svAt x))
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
 atWithDefaultOp :: SValue
@@ -617,7 +617,7 @@ rotateOp vecOp wordOp svOp =
       VToNat (VWord iw) -> do
         case xs of
           VVector xv -> do
-            let bs = V.toList (svUnpack iw)
+            bs <- V.toList <$> svUnpack iw
             VVector <$> shifter muxVector vecOp xv bs
           VWord xw -> return $ vWord (svOp xw iw)
           _ -> error $ "rotateOp: " ++ show xs
@@ -664,7 +664,7 @@ shiftOp vecOp wordOp svOp =
       VToNat (VWord iw) ->
         case xs of
           VVector xv -> do
-            let bs = V.toList (svUnpack iw)
+            bs <- V.toList <$> svUnpack iw
             VVector <$> shifter muxVector (vecOp z) xv bs
           VWord xw -> do
             zv <- toBool <$> force z
