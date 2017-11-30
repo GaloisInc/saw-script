@@ -65,7 +65,7 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, GlobalVar, IntrinsicType)
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 -- Values ----------------------------------------------------------------------
@@ -106,7 +106,7 @@ data Value
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
-  | VGhostVar (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue"))
+  | VGhostVar CIR.GhostGlobal
 
 data LLVMModule =
   LLVMModule
@@ -686,10 +686,10 @@ instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
 
-instance IsValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+instance IsValue CIR.GhostGlobal where
   toValue = VGhostVar
 
-instance FromValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+instance FromValue CIR.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
 

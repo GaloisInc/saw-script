@@ -121,7 +121,7 @@ data PointsTo = PointsTo SetupValue SetupValue
 data SetupCondition where
   SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Pred     :: TypedTerm -> SetupCondition
-  SetupCond_Ghost    :: Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  SetupCond_Ghost    :: GhostGlobal ->
                         TypedTerm ->
                         SetupCondition
   deriving (Show)
@@ -154,7 +154,10 @@ data CrucibleMethodSpecIR =
   }
   deriving (Show)
 
-type GhostValue = "GhostValue"
+type GhostValue  = "GhostValue"
+type GhostType   = Crucible.IntrinsicType GhostValue
+type GhostGlobal = Crucible.GlobalVar GhostType
+
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n) GhostValue = TypedTerm
   muxIntrinsic sym _namerep prd thn els =

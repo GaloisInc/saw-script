@@ -51,7 +51,7 @@ import qualified Data.Parameterized.Nonce as Nonce
 import qualified Text.LLVM.AST as L
 
 import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar,
+                   (TypeRepr(UnitRepr), GlobalVar,
                     BaseTypeRepr(..))
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -755,11 +755,11 @@ learnSetupCondition sc cc _    prepost (SetupCond_Ghost var val)    = learnGhost
 ------------------------------------------------------------------------
 
 learnGhost ::
-  SharedContext                                          ->
-  CrucibleContext                                        ->
-  PrePost                                                ->
-  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
-  TypedTerm                                              ->
+  SharedContext          ->
+  CrucibleContext        ->
+  PrePost                ->
+  GhostGlobal            ->
+  TypedTerm              ->
   OverrideMatcher ()
 learnGhost sc cc prepost var expected =
   do actual <- readGlobal var
@@ -880,7 +880,7 @@ executeSetupCondition sc _  _    (SetupCond_Ghost var val)   = executeGhost sc v
 
 executeGhost ::
   SharedContext ->
-  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  GhostGlobal ->
   TypedTerm ->
   OverrideMatcher ()
 executeGhost sc var val =

@@ -45,13 +45,13 @@ import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Nonce as Crucible
 
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), SomeCFG(..), TypeRepr(..), cfgHandle,
-   UnitType, EmptyCtx, asBaseType, AsBaseType(..), IntrinsicType, GlobalVar,
-   SymbolRepr, knownSymbol, freshGlobalVar)
+   UnitType, EmptyCtx, asBaseType, AsBaseType(..), freshGlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -1192,16 +1192,13 @@ crucible_declare_ghost_state ::
   TopLevel Value
 crucible_declare_ghost_state _bic _opt name =
   do allocator <- getHandleAlloc
-     global <- liftIO (liftST (Crucible.freshGlobalVar allocator (Text.pack name)
-                                  (Crucible.IntrinsicRepr
-                                     (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue))))
+     global <- liftIO (liftST (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr))
      return (VGhostVar global)
-
 
 crucible_ghost_value ::
   BuiltinContext                      ->
   Options                             ->
-  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  GhostGlobal                         ->
   TypedTerm                           ->
   CrucibleSetup ()
 crucible_ghost_value _bic _opt ghost val =
