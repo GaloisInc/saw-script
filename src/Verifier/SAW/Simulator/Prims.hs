@@ -265,7 +265,7 @@ eqOp trueOp andOp boolOp bvOp intOp =
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
 atWithDefaultOp :: (VMonad l, Show (Extra l)) =>
   Unpack l ->
-  (VWord l -> Int -> VBool l) ->
+  (VWord l -> Int -> MBool l) ->
   (VBool l -> MValue l -> MValue l -> MValue l) ->
   Value l
 atWithDefaultOp unpack bvOp mux =
@@ -278,7 +278,7 @@ atWithDefaultOp unpack bvOp mux =
       VNat i ->
         case x of
           VVector xv -> force (vecIdx d xv (fromIntegral i))
-          VWord xw -> return $ VBool $ bvOp xw (fromIntegral i)
+          VWord xw -> VBool <$> bvOp xw (fromIntegral i)
           _ -> fail "atOp: expected vector"
       VToNat i -> do
         iv <- toBits unpack i
@@ -286,7 +286,7 @@ atWithDefaultOp unpack bvOp mux =
           VVector xv ->
             selectV mux (fromIntegral n - 1) (force . vecIdx d xv) iv
           VWord xw ->
-            selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
+            selectV mux (fromIntegral n - 1) (liftM VBool . bvOp xw) iv
           _ -> fail "atOp: expected vector"
       _ -> fail $ "atOp: expected Nat, got " ++ show idx
 

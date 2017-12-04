@@ -305,7 +305,7 @@ constMap = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", Prims.atWithDefaultOp Identity (V.!) ite)
+  , ("Prelude.atWithDefault", Prims.atWithDefaultOp Identity (\x i -> Identity (x V.! i)) ite)
   , ("Prelude.upd", Prims.updOp Identity (\x y -> return (RMEV.eq x y)) RMEV.integer V.length ite)
   , ("Prelude.append", Prims.appendOp Identity (V.++))
   , ("Prelude.join", Prims.joinOp Identity (V.++))

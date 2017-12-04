@@ -284,7 +284,7 @@ constMap = Map.fromList
   , ("Prelude.intMax"  , Prims.intMaxOp)
   -- Vectors
   , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", Prims.atWithDefaultOp bvUnpack Prim.bvAt ite)
+  , ("Prelude.atWithDefault", Prims.atWithDefaultOp bvUnpack bvAt ite)
   , ("Prelude.upd", Prims.updOp bvUnpack (\x y -> return (Prim.bvEq undefined x y)) Prim.bv Prim.width ite)
   , ("Prelude.append", Prims.appendOp bvUnpack (Prim.append_bv undefined undefined undefined))
   , ("Prelude.join", Prims.joinOp bvUnpack (Prim.append_bv undefined undefined undefined))
@@ -339,6 +339,9 @@ iteOp =
 
 bvUnpack :: BitVector -> Identity (V.Vector Bool)
 bvUnpack x = Identity (V.generate (Prim.width x) (Prim.bvAt x))
+
+bvAt :: BitVector -> Int -> Identity Bool
+bvAt x i = Identity (Prim.bvAt x i)
 
 ite :: Bool -> a -> a -> a
 ite b x y = if b then x else y
