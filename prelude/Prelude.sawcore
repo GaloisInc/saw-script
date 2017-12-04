@@ -730,8 +730,8 @@ bvSExt m n x = append m (Succ n) Bool (replicate m Bool (msb n x)) x;
 
 -- Polynomial operations
 
-primitive bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n
-       -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
+primitive bvPMul :: (m n :: Nat) ->
+  bitvector (addNat 1 m) -> bitvector (addNat 1 n) -> bitvector (addNat 1 (addNat m n));
 
 primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
 
