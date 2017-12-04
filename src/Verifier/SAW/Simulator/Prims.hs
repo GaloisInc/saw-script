@@ -457,13 +457,13 @@ errorOp =
     VString s -> fail s
     _ -> fail "unknown error"
 
-muxValue :: forall l. (VMonadLazy l, Show (Extra l)) =>
+muxValue :: forall b l. (VMonadLazy l, Show (Extra l)) =>
   Unpack l ->
-  (VBool l -> VBool l -> VBool l -> MBool l) ->
-  (VBool l -> VWord l -> VWord l -> MWord l) ->
-  (VBool l -> VInt  l -> VInt  l -> MInt  l) ->
-  (VBool l -> Extra l -> Extra l -> EvalM l (Extra l)) ->
-  VBool l -> Value l -> Value l -> MValue l
+  (b -> VBool l -> VBool l -> MBool l) ->
+  (b -> VWord l -> VWord l -> MWord l) ->
+  (b -> VInt  l -> VInt  l -> MInt  l) ->
+  (b -> Extra l -> Extra l -> EvalM l (Extra l)) ->
+  b -> Value l -> Value l -> MValue l
 muxValue unpack bool word int extra b = value
   where
     value :: Value l -> Value l -> MValue l
