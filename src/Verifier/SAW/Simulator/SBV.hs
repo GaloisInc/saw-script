@@ -161,7 +161,7 @@ constMap = Map.fromList
   , ("Prelude.join", Prims.joinOp svUnpack svJoin)
   , ("Prelude.split", splitOp)
   , ("Prelude.zip", vZipOp)
-  , ("Prelude.foldr", foldrOp)
+  , ("Prelude.foldr", Prims.foldrOp svUnpack)
   , ("Prelude.rotateL", rotateLOp)
   , ("Prelude.rotateR", rotateROp)
   , ("Prelude.shiftL", shiftLOp)
@@ -734,22 +734,6 @@ bvNatOp =
   Prims.natFun'' "bvNatOp(1)" $ \w -> return $
   Prims.natFun'' "bvNatOp(2)" $ \x -> return $
   vWord (bitVector (fromIntegral w) (toInteger x))
-
--- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
-foldrOp :: SValue
-foldrOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \f -> return $
-  VFun $ \z -> return $
-  strictFun $ \xs -> do
-    let g x m = do fx <- apply f x
-                   y <- delay m
-                   apply fx y
-    case xs of
-      VVector xv -> V.foldr g (force z) xv
-      _ -> fail "foldrOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: SValue
