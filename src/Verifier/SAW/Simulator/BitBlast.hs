@@ -293,7 +293,7 @@ beConstMap be = Map.fromList
   , ("Prelude.append", Prims.appendOp unpackLV (AIG.++))
   , ("Prelude.join", Prims.joinOp unpackLV (AIG.++))
   , ("Prelude.zip", vZipOp)
-  , ("Prelude.foldr", foldrOp)
+  , ("Prelude.foldr", Prims.foldrOp unpackLV)
   , ("Prelude.rotateL", rotateOp be rol)
   , ("Prelude.rotateR", rotateOp be ror)
   , ("Prelude.shiftL", shiftLOp be)
@@ -356,22 +356,6 @@ vectorOfBValue :: BValue l -> V.Vector (BThunk l)
 vectorOfBValue (VVector xv) = xv
 vectorOfBValue (VWord lv) = fmap (ready . vBool) (vFromLV lv)
 vectorOfBValue _ = error "Verifier.SAW.Simulator.BitBlast.vectorOfBValue"
-
--- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
-foldrOp :: BValue l
-foldrOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \f -> return $
-  VFun $ \z -> return $
-  strictFun $ \xs -> do
-    let g x m = do fx <- apply f x
-                   y <- delay m
-                   apply fx y
-    case xs of
-      VVector xv -> V.foldr g (force z) xv
-      _ -> fail "Verifier.SAW.Simulator.BitBlast.foldrOp"
 
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: AIG.IsAIG l g => g s -> BValue (l s)
