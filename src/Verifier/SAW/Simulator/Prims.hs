@@ -370,6 +370,21 @@ joinOp unpack app =
       V.foldM (appV unpack app) (VVector V.empty) vv
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
 
+-- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+foldrOp :: (VMonadLazy l, Show (Extra l)) => Unpack l -> Value l
+foldrOp unpack =
+  constFun $
+  constFun $
+  constFun $
+  strictFun $ \f -> return $
+  VFun $ \z -> return $
+  strictFun $ \xs -> do
+    let g x m = do fx <- apply f x
+                   y <- delay m
+                   apply fx y
+    xv <- toVector unpack xs
+    V.foldr g (force z) xv
+
 intUnOp :: VMonad l => String -> (VInt l -> VInt l) -> Value l
 intUnOp nm f =
   intFun nm $ \x -> return $
