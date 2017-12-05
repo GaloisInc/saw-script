@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.CrucibleOverride
   ( OverrideMatcher(..)
@@ -49,6 +50,9 @@ import qualified Data.Vector as V
 import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified Text.LLVM.AST as L
+
+import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.Eval.Type as Cryptol (evalType, TValue(..))
 
 import qualified Lang.Crucible.CFG.Core as Crucible
                    (TypeRepr(UnitRepr), IntrinsicType, GlobalVar,
@@ -621,6 +625,26 @@ matchArg ::
   Crucible.MemType   {- ^ expected memory type                  -} ->
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher ()
+
+
+-- NB! Special case.  Bitvectors that happen to be of the same length
+-- as pointers must be handled in a special way!  Such bitvectors may
+-- (but are not necessarily) be encoded a pointers with the special '0'
+-- block number.
+matchArg sc cc prepost actual@(Crucible.LLVMValPtr blk _end off)
+                       expectedTy@(Crucible.IntType intN)
+                       expected@(SetupTerm expectedTT) =
+  case ttSchema expectedTT of
+    Cryptol.Forall [] [] (Cryptol.evalType Map.empty -> Right (Cryptol.TVSeq n Cryptol.TVBit))
+      | n == (Crucible.natValue Crucible.ptrWidth)
+      , n == fromIntegral intN ->
+            do sym <- getSymInterface
+               p <- liftIO (Crucible.natEq sym blk =<< Crucible.natLit sym 0)
+               addAssert p (Crucible.AssertFailureSimError ("pointer/bitvector comparison " ++ stateCond prepost))
+               realTerm <- liftIO (valueToSC sym (Crucible.LLVMValInt Crucible.ptrWidth off))
+               matchTerm sc cc prepost realTerm (ttTerm expectedTT)
+
+    _ -> failure (StructuralMismatch actual expected expectedTy)
 
 matchArg sc cc prepost realVal _ (SetupTerm expected) =
   do sym      <- getSymInterface
