@@ -310,7 +310,7 @@ constMap = Map.fromList
   , ("Prelude.append", Prims.appendOp Identity (V.++))
   , ("Prelude.join", Prims.joinOp Identity (V.++))
   , ("Prelude.zip", vZipOp)
-  , ("Prelude.foldr", foldrOp)
+  , ("Prelude.foldr", Prims.foldrOp Identity)
   , ("Prelude.rotateL", rotateOp vRotateL)
   , ("Prelude.rotateR", rotateOp vRotateR)
   , ("Prelude.shiftL", shiftOp vShiftL)
@@ -406,22 +406,6 @@ vZipOp =
   pureFun $ \xs ->
   pureFun $ \ys ->
   VVector (V.zipWith (\x y -> ready (vTuple [ready x, ready y])) (toVector xs) (toVector ys))
-
--- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
-foldrOp :: RValue
-foldrOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \f -> return $
-  VFun $ \z -> return $
-  strictFun $ \xs -> do
-    let g x m = do fx <- apply f x
-                   y <- delay m
-                   apply fx y
-    case xs of
-      VVector xv -> V.foldr g (force z) xv
-      _ -> fail "Verifier.SAW.Simulator.RME.foldrOp"
 
 -- bvNat :: (x :: Nat) -> Nat -> bitvector x;
 bvNatOp :: RValue
