@@ -58,14 +58,15 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import Language.JVM.Common (ppFldId)
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr as TC
-import SAWScript.Options
+import SAWScript.Options hiding (Verbosity)
+import qualified SAWScript.Options as Opts
 import SAWScript.Utils
 import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaMethodSpec.Evaluator
 import SAWScript.JavaUtils
 import SAWScript.PathVC
 import SAWScript.TypedTerm
-import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io)
+import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutTop, printOutLnTop)
 import SAWScript.VerificationCheck
 
 import Data.JVM.Symbolic.AST (entryBlock)
@@ -436,13 +437,19 @@ type Prover =
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
   let ir = vpSpec params
-      verb = verbLevel (vpOpts params)
+      printLn      = printOutLnTop
   opts <- fmap rwPPOpts getTopLevelRW
   forM_ results $ \pvc -> do
     let mkVState nm cfn =
           VState { vsVCName = nm
                  , vsMethodSpec = ir
-                 , vsVerbosity = verb
+                 , vsVerbosity = case Opts.verbLevel (vpOpts params) of
+                                    Opts.Silent              -> 0
+                                    Opts.OnlyCounterExamples -> 0
+                                    Opts.Error               -> 1
+                                    Opts.Warn                -> 2
+                                    Opts.Info                -> 3
+                                    _                        -> 4
                  , vsCounterexampleFn = cfn
                  , vsStaticErrors = pvcStaticErrors pvc
                  }
@@ -450,21 +457,18 @@ runValidation prover params sc results = do
      forM_ (pvcChecks pvc) $ \vc -> do
        let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
        g <- io $ scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
-       when (verb >= 2) $ io $ do
-         putStr $ "Checking " ++ vcName vc
-         when (verb >= 5) $ putStr $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
-         putStrLn ""
+       printOutTop Info $ "Checking " ++ vcName vc
+       printOutTop Debug $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
+       printLn Info ""
        prover vs g
     else do
       let vsName = "an invalid path"
       let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
       false <- io $ scBool sc False
       g <- io $ scImplies sc (pvcAssumptions pvc) false
-      when (verb >= 2) $ io $ do
-        putStrLn $ "Checking " ++ vsName
-        print $ pvcStaticErrors pvc
-      when (verb >= 5) $ io $ do
-        putStrLn $ "Calling prover to disprove " ++
+      printLn Info $ "Checking " ++ vsName
+      printLn Info $ show $ pvcStaticErrors pvc
+      printLn Debug $ "Calling prover to disprove " ++
                  scPrettyTerm defaultPPOpts (pvcAssumptions pvc)
       prover vs g
 

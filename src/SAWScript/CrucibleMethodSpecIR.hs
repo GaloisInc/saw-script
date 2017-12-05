@@ -54,6 +54,7 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 import Verifier.SAW.SharedTerm
+import SAWScript.Options
 
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
@@ -72,40 +73,40 @@ data SetupValue where
   SetupGlobal :: String -> SetupValue
   deriving (Show)
 
-setupToTypedTerm :: SharedContext -> SetupValue -> MaybeT IO TypedTerm
-setupToTypedTerm sc sv =
+setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm
+setupToTypedTerm opts sc sv =
   case sv of
     SetupTerm term -> return term
-    _ -> do t <- setupToTerm sc sv
+    _ -> do t <- setupToTerm opts sc sv
             lift $ mkTypedTerm sc t
 
 -- | Convert a setup value to a SAW-Core term. This is a partial
 -- function, as certain setup values ---SetupVar, SetupNull and
 -- SetupGlobal--- don't have semantics outside of the symbolic
 -- simulator.
-setupToTerm :: SharedContext -> SetupValue -> MaybeT IO Term
-setupToTerm sc sv =
+setupToTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO Term
+setupToTerm opts sc sv =
   let intToNat = fromInteger . toInteger 
   in case sv of
     SetupTerm term -> return (ttTerm term)
-    SetupStruct fields -> do ts <- mapM (setupToTerm sc) fields
+    SetupStruct fields -> do ts <- mapM (setupToTerm opts sc) fields
                              lift $ scTuple sc ts
-    SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm sc) elems
+    SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm opts sc) elems
                                  typt <- lift $ scTypeOf sc t
                                  vec <- lift $ scVector sc typt ts
                                  typ <- lift $ scTypeOf sc vec
-                                 lift $ print $ vec
-                                 lift $ print $ typ
+                                 lift $ printOutLn opts Info $ show vec
+                                 lift $ printOutLn opts Info $ show typ
                                  return vec
     SetupElem base ind ->
       case base of
-        SetupArray elems@(e:_) -> do art <- setupToTerm sc base
+        SetupArray elems@(e:_) -> do art <- setupToTerm opts sc base
                                      ixt <- lift $ scNat sc $ intToNat ind
                                      lent <- lift $ scNat sc $ intToNat $ length elems
-                                     et <- setupToTerm sc e
+                                     et <- setupToTerm opts sc e
                                      typ <- lift $ scTypeOf sc et
                                      lift $ scAt sc lent typ art ixt
-        _                -> do st <- setupToTerm sc base
+        _                -> do st <- setupToTerm opts sc base
                                lift $ scTupleSelector sc st ind
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
