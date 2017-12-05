@@ -35,6 +35,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
+import Control.Monad(when)
 
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
@@ -240,17 +241,28 @@ translateDeclGroups sc env dgs = do
 -- | Translate all declarations in all loaded modules to SAWCore terms
 genTermEnv :: SharedContext -> ME.ModuleEnv -> IO (Map T.Name Term)
 genTermEnv sc modEnv = do
-  let declGroups = concatMap T.mDecls (ME.loadedModules modEnv)
+  let declGroups = concatMap T.mDecls
+                 $ filter (not . T.isParametrizedModule)
+                 $ ME.loadedModules modEnv
   cryEnv <- C.importTopLevelDeclGroups sc C.emptyEnv declGroups
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
 --------------------------------------------------------------------------------
+
+checkNotParametrized :: T.Module -> IO ()
+checkNotParametrized m =
+  when (T.isParametrizedModule m) $
+    fail $ unlines [ "Cannot load parameterized modules directly."
+                   , "Either use a ` import, or make a module instantiation."
+                   ]
+
 
 loadCryptolModule :: SharedContext -> CryptolEnv -> FilePath
                      -> IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  checkNotParametrized m
 
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
@@ -296,6 +308,7 @@ importModule sc env imp = do
             Left path -> return path
             Right mn -> fst `fmap` liftModuleM modEnv (MB.findModule mn)
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  checkNotParametrized m
 
   -- Regenerate SharedTerm environment. TODO: preserve old
   -- values, only translate decls from new module.
@@ -440,12 +453,10 @@ parseDecls sc env input = do
 
 parseSchema :: CryptolEnv -> Located String -> IO T.Schema
 parseSchema env input = do
-  --putStrLn $ "parseSchema: " ++ show input
   let modEnv = eModuleEnv env
 
   -- Parse
   pschema <- ioParseSchema input
-  --putStrLn $ "ioParseSchema: " ++ show pschema
 
   fmap fst $ liftModuleM modEnv $ do
 
