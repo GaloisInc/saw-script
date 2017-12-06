@@ -238,9 +238,6 @@ beConstMap be = Map.fromList
   , ("Prelude.bvURem", binOp (AIG.urem be))
   , ("Prelude.bvSDiv", binOp (AIG.squot be))
   , ("Prelude.bvSRem", binOp (AIG.srem be))
-  , ("Prelude.bvPMul", bvPMulOp be)
-  , ("Prelude.bvPMod", bvPModOp be)
-  , ("Prelude.bvPDiv", bvPDivOp be)
   , ("Prelude.bvLg2" , Prims.bvLg2Op toWord (bitblastLogBase2 be) )
   -- Relations
   , ("Prelude.bvEq"  , binRel (AIG.bvEq be))
@@ -455,33 +452,6 @@ intToBvOp g =
     VWord <$>
      if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
                else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x))
-
-----------------------------------------
--- Polynomial operations
-
--- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
-bvPModOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvPModOp g =
-  constFun $
-  constFun $
-  wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> AIG.pmod g x y
-
--- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector _;
-bvPMulOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvPMulOp g =
-  constFun $
-  constFun $
-  wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> AIG.pmul g x y
-
--- primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
-bvPDivOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvPDivOp g =
-  constFun $
-  constFun $
-  wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> AIG.pdiv g x y
 
 ----------------------------------------
 
