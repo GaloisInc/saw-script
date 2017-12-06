@@ -256,9 +256,6 @@ constMap = Map.fromList
   , ("Prelude.bvURem", binOp RMEV.urem)
   , ("Prelude.bvSDiv", binOp RMEV.sdiv)
   , ("Prelude.bvSRem", binOp RMEV.srem)
-  , ("Prelude.bvPMul", bvPMulOp)
-  , ("Prelude.bvPMod", bvPModOp)
-  , ("Prelude.bvPDiv", bvPDivOp)
   -- Relations
   , ("Prelude.bvEq"  , binRel RMEV.eq)
   , ("Prelude.bvsle" , binRel RMEV.sle)
@@ -368,33 +365,6 @@ muxRValue b0 x0 y0 = runIdentity $ Prims.muxValue Identity bool word int extra b
     word b x y = return (muxRMEV b x y)
     int _ x y = if x == y then return x else fail $ "muxRValue: VInt " ++ show (x, y)
     extra b (AStream xs) (AStream ys) = return (AStream (muxRValue b <$> xs <*> ys))
-
-----------------------------------------
--- Polynomial operations
-
--- bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector _;
-bvPMulOp :: RValue
-bvPMulOp =
-  constFun $
-  constFun $
-  wordFun $ \x ->
-  wordFun $ \y -> vWord (RMEV.pmul x y)
-
--- bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
-bvPModOp :: RValue
-bvPModOp =
-  constFun $
-  constFun $
-  wordFun $ \x ->
-  wordFun $ \y -> vWord (RMEV.pmod x y)
-
--- primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
-bvPDivOp :: RValue
-bvPDivOp =
-  constFun $
-  constFun $
-  wordFun $ \x ->
-  wordFun $ \y -> vWord (RMEV.pdiv x y)
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: RValue
