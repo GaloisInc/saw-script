@@ -19,7 +19,6 @@ import Control.Monad (zipWithM, foldM)
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
-import Data.Word (Word64)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
@@ -28,6 +27,7 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.BaseTypes as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
@@ -141,7 +141,10 @@ typeOfSetupValue' cc env val =
           case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
             Nothing -> fail "typeOfSetupValue: non-representable type"
             Just memTy -> return (Crucible.MemType memTy)
-        _ -> fail "typeOfSetupValue: expected monomorphic term"
+        s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
+                            , "instead got:"
+                            , show (Cryptol.pp s)
+                            ]
     SetupStruct vs ->
       do memTys <- traverse (typeOfSetupValue cc env) vs
          let si = Crucible.mkStructInfo dl False memTys
@@ -381,14 +384,14 @@ toLLVMType dl tp =
 mkFields ::
   Crucible.DataLayout ->
   Crucible.Alignment ->
-  Word64 ->
+  Crucible.Bytes ->
   [Crucible.Type] ->
-  [(Crucible.Type, Word64)]
+  [(Crucible.Type, Crucible.Bytes)]
 mkFields _ _ _ [] = []
 mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
     where
       end = off + Crucible.typeSize ty
-      off' = Crucible.nextPow2Multiple end (fromIntegral nextAlign)
+      off' = Crucible.toBytes $ Crucible.nextPow2Multiple (Crucible.bytesToInteger end) (fromIntegral nextAlign)
       pad = off' - end
       a' = max a (typeAlignment dl ty)
       nextAlign = case tys of
@@ -400,7 +403,7 @@ mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
 typeAlignment :: Crucible.DataLayout -> Crucible.Type -> Crucible.Alignment
 typeAlignment dl ty =
   case Crucible.typeF ty of
-    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromIntegral (bytes*8))
+    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
@@ -410,12 +413,12 @@ typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal dl val =
   case val of
     Crucible.LLVMValPtr {}      -> ptrType
-    Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w)))
+    Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.toBytes (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w))))
     Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
   where
-    ptrType = Crucible.bitvectorType (dl^.Crucible.ptrSize)
+    ptrType = Crucible.bitvectorType (Crucible.toBytes (dl^.Crucible.ptrSize))
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 
 equalValsPred ::
