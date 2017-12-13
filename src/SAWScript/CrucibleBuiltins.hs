@@ -37,7 +37,6 @@ module SAWScript.CrucibleBuiltins
     , crucible_fresh_var
     , crucible_alloc
     , crucible_fresh_expanded_val
-    , match
     ) where
 
 import           Control.Lens
@@ -66,13 +65,14 @@ import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Nonce as Crucible
 
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), SomeCFG(..), TypeRepr(..), cfgHandle,
-   UnitType, EmptyCtx, asBaseType, AsBaseType(..), IntrinsicType, GlobalVar,
-   SymbolRepr, knownSymbol, freshGlobalVar)
+   UnitType, EmptyCtx, asBaseType, AsBaseType(..),
+   freshGlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -85,10 +85,12 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
+import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 
 import Lang.Crucible.Utils.MonadST
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -112,7 +114,7 @@ import SAWScript.CrucibleOverride
 import SAWScript.CrucibleResolveSetupValue
 
 
-type MemImpl = Crucible.MemImpl Sym Crucible.PtrWidth
+type MemImpl = Crucible.MemImpl Sym
 
 show_cfg :: Crucible.AnyCFG -> String
 show_cfg (Crucible.AnyCFG cfg) = show cfg
@@ -305,7 +307,9 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
       do val' <- resolveSetupVal cc env tyenv val
          ptr' <- resolveSetupVal cc env tyenv ptr
          ptr'' <- case ptr' of
-           Crucible.LLVMValPtr blk end off -> return (Crucible.LLVMPtr blk end off)
+           Crucible.LLVMValInt blk off
+             | Just Crucible.Refl <- Crucible.testEquality (Crucible.bvWidth off) Crucible.ptrWidth64
+             -> return (Crucible.LLVMPointer blk off)
            _ -> fail "Non-pointer value found in points-to assertion"
          -- In case the types are different (from crucible_points_to_untyped)
          -- then the store type should be determined by the rhs.
@@ -364,7 +368,7 @@ doAlloc ::
 doAlloc cc tp = StateT $ \mem ->
   do let sym = ccBackend cc
      let dl = TyCtx.llvmDataLayout ?lc
-     sz <- Crucible.bvLit sym Crucible.ptrWidth (fromIntegral (Crucible.memTypeSize dl tp))
+     sz <- Crucible.bvLit sym Crucible.ptrWidth64 (fromIntegral (Crucible.memTypeSize dl tp))
      Crucible.mallocRaw sym mem sz
 
 --------------------------------------------------------------------------------
@@ -487,51 +491,6 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
            v <- Crucible.coerceAny sym tr a
            return (Crucible.RegEntry tr v))
       ctx
-
---------------------------------------------------------------------------------
-
--- | Match an 'LLVMVal' with a 'SetupValue', producing a list of
--- equality constraints, and accumulating bindings for
--- previously-unbound 'SetupVar's on the right-hand side.
-match ::
-  SharedContext   {- ^ term construction context -} ->
-  CrucibleContext {- ^ simulator context         -} ->
-  Map AllocIndex Crucible.SymType {- ^ type env  -} ->
-  LLVMVal       ->
-  SetupValue    ->
-  StateT (Map AllocIndex LLVMPtr) IO [Term]
-match _sc cc _tyenv x@(Crucible.LLVMValPtr blk off end) (SetupVar i) =
-  do env <- get
-     case Map.lookup i env of
-       Just y  -> do t <- liftIO $ assertEqualVals cc x (ptrToVal y)
-                     return [t]
-       Nothing -> do put (Map.insert i (Crucible.LLVMPtr blk off end) env)
-                     return []
-match sc cc tyenv (Crucible.LLVMValStruct fields) (SetupStruct vs) =
-  matchList sc cc tyenv (map snd (V.toList fields)) vs
-match sc cc tyenv (Crucible.LLVMValArray _ty xs) (SetupArray vs) =
-  matchList sc cc tyenv (V.toList xs) vs
-match sc cc _tyenv x (SetupTerm tm) =
-  do tVal <- liftIO $ valueToSC (ccBackend cc) x
-     g <- liftIO $ scEq sc tVal (ttTerm tm)
-     return [g]
-match _sc cc tyenv x v =
-  do env <- get
-     v' <- liftIO $ resolveSetupVal cc env tyenv v
-     g <- liftIO $ assertEqualVals cc x v'
-     return [g]
-
-matchList ::
-  SharedContext   {- ^ term construction context -} ->
-  CrucibleContext {- ^ simulator context         -} ->
-  Map AllocIndex Crucible.SymType {- ^ type env  -} ->
-  [LLVMVal]                                         ->
-  [SetupValue]                                      ->
-  StateT (Map AllocIndex LLVMPtr) IO [Term]
-matchList sc cc tyenv xs vs = -- precondition: length xs = length vs
-  do gs <- concat <$> sequence [ match sc cc tyenv x v | (x, v) <- zip xs vs ]
-     g <- liftIO $ scAndList sc gs
-     return (if null gs then [] else [g])
 
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
@@ -828,13 +787,11 @@ logicTypeOfActual dl sc (Crucible.StructType si) = do
     Nothing -> return Nothing
 logicTypeOfActual _ _ _ = return Nothing
 
-
 logicTypeForInt :: SharedContext -> Natural -> IO Term
 logicTypeForInt sc w =
   do bType <- scBoolType sc
      lTm <- scNat sc (fromIntegral w)
      scVecType sc lTm bType
-
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
@@ -1068,15 +1025,13 @@ crucible_declare_ghost_state ::
   TopLevel Value
 crucible_declare_ghost_state _bic _opt name =
   do allocator <- getHandleAlloc
-     global <- liftIO (liftST (Crucible.freshGlobalVar allocator (Text.pack name)
-                                  (Crucible.IntrinsicRepr
-                                     (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue))))
+     global <- liftIO (liftST (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr))
      return (VGhostVar global)
 
 crucible_ghost_value ::
   BuiltinContext                      ->
   Options                             ->
-  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  GhostGlobal                         ->
   TypedTerm                           ->
   CrucibleSetup ()
 crucible_ghost_value _bic _opt ghost val =

@@ -46,7 +46,7 @@ import qualified Lang.Crucible.CFG.Common as Crucible
 import SAWScript.SolverStats
 import SAWScript.TypedTerm
 
-import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, PtrWidth)
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -122,7 +122,7 @@ data PointsTo = PointsTo SetupValue SetupValue
 data SetupCondition where
   SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
   SetupCond_Pred     :: TypedTerm -> SetupCondition
-  SetupCond_Ghost    :: Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  SetupCond_Ghost    :: GhostGlobal ->
                         TypedTerm ->
                         SetupCondition
   deriving (Show)
@@ -155,10 +155,13 @@ data CrucibleMethodSpecIR =
   }
   deriving (Show)
 
-type GhostValue = "GhostValue"
+type GhostValue  = "GhostValue"
+type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
+type GhostGlobal = Crucible.GlobalVar GhostType
+
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n) GhostValue = TypedTerm
-  muxIntrinsic sym _namerep prd thn els =
+  type Intrinsic (Crucible.SAWCoreBackend n) GhostValue ctx = TypedTerm
+  muxIntrinsic sym _namerep _ctx prd thn els =
     do st <- readIORef (Crucible.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
        prd' <- Crucible.toSC sym prd
@@ -215,7 +218,7 @@ data CrucibleContext =
   , ccLLVMModule      :: L.Module
   , ccLLVMModuleTrans :: Crucible.ModuleTranslation
   , ccBackend         :: Sym
-  , ccEmptyMemImpl    :: Crucible.MemImpl Sym Crucible.PtrWidth -- ^ A heap where LLVM globals are allocated, but not initialized.
+  , ccEmptyMemImpl    :: Crucible.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
   , ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
   , ccGlobals         :: Crucible.SymGlobalState Sym
   }

@@ -10,7 +10,6 @@ module SAWScript.CrucibleResolveSetupValue
   , resolveSAWPred
   , resolveSetupFieldIndex
   , equalValsPred
-  , packPointer
   , ptrToVal
   ) where
 
@@ -42,7 +41,6 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
-import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 -- import           Lang.Crucible.Utils.MonadST
@@ -63,7 +61,7 @@ import SAWScript.CrucibleMethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
 
-type LLVMVal = Crucible.LLVMVal Sym Crucible.PtrWidth
+type LLVMVal = Crucible.LLVMVal Sym
 type LLVMPtr = Crucible.LLVMPtr Sym Crucible.PtrWidth
 
 -- | Use the LLVM metadata to determine the struct field index
@@ -210,8 +208,7 @@ resolveSetupVal ::
 resolveSetupVal cc env tyenv val =
   case val of
     SetupVar i
-      | Just (Crucible.LLVMPtr blk end off) <- Map.lookup i env ->
-                return (Crucible.LLVMValPtr blk end off)
+      | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
@@ -249,17 +246,16 @@ resolveSetupVal cc env tyenv val =
            _ -> fail msg
          ptr <- resolveSetupVal cc env tyenv v
          case ptr of
-           Crucible.LLVMValPtr blk end off ->
-             do delta' <- Crucible.bvLit sym Crucible.knownNat (toInteger delta)
+           Crucible.LLVMValInt blk off ->
+             do delta' <- Crucible.bvLit sym (Crucible.bvWidth off) (toInteger delta)
                 off' <- Crucible.bvAdd sym off delta'
-                return (Crucible.LLVMValPtr blk end off')
+                return (Crucible.LLVMValInt blk off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
     SetupNull ->
-      packPointer sym =<< Crucible.mkNullPointer sym
+      ptrToVal <$> Crucible.mkNullPointer sym
     SetupGlobal name ->
       do let mem = ccEmptyMemImpl cc
-         ptr <- Crucible.doResolveGlobal sym mem (L.Symbol name)
-         packPointer sym ptr
+         ptrToVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
   where
     sym = ccBackend cc
     lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
@@ -306,14 +302,10 @@ resolveSAWTerm cc tp tm =
                            sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm'
                            return (SBV.svAsInteger sbv)
                          _ -> return Nothing
-                 case mx of
-                   Just x -> do
-                     loc <- Crucible.curProgramLoc sym
-                     let v = Crucible.BVElt w x loc
-                     return (Crucible.LLVMValInt w v)
-                   Nothing -> do
-                     v <- Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm'
-                     return (Crucible.LLVMValInt w v)
+                 v <- case mx of
+                        Just x  -> Crucible.bvLit sym w x
+                        Nothing -> Crucible.bindSAWTerm sym (Crucible.BaseBVRepr w) tm'
+                 Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
         do sc    <- Crucible.saw_ctx <$> (readIORef (Crucible.sbStateManager sym))
@@ -351,13 +343,7 @@ resolveSAWTerm cc tp tm =
     dl = TyCtx.llvmDataLayout (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
 ptrToVal :: LLVMPtr -> LLVMVal
-ptrToVal (Crucible.LLVMPtr blk end off) = Crucible.LLVMValPtr blk end off
-
-packPointer ::
-  Sym ->
-  Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
-packPointer sym x = Crucible.ptrToPtrVal <$> Crucible.projectLLVM_pointer sym x
+ptrToVal (Crucible.LLVMPointer blk off) = Crucible.LLVMValInt blk off
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =
@@ -408,15 +394,14 @@ typeAlignment dl ty =
     Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
 typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
-typeOfLLVMVal dl val =
+typeOfLLVMVal _dl val =
   case val of
-    Crucible.LLVMValPtr {}      -> ptrType
-    Crucible.LLVMValInt w _bv   -> Crucible.bitvectorType (Crucible.toBytes (Crucible.intWidthSize (fromIntegral (NatRepr.natValue w))))
+    Crucible.LLVMValInt _bkl bv ->
+       Crucible.bitvectorType (Crucible.toBytes (Crucible.intWidthSize (fromIntegral (NatRepr.natValue (Crucible.bvWidth bv)))))
     Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
   where
-    ptrType = Crucible.bitvectorType (Crucible.toBytes (dl^.Crucible.ptrSize))
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 
 equalValsPred ::
@@ -428,13 +413,11 @@ equalValsPred cc v1 v2 = go (v1, v2)
   where
   go :: (LLVMVal, LLVMVal) -> IO (Crucible.Pred Sym)
 
-  go (Crucible.LLVMValPtr blk1 _end1 off1, Crucible.LLVMValPtr blk2 _end2 off2)
+  go (Crucible.LLVMValInt blk1 off1, Crucible.LLVMValInt blk2 off2)
+       | Just Crucible.Refl <- Crucible.testEquality (Crucible.bvWidth off1) (Crucible.bvWidth off2)
        = do blk_eq <- Crucible.natEq sym blk1 blk2
             off_eq <- Crucible.bvEq sym off1 off2
             Crucible.andPred sym blk_eq off_eq
-  go (Crucible.LLVMValInt wx x, Crucible.LLVMValInt wy y)
-       | Just Crucible.Refl <- Crucible.testEquality wx wy
-       = Crucible.bvEq sym x y
   go (Crucible.LLVMValReal x, Crucible.LLVMValReal y)
        = Crucible.realEq sym x y
   go (Crucible.LLVMValStruct xs, Crucible.LLVMValStruct ys)

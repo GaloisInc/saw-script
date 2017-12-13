@@ -15,8 +15,6 @@ module SAWScript.CrucibleOverride
   ( OverrideMatcher(..)
   , runOverrideMatcher
 
-  , unpackPointer
-
   , setupValueSub
   , executeFreshPointer
   , osAsserts
@@ -47,15 +45,13 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 
-import qualified Data.Parameterized.Nonce as Nonce
-
 import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Cryptol.Eval.Type as Cryptol (evalType, TValue(..))
+import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 
 import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr), IntrinsicType, GlobalVar,
+                   (TypeRepr(UnitRepr), GlobalVar,
                     BaseTypeRepr(..))
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -67,6 +63,7 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
@@ -127,7 +124,7 @@ data OverrideFailure
   | BadReturnSpecification -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
   | BadPointerLoad String -- ^ loadRaw failed due to type error
-  | StructuralMismatch (Crucible.LLVMVal Sym Crucible.PtrWidth)
+  | StructuralMismatch (Crucible.LLVMVal Sym)
                        SetupValue
                        Crucible.MemType
                         -- ^ simulated value, specified value, specified type
@@ -207,9 +204,9 @@ methodSpecHandler ::
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc css retTy = do
   let L.Symbol fsym = (head css)^.csName
-  Crucible.RegMap args <- Crucible.getOverrideArgs
   globals <- Crucible.readGlobals
   sym     <- Crucible.getSymInterface
+  (Crucible.RegMap args) <- Crucible.getOverrideArgs
 
   gs <- liftIO (buildGlobalsList sym (length css) globals)
 
@@ -431,16 +428,16 @@ enforceDisjointness cc ss =
      sequence_
         [ do c <- liftIO
                 $ Crucible.buildDisjointRegionsAssertion
-                    sym Crucible.ptrWidth
-                    (unpackPointer sym p) (sz pty)
-                    (unpackPointer sym q) (sz qty)
+                    sym Crucible.ptrWidth64
+                    p (sz pty)
+                    q (sz qty)
              addAssert c a
 
         | let dl = TyCtx.llvmDataLayout
                      (Crucible.llvmTypeCtx (ccLLVMContext cc))
 
               sz p = Crucible.BVElt
-                       Crucible.ptrWidth
+                       Crucible.ptrWidth64
                        (fromIntegral (Crucible.memTypeSize dl p))
                        Crucible.initializationLoc
 
@@ -628,36 +625,19 @@ matchArg ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   CrucibleContext    {- ^ context for interacting with Crucible -} ->
   PrePost                                                          ->
-  Crucible.LLVMVal Sym Crucible.PtrWidth
+  Crucible.LLVMVal Sym
                      {- ^ concrete simulation value             -} ->
   Crucible.MemType   {- ^ expected memory type                  -} ->
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher ()
 
-
--- NB! Special case.  Bitvectors that happen to be of the same length
--- as pointers must be handled in a special way!  Such bitvectors may
--- (but are not necessarily) be encoded a pointers with the special '0'
--- block number.
-matchArg sc cc prepost actual@(Crucible.LLVMValPtr blk _end off)
-                       expectedTy@(Crucible.IntType intN)
-                       expected@(SetupTerm expectedTT) =
-  case ttSchema expectedTT of
-    Cryptol.Forall [] [] (Cryptol.evalType Map.empty -> Right (Cryptol.TVSeq n Cryptol.TVBit))
-      | n == (Crucible.natValue Crucible.ptrWidth)
-      , n == fromIntegral intN ->
-            do sym <- getSymInterface
-               p <- liftIO (Crucible.natEq sym blk =<< Crucible.natLit sym 0)
-               addAssert p (Crucible.AssertFailureSimError ("pointer/bitvector comparison " ++ stateCond prepost))
-               realTerm <- liftIO (valueToSC sym (Crucible.LLVMValInt Crucible.ptrWidth off))
-               matchTerm sc cc prepost realTerm (ttTerm expectedTT)
-
-    _ -> failure (StructuralMismatch actual expected expectedTy)
-
-matchArg sc cc prepost realVal _ (SetupTerm expected) =
-  do sym      <- getSymInterface
-     realTerm <- liftIO (valueToSC sym realVal)
-     matchTerm sc cc prepost realTerm (ttTerm expected)
+matchArg sc cc prepost actual expectedTy expected@(SetupTerm expectedTT)
+  | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
+  , Right tval <- Cryptol.evalType mempty tyexpr
+  = do sym      <- getSymInterface
+       let failMsg = StructuralMismatch actual expected expectedTy
+       realTerm <- valueToSC sym failMsg tval actual
+       matchTerm sc cc prepost realTerm (ttTerm expectedTT)
 
 -- match the fields of struct point-wise
 matchArg sc cc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
@@ -667,66 +647,73 @@ matchArg sc cc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) 
                              (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                              zs ]
 
-matchArg _sc cc prepost actual@(Crucible.LLVMValPtr blk end off) expectedTy setupval =
-  let ptr = Crucible.LLVMPtr blk end off in
+matchArg _sc cc prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
-    SetupVar var ->
-      do assignVar cc var ptr
+    SetupVar var | Just Crucible.Refl <- Crucible.testEquality (Crucible.bvWidth off) Crucible.ptrWidth64 ->
+      do assignVar cc var (Crucible.LLVMPointer blk off)
 
-    SetupNull ->
+    SetupNull | Just Crucible.Refl <- Crucible.testEquality (Crucible.bvWidth off) Crucible.ptrWidth64 ->
       do sym <- getSymInterface
-         p   <- liftIO (Crucible.isNullPointer sym (unpackPointer sym ptr))
+         p   <- liftIO (Crucible.isNullPointer sym (Crucible.LLVMPointer blk off))
          addAssert p (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost))
 
-    SetupGlobal name ->
+    SetupGlobal name | Just Crucible.Refl <- Crucible.testEquality (Crucible.bvWidth off) Crucible.ptrWidth64 ->
       do let mem = ccEmptyMemImpl cc
          sym  <- getSymInterface
-         ptr' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
-         Crucible.LLVMPtr blk' _ off' <- liftIO (Crucible.projectLLVM_pointer sym ptr')
+         Crucible.LLVMPointer blk' off' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
 
          p1 <- liftIO (Crucible.natEq sym blk blk')
          p2 <- liftIO (Crucible.bvEq sym off off')
          p  <- liftIO (Crucible.andPred sym p1 p2)
          addAssert p (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost))
 
-    _ ->
-      do failure (StructuralMismatch actual setupval expectedTy)
+    _ -> failure (StructuralMismatch actual setupval expectedTy)
 
 matchArg _sc _cc _prepost actual expectedTy expected =
   failure (StructuralMismatch actual expected expectedTy)
 
 ------------------------------------------------------------------------
 
--- TODO: this seems general enough that it could go in the Crucible
--- SAWCore backend
 valueToSC ::
-  Crucible.SAWCoreBackend Nonce.GlobalNonceGenerator ->
-  Crucible.LLVMVal Sym Crucible.PtrWidth ->
-  IO Term
+  Sym ->
+  OverrideFailure ->
+  Cryptol.TValue ->
+  Crucible.LLVMVal Sym  ->
+  OverrideMatcher Term
+valueToSC sym failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)
+  | length tys == length vals
+  = do terms <- traverse (\(ty, tm) -> valueToSC sym failMsg ty (snd tm)) (zip tys (V.toList vals))
+       sc    <- liftIO (Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym))
+       liftIO $ scTuple sc terms
 
-valueToSC sym (Crucible.LLVMValInt _ bv) =
-  Crucible.toSC sym bv
+valueToSC sym failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt base off) =
+  do baseZero <- liftIO (Crucible.natEq sym base =<< Crucible.natLit sym 0)
+     offTm    <- liftIO (Crucible.toSC sym off)
+     case Crucible.asConstantPred baseZero of
+       Just True  -> return offTm
+       Just False -> failure failMsg
+       _ -> do addAssert baseZero (Crucible.GenericSimError "Expected bitvector value, but found pointer")
+               return offTm
 
-valueToSC sym (Crucible.LLVMValStruct vals) =
-  do terms <- V.toList <$> traverse (valueToSC sym . snd) vals
-     sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
-     scTuple sc terms
+-- This is a case for pointers, when we opaque types in Cryptol to represent them...
+-- valueToSC sym _tval (Crucible.LLVMValInt base off) =
+--   do base' <- Crucible.toSC sym base
+--      off'  <- Crucible.toSC sym off
+--      sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+--      Just <$> scTuple sc [base', off']
 
-valueToSC sym (Crucible.LLVMValPtr base sz off) =
-  do base' <- Crucible.toSC sym base
-     sz'   <- Crucible.toSC sym sz
-     off'  <- Crucible.toSC sym off
-     sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
-     scTuple sc [base', sz', off']
+valueToSC sym failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
+  | toInteger (length vals) == n
+  = do terms <- V.toList <$> traverse (valueToSC sym failMsg cryty) vals
+       sc    <- liftIO (Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym))
+       t     <- liftIO (typeToSC sc ty)
+       liftIO (scVector sc t terms)
 
-valueToSC sym (Crucible.LLVMValArray ty vals) =
-  do terms <- V.toList <$> traverse (valueToSC sym) vals
-     sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
-     t     <- typeToSC sc ty
-     scVector sc t terms
+valueToSC _ _ _ Crucible.LLVMValReal{} =
+  fail  "valueToSC: Real not supported"
 
-valueToSC _ Crucible.LLVMValReal{} =
-  fail "valueToSC: Real not supported"
+valueToSC _sym failMsg _tval _val =
+  failure failMsg
 
 ------------------------------------------------------------------------
 
@@ -791,7 +778,7 @@ learnGhost ::
   SharedContext                                          ->
   CrucibleContext                                        ->
   PrePost                                                ->
-  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  GhostGlobal                                            ->
   TypedTerm                                              ->
   OverrideMatcher ()
 learnGhost sc cc prepost var expected =
@@ -825,8 +812,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo ptr val) =
                           $ Crucible.memModelOps
                           $ ccLLVMContext cc
 
-     ptr2 <- liftIO (Crucible.projectLLVM_pointer sym ptr1)
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr2 storTy)
+     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy)
      (p,r,v) <- case res of
                   Left e  -> failure (BadPointerLoad e)
                   Right x -> return x
@@ -892,7 +878,7 @@ executeAllocation opts cc (var, symTy) =
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps $ ccLLVMContext cc
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
-     sz <- liftIO $ Crucible.bvLit sym Crucible.ptrWidth (fromIntegral w)
+     sz <- liftIO $ Crucible.bvLit sym Crucible.ptrWidth64 (fromIntegral w)
      (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz)
      writeGlobal memVar mem'
      assignVar cc var ptr
@@ -917,7 +903,7 @@ executeSetupCondition _opts sc _  _    (SetupCond_Ghost var val)  = executeGhost
 
 executeGhost ::
   SharedContext ->
-  Crucible.GlobalVar (Crucible.IntrinsicType GhostValue) ->
+  GhostGlobal ->
   TypedTerm ->
   OverrideMatcher ()
 executeGhost sc var val =
@@ -997,9 +983,8 @@ executeFreshPointer cc (AllocIndex i) =
   do let mkName base = Crucible.systemSymbol (base ++ show i ++ "!")
          sym         = ccBackend cc
      blk <- Crucible.freshConstant sym (mkName "blk") Crucible.BaseNatRepr
-     end <- Crucible.freshConstant sym (mkName "end") (Crucible.BaseBVRepr Crucible.ptrWidth)
-     off <- Crucible.freshConstant sym (mkName "off") (Crucible.BaseBVRepr Crucible.ptrWidth)
-     return (Crucible.LLVMPtr blk end off)
+     off <- Crucible.freshConstant sym (mkName "off") (Crucible.BaseBVRepr Crucible.ptrWidth64)
+     return (Crucible.LLVMPointer blk off)
 
 ------------------------------------------------------------------------
 
@@ -1054,24 +1039,18 @@ resolveSetupValue opts cc sc spec sval =
      aval <- liftIO $ Crucible.unpackMemValue sym lval
      return (memTy, aval)
 
-unpackPointer ::
-  Sym ->
-  Crucible.LLVMPtr Sym Crucible.PtrWidth ->
-  Crucible.RegValue Sym Crucible.LLVMPointerType
-unpackPointer sym (Crucible.LLVMPtr blk end off) =
-  Crucible.llvmPointer sym blk end off
-
 ------------------------------------------------------------------------
 
 asPointer ::
   (?lc :: TyCtx.LLVMContext) =>
   (Crucible.MemType, Crucible.AnyValue Sym) ->
-  OverrideMatcher (Crucible.MemType, Crucible.RegValue Sym Crucible.LLVMPointerType)
+  OverrideMatcher (Crucible.MemType, LLVMPtr)
 
 asPointer
   (Crucible.PtrType pty,
-   Crucible.AnyValue Crucible.LLVMPointerRepr val)
+   Crucible.AnyValue (Crucible.LLVMPointerRepr w) val)
   | Just pty' <- TyCtx.asMemType pty
+  , Just Crucible.Refl <- Crucible.testEquality w Crucible.ptrWidth64
   = return (pty', val)
 
 asPointer _ = failure BadPointerCast
