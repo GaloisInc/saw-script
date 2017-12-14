@@ -65,13 +65,15 @@ import Verifier.SAW.TypedAST (FieldName, Module, identName)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), asFirstOrderType)
 
 data SBV
+
+type instance EvalM SBV = IO
 type instance VBool SBV = SBool
 type instance VWord SBV = SWord
 type instance VInt  SBV = SInteger
 type instance Extra SBV = SbvExtra
 
-type SValue = Value (WithM IO SBV)
-type SThunk = Thunk (WithM IO SBV)
+type SValue = Value SBV
+--type SThunk = Thunk SBV
 
 data SbvExtra =
   SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
@@ -79,103 +81,106 @@ data SbvExtra =
 instance Show SbvExtra where
   show (SStream _ _) = "<SStream>"
 
+pure1 :: Applicative f => (a -> b) -> a -> f b
+pure1 f x = pure (f x)
+
+pure2 :: Applicative f => (a -> b -> c) -> a -> b -> f c
+pure2 f x y = pure (f x y)
+
+pure3 :: Applicative f => (a -> b -> c -> d) -> a -> b -> c -> f d
+pure3 f x y z = pure (f x y z)
+
+prims :: Prims.BasePrims SBV
+prims =
+  Prims.BasePrims
+  { Prims.bpAsBool  = svAsBool
+  , Prims.bpUnpack  = svUnpack
+  , Prims.bpPack    = pure1 symFromBits
+  , Prims.bpBvAt    = pure2 svAt
+  , Prims.bpBvLit   = pure2 literalSWord
+  , Prims.bpBvSize  = intSizeOf
+  , Prims.bpBvJoin  = pure2 svJoin
+  , Prims.bpBvSlice = pure3 svSlice
+    -- Conditionals
+  , Prims.bpMuxBool  = pure3 svIte
+  , Prims.bpMuxWord  = pure3 svIte
+  , Prims.bpMuxInt   = pure3 svIte
+  , Prims.bpMuxExtra = pure3 extraFn
+    -- Booleans
+  , Prims.bpTrue   = svTrue
+  , Prims.bpFalse  = svFalse
+  , Prims.bpNot    = pure1 svNot
+  , Prims.bpAnd    = pure2 svAnd
+  , Prims.bpOr     = pure2 svOr
+  , Prims.bpXor    = pure2 svXOr
+  , Prims.bpBoolEq = pure2 svEqual
+    -- Bitvector logical
+  , Prims.bpBvNot  = pure1 svNot
+  , Prims.bpBvAnd  = pure2 svAnd
+  , Prims.bpBvOr   = pure2 svOr
+  , Prims.bpBvXor  = pure2 svXOr
+    -- Bitvector arithmetic
+  , Prims.bpBvNeg  = pure1 svUNeg
+  , Prims.bpBvAdd  = pure2 svPlus
+  , Prims.bpBvSub  = pure2 svMinus
+  , Prims.bpBvMul  = pure2 svTimes
+  , Prims.bpBvUDiv = pure2 svQuot
+  , Prims.bpBvURem = pure2 svRem
+  , Prims.bpBvSDiv = \x y -> pure (svUnsign (svQuot (svSign x) (svSign y)))
+  , Prims.bpBvSRem = \x y -> pure (svUnsign (svRem (svSign x) (svSign y)))
+  , Prims.bpBvLg2  = pure1 sLg2
+    -- Bitvector comparisons
+  , Prims.bpBvEq   = pure2 svEqual
+  , Prims.bpBvsle  = \x y -> pure (svLessEq (svSign x) (svSign y))
+  , Prims.bpBvslt  = \x y -> pure (svLessThan (svSign x) (svSign y))
+  , Prims.bpBvule  = pure2 svLessEq
+  , Prims.bpBvult  = pure2 svLessThan
+  , Prims.bpBvsge  = \x y -> pure (svGreaterEq (svSign x) (svSign y))
+  , Prims.bpBvsgt  = \x y -> pure (svGreaterThan (svSign x) (svSign y))
+  , Prims.bpBvuge  = pure2 svGreaterEq
+  , Prims.bpBvugt  = pure2 svGreaterThan
+    -- Bitvector shift/rotate
+  , Prims.bpBvRolInt = pure2 svRol'
+  , Prims.bpBvRorInt = pure2 svRor'
+  , Prims.bpBvShlInt = pure3 svShl'
+  , Prims.bpBvShrInt = pure3 svShr'
+  , Prims.bpBvRol    = pure2 svRotateLeft
+  , Prims.bpBvRor    = pure2 svRotateRight
+  , Prims.bpBvShl    = pure3 svShiftL
+  , Prims.bpBvShr    = pure3 svShiftR
+    -- Integer operations
+  , Prims.bpIntAdd = pure2 svPlus
+  , Prims.bpIntSub = pure2 svMinus
+  , Prims.bpIntMul = pure2 svTimes
+  , Prims.bpIntDiv = pure2 svQuot
+  , Prims.bpIntMod = pure2 svRem
+  , Prims.bpIntNeg = pure1 svUNeg
+  , Prims.bpIntEq  = pure2 svEqual
+  , Prims.bpIntLe  = pure2 svLessEq
+  , Prims.bpIntLt  = pure2 svLessThan
+  , Prims.bpIntMin = undefined --pure2 min
+  , Prims.bpIntMax = undefined --pure2 max
+  }
+
 constMap :: Map Ident SValue
-constMap = Map.fromList
-  -- Boolean
-  [ ("Prelude.True", VBool svTrue)
-  , ("Prelude.False", VBool svFalse)
-  , ("Prelude.not", strictFun (return . vBool . svNot . toBool))
-  , ("Prelude.and", boolBinOp svAnd)
-  , ("Prelude.or", boolBinOp svOr)
-  , ("Prelude.xor", boolBinOp svXOr)
-  , ("Prelude.boolEq", boolBinOp svEqual)
-  , ("Prelude.ite", iteOp)
-  -- Arithmetic
-  , ("Prelude.bvNeg" , unOp svUNeg)
-  , ("Prelude.bvAdd" , binOp svPlus)
-  , ("Prelude.bvSub" , binOp svMinus)
-  , ("Prelude.bvMul" , binOp svTimes)
-  , ("Prelude.bvAnd" , binOp svAnd)
-  , ("Prelude.bvOr"  , binOp svOr)
-  , ("Prelude.bvXor" , binOp svXOr)
-  , ("Prelude.bvNot" , unOp svNot)
-  , ("Prelude.bvUDiv", binOp svQuot)
-  , ("Prelude.bvURem", binOp svRem)
-  , ("Prelude.bvSDiv", sbinOp svQuot)
-  , ("Prelude.bvSRem", sbinOp svRem)
-  , ("Prelude.bvLg2" , Prims.bvLg2Op toWord (return . sLg2))
-  -- Relations
-  , ("Prelude.bvEq"  , binRel svEqual)
-  , ("Prelude.bvsle" , sbinRel svLessEq)
-  , ("Prelude.bvslt" , sbinRel svLessThan)
-  , ("Prelude.bvule" , binRel svLessEq)
-  , ("Prelude.bvult" , binRel svLessThan)
-  , ("Prelude.bvsge" , sbinRel svGreaterEq)
-  , ("Prelude.bvsgt" , sbinRel svGreaterThan)
-  , ("Prelude.bvuge" , binRel svGreaterEq)
-  , ("Prelude.bvugt" , binRel svGreaterThan)
+constMap =
+  Map.union (Prims.constMap prims) $
+  Map.fromList
+  [
   -- Shifts
-  , ("Prelude.bvShl" , bvShLOp)
+    ("Prelude.bvShl" , bvShLOp)
   , ("Prelude.bvShr" , bvShROp)
   , ("Prelude.bvSShr", bvSShROp)
-  -- Nat
-  , ("Prelude.Succ", Prims.succOp)
-  , ("Prelude.addNat", Prims.addNatOp)
-  , ("Prelude.subNat", Prims.subNatOp)
-  , ("Prelude.mulNat", Prims.mulNatOp)
-  , ("Prelude.minNat", Prims.minNatOp)
-  , ("Prelude.maxNat", Prims.maxNatOp)
-  , ("Prelude.divModNat", Prims.divModNatOp)
-  , ("Prelude.expNat", Prims.expNatOp)
-  , ("Prelude.widthNat", Prims.widthNatOp)
-  , ("Prelude.natCase", Prims.natCaseOp)
-  , ("Prelude.equalNat", Prims.equalNat (return . svBool))
-  , ("Prelude.ltNat", Prims.ltNat (return . svBool))
   -- Integers
-  , ("Prelude.intAdd", Prims.intBinOp "intAdd" svPlus)
-  , ("Prelude.intSub", Prims.intBinOp "intSub" svMinus)
-  , ("Prelude.intMul", Prims.intBinOp "intMul" svTimes)
-  , ("Prelude.intDiv", Prims.intBinOp "intDiv" svQuot)
-  , ("Prelude.intMod", Prims.intBinOp "intMod" svRem)
-  , ("Prelude.intNeg", Prims.intUnOp "intNeg" svUNeg)
-  , ("Prelude.intEq" , Prims.intBinCmp "intEq" svEqual id)
-  , ("Prelude.intLe" , Prims.intBinCmp "intLe" svLessEq id)
-  , ("Prelude.intLt" , Prims.intBinCmp "intLt" svLessThan id)
   --XXX , ("Prelude.intToNat", Prims.intToNatOp)
   , ("Prelude.natToInt", natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
-  --XXX , ("Prelude.intMin"  , Prims.intMinOp)
-  --XXX , ("Prelude.intMax"  , Prims.intMaxOp)
-  -- Vectors
-  , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", atWithDefaultOp)
-  , ("Prelude.upd", Prims.updOp svUnpack (\x y -> return (svEqual x y)) literalSWord intSizeOf (lazyMux muxBVal))
-  , ("Prelude.take", takeOp)
-  , ("Prelude.drop", dropOp)
-  , ("Prelude.append", Prims.appendOp svUnpack svJoin)
-  , ("Prelude.join", Prims.joinOp svUnpack svJoin)
-  , ("Prelude.split", splitOp)
-  , ("Prelude.zip", vZipOp)
-  , ("Prelude.foldr", Prims.foldrOp svUnpack)
-  , ("Prelude.rotateL", rotateLOp)
-  , ("Prelude.rotateR", rotateROp)
-  , ("Prelude.shiftL", shiftLOp)
-  , ("Prelude.shiftR", shiftROp)
-  , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
   , ("Prelude.bvStreamGet", bvStreamGetOp)
-  -- Miscellaneous
-  , ("Prelude.coerce", Prims.coerceOp)
-  , ("Prelude.bvNat", bvNatOp)
-  , ("Prelude.bvToNat", Prims.bvToNatOp)
-  , ("Prelude.error", Prims.errorOp)
-  , ("Prelude.fix", Prims.fixOp)
-  -- Overloaded
-  , ("Prelude.eq", eqOp)
   ]
 
 ------------------------------------------------------------
@@ -201,21 +206,10 @@ toWord (VWord w) = return w
 toWord (VVector vv) = symFromBits <$> traverse (fmap toBool . force) vv
 toWord x = fail $ unwords ["Verifier.SAW.Simulator.SBV.toWord", show x]
 
-fromVInt :: SValue -> SInteger
-fromVInt (VInt i) = i
-fromVInt sv = error $ unwords ["fromVInt failed:", show sv]
-
 toMaybeWord :: SValue -> IO (Maybe SWord)
 toMaybeWord (VWord w) = return (Just w)
 toMaybeWord (VVector vv) = ((symFromBits <$>) . T.sequence) <$> traverse (fmap toMaybeBool . force) vv
 toMaybeWord _ = return Nothing
-
-toVector :: SValue -> Vector SThunk
-toVector (VVector xv) = xv
-toVector (VWord xv) =
-  V.fromList (map (ready . vBool . svTestBit xv) (enumFromThenTo (k-1) (k-2) 0))
-  where k = intSizeOf xv
-toVector _ = error "Verifier.SAW.Simulator.SBV.toVector"
 
 -- | Flatten an SValue to a sequence of components, each of which is
 -- either a symbolic word or a symbolic boolean. If the SValue
@@ -286,66 +280,12 @@ selectV merger maxValue valueFn vx =
     impl 0 y = valueFn y
     impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
--- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
-shifter :: (SBool -> a -> a -> IO a) -> (a -> Integer -> a) -> a -> [SBool] -> IO a
-shifter mux op = go
-  where
-    go x [] = return x
-    go x (b : bs) = do
-      x' <- mux b (op x (2 ^ length bs)) x
-      go x' bs
-
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
 svAt x i = svTestBit x (intSizeOf x - 1 - i)
 
 svUnpack :: SWord -> IO (Vector SBool)
 svUnpack x = return (V.generate (intSizeOf x) (svAt x))
-
--- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
-atWithDefaultOp :: SValue
-atWithDefaultOp =
-  Prims.natFun $ \n -> return $
-  constFun $
-  VFun $ \d -> return $
-  strictFun $ \x -> return $
-  strictFun $ \index ->
-    case index of
-      VNat i ->
-        case x of
-          VVector xv -> force (Prims.vecIdx d xv (fromIntegral i))
-          VWord xw -> return $ VBool $ svAt xw (fromIntegral i)
-          _ -> fail "atOp: expected vector"
-      VToNat i -> do
-        case x of
-          VVector xv ->
-            case i of
-              VWord iw -> do
-                selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iw
-              _ -> do
-                iv <- Prims.toBits svUnpack i
-                Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iv
-{-
-            case i of
-              VWord iw -> do
-                xs <- T.mapM force $ V.toList xv
-                case asWordList xs of
-                  Just (w:ws) -> return $ VWord $ svSelect (w:ws) w iw
-                  _ -> do
-                    selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iw
-              _ -> do
-                iv <- Prims.toBits svUnpack i
-                Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (force . Prims.vecIdx d xv) iv
--}
-          VWord xw -> do
-            case i of
-              VWord iw ->
-                selectV (lazyMux muxBVal) (fromIntegral n - 1) (return . VBool . svAt xw) iw
-              _ -> do
-                iv <- Prims.toBits svUnpack i
-                Prims.selectV (lazyMux muxBVal) (fromIntegral n - 1) (return . VBool . svAt xw) iv
-          _ -> fail "atOp: expected vector"
-      _ -> fail $ "atOp: expected Nat, got " ++ show index
 
 asWordList :: [SValue] -> Maybe [SWord]
 asWordList = go id
@@ -354,45 +294,9 @@ asWordList = go id
   go f (VWord x : xs) = go (f . (x:)) xs
   go _ _ = Nothing
 
--- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-takeOp :: SValue
-takeOp =
-  constFun $
-  Prims.natFun $ \(fromIntegral -> m) -> return $
-  Prims.natFun $ \(fromIntegral -> n) -> return $
-  strictFun $ \v -> return $
-    case v of
-      VVector vv -> VVector (V.take m vv)
-      VWord vw -> VWord (svExtract (m + n - 1) n vw)
-      _ -> error $ "takeOp: " ++ show v
-
--- drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
-dropOp :: SValue
-dropOp =
-  constFun $
-  Prims.natFun $ \(fromIntegral -> m) -> return $
-  Prims.natFun $ \(fromIntegral -> n) -> return $
-  strictFun $ \v -> return $
-    case v of
-      VVector vv -> VVector (V.drop m vv)
-      VWord vw -> VWord (svExtract (n - 1) 0 vw)
-      _ -> error $ "dropOp: " ++ show v
-
--- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
-splitOp :: SValue
-splitOp =
-  Prims.natFun $ \(fromIntegral -> m) -> return $
-  Prims.natFun $ \(fromIntegral -> n) -> return $
-  constFun $
-  strictFun $ \x -> return $
-  case x of
-    VVector xv ->
-      let f i = ready (VVector (V.slice (i*n) n xv))
-      in VVector (V.generate m f)
-    VWord xw ->
-      let f i = ready (VWord (svExtract ((m-i)*n-1) ((m-i-1)*n) xw))
-      in VVector (V.generate m f)
-    _ -> error "Verifier.SAW.Simulator.SBV.splitOp"
+svSlice :: Int -> Int -> SWord -> SWord
+svSlice i j x = svExtract (w - i - 1) (w - i - j) x
+  where w = intSizeOf x
 
 ----------------------------------------
 -- Shift operations
@@ -423,16 +327,6 @@ bvSShROp = bvShiftOp bvOp natOp
   where
     bvOp w x = svUnsign (svShiftRight (svSign w) x)
     natOp w i = svUnsign (svShr (svSign w) i)
-
-eqOp :: SValue
-eqOp = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
-  where trueOp       = VBool svTrue
-        andOp    x y = return $ vBool (svAnd (toBool x) (toBool y))
-        boolEqOp x y = return $ vBool (svEqual (toBool x) (toBool y))
-        intEqOp  x y = return $ vBool (svEqual (fromVInt x) (fromVInt y))
-        bvEqOp _ x y = do x' <- toWord x
-                          y' <- toWord y
-                          return $ vBool (svEqual x' y')
 
 -----------------------------------------
 -- Integer/bitvector conversions
@@ -467,123 +361,27 @@ intToBvOp =
       Nothing -> return $ VWord $ svFromIntegral (KBounded False (fromIntegral n)) x
 
 ------------------------------------------------------------
--- Vector operations
-
-vRotateL :: Vector a -> Integer -> Vector a
-vRotateL xs i
-  | V.null xs = xs
-  | otherwise = (V.++) (V.drop j xs) (V.take j xs)
-  where j = fromInteger (i `mod` toInteger (V.length xs))
-
-vRotateR :: Vector a -> Integer -> Vector a
-vRotateR xs i = vRotateL xs (- i)
-
-vShiftL :: a -> Vector a -> Integer -> Vector a
-vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
-  where j = fromInteger (i `min` toInteger (V.length xs))
-
-vShiftR :: a -> Vector a -> Integer -> Vector a
-vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
-  where j = fromInteger (i `min` toInteger (V.length xs))
-
-------------------------------------------------------------
 -- Rotations and shifts
 
--- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateOp :: (Vector SThunk -> Integer -> Vector SThunk)
-         -> (SWord -> Integer -> SWord)
-         -> (SWord -> SWord -> SWord)
-         -> SValue
-rotateOp vecOp wordOp svOp =
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \y ->
-    case y of
-      VNat i -> return $
-        case xs of
-          VVector xv -> VVector (vecOp xv i)
-          VWord xw -> vWord (wordOp xw (fromInteger (i `mod` toInteger (intSizeOf xw))))
-          _ -> error $ "rotateOp: " ++ show xs
-      VToNat (VVector iv) -> do
-        bs <- V.toList <$> traverse (fmap toBool . force) iv
-        case xs of
-          VVector xv -> VVector <$> shifter muxVector vecOp xv bs
-          VWord xw -> vWord <$> shifter muxWord wordOp xw bs
-          _ -> error $ "rotateOp: " ++ show xs
-      VToNat (VWord iw) -> do
-        case xs of
-          VVector xv -> do
-            bs <- V.toList <$> svUnpack iw
-            VVector <$> shifter muxVector vecOp xv bs
-          VWord xw -> return $ vWord (svOp xw iw)
-          _ -> error $ "rotateOp: " ++ show xs
-      _ -> error $ "rotateOp: " ++ show y
+svRol' :: SWord -> Integer -> SWord
+svRol' x i = svRol x (fromInteger (i `mod` toInteger (intSizeOf x)))
 
--- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateLOp :: SValue
-rotateLOp = rotateOp vRotateL rol svRotateLeft
-  where rol x i = svRol x (fromInteger (i `mod` toInteger (intSizeOf x)))
+svRor' :: SWord -> Integer -> SWord
+svRor' x i = svRor x (fromInteger (i `mod` toInteger (intSizeOf x)))
 
--- rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateROp :: SValue
-rotateROp = rotateOp vRotateR ror svRotateRight
-  where ror x i = svRol x (fromInteger (i `mod` toInteger (intSizeOf x)))
+svShl' :: SBool -> SWord -> Integer -> SWord
+svShl' b x i = svIte b (svNot (svShl (svNot x) j)) (svShl x j)
+  where j = fromInteger (i `min` toInteger (intSizeOf x))
 
--- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-shiftOp :: (SThunk -> Vector SThunk -> Integer -> Vector SThunk)
-        -> (SBool -> SWord -> Integer -> SWord)
-        -> (SBool -> SWord -> SWord -> SWord)
-        -> SValue
-shiftOp vecOp wordOp svOp =
-  constFun $
-  constFun $
-  VFun $ \z -> return $
-  strictFun $ \xs -> return $
-  strictFun $ \y ->
-    case y of
-      VNat i ->
-        case xs of
-          VVector xv -> return $ VVector (vecOp z xv i)
-          VWord xw -> do
-            zv <- toBool <$> force z
-            let i' = fromInteger (i `min` toInteger (intSizeOf xw))
-            return $ vWord (wordOp zv xw i')
-          _ -> error $ "shiftOp: " ++ show xs
-      VToNat (VVector iv) -> do
-        bs <- V.toList <$> traverse (fmap toBool . force) iv
-        case xs of
-          VVector xv -> VVector <$> shifter muxVector (vecOp z) xv bs
-          VWord xw -> do
-            zv <- toBool <$> force z
-            vWord <$> shifter muxWord (wordOp zv) xw bs
-          _ -> error $ "shiftOp: " ++ show xs
-      VToNat (VWord iw) ->
-        case xs of
-          VVector xv -> do
-            bs <- V.toList <$> svUnpack iw
-            VVector <$> shifter muxVector (vecOp z) xv bs
-          VWord xw -> do
-            zv <- toBool <$> force z
-            return $ vWord (svOp zv xw iw)
-          _ -> error $ "shiftOp: " ++ show xs
-      _ -> error $ "shiftOp: " ++ show y
+svShr' :: SBool -> SWord -> Integer -> SWord
+svShr' b x i = svIte b (svNot (svShr (svNot x) j)) (svShr x j)
+  where j = fromInteger (i `min` toInteger (intSizeOf x))
 
--- shiftL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-shiftLOp :: SValue
-shiftLOp = shiftOp vShiftL undefined shl
-  where shl b x i = svIte b (svNot (svShiftLeft (svNot x) i)) (svShiftLeft x i)
+svShiftL :: SBool -> SWord -> SWord -> SWord
+svShiftL b x i = svIte b (svNot (svShiftLeft (svNot x) i)) (svShiftLeft x i)
 
--- shiftR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-shiftROp :: SValue
-shiftROp = shiftOp vShiftR undefined shr
-  where shr b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
-
-muxWord :: SBool -> SWord -> SWord -> IO SWord
-muxWord b w1 w2 = return (svIte b w1 w2)
-
-muxVector :: SBool -> Vector SThunk -> Vector SThunk -> IO (Vector SThunk)
-muxVector b v1 v2 = toVector <$> muxBVal b (VVector v1) (VVector v2)
+svShiftR :: SBool -> SWord -> SWord -> SWord
+svShiftR b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
 
 ------------------------------------------------------------
 -- Stream operations
@@ -625,24 +423,6 @@ lookupSStream _ _ = fail "expected Stream"
 ------------------------------------------------------------
 -- Misc operations
 
--- bvNat :: (x :: Nat) -> Nat -> bitvector x;
-bvNatOp :: SValue
-bvNatOp =
-  Prims.natFun'' "bvNatOp(1)" $ \w -> return $
-  Prims.natFun'' "bvNatOp(2)" $ \x -> return $
-  vWord (bitVector (fromIntegral w) (toInteger x))
-
--- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
-vZipOp :: SValue
-vZipOp =
-  constFun $
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \ys -> return $
-  VVector (V.zipWith (\x y -> ready (vTuple [x, y])) (toVector xs) (toVector ys))
-
 -- | Ceiling (log_2 x)
 sLg2 :: SWord -> SWord
 sLg2 x = go 0
@@ -652,59 +432,10 @@ sLg2 x = go 0
          | otherwise       = lit (toInteger i)
 
 ------------------------------------------------------------
--- Helpers for marshalling into SValues
-
-unOp :: (SWord -> SWord) -> SValue
-unOp op = constFun $
-          strictFun $ \mx -> do
-            x <- toWord mx
-            return $ vWord $ op x
-
-binOp :: (SWord -> SWord -> SWord) -> SValue
-binOp op = constFun $
-          strictFun $ \mx -> return $
-          strictFun $ \my -> do
-            x <- toWord mx
-            y <- toWord my
-            return $ vWord $ op x y
-
-sbinOp :: (SWord -> SWord -> SWord) -> SValue
-sbinOp f = binOp (\x y -> svUnsign (f (svSign x) (svSign y)))
-
-binRel :: (SWord -> SWord -> SBool) -> SValue
-binRel op = constFun $
-            strictFun $ \mx-> return $
-            strictFun $ \my-> do
-              x <- toWord mx
-              y <- toWord my
-              return $ vBool $ op x y
-
-sbinRel :: (SWord -> SWord -> SBool) -> SValue
-sbinRel f = binRel (\x y -> svSign x `f` svSign y)
-
-boolBinOp :: (SBool -> SBool -> SBool) -> SValue
-boolBinOp op =
-  strictFun $ \x -> return $
-  strictFun $ \y -> return $ vBool $ op (toBool x) (toBool y)
-
-------------------------------------------------------------
 -- Ite ops
 
-iteOp :: SValue
-iteOp =
-    constFun $
-    strictFun $ \b -> return $
-    VFun $ \x -> return $
-    VFun $ \y ->
-      lazyMux muxBVal (toBool b) (force x) (force y)
-
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
-muxBVal = Prims.muxValue svUnpack bool word int extra
-  where
-    bool b x y = return (svIte b x y)
-    word b x y = return (svIte b x y)
-    int b x y = return (svIte b x y)
-    extra b x y = return (extraFn b x y)
+muxBVal = Prims.muxValue prims
 
 extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
 extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
