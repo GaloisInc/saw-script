@@ -15,7 +15,11 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.BitBlast where
+module Verifier.SAW.Simulator.BitBlast
+  ( BValue
+  , withBitBlastedPred
+  , withBitBlastedTerm
+  ) where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -50,26 +54,6 @@ lvFromV v = AIG.generate_msb0 (V.length v) ((V.!) v)
 vFromLV :: LitVector l -> V.Vector l
 vFromLV lv = V.generate (AIG.length lv) (AIG.at lv)
 
-unpackLV :: LitVector l -> IO (V.Vector l)
-unpackLV lv = return (vFromLV lv)
-
-vRotateL :: V.Vector a -> Integer -> V.Vector a
-vRotateL xs i
-  | V.null xs = xs
-  | otherwise = (V.++) (V.drop j xs) (V.take j xs)
-  where j = fromInteger (i `mod` toInteger (V.length xs))
-
-vRotateR :: V.Vector a -> Integer -> V.Vector a
-vRotateR xs i = vRotateL xs (- i)
-
-vShiftL :: a -> V.Vector a -> Int -> V.Vector a
-vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
-  where j = min i (V.length xs)
-
-vShiftR :: a -> V.Vector a -> Int -> V.Vector a
-vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
-  where j = min i (V.length xs)
-
 lvRotateL :: LitVector l -> Integer -> LitVector l
 lvRotateL xs i
   | AIG.length xs == 0 = xs
@@ -79,25 +63,37 @@ lvRotateL xs i
 lvRotateR :: LitVector l -> Integer -> LitVector l
 lvRotateR xs i = lvRotateL xs (- i)
 
-lvShiftL :: l -> LitVector l -> Int -> LitVector l
+lvShiftL :: l -> LitVector l -> Integer -> LitVector l
 lvShiftL x xs i = (AIG.++) (AIG.drop j xs) (AIG.replicate j x)
-  where j = min i (AIG.length xs)
+  where j = fromInteger (min i (toInteger (AIG.length xs)))
 
-lvShiftR :: l -> LitVector l -> Int -> LitVector l
+lvShl :: l -> LitVector l -> Nat -> LitVector l
+lvShl l v i = AIG.slice v j (n-j) AIG.++ AIG.replicate j l
+  where n = AIG.length v
+        j = fromIntegral i `min` n
+
+lvShiftR :: l -> LitVector l -> Integer -> LitVector l
 lvShiftR x xs i = (AIG.++) (AIG.replicate j x) (AIG.take (AIG.length xs - j) xs)
-  where j = min i (AIG.length xs)
+  where j = fromInteger (min i (toInteger (AIG.length xs)))
+
+lvShr :: l -> LitVector l -> Nat -> LitVector l
+lvShr l v i = AIG.replicate j l AIG.++ AIG.slice v 0 (n-j)
+  where n = AIG.length v
+        j = fromIntegral i `min` n
 
 ------------------------------------------------------------
 -- Values
 
 data BitBlast l
+
+type instance EvalM (BitBlast l) = IO
 type instance VBool (BitBlast l) = l
 type instance VWord (BitBlast l) = LitVector l
 type instance VInt  (BitBlast l) = Integer
 type instance Extra (BitBlast l) = BExtra l
 
-type BValue l = Value (WithM IO (BitBlast l))
-type BThunk l = Thunk (WithM IO (BitBlast l))
+type BValue l = Value (BitBlast l)
+type BThunk l = Thunk (BitBlast l)
 
 data BExtra l
   = BStream (Integer -> IO (BValue l)) (IORef (Map Integer (BValue l)))
@@ -120,10 +116,6 @@ toWord (VWord lv) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
 toWord x = fail $ unwords ["Verifier.SAW.Simulator.BitBlast.toWord", show x]
 
-fromVInt :: BValue l -> Integer
-fromVInt (VInt i) = i
-fromVInt sv = error $ unwords ["fromVInt failed:", show sv]
-
 flattenBValue :: BValue l -> IO (LitVector l)
 flattenBValue (VBool l) = return (AIG.replicate 1 l)
 flattenBValue (VWord lv) = return lv
@@ -145,31 +137,7 @@ flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValu
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
 wordFun f = strictFun (\x -> toWord x >>= f)
 
--- | op :: Bool -> Bool -> Bool
-boolBinOp :: (l -> l -> IO l) -> BValue l
-boolBinOp op =
-  strictFun $ \x -> return $
-  strictFun $ \y -> vBool <$> op (toBool x) (toBool y)
-
--- | op :: (n :: Nat) -> bitvector n -> bitvector n
-unOp :: (LitVector l -> IO (LitVector l)) -> BValue l
-unOp op =
-  constFun $
-  wordFun $ \x -> vWord <$> op x
-
--- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
-binOp :: (LitVector l -> LitVector l -> IO (LitVector l)) -> BValue l
-binOp op =
-  constFun $
-  wordFun $ \x -> return $
-  wordFun $ \y -> vWord <$> op x y
-
--- | op :: (n :: Nat) -> bitvector n -> bitvector n -> Bool
-binRel :: (LitVector l -> LitVector l -> IO l) -> BValue l
-binRel op =
-  constFun $
-  wordFun $ \x -> return $
-  wordFun $ \y -> vBool <$> op x y
+------------------------------------------------------------
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
 bvShiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
@@ -184,130 +152,111 @@ bvShiftOp bvOp natOp =
       VToNat v -> fmap vWord (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
-rol :: BValue l -> Integer -> BValue l
-rol x i =
-  case x of
-    VVector xv -> VVector (vRotateL xv i)
-    VWord xlv -> VWord (lvRotateL xlv i)
-    _ -> error $ "Verifier.SAW.Simulator.BitBlast.rol: " ++ show x
-
-ror :: BValue l -> Integer -> BValue l
-ror x i =
-  case x of
-    VVector xv -> VVector (vRotateR xv i)
-    VWord xlv -> VWord (lvRotateR xlv i)
-    _ -> error $ "Verifier.SAW.Simulator.BitBlast.ror: " ++ show x
-
-------------------------------------------------------------
-
-lvShl :: l -> LitVector l -> Nat -> LitVector l
-lvShl l v i = AIG.slice v j (n-j) AIG.++ AIG.replicate j l
-  where n = AIG.length v
-        j = fromIntegral i `min` n
-
-lvShr :: l -> LitVector l -> Nat -> LitVector l
-lvShr l v i = AIG.replicate j l AIG.++ AIG.slice v 0 (n-j)
-  where n = AIG.length v
-        j = fromIntegral i `min` n
-
 lvSShr :: LitVector l -> Nat -> LitVector l
 lvSShr v i = lvShr (AIG.msb v) v i
 
 ------------------------------------------------------------
 
+pure1 :: Applicative f => (a -> b) -> a -> f b
+pure1 f x = pure (f x)
+
+pure2 :: Applicative f => (a -> b -> c) -> a -> b -> f c
+pure2 f x y = pure (f x y)
+
+pure3 :: Applicative f => (a -> b -> c -> d) -> a -> b -> c -> f d
+pure3 f x y z = pure (f x y z)
+
+prims :: AIG.IsAIG l g => g s -> Prims.BasePrims (BitBlast (l s))
+prims be =
+  Prims.BasePrims
+  { Prims.bpAsBool  = AIG.asConstant be
+    -- Bitvectors
+  , Prims.bpUnpack  = pure1 vFromLV
+  , Prims.bpPack    = pure1 lvFromV
+  , Prims.bpBvAt    = pure2 AIG.at
+  , Prims.bpBvLit   = pure2 (AIG.bvFromInteger be)
+  , Prims.bpBvSize  = AIG.length
+  , Prims.bpBvJoin  = pure2 (AIG.++)
+  , Prims.bpBvSlice = pure3 (\i n v -> AIG.slice v i n)
+    -- Conditionals
+  , Prims.bpMuxBool  = \b x y -> AIG.lazyMux be b (pure x) (pure y)
+  , Prims.bpMuxWord  = \b x y -> AIG.iteM be b (pure x) (pure y)
+  , Prims.bpMuxInt   = muxInt
+  , Prims.bpMuxExtra = muxBExtra be
+    -- Booleans
+  , Prims.bpTrue   = AIG.trueLit be
+  , Prims.bpFalse  = AIG.falseLit be
+  , Prims.bpNot    = pure1 AIG.not
+  , Prims.bpAnd    = AIG.and be
+  , Prims.bpOr     = AIG.or be
+  , Prims.bpXor    = AIG.xor be
+  , Prims.bpBoolEq = AIG.eq be
+    -- Bitvector logical
+  , Prims.bpBvNot  = pure1 (fmap AIG.not)
+  , Prims.bpBvAnd  = AIG.zipWithM (AIG.and be)
+  , Prims.bpBvOr   = AIG.zipWithM (AIG.or be)
+  , Prims.bpBvXor  = AIG.zipWithM (AIG.xor be)
+    -- Bitvector arithmetic
+  , Prims.bpBvNeg  = AIG.neg be
+  , Prims.bpBvAdd  = AIG.add be
+  , Prims.bpBvSub  = AIG.sub be
+  , Prims.bpBvMul  = AIG.mul be
+  , Prims.bpBvUDiv = AIG.uquot be
+  , Prims.bpBvURem = AIG.urem be
+  , Prims.bpBvSDiv = AIG.squot be
+  , Prims.bpBvSRem = AIG.srem be
+  , Prims.bpBvLg2  = bitblastLogBase2 be
+    -- Bitvector comparisons
+  , Prims.bpBvEq   = AIG.bvEq be
+  , Prims.bpBvsle  = AIG.sle be
+  , Prims.bpBvslt  = AIG.slt be
+  , Prims.bpBvule  = AIG.ule be
+  , Prims.bpBvult  = AIG.ult be
+  , Prims.bpBvsge  = flip (AIG.sle be)
+  , Prims.bpBvsgt  = flip (AIG.slt be)
+  , Prims.bpBvuge  = flip (AIG.ule be)
+  , Prims.bpBvugt  = flip (AIG.ult be)
+    -- Bitvector shift/rotate
+  , Prims.bpBvRolInt = pure2 lvRotateL
+  , Prims.bpBvRorInt = pure2 lvRotateR
+  , Prims.bpBvShlInt = pure3 lvShiftL
+  , Prims.bpBvShrInt = pure3 lvShiftR
+  , Prims.bpBvRol    = genShift be lvRotateL
+  , Prims.bpBvRor    = genShift be lvRotateR
+  , Prims.bpBvShl    = genShift be . lvShiftL
+  , Prims.bpBvShr    = genShift be . lvShiftR
+    -- Integer operations
+  , Prims.bpIntAdd = pure2 (+)
+  , Prims.bpIntSub = pure2 (-)
+  , Prims.bpIntMul = pure2 (*)
+  , Prims.bpIntDiv = pure2 div
+  , Prims.bpIntMod = pure2 mod
+  , Prims.bpIntNeg = pure1 negate
+  , Prims.bpIntEq  = pure2 (\x y -> AIG.constant be (x == y))
+  , Prims.bpIntLe  = pure2 (\x y -> AIG.constant be (x <= y))
+  , Prims.bpIntLt  = pure2 (\x y -> AIG.constant be (x < y))
+  , Prims.bpIntMin = pure2 min
+  , Prims.bpIntMax = pure2 max
+  }
+
 beConstMap :: AIG.IsAIG l g => g s -> Map Ident (BValue (l s))
-beConstMap be = Map.fromList
-  -- Boolean
-  [ ("Prelude.True"  , vBool (AIG.trueLit be))
-  , ("Prelude.False" , vBool (AIG.falseLit be))
-  , ("Prelude.not"   , strictFun (return . vBool . AIG.not . toBool))
-  , ("Prelude.and"   , boolBinOp (AIG.and be))
-  , ("Prelude.or"    , boolBinOp (AIG.or be))
-  , ("Prelude.xor"   , boolBinOp (AIG.xor be))
-  , ("Prelude.boolEq", boolBinOp (AIG.eq be))
-  , ("Prelude.ite"   , iteOp be)
-  -- Arithmetic
-  , ("Prelude.bvNeg" , unOp (AIG.neg be))
-  , ("Prelude.bvAdd" , binOp (AIG.add be))
-  , ("Prelude.bvSub" , binOp (AIG.sub be))
-  , ("Prelude.bvMul" , binOp (AIG.mul be))
-  , ("Prelude.bvAnd" , binOp (AIG.zipWithM (AIG.and be)))
-  , ("Prelude.bvOr"  , binOp (AIG.zipWithM (AIG.or be)))
-  , ("Prelude.bvXor" , binOp (AIG.zipWithM (AIG.xor be)))
-  , ("Prelude.bvUDiv", binOp (AIG.uquot be))
-  , ("Prelude.bvURem", binOp (AIG.urem be))
-  , ("Prelude.bvSDiv", binOp (AIG.squot be))
-  , ("Prelude.bvSRem", binOp (AIG.srem be))
-  , ("Prelude.bvLg2" , Prims.bvLg2Op toWord (bitblastLogBase2 be) )
-  -- Relations
-  , ("Prelude.bvEq"  , binRel (AIG.bvEq be))
-  , ("Prelude.bvsle" , binRel (AIG.sle be))
-  , ("Prelude.bvslt" , binRel (AIG.slt be))
-  , ("Prelude.bvule" , binRel (AIG.ule be))
-  , ("Prelude.bvult" , binRel (AIG.ult be))
-  , ("Prelude.bvsge" , binRel (flip (AIG.sle be)))
-  , ("Prelude.bvsgt" , binRel (flip (AIG.slt be)))
-  , ("Prelude.bvuge" , binRel (flip (AIG.ule be)))
-  , ("Prelude.bvugt" , binRel (flip (AIG.ult be)))
+beConstMap be =
+  Map.union (Prims.constMap (prims be)) $
+  Map.fromList
   -- Shifts
-  , ("Prelude.bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
+  [ ("Prelude.bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
   , ("Prelude.bvShr" , bvShiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
   , ("Prelude.bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
-  -- Nat
-  , ("Prelude.Succ", Prims.succOp)
-  , ("Prelude.addNat", Prims.addNatOp)
-  , ("Prelude.subNat", Prims.subNatOp)
-  , ("Prelude.mulNat", Prims.mulNatOp)
-  , ("Prelude.minNat", Prims.minNatOp)
-  , ("Prelude.maxNat", Prims.maxNatOp)
-  , ("Prelude.divModNat", Prims.divModNatOp)
-  , ("Prelude.expNat", Prims.expNatOp)
-  , ("Prelude.widthNat", Prims.widthNatOp)
-  , ("Prelude.natCase", Prims.natCaseOp)
-  , ("Prelude.equalNat", Prims.equalNat (return . AIG.constant be))
-  , ("Prelude.ltNat", Prims.ltNat (return . AIG.constant be))
   -- Integers
-  , ("Prelude.intAdd", Prims.intAddOp)
-  , ("Prelude.intSub", Prims.intSubOp)
-  , ("Prelude.intMul", Prims.intMulOp)
-  , ("Prelude.intDiv", Prims.intDivOp)
-  , ("Prelude.intMod", Prims.intModOp)
-  , ("Prelude.intNeg", Prims.intNegOp)
-  , ("Prelude.intEq" , Prims.intEqOp (AIG.constant be))
-  , ("Prelude.intLe" , Prims.intLeOp (AIG.constant be))
-  , ("Prelude.intLt" , Prims.intLtOp (AIG.constant be))
   , ("Prelude.intToNat", Prims.intToNatOp)
   , ("Prelude.natToInt", Prims.natToIntOp)
   , ("Prelude.intToBv" , intToBvOp be)
   , ("Prelude.bvToInt" , bvToIntOp be)
   , ("Prelude.sbvToInt", sbvToIntOp be)
-  , ("Prelude.intMin"  , Prims.intMinOp)
-  , ("Prelude.intMax"  , Prims.intMaxOp)
-  -- Vectors
-  , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", Prims.atWithDefaultOp unpackLV (\x i -> return (AIG.at x i)) (lazyMux be (muxBVal be)))
-  , ("Prelude.upd", Prims.updOp unpackLV (AIG.bvEq be) (AIG.bvFromInteger be) AIG.length (lazyMux be (muxBVal be)))
-  , ("Prelude.append", Prims.appendOp unpackLV (AIG.++))
-  , ("Prelude.join", Prims.joinOp unpackLV (AIG.++))
-  , ("Prelude.zip", vZipOp)
-  , ("Prelude.foldr", Prims.foldrOp unpackLV)
-  , ("Prelude.rotateL", rotateOp be rol)
-  , ("Prelude.rotateR", rotateOp be ror)
-  , ("Prelude.shiftL", shiftLOp be)
-  , ("Prelude.shiftR", shiftROp be)
-  , ("Prelude.EmptyVec", Prims.emptyVec)
 -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
   , ("Prelude.bvStreamGet", bvStreamGetOp be)
-  -- Miscellaneous
-  , ("Prelude.coerce", Prims.coerceOp)
-  , ("Prelude.bvNat", bvNatOp be)
-  , ("Prelude.bvToNat", Prims.bvToNatOp)
-  , ("Prelude.error", Prims.errorOp)
-  , ("Prelude.fix", Prims.fixOp)
-  -- Overloaded
-  , ("Prelude.eq", eqOp be)
   ]
 
 -- | Lifts a strict mux operation to a lazy mux
@@ -320,105 +269,20 @@ lazyMux be muxFn c tm fm
       f <- fm
       muxFn c t f
 
--- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
-iteOp :: AIG.IsAIG l g => g s -> BValue (l s)
-iteOp be =
-  constFun $
-  strictFun $ \b -> return $
-  VFun $ \x -> return $
-  VFun $ \y -> lazyMux be (muxBVal be) (toBool b) (force x) (force y)
-
 muxBVal :: AIG.IsAIG l g => g s -> l s -> BValue (l s) -> BValue (l s) -> IO (BValue (l s))
-muxBVal be = Prims.muxValue unpackLV bool word int (muxBExtra be)
-  where
-    bool b = AIG.mux be b
-    word b = AIG.zipWithM (bool b)
-    int _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
+muxBVal be = Prims.muxValue (prims be)
+
+muxInt :: a -> Integer -> Integer -> IO Integer
+muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
 
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
 muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
 
--- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
-vZipOp :: BValue l
-vZipOp =
-  constFun $
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  strictFun $ \ys -> return $
-  VVector (V.zipWith (\x y -> ready (vTuple [x, y])) (vectorOfBValue xs) (vectorOfBValue ys))
-
-vectorOfBValue :: BValue l -> V.Vector (BThunk l)
-vectorOfBValue (VVector xv) = xv
-vectorOfBValue (VWord lv) = fmap (ready . vBool) (vFromLV lv)
-vectorOfBValue _ = error "Verifier.SAW.Simulator.BitBlast.vectorOfBValue"
-
--- bvNat :: (x :: Nat) -> Nat -> bitvector x;
-bvNatOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvNatOp be =
-  Prims.natFun'' "bvNat(1)" $ \w -> return $
-  Prims.natFun'' "bvNat(2)" $ \x -> return $
-  VWord (AIG.bvFromInteger be (fromIntegral w) (toInteger x))
-
--- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateOp :: AIG.IsAIG l g =>
-  g s -> (BValue (l s) -> Integer -> BValue (l s)) -> BValue (l s)
-rotateOp be op =
-  constFun $
-  constFun $
-  strictFun $ \x0 -> return $
-  strictFun $ \i ->
-    case i of
-      VNat n   -> return (op x0 n)
-      VToNat v -> toWord v >>= \ilv -> go x0 (AIG.bvToList ilv)
-      _        -> fail $ "Verifier.SAW.Simulator.BitBlast.rotateOp: " ++ show i
-  where
-    go x [] = return x
-    go x (y : ys) = do
-      x' <- lazyMux be (muxBVal be) y (return (op x (2 ^ length ys))) (return x)
-      go x' ys
-
--- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-shiftOp :: AIG.IsAIG l g => g s
-        -> (BThunk (l s) -> V.Vector (BThunk (l s)) -> Int -> V.Vector (BThunk (l s)))
-        -> (l s -> AIG.BV (l s) -> Int -> LitVector (l s))
-        -> BValue (l s)
-shiftOp be vecOp wordOp =
-  constFun $
-  constFun $
-  VFun $ \x -> return $
-  strictFun $ \xs -> return $
-  strictFun $ \y -> do
-    (n, f) <- case xs of
-                VVector xv -> return (V.length xv, VVector . vecOp x xv)
-                VWord xlv -> do l <- toBool <$> force x
-                                return (AIG.length xlv, VWord . wordOp l xlv)
-                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.shiftOp: " ++ show xs
-    case y of
-      VNat i   -> return (f (fromInteger (i `min` toInteger n)))
-      VToNat v -> do
-        ilv <- toWord v
-        AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
-      _        -> fail $ "Verifier.SAW.Simulator.BitBlast.shiftOp: " ++ show y
-
--- shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-shiftLOp :: AIG.IsAIG l g => g s -> BValue (l s)
-shiftLOp be = shiftOp be vShiftL lvShiftL
-
--- shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-shiftROp :: AIG.IsAIG l g => g s -> BValue (l s)
-shiftROp be = shiftOp be vShiftR lvShiftR
-
-eqOp :: AIG.IsAIG l g => g s -> BValue (l s)
-eqOp be = Prims.eqOp trueOp andOp boolEqOp bvEqOp intEqOp
-  where trueOp       = vBool (AIG.trueLit be)
-        andOp    x y = vBool <$> AIG.and be (toBool x) (toBool y)
-        boolEqOp x y = vBool <$> AIG.eq be (toBool x) (toBool y)
-        bvEqOp _ x y = do x' <- toWord x
-                          y' <- toWord y
-                          vBool <$> AIG.bvEq be x' y'
-        intEqOp  x y = return $ vBool (AIG.constant be (fromVInt x == fromVInt y))
+-- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
+genShift ::
+  AIG.IsAIG l g => g s -> (LitVector (l s) -> Integer -> LitVector (l s)) ->
+  LitVector (l s) -> LitVector (l s) -> IO (LitVector (l s))
+genShift be op x y = Prims.shifter (AIG.ite be) (pure2 op) x (AIG.bvToList y)
 
 -- | rounded-up log base 2, where we complete the function by setting:
 --   lg2 0 = 0
