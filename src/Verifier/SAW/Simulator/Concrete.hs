@@ -219,7 +219,7 @@ prims =
 
 constMap :: Map Ident CValue
 constMap =
-  Map.union (Prims.constMap prims) $
+  flip Map.union (Prims.constMap prims) $
   Map.fromList
   -- Shifts
   [ ("Prelude.bvShl" , bvShiftOp (Prim.bvShl undefined))
@@ -236,7 +236,7 @@ constMap =
   , ("Prelude.streamGet", streamGetOp)
   , ("Prelude.bvStreamGet", bvStreamGetOp)
   -- Miscellaneous
-  , ("Prelude.bvToNat", bvToNatOp)
+  , ("Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
   ]
 
 ------------------------------------------------------------
