@@ -551,20 +551,22 @@ updOp bp =
   strictFun $ \idx -> return $
   VFun $ \y ->
     case idx of
-      VNat i -> return (VVector (xv V.// [(fromIntegral i, y)]))
+      VNat i
+        | i < toInteger (V.length xv) -> return (VVector (xv V.// [(fromInteger i, y)]))
+        | otherwise                   -> return (VVector xv)
       VToNat (VWord w) ->
-        do let f i = do b <- bpBvEq bp w =<< bpBvLit bp (bpBvSize bp w) (toInteger i)
-                        err <- delay (fail "updOp")
-                        delay (lazyMuxValue bp b (force y) (force (vecIdx err xv i)))
+        do let wsize = bpBvSize bp w
+               f i = do b <- bpBvEq bp w =<< bpBvLit bp wsize (toInteger i)
+                        if wsize < 64 && toInteger i >= 2 ^ wsize
+                          then return (xv V.! i)
+                          else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))
            yv <- V.generateM (V.length xv) f
            return (VVector yv)
-      VToNat val ->
+      VToNat (VVector iv) ->
         do let update i = return (VVector (xv V.// [(i, y)]))
-           iv <- toBits (bpUnpack bp) val
-           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv
+           iv' <- V.mapM (liftM toBool . force) iv
+           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv'
       _ -> fail $ "updOp: expected Nat, got " ++ show idx
-
-
 
 -- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
 emptyVec :: VMonad l => Value l
