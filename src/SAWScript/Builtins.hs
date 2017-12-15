@@ -481,8 +481,8 @@ split_goal =
   StateT $ \(ProofState goals concl stats) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
-    (ProofGoal Existential _ _) : _ -> fail "not a universally-quantified goal"
-    (ProofGoal Universal name prop) : gs ->
+    (ProofGoal Existential _ _ _ _) : _ -> fail "not a universally-quantified goal"
+    (ProofGoal Universal num ty name prop) : gs ->
       let (vars, body) = asLambdaList prop in
       case (isGlobalDef "Prelude.and" <@> return <@> return) body of
         Nothing -> fail "split_goal: goal not of form 'Prelude.and _ _'"
@@ -490,8 +490,8 @@ split_goal =
           do sc <- getSharedContext
              t1 <- io $ scLambdaList sc vars p1
              t2 <- io $ scLambdaList sc vars p2
-             let g1 = ProofGoal Universal (name ++ ".left") t1
-             let g2 = ProofGoal Universal (name ++ ".right") t2
+             let g1 = ProofGoal Universal num (ty ++ ".left") name t1
+             let g2 = ProofGoal Universal num (ty ++ ".right") name t2
              return ((), ProofState (g1 : g2 : gs) concl stats)
 
 getTopLevelPPOpts :: TopLevel PPOpts
@@ -668,7 +668,7 @@ satExternal :: Bool -> SharedContext -> String -> [String]
 satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
-  let cnfName = goalName g ++ ".cnf"
+  let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
       argNames = map fst (fst (asPiList tp))
   checkBoolean sc t
   (path, fh) <- openTempFile "." cnfName
@@ -889,7 +889,7 @@ satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
              Nothing -> fail $ "Invalid non-boolean type: " ++ show ty
              Just () -> return ()
            negTerm (map snd ts) t0
-  exporter sc ((path ++ goalName g) ++ ext) t
+  exporter sc ((path ++ "." ++ goalType g ++ show (goalNum g)) ++ ext) t
   let stats = solverStats ("offline:"++ drop 1 ext)
                           (scSharedSize t)
   case goalQuant g of
@@ -936,7 +936,7 @@ provePrim :: ProofScript SV.SatResult
           -> TypedTerm -> TopLevel SV.ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
+  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
   case finishProof pstate of
     (_stats, Just _)  -> return ()
     (_stats, Nothing) -> printOutLnTop Info $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
@@ -945,7 +945,7 @@ provePrim script t = do
 provePrintPrim :: ProofScript SV.SatResult
                -> TypedTerm -> TopLevel Theorem
 provePrintPrim script t = do
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal "prove" (ttTerm t)))
+  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
     (_,Just thm) -> do printOutLnTop Info "Valid"
@@ -957,7 +957,7 @@ satPrim :: ProofScript SV.SatResult -> TypedTerm
         -> TopLevel SV.SatResult
 satPrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  evalStateT script (startProof (ProofGoal Existential "sat" (ttTerm t)))
+  evalStateT script (startProof (ProofGoal Existential 0 "sat" "sat" (ttTerm t)))
 
 satPrintPrim :: ProofScript SV.SatResult
              -> TypedTerm -> TopLevel ()
@@ -1301,7 +1301,7 @@ parse_core input = do
 prove_core :: ProofScript SV.SatResult -> String -> TopLevel Theorem
 prove_core script input = do
   t <- parseCore input
-  (r', pstate) <- runStateT script (startProof (ProofGoal Universal "prove" t))
+  (r', pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" t))
   let r = SV.flipSatResult r'
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of

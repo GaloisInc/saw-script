@@ -245,11 +245,12 @@ verifyJava bic opts cls mname overrides setup = do
       -- runDefSimulator cb sbe $ do
       runSimulator cb sbe defaultSEH (Just fl) $ do
         setVerbosity (simVerbose opts)
-        let prover script vs g = do
+        let prover script vs n g = do
               let exts = getAllExts g
               glam <- io $ scAbstractExts jsc exts g
               io $ doExtraChecks opts bsc glam
-              r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) glam))
+              let goal = ProofGoal Universal n "vc" (vsVCName vs) glam
+              r <- evalStateT script (startProof goal)
               case r of
                 SS.Unsat _ -> liftIO $ printOutLn opts Info "Valid."
                 SS.SatMulti _ vals ->

@@ -296,13 +296,15 @@ prover :: Options
        -> LLVMMethodSpecIR
        -> ProofScript SV.SatResult
        -> VerifyState
+       -> Int
        -> Term
        -> TopLevel SolverStats
-prover vpopts sc ms script vs g = do
+prover vpopts sc ms script vs n g = do
   let exts = getAllExts g
   ppopts <- fmap rwPPOpts getTopLevelRW
   tt <- io (scAbstractExts sc exts g)
-  r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) tt))
+  let goal = ProofGoal Universal n "vc" (vsVCName vs) tt
+  r <- evalStateT script (startProof goal)
   case r of
     SV.Unsat stats -> do
         printOutLnTop Info "Valid."
