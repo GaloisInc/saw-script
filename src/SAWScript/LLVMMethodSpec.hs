@@ -659,7 +659,7 @@ data VerifyParams = VerifyParams
 
 type SymbolicRunHandler =
   SharedContext -> [PathVC ()] -> TopLevel SolverStats
-type Prover = VerifyState -> Term -> TopLevel SolverStats
+type Prover = VerifyState -> Int -> Term -> TopLevel SolverStats
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
@@ -681,13 +681,13 @@ runValidation prover params sc results = do
                  , vsStaticErrors = pvcStaticErrors pvc
                  }
     if null (pvcStaticErrors pvc) then
-      mconcat <$> (forM (pvcChecks pvc) $ \vc -> do
+      mconcat <$> (forM (zip [0..] $ pvcChecks pvc) $ \(n, vc) -> do
         let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
         g <- io (scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc)
         io $ printOutLn (vpOpts params) Info $ "Checking " ++ vcName vc
         io $ printOutLn (vpOpts params) Debug $ " (" ++ show g ++ ")"
         io $ printOutLn (vpOpts params) Info "\n"
-        prover vs g)
+        prover vs n g)
     else do
       let vsName = "an invalid path"
       let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
@@ -697,7 +697,7 @@ runValidation prover params sc results = do
       printOutLnTop Info $ show (pvcStaticErrors pvc)
       printOutLnTop Info $ "Calling prover to disprove " ++
                  scPrettyTerm defaultPPOpts (pvcAssumptions pvc)
-      prover vs g)
+      prover vs 0 g)
 
 data VerifyState = VState {
          vsVCName :: String

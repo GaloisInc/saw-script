@@ -206,11 +206,12 @@ verifyObligations cc mspec tactic assumes asserts = do
   let sc  = Crucible.saw_ctx st
   assume <- io $ scAndList sc assumes
   let nm  = show (L.ppSymbol (mspec^.csName))
-  stats <- forM asserts $ \(msg, assert) -> do
+  stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
     goal   <- io $ scImplies sc assume assert
     goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
     let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-    r      <- evalStateT tactic (startProof (ProofGoal Universal goalname goal'))
+        proofgoal = ProofGoal Universal n "vc" goalname goal'
+    r      <- evalStateT tactic (startProof proofgoal)
     case r of
       Unsat stats -> return stats
       SatMulti stats vals -> do
