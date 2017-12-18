@@ -12,6 +12,7 @@ Stability   : provisional
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
@@ -48,11 +49,13 @@ import SAWScript.TypedTerm
 
 import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
+import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
+
 import Verifier.SAW.SharedTerm
 import SAWScript.Options
 
@@ -201,31 +204,6 @@ methodSpecToTerm sc spec =
 instantiateUserVars :: CrucibleMethodSpecIR -> CrucibleMethodSpecIR
 instantiateUserVars _spec = undefined
 
-data CrucibleSetupState =
-  CrucibleSetupState
-  {_csVarCounter    :: !AllocIndex
-  ,_csPrePost       :: PrePost
-  ,_csResolvedState :: ResolvedState
-  ,_csMethodSpec    :: CrucibleMethodSpecIR
-  ,_csCrucibleContext :: CrucibleContext
-  }
-
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
-
-data CrucibleContext =
-  CrucibleContext
-  { ccLLVMContext     :: Crucible.LLVMContext
-  , ccLLVMModule      :: L.Module
-  , ccLLVMModuleTrans :: Crucible.ModuleTranslation
-  , ccBackend         :: Sym
-  , ccEmptyMemImpl    :: Crucible.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
-  , ccGlobals         :: Crucible.SymGlobalState Sym
-  }
-
-
---------------------------------------------------------------------------------
-
 -- | A datatype to keep track of which parts of the simulator state
 -- have been initialized already. For each allocation unit or global,
 -- we keep a list of element-paths that identify the initialized
@@ -236,8 +214,36 @@ data ResolvedState =
   ,_rsGlobals :: Map String [[Int]]
   }
 
+data CrucibleSetupState wptr =
+  CrucibleSetupState
+  {_csVarCounter      :: !AllocIndex
+  ,_csPrePost         :: PrePost
+  ,_csResolvedState   :: ResolvedState
+  ,_csMethodSpec      :: CrucibleMethodSpecIR
+  ,_csCrucibleContext :: CrucibleContext wptr
+  }
+
+type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
+
+data CrucibleContext wptr =
+  CrucibleContext
+  { _ccLLVMContext     :: Crucible.LLVMContext wptr
+  , _ccLLVMModule      :: L.Module
+  , _ccLLVMModuleTrans :: Crucible.ModuleTranslation
+  , _ccBackend         :: Sym
+  , _ccEmptyMemImpl    :: Crucible.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
+  , _ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
+  , _ccGlobals         :: Crucible.SymGlobalState Sym
+  }
+
+makeLenses ''CrucibleContext
 makeLenses ''CrucibleSetupState
 makeLenses ''ResolvedState
+
+ccTypeCtx :: Simple Lens (CrucibleContext wptr) TyCtx.LLVMContext
+ccTypeCtx = ccLLVMContext . Crucible.llvmTypeCtx
+
+--------------------------------------------------------------------------------
 
 emptyResolvedState :: ResolvedState
 emptyResolvedState = ResolvedState Map.empty Map.empty
@@ -324,7 +330,7 @@ initialDeclCrucibleMethodSpecIR dec =
   ,_csSolverStats     = mempty
   }
 
-initialCrucibleSetupState :: CrucibleContext -> L.Define -> CrucibleSetupState
+initialCrucibleSetupState :: CrucibleContext wptr -> L.Define -> CrucibleSetupState wptr
 initialCrucibleSetupState cc def = CrucibleSetupState
   { _csVarCounter      = AllocIndex 0
   , _csPrePost         = PreState
@@ -333,7 +339,7 @@ initialCrucibleSetupState cc def = CrucibleSetupState
   , _csCrucibleContext = cc
   }
 
-initialCrucibleSetupStateDecl :: CrucibleContext -> L.Declare -> CrucibleSetupState
+initialCrucibleSetupStateDecl :: CrucibleContext wptr -> L.Declare -> CrucibleSetupState wptr
 initialCrucibleSetupStateDecl cc dec = CrucibleSetupState
   { _csVarCounter      = AllocIndex 0
   , _csPrePost         = PreState
