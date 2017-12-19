@@ -44,9 +44,27 @@ Num_rec :: (p:: Num -> sort 1) -> ((n::Nat) -> p (TCNum n)) -> p TCInf ->
 Num_rec p f1 f2 (TCNum n) = f1 n;
 Num_rec p f1 f2 TCInf = f2;
 
-tcWidth :: Num -> Num;
-tcWidth n = Num_rec (\ (n::Num) -> Num)
-                    (\ (x::Nat) -> TCNum (widthNat x)) TCInf n;
+-- Helper function: take a Num that we expect to be finite, and extract its Nat,
+-- raising an error if that Num is not finite
+getFinNat :: (n::Num) -> Nat
+getFinNat =
+  Num_rec (\ (n::Num) -> Nat) (\ (n::Nat) -> n)
+          (error Nat "Unexpected Fin constraint violation!");
+
+-- Helper function: destruct a Num that we expect to be finite
+finNumRec :: (p:: Num -> sort 1) -> ((n::Nat) -> p (TCNum n)) ->
+             (n::Num) -> p n;
+finNumRec p f =
+  Num_rec p f (error (p TCInf) "Unexpected Fin constraint violation!")
+
+-- Helper function: destruct two Nums that we expect to be finite
+finNumRec2 :: (p:: Num -> Num -> sort 1) ->
+              ((m n::Nat) -> p (TCNum m) (TCNum n)) ->
+              (m n::Num) -> p m n;
+finNumRec2 p f =
+  finNumRec
+    (\ (m::Num) -> (n::Num) -> p m n)
+    (\ (m::Nat) -> finNumRec (p m) (f m));
 
 -- Build a binary function on Nums by lifting a binary function on Nats (the
 -- first argument) and using additional cases for: when the first argument is a
@@ -80,6 +98,12 @@ trinaryNumFun f1 f2 num1 num2 num3 =
               f2 num3)
          f2 num2)
     f2 num1;
+
+
+
+tcWidth :: Num -> Num;
+tcWidth n = Num_rec (\ (n::Num) -> Num)
+                    (\ (x::Nat) -> TCNum (widthNat x)) TCInf n;
 
 tcAdd :: Num -> Num -> Num;
 tcAdd =
@@ -819,49 +843,37 @@ ecShiftL =
     (\ (m::Num) -> (n::Num) -> (a :: sort 0) -> seq m a ->
        seq n Bool -> seq m a)
     (\ (m::Nat) ->
-       Num_rec
+       finNumRec
          (\ (n::Num) -> (a :: sort 0) -> Vec m a -> seq n Bool -> Vec m a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> bvShiftL m a n (ecZero a pa))
-         -- Error case for (TCNum m, infinity)
-         (\ (a::sort 0) -> \ (v::Vec m a) -> \ (s::Stream Bool) ->
-            error (Vec m a) "invalid ShiftL instance"))
-    (Num_rec
+         (\ (n::Nat) -> \ (a::sort 0) -> bvShiftL m a n (ecZero a pa)))
+    (finNumRec
        (\ (n::Num) -> (a::sort 0) -> Stream a -> seq n Bool ->
           Stream a)
        -- Case for (infinity, TCNum n)
-       (\ (n::Nat) -> \ (a::sort 0) -> bvStreamShiftL a n)
-       -- Error case for (infinity, infinity)
-       (\ (a::sort 0) -> \ (s1::Stream a) -> \ (s2 :: Stream Bool) ->
-          error (Stream a) "invalid ShiftL instance"));
+       (\ (n::Nat) -> \ (a::sort 0) -> bvStreamShiftL a n));
 
 ecShiftR :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool -> seq m a;
 ecShiftR =
   Num_rec
     (\ (m::Num) -> (n::Num) -> (a :: sort 0) -> seq m a -> seq n Bool -> seq m a)
     (\ (m::Nat) ->
-       Num_rec
+       finNumRec
          (\ (n::Num) -> (a :: sort 0) -> Vec m a -> seq n Bool -> Vec m a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> bvShiftR m a n (ecZero a pa))
-         -- Error case for (TCNum m, infinity)
-         (\ (a::sort 0) -> \ (v::Vec m a) -> \ (s::Stream Bool) ->
-            error (Vec m a) "invalid ShiftL instance"))
-    (Num_rec
+         (\ (n::Nat) -> \ (a::sort 0) -> bvShiftR m a n (ecZero a pa)))
+    (finNumRec
        (\ (n::Num) -> (a::sort 0) -> Stream a -> seq n Bool ->
           Stream a)
        -- Case for (infinity, TCNum n)
-       (\ (n::Nat) -> \ (a::sort 0) -> bvStreamShiftR a n (ecZero a pa))
-       -- Error case for (infinity, infinity)
-       (\ (a::sort 0) -> \ (s1::Stream a) -> \ (s2 :: Stream Bool) ->
-          error (Stream a) "invalid ShiftL instance"));
+       (\ (n::Nat) -> \ (a::sort 0) -> bvStreamShiftR a n (ecZero a pa)));
 
 ecSShiftR :: (n k :: Num) -> seq n Bool -> seq k Bool -> seq n Bool;
 ecSShiftR =
-  Num_rec
+  finNumRec
     (\ (n::Num) -> (k::Num) -> seq n Bool -> seq k Bool -> seq n Bool)
     (\ (n::Nat) ->
-       Num_rec
+       finNumRec
          (\ (k::Num) -> Vec n Bool -> seq k Bool -> Vec n Bool)
          -- Case for (TCNum n, TCNum k)
          (\ (k::Nat) ->
@@ -870,87 +882,55 @@ ecSShiftR =
               (\ (x :: bitvector 0) -> \ (i :: bitvector k) -> x)
               (\ (w :: Nat) -> \ (x :: bitvector (Succ w)) ->
                \ (i :: bitvector k) -> bvSShr w x (bvToNat k i))
-              n)
-         -- Error case for (TCNum n, infinity)
-         (\ (v::Vec n Bool) -> \ (s::Stream Bool) ->
-            error (Vec n Bool) "invalid SShiftR instance"))
-    -- Error case for (infinity, any m)
-    (\ (k::Num) -> \ (s1::Stream Bool) -> \ (s2::seq k Bool) ->
-       error (Stream Bool) "invalid SShiftR instance");
+              n));
 
 ecCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
 ecCarry =
-  Num_rec (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool)
-          bvCarry
-          -- Error case for infinity
-          (\ (s1::Stream Bool) -> \ (s2::Stream Bool) ->
-             error Bool "invalid Carry instance");
+  finNumRec (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool) bvCarry;
 
 ecSCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSCarry =
-  Num_rec
+  finNumRec
     (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool)
     (\ (n::Nat) ->
        natCase
          (\ (w :: Nat) -> bitvector w -> bitvector w -> Bool)
          (\ (_ :: bitvector 0) (_ :: bitvector 0) ->
             error Bool "invalid SCarry instance")
-         bvSCarry n)
-    (\ (_::Stream Bool) -> \ (_::Stream Bool) ->
-       error Bool "invalid SCarry instance");
+         bvSCarry n);
 
 ecRotL :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool ->
           seq m a;
 ecRotL =
-  Num_rec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m a -> seq n Bool -> seq m a)
-    (\ (m::Nat) ->
-       Num_rec
-         (\ (n::Num) -> (a::sort 0) -> Vec m a -> seq n Bool ->
-            Vec m a)
-         (\ (n::Nat) -> \ (a::sort 0) -> bvRotateL m a n)
-         -- Error case for (TCNum m, infinity)
-         (\ (a::sort 0) -> \ (v::Vec m a) -> \ (s::Stream Bool) ->
-            error (Vec m a) "invalid RotL instance"))
-    -- Error case for n = infinity
-    (\ (n::Num) -> \ (a::sort 0) -> \ (s1::Stream a) -> \ (s2::seq n Bool) ->
-       error (Stream a) "invalid RotL instance");
+  finNumRec2
+    (\ (m::Num) -> \ (n::Num) -> (a::sort 0) -> seq m a -> seq n Bool -> seq m a)
+    (\ (m::Nat) -> \ (n::Nat) -> \ (a::sort 0) -> bvRotateL m a n);
 
 
 ecRotR :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool -> seq m a;
 ecRotR =
-  Num_rec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m a -> seq n Bool -> seq m a)
-    (\ (m::Nat) ->
-       Num_rec
-         (\ (n::Num) -> (a::sort 0) -> Vec m a -> seq n Bool -> Vec m a)
-         (\ (n::Nat) -> \ (a::sort 0) -> bvRotateR m a n)
-         -- Error case for (TCNum m, infinity)
-         (\ (a::sort 0) -> \ (v::Vec m a) -> \ (s::Stream Bool) ->
-            error (Vec m a) "invalid RotR instance"))
-    -- Error case for n = infinity
-    (\ (n::Num) -> \ (a::sort 0) -> \ (s1::Stream a) -> \ (s2::seq n Bool) ->
-     error (Stream a) "invalid RotR instance");
+  finNumRec2
+    (\ (m::Num) -> \ (n::Num) -> (a::sort 0) -> seq m a -> seq n Bool -> seq m a)
+    (\ (m::Nat) -> \ (n::Nat) -> \ (a::sort 0) -> bvRotateR m a n);
 
 ecCat :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n a -> seq (tcAdd m n) a;
 ecCat =
-  Num_rec
+  finNumRec
     (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m a -> seq n a ->
        seq (tcAdd m n) a)
     (\ (m::Nat) ->
        Num_rec
          (\ (n::Num) -> (a::sort 0) -> Vec m a -> seq n a ->
             seq (tcAdd (TCNum m) n) a)
+         -- Case for (TCNum m, TCNum n)
          (\ (n::Nat) -> \ (a::sort 0) -> append m n a)
-         (\ (a::sort 0) -> streamAppend a m))
-    -- Error case for m = infinity
-    (\ (n::Num) -> \ (a::sort 0) -> \ (s1::Stream a) -> \ (s2::seq n a) ->
-       error (seq (tcAdd TCInf n) a) "invalid Cat instance");
+         -- Case for (TCNum m, TCInf)
+         (\ (a::sort 0) -> streamAppend a m));
 
 ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> seq (tcAdd m n) a ->
              #(seq m a, seq n a);
 ecSplitAt =
-  Num_rec
+  finNumRec
     (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq (tcAdd m n) a ->
        #(seq m a, seq n a))
     (\ (m::Nat) ->
@@ -962,10 +942,7 @@ ecSplitAt =
             (take a m n xs, drop a m n xs))
          -- The case (TCNum m, infinity)
          (\ (a::sort 0) -> \ (xs:: Stream a) ->
-            (streamTake a m xs, streamDrop a m xs)))
-    -- Error case for m = infinity
-    (\ (n::Num) -> \ (a::sort 0) -> \ (xs:: seq (tcAdd TCInf n) a) ->
-       error #(Stream a, seq n a) "invalid SplitAt instance");
+            (streamTake a m xs, streamDrop a m xs)));
 
 ecJoin :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
 ecJoin =
@@ -973,15 +950,14 @@ ecJoin =
     (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m (seq n a) ->
        seq (tcMul m n) a)
     (\ (m::Nat) ->
-       Num_rec
+       finNumRec
          (\ (n::Num) -> (a::sort 0) -> Vec m (seq n a) ->
             seq (tcMul (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
          (\ (n::Nat) -> \ (a::sort 0) -> join m n a)
-         -- Error case for (TCNum m, TCInf)
-         (\ (a::sort 0) -> \ (_::Vec m (Stream a)) ->
-            error (seq (tcMul (TCNum m) TCInf) a) "invalid Join instance"))
-    (Num_rec
+         -- No case for (TCNum m, TCInf)
+         )
+    (finNumRec
        (\ (n::Num) -> (a::sort 0) -> Stream (seq n a) ->
           seq (tcMul TCInf n) a)
        -- Case for (TCInf, TCNum n)
@@ -993,9 +969,8 @@ ecJoin =
             (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) ->
                streamJoin a n' s)
             n)
-       -- Error case for (TCInf, TCInf)
-       (\ (a::sort 0) -> \ (_::Stream (Stream a)) ->
-          error (Stream a) "invalid Join instance"));
+       -- No case for (TCInf, TCInf)
+       );
 
 ecSplit :: (m n :: Num) -> (a :: sort 0) -> seq (tcMul m n) a ->
            seq m (seq n a);
@@ -1004,14 +979,13 @@ ecSplit =
     (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq (tcMul m n) a ->
        seq m (seq n a))
     (\ (m::Nat) ->
-       Num_rec
+       finNumRec
          (\ (n::Num) -> (a::sort 0) -> seq (tcMul (TCNum m) n) a ->
             Vec m (seq n a))
          -- Case for (TCNum m, TCNum n)
          (\ (n::Num) -> \ (a::sort 0) -> split m n a)
-         -- Error case for (TCNum m, TCInf)
-         (\ (a::sort 0) -> \ (v:: seq (tcMul (TCNum m) TCInf) a) ->
-            error (Vec m (Stream a)) "invalid Split instance"))
+         -- No case for (TCNum m, TCInf)
+         )
     (Num_rec
        (\ (n::Num) -> (a::sort 0) -> seq (tcMul TCInf n) a -> Stream (seq n a))
        -- Case for (TCInf, TCNum n)
@@ -1025,26 +999,16 @@ ecSplit =
 
 ecReverse :: (n :: Num) -> (a :: sort 0) -> seq n a -> seq n a;
 ecReverse =
-  Num_rec
-    (\ (n::Num) -> (a::sort 0) -> seq n a -> seq n a)
-    (\ (n::Nat) -> \ (a::sort) -> reverse n a)
-    (\ (a::sort 0) -> \ (s::Stream a) ->
-       error (Stream a) "invalid Reverse instance");
+  finNumRec
+    (\ (n::Num) -> (a::sort 0) -> seq n a -> seq n a) reverse;
 
 ecTranspose :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) ->
                seq n (seq m a);
 ecTranspose
-  Num_rec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m (seq n a) ->
+  finNumRec2
+    (\ (m::Num) -> \ (n::Num) -> (a::sort 0) -> seq m (seq n a) ->
        seq n (seq m a))
-    (\ (m::Nat) ->
-       Num_rec
-         (\ (n::Num) -> (a::sort 0) -> Vec m (seq n a) -> seq n (Vec m a))
-         (\ (n::Nat) -> \ (a::sort 0) -> transpose m n a)
-         (\ (a::sort 0) -> \ (v::Vec m (Stream a)) ->
-            error (Stream (Vec m a)) "invalid Transpose instance"))
-    (\ (n::Num) -> \ (a::sort 0) -> \ (s::Stream (seq n a)) ->
-       error (seq n (Stream a)) "invalid Transpose instance");
+    transpose;
 
 
 ecAt :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
@@ -1052,88 +1016,133 @@ ecAt =
   Num_rec
     (\ (n::Num) -> (a::sort 0) -> (i::Num) -> seq n a -> seq i Bool -> a)
     (\ (n::Nat) -> \ (a::sort 0) ->
-       Num_rec
+       finNumRec
          (\ (i::Num) -> Vec n a -> seq i Bool -> a)
          -- Case for (TCNum n, TCNum i)
          (\ (i::Nat) -> bvAt n a i)
-         -- Error case for (TCNum n, TCInf)
-         (\ (v::Vec n a) -> \ (s::Stream Bool) ->
-            error a "invalid At instance"))
+         -- No case for (TCNum n, TCInf)
+         )
     (\ (a::sort 0) ->
-       Num_rec
+       finNumRec
          (\ (i::Num) -> Stream a -> seq i Bool -> a)
          -- Case for (TCInf, TCNum i)
          (\ (i::Nat) -> bvStreamGet a i)
-         -- Error case for (TCNum n, TCInf)
-         (\ (s1::Stream a) -> \ (s2::Stream Bool) ->
-            error a "invalid At instance"));
-ecAtRange :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) -> seq n a ->
+         -- No case for (TCNum n, TCInf)
+         );
+
+ecAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a ->
              seq m (seq i Bool) -> seq m a;
-ecAtRange n a pa m i xs = seqMap (seq i Bool) a m (ecAt n a pa i xs);
-
-ecAtBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (i :: Num) -> seq n a ->
-            seq i Bool -> a;
-ecAtBack n a pa i xs = ecAt n a pa i (ecReverse n a pa xs);
-
-ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> Ops a -> (m i :: Num) ->
-                 seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRangeBack n a pa m i xs = seqMap (seq i Bool) a m (ecAtBack n a pa i xs);
-=======
-ecAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
 ecAtRange n a m i xs = seqMap (seq i Bool) a m (ecAt n a i xs);
 
-ecAtBack :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAtBack :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a ->
+            seq i Bool -> a;
 ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
 
 ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
 ecAtRangeBack n a m i xs = seqMap (seq i Bool) a m (ecAtBack n a i xs);
->>>>>>> master
+
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> seq len (seq bits Bool);
-ecFromThen (TCNum first) (TCNum next) (TCNum bits) (TCNum len) =
-  gen len (Vec bits Bool)
-    (\(i :: Nat) -> bvAdd bits (bvNat bits first)
-                          (bvMul bits (bvSub bits (bvNat bits next) (bvNat bits first))
-			              (bvNat bits i)));
+ecFromThen first next =
+  finNumRec
+    (\ (bits::Num) -> (len::Num) -> seq len (seq bits Bool))
+    (\ (bits::Nat) ->
+       finNumRec
+         (\ (len::Num) -> seq len (Vec bits Bool))
+         (\ (len::Nat) ->
+            gen len (Vec bits Bool)
+                (\ (i :: Nat) ->
+                   bvAdd
+                     bits
+                     (bvNat bits (getFinNat first))
+                     (bvMul bits
+                            (bvSub bits (bvNat bits (getFinNat next))
+                                   (bvNat bits (getFinNat first)))
+                            (bvNat bits i)))));
 
-ecFromTo :: (first last bits :: Num)
-         -> seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
-ecFromTo (TCNum first) (TCNum last) (TCNum bits) =
-  gen (addNat 1 (subNat last first)) (Vec bits Bool)
-    (\(i :: Nat) -> bvNat bits (addNat i first));
+ecFromTo :: (first last bits :: Num) ->
+            seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
+ecFromTo =
+  finNumRec
+    (\ (first::Num) -> (last::Num) -> (bits::Num) ->
+       seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool))
+    (\ (first::Nat) ->
+       finNumRec
+         (\ (last::Num) -> (bits::Num) ->
+            seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) (seq bits Bool))
+         (\ (last::Nat) ->
+            finNumRec
+              (\ (bits::Num) ->
+                 Vec (addNat 1 (subNat last first)) (seq bits Bool))
+              (\ (bits::Nat) ->
+                 gen (addNat 1 (subNat last first)) (Vec bits Bool)
+                     (\ (i :: Nat) -> bvNat bits (addNat i first)))));
 
 ecFromThenTo :: (first next last bits len :: Num) -> seq len (seq bits Bool);
-ecFromThenTo (TCNum first) (TCNum next) _ (TCNum bits) (TCNum len) =
-  gen len (Vec bits Bool)
-    (\(i :: Nat) ->
-      bvNat bits (subNat (addNat first (mulNat i next)) (mulNat i first)));
+ecFromThenTo first next _ =
+  finNumRec
+    (\ (bits::Num) -> (len::Num) -> seq len (seq bits Bool))
+    (\ (bits::Nat) ->
+       finNumRec
+         (\ (len::Num) -> seq len (Vec bits Bool))
+         (\ (len::Nat) ->
+            gen len (Vec bits Bool)
+                (\ (i :: Nat) ->
+                   bvNat bits (subNat (addNat (getFinNat first)
+                                              (mulNat i (getFinNat next)))
+                                      (mulNat i (getFinNat first))))));
 
 -- Infinite word sequences
 ecInfFrom :: (n :: Num) -> seq n Bool -> seq TCInf (seq n Bool);
-ecInfFrom (TCNum n) w = MkStream (bitvector n) (\(i :: Nat) -> bvAdd n w (bvNat n i));
+ecInfFrom =
+  finNumRec
+    (\ (n::Num) -> seq n Bool -> seq TCInf (seq n Bool))
+    (\ (n::Nat) -> \ (w::Vec n Bool) ->
+       MkStream (bitvector n) (\ (i :: Nat) -> bvAdd n w (bvNat n i)));
 
 ecInfFromThen :: (n :: Num) -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
-ecInfFromThen (TCNum n) first next =
-  MkStream (bitvector n) (\(i :: Nat) ->
-    bvAdd n first (bvMul n (bvSub n next first) (bvNat n i)));
+ecInfFromThen =
+  finNumRec
+    (\ (n::Num) -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool))
+    (\ (n::Nat) -> \ (fist::Vec n Bool) -> \ (next::Vec n Bool) ->
+       MkStream (bitvector n)
+                (\ (i :: Nat) ->
+                   bvAdd n first (bvMul n (bvSub n next first) (bvNat n i))));
+
 
 -- Run-time error
 primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
 
 ecError :: (a :: sort 0) -> (len :: Num) -> seq len (bitvector 8) -> a;
-ecError a (TCNum n) = cryError a n;
+ecError a =
+  finNumRec
+    (\ (len::Num) -> seq len (bitvector 8) -> a)
+    (\ (len::Nat) -> cryError a n);
 
 -- Polynomials
-ecPMul :: (a b :: Num) -> seq (tcAdd (TCNum 1) a) Bool -> seq (tcAdd (TCNum 1) b) Bool
-       -> seq (tcAdd (TCNum 1) (tcAdd a b)) Bool;
-ecPMul (TCNum a) (TCNum b) = bvPMul a b;
+ecPMul :: (a b :: Num) -> seq (tcAdd (TCNum 1) a) Bool ->
+          seq (tcAdd (TCNum 1) b) Bool ->
+          seq (tcAdd (TCNum 1) (tcAdd a b)) Bool;
+ecPMul =
+ finNumRec2
+    (\ (a::Num) -> \ (b::Num) -> seq (tcAdd (TCNum 1) a) Bool ->
+       seq (tcAdd (TCNum 1) b) Bool ->
+       seq (tcAdd (TCNum 1) (tcAdd a b)) Bool)
+    bvPMul;
 
 ecPDiv :: (a b :: Num) -> seq a Bool -> seq b Bool -> seq a Bool;
-ecPDiv (TCNum a) (TCNum b) = bvPDiv a b;
+  finNumRec2
+    (\ (a::Num) -> \ (b::Num) -> seq a Bool -> seq b Bool -> seq a Bool)
+    bvPDiv;
 
-ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bool;
-ecPMod (TCNum a) (TCNum b) = bvPMod a b;
+ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool ->
+          seq b Bool;
+ecPMod =
+  finNumRec2
+    (\ (a::Num) -> \ (b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool ->
+       seq b Bool)
+    bvPMod;
 
 -- Random values
 ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
@@ -1143,26 +1152,53 @@ ecRandom a _ = error a "Cryptol.random";
 ecTrace :: (n :: Num) -> (a b :: sort 0) -> seq n (bitvector 8) -> a -> b -> b;
 ecTrace _ _ _ _ _ x = x;
 
+
 --------------------------------------------------------------------------------
 -- Extra primitives
 
 -- Array update
-ecUpdate :: (n :: Num) -> (a :: sort 0) -> (w :: Num)
-  -> seq n a -> seq w Bool -> a -> seq n a;
-ecUpdate (TCNum n) a (TCNum w) = bvUpd n a w;
-ecUpdate TCInf     a (TCNum w) = bvStreamUpd a w;
+ecUpdate :: (n :: Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+            seq w Bool -> a -> seq n a;
+ecUpdate =
+  Num_rec
+    (\ (n::Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+       seq w Bool -> a -> seq n a)
+    (\ (n::Nat) -> \ (a::sort 0) ->
+       -- Case for (TCNum n, TCNum w)
+       finNumRec
+         (\ (w::Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
+         (\ (w::Nat) -> bvUpd n a w))
+    (\ (a::sort 0) ->
+       finNumRec
+         (\ (w::Num) -> Stream a -> seq w Bool -> a -> Stream a)
+         -- Case for (TCInf, TCNum w)
+         (\ (w::Nat) -> bvStreamUpd a w));
 
-ecUpdateEnd :: (n :: Num) -> (a :: sort 0) -> (w :: Num)
-  -> seq n a -> seq w Bool -> a -> seq n a;
-ecUpdateEnd (TCNum n) a (TCNum w) xs i y = upd n a xs (subNat (subNat n 1) (bvToNat w i)) y;
+ecUpdateEnd :: (n :: Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+               seq w Bool -> a -> seq n a;
+ecUpdateEnd =
+  finNumRec
+    (\ (n::Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+       seq w Bool -> a -> seq n a)
+    (\ (n::Nat) -> \ (a::sort 0) ->
+       finNumRec
+         (\ (w::Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
+         (\ (w::Nat) -> \ (xs::Vec n a) -> \ (i::Vec w Bool) -> \ (y::a) ->
+            upd n a xs (subNat (subNat n 1) (bvToNat w i)) y));
 
 -- Bitvector truncation
 ecTrunc :: (m n :: Num) -> seq (tcAdd m n) Bool -> seq n Bool;
-ecTrunc (TCNum m) (TCNum n) = bvTrunc m n;
+ecTrunc =
+  finNumRec2
+    (\ (m::Num) -> \ (n::Num) -> seq (tcAdd m n) Bool -> seq n Bool)
+    bvTrunc;
 
 -- Zero extension
 ecUExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
-ecUExt (TCNum m) (TCNum n) = bvUExt m n;
+ecUExt =
+  finNumRec2 (\ (m::Num) -> \ (n::Num) -> seq n Bool -> seq (tcAdd m n) Bool)
+             bvUExt;
+
 {-
 -- Sign extension
 ecSExt :: (m n :: Num) -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd m (tcAdd n (TCNum 1))) Bool;
@@ -1178,21 +1214,26 @@ ecSRem :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
   -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
 ecSRem (TCNum n) = bvSRem n;
 -}
+
 -- Signed greater-than
 ecSgt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSgt (TCNum n) = bvsgt n;
+ecSgt =
+  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvsgt;
 
 -- Signed greater-or-equal
 ecSge :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSge (TCNum n) = bvsge n;
+ecSge =
+  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvsge;
 
 -- Signed less-than
 ecSlt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSlt (TCNum n) = bvslt n;
+ecSlt =
+  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) (TCNum n) bvslt;
 
 -- Signed less-or-equal
 ecSle :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSle (TCNum n) = bvsle n;
+ecSle =
+  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvsle;
 
 -- Prelude.bvSShr
 
