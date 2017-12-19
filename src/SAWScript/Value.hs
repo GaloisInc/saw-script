@@ -45,7 +45,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
-import SAWScript.Options (Options)
+import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.TypedTerm
 import SAWScript.ImportAIG
@@ -356,6 +356,16 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+printOutLnTop :: Verbosity -> String -> TopLevel ()
+printOutLnTop v s =
+    do opts <- getOptions
+       io $ printOutLn opts v s
+
+printOutTop :: Verbosity -> String -> TopLevel ()
+printOutTop v s =
+    do opts <- getOptions
+       io $ printOutFn opts v s
 
 getHandleAlloc :: TopLevel (Crucible.HandleAllocator RealWorld)
 getHandleAlloc = TopLevel (asks roHandleAlloc)

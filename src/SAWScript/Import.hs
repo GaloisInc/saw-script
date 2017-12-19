@@ -12,7 +12,6 @@ module SAWScript.Import
   , findAndLoadFile
   ) where
 
-import Control.Monad (when)
 
 import SAWScript.AST
 import SAWScript.Lexer (lexSAW)
@@ -23,7 +22,7 @@ import System.Directory
 
 loadFile :: Options -> FilePath -> IO [Stmt]
 loadFile opts fname = do
-  when (verbLevel opts > 0) $ putStrLn $ "Loading file " ++ show fname
+  printOutLn opts Info $ "Loading file " ++ show fname
   ftext <- readFile fname
   either fail return (parseFile fname ftext)
 

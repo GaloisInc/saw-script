@@ -27,6 +27,7 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.BaseTypes as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
@@ -40,7 +41,6 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
@@ -141,7 +141,10 @@ typeOfSetupValue' cc env val =
           case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
             Nothing -> fail "typeOfSetupValue: non-representable type"
             Just memTy -> return (Crucible.MemType memTy)
-        _ -> fail "typeOfSetupValue: expected monomorphic term"
+        s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
+                            , "instead got:"
+                            , show (Cryptol.pp s)
+                            ]
     SetupStruct vs ->
       do memTys <- traverse (typeOfSetupValue cc env) vs
          let si = Crucible.mkStructInfo dl False memTys
@@ -251,11 +254,11 @@ resolveSetupVal cc env tyenv val =
                 return (Crucible.LLVMValPtr blk end off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
     SetupNull ->
-      packPointer sym =<< Crucible.mkNullPointer sym
+      packPointer <$> Crucible.mkNullPointer sym
     SetupGlobal name ->
       do let mem = ccEmptyMemImpl cc
          ptr <- Crucible.doResolveGlobal sym mem (L.Symbol name)
-         packPointer sym ptr
+         return (packPointer ptr)
   where
     sym = ccBackend cc
     lc = Crucible.llvmTypeCtx (ccLLVMContext cc)
@@ -350,10 +353,13 @@ ptrToVal :: LLVMPtr -> LLVMVal
 ptrToVal (Crucible.LLVMPtr blk end off) = Crucible.LLVMValPtr blk end off
 
 packPointer ::
-  Sym ->
   Crucible.RegValue Sym Crucible.LLVMPointerType ->
-  IO (Crucible.LLVMVal Sym Crucible.PtrWidth)
-packPointer sym x = Crucible.ptrToPtrVal <$> Crucible.projectLLVM_pointer sym x
+  Crucible.LLVMVal Sym Crucible.PtrWidth
+packPointer (Crucible.RolledType xs) = Crucible.LLVMValPtr blk end off
+  where
+    Crucible.RV blk = xs^._1
+    Crucible.RV end = xs^._2
+    Crucible.RV off = xs^._3
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =
