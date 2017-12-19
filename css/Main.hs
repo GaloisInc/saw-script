@@ -6,15 +6,16 @@ import           System.Environment( getArgs )
 import           System.Exit( exitFailure )
 import           System.Console.GetOpt
 import           System.IO
-import           Data.Text.Lazy ( pack )
+import           Data.Text ( pack )
 import           Data.Version
 
+import qualified Cryptol.Eval as E
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.ModuleSystem as CM
 import qualified Cryptol.ModuleSystem.Env as CME
 import qualified Cryptol.Parser as P
 import           Cryptol.Utils.PP
-
+import           Cryptol.Utils.Logger (quietLogger)
 
 import qualified Verifier.SAW.Cryptol as C
 import           Verifier.SAW.Cryptol.Prims
@@ -77,13 +78,17 @@ main = do
        hPutStr stderr (concat errs ++ usageInfo header options)
        exitFailure
 
+defaultEvalOpts :: E.EvalOpts
+defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
+
 cssMain :: CSS -> [String] -> IO ()
 cssMain css [inputModule,name] | cssMode css == NormalMode = do
     let out = if null (output css)
                  then name++".aig"
                  else (output css)
 
-    (e,warn) <- CM.loadModuleByPath inputModule =<< CM.initialModuleEnv
+    modEnv <- CM.initialModuleEnv
+    (e,warn) <- CM.loadModuleByPath inputModule (defaultEvalOpts, modEnv)
     mapM_ (print . pp) warn
     case e of
        Left msg -> print msg >> exitFailure
@@ -118,9 +123,9 @@ extractCryptol sc modEnv input = do
   env <- C.importDeclGroups sc C.emptyEnv declGroups
   pexpr <-
     case P.parseExpr (pack input) of
-      Left err -> fail (show (pp err))
+      Left err -> fail (show (P.ppError err))
       Right x -> return x
-  (exprResult, exprWarnings) <- CM.checkExpr pexpr modEnv
+  (exprResult, exprWarnings) <- CM.checkExpr pexpr (defaultEvalOpts, modEnv)
   mapM_ (print . pp) exprWarnings
   ((_, expr, schema), _modEnv') <-
     case exprResult of
