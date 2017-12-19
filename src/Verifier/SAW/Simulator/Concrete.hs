@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TypeFamilies #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Concrete
@@ -52,58 +54,23 @@ evalSharedTerm m addlPrims t =
     Sim.evalSharedTerm cfg t
 
 ------------------------------------------------------------
--- BitVector operations
-
-bvRotateL :: BitVector -> Int -> BitVector
-bvRotateL (BV w x) i = Prim.bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))
-  where j = i `mod` w
-
-bvRotateR :: BitVector -> Int -> BitVector
-bvRotateR w i = bvRotateL w (- i)
-
-bvShiftL :: Bool -> BitVector -> Int -> BitVector
-bvShiftL c (BV w x) i = Prim.bv w ((x `shiftL` i) .|. c')
-  where c' = if c then (1 `shiftL` i) - 1 else 0
-
-bvShiftR :: Bool -> BitVector -> Int -> BitVector
-bvShiftR c (BV w x) i = Prim.bv w (c' .|. (x `shiftR` i))
-  where c' = if c then (full `shiftL` (w - j)) .&. full else 0
-        full = (1 `shiftL` w) - 1
-        j  = min w i
-
-------------------------------------------------------------
--- Vector operations
-
-vRotateL :: V.Vector a -> Int -> V.Vector a
-vRotateL xs i
-  | V.null xs = xs
-  | otherwise = (V.++) (V.drop j xs) (V.take j xs)
-  where j = i `mod` V.length xs
-
-vRotateR :: V.Vector a -> Int -> V.Vector a
-vRotateR xs i = vRotateL xs (- i)
-
-vShiftL :: a -> V.Vector a -> Int -> V.Vector a
-vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
-  where j = min i (V.length xs)
-
-vShiftR :: a -> V.Vector a -> Int -> V.Vector a
-vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
-  where j = min i (V.length xs)
-
-------------------------------------------------------------
 -- Values
 
-type CValue = Value Identity Bool BitVector Integer CExtra
+data Concrete
+
+type instance EvalM Concrete = Identity
+type instance VBool Concrete = Bool
+type instance VWord Concrete = BitVector
+type instance VInt  Concrete = Integer
+type instance Extra Concrete = CExtra
+
+type CValue = Value Concrete -- (WithM Identity Concrete)
 
 data CExtra
   = CStream (IntTrie CValue)
 
 instance Show CExtra where
   show (CStream _) = "<stream>"
-
-vBool :: Bool -> CValue
-vBool b = VBool b
 
 toBool :: CValue -> Bool
 toBool (VBool b) = b
@@ -112,20 +79,19 @@ toBool x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toBool", show x]
 vWord :: BitVector -> CValue
 vWord x = VWord x
 
-fromVInt :: CValue -> Integer
-fromVInt (VInt i) = i
-fromVInt x = error $ unwords ["Verifier.SAW.Simulator.Concrete.fromVInt", show x]
-
 -- | Conversion from list of bits to integer (big-endian)
 bvToInteger :: Vector Bool -> Integer
 bvToInteger = V.foldl' (\x b -> if b then 2*x+1 else 2*x) 0
 
-explodeBitVector :: BitVector -> Vector Bool
-explodeBitVector (BV w x) = V.reverse (V.generate w (testBit x))
+unpackBitVector :: BitVector -> Vector Bool
+unpackBitVector x = V.generate (Prim.width x) (Prim.bvAt x)
+
+packBitVector :: Vector Bool -> BitVector
+packBitVector v = BV (V.length v) (bvToInteger v)
 
 toWord :: CValue -> BitVector
 toWord (VWord x) = x
-toWord (VVector vv) = BV (V.length vv) (bvToInteger (fmap (toBool . runIdentity . force) vv))
+toWord (VVector vv) = packBitVector (fmap (toBool . runIdentity . force) vv)
 toWord x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toWord", show x]
 
 vStream :: IntTrie CValue -> CValue
@@ -134,11 +100,6 @@ vStream x = VExtra (CStream x)
 toStream :: CValue -> IntTrie CValue
 toStream (VExtra (CStream x)) = x
 toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x]
-
-toVector :: CValue -> V.Vector CValue
-toVector (VVector xv) = fmap (runIdentity . force) xv
-toVector (VWord w) = fmap vBool (explodeBitVector w)
-toVector x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toVector", show x]
 
 {-
 flattenBValue :: CValue -> BitVector
@@ -157,43 +118,9 @@ flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.Concrete.flattenBValu
 wordFun :: (BitVector -> CValue) -> CValue
 wordFun f = pureFun (\x -> f (toWord x))
 
--- | op :: Bool -> Bool -> Bool
-boolBinOp :: (Bool -> Bool -> Bool) -> CValue
-boolBinOp op =
-  pureFun $ \x ->
-  pureFun $ \y -> vBool (op (toBool x) (toBool y))
-
--- | op :: (n :: Nat) -> bitvector n -> bitvector n
-unOp :: (BitVector -> BitVector) -> CValue
-unOp op =
-  constFun $
-  wordFun $ \x -> vWord (op x)
-
--- | op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n
-binOp :: (BitVector -> BitVector -> BitVector) -> CValue
-binOp op =
-  constFun $
-  wordFun $ \x ->
-  wordFun $ \y -> vWord (op x y)
-
-binOp' :: (BitVector -> BitVector -> Maybe BitVector) -> CValue
-binOp' op =
-  constFun $
-  wordFun $ \x ->
-  wordFun $ \y -> maybe Prim.divideByZero vWord (op x y)
-
--- | op :: (n :: Nat) -> bitvector n -> bitvector n -> Bool
-binRel :: (BitVector -> BitVector -> Bool) -> CValue
-binRel op =
-  constFun $
-  wordFun $ \x ->
-  wordFun $ \y -> vBool (op x y)
-
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
-bvShiftOp :: (BitVector -> BitVector -> BitVector)
-          -> (BitVector -> Int -> BitVector)
-          -> CValue
-bvShiftOp _bvOp natOp =
+bvShiftOp :: (BitVector -> Int -> BitVector) -> CValue
+bvShiftOp natOp =
   constFun $
   wordFun $ \x ->
   pureFun $ \y ->
@@ -203,103 +130,118 @@ bvShiftOp _bvOp natOp =
 
 ------------------------------------------------------------
 
+pure1 :: Applicative f => (a -> b) -> a -> f b
+pure1 f x = pure (f x)
+
+pure2 :: Applicative f => (a -> b -> c) -> a -> b -> f c
+pure2 f x y = pure (f x y)
+
+pure3 :: Applicative f => (a -> b -> c -> d) -> a -> b -> c -> f d
+pure3 f x y z = pure (f x y z)
+
+divOp :: (a -> b -> Maybe c) -> a -> b -> Identity c
+divOp f x y = maybe Prim.divideByZero pure (f x y)
+
+ite :: Bool -> a -> a -> a
+ite b x y = if b then x else y
+
+prims :: Prims.BasePrims Concrete
+prims =
+  Prims.BasePrims
+  { Prims.bpAsBool  = Just
+  , Prims.bpUnpack  = pure1 unpackBitVector
+  , Prims.bpPack    = pure1 packBitVector
+  , Prims.bpBvAt    = pure2 Prim.bvAt
+  , Prims.bpBvLit   = pure2 Prim.bv
+  , Prims.bpBvSize  = Prim.width
+  , Prims.bpBvJoin  = pure2 (Prim.append_bv undefined undefined undefined)
+  , Prims.bpBvSlice = pure3 (\m n x -> Prim.slice_bv () m n (Prim.width x - m - n) x)
+    -- Conditionals
+  , Prims.bpMuxBool  = pure3 ite
+  , Prims.bpMuxWord  = pure3 ite
+  , Prims.bpMuxInt   = pure3 ite
+  , Prims.bpMuxExtra = pure3 ite
+    -- Booleans
+  , Prims.bpTrue   = True
+  , Prims.bpFalse  = False
+  , Prims.bpNot    = pure1 not
+  , Prims.bpAnd    = pure2 (&&)
+  , Prims.bpOr     = pure2 (||)
+  , Prims.bpXor    = pure2 (/=)
+  , Prims.bpBoolEq = pure2 (==)
+    -- Bitvector logical
+  , Prims.bpBvNot  = pure1 (Prim.bvNot undefined)
+  , Prims.bpBvAnd  = pure2 (Prim.bvAnd undefined)
+  , Prims.bpBvOr   = pure2 (Prim.bvOr  undefined)
+  , Prims.bpBvXor  = pure2 (Prim.bvXor undefined)
+    -- Bitvector arithmetic
+  , Prims.bpBvNeg  = pure1 (Prim.bvNeg undefined)
+  , Prims.bpBvAdd  = pure2 (Prim.bvAdd undefined)
+  , Prims.bpBvSub  = pure2 (Prim.bvSub undefined)
+  , Prims.bpBvMul  = pure2 (Prim.bvMul undefined)
+  , Prims.bpBvUDiv = divOp (Prim.bvUDiv undefined)
+  , Prims.bpBvURem = divOp (Prim.bvURem undefined)
+  , Prims.bpBvSDiv = divOp (Prim.bvSDiv undefined)
+  , Prims.bpBvSRem = divOp (Prim.bvSRem undefined)
+  , Prims.bpBvLg2  = pure1 Prim.bvLg2
+    -- Bitvector comparisons
+  , Prims.bpBvEq   = pure2 (Prim.bvEq  undefined)
+  , Prims.bpBvsle  = pure2 (Prim.bvsle undefined)
+  , Prims.bpBvslt  = pure2 (Prim.bvslt undefined)
+  , Prims.bpBvule  = pure2 (Prim.bvule undefined)
+  , Prims.bpBvult  = pure2 (Prim.bvult undefined)
+  , Prims.bpBvsge  = pure2 (Prim.bvsge undefined)
+  , Prims.bpBvsgt  = pure2 (Prim.bvsgt undefined)
+  , Prims.bpBvuge  = pure2 (Prim.bvuge undefined)
+  , Prims.bpBvugt  = pure2 (Prim.bvugt undefined)
+    -- Bitvector shift/rotate
+  , Prims.bpBvRolInt = pure2 bvRotateL
+  , Prims.bpBvRorInt = pure2 bvRotateR
+  , Prims.bpBvShlInt = pure3 bvShiftL
+  , Prims.bpBvShrInt = pure3 bvShiftR
+  , Prims.bpBvRol    = pure2 (\x y -> bvRotateL x (unsigned y))
+  , Prims.bpBvRor    = pure2 (\x y -> bvRotateR x (unsigned y))
+  , Prims.bpBvShl    = pure3 (\b x y -> bvShiftL b x (unsigned y))
+  , Prims.bpBvShr    = pure3 (\b x y -> bvShiftR b x (unsigned y))
+    -- Integer operations
+  , Prims.bpIntAdd = pure2 (+)
+  , Prims.bpIntSub = pure2 (-)
+  , Prims.bpIntMul = pure2 (*)
+  , Prims.bpIntDiv = pure2 div
+  , Prims.bpIntMod = pure2 mod
+  , Prims.bpIntNeg = pure1 negate
+  , Prims.bpIntEq  = pure2 (==)
+  , Prims.bpIntLe  = pure2 (<=)
+  , Prims.bpIntLt  = pure2 (<)
+  , Prims.bpIntMin = pure2 min
+  , Prims.bpIntMax = pure2 max
+  }
+
 constMap :: Map Ident CValue
-constMap = Map.fromList
-  -- Boolean
-  [ ("Prelude.True"  , vBool True)
-  , ("Prelude.False" , vBool False)
-  , ("Prelude.not"   , pureFun (vBool . not . toBool))
-  , ("Prelude.and"   , boolBinOp (&&))
-  , ("Prelude.or"    , boolBinOp (||))
-  , ("Prelude.xor"   , boolBinOp (/=))
-  , ("Prelude.boolEq", boolBinOp (==))
-  , ("Prelude.ite"   , iteOp)
-  -- Arithmetic
-  , ("Prelude.bvNeg" , unOp (Prim.bvNeg undefined))
-  , ("Prelude.bvAdd" , binOp (Prim.bvAdd undefined))
-  , ("Prelude.bvSub" , binOp (Prim.bvSub undefined))
-  , ("Prelude.bvMul" , binOp (Prim.bvMul undefined))
-  , ("Prelude.bvAnd" , binOp (Prim.bvAnd undefined))
-  , ("Prelude.bvOr"  , binOp (Prim.bvOr undefined))
-  , ("Prelude.bvXor" , binOp (Prim.bvXor undefined))
-  , ("Prelude.bvUDiv", binOp' (Prim.bvUDiv undefined))
-  , ("Prelude.bvURem", binOp' (Prim.bvURem undefined))
-  , ("Prelude.bvSDiv", binOp' (Prim.bvSDiv undefined))
-  , ("Prelude.bvSRem", binOp' (Prim.bvSRem undefined))
-  , ("Prelude.bvPMul", constFun $ binOp (Prim.bvPMul undefined undefined))
-  , ("Prelude.bvPMod", constFun $ binOp (Prim.bvPMod undefined undefined))
-  , ("Prelude.bvLg2" , Prims.bvLg2Op (return . toWord) (return . Prim.bvLg2))
-  -- Relations
-  , ("Prelude.bvEq"  , binRel (Prim.bvEq undefined))
-  , ("Prelude.bvsle" , binRel (Prim.bvsle undefined))
-  , ("Prelude.bvslt" , binRel (Prim.bvslt undefined))
-  , ("Prelude.bvule" , binRel (Prim.bvule undefined))
-  , ("Prelude.bvult" , binRel (Prim.bvult undefined))
-  , ("Prelude.bvsge" , binRel (Prim.bvsge undefined))
-  , ("Prelude.bvsgt" , binRel (Prim.bvsgt undefined))
-  , ("Prelude.bvuge" , binRel (Prim.bvuge undefined))
-  , ("Prelude.bvugt" , binRel (Prim.bvugt undefined))
+constMap =
+  flip Map.union (Prims.constMap prims) $
+  Map.fromList
   -- Shifts
-  , ("Prelude.bvShl" , bvShiftOp undefined (Prim.bvShl undefined))
-  , ("Prelude.bvShr" , bvShiftOp undefined (Prim.bvShr undefined))
-  , ("Prelude.bvSShr", bvShiftOp undefined (Prim.bvSShr undefined))
-  -- Nat
-  , ("Prelude.Succ", Prims.succOp)
-  , ("Prelude.addNat", Prims.addNatOp)
-  , ("Prelude.subNat", Prims.subNatOp)
-  , ("Prelude.mulNat", Prims.mulNatOp)
-  , ("Prelude.minNat", Prims.minNatOp)
-  , ("Prelude.maxNat", Prims.maxNatOp)
-  , ("Prelude.divModNat", Prims.divModNatOp)
-  , ("Prelude.expNat", Prims.expNatOp)
-  , ("Prelude.widthNat", Prims.widthNatOp)
-  , ("Prelude.natCase", Prims.natCaseOp)
-  , ("Prelude.equalNat", Prims.equalNat return)
-  , ("Prelude.ltNat", Prims.ltNat return)
+  [ ("Prelude.bvShl" , bvShiftOp (Prim.bvShl undefined))
+  , ("Prelude.bvShr" , bvShiftOp (Prim.bvShr undefined))
+  , ("Prelude.bvSShr", bvShiftOp (Prim.bvSShr undefined))
   -- Integers
-  , ("Prelude.intAdd", Prims.intAddOp)
-  , ("Prelude.intSub", Prims.intSubOp)
-  , ("Prelude.intMul", Prims.intMulOp)
-  , ("Prelude.intDiv", Prims.intDivOp)
-  , ("Prelude.intMod", Prims.intModOp)
-  , ("Prelude.intNeg", Prims.intNegOp)
-  , ("Prelude.intEq" , Prims.intEqOp id)
-  , ("Prelude.intLe" , Prims.intLeOp id)
-  , ("Prelude.intLt" , Prims.intLtOp id)
   , ("Prelude.intToNat", Prims.intToNatOp)
   , ("Prelude.natToInt", Prims.natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
-  , ("Prelude.intMin"  , Prims.intMinOp)
-  , ("Prelude.intMax"  , Prims.intMaxOp)
-  -- Vectors
-  , ("Prelude.gen", Prims.genOp)
-  , ("Prelude.atWithDefault", Prims.atWithDefaultOp bvUnpack Prim.bvAt ite)
-  , ("Prelude.upd", Prims.updOp bvUnpack (\x y -> return (Prim.bvEq undefined x y)) Prim.bv Prim.width ite)
-  , ("Prelude.append", Prims.appendOp bvUnpack (Prim.append_bv undefined undefined undefined))
-  , ("Prelude.join", Prims.joinOp bvUnpack (Prim.append_bv undefined undefined undefined))
-  , ("Prelude.zip", vZipOp)
-  , ("Prelude.foldr", foldrOp)
-  , ("Prelude.rotateL", rotateLOp)
-  , ("Prelude.rotateR", rotateROp)
-  , ("Prelude.shiftL", shiftLOp)
-  , ("Prelude.shiftR", shiftROp)
-  , ("Prelude.EmptyVec", Prims.emptyVec)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
   , ("Prelude.bvStreamGet", bvStreamGetOp)
   -- Miscellaneous
-  , ("Prelude.coerce", Prims.coerceOp)
-  , ("Prelude.bvNat", bvNatOp)
-  , ("Prelude.bvToNat", bvToNatOp)
-  , ("Prelude.error", Prims.errorOp)
-  , ("Prelude.fix", Prims.fixOp)
-  -- Overloaded
-  , ("Prelude.eq", eqOp)
+  , ("Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
   ]
 
+------------------------------------------------------------
+
+-- primitive bvToNat :: (n::Nat) -> bitvector n -> Nat;
 bvToNatOp :: CValue
 bvToNatOp = constFun $ wordFun $ VNat . unsigned
 
@@ -320,115 +262,28 @@ intToBvOp =
      if n >= 0 then bv (fromIntegral n) x
                else bvNeg n $ bv (fromIntegral n) $ negate x
 
--- | ite :: ?(a :: sort 1) -> Bool -> a -> a -> a;
-iteOp :: CValue
-iteOp =
-  constFun $
-  strictFun $ \b -> return $
-  VFun $ \x -> return $
-  VFun $ \y -> if toBool b then force x else force y
+------------------------------------------------------------
+-- BitVector operations
 
-bvUnpack :: BitVector -> V.Vector Bool
-bvUnpack x = V.generate (Prim.width x) (Prim.bvAt x)
+bvRotateL :: BitVector -> Integer -> BitVector
+bvRotateL (BV w x) i = Prim.bv w ((x `shiftL` j) .|. (x `shiftR` (w - j)))
+  where j = fromInteger (i `mod` toInteger w)
 
-ite :: Bool -> a -> a -> a
-ite b x y = if b then x else y
+bvRotateR :: BitVector -> Integer -> BitVector
+bvRotateR w i = bvRotateL w (- i)
 
--- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
-vZipOp :: CValue
-vZipOp =
-  constFun $
-  constFun $
-  constFun $
-  constFun $
-  pureFun $ \xs ->
-  pureFun $ \ys ->
-  VVector (V.zipWith (\x y -> ready (vTuple [ready x, ready y])) (toVector xs) (toVector ys))
+bvShiftL :: Bool -> BitVector -> Integer -> BitVector
+bvShiftL c (BV w x) i = Prim.bv w ((x `shiftL` j) .|. c')
+  where c' = if c then (1 `shiftL` j) - 1 else 0
+        j = fromInteger (i `min` toInteger w)
 
--- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
-foldrOp :: CValue
-foldrOp =
-  constFun $
-  constFun $
-  constFun $
-  strictFun $ \f -> return $
-  VFun $ \z -> return $
-  strictFun $ \xs -> do
-    let g x m = do fx <- apply f x
-                   y <- delay m
-                   apply fx y
-    case xs of
-      VVector xv -> V.foldr g (force z) xv
-      _ -> fail "Verifier.SAW.Simulator.Concrete.foldrOp"
+bvShiftR :: Bool -> BitVector -> Integer -> BitVector
+bvShiftR c (BV w x) i = Prim.bv w (c' .|. (x `shiftR` j))
+  where c' = if c then (full `shiftL` (w - j)) .&. full else 0
+        full = (1 `shiftL` w) - 1
+        j = fromInteger (i `min` toInteger w)
 
--- bvNat :: (x :: Nat) -> Nat -> bitvector x;
-bvNatOp :: CValue
-bvNatOp =
-  Prims.natFun'' "bvNatOp1" $ \w -> return $
-  Prims.natFun'' "bvNatOp2"  $ \x -> return $
-  VWord (Prim.bv (fromIntegral w) (toInteger x))
-
--- rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateLOp :: CValue
-rotateLOp =
-  constFun $
-  constFun $
-  pureFun $ \xs ->
-  Prims.natFun $ \i -> return $
-    case xs of
-      VVector xv -> VVector (vRotateL xv (fromIntegral i))
-      VWord w -> vWord (bvRotateL w (fromIntegral i))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.rotateLOp: " ++ show xs
-
--- rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
-rotateROp :: CValue
-rotateROp =
-  constFun $
-  constFun $
-  pureFun $ \xs ->
-  Prims.natFun $ \i -> return $
-    case xs of
-      VVector xv -> VVector (vRotateR xv (fromIntegral i))
-      VWord w -> vWord (bvRotateR w (fromIntegral i))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.rotateROp: " ++ show xs
-
--- shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-shiftLOp :: CValue
-shiftLOp =
-  constFun $
-  constFun $
-  VFun $ \x -> return $
-  pureFun $ \xs ->
-  Prims.natFun $ \i -> return $
-    case xs of
-      VVector xv -> VVector (vShiftL x xv (fromIntegral i))
-      VWord w -> vWord (bvShiftL c w (fromIntegral i))
-        where c = toBool (runIdentity (force x))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.shiftLOp: " ++ show xs
-
--- shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-shiftROp :: CValue
-shiftROp =
-  constFun $
-  constFun $
-  VFun $ \x -> return $
-  pureFun $ \xs ->
-  Prims.natFun $ \i -> return $
-    case xs of
-      VVector xv -> VVector (vShiftR x xv (fromIntegral i))
-      VWord w -> vWord (bvShiftR c w (fromIntegral i))
-        where c = toBool (runIdentity (force x))
-      _ -> error $ "Verifier.SAW.Simulator.Concrete.shiftROp: " ++ show xs
-
-eqOp :: CValue
-eqOp = Prims.eqOp trueOp andOp boolOp bvOp intOp
-  where trueOp = vBool True
-        andOp x y = return (vBool (toBool x && toBool y))
-        boolOp x y = return (vBool (toBool x == toBool y))
-        bvOp _ x y = return (vBool (Prim.bvEq undefined (toWord x) (toWord y)))
-        intOp x y = return (vBool (fromVInt x == fromVInt y))
-
-----------------------------------------
+------------------------------------------------------------
 
 -- MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
 mkStreamOp :: CValue

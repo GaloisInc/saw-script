@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Prims
@@ -21,78 +23,324 @@ import Control.Applicative
 import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Traversable
+import Data.Vector (Vector)
 import qualified Data.Vector as V
 
+import Verifier.SAW.Term.Functor (Ident)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 
 ------------------------------------------------------------
+--
+
+-- | A collection of implementations of primitives on base types.
+-- These can be used to derive other primitives on higher types.
+data BasePrims l =
+  BasePrims
+  { bpAsBool :: VBool l -> Maybe Bool
+    -- Bitvectors
+  , bpUnpack  :: VWord l -> EvalM l (Vector (VBool l))
+  , bpPack    :: Vector (VBool l) -> MWord l
+  , bpBvAt    :: VWord l -> Int -> MBool l
+  , bpBvLit   :: Int -> Integer -> MWord l
+  , bpBvSize  :: VWord l -> Int
+  , bpBvJoin  :: VWord l -> VWord l -> MWord l
+  , bpBvSlice :: Int -> Int -> VWord l -> MWord l
+    -- Conditionals
+  , bpMuxBool  :: VBool l -> VBool l -> VBool l -> MBool l
+  , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
+  , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
+  , bpMuxExtra :: VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
+    -- Booleans
+  , bpTrue   :: VBool l
+  , bpFalse  :: VBool l
+  , bpNot    :: VBool l -> MBool l
+  , bpAnd    :: VBool l -> VBool l -> MBool l
+  , bpOr     :: VBool l -> VBool l -> MBool l
+  , bpXor    :: VBool l -> VBool l -> MBool l
+  , bpBoolEq :: VBool l -> VBool l -> MBool l
+    -- Bitvector logical
+  , bpBvNot  :: VWord l -> MWord l
+  , bpBvAnd  :: VWord l -> VWord l -> MWord l
+  , bpBvOr   :: VWord l -> VWord l -> MWord l
+  , bpBvXor  :: VWord l -> VWord l -> MWord l
+    -- Bitvector arithmetic
+  , bpBvNeg  :: VWord l -> MWord l
+  , bpBvAdd  :: VWord l -> VWord l -> MWord l
+  , bpBvSub  :: VWord l -> VWord l -> MWord l
+  , bpBvMul  :: VWord l -> VWord l -> MWord l
+  , bpBvUDiv :: VWord l -> VWord l -> MWord l
+  , bpBvURem :: VWord l -> VWord l -> MWord l
+  , bpBvSDiv :: VWord l -> VWord l -> MWord l
+  , bpBvSRem :: VWord l -> VWord l -> MWord l
+  , bpBvLg2  :: VWord l -> MWord l
+    -- Bitvector comparisons
+  , bpBvEq   :: VWord l -> VWord l -> MBool l
+  , bpBvsle  :: VWord l -> VWord l -> MBool l
+  , bpBvslt  :: VWord l -> VWord l -> MBool l
+  , bpBvule  :: VWord l -> VWord l -> MBool l
+  , bpBvult  :: VWord l -> VWord l -> MBool l
+  , bpBvsge  :: VWord l -> VWord l -> MBool l
+  , bpBvsgt  :: VWord l -> VWord l -> MBool l
+  , bpBvuge  :: VWord l -> VWord l -> MBool l
+  , bpBvugt  :: VWord l -> VWord l -> MBool l
+    -- Bitvector shift/rotate
+  , bpBvRolInt :: VWord l -> Integer -> MWord l
+  , bpBvRorInt :: VWord l -> Integer -> MWord l
+  , bpBvShlInt :: VBool l -> VWord l -> Integer -> MWord l
+  , bpBvShrInt :: VBool l -> VWord l -> Integer -> MWord l
+  , bpBvRol    :: VWord l -> VWord l -> MWord l
+  , bpBvRor    :: VWord l -> VWord l -> MWord l
+  , bpBvShl    :: VBool l -> VWord l -> VWord l -> MWord l
+  , bpBvShr    :: VBool l -> VWord l -> VWord l -> MWord l
+    -- Integer operations
+  , bpIntAdd :: VInt l -> VInt l -> MInt l
+  , bpIntSub :: VInt l -> VInt l -> MInt l
+  , bpIntMul :: VInt l -> VInt l -> MInt l
+  , bpIntDiv :: VInt l -> VInt l -> MInt l
+  , bpIntMod :: VInt l -> VInt l -> MInt l
+  , bpIntNeg :: VInt l -> MInt l
+  , bpIntEq :: VInt l -> VInt l -> MBool l
+  , bpIntLe :: VInt l -> VInt l -> MBool l
+  , bpIntLt :: VInt l -> VInt l -> MBool l
+  , bpIntMin :: VInt l -> VInt l -> MInt l
+  , bpIntMax :: VInt l -> VInt l -> MInt l
+  }
+
+bpBool :: VMonad l => BasePrims l -> Bool -> MBool l
+bpBool bp True = return (bpTrue bp)
+bpBool bp False = return (bpFalse bp)
+
+-- | Given implementations of the base primitives, construct a table
+-- containing implementations of all primitives.
+constMap ::
+  (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
+  BasePrims l -> Map Ident (Value l)
+constMap bp = Map.fromList
+  -- Boolean
+  [ ("Prelude.True"  , VBool (bpTrue bp))
+  , ("Prelude.False" , VBool (bpFalse bp))
+  , ("Prelude.not"   , strictFun (liftM VBool . bpNot bp . toBool))
+  , ("Prelude.and"   , boolBinOp (bpAnd bp))
+  , ("Prelude.or"    , boolBinOp (bpOr bp))
+  , ("Prelude.xor"   , boolBinOp (bpXor bp))
+  , ("Prelude.boolEq", boolBinOp (bpBoolEq bp))
+  -- Bitwise
+  , ("Prelude.bvAnd" , wordBinOp (bpPack bp) (bpBvAnd bp))
+  , ("Prelude.bvOr"  , wordBinOp (bpPack bp) (bpBvOr  bp))
+  , ("Prelude.bvXor" , wordBinOp (bpPack bp) (bpBvXor bp))
+  , ("Prelude.bvNot" , wordUnOp  (bpPack bp) (bpBvNot bp))
+  -- Arithmetic
+  , ("Prelude.bvNeg" , wordUnOp  (bpPack bp) (bpBvNeg bp))
+  , ("Prelude.bvAdd" , wordBinOp (bpPack bp) (bpBvAdd bp))
+  , ("Prelude.bvSub" , wordBinOp (bpPack bp) (bpBvSub bp))
+  , ("Prelude.bvMul" , wordBinOp (bpPack bp) (bpBvMul bp))
+  , ("Prelude.bvUDiv", wordBinOp (bpPack bp) (bpBvUDiv bp))
+  , ("Prelude.bvURem", wordBinOp (bpPack bp) (bpBvURem bp))
+  , ("Prelude.bvSDiv", wordBinOp (bpPack bp) (bpBvSDiv bp))
+  , ("Prelude.bvSRem", wordBinOp (bpPack bp) (bpBvSRem bp))
+  , ("Prelude.bvLg2" , wordUnOp  (bpPack bp) (bpBvLg2  bp))
+  -- Comparisons
+  , ("Prelude.bvEq"  , wordBinRel (bpPack bp) (bpBvEq  bp))
+  , ("Prelude.bvsle" , wordBinRel (bpPack bp) (bpBvsle bp))
+  , ("Prelude.bvslt" , wordBinRel (bpPack bp) (bpBvslt bp))
+  , ("Prelude.bvule" , wordBinRel (bpPack bp) (bpBvule bp))
+  , ("Prelude.bvult" , wordBinRel (bpPack bp) (bpBvult bp))
+  , ("Prelude.bvsge" , wordBinRel (bpPack bp) (bpBvsge bp))
+  , ("Prelude.bvsgt" , wordBinRel (bpPack bp) (bpBvsgt bp))
+  , ("Prelude.bvuge" , wordBinRel (bpPack bp) (bpBvuge bp))
+  , ("Prelude.bvugt" , wordBinRel (bpPack bp) (bpBvugt bp))
+{-
+  -- Shifts
+  , ("Prelude.bvShl" , bvShLOp)
+  , ("Prelude.bvShr" , bvShROp)
+  , ("Prelude.bvSShr", bvSShROp)
+-}
+  -- Nat
+  , ("Prelude.Succ", succOp)
+  , ("Prelude.addNat", addNatOp)
+  , ("Prelude.subNat", subNatOp)
+  , ("Prelude.mulNat", mulNatOp)
+  , ("Prelude.minNat", minNatOp)
+  , ("Prelude.maxNat", maxNatOp)
+  , ("Prelude.divModNat", divModNatOp)
+  , ("Prelude.expNat", expNatOp)
+  , ("Prelude.widthNat", widthNatOp)
+  , ("Prelude.natCase", natCaseOp)
+  , ("Prelude.equalNat", equalNatOp (bpBool bp))
+  , ("Prelude.ltNat", ltNatOp (bpBool bp))
+  -- Integers
+  , ("Prelude.intAdd", intBinOp "intAdd" (bpIntAdd bp))
+  , ("Prelude.intSub", intBinOp "intSub" (bpIntSub bp))
+  , ("Prelude.intMul", intBinOp "intMul" (bpIntMul bp))
+  , ("Prelude.intDiv", intBinOp "intDiv" (bpIntDiv bp))
+  , ("Prelude.intMod", intBinOp "intMod" (bpIntMod bp))
+  , ("Prelude.intNeg", intUnOp  "intNeg" (bpIntNeg bp))
+  , ("Prelude.intEq" , intBinCmp "intEq" (bpIntEq bp))
+  , ("Prelude.intLe" , intBinCmp "intLe" (bpIntLe bp))
+  , ("Prelude.intLt" , intBinCmp "intLt" (bpIntLt bp))
+{-
+  --XXX , ("Prelude.intToNat", Prims.intToNatOp)
+  , ("Prelude.natToInt", natToIntOp)
+  , ("Prelude.intToBv" , intToBvOp)
+  , ("Prelude.bvToInt" , bvToIntOp)
+  , ("Prelude.sbvToInt", sbvToIntOp)
+  --XXX , ("Prelude.intMin"  , Prims.intMinOp)
+  --XXX , ("Prelude.intMax"  , Prims.intMaxOp)
+-}
+  , ("Prelude.intMin", intBinOp "intMin" (bpIntMin bp))
+  , ("Prelude.intMax", intBinOp "intMax" (bpIntMax bp))
+  -- Vectors
+  , ("Prelude.gen", genOp)
+  , ("Prelude.atWithDefault", atWithDefaultOp bp)
+  , ("Prelude.upd", updOp bp)
+  , ("Prelude.take", takeOp bp)
+  , ("Prelude.drop", dropOp bp)
+  , ("Prelude.append", appendOp bp)
+  , ("Prelude.join", joinOp bp)
+  , ("Prelude.split", splitOp bp)
+  , ("Prelude.zip", vZipOp (bpUnpack bp))
+  , ("Prelude.foldr", foldrOp (bpUnpack bp))
+  , ("Prelude.rotateL", rotateLOp bp)
+  , ("Prelude.rotateR", rotateROp bp)
+  , ("Prelude.shiftL", shiftLOp bp)
+  , ("Prelude.shiftR", shiftROp bp)
+  , ("Prelude.EmptyVec", emptyVec)
+{-
+  -- Streams
+  , ("Prelude.MkStream", mkStreamOp)
+  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude.bvStreamGet", bvStreamGetOp)
+  -- Miscellaneous
+-}
+  , ("Prelude.coerce", coerceOp)
+  , ("Prelude.bvNat", bvNatOp bp)
+  , ("Prelude.bvToNat", bvToNatOp)
+  , ("Prelude.error", errorOp)
+  , ("Prelude.fix", fixOp)
+  -- Overloaded
+  , ("Prelude.eq", eqOp bp)
+  , ("Prelude.ite", iteOp bp)
+  ]
+
+------------------------------------------------------------
 -- Value accessors and constructors
 
-vNat :: Nat -> Value m b w i e
+vNat :: Nat -> Value l
 vNat n = VNat (fromIntegral n)
 
-natFromValue :: Num a => Value m b w i e -> a
+natFromValue :: Num a => Value l -> a
 natFromValue (VNat n) = fromInteger n
 natFromValue _ = error "natFromValue"
 
-natFun'' :: (Monad m, Show e) => String -> (Nat -> m (Value m b w i e)) -> Value m b w i e
+natFun'' :: (VMonad l, Show (Extra l)) => String -> (Nat -> MValue l) -> Value l
 natFun'' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g v = fail $ "expected Nat (" ++ s ++ "): " ++ show v
 
-natFun' :: Monad m => String -> (Nat -> m (Value m b w i e)) -> Value m b w i e
+natFun' :: VMonad l => String -> (Nat -> MValue l) -> Value l
 natFun' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail $ "expected Nat: " ++ s
 
-natFun :: Monad m => (Nat -> m (Value m b w i e)) -> Value m b w i e
+natFun :: VMonad l => (Nat -> MValue l) -> Value l
 natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"
 
-intFun :: Monad m => String -> (i -> m (Value m b w i e)) -> Value m b w i e
+intFun :: VMonad l => String -> (VInt l -> MValue l) -> Value l
 intFun msg f = strictFun g
   where g (VInt i) = f i
         g _ = fail $ "expected Integer "++ msg
 
-toBool :: Show e => Value m b w i e -> b
+toBool :: Show (Extra l) => Value l -> VBool l
 toBool (VBool b) = b
 toBool x = error $ unwords ["Verifier.SAW.Simulator.toBool", show x]
 
-toWord :: (Monad m, Show e) => (V.Vector b -> w) -> Value m b w i e -> m w
+type Pack l   = Vector (VBool l) -> MWord l
+type Unpack l = VWord l -> EvalM l (Vector (VBool l))
+
+toWord :: (VMonad l, Show (Extra l)) => Pack l -> Value l -> MWord l
 toWord _ (VWord w) = return w
-toWord pack (VVector vv) = liftM pack $ V.mapM (liftM toBool . force) vv
+toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
 toWord _ x = fail $ unwords ["Verifier.SAW.Simulator.toWord", show x]
 
-toBits :: (Monad m, Show e) => (w -> V.Vector b) -> Value m b w i e -> m (V.Vector b)
-toBits unpack (VWord w) = return (unpack w)
+toBits :: (VMonad l, Show (Extra l)) => Unpack l -> Value l ->
+                                                  EvalM l (Vector (VBool l))
+toBits unpack (VWord w) = unpack w
 toBits _ (VVector v) = V.mapM (liftM toBool . force) v
 toBits _ x = fail $ unwords ["Verifier.SAW.Simulator.toBits", show x]
 
-toVector :: (Monad m, Show e) => (w -> V.Vector b)
-         -> Value m b w i e -> V.Vector (Thunk m b w i e)
-toVector _ (VVector v) = v
-toVector unpack (VWord w) = fmap (ready . VBool) (unpack w)
+toVector :: (VMonad l, Show (Extra l)) => Unpack l
+         -> Value l -> EvalM l (Vector (Thunk l))
+toVector _ (VVector v) = return v
+toVector unpack (VWord w) = liftM (fmap (ready . VBool)) (unpack w)
 toVector _ x = fail $ unwords ["Verifier.SAW.Simulator.toVector", show x]
 
-wordFun :: (Monad m, Show e) => (V.Vector b -> w) -> (w -> m (Value m b w i e)) -> Value m b w i e
+wordFun :: (VMonad l, Show (Extra l)) => Pack l -> (VWord l -> MValue l) -> Value l
 wordFun pack f = strictFun (\x -> toWord pack x >>= f)
 
-bitsFun :: (Monad m, Show e) => (w -> V.Vector b)
-        -> (V.Vector b -> m (Value m b w i e)) -> Value m b w i e
+bitsFun :: (VMonad l, Show (Extra l)) =>
+  Unpack l -> (Vector (VBool l) -> MValue l) -> Value l
 bitsFun unpack f = strictFun (\x -> toBits unpack x >>= f)
 
-vectorFun :: (Monad m, Show e) => (w -> V.Vector b)
-          -> (V.Vector (Thunk m b w i e) -> m (Value m b w i e)) -> Value m b w i e
-vectorFun unpack f = strictFun (\x -> f (toVector unpack x))
+vectorFun :: (VMonad l, Show (Extra l)) =>
+  Unpack l -> (Vector (Thunk l) -> MValue l) -> Value l
+vectorFun unpack f = strictFun (\x -> toVector unpack x >>= f)
 
-vecIdx :: a -> V.Vector a -> Int -> a
+vecIdx :: a -> Vector a -> Int -> a
 vecIdx err v n =
   case (V.!?) v n of
     Just a -> a
     Nothing -> err
+
+------------------------------------------------------------
+-- Standard operator types
+
+-- op :: Bool -> Bool -> Bool;
+boolBinOp ::
+  (VMonad l, Show (Extra l)) =>
+  (VBool l -> VBool l -> MBool l) -> Value l
+boolBinOp op =
+  strictFun $ \x -> return $
+  strictFun $ \y -> VBool <$> op (toBool x) (toBool y)
+
+-- op :: (n :: Nat) -> bitvector n -> bitvector n;
+wordUnOp ::
+  (VMonad l, Show (Extra l)) =>
+  Pack l -> (VWord l -> MWord l) -> Value l
+wordUnOp pack op =
+  constFun $
+  strictFun $ \x ->
+  do xw <- toWord pack x
+     VWord <$> op xw
+
+-- op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+wordBinOp ::
+  (VMonad l, Show (Extra l)) =>
+  Pack l -> (VWord l -> VWord l -> MWord l) -> Value l
+wordBinOp pack op =
+  constFun $
+  strictFun $ \x -> return $
+  strictFun $ \y ->
+  do xw <- toWord pack x
+     yw <- toWord pack y
+     VWord <$> op xw yw
+
+-- op :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+wordBinRel ::
+  (VMonad l, Show (Extra l)) =>
+  Pack l -> (VWord l -> VWord l -> MBool l) -> Value l
+wordBinRel pack op =
+  constFun $
+  strictFun $ \x -> return $
+  strictFun $ \y ->
+  do xw <- toWord pack x
+     yw <- toWord pack y
+     VBool <$> op xw yw
 
 ------------------------------------------------------------
 -- Utility functions
@@ -101,7 +349,7 @@ vecIdx err v n =
 -- index, represented as a big-endian list of bits. It does a binary
 -- lookup, using @mux@ as an if-then-else operator. If the index is
 -- greater than @maxValue@, then it returns @valueFn maxValue@.
-selectV :: (b -> a -> a -> a) -> Int -> (Int -> a) -> V.Vector b -> a
+selectV :: (b -> a -> a -> a) -> Int -> (Int -> a) -> Vector b -> a
 selectV mux maxValue valueFn v = impl len 0
   where
     len = V.length v
@@ -113,75 +361,71 @@ selectV mux maxValue valueFn v = impl len 0
 ------------------------------------------------------------
 -- Values for common primitives
 
+-- bvNat :: (n :: Nat) -> Nat -> bitvector n;
+bvNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+bvNatOp bp =
+  natFun'' "bvNatOp1" $ \w -> return $
+  natFun'' "bvNatOp2"  $ \x ->
+  VWord <$> bpBvLit bp (fromIntegral w) (toInteger x) -- FIXME check for overflow on w
+
 -- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
-bvToNatOp :: Monad m => Value m b w i e
+bvToNatOp :: VMonad l => Value l
 bvToNatOp = constFun $ pureFun VToNat
 
 -- coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
-coerceOp :: Monad m => Value m b w i e
+coerceOp :: VMonad l => Value l
 coerceOp =
   constFun $
   constFun $
   constFun $
   VFun force
 
+------------------------------------------------------------
+-- Nat primitives
+
 -- Succ :: Nat -> Nat;
-succOp :: Monad m => Value m b w i e
+succOp :: VMonad l => Value l
 succOp =
   natFun' "Succ" $ \n -> return $
   vNat (succ n)
 
 -- addNat :: Nat -> Nat -> Nat;
-addNatOp :: Monad m => Value m b w i e
+addNatOp :: VMonad l => Value l
 addNatOp =
   natFun' "addNat1" $ \m -> return $
   natFun' "addNat2" $ \n -> return $
   vNat (m + n)
 
 -- subNat :: Nat -> Nat -> Nat;
-subNatOp :: Monad m => Value m b w i e
+subNatOp :: VMonad l => Value l
 subNatOp =
   natFun' "subNat1" $ \m -> return $
   natFun' "subNat2" $ \n -> return $
   vNat (if m < n then 0 else m - n)
 
 -- mulNat :: Nat -> Nat -> Nat;
-mulNatOp :: Monad m => Value m b w i e
+mulNatOp :: VMonad l => Value l
 mulNatOp =
   natFun' "mulNat1" $ \m -> return $
   natFun' "mulNat2" $ \n -> return $
   vNat (m * n)
 
 -- minNat :: Nat -> Nat -> Nat;
-minNatOp :: Monad m => Value m b w i e
+minNatOp :: VMonad l => Value l
 minNatOp =
   natFun' "minNat1" $ \m -> return $
   natFun' "minNat2" $ \n -> return $
   vNat (min m n)
 
 -- maxNat :: Nat -> Nat -> Nat;
-maxNatOp :: Monad m => Value m b w i e
+maxNatOp :: VMonad l => Value l
 maxNatOp =
   natFun' "maxNat1" $ \m -> return $
   natFun' "maxNat2" $ \n -> return $
   vNat (max m n)
 
--- equalNat :: Nat -> Nat -> Bool;
-equalNat :: Monad m => (Bool -> m b) -> Value m b w i e
-equalNat lit =
-  natFun' "equalNat1" $ \m -> return $
-  natFun' "equalNat2" $ \n ->
-  lit (m == n) >>= return . VBool
-
--- equalNat :: Nat -> Nat -> Bool;
-ltNat :: Monad m => (Bool -> m b) -> Value m b w i e
-ltNat lit =
-  natFun' "ltNat1" $ \m -> return $
-  natFun' "ltNat2" $ \n ->
-  lit (m < n) >>= return . VBool
-
 -- divModNat :: Nat -> Nat -> #(Nat, Nat);
-divModNatOp :: Monad m => Value m b w i e
+divModNatOp :: VMonad l => Value l
 divModNatOp =
   natFun' "divModNat1" $ \m -> return $
   natFun' "divModNat2" $ \n -> return $
@@ -189,20 +433,34 @@ divModNatOp =
     vTuple [ready $ vNat q, ready $ vNat r]
 
 -- expNat :: Nat -> Nat -> Nat;
-expNatOp :: Monad m => Value m b w i e
+expNatOp :: VMonad l => Value l
 expNatOp =
   natFun' "expNat1" $ \m -> return $
   natFun' "expNat2" $ \n -> return $
   vNat (m ^ n)
 
 -- widthNat :: Nat -> Nat;
-widthNatOp :: Monad m => Value m b w i e
+widthNatOp :: VMonad l => Value l
 widthNatOp =
   natFun' "widthNat1" $ \n -> return $
   vNat (widthNat n)
 
+-- equalNat :: Nat -> Nat -> Bool;
+equalNatOp :: VMonad l => (Bool -> MBool l) -> Value l
+equalNatOp lit =
+  natFun' "equalNat1" $ \m -> return $
+  natFun' "equalNat2" $ \n ->
+  lit (m == n) >>= return . VBool
+
+-- ltNat :: Nat -> Nat -> Bool;
+ltNatOp :: VMonad l => (Bool -> MBool l) -> Value l
+ltNatOp lit =
+  natFun' "ltNat1" $ \m -> return $
+  natFun' "ltNat2" $ \n ->
+  lit (m < n) >>= return . VBool
+
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
-natCaseOp :: Monad m => Value m b w i e
+natCaseOp :: VMonad l => Value l
 natCaseOp =
   constFun $
   VFun $ \z -> return $
@@ -213,8 +471,10 @@ natCaseOp =
     else do s' <- force s
             apply s' (ready (VNat (fromIntegral n - 1)))
 
+--------------------------------------------------------------------------------
+
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
-genOp :: MonadLazy m => Value m b w i e
+genOp :: VMonadLazy l => Value l
 genOp =
   natFun' "gen1" $ \n -> return $
   constFun $
@@ -223,44 +483,44 @@ genOp =
     liftM VVector $ V.generateM (fromIntegral n) g
 
 -- eq :: (a :: sort 0) -> a -> a -> Bool
-eqOp :: (MonadLazy m, Show e) => Value m b w i e
-     -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
-     -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
-     -> (Integer -> Value m b w i e -> Value m b w i e -> m (Value m b w i e))
-     -> (Value m b w i e -> Value m b w i e -> m (Value m b w i e))
-     -> Value m b w i e
-eqOp trueOp andOp boolOp bvOp intOp =
-  pureFun $ \t -> pureFun $ \v1 -> strictFun $ \v2 -> go t v1 v2
+eqOp :: forall l. (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+eqOp bp =
+  constFun $ pureFun $ \v1 -> strictFun $ \v2 -> VBool <$> go v1 v2
   where
-    go VUnitType VUnit VUnit = return trueOp
-    go (VPairType t1 t2) (VPair x1 x2) (VPair y1 y2) = do
-      b1 <- go' t1 x1 y1
-      b2 <- go' t2 x2 y2
-      andOp b1 b2
-    go VEmptyType VEmpty VEmpty = return trueOp
-    go (VFieldType f t1 t2) (VField xf x1 x2) (VField yf y1 y2)
-      | f == xf && f == yf = do
-        b1 <- go' t1 x1 y1
-        b2 <- go t2 x2 y2
-        andOp b1 b2
-    go (VDataType "Prelude.Vec" [VNat n, VDataType "Prelude.Bool" []]) v1 v2 = bvOp n v1 v2
-    go (VDataType "Prelude.Vec" [_, t']) (VVector vv1) (VVector vv2) = do
-      bs <- sequence $ zipWith (go' t') (V.toList vv1) (V.toList vv2)
-      foldM andOp trueOp bs
-    go (VDataType "Prelude.Bool" []) v1 v2 = boolOp v1 v2
-    go (VDataType "Prelude.Integer" []) v1 v2 = intOp v1 v2
-    go t _ _ = fail $ "binary: invalid arguments: " ++ show t
+    go :: Value l -> Value l -> MBool l
+    go VUnit VUnit = return (bpTrue bp)
+    go (VPair x1 x2) (VPair y1 y2) =
+      do b1 <- go' x1 y1
+         b2 <- go' x2 y2
+         bpAnd bp b1 b2
+    go VEmpty VEmpty = return (bpTrue bp)
+    go (VField xf x1 x2) (VField yf y1 y2) | xf == yf =
+      do b1 <- go' x1 y1
+         b2 <- go x2 y2
+         bpAnd bp b1 b2
+    go (VWord w1) (VWord w2) = bpBvEq bp w1 w2
+    go (VVector v1) (VVector v2) =
+      do bs <- sequence $ zipWith go' (V.toList v1) (V.toList v2)
+         foldM (bpAnd bp) (bpTrue bp) bs
+    go x1 (VVector v2) =
+      do v1 <- toVector (bpUnpack bp) x1
+         go (VVector v1) (VVector v2)
+    go (VVector v1) x2 =
+      do v2 <- toVector (bpUnpack bp) x2
+         go (VVector v1) (VVector v2)
+    go (VBool b1) (VBool b2) = bpBoolEq bp b1 b2
+    go (VInt i1) (VInt i2) = bpIntEq bp i1 i2
+    go x1 x2 = fail $ "eq: invalid arguments: " ++ show (x1, x2)
 
-    go' t thunk1 thunk2 = do
-      v1 <- force thunk1
-      v2 <- force thunk2
-      go t v1 v2
+    go' :: Thunk l -> Thunk l -> MBool l
+    go' thunk1 thunk2 =
+      do v1 <- force thunk1
+         v2 <- force thunk2
+         go v1 v2
 
 -- atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
-atWithDefaultOp :: (Monad m, Show e) => (w -> V.Vector b) -> (w -> Int -> b)
-     -> (b -> m (Value m b w i e) -> m (Value m b w i e) -> m (Value m b w i e))
-     -> Value m b w i e
-atWithDefaultOp unpack bvOp mux =
+atWithDefaultOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+atWithDefaultOp bp =
   natFun $ \n -> return $
   constFun $
   VFun $ \d -> return $
@@ -270,75 +530,96 @@ atWithDefaultOp unpack bvOp mux =
       VNat i ->
         case x of
           VVector xv -> force (vecIdx d xv (fromIntegral i))
-          VWord xw -> return $ VBool $ bvOp xw (fromIntegral i)
+          VWord xw -> VBool <$> bpBvAt bp xw (fromIntegral i)
           _ -> fail "atOp: expected vector"
       VToNat i -> do
-        iv <- toBits unpack i
+        iv <- toBits (bpUnpack bp) i
         case x of
           VVector xv ->
-            selectV mux (fromIntegral n - 1) (force . vecIdx d xv) iv
+            selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv
           VWord xw ->
-            selectV mux (fromIntegral n - 1) (return . VBool . bvOp xw) iv
+            selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv
           _ -> fail "atOp: expected vector"
       _ -> fail $ "atOp: expected Nat, got " ++ show idx
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-updOp :: (MonadLazy m, Show e) => (w -> V.Vector b)
-      -> (w -> w -> m b) -> (Int -> Integer -> w) -> (w -> Int)
-      -> (b -> m (Value m b w i e) -> m (Value m b w i e) -> m (Value m b w i e))
-      -> Value m b w i e
-updOp unpack eq lit bitsize mux =
+updOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+updOp bp =
   natFun $ \n -> return $
   constFun $
-  vectorFun unpack $ \xv -> return $
+  vectorFun (bpUnpack bp) $ \xv -> return $
   strictFun $ \idx -> return $
   VFun $ \y ->
     case idx of
-      VNat i -> return (VVector (xv V.// [(fromIntegral i, y)]))
-      VToNat (VWord w) -> do
-        let f i = do b <- eq w (lit (bitsize w) (toInteger i))
-                     err <- delay (fail "updOp")
-                     delay (mux b (force y) (force (vecIdx err xv i)))
-        yv <- V.generateM (V.length xv) f
-        return (VVector yv)
-      VToNat val -> do
-        let update i = return (VVector (xv V.// [(i, y)]))
-        iv <- toBits unpack val
-        selectV mux (fromIntegral n - 1) update iv
+      VNat i
+        | i < toInteger (V.length xv) -> return (VVector (xv V.// [(fromInteger i, y)]))
+        | otherwise                   -> return (VVector xv)
+      VToNat (VWord w) ->
+        do let wsize = bpBvSize bp w
+               f i = do b <- bpBvEq bp w =<< bpBvLit bp wsize (toInteger i)
+                        if wsize < 64 && toInteger i >= 2 ^ wsize
+                          then return (xv V.! i)
+                          else delay (lazyMuxValue bp b (force y) (force (xv V.! i)))
+           yv <- V.generateM (V.length xv) f
+           return (VVector yv)
+      VToNat (VVector iv) ->
+        do let update i = return (VVector (xv V.// [(i, y)]))
+           iv' <- V.mapM (liftM toBool . force) iv
+           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv'
       _ -> fail $ "updOp: expected Nat, got " ++ show idx
 
-
-
 -- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
-emptyVec :: Monad m => Value m b w i e
+emptyVec :: VMonad l => Value l
 emptyVec = constFun $ VVector V.empty
 
+-- take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
+takeOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+takeOp bp =
+  constFun $
+  natFun $ \(fromIntegral -> m) -> return $
+  constFun $
+  strictFun $ \v ->
+    case v of
+      VVector vv -> return (VVector (V.take m vv))
+      VWord vw -> VWord <$> bpBvSlice bp 0 m vw
+      _ -> error $ "takeOp: " ++ show v
+
+-- drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
+dropOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+dropOp bp =
+  constFun $
+  natFun $ \(fromIntegral -> m) -> return $
+  constFun $
+  strictFun $ \v ->
+  case v of
+    VVector vv -> return (VVector (V.drop m vv))
+    VWord vw -> VWord <$> bpBvSlice bp m (bpBvSize bp vw - m) vw
+    _ -> error $ "dropOp: " ++ show v
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-appendOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w i e
-appendOp unpack app =
+appendOp :: VMonad l => BasePrims l -> Value l
+appendOp bp =
   constFun $
   constFun $
   constFun $
   strictFun $ \xs -> return $
-  strictFun $ \ys -> return $
-  appV unpack app xs ys
+  strictFun $ \ys ->
+  appV bp xs ys
 
-appV :: Monad m => (w -> V.Vector b) -> (w -> w -> w)
-     -> Value m b w i e -> Value m b w i e -> Value m b w i e
-appV unpack app xs ys =
+appV :: VMonad l => BasePrims l -> Value l -> Value l -> MValue l
+appV bp xs ys =
   case (xs, ys) of
-    (VVector xv, _) | V.null xv -> ys
-    (_, VVector yv) | V.null yv -> xs
-    (VVector xv, VVector yv) -> VVector ((V.++) xv yv)
-    (VVector xv, VWord yw) -> VVector ((V.++) xv (fmap (ready . VBool) (unpack yw)))
-    (VWord xw, VVector yv) -> VVector ((V.++) (fmap (ready . VBool) (unpack xw)) yv)
-    (VWord xw, VWord yw) -> VWord (app xw yw)
-    _ -> error "Verifier.SAW.Simulator.Prims.appendOp"
+    (VVector xv, _) | V.null xv -> return ys
+    (_, VVector yv) | V.null yv -> return xs
+    (VWord xw, VWord yw) -> VWord <$> bpBvJoin bp xw yw
+    (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
+    (VVector xv, VWord yw) -> liftM (\yv -> VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw)
+    (VWord xw, VVector yv) -> liftM (\xv -> VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw)
+    _ -> fail "Verifier.SAW.Simulator.Prims.appendOp"
 
 -- join  :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
-joinOp :: Monad m => (w -> V.Vector b) -> (w -> w -> w) -> Value m b w i e
-joinOp unpack app =
+joinOp :: VMonad l => BasePrims l -> Value l
+joinOp bp =
   constFun $
   constFun $
   constFun $
@@ -346,89 +627,416 @@ joinOp unpack app =
   case x of
     VVector xv -> do
       vv <- V.mapM force xv
-      return (V.foldr (appV unpack app) (VVector V.empty) vv)
+      V.foldM (appV bp) (VVector V.empty) vv
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
 
+-- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+splitOp :: (VMonad l) => BasePrims l -> Value l
+splitOp bp =
+  natFun $ \(fromIntegral -> m) -> return $
+  natFun $ \(fromIntegral -> n) -> return $
+  constFun $
+  strictFun $ \x ->
+  case x of
+    VVector xv ->
+      let f i = ready (VVector (V.slice (i*n) n xv))
+      in return (VVector (V.generate m f))
+    VWord xw ->
+      let f i = (ready . VWord) <$> bpBvSlice bp (i*n) n xw
+      in VVector <$> V.generateM m f
+    _ -> fail "Verifier.SAW.Simulator.SBV.splitOp"
 
-intUnOp :: Monad m => String -> (i -> i) -> Value m b w i e
+-- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+vZipOp :: (VMonadLazy l, Show (Extra l)) => Unpack l -> Value l
+vZipOp unpack =
+  constFun $
+  constFun $
+  constFun $
+  constFun $
+  strictFun $ \x -> return $
+  strictFun $ \y ->
+  do xv <- toVector unpack x
+     yv <- toVector unpack y
+     let pair a b = ready (vTuple [a, b])
+     return (VVector (V.zipWith pair xv yv))
+
+------------------------------------------------------------
+-- Shifts and Rotates
+
+-- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
+shifter :: Monad m => (b -> a -> a -> m a) -> (a -> Integer -> m a) -> a -> [b] -> m a
+shifter mux op = go
+  where
+    go x [] = return x
+    go x (b : bs) = do
+      x' <- op x (2 ^ length bs)
+      y <- mux b x' x
+      go y bs
+
+-- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: forall l.
+  (VMonadLazy l, Show (Extra l)) =>
+  BasePrims l ->
+  (Thunk l -> Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
+  (VBool l -> VWord l -> Integer -> MWord l) ->
+  (VBool l -> VWord l -> VWord l -> MWord l) ->
+  Value l
+shiftOp bp vecOp wordIntOp wordOp =
+  natFun $ \n -> return $
+  constFun $
+  VFun $ \z -> return $
+  strictFun $ \xs -> return $
+  strictFun $ \y ->
+    case y of
+      VNat i ->
+        case xs of
+          VVector xv -> return $ VVector (vecOp z xv i)
+          VWord xw -> do
+            zb <- toBool <$> force z
+            VWord <$> wordIntOp zb xw (min i (toInteger n))
+          _ -> error $ "shiftOp: " ++ show xs
+      VToNat (VVector iv) -> do
+        bs <- V.toList <$> traverse (fmap toBool . force) iv
+        case xs of
+          VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
+          VWord xw -> do
+            zb <- toBool <$> force z
+            VWord <$> shifter (bpMuxWord bp) (wordIntOp zb) xw bs
+          _ -> error $ "shiftOp: " ++ show xs
+      VToNat (VWord iw) ->
+        case xs of
+          VVector xv -> do
+            bs <- V.toList <$> bpUnpack bp iw
+            VVector <$> shifter muxVector (\v i -> return (vecOp z v i)) xv bs
+          VWord xw -> do
+            zb <- toBool <$> force z
+            VWord <$> wordOp zb xw iw
+          _ -> error $ "shiftOp: " ++ show xs
+      _ -> error $ "shiftOp: " ++ show y
+  where
+    muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    muxVector b v1 v2 = toVector (bpUnpack bp) =<< muxVal b (VVector v1) (VVector v2)
+
+    muxVal :: VBool l -> Value l -> Value l -> MValue l
+    muxVal = muxValue bp
+
+-- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+rotateOp :: forall l.
+  (VMonadLazy l, Show (Extra l)) =>
+  BasePrims l ->
+  (Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
+  (VWord l -> Integer -> MWord l) ->
+  (VWord l -> VWord l -> MWord l) ->
+  Value l
+rotateOp bp vecOp wordIntOp wordOp =
+  constFun $
+  constFun $
+  strictFun $ \xs -> return $
+  strictFun $ \y ->
+    case y of
+      VNat i ->
+        case xs of
+          VVector xv -> return $ VVector (vecOp xv i)
+          VWord xw -> VWord <$> wordIntOp xw i
+          _ -> error $ "rotateOp: " ++ show xs
+      VToNat (VVector iv) -> do
+        bs <- V.toList <$> traverse (fmap toBool . force) iv
+        case xs of
+          VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
+          VWord xw -> VWord <$> shifter (bpMuxWord bp) wordIntOp xw bs
+          _ -> error $ "rotateOp: " ++ show xs
+      VToNat (VWord iw) ->
+        case xs of
+          VVector xv -> do
+            bs <- V.toList <$> bpUnpack bp iw
+            VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
+          VWord xw -> do
+            VWord <$> wordOp xw iw
+          _ -> error $ "rotateOp: " ++ show xs
+      _ -> error $ "rotateOp: " ++ show y
+  where
+    muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    muxVector b v1 v2 = toVector (bpUnpack bp) =<< muxVal b (VVector v1) (VVector v2)
+
+    muxVal :: VBool l -> Value l -> Value l -> MValue l
+    muxVal = muxValue bp
+
+vRotateL :: Vector a -> Integer -> Vector a
+vRotateL xs i
+  | V.null xs = xs
+  | otherwise = (V.++) (V.drop j xs) (V.take j xs)
+  where j = fromInteger (i `mod` toInteger (V.length xs))
+
+vRotateR :: Vector a -> Integer -> Vector a
+vRotateR xs i = vRotateL xs (- i)
+
+vShiftL :: a -> Vector a -> Integer -> Vector a
+vShiftL x xs i = (V.++) (V.drop j xs) (V.replicate j x)
+  where j = fromInteger (i `min` toInteger (V.length xs))
+
+vShiftR :: a -> Vector a -> Integer -> Vector a
+vShiftR x xs i = (V.++) (V.replicate j x) (V.take (V.length xs - j) xs)
+  where j = fromInteger (i `min` toInteger (V.length xs))
+
+rotateLOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+rotateLOp bp = rotateOp bp vRotateL (bpBvRolInt bp) (bpBvRol bp)
+
+rotateROp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+rotateROp bp = rotateOp bp vRotateR (bpBvRorInt bp) (bpBvRor bp)
+
+shiftLOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+shiftLOp bp = shiftOp bp vShiftL (bpBvShlInt bp) (bpBvShl bp)
+
+shiftROp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+shiftROp bp = shiftOp bp vShiftR (bpBvShrInt bp) (bpBvShr bp)
+
+{-
+-- rotate{L,R} :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+shiftValue :: forall l.
+  (VMonadLazy l, Show (Extra l)) =>
+  BasePrims l ->
+  (Vector (Thunk l) -> Integer -> Vector (Thunk l)) ->
+  (VWord l -> Integer -> MWord l) ->
+  (VWord l -> VWord l -> MWord l) ->
+  Value l -> Value l -> MValue l
+shiftValue bp vecOp wordIntOp wordOp xs y =
+  case y of
+    VNat i ->
+      case xs of
+        VVector xv -> return $ VVector (vecOp xv i)
+        VWord xw -> VWord <$> wordIntOp xw i
+        _ -> fail $ "shift/rotate: " ++ show xs
+    VToNat (VVector iv) ->
+      do bs <- V.toList <$> traverse (fmap toBool . force) iv
+         case xs of
+           VVector xv -> VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
+           VWord xw -> VWord <$> shifter (bpMuxWord bp) wordIntOp xw bs
+           _ -> fail $ "shift/rotate: " ++ show xs
+    VToNat (VWord iw) ->
+      case xs of
+        VVector xv ->
+          do bs <- V.toList <$> bpUnpack bp iw
+             VVector <$> shifter muxVector (\v i -> return (vecOp v i)) xv bs
+        VWord xw ->
+          do VWord <$> wordOp xw iw
+        _ -> fail $ "shift/rotate: " ++ show xs
+    _ -> fail $ "shift/rotate: " ++ show y
+  where
+    muxVector :: VBool l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
+    muxVector b v1 v2 = toVector (bpUnpack bp) =<< muxVal b (VVector v1) (VVector v2)
+
+    muxVal :: VBool l -> Value l -> Value l -> MValue l
+    muxVal = muxValue bp
+-}
+
+{-------------
+
+-- Concrete --
+
+-- shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftROp :: CValue
+shiftROp =
+  constFun $
+  constFun $
+  VFun $ \x -> return $
+  pureFun $ \xs ->
+  Prims.natFun $ \i -> return $
+    case xs of
+      VVector xv -> VVector (vShiftR x xv (fromIntegral i))
+      VWord w -> vWord (bvShiftR c w (fromIntegral i))
+        where c = toBool (runIdentity (force x))
+      _ -> error $ "Verifier.SAW.Simulator.Concrete.shiftROp: " ++ show xs
+
+
+-- SBV --
+
+-- shiftR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
+shiftROp :: SValue
+shiftROp = shiftOp vShiftR undefined shr
+  where shr b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
+
+-- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: (SThunk -> Vector SThunk -> Integer -> Vector SThunk)
+        -> (SBool -> SWord -> Integer -> SWord)
+        -> (SBool -> SWord -> SWord -> SWord)
+        -> SValue
+shiftOp vecOp wordOp svOp =
+  constFun $
+  constFun $
+  VFun $ \z -> return $
+  strictFun $ \xs -> return $
+  strictFun $ \y ->
+    case y of
+      VNat i ->
+        case xs of
+          VVector xv -> return $ VVector (vecOp z xv i)
+          VWord xw -> do
+            zv <- toBool <$> force z
+            let i' = fromInteger (i `min` toInteger (intSizeOf xw))
+            return $ vWord (wordOp zv xw i')
+          _ -> error $ "shiftOp: " ++ show xs
+      VToNat (VVector iv) -> do
+        bs <- V.toList <$> traverse (fmap toBool . force) iv
+        case xs of
+          VVector xv -> VVector <$> shifter muxVector (vecOp z) xv bs
+          VWord xw -> do
+            zv <- toBool <$> force z
+            vWord <$> shifter muxWord (wordOp zv) xw bs
+          _ -> error $ "shiftOp: " ++ show xs
+      VToNat (VWord iw) ->
+        case xs of
+          VVector xv -> do
+            bs <- V.toList <$> svUnpack iw
+            VVector <$> shifter muxVector (vecOp z) xv bs
+          VWord xw -> do
+            zv <- toBool <$> force z
+            return $ vWord (svOp zv xw iw)
+          _ -> error $ "shiftOp: " ++ show xs
+      _ -> error $ "shiftOp: " ++ show y
+
+
+-- RME --
+
+-- | op :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: (RValue -> Vector RValue -> Integer -> Vector RValue) -> RValue
+shiftOp op =
+  constFun $
+  constFun $
+  pureFun $ \z ->
+  pureFun $ \(toVector -> x) ->
+  pureFun $ \y ->
+  case y of
+    VNat n   -> vVector (op z x n)
+    VToNat v -> vVector (genShift (V.zipWith . muxRValue) (op z) x (toWord v))
+    _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
+
+-- BitBlast --
+
+-- shift{L,R} :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+shiftOp :: AIG.IsAIG l g => g s
+        -> (BThunk (l s) -> Vector (BThunk (l s)) -> Int -> Vector (BThunk (l s)))
+        -> (l s -> AIG.BV (l s) -> Int -> LitVector (l s))
+        -> BValue (l s)
+shiftOp be vecOp wordOp =
+  constFun $
+  constFun $
+  VFun $ \x -> return $
+  strictFun $ \xs -> return $
+  strictFun $ \y -> do
+    (n, f) <- case xs of
+                VVector xv -> return (V.length xv, VVector . vecOp x xv)
+                VWord xlv -> do l <- toBool <$> force x
+                                return (AIG.length xlv, VWord . wordOp l xlv)
+                _ -> fail $ "Verifier.SAW.Simulator.BitBlast.shiftOp: " ++ show xs
+    case y of
+      VNat i   -> return (f (fromInteger (i `min` toInteger n)))
+      VToNat v -> do
+        ilv <- toWord v
+        AIG.muxInteger (lazyMux be (muxBVal be)) n ilv (return . f)
+      _        -> fail $ "Verifier.SAW.Simulator.BitBlast.shiftOp: " ++ show y
+
+---------------}
+
+-- foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+foldrOp :: (VMonadLazy l, Show (Extra l)) => Unpack l -> Value l
+foldrOp unpack =
+  constFun $
+  constFun $
+  constFun $
+  strictFun $ \f -> return $
+  VFun $ \z -> return $
+  strictFun $ \xs -> do
+    let g x m = do fx <- apply f x
+                   y <- delay m
+                   apply fx y
+    xv <- toVector unpack xs
+    V.foldr g (force z) xv
+
+-- op :: Integer -> Integer;
+intUnOp :: VMonad l => String -> (VInt l -> MInt l) -> Value l
 intUnOp nm f =
-  intFun nm $ \x -> return $
-    VInt (f x)
+  intFun nm $ \x ->
+  VInt <$> f x
 
-intBinOp :: Monad m => String -> (i -> i -> i) -> Value m b w i e
+-- op :: Integer -> Integer -> Integer;
+intBinOp :: VMonad l => String -> (VInt l -> VInt l -> MInt l) -> Value l
 intBinOp nm f =
   intFun (nm++" x") $ \x -> return $
-  intFun (nm++" y") $ \y -> return $
-    VInt (f x y)
+  intFun (nm++" y") $ \y ->
+  VInt <$> f x y
 
-intBinCmp :: Monad m => String -> (i -> i -> a) -> (a -> b) -> Value m b w i e
-intBinCmp nm f boolLit =
+-- op :: Integer -> Integer -> Bool;
+intBinCmp :: VMonad l =>
+  String -> (VInt l -> VInt l -> MBool l) -> Value l
+intBinCmp nm f =
   intFun (nm++" x") $ \x -> return $
-  intFun (nm++" y") $ \y -> return $
-    VBool $ boolLit (f x y)
+  intFun (nm++" y") $ \y ->
+  VBool <$> f x y
 
+{-
 -- primitive intAdd :: Integer -> Integer -> Integer;
-intAddOp :: Monad m => Value m b w Integer e
+intAddOp :: (VMonad l, VInt l ~ Integer) => Value l
 intAddOp = intBinOp "intAdd" (+)
 
 -- primitive intSub :: Integer -> Integer -> Integer;
-intSubOp :: Monad m => Value m b w Integer e
+intSubOp :: (VMonad l, VInt l ~ Integer) => Value l
 intSubOp = intBinOp "intSub" (-)
 
 -- primitive intMul :: Integer -> Integer -> Integer;
-intMulOp :: Monad m => Value m b w Integer e
+intMulOp :: (VMonad l, VInt l ~ Integer) => Value l
 intMulOp = intBinOp "intMul" (*)
 
 -- primitive intDiv :: Integer -> Integer -> Integer;
-intDivOp :: Monad m => Value m b w Integer e
+intDivOp :: (VMonad l, VInt l ~ Integer) => Value l
 intDivOp = intBinOp "intDiv" div
 
 -- primitive intMod :: Integer -> Integer -> Integer;
-intModOp :: Monad m => Value m b w Integer e
+intModOp :: (VMonad l, VInt l ~ Integer) => Value l
 intModOp = intBinOp "intMod" mod
 
 -- primitive intMin :: Integer -> Integer -> Integer;
-intMinOp :: Monad m => Value m b w Integer e
+intMinOp :: (VMonad l, VInt l ~ Integer) => Value l
 intMinOp = intBinOp "intMin" min
 
 -- primitive intMax :: Integer -> Integer -> Integer;
-intMaxOp :: Monad m => Value m b w Integer e
+intMaxOp :: (VMonad l, VInt l ~ Integer) => Value l
 intMaxOp = intBinOp "intMax" max
 
 -- primitive intNeg :: Integer -> Integer;
-intNegOp :: Monad m => Value m b w Integer e
+intNegOp :: (VMonad l, VInt l ~ Integer) => Value l
 intNegOp = intUnOp "intNeg x" negate
 
 -- primitive intEq  :: Integer -> Integer -> Bool;
-intEqOp :: Monad m => (Bool -> b) -> Value m b w Integer e
+intEqOp :: (VMonad l, VInt l ~ Integer) => (Bool -> VBool l) -> Value l
 intEqOp = intBinCmp "intEq" (==)
 
 -- primitive intLe  :: Integer -> Integer -> Bool;
-intLeOp :: Monad m => (Bool -> b) -> Value m b w Integer e
+intLeOp :: (VMonad l, VInt l ~ Integer) => (Bool -> VBool l) -> Value l
 intLeOp = intBinCmp "intLe" (<=)
 
 -- primitive intLt  :: Integer -> Integer -> Bool;
-intLtOp :: Monad m => (Bool -> b) -> Value m b w Integer e
+intLtOp :: (VMonad l, VInt l ~ Integer) => (Bool -> VBool l) -> Value l
 intLtOp = intBinCmp "intLt" (<)
+-}
 
 -- primitive intToNat :: Integer -> Nat;
-intToNatOp :: Monad m => Value m b w Integer e
+intToNatOp :: (VMonad l, VInt l ~ Integer) => Value l
 intToNatOp =
   intFun "intToNat" $ \x -> return $!
     if x >= 0 then VNat x else VNat 0
 
 -- primitive natToInt :: Nat -> Integer;
-natToIntOp :: Monad m => Value m b w Integer e
+natToIntOp :: (VMonad l, VInt l ~ Integer) => Value l
 natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (fromIntegral x)
 
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
-bvLg2Op :: Monad m => (Value m b w i e -> m w) -> (w -> m w) -> Value m b w i e
+bvLg2Op :: VMonad l => (Value l -> MWord l) -> (VWord l -> MWord l) -> Value l
 bvLg2Op asWord wordLg2 =
   natFun' "bvLg2 1" $ \_n -> return $
   strictFun $ \w -> (return . VWord) =<< (wordLg2 =<< asWord w)
 
 -- primitive error :: (a :: sort 0) -> String -> a;
-errorOp :: Monad m => Value m b w i e
+errorOp :: VMonad l => Value l
 errorOp =
   constFun $
   strictFun $ \x ->
@@ -436,16 +1044,34 @@ errorOp =
     VString s -> fail s
     _ -> fail "unknown error"
 
-muxValue :: forall m b w i e. (MonadLazy m, Applicative m, Show e) =>
-            (w -> V.Vector b)
-         -> (b -> b -> b -> m b)
-         -> (b -> w -> w -> m w)
-         -> (b -> i -> i -> m i)
-         -> (b -> e -> e -> m e)
-         -> b -> Value m b w i e -> Value m b w i e -> m (Value m b w i e)
-muxValue unpack bool word int extra b = value
+------------------------------------------------------------
+-- Conditionals
+
+iteOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
+iteOp bp =
+  constFun $
+  strictFun $ \b -> return $
+  VFun $ \x -> return $
+  VFun $ \y -> lazyMuxValue bp (toBool b) (force x) (force y)
+
+lazyMuxValue ::
+  (VMonadLazy l, Show (Extra l)) =>
+  BasePrims l -> VBool l -> MValue l -> MValue l -> MValue l
+lazyMuxValue bp b x y =
+  case bpAsBool bp b of
+    Just True  -> x
+    Just False -> y
+    Nothing ->
+      do x' <- x
+         y' <- y
+         muxValue bp b x' y'
+
+muxValue :: forall l.
+  (VMonadLazy l, Show (Extra l)) =>
+  BasePrims l -> VBool l -> Value l -> Value l -> MValue l
+muxValue bp b = value
   where
-    value :: Value m b w i e -> Value m b w i e -> m (Value m b w i e)
+    value :: Value l -> Value l -> MValue l
     value (VFun f)          (VFun g)          = return $ VFun $ \a -> do
                                                   x <- f a
                                                   y <- g a
@@ -457,31 +1083,31 @@ muxValue unpack bool word int extra b = value
                                               = VField xf <$> thunk x1 y1 <*> value x2 y2
     value (VCtorApp i xv)   (VCtorApp j yv)   | i == j = VCtorApp i <$> thunks xv yv
     value (VVector xv)      (VVector yv)      = VVector <$> thunks xv yv
-    value (VBool x)         (VBool y)         = VBool <$> bool b x y
-    value (VWord x)         (VWord y)         = VWord <$> word b x y
-    value (VInt x)          (VInt y)          = VInt <$> int b x y
+    value (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
+    value (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
+    value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
     value (VNat m)          (VNat n)          | m == n = return $ VNat m
     value (VString x)       (VString y)       | x == y = return $ VString x
     value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
     value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
     value VType             VType             = return VType
-    value (VExtra x)        (VExtra y)        = VExtra <$> extra b x y
-    value x@(VWord _)       y                 = value (VVector (toVector unpack x)) y
-    value x                 y@(VWord _)       = value x (VVector (toVector unpack y))
+    value (VExtra x)        (VExtra y)        = VExtra <$> bpMuxExtra bp b x y
+    value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
+    value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
     value x                 y                 =
       fail $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
-    thunks :: V.Vector (Thunk m b w i e) -> V.Vector (Thunk m b w i e) -> m (V.Vector (Thunk m b w i e))
+    thunks :: Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
     thunks xv yv
       | V.length xv == V.length yv = V.zipWithM thunk xv yv
       | otherwise                  = fail "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments"
 
-    thunk :: Thunk m b w i e -> Thunk m b w i e -> m (Thunk m b w i e)
+    thunk :: Thunk l -> Thunk l -> EvalM l (Thunk l)
     thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'
 
 -- fix :: (a :: sort 0) -> (a -> a) -> a;
-fixOp :: (MonadLazy m, MonadFix m) => Value m b w i e
+fixOp :: (VMonadLazy l, MonadFix (EvalM l)) => Value l
 fixOp =
   constFun $
   strictFun $ \f ->

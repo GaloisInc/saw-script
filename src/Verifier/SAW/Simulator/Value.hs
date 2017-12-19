@@ -1,5 +1,10 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}  -- For `Show` instance, it's OK.
+{-# LANGUAGE EmptyDataDecls #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Value
@@ -32,43 +37,84 @@ import Verifier.SAW.Simulator.MonadLazy
 ------------------------------------------------------------
 -- Values and Thunks
 
-data Value m b w i e
-  = VFun !(Thunk m b w i e -> m (Value m b w i e))
+{- | The type of values.
+Values are parameterized by the /name/ of an instantiation.
+The concrete parameters to use are computed from the name using
+a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
+data Value l
+  = VFun !(Thunk l -> MValue l)
   | VUnit
-  | VPair (Thunk m b w i e) (Thunk m b w i e) -- TODO: should second component be strict?
+  | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VEmpty
-  | VField FieldName (Thunk m b w i e) !(Value m b w i e)
-  | VCtorApp !Ident !(Vector (Thunk m b w i e))
-  | VVector !(Vector (Thunk m b w i e))
-  | VBool b
-  | VWord w
-  | VToNat (Value m b w i e)
+  | VField FieldName (Thunk l) !(Value l)
+  | VCtorApp !Ident !(Vector (Thunk l))
+  | VVector !(Vector (Thunk l))
+  | VBool (VBool l)
+  | VWord (VWord l)
+  | VToNat (Value l)
   | VNat !Integer
-  | VInt i
+  | VInt (VInt l)
   | VString !String
   | VFloat !Float
   | VDouble !Double
-  | VPiType !(Value m b w i e) !(Thunk m b w i e -> m (Value m b w i e))
+  | VPiType !(Value l) !(Thunk l -> MValue l)
   | VUnitType
-  | VPairType (Value m b w i e) (Value m b w i e)
+  | VPairType (Value l) (Value l)
   | VEmptyType
-  | VFieldType FieldName !(Value m b w i e) !(Value m b w i e)
-  | VDataType !Ident [Value m b w i e]
+  | VFieldType FieldName !(Value l) !(Value l)
+  | VDataType !Ident [Value l]
   | VType -- ^ Other unknown type
-  | VExtra e
+  | VExtra (Extra l)
 
-type Thunk m b w i e = Lazy m (Value m b w i e)
+type Thunk l = Lazy (EvalM l) (Value l)
 
-strictFun :: Monad m => (Value m b w i e -> m (Value m b w i e)) -> Value m b w i e
+type family EvalM l :: * -> * -- ^ Evaluation monad for value instantiation 'l'
+type family VBool l :: *      -- ^ Booleans for value instantiation 'l'
+type family VWord l :: *      -- ^ Words for value instantiation 'l'
+type family VInt  l :: *      -- ^ Integers for value instantiation 'l'
+type family Extra l :: *      -- ^ Additional constructors for instantiation 'l'
+
+-- | Short-hand for a monadic value.
+type MValue l     = EvalM l (Value l)
+
+-- | Short-hand for a monadic boolean.
+type MBool  l     = EvalM l (VBool l)
+
+-- | Short-hand for a monadic word.
+type MWord l      = EvalM l (VWord l)
+
+-- | Short-hand for a monadic integer.
+type MInt l       = EvalM l (VInt  l)
+
+-- | Short hand to specify that the evaluation monad is a monad (very common)
+type VMonad l     = Monad (EvalM l)
+
+-- | Short hand to specify that the evaluation monad is a lazy monad.
+type VMonadLazy l = MonadLazy (EvalM l)
+
+
+
+
+-- | Language instantiations with a specific monad.
+data WithM (m :: * -> *) l
+type instance EvalM (WithM m l) = m
+type instance VBool (WithM m l) = VBool l
+type instance VWord (WithM m l) = VWord l
+type instance VInt  (WithM m l) = VInt l
+type instance Extra (WithM m l) = Extra l
+
+--------------------------------------------------------------------------------
+
+strictFun :: VMonad l => (Value l -> MValue l) -> Value l
 strictFun f = VFun (\x -> force x >>= f)
 
-pureFun :: Monad m => (Value m b w i e -> Value m b w i e) -> Value m b w i e
+pureFun :: VMonad l => (Value l -> Value l) -> Value l
 pureFun f = VFun (\x -> liftM f (force x))
 
-constFun :: Monad m => Value m b w i e -> Value m b w i e
+constFun :: VMonad l => Value l -> Value l
 constFun x = VFun (\_ -> return x)
 
-instance Show e => Show (Value m b w i e) where
+instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
       VFun {}        -> showString "<<fun>>"
@@ -110,38 +156,39 @@ instance Show Nil where
 ------------------------------------------------------------
 -- Basic operations on values
 
-vTuple :: Monad m => [Thunk m b w i e] -> Value m b w i e
+vTuple :: VMonad l => [Thunk l] -> Value l
 vTuple [] = VUnit
 vTuple (x : xs) = VPair x (ready (vTuple xs))
 
-vTupleType :: Monad m => [Value m b w i e] -> Value m b w i e
+vTupleType :: VMonad l => [Value l] -> Value l
 vTupleType [] = VUnitType
 vTupleType (x : xs) = VPairType x (vTupleType xs)
 
-valPairLeft :: (Monad m, Show e) => Value m b w i e -> m (Value m b w i e)
+valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
 valPairLeft v = fail $ "valPairLeft: Not a pair value: " ++ show v
 
-valPairRight :: (Monad m, Show e) => Value m b w i e -> m (Value m b w i e)
+valPairRight :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairRight (VPair _ t2) = force t2
 valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
 
-vRecord :: Map FieldName (Thunk m b w i e) -> Value m b w i e
+vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = foldr (uncurry VField) VEmpty (Map.assocs m)
 
-valRecordSelect :: (Monad m, Show e) => FieldName -> Value m b w i e -> m (Value m b w i e)
+valRecordSelect :: (VMonad l, Show (Extra l)) =>
+  FieldName -> Value l -> MValue l
 valRecordSelect k (VField k' x r) = if k == k' then force x else valRecordSelect k r
 valRecordSelect k VEmpty = fail $ "valRecordSelect: record field not found: " ++ k
 valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
 
-apply :: Monad m => Value m b w i e -> Thunk m b w i e -> m (Value m b w i e)
+apply :: VMonad l => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
 apply _ _ = fail "Not a function value"
 
-applyAll :: Monad m => Value m b w i e -> [Thunk m b w i e] -> m (Value m b w i e)
+applyAll :: VMonad l => Value l -> [Thunk l] -> MValue l
 applyAll = foldM apply
 
-asFiniteTypeValue :: Value m b w i e -> Maybe FiniteType
+asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
     VDataType "Prelude.Bool" [] -> return FTBit

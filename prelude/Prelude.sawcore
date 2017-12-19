@@ -300,6 +300,10 @@ and__def_True x =
   Bool__rec (\ (x::Bool) -> Eq Bool (and__def x True) x)
             (Refl Bool True) (Refl Bool False) x;
 
+true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
+true_implies True = Refl Bool True;
+true_implies False = Refl Bool False;
+
 and_True :: (x :: Bool) -> Eq Bool (and x True) x;
 and_True x =
   trans
@@ -1061,15 +1065,15 @@ bitvector :: (n :: Nat) -> sort 0;
 bitvector n = Vec n Bool;
 
 -- | Returns most-significant bit in a signed bitvector.
-msb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
-msb x v = at (Succ x) Bool v 0;
+msb :: (n :: Nat) -> bitvector (Succ n) -> Bool;
+msb n v = at (Succ n) Bool v 0;
 
 -- | Returns least-significant bit in a bitvector.
-lsb :: (x :: Nat) -> bitvector (Succ x) -> Bool;
-lsb x v = at (Succ x) Bool v x;
+lsb :: (n :: Nat) -> bitvector (Succ n) -> Bool;
+lsb n v = at (Succ n) Bool v n;
 
--- | (bvNat x n) yields (n mod 2^x) as an x-bit vector.
-primitive bvNat :: (x :: Nat) -> Nat -> bitvector x;
+-- | (bvNat n x) yields (x mod 2^n) as an n-bit vector.
+primitive bvNat :: (n :: Nat) -> Nat -> bitvector n;
 
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 primitive bvToNat :: (n :: Nat) -> bitvector n -> Nat;
@@ -1094,7 +1098,7 @@ bvShiftL n a w z xs i = shiftL n a z xs (bvToNat w i);
 bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
-primitive bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvAdd :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 
 bvCarry :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
@@ -1108,9 +1112,9 @@ bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 axiom bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
 axiom bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
 
-primitive bvNeg :: (x :: Nat) -> bitvector x -> bitvector x;
-primitive bvSub :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-primitive bvMul :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvNeg :: (n :: Nat) -> bitvector n -> bitvector n;
+primitive bvSub :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvMul :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 
 -- Unsigned division and remainder.
@@ -1120,8 +1124,8 @@ primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 --
 -- These two functions satisfy the property that:
 --   bvAdd x (bvMul x (bvUDiv x u v) v) (bvURem x u v) == u
-primitive bvUDiv :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-primitive bvURem :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+primitive bvUDiv :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvURem :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 
 
 -- Signed division.
@@ -1235,15 +1239,73 @@ bvSExt m n x = append m (Succ n) Bool (replicate m Bool (msb n x)) x;
 -- bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
 -- bvSExt m n x = append (Succ n) m Bool x (replicate m Bool (msb n x));
 
+--------------------------------------------------------------------------------
 -- Polynomial operations
 
-primitive bvPMul :: (m n :: Nat) -> bitvector m -> bitvector n
-       -> bitvector (subNat (maxNat 1 (addNat m n)) 1);
+bvPMul :: (m n :: Nat) ->
+  bitvector (Succ m) -> bitvector (Succ n) -> bitvector (Succ (addNat m n));
+bvPMul m n x =
+  foldr Bool (bitvector (Succ (addNat m n))) (Succ n)
+    (\ (b :: Bool) -> \ (a :: bitvector (Succ (addNat m n))) ->
+      bvXor (Succ (addNat m n))
+        (bvShr (Succ (addNat m n)) a 1)
+        (ite (bitvector (Succ (addNat m n))) b
+          (append (Succ m) n Bool x (bvNat n 0))
+          (bvNat (Succ (addNat m n)) 0)))
+    (bvNat (Succ (addNat m n)) 0);
 
-primitive bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+snoc :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> a -> Vec (Succ n) a;
+snoc a n xs x = rotateL (Succ n) a (ConsVec a x n xs) 1;
 
-primitive bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+nextPDivModC :: (n :: Nat) -> bitvector n -> Bool;
+nextPDivModC n r = msb n (snoc Bool n r False);
 
+nextPDivModR :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+nextPDivModR n mask r =
+  ite (bitvector n) (nextPDivModC n r)
+  (bvXor n mask (bvShl n r 1))
+  (bvShl n r 1);
+
+nextPDivModQ :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+nextPDivModQ m n q r = drop Bool 1 m (snoc Bool m q (nextPDivModC n r));
+
+-- bvPModAux m n x y = bvPMod m n x (ConsVec Bool True n y);
+bvPModAux :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector n;
+bvPModAux m n x mask =
+  (foldr Bool #(bitvector n, bitvector n) m
+    (\ (b :: Bool) -> \ (acc :: #(bitvector n, bitvector n)) ->
+      (nextPDivModR n mask acc.1,
+       ite (bitvector n) b (bvXor n acc.1 acc.2) acc.2))
+    (bvNat n 1, bvNat n 0) x).2;
+
+bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
+bvPMod m n x y =
+  ite (bitvector n) (msb n y) (bvPModAux m n x (drop Bool 1 n y))
+    (natCase
+      (\ (i :: Nat) -> bitvector i -> bitvector i)
+      (\ (z :: bitvector 0) -> z)
+      (\ (i :: Nat) -> \ (a :: bitvector (Succ i)) -> ConsVec Bool False i (bvPMod m i x a))
+      n (drop Bool 1 n y));
+
+-- bvPDivAux m n x y = bvPDiv m (Succ n) x (ConsVec Bool True n y);
+bvPDivAux :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+bvPDivAux m n x mask =
+  (foldr Bool #(bitvector m, bitvector n, bitvector m) m
+    (\ (b :: Bool) -> \ (acc :: #(bitvector m, bitvector n, bitvector m)) ->
+      (nextPDivModQ m n acc.1 acc.2,
+       nextPDivModR n mask acc.2,
+       ite (bitvector m) b (bvXor m acc.1 acc.3) acc.3))
+    (take Bool m n (bvNat (addNat m n) 1), bvNat n 1, bvNat m 0) x).3;
+
+bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
+bvPDiv m n x y =
+  natCase
+    (\ (n' :: Nat) -> bitvector n' -> bitvector m)
+    (\ (_ :: bitvector 0) -> bvNat m 0)
+    (\ (n' :: Nat) -> \ (y' :: bitvector (Succ n')) ->
+      ite (bitvector m) (msb n' y') (bvPDivAux m n' x (drop Bool 1 n' y'))
+        (bvPDiv m n' x (drop Bool 1 n' y')))
+    n y;
 
 --------------------------------------------------------------------------------
 -- Infinite streams
