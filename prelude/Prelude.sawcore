@@ -250,12 +250,18 @@ xor__def = \ (b1::Bool) -> \ (b2::Bool) ->
 axiom xor__eq :: Eq (Bool -> Bool -> Bool) xor xor__def;
 
 
+{-
 primitive implies :: Bool -> Bool -> Bool;
 
 implies__def :: Bool -> Bool -> Bool;
 implies__def = \ (a::Bool) -> \ (b::Bool) -> or (not a) b;
 
 axiom implies__eq :: Eq (Bool -> Bool -> Bool) implies implies__def;
+-}
+
+-- Implies is not a "primitive", it is just defined in terms of or and not
+implies :: Bool -> Bool -> Bool;
+implies = \ (a::Bool) -> \ (b::Bool) -> or (not a) b;
 
 
 primitive boolEq :: Bool -> Bool -> Bool;
