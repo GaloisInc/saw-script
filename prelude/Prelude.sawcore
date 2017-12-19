@@ -259,7 +259,8 @@ implies__def = \ (a::Bool) -> \ (b::Bool) -> or (not a) b;
 axiom implies__eq :: Eq (Bool -> Bool -> Bool) implies implies__def;
 -}
 
--- Implies is not a "primitive", it is just defined in terms of or and not
+-- Implies is not a primitive, as it is not mapped by any of the simulator
+-- back-ends; instead, it is just defined in terms of or and not
 implies :: Bool -> Bool -> Bool;
 implies = \ (a::Bool) -> \ (b::Bool) -> or (not a) b;
 
