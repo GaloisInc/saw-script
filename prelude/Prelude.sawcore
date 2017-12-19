@@ -109,6 +109,10 @@ not_not :: (x :: Bool) -> Eq Bool (not (not x)) x;
 not_not True = Refl Bool True;
 not_not False = Refl Bool False;
 
+true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
+true_implies True = Refl Bool True;
+true_implies False = Refl Bool False;
+
 and_True :: (x :: Bool) -> Eq Bool (and x True) x;
 and_True True = Refl Bool True;
 and_True False = Refl Bool False;
