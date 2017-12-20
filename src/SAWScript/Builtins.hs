@@ -496,8 +496,8 @@ split_goal =
 
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do
-  rw <- getTopLevelRW
-  return defaultPPOpts { ppBase = SV.ppOptsBase (rwPPOpts rw) }
+  opts <- fmap rwPPOpts getTopLevelRW
+  return (SV.sawPPOpts opts)
 
 show_term :: Term -> TopLevel String
 show_term t = do

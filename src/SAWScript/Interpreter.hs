@@ -432,6 +432,11 @@ set_base b = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsBase = b } }
 
+set_color :: Bool -> TopLevel ()
+set_color b = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b } }
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info s
 print_value (VTerm t) = do
@@ -551,6 +556,10 @@ primitives = Map.fromList
     (pureVal set_base)
     [ "Set the number base for pretty-printing numeric literals."
     , "Permissible values include 2, 8, 10, and 16." ]
+
+  , prim "set_color"           "Bool -> TopLevel ()"
+    (pureVal set_color)
+    [ "Select whether to pretty-print SAWCore terms using color." ]
 
   , prim "show"                "{a} a -> String"
     (funVal1 showPrim)
