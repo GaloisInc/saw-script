@@ -50,7 +50,6 @@ import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol
 
-import Verifier.SAW.Constant
 import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
@@ -126,10 +125,11 @@ showPrim v = do
   return (SV.showsPrecValue opts 0 v "")
 
 definePrim :: String -> TypedTerm -> TopLevel TypedTerm
-definePrim name (TypedTerm schema rhs) = do
-  sc <- getSharedContext
-  t <- io $ scConstant sc name rhs
-  return $ TypedTerm schema t
+definePrim name (TypedTerm schema rhs) =
+  do sc <- getSharedContext
+     ty <- io $ Cryptol.importSchema sc Cryptol.emptyEnv schema
+     t <- io $ scConstant sc name rhs ty
+     return $ TypedTerm schema t
 
 sbvUninterpreted :: String -> Term -> TopLevel Uninterp
 sbvUninterpreted s t = return $ Uninterp (s, t)
