@@ -180,7 +180,10 @@ rcoerce_same a q x = coerce_same a (sym (sort 0) a a q) x;
 unsafeCoerce :: (a b :: sort 0) -> a -> b;
 unsafeCoerce a b = coerce a b (unsafeAssert (sort 0) a b);
 
--- NOTE: this could be added because it relies on unsafeAssert anyway...
+axiom unsafeCoerce_same :: (a :: sort 0) -> (x :: a) ->
+                           Eq a (unsafeCoerce a a x) x;
+
+-- NOTE: We could prove unsafeCoerce_same if we were willing to allow UIP...
 {-
 unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
 unsafeCoerce_same a x = coerce_same a (unsafeAssert (sort 0) a a) x;
