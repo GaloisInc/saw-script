@@ -76,7 +76,7 @@ data LocalVarDoc =
   { docModuleName :: Map ModuleName String
   , _docShowLocalNames :: Bool
   , _docShowLocalTypes :: Bool
-  , docMap :: !(Map DeBruijnIndex Doc)
+  , docMap :: !(Map DeBruijnIndex String)
   , docLvl :: !DeBruijnIndex
   , docUsedMap :: Map String DeBruijnIndex
   }
@@ -105,7 +105,7 @@ freshVariant used name
   | otherwise = name
 
 consBinding :: LocalVarDoc -> String -> LocalVarDoc
-consBinding lvd i = lvd { docMap = Map.insert lvl (text i) m
+consBinding lvd i = lvd { docMap = Map.insert lvl i m
                         , docLvl = lvl + 1
                         , docUsedMap = Map.insert i lvl (docUsedMap lvd)
                         }
@@ -114,13 +114,13 @@ consBinding lvd i = lvd { docMap = Map.insert lvl (text i) m
              Just pl -> Map.delete pl (docMap lvd)
              Nothing -> docMap lvd
 
-lookupDoc :: LocalVarDoc -> DeBruijnIndex -> Doc
+lookupDoc :: LocalVarDoc -> DeBruijnIndex -> String
 lookupDoc lvd i
     | lvd^.docShowLocalNames =
         case Map.lookup lvl (docMap lvd) of
           Just d -> d
-          Nothing -> text ('!' : show (i - docLvl lvd))
-    | otherwise = text ('!' : show i)
+          Nothing -> '!' : show (i - docLvl lvd)
+    | otherwise = '!' : show i
   where lvl = docLvl lvd - i - 1
 
 type TermPrinter e = LocalVarDoc -> Prec -> e -> Doc
@@ -147,10 +147,10 @@ commaSepList (d:l) = d <> comma <+> commaSepList l
 ppParens :: Bool -> Doc -> Doc
 ppParens b = if b then parens . align else id
 
-data PPOpts = PPOpts { ppBase :: Int }
+data PPOpts = PPOpts { ppBase :: Int, ppColor :: Bool }
 
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts { ppBase = 10 }
+defaultPPOpts = PPOpts { ppBase = 10, ppColor = False }
 
 ppNat :: PPOpts -> Integer -> Doc
 ppNat opts i
@@ -171,6 +171,18 @@ ppNat opts i
 
 ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
+
+ppName :: (Doc -> Doc) -> PPOpts -> String -> Doc
+ppName color opts s = if ppColor opts then color (text s) else text s
+
+ppLocal :: PPOpts -> String -> Doc
+ppLocal = ppName dullgreen
+
+ppConstant :: PPOpts -> String -> Doc
+ppConstant = ppName dullblue
+
+ppExtCns :: PPOpts -> String -> Doc
+ppExtCns = ppName dullred
 
 ppCtor :: TermPrinter e -> Ctor e -> Doc
 ppCtor f c = hang 2 $ group (ppIdent (ctorName c) <<$>> doublecolon <+> tp)
@@ -323,7 +335,7 @@ ppFlatTermF' opts pp prec tf =
     FloatLit v  -> pure $ TermDoc $ text (show v)
     DoubleLit v -> pure $ TermDoc $ text (show v)
     StringLit s -> pure $ LabelDoc s
-    ExtCns (EC _ v _) -> pure $ TermDoc $ text v
+    ExtCns (EC _ v _) -> pure $ TermDoc $ ppExtCns opts v
   where
     pp' p t = ppTermDoc <$> pp p t
 
@@ -353,13 +365,13 @@ ppTermF' _opts pp lcls prec (App l r) = ppApp <$> pp False lcls PrecApp l <*> pp
   where ppApp l' r' = TermDoc $ ppAppParens prec $ group $ hang 2 $
                       ppTermDoc l' Leijen.<$> ppTermDoc r'
 
-ppTermF' _opts pp lcls p (Lambda name tp rhs) =
+ppTermF' opts pp lcls p (Lambda name tp rhs) =
     ppLam
       <$> pp False lcls PrecLambda tp
       <*> pp True lcls' PrecLambda rhs
   where ppLam tp' rhs' = TermDoc $
           ppParens (p > PrecLambda) $ group $ hang 2 $
-            text "\\" <> parens (text name' <> doublecolon <> ppTermDoc tp')
+            text "\\" <> parens (ppLocal opts name' <> doublecolon <> ppTermDoc tp')
               <+> text "->" Leijen.<$> ppTermDoc rhs'
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
@@ -374,13 +386,13 @@ ppTermF' _opts pp lcls p (Pi name tp rhs) = ppPi <$> lhs <*> pp True lcls' PrecL
         name' = freshVariant (docUsedMap lcls) name
         lcls' = consBinding lcls name'
 
-ppTermF' _opts _pp lcls _p (LocalVar i)
+ppTermF' opts _pp lcls _p (LocalVar i)
 --    | lcls^.docShowLocalTypes = pptc <$> pp lcls PrecLambda tp
-    | otherwise = pure $ TermDoc d
+    | otherwise = pure $ TermDoc (ppLocal opts d)
   where d = lookupDoc lcls i
 --        pptc tpd = ppParens (p > PrecNone)
 --                            (d <> doublecolon <> tpd)
-ppTermF' _ _ _ _ (Constant i _ _) = pure $ TermDoc $ text i
+ppTermF' opts _ _ _ (Constant i _ _) = pure $ TermDoc $ ppConstant opts i
 
 -- | Pretty print a term with the given outer precedence.
 ppTerm :: PPOpts -> LocalVarDoc -> Prec -> Term -> Doc
