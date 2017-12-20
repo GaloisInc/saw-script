@@ -31,12 +31,14 @@ import System.Directory(makeRelativeToCurrentDirectory)
 import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
 import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff, toCalendarTime, formatCalendarTime)
 import System.Locale(defaultTimeLocale)
+import System.Exit
 import Text.PrettyPrint.ANSI.Leijen hiding ((</>), (<$>))
 import Text.Printf
 import Numeric(showFFloat)
 
 import qualified Verifier.Java.Codebase as JSS
 
+import SAWScript.Options
 import Verifier.SAW.Conversion
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -219,12 +221,42 @@ basic_ss sc = do
   return $ addConvs procs (addRules (rs1 ++ rs2) emptySimpset)
   where
     eqs = map (mkIdent preludeName)
-      [ "not_not", "bvAddZeroL", "bvAddZeroR", "ite_eq"
-      , "not_not", "and_True", "and_False", "and_idem", "ite_eq"
-      , "or_triv1", "and_triv1", "or_triv2", "and_triv2"
+      [ "unsafeCoerce_same"
+      , "not_not"
+      , "true_implies"
+      , "and_True"
+      , "and_False"
+      , "and_True2"
+      , "and_False2"
+      , "and_idem"
+      , "or_True"
+      , "or_False"
+      , "or_True2"
+      , "or_False2"
+      , "or_idem"
+      , "not_or"
+      , "not_and"
+      , "ite_not"
+      , "ite_nest1"
+      , "ite_nest2"
+      , "ite_fold_not"
+      , "ite_eq"
+      , "ite_true"
+      , "ite_false"
+      , "or_triv1"
+      , "and_triv1"
+      , "or_triv2"
+      , "and_triv2"
+      , "eq_refl"
+      , "bvAddZeroL"
+      , "bvAddZeroR"
+      , "bveq_sameL"
+      , "bveq_sameR"
+      , "bveq_same2"
+      , "bvNat_bvToNat"
       ]
     defs = map (mkIdent preludeName)
-      [ "not", "and", "or", "xor", "boolEq", "ite", "addNat", "mulNat"
+      [ "not", "and", "or", "xor", "boolEq", "ite", "addNat", "mulNat", "implies"
       , "compareNat", "equalNat"
       , "bitvector"
       ]
@@ -250,3 +282,11 @@ ordinal n | n < 0 = error "Only non-negative cardinals are supported."
              3 -> "rd"
              _ -> "th"
     inTens = (n `mod` 100) `div` 10 == 1
+
+handleException :: Options -> CE.SomeException -> IO a
+handleException opts e = printOutLn opts Error (show e) >> exitProofUnknown
+
+exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
+exitProofFalse = exitWith (ExitFailure 1)
+exitProofUnknown = exitWith (ExitFailure 2)
+exitProofSuccess = exitSuccess

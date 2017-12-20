@@ -24,6 +24,8 @@ data Quantification = Existential | Universal
 data ProofGoal =
   ProofGoal
   { goalQuant :: Quantification
+  , goalNum  :: Int
+  , goalType :: String
   , goalName :: String
   , goalTerm :: Term
   }

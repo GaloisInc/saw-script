@@ -32,10 +32,12 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
+import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
+import Data.Text (pack)
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -74,8 +76,9 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
+import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
-import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue, PPOpts(..))
+import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -111,7 +114,7 @@ extendEnv x mt md v rw =
   where
     name = x
     ident = T.packIdent (getOrig x)
-    modname = T.packModName [getOrig x]
+    modname = T.packModName [pack (getOrig x)]
     ce = rwCryptol rw
     ce' = case v of
             VTerm t
@@ -288,12 +291,12 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   -- Print non-unit result if it was not bound to a variable
   case pat of
     SS.PWild _ | printBinds && not (isVUnit result) ->
-      io $ putStrLn (showsPrecValue opts 0 result "")
+      printOutLnTop Info (showsPrecValue opts 0 result "")
     _ -> return ()
 
   -- Print function type if result was a function
   case ty of
-    SS.TyCon SS.FunCon _ -> io $ putStrLn $ getVal lname ++ " : " ++ SS.pShow ty
+    SS.TyCon SS.FunCon _ -> printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
     _ -> return ()
 
   rw' <- getTopLevelRW
@@ -364,7 +367,6 @@ buildTopLevelEnv opts =
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
-                          , "Cryptol.ty"
                           , "Cryptol.seq"
                           ]
        simps <- scSimpset sc0 cryptolDefs [] convs
@@ -401,7 +403,12 @@ processFile opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
+  let handler :: X.SomeException -> IO a
+      handler e =
+        do printOutFn opts Error (show e)
+           exitProofUnknown
   _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
+            `X.catch` handler
   setCurrentDirectory oldpath
   return ()
 
@@ -426,23 +433,24 @@ set_base b = do
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsBase = b } }
 
 print_value :: Value -> TopLevel ()
-print_value (VString s) = io $ putStrLn s
+print_value (VString s) = printOutLnTop Info s
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- fmap rwCryptol getTopLevelRW
   let cfg = meSolverConfig (CEnv.eModuleEnv cenv)
   unless (null (getAllExts (ttTerm t))) $
     fail "term contains symbolic variables"
-  t' <- io $ defaultTypedTerm sc cfg t
+  sawopts <- getOptions
+  t' <- io $ defaultTypedTerm sawopts sc cfg t
   opts <- fmap rwPPOpts getTopLevelRW
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
                               }
-  doc <- io $ V.runEval (V.ppValue opts' (evaluateTypedTerm sc t'))
+  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' (evaluateTypedTerm sc t'))
   io (rethrowEvalError $ print $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  io $ putStrLn (showsPrecValue opts 0 v "")
+  printOutLnTop Info (showsPrecValue opts 0 v "")
 
 cryptol_load :: FilePath -> TopLevel CryptolModule
 cryptol_load path = do
@@ -778,18 +786,19 @@ primitives = Map.fromList
     ]
 
   , prim "qc_print"            "Int -> Term -> TopLevel ()"
-    (scVal quickCheckPrintPrim)
+    (\a -> scVal (quickCheckPrintPrim a) a)
     [ "Quick Check a term by applying it to a sequence of random inputs"
     , "and print the results. The 'Int' arg specifies how many tests to run."
     ]
 
-  , prim "codegen"             "String -> String -> Term -> TopLevel ()"
+  , prim "codegen"             "String -> [String] -> String -> Term -> TopLevel ()"
     (scVal codegenSBV)
     [ "Generate straight-line C code for the given term using SBV."
     , ""
     , "First argument is directory path (\"\" for stdout) for generating files."
-    , "Second argument is C function name."
-    , "Third argument is the term to generated code for. It must be a"
+    , "Second argument is the list of function names to leave uninterpreted."
+    , "Third argument is C function name."
+    , "Fourth argument is the term to generated code for. It must be a"
     , "first-order function whose arguments and result are all of type"
     , "Bit, [8], [16], [32], or [64]."
     ]
