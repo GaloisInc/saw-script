@@ -101,7 +101,7 @@ RecordType__rec _ _ _ _ f1 (RecordValue _ _ _ x y) = f1 x y;
 
 primitive data String :: sort 0;
 
-primitive error :: (a :: sort 0) -> String -> a;
+primitive error :: (a :: sort 1) -> String -> a;
 
 
 --------------------------------------------------------------------------------
@@ -300,10 +300,6 @@ and__def_True x =
   Bool__rec (\ (x::Bool) -> Eq Bool (and__def x True) x)
             (Refl Bool True) (Refl Bool False) x;
 
-true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
-true_implies True = Refl Bool True;
-true_implies False = Refl Bool False;
-
 and_True :: (x :: Bool) -> Eq Bool (and x True) x;
 and_True x =
   trans
@@ -414,6 +410,14 @@ or_idem x =
              (\ (f::Bool -> Bool -> Bool) -> f x x))
     (Bool__rec (\ (b::Bool) -> Eq Bool (or__def b b) b)
                (Refl Bool True) (Refl Bool False) x);
+
+true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
+true_implies x =
+  trans
+    Bool (or (not True) x) (or False x) x
+    (eq_cong (Bool -> Bool) not not__def not__eq Bool
+             (\ (f::Bool -> Bool) -> or (f True) x))
+    (or_False2 x);
 
 not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
 not_or x y =
