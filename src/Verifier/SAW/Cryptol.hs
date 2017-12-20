@@ -682,7 +682,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
      let x = nameToString (C.dName decl)
      f' <- scLambda sc x t' e'
      rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-     rhs' <- if not isTopLevel then return rhs else scTermF sc (Constant x rhs t')
+     rhs' <- if not isTopLevel then return rhs else scConstant sc x rhs t'
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
@@ -737,7 +737,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      rhss <- mapM (\d -> scRecordSelect sc rhs (nameToString (C.dName d))) decls
 
      -- if toplevel, then wrap each binding with a Constant constructor
-     let wrap d r t = scTermF sc (Constant (nameToString (C.dName d)) r t)
+     let wrap d r t = scConstant sc (nameToString (C.dName d)) r t
      rhss' <- if isTopLevel then sequence (zipWith3 wrap decls rhss ts) else return rhss
 
      let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss' decls
@@ -761,7 +761,7 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
      rhs <- importExpr sc env expr
      rhs' <- if not isTopLevel then return rhs else do
        t <- importSchema sc env (C.dSignature decl)
-       scTermF sc (Constant (nameToString (C.dName decl)) rhs t)
+       scConstant sc (nameToString (C.dName decl)) rhs t
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
