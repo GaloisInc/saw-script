@@ -68,6 +68,7 @@ module Verifier.SAW.SharedTerm
   , scPi
   , scPiList
   , scLocalVar
+  , scConstant
   , scLookupDef
   , scSort
   , scUnitValue
@@ -1029,6 +1030,20 @@ scLocalVar :: SharedContext
            -> DeBruijnIndex
            -> IO Term
 scLocalVar sc i = scTermF sc (LocalVar i)
+
+-- | Create an abstract constant with the specified name, body, and
+-- type. The term for the body must not have any loose de Bruijn
+-- indices. If the body contains any ExtCns variables, they will be
+-- abstracted over and reapplied to the resulting constant.
+scConstant :: SharedContext -> String -> Term -> Term -> IO Term
+scConstant sc name rhs ty =
+  do unless (looseVars rhs == 0) $ fail "scConstant: term contains loose variables"
+     let ecs = getAllExts rhs
+     rhs' <- scAbstractExts sc ecs rhs
+     ty' <- scFunAll sc (map ecType ecs) ty
+     t <- scTermF sc (Constant name rhs' ty')
+     args <- mapM (scFlatTermF sc . ExtCns) ecs
+     scApplyAll sc t args
 
 scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
