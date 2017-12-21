@@ -1,0 +1,33 @@
+m <- llvm_load_module "test.bc";
+
+let bad_pointer_no_biscuit nm =
+  do { print "=======================================";
+       print (str_concat "Testing failure case: " nm);
+       print "";
+       fails (crucible_llvm_verify m nm [] false
+         do { crucible_execute_func [];
+              crucible_return (crucible_term {{ 1:[32] }});
+            }
+         trivial);
+  };
+
+bad_pointer_no_biscuit "read_after_free";
+bad_pointer_no_biscuit "write_after_free";
+bad_pointer_no_biscuit "double_free";
+bad_pointer_no_biscuit "equals_after_free";
+bad_pointer_no_biscuit "equals_null_after_free";
+bad_pointer_no_biscuit "le_after_free";
+bad_pointer_no_biscuit "le_different_allocs";
+
+bad_pointer_no_biscuit "read_after_stack_free";
+bad_pointer_no_biscuit "write_after_stack_free";
+bad_pointer_no_biscuit "free_after_stack_free";
+bad_pointer_no_biscuit "equals_after_stack_free";
+bad_pointer_no_biscuit "lt_after_stack_free";
+
+bad_pointer_no_biscuit "free_local";
+bad_pointer_no_biscuit "free_global";
+
+print "";
+print "============================================";
+print "Success!";

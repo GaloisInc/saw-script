@@ -2,9 +2,14 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -65,8 +70,10 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, GlobalVar, IntrinsicType)
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
+import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
 
 -- Values ----------------------------------------------------------------------
 
@@ -91,7 +98,7 @@ data Value
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   | VLLVMMethodSpec LIR.LLVMMethodSpecIR
   -----
-  | VCrucibleSetup (CrucibleSetup Value)
+  | VCrucibleSetup !(CrucibleSetupM Value)
   | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
   | VCrucibleSetupValue CIR.SetupValue
   -----
@@ -105,7 +112,7 @@ data Value
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG Crucible.AnyCFG
-  | VGhostVar (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue"))
+  | VGhostVar CIR.GhostGlobal
 
 data LLVMModule =
   LLVMModule
@@ -417,7 +424,22 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
-type CrucibleSetup a = StateT CIR.CrucibleSetupState TopLevel a
+type CrucibleSetup wptr a =
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) => StateT (CIR.CrucibleSetupState wptr) TopLevel a
+
+data CrucibleSetupM a =
+  CrucibleSetupM { runCrucibleSetupM :: forall wptr. CrucibleSetup wptr a }
+
+instance Functor CrucibleSetupM where
+  fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
+
+instance Applicative CrucibleSetupM where
+  pure x = CrucibleSetupM (pure x)
+  CrucibleSetupM f <*> CrucibleSetupM m = CrucibleSetupM (f <*> m)
+
+instance Monad CrucibleSetupM where
+  return = pure
+  CrucibleSetupM m >>= f = CrucibleSetupM (m >>= runCrucibleSetupM . f)
 
 type ProofScript a = StateT ProofState TopLevel a
 
@@ -519,16 +541,16 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
     fromValue _ = error "fromValue LLVMSetup"
 
 ---------------------------------------------------------------------------------
-instance IsValue a => IsValue (StateT CIR.CrucibleSetupState TopLevel a) where
+instance IsValue a => IsValue (CrucibleSetupM a) where
     toValue m = VCrucibleSetup (fmap toValue m)
 
-instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) where
+instance FromValue a => FromValue (CrucibleSetupM a) where
     fromValue (VCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = do
-      v1 <- fromValue m1
+    fromValue (VBind m1 v2) = CrucibleSetupM $ do
+      v1 <- runCrucibleSetupM (fromValue m1)
       m2 <- lift $ applyValue v2 v1
-      fromValue m2
+      runCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue CIR.SetupValue where
@@ -695,10 +717,10 @@ instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
 
-instance IsValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+instance IsValue CIR.GhostGlobal where
   toValue = VGhostVar
 
-instance FromValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+instance FromValue CIR.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
@@ -714,7 +736,7 @@ addTrace str val =
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
     VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
     VLLVMSetup     m -> VLLVMSetup     (addTrace str `fmap` addTraceStateT str m)
-    VCrucibleSetup m -> VCrucibleSetup (addTrace str `fmap` addTraceStateT str m)
+    VCrucibleSetup (CrucibleSetupM m) -> VCrucibleSetup (CrucibleSetupM (addTrace str `fmap` addTraceStateT str m))
     VBind v1 v2      -> VBind          (addTrace str v1) (addTrace str v2)
     _                -> val
 

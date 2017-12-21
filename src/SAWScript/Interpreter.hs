@@ -1428,6 +1428,14 @@ primitives = Map.fromList
     , "process."
     ]
 
+  , prim "fails"               "{a} TopLevel a -> TopLevel ()"
+    (\_ _ -> toValue failsPrim)
+    [ "Run the given inner action and convert failure into success.  Fail"
+    , "if the inner action does NOT raise an exception. This is primarily used"
+    , "for unit testing purposes, to ensure that we can elicit expected"
+    , "failing behaviors."
+    ]
+
   , prim "time"                "{a} TopLevel a -> TopLevel a"
     (\_ _ -> toValue timePrim)
     [ "Print the CPU time used by the given TopLevel command." ]
