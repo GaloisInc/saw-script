@@ -592,7 +592,7 @@ assignVar ::
 assignVar cc var val =
   do old <- OM (setupValueSub . at var <<.= Just val)
      for_ old $ \val' ->
-       do p <- liftIO (equalValsPred cc (ptrToVal val') (ptrToVal val))
+       do p <- liftIO (equalValsPred cc (Crucible.ptrToPtrVal val') (Crucible.ptrToPtrVal val))
           addAssert p (Crucible.AssertFailureSimError "equality of aliased pointers")
 
 ------------------------------------------------------------------------
