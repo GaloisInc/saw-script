@@ -379,11 +379,10 @@ ppGlobalPair :: CrucibleContext wptr
              -> Doc
 ppGlobalPair cc gp =
   let memOps = Crucible.memModelOps (cc^.ccLLVMContext)
-      sym = cc^.ccBackend
       globals = gp ^. Crucible.gpGlobals in
   case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals of
     Nothing -> text "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem sym mem
+    Just mem -> Crucible.ppMem mem
 
 
 --------------------------------------------------------------------------------

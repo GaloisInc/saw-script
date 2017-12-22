@@ -168,16 +168,24 @@ data PPOpts = PPOpts
   { ppOptsAnnotate :: Bool
   , ppOptsAscii :: Bool
   , ppOptsBase :: Int
+  , ppOptsColor :: Bool
   }
 
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts False False 10
+defaultPPOpts = PPOpts False False 10 False
 
 cryptolPPOpts :: PPOpts -> C.PPOpts
 cryptolPPOpts opts =
   C.defaultPPOpts
     { C.useAscii = ppOptsAscii opts
     , C.useBase = ppOptsBase opts
+    }
+
+sawPPOpts :: PPOpts -> SharedTerm.PPOpts
+sawPPOpts opts =
+  SharedTerm.defaultPPOpts
+    { SharedTerm.ppBase = ppOptsBase opts
+    , SharedTerm.ppColor = ppOptsColor opts
     }
 
 quietEvalOpts :: C.EvalOpts
@@ -198,7 +206,7 @@ showsProofResult opts r =
     Valid _ -> showString "Valid"
     InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
   where
-    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
@@ -210,7 +218,7 @@ showsSatResult opts r =
     Unsat _ -> showString "Unsat"
     SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
   where
-    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
@@ -227,7 +235,7 @@ showSimpset opts ss =
        PPL.</> PPL.char '=' PPL.<+>
        ppTerm (rhsRewriteRule r))
     ppTerm t = scPrettyTermDoc opts' t
-    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
 showsPrecValue opts p v =
@@ -273,7 +281,7 @@ showsPrecValue opts p v =
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
   where
-    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
 
 instance Show Value where
     showsPrec p v = showsPrecValue defaultPPOpts p v

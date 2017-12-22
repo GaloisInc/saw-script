@@ -10,7 +10,6 @@ module SAWScript.CrucibleResolveSetupValue
   , resolveSAWPred
   , resolveSetupFieldIndex
   , equalValsPred
-  , ptrToVal
   ) where
 
 import Control.Lens
@@ -39,7 +38,7 @@ import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Type as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
@@ -251,10 +250,10 @@ resolveSetupVal cc env tyenv val =
                 return (Crucible.LLVMValInt blk off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
     SetupNull ->
-      ptrToVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
+      Crucible.ptrToPtrVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
     SetupGlobal name ->
       do let mem = cc^.ccEmptyMemImpl
-         ptrToVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
+         Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
   where
     sym = cc^.ccBackend
     lc = cc^.ccTypeCtx
@@ -342,9 +341,6 @@ resolveSAWTerm cc tp tm =
   where
     sym = cc^.ccBackend
     dl = TyCtx.llvmDataLayout (cc^.ccTypeCtx)
-
-ptrToVal :: Crucible.HasPtrWidth wptr => LLVMPtr wptr -> LLVMVal
-ptrToVal (Crucible.LLVMPointer blk off) = Crucible.LLVMValInt blk off
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =
