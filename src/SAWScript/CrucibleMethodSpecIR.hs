@@ -47,7 +47,7 @@ import qualified Lang.Crucible.CFG.Common as Crucible
 import SAWScript.SolverStats
 import SAWScript.TypedTerm
 
-import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl)
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, LLVM)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
@@ -232,7 +232,7 @@ data CrucibleContext wptr =
   , _ccLLVMModuleTrans :: Crucible.ModuleTranslation
   , _ccBackend         :: Sym
   , _ccEmptyMemImpl    :: Crucible.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym
+  , _ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym Crucible.LLVM
   , _ccGlobals         :: Crucible.SymGlobalState Sym
   }
 
