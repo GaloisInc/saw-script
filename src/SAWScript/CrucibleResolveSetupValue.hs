@@ -39,7 +39,7 @@ import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Common as Crucible
+import qualified Lang.Crucible.LLVM.MemModel.Type as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible (bvLit, bvAdd, Pred)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
