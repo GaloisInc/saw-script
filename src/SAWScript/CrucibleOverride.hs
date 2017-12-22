@@ -200,7 +200,7 @@ methodSpecHandler ::
   CrucibleContext wptr     {- ^ context for interacting with Crucible        -} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret
+  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym Crucible.LLVM rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc css retTy = do
   let L.Symbol fsym = (head css)^.csName

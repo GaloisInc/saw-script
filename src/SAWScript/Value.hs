@@ -73,6 +73,7 @@ import Cryptol.Utils.PP (pretty)
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
 
 -- Values ----------------------------------------------------------------------
@@ -112,7 +113,7 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
-  | VCFG Crucible.AnyCFG
+  | VCFG (Crucible.AnyCFG Crucible.LLVM)
   | VGhostVar CIR.GhostGlobal
 
 data LLVMModule =
@@ -562,10 +563,10 @@ instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue (Crucible.AnyCFG) where
+instance IsValue (Crucible.AnyCFG Crucible.LLVM) where
     toValue t = VCFG t
 
-instance FromValue (Crucible.AnyCFG) where
+instance FromValue (Crucible.AnyCFG Crucible.LLVM) where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 

@@ -117,12 +117,12 @@ import SAWScript.CrucibleResolveSetupValue
 
 type MemImpl = Crucible.MemImpl Sym
 
-show_cfg :: Crucible.AnyCFG -> String
+show_cfg :: Crucible.AnyCFG Crucible.LLVM -> String
 show_cfg (Crucible.AnyCFG cfg) = show cfg
 
 
 ppAbortedResult :: CrucibleContext wptr
-                -> Crucible.AbortedResult Sym
+                -> Crucible.AbortedResult Sym Crucible.LLVM
                 -> Doc
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
   Crucible.ppSimError err <$$> ppGlobalPair cc gp
@@ -391,9 +391,9 @@ registerOverride ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
   Options                    ->
   CrucibleContext wptr       ->
-  Crucible.SimContext Crucible.SAWCruciblePersonality Sym  ->
+  Crucible.SimContext Crucible.SAWCruciblePersonality Sym Crucible.LLVM ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym rtp args ret ()
+  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym Crucible.LLVM rtp args ret ()
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -439,7 +439,8 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
             let simCtx = cc^.ccSimContext
                 conf = Crucible.simConfig simCtx
             simCtx' <- flip SState.execStateT simCtx $
-                       Crucible.setConfigValue Crucible.sawCheckPathSat conf checkSat
+                         Crucible.runSimConfigMonad
+                           (Crucible.setConfigValue Crucible.sawCheckPathSat conf checkSat)
             let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
@@ -571,11 +572,11 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod) action = do
       sym <- Crucible.newSAWCoreBackend sc gen cfg
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics cfg halloc stdout
-                        bindings Crucible.SAWCruciblePersonality
+                        bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
       mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym
+      let setupMem :: Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym Crucible.LLVM
                        (Crucible.RegEntry Sym Crucible.UnitType)
                        Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
           setupMem = do
@@ -643,7 +644,7 @@ setupArgs sc sym fn = do
 
 --------------------------------------------------------------------------------
 
-extractFromCFG :: Options -> SharedContext -> CrucibleContext wptr -> Crucible.AnyCFG -> IO TypedTerm
+extractFromCFG :: Options -> SharedContext -> CrucibleContext wptr -> Crucible.AnyCFG Crucible.LLVM -> IO TypedTerm
 extractFromCFG opts sc cc (Crucible.AnyCFG cfg) = do
   let sym = cc^.ccBackend
   let h   = Crucible.cfgHandle cfg
@@ -682,7 +683,7 @@ extract_crucible_llvm bic opts lm fn_name =
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> io $ extractFromCFG opts (biSharedContext bic) cc cfg
 
-load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel Crucible.AnyCFG
+load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel (Crucible.AnyCFG Crucible.LLVM)
 load_llvm_cfg bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
