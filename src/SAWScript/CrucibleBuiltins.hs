@@ -808,8 +808,8 @@ addCondition cond = currentState.csConditions %= (cond : )
 logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
                   -> IO (Maybe Term)
 logicTypeOfActual _ sc (Crucible.IntType w) = Just <$> logicTypeForInt sc w
-logicTypeOfActual _ sc Crucible.FloatType = Just <$> scPrelude_Float sc
-logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scPrelude_Double sc
+logicTypeOfActual _ sc Crucible.FloatType = Just <$> scApplyPrelude_Float sc
+logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scApplyPrelude_Double sc
 logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
   melTyp <- logicTypeOfActual dl sc ty
   case melTyp of
