@@ -902,8 +902,8 @@ asCryptolTypeValue :: SC.CValue -> Maybe C.Type
 asCryptolTypeValue v =
   case v of
     SC.VDataType "Prelude.Bool" [] -> return C.tBit
-    SC.VDataType "Prelude.Integer" [] -> return C.tInteger
-    SC.VDataType "Prelude.Vec" [SC.VNat n, v2] -> do
+    SC.VIntType -> return C.tInteger
+    SC.VVecType (SC.VNat n) v2 -> do
       t2 <- asCryptolTypeValue v2
       return (C.tSeq (C.tNum n) t2)
     SC.VDataType "Prelude.Stream" [v1] -> do
