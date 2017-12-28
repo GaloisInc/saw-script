@@ -63,6 +63,8 @@ data Value l
   | VEmptyType
   | VFieldType FieldName !(Value l) !(Value l)
   | VDataType !Ident [Value l]
+  | VIntType
+  | VVecType (Value l) (Value l)
   | VType -- ^ Other unknown type
   | VExtra (Extra l)
 
@@ -143,6 +145,9 @@ instance Show (Extra l) => Show (Value l) where
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
+      VIntType       -> showString "Integer"
+      VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
+                        . showString " " . showParen True (showsPrec p a)
       VType          -> showString "_"
       VExtra x       -> showsPrec p x
     where
@@ -192,7 +197,7 @@ asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
     VDataType "Prelude.Bool" [] -> return FTBit
-    VDataType "Prelude.Vec" [VNat n, v1] -> do
+    VVecType (VNat n) v1 -> do
       t1 <- asFiniteTypeValue v1
       return (FTVec (fromInteger n) t1)
     VUnitType -> return (FTTuple [])

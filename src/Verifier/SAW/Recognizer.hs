@@ -16,7 +16,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Recognizer
   ( Recognizer
-  , (<:), emptyl, endl
+  , (<:>), (<:), emptyl, endl
   , (:*:)(..)
   , asFTermF
 
@@ -133,6 +133,12 @@ asApp _ = fail "not app"
 (@>) f g t = do
   (x, y) <- asApp t
   liftM2 (const id) (f x) (g y)
+
+-- | Recognizes a function application, and returns the function
+(<@) :: (Monad f) => Recognizer f Term a -> Recognizer f Term () -> Recognizer f Term a
+(<@) f g t = do
+  (x, y) <- asApp t
+  liftM2 const (f x) (g y)
 
 asApplyAll :: Term -> (Term, [Term])
 asApplyAll = go []
@@ -296,16 +302,17 @@ asBoolType :: (Monad f) => Recognizer f Term ()
 asBoolType = isDataType "Prelude.Bool" emptyl
 
 asIntegerType :: (Monad f) => Recognizer f Term ()
-asIntegerType = isDataType "Prelude.Integer" emptyl
+asIntegerType = isGlobalDef "Prelude.Integer"
 
 asVectorType :: (Monad f) => Recognizer f Term (Term, Term)
-asVectorType = isDataType "Prelude.Vec" r
-  where r [n, t] = return (n, t)
-        r _ = fail "asVectorType: wrong number of arguments"
+asVectorType = helper ((isGlobalDef "Prelude.Vec" @> return) <@> return) where
+  helper r t =
+    do (n :*: a) <- r t
+       return (n, a)
 
 isVecType :: (Monad f)
           => Recognizer f Term a -> Recognizer f Term (Nat :*: a)
-isVecType tp = isDataType "Prelude.Vec" (asNatLit <:> endl tp)
+isVecType tp = (isGlobalDef "Prelude.Vec" @> asNatLit) <@> tp
 
 asVecType :: (Monad f) => Recognizer f Term (Nat :*: Term)
 asVecType = isVecType return
@@ -313,8 +320,8 @@ asVecType = isVecType return
 asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNatLit)
-  <> isDataType "Prelude.Vec"
-                (asNatLit <: endl (isDataType "Prelude.Bool" emptyl))
+  <> ((isGlobalDef "Prelude.Vec" @> asNatLit)
+      <@ isDataType "Prelude.Bool" emptyl)
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return

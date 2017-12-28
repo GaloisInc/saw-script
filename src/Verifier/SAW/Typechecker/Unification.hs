@@ -53,6 +53,7 @@ import Verifier.SAW.Typechecker.Context
 import Verifier.SAW.Typechecker.Monad
 import Verifier.SAW.Typechecker.Simplification
 import Verifier.SAW.TypedAST (ppParens, zipWithFlatTermF, ppFlatTermF, defaultPPOpts, Prec(..))
+import Verifier.SAW.Prelude.Constants
 import qualified Verifier.SAW.UntypedAST as Un
 
 -- | Return true if set has duplicates.
@@ -287,7 +288,7 @@ indexUnPat upat =
       let vfn upl = UPatF (pos pnm) (UPCtor c upl)
       first vfn <$> indexPiPats pl tp
     Un.PString p s -> do
-      tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF (DataTypeApp "Prelude.String" []))
+      tpv <- mkVar (show (Un.ppPat PrecNone upat)) (UTF preludeStringType)
       return (UPatF p (UPString s), tpv)
 
 -- | Variable, the type, and name, and type.

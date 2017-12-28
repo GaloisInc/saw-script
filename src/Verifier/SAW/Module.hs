@@ -181,7 +181,6 @@ data DataType =
   { dtName :: Ident
   , dtType :: Term
   , dtCtors :: [Ctor Term]
-  , dtIsPrimitive :: Bool
   }
 
 instance Eq DataType where

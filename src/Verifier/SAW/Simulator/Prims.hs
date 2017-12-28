@@ -173,6 +173,7 @@ constMap bp = Map.fromList
   , ("Prelude.equalNat", equalNatOp (bpBool bp))
   , ("Prelude.ltNat", ltNatOp (bpBool bp))
   -- Integers
+  , ("Prelude.Integer", VIntType)
   , ("Prelude.intAdd", intBinOp "intAdd" (bpIntAdd bp))
   , ("Prelude.intSub", intBinOp "intSub" (bpIntSub bp))
   , ("Prelude.intMul", intBinOp "intMul" (bpIntMul bp))
@@ -194,6 +195,7 @@ constMap bp = Map.fromList
   , ("Prelude.intMin", intBinOp "intMin" (bpIntMin bp))
   , ("Prelude.intMax", intBinOp "intMax" (bpIntMax bp))
   -- Vectors
+  , ("Prelude.Vec", vecTypeOp)
   , ("Prelude.gen", genOp)
   , ("Prelude.atWithDefault", atWithDefaultOp bp)
   , ("Prelude.upd", updOp bp)
@@ -472,6 +474,10 @@ natCaseOp =
             apply s' (ready (VNat (fromIntegral n - 1)))
 
 --------------------------------------------------------------------------------
+
+-- Vec :: (n :: Nat) -> (a :: sort 0) -> sort 0;
+vecTypeOp :: VMonad l => Value l
+vecTypeOp = pureFun $ \n -> pureFun $ \a -> VVecType n a
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 genOp :: VMonadLazy l => Value l

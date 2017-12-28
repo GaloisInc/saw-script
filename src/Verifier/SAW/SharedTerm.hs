@@ -584,10 +584,11 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
           n <- scNat sc (fromIntegral (V.length vs))
-          scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
-        FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
-        DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
-        StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
+          vec_f <- scFlatTermF sc preludeVecTypeFun
+          scApplyAll sc vec_f [n, tp]
+        FloatLit{}  -> lift $ scFlatTermF sc preludeFloatType
+        DoubleLit{} -> lift $ scFlatTermF sc preludeDoubleType
+        StringLit{} -> lift $ scFlatTermF sc preludeStringType
         ExtCns ec   -> return $ ecType ec
 
 --------------------------------------------------------------------------------
@@ -1046,10 +1047,12 @@ scBoolType :: SharedContext -> IO Term
 scBoolType sc = scDataTypeApp sc "Prelude.Bool" []
 
 scNatType :: SharedContext -> IO Term
-scNatType sc = scDataTypeApp sc preludeNatIdent []
+scNatType sc = scFlatTermF sc preludeNatType
 
 scVecType :: SharedContext -> Term -> Term -> IO Term
-scVecType sc n e = scDataTypeApp sc "Prelude.Vec" [n, e]
+scVecType sc n e =
+  do vec_f <- scFlatTermF sc preludeVecTypeFun
+     scApplyAll sc vec_f [n, e]
 
 scNot :: SharedContext -> Term -> IO Term
 scNot sc t = scGlobalApply sc "Prelude.not" [t]
@@ -1137,7 +1140,7 @@ scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 -- Primitive operations on Integer
 
 scIntegerType :: SharedContext -> IO Term
-scIntegerType sc = scDataTypeApp sc "Prelude.Integer" []
+scIntegerType sc = scFlatTermF sc preludeIntegerType
 
 -- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
 scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin

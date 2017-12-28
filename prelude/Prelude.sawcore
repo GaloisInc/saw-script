@@ -99,7 +99,7 @@ RecordType__rec _ _ _ _ f1 (RecordValue _ _ _ x y) = f1 x y;
 --------------------------------------------------------------------------------
 -- String values
 
-primitive data String :: sort 0;
+primitive String :: sort 0;
 
 primitive error :: (a :: sort 1) -> String -> a;
 
@@ -916,7 +916,7 @@ natCase p z s = Nat__rec p z (\ (n::Nat) -> \ (r::p n) -> s n);
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
-primitive data Vec :: Nat -> sort 0 -> sort 0;
+primitive Vec :: Nat -> sort 0 -> sort 0;
 
 -- Primitive function for generating an array.
 primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
@@ -1388,7 +1388,7 @@ bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i
 -- Integer values
 --   integer values of unbounded precision
 
-primitive data Integer :: sort 0;
+primitive Integer :: sort 0;
 
 primitive intAdd :: Integer -> Integer -> Integer;
 primitive intSub :: Integer -> Integer -> Integer;
@@ -1432,12 +1432,12 @@ updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 -- Floating-point values
 --    Currently commented out because they are not implemented...
 
-primitive data Float :: sort 0;
+primitive Float :: sort 0;
 
 -- primitive bvToFloat :: bitvector 32 -> Float;
 -- primitive floatToBV :: Float -> bitvector 32;
 
-primitive data Double :: sort 0;
+primitive Double :: sort 0;
 
 -- primitive bvToDouble :: bitvector 64 -> Double;
 -- primitive doubleToBV :: Double -> bitvector 64;

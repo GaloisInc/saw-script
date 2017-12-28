@@ -101,7 +101,6 @@ Import : 'import' opt('qualified') ModuleName opt(AsName) opt(ModuleImports) ';'
 
 SAWDecl :: { Decl }
 SAWDecl : 'data' Con '::' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
-          | 'primitive' 'data' Con '::' LTerm ';'  { PrimDataDecl $3 $5 }
           | 'primitive' DeclLhs '::' LTerm ';'
                {% mkTypeDecl PrimitiveQualifier $2 $4 }
           | 'axiom' DeclLhs '::' LTerm ';'

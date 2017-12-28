@@ -294,16 +294,16 @@ inferTerm tc uut = do
     Un.Paren _ t -> uncurry TypedValue <$> inferTypedValue tc t
     Un.NatLit p i | i < 0 -> fail $ ppPos p ++ " Unexpected negative natural number literal."
                   | otherwise -> pure $ TypedValue (TCF (NatLit i)) nattp
-      where nattp = TCF (DataTypeApp preludeNatIdent [])
+      where nattp = TCF preludeNatType
     Un.StringLit _ s -> pure $ TypedValue (TCF (StringLit s)) strtp
-      where strtp = TCF (DataTypeApp preludeStringIdent [])
+      where strtp = TCF preludeStringType
     Un.VecLit p [] -> tcFail p "SAWCore parser does not support empty array literals."
     Un.VecLit _ (h:l) -> do
       (v,tp) <- inferTypedValue tc h
       vl <- traverse (\ u -> tcTerm tc u tp) l
       let vals = V.fromList (v:vl)
       let n = TCF (NatLit (toInteger (V.length vals)))
-      return $ TypedValue (TCF (ArrayValue tp vals)) (TCF (DataTypeApp preludeVecIdent [n,tp]))
+      return $ TypedValue (TCF (ArrayValue tp vals)) (TCApp (TCApp (TCF preludeVecTypeFun) n) tp)
     Un.BadTerm p -> fail $ "Encountered bad term from position " ++ show p
 
 -- | @checkTypeSubtype tc p x y@ checks that @x@ is a subtype of @y@.
@@ -363,10 +363,9 @@ topEval :: TCRef s v -> TC s v
 topEval r = eval (internalError $ "Cyclic error in top level" ++ show r) r
 
 evalDataType :: TCRefDataType s -> TC s TCDataType
-evalDataType (DataTypeGen n tp ctp isPrim) =
+evalDataType (DataTypeGen n tp ctp) =
   DataTypeGen n <$> topEval tp
                 <*> traverse (traverse topEval) ctp
-                <*> pure isPrim
 
 evalDef :: TCRefDef s -> TC s TCDef
 evalDef (DefGen nm qual tpr elr) =
@@ -381,11 +380,10 @@ data CompletionContext
 completeDataType :: CompletionContext
                  -> TCDataType
                  -> DataType
-completeDataType cc (DataTypeGen dt tp cl isPrim) =
+completeDataType cc (DataTypeGen dt tp cl) =
   DataType { dtName = dt
            , dtType = completeTerm cc (termFromTCDTType tp)
            , dtCtors = fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
-           , dtIsPrimitive = isPrim
            }
 
 completeDef :: CompletionContext -> TCDef -> Def
@@ -684,19 +682,13 @@ parseDecl eqnMap d = do
         let def = DefGen (mkIdent mnm nm) qual rtp eqs
         isCtx  %= insertDef [Nothing] True (LocalLoc p) def
         isDefs %= (def:)
-    Un.PrimDataDecl psym utp -> do
-      let dti = mkIdent mnm (val psym)
-      dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
-      let dt = DataTypeGen dti dtp [] True
-      isCtx %= insertDataType [Nothing] True (LocalLoc (pos psym)) dt
-      isTypes %= (DataTypeGen dti dtp [] True :)
     Un.DataDecl psym utp ucl -> do
       let dti = mkIdent mnm (val psym)
       dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
       cl  <- traverse (parseCtor dti) ucl
-      let dt = DataTypeGen dti dtp cl False
+      let dt = DataTypeGen dti dtp cl
       isCtx   %= insertDataType [Nothing] True (LocalLoc (pos psym)) dt
-      isTypes %= (DataTypeGen dti dtp (view _3 <$> cl) False :)
+      isTypes %= (DataTypeGen dti dtp (view _3 <$> cl) :)
     Un.TermDef{} -> return ()
 
 parseImport :: Map ModuleName Module
@@ -726,7 +718,7 @@ parseImport moduleMap (Un.Import q (PosPair p nm) mAsName mcns) = do
           let addInModule = includeNameInModule mcns cnm
           (addInModule,loc,) . Ctor cnm <$> addPending (identName cnm) cfn
         let dtuse = includeNameInModule mcns dtnm
-        isCtx %= insertDataType mnml dtuse loc (DataTypeGen dtnm dtr cl (dtIsPrimitive dt))
+        isCtx %= insertDataType mnml dtuse loc (DataTypeGen dtnm dtr cl)
       -- Add definitions to module.
       forOf_ folded (moduleDefs m) $ \def -> do
         let inm = identName (defIdent def)

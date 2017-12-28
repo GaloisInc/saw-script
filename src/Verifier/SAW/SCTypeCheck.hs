@@ -215,10 +215,10 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           tp' <- whnf tp
           tys <- traverse memo vs
           V.mapM_ (\ty -> checkEqTy ty tp' (ArrayTypeMismatch tp' ty)) tys
-          io $ scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp'])
-        FloatLit{}  -> io $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
-        DoubleLit{} -> io $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
-        StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
+          io $ scVecType sc n tp'
+        FloatLit{}  -> io $ scFlatTermF sc preludeFloatType
+        DoubleLit{} -> io $ scFlatTermF sc preludeDoubleType
+        StringLit{} -> io $ scFlatTermF sc preludeStringType
         ExtCns ec   -> whnf $ ecType ec
 
 argMatch :: SharedContext -> Term -> Term -> IO Bool
