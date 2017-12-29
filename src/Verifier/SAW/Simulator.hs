@@ -49,6 +49,8 @@ import Data.Traversable
 import qualified Data.Vector as V
 --import qualified Debug.Trace as Debug
 
+import Verifier.SAW.Prelude.Constants
+
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -105,6 +107,9 @@ matchThunk p x =
     PCtor i ps  -> do v <- force x
                       case v of
                         VCtorApp s xv | i == s -> matchThunks ps (V.toList xv)
+                        VNat 0 | i == preludeZeroIdent -> matchThunks ps []
+                        VNat n | i == preludeSuccIdent ->
+                          matchThunks ps [ready (VNat (n-1))]
                         _                      -> return Nothing
     PString s   -> do v <- force x
                       case v of
