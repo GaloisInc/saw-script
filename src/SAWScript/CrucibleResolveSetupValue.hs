@@ -31,7 +31,6 @@ import qualified Lang.Crucible.BaseTypes as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
-import qualified Lang.Crucible.Utils.Arithmetic as Crucible
 
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
@@ -372,7 +371,7 @@ mkFields _ _ _ [] = []
 mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
     where
       end = off + Crucible.typeSize ty
-      off' = Crucible.toBytes $ Crucible.nextPow2Multiple (Crucible.bytesToInteger end) (fromIntegral nextAlign)
+      off' = Crucible.toBytes $ Crucible.padToAlignment (Crucible.bytesToInteger end) nextAlign
       pad = off' - end
       a' = max a (typeAlignment dl ty)
       nextAlign = case tys of
