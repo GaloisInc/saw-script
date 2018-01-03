@@ -273,8 +273,8 @@ llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
         run
         dumpMem 4 "llvm_verify post" Nothing
         res <- checkFinalState scLLVM ms initPS otherPtrs args
-        liftIO $ printOutFn vpopts Info "Verifying the following:"
-        liftIO $ printOutLn vpopts Info $ show (ppPathVC res)
+        liftIO $ printOutFn vpopts Debug "Verifying the following:"
+        liftIO $ printOutLn vpopts Debug $ show (ppPathVC res)
         case lsTactic lsctx of
              Skip -> do
                 liftIO $ printOutLn vpopts Warn $
