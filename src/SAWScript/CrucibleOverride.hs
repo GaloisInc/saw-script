@@ -58,6 +58,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
+import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
@@ -437,7 +438,7 @@ enforceDisjointness cc ss =
 
               sz p = Crucible.BVElt
                        Crucible.PtrWidth
-                       (fromIntegral (Crucible.memTypeSize dl p))
+                       (Crucible.bytesToInteger (Crucible.memTypeSize dl p))
                        Crucible.initializationLoc
 
               a = Crucible.AssertFailureSimError
@@ -880,7 +881,7 @@ executeAllocation opts cc (var, symTy) =
      let memVar = Crucible.llvmMemVar $ Crucible.memModelOps (cc^.ccLLVMContext)
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
-     sz <- liftIO $ Crucible.bvLit sym Crucible.PtrWidth (fromIntegral w)
+     sz <- liftIO $ Crucible.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
      (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz)
      writeGlobal memVar mem'
      assignVar cc var ptr

@@ -32,6 +32,7 @@ import qualified Lang.Crucible.CFG.Core as Crucible (Some(..))
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 
+import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
@@ -99,7 +100,7 @@ resolveSetupFieldIndex cc env v n =
         o:_ ->
           do Crucible.PtrType symTy <- typeOfSetupValue cc env v
              Crucible.StructType si <- let ?lc = lc in TyCtx.asMemType symTy
-             V.findIndex (\fi -> 8 * Crucible.fiOffset fi == o) (Crucible.siFields si)
+             V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == toInteger o) (Crucible.siFields si)
 
     _ -> Nothing
   where
@@ -244,7 +245,7 @@ resolveSetupVal cc env tyenv val =
          ptr <- resolveSetupVal cc env tyenv v
          case ptr of
            Crucible.LLVMValInt blk off ->
-             do delta' <- Crucible.bvLit sym (Crucible.bvWidth off) (toInteger delta)
+             do delta' <- Crucible.bvLit sym (Crucible.bvWidth off) (Crucible.bytesToInteger delta)
                 off' <- Crucible.bvAdd sym off delta'
                 return (Crucible.LLVMValInt blk off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
@@ -371,7 +372,7 @@ mkFields _ _ _ [] = []
 mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
     where
       end = off + Crucible.typeSize ty
-      off' = Crucible.toBytes $ Crucible.padToAlignment (Crucible.bytesToInteger end) nextAlign
+      off' = Crucible.padToAlignment end nextAlign
       pad = off' - end
       a' = max a (typeAlignment dl ty)
       nextAlign = case tys of
@@ -393,7 +394,7 @@ typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
 typeOfLLVMVal _dl val =
   case val of
     Crucible.LLVMValInt _bkl bv ->
-       Crucible.bitvectorType (Crucible.toBytes (Crucible.intWidthSize (fromIntegral (NatRepr.natValue (Crucible.bvWidth bv)))))
+       Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue (Crucible.bvWidth bv))))
     Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
