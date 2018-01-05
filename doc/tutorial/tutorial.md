@@ -224,15 +224,9 @@ First, we compile the Java code to a JVM class file.
 
     # javac -g FFS.java
 
-Now we can do the proof both within and across languages (from
-`code/ffs_compare.saw`):
-
-```
-$include all code/ffs_compare.saw
-```
-
-We can run this with the `-j` flag to tell it where to find the Java
-standard libraries:
+Using `saw` with Java code requires a command-line option `-j` that
+locates the Java standard libraries. Run the code in this section with
+the command:
 
     # saw -j <path to rt.jar or classes.jar from JDK> ffs_compare.saw
 
@@ -240,6 +234,15 @@ If you're using a Sun Java, you can find the standard libraries JAR by
 grepping the output of `java -v`:
 
     # java -v 2>&1 | grep Opened
+
+
+Now we can do the proof both within and across languages (from
+`code/ffs_compare.saw`):
+
+```
+$include all code/ffs_compare.saw
+```
+
 
 Using SMT-Lib Solvers
 =====================
