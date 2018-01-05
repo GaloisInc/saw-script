@@ -44,7 +44,7 @@ To build SAWScript and related utilities (CSS, LSS, JSS) from source:
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
-    platforms.
+    platforms. On Fedora, it is part of the `ncurses-compat-libs` package.
 
   * Ensure that you have the programs `javac` and `z3` on your
     `PATH`. Z3 binaries are available at

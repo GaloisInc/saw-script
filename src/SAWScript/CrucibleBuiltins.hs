@@ -86,6 +86,7 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 
 import qualified Lang.Crucible.LLVM as Crucible
+import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
@@ -370,7 +371,7 @@ doAlloc ::
 doAlloc cc tp = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = TyCtx.llvmDataLayout ?lc
-     sz <- Crucible.bvLit sym Crucible.PtrWidth (fromIntegral (Crucible.memTypeSize dl tp))
+     sz <- Crucible.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
      Crucible.mallocRaw sym mem sz
 
 --------------------------------------------------------------------------------
