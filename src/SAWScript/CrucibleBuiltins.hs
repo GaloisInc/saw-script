@@ -73,8 +73,7 @@ import           Data.Parameterized.Some
 import qualified Lang.Crucible.Config as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), SomeCFG(..), TypeRepr(..), cfgHandle,
-   UnitType, EmptyCtx, asBaseType, AsBaseType(..),
-   freshGlobalVar)
+   asBaseType, AsBaseType(..), freshGlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -119,12 +118,11 @@ import SAWScript.CrucibleResolveSetupValue
 
 type MemImpl = Crucible.MemImpl Sym
 
-show_cfg :: Crucible.AnyCFG Crucible.LLVM -> String
-show_cfg (Crucible.AnyCFG cfg) = show cfg
-
+show_cfg :: LLVM_CFG -> String
+show_cfg (LLVM_CFG _w (Crucible.AnyCFG cfg)) = show cfg
 
 ppAbortedResult :: CrucibleContext wptr
-                -> Crucible.AbortedResult Sym Crucible.LLVM
+                -> Crucible.AbortedResult Sym (Crucible.LLVM wptr)
                 -> Doc
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
   Crucible.ppSimError err <$$> ppGlobalPair cc gp
@@ -393,9 +391,9 @@ registerOverride ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
   Options                    ->
   CrucibleContext wptr       ->
-  Crucible.SimContext Crucible.SAWCruciblePersonality Sym Crucible.LLVM ->
+  Crucible.SimContext Crucible.SAWCruciblePersonality Sym (Crucible.LLVM wptr) ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym Crucible.LLVM rtp args ret ()
+  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym (Crucible.LLVM wptr) rtp args ret ()
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -563,7 +561,8 @@ setupCrucibleContext ::
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod) action = do
   halloc <- getHandleAlloc
-  (Some ctx, mtrans) <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
+  Some mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
+  let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
     action =<< (io $ do
@@ -578,10 +577,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod) action = do
       mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem
 
-      let setupMem :: Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym Crucible.LLVM
-                       (Crucible.RegEntry Sym Crucible.UnitType)
-                       Crucible.EmptyCtx Crucible.UnitType (Crucible.RegValue Sym Crucible.UnitType)
-          setupMem = do
+      let setupMem = do
              -- register the callable override functions
              _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
 
@@ -601,8 +597,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod) action = do
             Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
       return
-         CrucibleContext{ _ccLLVMContext = ctx
-                        , _ccLLVMModuleTrans = mtrans
+         CrucibleContext{ _ccLLVMModuleTrans = mtrans
                         , _ccLLVMModule = llvm_mod
                         , _ccBackend = sym
                         , _ccEmptyMemImpl = mem
@@ -646,36 +641,37 @@ setupArgs sc sym fn = do
 
 --------------------------------------------------------------------------------
 
-extractFromCFG :: Options -> SharedContext -> CrucibleContext wptr -> Crucible.AnyCFG Crucible.LLVM -> IO TypedTerm
-extractFromCFG opts sc cc (Crucible.AnyCFG cfg) = do
-  let sym = cc^.ccBackend
-  let h   = Crucible.cfgHandle cfg
-  (ecs, args) <- setupArgs sc sym h
-  let simCtx  = cc^.ccSimContext
-  let globals = cc^.ccGlobals
-  let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
-  res  <- Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
-             (Crucible.regValue <$> (Crucible.callCFG cfg args))
-  case res of
-    Crucible.FinishedExecution _ pr -> do
-        gp <- case pr of
-                Crucible.TotalRes gp -> return gp
-                Crucible.PartialRes _ gp _ -> do
-                  printOutLn opts Error "Symbolic simulation failed along some paths!"
-                  return gp
-        t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (Crucible.toSC sym)
-                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
-        t' <- scAbstractExts sc (toList ecs) t
-        tt <- mkTypedTerm sc t'
-        return tt
-    Crucible.AbortedResult _ ar -> do
-      let resultDoc = ppAbortedResult cc ar
-      fail $ unlines [ "Symbolic execution failed."
-                     , show resultDoc
-                     ]
-
+extractFromCFG :: Crucible.HasPtrWidth wptr =>
+   Options -> SharedContext -> CrucibleContext wptr -> Crucible.AnyCFG (Crucible.LLVM wptr) -> IO TypedTerm
+extractFromCFG opts sc cc (Crucible.AnyCFG cfg) =
+  do  let sym = cc^.ccBackend
+      let h   = Crucible.cfgHandle cfg
+      (ecs, args) <- setupArgs sc sym h
+      let simCtx  = cc^.ccSimContext
+      let globals = cc^.ccGlobals
+      let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
+      res  <- Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
+                 (Crucible.regValue <$> (Crucible.callCFG cfg args))
+      case res of
+        Crucible.FinishedExecution _ pr -> do
+            gp <- case pr of
+                    Crucible.TotalRes gp -> return gp
+                    Crucible.PartialRes _ gp _ -> do
+                      printOutLn opts Error "Symbolic simulation failed along some paths!"
+                      return gp
+            t <- Crucible.asSymExpr
+                       (gp^.Crucible.gpValue)
+                       (Crucible.toSC sym)
+                       (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
+            t' <- scAbstractExts sc (toList ecs) t
+            tt <- mkTypedTerm sc t'
+            return tt
+        Crucible.AbortedResult _ ar -> do
+          let resultDoc = ppAbortedResult cc ar
+          fail $ unlines [ "Symbolic execution failed."
+                         , show resultDoc
+                         ]
+    
 --------------------------------------------------------------------------------
 
 extract_crucible_llvm :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel TypedTerm
@@ -685,12 +681,12 @@ extract_crucible_llvm bic opts lm fn_name =
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> io $ extractFromCFG opts (biSharedContext bic) cc cfg
 
-load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel (Crucible.AnyCFG Crucible.LLVM)
+load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel LLVM_CFG
 load_llvm_cfg bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> return cfg
+      Just cfg -> Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \w -> return (LLVM_CFG w cfg)
 
 --------------------------------------------------------------------------------
 

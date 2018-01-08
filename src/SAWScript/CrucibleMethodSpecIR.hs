@@ -47,7 +47,7 @@ import qualified Lang.Crucible.CFG.Common as Crucible
 import SAWScript.SolverStats
 import SAWScript.TypedTerm
 
-import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl, LLVM)
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (MemImpl)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
@@ -227,18 +227,20 @@ type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
 
 data CrucibleContext wptr =
   CrucibleContext
-  { _ccLLVMContext     :: Crucible.LLVMContext wptr
-  , _ccLLVMModule      :: L.Module
-  , _ccLLVMModuleTrans :: Crucible.ModuleTranslation
+  { _ccLLVMModule      :: L.Module
+  , _ccLLVMModuleTrans :: Crucible.ModuleTranslation wptr
   , _ccBackend         :: Sym
   , _ccEmptyMemImpl    :: Crucible.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym Crucible.LLVM
+  , _ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym (Crucible.LLVM wptr)
   , _ccGlobals         :: Crucible.SymGlobalState Sym
   }
 
 makeLenses ''CrucibleContext
 makeLenses ''CrucibleSetupState
 makeLenses ''ResolvedState
+
+ccLLVMContext :: Simple Lens (CrucibleContext wptr) (Crucible.LLVMContext wptr)
+ccLLVMContext = ccLLVMModuleTrans . Crucible.transContext
 
 ccTypeCtx :: Simple Lens (CrucibleContext wptr) TyCtx.LLVMContext
 ccTypeCtx = ccLLVMContext . Crucible.llvmTypeCtx

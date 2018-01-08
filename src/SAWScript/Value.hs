@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -70,10 +71,11 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
+import qualified Data.Parameterized.NatRepr as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
 
 -- Values ----------------------------------------------------------------------
@@ -112,8 +114,11 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
-  | VCFG (Crucible.AnyCFG Crucible.LLVM)
+  | VCFG LLVM_CFG
   | VGhostVar CIR.GhostGlobal
+
+data LLVM_CFG where
+  LLVM_CFG :: Crucible.NatRepr wptr -> Crucible.AnyCFG (Crucible.LLVM wptr) -> LLVM_CFG
 
 data LLVMModule =
   LLVMModule
@@ -561,10 +566,10 @@ instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue (Crucible.AnyCFG Crucible.LLVM) where
+instance IsValue LLVM_CFG where
     toValue t = VCFG t
 
-instance FromValue (Crucible.AnyCFG Crucible.LLVM) where
+instance FromValue LLVM_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
