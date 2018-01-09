@@ -34,6 +34,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
+import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.Translation as Crucible
@@ -197,9 +198,9 @@ typeOfSetupValue' cc env val =
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
 resolveSetupVal ::
-  Crucible.HasPtrWidth wptr =>
-  CrucibleContext wptr ->
-  Map AllocIndex (LLVMPtr wptr) ->
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  CrucibleContext arch ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   Map AllocIndex Crucible.SymType ->
   SetupValue             ->
   IO LLVMVal
@@ -260,8 +261,8 @@ resolveSetupVal cc env tyenv val =
     dl = TyCtx.llvmDataLayout lc
 
 resolveTypedTerm ::
-  Crucible.HasPtrWidth wptr =>
-  CrucibleContext wptr ->
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  CrucibleContext arch ->
   TypedTerm       ->
   IO LLVMVal
 resolveTypedTerm cc tm =
@@ -278,8 +279,8 @@ resolveSAWPred cc tm =
   Crucible.bindSAWTerm (cc^.ccBackend) Crucible.BaseBoolRepr tm
 
 resolveSAWTerm ::
-  Crucible.HasPtrWidth wptr =>
-  CrucibleContext wptr ->
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  CrucibleContext arch ->
   Cryptol.TValue ->
   Term ->
   IO LLVMVal

@@ -87,6 +87,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
+import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
@@ -119,7 +120,7 @@ import SAWScript.CrucibleResolveSetupValue
 type MemImpl = Crucible.MemImpl Sym
 
 show_cfg :: LLVM_CFG -> String
-show_cfg (LLVM_CFG _w (Crucible.AnyCFG cfg)) = show cfg
+show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 
 ppAbortedResult :: CrucibleContext wptr
                 -> Crucible.AbortedResult Sym (Crucible.LLVM wptr)
@@ -239,13 +240,13 @@ verifyObligations cc mspec tactic assumes asserts = do
 -- Returns a tuple of (arguments, preconditions, pointer values,
 -- memory).
 verifyPrestate ::
-  Crucible.HasPtrWidth wptr =>
-  CrucibleContext wptr ->
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  CrucibleContext arch ->
   CrucibleMethodSpecIR ->
   Crucible.SymGlobalState Sym ->
   IO ([(Crucible.MemType, LLVMVal)],
       [Term],
-      Map AllocIndex (LLVMPtr wptr),
+      Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
@@ -269,10 +270,10 @@ verifyPrestate cc mspec globals = do
 
 
 resolveArguments ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
-  CrucibleContext wptr       ->
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  CrucibleContext arch       ->
   CrucibleMethodSpecIR       ->
-  Map AllocIndex (LLVMPtr wptr) ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   IO [(Crucible.MemType, LLVMVal)]
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
@@ -292,10 +293,10 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR       ->
-  CrucibleContext wptr       ->
-  Map AllocIndex (LLVMPtr wptr) ->
+  CrucibleContext arch       ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   [PointsTo]                 ->
   MemImpl                    ->
   IO MemImpl
@@ -321,10 +322,10 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          return mem'
 
 setupPrestateConditions ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr)  =>
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR        ->
-  CrucibleContext wptr        ->
-  Map AllocIndex (LLVMPtr wptr) ->
+  CrucibleContext arch        ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   Crucible.SymGlobalState Sym ->
   [SetupCondition]            ->
   IO (Crucible.SymGlobalState Sym, [Term])
@@ -350,7 +351,7 @@ setupPrestateConditions mspec cc env = aux []
 
 -- | Create a SAWCore formula asserting that two 'LLVMVal's are equal.
 assertEqualVals ::
-  CrucibleContext wptr ->
+  CrucibleContext arch ->
   LLVMVal ->
   LLVMVal ->
   IO Term
@@ -362,10 +363,10 @@ assertEqualVals cc v1 v2 =
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
 doAlloc ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
-  CrucibleContext wptr       ->
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  CrucibleContext arch       ->
   Crucible.MemType           ->
-  StateT MemImpl IO (LLVMPtr wptr)
+  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
 doAlloc cc tp = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = TyCtx.llvmDataLayout ?lc
@@ -374,7 +375,7 @@ doAlloc cc tp = StateT $ \mem ->
 
 --------------------------------------------------------------------------------
 
-ppGlobalPair :: CrucibleContext wptr
+ppGlobalPair :: CrucibleContext arch
              -> Crucible.GlobalPair Sym a
              -> Doc
 ppGlobalPair cc gp =
@@ -388,12 +389,12 @@ ppGlobalPair cc gp =
 --------------------------------------------------------------------------------
 
 registerOverride ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                    ->
-  CrucibleContext wptr       ->
-  Crucible.SimContext Crucible.SAWCruciblePersonality Sym (Crucible.LLVM wptr) ->
+  CrucibleContext arch       ->
+  Crucible.SimContext Crucible.SAWCruciblePersonality Sym (Crucible.LLVM arch) ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym (Crucible.LLVM wptr) rtp args ret ()
+  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym (Crucible.LLVM arch) rtp args ret ()
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -418,9 +419,9 @@ registerOverride opts cc _ctx cs = do
 --------------------------------------------------------------------------------
 
 verifySimulate ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                       ->
-  CrucibleContext wptr          ->
+  CrucibleContext arch          ->
   CrucibleMethodSpecIR          ->
   [(Crucible.MemType, LLVMVal)] ->
   [Term]                        ->
@@ -501,10 +502,10 @@ scAndList sc (x : xs) = foldM (scAnd sc) x xs
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                           {- ^ saw script debug and print options           -} ->
   SharedContext                     {- ^ saw core context                             -} ->
-  CrucibleContext wptr              {- ^ crucible context                             -} ->
+  CrucibleContext arch              {- ^ crucible context                             -} ->
   CrucibleMethodSpecIR              {- ^ specification                                -} ->
   Map AllocIndex (LLVMPtr wptr)     {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
@@ -557,7 +558,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
 setupCrucibleContext ::
    BuiltinContext -> Options -> LLVMModule ->
-   (forall wptr. (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) => CrucibleContext wptr -> TopLevel a) ->
+   (forall arch. (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => CrucibleContext arch -> TopLevel a) ->
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod) action = do
   halloc <- getHandleAlloc
@@ -641,8 +642,8 @@ setupArgs sc sym fn = do
 
 --------------------------------------------------------------------------------
 
-extractFromCFG :: Crucible.HasPtrWidth wptr =>
-   Options -> SharedContext -> CrucibleContext wptr -> Crucible.AnyCFG (Crucible.LLVM wptr) -> IO TypedTerm
+extractFromCFG :: Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+   Options -> SharedContext -> CrucibleContext arch -> Crucible.AnyCFG (Crucible.LLVM arch) -> IO TypedTerm
 extractFromCFG opts sc cc (Crucible.AnyCFG cfg) =
   do  let sym = cc^.ccBackend
       let h   = Crucible.cfgHandle cfg
@@ -686,7 +687,7 @@ load_llvm_cfg bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \w -> return (LLVM_CFG w cfg)
+      Just cfg -> return (LLVM_CFG cfg)
 
 --------------------------------------------------------------------------------
 
@@ -862,10 +863,10 @@ symTypeForLLVMType _bic lty =
 --
 -- This is the recursively-called worker function.
 constructExpandedSetupValue ::
-  (?lc::TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) =>
+  (?lc::TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext    {- ^ shared context             -} ->
   Crucible.MemType {- ^ LLVM mem type              -} ->
-  CrucibleSetup wptr SetupValue
+  CrucibleSetup arch SetupValue
                    {- ^ fresh expanded setup value -}
 constructExpandedSetupValue sc t =
   case t of

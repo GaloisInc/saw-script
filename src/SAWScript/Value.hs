@@ -71,10 +71,10 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Data.Parameterized.NatRepr as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.LLVM as Crucible
+import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
 
@@ -118,7 +118,7 @@ data Value
   | VGhostVar CIR.GhostGlobal
 
 data LLVM_CFG where
-  LLVM_CFG :: Crucible.NatRepr wptr -> Crucible.AnyCFG (Crucible.LLVM wptr) -> LLVM_CFG
+  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> LLVM_CFG
 
 data LLVMModule =
   LLVMModule
@@ -430,11 +430,11 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
-type CrucibleSetup wptr a =
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) => StateT (CIR.CrucibleSetupState wptr) TopLevel a
+type CrucibleSetup arch a =
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
 
 data CrucibleSetupM a =
-  CrucibleSetupM { runCrucibleSetupM :: forall wptr. CrucibleSetup wptr a }
+  CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }
 
 instance Functor CrucibleSetupM where
   fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
