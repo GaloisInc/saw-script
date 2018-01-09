@@ -63,9 +63,12 @@ type Bind a = (Name,a)
 
 -- Expr Level {{{
 
-data Located a = Located { getVal :: a, getOrig :: Name, getPos :: Pos } deriving (Functor, Foldable, Traversable)
+data Located a = Located { getVal :: a, getOrig :: Name, locatedPos :: Pos } deriving (Functor, Foldable, Traversable)
 instance Show (Located a) where
   show (Located _ v p) = show v ++ " (" ++ show p ++ ")"
+
+instance Positioned (Located a) where
+  getPos = locatedPos
 
 type LName = Located Name
 
@@ -108,13 +111,27 @@ data Expr
   | Let DeclGroup Expr
   | TSig Expr Type
   | IfThenElse Expr Expr Expr
+  -- Source locations
+  | LExpr Pos Expr
   deriving (Eq, Show)
+
+instance Positioned Expr where
+  getPos (Code c) = getPos c
+  getPos (CType t) = getPos t
+  getPos (LExpr site _) = site
+  getPos (Var n) = getPos n
+  getPos _ = Unknown
 
 data Pattern
   = PWild (Maybe Type)
   | PVar LName (Maybe Type)
   | PTuple [Pattern]
+  | LPattern Pos Pattern
   deriving (Eq, Show)
+
+instance Positioned Pattern where
+  getPos (LPattern pos _) = pos
+  getPos _ = Unknown
 
 data Stmt
   = StmtBind     Pattern (Maybe Type) Expr
@@ -129,9 +146,16 @@ data DeclGroup
   | NonRecursive Decl
   deriving (Eq, Show)
 
+instance Positioned DeclGroup where
+  getPos (Recursive ds) = maxSpan ds
+  getPos (NonRecursive d) = getPos d
+
 data Decl
-  = Decl { dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
+  = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
   deriving (Eq, Show)
+
+instance Positioned Decl where
+  getPos = dPos
 
 -- }}}
 
@@ -225,6 +249,7 @@ instance Pretty Expr where
       PP.text "if" PP.<+> PP.pretty e1 PP.<+>
       PP.text "then" PP.<+> PP.pretty e2 PP.<+>
       PP.text "else" PP.<+> PP.pretty e3
+    LExpr _ e -> PP.pretty e
 
 instance PrettyPrint Expr where
   pretty _ e = PP.pretty e
@@ -237,10 +262,10 @@ instance Pretty Pattern where
       prettyMaybeTypedArg (name, mType)
     PTuple pats ->
       PP.tupled (map PP.pretty pats)
+    LPattern _ pat' -> PP.pretty pat'
 
 instance Pretty Stmt where
    pretty = \case
-
       StmtBind (PWild _leftType) _rightType expr ->
          PP.pretty expr
       StmtBind pat _rightType expr ->
@@ -282,7 +307,7 @@ instance Pretty Stmt where
         --ppName n = ppIdent (P.nameIdent n)
 
 prettyDef :: Decl -> PP.Doc
-prettyDef (Decl pat _ def) =
+prettyDef (Decl _ pat _ def) =
    PP.pretty pat PP.<+>
    let (args, body) = dissectLambda def
    in (if not (null args)

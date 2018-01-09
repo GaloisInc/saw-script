@@ -45,6 +45,7 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import SAWScript.AST (Located(..))
 import SAWScript.Builtins
+import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
@@ -153,6 +154,7 @@ bindPatternGeneric ext pat ms v env =
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   _ -> error "bindPattern: expected tuple value"
         _ -> error "bindPattern: expected tuple value"
+    SS.LPattern _ pat' -> bindPatternGeneric ext pat' ms v env
 
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal = bindPatternGeneric extendLocal
@@ -206,9 +208,10 @@ interpret env expr =
                                    case v1 of
                                      VBool b -> interpret env (if b then e2 else e3)
                                      _ -> fail $ "interpret IfThenElse: " ++ show v1
+      SS.LExpr _ e           -> interpret env e
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
-interpretDecl env (SS.Decl pat mt expr) = do
+interpretDecl env (SS.Decl _ pat mt expr) = do
   v <- interpret env expr
   return (bindPatternLocal pat mt v env)
 
@@ -225,7 +228,7 @@ interpretDeclGroup env (SS.NonRecursive d) = interpretDecl env d
 interpretDeclGroup env (SS.Recursive ds) = return env'
   where
     env' = foldr addDecl env ds
-    addDecl (SS.Decl pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
+    addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
 
 interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
 interpretStmts env stmts =
@@ -266,12 +269,12 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl pat Nothing expr'
+  let decl = SS.Decl (getPos expr) pat Nothing expr'
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
-  SS.Decl _ (Just schema) expr'' <-
-    either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+  SS.Decl _ _ (Just schema) expr'' <-
+    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -311,7 +314,7 @@ interpretStmt printBinds stmt =
   case stmt of
     SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
     SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- either fail return $
+                                    dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW

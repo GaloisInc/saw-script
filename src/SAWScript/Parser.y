@@ -81,10 +81,10 @@ import Control.Applicative
   '='            { TPunct    _ "="              }
   '->'           { TPunct    _ "->"             }
   '<-'           { TPunct    _ "<-"             }
-  string         { TLit      _ $$               }
+  string         { TLit      _ _                }
   code           { TCode     _ _                }
   ctype          { TCType    _ _                }
-  num            { TNum      _ _ $$             }
+  num            { TNum      _ _ _              }
   name           { TVar      _ _                }
 
 %right 'else'
@@ -101,7 +101,7 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { Import (Left $1) $2 $3 }
+ : string mbAs mbImportSpec             { Import (Left (tokStr $1)) $2 $3 }
  -- TODO: allow imports by module name instead of path
 
 mbAs :: { Maybe P.ModName }
@@ -123,17 +123,17 @@ Stmt :: { Stmt }
  | 'typedef' name '=' Type              { StmtTypedef (toLName $2) $4 }
 
 Declaration :: { Decl }
- : Arg list(Arg) '=' Expression         { Decl $1 Nothing (buildFunction $2 $4) }
+ : Arg list(Arg) '=' Expression         { Decl (maxSpan [getPos $1, getPos $4]) $1 Nothing (buildFunction $2 $4) }
  | Arg list(Arg) ':' Type '=' Expression
-                                        { Decl $1 Nothing (buildFunction $2 (TSig $6 $4)) }
+                                        { Decl (maxSpan [getPos $1, getPos $6]) $1 Nothing (buildFunction $2 (TSig $6 $4)) }
 
 Pattern :: { Pattern }
  : Arg                                  { $1 }
  | name ':' Type                        { PVar (toLName $1) (Just $3) }
 
 Arg :: { Pattern }
- : name                                 { PVar (toLName $1) Nothing }
- | '(' commas(Pattern) ')'              { case $2 of [p] -> p; _ -> PTuple $2 }
+ : name                                 { LPattern (tokPos $1) (PVar (toLName $1) Nothing) }
+ | '(' commas(Pattern) ')'              { LPattern (maxSpan [tokPos $1, tokPos $3]) (case $2 of [p] -> p; _ -> PTuple $2) }
 
 Expression :: { Expr }
  : IExpr                                { $1 }
@@ -149,23 +149,23 @@ IExpr :: { Expr }
  : AExprs                               { $1 }
 
 AExprs :: { Expr }
- : list1(AExpr)                         { buildApplication $1 }
+ : list1(AExpr)                         { LExpr (maxSpan $1) (buildApplication $1) }
 
 AExpr :: { Expr }
- : '(' ')'                              { Tuple []                }
- | '[' ']'                              { Array []                }
- | string                               { String $1               }
+: '(' ')'                               { LExpr (maxSpan [tokPos $1, tokPos $2]) (Tuple []) }
+ | '[' ']'                              { LExpr (maxSpan [tokPos $1, tokPos $2]) (Array []) }
+ | string                               { LExpr (tokPos $1) (String (tokStr $1)) }
  | Code                                 { Code $1                 }
  | CType                                { CType $1                }
- | num                                  { Int $1                  }
+ | num                                  { LExpr (tokPos $1) (Int (tokNum $1)) }
  | name                                 { Var (Located (tokStr $1) (tokStr $1) (tokPos $1)) }
- | '(' Expression ')'                   { $2                      }
- | '(' commas2(Expression) ')'          { Tuple $2                }
- | '[' commas(Expression) ']'           { Array $2                }
- | '{' commas(Field) '}'                { Record (Map.fromList $2) }
- | 'do' '{' termBy(Stmt, ';') '}'       { Block $3                }
- | AExpr '.' name                       { Lookup $1 (tokStr $3)   }
- | AExpr '.' num                        { TLookup $1 $3           }
+ | '(' Expression ')'                   { LExpr (maxSpan [tokPos $1, tokPos $3]) $2 }
+ | '(' commas2(Expression) ')'          { LExpr (maxSpan [tokPos $1, tokPos $3]) (Tuple $2) }
+ | '[' commas(Expression) ']'           { LExpr (maxSpan [tokPos $1, tokPos $3]) (Array $2) }
+ | '{' commas(Field) '}'                { LExpr (maxSpan [tokPos $1, tokPos $3]) (Record (Map.fromList $2)) }
+ | 'do' '{' termBy(Stmt, ';') '}'       { LExpr (maxSpan [tokPos $1, tokPos $4]) (Block $3) }
+ | AExpr '.' name                       { LExpr (maxSpan [getPos $1, tokPos $3]) (Lookup $1 (tokStr $3)) }
+ | AExpr '.' num                        { LExpr (maxSpan [getPos $1, tokPos $3]) (TLookup $1 (tokNum $3))           }
 
 Code :: { Located String }
  : code                                 { Located (tokStr $1) (tokStr $1) (tokPos $1) }
@@ -284,8 +284,8 @@ instance Show ParseError where
   show e =
     case e of
       UnexpectedEOF     -> "Parse error: unexpected end of file"
-      UnexpectedToken t -> "Parse error at line " ++ show ln ++ ", col " ++ show col
-        where Pos _ ln col = tokPos t
+      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ tokStr t ++ "'"
+        where Range _ sl sc el ec = tokPos t -- TODO show token span consistently
       InvalidPattern x  -> "Parse error: invalid pattern " ++ pShow x
 
 parseError :: [Token Pos] -> Either ParseError b
@@ -305,6 +305,7 @@ toPattern expr =
     Tuple es       -> PTuple `fmap` mapM toPattern es
     TSig (Var x) t -> return (PVar x (Just t))
     Var x          -> return (PVar x Nothing)
+    LExpr pos e    -> LPattern pos `fmap` toPattern e
     _              -> Left (InvalidPattern expr)
 
 }

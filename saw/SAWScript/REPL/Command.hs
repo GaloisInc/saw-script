@@ -32,6 +32,7 @@ module SAWScript.REPL.Command (
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
+import SAWScript.Utils (getPos)
 
 import Cryptol.Parser (ParseError())
 import Cryptol.Utils.PP
@@ -50,6 +51,7 @@ import qualified SAWScript.AST as SS
      Located(..),
      Decl(..),
      Pattern(..))
+import SAWScript.Exceptions
 import SAWScript.MGU (checkDecl)
 import SAWScript.Interpreter
     (interpretStmt,
@@ -142,6 +144,7 @@ runCommand c = case c of
   Command cmd -> cmd `SAWScript.REPL.Monad.catch` handler
                      `SAWScript.REPL.Monad.catchIO` handlerIO
                      `SAWScript.REPL.Monad.catchFail` handler2
+                     `SAWScript.REPL.Monad.catchTypeErrors` handlerIO
     where
     handler re = io (putStrLn "" >> print (pp re))
     handler2 s = io (putStrLn "" >> putStrLn s)
@@ -160,10 +163,10 @@ typeOfCmd str =
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
-     let decl = SS.Decl (SS.PWild Nothing) Nothing expr
+     let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
      rw <- getEnvironment
-     SS.Decl _ (Just schema) _expr' <-
-       either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+     SS.Decl _pos _ (Just schema) _expr' <-
+       either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
 
 quitCmd :: REPL ()

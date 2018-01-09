@@ -165,6 +165,7 @@
     (font-lock-extend-after-change-region-function . saw-script--extend-after-change-region-function))
   "Highlighting instructions for SAWScript.")
 
+
 ;;; Running SAWScript
 
 (defun saw-script--compilation-buffer-name-function (_mode)
@@ -214,7 +215,15 @@
 (define-derived-mode saw-script-mode prog-mode "SAWScript"
   "A major mode for editing SAWScript files."
   (setq font-lock-defaults saw-script-font-lock-defaults)
-  (setq font-lock-multiline t))
+  (setq font-lock-multiline t)
+  ;; Compilation mode highlighting
+  (let ((compilation-regexp '("$\\([^:]+\\):\\([0-9]+\\):\\(0-9\\)-\\([0-9]+\\):\\(0-9\\): "
+                              1 (2 . 4) (3 . 5) nil 0)))
+    (if (assoc 'saw-script compilation-error-regexp-alist-alist)
+        (setf (assoc 'saw-script compilation-error-regexp-alist-alist) compilation-regexp)
+      (add-to-list 'compilation-error-regexp-alist-alist (cons 'saw-script compilation-regexp))))
+  (add-to-list 'compilation-error-regexp-alist 'saw-script)
+  )
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.saw$" . saw-script-mode))

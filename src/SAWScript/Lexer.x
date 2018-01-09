@@ -93,8 +93,15 @@ via  c g p s = c p s (g s)
 via' c g p s = c p (g s)
 
 lexSAW :: FilePath -> String -> [Token Pos]
-lexSAW f = dropComments . map (fmap fixPos) . alexScanTokens
-  where fixPos (AlexPn _ l c) = Pos f l c
+lexSAW f = dropComments . map fixPos . alexScanTokens
+  where fixPos tok =
+          let (AlexPn _ sl sc) = tokPos tok
+              pos = case lines (tokStr tok) of
+                      [] -> Range f sl sc sl sc
+                      [l] -> Range f sl sc sl (sc + length l)
+                      (l:ls) -> Range f sl sc (sl + length ls) (length (last (l:ls)))
+          in tok { tokPos = pos }
+
 
 readCode :: String -> String
 readCode = reverse . drop 2 . reverse . drop 2
