@@ -122,8 +122,8 @@ type MemImpl = Crucible.MemImpl Sym
 show_cfg :: LLVM_CFG -> String
 show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 
-ppAbortedResult :: CrucibleContext wptr
-                -> Crucible.AbortedResult Sym (Crucible.LLVM wptr)
+ppAbortedResult :: CrucibleContext arch
+                -> Crucible.AbortedResult Sym (Crucible.LLVM arch)
                 -> Doc
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
   Crucible.ppSimError err <$$> ppGlobalPair cc gp
@@ -194,7 +194,7 @@ crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
                    Just st0 -> return st0
     (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
 
-verifyObligations :: CrucibleContext wptr
+verifyObligations :: CrucibleContext arch
                   -> CrucibleMethodSpecIR
                   -> ProofScript SatResult
                   -> [Term]
@@ -692,17 +692,19 @@ load_llvm_cfg bic opts lm fn_name =
 --------------------------------------------------------------------------------
 
 diffMemTypes ::
+  Crucible.HasPtrWidth wptr =>
   Crucible.MemType ->
   Crucible.MemType ->
   [([Maybe Int], Crucible.MemType, Crucible.MemType)]
 diffMemTypes x0 y0 =
+  let wptr :: Natural = fromIntegral (Crucible.natValue ?ptrWidth) in
   case (x0, y0) of
     (Crucible.IntType x, Crucible.IntType y) | x == y -> []
     (Crucible.FloatType, Crucible.FloatType) -> []
     (Crucible.DoubleType, Crucible.DoubleType) -> []
     (Crucible.PtrType{}, Crucible.PtrType{}) -> []
-    (Crucible.IntType 64, Crucible.PtrType{}) -> []
-    (Crucible.PtrType{}, Crucible.IntType 64) -> []
+    (Crucible.IntType w, Crucible.PtrType{}) | w == wptr -> []
+    (Crucible.PtrType{}, Crucible.IntType w) | w == wptr -> []
     (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
       | xn == yn ->
         [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
@@ -718,6 +720,7 @@ diffMemTypes x0 y0 =
     _ -> [([], x0, y0)]
 
 diffMemTypesList ::
+  Crucible.HasPtrWidth arch =>
   Int ->
   [(Crucible.MemType, Crucible.MemType)] ->
   [([Maybe Int], Crucible.MemType, Crucible.MemType)]
@@ -738,9 +741,10 @@ showMemTypeDiff (path, l, r) = showPath path
 -- | Succeed if the types have compatible memory layouts. Otherwise,
 -- fail with a detailed message indicating how the types differ.
 checkMemTypeCompatibility ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   Crucible.MemType ->
   Crucible.MemType ->
-  CrucibleSetup wptr ()
+  CrucibleSetup arch ()
 checkMemTypeCompatibility t1 t2 =
   case diffMemTypes t1 t2 of
     [] -> return ()
@@ -752,19 +756,19 @@ checkMemTypeCompatibility t1 t2 =
 --------------------------------------------------------------------------------
 -- Setup builtins
 
-getCrucibleContext :: CrucibleSetup wptr (CrucibleContext wptr)
+getCrucibleContext :: CrucibleSetup arch (CrucibleContext arch)
 getCrucibleContext = view csCrucibleContext <$> get
 
-currentState :: Lens' (CrucibleSetupState wptr) StateSpec
+currentState :: Lens' (CrucibleSetupState arch) StateSpec
 currentState f x = case x^.csPrePost of
   PreState  -> csMethodSpec (csPreState f) x
   PostState -> csMethodSpec (csPostState f) x
 
-addPointsTo :: PointsTo -> CrucibleSetup wptr ()
+addPointsTo :: PointsTo -> CrucibleSetup arch ()
 addPointsTo pt = currentState.csPointsTos %= (pt : )
 
 addCondition :: SetupCondition
-             -> CrucibleSetup wptr ()
+             -> CrucibleSetup arch ()
 addCondition cond = currentState.csConditions %= (cond : )
 
 -- | Returns logical type of actual type if it is an array or primitive
@@ -823,7 +827,7 @@ freshVariable ::
   SharedContext {- ^ shared context -} ->
   String        {- ^ variable name  -} ->
   Term          {- ^ variable type  -} ->
-  CrucibleSetup wptr TypedTerm
+  CrucibleSetup arch TypedTerm
 freshVariable sc name ty =
   do tt <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc name ty)
      currentState . csFreshVars %= cons tt
@@ -847,13 +851,13 @@ crucible_fresh_expanded_val bic _opts lty = CrucibleSetupM $
      constructExpandedSetupValue sc lty'
 
 
-memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup wptr Crucible.MemType
+memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup arch Crucible.MemType
 memTypeForLLVMType _bic lty =
   do case TyCtx.liftMemType lty of
        Just m -> return m
        Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
 
-symTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup wptr Crucible.SymType
+symTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup arch Crucible.SymType
 symTypeForLLVMType _bic lty =
   do case TyCtx.liftType lty of
        Just m -> return m
@@ -913,7 +917,7 @@ crucible_fresh_pointer bic _opt lty = CrucibleSetupM $
   do symTy <- symTypeForLLVMType bic lty
      constructFreshPointer symTy
 
-constructFreshPointer :: Crucible.SymType -> CrucibleSetup wptr SetupValue
+constructFreshPointer :: Crucible.SymType -> CrucibleSetup arch SetupValue
 constructFreshPointer symTy =
   do n <- csVarCounter <<%= nextAllocIndex
      currentState.csFreshPointers.at n ?= symTy
@@ -928,23 +932,24 @@ crucible_points_to ::
   CrucibleSetupM ()
 crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
   do cc <- getCrucibleContext
-     let ?lc = cc^.ccTypeCtx
-     st <- get
-     let rs = st^.csResolvedState
-     if st^.csPrePost == PreState && testResolved ptr rs
-       then fail "Multiple points-to preconditions on same pointer"
-       else csResolvedState %= markResolved ptr
-     let env = csAllocations (st^.csMethodSpec)
-     ptrTy <- typeOfSetupValue cc env ptr
-     lhsTy <- case ptrTy of
-       Crucible.PtrType symTy ->
-         case TyCtx.asMemType symTy of
-           Just lhsTy -> return lhsTy
-           Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
-       _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-     valTy <- typeOfSetupValue cc env val
-     when typed (checkMemTypeCompatibility lhsTy valTy)
-     addPointsTo (PointsTo ptr val)
+     Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \wptr -> Crucible.withPtrWidth wptr $
+       do let ?lc = cc^.ccTypeCtx
+          st <- get
+          let rs = st^.csResolvedState
+          if st^.csPrePost == PreState && testResolved ptr rs
+            then fail "Multiple points-to preconditions on same pointer"
+            else csResolvedState %= markResolved ptr
+          let env = csAllocations (st^.csMethodSpec)
+          ptrTy <- typeOfSetupValue cc env ptr
+          lhsTy <- case ptrTy of
+            Crucible.PtrType symTy ->
+              case TyCtx.asMemType symTy of
+                Just lhsTy -> return lhsTy
+                Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
+            _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
+          valTy <- typeOfSetupValue cc env val
+          when typed (checkMemTypeCompatibility lhsTy valTy)
+          addPointsTo (PointsTo ptr val)
 
 crucible_equal ::
   BuiltinContext ->
