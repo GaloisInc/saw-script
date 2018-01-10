@@ -209,6 +209,24 @@
     map)
   "Keymap for SAWScript mode.")
 
+;;; Flycheck support
+(with-eval-after-load 'flycheck
+  (flycheck-define-checker saw-script
+    "A checker for SAWScript.
+
+See URL `http://saw.galois.com' for more information."
+    :command ("saw" source-inplace)
+    :error-patterns ((error line-start (file-name) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ":"
+                            (message) line-end)
+                     (error (seq line-start "[error] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
+                                 "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
+                                 (message (1+ (seq "\n " (1+ (not (any ?\n))))))))
+                     (warning (seq line-start "[warning] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
+                                   "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
+                                   (message (1+ (seq "\n " (1+ (not (any ?\n)))))))))
+    :modes (saw-script-mode))
+  (add-to-list 'flycheck-checkers 'saw-script))
+
 ;;; The mode itself
 
 ;;;###autoload
