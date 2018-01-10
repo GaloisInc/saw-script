@@ -85,7 +85,11 @@ data Import = Import
   { iModule    :: Either FilePath P.ModName
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
+  , iPos       :: Pos
   } deriving (Eq, Show)
+
+instance Positioned Import where
+  getPos = iPos
 
 data Expr
   -- Constants
@@ -134,12 +138,19 @@ instance Positioned Pattern where
   getPos _ = Unknown
 
 data Stmt
-  = StmtBind     Pattern (Maybe Type) Expr
-  | StmtLet      DeclGroup
-  | StmtCode     (Located String)
-  | StmtImport   Import
-  | StmtTypedef  (Located String) Type
+  = StmtBind     Pos Pattern (Maybe Type) Expr
+  | StmtLet      Pos DeclGroup
+  | StmtCode     Pos (Located String)
+  | StmtImport   Pos Import
+  | StmtTypedef  Pos (Located String) Type
   deriving (Eq, Show)
+
+instance Positioned Stmt where
+  getPos (StmtBind pos _ _ _)  = pos
+  getPos (StmtLet pos _)       = pos
+  getPos (StmtCode pos _)      = pos
+  getPos (StmtImport pos _)    = pos
+  getPos (StmtTypedef pos _ _) = pos
 
 data DeclGroup
   = Recursive [Decl]
@@ -176,7 +187,12 @@ data Type
   | TyVar Name
   | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
   | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
+  | LType Pos Type
   deriving (Eq,Show)
+
+instance Positioned Type where
+  getPos (LType pos _) = pos
+  getPos _ = Unknown
 
 type TypeIndex = Integer
 
@@ -266,21 +282,21 @@ instance Pretty Pattern where
 
 instance Pretty Stmt where
    pretty = \case
-      StmtBind (PWild _leftType) _rightType expr ->
+      StmtBind _ (PWild _leftType) _rightType expr ->
          PP.pretty expr
-      StmtBind pat _rightType expr ->
+      StmtBind _ pat _rightType expr ->
          PP.pretty pat PP.<+> PP.text "<-" PP.<+> PP.align (PP.pretty expr)
-      StmtLet (NonRecursive decl) ->
+      StmtLet _ (NonRecursive decl) ->
          PP.text "let" PP.<+> prettyDef decl
-      StmtLet (Recursive decls) ->
+      StmtLet _ (Recursive decls) ->
          PP.text "rec" PP.<+>
          PP.cat (PP.punctuate
             (PP.empty PP.</> PP.text "and" PP.<> PP.space)
             (map prettyDef decls))
-      StmtCode (Located code _ _) ->
+      StmtCode _ (Located code _ _) ->
          PP.text "let" PP.<+>
             (PP.braces . PP.braces $ PP.text code)
-      StmtImport Import{iModule,iAs,iSpec} ->
+      StmtImport _ Import{iModule,iAs,iSpec} ->
          PP.text "import" PP.<+>
          (case iModule of
             Left filepath ->
@@ -297,7 +313,7 @@ instance Pretty Stmt where
             Just (P.Only names) ->
                PP.space PP.<> PP.tupled (map ppIdent names)
             Nothing -> PP.empty)
-      StmtTypedef (Located name _ _) ty ->
+      StmtTypedef _ (Located name _ _) ty ->
          PP.text "typedef" PP.<+> PP.text name PP.<+> pretty 0 ty
       --expr -> PP.cyan . PP.text $ show expr
 
@@ -355,6 +371,7 @@ instance PrettyPrint Type where
   pretty _par (TyUnifyVar i)    = PP.text "t." PP.<> PP.integer i
   pretty _par (TySkolemVar n i) = PP.text n PP.<> PP.integer i
   pretty _par (TyVar n)         = PP.text n
+  pretty par (LType _ t)        = pretty par t
 
 instance PrettyPrint TyCon where
   pretty par tc = case tc of

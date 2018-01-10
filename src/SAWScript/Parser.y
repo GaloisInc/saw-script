@@ -101,26 +101,26 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { Import (Left (tokStr $1)) $2 $3 }
+ : string mbAs mbImportSpec             { Import (Left (tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
  -- TODO: allow imports by module name instead of path
 
-mbAs :: { Maybe P.ModName }
- : 'as' name                            { Just (P.packModName [pack (tokStr $2)]) }
- | {- empty -}                          { Nothing }
+mbAs :: { (Maybe P.ModName, Pos) }
+ : 'as' name                            { (Just (P.packModName [pack (tokStr $2)]), maxSpan [$1, $2]) }
+ | {- empty -}                          { (Nothing, Unknown) }
 
-mbImportSpec :: { Maybe P.ImportSpec }
- : '(' list(name) ')'                   { Just $ P.Only   [ P.packIdent (tokStr n) | n <- $2 ] }
- | 'hiding' '(' list(name) ')'          { Just $ P.Hiding [ P.packIdent (tokStr n) | n <- $3 ] }
- | {- empty -}                          { Nothing }
+mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
+ : '(' list(name) ')'                   { (Just $ P.Only   [ P.packIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
+ | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.packIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
+ | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
- : Expression                           { StmtBind (PWild Nothing) Nothing $1   }
- | AExpr '<-' Expression                {% fmap (\x -> StmtBind x Nothing $3) (toPattern $1) }
- | 'rec' sepBy1(Declaration, 'and')     { StmtLet (Recursive $2)                  }
- | 'let' Declaration                    { StmtLet (NonRecursive $2)               }
- | 'let' Code                           { StmtCode $2                 }
- | 'import' Import                      { StmtImport $2               }
- | 'typedef' name '=' Type              { StmtTypedef (toLName $2) $4 }
+ : Expression                           { StmtBind (getPos $1) (PWild Nothing) Nothing $1 }
+ | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan [getPos x, getPos $3]) x Nothing $3) (toPattern $1) }
+ | 'rec' sepBy1(Declaration, 'and')     { StmtLet (maxSpan [tokPos $1, maxSpan $2]) (Recursive $2) }
+ | 'let' Declaration                    { StmtLet (maxSpan [tokPos $1, getPos $2]) (NonRecursive $2) }
+ | 'let' Code                           { StmtCode (maxSpan [tokPos $1, getPos $2]) $2 }
+ | 'import' Import                      { StmtImport (maxSpan [tokPos $1, getPos $2]) $2 }
+ | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (toLName $2) $4 }
 
 Declaration :: { Decl }
  : Arg list(Arg) '=' Expression         { Decl (maxSpan [getPos $1, getPos $4]) $1 Nothing (buildFunction $2 $4) }
@@ -186,26 +186,26 @@ PolyType :: { Schema }
 
 Type :: { Type }
  : BaseType                             { $1                      }
- | BaseType '->' Type                   { tFun $1 $3              }
+ | BaseType '->' Type                   { LType (maxSpan [$1, $3]) (tFun $1 $3) }
 
 FieldType :: { Bind Type }
   : name ':' BaseType                   { (tokStr $1, $3)         }
 
 BaseType :: { Type }
- : name                                 { tVar (tokStr $1)        }
- | Context BaseType                     { tBlock $1 $2            }
- | '(' ')'                              { tTuple []               }
- | 'Bool'                               { tBool                   }
- | 'Int'                                { tInt                    }
- | 'String'                             { tString                 }
- | 'Term'                               { tTerm                   }
- | 'Type'                               { tType                   }
- | 'AIG'                                { tAIG                    }
- | 'CFG' 				{ tCFG			  }
- | '(' Type ')'                         { $2                      }
- | '(' commas2(Type) ')'                { tTuple $2               }
- | '[' Type ']'                         { tArray $2               }
- | '{' commas(FieldType) '}'            { tRecord $2              }
+ : name                                 { LType (getPos $1) (tVar (tokStr $1))  }
+ | Context BaseType                     { tBlock $1 $2                          }
+ | '(' ')'                              { LType (maxSpan [$1, $2]) (tTuple [])  }
+ | 'Bool'                               { LType (getPos $1) tBool               }
+ | 'Int'                                { LType (getPos $1) tInt                }
+ | 'String'                             { LType (getPos $1) tString             }
+ | 'Term'                               { LType (getPos $1) tTerm               }
+ | 'Type'                               { LType (getPos $1) tType               }
+ | 'AIG'                                { LType (getPos $1) tAIG                }
+ | 'CFG' 				{ LType (getPos $1) tCFG                }
+ | '(' Type ')'                         { LType (maxSpan [$1, $3]) $2           }
+ | '(' commas2(Type) ')'                { LType (maxSpan [$1, $3]) (tTuple $2)  }
+ | '[' Type ']'                         { LType (maxSpan [$1, $3]) (tArray $2)  }
+ | '{' commas(FieldType) '}'            { LType (maxSpan [$1, $3]) (tRecord $2) }
 
 Context :: { Type }
  : 'CryptolSetup'                       { tContext CryptolSetup   }

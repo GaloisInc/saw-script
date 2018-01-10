@@ -234,13 +234,13 @@ interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
 interpretStmts env stmts =
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind pat _ e : ss ->
+      [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
+      SS.StmtBind _ pat _ e : ss ->
           do v1 <- interpret env e
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue v1 (VLambda f)
-      SS.StmtLet bs : ss -> interpret env (SS.Let bs (SS.Block ss))
-      SS.StmtCode s : ss ->
+      SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
+      SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv env
              ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) s
@@ -248,9 +248,9 @@ interpretStmts env stmts =
              -- We should change parseDecls to return only the new bindings instead.
              putTopLevelRW $ rw{rwCryptol = ce'}
              interpretStmts env ss
-      SS.StmtImport _ : _ ->
+      SS.StmtImport _ _ : _ ->
           do fail "block import unimplemented"
-      SS.StmtTypedef name ty : ss ->
+      SS.StmtTypedef _ name ty : ss ->
           do let env' = LocalTypedef (getVal name) ty : env
              interpretStmts env' ss
 
@@ -312,27 +312,27 @@ interpretStmt ::
   TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
-    SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
-    SS.StmtLet dg             -> do rw <- getTopLevelRW
+    SS.StmtBind _ pat mc expr -> do {-TODO set loc-} processStmtBind printBinds pat mc expr
+    SS.StmtLet _ dg           -> do rw <- getTopLevelRW
                                     dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW
-    SS.StmtCode lstr          -> do rw <- getTopLevelRW
+    SS.StmtCode _ lstr        -> do rw <- getTopLevelRW
                                     sc <- getSharedContext
                                     --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
                                     --showCryptolEnv
                                     cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) lstr
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
-    SS.StmtImport imp         -> do rw <- getTopLevelRW
+    SS.StmtImport _ imp       -> do rw <- getTopLevelRW
                                     sc <- getSharedContext
                                     --showCryptolEnv
                                     cenv' <- io $ CEnv.importModule sc (rwCryptol rw) imp
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
-    SS.StmtTypedef name ty    -> do rw <- getTopLevelRW
-                                    putTopLevelRW $ addTypedef (getVal name) ty rw
+    SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
+                                     putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do

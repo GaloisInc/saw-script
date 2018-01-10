@@ -62,6 +62,8 @@ assert :: Bool -> String -> Either String ()
 assert b msg = unless b $ failMGU msg
 
 mgu :: LName -> Type -> Type -> Either String Subst
+mgu m (LType _ t) t2 = mgu m t t2
+mgu m t1 (LType _ t) = mgu m t1 t
 mgu m (TyUnifyVar i) t2 = bindVar m i t2
 mgu m t1 (TyUnifyVar i) = bindVar m i t1
 mgu m r1@(TyRecord ts1) r2@(TyRecord ts2) = do
@@ -112,6 +114,7 @@ instance UnifyVars Type where
     TyVar _         -> S.empty
     TyUnifyVar i    -> S.singleton i
     TySkolemVar _ _ -> S.empty
+    LType _ t'      -> unifyVars t'
 
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
@@ -136,6 +139,7 @@ instance NamedVars Type where
     TyVar n         -> S.singleton n
     TyUnifyVar _    -> S.empty
     TySkolemVar _ _ -> S.empty
+    LType _ t'      -> namedVars t'
 
 instance NamedVars Schema where
   namedVars (Forall ns t) = namedVars t S.\\ S.fromList ns
@@ -292,6 +296,7 @@ instance AppSubst Type where
                          Just t' -> t'
                          Nothing -> t
     TySkolemVar _ _ -> t
+    LType pos t'    -> LType pos (appSubst s t')
 
 instance AppSubst Schema where
   appSubst s (Forall ns t) = Forall ns (appSubst s t)
@@ -330,11 +335,11 @@ instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
 
 instance AppSubst Stmt where
   appSubst s bst = case bst of
-    StmtBind pat ctx e   -> StmtBind (appSubst s pat) (appSubst s ctx) (appSubst s e)
-    StmtLet dg           -> StmtLet (appSubst s dg)
-    StmtCode str         -> StmtCode str
-    StmtImport imp       -> StmtImport imp
-    StmtTypedef name ty  -> StmtTypedef name (appSubst s ty)
+    StmtBind pos pat ctx e   -> StmtBind pos (appSubst s pat) (appSubst s ctx) (appSubst s e)
+    StmtLet pos dg           -> StmtLet pos (appSubst s dg)
+    StmtCode pos str         -> StmtCode pos str
+    StmtImport pos imp       -> StmtImport pos imp
+    StmtTypedef pos name ty  -> StmtTypedef pos name (appSubst s ty)
 
 instance AppSubst DeclGroup where
   appSubst s (Recursive ds) = Recursive (appSubst s ds)
@@ -363,6 +368,7 @@ instance Instantiate Type where
     TyVar n         -> maybe ty id (lookup n nts)
     TyUnifyVar _    -> ty
     TySkolemVar _ _ -> ty
+    LType pos ty'   -> LType pos (instantiate nts ty')
 
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
@@ -524,7 +530,7 @@ inferStmts m _ctx [] = do
   t <- newType
   return ([], t)
 
-inferStmts m ctx [StmtBind (PWild mt) mc e] = do
+inferStmts m ctx [StmtBind pos (PWild mt) mc e] = do
   t  <- maybe newType return mt
   e' <- checkE m e (tBlock ctx t)
   mc' <- case mc of
@@ -532,14 +538,14 @@ inferStmts m ctx [StmtBind (PWild mt) mc e] = do
     Just ty  -> do ty' <- checkKind ty
                    unify m ty ctx -- TODO: should this be ty'?
                    return ty'
-  return ([StmtBind (PWild (Just t)) (Just mc') e'],t)
+  return ([StmtBind pos (PWild (Just t)) (Just mc') e'],t)
 
 inferStmts m _ [_] = do
   recordError ("do block must end with expression at " ++ show m)
   t <- newType
   return ([],t)
 
-inferStmts m ctx (StmtBind pat mc e : more) = do
+inferStmts m ctx (StmtBind pos pat mc e : more) = do
   (pt, pat') <- newTypePattern pat
   e' <- checkE m e (tBlock ctx pt)
   mc' <- case mc of
@@ -549,25 +555,25 @@ inferStmts m ctx (StmtBind pat mc e : more) = do
                   return c'
   (more', t') <- bindPattern pat' $ inferStmts m ctx more
 
-  return (StmtBind pat' (Just mc') e' : more', t')
+  return (StmtBind pos pat' (Just mc') e' : more', t')
 
-inferStmts m ctx (StmtLet dg : more) = do
+inferStmts m ctx (StmtLet pos dg : more) = do
   dg' <- inferDeclGroup dg
   (more', t) <- bindDeclGroup dg' (inferStmts m ctx more)
-  return (StmtLet dg' : more', t)
+  return (StmtLet pos dg' : more', t)
 
-inferStmts m ctx (StmtCode s : more) = do
+inferStmts m ctx (StmtCode pos s : more) = do
   (more',t) <- inferStmts m ctx more
-  return (StmtCode s : more', t)
+  return (StmtCode pos s : more', t)
 
-inferStmts m ctx (StmtImport imp : more) = do
+inferStmts m ctx (StmtImport pos imp : more) = do
   (more', t) <- inferStmts m ctx more
-  return (StmtImport imp : more', t)
+  return (StmtImport pos imp : more', t)
 
-inferStmts m ctx (StmtTypedef name ty : more) =
+inferStmts m ctx (StmtTypedef pos name ty : more) =
   bindTypedef name ty $ do
     (more', t) <- inferStmts m ctx more
-    return (StmtTypedef name ty : more', t)
+    return (StmtTypedef pos name ty : more', t)
 
 patternLNames :: Pattern -> [LName]
 patternLNames pat =
