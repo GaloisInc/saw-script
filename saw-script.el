@@ -216,13 +216,22 @@
   "A major mode for editing SAWScript files."
   (setq font-lock-defaults saw-script-font-lock-defaults)
   (setq font-lock-multiline t)
+
   ;; Compilation mode highlighting
-  (let ((compilation-regexp '("$\\([^:]+\\):\\([0-9]+\\):\\(0-9\\)-\\([0-9]+\\):\\(0-9\\): "
-                              1 (2 . 4) (3 . 5) nil 0)))
-    (if (assoc 'saw-script compilation-error-regexp-alist-alist)
-        (setf (assoc 'saw-script compilation-error-regexp-alist-alist) compilation-regexp)
-      (add-to-list 'compilation-error-regexp-alist-alist (cons 'saw-script compilation-regexp))))
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(saw-script "$\\([^:]+\\):\\([0-9]+\\):\\(0-9\\)-\\([0-9]+\\):\\(0-9\\): "
+                            1 (2 . 4) (3 . 5) nil 0))
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(cryptol-warning
+                 "\\[warning\\] at \\([^:]+\\):\\([0-9]+\\):\\([0-9]+\\)--\\([0-9]+\\):\\([0-9+]\\)"
+                 1 (2 . 4) (3 . 5) 1))
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(cryptol-error
+                 "\\[error\\] at \\([^:]+\\):\\([0-9]+\\):\\([0-9]+\\)--\\([0-9]+\\):\\([0-9+]\\)"
+                 1 (2 . 4) (3 . 5) 1))
   (add-to-list 'compilation-error-regexp-alist 'saw-script)
+  (add-to-list 'compilation-error-regexp-alist 'cryptol-warning)
+  (add-to-list 'compilation-error-regexp-alist 'cryptol-error)
   )
 
 ;;;###autoload
