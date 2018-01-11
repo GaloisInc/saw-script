@@ -150,6 +150,17 @@ For example:
 include "print.saw";
 ~~~~
 
+## Syntax
+
+The syntax of SAWScript is reminiscent of functional languages such as
+Cryptol, Haskell and ML. In particular, functions are applied by
+writing them next to their arguments rather than by using parentheses
+and commas. Rather than writing `f(x, y)`, write `f x y`.
+
+In SAWScript, all text from `//` until the end of a line is
+ignored. Additionally, all text between `/*` and `*/` is ignored,
+regardless of whether the line ends.
+
 ## Basic Types and Values
 
 All values in SAWScript have types, and these types are determined and
