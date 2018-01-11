@@ -1402,7 +1402,7 @@ primitives = Map.fromList
 
   , prim "caseProofResult"     "{b} ProofResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseProofResultPrim)
-    [ "Branch on the result of proofing."
+    [ "Branch on the result of proving."
     , ""
     , "Usage: caseProofResult <code to run if true> <code to run if false>."
     , ""
@@ -1411,7 +1411,7 @@ primitives = Map.fromList
     , "  r <- prove abc <thm>"
     , "  caseProofResult r <true> <false>"
     , ""
-    , "will run '<trie>' if '<thm>' is proved and will run '<false> <example>'"
+    , "will run '<true>' if '<thm>' is proved and will run '<false> <example>'"
     , "if '<thm>' is false, where '<example>' is a counter example."
     , "If '<thm>' is a curried function, then '<example>' will be a tuple."
     ]
