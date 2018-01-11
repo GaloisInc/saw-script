@@ -4,6 +4,7 @@
 
 ;; Author: David Thrane Christiansen <dtc@dtc.galois.com>
 ;; Keywords: languages
+;; Package-Requires: ((emacs "24") (prop-menu "0.1") (cl-lib "0.5"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -26,6 +27,7 @@
 
 (require 'compile)
 (require 'cl-lib)
+(require 'prop-menu)
 
 ;;; Configuration
 
@@ -207,6 +209,8 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-c") 'saw-script-run-current-buffer)
     (define-key map (kbd "C-c C-l") 'saw-script-run-current-buffer)
+    (define-key map (kbd "<mouse-3>") 'prop-menu-show-menu)
+    (define-key map (kbd "C-c C-SPC") 'prop-menu-by-completing-read)
     map)
   "Keymap for SAWScript mode.")
 
@@ -246,9 +250,33 @@
           (overlay-put overlay 'saw-script-output output)
           (overlay-put overlay 'face 'underline))))))
 
+(defun saw-script--context-menu-items (plist)
+  "Compute context menu items for PLIST."
+  (let ((output (plist-get plist 'saw-script-output)))
+    (if output
+        (list (list "Show Output"
+                    (let ((loc (point)))
+                      (lambda ()
+                        (interactive)
+                        (saw-script-view-output loc)))))
+      (list))))
+
 (defun saw-script-output-buffer-name (file)
   "Find the name for output from FILE."
   (format "*SAW Output[%s]*" file))
+
+(defun saw-script--view-overlay-output (overlay)
+  "View the SAWScript output in OVERLAY."
+  (let ((output (overlay-get overlay 'saw-script-output))
+        (buffer (get-buffer-create (saw-script-output-buffer-name (buffer-file-name)))))
+    (with-current-buffer buffer
+      (read-only-mode 1)
+      (let ((inhibit-read-only t))
+        (widen)
+        (erase-buffer)
+        (insert output)
+        (goto-char (point-min)))
+      (pop-to-buffer buffer))))
 
 
 (defun saw-script-view-output (pos)
@@ -260,16 +288,7 @@
                         (when (saw-script-output-overlay-p o)
                           (throw tag o)))
                       (error "No output at position %s" pos)))))
-      (let ((output (overlay-get o 'saw-script-output))
-            (buffer (get-buffer-create (saw-script-output-buffer-name (buffer-file-name)))))
-        (with-current-buffer buffer
-          (read-only-mode 1)
-          (let ((inhibit-read-only t))
-            (widen)
-            (erase-buffer)
-            (insert output)
-            (goto-char (point-min)))
-          (pop-to-buffer buffer))))))
+      (saw-script--view-overlay-output o))))
 
 ;;; Flycheck support
 
@@ -341,16 +360,6 @@
 
 See URL `http://saw.galois.com' for more information."
     :command ("saw" "--output-locations" source-inplace)
-    
-    ;; :error-patterns ((info (message (1+ (seq ?\n ?\t (1+ (not (any ?\n)))))))
-    ;;                  (error line-start (file-name) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ":"
-    ;;                         (message) line-end)
-    ;;                  (error (seq line-start "[error] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
-    ;;                              "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
-    ;;                              (message (1+ (seq "\n " (1+ (not (any ?\n))))))))
-    ;;                  (warning (seq line-start "[warning] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
-    ;;                                "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
-    ;;                                (message (1+ (seq "\n " (1+ (not (any ?\n)))))))))
     :error-parser saw-script--flycheck-parse
     :modes (saw-script-mode))
   (add-to-list 'flycheck-checkers 'saw-script))
@@ -382,6 +391,9 @@ See URL `http://saw.galois.com' for more information."
 
   ;; Setup code for output viewing
   (make-variable-buffer-local 'saw-script-output)
+
+  ;; Right click
+  (set (make-local-variable 'prop-menu-item-functions) '(saw-script--context-menu-items))
   )
 
 ;;;###autoload
