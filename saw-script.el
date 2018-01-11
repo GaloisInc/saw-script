@@ -177,7 +177,7 @@
   (interactive "fFile to run in saw: ")
   (let* ((dir (file-name-directory filename))
          (file (file-name-nondirectory filename))
-         (command (concat saw-script-command " " file))
+         (command (concat saw-script-command " --output-locations " file))
          ;; Special variables that configure compilation mode
          (compilation-buffer-name-function
           'saw-script--compilation-buffer-name-function)
@@ -215,8 +215,9 @@
     "A checker for SAWScript.
 
 See URL `http://saw.galois.com' for more information."
-    :command ("saw" source-inplace)
-    :error-patterns ((error line-start (file-name) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ":"
+    :command ("saw" "--output-locations" source-inplace)
+    :error-patterns ((info line-start "[output] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ": " (message))
+                     (error line-start (file-name) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ":"
                             (message) line-end)
                      (error (seq line-start "[error] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
                                  "--" (group (1+ digit)) ":" (group (1+ digit)) ":"

@@ -338,7 +338,15 @@ interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
-  mapM_ (interpretStmt False) stmts
+  mapM_ stmtWithPrint stmts
+  where
+    stmtWithPrint s = do let p = getPos s
+                         showLoc <- printShowPos <$> getOptions
+                         if showLoc
+                           then localOptions (\o -> o { printOutFn = \lvl str ->
+                                                          printOutFn o lvl ("[output] at " ++ show p ++ ": " ++ str) })
+                                  (interpretStmt False s)
+                           else interpretStmt False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
@@ -455,7 +463,8 @@ print_value (VTerm t) = do
                               , V.useBase = ppOptsBase opts
                               }
   doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' (evaluateTypedTerm sc t'))
-  io (rethrowEvalError $ print $ doc)
+  sawOpts <- getOptions
+  io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   printOutLnTop Info (showsPrecValue opts 0 v "")

@@ -17,6 +17,7 @@ module SAWScript.TopLevel
   , getHandleAlloc
   , getTopLevelRO
   , getTopLevelRW
+  , localOptions
   , putTopLevelRW
   ) where
 
