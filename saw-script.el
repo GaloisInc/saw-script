@@ -25,6 +25,7 @@
 ;;; Code:
 
 (require 'compile)
+(require 'cl-lib)
 
 ;;; Configuration
 
@@ -209,24 +210,151 @@
     map)
   "Keymap for SAWScript mode.")
 
+;;; Output tracking
+(defvar saw-script-output '() "The current output from SAWScript.")
+(make-variable-buffer-local 'saw-script-output)
+
+(defun saw-script-output-overlay-p (overlay)
+  "Determine whether OVERLAY is describing SAWScript output."
+  (and (overlayp overlay)
+       (overlay-get overlay 'saw-script-output)))
+
+(defun saw-script-clear-output ()
+  "Clear the SAWScript output for the current buffer."
+  (interactive)
+  (save-excursion
+    (save-restriction
+      (widen)
+      (dolist (o (overlays-in (point-min) (point-max)))
+        (when (saw-script-output-overlay-p o)
+          (delete-overlay o))))))
+
+(defun saw-script-record-output (start-line start-column end-line end-column output)
+  "Save SAWScript OUTPUT in the region delimited by START-LINE, START-COLUMN, END-LINE, END-COLUMN."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (let ((start (progn (goto-char (point-min))
+                          (forward-line (1- start-line))
+                          (forward-char (1- start-column))
+                          (point)))
+            (end (progn (goto-char (point-min))
+                        (forward-line (1- end-line))
+                        (forward-char (1- end-column))
+                        (point))))
+        (let ((overlay (make-overlay start end)))
+          (overlay-put overlay 'saw-script-output output)
+          (overlay-put overlay 'face 'underline))))))
+
+(defun saw-script-output-buffer-name (file)
+  "Find the name for output from FILE."
+  (format "*SAW Output[%s]*" file))
+
+
+(defun saw-script-view-output (pos)
+  "View the SAWScript output at POS, if any."
+  (interactive "d")
+  (let ((tag (cl-gensym)))
+    (let ((o (catch tag
+               (progn (dolist (o (overlays-at pos))
+                        (when (saw-script-output-overlay-p o)
+                          (throw tag o)))
+                      (error "No output at position %s" pos)))))
+      (let ((output (overlay-get o 'saw-script-output))
+            (buffer (get-buffer-create (saw-script-output-buffer-name (buffer-file-name)))))
+        (with-current-buffer buffer
+          (read-only-mode 1)
+          (let ((inhibit-read-only t))
+            (widen)
+            (erase-buffer)
+            (insert output)
+            (goto-char (point-min)))
+          (pop-to-buffer buffer))))))
+
 ;;; Flycheck support
+
+(defconst saw-script--output-regexp
+  (rx (seq line-start "[output] at "
+           (group-n 1 (1+ (not (any ?\:))))
+           ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+           "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":" (0+ space)))
+  "Output from SAWScript matches this regexp.")
+
+(defconst saw-script--info-start-regexp
+  (rx-to-string
+   `(or (regexp ,saw-script--output-regexp)
+        (seq line-start "[error] at "
+             (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "--" (1+ digit) ":" (1+ digit) ":"
+             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
+        (seq line-start "[warning] at "
+             (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "--" (1+ digit) ":" (1+ digit) ":"
+             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n))))))))))
+
+
+
+(defun saw-script--flycheck-parse (output checker buffer)
+  "Find Flycheck info in the string OUTPUT from saw using CHECKER applied to BUFFER."
+  (with-current-buffer buffer (saw-script-clear-output))
+  (save-excursion
+    (save-match-data
+      (let ((found '()))
+        (with-temp-buffer
+          (insert output)
+          (goto-char (point-min))
+          (while (re-search-forward saw-script--info-start-regexp nil t)
+            (let ((filename (match-string 1))
+                  (line (string-to-number (match-string 2)))
+                  (column (string-to-number (match-string 3)))
+                  (end-line (string-to-number (match-string 5)))
+                  (end-column (string-to-number (match-string 6)))
+                  (text (let ((perhaps-text (match-string 4)))
+                          (or perhaps-text
+                              (let ((text-start (point)))
+                                (forward-line 1)
+                                (beginning-of-line)
+                                (while (and (not (eobp))
+                                            (looking-at-p "\t"))
+                                  (forward-line 1)
+                                  (beginning-of-line))
+                                (buffer-substring-no-properties text-start (point)))))))
+              (push (flycheck-error-new-at line column
+                                           (if (match-string 4) 'error 'info)
+                                           text
+                                           :checker checker :buffer buffer)
+                    found)
+              (unless (match-string 4)
+                (with-current-buffer buffer
+                  (saw-script-record-output line
+                                            column
+                                            end-line
+                                            end-column
+                                            text))))))
+        found))))
+
 (with-eval-after-load 'flycheck
   (flycheck-define-checker saw-script
     "A checker for SAWScript.
 
 See URL `http://saw.galois.com' for more information."
     :command ("saw" "--output-locations" source-inplace)
-    :error-patterns ((info line-start "[output] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ": " (message))
-                     (error line-start (file-name) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ":"
-                            (message) line-end)
-                     (error (seq line-start "[error] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
-                                 "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
-                                 (message (1+ (seq "\n " (1+ (not (any ?\n))))))))
-                     (warning (seq line-start "[warning] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
-                                   "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
-                                   (message (1+ (seq "\n " (1+ (not (any ?\n)))))))))
+    
+    ;; :error-patterns ((info (message (1+ (seq ?\n ?\t (1+ (not (any ?\n)))))))
+    ;;                  (error line-start (file-name) ":" line ":" column "-" (1+ digit) ":" (1+ digit) ":"
+    ;;                         (message) line-end)
+    ;;                  (error (seq line-start "[error] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
+    ;;                              "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
+    ;;                              (message (1+ (seq "\n " (1+ (not (any ?\n))))))))
+    ;;                  (warning (seq line-start "[warning] at " (file-name (1+ (not (any ?\:)))) ":" line ":" column
+    ;;                                "--" (group (1+ digit)) ":" (group (1+ digit)) ":"
+    ;;                                (message (1+ (seq "\n " (1+ (not (any ?\n)))))))))
+    :error-parser saw-script--flycheck-parse
     :modes (saw-script-mode))
   (add-to-list 'flycheck-checkers 'saw-script))
+
 
 ;;; The mode itself
 
@@ -251,6 +379,9 @@ See URL `http://saw.galois.com' for more information."
   (add-to-list 'compilation-error-regexp-alist 'saw-script)
   (add-to-list 'compilation-error-regexp-alist 'cryptol-warning)
   (add-to-list 'compilation-error-regexp-alist 'cryptol-error)
+
+  ;; Setup code for output viewing
+  (make-variable-buffer-local 'saw-script-output)
   )
 
 ;;;###autoload

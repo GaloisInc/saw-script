@@ -340,11 +340,13 @@ interpretFile file = do
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
   where
-    stmtWithPrint s = do let p = getPos s
+    stmtWithPrint s = do let withPos str = unlines $
+                                           ("[output] at " ++ show (getPos s) ++ ": ") :
+                                             map (\l -> "\t"  ++ l) (lines str)
                          showLoc <- printShowPos <$> getOptions
                          if showLoc
                            then localOptions (\o -> o { printOutFn = \lvl str ->
-                                                          printOutFn o lvl ("[output] at " ++ show p ++ ": " ++ str) })
+                                                          printOutFn o lvl (withPos str) })
                                   (interpretStmt False s)
                            else interpretStmt False s
 
