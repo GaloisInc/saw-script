@@ -313,7 +313,11 @@
              "--" (1+ digit) ":" (1+ digit) ":"
              (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n))))))))))
 
-
+(defun saw-script--abbreviate-string (str)
+  "Cut off STR if it's too long."
+  (if (> (length str) 120)
+      (concat (substring str 0 117) "...")
+    str))
 
 (defun saw-script--flycheck-parse (output checker buffer)
   "Find Flycheck info in the string OUTPUT from saw using CHECKER applied to BUFFER."
@@ -342,7 +346,7 @@
                                 (buffer-substring-no-properties text-start (point)))))))
               (push (flycheck-error-new-at line column
                                            (if (match-string 4) 'error 'info)
-                                           text
+                                           (saw-script--abbreviate-string text)
                                            :checker checker :buffer buffer)
                     found)
               (unless (match-string 4)
