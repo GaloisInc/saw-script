@@ -813,7 +813,6 @@ learnPointsTo opts sc cc spec prepost (PointsTo ptr val) =
      sym    <- getSymInterface
 
      mem    <- readGlobal $ Crucible.llvmMemVar
-                          $ Crucible.memModelOps
                           $ (cc^.ccLLVMContext)
 
      res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy)
@@ -880,7 +879,7 @@ executeAllocation opts cc (var, symTy) =
                 Just memTy -> return memTy
                 Nothing    -> fail "executAllocation: failed to resolve type"
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
-     let memVar = Crucible.llvmMemVar $ Crucible.memModelOps (cc^.ccLLVMContext)
+     let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
      sz <- liftIO $ Crucible.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
@@ -935,12 +934,12 @@ executePointsTo opts sc cc spec (PointsTo ptr val) =
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
-     (memTy1, val1) <- resolveSetupValue opts cc sc spec val
+     (memTy1, Crucible.AnyValue vtp val1) <- resolveSetupValue opts cc sc spec val
      storTy <- Crucible.toStorableType memTy1
 
-     let memVar = Crucible.llvmMemVar $ Crucible.memModelOps (cc^.ccLLVMContext)
+     let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
      mem  <- readGlobal memVar
-     mem' <- liftIO (Crucible.doStore sym mem ptr1 storTy val1)
+     mem' <- liftIO (Crucible.doStore sym mem ptr1 vtp storTy val1)
      writeGlobal memVar mem'
 
 

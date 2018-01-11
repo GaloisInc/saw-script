@@ -156,8 +156,8 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      -- execute commands of the method spec
      methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
      let globals = cc^.ccGlobals
-     let memOps = Crucible.memModelOps (cc^.ccLLVMContext)
-     mem0 <- case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals of
+     let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+     mem0 <- case Crucible.lookupGlobal mvar globals of
        Nothing -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
@@ -251,7 +251,7 @@ verifyPrestate ::
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
 
-  let lvar = Crucible.llvmMemVar (Crucible.memModelOps (cc^.ccLLVMContext))
+  let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
   let Just mem = Crucible.lookupGlobal lvar globals
 
   let Just memtypes = traverse TyCtx.asMemType (mspec^.csPreState.csAllocs)
@@ -379,9 +379,9 @@ ppGlobalPair :: CrucibleContext arch
              -> Crucible.GlobalPair Sym a
              -> Doc
 ppGlobalPair cc gp =
-  let memOps = Crucible.memModelOps (cc^.ccLLVMContext)
+  let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
       globals = gp ^. Crucible.gpGlobals in
-  case Crucible.lookupGlobal (Crucible.llvmMemVar memOps) globals of
+  case Crucible.lookupGlobal mvar globals of
     Nothing -> text "LLVM Memory global variable not initialized"
     Just mem -> Crucible.ppMem mem
 
