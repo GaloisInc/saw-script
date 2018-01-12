@@ -29,14 +29,15 @@ import qualified Cryptol.Utils.Ident as P (packIdent, packModName)
 import qualified Text.Show.Pretty as PP
 
 import Control.Applicative
+import Control.Exception
 
 }
 
-%name parseModule Stmts
-%name parseStmt Stmt
-%name parseStmtSemi StmtSemi
-%name parseExpression Expression
-%name parseSchema PolyType
+%name parseModule StmtsEOF
+%name parseStmt StmtEOF
+%name parseStmtSemi StmtSemiEOF
+%name parseExpression ExpressionEOF
+%name parseSchema PolyTypeEOF
 %error { parseError }
 %tokentype { Token Pos }
 %monad { Either ParseError }
@@ -86,6 +87,7 @@ import Control.Applicative
   ctype          { TCType    _ _                }
   num            { TNum      _ _ _              }
   name           { TVar      _ _                }
+  EOF            { TEOF      _ _                }
 
 %right 'else'
 %left ':'
@@ -93,6 +95,21 @@ import Control.Applicative
 %left '.'
 
 %%
+
+StmtsEOF :: { [Stmt] }
+ : Stmts EOF                            { $1 }
+
+StmtEOF :: { Stmt }
+ : Stmt EOF                             { $1 }
+
+StmtSemiEOF :: { Stmt }
+ : StmtSemi EOF                         { $1 }
+
+ExpressionEOF :: { Expr }
+ : Expression EOF                       { $1 }
+
+PolyTypeEOF :: { Schema }
+ : PolyType EOF                         { $1 }
 
 Stmts :: { [Stmt] }
  : termBy(Stmt, ';')                    { $1 }
@@ -221,6 +238,8 @@ fst(p, q)  : p q   { $1 }
 snd(p, q)  : p q   { $2 }
 both(p, q) : p q   { ($1, $2) }
 
+phrase(p) : p EOF { $1 }
+
 -- p bracketed with some delims o-c
 bracketed(o, p, c) : o p c { $2 }
 
@@ -279,6 +298,8 @@ data ParseError
   = UnexpectedEOF
   | UnexpectedToken (Token Pos)
   | InvalidPattern Expr
+
+instance Exception ParseError
 
 instance Show ParseError where
   show e =

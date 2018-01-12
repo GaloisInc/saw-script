@@ -185,7 +185,8 @@
          (compilation-buffer-name-function
           'saw-script--compilation-buffer-name-function)
          (default-directory dir) )
-    (compile command)))
+    (let ((compilation-finish-functions (list (lambda (x) (message "Done!")))))
+      (compile command))))
 
 (defun saw-script-run-buffer (buffer)
   "Run the file from BUFFER in saw."
@@ -305,13 +306,17 @@
         (seq line-start "[error] at "
              (group-n 1 (1+ (not (any ?\:))))
              ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
-             "--" (1+ digit) ":" (1+ digit) ":"
+             "--" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":"
              (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
         (seq line-start "[warning] at "
              (group-n 1 (1+ (not (any ?\:))))
              ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
-             "--" (1+ digit) ":" (1+ digit) ":"
-             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n))))))))))
+             "--" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":"
+             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
+        (seq line-start "Parse error at " (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":"
+             (group-n 4 (1+ (not (any ?\n))))))))
 
 (defun saw-script--abbreviate-string (str)
   "Cut off STR if it's too long."
@@ -332,8 +337,10 @@
             (let ((filename (match-string 1))
                   (line (string-to-number (match-string 2)))
                   (column (string-to-number (match-string 3)))
-                  (end-line (string-to-number (match-string 5)))
-                  (end-column (string-to-number (match-string 6)))
+                  (end-line (and (match-string 5)
+                                 (string-to-number (match-string 5))))
+                  (end-column (and (match-string 6)
+                                   (string-to-number (match-string 6))))
                   (text (let ((perhaps-text (match-string 4)))
                           (or perhaps-text
                               (let ((text-start (point)))
@@ -398,7 +405,12 @@ See URL `http://saw.galois.com' for more information."
 
   ;; Right click
   (set (make-local-variable 'prop-menu-item-functions) '(saw-script--context-menu-items))
-  )
+
+  ;; Use Flycheck when possible
+  (when (fboundp 'flycheck-mode)
+    (when (boundp 'flycheck-checker)
+      (setq flycheck-checker 'saw-script))
+    (flycheck-mode 1)))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.saw$" . saw-script-mode))
