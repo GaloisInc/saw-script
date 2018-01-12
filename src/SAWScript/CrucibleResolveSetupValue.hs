@@ -396,7 +396,7 @@ typeOfLLVMVal _dl val =
   case val of
     Crucible.LLVMValInt _bkl bv ->
        Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (NatRepr.natValue (Crucible.bvWidth bv))))
-    Crucible.LLVMValReal _      -> error "FIXME: typeOfLLVMVal LLVMValReal"
+    Crucible.LLVMValReal _ _    -> error "FIXME: typeOfLLVMVal LLVMValReal"
     Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
   where
@@ -416,7 +416,7 @@ equalValsPred cc v1 v2 = go (v1, v2)
        = do blk_eq <- Crucible.natEq sym blk1 blk2
             off_eq <- Crucible.bvEq sym off1 off2
             Crucible.andPred sym blk_eq off_eq
-  go (Crucible.LLVMValReal x, Crucible.LLVMValReal y)
+  go (Crucible.LLVMValReal xsz x, Crucible.LLVMValReal ysz y) | xsz == ysz
        = Crucible.realEq sym x y
   go (Crucible.LLVMValStruct xs, Crucible.LLVMValStruct ys)
        | V.length xs == V.length ys

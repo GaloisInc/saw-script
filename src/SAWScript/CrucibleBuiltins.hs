@@ -279,10 +279,21 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
     tyenv = mspec^.csPreState.csAllocs
+    checkArgTy i mt mt' =
+      do st  <- Crucible.toStorableType mt
+         st' <- Crucible.toStorableType mt'
+         let L.Symbol nm = mspec^.csName
+         unless (st == st') $
+           fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
+                          , "Argument is declared with type: " ++ show mt
+                          , "but provided argument has incompatible type: " ++ show mt'
+                          ]
     resolveArg i =
       case Map.lookup i (mspec^.csArgBindings) of
         Just (tp, sv) -> do
-          let mt = fromMaybe (error ("Expected memory type:" ++ show tp)) (TyCtx.asMemType tp)
+          let mt  = fromMaybe (error ("Expected memory type:" ++ show tp)) (TyCtx.asMemType tp)
+          mt' <- typeOfSetupValue cc tyenv sv
+          checkArgTy i mt mt'
           v <- resolveSetupVal cc env tyenv sv
           return (mt, v)
         Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
