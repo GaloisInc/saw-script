@@ -19,17 +19,18 @@ import SAWScript.Options
 import SAWScript.Parser
 
 import System.Directory
+import Control.Exception
 
 loadFile :: Options -> FilePath -> IO [Stmt]
 loadFile opts fname = do
   printOutLn opts Info $ "Loading file " ++ show fname
   ftext <- readFile fname
-  either fail return (parseFile fname ftext)
+  either throwIO return (parseFile fname ftext)
 
-parseFile :: FilePath -> String -> Either String [Stmt]
+parseFile :: FilePath -> String -> Either ParseError [Stmt]
 parseFile fname input =
   case parseModule (lexSAW fname input) of
-    Left err -> Left ("Error\n  " ++ show err)
+    Left err -> Left err
     Right stmts -> Right stmts
 
 findAndLoadFile :: Options -> FilePath -> IO [Stmt]

@@ -92,8 +92,17 @@ cnst f p s   = f p s
 via  c g p s = c p s (g s)
 via' c g p s = c p (g s)
 
+scanTokens :: String -> [Token AlexPosn]
+scanTokens str = go (alexStartPos, '\n', [], str)
+  where go inp@(pos, _, _, str) =
+            case alexScan inp 0 of
+              AlexEOF -> [TEOF pos "EOF"]
+              AlexError ((AlexPn _ line column),_,_,_) -> error $ "lexical error at " ++ (show line) ++ " line, " ++ (show column) ++ " column "
+              AlexSkip inp' len -> go inp'
+              AlexToken inp' len act -> act pos (take len str) :  go inp'
+
 lexSAW :: FilePath -> String -> [Token Pos]
-lexSAW f = dropComments . map fixPos . alexScanTokens
+lexSAW f = dropComments . map fixPos . scanTokens --alexScanTokens
   where fixPos tok =
           let (AlexPn _ sl sc) = tokPos tok
               pos = case lines (tokStr tok) of
