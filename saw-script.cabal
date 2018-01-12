@@ -88,6 +88,7 @@ library
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
     SAWScript.CryptolEnv
+    SAWScript.Exceptions
     SAWScript.Import
     SAWScript.ImportAIG
     SAWScript.Interpreter

@@ -78,7 +78,7 @@ import Cryptol.Utils.Logger (quietLogger)
 --import SAWScript.REPL.Monad (REPLException(..))
 import SAWScript.TypedTerm
 import SAWScript.Utils (Pos(..))
-import SAWScript.AST (Located(getVal, getPos), Import(..))
+import SAWScript.AST (Located(getVal, locatedPos), Import(..))
 
 --------------------------------------------------------------------------------
 
@@ -147,10 +147,11 @@ ioParseGeneric :: (P.Config -> Text -> Either P.ParseError a) -> Located String 
 ioParseGeneric parse lstr = ioParseResult (parse cfg (pack str))
   where
     (file, line, col) =
-      case getPos lstr of
-        Pos f l c     -> (f, l, c)
+      case locatedPos lstr of
+        Range f sl sc _el _ec -> (f, sl, sc) -- TODO: take span into account
         PosInternal s -> (s, 1, 1)
         PosREPL       -> ("<interactive>", 1, 1)
+        Unknown       -> ("Unknown", 1, 1)
     cfg = P.defaultConfig { P.cfgSource = file }
     str = concat [ replicate (line - 1) '\n'
                  , replicate (col - 1 + 2) ' ' -- add 2 to compensate for dropped "{{"

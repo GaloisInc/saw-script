@@ -18,7 +18,7 @@ module SAWScript.MGU
        ) where
 
 import SAWScript.AST
-import SAWScript.Utils (Pos(..))
+import SAWScript.Utils (Pos(..), Positioned(..))
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -62,6 +62,8 @@ assert :: Bool -> String -> Either String ()
 assert b msg = unless b $ failMGU msg
 
 mgu :: LName -> Type -> Type -> Either String Subst
+mgu m (LType _ t) t2 = mgu m t t2
+mgu m t1 (LType _ t) = mgu m t1 t
 mgu m (TyUnifyVar i) t2 = bindVar m i t2
 mgu m t1 (TyUnifyVar i) = bindVar m i t1
 mgu m r1@(TyRecord ts1) r2@(TyRecord ts2) = do
@@ -112,6 +114,7 @@ instance UnifyVars Type where
     TyVar _         -> S.empty
     TyUnifyVar i    -> S.singleton i
     TySkolemVar _ _ -> S.empty
+    LType _ t'      -> unifyVars t'
 
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
@@ -136,6 +139,7 @@ instance NamedVars Type where
     TyVar n         -> S.singleton n
     TyUnifyVar _    -> S.empty
     TySkolemVar _ _ -> S.empty
+    LType _ t'      -> namedVars t'
 
 instance NamedVars Schema where
   namedVars (Forall ns t) = namedVars t S.\\ S.fromList ns
@@ -145,17 +149,18 @@ instance NamedVars Schema where
 -- TI Monad {{{
 
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
-                        deriving (Functor,Applicative,Monad)
+                        deriving (Functor,Applicative,Monad,MonadReader RO)
 
 data RO = RO
   { typeEnv :: M.Map (Located Name) Schema
   , typedefEnv :: M.Map Name Type
+  , currentExprPos :: Pos
   }
 
 data RW = RW
   { nameGen :: TypeIndex
   , subst   :: Subst
-  , errors  :: [String]
+  , errors  :: [(Pos, String)]
   }
 
 emptyRW :: RW
@@ -170,6 +175,9 @@ newTypeIndex = do
 newType :: TI Type
 newType = TyUnifyVar <$> newTypeIndex
 
+withExprPos :: Pos -> TI a -> TI a
+withExprPos p = local (\e -> e { currentExprPos = p })
+
 newTypePattern :: Pattern -> TI (Type, Pattern)
 newTypePattern pat =
   case pat of
@@ -179,6 +187,7 @@ newTypePattern pat =
                     return (t, PVar x (Just t))
     PTuple ps -> do (ts, ps') <- unzip <$> mapM newTypePattern ps
                     return (tTuple ts, PTuple ps')
+    LPattern pos pat' -> withExprPos pos (newTypePattern pat')
 
 appSubstM :: AppSubst t => t -> TI t
 appSubstM t = do
@@ -186,8 +195,9 @@ appSubstM t = do
   return $ appSubst s t
 
 recordError :: String -> TI ()
-recordError err = TI $ modify $ \rw ->
-  rw { errors = err : errors rw }
+recordError err = do pos <- currentExprPos <$> ask
+                     TI $ modify $ \rw ->
+                       rw { errors = (pos, err) : errors rw }
 
 unify :: LName -> Type -> Type -> TI ()
 unify m t1 t2 = do
@@ -209,8 +219,8 @@ bindSchemas :: [(Located Name, Schema)] -> TI a -> TI a
 bindSchemas bs m = foldr (uncurry bindSchema) m bs
 
 bindDecl :: Decl -> TI a -> TI a
-bindDecl (Decl _ Nothing _) m = m
-bindDecl (Decl p (Just s) _) m = bindPatternSchema p s m
+bindDecl (Decl _ _ Nothing _) m = m
+bindDecl (Decl _ p (Just s) _) m = bindPatternSchema p s m
 
 bindDeclGroup :: DeclGroup -> TI a -> TI a
 bindDeclGroup (NonRecursive d) m = bindDecl d m
@@ -226,6 +236,7 @@ patternBindings pat =
     PWild _mt -> []
     PVar x mt -> [(x, mt)]
     PTuple ps -> concatMap patternBindings ps
+    LPattern _ pat' -> patternBindings pat'
 
 bindPatternSchema :: Pattern -> Schema -> TI a -> TI a
 bindPatternSchema pat s@(Forall vs t) m =
@@ -237,6 +248,7 @@ bindPatternSchema pat s@(Forall vs t) m =
         TyCon (TupleCon _) ts -> foldr ($) m
           [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
+    LPattern pos pat' -> withExprPos pos (bindPatternSchema pat' s m)
 
 bindTypedef :: LName -> Type -> TI a -> TI a
 bindTypedef n t m =
@@ -284,6 +296,7 @@ instance AppSubst Type where
                          Just t' -> t'
                          Nothing -> t
     TySkolemVar _ _ -> t
+    LType pos t'    -> LType pos (appSubst s t')
 
 instance AppSubst Schema where
   appSubst s (Forall ns t) = Forall ns (appSubst s t)
@@ -308,30 +321,32 @@ instance AppSubst Expr where
     Application f v    -> Application (appSubst s f) (appSubst s v)
     Let dg e           -> Let (appSubst s dg) (appSubst s e)
     IfThenElse e e2 e3 -> IfThenElse (appSubst s e) (appSubst s e2) (appSubst s e3)
+    LExpr p e          -> LExpr p (appSubst s e)
 
 instance AppSubst Pattern where
   appSubst s pat = case pat of
     PWild mt  -> PWild (appSubst s mt)
     PVar x mt -> PVar x (appSubst s mt)
     PTuple ps -> PTuple (appSubst s ps)
+    LPattern _ pat' -> appSubst s pat'
 
 instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
   appSubst s = fmap (appSubst s)
 
 instance AppSubst Stmt where
   appSubst s bst = case bst of
-    StmtBind pat ctx e   -> StmtBind (appSubst s pat) (appSubst s ctx) (appSubst s e)
-    StmtLet dg           -> StmtLet (appSubst s dg)
-    StmtCode str         -> StmtCode str
-    StmtImport imp       -> StmtImport imp
-    StmtTypedef name ty  -> StmtTypedef name (appSubst s ty)
+    StmtBind pos pat ctx e   -> StmtBind pos (appSubst s pat) (appSubst s ctx) (appSubst s e)
+    StmtLet pos dg           -> StmtLet pos (appSubst s dg)
+    StmtCode pos str         -> StmtCode pos str
+    StmtImport pos imp       -> StmtImport pos imp
+    StmtTypedef pos name ty  -> StmtTypedef pos name (appSubst s ty)
 
 instance AppSubst DeclGroup where
   appSubst s (Recursive ds) = Recursive (appSubst s ds)
   appSubst s (NonRecursive d) = NonRecursive (appSubst s d)
 
 instance AppSubst Decl where
-  appSubst s (Decl p mt e) = Decl (appSubst s p) (appSubst s mt) (appSubst s e)
+  appSubst s (Decl pos p mt e) = Decl pos (appSubst s p) (appSubst s mt) (appSubst s e)
 
 -- }}}
 
@@ -353,6 +368,7 @@ instance Instantiate Type where
     TyVar n         -> maybe ty id (lookup n nts)
     TyUnifyVar _    -> ty
     TySkolemVar _ _ -> ty
+    LType pos ty'   -> LType pos (instantiate nts ty')
 
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
@@ -483,6 +499,9 @@ inferE (ln, expr) = case expr of
        e3' <- checkE ln e3 t
        return (IfThenElse e1' e2' e3', t)
 
+  LExpr p e ->
+    withExprPos p (inferE (ln, e))
+
 
 checkE :: LName -> Expr -> Type -> TI OutExpr
 checkE m e t = do
@@ -511,7 +530,7 @@ inferStmts m _ctx [] = do
   t <- newType
   return ([], t)
 
-inferStmts m ctx [StmtBind (PWild mt) mc e] = do
+inferStmts m ctx [StmtBind pos (PWild mt) mc e] = do
   t  <- maybe newType return mt
   e' <- checkE m e (tBlock ctx t)
   mc' <- case mc of
@@ -519,14 +538,14 @@ inferStmts m ctx [StmtBind (PWild mt) mc e] = do
     Just ty  -> do ty' <- checkKind ty
                    unify m ty ctx -- TODO: should this be ty'?
                    return ty'
-  return ([StmtBind (PWild (Just t)) (Just mc') e'],t)
+  return ([StmtBind pos (PWild (Just t)) (Just mc') e'],t)
 
 inferStmts m _ [_] = do
   recordError ("do block must end with expression at " ++ show m)
   t <- newType
   return ([],t)
 
-inferStmts m ctx (StmtBind pat mc e : more) = do
+inferStmts m ctx (StmtBind pos pat mc e : more) = do
   (pt, pat') <- newTypePattern pat
   e' <- checkE m e (tBlock ctx pt)
   mc' <- case mc of
@@ -536,25 +555,25 @@ inferStmts m ctx (StmtBind pat mc e : more) = do
                   return c'
   (more', t') <- bindPattern pat' $ inferStmts m ctx more
 
-  return (StmtBind pat' (Just mc') e' : more', t')
+  return (StmtBind pos pat' (Just mc') e' : more', t')
 
-inferStmts m ctx (StmtLet dg : more) = do
+inferStmts m ctx (StmtLet pos dg : more) = do
   dg' <- inferDeclGroup dg
   (more', t) <- bindDeclGroup dg' (inferStmts m ctx more)
-  return (StmtLet dg' : more', t)
+  return (StmtLet pos dg' : more', t)
 
-inferStmts m ctx (StmtCode s : more) = do
+inferStmts m ctx (StmtCode pos s : more) = do
   (more',t) <- inferStmts m ctx more
-  return (StmtCode s : more', t)
+  return (StmtCode pos s : more', t)
 
-inferStmts m ctx (StmtImport imp : more) = do
+inferStmts m ctx (StmtImport pos imp : more) = do
   (more', t) <- inferStmts m ctx more
-  return (StmtImport imp : more', t)
+  return (StmtImport pos imp : more', t)
 
-inferStmts m ctx (StmtTypedef name ty : more) =
+inferStmts m ctx (StmtTypedef pos name ty : more) =
   bindTypedef name ty $ do
     (more', t) <- inferStmts m ctx more
-    return (StmtTypedef name ty : more', t)
+    return (StmtTypedef pos name ty : more', t)
 
 patternLNames :: Pattern -> [LName]
 patternLNames pat =
@@ -562,6 +581,7 @@ patternLNames pat =
     PWild _ -> []
     PVar n _ -> [n]
     PTuple ps -> concatMap patternLNames ps
+    LPattern _ pat' -> patternLNames pat'
 
 patternLName :: Pattern -> LName
 patternLName pat =
@@ -585,14 +605,15 @@ constrainTypeWithPattern ln t pat =
                [ "type mismatch: " ++ pShow (TupleCon (genericLength ps)) ++ " and " ++ pShow t
                , " at " ++ show ln
                ]
+    LPattern pos pat' -> withExprPos pos (constrainTypeWithPattern ln t pat')
 
 inferDecl :: Decl -> TI Decl
-inferDecl (Decl pat _ e) = do
+inferDecl (Decl pos pat _ e) = withExprPos pos $ do
   let n = patternLName pat
   (e',t) <- inferE (n, e)
   constrainTypeWithPattern n t pat
   [(e1,s)] <- generalize [e'] [t]
-  return (Decl pat (Just s) e1)
+  return (Decl pos pat (Just s) e1)
 
 inferRecDecls :: [Decl] -> TI [Decl]
 inferRecDecls ds =
@@ -600,10 +621,14 @@ inferRecDecls ds =
      (_ts, pats') <- unzip <$> mapM newTypePattern pats
      (es, ts) <- fmap unzip
                  $ flip (foldr bindPattern) pats'
-                 $ sequence [ inferE (patternLName p, e) | Decl p _ e <- ds ]
+                 $ sequence [ withExprPos pos $ inferE (patternLName p, e)
+                            | Decl pos p _ e <- ds
+                            ]
      sequence_ $ zipWith (constrainTypeWithPattern (error "FIXME")) ts pats'
      ess <- generalize es ts
-     return [ Decl p (Just s) e1 | (p, (e1, s)) <- zip pats ess ]
+     return [ Decl pos p (Just s) e1
+            | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
+            ]
 
 generalize :: [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
 generalize es0 ts0 =
@@ -628,30 +653,31 @@ checkKind = return
 
 -- }}}
 
+
 -- Main interface {{{
 
-checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either String DeclGroup
+checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either [(Pos, String)] DeclGroup
 checkDeclGroup env tenv dg =
-  case evalTIWithEnv env tenv (inferDeclGroup dg) of
-    Left errs -> Left ("Error\n" ++ unlines (map ("  " ++) errs))
+  case evalTIWithEnv env tenv (getPos dg) (inferDeclGroup dg) of
+    Left errs -> Left errs
     Right dg' -> Right dg'
 
-checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either String Decl
+checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either [(Pos, String)] Decl
 checkDecl env tenv decl =
-  case evalTIWithEnv env tenv (inferDecl decl) of
-    Left errs -> Left ("Error\n" ++ unlines (map ("  " ++) errs))
+  case evalTIWithEnv env tenv (getPos decl) (inferDecl decl) of
+    Left errs -> Left errs
     Right decl' -> Right decl'
 
-evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [String] a
-evalTIWithEnv env tenv m =
-  case runTIWithEnv env tenv m of
+evalTIWithEnv :: Map LName Schema -> Map Name Type -> Pos -> TI a -> Either [(Pos, String)] a
+evalTIWithEnv env tenv pos m =
+  case runTIWithEnv env tenv pos m of
     (res, _, []) -> Right res
     (_, _, errs) -> Left errs
 
-runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [String])
-runTIWithEnv env tenv m = (a, subst rw, errors rw)
+runTIWithEnv :: Map LName Schema -> Map Name Type -> Pos -> TI a -> (a, Subst, [(Pos, String)])
+runTIWithEnv env tenv pos m = (a, subst rw, errors rw)
   where
-  m' = runReaderT (unTI m) (RO env tenv)
+  m' = runReaderT (unTI m) (RO env tenv pos)
   (a,rw) = runState m' emptyRW
 
 -- }}}

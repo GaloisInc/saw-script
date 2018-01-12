@@ -45,6 +45,7 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import SAWScript.AST (Located(..))
 import SAWScript.Builtins
+import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
@@ -153,6 +154,7 @@ bindPatternGeneric ext pat ms v env =
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   _ -> error "bindPattern: expected tuple value"
         _ -> error "bindPattern: expected tuple value"
+    SS.LPattern _ pat' -> bindPatternGeneric ext pat' ms v env
 
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal = bindPatternGeneric extendLocal
@@ -206,9 +208,10 @@ interpret env expr =
                                    case v1 of
                                      VBool b -> interpret env (if b then e2 else e3)
                                      _ -> fail $ "interpret IfThenElse: " ++ show v1
+      SS.LExpr _ e           -> interpret env e
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
-interpretDecl env (SS.Decl pat mt expr) = do
+interpretDecl env (SS.Decl _ pat mt expr) = do
   v <- interpret env expr
   return (bindPatternLocal pat mt v env)
 
@@ -225,19 +228,19 @@ interpretDeclGroup env (SS.NonRecursive d) = interpretDecl env d
 interpretDeclGroup env (SS.Recursive ds) = return env'
   where
     env' = foldr addDecl env ds
-    addDecl (SS.Decl pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
+    addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
 
 interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
 interpretStmts env stmts =
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind pat _ e : ss ->
+      [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
+      SS.StmtBind _ pat _ e : ss ->
           do v1 <- interpret env e
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue v1 (VLambda f)
-      SS.StmtLet bs : ss -> interpret env (SS.Let bs (SS.Block ss))
-      SS.StmtCode s : ss ->
+      SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
+      SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv env
              ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) s
@@ -245,9 +248,9 @@ interpretStmts env stmts =
              -- We should change parseDecls to return only the new bindings instead.
              putTopLevelRW $ rw{rwCryptol = ce'}
              interpretStmts env ss
-      SS.StmtImport _ : _ ->
+      SS.StmtImport _ _ : _ ->
           do fail "block import unimplemented"
-      SS.StmtTypedef name ty : ss ->
+      SS.StmtTypedef _ name ty : ss ->
           do let env' = LocalTypedef (getVal name) ty : env
              interpretStmts env' ss
 
@@ -266,12 +269,12 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl pat Nothing expr'
+  let decl = SS.Decl (getPos expr) pat Nothing expr'
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
-  SS.Decl _ (Just schema) expr'' <-
-    either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+  SS.Decl _ _ (Just schema) expr'' <-
+    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -309,33 +312,43 @@ interpretStmt ::
   TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
-    SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
-    SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- either fail return $
+    SS.StmtBind _ pat mc expr -> do {-TODO set loc-} processStmtBind printBinds pat mc expr
+    SS.StmtLet _ dg           -> do rw <- getTopLevelRW
+                                    dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW
-    SS.StmtCode lstr          -> do rw <- getTopLevelRW
+    SS.StmtCode _ lstr        -> do rw <- getTopLevelRW
                                     sc <- getSharedContext
                                     --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
                                     --showCryptolEnv
                                     cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) lstr
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
-    SS.StmtImport imp         -> do rw <- getTopLevelRW
+    SS.StmtImport _ imp       -> do rw <- getTopLevelRW
                                     sc <- getSharedContext
                                     --showCryptolEnv
                                     cenv' <- io $ CEnv.importModule sc (rwCryptol rw) imp
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
-    SS.StmtTypedef name ty    -> do rw <- getTopLevelRW
-                                    putTopLevelRW $ addTypedef (getVal name) ty rw
+    SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
+                                     putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
-  mapM_ (interpretStmt False) stmts
+  mapM_ stmtWithPrint stmts
+  where
+    stmtWithPrint s = do let withPos str = unlines $
+                                           ("[output] at " ++ show (getPos s) ++ ": ") :
+                                             map (\l -> "\t"  ++ l) (lines str)
+                         showLoc <- printShowPos <$> getOptions
+                         if showLoc
+                           then localOptions (\o -> o { printOutFn = \lvl str ->
+                                                          printOutFn o lvl (withPos str) })
+                                  (interpretStmt False s)
+                           else interpretStmt False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
@@ -452,7 +465,8 @@ print_value (VTerm t) = do
                               , V.useBase = ppOptsBase opts
                               }
   doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' (evaluateTypedTerm sc t'))
-  io (rethrowEvalError $ print $ doc)
+  sawOpts <- getOptions
+  io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   printOutLnTop Info (showsPrecValue opts 0 v "")

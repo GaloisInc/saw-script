@@ -4,6 +4,7 @@
 
 ;; Author: David Thrane Christiansen <dtc@dtc.galois.com>
 ;; Keywords: languages
+;; Package-Requires: ((emacs "24") (prop-menu "0.1") (cl-lib "0.5"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -25,6 +26,8 @@
 ;;; Code:
 
 (require 'compile)
+(require 'cl-lib)
+(require 'prop-menu)
 
 ;;; Configuration
 
@@ -165,6 +168,7 @@
     (font-lock-extend-after-change-region-function . saw-script--extend-after-change-region-function))
   "Highlighting instructions for SAWScript.")
 
+
 ;;; Running SAWScript
 
 (defun saw-script--compilation-buffer-name-function (_mode)
@@ -176,7 +180,7 @@
   (interactive "fFile to run in saw: ")
   (let* ((dir (file-name-directory filename))
          (file (file-name-nondirectory filename))
-         (command (concat saw-script-command " " file))
+         (command (concat saw-script-command " --output-locations " file))
          ;; Special variables that configure compilation mode
          (compilation-buffer-name-function
           'saw-script--compilation-buffer-name-function)
@@ -205,8 +209,161 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-c") 'saw-script-run-current-buffer)
     (define-key map (kbd "C-c C-l") 'saw-script-run-current-buffer)
+    (define-key map (kbd "<mouse-3>") 'prop-menu-show-menu)
+    (define-key map (kbd "C-c C-SPC") 'prop-menu-by-completing-read)
     map)
   "Keymap for SAWScript mode.")
+
+;;; Output tracking
+(defvar saw-script-output '() "The current output from SAWScript.")
+(make-variable-buffer-local 'saw-script-output)
+
+(defun saw-script-output-overlay-p (overlay)
+  "Determine whether OVERLAY is describing SAWScript output."
+  (and (overlayp overlay)
+       (overlay-get overlay 'saw-script-output)))
+
+(defun saw-script-clear-output ()
+  "Clear the SAWScript output for the current buffer."
+  (interactive)
+  (save-excursion
+    (save-restriction
+      (widen)
+      (dolist (o (overlays-in (point-min) (point-max)))
+        (when (saw-script-output-overlay-p o)
+          (delete-overlay o))))))
+
+(defun saw-script-record-output (start-line start-column end-line end-column output)
+  "Save SAWScript OUTPUT in the region delimited by START-LINE, START-COLUMN, END-LINE, END-COLUMN."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (let ((start (progn (goto-char (point-min))
+                          (forward-line (1- start-line))
+                          (forward-char (1- start-column))
+                          (point)))
+            (end (progn (goto-char (point-min))
+                        (forward-line (1- end-line))
+                        (forward-char (1- end-column))
+                        (point))))
+        (let ((overlay (make-overlay start end)))
+          (overlay-put overlay 'saw-script-output output)
+          (overlay-put overlay 'face 'underline))))))
+
+(defun saw-script--context-menu-items (plist)
+  "Compute context menu items for PLIST."
+  (let ((output (plist-get plist 'saw-script-output)))
+    (if output
+        (list (list "Show Output"
+                    (let ((loc (point)))
+                      (lambda ()
+                        (interactive)
+                        (saw-script-view-output loc)))))
+      (list))))
+
+(defun saw-script-output-buffer-name (file)
+  "Find the name for output from FILE."
+  (format "*SAW Output[%s]*" file))
+
+(defun saw-script--view-overlay-output (overlay)
+  "View the SAWScript output in OVERLAY."
+  (let ((output (overlay-get overlay 'saw-script-output))
+        (buffer (get-buffer-create (saw-script-output-buffer-name (buffer-file-name)))))
+    (with-current-buffer buffer
+      (read-only-mode 1)
+      (let ((inhibit-read-only t))
+        (widen)
+        (erase-buffer)
+        (insert output)
+        (goto-char (point-min)))
+      (pop-to-buffer buffer))))
+
+
+(defun saw-script-view-output (pos)
+  "View the SAWScript output at POS, if any."
+  (interactive "d")
+  (let ((tag (cl-gensym)))
+    (let ((o (catch tag
+               (progn (dolist (o (overlays-at pos))
+                        (when (saw-script-output-overlay-p o)
+                          (throw tag o)))
+                      (error "No output at position %s" pos)))))
+      (saw-script--view-overlay-output o))))
+
+;;; Flycheck support
+
+(defconst saw-script--output-regexp
+  (rx (seq line-start "[output] at "
+           (group-n 1 (1+ (not (any ?\:))))
+           ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+           "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":" (0+ space)))
+  "Output from SAWScript matches this regexp.")
+
+(defconst saw-script--info-start-regexp
+  (rx-to-string
+   `(or (regexp ,saw-script--output-regexp)
+        (seq line-start "[error] at "
+             (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "--" (1+ digit) ":" (1+ digit) ":"
+             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
+        (seq line-start "[warning] at "
+             (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "--" (1+ digit) ":" (1+ digit) ":"
+             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n))))))))))
+
+
+
+(defun saw-script--flycheck-parse (output checker buffer)
+  "Find Flycheck info in the string OUTPUT from saw using CHECKER applied to BUFFER."
+  (with-current-buffer buffer (saw-script-clear-output))
+  (save-excursion
+    (save-match-data
+      (let ((found '()))
+        (with-temp-buffer
+          (insert output)
+          (goto-char (point-min))
+          (while (re-search-forward saw-script--info-start-regexp nil t)
+            (let ((filename (match-string 1))
+                  (line (string-to-number (match-string 2)))
+                  (column (string-to-number (match-string 3)))
+                  (end-line (string-to-number (match-string 5)))
+                  (end-column (string-to-number (match-string 6)))
+                  (text (let ((perhaps-text (match-string 4)))
+                          (or perhaps-text
+                              (let ((text-start (point)))
+                                (forward-line 1)
+                                (beginning-of-line)
+                                (while (and (not (eobp))
+                                            (looking-at-p "\t"))
+                                  (forward-line 1)
+                                  (beginning-of-line))
+                                (buffer-substring-no-properties text-start (point)))))))
+              (push (flycheck-error-new-at line column
+                                           (if (match-string 4) 'error 'info)
+                                           text
+                                           :checker checker :buffer buffer)
+                    found)
+              (unless (match-string 4)
+                (with-current-buffer buffer
+                  (saw-script-record-output line
+                                            column
+                                            end-line
+                                            end-column
+                                            text))))))
+        found))))
+
+(with-eval-after-load 'flycheck
+  (flycheck-define-checker saw-script
+    "A checker for SAWScript.
+
+See URL `http://saw.galois.com' for more information."
+    :command ("saw" "--output-locations" source-inplace)
+    :error-parser saw-script--flycheck-parse
+    :modes (saw-script-mode))
+  (add-to-list 'flycheck-checkers 'saw-script))
+
 
 ;;; The mode itself
 
@@ -214,7 +371,30 @@
 (define-derived-mode saw-script-mode prog-mode "SAWScript"
   "A major mode for editing SAWScript files."
   (setq font-lock-defaults saw-script-font-lock-defaults)
-  (setq font-lock-multiline t))
+  (setq font-lock-multiline t)
+
+  ;; Compilation mode highlighting
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(saw-script "$\\([^:]+\\):\\([0-9]+\\):\\(0-9\\)-\\([0-9]+\\):\\(0-9\\): "
+                            1 (2 . 4) (3 . 5) nil 0))
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(cryptol-warning
+                 "\\[warning\\] at \\([^:]+\\):\\([0-9]+\\):\\([0-9]+\\)--\\([0-9]+\\):\\([0-9+]\\)"
+                 1 (2 . 4) (3 . 5) 1))
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(cryptol-error
+                 "\\[error\\] at \\([^:]+\\):\\([0-9]+\\):\\([0-9]+\\)--\\([0-9]+\\):\\([0-9+]\\)"
+                 1 (2 . 4) (3 . 5) 1))
+  (add-to-list 'compilation-error-regexp-alist 'saw-script)
+  (add-to-list 'compilation-error-regexp-alist 'cryptol-warning)
+  (add-to-list 'compilation-error-regexp-alist 'cryptol-error)
+
+  ;; Setup code for output viewing
+  (make-variable-buffer-local 'saw-script-output)
+
+  ;; Right click
+  (set (make-local-variable 'prop-menu-item-functions) '(saw-script--context-menu-items))
+  )
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.saw$" . saw-script-mode))

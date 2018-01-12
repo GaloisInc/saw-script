@@ -27,6 +27,7 @@ data Options = Options
   , runInteractively :: Bool
   , showHelp         :: Bool
   , showVersion      :: Bool
+  , printShowPos     :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
   } deriving (Show)
 
@@ -42,6 +43,7 @@ defaultOptions
     , classPath = ["."]
     , jarList = []
     , verbLevel = Info
+    , printShowPos = False
     , printOutFn = printOutWith Info
     , simVerbose = 1
     , extraChecks = False
@@ -92,6 +94,10 @@ options =
      "path"
     )
     pathDesc
+  , Option [] ["output-locations"]
+    (NoArg
+     (\opts -> opts { printShowPos = True }))
+     "Show the source locations that are responsible for output."
   , Option "d" ["sim-verbose"]
     (ReqArg
      (\v opts -> opts { simVerbose = read v })

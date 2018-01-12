@@ -30,7 +30,7 @@ import Control.Monad.ST
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (ReaderT(..), ask, asks)
+import Control.Monad.Reader (ReaderT(..), ask, asks, local)
 import Control.Monad.State (StateT(..), get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
@@ -375,6 +375,9 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
+localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
 
 printOutLnTop :: Verbosity -> String -> TopLevel ()
 printOutLnTop v s =
