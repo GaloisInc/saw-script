@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
@@ -75,6 +76,7 @@ import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), SomeCFG(..), TypeRepr(..), cfgHandle,
    asBaseType, AsBaseType(..), freshGlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible
+import qualified Lang.Crucible.ProgramLoc as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
@@ -153,26 +155,37 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
                     Nothing -> fail ("Could not find function named" ++ show nm)
                     Just decl -> return decl
      let st0 = initialCrucibleSetupState cc def
+
      -- execute commands of the method spec
+     let setupLoc = Crucible.mkProgramLoc "_SAW_verify_setup" Crucible.InternalPos
+     liftIO $ Crucible.setCurrentProgramLoc sym setupLoc
      methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
+
+     -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccGlobals
      let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
      mem0 <- case Crucible.lookupGlobal mvar globals of
        Nothing -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
+
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+
      -- save initial path condition
      pathstate <- io $ Crucible.getCurrentState sym
+
      -- run the symbolic execution
      (ret, globals3)
         <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
+
      -- collect the proof obligations
      asserts <- io $ verifyPoststate opts (biSharedContext bic) cc
                        methodSpec env globals3 ret
+
      -- restore initial path condition
      io $ Crucible.resetCurrentState sym pathstate
+
      -- attempt to verify the proof obligations
      stats <- verifyObligations cc methodSpec tactic assumes asserts
      return (methodSpec & csSolverStats .~ stats)
@@ -250,6 +263,10 @@ verifyPrestate ::
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
+  let sym = cc^.ccBackend
+
+  let prestateLoc = Crucible.mkProgramLoc "_SAW_verify_prestate" Crucible.InternalPos
+  liftIO $ Crucible.setCurrentProgramLoc sym prestateLoc
 
   let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
   let Just mem = Crucible.lookupGlobal lvar globals
@@ -524,7 +541,10 @@ verifyPoststate ::
   IO [(String, Term)]               {- ^ generated labels and verification conditions -}
 verifyPoststate opts sc cc mspec env0 globals ret =
 
-  do let terms0 = Map.fromList
+  do let poststateLoc = Crucible.mkProgramLoc "_SAW_verify_poststate" Crucible.InternalPos
+     liftIO $ Crucible.setCurrentProgramLoc sym poststateLoc
+
+     let terms0 = Map.fromList
            [ (ecVarIndex ec, ttTerm tt)
            | tt <- mspec^.csPreState.csFreshVars
            , let Just ec = asExtCns (ttTerm tt) ]
