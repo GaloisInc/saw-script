@@ -730,6 +730,13 @@ diffMemTypes ::
 diffMemTypes x0 y0 =
   let wptr :: Natural = fromIntegral (Crucible.natValue ?ptrWidth) in
   case (x0, y0) of
+    -- Special case; consider a one-element struct to be compatiable with
+    -- the type of its field
+    (Crucible.StructType x, _)
+      | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
+    (_, Crucible.StructType y)
+      | V.length (Crucible.siFields y) == 1 -> diffMemTypes x0 (Crucible.fiType (V.head (Crucible.siFields y)))
+
     (Crucible.IntType x, Crucible.IntType y) | x == y -> []
     (Crucible.FloatType, Crucible.FloatType) -> []
     (Crucible.DoubleType, Crucible.DoubleType) -> []
