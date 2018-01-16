@@ -264,6 +264,7 @@ verifyPrestate ::
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
+  let tyenv = mspec^.csPreState.csAllocs
 
   let prestateLoc = Crucible.mkProgramLoc "_SAW_verify_prestate" Crucible.InternalPos
   liftIO $ Crucible.setCurrentProgramLoc sym prestateLoc
@@ -271,7 +272,7 @@ verifyPrestate cc mspec globals = do
   let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
   let Just mem = Crucible.lookupGlobal lvar globals
 
-  let Just memtypes = traverse TyCtx.asMemType (mspec^.csPreState.csAllocs)
+  let Just memtypes = traverse TyCtx.asMemType tyenv
   -- Allocate LLVM memory for each 'crucible_alloc'
   (env1, mem') <- runStateT (traverse (doAlloc cc) memtypes) mem
   env2 <- Map.traverseWithKey
@@ -283,8 +284,42 @@ verifyPrestate cc mspec globals = do
   let globals1 = Crucible.insertGlobal lvar mem'' globals
   (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
   args <- resolveArguments cc mspec env
+
+  -- Check the type of the return setup value
+  case (mspec^.csRetValue, Crucible.liftRetType (mspec^.csRet)) of
+    (_, Nothing) ->
+         fail $ unlines
+           [ "Could not resolve return type of " ++ show (mspec^.csName)
+           , "Raw type: " ++ show (mspec^.csRet)
+           ]
+    (Just sv, Just (Just retTy)) ->
+      do retTy' <- typeOfSetupValue cc tyenv sv
+         b <- liftIO $ checkRegisterCompatibility retTy retTy'
+         unless b $ fail $ unlines
+           [ "Incompatible types for return value when verifying " ++ show (mspec^.csName)
+           , "Expected: " ++ show retTy
+           , "but given value of type: " ++ show retTy'
+           ]
+    (Just _, Just Nothing) ->
+         fail $ unlines
+           [ "Unexpected return value given when verifying " ++ show (mspec^.csName) ++ " which has 'void' return type."
+           ]
+    (Nothing, Just _) -> return ()
+
   return (args, cs, env, globals2)
 
+-- | Check two MemTypes for register compatiblity.  This is a stricter
+--   check than the memory compatiblity check that is done for points-to
+--   assertions.
+checkRegisterCompatibility ::
+  (Crucible.HasPtrWidth wptr) =>
+  Crucible.MemType ->
+  Crucible.MemType ->
+  IO Bool
+checkRegisterCompatibility mt mt' =
+  do st  <- Crucible.toStorableType mt
+     st' <- Crucible.toStorableType mt'
+     return (st == st')
 
 resolveArguments ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
@@ -296,11 +331,11 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
     tyenv = mspec^.csPreState.csAllocs
+    L.Symbol nm = mspec^.csName
+
     checkArgTy i mt mt' =
-      do st  <- Crucible.toStorableType mt
-         st' <- Crucible.toStorableType mt'
-         let L.Symbol nm = mspec^.csName
-         unless (st == st') $
+      do b <- checkRegisterCompatibility mt mt'
+         unless b $
            fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
                           , "Argument is declared with type: " ++ show mt
                           , "but provided argument has incompatible type: " ++ show mt'
@@ -313,7 +348,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
           checkArgTy i mt mt'
           v <- resolveSetupVal cc env tyenv sv
           return (mt, v)
-        Nothing -> fail $ unwords ["Argument", show i, "unspecified"]
+        Nothing -> fail $ unwords ["Argument", show i, "unspecified when verifying", show nm]
 
 --------------------------------------------------------------------------------
 
@@ -579,11 +614,9 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
     matchResult =
       case (ret, mspec ^. csRetValue) of
-        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
-        (Just _      , Nothing)     -> fail "verifyPoststate: missing crucible_return specification"
-        (Nothing     , Nothing)     -> return ()
         (Just (rty,r), Just expect) -> matchArg sc cc PostState r rty expect
-
+        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
+        _ -> return ()
 
 --------------------------------------------------------------------------------
 
@@ -1001,7 +1034,12 @@ crucible_equal _bic _opt val1 val2 = CrucibleSetupM $
      let env = csAllocations (st^.csMethodSpec)
      ty1 <- typeOfSetupValue cc env val1
      ty2 <- typeOfSetupValue cc env val2
-     checkMemTypeCompatibility ty1 ty2
+     b <- liftIO $ checkRegisterCompatibility ty1 ty2
+     unless b $ fail $ unlines
+       [ "Incompatible types when asserting equality:"
+       , show ty1
+       , show ty2
+       ]
      addCondition (SetupCond_Equal val1 val2)
 
 crucible_precond ::
