@@ -33,6 +33,16 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
+-- Ignoring source locations {{{
+
+-- | Remove all location information from the top of a type. Use this
+-- before checking for a particular canonical type former.
+unlocated :: Type -> Type
+unlocated (LType _ t) = unlocated t
+unlocated t = t
+
+-- }}}
+
 -- Subst {{{
 
 newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
@@ -244,7 +254,7 @@ bindPatternSchema pat s@(Forall vs t) m =
     PWild _ -> m
     PVar n _ -> bindSchema n s m
     PTuple ps ->
-      case t of
+      case unlocated t of
         TyCon (TupleCon _) ts -> foldr ($) m
           [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
@@ -422,7 +432,7 @@ inferE (ln, expr) = case expr of
   Lookup e n ->
     do (e1,t) <- inferE (ln, e)
        t1 <- appSubstM =<< instantiateM t
-       elTy <- case t1 of
+       elTy <- case unlocated t1 of
                  TyRecord fs
                     | Just ty <- M.lookup n fs -> return ty
                     | otherwise ->
@@ -441,7 +451,7 @@ inferE (ln, expr) = case expr of
   TLookup e i ->
     do (e1,t) <- inferE (ln,e)
        t1 <- appSubstM =<< instantiateM t
-       elTy <- case t1 of
+       elTy <- case unlocated t1 of
                  TyCon (TupleCon n) tys
                    | i < n -> return (tys !! fromIntegral i)
                    | otherwise ->
@@ -597,7 +607,7 @@ constrainTypeWithPattern ln t pat =
     PVar _ Nothing -> return ()
     PVar _ (Just t') -> unify ln t t'
     PTuple ps ->
-      case t of
+      case unlocated t of
         TyCon (TupleCon k) ts
           | k == genericLength ps ->
             sequence_ $ zipWith (constrainTypeWithPattern ln) ts ps
