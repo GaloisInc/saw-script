@@ -124,3 +124,16 @@ downloaded dependencies include:
 * `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, LSS and SAWScript
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
 * `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
+
+## Acknowledgements
+
+Much of the work on SAW has been funded by, and lots of design input was
+provided by the team at the [NSA's Trusted Systems Research
+Group](http://www.nsa.gov/research/ia_research/), including Brad Martin,
+Frank Taylor and Sean Weaver.
+
+Portions of SAW are also based upon work supported by the Office
+of Naval Research under Contract No. N68335-17-C-0452. Any opinions,
+findings and conclusions or recommendations expressed in this
+material are those of the author(s) and do not necessarily reflect
+the views of the Office of Naval Research.
