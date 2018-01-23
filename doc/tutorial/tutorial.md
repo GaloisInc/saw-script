@@ -18,11 +18,14 @@ analysis tasks.
 
 This tutorial introduces the details of the language by walking through
 several examples, and showing how simple verification tasks can be
-described. Most of the examples make use of inline specifications
-written in Cryptol, a language originally designed for high-level
-descriptions of cryptographic algorithms. For readers unfamiliar with
-Cryptol, various documents describing its use are available
+described. The complete examples are available in [the accompanying
+collection of code](saw-tutorial-code.tar.gz).  Most of the examples
+make use of inline specifications written in Cryptol, a language
+originally designed for high-level descriptions of cryptographic
+algorithms. For readers unfamiliar with Cryptol, various documents
+describing its use are available
 [here](http://cryptol.net/documentation.html).
+
 
 Example: Find First Set
 =======================
@@ -43,8 +46,8 @@ initialized to zero, and a mask initialized to have the least
 significant bit set. On each iteration, we increment the index, and
 shift the mask to the left. Then we can use a bitwise "and" operation
 to test the bit at the index indicated by the index variable. The
-following C code (which is also in the `code/ffs.c` file accompanying
-this tutorial) uses this approach.
+following C code (which is also in the `code/ffs.c` file [accompanying
+this tutorial](saw-tutorial-code.tar.gz)) uses this approach.
 
 ``` {.c}
 $include 9-17 code/ffs.c
@@ -61,7 +64,7 @@ Optimized Implementations
 -------------------------
 
 An alternative implementation, taken by the following program (also in
-`code/ffs.c`), treats the bits of the input word in chunks, allowing
+[`code/ffs.c`](saw-tutorial-code.tar.gz)), treats the bits of the input word in chunks, allowing
 sequences of zero bits to be skipped over more quickly.
 
 ``` {.c}
@@ -221,15 +224,9 @@ First, we compile the Java code to a JVM class file.
 
     > javac -g FFS.java
 
-Now we can do the proof both within and across languages (from
-`code/ffs_compare.saw`):
-
-```
-$include all code/ffs_compare.saw
-```
-
-We can run this with the `-j` flag to tell it where to find the Java
-standard libraries:
+Using `saw` with Java code requires a command-line option `-j` that
+locates the Java standard libraries. Run the code in this section with
+the command:
 
     > saw -j <path to rt.jar or classes.jar from JDK> ffs_compare.saw
 
@@ -237,6 +234,15 @@ If you're using a Sun Java, you can find the standard libraries JAR by
 grepping the output of `java -v`:
 
     > java -v 2>&1 | grep Opened
+
+
+Now we can do the proof both within and across languages (from
+`code/ffs_compare.saw`):
+
+```
+$include all code/ffs_compare.saw
+```
+
 
 Using SMT-Lib Solvers
 =====================
@@ -258,10 +264,10 @@ $include all code/double.c
 
 In this trivial example, an integer can be doubled either using
 multiplication or shifting. The following SAWScript program
-(`code/double.saw`) verifies that the two are equivalent using both
-internal ABC, Yices, and CVC4 modes,
-and by exporting an SMT-Lib theorem to be checked later, by an external
-SAT solver.
+([`code/double.saw`](saw-tutorial-code.tar.gz)) verifies that the two
+are equivalent using both internal ABC, Yices, and CVC4 modes, and by
+exporting an SMT-Lib theorem to be checked later, by an external SAT
+solver.
 
 ```
 $include all code/double.saw
@@ -351,7 +357,7 @@ function then calls `add` to double its argument. While it would be easy
 to prove that `dbl` doubles its argument by following the call to `add`,
 it's also possible in SAWScript to prove something about `add` first,
 and then use the results of that proof in the proof of `dbl`, as in the
-following SAWScript code (`code/java_add.saw`).
+following SAWScript code ([`code/java_add.saw`](saw-tutorial-code.tar.gz)).
 
 ````
 $include all code/java_add.saw
@@ -518,7 +524,7 @@ constant value.
 
 An example of using `java_symexec` on a simple function (using just
 scalar arguments and return values) appears in the
-`code/java_symexec.saw` file, quoted below.
+[`code/java_symexec.saw`](saw-tutorial-code.tar.gz) file, quoted below.
 
 ```
 $include all code/java_symexec.saw
@@ -676,8 +682,8 @@ Java Equivalence Checking
 
 The previous examples showed comparison between two different LLVM
 implementations, and cross-language comparisons between Cryptol, Java,
-and LLVM. The script in `code/ffs_java.saw` compares two different
-Java implementations, instead.
+and LLVM. The script in [`code/ffs_java.saw`](saw-tutorial-code.tar.gz)
+compares two different Java implementations, instead.
 
 ````
 $include all code/ffs_java.saw
