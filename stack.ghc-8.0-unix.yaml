@@ -20,6 +20,7 @@ packages:
   - deps/parameterized-utils/
   - .
 extra-deps:
+  - containers-0.5.8.2
   - crackNum-1.9
   - FloatingHex-0.4
   - QuickCheck-2.9.2
