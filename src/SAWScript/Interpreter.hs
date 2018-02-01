@@ -1541,6 +1541,15 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
+  , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc_readonly)
+    [ "Declare that a read-only memory region of the given type should be"
+    , "allocated in a Crucible specification. The function must not attempt"
+    , "to write to this memory region. Unlike `crucible_alloc`, regions"
+    , "allocated with `crucible_alloc_readonly` are allowed to alias other"
+    , "read-only regions."
+    ]
+
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
     [ "Create a fresh pointer value for use in a Crucible specification."

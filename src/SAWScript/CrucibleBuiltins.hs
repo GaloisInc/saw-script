@@ -38,6 +38,7 @@ module SAWScript.CrucibleBuiltins
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
     , crucible_alloc
+    , crucible_alloc_readonly
     , crucible_fresh_expanded_val
     ) where
 
@@ -264,7 +265,9 @@ verifyPrestate ::
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
-  let tyenv = mspec^.csPreState.csAllocs
+  let tyenvRW = mspec^.csPreState.csAllocs
+  let tyenvRO = mspec^.csPreState.csConstAllocs
+  let tyenv = tyenvRW <> tyenvRO
 
   let prestateLoc = Crucible.mkProgramLoc "_SAW_verify_prestate" Crucible.InternalPos
   liftIO $ Crucible.setCurrentProgramLoc sym prestateLoc
@@ -272,16 +275,19 @@ verifyPrestate cc mspec globals = do
   let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
   let Just mem = Crucible.lookupGlobal lvar globals
 
-  let Just memtypes = traverse TyCtx.asMemType tyenv
+  let Just memtypesRW = traverse TyCtx.asMemType tyenvRW
+  let Just memtypesRO = traverse TyCtx.asMemType tyenvRO
   -- Allocate LLVM memory for each 'crucible_alloc'
-  (env1, mem') <- runStateT (traverse (doAlloc cc) memtypes) mem
-  env2 <- Map.traverseWithKey
+  (env1, mem') <- runStateT (traverse (doAlloc cc) memtypesRW) mem
+  -- Allocate LLVM memory for each 'crucible_alloc_readonly'
+  (env2, mem'') <- runStateT (traverse (doAllocConst cc) memtypesRO) mem'
+  env3 <- Map.traverseWithKey
             (\k _ -> executeFreshPointer cc k)
             (mspec^.csPreState.csFreshPointers)
-  let env = Map.union env1 env2
+  let env = Map.unions [env1, env2, env3]
 
-  mem'' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem'
-  let globals1 = Crucible.insertGlobal lvar mem'' globals
+  mem''' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem''
+  let globals1 = Crucible.insertGlobal lvar mem''' globals
   (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
   args <- resolveArguments cc mspec env
 
@@ -330,7 +336,7 @@ resolveArguments ::
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
-    tyenv = mspec^.csPreState.csAllocs
+    tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
     L.Symbol nm = mspec^.csName
 
     checkArgTy i mt mt' =
@@ -365,7 +371,7 @@ setupPrePointsTos ::
   IO MemImpl
 setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
-    tyenv = mspec^.csPreState.csAllocs
+    tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
 
     go :: MemImpl -> PointsTo -> IO MemImpl
     go mem (PointsTo ptr val) =
@@ -381,7 +387,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          memTy <- typeOfSetupValue cc tyenv val
          storTy <- Crucible.toStorableType memTy
          let sym = cc^.ccBackend
-         mem' <- Crucible.storeRaw sym mem ptr'' storTy val'
+         mem' <- Crucible.storeConstRaw sym mem ptr'' storTy val'
          return mem'
 
 setupPrestateConditions ::
@@ -394,7 +400,7 @@ setupPrestateConditions ::
   IO (Crucible.SymGlobalState Sym, [Term])
 setupPrestateConditions mspec cc env = aux []
   where
-    tyenv = mspec^.csPreState.csAllocs
+    tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
 
     aux acc globals [] = return (globals, acc)
 
@@ -435,6 +441,19 @@ doAlloc cc tp = StateT $ \mem ->
      let dl = TyCtx.llvmDataLayout ?lc
      sz <- Crucible.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
      Crucible.mallocRaw sym mem sz
+
+-- | Allocate read-only space on the LLVM heap to store a value of the
+-- given type. Returns the pointer to the allocated memory.
+doAllocConst ::
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  CrucibleContext arch       ->
+  Crucible.MemType           ->
+  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
+doAllocConst cc tp = StateT $ \mem ->
+  do let sym = cc^.ccBackend
+     let dl = TyCtx.llvmDataLayout ?lc
+     sz <- Crucible.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
+     Crucible.mallocConstRaw sym mem sz
 
 --------------------------------------------------------------------------------
 
@@ -965,10 +984,11 @@ constructExpandedSetupValue sc t =
     Crucible.MetadataType -> fail "crucible_fresh_expanded_var: Metadata not supported"
     Crucible.VecType{}    -> fail "crucible_fresh_expanded_var: Vec not supported"
 
-crucible_alloc :: BuiltinContext
-               -> Options
-               -> L.Type
-               -> CrucibleSetupM SetupValue
+crucible_alloc ::
+  BuiltinContext ->
+  Options        ->
+  L.Type         ->
+  CrucibleSetupM SetupValue
 crucible_alloc _bic _opt lty = CrucibleSetupM $
   do let ?dl = TyCtx.llvmDataLayout ?lc
      symTy <- case TyCtx.liftType lty of
@@ -978,6 +998,19 @@ crucible_alloc _bic _opt lty = CrucibleSetupM $
      currentState.csAllocs.at n ?= symTy
      return (SetupVar n)
 
+crucible_alloc_readonly ::
+  BuiltinContext ->
+  Options        ->
+  L.Type         ->
+  CrucibleSetupM SetupValue
+crucible_alloc_readonly _bic _opt lty = CrucibleSetupM $
+  do let ?dl = TyCtx.llvmDataLayout ?lc
+     symTy <- case TyCtx.liftType lty of
+       Just s -> return s
+       Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
+     n <- csVarCounter <<%= nextAllocIndex
+     currentState.csConstAllocs.at n ?= symTy
+     return (SetupVar n)
 
 crucible_fresh_pointer ::
   BuiltinContext ->

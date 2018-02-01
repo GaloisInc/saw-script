@@ -134,6 +134,8 @@ data SetupCondition where
 data StateSpec = StateSpec
   { _csAllocs        :: Map AllocIndex SymType
     -- ^ allocated pointers
+  , _csConstAllocs   :: Map AllocIndex SymType
+    -- ^ allocated read-only pointers
   , _csFreshPointers :: Map AllocIndex SymType
     -- ^ symbolic pointers
   , _csPointsTos     :: [PointsTo]
@@ -178,9 +180,9 @@ makeLenses ''StateSpec
 csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex SymType
 csAllocations
   = Map.unions
-  . toListOf ((csPreState <> csPostState) . (csAllocs <> csFreshPointers))
+  . toListOf ((csPreState <> csPostState) . (csAllocs <> csConstAllocs <> csFreshPointers))
 
--- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core. 
+-- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core.
 methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
 methodSpecToTerm sc spec =
       -- 1. fill in the post-state user variable holes with final
@@ -300,6 +302,7 @@ intrinsics =
 initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec
   { _csAllocs        = Map.empty
+  , _csConstAllocs   = Map.empty
   , _csFreshPointers = Map.empty
   , _csPointsTos     = []
   , _csConditions    = []

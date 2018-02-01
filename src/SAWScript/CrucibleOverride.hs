@@ -414,20 +414,25 @@ refreshTerms sc ss =
 ------------------------------------------------------------------------
 
 -- | Generate assertions that all of the memory allocations matched by
--- an override's precondition are disjoint.
+-- an override's precondition are disjoint. Read-only allocations are
+-- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch -> StateSpec -> OverrideMatcher arch ()
 enforceDisjointness cc ss =
   do sym <- getSymInterface
      sub <- OM (use setupValueSub)
-     let syms = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
+     let symsRW = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
+         symsRO = Map.elems $ Map.intersectionWith (,) (view csConstAllocs ss) sub
 
      let resolve s = case TyCtx.asMemType s of
                        Nothing -> fail "enforceDisjointness: not memtype"
                        Just m  -> return m
-     mems <- traverse (_1 resolve) syms
+     memsRW <- traverse (_1 resolve) symsRW
+     memsRO <- traverse (_1 resolve) symsRO
 
+     -- Ensure that all RW regions are disjoint from each other, and
+     -- that all RW regions are disjoint from all RO regions.
      sequence_
         [ do c <- liftIO
                 $ Crucible.buildDisjointRegionsAssertion
@@ -445,9 +450,8 @@ enforceDisjointness cc ss =
 
               a = Crucible.AssertFailureSimError
                     "Memory regions not disjoint"
-
-        , (pty,p):ps <- tails mems
-        , (qty,q)    <- ps
+        , (pty,p):ps <- tails memsRW
+        , (qty,q)    <- ps ++ memsRO
         ]
 
 ------------------------------------------------------------------------
@@ -461,7 +465,7 @@ matchPointsTos :: forall arch.
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options          {- ^ saw script print out opts -} ->
   SharedContext    {- ^ term construction context -} ->
-  CrucibleContext arch {- ^ simulator context         -} ->
+  CrucibleContext arch {- ^ simulator context     -} ->
   CrucibleMethodSpecIR                               ->
   PrePost                                            ->
   [PointsTo]       {- ^ points-tos                -} ->
