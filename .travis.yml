@@ -1,31 +1,28 @@
-dist: trusty
-sudo: false
-
-language: c
-
-cache:
-  directories:
-  - $HOME/.ghc
-  - $HOME/.cabal
+language: nix
 
 matrix:
+  fast_finish: true
   include:
-    - env: CABALVER="2.0" GHCVER="8.2.2"
-      compiler: ": #GHC 8.2.2"
-      addons: {apt: {packages: [cabal-install-2.0,ghc-8.2.2], sources: [hvr-ghc]}}
-    - os: osx
-      env: CABALVER="2.0" GHCVER="8.2.2"
-      compiler: ": #GHC 8.2.2"
+    - env: GHCVER=ghc7103
+    - env: GHCVER=ghc802
+    - env: GHCVER=ghc822
+    - env: GHCVER=ghc742
+    - env: GHCVER=ghc763
+    - env: GHCVER=ghc783
+    - env: GHCVER=ghc784
+    - env: GHCVER=ghcHEAD
+  allow_failures:
+    - env: GHCVER=ghc742
+    - env: GHCVER=ghc763
+    - env: GHCVER=ghc783
+    - env: GHCVER=ghc784
+    - env: GHCVER=ghc7103
+    - env: GHCVER=ghcHEAD
 
 before_install:
-  - if [[ $TRAVIS_OS_NAME == 'osx' ]];
-    then
-        brew update;
-        brew install ghc cabal-install;
-    fi
-  - unset CC
-  - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
+ - git submodule update --init
+ - nix-channel --list
+ - nix-channel --update
 
 script:
-  - cabal update
-  - cabal new-build -j --disable-optimization
+ - nix-build --argstr compiler $GHCVER
