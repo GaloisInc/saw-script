@@ -10,12 +10,12 @@ cache:
 
 matrix:
   include:
-    - env: CABALVER="2.0" GHCVER="8.2.1"
-      compiler: ": #GHC 8.2.1"
-      addons: {apt: {packages: [cabal-install-2.0,ghc-8.2.1], sources: [hvr-ghc]}}
+    - env: CABALVER="2.0" GHCVER="8.2.2"
+      compiler: ": #GHC 8.2.2"
+      addons: {apt: {packages: [cabal-install-2.0,ghc-8.2.2], sources: [hvr-ghc]}}
     - os: osx
-      env: CABALVER="2.0" GHCVER="8.2.1"
-      compiler: ": #GHC 8.2.1"
+      env: CABALVER="2.0" GHCVER="8.2.2"
+      compiler: ": #GHC 8.2.2"
 
 before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
