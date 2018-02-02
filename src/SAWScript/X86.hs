@@ -1,4 +1,4 @@
-{-# Language DataKinds, OverloadedStrings, GADTs #-}
+{-# Language DataKinds, OverloadedStrings, GADTs, TypeApplications #-}
 module SAWScript.X86
   ( Options(..)
   , main
@@ -22,14 +22,16 @@ import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Classes(knownRepr)
+import Data.Parameterized.Context(field)
 
 -- Crucible
 import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar)
 import Lang.Crucible.BaseTypes(BaseTypeRepr(..))
 import Lang.Crucible.Solver.Interface(freshConstant)
--- import Lang.Crucible.Solver.SAWCoreBackend(toSC)
-import Lang.Crucible.Simulator.RegValue(RegValue'(RV))
+import Lang.Crucible.Solver.SAWCoreBackend(toSC)
+import Lang.Crucible.Simulator.RegMap(regValue)
+import Lang.Crucible.Simulator.RegValue(RegValue'(RV,unRV))
 import Lang.Crucible.Simulator.ExecutionTree
           (gpValue,ExecResult(..),PartialResult(..))
 import Lang.Crucible.ProgramLoc(Position(OtherPos))
@@ -189,7 +191,11 @@ translate opts elf name =
                           (x86_64MacawEvalFn (symFuns opts)) halloc g regs
 
      case execResult of
-       FinishedExecution _ (TotalRes p) -> undefined (p^.gpValue)
+       FinishedExecution _ (TotalRes p) ->
+        -- XXX: Temporary, just to make sure the types work out,
+        -- this translates the first register (whatever that is)
+        toSC (backend opts)
+          (unRV ((regValue (p^.gpValue)) ^. (field @0)))
        _ -> malformed "Bad simulation result"
 
 
