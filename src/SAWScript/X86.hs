@@ -1,4 +1,8 @@
 {-# Language DataKinds, OverloadedStrings, GADTs, TypeApplications #-}
+{-# Language RankNTypes, TypeOperators #-}
+{-# Language RecordWildCards #-}
+{-# Language AllowAmbiguousTypes, ScopedTypeVariables #-}
+{-# Language FlexibleContexts #-}
 module SAWScript.X86
   ( Options(..)
   , main
@@ -9,7 +13,7 @@ module SAWScript.X86
 
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad(unless)
-import Control.Monad.ST(stToIO)
+import Control.Monad.ST(ST,stToIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import           Data.Map ( Map )
@@ -22,11 +26,14 @@ import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Classes(knownRepr)
-import Data.Parameterized.Context(field)
+import Data.Parameterized.Context(Assignment,EmptyCtx,(::>),field,Idx)
 
 -- Crucible
+import Lang.Crucible.Vector(Vector)
+import qualified Lang.Crucible.Vector as Vector
 import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar)
+import Lang.Crucible.Types(BVType,BoolType)
 import Lang.Crucible.BaseTypes(BaseTypeRepr(..))
 import Lang.Crucible.Solver.Interface(freshConstant)
 import Lang.Crucible.Solver.SAWCoreBackend(toSC)
@@ -35,7 +42,7 @@ import Lang.Crucible.Simulator.RegValue(RegValue'(RV,unRV))
 import Lang.Crucible.Simulator.ExecutionTree
           (gpValue,ExecResult(..),PartialResult(..))
 import Lang.Crucible.ProgramLoc(Position(OtherPos))
-import Lang.Crucible.FunctionHandle(newHandleAllocator)
+import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
 
 -- Macaw
@@ -50,8 +57,11 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , LoadStyle(..)
                                   , memoryForElf
                                   , resolveElfFuncSymbols )
-import Data.Macaw.Symbolic(mkFunCFG, runCodeBlock)
-import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..))
+import Data.Macaw.Symbolic( ArchRegStruct
+                          , MacawArchEvalFn,ArchRegContext,mkFunCFG,
+                                                        runCodeBlock)
+import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt,
+                                   MacawCrucibleRegTypes)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType,macawAssignToCrucM)
 import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
 import Data.Macaw.X86.ArchTypes(X86_64)
@@ -172,44 +182,56 @@ posFn = OtherPos . Text.pack . show
 translate :: Options -> RelevnatElf -> ByteString -> IO Term
 translate opts elf name =
   do addr <- findSymbol (symMap elf) name
-     (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
-     halloc  <- stToIO $ newHandleAllocator
-     baseVar <- stToIO $ freshGlobalVar halloc baseName knownRepr
-     let memBaseVarMap = Map.singleton 1 baseVar
-     SomeCFG g <- stToIO $ mkFunCFG x86_64MacawSymbolicFns
-                                    halloc
-                                    memBaseVarMap
-                                    cruxName
-                                    posFn
-                                    funInfo
+     (halloc, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
 
      let sym = backend opts
-     regs <- macawAssignToCrucM (mkReg sym)
-                                (crucGenRegAssignment x86_64MacawSymbolicFns)
+     regs <- macawAssignToCrucM (mkReg sym) genRegAssign
 
-     execResult <- runCodeBlock sym x86_64MacawSymbolicFns
-                          (x86_64MacawEvalFn (symFuns opts)) halloc g regs
+
+     execResult <- runCodeBlock sym x86 (x86_eval opts) halloc cfg regs
+
 
      case execResult of
        FinishedExecution _ (TotalRes p) ->
-        -- XXX: Temporary, just to make sure the types work out,
-        -- this translates the first register (whatever that is)
-        toSC (backend opts)
-          (unRV ((regValue (p^.gpValue)) ^. (field @0)))
+          do startRegs <- getRegs sym regs
+             endRegs   <- getRegs sym (regValue (p^.gpValue))
+             relate opts startRegs endRegs
+
        _ -> malformed "Bad simulation result"
 
+relate :: Options -> Regs -> Regs -> IO Term
+relate = undefined
 
 
+
+
+-- | Generate a CFG for the function at the given address.
+makeCFG ::
+  Options ->
+  RelevnatElf ->
+  ByteString ->
+  MemSegmentOff 64 ->
+  ST s ( HandleAllocator s
+       , SomeCFG (MacawExt X86_64)
+                 (EmptyCtx ::> ArchRegStruct X86_64)
+                 (ArchRegStruct X86_64)
+       )
+makeCFG opts elf name addr =
+  do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
+     halloc  <- newHandleAllocator
+     baseVar <- freshGlobalVar halloc baseName knownRepr
+     let memBaseVarMap = Map.singleton 1 baseVar
+     g <- mkFunCFG x86 halloc memBaseVarMap cruxName posFn funInfo
+     return (halloc,g)
   where
+  txtName   = decodeUtf8 name
+  cruxName  = functionNameFromText txtName
+  baseName  = Text.append "mem_base_" txtName
+
   empty = emptyDiscoveryState (memory elf) (symMap elf) (archInfo opts)
 
-  txtName   = decodeUtf8 name
-  baseName  = Text.append "mem_base_" txtName
-  cruxName  = functionNameFromText txtName
 
-
-
-
+-- | Make up a fresh variable for a specific register.
 mkReg :: Sym -> X86Reg tp -> IO (RegValue' Sym (ToCrucibleType tp))
 mkReg sym r =
   case typeRepr r of
@@ -219,6 +241,185 @@ mkReg sym r =
       unsupported "macaw-symbolic does not support tuple types."
   where
   nm = crucGenArchRegName x86_64MacawSymbolicFns r
+
+
+
+
+--------------------------------------------------------------------------------
+-- Specialize 
+
+-- | All functions related to X86.
+x86 :: MacawSymbolicArchFunctions X86_64
+x86 = x86_64MacawSymbolicFns
+
+genRegAssign :: Assignment X86Reg (ArchRegContext X86_64)
+genRegAssign = crucGenRegAssignment x86
+
+-- | Evaluate a specific instruction.
+x86_eval :: Options -> MacawArchEvalFn Sym X86_64
+x86_eval opts = x86_64MacawEvalFn (symFuns opts)
+
+
+--------------------------------------------------------------------------------
+-- Registers 
+
+data Regs = Regs
+  { rIP    :: Term             -- ^ 0 (64)
+  , rGP    :: Vector 16 Term   -- ^ 1--16 (64)
+  , rFlag  :: Vector 9  Term   -- ^ 17--25 (Bool)
+  , rFP    :: FPRegs
+  , rVec   :: Vector 16 Term   -- ^ 59--74 (256)
+
+  }
+
+data FPRegs = FPRegs
+  { fpStatus :: Vector 16 Term  -- ^26--41 (bool)
+  , fpTop    :: Term            -- ^42 (3)
+  , fpTags   :: Vector 8 Term   -- ^ 43--50 (2)
+  , fpRegs   :: Vector 8 Term   -- ^ 51-58 (80)
+  }
+
+
+getReg :: forall w n ctx.
+  ( Idx n ctx (BVType w)
+  , ctx ~ MacawCrucibleRegTypes X86_64
+  ) =>
+  Sym -> Assignment (RegValue' Sym) ctx ->
+  IO Term
+getReg sym a = toSC sym (unRV (a ^. (field @n)))
+
+getFlag :: forall n ctx.
+  ( Idx n ctx BoolType
+  , ctx ~ MacawCrucibleRegTypes X86_64
+  ) =>
+  Sym -> Assignment (RegValue' Sym) ctx ->
+  IO Term
+getFlag sym a = toSC sym (unRV (a ^. (field @n)))
+
+getRegs ::
+  Sym ->
+  Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64) ->
+  IO Regs
+getRegs sym a =
+  do rIP  <- getReg @64 @0 sym a
+
+     Just rGP <- Vector.fromList knownRepr <$> sequence
+       [ getReg @64 @1 sym a
+       , getReg @64 @2 sym a
+       , getReg @64 @3 sym a
+       , getReg @64 @4 sym a
+       , getReg @64 @5 sym a
+       , getReg @64 @6 sym a
+       , getReg @64 @7 sym a
+       , getReg @64 @8 sym a
+
+       , getReg @64 @9 sym a
+       , getReg @64 @10 sym a
+       , getReg @64 @11 sym a
+       , getReg @64 @12 sym a
+       , getReg @64 @13 sym a
+       , getReg @64 @14 sym a
+       , getReg @64 @15 sym a
+       , getReg @64 @16 sym a
+       ]
+
+     Just rFlag <- Vector.fromList knownRepr <$> sequence
+        [ getFlag @17 sym a
+        , getFlag @18 sym a
+        , getFlag @19 sym a
+        , getFlag @20 sym a
+        , getFlag @21 sym a
+        , getFlag @22 sym a
+        , getFlag @23 sym a
+        , getFlag @24 sym a
+        , getFlag @25 sym a
+        ]
+
+     rFP <-
+       do -- X87 status registers
+          Just fpStatus <- Vector.fromList knownRepr <$> sequence
+            [ getFlag @26 sym a
+            , getFlag @27 sym a
+            , getFlag @28 sym a
+            , getFlag @29 sym a
+            , getFlag @30 sym a
+            , getFlag @31 sym a
+            , getFlag @32 sym a
+            , getFlag @33 sym a
+            , getFlag @34 sym a
+            , getFlag @36 sym a
+            , getFlag @36 sym a
+            , getFlag @37 sym a
+            , getFlag @38 sym a
+            , getFlag @39 sym a
+            , getFlag @40 sym a
+            , getFlag @41 sym a
+            ]
+
+          fpTop <- getReg @3 @42 sym a
+
+          -- Tags
+          Just fpTags <- Vector.fromList knownRepr <$> sequence
+            [ getReg @2 @43 sym a
+            , getReg @2 @44 sym a
+            , getReg @2 @45 sym a
+            , getReg @2 @46 sym a
+            , getReg @2 @47 sym a
+            , getReg @2 @48 sym a
+            , getReg @2 @49 sym a
+            , getReg @2 @50 sym a
+            ]
+
+          -- Floating point register
+          Just fpRegs <- Vector.fromList knownRepr <$> sequence
+            [ getReg @80 @51 sym a
+            , getReg @80 @52 sym a
+            , getReg @80 @53 sym a
+            , getReg @80 @54 sym a
+            , getReg @80 @55 sym a
+            , getReg @80 @56 sym a
+            , getReg @80 @57 sym a
+            , getReg @80 @58 sym a
+            ]
+
+          return FPRegs { .. }
+
+     -- Vector registers
+     Just rVec <- Vector.fromList knownRepr <$> sequence
+       [ getReg @256 @59 sym a
+       , getReg @256 @60 sym a
+       , getReg @256 @61 sym a
+       , getReg @256 @62 sym a
+       , getReg @256 @63 sym a
+       , getReg @256 @64 sym a
+       , getReg @256 @65 sym a
+       , getReg @256 @66 sym a
+       , getReg @256 @67 sym a
+       , getReg @256 @68 sym a
+       , getReg @256 @69 sym a
+       , getReg @256 @70 sym a
+       , getReg @256 @71 sym a
+       , getReg @256 @72 sym a
+       , getReg @256 @73 sym a
+       , getReg @256 @74 sym a
+       ]
+
+     return Regs { .. }
+
+
+
+
+--------------------------------------------------------------------------------
+-- Calling Convention
+-- see: http://refspecs.linuxfoundation.org/elf/x86_64-abi-0.99.pdf
+-- Need to preserve: %rbp, %rbx, %r12--%r15
+-- Preserve control bits in MXCSR
+-- Preserve x87 control word.
+-- On entry:
+--   CPU is in x87 mode
+--   DF in $rFLAGS is clear one entry and return.
+-- "Red zone" 128 bytes past the end of the stack %rsp.
+--    * not modified by interrupts
 
 
 --------------------------------------------------------------------------------
@@ -243,64 +444,3 @@ unsupported x = throwIO (X86Unsupported x)
 malformed :: String -> IO a
 malformed x = throwIO (X86Error x)
 
-
-{-
-
-main :: IO ()
-main = do
-  putStrLn "Start test case"
-  Some gen <- newIONonceGenerator
-  halloc <- C.newHandleAllocator
-  sym <- C.newSimpleBackend gen
-  let x86ArchFns :: MS.MacawSymbolicArchFunctions MX.X86_64
-      x86ArchFns = MX.x86_64MacawSymbolicFns
-
-  let posFn :: M.MemSegmentOff 64 -> C.Position
-      posFn = C.OtherPos . Text.pack . show
-
-  let loadOpt :: Elf.LoadOptions
-      loadOpt = Elf.LoadOptions { Elf.loadRegionIndex = Just 1
-                                , Elf.loadStyleOverride = Just Elf.LoadBySection
-                                , Elf.includeBSS = False
-                                }
-
-  memBaseVar <- stToIO $ C.freshGlobalVar halloc "add_mem_base" C.knownRepr
-
-  let memBaseVarMap :: MS.MemSegmentMap 64
-      memBaseVarMap = Map.singleton 1 memBaseVar
-
-  let addrSymMap :: M.AddrSymMap 64
-      addrSymMap = Map.fromList [ (M.memSymbolStart msym, M.memSymbolName msym)
-                                | msym <- nameAddrList ]
-  let archInfo :: M.ArchitectureInfo MX.X86_64
-      archInfo =  MX.x86_64_linux_info
-
-  let ds0 :: M.DiscoveryState MX.X86_64
-      ds0 = M.emptyDiscoveryState mem addrSymMap archInfo
-
-  putStrLn "Analyze a function"
-  let logFn addr = ioToST $ do
-        putStrLn $ "Analyzing " ++ show addr
-
-  (_, Some funInfo) <- stToIO $ M.analyzeFunction logFn addAddr M.UserRequest ds0
-  putStrLn "Make CFG"
-  C.SomeCFG g <- stToIO $ MS.mkFunCFG x86ArchFns halloc memBaseVarMap "add" posFn funInfo
-
-  regs <- MS.macawAssignToCrucM (mkReg x86ArchFns sym) (MS.crucGenRegAssignment x86ArchFns)
-
-  symFuns <- MX.newSymFuns sym
-
-  putStrLn "Run code block"
-  execResult <- MS.runCodeBlock sym x86ArchFns (MX.x86_64MacawEvalFn symFuns) halloc g regs
-  case execResult of
-    C.FinishedExecution _ (C.TotalRes _pair) -> do
-      putStrLn "Done"
-    _ -> do
-      fail "Partial execution returned."
-
-  -- Steps:
-  -- Load up Elf file.
-  -- Call symbolic simulator
-  -- Check Result
-
--}
