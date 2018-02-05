@@ -52,6 +52,7 @@ import           Data.Function
 import           Data.IORef
 import           Data.List
 import           Data.Maybe (fromMaybe)
+import           Data.Monoid ((<>))
 import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -65,7 +66,7 @@ import           System.IO
 
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
-import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
 import           Data.Parameterized.Classes
