@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {- |
 Module      : $Header$
 Description : Miscellaneous utilities.
@@ -317,7 +318,9 @@ ordinal n | n < 0 = error "Only non-negative cardinals are supported."
     inTens = (n `mod` 100) `div` 10 == 1
 
 handleException :: Options -> CE.SomeException -> IO a
-handleException opts e = printOutLn opts Error (show e) >> exitProofUnknown
+handleException opts e
+    | Just (_ :: ExitCode) <- CE.fromException e = CE.throw e
+    | otherwise = printOutLn opts Error (CE.displayException e) >> exitProofUnknown
 
 exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
 exitProofFalse = exitWith (ExitFailure 1)
