@@ -185,12 +185,12 @@ showDuration n = printf "%02d:%s" m (show s)
 
 -- | Atempt to find class with given name, or throw ExecException if no class
 -- with that name exists. Class name should be in slash-separated form.
-lookupClass :: JSS.Codebase -> Pos -> String -> IO JSS.Class
+lookupClass :: JSS.Codebase -> Pos -> JSS.ClassName -> IO JSS.Class
 lookupClass cb site nm = do
   maybeCl <- JSS.tryLookupClass cb nm
   case maybeCl of
     Nothing -> do
-     let msg = ftext ("The Java class " ++ JSS.slashesToDots nm ++ " could not be found.")
+     let msg = ftext ("The Java class " ++ JSS.slashesToDots (JSS.unClassName nm) ++ " could not be found.")
          res = "Please check that the --classpath and --jars options are set correctly."
       in throwIOExecException site msg res
     Just cl -> return cl
@@ -199,7 +199,7 @@ lookupClass cb site nm = do
 -- Throws an ExecException if method could not be found or is ambiguous.
 findMethod :: JSS.Codebase -> Pos -> String -> JSS.Class -> IO (JSS.Class, JSS.Method)
 findMethod cb site nm initClass = impl initClass
-  where javaClassName = JSS.slashesToDots (JSS.className initClass)
+  where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))
         methodMatches m = JSS.methodName m == nm && not (JSS.methodIsAbstract m)
         impl cl =
           case filter methodMatches (JSS.classMethods cl) of

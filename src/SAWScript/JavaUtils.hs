@@ -313,7 +313,7 @@ readJavaValue mlocals ps (CC.Term e) = do
       case Map.lookup f sfields of
         Just v -> return v
         _ -> fail $ "Static field '" ++ fieldIdName f ++
-                    "' not found in class '" ++ fieldIdClass f ++ "'"
+                    "' not found in class '" ++ JSS.unClassName (fieldIdClass f) ++ "'"
 
 readJavaValueSim :: (Monad m) =>
                     JavaExpr

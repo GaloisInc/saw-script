@@ -19,15 +19,15 @@ import Verifier.Java.Codebase
 prettyClass :: Class -> Doc
 prettyClass cls = vcat $
   [ empty
-  , text "Class name:" <+> text (className cls) <+>
+  , text "Class name:" <+> text (unClassName (className cls)) <+>
     parens (commas attrs)
-  , text "Superclass:" <+> text (fromMaybe "none" (superClass cls))
+  , text "Superclass:" <+> text (fromMaybe "none" (fmap unClassName (superClass cls)))
   , empty
   ] ++
   (if null (classInterfaces cls)
       then []
       else [ text "Interfaces:"
-           , indent 2 (vcat (map text (classInterfaces cls)))
+           , indent 2 (vcat (map (text . unClassName) (classInterfaces cls)))
            , empty
            ]) ++
   [ text "Fields:"

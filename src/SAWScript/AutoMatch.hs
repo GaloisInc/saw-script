@@ -51,7 +51,7 @@ import SAWScript.AutoMatch.Cryptol
 
 import SAWScript.LLVMBuiltins
 --import SAWScript.JavaBuiltins
-import Language.JVM.Common (dotsToSlashes)
+import Language.JVM.Common (dotsToSlashes, mkClassName)
 
 import Text.PrettyPrint.ANSI.Leijen (putDoc, hPutDoc)
 
@@ -281,7 +281,7 @@ loadDecls (TaggedSourceFile lang path) = do
    where
       loadJavaClassTopLevel cls = do
          javaCodebase <- getJavaCodebase
-         io . lookupClass javaCodebase fixPos . dotsToSlashes $ cls
+         io . lookupClass javaCodebase fixPos . mkClassName . dotsToSlashes $ cls
 
 -- A description of the result of matching: some generated SAWScript, and some flags determining what to do now
 data MatchResult =

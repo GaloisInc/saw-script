@@ -174,7 +174,7 @@ ppBehaviorCommand cmd =
   where
     ppField f = text (JSS.fieldIdName f)
     ppStaticField f =
-      text (JSS.fieldIdClass f) <> "." <> text (JSS.fieldIdName f)
+      text (JSS.unClassName (JSS.fieldIdClass f)) <> "." <> text (JSS.fieldIdName f)
 
 ppBehavior :: BehaviorSpec -> Doc
 ppBehavior bs =
@@ -210,12 +210,12 @@ ppMethodSpec :: JavaMethodSpecIR -> Doc
 ppMethodSpec ms =
   vcat [ "Java Method specification."
        , ""
-       , "Instance class:" <+> text (JSS.className (specThisClass ms))
-       , "Definition class:" <+> text (JSS.className (specMethodClass ms))
+       , "Instance class:" <+> text (JSS.unClassName (JSS.className (specThisClass ms)))
+       , "Definition class:" <+> text (JSS.unClassName (JSS.className (specMethodClass ms)))
        , "Method:" <+> text (JSS.methodName (specMethod ms))
        , ""
        , "Requires these classes to be initialized:"
-       , indent 2 $ vcat $ map text $ specInitializedClasses ms
+       , indent 2 $ vcat $ map (text . JSS.unClassName) $ specInitializedClasses ms
        , ""
        , if specAllowAlloc ms
          then "Allows allocation."
@@ -382,7 +382,7 @@ data JavaMethodSpecIR = MSIR {
     -- | Class names expected to be initialized using JVM "/" separators.
     -- (as opposed to Java "." path separators). Currently this is set
     -- to the list of superclasses of specThisClass.
-  , specInitializedClasses :: [String]
+  , specInitializedClasses :: [JSS.ClassName]
     -- | Behavior specifications for method at different PC values.
     -- A list is used because the behavior may depend on the inputs.
   , specBehaviors :: BehaviorSpec  -- Map JSS.Breakpoint [BehaviorSpec]
@@ -395,7 +395,7 @@ specName :: JavaMethodSpecIR -> String
 specName ir =
  let clName = JSS.className (specThisClass ir)
      mName = JSS.methodName (specMethod ir)
-  in JSS.slashesToDots clName ++ ('.' : mName)
+  in JSS.slashesToDots (JSS.unClassName clName) ++ ('.' : mName)
 
 -- TODO: error if already declared
 specAddVarDecl :: JavaExpr -> JavaActualType

@@ -61,7 +61,7 @@ import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
 loadJavaClass :: BuiltinContext -> String -> IO Class
 loadJavaClass bic =
-  lookupClass (biJavaCodebase bic) fixPos . dotsToSlashes
+  lookupClass (biJavaCodebase bic) fixPos . mkClassName . dotsToSlashes
 
 getActualArgTypes :: JavaSetupState -> Either String [JavaActualType]
 getActualArgTypes s = mapM getActualType declaredTypes
@@ -226,7 +226,7 @@ verifyJava bic opts cls mname overrides setup = do
           case overrides of
             [] -> ""
             irs -> " (overriding " ++ show (map renderName irs) ++ ")"
-        renderName ir = className (specMethodClass ir) ++ "." ++
+        renderName ir = unClassName (className (specMethodClass ir)) ++ "." ++
                         methodName (specMethod ir)
         configs = [ (bs, cl)
                   | bs <- {- concat $ Map.elems $ -} [specBehaviors ms]
@@ -338,7 +338,7 @@ exportJSSType jty =
     JavaFloat       -> return FloatType
     JavaDouble      -> return DoubleType
     JavaArray _ ety -> ArrayType <$> exportJSSType ety
-    JavaClass name  -> return $ ClassType (dotsToSlashes name)
+    JavaClass name  -> return $ ClassType (mkClassName (dotsToSlashes name))
 
 exportJavaType :: Codebase -> JavaType -> JavaSetup JavaActualType
 exportJavaType cb jty =
@@ -353,7 +353,7 @@ exportJavaType cb jty =
     JavaDouble      -> return $ PrimitiveType DoubleType
     JavaArray n t   -> ArrayInstance (fromIntegral n) <$> exportJSSType t
     JavaClass name  ->
-      do cls <- liftIO $ lookupClass cb fixPos (dotsToSlashes name)
+      do cls <- liftIO $ lookupClass cb fixPos (mkClassName (dotsToSlashes name))
          return (ClassInstance cls)
 
 checkCompatibleType :: (Monad m, MonadIO m) =>
@@ -431,7 +431,7 @@ javaSatBranches doSat = modify (\s -> s { jsSatBranches = doSat })
 
 javaRequiresClass :: String -> JavaSetup ()
 javaRequiresClass cls = modifySpec $ \ms ->
-  let clss' = dotsToSlashes cls : specInitializedClasses ms in
+  let clss' = mkClassName (dotsToSlashes cls) : specInitializedClasses ms in
   ms { specInitializedClasses = clss' }
 
 javaClassVar :: BuiltinContext -> Options -> String -> JavaType
