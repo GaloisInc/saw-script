@@ -416,12 +416,8 @@ processFile opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  let handler :: X.SomeException -> IO a
-      handler e =
-        do printOutFn opts Error (show e)
-           exitProofUnknown
   _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
-            `X.catch` handler
+            `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
 
