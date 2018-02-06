@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.CryptolEnv
 Description : Context for interpreting Cryptol within SAW-Script.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module SAWScript.CryptolEnv
   ( CryptolEnv(..)
   , initCryptolEnv

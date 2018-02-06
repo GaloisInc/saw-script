@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.SolverStats
 Description : Represents information about solved goals.
 Maintainer  : atomb
 Stability   : provisional

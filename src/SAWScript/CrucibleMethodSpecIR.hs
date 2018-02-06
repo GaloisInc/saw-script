@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.CrucibleMethodSpecIR
 Description : Provides type-checked representation for Crucible/LLVM function
               specifications and function for creating it from AST
               representation.
@@ -22,6 +22,7 @@ Stability   : provisional
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
+
 module SAWScript.CrucibleMethodSpecIR where
 
 import           Data.List (isPrefixOf)
@@ -91,7 +92,7 @@ setupToTypedTerm opts sc sv =
 -- simulator.
 setupToTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO Term
 setupToTerm opts sc sv =
-  let intToNat = fromInteger . toInteger 
+  let intToNat = fromInteger . toInteger
   in case sv of
     SetupTerm term -> return (ttTerm term)
     SetupStruct fields -> do ts <- mapM (setupToTerm opts sc) fields
@@ -392,5 +393,3 @@ initialCrucibleSetupStateDecl cc dec = do
     , _csMethodSpec      = ms
     , _csCrucibleContext = cc
     }
-
-

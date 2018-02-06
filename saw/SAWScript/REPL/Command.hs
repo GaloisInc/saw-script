@@ -1,14 +1,14 @@
-{-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Command
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module SAWScript.REPL.Command (
     -- * Commands
     Command(..), CommandDescr(..), CommandBody(..)

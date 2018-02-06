@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.Interpreter
+Description : Interpreter for SAW-Script files and statements.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -12,13 +19,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 
-{- |
-Module      : $Header$
-Description : Interpreter for SAW-Script files and statements.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.Interpreter
   ( interpretStmt
   , interpretFile

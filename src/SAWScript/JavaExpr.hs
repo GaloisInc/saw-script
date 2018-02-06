@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaExpr
+Description : Data structures for Java expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -9,13 +16,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-{- |
-Module      : $Header$
-Description : Data structures for Java expressions and types.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaExpr
   (-- * Java Expressions
     JavaExprF(..)

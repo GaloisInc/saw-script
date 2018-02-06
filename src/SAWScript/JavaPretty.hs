@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.JavaPretty
 Description : Pretty printer for Java Class datatype.
 License     : BSD3
 Maintainer  : atomb

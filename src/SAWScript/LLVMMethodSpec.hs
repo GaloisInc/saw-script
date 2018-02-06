@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMMethodSpec
+Description : Interface to the LLVM symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-{- |
-Module      : $Header$
-Description : Interface to the LLVM symbolic simulator.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMMethodSpec
   ( LLVMMethodSpecIR
   , specFunction

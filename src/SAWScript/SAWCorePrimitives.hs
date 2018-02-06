@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.SAWCorePrimitives
 Description : Collections of primitives for various SAW-Core backends.
 License     : BSD3
 Maintainer  : huffman

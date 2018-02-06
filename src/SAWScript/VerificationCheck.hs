@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.VerificationCheck
 Description : Equality and predicate assertions.
 License     : BSD3
 Maintainer  : atomb

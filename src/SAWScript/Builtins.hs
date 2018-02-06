@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.Builtins
+Description : Implementations of SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -10,13 +17,6 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.Builtins where
 
 import Data.Foldable (toList)

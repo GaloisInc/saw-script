@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaMethodSpec
+Description : Interface to the Java symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 
-{- |
-Module      : $Header$
-Description : Interface to the Java symbolic simulator.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaMethodSpec
   ( JavaMethodSpecIR
   , specMethod

@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.MGU
+Description : SAW-Script type checking.
+License     : BSD3
+Maintainer  : diatchki
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternGuards #-}
@@ -5,13 +12,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 
-{- |
-Module      : $Header$
-Description : SAW-Script type checking.
-License     : BSD3
-Maintainer  : diatchki
-Stability   : provisional
--}
 module SAWScript.MGU
        ( checkDecl
        , checkDeclGroup

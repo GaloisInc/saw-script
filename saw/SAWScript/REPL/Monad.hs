@@ -1,14 +1,14 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Monad
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module SAWScript.REPL.Monad (
     -- * REPL Monad
     REPL(..), runREPL

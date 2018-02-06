@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.TopLevel
 Description : TopLevel monad for SAW-Script interpreter.
 License     : BSD3
 Maintainer  : huffman

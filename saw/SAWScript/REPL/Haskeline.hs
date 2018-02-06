@@ -1,13 +1,13 @@
-{-# LANGUAGE PatternGuards #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Haskeline
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module SAWScript.REPL.Haskeline where
 
 import SAWScript.REPL.Command

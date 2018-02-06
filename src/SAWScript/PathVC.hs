@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.PathVC
 Description : Assumptions and assertions for symbolic execution paths.
 License     : BSD3
 Maintainer  : atomb

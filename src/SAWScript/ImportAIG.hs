@@ -1,16 +1,16 @@
+{- |
+Module      : SAWScript.ImportAIG
+Description : And-Inverter Graphs.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- |
-Module      : $Header$
-Description : And-Inverter Graphs.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.ImportAIG
   ( readAIG
   , loadAIG

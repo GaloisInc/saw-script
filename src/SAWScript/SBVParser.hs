@@ -1,14 +1,14 @@
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.SBVParser
 Description : Parser for .sbv file format.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.SBVParser
   ( loadSBV
   , parseSBVPgm

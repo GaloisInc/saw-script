@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.CrucibleBuiltins
+Description : Implementations of Crucible-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses#-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of Crucible-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.CrucibleBuiltins
     ( load_llvm_cfg
     , show_cfg
@@ -755,7 +755,7 @@ extractFromCFG opts sc cc (Crucible.AnyCFG cfg) =
           fail $ unlines [ "Symbolic execution failed."
                          , show resultDoc
                          ]
-    
+
 --------------------------------------------------------------------------------
 
 extract_crucible_llvm :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel TypedTerm

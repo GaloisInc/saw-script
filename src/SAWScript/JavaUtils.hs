@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaUtils
+Description : Miscellaneous utilities for Java.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -5,13 +12,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- |
-Module      : $Header$
-Description : Miscellaneous utilities for Java.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaUtils where
 
 #if !MIN_VERSION_base(4,8,0)

@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.Options
 Description : Datatype for saw command-line options.
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module SAWScript.Options where
 
 import Data.Char (toLower)

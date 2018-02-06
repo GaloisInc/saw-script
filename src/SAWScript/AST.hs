@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.AST
+Description : Datatypes representing SAWScript statements, expressions, and types.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor,DeriveFoldable,DeriveTraversable #-}
 {-# LANGUAGE TypeOperators #-}
@@ -6,13 +13,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-{- |
-Module      : $Header$
-Description : Datatypes representing SAWScript statements, expressions, and types.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.AST
        ( Name
        , LName

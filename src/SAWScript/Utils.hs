@@ -1,14 +1,14 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {- |
-Module      : $Header$
+Module      : SAWScript.Utils
 Description : Miscellaneous utilities.
 Maintainer  : jhendrix, atomb
 Stability   : provisional
 -}
 
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
 module SAWScript.Utils where
 

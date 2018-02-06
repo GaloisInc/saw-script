@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.JavaMethodSpecIR
 Description : Provides typechecked representation for method specifications and function for creating it from AST representation.
 License     : BSD3
 Maintainer  : jhendrix, atomb
@@ -13,6 +13,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.JavaMethodSpecIR
   (-- * MethodSpec record
     JavaMethodSpecIR

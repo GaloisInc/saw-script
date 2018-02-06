@@ -1,12 +1,12 @@
-{-# LANGUAGE CPP #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.Import
 Description : Loading and parsing SAW-Script files.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+
 module SAWScript.Import
   ( loadFile
   , findAndLoadFile

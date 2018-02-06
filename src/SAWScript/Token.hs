@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.Token
 Description : Token type for SAW-Script lexer.
 Maintainer  : atomb
 Stability   : provisional

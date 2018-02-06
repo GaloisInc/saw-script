@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.Value
+Description : Value datatype for SAW-Script interpreter.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
@@ -14,13 +21,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
 
-{- |
-Module      : $Header$
-Description : Value datatype for SAW-Script interpreter.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.Value where
 
 #if !MIN_VERSION_base(4,8,0)

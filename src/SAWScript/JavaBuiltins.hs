@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaBuiltins
+Description : Implementations of Java-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,13 +13,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of Java-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)

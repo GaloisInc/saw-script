@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.Proof
 Description : Representations of SAW-Script proof states.
 License     : BSD3
 Maintainer  : huffman

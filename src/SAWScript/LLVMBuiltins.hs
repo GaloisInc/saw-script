@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMBuiltins
+Description : Implementations of LLVM-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -10,13 +17,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of LLVM-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)
