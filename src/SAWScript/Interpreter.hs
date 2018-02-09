@@ -1519,7 +1519,11 @@ primitives = Map.fromList
 
   , prim "extract_crucible_llvm"  "LLVMModule -> String -> TopLevel Term"
     (bicVal extract_crucible_llvm)
-    [ "TODO"
+    [ "Translate an LLVM function directly to a Term. The parameters of the"
+    , "Term will be the parameters of the LLVM function, and the return"
+    , "value will be the return value of the functions. Only functions with"
+    , "scalar argument and return types are currently supported. For more"
+    , "flexibility, see 'crucible_llvm_verify'."
     ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
@@ -1555,7 +1559,11 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_expanded_val)
-    [ "TODO" ]
+    [ "Create a compound type entirely populated with fresh symbolic variables."
+    , "Equivalent to allocating a new struct or array of the given type and"
+    , "eplicitly setting each field or element to contain a fresh symbolic"
+    , "variable."
+    ]
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal (crucible_points_to True))
@@ -1627,7 +1635,10 @@ primitives = Map.fromList
   , prim "crucible_llvm_unsafe_assume_spec"
     "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_unsafe_assume_spec)
-    [ "TODO" ]
+    [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
+    , "as would be returned by llvm_verify but without performing any"
+    , "verification."
+    ]
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
