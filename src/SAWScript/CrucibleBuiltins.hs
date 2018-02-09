@@ -43,7 +43,6 @@ module SAWScript.CrucibleBuiltins
     ) where
 
 import           Control.Lens
-import           Control.Monad.ST
 import           Control.Monad.State
 import qualified Control.Monad.Trans.State.Strict as SState
 import           Control.Applicative
@@ -644,9 +643,8 @@ setupCrucibleContext ::
    BuiltinContext -> Options -> LLVMModule ->
    (forall arch. (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => CrucibleContext arch -> TopLevel a) ->
    TopLevel a
-setupCrucibleContext bic opts (LLVMModule _ llvm_mod) action = do
+setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
   halloc <- getHandleAlloc
-  Some mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
   let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in

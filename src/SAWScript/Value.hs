@@ -40,6 +40,7 @@ import qualified Text.LLVM    as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import Data.Parameterized.Some
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.CryptolEnv as CEnv
@@ -77,6 +78,7 @@ import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 -- Values ----------------------------------------------------------------------
 
@@ -124,10 +126,11 @@ data LLVMModule =
   LLVMModule
   { modName :: String
   , modMod :: L.Module
+  , modTrans :: Some Crucible.ModuleTranslation
   }
 
 showLLVMModule :: LLVMModule -> String
-showLLVMModule (LLVMModule name m) =
+showLLVMModule (LLVMModule name m _) =
   unlines [ "Module: " ++ name
           , "Types:"
           , showParts L.ppTypeDecl (L.modTypes m)

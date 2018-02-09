@@ -24,6 +24,7 @@ import Control.Applicative hiding (many)
 #endif
 import Control.Lens
 import Control.Monad.State hiding (mapM)
+import Control.Monad.ST (stToIO)
 import Control.Monad.Trans.Except
 import Data.Function (on)
 import Data.List (find, partition, sortBy, groupBy)
@@ -69,6 +70,7 @@ import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV
 
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
@@ -82,7 +84,10 @@ llvm_load_module :: FilePath -> TopLevel LLVMModule
 llvm_load_module file =
   io (LLVM.parseBitCodeFromFile file) >>= \case
     Left err -> fail (LLVM.formatError err)
-    Right llvm_mod -> return (LLVMModule file llvm_mod)
+    Right llvm_mod -> do
+      halloc <- getHandleAlloc
+      mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
+      return (LLVMModule file llvm_mod mtrans)
 
 -- LLVM verification and model extraction commands
 
@@ -100,7 +105,7 @@ startSimulator :: Options
                    -> SymDefine Term
                    -> Simulator SAWBackend IO a)
                -> IO a
-startSimulator opts sc lopts (LLVMModule file mdl) sym body = do
+startSimulator opts sc lopts (LLVMModule file mdl _) sym body = do
   let dl = parseDataLayout $ modDataLayout mdl
   (sbe, mem, scLLVM) <- createSAWBackend' sawProxy dl sc
   (warnings, cb) <- mkCodebase sbe dl mdl
@@ -222,7 +227,7 @@ llvm_verify :: BuiltinContext
             -> [LLVMMethodSpecIR]
             -> LLVMSetup ()
             -> TopLevel LLVMMethodSpecIR
-llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
+llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup =
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
