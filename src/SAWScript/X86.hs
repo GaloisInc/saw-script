@@ -178,7 +178,8 @@ posFn = OtherPos . Text.pack . show
 --------------------------------------------------------------------------------
 -- Translation
 
--- | Translate the function with the given name to SAW core.
+-- | Translate an assertion about the function with the given name to
+-- a SAW core term.
 translate :: Options -> RelevnatElf -> ByteString -> IO Term
 translate opts elf name =
   do addr <- findSymbol (symMap elf) name
