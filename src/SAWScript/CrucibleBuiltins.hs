@@ -64,7 +64,7 @@ import           Numeric.Natural
 import           System.IO
 
 import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L (ppType, ppSymbol)
+import qualified Text.LLVM.PP as L (ppType)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
@@ -155,7 +155,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      def <- case find (\d -> L.defName d == nm') (L.modDefines llmod) of
                     Nothing -> fail ("Could not find function named" ++ show nm)
                     Just decl -> return decl
-     let st0 = initialCrucibleSetupState cc def
+     st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def)
 
      -- execute commands of the method spec
      let setupLoc = Crucible.mkProgramLoc "_SAW_verify_setup" Crucible.InternalPos
@@ -205,7 +205,8 @@ crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
     st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <|>
                 initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) of
                    Nothing -> fail ("Could not find function named" ++ show nm)
-                   Just st0 -> return st0
+                   Just (Left err) -> fail (show (ppSetupError err))
+                   Just (Right st0) -> return st0
     (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
 
 verifyObligations :: CrucibleContext arch
@@ -219,7 +220,7 @@ verifyObligations cc mspec tactic assumes asserts = do
   st     <- io $ readIORef $ Crucible.sbStateManager sym
   let sc  = Crucible.saw_ctx st
   assume <- io $ scAndList sc assumes
-  let nm  = show (L.ppSymbol (mspec^.csName))
+  let nm  = mspec^.csName
   stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
     goal   <- io $ scImplies sc assume assert
     goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
@@ -292,23 +293,23 @@ verifyPrestate cc mspec globals = do
   args <- resolveArguments cc mspec env
 
   -- Check the type of the return setup value
-  case (mspec^.csRetValue, Crucible.liftRetType (mspec^.csRet)) of
+  case (mspec^.csRetValue, TyCtx.asMemType <$> mspec^.csRet) of
     (_, Nothing) ->
          fail $ unlines
-           [ "Could not resolve return type of " ++ show (mspec^.csName)
+           [ "Could not resolve return type of " ++ mspec^.csName
            , "Raw type: " ++ show (mspec^.csRet)
            ]
     (Just sv, Just (Just retTy)) ->
       do retTy' <- typeOfSetupValue cc tyenv sv
          b <- liftIO $ checkRegisterCompatibility retTy retTy'
          unless b $ fail $ unlines
-           [ "Incompatible types for return value when verifying " ++ show (mspec^.csName)
+           [ "Incompatible types for return value when verifying " ++ mspec^.csName
            , "Expected: " ++ show retTy
            , "but given value of type: " ++ show retTy'
            ]
     (Just _, Just Nothing) ->
          fail $ unlines
-           [ "Unexpected return value given when verifying " ++ show (mspec^.csName) ++ " which has 'void' return type."
+           [ "Unexpected return value given when verifying " ++ mspec^.csName ++ " which has 'void' return type."
            ]
     (Nothing, Just _) -> return ()
 
@@ -337,7 +338,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
     tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
-    L.Symbol nm = mspec^.csName
+    nm = mspec^.csName
 
     checkArgTy i mt mt' =
       do b <- checkRegisterCompatibility mt mt'
@@ -480,11 +481,11 @@ registerOverride ::
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
-  let s@(L.Symbol fsym) = (head cs)^.csName
+  let fsym = (head cs)^.csName
       llvmctx = cc^.ccLLVMContext
   liftIO $
     printOutLn opts Info $ "Registering override for `" ++ fsym ++ "`"
-  case Map.lookup s (llvmctx ^. Crucible.symbolMap) of
+  case Map.lookup (L.Symbol fsym) (llvmctx ^. Crucible.symbolMap) of
     -- LLVMHandleInfo constructor has two existential type arguments,
     -- which are bound here. h :: FnHandle args' ret'
     Just (Crucible.LLVMHandleInfo _decl' h) -> do
@@ -513,7 +514,7 @@ verifySimulate ::
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc mspec args assumes lemmas globals checkSat =
   do let nm = mspec^.csName
-     case Map.lookup nm (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
+     case Map.lookup (L.Symbol nm) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
        Nothing -> fail $ unwords ["function", show nm, "not found"]
        Just (Crucible.AnyCFG cfg) ->
          do let h   = Crucible.cfgHandle cfg
@@ -543,7 +544,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                             return gp
                    let ret_ty = mspec^.csRet
                    let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
-                                 (TyCtx.liftRetType ret_ty)
+                                 (TyCtx.asMemType <$> ret_ty)
                    retval' <- case ret_ty' of
                      Nothing -> return Nothing
                      Just ret_mt ->
@@ -1099,17 +1100,12 @@ crucible_execute_func :: BuiltinContext
 crucible_execute_func _bic _opt args = CrucibleSetupM $ do
   let ?dl   = TyCtx.llvmDataLayout ?lc
   tps <- use (csMethodSpec.csArgs)
-  case traverse TyCtx.liftType tps of
-    Just tps' -> do
-      csPrePost .= PostState
-      csMethodSpec.csArgBindings .= Map.fromList [ (i, (t,a))
-                                                 | i <- [0..]
-                                                 | a <- args
-                                                 | t <- tps'
-                                                 ]
-
-    _ -> fail $ unlines ["Function signature not supported:", show tps]
-
+  csPrePost .= PostState
+  csMethodSpec.csArgBindings .= Map.fromList [ (i, (t,a))
+                                             | i <- [0..]
+                                             | a <- args
+                                             | t <- tps
+                                             ]
 
 crucible_return :: BuiltinContext
                 -> Options

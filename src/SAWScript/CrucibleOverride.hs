@@ -206,7 +206,7 @@ methodSpecHandler ::
   Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc css retTy = do
-  let L.Symbol fsym = (head css)^.csName
+  let fsym = (head css)^.csName
   globals <- Crucible.readGlobals
   sym     <- Crucible.getSymInterface
   (Crucible.RegMap args) <- Crucible.getOverrideArgs
