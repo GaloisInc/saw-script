@@ -27,6 +27,7 @@ import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Context(Assignment,EmptyCtx,(::>),field,Idx)
+import Data.Parameterized.Nonce(GlobalNonceGenerator)
 
 -- Crucible
 import Lang.Crucible.Vector(Vector)
@@ -36,7 +37,7 @@ import Lang.Crucible.CFG.Common(freshGlobalVar)
 import Lang.Crucible.Types(BVType,BoolType)
 import Lang.Crucible.BaseTypes(BaseTypeRepr(..))
 import Lang.Crucible.Solver.Interface(freshConstant)
-import Lang.Crucible.Solver.SAWCoreBackend(toSC)
+import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, toSC)
 import Lang.Crucible.Simulator.RegMap(regValue)
 import Lang.Crucible.Simulator.RegValue(RegValue'(RV,unRV))
 import Lang.Crucible.Simulator.ExecutionTree
@@ -72,13 +73,14 @@ import Data.Macaw.X86.Crucible(SymFuns)
 -- Saw Core
 import Verifier.SAW.SharedTerm(Term)
 
--- Saw Script
-import SAWScript.CrucibleMethodSpecIR(Sym)
 
 
 
 --------------------------------------------------------------------------------
 -- Input Options
+
+
+type Sym = SAWCoreBackend GlobalNonceGenerator
 
 -- | What we'd like done, plus additional information from the "outside world".
 data Options = Options
