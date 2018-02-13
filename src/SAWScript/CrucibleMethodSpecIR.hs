@@ -31,7 +31,7 @@ import qualified Data.Map as Map
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
-import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
 import qualified Lang.Crucible.LLVM.MemType as CL
 import qualified Text.LLVM.AST as L
