@@ -3,6 +3,7 @@
 {-# Language RecordWildCards #-}
 {-# Language AllowAmbiguousTypes, ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
+{-# Language PatternSynonyms #-}
 module SAWScript.X86
   ( Options(..)
   , main
@@ -33,18 +34,25 @@ import Data.Parameterized.Nonce(GlobalNonceGenerator)
 import Lang.Crucible.Vector(Vector)
 import qualified Lang.Crucible.Vector as Vector
 import Lang.Crucible.CFG.Core(SomeCFG(..))
-import Lang.Crucible.CFG.Common(freshGlobalVar)
-import Lang.Crucible.Types(BVType,BoolType)
+import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
+import Lang.Crucible.Types(BoolType)
 import Lang.Crucible.BaseTypes(BaseTypeRepr(..))
-import Lang.Crucible.Solver.Interface(freshConstant)
+import Lang.Crucible.Solver.Interface(freshConstant,Pred)
 import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, toSC)
 import Lang.Crucible.Simulator.RegMap(regValue)
-import Lang.Crucible.Simulator.RegValue(RegValue'(RV,unRV))
+import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(RV,unRV))
+import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
 import Lang.Crucible.Simulator.ExecutionTree
-          (gpValue,ExecResult(..),PartialResult(..))
+          (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
+          , gpGlobals)
 import Lang.Crucible.ProgramLoc(Position(OtherPos))
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
+
+-- Crucible LLVM
+import Lang.Crucible.LLVM.MemModel(LLVMPointerType,Mem,mkMemVar)
+import Lang.Crucible.LLVM.MemModel.Pointer(pattern LLVMPointer)
+
 
 -- Macaw
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
@@ -185,7 +193,7 @@ posFn = OtherPos . Text.pack . show
 translate :: Options -> RelevnatElf -> ByteString -> IO Term
 translate opts elf name =
   do addr <- findSymbol (symMap elf) name
-     (halloc, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
+     (halloc, mvar, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
 
      let sym = backend opts
      regs <- macawAssignToCrucM (mkReg sym) genRegAssign
@@ -194,15 +202,34 @@ translate opts elf name =
      execResult <- runCodeBlock sym x86 (x86_eval opts) halloc cfg regs
 
 
+
      case execResult of
-       FinishedExecution _ (TotalRes p) ->
-          do startRegs <- getRegs sym regs
-             endRegs   <- getRegs sym (regValue (p^.gpValue))
-             relate opts startRegs endRegs
+       FinishedExecution _ctx res ->
+          case res of
+            TotalRes gp ->
+              do mem <- getMem gp mvar
+                 startRegs <- getRegs sym regs
+                 endRegs   <- getRegs sym (regValue (gp^.gpValue))
+                 relate opts startRegs Nothing endRegs
+            PartialRes pre gp _ ->
+              do mem       <- getMem gp mvar
+                 startRegs <- getRegs sym regs
+                 endRegs   <- getRegs sym (regValue (gp^.gpValue))
+                 relate opts startRegs (Just pre) endRegs
 
        _ -> malformed "Bad simulation result"
 
-relate :: Options -> Regs -> Regs -> IO Term
+-- | Get the current model of the memory.
+getMem :: GlobalPair sym a ->
+          GlobalVar Mem ->
+          IO (RegValue sym Mem)
+getMem st mvar =
+  case lookupGlobal mvar (st ^. gpGlobals) of
+    Just mem -> return mem
+    Nothing  -> fail ("Global heap value not initialized: " ++ show mvar)
+
+
+relate :: Options -> Regs -> Maybe (Pred Sym) -> Regs -> IO Term
 relate = undefined
 
 
@@ -215,6 +242,7 @@ makeCFG ::
   ByteString ->
   MemSegmentOff 64 ->
   ST s ( HandleAllocator s
+       , GlobalVar Mem
        , SomeCFG (MacawExt X86_64)
                  (EmptyCtx ::> ArchRegStruct X86_64)
                  (ArchRegStruct X86_64)
@@ -222,10 +250,14 @@ makeCFG ::
 makeCFG opts elf name addr =
   do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
      halloc  <- newHandleAllocator
+     mvar    <- mkMemVar halloc
+     -- XXX: setup memory is needed (i.e., assume the existance of
+     -- various code blocks)
+
      baseVar <- freshGlobalVar halloc baseName knownRepr
      let memBaseVarMap = Map.singleton 1 baseVar
-     g <- mkFunCFG x86 halloc memBaseVarMap cruxName posFn funInfo
-     return (halloc,g)
+     g <- mkFunCFG x86 halloc memBaseVarMap mvar cruxName posFn funInfo
+     return (halloc,mvar, g)
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName
@@ -239,7 +271,10 @@ mkReg :: Sym -> X86Reg tp -> IO (RegValue' Sym (ToCrucibleType tp))
 mkReg sym r =
   case typeRepr r of
     BoolTypeRepr -> RV <$> freshConstant sym nm BaseBoolRepr
-    BVTypeRepr w -> RV <$> freshConstant sym nm (BaseBVRepr w)
+    BVTypeRepr w ->
+      do base <- freshConstant sym nm BaseNatRepr
+         offs <- freshConstant sym nm (BaseBVRepr w)
+         return (RV (LLVMPointer base offs))
     TupleTypeRepr{} ->
       unsupported "macaw-symbolic does not support tuple types."
   where
@@ -284,12 +319,12 @@ data FPRegs = FPRegs
 
 
 getReg :: forall w n ctx.
-  ( Idx n ctx (BVType w)
+  ( Idx n ctx (LLVMPointerType w)
   , ctx ~ MacawCrucibleRegTypes X86_64
   ) =>
   Sym -> Assignment (RegValue' Sym) ctx ->
   IO Term
-getReg sym a = toSC sym (unRV (a ^. (field @n)))
+getReg sym a = undefined -- toSC sym (unRV (a ^. (field @n)))
 
 getFlag :: forall n ctx.
   ( Idx n ctx BoolType
