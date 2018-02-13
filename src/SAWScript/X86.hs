@@ -193,13 +193,15 @@ posFn = OtherPos . Text.pack . show
 translate :: Options -> RelevnatElf -> ByteString -> IO Term
 translate opts elf name =
   do addr <- findSymbol (symMap elf) name
-     (halloc, mvar, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
+     (halloc, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
 
      let sym = backend opts
      regs <- macawAssignToCrucM (mkReg sym) genRegAssign
 
+     -- XXX: setup memory
+     mvar <- stToIO (mkMemVar halloc)
 
-     execResult <- runCodeBlock sym x86 (x86_eval opts) halloc cfg regs
+     execResult <- runCodeBlock sym x86 (x86_eval opts) halloc mvar cfg regs
 
 
 
@@ -242,7 +244,6 @@ makeCFG ::
   ByteString ->
   MemSegmentOff 64 ->
   ST s ( HandleAllocator s
-       , GlobalVar Mem
        , SomeCFG (MacawExt X86_64)
                  (EmptyCtx ::> ArchRegStruct X86_64)
                  (ArchRegStruct X86_64)
@@ -250,14 +251,10 @@ makeCFG ::
 makeCFG opts elf name addr =
   do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
      halloc  <- newHandleAllocator
-     mvar    <- mkMemVar halloc
-     -- XXX: setup memory is needed (i.e., assume the existance of
-     -- various code blocks)
-
      baseVar <- freshGlobalVar halloc baseName knownRepr
      let memBaseVarMap = Map.singleton 1 baseVar
-     g <- mkFunCFG x86 halloc memBaseVarMap mvar cruxName posFn funInfo
-     return (halloc,mvar, g)
+     g <- mkFunCFG x86 halloc memBaseVarMap cruxName posFn funInfo
+     return (halloc, g)
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName
