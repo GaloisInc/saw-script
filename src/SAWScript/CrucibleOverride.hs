@@ -312,7 +312,7 @@ methodSpecHandler1 ::
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
   OverrideMatcher arch (Crucible.RegValue Sym ret)
 methodSpecHandler1 opts sc cc args retTy cs =
-    do expectedArgTypes <- (traverse . _1) resolveMemType (Map.elems (cs^.csArgBindings))
+    do let expectedArgTypes = {-(traverse . _1) resolveMemType-} (Map.elems (cs^.csArgBindings))
 
        sym <- getSymInterface
 
@@ -422,14 +422,8 @@ enforceDisjointness ::
 enforceDisjointness cc ss =
   do sym <- getSymInterface
      sub <- OM (use setupValueSub)
-     let symsRW = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
-         symsRO = Map.elems $ Map.intersectionWith (,) (view csConstAllocs ss) sub
-
-     let resolve s = case TyCtx.asMemType s of
-                       Nothing -> fail "enforceDisjointness: not memtype"
-                       Just m  -> return m
-     memsRW <- traverse (_1 resolve) symsRW
-     memsRO <- traverse (_1 resolve) symsRO
+     let memsRW = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
+         memsRO = Map.elems $ Map.intersectionWith (,) (view csConstAllocs ss) sub
 
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
@@ -518,19 +512,6 @@ matchPointsTos opts sc cc spec prepost = go False []
         SetupNull      -> Set.empty
         SetupGlobal _  -> Set.empty
 
-
-------------------------------------------------------------------------
-
--- | Compute the 'Crucible.MemType' for a given 'Crucible.SymType' or throw
--- an error.
-resolveMemType ::
-  (?lc :: TyCtx.LLVMContext) =>
-  Crucible.SymType           ->
-  OverrideMatcher arch Crucible.MemType
-resolveMemType ty =
-  case TyCtx.asMemType ty of
-    Nothing    -> failure (BadSymType ty)
-    Just memTy -> return memTy
 
 ------------------------------------------------------------------------
 
@@ -874,14 +855,16 @@ executeAllocation ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
   CrucibleContext arch           ->
-  (AllocIndex, Crucible.SymType) ->
+  (AllocIndex, Crucible.MemType) ->
   OverrideMatcher arch ()
-executeAllocation opts cc (var, symTy) =
+executeAllocation opts cc (var, memTy) =
   do let sym = cc^.ccBackend
      let dl = TyCtx.llvmDataLayout ?lc
+     {-
      memTy <- case TyCtx.asMemType symTy of
                 Just memTy -> return memTy
                 Nothing    -> fail "executAllocation: failed to resolve type"
+                -}
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
      let w = Crucible.memTypeSize dl memTy
@@ -1031,7 +1014,7 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     let tyenv = csAllocations spec :: Map AllocIndex Crucible.SymType
+     let tyenv = csAllocations spec :: Map AllocIndex Crucible.MemType
      memTy <- liftIO $ typeOfSetupValue cc tyenv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
      lval  <- liftIO $ resolveSetupVal cc m tyenv sval' `X.catch` handleException opts

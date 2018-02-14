@@ -276,12 +276,10 @@ verifyPrestate cc mspec globals = do
   let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
   let Just mem = Crucible.lookupGlobal lvar globals
 
-  let Just memtypesRW = traverse TyCtx.asMemType tyenvRW
-  let Just memtypesRO = traverse TyCtx.asMemType tyenvRO
   -- Allocate LLVM memory for each 'crucible_alloc'
-  (env1, mem') <- runStateT (traverse (doAlloc cc) memtypesRW) mem
+  (env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
   -- Allocate LLVM memory for each 'crucible_alloc_readonly'
-  (env2, mem'') <- runStateT (traverse (doAllocConst cc) memtypesRO) mem'
+  (env2, mem'') <- runStateT (traverse (doAllocConst cc) tyenvRO) mem'
   env3 <- Map.traverseWithKey
             (\k _ -> executeFreshPointer cc k)
             (mspec^.csPreState.csFreshPointers)
@@ -293,13 +291,13 @@ verifyPrestate cc mspec globals = do
   args <- resolveArguments cc mspec env
 
   -- Check the type of the return setup value
-  case (mspec^.csRetValue, TyCtx.asMemType <$> mspec^.csRet) of
-    (_, Nothing) ->
+  case (mspec^.csRetValue, mspec^.csRet) of
+    (Just _, Nothing) ->
          fail $ unlines
            [ "Could not resolve return type of " ++ mspec^.csName
            , "Raw type: " ++ show (mspec^.csRet)
            ]
-    (Just sv, Just (Just retTy)) ->
+    (Just sv, Just retTy) ->
       do retTy' <- typeOfSetupValue cc tyenv sv
          b <- liftIO $ checkRegisterCompatibility retTy retTy'
          unless b $ fail $ unlines
@@ -307,11 +305,7 @@ verifyPrestate cc mspec globals = do
            , "Expected: " ++ show retTy
            , "but given value of type: " ++ show retTy'
            ]
-    (Just _, Just Nothing) ->
-         fail $ unlines
-           [ "Unexpected return value given when verifying " ++ mspec^.csName ++ " which has 'void' return type."
-           ]
-    (Nothing, Just _) -> return ()
+    (Nothing, _) -> return ()
 
   return (args, cs, env, globals2)
 
@@ -349,8 +343,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
                           ]
     resolveArg i =
       case Map.lookup i (mspec^.csArgBindings) of
-        Just (tp, sv) -> do
-          let mt  = fromMaybe (error ("Expected memory type:" ++ show tp)) (TyCtx.asMemType tp)
+        Just (mt, sv) -> do
           mt' <- typeOfSetupValue cc tyenv sv
           checkArgTy i mt mt'
           v <- resolveSetupVal cc env tyenv sv
@@ -543,9 +536,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                          do printOutLn opts Error "Symbolic simulation failed along some paths!"
                             return gp
                    let ret_ty = mspec^.csRet
-                   let ret_ty' = fromMaybe (error ("Expected return type:" ++ show ret_ty))
-                                 (TyCtx.asMemType <$> ret_ty)
-                   retval' <- case ret_ty' of
+                   retval' <- case ret_ty of
                      Nothing -> return Nothing
                      Just ret_mt ->
                        do v <- Crucible.packMemValue sym
@@ -554,7 +545,6 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                                  (Crucible.regType  retval)
                                  (Crucible.regValue retval)
                           return (Just (ret_mt, v))
-
                    return (retval', globals1)
 
               Crucible.AbortedResult _ ar ->
@@ -885,7 +875,7 @@ logicTypeOfActual dl sc (Crucible.StructType si) = do
   case sequence melTyps of
     Just elTyps -> Just <$> scTupleType sc elTyps
     Nothing -> return Nothing
-logicTypeOfActual _ _ _ = return Nothing
+logicTypeOfActual _ _ t = fail (show t) -- return Nothing
 
 logicTypeForInt :: SharedContext -> Natural -> IO Term
 logicTypeForInt sc w =
@@ -947,12 +937,6 @@ memTypeForLLVMType _bic lty =
        Just m -> return m
        Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
 
-symTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup arch Crucible.SymType
-symTypeForLLVMType _bic lty =
-  do case TyCtx.liftType lty of
-       Just m -> return m
-       Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
-
 -- | See 'crucible_fresh_expanded_val'
 --
 -- This is the recursively-called worker function.
@@ -973,7 +957,7 @@ constructExpandedSetupValue sc t =
 
     Crucible.PtrType symTy ->
       case TyCtx.asMemType symTy of
-        Just memTy ->  constructFreshPointer (Crucible.MemType memTy)
+        Just memTy ->  constructFreshPointer memTy
         Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
 
     Crucible.ArrayType n memTy ->
@@ -991,11 +975,11 @@ crucible_alloc ::
   CrucibleSetupM SetupValue
 crucible_alloc _bic _opt lty = CrucibleSetupM $
   do let ?dl = TyCtx.llvmDataLayout ?lc
-     symTy <- case TyCtx.liftType lty of
+     memTy <- case TyCtx.liftMemType lty of
        Just s -> return s
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csAllocs.at n ?= symTy
+     currentState.csAllocs.at n ?= memTy
      return (SetupVar n)
 
 crucible_alloc_readonly ::
@@ -1005,11 +989,11 @@ crucible_alloc_readonly ::
   CrucibleSetupM SetupValue
 crucible_alloc_readonly _bic _opt lty = CrucibleSetupM $
   do let ?dl = TyCtx.llvmDataLayout ?lc
-     symTy <- case TyCtx.liftType lty of
+     memTy <- case TyCtx.liftMemType lty of
        Just s -> return s
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csConstAllocs.at n ?= symTy
+     currentState.csConstAllocs.at n ?= memTy
      return (SetupVar n)
 
 crucible_fresh_pointer ::
@@ -1018,10 +1002,10 @@ crucible_fresh_pointer ::
   L.Type         ->
   CrucibleSetupM SetupValue
 crucible_fresh_pointer bic _opt lty = CrucibleSetupM $
-  do symTy <- symTypeForLLVMType bic lty
-     constructFreshPointer symTy
+  do memTy <- memTypeForLLVMType bic lty
+     constructFreshPointer memTy
 
-constructFreshPointer :: Crucible.SymType -> CrucibleSetup arch SetupValue
+constructFreshPointer :: Crucible.MemType -> CrucibleSetup arch SetupValue
 constructFreshPointer symTy =
   do n <- csVarCounter <<%= nextAllocIndex
      currentState.csFreshPointers.at n ?= symTy

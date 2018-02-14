@@ -150,7 +150,7 @@ data StateSpec' t = StateSpec
   }
   deriving (Show)
 
-type StateSpec = StateSpec' CL.SymType
+type StateSpec = StateSpec' CL.MemType
 
 data CrucibleMethodSpecIR' t =
   CrucibleMethodSpec
@@ -165,7 +165,7 @@ data CrucibleMethodSpecIR' t =
   }
   deriving (Show)
 
-type CrucibleMethodSpecIR = CrucibleMethodSpecIR' CL.SymType
+type CrucibleMethodSpecIR = CrucibleMethodSpecIR' CL.MemType
 
 type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
@@ -184,7 +184,7 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
 makeLenses ''CrucibleMethodSpecIR'
 makeLenses ''StateSpec'
 
-csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex CL.SymType
+csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex CL.MemType
 csAllocations
   = Map.unions
   . toListOf ((csPreState <> csPostState) . (csAllocs <> csConstAllocs <> csFreshPointers))
@@ -306,21 +306,37 @@ intrinsics =
 
 -------------------------------------------------------------------------------
 
-data SetupError' t
-  = InvalidReturnType t
-  | InvalidArgTypes [t]
-
-type SetupError = SetupError' CL.SymType
+data SetupError
+  = InvalidReturnType L.Type
+  | InvalidArgTypes [L.Type]
 
 ppSetupError :: SetupError -> PP.Doc
 ppSetupError (InvalidReturnType t) =
   text "Can't lift return type" <+>
-  CL.ppSymType t <+>
+  text (show (L.ppType t)) <+>
   text "to a Crucible type."
 ppSetupError (InvalidArgTypes ts) =
   text "Can't lift argument types " <+>
-  encloseSep lparen rparen comma (map CL.ppSymType ts) <+>
+  encloseSep lparen rparen comma (map (text . show . L.ppType) ts) <+>
   text "to Crucible types."
+
+resolveArgs ::
+  (?lc :: TyCtxt.LLVMContext) =>
+  [L.Type] ->
+  Either SetupError [CL.MemType]
+resolveArgs args = do
+  -- TODO: make sure we resolve aliases
+  let mtys = traverse TyCtxt.liftMemType args
+  maybe (Left (InvalidArgTypes args)) Right mtys
+
+resolveRetTy ::
+  (?lc :: TyCtxt.LLVMContext) =>
+  L.Type ->
+  Either SetupError (Maybe CL.MemType)
+resolveRetTy ty = do
+  -- TODO: make sure we resolve aliases
+  let ret = TyCtxt.liftRetType ty
+  maybe (Left (InvalidReturnType ty)) Right ret
 
 initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec
@@ -333,13 +349,15 @@ initialStateSpec =  StateSpec
   }
 
 initialDefCrucibleMethodSpecIR ::
+  (?lc :: TyCtxt.LLVMContext) =>
   L.Define ->
   Either SetupError CrucibleMethodSpecIR
 initialDefCrucibleMethodSpecIR def = do
-  args <- undefined (L.typedType <$> L.defArgs def)
-  ret <- undefined (L.defRetType def)
+  args <- resolveArgs (L.typedType <$> L.defArgs def)
+  ret <- resolveRetTy (L.defRetType def)
+  let L.Symbol nm = L.defName def
   return CrucibleMethodSpec
-    {_csName            = show (L.ppSymbol (L.defName def))
+    {_csName            = nm
     ,_csArgs            = args
     ,_csRet             = ret
     ,_csPreState        = initialStateSpec
@@ -350,13 +368,15 @@ initialDefCrucibleMethodSpecIR def = do
     }
 
 initialDeclCrucibleMethodSpecIR ::
+  (?lc :: TyCtxt.LLVMContext) =>
   L.Declare ->
   Either SetupError CrucibleMethodSpecIR
 initialDeclCrucibleMethodSpecIR dec = do
-  args <- undefined (L.decArgs dec)
-  ret <- undefined (L.decRetType dec)
+  args <- resolveArgs (L.decArgs dec)
+  ret <- resolveRetTy (L.decRetType dec)
+  let L.Symbol nm = L.decName dec
   return CrucibleMethodSpec
-    {_csName            = show (L.ppSymbol (L.decName dec))
+    {_csName            = nm
     ,_csArgs            = args
     ,_csRet             = ret
     ,_csPreState        = initialStateSpec
@@ -367,6 +387,7 @@ initialDeclCrucibleMethodSpecIR dec = do
     }
 
 initialCrucibleSetupState ::
+  (?lc :: TyCtxt.LLVMContext) =>
   CrucibleContext wptr ->
   L.Define ->
   Either SetupError (CrucibleSetupState wptr)
@@ -381,6 +402,7 @@ initialCrucibleSetupState cc def = do
     }
 
 initialCrucibleSetupStateDecl ::
+  (?lc :: TyCtxt.LLVMContext) =>
   CrucibleContext wptr ->
   L.Declare ->
   Either SetupError (CrucibleSetupState wptr)

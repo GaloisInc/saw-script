@@ -68,16 +68,12 @@ type LLVMPtr wptr = Crucible.LLVMPtr Sym wptr
 -- corresponding to the given field name.
 resolveSetupValueInfo ::
   CrucibleContext wptr            {- ^ crucible context  -} ->
-  Map AllocIndex Crucible.SymType {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.MemType {- ^ allocation types  -} ->
   SetupValue                      {- ^ pointer to struct -} ->
   L.Info                          {- ^ field index       -}
 resolveSetupValueInfo cc env v =
   case v of
     -- SetupGlobal g ->
-    SetupVar i
-       | Just (Crucible.Alias alias) <- Map.lookup i env
-       , let mdMap = TyCtx.llvmMetadataMap (cc^.ccTypeCtx)
-       -> L.Pointer (guessAliasInfo mdMap alias)
     SetupField a n ->
        fromMaybe L.Unknown $
        do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env a)
@@ -89,7 +85,7 @@ resolveSetupValueInfo cc env v =
 -- corresponding to the given field name.
 resolveSetupFieldIndex ::
   CrucibleContext wptr            {- ^ crucible context  -} ->
-  Map AllocIndex Crucible.SymType {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.MemType {- ^ allocation types  -} ->
   SetupValue                      {- ^ pointer to struct -} ->
   String                          {- ^ field name        -} ->
   Maybe Int                       {- ^ field index       -}
@@ -110,34 +106,31 @@ resolveSetupFieldIndex cc env v n =
 typeOfSetupValue ::
   Monad m =>
   CrucibleContext wptr ->
-  Map AllocIndex Crucible.SymType ->
+  Map AllocIndex Crucible.MemType ->
   SetupValue ->
   m Crucible.MemType
 typeOfSetupValue cc env val =
   do let ?lc = cc^.ccTypeCtx
-     symTy <- typeOfSetupValue' cc env val
-     case TyCtx.asMemType symTy of
-       Nothing -> fail "typeOfSetupValue: Not a memtype"
-       Just x  -> return x
+     typeOfSetupValue' cc env val
 
 typeOfSetupValue' ::
   Monad m =>
   CrucibleContext wptr ->
-  Map AllocIndex Crucible.SymType ->
+  Map AllocIndex Crucible.MemType ->
   SetupValue ->
-  m Crucible.SymType
+  m Crucible.MemType
 typeOfSetupValue' cc env val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
         Nothing -> fail ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
-        Just symTy -> return (Crucible.MemType (Crucible.PtrType symTy))
+        Just memTy -> return (Crucible.PtrType (Crucible.MemType memTy))
     SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
           case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
             Nothing -> fail "typeOfSetupValue: non-representable type"
-            Just memTy -> return (Crucible.MemType memTy)
+            Just memTy -> return memTy
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
                             , "instead got:"
                             , show (Cryptol.pp s)
@@ -145,13 +138,13 @@ typeOfSetupValue' cc env val =
     SetupStruct vs ->
       do memTys <- traverse (typeOfSetupValue cc env) vs
          let si = Crucible.mkStructInfo dl False memTys
-         return (Crucible.MemType (Crucible.StructType si))
+         return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
       do memTy <- typeOfSetupValue cc env v
          _memTys <- traverse (typeOfSetupValue cc env) vs
          -- TODO: check that all memTys are compatible with memTy
-         return (Crucible.MemType (Crucible.ArrayType (length (v:vs)) memTy))
+         return (Crucible.ArrayType (length (v:vs)) memTy)
     SetupField v n ->
       case resolveSetupFieldIndex cc env v n of
         Nothing -> fail ("Unable to resolve field name: " ++ show n)
@@ -165,11 +158,11 @@ typeOfSetupValue' cc env val =
                Just memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | i < n -> return (Crucible.MemType (Crucible.PtrType (Crucible.MemType memTy'')))
+                     | i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
                      | otherwise -> fail $ "typeOfSetupValue: array type index out of bounds: " ++ show (i, n)
                    Crucible.StructType si ->
                      case Crucible.siFieldInfo si i of
-                       Just fi -> return (Crucible.MemType (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi))))
+                       Just fi -> return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))
                        Nothing -> fail $ "typeOfSetupValue: struct type index out of bounds: " ++ show i
                    _ -> fail msg
                Nothing -> fail msg
@@ -179,7 +172,7 @@ typeOfSetupValue' cc env val =
       -- is memory-compatible with any type that NULL can be used at,
       -- and b) it prevents us from doing a type-safe dereference
       -- operation.
-      return (Crucible.MemType (Crucible.PtrType Crucible.VoidType))
+      return (Crucible.PtrType Crucible.VoidType)
     SetupGlobal name ->
       do let m = cc^.ccLLVMModule
              tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
@@ -190,7 +183,7 @@ typeOfSetupValue' cc env val =
            Just ty ->
              case let ?lc = lc in TyCtx.liftType ty of
                Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
-               Just symTy -> return (Crucible.MemType (Crucible.PtrType symTy))
+               Just symTy -> return (Crucible.PtrType symTy)
   where
     lc = cc^.ccTypeCtx
     dl = TyCtx.llvmDataLayout lc
@@ -201,7 +194,7 @@ resolveSetupVal ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   CrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
-  Map AllocIndex Crucible.SymType ->
+  Map AllocIndex Crucible.MemType ->
   SetupValue             ->
   IO LLVMVal
 resolveSetupVal cc env tyenv val =
