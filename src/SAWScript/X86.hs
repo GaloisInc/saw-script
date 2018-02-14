@@ -4,16 +4,42 @@
 {-# Language AllowAmbiguousTypes, ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
 {-# Language PatternSynonyms #-}
+{-# Language ImplicitParams #-}
 module SAWScript.X86
   ( Options(..)
   , main
   , linuxInfo
   , bsdInfo
+
+    -- * Specifications
+  , FunSpec(..)
+  , InitRegs(..)
+  , Spec
+  , Ptr
+  , BV
+
+    -- ** Uninterpred values
+  , someBV
+  , sawBV
+  , thisBV
+  , someBool
+  , sawBool
+  , thisBool
+  , somePtr
+  , Mutability(..)
+
+    -- ** Interacting with memory
+  , allocBytes
+  , allocArray
+  , writeMem
+  , readMem
+  , readArray
   ) where
 
 
+import GHC.TypeLits
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad(unless)
+import Control.Monad(unless,liftM,ap)
 import Control.Monad.ST(ST,stToIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -29,29 +55,41 @@ import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Context(Assignment,EmptyCtx,(::>),field,Idx)
 import Data.Parameterized.Nonce(GlobalNonceGenerator)
+import Data.Parameterized.NatRepr
 
 -- Crucible
 import Lang.Crucible.Vector(Vector)
 import qualified Lang.Crucible.Vector as Vector
 import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
-import Lang.Crucible.Types(BoolType)
+import Lang.Crucible.Types
 import Lang.Crucible.BaseTypes(BaseTypeRepr(..))
-import Lang.Crucible.Solver.Interface(freshConstant,Pred)
-import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, toSC)
+import Lang.Crucible.Solver.Interface
+          (freshConstant,Pred,natLit,notPred,addAssertion,natEq,bvLit
+          , truePred, falsePred)
+import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, toSC, bindSAWTerm)
+import Lang.Crucible.Solver.Symbol(SolverSymbol,userSymbol)
 import Lang.Crucible.Simulator.RegMap(regValue)
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(RV,unRV))
 import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
           , gpGlobals)
+import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
 import Lang.Crucible.ProgramLoc(Position(OtherPos))
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
 
 -- Crucible LLVM
-import Lang.Crucible.LLVM.MemModel(LLVMPointerType,Mem,mkMemVar)
-import Lang.Crucible.LLVM.MemModel.Pointer(pattern LLVMPointer)
+import Lang.Crucible.LLVM.MemModel
+  (LLVMPointerType,Mem,mkMemVar,doMalloc,doStore,doLoad,coerceAny
+  , doPtrAddOffset, emptyMem)
+import Lang.Crucible.LLVM.MemModel.Pointer
+  (pattern LLVMPointer, llvmPointer_bv,projectLLVM_bv,ptrAdd)
+import Lang.Crucible.LLVM.MemModel.Generic(AllocType(HeapAlloc), Mutability(..))
+import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
+import Lang.Crucible.LLVM.Bytes(toBytes)
+import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 
 
 -- Macaw
@@ -59,7 +97,6 @@ import Data.Macaw.Architecture.Info(ArchitectureInfo)
 import Data.Macaw.Discovery(analyzeFunction)
 import Data.Macaw.Discovery.State(CodeAddrReason(UserRequest)
                                  , emptyDiscoveryState)
-import Data.Macaw.Types(TypeRepr(..), typeRepr)
 import Data.Macaw.Memory(Memory, MemSymbol(..), MemSegmentOff
                         , AddrSymMap )
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
@@ -90,13 +127,17 @@ import Verifier.SAW.SharedTerm(Term)
 
 type Sym = SAWCoreBackend GlobalNonceGenerator
 
+type Ptr  = RegValue Sym (LLVMPointerType 64)
+type BV n = RegValue Sym (LLVMPointerType n)
+
+
 -- | What we'd like done, plus additional information from the "outside world".
 data Options = Options
   { fileName  :: FilePath
     -- ^ Name of the elf file to process.
 
-  , functions :: [ByteString]
-    -- ^ Functions that we'd like ot extract.
+  , functions :: [FunSpec]
+    -- ^ Functions that we'd like to extract.
 
   , symFuns   :: SymFuns Sym
     -- ^ Symbolic function names for complex instructinos.
@@ -116,6 +157,199 @@ bsdInfo :: ArchitectureInfo X86_64
 bsdInfo = x86_64_freeBSD_info
 
 
+--------------------------------------------------------------------------------
+-- Spec
+
+data FunSpec = FunSpec
+  { funName   :: ByteString
+  , funSetup  :: Spec InitRegs
+    -- ^ Setup initial memory and registers.
+  }
+
+data InitRegs =
+  InitRegs (forall tp. X86Reg tp -> RegValue' Sym (ToCrucibleType tp))
+
+newtype Spec a = Spec (Sym -> RegValue Sym Mem -> IO (a, RegValue Sym Mem))
+
+instance Functor Spec where fmap = liftM
+instance Applicative Spec where
+  pure a = Spec (\_ m -> return (a,m))
+  (<*>) = ap
+instance Monad Spec where
+  Spec m >>= k = Spec (\r s -> do (a, s1) <- m r s
+                                  let Spec m1 = k a
+                                  m1 r s1)
+  fail x = Spec (\_ _ -> malformed x)
+
+io :: IO a -> Spec a
+io m = Spec (\_ s -> do a <- m
+                        return (a,s))
+
+getSym :: Spec Sym
+getSym = Spec (\r s -> return (r,s))
+
+updMem :: (Sym -> RegValue Sym Mem -> IO (a, RegValue Sym Mem)) -> Spec a
+updMem f = Spec f
+
+withMem :: (Sym -> RegValue Sym Mem -> IO a) -> Spec a
+withMem f = Spec (\r s -> f r s >>= \a -> return (a,s))
+
+updMem_ :: (Sym -> RegValue Sym Mem -> IO (RegValue Sym Mem)) -> Spec ()
+updMem_ f = updMem (\sym mem -> do mem1 <- f sym mem
+                                   return ((),mem1))
+
+
+
+-- | An uninitialized bit-vector of the given length.
+someBV :: (1 <= w) =>
+  String      {- ^ Name -} ->
+  NatRepr w   {- ^ How many bits -} ->
+  Spec (RegValue Sym (LLVMPointerType w))
+someBV str w =
+  getSym >>= \sym ->
+  io (do nm <- symName str
+         llvmPointer_bv sym =<< freshConstant sym nm (BaseBVRepr w))
+
+-- | Bit-vector initialized to a SAW term.
+sawBV :: (1 <= w) =>
+  NatRepr w {- Width of bit-vector -} ->
+  Term      {- ^ A bit-vector of width the given widht -} ->
+  Spec (RegValue Sym (LLVMPointerType w))
+sawBV w val =
+  getSym >>= \sym ->
+  io (llvmPointer_bv sym =<< bindSAWTerm sym (BaseBVRepr w) val)
+
+-- | A concrete bit-vector.
+thisBV :: (1 <= w) =>
+  NatRepr w -> Integer -> Spec (RegValue Sym (LLVMPointerType w))
+thisBV w val =
+  getSym >>= \sym -> io (llvmPointer_bv sym =<< bvLit sym w val)
+
+-- | An uninitialized boolean value.
+someBool :: String -> Spec (RegValue Sym BoolType)
+someBool str =
+  getSym >>= \sym -> io (do nm <- symName str
+                            freshConstant sym nm BaseBoolRepr)
+
+-- | A boolean initialized to a SAW term.
+sawBool :: Term -> Spec (RegValue Sym BoolType)
+sawBool val = getSym >>= \sym -> io (bindSAWTerm sym BaseBoolRepr val)
+
+-- | A concrete boolean value.
+thisBool :: Bool -> Spec (RegValue Sym BoolType)
+thisBool b =
+  getSym >>= \sym -> return (if b then truePred sym else falsePred sym)
+
+-- | An uninitilized pointer value.
+somePtr :: String -> Spec Ptr
+somePtr str =
+  getSym >>= \sym -> io (
+  do base_nm <- symName (str ++ "_base")
+     off_nm  <- symName (str ++ "_offset")
+     base <- freshConstant sym base_nm BaseNatRepr
+     offs <- freshConstant sym off_nm (BaseBVRepr knownNat)
+     ok <- notPred sym =<< natEq sym base =<< natLit sym 0
+     addAssertion sym ok
+        (AssertFailureSimError "[somePtr] pointer used a bit-vector")
+     return (LLVMPointer base offs)
+  )
+
+-- | Allocate a pointer that points to the given number of bytes (on the heap).
+-- The allocated memory is not initialized, so it should not be read until
+-- it has been initialized.
+allocBytes :: String -> Mutability -> BV 64 -> Spec Ptr
+allocBytes str mut n =
+  let ?ptrWidth = knownNat in
+  updMem (\sym m -> doMalloc sym HeapAlloc mut str m =<< projectLLVM_bv sym n)
+
+
+-- | Write a bit-vector (not a pointer) to a memory location.
+writeMem :: (1 <= (w * 8)) => NatRepr (w * 8) -> Ptr -> BV (w * 8) -> Spec ()
+writeMem w p x =
+  do let bytes = divNat w (knownNat @8)
+     updMem_ (\sym mem ->
+       do bv <- projectLLVM_bv sym x
+          let ?ptrWidth = knownNat
+          let ty = bitvectorType (toBytes (natValue bytes))
+          doStore sym mem p (BVRepr w) ty bv
+       )
+
+-- | Read a bit-vector from a memory location.
+readMem :: (1 <= (w * 8)) => NatRepr (w * 8) -> Ptr -> Spec (BV (w * 8))
+readMem w p =
+  do let bytes = divNat w (knownNat @8)
+         ty    = bitvectorType (toBytes (natValue bytes))
+     let ?ptrWidth = knownNat
+     anyV <- withMem (\sym mem -> doLoad sym mem p ty 0)
+     sym  <- getSym
+     io $ do bv <- coerceAny sym (BVRepr w) anyV
+             llvmPointer_bv sym bv
+
+-- | Allocate an array, an initialize it with the given values.
+allocArray ::
+  (1 <= (w * 8)) =>
+  String ->
+  Mutability ->
+  NatRepr (w * 8) ->
+  [ BV (w * 8) ] ->
+  Spec Ptr
+allocArray str mut w xs =
+  withDivModNat w (knownNat @8) $ \bytesNum remi ->
+    case testEquality remi (knownNat @0) of
+      Just Refl ->
+        do sym <- getSym
+           let n = fromIntegral (length xs)
+               bs = natValue bytesNum
+           sz  <- thisBV knownNat (n * bs)
+           ptr <- allocBytes str mut sz
+           bytes <- io (bvLit sym knownNat bs)
+           doInit bytes ptr xs
+           return ptr
+      Nothing ->
+        io (malformed "[allocArray] The elemtn size should be a multiple of 8")
+  where
+  doInit bytes ptr ys =
+    case ys of
+      [] -> return ()
+      y : more ->
+        do writeMem w ptr y
+           sym <- getSym
+           nextPtr <- io (ptrAdd sym knownNat ptr bytes)
+           doInit bytes nextPtr more
+
+readArray ::
+  (1 <= (w * 8)) => NatRepr (w * 8) -> Ptr -> Int -> Spec [ BV (w * 8) ]
+readArray w p0 n0 =
+  do sym <- getSym
+     amt <- io (bvLit sym knownNat (natValue (divNat w (knownNat @8))))
+     go amt p0 n0
+  where
+  go amt p n
+    | n > 0 = do v  <- readMem w p
+                 p1 <- withMem (\sym mem ->
+                        let ?ptrWidth = knownNat
+                        in doPtrAddOffset sym mem p amt)
+                 vs <- go amt p1 (n-1)
+                 return (v : vs)
+    | otherwise = return []
+
+
+
+symName :: String -> IO SolverSymbol
+symName s = case userSymbol s of
+              Left err -> malformed (show err)
+              Right a  -> return a
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
 
 -- | The main entry point.
 -- Extracts SAW core terms for the functions specified in the "Options".
@@ -123,7 +357,7 @@ main :: Options -> IO (Map ByteString Term)
 main opts =
   do elf <- getRelevant =<< getElf (fileName opts)
      ts <- mapM (translate opts elf) (functions opts)
-     return $ Map.fromList $ zip (functions opts) ts
+     return $ Map.fromList $ zip (map funName (functions opts)) ts
 
 
 --------------------------------------------------------------------------------
@@ -190,20 +424,25 @@ posFn = OtherPos . Text.pack . show
 
 -- | Translate an assertion about the function with the given name to
 -- a SAW core term.
-translate :: Options -> RelevnatElf -> ByteString -> IO Term
-translate opts elf name =
-  do addr <- findSymbol (symMap elf) name
+translate :: Options -> RelevnatElf -> FunSpec -> IO Term
+translate opts elf fspec =
+  do let name = funName fspec
+     addr <- findSymbol (symMap elf) name
      (halloc, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
 
-     let sym = backend opts
-     regs <- macawAssignToCrucM (mkReg sym) genRegAssign
-
-     -- XXX: setup memory
      mvar <- stToIO (mkMemVar halloc)
+     m0   <- emptyMem LittleEndian
+     let sym    = backend opts
+         Spec m = funSetup fspec
+     (InitRegs mkReg, m1) <- m sym m0
+     regs <- macawAssignToCrucM (return . mkReg) genRegAssign
+     execResult <-
+        runCodeBlock sym x86 (x86_eval opts) halloc (mvar,m1) cfg regs
 
-     execResult <- runCodeBlock sym x86 (x86_eval opts) halloc mvar cfg regs
 
-
+    -- XXX: the post condition spec needs to have access to the registers,
+    -- and either thread the values as pointers, in which case we should
+    -- read the corresponding values from memory, or get them as bit-vectors.
 
      case execResult of
        FinishedExecution _ctx res ->
@@ -263,19 +502,6 @@ makeCFG opts elf name addr =
   empty = emptyDiscoveryState (memory elf) (symMap elf) (archInfo opts)
 
 
--- | Make up a fresh variable for a specific register.
-mkReg :: Sym -> X86Reg tp -> IO (RegValue' Sym (ToCrucibleType tp))
-mkReg sym r =
-  case typeRepr r of
-    BoolTypeRepr -> RV <$> freshConstant sym nm BaseBoolRepr
-    BVTypeRepr w ->
-      do base <- freshConstant sym nm BaseNatRepr
-         offs <- freshConstant sym nm (BaseBVRepr w)
-         return (RV (LLVMPointer base offs))
-    TupleTypeRepr{} ->
-      unsupported "macaw-symbolic does not support tuple types."
-  where
-  nm = crucGenArchRegName x86_64MacawSymbolicFns r
 
 
 
