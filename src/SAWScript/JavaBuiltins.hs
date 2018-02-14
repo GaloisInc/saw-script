@@ -235,12 +235,12 @@ verifyJava bic opts cls mname overrides setup = do
         fl = defaultSimFlags { alwaysBitBlastBranchTerms = True
                              , satAtBranches = jsSatBranches setupRes
                              }
-    printOutLnTop Info $ "Starting verification of " ++ specName ms
+    printOutLnTop Debug $ "Starting verification of " ++ specName ms
     ro <- getTopLevelRO
     rw <- getTopLevelRW
     forM_ configs $ \(bs,cl) -> withSAWBackend Nothing $ \sbe -> io $ do
       liftIO $ bsCheckAliasTypes pos bs
-      liftIO $ printOutLn opts Info $ "Executing " ++ specName ms ++
+      liftIO $ printOutLn opts Debug $ "Executing " ++ specName ms ++
                    " at PC " ++ show (bsLoc bs) ++ "."
       -- runDefSimulator cb sbe $ do
       runSimulator cb sbe defaultSEH (Just fl) $ do
@@ -252,21 +252,21 @@ verifyJava bic opts cls mname overrides setup = do
               let goal = ProofGoal Universal n "vc" (vsVCName vs) glam
               r <- evalStateT script (startProof goal)
               case r of
-                SS.Unsat _ -> liftIO $ printOutLn opts Info "Valid."
+                SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."
                 SS.SatMulti _ vals ->
                        io $ showCexResults opts jsc (rwPPOpts rw) ms vs exts vals
         let ovds = vpOver vp
         initPS <- initializeVerification' jsc ms bs cl
-        liftIO $ printOutLn opts Info $ "Overriding: " ++ show (map specName ovds)
+        liftIO $ printOutLn opts Debug $ "Overriding: " ++ show (map specName ovds)
         mapM_ (overrideFromSpec jsc (specPos ms)) ovds
-        liftIO $ printOutLn opts Info $ "Running method: " ++ specName ms
+        liftIO $ printOutLn opts Debug $ "Running method: " ++ specName ms
         -- Execute code.
         run
-        liftIO $ printOutLn opts Info $ "Checking final state"
+        liftIO $ printOutLn opts Debug $ "Checking final state"
         pvc <- checkFinalState jsc ms bs cl initPS
         let pvcs = [pvc] -- Only one for now, but that might change
-        liftIO $ printOutLn opts Debug "Verifying the following:"
-        liftIO $ mapM_ (printOutLn opts Debug . show . ppPathVC) pvcs
+        liftIO $ printOutLn opts ExtraDebug "Verifying the following:"
+        liftIO $ mapM_ (printOutLn opts ExtraDebug . show . ppPathVC) pvcs
         let validator script = runValidation (prover script) vp jsc pvcs
         case jsTactic setupRes of
           Skip -> liftIO $ printOutLn opts Warn $
@@ -283,13 +283,13 @@ verifyJava bic opts cls mname overrides setup = do
 doExtraChecks :: Options -> SharedContext -> Term -> IO ()
 doExtraChecks opts bsc t = do
   when (extraChecks opts) $ do
-    printOutLn opts Info "Type checking goal..."
+    printOutLn opts Debug "Type checking goal..."
     tcr <- scTypeCheck bsc t
     case tcr of
       Left e -> printOutLn opts Warn $ unlines $
                 "Ill-typed goal constructed." : prettyTCError e
-      Right _ -> printOutLn opts Info "Done."
-  printOutLn opts Debug $ "Trying to prove: " ++ show t
+      Right _ -> printOutLn opts Debug "Done."
+  printOutLn opts ExtraDebug $ "Trying to prove: " ++ show t
 
 showCexResults :: Options
                -> SharedContext

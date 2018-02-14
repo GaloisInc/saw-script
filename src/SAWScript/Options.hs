@@ -33,7 +33,14 @@ data Options = Options
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
 -- level includes the outputs of all lower levels.
-data Verbosity = Silent | OnlyCounterExamples | Error | Warn | Info | Debug
+data Verbosity
+  = Silent
+  | OnlyCounterExamples
+  | Error
+  | Warn
+  | Info
+  | Debug
+  | ExtraDebug
     deriving (Show,Eq,Ord)
 
 defaultOptions :: Options

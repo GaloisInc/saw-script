@@ -457,9 +457,9 @@ runValidation prover params sc results = do
      forM_ (zip [0..] (pvcChecks pvc)) $ \(n, vc) -> do
        let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
        g <- io $ scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
-       printOutTop Info $ "Checking " ++ vcName vc
-       printOutTop Debug $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
-       printLn Info ""
+       printOutTop Debug $ "Checking " ++ vcName vc
+       printOutTop ExtraDebug $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
+       printOutTop Debug ""
        prover vs n g
     else do
       let vsName = "an invalid path"

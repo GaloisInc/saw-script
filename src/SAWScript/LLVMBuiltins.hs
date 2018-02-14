@@ -140,10 +140,10 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
               e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
               case resolveType cb (lssTypeOfLLVMExpr e) of
                 PtrType (MemType ty) -> do
-                  liftIO $ printOutLn opts Info $
+                  liftIO $ printOutLn opts Debug $
                     "Allocating " ++ show n ++ " elements of type " ++ show (ppActualType ty)
                   tm <- allocSome sbe dl n ty
-                  liftIO $ printOutLn opts Info $
+                  liftIO $ printOutLn opts Debug $
                     "Allocated address: " ++ show tm
                   return (e, tm, 1)
                 ty -> fail $ "Allocation parameter " ++ s ++

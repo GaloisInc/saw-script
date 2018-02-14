@@ -684,9 +684,8 @@ runValidation prover params sc results = do
       mconcat <$> (forM (zip [0..] $ pvcChecks pvc) $ \(n, vc) -> do
         let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
         g <- io (scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc)
-        io $ printOutLn (vpOpts params) Info $ "Checking " ++ vcName vc
-        io $ printOutLn (vpOpts params) Debug $ " (" ++ show g ++ ")"
-        io $ printOutLn (vpOpts params) Info "\n"
+        io $ printOutLn (vpOpts params) Debug $ "Checking " ++ vcName vc
+        io $ printOutLn (vpOpts params) ExtraDebug $ " (" ++ show g ++ ")"
         prover vs n g)
     else do
       let vsName = "an invalid path"
