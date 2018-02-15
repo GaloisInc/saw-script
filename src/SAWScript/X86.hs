@@ -5,6 +5,8 @@
 {-# Language FlexibleContexts #-}
 {-# Language PatternSynonyms #-}
 {-# Language ImplicitParams #-}
+{-# OPTIONS_GHC -w #-}
+
 module SAWScript.X86
   ( Options(..)
   , main
@@ -86,7 +88,7 @@ import Data.Macaw.X86.Crucible(SymFuns)
 import Verifier.SAW.SharedTerm(Term)
 
 -- SAWScript
-import SAWScript.X86Spec(Sym,Spec,runSpec)
+import SAWScript.X86Spec(Sym,Spec,Pre,runPreSpec)
 
 
 
@@ -125,7 +127,7 @@ bsdInfo = x86_64_freeBSD_info
 
 data FunSpec = FunSpec
   { funName   :: ByteString
-  , funSetup  :: Spec InitRegs
+  , funSetup  :: Spec Pre InitRegs
     -- ^ Setup initial memory and registers.
   }
 
@@ -219,7 +221,7 @@ translate opts elf fspec =
      mvar <- stToIO (mkMemVar halloc)
      m0   <- emptyMem LittleEndian
      let sym    = backend opts
-     (InitRegs mkReg, m1) <- runSpec sym m0 (funSetup fspec)
+     (InitRegs mkReg, m1) <- runPreSpec sym m0 (funSetup fspec)
      regs <- macawAssignToCrucM (return . mkReg) genRegAssign
      execResult <-
         runCodeBlock sym x86 (x86_eval opts) halloc (mvar,m1) cfg regs
@@ -258,7 +260,10 @@ getMem st mvar =
 relate :: Options -> Regs -> Maybe (Pred Sym) -> Regs -> IO Term
 relate = undefined
 
+data Regs = XXX
 
+getRegs :: Sym -> a -> IO Regs
+getRegs = undefined
 
 
 -- | Generate a CFG for the function at the given address.
@@ -304,153 +309,6 @@ genRegAssign = crucGenRegAssignment x86
 -- | Evaluate a specific instruction.
 x86_eval :: Options -> MacawArchEvalFn Sym X86_64
 x86_eval opts = x86_64MacawEvalFn (symFuns opts)
-
-
---------------------------------------------------------------------------------
--- Registers 
-
-data Regs = Regs
-  { rIP    :: Term             -- ^ 0 (64)
-  , rGP    :: Vector 16 Term   -- ^ 1--16 (64)
-  , rFlag  :: Vector 9  Term   -- ^ 17--25 (Bool)
-  , rFP    :: FPRegs
-  , rVec   :: Vector 16 Term   -- ^ 59--74 (256)
-
-  }
-
-data FPRegs = FPRegs
-  { fpStatus :: Vector 16 Term  -- ^26--41 (bool)
-  , fpTop    :: Term            -- ^42 (3)
-  , fpTags   :: Vector 8 Term   -- ^ 43--50 (2)
-  , fpRegs   :: Vector 8 Term   -- ^ 51-58 (80)
-  }
-
-
-getReg :: forall w n ctx.
-  ( Idx n ctx (LLVMPointerType w)
-  , ctx ~ MacawCrucibleRegTypes X86_64
-  ) =>
-  Sym -> Assignment (RegValue' Sym) ctx ->
-  IO Term
-getReg _sym _a = undefined -- toSC sym (unRV (a ^. (field @n)))
-
-getFlag :: forall n ctx.
-  ( Idx n ctx BoolType
-  , ctx ~ MacawCrucibleRegTypes X86_64
-  ) =>
-  Sym -> Assignment (RegValue' Sym) ctx ->
-  IO Term
-getFlag sym a = toSC sym (unRV (a ^. (field @n)))
-
-getRegs ::
-  Sym ->
-  Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64) ->
-  IO Regs
-getRegs sym a =
-  do rIP  <- getReg @64 @0 sym a
-
-     Just rGP <- Vector.fromList knownRepr <$> sequence
-       [ getReg @64 @1 sym a
-       , getReg @64 @2 sym a
-       , getReg @64 @3 sym a
-       , getReg @64 @4 sym a
-       , getReg @64 @5 sym a
-       , getReg @64 @6 sym a
-       , getReg @64 @7 sym a
-       , getReg @64 @8 sym a
-
-       , getReg @64 @9 sym a
-       , getReg @64 @10 sym a
-       , getReg @64 @11 sym a
-       , getReg @64 @12 sym a
-       , getReg @64 @13 sym a
-       , getReg @64 @14 sym a
-       , getReg @64 @15 sym a
-       , getReg @64 @16 sym a
-       ]
-
-     Just rFlag <- Vector.fromList knownRepr <$> sequence
-        [ getFlag @17 sym a
-        , getFlag @18 sym a
-        , getFlag @19 sym a
-        , getFlag @20 sym a
-        , getFlag @21 sym a
-        , getFlag @22 sym a
-        , getFlag @23 sym a
-        , getFlag @24 sym a
-        , getFlag @25 sym a
-        ]
-
-     rFP <-
-       do -- X87 status registers
-          Just fpStatus <- Vector.fromList knownRepr <$> sequence
-            [ getFlag @26 sym a
-            , getFlag @27 sym a
-            , getFlag @28 sym a
-            , getFlag @29 sym a
-            , getFlag @30 sym a
-            , getFlag @31 sym a
-            , getFlag @32 sym a
-            , getFlag @33 sym a
-            , getFlag @34 sym a
-            , getFlag @36 sym a
-            , getFlag @36 sym a
-            , getFlag @37 sym a
-            , getFlag @38 sym a
-            , getFlag @39 sym a
-            , getFlag @40 sym a
-            , getFlag @41 sym a
-            ]
-
-          fpTop <- getReg @3 @42 sym a
-
-          -- Tags
-          Just fpTags <- Vector.fromList knownRepr <$> sequence
-            [ getReg @2 @43 sym a
-            , getReg @2 @44 sym a
-            , getReg @2 @45 sym a
-            , getReg @2 @46 sym a
-            , getReg @2 @47 sym a
-            , getReg @2 @48 sym a
-            , getReg @2 @49 sym a
-            , getReg @2 @50 sym a
-            ]
-
-          -- Floating point register
-          Just fpRegs <- Vector.fromList knownRepr <$> sequence
-            [ getReg @80 @51 sym a
-            , getReg @80 @52 sym a
-            , getReg @80 @53 sym a
-            , getReg @80 @54 sym a
-            , getReg @80 @55 sym a
-            , getReg @80 @56 sym a
-            , getReg @80 @57 sym a
-            , getReg @80 @58 sym a
-            ]
-
-          return FPRegs { .. }
-
-     -- Vector registers
-     Just rVec <- Vector.fromList knownRepr <$> sequence
-       [ getReg @256 @59 sym a
-       , getReg @256 @60 sym a
-       , getReg @256 @61 sym a
-       , getReg @256 @62 sym a
-       , getReg @256 @63 sym a
-       , getReg @256 @64 sym a
-       , getReg @256 @65 sym a
-       , getReg @256 @66 sym a
-       , getReg @256 @67 sym a
-       , getReg @256 @68 sym a
-       , getReg @256 @69 sym a
-       , getReg @256 @70 sym a
-       , getReg @256 @71 sym a
-       , getReg @256 @72 sym a
-       , getReg @256 @73 sym a
-       , getReg @256 @74 sym a
-       ]
-
-     return Regs { .. }
 
 
 
