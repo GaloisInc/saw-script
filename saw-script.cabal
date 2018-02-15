@@ -126,6 +126,7 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
     SAWScript.X86
+    SAWScript.X86Spec
 
   GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
