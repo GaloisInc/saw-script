@@ -12,29 +12,38 @@
 {-# Language RankNTypes #-}
 {-# Language RecordWildCards #-}
 module SAWScript.X86Spec
-  ( Spec
-  , Pre, Post
+  ( -- * Specifications
+    FunSpec(..)
+  , Spec
+
+    -- ** Pre conditions
+  , Pre
+  , fresh
+  , assume
+  , freshRegs
+  , allocBytes
+  , allocArray
+  , Mutability(..)
+  , writeMem
+
+    -- ** Post conditions
+  , Post
+  , readMem
+  , readArray
+  , assert
 
     -- * Types
   , X86Type
   , AByte, AWord, ADWord, AQWord, AVec, APtr, ABool
   , ABits2, ABits3, ABigFloat
   , X86(..)
+  , KnownX86(..)
+  , MemType
 
-    -- * Defining Values
+    -- * Values
   , Value
-  , fresh
   , SAW(..)
   , Literal(..)
-
-    -- * Memory
-  , MemType
-  , allocBytes
-  , Mutability(..)
-  , allocArray
-  , readMem
-  , writeMem
-  , readArray
 
     -- * Registers
   , GetReg(..)
@@ -55,7 +64,6 @@ module SAWScript.X86Spec
   , runPreSpec
   , runPostSpec
   , Rep
-  , fromValue
   , macawLookup
 
   ) where
@@ -64,6 +72,7 @@ import Data.Kind(Type)
 import GHC.TypeLits
 import Control.Monad(liftM,ap)
 import Control.Lens((^.))
+import qualified Data.Vector as Vector
 
 import Data.Parameterized.Nonce(GlobalNonceGenerator)
 import Data.Parameterized.Classes(KnownRepr(knownRepr))
@@ -82,15 +91,17 @@ import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, bindSAWTerm, toSC)
 import Lang.Crucible.Solver.Interface
           (freshConstant,natLit,notPred,addAssertion,natEq,bvLit
           , truePred, falsePred)
+import Lang.Crucible.Solver.BoolInterface(addAssumption)
 import Lang.Crucible.LLVM.MemModel
-  (Mem, LLVMPointerType, doStore, doLoad, doMalloc, doPtrAddOffset, coerceAny)
+  ( Mem, emptyMem
+  , LLVMPointerType, doStore, doLoad, doMalloc, doPtrAddOffset, coerceAny)
 import Lang.Crucible.LLVM.MemModel.Pointer
   (llvmPointer_bv, projectLLVM_bv, pattern LLVMPointer, ptrAdd)
 import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
 import Lang.Crucible.LLVM.MemModel.Generic(AllocType(HeapAlloc), Mutability(..))
 import qualified Lang.Crucible.LLVM.MemModel.Type as LLVM
 import Lang.Crucible.LLVM.Bytes(Bytes,toBytes)
-
+import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
 import Data.Macaw.X86.ArchTypes(X86_64)
@@ -122,6 +133,7 @@ type ABits3     = 'ABits3
 type ABigFloat  = 'ABigFloat
 
 
+-- | This type is used to specify types explicitly.
 data X86 :: X86Type -> Type where
   Byte      :: X86 AByte
   Word      :: X86 AWord
@@ -134,6 +146,24 @@ data X86 :: X86Type -> Type where
   Bits3     :: X86 ABits3
   BigFloat  :: X86 ABigFloat
 
+-- | This type may be used to specify types implicitly
+-- (i.e., in contexts where the type can be inferred automatically).
+class KnownX86 t where
+  knownX86 :: X86 t
+
+instance KnownX86 AByte     where knownX86 = Byte
+instance KnownX86 AWord     where knownX86 = Word
+instance KnownX86 ADWord    where knownX86 = DWord
+instance KnownX86 AQWord    where knownX86 = QWord
+instance KnownX86 AVec      where knownX86 = Vec
+instance KnownX86 APtr      where knownX86 = Ptr
+instance KnownX86 ABool     where knownX86 = Bool
+instance KnownX86 ABits2    where knownX86 = Bits2
+instance KnownX86 ABits3    where knownX86 = Bits3
+instance KnownX86 ABigFloat where knownX86 = BigFloat
+
+
+-- | Mapping from X86 types to the Crucible types used to implement them.
 type family Rep (x :: X86Type) :: CrucibleType where
   Rep AByte       = LLVMPointerType 8
   Rep AWord       = LLVMPointerType 16
@@ -146,6 +176,7 @@ type family Rep (x :: X86Type) :: CrucibleType where
   Rep ABits3      = LLVMPointerType 3
   Rep ABigFloat   = LLVMPointerType 80  -- or something eles?
 
+-- | Specify a crucible type expclitily.
 crucRepr :: X86 t -> TypeRepr (Rep t)
 crucRepr x =
   case x of
@@ -160,7 +191,9 @@ crucRepr x =
     Bits3    -> knownRepr
     BigFloat -> knownRepr
 
+-- | Types that can be stored in memory.
 class MemType (t :: X86Type) where
+  -- | Size of the type, in bytes.
   type ByteSize t :: Nat
   byteSizeNat :: X86 t -> NatRepr (ByteSize t)
 
@@ -188,6 +221,7 @@ instance MemType APtr where
   type ByteSize APtr = 8
   byteSizeNat _ = knownNat
 
+-- | Size of types in bits.
 type family BitSize (x :: X86Type) :: Nat where
   BitSize AByte     = 8
   BitSize AWord     = 16
@@ -195,11 +229,12 @@ type family BitSize (x :: X86Type) :: Nat where
   BitSize AQWord    = 64
   BitSize AVec      = 256
   BitSize APtr      = 64
-  BitSize ABool     = 1   -- XXX: Type error?
+  BitSize ABool     = 1
   BitSize ABits2    = 2
   BitSize ABits3    = 3
   BitSize ABigFloat = 80
 
+-- | A value level nubmer for the size of the type.
 bitSizeNat :: forall t. X86 t -> NatRepr (BitSize t)
 bitSizeNat x =
   case x of
@@ -214,18 +249,17 @@ bitSizeNat x =
     Bits3    -> knownNat @(BitSize t)
     BigFloat -> knownNat @(BitSize t)
 
+-- | A value representating the number of bytes used to store this type.
 byteSize :: MemType t => X86 t -> Bytes
 byteSize = toBytes . natValue . byteSizeNat
 
+-- | The LLVM type used when manipulating values of the given type in memory.
 llvmType :: MemType t => X86 t -> LLVM.Type
 llvmType x = bitvectorType (byteSize x)
 
 
 -- | A value in a X86 specification.
 newtype Value t = Value (RegValue Sym (Rep t))
-
-fromValue :: Value t -> RegValue Sym (Rep t)
-fromValue (Value t) = t
 
 value :: proxy t -> RegValue Sym (Rep t) -> Value t
 value _ x = Value x
@@ -240,26 +274,45 @@ symName s = case userSymbol s of
 --------------------------------------------------------------------------------
 -- Spec monad
 
+-- | A specifiction for a functino.
+data FunSpec = FunSpec
+  { funPre  :: Spec Pre RegAssign
+    -- ^ Setup memory, and compute register assignment.
+    -- Assumptions about the initial values can be added using "assume"
+
+  , funPost :: RegAssign -> Spec Post ()
+    -- ^ Compute a post-condition for the function.
+    -- The post condition is specified by uses of "assert".
+  }
+
+-- | The Crucible backend used for speicifcations.
 type Sym = SAWCoreBackend GlobalNonceGenerator
 
 -- | Is this a pre- or post-condition specificiation.
 data {- kind -} SpecType = Pre | Post
 
+-- | We are specifying a pre-condition.
 type Pre  = 'Pre
+
+-- | We are specifying a post-condition.
 type Post = 'Post
 
+
+-- | A monad for definingin specifications.
 newtype Spec (p :: SpecType) a =
   Spec (Sym -> RR p -> RegValue Sym Mem -> IO (a, RegValue Sym Mem))
 
-runPreSpec :: Sym -> RegValue Sym Mem -> Spec Pre a -> IO (a, RegValue Sym Mem)
-runPreSpec sym mem (Spec f) = f sym () mem
+-- | Execute a pre-condition specification.
+runPreSpec :: Sym -> Spec Pre RegAssign -> IO (RegAssign, RegValue Sym Mem)
+runPreSpec sym (Spec f) = f sym () =<< emptyMem LittleEndian
 
+-- | Execute a post-condition specification.
 runPostSpec ::
   Sym ->
   Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64) ->
   RegValue Sym Mem ->
-  Spec Post a ->
-  IO a
+  Spec Post () ->
+  IO ()
 runPostSpec sym rs mem (Spec f) = fst <$> f sym rs  mem
 
 type family RR (x :: SpecType) where
@@ -353,11 +406,39 @@ freshPtr str =
      return (Value (LLVMPointer base offs))
   )
 
+
+-- | Generate fresh values for a class of registers.
+freshRegs ::
+  forall a.
+  (Show a, Enum a, Bounded a, GetReg a, KnownX86 (RegType a)) =>
+  Spec Pre (a -> Value (RegType a))
+freshRegs =
+  do vs <- Vector.fromList <$>
+              mapM (\a -> fresh knownX86 (show (a :: a))) elemList
+     return (\x -> vs Vector.! fromEnum x)
+
+-- The input should be a boolean SAW Core term.
+assume :: Term {- ^ Boolean assumption -} -> Spec Pre ()
+assume p =
+  do sym <- getSym
+     io $ do v <- bindSAWTerm sym BaseBoolRepr p
+             addAssumption sym v
+
+-- | Add an assertion to the post-condition.
+assert ::
+  Term    {- ^ Boolean assertion, should be true -} ->
+  String  {- ^ A message to show if the assrtion failes -} ->
+  Spec Post ()
+assert p msg =
+  do sym <- getSym
+     io $ do ok <- bindSAWTerm sym BaseBoolRepr p
+             addAssertion sym ok (AssertFailureSimError msg)
 --------------------------------------------------------------------------------
 -- SAW terms
 
+-- | Convert between values and SAW Core terms.
 class SAW (t :: X86Type) where
-  saw :: X86 t -> Term -> Spec p (Value t)
+  saw   :: X86 t -> Term -> Spec p (Value t)
   toSAW :: Value t -> Spec p Term
 
 instance SAW ABool where
@@ -459,6 +540,8 @@ writeMem w (Value p) (Value x) =
     in doStore sym mem p (crucRepr w) (llvmType w) x
 
 -- | Read a value from memory.
+-- Currently this is an unaligned read (i.e., any alignment will do).
+-- We probably want to have an aligned read also.
 readMem :: MemType t => X86 t -> Value APtr -> Spec Post (Value t)
 readMem w (Value p) =
   withMem $ \sym mem ->
@@ -552,8 +635,12 @@ regValueGP how = case how of
                    AsBits -> regValue @n @AQWord
                    AsPtr  -> regValue @n @APtr
 
+elemList :: (Enum a, Bounded a) => [a]
+elemList = [ minBound .. maxBound ]
+
 -- | Instruciotn pointer.
 data IP = IP
+  deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance GetReg IP where
   type RegType IP = AQWord
@@ -562,6 +649,7 @@ instance GetReg IP where
 -- | General purpose register.
 data GPReg = RAX | RBX | RCX | RDX | RSI | RDI | RSP | RBP
            | R8  | R9  | R10 | R11 | R12 | R13 | R14 | R15
+  deriving (Show,Eq,Ord,Enum,Bounded)
 
 -- | General purpose reigsters may contain either a bit-value or a pointer.
 -- This type specifies which form we want to access.
@@ -569,6 +657,12 @@ data GPRegUse :: X86Type -> Type where
   AsBits :: GPRegUse AQWord
   AsPtr  :: GPRegUse APtr
 
+
+-- | If not explicitly specified, "GPReg" is used as a bit-vecotr
+-- (i.e., not a pointer).
+instance GetReg GPReg where
+  type RegType GPReg = AQWord
+  getReg x = getReg (x, AsBits)
 
 instance GetReg (GPReg,GPRegUse t) where
   type RegType (GPReg,GPRegUse t) = t
@@ -593,6 +687,7 @@ instance GetReg (GPReg,GPRegUse t) where
 
 -- | CPU flags
 data Flag = CF | PF | AF | ZF | SF | TF | IF | DF | OF
+  deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance GetReg Flag where
   type RegType Flag = ABool
@@ -612,6 +707,7 @@ instance GetReg Flag where
 data VecReg =
     YMM0  | YMM1  | YMM2  | YMM3  | YMM4  | YMM5  | YMM6  | YMM7
   | YMM8  | YMM9  | YMM10 | YMM11 | YMM12 | YMM13 | YMM14 | YMM15
+  deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance GetReg VecReg where
   type RegType VecReg = AVec
@@ -638,6 +734,7 @@ instance GetReg VecReg where
 data X87Status = X87_IE | X87_DE | X87_ZE | X87_OE
                | X87_UE | X87_PE | X87_EF | X87_ES
                | X87_C0 | X87_C1 | X87_C2 | X87_C3
+              deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance GetReg X87Status where
   type RegType X87Status = ABool
@@ -662,6 +759,7 @@ instance GetReg X87Status where
 
 -- | Top of X87 register stack.
 data X87Top = X87Top
+              deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance GetReg X87Top where
   type RegType X87Top = ABits3
@@ -671,6 +769,7 @@ instance GetReg X87Top where
 -- | X87 tags.
 data X87Tag = Tag0 | Tag1 | Tag2 | Tag3
             | Tag4 | Tag5 | Tag6 | Tag7
+              deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance GetReg X87Tag where
   type RegType X87Tag = ABits2
@@ -687,6 +786,7 @@ instance GetReg X87Tag where
 
 -- | 80-bit floating point registers.
 data FPReg = FP0 | FP1 | FP2 | FP3 | FP4 | FP5 | FP6 | FP7
+              deriving (Show,Eq,Ord,Enum,Bounded)
 
 
 instance GetReg FPReg where
@@ -702,6 +802,7 @@ instance GetReg FPReg where
       FP6 -> regValue @(M.FPReg 6)
       FP7 -> regValue @(M.FPReg 7)
 
+-- | A register assignment.
 data RegAssign = RegAssign
   { valIP         :: Value AQWord
   , valGPReg      :: forall t. GPReg -> GPRegUse t -> Value t
@@ -715,6 +816,7 @@ data RegAssign = RegAssign
 
 
 
+-- | Convert a register assignment to a form suitable for Macaw CFG generation.
 macawLookup :: RegAssign -> R.X86Reg t -> RegValue' Sym (ToCrucibleType t)
 macawLookup RegAssign { .. } reg =
   case reg of
@@ -812,14 +914,6 @@ macawLookup RegAssign { .. } reg =
   x87_status r  = toRV (valX87Status r)
   tag r         = toRV (valX87Tag r)
 
-
-
-{-
-    M.X86_FlagReg n
-    M.X87_StatusReg n
-    M.X87_TopReg
-    M.X87_TagReg n
--}
 
 
 toRV :: Value t -> RegValue' Sym (Rep t)

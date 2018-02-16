@@ -14,8 +14,7 @@ module SAWScript.X86
   , bsdInfo
 
     -- * Specifications
-  , FunSpec(..)
-  , Spec
+  , Fun(..)
 
   ) where
 
@@ -55,8 +54,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
 
 -- Crucible LLVM
-import Lang.Crucible.LLVM.MemModel (LLVMPointerType,Mem,mkMemVar,emptyMem)
-import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
+import Lang.Crucible.LLVM.MemModel (LLVMPointerType,Mem,mkMemVar)
 
 
 -- Macaw
@@ -87,7 +85,7 @@ import Verifier.SAW.SharedTerm(Term)
 
 -- SAWScript
 import SAWScript.X86Spec
-  (Sym,Spec,Pre,Post,runPreSpec,runPostSpec,RegAssign,macawLookup)
+  (Sym,FunSpec(..),runPreSpec,runPostSpec,macawLookup)
 
 
 
@@ -100,8 +98,8 @@ data Options = Options
   { fileName  :: FilePath
     -- ^ Name of the elf file to process.
 
-  , functions :: [FunSpec]
-    -- ^ Functions that we'd like to extract.
+  , function :: Fun
+    -- ^ Function that we'd like to extract.
 
   , symFuns   :: SymFuns Sym
     -- ^ Symbolic function names for complex instructinos.
@@ -124,14 +122,7 @@ bsdInfo = x86_64_freeBSD_info
 --------------------------------------------------------------------------------
 -- Spec
 
-data FunSpec = FunSpec
-  { funName   :: ByteString
-  , funSetup  :: Spec Pre RegAssign
-    -- ^ Setup initial memory and registers.
-
-  , funPost   :: RegAssign -> Spec Post Term
-    -- ^ Compute post condition, using the initial values of the registers.
-  }
+data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 
 
@@ -139,13 +130,10 @@ data FunSpec = FunSpec
 
 --------------------------------------------------------------------------------
 
--- | The main entry point.
--- Extracts SAW core terms for the functions specified in the "Options".
-main :: Options -> IO (Map ByteString Term)
+main :: Options -> IO ()
 main opts =
   do elf <- getRelevant =<< getElf (fileName opts)
-     ts <- mapM (translate opts elf) (functions opts)
-     return $ Map.fromList $ zip (map funName (functions opts)) ts
+     translate opts elf (function opts)
 
 
 --------------------------------------------------------------------------------
@@ -212,36 +200,34 @@ posFn = OtherPos . Text.pack . show
 
 -- | Translate an assertion about the function with the given name to
 -- a SAW core term.
-translate :: Options -> RelevnatElf -> FunSpec -> IO Term
-translate opts elf fspec =
-  do let name = funName fspec
+translate :: Options -> RelevnatElf -> Fun -> IO ()
+translate opts elf fun =
+  do let name = funName fun  
      addr <- findSymbol (symMap elf) name
      (halloc, SomeCFG cfg) <- stToIO (makeCFG opts elf name addr)
 
      mvar <- stToIO (mkMemVar halloc)
-     m0   <- emptyMem LittleEndian
-     let sym    = backend opts
-     (initRegs, m1) <- runPreSpec sym m0 (funSetup fspec)
+     let sym  = backend opts
+         fspec = funSpec fun
+     (initRegs, m1) <- runPreSpec sym (funPre fspec)
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
      execResult <-
         runCodeBlock sym x86 (x86_eval opts) halloc (mvar,m1) cfg regs
 
 
      let postSpec = funPost fspec initRegs
+     gp <- case execResult of
+             FinishedExecution _ res ->
+                case res of
+                  TotalRes gp -> return gp
+                  PartialRes _pre gp _ab -> return gp
+                  -- XXX: we ignore the _pre, as it should be subsumed
+                  -- by the assertions in the backed. Ask Rob D. for details.
+             _ -> malformed "Failed to finish execution"
 
-     case execResult of
-       FinishedExecution _ctx res ->
-          case res of
-            TotalRes gp ->
-              do mem <- getMem gp mvar
-                 runPostSpec sym (regValue (gp ^. gpValue)) mem postSpec
-            PartialRes pre gp _ ->
-              do mem <- getMem gp mvar
-                 -- XXX: we also need to do something about this pre
-                 runPostSpec sym (regValue (gp ^. gpValue)) mem postSpec
+     mem <- getMem gp mvar
+     runPostSpec sym (regValue (gp ^. gpValue)) mem postSpec
 
-
-       _ -> malformed "Bad simulation result"
 
 -- | Get the current model of the memory.
 getMem :: GlobalPair sym a ->
