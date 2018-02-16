@@ -15,7 +15,6 @@ module SAWScript.X86
 
     -- * Specifications
   , FunSpec(..)
-  , InitRegs(..)
   , Spec
 
   ) where
@@ -45,7 +44,6 @@ import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
 import Lang.Crucible.Types
 import Lang.Crucible.Solver.Interface (Pred)
-import Lang.Crucible.Solver.SAWCoreBackend(toSC)
 import Lang.Crucible.Simulator.RegMap(regValue)
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(unRV))
 import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
@@ -88,7 +86,8 @@ import Data.Macaw.X86.Crucible(SymFuns)
 import Verifier.SAW.SharedTerm(Term)
 
 -- SAWScript
-import SAWScript.X86Spec(Sym,Spec,Pre,runPreSpec)
+import SAWScript.X86Spec
+  (Sym,Spec,Pre,Post,runPreSpec,runPostSpec,RegAssign,macawLookup)
 
 
 
@@ -127,12 +126,13 @@ bsdInfo = x86_64_freeBSD_info
 
 data FunSpec = FunSpec
   { funName   :: ByteString
-  , funSetup  :: Spec Pre InitRegs
+  , funSetup  :: Spec Pre RegAssign
     -- ^ Setup initial memory and registers.
+
+  , funPost   :: RegAssign -> Spec Post Term
+    -- ^ Compute post condition, using the initial values of the registers.
   }
 
-data InitRegs =
-  InitRegs (forall tp. X86Reg tp -> RegValue' Sym (ToCrucibleType tp))
 
 
 
@@ -221,29 +221,25 @@ translate opts elf fspec =
      mvar <- stToIO (mkMemVar halloc)
      m0   <- emptyMem LittleEndian
      let sym    = backend opts
-     (InitRegs mkReg, m1) <- runPreSpec sym m0 (funSetup fspec)
-     regs <- macawAssignToCrucM (return . mkReg) genRegAssign
+     (initRegs, m1) <- runPreSpec sym m0 (funSetup fspec)
+     regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
      execResult <-
         runCodeBlock sym x86 (x86_eval opts) halloc (mvar,m1) cfg regs
 
 
-    -- XXX: the post condition spec needs to have access to the registers,
-    -- and either thread the values as pointers, in which case we should
-    -- read the corresponding values from memory, or get them as bit-vectors.
+     let postSpec = funPost fspec initRegs
 
      case execResult of
        FinishedExecution _ctx res ->
           case res of
             TotalRes gp ->
-              do _mem <- getMem gp mvar
-                 startRegs <- getRegs sym regs
-                 endRegs   <- getRegs sym (regValue (gp^.gpValue))
-                 relate opts startRegs Nothing endRegs
+              do mem <- getMem gp mvar
+                 runPostSpec sym (regValue (gp ^. gpValue)) mem postSpec
             PartialRes pre gp _ ->
-              do _mem       <- getMem gp mvar
-                 startRegs <- getRegs sym regs
-                 endRegs   <- getRegs sym (regValue (gp^.gpValue))
-                 relate opts startRegs (Just pre) endRegs
+              do mem <- getMem gp mvar
+                 -- XXX: we also need to do something about this pre
+                 runPostSpec sym (regValue (gp ^. gpValue)) mem postSpec
+
 
        _ -> malformed "Bad simulation result"
 

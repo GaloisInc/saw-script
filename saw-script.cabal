@@ -73,6 +73,7 @@ library
     , macaw-x86
     , macaw-x86-symbolic
     , elf-edit
+    , flexdis86
 
   hs-source-dirs: src
 

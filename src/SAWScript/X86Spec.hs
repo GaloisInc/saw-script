@@ -9,6 +9,8 @@
 {-# Language AllowAmbiguousTypes #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleInstances #-}
+{-# Language RankNTypes #-}
+{-# Language RecordWildCards #-}
 module SAWScript.X86Spec
   ( Spec
   , Pre, Post
@@ -46,12 +48,15 @@ module SAWScript.X86Spec
   , X87Top(..)
   , X87Tag(..)
 
+  , RegAssign(..)
+
     -- * Connection with other tools
   , Sym
   , runPreSpec
   , runPostSpec
   , Rep
   , fromValue
+  , macawLookup
 
   ) where
 
@@ -65,13 +70,15 @@ import Data.Parameterized.Classes(KnownRepr(knownRepr))
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Context(Assignment,field,Idx)
 
+import qualified Flexdis86 as F
+
 import Lang.Crucible.Types(CrucibleType,TypeRepr,BoolType)
 import Lang.Crucible.BaseTypes
         (BaseTypeRepr(BaseBVRepr,BaseNatRepr,BaseBoolRepr))
-import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(unRV))
+import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(RV,unRV))
 import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
 import Lang.Crucible.Solver.Symbol(SolverSymbol,userSymbol)
-import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, bindSAWTerm)
+import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend, bindSAWTerm, toSC)
 import Lang.Crucible.Solver.Interface
           (freshConstant,natLit,notPred,addAssertion,natEq,bvLit
           , truePred, falsePred)
@@ -87,9 +94,10 @@ import Lang.Crucible.LLVM.Bytes(Bytes,toBytes)
 
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
 import Data.Macaw.X86.ArchTypes(X86_64)
+import qualified Data.Macaw.X86.X86Reg as R
 import qualified Data.Macaw.X86.Symbolic as M
         (IP,GP,Flag,X87Status,X87Top,X87Tag,FPReg,YMM)
-import Data.Macaw.Symbolic.PersistentState()
+import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 
 import Verifier.SAW.SharedTerm(Term)
 
@@ -350,19 +358,24 @@ freshPtr str =
 
 class SAW (t :: X86Type) where
   saw :: X86 t -> Term -> Spec p (Value t)
+  toSAW :: Value t -> Spec p Term
 
 instance SAW ABool where
   saw _ val =
     do sym <- getSym
        Value <$> io (bindSAWTerm sym BaseBoolRepr val)
 
-instance SAW AByte  where saw = sawBits
-instance SAW AWord  where saw = sawBits
-instance SAW ADWord where saw = sawBits
-instance SAW AQWord where saw = sawBits
-instance SAW AVec   where saw = sawBits
-instance SAW ABits2 where saw = sawBits
-instance SAW ABits3 where saw = sawBits
+  toSAW (Value v) =
+    do sym <- getSym
+       io (toSC sym v)
+
+instance SAW AByte  where saw = sawBits; toSAW = toSawBits
+instance SAW AWord  where saw = sawBits; toSAW = toSawBits
+instance SAW ADWord where saw = sawBits; toSAW = toSawBits
+instance SAW AQWord where saw = sawBits; toSAW = toSawBits
+instance SAW AVec   where saw = sawBits; toSAW = toSawBits
+instance SAW ABits2 where saw = sawBits; toSAW = toSawBits
+instance SAW ABits3 where saw = sawBits; toSAW = toSawBits
 
 sawBits ::
   (Rep t ~ LLVMPointerType (BitSize t), 1 <= BitSize t) =>
@@ -371,6 +384,14 @@ sawBits w val =
   do sym <- getSym
      io $ do bv <- bindSAWTerm sym (BaseBVRepr (bitSizeNat w)) val
              value w <$> llvmPointer_bv sym bv
+
+toSawBits ::
+  (Rep t ~ LLVMPointerType (BitSize t), 1 <= BitSize t) =>
+  Value t -> Spec p Term
+toSawBits (Value v) =
+  do sym <- getSym
+     io $ do bv <- projectLLVM_bv sym v
+             toSC sym bv
 
 
 --------------------------------------------------------------------------------
@@ -665,21 +686,144 @@ instance GetReg X87Tag where
       Tag7 -> regValue @(M.X87Tag 7)
 
 -- | 80-bit floating point registers.
-data FPReg = FPReg0 | FPReg1 | FPReg2 | FPReg3
-           | FPReg4 | FPReg5 | FPReg6 | FPReg7
+data FPReg = FP0 | FP1 | FP2 | FP3 | FP4 | FP5 | FP6 | FP7
 
 
 instance GetReg FPReg where
   type RegType FPReg = ABigFloat
   getReg t =
     case t of
-      FPReg0 -> regValue @(M.FPReg 0)
-      FPReg1 -> regValue @(M.FPReg 1)
-      FPReg2 -> regValue @(M.FPReg 2)
-      FPReg3 -> regValue @(M.FPReg 3)
-      FPReg4 -> regValue @(M.FPReg 4)
-      FPReg5 -> regValue @(M.FPReg 5)
-      FPReg6 -> regValue @(M.FPReg 6)
-      FPReg7 -> regValue @(M.FPReg 7)
+      FP0 -> regValue @(M.FPReg 0)
+      FP1 -> regValue @(M.FPReg 1)
+      FP2 -> regValue @(M.FPReg 2)
+      FP3 -> regValue @(M.FPReg 3)
+      FP4 -> regValue @(M.FPReg 4)
+      FP5 -> regValue @(M.FPReg 5)
+      FP6 -> regValue @(M.FPReg 6)
+      FP7 -> regValue @(M.FPReg 7)
+
+data RegAssign = RegAssign
+  { valIP         :: Value AQWord
+  , valGPReg      :: forall t. GPReg -> GPRegUse t -> Value t
+  , valVecReg     :: VecReg -> Value AVec
+  , valFPReg      :: FPReg  -> Value ABigFloat
+  , valFlag       :: Flag   -> Value ABool
+  , valX87Status  :: X87Status -> Value ABool
+  , valX87Top     :: Value ABits3
+  , valX87Tag     :: X87Tag -> Value ABits2
+  }
+
+
+
+macawLookup :: RegAssign -> R.X86Reg t -> RegValue' Sym (ToCrucibleType t)
+macawLookup RegAssign { .. } reg =
+  case reg of
+    R.X86_IP -> toRV valIP
+
+    R.RAX -> gp RAX
+    R.RBX -> gp RBX
+    R.RCX -> gp RCX
+    R.RDX -> gp RDX
+    R.RSI -> gp RSI
+    R.RDI -> gp RDI
+    R.RSP -> gp RSP
+    R.RBP -> gp RBP
+    R.R8  -> gp R8
+    R.R9  -> gp R9
+    R.R10 -> gp R10
+    R.R11 -> gp R11
+    R.R12 -> gp R12
+    R.R13 -> gp R13
+    R.R14 -> gp R14
+    R.R15 -> gp R15
+    R.X86_GP _ -> error "[bug] Unexpecet general purpose register."
+
+    R.YMM (F.YMMR 0)  -> vec YMM0
+    R.YMM (F.YMMR 1)  -> vec YMM1
+    R.YMM (F.YMMR 2)  -> vec YMM2
+    R.YMM (F.YMMR 3)  -> vec YMM3
+    R.YMM (F.YMMR 4)  -> vec YMM4
+    R.YMM (F.YMMR 5)  -> vec YMM5
+    R.YMM (F.YMMR 6)  -> vec YMM6
+    R.YMM (F.YMMR 7)  -> vec YMM7
+    R.YMM (F.YMMR 8)  -> vec YMM8
+    R.YMM (F.YMMR 9)  -> vec YMM9
+    R.YMM (F.YMMR 10) -> vec YMM10
+    R.YMM (F.YMMR 11) -> vec YMM11
+    R.YMM (F.YMMR 12) -> vec YMM12
+    R.YMM (F.YMMR 13) -> vec YMM13
+    R.YMM (F.YMMR 14) -> vec YMM14
+    R.YMM (F.YMMR 15) -> vec YMM15
+    R.X86_YMMReg _ -> error "[bug] Unexpected YMM register."
+
+    R.X87_FPUReg (F.MMXR 0)  -> fp FP0
+    R.X87_FPUReg (F.MMXR 1)  -> fp FP1
+    R.X87_FPUReg (F.MMXR 2)  -> fp FP2
+    R.X87_FPUReg (F.MMXR 3)  -> fp FP3
+    R.X87_FPUReg (F.MMXR 4)  -> fp FP4
+    R.X87_FPUReg (F.MMXR 5)  -> fp FP5
+    R.X87_FPUReg (F.MMXR 6)  -> fp FP6
+    R.X87_FPUReg (F.MMXR 7)  -> fp FP7
+    R.X87_FPUReg _ -> error "[bug] Unexpected FPUReg register."
+
+    R.CF -> flag CF
+    R.PF -> flag PF
+    R.AF -> flag AF
+    R.ZF -> flag ZF
+    R.SF -> flag SF
+    R.TF -> flag TF
+    R.IF -> flag IF
+    R.DF -> flag DF
+    R.OF -> flag OF
+    R.X86_FlagReg _ -> error "[bug] Unexpected flag register."
+
+    R.X87_IE -> x87_status X87_IE
+    R.X87_DE -> x87_status X87_DE
+    R.X87_ZE -> x87_status X87_ZE
+    R.X87_OE -> x87_status X87_OE
+    R.X87_UE -> x87_status X87_UE
+    R.X87_PE -> x87_status X87_PE
+    R.X87_EF -> x87_status X87_EF
+    R.X87_ES -> x87_status X87_ES
+    R.X87_C0 -> x87_status X87_C0
+    R.X87_C1 -> x87_status X87_C1
+    R.X87_C2 -> x87_status X87_C2
+    R.X87_C3 -> x87_status X87_C3
+    R.X87_StatusReg _ -> error "[bug] Unexpected X87 status register"
+
+    R.X87_TopReg -> toRV valX87Top
+
+    R.X87_TagReg 0 -> tag Tag0
+    R.X87_TagReg 1 -> tag Tag1
+    R.X87_TagReg 2 -> tag Tag2
+    R.X87_TagReg 3 -> tag Tag3
+    R.X87_TagReg 4 -> tag Tag4
+    R.X87_TagReg 5 -> tag Tag5
+    R.X87_TagReg 6 -> tag Tag6
+    R.X87_TagReg 7 -> tag Tag7
+    R.X87_TagReg _ -> error "[bug] Unexpecte X87 tag"
+
+
+  where
+  gp r          = toRV (valGPReg r AsPtr)
+  vec r         = toRV (valVecReg r)
+  fp r          = toRV (valFPReg r)
+  flag r        = toRV (valFlag r)
+  x87_status r  = toRV (valX87Status r)
+  tag r         = toRV (valX87Tag r)
+
+
+
+{-
+    M.X86_FlagReg n
+    M.X87_StatusReg n
+    M.X87_TopReg
+    M.X87_TagReg n
+-}
+
+
+toRV :: Value t -> RegValue' Sym (Rep t)
+toRV (Value x) = RV x
+
 
 
