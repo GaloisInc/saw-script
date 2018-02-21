@@ -1,4 +1,4 @@
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 -- Cryptol primitives for SAWCore
 
 module Cryptol where
@@ -849,21 +849,16 @@ ecTrunc (TCNum m) (TCNum n) = bvTrunc m n;
 -- Zero extension
 ecUExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
 ecUExt (TCNum m) (TCNum n) = bvUExt m n;
-{-
+
 -- Sign extension
-ecSExt :: (m n :: Num) -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd m (tcAdd n (TCNum 1))) Bool;
-ecSExt (TCNum m) (TCNum n) = bvSExt m n;
+ecSExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
+ecSExt (TCNum m) (TCNum n) =
+  natCase
+  (\(n' :: Nat) -> bitvector n' -> bitvector (addNat m n'))
+  (\(_ :: bitvector 0) -> bvNat (addNat m 0) 0)
+  (bvSExt m)
+  n;
 
--- Signed integer division
-ecSDiv :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
-  -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
-ecSDiv (TCNum n) = bvSDiv n;
-
--- Signed integer remainder
-ecSRem :: (n :: Num) -> seq (tcAdd n (TCNum 1)) Bool
-  -> seq (tcAdd n (TCNum 1)) Bool -> seq (tcAdd n (TCNum 1)) Bool;
-ecSRem (TCNum n) = bvSRem n;
--}
 -- Signed greater-than
 ecSgt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSgt (TCNum n) = bvsgt n;
@@ -879,8 +874,6 @@ ecSlt (TCNum n) = bvslt n;
 -- Signed less-or-equal
 ecSle :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSle (TCNum n) = bvsle n;
-
--- Prelude.bvSShr
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
