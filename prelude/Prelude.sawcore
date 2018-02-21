@@ -719,7 +719,7 @@ bvTrunc = drop Bool;
 -- the n-bit vector x.
 -- msb implementation:
 bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat m n);
-bvUExt m n x = append m n Bool (replicate m Bool False) x;
+bvUExt m n x = append m n Bool (bvNat m 0) x;
 -- lsb implementation:
 -- bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat n m);
 -- bvUExt m n a = append n m Bool x (bvNat m 0);
