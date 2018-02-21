@@ -4,7 +4,7 @@ LLVM_LINK?=/usr/local/opt/llvm/bin/llvm-link
 SAW?=../../bin/saw
 LSS?=../../bin/lss
 
-OPENSSL_VERSION?=1.0.2f
+OPENSSL_VERSION?=1.1.0g
 SRCDIR=openssl-${OPENSSL_VERSION}
 TARBALL=${SRCDIR}.tar.gz
 
@@ -30,7 +30,7 @@ ${SRCDIR}/Makefile: ${SRCDIR}/Configure
 	(cd ${SRCDIR} && CC="${CLANG}" ./Configure debug-darwin64-x86_64-cc no-asm)
 
 ${SRCDIR}/crypto/aes/aes_core.o: ${SRCDIR}/Makefile
-	make -C ${SRCDIR}/crypto/aes
+	(cd ${SRCDIR} && make CC="${CLANG}" include/openssl/opensslconf.h crypto/aes/aes_core.o)
 
 aes_wrap.bc: aes_wrap.c ${SRCDIR}/crypto/aes/aes_core.o
 	${CLANG} -c -emit-llvm ${CFLAGS} -o $@ $<
