@@ -38,6 +38,7 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Text (pack)
+import qualified Data.Vector as Vector
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -80,6 +81,7 @@ import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
+import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -126,7 +128,28 @@ extendEnv x mt md v rw =
               -> CEnv.bindInteger (ident, n) ce
             VCryptolModule m
               -> CEnv.bindCryptolModule (modname, m) ce
+            VString s
+              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
             _ -> ce
+
+typedTermOfString :: String -> TypedTerm
+typedTermOfString cs = TypedTerm schema trm
+  where
+    nat :: Integer -> Term
+    nat n = Unshared (FTermF (NatLit n))
+    bvNat :: Term
+    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
+    bvNat8 :: Term
+    bvNat8 = Unshared (App bvNat (nat 8))
+    encodeChar :: Char -> Term
+    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
+    bitvector :: Term
+    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
+    byteT :: Term
+    byteT = Unshared (App bitvector (nat 8))
+    trm :: Term
+    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
+    schema = C.Forall [] [] (C.tString (length cs))
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
