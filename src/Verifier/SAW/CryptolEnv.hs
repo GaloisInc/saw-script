@@ -313,7 +313,7 @@ importModule ::
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
-  Maybe P.ModName           {- ^ Name qualified -} ->
+  Maybe P.ModName           {- ^ Name qualifier -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
 importModule sc env src as imps = do
