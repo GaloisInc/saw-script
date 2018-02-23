@@ -34,12 +34,17 @@ library
     saw-core-aig,
     saw-core-sbv,
     sbv,
-    vector
+    vector,
+    text,
+    executable-path,
+    filepath
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Prelude
      Verifier.SAW.Cryptol.Prims
+     Verifier.SAW.CryptolEnv
+     Verifier.SAW.TypedTerm
   GHC-options: -Wall -Werror
 
 executable css
