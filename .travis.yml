@@ -21,7 +21,8 @@ before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
     then
         brew update;
-        brew install ghc cabal-install;
+        brew install ghc;
+        brew install cabal-install --HEAD;
     fi
   - unset CC
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
