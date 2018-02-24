@@ -1501,6 +1501,11 @@ primitives = Map.fromList
     [ "Convert a Cryptol size type to a SAWScript Int."
     ]
 
+  , prim "eval_list"           "Term -> [Term]"
+    (funVal1 eval_list)
+    [ "Evaluate a Cryptol term of type [n]a to a list of terms."
+    ]
+
   , prim "parse_core"         "String -> Term"
     (funVal1 parse_core)
     [ "Parse a Term from a String in SAWCore syntax."

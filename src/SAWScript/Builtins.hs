@@ -1244,6 +1244,19 @@ isInteger :: C.Type -> Bool
 isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
 isInteger _ = False
 
+eval_list :: TypedTerm -> TopLevel [TypedTerm]
+eval_list t = do
+  sc <- getSharedContext
+  (n, a) <-
+    case ttSchema t of
+      C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a)) -> return (n, a)
+      _ -> fail "eval_list: not a monomorphic array type"
+  n' <- io $ scNat sc (fromInteger n)
+  a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+  idxs <- io $ traverse (scNat sc) [0 .. fromInteger n - 1]
+  ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
+  return (map (TypedTerm (C.tMono a)) ts)
+
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
 defaultTypedTerm opts sc cfg (TypedTerm schema trm) = do
