@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaBuiltins
+Description : Implementations of Java-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,13 +13,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of Java-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -61,7 +61,7 @@ import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
 loadJavaClass :: BuiltinContext -> String -> IO Class
 loadJavaClass bic =
-  lookupClass (biJavaCodebase bic) fixPos . dotsToSlashes
+  lookupClass (biJavaCodebase bic) fixPos . mkClassName . dotsToSlashes
 
 getActualArgTypes :: JavaSetupState -> Either String [JavaActualType]
 getActualArgTypes s = mapM getActualType declaredTypes
@@ -193,7 +193,6 @@ runJavaSetup :: Pos -> Codebase -> Class -> String
 runJavaSetup pos cb cls mname setup = do
   sc <- getSharedContext
   ms <- io $ initMethodSpec pos cb cls mname
-  --putStrLn "Created MethodSpec"
   let setupState = JavaSetupState {
                      jsSpec = ms
                    , jsContext = sc
@@ -214,7 +213,6 @@ verifyJava bic opts cls mname overrides setup = do
       bsc = biSharedContext bic
       jsc = bsc
   setupRes <- runJavaSetup pos cb cls mname setup
-  --putStrLn "Done running setup"
   let ms = jsSpec setupRes
       vp = VerifyParams {
              vpCode = cb
@@ -224,12 +222,11 @@ verifyJava bic opts cls mname overrides setup = do
            , vpOver = overrides
            }
   when (jsSimulate setupRes) $ do
-    let verb = simVerbose opts
-        overrideText =
+    let overrideText =
           case overrides of
             [] -> ""
             irs -> " (overriding " ++ show (map renderName irs) ++ ")"
-        renderName ir = className (specMethodClass ir) ++ "." ++
+        renderName ir = unClassName (className (specMethodClass ir)) ++ "." ++
                         methodName (specMethod ir)
         configs = [ (bs, cl)
                   | bs <- {- concat $ Map.elems $ -} [specBehaviors ms]
@@ -238,88 +235,84 @@ verifyJava bic opts cls mname overrides setup = do
         fl = defaultSimFlags { alwaysBitBlastBranchTerms = True
                              , satAtBranches = jsSatBranches setupRes
                              }
-    when (verb >= 2) $ io $ putStrLn $ "Starting verification of " ++ specName ms
+    printOutLnTop Debug $ "Starting verification of " ++ specName ms
     ro <- getTopLevelRO
     rw <- getTopLevelRW
-    -- io $ print (length configs)
     forM_ configs $ \(bs,cl) -> withSAWBackend Nothing $ \sbe -> io $ do
       liftIO $ bsCheckAliasTypes pos bs
-      when (verb >= 2) $ do
-        putStrLn $ "Executing " ++ specName ms ++
+      liftIO $ printOutLn opts Debug $ "Executing " ++ specName ms ++
                    " at PC " ++ show (bsLoc bs) ++ "."
       -- runDefSimulator cb sbe $ do
       runSimulator cb sbe defaultSEH (Just fl) $ do
         setVerbosity (simVerbose opts)
-        let prover script vs g = do
+        let prover script vs n g = do
               let exts = getAllExts g
               glam <- io $ scAbstractExts jsc exts g
               io $ doExtraChecks opts bsc glam
-              r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) glam))
+              let goal = ProofGoal Universal n "vc" (vsVCName vs) glam
+              r <- evalStateT script (startProof goal)
               case r of
-                SS.Unsat _ -> when (verb >= 3) $ io $ putStrLn "Valid."
-                SS.SatMulti _ vals -> io $ showCexResults jsc (rwPPOpts rw) ms vs exts vals
+                SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."
+                SS.SatMulti _ vals ->
+                       io $ showCexResults opts jsc (rwPPOpts rw) ms vs exts vals
         let ovds = vpOver vp
         initPS <- initializeVerification' jsc ms bs cl
-        when (verb >= 2) $ liftIO $
-          putStrLn $ "Overriding: " ++ show (map specName ovds)
+        liftIO $ printOutLn opts Debug $ "Overriding: " ++ show (map specName ovds)
         mapM_ (overrideFromSpec jsc (specPos ms)) ovds
-        when (verb >= 2) $ liftIO $
-          putStrLn $ "Running method: " ++ specName ms
+        liftIO $ printOutLn opts Debug $ "Running method: " ++ specName ms
         -- Execute code.
         run
-        when (verb >= 2) $ liftIO $
-          putStrLn $ "Checking final state"
+        liftIO $ printOutLn opts Debug $ "Checking final state"
         pvc <- checkFinalState jsc ms bs cl initPS
         let pvcs = [pvc] -- Only one for now, but that might change
-        when (verb >= 5) $ liftIO $ do
-          putStrLn "Verifying the following:"
-          mapM_ (print . ppPathVC) pvcs
+        liftIO $ printOutLn opts ExtraDebug "Verifying the following:"
+        liftIO $ mapM_ (printOutLn opts ExtraDebug . show . ppPathVC) pvcs
         let validator script = runValidation (prover script) vp jsc pvcs
         case jsTactic setupRes of
-          Skip -> liftIO $ putStrLn $
-            "WARNING: skipping verification of " ++ specName ms
+          Skip -> liftIO $ printOutLn opts Warn $
+                    "WARNING: skipping verification of " ++ specName ms
           RunVerify script ->
             liftIO $ fmap fst $ runTopLevel (validator script) ro rw
     endTime <- io $ getCurrentTime
-    io $ putStrLn $ "Successfully verified " ++ specName ms ++ overrideText ++
+    printOutLnTop Info $ "Successfully verified " ++ specName ms ++ overrideText ++
                     " (" ++ showDuration (diffUTCTime endTime startTime) ++ ")"
-  unless (jsSimulate setupRes) $ io $ putStrLn $
+  unless (jsSimulate setupRes) $ printOutLnTop Warn $
     "WARNING: skipping simulation of " ++ specName ms
   return ms
 
 doExtraChecks :: Options -> SharedContext -> Term -> IO ()
 doExtraChecks opts bsc t = do
-  let verb = simVerbose opts
   when (extraChecks opts) $ do
-    when (verb >= 2) $ putStrLn "Type checking goal..."
+    printOutLn opts Debug "Type checking goal..."
     tcr <- scTypeCheck bsc t
     case tcr of
-      Left e -> putStr $ unlines $
+      Left e -> printOutLn opts Warn $ unlines $
                 "Ill-typed goal constructed." : prettyTCError e
-      Right _ -> when (verb >= 2) $ putStrLn "Done."
-  when (verb >= 6) $ putStrLn $ "Trying to prove: " ++ show t
+      Right _ -> printOutLn opts Debug "Done."
+  printOutLn opts ExtraDebug $ "Trying to prove: " ++ show t
 
-showCexResults :: SharedContext
+showCexResults :: Options
+               -> SharedContext
                -> SS.PPOpts
                -> JavaMethodSpecIR
                -> VerifyState
                -> [ExtCns Term]
                -> [(String, FirstOrderValue)]
                -> IO ()
-showCexResults sc opts ms vs exts vals = do
-  putStrLn $ "When verifying " ++ specName ms ++ ":"
-  putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
-  putStrLn $ "Counterexample:"
+showCexResults vpopts sc opts ms vs exts vals = do
+  printOutLn vpopts Info $ "When verifying " ++ specName ms ++ ":"
+  printOutLn vpopts Info $ "Proof of " ++ vsVCName vs ++ " failed."
+  printOutLn vpopts Info $ "Counterexample:"
   let showVal v = show <$> (Cryptol.runEval SS.quietEvalOpts (Cryptol.ppValue (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
-                       putStrLn ("  " ++ n ++ ": " ++ vdoc)) vals
+                       printOutLn vpopts Info ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)
     then do let cexEval = cexEvalFn sc (zip exts (map snd vals))
             doc <- vsCounterexampleFn vs cexEval
-            putStrLn (renderDoc doc)
-    else do putStrLn $ "ERROR: Can't show result, wrong number of values"
-            putStrLn $ "Constants: " ++ show (map ecName exts)
-            putStrLn $ "Value names: " ++ show (map fst vals)
+            printOutLn vpopts Info (renderDoc doc)
+    else do printOutLn vpopts Info $ "ERROR: Can't show result, wrong number of values"
+            printOutLn vpopts Info $ "Constants: " ++ show (map ecName exts)
+            printOutLn vpopts Info $ "Value names: " ++ show (map fst vals)
   fail "Proof failed."
 
 mkMixedExpr :: Term -> JavaSetup MixedExpr
@@ -345,7 +338,7 @@ exportJSSType jty =
     JavaFloat       -> return FloatType
     JavaDouble      -> return DoubleType
     JavaArray _ ety -> ArrayType <$> exportJSSType ety
-    JavaClass name  -> return $ ClassType (dotsToSlashes name)
+    JavaClass name  -> return $ ClassType (mkClassName (dotsToSlashes name))
 
 exportJavaType :: Codebase -> JavaType -> JavaSetup JavaActualType
 exportJavaType cb jty =
@@ -360,7 +353,7 @@ exportJavaType cb jty =
     JavaDouble      -> return $ PrimitiveType DoubleType
     JavaArray n t   -> ArrayInstance (fromIntegral n) <$> exportJSSType t
     JavaClass name  ->
-      do cls <- liftIO $ lookupClass cb fixPos (dotsToSlashes name)
+      do cls <- liftIO $ lookupClass cb fixPos (mkClassName (dotsToSlashes name))
          return (ClassInstance cls)
 
 checkCompatibleType :: (Monad m, MonadIO m) =>
@@ -438,7 +431,7 @@ javaSatBranches doSat = modify (\s -> s { jsSatBranches = doSat })
 
 javaRequiresClass :: String -> JavaSetup ()
 javaRequiresClass cls = modifySpec $ \ms ->
-  let clss' = dotsToSlashes cls : specInitializedClasses ms in
+  let clss' = mkClassName (dotsToSlashes cls) : specInitializedClasses ms in
   ms { specInitializedClasses = clss' }
 
 javaClassVar :: BuiltinContext -> Options -> String -> JavaType
@@ -453,7 +446,6 @@ javaClassVar bic _ name t = do
 javaVar :: BuiltinContext -> Options -> String -> JavaType
         -> JavaSetup TypedTerm
 javaVar bic _ name t = do
-  --liftIO $ putStrLn "javaVar"
   (expr, aty) <- typeJavaExpr bic name t
   case aty of
     ClassInstance _ -> fail "Can't use `java_var` with variable of class type."
@@ -475,7 +467,6 @@ javaMayAlias exprs = do
 
 javaAssert :: TypedTerm -> JavaSetup ()
 javaAssert (TypedTerm schema v) = do
-  --liftIO $ putStrLn "javaAssert"
   unless (schemaNoUser schema == Cryptol.Forall [] [] Cryptol.tBit) $
     fail $ "java_assert passed expression of non-boolean type: " ++ show schema
   me <- mkMixedExpr v
@@ -485,7 +476,6 @@ javaAssert (TypedTerm schema v) = do
 
 javaAssertEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
 javaAssertEq bic _ name (TypedTerm schema t) = do
-  --liftIO $ putStrLn "javaAssertEq"
   (expr, aty) <- (getJavaExpr "java_assert_eq") name
   checkCompatibleType (biSharedContext bic) "java_assert_eq" aty schema
   me <- mkMixedExpr t
@@ -493,16 +483,13 @@ javaAssertEq bic _ name (TypedTerm schema t) = do
 
 javaEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
 javaEnsureEq bic _ name (TypedTerm schema t) = do
-  --liftIO $ putStrLn "javaEnsureEq"
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_ensure_eq") name
-  --liftIO $ putStrLn "Making MixedExpr"
   when (isArg (specMethod ms) expr && isScalarExpr expr) $ fail $
     "The `java_ensure_eq` function cannot be used " ++
     "to set the value of a scalar argument."
   checkCompatibleType (biSharedContext bic) "java_ensure_eq" aty schema
   me <- mkMixedExpr t
-  --liftIO $ putStrLn "Done making MixedExpr"
   cmd <- case (CC.unTerm expr, aty) of
     (_, ArrayInstance _ _) -> return (EnsureArray fixPos expr me)
     (InstanceField r f, _) -> return (EnsureInstanceField fixPos r f me)
@@ -512,7 +499,6 @@ javaEnsureEq bic _ name (TypedTerm schema t) = do
 
 javaModify :: String -> JavaSetup ()
 javaModify name = do
-  --liftIO $ putStrLn "javaModify"
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_modify") name
   when (isArg (specMethod ms) expr && isScalarExpr expr) $ fail $
@@ -527,7 +513,6 @@ javaModify name = do
 
 javaReturn :: TypedTerm -> JavaSetup ()
 javaReturn (TypedTerm _ t) = do
-  --liftIO $ putStrLn "javaReturn"
   ms <- gets jsSpec
   let meth = specMethod ms
   case methodReturnType meth of

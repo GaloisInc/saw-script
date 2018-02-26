@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.CongruenceClosure
 Description : Congruence closure library.
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+
 module SAWScript.CongruenceClosure
   ( -- * Functor type classes
     EqFoldable(..)

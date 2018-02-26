@@ -1,4 +1,4 @@
-module SAWScript.AutoMatch.Declaration 
+module SAWScript.AutoMatch.Declaration
   ( Type(..), TCon(..), TC(..)
   , Name
   , Arg(..)

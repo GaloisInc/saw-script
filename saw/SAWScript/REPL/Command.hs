@@ -1,14 +1,14 @@
-{-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Command
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module SAWScript.REPL.Command (
     -- * Commands
     Command(..), CommandDescr(..), CommandBody(..)
@@ -17,8 +17,6 @@ module SAWScript.REPL.Command (
   , splitCommand
   , findCommand
   , findNbCommand
-
-  -- , moduleCmd, loadCmd, loadPrelude
 
     -- Misc utilities
   , handleCtrlC
@@ -34,20 +32,15 @@ module SAWScript.REPL.Command (
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
+import SAWScript.Utils (getPos)
 
-import qualified Cryptol.ModuleSystem as M
-
-import qualified Cryptol.Eval as E (PPOpts(..))
 import Cryptol.Parser (ParseError())
-import qualified Cryptol.TypeCheck.AST as T
-import qualified Cryptol.ModuleSystem.Name as T (nameIdent)
-import qualified Cryptol.Utils.Ident as T (unpackIdent)
 import Cryptol.Utils.PP
 
-import Control.Monad (guard, unless, when)
+import Control.Monad (guard)
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
-import Data.List (intercalate,isPrefixOf)
+import Data.List (intercalate)
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
@@ -55,55 +48,18 @@ import qualified Data.Map as Map
 -- SAWScript imports
 import qualified SAWScript.AST as SS
     (pShow,
-     Import(..),
      Located(..),
      Decl(..),
      Pattern(..))
-import qualified SAWScript.CryptolEnv as CEnv
+import SAWScript.Exceptions
 import SAWScript.MGU (checkDecl)
 import SAWScript.Interpreter
     (interpretStmt,
      primDocEnv)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
-import qualified SAWScript.Value (evaluate)
 import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
-import SAWScript.TypedTerm
-import SAWScript.Utils (Pos(..))
 
-
-{-
-#if __GLASGOW_HASKELL__ < 706
-import Control.Monad (liftM)
-import qualified Text.ParserCombinators.ReadP as P
-import Text.Read hiding (step)
-import System.Environment (getEnvironment)
-
-lookupEnv :: String -> IO (Maybe String)
-lookupEnv key = lookup key `liftM` getEnvironment
-
-readEither :: Read a => String -> Either String a
-readEither s =
-  case [ x | (x,"") <- readPrec_to_S read' minPrec s ] of
-    [x] -> Right x
-    []  -> Left "Prelude.read: no parse"
-    _   -> Left "Prelude.read: ambiguous parse"
- where
-  read' =
-    do x <- readPrec
-       lift P.skipSpaces
-       return x
-
--- | Parse a string using the 'Read' instance.
--- Succeeds if there is exactly one valid result.
-readMaybe :: Read a => String -> Maybe a
-readMaybe s = case readEither s of
-                Left _  -> Nothing
-                Right a -> Just a
-#else
-import System.Environment (lookupEnv)
-#endif
--}
 
 -- Commands --------------------------------------------------------------------
 
@@ -132,9 +88,7 @@ instance Ord CommandDescr where
 
 data CommandBody
   = ExprArg     (String   -> REPL ())
-  | ExprTypeArg (String   -> REPL ())
   | FilenameArg (FilePath -> REPL ())
-  | OptionArg   (String   -> REPL ())
   | ShellArg    (String   -> REPL ())
   | NoArg       (REPL ())
 
@@ -154,22 +108,14 @@ nbCommands  = foldl insert emptyTrie nbCommandList
 -- | A subset of commands safe for Notebook execution
 nbCommandList :: [CommandDescr]
 nbCommandList  =
-  [ CommandDescr ":env" (ExprTypeArg envCmd)
+  [ CommandDescr ":env"    (NoArg envCmd)
     "display the current sawscript environment"
   , CommandDescr ":type"   (ExprArg typeOfCmd)
     "check the type of an expression"
-  , CommandDescr ":browse" (ExprTypeArg browseCmd)
-    "display the current environment"
-  , CommandDescr ":eval" (ExprArg evalCmd)
-    "evaluate an expression and print the result"
   , CommandDescr ":?"      (ExprArg helpCmd)
     "display a brief description about a built-in operator"
   , CommandDescr ":help"   (ExprArg helpCmd)
     "display a brief description about a built-in operator"
-  {-
-  , CommandDescr ":set" (OptionArg setOptionCmd)
-    "set an environmental option (:set on its own displays current values)"
-  -}
   ]
 
 commandList :: [CommandDescr]
@@ -177,33 +123,8 @@ commandList  =
   nbCommandList ++
   [ CommandDescr ":quit"   (NoArg quitCmd)
     "exit the REPL"
-  , CommandDescr ":load"   (FilenameArg loadCmd)
-    "load a module"
-  , CommandDescr ":add"    (FilenameArg addCmd)
-    "load an additional module"
-{-
-  , CommandDescr ":reload" (NoArg reloadCmd)
-    "reload the currently loaded module"
-  , CommandDescr ":edit"   (FilenameArg editCmd)
-    "edit the currently loaded module"
-  , CommandDescr ":!" (ShellArg runShellCmd)
-    "execute a command in the shell"
--}
   , CommandDescr ":cd" (FilenameArg cdCmd)
     "set the current working directory"
-{-
-  , CommandDescr ":module" (FilenameArg moduleCmd)
-    "load a module"
-
-  , CommandDescr ":check" (ExprArg qcCmd)
-    "use random testing to check that the argument always returns true"
-  , CommandDescr ":prove" (ExprArg proveCmd)
-    "use an external solver to prove that the argument always returns true"
-  , CommandDescr ":sat" (ExprArg satCmd)
-    "use a solver to find a satisfying assignment for which the argument returns true"
-  , CommandDescr ":debug_specialize" (ExprArg specializeCmd)
-    "do type specialization on a closed expression"
--}
   ]
 
 genHelp :: [CommandDescr] -> [String]
@@ -223,6 +144,7 @@ runCommand c = case c of
   Command cmd -> cmd `SAWScript.REPL.Monad.catch` handler
                      `SAWScript.REPL.Monad.catchIO` handlerIO
                      `SAWScript.REPL.Monad.catchFail` handler2
+                     `SAWScript.REPL.Monad.catchTypeErrors` handlerIO
     where
     handler re = io (putStrLn "" >> print (pp re))
     handler2 s = io (putStrLn "" >> putStrLn s)
@@ -235,295 +157,27 @@ runCommand c = case c of
     putStrLn ("\t" ++ intercalate ", " cmds)
 
 
--- Get the setting we should use for displaying values.
-_getPPValOpts :: REPL E.PPOpts
-_getPPValOpts =
-  do EnvNum base      <- getUser "base"
-     EnvBool ascii    <- getUser "ascii"
-     EnvNum infLength <- getUser "infLength"
-     return E.PPOpts { E.useBase      = base
-                     , E.useAscii     = ascii
-                     , E.useInfLength = infLength
-                     }
-
-evalCmd :: String -> REPL ()
-evalCmd str = do
-  let str' = SS.Located str str PosREPL
-  sc <- getSharedContext
-  cenv <- getCryptolEnv
-  TypedTerm _schema sharedterm <- io (CEnv.parseTypedTerm sc cenv str')
-
-  -- Evaluate and print
-  let val = SAWScript.Value.evaluate sc sharedterm
-  io $ rethrowEvalError $ print val
-
-{-
-  (val,_ty) <- replEvalExpr str
-  ppOpts <- getPPValOpts
-  io $ rethrowEvalError $ print $ pp $ E.WithBase ppOpts val
--}
-
-{-
-qcCmd :: String -> REPL ()
-qcCmd "" =
-  do xs <- getPropertyNames
-     if null xs
-        then io $ putStrLn "There are no properties in scope."
-        else forM_ xs $ \x ->
-               do io $ putStr $ "property " ++ x ++ " "
-                  qcCmd x
-
-qcCmd str =
-  do (val,ty) <- replEvalExpr str
-     EnvNum testNum  <- getUser "tests"
-     case TestX.testableType ty of
-       Just (sz,vss) | sz <= toInteger testNum ->
-         do io $ putStrLn "Using exhaustive testing."
-            let doTest _ [] = panic "We've unexpectedly run out of test cases"
-                                    []
-                doTest _ (vs : vss1) =
-                    if TestX.runTest val vs
-                        then (Nothing, vss1)
-                        else (Just vs, vss1)
-            ok <- go doTest sz 0 vss
-            when ok $ io $ putStrLn "QED"
-
-       n -> case TestR.testableType ty of
-              Nothing   -> raise (TypeNotTestable ty)
-              Just gens ->
-                do io $ putStrLn "Using random testing."
-                   prt testingMsg
-                   g <- io newStdGen
-                   ok <- go (TestR.runTest val gens) testNum 0 g
-                   when ok $
-                     case n of
-                       Just (valNum,_) ->
-                         do let valNumD = fromIntegral valNum :: Double
-                                percent = fromIntegral (testNum * 100)
-                                        / valNumD
-                                showValNum
-                                   | valNum > 2 ^ (20::Integer) =
-                                       "2^^" ++ show (round $ logBase 2 valNumD :: Integer)
-                                   | otherwise = show valNum
-                            io $ putStrLn $ "Coverage: "
-                                     ++ showFFloat (Just 2) percent "% ("
-                                     ++ show testNum ++ " of "
-                                     ++ showValNum ++ " values)"
-                       Nothing -> return ()
-
-  where
-  testingMsg = "testing..."
-
-  totProgressWidth = 4    -- 100%
-
-  prt msg   = io (putStr msg >> hFlush stdout)
-  prtLn msg = io (putStrLn msg >> hFlush stdout)
-
-  ppProgress this tot =
-    let percent = show (div (100 * this) tot) ++ "%"
-        width   = length percent
-        pad     = replicate (totProgressWidth - width) ' '
-    in prt (pad ++ percent)
-
-  del n       = prt (replicate n '\BS')
-  delTesting  = del (length testingMsg)
-  delProgress = del totProgressWidth
-
-  go _ totNum testNum _
-     | testNum >= totNum =
-         do delTesting
-            prtLn $ "passed " ++ show totNum ++ " tests."
-            return True
-
-  go doTest totNum testNum st =
-     do ppProgress testNum totNum
-        case doTest (div (100 * (1 + testNum)) totNum) st of
-          (Nothing, st1) -> do delProgress
-                               go doTest totNum (testNum + 1) st1
-          (Just vs, _g1) ->
-             do opts <- getPPValOpts
-                do delProgress
-                   delTesting
-                   prtLn "FAILED for the following inputs:"
-                   io $ mapM_ (print . pp . E.WithBase opts) vs
-                   return False
--}
-
 typeOfCmd :: String -> REPL ()
 typeOfCmd str =
   do let tokens = SAWScript.Lexer.lexSAW replFileName str
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
-     let decl = SS.Decl (SS.PWild Nothing) Nothing expr
+     let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
      rw <- getEnvironment
-     SS.Decl _ (Just schema) _expr' <-
-       either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+     SS.Decl _pos _ (Just schema) _expr' <-
+       either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
-
-{-
-reloadCmd :: REPL ()
-reloadCmd  = do
-  mb <- getLoadedMod
-  case mb of
-    Just m  -> loadCmd (lPath m)
-    Nothing -> return ()
--}
-
-{-
-editCmd :: String -> REPL ()
-editCmd path
-  | null path = do
-      mb <- getLoadedMod
-      case mb of
-
-        Just m -> do
-          success <- replEdit (lPath m)
-          if success
-             then loadCmd (lPath m)
-             else return ()
-
-        Nothing   -> do
-          io (putStrLn "No files to edit.")
-          return ()
-
-  | otherwise = do
-      _  <- replEdit path
-      mb <- getLoadedMod
-      case mb of
-        Nothing -> loadCmd path
-        Just _  -> return ()
--}
-
-{-
-moduleCmd :: String -> REPL ()
-moduleCmd modString
-  | null modString = return ()
-  | otherwise      = do
-      case parseModName modString of
-        Just m -> loadCmd =<< liftModuleCmd (M.findModule m)
-        Nothing -> io $ putStrLn "Invalid module name."
-
-loadPrelude :: REPL ()
-loadPrelude  = moduleCmd $ show $ pp MB.preludeName
--}
-
-loadCmd :: FilePath -> REPL ()
-loadCmd path
-  | null path = return ()
-  | otherwise = do
-      sc <- getSharedContext
-      cenv <- getCryptolEnv
-      cenv' <- io (CEnv.importModule sc cenv (SS.Import (Left path) Nothing Nothing))
-      setCryptolEnv cenv'
-      --whenDebug (io (putStrLn (dump m)))
-
-addCmd :: FilePath -> REPL ()
-addCmd path
-  | null path = return ()
-  | otherwise = do
-      sc <- getSharedContext
-      cenv <- getCryptolEnv
-      cenv' <- io (CEnv.importModule sc cenv (SS.Import (Left path) Nothing Nothing))
-      setCryptolEnv cenv'
-      --whenDebug (io (putStrLn (dump m)))
 
 quitCmd :: REPL ()
 quitCmd  = stop
 
 
-envCmd :: String -> REPL ()
-envCmd _pfx = do
+envCmd :: REPL ()
+envCmd = do
   env <- getEnvironment
   let showLName = SS.getVal
-{-
-  io $ putStrLn "\nTerms:\n"
-  io $ sequence_ [ putStrLn (showLName x ++ " = " ++ show v) | (x, v) <- Map.assocs (interpretEnvShared env) ]
-  io $ putStrLn "\nValues:\n"
-  io $ sequence_ [ putStrLn (showLName x ++ " = " ++ show v) | (x, v) <- Map.assocs (interpretEnvValues env) ]
-  io $ putStrLn "\nTypes:\n"
--}
   io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
-
-browseCmd :: String -> REPL ()
-browseCmd pfx = do
-  browseTSyns pfx
-  browseNewtypes pfx
-  browseVars pfx
-
-browseTSyns :: String -> REPL ()
-browseTSyns pfx = do
-  tsyns <- getTSyns
-  let tsyns' = Map.filterWithKey (\k _ -> pfx `isNamePrefix` k) tsyns
-  unless (Map.null tsyns') $ io $ do
-    putStrLn "Type Synonyms"
-    putStrLn "============="
-    let ppSyn (qn,T.TySyn _ ps cs ty doc) = pp (T.TySyn qn ps cs ty doc)
-    print (nest 4 (vcat (map ppSyn (Map.toList tsyns'))))
-    putStrLn ""
-
-browseNewtypes :: String -> REPL ()
-browseNewtypes pfx = do
-  nts <- getNewtypes
-  let nts' = Map.filterWithKey (\k _ -> pfx `isNamePrefix` k) nts
-  unless (Map.null nts') $ io $ do
-    putStrLn "Newtypes"
-    putStrLn "========"
-    let ppNT (qn,nt) = T.ppNewtypeShort (nt { T.ntName = qn })
-    print (nest 4 (vcat (map ppNT (Map.toList nts'))))
-    putStrLn ""
-
-browseVars :: String -> REPL ()
-browseVars pfx = do
-  vars  <- getVars
-  let allNames = vars
-          {- This shows the built-ins as well:
-             Map.union vars
-                  (Map.fromList [ (Name x,t) | (x,(_,t)) <- builtIns ]) -}
-      vars' = Map.filterWithKey (\k _ -> pfx `isNamePrefix` k) allNames
-
-      isProp p     = T.PragmaProperty `elem` (M.ifDeclPragmas p)
-      (props,syms) = Map.partition isProp vars'
-
-  ppBlock "Properties" props
-  ppBlock "Symbols" syms
-
-  where
-  ppBlock name xs =
-    unless (Map.null xs) $ io $ do
-      putStrLn name
-      putStrLn (replicate (length name) '=')
-      let step k d acc =
-              pp k <+> char ':' <+> pp (M.ifDeclSig d) : acc
-      print (nest 4 (vcat (Map.foldrWithKey step [] xs)))
-      putStrLn ""
-
-
-
-_setOptionCmd :: String -> REPL ()
-_setOptionCmd str
-  | Just value <- mbValue = setUser key value
-  | null key              = mapM_ (describe . optName) (leaves userOptions)
-  | otherwise             = describe key
-  where
-  (before,after) = break (== '=') str
-  key   = trim before
-  mbValue = case after of
-              _ : stuff -> Just (trim stuff)
-              _         -> Nothing
-
-  describe k = do
-    ev <- tryGetUser k
-    io $ case ev of
-           Just (EnvString s)   -> putStrLn (k ++ " = " ++ s)
-           Just (EnvNum n)      -> putStrLn (k ++ " = " ++ show n)
-           Just (EnvBool True)  -> putStrLn (k ++ " = on")
-           Just (EnvBool False) -> putStrLn (k ++ " = off")
-           Nothing              -> do putStrLn ("Unknown user option: `" ++ k ++ "`")
-                                      when (any isSpace k) $ do
-                                        let (k1, k2) = break isSpace k
-                                        putStrLn ("Did you mean: `:set " ++ k1 ++ " =" ++ k2 ++ "`?")
-
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
@@ -537,14 +191,6 @@ helpCmd cmd
   | otherwise = do io $ putStrLn $ "// No documentation is available."
                    typeOfCmd cmd
 
-
-{-
-runShellCmd :: String -> REPL ()
-runShellCmd cmd
-  = io $ do h <- Process.runCommand cmd
-            _ <- waitForProcess h
-            return ()
--}
 
 cdCmd :: FilePath -> REPL ()
 cdCmd f | null f = io $ putStrLn $ "[error] :cd requires a path argument"
@@ -599,17 +245,6 @@ handleCtrlC  = io (putStrLn "Ctrl-C")
 
 -- Utilities -------------------------------------------------------------------
 
-isNamePrefix :: String -> T.Name -> Bool
-isNamePrefix pfx n = pfx `isPrefixOf` T.unpackIdent (T.nameIdent n)
-
-{-
-printWarning :: (Range,Warning) -> IO ()
-printWarning = print . ppWarning
-
-printError :: (Range,Error) -> IO ()
-printError = print . ppError
--}
-
 -- | Lift a parsing action into the REPL monad.
 replParse :: (String -> Either ParseError a) -> String -> REPL a
 replParse parse str = case parse str of
@@ -628,9 +263,6 @@ sanitize  = dropWhile isSpace
 -- | Strip trailing space.
 sanitizeEnd :: String -> String
 sanitizeEnd = reverse . sanitize . reverse
-
-trim :: String -> String
-trim = sanitizeEnd . sanitize
 
 -- | Split at the first word boundary.
 splitCommand :: String -> Maybe (String,String)
@@ -669,9 +301,7 @@ parseCommand findCmd line = do
   case findCmd cmd of
     [c] -> case cBody c of
       ExprArg     body -> Just (Command (body args'))
-      ExprTypeArg body -> Just (Command (body args'))
       FilenameArg body -> Just (Command (body =<< expandHome args'))
-      OptionArg   body -> Just (Command (body args'))
       ShellArg    body -> Just (Command (body args'))
       NoArg       body -> Just (Command  body)
 

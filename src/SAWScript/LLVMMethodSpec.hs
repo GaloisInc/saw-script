@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMMethodSpec
+Description : Interface to the LLVM symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-{- |
-Module      : $Header$
-Description : Interface to the LLVM symbolic simulator.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMMethodSpec
   ( LLVMMethodSpecIR
   , specFunction
@@ -52,14 +52,15 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified SAWScript.CongruenceClosure as CC
 import qualified SAWScript.LLVMExpr as TC
-import SAWScript.Options
+import SAWScript.Options hiding (Verbosity)
+import qualified SAWScript.Options as Opts
 import SAWScript.Utils
 import Verifier.SAW.Prelude
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMUtils
 import SAWScript.PathVC
 import SAWScript.SolverStats
-import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io)
+import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutLnTop)
 import SAWScript.VerificationCheck
 
 import Verifier.LLVM.Simulator hiding (State)
@@ -372,19 +373,19 @@ execBehavior bsl ec ps = do
        -- Execute statements.
        mapM_ ocStep (bsCommands bs)
 
-execOverride :: (MonadIO m, Functor m) =>
-                SharedContext
+execOverride :: (MonadIO m, Functor m)
+             => Options
+             -> SharedContext
              -> Pos
              -> [LLVMMethodSpecIR]
              -> [(MemType, SpecLLVMValue)]
              -> Simulator SpecBackend m (Maybe Term)
-execOverride _ _ [] _ = fail "Empty list of overrides passed to execOverride."
-execOverride sc _pos irs@(ir:_) args = do
+execOverride _ _ _ [] _ = fail "Empty list of overrides passed to execOverride."
+execOverride vpopts sc _pos irs@(ir:_) args = do
   initPS <- fromMaybe (error "no path during override") <$> getPath
   let bsl = map specBehavior irs
       cb = specCodebase ir
   sbe <- gets symBE
-  --liftIO $ putStrLn $ "Executing override for " ++ show func
   gm <- use globalTerms
   opts <- gets lssOpts
   let ec = EvalContext { ecContext = sc
@@ -397,12 +398,12 @@ execOverride sc _pos irs@(ir:_) args = do
                        , ecLLVMExprs = specLLVMExprNames ir
                        , ecFunction = specFunction ir
                        }
-  --liftIO $ putStrLn $ "Executing behavior"
+  liftIO $ printOutLn vpopts Debug $ "Executing behavior"
   res <- execBehavior bsl ec initPS
   case [ (ps, mval) | (ps, _, Right mval) <- res ] of
     -- One or more successful result: use the first.
     (ps, mval):rest -> do
-      unless (null rest) $ liftIO $ print $ hcat
+      unless (null rest) $ liftIO $ printOutLn vpopts Warn $ show $ hcat
         [ text "WARNING: More than one successful path returned from override "
         , text "execution for " , specName ir
         ]
@@ -424,14 +425,15 @@ execOverride sc _pos irs@(ir:_) args = do
 
 -- | Add a method override for the given method to the simulator.
 overrideFromSpec :: (MonadIO m, Functor m) =>
-                    SharedContext
+                    Options
+                 -> SharedContext
                  -> Pos
                  -> [LLVMMethodSpecIR]
                  -> Simulator SpecBackend m ()
-overrideFromSpec _ _ [] =
+overrideFromSpec _ _ _ [] =
   fail "Called overrideFromSpec with empty list."
-overrideFromSpec sc pos irs@(ir:_) = do
-  let ovd = Override (\_ _ -> execOverride sc pos irs)
+overrideFromSpec vpopts sc pos irs@(ir:_) = do
+  let ovd = Override (\_ _ -> execOverride vpopts sc pos irs)
   -- TODO: check argument types?
   tryRegisterOverride (specFunction ir) (const (Just ovd))
 
@@ -657,12 +659,18 @@ data VerifyParams = VerifyParams
 
 type SymbolicRunHandler =
   SharedContext -> [PathVC ()] -> TopLevel SolverStats
-type Prover = VerifyState -> Term -> TopLevel SolverStats
+type Prover = VerifyState -> Int -> Term -> TopLevel SolverStats
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
   let ir = vpSpec params
-      verb = verbLevel (vpOpts params)
+      verb = case Opts.verbLevel (vpOpts params) of
+                Opts.Silent              -> 0
+                Opts.OnlyCounterExamples -> 0
+                Opts.Error               -> 1
+                Opts.Warn                -> 2
+                Opts.Info                -> 3
+                _                        -> 5
   opts <- fmap rwPPOpts getTopLevelRW
   mconcat <$> (forM results $ \pvc -> do
     let mkVState nm cfn =
@@ -673,25 +681,22 @@ runValidation prover params sc results = do
                  , vsStaticErrors = pvcStaticErrors pvc
                  }
     if null (pvcStaticErrors pvc) then
-      mconcat <$> (forM (pvcChecks pvc) $ \vc -> do
+      mconcat <$> (forM (zip [0..] $ pvcChecks pvc) $ \(n, vc) -> do
         let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
         g <- io (scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc)
-        when (verb >= 3) $ io $ do
-          putStr $ "Checking " ++ vcName vc
-          when (verb >= 4) $ putStr $ " (" ++ show g ++ ")"
-          putStrLn ""
-        prover vs g)
+        io $ printOutLn (vpOpts params) Debug $ "Checking " ++ vcName vc
+        io $ printOutLn (vpOpts params) ExtraDebug $ " (" ++ show g ++ ")"
+        prover vs n g)
     else do
       let vsName = "an invalid path"
       let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
       false <- io $ scBool sc False
       g <- io $ scImplies sc (pvcAssumptions pvc) false
-      when (verb >= 4) $ io $ do
-        putStrLn $ "Checking " ++ vsName
-        print $ pvcStaticErrors pvc
-        putStrLn $ "Calling prover to disprove " ++
+      printOutLnTop Info $ "Checking " ++ vsName
+      printOutLnTop Info $ show (pvcStaticErrors pvc)
+      printOutLnTop Info $ "Calling prover to disprove " ++
                  scPrettyTerm defaultPPOpts (pvcAssumptions pvc)
-      prover vs g)
+      prover vs 0 g)
 
 data VerifyState = VState {
          vsVCName :: String

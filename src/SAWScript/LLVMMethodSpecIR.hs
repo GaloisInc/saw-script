@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.LLVMMethodSpecIR
 Description : Provides typechecked representation for LLVM function
               specifications and function for creating it from AST
               representation.

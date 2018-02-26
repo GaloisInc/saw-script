@@ -34,7 +34,7 @@ getDeclsCryptol path = do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of
          Left err -> liftF $ Failure True (pretty err) Nothing
-         Right (AST.Module{mDecls}, _) ->
+         Right ((_, AST.Module{mDecls}), _) ->
             let stdDecls = catMaybes . for (concatMap flattenDeclGroup mDecls) $
                   \(AST.Decl{dName, dSignature, dDefinition}) -> do
                      funcName <- sourceName dName

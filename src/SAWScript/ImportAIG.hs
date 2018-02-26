@@ -1,19 +1,18 @@
+{- |
+Module      : SAWScript.ImportAIG
+Description : And-Inverter Graphs.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- |
-Module      : $Header$
-Description : And-Inverter Graphs.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.ImportAIG
-  ( readAIGexpect
-  , readAIG
+  ( readAIG
   , loadAIG
   , verifyAIGCompatible
   , AIGNetwork
@@ -36,6 +35,7 @@ import qualified Data.ABC.GIA as ABC
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (scNot, scAnd, scOr)
+import SAWScript.Options
 
 type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
 
@@ -146,14 +146,15 @@ withReadAiger path action = do
       Right ntk -> action ntk
 
 translateNetwork :: AIG.IsAIG l g
-                 => SharedContext    -- ^ Context to build in term.
+                 => Options          -- ^ Options to control user feedback
+                 -> SharedContext    -- ^ Context to build in term.
                  -> g x              -- ^ Network to bitblast
                  -> [l x]            -- ^ Outputs for network.
                  -> [(String, Term)] -- ^ Expected types
                  -> Term             -- ^ Expected output type.
                  -> ExceptT String IO Term
-translateNetwork sc ntk outputLits args resultType = do
-  --lift $ putStrLn "inputTerms"
+translateNetwork opts sc ntk outputLits args resultType = do
+  lift $ printOutLn opts Debug "inputTerms"
   inputTerms <- bitblastVarsAsInputLits sc (snd <$> args)
   -- Check number of inputs to network matches expected inputs.
   do let expectedInputCount = V.length inputTerms
@@ -162,28 +163,16 @@ translateNetwork sc ntk outputLits args resultType = do
        throwE $ "AIG has " ++ show aigCount
                   ++ " inputs, while expected type has "
                   ++ show expectedInputCount ++ " inputs."
-  --lift $ putStrLn "Output vars"
+  lift $ printOutLn opts Debug "Output vars"
   -- Get outputs as SAWCore terms.
   outputVars <- liftIO $
     networkAsSharedTerms ntk sc inputTerms (V.fromList outputLits)
-  --lift $ putStrLn "Type parser"
+  lift $ printOutLn opts Debug "Type parser"
    -- Join output lits into result type.
   (res,rargs) <- runTypeParser outputVars $ parseAIGResultType sc resultType
   unless (V.null rargs) $
     throwE "AIG contains more outputs than expected."
   lift $ scLambdaList sc args res
-
-readAIGexpect
-        :: SharedContext -- ^ Context to build in term.
-        -> FilePath      -- ^ Path to AIG
-        -> Term          -- ^ Expected type of term.
-        -> IO (Either String Term)
-readAIGexpect sc path aigType =
-  withReadAiger path $ \(AIG.Network ntk outputLits) -> do
-    --putStrLn "Network outputs"
-    let (args,resultType) = asPiList aigType
-    runExceptT $
-      translateNetwork sc ntk outputLits args resultType
 
 loadAIG :: FilePath -> IO (Either String AIGNetwork)
 loadAIG f = do
@@ -192,8 +181,8 @@ loadAIG f = do
       Left e -> return (Left (show (e :: IOException)))
       Right ntk -> return $ Right ntk
 
-readAIG :: SharedContext -> FilePath -> IO (Either String Term)
-readAIG sc f =
+readAIG :: Options -> SharedContext -> FilePath -> IO (Either String Term)
+readAIG opts sc f =
   withReadAiger f $ \(AIG.Network ntk outputLits) -> do
     inputs <- AIG.inputCount ntk
     inLen <- scNat sc (fromIntegral inputs)
@@ -202,7 +191,7 @@ readAIG sc f =
     inType <- scVecType sc inLen boolType
     outType <- scVecType sc outLen boolType
     runExceptT $
-      translateNetwork sc ntk outputLits [("x", inType)] outType
+      translateNetwork opts sc ntk outputLits [("x", inType)] outType
 
 -- | Check that the input and output counts of the given
 --   AIGNetworks are equal.

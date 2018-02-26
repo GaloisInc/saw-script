@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.Proof
 Description : Representations of SAW-Script proof states.
 License     : BSD3
 Maintainer  : huffman
@@ -24,6 +24,8 @@ data Quantification = Existential | Universal
 data ProofGoal =
   ProofGoal
   { goalQuant :: Quantification
+  , goalNum  :: Int
+  , goalType :: String
   , goalName :: String
   , goalTerm :: Term
   }

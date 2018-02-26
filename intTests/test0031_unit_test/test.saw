@@ -1,0 +1,15 @@
+
+let setup = do {
+  x <- crucible_fresh_var "x" (llvm_int 32);
+
+  p_a <- crucible_alloc (llvm_struct "struct.a_t");
+  crucible_points_to p_a ( crucible_term {{ x }} );
+
+  crucible_execute_func [ p_a ];
+  crucible_return (crucible_term {{ 3:[32] }});
+
+  crucible_points_to p_a ( crucible_term {{ 3:[32] }} );
+};
+
+m <- llvm_load_module "test.bc";
+crucible_llvm_verify m "foo" [] false setup z3;

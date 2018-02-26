@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMBuiltins
+Description : Implementations of LLVM-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -10,13 +17,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of LLVM-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -24,6 +24,7 @@ import Control.Applicative hiding (many)
 #endif
 import Control.Lens
 import Control.Monad.State hiding (mapM)
+import Control.Monad.ST (stToIO)
 import Control.Monad.Trans.Except
 import Data.Function (on)
 import Data.List (find, partition, sortBy, groupBy)
@@ -62,13 +63,14 @@ import SAWScript.LLVMExpr
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMMethodSpec
 import SAWScript.LLVMUtils
-import SAWScript.Options
+import SAWScript.Options as Opt
 import SAWScript.Proof
 import SAWScript.SolverStats
 import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV
 
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
@@ -82,13 +84,17 @@ llvm_load_module :: FilePath -> TopLevel LLVMModule
 llvm_load_module file =
   io (LLVM.parseBitCodeFromFile file) >>= \case
     Left err -> fail (LLVM.formatError err)
-    Right llvm_mod -> return (LLVMModule file llvm_mod)
+    Right llvm_mod -> do
+      halloc <- getHandleAlloc
+      mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
+      return (LLVMModule file llvm_mod mtrans)
 
 -- LLVM verification and model extraction commands
 
 type Assign = (LLVMExpr, TypedTerm)
 
-startSimulator :: SharedContext
+startSimulator :: Options
+               -> SharedContext
                -> LSSOpts
                -> LLVMModule
                -> Symbol
@@ -99,11 +105,11 @@ startSimulator :: SharedContext
                    -> SymDefine Term
                    -> Simulator SAWBackend IO a)
                -> IO a
-startSimulator sc lopts (LLVMModule file mdl) sym body = do
+startSimulator opts sc lopts (LLVMModule file mdl _) sym body = do
   let dl = parseDataLayout $ modDataLayout mdl
   (sbe, mem, scLLVM) <- createSAWBackend' sawProxy dl sc
   (warnings, cb) <- mkCodebase sbe dl mdl
-  forM_ warnings $ putStrLn . ("WARNING: " ++) . show
+  forM_ warnings $ printOutLn opts Warn . ("WARNING: " ++) . show
   case lookupDefine sym cb of
     Nothing -> fail $ missingSymMsg file sym
     Just md -> runSimulator cb sbe mem (Just lopts) $
@@ -125,9 +131,8 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
                       , optsSatAtBranches = doSat
                       , optsSimplifyAddrs = False
                       }
-  in startSimulator sc lopts lmod sym $ \scLLVM sbe cb dl md -> do
+  in startSimulator opts sc lopts lmod sym $ \scLLVM sbe cb dl md -> do
         setVerbosity (simVerbose opts)
-        let verb = simVerbose opts
         let mkAssign (s, tm, n) = do
               e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
               return (e, tm, n)
@@ -135,10 +140,10 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
               e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
               case resolveType cb (lssTypeOfLLVMExpr e) of
                 PtrType (MemType ty) -> do
-                  when (verb >= 2) $ liftIO $ putStrLn $
+                  liftIO $ printOutLn opts Debug $
                     "Allocating " ++ show n ++ " elements of type " ++ show (ppActualType ty)
                   tm <- allocSome sbe dl n ty
-                  when (verb >= 2) $ liftIO $ putStrLn $
+                  liftIO $ printOutLn opts Debug $
                     "Allocated address: " ++ show tm
                   return (e, tm, 1)
                 ty -> fail $ "Allocation parameter " ++ s ++
@@ -167,9 +172,9 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
         _ <- callDefine' False sym retReg args
         -- TODO: the following line is generating memory errors
         mapM_ (writeLLVMTerm Nothing argVals) otherAssigns
-        when (verb >= 2) $ liftIO $ putStrLn $ "Running " ++ fname
+        liftIO $ printOutLn opts Info $ "Running " ++ fname
         run
-        when (verb >= 2) $ liftIO $ putStrLn $ "Finished running " ++ fname
+        liftIO $ printOutLn opts Info $ "Finished running " ++ fname
         outtms <- forM outputs $ \(ostr, n) -> do
           case ostr of
             "$safety" -> do
@@ -203,7 +208,7 @@ llvm_extract bic opts lmod func _setup =
                       , optsSatAtBranches = True
                       , optsSimplifyAddrs = False
                       }
-  in startSimulator sc lopts lmod sym $ \scLLVM _sbe _cb _dl md -> do
+  in startSimulator opts sc lopts lmod sym $ \scLLVM _sbe _cb _dl md -> do
     setVerbosity (simVerbose opts)
     args <- mapM freshLLVMArg (sdArgs md)
     exts <- mapM (asExtCns . snd) args
@@ -222,14 +227,14 @@ llvm_verify :: BuiltinContext
             -> [LLVMMethodSpecIR]
             -> LLVMSetup ()
             -> TopLevel LLVMMethodSpecIR
-llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
+llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup =
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
   in do
     (sbe, mem, scLLVM) <- io $ createSAWBackend' sawProxy dl sc
     (warnings, cb) <- io $ mkCodebase sbe dl mdl
-    io $ forM_ warnings $ putStrLn . ("WARNING: " ++) . show
+    forM_ warnings $ printOutLnTop Warn . ("WARNING: " ++) . show
     let ms0 = initLLVMMethodSpec pos sbe cb (fromString funcname)
         lsctx0 = LLVMSetupState {
                     lsSpec = ms0
@@ -248,21 +253,20 @@ llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
                           , vpSpec = ms
                           , vpOver = overrides
                           }
-    let verb = verbLevel opts
     let overrideText =
           case overrides of
             [] -> ""
             irs -> " (overriding " ++ show (map specFunction irs) ++ ")"
-    when (verb >= 2) $ io $ putStrLn $ "Starting verification of " ++ show (specName ms)
+    printOutLnTop Info $ "Starting verification of " ++ show (specName ms)
     let lopts = LSSOpts { optsErrorPathDetails = True
                         , optsSatAtBranches = lsSatBranches lsctx
                         , optsSimplifyAddrs = lsSimplifyAddrs lsctx
                         }
     ro <- getTopLevelRO
     rw <- getTopLevelRW
+    vpopts <- getOptions
     if lsSimulate lsctx then io $ do
-      when (verb >= 3) $ do
-        putStrLn $ "Executing " ++ show (specName ms)
+      liftIO $ printOutLn vpopts Info $ "Executing " ++ show (specName ms)
       ms' <- runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity (simVerbose opts)
         (initPS, otherPtrs, args) <- initializeVerification' scLLVM file ms
@@ -270,27 +274,26 @@ llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
         let ovdsByFunction = groupBy ((==) `on` specFunction) $
                              sortBy (compare `on` specFunction) $
                              vpOver vp
-        mapM_ (overrideFromSpec scLLVM (specPos ms)) ovdsByFunction
+        mapM_ (overrideFromSpec (vpOpts vp) scLLVM (specPos ms)) ovdsByFunction
         run
         dumpMem 4 "llvm_verify post" Nothing
         res <- checkFinalState scLLVM ms initPS otherPtrs args
-        when (verb >= 3) $ liftIO $ do
-          putStrLn "Verifying the following:"
-          print (ppPathVC res)
+        liftIO $ printOutFn vpopts Debug "Verifying the following:"
+        liftIO $ printOutLn vpopts Debug $ show (ppPathVC res)
         case lsTactic lsctx of
              Skip -> do
-                liftIO $ putStrLn $
+                liftIO $ printOutLn vpopts Warn $
                    "WARNING: skipping verification of " ++ show (specName ms)
                 return ms
              RunVerify script -> do
                 let prv = prover opts scLLVM ms script
                 stats <- liftIO $ fmap fst $ runTopLevel (runValidation prv vp scLLVM [res]) ro rw
                 return ms { specSolverStats = stats }
-      putStrLn $ "Successfully verified " ++
+      printOutLn vpopts Info $ "Successfully verified " ++
                    show (specName ms) ++ overrideText
       return ms'
     else do
-      io $ putStrLn $ "WARNING: skipping simulation of " ++ show (specName ms)
+      printOutLnTop Warn $ "WARNING: skipping simulation of " ++ show (specName ms)
       return ms
 
 prover :: Options
@@ -298,40 +301,43 @@ prover :: Options
        -> LLVMMethodSpecIR
        -> ProofScript SV.SatResult
        -> VerifyState
+       -> Int
        -> Term
        -> TopLevel SolverStats
-prover opts sc ms script vs g = do
+prover vpopts sc ms script vs n g = do
   let exts = getAllExts g
-      verb = verbLevel opts
   ppopts <- fmap rwPPOpts getTopLevelRW
   tt <- io (scAbstractExts sc exts g)
-  r <- evalStateT script (startProof (ProofGoal Universal (vsVCName vs) tt))
+  let goal = ProofGoal Universal n "vc" (vsVCName vs) tt
+  r <- evalStateT script (startProof goal)
   case r of
     SV.Unsat stats -> do
-        when (verb >= 3) $ io $ putStrLn "Valid."
+        printOutLnTop Info "Valid."
         return stats
     SV.SatMulti _stats vals -> do
-        io $ showCexResults sc ppopts ms vs exts vals
+        io $ showCexResults vpopts sc ppopts ms vs exts vals
         return mempty
 
-showCexResults :: SharedContext
+showCexResults :: Options
+               -> SharedContext
                -> SV.PPOpts
                -> LLVMMethodSpecIR
                -> VerifyState
                -> [ExtCns Term]
                -> [(String, FirstOrderValue)]
                -> IO ()
-showCexResults sc opts ms vs exts vals = do
-  putStrLn $ "When verifying " ++ show (specName ms) ++ ":"
-  putStrLn $ "Proof of " ++ vsVCName vs ++ " failed."
-  putStrLn $ "Counterexample:"
+showCexResults vpopts sc opts ms vs exts vals = do
+  printOutLn vpopts Info $ "When verifying " ++ show (specName ms) ++ ":"
+  printOutLn vpopts Info $ "Proof of " ++ vsVCName vs ++ " failed."
+  printOutLn vpopts OnlyCounterExamples $ "----------Counterexample----------"
   let showVal v = show <$> (Cryptol.runEval SV.quietEvalOpts (Cryptol.ppValue (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
-                       putStrLn ("  " ++ n ++ ": " ++ vdoc)) vals
+                       printOutLn vpopts OnlyCounterExamples ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)
-    then vsCounterexampleFn vs (cexEvalFn sc (zip exts (map snd vals))) >>= print
-    else putStrLn "ERROR: Can't show result, wrong number of values"
-  fail "Proof failed."
+    then vsCounterexampleFn vs (cexEvalFn sc (zip exts (map snd vals))) >>= printOutLn vpopts OnlyCounterExamples . show
+    else printOutLn vpopts Opt.Error "ERROR: Can't show result, wrong number of values"
+  printOutLn vpopts Opt.Error "Proof failed."
+  exitProofFalse
 
 llvm_pure :: LLVMSetup ()
 llvm_pure = return ()

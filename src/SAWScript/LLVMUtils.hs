@@ -1,13 +1,13 @@
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE CPP #-}
 {- |
-Module      : $Header$
+Module      : SAWScript.LLVMUtils
 Description : Miscellaneous utilities for LLVM.
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE CPP #-}
 module SAWScript.LLVMUtils where
 
 #if !MIN_VERSION_base(4,8,0)

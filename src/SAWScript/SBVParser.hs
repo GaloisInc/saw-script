@@ -1,14 +1,14 @@
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.SBVParser
 Description : Parser for .sbv file format.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.SBVParser
   ( loadSBV
   , parseSBVPgm
@@ -28,6 +28,7 @@ import Data.Traversable (mapM)
 import Verifier.SAW.TypedAST
 import Verifier.SAW.SharedTerm
 import qualified SAWScript.SBVModel as SBV
+import SAWScript.Options
 
 type NodeCache = Map SBV.NodeId Term
 
@@ -42,11 +43,11 @@ parseSBV _ nodes (SBV.SBV size (Right nodeid)) =
 
 type UnintMap = String -> Typ -> Maybe Term
 
-parseSBVExpr :: SharedContext -> UnintMap -> NodeCache ->
+parseSBVExpr :: Options -> SharedContext -> UnintMap -> NodeCache ->
                 Nat -> SBV.SBVExpr -> IO Term
-parseSBVExpr sc _unint nodes _size (SBV.SBVAtom sbv) =
+parseSBVExpr _opts sc _unint nodes _size (SBV.SBVAtom sbv) =
     liftM snd $ parseSBV sc nodes sbv
-parseSBVExpr sc unint nodes size (SBV.SBVApp operator sbvs) =
+parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
     case operator of
       SBV.BVAdd -> binop scBvAdd sbvs
       SBV.BVSub -> binop scBvSub sbvs
@@ -113,7 +114,6 @@ parseSBVExpr sc unint nodes size (SBV.SBVApp operator sbvs) =
             _ -> fail "parseSBVExpr: wrong number of arguments for append"
       SBV.BVLkUp indexSize resultSize ->
           do (size1 : inSizes, arg1 : args) <- liftM unzip $ mapM (parseSBV sc nodes) sbvs
-             -- unless (2 ^ indexSize == length args) $ putStrLn "parseSBVExpr BVLkUp: list size not a power of 2"
              unless (size1 == fromInteger indexSize && all (== (fromInteger resultSize)) inSizes)
                         (fail $ "parseSBVExpr BVLkUp: size mismatch")
              e <- scBitvector sc (fromInteger resultSize)
@@ -123,16 +123,16 @@ parseSBVExpr sc unint nodes size (SBV.SBVApp operator sbvs) =
              t <- case unint name typ of
                Just t -> return t
                Nothing ->
-                   do putStrLn ("WARNING: unknown uninterpreted function " ++ show (name, typ, size))
-                      putStrLn ("Using Prelude." ++ name)
+                   do printOutLn opts Warn ("WARNING: unknown uninterpreted function " ++ show (name, typ, size))
+                      printOutLn opts Info ("Using Prelude." ++ name)
                       scGlobalDef sc (mkIdent preludeName name)
              args <- mapM (parseSBV sc nodes) sbvs
              let inSizes = map fst args
                  (TFun inTyp outTyp) = typ
              unless (sum (typSizes inTyp) == sum (map fromIntegral inSizes)) $ do
-               putStrLn ("ERROR parseSBVPgm: input size mismatch in " ++ name)
-               print inTyp
-               print inSizes
+               printOutLn opts Error ("ERROR parseSBVPgm: input size mismatch in " ++ name)
+               printOutFn opts Error (show inTyp)
+               printOutFn opts Error (show inSizes)
              argument <- combineOutputs sc inTyp args
              result <- scApply sc t argument
              results <- splitInputs sc outTyp result
@@ -196,9 +196,9 @@ partitionSBVCommands = foldr select ([], [], [])
                 (assigns, inputs, sbv : outputs)
 
 -- TODO: Should I use a state monad transformer?
-parseSBVAssign :: SharedContext -> UnintMap -> NodeCache -> SBVAssign -> IO NodeCache
-parseSBVAssign sc unint nodes (SBVAssign size nodeid expr) =
-    do term <- parseSBVExpr sc unint nodes (fromInteger size) expr
+parseSBVAssign :: Options -> SharedContext -> UnintMap -> NodeCache -> SBVAssign -> IO NodeCache
+parseSBVAssign opts sc unint nodes (SBVAssign size nodeid expr) =
+    do term <- parseSBVExpr opts sc unint nodes (fromInteger size) expr
        return (Map.insert nodeid term nodes)
 
 ----------------------------------------------------------------------
@@ -329,24 +329,19 @@ combineOutputs sc ty xs0 =
 
 ----------------------------------------------------------------------
 
-parseSBVPgm :: SharedContext -> UnintMap -> SBV.SBVPgm -> IO Term
-parseSBVPgm sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warnings, _uninterps)) =
+parseSBVPgm :: Options -> SharedContext -> UnintMap -> SBV.SBVPgm -> IO Term
+parseSBVPgm opts sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warnings, _uninterps)) =
     do let (TFun inTyp outTyp) = parseIRType irtype
        let cmds = reverse revcmds
        let (assigns, inputs, outputs) = partitionSBVCommands cmds
        let inSizes = [ size | SBVInput size _ <- inputs ]
        let inNodes = [ node | SBVInput _ node <- inputs ]
-       -- putStrLn ("inTyp: " ++ show inTyp)
-       --putStrLn ("outTyp: " ++ show outTyp)
-       --putStrLn ("inSizes: " ++ show inSizes)
        unless (typSizes inTyp == inSizes) (fail "parseSBVPgm: input size mismatch")
        inputType <- scTyp sc inTyp
        inputVar <- scLocalVar sc 0
        inputTerms <- splitInputs sc inTyp inputVar
-       --putStrLn "processing..."
        let nodes0 = Map.fromList (zip inNodes inputTerms)
-       nodes <- foldM (parseSBVAssign sc unint) nodes0 assigns
-       --putStrLn "collecting output..."
+       nodes <- foldM (parseSBVAssign opts sc unint) nodes0 assigns
        outputTerms <- mapM (parseSBV sc nodes) outputs
        outputTerm <- combineOutputs sc outTyp outputTerms
        scLambda sc "x" inputType outputTerm

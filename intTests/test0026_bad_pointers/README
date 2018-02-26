@@ -1,0 +1,8 @@
+This unit test is inteded to ensure that we properly get failues for certain
+kinds of inappropriate pointer uses.  In particular, pointer dereference after free,
+double free, freeing illegal memory (stack or global memory), and certain kinds of
+pointer comparisons after free are not allowed.
+
+The included C file and SAW script explicity exercise these illegal behaviors
+and check that they are, in fact, rejected by the Crucible LLVM verification
+prodecure.

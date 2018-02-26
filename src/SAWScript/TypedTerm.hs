@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.TypedTerm
 Description : SAW-Core terms paired with Cryptol types.
 License     : BSD3
 Maintainer  : huffman

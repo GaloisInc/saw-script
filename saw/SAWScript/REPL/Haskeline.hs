@@ -1,18 +1,17 @@
-{-# LANGUAGE PatternGuards #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Haskeline
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module SAWScript.REPL.Haskeline where
 
 import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
-import SAWScript.REPL.Trie
 
 import Control.Monad (when)
 import Data.Char (isAlphaNum, isSpace)
@@ -136,11 +135,9 @@ cmdComp prefix c = Completion
 -- command is expecting.
 cmdArgument :: CommandBody -> CompletionFunc REPL
 cmdArgument ct cursor@(l,_) = case ct of
-  ExprArg     _ -> completeExpr cursor
-  ExprTypeArg _ -> (completeExpr +++ completeType) cursor
+  ExprArg     _ -> completeSAWScript cursor
   FilenameArg _ -> completeFilename cursor
   ShellArg _    -> completeFilename cursor
-  OptionArg _   -> completeOption cursor
   NoArg       _ -> return (l,[])
 
 -- | Complete a name from the expression environment.
@@ -159,19 +156,24 @@ completeType (l,_) = do
       vars = filter (n `isPrefixOf`) ns
   return (l,map (nameComp n) vars)
 
-data LexerMode = ModeNormal | ModeCryptol | ModeQuote
+data LexerMode = ModeNormal | ModeCryptol | ModeCryType | ModeQuote
 
 lexerMode :: String -> LexerMode
 lexerMode = normal
   where
     normal [] = ModeNormal
     normal ('{' : '{' : s) = cryptol s
+    normal ('{' : '|' : s) = crytype s
     normal ('\"' : s) = quote s
     normal (_ : s) = normal s
 
     cryptol [] = ModeCryptol
     cryptol ('}' : '}' : s) = normal s
     cryptol (_ : s) = cryptol s
+
+    crytype [] = ModeCryType
+    crytype ('|' : '}' : s) = normal s
+    crytype (_ : s) = crytype s
 
     quote [] = ModeQuote
     quote ('\"' : s) = normal s
@@ -185,11 +187,13 @@ completeSAWScript :: CompletionFunc REPL
 completeSAWScript cursor@(l, _) = do
   ns1 <- getSAWScriptNames
   ns2 <- getExprNames
+  ns3 <- getTypeNames
   let n = reverse (takeWhile isIdentChar l)
       nameComps prefix ns = map (nameComp prefix) (filter (prefix `isPrefixOf`) ns)
   case lexerMode (reverse l) of
     ModeNormal  -> return (l, nameComps n ns1)
     ModeCryptol -> return (l, nameComps n ns2)
+    ModeCryType -> return (l, nameComps n ns3)
     ModeQuote   -> completeFilename cursor
 
 -- | Generate a completion from a prefix and a name.
@@ -207,18 +211,3 @@ nameComp prefix c = Completion
   (_,acs) <- as cursor
   (_,bcs) <- bs cursor
   return (fst cursor, sortBy (compare `on` replacement) (acs ++ bcs))
-
-
--- | Complete an option from the options environment.
---
--- XXX this can do better, as it has access to the expected form of the value
-completeOption :: CompletionFunc REPL
-completeOption cursor@(l,_) = return (fst cursor, map comp opts)
-  where
-  n        = reverse l
-  opts     = lookupTrie n userOptions
-  comp opt = Completion
-    { replacement = drop (length n) (optName opt)
-    , display     = optName opt
-    , isFinished  = False
-    }

@@ -1,14 +1,14 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Monad
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module SAWScript.REPL.Monad (
     -- * REPL Monad
     REPL(..), runREPL
@@ -18,6 +18,7 @@ module SAWScript.REPL.Monad (
   , catch
   , catchIO
   , catchFail
+  , catchTypeErrors
 
     -- ** Errors
   , REPLException(..)
@@ -27,12 +28,9 @@ module SAWScript.REPL.Monad (
   , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
   , getModuleEnv, setModuleEnv
   , getTSyns, getNewtypes, getVars
-  , whenDebug
   , getExprNames
   , getTypeNames
   , getPropertyNames
-  , getTargetMods, setTargetMods, addTargetMod
-  , builtIns
   , getPrompt
   , shouldContinue
   , unlessBatch
@@ -42,12 +40,6 @@ module SAWScript.REPL.Monad (
   , getExtraNames, modifyExtraNames, setExtraNames
   , getRW
 
-    -- ** Config Options
-  , EnvVal(..)
-  , OptionDescr(..)
-  , setUser, getUser, tryGetUser
-  , userOptions
-
     -- ** SAWScript stuff
   , getSharedContext
   , getTopLevelRO
@@ -55,27 +47,21 @@ module SAWScript.REPL.Monad (
   , getSAWScriptNames
   ) where
 
-import SAWScript.REPL.Trie
-
-import Cryptol.Prims.Eval(primTable)
 import Cryptol.Eval (EvalError)
 import qualified Cryptol.ModuleSystem as M
+import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import Cryptol.ModuleSystem.NamingEnv (NamingEnv)
-import Cryptol.Utils.Ident (unpackIdent)
 import Cryptol.Parser (ParseError,ppError)
 import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
 import Cryptol.Parser.NoPat (Error)
 import qualified Cryptol.TypeCheck.AST as T
 import Cryptol.Utils.PP
-import Cryptol.Utils.Panic (panic)
-import qualified Cryptol.Parser.AST as P
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative(..), pure, (<*>))
 #endif
-import Control.Monad (unless,when,ap)
+import Control.Monad (unless, ap)
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
-import Data.List (isPrefixOf)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Typeable (Typeable)
@@ -88,8 +74,8 @@ import Verifier.SAW.SharedTerm (Term)
 --------------------
 
 import SAWScript.AST (Located(getVal))
-import SAWScript.Builtins (BuiltinContext(..))
 import SAWScript.CryptolEnv
+import SAWScript.Exceptions
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
@@ -100,11 +86,8 @@ import Verifier.SAW (SharedContext)
 
 -- REPL RW Environment.
 data RW = RW
-  { eTargetMods :: [(P.ModName, FilePath)] -- ^ Which modules to load after a :reload command
-  , eContinue   :: Bool
+  { eContinue   :: Bool
   , eIsBatch    :: Bool
-  , eUserEnv    :: UserEnv     -- ^ User-configured settings from :set commands
-  , sharedContext :: SharedContext
   , eTopLevelRO :: TopLevelRO
   , environment :: TopLevelRW
   }
@@ -112,15 +95,11 @@ data RW = RW
 -- | Initial, empty environment.
 defaultRW :: Bool -> Options -> IO RW
 defaultRW isBatch opts = do
-  (biContext, ro, rw) <- buildTopLevelEnv opts
-  let sc = biSharedContext biContext
+  (_biContext, ro, rw) <- buildTopLevelEnv opts
 
   return RW
-    { eTargetMods = []
-    , eContinue   = True
+    { eContinue   = True
     , eIsBatch    = isBatch
-    , eUserEnv    = mkUserEnv userOptions
-    , sharedContext = sc
     , eTopLevelRO = ro
     , environment = rw
     }
@@ -128,14 +107,11 @@ defaultRW isBatch opts = do
 -- | Build up the prompt for the REPL.
 mkPrompt :: RW -> String
 mkPrompt rw
-  | eIsBatch rw           = ""
-  | null (eTargetMods rw) = "sawscript> "
-  | otherwise             = unwords (map (pretty . fst) (eTargetMods rw)) ++ "> "
+  | eIsBatch rw = ""
+  | otherwise   = "sawscript> "
 
 mkTitle :: RW -> String
-mkTitle rw
-  | null (eTargetMods rw) = "sawscript"
-  | otherwise             = unwords (map (pretty . fst) (eTargetMods rw)) ++ " - sawscript"
+mkTitle _rw = "sawscript"
 
 
 -- REPL Monad ------------------------------------------------------------------
@@ -161,6 +137,9 @@ instance Monad REPL where
   m >>= f = REPL $ \ref -> do
     x <- unREPL m ref
     unREPL (f x) ref
+
+  {-# INLINE fail #-}
+  fail msg = REPL (\_ -> fail msg)
 
 instance Applicative REPL where
   {-# INLINE pure #-}
@@ -217,6 +196,10 @@ catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
 catchIO = catchEx
 
+-- | Handle SAWScript type error exceptions in 'REPL' actions.
+catchTypeErrors :: REPL a -> (TypeErrors -> REPL a) -> REPL a
+catchTypeErrors = catchEx
+
 -- | Handle 'REPLException' exceptions in 'REPL' actions.
 catch :: REPL a -> (REPLException -> REPL a) -> REPL a
 catch = catchEx
@@ -257,21 +240,6 @@ modifyRW_ f = REPL (\ ref -> modifyIORef ref f)
 getPrompt :: REPL String
 getPrompt  = mkPrompt `fmap` getRW
 
--- | Set the name of the currently focused file, edited by @:e@ and loaded via
--- @:r@.
-setTargetMods :: [(P.ModName, FilePath)] -> REPL ()
-setTargetMods mods = do
-  modifyRW_ (\ rw -> rw { eTargetMods = mods })
-  setREPLTitle
-
-getTargetMods :: REPL [(P.ModName, FilePath)]
-getTargetMods  = eTargetMods `fmap` getRW
-
-addTargetMod :: (P.ModName, FilePath) -> REPL ()
-addTargetMod m = do
-  modifyRW_ (\ rw -> rw { eTargetMods = m : eTargetMods rw })
-  setREPLTitle
-
 shouldContinue :: REPL Bool
 shouldContinue  = eContinue `fmap` getRW
 
@@ -288,13 +256,10 @@ setREPLTitle  = unlessBatch $ do
   rw <- getRW
   io (setTitle (mkTitle rw))
 
-builtIns :: [String]
-builtIns = map unpackIdent (Map.keys primTable)
-
 getVars :: REPL (Map.Map T.Name M.IfaceDecl)
 getVars  = do
   me <- getModuleEnv
-  let (decls, _namingenv, _namedisp) = M.focusedEnv me
+  let decls = getAllIfaceDecls me
   let vars1 = M.ifDecls decls
   extras <- getExtraTypes
   let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl q s [] False Nothing Nothing) extras
@@ -303,26 +268,26 @@ getVars  = do
 getTSyns :: REPL (Map.Map T.Name T.TySyn)
 getTSyns  = do
   me <- getModuleEnv
-  let (decls, _namingenv, _namedisp) = M.focusedEnv me
+  let decls = getAllIfaceDecls me
   return (M.ifTySyns decls)
 
 getNewtypes :: REPL (Map.Map T.Name T.Newtype)
 getNewtypes = do
   me <- getModuleEnv
-  let (decls, _namingenv, _namedisp) = M.focusedEnv me
+  let decls = getAllIfaceDecls me
   return (M.ifNewtypes decls)
 
 -- | Get visible variable names.
 getExprNames :: REPL [String]
-getExprNames  = do as <- (map getName . Map.keys) `fmap` getVars
-                   return (builtIns ++ as)
+getExprNames =
+  do fNames <- fmap getNamingEnv getCryptolEnv
+     return (map (show . pp) (Map.keys (MN.neExprs fNames)))
 
 -- | Get visible type signature names.
 getTypeNames :: REPL [String]
 getTypeNames  =
-  do tss <- getTSyns
-     nts <- getNewtypes
-     return $ map getName $ Map.keys tss ++ Map.keys nts
+  do fNames <- fmap getNamingEnv getCryptolEnv
+     return (map (show . pp) (Map.keys (MN.neTypes fNames)))
 
 getPropertyNames :: REPL [String]
 getPropertyNames =
@@ -376,7 +341,7 @@ setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)
 
 getSharedContext :: REPL SharedContext
-getSharedContext = fmap sharedContext getRW
+getSharedContext = fmap roSharedContext getTopLevelRO
 
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = fmap eTopLevelRO getRW
@@ -400,133 +365,9 @@ getSAWScriptNames = do
 
 -- User Environment Interaction ------------------------------------------------
 
--- | User modifiable environment, for things like numeric base.
-type UserEnv = Map.Map String EnvVal
-
 data EnvVal
   = EnvString String
   | EnvNum    !Int
   | EnvBool   Bool
     deriving (Show)
 
--- | Generate a UserEnv from a description of the options map.
-mkUserEnv :: OptionMap -> UserEnv
-mkUserEnv opts = Map.fromList $ do
-  opt <- leaves opts
-  return (optName opt, optDefault opt)
-
--- | Set a user option.
-setUser :: String -> String -> REPL ()
-setUser name val = case lookupTrie name userOptions of
-
-  [opt] -> setUserOpt opt
-  []    -> io (putStrLn ("Unknown env value `" ++ name ++ "`"))
-  _     -> io (putStrLn ("Ambiguous env value `" ++ name ++ "`"))
-
-  where
-  setUserOpt opt = case optDefault opt of
-    EnvString _
-      | Just e <- optCheck opt (EnvString val)
-        -> io (putStrLn e)
-      | otherwise
-        -> writeEnv (EnvString val)
-
-    EnvNum _ -> case reads val of
-      [(x,_)]
-        | Just e <- optCheck opt (EnvNum x)
-          -> io (putStrLn e)
-        | otherwise
-          -> writeEnv (EnvNum x)
-
-      _       -> io (putStrLn ("Failed to parse number for field, `" ++ name ++ "`"))
-
-    EnvBool _
-      | any (`isPrefixOf` val) ["enable","on","yes"] ->
-        writeEnv (EnvBool True)
-      | any (`isPrefixOf` val) ["disable","off","no"] ->
-        writeEnv (EnvBool False)
-      | otherwise ->
-        io (putStrLn ("Failed to parse boolean for field, `" ++ name ++ "`"))
-
-  writeEnv ev =
-    modifyRW_ (\rw -> rw { eUserEnv = Map.insert name ev (eUserEnv rw) })
-
--- | Get a user option, using Maybe for failure.
-tryGetUser :: String -> REPL (Maybe EnvVal)
-tryGetUser name = do
-  rw <- getRW
-  return (Map.lookup name (eUserEnv rw))
-
--- | Get a user option, when it's known to exist.  Fail with panic when it
--- doesn't.
-getUser :: String -> REPL EnvVal
-getUser name = do
-  mb <- tryGetUser name
-  case mb of
-    Just ev -> return ev
-    Nothing -> panic "[REPL] getUser" ["option `" ++ name ++ "` does not exist"]
-
--- Environment Options ---------------------------------------------------------
-
-type OptionMap = Trie OptionDescr
-
-mkOptionMap :: [OptionDescr] -> OptionMap
-mkOptionMap  = foldl insert emptyTrie
-  where
-  insert m d = insertTrie (optName d) d m
-
-data OptionDescr = OptionDescr
-  { optName    :: String
-  , optDefault :: EnvVal
-  , optCheck   :: EnvVal -> Maybe String
-  , optHelp    :: String
-  }
-
-userOptions :: OptionMap
-userOptions  = mkOptionMap
-  [ OptionDescr "base" (EnvNum 10) checkBase
-    "the base to display words at"
-  , OptionDescr "debug" (EnvBool False) (const Nothing)
-    "enable debugging output"
-  , OptionDescr "ascii" (EnvBool False) (const Nothing)
-    "display 7- or 8-bit words using ASCII notation."
-  , OptionDescr "infLength" (EnvNum 5) checkInfLength
-    "The number of elements to display for infinite sequences."
-  , OptionDescr "tests" (EnvNum 100) (const Nothing)
-    "The number of random tests to try."
-  , OptionDescr "prover" (EnvString "cvc4") checkProver
-    "The external smt solver for :prove and :sat (cvc4, yices, or z3)."
-  , OptionDescr "iteSolver" (EnvBool False) (const Nothing)
-    "Use smt solver to filter conditional branches in proofs."
-  , OptionDescr "warnDefaulting" (EnvBool True) (const Nothing)
-    "Choose if we should display warnings when defaulting."
-  ]
-
--- | Check the value to the `base` option.
-checkBase :: EnvVal -> Maybe String
-checkBase val = case val of
-  EnvNum n
-    | n >= 2 && n <= 36 -> Nothing
-    | otherwise         -> Just "base must fall between 2 and 36"
-  _                     -> Just "unable to parse a value for base"
-
-checkInfLength :: EnvVal -> Maybe String
-checkInfLength val = case val of
-  EnvNum n
-    | n >= 0    -> Nothing
-    | otherwise -> Just "the number of elements should be positive"
-  _ -> Just "unable to parse a value for infLength"
-
-checkProver :: EnvVal -> Maybe String
-checkProver val = case val of
-  EnvString s
-    | s `elem` ["cvc4", "yices", "z3"] -> Nothing
-    | otherwise                        -> Just "prover must be cvc4, yices, or z3"
-  _ -> Just "unable to parse a value for prover"
-
--- Environment Utilities -------------------------------------------------------
-
-whenDebug :: REPL () -> REPL ()
-whenDebug m = do
-  EnvBool b <- getUser "debug"
-  when b m

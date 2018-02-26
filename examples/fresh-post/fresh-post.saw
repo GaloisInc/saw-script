@@ -22,11 +22,11 @@ let one_spec : CrucibleSetup () = do {
 
 let main : TopLevel () = do {
 
-    load_crucible_llvm_module "source.bc";
-    whoknows <- crucible_llvm_unsafe_assume_spec "whoknows" whoknows_spec;
-    crucible_llvm_verify "example" [whoknows] false example_spec abc;
-    crucible_llvm_verify "one" [] false one_spec ( do { print_goal; abc; } );
-    crucible_llvm_verify "bad" [whoknows] false bad_spec
+    m <- llvm_load_module "source.bc";
+    whoknows <- crucible_llvm_unsafe_assume_spec m "whoknows" whoknows_spec;
+    crucible_llvm_verify m "example" [whoknows] false example_spec abc;
+    crucible_llvm_verify m "one" [] false one_spec ( do { print_goal; abc; } );
+    crucible_llvm_verify m "bad" [whoknows] false bad_spec
       ( do { print_goal; abc; } );
     print "done";
 };

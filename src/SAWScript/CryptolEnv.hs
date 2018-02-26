@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.CryptolEnv
 Description : Context for interpreting Cryptol within SAW-Script.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module SAWScript.CryptolEnv
   ( CryptolEnv(..)
   , initCryptolEnv
@@ -24,6 +24,8 @@ module SAWScript.CryptolEnv
   , declareName
   , typeNoUser
   , schemaNoUser
+  , getNamingEnv
+  , getAllIfaceDecls
   )
   where
 
@@ -33,6 +35,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
+import Control.Monad(when)
 
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
@@ -61,6 +64,7 @@ import qualified Cryptol.TypeCheck.Monad as TM
 import qualified Cryptol.ModuleSystem as M
 import qualified Cryptol.ModuleSystem.Base as MB
 import qualified Cryptol.ModuleSystem.Env as ME
+import qualified Cryptol.ModuleSystem.Exports as MEx
 import qualified Cryptol.ModuleSystem.Interface as MI
 import qualified Cryptol.ModuleSystem.Monad as MM
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
@@ -74,7 +78,7 @@ import Cryptol.Utils.Logger (quietLogger)
 --import SAWScript.REPL.Monad (REPLException(..))
 import SAWScript.TypedTerm
 import SAWScript.Utils (Pos(..))
-import SAWScript.AST (Located(getVal, getPos), Import(..))
+import SAWScript.AST (Located(getVal, locatedPos), Import(..))
 
 --------------------------------------------------------------------------------
 
@@ -143,10 +147,11 @@ ioParseGeneric :: (P.Config -> Text -> Either P.ParseError a) -> Located String 
 ioParseGeneric parse lstr = ioParseResult (parse cfg (pack str))
   where
     (file, line, col) =
-      case getPos lstr of
-        Pos f l c     -> (f, l, c)
+      case locatedPos lstr of
+        Range f sl sc _el _ec -> (f, sl, sc) -- TODO: take span into account
         PosInternal s -> (s, 1, 1)
         PosREPL       -> ("<interactive>", 1, 1)
+        Unknown       -> ("Unknown", 1, 1)
     cfg = P.defaultConfig { P.cfgSource = file }
     str = concat [ replicate (line - 1) '\n'
                  , replicate (col - 1 + 2) ' ' -- add 2 to compensate for dropped "{{"
@@ -195,7 +200,9 @@ translateExpr sc env expr = do
   let ifaceDecls = getAllIfaceDecls modEnv
   (types, _) <- liftModuleM modEnv $ do
     prims <- MB.getPrimMap
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims ifaceDecls
+    -- noIfaceParams because we don't support translating functors yet
+    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims
+                                              MI.noIfaceParams ifaceDecls
   let types' = Map.union (eExtraTypes env) types
   let terms = eTermEnv env
   let cryEnv = C.emptyEnv
@@ -210,7 +217,9 @@ translateDeclGroups sc env dgs = do
   let ifaceDecls = getAllIfaceDecls modEnv
   (types, _) <- liftModuleM modEnv $ do
     prims <- MB.getPrimMap
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims ifaceDecls
+    -- noIfaceParams because we don't support translating functors yet
+    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims MI.noIfaceParams
+                                                          ifaceDecls
   let types' = Map.union (eExtraTypes env) types
   let terms = eTermEnv env
   let cryEnv = C.emptyEnv
@@ -233,33 +242,44 @@ translateDeclGroups sc env dgs = do
 -- | Translate all declarations in all loaded modules to SAWCore terms
 genTermEnv :: SharedContext -> ME.ModuleEnv -> IO (Map T.Name Term)
 genTermEnv sc modEnv = do
-  let declGroups = concatMap T.mDecls (ME.loadedModules modEnv)
+  let declGroups = concatMap T.mDecls
+                 $ filter (not . T.isParametrizedModule)
+                 $ ME.loadedModules modEnv
   cryEnv <- C.importTopLevelDeclGroups sc C.emptyEnv declGroups
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
 --------------------------------------------------------------------------------
+
+checkNotParametrized :: T.Module -> IO ()
+checkNotParametrized m =
+  when (T.isParametrizedModule m) $
+    fail $ unlines [ "Cannot load parameterized modules directly."
+                   , "Either use a ` import, or make a module instantiation."
+                   ]
+
 
 loadCryptolModule :: SharedContext -> CryptolEnv -> FilePath
                      -> IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  checkNotParametrized m
 
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
     prims <- MB.getPrimMap
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims ifaceDecls
+    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims MI.noIfaceParams ifaceDecls
 
   -- Regenerate SharedTerm environment.
   let oldTermEnv = eTermEnv env
   newTermEnv <- genTermEnv sc modEnv''
-  let names = P.eBinds (T.mExports m) -- :: Set T.Name
+  let names = MEx.eBinds (T.mExports m) -- :: Set T.Name
   let tm' = Map.filterWithKey (\k _ -> Set.member k names) $
             Map.intersectionWith TypedTerm types newTermEnv
   let env' = env { eModuleEnv = modEnv''
                  , eTermEnv = Map.union newTermEnv oldTermEnv
                  }
-  let sm' = Map.filterWithKey (\k _ -> Set.member k (P.eTypes (T.mExports m))) (T.mTySyns m)
+  let sm' = Map.filterWithKey (\k _ -> Set.member k (MEx.eTypes (T.mExports m))) (T.mTySyns m)
   return (CryptolModule sm' tm', env')
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
@@ -289,6 +309,7 @@ importModule sc env imp = do
             Left path -> return path
             Right mn -> fst `fmap` liftModuleM modEnv (MB.findModule mn)
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  checkNotParametrized m
 
   -- Regenerate SharedTerm environment. TODO: preserve old
   -- values, only translate decls from new module.
@@ -362,7 +383,8 @@ parseTypedTerm sc env input = do
     let ifDecls = getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc re)
     prims <- MB.getPrimMap
-    tcEnv <- MB.genInferInput range prims ifDecls
+    -- noIfaceParams because we don't support functors yet
+    tcEnv <- MB.genInferInput range prims MI.noIfaceParams ifDecls
     let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
@@ -401,12 +423,17 @@ parseDecls sc env input = do
     (rdecls :: [P.TopDecl T.Name]) <- MM.interactive (MB.rename interactiveName nameEnv (traverse MR.rename topdecls))
 
     -- Create a Module to contain the declarations
-    let rmodule = P.Module (P.Located P.emptyRange interactiveName) [] rdecls
+    let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
+                           , P.mInstance = Nothing
+                           , P.mImports = []
+                           , P.mDecls = rdecls
+                           }
 
     -- Infer types
     let range = fromMaybe P.emptyRange (P.getLoc rdecls)
     prims <- MB.getPrimMap
-    tcEnv <- MB.genInferInput range prims ifaceDecls
+    -- noIfaceParams because we don't support functors yet
+    tcEnv <- MB.genInferInput range prims MI.noIfaceParams ifaceDecls
     let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
@@ -427,12 +454,10 @@ parseDecls sc env input = do
 
 parseSchema :: CryptolEnv -> Located String -> IO T.Schema
 parseSchema env input = do
-  --putStrLn $ "parseSchema: " ++ show input
   let modEnv = eModuleEnv env
 
   -- Parse
   pschema <- ioParseSchema input
-  --putStrLn $ "ioParseSchema: " ++ show pschema
 
   fmap fst $ liftModuleM modEnv $ do
 
@@ -443,7 +468,8 @@ parseSchema env input = do
     let ifDecls = getAllIfaceDecls modEnv
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
     prims <- MB.getPrimMap
-    tcEnv <- MB.genInferInput range prims ifDecls
+    -- noIfaceParams because we don't support functors yet
+    tcEnv <- MB.genInferInput range prims MI.noIfaceParams ifDecls
     let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv) }
     let infer =
           case rschema of
@@ -451,7 +477,7 @@ parseSchema env input = do
               let k = Nothing -- allow either kind KNum or KType
               (t', goals) <- TM.collectGoals $ TK.checkType t k
               return (T.Forall [] [] t', goals)
-            _ -> TK.checkSchema rschema
+            _ -> TK.checkSchema True rschema
     out <- MM.io (TM.runInferM tcEnv' infer)
     (schema, _goals) <- MM.interactive (runInferOutput out)
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals

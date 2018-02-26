@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.AST
+Description : Datatypes representing SAWScript statements, expressions, and types.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor,DeriveFoldable,DeriveTraversable #-}
 {-# LANGUAGE TypeOperators #-}
@@ -6,13 +13,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-{- |
-Module      : $Header$
-Description : Datatypes representing SAWScript statements, expressions, and types.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.AST
        ( Name
        , LName
@@ -51,7 +51,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           Text.PrettyPrint.ANSI.Leijen (Pretty)
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
-import qualified Cryptol.Utils.Ident as P (unpackIdent, unpackModName)
+import qualified Cryptol.Utils.Ident as P (unpackIdent, modNameChunks)
 
 -- Names {{{
 
@@ -63,9 +63,12 @@ type Bind a = (Name,a)
 
 -- Expr Level {{{
 
-data Located a = Located { getVal :: a, getOrig :: Name, getPos :: Pos } deriving (Functor, Foldable, Traversable)
+data Located a = Located { getVal :: a, getOrig :: Name, locatedPos :: Pos } deriving (Functor, Foldable, Traversable)
 instance Show (Located a) where
   show (Located _ v p) = show v ++ " (" ++ show p ++ ")"
+
+instance Positioned (Located a) where
+  getPos = locatedPos
 
 type LName = Located Name
 
@@ -82,7 +85,11 @@ data Import = Import
   { iModule    :: Either FilePath P.ModName
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
+  , iPos       :: Pos
   } deriving (Eq, Show)
+
+instance Positioned Import where
+  getPos = iPos
 
 data Expr
   -- Constants
@@ -108,30 +115,58 @@ data Expr
   | Let DeclGroup Expr
   | TSig Expr Type
   | IfThenElse Expr Expr Expr
+  -- Source locations
+  | LExpr Pos Expr
   deriving (Eq, Show)
+
+instance Positioned Expr where
+  getPos (Code c) = getPos c
+  getPos (CType t) = getPos t
+  getPos (LExpr site _) = site
+  getPos (Var n) = getPos n
+  getPos _ = Unknown
 
 data Pattern
   = PWild (Maybe Type)
   | PVar LName (Maybe Type)
   | PTuple [Pattern]
+  | LPattern Pos Pattern
   deriving (Eq, Show)
 
+instance Positioned Pattern where
+  getPos (LPattern pos _) = pos
+  getPos _ = Unknown
+
 data Stmt
-  = StmtBind     Pattern (Maybe Type) Expr
-  | StmtLet      DeclGroup
-  | StmtCode     (Located String)
-  | StmtImport   Import
-  | StmtTypedef  (Located String) Type
+  = StmtBind     Pos Pattern (Maybe Type) Expr
+  | StmtLet      Pos DeclGroup
+  | StmtCode     Pos (Located String)
+  | StmtImport   Pos Import
+  | StmtTypedef  Pos (Located String) Type
   deriving (Eq, Show)
+
+instance Positioned Stmt where
+  getPos (StmtBind pos _ _ _)  = pos
+  getPos (StmtLet pos _)       = pos
+  getPos (StmtCode pos _)      = pos
+  getPos (StmtImport pos _)    = pos
+  getPos (StmtTypedef pos _ _) = pos
 
 data DeclGroup
   = Recursive [Decl]
   | NonRecursive Decl
   deriving (Eq, Show)
 
+instance Positioned DeclGroup where
+  getPos (Recursive ds) = maxSpan ds
+  getPos (NonRecursive d) = getPos d
+
 data Decl
-  = Decl { dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
+  = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
   deriving (Eq, Show)
+
+instance Positioned Decl where
+  getPos = dPos
 
 -- }}}
 
@@ -152,7 +187,12 @@ data Type
   | TyVar Name
   | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
   | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
+  | LType Pos Type
   deriving (Eq,Show)
+
+instance Positioned Type where
+  getPos (LType pos _) = pos
+  getPos _ = Unknown
 
 type TypeIndex = Integer
 
@@ -225,6 +265,7 @@ instance Pretty Expr where
       PP.text "if" PP.<+> PP.pretty e1 PP.<+>
       PP.text "then" PP.<+> PP.pretty e2 PP.<+>
       PP.text "else" PP.<+> PP.pretty e3
+    LExpr _ e -> PP.pretty e
 
 instance PrettyPrint Expr where
   pretty _ e = PP.pretty e
@@ -237,25 +278,25 @@ instance Pretty Pattern where
       prettyMaybeTypedArg (name, mType)
     PTuple pats ->
       PP.tupled (map PP.pretty pats)
+    LPattern _ pat' -> PP.pretty pat'
 
 instance Pretty Stmt where
    pretty = \case
-
-      StmtBind (PWild _leftType) _rightType expr ->
+      StmtBind _ (PWild _leftType) _rightType expr ->
          PP.pretty expr
-      StmtBind pat _rightType expr ->
+      StmtBind _ pat _rightType expr ->
          PP.pretty pat PP.<+> PP.text "<-" PP.<+> PP.align (PP.pretty expr)
-      StmtLet (NonRecursive decl) ->
+      StmtLet _ (NonRecursive decl) ->
          PP.text "let" PP.<+> prettyDef decl
-      StmtLet (Recursive decls) ->
+      StmtLet _ (Recursive decls) ->
          PP.text "rec" PP.<+>
          PP.cat (PP.punctuate
             (PP.empty PP.</> PP.text "and" PP.<> PP.space)
             (map prettyDef decls))
-      StmtCode (Located code _ _) ->
+      StmtCode _ (Located code _ _) ->
          PP.text "let" PP.<+>
             (PP.braces . PP.braces $ PP.text code)
-      StmtImport Import{iModule,iAs,iSpec} ->
+      StmtImport _ Import{iModule,iAs,iSpec} ->
          PP.text "import" PP.<+>
          (case iModule of
             Left filepath ->
@@ -272,17 +313,17 @@ instance Pretty Stmt where
             Just (P.Only names) ->
                PP.space PP.<> PP.tupled (map ppIdent names)
             Nothing -> PP.empty)
-      StmtTypedef (Located name _ _) ty ->
+      StmtTypedef _ (Located name _ _) ty ->
          PP.text "typedef" PP.<+> PP.text name PP.<+> pretty 0 ty
       --expr -> PP.cyan . PP.text $ show expr
 
       where
-        ppModName mn = PP.text (intercalate "." (P.unpackModName mn))
+        ppModName mn = PP.text (intercalate "." (P.modNameChunks mn))
         ppIdent i = PP.text (P.unpackIdent i)
         --ppName n = ppIdent (P.nameIdent n)
 
 prettyDef :: Decl -> PP.Doc
-prettyDef (Decl pat _ def) =
+prettyDef (Decl _ pat _ def) =
    PP.pretty pat PP.<+>
    let (args, body) = dissectLambda def
    in (if not (null args)
@@ -330,6 +371,7 @@ instance PrettyPrint Type where
   pretty _par (TyUnifyVar i)    = PP.text "t." PP.<> PP.integer i
   pretty _par (TySkolemVar n i) = PP.text n PP.<> PP.integer i
   pretty _par (TyVar n)         = PP.text n
+  pretty par (LType _ t)        = pretty par t
 
 instance PrettyPrint TyCon where
   pretty par tc = case tc of

@@ -1,20 +1,26 @@
-{-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverlappingInstances #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DataKinds #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.Value
 Description : Value datatype for SAW-Script interpreter.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DataKinds #-}
+
 module SAWScript.Value where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -24,7 +30,7 @@ import Control.Monad.ST
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (ReaderT(..), ask, asks)
+import Control.Monad.Reader (ReaderT(..), ask, asks, local)
 import Control.Monad.State (StateT(..), get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
@@ -34,6 +40,7 @@ import qualified Text.LLVM    as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import Data.Parameterized.Some
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.CryptolEnv as CEnv
@@ -45,7 +52,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
-import SAWScript.Options (Options)
+import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.TypedTerm
 import SAWScript.ImportAIG
@@ -65,8 +72,13 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, GlobalVar, IntrinsicType)
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.LLVM as Crucible
+import qualified Lang.Crucible.LLVM.Extension as Crucible
+import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
+import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 -- Values ----------------------------------------------------------------------
 
@@ -91,7 +103,7 @@ data Value
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   | VLLVMMethodSpec LIR.LLVMMethodSpecIR
   -----
-  | VCrucibleSetup (CrucibleSetup Value)
+  | VCrucibleSetup !(CrucibleSetupM Value)
   | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
   | VCrucibleSetupValue CIR.SetupValue
   -----
@@ -104,17 +116,21 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
-  | VCFG Crucible.AnyCFG
-  | VGhostVar (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue"))
+  | VCFG LLVM_CFG
+  | VGhostVar CIR.GhostGlobal
+
+data LLVM_CFG where
+  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> LLVM_CFG
 
 data LLVMModule =
   LLVMModule
   { modName :: String
   , modMod :: L.Module
+  , modTrans :: Some Crucible.ModuleTranslation
   }
 
 showLLVMModule :: LLVMModule -> String
-showLLVMModule (LLVMModule name m) =
+showLLVMModule (LLVMModule name m _) =
   unlines [ "Module: " ++ name
           , "Types:"
           , showParts L.ppTypeDecl (L.modTypes m)
@@ -160,16 +176,24 @@ data PPOpts = PPOpts
   { ppOptsAnnotate :: Bool
   , ppOptsAscii :: Bool
   , ppOptsBase :: Int
+  , ppOptsColor :: Bool
   }
 
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts False False 10
+defaultPPOpts = PPOpts False False 10 False
 
 cryptolPPOpts :: PPOpts -> C.PPOpts
 cryptolPPOpts opts =
   C.defaultPPOpts
     { C.useAscii = ppOptsAscii opts
     , C.useBase = ppOptsBase opts
+    }
+
+sawPPOpts :: PPOpts -> SharedTerm.PPOpts
+sawPPOpts opts =
+  SharedTerm.defaultPPOpts
+    { SharedTerm.ppBase = ppOptsBase opts
+    , SharedTerm.ppColor = ppOptsColor opts
     }
 
 quietEvalOpts :: C.EvalOpts
@@ -190,7 +214,7 @@ showsProofResult opts r =
     Valid _ -> showString "Valid"
     InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
   where
-    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
@@ -202,7 +226,7 @@ showsSatResult opts r =
     Unsat _ -> showString "Unsat"
     SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
   where
-    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
@@ -219,7 +243,7 @@ showSimpset opts ss =
        PPL.</> PPL.char '=' PPL.<+>
        ppTerm (rhsRewriteRule r))
     ppTerm t = scPrettyTermDoc opts' t
-    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
 showsPrecValue opts p v =
@@ -264,7 +288,7 @@ showsPrecValue opts p v =
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
   where
-    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+    opts' = sawPPOpts opts
 
 instance Show Value where
     showsPrec p v = showsPrecValue defaultPPOpts p v
@@ -355,6 +379,19 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
 
+localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
+localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
+
+printOutLnTop :: Verbosity -> String -> TopLevel ()
+printOutLnTop v s =
+    do opts <- getOptions
+       io $ printOutLn opts v s
+
+printOutTop :: Verbosity -> String -> TopLevel ()
+printOutTop v s =
+    do opts <- getOptions
+       io $ printOutFn opts v s
+
 getHandleAlloc :: TopLevel (Crucible.HandleAllocator RealWorld)
 getHandleAlloc = TopLevel (asks roHandleAlloc)
 
@@ -399,7 +436,22 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
-type CrucibleSetup a = StateT CIR.CrucibleSetupState TopLevel a
+type CrucibleSetup arch a =
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
+
+data CrucibleSetupM a =
+  CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }
+
+instance Functor CrucibleSetupM where
+  fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
+
+instance Applicative CrucibleSetupM where
+  pure x = CrucibleSetupM (pure x)
+  CrucibleSetupM f <*> CrucibleSetupM m = CrucibleSetupM (f <*> m)
+
+instance Monad CrucibleSetupM where
+  return = pure
+  CrucibleSetupM m >>= f = CrucibleSetupM (m >>= runCrucibleSetupM . f)
 
 type ProofScript a = StateT ProofState TopLevel a
 
@@ -501,16 +553,16 @@ instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
     fromValue _ = error "fromValue LLVMSetup"
 
 ---------------------------------------------------------------------------------
-instance IsValue a => IsValue (StateT CIR.CrucibleSetupState TopLevel a) where
+instance IsValue a => IsValue (CrucibleSetupM a) where
     toValue m = VCrucibleSetup (fmap toValue m)
 
-instance FromValue a => FromValue (StateT CIR.CrucibleSetupState TopLevel a) where
+instance FromValue a => FromValue (CrucibleSetupM a) where
     fromValue (VCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = do
-      v1 <- fromValue m1
+    fromValue (VBind m1 v2) = CrucibleSetupM $ do
+      v1 <- runCrucibleSetupM (fromValue m1)
       m2 <- lift $ applyValue v2 v1
-      fromValue m2
+      runCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue CIR.SetupValue where
@@ -520,10 +572,10 @@ instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue (Crucible.AnyCFG) where
+instance IsValue LLVM_CFG where
     toValue t = VCFG t
 
-instance FromValue (Crucible.AnyCFG) where
+instance FromValue LLVM_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
@@ -677,10 +729,10 @@ instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
 
-instance IsValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+instance IsValue CIR.GhostGlobal where
   toValue = VGhostVar
 
-instance FromValue (Crucible.GlobalVar (Crucible.IntrinsicType "GhostValue")) where
+instance FromValue CIR.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
@@ -696,7 +748,7 @@ addTrace str val =
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
     VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
     VLLVMSetup     m -> VLLVMSetup     (addTrace str `fmap` addTraceStateT str m)
-    VCrucibleSetup m -> VCrucibleSetup (addTrace str `fmap` addTraceStateT str m)
+    VCrucibleSetup (CrucibleSetupM m) -> VCrucibleSetup (CrucibleSetupM (addTrace str `fmap` addTraceStateT str m))
     VBind v1 v2      -> VBind          (addTrace str v1) (addTrace str v2)
     _                -> val
 

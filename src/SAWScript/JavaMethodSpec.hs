@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaMethodSpec
+Description : Interface to the Java symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 
-{- |
-Module      : $Header$
-Description : Interface to the Java symbolic simulator.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaMethodSpec
   ( JavaMethodSpecIR
   , specMethod
@@ -58,14 +58,15 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import Language.JVM.Common (ppFldId)
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr as TC
-import SAWScript.Options
+import SAWScript.Options hiding (Verbosity)
+import qualified SAWScript.Options as Opts
 import SAWScript.Utils
 import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaMethodSpec.Evaluator
 import SAWScript.JavaUtils
 import SAWScript.PathVC
 import SAWScript.TypedTerm
-import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io)
+import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutTop, printOutLnTop)
 import SAWScript.VerificationCheck
 
 import Data.JVM.Symbolic.AST (entryBlock)
@@ -350,7 +351,7 @@ execBehavior meth bsl sc mbThis argLocals ps = do
        mapM_ ocStep (bsCommands bs)
 
 checkClassesInitialized :: MonadSim SharedContext m =>
-                           Pos -> String -> [String]
+                           Pos -> String -> [ClassName]
                         -> SAWJavaSim m ()
 checkClassesInitialized pos nm requiredClasses = do
   forM_ requiredClasses $ \c -> do
@@ -358,7 +359,7 @@ checkClassesInitialized pos nm requiredClasses = do
     let status = Map.lookup c (mem ^. memInitialization)
     when (status /= Just Initialized) $
       let msg = "The method spec \'" ++ nm ++
-                "\' requires that the class " ++ slashesToDots c ++
+                "\' requires that the class " ++ slashesToDots (unClassName c) ++
                 " is initialized.  SAWScript does not " ++
                 "currently support methods that initialize new classes."
        in throwIOExecException pos (ftext msg) ""
@@ -431,42 +432,45 @@ data VerifyParams = VerifyParams
 type SymbolicRunHandler =
   SharedContext -> [PathVC Breakpoint] -> TopLevel ()
 type Prover =
-  VerifyState -> Term -> TopLevel ()
+  VerifyState -> Int -> Term -> TopLevel ()
 
 runValidation :: Prover -> VerifyParams -> SymbolicRunHandler
 runValidation prover params sc results = do
   let ir = vpSpec params
-      verb = verbLevel (vpOpts params)
+      printLn      = printOutLnTop
   opts <- fmap rwPPOpts getTopLevelRW
   forM_ results $ \pvc -> do
     let mkVState nm cfn =
           VState { vsVCName = nm
                  , vsMethodSpec = ir
-                 , vsVerbosity = verb
+                 , vsVerbosity = case Opts.verbLevel (vpOpts params) of
+                                    Opts.Silent              -> 0
+                                    Opts.OnlyCounterExamples -> 0
+                                    Opts.Error               -> 1
+                                    Opts.Warn                -> 2
+                                    Opts.Info                -> 3
+                                    _                        -> 4
                  , vsCounterexampleFn = cfn
                  , vsStaticErrors = pvcStaticErrors pvc
                  }
     if null (pvcStaticErrors pvc) then
-     forM_ (pvcChecks pvc) $ \vc -> do
+     forM_ (zip [0..] (pvcChecks pvc)) $ \(n, vc) -> do
        let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
        g <- io $ scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
-       when (verb >= 2) $ io $ do
-         putStr $ "Checking " ++ vcName vc
-         when (verb >= 5) $ putStr $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
-         putStrLn ""
-       prover vs g
+       printOutTop Debug $ "Checking " ++ vcName vc
+       printOutTop ExtraDebug $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
+       printOutTop Debug ""
+       prover vs n g
     else do
       let vsName = "an invalid path"
       let vs = mkVState vsName (\_ -> return $ vcat (pvcStaticErrors pvc))
       false <- io $ scBool sc False
       g <- io $ scImplies sc (pvcAssumptions pvc) false
-      when (verb >= 2) $ io $ do
-        putStrLn $ "Checking " ++ vsName
-        print $ pvcStaticErrors pvc
-      when (verb >= 5) $ io $ do
-        putStrLn $ "Calling prover to disprove " ++
+      printLn Info $ "Checking " ++ vsName
+      printLn Info $ show $ pvcStaticErrors pvc
+      printLn Debug $ "Calling prover to disprove " ++
                  scPrettyTerm defaultPPOpts (pvcAssumptions pvc)
-      prover vs g
+      prover vs 0 g
 
 data VerifyState = VState {
          vsVCName :: String
@@ -752,7 +756,7 @@ checkFinalState sc ms bs cl initPS = do
     forM_ (Map.toList (finalMem ^. memStaticFields)) $ \(f, fval) ->
       unless (Set.member f mentionedSFields) $
         unless(isArrayType (fieldIdType f)) $
-          let fieldDesc = fieldIdClass f ++ "." ++ fieldIdName f in
+          let fieldDesc = unClassName (fieldIdClass f) ++ "." ++ fieldIdName f in
           case Map.lookup f (initMem ^. memStaticFields) of
             Nothing -> pvcgFail $ hsep
               [ ftext "Modifies the unspecified static field"

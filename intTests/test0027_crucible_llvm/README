@@ -1,0 +1,6 @@
+This is a basic smoke test of the crucible LLVM verification support.
+
+It explicitly pokes at a somewhat delicate issue; that of the representation
+of bitvector values that happen to be of the same length as pointers.  These
+require special recognition in on the SAWScript side.  This test is
+included largely to ensure that this support continues to be exercised.
