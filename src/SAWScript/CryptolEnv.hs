@@ -47,6 +47,7 @@ import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
 import Verifier.SAW.SharedTerm (SharedContext, Term, incVars)
+import Verifier.SAW.TypedTerm
 
 import qualified Verifier.SAW.Cryptol as C
 
@@ -75,8 +76,8 @@ import Cryptol.Utils.PP
 import Cryptol.Utils.Ident (Ident, preludeName, packIdent, interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 
+
 --import SAWScript.REPL.Monad (REPLException(..))
-import SAWScript.TypedTerm
 import SAWScript.Utils (Pos(..))
 import SAWScript.AST (Located(getVal, locatedPos), Import(..))
 

@@ -59,7 +59,6 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkDecl, checkDeclGroup)
 import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value
 import SAWScript.Prover.Rewrite(basic_ss)
@@ -70,6 +69,7 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.TypedTerm
 
 import qualified Verifier.Java.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW

@@ -55,6 +55,7 @@ import Verifier.SAW.Cryptol (exportFirstOrderValue)
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.Builtins
@@ -66,7 +67,6 @@ import SAWScript.LLVMUtils
 import SAWScript.Options as Opt
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV
 

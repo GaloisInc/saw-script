@@ -106,12 +106,12 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
+import Verifier.SAW.TypedTerm
 
 import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.TypedTerm
 import SAWScript.TopLevel
 import SAWScript.Value
 

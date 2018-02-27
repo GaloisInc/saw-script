@@ -115,7 +115,6 @@ library
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
-    SAWScript.TypedTerm
     SAWScript.Utils
     SAWScript.Value
     SAWScript.VerificationCheck

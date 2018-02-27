@@ -65,7 +65,6 @@ import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaMethodSpec.Evaluator
 import SAWScript.JavaUtils
 import SAWScript.PathVC
-import SAWScript.TypedTerm
 import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutTop, printOutLnTop)
 import SAWScript.VerificationCheck
 
@@ -77,6 +76,7 @@ import Verifier.Java.SAWBackend hiding (basic_ss)
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 -- JSS Utilities {{{1
 

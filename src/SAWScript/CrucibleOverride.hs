@@ -80,10 +80,10 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
+import           Verifier.SAW.TypedTerm
 
 import           SAWScript.CrucibleMethodSpecIR
 import           SAWScript.CrucibleResolveSetupValue
-import           SAWScript.TypedTerm
 import           SAWScript.Options
 import           SAWScript.Utils (handleException)
 

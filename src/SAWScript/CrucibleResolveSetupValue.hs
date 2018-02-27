@@ -49,12 +49,12 @@ import qualified Data.Parameterized.NatRepr as NatRepr
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
+import Verifier.SAW.TypedTerm
 import Text.LLVM.DebugUtils as L
 
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
-import SAWScript.TypedTerm
 import SAWScript.Prover.Rewrite
 
 import SAWScript.CrucibleMethodSpecIR

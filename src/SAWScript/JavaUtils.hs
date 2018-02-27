@@ -31,10 +31,10 @@ import Verifier.Java.Simulator as JSS
 import Verifier.Java.SAWImport
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr
-import SAWScript.TypedTerm
 
 type SAWBackend = SharedContext
 type SpecPathState = Path SharedContext

@@ -63,6 +63,7 @@ import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Recognizer
@@ -80,7 +81,6 @@ import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.TopLevel
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV

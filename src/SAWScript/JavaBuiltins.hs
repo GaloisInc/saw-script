@@ -38,6 +38,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
 
@@ -50,7 +51,6 @@ import SAWScript.Builtins
 import SAWScript.CryptolEnv (schemaNoUser)
 import SAWScript.Options
 import SAWScript.Proof
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SS
 

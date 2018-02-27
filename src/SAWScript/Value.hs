@@ -54,7 +54,6 @@ import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
-import SAWScript.TypedTerm
 import SAWScript.ImportAIG
 import SAWScript.Prover.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
@@ -62,6 +61,7 @@ import SAWScript.SAWCorePrimitives( concretePrimitives )
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
