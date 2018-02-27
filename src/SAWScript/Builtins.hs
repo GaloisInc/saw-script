@@ -73,7 +73,6 @@ import qualified Verifier.SAW.Typechecker (checkTerm)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as UntypedAST
 
-import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
@@ -92,6 +91,7 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(basic_ss)
 import qualified SAWScript.Prover.SBV as Prover
 
+import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
@@ -1305,8 +1305,13 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       ]
       -- TODO: sext, sdiv, srem, sshr
 
-    noLoc :: String -> Located String
-    noLoc x = Located x x (PosInternal "cryptol_prims")
+    noLoc :: String -> CEnv.InputText
+    noLoc x = CEnv.InputText
+                { CEnv.inpText = x
+                , CEnv.inpFile = "(cryptol_prims)"
+                , CEnv.inpLine = 1
+                , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
+                }
 
     parsePrim :: (String, Ident, String) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do

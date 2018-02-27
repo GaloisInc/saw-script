@@ -43,7 +43,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 
 import qualified SAWScript.AST as SS
-import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -58,6 +57,7 @@ import SAWScript.ImportAIG
 import SAWScript.Prover.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
+import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)

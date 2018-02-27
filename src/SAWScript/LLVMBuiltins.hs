@@ -56,10 +56,10 @@ import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.CryptolEnv (schemaNoUser)
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.Builtins
-import SAWScript.CryptolEnv (schemaNoUser)
 import SAWScript.LLVMExpr
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMMethodSpec

@@ -87,7 +87,6 @@ library
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
-    SAWScript.CryptolEnv
     SAWScript.Exceptions
     SAWScript.Import
     SAWScript.ImportAIG
@@ -166,3 +165,4 @@ executable saw
     , transformers
     , saw-script
     , saw-core
+    , cryptol-verifier
