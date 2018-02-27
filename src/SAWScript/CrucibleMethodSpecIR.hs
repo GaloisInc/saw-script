@@ -47,7 +47,7 @@ import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.CFG.Common as Crucible
 --import qualified Verifier.LLVM.Codebase as LSS
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.TypedTerm
 
 import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)

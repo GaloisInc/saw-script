@@ -1,14 +1,15 @@
 {- |
-Module      : SAWScript.SolverStats
+Module      : SAWScript.Prover.SolverStats
 Description : Represents information about solved goals.
 Maintainer  : atomb
 Stability   : provisional
 -}
 
-module SAWScript.SolverStats where
+module SAWScript.Prover.SolverStats where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.List (intercalate)
 
 -- | Data structure for recording useful information about
 --   verification runs on goals.
@@ -31,3 +32,10 @@ solverStats nm sz = SolverStats (Set.singleton nm) sz
 instance Monoid SolverStats where
   mempty = SolverStats mempty 0
   mappend (SolverStats xs n) (SolverStats ys m) = SolverStats (mappend xs ys) (n+m)
+
+
+ppStats :: SolverStats -> String
+ppStats x = "Goal size " ++ show (solverStatsGoalSize x) ++
+            ". Provers used: " ++
+            intercalate "," (Set.toList (solverStatsSolvers x))
+

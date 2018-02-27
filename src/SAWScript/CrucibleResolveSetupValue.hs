@@ -55,7 +55,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
 import SAWScript.TypedTerm
-import SAWScript.Utils
+import SAWScript.Prover.Rewrite
 
 import SAWScript.CrucibleMethodSpecIR
 

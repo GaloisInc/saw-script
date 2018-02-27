@@ -110,7 +110,7 @@ import Verifier.SAW.Recognizer
 import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.TypedTerm
 import SAWScript.TopLevel
 import SAWScript.Value

@@ -56,7 +56,7 @@ import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.TypedTerm
 import SAWScript.ImportAIG
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)

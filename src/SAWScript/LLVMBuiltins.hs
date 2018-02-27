@@ -65,7 +65,7 @@ import SAWScript.LLVMMethodSpec
 import SAWScript.LLVMUtils
 import SAWScript.Options as Opt
 import SAWScript.Proof
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SV

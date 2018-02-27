@@ -112,7 +112,6 @@ library
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SAWCorePrimitives
-    SAWScript.SolverStats
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
@@ -120,6 +119,12 @@ library
     SAWScript.Utils
     SAWScript.Value
     SAWScript.VerificationCheck
+
+    SAWScript.Prover.Mode
+    SAWScript.Prover.Rewrite
+    SAWScript.Prover.SolverStats
+    SAWScript.Prover.Util
+    SAWScript.Prover.SBV
 
   GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
