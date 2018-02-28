@@ -18,3 +18,10 @@ packages:
     deps/crucible/crucible-saw
     deps/crucible/galois-matlab
     deps/parameterized-utils
+    deps/flexdis86
+    deps/macaw/base
+    deps/macaw/symbolic
+    deps/macaw/x86
+    deps/macaw/x86_symbolic
+    deps/elf-edit
+    deps/dwarf
