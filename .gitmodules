@@ -42,13 +42,13 @@
 	url = https://github.com/GaloisInc/saw-core.git
 [submodule "deps/flexdis86"]
 	path = deps/flexdis86
-	url = https://github.com:GaloisInc/flexdis86.git
+	url = https://github.com/GaloisInc/flexdis86.git
 [submodule "deps/macaw"]
 	path = deps/macaw
-	url = https://github.com:GaloisInc/macaw.git
+	url = https://github.com/GaloisInc/macaw.git
 [submodule "deps/elf-edit"]
 	path = deps/elf-edit
-	url = https://github.com:GaloisInc/elf-edit.git
+	url = https://github.com/GaloisInc/elf-edit.git
 [submodule "deps/dwarf"]
 	path = deps/dwarf
-	url = https://github.com:GaloisInc/dwarf.git
+	url = https://github.com/GaloisInc/dwarf.git
