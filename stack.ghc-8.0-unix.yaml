@@ -18,6 +18,13 @@ packages:
   - deps/crucible/crucible-saw/
   - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
+  - deps/dwarf/
+  - deps/elf-edit/
+  - deps/flexdis86/
+  - deps/macaw/base
+  - deps/macaw/symbolic
+  - deps/macaw/x86
+  - deps/macaw/x86_symbolic
   - .
 extra-deps:
   - GraphSCC-1.0.4
