@@ -53,7 +53,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
 
 -- Crucible LLVM
-import Lang.Crucible.LLVM.MemModel (Mem,mkMemVar)
+import Lang.Crucible.LLVM.MemModel (Mem)
 
 -- Crucible SAW
 import Lang.Crucible.Solver.SAWCoreBackend
@@ -247,7 +247,6 @@ translate opts elf fun =
      (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
                             $ stToIO (makeCFG opts elf name addr)
 
-     mvar <- stToIO (mkMemVar halloc)
      let sym   = backend opts
          fspec = funSpec fun
 
@@ -256,9 +255,11 @@ translate opts elf fun =
           runPreSpec sym (cryDecls fspec) (spec fspec)
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
-     execResult <-
+     let memStart = theMem extra
+         globs = theRegions extra
+     (mvar, execResult) <-
         statusBlock "  Simulating... " $
-        runCodeBlock sym x86 (x86_eval opts) halloc (mvar,theMem extra) cfg regs
+        runCodeBlock sym x86 (x86_eval opts) halloc (memStart, globs) cfg regs
 
 
      gp <- case execResult of

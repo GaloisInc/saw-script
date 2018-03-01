@@ -13,6 +13,7 @@ module SAWScript.X86Spec.Monad
   , updMem
   , updMem_
   , withMem
+  , registerRegion
   , getRegs
   , InPre(..)
   , isPtr
@@ -37,7 +38,7 @@ import Lang.Crucible.Solver.Interface
   (natLit,notPred,addAssertion,addAssumption, natEq)
 import Lang.Crucible.Solver.SAWCoreBackend(sawBackendSharedContext)
 import Lang.Crucible.LLVM.MemModel ( Mem, emptyMem, LLVMPointerType)
-import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer )
+import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, LLVMPtr )
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 
 import Verifier.SAW.SharedTerm(Term,SharedContext,scApplyAll)
@@ -47,6 +48,7 @@ import Verifier.SAW.CryptolEnv(initCryptolEnv,loadCryptolModule,CryptolEnv(..))
 import Cryptol.ModuleSystem.Name(nameIdent)
 import Cryptol.Utils.Ident(unpackIdent)
 
+import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
 import Data.Macaw.X86.ArchTypes(X86_64)
 
@@ -67,11 +69,12 @@ type Post = 'Post
 newtype Spec (p :: SpecType) a =
   Spec ((Sym, Map String Term) ->
         RR p ->
-        RegValue Sym Mem -> IO (a, RegValue Sym Mem))
+        (RegValue Sym Mem, SS p) -> IO (a, (RegValue Sym Mem, SS p)))
 
 -- | Interanl state to be passed from the pre-spec to the post-spec
-data PreExtra = PreExtra { theMem :: RegValue Sym Mem
-                         , cryTerms :: Map String Term
+data PreExtra = PreExtra { theMem     :: RegValue Sym Mem
+                         , theRegions :: Map RegionIndex (LLVMPtr Sym 64)
+                         , cryTerms   :: Map String Term
                          }
 
 -- | Execute a pre-condition specification.
@@ -81,8 +84,9 @@ runPreSpec ::
   Spec Pre a -> IO (a, PreExtra)
 runPreSpec sym mb (Spec f) =
   do cs <- loadCry sym mb
-     (a,m) <- f (sym,cs) () =<< emptyMem LittleEndian
-     return (a, PreExtra { theMem = m, cryTerms = cs })
+     m0 <- emptyMem LittleEndian
+     (a,(m,rs)) <- f (sym,cs) () (m0, Map.empty)
+     return (a, PreExtra { theMem = m, cryTerms = cs, theRegions = rs })
 
 -- | Load a file with Cryptol decls.
 loadCry :: Sym -> Maybe FilePath -> IO (Map String Term)
@@ -105,11 +109,15 @@ runPostSpec ::
   RegValue Sym Mem ->
   Spec Post () ->
   IO ()
-runPostSpec sym cry rs mem (Spec f) = fst <$> f (sym, cry) rs mem
+runPostSpec sym cry rs mem (Spec f) = fst <$> f (sym, cry) rs (mem, ())
 
 type family RR (x :: SpecType) where
   RR Pre = ()
   RR Post = Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64)
+
+type family SS (x :: SpecType) where
+  SS Pre = Map RegionIndex (LLVMPtr Sym 64)
+  SS Post = ()
 
 instance Functor (Spec p) where fmap = liftM
 
@@ -153,17 +161,24 @@ cryTerm x xs = Spec (\(sym,cs) _ s ->
                   return (t1,s))
 
 updMem :: (Sym -> RegValue Sym Mem -> IO (a, RegValue Sym Mem)) -> Spec Pre a
-updMem f = Spec (\r _ s -> f (fst r) s)
+updMem f = Spec (\r _ (s1,s2) -> do (a,s1') <- f (fst r) s1
+                                    return (a, (s1',s2)))
 
 updMem_ :: (Sym -> RegValue Sym Mem -> IO (RegValue Sym Mem)) -> Spec Pre ()
 updMem_ f = updMem (\sym mem -> do mem1 <- f sym mem
                                    return ((),mem1))
 
 withMem :: (Sym -> RegValue Sym Mem -> IO a) -> Spec p a
-withMem f = Spec (\r _ s -> f (fst r) s >>= \a -> return (a,s))
+withMem f = Spec (\r _ s -> f (fst r) (fst s) >>= \a -> return (a,s))
 
 getRegs :: Spec Post (Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64))
 getRegs = Spec (\_ r s -> return (r,s))
+
+registerRegion :: RegionIndex -> LLVMPtr Sym 64 -> Spec Pre ()
+registerRegion r x = Spec (\_ _ (s1,s2) ->
+  if Map.member r s2
+    then fail ("Multiple declarations for global region: " ++ show r)
+    else return ((), (s1, Map.insert r x s2)))
 
 class InPre p where
   inPre :: Spec p Bool
