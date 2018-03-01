@@ -2,12 +2,14 @@
 {-# Language DataKinds #-}
 {-# Language TypeFamilies #-}
 {-# Language TypeSynonymInstances #-}
+{-# Language FlexibleInstances #-}
 module SAWScript.X86Spec.Memory
   ( MemType(..)
   , SizeOf(..)
   , WriteMem(..)
-  , allocBytes
+  , AllocBytes(..)
   , allocArray
+  , allocArrayOf
   , readMem
   , readArray
   , PtrAdd(..)
@@ -25,7 +27,7 @@ import Data.Parameterized.NatRepr(NatRepr,knownNat,natValue)
 import qualified Lang.Crucible.LLVM.MemModel.Type as LLVM
 import Lang.Crucible.LLVM.MemModel.Generic(AllocType(HeapAlloc), Mutability(..))
 import Lang.Crucible.LLVM.MemModel
-  ( doStore, doLoad, doMalloc, doPtrAddOffset, coerceAny)
+  ( storeConstRaw, doLoad, doMalloc, doPtrAddOffset, coerceAny, packMemValue )
 import Lang.Crucible.LLVM.Bytes(Bytes,toBytes,bytesToInteger)
 import Lang.Crucible.LLVM.MemModel.Pointer (projectLLVM_bv)
 import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
@@ -87,12 +89,28 @@ llvmType x = bitvectorType (sizeOf x)
 class WriteMem t where
   writeMem :: Value APtr -> t -> Spec Pre ()
 
-instance (MemType t, Infer t) => WriteMem (Value t) where
-  writeMem (Value p) v@(Value x) =
+instance (MemType t, a ~ X86 t) => WriteMem (a, Value t) where
+  writeMem (Value p) (w,Value x) =
     updMem_ $ \sym mem ->
-      do let w = typeOf v
-         let ?ptrWidth = knownNat
-         doStore sym mem p (crucRepr w) (llvmType w) x
+      do let ?ptrWidth = knownNat
+         let ty = llvmType w
+         val <- packMemValue sym ty (crucRepr w) x
+         -- Here we use the write that ignore mutability.
+         -- This is because we are writinging initialization code.
+         storeConstRaw sym mem p ty val
+
+instance (MemType t, Infer t) => WriteMem (Value t) where
+  writeMem p x = writeMem p (infer, x)
+
+instance (MemType t, a ~ X86 t) => WriteMem (a, [Value t]) where
+  writeMem p (t,xs) =
+    case xs of
+      []     -> return ()
+      v : vs -> do writeMem p (t,v)
+                   p1 <- ptrAdd p (sizeOf t)
+                   writeMem p1 (t,vs)
+
+
 
 instance (SizeOf t, WriteMem t) => WriteMem [t] where
   writeMem p xs =
@@ -154,12 +172,19 @@ allocArray ::
   Mutability ->
   [ Value t ] ->
   Spec Pre (Value APtr)
-allocArray str mut xs =
+allocArray = allocArrayOf infer
+
+-- | Allocate an array with elements of the given type.
+-- Initialize it with the given values.
+allocArrayOf ::
+  MemType t =>
+  X86 t -> String -> Mutability -> [Value t] -> Spec Pre (Value APtr)
+allocArrayOf ty str mut xs =
   do let n  = fromIntegral (length xs)
-         bs = bytesToInteger (sizeOf (typeOf (head xs)))
+         bs = bytesToInteger (sizeOf ty)
      sz    <- literal (n * bs)
      ptr   <- allocBytes str mut sz
-     writeMem ptr xs
+     writeMem ptr (ty,xs)
      return ptr
 
 

@@ -174,8 +174,8 @@ withMem f = Spec (\r _ s -> f (fst r) (fst s) >>= \a -> return (a,s))
 getRegs :: Spec Post (Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64))
 getRegs = Spec (\_ r s -> return (r,s))
 
-registerRegion :: RegionIndex -> LLVMPtr Sym 64 -> Spec Pre ()
-registerRegion r x = Spec (\_ _ (s1,s2) ->
+registerRegion :: RegionIndex -> Value APtr -> Spec Pre ()
+registerRegion r (Value x) = Spec (\_ _ (s1,s2) ->
   if Map.member r s2
     then fail ("Multiple declarations for global region: " ++ show r)
     else return ((), (s1, Map.insert r x s2)))
