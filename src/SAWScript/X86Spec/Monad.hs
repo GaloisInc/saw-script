@@ -14,7 +14,7 @@ module SAWScript.X86Spec.Monad
   , updMem_
   , withMem
   , registerRegion
-  , getRegs
+  , lookupReg
   , InPre(..)
   , isPtr
   , assume
@@ -32,7 +32,7 @@ import qualified Data.Map as Map
 import Data.Parameterized.Context(Assignment)
 
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
-import Lang.Crucible.Simulator.RegValue(RegValue,RegValue')
+import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
 import Lang.Crucible.Solver.Interface
   (natLit,notPred,addAssertion,addAssumption, natEq)
@@ -50,7 +50,10 @@ import Cryptol.Utils.Ident(unpackIdent)
 
 import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
+import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import Data.Macaw.X86.ArchTypes(X86_64)
+import Data.Macaw.X86.Symbolic(lookupX86Reg)
+import Data.Macaw.X86.X86Reg(X86Reg)
 
 
 import SAWScript.X86Spec.Types
@@ -171,8 +174,12 @@ updMem_ f = updMem (\sym mem -> do mem1 <- f sym mem
 withMem :: (Sym -> RegValue Sym Mem -> IO a) -> Spec p a
 withMem f = Spec (\r _ s -> f (fst r) (fst s) >>= \a -> return (a,s))
 
-getRegs :: Spec Post (Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64))
-getRegs = Spec (\_ r s -> return (r,s))
+lookupReg ::
+  (ToCrucibleType t ~ Rep ty) => X86Reg t -> Spec Post (Value ty)
+lookupReg r = Spec (\_ regs s ->
+  case lookupX86Reg r regs of
+    Nothing     -> fail ("Unknown register: " ++ show r)
+    Just (RV v) -> return (Value v,s))
 
 registerRegion :: RegionIndex -> Value APtr -> Spec Pre ()
 registerRegion r (Value x) = Spec (\_ _ (s1,s2) ->

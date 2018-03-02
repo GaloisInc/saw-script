@@ -7,7 +7,6 @@
 {-# Language DataKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language FlexibleContexts #-}
-{-# Language AllowAmbiguousTypes #-}
 module SAWScript.X86Spec.Registers
   ( -- * Register names
     IP(..)
@@ -29,21 +28,12 @@ module SAWScript.X86Spec.Registers
   , macawLookup
   ) where
 
-import Control.Lens((^.))
-
 import qualified Flexdis86 as F
 
-import Data.Parameterized.Context(field,Idx)
-
-import Lang.Crucible.Simulator.RegValue(RegValue'(RV,unRV))
-import Lang.Crucible.LLVM.MemModel(LLVMPointerType)
+import Lang.Crucible.Simulator.RegValue(RegValue'(RV))
 
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import qualified Data.Macaw.X86.X86Reg as R
-import qualified Data.Macaw.X86.Symbolic as M
-        (IP,GP,Flag,X87Status,X87Top,X87Tag,FPReg,YMM)
-import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
-import Data.Macaw.X86.ArchTypes(X86_64)
 
 import SAWScript.X86Spec.Types
 import SAWScript.X86Spec.Monad
@@ -195,12 +185,7 @@ macawLookup RegAssign { .. } reg =
     R.X87_C0 -> x87_status X87_C0
     R.X87_C1 -> x87_status X87_C1
     R.X87_C2 -> x87_status X87_C2
-    R.X87_StatusReg 11 -> x87_status X87_C3
-
-    -- R.X87_C3 -> x87_status X87_C3
-    -- This doesn't work because C3 is 14 in flexdis, but Macaw
-    -- expects it to be 11.
-
+    R.X87_C3 -> x87_status X87_C3
 
     R.X87_StatusReg n ->
       error ("[bug] Unexpected X87 status register: " ++ show n)
@@ -254,147 +239,123 @@ type family RegType a where
 class GetReg a where
   getReg :: a -> Spec Post (Value (RegType a))
 
-regValue ::
-  forall n t. (Idx n (MacawCrucibleRegTypes X86_64) (Rep t)) =>
-  Spec Post (Value t)
-regValue =
-  do regs <- getRegs
-     return (Value (unRV (regs ^. (field @n))))
 
-regValueGP ::
-  forall n t. (Idx n (MacawCrucibleRegTypes X86_64) (LLVMPointerType 64)) =>
-  GPRegUse t -> Spec Post (Value t)
-regValueGP how =
+lookupRegGP :: R.X86Reg R.GP -> GPRegUse t -> Spec Post (Value t)
+lookupRegGP r how =
   case how of
-    AsBits -> do r <- regValue @n @AQWord
-                 isPtr r False
-                 return r
-    AsPtr  -> do r <- regValue @n @APtr
-                 isPtr r True
-                 return r
+    AsBits -> do v <- lookupReg r
+                 isPtr v False
+                 return v
+    AsPtr  -> do v <- lookupReg r
+                 isPtr v True
+                 return v
 
 
 
 instance GetReg IP where
-  getReg _ = regValue @M.IP
-
-
-
-
-
-
-
-
-
-
-
+  getReg _ = lookupReg R.X86_IP
 
 instance GetReg (GPReg,GPRegUse t) where
   getReg (x,use) =
     case x of
-      -- Flexdi86.Register for the mapping between registers.
-      RAX -> regValueGP @(M.GP  0) use
-      RBX -> regValueGP @(M.GP  3) use
-      RCX -> regValueGP @(M.GP  1) use
-      RDX -> regValueGP @(M.GP  2) use
-      RSI -> regValueGP @(M.GP  6) use
-      RDI -> regValueGP @(M.GP  7) use
-      RSP -> regValueGP @(M.GP  4) use
-      RBP -> regValueGP @(M.GP  5) use
-      R8  -> regValueGP @(M.GP  8) use
-      R9  -> regValueGP @(M.GP  9) use
-      R10 -> regValueGP @(M.GP 10) use
-      R11 -> regValueGP @(M.GP 11) use
-      R12 -> regValueGP @(M.GP 12) use
-      R13 -> regValueGP @(M.GP 13) use
-      R14 -> regValueGP @(M.GP 14) use
-      R15 -> regValueGP @(M.GP 15) use
+      RAX -> lookupRegGP R.RAX use
+      RBX -> lookupRegGP R.RBX use
+      RCX -> lookupRegGP R.RCX use
+      RDX -> lookupRegGP R.RDX use
+      RSI -> lookupRegGP R.RSI use
+      RDI -> lookupRegGP R.RDI use
+      RSP -> lookupRegGP R.RSP use
+      RBP -> lookupRegGP R.RBP use
+      R8  -> lookupRegGP R.R8  use
+      R9  -> lookupRegGP R.R9  use
+      R10 -> lookupRegGP R.R10 use
+      R11 -> lookupRegGP R.R11 use
+      R12 -> lookupRegGP R.R12 use
+      R13 -> lookupRegGP R.R13 use
+      R14 -> lookupRegGP R.R14 use
+      R15 -> lookupRegGP R.R15 use
 
 
 instance GetReg Flag where
   getReg f =
     case f of
-      CF -> regValue @(M.Flag 0)
-      PF -> regValue @(M.Flag 1)
-      AF -> regValue @(M.Flag 2)
-      ZF -> regValue @(M.Flag 3)
-      SF -> regValue @(M.Flag 4)
-      TF -> regValue @(M.Flag 5)
-      IF -> regValue @(M.Flag 6)
-      DF -> regValue @(M.Flag 7)
-      OF -> regValue @(M.Flag 8)
+      CF -> lookupReg R.CF
+      PF -> lookupReg R.PF
+      AF -> lookupReg R.AF
+      ZF -> lookupReg R.ZF
+      SF -> lookupReg R.SF
+      TF -> lookupReg R.TF
+      IF -> lookupReg R.IF
+      DF -> lookupReg R.DF
+      OF -> lookupReg R.OF
 
 
 instance GetReg VecReg where
   getReg f =
     case f of
-      YMM0  -> regValue @(M.YMM 0)
-      YMM1  -> regValue @(M.YMM 1)
-      YMM2  -> regValue @(M.YMM 2)
-      YMM3  -> regValue @(M.YMM 3)
-      YMM4  -> regValue @(M.YMM 4)
-      YMM5  -> regValue @(M.YMM 5)
-      YMM6  -> regValue @(M.YMM 6)
-      YMM7  -> regValue @(M.YMM 7)
-      YMM8  -> regValue @(M.YMM 8)
-      YMM9  -> regValue @(M.YMM 9)
-      YMM10 -> regValue @(M.YMM 10)
-      YMM11 -> regValue @(M.YMM 11)
-      YMM12 -> regValue @(M.YMM 12)
-      YMM13 -> regValue @(M.YMM 13)
-      YMM14 -> regValue @(M.YMM 14)
-      YMM15 -> regValue @(M.YMM 15)
+      YMM0  -> lookupReg (ymm 0)
+      YMM1  -> lookupReg (ymm 1)
+      YMM2  -> lookupReg (ymm 2)
+      YMM3  -> lookupReg (ymm 3)
+      YMM4  -> lookupReg (ymm 4)
+      YMM5  -> lookupReg (ymm 5)
+      YMM6  -> lookupReg (ymm 6)
+      YMM7  -> lookupReg (ymm 7)
+      YMM8  -> lookupReg (ymm 8)
+      YMM9  -> lookupReg (ymm 9)
+      YMM10 -> lookupReg (ymm 10)
+      YMM11 -> lookupReg (ymm 11)
+      YMM12 -> lookupReg (ymm 12)
+      YMM13 -> lookupReg (ymm 13)
+      YMM14 -> lookupReg (ymm 14)
+      YMM15 -> lookupReg (ymm 15)
+    where ymm = R.YMM . F.ymmReg
 
 
 instance GetReg X87Status where
   getReg f =
     case f of
-      X87_IE -> regValue @(M.X87Status 0)
-      X87_DE -> regValue @(M.X87Status 1)
-      X87_ZE -> regValue @(M.X87Status 2)
-      X87_OE -> regValue @(M.X87Status 3)
-      X87_UE -> regValue @(M.X87Status 4)
-      X87_PE -> regValue @(M.X87Status 5)
-      X87_EF -> regValue @(M.X87Status 6)
-      X87_ES -> regValue @(M.X87Status 7)
-      X87_C0 -> regValue @(M.X87Status 8)
-      X87_C1 -> regValue @(M.X87Status 9)
-      X87_C2 -> regValue @(M.X87Status 10)
-      X87_C3 -> regValue @(M.X87Status 11)
-      -- Note: C3 is bit 14 in the x87 FPU status word.
-      -- However, our register representation has a separate variable for
-      -- each status flag.  So the 11 here refers to the number of the
-      -- variable, not the index into the status word.
-
+      X87_IE -> lookupReg R.X87_IE
+      X87_DE -> lookupReg R.X87_DE
+      X87_ZE -> lookupReg R.X87_ZE
+      X87_OE -> lookupReg R.X87_OE
+      X87_UE -> lookupReg R.X87_UE
+      X87_PE -> lookupReg R.X87_PE
+      X87_EF -> lookupReg R.X87_EF
+      X87_ES -> lookupReg R.X87_ES
+      X87_C0 -> lookupReg R.X87_C0
+      X87_C1 -> lookupReg R.X87_C1
+      X87_C2 -> lookupReg R.X87_C2
+      X87_C3 -> lookupReg R.X87_C3
 
 instance GetReg X87Top where
-  getReg _ = regValue @M.X87Top
+  getReg _ = lookupReg R.X87_TopReg
 
 
 instance GetReg X87Tag where
   getReg t =
     case t of
-      Tag0 -> regValue @(M.X87Tag 0)
-      Tag1 -> regValue @(M.X87Tag 1)
-      Tag2 -> regValue @(M.X87Tag 2)
-      Tag3 -> regValue @(M.X87Tag 3)
-      Tag4 -> regValue @(M.X87Tag 4)
-      Tag5 -> regValue @(M.X87Tag 5)
-      Tag6 -> regValue @(M.X87Tag 6)
-      Tag7 -> regValue @(M.X87Tag 7)
+      Tag0 -> lookupReg (R.X87_TagReg 0)
+      Tag1 -> lookupReg (R.X87_TagReg 1)
+      Tag2 -> lookupReg (R.X87_TagReg 2)
+      Tag3 -> lookupReg (R.X87_TagReg 3)
+      Tag4 -> lookupReg (R.X87_TagReg 4)
+      Tag5 -> lookupReg (R.X87_TagReg 5)
+      Tag6 -> lookupReg (R.X87_TagReg 6)
+      Tag7 -> lookupReg (R.X87_TagReg 7)
 
 
 
 instance GetReg FPReg where
   getReg t =
     case t of
-      FP0 -> regValue @(M.FPReg 0)
-      FP1 -> regValue @(M.FPReg 1)
-      FP2 -> regValue @(M.FPReg 2)
-      FP3 -> regValue @(M.FPReg 3)
-      FP4 -> regValue @(M.FPReg 4)
-      FP5 -> regValue @(M.FPReg 5)
-      FP6 -> regValue @(M.FPReg 6)
-      FP7 -> regValue @(M.FPReg 7)
-
+      FP0 -> lookupReg (fp 0)
+      FP1 -> lookupReg (fp 1)
+      FP2 -> lookupReg (fp 2)
+      FP3 -> lookupReg (fp 3)
+      FP4 -> lookupReg (fp 4)
+      FP5 -> lookupReg (fp 5)
+      FP6 -> lookupReg (fp 6)
+      FP7 -> lookupReg (fp 7)
+    where fp = R.X87_FPUReg . F.mmxReg
 
