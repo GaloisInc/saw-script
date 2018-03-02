@@ -47,10 +47,12 @@ module SAWScript.X86Spec
   , Bytes
   , toBytes
   , bytesToInteger
+  , BitSize
+  , bitSize
 
     -- * Values
   , Value
-  , SAW(..), showTerm
+  , SAW(..), showTerm, withSharedContext
   , Literal(..), literal
   , SameVal(..)
   , expectSame
