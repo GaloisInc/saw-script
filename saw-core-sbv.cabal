@@ -28,4 +28,3 @@ library
      Verifier.SAW.Simulator.SBV
      Verifier.SAW.Simulator.SBV.SWord
   GHC-options: -Wall -Werror
-  GHC-prof-options: -auto-all -caf-all
