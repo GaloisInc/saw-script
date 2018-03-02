@@ -59,7 +59,6 @@ import Lang.Crucible.LLVM.MemModel (Mem)
 import Lang.Crucible.Solver.SAWCoreBackend
   (newSAWCoreBackend, proofObligs, toSC, sawBackendSharedContext)
 
-
 -- Macaw
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
 import Data.Macaw.Discovery(analyzeFunction)
@@ -80,7 +79,7 @@ import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
 import Data.Macaw.X86.ArchTypes(X86_64)
 import Data.Macaw.X86.Symbolic
   ( x86_64MacawSymbolicFns, x86_64MacawEvalFn, newSymFuns )
-import Data.Macaw.X86.Crucible(SymFuns)
+import Data.Macaw.X86.Crucible(SymFuns(..))
 
 
 -- Saw Core
@@ -134,15 +133,15 @@ bsdInfo = x86_64_freeBSD_info
 data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 
-
-
-
 --------------------------------------------------------------------------------
 
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
-proof :: ArchitectureInfo X86_64 -> FilePath -> Fun -> IO (SharedContext,[Goal])
+proof :: ArchitectureInfo X86_64 ->
+         FilePath ->
+         Fun ->
+         IO (SharedContext,[Goal])
 proof archi file fun =
   do cfg <- initialConfig 0 []
      sc  <- mkSharedContext cryptolModule
@@ -252,7 +251,7 @@ translate opts elf fun =
 
      ((initRegs,post), extra) <-
         statusBlock "  Setting up pre-conditions... " $
-          runPreSpec sym (cryDecls fspec) (spec fspec)
+          runPreSpec sym (symFuns opts) (cryDecls fspec) (spec fspec)
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
      let memStart = theMem extra

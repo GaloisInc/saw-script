@@ -73,6 +73,10 @@ module SAWScript.X86Spec
 
   , RegAssign(..), GPRegVal(..)
 
+    -- * Complex instructions
+  , registerSymFuns
+  , SymFunTerms(..)
+
     -- * Cryptol specs
   , cryTerm
 

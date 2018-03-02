@@ -23,6 +23,8 @@ module SAWScript.X86Spec.Monad
   , withSharedContext
   , cryTerm
   , PreExtra(..)
+  , registerSymFuns
+  , SymFunTerms(..)
   ) where
 
 import Control.Monad(liftM,ap)
@@ -36,7 +38,8 @@ import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
 import Lang.Crucible.Solver.Interface
   (natLit,notPred,addAssertion,addAssumption, natEq)
-import Lang.Crucible.Solver.SAWCoreBackend(sawBackendSharedContext)
+import Lang.Crucible.Solver.SAWCoreBackend
+  (sawBackendSharedContext, sawRegisterSymFunInterp)
 import Lang.Crucible.LLVM.MemModel ( Mem, emptyMem, LLVMPointerType)
 import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, LLVMPtr )
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
@@ -52,7 +55,7 @@ import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import Data.Macaw.X86.ArchTypes(X86_64)
-import Data.Macaw.X86.Symbolic(lookupX86Reg)
+import Data.Macaw.X86.Symbolic(lookupX86Reg,SymFuns(..))
 import Data.Macaw.X86.X86Reg(X86Reg)
 
 
@@ -83,12 +86,13 @@ data PreExtra = PreExtra { theMem     :: RegValue Sym Mem
 -- | Execute a pre-condition specification.
 runPreSpec ::
   Sym ->
+  SymFuns Sym ->
   Maybe FilePath {- ^ Optional file, containing Cryptol declarations -} ->
   Spec Pre a -> IO (a, PreExtra)
-runPreSpec sym mb (Spec f) =
+runPreSpec sym symFs mb (Spec f) =
   do cs <- loadCry sym mb
      m0 <- emptyMem LittleEndian
-     (a,(m,rs)) <- f (sym,cs) () (m0, Map.empty)
+     (a,(m,rs)) <- f (sym,cs) symFs (m0, Map.empty)
      return (a, PreExtra { theMem = m, cryTerms = cs, theRegions = rs })
 
 -- | Load a file with Cryptol decls.
@@ -115,7 +119,7 @@ runPostSpec ::
 runPostSpec sym cry rs mem (Spec f) = fst <$> f (sym, cry) rs (mem, ())
 
 type family RR (x :: SpecType) where
-  RR Pre = ()
+  RR Pre = SymFuns Sym
   RR Post = Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64)
 
 type family SS (x :: SpecType) where
@@ -230,6 +234,51 @@ assert ::
   Spec Post ()
 assert (Value p) msg =
   withSym $ \sym -> addAssertion sym p (AssertFailureSimError msg)
+
+
+--------------------------------------------------------------------------------
+-- Symbolic terms
+
+{- | The SAW core terms used to implement the given instructions.
+During simulation, these instructions are threated as uninterpred
+functions, but in the post conditions we use these intepretations.
+For the types, plase have a look at "SymFuns" in "Data.Macaw.X86.Crucible"
+from the "macaw-x86-symbolic" pacakge. -}
+data SymFunTerms = SymFunTerms
+  { termAesEnc ::
+      SharedContext -> Term{-128-} -> Term{-128-} -> IO Term{-128-}
+
+  , termAesEncLast ::
+      SharedContext -> Term{-128-} -> Term{-128-} -> IO Term{-128-}
+
+  , termClMul ::
+      SharedContext -> Term{- 64-} -> Term{- 64-} -> IO Term{-128-}
+  }
+
+-- | Add interpretations for the symbolic functions.
+registerSymFuns :: SymFunTerms -> Spec Pre ()
+registerSymFuns defs = Spec $ \(sym,_) symFs st ->
+  do let mk2 nm f = \sc xs -> case xs of
+                                [a,b] -> f defs sc a b
+                                _     -> fail (err nm xs)
+
+     sawRegisterSymFunInterp sym (fnAesEnc symFs) $
+        mk2 "aesenc" termAesEnc
+
+     sawRegisterSymFunInterp sym (fnAesEncLast symFs) $
+        mk2 "aesenclast" termAesEncLast
+
+     sawRegisterSymFunInterp sym (fnClMul symFs) $
+        mk2 "clmul" termClMul
+
+     return ((),st)
+
+  where
+  err nm xs =
+    unlines [ "Type error in call to " ++ show (nm::String) ++ ":"
+            , "*** Expected: 2 arguments"
+            , "*** Given:    " ++ show (length xs) ++ " arguments"
+            ]
 
 
 
