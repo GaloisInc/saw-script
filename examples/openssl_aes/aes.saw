@@ -1,4 +1,5 @@
-import "../../deps/cryptol/docs/ProgrammingCryptol/aes/AES.cry";
+// Use CRYPTOLPATH to locate AES specification.
+import "AES.cry";
 
 let {{
   aesExtract x = aesEncrypt (pt,key)
