@@ -40,3 +40,4 @@ extra-deps:
   - smtLib-1.0.8
   - sbv-7.5
 resolver: lts-10.6
+allow-newer: true
