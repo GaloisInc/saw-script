@@ -216,8 +216,6 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
           tys <- traverse memo vs
           V.mapM_ (\ty -> checkEqTy ty tp' (ArrayTypeMismatch tp' ty)) tys
           io $ scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp'])
-        FloatLit{}  -> io $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
-        DoubleLit{} -> io $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> io $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> whnf $ ecType ec
 

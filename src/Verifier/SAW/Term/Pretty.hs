@@ -332,8 +332,6 @@ ppFlatTermF' opts pp prec tf =
     Sort s -> pure $ TermDoc $ text (show s)
     NatLit i -> pure $ TermDoc $ ppNat opts i
     ArrayValue _ vl -> TermDoc . list <$> traverse (pp' PrecNone) (V.toList vl)
-    FloatLit v  -> pure $ TermDoc $ text (show v)
-    DoubleLit v -> pure $ TermDoc $ text (show v)
     StringLit s -> pure $ LabelDoc s
     ExtCns (EC _ v _) -> pure $ TermDoc $ ppExtCns opts v
   where

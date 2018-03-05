@@ -244,8 +244,6 @@ evalTermF cfg lam rec tf env =
         Sort {}             -> return VType
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM rec' tv
-        FloatLit float      -> return $ VFloat float
-        DoubleLit double    -> return $ VDouble double
         StringLit s         -> return $ VString s
         ExtCns ec           -> do v <- rec (ecType ec)
                                   simExtCns cfg (ecVarIndex ec) (ecName ec) v

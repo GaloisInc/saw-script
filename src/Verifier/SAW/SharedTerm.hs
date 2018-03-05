@@ -122,6 +122,7 @@ module Verifier.SAW.SharedTerm
   , scSlice
   -- *** Integer primitives
   , scIntegerType
+  , scIntegerConst
   , scIntAdd, scIntSub, scIntMul
   , scIntDiv, scIntMod, scIntNeg
   , scIntMin, scIntMax
@@ -586,8 +587,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         ArrayValue tp vs -> lift $ do
           n <- scNat sc (fromIntegral (V.length vs))
           scFlatTermF sc (DataTypeApp preludeVecIdent [n, tp])
-        FloatLit{}  -> lift $ scFlatTermF sc (DataTypeApp preludeFloatIdent  [])
-        DoubleLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeDoubleIdent [])
         StringLit{} -> lift $ scFlatTermF sc (DataTypeApp preludeStringIdent [])
         ExtCns ec   -> return $ ecType ec
 
@@ -850,8 +849,6 @@ scPrettyTermDoc opts t0 =
         FTermF (DataTypeApp _ []) -> False
         FTermF NatLit{} -> False
         FTermF (ArrayValue _ v) | V.length v == 0 -> False
-        FTermF FloatLit{} -> False
-        FTermF DoubleLit{} -> False
         FTermF StringLit{} -> False
         FTermF ExtCns{} -> False
         LocalVar{} -> False
@@ -1153,6 +1150,11 @@ scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 scIntegerType :: SharedContext -> IO Term
 scIntegerType sc = scDataTypeApp sc "Prelude.Integer" []
+
+scIntegerConst :: SharedContext -> Integer -> IO Term
+scIntegerConst sc i
+  | i >= 0 = scNat sc (fromInteger i)
+  | otherwise = scIntNeg sc =<< scNat sc (fromInteger (- i))
 
 -- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
 scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin

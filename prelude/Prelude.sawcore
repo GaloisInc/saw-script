@@ -917,11 +917,15 @@ primitive error :: (a :: sort 0) -> String -> a;
 
 primitive data Float :: sort 0;
 
+-- mkFloat m e = m * 2^^e
+primitive mkFloat :: Integer -> Integer -> Float;
 -- primitive bvToFloat :: bitvector 32 -> Float;
 -- primitive floatToBV :: Float -> bitvector 32;
 
 primitive data Double :: sort 0;
 
+-- mkDouble m e = m * 2^^e
+primitive mkDouble :: Integer -> Integer -> Float;
 -- primitive bvToDouble :: bitvector 64 -> Double;
 -- primitive doubleToBV :: Double -> bitvector 64;
 
