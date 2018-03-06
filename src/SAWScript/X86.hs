@@ -13,6 +13,8 @@ module SAWScript.X86
   , X86Error(..)
   , X86Unsupported(..)
   , SharedContext
+  , CallHandler
+  , Sym
   ) where
 
 
@@ -77,9 +79,9 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , memoryForElf
                                   , resolveElfFuncSymbols )
 import Data.Macaw.Symbolic( ArchRegStruct
-                          , MacawArchEvalFn,ArchRegContext,mkFunCFG,
-                                                        runCodeBlock
-                          , CallHandler )
+                          , MacawArchEvalFn,ArchRegContext,mkFunCFG
+                          , runCodeBlock)
+import qualified Data.Macaw.Symbolic as Macaw ( CallHandler )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt)
 import Data.Macaw.Symbolic.PersistentState(macawAssignToCrucM)
 import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
@@ -128,7 +130,7 @@ data Options = Options
   , backend :: Sym
     -- ^ The Crucible backend to use.
 
-  , funCalls :: Map (Natural,Integer) (CallHandler Sym X86_64)
+  , funCalls :: Map (Natural,Integer) CallHandler
     {- ^ A mapping for function locations to the code to run to handle
          function calls.  The two integers are the base and offset
          pair representing the address of function.
@@ -156,12 +158,13 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 --------------------------------------------------------------------------------
 
+type CallHandler = Macaw.CallHandler Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
 proof :: ArchitectureInfo X86_64 ->
          FilePath ->
-         Map (Natural,Integer) (CallHandler Sym X86_64) ->
+         Map (Natural,Integer) CallHandler ->
          Fun ->
          IO (SharedContext,[Goal])
 proof archi file callMap fun =
@@ -255,7 +258,7 @@ posFn = OtherPos . Text.pack . show
 --------------------------------------------------------------------------------
 -- Translation
 
-callHandler :: Options -> CallHandler Sym X86_64
+callHandler :: Options -> CallHandler
 callHandler opts (mem,regs) =
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
