@@ -533,7 +533,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                      case pr of
                        Crucible.TotalRes gp -> return gp
                        Crucible.PartialRes _ gp _ ->
-                         do printOutLn opts Error "Symbolic simulation failed along some paths!"
+                         do printOutLn opts Info "Symbolic simulation completed with side conditions."
                             return gp
                    let ret_ty = mspec^.csRet
                    retval' <- case ret_ty of
@@ -731,7 +731,7 @@ extractFromCFG opts sc cc (Crucible.AnyCFG cfg) =
             gp <- case pr of
                     Crucible.TotalRes gp -> return gp
                     Crucible.PartialRes _ gp _ -> do
-                      printOutLn opts Error "Symbolic simulation failed along some paths!"
+                      printOutLn opts Info "Symbolic simulation completed with side conditions."
                       return gp
             t <- Crucible.asSymExpr
                        (gp^.Crucible.gpValue)
