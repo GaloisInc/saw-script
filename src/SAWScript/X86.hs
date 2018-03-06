@@ -1,5 +1,6 @@
 {-# Language DataKinds, OverloadedStrings #-}
 {-# Language RankNTypes, TypeOperators #-}
+{-# Language PatternSynonyms #-}
 module SAWScript.X86
   ( Options(..)
   , proof
@@ -20,11 +21,13 @@ import Control.Monad.ST(ST,stToIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
+import           Data.Map ( Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
 import           Data.Foldable(toList)
 import           Control.Lens((^.))
+import GHC.Natural(Natural)
 import           System.IO(hFlush,stdout)
 
 import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
@@ -39,12 +42,13 @@ import Lang.Crucible.Config(initialConfig)
 import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
 import Lang.Crucible.Simulator.RegMap(regValue)
-import Lang.Crucible.Simulator.RegValue(RegValue)
+import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
           , gpGlobals, AbortedResult(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason)
+import Lang.Crucible.Solver.Interface(asNat,asUnsignedBV)
 import Lang.Crucible.Solver.BoolInterface
           (assertLoc,assertMsg,assertPred,getCurrentState)
 import Lang.Crucible.Solver.SimpleBuilder(pathState)
@@ -54,6 +58,8 @@ import Lang.Crucible.FunctionName(functionNameFromText)
 
 -- Crucible LLVM
 import Lang.Crucible.LLVM.MemModel (Mem)
+import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
+import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
 
 -- Crucible SAW
 import Lang.Crucible.Solver.SAWCoreBackend
@@ -72,13 +78,16 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , resolveElfFuncSymbols )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , MacawArchEvalFn,ArchRegContext,mkFunCFG,
-                                                        runCodeBlock)
+                                                        runCodeBlock
+                          , CallHandler )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt)
 import Data.Macaw.Symbolic.PersistentState(macawAssignToCrucM)
 import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
 import Data.Macaw.X86.ArchTypes(X86_64)
 import Data.Macaw.X86.Symbolic
-  ( x86_64MacawSymbolicFns, x86_64MacawEvalFn, newSymFuns )
+  ( x86_64MacawSymbolicFns, x86_64MacawEvalFn, newSymFuns
+  , lookupX86Reg
+  )
 import Data.Macaw.X86.Crucible(SymFuns(..))
 
 
@@ -118,6 +127,18 @@ data Options = Options
 
   , backend :: Sym
     -- ^ The Crucible backend to use.
+
+  , funCalls :: Map (Natural,Integer) (CallHandler Sym X86_64)
+    {- ^ A mapping for function locations to the code to run to handle
+         function calls.  The two integers are the base and offset
+         pair representing the address of function.
+         The handler is just some code that will be executed instead of
+         calling the function.  Typeically, it should assert the functions's
+         precondition and asssume its post condition after.
+
+         Note that his works only when the call is completely known
+         (i.e., no symbolic stuff, etc.)
+    -}
   }
 
 linuxInfo :: ArchitectureInfo X86_64
@@ -140,9 +161,10 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 -- Should be used when making a standalone proof script.
 proof :: ArchitectureInfo X86_64 ->
          FilePath ->
+         Map (Natural,Integer) (CallHandler Sym X86_64) ->
          Fun ->
          IO (SharedContext,[Goal])
-proof archi file fun =
+proof archi file callMap fun =
   do cfg <- initialConfig 0 []
      sc  <- mkSharedContext cryptolModule
      sym <- newSAWCoreBackend sc globalNonceGenerator cfg
@@ -153,6 +175,7 @@ proof archi file fun =
        , archInfo = archi
        , symFuns = sfs
        , backend = sym
+       , funCalls = callMap
        }
 
 -- | Run a proof using the given backend.
@@ -232,6 +255,22 @@ posFn = OtherPos . Text.pack . show
 --------------------------------------------------------------------------------
 -- Translation
 
+callHandler :: Options -> CallHandler Sym X86_64
+callHandler opts (mem,regs) =
+  case lookupX86Reg X86_IP regs of
+    Just (RV ptr) | LLVMPointer base off <- ptr ->
+      case (asNat base, asUnsignedBV off) of
+        (Just b, Just o) ->
+           case Map.lookup (b,o) (funCalls opts) of
+             Just h  -> h (mem,regs)
+             Nothing ->
+               fail ("No over-ride for function: " ++ show (ppPtr ptr))
+
+        _ -> fail ("Non-static call: " ++ show (ppPtr ptr))
+
+    _ -> fail "[Bug?] Failed to obtain the value of the IP register."
+
+
 -- | Translate an assertion about the function with the given name to
 -- a SAW core term.
 translate :: Options -> RelevantElf -> Fun -> IO (SharedContext, [Goal])
@@ -258,7 +297,8 @@ translate opts elf fun =
          globs = theRegions extra
      (mvar, execResult) <-
         statusBlock "  Simulating... " $
-        runCodeBlock sym x86 (x86_eval opts) halloc (memStart, globs) cfg regs
+        runCodeBlock sym x86 (x86_eval opts) halloc (memStart, globs)
+           (callHandler opts) cfg regs
 
 
      gp <- case execResult of
