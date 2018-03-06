@@ -22,6 +22,7 @@ module SAWScript.X86Spec
   , freshRegs
   , freshGP
   , setupGPRegs, GPSetup(..), GPValue, gpUse
+  , setupVecRegs
   , GetReg(..)
   , allocBytes
   , allocArray
@@ -215,18 +216,30 @@ data GPSetup = forall t. GPFresh (GPRegUse t)
 gpUse :: GPValue t => Value t -> GPSetup
 gpUse = GPUse . gpValue
 
+setupVecRegs ::
+  (VecReg -> Maybe (Value AVec)) ->
+  Spec Pre (VecReg -> Value AVec)
+setupVecRegs ty =
+  do vs <- Vector.fromList <$> mapM mk elemList
+     return (\x -> vs Vector.! fromEnum x)
+  where
+  mk r = case ty r of
+           Just x  -> return x
+           Nothing -> fresh Vec (show r)
+
+
 
 -- | Allocate an array initialized with fresh values.
 freshArray ::
   MemType t =>
-  String {- ^ Name -} ->
-  Int    {- ^ Number of elemnts -} ->
-  X86 t  {- ^ Type of elements -} ->
+  String  {- ^ Name -} ->
+  Integer {- ^ Number of elemnts -} ->
+  X86 t   {- ^ Type of elements -} ->
   Mutability {- ^ Read/write? -} ->
   Spec Pre (Value APtr, [Value t])
   -- ^ Returns the pointer and the values in the array.
 freshArray name size ty mut =
-  do vs <- mapM el (take size [ 0 .. ])
+  do vs <- mapM el (take (fromIntegral size) [ 0 .. ])
      p  <- allocArrayOf ty name mut vs
      return (p, vs)
   where
