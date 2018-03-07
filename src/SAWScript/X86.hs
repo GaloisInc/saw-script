@@ -288,6 +288,8 @@ translate opts elf fun =
      (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
                             $ stToIO (makeCFG opts elf name addr)
 
+     writeFile "XXX.hs" (show cfg)
+
      let sym   = backend opts
          fspec = funSpec fun
 
