@@ -90,14 +90,12 @@ import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(basic_ss)
 import qualified SAWScript.Prover.SBV as Prover
+import qualified SAWScript.Prover.RME as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
-
-import qualified Verifier.SAW.Simulator.RME as RME
-import qualified Verifier.SAW.Simulator.RME.Base as RME
 
 import qualified Data.ABC as ABC
 import qualified Data.SBV.Dynamic as SBV
@@ -722,38 +720,7 @@ rewriteEqs sc t = do
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using the RME library.
 satRME :: SharedContext -> ProofScript SV.SatResult
-satRME sc = withFirstGoal $ \g -> io $ do
-  let t0 = goalTerm g
-  TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  tp <- scWhnf sc =<< scTypeOf sc t
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  RME.withBitBlastedPred sc Map.empty t $ \lit0 shapes -> do
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> RME.compl lit0
-  let stats = solverStats "RME" (scSharedSize t0)
-  case RME.sat lit of
-    Nothing ->
-      case goalQuant g of
-        Existential -> do ft <- scApplyPrelude_False sc
-                          return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    Just cex -> do
-      let m = Map.fromList cex
-      let n = sum (map sizeFiniteType shapes)
-      let bs = map (maybe False id . flip Map.lookup m) $ take n [0..]
-      let r = liftCexBB shapes bs
-      case r of
-        Left err -> fail $ "Can't parse counterexample: " ++ err
-        Right vs
-          | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            case goalQuant g of
-              Existential -> return (r', stats, Nothing)
-              Universal -> return (r', stats, Just g)
-          | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
+satRME sc = wrapProver sc (Prover.satRME sc)
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -770,12 +737,19 @@ satSBV conf sc = satUnintSBV conf sc []
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
 satUnintSBV :: SBV.SMTConfig -> SharedContext -> [String] -> ProofScript SV.SatResult
-satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
+satUnintSBV conf sc unints = wrapProver sc (Prover.satUnintSBV conf sc unints)
+
+
+wrapProver ::
+  SharedContext ->
+  (ProverMode -> Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ProofScript SV.SatResult
+wrapProver sc f = withFirstGoal $ \g -> io $ do
   let mode = case goalQuant g of
                Existential -> CheckSat
                Universal   -> Prove
 
-  (mb,stats) <- Prover.satUnintSBV conf sc unints mode (goalTerm g)
+  (mb,stats) <- f mode (goalTerm g)
 
   let nope r = do ft <- scApplyPrelude_False sc
                   return (r, stats, Just g { goalTerm = ft })
@@ -785,6 +759,11 @@ satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
     (CheckSat, Nothing) -> nope (SV.Unsat stats)
     (Prove, Nothing)    -> return (SV.Unsat stats, stats, Nothing)
     (Prove, Just a)     -> nope (SV.SatMulti stats a)
+
+
+
+
+
 
 
 satBoolector :: SharedContext -> ProofScript SV.SatResult

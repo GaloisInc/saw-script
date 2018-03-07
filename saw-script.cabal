@@ -129,6 +129,7 @@ library
     SAWScript.Prover.SolverStats
     SAWScript.Prover.Util
     SAWScript.Prover.SBV
+    SAWScript.Prover.RME
 
     SAWScript.X86
     SAWScript.X86Spec
