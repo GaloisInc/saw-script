@@ -279,35 +279,23 @@ errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
 -- Zero class
 
 PZero :: sort 0 -> sort 0;
-PZero a = #{ zero :: a };
+PZero a = a;
 
 PZeroBit :: PZero Bool;
-PZeroBit = { zero = False };
+PZeroBit = False;
 
 PZeroInteger :: PZero Integer;
-PZeroInteger = { zero = natToInt 0 };
+PZeroInteger = natToInt 0;
 
 PZeroSeq :: (n :: Num) -> (a :: sort 0) -> PZero a -> PZero (seq n a);
-PZeroSeq n a pa = { zero = seqConst n a pa.zero };
+PZeroSeq n a pa = seqConst n a pa;
 
 PZeroSeqBool :: (n :: Num) -> PZero (seq n Bool);
-PZeroSeqBool (TCNum n) = { zero = bvNat n 0 };
-PZeroSeqBool TCInf = { zero = streamConst Bool False };
+PZeroSeqBool (TCNum n) = bvNat n 0;
+PZeroSeqBool TCInf = streamConst Bool False;
 
 PZeroFun :: (a b :: sort 0) -> PZero b -> PZero (a -> b);
-PZeroFun a b pb = { zero = (\(_ :: a) -> pb.zero) };
-
-PZeroUnit :: PZero #();
-PZeroUnit = { zero = () };
-
-PZeroPair :: (a b :: sort 0) -> PZero a -> PZero b -> PZero #(a | b);
-PZeroPair a b pa pb = { zero = (pa.zero | pb.zero) };
-
-PZeroEmpty :: PZero #{};
-PZeroEmpty = { zero = {} };
-
-PZeroField :: (s :: String) -> (a b :: sort 0) -> PZero a -> PZero b -> PZero #{ (s) :: a | b };
-PZeroField s a b pa pb = { zero = { (s) = pa.zero | pb.zero } };
+PZeroFun a b pb = (\(_ :: a) -> pb);
 
 -- Logic class
 
@@ -698,7 +686,7 @@ ecCompl :: (a :: sort 0) -> PLogic a -> a -> a;
 ecCompl a pa = pa.not;
 
 ecZero :: (a :: sort 0) -> PZero a -> a;
-ecZero a pa = pa.zero;
+ecZero a pa = pa;
 
 -- Sequences
 ecShiftL :: (m n :: Num) -> (a :: sort 0) -> PZero a -> seq m a -> seq n Bool -> seq m a;

@@ -253,27 +253,15 @@ proveProp sc env prop =
                 b' <- importType sc env b
                 pb <- proveProp sc env (C.pZero b)
                 scGlobalApply sc "Cryptol.PZeroFun" [a', b', pb]
-        -- instance Zero ()
-        (C.pIsZero -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PZeroUnit" []
-        -- instance (Zero a, Zero b) => Zero (a, b)
-        (C.pIsZero -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pZero t)
-                pb <- proveProp sc env (C.pZero (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PZeroPair" [a, b, pa, pb]
-        -- instance Zero {}
-        (C.pIsZero -> Just (C.TRec []))
-          -> do scGlobalApply sc "Cryptol.PZeroEmpty" []
-        -- instance (Zero a, Zero b) => instance Zero { x : a, y : b }
-        (C.pIsZero -> Just (C.TRec ((n, t) : fs)))
-          -> do s <- scString sc (C.unpackIdent n)
-                a <- importType sc env t
-                b <- importType sc env (C.TRec fs)
-                pa <- proveProp sc env (C.pZero t)
-                pb <- proveProp sc env (C.pZero (C.TRec fs))
-                scGlobalApply sc "Cryptol.PZeroField" [s, a, b, pa, pb]
+        -- instance (Zero a, Zero b, ...) => Zero (a, b, ...)
+        (C.pIsZero -> Just (C.tIsTuple -> Just ts))
+          -> do ps <- traverse (proveProp sc env . C.pZero) ts
+                scTuple sc ps
+        -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
+        (C.pIsZero -> Just (C.TRec fs))
+          -> do let tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- fs ]
+                pm <- traverse (proveProp sc env . C.pZero) tm
+                scRecord sc pm
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
