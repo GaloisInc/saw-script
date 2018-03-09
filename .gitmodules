@@ -21,7 +21,7 @@
 	url = https://github.com/GaloisInc/jvm-verifier.git
 [submodule "deps/llvm-pretty"]
 	path = deps/llvm-pretty
-	url = https://github.com/elliottt/llvm-pretty.git
+	url = https://github.com/GaloisInc/llvm-pretty.git
 [submodule "deps/llvm-pretty-bc-parser"]
 	path = deps/llvm-pretty-bc-parser
 	url = https://github.com/GaloisInc/llvm-pretty-bc-parser.git
