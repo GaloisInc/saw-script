@@ -158,20 +158,21 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 --------------------------------------------------------------------------------
 
-type CallHandler = Macaw.CallHandler Sym X86_64
+type CallHandler = Sym -> Macaw.CallHandler Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
 proof :: ArchitectureInfo X86_64 ->
          FilePath ->
-         Map (Natural,Integer) CallHandler ->
+         (Sym -> IO (Map (Natural,Integer) CallHandler)) ->
          Fun ->
          IO (SharedContext,[Goal])
-proof archi file callMap fun =
+proof archi file mkCallMap fun =
   do cfg <- initialConfig 0 []
      sc  <- mkSharedContext cryptolModule
      sym <- newSAWCoreBackend sc globalNonceGenerator cfg
      sfs <- newSymFuns sym
+     callMap <- mkCallMap sym
      proofWithOptions Options
        { fileName = file
        , function = fun
@@ -259,13 +260,13 @@ posFn = OtherPos . Text.pack . show
 -- Translation
 
 callHandler :: Options -> CallHandler
-callHandler opts (mem,regs) =
+callHandler opts sym (mem,regs) =
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
       case (asNat base, asUnsignedBV off) of
         (Just b, Just o) ->
            case Map.lookup (b,o) (funCalls opts) of
-             Just h  -> h (mem,regs)
+             Just h  -> h sym (mem,regs)
              Nothing ->
                fail ("No over-ride for function: " ++ show (ppPtr ptr))
 
@@ -303,7 +304,7 @@ translate opts elf fun =
      (mvar, execResult) <-
         statusBlock "  Simulating... " $
         runCodeBlock sym x86 (x86_eval opts) halloc (memStart, globs)
-           (callHandler opts) cfg regs
+           (callHandler opts sym) cfg regs
 
 
      gp <- case execResult of

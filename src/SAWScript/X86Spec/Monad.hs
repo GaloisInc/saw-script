@@ -25,6 +25,9 @@ module SAWScript.X86Spec.Monad
   , PreExtra(..)
   , registerSymFuns
   , SymFunTerms(..)
+
+  -- ** XXX
+  , loadCry
   ) where
 
 import Control.Monad(liftM,ap)
