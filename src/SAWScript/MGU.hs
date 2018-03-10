@@ -28,7 +28,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Identity
-import Data.List (genericLength)
 import Data.Map (Map)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -601,21 +600,8 @@ patternLName pat =
 
 constrainTypeWithPattern :: LName -> Type -> Pattern -> TI ()
 constrainTypeWithPattern ln t pat =
-  case pat of
-    PWild Nothing -> return ()
-    PWild (Just t') -> unify ln t t'
-    PVar _ Nothing -> return ()
-    PVar _ (Just t') -> unify ln t t'
-    PTuple ps ->
-      case unlocated t of
-        TyCon (TupleCon k) ts
-          | k == genericLength ps ->
-            sequence_ $ zipWith (constrainTypeWithPattern ln) ts ps
-        _ -> recordError $ unlines
-               [ "type mismatch: " ++ pShow (TupleCon (genericLength ps)) ++ " and " ++ pShow t
-               , " at " ++ show ln
-               ]
-    LPattern pos pat' -> withExprPos pos (constrainTypeWithPattern ln t pat')
+  do (pt, _pat') <- newTypePattern pat
+     unify ln t pt
 
 inferDecl :: Decl -> TI Decl
 inferDecl (Decl pos pat _ e) = withExprPos pos $ do
