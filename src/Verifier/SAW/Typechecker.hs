@@ -380,9 +380,10 @@ data CompletionContext
 completeDataType :: CompletionContext
                  -> TCDataType
                  -> DataType
-completeDataType cc (DataTypeGen dt tp cl) =
+completeDataType cc (DataTypeGen dt params ret_tp cl) =
   DataType { dtName = dt
-           , dtType = completeTerm cc (termFromTCDTType tp)
+           , dtParams = map (\(str,tp) -> (str, completeTerm cc)) params
+           , dtRetType = completeTerm cc (termFromTCDTType tp)
            , dtCtors = fmap (completeTerm cc . termFromTCCtorType dt) <$> cl
            }
 
@@ -682,13 +683,14 @@ parseDecl eqnMap d = do
         let def = DefGen (mkIdent mnm nm) qual rtp eqs
         isCtx  %= insertDef [Nothing] True (LocalLoc p) def
         isDefs %= (def:)
-    Un.DataDecl psym utp ucl -> do
+    Un.DataDecl psym uparams utp uctors -> do
       let dti = mkIdent mnm (val psym)
+      
       dtp <- addPending (val psym) (\tc -> tcDTType tc utp)
-      cl  <- traverse (parseCtor dti) ucl
-      let dt = DataTypeGen dti dtp cl
+      ctors  <- traverse (parseCtor dti) uctors
+      let dt = DataTypeGen dti dtp ctors
       isCtx   %= insertDataType [Nothing] True (LocalLoc (pos psym)) dt
-      isTypes %= (DataTypeGen dti dtp (view _3 <$> cl) :)
+      isTypes %= (DataTypeGen dti dtp (view _3 <$> ctors) :)
     Un.TermDef{} -> return ()
 
 parseImport :: Map ModuleName Module

@@ -74,13 +74,12 @@ import Verifier.SAW.Lexer
   'module'    { PosPair _ (TKey "module") }
   'qualified' { PosPair _ (TKey "qualified") }
   'sort'      { PosPair _ (TKey "sort") }
+  'Prop'      { PosPair _ (TKey "Prop") }
   'where'     { PosPair _ (TKey "where") }
   'axiom'     { PosPair _ (TKey "axiom") }
   'primitive' { PosPair _ (TKey "primitive") }
-  var      { PosPair _ (TVar _) }
-  unvar    { PosPair _ (TUnVar _) }
-  con      { PosPair _ (TCon _) }
   nat      { PosPair _ (TNat _) }
+  ident    { PosPair _ (TIdent _) }
   string   { PosPair _ (TString _) }
 
 %%
@@ -89,26 +88,24 @@ Module :: { Module }
 Module : 'module' ModuleName 'where' list(Import) list(SAWDecl) { Module $2 $4 $5 }
 
 ModuleName :: { PosPair ModuleName }
-ModuleName : ConDotList { mkPosModuleName $1 }
-
-ConDotList :: { [PosPair String] }
-ConDotList : Con { [$1] }
-           | ConDotList '.' Con { $3 : $1 }
+ModuleName : sepBy (Ident, '.') { mkPosModuleName $1 }
 
 Import :: { Import }
 Import : 'import' opt('qualified') ModuleName opt(AsName) opt(ModuleImports) ';'
           { Import (isJust $2) $3 $4 $5 }
 
 SAWDecl :: { Decl }
-SAWDecl : 'data' Con '::' LTerm 'where' '{' list(CtorDecl) '}' { DataDecl $2 $4 $7 }
-          | 'primitive' DeclLhs '::' LTerm ';'
-               {% mkTypeDecl PrimitiveQualifier $2 $4 }
-          | 'axiom' DeclLhs '::' LTerm ';'
-               {% mkTypeDecl AxiomQualifier $2 $4 }
-          | SAWEqDecl { $1 }
+SAWDecl : 'data' Ident VarCtx '::' LTerm 'where' '{' list(CtorDecl) '}'
+             { DataDecl $2 $3 $5 $8 }
+        | 'primitive' Ident '::' LTerm ';'
+             { TypeDecl PrimitiveQualifier $2 $4 }
+        | 'axiom' Ident '::' LTerm ';'
+             { TypeDecl AxiomQualifier $2 $4 }
+        | Ident '::' LTerm ';' { TypeDecl NoQualifier $1 $3 }
+        | Ident DefVarCtx '=' LTerm ';' { TermDef $1 $2 $4 }
 
 AsName :: { PosPair String }
-AsName : 'as' Con { $2 }
+AsName : 'as' Ident { $2 }
 
 ModuleImports :: { ImportConstraint }
 ModuleImports : 'hiding' ImportNames { HidingImports $2 }
@@ -118,113 +115,76 @@ ImportNames :: { [ImportName] }
 ImportNames : '(' sepBy(ImportName, ',') ')' { $2 }
 
 ImportName :: { ImportName }
-ImportName : Symbol                         { SingleImport $1 }
-           | Con '(' '..' ')'               { AllImport $1 }
-           | Con '(' sepBy(Symbol, ',') ')' { SelectiveImport $1 $3 }
+ImportName : Ident                            { SingleImport $1 }
+           | Ident '(' '..' ')'               { AllImport $1 }
+           | Ident '(' sepBy(Ident, ',') ')'  { SelectiveImport $1 $3 }
 
-SAWEqDecl :: { Decl }
-SAWEqDecl : DeclLhs '::' LTerm ';' {% mkTypeDecl NoQualifier $1 $3 }
-          | DeclLhs '='  Term ';'  {% mkTermDef  $1 $3 }
+-- A context of variables which may or may not be typed
+DefVarCtx :: { [(TermVar, Maybe Term)] }
+DefVarCtx : list(DefVarCtxItem) { concat $1 }
 
-DeclLhs :: { DeclLhs }
-DeclLhs : Symbol list(AtomPat) { ($1, $2) }
+DefVarCtxItem :: { [(TermVar, Maybe Term)] }
+DefVarCtxItem : Ident { [(TermVar $1, Nothing)] }
+              | '(' list(Ident) '::'  LTerm ')' { map (\i -> (TermVar i,$4)) $2 }
 
+-- A context of variables, all of which must be typed; i.e., a list syntactic
+-- elements of the form (x y z :: tp) (x2 y3 :: tp2) ...
+VarCtx :: { [(TermVar, Term)] }
+VarCtx : list(VarCtxItem) { concat $1 }
+
+VarCtxItem :: { [(TermVar, Term)] }
+VarCtxItem : '(' list(Ident) '::' LTerm ')' { map (\i -> (TermVar i,$4)) $2 }
+
+-- Constructor declaration of the form "c (x1 x2 :: tp1) ... (z1 :: tpn) :: tp"
 CtorDecl :: { CtorDecl }
-CtorDecl : Con '::' CtorType ';' { Ctor $1 $3 }
-
-Pat :: { Pat }
-Pat : AtomPat           { $1 }
-    | ConDotList list1(AtomPat) { PCtor (identFromList1 $1) $2 }
-
-AtomPat :: { Pat }
-AtomPat : SimplePat                    { PSimple $1 }
-        | ConDotList                   { PCtor (identFromList1 $1) [] }
-        | '(' sepBy(Pat, ',') ')'      { parseParen (\_ v -> v) mkPTuple (pos $1) $2 }
-        | '(' Pat '|' Pat ')'          { PPair (pos $1) $2 $4 }
-        | '{' sepBy(FieldPat, ',') '}' { mkPRecord (pos $1) $2 }
-        | '{' FieldPat '|' Pat '}'     { PField $2 $4 }
-
-SimplePat :: { SimplePat }
-SimplePat : unvar { PUnused (fmap tokVar $1) }
-          | Var   { PVar $1 }
-
-LabelPat :: { Pat }
-LabelPat : FieldName   { mkFieldNamePat $1 }
-         | '(' Pat ')' { $2 }
-
-FieldPat :: { (Pat, Pat) }
-FieldPat : LabelPat '=' Pat { ($1, $3) }
+CtorDecl : Ident VarCtx '::' LTerm ';' { Ctor $1 $2 $4 }
 
 Term :: { Term }
 Term : LTerm { $1 }
      | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
 
--- Term with uses of pi and lambda, but no typing.
+-- Term with uses of pi and lambda, but no type ascriptions
 LTerm :: { Term }
-LTerm : AppTerm                          {  $1 }
-      | PiArg '->' LTerm                 {  mkPi (pos $2) $1 $3 }
-      | '\\' list1(AtomTerm) '->' LTerm {% mkLambda (pos $1) $2 $4 }
+LTerm : AppTerm                          { $1 }
+      | PiArg '->' LTerm                 { Pi (pos $2) $1 $3 }
+      | '\\' VarCtx '->' LTerm           { Lambda (pos $1) $2 $4 }
 
--- Term with uses of pi and lambda, but no typing.
-CtorType :: { Term }
-CtorType : AppTerm             { $1 }
-         | PiArg '->' CtorType { mkPi (pos $2) $1 $3 }
+PiArg :: { [(TermVar, Term)] }
+PiArg : AppTerm { mkPiArg $1 }
 
--- Term formed from applications of atomic expressions.
+-- Term formed from applications of atomic expressions
 AppTerm :: { Term }
-AppTerm : AppArg                   { $1 }
-        | AppTerm AppArg           { App $1 $2 }
-
-AppArg :: { Term }
-AppArg : RecTerm { $1 }
-       | ConDotList { Con (identFromList1 $1) }
-
-RecTerm :: { Term }
-RecTerm : AtomTerm              { $1 }
-        | ConDotList '.' Var    { Var (identFromList1 ($3 : $1)) }
-        | RecTerm '.' Label     { RecordSelector $1 $3 }
-        | RecTerm '.' nat       { mkTupleSelector $1 (fmap tokNat $3) }
+AppTerm : AtomTerm                 { $1 }
+        | AppTerm AtomTerm         { App $1 $2 }
 
 AtomTerm :: { Term }
-AtomTerm : nat                          { NatLit (pos $1) (tokNat (val $1)) }
-         | string                       { StringLit (pos $1) (tokString (val $1)) }
-         | Var                          { Var (fmap localIdent $1) }
-         | unvar                        { Unused (fmap tokVar $1) }
-         | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
-         |     '(' sepBy(Term, ',') ')'       { parseParen Paren mkTupleValue (pos $1) $2 }
-         | '#' '(' sepBy(Term, ',') ')'       {% parseTParen (pos $1) $3 }
-         |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
-         |     '{' sepBy(FieldValue, ',') '}' { mkRecordValue (pos $1) $2 }
-         | '#' '{' sepBy(FieldType, ',') '}'  { mkRecordType  (pos $1) $3 }
-         |     '(' Term '|' Term ')'          { PairValue (pos $1) $2 $4 }
-         | '#' '(' Term '|' Term ')'          { PairType (pos $1) $3 $5 }
-         |     '{' FieldValue '|' Term '}'    { FieldValue $2 $4 }
-         | '#' '{' FieldType '|' Term '}'     { FieldType $3 $5 }
+AtomTerm
+  : nat                          { NatLit (pos $1) (tokNat (val $1)) }
+  | string                       { StringLit (pos $1) (tokString (val $1)) }
+  | Ident                        { Name $1 }
+  | 'Prop'                       { Sort (pos $1) propSort }
+  | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
+  | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
+  | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
+  | '(' sepBy(Term, ',') ')'     { parseParen (pos $1) $2 }
+  | '#' '(' sepBy(Term, ',') ')'       {% parseTParen (pos $1) $3 }
+  |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
+  |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
+  | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
 
-PiArg :: { PiArg }
-PiArg : AppTerm  {% mkPiArg $1 }
+    -- FIXME: old-style pairs, pair types, and pair projections
+  |     '(' Term '|' Term ')'          { OldPairValue (pos $1) $2 $4 }
+  | '#' '(' Term '|' Term ')'          { OldPairType (pos $1) $3 $5 }
+  | AtomTerm '.' '(' nat ')'           {% mkOldTupleProj $1 (fmap tokNat $4) }
 
-Symbol :: { PosPair String }
-Symbol : Con { $1 } | Var { $1 }
+Ident :: { PosPair String }
+Ident : ident { fmap tokIdent $1 }
 
-Con :: { PosPair String }
-Con : con { fmap tokCon $1 }
+FieldValue :: { (PosPair String, Term) }
+FieldValue : Ident '=' Term { ($1, $3) }
 
-Var :: { PosPair String }
-Var : var { fmap tokVar $1 }
-
-FieldName :: { PosPair FieldName }
-FieldName : var { fmap tokVar $1 }
-
-Label :: { Term }
-Label : FieldName    { mkFieldNameTerm $1 }
-      | '(' Term ')' { $2 }
-
-FieldValue :: { (Term, Term) }
-FieldValue : Label '=' Term { ($1, $3) }
-
-FieldType :: { (Term, Term) }
-FieldType : Label '::' LTerm { ($1, $3) }
+FieldType :: { (PosPair String, Term) }
+FieldType : Ident '::' LTerm { ($1, $3) }
 
 opt(q) :: { Maybe q }
   : { Nothing }
@@ -233,10 +193,6 @@ opt(q) :: { Maybe q }
 -- Two elements p and r separated by q and terminated by s
 sepPair(p,q,r,s) :: { (p,r) }
   : p q r s { ($1,$3) }
-
--- A list of record fields with the given separator and element type.
-recList(q,r) :: { [(FieldName,r)] }
-  : list(sepPair(FieldName,q,r,';')) { $1 }
 
 -- A possibly-empty list of p's separated by q.
 sepBy(p,q) :: { [p] }
@@ -366,116 +322,51 @@ unexpectedLambda p = addParseError p "Unexpected lambda expression"
 unexpectedOpenParen :: Pos -> Parser ()
 unexpectedOpenParen p = addParseError p "Unexpected parenthesis"
 
-termAsPat :: Term -> Parser (Maybe Pat)
-termAsPat ex = do
-    case asApp ex of
-      (Var i, []) ->
-        case asLocalIdent (val i) of
-          Just nm -> ret $ PSimple $ PVar (PosPair (pos i) nm)
-          _ -> badPat "Imported expressions"
-      (Unused i,[]) -> ret $ PSimple $ PUnused i
-      (Con i,l) -> fmap (fmap (PCtor i) . sequence) $ mapM termAsPat l
-      (Sort{},_) -> badPat "Sorts"
-
-      (Lambda{},_) -> badPat "Lambda expressions"
-      (App{},_) -> error "internal: Unexpected application"
-      (Pi{},_) -> badPat "Pi expressions"
-
-      (UnitValue p, []) -> return $ Just (PUnit p)
-      (PairValue p x y, []) -> do
-        px <- termAsPat x
-        py <- termAsPat y
-        return (PPair p <$> px <*> py)
-      (UnitType{}, _) -> badPat "Tuple types"
-      (PairType{}, _) -> badPat "Tuple types"
-      (EmptyValue p, []) -> return $ Just (PEmpty p)
-      (FieldValue (f, x) y, []) -> do
-        pf <- termAsPat f
-        px <- termAsPat x
-        py <- termAsPat y
-        return (curry PField <$> pf <*> px <*> py)
-      (RecordSelector{}, []) -> badPat "Record selector"
-      (EmptyType{},[]) -> badPat "Record type"
-      (FieldType{},[]) -> badPat "Record type"
-
-      (TypeConstraint{}, []) -> badPat "Type constraint"
-      (Paren{}, _) -> error "internal: Unexpected paren"
-      (BadTerm{}, _) -> return Nothing
-      (_, h:_) -> err (pos h) "Unexpected expression"
-  where ret r = return (Just r)
-        badPat nm = err (pos ex) (nm ++ " may not appear in patterns")
-        err p msg = addParseError p msg >> return Nothing
-
-
--- Attempts to parses an expression as a list of identifiers.
--- Will return a value on all expressions, but may add errors to parser state.
-exprAsPatList :: Term -> Parser [Pat]
-exprAsPatList ex = go ex []
-  where go (App x y) r = do
-          mp <- termAsPat y
-          go x (maybe r (:r) mp)
-        go x r = do
-          mp <- termAsPat x
-          return (maybe r (:r) mp)
-
-termAsSimplePat :: Term -> Parser (Maybe SimplePat)
-termAsSimplePat ex = do
-    case asApp ex of
-      (Var i, []) ->
-        case asLocalIdent (val i) of
-          Just nm -> ret $ PVar (PosPair (pos i) nm)
-          _ -> badPat "Imported expressions"
-      (Unused i, []) -> ret $ PUnused i
-      (BadTerm{}, _) -> return Nothing
-      (_, h:_) -> err (pos h) "Unexpected expression"
-  where ret r = return (Just r)
-        badPat nm = err (pos ex) (nm ++ " may not appear in patterns")
-        err p msg = addParseError p msg >> return Nothing
-
--- Attempts to parses an expression as a list of identifiers.
--- Will return a value on all expressions, but may add errors to parser state.
-exprAsSimplePatList :: Term -> Parser [SimplePat]
-exprAsSimplePatList ex = go ex []
-  where go (App x y) r = do
-          mp <- termAsSimplePat y
-          go x (maybe r (:r) mp)
-        go x r = do
-          mp <- termAsSimplePat x
-          return (maybe r (:r) mp)
-
-
-type PiArg = ([SimplePat], Term)
+-- Try to parse an expression as a list of identifiers
+exprAsIdentList :: Term -> Maybe [TermVar]
+exprAsIdentList (Name x) = return [TermVar x]
+exprAsIdentList (App expr (Name x)) =
+  (: TermVar x) <$> exprAsIdentList expr
+exprAsIdentList _ = Nothing
 
 -- | Pi expressions should have one of the forms:
--- * '(' list(Pat) '::' LTerm ')' '->' LTerm
+--
+-- * '(' list(Ident) '::' LTerm ')' '->' LTerm
 -- * AppTerm '->' LTerm
-mkPiArg :: Term -> Parser PiArg
-mkPiArg (Paren _ (TypeConstraint x _ t)) =
-  (\pats -> (pats, t)) <$> exprAsSimplePatList x
-mkPiArg lhs =
-  return ([PUnused (PosPair (pos lhs) "_")], lhs)
+--
+-- This function takes in a term for the LHS and tests if it is of the first
+-- form, or, if not, converts the second form into the first by making a single
+-- "unused" variable with the name "_"
+mkPiArg :: Term -> [(TermVar, Term)]
+mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
+  map (\x -> (TermVar x, t)) xs
+mkPiArg lhs = return ([UnusedVar (pos lhs)], lhs)
 
--- | Pi expressions should have one of the forms:
--- * '(' list(Pat) '::' LTerm ')' '->' LTerm
--- * AppTerm '->' LTerm
-mkPi :: Pos -> PiArg -> Term -> Term
-mkPi ptp (pats,tp) r = Pi pats tp ptp r
+-- | Parse a tuple value @(x1, .., xn)@ as a record value whose fields are named
+-- @1@, @2@, etc. As a special case, the unary tuple @(x)@ is just @x@.
+parseTupleValue :: Pos -> [Term] -> Term
+parseTupleValue _ [t] = t
+parseTupleValue p ts = RecordValue $ zip (map show [1 ..]) ts
 
-mkLambda :: Pos -> [Term] -> Term -> Parser Term
-mkLambda ptp lhs rhs = parseLhs lhs []
-  where parseLhs [] r = return $ Lambda ptp r rhs
-        parseLhs ((Paren _ (TypeConstraint ux _ ut)):ul) r = do
-          pl <- exprAsSimplePatList ux
-          parseLhs ul ((pl, ut):r)
+-- | Parse a tuple type @#(x1, .., xn)@ as a record type whose fields are named
+-- @1@, @2@, etc. As a special case, the unary tuple @(x)@ is just @x@.
+parseTupleType :: Pos -> [Term] -> Term
+parseTupleType _ [tp] =
+  addParseError p "Tuple may not contain a single value."
+parseTupleType p tps = RecordType $ zip (map show [1 ..]) tps
+
+-- | Parse an old-style tuple projection of the form @t.(1)@ or @t.(2)@
+mkOldTupleProj :: Term -> Int -> Parser Term
+mkOldTupleProj t 1 = return $ OldPairLeft t
+mkOldTupleProj t 2 = return $ OldPairRight t
+mkOldTupleProj t _ =
+  do addParserError (pos t) "Old-style projections must be either .(1) or .(2)"
+     return (badTerm (pos t))
 
 -- | Parse a parenthesized expression which may actually be a tuple.
-parseParen :: (Pos -> a -> b) -- ^ singleton case.
-           -> (Pos -> [a] -> b) -- ^ Tuple case
-           -> Pos
-           -> [a]
-           -> b
-parseParen f _ p [e] = f p e
-parseParen _ g p l = g p l
+parseParen :: Pos -> [Term] -> Term
+parseParen _ [t] = return t
+parseParen p ts = mkTupleValue p ts
 
 parseTParen :: Pos -> [Term] -> Parser Term
 parseTParen p [expr] = do
@@ -483,21 +374,11 @@ parseTParen p [expr] = do
   return (badTerm p)
 parseTParen p l = return $ mkTupleType p l
 
-asAppList :: Term -> (Term,[Term])
-asAppList = \x -> impl x []
-  where impl (App x y) r = impl x (y:r)
-        impl x r = (x,r)
-
-type DeclLhs = (PosPair String, [Pat])
-
-mkTypeDecl :: DeclQualifier -> DeclLhs -> Term -> Parser Decl
-mkTypeDecl qual (op,args) rhs = fmap (\l -> TypeDecl qual (op:l) rhs) $ filterArgs args []
-  where filterArgs ((PSimple (PVar (PosPair p i))):l) r =
-          filterArgs l (PosPair p i:r)
-        filterArgs (e:l) r = do
-          addParseError (pos e) "Expected variable identifier in type declaration."
-          filterArgs l r
-        filterArgs [] r = return (reverse r)
+parseTupleSelector :: Term -> PosPair Integer -> Parser Term
+parseTupleSelector t i =
+  if val i >= 1 then return (RecordProj t (val i)) else
+    do addParserError (pos t) "non-positive tuple projection index"
+       return (badTerm (pos t))
 
 -- | Crete a module name given a list of strings with the top-most
 -- module name given first.
@@ -506,13 +387,4 @@ mkPosModuleName [] = error "internal: Unexpected empty module name"
 mkPosModuleName l = PosPair p (mkModuleName nms)
   where nms = fmap val l
         p = pos (last l)
-
-identFromList1 :: [PosPair String] -> PosPair Ident
-identFromList1 [] = error "internal: identFromList1 expected non-empty list"
-identFromList1 [PosPair p sym] = PosPair p (mkIdent Nothing sym)
-identFromList1 (PosPair _ sym:l) = PosPair p (mkIdent (Just m) sym)
-  where PosPair p m = mkPosModuleName l
-
-mkTermDef :: DeclLhs -> Term -> Parser Decl
-mkTermDef (op,args) rhs = return (TermDef op args rhs)
 }

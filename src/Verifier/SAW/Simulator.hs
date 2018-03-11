@@ -324,6 +324,8 @@ evalGlobal m0 prims extcns uninterpreted = do
         m <- ms, td <- moduleDefs m, not (null (defEqs td)) ] ++
       Map.assocs (fmap return prims) -- Later mappings take precedence
 
+    -- Convert a constructor to a value by creating a function that takes in one
+    -- argument for each nested pi type of the constructor
     vCtor :: Ident -> [Thunk l] -> Term -> Value l
     vCtor ident xs (unwrapTermF -> (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))

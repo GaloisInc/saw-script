@@ -49,6 +49,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scFun
   , scString
+  , scStringType
   , Nat
   , scNat
   , scNatType
@@ -310,6 +311,11 @@ getTerm r a =
 -- | Reduces beta-redexes, tuple/record selectors, and definition
 -- equations at the top level of a term, and evaluates all arguments
 -- to type constructors (including function, record, and tuple types).
+--
+-- NOTE: this notion of weak head normal form differs from the standard type
+-- theory definition, in that it normalizes the arguments of type-forming
+-- constructs like pi types, pair types, etc. The idea is that these constructs
+-- are being treated as strict constructors in the Haskell sense.
 scWhnf :: SharedContext -> Term -> IO Term
 scWhnf sc t0 =
   do cache <- newCacheIntMap
@@ -490,7 +496,8 @@ scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
     case findDataType (scModule sc) ident of
       Nothing -> fail $ "scTypeOfDataType: failed to find " ++ show ident ++ " in module."
-      Just d -> scSharedTerm sc (dtType d)
+      Just d ->
+        scPiList (dtParams d) =<< scSharedTerm sc (dtRetType d)
 
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
@@ -628,30 +635,6 @@ scImport sc t0 =
           useCache cache idx (scTermF sc =<< traverse (go cache) tf)
 
 --------------------------------------------------------------------------------
-
--- | Returns bitset containing indices of all free local variables.
-looseVars :: Term -> BitSet
-looseVars STApp{ stAppFreeVars = x } = x
-looseVars (Unshared f) = freesTermF (fmap looseVars f)
-
--- | Compute the value of the smallest variable in the term, if any.
-smallestFreeVar :: Term -> Maybe Int
-smallestFreeVar t
-   | fv == 0 = Nothing
-   | fv > 0  = Just $! go 0 fv
-   | otherwise = error "impossible: negative free variable bitset!"
-
- where fv = looseVars t
-
-       go :: Int -> Integer -> Int
-       go !shft !x
-          | xw == 0   = go (shft+64) (shiftR x 64)
-          | otherwise = shft + countTrailingZeros xw
-
-        where xw :: Word64
-              xw = fromInteger x
-
---------------------------------------------------------------------------------
 -- Instantiating variables
 
 instantiateVars :: SharedContext
@@ -775,38 +758,6 @@ betaNormalize sc t0 =
 --------------------------------------------------------------------------------
 -- Pretty printing
 
-type OccurrenceMap s = IntMap (Term, Int)
-
--- | Returns map that associates each term index appearing in the term
--- to the number of occurrences in the shared term. Subterms that are
--- on the left-hand side of an application are excluded. The boolean
--- flag indicates whether to descend under lambdas and other binders.
-scTermCount :: Bool -> Term -> OccurrenceMap s
-scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
-  where go :: [Term] -> State (OccurrenceMap s) ()
-        go [] = return ()
-        go (t:r) =
-          case t of
-            Unshared _ -> recurse
-            STApp{ stAppIndex = i } -> do
-              m <- get
-              case IntMap.lookup i m of
-                Just (_, n) -> do
-                  put $ n `seq` IntMap.insert i (t, n+1) m
-                  go r
-                Nothing -> do
-                  put (IntMap.insert i (t, 1) m)
-                  recurse
-          where
-            recurse = do
-              let (h,args) = asApplyAll t
-              go (Fold.foldr' (:) (args ++ r) (subterms h))
-        subterms h =
-          case unwrapTermF h of
-            Lambda _ t1 _ | not doBinders -> [t1]
-            Pi _ t1 _     | not doBinders -> [t1]
-            Constant{}                    -> []
-            tf                            -> Fold.toList tf
 
 scPrettyTermDoc :: PPOpts -> Term -> Doc
 scPrettyTermDoc opts t0 =
@@ -915,6 +866,9 @@ scNat sc n = scFlatTermF sc (NatLit (toInteger n))
 
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
+
+scStringType :: SharedContext -> IO Term
+scStringType sc = scFlatTermF sc preludeStringType
 
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))

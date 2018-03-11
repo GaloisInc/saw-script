@@ -187,7 +187,8 @@ type TCCtorType = FixedPiType [TCTerm]
 
 data DataTypeGen t c =
    DataTypeGen { dtgName :: Ident
-               , dtgType :: t
+               , dtgParams :: [(AnnPat t, t)]
+               , dtgRetType :: t
                , dtgCtors :: [c]
                }
 
@@ -402,9 +403,9 @@ insertDataType :: [Maybe ModuleName] -- ^ List of namespaces for symbols.
                -> DataTypeGen (TCRef s TCDTType) (Bool, Loc, TCRefCtor s)
                -> GlobalContext s
                -> GlobalContext s
-insertDataType mnml vis loc (DataTypeGen dtnm dtp cl) gc =
+insertDataType mnml vis loc (DataTypeGen dtnm dparams dtp cl) gc =
     gc { gcMap = insertAllBindings bindings (gcMap gc) }
-  where dt = DataTypeGen dtnm dtp (view _3 <$> cl)
+  where dt = DataTypeGen dtnm dparams dtp (view _3 <$> cl)
         dtBindings = untypedBindings vis mnml (identName dtnm) (DataTypeBinding loc dt)
         cBindings (b, cloc, c@(Ctor cnm _)) =
           untypedBindings b mnml (identName cnm) (CtorBinding cloc dt c)
@@ -532,7 +533,8 @@ resolveIdent tc0 (PosPair p ident) = go tc0
         go (TopContext gc) = do
           gb <- resolveGlobalIdent gc (PosPair p ident)
           case gb of
-            DataTypeBinding _ (DataTypeGen dt rtp _) -> do
+            DataTypeBinding _ (DataTypeGen dt rparams rtp _) -> do
+              
               ftp <- eval p rtp
               case ftp of
                 FPResult s -> pure $ TypedValue (TCF (DataTypeApp dt [])) (TCF (Sort s))

@@ -6,6 +6,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE BangPatterns #-}
 
 {- |
 Module      : Verifier.SAW.Term.Functor
@@ -40,8 +42,10 @@ module Verifier.SAW.Term.Functor
   , unwrapTermF
   , termToPat
   , alphaEquiv
+  , looseVars, smallestFreeVar
+  , recordAListAllFields, recordAListAsTuple
     -- * Sorts
-  , Sort, mkSort, sortOf, maxSort
+  , Sort, mkSort, propSort, sortOf
   ) where
 
 import Control.Exception (assert)
@@ -146,26 +150,38 @@ isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 
 -- Sorts -----------------------------------------------------------------------
 
-newtype Sort = SortCtor { _sortIndex :: Integer }
-  deriving (Eq, Ord, Generic)
+-- | The sorts, also known as universes, which can either be a predicative
+-- universe with level i or the impredicative universe Prop.
+data Sort
+  = TypeSort Integer
+  | PropSort
+  deriving (Eq, Generic)
+
+-- Prop is the lowest sort
+instance Ord Sort where
+  PropSort <= _ = True
+  (TypeSort _) <= PropSort = False
+  (TypeSort i) <= (TypeSort j) = i <= j
 
 instance Hashable Sort -- automatically derived
 
 instance Show Sort where
-  showsPrec p (SortCtor i) = showParen (p >= 10) (showString "sort " . shows i)
+  showsPrec p (TypeSort i) = showParen (p >= 10) (showString "sort " . shows i)
+  showsPrec _ PropSort = showString "Prop"
 
--- | Create sort for given integer.
+-- | Create sort @Type i@ for the given integer @i@
 mkSort :: Integer -> Sort
-mkSort i | 0 <= i = SortCtor i
+mkSort i | 0 <= i = TypeSort i
          | otherwise = error "Negative index given to sort."
+
+-- | Wrapper around 'PropSort', for export
+propSort :: Sort
+propSort = PropSort
 
 -- | Returns sort of the given sort.
 sortOf :: Sort -> Sort
-sortOf (SortCtor i) = SortCtor (i + 1)
-
--- | Returns the larger of the two sorts.
-maxSort :: Sort -> Sort -> Sort
-maxSort (SortCtor x) (SortCtor y) = SortCtor (max x y)
+sortOf (TypeSort i) = TypeSort (i + 1)
+sortOf PropSort = TypeSort 0
 
 
 -- External Constants ----------------------------------------------------------
@@ -194,6 +210,8 @@ instance Hashable (ExtCns e) where
 
 -- Flat Terms ------------------------------------------------------------------
 
+-- | The "flat terms", which are the built-in atomic constructs of SAW core.
+--
 -- NB: If you add constructors to FlatTermF, make sure you update
 --     zipWithFlatTermF!
 data FlatTermF e
@@ -215,6 +233,11 @@ data FlatTermF e
 
   | CtorApp !Ident ![e]
   | DataTypeApp !Ident ![e]
+  | RecursorApp !Ident ![e]
+
+  | RecordType ![(String, e)]
+  | RecordValue ![(String, e)]
+  | RecordProj e String
 
   | Sort !Sort
 
@@ -236,7 +259,35 @@ data FlatTermF e
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
-zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
+-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+-- precisely the given field names and no more. If so, return the values
+-- associated with those field names, in the order given in the input, and
+-- otherwise return 'Nothing'
+recordAListAllFields :: [String] -> [(String, e)] -> Maybe [e]
+recordAListAllFields [] [] = Just []
+recordAListAllFields (fld:flds) alist
+  | Just val <- lookup fld alist =
+    (val :) <$> recordAListAllFields flds (deleteField fld alist)
+  where
+    deleteField _ [] = error "deleteField"
+    deleteField f ((f',_):rest) | f == f' = rest
+    deleteField f (x:rest) = x : deleteField f rest
+recordAListAllFields _ _ = Nothing
+
+-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+-- field names that are the strings @"1", "2", ...@ indicating that the record
+-- type or value is to be printed as a tuple. If so, return a list of the
+-- values, and otherwise return 'Nothing'.
+recordAListAsTuple :: [(String, e)] -> Maybe [e]
+recordAListAsTuple alist =
+  recordAListAllFields (map show [1 .. length alist]) alist
+
+
+-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
+-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
+-- constructor; otherwise, return 'Nothing' if they use different constructors
+zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
+                    Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
     go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
@@ -261,6 +312,18 @@ zipWithFlatTermF f = go
       | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
     go (DataTypeApp dx lx) (DataTypeApp dy ly)
       | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
+    go (RecursorApp dx lx) (RecursorApp dy ly)
+      | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
+
+    go (RecordType elems1) (RecordType elems2)
+      | Just vals2 <- recordAListAllFields (map fst elems1) elems2 =
+        Just $ RecordType $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
+    go (RecordValue elems1) (RecordValue elems2)
+      | Just vals2 <- recordAListAllFields (map fst elems1) elems2 =
+        Just $ RecordValue $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
+    go (RecordProj e1 fld1) (RecordProj e2 fld2)
+      | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
+
     go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (FloatLit fx) (FloatLit fy)
@@ -269,7 +332,8 @@ zipWithFlatTermF f = go
       | fx == fy = Just $ DoubleLit fx
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
-      | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
+      | V.length vx == V.length vy
+      = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
     go (ExtCns (EC xi xn xt)) (ExtCns (EC yi _ yt))
       | xi == yi = Just (ExtCns (EC xi xn (f xt yt)))
 
@@ -293,26 +357,6 @@ data TermF e
 instance Hashable e => Hashable (TermF e) -- automatically derived.
 
 
--- Free de Bruijn Variables ----------------------------------------------------
-
-bitwiseOrOf :: (Bits a, Num a) => Fold s a -> s -> a
-bitwiseOrOf fld = foldlOf' fld (.|.) 0
-
--- | A @BitSet@ represents a set of natural numbers.
--- Bit n is a 1 iff n is in the set.
-type BitSet = Integer
-
-freesTermF :: TermF BitSet -> BitSet
-freesTermF tf =
-    case tf of
-      FTermF ftf -> bitwiseOrOf folded ftf
-      App l r -> l .|. r
-      Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
-      Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
-      LocalVar i -> bit i
-      Constant _ _ _ -> 0 -- assume rhs is a closed term
-
-
 -- Term Datatype ---------------------------------------------------------------
 
 type TermIndex = Int -- Word64
@@ -329,6 +373,7 @@ data Term
 instance Hashable Term where
   hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
+
 
 -- | Combine two given hash values.  'combine' has zero as a left
 -- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
@@ -384,3 +429,44 @@ termToPat t =
 unwrapTermF :: Term -> TermF Term
 unwrapTermF STApp{stAppTermF = tf} = tf
 unwrapTermF (Unshared tf) = tf
+
+
+-- Free de Bruijn Variables ----------------------------------------------------
+
+-- | A @BitSet@ represents a set of natural numbers.
+-- Bit n is a 1 iff n is in the set.
+type BitSet = Integer
+
+bitwiseOrOf :: (Bits a, Num a) => Fold s a -> s -> a
+bitwiseOrOf fld = foldlOf' fld (.|.) 0
+
+-- | Compute the free variables of a term given free variables for its immediate
+-- subterms
+freesTermF :: TermF BitSet -> BitSet
+freesTermF tf =
+    case tf of
+      FTermF ftf -> bitwiseOrOf folded ftf
+      App l r -> l .|. r
+      Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
+      Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
+      LocalVar i -> bit i
+      Constant _ _ _ -> 0 -- assume rhs is a closed term
+
+-- | Return a bitset containing indices of all free local variables
+looseVars :: Term -> BitSet
+looseVars STApp{ stAppFreeVars = x } = x
+looseVars (Unshared f) = freesTermF (fmap looseVars f)
+
+-- | Compute the value of the smallest variable in the term, if any.
+smallestFreeVar :: Term -> Maybe Int
+smallestFreeVar t
+   | fv == 0 = Nothing
+   | fv > 0  = Just $! go 0 fv
+   | otherwise = error "impossible: negative free variable bitset!"
+ where fv = looseVars t
+       go :: Int -> Integer -> Int
+       go !shft !x
+          | xw == 0   = go (shft+64) (shiftR x 64)
+          | otherwise = shft + countTrailingZeros xw
+        where xw :: Word64
+              xw = fromInteger x

@@ -202,7 +202,7 @@ declareSharedDataTypeApp :: String
                          -> DecWriter ()
 declareSharedDataTypeApp nm tdt = do
   let sym = show (dtName tdt)
-  let n = piArgCount (dtType tdt)
+  let n = length (dtParams tdt) + piArgCount (dtRetType tdt)
   -- Get type of result.
   tp <- lift $ sharedFunctionType n
   -- Get value of result.

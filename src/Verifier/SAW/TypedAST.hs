@@ -44,8 +44,6 @@ module Verifier.SAW.TypedAST
  , Ctor(..)
  , Def(..)
  , DefQualifier(..)
- , DefEqn(..)
- , Pat(..)
  , patBoundVarCount
  , patUnusedVarCount
    -- * Terms and associated operations.
@@ -58,42 +56,21 @@ module Verifier.SAW.TypedAST
  , freesTermF
  , termToPat
 
- , LocalVarDoc
- , emptyLocalVarDoc
- , docShowLocalNames
- , docShowLocalTypes
-
- , TermPrinter
- , TermDoc(..)
  , PPOpts(..)
  , defaultPPOpts
- , ppTermDoc
- , Prec(..)
- , ppAppParens
  , ppTerm
- , ppTermF
- , ppTermF'
- , ppFlatTermF
- , ppFlatTermF'
  , ppTermDepth
    -- * Primitive types.
- , Sort, mkSort, sortOf, maxSort
+ , Sort, mkSort, propSort, sortOf
  , Ident(identModule, identName), mkIdent
  , parseIdent
  , isIdent
- , ppIdent
- , ppDef
- , ppDefEqn
  , DeBruijnIndex
  , FieldName
  , ExtCns(..)
  , VarIndex
    -- * Utility functions
  , BitSet
- , commaSepList
- , semiTermList
- , ppParens
- , ppLetBlock
  ) where
 
 import Control.Exception (assert)

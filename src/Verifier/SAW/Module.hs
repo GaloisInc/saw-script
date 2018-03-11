@@ -21,7 +21,6 @@ module Verifier.SAW.Module
     -- * Data types and definitions.
   , DefQualifier(..)
   , Def(..)
-  , DefEqn(..)
   , Ctor(..)
   , TypedCtor
   , DataType(..)
@@ -30,6 +29,7 @@ module Verifier.SAW.Module
   , ModuleDecl(..)
   , moduleName
   , moduleImports
+  , moduleImportNames
   , emptyModule
   , findDataType
   , insImport
@@ -131,23 +131,18 @@ data DefQualifier
 
 instance Hashable DefQualifier -- automatically derived
 
--- | A Definition contains an identifier, the type of the definition, and a list of equations.
+-- | A Definition contains an identifier, the type of the definition, and an
+-- optional body (axioms and primitives do not have a body)
 data Def =
   Def
   { defIdent :: Ident
   , defQualifier :: DefQualifier
   , defType :: Term
-  , defEqs :: [DefEqn]
+  , defBody :: Maybe Term
   }
   deriving (Eq, Show, Generic)
 
 instance Hashable Def -- automatically derived
-
-data DefEqn
-  = DefEqn [Pat] Term -- ^ List of patterns and a right hand side
-  deriving (Eq, Show, Generic)
-
-instance Hashable DefEqn -- automatically derived
 
 
 -- Constructors ----------------------------------------------------------------
@@ -157,7 +152,22 @@ type TypedCtor = Ctor Term
 data Ctor tp =
   Ctor
   { ctorName :: !Ident
-  , ctorType :: tp -- ^ The type of the constructor (should contain no free variables).
+    -- ^ The name of this constructor
+  , ctorParams :: [(String, tp)]
+    -- ^ Parameters of the constructor (inherited from its datatype)
+  , ctorArgs :: [(String, tp)]
+    -- ^ Context of arguments of the constructor
+  , ctorDataTypeName :: Ident
+    -- ^ The datatype this constructor belongs to
+  , ctorDataTypeIndices :: [tp]
+    -- ^ The non-parameter arguments to the datatype in the return type of this
+    -- constructor
+  , ctorType :: tp
+    -- ^ Cached type of the constructor, which should always be equal to the
+    -- term @p1 -> .. -> pN -> arg1 -> .. -> argM -> d p1 .. pN ix1 .. ixK@,
+    -- where the @pi@ are the 'ctorParams', the @argi@ are the 'ctorArgs', and
+    -- the @ixi@ are the 'ctorDataTypeIndices'. Note that this type should
+    -- always be top-level, i.e., have no free variables.
   }
   deriving (Functor, Foldable, Traversable)
 
@@ -176,11 +186,24 @@ instance Show (Ctor tp) where
 
 -- Datatypes -------------------------------------------------------------------
 
+-- | An inductively-defined datatype. 
 data DataType =
   DataType
   { dtName :: Ident
-  , dtType :: Term
+    -- ^ The name of this datatype
+  , dtParams :: [(String, Term)]
+    -- ^ The context of parameters of this datatype
+  , dtArgs :: [(String, Term)]
+    -- ^ The context of non-parameter arguments of this datatype
+  , dtSort :: Sort
+    -- ^ The universe of this datatype
   , dtCtors :: [Ctor Term]
+    -- ^ The list of constructors of this datatype
+  , dtType :: Term
+    -- ^ The cached type of this datatype, which should always be equal to the
+    -- term @p1 -> .. -> pN -> arg1 -> .. -> argM -> dtSort@, where the @pi@ are
+    -- the 'dtParams' and the @argi@ are the 'dtArgs'. Note that this type
+    -- should always be top-level, i.e., have no free variables.
   }
 
 instance Eq DataType where
@@ -209,6 +232,9 @@ data Module = Module {
 
 moduleImports :: Simple Lens Module (Map ModuleName Module)
 moduleImports = lens _moduleImports (\m v -> m { _moduleImports = v })
+
+moduleImportNames :: Module -> [ModuleName]
+moduleImportNames m = Map.keys (m^.moduleImports)
 
 emptyModule :: ModuleName -> Module
 emptyModule nm =
