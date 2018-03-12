@@ -130,6 +130,7 @@ library
     SAWScript.Prover.Util
     SAWScript.Prover.SBV
     SAWScript.Prover.RME
+    SAWScript.Prover.ABC
 
     SAWScript.X86
     SAWScript.X86Spec

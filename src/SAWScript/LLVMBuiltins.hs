@@ -67,6 +67,7 @@ import SAWScript.LLVMUtils
 import SAWScript.Options as Opt
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Utils
 import SAWScript.Value as SV
 

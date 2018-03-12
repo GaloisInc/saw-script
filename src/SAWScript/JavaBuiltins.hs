@@ -48,6 +48,7 @@ import SAWScript.JavaMethodSpec
 import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaUtils
 
+import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof

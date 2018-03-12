@@ -12,7 +12,7 @@ import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent, globalSym, glo
 import Verifier.LLVM.Backend.SAW
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Builtins
+import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Value
 
 --import Data.Maybe

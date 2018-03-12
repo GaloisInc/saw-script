@@ -53,8 +53,7 @@ import qualified Cryptol.TypeCheck.AST as Cryptol
 import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
-  ( FiniteType(..), FiniteValue(..)
-  , readFiniteValues, readFiniteValue
+  ( FiniteType(..), readFiniteValue
   , asFiniteTypePure, sizeFiniteType
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
@@ -85,12 +84,13 @@ import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concreteP
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop)
 
-import SAWScript.Prover.Util(checkBooleanSchema)
+import SAWScript.Prover.Util(checkBooleanSchema,sawProxy,liftCexBB)
 import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(basic_ss)
 import qualified SAWScript.Prover.SBV as Prover
 import qualified SAWScript.Prover.RME as Prover
+import qualified SAWScript.Prover.ABC as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
@@ -177,9 +177,6 @@ readSBV path unintlst =
           SBV.TRecord bs -> C.tRec [ (C.packIdent n, toCType t) | (n, t) <- bs ]
 
 
--- | The 'AIG.Proxy' used by SAWScript.
-sawProxy :: AIG.Proxy GIA.Lit GIA.GIA
-sawProxy = GIA.proxy
 
 -- | Use ABC's 'dsec' command to equivalence check to terms
 -- representing SAIGs. Note that nothing is returned; you must read
@@ -611,37 +608,7 @@ checkBoolean sc t = do
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
 satABC :: SharedContext -> ProofScript SV.SatResult
-satABC sc = withFirstGoal $ \g -> io $ do
-  let t0 = goalTerm g
-  TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  tp <- scWhnf sc =<< scTypeOf sc t
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  BBSim.withBitBlastedPred sawProxy sc bitblastPrimitives t $ \be lit0 shapes -> do
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> AIG.not lit0
-  satRes <- AIG.checkSat be lit
-  ft <- scApplyPrelude_False sc
-  let stats = solverStats "ABC" (scSharedSize t0)
-  case satRes of
-    AIG.Unsat ->
-      case goalQuant g of
-        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    AIG.Sat cex -> do
-      let r = liftCexBB shapes cex
-      case r of
-        Left err -> fail $ "Can't parse counterexample: " ++ err
-        Right vs
-          | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            case goalQuant g of
-              Existential -> return (r', stats, Nothing)
-              Universal -> return (r', stats, Just (g { goalTerm = ft }))
-          | otherwise -> fail $ unwords ["ABC SAT results do not match expected arguments", show argNames, show vs]
-    AIG.SatUnknown -> fail "Unknown result from ABC"
+satABC sc = wrapProver sc (Prover.satABC sc)
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
                     -> [String] -- ^ The value lines from the solver
@@ -847,12 +814,6 @@ satSMTLib2 sc path = satWithExporter writeSMTLib2 sc path ".smt2"
 
 satUnintSMTLib2 :: SharedContext -> [String] -> FilePath -> ProofScript SV.SatResult
 satUnintSMTLib2 sc unints path = satWithExporter (writeUnintSMTLib2 unints) sc path ".smt2"
-
-liftCexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
-liftCexBB tys bs =
-  case readFiniteValues tys bs of
-    Nothing -> Left "Failed to lift counterexample"
-    Just fvs -> Right fvs
 
 -- | Translate a @Term@ representing a theorem for input to the
 -- given validity-checking script and attempt to prove it.
