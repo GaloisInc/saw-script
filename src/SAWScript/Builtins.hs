@@ -608,7 +608,7 @@ checkBoolean sc t = do
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
 satABC :: SharedContext -> ProofScript SV.SatResult
-satABC sc = wrapProver sc (Prover.satABC sc)
+satABC sc = wrapProver sc Prover.satABC
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
                     -> [String] -- ^ The value lines from the solver
@@ -687,7 +687,7 @@ rewriteEqs sc t = do
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using the RME library.
 satRME :: SharedContext -> ProofScript SV.SatResult
-satRME sc = wrapProver sc (Prover.satRME sc)
+satRME sc = wrapProver sc Prover.satRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -704,19 +704,21 @@ satSBV conf sc = satUnintSBV conf sc []
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
 satUnintSBV :: SBV.SMTConfig -> SharedContext -> [String] -> ProofScript SV.SatResult
-satUnintSBV conf sc unints = wrapProver sc (Prover.satUnintSBV conf sc unints)
+satUnintSBV conf sc unints = wrapProver sc (Prover.satUnintSBV conf unints)
 
 
 wrapProver ::
   SharedContext ->
-  (ProverMode -> Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ( SharedContext ->
+    ProverMode ->
+    Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
   ProofScript SV.SatResult
 wrapProver sc f = withFirstGoal $ \g -> io $ do
   let mode = case goalQuant g of
                Existential -> CheckSat
                Universal   -> Prove
 
-  (mb,stats) <- f mode (goalTerm g)
+  (mb,stats) <- f sc mode (goalTerm g)
 
   let nope r = do ft <- scApplyPrelude_False sc
                   return (r, stats, Just g { goalTerm = ft })

@@ -34,13 +34,13 @@ import SAWScript.Prover.Util(checkBooleanSchema)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
 satUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
-  SharedContext {- ^ Context for working with terms -} ->
   [String]      {- ^ Uninterpreted functions -} ->
+  SharedContext {- ^ Context for working with terms -} ->
   ProverMode    {- ^ Prove/check -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
-satUnintSBV conf sc unints mode term =
+satUnintSBV conf unints sc mode term =
   do (t', labels, lit0) <- prepSBV sc unints term
 
      let lit = case mode of
