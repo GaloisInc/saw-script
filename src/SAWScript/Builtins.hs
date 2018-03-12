@@ -25,7 +25,6 @@ import Data.Functor
 import Control.Applicative
 import Data.Monoid
 #endif
-import Control.Lens
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
@@ -37,7 +36,6 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Time.Clock
-import qualified Data.Vector as V
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
@@ -60,12 +58,13 @@ import Verifier.SAW.FiniteValue
   , readFiniteValues, readFiniteValue
   , asFiniteTypePure, sizeFiniteType
   , FirstOrderValue(..)
-  , toFirstOrderValue, scFirstOrderValue, firstOrderTypeOf, fovVec
+  , toFirstOrderValue, scFirstOrderValue
   )
 import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Recognizer
@@ -75,27 +74,29 @@ import qualified Verifier.SAW.Typechecker (checkTerm)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as UntypedAST
 
-import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
-import SAWScript.SolverStats
 import SAWScript.TopLevel
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop)
 
+import SAWScript.Prover.Util(checkBooleanSchema)
+import SAWScript.Prover.Mode(ProverMode(..))
+import SAWScript.Prover.SolverStats
+import SAWScript.Prover.Rewrite(basic_ss)
+import qualified SAWScript.Prover.SBV as Prover
+import qualified SAWScript.Prover.RME as Prover
+
+import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
-
-import qualified Verifier.SAW.Simulator.RME as RME
-import qualified Verifier.SAW.Simulator.RME.Base as RME
 
 import qualified Data.ABC as ABC
 import qualified Data.SBV.Dynamic as SBV
@@ -410,7 +411,7 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 -- 2 file, treating some constants as uninterpreted.
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
 writeUnintSMTLib2 unints sc f t = do
-  (_, _, l) <- prepSBV sc unints t
+  (_, _, l) <- Prover.prepSBV sc unints t
   txt <- SBV.generateSMTBenchmark True l
   writeFile f txt
 
@@ -608,17 +609,6 @@ checkBoolean sc t = do
   unless (returnsBool ty) $
     fail $ "Invalid non-boolean type: " ++ show ty
 
-checkBooleanType :: C.Type -> IO ()
-checkBooleanType (C.tIsBit -> True) = return ()
-checkBooleanType (C.tIsFun -> Just (_, ty')) = checkBooleanType ty'
-checkBooleanType ty =
-  fail $ "Invalid non-boolean type: " ++ pretty ty
-
-checkBooleanSchema :: C.Schema -> IO ()
-checkBooleanSchema (C.Forall [] [] t) = checkBooleanType t
-checkBooleanSchema s =
-  fail $ "Invalid polymorphic type: " ++ pretty s
-
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
 satABC :: SharedContext -> ProofScript SV.SatResult
@@ -731,54 +721,13 @@ rewriteEqs sc t = do
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using the RME library.
 satRME :: SharedContext -> ProofScript SV.SatResult
-satRME sc = withFirstGoal $ \g -> io $ do
-  let t0 = goalTerm g
-  TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  tp <- scWhnf sc =<< scTypeOf sc t
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  RME.withBitBlastedPred sc Map.empty t $ \lit0 shapes -> do
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> RME.compl lit0
-  let stats = solverStats "RME" (scSharedSize t0)
-  case RME.sat lit of
-    Nothing ->
-      case goalQuant g of
-        Existential -> do ft <- scApplyPrelude_False sc
-                          return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    Just cex -> do
-      let m = Map.fromList cex
-      let n = sum (map sizeFiniteType shapes)
-      let bs = map (maybe False id . flip Map.lookup m) $ take n [0..]
-      let r = liftCexBB shapes bs
-      case r of
-        Left err -> fail $ "Can't parse counterexample: " ++ err
-        Right vs
-          | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            case goalQuant g of
-              Existential -> return (r', stats, Nothing)
-              Universal -> return (r', stats, Just g)
-          | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
+satRME sc = wrapProver sc (Prover.satRME sc)
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
   SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
-prepSBV :: SharedContext -> [String] -> Term
-        -> IO (Term, [SBVSim.Labeler], SBV.Symbolic SBV.SVal)
-prepSBV sc unints t0 = do
-  -- Abstract over all non-function ExtCns variables
-  let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
-  exts <- filterM nonFun (getAllExts t0)
-  TypedTerm schema t' <- (scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  (labels, lit) <- SBVSim.sbvSolve sc sbvPrimitives unints t'
-  return (t', labels, lit)
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
@@ -789,60 +738,33 @@ satSBV conf sc = satUnintSBV conf sc []
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
 satUnintSBV :: SBV.SMTConfig -> SharedContext -> [String] -> ProofScript SV.SatResult
-satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
-  (t', labels, lit0) <- prepSBV sc unints (goalTerm g)
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> liftM SBV.svNot lit0
-  tp <- scWhnf sc =<< scTypeOf sc t'
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  SBV.SatResult r <- SBV.satWith conf lit
-  let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
-                          (scSharedSize t')
-  case r of
-    SBV.Satisfiable {} -> do
-      ft <- scApplyPrelude_False sc
-      let dict = SBV.getModelDictionary r
-          r' = getLabels stats labels dict argNames
-      case goalQuant g of
-        Existential -> return (r', stats, Nothing)
-        Universal -> return (r', stats, Just (g { goalTerm = ft }))
-    SBV.SatExtField {} -> fail "Prover returned model in extension field"
-    SBV.Unsatisfiable {} -> do
-      ft <- scApplyPrelude_False sc
-      case goalQuant g of
-        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    SBV.Unknown {} -> fail "Prover returned Unknown"
-    SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
+satUnintSBV conf sc unints = wrapProver sc (Prover.satUnintSBV conf sc unints)
 
-getLabels :: SolverStats -> [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
-getLabels stats ls d argNames =
-  if length argNames == length xs then
-    SV.SatMulti stats (zip argNames xs)
-  else
-    error $ unwords ["SBV SAT results do not match expected arguments", show argNames, show xs]
 
-  where
-    xs = fmap getLabel ls
-    getLabel :: SBVSim.Labeler -> FirstOrderValue
-    getLabel (SBVSim.BoolLabel s) = FOVBit (SBV.cwToBool (d Map.! s))
-    getLabel (SBVSim.IntegerLabel s) = FOVInt (cwToInteger (d Map.! s))
-    getLabel (SBVSim.WordLabel s) = d Map.! s &
-      (\(SBV.KBounded _ n) -> FOVWord (fromIntegral n)) . SBV.kindOf <*> (\(SBV.CWInteger i)-> i) . SBV.cwVal
-    getLabel (SBVSim.VecLabel ns)
-      | V.null ns = error "getLabel of empty vector"
-      | otherwise = fovVec t vs
-      where vs = map getLabel (V.toList ns)
-            t = firstOrderTypeOf (head vs)
-    getLabel (SBVSim.TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
-    getLabel (SBVSim.RecLabel ns) = FOVRec $ fmap getLabel ns
+wrapProver ::
+  SharedContext ->
+  (ProverMode -> Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ProofScript SV.SatResult
+wrapProver sc f = withFirstGoal $ \g -> io $ do
+  let mode = case goalQuant g of
+               Existential -> CheckSat
+               Universal   -> Prove
 
-    cwToInteger cw =
-      case SBV.cwVal cw of
-        SBV.CWInteger i -> i
-        _ -> error "cwToInteger"
+  (mb,stats) <- f mode (goalTerm g)
+
+  let nope r = do ft <- scApplyPrelude_False sc
+                  return (r, stats, Just g { goalTerm = ft })
+
+  case (mode,mb) of
+    (CheckSat, Just a)  -> return (SV.SatMulti stats a, stats, Nothing)
+    (CheckSat, Nothing) -> nope (SV.Unsat stats)
+    (Prove, Nothing)    -> return (SV.Unsat stats, stats, Nothing)
+    (Prove, Just a)     -> nope (SV.SatMulti stats a)
+
+
+
+
+
 
 
 satBoolector :: SharedContext -> ProofScript SV.SatResult
@@ -1363,8 +1285,13 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       ]
       -- TODO: sext, sdiv, srem, sshr
 
-    noLoc :: String -> Located String
-    noLoc x = Located x x (PosInternal "cryptol_prims")
+    noLoc :: String -> CEnv.InputText
+    noLoc x = CEnv.InputText
+                { CEnv.inpText = x
+                , CEnv.inpFile = "(cryptol_prims)"
+                , CEnv.inpLine = 1
+                , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
+                }
 
     parsePrim :: (String, Ident, String) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do

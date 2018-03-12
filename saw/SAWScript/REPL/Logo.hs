@@ -26,16 +26,27 @@ logo useColor =
   ver = sgr [SetColor Foreground Dull White]
         ++ replicate (lineLen - 20 - length versionText) ' '
         ++ versionText
-  ls =
+  ls = logo2 ver
+  lineLen   = length (head ls)
+  slen      = length ls `div` 3
+  (ws,rest) = splitAt slen ls
+  (vs,ds)   = splitAt slen rest
+
+logo1 :: String -> [String]
+logo1 ver =
     [ "   ___  __ _ _ _ _"
     , "  / __|/ _\' | | | |"
     , "  \\__ \\ (_| | | | |"
     , "  |___/\\__,_|\\_,_/ " ++ ver
     ]
-  lineLen   = length (head ls)
-  slen      = length ls `div` 3
-  (ws,rest) = splitAt slen ls
-  (vs,ds)   = splitAt slen rest
+
+logo2 :: String -> [String]
+logo2 ver =
+    [ " ┏━━━┓━━━┓━┓━┓━┓"
+    , " ┃ ━━┓ ╻ ┃ ┃ ┃ ┃"
+    , " ┣━━ ┃ ╻ ┃┓ ╻ ┏┛"
+    , " ┗━━━┛━┛━┛┗━┛━┛ " ++ ver
+    ]
 
 displayLogo :: Bool -> IO ()
 displayLogo useColor = mapM_ putStrLn (logo useColor)

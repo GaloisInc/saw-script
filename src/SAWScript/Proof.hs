@@ -8,7 +8,7 @@ Stability   : provisional
 module SAWScript.Proof where
 
 import Verifier.SAW.SharedTerm
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 
 -- | A theorem must contain a boolean term, possibly surrounded by one
 -- or more lambdas which are interpreted as universal quantifiers.

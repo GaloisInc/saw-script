@@ -47,8 +47,7 @@ import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.CFG.Common as Crucible
 --import qualified Verifier.LLVM.Codebase as LSS
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
-import SAWScript.SolverStats
-import SAWScript.TypedTerm
+import SAWScript.Prover.SolverStats
 
 import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
 import qualified Lang.Crucible.LLVM.Translation as CL
@@ -60,6 +59,7 @@ import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
 
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 import SAWScript.Options
 
 newtype AllocIndex = AllocIndex Int

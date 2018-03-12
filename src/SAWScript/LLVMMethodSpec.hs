@@ -59,7 +59,7 @@ import Verifier.SAW.Prelude
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMUtils
 import SAWScript.PathVC
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutLnTop)
 import SAWScript.VerificationCheck
 

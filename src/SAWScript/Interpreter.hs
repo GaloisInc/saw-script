@@ -44,10 +44,9 @@ import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
-import SAWScript.AST (Located(..))
+import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
-import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -59,9 +58,9 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkDecl, checkDeclGroup)
 import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Prover.Rewrite(basic_ss)
 import Verifier.SAW.Conversion
 import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
@@ -69,6 +68,8 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.TypedTerm
+import qualified Verifier.SAW.CryptolEnv as CEnv
 
 import qualified Verifier.Java.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW
@@ -197,10 +198,12 @@ interpret env expr =
                                    cenv <- fmap rwCryptol (getMergedEnv env)
                                    --io $ putStrLn $ "Parsing code: " ++ show str
                                    --showCryptolEnv' cenv
-                                   t <- io $ CEnv.parseTypedTerm sc cenv str
+                                   t <- io $ CEnv.parseTypedTerm sc cenv
+                                           $ locToInput str
                                    return (toValue t)
       SS.CType str           -> do cenv <- fmap rwCryptol (getMergedEnv env)
-                                   s <- io $ CEnv.parseSchema cenv str
+                                   s <- io $ CEnv.parseSchema cenv
+                                           $ locToInput str
                                    return (toValue s)
       SS.Array es            -> VArray <$> traverse (interpret env) es
       SS.Block stmts         -> interpretStmts env stmts
@@ -232,6 +235,20 @@ interpret env expr =
                                      VBool b -> interpret env (if b then e2 else e3)
                                      _ -> fail $ "interpret IfThenElse: " ++ show v1
       SS.LExpr _ e           -> interpret env e
+
+locToInput :: Located String -> CEnv.InputText
+locToInput l = CEnv.InputText { CEnv.inpText = getVal l
+                              , CEnv.inpFile = file
+                              , CEnv.inpLine = ln
+                              , CEnv.inpCol  = col + 2 -- for dropped }}
+                              }
+  where
+  (file,ln,col) =
+    case locatedPos l of
+      Range f sl sc _ _ -> (f,sl, sc)
+      PosInternal s -> (s,1,1)
+      PosREPL       -> ("<interactive>", 1, 1)
+      Unknown       -> ("Unknown", 1, 1)
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
@@ -266,7 +283,7 @@ interpretStmts env stmts =
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv env
-             ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) s
+             ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
              -- FIXME: Local bindings get saved into the global cryptol environment here.
              -- We should change parseDecls to return only the new bindings instead.
              putTopLevelRW $ rw{rwCryptol = ce'}
@@ -345,15 +362,20 @@ interpretStmt printBinds stmt =
                                     sc <- getSharedContext
                                     --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
                                     --showCryptolEnv
-                                    cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) lstr
+                                    cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput lstr
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
-    SS.StmtImport _ imp       -> do rw <- getTopLevelRW
-                                    sc <- getSharedContext
-                                    --showCryptolEnv
-                                    cenv' <- io $ CEnv.importModule sc (rwCryptol rw) imp
-                                    putTopLevelRW $ rw { rwCryptol = cenv' }
-                                    --showCryptolEnv
+    SS.StmtImport _ imp ->
+      do rw <- getTopLevelRW
+         sc <- getSharedContext
+         --showCryptolEnv
+         let mLoc = iModule imp
+             qual = iAs imp
+             spec = iSpec imp
+         cenv' <- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual spec
+         putTopLevelRW $ rw { rwCryptol = cenv' }
+         --showCryptolEnv
+
     SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
                                      putTopLevelRW $ addTypedef (getVal name) ty rw
 

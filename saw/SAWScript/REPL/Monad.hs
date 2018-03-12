@@ -70,11 +70,11 @@ import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 
 import Verifier.SAW.SharedTerm (Term)
+import Verifier.SAW.CryptolEnv
 
 --------------------
 
 import SAWScript.AST (Located(getVal))
-import SAWScript.CryptolEnv
 import SAWScript.Exceptions
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
