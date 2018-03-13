@@ -1766,6 +1766,13 @@ primitives = Map.fromList
     [ "Print out a rendering of the given term in EasyCrypt syntax, if"
     , "possible, or an error message otherwise."
     ]
+
+  , prim "generate_easycrypt_mod"
+    "CryptolModule -> TopLevel ()"
+    (pureVal generate_easycrypt_mod)
+    [ "Print out a rendering of the given Cryptol module in EasyCrypt syntax,"
+    , "if possible, or an error message otherwise."
+    ]
   ]
 
   where

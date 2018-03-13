@@ -52,6 +52,8 @@ import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Grammar (parseSAWTerm)
 import qualified Verifier.SAW.Export.EasyCrypt as EC
+import qualified Data.EasyCrypt.AST as EC
+import qualified Data.EasyCrypt.Pretty as EC
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), FiniteValue(..)
@@ -105,6 +107,7 @@ import qualified Data.ABC.GIA as GIA
 import qualified Data.AIG as AIG
 
 import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig)
+import qualified Cryptol.ModuleSystem.Name as C (nameIdent)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
@@ -115,7 +118,7 @@ import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
-import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
+import qualified Cryptol.Utils.Ident as C (packIdent, unpackIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
@@ -1310,6 +1313,24 @@ generate_easycrypt t = do
     sc <- getSharedContext
     ss <- cryptolSimpset
     t' <- io $ rewriteSharedTerm sc ss (ttTerm t)
-    case EC.translateTermDoc t' of
+    case EC.translateTermDoc True t' of
       Left err -> io $ putStrLn $ "Error translating term: " ++ show err
       Right doc -> io $ putStrLn $ show doc
+
+generate_easycrypt_mod :: CryptolModule -> TopLevel ()
+generate_easycrypt_mod (CryptolModule _ defs) = do
+    sc <- getSharedContext
+    ss <- cryptolSimpset
+    let translate t = evalStateT (EC.runECTrans $ EC.translateTerm False [] t) [] 
+    io $ putStrLn "require import Cryptol."
+    forM_ (Map.assocs defs) $ \(n, t) -> do
+      let i = C.unpackIdent (C.nameIdent n)
+      t' <- io (rewriteSharedTerm sc ss =<< scUnfoldConstants sc [i] (ttTerm t))
+      io $ putStrLn ""
+      case translate t' of
+        Left err -> io $ putStrLn $ "Error translating term: " ++ show err
+        Right (EC.Binding EC.Lambda args body) -> do
+          io $ print $ EC.ppDecl (EC.OpDecl i args body)
+        Right ect -> do
+          io $ print $ EC.ppDecl (EC.OpDecl i [] ect)
+
