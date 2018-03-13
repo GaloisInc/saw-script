@@ -39,8 +39,14 @@ module SAWScript.X86Spec
 
     -- * Types
   , X86Type
-  , AByte, AWord, ADWord, AQWord, AVec, APtr, ABool
-  , ABits2, ABits3, ABigFloat
+  , Bits, APtr, ABool, ABigFloat
+  , pattern Byte
+  , pattern Word
+  , pattern DWord
+  , pattern QWord
+  , pattern V128
+  , pattern V256
+
   , X86(..)
   , Infer(..)
   , MemType
@@ -113,14 +119,8 @@ debug x = io (putStrLn x)
 ppValAt :: X86 t -> Value t -> String
 ppValAt ty (Value v) =
   case ty of
-    Byte      -> show (ppPtr v)
-    Word      -> show (ppPtr v)
-    DWord     -> show (ppPtr v)
-    QWord     -> show (ppPtr v)
-    Vec       -> show (ppPtr v)
+    Bits _    -> show (ppPtr v)
     Ptr       -> show (ppPtr v)
-    Bits2     -> show (ppPtr v)
-    Bits3     -> show (ppPtr v)
     BigFloat  -> show (ppPtr v)
     Bool      -> show (printSymExpr v)
 
@@ -158,14 +158,8 @@ sameValAt t (Value x) (Value y) =
     Value <$> (
     let w = bitSize t
     in case t of
-         Byte      -> ptrEq sym w x y
-         Word      -> ptrEq sym w x y
-         DWord     -> ptrEq sym w x y
-         QWord     -> ptrEq sym w x y
-         Vec       -> ptrEq sym w x y
+         Bits _    -> ptrEq sym w x y
          Ptr       -> ptrEq sym w x y
-         Bits2     -> ptrEq sym w x y
-         Bits3     -> ptrEq sym w x y
          BigFloat  -> ptrEq sym w x y
          Bool      -> isEq sym x y)
 
@@ -217,15 +211,15 @@ gpUse :: GPValue t => Value t -> GPSetup
 gpUse = GPUse . gpValue
 
 setupVecRegs ::
-  (VecReg -> Maybe (Value AVec)) ->
-  Spec Pre (VecReg -> Value AVec)
+  (VecReg -> Maybe (Value (Bits 256))) ->
+  Spec Pre (VecReg -> Value (Bits 256))
 setupVecRegs ty =
   do vs <- Vector.fromList <$> mapM mk elemList
      return (\x -> vs Vector.! fromEnum x)
   where
   mk r = case ty r of
            Just x  -> return x
-           Nothing -> fresh Vec (show r)
+           Nothing -> fresh V256 (show r)
 
 
 

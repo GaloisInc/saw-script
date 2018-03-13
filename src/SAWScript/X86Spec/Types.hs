@@ -5,13 +5,24 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language TypeFamilies #-}
 {-# Language TypeSynonymInstances #-}
+{-# Language PatternSynonyms #-}
+{-# Language ViewPatterns #-}
+{-# Language TypeOperators #-}
+
 module SAWScript.X86Spec.Types
   ( X86Type
-  , AByte, AWord, ADWord, AQWord, AVec, APtr, ABool, ABits2, ABits3, ABigFloat
+  , Bits, APtr, ABool, ABigFloat
   , X86(..)
   , Infer(..)
   , typeOf
   , BitSize, bitSize
+
+  , pattern Byte
+  , pattern Word
+  , pattern DWord
+  , pattern QWord
+  , pattern V128
+  , pattern V256
 
   -- * Mapping to Crucible
   , Sym, Rep, crucRepr
@@ -21,49 +32,75 @@ module SAWScript.X86Spec.Types
   ) where
 
 import Data.Kind(Type)
-import GHC.TypeLits(Nat)
+import GHC.TypeLits(Nat,KnownNat)
 
-import Data.Parameterized.NatRepr(NatRepr,knownNat)
+import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Nonce(GlobalNonceGenerator)
 
 import Lang.Crucible.Types(CrucibleType,TypeRepr,BoolType)
 import Lang.Crucible.Simulator.RegValue(RegValue)
 import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend)
-import Lang.Crucible.LLVM.MemModel(LLVMPointerType)
+import Lang.Crucible.LLVM.MemModel(LLVMPointerType,pattern LLVMPointerRepr)
 
 
 -- | The kind of X86 types.
-data {- kind -} X86Type =
-    AByte | AWord | ADWord | AQWord | AVec | APtr
-  | ABool
-  | ABits3
-  | ABits2
-  | ABigFloat
+data {- kind -} X86Type = APtr | ABits Nat | ABool | ABigFloat
 
-type AByte      = 'AByte
-type AWord      = 'AWord
-type ADWord     = 'ADWord
-type AQWord     = 'AQWord
-type AVec       = 'AVec
+type Bits       = 'ABits
 type APtr       = 'APtr
 type ABool      = 'ABool
-type ABits2     = 'ABits2
-type ABits3     = 'ABits3
 type ABigFloat  = 'ABigFloat
+
+pattern Byte :: () => (t ~ Bits 8) => X86 t
+pattern Byte <- Bits (testEquality n8 -> Just Refl)
+  where Byte = Bits n8
+
+pattern Word :: () => (t ~ Bits 16) => X86 t
+pattern Word <- Bits (testEquality n16 -> Just Refl)
+  where Word = Bits n16
+
+pattern DWord :: () => (t ~ Bits 32) => X86 t
+pattern DWord <- Bits (testEquality n32 -> Just Refl)
+  where DWord = Bits n32
+
+pattern QWord :: () => (t ~ Bits 64) => X86 t
+pattern QWord <- Bits (testEquality n64 -> Just Refl)
+  where QWord = Bits n64
+
+pattern V128 :: () => (t ~ Bits 128) => X86 t
+pattern V128 <- Bits (testEquality n128 -> Just Refl)
+  where V128 = Bits n128
+
+pattern V256 :: () => (t ~ Bits 256) => X86 t
+pattern V256 <- Bits (testEquality n256 -> Just Refl)
+  where V256 = Bits n256
+
+
+n8 :: NatRepr 8
+n8 = knownNat
+
+n16 :: NatRepr 16
+n16 = knownNat
+
+n32 :: NatRepr 32
+n32  = knownNat
+
+n64 :: NatRepr 64
+n64 = knownNat
+
+n128 :: NatRepr 128
+n128 = knownNat
+
+n256 :: NatRepr 256
+n256 = knownNat
 
 
 -- | This type is used to specify types explicitly.
 data X86 :: X86Type -> Type where
-  Byte      :: X86 AByte
-  Word      :: X86 AWord
-  DWord     :: X86 ADWord
-  QWord     :: X86 AQWord
-  Vec       :: X86 AVec
+  Bits      :: (1 <= n) => NatRepr n -> X86 (Bits n)
   Ptr       :: X86 APtr
   Bool      :: X86 ABool
-  Bits2     :: X86 ABits2
-  Bits3     :: X86 ABits3
   BigFloat  :: X86 ABigFloat
 
 -- | This type may be used to specify types implicitly
@@ -71,15 +108,10 @@ data X86 :: X86Type -> Type where
 class Infer t where
   infer :: X86 t
 
-instance Infer AByte     where infer = Byte
-instance Infer AWord     where infer = Word
-instance Infer ADWord    where infer = DWord
-instance Infer AQWord    where infer = QWord
-instance Infer AVec      where infer = Vec
+instance (1 <= n, KnownNat n) =>
+         Infer (Bits n)  where infer = Bits knownNat
 instance Infer APtr      where infer = Ptr
 instance Infer ABool     where infer = Bool
-instance Infer ABits2    where infer = Bits2
-instance Infer ABits3    where infer = Bits3
 instance Infer ABigFloat where infer = BigFloat
 
 -- | Get the type of something with at ype.
@@ -89,58 +121,34 @@ typeOf _ = infer
 
 -- | Mapping from X86 types to the Crucible types used to implement them.
 type family Rep (x :: X86Type) :: CrucibleType where
-  Rep AByte       = LLVMPointerType 8
-  Rep AWord       = LLVMPointerType 16
-  Rep ADWord      = LLVMPointerType 32
-  Rep AQWord      = LLVMPointerType 64
-  Rep AVec        = LLVMPointerType 256
+  Rep (Bits n)    = LLVMPointerType n   -- or just BVType?
   Rep APtr        = LLVMPointerType 64
   Rep ABool       = BoolType
-  Rep ABits2      = LLVMPointerType 2
-  Rep ABits3      = LLVMPointerType 3
   Rep ABigFloat   = LLVMPointerType 80  -- or something eles?
 
 -- | Specify a crucible type expclitily.
 crucRepr :: X86 t -> TypeRepr (Rep t)
 crucRepr x =
   case x of
-    Byte     -> knownRepr
-    Word     -> knownRepr
-    DWord    -> knownRepr
-    QWord    -> knownRepr
-    Vec      -> knownRepr
+    Bits n   -> LLVMPointerRepr n
     Ptr      -> knownRepr
     Bool     -> knownRepr
-    Bits2    -> knownRepr
-    Bits3    -> knownRepr
     BigFloat -> knownRepr
 
 -- | Size of types in bits.
 type family BitSize (x :: X86Type) :: Nat where
-  BitSize AByte     = 8
-  BitSize AWord     = 16
-  BitSize ADWord    = 32
-  BitSize AQWord    = 64
-  BitSize AVec      = 256
+  BitSize (Bits n) = n
   BitSize APtr      = 64
   BitSize ABool     = 1
-  BitSize ABits2    = 2
-  BitSize ABits3    = 3
   BitSize ABigFloat = 80
 
 -- | A value level nubmer for the size of the type.
 bitSize :: forall t. X86 t -> NatRepr (BitSize t)
 bitSize x =
   case x of
-    Byte     -> knownNat @(BitSize t)
-    Word     -> knownNat @(BitSize t)
-    DWord    -> knownNat @(BitSize t)
-    QWord    -> knownNat @(BitSize t)
-    Vec      -> knownNat @(BitSize t)
+    Bits n   -> n
     Ptr      -> knownNat @(BitSize t)
     Bool     -> knownNat @(BitSize t)
-    Bits2    -> knownNat @(BitSize t)
-    Bits3    -> knownNat @(BitSize t)
     BigFloat -> knownNat @(BitSize t)
 
 

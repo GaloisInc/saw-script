@@ -14,7 +14,7 @@ import Data.Parameterized.NatRepr(knownNat)
 import Lang.Crucible.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseNatRepr,BaseBoolRepr))
 import Lang.Crucible.Solver.Symbol(SolverSymbol,userSymbol)
 import Lang.Crucible.Solver.Interface(freshConstant)
-import Lang.Crucible.LLVM.MemModel ( LLVMPointerType )
+import Lang.Crucible.LLVM.MemModel(LLVMPointerType)
 import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, llvmPointer_bv )
 
 import SAWScript.X86Spec.Types
@@ -26,15 +26,9 @@ import SAWScript.X86Spec.Registers
 fresh :: X86 t -> String -> Spec Pre (Value t)
 fresh x str =
   case x of
-    Byte      -> freshBits str x
-    Word      -> freshBits str x
-    DWord     -> freshBits str x
-    QWord     -> freshBits str x
-    Vec       -> freshBits str x
+    Bits n    -> freshBits str (Bits n)
     Ptr       -> freshPtr  str
     Bool      -> freshBool str
-    Bits2     -> freshBits str x
-    Bits3     -> freshBits str x
     BigFloat  -> freshBits str x
 
 

@@ -42,24 +42,28 @@ class MemType (t :: X86Type) where
   type ByteSize t :: Nat
   byteSizeNat :: X86 t -> NatRepr (ByteSize t)
 
-instance MemType AByte where
-  type ByteSize AByte = 1
+instance MemType (Bits 8) where
+  type ByteSize (Bits 8) = 1
   byteSizeNat _ = knownNat
 
-instance MemType AWord where
-  type ByteSize AWord = 2
+instance MemType (Bits 16) where
+  type ByteSize (Bits 16) = 2
   byteSizeNat _ = knownNat
 
-instance MemType ADWord where
-  type ByteSize ADWord = 4
+instance MemType (Bits 32) where
+  type ByteSize (Bits 32) = 4
   byteSizeNat _ = knownNat
 
-instance MemType AQWord where
-  type ByteSize AQWord = 8
+instance MemType (Bits 64) where
+  type ByteSize (Bits 64) = 8
   byteSizeNat _ = knownNat
 
-instance MemType AVec where
-  type ByteSize AVec = 32
+instance MemType (Bits 128) where
+  type ByteSize (Bits 128) = 16
+  byteSizeNat _ = knownNat
+
+instance MemType (Bits 256) where
+  type ByteSize (Bits 256) = 32
   byteSizeNat _ = knownNat
 
 instance MemType APtr where
@@ -140,7 +144,7 @@ readMem w (Value p) =
 class AllocBytes t where
   allocBytes :: String -> Mutability -> t -> Spec Pre (Value APtr)
 
-instance (t ~ AQWord) => AllocBytes (Value t) where
+instance (t ~ Bits 64) => AllocBytes (Value t) where
   allocBytes str mut (Value n) =
     let ?ptrWidth = knownNat in
     updMem $ \sym m ->
@@ -154,7 +158,7 @@ instance AllocBytes Bytes where
 class PtrAdd t where
   ptrAdd :: Value APtr -> t -> Spec p (Value APtr)
 
-instance (t ~ AQWord) => PtrAdd (Value t) where
+instance (t ~ Bits 64) => PtrAdd (Value t) where
   ptrAdd (Value p) (Value o) = withMem $ \sym mem ->
     let ?ptrWidth = knownNat
     in Value <$> (doPtrAddOffset sym mem p =<< projectLLVM_bv sym o)

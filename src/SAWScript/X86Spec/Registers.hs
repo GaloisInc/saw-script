@@ -51,18 +51,18 @@ data GPReg = RAX | RBX | RCX | RDX | RSI | RDI | RSP | RBP
 -- | General purpose reigsters may contain either a bit-value or a pointer.
 -- This type specifies which form we want to access.
 data GPRegUse t where
-  AsBits :: GPRegUse AQWord
+  AsBits :: GPRegUse (Bits 64)
   AsPtr  :: GPRegUse APtr
 
 -- | The value of a general purpose register.
-data GPRegVal = GPBits (Value AQWord) | GPPtr (Value APtr)
+data GPRegVal = GPBits (Value (Bits 64)) | GPPtr (Value APtr)
 
 -- | A convenient way to construct general purpose values, based on their type.
 class GPValue t where
   gpValue :: Value t -> GPRegVal
 
-instance GPValue AQWord where gpValue = GPBits
-instance GPValue APtr   where gpValue = GPPtr
+instance (n ~ 64) => GPValue (Bits n) where gpValue = GPBits
+instance GPValue APtr                 where gpValue = GPPtr
 
 
 -- | CPU flags
@@ -100,14 +100,14 @@ data FPReg = FP0 | FP1 | FP2 | FP3 | FP4 | FP5 | FP6 | FP7
 
 -- | A register assignment.
 data RegAssign = RegAssign
-  { valIP         ::               Value AQWord
+  { valIP         ::               Value (Bits 64)
   , valGPReg      :: GPReg      -> GPRegVal
-  , valVecReg     :: VecReg     -> Value AVec
+  , valVecReg     :: VecReg     -> Value (Bits 256)
   , valFPReg      :: FPReg      -> Value ABigFloat
   , valFlag       :: Flag       -> Value ABool
   , valX87Status  :: X87Status  -> Value ABool
-  , valX87Top     ::               Value ABits3
-  , valX87Tag     :: X87Tag     -> Value ABits2
+  , valX87Top     ::               Value (Bits 3)
+  , valX87Tag     :: X87Tag     -> Value (Bits 2)
   }
 
 
@@ -222,13 +222,13 @@ toRV (Value x) = RV x
 
 -- | The type of value stored in a register.  Used for reading registers.
 type family RegType a where
-  RegType IP                  = AQWord
+  RegType IP                  = Bits 64
   RegType (GPReg,GPRegUse t)  = t
   RegType Flag                = ABool
-  RegType VecReg              = AVec
+  RegType VecReg              = Bits 256
   RegType X87Status           = ABool
-  RegType X87Top              = ABits3
-  RegType X87Tag              = ABits2
+  RegType X87Top              = Bits 3
+  RegType X87Tag              = Bits 2
   RegType FPReg               = ABigFloat
 
 
