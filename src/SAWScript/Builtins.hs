@@ -19,7 +19,6 @@ Stability   : provisional
 
 module SAWScript.Builtins where
 
-import Data.Foldable (toList)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Functor
 import Control.Applicative
@@ -54,7 +53,6 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , asFiniteTypePure, sizeFiniteType
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
   )
@@ -87,10 +85,11 @@ import SAWScript.Value (ProofScript, printOutLnTop)
 import SAWScript.Prover.Util(checkBooleanSchema,sawProxy,liftCexBB)
 import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Rewrite(basic_ss)
+import SAWScript.Prover.Rewrite(rewriteEqs)
 import qualified SAWScript.Prover.SBV as Prover
 import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
+import qualified SAWScript.Prover.Exporter as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
@@ -191,8 +190,8 @@ dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> IO ()
 dsecPrint sc t1 t2 = do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  writeSAIGInferLatches sc path1 t1
-  writeSAIGInferLatches sc path2 t2
+  Prover.writeSAIGInferLatches sc path1 t1
+  Prover.writeSAIGInferLatches sc path2 t2
   callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
@@ -229,19 +228,6 @@ saveAIGasCNFPrim f (AIG.Network be ls) =
     [l] -> do _ <- io $ GIA.writeCNF be l f
               return ()
     _ -> fail "save_aig_as_cnf: non-boolean term"
-
--- | Tranlsate a SAWCore term into an AIG
-bitblastPrim :: SharedContext -> Term -> IO AIGNetwork
-bitblastPrim sc t = do
-  t' <- rewriteEqs sc t
-{-
-  let s = ttSchema t'
-  case s of
-    C.Forall [] [] _ -> return ()
-    _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
--}
-  BBSim.withBitBlastedTerm sawProxy sc bitblastPrimitives t' $ \be ls -> do
-    return (AIG.Network be (toList ls))
 
 -- | Read an AIG file representing a theorem or an arbitrary function
 -- and represent its contents as a @Term@ lambda term. This is
@@ -317,102 +303,6 @@ checkConvertiblePrim x y = do
             else "Not convertible")
    printOutLnTop Info str
 
--- | Write a @Term@ representing a theorem or an arbitrary
--- function to an AIG file.
-writeAIG :: SharedContext -> FilePath -> Term -> IO ()
-writeAIG sc f t = do
-  aig <- bitblastPrim sc t
-  ABC.writeAiger f aig
-
--- | Like @writeAIG@, but takes an additional 'Integer' argument
--- specifying the number of input and output bits to be interpreted as
--- latches. Used to implement more friendly SAIG writers
--- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-writeSAIG :: SharedContext -> FilePath -> Term -> Int -> IO ()
-writeSAIG sc file tt numLatches = do
-  aig <- bitblastPrim sc tt
-  GIA.writeAigerWithLatches file aig numLatches
-
--- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
--- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: SharedContext -> FilePath -> TypedTerm -> IO ()
-writeSAIGInferLatches sc file tt = do
-  ty <- scTypeOf sc (ttTerm tt)
-  s <- getStateType ty
-  let numLatches = sizeFiniteType s
-  writeSAIG sc file (ttTerm tt) numLatches
-  where
-    die :: Monad m => String -> m a
-    die why = fail $
-      "writeSAIGInferLatches: " ++ why ++ ":\n" ++
-      "term must have type of the form '(i, s) -> (o, s)',\n" ++
-      "where 'i', 's', and 'o' are all fixed-width types,\n" ++
-      "but type of term is:\n" ++ (pretty . ttSchema $ tt)
-
-    -- Decompose type as '(i, s) -> (o, s)' and return 's'.
-    getStateType :: Term -> IO FiniteType
-    getStateType ty = do
-      ty' <- scWhnf sc ty
-      case ty' of
-        (asPi -> Just (_nm, tp, body)) ->
-          -- NB: if we get unexpected "state types are different"
-          -- failures here than we need to 'scWhnf sc' before calling
-          -- 'asFiniteType'.
-          case (asFiniteTypePure tp, asFiniteTypePure body) of
-            (Just dom, Just rng) ->
-              case (dom, rng) of
-                (FTTuple [_i, s], FTTuple [_o, s']) ->
-                  if s == s' then
-                    return s
-                  else
-                    die "state types are different"
-                _ -> die "domain or range not a tuple type"
-            _ -> die "domain or range not finite width"
-        _ -> die "not a function type"
-
--- | Like @writeAIGInferLatches@, but takes an additional argument
--- specifying the number of input and output bits to be interpreted as
--- latches.
-writeAIGComputedLatches ::
-  SharedContext -> FilePath -> Term -> Int -> IO ()
-writeAIGComputedLatches sc file term numLatches = do
-  writeSAIG sc file term numLatches
-
-writeCNF :: SharedContext -> FilePath -> Term -> IO ()
-writeCNF sc f t = do
-  AIG.Network be ls <- bitblastPrim sc t
-  case ls of
-    [l] -> do
-      _ <- GIA.writeCNF be l f
-      return ()
-    _ -> fail "writeCNF: non-boolean term"
-
-write_cnf :: SharedContext -> FilePath -> TypedTerm -> IO ()
-write_cnf sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  writeCNF sc f t
-
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file.
-writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
-writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
-
--- | As above, but check that the type is monomorphic and boolean.
-write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
-write_smtlib2 sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  writeSMTLib2 sc f t
-
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
-writeUnintSMTLib2 unints sc f t = do
-  (_, _, l) <- Prover.prepSBV sc unints t
-  txt <- SBV.generateSMTBenchmark True l
-  writeFile f txt
-
-writeCore :: FilePath -> Term -> IO ()
-writeCore path t = writeFile path (scWriteExternal t)
 
 readCore :: FilePath -> TopLevel TypedTerm
 readCore path = do
@@ -674,16 +564,6 @@ writeAIGWithMapping be l path = do
   ABC.writeAiger path (ABC.Network be [l])
   return [1..nins]
 
-rewriteEqs :: SharedContext -> Term -> IO Term
-rewriteEqs sc t = do
-  let eqs = map (mkIdent preludeName)
-            [ "eq_Bool", "eq_Nat", "eq_bitvector", "eq_VecBool"
-            , "eq_VecVec" ]
-  rs <- scEqsRewriteRules sc eqs
-  ss <- addRules rs <$> basic_ss sc
-  t' <- rewriteSharedTerm sc ss t
-  return t'
-
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using the RME library.
 satRME :: SharedContext -> ProofScript SV.SatResult
@@ -771,51 +651,31 @@ satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
                 -> String
                 -> ProofScript SV.SatResult
 satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
-  t <- case goalQuant g of
-         Existential -> return (goalTerm g)
-         Universal -> do
-           let t0 = goalTerm g
-           ty <- scTypeOf sc t0
-           let (ts, tf) = asPiList ty
-           tf' <- scWhnf sc tf
-           case asBoolType tf' of
-             Nothing -> fail $ "Invalid non-boolean type: " ++ show ty
-             Just () -> return ()
-           negTerm (map snd ts) t0
-  exporter sc ((path ++ "." ++ goalType g ++ show (goalNum g)) ++ ext) t
-  let stats = solverStats ("offline:"++ drop 1 ext)
-                          (scSharedSize t)
+  let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+      mode = case goalQuant g of
+               Existential -> CheckSat
+               Universal   -> Prove
+
+  stats <- Prover.satWithExporter exporter file sc mode (goalTerm g)
+
   case goalQuant g of
     Existential -> return (SV.Unsat stats, stats, Just g)
-    Universal -> return (SV.Unsat stats, stats, Nothing)
-  where
-    negTerm :: [Term] -> Term -> IO Term
-    negTerm [] p = scNot sc p
-    negTerm (t1 : ts) p = do
-      (x, ty, p') <-
-        case unwrapTermF p of
-          Lambda x ty p' -> return (x, ty, p')
-          _ -> do
-            p1 <- incVars sc 0 1 p
-            x0 <- scLocalVar sc 0
-            p' <- scApply sc p1 x0
-            return ("x", t1, p')
-      scLambda sc x ty =<< negTerm ts p'
+    Universal   -> return (SV.Unsat stats, stats, Nothing)
 
 satAIG :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satAIG sc path = satWithExporter writeAIG sc path ".aig"
+satAIG sc path = satWithExporter Prover.writeAIG sc path ".aig"
 
 satCNF :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satCNF sc path = satWithExporter writeCNF sc path ".cnf"
+satCNF sc path = satWithExporter Prover.writeCNF sc path ".cnf"
 
 satExtCore :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satExtCore sc path = satWithExporter (const writeCore) sc path ".extcore"
+satExtCore sc path = satWithExporter (const Prover.writeCore) sc path ".extcore"
 
 satSMTLib2 :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satSMTLib2 sc path = satWithExporter writeSMTLib2 sc path ".smt2"
+satSMTLib2 sc path = satWithExporter Prover.writeSMTLib2 sc path ".smt2"
 
 satUnintSMTLib2 :: SharedContext -> [String] -> FilePath -> ProofScript SV.SatResult
-satUnintSMTLib2 sc unints path = satWithExporter (writeUnintSMTLib2 unints) sc path ".smt2"
+satUnintSMTLib2 sc unints path = satWithExporter (Prover.writeUnintSMTLib2 unints) sc path ".smt2"
 
 -- | Translate a @Term@ representing a theorem for input to the
 -- given validity-checking script and attempt to prove it.

@@ -131,6 +131,7 @@ library
     SAWScript.Prover.SBV
     SAWScript.Prover.RME
     SAWScript.Prover.ABC
+    SAWScript.Prover.Exporter
 
     SAWScript.X86
     SAWScript.X86Spec

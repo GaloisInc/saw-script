@@ -10,18 +10,6 @@ import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)
 
 
-{-
-checkTerm :: SharedContext -> Term -> 
-checkTerm sc t0 =
-  do TypedTerm schema t <-
-        mkTypedTerm sc =<< rewriteEqs sc =<< bindAllExts sc t0
-     checkBooleanSchema schema
-     tp <- scWhnf sc =<< scTypeOf sc t
-     let (args, _) = asPiList tp
-         argNames = map fst args
--}
-
-
 -- | Is this a bool, or something that returns bool.
 checkBooleanType :: C.Type -> IO ()
 checkBooleanType ty

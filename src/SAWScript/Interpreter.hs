@@ -61,6 +61,7 @@ import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
 import SAWScript.Prover.Rewrite(basic_ss)
+import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
 import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
