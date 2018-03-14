@@ -258,7 +258,7 @@ proveProp sc env prop =
           -> do ps <- traverse (proveProp sc env . C.pZero) ts
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
-        (C.pIsZero -> Just (C.TRec fs))
+        (C.pIsZero -> Just (C.tIsRec -> Just fs))
           -> do let tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- fs ]
                 pm <- traverse (proveProp sc env . C.pZero) tm
                 scRecord sc pm
@@ -645,7 +645,7 @@ mapRecordSelector sc env i = fmap fst . go
           n' <- importType sc env n
           g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
           return (g, C.tFun n b)
-        C.TRec ts | Just b <- lookup i ts -> do
+        (C.tIsRec -> Just ts) | Just b <- lookup i ts -> do
           x <- scLocalVar sc 0
           y <- scRecordSelect sc x (C.unpackIdent i)
           t' <- importType sc env t
@@ -906,7 +906,7 @@ asCryptolTypeValue v =
     SC.VFieldType k v1 v2 -> do
       let name = C.packIdent k
       t1 <- asCryptolTypeValue v1
-      fs <- asCryptolTypeValue v2 >>= tIsRec
+      fs <- asCryptolTypeValue v2 >>= C.tIsRec
       return (C.tRec ((name, t1) : fs))
     SC.VPiType v1 f -> do
       case v1 of
@@ -929,9 +929,6 @@ asCryptolTypeValue v =
           t2 <- asCryptolTypeValue v2
           return (C.tFun t1 t2)
     _ -> Nothing
-  where
-    tIsRec (C.TRec fs) = Just fs
-    tIsRec _           = Nothing
 
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
