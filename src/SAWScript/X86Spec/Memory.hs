@@ -198,7 +198,7 @@ readArray ::
   MemType t =>
   X86 t ->
   Value APtr ->
-  Int ->
+  Integer ->
   Spec Post [ Value t ]
 readArray ty p n
   | n > 0 = do v  <- readMem ty p
