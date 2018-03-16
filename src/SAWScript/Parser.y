@@ -150,6 +150,7 @@ Pattern :: { Pattern }
 
 Arg :: { Pattern }
  : name                                 { LPattern (tokPos $1) (PVar (toLName $1) Nothing) }
+ | '(' ')'                              { LPattern (maxSpan [tokPos $1, tokPos $2]) (PTuple []) }
  | '(' commas(Pattern) ')'              { LPattern (maxSpan [tokPos $1, tokPos $3]) (case $2 of [p] -> p; _ -> PTuple $2) }
 
 Expression :: { Expr }
