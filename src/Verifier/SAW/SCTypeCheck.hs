@@ -12,6 +12,9 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.SCTypeCheck
   ( scTypeCheck
   , scTypeCheckError
+  , scTypeCheckWHNF
+  , scSubtype
+  , scConvertible
   , TCError(..)
   , tcErrorPath
   , prettyTCError
@@ -301,14 +304,14 @@ scTypeCheckWHNF t = lift $ lift $ do
 scSubtype :: SharedContext -> Term -> Term -> IO Bool
 scSubtype sc t1 t2 = helper (unwrapTermF t1) (unwrapTermF t2) where
   helper (Pi _ a1 b1) (Pi _ a2 b2) =
-    (&&) <$> scConvertable a1 a2 <*> scConvertable b1 b2
+    (&&) <$> scConvertible a1 a2 <*> scConvertible b1 b2
   helper (FTermF (Sort s1)) (FTermF (Sort s2)) = return $ s1 <= s2
-  helper t1' t2' = scConvertable t1' t2'
+  helper t1' t2' = scConvertible t1' t2'
 
 -- | Check that two terms are convertable, assuming they both have the same type
 -- and are both in WHNF
-scConvertable :: SharedContext -> Term -> Term -> IO Bool
-scConvertable sc = term
+scConvertible :: SharedContext -> Term -> Term -> IO Bool
+scConvertible sc = term
   where
     term' :: Term -> Term -> IO Bool
     term' t1 t2 = do

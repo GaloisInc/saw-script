@@ -125,7 +125,8 @@ DefVarCtx : list(DefVarCtxItem) { concat $1 }
 
 DefVarCtxItem :: { [(TermVar, Maybe Term)] }
 DefVarCtxItem : Ident { [(TermVar $1, Nothing)] }
-              | '(' list(Ident) '::'  LTerm ')' { map (\i -> (TermVar i,$4)) $2 }
+              | '(' list(Ident) '::'  LTerm ')'
+                { map (\i -> (TermVar i, Just $4)) $2 }
 
 -- A context of variables, all of which must be typed; i.e., a list syntactic
 -- elements of the form (x y z :: tp) (x2 y3 :: tp2) ...
@@ -166,8 +167,8 @@ AtomTerm
   | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
-  | '(' sepBy(Term, ',') ')'     { parseParen (pos $1) $2 }
-  | '#' '(' sepBy(Term, ',') ')'       {% parseTParen (pos $1) $3 }
+  | '(' sepBy(Term, ',') ')'     { parseTuple (pos $1) $2 }
+  | '#' '(' sepBy(Term, ',') ')'       {% parseTupleType (pos $1) $3 }
   |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
   |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
@@ -175,7 +176,7 @@ AtomTerm
     -- FIXME: old-style pairs, pair types, and pair projections
   |     '(' Term '|' Term ')'          { OldPairValue (pos $1) $2 $4 }
   | '#' '(' Term '|' Term ')'          { OldPairType (pos $1) $3 $5 }
-  | AtomTerm '.' '(' nat ')'           {% mkOldTupleProj $1 (fmap tokNat $4) }
+  | AtomTerm '.' '(' nat ')'           {% mkOldTupleProj $1 (tokNat (val $4)) }
 
 Ident :: { PosPair String }
 Ident : ident { fmap tokIdent $1 }
@@ -326,7 +327,7 @@ unexpectedOpenParen p = addParseError p "Unexpected parenthesis"
 exprAsIdentList :: Term -> Maybe [TermVar]
 exprAsIdentList (Name x) = return [TermVar x]
 exprAsIdentList (App expr (Name x)) =
-  (: TermVar x) <$> exprAsIdentList expr
+  (++ [TermVar x]) <$> exprAsIdentList expr
 exprAsIdentList _ = Nothing
 
 -- | Pi expressions should have one of the forms:
@@ -339,45 +340,35 @@ exprAsIdentList _ = Nothing
 -- "unused" variable with the name "_"
 mkPiArg :: Term -> [(TermVar, Term)]
 mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
-  map (\x -> (TermVar x, t)) xs
-mkPiArg lhs = return ([UnusedVar (pos lhs)], lhs)
+  map (\x -> (x, t)) xs
+mkPiArg lhs = [(UnusedVar (pos lhs), lhs)]
 
 -- | Parse a tuple value @(x1, .., xn)@ as a record value whose fields are named
 -- @1@, @2@, etc. As a special case, the unary tuple @(x)@ is just @x@.
-parseTupleValue :: Pos -> [Term] -> Term
-parseTupleValue _ [t] = t
-parseTupleValue p ts = RecordValue $ zip (map show [1 ..]) ts
+parseTuple :: Pos -> [Term] -> Term
+parseTuple _ [t] = t
+parseTuple p ts = mkTupleValue p ts
 
 -- | Parse a tuple type @#(x1, .., xn)@ as a record type whose fields are named
 -- @1@, @2@, etc. As a special case, the unary tuple @(x)@ is just @x@.
-parseTupleType :: Pos -> [Term] -> Term
-parseTupleType _ [tp] =
-  addParseError p "Tuple may not contain a single value."
-parseTupleType p tps = RecordType $ zip (map show [1 ..]) tps
+parseTupleType :: Pos -> [Term] -> Parser Term
+parseTupleType p [tp] =
+  addParseError p "Tuple type may not contain a single value." >>
+  return (badTerm p)
+parseTupleType p tps = return $ mkTupleType p tps
 
 -- | Parse an old-style tuple projection of the form @t.(1)@ or @t.(2)@
-mkOldTupleProj :: Term -> Int -> Parser Term
+mkOldTupleProj :: Term -> Integer -> Parser Term
 mkOldTupleProj t 1 = return $ OldPairLeft t
 mkOldTupleProj t 2 = return $ OldPairRight t
 mkOldTupleProj t _ =
-  do addParserError (pos t) "Old-style projections must be either .(1) or .(2)"
+  do addParseError (pos t) "Old-style projections must be either .(1) or .(2)"
      return (badTerm (pos t))
-
--- | Parse a parenthesized expression which may actually be a tuple.
-parseParen :: Pos -> [Term] -> Term
-parseParen _ [t] = return t
-parseParen p ts = mkTupleValue p ts
-
-parseTParen :: Pos -> [Term] -> Parser Term
-parseTParen p [expr] = do
-  addParseError p "Tuple may not contain a single value."
-  return (badTerm p)
-parseTParen p l = return $ mkTupleType p l
 
 parseTupleSelector :: Term -> PosPair Integer -> Parser Term
 parseTupleSelector t i =
-  if val i >= 1 then return (RecordProj t (val i)) else
-    do addParserError (pos t) "non-positive tuple projection index"
+  if val i >= 1 then return (mkTupleSelector t (val i)) else
+    do addParseError (pos t) "non-positive tuple projection index"
        return (badTerm (pos t))
 
 -- | Crete a module name given a list of strings with the top-most

@@ -147,63 +147,88 @@ instance Hashable Def -- automatically derived
 
 -- Constructors ----------------------------------------------------------------
 
-type TypedCtor = Ctor Term
+-- | A specification of a constructor argument with a given type in a given
+-- context of parameters and earlier arguments
+data CtorArg
+  = ConstArg Term
+    -- ^ A fixed, constant type
+  | RecursiveArg [(String,Term)] [Term]
+    -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
+    -- specifies a recursive argument type of the form
+    --
+    -- > (z1::tp1) -> .. -> (zn::tpn) -> d p1 .. pm e1 .. ek
+    --
+    -- where @d@ is the datatype (not given here), the @zi::tpi@ are the
+    -- elements of the Pi context (the first argument to 'RecursiveArgType'),
+    -- the @pi@ are the parameters of @d@ (not given here), and the @ei@ are the
+    -- type indices of @d@.
 
-data Ctor tp =
+
+-- | A specification of a constructor
+data Ctor =
   Ctor
   { ctorName :: !Ident
     -- ^ The name of this constructor
-  , ctorParams :: [(String, tp)]
+  , ctorParams :: [(String,Term)]
     -- ^ Parameters of the constructor (inherited from its datatype)
-  , ctorArgs :: [(String, tp)]
+  , ctorArgs :: [(String,CtorArg)]
     -- ^ Context of arguments of the constructor
+    --
+    -- The free variables of the types used in arguments include the parameters
+    -- and all the previous arguments
   , ctorDataTypeName :: Ident
     -- ^ The datatype this constructor belongs to
-  , ctorDataTypeIndices :: [tp]
+  , ctorDataTypeIndices :: [Term]
     -- ^ The non-parameter arguments to the datatype in the return type of this
     -- constructor
-  , ctorType :: tp
-    -- ^ Cached type of the constructor, which should always be equal to the
-    -- term @p1 -> .. -> pN -> arg1 -> .. -> argM -> d p1 .. pN ix1 .. ixK@,
-    -- where the @pi@ are the 'ctorParams', the @argi@ are the 'ctorArgs', and
-    -- the @ixi@ are the 'ctorDataTypeIndices'. Note that this type should
-    -- always be top-level, i.e., have no free variables.
+    --
+    -- The free variables of the indices include all parameters and arguments
+  , ctorType :: Term
+    -- ^ Cached type of the constructor, which should always be equal to
+    --
+    -- > (p1::P1) -> .. -> (pn::Pn) -> (x1::arg1) -> .. -> (xm::argm) ->
+    -- >  d p1 .. pn ix1 .. ixk
+    --
+    -- where the @pi@ are the 'ctorParams', the @argi@ are the types specified
+    -- by the 'ctorArgs', and the @ixi@ are the 'ctorDataTypeIndices'. Note that
+    -- this type should always be top-level, i.e., have no free variables.
   }
-  deriving (Functor, Foldable, Traversable)
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)
 
-instance Eq (Ctor tp) where
+instance Eq Ctor where
   (==) = lift2 ctorName (==)
 
-instance Ord (Ctor tp) where
+instance Ord Ctor where
   compare = lift2 ctorName compare
 
-instance Show (Ctor tp) where
+instance Show Ctor where
   show = show . ctorName
 
 
 -- Datatypes -------------------------------------------------------------------
 
--- | An inductively-defined datatype. 
-data DataType =
+-- | An inductively-defined datatype
+data DataType where
   DataType
   { dtName :: Ident
     -- ^ The name of this datatype
-  , dtParams :: [(String, Term)]
+  , dtParams :: [(String,Term)]
     -- ^ The context of parameters of this datatype
-  , dtArgs :: [(String, Term)]
-    -- ^ The context of non-parameter arguments of this datatype
+  , dtIndices :: [(String,Term)]
+    -- ^ The context of indices of this datatype
   , dtSort :: Sort
     -- ^ The universe of this datatype
-  , dtCtors :: [Ctor Term]
+  , dtCtors :: [Ctor]
     -- ^ The list of constructors of this datatype
   , dtType :: Term
-    -- ^ The cached type of this datatype, which should always be equal to the
-    -- term @p1 -> .. -> pN -> arg1 -> .. -> argM -> dtSort@, where the @pi@ are
-    -- the 'dtParams' and the @argi@ are the 'dtArgs'. Note that this type
-    -- should always be top-level, i.e., have no free variables.
+    -- ^ The cached type of this datatype, which should always be equal to
+    --
+    -- > (p1::P1) -> .. -> (pn::Pn) -> (i1::I1) -> .. -> (im::Im) -> 'dtSort'
+    --
+    -- where the @pi@ are the 'dtParams' and the @ii@ are the 'dtIndices'. Note
+    -- that this type should always be top-level, i.e., have no free variables.
   }
 
 instance Eq DataType where

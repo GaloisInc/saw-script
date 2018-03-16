@@ -231,14 +231,36 @@ data FlatTermF e
   | FieldType e e e
   | RecordSelector e e -- Record value, field name
 
-  | CtorApp !Ident ![e]
-  | DataTypeApp !Ident ![e]
-  | RecursorApp !Ident ![e]
+    -- | An inductively-defined type, applied to parameters and type indices
+  | DataTypeApp !Ident ![e] ![e]
+    -- | An application of a constructor to its arguments, i.e., an element of
+    -- an inductively-defined type; the parameters (of the inductive type to
+    -- which this constructor belongs) and indices are kept separate
+  | CtorApp !Ident ![e] ![e]
+    -- | An eliminator / pattern-matching function for an inductively-defined
+    -- type, given by:
+    -- * The (identifier of the) inductive type it eliminates;
+    -- * The parameters of that inductive type;
+    -- * The return type, also called the "intent", given by a function from
+    --   type indices of the inductive type to a type;
+    -- * The elimination function for each constructor of that inductive type;
+    -- * The indices for that inductive type; AND
+    -- * The argument that is being eliminated / pattern-matched
+  | RecursorApp !Ident [e] e [(Ident,e)] [e] e
 
+    -- | Non-dependent record types, i.e., N-ary tuple types with named
+    -- fields. These are considered equal up to reordering of fields. Actual
+    -- tuple types are represented with field names @"1"@, @"2"@, etc.
   | RecordType ![(String, e)]
+    -- | Non-dependent records, i.e., N-ary tuples with named fields. These are
+    -- considered equal up to reordering of fields. Actual tuples are
+    -- represented with field names @"1"@, @"2"@, etc.
   | RecordValue ![(String, e)]
-  | RecordProj e String
+    -- | Non-dependent record projection
+  | RecordProj e !String
 
+    -- | Sorts, aka universes, are the types of types; i.e., an object is a
+    -- "type" iff it has type @Sort s@ for some s
   | Sort !Sort
 
     -- Primitive builtin values
@@ -343,10 +365,14 @@ zipWithFlatTermF f = go
 -- Term Functor ----------------------------------------------------------------
 
 data TermF e
-    = FTermF !(FlatTermF e)  -- ^ Global variables are referenced by label.
+    = FTermF !(FlatTermF e)
+      -- ^ The atomic, or builtin, term constructs
     | App !e !e
+      -- ^ Applications of functions
     | Lambda !String !e !e
+      -- ^ Function abstractions
     | Pi !String !e !e
+      -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
     | Constant String !e !e

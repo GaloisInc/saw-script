@@ -48,10 +48,7 @@ import Verifier.SAW.Position
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
-import Verifier.SAW.Typechecker.Context
-import Verifier.SAW.Typechecker.Monad
-import Verifier.SAW.Typechecker.Simplification
-import Verifier.SAW.Typechecker.Unification
+import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
 -- | Given a project function returning a key and a list of values, return a map
@@ -472,10 +469,13 @@ includeNameInModule mic = fn . identName
                  where imset = importNameStrings iml
 
 -- | Creates a module from a list of untyped declarations.
-tcModule :: [Module] -- ^ List of modules loaded already.
+tcModule :: SharedContext
          -> Un.Module
          -> Either Doc Module
-tcModule ml (Un.Module (PosPair _ nm) iml d) = do
+tcModule sc (Un.Module (PosPair _ nm) iml d) = do
+
+  FIXME HERE NOW
+
   let moduleMap = projMap moduleName ml
   runTC $ do
     let gc0 = emptyGlobalContext

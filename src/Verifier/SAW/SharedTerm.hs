@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {- |
 Module      : Verifier.SAW.SharedTerm
@@ -178,6 +180,7 @@ import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Data.Bits
+import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM)
 import Data.HashMap.Strict (HashMap)
@@ -248,9 +251,8 @@ insertTFM tf x tfm =
 -- SharedContext: a high-level interface for building Terms.
 
 data SharedContext = SharedContext
-  { -- | Returns the current module for the underlying global theory.
-    scModule        :: Module
-  , scTermF         :: TermF Term -> IO Term
+  { scModuleMap      :: IORef (HashMap ModuleName Module)
+  , scTermF          :: TermF Term -> IO Term
   , scFreshGlobalVar :: IO VarIndex
   }
 
@@ -281,6 +283,51 @@ scDataTypeApp sc ident args = scFlatTermF sc (DataTypeApp ident args)
 scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
 scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
 
+-- | Test if a module is loaded in the current shared context
+scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
+scModuleIsLoaded sc name =
+  HMap.member name <$> readIORef (scModuleMap sc)
+
+-- | Load a module into the current shared context, raising an error if a module
+-- of the same name is already loaded
+scLoadModule :: SharedContext -> Module -> IO ()
+scLoadModule sc mod =
+  modifyIORef' (scModuleMap sc) $
+  HMap.insertWith (error $ "scLoadModule: module "
+                   ++ moduleName mod ++ " already loaded!")
+  (moduleName mod) mod
+
+-- | Ensure that a module is loaded into the current shared context, doing
+-- nothing if a module of the same name is already loaded
+scEnsureModule :: SharedContext -> Module -> IO ()
+scEnsureModule sc mod =
+  modifyIORef' (scModuleMap sc) $
+  HMap.insertWith (\_new old -> old) (moduleName mod) mod
+
+-- | Look up a module by name, raising an error if it is not loaded
+scFindModule :: SharedContext -> ModuleName -> IO Module
+scFindModule sc name =
+  do maybe_mod <- HMap.lookup name <$> readIORef (scModuleMap sc)
+     case maybe_mod of
+       Just mod -> return mod
+       Nothing ->
+         error ("scFindModule: module " ++ show name ++ " not found!")
+
+-- | Look up a definition by its identifier
+scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
+scFindDef sc i = findDef <$> scFindModule sc (identModule i) <*> return i
+
+-- | Look up a datatype by its identifier
+scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
+scFindDataType sc i =
+  findDataType <$> scFindModule sc (identModule i) <*> return i
+
+-- | Look up a constructor by its identifier
+scFindCtor :: SharedContext -> Ident -> IO (Maybe TypedCtor)
+scFindCtor sc i =
+  findCtor <$> scFindModule sc (identModule i) <*> return i
+
+
 -- SharedContext implementation.
 
 type AppCache = TermFMap Term
@@ -305,12 +352,207 @@ getTerm r a =
         let s' = insertTFM a t s
         seq s' $ return (s', t)
 
+
+--------------------------------------------------------------------------------
+-- Recursors
+
+-- | Reduce an application of a recursor. Specifically,
+--
+-- > scReduceRecursor d [p1, .., pn] P [(c1,f1), .., (cm,fm)] ci [x1, .., xk]
+--
+-- reduces @(RecursorApp d ps P cs_fs ixs (CtorApp ci ps xs))@ to
+--
+-- > fi x1 .. xk rec_tm_1 .. rec_tm_l
+--
+-- where the arguments @rec_tm_i@ are given by recursion on those arguments @xi@
+-- that are recursive arguments. Specifically, for a @'RecursiveArg' zs ixs@
+-- argument @arg@, which has type @\(z1::Z1) -> .. -> d p1 .. pn ix1 .. ixp@, we
+-- build the recursive call
+--
+-- > \(z1::[ps/params,xs/args]Z1) -> .. ->
+-- >   RecursorApp d ps P cs_fs [ps/params,xs/args]ixs arg
+--
+-- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
+-- parameter variables of the inductive type and the earlier constructor
+-- arguments @xs@ for the remaining free variables.
+scReduceRecursor :: SharedContext ->
+                    Ident -> [Term] -> Term -> [(Ident,Term)] ->
+                    Ident -> [Term] -> IO Term
+scReduceRecursor sc d params p_ret cs_fs c c_args =
+  rec_argsM >>= \rec_args -> scApplyAll sc f_c (c_args ++ rec_args)
+  where
+    fromJustHelper =
+      maybe (error ("scApplyRecursor: constructor " ++ show c ++ " not found!"))
+      id
+
+    -- Look up the proper function for c in the cs_fs list of functions
+    f_c = fromJustHelper $ lookup c cs_fs
+
+    -- Look up the ctorArgs of c and pass them to mk_rec_args
+    rec_argsM =
+      (ctorArgs <$> fromJustHelper <$> scFindCtor sc c) >>=
+      mk_rec_args (reverse params) c_args
+
+    -- Build the recursive calls rec_tm_i to the recursor for each RecursiveArg
+    -- for the constructor c. The prev_args contain the parameters and all the
+    -- ordinary constructor arguments x1 through x(i-1) for the previous
+    -- constructor arguments before the current argument. These are in reverse
+    -- order, with the most recently-added argument first. These are necessary
+    -- as they must be substituted into the argument types for the recursive
+    -- calls.
+    mk_rec_args _ [] [] = return []
+    mk_rec_args prev_args (c_arg:c_args) (ConstArg _:args) =
+      mk_rec_args (c_arg:prev_args) c_args args
+    mk_rec_args prev_args (c_arg:c_args) (RecursiveArg zs ixs : args) =
+      (:) <$> build_rec_call prev_args zs ixs c_arg <*>
+      mk_rec_args (c_arg:prev_args) c_args args
+
+    -- Build a recursive call that abstracts over arguments zs and recurses over
+    -- c_arg with type indices ixs. The zs and ixs have the parameters and also
+    -- all previous arguments x1, .., x(i-1) as free variables, so we must
+    -- substitute the actual parameters and earlier argument values for
+    -- them. Note that these previous arguments are built up as a reversed list,
+    -- since instantiateVarList wants the most recent variables first (see
+    -- comments after that function, below). Note also that everything in the
+    -- return type, other than zs and ixs, need to be lifted into the context of
+    -- the zs.
+    build_rec_call prev_args zs ixs c_arg =
+      do (inst_zs, inst_ixs) <-
+           instantiateVarListCtxTerms sc 0 prev_args (zs, ixs)
+         params_lifted <- mapM (incVars sc 0 (length zs)) params
+         p_ret_lifted <- incVars sc 0 (length zs) p_ret
+         cs_fs_lifted <-
+           mapM (\(c,f) -> (c,) <$> incVars sc 0 (length zs) f) cs_fs
+         c_arg_lifted <- incVars sc 0 (length zs) c_arg
+         body <-
+           scFlatTermF sc (RecursorApp d params_lifted p_ret_lifted cs_fs_lifted
+                           inst_ixs c_arg_lifted)
+         scLambdaList sc inst_zs body
+
+
+-- | Convert a 'CtorArg' to the type it describes, given the datatype and
+-- parameter context for the constructor. Note that the returned type will have
+-- all the parameters and all previous constructor arguments as free variables.
+scCtorArgType :: SharedContext -> Ident -> [(String,Term)] -> CtorArg -> IO Term
+scCtorArgType _ _ _ (ConstArg tp) = return tp
+scCtorArgType sc d param_ctx (RecursiveArg zs ixs) =
+  do param_vars <- scVarsForCtx param_ctx
+     d_app <- scFlatTermF sc (DataTypeApp d param_vars ixs)
+     scPiList zs d_app
+
+-- | Compute the type of a constructor from its context of parameters, its
+-- arguments, its datatype, and its return type indices. This is used to
+-- pre-compute the 'ctorType' field of a 'Ctor'.
+scCtorType :: SharedContext -> [(String,Term)] -> [(String,CtorArg)] ->
+              Ident -> [Term] -> IO Term
+scCtorType sc param_ctx args d ixs =
+  do arg_ctx <- mapM (\(str,arg) ->
+                       (str,) <$> scCtorArgType sc d param_ctx arg) args
+     param_vars <- scVarsForCtx param_ctx
+     ret_type <- scFlatTermF sc $ DataTypeApp ctorDataTypeName param_vars ixs
+     scPiList sc (param_ctx ++ arg_ctx) ret_type
+
+
+-- | Calculate the types of the function arguments to a recursor for datatype
+-- @d@ with parameters @ps@ and return type function @p_ret@
+scRecursorFunTypes :: SharedContext -> Ident -> [Term] -> Term ->
+                      IO [(Ident,Term)]
+scRecursorFunTypes sc d params p_ret =
+  ctorsM >>= \ctor -> (ctorName ctor,) <$> mk_fun_type ctor
+  where
+    ctorsM =
+      dtCtors <$>
+      maybe (error $ "scRecursorFunTypes: " ++ show d ++ " not found!") id <$>
+      scFindDataType sc d
+
+    -- Build the type for the eliminator function for ctor, which has the form
+    --
+    -- (x1::[params/ps]arg1) -> .. -> (xn::[params/ps]argn) ->
+    --   rec_call_tp_1 -> .. -> rec_call_tp_m ->
+    --   p_ret ix_1 .. ix_k (ctor x1 .. xn)
+    --
+    -- where ps are the free variables for the parameters (deBruijn indices i
+    -- through i + (length params) - 1 for argument i), the ixs are the
+    -- ctorDataTypeIndices of the function, and the rec_call_tps have the form
+    --
+    -- \(z1::[params/ps]Z1) -> .. \(zl::[params/ps]Zl) ->
+    --   p_ret [params/ps]arg_ixs (xi z1 .. zl)
+    --
+    -- for each argi = RecursiveArg [(z1,Z1), .., (zl,Zl)] arg_ixs. Note that
+    -- the Zs and arg_ixs must be lifted (via incVars) once for each variable xj
+    -- where j >= i and once for each rec_call_tp_j for j < i, because these
+    -- terms only expect to be in a context with the ps and x1 .. x(i-1).
+    -- Similarly, p_ret must be lifted once for each xj, once for each
+    -- rec_call_tp_j where j < i, and once for each zj.
+    mk_fun_type (Ctor{..}) =
+      do arg_ctx <- build_arg_ctx 0 ctorDataTypeName ctorArgs
+         rec_tps <-
+           build_rec_tps (length ctorArgs) 0 (zip [0..] $ map snd ctorArgs)
+         let num_rec_tps = length rec_tps
+
+         -- Lift p_ret into the context of all the xs and rec_call_tps
+         p_ret_lifted <- incVars sc 0 (length arg_ctx + num_rec_tps) p_ret
+
+         -- Lift the ixs into the context of the rec_call_tps
+         ixs <- mapM (incVars sc 0 num_rec_tps) ctorDataTypeIndices
+
+         -- Build (ctor x1 .. xn) in the context of the rec_call_tps
+         xs <- scVarsForContext num_rec_tps arg_ctx
+         ctor_app <- scFlatTermF sc (CtorApp ctorName params xs)
+
+         -- Build (p_ret ixs (ctor xs))
+         ret_type <- scApplyAll sc p_ret_lifted (ixs ++ [ctor_app])
+
+         -- Finally, return the entire Pi type
+         scPiList arg_ctx $ scFunAll rec_tps ret_type
+
+    -- Build the context (xi::[params/ps]argi) -> .. described above
+    build_arg_ctx _ _ [] = return []
+    build_arg_ctx i d (arg : args) =
+      -- NOTE: we have to substitute in params, which, for argument i, start at
+      -- deBruijn level i
+      (:) <$>
+      (scCtorArgType sc d arg >>= instantiateVarList sc i params) <*>
+      build_arg_ctx (i+1) d args
+
+    -- Build the rec_call_tps described above
+    build_rec_tps num_args num_rec_tps ((_,(ConstArg _):args) =
+      build_rec_tps num_args num_rec_tps args
+    build_rec_tps num_args num_rec_tps ((i, RecursiveArg z_ctx ixs):args) =
+      do
+        -- Lift z_ctx and ixs once for each xj with j >= i and once for each
+        -- rec_call_tp before this one, after substituting in the params
+        let arg_lift = num_args - i + num_rec_tps
+        z_ctx_lifted <-
+          instantiateVarListCtx sc i params z_ctx >>= incVarsCtx sc 0 arg_lift
+        ixs_lifted <-
+          mapM (instantiateVarList sc (i + length z_ctx) params >=>
+                incVars sc (length z_ctx) arg_lift) ixs
+
+        -- Build xi, which is deBruijn index 0 but lifted once for each xj with
+        -- j >= i, once for each rec_call_tp before this one, and once for each
+        -- z in z_ctx. Then build (xi z1 .. zl).
+        xi <- scLocalVar sc (length z_ctx + arg_lift)
+        xi_app <- scApplyAll sc xi =<< scVarsForCtx z_ctx_lifted
+
+        -- Lift p_ret once for each argument, once for each earlier rec_call_tp,
+        -- and once for each z variable in z_ctx
+        let p_lift = num_args + num_rec_tps + length z_ctx
+        p_ret_lifted <- incVars sc 0 p_lift p_ret
+
+        -- Now return (zs -> p_ret arg_ixs (xi zs)) prepended to the rest
+        p_ret_app <- scApplyAll sc p_ret (ixs_lifted ++ [xi_app])
+        ret <- scPiList sc z_ctx_lifted p_ret_app
+        rest <- build_rec_tps num_args (num_rec_tps+1) args
+        return (ret : rest)
+
+
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
 
--- | Reduces beta-redexes, tuple/record selectors, and definition
--- equations at the top level of a term, and evaluates all arguments
--- to type constructors (including function, record, and tuple types).
+-- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
+-- definitions at the top level of a term, and evaluates all arguments to type
+-- constructors (including function, record, and tuple types).
 --
 -- NOTE: this notion of weak head normal form differs from the standard type
 -- theory definition, in that it normalizes the arguments of type-forming
@@ -340,7 +582,7 @@ scWhnf sc t0 =
                                                                      case asRecordValue t' of
                                                                        Just tm -> go xs ((Map.!) tm i)
                                                                        Nothing -> foldM reapply t' xs
-    go xs                     (asGlobalDef -> Just c)           = tryEqns c xs (maybe [] defEqs (findDef (scModule sc) c))
+    go xs                     (asGlobalDef -> Just c)           = scFindDef sc c >>= tryDef c xs
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -372,65 +614,11 @@ scWhnf sc t0 =
     reapply t (Right (Left i)) = scPairSelector sc t i
     reapply t (Right (Right i)) = scRecordSelect sc t i
 
-    tryEqns :: (?cache :: Cache IORef TermIndex Term) =>
-               Ident -> [Either Term (Either Bool FieldName)] -> [DefEqn] -> IO Term
-    tryEqns ident xs [] = scGlobalDef sc ident >>= flip (foldM reapply) xs
-    tryEqns ident xs (DefEqn ps rhs : eqns) = do
-      minst <- matchAll ps xs
-      case minst of
-        Just inst | and (zipWith (==) (Map.keys inst) [0..]) -> do
-          rhs' <- scSharedTerm sc rhs
-          t <- instantiateVarList sc 0 (reverse (Map.elems inst)) rhs'
-          go (drop (length ps) xs) t
-        _ -> tryEqns ident xs eqns
-
-    matchAll :: (?cache :: Cache IORef TermIndex Term) =>
-                [Pat] -> [Either Term (Either Bool FieldName)]
-                  -> IO (Maybe (Map Int Term))
-    matchAll [] _ = return $ Just Map.empty
-    matchAll (_ : _) [] = return Nothing
-    matchAll (_ : _) (Right _ : _) = return Nothing
-    matchAll (p : ps) (Left x : xs) = do
-      mm1 <- match p x
-      case mm1 of
-        Nothing -> return Nothing
-        Just m1 -> do
-          mm2 <- matchAll ps xs
-          case mm2 of
-            Nothing -> return Nothing
-            Just m2 -> return $ Just (Map.union m1 m2)
-
-    match :: (?cache :: Cache IORef TermIndex Term) =>
-             Pat -> Term -> IO (Maybe (Map Int Term))
-    match p x =
-      case p of
-        PVar _ i _  -> return $ Just (Map.singleton i x)
-        PUnused _ _ -> return $ Just Map.empty
-        PUnit       -> do v <- memo x
-                          case asTupleValue v of
-                            Just [] -> matchAll [] []
-                            _ -> return Nothing
-        PPair p1 p2 -> do v <- memo x
-                          case asPairValue v of
-                            Just (v1, v2) -> matchAll [p1, p2] [Left v1, Left v2]
-                            _ -> return Nothing
-        PEmpty      -> do v <- memo x
-                          case asFTermF v of
-                            Just EmptyValue -> return $ Just Map.empty
-                            _ -> return Nothing
-        PField p1 p2 p3 -> do v <- memo x
-                              case asFTermF v of
-                                Just (FieldValue v1 v2 v3) ->
-                                  matchAll [p1, p2, p3] [Left v1, Left v2, Left v3]
-                                _ -> return Nothing
-        PCtor i ps  -> do v <- memo x
-                          case asCtor v of
-                            Just (s, xs) | i == s -> matchAll ps (map Left xs)
-                            _ -> return Nothing
-        PString s   -> do v <- memo x
-                          case asStringLit v of
-                            Just s' | s == s' -> matchAll [] []
-                            _ -> return Nothing
+    tryDef :: (?cache :: Cache IORef TermIndex Term) =>
+              Ident -> [Either Term (Either Bool FieldName)] -> Maybe Def ->
+              IO Term
+    tryDef ident xs (Just (defBody -> Just t)) = go xs t
+    tryDef ident xs _ = scGlobalDef sc ident >>= flip (foldM reapply) xs
 
 
 -- | Test if two terms are convertible; that is, if they are equivalent under evaluation.
@@ -674,6 +862,14 @@ incVars sc initialLevel j
     fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
     fn _ (Right i) = scTermF sc (LocalVar (i+j))
 
+-- | Increment the free variables for each element of a variable context
+incVarsCtx :: SharedContext -> DeBruijnIndex -> DeBruijnIndex ->
+              [(String,Term)] -> IO [(String,Term)]
+incVarsCtx _ _ _ [] = return []
+incVarsCtx sc k j ((x,tp):ctx) =
+  -- NOTE: increment k when we recurse, since we are moving under the binding
+  (:) <$> ((x,) <$> incVars k j tp) <*> incVarsCtx sc (k+1) j ctx
+
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
 instantiateVar :: SharedContext
@@ -721,6 +917,20 @@ instantiateVarList sc k ts t =
 -- (Lam (Lam t)) `App` z `App` y `App` x@, i.e. @instantiateVarList 0
 -- [x,y,z] t == instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
 -- (instantiateVar 2 (incVars 0 2 z) t))@.
+
+
+-- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ into a context and
+-- decrement all higher loose variables by @length ts@. This is just like
+-- 'instantiateVarList' but for contexts, i.e., lists of variable bindings.
+instantiateVarListCtx :: SharedContext -> DeBruijnIndex -> [Term] ->
+                         [(String,Term)] -> IO [(String,Term)]
+instantiateVarListCtx _ _ _ [] = return []
+instantiateVarListCtx sc k ts ((str,tp):ctx) =
+  -- NOTE: increment k when we recurse, since we are moving under the binding
+  -- for str
+  (:) <$> ((str,) <$> instantiateVarList sc k ts tp) <*>
+  instantiateVarListCtx sc (k+1) ts ctx
+
 
 --------------------------------------------------------------------------------
 -- Beta Normalization
@@ -984,6 +1194,16 @@ scLocalVar :: SharedContext
            -> DeBruijnIndex
            -> IO Term
 scLocalVar sc i = scTermF sc (LocalVar i)
+
+-- | Return a list of local variables that are bound by a variable context,
+-- assuming that the context starts at the given deBruijn index. These are
+-- returned in reverse order, as @[i+n-1, .., i]@, where @n@ is the length of
+-- the context and @i@ is the starting deBruijn index, because the first
+-- variable in the context is the least recently bound, i.e., has the highest
+-- deBruijn index.
+scVarsForCtx :: SharedContext -> DeBruijnIndex -> [(String,Term)] -> IO [Term]
+scVarsForCtx sc i ctx =
+  reverse <$> zipWithM (scLocalVar sc . const) [i ..] ctx
 
 scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
