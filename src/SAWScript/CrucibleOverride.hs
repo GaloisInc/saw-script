@@ -300,6 +300,9 @@ globalMuxUnleveled sym p l r
 
 ------------------------------------------------------------------------
 
+-- | Use a method spec to override the behavior of a function.
+-- That is: match the current state using the pre-condition,
+-- and execute the post condition.
 methodSpecHandler1 ::
   forall arch ret ctx.
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
@@ -307,7 +310,7 @@ methodSpecHandler1 ::
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   Ctx.Assignment (Crucible.RegEntry Sym) ctx
-           {- ^ type representation of function return value -} ->
+                           {- ^ the arguments to the function -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
   OverrideMatcher arch (Crucible.RegValue Sym ret)

@@ -384,6 +384,8 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          mem' <- Crucible.storeConstRaw sym mem ptr'' storTy val'
          return mem'
 
+-- | Sets up globals (ghost variable), and collects boolean terms
+-- that shuld be assumed to be true.
 setupPrestateConditions ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR        ->
