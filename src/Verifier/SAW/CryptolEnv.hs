@@ -27,6 +27,7 @@ module Verifier.SAW.CryptolEnv
   , getNamingEnv
   , getAllIfaceDecls
   , InputText(..)
+  , lookupIn
   )
   where
 
@@ -73,7 +74,8 @@ import qualified Cryptol.ModuleSystem.Name as MN
 import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import Cryptol.Utils.PP
-import Cryptol.Utils.Ident (Ident, preludeName, packIdent, interactiveName)
+import Cryptol.Utils.Ident (Ident, preludeName, packIdent, interactiveName
+                           , packModName, textToModName, modNameChunks)
 import Cryptol.Utils.Logger (quietLogger)
 
 --import SAWScript.REPL.Monad (REPLException(..))
@@ -102,6 +104,40 @@ data CryptolEnv = CryptolEnv
   , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
   }
+
+
+-- Finding things --------------------------------------------------------------
+
+
+-- | Lookup a name in a map containg Cryptol names.
+-- The string corresponds to the Cryptol name we are looking for.
+-- If it is unqualifed, then we return any entry associated with the given
+-- name.  If the string is qualified (i.e., has @::@), then we only consider
+-- entries from the module in the qualified.
+-- The result is either the corresponding value, or a list of the
+lookupIn :: String -> Map T.Name b -> Either [T.Name] b
+lookupIn nm mp =
+  case [ x | x <- Map.toList mp, matches (fst x) ] of
+    [ (_,v) ] -> Right v
+    opts      -> Left (map fst opts)
+  where
+  matches = nameMatcher nm
+
+
+-- | Parse a string into a function that will match names.
+-- If the string is unqualified (i.e., no `::`), then we match all
+-- names with the given identifier.  Otherwise, we only match the
+-- ones in the module specified by the qualifier.
+nameMatcher :: String -> T.Name -> Bool
+nameMatcher xs =
+    case modNameChunks (textToModName (pack xs)) of
+      []  -> const False
+      [x] -> (packIdent x ==) . MN.nameIdent
+      cs -> let m = MN.Declared (packModName (map pack (init cs)))
+                i = packIdent (last cs)
+             in \n -> MN.nameIdent n == i && MN.nameInfo n == m
+
+
 
 -- Initialize ------------------------------------------------------------------
 
