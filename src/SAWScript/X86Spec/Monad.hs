@@ -25,9 +25,7 @@ module SAWScript.X86Spec.Monad
   , PreExtra(..)
   , registerSymFuns
   , SymFunTerms(..)
-
-  -- ** XXX
-  , loadCry
+  , lookupCry
   ) where
 
 import Control.Monad(liftM,ap)
@@ -49,10 +47,10 @@ import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 
 import Verifier.SAW.SharedTerm(Term,SharedContext,scApplyAll)
 
-import Verifier.SAW.CryptolEnv(initCryptolEnv,loadCryptolModule,CryptolEnv(..))
+import Verifier.SAW.CryptolEnv(CryptolEnv(..), lookupIn )
 
-import Cryptol.ModuleSystem.Name(nameIdent)
-import Cryptol.Utils.Ident(unpackIdent)
+import Cryptol.ModuleSystem.Name(Name)
+import Cryptol.Utils.PP(alwaysQualify,runDoc,pp)
 
 import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
@@ -76,45 +74,32 @@ type Post = 'Post
 
 -- | A monad for definingin specifications.
 newtype Spec (p :: SpecType) a =
-  Spec ((Sym, Map String Term) ->
+  Spec ((Sym, CryptolEnv) ->
         RR p ->
         (RegValue Sym Mem, SS p) -> IO (a, (RegValue Sym Mem, SS p)))
 
 -- | Interanl state to be passed from the pre-spec to the post-spec
 data PreExtra = PreExtra { theMem     :: RegValue Sym Mem
                          , theRegions :: Map RegionIndex (LLVMPtr Sym 64)
-                         , cryTerms   :: Map String Term
                          }
 
 -- | Execute a pre-condition specification.
 runPreSpec ::
   Sym ->
   SymFuns Sym ->
-  Maybe FilePath {- ^ Optional file, containing Cryptol declarations -} ->
+  CryptolEnv  {- ^ Contains Cryptol declarations we may use -} ->
   Spec Pre a -> IO (a, PreExtra)
-runPreSpec sym symFs mb (Spec f) =
-  do cs <- loadCry sym mb
-     m0 <- emptyMem LittleEndian
+runPreSpec sym symFs cs (Spec f) =
+  do m0 <- emptyMem LittleEndian
      (a,(m,rs)) <- f (sym,cs) symFs (m0, Map.empty)
-     return (a, PreExtra { theMem = m, cryTerms = cs, theRegions = rs })
+     return (a, PreExtra { theMem = m, theRegions = rs })
 
--- | Load a file with Cryptol decls.
-loadCry :: Sym -> Maybe FilePath -> IO (Map String Term)
-loadCry sym mb =
-  case mb of
-    Nothing -> return Map.empty
-    Just file ->
-      do ctx <- sawBackendSharedContext sym
-         env <- initCryptolEnv ctx
-         (_,env1) <- loadCryptolModule ctx env file
-         let nameText = unpackIdent . nameIdent
-         let cvt (x,v) = (nameText x, v)
-         return (Map.fromList $ map cvt $ Map.toList $ eTermEnv env1)
+
 
 -- | Execute a post-condition specification.
 runPostSpec ::
   Sym ->
-  Map String Term ->
+  CryptolEnv ->
   Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64) ->
   RegValue Sym Mem ->
   Spec Post () ->
@@ -164,11 +149,23 @@ withSharedContext f =
 -- returning the result.
 cryTerm :: String -> [Term] -> Spec p Term
 cryTerm x xs = Spec (\(sym,cs) _ s ->
-  case Map.lookup x cs of
-    Nothing -> fail ("Missing Cryptol term: " ++ show x)
-    Just t  -> do sc <- sawBackendSharedContext sym
-                  t1 <- scApplyAll sc t xs
-                  return (t1,s))
+  do t <- lookupCry x (eTermEnv cs)
+     sc <- sawBackendSharedContext sym
+     t1 <- scApplyAll sc t xs
+     return (t1,s))
+
+-- | Lookup a name in a map indexed by Cryptol names.
+lookupCry :: String -> Map Name a -> IO a
+lookupCry x mp =
+  case x `lookupIn` mp of
+    Left [] -> fail ("Missing Cryptol name: " ++ show x)
+    Left ys -> fail $ unlines
+      ( "Ambiguous Cryptol name:"
+      : [ "*** " ++ show (runDoc alwaysQualify (pp y)) | y <- ys ]
+      )
+    Right a -> return a
+
+
 
 updMem :: (Sym -> RegValue Sym Mem -> IO (a, RegValue Sym Mem)) -> Spec Pre a
 updMem f = Spec (\r _ (s1,s2) -> do (a,s1') <- f (fst r) s1

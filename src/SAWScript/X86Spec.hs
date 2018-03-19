@@ -12,7 +12,7 @@
 {-# Language RecordWildCards #-}
 module SAWScript.X86Spec
   ( -- * Specifications
-    FunSpec(..)
+    FunSpec
   , Spec
 
     -- ** Pre conditions
@@ -180,10 +180,7 @@ The outer, "Pre", computiation sets up the initial state of the
 computation (i.e., the pre-condition for the function).
 As a result, we return the inital register assignemtn,
 and the post-condition for the function). -}
-data FunSpec = FunSpec
-  { spec     :: Spec Pre (RegAssign, Spec Post ())
-  , cryDecls :: Maybe FilePath
-  }
+type FunSpec =  Spec Pre (RegAssign, Spec Post ())
 
 
 

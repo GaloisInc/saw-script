@@ -98,13 +98,14 @@ import Verifier.SAW.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
 import Verifier.SAW.Term.Pretty(showTerm)
 
 -- Cryptol Verifier
+import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude(cryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec.Types(Sym)
 import SAWScript.X86Spec.Monad(runPreSpec,runPostSpec,PreExtra(..))
 import SAWScript.X86Spec.Registers(macawLookup)
-import SAWScript.X86Spec (FunSpec(..))
+import SAWScript.X86Spec (FunSpec)
 
 
 
@@ -141,6 +142,8 @@ data Options = Options
          Note that his works only when the call is completely known
          (i.e., no symbolic stuff, etc.)
     -}
+
+  , cryEnv :: CryptolEnv
   }
 
 linuxInfo :: ArchitectureInfo X86_64
@@ -163,16 +166,19 @@ type CallHandler = Sym -> Macaw.CallHandler Sym X86_64
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
 proof :: ArchitectureInfo X86_64 ->
-         FilePath ->
-         (Sym -> IO (Map (Natural,Integer) CallHandler)) ->
+         FilePath {- ^ ELF binary -} ->
+         Maybe FilePath {- ^ Cryptol spec, if any -} ->
+         (Sym -> CryptolEnv -> IO (Map (Natural,Integer) CallHandler))
+         {- ^ Funciton call handler -} ->
          Fun ->
          IO (SharedContext,[Goal])
-proof archi file mkCallMap fun =
+proof archi file mbCry mkCallMap fun =
   do cfg <- initialConfig 0 []
      sc  <- mkSharedContext cryptolModule
      sym <- newSAWCoreBackend sc globalNonceGenerator cfg
+     cenv <- loadCry sym mbCry
      sfs <- newSymFuns sym
-     callMap <- mkCallMap sym
+     callMap <- mkCallMap sym cenv
      proofWithOptions Options
        { fileName = file
        , function = fun
@@ -180,6 +186,7 @@ proof archi file mkCallMap fun =
        , symFuns = sfs
        , backend = sym
        , funCalls = callMap
+       , cryEnv = cenv
        }
 
 -- | Run a proof using the given backend.
@@ -256,6 +263,17 @@ findSymbol addrs nm =
 posFn :: MemSegmentOff 64 -> Position
 posFn = OtherPos . Text.pack . show
 
+
+-- | Load a file with Cryptol decls.
+loadCry :: Sym -> Maybe FilePath -> IO CryptolEnv
+loadCry sym mb =
+  do ctx <- sawBackendSharedContext sym
+     env <- initCryptolEnv ctx
+     case mb of
+       Nothing   -> return env
+       Just file -> snd <$> loadCryptolModule ctx env file
+
+
 --------------------------------------------------------------------------------
 -- Translation
 
@@ -292,11 +310,10 @@ translate opts elf fun =
      writeFile "XXX.hs" (show cfg)
 
      let sym   = backend opts
-         fspec = funSpec fun
 
      ((initRegs,post), extra) <-
         statusBlock "  Setting up pre-conditions... " $
-          runPreSpec sym (symFuns opts) (cryDecls fspec) (spec fspec)
+          runPreSpec sym (symFuns opts) (cryEnv opts) (funSpec fun)
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
      let memStart = theMem extra
@@ -321,7 +338,7 @@ translate opts elf fun =
      mem <- getMem gp mvar
 
      statusBlock "  Setting-up post-conditions... " $
-       runPostSpec sym (cryTerms extra) (regValue (gp ^. gpValue)) mem post
+       runPostSpec sym (cryEnv opts) (regValue (gp ^. gpValue)) mem post
 
      gs <- getGoals sym
      ctx <- sawBackendSharedContext sym
