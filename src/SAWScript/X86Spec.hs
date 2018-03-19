@@ -86,6 +86,7 @@ module SAWScript.X86Spec
 
     -- * Cryptol specs
   , cryTerm
+  , cryConst
 
     -- * Misc
   , debug

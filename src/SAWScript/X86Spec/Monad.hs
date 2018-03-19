@@ -22,6 +22,7 @@ module SAWScript.X86Spec.Monad
   , getSharedContext
   , withSharedContext
   , cryTerm
+  , cryConst
   , PreExtra(..)
   , registerSymFuns
   , SymFunTerms(..)
@@ -47,10 +48,14 @@ import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 
 import Verifier.SAW.SharedTerm(Term,SharedContext,scApplyAll)
 
-import Verifier.SAW.CryptolEnv(CryptolEnv(..), lookupIn )
+import Verifier.SAW.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
 
 import Cryptol.ModuleSystem.Name(Name)
+import Cryptol.ModuleSystem.Interface(ifTySyns)
+import Cryptol.TypeCheck.AST(TySyn(tsDef))
+import Cryptol.TypeCheck.TypePat(aNat)
 import Cryptol.Utils.PP(alwaysQualify,runDoc,pp)
+import Cryptol.Utils.Patterns(matchMaybe)
 
 import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
@@ -154,17 +159,28 @@ cryTerm x xs = Spec (\(sym,cs) _ s ->
      t1 <- scApplyAll sc t xs
      return (t1,s))
 
+-- | Lookup a Crytpol type synonym, which should resolve to a constant.
+cryConst :: String -> Spec p Integer
+cryConst x = Spec (\(_,cs) _ s ->
+  do let mp = ifTySyns (getAllIfaceDecls (eModuleEnv cs))
+     t <- lookupCry x mp
+     case matchMaybe (aNat (tsDef t)) of
+       Just n  -> return (n,s)
+       Nothing -> fail (x ++ " is not a fixed constant type synonym.")
+  )
+
 -- | Lookup a name in a map indexed by Cryptol names.
 lookupCry :: String -> Map Name a -> IO a
 lookupCry x mp =
   case x `lookupIn` mp of
-    Left [] -> fail ("Missing Cryptol name: " ++ show x)
-    Left ys -> fail $ unlines
-      ( "Ambiguous Cryptol name:"
-      : [ "*** " ++ show (runDoc alwaysQualify (pp y)) | y <- ys ]
-      )
+    Left [] -> fail $ unlines $ ("Missing Cryptol name: " ++ show x)
+                              : [ "*** " ++ ppName y | y <- Map.keys mp ]
+    Left ys -> fail $ unlines ( "Ambiguous Cryptol name:"
+                              : [ "*** " ++ ppName y | y <- ys ]
+                              )
     Right a -> return a
 
+  where ppName = show . runDoc alwaysQualify . pp
 
 
 updMem :: (Sym -> RegValue Sym Mem -> IO (a, RegValue Sym Mem)) -> Spec Pre a
