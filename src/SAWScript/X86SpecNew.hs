@@ -4,18 +4,21 @@
 {-# Language TypeOperators #-}
 {-# Language ExistentialQuantification #-}
 {-# Language Rank2Types #-}
+{-# Language FlexibleContexts #-}
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
   , overrideMode
   , State(..)
   , Loc(..)
+  , V(..)
   , Prop(..)
   , Alloc(..)
   , Area(..)
   , Mode(..)
   , Unit(..)
-  , (.*)
+  , (*.)
+  , (===)
   ) where
 
 import Data.Kind(Type)
@@ -76,17 +79,18 @@ data Specification = Specification
 
 data Unit = Bytes | Words | DWords | QWords | V128s | V256s
 
-(.*) :: Integral a => a -> Unit -> Bytes
-n .* u = toBytes (fromIntegral n * size)
+
+(*.) :: Integer -> Unit -> Bytes
+n *. u = toBytes (fromIntegral n * bs)
   where
-  size :: Integer
-  size = case u of
-           Bytes  -> 1
-           Words  -> 2
-           DWords -> 4
-           QWords -> 8
-           V128s  -> 16
-           V256s  -> 32
+  bs :: Integer
+  bs = case u of
+         Bytes  -> 1
+         Words  -> 2
+         DWords -> 4
+         QWords -> 8
+         V128s  -> 16
+         V256s  -> 32
 
 unitBitSize :: Unit -> (forall w. (1 <= w) => NatRepr w -> a) -> a
 unitBitSize u k =
@@ -107,16 +111,31 @@ data Area = Area
   { areaName :: String
   , areaMode :: Mode
   , areaSize :: Bytes
+
+  , areaPtr  :: Bytes
+    {- ^ The canonical pointer to this area is this many bytes from
+    -- the start of the actual object.
+    -- When we initialize such an area, we allocate it, then advnace
+    -- the pointer by this much, and return *that* as the value of
+    -- initialization.
+
+    -- When we match such an area, we get the value as it,
+    -- but then we have to check that there are this many bytes *before*
+    -- the value we got.
+    -}
   }
 
 
 data Loc :: CrucibleType -> Type where
+
   InMem :: (1 <= w) =>
            NatRepr w                {- ^ Read this much (in bytes) -} ->
            Loc (LLVMPointerType 64) {- ^ Read from this pointer -} ->
            Integer                  {- ^ Offset in bytes -} ->
            Loc (LLVMPointerType (8*w))
+
   InReg :: X86Reg tp -> Loc (ToCrucibleType tp)
+
 
 instance TestEquality Loc where
   testEquality x y = case compareF x y of
@@ -216,6 +235,9 @@ data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
   SAWProp :: Term -> Prop p
 
+(===) :: KnownRepr TypeRepr t => V p t -> V p t -> Prop p
+x === y = Same knownRepr x y
+
 locRepr :: Loc t -> TypeRepr t
 locRepr l =
   case l of
@@ -263,7 +285,7 @@ getLoc l =
       do obj <- getLoc lm sym s
          let mem = stateMem s
          let ?ptrWidth = knownNat
-         loc <- doPtrAddOffset sym mem obj =<< bvLit sym knownNat n
+         loc <- adjustPtr sym mem obj n
          anyV <- doLoad sym mem loc (llvmBytes w) 0
          coerceAny sym (locRepr l) anyV
 
@@ -291,7 +313,7 @@ setLoc l =
           do obj <- getLoc lm sym s
              let mem = stateMem s
              let ?ptrWidth = knownNat
-             loc <- doPtrAddOffset sym mem obj =<< bvLit sym knownNat n
+             loc <- adjustPtr sym mem obj n
              mem1 <- doStore sym mem loc (locRepr l) (llvmBytes w) v
              return s { stateMem = mem1 }
 
@@ -499,21 +521,24 @@ addAssumptionsPost sym (s1,s2) ps =
 allocate :: Sym -> Area -> State -> IO (LLVMPtr Sym 64, State)
 allocate sym area s =
   case areaMode area of
-    RO -> do (p,m1) <- alloc Immutable
-             m2     <- fillFresh sym p names m1
+    RO -> do (base,p,m1) <- alloc Immutable
+             m2     <- fillFresh sym base names m1
              return (p, s { stateMem = m2 })
 
-    RW -> do (p,m1) <- alloc Mutable
-             m2 <- fillFresh sym p names m1
+    RW -> do (base,p,m1) <- alloc Mutable
+             m2 <- fillFresh sym base names m1
              return (p, s { stateMem = m2 })
 
-    WO -> do (p,m1) <- alloc Mutable
+    WO -> do (_,p,m1) <- alloc Mutable
              return (p, s { stateMem = m1 })
   where
+
   alloc mut =
     do let ?ptrWidth = knownNat @64
        sz <- bvLit sym knownNat (bytesToInteger (areaSize area))
-       doMalloc sym HeapAlloc mut (areaName area) (stateMem s) sz
+       (base,mem) <- doMalloc sym HeapAlloc mut (areaName area) (stateMem s) sz
+       ptr <- adjustPtr sym mem base (bytesToInteger (areaPtr area))
+       return (base,ptr,mem)
 
   names :: [String]
   names = [ areaName area ++ "_byte_" ++ show i
@@ -538,8 +563,7 @@ fillFresh sym p todo mem =
          -- Here we use the write that ignore mutability.
          -- This is because we are writinging initialization code.
          mem1 <- storeConstRaw sym mem p lty val
-         off <- bvLit sym knownNat elS
-         p1 <- doPtrAddOffset sym mem1 p off
+         p1   <- adjustPtr sym mem1 p elS
          fillFresh sym p1 more mem1
 
 
@@ -557,9 +581,10 @@ clobberArea sym mem p area =
   case areaMode area of
     RO -> return mem
     _  ->
-      do let xs = take (fromInteger (bytesToInteger (areaSize area)))
+      do base <- adjustPtr sym mem p (negate (bytesToInteger (areaPtr area)))
+         let xs = take (bytesToInt (areaSize area))
                      [ areaName area ++ "_at_" ++ show i | i <- [ 0 :: Int .. ]]
-         fillFresh sym p xs mem
+         fillFresh sym base xs mem
 
 
 -- | Lookup the value for an allocation in the existing state.
@@ -568,11 +593,12 @@ clobberArea sym mem p area =
 checkAlloc :: Sym -> State -> Alloc -> IO (LLVMPtr Sym 64, LLVMPtr Sym 64)
 checkAlloc sym s (l := a) =
   do p1 <- getLoc l sym s
-     let is = bytesToInteger (areaSize a)
+     let mem = stateMem s
+     p2 <- adjustPtr sym mem p1 (negate (bytesToInteger (areaPtr a)))
+
      -- Make sure that we have a pointer and it is big enough.
-     let ?ptrWidth = knownNat
-     p2 <- doPtrAddOffset sym (stateMem s) p1 =<< bvLit sym knownNat is
-     return (p1,p2)
+     p3 <- adjustPtr sym mem p2 (bytesToInteger (areaSize a))
+     return (p2,p3)
 
 
 -- | Setup globals in a single read-only region (index 0).
@@ -600,7 +626,8 @@ setupGlobals sym gs s
        return (Map.singleton 0 p, s { stateMem = mem1 })
   where
   regions = sortBy cmpStart
-          $ [ (nm,start, length els .* u) | (nm,start,u,els) <- gs ]
+          $ [ (nm,start, fromIntegral (length els) *. u)
+              | (nm,start,u,els) <- gs ]
   cmpStart (_,s1,_) (_,s2,_) = compare s1 s2
 
   overlaps = catMaybes (zipWith check regions (tail regions))
@@ -611,20 +638,19 @@ setupGlobals sym gs s
     | otherwise                    = Just (r1,r2)
 
   writeGlob base mem (_,start,u,els) =
-    do let ?ptrWidth = knownNat
-       p <- doPtrAddOffset sym mem base =<< bvLit sym knownNat start
+    do p <- adjustPtr sym mem base start
        snd <$> foldM (writeU u) (p,mem) els
 
   writeU u (p,mem) v =
     unitBitSize u $ \w ->
-      do let sz = (1::Int) .* u
+      do let sz = 1 *. u
              szI = bytesToInteger sz
              lty = bitvectorType sz
          z    <- natLit sym 0
          val  <- LLVMValInt z <$> bvLit sym w v
          let ?ptrWidth = knownNat
          mem1 <- storeConstRaw sym mem p lty val
-         p1   <- doPtrAddOffset sym mem p =<< bvLit sym knownNat szI
+         p1   <- adjustPtr sym mem1 p szI
          return (p1,mem1)
 
 -- | Use a specification to verify a function.
@@ -680,4 +706,14 @@ overrideMode spec sym s =
 
      let sNew1 = sNew0 { stateMem = mem1 }
      addAssumptionsPost sym (s,sNew1) (specPosts spec)
+
+
+adjustPtr ::
+  Sym -> MemImpl Sym -> LLVMPtr Sym 64 -> Integer -> IO (LLVMPtr Sym 64)
+adjustPtr sym mem ptr amt
+  | amt == 0  = return ptr
+  | otherwise =
+    do let ?ptrWidth = knownNat
+       doPtrAddOffset sym mem ptr =<< bvLit sym knownNat amt
+
 

@@ -214,8 +214,8 @@ data RelevantElf = RelevantElf
 -- | Parse an elf file.
 getElf :: FilePath -> IO (Elf 64)
 getElf path =
-  do bytes <- BS.readFile path
-     case parseElf bytes of
+  do bs <- BS.readFile path
+     case parseElf bs of
        Elf64Res [] e     -> return e
        Elf64Res _ _      -> malformed "64-bit ELF input"
        Elf32Res _ _      -> unsupported "32-bit ELF format"

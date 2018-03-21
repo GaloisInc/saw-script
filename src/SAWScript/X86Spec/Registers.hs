@@ -135,22 +135,22 @@ macawLookup RegAssign { .. } reg =
     R.R15 -> gp R15
     R.X86_GP _ -> error "[bug] Unexpecet general purpose register."
 
-    R.YMM (F.YMMR 0)  -> vec YMM0
-    R.YMM (F.YMMR 1)  -> vec YMM1
-    R.YMM (F.YMMR 2)  -> vec YMM2
-    R.YMM (F.YMMR 3)  -> vec YMM3
-    R.YMM (F.YMMR 4)  -> vec YMM4
-    R.YMM (F.YMMR 5)  -> vec YMM5
-    R.YMM (F.YMMR 6)  -> vec YMM6
-    R.YMM (F.YMMR 7)  -> vec YMM7
-    R.YMM (F.YMMR 8)  -> vec YMM8
-    R.YMM (F.YMMR 9)  -> vec YMM9
-    R.YMM (F.YMMR 10) -> vec YMM10
-    R.YMM (F.YMMR 11) -> vec YMM11
-    R.YMM (F.YMMR 12) -> vec YMM12
-    R.YMM (F.YMMR 13) -> vec YMM13
-    R.YMM (F.YMMR 14) -> vec YMM14
-    R.YMM (F.YMMR 15) -> vec YMM15
+    R.YMM 0  -> vec YMM0
+    R.YMM 1  -> vec YMM1
+    R.YMM 2  -> vec YMM2
+    R.YMM 3  -> vec YMM3
+    R.YMM 4  -> vec YMM4
+    R.YMM 5  -> vec YMM5
+    R.YMM 6  -> vec YMM6
+    R.YMM 7  -> vec YMM7
+    R.YMM 8  -> vec YMM8
+    R.YMM 9  -> vec YMM9
+    R.YMM 10 -> vec YMM10
+    R.YMM 11 -> vec YMM11
+    R.YMM 12 -> vec YMM12
+    R.YMM 13 -> vec YMM13
+    R.YMM 14 -> vec YMM14
+    R.YMM 15 -> vec YMM15
     R.X86_YMMReg _ -> error "[bug] Unexpected YMM register."
 
     R.X87_FPUReg (F.MMXR 0)  -> fp FP0
@@ -293,23 +293,22 @@ instance GetReg Flag where
 instance GetReg VecReg where
   getReg f =
     case f of
-      YMM0  -> lookupReg (ymm 0)
-      YMM1  -> lookupReg (ymm 1)
-      YMM2  -> lookupReg (ymm 2)
-      YMM3  -> lookupReg (ymm 3)
-      YMM4  -> lookupReg (ymm 4)
-      YMM5  -> lookupReg (ymm 5)
-      YMM6  -> lookupReg (ymm 6)
-      YMM7  -> lookupReg (ymm 7)
-      YMM8  -> lookupReg (ymm 8)
-      YMM9  -> lookupReg (ymm 9)
-      YMM10 -> lookupReg (ymm 10)
-      YMM11 -> lookupReg (ymm 11)
-      YMM12 -> lookupReg (ymm 12)
-      YMM13 -> lookupReg (ymm 13)
-      YMM14 -> lookupReg (ymm 14)
-      YMM15 -> lookupReg (ymm 15)
-    where ymm = R.YMM . F.ymmReg
+      YMM0  -> lookupReg (R.YMM 0)
+      YMM1  -> lookupReg (R.YMM 1)
+      YMM2  -> lookupReg (R.YMM 2)
+      YMM3  -> lookupReg (R.YMM 3)
+      YMM4  -> lookupReg (R.YMM 4)
+      YMM5  -> lookupReg (R.YMM 5)
+      YMM6  -> lookupReg (R.YMM 6)
+      YMM7  -> lookupReg (R.YMM 7)
+      YMM8  -> lookupReg (R.YMM 8)
+      YMM9  -> lookupReg (R.YMM 9)
+      YMM10 -> lookupReg (R.YMM 10)
+      YMM11 -> lookupReg (R.YMM 11)
+      YMM12 -> lookupReg (R.YMM 12)
+      YMM13 -> lookupReg (R.YMM 13)
+      YMM14 -> lookupReg (R.YMM 14)
+      YMM15 -> lookupReg (R.YMM 15)
 
 
 instance GetReg X87Status where
