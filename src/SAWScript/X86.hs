@@ -19,7 +19,7 @@ module SAWScript.X86
 
 
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST(ST,stToIO,RealWorld)
+import Control.Monad.ST(ST,stToIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -106,7 +106,7 @@ import Verifier.SAW.Cryptol.Prelude(cryptolModule)
 import SAWScript.X86Spec.Types(Sym)
 import SAWScript.X86Spec.Monad(runPreSpec,runPostSpec,PreExtra(..))
 import SAWScript.X86Spec.Registers(macawLookup)
-import SAWScript.X86Spec (FunSpec(..))
+import SAWScript.X86Spec (Spec,FunSpec(..),Pre,Post,RegAssign)
 
 import SAWScript.X86SpecNew
 
@@ -296,45 +296,21 @@ callHandler opts sym (mem,regs) =
     _ -> fail "[Bug?] Failed to obtain the value of the IP register."
 
 
--- | Translate an assertion about the function with the given name to
--- a SAW core term.
+-- | Verify the given function.  The function matches it sepcification,
+-- as long as the returned goals can be discharged.
 translate :: Options -> RelevantElf -> Fun -> IO (SharedContext, [Goal])
 translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
-     say "  Looking for address... "
-     addr <- findSymbol (symMap elf) name
-     sayLn (show addr)
-
-     (halloc, cfg) <- statusBlock "  Constructing CFG... "
-                    $ stToIO (makeCFG opts elf name addr)
-
      let sym   = backend opts
 
-     (st,globs,checkPost) <-
+     (globs,st,checkPost) <-
         case funSpec fun of
-          OldStyle spec ->
-            do ((initRegs,post), extra) <-
-                  statusBlock "  Setting up pre-conditions... " $
-                    runPreSpec sym (symFuns opts) (cryEnv opts) spec
+          OldStyle spec -> doSpecOldStyle opts spec
+          NewStyle spec -> verifyMode spec sym
 
-               regs <- macawAssignToCrucM
-                                (return . macawLookup initRegs) genRegAssign
-
-               return ( State { stateMem = theMem extra
-                               , stateRegs = regs }
-                       , theRegions extra
-                       , \st1 ->
-
-                          statusBlock "  Setting-up post-conditions... " $
-                            runPostSpec sym (cryEnv opts) (stateRegs st1)
-                                                         (stateMem st1) post
-                       )
-
-          NewStyle {} -> fail "XXX: NewStyle"
-
-     st1 <- doSim opts sym halloc globs st cfg
+     st1 <- doSim opts elf name globs st
 
      checkPost st1
 
@@ -343,17 +319,48 @@ translate opts elf fun =
      return (ctx,gs)
 
 
+doSpecOldStyle ::
+  Options ->
+  Spec Pre (RegAssign, Spec Post ()) ->
+  IO (GlobalMap Sym X86_64, State, State -> IO ())
+doSpecOldStyle opts spec =
+  do let sym = backend opts
+
+     ((initRegs,post), extra) <-
+        statusBlock "  Setting up pre-conditions... " $
+        runPreSpec sym (symFuns opts) (cryEnv opts) spec
+
+     regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
+
+     return ( theRegions extra
+            , State { stateMem = theMem extra, stateRegs = regs }
+            , \st1 -> statusBlock "  Setting-up post-conditions... " $
+                      runPostSpec sym (cryEnv opts)
+                                      (stateRegs st1)
+                                      (stateMem st1)
+                                      post
+             )
+
+
 
 doSim ::
   Options ->
-  Sym ->
-  HandleAllocator RealWorld ->
+  RelevantElf ->
+  ByteString ->
   GlobalMap Sym X86_64 ->
   State ->
-  TheCFG ->
   IO State
-doSim opts sym halloc globs st (SomeCFG cfg) =
-  do (mvar, execResult) <-
+doSim opts elf name globs st =
+  do say "  Looking for address... "
+     addr <- findSymbol (symMap elf) name
+     sayLn (show addr)
+
+     (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
+                    $ stToIO (makeCFG opts elf name addr)
+
+     let sym = backend opts
+
+     (mvar, execResult) <-
         statusBlock "  Simulating... " $
         runCodeBlock sym x86 (x86_eval opts) halloc (stateMem st, globs)
            (callHandler opts sym) cfg (stateRegs st)

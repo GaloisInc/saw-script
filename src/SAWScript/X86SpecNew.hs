@@ -3,6 +3,7 @@
 {-# Language TypeApplications #-}
 {-# Language TypeOperators #-}
 {-# Language ExistentialQuantification #-}
+{-# Language Rank2Types #-}
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
@@ -13,11 +14,15 @@ module SAWScript.X86SpecNew
   , Alloc(..)
   , Area(..)
   , Mode(..)
+  , Unit(..)
+  , (.*)
   ) where
 
 import Data.Kind(Type)
 import Control.Monad(foldM)
 import Data.List(sortBy)
+import Data.Maybe(catMaybes)
+import qualified Data.Map as Map
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
@@ -28,25 +33,26 @@ import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.LLVM.MemModel
   ( MemImpl,coerceAny,doLoad,doPtrAddOffset,doStore, emptyMem
   , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
-  , LLVMPointerType )
+  , LLVMPointerType, LLVMVal(LLVMValInt) )
 import Lang.Crucible.LLVM.MemModel.Pointer
     (ptrEq, LLVMPtr, ppPtr, llvmPointerView)
 import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
 import qualified Lang.Crucible.LLVM.MemModel.Type as LLVM
 import Lang.Crucible.LLVM.Bytes(Bytes,bytesToInteger,toBytes)
-import Lang.Crucible.LLVM.MemModel.Generic(AllocType(HeapAlloc), Mutability(..))
+import Lang.Crucible.LLVM.MemModel.Generic
+    (AllocType(HeapAlloc,GlobalAlloc), Mutability(..))
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Solver.Interface
           (bvLit,isEq, Pred, addAssumption, addAssertion, notPred, orPred
-          , bvUle, truePred, falsePred )
+          , bvUle, truePred, falsePred, natLit )
 import Lang.Crucible.Solver.SAWCoreBackend(bindSAWTerm)
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType
   , BoolType, BVType )
 
 import Verifier.SAW.SharedTerm(Term)
-import Data.Macaw.Symbolic(freshValue)
+import Data.Macaw.Symbolic(freshValue,GlobalMap)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import Data.Macaw.Symbolic(Regs, macawAssignToCrucM )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..))
@@ -58,6 +64,39 @@ import qualified Data.Macaw.Types as M
 
 import SAWScript.X86Spec.Types(Sym)
 import SAWScript.X86Spec.Monad(SpecType,Pre,Post)
+
+data Specification = Specification
+  { specAllocs  :: [Alloc]
+  , specPres    :: [(String, Prop Pre)]
+  , specPosts   :: [(String, Prop Post)]
+
+  , specGlobsRO :: [ (String, Integer, Unit, [ Integer ]) ]
+    -- ^ Read only globals. 
+  }
+
+data Unit = Bytes | Words | DWords | QWords | V128s | V256s
+
+(.*) :: Integral a => a -> Unit -> Bytes
+n .* u = toBytes (fromIntegral n * size)
+  where
+  size :: Integer
+  size = case u of
+           Bytes  -> 1
+           Words  -> 2
+           DWords -> 4
+           QWords -> 8
+           V128s  -> 16
+           V256s  -> 32
+
+unitBitSize :: Unit -> (forall w. (1 <= w) => NatRepr w -> a) -> a
+unitBitSize u k =
+  case u of
+    Bytes  -> k (knownNat @8)
+    Words  -> k (knownNat @16)
+    DWords -> k (knownNat @32)
+    QWords -> k (knownNat @64)
+    V128s  -> k (knownNat @128)
+    V256s  -> k (knownNat @256)
 
 data Mode = RO    -- ^ Starts initialized; cannot write to it
           | RW    -- ^ Starts initialized; can write to it
@@ -176,12 +215,6 @@ instance OrdF Lit where
 data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
   SAWProp :: Term -> Prop p
-
-data Specification = Specification
-  { specAllocs :: [Alloc]
-  , specPres   :: [(String, Prop Pre)]
-  , specPosts  :: [(String, Prop Post)]
-  }
 
 locRepr :: Loc t -> TypeRepr t
 locRepr l =
@@ -541,15 +574,70 @@ checkAlloc sym s (l := a) =
      p2 <- doPtrAddOffset sym (stateMem s) p1 =<< bvLit sym knownNat is
      return (p1,p2)
 
+
+-- | Setup globals in a single read-only region (index 0).
+setupGlobals ::
+  Sym ->
+  [(String,Integer,Unit,[Integer])] ->
+  State ->
+  IO (GlobalMap Sym X86_64, State)
+setupGlobals sym gs s
+  | null regions = return (Map.empty, s)
+
+  | not (null overlaps) =
+      fail $ unlines $ "Overlapping regions in global spec:"
+                     : [ "*** " ++ x ++ " and " ++ y
+                          | (x,y) <- overlaps ]
+
+  | otherwise =
+    do let size = case last regions of
+                    (_,start,n) -> start + bytesToInteger n
+
+       let ?ptrWidth = knownNat @64
+       sz <- bvLit sym knownNat size
+       (p,mem) <- doMalloc sym GlobalAlloc Immutable "Globals" (stateMem s) sz
+       mem1 <- foldM (writeGlob p) mem gs
+       return (Map.singleton 0 p, s { stateMem = mem1 })
+  where
+  regions = sortBy cmpStart
+          $ [ (nm,start, length els .* u) | (nm,start,u,els) <- gs ]
+  cmpStart (_,s1,_) (_,s2,_) = compare s1 s2
+
+  overlaps = catMaybes (zipWith check regions (tail regions))
+
+  -- check for overlap, assuming first one starts at smaller address.
+  check (r1,s1,n1) (r2,s2,_)
+    | s1 + bytesToInteger n1 <= s2 = Nothing
+    | otherwise                    = Just (r1,r2)
+
+  writeGlob base mem (_,start,u,els) =
+    do let ?ptrWidth = knownNat
+       p <- doPtrAddOffset sym mem base =<< bvLit sym knownNat start
+       snd <$> foldM (writeU u) (p,mem) els
+
+  writeU u (p,mem) v =
+    unitBitSize u $ \w ->
+      do let sz = (1::Int) .* u
+             szI = bytesToInteger sz
+             lty = bitvectorType sz
+         z    <- natLit sym 0
+         val  <- LLVMValInt z <$> bvLit sym w v
+         let ?ptrWidth = knownNat
+         mem1 <- storeConstRaw sym mem p lty val
+         p1   <- doPtrAddOffset sym mem p =<< bvLit sym knownNat szI
+         return (p1,mem1)
+
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
-verifyMode :: Specification -> Sym -> IO (State, State -> IO ())
+verifyMode ::
+  Specification -> Sym -> IO (GlobalMap Sym X86_64, State, State -> IO ())
 verifyMode spec sym =
   do s0 <- freshState sym
      s1 <- foldM (doAlloc sym) s0 $ sortBy cmpAlloc $ specAllocs spec
-     s2 <- addAssumptions sym s1 (specPres spec)
-     let post sF = mapM_ (doAssert sym (s2,sF)) (specPosts spec)
-     return (s2, post)
+     (globs,s2) <- setupGlobals sym (specGlobsRO spec) s1
+     s3 <- addAssumptions sym s2 (specPres spec)
+     let post sF = mapM_ (doAssert sym (s3,sF)) (specPosts spec)
+     return (globs, s3, post)
 
 -- | Ensure that writable areas do not overlap with any other areas.
 checkOverlaps :: Sym -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()

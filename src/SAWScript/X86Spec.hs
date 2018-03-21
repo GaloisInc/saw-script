@@ -111,7 +111,7 @@ import SAWScript.X86Spec.SAW
 import SAWScript.X86Spec.Literal
 import SAWScript.X86Spec.Memory
 
-import SAWScript.X86SpecNew
+import SAWScript.X86SpecNew(Specification)
 
 
 
