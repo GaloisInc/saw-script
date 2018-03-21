@@ -60,23 +60,12 @@ data Mode = RO    -- ^ Starts initialized; cannot write to it
           | RW    -- ^ Starts initialized; can write to it
           | WO    -- ^ Starts uninitialized; can write to it
 
-data Area where
-  Array :: (1 <= w) =>
-           String    {- ^ Name -} ->
-           Mode      {- ^ Read/write etc. -} ->
-           Integer   {- ^ Number of elements -} ->
-           NatRepr w {- ^ Size in bytes of each element -} ->
-           Area
+data Area = Area
+  { areaName :: String
+  , areaMode :: Mode
+  , areaSize :: Bytes
+  }
 
-areaSize :: Area -> Bytes
-areaSize a =
-  case a of
-    Array _ _ n t -> toBytes (n * natValue t)
-
-areaName :: Area -> String
-areaName a =
-  case a of
-    Array s _ _ _ -> s
 
 data Loc :: CrucibleType -> Type where
   InMem :: (1 <= w) =>
@@ -359,38 +348,38 @@ addAssumptionsPost sym (s1,s2) ps =
 -- | Allocate a memory region.
 allocate :: Sym -> Area -> State -> IO (LLVMPtr Sym 64, State)
 allocate sym area s =
-  case area of
-    Array nm mode size w ->
-      case mode of
-        RO -> do (p,m1) <- alloc nm Immutable
-                 m2     <- fillFresh sym w p (names nm size) m1
-                 return (p, s { stateMem = m2 })
+  case areaMode area of
+    RO -> do (p,m1) <- alloc Immutable
+             m2     <- fillFresh sym p names m1
+             return (p, s { stateMem = m2 })
 
-        RW -> do (p,m1) <- alloc nm Mutable
-                 m2 <- fillFresh sym w p (names nm size) m1
-                 return (p, s { stateMem = m2 })
+    RW -> do (p,m1) <- alloc Mutable
+             m2 <- fillFresh sym p names m1
+             return (p, s { stateMem = m2 })
 
-        WO -> do (p,m1) <- alloc nm Mutable
-                 return (p, s { stateMem = m1 })
+    WO -> do (p,m1) <- alloc Mutable
+             return (p, s { stateMem = m1 })
   where
-  alloc str mut =
+  alloc mut =
     do let ?ptrWidth = knownNat @64
        sz <- bvLit sym knownNat (bytesToInteger (areaSize area))
-       doMalloc sym HeapAlloc mut str (stateMem s) sz
+       doMalloc sym HeapAlloc mut (areaName area) (stateMem s) sz
 
-  names :: String -> Integer -> [String]
-  names nm todo = [ nm ++ "_at_" ++ show i
-                        | i <- take (fromInteger todo) [ 0 :: Int .. ] ]
+  names :: [String]
+  names = [ areaName area ++ "_byte_" ++ show i
+          | i <- take (bytesToInt (areaSize area)) [ 0 :: Int .. ] ]
 
+bytesToInt :: Bytes -> Int
+bytesToInt = fromIntegral . bytesToInteger
 
-fillFresh ::
-  (1 <= w) => Sym -> NatRepr w -> LLVMPtr Sym 64 ->
-           [String] -> MemImpl Sym -> IO (MemImpl Sym)
-fillFresh sym w p todo mem =
+fillFresh :: Sym -> LLVMPtr Sym 64 ->
+                [String] -> MemImpl Sym -> IO (MemImpl Sym)
+fillFresh sym p todo mem =
   case todo of
     [] -> return mem
     nm : more ->
-      do let ?ptrWidth = knownNat
+      do let w = knownNat @1
+         let ?ptrWidth = knownNat
          let ty        = ptrTy w
          let elS       = natValue w
          let lty       = bitvectorType (toBytes elS)
@@ -401,7 +390,7 @@ fillFresh sym w p todo mem =
          mem1 <- storeConstRaw sym mem p lty val
          off <- bvLit sym knownNat elS
          p1 <- doPtrAddOffset sym mem1 p off
-         fillFresh sym w p1 more mem1
+         fillFresh sym p1 more mem1
 
 
 -- | Make an allocation.  Used when verifying.
@@ -411,12 +400,16 @@ doAlloc sym s (l := a) =
      setLoc l sym p s1
 
 -- | Fill-in a memory area with fresh values.
+-- This has no effect if the area is RO.
 clobberArea ::
   Sym -> MemImpl Sym -> LLVMPtr Sym 64 -> Area -> IO (MemImpl Sym)
 clobberArea sym mem p area =
-  do let xs = take (fromInteger (bytesToInteger (areaSize area)))
-                   [ areaName area ++ "_at_" ++ show i | i <- [ 0 :: Int .. ]]
-     fillFresh sym (knownNat @1) p xs mem
+  case areaMode area of
+    RO -> return mem
+    _  ->
+      do let xs = take (fromInteger (bytesToInteger (areaSize area)))
+                     [ areaName area ++ "_at_" ++ show i | i <- [ 0 :: Int .. ]]
+         fillFresh sym p xs mem
 
 
 -- | Lookup the value for an allocation in the existing state.
