@@ -59,6 +59,7 @@ import SAWScript.X86Spec.Monad(SpecType,Pre,Post)
 data Mode = RO    -- ^ Starts initialized; cannot write to it
           | RW    -- ^ Starts initialized; can write to it
           | WO    -- ^ Starts uninitialized; can write to it
+          deriving (Eq,Show)
 
 data Area = Area
   { areaName :: String
@@ -108,6 +109,9 @@ instance OrdF Loc where
 
 
 data Alloc = Loc (LLVMPointerType 64) := Area
+
+allocArea :: Alloc -> Area
+allocArea (_ := a) = a
 
 cmpAlloc :: Alloc -> Alloc -> Ordering
 cmpAlloc (l1 := _) (l2 := _) = case compareF l1 l2 of
@@ -434,13 +438,17 @@ verifyMode spec sym =
      let post sF = mapM_ (doAssert sym (s2,sF)) (specPosts spec)
      return (s2, post)
 
-checkOverlaps :: Sym -> [(LLVMPtr Sym 64, LLVMPtr Sym 64)] -> IO ()
+checkOverlaps :: Sym -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()
 checkOverlaps sym = check
   where
   check (p : ps) = mapM_ (nonOverLap p) ps >> check ps
   check []       = return ()
 
-  nonOverLap (p1,p2) (q1,q2) =
+  nonOverLap ((p1,p2),ar1) ((q1,q2),ar2)
+    -- Read-only area may overlap
+    | areaMode ar1 == RO && areaMode ar2 == RO = return ()
+
+    | otherwise =
     do let (a1,x1) = llvmPointerView p1
            (_, x2) = llvmPointerView p2
            (b1,y1) = llvmPointerView q1
@@ -460,7 +468,7 @@ overrideMode :: Specification -> Sym -> State -> IO State
 overrideMode spec sym s =
   do let orderedAllocs = sortBy cmpAlloc (specAllocs spec)
      as <- mapM (checkAlloc sym s) orderedAllocs    -- check sizes
-     checkOverlaps sym as                           -- check distinct
+     checkOverlaps sym (zip as (map allocArea orderedAllocs)) -- check distinct
      mapM_ (doAssert sym s) (specPres spec)         -- assert pre-condition
 
      sNew0 <- freshState sym
