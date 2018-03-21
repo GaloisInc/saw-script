@@ -311,27 +311,37 @@ translate opts elf fun =
                     $ stToIO (makeCFG opts elf name addr)
 
      let sym   = backend opts
-     spec <- case funSpec fun of
-               OldStyle spec -> return spec
-               NewStyle {} -> fail "XXX: NewStyle"
 
-     ((initRegs,post), extra) <-
-        statusBlock "  Setting up pre-conditions... " $
-          runPreSpec sym (symFuns opts) (cryEnv opts) spec
+     (st,globs,checkPost) <-
+        case funSpec fun of
+          OldStyle spec ->
+            do ((initRegs,post), extra) <-
+                  statusBlock "  Setting up pre-conditions... " $
+                    runPreSpec sym (symFuns opts) (cryEnv opts) spec
 
-     regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
-     let memStart = theMem extra
-         globs = theRegions extra
-         st = State { stateMem = memStart, stateRegs = regs }
+               regs <- macawAssignToCrucM
+                                (return . macawLookup initRegs) genRegAssign
+
+               return ( State { stateMem = theMem extra
+                               , stateRegs = regs }
+                       , theRegions extra
+                       , \st1 ->
+
+                          statusBlock "  Setting-up post-conditions... " $
+                            runPostSpec sym (cryEnv opts) (stateRegs st1)
+                                                         (stateMem st1) post
+                       )
+
+          NewStyle {} -> fail "XXX: NewStyle"
 
      st1 <- doSim opts sym halloc globs st cfg
 
-     statusBlock "  Setting-up post-conditions... " $
-       runPostSpec sym (cryEnv opts) (stateRegs st1) (stateMem st1) post
+     checkPost st1
 
      gs <- getGoals sym
      ctx <- sawBackendSharedContext sym
      return (ctx,gs)
+
 
 
 doSim ::
