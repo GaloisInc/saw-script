@@ -2,6 +2,7 @@
 {-# Language PatternSynonyms, TypeFamilies, TypeSynonymInstances #-}
 {-# Language TypeApplications #-}
 {-# Language TypeOperators #-}
+{-# Language ExistentialQuantification #-}
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
@@ -38,9 +39,11 @@ import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Solver.Interface
           (bvLit,isEq, Pred, addAssumption, addAssertion, notPred, orPred
-          , bvUle )
+          , bvUle, truePred, falsePred )
 import Lang.Crucible.Solver.SAWCoreBackend(bindSAWTerm)
-import Lang.Crucible.Types(TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType)
+import Lang.Crucible.Types
+  (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType
+  , BoolType, BVType )
 
 import Verifier.SAW.SharedTerm(Term)
 import Data.Macaw.Symbolic(freshValue)
@@ -121,10 +124,54 @@ cmpAlloc (l1 := _) (l2 := _) = case compareF l1 l2 of
 
 data V :: SpecType -> CrucibleType -> Type where
   SAW    :: BaseTypeRepr s -> Term  -> V p (BaseToType s)
-            -- ^ WARNING: unchecked
-  Loc    :: Loc t -> V p t     -- ^ Read the value at the location
-                               -- in the *current* state.
-  PreLoc :: Loc t -> V Post t  -- ^ Read the value in the pre-condition.
+  -- ^ An opaque SAW term; WARNING: type is unchecked
+
+  Lit    :: Lit t -> V p t
+  -- ^ A literal value
+
+  Loc    :: Loc t -> V p t
+  -- ^ Read the value at the location
+  -- in the *current* state.
+
+  PreLoc :: Loc t -> V Post t
+  -- ^ Read the value in the pre-condition.
+
+data Lit :: CrucibleType -> Type where
+  BVLit   :: (1 <= w) => NatRepr w -> Integer -> Lit (BVType w)
+  BoolLit :: Bool -> Lit BoolType
+
+instance Show (Lit t) where
+  show x =
+    case x of
+      BVLit w i -> "(" ++ show i ++ " : [" ++ show (natValue w) ++ "]"
+      BoolLit b -> show b
+
+instance TestEquality Lit where
+  testEquality x y = case compareF x y of
+                       EQF -> Just Refl
+                       _   -> Nothing
+
+instance OrdF Lit where
+  compareF x y =
+    case (x,y) of
+
+      (BoolLit a, BoolLit b) ->
+        case compare a b of
+          EQ -> EQF
+          LT -> LTF
+          GT -> GTF
+      (BoolLit _, _) -> LTF
+      (_, BoolLit _) -> GTF
+
+      (BVLit w1 a, BVLit w2 b) ->
+        case compareF w1 w2 of
+          LTF -> LTF
+          GTF -> GTF
+          EQF -> case compare a b of
+                   LT -> LTF
+                   EQ -> EQF
+                   GT -> GTF
+
 
 data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
@@ -220,18 +267,26 @@ class Eval p where
   type S p
   eval :: V p t -> Sym -> S p -> IO (RegValue Sym t)
 
+evalLit :: Sym -> Lit t -> IO (RegValue Sym t)
+evalLit sym l =
+  case l of
+    BVLit w n -> bvLit sym w n
+    BoolLit b -> return (if b then truePred sym else falsePred sym)
+
 instance Eval Pre where
   type S Pre = State
   eval val =
     case val of
       SAW ty t -> \sym _ -> bindSAWTerm sym ty t
-      Loc l -> getLoc l
+      Lit l    -> \sym _ -> evalLit sym l
+      Loc l    -> getLoc l
 
 instance Eval Post where
   type S Post = (State,State)
   eval val =
     case val of
       SAW ty t -> \sym _        -> bindSAWTerm sym ty t
+      Lit l    -> \sym _        -> evalLit sym l
       Loc l    -> \sym (_,post) -> getLoc l sym post
       PreLoc l -> \sym (pre,_)  -> getLoc l sym pre
 
@@ -258,28 +313,61 @@ doAssert sym s (msg,p) =
 
 --------------------------------------------------------------------------------
 
+data Rep t = RLoc (Loc t)
+           | RLit (Lit t)
+
+
+instance TestEquality Rep where
+  testEquality x y = case compareF x y of
+                       EQF -> Just Refl
+                       _   -> Nothing
+
+-- | We prefer literals as the representatives
+instance OrdF Rep where
+  compareF x y =
+    case (x,y) of
+      (RLit a, RLit b) -> compareF a b
+      (RLit _, _)      -> LTF
+      (_, RLit _)      -> GTF
+      (RLoc a, RLoc b) -> compareF a b
+
+
 data RepMap = RepMap
-  { repFor :: MapF.MapF Loc Loc
+  { repFor :: MapF.MapF Loc Rep
      -- ^ Keeps track of the representative for a value
-  , repBy  :: MapF.MapF Loc Locs
+  , repBy  :: MapF.MapF Rep Locs
     -- ^ Inverse of the above: keeps track of which locs have this rep.
+
+  , contradiction :: Maybe Contradiction
   }
 
+data Contradiction = forall t. NotEqual (Lit t) (Lit t)
+
 emptyRepMap :: RepMap
-emptyRepMap = RepMap { repFor = MapF.empty, repBy = MapF.empty }
+emptyRepMap = RepMap { repFor = MapF.empty
+                     , repBy = MapF.empty
+                     , contradiction = Nothing
+                     }
 
 newtype Locs t = Locs [ Loc t ]
 
 jnLocs :: Locs t -> Locs t -> Locs t
 jnLocs (Locs xs) (Locs ys) = Locs (xs ++ ys)
 
-getRep :: RepMap -> Loc t -> Loc t
+getRep :: RepMap -> Loc t -> Rep t
 getRep mp x = case MapF.lookup x (repFor mp) of
-                Nothing -> x
+                Nothing -> RLoc x
                 Just y  -> y
 
-addEq :: Loc t -> Loc t -> RepMap -> RepMap
-addEq x y mp =
+
+addEqLitLit :: Lit t -> Lit t -> RepMap -> RepMap
+addEqLitLit x y = RLit x `isRepFor` RLit y
+
+addEqLocLit :: Loc t -> Lit t -> RepMap -> RepMap
+addEqLocLit loc lit mp = (RLit lit `isRepFor` getRep mp loc) mp
+
+addEqLocLoc :: Loc t -> Loc t -> RepMap -> RepMap
+addEqLocLoc x y mp =
   let x1 = getRep mp x
       y1 = getRep mp y
   in case compareF x1 y1 of
@@ -287,20 +375,32 @@ addEq x y mp =
        LTF -> (x1 `isRepFor` y1) mp
        GTF -> (y1 `isRepFor` x1) mp
 
-isRepFor :: Loc t -> Loc t -> RepMap -> RepMap
+isRepFor :: Rep t -> Rep t -> RepMap -> RepMap
 (x `isRepFor` y) mp =
-  let newReps = case MapF.lookup y (repBy mp) of
-                  Nothing -> [y]
-                  Just (Locs xs) -> y : xs
-      setRep z = MapF.insert z x
-  in RepMap { repBy   = MapF.insertWith jnLocs x (Locs newReps)
-                      $ MapF.delete y (repBy mp)
-            , repFor  = foldr setRep (repFor mp) newReps
-            }
+  case y of
+    RLit yl ->
+      case x of
+        RLit xl
+          | Just Refl <- testEquality xl yl -> mp
+          | otherwise -> mp { contradiction = Just (NotEqual xl yl) }
+        RLoc _  -> error ("[bug] Literal " ++ show yl ++
+                          " represented by a location.")
+    RLoc yl ->
+      let newReps = case MapF.lookup y (repBy mp) of
+                      Nothing -> [yl]
+                      Just (Locs xs) -> yl : xs
+          setRep z = MapF.insert z x
+      in RepMap { repBy   = MapF.insertWith jnLocs x (Locs newReps)
+                          $ MapF.delete y (repBy mp)
+                , repFor  = foldr setRep (repFor mp) newReps
+                , contradiction = contradiction mp
+                }
 
-makeEquiv :: Sym -> State -> Pair Loc Locs -> IO State
+makeEquiv :: Sym -> State -> Pair Rep Locs -> IO State
 makeEquiv sym s (Pair x (Locs xs)) =
-  do v  <- getLoc x sym s
+  do v  <- case x of
+             RLoc l -> getLoc l sym s
+             RLit l -> evalLit sym l
      foldM (\s' y -> setLoc y sym v s') s xs
 
 makeEquivs :: Sym -> RepMap -> State -> IO State
@@ -320,13 +420,19 @@ setPrePost sym s1 s2 (_,p) =
 getEq :: (String,Prop p) -> RepMap -> RepMap
 getEq (_,p) mp =
   case p of
-    Same _ (Loc x) (Loc y) -> addEq x y mp
+    Same _ (Loc x) (Loc y) -> addEqLocLoc x y mp
+    Same _ (Loc x) (Lit y) -> addEqLocLit x y mp
+    Same _ (Lit x) (Loc y) -> addEqLocLit y x mp
+    Same _ (Lit x) (Lit y) -> addEqLitLit x y mp
     _                      -> mp
 
 addAsmp :: Eval p => Sym -> S p -> (String,Prop p) -> IO ()
 addAsmp sym s (_,p) =
   case p of
     Same _ (Loc _) (Loc _) -> return ()
+    Same _ (Loc _) (Lit _) -> return ()
+    Same _ (Lit _) (Loc _) -> return ()
+    Same _ (Lit _) (Lit _) -> return ()
     Same _ (PreLoc _) (Loc _) -> return ()
     Same _ (Loc _) (PreLoc _) -> return ()
     _ -> addAssumption sym =<< evalProp p sym s
@@ -334,7 +440,14 @@ addAsmp sym s (_,p) =
 
 addAssumptions :: Sym -> State -> [(String, Prop Pre)] -> IO State
 addAssumptions sym s0 ps =
-  do s1 <- makeEquivs sym (foldr getEq emptyRepMap ps) s0
+  do let mp = foldr getEq emptyRepMap ps
+     case contradiction mp of
+       Nothing -> return ()
+       Just (NotEqual x y) ->
+         fail $ unlines [ "Attempt to assume false equality:"
+                        , "*** " ++ show x ++ " /= " ++ show y
+                        ]
+     s1 <- makeEquivs sym mp s0
      mapM_ (addAsmp sym s1) ps
      return s1
 
@@ -438,6 +551,7 @@ verifyMode spec sym =
      let post sF = mapM_ (doAssert sym (s2,sF)) (specPosts spec)
      return (s2, post)
 
+-- | Ensure that writable areas do not overlap with any other areas.
 checkOverlaps :: Sym -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()
 checkOverlaps sym = check
   where
