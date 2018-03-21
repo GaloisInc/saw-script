@@ -24,7 +24,7 @@ library
     , containers
     , cryptol
     , cryptol-verifier
-    , crucible >= 0.3 && < 0.4
+    , crucible >= 0.3.2 && < 0.4
     , crucible-llvm
     , crucible-saw
     , deepseq

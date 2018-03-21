@@ -173,7 +173,7 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n) GhostValue ctx = TypedTerm
-  muxIntrinsic sym _namerep _ctx prd thn els =
+  muxIntrinsic sym _ _namerep _ctx prd thn els =
     do st <- readIORef (Crucible.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
        prd' <- Crucible.toSC sym prd
