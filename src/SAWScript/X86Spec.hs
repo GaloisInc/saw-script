@@ -14,6 +14,7 @@ module SAWScript.X86Spec
   ( -- * Specifications
     FunSpec
   , Spec
+  , SpecType
 
     -- ** Pre conditions
   , Pre
