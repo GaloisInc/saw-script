@@ -134,6 +134,7 @@ library
     SAWScript.Prover.Exporter
 
     SAWScript.X86
+    SAWScript.X86SpecNew
     SAWScript.X86Spec
     SAWScript.X86Spec.Memory
     SAWScript.X86Spec.Registers

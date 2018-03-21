@@ -19,7 +19,7 @@ module SAWScript.X86
 
 
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST(ST,stToIO)
+import Control.Monad.ST(ST,stToIO,RealWorld)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -80,7 +80,8 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , resolveElfFuncSymbols )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , MacawArchEvalFn,ArchRegContext,mkFunCFG
-                          , runCodeBlock)
+                          , runCodeBlock
+                          , GlobalMap )
 import qualified Data.Macaw.Symbolic as Macaw ( CallHandler )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt)
 import Data.Macaw.Symbolic.PersistentState(macawAssignToCrucM)
@@ -105,7 +106,9 @@ import Verifier.SAW.Cryptol.Prelude(cryptolModule)
 import SAWScript.X86Spec.Types(Sym)
 import SAWScript.X86Spec.Monad(runPreSpec,runPostSpec,PreExtra(..))
 import SAWScript.X86Spec.Registers(macawLookup)
-import SAWScript.X86Spec (FunSpec)
+import SAWScript.X86Spec (FunSpec(..))
+
+import SAWScript.X86SpecNew
 
 
 
@@ -304,24 +307,46 @@ translate opts elf fun =
      addr <- findSymbol (symMap elf) name
      sayLn (show addr)
 
-     (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
-                            $ stToIO (makeCFG opts elf name addr)
-
-     writeFile "XXX.hs" (show cfg)
+     (halloc, cfg) <- statusBlock "  Constructing CFG... "
+                    $ stToIO (makeCFG opts elf name addr)
 
      let sym   = backend opts
+     spec <- case funSpec fun of
+               OldStyle spec -> return spec
+               NewStyle {} -> fail "XXX: NewStyle"
 
      ((initRegs,post), extra) <-
         statusBlock "  Setting up pre-conditions... " $
-          runPreSpec sym (symFuns opts) (cryEnv opts) (funSpec fun)
+          runPreSpec sym (symFuns opts) (cryEnv opts) spec
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
      let memStart = theMem extra
          globs = theRegions extra
-     (mvar, execResult) <-
+         st = State { stateMem = memStart, stateRegs = regs }
+
+     st1 <- doSim opts sym halloc globs st cfg
+
+     statusBlock "  Setting-up post-conditions... " $
+       runPostSpec sym (cryEnv opts) (stateRegs st1) (stateMem st1) post
+
+     gs <- getGoals sym
+     ctx <- sawBackendSharedContext sym
+     return (ctx,gs)
+
+
+doSim ::
+  Options ->
+  Sym ->
+  HandleAllocator RealWorld ->
+  GlobalMap Sym X86_64 ->
+  State ->
+  TheCFG ->
+  IO State
+doSim opts sym halloc globs st (SomeCFG cfg) =
+  do (mvar, execResult) <-
         statusBlock "  Simulating... " $
-        runCodeBlock sym x86 (x86_eval opts) halloc (memStart, globs)
-           (callHandler opts sym) cfg regs
+        runCodeBlock sym x86 (x86_eval opts) halloc (stateMem st, globs)
+           (callHandler opts sym) cfg (stateRegs st)
 
 
      gp <- case execResult of
@@ -336,13 +361,8 @@ translate opts elf fun =
                                    , ppAbort res ]
 
      mem <- getMem gp mvar
+     return State { stateMem = mem, stateRegs = regValue (gp ^. gpValue) }
 
-     statusBlock "  Setting-up post-conditions... " $
-       runPostSpec sym (cryEnv opts) (regValue (gp ^. gpValue)) mem post
-
-     gs <- getGoals sym
-     ctx <- sawBackendSharedContext sym
-     return (ctx,gs)
 
 ppAbort :: AbortedResult a b -> String
 ppAbort x =
@@ -365,6 +385,10 @@ getMem st mvar =
 
 
 
+type TheCFG = SomeCFG (MacawExt X86_64)
+                      (EmptyCtx ::> ArchRegStruct X86_64)
+                      (ArchRegStruct X86_64)
+
 
 -- | Generate a CFG for the function at the given address.
 makeCFG ::
@@ -372,11 +396,7 @@ makeCFG ::
   RelevantElf ->
   ByteString ->
   MemSegmentOff 64 ->
-  ST s ( HandleAllocator s
-       , SomeCFG (MacawExt X86_64)
-                 (EmptyCtx ::> ArchRegStruct X86_64)
-                 (ArchRegStruct X86_64)
-       )
+  ST s ( HandleAllocator s, TheCFG )
 makeCFG opts elf name addr =
   do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
      halloc  <- newHandleAllocator
