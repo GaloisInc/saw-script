@@ -24,8 +24,8 @@ module SAWScript.X86Spec.Monad
   , cryTerm
   , cryConst
   , PreExtra(..)
-  , registerSymFuns
-  , SymFunTerms(..)
+  -- , registerSymFuns
+  -- , SymFunTerms(..)
   , lookupCry
   ) where
 
@@ -40,8 +40,7 @@ import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
 import Lang.Crucible.Solver.Interface
   (natLit,notPred,addAssertion,addAssumption, natEq)
-import Lang.Crucible.Solver.SAWCoreBackend
-  (sawBackendSharedContext, sawRegisterSymFunInterp)
+import Lang.Crucible.Solver.SAWCoreBackend (sawBackendSharedContext)
 import Lang.Crucible.LLVM.MemModel ( Mem, emptyMem, LLVMPointerType)
 import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, LLVMPtr )
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
@@ -61,7 +60,7 @@ import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic.CrucGen(MacawCrucibleRegTypes)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import Data.Macaw.X86.ArchTypes(X86_64)
-import Data.Macaw.X86.Symbolic(lookupX86Reg,SymFuns(..))
+import Data.Macaw.X86.Symbolic(lookupX86Reg)
 import Data.Macaw.X86.X86Reg(X86Reg)
 
 
@@ -91,12 +90,11 @@ data PreExtra = PreExtra { theMem     :: RegValue Sym Mem
 -- | Execute a pre-condition specification.
 runPreSpec ::
   Sym ->
-  SymFuns Sym ->
   CryptolEnv  {- ^ Contains Cryptol declarations we may use -} ->
   Spec Pre a -> IO (a, PreExtra)
-runPreSpec sym symFs cs (Spec f) =
+runPreSpec sym cs (Spec f) =
   do m0 <- emptyMem LittleEndian
-     (a,(m,rs)) <- f (sym,cs) symFs (m0, Map.empty)
+     (a,(m,rs)) <- f (sym,cs) () (m0, Map.empty)
      return (a, PreExtra { theMem = m, theRegions = rs })
 
 
@@ -112,7 +110,7 @@ runPostSpec ::
 runPostSpec sym cry rs mem (Spec f) = fst <$> f (sym, cry) rs (mem, ())
 
 type family RR (x :: SpecType) where
-  RR Pre = SymFuns Sym
+  RR Pre = ()
   RR Post = Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64)
 
 type family SS (x :: SpecType) where
@@ -255,6 +253,7 @@ assert (Value p) msg =
 --------------------------------------------------------------------------------
 -- Symbolic terms
 
+{-
 {- | The SAW core terms used to implement the given instructions.
 During simulation, these instructions are threated as uninterpred
 functions, but in the post conditions we use these intepretations.
@@ -298,4 +297,4 @@ registerSymFuns defs = Spec $ \(sym,_) symFs st ->
 
 
 
-
+-}

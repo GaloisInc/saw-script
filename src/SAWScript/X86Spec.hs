@@ -81,10 +81,6 @@ module SAWScript.X86Spec
 
   , RegAssign(..), GPRegVal(..)
 
-    -- * Complex instructions
-  , registerSymFuns
-  , SymFunTerms(..)
-
     -- * Cryptol specs
   , cryTerm
   , cryConst
@@ -102,6 +98,7 @@ import Lang.Crucible.LLVM.MemModel.Pointer (ptrEq)
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 
 import Verifier.SAW.Term.Pretty(showTerm)
+import Verifier.SAW.CryptolEnv(CryptolEnv)
 
 import SAWScript.X86Spec.Types
 import SAWScript.X86Spec.Registers
@@ -185,7 +182,7 @@ As a result, we return the inital register assignemtn,
 and the post-condition for the function). -}
 data FunSpec =
     OldStyle (Spec Pre (RegAssign, Spec Post ()))
-  | NewStyle Specification
+  | NewStyle (CryptolEnv -> IO Specification)
 
 
 

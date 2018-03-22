@@ -19,12 +19,19 @@ module SAWScript.X86SpecNew
   , Unit(..)
   , (*.)
   , (===)
+  , Opts(..)
+
+  -- * Cryptol
+  , CryArg(..)
+  , cryTerm
+  , cryConst
   ) where
 
 import Data.Kind(Type)
 import Control.Monad(foldM)
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
+import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Data.Parameterized.NatRepr
@@ -34,11 +41,11 @@ import Data.Parameterized.Pair
 
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.LLVM.MemModel
-  ( MemImpl,coerceAny,doLoad,doPtrAddOffset,doStore, emptyMem
+  ( MemImpl,coerceAny,doLoad,doPtrAddOffset, emptyMem
   , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
   , LLVMPointerType, LLVMVal(LLVMValInt) )
 import Lang.Crucible.LLVM.MemModel.Pointer
-    (ptrEq, LLVMPtr, ppPtr, llvmPointerView)
+    (ptrEq, LLVMPtr, ppPtr, llvmPointerView, projectLLVM_bv)
 import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
 import qualified Lang.Crucible.LLVM.MemModel.Type as LLVM
 import Lang.Crucible.LLVM.Bytes(Bytes,bytesToInteger,toBytes)
@@ -49,12 +56,13 @@ import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Solver.Interface
           (bvLit,isEq, Pred, addAssumption, addAssertion, notPred, orPred
           , bvUle, truePred, falsePred, natLit )
-import Lang.Crucible.Solver.SAWCoreBackend(bindSAWTerm)
+import Lang.Crucible.Solver.SAWCoreBackend
+  (bindSAWTerm,sawBackendSharedContext,toSC)
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType
   , BoolType, BVType )
 
-import Verifier.SAW.SharedTerm(Term)
+import Verifier.SAW.SharedTerm(Term,scApplyAll)
 import Data.Macaw.Symbolic(freshValue,GlobalMap)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import Data.Macaw.Symbolic(Regs, macawAssignToCrucM )
@@ -64,6 +72,16 @@ import Data.Macaw.X86.Symbolic
             (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg,freshX86Reg)
 import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
+
+import Verifier.SAW.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
+
+import Cryptol.ModuleSystem.Name(Name)
+import Cryptol.ModuleSystem.Interface(ifTySyns)
+import Cryptol.TypeCheck.AST(TySyn(tsDef))
+import Cryptol.TypeCheck.TypePat(aNat)
+import Cryptol.Utils.PP(alwaysQualify,runDoc,pp)
+import Cryptol.Utils.Patterns(matchMaybe)
+
 
 import SAWScript.X86Spec.Types(Sym)
 import SAWScript.X86Spec.Monad(SpecType,Pre,Post)
@@ -79,6 +97,11 @@ data Specification = Specification
 
 data Unit = Bytes | Words | DWords | QWords | V128s | V256s
 
+
+data Opts = Opts
+  { optsSym :: Sym
+  , optsCry :: CryptolEnv
+  }
 
 (*.) :: Integer -> Unit -> Bytes
 n *. u = toBytes (fromIntegral n * bs)
@@ -230,9 +253,11 @@ instance OrdF Lit where
                    EQ -> EQF
                    GT -> GTF
 
+data CryArg p = forall w. Cry (V p (LLVMPointerType w))
 
 data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
+  CryProp :: String -> [ CryArg p ] -> Prop p
   SAWProp :: Term -> Prop p
 
 (===) :: KnownRepr TypeRepr t => V p t -> V p t -> Prop p
@@ -314,7 +339,12 @@ setLoc l =
              let mem = stateMem s
              let ?ptrWidth = knownNat
              loc <- adjustPtr sym mem obj n
-             mem1 <- doStore sym mem loc (locRepr l) (llvmBytes w) v
+
+             let lty = llvmBytes w
+                 ty  = locRepr l
+             val <- packMemValue sym lty ty v
+             mem1 <- storeConstRaw sym mem loc lty val
+
              return s { stateMem = mem1 }
 
 
@@ -345,25 +375,34 @@ instance Eval Post where
       Loc l    -> \sym (_,post) -> getLoc l sym post
       PreLoc l -> \sym (pre,_)  -> getLoc l sym pre
 
-evalProp :: Eval p => Prop p -> Sym -> S p -> IO (Pred Sym)
-evalProp p =
+evalCry :: Eval p => Sym -> CryArg p -> S p -> IO Term
+evalCry sym (Cry v) s = toSC sym =<< projectLLVM_bv sym =<< eval v sym s
+
+evalProp :: Eval p => Opts -> Prop p -> S p -> IO (Pred Sym)
+evalProp opts p s =
   case p of
     Same t x y ->
-      \sym s ->
-        do v1 <- eval x sym s
-           v2 <- eval y sym s
-           case t of
-             BoolRepr          -> isEq sym v1 v2
-             LLVMPointerRepr w -> ptrEq sym w v1 v2
-             it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
-    SAWProp t -> \sym _ -> bindSAWTerm sym BaseBoolRepr t
+      do v1 <- eval x sym s
+         v2 <- eval y sym s
+         case t of
+           BoolRepr          -> isEq sym v1 v2
+           LLVMPointerRepr w -> ptrEq sym w v1 v2
+           it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
+
+    CryProp f xs ->
+      do ts <- mapM (\x -> evalCry sym x s) xs
+         bindSAWTerm (optsSym opts) BaseBoolRepr =<< cryTerm opts f ts
+
+    SAWProp t -> bindSAWTerm sym BaseBoolRepr t
+  where
+  sym = optsSym opts
 
 
 -- | Add an assertion to the post-condition.
-doAssert :: Eval p => Sym -> S p -> (String, Prop p) -> IO ()
-doAssert sym s (msg,p) =
-  do pr <- evalProp p sym s
-     addAssertion sym pr (AssertFailureSimError msg)
+doAssert :: Eval p => Opts -> S p -> (String, Prop p) -> IO ()
+doAssert opts s (msg,p) =
+  do pr <- evalProp opts p s
+     addAssertion (optsSym opts) pr (AssertFailureSimError msg)
 
 
 --------------------------------------------------------------------------------
@@ -481,8 +520,8 @@ getEq (_,p) mp =
     Same _ (Lit x) (Lit y) -> addEqLitLit x y mp
     _                      -> mp
 
-addAsmp :: Eval p => Sym -> S p -> (String,Prop p) -> IO ()
-addAsmp sym s (_,p) =
+addAsmp :: Eval p => Opts -> S p -> (String,Prop p) -> IO ()
+addAsmp opts s (_,p) =
   case p of
     Same _ (Loc _) (Loc _) -> return ()
     Same _ (Loc _) (Lit _) -> return ()
@@ -490,12 +529,13 @@ addAsmp sym s (_,p) =
     Same _ (Lit _) (Lit _) -> return ()
     Same _ (PreLoc _) (Loc _) -> return ()
     Same _ (Loc _) (PreLoc _) -> return ()
-    _ -> addAssumption sym =<< evalProp p sym s
+    _ -> addAssumption (optsSym opts) =<< evalProp opts p s
 
 
-addAssumptions :: Sym -> State -> [(String, Prop Pre)] -> IO State
-addAssumptions sym s0 ps =
-  do let mp = foldr getEq emptyRepMap ps
+addAssumptions :: Opts -> State -> [(String, Prop Pre)] -> IO State
+addAssumptions opts s0 ps =
+  do let sym = optsSym opts
+     let mp = foldr getEq emptyRepMap ps
      case contradiction mp of
        Nothing -> return ()
        Just (NotEqual x y) ->
@@ -503,15 +543,16 @@ addAssumptions sym s0 ps =
                         , "*** " ++ show x ++ " /= " ++ show y
                         ]
      s1 <- makeEquivs sym mp s0
-     mapM_ (addAsmp sym s1) ps
+     mapM_ (addAsmp opts s1) ps
      return s1
 
 addAssumptionsPost ::
-  Sym -> (State,State) -> [(String, Prop Post)] -> IO State
-addAssumptionsPost sym (s1,s2) ps =
-  do s3 <- foldM (setPrePost sym s1) s2 ps
+  Opts -> (State,State) -> [(String, Prop Post)] -> IO State
+addAssumptionsPost opts (s1,s2) ps =
+  do let sym = optsSym opts
+     s3 <- foldM (setPrePost sym s1) s2 ps
      s4 <- makeEquivs sym (foldr getEq emptyRepMap ps) s3
-     mapM_ (addAsmp sym (s1,s4)) ps
+     mapM_ (addAsmp opts (s1,s4)) ps
      return s4
 
 
@@ -558,8 +599,7 @@ fillFresh sym p todo mem =
          let ty        = ptrTy w
          let elS       = natValue w
          let lty       = bitvectorType (toBytes elS)
-         x   <- freshVal sym ty nm
-         val <- packMemValue sym lty ty x
+         val <- packMemValue sym lty ty =<< freshVal sym ty nm
          -- Here we use the write that ignore mutability.
          -- This is because we are writinging initialization code.
          mem1 <- storeConstRaw sym mem p lty val
@@ -656,13 +696,14 @@ setupGlobals sym gs s
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
 verifyMode ::
-  Specification -> Sym -> IO (GlobalMap Sym X86_64, State, State -> IO ())
-verifyMode spec sym =
-  do s0 <- freshState sym
+  Specification -> Opts -> IO (GlobalMap Sym X86_64, State, State -> IO ())
+verifyMode spec opts =
+  do let sym = optsSym opts
+     s0 <- freshState sym
      s1 <- foldM (doAlloc sym) s0 $ sortBy cmpAlloc $ specAllocs spec
      (globs,s2) <- setupGlobals sym (specGlobsRO spec) s1
-     s3 <- addAssumptions sym s2 (specPres spec)
-     let post sF = mapM_ (doAssert sym (s3,sF)) (specPosts spec)
+     s3 <- addAssumptions opts s2 (specPres spec)
+     let post sF = mapM_ (doAssert opts (s3,sF)) (specPosts spec)
      return (globs, s3, post)
 
 -- | Ensure that writable areas do not overlap with any other areas.
@@ -692,12 +733,13 @@ checkOverlaps sym = check
                  ]
 
 -- | Use a specification to replace the execution of a function.
-overrideMode :: Specification -> Sym -> State -> IO State
-overrideMode spec sym s =
-  do let orderedAllocs = sortBy cmpAlloc (specAllocs spec)
+overrideMode :: Specification -> Opts -> State -> IO State
+overrideMode spec opts s =
+  do let sym = optsSym opts
+     let orderedAllocs = sortBy cmpAlloc (specAllocs spec)
      as <- mapM (checkAlloc sym s) orderedAllocs    -- check sizes
      checkOverlaps sym (zip as (map allocArea orderedAllocs)) -- check distinct
-     mapM_ (doAssert sym s) (specPres spec)         -- assert pre-condition
+     mapM_ (doAssert opts s) (specPres spec)         -- assert pre-condition
 
      sNew0 <- freshState sym
 
@@ -705,7 +747,48 @@ overrideMode spec sym s =
            $ reverse $ zip (map fst as) [ a | _ := a <- orderedAllocs ]
 
      let sNew1 = sNew0 { stateMem = mem1 }
-     addAssumptionsPost sym (s,sNew1) (specPosts spec)
+     addAssumptionsPost opts (s,sNew1) (specPosts spec)
+
+
+--------------------------------------------------------------------------------
+-- Cryptol
+
+
+-- | Lookup a cryptol term, and apply it to the given arguments,
+-- returning the result.
+cryTerm :: Opts -> String -> [Term] -> IO Term
+cryTerm opts x xs =
+  do t  <- lookupCry x (eTermEnv (optsCry opts))
+     sc <- sawBackendSharedContext (optsSym opts)
+     t1 <- scApplyAll sc t xs
+     return t1
+
+-- | Lookup a Crytpol type synonym, which should resolve to a constant.
+cryConst :: CryptolEnv -> String -> IO Integer
+cryConst env x =
+  do let mp = ifTySyns (getAllIfaceDecls (eModuleEnv env))
+     t <- lookupCry x mp
+     case matchMaybe (aNat (tsDef t)) of
+       Just n  -> return n
+       Nothing -> fail (x ++ " is not a fixed constant type synonym.")
+
+-- | Lookup a name in a map indexed by Cryptol names.
+lookupCry :: String -> Map Name a -> IO a
+lookupCry x mp =
+  case x `lookupIn` mp of
+    Left [] -> fail $ unlines $ ("Missing Cryptol name: " ++ show x)
+                              : [ "*** " ++ ppName y | y <- Map.keys mp ]
+    Left ys -> fail $ unlines ( "Ambiguous Cryptol name:"
+                              : [ "*** " ++ ppName y | y <- ys ]
+                              )
+    Right a -> return a
+
+  where ppName = show . runDoc alwaysQualify . pp
+
+
+
+
+--------------------------------------------------------------------------------
 
 
 adjustPtr ::

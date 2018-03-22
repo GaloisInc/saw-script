@@ -65,7 +65,8 @@ import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
 
 -- Crucible SAW
 import Lang.Crucible.Solver.SAWCoreBackend
-  (newSAWCoreBackend, proofObligs, toSC, sawBackendSharedContext)
+  (newSAWCoreBackend, proofObligs, toSC, sawBackendSharedContext
+  , sawRegisterSymFunInterp)
 
 -- Macaw
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
@@ -79,7 +80,7 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , memoryForElf
                                   , resolveElfFuncSymbols )
 import Data.Macaw.Symbolic( ArchRegStruct
-                          , MacawArchEvalFn,ArchRegContext,mkFunCFG
+                          , ArchRegContext,mkFunCFG
                           , runCodeBlock
                           , GlobalMap )
 import qualified Data.Macaw.Symbolic as Macaw ( CallHandler )
@@ -123,10 +124,6 @@ data Options = Options
 
   , function :: Fun
     -- ^ Function that we'd like to extract.
-
-  , symFuns   :: SymFuns Sym
-    -- ^ Symbolic function names for complex instructinos.
-    -- Should be created once during initialization.
 
   , archInfo :: ArchitectureInfo X86_64
     -- ^ Architectural flavor.  See "linuxInfo" and "bsdInfo".
@@ -180,13 +177,11 @@ proof archi file mbCry mkCallMap fun =
      sc  <- mkSharedContext cryptolModule
      sym <- newSAWCoreBackend sc globalNonceGenerator cfg
      cenv <- loadCry sym mbCry
-     sfs <- newSymFuns sym
      callMap <- mkCallMap sym cenv
      proofWithOptions Options
        { fileName = file
        , function = fun
        , archInfo = archi
-       , symFuns = sfs
        , backend = sym
        , funCalls = callMap
        , cryEnv = cenv
@@ -199,8 +194,30 @@ proofWithOptions opts =
   do elf <- getRelevant =<< getElf (fileName opts)
      translate opts elf (function opts)
 
+-- | Add interpretations for the symbolic functions, by looking
+-- them up in the Cryptol environment.  There should be definitions
+-- for "aesenc", "aesenclast", and "clmul".
+registerSymFuns :: Opts -> IO (SymFuns Sym)
+registerSymFuns opts =
+  do let sym = optsSym opts
+     sfs <- newSymFuns sym
 
+     sawRegisterSymFunInterp sym (fnAesEnc     sfs) (mk2 "aesenc")
+     sawRegisterSymFunInterp sym (fnAesEncLast sfs) (mk2 "aesenclast")
+     sawRegisterSymFunInterp sym (fnClMul      sfs) (mk2 "clmul")
 
+     return sfs
+
+  where
+  err nm xs =
+    unlines [ "Type error in call to " ++ show (nm::String) ++ ":"
+            , "*** Expected: 2 arguments"
+            , "*** Given:    " ++ show (length xs) ++ " arguments"
+            ]
+
+  mk2 nm _sc xs = case xs of
+                    [_,_] -> cryTerm opts nm xs
+                    _     -> fail (err nm xs)
 
 --------------------------------------------------------------------------------
 -- ELF
@@ -304,13 +321,18 @@ translate opts elf fun =
      sayLn ("Translating function: " ++ BSC.unpack name)
 
      let sym   = backend opts
+         sopts = Opts { optsSym = sym, optsCry = cryEnv opts }
+
+     sfs <- registerSymFuns sopts
 
      (globs,st,checkPost) <-
         case funSpec fun of
           OldStyle spec -> doSpecOldStyle opts spec
-          NewStyle spec -> verifyMode spec sym
+          NewStyle mkSpec ->
+            do spec <- mkSpec (cryEnv opts)
+               verifyMode spec sopts
 
-     st1 <- doSim opts elf name globs st
+     st1 <- doSim opts elf sfs name globs st
 
      checkPost st1
 
@@ -328,7 +350,7 @@ doSpecOldStyle opts spec =
 
      ((initRegs,post), extra) <-
         statusBlock "  Setting up pre-conditions... " $
-        runPreSpec sym (symFuns opts) (cryEnv opts) spec
+        runPreSpec sym (cryEnv opts) spec
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
 
@@ -346,11 +368,12 @@ doSpecOldStyle opts spec =
 doSim ::
   Options ->
   RelevantElf ->
+  SymFuns Sym ->
   ByteString ->
   GlobalMap Sym X86_64 ->
   State ->
   IO State
-doSim opts elf name globs st =
+doSim opts elf sfs name globs st =
   do say "  Looking for address... "
      addr <- findSymbol (symMap elf) name
      sayLn (show addr)
@@ -362,7 +385,7 @@ doSim opts elf name globs st =
 
      (mvar, execResult) <-
         statusBlock "  Simulating... " $
-        runCodeBlock sym x86 (x86_eval opts) halloc (stateMem st, globs)
+        runCodeBlock sym x86 (x86_64MacawEvalFn sfs) halloc (stateMem st, globs)
            (callHandler opts sym) cfg (stateRegs st)
 
 
@@ -480,10 +503,6 @@ x86 = x86_64MacawSymbolicFns
 
 genRegAssign :: Assignment X86Reg (ArchRegContext X86_64)
 genRegAssign = crucGenRegAssignment x86
-
--- | Evaluate a specific instruction.
-x86_eval :: Options -> MacawArchEvalFn Sym X86_64
-x86_eval opts = x86_64MacawEvalFn (symFuns opts)
 
 
 
