@@ -28,6 +28,7 @@ module SAWScript.X86SpecNew
   , area
   , cryArrPre
   , cryArrCur
+  , LLVMPointerType
 
   -- * Cryptol
   , CryArg(..)
