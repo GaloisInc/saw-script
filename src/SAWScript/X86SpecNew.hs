@@ -6,6 +6,7 @@
 {-# Language Rank2Types #-}
 {-# Language FlexibleContexts #-}
 {-# Language ScopedTypeVariables #-}
+{-# Language ConstraintKinds #-}
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
@@ -19,8 +20,10 @@ module SAWScript.X86SpecNew
   , Mode(..)
   , Unit(..)
   , (*.)
+  , inMem
   , (===)
   , Opts(..)
+  , KnownType
 
   -- * Cryptol
   , CryArg(..)
@@ -28,6 +31,7 @@ module SAWScript.X86SpecNew
   , cryConst
   ) where
 
+import GHC.TypeLits(KnownNat)
 import Data.Kind(Type)
 import Control.Monad(foldM)
 import Data.List(sortBy)
@@ -161,6 +165,25 @@ data Loc :: CrucibleType -> Type where
 
   InReg :: X86Reg tp -> Loc (ToCrucibleType tp)
 
+instance Show (Loc t) where
+  show x =
+    case x of
+      InReg r -> show r
+      InMem w l o ->
+        "[" ++ show l ++ off ++ " |" ++ show (8 * natValue w) ++ "]"
+        where off | o < 0     = " - " ++ show (negate o)
+                  | o == 0    = ""
+                  | otherwise = " + " ++ show o
+
+inMem ::
+  (1 <= w, KnownNat w) =>
+  Loc (LLVMPointerType 64) ->
+  Integer ->
+  Unit ->
+  Loc (LLVMPointerType (8 * w))
+inMem l n u = InMem knownNat l (bytesToInteger (n *. u))
+
+
 
 instance TestEquality Loc where
   testEquality x y = case compareF x y of
@@ -219,6 +242,11 @@ data V :: SpecType -> CrucibleType -> Type where
   PreLoc :: Loc t -> V Post t
   -- ^ Read the value in the pre-condition.
 
+  PreAddPtr ::
+    Loc (LLVMPointerType 64) -> Integer -> Unit -> V Post (LLVMPointerType 64)
+  -- ^ Add a constant to a pointer from a location in the pre-condition.
+
+
 data Lit :: CrucibleType -> Type where
   BVLit   :: (1 <= w) => NatRepr w -> Integer -> Lit (BVType w)
   BoolLit :: Bool -> Lit BoolType
@@ -262,7 +290,9 @@ data Prop :: SpecType -> Type where
   CryProp :: String -> [ CryArg p ] -> Prop p
   SAWProp :: Term -> Prop p
 
-(===) :: KnownRepr TypeRepr t => V p t -> V p t -> Prop p
+type KnownType = KnownRepr TypeRepr
+
+(===) :: KnownType t => V p t -> V p t -> Prop p
 x === y = Same knownRepr x y
 
 locRepr :: Loc t -> TypeRepr t
@@ -380,6 +410,10 @@ instance Eval Post where
       Lit l    -> \sym _        -> evalLit sym l
       Loc l    -> \sym (_,post) -> getLoc l sym post
       PreLoc l -> \sym (pre,_)  -> getLoc l sym pre
+      PreAddPtr l i u -> \sym (pre,_) ->
+        do ptr <- getLoc l sym pre
+           adjustPtr sym (stateMem pre) ptr (bytesToInteger (i *. u))
+
   curState _ (_,s) = s
   setCurState _ s (s1,_) = (s1,s)
 
@@ -766,30 +800,32 @@ overrideMode spec opts s =
 -- returning the result.
 cryTerm :: Opts -> String -> [Term] -> IO Term
 cryTerm opts x xs =
-  do t  <- lookupCry x (eTermEnv (optsCry opts))
-     sc <- sawBackendSharedContext (optsSym opts)
-     t1 <- scApplyAll sc t xs
-     return t1
+  case lookupCry x (eTermEnv (optsCry opts)) of
+    Left err -> fail err
+    Right t ->
+     do sc <- sawBackendSharedContext (optsSym opts)
+        t1 <- scApplyAll sc t xs
+        return t1
 
 -- | Lookup a Crytpol type synonym, which should resolve to a constant.
-cryConst :: CryptolEnv -> String -> IO Integer
+cryConst :: CryptolEnv -> String -> Either String Integer
 cryConst env x =
   do let mp = ifTySyns (getAllIfaceDecls (eModuleEnv env))
      t <- lookupCry x mp
      case matchMaybe (aNat (tsDef t)) of
        Just n  -> return n
-       Nothing -> fail (x ++ " is not a fixed constant type synonym.")
+       Nothing -> Left (x ++ " is not a fixed constant type synonym.")
 
 -- | Lookup a name in a map indexed by Cryptol names.
-lookupCry :: String -> Map Name a -> IO a
+lookupCry :: String -> Map Name a -> Either String a
 lookupCry x mp =
   case x `lookupIn` mp of
-    Left [] -> fail $ unlines $ ("Missing Cryptol name: " ++ show x)
+    Left [] -> Left $ unlines $ ("Missing Cryptol name: " ++ show x)
                               : [ "*** " ++ ppName y | y <- Map.keys mp ]
-    Left ys -> fail $ unlines ( "Ambiguous Cryptol name:"
+    Left ys -> Left $ unlines ( "Ambiguous Cryptol name:"
                               : [ "*** " ++ ppName y | y <- ys ]
                               )
-    Right a -> return a
+    Right a -> Right a
 
   where ppName = show . runDoc alwaysQualify . pp
 
