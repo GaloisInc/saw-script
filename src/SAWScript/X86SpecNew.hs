@@ -25,6 +25,12 @@ module SAWScript.X86SpecNew
   , Opts(..)
   , KnownType
   , intLit
+  , litByte
+  , litWord
+  , litDWord
+  , litQWord
+  , litV128
+  , litV256
   , area
   , LLVMPointerType
 
@@ -162,10 +168,10 @@ data Area = Area
     -}
   }
 
-area :: String -> Mode -> Bytes -> Area
-area n m s = Area { areaName = n
+area :: String -> Mode -> Integer -> Unit -> Area
+area n m u s = Area { areaName = n
                   , areaMode = m
-                  , areaSize = s
+                  , areaSize = u *. s
                   , areaHasPointers = False
                   , areaPtr = 0 *. Bytes
                   }
@@ -277,6 +283,25 @@ data V :: SpecType -> CrucibleType -> Type where
   PreAddPtr ::
     Loc (LLVMPointerType 64) -> Integer -> Unit -> V Post (LLVMPointerType 64)
   -- ^ Add a constant to a pointer from a location in the pre-condition.
+
+
+litByte :: Integer -> V p (LLVMPointerType 8)
+litByte = intLit
+
+litWord :: Integer -> V p (LLVMPointerType 16)
+litWord = intLit
+
+litDWord :: Integer -> V p (LLVMPointerType 32)
+litDWord = intLit
+
+litQWord :: Integer -> V p (LLVMPointerType 64)
+litQWord = intLit
+
+litV128 :: Integer -> V p (LLVMPointerType 128)
+litV128 = intLit
+
+litV256 :: Integer -> V p (LLVMPointerType 256)
+litV256 = intLit
 
 intLit :: (1 <= w, KnownNat w) => Integer -> V p (LLVMPointerType w)
 intLit = IntLit knownNat
