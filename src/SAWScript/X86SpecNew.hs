@@ -26,12 +26,14 @@ module SAWScript.X86SpecNew
   , KnownType
   , intLit
   , area
-  , cryArrPre
-  , cryArrCur
   , LLVMPointerType
 
   -- * Cryptol
   , CryArg(..)
+  , cryPre
+  , cryCur
+  , cryArrPre
+  , cryArrCur
   , cryTerm
   , cryConst
   ) where
@@ -254,10 +256,16 @@ data V :: SpecType -> CrucibleType -> Type where
   SAW    :: BaseTypeRepr s -> Term  -> V p (BaseToType s)
   -- ^ An opaque SAW term; WARNING: type is unchecked
 
+  CryFun ::
+    (1 <= w) => NatRepr w -> String -> [CryArg p] -> V p (LLVMPointerType w)
+  -- ^ An opaque Cryptol term term; WARNING: type is unchecked
+
   IntLit :: (1 <= w) => NatRepr w -> Integer -> V p (LLVMPointerType w)
   -- ^ A literal value
 
   BoolLit :: Bool -> V p BoolType
+  -- ^ A literal value
+
 
   Loc    :: Loc t -> V p t
   -- ^ Read the value at the location
@@ -277,6 +285,12 @@ intLit = IntLit knownNat
 
 data CryArg p = forall w. Cry (V p (LLVMPointerType w))
               | forall w. CryArr (NatRepr w) [V p (LLVMPointerType w)]
+
+cryPre :: Loc (LLVMPointerType w) -> CryArg Post
+cryPre l = Cry (PreLoc l)
+
+cryCur :: Loc (LLVMPointerType w) -> CryArg p
+cryCur l = Cry (Loc l)
 
 cryArr ::
   (forall t. Loc t -> V p t) {- ^ "Loc" or "PreLoc" -} ->
@@ -399,7 +413,7 @@ setLoc l =
 
 class Eval p where
   type S p
-  eval :: V p t -> Sym -> S p -> IO (RegValue Sym t)
+  eval :: V p t -> Opts -> S p -> IO (RegValue Sym t)
   curState :: f p -> S p -> State
   setCurState :: f p -> State -> S p -> S p
 
@@ -413,10 +427,11 @@ instance Eval Pre where
   type S Pre = State
   eval val =
     case val of
-      SAW ty t    -> \sym _ -> bindSAWTerm sym ty t
-      IntLit w n  -> \sym _ -> evIntLit sym w n
-      BoolLit b   -> \sym _ -> evBoolLit sym b
-      Loc l       -> getLoc l
+      SAW ty t       -> \opts _ -> bindSAWTerm (optsSym opts) ty t
+      CryFun w f xs  -> \opts s -> evalCryFun opts s w f xs
+      IntLit w n     -> \opts _ -> evIntLit (optsSym opts) w n
+      BoolLit b      -> \opts _ -> evBoolLit (optsSym opts) b
+      Loc l          -> \opts s -> getLoc l (optsSym opts) s
   curState _ s = s
   setCurState _ s _ = s
 
@@ -424,39 +439,64 @@ instance Eval Post where
   type S Post = (State,State)
   eval val =
     case val of
-      SAW ty t -> \sym _        -> bindSAWTerm sym ty t
-      IntLit w n -> \sym _      -> evIntLit sym w n
-      BoolLit b  -> \sym _      -> evBoolLit sym b
-      Loc l    -> \sym (_,post) -> getLoc l sym post
-      PreLoc l -> \sym (pre,_)  -> getLoc l sym pre
-      PreAddPtr l i u -> \sym (pre,_) ->
-        do ptr <- getLoc l sym pre
+      SAW ty t        -> \opts _         -> bindSAWTerm (optsSym opts) ty t
+      CryFun w f xs   -> \opts s         -> evalCryFun opts s w f xs
+      IntLit w n      -> \opts _         -> evIntLit (optsSym opts) w n
+      BoolLit b       -> \opts _         -> evBoolLit (optsSym opts) b
+      Loc l           -> \opts (_,post)  -> getLoc l (optsSym opts) post
+      PreLoc l        -> \opts (pre,_)   -> getLoc l (optsSym opts) pre
+      PreAddPtr l i u -> \opts (pre,_) ->
+        do let sym = optsSym opts
+           ptr <- getLoc l sym pre
            adjustPtr sym (stateMem pre) ptr (bytesToInteger (i *. u))
 
   curState _ (_,s) = s
   setCurState _ s (s1,_) = (s1,s)
 
-evalCry :: Eval p => Sym -> CryArg p -> S p -> IO Term
-evalCry sym cry s =
+evalCry :: Eval p => Opts -> CryArg p -> S p -> IO Term
+evalCry opts cry s =
   case cry of
-    Cry v -> toSC sym =<< projectLLVM_bv sym =<< eval v sym s
+    Cry v -> toSC sym =<< projectLLVM_bv sym =<< eval v opts s
     CryArr w cs ->
-      do ts <- mapM (\x -> evalCry sym (Cry x) s) cs
+      do ts <- mapM (\x -> evalCry opts (Cry x) s) cs
          sc <- sawBackendSharedContext sym
          ty <- scBitvector sc (fromIntegral (natValue w))
          scVector sc ty ts
+  where
+  sym = optsSym opts
+
+evalCryFunGen ::
+  Eval p =>
+  Opts ->
+  S p ->
+  BaseTypeRepr t ->
+  String ->
+  [CryArg p] ->
+  IO (RegValue Sym (BaseToType t))
+evalCryFunGen opts s ty f xs =
+  do ts <- mapM (\x -> evalCry opts x s) xs
+     bindSAWTerm (optsSym opts) ty =<< cryTerm opts f ts
+
+evalCryFun ::
+  (1 <= w, Eval p) =>
+  Opts ->
+  S p ->
+  NatRepr w ->
+  String ->
+  [CryArg p] ->
+  IO (LLVMPtr Sym w)
+evalCryFun opts s w f xs =
+  llvmPointer_bv (optsSym opts) =<< evalCryFunGen opts s (BaseBVRepr w) f xs
 
 evalProp :: Eval p => Opts -> Prop p -> S p -> IO (Pred Sym)
 evalProp opts p s =
   case p of
     Same t x y ->
-      do v1 <- eval x sym s
-         v2 <- eval y sym s
+      do v1 <- eval x opts s
+         v2 <- eval y opts s
          evalSame sym t v1 v2
 
-    CryProp f xs ->
-      do ts <- mapM (\x -> evalCry sym x s) xs
-         bindSAWTerm (optsSym opts) BaseBoolRepr =<< cryTerm opts f ts
+    CryProp f xs -> evalCryFunGen opts s BaseBoolRepr f xs
 
     SAWProp t -> bindSAWTerm sym BaseBoolRepr t
   where
@@ -574,14 +614,21 @@ getEq (_,p) mp =
     Same t v       (Loc x) -> addEqLocVal t x v mp
     _                      -> mp
 
-makeEquiv :: forall p. Eval p => Sym -> S p -> Pair Rep (Equiv p) -> IO (S p)
-makeEquiv sym s (Pair (Rep t _) (Equiv xs ys)) =
+makeEquiv :: forall p. Eval p => Opts -> S p -> Pair Rep (Equiv p) -> IO (S p)
+makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
   do -- Note that (at least currently) the `ys` do not
      -- depend on the current state: they are all either `Lit`
      -- or SAW terms, or `PreLoc`.  This is why we can evaluate
      -- them now, without worrying about dependencies.  I think. (Yav)
-     vs <- mapM (\v -> eval v sym s) ys
 
+     -- XXX: With the introduction of `CryFun` one could depend on the
+     -- current state.  For now, we are simply careful not to,
+     -- in particular, `CryFun` is used only in pre-conditions and all
+     -- its argumnets are `LocPre` (i.e., the values before execution).
+
+     vs <- mapM (\v -> eval v opts s) ys
+
+     let sym = optsSym opts
      let pName = Proxy :: Proxy p
      let cur = curState pName s
 
@@ -601,8 +648,8 @@ makeEquiv sym s (Pair (Rep t _) (Equiv xs ys)) =
      return (setCurState pName s1 s)
 
 
-makeEquivs :: Eval p => Sym -> RepMap p -> S p -> IO (S p)
-makeEquivs sym mp s = foldM (makeEquiv sym) s (MapF.toList (repBy mp))
+makeEquivs :: Eval p => Opts -> RepMap p -> S p -> IO (S p)
+makeEquivs opts mp s = foldM (makeEquiv opts) s (MapF.toList (repBy mp))
 
 
 
@@ -617,9 +664,8 @@ addAsmp opts s (_,p) =
 addAssumptions ::
   forall p. Eval p => Opts -> S p -> [(String, Prop p)] -> IO State
 addAssumptions opts s0 ps =
-  do let sym = optsSym opts
-     let mp = foldr getEq emptyRepMap ps
-     s1 <- makeEquivs sym mp s0
+  do let mp = foldr getEq emptyRepMap ps
+     s1 <- makeEquivs opts mp s0
      mapM_ (addAsmp opts s1) ps
      return (curState (Proxy :: Proxy p) s1)
 
