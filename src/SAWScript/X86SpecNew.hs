@@ -5,6 +5,7 @@
 {-# Language ExistentialQuantification #-}
 {-# Language Rank2Types #-}
 {-# Language FlexibleContexts #-}
+{-# Language ScopedTypeVariables #-}
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
@@ -32,6 +33,7 @@ import Control.Monad(foldM)
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
 import Data.Map (Map)
+import Data.Proxy(Proxy(..))
 import qualified Data.Map as Map
 
 import Data.Parameterized.NatRepr
@@ -351,6 +353,8 @@ setLoc l =
 class Eval p where
   type S p
   eval :: V p t -> Sym -> S p -> IO (RegValue Sym t)
+  curState :: f p -> S p -> State
+  setCurState :: f p -> State -> S p -> S p
 
 evalLit :: Sym -> Lit t -> IO (RegValue Sym t)
 evalLit sym l =
@@ -365,6 +369,8 @@ instance Eval Pre where
       SAW ty t -> \sym _ -> bindSAWTerm sym ty t
       Lit l    -> \sym _ -> evalLit sym l
       Loc l    -> getLoc l
+  curState _ s = s
+  setCurState _ s _ = s
 
 instance Eval Post where
   type S Post = (State,State)
@@ -374,6 +380,8 @@ instance Eval Post where
       Lit l    -> \sym _        -> evalLit sym l
       Loc l    -> \sym (_,post) -> getLoc l sym post
       PreLoc l -> \sym (pre,_)  -> getLoc l sym pre
+  curState _ (_,s) = s
+  setCurState _ s (s1,_) = (s1,s)
 
 evalCry :: Eval p => Sym -> CryArg p -> S p -> IO Term
 evalCry sym (Cry v) s = toSC sym =<< projectLLVM_bv sym =<< eval v sym s
@@ -384,10 +392,7 @@ evalProp opts p s =
     Same t x y ->
       do v1 <- eval x sym s
          v2 <- eval y sym s
-         case t of
-           BoolRepr          -> isEq sym v1 v2
-           LLVMPointerRepr w -> ptrEq sym w v1 v2
-           it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
+         evalSame sym t v1 v2
 
     CryProp f xs ->
       do ts <- mapM (\x -> evalCry sym x s) xs
@@ -396,6 +401,15 @@ evalProp opts p s =
     SAWProp t -> bindSAWTerm sym BaseBoolRepr t
   where
   sym = optsSym opts
+
+evalSame ::
+  Sym -> TypeRepr t -> RegValue Sym t -> RegValue Sym t -> IO (Pred Sym)
+evalSame sym t v1 v2 =
+  case t of
+    BoolRepr          -> isEq sym v1 v2
+    LLVMPointerRepr w -> ptrEq sym w v1 v2
+    it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
+
 
 
 -- | Add an assertion to the post-condition.
@@ -407,153 +421,147 @@ doAssert opts s (msg,p) =
 
 --------------------------------------------------------------------------------
 
-data Rep t = RLoc (Loc t)
-           | RLit (Lit t)
+data Rep t = Rep (TypeRepr t) Int
 
+instance Eq (Rep t) where
+  Rep _ x == Rep _ y = x == y
 
 instance TestEquality Rep where
   testEquality x y = case compareF x y of
                        EQF -> Just Refl
                        _   -> Nothing
 
--- | We prefer literals as the representatives
 instance OrdF Rep where
-  compareF x y =
-    case (x,y) of
-      (RLit a, RLit b) -> compareF a b
-      (RLit _, _)      -> LTF
-      (_, RLit _)      -> GTF
-      (RLoc a, RLoc b) -> compareF a b
+  compareF (Rep s x) (Rep t y) =
+    case compareF s t of
+      LTF -> LTF
+      GTF -> GTF
+      EQF -> case compare x y of
+                LT -> LTF
+                GT -> GTF
+                EQ -> EQF
 
-
-data RepMap = RepMap
+data RepMap p = RepMap
   { repFor :: MapF.MapF Loc Rep
      -- ^ Keeps track of the representative for a value
-  , repBy  :: MapF.MapF Rep Locs
+
+  , repBy  :: MapF.MapF Rep (Equiv p)
     -- ^ Inverse of the above: keeps track of which locs have this rep.
 
-  , contradiction :: Maybe Contradiction
+  , nextRep :: !Int
   }
 
-data Contradiction = forall t. NotEqual (Lit t) (Lit t)
 
-emptyRepMap :: RepMap
+emptyRepMap :: RepMap p
 emptyRepMap = RepMap { repFor = MapF.empty
                      , repBy = MapF.empty
-                     , contradiction = Nothing
+                     , nextRep = 0
                      }
 
-newtype Locs t = Locs [ Loc t ]
+data Equiv p t = Equiv [ Loc t ] [ V p t ]
 
-jnLocs :: Locs t -> Locs t -> Locs t
-jnLocs (Locs xs) (Locs ys) = Locs (xs ++ ys)
+jnEquiv :: Equiv p t -> Equiv p t -> Equiv p t
+jnEquiv (Equiv xs ys) (Equiv as bs) = Equiv (xs ++ as) (ys ++ bs)
 
-getRep :: RepMap -> Loc t -> Rep t
-getRep mp x = case MapF.lookup x (repFor mp) of
-                Nothing -> RLoc x
-                Just y  -> y
+-- | Add a fresh representative for something that had no rep before.
+newRep :: TypeRepr t -> Equiv p t -> RepMap p -> (Rep t, RepMap p)
+newRep t xs mp =
+  let n = nextRep mp
+      r = Rep t n
+  in (r, mp { nextRep = n + 1
+            , repBy   = MapF.insert r xs (repBy mp)
+            })
+
+getRep :: TypeRepr t -> RepMap p -> Loc t -> (Rep t, RepMap p)
+getRep t mp x =
+  case MapF.lookup x (repFor mp) of
+    Nothing -> let (r,mp1) = newRep t (Equiv [x] []) mp
+               in (r, mp1 { repFor = MapF.insert x r (repFor mp1) })
+    Just y  -> (y, mp)
 
 
-addEqLitLit :: Lit t -> Lit t -> RepMap -> RepMap
-addEqLitLit x y = RLit x `isRepFor` RLit y
+addEqLocVal :: TypeRepr t -> Loc t -> V p t -> RepMap p -> RepMap p
+addEqLocVal t loc lit mp =
+  let (x1,mp1) = getRep t mp loc
+      (x2,mp2) = newRep t (Equiv [] [lit]) mp1
+  in joinReps x1 x2 mp2
 
-addEqLocLit :: Loc t -> Lit t -> RepMap -> RepMap
-addEqLocLit loc lit mp = (RLit lit `isRepFor` getRep mp loc) mp
+addEqLocLoc :: TypeRepr t -> Loc t -> Loc t -> RepMap p -> RepMap p
+addEqLocLoc t x y mp =
+  let (x1,mp1) = getRep t mp  x
+      (y1,mp2) = getRep t mp1 y
+  in joinReps x1 y1 mp2
 
-addEqLocLoc :: Loc t -> Loc t -> RepMap -> RepMap
-addEqLocLoc x y mp =
-  let x1 = getRep mp x
-      y1 = getRep mp y
-  in case compareF x1 y1 of
-       EQF -> mp
-       LTF -> (x1 `isRepFor` y1) mp
-       GTF -> (y1 `isRepFor` x1) mp
+joinReps :: Rep t -> Rep t -> RepMap p -> RepMap p
+joinReps x y mp
+  | x == y = mp
+  | otherwise =
+    -- x is the new rep
+    case MapF.lookup y (repBy mp) of
+      Nothing -> error "[joinReps] Empty equivalance class"
+      Just new@(Equiv ls _) ->
+        let setRep z = MapF.insert z x
+        in mp { repBy = MapF.insertWith jnEquiv x new
+                      $ MapF.delete y (repBy mp)
+              , repFor = foldr setRep (repFor mp) ls
+              }
 
-isRepFor :: Rep t -> Rep t -> RepMap -> RepMap
-(x `isRepFor` y) mp =
-  case y of
-    RLit yl ->
-      case x of
-        RLit xl
-          | Just Refl <- testEquality xl yl -> mp
-          | otherwise -> mp { contradiction = Just (NotEqual xl yl) }
-        RLoc _  -> error ("[bug] Literal " ++ show yl ++
-                          " represented by a location.")
-    RLoc yl ->
-      let newReps = case MapF.lookup y (repBy mp) of
-                      Nothing -> [yl]
-                      Just (Locs xs) -> yl : xs
-          setRep z = MapF.insert z x
-      in RepMap { repBy   = MapF.insertWith jnLocs x (Locs newReps)
-                          $ MapF.delete y (repBy mp)
-                , repFor  = foldr setRep (repFor mp) newReps
-                , contradiction = contradiction mp
-                }
-
-makeEquiv :: Sym -> State -> Pair Rep Locs -> IO State
-makeEquiv sym s (Pair x (Locs xs)) =
-  do v  <- case x of
-             RLoc l -> getLoc l sym s
-             RLit l -> evalLit sym l
-     foldM (\s' y -> setLoc y sym v s') s xs
-
-makeEquivs :: Sym -> RepMap -> State -> IO State
-makeEquivs sym mp s = foldM (makeEquiv sym) s (MapF.toList (repBy mp))
-
-setPrePost :: Sym -> State -> State -> (String,Prop Post) -> IO State
-setPrePost sym s1 s2 (_,p) =
-  case p of
-    Same _ (PreLoc x) (Loc y) ->
-      do v <- getLoc x sym s1
-         setLoc y sym v s2
-    Same _ (Loc y) (PreLoc x) ->
-      do v <- getLoc x sym s1
-         setLoc y sym v s2
-    _ -> return s2
-
-getEq :: (String,Prop p) -> RepMap -> RepMap
+getEq :: (String,Prop p) -> RepMap p -> RepMap p
 getEq (_,p) mp =
   case p of
-    Same _ (Loc x) (Loc y) -> addEqLocLoc x y mp
-    Same _ (Loc x) (Lit y) -> addEqLocLit x y mp
-    Same _ (Lit x) (Loc y) -> addEqLocLit y x mp
-    Same _ (Lit x) (Lit y) -> addEqLitLit x y mp
+    Same t (Loc x) (Loc y) -> addEqLocLoc t x y mp
+    Same t (Loc x) v       -> addEqLocVal t x v mp
+    Same t v       (Loc x) -> addEqLocVal t x v mp
     _                      -> mp
+
+makeEquiv :: forall p. Eval p => Sym -> S p -> Pair Rep (Equiv p) -> IO (S p)
+makeEquiv sym s (Pair (Rep t _) (Equiv xs ys)) =
+  do -- Note that (at least currently) the `ys` do not
+     -- depend on the current state: they are all either `Lit`
+     -- or SAW terms, or `PreLoc`.  This is why we can evaluate
+     -- them now, without worrying about dependencies.  I think. (Yav)
+     vs <- mapM (\v -> eval v sym s) ys
+
+     let pName = Proxy :: Proxy p
+     let cur = curState pName s
+
+     (v,rest) <- case vs of
+                   v : us -> return (v,us)
+                   [] -> case xs of
+                           [] -> error "[makeEquiv] Empty equivalence class"
+                           l : _ -> do v <- getLoc l sym cur
+                                       return (v,[])
+
+     s1 <- foldM (\s' y -> setLoc y sym v s') cur xs
+
+     let same a = addAssumption sym =<< evalSame sym t v a
+
+     mapM_ same rest
+
+     return (setCurState pName s1 s)
+
+
+makeEquivs :: Eval p => Sym -> RepMap p -> S p -> IO (S p)
+makeEquivs sym mp s = foldM (makeEquiv sym) s (MapF.toList (repBy mp))
+
+
 
 addAsmp :: Eval p => Opts -> S p -> (String,Prop p) -> IO ()
 addAsmp opts s (_,p) =
   case p of
-    Same _ (Loc _) (Loc _) -> return ()
-    Same _ (Loc _) (Lit _) -> return ()
-    Same _ (Lit _) (Loc _) -> return ()
-    Same _ (Lit _) (Lit _) -> return ()
-    Same _ (PreLoc _) (Loc _) -> return ()
-    Same _ (Loc _) (PreLoc _) -> return ()
+    Same _ (Loc _) _ -> return ()
+    Same _ _ (Loc _) -> return ()
     _ -> addAssumption (optsSym opts) =<< evalProp opts p s
 
 
-addAssumptions :: Opts -> State -> [(String, Prop Pre)] -> IO State
+addAssumptions ::
+  forall p. Eval p => Opts -> S p -> [(String, Prop p)] -> IO State
 addAssumptions opts s0 ps =
   do let sym = optsSym opts
      let mp = foldr getEq emptyRepMap ps
-     case contradiction mp of
-       Nothing -> return ()
-       Just (NotEqual x y) ->
-         fail $ unlines [ "Attempt to assume false equality:"
-                        , "*** " ++ show x ++ " /= " ++ show y
-                        ]
      s1 <- makeEquivs sym mp s0
      mapM_ (addAsmp opts s1) ps
-     return s1
-
-addAssumptionsPost ::
-  Opts -> (State,State) -> [(String, Prop Post)] -> IO State
-addAssumptionsPost opts (s1,s2) ps =
-  do let sym = optsSym opts
-     s3 <- foldM (setPrePost sym s1) s2 ps
-     s4 <- makeEquivs sym (foldr getEq emptyRepMap ps) s3
-     mapM_ (addAsmp opts (s1,s4)) ps
-     return s4
+     return (curState (Proxy :: Proxy p) s1)
 
 
 --------------------------------------------------------------------------------
@@ -747,7 +755,7 @@ overrideMode spec opts s =
            $ reverse $ zip (map fst as) [ a | _ := a <- orderedAllocs ]
 
      let sNew1 = sNew0 { stateMem = mem1 }
-     addAssumptionsPost opts (s,sNew1) (specPosts spec)
+     addAssumptions opts (s,sNew1) (specPosts spec)
 
 
 --------------------------------------------------------------------------------
