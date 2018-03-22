@@ -7,22 +7,22 @@ type SM i o s = (i, s) -> (o, s)
 // To run a state machine for 'n' steps, a sequence of 'n'
 // input values must be provided; the initial state is always
 // seeded with 'zero : s'.
-run : {n, i, s, o} SM i o s -> [n]i -> [n](o,s)
+run : {n, i, s, o} (Zero s) => SM i o s -> [n]i -> [n](o,s)
 run sm is = oss
   where
   states = [zero] # [ os.1 | os <- oss ]
   oss = [ sm (i, s) | i <- is | s <- states ]
 
-eval : {n, i, s, o} SM i o s -> [n]i -> [n](o)
+eval : {n, i, s, o} (Zero s) => SM i o s -> [n]i -> [n](o)
 eval sm is = [ os.0 | os <- run sm is ]
 
-exec : {n, i, s, o} SM i o s -> [n]i -> [n](s)
+exec : {n, i, s, o} (Zero s) => SM i o s -> [n]i -> [n](s)
 exec sm is = [ os.1 | os <- run sm is ]
 
 // Two state machines are equivalent if their output streams agree
 // on all input streams. This function checks equivalence at specific
 // finite input sequences.
-equiv : {n, i, s1, s2, o} (Cmp o, fin n)
+equiv : {n, i, s1, s2, o} (Cmp o, fin n, Zero s1, Zero s2)
      => SM i o s1 -> SM i o s2 -> [n]i -> Bool
 equiv sm1 sm2 is = all [ o1 == o2 | o1 <- eval sm1 is | o2 <- eval sm2 is ]
   where
@@ -121,7 +121,7 @@ mk_loop initializer body (i, (started, s)) = (o, (True, s''))
   (o, s'') = body s'
 
 // Run a loop for 'n' steps, seeded with input 'i'.
-run_loop : {n, i, o, s} (fin n, n >= 1) =>
+run_loop : {n, i, o, s} (fin n, n >= 1, Zero i, Zero s) =>
   SM i o s -> i -> [n](o, s)
 run_loop loop i = run loop ([i] # zero)
 
@@ -136,7 +136,7 @@ run_loop loop i = run loop ([i] # zero)
 // i.e. it shows something is possible, not that it's feasible in
 // practice -- and I'm not optimistic that ABC will magically be able
 // to check the equivalence of such biased joins quickly.
-sync_loops : {i, o, s1, s2}
+sync_loops : {i, o, s1, s2} (Zero o) =>
   [1] -> SM i (Bool, o) s1 -> SM i (Bool, o) s2 -> SM i (Bool, o) (s1, s2)
 sync_loops bias l1 l2 (i, (s1, s2)) = ((done, o'), (s1', s2'))
   where
