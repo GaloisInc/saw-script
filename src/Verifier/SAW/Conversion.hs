@@ -271,18 +271,18 @@ asCtor :: (Monad m, ArgsMatchable v m a)
        => Ident -> v m a -> Matcher m a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
-          CtorApp c l <- R.asFTermF t
+          CtorApp c params l <- R.asFTermF t
           unless (c == o) $ fail $ "not " ++ show o
-          return l
+          return (params ++ l)
 
 -- | Match a datatype.
 asDataType :: (Monad m, ArgsMatchable v m a)
            => Ident -> v m a -> Matcher m a
 asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
-          DataTypeApp dt l <- R.asFTermF t
+          DataTypeApp dt params l <- R.asFTermF t
           unless (dt == o) $ fail $ "not " ++ show o
-          return l
+          return (params ++ l)
 
 -- | Match any sort.
 asAnySort :: (Monad m) => Matcher m Sort

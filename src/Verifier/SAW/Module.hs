@@ -2,6 +2,11 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 {- |
 Module      : Verifier.SAW.Module
@@ -21,8 +26,9 @@ module Verifier.SAW.Module
     -- * Data types and definitions.
   , DefQualifier(..)
   , Def(..)
+  , CtorArg(..)
+  , CtorArgStruct(..)
   , Ctor(..)
-  , TypedCtor
   , DataType(..)
     -- * Modules
   , Module
@@ -149,10 +155,10 @@ instance Hashable Def -- automatically derived
 
 -- | A specification of a constructor argument with a given type in a given
 -- context of parameters and earlier arguments
-data CtorArg
-  = ConstArg Term
+data CtorArg ixs ctx a
+  = ConstArg (CtxTerm ctx a)
     -- ^ A fixed, constant type
-  | RecursiveArg [(String,Term)] [Term]
+  | RecursiveArg (InBindings CtxTerm CtxTerms ctx ixs)
     -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
     -- specifies a recursive argument type of the form
     --
@@ -163,26 +169,24 @@ data CtorArg
     -- the @pi@ are the parameters of @d@ (not given here), and the @ei@ are the
     -- type indices of @d@.
 
+data CtorArgStruct =
+  forall params ixs args.
+  CtorArgStruct
+  {
+    ctorParams :: Bindings CtxTerm 'CNil params,
+    ctorIndices :: Bindings CtxTerm params ixs,
+    ctorArgs :: Bindings (CtorArg ixs) params args
+  }
 
 -- | A specification of a constructor
 data Ctor =
   Ctor
   { ctorName :: !Ident
     -- ^ The name of this constructor
-  , ctorParams :: [(String,Term)]
-    -- ^ Parameters of the constructor (inherited from its datatype)
-  , ctorArgs :: [(String,CtorArg)]
-    -- ^ Context of arguments of the constructor
-    --
-    -- The free variables of the types used in arguments include the parameters
-    -- and all the previous arguments
+  , ctorArgStruct :: CtorArgStruct
+    -- ^ Arguments to the constructor
   , ctorDataTypeName :: Ident
     -- ^ The datatype this constructor belongs to
-  , ctorDataTypeIndices :: [Term]
-    -- ^ The non-parameter arguments to the datatype in the return type of this
-    -- constructor
-    --
-    -- The free variables of the indices include all parameters and arguments
   , ctorType :: Term
     -- ^ Cached type of the constructor, which should always be equal to
     --
@@ -210,7 +214,7 @@ instance Show Ctor where
 -- Datatypes -------------------------------------------------------------------
 
 -- | An inductively-defined datatype
-data DataType where
+data DataType =
   DataType
   { dtName :: Ident
     -- ^ The name of this datatype
@@ -250,7 +254,7 @@ data Module = Module {
           moduleName    :: !ModuleName
         , _moduleImports :: !(Map ModuleName Module)
         , moduleTypeMap :: !(Map String DataType)
-        , moduleCtorMap :: !(Map String TypedCtor)
+        , moduleCtorMap :: !(Map String Ctor)
         , moduleDefMap  :: !(Map String Def)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
@@ -295,7 +299,7 @@ moduleDataTypes :: Module -> [DataType]
 moduleDataTypes = Map.elems . moduleTypeMap
 
 -- | Ctors defined in module.
-moduleCtors :: Module -> [TypedCtor]
+moduleCtors :: Module -> [Ctor]
 moduleCtors = Map.elems . moduleCtorMap
 
 findDeclaringModule :: Module -> ModuleName -> Maybe Module
@@ -303,7 +307,7 @@ findDeclaringModule m nm
   | moduleName m == nm = Just m
   | otherwise = m^.moduleImports^.at nm
 
-findCtor :: Module -> Ident -> Maybe TypedCtor
+findCtor :: Module -> Ident -> Maybe Ctor
 findCtor m i = do
   m' <- findDeclaringModule m (identModule i)
   Map.lookup (identName i) (moduleCtorMap m')

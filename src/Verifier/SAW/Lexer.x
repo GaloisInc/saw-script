@@ -87,11 +87,13 @@ $white+;
 @num        { TNat . read }
 @key        { TKey }
 @ident      { TIdent }
+@ident "#rec" { TRecursor }
 .           { TIllegal }
 
 {
 data Token
   = TIdent { tokIdent :: String }   -- ^ Identifier
+  | TRecursor { tokRecursor :: String }   -- ^ Recursor
   | TNat { tokNat :: Integer }  -- ^ Natural number literal
   | TString { tokString :: String } -- ^ String literal
   | TKey String     -- ^ Keyword or predefined symbol
@@ -105,6 +107,7 @@ ppToken :: Token -> String
 ppToken tkn =
   case tkn of
     TIdent s -> s
+    TRecursor s -> s ++ "#rec"
     TNat n -> show n
     TString s -> show s
     TKey s -> s

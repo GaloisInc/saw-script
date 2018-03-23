@@ -84,10 +84,6 @@ library
      Verifier.SAW.UntypedAST
      Verifier.SAW.Change
   other-modules:
-     Verifier.SAW.Typechecker.Context
-     Verifier.SAW.Typechecker.Monad
-     Verifier.SAW.Typechecker.Simplification
-     Verifier.SAW.Typechecker.Unification
      Verifier.SAW.UnionFind
      Verifier.SAW.Utils
   GHC-options: -Wall -Werror

@@ -18,7 +18,7 @@ preludeNatIdent :: Ident
 preludeNatIdent =  mkIdent preludeModuleName "Nat"
 
 preludeNatType :: FlatTermF e
-preludeNatType =  DataTypeApp preludeNatIdent []
+preludeNatType =  DataTypeApp preludeNatIdent [] []
 
 preludeZeroIdent :: Ident
 preludeZeroIdent =  mkIdent preludeModuleName "Zero"

@@ -8,6 +8,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {- |
 Module      : Verifier.SAW.Term.Functor
@@ -43,9 +51,15 @@ module Verifier.SAW.Term.Functor
   , termToPat
   , alphaEquiv
   , looseVars, smallestFreeVar
-  , recordAListAllFields, recordAListAsTuple
+  , alistAllFields, recordAListAsTuple, tupleAsRecordAList
     -- * Sorts
   , Sort, mkSort, propSort, sortOf
+    -- * Terms in Context
+  , Ctx(..), CtxBind, (:++:), Arrows, CtxExtends(..)
+  , ctxTermsForBindings, invAppendBindings, invertBindings
+    -- , appendBinding, appendBindings
+  , CtxTerm(..), CtxTerms(..), Typ, mkClosedTerm, elimClosedTerm
+  , CtxPair(..), Bindings(..), InvBindings(..), InBindings(..)
   ) where
 
 import Control.Exception (assert)
@@ -285,16 +299,16 @@ instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 -- precisely the given field names and no more. If so, return the values
 -- associated with those field names, in the order given in the input, and
 -- otherwise return 'Nothing'
-recordAListAllFields :: [String] -> [(String, e)] -> Maybe [e]
-recordAListAllFields [] [] = Just []
-recordAListAllFields (fld:flds) alist
+alistAllFields :: Eq k => [k] -> [(k, a)] -> Maybe [a]
+alistAllFields [] [] = Just []
+alistAllFields (fld:flds) alist
   | Just val <- lookup fld alist =
-    (val :) <$> recordAListAllFields flds (deleteField fld alist)
+    (val :) <$> alistAllFields flds (deleteField fld alist)
   where
     deleteField _ [] = error "deleteField"
     deleteField f ((f',_):rest) | f == f' = rest
     deleteField f (x:rest) = x : deleteField f rest
-recordAListAllFields _ _ = Nothing
+alistAllFields _ _ = Nothing
 
 -- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
 -- field names that are the strings @"1", "2", ...@ indicating that the record
@@ -302,8 +316,12 @@ recordAListAllFields _ _ = Nothing
 -- values, and otherwise return 'Nothing'.
 recordAListAsTuple :: [(String, e)] -> Maybe [e]
 recordAListAsTuple alist =
-  recordAListAllFields (map show [1 .. length alist]) alist
+  alistAllFields (map show [1 .. length alist]) alist
 
+-- | Convert a tuple of expression to an association list used in a 'RecordType'
+-- or 'RecordValue' to denote a tuple
+tupleAsRecordAList :: [e] -> [(String, e)]
+tupleAsRecordAList es = zip (map (show :: Integer -> String) [1 ..]) es
 
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 -- pointwise to immediate subterms, if the two 'FlatTermF's are the same
@@ -330,18 +348,23 @@ zipWithFlatTermF f = go
     go (RecordSelector x1 x2) (RecordSelector y1 y2) =
       Just $ RecordSelector (f x1 y1) (f x2 y2)
 
-    go (CtorApp cx lx) (CtorApp cy ly)
-      | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
-    go (DataTypeApp dx lx) (DataTypeApp dy ly)
-      | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
-    go (RecursorApp dx lx) (RecursorApp dy ly)
-      | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
+    go (CtorApp cx psx lx) (CtorApp cy psy ly)
+      | cx == cy = Just $ CtorApp cx (zipWith f psx psy) (zipWith f lx ly)
+    go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly)
+      | dx == dy = Just $ DataTypeApp dx (zipWith f psx psy) (zipWith f lx ly)
+    go (RecursorApp d1 ps1 p1 cs_fs1 ixs1 x1) (RecursorApp d2 ps2 p2 cs_fs2 ixs2 x2)
+      | d1 == d2
+      , Just fs2 <- alistAllFields (map fst cs_fs1) cs_fs2
+      = Just $
+        RecursorApp d1 (zipWith f ps1 ps2) (f p1 p2)
+        (zipWith (\(c,f1) f2 -> (c, f f1 f2)) cs_fs1 fs2)
+        (zipWith f ixs1 ixs2) (f x1 x2)
 
     go (RecordType elems1) (RecordType elems2)
-      | Just vals2 <- recordAListAllFields (map fst elems1) elems2 =
+      | Just vals2 <- alistAllFields (map fst elems1) elems2 =
         Just $ RecordType $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
     go (RecordValue elems1) (RecordValue elems2)
-      | Just vals2 <- recordAListAllFields (map fst elems1) elems2 =
+      | Just vals2 <- alistAllFields (map fst elems1) elems2 =
         Just $ RecordValue $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
     go (RecordProj e1 fld1) (RecordProj e2 fld2)
       | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
@@ -448,8 +471,10 @@ termToPat t =
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
       FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
-      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      FTermF (DataTypeApp c ps ts) ->
+        foldl Net.App (Net.Atom (identName c)) (map termToPat (ps ++ ts))
+      FTermF (CtorApp c ps ts)   ->
+        foldl Net.App (Net.Atom (identName c)) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term
@@ -496,3 +521,147 @@ smallestFreeVar t
           | otherwise = shft + countTrailingZeros xw
         where xw :: Word64
               xw = fromInteger x
+
+
+-- Terms In Context ------------------------------------------------------------
+
+-- | We use DataKinds to represent contexts at the type level. These are
+-- basically natural numbers, but we redefine them here in the usual inductive
+-- presentation, both because that is how we are using them and also to keep it
+-- clear that these are different from the usual type-level nats.
+--
+-- Note that contexts are "inside-out", meaning that the most recently-bound
+-- variable is listed on the outside. We reflect this by having that most
+-- recently-bound variable to the right in 'CCons'.
+data Ctx a = CNil | CCons (Ctx a) a
+
+-- | Append two lists of types
+type family as :++: bs where
+  '[] :++: bs = bs
+  (a ': as) :++: bs = a ': as :++: bs
+
+-- | Append a list of types to a context, i.e., bind the types in the list
+-- inside the context
+type family CtxBind ctx as where
+  CtxBind ctx '[] = ctx
+  CtxBind ctx (a ': as) = CtxBind ('CCons ctx a) as
+
+type family CtxApp ctx1 ctx2 where
+  CtxApp ctx1 'CNil = ctx1
+  CtxApp ctx1 ('CCons ctx2 a) = 'CCons (CtxApp ctx1 ctx2) a
+
+-- | Abstract a type list using Haskell arrows. This is done "outside-in", since
+-- type-level lists represent bindings from the outside in.
+type family Arrows as b where
+  Arrows '[] b = b
+  Arrows (a ': as) b = a -> Arrows as b
+
+-- | Proof that one context is an extension of another
+data CtxExtends ctx1 ctx2 where
+  CtxExtendsRefl :: CtxExtends ctx ctx
+  CtxExtendsCons :: CtxExtends ctx1 ctx2 -> CtxExtends ctx1 ('CCons ctx2 a)
+
+-- | A dummy type of types
+data Typ
+
+-- | A 'Term' with a given "type" relative to a given context. Since we cannot
+-- hope to represent dependent type theory in Haskell types anyway, these
+-- "types" are usually instantiated with a dummy, such as the unit type, but the
+-- code that consumes them cannot know that and has to be agnostic to what type
+-- it is.
+newtype CtxTerm ctx a = CtxTerm Term
+
+-- | Build a term in the empty context
+mkClosedTerm :: Term -> CtxTerm 'CNil a
+mkClosedTerm = CtxTerm
+
+-- | Take a term out of the empty context
+elimClosedTerm :: CtxTerm 'CNil a -> Term
+elimClosedTerm (CtxTerm t) = t
+
+-- | A pair of things in a given context
+data CtxPair f1 f2 ctx ab where
+  CtxPair :: f1 ctx a -> f2 ctx b -> CtxPair f1 f2 ctx (a,b)
+
+-- | A list of terms in a given context
+data CtxTerms ctx as where
+  CtxTermsNil :: CtxTerms ctx '[]
+  CtxTermsCons :: CtxTerm ctx a -> CtxTerms ctx as -> CtxTerms ctx (a ': as)
+
+-- | A list of terms in a given context, stored "inside-out"
+{-
+data CtxTermsCtx ctx term_ctx where
+  CtxTermsCtxNil :: CtxTerms ctx 'CNil
+  CtxTermsCtxCons :: CtxTermsCtx ctx term_ctx -> CtxTerm ctx a ->
+                     CtxTermsCtx ctx ('CCons as a)
+-}
+
+-- | A sequence of bindings of pairs of a variable name and a type of some form
+-- for that variable. These bindings are relative to ambient context @ctx@, use
+-- @tp@ for the variable types, and bind variables whose types are listed in
+-- @as@.
+data Bindings (tp :: Ctx * -> * -> *) (ctx :: Ctx *) (as :: [*]) where
+  NoBind :: Bindings tp ctx '[]
+  Bind :: String -> tp ctx a -> Bindings tp ('CCons ctx a) as ->
+          Bindings tp ctx (a ': as)
+
+-- | An inverted list of bindings, seen from the "inside out"
+data InvBindings (tp :: Ctx * -> * -> *) (ctx :: Ctx *) (as :: Ctx *) where
+  InvNoBind :: InvBindings tp ctx 'CNil
+  InvBind :: InvBindings tp ctx as -> String -> tp (CtxApp ctx as) a ->
+             InvBindings tp ctx ('CCons as a)
+
+
+invAppendBindings :: InvBindings tp ctx as ->
+                     Bindings tp (CtxApp ctx as) bs ->
+                     InvBindings tp ctx (CtxBind as bs)
+invAppendBindings as NoBind = as
+invAppendBindings as (Bind y y_tp bs) =
+  (invAppendBindings (InvBind as y y_tp) bs)
+
+invertBindings :: Bindings tp ctx as -> InvBindings tp ctx (CtxBind 'CNil as)
+invertBindings = invAppendBindings InvNoBind
+
+-- | Take a list of terms and match them up with a sequence of bindings,
+-- returning a structured 'CtxTermsCtx' list. Note that the bindings themselves
+-- can be in an arbitrary context, but the terms passed in are assumed to be
+-- closed, i.e., in the empty context.
+ctxTermsForBindings :: Bindings tp ctx as -> [Term] ->
+                       Maybe (CtxTerms 'CNil as)
+ctxTermsForBindings NoBind [] = Just CtxTermsNil
+ctxTermsForBindings (Bind _ _ bs) (t : ts) =
+  CtxTermsCons (mkClosedTerm t) <$> ctxTermsForBindings bs ts
+ctxTermsForBindings _ _ = Nothing
+
+{-
+ctxTermsForBindings bs_top ts_top = helper bs_top (reverse ts_top)
+  where
+    helper :: Bindings tp ctx as -> [Term] -> Maybe (CtxTerms 'CNil as)
+    helper NoBind [] = Just CtxTermsNil
+    helper (Bind bs _ _) (t : ts) =
+      CtxTermsCons <$> helper bs ts <*> Just (mkClosedTerm t)
+    helper _ _ = Nothing
+-}
+
+-- | Prepend a single binding to a sequence of bindings
+{-
+prependBinding :: String -> tp ctx a -> Bindings tp ctx as ->
+                  Bindings tp ctx ('CCons as a)
+prependBinding NoBind x tp = Bind x tp NoBind
+prependBinding (Bind bs y y_tp) x tp = Bind (prependBinding bs x tp) y y_tp
+-}
+
+-- | Append two sequences of 'Bindings'
+{-
+appendBindings :: Bindings tp ctx as ->
+                  Bindings tp (CtxApp ctx as) bs ->
+                  Bindings tp ctx (CtxApp as bs)
+appendBindings as NoBind = as
+appendBindings as (Bind bs y y_tp) = Bind (appendBindings as bs) y y_tp
+-}
+
+-- | A sequence of bindings bundled with something that is relative to those
+-- bindings
+data InBindings tp (f :: Ctx * -> k -> *) ctx (a::k) where
+  InBindings :: Bindings tp ctx as -> f (CtxBind ctx as) a ->
+                InBindings tp f ctx a

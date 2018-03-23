@@ -48,6 +48,8 @@ data Term
   | App Term Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
+  | Recursor (PosPair String)
+  | RecursorProj Term (PosPair String)
     -- | New-style records
   | RecordValue Pos [(PosPair String, Term)]
   | RecordType Pos [(PosPair String, Term)]
@@ -83,6 +85,8 @@ instance Positioned Term where
       Lambda p _ _         -> p
       App x _              -> pos x
       Pi p _ _             -> p
+      Recursor i           -> pos i
+      RecursorProj x _     -> pos x
       RecordValue p _      -> p
       RecordType p _       -> p
       RecordProj x _       -> pos x

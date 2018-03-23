@@ -31,13 +31,22 @@ module Verifier.SAW.Recognizer
   , asTupleType
   , asTupleValue
   , asTupleSelector
+  , asOldTupleType
+  , asOldTupleValue
+  , asOldTupleSelector
   , asFieldType
   , asFieldValue
   , asRecordType
   , asRecordValue
   , asRecordSelector
+  , asOldRecordType
+  , asOldRecordValue
+  , asOldRecordSelector
+  , asCtorParams
   , asCtor
   , asDataType
+  , asDataTypeParams
+  , asRecursorApp
   , isDataType
   , asNatLit
   , asStringLit
@@ -69,6 +78,7 @@ import qualified Data.Map as Map
 import Verifier.SAW.Prim
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
+import Text.Read (readMaybe)
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)
@@ -173,20 +183,41 @@ asTupleType :: (Monad m) => Recognizer m Term [Term]
 asTupleType t = do
   ftf <- asFTermF t
   case ftf of
+    RecordType (recordAListAsTuple -> Just ts) -> return ts
+    _                                          -> fail "asTupleType"
+
+asTupleValue :: (Monad m) => Recognizer m Term [Term]
+asTupleValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    RecordValue (recordAListAsTuple -> Just ts) -> return ts
+    _                                           -> fail "asTupleValue"
+
+asTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
+asTupleSelector t = do
+  ftf <- asFTermF t
+  case ftf of
+    RecordProj u (readMaybe -> Just i) -> return (u, i)
+    _                                  -> fail "asTupleSelector"
+
+asOldTupleType :: (Monad m) => Recognizer m Term [Term]
+asOldTupleType t = do
+  ftf <- asFTermF t
+  case ftf of
     UnitType     -> return []
     PairType x y -> do xs <- asTupleType y; return (x : xs)
     _            -> fail "asTupleType"
 
-asTupleValue :: (Monad m) => Recognizer m Term [Term]
-asTupleValue t = do
+asOldTupleValue :: (Monad m) => Recognizer m Term [Term]
+asOldTupleValue t = do
   ftf <- asFTermF t
   case ftf of
     UnitValue     -> return []
     PairValue x y -> do xs <- asTupleValue y; return (x : xs)
     _             -> fail "asTupleValue"
 
-asTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
-asTupleSelector t = do
+asOldTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
+asOldTupleSelector t = do
   ftf <- asFTermF t
   case ftf of
     PairLeft x  -> return (x, 1)
@@ -211,14 +242,31 @@ asRecordType :: (Monad m) => Recognizer m Term (Map FieldName Term)
 asRecordType t = do
   ftf <- asFTermF t
   case ftf of
+    RecordType elems -> return $ Map.fromList elems
+    _                -> fail $ "asRecordType: " ++ showTerm t
+
+-- | Old version of 'asRecordType', that works on old-style record types
+asOldRecordType :: (Monad m) => Recognizer m Term (Map FieldName Term)
+asOldRecordType t = do
+  ftf <- asFTermF t
+  case ftf of
     EmptyType       -> return Map.empty
     FieldType f x y -> do m <- asRecordType y
                           s <- asStringLit f
                           return (Map.insert s x m)
     _               -> fail $ "asRecordType: " ++ showTerm t
 
+
 asRecordValue :: (Monad m) => Recognizer m Term (Map FieldName Term)
 asRecordValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    RecordValue elems -> return $ Map.fromList elems
+    _                 -> fail $ "asRecordValue: " ++ showTerm t
+
+-- | Old version of 'asRecordValue', that uses 'EmptyValue' and 'FieldValue'
+asOldRecordValue :: (Monad m) => Recognizer m Term (Map FieldName Term)
+asOldRecordValue t = do
   ftf <- asFTermF t
   case ftf of
     EmptyValue       -> return Map.empty
@@ -229,15 +277,36 @@ asRecordValue t = do
 
 asRecordSelector :: (Monad m) => Recognizer m Term (Term, FieldName)
 asRecordSelector t = do
+  RecordProj u s <- asFTermF t
+  return (u, s)
+
+asOldRecordSelector :: (Monad m) => Recognizer m Term (Term, FieldName)
+asOldRecordSelector t = do
   RecordSelector u i <- asFTermF t
   s <- asStringLit i
   return (u, s)
 
-asCtor :: (Monad f) => Recognizer f Term (Ident, [Term])
-asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
+-- | A version of 'asCtor' that returns the parameters separately
+asCtorParams :: (Monad f) => Recognizer f Term (Ident, [Term], [Term])
+asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 
+-- | A version of 'asCtorParams' that combines the parameters and normal args
+asCtor :: (Monad f) => Recognizer f Term (Ident, [Term])
+asCtor t = do CtorApp c ps args <- asFTermF t; return (c,ps ++ args)
+
+-- | A version of 'asDataType' that returns the parameters separately
+asDataTypeParams :: (Monad f) => Recognizer f Term (Ident, [Term], [Term])
+asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
+
+-- | A version of 'asDataTypeParams' that combines the params and normal args
 asDataType :: (Monad f) => Recognizer f Term (Ident, [Term])
-asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l)
+asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
+
+asRecursorApp :: Monad f => Recognizer f Term (Ident,[Term],Term,
+                                               [(Ident,Term)],[Term],Term)
+asRecursorApp t =
+  do RecursorApp d params p_ret cs_fs ixs arg <- asFTermF t;
+     return (d, params, p_ret, cs_fs, ixs, arg)
 
 isDataType :: (Monad f) => Ident -> Recognizer f [Term] a -> Recognizer f Term a
 isDataType i p t = do

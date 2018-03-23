@@ -40,13 +40,21 @@ module Verifier.SAW.SharedTerm
   , scFreshGlobalVar
   , scFreshGlobal
   , scGlobalDef
-  , scModule
+    -- ** Recursors and datatypes
+  , scComputeCtorType
+  , scReduceRecursor
+  , scRecursorFunTypes
+  , scRecursorRetTypeType
+  , allowedElimSort
+    -- ** Term construction
   , scApply
   , scApplyAll
   , scRecord
   , scRecordSelect
   , scRecordType
+  , scDataTypeAppParams
   , scDataTypeApp
+  , scCtorAppParams
   , scCtorApp
   , scApplyCtor
   , scFun
@@ -90,16 +98,12 @@ module Verifier.SAW.SharedTerm
   , scVecType
   , scUpdNatFun
   , scUpdBvFun
-  , scTermCount
-  , PPOpts(..)
-  , defaultPPOpts
-  , scPrettyTerm
-  , scPrettyTermDoc
   , scGlobalApply
   , scSharedTerm
   , scImport
     -- ** Normalization
   , scWhnf
+  , scConvertibleEval
   , scConvertible
     -- ** Type checking
   , scTypeOf
@@ -182,12 +186,12 @@ import Control.Monad.State.Strict as State
 import Data.Bits
 import Data.Maybe
 import qualified Data.Foldable as Fold
-import Data.Foldable (foldl', foldlM, foldrM)
+import Data.Foldable (foldl', foldlM, foldrM, maximum)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import Data.IORef (IORef)
+import Data.IORef (IORef,newIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -273,15 +277,33 @@ scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 scApply :: SharedContext -> Term -> Term -> IO Term
 scApply sc f = scTermF sc . App f
 
+-- | Applies the constructor with the given name to the list of parameters and
+-- arguments. This version does no checking against the module.
+scDataTypeAppParams :: SharedContext -> Ident -> [Term] -> [Term] -> IO Term
+scDataTypeAppParams sc ident params args =
+  scFlatTermF sc (DataTypeApp ident params args)
+
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
 scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
-scDataTypeApp sc ident args = scFlatTermF sc (DataTypeApp ident args)
+scDataTypeApp sc ident args =
+  do Just d <- scFindDataType sc ident
+     let (params,args') = splitAt (length (dtParams d)) args
+     scDataTypeAppParams sc params args'
+
+-- | Applies the constructor with the given name to the list of parameters and
+-- arguments. This version does no checking against the module.
+scCtorAppParams :: SharedContext -> Ident -> [Term] -> [Term] -> IO Term
+scCtorAppParams sc ident params args =
+  scFlatTermF sc (CtorApp ident params args)
 
 -- | Applies the constructor with the given name to the list of
 -- arguments. This version does no checking against the module.
 scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
-scCtorApp sc ident args = scFlatTermF sc (CtorApp ident args)
+scCtorApp sc ident args =
+  do Just ctor <- scFindCtor sc ident
+     let (params,args') = splitAt (length (ctorParams d)) args
+     scCtorAppParams sc params args'
 
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
@@ -323,7 +345,7 @@ scFindDataType sc i =
   findDataType <$> scFindModule sc (identModule i) <*> return i
 
 -- | Look up a constructor by its identifier
-scFindCtor :: SharedContext -> Ident -> IO (Maybe TypedCtor)
+scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
 scFindCtor sc i =
   findCtor <$> scFindModule sc (identModule i) <*> return i
 
@@ -354,7 +376,41 @@ getTerm r a =
 
 
 --------------------------------------------------------------------------------
+-- Substitution, Lifting, and Term Construction for Terms in Context
+
+-- | The class of "in-context" types that support lifting and substitution
+class SCLiftSubst f where
+  -- | Lift an @f@ into an extended context
+  scCtxLift :: SharedContext -> Bindings tp ctx as -> f ctx a ->
+               IO (f (CtxApp ctx as) a)
+  -- | Substitute a list of terms in an @f@
+  scCtxSubst :: SharedContext -> CtxTerms ctx as ->
+                f (CtxBind as ctx) a -> IO (f ctx a)
+
+-- | FIXME HERE: docs!
+scCtxVars :: SharedContext -> Bindings CtxTerm ctx as ->
+             IO (CtxTerms (CtxBind as ctx) as)
+
+scCtxLambda :: SharedContext -> Bindings CtxTerm ctx as ->
+               (CtxTerms (CtxBind as ctx) as ->
+                CtxTerm (CtxBind as ctx) a) ->
+               IO (CtxTerm ctx (Arrows as a))
+
+scCtxPi :: SharedContext -> Bindings CtxTerm ctx as ->
+           (CtxTerms (CtxBind as ctx) as ->
+            CtxTerm (CtxBind as ctx) Typ) ->
+           IO (CtxTerm ctx Typ)
+
+scCtxDataType :: SharedContext -> Ident -> CtxTerms ctx params ->
+                 CtxTerms ctx ixs -> IO (CtxTerm ctx Typ)
+
+
+--------------------------------------------------------------------------------
 -- Recursors
+
+-- | FIXME HERE: docs!
+--scCtorArgType :: 
+
 
 -- | Reduce an application of a recursor. Specifically,
 --
@@ -381,17 +437,31 @@ scReduceRecursor :: SharedContext ->
 scReduceRecursor sc d params p_ret cs_fs c c_args =
   rec_argsM >>= \rec_args -> scApplyAll sc f_c (c_args ++ rec_args)
   where
-    fromJustHelper =
-      maybe (error ("scApplyRecursor: constructor " ++ show c ++ " not found!"))
-      id
+    fromJustHelper msg = maybe (error ("scApplyRecursor: " ++ msg)) id
 
     -- Look up the proper function for c in the cs_fs list of functions
-    f_c = fromJustHelper $ lookup c cs_fs
+    f_c =
+      fromJustHelper ("eliminator for " ++ show c ++ " not found") $
+      lookup c cs_fs
 
     -- Look up the ctorArgs of c and pass them to mk_rec_args
     rec_argsM =
-      (ctorArgs <$> fromJustHelper <$> scFindCtor sc c) >>=
-      mk_rec_args (reverse params) c_args
+      do argStruct <-
+           ctorArgStruct <$>
+           fromJustHelper ("constructor " ++ show c ++ " not found") <$>
+           scFindCtor sc c
+         let params' =
+               fromJustHelper "wrong number of params" $
+               ctxTermsForBindings ctorParams params
+         arg_ctx <- scCtxSubst sc params' ctorArgs
+         let c_args' =
+               fromJustHelper "wrong number of constructor arguments" $
+               ctxTermsForBindings arg_ctx c_args
+         mk_rec_args params' 
+
+    mk_rec_args :: CtorArgStruct -> IO [Term]
+    mk_rec_args (CtorArgStruct {..}) =
+      do 
 
     -- Build the recursive calls rec_tm_i to the recursor for each RecursiveArg
     -- for the constructor c. The prev_args contain the parameters and all the
@@ -436,35 +506,42 @@ scReduceRecursor sc d params p_ret cs_fs c c_args =
 scCtorArgType :: SharedContext -> Ident -> [(String,Term)] -> CtorArg -> IO Term
 scCtorArgType _ _ _ (ConstArg tp) = return tp
 scCtorArgType sc d param_ctx (RecursiveArg zs ixs) =
-  do param_vars <- scVarsForCtx param_ctx
+  do param_vars <- scVarsForCtx sc (length zs) param_ctx
      d_app <- scFlatTermF sc (DataTypeApp d param_vars ixs)
-     scPiList zs d_app
+     scPiList sc zs d_app
 
 -- | Compute the type of a constructor from its context of parameters, its
 -- arguments, its datatype, and its return type indices. This is used to
 -- pre-compute the 'ctorType' field of a 'Ctor'.
-scCtorType :: SharedContext -> [(String,Term)] -> [(String,CtorArg)] ->
-              Ident -> [Term] -> IO Term
-scCtorType sc param_ctx args d ixs =
+scComputeCtorType :: SharedContext -> [(String,Term)] ->
+                     [(String,CtorArg)] -> Ident -> [Term] -> IO Term
+scComputeCtorType sc param_ctx args d ixs =
   do arg_ctx <- mapM (\(str,arg) ->
                        (str,) <$> scCtorArgType sc d param_ctx arg) args
-     param_vars <- scVarsForCtx param_ctx
-     ret_type <- scFlatTermF sc $ DataTypeApp ctorDataTypeName param_vars ixs
+     param_vars <- scVarsForCtx sc (length arg_ctx) param_ctx
+     ret_type <- scFlatTermF sc $ DataTypeApp d param_vars ixs
      scPiList sc (param_ctx ++ arg_ctx) ret_type
 
+-- | Calculate the type of the @p_ret@ return type function for a given
+-- 'DataType', list of parameters for that 'DataType', and return sort. This
+-- should be of the form
+--
+-- > (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
+scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
+scRecursorRetTypeType sc dt params s =
+  do ix_vars <- scVarsForCtx sc 0 (dtIndices dt)
+     params_lifted <- mapM (incVars sc 0 (length $ dtIndices dt)) params
+     d_app <- scFlatTermF sc (DataTypeApp (dtName dt) params_lifted ix_vars)
+     s_tm <- scSort sc s
+     scPiList sc (dtIndices dt ++ [("_",d_app)]) s_tm
 
 -- | Calculate the types of the function arguments to a recursor for datatype
 -- @d@ with parameters @ps@ and return type function @p_ret@
-scRecursorFunTypes :: SharedContext -> Ident -> [Term] -> Term ->
+scRecursorFunTypes :: SharedContext -> DataType -> [Term] -> Term ->
                       IO [(Ident,Term)]
-scRecursorFunTypes sc d params p_ret =
-  ctorsM >>= \ctor -> (ctorName ctor,) <$> mk_fun_type ctor
+scRecursorFunTypes sc dt params p_ret =
+  mapM (\ctor -> (ctorName ctor,) <$> mk_fun_type ctor) (dtCtors dt)
   where
-    ctorsM =
-      dtCtors <$>
-      maybe (error $ "scRecursorFunTypes: " ++ show d ++ " not found!") id <$>
-      scFindDataType sc d
-
     -- Build the type for the eliminator function for ctor, which has the form
     --
     -- (x1::[params/ps]arg1) -> .. -> (xn::[params/ps]argn) ->
@@ -484,6 +561,7 @@ scRecursorFunTypes sc d params p_ret =
     -- terms only expect to be in a context with the ps and x1 .. x(i-1).
     -- Similarly, p_ret must be lifted once for each xj, once for each
     -- rec_call_tp_j where j < i, and once for each zj.
+    mk_fun_type :: Ctor -> IO Term
     mk_fun_type (Ctor{..}) =
       do arg_ctx <- build_arg_ctx 0 ctorDataTypeName ctorArgs
          rec_tps <-
@@ -497,26 +575,30 @@ scRecursorFunTypes sc d params p_ret =
          ixs <- mapM (incVars sc 0 num_rec_tps) ctorDataTypeIndices
 
          -- Build (ctor x1 .. xn) in the context of the rec_call_tps
-         xs <- scVarsForContext num_rec_tps arg_ctx
+         xs <- scVarsForCtx sc num_rec_tps arg_ctx
          ctor_app <- scFlatTermF sc (CtorApp ctorName params xs)
 
          -- Build (p_ret ixs (ctor xs))
          ret_type <- scApplyAll sc p_ret_lifted (ixs ++ [ctor_app])
 
          -- Finally, return the entire Pi type
-         scPiList arg_ctx $ scFunAll rec_tps ret_type
+         scPiList sc arg_ctx =<< scFunAll sc rec_tps ret_type
 
     -- Build the context (xi::[params/ps]argi) -> .. described above
+    build_arg_ctx :: DeBruijnIndex -> Ident -> [(String,CtorArg)] ->
+                     IO [(String,Term)]
     build_arg_ctx _ _ [] = return []
-    build_arg_ctx i d (arg : args) =
+    build_arg_ctx i d ((x, arg) : args) =
       -- NOTE: we have to substitute in params, which, for argument i, start at
       -- deBruijn level i
       (:) <$>
-      (scCtorArgType sc d arg >>= instantiateVarList sc i params) <*>
+      ((x,) <$> (scCtorArgType sc d (dtParams dt) arg >>=
+                 instantiateVarList sc i params)) <*>
       build_arg_ctx (i+1) d args
 
     -- Build the rec_call_tps described above
-    build_rec_tps num_args num_rec_tps ((_,(ConstArg _):args) =
+    build_rec_tps :: Int -> Int -> [(Int,CtorArg)] -> IO [Term]
+    build_rec_tps num_args num_rec_tps ((_,(ConstArg _)):args) =
       build_rec_tps num_args num_rec_tps args
     build_rec_tps num_args num_rec_tps ((i, RecursiveArg z_ctx ixs):args) =
       do
@@ -533,7 +615,7 @@ scRecursorFunTypes sc d params p_ret =
         -- j >= i, once for each rec_call_tp before this one, and once for each
         -- z in z_ctx. Then build (xi z1 .. zl).
         xi <- scLocalVar sc (length z_ctx + arg_lift)
-        xi_app <- scApplyAll sc xi =<< scVarsForCtx z_ctx_lifted
+        xi_app <- scApplyAll sc xi =<< scVarsForCtx sc 0 z_ctx_lifted
 
         -- Lift p_ret once for each argument, once for each earlier rec_call_tp,
         -- and once for each z variable in z_ctx
@@ -547,8 +629,29 @@ scRecursorFunTypes sc d params p_ret =
         return (ret : rest)
 
 
+-- | Test whether a 'DataType' can be eliminated to the given sort. The rules
+-- are that you can only eliminate propositional datatypes to the proposition
+-- sort, unless your propositional data type is the empty type. This differs
+-- slightly from the Coq rules, which allow elimination of propositional
+-- datatypes with a single constructor that has only propositional arguments,
+-- but this Coq behavior can be simulated with the behavior we are using here.
+allowedElimSort :: DataType -> Sort -> Bool
+allowedElimSort dt s =
+  if dtSort dt == propSort && s /= propSort then
+    length (dtCtors dt) == 1
+  else True
+
+
+
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
+
+-- | An elimination for 'scWhnf'
+data WHNFElim
+  = ElimApp Term
+  | ElimProj String
+  | ElimOldPair Bool
+  | ElimOldProj FieldName
 
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term, and evaluates all arguments to type
@@ -569,20 +672,29 @@ scWhnf sc t0 =
         Unshared _ -> go [] t
         STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
 
-    go :: (?cache :: Cache IORef TermIndex Term) =>
-          [Either Term (Either Bool FieldName)] -> Term -> IO Term
-    go xs                     (asApp            -> Just (t, x)) = go (Left x : xs) t
-    go xs                     (asPairSelector   -> Just (t, i)) = go (Right (Left i) : xs) t
-    go xs                     (asRecordSelector -> Just (t, n)) = go (Right (Right n) : xs) t
-    go (Left x : xs)          (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
-    go (Right (Left i) : xs)  (asPairValue -> Just (a, b))      = go xs (if i then b else a)
-    go (Right (Right i) : xs) (asFieldValue -> Just (s, a, b))  = do s' <- memo s
+    go :: (?cache :: Cache IORef TermIndex Term) => [WHNFElim] -> Term -> IO Term
+    go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
+    go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
+    go xs                     (asOldRecordSelector -> Just (t, n)) = go (ElimOldProj n : xs) t
+    go xs                     (asPairSelector -> Just (t, i)) = go (ElimOldPair i : xs) t
+    go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
+    go (ElimOldPair i : xs)   (asPairValue -> Just (a, b))      = go xs (if i then b else a)
+    go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
+                                                                    Just t -> go xs t
+                                                                    Nothing ->
+                                                                      error "scWhnf: field missing in record"
+    go (ElimOldProj i : xs)   (asFieldValue -> Just (s, a, b))  = do s' <- memo s
                                                                      b' <- memo b
                                                                      t' <- scFieldValue sc s' a b'
                                                                      case asRecordValue t' of
                                                                        Just tm -> go xs ((Map.!) tm i)
                                                                        Nothing -> foldM reapply t' xs
     go xs                     (asGlobalDef -> Just c)           = scFindDef sc c >>= tryDef c xs
+    go xs                     (asRecursorApp ->
+                               Just (d, params, p_ret, cs_fs, ixs,
+                                     asCtorParams ->
+                                     Just (c, _, args)))        = (scReduceRecursor sc d params
+                                                                   p_ret cs_fs c args) >>= go xs
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -599,6 +711,10 @@ scWhnf sc t0 =
                                                                      b' <- memo b
                                                                      t' <- scFieldType sc s' a' b'
                                                                      foldM reapply t' xs
+    go xs                     (asRecordType -> Just elems)   = do elems' <-
+                                                                    mapM (\(i,t) -> (i,) <$> memo t) (Map.assocs elems)
+                                                                  t' <- scRecordType sc elems'
+                                                                  foldM reapply t' xs
     go xs                     (asPi -> Just (x,aty,rty))        = do aty' <- memo aty
                                                                      rty' <- memo rty
                                                                      t' <- scPi sc x aty' rty'
@@ -609,31 +725,35 @@ scWhnf sc t0 =
     go xs                     (asConstant -> Just (_,body,_))   = do go xs body
     go xs                     t                                 = foldM reapply t xs
 
-    reapply :: Term -> Either Term (Either Bool FieldName) -> IO Term
-    reapply t (Left x) = scApply sc t x
-    reapply t (Right (Left i)) = scPairSelector sc t i
-    reapply t (Right (Right i)) = scRecordSelect sc t i
+    reapply :: Term -> WHNFElim -> IO Term
+    reapply t (ElimApp x) = scApply sc t x
+    reapply t (ElimProj i) = scRecordSelect sc t i
+    reapply t (ElimOldPair i) = scPairSelector sc t i
+    reapply t (ElimOldProj i) = scOldRecordSelect sc t i
 
     tryDef :: (?cache :: Cache IORef TermIndex Term) =>
-              Ident -> [Either Term (Either Bool FieldName)] -> Maybe Def ->
-              IO Term
+              Ident -> [WHNFElim] -> Maybe Def -> IO Term
     tryDef ident xs (Just (defBody -> Just t)) = go xs t
     tryDef ident xs _ = scGlobalDef sc ident >>= flip (foldM reapply) xs
 
 
--- | Test if two terms are convertible; that is, if they are equivalent under evaluation.
-scConvertible :: SharedContext
-              -> Bool -- ^ Should abstract constants be unfolded during this check?
-              -> Term
-              -> Term
-              -> IO Bool
-scConvertible sc unfoldConst tm1 tm2 = do
+-- | Test if two terms are convertible up to a given evaluation procedure. In
+-- practice, this procedure is usually 'scWhnf', possibly combined with some
+-- rewriting.
+scConvertibleEval :: SharedContext
+                  -> (SharedContext -> Term -> IO Term)
+                  -> Bool -- ^ Should constants be unfolded during this check?
+                  -> Term
+                  -> Term
+                  -> IO Bool
+scConvertibleEval sc eval unfoldConst tm1 tm2 = do
    c <- newCache
    go c tm1 tm2
 
  where whnf :: Cache IORef TermIndex Term -> Term -> IO (TermF Term)
-       whnf _c t@(Unshared _) = unwrapTermF <$> scWhnf sc t
-       whnf c t@(STApp{ stAppIndex = idx}) = unwrapTermF <$> (useCache c idx $ scWhnf sc t)
+       whnf _c t@(Unshared _) = unwrapTermF <$> eval sc t
+       whnf c t@(STApp{ stAppIndex = idx}) =
+         unwrapTermF <$> useCache c idx (eval sc t)
 
        go :: Cache IORef TermIndex Term -> Term -> Term -> IO Bool
        go _c (STApp{ stAppIndex = idx1}) (STApp{ stAppIndex = idx2})
@@ -664,34 +784,50 @@ scConvertible sc unfoldConst tm1 tm2 = do
        -- final catch-all case
        goF _c x y = return $ alphaEquiv (Unshared x) (Unshared y)
 
+
+-- | Test if two terms are convertible using 'scWhnf' for evaluation
+scConvertible :: SharedContext
+              -> Bool -- ^ Should constants be unfolded during this check?
+              -> Term
+              -> Term
+              -> IO Bool
+scConvertible sc = scConvertibleEval sc scWhnf
+
+
 --------------------------------------------------------------------------------
 -- Type checking
 
+-- | @reducePi sc (Pi x tp body) t@ returns @[t/x]body@, and otherwise fails
 reducePi :: SharedContext -> Term -> Term -> IO Term
 reducePi sc t arg = do
   t' <- scWhnf sc t
   case asPi t' of
     Just (_, _, body) -> instantiateVar sc 0 arg body
-    _                 -> fail $ unlines ["reducePi: not a Pi term", scPrettyTerm defaultPPOpts t']
+    _ ->
+      fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
-    case findDef (scModule sc) ident of
-      Nothing -> fail $ "scTypeOfGlobal: failed to find " ++ show ident ++ " in module."
-      Just d -> scSharedTerm sc (defType d)
+  do maybe_d <- scFindDef sc ident
+     case maybe_d of
+       Nothing ->
+         fail $ "scTypeOfGlobal: failed to find " ++ show ident ++ " in module."
+       Just d -> scSharedTerm sc (defType d)
 
 scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
-    case findDataType (scModule sc) ident of
-      Nothing -> fail $ "scTypeOfDataType: failed to find " ++ show ident ++ " in module."
-      Just d ->
-        scPiList (dtParams d) =<< scSharedTerm sc (dtRetType d)
+  do maybe_d <- scFindDataType sc ident
+     case maybe_d of
+       Nothing ->
+         fail $ "scTypeOfDataType: failed to find " ++ show ident
+       Just d -> scSharedTerm sc (dtType d)
 
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
-    case findCtor (scModule sc) ident of
-      Nothing -> fail $ "scTypeOfCtor: failed to find " ++ show ident ++ " in module."
-      Just d -> scSharedTerm sc (ctorType d)
+  do maybe_ctor <- scFindCtor sc ident
+     case maybe_ctor of
+       Nothing -> fail $ "scTypeOfCtor: failed to find " ++ show ident
+       Just ctor -> scSharedTerm sc (ctorType ctor)
 
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
@@ -769,12 +905,26 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           m <- asRecordType t'
           let Just tp = Map.lookup f' m
           return tp
-        CtorApp c args -> do
+        CtorApp c params args -> do
           t <- lift $ scTypeOfCtor sc c
-          lift $ foldM (reducePi sc) t args
-        DataTypeApp dt args -> do
+          lift $ foldM (reducePi sc) t (params ++ args)
+        DataTypeApp dt params args -> do
           t <- lift $ scTypeOfDataType sc dt
-          lift $ foldM (reducePi sc) t args
+          lift $ foldM (reducePi sc) t (params ++ args)
+        RecursorApp _ _ p_ret _ ixs arg ->
+          lift $ scApplyAll sc p_ret (ixs ++ [arg])
+        RecordType elems ->
+          do max_s <- maximum <$> mapM (sort . snd) elems
+             lift $ scSort sc max_s
+        RecordValue elems ->
+          do elem_tps <- mapM (\(fld,t) -> (fld,) <$> memo t) elems
+             lift $ scRecordType sc elem_tps
+        RecordProj t fld ->
+          do tp <- memo t
+             case asRecordType tp of
+               Just (Map.lookup fld -> Just f_tp) -> return f_tp
+               Just _ -> fail "Record field not in record type"
+               Nothing -> fail "Record project of non-record type"
         Sort s -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
@@ -868,7 +1018,7 @@ incVarsCtx :: SharedContext -> DeBruijnIndex -> DeBruijnIndex ->
 incVarsCtx _ _ _ [] = return []
 incVarsCtx sc k j ((x,tp):ctx) =
   -- NOTE: increment k when we recurse, since we are moving under the binding
-  (:) <$> ((x,) <$> incVars k j tp) <*> incVarsCtx sc (k+1) j ctx
+  (:) <$> ((x,) <$> incVars sc k j tp) <*> incVarsCtx sc (k+1) j ctx
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
@@ -932,6 +1082,9 @@ instantiateVarListCtx sc k ts ((str,tp):ctx) =
   instantiateVarListCtx sc (k+1) ts ctx
 
 
+instantiateVarListCtxTerms :: SharedContext 
+
+
 --------------------------------------------------------------------------------
 -- Beta Normalization
 
@@ -965,86 +1118,6 @@ betaNormalize sc t0 =
     traverseTF _ tf@(Constant _ _ _) = pure tf
     traverseTF f tf = traverse f tf
 
---------------------------------------------------------------------------------
--- Pretty printing
-
-
-scPrettyTermDoc :: PPOpts -> Term -> Doc
-scPrettyTermDoc opts t0 =
-  ppLets lets0 (ppTermDoc (ppt (n0, dm0) False lcls0 PrecNone t0))
-  where
-    lcls0 = emptyLocalVarDoc
-
-    -- | Terms in top-level let block.
-    cm0 :: IntMap Term
-    cm0 =
-      IntMap.filter (\t -> looseVars t == 0) $ fmap fst $
-      IntMap.filter shouldName (scTermCount True t0) -- Occurrence map
-
-    -- Terms bound in map.
-    bound0 :: [(TermIndex, Term)]
-    bound0 = IntMap.assocs cm0
-
-    lets0 = [ ppEqn m (n0, dm0) lcls0 PrecNone t | ((_, t), m) <- bound0 `zip` [0..] ]
-
-    dm0 :: IntMap Doc
-    dm0 = IntMap.fromList (zip (IntMap.keys cm0) (map var [0..]))
-
-    n0 :: Int
-    n0 = IntMap.size dm0
-
-    ppLets :: [Doc] -> Doc -> Doc
-    ppLets lets doc
-      | null lets = doc
-      | otherwise = ppLetBlock lets doc
-
-    -- | Return true if variable should be introduced to name term.
-    shouldName :: (Term, Int) -> Bool
-    shouldName (t, c) =
-      case unwrapTermF t of
-        FTermF GlobalDef{} -> False
-        FTermF UnitValue -> False
-        FTermF UnitType -> False
-        FTermF EmptyValue -> False
-        FTermF EmptyType -> False
-        FTermF (CtorApp _ []) -> False
-        FTermF (DataTypeApp _ []) -> False
-        FTermF NatLit{} -> False
-        FTermF (ArrayValue _ v) | V.length v == 0 -> False
-        FTermF FloatLit{} -> False
-        FTermF DoubleLit{} -> False
-        FTermF StringLit{} -> False
-        FTermF ExtCns{} -> False
-        LocalVar{} -> False
-        _ -> c > 1
-
-    var :: Int -> Doc
-    var n = char 'x' <> integer (toInteger n)
-
-    ppEqn :: Int -> (Int, IntMap Doc) -> LocalVarDoc -> Prec -> Term -> Doc
-    ppEqn m (n, dm) lcls p t =
-      var m <+> char '=' <+>
-      ppTermDoc (ppTermF opts (ppt (n, dm)) lcls p (unwrapTermF t)) <> char ';'
-
-    ppt :: (Int, IntMap Doc) -> Bool -> LocalVarDoc -> Prec -> Term -> TermDoc
-    ppt (n, dm) False lcls p (Unshared tf) = ppTermF opts (ppt (n, dm)) lcls p tf
-    ppt (n, dm) False lcls p (STApp{stAppIndex = i, stAppTermF = tf}) =
-      case IntMap.lookup i dm of
-        Just d -> TermDoc d
-        Nothing -> ppTermF opts (ppt (n, dm)) lcls p tf
-    ppt (n, dm) True lcls _p t =
-      TermDoc $ ppLets lets (ppTermDoc (ppt (n', dm') False lcls PrecNone t))
-      where
-        cm1 = fmap fst $ IntMap.filter shouldName (scTermCount False t)
-        cm = IntMap.difference cm1 dm0 -- remove already-named entries
-        dm1 = IntMap.fromList (zip (IntMap.keys cm) (map var [n ..]))
-        dm' = IntMap.union dm dm1
-        n' = n + IntMap.size cm
-        lets = [ ppEqn m (n', dm') lcls PrecNone rhs
-               | (rhs, m) <- IntMap.elems cm `zip` [n ..] ]
-
-scPrettyTerm :: PPOpts -> Term -> String
-scPrettyTerm opts t = show (scPrettyTermDoc opts t)
 
 --------------------------------------------------------------------------------
 -- Building shared terms
@@ -1065,7 +1138,7 @@ scDefTerm sc d = scGlobalDef sc (defIdent d)
 -- constructor identifier in the module.
 
 -- | Deprecated. Use scCtorApp instead.
-scApplyCtor :: SharedContext -> TypedCtor -> [Term] -> IO Term
+scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
 scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
 scSort :: SharedContext -> Sort -> IO Term
@@ -1084,19 +1157,28 @@ scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
-scRecord sc m = go (Map.assocs m)
+scRecord sc m = scFlatTermF sc (RecordType $ Map.assocs m)
+
+scOldRecord :: SharedContext -> Map FieldName Term -> IO Term
+scOldRecord sc m = go (Map.assocs m)
   where go [] = scEmptyValue sc
         go ((f, x) : xs) = do l <- scString sc f
                               r <- go xs
                               scFieldValue sc l x r
 
 scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
-scRecordSelect sc t fname = do
+scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
+
+scOldRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
+scOldRecordSelect sc t fname = do
   l <- scString sc fname
   scFlatTermF sc (RecordSelector t l)
 
-scRecordType :: SharedContext -> Map FieldName Term -> IO Term
-scRecordType sc m = go (Map.assocs m)
+scRecordType :: SharedContext -> [(String,Term)] -> IO Term
+scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
+
+scOldRecordType :: SharedContext -> Map FieldName Term -> IO Term
+scOldRecordType sc m = go (Map.assocs m)
   where go [] = scEmptyType sc
         go ((f, x) : xs) = do l <- scString sc f
                               r <- go xs
@@ -1127,12 +1209,18 @@ scFieldType :: SharedContext -> Term -> Term -> Term -> IO Term
 scFieldType sc f x y = scFlatTermF sc (FieldType f x y)
 
 scTuple :: SharedContext -> [Term] -> IO Term
-scTuple sc [] = scUnitValue sc
-scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
+scTuple sc ts = scFlatTermF sc (RecordValue $ tupleAsRecordAList ts)
+
+scOldTuple :: SharedContext -> [Term] -> IO Term
+scOldTuple sc [] = scUnitValue sc
+scOldTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 scTupleType :: SharedContext -> [Term] -> IO Term
-scTupleType sc [] = scUnitType sc
-scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
+scTupleType sc ts = scFlatTermF sc (RecordType $ tupleAsRecordAList ts)
+
+scOldTupleType :: SharedContext -> [Term] -> IO Term
+scOldTupleType sc [] = scUnitType sc
+scOldTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc t = scFlatTermF sc (PairLeft t)
@@ -1145,11 +1233,14 @@ scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
 
 scTupleSelector :: SharedContext -> Term -> Int -> IO Term
-scTupleSelector sc t i
+scTupleSelector sc t i = scRecordSelect sc t (show i)
+
+scOldTupleSelector :: SharedContext -> Term -> Int -> IO Term
+scOldTupleSelector sc t i
   | i == 1    = scPairLeft sc t
   | i > 1     = do t' <- scPairRight sc t
-                   scTupleSelector sc t' (i - 1)
-  | otherwise = fail "scTupleSelector: non-positive index"
+                   scOldTupleSelector sc t' (i - 1)
+  | otherwise = fail "scOldTupleSelector: non-positive index"
 
 scFun :: SharedContext -> Term -> Term -> IO Term
 scFun sc a b = do b' <- incVars sc 0 1 b
@@ -1203,7 +1294,7 @@ scLocalVar sc i = scTermF sc (LocalVar i)
 -- deBruijn index.
 scVarsForCtx :: SharedContext -> DeBruijnIndex -> [(String,Term)] -> IO [Term]
 scVarsForCtx sc i ctx =
-  reverse <$> zipWithM (scLocalVar sc . const) [i ..] ctx
+  reverse <$> zipWithM (\j _ -> scLocalVar sc j) [i ..] ctx
 
 scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
@@ -1482,13 +1573,14 @@ scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
-mkSharedContext :: Module -> IO SharedContext
-mkSharedContext m = do
+mkSharedContext :: IO SharedContext
+mkSharedContext = do
   vr <- newMVar 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
+  mod_map_ref <- newIORef HMap.empty
   return SharedContext {
-             scModule = m
+             scModuleMap = mod_map_ref
            , scTermF = getTerm cr
            , scFreshGlobalVar = freshGlobalVar
            }

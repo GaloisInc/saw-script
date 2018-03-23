@@ -80,6 +80,7 @@ import Verifier.SAW.Lexer
   'primitive' { PosPair _ (TKey "primitive") }
   nat      { PosPair _ (TNat _) }
   ident    { PosPair _ (TIdent _) }
+  identrec { PosPair _ (TRecursor _) }
   string   { PosPair _ (TString _) }
 
 %%
@@ -163,9 +164,11 @@ AtomTerm
   : nat                          { NatLit (pos $1) (tokNat (val $1)) }
   | string                       { StringLit (pos $1) (tokString (val $1)) }
   | Ident                        { Name $1 }
+  | IdentRec                     { Recursor $1 }
   | 'Prop'                       { Sort (pos $1) propSort }
   | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
+  | AtomTerm '.' IdentRec        { RecursorProj $1 $3 }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
   | '(' sepBy(Term, ',') ')'     { parseTuple (pos $1) $2 }
   | '#' '(' sepBy(Term, ',') ')'       {% parseTupleType (pos $1) $3 }
@@ -180,6 +183,9 @@ AtomTerm
 
 Ident :: { PosPair String }
 Ident : ident { fmap tokIdent $1 }
+
+IdentRec :: { PosPair String }
+IdentRec : identrec { fmap tokRecursor $1 }
 
 FieldValue :: { (PosPair String, Term) }
 FieldValue : Ident '=' Term { ($1, $3) }

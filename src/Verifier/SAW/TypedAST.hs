@@ -24,7 +24,6 @@ module Verifier.SAW.TypedAST
  , moduleDataTypes
  , moduleImports
  , findDataType
- , TypedCtor
  , moduleCtors
  , findCtor
  , moduleDefs
@@ -42,6 +41,7 @@ module Verifier.SAW.TypedAST
    -- * Data types and definitions.
  , DataType(..)
  , Ctor(..)
+ , CtorArg(..)
  , Def(..)
  , DefQualifier(..)
  , patBoundVarCount
@@ -60,6 +60,8 @@ module Verifier.SAW.TypedAST
  , defaultPPOpts
  , ppTerm
  , ppTermDepth
+ , showTerm
+ , scPrettyTerm
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf
  , Ident(identModule, identName), mkIdent

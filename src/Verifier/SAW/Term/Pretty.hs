@@ -19,6 +19,7 @@ module Verifier.SAW.Term.Pretty
   , depthPPOpts
   , ppTerm
   , showTerm
+  , scPrettyTerm
   , ppTermDepth
   , ppModule
   , showModule
@@ -354,11 +355,6 @@ ppDef :: Doc -> Doc -> Maybe Doc -> Doc
 ppDef d tp Nothing = ppTypeConstraint d tp
 ppDef d tp (Just body) = ppTypeConstraint d tp <+> equals <+> body
 
--- | Pretty-print a constructor declaration @c (x1::tp1) .. (xn::tpn) :: d args@
-ppCtor :: Ident -> Ident -> (Doc, [Doc]) -> Doc
-ppCtor c d (ctx, d_args) =
-  ppTypeConstraint (ppIdent c <<$>> ctx) (ppAppList PrecNone (ppIdent d) d_args)
-
 -- | Pretty-print a datatype declaration of the form
 -- > data d (p1::tp1) .. (pN::tpN) :: tp where {
 -- >   c1 (x1_1::tp1_1)  .. (x1_N::tp1_N) :: tp1
@@ -401,13 +397,23 @@ ppFlatTermF prec tf =
       ppTerm' PrecNone x <*> ppTerm' PrecNone y
     RecordSelector t f  ->
       ppOldRecordSel <$> ppTerm' PrecArg t <*> ppTerm' PrecArg f
-    CtorApp c args      ->
-      ppAppList prec (ppIdent c) <$> mapM (ppTerm' PrecArg) args
-    DataTypeApp dt args ->
-      ppAppList prec (ppIdent dt) <$> mapM (ppTerm' PrecArg) args
-    RecursorApp dt args ->
-      ppAppList prec (ppIdent dt <> text "__rec") <$>
-      mapM (ppTerm' PrecArg) args
+    CtorApp c params args ->
+      ppAppList prec (ppIdent c) <$> mapM (ppTerm' PrecArg) (params ++ args)
+    DataTypeApp dt params args ->
+      ppAppList prec (ppIdent dt) <$> mapM (ppTerm' PrecArg) (params ++ args)
+    RecursorApp d params p_ret cs_fs ixs arg ->
+      do params_pp <- mapM (ppTerm' PrecArg) params
+         p_ret_pp <- ppTerm' PrecArg p_ret
+         fs_pp <- mapM (ppTerm' PrecNone . snd) cs_fs
+         ixs_pp <- mapM (ppTerm' PrecArg) ixs
+         arg_pp <- ppTerm' PrecArg arg
+         return $
+           ppAppList prec (ppIdent d <> text "#rec")
+           (params_pp ++ [p_ret_pp] ++
+            [tupled $
+             zipWith (\(c,_) f_pp -> ppIdent c <<$>> text "=>" <<$>> f_pp)
+             cs_fs fs_pp]
+            ++ ixs_pp ++ [arg_pp])
     RecordType alist ->
       ppRecord True <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecNone t) alist
     RecordValue alist ->
@@ -498,8 +504,8 @@ shouldMemoizeTerm t =
     FTermF UnitType -> False
     FTermF EmptyValue -> False
     FTermF EmptyType -> False
-    FTermF (CtorApp _ []) -> False
-    FTermF (DataTypeApp _ []) -> False
+    FTermF (CtorApp _ [] []) -> False
+    FTermF (DataTypeApp _ [] []) -> False
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF FloatLit{} -> False
@@ -579,9 +585,14 @@ ppTerm opts trm = runPPM opts $ ppTermWithMemoTable PrecNone True trm
 ppTermDepth :: Int -> Term -> Doc
 ppTermDepth depth t = ppTerm (depthPPOpts depth) t
 
+-- | Pretty-print a term and render it to a string, using the given options
+scPrettyTerm :: PPOpts -> Term -> String
+scPrettyTerm opts t =
+  flip displayS "" $ renderPretty 0.8 80 $ ppTerm opts t
+
 -- | Pretty-print a term and render it to a string
 showTerm :: Term -> String
-showTerm t = show $ ppTerm defaultPPOpts t
+showTerm t = scPrettyTerm defaultPPOpts t
 
 
 --------------------------------------------------------------------------------
@@ -600,11 +611,10 @@ ppModule opts m =
     ppDecl (TypeDecl d) =
       ppDataType (dtName d) <$> ppWithBoundCtx (dtParams d)
       ((,) <$>
-       ppWithBoundCtx (dtArgs d) (return $ text $ show $ dtSort d) <*>
+       ppWithBoundCtx (dtIndices d) (return $ text $ show $ dtSort d) <*>
        mapM (\c ->
-              ppCtor (ctorName c) (dtName d) <$>
-              ppWithBoundCtx (ctorArgs c)
-              (mapM (ppTerm' PrecNone) (ctorDataTypeIndices c)))
+              ppTypeConstraint (ppIdent (ctorName c)) <$>
+              ppTerm' PrecNone (ctorType c))
        (dtCtors d))
     ppDecl (DefDecl d) =
       ppDef (ppIdent $ defIdent d) <$> ppTerm' PrecNone (defType d) <*>
