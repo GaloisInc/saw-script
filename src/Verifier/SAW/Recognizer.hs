@@ -82,8 +82,8 @@ instance Field2 (a :*: b) (a :*: b') b b' where
 type Recognizer m t a = t -> m a
 
 -- | Tries both recognizers.
-(<>) :: Alternative f => Recognizer f t a -> Recognizer f t a -> Recognizer f t a
-(<>) f g t = f t <|> g t
+orElse :: Alternative f => Recognizer f t a -> Recognizer f t a -> Recognizer f t a
+orElse f g t = f t <|> g t
 
 -- | Recognizes the head and tail of a list, and returns head.
 (<:) :: Monad f
@@ -313,7 +313,7 @@ asVecType = isVecType return
 asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNatLit)
-  <> isDataType "Prelude.Vec"
+  `orElse` isDataType "Prelude.Vec"
                 (asNatLit <: endl (isDataType "Prelude.Bool" emptyl))
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
