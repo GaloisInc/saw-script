@@ -6,6 +6,7 @@
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {- |
 Module      : Verifier.SAW.SharedTerm
@@ -183,6 +184,7 @@ import Control.Exception
 import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
+import Control.Monad.Reader
 import Data.Bits
 import Data.Maybe
 import qualified Data.Foldable as Fold
@@ -206,6 +208,7 @@ import Verifier.SAW.Change
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.CtxTerm
 --import Verifier.SAW.Term.Pretty
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Unique
@@ -376,41 +379,23 @@ getTerm r a =
 
 
 --------------------------------------------------------------------------------
--- Substitution, Lifting, and Term Construction for Terms in Context
-
--- | The class of "in-context" types that support lifting and substitution
-class SCLiftSubst f where
-  -- | Lift an @f@ into an extended context
-  scCtxLift :: SharedContext -> Bindings tp ctx as -> f ctx a ->
-               IO (f (CtxApp ctx as) a)
-  -- | Substitute a list of terms in an @f@
-  scCtxSubst :: SharedContext -> CtxTerms ctx as ->
-                f (CtxBind as ctx) a -> IO (f ctx a)
-
--- | FIXME HERE: docs!
-scCtxVars :: SharedContext -> Bindings CtxTerm ctx as ->
-             IO (CtxTerms (CtxBind as ctx) as)
-
-scCtxLambda :: SharedContext -> Bindings CtxTerm ctx as ->
-               (CtxTerms (CtxBind as ctx) as ->
-                CtxTerm (CtxBind as ctx) a) ->
-               IO (CtxTerm ctx (Arrows as a))
-
-scCtxPi :: SharedContext -> Bindings CtxTerm ctx as ->
-           (CtxTerms (CtxBind as ctx) as ->
-            CtxTerm (CtxBind as ctx) Typ) ->
-           IO (CtxTerm ctx Typ)
-
-scCtxDataType :: SharedContext -> Ident -> CtxTerms ctx params ->
-                 CtxTerms ctx ixs -> IO (CtxTerm ctx Typ)
-
-
---------------------------------------------------------------------------------
 -- Recursors
 
--- | FIXME HERE: docs!
---scCtorArgType :: 
+-- | Helper monad for building terms relative to a 'SharedContext'
+newtype ShCtxM a = ShCtxM (ReaderT SharedContext IO a)
+                 deriving (Functor, Applicative, Monad)
 
+scShCtxM :: SharedContext -> ShCtxM a -> IO a
+scShCtxM sc (ShCtxM m) = runReaderT m sc
+
+instance MonadReader SharedContext ShCtxM where
+  ask = ShCtxM ask
+  local f = ShCtxM $ local f
+
+instance MonadTerm ShCtxM where
+  mkTermF tf = ask >>= \sc -> scTermF sc tf
+  liftTerm n i t = ask >>= \sc -> incVars n i t
+  substTerm n subst t = ask >>= \sc -> instantiateVarList sc n subst t
 
 -- | Reduce an application of a recursor. Specifically,
 --
@@ -435,80 +420,33 @@ scReduceRecursor :: SharedContext ->
                     Ident -> [Term] -> Term -> [(Ident,Term)] ->
                     Ident -> [Term] -> IO Term
 scReduceRecursor sc d params p_ret cs_fs c c_args =
-  rec_argsM >>= \rec_args -> scApplyAll sc f_c (c_args ++ rec_args)
+  (do argStruct <-
+        ctorArgStruct <$>
+        fromJustErr ("constructor " ++ show c ++ " not found") <$>
+        scFindCtor sc c
+      rec_args <- mk_rec_args_top argStruct
+      scApplyAll sc f_c (c_args ++ rec_args))
   where
-    fromJustHelper msg = maybe (error ("scApplyRecursor: " ++ msg)) id
+    -- Helper function for throwing an error message when fromJust fails
+    fromJustErr msg = maybe (error ("scReduceRecursor: " ++ msg)) id
 
     -- Look up the proper function for c in the cs_fs list of functions
     f_c =
-      fromJustHelper ("eliminator for " ++ show c ++ " not found") $
+      fromJustErr ("eliminator for " ++ show c ++ " not found") $
       lookup c cs_fs
 
     -- Look up the ctorArgs of c and pass them to mk_rec_args
-    rec_argsM =
-      do argStruct <-
-           ctorArgStruct <$>
-           fromJustHelper ("constructor " ++ show c ++ " not found") <$>
-           scFindCtor sc c
-         let params' =
-               fromJustHelper "wrong number of params" $
-               ctxTermsForBindings ctorParams params
-         arg_ctx <- scCtxSubst sc params' ctorArgs
-         let c_args' =
-               fromJustHelper "wrong number of constructor arguments" $
-               ctxTermsForBindings arg_ctx c_args
-         mk_rec_args params' 
+    mk_rec_args_top :: CtorArgStruct -> IO [Term]
+    mk_rec_args_top (CtorArgStruct {..}) =
+      let params_terms =
+            fromJustErr "wrong number of params" $
+            ctxTermsForBindings ctorParams params
+          c_args_terms =
+            fromJustErr "wrong number of constructor arguments" $
+            ctxTermsForBindings ctorArgs c_args in
+      scShCtxM sc $
+      mk_rec_args params_terms (invertTerms params_terms) c_args_terms ctorArgs
 
-    mk_rec_args :: CtorArgStruct -> IO [Term]
-    mk_rec_args (CtorArgStruct {..}) =
-      do 
-
-    -- Build the recursive calls rec_tm_i to the recursor for each RecursiveArg
-    -- for the constructor c. The prev_args contain the parameters and all the
-    -- ordinary constructor arguments x1 through x(i-1) for the previous
-    -- constructor arguments before the current argument. These are in reverse
-    -- order, with the most recently-added argument first. These are necessary
-    -- as they must be substituted into the argument types for the recursive
-    -- calls.
-    mk_rec_args _ [] [] = return []
-    mk_rec_args prev_args (c_arg:c_args) (ConstArg _:args) =
-      mk_rec_args (c_arg:prev_args) c_args args
-    mk_rec_args prev_args (c_arg:c_args) (RecursiveArg zs ixs : args) =
-      (:) <$> build_rec_call prev_args zs ixs c_arg <*>
-      mk_rec_args (c_arg:prev_args) c_args args
-
-    -- Build a recursive call that abstracts over arguments zs and recurses over
-    -- c_arg with type indices ixs. The zs and ixs have the parameters and also
-    -- all previous arguments x1, .., x(i-1) as free variables, so we must
-    -- substitute the actual parameters and earlier argument values for
-    -- them. Note that these previous arguments are built up as a reversed list,
-    -- since instantiateVarList wants the most recent variables first (see
-    -- comments after that function, below). Note also that everything in the
-    -- return type, other than zs and ixs, need to be lifted into the context of
-    -- the zs.
-    build_rec_call prev_args zs ixs c_arg =
-      do (inst_zs, inst_ixs) <-
-           instantiateVarListCtxTerms sc 0 prev_args (zs, ixs)
-         params_lifted <- mapM (incVars sc 0 (length zs)) params
-         p_ret_lifted <- incVars sc 0 (length zs) p_ret
-         cs_fs_lifted <-
-           mapM (\(c,f) -> (c,) <$> incVars sc 0 (length zs) f) cs_fs
-         c_arg_lifted <- incVars sc 0 (length zs) c_arg
-         body <-
-           scFlatTermF sc (RecursorApp d params_lifted p_ret_lifted cs_fs_lifted
-                           inst_ixs c_arg_lifted)
-         scLambdaList sc inst_zs body
-
-
--- | Convert a 'CtorArg' to the type it describes, given the datatype and
--- parameter context for the constructor. Note that the returned type will have
--- all the parameters and all previous constructor arguments as free variables.
-scCtorArgType :: SharedContext -> Ident -> [(String,Term)] -> CtorArg -> IO Term
-scCtorArgType _ _ _ (ConstArg tp) = return tp
-scCtorArgType sc d param_ctx (RecursiveArg zs ixs) =
-  do param_vars <- scVarsForCtx sc (length zs) param_ctx
-     d_app <- scFlatTermF sc (DataTypeApp d param_vars ixs)
-     scPiList sc zs d_app
 
 -- | Compute the type of a constructor from its context of parameters, its
 -- arguments, its datatype, and its return type indices. This is used to

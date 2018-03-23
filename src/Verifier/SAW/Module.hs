@@ -5,8 +5,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ExistentialQuantification #-}
 
 {- |
 Module      : Verifier.SAW.Module
@@ -70,6 +68,7 @@ import GHC.Generics (Generic)
 import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.Utils (sumBy, internalError)
 
 -- Patterns --------------------------------------------------------------------
@@ -152,31 +151,6 @@ instance Hashable Def -- automatically derived
 
 
 -- Constructors ----------------------------------------------------------------
-
--- | A specification of a constructor argument with a given type in a given
--- context of parameters and earlier arguments
-data CtorArg ixs ctx a
-  = ConstArg (CtxTerm ctx a)
-    -- ^ A fixed, constant type
-  | RecursiveArg (InBindings CtxTerm CtxTerms ctx ixs)
-    -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
-    -- specifies a recursive argument type of the form
-    --
-    -- > (z1::tp1) -> .. -> (zn::tpn) -> d p1 .. pm e1 .. ek
-    --
-    -- where @d@ is the datatype (not given here), the @zi::tpi@ are the
-    -- elements of the Pi context (the first argument to 'RecursiveArgType'),
-    -- the @pi@ are the parameters of @d@ (not given here), and the @ei@ are the
-    -- type indices of @d@.
-
-data CtorArgStruct =
-  forall params ixs args.
-  CtorArgStruct
-  {
-    ctorParams :: Bindings CtxTerm 'CNil params,
-    ctorIndices :: Bindings CtxTerm params ixs,
-    ctorArgs :: Bindings (CtorArg ixs) params args
-  }
 
 -- | A specification of a constructor
 data Ctor =

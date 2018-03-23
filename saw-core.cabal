@@ -75,6 +75,7 @@ library
      Verifier.SAW.Simulator.Value
      Verifier.SAW.SharedTerm
      Verifier.SAW.Term.Functor
+     Verifier.SAW.Term.CtxTerm
      Verifier.SAW.Term.Pretty
      Verifier.SAW.TermNet
      Verifier.SAW.Testing.Random
