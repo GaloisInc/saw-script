@@ -651,6 +651,16 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
      -- in particular, `CryFun` is used only in pre-conditions and all
      -- its argumnets are `LocPre` (i.e., the values before execution).
 
+     -- Note 2: Sometimes it is useful for CryFun to depend on the current
+     -- state.  For example, consider a function which computes two things
+     -- f : x -> (a,b)
+     -- Now we may have specs like this:
+     --    a = spec1 x
+     --    b = spec2 x a
+     -- Of course, we could replcae `b` by:
+     --    b = spec2 x (spec1 x)
+     -- but that's ugly and duplicates stuff.
+
      vs <- mapM (\v -> eval v opts s) ys
 
      let sym = optsSym opts
