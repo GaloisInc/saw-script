@@ -7,6 +7,7 @@ Stability   : provisional
 
 module SAWScript.Prover.SolverStats where
 
+import Data.Semigroup
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.List (intercalate)
@@ -29,9 +30,12 @@ data SolverStats
 solverStats :: String -> Integer -> SolverStats
 solverStats nm sz = SolverStats (Set.singleton nm) sz
 
+instance Semigroup SolverStats where
+  SolverStats xs n <> SolverStats ys m = SolverStats (mappend xs ys) (n+m)
+
 instance Monoid SolverStats where
   mempty = SolverStats mempty 0
-  mappend (SolverStats xs n) (SolverStats ys m) = SolverStats (mappend xs ys) (n+m)
+  mappend = (<>)
 
 
 ppStats :: SolverStats -> String
