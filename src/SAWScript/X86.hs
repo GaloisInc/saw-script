@@ -48,7 +48,7 @@ import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
-          , gpGlobals, AbortedResult(..))
+          , gpGlobals, AbortedResult(..), SimConfig )
 import Lang.Crucible.Simulator.SimError(SimErrorReason)
 import Lang.Crucible.Solver.Interface(asNat,asUnsignedBV)
 import Lang.Crucible.Solver.BoolInterface
@@ -66,15 +66,15 @@ import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
 -- Crucible SAW
 import Lang.Crucible.Solver.SAWCoreBackend
   (newSAWCoreBackend, proofObligs, toSC, sawBackendSharedContext
-  , sawRegisterSymFunInterp)
+  , sawRegisterSymFunInterp, sawOptions)
 
 -- Macaw
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
 import Data.Macaw.Discovery(analyzeFunction)
 import Data.Macaw.Discovery.State(CodeAddrReason(UserRequest)
                                  , emptyDiscoveryState)
-import Data.Macaw.Memory(Memory, MemSymbol(..), MemSegmentOff
-                        , AddrSymMap )
+import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
+                        , AddrSymMap, segmentBase, segmentOffset )
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , LoadStyle(..)
                                   , memoryForElf
@@ -82,7 +82,8 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
                           , runCodeBlock
-                          , GlobalMap )
+                          , GlobalMap
+                          , MacawSimulatorState )
 import qualified Data.Macaw.Symbolic as Macaw ( CallHandler )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt)
 import Data.Macaw.Symbolic.PersistentState(macawAssignToCrucM)
@@ -131,6 +132,8 @@ data Options = Options
   , backend :: Sym
     -- ^ The Crucible backend to use.
 
+  , crucConfig :: SimConfig MacawSimulatorState Sym
+
   , funCalls :: Map (Natural,Integer) CallHandler
     {- ^ A mapping for function locations to the code to run to handle
          function calls.  The two integers are the base and offset
@@ -169,11 +172,11 @@ proof :: ArchitectureInfo X86_64 ->
          FilePath {- ^ ELF binary -} ->
          Maybe FilePath {- ^ Cryptol spec, if any -} ->
          (Sym -> CryptolEnv -> IO (Map (Natural,Integer) CallHandler))
-         {- ^ Funciton call handler -} ->
+         {- ^ Funciton call handler; used only for OldStyle -} ->
          Fun ->
-         IO (SharedContext,[Goal])
+         IO (SharedContext,Integer,[Goal])
 proof archi file mbCry mkCallMap fun =
-  do cfg <- initialConfig 0 []
+  do cfg <- initialConfig 0 sawOptions
      sc  <- mkSharedContext cryptolModule
      sym <- newSAWCoreBackend sc globalNonceGenerator cfg
      cenv <- loadCry sym mbCry
@@ -183,13 +186,14 @@ proof archi file mbCry mkCallMap fun =
        , function = fun
        , archInfo = archi
        , backend = sym
+       , crucConfig = cfg
        , funCalls = callMap
        , cryEnv = cenv
        }
 
 -- | Run a proof using the given backend.
 -- Useful for integrating with other tool.
-proofWithOptions :: Options -> IO (SharedContext,[Goal])
+proofWithOptions :: Options -> IO (SharedContext,Integer,[Goal])
 proofWithOptions opts =
   do elf <- getRelevant =<< getElf (fileName opts)
      translate opts elf (function opts)
@@ -297,13 +301,13 @@ loadCry sym mb =
 --------------------------------------------------------------------------------
 -- Translation
 
-callHandler :: Options -> CallHandler
-callHandler opts sym (mem,regs) =
+callHandler :: Overrides -> CallHandler
+callHandler callMap sym (mem,regs) =
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
       case (asNat base, asUnsignedBV off) of
         (Just b, Just o) ->
-           case Map.lookup (b,o) (funCalls opts) of
+           case Map.lookup (b,o) callMap of
              Just h  -> h sym (mem,regs)
              Nothing ->
                fail ("No over-ride for function: " ++ show (ppPtr ptr))
@@ -315,7 +319,10 @@ callHandler opts sym (mem,regs) =
 
 -- | Verify the given function.  The function matches it sepcification,
 -- as long as the returned goals can be discharged.
-translate :: Options -> RelevantElf -> Fun -> IO (SharedContext, [Goal])
+-- Returns the shared context and the goals (from the Sym)
+-- and the integer is the (aboslute) address of the function.
+translate ::
+  Options -> RelevantElf -> Fun -> IO (SharedContext, Integer, [Goal])
 translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
@@ -328,23 +335,26 @@ translate opts elf fun =
      (globs,st,checkPost) <-
         case funSpec fun of
           OldStyle spec -> doSpecOldStyle opts spec
-          NewStyle mkSpec ->
+          NewStyle mkSpec debug ->
             do spec <- mkSpec (cryEnv opts)
-               verifyMode spec sopts
+               (gs,st,po) <- verifyMode spec sopts
+               debug st
+               let _oldStyle = (fst gs, funCalls opts)
+               return (gs,st,\st1 -> debug st1 >> po st1)
 
-     st1 <- doSim opts elf sfs name globs st
+     (addr, st1) <- doSim opts elf sfs name globs st
 
      checkPost st1
 
      gs <- getGoals sym
      ctx <- sawBackendSharedContext sym
-     return (ctx,gs)
+     return (ctx, addr, gs)
 
 
 doSpecOldStyle ::
   Options ->
   Spec Pre (RegAssign, Spec Post ()) ->
-  IO (GlobalMap Sym X86_64, State, State -> IO ())
+  IO ((GlobalMap Sym X86_64,Overrides), State, State -> IO ())
 doSpecOldStyle opts spec =
   do let sym = backend opts
 
@@ -354,7 +364,7 @@ doSpecOldStyle opts spec =
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
 
-     return ( theRegions extra
+     return ( (theRegions extra, funCalls opts)
             , State { stateMem = theMem extra, stateRegs = regs }
             , \st1 -> statusBlock "  Setting-up post-conditions... " $
                       runPostSpec sym (cryEnv opts)
@@ -370,23 +380,31 @@ doSim ::
   RelevantElf ->
   SymFuns Sym ->
   ByteString ->
-  GlobalMap Sym X86_64 ->
+  (GlobalMap Sym X86_64, Overrides) ->
   State ->
-  IO State
-doSim opts elf sfs name globs st =
+  IO (Integer,State)
+doSim opts elf sfs name (globs,overs) st =
   do say "  Looking for address... "
      addr <- findSymbol (symMap elf) name
+     let addrInt =
+           let seg = msegSegment addr
+           in if segmentBase seg == 0
+                 then toInteger (segmentOffset seg + msegOffset addr)
+                 else error "  Not an absolute address"
+
      sayLn (show addr)
 
      (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
                     $ stToIO (makeCFG opts elf name addr)
 
      let sym = backend opts
+         config = crucConfig opts
 
      (mvar, execResult) <-
         statusBlock "  Simulating... " $
-        runCodeBlock sym x86 (x86_64MacawEvalFn sfs) halloc (stateMem st, globs)
-           (callHandler opts sym) cfg (stateRegs st)
+        runCodeBlock config sym
+              x86 (x86_64MacawEvalFn sfs) halloc (stateMem st, globs)
+           (callHandler overs sym) cfg (stateRegs st)
 
 
      gp <- case execResult of
@@ -401,7 +419,9 @@ doSim opts elf sfs name globs st =
                                    , ppAbort res ]
 
      mem <- getMem gp mvar
-     return State { stateMem = mem, stateRegs = regValue (gp ^. gpValue) }
+     return ( addrInt
+            , State { stateMem = mem, stateRegs = regValue (gp ^. gpValue) }
+            )
 
 
 ppAbort :: AbortedResult a b -> String

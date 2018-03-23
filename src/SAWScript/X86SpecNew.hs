@@ -33,6 +33,8 @@ module SAWScript.X86SpecNew
   , litV256
   , area
   , LLVMPointerType
+  , Overrides
+  , debugPPReg
 
   -- * Cryptol
   , CryArg(..)
@@ -45,9 +47,10 @@ module SAWScript.X86SpecNew
   ) where
 
 import GHC.TypeLits(KnownNat)
+import GHC.Natural(Natural)
 import Data.Kind(Type)
 import Control.Monad(foldM)
-import Data.List(sortBy)
+import Data.List(sortBy,intercalate)
 import Data.Maybe(catMaybes)
 import Data.Map (Map)
 import Data.Proxy(Proxy(..))
@@ -74,7 +77,7 @@ import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Solver.Interface
           (bvLit,isEq, Pred, addAssumption, addAssertion, notPred, orPred
-          , bvUle, truePred, falsePred, natLit )
+          , bvUle, truePred, falsePred, natLit, asNat )
 import Lang.Crucible.Solver.SAWCoreBackend
   (bindSAWTerm,sawBackendSharedContext,toSC)
 import Lang.Crucible.Types
@@ -83,11 +86,11 @@ import Lang.Crucible.Types
 import Verifier.SAW.SharedTerm(Term,scApplyAll,scVector,scBitvector)
 import Data.Macaw.Symbolic(freshValue,GlobalMap)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
-import Data.Macaw.Symbolic(Regs, macawAssignToCrucM )
+import Data.Macaw.Symbolic(Regs, macawAssignToCrucM, CallHandler )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..))
 import Data.Macaw.X86.X86Reg
 import Data.Macaw.X86.Symbolic
-            (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg,freshX86Reg)
+     (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg,freshX86Reg)
 import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
 
@@ -105,15 +108,19 @@ import SAWScript.X86Spec.Types(Sym)
 import SAWScript.X86Spec.Monad(SpecType,Pre,Post)
 
 data Specification = Specification
-  { specAllocs  :: [Alloc]
-  , specPres    :: [(String, Prop Pre)]
-  , specPosts   :: [(String, Prop Post)]
+  { specAllocs  :: ![Alloc]
+  , specPres    :: ![(String, Prop Pre)]
+  , specPosts   :: ![(String, Prop Post)]
 
-  , specGlobsRO :: [ (String, Integer, Unit, [ Integer ]) ]
-    -- ^ Read only globals. 
+  , specGlobsRO :: ![ (String, Integer, Unit, [ Integer ]) ]
+    -- ^ Read only globals.
+
+  , specCalls   :: ![ (String, Integer, Specification) ]
+    -- ^ Specifications for the functions we call.
+    -- The integer is the absolute address of the function.
   }
 
-data Unit = Bytes | Words | DWords | QWords | V128s | V256s
+data Unit = Bytes | Words | DWords | QWords | V128s | V256s deriving Show
 
 
 data Opts = Opts
@@ -285,6 +292,23 @@ data V :: SpecType -> CrucibleType -> Type where
   -- ^ Add a constant to a pointer from a location in the pre-condition.
 
 
+instance Show (V p t) where
+  show val =
+    case val of
+      SAW ty _  -> pars ("SAW ... : " ++ show ty)
+      CryFun w f xs -> pars (f ++ " " ++ unwords (map show xs) ++ sh w)
+      IntLit w x -> pars (show x ++ sh w)
+      BoolLit x -> show x
+      Loc l     -> show l
+      PreLoc l  -> pars ("pre " ++ show l)
+      PreAddPtr l i u ->
+          pars ("pre &" ++ show l ++ " + " ++ show i ++ " " ++ show u)
+
+    where
+    pars x = "(" ++ x ++ ")"
+    sh w = " : [" ++ show (natValue w) ++ "]"
+
+
 litByte :: Integer -> V p (LLVMPointerType 8)
 litByte = intLit
 
@@ -310,6 +334,12 @@ intLit = IntLit knownNat
 
 data CryArg p = forall w. Cry (V p (LLVMPointerType w))
               | forall w. CryArr (NatRepr w) [V p (LLVMPointerType w)]
+
+instance Show (CryArg p) where
+  show x =
+    case x of
+      Cry v -> show v
+      CryArr _ vs -> "[" ++ intercalate "," (map show vs) ++ "]"
 
 cryPre :: Loc (LLVMPointerType w) -> CryArg Post
 cryPre l = Cry (PreLoc l)
@@ -583,7 +613,7 @@ emptyRepMap = RepMap { repFor = MapF.empty
                      , nextRep = 0
                      }
 
-data Equiv p t = Equiv [ Loc t ] [ V p t ]
+data Equiv p t = Equiv [ Loc t ] [ V p t ] deriving Show
 
 jnEquiv :: Equiv p t -> Equiv p t -> Equiv p t
 jnEquiv (Equiv xs ys) (Equiv as bs) = Equiv (xs ++ as) (ys ++ bs)
@@ -793,12 +823,13 @@ checkAlloc sym s (l := a) =
 
 -- | Setup globals in a single read-only region (index 0).
 setupGlobals ::
-  Sym ->
+  Opts ->
   [(String,Integer,Unit,[Integer])] ->
+  [(String,Integer,Specification)] ->
   State ->
-  IO (GlobalMap Sym X86_64, State)
-setupGlobals sym gs s
-  | null regions = return (Map.empty, s)
+  IO ((GlobalMap Sym X86_64,Overrides), State)
+setupGlobals opts gs fs s
+  | null regions && null fs = return ((Map.empty,Map.empty), s)
 
   | not (null overlaps) =
       fail $ unlines $ "Overlapping regions in global spec:"
@@ -806,15 +837,32 @@ setupGlobals sym gs s
                           | (x,y) <- overlaps ]
 
   | otherwise =
-    do let size = case last regions of
-                    (_,start,n) -> start + bytesToInteger n
+    do let endGlob = case last regions of
+                       (_,start,n) -> start + bytesToInteger n
+           size    = maximum (endGlob : fundAddrs)
 
        let ?ptrWidth = knownNat @64
        sz <- bvLit sym knownNat size
        (p,mem) <- doMalloc sym GlobalAlloc Immutable "Globals" (stateMem s) sz
+
+       let Just base = asNat (fst (llvmPointerView p))
+
        mem1 <- foldM (writeGlob p) mem gs
-       return (Map.singleton 0 p, s { stateMem = mem1 })
+       let gMap = Map.singleton 0 p
+
+           handler _f sp sy (m,r) =
+              do let st0 = State { stateRegs = r, stateMem = m }
+                 st1 <- overrideMode sp opts { optsSym = sy } st0
+                 return (stateMem st1, stateRegs st1)
+
+           fMap = Map.fromList [ ((base,a), handler f sp) | (f,a,sp) <- fs ]
+
+       return ((gMap,fMap), s { stateMem = mem1 })
   where
+  sym = optsSym opts
+
+  fundAddrs = [ a | (_,a,_) <- fs ]
+
   regions = sortBy cmpStart
           $ [ (nm,start, fromIntegral (length els) *. u)
               | (nm,start,u,els) <- gs ]
@@ -843,15 +891,28 @@ setupGlobals sym gs s
          p1   <- adjustPtr sym mem1 p szI
          return (p1,mem1)
 
+debugPPReg ::
+  (ToCrucibleType mt ~ LLVMPointerType w) =>
+  X86Reg mt -> State -> IO ()
+debugPPReg r s =
+  do let Just (RV v) = lookupX86Reg r (stateRegs s)
+     putStrLn (show r ++ " = " ++ show (ppPtr v))
+
+
+
+type Overrides = Map (Natural,Integer) (Sym -> CallHandler Sym X86_64)
+
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
 verifyMode ::
-  Specification -> Opts -> IO (GlobalMap Sym X86_64, State, State -> IO ())
+  Specification -> Opts -> IO ( ( GlobalMap Sym X86_64, Overrides )
+                              , State, State -> IO ()
+                              )
 verifyMode spec opts =
   do let sym = optsSym opts
      s0 <- freshState sym
-     s1 <- foldM (doAlloc sym) s0 $ sortBy cmpAlloc $ specAllocs spec
-     (globs,s2) <- setupGlobals sym (specGlobsRO spec) s1
+     (globs,s1) <- setupGlobals opts (specGlobsRO spec) (specCalls spec) s0
+     s2 <- foldM (doAlloc sym) s1 $ sortBy cmpAlloc $ specAllocs spec
      s3 <- addAssumptions opts s2 (specPres spec)
      let post sF = mapM_ (doAssert opts (s3,sF)) (specPosts spec)
      return (globs, s3, post)
@@ -891,13 +952,23 @@ overrideMode spec opts s =
      checkOverlaps sym (zip as (map allocArea orderedAllocs)) -- check distinct
      mapM_ (doAssert opts s) (specPres spec)         -- assert pre-condition
 
-     sNew0 <- freshState sym
+     newRegs <- stateRegs <$> freshState sym
 
      mem1 <- foldM (\s' (p,a) -> clobberArea sym s' p a) (stateMem s)
            $ reverse $ zip (map fst as) [ a | _ := a <- orderedAllocs ]
 
-     let sNew1 = sNew0 { stateMem = mem1 }
-     addAssumptions opts (s,sNew1) (specPosts spec)
+     let sNew1 = State { stateMem = mem1, stateRegs = newRegs  }
+     sf <- addAssumptions opts (s,sNew1) (specPosts spec)
+
+     -- XXX: When Macaw calls us, the IP is already at the adress of the
+     -- called function.  Unfortunately, the return address is not on top
+     -- of the stack, as it shold be, so we don't know the correct value.
+     -- It looks like things work, if keep the orignal value instead.
+
+     let Just ip0 = lookupX86Reg X86_IP (stateRegs s)
+     let Just finalRegs = updateX86Reg X86_IP (const ip0) (stateRegs sf)
+     return sf { stateRegs = finalRegs }
+
 
 
 --------------------------------------------------------------------------------

@@ -108,7 +108,7 @@ import SAWScript.X86Spec.SAW
 import SAWScript.X86Spec.Literal
 import SAWScript.X86Spec.Memory
 
-import SAWScript.X86SpecNew(Specification)
+import SAWScript.X86SpecNew(Specification,State)
 
 
 
@@ -183,6 +183,8 @@ and the post-condition for the function). -}
 data FunSpec =
     OldStyle (Spec Pre (RegAssign, Spec Post ()))
   | NewStyle (CryptolEnv -> IO Specification)
+             (State -> IO ())
+              -- Debug: Run this to print some stuff at interesting times.
 
 
 
