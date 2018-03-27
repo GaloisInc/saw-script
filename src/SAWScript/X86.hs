@@ -59,7 +59,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
 
 -- Crucible LLVM
-import Lang.Crucible.LLVM.MemModel (Mem)
+import Lang.Crucible.LLVM.MemModel (Mem,ppMem)
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
 
@@ -417,19 +417,23 @@ doSim opts elf sfs name (globs,overs) st =
                   -- XXX: we ignore the _pre, as it should be subsumed
                   -- by the assertions in the backend. Ask Rob D. for details.
              AbortedResult _ctx res ->
-               malformed $ unlines [ "Failed to finish execution"
-                                   , ppAbort res ]
+                   malformed $ unlines [ "Failed to finish execution"
+                                       , ppAbort mvar res
+                                       ]
 
      mem <- getMem gp mvar
      return ( addrInt
             , State { stateMem = mem, stateRegs = regValue (gp ^. gpValue) }
             )
 
-
-ppAbort :: AbortedResult a b -> String
-ppAbort x =
+ppAbort :: GlobalVar Mem -> AbortedResult Sym b -> String
+ppAbort mvar x =
   case x of
-    AbortedExec e _ -> "Aborted execution: " ++ show e
+    AbortedExec e gp ->
+       case lookupGlobal mvar (gp ^. gpGlobals) of
+         Just mem -> unlines [ "Aborted execution: " ++ show e
+                             , show (ppMem mem) ]
+         Nothing -> "Aborted exexution (no memory?)"
     AbortedExit {} -> "Aborted exit"
     AbortedInfeasible {} -> "Aborted infeasible"
     AbortedBranch {} -> "Aborted branch"
@@ -437,9 +441,9 @@ ppAbort x =
 
 
 -- | Get the current model of the memory.
-getMem :: GlobalPair sym a ->
+getMem :: GlobalPair Sym a ->
           GlobalVar Mem ->
-          IO (RegValue sym Mem)
+          IO (RegValue Sym Mem)
 getMem st mvar =
   case lookupGlobal mvar (st ^. gpGlobals) of
     Just mem -> return mem
