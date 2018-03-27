@@ -187,9 +187,9 @@ area n m u s = Area { areaName = n
 data Loc :: CrucibleType -> Type where
 
   InMem :: (1 <= w) =>
-           NatRepr w                {- ^ Read this much (in bytes) -} ->
-           Loc (LLVMPointerType 64) {- ^ Read from this pointer -} ->
-           Integer                  {- ^ Offset in bytes -} ->
+           NatRepr w                {- Read this much (in bytes) -} ->
+           Loc (LLVMPointerType 64) {- Read from this pointer -} ->
+           Integer                  {- Offset in bytes -} ->
            Loc (LLVMPointerType (8*w))
 
   InReg :: X86Reg tp -> Loc (ToCrucibleType tp)
@@ -267,29 +267,29 @@ cmpAlloc (l1 := _) (l2 := _) = case compareF l1 l2 of
 
 data V :: SpecType -> CrucibleType -> Type where
   SAW    :: BaseTypeRepr s -> Term  -> V p (BaseToType s)
-  -- ^ An opaque SAW term; WARNING: type is unchecked
+  -- An opaque SAW term; WARNING: type is unchecked
 
   CryFun ::
     (1 <= w) => NatRepr w -> String -> [CryArg p] -> V p (LLVMPointerType w)
-  -- ^ An opaque Cryptol term term; WARNING: type is unchecked
+  -- An opaque Cryptol term term; WARNING: type is unchecked
 
   IntLit :: (1 <= w) => NatRepr w -> Integer -> V p (LLVMPointerType w)
-  -- ^ A literal value
+  -- A literal value
 
   BoolLit :: Bool -> V p BoolType
-  -- ^ A literal value
+  -- A literal value
 
 
   Loc    :: Loc t -> V p t
-  -- ^ Read the value at the location
+  -- Read the value at the location
   -- in the *current* state.
 
   PreLoc :: Loc t -> V Post t
-  -- ^ Read the value in the pre-condition.
+  -- Read the value in the pre-condition.
 
   PreAddPtr ::
     Loc (LLVMPointerType 64) -> Integer -> Unit -> V Post (LLVMPointerType 64)
-  -- ^ Add a constant to a pointer from a location in the pre-condition.
+  -- Add a constant to a pointer from a location in the pre-condition.
 
 
 instance Show (V p t) where
