@@ -184,12 +184,13 @@ area n m u s = Area { areaName = n
                   }
 
 
+
 data Loc :: CrucibleType -> Type where
 
   InMem :: (1 <= w) =>
            NatRepr w                {- Read this much (in bytes) -} ->
            Loc (LLVMPointerType 64) {- Read from this pointer -} ->
-           Integer                  {- Offset in bytes -} ->
+           Integer                  {- Starting at this offset in bytes -} ->
            Loc (LLVMPointerType (8*w))
 
   InReg :: X86Reg tp -> Loc (ToCrucibleType tp)
@@ -250,7 +251,6 @@ instance OrdF Loc where
                            EQF -> EQF
           LTF -> LTF
           GTF -> GTF
-
 
 
 
