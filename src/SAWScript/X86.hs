@@ -62,6 +62,7 @@ import Lang.Crucible.FunctionName(functionNameFromText)
 import Lang.Crucible.LLVM.MemModel (Mem,ppMem)
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
+import Lang.Crucible.LLVM.Bytes(bytesToInteger)
 
 -- Crucible SAW
 import Lang.Crucible.Solver.SAWCoreBackend
@@ -74,11 +75,14 @@ import Data.Macaw.Discovery(analyzeFunction)
 import Data.Macaw.Discovery.State(CodeAddrReason(UserRequest)
                                  , emptyDiscoveryState)
 import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
-                        , AddrSymMap, segmentBase, segmentOffset )
+                        , AddrSymMap, segmentBase, segmentOffset
+                        , addrOffset, memWordInteger
+                        , relativeSegmentAddr, incAddr
+                        , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , LoadStyle(..)
                                   , memoryForElf
-                                  , resolveElfFuncSymbols )
+                                  , resolveElfFuncSymbolsAny )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
                           , runCodeBlock
@@ -147,6 +151,9 @@ data Options = Options
     -}
 
   , cryEnv :: CryptolEnv
+
+  , extraGlobals :: [(ByteString,Integer,Unit)]
+    -- ^ Additional globals to auto-load from the ELF file
   }
 
 linuxInfo :: ArchitectureInfo X86_64
@@ -171,11 +178,12 @@ type CallHandler = Sym -> Macaw.CallHandler Sym X86_64
 proof :: ArchitectureInfo X86_64 ->
          FilePath {- ^ ELF binary -} ->
          Maybe FilePath {- ^ Cryptol spec, if any -} ->
+         [(ByteString,Integer,Unit)] ->
          (Sym -> CryptolEnv -> IO (Map (Natural,Integer) CallHandler))
          {- ^ Funciton call handler; used only for OldStyle -} ->
          Fun ->
          IO (SharedContext,Integer,[Goal])
-proof archi file mbCry mkCallMap fun =
+proof archi file mbCry globs mkCallMap fun =
   do cfg <- initialConfig 0 sawOptions
      sc  <- mkSharedContext cryptolModule
      sym <- newSAWCoreBackend sc globalNonceGenerator cfg
@@ -189,6 +197,7 @@ proof archi file mbCry mkCallMap fun =
        , crucConfig = cfg
        , funCalls = callMap
        , cryEnv = cenv
+       , extraGlobals = globs
        }
 
 -- | Run a proof using the given backend.
@@ -250,7 +259,7 @@ getRelevant elf =
   case memoryForElf opts elf of
     Left err -> malformed err
     Right (ixMap,mem) ->
-      do let (_errs,addrs) = resolveElfFuncSymbols mem ixMap elf
+      do let (_errs,addrs) = resolveElfFuncSymbolsAny mem ixMap elf
 {-
          unless (null errs)
            $ malformed $ unlines $ "Failed to resolve ELF symbols:"
@@ -272,15 +281,60 @@ getRelevant elf =
 
 
 
--- | Find the address of a symbol by name.
+-- | Find the address(es) of a symbol by name.
+findSymbols :: AddrSymMap 64 -> ByteString -> [ MemSegmentOff 64 ]
+findSymbols addrs nm = Map.findWithDefault [] nm invertedMap
+  where
+  invertedMap = Map.fromListWith (++) [ (y,[x]) | (x,y) <- Map.toList addrs ]
+
+-- | Find the single address of a symbol, or fail.
 findSymbol :: AddrSymMap 64 -> ByteString -> IO (MemSegmentOff 64)
 findSymbol addrs nm =
-  case Map.findWithDefault [] nm invertedMap of
+  case findSymbols addrs nm of
     [addr] -> return $! addr
     []     -> malformed ("Could not find function " ++ show nm)
     _      -> malformed ("Multiple definitions for " ++ show nm)
+
+
+loadGlobal ::
+  RelevantElf ->
+  (ByteString, Integer, Unit) ->
+  IO [(String, Integer, Unit, [Integer])]
+loadGlobal elf (nm,n,u) =
+  case findSymbols (symMap elf) nm of
+    [] -> err "Global not found"
+    _  -> mapM loadLoc (findSymbols (symMap elf) nm)
   where
-  invertedMap = Map.fromListWith (++) [ (y,[x]) | (x,y) <- Map.toList addrs ]
+  mem   = memory elf
+  sname = BSC.unpack nm
+
+  readOne a = case u of
+                Bytes  -> check (readWord8    mem a)
+                Words  -> check (readWord16le mem a)
+                DWords -> check (readWord32le mem a)
+                QWords -> check (readWord64le mem a)
+                _      -> err ("unsuported global size: " ++ show u)
+
+  nextAddr = incAddr (bytesToInteger (1 *. u))
+
+  addrsFor o = take (fromIntegral n) (iterate nextAddr o)
+
+  check :: (Show b, Integral a) => Either b a -> IO Integer
+  check res = case res of
+                Left e  -> err (show e)
+                Right a -> return (fromIntegral a)
+
+
+  loadLoc off = do let start = relativeSegmentAddr off
+                       a  = memWordInteger (addrOffset start)
+                   is <- mapM readOne (addrsFor start)
+                   return (sname, a, u, is)
+
+  err xs = fail $ unlines $
+                    [ "Railed to load global."
+                    , "*** Global: " ++ show nm
+                    , "*** Error: " ++ xs
+                    ]
 
 
 -- | The possition associated with a specific location.
@@ -336,7 +390,9 @@ translate opts elf fun =
         case funSpec fun of
           OldStyle spec -> doSpecOldStyle opts spec
           NewStyle mkSpec debug ->
-            do spec <- mkSpec (cryEnv opts)
+            do gss <- mapM (loadGlobal elf) (extraGlobals opts)
+               spec0 <- mkSpec (cryEnv opts)
+               let spec = spec0 {specGlobsRO = concat (specGlobsRO spec0:gss)}
                (gs,st,po) <- verifyMode spec sopts
                debug st
                let _oldStyle = (fst gs, funCalls opts)
