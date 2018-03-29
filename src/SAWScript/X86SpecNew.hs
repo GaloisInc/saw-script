@@ -322,6 +322,7 @@ intLit = IntLit knownNat
 
 
 data CryArg :: SpecType -> Type where
+  CryNat    :: Integer -> CryArg p
   Cry       :: V p (LLVMPointerType w) -> CryArg p
   CryArrCur :: V p (LLVMPointerType 64) -> Integer -> Unit -> CryArg p
   CryArrPre :: V Post (LLVMPointerType 64) -> Integer -> Unit -> CryArg Post
@@ -331,6 +332,7 @@ instance Show (CryArg p) where
   show x =
     case x of
       Cry v -> show v
+      CryNat n -> show n
       CryArrCur p n u -> "[" ++ show p ++ "|" ++ show n ++ " " ++ show u ++ "]"
       CryArrPre p n u ->
         "[pre " ++ show p ++ "|" ++ show n ++ " " ++ show u ++ "]"
@@ -486,6 +488,9 @@ instance Eval Post where
 evalCry :: forall p. Eval p => Opts -> CryArg p -> S p -> IO Term
 evalCry opts cry s =
   case cry of
+    CryNat n -> do sc <- sawBackendSharedContext sym
+                   scNat sc (fromInteger n)
+
     Cry v -> toSC sym =<< projectLLVM_bv sym =<< eval v opts s
 
     CryArrCur ptr n u ->
@@ -1075,8 +1080,7 @@ cryTerm opts x xs =
     Left err -> fail err
     Right t ->
      do sc <- sawBackendSharedContext (optsSym opts)
-        t1 <- scApplyAll sc t xs
-        return t1
+        scApplyAll sc t xs
 
 -- | Lookup a Crytpol type synonym, which should resolve to a constant.
 cryConst :: CryptolEnv -> String -> Either String Integer
