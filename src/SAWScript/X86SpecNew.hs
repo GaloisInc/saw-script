@@ -53,6 +53,7 @@ import Data.Maybe(catMaybes)
 import Data.Map (Map)
 import Data.Proxy(Proxy(..))
 import qualified Data.Map as Map
+import Data.IORef(newIORef,atomicModifyIORef')
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
@@ -120,9 +121,10 @@ data Specification = Specification
   , specGlobsRO :: ![ (String, Integer, Unit, [ Integer ]) ]
     -- ^ Read only globals.
 
-  , specCalls   :: ![ (String, Integer, Specification) ]
+  , specCalls   :: ![ (String, Integer, Int -> Specification) ]
     -- ^ Specifications for the functions we call.
     -- The integer is the absolute address of the function.
+    -- The "Int" counts how many times we called this function so far.
   }
 
 data Unit = Bytes | Words | DWords | QWords | V128s | V256s deriving Show
@@ -908,7 +910,7 @@ checkAlloc sym s (l := a) =
 setupGlobals ::
   Opts ->
   [(String,Integer,Unit,[Integer])] ->
-  [(String,Integer,Specification)] ->
+  [(String,Integer,Int -> Specification)] ->
   State ->
   IO ((GlobalMap Sym X86_64,Overrides), State)
 setupGlobals opts gs fs s
@@ -933,17 +935,32 @@ setupGlobals opts gs fs s
        mem1 <- foldM (writeGlob p) mem gs
        let gMap = Map.singleton 0 p
 
-           handler _f sp sy (m,r) =
-              do -- putStrLn ("ENTER " ++ _f)
-                 let st0 = State { stateRegs = r, stateMem = m }
-                 -- debugPPReg RCX st0
-                 st1 <- overrideMode sp opts { optsSym = sy } st0
-                 -- debugPPReg RCX st1
-                 -- debugDumpGoals sym
-                 -- putStrLn ("EXIT " ++ _f)
-                 return (stateMem st1, stateRegs st1)
+           {- NOTE:  Some functions are called multiple times with different
+                     sizes. This means that we need different specs for them,
+                     at least unitl we support polymorphic specs.  As a quick
+                     work-around we count the number of times a functon is
+                     entered and provide this as an input to the spec.
+                     In simple cases this allows the spec to change itslef. -}
+           mkHandler (_f,a, sp) =
+              do entryCounter <- newIORef 0
+                 return $
+                    ( (base,a)
+                    , \sy (m,r) ->
+                         do -- putStrLn ("ENTER " ++ _f)
+                            let st0 = State { stateRegs = r, stateMem = m }
 
-           fMap = Map.fromList [ ((base,a), handler f sp) | (f,a,sp) <- fs ]
+                            ent <- atomicModifyIORef' entryCounter $
+                                                             \e -> (e + 1, e)
+                            -- debugPPReg RCX st0
+                            st1 <- overrideMode (sp ent)
+                                              opts { optsSym = sy } st0
+                            -- debugPPReg RCX st1
+                            -- debugDumpGoals sym
+                            -- putStrLn ("EXIT " ++ _f)
+                            return (stateMem st1, stateRegs st1)
+                      )
+
+       fMap <- Map.fromList <$> mapM mkHandler fs
 
        return ((gMap,fMap), s { stateMem = mem1 })
   where
