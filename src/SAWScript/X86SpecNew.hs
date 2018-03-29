@@ -40,8 +40,6 @@ module SAWScript.X86SpecNew
   , CryArg(..)
   , cryPre
   , cryCur
-  , cryArrPre
-  , cryArrCur
   , cryTerm
   , cryConst
   ) where
@@ -49,8 +47,8 @@ module SAWScript.X86SpecNew
 import GHC.TypeLits(KnownNat)
 import GHC.Natural(Natural)
 import Data.Kind(Type)
-import Control.Monad(foldM)
-import Data.List(sortBy,intercalate)
+import Control.Monad(foldM,zipWithM)
+import Data.List(sortBy)
 import Data.Maybe(catMaybes)
 import Data.Map (Map)
 import Data.Proxy(Proxy(..))
@@ -60,6 +58,11 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Pair
+
+import Data.Foldable(toList)
+import Control.Lens((^.))
+import Lang.Crucible.Solver.SimpleBuilder(pathState)
+
 
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.LLVM.MemModel
@@ -77,13 +80,15 @@ import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Solver.Interface
           (bvLit,isEq, Pred, addAssumption, addAssertion, notPred, orPred
-          , bvUle, truePred, falsePred, natLit, asNat )
+          , bvUle, truePred, natLit, asNat, andPred )
+import Lang.Crucible.Solver.BoolInterface (assertLoc,assertMsg,getCurrentState)
 import Lang.Crucible.Solver.SAWCoreBackend
-  (bindSAWTerm,sawBackendSharedContext,toSC)
+  (bindSAWTerm,sawBackendSharedContext,toSC,proofObligs)
 import Lang.Crucible.Types
-  (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType, BoolType )
+  (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType )
 
-import Verifier.SAW.SharedTerm(Term,scApplyAll,scVector,scBitvector)
+import Verifier.SAW.SharedTerm
+  (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
 import Data.Macaw.Symbolic(freshValue,GlobalMap)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
 import Data.Macaw.Symbolic(Regs, macawAssignToCrucM, CallHandler )
@@ -157,7 +162,7 @@ data Mode = RO    -- ^ Starts initialized; cannot write to it
 data Area = Area
   { areaName :: String
   , areaMode :: Mode
-  , areaSize :: Bytes
+  , areaSize :: (Integer,Unit)
 
   , areaHasPointers :: Bool
     -- ^ Could this area contain pointers
@@ -178,7 +183,7 @@ data Area = Area
 area :: String -> Mode -> Integer -> Unit -> Area
 area n m u s = Area { areaName = n
                   , areaMode = m
-                  , areaSize = u *. s
+                  , areaSize = (u,s)
                   , areaHasPointers = False
                   , areaPtr = 0 *. Bytes
                   }
@@ -212,16 +217,6 @@ inMem ::
   Unit ->
   Loc (LLVMPointerType (8 * w))
 inMem l n u = InMem knownNat l (bytesToInteger (n *. u))
-
-arrLoc ::
-  (1 <= w) =>
-  Loc (LLVMPointerType 64) {- ^ Start of array -} ->
-  NatRepr w                {- ^ Size of value in bytes -} ->
-  Integer                  {- ^ Element number -} ->
-  Loc (LLVMPointerType (8*w))
-arrLoc ptr byteW i = InMem byteW ptr (i * natValue byteW)
-
-
 
 instance TestEquality Loc where
   testEquality x y = case compareF x y of
@@ -266,8 +261,6 @@ cmpAlloc (l1 := _) (l2 := _) = case compareF l1 l2 of
                                  GTF -> GT
 
 data V :: SpecType -> CrucibleType -> Type where
-  SAW    :: BaseTypeRepr s -> Term  -> V p (BaseToType s)
-  -- An opaque SAW term; WARNING: type is unchecked
 
   CryFun ::
     (1 <= w) => NatRepr w -> String -> [CryArg p] -> V p (LLVMPointerType w)
@@ -276,16 +269,14 @@ data V :: SpecType -> CrucibleType -> Type where
   IntLit :: (1 <= w) => NatRepr w -> Integer -> V p (LLVMPointerType w)
   -- A literal value
 
-  BoolLit :: Bool -> V p BoolType
-  -- A literal value
-
+  -- The whole location thing needs to be fixed...
 
   Loc    :: Loc t -> V p t
-  -- Read the value at the location
-  -- in the *current* state.
+  -- Read the value at the location in the *current* state:
+  -- pre or post depending on `p`
 
   PreLoc :: Loc t -> V Post t
-  -- Read the value in the pre-condition.
+  -- Read the location from the pre-condition state.
 
   PreAddPtr ::
     Loc (LLVMPointerType 64) -> Integer -> Unit -> V Post (LLVMPointerType 64)
@@ -295,10 +286,8 @@ data V :: SpecType -> CrucibleType -> Type where
 instance Show (V p t) where
   show val =
     case val of
-      SAW ty _  -> pars ("SAW ... : " ++ show ty)
       CryFun w f xs -> pars (f ++ " " ++ unwords (map show xs) ++ sh w)
       IntLit w x -> pars (show x ++ sh w)
-      BoolLit x -> show x
       Loc l     -> show l
       PreLoc l  -> pars ("pre " ++ show l)
       PreAddPtr l i u ->
@@ -332,14 +321,19 @@ intLit = IntLit knownNat
 
 
 
-data CryArg p = forall w. Cry (V p (LLVMPointerType w))
-              | forall w. CryArr (NatRepr w) [V p (LLVMPointerType w)]
+data CryArg :: SpecType -> Type where
+  Cry       :: V p (LLVMPointerType w) -> CryArg p
+  CryArrCur :: V p (LLVMPointerType 64) -> Integer -> Unit -> CryArg p
+  CryArrPre :: V Post (LLVMPointerType 64) -> Integer -> Unit -> CryArg Post
+
 
 instance Show (CryArg p) where
   show x =
     case x of
       Cry v -> show v
-      CryArr _ vs -> "[" ++ intercalate "," (map show vs) ++ "]"
+      CryArrCur p n u -> "[" ++ show p ++ "|" ++ show n ++ " " ++ show u ++ "]"
+      CryArrPre p n u ->
+        "[pre " ++ show p ++ "|" ++ show n ++ " " ++ show u ++ "]"
 
 cryPre :: Loc (LLVMPointerType w) -> CryArg Post
 cryPre l = Cry (PreLoc l)
@@ -347,29 +341,17 @@ cryPre l = Cry (PreLoc l)
 cryCur :: Loc (LLVMPointerType w) -> CryArg p
 cryCur l = Cry (Loc l)
 
-cryArr ::
-  (forall t. Loc t -> V p t) {- ^ "Loc" or "PreLoc" -} ->
-  Loc (LLVMPointerType 64)   {- ^ Start address of array -} ->
-  Integer                    {- ^ Number of elements to read -} ->
-  Unit                       {- ^ Size of array elements -} ->
-  CryArg p
-cryArr toV ptr n u =
-  unitByteSize u $ \w ->
-    CryArr (natMultiply (knownNat @8) w)
-      [ toV (arrLoc ptr w i) | i <- [ 0 .. n - 1 ] ]
-
-
-cryArrPre :: Loc (LLVMPointerType 64) -> Integer -> Unit -> CryArg Post
-cryArrPre = cryArr PreLoc
-
-cryArrCur :: Loc (LLVMPointerType 64) -> Integer -> Unit -> CryArg p
-cryArrCur = cryArr Loc
-
 
 data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
   CryProp :: String -> [ CryArg p ] -> Prop p
-  SAWProp :: Term -> Prop p
+  CryPostMem ::
+    V Post (LLVMPointerType 64) {- starting here -} ->
+    Integer                     {- this many elemnts -} ->
+    Unit                        {- of this size -} ->
+    String                      {- are defined by this Cry. func. -} ->
+    [CryArg Post]               {- applied to these argumnets -} ->
+    Prop Post
 
 type KnownType = KnownRepr TypeRepr
 
@@ -475,17 +457,12 @@ class Eval p where
 evIntLit :: (1 <= w) => Sym -> NatRepr w -> Integer -> IO (LLVMPtr Sym w)
 evIntLit sym w n = llvmPointer_bv sym =<< bvLit sym w n
 
-evBoolLit :: Sym -> Bool -> IO (RegValue Sym BoolType)
-evBoolLit sym b = return (if b then truePred sym else falsePred sym)
-
 instance Eval Pre where
   type S Pre = State
   eval val =
     case val of
-      SAW ty t       -> \opts _ -> bindSAWTerm (optsSym opts) ty t
       CryFun w f xs  -> \opts s -> evalCryFun opts s w f xs
       IntLit w n     -> \opts _ -> evIntLit (optsSym opts) w n
-      BoolLit b      -> \opts _ -> evBoolLit (optsSym opts) b
       Loc l          -> \opts s -> getLoc l (optsSym opts) s
   curState _ s = s
   setCurState _ s _ = s
@@ -494,10 +471,8 @@ instance Eval Post where
   type S Post = (State,State)
   eval val =
     case val of
-      SAW ty t        -> \opts _         -> bindSAWTerm (optsSym opts) ty t
       CryFun w f xs   -> \opts s         -> evalCryFun opts s w f xs
       IntLit w n      -> \opts _         -> evIntLit (optsSym opts) w n
-      BoolLit b       -> \opts _         -> evBoolLit (optsSym opts) b
       Loc l           -> \opts (_,post)  -> getLoc l (optsSym opts) post
       PreLoc l        -> \opts (pre,_)   -> getLoc l (optsSym opts) pre
       PreAddPtr l i u -> \opts (pre,_) ->
@@ -508,15 +483,27 @@ instance Eval Post where
   curState _ (_,s) = s
   setCurState _ s (s1,_) = (s1,s)
 
-evalCry :: Eval p => Opts -> CryArg p -> S p -> IO Term
+evalCry :: forall p. Eval p => Opts -> CryArg p -> S p -> IO Term
 evalCry opts cry s =
   case cry of
     Cry v -> toSC sym =<< projectLLVM_bv sym =<< eval v opts s
-    CryArr w cs ->
-      do ts <- mapM (\x -> evalCry opts (Cry x) s) cs
+
+    CryArrCur ptr n u ->
+      unitByteSize u $ \byteW ->
+      do vs <- readArr opts ptr n byteW s (curState (Proxy @p) s)
+         terms <- mapM (\x -> toSC sym =<< projectLLVM_bv sym x) vs
          sc <- sawBackendSharedContext sym
-         ty <- scBitvector sc (fromIntegral (natValue w))
-         scVector sc ty ts
+         ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+         scVector sc ty terms
+
+    CryArrPre ptr n u ->
+      unitByteSize u $ \byteW ->
+      do vs <- readArr opts ptr n byteW s (fst s)
+         terms <- mapM (\x -> toSC sym =<< projectLLVM_bv sym x) vs
+         sc <- sawBackendSharedContext sym
+         ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+         scVector sc ty terms
+
   where
   sym = optsSym opts
 
@@ -532,6 +519,31 @@ evalCryFunGen opts s ty f xs =
   do ts <- mapM (\x -> evalCry opts x s) xs
      bindSAWTerm (optsSym opts) ty =<< cryTerm opts f ts
 
+
+-- | Cryptol function that returns a list of bit-vectors.
+evalCryFunArr ::
+  (1 <= w, Eval p) =>
+  Opts ->
+  S p ->
+  Integer ->
+  NatRepr w ->
+  String ->
+  [CryArg p] ->
+  IO [ LLVMPtr Sym w ]
+evalCryFunArr opts s n w f xs =
+  do term <- cryTerm opts f =<< mapM (\x -> evalCry opts x s) xs
+     let sym = optsSym opts
+     sc  <- sawBackendSharedContext sym
+     len <- scNat sc (fromInteger n)
+     ty  <- scBitvector sc (fromInteger (natValue w))
+     let atIx i = do ind    <- scNat sc (fromInteger i)
+                     term_i <- scAt sc len ty term ind
+                     bv <- bindSAWTerm sym (BaseBVRepr w) term_i
+                     llvmPointer_bv sym bv
+     mapM atIx [ 0 .. n - 1 ]
+
+
+-- | Cryptol function that returns a bitvector of the given len
 evalCryFun ::
   (1 <= w, Eval p) =>
   Opts ->
@@ -553,9 +565,44 @@ evalProp opts p s =
 
     CryProp f xs -> evalCryFunGen opts s BaseBoolRepr f xs
 
-    SAWProp t -> bindSAWTerm sym BaseBoolRepr t
+    CryPostMem ptr n u f xs ->
+      -- unitBitSize  u $ \wBits ->
+      unitByteSize u $ \wBytes ->
+      do LeqProof <- return (leqMulPos (Proxy @8) wBytes)
+         let wBits = natMultiply (knownNat @8) wBytes
+         need   <- evalCryFunArr opts s n wBits f xs -- expected values
+         have   <- readArr opts ptr n wBytes s (snd s)
+         checks <- zipWithM (ptrEq sym wBits) need have
+         foldM (andPred sym) (truePred sym) checks
   where
   sym = optsSym opts
+
+
+readArr :: forall w p.
+  (1 <= w, Eval p) =>
+  Opts ->
+  V p (LLVMPointerType 64) ->
+  Integer ->
+  NatRepr w ->
+  S p ->
+  State ->
+  IO [ LLVMPtr Sym (8 * w) ]
+readArr opts ptr n wBytes s sMem =
+  do ptrV <- eval ptr opts s
+     LeqProof <- return (leqMulPos (Proxy @8) (Proxy @w))
+     let sym    = optsSym opts
+         mem    = stateMem sMem
+         wBits  = natMultiply (knownNat @8) wBytes
+         cruT   = LLVMPointerRepr wBits
+         llT    = llvmBytes wBytes
+         getAt i =
+           do let ?ptrWidth = knownNat
+              loc  <- adjustPtr sym mem ptrV (i * natValue wBytes)
+              anyV <- doLoad sym mem loc llT 0
+              coerceAny sym cruT anyV
+
+     mapM getAt [ 0 .. n - 1 ]
+
 
 evalSame ::
   Sym -> TypeRepr t -> RegValue Sym t -> RegValue Sym t -> IO (Pred Sym)
@@ -723,7 +770,34 @@ addAsmp opts s (_,p) =
   case p of
     Same _ (Loc _) _ -> return ()
     Same _ _ (Loc _) -> return ()
+    CryPostMem {}    -> return ()
+
     _ -> addAssumption (optsSym opts) =<< evalProp opts p s
+
+setCryPost :: forall p. Eval p => Opts -> S p -> (String,Prop p) -> IO (S p)
+setCryPost opts s (_nm,p) =
+  case p of
+    CryPostMem ptr n u f xs ->
+      unitBitSize  u $ \bitW ->
+      unitByteSize u $ \byteW ->
+      do vs   <- evalCryFunArr opts s n bitW f xs
+         ptrV <- eval ptr opts s
+         let llT  = llvmBytes byteW
+             cruT = LLVMPointerRepr bitW
+             sym  = optsSym opts
+
+         let doSet mem (i,v) =
+               do let ?ptrWidth = knownNat
+                  loc <- adjustPtr sym mem ptrV (bytesToInteger (i *. u))
+                  val <- packMemValue sym llT cruT v
+                  storeConstRaw sym mem loc llT val
+
+         let cur   = Proxy @p
+             curSt = curState cur s :: State
+         mem1 <- foldM doSet (stateMem curSt) (zip [ 0 .. ] vs)
+         return (setCurState cur curSt { stateMem = mem1 } s)
+
+    _ -> return s
 
 
 addAssumptions ::
@@ -731,8 +805,9 @@ addAssumptions ::
 addAssumptions opts s0 ps =
   do let mp = foldr getEq emptyRepMap ps
      s1 <- makeEquivs opts mp s0
-     mapM_ (addAsmp opts s1) ps
-     return (curState (Proxy :: Proxy p) s1)
+     s2 <- foldM (setCryPost opts) s1 ps
+     mapM_ (addAsmp opts s2) ps
+     return (curState (Proxy :: Proxy p) s2)
 
 
 --------------------------------------------------------------------------------
@@ -742,11 +817,11 @@ allocate :: Sym -> Area -> State -> IO (LLVMPtr Sym 64, State)
 allocate sym ar s =
   case areaMode ar of
     RO -> do (base,p,m1) <- alloc Immutable
-             m2     <- fillFresh sym withPtrs base names m1
+             m2     <- fillFresh sym withPtrs base uni names m1
              return (p, s { stateMem = m2 })
 
     RW -> do (base,p,m1) <- alloc Mutable
-             m2 <- fillFresh sym withPtrs base names m1
+             m2 <- fillFresh sym withPtrs base uni names m1
              return (p, s { stateMem = m2 })
 
     WO -> do (_,p,m1) <- alloc Mutable
@@ -756,26 +831,26 @@ allocate sym ar s =
 
   alloc mut =
     do let ?ptrWidth = knownNat @64
-       sz <- bvLit sym knownNat (bytesToInteger (areaSize ar))
+       let szInt = bytesToInteger (uncurry (*.) (areaSize ar))
+       sz <- bvLit sym knownNat szInt
        (base,mem) <- doMalloc sym HeapAlloc mut (areaName ar) (stateMem s) sz
        ptr <- adjustPtr sym mem base (bytesToInteger (areaPtr ar))
        return (base,ptr,mem)
 
+  (num,uni) = areaSize ar
+
   names :: [String]
-  names = [ areaName ar ++ "_byte_" ++ show i
-          | i <- take (bytesToInt (areaSize ar)) [ 0 :: Int .. ] ]
+  names = [ areaName ar ++ "_" ++ show uni ++ "_" ++ show i
+          | i <- take (fromInteger num) [ 0 :: Int .. ] ]
 
-bytesToInt :: Bytes -> Int
-bytesToInt = fromIntegral . bytesToInteger
-
-fillFresh :: Sym -> Bool -> LLVMPtr Sym 64 ->
+fillFresh :: Sym -> Bool -> LLVMPtr Sym 64 -> Unit ->
                 [String] -> MemImpl Sym -> IO (MemImpl Sym)
-fillFresh sym ptrOk p todo mem =
+fillFresh sym ptrOk p u todo mem =
+  unitByteSize u $ \w ->
   case todo of
     [] -> return mem
     nm : more ->
-      do let w = knownNat @1
-         let ?ptrWidth = knownNat
+      do let ?ptrWidth = knownNat
          let ty        = ptrTy w
          let elS       = natValue w
          let lty       = bitvectorType (toBytes elS)
@@ -784,7 +859,7 @@ fillFresh sym ptrOk p todo mem =
          -- This is because we are writinging initialization code.
          mem1 <- storeConstRaw sym mem p lty val
          p1   <- adjustPtr sym mem1 p elS
-         fillFresh sym ptrOk p1 more mem1
+         fillFresh sym ptrOk p1 u more mem1
 
 
 -- | Make an allocation.  Used when verifying.
@@ -802,9 +877,11 @@ clobberArea sym mem p ar =
     RO -> return mem
     _  ->
       do base <- adjustPtr sym mem p (negate (bytesToInteger (areaPtr ar)))
-         let xs = take (bytesToInt (areaSize ar))
-                     [ areaName ar ++ "_at_" ++ show i | i <- [ 0 :: Int .. ]]
-         fillFresh sym (areaHasPointers ar) base xs mem
+         let (num,uni) = areaSize ar
+             xs = take (fromInteger num)
+                  [ areaName ar ++ "_" ++ show uni ++ "_at_" ++ show i
+                                                      | i <- [ 0 :: Int .. ]]
+         fillFresh sym (areaHasPointers ar) base uni xs mem
 
 
 -- | Lookup the value for an allocation in the existing state.
@@ -817,7 +894,8 @@ checkAlloc sym s (l := a) =
      p2 <- adjustPtr sym mem p1 (negate (bytesToInteger (areaPtr a)))
 
      -- Make sure that we have a pointer and it is big enough.
-     p3 <- adjustPtr sym mem p2 (bytesToInteger (areaSize a))
+     let siI = bytesToInteger $ uncurry (*.) (areaSize a)
+     p3 <- adjustPtr sym mem p2 siI
      return (p2,p3)
 
 
@@ -851,8 +929,13 @@ setupGlobals opts gs fs s
        let gMap = Map.singleton 0 p
 
            handler _f sp sy (m,r) =
-              do let st0 = State { stateRegs = r, stateMem = m }
+              do -- putStrLn ("ENTER " ++ _f)
+                 let st0 = State { stateRegs = r, stateMem = m }
+                 -- debugPPReg RCX st0
                  st1 <- overrideMode sp opts { optsSym = sy } st0
+                 -- debugPPReg RCX st1
+                 -- debugDumpGoals sym
+                 -- putStrLn ("EXIT " ++ _f)
                  return (stateMem st1, stateRegs st1)
 
            fMap = Map.fromList [ ((base,a), handler f sp) | (f,a,sp) <- fs ]
@@ -897,6 +980,15 @@ debugPPReg ::
 debugPPReg r s =
   do let Just (RV v) = lookupX86Reg r (stateRegs s)
      putStrLn (show r ++ " = " ++ show (ppPtr v))
+
+debugDumpGoals :: Sym -> IO ()
+debugDumpGoals sym =
+  do s <- getCurrentState sym
+     mapM_ sh (toList (s ^. pathState . proofObligs))
+  where
+  sh (_,g) = print (assertLoc g, assertMsg g)
+
+
 
 
 
