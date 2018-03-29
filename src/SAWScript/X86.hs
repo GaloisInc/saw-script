@@ -453,7 +453,7 @@ doSim opts elf sfs name (globs,overs) st =
      (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
                     $ stToIO (makeCFG opts elf name addr)
 
-     writeFile "XXX.hs" (show cfg)
+     -- writeFile "XXX.hs" (show cfg)
 
      let sym = backend opts
          config = crucConfig opts
