@@ -1,0 +1,45 @@
+flags: {}
+packages:
+  - deps/llvm-pretty/
+  - deps/llvm-pretty-bc-parser/
+  - deps/jvm-parser/
+  - deps/aig/
+  - deps/abcBridge/
+  - deps/cryptol/
+  - deps/saw-core/
+  - deps/saw-core-aig/
+  - deps/saw-core-sbv/
+  - deps/cryptol-verifier/
+  - deps/jvm-verifier/
+  - deps/llvm-verifier/
+  - deps/crucible/crucible/
+  - deps/crucible/crucible-abc/
+  - deps/crucible/crucible-llvm/
+  - deps/crucible/crucible-saw/
+  - deps/crucible/galois-matlab/
+  - deps/parameterized-utils/
+  - deps/dwarf/
+  - deps/elf-edit/
+  - deps/flexdis86/
+  - deps/macaw/base
+  - deps/macaw/symbolic
+  - deps/macaw/x86
+  - deps/macaw/x86_symbolic
+  - deps/monad-supply
+  - .
+extra-deps:
+  - IfElse-0.85
+  - fgl-visualize-0.1.0.1
+  - dotgen-0.4.2
+  - simple-smt-0.7.1
+  - GraphSCC-1.0.4
+  - monadLib-3.7.3
+  - sbv-7.6
+  - tasty-hunit-0.10.0.1
+  - MonadRandom-0.5.1
+  - crackNum-2.0
+  - hashtables-1.2.3.0
+  - FloatingHex-0.4
+  - data-inttrie-0.1.3
+resolver: nightly-2018-03-23
+allow-newer: true
