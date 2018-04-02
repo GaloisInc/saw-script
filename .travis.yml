@@ -10,19 +10,19 @@ cache:
 
 matrix:
   include:
-    - env: CABALVER="2.0" GHCVER="8.2.2"
-      compiler: ": #GHC 8.2.2"
-      addons: {apt: {packages: [cabal-install-2.0,ghc-8.2.2], sources: [hvr-ghc]}}
-#    - os: osx
-#      env: CABALVER="2.0" GHCVER="8.2.2"
-#      compiler: ": #GHC 8.2.2"
+    - env: CABALVER="2.2" GHCVER="8.4.1"
+      compiler: ": #GHC 8.4.1"
+      addons: {apt: {packages: [cabal-install-2.2,ghc-8.4.1], sources: [hvr-ghc]}}
+    - os: osx
+      env: CABALVER="2.2" GHCVER="8.4.1"
+      compiler: ": #GHC 8.4.1"
 
 before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
     then
         brew update;
         brew install ghc;
-        brew install cabal-install --HEAD;
+        brew install cabal-install;
     fi
   - unset CC
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
