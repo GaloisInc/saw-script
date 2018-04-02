@@ -55,7 +55,6 @@ library
     , saw-core-aig
     , saw-core-sbv
     , sbv >= 7.0
-    , smtLib
     , split
     , temporary
     , template-haskell
