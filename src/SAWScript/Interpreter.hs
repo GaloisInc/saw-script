@@ -295,8 +295,10 @@ interpretStmts env stmts =
           do let env' = LocalTypedef (getVal name) ty : env
              interpretStmts env' ss
 
+{-
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
+-}
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
