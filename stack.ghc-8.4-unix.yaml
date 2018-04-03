@@ -25,7 +25,6 @@ packages:
   - deps/macaw/symbolic
   - deps/macaw/x86
   - deps/macaw/x86_symbolic
-  - deps/monad-supply
   - .
 extra-deps:
   - IfElse-0.85

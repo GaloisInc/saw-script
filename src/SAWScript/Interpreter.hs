@@ -87,7 +87,7 @@ import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import SAWScript.AutoMatch
+--import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
@@ -814,11 +814,13 @@ primitives = Map.fromList
     (pureVal writeCore)
     [ "Write out a representation of a term in SAWCore external format." ]
 
+  {-
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     [ "Interactively decides how to align two modules of potentially heterogeneous"
     , "language and prints the result."
     ]
+    -}
 
   , prim "prove"               "ProofScript SatResult -> Term -> TopLevel ProofResult"
     (pureVal provePrim)

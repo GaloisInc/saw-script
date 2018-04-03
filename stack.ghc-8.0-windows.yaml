@@ -35,7 +35,7 @@ extra-deps:
   - FloatingHex-0.4
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
-  - monad-supply-0.6
+#  - monad-supply-0.6
   - sbv-7.6
   - simple-smt-0.7.1
   - monadLib-3.7.3
