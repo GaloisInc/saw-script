@@ -258,7 +258,7 @@ getRelevant :: Elf 64 -> IO RelevantElf
 getRelevant elf =
   case memoryForElf opts elf of
     Left err -> malformed err
-    Right (ixMap,mem) ->
+    Right (ixMap, mem, _warnings) ->
       do let (_errs,addrs) = resolveElfFuncSymbolsAny mem ixMap elf
 {-
          unless (null errs)
@@ -274,8 +274,6 @@ getRelevant elf =
   -- XXX: What options do we want?
   opts = LoadOptions { loadRegionIndex    = Just 0
                      , loadRegionBaseOffset = 0
-                     , loadStyleOverride  = Just LoadBySection
-                     , includeBSS         = False
                      }
 
 
