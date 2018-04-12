@@ -28,7 +28,7 @@ library
     base-compat,
     containers,
     cryptol >= 2.3.0,
-    data-inttrie,
+    data-inttrie >= 0.1.4,
     integer-gmp,
     saw-core,
     saw-core-aig,
