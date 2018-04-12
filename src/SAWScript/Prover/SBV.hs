@@ -41,7 +41,7 @@ satUnintSBV ::
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
 satUnintSBV conf unints sc mode term =
-  do (t', labels, lit0) <- prepSBV sc unints term
+  do (t', mlabels, lit0) <- prepSBV sc unints term
 
      let lit = case mode of
                  CheckSat -> lit0
@@ -49,7 +49,8 @@ satUnintSBV conf unints sc mode term =
 
      tp <- scWhnf sc =<< scTypeOf sc t'
      let (args, _) = asPiList tp
-         argNames = map fst args
+         (labels, argNames) = unzip [ (l, n) | (Just l, n) <- zip mlabels (map fst args) ]
+
      SBV.SatResult r <- SBV.satWith conf lit
 
      let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
@@ -70,8 +71,9 @@ satUnintSBV conf unints sc mode term =
        SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
 
 
-prepSBV :: SharedContext -> [String] -> Term
-        -> IO (Term, [SBVSim.Labeler], SBV.Symbolic SBV.SVal)
+prepSBV ::
+  SharedContext -> [String] -> Term ->
+  IO (Term, [Maybe SBVSim.Labeler], SBV.Symbolic SBV.SVal)
 prepSBV sc unints t0 = do
   -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
