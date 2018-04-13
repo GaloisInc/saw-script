@@ -336,6 +336,9 @@ withMaybeVars (InvBind ctx _ (Just _)) f =
        f (CtxTermsCtxCons (ctxLift1 vars) var)
 -}
 
+ctxTyp0 :: MonadTerm m => m (CtxTerm ctx (Typ a))
+ctxTyp0 = error "FIXME HERE NOW"
+
 ctxApply :: MonadTerm m => m (CtxTerm ctx (a -> b)) -> m (CtxTerm ctx a) ->
             m (CtxTerm ctx b)
 ctxApply = error "FIXME HERE NOW"
@@ -362,6 +365,12 @@ ctxPi :: MonadTerm m => Bindings CtxTerm ctx as ->
           m (CtxTerm (CtxInvApp ctx as) (Typ b))) ->
          m (CtxTerm ctx (Typ (Arrows as b)))
 ctxPi = error "FIXME HERE NOW"
+
+ctxPiProxy :: MonadTerm m => Proxy (Typ b) -> Bindings CtxTerm ctx as ->
+              (CtxTerms (CtxInvApp ctx as) as ->
+               m (CtxTerm (CtxInvApp ctx as) (Typ b))) ->
+              m (CtxTerm ctx (Typ (Arrows as b)))
+ctxPiProxy _ = ctxPi
 
 ctxPi1 :: MonadTerm m => String -> CtxTerm ctx (Typ a) ->
           (CtxTerm ('CCons ctx a) a ->
@@ -417,6 +426,10 @@ ctxLiftInBindings :: CtxLiftSubst f m => InvBindings tp1 ctx ctx1 ->
 ctxLiftInBindings ctx1 NoBind as = ctxLift ctx1 as
 ctxLiftInBindings ctx1 (Bind str tp ctx2) as =
   ctxLiftInBindings (InvBind ctx1 str tp) ctx2 as
+
+invBindNil :: MonadTerm m => InvBindings tp 'CNil ctx -> String ->
+              tp ctx (Typ a) -> m (InvBindings tp 'CNil ('CCons ctx a))
+invBindNil = error "FIXME HERE NOW"
 
 -- | Helper substitution function for when the ambient context is 'CNil'; i.e.,
 -- this is a "proof" that @'CtxApp' CNil ctx@ equals @ctx@
@@ -475,6 +488,10 @@ instance (CtxLiftSubst tp m, CtxLiftSubst f m) =>
     InBindings <$> ctxSubst subst1 subst2 ctx bs <*> ctxSubst subst1 subst2 ctx f
   -}
 
+instance MonadTerm m => CtxLiftSubst (CtorArg d ixs) m where
+  ctxLift = error "FIXME HERE NOW"
+  ctxSubst = error "FIXME HERE NOW"
+
 -- | Special-purpose substitution for 'InBindings', because we do not want to
 -- write that complicated lift instance!
 -- ctxSubstInBindings :: 
@@ -514,6 +531,17 @@ data CtorArg d ixs ctx a where
     -- parameters of @d@ (not given here), and the @ei@ are the type indices of
     -- @d@.
 
+-- | A structure that defines the parameters, arguments, and return type indices
+-- of a constructor, using 'CtxTerm' and friends to get the bindings right
+data CtorArgStruct d params ixs =
+  forall args.
+  CtorArgStruct
+  {
+    ctorParams :: Bindings CtxTerm 'CNil params,
+    ctorArgs :: Bindings (CtorArg d ixs) (CtxInv params) args,
+    ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs
+  }
+
 -- | Convert a 'CtorArg' into the type that it represents, given a context of
 -- the parameters and of the previous arguments
 ctxCtorArgType :: MonadTerm m => DataIdent d ->
@@ -538,17 +566,6 @@ ctxCtorArgBindings d params prevs (Bind x arg args) =
   do tp <- ctxCtorArgType d params prevs arg
      rest <- ctxCtorArgBindings d params (InvBind prevs x tp) args
      return (Bind x tp rest)
-
--- | A structure that defines the parameters, arguments, and return type indices
--- of a constructor, using 'CtxTerm' and friends to get the bindings right
-data CtorArgStruct d params ixs =
-  forall args.
-  CtorArgStruct
-  {
-    ctorParams :: Bindings CtxTerm 'CNil params,
-    ctorArgs :: Bindings (CtorArg d ixs) (CtxInv params) args,
-    ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs
-  }
 
 -- | Compute the type of a constructor from the name of its datatype and its
 -- 'CtorArgStruct'
@@ -583,33 +600,62 @@ ctxCtorType d (CtorArgStruct{..}) =
 -- In this case, @rec_tpi@ has the form
 --
 -- > (z1::Z1) -> .. -> (zm::Zm) -> p_ret t1 .. tk (f z1 .. zm)
-ctxCtorElimType :: MonadTerm m => Proxy ret -> DataIdent d -> Ident ->
+ctxCtorElimType :: MonadTerm m =>
+                   Proxy (Typ ret) -> Proxy (Typ a) -> DataIdent d -> Ident ->
                    Bindings CtxTerm (CtxInv params) ixs ->
-                   CtxTerm ('CCons (CtxInvApp (CtxInv params) ixs) d) (Typ a) ->
                    CtorArgStruct d params ixs ->
                    m (CtxTerm ('CCons (CtxInv params)
                                (Arrows ixs (d -> Typ a))) (Typ ret))
-ctxCtorElimType _ret d_top c dt_ixs a (CtorArgStruct{..}) =
+ctxCtorElimType ret (a :: Proxy (Typ a)) d_top c
+  (dt_ixs :: Bindings CtxTerm (CtxInv params) ixs)
+  (CtorArgStruct{..} :: CtorArgStruct d params ixs) =
   (do let params = invertBindings ctorParams
-      args <- ctxLift1 ctorArgs
-      p_ret_tp <-
-        ctxPi dt_ixs $ \ixs ->
+      -- param_vars <- (ctxVars :: InvBindings CtxTerm 'CNil (CtxInv params) -> _) params
+      -- Form the type of the motive function p_ret
+      {-
+      p_ret_tp_ <-
+        ctxPiProxy (Proxy :: Proxy (Typ (Arrows ixs (d -> Typ a)))) dt_ixs $ \ixs ->
         (do dt <-
               ctxDataTypeM d_top
-              (fst <$> ctxVars2 params (invertBindings dt_ixs))
-              (invertCtxTerms ixs)
-            ctxPi1 dt $ \_ -> a)
-      castCtxTerm Proxy Proxy <$>
-        helper Proxy d_top (InvBind params "_" p_ret_tp) InvNoBind args) where
+              (ctxLift InvNoBind dt_ixs param_vars)
+              (return $ invertCtxTerms ixs)
+            ctxPi1 "_" dt $ \_ -> ctxTyp0)
+      let p_ret_tp = p_ret_tp_ :: CtxTerm (CtxInv params) (Arrows ixs (d -> Typ a))
+        -}
+      p_ret_tp <- mkPRetTp a d_top params dt_ixs
+      -- Lift the argument and return indices into the context of p_ret
+      args <- ctxLift InvNoBind (Bind "_" p_ret_tp NoBind) ctorArgs
+      ixs <-
+        ctxLiftInBindings InvNoBind ctorArgs (Bind "_" p_ret_tp NoBind)
+        ctorIndices
+      -- NOTE: The following is needed to convert the context of p_ret_tp from
+      -- params to (CtxApp 'CNil params), which Haskell does not know are equal,
+      -- in order to append it to the params context
+      -- let p_ret_tp' = undefined -- :: CtxTerm (CtxApp 'CNil (CtxInv params)) (Arrows ixs (d -> Typ a))
+      -- p_ret_tp' <- ctxLift (InvBind params "_" p_ret_tp') NoBind p_ret_tp
+      params_pret <- invBindNil params "_" p_ret_tp
+      castCtxTerm Proxy ret <$>
+        helper a d_top params_pret InvNoBind args ixs
+  ) where
+  mkPRetTp :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
+              InvBindings CtxTerm 'CNil ps ->
+              Bindings CtxTerm ps ixs ->
+              m (CtxTerm ps (Typ (Arrows ixs (d -> Typ a))))
+  mkPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params (ixs :: Bindings _ _ ixs) =
+    ctxPiProxy (Proxy :: Proxy (Typ (d -> Typ a))) ixs $ \ix_vars ->
+    do param_vars <- ctxVars params
+       dt <- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)
+         (return $ invertCtxTerms ix_vars)
+       ctxPi1 "_" dt $ \_ -> ctxTyp0
   helper :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
-            InvBindings CtxTerm 'CNil ('CCons params (Arrows ixs (d -> Typ a))) ->
-            InvBindings CtxTerm ('CCons params (Arrows ixs (d -> Typ a))) prevs ->
+            InvBindings CtxTerm 'CNil ('CCons ps (Arrows ixs (d -> Typ a))) ->
+            InvBindings CtxTerm ('CCons ps (Arrows ixs (d -> Typ a))) prevs ->
             Bindings (CtorArg d ixs) (CtxApp
-                                      ('CCons params
+                                      ('CCons ps
                                        (Arrows ixs (d -> Typ a))) prevs) args ->
-            CtxTerms (CtxInvApp (CtxApp ('CCons params (Arrows ixs (d -> Typ a)))
+            CtxTerms (CtxInvApp (CtxApp ('CCons ps (Arrows ixs (d -> Typ a)))
                                  prevs) args) ixs ->
-            m (CtxTerm (CtxApp ('CCons params
+            m (CtxTerm (CtxApp ('CCons ps
                                 (Arrows ixs (d -> Typ a))) prevs)
                (Typ (Arrows args a)))
   helper a d params_pret prevs NoBind ret_ixs =
