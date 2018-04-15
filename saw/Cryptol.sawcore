@@ -798,17 +798,6 @@ primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
 ecError :: (a :: sort 0) -> (len :: Num) -> seq len (bitvector 8) -> a;
 ecError a (TCNum n) = cryError a n;
 
--- Polynomials
-ecPMul :: (a b :: Num) -> seq (tcAdd (TCNum 1) a) Bool -> seq (tcAdd (TCNum 1) b) Bool
-       -> seq (tcAdd (TCNum 1) (tcAdd a b)) Bool;
-ecPMul (TCNum a) (TCNum b) = bvPMul a b;
-
-ecPDiv :: (a b :: Num) -> seq a Bool -> seq b Bool -> seq a Bool;
-ecPDiv (TCNum a) (TCNum b) = bvPDiv a b;
-
-ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool -> seq b Bool;
-ecPMod (TCNum a) (TCNum b) = bvPMod a b;
-
 -- Random values
 ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
 ecRandom a _ = error a "Cryptol.random";
