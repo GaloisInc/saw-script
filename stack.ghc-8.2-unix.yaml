@@ -36,4 +36,4 @@ extra-deps:
   - monadLib-3.7.3
   - sbv-7.6
   - tasty-hunit-0.10.0.1
-resolver: lts-10.6
+resolver: lts-11.5
