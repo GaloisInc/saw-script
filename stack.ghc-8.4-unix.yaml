@@ -39,6 +39,6 @@ extra-deps:
   - crackNum-2.0
   - hashtables-1.2.3.0
   - FloatingHex-0.4
-  - data-inttrie-0.1.3
-resolver: nightly-2018-03-23
+  - data-inttrie-0.1.4
+resolver: nightly-2018-04-16
 allow-newer: true
