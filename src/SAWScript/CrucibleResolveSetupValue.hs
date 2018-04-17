@@ -69,14 +69,19 @@ type LLVMPtr wptr = Crucible.LLVMPtr Sym wptr
 resolveSetupValueInfo ::
   CrucibleContext wptr            {- ^ crucible context  -} ->
   Map AllocIndex Crucible.MemType {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
   SetupValue                      {- ^ pointer to struct -} ->
   L.Info                          {- ^ field index       -}
-resolveSetupValueInfo cc env v =
+resolveSetupValueInfo cc env nameEnv v =
   case v of
     -- SetupGlobal g ->
+    SetupVar i
+      | Just alias <- Map.lookup i nameEnv
+      , let mdMap = TyCtx.llvmMetadataMap (cc^.ccTypeCtx)
+      -> L.Pointer (guessAliasInfo mdMap alias)
     SetupField a n ->
        fromMaybe L.Unknown $
-       do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env a)
+       do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env nameEnv a)
           listToMaybe [L.Pointer i | (n',_,i) <- xs, n == n' ]
 
     _ -> L.Unknown
@@ -86,16 +91,17 @@ resolveSetupValueInfo cc env v =
 resolveSetupFieldIndex ::
   CrucibleContext wptr            {- ^ crucible context  -} ->
   Map AllocIndex Crucible.MemType {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
   SetupValue                      {- ^ pointer to struct -} ->
   String                          {- ^ field name        -} ->
   Maybe Int                       {- ^ field index       -}
-resolveSetupFieldIndex cc env v n =
-  case resolveSetupValueInfo cc env v of
+resolveSetupFieldIndex cc env nameEnv v n =
+  case resolveSetupValueInfo cc env nameEnv v of
     L.Pointer (L.Structure xs) ->
       case [o | (n',o,_) <- xs, n == n' ] of
         [] -> Nothing
         o:_ ->
-          do Crucible.PtrType symTy <- typeOfSetupValue cc env v
+          do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
              Crucible.StructType si <- let ?lc = lc in TyCtx.asMemType symTy
              V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == toInteger o) (Crucible.siFields si)
 
@@ -107,19 +113,21 @@ typeOfSetupValue ::
   Monad m =>
   CrucibleContext wptr ->
   Map AllocIndex Crucible.MemType ->
+  Map AllocIndex Crucible.Ident ->
   SetupValue ->
   m Crucible.MemType
-typeOfSetupValue cc env val =
+typeOfSetupValue cc env nameEnv val =
   do let ?lc = cc^.ccTypeCtx
-     typeOfSetupValue' cc env val
+     typeOfSetupValue' cc env nameEnv val
 
 typeOfSetupValue' ::
   Monad m =>
   CrucibleContext wptr ->
   Map AllocIndex Crucible.MemType ->
+  Map AllocIndex Crucible.Ident ->
   SetupValue ->
   m Crucible.MemType
-typeOfSetupValue' cc env val =
+typeOfSetupValue' cc env nameEnv val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
@@ -136,21 +144,21 @@ typeOfSetupValue' cc env val =
                             , show (Cryptol.pp s)
                             ]
     SetupStruct vs ->
-      do memTys <- traverse (typeOfSetupValue cc env) vs
+      do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl False memTys
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
-      do memTy <- typeOfSetupValue cc env v
-         _memTys <- traverse (typeOfSetupValue cc env) vs
+      do memTy <- typeOfSetupValue cc env nameEnv v
+         _memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          -- TODO: check that all memTys are compatible with memTy
          return (Crucible.ArrayType (length (v:vs)) memTy)
     SetupField v n ->
-      case resolveSetupFieldIndex cc env v n of
+      case resolveSetupFieldIndex cc env nameEnv v n of
         Nothing -> fail ("Unable to resolve field name: " ++ show n)
-        Just i  -> typeOfSetupValue' cc env (SetupElem v i)
+        Just i  -> typeOfSetupValue' cc env nameEnv (SetupElem v i)
     SetupElem v i ->
-      do memTy <- typeOfSetupValue cc env v
+      do memTy <- typeOfSetupValue cc env nameEnv v
          let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array"
          case memTy of
            Crucible.PtrType symTy ->
@@ -195,16 +203,17 @@ resolveSetupVal ::
   CrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   Map AllocIndex Crucible.MemType ->
+  Map AllocIndex Crucible.Ident ->
   SetupValue             ->
   IO LLVMVal
-resolveSetupVal cc env tyenv val =
+resolveSetupVal cc env tyenv nameEnv val =
   case val of
     SetupVar i
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct vs -> do
-      vals <- mapM (resolveSetupVal cc env tyenv) vs
+      vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
       let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields dl 0 0 tps))) of
             Crucible.Struct v -> v
@@ -212,15 +221,15 @@ resolveSetupVal cc env tyenv val =
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupArray [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray vs -> do
-      vals <- V.mapM (resolveSetupVal cc env tyenv) (V.fromList vs)
+      vals <- V.mapM (resolveSetupVal cc env tyenv nameEnv) (V.fromList vs)
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupField v n ->
-      case resolveSetupFieldIndex cc tyenv v n of
+      case resolveSetupFieldIndex cc tyenv nameEnv v n of
         Nothing -> fail ("Unable to resolve field name: " ++ show n)
-        Just i  -> resolveSetupVal cc env tyenv (SetupElem v i)
+        Just i  -> resolveSetupVal cc env tyenv nameEnv (SetupElem v i)
     SetupElem v i ->
-      do memTy <- typeOfSetupValue cc tyenv v
+      do memTy <- typeOfSetupValue cc tyenv nameEnv v
          let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array"
          delta <- case memTy of
            Crucible.PtrType symTy ->
@@ -236,7 +245,7 @@ resolveSetupVal cc env tyenv val =
                    _ -> fail msg
                Nothing -> fail msg
            _ -> fail msg
-         ptr <- resolveSetupVal cc env tyenv v
+         ptr <- resolveSetupVal cc env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
              do delta' <- Crucible.bvLit sym (Crucible.bvWidth off) (Crucible.bytesToInteger delta)

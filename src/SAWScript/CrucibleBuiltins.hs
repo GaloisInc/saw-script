@@ -269,6 +269,7 @@ verifyPrestate cc mspec globals = do
   let tyenvRW = mspec^.csPreState.csAllocs
   let tyenvRO = mspec^.csPreState.csConstAllocs
   let tyenv = tyenvRW <> tyenvRO
+  let nameEnv = mspec^.csPreState.csVarTypeNames
 
   let prestateLoc = Crucible.mkProgramLoc "_SAW_verify_prestate" Crucible.InternalPos
   liftIO $ Crucible.setCurrentProgramLoc sym prestateLoc
@@ -298,7 +299,7 @@ verifyPrestate cc mspec globals = do
            , "Raw type: " ++ show (mspec^.csRet)
            ]
     (Just sv, Just retTy) ->
-      do retTy' <- typeOfSetupValue cc tyenv sv
+      do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
          b <- liftIO $ checkRegisterCompatibility retTy retTy'
          unless b $ fail $ unlines
            [ "Incompatible types for return value when verifying " ++ mspec^.csName
@@ -332,6 +333,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
     tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
+    nameEnv = mspec^.csPreState.csVarTypeNames
     nm = mspec^.csName
 
     checkArgTy i mt mt' =
@@ -344,9 +346,9 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec^.csArgBindings) of
         Just (mt, sv) -> do
-          mt' <- typeOfSetupValue cc tyenv sv
+          mt' <- typeOfSetupValue cc tyenv nameEnv sv
           checkArgTy i mt mt'
-          v <- resolveSetupVal cc env tyenv sv
+          v <- resolveSetupVal cc env tyenv nameEnv sv
           return (mt, v)
         Nothing -> fail $ unwords ["Argument", show i, "unspecified when verifying", show nm]
 
@@ -366,11 +368,12 @@ setupPrePointsTos ::
 setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
     tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
+    nameEnv = mspec^.csPreState.csVarTypeNames
 
     go :: MemImpl -> PointsTo -> IO MemImpl
     go mem (PointsTo ptr val) =
-      do val' <- resolveSetupVal cc env tyenv val
-         ptr' <- resolveSetupVal cc env tyenv ptr
+      do val' <- resolveSetupVal cc env tyenv nameEnv val
+         ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValInt blk off
              | Just Crucible.Refl <- Crucible.testEquality (Crucible.bvWidth off) Crucible.PtrWidth
@@ -378,7 +381,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
            _ -> fail "Non-pointer value found in points-to assertion"
          -- In case the types are different (from crucible_points_to_untyped)
          -- then the store type should be determined by the rhs.
-         memTy <- typeOfSetupValue cc tyenv val
+         memTy <- typeOfSetupValue cc tyenv nameEnv val
          storTy <- Crucible.toStorableType memTy
          let sym = cc^.ccBackend
          mem' <- Crucible.storeConstRaw sym mem ptr'' storTy val'
@@ -397,12 +400,13 @@ setupPrestateConditions ::
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
+    nameEnv = mspec^.csPreState.csVarTypeNames
 
     aux acc globals [] = return (globals, acc)
 
     aux acc globals (SetupCond_Equal val1 val2 : xs) =
-      do val1' <- resolveSetupVal cc env tyenv val1
-         val2' <- resolveSetupVal cc env tyenv val2
+      do val1' <- resolveSetupVal cc env tyenv nameEnv val1
+         val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          aux (t:acc) globals xs
 
@@ -959,7 +963,7 @@ constructExpandedSetupValue sc t =
 
     Crucible.PtrType symTy ->
       case TyCtx.asMemType symTy of
-        Just memTy ->  constructFreshPointer memTy
+        Just memTy ->  constructFreshPointer (symTypeAlias symTy) memTy
         Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
 
     Crucible.ArrayType n memTy ->
@@ -969,6 +973,14 @@ constructExpandedSetupValue sc t =
     Crucible.DoubleType   -> fail "crucible_fresh_expanded_var: Double not supported"
     Crucible.MetadataType -> fail "crucible_fresh_expanded_var: Metadata not supported"
     Crucible.VecType{}    -> fail "crucible_fresh_expanded_var: Vec not supported"
+
+llvmTypeAlias :: L.Type -> Maybe Crucible.Ident
+llvmTypeAlias (L.Alias i) = Just i
+llvmTypeAlias _ = Nothing
+
+symTypeAlias :: Crucible.SymType -> Maybe Crucible.Ident
+symTypeAlias (Crucible.Alias i) = Just i
+symTypeAlias _ = Nothing
 
 crucible_alloc ::
   BuiltinContext ->
@@ -982,6 +994,10 @@ crucible_alloc _bic _opt lty = CrucibleSetupM $
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
      currentState.csAllocs.at n ?= memTy
+     -- TODO: refactor
+     case llvmTypeAlias lty of
+       Just i -> currentState.csVarTypeNames.at n ?= i
+       Nothing -> return ()
      return (SetupVar n)
 
 crucible_alloc_readonly ::
@@ -996,6 +1012,9 @@ crucible_alloc_readonly _bic _opt lty = CrucibleSetupM $
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
      currentState.csConstAllocs.at n ?= memTy
+     case llvmTypeAlias lty of
+       Just i -> currentState.csVarTypeNames.at n ?= i
+       Nothing -> return ()
      return (SetupVar n)
 
 crucible_fresh_pointer ::
@@ -1005,12 +1024,16 @@ crucible_fresh_pointer ::
   CrucibleSetupM SetupValue
 crucible_fresh_pointer bic _opt lty = CrucibleSetupM $
   do memTy <- memTypeForLLVMType bic lty
-     constructFreshPointer memTy
+     constructFreshPointer (llvmTypeAlias lty) memTy
 
-constructFreshPointer :: Crucible.MemType -> CrucibleSetup arch SetupValue
-constructFreshPointer symTy =
+constructFreshPointer :: Maybe Crucible.Ident -> Crucible.MemType -> CrucibleSetup arch SetupValue
+constructFreshPointer mid memTy =
   do n <- csVarCounter <<%= nextAllocIndex
-     currentState.csFreshPointers.at n ?= symTy
+     currentState.csFreshPointers.at n ?= memTy
+     -- TODO: refactor
+     case mid of
+       Just i -> currentState.csVarTypeNames.at n ?= i
+       Nothing -> return ()
      return (SetupVar n)
 
 crucible_points_to ::
@@ -1030,14 +1053,15 @@ crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
             then fail "Multiple points-to preconditions on same pointer"
             else csResolvedState %= markResolved ptr
           let env = csAllocations (st^.csMethodSpec)
-          ptrTy <- typeOfSetupValue cc env ptr
+              nameEnv = csTypeNames (st^.csMethodSpec)
+          ptrTy <- typeOfSetupValue cc env nameEnv ptr
           lhsTy <- case ptrTy of
             Crucible.PtrType symTy ->
               case TyCtx.asMemType symTy of
                 Just lhsTy -> return lhsTy
                 Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
             _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-          valTy <- typeOfSetupValue cc env val
+          valTy <- typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility lhsTy valTy)
           addPointsTo (PointsTo ptr val)
 
@@ -1051,8 +1075,9 @@ crucible_equal _bic _opt val1 val2 = CrucibleSetupM $
   do cc <- getCrucibleContext
      st <- get
      let env = csAllocations (st^.csMethodSpec)
-     ty1 <- typeOfSetupValue cc env val1
-     ty2 <- typeOfSetupValue cc env val2
+         nameEnv = csTypeNames (st^.csMethodSpec)
+     ty1 <- typeOfSetupValue cc env nameEnv val1
+     ty2 <- typeOfSetupValue cc env nameEnv val2
      b <- liftIO $ checkRegisterCompatibility ty1 ty2
      unless b $ fail $ unlines
        [ "Incompatible types when asserting equality:"
