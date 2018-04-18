@@ -46,7 +46,7 @@ module Verifier.SAW.Term.CtxTerm (
   , ctxLambda, ctxPi, ctxPi1
   , MonadTerm(..), CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
   , CtorArg(..), CtorArgStruct(..), ctxCtorArgType
-  , ctxCtorType, ctxCtorElimType, ctxReduceRecursor
+  , ctxCtorType, ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor
   ) where
 
 import Data.Proxy
@@ -620,7 +620,8 @@ data CtorArgStruct d params ixs =
   {
     ctorParams :: Bindings CtxTerm 'CNil params,
     ctorArgs :: Bindings (CtorArg d ixs) (CtxInv params) args,
-    ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs
+    ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs,
+    dataTypeIndices :: Bindings CtxTerm (CtxInv params) ixs
   }
 
 -- | Convert a 'CtorArg' into the type that it represents, given a context of
@@ -650,14 +651,15 @@ ctxCtorArgBindings d params prevs (Bind x arg args) =
 
 -- | Compute the type of a constructor from the name of its datatype and its
 -- 'CtorArgStruct'
-ctxCtorType :: MonadTerm m => DataIdent d ->
-               CtorArgStruct d params ixs -> m Term
+ctxCtorType :: MonadTerm m => Ident -> CtorArgStruct d params ixs -> m Term
 ctxCtorType d (CtorArgStruct{..}) =
   elimClosedTerm <$>
   (ctxPi ctorParams $ \params ->
-    do bs <- ctxCtorArgBindings d (invertBindings ctorParams) InvNoBind ctorArgs
+    do bs <-
+         ctxCtorArgBindings (DataIdent d) (invertBindings ctorParams)
+         InvNoBind ctorArgs
        ctxPi bs $ \_ ->
-         ctxDataTypeM d
+         ctxDataTypeM (DataIdent d)
          (ctxLift InvNoBind bs $ invertCtxTerms params)
          (return $ invertCtxTerms ctorIndices))
 
@@ -687,14 +689,13 @@ ctxCtorType d (CtorArgStruct{..}) =
 -- just casted to whatever type the caller specifies.
 ctxCtorElimType :: MonadTerm m =>
                    Proxy (Typ ret) -> Proxy (Typ a) -> DataIdent d -> Ident ->
-                   Bindings CtxTerm (CtxInv params) ixs ->
                    CtorArgStruct d params ixs ->
                    m (CtxTerm ('CCons (CtxInv params)
                                (Arrows ixs (d -> Typ a))) (Typ ret))
-ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c dt_ixs
+ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   (CtorArgStruct{..}) =
   (do let params = invertBindings ctorParams
-      p_ret_tp <- mkPRetTp a_top d_top params dt_ixs
+      p_ret_tp <- mkPRetTp a_top d_top params dataTypeIndices
 
       -- Lift the argument and return indices into the context of p_ret
       args <- ctxLift InvNoBind (Bind "_" p_ret_tp NoBind) ctorArgs
@@ -707,7 +708,9 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c dt_ixs
       castCtxTerm Proxy ret <$>
         helper a_top d_top params_pret InvNoBind args ixs
   ) where
-  -- Build the type of the p_ret function
+
+  -- Build the type of the p_ret function. Note that this is only actually used
+  -- to form contexts, and should never actually be used directly in the output
   mkPRetTp :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
               InvBindings CtxTerm 'CNil ps ->
               Bindings CtxTerm ps ixs ->
@@ -718,6 +721,7 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c dt_ixs
        dt <- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)
          (return $ invertCtxTerms ix_vars)
        ctxPi1 "_" dt $ \_ -> ctxTyp0
+
   -- Iterate through the argument types of the constructor, building up a
   -- function from those arguments to the result type of the p_ret function.
   -- Note that, technically, this function also takes in recursive calls, so has
@@ -789,6 +793,26 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c dt_ixs
            castCtxTerm Proxy Proxy <$>
              (ctxPi1 "_" ih_tp $ \_ ->
                ctxLift InvNoBind (Bind "_" ih_tp NoBind) rest)
+
+-- | Build a function that substitutes parameters and a @p_ret@ return type
+-- function into the type of an eliminator, as returned by 'ctxCtorElimType',
+-- for the given constructor. We return the substitution function in the monad
+-- so that we only call 'ctxCtorElimType' once but can call the function many
+-- times, in order to amortize the overhead of 'ctxCtorElimType'.
+mkCtorElimTypeFun :: MonadTerm m => Ident -> Ident ->
+                     CtorArgStruct d params ixs -> m ([Term] -> Term -> m Term)
+mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
+  do ctxElimType <- ctxCtorElimType Proxy Proxy (DataIdent d) c argStruct
+     case ctxAppNilEq (invertBindings ctorParams) of
+       Refl ->
+         return $ \params p_ret ->
+         case ctxTermsForBindings ctorParams params of
+           Nothing -> error "ctorElimTypeFun: wrong number of parameters!"
+           Just paramsCtx ->
+             elimClosedTerm <$>
+             ctxSubstInBindings
+             (CtxTermsCtxCons (invertCtxTerms paramsCtx) (mkClosedTerm p_ret))
+             InvNoBind NoBind ctxElimType
 
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
