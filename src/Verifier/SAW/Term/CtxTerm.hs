@@ -267,12 +267,14 @@ ctxTermsCtxHeadTail :: CtxTermsCtx ctx ('CCons as a) ->
                        (CtxTermsCtx ctx as, CtxTerm ctx a)
 ctxTermsCtxHeadTail (CtxTermsCtxCons as a) = (as, a)
 
+{-
 -- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
 -- because it throws away our typing information
 ctxTermsToListUnsafe :: CtxTerms ctx as -> [Term]
 ctxTermsToListUnsafe CtxTermsNil = []
 ctxTermsToListUnsafe (CtxTermsCons (CtxTerm t) ts) =
   t : ctxTermsToListUnsafe ts
+-}
 
 -- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
 -- because it throws away our typing information
@@ -285,8 +287,7 @@ ctxTermsCtxToListUnsafe (CtxTermsCtxCons ts (CtxTerm t)) =
 -- returning a structured 'CtxTermsCtx' list. Note that the bindings themselves
 -- can be in an arbitrary context, but the terms passed in are assumed to be
 -- closed, i.e., in the empty context.
-ctxTermsForBindings :: Bindings tp ctx as -> [Term] ->
-                       Maybe (CtxTerms 'CNil as)
+ctxTermsForBindings :: Bindings tp ctx as -> [Term] -> Maybe (CtxTerms 'CNil as)
 ctxTermsForBindings NoBind [] = Just CtxTermsNil
 ctxTermsForBindings (Bind _ _ bs) (t : ts) =
   CtxTermsCons (mkClosedTerm t) <$> ctxTermsForBindings bs ts
@@ -466,17 +467,17 @@ ctxCtorAppM _d c paramsM argsM =
     (ctxTermsCtxToListUnsafe <$> argsM)))
 
 -- | Build an application of a recursor as a 'CtxTerm'
-ctxRecursorAppM :: MonadTerm m => Ident -> m (CtxTerms ctx params) ->
+ctxRecursorAppM :: MonadTerm m => Ident -> m (CtxTermsCtx ctx params) ->
                    m (CtxTerm ctx p_ret) -> m [(Ident, CtxTerm ctx elim)] ->
-                   m (CtxTerms ctx ixs) -> m (CtxTerm ctx arg) ->
+                   m (CtxTermsCtx ctx ixs) -> m (CtxTerm ctx arg) ->
                    m (CtxTerm ctx a)
 ctxRecursorAppM d paramsM pretM cs_fsM ixsM argM =
   CtxTerm <$>
   (mkFlatTermF =<<
-   (RecursorApp d <$> (ctxTermsToListUnsafe <$> paramsM) <*>
+   (RecursorApp d <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
     (unCtxTermUnsafe <$> pretM) <*>
     (map (\(c,f) -> (c, unCtxTermUnsafe f)) <$> cs_fsM) <*>
-    (ctxTermsToListUnsafe <$> ixsM) <*>
+    (ctxTermsCtxToListUnsafe <$> ixsM) <*>
     (unCtxTermUnsafe <$> argM)))
 
 
@@ -813,47 +814,53 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c dt_ixs
 -- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
 -- parameter variables of the inductive type and the earlier constructor
 -- arguments @xs@ for the remaining free variables.
-ctxReduceRecursor :: MonadTerm m => Ident -> CtxTerms 'CNil params ->
-                     Term -> [(Ident,Term)] ->
-                     CtxTerms 'CNil ctor_args -> Ident ->
-                     Bindings (CtorArg d ixs) (CtxInv params) ctor_args ->
-                     m Term
-ctxReduceRecursor d params p_ret cs_fs top_args c ctor_args =
-  (case ctxAppNilEq (invertCtxTerms params) of
-    Refl ->
+ctxReduceRecursor :: MonadTerm m => Ident -> [Term] -> Term ->
+                     [(Ident,Term)] -> [Term] -> Ident ->
+                     CtorArgStruct d params ixs -> m Term
+ctxReduceRecursor d params p_ret cs_fs top_args c (CtorArgStruct{..}) =
+  (case (invertCtxTerms <$> ctxTermsForBindings ctorParams params,
+         ctxTermsForBindings ctorArgs top_args,
+         ctxAppNilEq (invertBindings ctorParams)) of
+    (Just paramsCtx, Just argsCtx, Refl) ->
       do let fi =
                 case lookup c cs_fs of
                   Just f -> f
                   Nothing ->
                     error ("ctxReduceRecursor: eliminator missing for constructor "
                            ++ show c)
-         args <- mk_args (invertCtxTerms params) top_args ctor_args
-         foldM (\f arg -> mkTermF $ App f arg) fi args)
+         args <- mk_args paramsCtx paramsCtx argsCtx ctorArgs
+         foldM (\f arg -> mkTermF $ App f arg) fi args
+    (Nothing, _, _) ->
+      error "ctxReduceRecursor: wrong number of parameters!"
+    (_, Nothing, _) ->
+      error "ctxReduceRecursor: wrong number of constructor arguments!"
+  )
   where
-    mk_args :: (MonadTerm m, CtxApp 'CNil ctx ~ ctx) => CtxTermsCtx 'CNil ctx ->
+    mk_args :: (MonadTerm m, CtxApp 'CNil ctx ~ ctx) =>
+               CtxTermsCtx 'CNil params -> CtxTermsCtx 'CNil ctx ->
                CtxTerms 'CNil args -> Bindings (CtorArg d ixs) ctx args ->
                m [Term]
-    mk_args _ _ NoBind = return []
-    mk_args pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
+    mk_args _ _ _ NoBind = return []
+    mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
       (elimClosedTerm x :) <$>
-      mk_args (CtxTermsCtxCons pre_xs x) xs args
-    mk_args pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =
+      mk_args ps (CtxTermsCtxCons pre_xs x) xs args
+    mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (RecursiveArg zs ixs) args) =
       do zs' <- ctxSubstInBindings pre_xs InvNoBind NoBind zs
          ixs' <- ctxSubstInBindings pre_xs InvNoBind zs ixs
          (elimClosedTerm x :) <$>
-           ((:) <$> mk_rec_arg zs' ixs' x <*>
-            mk_args (CtxTermsCtxCons pre_xs x) xs args)
+           ((:) <$> mk_rec_arg ps zs' ixs' x <*>
+            mk_args ps (CtxTermsCtxCons pre_xs x) xs args)
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
-    mk_rec_arg :: MonadTerm m =>
+    mk_rec_arg :: MonadTerm m => CtxTermsCtx 'CNil params ->
                   Bindings CtxTerm 'CNil zs -> CtxTerms (CtxInv zs) ixs ->
                   CtxTerm 'CNil a -> m Term
-    mk_rec_arg zs_ctx ixs x =
+    mk_rec_arg ps zs_ctx ixs x =
       elimClosedTerm <$> ctxLambda zs_ctx
       (\_ ->
-        ctxRecursorAppM d (ctxLift InvNoBind zs_ctx params)
+        ctxRecursorAppM d (ctxLift InvNoBind zs_ctx ps)
         (mkLiftedClosedTerm zs_ctx p_ret)
         (forM cs_fs (\(c',f) -> (c',) <$> mkLiftedClosedTerm zs_ctx f))
-        (return ixs)
+        (return $ invertCtxTerms ixs)
         (ctxLift InvNoBind zs_ctx x))
