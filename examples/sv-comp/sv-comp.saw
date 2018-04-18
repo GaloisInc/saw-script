@@ -1,0 +1,26 @@
+/* 
+ * TODO: one issue is that not all benchmarks include prototypes for all
+ * functions
+ */
+
+let error_spec = do {
+    crucible_precond {{ False }};
+    crucible_execute_func [];
+};
+
+let nondet_int_spec = do {
+    crucible_execute_func [];
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    crucible_return (crucible_term x);
+};
+
+let main_spec = do {
+    crucible_execute_func [];
+};
+
+m <- llvm_load_module "test.bc";
+let assume = crucible_llvm_unsafe_assume_spec m;
+error_ov <- assume "__VERIFIER_error" error_spec;
+nondet_int_ov <- assume "__VERIFIER_nondet_uint" nondet_int_spec;
+let ovs = [error_ov, nondet_int_ov];
+crucible_llvm_verify m "main" ovs true main_spec yices;
