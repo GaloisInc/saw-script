@@ -754,14 +754,8 @@ ecAt :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
 ecAt (TCNum n) a (TCNum i) = bvAt n a i;
 ecAt TCInf a (TCNum i) = bvStreamGet a i;
 
-ecAtRange :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRange n a m i xs = seqMap (seq i Bool) a m (ecAt n a i xs);
-
 ecAtBack :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
 ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
-
-ecAtRangeBack :: (n :: Num) -> (a :: sort 0) -> (m i :: Num) -> seq n a -> seq m (seq i Bool) -> seq m a;
-ecAtRangeBack n a m i xs = seqMap (seq i Bool) a m (ecAtBack n a i xs);
 
 -- Static word sequences
 ecFromThen :: (first next bits len :: Num) -> seq len (seq bits Bool);
