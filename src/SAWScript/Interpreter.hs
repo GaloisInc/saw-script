@@ -617,6 +617,13 @@ primitives = Map.fromList
     (pureVal set_color)
     [ "Select whether to pretty-print SAWCore terms using color." ]
 
+  , prim "set_timeout"         "Int -> ProofScript ()"
+    (pureVal set_timeout)
+    [ "Set the timeout, in milliseconds, for any automated prover at the"
+    , "end of this proof script. Not that this is simply ignored for provers"
+    , "that don't support timeouts, for now."
+    ]
+
   , prim "show"                "{a} a -> String"
     (funVal1 showPrim)
     [ "Convert the value of the given expression to a string." ]
