@@ -5,6 +5,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {- |
 Module      : Verifier.SAW.Module
@@ -27,6 +29,7 @@ module Verifier.SAW.Module
   , CtorArg(..)
   , CtorArgStruct(..)
   , Ctor(..)
+  , ctorNumParams
   , DataType(..)
     -- * Modules
   , Module
@@ -154,10 +157,11 @@ instance Hashable Def -- automatically derived
 
 -- | A specification of a constructor
 data Ctor =
+  forall d params ixs.
   Ctor
   { ctorName :: !Ident
     -- ^ The name of this constructor
-  , ctorArgStruct :: CtorArgStruct
+  , ctorArgStruct :: CtorArgStruct d params ixs
     -- ^ Arguments to the constructor
   , ctorDataTypeName :: Ident
     -- ^ The datatype this constructor belongs to
@@ -170,7 +174,21 @@ data Ctor =
     -- where the @pi@ are the 'ctorParams', the @argi@ are the types specified
     -- by the 'ctorArgs', and the @ixi@ are the 'ctorDataTypeIndices'. Note that
     -- this type should always be top-level, i.e., have no free variables.
+  , ctorElimTypeFun :: [Term] -> Term -> IO Term
+    -- ^ Cached function for generating the type of an eliminator for this
+    -- constructor by passing it a list of parameters and a @p_ret@ function,
+    -- also known as the "motive function", which itself must have type
+    --
+    -- > (x1::ix1) -> .. -> (xm::ixm) -> d p1 .. pn x1 .. xm -> Type i
+    --
+    -- where the @ps@ are the parameters and the @ix@s are the indices of
+    -- datatype @d@
   }
+
+ctorNumParams :: Ctor -> Int
+ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
+  bindingsLength ctorParams
+
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
 lift2 f h x y = h (f x) (f y)

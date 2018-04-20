@@ -41,6 +41,7 @@ module Verifier.SAW.TypedAST
    -- * Data types and definitions.
  , DataType(..)
  , Ctor(..)
+ , ctorNumParams
  , CtorArg(..)
  , Def(..)
  , DefQualifier(..)

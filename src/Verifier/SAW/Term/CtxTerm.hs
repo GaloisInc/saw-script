@@ -37,11 +37,11 @@ right when you finally get GHC to accept your code. :)
 -}
 
 module Verifier.SAW.Term.CtxTerm (
-  Ctx(..), CtxApp, CtxInvApp, Arrows
+  Ctx(..), CtxApp, CtxInvApp, CtxInv, Arrows
   , ctxTermsForBindings, invAppendBindings, invertBindings
   , CtxTerm(..), CtxTerms(..), CtxTermsCtx(..)
   , Typ, mkClosedTerm, mkClosedTyp, elimClosedTerm
-  , Bindings(..), InvBindings(..), InBindings(..)
+  , Bindings(..), bindingsLength, InvBindings(..), InBindings(..)
   , mkLiftedClosedTerm
   , ctxLambda, ctxPi, ctxPi1
   , MonadTerm(..), CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
@@ -839,11 +839,11 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
 -- parameter variables of the inductive type and the earlier constructor
 -- arguments @xs@ for the remaining free variables.
 ctxReduceRecursor :: MonadTerm m => Ident -> [Term] -> Term ->
-                     [(Ident,Term)] -> [Term] -> Ident ->
+                     [(Ident,Term)] -> Ident -> [Term] ->
                      CtorArgStruct d params ixs -> m Term
-ctxReduceRecursor d params p_ret cs_fs top_args c (CtorArgStruct{..}) =
+ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
   (case (invertCtxTerms <$> ctxTermsForBindings ctorParams params,
-         ctxTermsForBindings ctorArgs top_args,
+         ctxTermsForBindings ctorArgs c_args,
          ctxAppNilEq (invertBindings ctorParams)) of
     (Just paramsCtx, Just argsCtx, Refl) ->
       do let fi =
