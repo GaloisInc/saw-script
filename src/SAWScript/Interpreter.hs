@@ -87,7 +87,7 @@ import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
---import SAWScript.AutoMatch
+import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
@@ -295,10 +295,8 @@ interpretStmts env stmts =
           do let env' = LocalTypedef (getVal name) ty : env
              interpretStmts env' ss
 
-{-
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts = fmap fst $ runTopLevel (interpretStmts emptyLocal stmts) ro rw
--}
 
 processStmtBind :: Bool -> SS.Pattern -> Maybe SS.Type -> SS.Expr -> TopLevel ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
@@ -619,6 +617,13 @@ primitives = Map.fromList
     (pureVal set_color)
     [ "Select whether to pretty-print SAWCore terms using color." ]
 
+  , prim "set_timeout"         "Int -> ProofScript ()"
+    (pureVal set_timeout)
+    [ "Set the timeout, in milliseconds, for any automated prover at the"
+    , "end of this proof script. Not that this is simply ignored for provers"
+    , "that don't support timeouts, for now."
+    ]
+
   , prim "show"                "{a} a -> String"
     (funVal1 showPrim)
     [ "Convert the value of the given expression to a string." ]
@@ -816,13 +821,11 @@ primitives = Map.fromList
     (pureVal writeCore)
     [ "Write out a representation of a term in SAWCore external format." ]
 
-  {-
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     [ "Interactively decides how to align two modules of potentially heterogeneous"
     , "language and prints the result."
     ]
-    -}
 
   , prim "prove"               "ProofScript SatResult -> Term -> TopLevel ProofResult"
     (pureVal provePrim)

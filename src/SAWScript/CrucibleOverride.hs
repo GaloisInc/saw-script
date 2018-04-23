@@ -793,7 +793,8 @@ learnPointsTo ::
   OverrideMatcher arch ()
 learnPointsTo opts sc cc spec prepost (PointsTo ptr val) =
   do let tyenv = csAllocations spec
-     memTy <- liftIO $ typeOfSetupValue cc tyenv val
+         nameEnv = csTypeNames spec
+     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
      (_memTy, ptr1) <- asPointer =<< resolveSetupValue opts cc sc spec ptr
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
@@ -1018,9 +1019,10 @@ resolveSetupValueLLVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = csAllocations spec :: Map AllocIndex Crucible.MemType
-     memTy <- liftIO $ typeOfSetupValue cc tyenv sval
+         nameEnv = csTypeNames spec
+     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
-     lval  <- liftIO $ resolveSetupVal cc m tyenv sval' `X.catch` handleException opts
+     lval  <- liftIO $ resolveSetupVal cc m tyenv nameEnv sval' `X.catch` handleException opts
      return (memTy, lval)
 
 resolveSetupValue ::

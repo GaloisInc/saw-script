@@ -37,13 +37,14 @@ data ProofState =
   { psGoals :: [ProofGoal]
   , psConcl :: ProofGoal
   , psStats :: SolverStats
+  , psTimeout :: Maybe Integer
   }
 
 startProof :: ProofGoal -> ProofState
-startProof g = ProofState [g] g mempty
+startProof g = ProofState [g] g mempty Nothing
 
 finishProof :: ProofState -> (SolverStats, Maybe Theorem)
-finishProof (ProofState gs concl stats) =
+finishProof (ProofState gs concl stats _) =
   case gs of
     []    -> (stats, Just (Theorem (goalTerm concl)))
     _ : _ -> (stats, Nothing)

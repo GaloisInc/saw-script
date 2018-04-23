@@ -147,6 +147,8 @@ data StateSpec' t = StateSpec
     -- ^ equality, propositions, and ghost-variable conditions
   , _csFreshVars     :: [TypedTerm]
     -- ^ fresh variables created in this state
+  , _csVarTypeNames  :: Map AllocIndex CL.Ident
+    -- ^ names for types of variables, for diagnostics
   }
   deriving (Show)
 
@@ -188,6 +190,11 @@ csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex CL.MemType
 csAllocations
   = Map.unions
   . toListOf ((csPreState <> csPostState) . (csAllocs <> csConstAllocs <> csFreshPointers))
+
+csTypeNames :: CrucibleMethodSpecIR -> Map AllocIndex CL.Ident
+csTypeNames
+  = Map.unions
+  . toListOf ((csPreState <> csPostState) . (csVarTypeNames))
 
 -- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core.
 methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
@@ -346,6 +353,7 @@ initialStateSpec =  StateSpec
   , _csPointsTos     = []
   , _csConditions    = []
   , _csFreshVars     = []
+  , _csVarTypeNames  = Map.empty
   }
 
 initialDefCrucibleMethodSpecIR ::

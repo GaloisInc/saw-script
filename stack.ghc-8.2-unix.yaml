@@ -30,7 +30,7 @@ extra-deps:
   - IfElse-0.85
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
-#  - monad-supply-0.6
+  - monad-supply-0.7
   - simple-smt-0.7.1
   - GraphSCC-1.0.4
   - monadLib-3.7.3

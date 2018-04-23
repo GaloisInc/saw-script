@@ -11,6 +11,7 @@ import qualified Data.Vector as V
 import           Control.Monad(filterM,liftM)
 
 import qualified Data.SBV.Dynamic as SBV
+import qualified Data.SBV.Internals as SBV
 
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
@@ -35,12 +36,13 @@ import SAWScript.Prover.Util(checkBooleanSchema)
 satUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   [String]      {- ^ Uninterpreted functions -} ->
+  Maybe Integer {- ^ Timeout in milliseconds -} ->
   SharedContext {- ^ Context for working with terms -} ->
   ProverMode    {- ^ Prove/check -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
-satUnintSBV conf unints sc mode term =
+satUnintSBV conf unints timeout sc mode term =
   do (t', mlabels, lit0) <- prepSBV sc unints term
 
      let lit = case mode of
@@ -51,7 +53,10 @@ satUnintSBV conf unints sc mode term =
      let (args, _) = asPiList tp
          (labels, argNames) = unzip [ (l, n) | (Just l, n) <- zip mlabels (map fst args) ]
 
-     SBV.SatResult r <- SBV.satWith conf lit
+         script = do
+           maybe (return ()) SBV.setTimeOut timeout
+           lit
+     SBV.SatResult r <- SBV.satWith conf script
 
      let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
                              (scSharedSize t')

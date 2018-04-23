@@ -40,5 +40,6 @@ extra-deps:
   - hashtables-1.2.3.0
   - FloatingHex-0.4
   - data-inttrie-0.1.4
+  - monad-supply-0.7
 resolver: nightly-2018-04-16
 allow-newer: true

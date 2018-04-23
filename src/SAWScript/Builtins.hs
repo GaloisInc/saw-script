@@ -42,7 +42,7 @@ import System.IO
 import System.IO.Temp (withSystemTempFile)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
-import Text.Read
+import Text.Read (readMaybe)
 
 
 import qualified Verifier.Java.Codebase as JSS
@@ -311,14 +311,14 @@ readCore path = do
 
 withFirstGoal :: (ProofGoal -> TopLevel (a, SolverStats, Maybe ProofGoal)) -> ProofScript a
 withFirstGoal f =
-  StateT $ \(ProofState goals concl stats) ->
+  StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
     g : gs -> do
       (x, stats', mg') <- f g
       case mg' of
-        Nothing -> return (x, ProofState gs concl (stats <> stats'))
-        Just g' -> return (x, ProofState (g' : gs) concl (stats <> stats'))
+        Nothing -> return (x, ProofState gs concl (stats <> stats') timeout)
+        Just g' -> return (x, ProofState (g' : gs) concl (stats <> stats') timeout)
 
 quickcheckGoal :: SharedContext -> Integer -> ProofScript SV.SatResult
 quickcheckGoal sc n = do
@@ -368,7 +368,7 @@ trivial = withFirstGoal $ \goal -> do
 
 split_goal :: ProofScript ()
 split_goal =
-  StateT $ \(ProofState goals concl stats) ->
+  StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
     (ProofGoal Existential _ _ _ _) : _ -> fail "not a universally-quantified goal"
@@ -382,7 +382,7 @@ split_goal =
              t2 <- io $ scLambdaList sc vars p2
              let g1 = ProofGoal Universal num (ty ++ ".left") name t1
              let g2 = ProofGoal Universal num (ty ++ ".right") name t2
-             return ((), ProofState (g1 : g2 : gs) concl stats)
+             return ((), ProofState (g1 : g2 : gs) concl stats timeout)
 
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do
@@ -584,7 +584,9 @@ satSBV conf sc = satUnintSBV conf sc []
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
 satUnintSBV :: SBV.SMTConfig -> SharedContext -> [String] -> ProofScript SV.SatResult
-satUnintSBV conf sc unints = wrapProver sc (Prover.satUnintSBV conf unints)
+satUnintSBV conf sc unints = do
+  timeout <- psTimeout <$> get
+  wrapProver sc (Prover.satUnintSBV conf unints timeout)
 
 
 wrapProver ::
@@ -676,6 +678,9 @@ satSMTLib2 sc path = satWithExporter Prover.writeSMTLib2 sc path ".smt2"
 
 satUnintSMTLib2 :: SharedContext -> [String] -> FilePath -> ProofScript SV.SatResult
 satUnintSMTLib2 sc unints path = satWithExporter (Prover.writeUnintSMTLib2 unints) sc path ".smt2"
+
+set_timeout :: Integer -> ProofScript ()
+set_timeout to = modify (\ps -> ps { psTimeout = Just to })
 
 -- | Translate a @Term@ representing a theorem for input to the
 -- given validity-checking script and attempt to prove it.
