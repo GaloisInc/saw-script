@@ -18,7 +18,7 @@ let main_spec = do {
     crucible_execute_func [];
 };
 
-m <- llvm_load_module "test.bc";
+m <- llvm_load_module "parity.bc";
 let assume = crucible_llvm_unsafe_assume_spec m;
 error_ov <- assume "__VERIFIER_error" error_spec;
 nondet_int_ov <- assume "__VERIFIER_nondet_uint" nondet_int_spec;
