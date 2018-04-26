@@ -413,11 +413,18 @@ mkTupleSelector i t
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
   | otherwise = fail "mkTupleSelector: non-positive index"
 
-mkCtor :: Ident -> [TermBuilder Term] -> TermBuilder Term
-mkCtor i l = mkTermF . FTermF . CtorApp i =<< sequence l
+mkCtor :: Ident -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
+mkCtor i paramsB argsB =
+  do params <- sequence paramsB
+     args <- sequence argsB
+     mkTermF $ FTermF $ CtorApp i params args
 
-mkDataType :: Ident -> [TermBuilder Term] -> TermBuilder Term
-mkDataType i l = mkTermF . FTermF . DataTypeApp i =<< sequence l
+mkDataType :: Ident -> [TermBuilder Term] -> [TermBuilder Term] ->
+              TermBuilder Term
+mkDataType i paramsB argsB =
+  do params <- sequence paramsB
+     args <- sequence argsB
+     mkTermF $ FTermF $ DataTypeApp i params args
 
 mkNatLit :: Prim.Nat -> TermBuilder Term
 mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
@@ -426,8 +433,8 @@ mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 
 mkBool :: Bool -> TermBuilder Term
-mkBool True  = mkCtor "Prelude.True" []
-mkBool False = mkCtor "Prelude.False" []
+mkBool True  = mkCtor "Prelude.True" [] []
+mkBool False = mkCtor "Prelude.False" [] []
 
 mkBvNat :: Prim.Nat -> Integer -> TermBuilder Term
 mkBvNat n x = do
@@ -543,7 +550,7 @@ eq_Tuple = Conversion $ thenMatcher matcher action
       Just (foldr mkAnd mkTrue (map mkEq (zip [1 ..] ts)))
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
+        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" [] []))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t
                       `mkApp` mkTupleSelector i x
@@ -558,7 +565,7 @@ eq_Record = Conversion $ thenMatcher matcher action
       Just (foldr mkAnd mkTrue (map mkEq (Map.assocs tm)))
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
+        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" [] []))
         sel t i = mkTermF . FTermF . RecordSelector t =<< mkTermF (FTermF (StringLit i))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t
