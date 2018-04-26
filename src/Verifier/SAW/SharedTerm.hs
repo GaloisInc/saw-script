@@ -43,16 +43,23 @@ module Verifier.SAW.SharedTerm
   , scFreshGlobal
   , scGlobalDef
     -- ** Recursors and datatypes
-  , scRecursorFunTypes
+  , scRecursorElimTypes
   , scRecursorRetTypeType
   , scReduceRecursor
   , allowedElimSort
+    -- ** Modules
+  , scLoadModule
+  , scEnsureModule
+  , scModuleIsLoaded
     -- ** Term construction
   , scApply
   , scApplyAll
   , scRecord
   , scRecordSelect
   , scRecordType
+  , scOldRecord
+  , scOldRecordSelect
+  , scOldRecordType
   , scDataTypeAppParams
   , scDataTypeApp
   , scCtorAppParams
@@ -95,6 +102,9 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
+  , scOldTuple
+  , scOldTupleType
+  , scOldTupleSelector
   , scVector
   , scVecType
   , scUpdNatFun
@@ -185,7 +195,6 @@ import Control.Lens
 import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Control.Monad.Reader
-import Control.Monad.IO.Class
 import Data.Bits
 import Data.Maybe
 import qualified Data.Foldable as Fold
@@ -200,9 +209,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Data.Word
 import Prelude hiding (mapM, maximum)
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
@@ -317,25 +324,25 @@ scModuleIsLoaded sc name =
 -- | Load a module into the current shared context, raising an error if a module
 -- of the same name is already loaded
 scLoadModule :: SharedContext -> Module -> IO ()
-scLoadModule sc mod =
+scLoadModule sc m =
   modifyIORef' (scModuleMap sc) $
   HMap.insertWith (error $ "scLoadModule: module "
-                   ++ show (moduleName mod) ++ " already loaded!")
-  (moduleName mod) mod
+                   ++ show (moduleName m) ++ " already loaded!")
+  (moduleName m) m
 
 -- | Ensure that a module is loaded into the current shared context, doing
 -- nothing if a module of the same name is already loaded
 scEnsureModule :: SharedContext -> Module -> IO ()
-scEnsureModule sc mod =
+scEnsureModule sc m =
   modifyIORef' (scModuleMap sc) $
-  HMap.insertWith (\_new old -> old) (moduleName mod) mod
+  HMap.insertWith (\_new old -> old) (moduleName m) m
 
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
 scFindModule sc name =
   do maybe_mod <- HMap.lookup name <$> readIORef (scModuleMap sc)
      case maybe_mod of
-       Just mod -> return mod
+       Just m -> return m
        Nothing ->
          error ("scFindModule: module " ++ show name ++ " not found!")
 
@@ -414,6 +421,39 @@ allowedElimSort dt s =
   else True
 
 
+-- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
+-- function @p_ret@ of type
+--
+-- > (x1::ix1) -> .. -> (xm::ixm) -> d p1 .. pn x1 .. xm -> Type i
+--
+-- that computes a return type from type indices for @d@ and an element of @d@
+-- for those indices, return the requires types of elimination functions for
+-- each constructor of @d@. See the documentation of the 'Ctor' type and/or the
+-- 'ctxCtorElimType' function for more details.
+scRecursorElimTypes :: SharedContext -> Ident -> [Term] -> Term ->
+                       IO [(Ident, Term)]
+scRecursorElimTypes sc d_id params p_ret =
+  do maybe_d <- scFindDataType sc d_id
+     d <-
+       case maybe_d of
+         Nothing ->
+           fail $ "scRecursorElimTypes: failed to find datatype " ++ show d_id
+         Just d -> return d
+     forM (dtCtors d) $ \ctor ->
+       do elim_type <- ctorElimTypeFun ctor params p_ret
+          return (ctorName ctor, elim_type)
+
+
+-- | Generate the type @(ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s@
+-- given @d@, @params@, and the sort @s@
+scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
+scRecursorRetTypeType sc dt params s =
+  do ixs <- mapM (scLocalVar sc) [length (dtIndices dt) - 1 .. 0]
+     d_params_ixs <- scFlatTermF sc (DataTypeApp (dtName dt) params ixs)
+     s_tm <- scSort sc s
+     body <- scFun sc d_params_ixs s_tm
+     scPiList sc (dtIndices dt) body
+
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call
 --
@@ -486,7 +526,7 @@ scWhnf sc t0 =
                                                                        Nothing -> foldM reapply t' xs
     go xs                     (asGlobalDef -> Just c)           = scFindDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
-                               Just (d, params, p_ret, cs_fs, ixs,
+                               Just (d, params, p_ret, cs_fs, _,
                                      asCtorParams ->
                                      Just (c, _, args)))        = (scReduceRecursor sc d params
                                                                    p_ret cs_fs c args) >>= go xs
@@ -528,7 +568,7 @@ scWhnf sc t0 =
 
     tryDef :: (?cache :: Cache IORef TermIndex Term) =>
               Ident -> [WHNFElim] -> Maybe Def -> IO Term
-    tryDef ident xs (Just (defBody -> Just t)) = go xs t
+    tryDef _ xs (Just (defBody -> Just t)) = go xs t
     tryDef ident xs _ = scGlobalDef sc ident >>= flip (foldM reapply) xs
 
 
