@@ -30,6 +30,7 @@ module Verifier.SAW.Module
   , CtorArgStruct(..)
   , Ctor(..)
   , ctorNumParams
+  , ctorNumArgs
   , DataType(..)
     -- * Modules
   , Module
@@ -188,6 +189,10 @@ data Ctor =
 ctorNumParams :: Ctor -> Int
 ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorParams
+
+ctorNumArgs :: Ctor -> Int
+ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
+  bindingsLength ctorArgs
 
 
 lift2 :: (a -> b) -> (b -> b -> c) -> a -> a -> c
