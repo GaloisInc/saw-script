@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {- |
 Module      : Verifier.SAW.Term.Pretty
@@ -17,6 +18,7 @@ module Verifier.SAW.Term.Pretty
   ( PPOpts(..)
   , defaultPPOpts
   , depthPPOpts
+  , ppNat
   , ppTerm
   , showTerm
   , scPrettyTerm
@@ -249,19 +251,19 @@ ppIdent :: Ident -> Doc
 ppIdent i = text (show i)
 
 -- | Pretty-print an integer in the correct base
-ppNat :: Int -> Integer -> Doc
-ppNat base i
-  | base > 36 = integer i
+ppNat :: PPOpts -> Integer -> Doc
+ppNat (PPOpts{..}) i
+  | ppBase > 36 = integer i
   | otherwise = prefix <> text value
   where
-    prefix = case base of
+    prefix = case ppBase of
       2  -> text "0b"
       8  -> text "0o"
       10 -> empty
       16 -> text "0x"
-      _  -> text "0"  <> char '<' <> int base <> char '>'
+      _  -> text "0"  <> char '<' <> int ppBase <> char '>'
 
-    value  = showIntAtBase (toInteger base) (digits !!) i ""
+    value  = showIntAtBase (toInteger ppBase) (digits !!) i ""
     digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 -- | Pretty-print a memoization variable
@@ -420,7 +422,7 @@ ppFlatTermF prec tf =
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecNone t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
     Sort s -> return $ text (show s)
-    NatLit i -> ppNat <$> (ppBase <$> ppOpts <$> ask) <*> return i
+    NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return i
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
     FloatLit v  -> return $ text (show v)
