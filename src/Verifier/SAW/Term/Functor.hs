@@ -116,6 +116,11 @@ instance Hashable Ident -- automatically derived
 instance Show Ident where
   show (Ident m s) = shows m ('.' : s)
 
+instance Read Ident where
+  readsPrec _ str =
+    let (str1, str2) = break (== ' ') str in
+    [(parseIdent str1, str2)]
+
 mkIdent :: ModuleName -> String -> Ident
 mkIdent = Ident
 
