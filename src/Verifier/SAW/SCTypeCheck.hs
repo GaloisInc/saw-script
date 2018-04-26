@@ -1,5 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
+
 {- |
 Module      : Verifier.SAW.SCTypeCheck
 Copyright   : Galois, Inc. 2012-2015
@@ -24,7 +26,9 @@ module Verifier.SAW.SCTypeCheck
 import Control.Applicative
 import Control.Lens
 import Control.Monad.Trans.Except
-import Control.Monad.State.Strict as State
+import Control.Monad.State.Strict
+import Control.Monad.Reader
+import Control.Monad.IO.Class
 
 import Data.Foldable (and)
 import Data.Map (Map)
@@ -45,8 +49,48 @@ import Verifier.SAW.TypedAST
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term
 
--- | The monad for type-checking, which memoizes and can throw errors
-type TCM a = State.StateT TCState (ExceptT TCError IO) a
+-- | The monad for type checking and inference, which:
+--
+-- * Maintains a variable context, giving types to the deBruijn indices in
+-- scope, along with a 'SharedContext';
+--
+-- * Memoizes the most general type inferred for each expression; AND
+--
+-- * Can throw 'TCError's
+type TCM a =
+  ReaderT (SharedContext, [Term]) (StateT TCState (ExceptT TCError IO)) a
+
+-- | Run a type-checking computation in a given context, starting from the empty
+-- memoization table
+runTCM :: TCM a -> SharedContext -> [Term] -> IO (Either TCError Term)
+runTCM m sc ctx = runExceptT $ evalStateT (runReaderT m (sc, ctx)) Map.empty
+
+-- | Run a type-checking computation in a typing context extended with a new
+-- variable with the given type. This throws away the memoization table while
+-- running the sub-computation, as memoization tables are tied to specific sets
+-- of bindings.
+inExtendedCtx :: Term -> TCM a -> TCM a
+inExtendedCtx tp m =
+  do saved_table <- get
+     put Map.empty
+     a <- local (\(sc,ctx) -> (sc, tp:ctx)) m
+     put saved_table
+     return a
+
+-- | Lift a binary 'IO' function that takes in a 'SharedContext' to a unary
+-- function to a 'TCM' computation
+liftTCM1 :: (SharedContext -> a -> IO b) -> a -> TCM b
+liftTCM1 f a = (fst <$> ask) >>= f a
+
+-- | Lift a trinary 'IO' function that takes in a 'SharedContext' to a binary
+-- function to a 'TCM' computation
+liftTCM2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> TCM c
+liftTCM2 f a b = (fst <$> ask) >>= f a b
+
+-- | Lift a quaternary (yes, that is the word) 'IO' function that takes in a
+-- 'SharedContext' to a trinary function to a 'TCM' computation
+liftTCM3 :: (SharedContext -> a -> b -> IO c) -> a -> b -> TCM c
+liftTCM3 f a b = (fst <$> ask) >>= f a b
 
 -- | Errors that can occur during type-checking
 data TCError
@@ -61,10 +105,11 @@ data TCError
   | ArrayTypeMismatch Term Term
   | DanglingVar Int
   | DisallowedElimSort Term
+  | BadParamsOrArgsLength Ident [Term] [Term]
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
-throwTCError = lift . throwE
+throwTCError = lift . lift . throwE
 
 -- | Pretty-print a type-checking error
 prettyTCError :: TCError -> [String]
@@ -96,6 +141,12 @@ prettyTCError e =
       ]
     DanglingVar n ->
       [ "Dangling bound variable index: " ++ show n ]
+    BadParamsOrArgsLength is_dt ident params args ->
+      [ "Wrong number of parameters or arguments to "
+        ++ (if is_dt then "datatype" else "constructor") ++ ": ",
+        ishow (Unshared $
+               (if is_dt then DataTypeApp else CtorApp) ident params args)
+      ]
   where
     ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
@@ -109,264 +160,297 @@ scTypeCheckError sc t0 =
 -- well-formed and that all internal type annotations are correct. Types are
 -- evaluated to WHNF as necessary, and the returned type is in WHNF.
 scTypeCheck :: SharedContext -> Term -> IO (Either TCError Term)
-scTypeCheck sc t0 = runExceptT (scTypeCheck' sc [] t0)
+scTypeCheck sc = scTypeCheckInCtx sc []
 
 -- | Like 'scTypeCheck', but type-check the term relative to a typing context,
 -- which assigns types to free variables in the term
 scTypeCheckInCtx :: SharedContext -> [Term] -> Term -> IO (Either TCError Term)
-scTypeCheckInCtx sc ctx t0 = runExceptT $ scTypeCheck' sc ctx t0
+scTypeCheckInCtx sc ctx t0 = runTCM (inferTerm t0) sc ctx
 
--- | The main workhorse for 'scTypeCheck' and friends
-scTypeCheck' :: SharedContext -> [Term] -> Term -> ExceptT TCError IO Term
-scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
-  where
-    -- Memoized type inference
-    memo :: Term -> TCM Term
-    memo (Unshared tf) = termf tf
-    memo _t@(STApp{ stAppIndex = i, stAppTermF = tf}) =
-      do table <- State.get
-         case Map.lookup i table of
-           Just x  -> return x
-           Nothing ->
-             do x <- termf tf
-                x' <- scTypeCheckWHNF x
-                State.modify (Map.insert i x')
-                return x'
+-- | A pair of a 'Term' and its type
+data TypedTerm = TypedTerm { typedVal :: Term, typedType :: Term }
 
-    -- Infer the type of a term and ensure that it is a sort
-    sort :: Term -> TCM Sort
-    sort t =
-      do t_tp <- memo t
-         case asSort t_tp of
-           Just s -> return s
-           Nothing -> throwTCError (NotSort t_tp)
+-- | The class of things that we can infer types of. The 'typeInfer' method
+-- returns the most general (with respect to subtyping) type of its input.
+class TypeInfer a where
+  typeInfer :: a -> TCM Term
 
-    -- Helper function to lift IO computations
-    io = lift . lift
+typeInferAndBuild :: TermF TypedTerm -> TCM TypedTerm
+typeInferAndBuild tf =
+  TypedTerm <$> liftTCM1 scTermF (fmap typedVal tf) <*> typeInfer tf
 
-    -- Check that tx = (Pi v ty tz) and that y has type ty, and return [y/v]tz
-    applyPi :: Term -> Term -> TCM Term
-    applyPi tx y = do
-      ty <- memo y
-      case asPi tx of
-        Just (_, aty, rty) -> do
-          _ <- sort aty -- TODO: do we care about the level?
-          aty' <- scTypeCheckWHNF aty
-          checkSubtype ty aty' (ArgTypeMismatch aty' ty)
-          io $ instantiateVar sc 0 y rty
-        _ -> throwTCError (NotFuncType tx)
+typeInferAndId :: Term -> TCM TypedTerm
+typeInferAndId t = TypedTerm t <$> typeInfer t
 
-    -- Check that one type is a subtype of another, throwing the given error if
-    -- not. Note: we assume the types are already in WHNF.
-    checkSubtype :: Term -> Term -> TCError -> TCM ()
-    checkSubtype t1 t2 err = do
-      ok <- io $ scSubtype sc ty ty'
-      unless ok (throwTCError err)
+-- Type inference for Term dispatches to type inference on TermF Term, but uses
+-- memoization to avoid repeated work
+instance TypeInfer Term where
+  typeInfer (Unshared tf) = typeInfer tf
+  typeInfer (STApp{ stAppIndex = i, stAppTermF = tf}) =
+    do table <- get
+       case Map.lookup i table of
+         Just x  -> return x
+         Nothing ->
+           do x <- inferTermF tf
+              x' <- typeCheckWHNF x
+              modify (Map.insert i x')
+              return x'
 
-    -- Check that a term has type String
-    checkField :: Term -> TCM ()
-    checkField f =
-      do tf <- memo f
-         string_tp <- io scStringType
-         checkSubtype tf string_tp (NotStringType tf)
+-- Type inference for TermF Term dispatches to that for TermF TypedTerm by
+-- calling inference on all the sub-components and extending the context inside
+-- of the binding forms
+instance TypeInfer (TermF Term) where
+  typeInfer (Lam x a rhs) =
+    typeInfer =<< (Lam x <$> (typeInferAndId a)
+                   <*> inExtendedCtx a (typeInferAndId rhs))
+  typeInfer (Pi x a rhs) =
+    typeInfer =<< (Pi x <$> (typeInferAndId a)
+                   <*> inExtendedCtx a (typeInferAndId rhs))
+  typeInfer t = typeInfer =<< mapM typeInferAndId t
 
-    -- The main type inference engine for term-level constructs
-    termf :: TermF Term -> TCM Term
-    termf tf =
-      case tf of
-        FTermF ftf -> ftermf ftf
-        App x y ->
-          do tx <- memo x
-             applyPi tx y
-        Lambda x a rhs ->
-          do _ <- sort a
-             -- NOTE: we call scTypeCheck' again here because we cannot reuse
-             -- the memo table in an extended context
-             b <- lift $ scTypeCheck' sc (a : env) rhs
-             io $ scTermF sc (Pi x a b)
-        Pi _ a rhs ->
-          do s1 <- sort a
-             -- NOTE: we call scTypeCheck' again here because we cannot reuse
-             -- the memo table in an extended context
-             s2 <- asSort =<< lift (scTypeCheck' sc (a : env) rhs)
-             -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is
-             -- a Prop when b is a Prop (this is a forall proposition),
-             -- otherwise it is a (Type (max (sortOf a) (sortOf b)))
-             io $ scSort sc $ if s2 == propSort then propSort else max s1 s2
-        LocalVar i
-          | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
-          | otherwise      -> throwTCError (DanglingVar (i - length env))
-        Constant _ t _ -> memo t
+-- Type inference for FlatTermF Term dispatches to that for FlatTermF TypedTerm
+instance TypeInfer (FlatTermF Term) where
+  typeInfer = typeInfer =<< mapM typeInferAndId t
 
-    -- The type inference engine for built-in constructs
-    ftermf :: FlatTermF Term -> TCM Term
-    ftermf tf =
-      case tf of
-        GlobalDef d -> do
-          ty <- io $ scTypeOfGlobal sc d
-          _ <- sort ty
-          scTypeCheckWHNF ty
-        UnitValue -> io $ scUnitType sc
-        UnitType -> io $ scSort sc (mkSort 0)
-        PairValue x y -> do
-          tx <- memo x
-          ty <- memo y
-          io $ scPairType sc tx ty
-        PairType x y -> do
-          sx <- sort x
-          sy <- sort y
-          io $ scSort sc (max sx sy)
-        EmptyValue -> io $ scEmptyType sc
-        EmptyType -> io $ scSort sc (mkSort 0)
-        FieldValue f x y -> do
-          checkField f
-          tx <- memo x
-          ty <- memo y
-          io $ scFieldType sc f tx ty
-        FieldType f x y -> do
-          checkField f
-          sx <- sort x
-          sy <- sort y
-          io $ scSort sc (max sx sy)
-        PairLeft t -> do
-          ty <- memo t
-          case asPairType ty of
-            Just (t1, _) -> scTypeCheckWHNF t1
-            _ -> throwTCError (NotTupleType ty)
-        PairRight t -> do
-          ty <- memo t
-          case asPairType ty of
-            Just (_, t2) -> scTypeCheckWHNF t2
-            _ -> throwTCError (NotTupleType ty)
-        RecordSelector t f' -> do
-          checkField f'
-          maybe_f <- asStringLit <$> scTypeCheckWHNF f'
-          f <- case maybe_f of
-            Just f -> f
-            Nothing -> throwTCError (BadRecordField f')
-          ty <- memo t
-          case asRecordType ty of
-            Just m ->
-              case Map.lookup f m of
-                Nothing -> throwTCError $ BadRecordField f ty
-                Just tp -> scTypeCheckWHNF tp
-            _ -> throwTCError (NotRecordType ty)
 
-        CtorApp c params args -> do
-          t <- io $ scTypeOfCtor sc c
-          _ <- sort () t -- TODO: do we care about the level?
-          t' <- scTypeCheckWHNF t
-          foldM applyPi t' (params ++ args)
-        DataTypeApp dt params args -> do
-          t <- io $ scTypeOfDataType sc dt
-          _ <- sort t -- TODO: do we care about the level?
-          t' <- scTypeCheckWHNF t
-          foldM applyPi t' (params ++ args)
-        RecursorApp d params p_ret fs_cs ixs arg -> do
-          -- Look up the datatype
-          maybe_dt <- scFindDataType sc d
-          dt <- case maybe_dt of
-            Just dt -> dt
-            Nothing -> fail $ "Could not find datatype: " ++ show d
+-- Type inference for TermF TypedTerm is the main workhorse. Intuitively, this
+-- represents the case where each immediate subterm of a term is labeled with
+-- its (most general) type.
+instance TypeInfer (TermF TypedTerm) where
+  typeInfer (FTermF ftf) = typeInfer ftf
+  typeInfer (App (TypedTerm _ x_tp) y) = applyPiTyped x_tp y
+  typeInfer (Lambda x (TypedTerm a a_tp) (TypedTerm _ b)) =
+    void (ensureSort a_tp) >> liftTCM1 scTermF (Pi x a b)
+  typeInfer (Pi _ (TypedTerm a a_tp) (TypedTerm b b_tp)) =
+    do s1 <- ensureSort a_tp
+       s2 <- ensureSort b_tp
+       -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
+       -- when b is a Prop (this is a forall proposition), otherwise it is a
+       -- (Type (max (sortOf a) (sortOf b)))
+       liftTCM1 $ scSort $ if s2 == propSort then propSort else max s1 s2
+  typeInfer (LocalVar i) =
+    do (_, ctx) <- ask
+       if i < length ctx then
+         -- The ith type in the current variable typing context is well-typed
+         -- relative to the suffix of the context after it, so we have to lift it
+         -- (i.e., call incVars) to make it well-typed relative to all of ctx
+         liftTCM3 incVars 0 (i+1) (ctx !! i)
+         else
+         throwTCError (DanglingVar (i - length env))
+  typeInfer (Constant _ (TypedTerm _ tp) _) =
+    -- FIXME: should we check that the type (3rd arg of Constant) is a type?
+    return tp
 
-          -- Check that the params and ixs have the correct types by making sure
-          -- they correspond to the input types of dt
-          if length params /= length (dtParams dt) ||
-             length ixs /= length (dtIndices dt) then
-            throwTCError $ MalformedRecursorArgs (Unshared tf)
-            else return ()
-          _ <- foldM applyPi (dtType dt) (params ++ ixs)
 
-          -- Get the type of p_ret and make sure that it is of the form
-          --
-          -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
-          --
-          -- for some allowed sort s, where the Ix are the indices of of dt
-          p_ret_tp <- memo p_ret
-          p_ret_s <-
-            case asPiList p_ret_tp of
-              (_, (asSort -> Just s)) -> return s
-              _ -> throwTCError $ MalformedRecursorRet $ Unshared tf
-          p_ret_tp_req <- scRecursorRetTypeType sc dt params p_ret_s
-          -- Technically this is an equality test, not a subtype test, but we
-          -- use the precise sort used in p_ret_tp, so they are the same, and
-          -- checkSubtype is handy...
-          checkSubtype p_ret_tp p_ret_tp_req
-            (MalformedRecursorRet $ Unshared tf)
-          if allowedElimSort dt s then return ()
-            else throwTCError $ MalformedRecursorSort (Unshared tf)
+-- Type inference for FlatTermF TypedTerm is the main workhorse for flat
+-- terms. Intuitively, this represents the case where each immediate subterm of
+-- a term has already been labeled with its (most general) type.
+instance TypeInfer (FlatTermF TypedTerm) where
+  typeInfer (GlobalDef d) =
+    do ty <- liftTCM1 scTypeOfGlobal d
+       _ <- ensureSort ty
+       typeCheckWHNF ty
+  typeInfer UnitValue = liftTCM0 scUnitType
+  typeInfer UnitType = liftTCM1 scSort (mkSort 0)
+  typeInfer (PairValue (TypedTerm _ tx) (TypedTerm ty)) =
+    liftTCM2 scPairType tx ty
+  typeInfer (PairType (TypedTerm _ tx) (TypedTerm ty)) =
+    do sx <- ensureSort tx
+       sy <- ensureSort ty
+       liftTCM1 scSort (max sx sy)
+  typeInfer EmptyValue = liftTCM0 scEmptyType
+  typeInfer EmptyType = liftTCM1 scSort (mkSort 0)
+  typeInfer (FieldValue f (TypedTerm _ tx) (TypedTerm _ ty)) =
+    do checkField f
+       liftTCM3 scFieldType f tx ty
+  typeInfer (FieldType f (TypedTerm _ tx) (TypedTerm _ ty)) =
+    do checkField f
+       sx <- ensureSort tx
+       sy <- ensureSort ty
+       liftTCM1 scSort (max sx sy)
+  typeInfer (PairLeft (TypedTerm _ tp)) =
+    case asPairType tp of
+      Just (t1, _) -> typeCheckWHNF t1
+      _ -> throwTCError (NotTupleType tp)
+  typeInfer (PairRight (TypedTerm _ tp)) =
+    case asPairType tp of
+      Just (_, t2) -> typeCheckWHNF t2
+      _ -> throwTCError (NotTupleType tp)
+  typeInfer (RecordSelector (TypedTerm _ tp) f@(TypedTerm f_trm _) =
+    do checkField f
+       maybe_str <- asStringLit <$> typeCheckWHNF f_trm
+       f_str <- case maybe_str of
+         Just x -> x
+         Nothing -> throwTCError (BadRecordField f_trm)
+       case asRecordType tp of
+         Just m ->
+           case Map.lookup f m of
+             Nothing -> throwTCError $ BadRecordField f tp
+             Just f_tp -> typeCheckWHNF f_tp
+         _ -> throwTCError (NotRecordType tp)
 
-          -- Check that the elimination functions each have the right types, and
-          -- that we have exactly one for each constructor of dt
-          cs_fs_tps <- scRecursorFunTypes sc dt params p_ret
-          let extra_ctors = map fst cs_fst \\ map fst cs_fs_tps
-          case extra_ctors of
-            c:_ -> throwTCError $ MalformedRecursorExtraCtor c (Unshared tf)
-            _ -> return ()
-          forM cs_fs_tps $ \(c,req_tp) ->
-            case lookup c cs_fs of
-              Nothing ->
-                throwTCError $ MalformedRecursorMissingCtor c (Unshared tf)
-              Just f ->
-                do f_tp <- memo f
-                   checkSubtype f_tp req_tp
-                     (MalformedRecursorCtorElim c (Unshared tf))
+  typeInfer (DataTypeApp dt params args) =
+    -- Look up the DataType structure, check the length of the params and args,
+    -- and then apply the cached Pi type of dt to params and args
+    do maybe_dt <- liftTCM1 scFindDataType d
+       dt <- case maybe_dt of
+         Just dt -> return dt
+         Nothing -> throwTCError $ NoSuchDataType d
+       if length params == length (dtParams dt) &&
+          length args == length (dtIndices dt) then return () else
+         throwTCError $ BadParamsOrArgsLength True d params args
+       -- NOTE: we assume dtType is already well-typed and in WHNF
+       -- _ <- inferSort t
+       -- t' <- typeCheckWHNF t
+       foldM applyPiTyped (dtType dt) (params ++ args)
 
-          -- Finally, check that arg has type (d params ixs), and return the
-          -- type (p_ret ixs arg)
-          arg_tp <- memo arg
-          arg_req_tp <- scFlatTermF sc $ DataTypeApp d params ixs
-          checkSubtype arg_tp arg_req_tp (MalformedRecursorArg (Unshared tf))
-          scApplyAll sc p_ret (ixs ++ [arg])
+  typeInfer (CtorApp c params args) =
+    -- Look up the Ctor structure, check the length of the params and args, and
+    -- then apply the cached Pi type of ctor to params and args
+    do maybe_ctor <- liftTCM1 scFindCtor c
+       ctor <- case maybe_ctor of
+         Just ctor -> return ctor
+         Nothing -> throwTCError $ NoSuchCtor c
+       if length params == length (ctorNumParams ctor) &&
+          length args == length (ctorNumArgs ctor) then return () else
+         throwTCError $ BadParamsOrArgsLength False c params args
+       -- NOTE: we assume ctorType is already well-typed and in WHNF
+       -- _ <- inferSort t
+       -- t' <- typeCheckWHNF t
+       foldM applyPiTyped (ctorType dt) (params ++ args)
 
-        RecordType elems ->
-          do sorts <- mapM (sort . snd) elems
-             scSort sc (maximum sorts)
+  typeInfer (RecursorApp d params p_ret fs_cs ixs arg) =
+    inferRecursorApp d params p_ret fs_cs ixs arg
+  typeInfer (RecordType elems) =
+    do sorts <- mapM (ensureSort . typedType . snd) elems
+       liftTCM1 scSort (maximum sorts)
+  typeInfer (RecordValue elems) =
+    liftTCM1 scFlatTermF $ RecordType $
+    map (\(f,TypedTerm _ tp) -> (f,tp)) elems
+  typeInfer (RecordProj (TypedTerm _ t_tp) fld) =
+    case asRecordType t_tp of
+      Just (Map.lookup fld -> Just tp) -> return tp
+      Just _ -> throwTCError $ NotRecordType t_tp
+      Nothing -> throwTCError $ BadRecordField fld t_tp
+  typeInfer (Sort s) = liftTCM1 scSort (sortOf s)
+  typeInfer (NatLit _) = liftTCM0 scNatType
+  typeInfer (ArrayValue (TypedTerm tp tp_tp) vs) =
+    do n <- liftTCM1 scNat (fromIntegral (V.length vs))
+       _ <- ensureSort tp_tp -- TODO: do we care about the level?
+       tp' <- typeCheckWHNF tp
+       forM_ vs $ \(TypedTerm _ v_tp) ->
+         checkSubtype v_tp tp' (ArrayTypeMismatch tp' v_tp)
+       liftTCM2 scVecType n tp'
+  typeInfer (FloatLit{}) = liftTCM1 scFlatTermF preludeFloatType
+  typeInfer (DoubleLit{}) = liftTCM1 scFlatTermF preludeDoubleType
+  typeInfer (StringLit{}) = liftTCM1 scFlatTermF preludeStringType
+  typeInfer (ExtCns ec) = typeCheckWHNF $ ecType ec
 
-        RecordValue elems ->
-          do elem_tps <- mapM (memo . snd) elems
-             scFlatTermF sc (RecordType $ zip (map fst elems) elem_tps)
-        RecordProj t fld ->
-          do t_tp <- memo t
-             case asRecordType t_tp of
-               Just (Map.lookup fld -> Just tp) -> return tp
-               Just _ -> throwTCError $ NotRecordType t_tp
-               Nothing -> throwTCError $ BadRecordField f t_tp
 
-        Sort s -> io $ scSort sc (sortOf s)
-        NatLit _ -> io $ scNatType sc
-        ArrayValue tp vs -> do
-          n <- io $ scNat sc (fromIntegral (V.length vs))
-          _ <- sort tp -- TODO: do we care about the level?
-          tp' <- scTypeCheckWHNF tp
-          forM_ vs $ \v_t ->
-            do v_ty <- memo v_t
-               checkSubtype v_ty tp' (ArrayTypeMismatch tp' v_ty)
-          io $ scVecType sc n tp'
-        FloatLit{}  -> io $ scFlatTermF sc preludeFloatType
-        DoubleLit{} -> io $ scFlatTermF sc preludeDoubleType
-        StringLit{} -> io $ scFlatTermF sc preludeStringType
-        ExtCns ec   -> scTypeCheckWHNF $ ecType ec
+-- | Check that @tx=Pi v ty tz@ and that @y@ has type @ty@, and return @[y/v]tz@
+applyPiTyped :: Term -> TypedTerm -> TCM Term
+applyPiTyped tx (TypedTerm y ty) =
+  case asPi tx of
+    Just (_, aty, rty) -> do
+      -- _ <- ensureSort aty -- NOTE: we assume tx is well-formed and WHNF
+      -- aty' <- scTypeCheckWHNF aty
+      checkSubtype ty aty (ArgTypeMismatch aty ty)
+      liftTCM3 instantiateVar 0 y rty
+    _ -> throwTCError (NotFuncType tx)
+
+-- | Ensure that a 'Term' is a sort, and return that sort
+ensureSort :: Term -> TCM Sort
+ensureSort (asSort -> Just s) = return s
+ensureSort tp = throwTCError $ NotSort tp
 
 -- | Reduce a type to WHNF (using 'scWhnf'), also adding in some conversions for
 -- operations on Nat literals that are useful in type-checking
-scTypeCheckWHNF :: Term -> TCM Term
-scTypeCheckWHNF t = lift $ lift $ do
-  t' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) t
-  scWhnf sc t'
+typeCheckWHNF :: Term -> TCM Term
+typeCheckWHNF t =
+  do t' <- liftTCM2 rewriteSharedTerm (addConvs natConversions emptySimpset) t
+  liftTCM1 scWhnf t'
 
 -- | Check that one type is a subtype of another, assuming both arguments are
 -- types, i.e., that both have type Sort s for some s, and that they are both
--- already in WHNF
-scSubtype :: SharedContext -> Term -> Term -> IO Bool
-scSubtype sc t1 t2 = helper (unwrapTermF t1) (unwrapTermF t2) where
+-- already in WHNF. If the check fails, throw the given 'TCError'.
+checkSubtype :: Term -> Term -> TCError -> TCM ()
+checkSubtype t1 t2 err = helper (unwrapTermF t1) (unwrapTermF t2) where
   helper (Pi _ a1 b1) (Pi _ a2 b2) =
-    (&&) <$> scConvertibleTC a1 a2 <*> scConvertibleTC b1 b2
-  helper (FTermF (Sort s1)) (FTermF (Sort s2)) = return $ s1 <= s2
-  helper t1' t2' = scConvertibleTC t1' t2'
+    checkConvertible a1 a2 err >>
+    inExtendedContext a1 (checkConvertible b1 b2 err)
+  helper (FTermF (Sort s1)) (FTermF (Sort s2)) | s1 <= s2 = return ()
+  helper t1' t2' = checkConvertible t1' t2' err
 
 -- | Check that two terms are "convertible for type-checking", meaning that they
--- are convertible up to 'natConversions'
-scConvertibleTC :: SharedContext -> Term -> Term -> IO Bool
-scConvertibleTC sc =
-  scConvertible sc (addConvs natConversions emptySimpset) True
+-- are convertible up to 'natConversions'. Throw the given 'TCError' on failure.
+checkConvertible :: Term -> Term -> TCError -> TCM ()
+checkConvertible t1 t2 err =
+  do are_conv <-
+       liftTCM4 scConvertible (addConvs natConversions emptySimpset) True t1 t2
+     if are_conv then return () else
+       throwTCError err
+
+-- | Check that a term has type @String@
+checkField :: TypedTerm -> TCM ()
+checkField (TypedTerm _ tf) =
+  do string_tp <- liftTCM0 scStringType
+     checkSubtype tf string_tp (NotStringType tf)
+
+-- | Infer the type of a recursor application
+inferRecursorApp :: Ident -> [TypedTerm] -> TypedTerm ->
+                    [(Ident,TypedTerm)] -> [TypedTerm] -> TypedTerm ->
+                    TCM Term
+inferRecursorApp d params p_ret fs_cs ixs arg =
+  do let err_term =
+           Unshared $ fmap typedVal $ FTermF $
+           RecursorApp d params p_ret fs_cs ixs arg
+     maybe_dt <- liftTCM1 scFindDataType d
+     dt <- case maybe_dt of
+       Just dt -> dt
+       Nothing -> throwTCError $ NoSuchDataType d
+
+     -- Check that the params and ixs have the correct types by making sure
+     -- they correspond to the input types of dt
+     if length params == length (dtParams dt) &&
+        length ixs == length (dtIndices dt) then return () else
+       throwTCError $ MalformedRecursorArgs err_term
+     _ <- foldM applyPiTyped (dtType dt) (params ++ ixs)
+
+     -- Get the type of p_ret and make sure that it is of the form
+     --
+     -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
+     --
+     -- for some allowed sort s, where the Ix are the indices of of dt
+     let p_ret_tp = typedType p_ret
+     (p_ret_ctx, p_ret_s) <-
+       case asPiList p_ret_tp of
+         (ctx, (asSort -> Just s)) -> return (ctx, s)
+         _ -> throwTCError $ MalformedRecursorRet err_term
+     p_ret_tp_req <- liftTCM3 scRecursorRetTypeType dt params p_ret_s
+     -- Technically this is an equality test, not a subtype test, but we
+     -- use the precise sort used in p_ret_tp, so they are the same, and
+     -- checkSubtype is handy...
+     checkSubtype p_ret_tp p_ret_tp_req (MalformedRecursorRet err_term)
+     if allowedElimSort dt s then return ()
+       else throwTCError $ MalformedRecursorElimSort err_term
+
+     -- Check that the elimination functions each have the right types, and
+     -- that we have exactly one for each constructor of dt
+     cs_fs_tps <- liftTCM3 scRecursorElimTypes dt params p_ret
+     case map fst cs_fs \\ map fst cs_fs_tps of
+       [] -> return ()
+       cs -> throwTCError $ MalformedRecursorExtraCtors cs err_term
+     forM cs_fs_tps $ \(c,req_tp) ->
+       case lookup c cs_fs of
+         Nothing ->
+           throwTCError $ MalformedRecursorMissingCtor c err_term
+         Just (TypedTerm _ f_tp) ->
+           checkSubtype f_tp req_tp (MalformedRecursorCtorElim c err_term)
+
+     -- Finally, check that arg has type (d params ixs), and return the
+     -- type (p_ret ixs arg)
+     let arg_tp = typedType arg
+     arg_req_tp <-
+       liftTCM1 scFlatTermF $ map typedVal $ DataTypeApp d params ixs
+     checkSubtype arg_tp arg_req_tp (MalformedRecursorArg err_term)
+     liftTCM2 scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg]))
