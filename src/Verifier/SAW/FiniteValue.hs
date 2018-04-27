@@ -228,7 +228,7 @@ scFirstOrderType sc ft =
                       scVecType sc n' t'
     FOTTuple ts -> scTupleType sc =<< traverse (scFirstOrderType sc) ts
     FOTRec tm   ->
-      scRecordType sc =<< traverse (scFirstOrderType sc) (Map.assocs tm)
+      scRecordType sc =<< (Map.assocs <$> traverse (scFirstOrderType sc) tm)
 
 -- | Convert a finite value to a SharedTerm.
 scFiniteValue :: SharedContext -> FiniteValue -> IO Term
