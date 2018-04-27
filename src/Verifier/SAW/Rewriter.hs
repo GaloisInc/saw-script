@@ -28,8 +28,6 @@ module Verifier.SAW.Rewriter
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfProp
-  , ruleOfDefEqn
-  , rulesOfTypedDef
   , scDefRewriteRules
   , scEqsRewriteRules
   , scEqRewriteRule
@@ -59,7 +57,6 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Lens
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
@@ -87,9 +84,6 @@ data RewriteRule
   deriving (Eq, Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
-
-traverseRhs :: Functor f => (Term -> f Term) -> RewriteRule -> f RewriteRule
-traverseRhs f (RewriteRule c l r) = RewriteRule c l <$> f r
 
 ctxtRewriteRule :: RewriteRule -> [Term]
 ctxtRewriteRule = ctxt
@@ -226,7 +220,9 @@ vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 ruleOfTerm :: Term -> RewriteRule
 ruleOfTerm t =
     case unwrapTermF t of
-      FTermF (DataTypeApp ident [_, x, y])
+      -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
+      -- (the type of x and y) and x are parameters, and y is an index
+      FTermF (DataTypeApp ident [_, x] [y])
           | ident == eqIdent -> RewriteRule { ctxt = [], lhs = x, rhs = y }
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
@@ -254,63 +250,23 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y
 ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
 ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm defaultPPOpts t
 
--- Create a rewrite rule from an equation.
--- Terms do not have unused variables, so unused variables are introduced
--- as new variables bound after all the used variables.
-ruleOfDefEqn :: Ident -> DefEqn -> RewriteRule
-ruleOfDefEqn ident (DefEqn pats rhs) =
-      RewriteRule { ctxt = Map.elems varmap
-                  , lhs = ruleLhs
-                  , rhs = ruleRhs
-                  }
-  where
-    _lvd = emptyLocalVarDoc
-        & docShowLocalNames .~ False
-        & docShowLocalTypes .~ True
-    _varsUnbound t i = looseVars t `shiftR` i /= 0
-    ruleLhs = foldl mkTermApp (Unshared (FTermF (GlobalDef ident))) args
-    ruleRhs = incVarsSimpleTerm 0 nUnused rhs
-
-    nBound  = sum $ fmap patBoundVarCount  pats
-    nUnused = sum $ fmap patUnusedVarCount pats
-    n = nBound + nUnused
-    mkTermApp :: Term -> Term -> Term
-    mkTermApp f x = Unshared (App f x)
-
-    termOfPat :: Pat -> State (Int, Map Int Term) Term
-    termOfPat pat =
-        case pat of
-          PVar _ i tp -> do
-            (j, m) <- get
-            put (j, Map.insert i tp m)
-            return $ Unshared $ LocalVar (n - 1 - i)
-          PUnused i tp -> do
-            (j, m) <- get
-            put (j + 1, Map.insert j (incVarsSimpleTerm 0 (j - i) tp) m)
-            return $ Unshared $ LocalVar (n - 1 - j)
-          PUnit        -> return $ Unshared (FTermF UnitValue)
-          PPair x y    -> (Unshared . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
-          PEmpty       -> return $ Unshared (FTermF EmptyValue)
-          PField f x y -> (Unshared . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
-          PCtor c ps   -> (Unshared . FTermF . CtorApp c) <$> traverse termOfPat ps
-          PString s    -> return $ Unshared (FTermF (StringLit s))
-
-    (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
-
-rulesOfTypedDef :: Def -> [RewriteRule]
-rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
-
--- | Creates a set of rewrite rules from the defining equations of the named constant.
-scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
-scDefRewriteRules sc def =
-  traverse (traverseRhs (scSharedTerm sc)) (rulesOfTypedDef def)
+-- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
+scEqRewriteRule :: SharedContext -> Ident -> IO RewriteRule
+scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule]
 scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 
-scEqRewriteRule :: SharedContext -> Ident -> IO RewriteRule
-scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
+-- | Create a rewrite rule for a definition that expands the definition, if it
+-- has a body to expand to, otherwise return the empty list
+scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
+scDefRewriteRules _ (Def { defBody = Nothing }) = return []
+scDefRewriteRules sc (Def { defIdent = ident, defBody = Just body }) =
+  do lhs <- scGlobalDef sc ident
+     rhs <- scSharedTerm sc body
+     return [RewriteRule { ctxt = [], lhs = lhs, rhs = rhs }]
+
 
 ----------------------------------------------------------------------
 -- Simpsets
@@ -473,8 +429,17 @@ rewriteSharedTermTypeSafe sc ss t0 =
           FieldValue{}     -> traverse rewriteAll ftf
           FieldType{}      -> return ftf -- doesn't matter
           RecordSelector{} -> traverse rewriteAll ftf
-          CtorApp{}        -> return ftf --FIXME
+
+          -- NOTE: we don't rewrite arguments of constructors, datatypes, or
+          -- recursors because of dependent types, as we could potentially cause
+          -- a term to become ill-typed
+          CtorApp{}        -> return ftf
           DataTypeApp{}    -> return ftf -- could treat same as CtorApp
+          RecursorApp{}    -> return ftf -- could treat same as CtorApp
+
+          RecordType{}     -> traverse rewriteAll ftf
+          RecordValue{}    -> traverse rewriteAll ftf
+          RecordProj{}     -> traverse rewriteAll ftf
           Sort{}           -> return ftf -- doesn't matter
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
