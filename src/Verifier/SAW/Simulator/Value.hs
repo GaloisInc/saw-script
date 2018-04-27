@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}  -- For `Show` instance, it's OK.
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Value
@@ -22,7 +23,7 @@ module Verifier.SAW.Simulator.Value
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM)
+import Control.Monad (foldM, liftM, mapM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
@@ -63,6 +64,11 @@ data Value l
   | VEmptyType
   | VFieldType FieldName !(Value l) !(Value l)
   | VDataType !Ident [Value l]
+  | VRecursorApp !Ident [Value l] (Value l) [(Ident, Value l)]
+    [Value l] (Value l)
+  | VRecordType ![(String, Value l)]
+  | VRecordValue ![(String, Value l)]
+  | VRecordProj (Value l) !String
   | VIntType
   | VVecType (Value l) (Value l)
   | VType -- ^ Other unknown type
@@ -145,6 +151,14 @@ instance Show (Extra l) => Show (Value l) where
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
+      VRecursorApp {} -> showString "<<recursor>>"
+      VRecordType [] -> showString "{}"
+      VRecordType ((fld,_):_) ->
+        showString "{" . showString fld . showString " :: _, ...}"
+      VRecordValue [] -> showString "{}"
+      VRecordValue ((fld,_):_) ->
+        showString "{" . showString fld . showString " = _, ...}"
+      VRecordProj x prj -> shows x . showString "." . showString prj
       VIntType       -> showString "Integer"
       VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
                         . showString " " . showParen True (showsPrec p a)
@@ -214,4 +228,7 @@ asFiniteTypeValue v =
       case t2 of
         FTRec tm -> return (FTRec (Map.insert k t1 tm))
         _ -> Nothing
+    VRecordType elem_tps ->
+      FTRec <$> Map.fromList <$>
+      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeValue tp) elem_tps
     _ -> Nothing
