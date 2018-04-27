@@ -46,16 +46,18 @@ module Verifier.SAW.Module
   , moduleCtors
   , findCtor
   , moduleDefs
-  , allModuleDefs
   , findDef
   , insDef
   , moduleDecls
-  , allModuleDecls
   , modulePrimitives
-  , allModulePrimitives
   , moduleAxioms
-  , allModuleAxioms
   , moduleActualDefs
+    -- * Module Maps
+  , ModuleMap
+  , allModuleDefs
+  , allModuleDecls
+  , allModulePrimitives
+  , allModuleAxioms
   , allModuleActualDefs
   ) where
 
@@ -67,6 +69,8 @@ import Data.Foldable (foldl')
 import Data.Hashable
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HMap
 import GHC.Generics (Generic)
 
 import Prelude hiding (all, foldr, sum)
@@ -312,9 +316,6 @@ findCtor m i = do
 moduleDefs :: Module -> [Def]
 moduleDefs = Map.elems . moduleDefMap
 
-allModuleDefs :: Module -> [Def]
-allModuleDefs m = concatMap moduleDefs (m : Map.elems (m^.moduleImports))
-
 findDef :: Module -> Ident -> Maybe Def
 findDef m i = do
   m' <- findDeclaringModule m (identModule i)
@@ -330,9 +331,6 @@ insDef m d
 
 moduleDecls :: Module -> [ModuleDecl]
 moduleDecls = reverse . moduleRDecls
-
-allModuleDecls :: Module -> [ModuleDecl]
-allModuleDecls m = concatMap moduleDecls (m : Map.elems (m^.moduleImports))
 
 modulePrimitives :: Module -> [Def]
 modulePrimitives m =
@@ -355,23 +353,32 @@ moduleActualDefs m =
     , defQualifier def == NoQualifier
     ]
 
-allModulePrimitives :: Module -> [Def]
-allModulePrimitives m =
+
+type ModuleMap = HashMap ModuleName Module
+
+allModuleDefs :: ModuleMap -> [Def]
+allModuleDefs modmap = concatMap moduleDefs (HMap.elems modmap)
+
+allModuleDecls :: ModuleMap -> [ModuleDecl]
+allModuleDecls modmap = concatMap moduleDecls (HMap.elems modmap)
+
+allModulePrimitives :: ModuleMap -> [Def]
+allModulePrimitives modmap =
     [ def
-    | DefDecl def <- allModuleDecls m
+    | DefDecl def <- allModuleDecls modmap
     , defQualifier def == PrimQualifier
     ]
 
-allModuleAxioms :: Module -> [Def]
-allModuleAxioms m =
+allModuleAxioms :: ModuleMap -> [Def]
+allModuleAxioms modmap =
     [ def
-    | DefDecl def <- allModuleDecls m
+    | DefDecl def <- allModuleDecls modmap
     , defQualifier def == AxiomQualifier
     ]
 
-allModuleActualDefs :: Module -> [Def]
-allModuleActualDefs m =
+allModuleActualDefs :: ModuleMap -> [Def]
+allModuleActualDefs modmap =
     [ def
-    | DefDecl def <- allModuleDecls m
+    | DefDecl def <- allModuleDecls modmap
     , defQualifier def == NoQualifier
     ]

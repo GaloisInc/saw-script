@@ -34,6 +34,7 @@ module Verifier.SAW.SharedTerm
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
+  , scGetModuleMap
     -- ** Low-level generic term constructors
   , scTermF
   , scFlatTermF
@@ -269,7 +270,7 @@ insertTFM tf x tfm =
 -- SharedContext: a high-level interface for building Terms.
 
 data SharedContext = SharedContext
-  { scModuleMap      :: IORef (HashMap ModuleName Module)
+  { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
   , scFreshGlobalVar :: IO VarIndex
   }
@@ -319,10 +320,14 @@ scCtorApp sc c_id args =
      let (params,args') = splitAt (ctorNumParams ctor) args
      scCtorAppParams sc c_id params args'
 
+-- | Get the current 'ModuleMap'
+scGetModuleMap :: SharedContext -> IO ModuleMap
+scGetModuleMap sc = readIORef (scModuleMap sc)
+
 -- | Test if a module is loaded in the current shared context
 scModuleIsLoaded :: SharedContext -> ModuleName -> IO Bool
 scModuleIsLoaded sc name =
-  HMap.member name <$> readIORef (scModuleMap sc)
+  HMap.member name <$> scGetModuleMap sc
 
 -- | Load a module into the current shared context, raising an error if a module
 -- of the same name is already loaded
@@ -343,7 +348,7 @@ scEnsureModule sc m =
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
 scFindModule sc name =
-  do maybe_mod <- HMap.lookup name <$> readIORef (scModuleMap sc)
+  do maybe_mod <- HMap.lookup name <$> scGetModuleMap sc
      case maybe_mod of
        Just m -> return m
        Nothing ->
