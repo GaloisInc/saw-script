@@ -18,6 +18,7 @@ module Verifier.SAW.TypedAST
  , ModuleName, mkModuleName
  , moduleName
  , preludeName
+ , ModuleMap
  , ModuleDecl(..)
  , moduleDecls
  , allModuleDecls

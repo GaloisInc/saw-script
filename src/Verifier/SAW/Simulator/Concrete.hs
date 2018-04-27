@@ -38,7 +38,7 @@ import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.TypedAST (Module)
+import Verifier.SAW.TypedAST (ModuleMap)
 import Verifier.SAW.SharedTerm
 
 ------------------------------------------------------------
@@ -46,7 +46,7 @@ import Verifier.SAW.SharedTerm
 -- type ExtCnsEnv = VarIndex -> String -> CValue
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: Module -> Map Ident CValue -> Term -> CValue
+evalSharedTerm :: ModuleMap -> Map Ident CValue -> Term -> CValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)

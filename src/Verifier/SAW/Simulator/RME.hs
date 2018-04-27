@@ -43,7 +43,7 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST (Module)
+import Verifier.SAW.TypedAST (ModuleMap, showTerm)
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -53,7 +53,7 @@ import Data.Traversable
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: Module -> Map Ident RValue -> Term -> RValue
+evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
@@ -309,7 +309,7 @@ newVars' shape = ready <$> newVars shape
 ------------------------------------------------------------
 -- Bit-blasting primitives.
 
-bitBlastBasic :: Module
+bitBlastBasic :: ModuleMap
               -> Map Ident RValue
               -> Term
               -> RValue
@@ -325,7 +325,7 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ scPrettyTerm defaultPPOpts t'
+    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ showTerm t'
 
 withBitBlastedPred ::
   SharedContext ->
@@ -336,8 +336,9 @@ withBitBlastedPred sc addlPrims t c = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
   shapes <- traverse (asFiniteType sc) argTs
+  modmap <- scGetModuleMap sc
   let vars = evalState (traverse newVars' shapes) 0
-  let bval = bitBlastBasic (scModule sc) addlPrims t
+  let bval = bitBlastBasic modmap addlPrims t
   let bval' = runIdentity $ applyAll bval vars
   case bval' of
     VBool anf -> c anf shapes
