@@ -51,6 +51,9 @@ module Verifier.SAW.SharedTerm
   , scLoadModule
   , scEnsureModule
   , scModuleIsLoaded
+  , scFindDef
+  , scFindDataType
+  , scFindCtor
     -- ** Term construction
   , scApply
   , scApplyAll
