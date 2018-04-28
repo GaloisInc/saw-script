@@ -18,22 +18,20 @@ module Verifier.SAW.SCTypeCheck
   ( scTypeCheck
   , scTypeCheckError
   , scTypeCheckWHNF
-  , scSubtype
   , scConvertible
   , TCError(..)
-  , tcErrorPath
   , prettyTCError
   , throwTCError
+  , TypeInfer(..)
+  , typeInferAndBuild
+  , typeInferAndId
   ) where
 
 import Control.Applicative
-import Control.Lens
 import Control.Monad.Trans.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
-import Control.Monad.IO.Class
 
-import Data.Foldable (and)
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -98,21 +96,6 @@ instance LiftTCM b => LiftTCM (a -> b) where
   type TCMLifted (a -> b) = a -> TCMLifted b
   liftTCM f a = liftTCM (\sc -> f sc a)
 
--- | Lift a binary 'IO' function that takes in a 'SharedContext' to a unary
--- function to a 'TCM' computation
-liftTCM1 :: (SharedContext -> a -> IO b) -> a -> TCM b
-liftTCM1 = liftTCM
-
--- | Lift a trinary 'IO' function that takes in a 'SharedContext' to a binary
--- function to a 'TCM' computation
-liftTCM2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> TCM c
-liftTCM2 = liftTCM
-
--- | Lift a quaternary (yes, that is the word) 'IO' function that takes in a
--- 'SharedContext' to a trinary function to a 'TCM' computation
-liftTCM3 :: (SharedContext -> a -> b -> IO c) -> a -> b -> TCM c
-liftTCM3 = liftTCM
-
 -- | Errors that can occur during type-checking
 data TCError
   = NotSort Term
@@ -121,12 +104,13 @@ data TCError
   | NotTupleType Term
   | BadTupleIndex Int Term
   | NotStringType Term
+  | NotStringLit Term
   | NotRecordType Term
   | BadRecordField FieldName Term
   | ArrayTypeMismatch Term Term
   | DanglingVar Int
-  | DisallowedElimSort Term
   | NoSuchDataType Ident
+  | NoSuchCtor Ident
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
   | MalformedRecursor Term String
 
@@ -152,6 +136,10 @@ prettyTCError e =
       [ "Bad tuple index (" ++ show n ++ ") for type"
       , ishow ty
       ]
+    NotStringType ty ->
+      [ "Field with non-string type", ishow ty ]
+    NotStringLit trm ->
+      [ "Record selector is not a string literal", ishow trm ]
     NotRecordType ty ->
       [ "Record field projection with non-record type" , ishow ty ]
     BadRecordField n ty ->
@@ -164,12 +152,16 @@ prettyTCError e =
       ]
     DanglingVar n ->
       [ "Dangling bound variable index: " ++ show n ]
+    NoSuchDataType d -> [ "No such data type", show d]
+    NoSuchCtor c -> [ "No such constructor", show c]
     BadParamsOrArgsLength is_dt ident params args ->
       [ "Wrong number of parameters or arguments to "
         ++ (if is_dt then "datatype" else "constructor") ++ ": ",
         ishow (Unshared $ FTermF $
                (if is_dt then DataTypeApp else CtorApp) ident params args)
       ]
+    MalformedRecursor trm reason ->
+      [ "Malformed recursor application", ishow trm, reason ]
   where
     ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
@@ -200,7 +192,7 @@ class TypeInfer a where
 
 typeInferAndBuild :: TermF TypedTerm -> TCM TypedTerm
 typeInferAndBuild tf =
-  TypedTerm <$> liftTCM1 scTermF (fmap typedVal tf) <*> typeInfer tf
+  TypedTerm <$> liftTCM scTermF (fmap typedVal tf) <*> typeInfer tf
 
 typeInferAndId :: Term -> TCM TypedTerm
 typeInferAndId t = TypedTerm t <$> typeInfer t
@@ -243,8 +235,8 @@ instance TypeInfer (TermF TypedTerm) where
   typeInfer (FTermF ftf) = typeInfer ftf
   typeInfer (App (TypedTerm _ x_tp) y) = applyPiTyped x_tp y
   typeInfer (Lambda x (TypedTerm a a_tp) (TypedTerm _ b)) =
-    void (ensureSort a_tp) >> liftTCM1 scTermF (Pi x a b)
-  typeInfer (Pi _ (TypedTerm a a_tp) (TypedTerm b b_tp)) =
+    void (ensureSort a_tp) >> liftTCM scTermF (Pi x a b)
+  typeInfer (Pi _ (TypedTerm _ a_tp) (TypedTerm _ b_tp)) =
     do s1 <- ensureSort a_tp
        s2 <- ensureSort b_tp
        -- NOTE: the rule for type-checking Pi types is that (Pi x a b) is a Prop
@@ -270,27 +262,27 @@ instance TypeInfer (TermF TypedTerm) where
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (GlobalDef d) =
-    do ty <- liftTCM1 scTypeOfGlobal d
+    do ty <- liftTCM scTypeOfGlobal d
        _ <- ensureSort ty
        typeCheckWHNF ty
-  typeInfer UnitValue = liftTCM0 scUnitType
-  typeInfer UnitType = liftTCM1 scSort (mkSort 0)
+  typeInfer UnitValue = liftTCM scUnitType
+  typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =
-    liftTCM2 scPairType tx ty
+    liftTCM scPairType tx ty
   typeInfer (PairType (TypedTerm _ tx) (TypedTerm _ ty)) =
     do sx <- ensureSort tx
        sy <- ensureSort ty
-       liftTCM1 scSort (max sx sy)
-  typeInfer EmptyValue = liftTCM0 scEmptyType
-  typeInfer EmptyType = liftTCM1 scSort (mkSort 0)
+       liftTCM scSort (max sx sy)
+  typeInfer EmptyValue = liftTCM scEmptyType
+  typeInfer EmptyType = liftTCM scSort (mkSort 0)
   typeInfer (FieldValue f (TypedTerm _ tx) (TypedTerm _ ty)) =
     do checkField f
-       liftTCM3 scFieldType f tx ty
+       liftTCM scFieldType (typedVal f) tx ty
   typeInfer (FieldType f (TypedTerm _ tx) (TypedTerm _ ty)) =
     do checkField f
        sx <- ensureSort tx
        sy <- ensureSort ty
-       liftTCM1 scSort (max sx sy)
+       liftTCM scSort (max sx sy)
   typeInfer (PairLeft (TypedTerm _ tp)) =
     case asPairType tp of
       Just (t1, _) -> typeCheckWHNF t1
@@ -303,19 +295,19 @@ instance TypeInfer (FlatTermF TypedTerm) where
     do checkField f
        maybe_str <- asStringLit <$> typeCheckWHNF f_trm
        f_str <- case maybe_str of
-         Just x -> x
-         Nothing -> throwTCError (BadRecordField f_trm)
+         Just x -> return x
+         Nothing -> throwTCError (NotStringLit f_trm)
        case asRecordType tp of
          Just m ->
-           case Map.lookup f m of
-             Nothing -> throwTCError $ BadRecordField f tp
+           case Map.lookup f_str m of
+             Nothing -> throwTCError $ BadRecordField f_str tp
              Just f_tp -> typeCheckWHNF f_tp
          _ -> throwTCError (NotRecordType tp)
 
-  typeInfer (DataTypeApp dt params args) =
+  typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
     -- and then apply the cached Pi type of dt to params and args
-    do maybe_dt <- liftTCM1 scFindDataType d
+    do maybe_dt <- liftTCM scFindDataType d
        dt <- case maybe_dt of
          Just dt -> return dt
          Nothing -> throwTCError $ NoSuchDataType d
@@ -331,12 +323,12 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (CtorApp c params args) =
     -- Look up the Ctor structure, check the length of the params and args, and
     -- then apply the cached Pi type of ctor to params and args
-    do maybe_ctor <- liftTCM1 scFindCtor c
+    do maybe_ctor <- liftTCM scFindCtor c
        ctor <- case maybe_ctor of
          Just ctor -> return ctor
          Nothing -> throwTCError $ NoSuchCtor c
-       if length params == length (ctorNumParams ctor) &&
-          length args == length (ctorNumArgs ctor) then return () else
+       if length params == ctorNumParams ctor &&
+          length args == ctorNumArgs ctor then return () else
          throwTCError $
          BadParamsOrArgsLength False c (map typedVal params) (map typedVal args)
        -- NOTE: we assume ctorType is already well-typed and in WHNF
@@ -348,27 +340,27 @@ instance TypeInfer (FlatTermF TypedTerm) where
     inferRecursorApp d params p_ret cs_fs ixs arg
   typeInfer (RecordType elems) =
     do sorts <- mapM (ensureSort . typedType . snd) elems
-       liftTCM1 scSort (maximum sorts)
+       liftTCM scSort (maximum sorts)
   typeInfer (RecordValue elems) =
-    liftTCM1 scFlatTermF $ RecordType $
+    liftTCM scFlatTermF $ RecordType $
     map (\(f,TypedTerm _ tp) -> (f,tp)) elems
   typeInfer (RecordProj (TypedTerm _ t_tp) fld) =
     case asRecordType t_tp of
       Just (Map.lookup fld -> Just tp) -> return tp
       Just _ -> throwTCError $ NotRecordType t_tp
       Nothing -> throwTCError $ BadRecordField fld t_tp
-  typeInfer (Sort s) = liftTCM1 scSort (sortOf s)
+  typeInfer (Sort s) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
   typeInfer (ArrayValue (TypedTerm tp tp_tp) vs) =
-    do n <- liftTCM1 scNat (fromIntegral (V.length vs))
+    do n <- liftTCM scNat (fromIntegral (V.length vs))
        _ <- ensureSort tp_tp -- TODO: do we care about the level?
        tp' <- typeCheckWHNF tp
        forM_ vs $ \(TypedTerm _ v_tp) ->
          checkSubtype v_tp tp' (ArrayTypeMismatch tp' v_tp)
-       liftTCM2 scVecType n tp'
-  typeInfer (FloatLit{}) = liftTCM1 scFlatTermF preludeFloatType
-  typeInfer (DoubleLit{}) = liftTCM1 scFlatTermF preludeDoubleType
-  typeInfer (StringLit{}) = liftTCM1 scFlatTermF preludeStringType
+       liftTCM scVecType n tp'
+  typeInfer (FloatLit{}) = liftTCM scFlatTermF preludeFloatType
+  typeInfer (DoubleLit{}) = liftTCM scFlatTermF preludeDoubleType
+  typeInfer (StringLit{}) = liftTCM scFlatTermF preludeStringType
   typeInfer (ExtCns ec) =
     -- FIXME: should we check that the type of ecType is a sort?
     typeCheckWHNF $ typedVal $ ecType ec
@@ -433,7 +425,7 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
            MalformedRecursor
            (Unshared $ fmap typedVal $ FTermF $
             RecursorApp d params p_ret cs_fs ixs arg) str
-     maybe_dt <- liftTCM1 scFindDataType d
+     maybe_dt <- liftTCM scFindDataType d
      dt <- case maybe_dt of
        Just dt -> return dt
        Nothing -> throwTCError $ NoSuchDataType d
@@ -451,9 +443,9 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
      --
      -- for some allowed sort s, where the Ix are the indices of of dt
      let p_ret_tp = typedType p_ret
-     (p_ret_ctx, p_ret_s) <-
+     p_ret_s <-
        case asPiList p_ret_tp of
-         (ctx, (asSort -> Just s)) -> return (ctx, s)
+         (_, (asSort -> Just s)) -> return s
          _ -> throwTCError $ mk_err "Incorrectly typed motive function"
      p_ret_tp_req <-
        liftTCM scRecursorRetTypeType dt (map typedVal params) p_ret_s
@@ -472,7 +464,7 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
      case map fst cs_fs \\ map fst cs_fs_tps of
        [] -> return ()
        cs -> throwTCError $ mk_err ("Extra constructors: " ++ show cs)
-     forM cs_fs_tps $ \(c,req_tp) ->
+     forM_ cs_fs_tps $ \(c,req_tp) ->
        case lookup c cs_fs of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
@@ -484,6 +476,6 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
      -- type (p_ret ixs arg)
      let arg_tp = typedType arg
      arg_req_tp <-
-       liftTCM1 scFlatTermF $ fmap typedVal $ DataTypeApp d params ixs
+       liftTCM scFlatTermF $ fmap typedVal $ DataTypeApp d params ixs
      checkSubtype arg_tp arg_req_tp (mk_err "Incorrectly typed argument")
-     liftTCM2 scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg]))
+     liftTCM scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg]))
