@@ -153,17 +153,6 @@ instance CtxAppNilEq (CtxTermsCtx ctx') where
 ctxLiftNil :: InvBindings tp 'CNil ctx -> f ctx a -> f (CtxApp 'CNil ctx) a
 ctxLiftNil ctx f = case ctxAppNilEq ctx of Refl -> f
 
-{-
--- | Build a proof that 'CtxInvApp' commutes with 'CtxApp'
-ctxAppInvAssocEq :: c1 ctx1 -> InvBindings tp2 ctx ctx2 -> c3 ctx3 ->
-                    CtxInvApp (CtxApp ctx1 ctx2) ctx3 :~:
-                    CtxApp ctx1 (CtxInvApp ctx2 ctx3)
-ctxAppInvAssocEq _ InvNoBind _ = error "FIXME HERE NOW"
-ctxAppInvAssocEq ctx1 (InvBind ctx2 _ (tp :: tp _ (Typ a))) (ctx3 :: c3 ctx3) =
-  case ctxAppInvAssocEq ctx1 ctx2 (Proxy :: Proxy (a ': ctx3)) of
-    Refl -> Refl
--}
-
 -- | Append a 'Bindings' list to an inverted 'InvBindings' list, inverting the
 -- former as we go to yield an inverted 'InvBidnings' list. Intuitively, this
 -- means we are already "inside" the inverted bindings lists, and we are moving
