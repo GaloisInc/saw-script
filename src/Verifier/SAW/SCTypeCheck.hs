@@ -22,9 +22,14 @@ module Verifier.SAW.SCTypeCheck
   , TCError(..)
   , prettyTCError
   , throwTCError
+  , TCM
+  , runTCM
+  , askCtx
+  , askModName
+  , inExtendedCtx
+  , LiftTCM
+  , TypedTerm(..)
   , TypeInfer(..)
-  , typeInferAndBuild
-  , typeInferAndId
   ) where
 
 import Control.Applicative
@@ -54,29 +59,40 @@ type TCState = Map TermIndex Term
 
 -- | The monad for type checking and inference, which:
 --
--- * Maintains a variable context, giving types to the deBruijn indices in
--- scope, along with a 'SharedContext';
+-- * Maintains a 'SharedContext', the name of the current module, and a variable
+-- context, where the latter assigns types to the deBruijn indices in scope;
 --
 -- * Memoizes the most general type inferred for each expression; AND
 --
 -- * Can throw 'TCError's
 type TCM a =
-  ReaderT (SharedContext, [Term]) (StateT TCState (ExceptT TCError IO)) a
+  ReaderT (SharedContext, Maybe ModuleName, [(String,Term)])
+  (StateT TCState (ExceptT TCError IO)) a
 
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
-runTCM :: TCM a -> SharedContext -> [Term] -> IO (Either TCError a)
-runTCM m sc ctx = runExceptT $ evalStateT (runReaderT m (sc, ctx)) Map.empty
+runTCM :: TCM a -> SharedContext -> Maybe ModuleName -> [(String,Term)] ->
+          IO (Either TCError a)
+runTCM m sc mnm ctx =
+  runExceptT $ evalStateT (runReaderT m (sc, mnm, ctx)) Map.empty
+
+-- | Read the current typing context
+askCtx :: TCM [(String,Term)]
+askCtx = (\(_,_,ctx) -> ctx) <$> ask
+
+-- | Read the current module name
+askModName :: TCM (Maybe ModuleName)
+askModName = (\(_,mnm,_) -> mnm) <$> ask
 
 -- | Run a type-checking computation in a typing context extended with a new
 -- variable with the given type. This throws away the memoization table while
 -- running the sub-computation, as memoization tables are tied to specific sets
 -- of bindings.
-inExtendedCtx :: Term -> TCM a -> TCM a
-inExtendedCtx tp m =
+inExtendedCtx :: String -> Term -> TCM a -> TCM a
+inExtendedCtx x tp m =
   do saved_table <- get
      put Map.empty
-     a <- local (\(sc,ctx) -> (sc, tp:ctx)) m
+     a <- local (\(sc,mnm,ctx) -> (sc, mnm, (x,tp):ctx)) m
      put saved_table
      return a
 
@@ -89,7 +105,7 @@ class LiftTCM a where
 instance LiftTCM (IO a) where
   type TCMLifted (IO a) = TCM a
   liftTCM f =
-    do sc <- fst <$> ask
+    do sc <- (\(sc,_,_) -> sc) <$> ask
        liftIO (f sc)
 
 instance LiftTCM b => LiftTCM (a -> b) where
@@ -169,18 +185,20 @@ prettyTCError e =
 -- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
 scTypeCheckError :: SharedContext -> Term -> IO Term
 scTypeCheckError sc t0 =
-  either (fail . unlines . prettyTCError) return =<< scTypeCheck sc t0
+  either (fail . unlines . prettyTCError) return =<< scTypeCheck sc Nothing t0
 
 -- | Infer the type of a 'Term', ensuring in the process that the entire term is
 -- well-formed and that all internal type annotations are correct. Types are
 -- evaluated to WHNF as necessary, and the returned type is in WHNF.
-scTypeCheck :: SharedContext -> Term -> IO (Either TCError Term)
-scTypeCheck sc = scTypeCheckInCtx sc []
+scTypeCheck :: SharedContext -> Maybe ModuleName -> Term ->
+               IO (Either TCError Term)
+scTypeCheck sc mnm = scTypeCheckInCtx sc mnm []
 
 -- | Like 'scTypeCheck', but type-check the term relative to a typing context,
 -- which assigns types to free variables in the term
-scTypeCheckInCtx :: SharedContext -> [Term] -> Term -> IO (Either TCError Term)
-scTypeCheckInCtx sc ctx t0 = runTCM (typeInfer t0) sc ctx
+scTypeCheckInCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
+                    Term -> IO (Either TCError Term)
+scTypeCheckInCtx sc ctx mnm t0 = runTCM (typeInfer t0) sc ctx mnm
 
 -- | A pair of a 'Term' and its type
 data TypedTerm = TypedTerm { typedVal :: Term, typedType :: Term }
@@ -188,14 +206,11 @@ data TypedTerm = TypedTerm { typedVal :: Term, typedType :: Term }
 -- | The class of things that we can infer types of. The 'typeInfer' method
 -- returns the most general (with respect to subtyping) type of its input.
 class TypeInfer a where
+  -- | Infer the type of an @a@
   typeInfer :: a -> TCM Term
+  -- | Infer the type of an @a@ and complete it to a 'Term'
+  typeInferComplete :: a -> TCM TypedTerm
 
-typeInferAndBuild :: TermF TypedTerm -> TCM TypedTerm
-typeInferAndBuild tf =
-  TypedTerm <$> liftTCM scTermF (fmap typedVal tf) <*> typeInfer tf
-
-typeInferAndId :: Term -> TCM TypedTerm
-typeInferAndId t = TypedTerm t <$> typeInfer t
 
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
@@ -210,22 +225,27 @@ instance TypeInfer Term where
               x' <- typeCheckWHNF x
               modify (Map.insert i x')
               return x'
+  typeInferComplete trm = TypedTerm trm <$> typeInfer trm
 
 -- Type inference for TermF Term dispatches to that for TermF TypedTerm by
 -- calling inference on all the sub-components and extending the context inside
 -- of the binding forms
 instance TypeInfer (TermF Term) where
   typeInfer (Lambda x a rhs) =
-    typeInfer =<< (Lambda x <$> (typeInferAndId a)
-                   <*> inExtendedCtx a (typeInferAndId rhs))
+    typeInfer =<< (Lambda x <$> (typeInferComplete a)
+                   <*> inExtendedCtx x a (typeInferComplete rhs))
   typeInfer (Pi x a rhs) =
-    typeInfer =<< (Pi x <$> (typeInferAndId a)
-                   <*> inExtendedCtx a (typeInferAndId rhs))
-  typeInfer t = typeInfer =<< mapM typeInferAndId t
+    typeInfer =<< (Pi x <$> (typeInferComplete a)
+                   <*> inExtendedCtx x a (typeInferComplete rhs))
+  typeInfer t = typeInfer =<< mapM typeInferComplete t
+  typeInferComplete tf =
+    TypedTerm <$> liftTCM scTermF tf <*> typeInfer tf
 
 -- Type inference for FlatTermF Term dispatches to that for FlatTermF TypedTerm
 instance TypeInfer (FlatTermF Term) where
-  typeInfer t = typeInfer =<< mapM typeInferAndId t
+  typeInfer t = typeInfer =<< mapM typeInferComplete t
+  typeInferComplete ftf =
+    TypedTerm <$> liftTCM scFlatTermF ftf <*> typeInfer ftf
 
 
 -- Type inference for TermF TypedTerm is the main workhorse. Intuitively, this
@@ -244,17 +264,19 @@ instance TypeInfer (TermF TypedTerm) where
        -- (Type (max (sortOf a) (sortOf b)))
        liftTCM scSort $ if s2 == propSort then propSort else max s1 s2
   typeInfer (LocalVar i) =
-    do (_, ctx) <- ask
+    do ctx <- askCtx
        if i < length ctx then
          -- The ith type in the current variable typing context is well-typed
          -- relative to the suffix of the context after it, so we have to lift it
          -- (i.e., call incVars) to make it well-typed relative to all of ctx
-         liftTCM incVars 0 (i+1) (ctx !! i)
+         liftTCM incVars 0 (i+1) (snd (ctx !! i))
          else
          throwTCError (DanglingVar (i - length ctx))
   typeInfer (Constant _ (TypedTerm _ tp) _) =
     -- FIXME: should we check that the type (3rd arg of Constant) is a type?
     return tp
+  typeInferComplete tf =
+    TypedTerm <$> liftTCM scTermF (fmap typedVal tf) <*> typeInfer tf
 
 
 -- Type inference for FlatTermF TypedTerm is the main workhorse for flat
@@ -365,6 +387,8 @@ instance TypeInfer (FlatTermF TypedTerm) where
     -- FIXME: should we check that the type of ecType is a sort?
     typeCheckWHNF $ typedVal $ ecType ec
 
+  typeInferComplete ftf =
+    TypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf) <*> typeInfer ftf
 
 -- | Check that @tx=Pi v ty tz@ and that @y@ has type @ty@, and return @[y/v]tz@
 applyPiTyped :: Term -> TypedTerm -> TCM Term
@@ -397,9 +421,9 @@ scTypeCheckWHNF sc t =
 -- types, i.e., that both have type Sort s for some s, and that they are both
 -- already in WHNF. If the check fails, throw the given 'TCError'.
 checkSubtype :: Term -> Term -> TCError -> TCM ()
-checkSubtype (unwrapTermF -> Pi _ a1 b1) (unwrapTermF -> Pi _ a2 b2) err =
+checkSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) err =
     checkConvertible a1 a2 err >>
-    inExtendedCtx a1 (checkSubtype b1 b2 err)
+    inExtendedCtx x1 a1 (checkSubtype b1 b2 err)
 checkSubtype (asSort -> Just s1) (asSort -> Just s2) _ | s1 <= s2 = return ()
 checkSubtype t1' t2' err = checkConvertible t1' t2' err
 
