@@ -356,17 +356,18 @@ scFindModule sc name =
 
 -- | Look up a definition by its identifier
 scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
-scFindDef sc i = findDef <$> scFindModule sc (identModule i) <*> return i
+scFindDef sc i =
+  findDef <$> scFindModule sc (identModule i) <*> return (identName i)
 
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
 scFindDataType sc i =
-  findDataType <$> scFindModule sc (identModule i) <*> return i
+  findDataType <$> scFindModule sc (identModule i) <*> return (identName i)
 
 -- | Look up a constructor by its identifier
 scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
 scFindCtor sc i =
-  findCtor <$> scFindModule sc (identModule i) <*> return i
+  findCtor <$> scFindModule sc (identModule i) <*> return (identName i)
 
 
 -- SharedContext implementation.
