@@ -21,6 +21,7 @@ module Verifier.SAW.UntypedAST
   , CtorDecl(..)
   , Term(..)
   , TermVar(..)
+  , TermCtx
   , asApp
   , mkTupleValue
   , mkTupleType
