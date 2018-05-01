@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : Verifier.SAW.Module
@@ -61,14 +62,13 @@ module Verifier.SAW.Module
   , allModuleActualDefs
   ) where
 
-import Control.Lens
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
 import Data.Foldable (foldl')
 import Data.Hashable
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import GHC.Generics (Generic)
@@ -248,90 +248,124 @@ instance Show DataType where
 
 -- Modules ---------------------------------------------------------------------
 
+-- | Declarations that can occur in a module
 data ModuleDecl = TypeDecl DataType
                 | DefDecl Def
 
+-- | The different sorts of things that a 'String' name can be resolved to
+data ResolvedName
+  = ResolvedCtor Ctor
+  | ResolvedDataType DataType
+  | ResolvedDef Def
+
+-- | Get the 'Ident' for a 'ResolvedName'
+resolvedNameIdent :: ResolvedName -> Ident
+resolvedNameIdent (ResolvedCtor ctor) = ctorName ctor
+resolvedNameIdent (ResolvedDataType dt) = dtName dt
+resolvedNameIdent (ResolvedDef d) = defIdent d
+
+-- | Modules define namespaces of datatypes, constructors, and definitions,
+-- i.e., mappings from 'String' names to these objects. A module is allowed to
+-- map a 'String' name to an object defined in a different module. Modules also
+-- keep a record of the top-level declarations and the imports that were used to
+-- build them.
 data Module = Module {
           moduleName    :: !ModuleName
-        , _moduleImports :: !(Map ModuleName Module)
-        , moduleTypeMap :: !(Map String DataType)
-        , moduleCtorMap :: !(Map String Ctor)
-        , moduleDefMap  :: !(Map String Def)
+        , moduleImports :: !(Map ModuleName Module)
+        , moduleResolveMap :: !(Map String ResolvedName)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
 
-moduleImports :: Simple Lens Module (Map ModuleName Module)
-moduleImports = lens _moduleImports (\m v -> m { _moduleImports = v })
-
+-- | Get the names of all modules imported by the given one
 moduleImportNames :: Module -> [ModuleName]
-moduleImportNames m = Map.keys (m^.moduleImports)
+moduleImportNames m = Map.keys (moduleImports m)
 
 emptyModule :: ModuleName -> Module
 emptyModule nm =
   Module { moduleName = nm
-         , _moduleImports = Map.empty
-         , moduleTypeMap = Map.empty
-         , moduleCtorMap = Map.empty
-         , moduleDefMap  = Map.empty
+         , moduleImports = Map.empty
+         , moduleResolveMap = Map.empty
          , moduleRDecls = []
          }
 
-findDataType :: Module -> Ident -> Maybe DataType
-findDataType m i = do
-  m' <- findDeclaringModule m (identModule i)
-  Map.lookup (identName i) (moduleTypeMap m')
 
--- | @insImport i m@ returns module obtained by importing @i@ into @m@.
-insImport :: Module -> Module -> Module
-insImport i = moduleImports . at (moduleName i) ?~ i
+-- | Resolve a 'String' name in the namespace defined by a 'Module', to either a
+-- 'Ctor', 'DataType', or 'Def'
+resolveName :: Module -> String -> Maybe ResolvedName
+resolveName m str = Map.lookup str (moduleResolveMap m)
 
+-- | Resolve a 'String' name to a 'Ctor'
+findCtor :: Module -> String -> Maybe Ctor
+findCtor m str =
+  resolveName m str >>= \case { ResolvedCtor ctor -> Just ctor; _ -> Nothing }
+
+-- | Resolve a 'String' name to a 'DataType'
+findDataType :: Module -> String -> Maybe DataType
+findDataType m str =
+  resolveName m str >>= \case { ResolvedDataType d -> Just d; _ -> Nothing }
+
+-- | Resolve a 'String' name to a 'Def'
+findDef :: Module -> String -> Maybe Def
+findDef m str =
+  resolveName m str >>= \case { ResolvedDef d -> Just d; _ -> Nothing }
+
+
+-- | Insert a 'ResolvedName' into a 'Module', adding a mapping from the 'String'
+-- name of that resolved name to it. Signal an error in the case of a name
+-- clash, i.e., an existing binding for the same 'String' name.
+insResolvedName :: Module -> ResolvedName -> Module
+insResolvedName m nm =
+  let str = identName $ resolvedNameIdent nm in
+  if Map.member str (moduleResolveMap m) then
+    internalError ("Duplicate name " ++ str ++ " being inserted into module "
+                   ++ show (moduleName m))
+  else
+    m { moduleResolveMap = Map.insert str nm (moduleResolveMap m) }
+
+-- | @insImport i m@ returns the module obtained by importing @i@ into @m@,
+-- using a predicate to specify which names are imported from @i@ into @m@. In
+-- the case of name clashes, an error is signaled.
+insImport :: (ResolvedName -> Bool) -> Module -> Module -> Module
+insImport name_p i m =
+  (foldl' insResolvedName m $ Map.elems $
+   Map.filter name_p (moduleResolveMap i))
+  { moduleImports = Map.insert (moduleName i) i (moduleImports m) }
+
+-- | Insert a 'DataType' declaration, along with its 'Ctor's, into a module
 insDataType :: Module -> DataType -> Module
-insDataType m dt
-    | identModule (dtName dt) == moduleName m =
-        m { moduleTypeMap = Map.insert (identName (dtName dt)) dt (moduleTypeMap m)
-          , moduleCtorMap = foldl' insCtor (moduleCtorMap m) (dtCtors dt)
-          , moduleRDecls = TypeDecl dt : moduleRDecls m
-          }
-    | otherwise = internalError "insDataType given datatype from another module."
-  where insCtor m' c = Map.insert (identName (ctorName c)) c m'
+insDataType m dt =
+  foldl' insResolvedName m $
+  (ResolvedDataType dt : map ResolvedCtor (dtCtors dt))
 
--- | Data types defined in module.
-moduleDataTypes :: Module -> [DataType]
-moduleDataTypes = Map.elems . moduleTypeMap
-
--- | Ctors defined in module.
-moduleCtors :: Module -> [Ctor]
-moduleCtors = Map.elems . moduleCtorMap
-
-findDeclaringModule :: Module -> ModuleName -> Maybe Module
-findDeclaringModule m nm
-  | moduleName m == nm = Just m
-  | otherwise = m^.moduleImports^.at nm
-
-findCtor :: Module -> Ident -> Maybe Ctor
-findCtor m i = do
-  m' <- findDeclaringModule m (identModule i)
-  Map.lookup (identName i) (moduleCtorMap m')
-
-moduleDefs :: Module -> [Def]
-moduleDefs = Map.elems . moduleDefMap
-
-findDef :: Module -> Ident -> Maybe Def
-findDef m i = do
-  m' <- findDeclaringModule m (identModule i)
-  Map.lookup (identName i) (moduleDefMap m')
-
+-- | Insert a definition into a module
 insDef :: Module -> Def -> Module
-insDef m d
-  | identModule (defIdent d) == moduleName m =
-      m { moduleDefMap = Map.insert (identName (defIdent d)) d (moduleDefMap m)
-        , moduleRDecls = DefDecl d : moduleRDecls m
-        }
-  | otherwise = internalError "insDef given def from another module."
+insDef m d = insResolvedName m (ResolvedDef d)
 
+
+-- | Get all data types defined in a module
+moduleDataTypes :: Module -> [DataType]
+moduleDataTypes =
+  Map.foldr' (\case { ResolvedDataType dt -> (dt :); _ -> id } ) [] .
+  moduleResolveMap
+
+-- | Get all constructors defined in a module
+moduleCtors :: Module -> [Ctor]
+moduleCtors =
+  Map.foldr' (\case { ResolvedCtor ctor -> (ctor :); _ -> id } ) [] .
+  moduleResolveMap
+
+-- | Get all definitions defined in a module
+moduleDefs :: Module -> [Def]
+moduleDefs =
+  Map.foldr' (\case { ResolvedDef d -> (d :); _ -> id } ) [] .
+  moduleResolveMap
+
+-- | Get all declarations that are local to a module, i.e., that defined names
+-- that were not imported from some other module
 moduleDecls :: Module -> [ModuleDecl]
 moduleDecls = reverse . moduleRDecls
 
+-- | Get all local declarations in a module that are marked as primitives
 modulePrimitives :: Module -> [Def]
 modulePrimitives m =
     [ def
@@ -339,6 +373,7 @@ modulePrimitives m =
     , defQualifier def == PrimQualifier
     ]
 
+-- | Get all local declarations in a module that are marked as axioms
 moduleAxioms :: Module -> [Def]
 moduleAxioms m =
     [ def
@@ -346,6 +381,8 @@ moduleAxioms m =
     , defQualifier def == AxiomQualifier
     ]
 
+-- | Get all local declarations in a module that are not marked as primitives or
+-- axioms
 moduleActualDefs :: Module -> [Def]
 moduleActualDefs m =
     [ def
@@ -353,15 +390,21 @@ moduleActualDefs m =
     , defQualifier def == NoQualifier
     ]
 
-
+-- | The type of mappings from module names to modules
 type ModuleMap = HashMap ModuleName Module
 
+-- | Get all definitions defined in any module in an entire module map. Note
+-- that the returned list might have redundancies if a definition is visible /
+-- imported in multiple modules in the module map.
 allModuleDefs :: ModuleMap -> [Def]
 allModuleDefs modmap = concatMap moduleDefs (HMap.elems modmap)
 
+-- | Get all local declarations from all modules in an entire module map
 allModuleDecls :: ModuleMap -> [ModuleDecl]
 allModuleDecls modmap = concatMap moduleDecls (HMap.elems modmap)
 
+-- | Get all local declarations from all modules in an entire module map that
+-- are marked as primitives
 allModulePrimitives :: ModuleMap -> [Def]
 allModulePrimitives modmap =
     [ def
@@ -369,6 +412,8 @@ allModulePrimitives modmap =
     , defQualifier def == PrimQualifier
     ]
 
+-- | Get all local declarations from all modules in an entire module map that
+-- are marked as axioms
 allModuleAxioms :: ModuleMap -> [Def]
 allModuleAxioms modmap =
     [ def
@@ -376,6 +421,8 @@ allModuleAxioms modmap =
     , defQualifier def == AxiomQualifier
     ]
 
+-- | Get all local declarations from all modules in an entire module map that
+-- are marked as neither primitives nor axioms
 allModuleActualDefs :: ModuleMap -> [Def]
 allModuleActualDefs modmap =
     [ def
