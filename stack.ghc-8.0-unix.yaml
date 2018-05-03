@@ -21,6 +21,7 @@ packages:
   - deps/dwarf/
   - deps/elf-edit/
   - deps/flexdis86/
+  - deps/flexdis86/binary-symbols/
   - deps/macaw/base
   - deps/macaw/symbolic
   - deps/macaw/x86
@@ -34,7 +35,7 @@ extra-deps:
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
   - monad-supply-0.7
-  - sbv-7.6
+  - sbv-7.7
   - simple-smt-0.7.1
   - monadLib-3.7.3
   - tasty-hunit-0.10.0.1

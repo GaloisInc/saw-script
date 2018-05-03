@@ -44,7 +44,6 @@ module SAWScript.CrucibleBuiltins
 
 import           Control.Lens
 import           Control.Monad.State
-import qualified Control.Monad.Trans.State.Strict as SState
 import           Control.Applicative
 import           Data.Foldable (for_, toList, find)
 import           Data.Function
@@ -83,6 +82,8 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
+import qualified Lang.Crucible.Solver.AssumptionStack as Crucible (ProofGoal(..))
+import qualified Lang.Crucible.Solver.BoolInterface as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible hiding (mkStruct)
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
@@ -128,12 +129,12 @@ show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 ppAbortedResult :: CrucibleContext arch
                 -> Crucible.AbortedResult Sym (Crucible.LLVM arch)
                 -> Doc
+ppAbortedResult _ (Crucible.AbortedExec (Crucible.SimError _ Crucible.InfeasibleBranchError) _) =
+  text "Infeasible branch"
 ppAbortedResult cc (Crucible.AbortedExec err gp) = do
   Crucible.ppSimError err <$$> ppGlobalPair cc gp
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
   text "Aborted branch"
-ppAbortedResult _ Crucible.AbortedInfeasible =
-  text "Infeasible branch"
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
@@ -173,8 +174,8 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
 
-     -- save initial path condition
-     pathstate <- io $ Crucible.getCurrentState sym
+     -- save initial path conditions
+     frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
      (ret, globals3)
@@ -184,8 +185,8 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      asserts <- io $ verifyPoststate opts (biSharedContext bic) cc
                        methodSpec env globals3 ret
 
-     -- restore initial path condition
-     io $ Crucible.resetCurrentState sym pathstate
+     -- restore previous assumption state
+     _ <- io $ Crucible.popAssumptionFrame sym frameIdent
 
      -- attempt to verify the proof obligations
      stats <- verifyObligations cc methodSpec tactic assumes asserts
@@ -474,9 +475,9 @@ registerOverride ::
   (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                    ->
   CrucibleContext arch       ->
-  Crucible.SimContext Crucible.SAWCruciblePersonality Sym (Crucible.LLVM arch) ->
+  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym (Crucible.LLVM arch) rtp args ret ()
+  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (Crucible.sbStateManager sym))
@@ -520,14 +521,14 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                 rty = Crucible.handleReturnType h
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
             let simCtx = cc^.ccSimContext
-                conf = Crucible.simConfig simCtx
-            simCtx' <- flip SState.execStateT simCtx $
-                         Crucible.runSimConfigMonad
-                           (Crucible.setConfigValue Crucible.sawCheckPathSat conf checkSat)
-            let simSt = Crucible.initSimState simCtx' globals Crucible.defaultErrorHandler
+                conf = Crucible.getConfiguration sym
+            checkSatOpt <- Crucible.getOptionSetting Crucible.sawCheckPathSat conf
+            _ <- Crucible.setOpt checkSatOpt checkSat
+
+            let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
             res <-
               Crucible.runOverrideSim simSt rty $
-                do mapM_ (registerOverride opts cc simCtx')
+                do mapM_ (registerOverride opts cc simCtx)
                          (groupOn (view csName) lemmas)
                    liftIO $ do
                      preds <- mapM (resolveSAWPred cc) assumes
@@ -611,19 +612,17 @@ verifyPoststate opts sc cc mspec env0 globals ret =
              Left err      -> fail (show err)
              Right (_, st) -> return st
      for_ (view osAsserts st) $ \(p, r) ->
-       Crucible.sbAddAssertion sym p r
+       Crucible.addAssertion sym p r
 
      obligations <- Crucible.getProofObligations sym
-     Crucible.setProofObligations sym []
-     mapM verifyObligation obligations
+     Crucible.setProofObligations sym mempty
+     mapM verifyObligation (toList obligations)
 
   where
     sym = cc^.ccBackend
 
-    verifyObligation (_, (Crucible.Assertion _ _ Nothing)) =
-      fail "Found an assumption in final proof obligation list"
-    verifyObligation (hyps, (Crucible.Assertion _ concl (Just err))) = do
-      hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) hyps
+    verifyObligation (Crucible.ProofGoal hyps (Crucible.Assertion _ concl err)) = do
+      hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) (toList hyps)
       conclTerm  <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
@@ -649,10 +648,14 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let gen = Crucible.globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      cfg <- Crucible.initialConfig verbosity Crucible.sawOptions
-      sym <- Crucible.newSAWCoreBackend sc gen cfg
+      sym <- Crucible.newSAWCoreBackend sc gen
+
+      let cfg = Crucible.getConfiguration sym
+      verbSetting <- Crucible.getOptionSetting Crucible.verbosity cfg
+      _ <- Crucible.setOpt verbSetting (toInteger verbosity)
+
       let bindings = Crucible.fnBindingsFromList []
-      let simctx   = Crucible.initSimContext sym intrinsics cfg halloc stdout
+      let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
                         bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
       mem <- Crucible.initializeMemory sym ctx llvm_mod
       let globals  = Crucible.llvmGlobals ctx mem

@@ -247,7 +247,7 @@ data CrucibleContext wptr =
   , _ccLLVMModuleTrans :: CL.ModuleTranslation wptr
   , _ccBackend         :: Sym
   , _ccEmptyMemImpl    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _ccSimContext      :: Crucible.SimContext Crucible.SAWCruciblePersonality Sym (CL.LLVM wptr)
+  , _ccSimContext      :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM wptr)
   , _ccGlobals         :: Crucible.SymGlobalState Sym
   }
 
