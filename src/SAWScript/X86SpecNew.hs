@@ -61,9 +61,6 @@ import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Pair
 
 import Data.Foldable(toList)
-import Control.Lens((^.))
-import Lang.Crucible.Solver.SimpleBuilder(pathState)
-
 
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.LLVM.MemModel
@@ -79,12 +76,15 @@ import Lang.Crucible.LLVM.MemModel.Generic
     (AllocType(HeapAlloc,GlobalAlloc), Mutability(..))
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
+import Lang.Crucible.Solver.AssumptionStack
+          (Assertion(..), ProofGoal(..))
+import Lang.Crucible.Solver.BoolInterface
+          (addAssertion, addAssumption, getProofObligations)
 import Lang.Crucible.Solver.Interface
-          (bvLit,isEq, Pred, addAssumption, addAssertion, notPred, orPred
+          (bvLit,isEq, Pred, notPred, orPred
           , bvUle, truePred, natLit, asNat, andPred )
-import Lang.Crucible.Solver.BoolInterface (assertLoc,assertMsg,getCurrentState)
 import Lang.Crucible.Solver.SAWCoreBackend
-  (bindSAWTerm,sawBackendSharedContext,toSC,proofObligs)
+  (bindSAWTerm,sawBackendSharedContext,toSC)
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType )
 
@@ -1005,12 +1005,10 @@ debugPPReg r s =
 
 debugDumpGoals :: Sym -> IO ()
 debugDumpGoals sym =
-  do s <- getCurrentState sym
-     mapM_ sh (toList (s ^. pathState . proofObligs))
+  do obls <- getProofObligations sym
+     mapM_ sh (toList obls)
   where
-  sh (_,g) = print (assertLoc g, assertMsg g)
-
-
+  sh (ProofGoal _hyps g) = print (assertLoc g, assertMsg g)
 
 
 

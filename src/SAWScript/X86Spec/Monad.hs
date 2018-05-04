@@ -38,8 +38,10 @@ import Data.Parameterized.Context(Assignment)
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
+import Lang.Crucible.Solver.BoolInterface
+  (addAssertion,addAssumption)
 import Lang.Crucible.Solver.Interface
-  (natLit,notPred,addAssertion,addAssumption, natEq)
+  (natLit,notPred,natEq)
 import Lang.Crucible.Solver.SAWCoreBackend (sawBackendSharedContext)
 import Lang.Crucible.LLVM.MemModel ( Mem, emptyMem, LLVMPointerType)
 import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, LLVMPtr )

@@ -67,6 +67,7 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Type as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
+import qualified Lang.Crucible.Solver.BoolInterface as Crucible
 import qualified Lang.Crucible.Solver.Interface as Crucible
 import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
 import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
@@ -203,7 +204,7 @@ methodSpecHandler ::
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
-  Crucible.OverrideSim Crucible.SAWCruciblePersonality Sym (Crucible.LLVM arch) rtp args ret
+  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc css retTy = do
   let fsym = (head css)^.csName
@@ -233,7 +234,7 @@ methodSpecHandler opts sc cc css retTy = do
     do -- assert the disjunction of all the preconditions
        do ps <- traverse (conjunction sym . toListOf (_2 . osAsserts . folded . _1)) outputs
           p  <- disjunction sym ps
-          Crucible.sbAddAssertion (cc^.ccBackend) p
+          Crucible.addAssertion (cc^.ccBackend) p
             (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
 
        -- Postcondition can be used if precondition holds
@@ -241,7 +242,7 @@ methodSpecHandler opts sc cc css retTy = do
          do p       <- conjunction sym (toListOf (osAsserts . folded . _1) output)
             q       <- conjunction sym (view osAssumes output)
             p_imp_q <- Crucible.impliesPred sym p q
-            Crucible.sbAddAssumption (cc^.ccBackend) p_imp_q
+            Crucible.addAssumption (cc^.ccBackend) p_imp_q
 
        muxReturnValue sym retTy outputs
 

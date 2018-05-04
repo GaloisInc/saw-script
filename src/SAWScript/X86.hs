@@ -40,7 +40,6 @@ import Data.Parameterized.Context(Assignment,EmptyCtx,(::>))
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- Crucible
-import Lang.Crucible.Config(initialConfig)
 import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
 import Lang.Crucible.Simulator.RegMap(regValue)
@@ -48,12 +47,12 @@ import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
-          , gpGlobals, AbortedResult(..), SimConfig )
+          , gpGlobals, AbortedResult(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason)
+import Lang.Crucible.Solver.BoolInterface(getProofObligations)
 import Lang.Crucible.Solver.Interface(asNat,asUnsignedBV)
-import Lang.Crucible.Solver.BoolInterface
-          (assertLoc,assertMsg,assertPred,getCurrentState)
-import Lang.Crucible.Solver.SimpleBuilder(pathState)
+import Lang.Crucible.Solver.AssumptionStack
+          (assertLoc,assertMsg,assertPred,ProofGoal(..))
 import Lang.Crucible.ProgramLoc(ProgramLoc,Position(OtherPos))
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 import Lang.Crucible.FunctionName(functionNameFromText)
@@ -66,13 +65,13 @@ import Lang.Crucible.LLVM.Bytes(bytesToInteger)
 
 -- Crucible SAW
 import Lang.Crucible.Solver.SAWCoreBackend
-  (newSAWCoreBackend, proofObligs, toSC, sawBackendSharedContext
-  , sawRegisterSymFunInterp, sawOptions)
+  (newSAWCoreBackend, toSC, sawBackendSharedContext
+  , sawRegisterSymFunInterp)
 
 -- Macaw
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
 import Data.Macaw.Discovery(analyzeFunction)
-import Data.Macaw.Discovery.State(CodeAddrReason(UserRequest)
+import Data.Macaw.Discovery.State(FunctionExploreReason(UserRequest)
                                  , emptyDiscoveryState)
 import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
                         , AddrSymMap, segmentBase, segmentOffset
@@ -80,14 +79,12 @@ import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
                         , relativeSegmentAddr, incAddr
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
-                                  , LoadStyle(..)
                                   , memoryForElf
                                   , resolveElfFuncSymbolsAny )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
                           , runCodeBlock
-                          , GlobalMap
-                          , MacawSimulatorState )
+                          , GlobalMap )
 import qualified Data.Macaw.Symbolic as Macaw ( CallHandler )
 import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt)
 import Data.Macaw.Symbolic.PersistentState(macawAssignToCrucM)
@@ -136,8 +133,6 @@ data Options = Options
   , backend :: Sym
     -- ^ The Crucible backend to use.
 
-  , crucConfig :: SimConfig MacawSimulatorState Sym
-
   , funCalls :: Map (Natural,Integer) CallHandler
     {- ^ A mapping for function locations to the code to run to handle
          function calls.  The two integers are the base and offset
@@ -184,9 +179,8 @@ proof :: ArchitectureInfo X86_64 ->
          Fun ->
          IO (SharedContext,Integer,[Goal])
 proof archi file mbCry globs mkCallMap fun =
-  do cfg <- initialConfig 0 sawOptions
-     sc  <- mkSharedContext cryptolModule
-     sym <- newSAWCoreBackend sc globalNonceGenerator cfg
+  do sc  <- mkSharedContext cryptolModule
+     sym <- newSAWCoreBackend sc globalNonceGenerator
      cenv <- loadCry sym mbCry
      callMap <- mkCallMap sym cenv
      proofWithOptions Options
@@ -194,7 +188,6 @@ proof archi file mbCry globs mkCallMap fun =
        , function = fun
        , archInfo = archi
        , backend = sym
-       , crucConfig = cfg
        , funCalls = callMap
        , cryEnv = cenv
        , extraGlobals = globs
@@ -454,11 +447,10 @@ doSim opts elf sfs name (globs,overs) st =
      -- writeFile "XXX.hs" (show cfg)
 
      let sym = backend opts
-         config = crucConfig opts
 
      (mvar, execResult) <-
         statusBlock "  Simulating... " $
-        runCodeBlock config sym
+        runCodeBlock sym
               x86 (x86_64MacawEvalFn sfs) halloc (stateMem st, globs)
            (callHandler overs sym) cfg (stateRegs st)
 
@@ -489,7 +481,6 @@ ppAbort mvar x =
                              , show (ppMem mem) ]
          Nothing -> "Aborted exexution (no memory?)"
     AbortedExit {} -> "Aborted exit"
-    AbortedInfeasible {} -> "Aborted infeasible"
     AbortedBranch {} -> "Aborted branch"
 
 
@@ -540,7 +531,7 @@ data Goal = Goal
   { gAssumes :: [ Term ]              -- ^ Assuming these
   , gShows   :: Term                  -- ^ We need to show this
   , gLoc     :: ProgramLoc            -- ^ The goal came from here
-  , gMessage :: Maybe SimErrorReason  -- ^ We should say this if the proof fails
+  , gMessage :: SimErrorReason        -- ^ We should say this if the proof fails
   }
 
 -- | The boolean term that needs proving (i.e., assumptions imply conclusion)
@@ -553,10 +544,10 @@ gGoal ctx g = go (gAssumes g)
 
 getGoals :: Sym -> IO [Goal]
 getGoals sym =
-  do s <- getCurrentState sym
-     mapM toGoal (toList (s ^. pathState . proofObligs))
+  do obls <- getProofObligations sym
+     mapM toGoal (toList obls)
   where
-  toGoal (asmps,g) =
+  toGoal (ProofGoal asmps g) =
     do as <- mapM (toSC sym) (toList asmps)
        p  <- toSC sym (g ^. assertPred)
        return Goal { gAssumes = as

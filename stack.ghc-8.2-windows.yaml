@@ -23,6 +23,7 @@ packages:
   - deps/dwarf/
   - deps/elf-edit/
   - deps/flexdis86/
+  - deps/flexdis86/binary-symbols/
   - deps/macaw/base
   - deps/macaw/symbolic
   - deps/macaw/x86
