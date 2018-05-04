@@ -699,7 +699,9 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   ) where
 
   -- Build the type of the p_ret function. Note that this is only actually used
-  -- to form contexts, and should never actually be used directly in the output
+  -- to form contexts, and is never actually used directly in the output. Thus
+  -- it is ok that we always use Type 0 as the output typek, even though p_ret
+  -- functions can have arbitrary sorts.
   mkPRetTp :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
               InvBindings CtxTerm 'CNil ps ->
               Bindings CtxTerm ps ixs ->
