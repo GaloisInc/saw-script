@@ -32,6 +32,7 @@ import System.Directory (getCurrentDirectory)
 import Prelude hiding (mapM, sequence)
 
 import Verifier.SAW.UntypedAST
+import Verifier.SAW.Module (DefQualifier(..))
 import Verifier.SAW.Lexer
 
 }
@@ -92,33 +93,25 @@ ModuleName :: { PosPair ModuleName }
 ModuleName : sepBy (Ident, '.') { mkPosModuleName $1 }
 
 Import :: { Import }
-Import : 'import' opt('qualified') ModuleName opt(AsName) opt(ModuleImports) ';'
-          { Import (isJust $2) $3 $4 $5 }
+Import : 'import' ModuleName opt(ModuleImports) ';'
+          { Import $2 $3 }
 
 SAWDecl :: { Decl }
 SAWDecl : 'data' Ident VarCtx '::' LTerm 'where' '{' list(CtorDecl) '}'
              { DataDecl $2 $3 $5 $8 }
         | 'primitive' Ident '::' LTerm ';'
-             { TypeDecl PrimitiveQualifier $2 $4 }
+             { TypeDecl PrimQualifier $2 $4 }
         | 'axiom' Ident '::' LTerm ';'
              { TypeDecl AxiomQualifier $2 $4 }
         | Ident '::' LTerm ';' { TypeDecl NoQualifier $1 $3 }
         | Ident DefVarCtx '=' LTerm ';' { TermDef $1 $2 $4 }
 
-AsName :: { PosPair String }
-AsName : 'as' Ident { $2 }
-
 ModuleImports :: { ImportConstraint }
 ModuleImports : 'hiding' ImportNames { HidingImports $2 }
               | ImportNames { SpecificImports $1 }
 
-ImportNames :: { [ImportName] }
-ImportNames : '(' sepBy(ImportName, ',') ')' { $2 }
-
-ImportName :: { ImportName }
-ImportName : Ident                            { SingleImport $1 }
-           | Ident '(' '..' ')'               { AllImport $1 }
-           | Ident '(' sepBy(Ident, ',') ')'  { SelectiveImport $1 $3 }
+ImportNames :: { [String] }
+ImportNames : '(' sepBy(ident, ',') ')' { $2 }
 
 -- A context of variables which may or may not be typed
 DefVarCtx :: { [(TermVar, Maybe Term)] }
@@ -164,11 +157,11 @@ AtomTerm
   : nat                          { NatLit (pos $1) (tokNat (val $1)) }
   | string                       { StringLit (pos $1) (tokString (val $1)) }
   | Ident                        { Name $1 }
-  | IdentRec                     { Recursor $1 }
+  | IdentRec                     { Recursor Nothing $1 }
   | 'Prop'                       { Sort (pos $1) propSort }
   | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
-  | AtomTerm '.' IdentRec        { RecursorProj $1 $3 }
+  | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
   | '(' sepBy(Term, ',') ')'     { parseTuple (pos $1) $2 }
   | '#' '(' sepBy(Term, ',') ')'       {% parseTupleType (pos $1) $3 }
@@ -369,6 +362,19 @@ mkOldTupleProj t 1 = return $ OldPairLeft t
 mkOldTupleProj t 2 = return $ OldPairRight t
 mkOldTupleProj t _ =
   do addParseError (pos t) "Old-style projections must be either .(1) or .(2)"
+     return (badTerm (pos t))
+
+-- | Parse a term as a dotted list of strings
+parseModuleName :: Term -> Maybe [String]
+parseModuleName (RecordProj t str) = (++ [str]) <$> parseModuleName t
+parseModuleName _ = Nothing
+
+-- | Parse a qualified recursor @M1.M2...Mn.d#rec@
+parseRecursorProj :: Term -> PosPair String -> Parser Term
+parseRecursorProj (parseModuleName -> Just mnm) i =
+  return $ Recursor (Just $ mkModuleName mnm) i
+parseRecursorProj t _ =
+  do addParseError (pos t) "Malformed recursor projection"
      return (badTerm (pos t))
 
 parseTupleSelector :: Term -> PosPair Integer -> Parser Term

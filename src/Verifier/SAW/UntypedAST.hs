@@ -13,14 +13,14 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.UntypedAST
   ( Module(..)
   , ModuleName, mkModuleName
-  , Import(..)
   , Decl(..)
-  , DeclQualifier(..)
+  , Import(..)
   , ImportConstraint(..)
-  , ImportName(..)
+  , nameSatsConstraint
   , CtorDecl(..)
   , Term(..)
   , TermVar(..)
+  , termVarString
   , TermCtx
   , asApp
   , mkTupleValue
@@ -40,7 +40,7 @@ import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, propSort, sortOf
-  , FieldName
+  , FieldName, DefQualifier
   )
 
 data Term
@@ -49,8 +49,7 @@ data Term
   | App Term Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
-  | Recursor (PosPair String)
-  | RecursorProj Term (PosPair String)
+  | Recursor (Maybe ModuleName) (PosPair String)
     -- | New-style records
   | RecordValue Pos [(PosPair String, Term)]
   | RecordType Pos [(PosPair String, Term)]
@@ -75,6 +74,11 @@ data TermVar
   | UnusedVar Pos
   deriving (Eq, Ord, Show)
 
+-- | Return the 'String' name associated with a 'TermVar'
+termVarString :: TermVar -> String
+termVarString (TermVar (PosPair _ str)) = str
+termVarString (UnusedVar _) = "_"
+
 -- | A context of 0 or more variable bindings, with types
 type TermCtx = [(TermVar,Term)]
 
@@ -86,8 +90,7 @@ instance Positioned Term where
       Lambda p _ _         -> p
       App x _              -> pos x
       Pi p _ _             -> p
-      Recursor i           -> pos i
-      RecursorProj x _     -> pos x
+      Recursor _ i         -> pos i
       RecordValue p _      -> p
       RecordType p _       -> p
       RecordProj x _       -> pos x
@@ -111,19 +114,9 @@ badTerm = BadTerm
 -- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
 data CtorDecl = Ctor (PosPair String) TermCtx Term deriving (Show)
 
--- | The "qualifiers" for declarations @foo :: type@
-data DeclQualifier
-  = NoQualifier
-    -- ^ Indicates this declaration should have an accompanying definition
-  | PrimitiveQualifier
-    -- ^ Indicates a declaration of a primitive
-  | AxiomQualifier
-    -- ^ Indicates a declaration of an axiom
- deriving (Eq, Show)
-
 -- | A top-level declaration in a saw-core file
 data Decl
-   = TypeDecl DeclQualifier (PosPair String) Term
+   = TypeDecl DefQualifier (PosPair String) Term
      -- ^ A declaration of something having a type, where the declaration
      -- qualifier states what flavor of thing it is
    | DataDecl (PosPair String) [(TermVar, Term)] Term [CtorDecl]
@@ -134,34 +127,27 @@ data Decl
      -- are allowed to have or not have type annotations
   deriving (Show)
 
--- | A specification of the names imported from another module
-data ImportName
-  = SingleImport (PosPair String)
-    -- ^ Import only a single name
-  | AllImport    (PosPair String)
-    -- ^ Import a datatype and all its constructors
-  | SelectiveImport (PosPair String) [PosPair String]
-    -- ^ Import a datatype and some of its constructors
-  deriving (Eq, Ord, Show)
-
--- | A set of constraints on what to import from a module
+-- | A set of constraints on what 'String' names to import from a module
 data ImportConstraint
-  = SpecificImports [ImportName]
+  = SpecificImports [String]
     -- ^ Only import the given names
-  | HidingImports [ImportName]
+  | HidingImports [String]
     -- ^ Import all but the given names
  deriving (Eq, Ord, Show)
 
 -- | An import declaration
-data Import = Import { importQualified :: Bool
-                       -- ^ Whether the import is marked as "qualified"
-                     , importModName :: PosPair ModuleName
+data Import = Import { importModName :: PosPair ModuleName
                        -- ^ The name of the module to import
-                     , importAsName :: Maybe (PosPair String)
-                       -- ^ The local name to use for the import
                      , importConstraints :: Maybe ImportConstraint
                        -- ^ The constraints on what to import
                      }
+
+-- | Test whether a 'String' name satisfies the constraints of an 'Import'
+nameSatsConstraint :: Maybe ImportConstraint -> String -> Bool
+nameSatsConstraint Nothing _ = True
+nameSatsConstraint (Just (SpecificImports ns)) n = elem n ns
+nameSatsConstraint (Just (HidingImports ns)) n = notElem n ns
+
 
 -- | A module declaration gives:
 -- * A name for the module;
