@@ -27,9 +27,12 @@ module Verifier.SAW.SCTypeCheck
   , askCtx
   , askModName
   , inExtendedCtx
-  , LiftTCM
+  , LiftTCM(..)
   , TypedTerm(..)
   , TypeInfer(..)
+  , checkSubtype
+  , ensureSort
+  , applyPiTyped
   ) where
 
 import Control.Applicative
@@ -125,10 +128,16 @@ data TCError
   | BadRecordField FieldName Term
   | ArrayTypeMismatch Term Term
   | DanglingVar Int
+  | UnboundName String
+  | ConstraintFailure Term Term
+  | EmptyVectorLit
   | NoSuchDataType Ident
   | NoSuchCtor Ident
+  | NotFullyApplied Ident
+  | NotFullyAppliedRec Ident
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
   | MalformedRecursor Term String
+  | DeclError String String
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
@@ -168,8 +177,17 @@ prettyTCError e =
       ]
     DanglingVar n ->
       [ "Dangling bound variable index: " ++ show n ]
-    NoSuchDataType d -> [ "No such data type", show d]
-    NoSuchCtor c -> [ "No such constructor", show c]
+    UnboundName str -> [ "Unbound name: " ++ str]
+    ConstraintFailure tp1 tp2 ->
+      [ "Inferred type", ishow tp1,
+        "Not a subtype of expected type", ishow tp2 ]
+    EmptyVectorLit -> [ "Empty vector literal" ]
+    NoSuchDataType d -> [ "No such data type: " ++ show d]
+    NoSuchCtor c -> [ "No such constructor: " ++ show c]
+    NotFullyApplied i ->
+      [ "Constructor or datatype not fully applied: " ++ show i ]
+    NotFullyAppliedRec i ->
+      [ "Recursor not fully applied: " ++ show i ]
     BadParamsOrArgsLength is_dt ident params args ->
       [ "Wrong number of parameters or arguments to "
         ++ (if is_dt then "datatype" else "constructor") ++ ": ",
@@ -178,6 +196,7 @@ prettyTCError e =
       ]
     MalformedRecursor trm reason ->
       [ "Malformed recursor application", ishow trm, reason ]
+    DeclError nm reason -> ["Bad declaration for " ++ nm, reason]
   where
     ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
@@ -198,7 +217,7 @@ scTypeCheck sc mnm = scTypeCheckInCtx sc mnm []
 -- which assigns types to free variables in the term
 scTypeCheckInCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
                     Term -> IO (Either TCError Term)
-scTypeCheckInCtx sc ctx mnm t0 = runTCM (typeInfer t0) sc ctx mnm
+scTypeCheckInCtx sc mnm ctx t0 = runTCM (typeInfer t0) sc mnm ctx
 
 -- | A pair of a 'Term' and its type
 data TypedTerm = TypedTerm { typedVal :: Term, typedType :: Term }
