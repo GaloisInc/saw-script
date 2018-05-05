@@ -36,10 +36,13 @@ module Verifier.SAW.Module
     -- * Modules
   , Module
   , ModuleDecl(..)
+  , ResolvedName(..)
+  , resolvedNameIdent
   , moduleName
   , moduleImports
   , moduleImportNames
   , emptyModule
+  , resolveName
   , findDataType
   , insImport
   , insDataType
