@@ -40,7 +40,7 @@ module Verifier.SAW.Term.CtxTerm (
   Ctx(..), CtxApp, CtxInvApp, CtxInv, Arrows
   , ctxTermsForBindings, invAppendBindings, invertBindings
   , CtxTerm(..), CtxTerms(..), CtxTermsCtx(..)
-  , Typ, mkClosedTerm, mkClosedTyp, elimClosedTerm
+  , Typ, mkClosedTerm, mkClosedTyp, elimClosedTerm, ctxBindingsOfTerms
   , Bindings(..), bindingsLength, InvBindings(..), InBindings(..)
   , mkLiftedClosedTerm
   , ctxLambda, ctxPi, ctxPi1
@@ -199,9 +199,9 @@ type family Arrows as b where
 
 -- | A 'Term' with a given "type" relative to a given context. Since we cannot
 -- hope to represent dependent type theory in Haskell types anyway, these
--- "types" are usually instantiated with a dummy, such as the unit type, but the
--- code that consumes them cannot know that and has to be agnostic to what type
--- it is.
+-- "types" are usually instantiated with a dummy, such as '()', but the code
+-- that consumes them cannot know that and has to be agnostic to what type it
+-- is.
 newtype CtxTerm (ctx :: Ctx *) (a :: *) = CtxTerm Term
 
 -- | Convert a 'CtxTerm' to an untyped term. This is "unsafe" because it throws
@@ -227,6 +227,23 @@ mkClosedTyp = mkClosedTerm
 -- | Take a term out of the empty context
 elimClosedTerm :: CtxTerm 'CNil a -> Term
 elimClosedTerm (CtxTerm t) = t
+
+-- | Existentially quantify over the "type" of an object
+data ExistsTp tp ctx = forall a. ExistsTp (tp ctx a)
+
+-- | Build a 'Bindings' list from a list of variable names and types, assuming
+-- that each variable is free in the remaining types and that @ctx@ describes
+-- the ambient context of the top-level type in the context. Note that nothing
+-- here ensures that the Haskell-level types used to "represent" the bindings
+-- created by this function have anything to do with the actual SAW types, but
+-- the Haskell type system is not powerful enough to represent all the SAW types
+-- anyway, and any code that consumes this 'Bindings' list cannot know that
+-- anyway. See also the comments for 'CtxTerm'.
+ctxBindingsOfTerms :: [(String,Term)] -> ExistsTp (Bindings CtxTerm) ctx
+ctxBindingsOfTerms [] = ExistsTp NoBind
+ctxBindingsOfTerms ((x,tp):ctx) =
+  case ctxBindingsOfTerms ctx of
+    ExistsTp rest -> ExistsTp (Bind x (CtxTerm tp) rest)
 
 -- | A dummy unit type that takes in a context
 data CtxUnit ctx a = CtxUnit
