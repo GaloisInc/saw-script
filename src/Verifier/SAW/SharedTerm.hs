@@ -8,6 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- |
 Module      : Verifier.SAW.SharedTerm
@@ -50,8 +51,10 @@ module Verifier.SAW.SharedTerm
   , allowedElimSort
     -- ** Modules
   , scLoadModule
-  , scEnsureModule
+  , scUnloadModule
+  , scModifyModule
   , scModuleIsLoaded
+  , scFindModule
   , scFindDef
   , scFindDataType
   , scFindCtor
@@ -338,12 +341,18 @@ scLoadModule sc m =
                    ++ show (moduleName m) ++ " already loaded!")
   (moduleName m) m
 
--- | Ensure that a module is loaded into the current shared context, doing
--- nothing if a module of the same name is already loaded
-scEnsureModule :: SharedContext -> Module -> IO ()
-scEnsureModule sc m =
+-- | Remove a module from the current shared context, or do nothing if it does
+-- not exist
+scUnloadModule :: SharedContext -> ModuleName -> IO ()
+scUnloadModule sc mnm =
+  modifyIORef' (scModuleMap sc) $ HMap.delete mnm
+
+-- | Modify an already loaded module, raising an error if it is not loaded
+scModifyModule :: SharedContext -> ModuleName -> (Module -> Module) -> IO ()
+scModifyModule sc mnm f =
+  let err_msg = "scModifyModule: module " ++ show mnm ++ " not found!" in
   modifyIORef' (scModuleMap sc) $
-  HMap.insertWith (\_new old -> old) (moduleName m) m
+  HMap.alter (\case { Just m -> Just (f m); _ -> error err_msg }) mnm
 
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module
