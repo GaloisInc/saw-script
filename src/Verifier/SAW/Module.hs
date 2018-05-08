@@ -46,6 +46,8 @@ module Verifier.SAW.Module
   , findDataType
   , insImport
   , insDataType
+  , beginDataType
+  , completeDataType
   , moduleDataTypes
   , moduleCtors
   , findCtor
@@ -337,8 +339,36 @@ insImport name_p i m =
 -- | Insert a 'DataType' declaration, along with its 'Ctor's, into a module
 insDataType :: Module -> DataType -> Module
 insDataType m dt =
-  foldl' insResolvedName m $
+  foldl' insResolvedName (m { moduleRDecls = TypeDecl dt : moduleRDecls m}) $
   (ResolvedDataType dt : map ResolvedCtor (dtCtors dt))
+
+-- | Insert an "incomplete" datatype, used as part of building up a 'DataType'
+-- to typecheck its constructors. This incomplete datatype must have no
+-- constructors, and it will not be added to the 'moduleRDecls' list until it is
+-- completed by 'completeDataType'.
+beginDataType :: Module -> DataType -> Module
+beginDataType m dt =
+   if null (dtCtors dt) then insResolvedName m (ResolvedDataType dt) else
+     internalError
+     "insTempDataType: attempt to insert a non-empty temporary datatype"
+
+-- | Complete a datatype, by adding its constructors
+completeDataType :: Module -> Ident -> [Ctor] -> Module
+completeDataType m (identName -> str) ctors =
+  case resolveName m str of
+    Just (ResolvedDataType dt)
+      | null (dtCtors dt) ->
+        let dt' = dt {dtCtors = ctors} in
+        m { moduleResolveMap =
+              Map.insert str (ResolvedDataType dt') (moduleResolveMap m),
+              moduleRDecls = TypeDecl dt' : moduleRDecls m }
+    Just (ResolvedDataType _) ->
+      internalError $ "completeDataType: datatype already completed: " ++ str
+    Just _ ->
+      internalError $ "completeDataType: not a datatype: " ++ str
+    Nothing ->
+      internalError $ "completeDataType: datatype not found: " ++ str
+
 
 -- | Insert a definition into a module
 insDef :: Module -> Def -> Module
