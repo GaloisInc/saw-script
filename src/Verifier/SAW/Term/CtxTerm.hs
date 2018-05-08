@@ -45,7 +45,7 @@ module Verifier.SAW.Term.CtxTerm (
   , mkLiftedClosedTerm
   , ctxLambda, ctxPi, ctxPi1
   , MonadTerm(..), CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
-  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType
+  , CtorArg(..), CtorArgStruct(..), mkCtorArgStruct, ctxCtorArgType
   , ctxCtorType, ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor
   ) where
 
@@ -273,14 +273,12 @@ ctxTermsCtxHeadTail :: CtxTermsCtx ctx ('CCons as a) ->
                        (CtxTermsCtx ctx as, CtxTerm ctx a)
 ctxTermsCtxHeadTail (CtxTermsCtxCons as a) = (as, a)
 
-{-
 -- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
 -- because it throws away our typing information
 ctxTermsToListUnsafe :: CtxTerms ctx as -> [Term]
 ctxTermsToListUnsafe CtxTermsNil = []
 ctxTermsToListUnsafe (CtxTermsCons (CtxTerm t) ts) =
   t : ctxTermsToListUnsafe ts
--}
 
 -- | Convert a typed list of terms to a list of untyped terms; this is "unsafe"
 -- because it throws away our typing information
@@ -289,10 +287,20 @@ ctxTermsCtxToListUnsafe CtxTermsCtxNil = []
 ctxTermsCtxToListUnsafe (CtxTermsCtxCons ts (CtxTerm t)) =
   ctxTermsCtxToListUnsafe ts ++ [t]
 
+-- | Like 'ctxTermsForBindings' but can return a 'CtxTerms' in an arbitrary
+-- context. We consider this "unsafe" because it associates an arbitrary context
+-- with these terms, and so we do not export this function.
+ctxTermsForBindingsOpen :: Bindings tp ctx_in as -> [Term] ->
+                           Maybe (CtxTerms ctx as)
+ctxTermsForBindingsOpen NoBind [] = Just CtxTermsNil
+ctxTermsForBindingsOpen (Bind _ _ bs) (t : ts) =
+  CtxTermsCons (CtxTerm t) <$> ctxTermsForBindingsOpen bs ts
+ctxTermsForBindingsOpen _ _ = Nothing
+
 -- | Take a list of terms and match them up with a sequence of bindings,
--- returning a structured 'CtxTermsCtx' list. Note that the bindings themselves
--- can be in an arbitrary context, but the terms passed in are assumed to be
--- closed, i.e., in the empty context.
+-- returning a structured 'CtxTerms' list. Note that the bindings themselves can
+-- be in an arbitrary context, but the terms passed in are assumed to be closed,
+-- i.e., in the empty context.
 ctxTermsForBindings :: Bindings tp ctx as -> [Term] -> Maybe (CtxTerms 'CNil as)
 ctxTermsForBindings NoBind [] = Just CtxTermsNil
 ctxTermsForBindings (Bind _ _ bs) (t : ts) =
@@ -453,6 +461,33 @@ ctxPiProxy :: MonadTerm m => Proxy (Typ b) -> Bindings CtxTerm ctx as ->
               m (CtxTerm ctx (Typ (Arrows as b)))
 ctxPiProxy _ = ctxPi
 
+-- | Existential return type of 'ctxAsPi'
+data CtxPi ctx =
+  forall b c.
+  CtxPi String (CtxTerm ctx (Typ b)) (CtxTerm ('CCons ctx b) (Typ c))
+
+-- | Test if a 'CtxTerm' is a pi-abstraction, returning its components if so.
+-- Note that we are not returning any equality constraints on the input type,
+-- @a@; i.e., if a term is a pi-abstraction, one would expect @a@ to have the
+-- form @b -> c@, but this would require a /lot/ more work...
+ctxAsPi :: CtxTerm ctx (Typ a) -> Maybe (CtxPi ctx)
+ctxAsPi (CtxTerm (unwrapTermF -> Pi x tp body)) =
+  Just (CtxPi x (CtxTerm tp) (CtxTerm body))
+ctxAsPi _ = Nothing
+
+-- | Existential return type of 'ctxAsPiMulti'
+data CtxMultiPi ctx =
+  forall as b.
+  CtxMultiPi (Bindings CtxTerm ctx as) (CtxTerm (CtxInvApp ctx as) (Typ b))
+
+-- | Repeatedly apply 'ctxAsPi', returning the 'Bindings' list of 0 or more
+-- pi-abstraction bindings in the given term
+ctxAsPiMulti :: CtxTerm ctx (Typ a) -> CtxMultiPi ctx
+ctxAsPiMulti (ctxAsPi -> Just (CtxPi x tp body)) =
+  case ctxAsPiMulti body of
+    CtxMultiPi as body' -> CtxMultiPi (Bind x tp as) body'
+ctxAsPiMulti t = CtxMultiPi NoBind t
+
 -- | Build an application of a datatype as a 'CtxTerm'
 ctxDataTypeM :: MonadTerm m => DataIdent d -> m (CtxTermsCtx ctx params) ->
                 m (CtxTermsCtx ctx ixs) -> m (CtxTerm ctx (Typ d))
@@ -461,6 +496,23 @@ ctxDataTypeM (DataIdent d) paramsM ixsM =
   (mkFlatTermF =<<
    (DataTypeApp d <$> (ctxTermsCtxToListUnsafe <$> paramsM) <*>
     (ctxTermsCtxToListUnsafe <$> ixsM)))
+
+
+-- | Test if a 'CtxTerm' is an application of a specific datatype with the
+-- supplied context of parameters and indices
+ctxAsDataTypeApp :: DataIdent d -> Bindings tp1 'CNil params ->
+                    Bindings tp2 (CtxInv params) ixs ->
+                    CtxTerm ctx (Typ a) ->
+                    Maybe (CtxTerms ctx params, CtxTerms ctx ixs)
+ctxAsDataTypeApp (DataIdent d) params ixs (CtxTerm
+                                           (unwrapTermF ->
+                                            FTermF (DataTypeApp d' params' ixs')))
+  | d == d'
+  = do params_ret <- ctxTermsForBindingsOpen params params'
+       ixs_ret <- ctxTermsForBindingsOpen ixs ixs'
+       return (params_ret, ixs_ret)
+ctxAsDataTypeApp _ _ _ _ = Nothing
+
 
 -- | Build an application of a constructor as a 'CtxTerm'
 ctxCtorAppM :: MonadTerm m => DataIdent d -> Ident ->
@@ -668,6 +720,11 @@ ctxCtorType d (CtorArgStruct{..}) =
          ctxDataTypeM (DataIdent d)
          (ctxLift InvNoBind bs $ invertCtxTerms params)
          (return $ invertCtxTerms ctorIndices))
+
+
+--
+-- * Computing with Eliminators
+--
 
 
 -- | Compute the type of an eliminator function for a constructor from the name
@@ -896,3 +953,150 @@ ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
         (forM cs_fs (\(c',f) -> (c',) <$> mkLiftedClosedTerm zs_ctx f))
         (return $ invertCtxTerms ixs)
         (ctxLift InvNoBind zs_ctx x))
+
+
+--
+-- * Parsing and Building Constructor Types
+--
+
+-- | Generic method for testing whether a datatype occurs in an object
+class UsesDataType a where
+  usesDataType :: DataIdent d -> a -> Bool
+
+instance UsesDataType (TermF Term) where
+  usesDataType (DataIdent d) (FTermF (DataTypeApp d' _ _)) | d' == d = True
+  usesDataType (DataIdent d) (FTermF (RecursorApp d' _ _ _ _ _)) | d' == d = True
+  usesDataType d tf = any (usesDataType d) tf
+
+instance UsesDataType Term where
+  usesDataType d = usesDataType d . unwrapTermF
+
+instance UsesDataType (CtxTerm ctx a) where
+  usesDataType d (CtxTerm t) = usesDataType d t
+
+instance UsesDataType (Bindings CtxTerm ctx as) where
+  usesDataType _ NoBind = False
+  usesDataType d (Bind _ tp tps) = usesDataType d tp || usesDataType d tps
+
+
+-- | Check that a type is a valid application of datatype @d@ for use in
+-- specific ways in the type of a constructor for @d@. This requires that this
+-- application of @d@ be of the form
+--
+-- > d p1 .. pn x1 .. xm
+--
+-- where the @pi@ are the distinct bound variables bound in the @params@
+-- context, given as argument, and that the @xj@ have no occurrences of @d@. If
+-- the given type is of this form, return the @xj@.
+asCtorDTApp :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+               Bindings CtxTerm (CtxInv params) ixs ->
+               InvBindings tp1 (CtxInv params) ctx1 ->
+               Bindings tp2 (CtxApp (CtxInv params) ctx1) ctx2 ->
+               CtxTerm (CtxInvApp (CtxApp (CtxInv params) ctx1) ctx2) (Typ a) ->
+               Maybe (CtxTerms (CtxInvApp (CtxApp (CtxInv params) ctx1) ctx2) ixs)
+asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
+                                       Just (param_vars, ixs))
+  | isVarList Proxy params ctx1 ctx2 param_vars &&
+    not (any (usesDataType d) $ ctxTermsToListUnsafe ixs)
+  = Just ixs
+  where
+    -- Check that the given list of terms is a list of bound variables, one for
+    -- each parameter, in the context extended by the given arguments
+    isVarList :: Proxy prev_params ->
+                 Bindings tp1 prev_params params ->
+                 InvBindings tp2 (CtxInvApp prev_params params) ctx1 ->
+                 Bindings tp3 (CtxApp
+                               (CtxInvApp prev_params params) ctx1) ctx2 ->
+                 CtxTerms (CtxInvApp
+                           (CtxApp
+                            (CtxInvApp prev_params params) ctx1) ctx2) params ->
+                 Bool
+    isVarList _ _ _ _ CtxTermsNil = True
+    isVarList _ (Bind _ _ ps) c1 c2 (CtxTermsCons
+                                     (CtxTerm (unwrapTermF -> LocalVar i)) ts) =
+      i == bindingsLength ps + invBindingsLength c1 + bindingsLength c2 &&
+      isVarList Proxy ps c1 c2 ts
+    isVarList _ _ _ _ _ = False
+asCtorDTApp _ _ _ _ _ _ = Nothing
+
+
+-- | Existential return type for 'asCtorArg'
+data ExCtorArg d ixs ctx =
+  forall a. ExCtorArg (CtorArg d ixs ctx (Typ a))
+
+-- | Check that an argument for a constructor has one of the allowed forms
+asCtorArg :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+             Bindings CtxTerm (CtxInv params) ixs ->
+             InvBindings tp (CtxInv params) prevs ->
+             CtxTerm (CtxApp (CtxInv params) prevs) (Typ a) ->
+             Maybe (ExCtorArg d ixs (CtxApp (CtxInv params) prevs))
+asCtorArg d params dt_ixs prevs (ctxAsPiMulti ->
+                                 CtxMultiPi zs
+                                 (asCtorDTApp d params dt_ixs prevs zs ->
+                                  Just ixs))
+  | not (usesDataType d zs)
+  = Just (ExCtorArg $ RecursiveArg zs ixs)
+asCtorArg d _ _ _ tp
+  | not (usesDataType d tp)
+  = Just (ExCtorArg $ ConstArg tp)
+asCtorArg _ _ _ _ _ = Nothing
+
+-- | Existential return type of 'asPiCtorArg'
+data CtxPiCtorArg d ixs ctx =
+  forall a b .
+  CtxPiCtorArg String (CtorArg d ixs ctx (Typ a))
+  (CtxTerm ('CCons ctx a) (Typ b))
+
+-- | Check that a constructor type is a pi-abstraction that takes as input an
+-- argument of one of the allowed forms described by 'CtorArg'
+asPiCtorArg :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+               Bindings CtxTerm (CtxInv params) ixs ->
+               InvBindings tp (CtxInv params) prevs ->
+               CtxTerm (CtxApp (CtxInv params) prevs) (Typ a) ->
+               Maybe (CtxPiCtorArg d ixs (CtxApp (CtxInv params) prevs))
+asPiCtorArg d params dt_ixs prevs (ctxAsPi ->
+                                   Just (CtxPi x
+                                         (asCtorArg d params dt_ixs prevs ->
+                                          Just (ExCtorArg arg)) rest)) =
+  Just $ CtxPiCtorArg x arg (castTopCtxElem rest)
+  where
+    castTopCtxElem :: CtxTerm ('CCons ctx a1) b -> CtxTerm ('CCons ctx a2) b
+    castTopCtxElem (CtxTerm t) = CtxTerm t
+asPiCtorArg _ _ _ _ _ = Nothing
+
+-- | Existential return type of 'mkCtorArgsIxs'
+data CtorArgsIxs d ixs prevs =
+  forall args.
+  CtorArgsIxs (Bindings (CtorArg d ixs) prevs args)
+  (CtxTerms (CtxInvApp prevs args) ixs)
+
+-- | Helper function for 'mkCtorArgStruct'
+mkCtorArgsIxs :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+                 Bindings CtxTerm (CtxInv params) ixs ->
+                 InvBindings (CtorArg d ixs) (CtxInv params) prevs ->
+                 CtxTerm (CtxApp (CtxInv params) prevs) (Typ a) ->
+                 Maybe (CtorArgsIxs d ixs (CtxApp (CtxInv params) prevs))
+mkCtorArgsIxs d params dt_ixs prevs (asPiCtorArg d params dt_ixs prevs ->
+                                     Just (CtxPiCtorArg x arg rest)) =
+  case mkCtorArgsIxs d params dt_ixs (InvBind prevs x arg) rest of
+    Just (CtorArgsIxs args ixs) -> Just (CtorArgsIxs (Bind x arg args) ixs)
+    Nothing -> Nothing
+mkCtorArgsIxs d params dt_ixs prevs (asCtorDTApp d params dt_ixs prevs NoBind ->
+                                     Just ixs) =
+  Just (CtorArgsIxs NoBind ixs)
+mkCtorArgsIxs _ _ _ _ _ = Nothing
+
+
+-- | Take in a datatype and 'Bindings' lists for its parameters and indices, and
+-- also a prospective type of a constructor for that datatype, where the
+-- constructor type is allowed to have the parameters but not the indices free.
+-- Test that the constructor type is an allowed type for a constructor of this
+-- datatype, and, if so, build a 'CtorArgStruct' for it.
+mkCtorArgStruct :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+                   Bindings CtxTerm (CtxInv params) ixs -> Term ->
+                   Maybe (CtorArgStruct d params ixs)
+mkCtorArgStruct d params dt_ixs ctor_tp =
+  case mkCtorArgsIxs d params dt_ixs InvNoBind (CtxTerm ctor_tp) of
+    Just (CtorArgsIxs args ctor_ixs) ->
+      Just (CtorArgStruct params args ctor_ixs dt_ixs)
+    Nothing -> Nothing
