@@ -439,6 +439,17 @@ allowedElimSort dt s =
   else True
 
 
+-- | Build a 'Ctor' from a 'CtorArgStruct'
+scBuildCtor :: SharedContext -> Ident -> Ident -> CtorArgStruct d params ixs ->
+               IO Ctor
+scBuildCtor sc d c arg_struct =
+  scShCtxM sc $
+  do tp <- ctxCtorType d c arg_struct
+     elim_fun <- scShCtxM mkCtorElimTypeFun d c arg_struct
+     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
+                     ctorDataTypeName = d, ctorType = tp,
+                     ctorElimTypeFun = elim_fun }
+
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
 --
