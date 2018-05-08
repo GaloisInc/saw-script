@@ -45,8 +45,8 @@ module Verifier.SAW.Term.CtxTerm (
   , mkLiftedClosedTerm
   , ctxLambda, ctxPi, ctxPi1
   , MonadTerm(..), CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
-  , CtorArg(..), CtorArgStruct(..), mkCtorArgStruct, ctxCtorArgType
-  , ctxCtorType, ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor
+  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType
+  , ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor, mkCtorArgStruct
   ) where
 
 import Data.Proxy
