@@ -40,7 +40,8 @@ module Verifier.SAW.Term.CtxTerm (
   Ctx(..), CtxApp, CtxInvApp, CtxInv, Arrows
   , ctxTermsForBindings, invAppendBindings, invertBindings
   , CtxTerm(..), CtxTerms(..), CtxTermsCtx(..)
-  , Typ, mkClosedTerm, mkClosedTyp, elimClosedTerm, ctxBindingsOfTerms
+  , Typ, mkClosedTerm, mkClosedTyp, elimClosedTerm
+  , ExistsTp(..), ctxBindingsOfTerms
   , Bindings(..), bindingsLength, InvBindings(..), InBindings(..)
   , mkLiftedClosedTerm
   , ctxLambda, ctxPi, ctxPi1
@@ -1092,11 +1093,11 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- constructor type is allowed to have the parameters but not the indices free.
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
-mkCtorArgStruct :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+mkCtorArgStruct :: Ident -> Bindings CtxTerm 'CNil params ->
                    Bindings CtxTerm (CtxInv params) ixs -> Term ->
                    Maybe (CtorArgStruct d params ixs)
 mkCtorArgStruct d params dt_ixs ctor_tp =
-  case mkCtorArgsIxs d params dt_ixs InvNoBind (CtxTerm ctor_tp) of
+  case mkCtorArgsIxs (DataIdent d) params dt_ixs InvNoBind (CtxTerm ctor_tp) of
     Just (CtorArgsIxs args ctor_ixs) ->
       Just (CtorArgStruct params args ctor_ixs dt_ixs)
     Nothing -> Nothing
