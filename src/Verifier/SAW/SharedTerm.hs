@@ -49,6 +49,7 @@ module Verifier.SAW.SharedTerm
   , scRecursorRetTypeType
   , scReduceRecursor
   , allowedElimSort
+  , scBuildCtor
     -- ** Modules
   , scLoadModule
   , scUnloadModule
@@ -444,11 +445,12 @@ scBuildCtor :: SharedContext -> Ident -> Ident -> CtorArgStruct d params ixs ->
                IO Ctor
 scBuildCtor sc d c arg_struct =
   scShCtxM sc $
-  do tp <- ctxCtorType d c arg_struct
-     elim_fun <- scShCtxM mkCtorElimTypeFun d c arg_struct
+  do tp <- ctxCtorType d arg_struct
+     elim_fun <- mkCtorElimTypeFun d c arg_struct
      return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
                      ctorDataTypeName = d, ctorType = tp,
-                     ctorElimTypeFun = elim_fun }
+                     ctorElimTypeFun =
+                       (\ps p_ret -> scShCtxM sc $ elim_fun ps p_ret) }
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
