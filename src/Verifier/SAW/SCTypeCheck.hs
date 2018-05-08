@@ -196,7 +196,7 @@ prettyTCError e =
       ]
     MalformedRecursor trm reason ->
       [ "Malformed recursor application", ishow trm, reason ]
-    DeclError nm reason -> ["Bad declaration for " ++ nm, reason]
+    DeclError nm reason -> ["Malformed declaration for " ++ nm, reason]
   where
     ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
