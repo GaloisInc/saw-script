@@ -66,13 +66,13 @@ data Term
     -- | Vector literal.
   | VecLit Pos [Term]
   | BadTerm Pos
- deriving (Show)
+ deriving (Show,Read)
 
 -- | A pattern used for matching a variable.
 data TermVar
   = TermVar (PosPair String)
   | UnusedVar Pos
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
 
 -- | Return the 'String' name associated with a 'TermVar'
 termVarString :: TermVar -> String
@@ -112,7 +112,7 @@ badTerm :: Pos -> Term
 badTerm = BadTerm
 
 -- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
-data CtorDecl = Ctor (PosPair String) TermCtx Term deriving (Show)
+data CtorDecl = Ctor (PosPair String) TermCtx Term deriving (Show,Read)
 
 -- | A top-level declaration in a saw-core file
 data Decl
@@ -125,7 +125,7 @@ data Decl
    | TermDef (PosPair String) [(TermVar, Maybe Term)] Term
      -- ^ A declaration of a term having a definition, with some variables that
      -- are allowed to have or not have type annotations
-  deriving (Show)
+  deriving (Show,Read)
 
 -- | A set of constraints on what 'String' names to import from a module
 data ImportConstraint
@@ -133,7 +133,7 @@ data ImportConstraint
     -- ^ Only import the given names
   | HidingImports [String]
     -- ^ Import all but the given names
- deriving (Eq, Ord, Show)
+ deriving (Eq, Ord, Show, Read)
 
 -- | An import declaration
 data Import = Import { importModName :: PosPair ModuleName
@@ -141,6 +141,7 @@ data Import = Import { importModName :: PosPair ModuleName
                      , importConstraints :: Maybe ImportConstraint
                        -- ^ The constraints on what to import
                      }
+            deriving (Show, Read)
 
 -- | Test whether a 'String' name satisfies the constraints of an 'Import'
 nameSatsConstraint :: Maybe ImportConstraint -> String -> Bool
@@ -153,7 +154,7 @@ nameSatsConstraint (Just (HidingImports ns)) n = notElem n ns
 -- * A name for the module;
 -- * A list of imports; AND
 -- * A list of top-level declarations
-data Module = Module (PosPair ModuleName) [Import] [Decl]
+data Module = Module (PosPair ModuleName) [Import] [Decl] deriving (Show, Read)
 
 asApp :: Term -> (Term,[Term])
 asApp = go []

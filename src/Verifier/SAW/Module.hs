@@ -145,7 +145,7 @@ data DefQualifier
   = NoQualifier
   | PrimQualifier
   | AxiomQualifier
- deriving (Eq, Show, Generic)
+ deriving (Eq, Show, Read, Generic)
 
 instance Hashable DefQualifier -- automatically derived
 

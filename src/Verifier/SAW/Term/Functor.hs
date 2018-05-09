@@ -91,6 +91,9 @@ instance Hashable ModuleName -- automatically derived
 instance Show ModuleName where
   show (ModuleName s) = BS.toString s
 
+instance Read ModuleName where
+  readsPrec _ s = [(ModuleName (BS.fromString s), "")]
+
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [String] -> ModuleName
@@ -173,6 +176,13 @@ instance Hashable Sort -- automatically derived
 instance Show Sort where
   showsPrec p (TypeSort i) = showParen (p >= 10) (showString "sort " . shows i)
   showsPrec _ PropSort = showString "Prop"
+
+instance Read Sort where
+  readsPrec p str
+    | take 5 str == "sort " =
+       map (\(i,str') -> (TypeSort i, str')) (readsPrec p (drop 5 str))
+  readsPrec _ str | take 4 str == "Prop" = [(PropSort, drop 4 str)]
+  readsPrec _ _ = []
 
 -- | Create sort @Type i@ for the given integer @i@
 mkSort :: Integer -> Sort
