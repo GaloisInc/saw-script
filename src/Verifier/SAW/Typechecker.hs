@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+-- The above is needed because we want our orphan TypeInfer instance below
+
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -12,7 +14,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
--- The above is needed because we want our orphan TypeInfer instance below
+{-# LANGUAGE RecordWildCards #-}
 
 {- |
 Module      : Verifier.SAW.Typechecker
@@ -41,7 +43,9 @@ import Verifier.SAW.Utils (internalError)
 import Verifier.SAW.Module
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
@@ -238,6 +242,21 @@ instance TypeInfer Un.Term where
     internalError "Type inference encountered a BadTerm"
 
 
+-- | Type-check a variable context, where each type is in the context of the
+-- previous variables. Complete this context to a list of variable names and
+-- types, and run the given computation in this context, passing in the actual
+-- completed context as well, as well as the maximum sort of its types.
+typeInferCompleteInCtx :: Un.TermCtx -> ([(String,Term)] -> Sort -> TCM a) ->
+                          TCM a
+typeInferCompleteInCtx [] f = f [] propSort
+typeInferCompleteInCtx ((Un.termVarString -> x,tp):ctx) f =
+  do typed_tp <- typeInferComplete tp
+     s <- ensureSort (typedType typed_tp)
+     inExtendedCtx x (typedVal typed_tp) $
+       typeInferCompleteInCtx ctx $ \ctx' s' ->
+       f ((x,typedVal typed_tp) : ctx') (max s s')
+
+
 --
 -- Type-checking modules
 --
@@ -278,9 +297,54 @@ processDecls (Un.TypeDecl q (PosPair _ nm) tp : rest) =
      processDecls rest
 processDecls (Un.TermDef (PosPair _ nm) _ _ : _) =
   throwTCError $ DeclError nm "Dangling definition without a type"
-processDecls (Un.DataDecl (PosPair _ _nm) _param_ctx _tp _ctor_decls : rest) =
-  do void (error "FIXME HERE NOW: process datatype declarations!")
-     processDecls rest
+processDecls (Un.DataDecl (PosPair _ nm) param_ctx dt_tp c_decls : rest) =
+  -- Step 1: type-check the parameters
+  typeInferCompleteInCtx param_ctx $ \dtParams param_sort -> do
+  let err :: String -> TCM a
+      err msg = throwTCError $ DeclError nm msg
+
+  -- Step 2: type-check the type given for d, and make sure it is of the form
+  -- (i1:ix1) -> ... -> (in:ixn) -> Type s for some sort s. Then form the full
+  -- type of d as (p1:param1) -> ... -> (i1:ix1) -> ... -> Type s
+  typed_dt_tp <- typeInferComplete dt_tp
+  (dtIndices, dtSort) <-
+    (case asPiList (typedVal typed_dt_tp) of
+       (ixs, asSort -> Just s) -> return (ixs, s)
+       _ -> err "Wrong form for type of datatype")
+  dtType <- liftTCM scPiList dtParams (typedVal typed_dt_tp)
+
+  -- Step 3: Make sure that, if we are declaring a predicative (non-Prop)
+  -- inductive type, then dtSort >= max sort used in the parameters
+  if dtSort /= propSort && param_sort > dtSort then
+    err "Universe level too low for parameters"
+    else return ()
+
+  -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
+  mnm <- getModuleName
+  let dtName = mkIdent mnm nm
+  let dt = DataType { dtCtors = [], .. }
+  liftTCM scModifyModule mnm (\m -> beginDataType m dt)
+
+  -- Step 5: typecheck the constructors, and build Ctors for them
+  typed_ctors <-
+    mapM (\(Un.Ctor (PosPair p c) ctx body) ->
+           (c,) <$> typedVal <$> typeInferComplete (Un.Pi p ctx body)) c_decls
+  ctors <-
+    case ctxBindingsOfTerms dtParams of
+      ExistsTp p_ctx ->
+        case ctxBindingsOfTerms dtIndices of
+          ExistsTp ix_ctx ->
+            forM typed_ctors $ \(c, tp) ->
+            case mkCtorArgStruct dtName p_ctx ix_ctx tp of
+              Just arg_struct ->
+                liftTCM scBuildCtor dtName (mkIdent mnm c) arg_struct
+              Nothing -> err ("Malformed type form constructor: " ++ c)
+
+  -- Step 6: complete the datatype with the given ctors
+  liftTCM scModifyModule mnm (\m -> completeDataType m dtName ctors)
+
+  -- Step 7: process the remaining declarations
+  processDecls rest
 
 
 -- | Typecheck a module and, on success, insert it into the current context
