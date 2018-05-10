@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.UntypedAST
@@ -23,6 +24,7 @@ module Verifier.SAW.UntypedAST
   , termVarString
   , TermCtx
   , asApp
+  , asPiList
   , mkTupleValue
   , mkTupleType
   , mkTupleSelector
@@ -30,6 +32,12 @@ module Verifier.SAW.UntypedAST
   , Sort, mkSort, propSort, sortOf
   , badTerm
   , module Verifier.SAW.Position
+  , moduleName
+  , moduleTypedDecls
+  , moduleDataDecls
+  , moduleCtorDecls
+  , moduleTypedDataDecls
+  , moduleTypedCtorDecls
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -119,7 +127,7 @@ data Decl
    = TypeDecl DefQualifier (PosPair String) Term
      -- ^ A declaration of something having a type, where the declaration
      -- qualifier states what flavor of thing it is
-   | DataDecl (PosPair String) [(TermVar, Term)] Term [CtorDecl]
+   | DataDecl (PosPair String) TermCtx Term [CtorDecl]
      -- ^ A declaration of an inductive data types, with a name, a parameter
      -- context, a return type, and a list of constructor declarations
    | TermDef (PosPair String) [(TermVar, Maybe Term)] Term
@@ -155,6 +163,49 @@ nameSatsConstraint (Just (HidingImports ns)) n = notElem n ns
 -- * A list of imports; AND
 -- * A list of top-level declarations
 data Module = Module (PosPair ModuleName) [Import] [Decl] deriving (Show, Read)
+
+moduleName :: Module -> ModuleName
+moduleName (Module (PosPair _ mnm) _ _) = mnm
+
+-- | Get a list of all names (i.e., definitions, axioms, or primitives) declared
+-- in a module, along with their types and qualifiers
+moduleTypedDecls :: Module -> [(String, Term)]
+moduleTypedDecls (Module _ _ decls) = concatMap helper decls where
+  helper :: Decl -> [(String, Term)]
+  helper (TypeDecl _ (PosPair _ nm) tm) = [(nm,tm)]
+  helper _ = []
+
+-- | Get a list of all datatypes declared in a module
+moduleDataDecls :: Module -> [(String,TermCtx,Term,[CtorDecl])]
+moduleDataDecls (Module _ _ decls) = concatMap helper decls where
+  helper :: Decl -> [(String,TermCtx,Term,[CtorDecl])]
+  helper (DataDecl (PosPair _ nm) params tp ctors) = [(nm, params, tp, ctors)]
+  helper _ = []
+
+moduleTypedDataDecls :: Module -> [(String,Term)]
+moduleTypedDataDecls =
+  map (\(nm,p_ctx,tp,_) ->
+        (nm, Pi (pos tp) p_ctx tp)) . moduleDataDecls
+
+-- | Get a list of all constructors declared in a module, along with the context
+-- of parameters for each one
+moduleCtorDecls :: Module -> [(TermCtx,CtorDecl)]
+moduleCtorDecls =
+  concatMap (\(_,p_ctx,_,ctors) -> map (p_ctx,) ctors) . moduleDataDecls
+
+-- | Get a list of the names and types of all the constructors in a module
+moduleTypedCtorDecls :: Module -> [(String,Term)]
+moduleTypedCtorDecls =
+  concatMap (\(_,p_ctx,_,ctors) ->
+              map (\(Ctor (PosPair _ nm) ctx tp) ->
+                    (nm, Pi (pos tp) (p_ctx ++ ctx) tp)) ctors)
+  . moduleDataDecls
+
+asPiList :: Term -> (TermCtx,Term)
+asPiList (Pi _ ctx1 body1) =
+  let (ctx2,body2) = asPiList body1 in
+  (ctx1 ++ ctx2, body2)
+asPiList t = ([], t)
 
 asApp :: Term -> (Term,[Term])
 asApp = go []
