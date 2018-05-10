@@ -27,6 +27,7 @@ module Verifier.SAW.SCTypeCheck
   , askCtx
   , askModName
   , inExtendedCtx
+  , atPos
   , LiftTCM(..)
   , TypedTerm(..)
   , TypeInfer(..)
@@ -36,7 +37,7 @@ module Verifier.SAW.SCTypeCheck
   ) where
 
 import Control.Applicative
-import Control.Monad.Trans.Except
+import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 
@@ -56,6 +57,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Module
+import Verifier.SAW.Position
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term
@@ -99,6 +101,14 @@ inExtendedCtx x tp m =
      put saved_table
      return a
 
+-- | Run a type-checking computation @m@ and tag any error it throws with the
+-- given position, using the 'ErrorPos' constructor, unless that error is
+-- already tagged with a position
+atPos :: Pos -> TCM a -> TCM a
+atPos p m = catchError m (throwError . addErrorPos)
+  where addErrorPos e@(ErrorPos _ _) = e
+        addErrorPos e = ErrorPos p e
+
 -- | Typeclass for lifting 'IO' computations that take a 'SharedContext' to
 -- 'TCM' computations
 class LiftTCM a where
@@ -138,10 +148,11 @@ data TCError
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
   | MalformedRecursor Term String
   | DeclError String String
+  | ErrorPos Pos TCError
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
-throwTCError = lift . lift . throwE
+throwTCError = throwError
 
 -- | Pretty-print a type-checking error
 prettyTCError :: TCError -> [String]
@@ -197,6 +208,8 @@ prettyTCError e =
     MalformedRecursor trm reason ->
       [ "Malformed recursor application", ishow trm, reason ]
     DeclError nm reason -> ["Malformed declaration for " ++ nm, reason]
+    ErrorPos _ e'@(ErrorPos _ _) -> prettyTCError e'
+    ErrorPos p e' -> (ppPos p) : prettyTCError e'
   where
     ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
