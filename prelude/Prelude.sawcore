@@ -36,7 +36,7 @@ data UnitType :: sort 0 where {
 
 -- The recursor for the Unit type at sort 0
 UnitType__rec :: (p :: UnitType -> sort 0) -> p Unit -> (u :: UnitType) -> p u;
-UnitType__rec p f1 u = Unit#rec p f1 u;
+UnitType__rec p f1 u = UnitType#rec p f1 u;
 
 
 --------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ data PairType :: (a b :: sort 0) -> sort 0 where {
 Pair__rec :: (a b :: sort 0) -> (p :: PairType a b -> sort 0) ->
              ((x::a) -> (y::b) -> p (PairValue a b x y)) ->
              (pair :: PairType a b) -> p pair;
-Pair__rec a b p f tup = PairType#rec a b p f tup;
+Pair__rec a b p f pair = PairType#rec a b p f pair;
 
 Pair_fst :: (a b :: sort 0) -> PairType a b -> a;
 Pair_fst a b = Pair__rec a b (\ (p::PairType a b) -> a)
