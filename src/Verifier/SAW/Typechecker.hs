@@ -49,7 +49,6 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
-
 -- | Infer the type of an untyped term and complete it to a 'Term', all in the
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.Term ->
@@ -268,7 +267,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair _ nm) tp :
               Un.TermDef (PosPair _ ((== nm) -> True)) ctx body : rest) =
   do typed_tp <- typeInferComplete tp
      void $ ensureSort $ typedType typed_tp
-     real_ctx <- completeContext nm ctx tp
+     real_ctx <- completeContext nm ctx $ fst $ Un.asPiList tp
      typed_body <- typeInferComplete (Un.Lambda (pos body) real_ctx body)
      checkSubtype (typedType typed_body) (typedVal typed_tp)
        (ConstraintFailure (typedType typed_tp) (typedVal typed_tp))
@@ -384,18 +383,20 @@ termVarsMatch _ _ = False
 -- | Complete a variable context that might be missing some types against a
 -- function type it is intended to match by filling in any types missing in
 -- the former with the corresponding type in the latter
-completeContext :: String -> [(Un.TermVar, Maybe Un.Term)] -> Un.Term ->
+completeContext :: String -> [(Un.TermVar, Maybe Un.Term)] -> Un.TermCtx ->
                    TCM Un.TermCtx
 completeContext _ [] _ = return []
-completeContext nm ((var, Just tp):ctx) (Un.Pi p ((var', _):pi_ctx) pi_body)
+completeContext nm ((var, Just tp):ctx) ((var', _):ctx')
   | termVarsMatch var var' =
-    ((var, tp) :) <$> completeContext nm ctx (Un.Pi p pi_ctx pi_body)
-completeContext nm ((var, Nothing):ctx) (Un.Pi p ((var', tp):pi_ctx) pi_body)
+    ((var, tp) :) <$> completeContext nm ctx ctx'
+completeContext nm ((var, Nothing):ctx) ((var', tp):ctx')
   | termVarsMatch var var' =
-    ((var, tp) :) <$> completeContext nm ctx (Un.Pi p pi_ctx pi_body)
-completeContext nm ((var1, _):_) (Un.Pi _ ((var2,_):_) _) =
+    ((var, tp) :) <$> completeContext nm ctx ctx'
+completeContext nm ((var1, _):_) ((var2,_):_) =
   throwTCError $ DeclError nm ("Definition variable " ++ Un.termVarString var1
                                ++ " does not match variable used in type:"
                                ++ Un.termVarString var2)
-completeContext nm _ _ =
-  throwTCError $ DeclError nm "More variables than length of function type"
+completeContext nm ctx ctx' =
+  throwTCError $
+  DeclError nm ("More variables than length of function type:\n" ++
+                show ctx ++ "\n" ++ show ctx')
