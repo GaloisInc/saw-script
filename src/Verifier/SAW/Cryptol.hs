@@ -44,7 +44,6 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, mkModuleName, findDef)
-import qualified Verifier.SAW.Recognizer as R
 
 unimplemented :: Monad m => String -> m a
 unimplemented name = fail ("unimplemented: " ++ name)
@@ -548,16 +547,13 @@ importExpr sc env expr =
                                           scApply sc e' t'
     C.EApp e1 e2                    -> do e1' <- go e1
                                           e2' <- go e2
-                                          t1 <- scTypeOf' sc (envS env) e1' >>= scWhnf sc
-                                          t2 <- scTypeOf' sc (envS env) e2' >>= scWhnf sc
+                                          let t1 = fastTypeOf (envC env) e1
+                                          let t2 = fastTypeOf (envC env) e2
                                           t1a <-
-                                            case R.asPi t1 of
-                                              Just (_, t1a, _) -> return t1a
+                                            case C.tIsFun t1 of
+                                              Just (a, _) -> return a
                                               Nothing -> fail "importExpr: internal error: expected function type"
-                                          e2'' <-
-                                            if alphaEquiv t1a t2
-                                            then return e2'
-                                            else scGlobalApply sc "Prelude.unsafeCoerce" [t2, t1a, e2']
+                                          e2'' <- coerceTerm sc env t2 t1a e2'
                                           scApply sc e1' e2''
     C.EAbs x t e                    -> do t' <- importType sc env t
                                           env' <- bindName sc x (C.Forall [] [] t) env
@@ -754,6 +750,14 @@ importDeclGroups sc = foldM (importDeclGroup False sc)
 
 importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
 importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
+
+coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
+coerceTerm sc env t1 t2 e =
+  do t1' <- importType sc env t1
+     t2' <- importType sc env t2
+     if alphaEquiv t1' t2'
+       then return e
+       else scGlobalApply sc "Prelude.unsafeCoerce" [t1', t2', e]
 
 --------------------------------------------------------------------------------
 -- List comprehensions
