@@ -328,10 +328,22 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
        _ -> err "Wrong form for type of datatype")
   dtType <- liftTCM scPiList dtParams (typedVal typed_dt_tp)
 
-  -- Step 3: Make sure that, if we are declaring a predicative (non-Prop)
-  -- inductive type, then dtSort >= max sort used in the parameters
-  if dtSort /= propSort && param_sort > dtSort then
-    err "Universe level too low for parameters"
+  -- Step 3: do the necessary universe inclusion checking for any predicative
+  -- (non-Prop) inductive type, which includes:
+  --
+  -- 1. All ix types must be of sort dtSort; AND
+  -- 2. All param types must be of sort dtSort+1
+  --
+  -- Note that the addition of propSort as an argument to maximum below is to
+  -- ensure that it is passed a non-empty list
+  if dtSort /= propSort && param_sort > sortOf dtSort then
+    err ("Universe level of parameters should be no greater \
+         than that of the datatype")
+    else return ()
+  ix_sorts <- mapM (ensureSort <=< liftTCM scTypeOf . snd) dtIndices
+  if dtSort /= propSort && maximum (propSort : ix_sorts) > dtSort then
+    err ("Universe level of indices should be strictly contained \
+         in that of the datatype")
     else return ()
 
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
