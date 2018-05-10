@@ -173,9 +173,11 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
          (splitAt (length $ dtCtors dt) ->
           (elims,
            (splitAt (length $ dtIndices dt) ->
-            (ixs, [arg])))))) ->
-         let cs_fs = zip (map ctorName $ dtCtors dt) elims in
-         typeInferComplete (RecursorApp dt_ident params p_ret cs_fs ixs arg)
+            (ixs, arg : rem_args)))))) ->
+         do let cs_fs = zip (map ctorName $ dtCtors dt) elims
+            typed_r <- typeInferComplete (RecursorApp dt_ident params
+                                          p_ret cs_fs ixs arg)
+            inferApplyAll typed_r rem_args
        _ -> throwTCError $ NotFullyAppliedRec dt_ident
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
