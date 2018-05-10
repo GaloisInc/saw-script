@@ -134,10 +134,11 @@ matchAppliedRecursor _ = Nothing
 instance TypeInfer Un.Term where
   typeInfer t = typedVal <$> typeInferComplete t
 
-  typeInferComplete t
-    | trace ("typechecking term: " ++ show t) False = undefined
-  typeInferComplete t = atPos (pos t) $ typeInferCompleteTerm t
-
+  typeInferComplete t =
+    do liftIO $ traceIO ("typechecking term: " ++ show t)
+       res <- atPos (pos t) $ typeInferCompleteTerm t
+       liftIO $ traceIO ("completed typechecking term: " ++ show t)
+       return res
 
 -- | Main workhore function for type inference on untyped terms
 typeInferCompleteTerm :: Un.Term -> TCM TypedTerm
@@ -229,7 +230,7 @@ typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
      typed_tp <- typeInferComplete tp
      _ <- ensureSort (typedType typed_tp)
      checkSubtype (typedType typed_t) (typedVal typed_tp)
-       (ConstraintFailure (typedType typed_t) (typedVal typed_tp))
+       (SubtypeFailure typed_t (typedVal typed_tp))
      return typed_t
 
 -- Literals
@@ -275,14 +276,15 @@ typeInferCompleteInCtx ((Un.termVarString -> x,tp):ctx) f =
 -- | Type-check a list of declarations and insert them into the current module
 processDecls :: [Un.Decl] -> TCM ()
 processDecls [] = return ()
-processDecls (Un.TypeDecl NoQualifier (PosPair _ nm) tp :
+processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
               Un.TermDef (PosPair _ ((== nm) -> True)) ctx body : rest) =
+  atPos p $
   do typed_tp <- typeInferComplete tp
      void $ ensureSort $ typedType typed_tp
      real_ctx <- completeContext nm ctx $ fst $ Un.asPiList tp
      typed_body <- typeInferComplete (Un.Lambda (pos body) real_ctx body)
      checkSubtype (typedType typed_body) (typedVal typed_tp)
-       (ConstraintFailure (typedType typed_tp) (typedVal typed_tp))
+       (SubtypeFailure typed_body (typedVal typed_tp))
      mnm <- getModuleName
      liftTCM scModifyModule mnm $ \m ->
        insDef m $ Def { defIdent = mkIdent mnm nm,
@@ -291,12 +293,13 @@ processDecls (Un.TypeDecl NoQualifier (PosPair _ nm) tp :
                         defBody = Just (typedVal typed_body) }
      processDecls rest
 
-processDecls (Un.TypeDecl NoQualifier (PosPair _ nm) _ : _) =
-  throwTCError $ DeclError nm "Definition without defining equation"
-processDecls (Un.TypeDecl _ (PosPair _ nm) _ :
+processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
+  atPos p $ throwTCError $ DeclError nm "Definition without defining equation"
+processDecls (Un.TypeDecl _ (PosPair p nm) _ :
               Un.TermDef (PosPair _ ((== nm) -> True)) _ _ : _) =
-  throwTCError $ DeclError nm "Primitive or axiom with definition"
-processDecls (Un.TypeDecl q (PosPair _ nm) tp : rest) =
+  atPos p $ throwTCError $ DeclError nm "Primitive or axiom with definition"
+processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
+  atPos p $
   do typed_tp <- typeInferComplete tp
      void $ ensureSort $ typedType typed_tp
      mnm <- getModuleName
@@ -306,9 +309,10 @@ processDecls (Un.TypeDecl q (PosPair _ nm) tp : rest) =
                         defType = typedVal typed_tp,
                         defBody = Nothing }
      processDecls rest
-processDecls (Un.TermDef (PosPair _ nm) _ _ : _) =
-  throwTCError $ DeclError nm "Dangling definition without a type"
-processDecls (Un.DataDecl (PosPair _ nm) param_ctx dt_tp c_decls : rest) =
+processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
+  atPos p $ throwTCError $ DeclError nm "Dangling definition without a type"
+processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
+  atPos p $
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx $ \dtParams param_sort -> do
   let err :: String -> TCM a
@@ -338,8 +342,8 @@ processDecls (Un.DataDecl (PosPair _ nm) param_ctx dt_tp c_decls : rest) =
 
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
-    mapM (\(Un.Ctor (PosPair p c) ctx body) ->
-           (c,) <$> typedVal <$> typeInferComplete (Un.Pi p ctx body)) c_decls
+    mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
+           (c,) <$> typedVal <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
   ctors <-
     case ctxBindingsOfTerms dtParams of
       ExistsTp p_ctx ->

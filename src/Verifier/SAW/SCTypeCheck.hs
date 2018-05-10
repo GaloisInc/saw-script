@@ -95,6 +95,7 @@ askModName = (\(_,mnm,_) -> mnm) <$> ask
 -- of bindings.
 inExtendedCtx :: String -> Term -> TCM a -> TCM a
 inExtendedCtx x tp m =
+  flip catchError (throwError . ErrorCtx x tp) $
   do saved_table <- get
      put Map.empty
      a <- local (\(sc,mnm,ctx) -> (sc, mnm, (x,tp):ctx)) m
@@ -105,9 +106,7 @@ inExtendedCtx x tp m =
 -- given position, using the 'ErrorPos' constructor, unless that error is
 -- already tagged with a position
 atPos :: Pos -> TCM a -> TCM a
-atPos p m = catchError m (throwError . addErrorPos)
-  where addErrorPos e@(ErrorPos _ _) = e
-        addErrorPos e = ErrorPos p e
+atPos p m = catchError m (throwError . ErrorPos p)
 
 -- | Typeclass for lifting 'IO' computations that take a 'SharedContext' to
 -- 'TCM' computations
@@ -129,7 +128,6 @@ instance LiftTCM b => LiftTCM (a -> b) where
 data TCError
   = NotSort Term
   | NotFuncType Term
-  | ArgTypeMismatch Term Term
   | NotTupleType Term
   | BadTupleIndex Int Term
   | NotStringType Term
@@ -139,7 +137,7 @@ data TCError
   | ArrayTypeMismatch Term Term
   | DanglingVar Int
   | UnboundName String
-  | ConstraintFailure Term Term
+  | SubtypeFailure TypedTerm Term
   | EmptyVectorLit
   | NoSuchDataType Ident
   | NoSuchCtor Ident
@@ -149,70 +147,88 @@ data TCError
   | MalformedRecursor Term String
   | DeclError String String
   | ErrorPos Pos TCError
+  | ErrorCtx String Term TCError
 
 -- | Throw a type-checking error
 throwTCError :: TCError -> TCM a
 throwTCError = throwError
 
+type PPErrM = Reader ([String], Maybe Pos)
+
 -- | Pretty-print a type-checking error
 prettyTCError :: TCError -> [String]
-prettyTCError e =
-  case e of
-    NotSort ty ->
-      [ "Not a sort" , ishow ty ]
-    NotFuncType ty ->
-      [ "Function application with non-function type" , ishow ty ]
-    ArgTypeMismatch ety aty ->
-      [ "Function argument type" , ishow aty
-      , "doesn't match expected type" , ishow ety
-      ]
-    NotTupleType ty ->
-      [ "Tuple field projection with non-tuple type" , ishow ty ]
-    BadTupleIndex n ty ->
-      [ "Bad tuple index (" ++ show n ++ ") for type"
-      , ishow ty
-      ]
-    NotStringType ty ->
-      [ "Field with non-string type", ishow ty ]
-    NotStringLit trm ->
-      [ "Record selector is not a string literal", ishow trm ]
-    NotRecordType ty ->
-      [ "Record field projection with non-record type" , ishow ty ]
-    BadRecordField n ty ->
-      [ "Bad record field (" ++ show n ++ ") for type"
-      , ishow ty
-      ]
-    ArrayTypeMismatch ety aty ->
-      [ "Array element type" , ishow aty
-      , "doesn't match declared array element type" , ishow ety
-      ]
-    DanglingVar n ->
-      [ "Dangling bound variable index: " ++ show n ]
-    UnboundName str -> [ "Unbound name: " ++ str]
-    ConstraintFailure tp1 tp2 ->
-      [ "Inferred type", ishow tp1,
-        "Not a subtype of expected type", ishow tp2 ]
-    EmptyVectorLit -> [ "Empty vector literal" ]
-    NoSuchDataType d -> [ "No such data type: " ++ show d]
-    NoSuchCtor c -> [ "No such constructor: " ++ show c]
-    NotFullyApplied i ->
-      [ "Constructor or datatype not fully applied: " ++ show i ]
-    NotFullyAppliedRec i ->
-      [ "Recursor not fully applied: " ++ show i ]
-    BadParamsOrArgsLength is_dt ident params args ->
-      [ "Wrong number of parameters or arguments to "
-        ++ (if is_dt then "datatype" else "constructor") ++ ": ",
+prettyTCError e = runReader (helper e) ([], Nothing) where
+
+  ppWithPos :: [PPErrM String] -> PPErrM [String]
+  ppWithPos str_ms =
+    do strs <- mapM id str_ms
+       (_, maybe_p) <- ask
+       case maybe_p of
+         Just p -> return (ppPos p : strs)
+         Nothing -> return strs
+
+  helper :: TCError -> PPErrM [String]
+  helper (NotSort ty) = ppWithPos [ return "Not a sort" , ishow ty ]
+  helper (NotFuncType ty) =
+      ppWithPos [ return "Function application with non-function type" ,
+                  ishow ty ]
+  helper (NotTupleType ty) =
+      ppWithPos [ return "Tuple field projection with non-tuple type" ,
+                  ishow ty ]
+  helper (BadTupleIndex n ty) =
+      ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
+                , ishow ty ]
+  helper (NotStringType ty) =
+      ppWithPos [ return "Field with non-string type", ishow ty ]
+  helper (NotStringLit trm) =
+      ppWithPos [ return "Record selector is not a string literal", ishow trm ]
+  helper (NotRecordType ty) =
+      ppWithPos [ return "Record field projection with non-record type" ,
+                  ishow ty ]
+  helper (BadRecordField n ty) =
+      ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
+                , ishow ty ]
+  helper (ArrayTypeMismatch ety aty) =
+      ppWithPos [ return "Array element type" , ishow aty
+                , return "doesn't match declared array element type" ,
+                  ishow ety ]
+  helper (DanglingVar n) =
+      ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
+  helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ str)]
+  helper (SubtypeFailure trm tp2) =
+      ppWithPos [ return "Inferred type", ishow (typedType trm),
+                  return "Not a subtype of expected type", ishow tp2,
+                  return "For term", ishow (typedVal trm) ]
+  helper EmptyVectorLit = ppWithPos [ return "Empty vector literal"]
+  helper (NoSuchDataType d) =
+    ppWithPos [ return ("No such data type: " ++ show d)]
+  helper (NoSuchCtor c) =
+    ppWithPos [ return ("No such constructor: " ++ show c) ]
+  helper (NotFullyApplied i) =
+      ppWithPos [ return ("Constructor or datatype not fully applied: "
+                          ++ show i) ]
+  helper (NotFullyAppliedRec i) =
+      ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
+  helper (BadParamsOrArgsLength is_dt ident params args) =
+      ppWithPos
+      [ return ("Wrong number of parameters or arguments to "
+                ++ (if is_dt then "datatype" else "constructor") ++ ": "),
         ishow (Unshared $ FTermF $
                (if is_dt then DataTypeApp else CtorApp) ident params args)
       ]
-    MalformedRecursor trm reason ->
-      [ "Malformed recursor application", ishow trm, reason ]
-    DeclError nm reason -> ["Malformed declaration for " ++ nm, reason]
-    ErrorPos _ e'@(ErrorPos _ _) -> prettyTCError e'
-    ErrorPos p e' -> (ppPos p) : prettyTCError e'
-  where
-    ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
+  helper (MalformedRecursor trm reason) =
+      ppWithPos [ return "Malformed recursor application",
+                  ishow trm, return reason ]
+  helper (DeclError nm reason) =
+    ppWithPos [ return ("Malformed declaration for " ++ nm), return reason ]
+  helper (ErrorPos p err) =
+    local (\(ctx,_) -> (ctx, Just p)) $ helper err
+  helper (ErrorCtx x _ err) =
+    local (\(ctx,p) -> (x:ctx, p)) $ helper err
 
+  ishow :: Term -> PPErrM String
+  ishow tm =
+    (\(ctx,_) -> "  " ++ scPrettyTermInCtx defaultPPOpts ctx tm) <$> ask
 
 -- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
 scTypeCheckError :: SharedContext -> Term -> IO Term
@@ -429,7 +445,7 @@ applyPiTyped tx (TypedTerm y ty) =
     Just (_, aty, rty) -> do
       -- _ <- ensureSort aty -- NOTE: we assume tx is well-formed and WHNF
       -- aty' <- scTypeCheckWHNF aty
-      checkSubtype ty aty (ArgTypeMismatch aty ty)
+      checkSubtype ty aty (SubtypeFailure (TypedTerm y ty) aty)
       liftTCM instantiateVar 0 y rty
     _ -> throwTCError (NotFuncType tx)
 
