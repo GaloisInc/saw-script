@@ -385,7 +385,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
 -- | Test whether two variable names "match", meaning that they are equal and/or
 -- at least one is an unused variable
 termVarsMatch :: Un.TermVar -> Un.TermVar -> Bool
-termVarsMatch v1 v2 | v1 == v2 = True
+termVarsMatch (Un.TermVar v1) (Un.TermVar v2) | val v1 == val v2 = True
 termVarsMatch (Un.UnusedVar _) _ = True
 termVarsMatch _ (Un.UnusedVar _) = True
 termVarsMatch _ _ = False
@@ -410,7 +410,7 @@ completeContext nm ((var, Nothing):ctx) ((var', tp):ctx')
     ((combineTermVars var var', tp) :) <$> completeContext nm ctx ctx'
 completeContext nm ((var1, _):_) ((var2,_):_) =
   throwTCError $ DeclError nm ("Definition variable " ++ Un.termVarString var1
-                               ++ " does not match variable used in type:"
+                               ++ " does not match variable used in type: "
                                ++ Un.termVarString var2)
 completeContext nm ctx ctx' =
   throwTCError $
