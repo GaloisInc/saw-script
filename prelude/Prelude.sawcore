@@ -50,7 +50,7 @@ data PairType :: (a b :: sort 0) -> sort 0 where {
 Pair__rec :: (a b :: sort 0) -> (p :: PairType a b -> sort 0) ->
              ((x::a) -> (y::b) -> p (PairValue a b x y)) ->
              (pair :: PairType a b) -> p pair;
-Pair__rec _ _ _ f (PairValue _ _ x y) = f x y;
+Pair__rec a b p f tup = PairType#rec a b p f tup;
 
 Pair_fst :: (a b :: sort 0) -> PairType a b -> a;
 Pair_fst a b = Pair__rec a b (\ (p::PairType a b) -> a)
@@ -61,10 +61,10 @@ Pair_snd a b = Pair__rec a b (\ (p::PairType a b) -> b)
                              (\ (x::a) -> \ (y::b) -> y);
 
 fst :: (a b :: sort 0) -> #(a | b) -> a;
-fst a b (x | y) = x;
+fst a b tup = tup.(1);
 
 snd :: (a b :: sort 0) -> #(a | b) -> b;
-snd a b (x | y) = y;
+snd a b tup = tup.(2);
 
 uncurry :: (a b c :: sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
 uncurry a b c f =
@@ -81,7 +81,7 @@ data EmptyType :: sort 0 where {
 
 -- The recursor for the empty type at sort 0
 EmptyType__rec :: (p :: EmptyType -> sort 0) -> p Empty -> (u :: EmptyType) -> p u;
-EmptyType__rec p f1 Empty = f1;
+EmptyType__rec p f1 emp = EmptyType#rec p f1 emp;
 
 -- Add a named field to a record type
 data RecordType :: (s::String) -> (a b ::sort 0) -> sort 0 where {
@@ -93,7 +93,7 @@ RecordType__rec :: (s::String) -> (a b ::sort 0) ->
                    (p:: RecordType s a b -> sort 1) ->
                    ((x::a) -> (y::b) -> p (RecordValue s a b x y)) ->
                    (r::RecordType s a b) -> p r;
-RecordType__rec _ _ _ _ f1 (RecordValue _ _ _ x y) = f1 x y;
+RecordType__rec s a b p f1 rec_val = RecordType#rec s a b p f1 rec_val;
 
 
 --------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ data Eq :: (t :: sort 1) -> t -> t -> sort 1 where {
 -- structure of the Eq type
 Eq__rec :: (t :: sort 1) -> (x :: t) -> (p :: (y :: t) -> Eq t x y -> sort 1) ->
            p x (Refl t x) -> (y :: t) -> (e :: Eq t x y) -> p y e;
-Eq__rec t x p f1 _ (Refl _ _) = f1;
+Eq__rec t x p f1 y pf = Eq#rec t x p f1 y pf;
 
 -- Congruence closure for equality
 eq_cong :: (t :: sort 1) -> (x :: t) -> (y :: t) -> Eq t x y ->
@@ -214,8 +214,7 @@ data Bool :: sort 0 where {
   }
 
 Bool__rec :: (p :: Bool -> sort 1) -> (p True) -> (p False) -> (b::Bool) -> p b;
-Bool__rec p f1 f2 (True) = f1;
-Bool__rec p f1 f2 (False) = f2;
+Bool__rec p f1 f2 b = Bool#rec p f1 f2 b;
 
 
 primitive not :: Bool -> Bool;
@@ -717,8 +716,7 @@ Either__rec :: (s t :: sort 0) -> (p :: Either s t -> sort 0) ->
                ((l :: s) -> p (Left s t l)) ->
                ((r :: t) -> p (Right s t r)) ->
                (e :: Either s t) -> p e;
-Either__rec s t p f1 f2 (Left _ _ l) = f1 l;
-Either__rec s t p f1 f2 (Right _ _ r) = f2 r;
+Either__rec s t p f1 f2 eith = Either#rec s t p f1 f2 eith;
 
 either :: (a b c :: sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
 either a b c f g e =
@@ -745,8 +743,7 @@ data Maybe :: sort 0 -> sort 0 where {
 
 Maybe__rec :: (a :: sort 0) -> (p :: (Maybe a) -> sort 0) ->
               p (Nothing a) -> ((x::a) -> p (Just a x)) -> (m :: Maybe a) -> p m;
-Maybe__rec a p f1 f2 (Nothing _) = f1;
-Maybe__rec a p f1 f2 (Just _ x) = f2 x;
+Maybe__rec a p f1 f2 maybe = Maybe#rec a p f1 f2 maybe;
 
 maybe :: (a b :: sort 0) -> b -> (a -> b) -> Maybe a -> b;
 maybe a b f1 f2 m = Maybe__rec a (\ (m'::Maybe a) -> b) f1 f2 m;
@@ -762,8 +759,7 @@ data Nat :: sort 0 where {
 
 Nat__rec :: (p :: Nat -> sort 1) -> p Zero -> ((n::Nat) -> p n -> p (Succ n)) ->
             (n::Nat) -> p n;
-Nat__rec p f1 f2 Zero = f1;
-Nat__rec p f1 f2 (Succ n) = f2 n (Nat__rec p f1 f2 n);
+Nat__rec p f1 f2 n = Nat#rec p f1 f2 n;
 
 Nat_cases :: (a::sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
 Nat_cases a f1 f2 n = Nat__rec (\ (n::Nat) -> a) f1 f2 n;
@@ -1180,10 +1176,16 @@ bvZipWith = zipWith Bool Bool Bool;
 bvNot :: (n :: Nat) -> bitvector n -> bitvector n;
 bvNot = map Bool Bool not;
 
--- | Pairwise conjunction, disjunction, and exclusive or.
-bvAnd bvOr bvXor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+-- | Pairwise conjunction
+bvAnd :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvAnd = bvZipWith and;
+
+-- | Pairwise disjunction
+bvOr :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvOr  = bvZipWith or;
+
+-- | Pairwise exclusive or
+bvXor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvXor = bvZipWith xor;
 
 -- | Return true if two bitvectors are equal.
@@ -1217,8 +1219,10 @@ bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
 
 -- | Unsigned and signed comparison functions.
-primitive bvugt bvuge bvult bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsgt bvsge bvslt bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvugt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvult :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 -- | Truncates a vector a smaller size.
 -- msb implementation:
@@ -1323,7 +1327,7 @@ data Stream :: sort 0 -> sort 0 where {
 
 Stream__rec :: (a::sort 0) -> (p::Stream a -> sort 0) ->
                ((f::Nat -> a) -> p (MkStream a f)) -> (s::Stream a) -> p s;
-Stream__rec a p f1 (MkStream _ f) = f1 f;
+Stream__rec a p f1 str = Stream#rec a p f1 str;
 
 streamUpd :: (a :: sort 0) -> Stream a -> Nat -> a -> Stream a;
 streamUpd a strm i y =
