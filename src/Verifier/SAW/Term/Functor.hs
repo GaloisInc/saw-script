@@ -91,8 +91,13 @@ instance Hashable ModuleName -- automatically derived
 instance Show ModuleName where
   show (ModuleName s) = BS.toString s
 
+isModNameChar :: Char -> Bool
+isModNameChar c = isIdChar c || c == '.'
+
 instance Read ModuleName where
-  readsPrec _ s = [(ModuleName (BS.fromString s), "")]
+  readsPrec _ s =
+    let (str1, str2) = break (not . isModNameChar) (dropWhile isSpace s) in
+    [(ModuleName (BS.fromString str1), str2)]
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
@@ -178,11 +183,12 @@ instance Show Sort where
   showsPrec _ PropSort = showString "Prop"
 
 instance Read Sort where
-  readsPrec p str
-    | take 5 str == "sort " =
-       map (\(i,str') -> (TypeSort i, str')) (readsPrec p (drop 5 str))
-  readsPrec _ str | take 4 str == "Prop" = [(PropSort, drop 4 str)]
-  readsPrec _ _ = []
+  readsPrec p str_in =
+    flip (readParen False) (dropWhile isSpace str_in) $ \str ->
+    if take 5 str == "sort " then
+      map (\(i,str') -> (TypeSort i, str')) (readsPrec p (drop 5 str))
+    else if take 4 str == "Prop" then [(PropSort, drop 4 str)]
+         else []
 
 -- | Create sort @Type i@ for the given integer @i@
 mkSort :: Integer -> Sort
