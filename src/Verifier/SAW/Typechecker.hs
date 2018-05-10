@@ -154,24 +154,7 @@ typeInferCompleteTerm (Un.Name (PosPair _ n)) =
 typeInferCompleteTerm (Un.Sort _ srt) =
   typeInferComplete (Sort srt :: FlatTermF TypedTerm)
 
--- Applications, lambdas, and pis
-typeInferCompleteTerm (Un.App f arg) =
-  (App <$> typeInferComplete f <*> typeInferComplete arg)
-  >>= typeInferComplete
-typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
-typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
-  do tp_trm <- typeInferComplete tp
-     body <- inExtendedCtx x (typedVal tp_trm) $
-       typeInferComplete $ Un.Lambda p ctx t
-     typeInferComplete (Lambda x tp_trm body)
-typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
-typeInferCompleteTerm (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
-  do tp_trm <- typeInferComplete tp
-     body <- inExtendedCtx x (typedVal tp_trm) $
-       typeInferComplete $ Un.Pi p ctx t
-     typeInferComplete (Pi x tp_trm body)
-
--- Recursors
+-- Recursors (must come before applications)
 typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
   do mnm <-
        case maybe_mnm of
@@ -196,6 +179,23 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
        _ -> throwTCError $ NotFullyAppliedRec dt_ident
 typeInferCompleteTerm (Un.Recursor _ _) =
   error "typeInferComplete: found a bare Recursor, which should never happen!"
+
+-- Applications, lambdas, and pis
+typeInferCompleteTerm (Un.App f arg) =
+  (App <$> typeInferComplete f <*> typeInferComplete arg)
+  >>= typeInferComplete
+typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
+typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
+  do tp_trm <- typeInferComplete tp
+     body <- inExtendedCtx x (typedVal tp_trm) $
+       typeInferComplete $ Un.Lambda p ctx t
+     typeInferComplete (Lambda x tp_trm body)
+typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
+typeInferCompleteTerm (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
+  do tp_trm <- typeInferComplete tp
+     body <- inExtendedCtx x (typedVal tp_trm) $
+       typeInferComplete $ Un.Pi p ctx t
+     typeInferComplete (Pi x tp_trm body)
 
 -- Non-dependent records
 typeInferCompleteTerm (Un.RecordValue _ elems) =
