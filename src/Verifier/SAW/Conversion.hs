@@ -534,7 +534,8 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 -- | Conversion for selector on a tuple
 tupleConversion :: Conversion
 tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
-  where action (ts, i) = Just (return (ts !! (i - 1)))
+  where action (ts, i) | i > length ts = error "tupleConversion"
+        action (ts, i) = Just (return (ts !! (i - 1)))
 
 -- | Conversion for selector on a record
 recordConversion :: Conversion
