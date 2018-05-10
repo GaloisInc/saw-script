@@ -87,7 +87,7 @@ $white+;
 @num        { TNat . read }
 @key        { TKey }
 @ident      { TIdent }
-@ident "#rec" { TRecursor }
+@ident "#rec" { TRecursor . dropRecSuffix }
 .           { TIllegal }
 
 {
@@ -102,6 +102,10 @@ data Token
   | TCmntE          -- ^ End of a block comment.
   | TIllegal String -- ^ Illegal character
   deriving (Show)
+
+-- | Remove the "#rec" suffix of a recursor string
+dropRecSuffix :: String -> String
+dropRecSuffix str = take (length str - 4) str
 
 ppToken :: Token -> String
 ppToken tkn =
