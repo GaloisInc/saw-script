@@ -359,6 +359,7 @@ completeDataType m (identName -> str) ctors =
     Just (ResolvedDataType dt)
       | null (dtCtors dt) ->
         let dt' = dt {dtCtors = ctors} in
+        flip (foldl' insResolvedName) (map ResolvedCtor ctors) $
         m { moduleResolveMap =
               Map.insert str (ResolvedDataType dt') (moduleResolveMap m),
               moduleRDecls = TypeDecl dt' : moduleRDecls m }
