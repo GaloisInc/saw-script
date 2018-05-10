@@ -64,6 +64,7 @@ module Verifier.SAW.TypedAST
  , ppTermDepth
  , showTerm
  , scPrettyTerm
+ , scPrettyTermInCtx
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf
  , Ident(identModule, identName), mkIdent

@@ -22,13 +22,13 @@ module Verifier.SAW.Term.Pretty
   , ppTerm
   , showTerm
   , scPrettyTerm
+  , scPrettyTermInCtx
   , ppTermDepth
   , ppModule
   , showModule
   ) where
 
 import Data.Maybe (isJust)
-import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.State.Strict as State
 #if !MIN_VERSION_base(4,8,0)
@@ -43,8 +43,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-
-import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Module
 import Verifier.SAW.Term.Functor
@@ -593,6 +591,14 @@ ppTermDepth depth t = ppTerm (depthPPOpts depth) t
 scPrettyTerm :: PPOpts -> Term -> String
 scPrettyTerm opts t =
   flip displayS "" $ renderPretty 0.8 80 $ ppTerm opts t
+
+-- | Like 'scPrettyTerm', but also supply a context of bound names
+scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
+scPrettyTermInCtx opts ctx trm =
+  flip displayS "" $ renderPretty 0.8 80 $ runPPM opts $
+  flip (Fold.foldr' (\x m -> snd <$> withBoundVarM x m)) ctx $
+  ppTermWithMemoTable PrecNone True trm
+
 
 -- | Pretty-print a term and render it to a string
 showTerm :: Term -> String
