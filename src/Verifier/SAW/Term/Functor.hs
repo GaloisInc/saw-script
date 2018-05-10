@@ -121,7 +121,7 @@ instance Show Ident where
 
 instance Read Ident where
   readsPrec _ str =
-    let (str1, str2) = break (== ' ') str in
+    let (str1, str2) = break (not . isIdChar) str in
     [(parseIdent str1, str2)]
 
 mkIdent :: ModuleName -> String -> Ident
