@@ -49,6 +49,8 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
+import Debug.Trace
+
 -- | Infer the type of an untyped term and complete it to a 'Term', all in the
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.Term ->
@@ -132,113 +134,121 @@ matchAppliedRecursor _ = Nothing
 instance TypeInfer Un.Term where
   typeInfer t = typedVal <$> typeInferComplete t
 
-  -- Names
-  typeInferComplete (matchAppliedName -> Just (n, args)) =
-    mapM typeInferComplete args >>= inferResolveNameApp n
-  typeInferComplete (Un.Name (PosPair _ n)) =
-    -- NOTE: this is actually covered by the previous case, but we put it here
-    -- so GHC doesn't complain about coverage
-    inferResolveNameApp n []
+  typeInferComplete t
+    | trace ("typechecking term: " ++ show t) False = undefined
+  typeInferComplete t = atPos (pos t) $ typeInferCompleteTerm t
 
-  -- Sorts
-  typeInferComplete (Un.Sort _ srt) =
-    typeInferComplete (Sort srt :: FlatTermF TypedTerm)
 
-  -- Applications, lambdas, and pis
-  typeInferComplete (Un.App f arg) =
-    (App <$> typeInferComplete f <*> typeInferComplete arg)
-    >>= typeInferComplete
-  typeInferComplete (Un.Lambda _ [] t) = typeInferComplete t
-  typeInferComplete (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
-    do tp_trm <- typeInferComplete tp
-       body <- inExtendedCtx x (typedVal tp_trm) $
-         typeInferComplete $ Un.Lambda p ctx t
-       typeInferComplete (Lambda x tp_trm body)
-  typeInferComplete (Un.Pi _ [] t) = typeInferComplete t
-  typeInferComplete (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
-    do tp_trm <- typeInferComplete tp
-       body <- inExtendedCtx x (typedVal tp_trm) $
-         typeInferComplete $ Un.Pi p ctx t
-       typeInferComplete (Pi x tp_trm body)
+-- | Main workhore function for type inference on untyped terms
+typeInferCompleteTerm :: Un.Term -> TCM TypedTerm
 
-  -- Recursors
-  typeInferComplete (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
-    do mnm <-
-         case maybe_mnm of
-           Just mnm -> return mnm
-           Nothing -> getModuleName
-       m <- liftTCM scFindModule mnm
-       let dt_ident = mkIdent mnm str
-       dt <- case findDataType m str of
-         Just d -> return d
-         Nothing -> throwTCError $ NoSuchDataType dt_ident
-       typed_args <- mapM typeInferComplete args
-       case typed_args of
-         (splitAt (length $ dtParams dt) ->
-          (params,
-           p_ret :
-           (splitAt (length $ dtCtors dt) ->
-            (elims,
-             (splitAt (length $ dtIndices dt) ->
-              (ixs, [arg])))))) ->
-           let cs_fs = zip (map ctorName $ dtCtors dt) elims in
-           typeInferComplete (RecursorApp dt_ident params p_ret cs_fs ixs arg)
-         _ -> throwTCError $ NotFullyAppliedRec dt_ident
-  typeInferComplete (Un.Recursor _ _) =
-    error "typeInferComplete: found a bare Recursor, which should never happen!"
+-- Names
+typeInferCompleteTerm (matchAppliedName -> Just (n, args)) =
+  mapM typeInferComplete args >>= inferResolveNameApp n
+typeInferCompleteTerm (Un.Name (PosPair _ n)) =
+  -- NOTE: this is actually covered by the previous case, but we put it here
+  -- so GHC doesn't complain about coverage
+  inferResolveNameApp n []
 
-  -- Non-dependent records
-  typeInferComplete (Un.RecordValue _ elems) =
-    do typed_elems <-
-         mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
-       typeInferComplete (RecordValue typed_elems)
-  typeInferComplete (Un.RecordType _ elems) =
-    do typed_elems <-
-         mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
-       typeInferComplete (RecordValue typed_elems)
-  typeInferComplete (Un.RecordProj t prj) =
-    (RecordProj <$> typeInferComplete t <*> return prj) >>= typeInferComplete
+-- Sorts
+typeInferCompleteTerm (Un.Sort _ srt) =
+  typeInferComplete (Sort srt :: FlatTermF TypedTerm)
 
-  -- Old-style pairs
-  typeInferComplete (Un.OldPairValue _ t1 t2) =
-    (PairValue <$> typeInferComplete t1 <*> typeInferComplete t2)
-    >>= typeInferComplete
-  typeInferComplete (Un.OldPairType _ t1 t2) =
-    (PairType <$> typeInferComplete t1 <*> typeInferComplete t2)
-    >>= typeInferComplete
-  typeInferComplete (Un.OldPairLeft t) =
-    (PairLeft <$> typeInferComplete t) >>= typeInferComplete
-  typeInferComplete (Un.OldPairRight t) =
-    (PairRight <$> typeInferComplete t) >>= typeInferComplete
+-- Applications, lambdas, and pis
+typeInferCompleteTerm (Un.App f arg) =
+  (App <$> typeInferComplete f <*> typeInferComplete arg)
+  >>= typeInferComplete
+typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
+typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
+  do tp_trm <- typeInferComplete tp
+     body <- inExtendedCtx x (typedVal tp_trm) $
+       typeInferComplete $ Un.Lambda p ctx t
+     typeInferComplete (Lambda x tp_trm body)
+typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
+typeInferCompleteTerm (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
+  do tp_trm <- typeInferComplete tp
+     body <- inExtendedCtx x (typedVal tp_trm) $
+       typeInferComplete $ Un.Pi p ctx t
+     typeInferComplete (Pi x tp_trm body)
 
-  -- Type ascriptions
-  typeInferComplete (Un.TypeConstraint t _ tp) =
-    do typed_t <- typeInferComplete t
-       typed_tp <- typeInferComplete tp
-       _ <- ensureSort (typedType typed_tp)
-       checkSubtype (typedType typed_t) (typedVal typed_tp)
-         (ConstraintFailure (typedType typed_t) (typedVal typed_tp))
-       return typed_t
+-- Recursors
+typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
+  do mnm <-
+       case maybe_mnm of
+         Just mnm -> return mnm
+         Nothing -> getModuleName
+     m <- liftTCM scFindModule mnm
+     let dt_ident = mkIdent mnm str
+     dt <- case findDataType m str of
+       Just d -> return d
+       Nothing -> throwTCError $ NoSuchDataType dt_ident
+     typed_args <- mapM typeInferComplete args
+     case typed_args of
+       (splitAt (length $ dtParams dt) ->
+        (params,
+         p_ret :
+         (splitAt (length $ dtCtors dt) ->
+          (elims,
+           (splitAt (length $ dtIndices dt) ->
+            (ixs, [arg])))))) ->
+         let cs_fs = zip (map ctorName $ dtCtors dt) elims in
+         typeInferComplete (RecursorApp dt_ident params p_ret cs_fs ixs arg)
+       _ -> throwTCError $ NotFullyAppliedRec dt_ident
+typeInferCompleteTerm (Un.Recursor _ _) =
+  error "typeInferComplete: found a bare Recursor, which should never happen!"
 
-  -- Literals
-  typeInferComplete (Un.NatLit _ i) =
-    typeInferComplete (NatLit i :: FlatTermF TypedTerm)
-  typeInferComplete (Un.StringLit _ str) =
-    typeInferComplete (StringLit str :: FlatTermF TypedTerm)
-  typeInferComplete (Un.VecLit _ []) = throwTCError EmptyVectorLit
-  typeInferComplete (Un.VecLit _ ts) =
-    do typed_ts <- mapM typeInferComplete ts
-       tp <- case typed_ts of
-         (t1:_) -> return $ typedType t1
-         [] -> throwTCError $ EmptyVectorLit
-       type_of_tp <- liftTCM scTypeOf tp
-       typeInferComplete (ArrayValue (TypedTerm tp type_of_tp) $
-                          V.fromList typed_ts)
+-- Non-dependent records
+typeInferCompleteTerm (Un.RecordValue _ elems) =
+  do typed_elems <-
+       mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
+     typeInferComplete (RecordValue typed_elems)
+typeInferCompleteTerm (Un.RecordType _ elems) =
+  do typed_elems <-
+       mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
+     typeInferComplete (RecordValue typed_elems)
+typeInferCompleteTerm (Un.RecordProj t prj) =
+  (RecordProj <$> typeInferComplete t <*> return prj) >>= typeInferComplete
 
-  typeInferComplete (Un.BadTerm _) =
-    -- Should be unreachable, since BadTerms represent parse errors, that should
-    -- already have been signaled before type inference
-    internalError "Type inference encountered a BadTerm"
+-- Old-style pairs
+typeInferCompleteTerm (Un.OldPairValue _ t1 t2) =
+  (PairValue <$> typeInferComplete t1 <*> typeInferComplete t2)
+  >>= typeInferComplete
+typeInferCompleteTerm (Un.OldPairType _ t1 t2) =
+  (PairType <$> typeInferComplete t1 <*> typeInferComplete t2)
+  >>= typeInferComplete
+typeInferCompleteTerm (Un.OldPairLeft t) =
+  (PairLeft <$> typeInferComplete t) >>= typeInferComplete
+typeInferCompleteTerm (Un.OldPairRight t) =
+  (PairRight <$> typeInferComplete t) >>= typeInferComplete
+
+-- Type ascriptions
+typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
+  do typed_t <- typeInferComplete t
+     typed_tp <- typeInferComplete tp
+     _ <- ensureSort (typedType typed_tp)
+     checkSubtype (typedType typed_t) (typedVal typed_tp)
+       (ConstraintFailure (typedType typed_t) (typedVal typed_tp))
+     return typed_t
+
+-- Literals
+typeInferCompleteTerm (Un.NatLit _ i) =
+  typeInferComplete (NatLit i :: FlatTermF TypedTerm)
+typeInferCompleteTerm (Un.StringLit _ str) =
+  typeInferComplete (StringLit str :: FlatTermF TypedTerm)
+typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
+typeInferCompleteTerm (Un.VecLit _ ts) =
+  do typed_ts <- mapM typeInferComplete ts
+     tp <- case typed_ts of
+       (t1:_) -> return $ typedType t1
+       [] -> throwTCError $ EmptyVectorLit
+     type_of_tp <- liftTCM scTypeOf tp
+     typeInferComplete (ArrayValue (TypedTerm tp type_of_tp) $
+                        V.fromList typed_ts)
+
+typeInferCompleteTerm (Un.BadTerm _) =
+  -- Should be unreachable, since BadTerms represent parse errors, that should
+  -- already have been signaled before type inference
+  internalError "Type inference encountered a BadTerm"
 
 
 -- | Type-check a variable context, where each type is in the context of the
@@ -380,6 +390,12 @@ termVarsMatch (Un.UnusedVar _) _ = True
 termVarsMatch _ (Un.UnusedVar _) = True
 termVarsMatch _ _ = False
 
+-- | Take two term variables that match (as in 'termVarsMatch') and pick the
+-- "most defined" one, i.e., the one that is not 'UnusedVar'
+combineTermVars :: Un.TermVar -> Un.TermVar -> Un.TermVar
+combineTermVars (Un.UnusedVar _) v2 = v2
+combineTermVars v1 _ = v1
+
 -- | Complete a variable context that might be missing some types against a
 -- function type it is intended to match by filling in any types missing in
 -- the former with the corresponding type in the latter
@@ -388,10 +404,10 @@ completeContext :: String -> [(Un.TermVar, Maybe Un.Term)] -> Un.TermCtx ->
 completeContext _ [] _ = return []
 completeContext nm ((var, Just tp):ctx) ((var', _):ctx')
   | termVarsMatch var var' =
-    ((var, tp) :) <$> completeContext nm ctx ctx'
+    ((combineTermVars var var', tp) :) <$> completeContext nm ctx ctx'
 completeContext nm ((var, Nothing):ctx) ((var', tp):ctx')
   | termVarsMatch var var' =
-    ((var, tp) :) <$> completeContext nm ctx ctx'
+    ((combineTermVars var var', tp) :) <$> completeContext nm ctx ctx'
 completeContext nm ((var1, _):_) ((var2,_):_) =
   throwTCError $ DeclError nm ("Definition variable " ++ Un.termVarString var1
                                ++ " does not match variable used in type:"
