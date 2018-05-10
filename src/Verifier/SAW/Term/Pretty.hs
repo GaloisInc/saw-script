@@ -350,7 +350,7 @@ ppLambda tp (name, body) =
 ppPi :: Bool -> Doc -> (String, Doc) -> Doc
 ppPi var_used_p tp (name, body) = lhs <<$>> text "->" <+> body
   where
-    lhs = if var_used_p then ppTypeConstraint (text name) tp else tp
+    lhs = if var_used_p then parens (ppTypeConstraint (text name) tp) else tp
 
 -- | Pretty-print a definition @d :: tp = body@
 ppDef :: Doc -> Doc -> Maybe Doc -> Doc
