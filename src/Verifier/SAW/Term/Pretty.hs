@@ -123,6 +123,8 @@ emptyVarNaming = VarNaming []
 
 -- | Look up a string to use for a variable
 lookupVarName :: VarNaming -> DeBruijnIndex -> String
+lookupVarName (VarNaming names) i
+  | i >= length names = "<unbound#" ++ show i ++ ">"
 lookupVarName (VarNaming names) i = names!!i
 
 -- | Generate a fresh name from a base name that does not clash with any names
