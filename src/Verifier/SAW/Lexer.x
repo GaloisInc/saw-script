@@ -65,7 +65,7 @@ $cntrl     = [$large \@\[\\\]\^\_]
 @octal     = $octit+
 @hex       = $hexit+
 $idchar    = [a-z A-Z 0-9 \' \_]
-@ident     = [a-z A-Z] $idchar*
+@ident     = [a-z A-Z \_] $idchar*
 
 @punct = "#" | "," | "->" | "." | ".." | ";" | "::" | "=" | "?" | "??" | "???"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"

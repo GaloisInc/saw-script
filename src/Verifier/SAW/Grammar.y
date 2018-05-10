@@ -80,6 +80,7 @@ import Verifier.SAW.Lexer
   'axiom'     { PosPair _ (TKey "axiom") }
   'primitive' { PosPair _ (TKey "primitive") }
   nat      { PosPair _ (TNat _) }
+  '_'      { PosPair _ (TIdent "_") }
   ident    { PosPair _ (TIdent _) }
   identrec { PosPair _ (TRecursor _) }
   string   { PosPair _ (TString _) }
@@ -113,14 +114,19 @@ ModuleImports : 'hiding' ImportNames { HidingImports $2 }
 ImportNames :: { [String] }
 ImportNames : '(' sepBy(ident, ',') ')' { $2 }
 
+TermVar :: { TermVar }
+TermVar
+  : Ident { TermVar $1 }
+  | '_' { UnusedVar (pos $1) }
+
 -- A context of variables which may or may not be typed
 DefVarCtx :: { [(TermVar, Maybe Term)] }
 DefVarCtx : list(DefVarCtxItem) { concat $1 }
 
 DefVarCtxItem :: { [(TermVar, Maybe Term)] }
-DefVarCtxItem : Ident { [(TermVar $1, Nothing)] }
-              | '(' list(Ident) '::'  LTerm ')'
-                { map (\i -> (TermVar i, Just $4)) $2 }
+DefVarCtxItem : TermVar { [($1, Nothing)] }
+              | '(' list(TermVar) '::'  LTerm ')'
+                { map (\var -> (var, Just $4)) $2 }
 
 -- A context of variables, all of which must be typed; i.e., a list syntactic
 -- elements of the form (x y z :: tp) (x2 y3 :: tp2) ...
@@ -128,7 +134,7 @@ VarCtx :: { [(TermVar, Term)] }
 VarCtx : list(VarCtxItem) { concat $1 }
 
 VarCtxItem :: { [(TermVar, Term)] }
-VarCtxItem : '(' list(Ident) '::' LTerm ')' { map (\i -> (TermVar i,$4)) $2 }
+VarCtxItem : '(' list(TermVar) '::' LTerm ')' { map (\var -> (var,$4)) $2 }
 
 -- Constructor declaration of the form "c (x1 x2 :: tp1) ... (z1 :: tpn) :: tp"
 CtorDecl :: { CtorDecl }
