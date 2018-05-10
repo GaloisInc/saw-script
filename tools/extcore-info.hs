@@ -14,7 +14,8 @@ import Verifier.SAW
 
 processFile :: FilePath -> IO ()
 processFile file = do
-  sc <- mkSharedContext preludeModule
+  sc <- mkSharedContext
+  scLoadPreludeModule sc
   tm <- scReadExternal sc =<< readFile file
   putStrLn $ "Shared size: " ++ show (scSharedSize tm)
   putStrLn $ "Tree size: " ++ show (scTreeSize tm)

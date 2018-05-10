@@ -19,8 +19,10 @@ module Verifier.SAW.Prelude
 import Verifier.SAW.ParserUtils
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Typechecker
 
-$(defineModuleFromFileWithFns "preludeModule" "prelude/Prelude.sawcore")
+$(defineModuleFromFileWithFns
+  "preludeModule" "scLoadPreludeModule" "prelude/Prelude.sawcore")
 
 scEq :: SharedContext -> Term -> Term -> IO Term
 scEq sc x y = do

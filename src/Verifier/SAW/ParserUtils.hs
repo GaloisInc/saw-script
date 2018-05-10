@@ -190,12 +190,24 @@ declareSharedModuleFns m =
        declareCtorFun (Un.moduleName m) c tp
 
 
--- | @defineModuleFromFileWithFns str file@ reads an untyped module from @file@,
--- adds a TH declaration of the name @str@ that is bound to that module at
--- runtime, and then calls 'declareSharedModuleFns' to add declarations of
+-- | @defineModuleFromFileWithFns str str2 file@ reads an untyped module from
+-- @file@, adds a TH declaration of the name @str@ that is bound to that module
+-- at runtime, and then calls 'declareSharedModuleFns' to add declarations of
 -- Haskell term-building functions for each definition, constructor, and
--- datatype declared in the module that is loaded.
-defineModuleFromFileWithFns :: String -> FilePath -> Q [Dec]
-defineModuleFromFileWithFns decNameStr path =
-  runDecWriter (defineModuleFromFile decNameStr path >>=
-                declareSharedModuleFns)
+-- datatype declared in the module that is loaded. It also defines the function
+--
+-- > str2 :: SharedContext -> IO ()
+--
+-- that will load the module @str@ into the current 'SharedContext'.
+defineModuleFromFileWithFns :: String -> String -> FilePath -> Q [Dec]
+defineModuleFromFileWithFns mod_name mod_loader path =
+  runDecWriter $
+  do m <- defineModuleFromFile mod_name path
+     declareSharedModuleFns m
+     let sc = mkName "sc"
+     load_tp <- lift $ [t| SharedContext -> IO () |]
+     load_body <-
+       lift $ [e| tcInsertModule $(varE sc) $(varE $ mkName mod_name) |]
+     addDecs [ SigD (mkName mod_loader) load_tp
+             , FunD (mkName mod_loader) [ Clause [VarP sc] (NormalB load_body) [] ]
+             ]

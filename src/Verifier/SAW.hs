@@ -12,6 +12,7 @@ module Verifier.SAW
   , module Verifier.SAW.ExternalFormat
   , Module
   , preludeModule
+  , scLoadPreludeModule
   ) where
 
 import Verifier.SAW.SharedTerm
