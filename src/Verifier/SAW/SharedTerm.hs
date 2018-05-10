@@ -922,6 +922,8 @@ instantiateVarList sc k ts t =
     fn _ _ (Left ec) = scFlatTermF sc $ ExtCns ec
     fn rs i (Right j)
               | j >= i + k + l = scTermF sc (LocalVar (j - l))
+              | j >= i + k && j - i - k >= length rs =
+                  error "instantiateVarList"
               | j >= i + k     = term (rs !! (j - i - k)) i
               | otherwise      = scTermF sc (LocalVar j)
 -- ^ Specification in terms of @instantiateVar@ (by example):
