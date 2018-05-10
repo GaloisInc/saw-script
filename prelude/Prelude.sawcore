@@ -36,7 +36,7 @@ data UnitType :: sort 0 where {
 
 -- The recursor for the Unit type at sort 0
 UnitType__rec :: (p :: UnitType -> sort 0) -> p Unit -> (u :: UnitType) -> p u;
-UnitType__rec p f1 Unit = f1;
+UnitType__rec p f1 u = Unit#rec p f1 u;
 
 
 --------------------------------------------------------------------------------
