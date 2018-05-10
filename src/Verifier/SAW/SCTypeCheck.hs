@@ -130,11 +130,9 @@ data TCError
   | NotFuncType Term
   | NotTupleType Term
   | BadTupleIndex Int Term
-  | NotStringType Term
   | NotStringLit Term
   | NotRecordType Term
   | BadRecordField FieldName Term
-  | ArrayTypeMismatch Term Term
   | DanglingVar Int
   | UnboundName String
   | SubtypeFailure TypedTerm Term
@@ -178,8 +176,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadTupleIndex n ty) =
       ppWithPos [ return ("Bad tuple index (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (NotStringType ty) =
-      ppWithPos [ return "Field with non-string type", ishow ty ]
   helper (NotStringLit trm) =
       ppWithPos [ return "Record selector is not a string literal", ishow trm ]
   helper (NotRecordType ty) =
@@ -188,10 +184,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
-  helper (ArrayTypeMismatch ety aty) =
-      ppWithPos [ return "Array element type" , ishow aty
-                , return "doesn't match declared array element type" ,
-                  ishow ety ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
   helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ str)]
@@ -425,8 +417,7 @@ instance TypeInfer (FlatTermF TypedTerm) where
     do n <- liftTCM scNat (fromIntegral (V.length vs))
        _ <- ensureSort tp_tp -- TODO: do we care about the level?
        tp' <- typeCheckWHNF tp
-       forM_ vs $ \(TypedTerm _ v_tp) ->
-         checkSubtype v_tp tp' (ArrayTypeMismatch tp' v_tp)
+       forM_ vs $ \v_elem -> checkSubtype v_elem tp'
        liftTCM scVecType n tp'
   typeInfer (FloatLit{}) = liftTCM scFlatTermF preludeFloatType
   typeInfer (DoubleLit{}) = liftTCM scFlatTermF preludeDoubleType
@@ -438,16 +429,17 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInferComplete ftf =
     TypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf) <*> typeInfer ftf
 
--- | Check that @tx=Pi v ty tz@ and that @y@ has type @ty@, and return @[y/v]tz@
+-- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
+-- result of substituting @arg@ for @x@ in the result type @b@, i.e., @[arg/x]b@
 applyPiTyped :: Term -> TypedTerm -> TCM Term
-applyPiTyped tx (TypedTerm y ty) =
-  case asPi tx of
-    Just (_, aty, rty) -> do
+applyPiTyped fun_tp arg =
+  case asPi fun_tp of
+    Just (_, arg_tp, ret_tp) -> do
       -- _ <- ensureSort aty -- NOTE: we assume tx is well-formed and WHNF
       -- aty' <- scTypeCheckWHNF aty
-      checkSubtype ty aty (SubtypeFailure (TypedTerm y ty) aty)
-      liftTCM instantiateVar 0 y rty
-    _ -> throwTCError (NotFuncType tx)
+      checkSubtype arg arg_tp
+      liftTCM instantiateVar 0 (typedVal arg) ret_tp
+    _ -> throwTCError (NotFuncType fun_tp)
 
 -- | Ensure that a 'Term' is a sort, and return that sort
 ensureSort :: Term -> TCM Sort
@@ -467,13 +459,19 @@ scTypeCheckWHNF sc t =
 
 -- | Check that one type is a subtype of another, assuming both arguments are
 -- types, i.e., that both have type Sort s for some s, and that they are both
--- already in WHNF. If the check fails, throw the given 'TCError'.
-checkSubtype :: Term -> Term -> TCError -> TCM ()
-checkSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) err =
+-- already in WHNF
+checkSubtype :: TypedTerm -> Term -> TCM ()
+checkSubtype arg req_tp = helper (typedVal arg) req_tp where
+  helper :: Term -> Term -> TCM ()
+  helper (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) =
     checkConvertible a1 a2 err >>
-    inExtendedCtx x1 a1 (checkSubtype b1 b2 err)
-checkSubtype (asSort -> Just s1) (asSort -> Just s2) _ | s1 <= s2 = return ()
-checkSubtype t1' t2' err = checkConvertible t1' t2' err
+    inExtendedCtx x1 a1 (helper b1 b2)
+  helper (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return ()
+  helper t1' t2' = checkConvertible t1' t2' err
+
+  err :: TCError
+  err = SubtypeFailure arg req_tp
+
 
 -- | Check that two terms are "convertible for type-checking", meaning that they
 -- are convertible up to 'natConversions'. Throw the given 'TCError' on failure.
@@ -484,9 +482,9 @@ checkConvertible t1 t2 err =
 
 -- | Check that a term has type @String@
 checkField :: TypedTerm -> TCM ()
-checkField (TypedTerm _ tf) =
+checkField t =
   do string_tp <- liftTCM scStringType
-     checkSubtype tf string_tp (NotStringType tf)
+     checkSubtype t string_tp
 
 -- | Infer the type of a recursor application
 inferRecursorApp :: Ident -> [TypedTerm] -> TypedTerm ->
@@ -514,18 +512,16 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
      -- (ix1::Ix1) -> .. -> (ixn::Ixn) -> d params ixs -> s
      --
      -- for some allowed sort s, where the Ix are the indices of of dt
-     let p_ret_tp = typedType p_ret
      p_ret_s <-
-       case asPiList p_ret_tp of
+       case asPiList (typedType p_ret) of
          (_, (asSort -> Just s)) -> return s
-         _ -> throwTCError $ mk_err "Incorrectly typed motive function"
+         _ -> throwTCError $ mk_err "Motive function should return a sort"
      p_ret_tp_req <-
        liftTCM scRecursorRetTypeType dt (map typedVal params) p_ret_s
      -- Technically this is an equality test, not a subtype test, but we
-     -- use the precise sort used in p_ret_tp, so they are the same, and
+     -- use the precise sort used in p_ret, so they are the same, and
      -- checkSubtype is handy...
-     checkSubtype p_ret_tp p_ret_tp_req (mk_err
-                                         "Incorrectly typed motive function")
+     checkSubtype p_ret p_ret_tp_req
      if allowedElimSort dt p_ret_s then return ()
        else throwTCError $ mk_err "Disallowed propositional elimination"
 
@@ -540,14 +536,11 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
        case lookup c cs_fs of
          Nothing ->
            throwTCError $ mk_err ("Missing constructor: " ++ show c)
-         Just (TypedTerm _ f_tp) ->
-           checkSubtype f_tp req_tp
-           (mk_err $ "Incorrectly typed eliminator for constructor " ++ show c)
+         Just f -> checkSubtype f req_tp
 
      -- Finally, check that arg has type (d params ixs), and return the
      -- type (p_ret ixs arg)
-     let arg_tp = typedType arg
      arg_req_tp <-
        liftTCM scFlatTermF $ fmap typedVal $ DataTypeApp d params ixs
-     checkSubtype arg_tp arg_req_tp (mk_err "Incorrectly typed argument")
+     checkSubtype arg arg_req_tp
      liftTCM scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg]))

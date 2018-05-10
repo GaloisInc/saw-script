@@ -229,8 +229,7 @@ typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
   do typed_t <- typeInferComplete t
      typed_tp <- typeInferComplete tp
      _ <- ensureSort (typedType typed_tp)
-     checkSubtype (typedType typed_t) (typedVal typed_tp)
-       (SubtypeFailure typed_t (typedVal typed_tp))
+     checkSubtype typed_t (typedVal typed_tp)
      return typed_t
 
 -- Literals
@@ -283,8 +282,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      void $ ensureSort $ typedType typed_tp
      real_ctx <- completeContext nm ctx $ fst $ Un.asPiList tp
      typed_body <- typeInferComplete (Un.Lambda (pos body) real_ctx body)
-     checkSubtype (typedType typed_body) (typedVal typed_tp)
-       (SubtypeFailure typed_body (typedVal typed_tp))
+     checkSubtype typed_body (typedVal typed_tp)
      mnm <- getModuleName
      liftTCM scModifyModule mnm $ \m ->
        insDef m $ Def { defIdent = mkIdent mnm nm,
