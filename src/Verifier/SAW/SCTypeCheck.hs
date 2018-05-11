@@ -461,24 +461,23 @@ scTypeCheckWHNF sc t =
 -- types, i.e., that both have type Sort s for some s, and that they are both
 -- already in WHNF
 checkSubtype :: TypedTerm -> Term -> TCM ()
-checkSubtype arg req_tp = helper (typedType arg) req_tp where
-  helper :: Term -> Term -> TCM ()
-  helper (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) =
-    checkConvertible a1 a2 err >>
-    inExtendedCtx x1 a1 (helper b1 b2)
-  helper (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return ()
-  helper t1' t2' = checkConvertible t1' t2' err
+checkSubtype arg req_tp =
+  do ok <- isSubtype (typedType arg) req_tp
+     if ok then return () else throwTCError $ SubtypeFailure arg req_tp
 
-  err :: TCError
-  err = SubtypeFailure arg req_tp
+-- | Check if one type is a subtype of another, assuming both arguments are
+-- types, i.e., that both have type Sort s for some s, and that they are both
+-- already in WHNF
+isSubtype :: Term -> Term -> TCM Bool
+isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) =
+    (&&) <$> areConvertible a1 a2 <*> inExtendedCtx x1 a1 (isSubtype b1 b2)
+isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True
+isSubtype t1' t2' = areConvertible t1' t2'
 
-
--- | Check that two terms are "convertible for type-checking", meaning that they
--- are convertible up to 'natConversions'. Throw the given 'TCError' on failure.
-checkConvertible :: Term -> Term -> TCError -> TCM ()
-checkConvertible t1 t2 err =
-  do are_conv <- liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
-     if are_conv then return () else throwTCError err
+-- | Check if two terms are "convertible for type-checking", meaning that they
+-- are convertible up to 'natConversions'
+areConvertible :: Term -> Term -> TCM Bool
+areConvertible t1 t2 = liftTCM scConvertibleEval scTypeCheckWHNF True t1 t2
 
 -- | Check that a term has type @String@
 checkField :: TypedTerm -> TCM ()
