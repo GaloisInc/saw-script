@@ -752,12 +752,51 @@ importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
 importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
 
 coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
-coerceTerm sc env t1 t2 e =
-  do t1' <- importType sc env t1
-     t2' <- importType sc env t2
-     if alphaEquiv t1' t2'
-       then return e
-       else scGlobalApply sc "Prelude.unsafeCoerce" [t1', t2', e]
+coerceTerm sc env t1 t2 e
+  | t1 == t2 = do return e
+  | otherwise =
+    do t1' <- importType sc env t1
+       t2' <- importType sc env t2
+       q <- proveEq sc env t1 t2
+       scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
+
+proveEq :: SharedContext -> Env -> C.Type -> C.Type -> IO Term
+proveEq sc env t1 t2
+  | t1 == t2 =
+    do s <- scSort sc (mkSort 0)
+       t' <- importType sc env t1
+       scCtorApp sc "Prelude.Refl" [s, t']
+  | otherwise =
+    case (C.tNoUser t1, C.tNoUser t2) of
+      (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
+        do n1' <- importType sc env n1
+           n2' <- importType sc env n2
+           a1' <- importType sc env a1
+           a2' <- importType sc env a2
+           num <- scDataTypeApp sc "Cryptol.Num" []
+           nEq <- if n1 == n2
+                  then scGlobalApply sc "Prelude.Refl" [num, n1']
+                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
+           aEq <- proveEq sc env a1 a2
+           scGlobalApply sc "Cryptol.seqEq" [n1', n2', a1', a2', nEq, aEq]
+      (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
+        do a1' <- importType sc env a1
+           a2' <- importType sc env a2
+           b1' <- importType sc env b1
+           b2' <- importType sc env b2
+           aEq <- proveEq sc env a1 a2
+           bEq <- proveEq sc env b1 b2
+           scGlobalApply sc "Cryptol.funEq" [a1', a2', b1', b2', aEq, bEq]
+      (C.tIsTuple -> Just ts1, C.tIsTuple -> Just ts2)
+        | length ts1 == length ts2 ->
+          do --ts1' <- traverse (importType sc env) ts1
+             --ts2' <- traverse (importType sc env) ts2
+             fail "unimplemented"
+      (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
+        | map fst ts1 == map fst ts2 ->
+          do fail "unimplemented"
+      (_, _) ->
+        fail $ unwords ["Internal type error:", pretty t1, pretty t2]
 
 --------------------------------------------------------------------------------
 -- List comprehensions

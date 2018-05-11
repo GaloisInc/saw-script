@@ -129,6 +129,35 @@ seqConst (TCNum n) = replicate n;
 seqConst TCInf = streamConst;
 
 --------------------------------------------------------------------------------
+-- Type coercions
+
+seqEq :: (m :: Num) -> (n :: Num) -> (a :: sort 0) -> (b :: sort 0) ->
+  Eq Num m n -> Eq (sort 0) a b -> Eq (sort 0) (seq m a) (seq n b);
+seqEq _ _ _ _ (Refl _ m) (Refl _ a) = Refl (sort 0) (seq m a);
+
+funEq :: (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
+  Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) (a -> c) (b -> d);
+funEq _ _ _ _ (Refl _ a) (Refl _ c) = Refl (sort 0) (a -> c);
+
+unitEq :: Eq (sort 0) #() #();
+unitEq = Refl (sort 0) #();
+
+pairEq :: (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
+  Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) #(a | c) #(b | d);
+pairEq _ _ _ _ (Refl _ a) (Refl _ c) = Refl (sort 0) #(a | c);
+
+emptyEq :: Eq (sort 0) #{} #{};
+emptyEq = Refl (sort 0) #{};
+
+fieldEq ::
+  (s :: String) -> (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
+  Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) #{ (s) :: a | c } #{ (s) :: b | d };
+fieldEq s _ _ _ _ (Refl _ a) (Refl _ c) = Refl (sort 0) #{ (s) :: a | c };
+
+axiom unsafeAssert_same_Num ::
+  (n :: Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);
+
+--------------------------------------------------------------------------------
 -- Auxiliary functions
 
 eListSel :: (a :: sort 0) -> (n :: Num) -> seq n a -> Nat -> a;
