@@ -326,7 +326,6 @@ instance TypeInfer (TermF TypedTerm) where
 instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (GlobalDef d) =
     do ty <- liftTCM scTypeOfGlobal d
-       _ <- ensureSort ty
        typeCheckWHNF ty
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
