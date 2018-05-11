@@ -129,16 +129,25 @@ matchAppliedRecursor (Un.App f arg) =
      return (mnm, n, args++[arg])
 matchAppliedRecursor _ = Nothing
 
+-- | The debugging level
+debugLevel :: Int
+debugLevel = 0
+
+-- | Print debugging output if 'debugLevel' is greater than 0
+typeInferDebug :: String -> TCM ()
+typeInferDebug str | debugLevel > 0 = liftIO $ traceIO str
+typeInferDebug _ = return ()
+
 -- The type inference engine for untyped terms, which mostly just dispatches to
 -- the type inference engine for (FTermF TypedTerm) defined in SCTypeCheck.hs
 instance TypeInfer Un.Term where
   typeInfer t = typedVal <$> typeInferComplete t
 
   typeInferComplete t =
-    do liftIO $ traceIO ("typechecking term: " ++ show t)
+    do typeInferDebug ("typechecking term: " ++ show t)
        res <- atPos (pos t) $ typeInferCompleteTerm t
-       liftIO $ traceIO ("completed typechecking term: " ++ show t ++ "\n"
-                         ++ "type = " ++ show (typedType res))
+       typeInferDebug ("completed typechecking term: " ++ show t ++ "\n"
+                       ++ "type = " ++ show (typedType res))
        return res
 
 -- | Main workhore function for type inference on untyped terms
@@ -209,7 +218,7 @@ typeInferCompleteTerm (Un.RecordValue _ elems) =
 typeInferCompleteTerm (Un.RecordType _ elems) =
   do typed_elems <-
        mapM (\(PosPair _ fld, t) -> (fld,) <$> typeInferComplete t) elems
-     typeInferComplete (RecordValue typed_elems)
+     typeInferComplete (RecordType typed_elems)
 typeInferCompleteTerm (Un.RecordProj t prj) =
   (RecordProj <$> typeInferComplete t <*> return prj) >>= typeInferComplete
 
