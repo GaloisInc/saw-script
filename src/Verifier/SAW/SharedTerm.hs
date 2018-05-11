@@ -871,7 +871,7 @@ instantiateVars sc f initialLevel t0 =
       | otherwise = f l (Right i)
     go' _ tf@(Constant _ _ _) = scTermF sc tf
 
--- | @incVars j k t@ increments free variables at least @initialLevel@ by @j@.
+-- | @incVars k j t@ increments free variables at least @k@ by @j@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
 incVars :: SharedContext
         -> DeBruijnIndex -> DeBruijnIndex -> Term -> IO Term
