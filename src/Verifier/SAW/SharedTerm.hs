@@ -902,8 +902,10 @@ instantiateVar sc k t0 t =
                | j == i     = term i
                | otherwise  = scTermF sc (LocalVar j)
 
--- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
--- decrement all higher loose variables by @length ts@.
+-- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and decrement all
+-- higher deBruijn indices by @length ts@. Assume that deBruijn index 0 in @ts@
+-- refers to deBruijn index @k + length ts@ in the current term; i.e., this
+-- substitution lifts terms in @ts@ by @k@ (plus any additional binders).
 instantiateVarList :: SharedContext
                    -> DeBruijnIndex -> [Term] -> Term -> IO Term
 instantiateVarList _ _ [] t = return t
