@@ -461,7 +461,7 @@ scTypeCheckWHNF sc t =
 -- types, i.e., that both have type Sort s for some s, and that they are both
 -- already in WHNF
 checkSubtype :: TypedTerm -> Term -> TCM ()
-checkSubtype arg req_tp = helper (typedVal arg) req_tp where
+checkSubtype arg req_tp = helper (typedType arg) req_tp where
   helper :: Term -> Term -> TCM ()
   helper (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) =
     checkConvertible a1 a2 err >>
