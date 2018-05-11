@@ -596,7 +596,7 @@ ctxSubstInBindings subst =
 
 instance MonadTerm m => CtxLiftSubst CtxTerm m where
   ctxLift ctx1 ctx2 (CtxTerm t) =
-    CtxTerm <$> liftTerm 0 (invBindingsLength ctx1 + bindingsLength ctx2) t
+    CtxTerm <$> liftTerm (invBindingsLength ctx1) (bindingsLength ctx2) t
   ctxSubst subst ctx (CtxTerm t) =
     -- NOTE: our term lists put the least recently-bound variable first, so we
     -- have to reverse here to call substTerm, which wants the term for the most
