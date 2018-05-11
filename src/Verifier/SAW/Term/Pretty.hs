@@ -126,14 +126,16 @@ lookupVarName (VarNaming names) i
 lookupVarName (VarNaming names) i = names!!i
 
 -- | Generate a fresh name from a base name that does not clash with any names
--- already in a given list
+-- already in a given list, unless it is "_", in which case return it as is
 freshName :: [String] -> String -> String
 freshName used name
+  | name == "_" = name
   | elem name used = freshName used (name ++ "'")
   | otherwise = name
 
 -- | Add a new variable with the given base name to the local variable list,
--- returning both the fresh name actually used and the new variable list
+-- returning both the fresh name actually used and the new variable list. As a
+-- special case, if the base name is "_", it is not modified.
 consVarNaming :: VarNaming -> String -> (String, VarNaming)
 consVarNaming (VarNaming names) name =
   let nm = freshName names name in (nm, VarNaming (nm : names))
