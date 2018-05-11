@@ -597,11 +597,12 @@ scPrettyTerm :: PPOpts -> Term -> String
 scPrettyTerm opts t =
   flip displayS "" $ renderPretty 0.8 80 $ ppTerm opts t
 
--- | Like 'scPrettyTerm', but also supply a context of bound names
+-- | Like 'scPrettyTerm', but also supply a context of bound names, where the
+-- most recently-bound variable is listed first in the context
 scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   flip displayS "" $ renderPretty 0.8 80 $ runPPM opts $
-  flip (Fold.foldr' (\x m -> snd <$> withBoundVarM x m)) ctx $
+  flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecNone False trm
 
 
