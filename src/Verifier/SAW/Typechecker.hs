@@ -137,7 +137,8 @@ instance TypeInfer Un.Term where
   typeInferComplete t =
     do liftIO $ traceIO ("typechecking term: " ++ show t)
        res <- atPos (pos t) $ typeInferCompleteTerm t
-       liftIO $ traceIO ("completed typechecking term: " ++ show t)
+       liftIO $ traceIO ("completed typechecking term: " ++ show t ++ "\n"
+                         ++ "type = " ++ show (typedType res))
        return res
 
 -- | Main workhore function for type inference on untyped terms
