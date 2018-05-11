@@ -42,9 +42,12 @@ UnitType__rec p f1 u = UnitType#rec p f1 u;
 --------------------------------------------------------------------------------
 -- Pair types
 
-data PairType :: (a b :: sort 0) -> sort 0 where {
-  PairValue :: (a b :: sort 0) -> a -> b -> PairType a b;
+data PairType (a b :: sort 0) :: sort 0 where {
+  PairValue :: a -> b -> PairType a b;
 }
+
+pair_example :: (a b :: sort 0) -> a -> b -> PairType a b;
+pair_example a b x y = PairValue a b x y;
 
 -- The recursor for primitive pair types at sort 1
 Pair__rec :: (a b :: sort 0) -> (p :: PairType a b -> sort 0) ->
@@ -72,6 +75,14 @@ uncurry a b c f =
 
 
 --------------------------------------------------------------------------------
+-- String values
+
+primitive String :: sort 0;
+
+primitive error :: (a :: sort 1) -> String -> a;
+
+
+--------------------------------------------------------------------------------
 -- Record types
 
 -- The empty record
@@ -80,12 +91,13 @@ data EmptyType :: sort 0 where {
 }
 
 -- The recursor for the empty type at sort 0
-EmptyType__rec :: (p :: EmptyType -> sort 0) -> p Empty -> (u :: EmptyType) -> p u;
+EmptyType__rec :: (p :: EmptyType -> sort 0) -> p Empty ->
+                  (emp :: EmptyType) -> p emp;
 EmptyType__rec p f1 emp = EmptyType#rec p f1 emp;
 
 -- Add a named field to a record type
-data RecordType :: (s::String) -> (a b ::sort 0) -> sort 0 where {
-  RecordValue :: (s::String) -> (a b ::sort 0) -> a -> b -> RecordType s a b;
+data RecordType (s::String) (a b ::sort 0) :: sort 0 where {
+  RecordValue :: a -> b -> RecordType s a b;
 }
 
 -- The recursor for record types at sort 0
@@ -93,15 +105,7 @@ RecordType__rec :: (s::String) -> (a b ::sort 0) ->
                    (p:: RecordType s a b -> sort 1) ->
                    ((x::a) -> (y::b) -> p (RecordValue s a b x y)) ->
                    (r::RecordType s a b) -> p r;
-RecordType__rec s a b p f1 rec_val = RecordType#rec s a b p f1 rec_val;
-
-
---------------------------------------------------------------------------------
--- String values
-
-primitive String :: sort 0;
-
-primitive error :: (a :: sort 1) -> String -> a;
+RecordType__rec s a b p f1 r = RecordType#rec s a b p f1 r;
 
 
 --------------------------------------------------------------------------------
