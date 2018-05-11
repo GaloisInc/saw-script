@@ -45,7 +45,6 @@ import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
@@ -200,13 +199,13 @@ typeInferCompleteTerm (Un.App f arg) =
 typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
 typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
   do tp_trm <- typeInferComplete tp
-     body <- inExtendedCtx x (typedVal tp_trm) $
+     body <- withVar x (typedVal tp_trm) $
        typeInferComplete $ Un.Lambda p ctx t
      typeInferComplete (Lambda x tp_trm body)
 typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
 typeInferCompleteTerm (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
   do tp_trm <- typeInferComplete tp
-     body <- inExtendedCtx x (typedVal tp_trm) $
+     body <- withVar x (typedVal tp_trm) $
        typeInferComplete $ Un.Pi p ctx t
      typeInferComplete (Pi x tp_trm body)
 
@@ -253,7 +252,7 @@ typeInferCompleteTerm (Un.VecLit _ ts) =
      tp <- case typed_ts of
        (t1:_) -> return $ typedType t1
        [] -> throwTCError $ EmptyVectorLit
-     type_of_tp <- liftTCM scTypeOf tp
+     type_of_tp <- typeInfer tp
      typeInferComplete (ArrayValue (TypedTerm tp type_of_tp) $
                         V.fromList typed_ts)
 
@@ -263,19 +262,9 @@ typeInferCompleteTerm (Un.BadTerm _) =
   internalError "Type inference encountered a BadTerm"
 
 
--- | Type-check a variable context, where each type is in the context of the
--- previous variables. Complete this context to a list of variable names and
--- types, and run the given computation in this context, passing in the actual
--- completed context as well, as well as the maximum sort of its types.
-typeInferCompleteInCtx :: Un.TermCtx -> ([(String,Term)] -> Sort -> TCM a) ->
-                          TCM a
-typeInferCompleteInCtx [] f = f [] propSort
-typeInferCompleteInCtx ((Un.termVarString -> x,tp):ctx) f =
-  do typed_tp <- typeInferComplete tp
-     s <- ensureSort (typedType typed_tp)
-     inExtendedCtx x (typedVal typed_tp) $
-       typeInferCompleteInCtx ctx $ \ctx' s' ->
-       f ((x,typedVal typed_tp) : ctx') (max s s')
+instance TypeInferCtx Un.TermVar Un.Term where
+  typeInferCompleteCtx =
+    typeInferCompleteCtx . map (\(x,tp) -> (Un.termVarString x, tp))
 
 
 --
@@ -324,19 +313,24 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- main body of the code below, which processes just the current data decl
   (>> processDecls rest) $ atPos p $
   -- Step 1: type-check the parameters
-  typeInferCompleteInCtx param_ctx $ \dtParams param_sort -> do
+  typeInferCompleteInCtx param_ctx $ \params -> do
+  let dtParams = map (\(x,tp,_) -> (x,tp)) params
+  let param_sort = maximum (propSort : map (\(_,_,s) -> s) params)
   let err :: String -> TCM a
       err msg = throwTCError $ DeclError nm msg
 
   -- Step 2: type-check the type given for d, and make sure it is of the form
   -- (i1:ix1) -> ... -> (in:ixn) -> Type s for some sort s. Then form the full
   -- type of d as (p1:param1) -> ... -> (i1:ix1) -> ... -> Type s
-  typed_dt_tp <- typeInferComplete dt_tp
-  (dtIndices, dtSort) <-
-    (case asPiList (typedVal typed_dt_tp) of
-       (ixs, asSort -> Just s) -> return (ixs, s)
-       _ -> err "Wrong form for type of datatype")
-  dtType <- liftTCM scPiList dtParams (typedVal typed_dt_tp)
+  (dt_ixs, dtSort) <-
+    case Un.asPiList dt_tp of
+      (ixs, Un.Sort _ s) -> return (ixs, s)
+      _ -> err "Wrong form for type of datatype"
+  dt_ixs_typed <- typeInferCompleteCtx dt_ixs
+  let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed
+      ixs_max_sort = maximum (propSort : map (\(_,_,s) -> s) dt_ixs_typed)
+  dtType <- (liftTCM scPiList (dtParams ++ dtIndices)
+             =<< liftTCM scSort dtSort)
 
   -- Step 3: do the necessary universe inclusion checking for any predicative
   -- (non-Prop) inductive type, which includes:
@@ -350,8 +344,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
     err ("Universe level of parameters should be no greater \
          than that of the datatype")
     else return ()
-  ix_sorts <- mapM (ensureSort <=< liftTCM scTypeOf . snd) dtIndices
-  if dtSort /= propSort && maximum (propSort : ix_sorts) > dtSort then
+  if dtSort /= propSort && ixs_max_sort > dtSort then
     err ("Universe level of indices should be strictly contained \
          in that of the datatype")
     else return ()

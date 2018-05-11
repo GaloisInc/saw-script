@@ -26,11 +26,14 @@ module Verifier.SAW.SCTypeCheck
   , runTCM
   , askCtx
   , askModName
-  , inExtendedCtx
+  , withVar
+  , withCtx
   , atPos
   , LiftTCM(..)
   , TypedTerm(..)
   , TypeInfer(..)
+  , TypeInferCtx(..)
+  , typeInferCompleteInCtx
   , checkSubtype
   , ensureSort
   , applyPiTyped
@@ -93,14 +96,20 @@ askModName = (\(_,mnm,_) -> mnm) <$> ask
 -- variable with the given type. This throws away the memoization table while
 -- running the sub-computation, as memoization tables are tied to specific sets
 -- of bindings.
-inExtendedCtx :: String -> Term -> TCM a -> TCM a
-inExtendedCtx x tp m =
+withVar :: String -> Term -> TCM a -> TCM a
+withVar x tp m =
   flip catchError (throwError . ErrorCtx x tp) $
   do saved_table <- get
      put Map.empty
      a <- local (\(sc,mnm,ctx) -> (sc, mnm, (x,tp):ctx)) m
      put saved_table
      return a
+
+-- | Run a type-checking computation in a typing context extended by a list of
+-- variables and their types. See 'withVar'.
+withCtx :: [(String,Term)] -> TCM a -> TCM a
+withCtx = flip (foldr (\(x,tp) -> withVar x tp))
+
 
 -- | Run a type-checking computation @m@ and tag any error it throws with the
 -- given position, using the 'ErrorPos' constructor, unless that error is
@@ -253,6 +262,31 @@ class TypeInfer a where
   typeInferComplete :: a -> TCM TypedTerm
 
 
+-- | Perform type inference on a context, i.e., a list of variable names and
+-- their associated types. The type @var@ gives the type of variable names,
+-- while @a@ is the type of types. This will give us 'Term's for each type, as
+-- well as their 'Sort's, since the type of any type is a 'Sort'.
+class TypeInferCtx var a where
+  typeInferCompleteCtx :: [(var,a)] -> TCM [(String, Term, Sort)]
+
+instance TypeInfer a => TypeInferCtx String a where
+  typeInferCompleteCtx [] = return []
+  typeInferCompleteCtx ((x,tp):ctx) =
+    do typed_tp <- typeInferComplete tp
+       s <- ensureSort (typedType typed_tp)
+       ((x,typedVal typed_tp,s):) <$>
+         withVar x (typedVal typed_tp) (typeInferCompleteCtx ctx)
+
+-- | Perform type inference on a context via 'typeInferCompleteCtx', and then
+-- run a computation in that context via 'withCtx', also passing in that context
+-- to the computation
+typeInferCompleteInCtx :: TypeInferCtx var tp => [(var, tp)] ->
+                          ([(String,Term,Sort)] -> TCM a) -> TCM a
+typeInferCompleteInCtx ctx f =
+  do typed_ctx <- typeInferCompleteCtx ctx
+     withCtx (map (\(x,tp,_) -> (x,tp)) typed_ctx) (f typed_ctx)
+
+
 -- Type inference for Term dispatches to type inference on TermF Term, but uses
 -- memoization to avoid repeated work
 instance TypeInfer Term where
@@ -274,10 +308,10 @@ instance TypeInfer Term where
 instance TypeInfer (TermF Term) where
   typeInfer (Lambda x a rhs) =
     typeInfer =<< (Lambda x <$> (typeInferComplete a)
-                   <*> inExtendedCtx x a (typeInferComplete rhs))
+                   <*> withVar x a (typeInferComplete rhs))
   typeInfer (Pi x a rhs) =
     typeInfer =<< (Pi x <$> (typeInferComplete a)
-                   <*> inExtendedCtx x a (typeInferComplete rhs))
+                   <*> withVar x a (typeInferComplete rhs))
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
     TypedTerm <$> liftTCM scTermF tf <*> typeInfer tf
@@ -312,7 +346,8 @@ instance TypeInfer (TermF TypedTerm) where
          -- (i.e., call incVars) to make it well-typed relative to all of ctx
          liftTCM incVars 0 (i+1) (snd (ctx !! i))
          else
-         throwTCError (DanglingVar (i - length ctx))
+         error ("Context = " ++ show ctx)
+         -- throwTCError (DanglingVar (i - length ctx))
   typeInfer (Constant _ (TypedTerm _ tp) _) =
     -- FIXME: should we check that the type (3rd arg of Constant) is a type?
     return tp
@@ -470,7 +505,7 @@ checkSubtype arg req_tp =
 -- already in WHNF
 isSubtype :: Term -> Term -> TCM Bool
 isSubtype (unwrapTermF -> Pi x1 a1 b1) (unwrapTermF -> Pi _ a2 b2) =
-    (&&) <$> areConvertible a1 a2 <*> inExtendedCtx x1 a1 (isSubtype b1 b2)
+    (&&) <$> areConvertible a1 a2 <*> withVar x1 a1 (isSubtype b1 b2)
 isSubtype (asSort -> Just s1) (asSort -> Just s2) | s1 <= s2 = return True
 isSubtype t1' t2' = areConvertible t1' t2'
 
