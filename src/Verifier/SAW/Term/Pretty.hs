@@ -438,10 +438,10 @@ ppTermF prec (App e1 e2) =
   ppAppList prec <$> ppTerm' PrecArg e1 <*> mapM (ppTerm' PrecArg) [e2]
 ppTermF prec (Lambda x tp body) =
   ppParensPrec prec PrecLambda <$>
-  (ppLambda <$> ppTerm' PrecLambda tp <*> ppTermInBinder PrecLambda x body)
+  (ppLambda <$> ppTerm' PrecApp tp <*> ppTermInBinder PrecLambda x body)
 ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
-  (ppPi <$> ppTerm' PrecLambda tp <*>
+  (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = text <$> varLookupM x
 ppTermF _ (Constant str _ _) = return $ text str
