@@ -534,7 +534,7 @@ ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
     IntMap.filter
     (\(t,cnt) ->
       cnt > 1 && shouldMemoizeTerm t &&
-      (if global_p then looseVars t == 0 else True)) $
+      (if global_p then looseVars t == emptyBitSet else True)) $
     scTermCount global_p trm
 
   -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
@@ -560,13 +560,16 @@ ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
 -- returning both the result of pretty-printing and the fresh name actually used
--- for the newly bound variable.
+-- for the newly bound variable. If the variable occurs in the term, then do not
+-- use an underscore for it, and use "_x" instead.
 --
 -- Also, pretty-print let-bindings around the term for all subterms that occur
 -- more than once at the same binding level.
 ppTermInBinder :: Prec -> String -> Term -> PPM (String, Doc)
 ppTermInBinder prec basename trm =
-  withBoundVarM basename $ ppTermWithMemoTable prec False trm
+  let nm = if basename == "_" && inBitSet 0 (looseVars trm) then "_x"
+           else basename in
+  withBoundVarM nm $ ppTermWithMemoTable prec False trm
 
 -- | Run a pretty-printing computation inside a context that binds zero or more
 -- variables, returning the result of the computation and also the

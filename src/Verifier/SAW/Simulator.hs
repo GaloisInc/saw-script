@@ -323,7 +323,7 @@ mkMemoClosed cfg t =
   where
     -- | Map of all closed subterms of t.
     subterms :: IntMap (TermF Term)
-    subterms = fmap fst $ IMap.filter ((== 0) . snd) $ State.execState (go t) IMap.empty
+    subterms = fmap fst $ IMap.filter ((== emptyBitSet) . snd) $ State.execState (go t) IMap.empty
 
     go :: Term -> State.State (IntMap (TermF Term, BitSet)) BitSet
     go (Unshared tf) = freesTermF <$> traverse go tf

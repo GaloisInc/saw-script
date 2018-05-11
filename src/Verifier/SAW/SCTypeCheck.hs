@@ -220,6 +220,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
 
   ishow :: Term -> PPErrM String
   ishow tm =
+    -- return $ show tm
     (\(ctx,_) -> "  " ++ scPrettyTermInCtx defaultPPOpts ctx tm) <$> ask
 
 -- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure

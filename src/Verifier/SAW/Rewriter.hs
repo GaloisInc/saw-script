@@ -60,7 +60,6 @@ import Data.Foldable (Foldable)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
-import Data.Bits
 import qualified Data.Foldable as Foldable
 import Data.IORef (IORef)
 import Data.Map (Map)
@@ -173,7 +172,9 @@ scMatch sc pat term = do
       --lift $ putStrLn $ "matching (rhs): " ++ show y
       case (unwrapTermF x, unwrapTermF y) of
         -- check that neither x nor y contains bound variables less than `depth`
-        (LocalVar i, _) | i >= depth && looseVars y .&. (bit depth - 1) == 0 ->
+        (LocalVar i, _) | i >= depth &&
+                          (looseVars y `intersectBitSets` (completeBitSet depth)
+                           == emptyBitSet) ->
           do -- decrement loose variables in y by `depth`
              y1 <- lift $ instantiateVarList sc 0 (replicate depth (error "scMatch: impossible")) y
              let (my2, m') = insertLookup (i - depth) y1 m
@@ -409,7 +410,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
                  case unwrapTermF t1 of
                    -- We only rewrite e2 if type of e1 is not a dependent type.
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
-                   Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
+                   Pi _ _ t | inBitSet 0 (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           Constant{}     -> return tf
@@ -501,7 +502,7 @@ replaceTerm :: SharedContext
             -> IO Term
 replaceTerm sc ss (pat, repl) t = do
     let fvs = looseVars pat
-    unless (fvs == 0) $ fail $ unwords
+    unless (fvs == emptyBitSet) $ fail $ unwords
        [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss

@@ -37,26 +37,27 @@ module Verifier.SAW.Term.Functor
   , TermF(..)
   , FlatTermF(..)
   , zipWithFlatTermF
-  , BitSet
   , freesTermF
   , unwrapTermF
   , termToPat
   , alphaEquiv
-  , looseVars, smallestFreeVar
   , alistAllFields, recordAListAsTuple, tupleAsRecordAList
     -- * Sorts
   , Sort, mkSort, propSort, sortOf
+    -- * Sets of free variables
+  , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
+  , decrBitSet, completeBitSet
+  , looseVars, smallestFreeVar
   ) where
 
 import Control.Exception (assert)
-import Control.Lens
 import Data.Bits
 import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import qualified Data.Foldable as Foldable (all, and)
+import qualified Data.Foldable as Foldable (all, and, foldl')
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
@@ -493,22 +494,60 @@ unwrapTermF (Unshared tf) = tf
 
 -- | A @BitSet@ represents a set of natural numbers.
 -- Bit n is a 1 iff n is in the set.
-type BitSet = Integer
+newtype BitSet = BitSet Integer deriving (Eq, Ord, Show)
 
-bitwiseOrOf :: (Bits a, Num a) => Fold s a -> s -> a
-bitwiseOrOf fld = foldlOf' fld (.|.) 0
+-- | The empty 'BitSet'
+emptyBitSet :: BitSet
+emptyBitSet = BitSet 0
+
+-- | The singleton 'BitSet'
+singletonBitSet :: Int -> BitSet
+singletonBitSet = BitSet . bit
+
+-- | Test if a number is in a 'BitSet'
+inBitSet :: Int -> BitSet -> Bool
+inBitSet i (BitSet j) = testBit j i
+
+-- | Union two 'BitSet's
+unionBitSets :: BitSet -> BitSet -> BitSet
+unionBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .|. i2)
+
+-- | Intersect two 'BitSet's
+intersectBitSets :: BitSet -> BitSet -> BitSet
+intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&. i2)
+
+-- | Decrement all elements of a 'BitSet' by 1, removing 0 if it is in the
+-- set. This is useful for moving a 'BitSet' out of the scope of a variable.
+decrBitSet :: BitSet -> BitSet
+decrBitSet (BitSet i) = BitSet (shiftR i 1)
+
+-- | The 'BitSet' containing all elements less than a given index @i@
+completeBitSet :: Int -> BitSet
+completeBitSet i = BitSet (bit i - 1)
+
+-- | Compute the smallest element of a 'BitSet', if any
+smallestBitSetElem :: BitSet -> Maybe Int
+smallestBitSetElem (BitSet 0) = Nothing
+smallestBitSetElem (BitSet i) | i < 0 = error "smallestBitSetElem"
+smallestBitSetElem (BitSet i) = Just $ go 0 i where
+  go :: Int -> Integer -> Int
+  go !shft !x
+    | xw == 0   = go (shft+64) (shiftR x 64)
+    | otherwise = shft + countTrailingZeros xw
+    where xw :: Word64
+          xw = fromInteger x
 
 -- | Compute the free variables of a term given free variables for its immediate
 -- subterms
 freesTermF :: TermF BitSet -> BitSet
 freesTermF tf =
     case tf of
-      FTermF ftf -> bitwiseOrOf folded ftf
-      App l r -> l .|. r
-      Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
-      Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
-      LocalVar i -> bit i
-      Constant _ _ _ -> 0 -- assume rhs is a closed term
+      FTermF ftf -> Foldable.foldl' unionBitSets emptyBitSet ftf
+      App l r -> unionBitSets l r
+      Lambda _name tp rhs -> unionBitSets tp (decrBitSet rhs)
+      Pi _name lhs rhs -> unionBitSets lhs (decrBitSet rhs)
+      LocalVar i -> singletonBitSet i
+      Constant _ _ _ -> emptyBitSet -- assume rhs is a closed term
 
 -- | Return a bitset containing indices of all free local variables
 looseVars :: Term -> BitSet
@@ -517,14 +556,4 @@ looseVars (Unshared f) = freesTermF (fmap looseVars f)
 
 -- | Compute the value of the smallest variable in the term, if any.
 smallestFreeVar :: Term -> Maybe Int
-smallestFreeVar t
-   | fv == 0 = Nothing
-   | fv > 0  = Just $! go 0 fv
-   | otherwise = error "impossible: negative free variable bitset!"
- where fv = looseVars t
-       go :: Int -> Integer -> Int
-       go !shft !x
-          | xw == 0   = go (shft+64) (shiftR x 64)
-          | otherwise = shft + countTrailingZeros xw
-        where xw :: Word64
-              xw = fromInteger x
+smallestFreeVar = smallestBitSetElem . looseVars

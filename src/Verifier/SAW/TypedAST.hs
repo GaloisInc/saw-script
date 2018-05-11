@@ -75,7 +75,8 @@ module Verifier.SAW.TypedAST
  , ExtCns(..)
  , VarIndex
    -- * Utility functions
- , BitSet
+  , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
+  , decrBitSet, completeBitSet
  ) where
 
 import Control.Exception (assert)
