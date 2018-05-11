@@ -888,7 +888,7 @@ instantiateVar :: SharedContext
                -> DeBruijnIndex -> Term -> Term -> IO Term
 instantiateVar sc k t0 t =
     do cache <- newCache
-       let ?cache = cache in instantiateVars sc fn 0 t
+       let ?cache = cache in instantiateVars sc fn k t
   where -- Use map reference to memoize instantiated versions of t.
         term :: (?cache :: Cache IORef DeBruijnIndex Term) =>
                 DeBruijnIndex -> IO Term
@@ -898,8 +898,8 @@ instantiateVar sc k t0 t =
               DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
         fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
         fn i (Right j)
-               | j  > i + k = scTermF sc (LocalVar (j - 1))
-               | j == i + k = term i
+               | j  > i     = scTermF sc (LocalVar (j - 1))
+               | j == i     = term i
                | otherwise  = scTermF sc (LocalVar j)
 
 -- | Substitute @ts@ for variables @[k .. k + length ts - 1]@ and
@@ -909,7 +909,7 @@ instantiateVarList :: SharedContext
 instantiateVarList _ _ [] t = return t
 instantiateVarList sc k ts t =
     do caches <- mapM (const newCache) ts
-       instantiateVars sc (fn (zip caches ts)) 0 t
+       instantiateVars sc (fn (zip caches ts)) k t
   where
     l = length ts
     -- Memoize instantiated versions of ts.
@@ -921,10 +921,8 @@ instantiateVarList sc k ts t =
        -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
     fn _ _ (Left ec) = scFlatTermF sc $ ExtCns ec
     fn rs i (Right j)
-              | j >= i + k + l = scTermF sc (LocalVar (j - l))
-              | j >= i + k && j - i - k >= length rs =
-                  error "instantiateVarList"
-              | j >= i + k     = term (rs !! (j - i - k)) i
+              | j >= i + l     = scTermF sc (LocalVar (j - l))
+              | j >= i         = term (rs !! (j - i)) i
               | otherwise      = scTermF sc (LocalVar j)
 -- ^ Specification in terms of @instantiateVar@ (by example):
 -- @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of @Lam
