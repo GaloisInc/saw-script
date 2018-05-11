@@ -345,12 +345,12 @@ ppLambda tp (name, body) =
   text "\\" <> parens (ppTypeConstraint (text name) tp)
   <+> text "->" Leijen.<$> body
 
--- | Pretty-print a pi abstraction as @(x :: tp) -> body@ if the flag is 'True',
--- or as @tp -> body@ otherwise, where the string for @x@ is bundled with @body@
-ppPi :: Bool -> Doc -> (String, Doc) -> Doc
-ppPi var_used_p tp (name, body) = lhs <<$>> text "->" <+> body
+-- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
+-- @x == "_"@
+ppPi :: Doc -> (String, Doc) -> Doc
+ppPi tp (name, body) = lhs <<$>> text "->" <+> body
   where
-    lhs = if var_used_p then parens (ppTypeConstraint (text name) tp) else tp
+    lhs = if name == "_" then tp else parens (ppTypeConstraint (text name) tp)
 
 -- | Pretty-print a definition @d :: tp = body@
 ppDef :: Doc -> Doc -> Maybe Doc -> Doc
@@ -441,7 +441,7 @@ ppTermF prec (Lambda x tp body) =
   (ppLambda <$> ppTerm' PrecLambda tp <*> ppTermInBinder PrecLambda x body)
 ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
-  (ppPi (x == "_") <$> ppTerm' PrecLambda tp <*>
+  (ppPi <$> ppTerm' PrecLambda tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = text <$> varLookupM x
 ppTermF _ (Constant str _ _) = return $ text str
@@ -597,7 +597,7 @@ scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   flip displayS "" $ renderPretty 0.8 80 $ runPPM opts $
   flip (Fold.foldr' (\x m -> snd <$> withBoundVarM x m)) ctx $
-  ppTermWithMemoTable PrecNone True trm
+  ppTermWithMemoTable PrecNone False trm
 
 
 -- | Pretty-print a term and render it to a string
