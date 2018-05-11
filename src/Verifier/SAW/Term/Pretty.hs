@@ -24,8 +24,8 @@ module Verifier.SAW.Term.Pretty
   , scPrettyTerm
   , scPrettyTermInCtx
   , ppTermDepth
-  , ppModule
-  , showModule
+  , PPModule(..), PPDecl(..)
+  , ppPPModule
   ) where
 
 import Data.Maybe (isJust)
@@ -38,13 +38,11 @@ import qualified Data.Foldable as Fold
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-import qualified Text.PrettyPrint.ANSI.Leijen as Leijen ((<$>))
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL ((<$>))
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
-import Verifier.SAW.Module
 import Verifier.SAW.Term.Functor
 
 
@@ -345,7 +343,7 @@ ppLambda :: Doc -> (String, Doc) -> Doc
 ppLambda tp (name, body) =
   group $ hang 2 $
   text "\\" <> parens (ppTypeConstraint (text name) tp)
-  <+> text "->" Leijen.<$> body
+  <+> text "->" PPL.<$> body
 
 -- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
 -- @x == "_"@
@@ -615,31 +613,34 @@ showTerm t = scPrettyTerm defaultPPOpts t
 -- * Pretty-printers for Modules and Top-level Constructs
 --------------------------------------------------------------------------------
 
--- | Pretty-print a 'Module'
-ppModule :: PPOpts -> Module -> Doc
-ppModule opts m =
+-- | Datatype for representing modules in pretty-printer land. We do not want to
+-- make the pretty-printer dependent on @Verifier.SAW.Module@, so we instead
+-- have that module translate to this representation.
+data PPModule = PPModule [ModuleName] [PPDecl]
+
+data PPDecl
+  = PPTypeDecl Ident [(String,Term)] [(String,Term)] Sort [(Ident,Term)]
+  | PPDefDecl Ident Term (Maybe Term)
+
+-- | Pretty-print a 'PPModule'
+ppPPModule :: PPOpts -> PPModule -> Doc
+ppPPModule opts (PPModule importNames decls) =
   vcat $ concat $ fmap (map (<> line)) $
-  [ map ppImport (moduleImportNames m)
-  , map (runPPM opts . ppDecl)   (moduleDecls m)
+  [ map ppImport importNames
+  , map (runPPM opts . ppDecl) decls
   ]
   where
     ppImport nm = text $ "import " ++ show nm
-    ppDecl (TypeDecl d) =
-      ppDataType (dtName d) <$> ppWithBoundCtx (dtParams d)
+    ppDecl (PPTypeDecl dtName dtParams dtIndices dtSort dtCtors) =
+      ppDataType dtName <$> ppWithBoundCtx dtParams
       ((,) <$>
-       ppWithBoundCtx (dtIndices d) (return $ text $ show $ dtSort d) <*>
-       mapM (\c ->
-              ppTypeConstraint (ppIdent (ctorName c)) <$>
-              ppTerm' PrecNone (ctorType c))
-       (dtCtors d))
-    ppDecl (DefDecl d) =
-      ppDef (ppIdent $ defIdent d) <$> ppTerm' PrecNone (defType d) <*>
-      case defBody d of
+       ppWithBoundCtx dtIndices (return $ text $ show dtSort) <*>
+       mapM (\(ctorName,ctorType) ->
+              ppTypeConstraint (ppIdent ctorName) <$>
+              ppTerm' PrecNone ctorType)
+       dtCtors)
+    ppDecl (PPDefDecl defIdent defType defBody) =
+      ppDef (ppIdent defIdent) <$> ppTerm' PrecNone defType <*>
+      case defBody of
         Just body -> Just <$> ppTerm' PrecNone body
         Nothing -> return Nothing
-
--- | Pretty-print a m and render it to a string (FIXME: this appears to not be
--- used anywhere in the SAW code base...)
-showModule :: Module -> String
-showModule m =
-  flip displayS "" $ renderPretty 0.8 80 $ ppModule defaultPPOpts m

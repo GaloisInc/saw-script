@@ -65,6 +65,8 @@ module Verifier.SAW.Module
   , allModulePrimitives
   , allModuleAxioms
   , allModuleActualDefs
+    -- * Pretty-printing
+  , ppModule
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -77,10 +79,12 @@ import qualified Data.Map.Strict as Map
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import GHC.Generics (Generic)
+import Text.PrettyPrint.ANSI.Leijen (Doc)
 
 import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.Utils (sumBy, internalError)
 
@@ -463,3 +467,14 @@ allModuleActualDefs modmap =
     | DefDecl def <- allModuleDecls modmap
     , defQualifier def == NoQualifier
     ]
+
+-- | Pretty-print a 'Module'
+ppModule :: PPOpts -> Module -> Doc
+ppModule opts m =
+  ppPPModule opts (PPModule (moduleImportNames m) (map toDecl $ moduleDecls m))
+  where
+    toDecl (TypeDecl (DataType {..})) =
+      PPTypeDecl dtName dtParams dtIndices dtSort
+      (map (\c -> (ctorName c, ctorType c)) dtCtors)
+    toDecl (DefDecl (Def {..})) =
+      PPDefDecl defIdent defType defBody
