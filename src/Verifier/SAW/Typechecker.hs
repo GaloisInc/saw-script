@@ -311,7 +311,9 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Dangling definition without a type"
 processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
-  atPos p $
+  -- This top line makes sure that we process the rest of the decls after the
+  -- main body of the code below, which processes just the current data decl
+  (>> processDecls rest) $ atPos p $
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx $ \dtParams param_sort -> do
   let err :: String -> TCM a
@@ -368,9 +370,6 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
 
   -- Step 6: complete the datatype with the given ctors
   liftTCM scModifyModule mnm (\m -> completeDataType m dtName ctors)
-
-  -- Step 7: process the remaining declarations
-  processDecls rest
 
 
 -- | Typecheck a module and, on success, insert it into the current context
