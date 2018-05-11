@@ -508,6 +508,7 @@ shouldMemoizeTerm t =
     FTermF EmptyType -> False
     FTermF (CtorApp _ [] []) -> False
     FTermF (DataTypeApp _ [] []) -> False
+    FTermF Sort{} -> False
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
     FTermF FloatLit{} -> False
@@ -551,9 +552,9 @@ ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
   ppLets ((idx, (t_rhs,_)):idxs) bindings =
     do isBound <- isJust <$> memoLookupM idx
        if isBound then ppLets idxs bindings else
-         withMemoVar global_p idx $ \memo_var ->
          do doc_rhs <- ppTerm' prec t_rhs
-            ppLets idxs ((memo_var, doc_rhs):bindings)
+            withMemoVar global_p idx $ \memo_var ->
+              ppLets idxs ((memo_var, doc_rhs):bindings)
 
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
