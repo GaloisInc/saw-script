@@ -479,11 +479,7 @@ scRecursorElimTypes sc d_id params p_ret =
 -- given @d@, @params@, and the sort @s@
 scRecursorRetTypeType :: SharedContext -> DataType -> [Term] -> Sort -> IO Term
 scRecursorRetTypeType sc dt params s =
-  do ixs <- mapM (scLocalVar sc) [length (dtIndices dt) - 1 .. 0]
-     d_params_ixs <- scFlatTermF sc (DataTypeApp (dtName dt) params ixs)
-     s_tm <- scSort sc s
-     body <- scFun sc d_params_ixs s_tm
-     scPiList sc (dtIndices dt) body
+  scShCtxM sc $ mkPRetTp (dtName dt) (dtParams dt) (dtIndices dt) params s
 
 -- | Reduce an application of a recursor. This is known in the Coq literature as
 -- an iota reduction. More specifically, the call

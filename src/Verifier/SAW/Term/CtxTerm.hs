@@ -46,7 +46,7 @@ module Verifier.SAW.Term.CtxTerm (
   , mkLiftedClosedTerm
   , ctxLambda, ctxPi, ctxPi1
   , MonadTerm(..), CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
-  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType
+  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType, mkPRetTp
   , ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor, mkCtorArgStruct
   ) where
 
@@ -378,9 +378,9 @@ ctxVars2 :: MonadTerm m => InvBindings tp 'CNil ctx1 ->
 ctxVars2 vars1 vars2 =
   splitCtxTermsCtx vars2 <$> ctxVars (appendTopInvBindings vars1 vars2)
 
--- | Build the 0th sort as a 'CtxTerm'
-ctxTyp0 :: MonadTerm m => m (CtxTerm ctx (Typ a))
-ctxTyp0 = CtxTerm <$> mkFlatTermF (Sort $ mkSort 0)
+-- | Build a 'CtxTerm' for a 'Sort'
+ctxSort :: MonadTerm m => Sort -> m (CtxTerm ctx (Typ a))
+ctxSort s = CtxTerm <$> mkFlatTermF (Sort s)
 
 -- | Apply two 'CtxTerm's
 ctxApply :: MonadTerm m => m (CtxTerm ctx (a -> b)) -> m (CtxTerm ctx a) ->
@@ -727,6 +727,48 @@ ctxCtorType d (CtorArgStruct{..}) =
 -- * Computing with Eliminators
 --
 
+-- | Build the type of the @p_ret@ function, also known as the "motive"
+-- function, of a recursor on datatype @d@. This type has the form
+--
+-- > (i1::ix1) -> .. -> (im::ixm) -> d p1 .. pn i1 .. im -> s
+--
+-- where the @pi@ are free variables for the parameters of @d@, the @ixj@
+-- are the indices of @d@, and @s@ is any sort supplied as an argument.
+ctxPRetTp :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
+             InvBindings CtxTerm 'CNil ps ->
+             Bindings CtxTerm ps ixs -> Sort ->
+             m (CtxTerm ps (Typ (Arrows ixs (d -> Typ a))))
+ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
+  ctxPiProxy (Proxy :: Proxy (Typ (d -> Typ a))) ixs $ \ix_vars ->
+  do param_vars <- ctxVars params
+     dt <- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)
+       (return $ invertCtxTerms ix_vars)
+     ctxPi1 "_" dt $ \_ -> ctxSort s
+
+-- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
+-- for the parameter variables returned by that function
+mkPRetTp :: MonadTerm m => Ident -> [(String,Term)] -> [(String,Term)] ->
+            [Term] -> Sort -> m Term
+mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
+  case ctxBindingsOfTerms untyped_p_ctx of
+    ExistsTp p_ctx ->
+      case (ctxBindingsOfTerms untyped_ix_ctx,
+            ctxTermsForBindings p_ctx untyped_params) of
+        (ExistsTp ix_ctx, Just params) ->
+          do p_ret <- (ctxPRetTp Proxy (DataIdent d)
+                       (invertBindings p_ctx) ix_ctx s)
+             elimClosedTerm <$>
+               ctxSubst (invertCtxTerms params) InvNoBind
+               (castPRet (invertBindings p_ctx) p_ret)
+        (_, Nothing) ->
+          error "mkPRetTp: incorrect number of parameters"
+  where
+    castPRet :: InvBindings tp ctx1 ctx -> CtxTerm ctx a ->
+                CtxTerm (CtxApp 'CNil ctx) a
+    castPRet ctx =
+      case ctxAppNilEq ctx of
+        Refl -> id
+
 
 -- | Compute the type of an eliminator function for a constructor from the name
 -- of its datatype, its name, and its 'CtorArgStruct'. This type has, as free
@@ -759,7 +801,10 @@ ctxCtorElimType :: MonadTerm m =>
 ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   (CtorArgStruct{..}) =
   (do let params = invertBindings ctorParams
-      p_ret_tp <- mkPRetTp a_top d_top params dataTypeIndices
+      -- NOTE: we use propSort for the type of p_ret just as arbitrary sort, but
+      -- it doesn't matter because p_ret_tp is only actually used to form
+      -- contexts, and is never actually used directly in the output
+      p_ret_tp <- ctxPRetTp a_top d_top params dataTypeIndices propSort
 
       -- Lift the argument and return indices into the context of p_ret
       args <- ctxLift InvNoBind (Bind "_" p_ret_tp NoBind) ctorArgs
@@ -772,21 +817,6 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
       castCtxTerm Proxy ret <$>
         helper a_top d_top params_pret InvNoBind args ixs
   ) where
-
-  -- Build the type of the p_ret function. Note that this is only actually used
-  -- to form contexts, and is never actually used directly in the output. Thus
-  -- it is ok that we always use Type 0 as the output typek, even though p_ret
-  -- functions can have arbitrary sorts.
-  mkPRetTp :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
-              InvBindings CtxTerm 'CNil ps ->
-              Bindings CtxTerm ps ixs ->
-              m (CtxTerm ps (Typ (Arrows ixs (d -> Typ a))))
-  mkPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs =
-    ctxPiProxy (Proxy :: Proxy (Typ (d -> Typ a))) ixs $ \ix_vars ->
-    do param_vars <- ctxVars params
-       dt <- ctxDataTypeM d (ctxLift InvNoBind ixs param_vars)
-         (return $ invertCtxTerms ix_vars)
-       ctxPi1 "_" dt $ \_ -> ctxTyp0
 
   -- Iterate through the argument types of the constructor, building up a
   -- function from those arguments to the result type of the p_ret function.
