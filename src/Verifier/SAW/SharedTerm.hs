@@ -514,6 +514,7 @@ data WHNFElim
   | ElimProj String
   | ElimOldPair Bool
   | ElimOldProj FieldName
+  | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
 
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term, and evaluates all arguments to type
@@ -551,12 +552,15 @@ scWhnf sc t0 =
                                                                      case asRecordValue t' of
                                                                        Just tm -> go xs ((Map.!) tm i)
                                                                        Nothing -> foldM reapply t' xs
+    go (ElimRecursor d ps
+        p_ret cs_fs _ : xs)   (asCtorParams ->
+                               Just (c, _, args))               = (scReduceRecursor sc d ps
+                                                                   p_ret cs_fs c args) >>= go xs
     go xs                     (asGlobalDef -> Just c)           = scFindDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
-                               Just (d, params, p_ret, cs_fs, _,
-                                     asCtorParams ->
-                                     Just (c, _, args)))        = (scReduceRecursor sc d params
-                                                                   p_ret cs_fs c args) >>= go xs
+                               Just (d, params, p_ret, cs_fs, ixs,
+                                     arg))                      = go (ElimRecursor d params p_ret
+                                                                      cs_fs ixs : xs) arg
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
@@ -592,6 +596,8 @@ scWhnf sc t0 =
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimOldPair i) = scPairSelector sc t i
     reapply t (ElimOldProj i) = scOldRecordSelect sc t i
+    reapply t (ElimRecursor d ps p_ret cs_fs ixs) =
+      scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
 
     tryDef :: (?cache :: Cache IORef TermIndex Term) =>
               Ident -> [WHNFElim] -> Maybe Def -> IO Term
