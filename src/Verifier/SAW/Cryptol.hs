@@ -808,24 +808,22 @@ importComp sc env lenT elemT expr mss =
            do (xs, len, ty, args) <- importMatches sc env branch
               m <- importType sc env len
               a <- importType sc env ty
-              return (xs, m, a, [args])
+              return (xs, m, a, [args], len)
          zipAll (branch : branches) =
            do (xs, len, ty, args) <- importMatches sc env branch
               m <- importType sc env len
               a <- importType sc env ty
-              (ys, n, b, argss) <- zipAll branches
+              (ys, n, b, argss, len') <- zipAll branches
               zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
               mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
-              return (zs, mn, ab, args : argss)
-     (xs, n, a, argss) <- zipAll mss
+              return (zs, mn, ab, args : argss, C.tMin len len')
+     (xs, n, a, argss, lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
      ys <- scGlobalApply sc "Cryptol.seqMap" [a, b, n, f, xs]
      -- The resulting type might not match the annotation, so we coerce
-     t1 <- scGlobalApply sc "Cryptol.seq" [n, b]
-     t2 <- importType sc env (C.tSeq lenT elemT)
-     scGlobalApply sc "Prelude.unsafeCoerce" [t1, t2, ys]
+     coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys
 
 lambdaTuples :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
 lambdaTuples sc env _ty expr [] = importExpr sc env expr
