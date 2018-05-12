@@ -111,14 +111,14 @@ RecordType__rec s a b p f1 r = RecordType#rec s a b p f1 r;
 --------------------------------------------------------------------------------
 -- Equality proofs.
 
-data Eq :: (t :: sort 1) -> t -> t -> sort 1 where {
-    Refl :: (u :: sort 1) -> (x :: u) -> Eq u x x;
+data Eq (t :: sort 1) (x :: t) :: t -> sort 1 where {
+    Refl :: Eq t x x;
   }
 
 -- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
 -- structure of the Eq type
 Eq__rec :: (t :: sort 1) -> (x :: t) -> (p :: (y :: t) -> Eq t x y -> sort 1) ->
-           p x (Refl t x) -> (y :: t) -> (e :: Eq t x y) -> p y e;
+           p x (Refl t x) -> (y :: t) -> (pf :: Eq t x y) -> p y pf;
 Eq__rec t x p f1 y pf = Eq#rec t x p f1 y pf;
 
 -- Congruence closure for equality
