@@ -465,7 +465,8 @@ instance TypeInfer (FlatTermF TypedTerm) where
     TypedTerm <$> liftTCM scFlatTermF (fmap typedVal ftf) <*> typeInfer ftf
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
--- result of substituting @arg@ for @x@ in the result type @b@, i.e., @[arg/x]b@
+-- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
+-- @[arg/x]b@. This substitution could create redexes, so we call the evaluator.
 applyPiTyped :: Term -> TypedTerm -> TCM Term
 applyPiTyped fun_tp arg =
   case asPi fun_tp of
@@ -473,7 +474,7 @@ applyPiTyped fun_tp arg =
       -- _ <- ensureSort aty -- NOTE: we assume tx is well-formed and WHNF
       -- aty' <- scTypeCheckWHNF aty
       checkSubtype arg arg_tp
-      liftTCM instantiateVar 0 (typedVal arg) ret_tp
+      liftTCM instantiateVar 0 (typedVal arg) ret_tp >>= typeCheckWHNF
     _ -> throwTCError (NotFuncType fun_tp)
 
 -- | Ensure that a 'Term' is a sort, and return that sort
