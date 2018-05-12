@@ -711,16 +711,16 @@ axiom ite_eq_cong_2 :: (a :: sort 0)
 --------------------------------------------------------------------------------
 -- Either
 
-data Either :: sort 0 -> sort 0 -> sort 0 where {
-    Left  :: (s t :: sort 0) -> s -> Either s t;
-    Right :: (s t :: sort 0) -> t -> Either s t;
+data Either (s t :: sort 0) :: sort 0 where {
+    Left  :: s -> Either s t;
+    Right :: t -> Either s t;
   }
 
 Either__rec :: (s t :: sort 0) -> (p :: Either s t -> sort 0) ->
                ((l :: s) -> p (Left s t l)) ->
                ((r :: t) -> p (Right s t r)) ->
                (e :: Either s t) -> p e;
-Either__rec s t p f1 f2 eith = Either#rec s t p f1 f2 eith;
+Either__rec s t p f1 f2 e = Either#rec s t p f1 f2 e;
 
 either :: (a b c :: sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
 either a b c f g e =
@@ -740,14 +740,14 @@ eitherCong1 t x y eq =
 --------------------------------------------------------------------------------
 -- Maybe
 
-data Maybe :: sort 0 -> sort 0 where {
-    Nothing :: (a :: sort 0) -> Maybe a;
-    Just :: (a :: sort 0) -> a -> Maybe a;
+data Maybe (a :: sort 0) :: sort 0 where {
+    Nothing :: Maybe a;
+    Just :: a -> Maybe a;
   }
 
 Maybe__rec :: (a :: sort 0) -> (p :: (Maybe a) -> sort 0) ->
               p (Nothing a) -> ((x::a) -> p (Just a x)) -> (m :: Maybe a) -> p m;
-Maybe__rec a p f1 f2 maybe = Maybe#rec a p f1 f2 maybe;
+Maybe__rec a p f1 f2 m = Maybe#rec a p f1 f2 m;
 
 maybe :: (a b :: sort 0) -> b -> (a -> b) -> Maybe a -> b;
 maybe a b f1 f2 m = Maybe__rec a (\ (m'::Maybe a) -> b) f1 f2 m;
