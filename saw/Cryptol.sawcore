@@ -135,6 +135,10 @@ seqEq :: (m :: Num) -> (n :: Num) -> (a :: sort 0) -> (b :: sort 0) ->
   Eq Num m n -> Eq (sort 0) a b -> Eq (sort 0) (seq m a) (seq n b);
 seqEq _ _ _ _ (Refl _ m) (Refl _ a) = Refl (sort 0) (seq m a);
 
+seqEq1 :: (m :: Num) -> (n :: Num) -> (a :: sort 0) ->
+  Eq Num m n -> Eq (sort 0) (seq m a) (seq n a);
+seqEq1 _ _ a (Refl _ m) = Refl (sort 0) (seq m a);
+
 funEq :: (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
   Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) (a -> c) (b -> d);
 funEq _ _ _ _ (Refl _ a) (Refl _ c) = Refl (sort 0) (a -> c);
