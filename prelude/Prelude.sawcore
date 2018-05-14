@@ -830,7 +830,7 @@ eqNatAddComm x y =
                     (Succ (addNat x' y'))
                     (Succ (addNat y' x'))
                     (eqNatAddS x' y')
-                    (eqNatSucc (addNat x' y') (addNat y' x') (eqNatAddComm x' y')))
+                    (eqNatSucc (addNat x' y') (addNat y' x') (eqF x')))
            y x;
 
 addNat_assoc :: (x y z :: Nat) ->
@@ -937,6 +937,39 @@ upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 upd n a v j x = gen n a (\ (i :: Nat) -> ite a (equalNat i j) x (at n a v i));
 -- TODO: assertion that j < n
 
+-- | Defines a function that maps array elements from one range to another.
+map :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
+map a b f n v = gen n b (\ (i :: Nat) -> f (at n a v i));
+
+-- | Defines a function that maps array elements from one range to another.
+zipWith :: (a b c :: sort 0)
+        -> (a -> b -> c)
+        -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
+zipWith a b c f n x y = gen n c (\ (i :: Nat) -> f (at n a x i) (at n b y i));
+
+-- replicate n x returns an array with n copies of x.
+replicate :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a;
+replicate n a x = gen n a (\ (_ :: Nat) -> x);
+
+-- | Create a vector of length 1.
+single :: (a :: sort 0) -> a -> Vec 1 a;
+single = replicate 1;
+
+axiom at_single :: (a :: sort 0) -> (x :: a) -> (i :: Nat) -> Eq a (at 1 a (single a x) i) x;
+
+-- Zip together two lists (truncating the longer of the two).
+primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+
+primitive foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+
+reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
+reverse n a xs = gen n a (\ (i :: Nat) -> at n a xs (subNat (subNat n 1) i));
+
+transpose :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
+transpose m n a xss =
+  gen n (Vec m a) (\ (j :: Nat) ->
+    gen m a (\ (i :: Nat) -> at n a (at m (Vec n a) xss i) j));
+
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
 vecEq :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool)
@@ -982,26 +1015,6 @@ slice :: (a :: sort 0)
       -> Vec (addNat (addNat m n) o) a -> Vec n a;
 slice a m n o v = drop a m n (take a (addNat m n) o v);
 
--- | Defines a function that maps array elements from one range to another.
-map :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
-map a b f n v = gen n b (\ (i :: Nat) -> f (at n a v i));
-
--- | Defines a function that maps array elements from one range to another.
-zipWith :: (a b c :: sort 0)
-        -> (a -> b -> c)
-        -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
-zipWith a b c f n x y = gen n c (\ (i :: Nat) -> f (at n a x i) (at n b y i));
-
--- replicate n x returns an array with n copies of x.
-replicate :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a;
-replicate n a x = gen n a (\ (_ :: Nat) -> x);
-
--- | Create a vector of length 1.
-single :: (a :: sort 0) -> a -> Vec 1 a;
-single = replicate 1;
-
-axiom at_single :: (a :: sort 0) -> (x :: a) -> (i :: Nat) -> Eq a (at 1 a (single a x) i) x;
-
 -- Concatenate arrays together.
 join  :: (m n :: Nat)
        -> (a :: sort 0)
@@ -1038,19 +1051,6 @@ primitive shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n 
 
 -- Shift array to the right.
 primitive shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
-
--- Zip together two lists (truncating the longer of the two).
-primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
-
-primitive foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
-
-reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
-reverse n a xs = gen n a (\ (i :: Nat) -> at n a xs (subNat (subNat n 1) i));
-
-transpose :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
-transpose m n a xss =
-  gen n (Vec m a) (\ (j :: Nat) ->
-    gen m a (\ (i :: Nat) -> at n a (at m (Vec n a) xss i) j));
 
 joinLittleEndian  :: (m n :: Nat)
                   -> (a :: sort 0)
@@ -1106,6 +1106,12 @@ bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvect
 bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
 primitive bvAdd :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+
+-- | Unsigned and signed comparison functions.
+primitive bvugt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvult :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 bvCarry :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
@@ -1209,10 +1215,6 @@ axiom eq_VecVec :: (n :: Nat) -> (m :: Nat) -> (a :: sort 0)
 axiom equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
 
--- | Return true if the bitvector is nonzero
-bvNonzero :: (n :: Nat) -> bitvector n -> Bool;
-bvNonzero n x = bvNe n x (bvNat n 0);
-
 -- | Returns the bitvector 1 if the boolean is true,
 --   and returns 0 otherwise
 bvBool :: (n :: Nat) -> Bool -> bitvector n;
@@ -1222,11 +1224,9 @@ bvBool n b = ite (bitvector n) b (bvNat n 1) (bvNat n 0);
 bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
 
--- | Unsigned and signed comparison functions.
-primitive bvugt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvult :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+-- | Return true if the bitvector is nonzero
+bvNonzero :: (n :: Nat) -> bitvector n -> Bool;
+bvNonzero n x = bvNe n x (bvNat n 0);
 
 -- | Truncates a vector a smaller size.
 -- msb implementation:
@@ -1254,83 +1254,16 @@ bvSExt m n x = append m (Succ n) Bool (replicate m Bool (msb n x)) x;
 -- bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
 -- bvSExt m n x = append (Succ n) m Bool x (replicate m Bool (msb n x));
 
---------------------------------------------------------------------------------
--- Polynomial operations
-
-bvPMul :: (m n :: Nat) ->
-  bitvector (Succ m) -> bitvector (Succ n) -> bitvector (Succ (addNat m n));
-bvPMul m n x =
-  foldr Bool (bitvector (Succ (addNat m n))) (Succ n)
-    (\ (b :: Bool) -> \ (a :: bitvector (Succ (addNat m n))) ->
-      bvXor (Succ (addNat m n))
-        (bvShr (Succ (addNat m n)) a 1)
-        (ite (bitvector (Succ (addNat m n))) b
-          (append (Succ m) n Bool x (bvNat n 0))
-          (bvNat (Succ (addNat m n)) 0)))
-    (bvNat (Succ (addNat m n)) 0);
-
-snoc :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> a -> Vec (Succ n) a;
-snoc a n xs x = rotateL (Succ n) a (ConsVec a x n xs) 1;
-
-nextPDivModC :: (n :: Nat) -> bitvector n -> Bool;
-nextPDivModC n r = msb n (snoc Bool n r False);
-
-nextPDivModR :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
-nextPDivModR n mask r =
-  ite (bitvector n) (nextPDivModC n r)
-  (bvXor n mask (bvShl n r 1))
-  (bvShl n r 1);
-
-nextPDivModQ :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
-nextPDivModQ m n q r = drop Bool 1 m (snoc Bool m q (nextPDivModC n r));
-
--- bvPModAux m n x y = bvPMod m n x (ConsVec Bool True n y);
-bvPModAux :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector n;
-bvPModAux m n x mask =
-  (foldr Bool #(bitvector n, bitvector n) m
-    (\ (b :: Bool) -> \ (acc :: #(bitvector n, bitvector n)) ->
-      (nextPDivModR n mask acc.1,
-       ite (bitvector n) b (bvXor n acc.1 acc.2) acc.2))
-    (bvNat n 1, bvNat n 0) x).2;
-
-bvPMod :: (m n :: Nat) -> bitvector m -> bitvector (Succ n) -> bitvector n;
-bvPMod m n x y =
-  ite (bitvector n) (msb n y) (bvPModAux m n x (drop Bool 1 n y))
-    (natCase
-      (\ (i :: Nat) -> bitvector i -> bitvector i)
-      (\ (z :: bitvector 0) -> z)
-      (\ (i :: Nat) -> \ (a :: bitvector (Succ i)) -> ConsVec Bool False i (bvPMod m i x a))
-      n (drop Bool 1 n y));
-
--- bvPDivAux m n x y = bvPDiv m (Succ n) x (ConsVec Bool True n y);
-bvPDivAux :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
-bvPDivAux m n x mask =
-  (foldr Bool #(bitvector m, bitvector n, bitvector m) m
-    (\ (b :: Bool) -> \ (acc :: #(bitvector m, bitvector n, bitvector m)) ->
-      (nextPDivModQ m n acc.1 acc.2,
-       nextPDivModR n mask acc.2,
-       ite (bitvector m) b (bvXor m acc.1 acc.3) acc.3))
-    (take Bool m n (bvNat (addNat m n) 1), bvNat n 1, bvNat m 0) x).3;
-
-bvPDiv :: (m n :: Nat) -> bitvector m -> bitvector n -> bitvector m;
-bvPDiv m n x y =
-  natCase
-    (\ (n' :: Nat) -> bitvector n' -> bitvector m)
-    (\ (_ :: bitvector 0) -> bvNat m 0)
-    (\ (n' :: Nat) -> \ (y' :: bitvector (Succ n')) ->
-      ite (bitvector m) (msb n' y') (bvPDivAux m n' x (drop Bool 1 n' y'))
-        (bvPDiv m n' x (drop Bool 1 n' y')))
-    n y;
 
 --------------------------------------------------------------------------------
 -- Infinite streams
 
-data Stream :: sort 0 -> sort 0 where {
-    MkStream :: (a :: sort 0) -> (Nat -> a) -> Stream a;
+data Stream (a :: sort 0) :: sort 0 where {
+    MkStream :: (Nat -> a) -> Stream a;
   }
 
 Stream__rec :: (a::sort 0) -> (p::Stream a -> sort 0) ->
-               ((f::Nat -> a) -> p (MkStream a f)) -> (s::Stream a) -> p s;
+               ((f::Nat -> a) -> p (MkStream a f)) -> (str::Stream a) -> p str;
 Stream__rec a p f1 str = Stream#rec a p f1 str;
 
 streamUpd :: (a :: sort 0) -> Stream a -> Nat -> a -> Stream a;
