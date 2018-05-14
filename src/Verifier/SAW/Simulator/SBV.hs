@@ -61,7 +61,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, Module, identName)
+import Verifier.SAW.TypedAST (FieldName, identName, showTerm)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), asFirstOrderType)
 
 data SBV
@@ -445,7 +445,7 @@ extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: Module -> Map Ident SValue -> [String] -> Term -> IO SValue
+sbvSolveBasic :: ModuleMap -> Map Ident SValue -> [String] -> Term -> IO SValue
 sbvSolveBasic m addlPrims unints t = do
   let unintSet = Set.fromList unints
   let uninterpreted nm ty
@@ -509,7 +509,7 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "non-boolean result type: " ++ scPrettyTerm defaultPPOpts t'
+    _                            -> fail $ "non-boolean result type: " ++ showTerm t'
 
 sbvSolve :: SharedContext
          -> Map Ident SValue
@@ -520,7 +520,8 @@ sbvSolve sc addlPrims unints t = do
   ty <- scTypeOf sc t
   argTs <- asPredType sc ty
   shapes <- traverse (asFirstOrderType sc) argTs
-  bval <- sbvSolveBasic (scModule sc) addlPrims unints t
+  modmap <- scGetModuleMap sc
+  bval <- sbvSolveBasic modmap addlPrims unints t
   (labels, vars) <- flip evalStateT 0 $ unzip <$> traverse newVars shapes
   let prd = do
               bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
@@ -615,7 +616,8 @@ sbvCodeGen_definition sc addlPrims unints t checkSz = do
   (argTs,resTy) <- argTypes sc ty
   shapes <- traverse (asFirstOrderType sc) argTs
   resultShape <- asFirstOrderType sc resTy
-  bval <- sbvSolveBasic (scModule sc) addlPrims unints t
+  modmap <- scGetModuleMap sc
+  bval <- sbvSolveBasic modmap addlPrims unints t
   vars <- evalStateT (traverse (newCodeGenVars checkSz) shapes) 0
   let codegen = do
         args <- traverse (fmap ready) vars
