@@ -121,6 +121,7 @@ module Verifier.SAW.SharedTerm
   , scSharedTerm
   , scImport
     -- ** Normalization
+  , asCtorOrNat
   , scWhnf
   , scConvertibleEval
   , scConvertible
