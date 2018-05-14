@@ -36,8 +36,8 @@ import Verifier.SAW.Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.TypedAST (Module)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Verifier.SAW.Recognizer as R
 
@@ -377,7 +377,7 @@ type PrimMap l g = forall s. g s -> Map Ident (BValue (l s))
 
 bitBlastBasic :: AIG.IsAIG l g
               => g s
-              -> Module
+              -> ModuleMap
               -> PrimMap l g
               -> Term
               -> IO (BValue (l s))
@@ -413,7 +413,8 @@ withBitBlastedPred proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
   argTs <- asPredType sc ty
   shapes <- traverse (asFiniteType sc) argTs
   vars <- traverse (newVars' be) shapes
-  bval <- bitBlastBasic be (scModule sc) addlPrims t
+  modmap <- scGetModuleMap sc
+  bval <- bitBlastBasic be modmap addlPrims t
   bval' <- applyAll bval vars
   case bval' of
     VBool l -> c be l shapes
@@ -441,13 +442,16 @@ withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
   argTs <- asAIGType sc ty
   shapes <- traverse (asFiniteType sc) argTs
   vars <- traverse (newVars' be) shapes
-  bval <- bitBlastBasic be (scModule sc) addlPrims t
+  modmap <- scGetModuleMap sc
+  bval <- bitBlastBasic be modmap addlPrims t
   bval' <- applyAll bval vars
   v <- flattenBValue bval'
   c be v
 
 asFiniteType :: SharedContext -> Term -> IO FiniteType
 asFiniteType sc t =
-  case asFiniteTypeValue (Concrete.evalSharedTerm (scModule sc) Map.empty t) of
+  scGetModuleMap sc >>= \modmap ->
+  case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty t) of
     Just ft -> return ft
-    Nothing -> fail $ "asFiniteType: unsupported type " ++ scPrettyTerm defaultPPOpts t
+    Nothing ->
+      fail $ "asFiniteType: unsupported type " ++ scPrettyTerm defaultPPOpts t
