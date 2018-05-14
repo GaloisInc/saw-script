@@ -44,6 +44,7 @@ module Verifier.SAW.Recognizer
   , asOldRecordSelector
   , asCtorParams
   , asCtor
+  , asCtorOrNat
   , asDataType
   , asDataTypeParams
   , asRecursorApp
@@ -78,6 +79,7 @@ import qualified Data.Map as Map
 import Verifier.SAW.Prim
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
+import Verifier.SAW.Prelude.Constants
 import Text.Read (readMaybe)
 
 data a :*: b = (:*:) a b
@@ -290,6 +292,19 @@ asOldRecordSelector t = do
 -- the constructor, its parameters, and its arguments
 asCtorParams :: (Monad f) => Recognizer f Term (Ident, [Term], [Term])
 asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
+
+-- | Just like 'asCtorParams', but treat natural number literals as constructor
+-- applications, i.e., @0@ becomes the constructor @Zero@, and any non-zero
+-- literal @k@ becomes @Succ (k-1)@
+asCtorOrNat :: (Alternative f, Monad f) =>
+               Recognizer f Term (Ident, [Term], [Term])
+asCtorOrNat = asCtorParams <> (asNatLit >=> helper . toInteger) where
+  helper 0 = return (preludeZeroIdent, [], [])
+  helper k =
+    if k > 0 then
+      return (preludeSuccIdent, [], [Unshared (FTermF (NatLit $ k-1))])
+    else error "asCtorOrNat: negative natural number literal!"
+
 
 -- | A version of 'asCtorParams' that combines the parameters and normal args
 asCtor :: (Monad f) => Recognizer f Term (Ident, [Term])
