@@ -793,10 +793,10 @@ proveEq sc env t1 t2
         | length ts1 == length ts2 ->
           do --ts1' <- traverse (importType sc env) ts1
              --ts2' <- traverse (importType sc env) ts2
-             fail "unimplemented"
+             fail $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
       (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
         | map fst ts1 == map fst ts2 ->
-          do fail "unimplemented"
+          do fail $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
       (_, _) ->
         fail $ unwords ["Internal type error:", pretty t1, pretty t2]
 
