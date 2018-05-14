@@ -57,6 +57,7 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
+import Control.Applicative (Alternative)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
@@ -331,6 +332,18 @@ asRecordRedex t =
        ts <- R.asRecordValue x
        return (ts, i)
 
+-- | An iota redex is a recursor application whose main argument is a
+-- constructor application; specifically, this function recognizes
+--
+-- > RecursorApp d params p_ret cs_fs _ (CtorApp c _ args)
+asIotaRedex :: (Monad m, Alternative m) => R.Recognizer m Term
+               (Ident,[Term],Term,[(Ident,Term)],Ident,[Term])
+asIotaRedex t =
+  do (d, params, p_ret, cs_fs, _, arg) <- R.asRecursorApp t
+     (c, _, args) <- asCtorOrNat arg
+     return (d, params, p_ret, cs_fs, c, args)
+
+
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
 
@@ -340,6 +353,8 @@ reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
 reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
 reduceSharedTerm _ (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
+reduceSharedTerm sc (asIotaRedex -> Just (d, params, p_ret, cs_fs, c, args)) =
+  Just $ scReduceRecursor sc d params p_ret cs_fs c args
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms
