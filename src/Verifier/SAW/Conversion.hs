@@ -88,6 +88,7 @@ module Verifier.SAW.Conversion
   , natConversions
   , vecConversions
   , bvConversions
+  , zero_NatLit
   , succ_NatLit
   , addNat_NatLit
   , append_VecLit
@@ -557,9 +558,15 @@ eq_Record = Conversion $ thenMatcher matcher action
 
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]
-natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit, mulNat_NatLit
-                 , expNat_NatLit, divNat_NatLit, remNat_NatLit, equalNat_NatLit
+natConversions = [ zero_NatLit, succ_NatLit, addNat_NatLit, subNat_NatLit
+                 , mulNat_NatLit, expNat_NatLit, divNat_NatLit, remNat_NatLit
+                 , equalNat_NatLit
                  ]
+
+zero_NatLit :: Conversion
+zero_NatLit =
+    Conversion $
+    thenMatcher (asCtor "Prelude.Zero" asEmpty) (\_ -> return $ mkNatLit 0)
 
 succ_NatLit :: Conversion
 succ_NatLit =
