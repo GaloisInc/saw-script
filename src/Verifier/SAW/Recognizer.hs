@@ -286,7 +286,8 @@ asOldRecordSelector t = do
   s <- asStringLit i
   return (u, s)
 
--- | A version of 'asCtor' that returns the parameters separately
+-- | Test whether a term is an application of a constructor, and, if so, return
+-- the constructor, its parameters, and its arguments
 asCtorParams :: (Monad f) => Recognizer f Term (Ident, [Term], [Term])
 asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 
