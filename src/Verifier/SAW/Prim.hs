@@ -312,36 +312,7 @@ slice_bv _ _ n o (BV _ x) = bv n (shiftR x o)
 -- slice_bv _ i n _ (BV _ x) = bv n (shiftR x i)
 
 ------------------------------------------------------------
--- Bitvectors polynomial operations
-
--- | Polynomial GF(2) multiplication for type Nat
-pMulNat :: Nat -> Nat -> Nat
-pMulNat 0 _y = 0
-pMulNat x y = if odd x then r `xor` y else r
-  where r = pMulNat (x `shiftR` 1) y `shiftL` 1
-
-pDivModNat :: Nat -> Nat -> (Nat, Nat)
-pDivModNat x 0 = (0, x) -- In Cryptol, this case is undefined.
-pDivModNat x y = (qr `shiftR` ySize, qr .&. (bit ySize - 1))
-  where
-    xSize = fromIntegral (widthNat x) - 1
-    ySize = fromIntegral (widthNat y) - 1
-    mask = y `clearBit` ySize
-    qr = go xSize x
-    go i z
-      | i < ySize     = z
-      | z `testBit` i = go (i - 1) (z `xor` (mask `shiftL` (i - ySize)))
-      | otherwise     = go (i - 1) z
-
-bvPMul :: Nat -> Nat -> BitVector -> BitVector -> BitVector
-bvPMul _ _ (BV m x) (BV n y) = BV w (unNat (pMulNat (Nat x) (Nat y)))
-  where w = max 0 (m + n - 1)
-
-bvPDiv :: Nat -> Nat -> BitVector -> BitVector -> BitVector
-bvPDiv _ _ (BV m x) (BV _ y) = BV m (unNat (fst (pDivModNat (Nat x) (Nat y))))
-
-bvPMod :: Nat -> Nat -> BitVector -> BitVector -> BitVector
-bvPMod _ _ (BV _ x) (BV n y) = BV (n - 1) (unNat (snd (pDivModNat (Nat x) (Nat y))))
+-- Base 2 logarithm
 
 bvLg2 :: BitVector -> BitVector
 bvLg2 (BV m x) = BV m (if d > 0 then k+1 else k)
