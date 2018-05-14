@@ -516,6 +516,19 @@ data WHNFElim
   | ElimOldProj FieldName
   | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
 
+-- | Test if a term is a constructor application that should be converted to a
+-- natural number literal. Specifically, test if a term is not already a natural
+-- number literal, but is 0 or more applications of the @Succ@ constructor to
+-- either the @Zero@ constructor or a natural number literal
+convertsToNat :: Term -> Maybe Integer
+convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
+convertsToNat t = helper t where
+  helper (asFTermF -> Just (NatLit k)) = return k
+  helper (asCtor -> Just (z, [])) | z == preludeZeroIdent = return 0
+  helper (asCtor -> Just (s, [t'])) | s == preludeSuccIdent = (1+) <$> helper t'
+  helper _ = Nothing
+
+
 -- | Reduces beta-redexes, tuple/record selectors, recursor applications, and
 -- definitions at the top level of a term, and evaluates all arguments to type
 -- constructors (including function, record, and tuple types).
@@ -536,6 +549,7 @@ scWhnf sc t0 =
         STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
 
     go :: (?cache :: Cache IORef TermIndex Term) => [WHNFElim] -> Term -> IO Term
+    go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asOldRecordSelector -> Just (t, n)) = go (ElimOldProj n : xs) t
@@ -553,7 +567,7 @@ scWhnf sc t0 =
                                                                        Just tm -> go xs ((Map.!) tm i)
                                                                        Nothing -> foldM reapply t' xs
     go (ElimRecursor d ps
-        p_ret cs_fs _ : xs)   (asCtorParams ->
+        p_ret cs_fs _ : xs)   (asCtorOrNat ->
                                Just (c, _, args))               = (scReduceRecursor sc d ps
                                                                    p_ret cs_fs c args) >>= go xs
     go xs                     (asGlobalDef -> Just c)           = scFindDef sc c >>= tryDef c xs
@@ -823,7 +837,7 @@ unshare t0 = State.evalState (go t0) Map.empty
 
 -- | Perform hash-consing at every AST node to obtain maximal sharing.
 --
--- FIXME: this should no longer be needed; since it was added to deal with the
+-- FIXME: this should no longer be needed, since it was added to deal with the
 -- fact that SAWCore files used to build all their terms as 'Unshared' terms,
 -- but that is no longer how we are doing things...
 scSharedTerm :: SharedContext -> Term -> IO Term
