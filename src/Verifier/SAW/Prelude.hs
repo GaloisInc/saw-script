@@ -19,7 +19,6 @@ module Verifier.SAW.Prelude
 import Verifier.SAW.ParserUtils
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Typechecker
 
 $(defineModuleFromFileWithFns
   "preludeModule" "scLoadPreludeModule" "prelude/Prelude.sawcore")
