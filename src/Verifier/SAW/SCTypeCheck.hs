@@ -233,21 +233,21 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     (\(ctx,_) -> "  " ++ scPrettyTermInCtx defaultPPOpts ctx tm) <$> ask
 
 -- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
-scTypeCheckError :: SharedContext -> Term -> IO Term
+scTypeCheckError :: TypeInfer a => SharedContext -> a -> IO Term
 scTypeCheckError sc t0 =
   either (fail . unlines . prettyTCError) return =<< scTypeCheck sc Nothing t0
 
 -- | Infer the type of a 'Term', ensuring in the process that the entire term is
 -- well-formed and that all internal type annotations are correct. Types are
 -- evaluated to WHNF as necessary, and the returned type is in WHNF.
-scTypeCheck :: SharedContext -> Maybe ModuleName -> Term ->
+scTypeCheck :: TypeInfer a => SharedContext -> Maybe ModuleName -> a ->
                IO (Either TCError Term)
 scTypeCheck sc mnm = scTypeCheckInCtx sc mnm []
 
 -- | Like 'scTypeCheck', but type-check the term relative to a typing context,
 -- which assigns types to free variables in the term
-scTypeCheckInCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
-                    Term -> IO (Either TCError Term)
+scTypeCheckInCtx :: TypeInfer a => SharedContext -> Maybe ModuleName ->
+                    [(String,Term)] -> a -> IO (Either TCError Term)
 scTypeCheckInCtx sc mnm ctx t0 = runTCM (typeInfer t0) sc mnm ctx
 
 -- | A pair of a 'Term' and its type
