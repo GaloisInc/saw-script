@@ -210,9 +210,10 @@ findField _ _ _ _ =
 
 defRewrites :: SharedContext -> Ident -> IO [RewriteRule]
 defRewrites sc ident =
-      case findDef (scModule sc) ident of
-        Nothing -> return []
-        Just def -> scDefRewriteRules sc def
+  scFindDef sc ident >>= \maybe_def ->
+  case maybe_def of
+    Nothing -> return []
+    Just def -> scDefRewriteRules sc def
 
 basic_ss :: SharedContext -> IO Simpset
 basic_ss sc = do

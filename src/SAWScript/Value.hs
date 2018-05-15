@@ -54,8 +54,9 @@ import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
-import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
-import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
+import Verifier.SAW.SharedTerm
+import qualified Verifier.SAW.TypedAST as PPTerm (PPOpts(..), defaultPPOpts,
+                                                  ppTerm, scPrettyTerm)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -190,7 +191,7 @@ showsProofResult opts r =
     Valid _ -> showString "Valid"
     InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
   where
-    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    opts' = PPTerm.defaultPPOpts{ PPTerm.ppBase = ppOptsBase opts }
     showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
@@ -202,7 +203,7 @@ showsSatResult opts r =
     Unsat _ -> showString "Unsat"
     SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
   where
-    opts' = SharedTerm.PPOpts{ SharedTerm.ppBase = ppOptsBase opts }
+    opts' = PPTerm.defaultPPOpts { PPTerm.ppBase = ppOptsBase opts }
     showVal t = shows (ppFirstOrderValue opts' t)
     showEqn (x, t) = showString x . showString " = " . showVal t
     showMulti _ [] = showString "]"
@@ -215,11 +216,10 @@ showSimpset opts ss =
     ppRule r =
       PPL.char '*' PPL.<+>
       (PPL.nest 2 $
-       ppTerm (lhsRewriteRule r)
+       PPTerm.ppTerm opts' (lhsRewriteRule r)
        PPL.</> PPL.char '=' PPL.<+>
-       ppTerm (rhsRewriteRule r))
-    ppTerm t = scPrettyTermDoc opts' t
-    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+       PPTerm.ppTerm opts' (rhsRewriteRule r))
+    opts' = PPTerm.defaultPPOpts { PPTerm.ppBase = ppOptsBase opts }
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
 showsPrecValue opts p v =
@@ -236,14 +236,15 @@ showsPrecValue opts p v =
                        showString n . showString "=" . showsPrecValue opts 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (scPrettyTerm opts' (ttTerm t))
+    VTerm t -> showString (PPTerm.scPrettyTerm opts' (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
+    VTheorem (Theorem t) ->
+      showString "Theorem " . showParen True (showString (PPTerm.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
     VCrucibleSetup{} -> showString "<<Crucible Setup>>"
@@ -264,7 +265,7 @@ showsPrecValue opts p v =
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
   where
-    opts' = SharedTerm.defaultPPOpts { SharedTerm.ppBase = ppOptsBase opts }
+    opts' = PPTerm.defaultPPOpts { PPTerm.ppBase = ppOptsBase opts }
 
 instance Show Value where
     showsPrec p v = showsPrecValue defaultPPOpts p v
@@ -289,12 +290,14 @@ tupleLookupValue (VTuple vs) i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
 
-evaluate :: SharedContext -> Term -> Concrete.CValue
-evaluate sc t = Concrete.evalSharedTerm (scModule sc) concretePrimitives t
+evaluate :: SharedContext -> Term -> IO Concrete.CValue
+evaluate sc t =
+  (\modmap -> Concrete.evalSharedTerm modmap concretePrimitives t) <$>
+  scGetModuleMap sc
 
-evaluateTypedTerm :: SharedContext -> TypedTerm -> C.Value
+evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm schema trm) =
-  exportValueWithSchema schema (evaluate sc trm)
+  exportValueWithSchema schema <$> evaluate sc trm
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x

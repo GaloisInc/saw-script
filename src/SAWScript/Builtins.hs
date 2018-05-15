@@ -69,7 +69,6 @@ import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
-import qualified Verifier.SAW.Typechecker (checkTerm)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.UntypedAST as UntypedAST
 
@@ -1285,12 +1284,12 @@ parseCore input = do
   let (uterm, errs) = parseSAWTerm base path (B.fromString input)
   mapM_ (printOutLnTop Opts.Error . show) errs
   unless (null errs) $ fail $ show errs
-  let imps = [ UntypedAST.Import False (Position.PosPair pos (mkModuleName ["Prelude"])) Nothing Nothing ]
+  let mnm = Just $ mkModuleName ["Prelude"]
       pos = Position.Pos base path 0 0
-  (t, _tp) <- case Verifier.SAW.Typechecker.checkTerm [preludeModule] imps uterm of
+  err_or_t <- io $ runTCM (typeInferComplete uterm) mnm []
+  case err_or_t of
     Left err -> fail (show err)
-    Right x -> return x
-  io $ scSharedTerm sc t
+    Right (TypedTerm x _) -> return x
 
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do

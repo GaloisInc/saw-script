@@ -73,7 +73,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.Java.Common as JSS
 
-import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.CongruenceClosure (CCSet)
@@ -140,7 +140,7 @@ data BehaviorSpec = BS {
 ppLogicExpr :: LogicExpr -> Doc
 ppLogicExpr (LogicExpr t args) =
   vcat $
-  parens (scPrettyTermDoc defaultPPOpts t) :
+  parens (ppTerm defaultPPOpts t) :
   map (text . ppJavaExpr) args
 
 ppMixedExpr :: MixedExpr -> Doc
