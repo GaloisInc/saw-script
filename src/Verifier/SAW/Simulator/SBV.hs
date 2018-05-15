@@ -61,7 +61,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, identName, showTerm)
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, showTerm)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), asFirstOrderType)
 
 data SBV
