@@ -21,6 +21,7 @@ module Verifier.SAW.ParserUtils
  , defineModuleFromFile
  , declareSharedModuleFns
  , defineModuleFromFileWithFns
+ , tcInsertModule -- re-exported for code using defineModuleFromFileWithFns
  ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -41,6 +42,7 @@ import qualified Verifier.SAW.UntypedAST as Un
 import qualified Verifier.SAW.Grammar as Un
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.Typechecker (tcInsertModule)
 
 -- | Parse an untyped module declaration from a byte-string
 readModule :: FilePath -> FilePath -> BL.ByteString -> Un.Module
