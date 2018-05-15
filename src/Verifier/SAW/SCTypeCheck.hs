@@ -232,6 +232,9 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     -- return $ show tm
     (\(ctx,_) -> "  " ++ scPrettyTermInCtx defaultPPOpts ctx tm) <$> ask
 
+instance Show TCError where
+  show = unlines . prettyTCError
+
 -- | Infer the type of a term using 'scTypeCheck', calling 'fail' on failure
 scTypeCheckError :: TypeInfer a => SharedContext -> a -> IO Term
 scTypeCheckError sc t0 =
