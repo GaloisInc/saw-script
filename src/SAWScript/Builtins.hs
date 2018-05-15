@@ -60,9 +60,9 @@ import Verifier.SAW.FiniteValue
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue, firstOrderTypeOf, fovVec
   )
-import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
-import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
+import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -70,7 +70,6 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
 import Verifier.SAW.TypedAST
-import qualified Verifier.SAW.UntypedAST as UntypedAST
 
 import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.SBVParser as SBV
@@ -87,7 +86,6 @@ import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concreteP
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop)
 
-import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
@@ -153,7 +151,7 @@ readSBV path unintlst =
        let schema = C.Forall [] [] (toCType (SBV.typOf pgm))
        trm <- io $ SBV.parseSBVPgm opts sc (\s _ -> Map.lookup s unintmap) pgm
        when (extraChecks opts) $ do
-         tcr <- io $ scTypeCheck sc trm
+         tcr <- io $ scTypeCheck sc Nothing trm
          case tcr of
            Left err ->
              printOutLnTop Error $ unlines $
@@ -266,10 +264,10 @@ replacePrim pat replace t = do
   let fvpat = looseVars tpat
   let fvrepl = looseVars trepl
 
-  unless (fvpat == 0) $ fail $ unlines
+  unless (fvpat == emptyBitSet) $ fail $ unlines
     [ "pattern term is not closed", show tpat ]
 
-  unless (fvrepl == 0) $ fail $ unlines
+  unless (fvrepl == emptyBitSet) $ fail $ unlines
     [ "replacement term is not closed", show trepl ]
 
   io $ do
@@ -469,11 +467,8 @@ trivial = withFirstGoal $ \goal -> do
   return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
-    checkTrue t =
-      case unwrapTermF t of
-        Lambda _ _ t' -> checkTrue t'
-        FTermF (CtorApp "Prelude.True" []) -> return ()
-        _ -> fail "trivial: not a trivial goal"
+    checkTrue (asLambdaList -> (_, asBool -> Just True)) = return ()
+    checkTrue _ = fail "trivial: not a trivial goal"
 
 split_goal :: ProofScript ()
 split_goal =
@@ -511,7 +506,8 @@ print_term t = do
 print_term_depth :: Int -> Term -> TopLevel ()
 print_term_depth d t = do
   opts <- getTopLevelPPOpts
-  printOutLnTop Info $ show (ppTermDepth opts d t)
+  let opts' = opts { ppMaxDepth = Just d }
+  printOutLnTop Info $ show (scPrettyTerm opts' t)
 
 print_goal :: ProofScript ()
 print_goal = withFirstGoal $ \goal -> do
@@ -523,8 +519,9 @@ print_goal = withFirstGoal $ \goal -> do
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  let opts' = opts { ppMaxDepth = Just n }
   printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-  printOutLnTop Info $ show (ppTermDepth opts n (goalTerm goal))
+  printOutLnTop Info $ scPrettyTerm opts' (goalTerm goal)
   return ((), mempty, Just goal)
 
 printGoalConsts :: ProofScript ()
@@ -987,9 +984,9 @@ quickCheckPrintPrim opts sc numTests tt = do
 cryptolSimpset :: TopLevel Simpset
 cryptolSimpset = do
   sc <- getSharedContext
-  io $ scSimpset sc cryptolDefs [] []
-  where cryptolDefs = filter (not . excluded) $
-                      moduleDefs CryptolSAW.cryptolModule
+  m <- io $ scFindModule sc (mkModuleName ["Cryptol"])
+  io $ scSimpset sc (cryptolDefs m) [] []
+  where cryptolDefs m = filter (not . excluded) $ moduleDefs m
         excluded d = defIdent d `elem` [ "Cryptol.fix" ]
 
 addPreludeEqs :: [String] -> Simpset
@@ -1017,7 +1014,8 @@ addPreludeDefs names ss = do
   return (addRules defRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
           getDef sc n =
-            case findDef (scModule sc) (qualify n) of
+            scFindDef sc (qualify n) >>= \maybe_def ->
+            case maybe_def of
               Just d -> return d
               Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
 
@@ -1123,7 +1121,8 @@ cexEvalFn sc args tm = do
   let is = map ecVarIndex exts
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
-  return $ Concrete.evalSharedTerm (scModule sc) concretePrimitives tm'
+  modmap <- scGetModuleMap sc
+  return $ Concrete.evalSharedTerm modmap concretePrimitives tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)
@@ -1205,7 +1204,7 @@ eval_bool t = do
     _ -> fail "eval_bool: not type Bit"
   unless (null (getAllExts (ttTerm t))) $
     fail "eval_bool: term contains symbolic variables"
-  v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t
+  v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t
   return (C.fromVBit v)
 
 eval_int :: TypedTerm -> TopLevel Integer
@@ -1220,7 +1219,7 @@ eval_int t = do
   case ttSchema t' of
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
-  v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t'
+  v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
   io $ C.runEval SV.quietEvalOpts (C.fromWord "eval_int" v)
 
 -- Predicate on Cryptol types true of integer types, i.e. types
@@ -1285,11 +1284,10 @@ parseCore input = do
   mapM_ (printOutLnTop Opts.Error . show) errs
   unless (null errs) $ fail $ show errs
   let mnm = Just $ mkModuleName ["Prelude"]
-      pos = Position.Pos base path 0 0
-  err_or_t <- io $ runTCM (typeInferComplete uterm) mnm []
+  err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
   case err_or_t of
     Left err -> fail (show err)
-    Right (TypedTerm x _) -> return x
+    Right (TC.TypedTerm x _) -> return x
 
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do

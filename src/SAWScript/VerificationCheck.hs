@@ -13,6 +13,7 @@ import qualified Cryptol.Eval.Monad as CV
 import qualified Cryptol.Eval.Value as CV
 import Verifier.SAW.Cryptol (exportValueWithSchema, scCryptolType)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 import Verifier.SAW.Simulator.Concrete (CValue)
 import Text.PrettyPrint.ANSI.Leijen
 
@@ -43,7 +44,7 @@ vcCounterexample :: SharedContext -> SV.PPOpts -> VerificationCheck -> Counterex
 vcCounterexample _ opts (AssertionCheck nm n) _ = do
   let opts' = defaultPPOpts { ppBase = SV.ppOptsBase opts }
   return $ text ("Assertion " ++ nm ++ " is unsatisfied:") <+>
-           scPrettyTermDoc opts' n
+           ppTerm opts' n
 vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
   do ln <- evalFn impNode
      sn <- evalFn specNode
@@ -70,11 +71,11 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
 ppCheck :: VerificationCheck -> Doc
 ppCheck (AssertionCheck nm tm) =
   hsep [ text (nm ++ ":")
-       , scPrettyTermDoc defaultPPOpts tm
+       , ppTerm defaultPPOpts tm
        ]
 ppCheck (EqualityCheck nm tm tm') =
   hsep [ text (nm ++ ":")
-       , scPrettyTermDoc defaultPPOpts tm
+       , ppTerm defaultPPOpts tm
        , text ":="
-       , scPrettyTermDoc defaultPPOpts tm'
+       , ppTerm defaultPPOpts tm'
        ]

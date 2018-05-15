@@ -61,7 +61,6 @@ import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value
 import Verifier.SAW.Conversion
-import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
@@ -349,12 +348,13 @@ interpretMain = do
 buildTopLevelEnv :: Options -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
 buildTopLevelEnv opts =
     do let mn = mkModuleName ["SAWScript"]
-       let scm = insImport preludeModule $
-                 insImport JavaSAW.javaModule $
-                 insImport LLVMSAW.llvmModule $
-                 insImport CryptolSAW.cryptolModule $
-                 emptyModule mn
-       sc0 <- mkSharedContext scm
+       sc0 <- mkSharedContext
+       CryptolSAW.scLoadPreludeModule sc0
+       JavaSAW.scLoadJavaModule sc0
+       LLVMSAW.scLoadLLVMModule sc0
+       CryptolSAW.scLoadCryptolModule sc0
+       scLoadModule sc0 (emptyModule mn)
+       cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
        let convs = natConversions
                    ++ bvConversions
                    ++ vecConversions
@@ -363,7 +363,7 @@ buildTopLevelEnv opts =
                       , remove_ident_coerce
                       , remove_ident_unsafeCoerce
                       ]
-           cryptolDefs = filter defPred $ allModuleDefs CryptolSAW.cryptolModule
+           cryptolDefs = filter defPred $ moduleDefs cryptol_mod
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
@@ -446,7 +446,8 @@ print_value (VTerm t) = do
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
                               }
-  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' (evaluateTypedTerm sc t'))
+  evaled_t <- io $ evaluateTypedTerm sc t'
+  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' evaled_t)
   io (rethrowEvalError $ print $ doc)
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW

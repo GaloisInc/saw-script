@@ -36,7 +36,7 @@ import Verifier.Java.SAWBackend
 import Verifier.SAW.Cryptol (exportFirstOrderValue)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.FiniteValue (FirstOrderValue)
-import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import Verifier.SAW.SharedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
@@ -284,7 +284,7 @@ doExtraChecks :: Options -> SharedContext -> Term -> IO ()
 doExtraChecks opts bsc t = do
   when (extraChecks opts) $ do
     printOutLn opts Info "Type checking goal..."
-    tcr <- scTypeCheck bsc t
+    tcr <- scTypeCheck bsc Nothing t
     case tcr of
       Left e -> printOutLn opts Warn $ unlines $
                 "Ill-typed goal constructed." : prettyTCError e
