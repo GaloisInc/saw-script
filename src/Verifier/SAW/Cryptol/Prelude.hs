@@ -12,13 +12,11 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Cryptol.Prelude
   ( Module
   , module Verifier.SAW.Cryptol.Prelude
+  , scLoadPreludeModule
   ) where
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.ParserUtils
 
-$(runDecWriter $ do
-    prelude <- defineImport [|preludeModule|] preludeModule
-    cryptol <- defineModuleFromFile [prelude] "cryptolModule" "saw/Cryptol.sawcore"
-    declareSharedModuleFns "Cryptol" (decVal cryptol)
- )
+$(defineModuleFromFileWithFns
+  "cryptolModule" "scLoadCryptolModule" "saw/Cryptol.sawcore")

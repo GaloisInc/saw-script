@@ -20,7 +20,7 @@ import           Cryptol.Utils.Logger (quietLogger)
 import qualified Verifier.SAW.Cryptol as C
 import           Verifier.SAW.Cryptol.Prims
 import           Verifier.SAW.SharedTerm
-import qualified Verifier.SAW.Cryptol.Prelude
+import qualified Verifier.SAW.Cryptol.Prelude as C
 
 
 import qualified Data.ABC as ABC
@@ -107,8 +107,9 @@ cssMain _ _ = do
 
 processModule :: CM.ModuleEnv -> FilePath -> String -> IO ()
 processModule menv fout funcName = do
-   let m = Verifier.SAW.Cryptol.Prelude.cryptolModule
-   sc <- mkSharedContext m
+   sc <- mkSharedContext
+   C.scLoadPreludeModule sc
+   C.scLoadCryptolModule sc
    tm <- extractCryptol sc menv funcName
    writeAIG sc fout tm
 

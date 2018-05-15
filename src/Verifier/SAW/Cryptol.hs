@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol
@@ -43,7 +44,7 @@ import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, mkModuleName, findDef)
+import Verifier.SAW.TypedAST (mkSort, mkModuleName, showTerm)
 import qualified Verifier.SAW.Recognizer as R
 
 unimplemented :: Monad m => String -> m a
@@ -159,8 +160,8 @@ importType sc env ty =
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> fail "internal error: importType TVBound"
     C.TUser _ _ t  -> go t
-    C.TRec fs -> scRecordType sc =<< traverse go tm
-      where tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- fs ]
+    C.TRec fs -> scRecordType sc =<< mapM (\(f,t) -> (f,) <$> go t) tm
+      where tm = [ (C.unpackIdent n, t) | (n, t) <- fs ]
     C.TCon tcon tyargs ->
       case tcon of
         C.TC tc ->
@@ -704,7 +705,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      -- the types of the declarations
      ts <- mapM (importSchema sc env . C.dSignature) decls
      -- the type of the recursive record
-     rect <- scRecordType sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) ts
+     rect <- scRecordType sc $ zip (map (nameToString . C.dName) decls) ts
      -- shift the environment by one more variable to make room for our recursive record
      let env2 = liftEnv env1 { envS = rect : envS env1 }
 
@@ -947,9 +948,10 @@ asCryptolTypeValue v =
 
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
-  case asCryptolTypeValue (SC.evalSharedTerm (scModule sc) Map.empty t) of
+  scGetModuleMap sc >>= \modmap ->
+  case asCryptolTypeValue (SC.evalSharedTerm modmap Map.empty t) of
     Just ty -> return ty
-    Nothing -> fail $ "scCryptolType: unsupported type " ++ scPrettyTerm defaultPPOpts t
+    Nothing -> fail $ "scCryptolType: unsupported type " ++ showTerm t
 
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y = do
@@ -974,9 +976,10 @@ scCryptolEq sc x y = do
     defs1 = map (mkIdent (mkModuleName ["Prelude"])) ["bitvector"]
     defs2 = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ty"]
     defRewrites ident =
-      case findDef (scModule sc) ident of
-        Nothing -> return []
-        Just def -> scDefRewriteRules sc def
+      do maybe_def <- scFindDef sc ident
+         case maybe_def of
+           Nothing -> return []
+           Just def -> scDefRewriteRules sc def
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.

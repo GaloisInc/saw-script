@@ -41,8 +41,7 @@ data Num :: sort 0 where {
 
 Num_rec :: (p:: Num -> sort 1) -> ((n::Nat) -> p (TCNum n)) -> p TCInf ->
            (n::Num) -> p n;
-Num_rec p f1 f2 (TCNum n) = f1 n;
-Num_rec p f1 f2 TCInf = f2;
+Num_rec p f1 f2 n = Num#rec p f1 f2 n;
 
 -- Helper function: take a Num that we expect to be finite, and extract its Nat,
 -- raising an error if that Num is not finite
@@ -168,12 +167,12 @@ ceilModNat :: Nat -> Nat -> Nat;
 ceilModNat x y = subNat (mulNat (ceilDivNat x y) y) x;
 
 tcCeilDiv :: Num -> Num -> Num;
-tcCeilDiv (TCNum x) (TCNum y) = TCNum (ceilDivNat x y);
--- other cases undefined
+toCeilDiv x y =
+  binaryNumFun ceilDivNat (\ (x::Nat) -> TCNum 0) (\ (y::Nat) -> TCInf) TCInf;
 
 tcCeilMod :: Num -> Num -> Num;
-tcCeilMod (TCNum x) (TCNum y) = TCNum (ceilModNat x y);
--- other cases undefined
+toCeilMod x y =
+  binaryNumFun ceilModNat (\ (x::Nat) -> TCNum 0) (\ (y::Nat) -> TCInf) TCInf;
 
 tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat x y w =
@@ -340,6 +339,7 @@ pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12) |
 emptyBinary :: #{} -> #{} -> #{};
 emptyBinary _ _ = {};
 
+{-
 fieldUnary :: (s :: String) -> (a b :: sort 0) -> (a -> a) -> (b -> b)
          -> #{ (s) :: a | b } -> #{ (s) :: a | b };
 fieldUnary s _ _ f g { (_) = x | y } = { (s) = f x | g y };
@@ -347,6 +347,7 @@ fieldUnary s _ _ f g { (_) = x | y } = { (s) = f x | g y };
 fieldBinary :: (s :: String) -> (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b)
             -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> #{ (s) :: a | b };
 fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g x2 y2 };
+-}
 
 funBinary :: (a b :: sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
@@ -389,10 +390,12 @@ pairCmp :: (a b :: sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Boo
 pairCmp a b f g x12 y12 k =
   f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
 
+{-
 fieldCmp :: (s :: String) -> (a b :: sort 0)
          -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
          -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> Bool -> Bool;
 fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
+-}
 
 errorCmp :: (a :: sort 0) -> a -> a -> Bool -> Bool;
 errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
@@ -415,8 +418,10 @@ PZeroSeq :: (n :: Num) -> (a :: sort 0) -> PZero a -> PZero (seq n a);
 PZeroSeq n a pa = { zero = seqConst n a pa.zero };
 
 PZeroSeqBool :: (n :: Num) -> PZero (seq n Bool);
-PZeroSeqBool (TCNum n) = { zero = bvNat n 0 };
-PZeroSeqBool TCInf = { zero = streamConst Bool False };
+PZeroSeqBool =
+  Num_rec (\ (n::Num) -> PZero (seq n Bool))
+          (\ (n::Nat) -> { zero = bvNat n 0 } )
+          ({ zero = streamConst Bool False });
 
 PZeroFun :: (a b :: sort 0) -> PZero b -> PZero (a -> b);
 PZeroFun a b pb = { zero = (\ (_ :: a) -> pb.zero) };
@@ -430,8 +435,10 @@ PZeroPair a b pa pb = { zero = (pa.zero | pb.zero) };
 PZeroEmpty :: PZero #{};
 PZeroEmpty = { zero = {} };
 
+{-
 PZeroField :: (s :: String) -> (a b :: sort 0) -> PZero a -> PZero b -> PZero #{ (s) :: a | b };
 PZeroField s a b pa pb = { zero = { (s) = pa.zero | pb.zero } };
+-}
 
 -- Logic class
 
@@ -468,8 +475,9 @@ PLogicStream a pa =
   };
 
 PLogicSeq :: (n :: Num) -> (a :: sort 0) -> PLogic a -> PLogic (seq n a);
-PLogicSeq (TCNum n) = PLogicVec n;
-PLogicSeq TCInf = PLogicStream;
+PLogicSeq =
+  Num_rec (\ (n::Num) -> (a::sort 0) -> PLogic a -> PLogic (seq n a))
+          (\ (n::Nat) -> PLogicVec n) PLogicStream;
 
 PLogicWord :: (n :: Nat) -> PLogic (Vec n Bool);
 PLogicWord n =
@@ -480,8 +488,9 @@ PLogicWord n =
   };
 
 PLogicSeqBool :: (n :: Num) -> PLogic (seq n Bool);
-PLogicSeqBool (TCNum n) = PLogicWord n;
-PLogicSeqBool TCInf = PLogicStream Bool PLogicBit;
+PLogicSeqBool =
+  Num_rec (\ (n::Num) -> PLogic (seq n Bool))
+          (\ (n::Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit);
 
 PLogicFun :: (a b :: sort 0) -> PLogic b -> PLogic (a -> b);
 PLogicFun a b pb =
@@ -515,6 +524,7 @@ PLogicEmpty =
   , not  = emptyUnary
   };
 
+{-
 PLogicField :: (s :: String) -> (a b :: sort 0) -> PLogic a -> PLogic b -> PLogic #{ (s) :: a | b };
 PLogicField s a b pa pb =
   { and  = fieldBinary s a b pa.and pb.and
@@ -522,6 +532,7 @@ PLogicField s a b pa pb =
   , xor  = fieldBinary s a b pa.xor pb.xor
   , not  = fieldUnary s a b pa.not pb.not
   };
+-}
 
 -- Arith class
 
@@ -582,8 +593,10 @@ PArithStream a pa =
   };
 
 PArithSeq :: (n :: Num) -> (a :: sort 0) -> PArith a -> PArith (seq n a);
-PArithSeq (TCNum n) = PArithVec n;
-PArithSeq TCInf = PArithStream;
+PArithSeq =
+  Num_rec (\ (n :: Num) -> (a :: sort 0) -> PArith a -> PArith (seq n a))
+          (\ (n::Nat) -> PArithVec n)
+          PArithStream;
 
 PArithWord :: (n :: Nat) -> PArith (Vec n Bool);
 PArithWord n =
@@ -602,7 +615,10 @@ PArithWord n =
   };
 
 PArithSeqBool :: (n :: Num) -> PArith (seq n Bool);
-PArithSeqBool (TCNum n) = PArithWord n;
+PArithSeqBool =
+  Num_rec (\ (n::Num) -> PArith (seq n Bool))
+          (\ (n::Nat) -> PArithWord n)
+          (error (PArith (Stream Bool)) "PArithSeqBool: no instance for streams");
 
 PArithFun :: (a b :: sort 0) -> PArith b -> PArith (a -> b);
 PArithFun a b pb =
@@ -660,6 +676,7 @@ PArithEmpty =
   , smod = emptyBinary
   };
 
+{-
 PArithField :: (s :: String) -> (a b :: sort 0) -> PArith a -> PArith b -> PArith #{ (s) :: a | b };
 PArithField s a b pa pb =
   { add = fieldBinary s a b pa.add pb.add
@@ -673,6 +690,7 @@ PArithField s a b pa pb =
   , sdiv = fieldBinary s a b pa.sdiv pb.sdiv
   , smod = fieldBinary s a b pa.smod pb.smod
   };
+-}
 
 -- Cmp class
 
@@ -689,15 +707,19 @@ PCmpVec :: (n :: Nat) -> (a :: sort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa = { cmp = vecCmp n a pa.cmp };
 
 PCmpSeq :: (n :: Num) -> (a :: sort 0) -> PCmp a -> PCmp (seq n a);
-PCmpSeq (TCNum n) a pa = PCmpVec n a pa;
-PCmpSeq TCInf a pa = { cmp = errorCmp (Stream a) };
+PCmpSeq =
+  Num_rec (\ (n::Num) -> (a :: sort 0) -> PCmp a -> PCmp (seq n a))
+          (\ (n::Nat) -> PCmpVec n)
+          (\ (a::sort 0) (pa :: PCmp a) -> { cmp = errorCmp (Stream a) });
 
 PCmpWord :: (n :: Nat) -> PCmp (Vec n Bool);
 PCmpWord n = { cmp = bvCmp n };
 
 PCmpSeqBool :: (n :: Num) -> PCmp (seq n Bool);
-PCmpSeqBool (TCNum n) = PCmpWord n;
-PCmpSeqBool TCInf = { cmp = errorCmp (Stream Bool) };
+PCmpSeqBool =
+  Num_rec (\ (n :: Num) -> PCmp (seq n Bool))
+          (\ (n::Nat) -> PCmpWord n)
+          ({ cmp = errorCmp (Stream Bool) });
 
 PCmpUnit :: PCmp #();
 PCmpUnit = { cmp = unitCmp };
@@ -708,8 +730,10 @@ PCmpPair a b pa pb = { cmp = pairCmp a b pa.cmp pb.cmp };
 PCmpEmpty :: PCmp #{};
 PCmpEmpty = { cmp = emptyCmp };
 
+{-
 PCmpField :: (s :: String) -> (a b :: sort 0) -> PCmp a -> PCmp b -> PCmp #{ (s) :: a | b };
 PCmpField s a b pa pb = { cmp = fieldCmp s a b pa.cmp pb.cmp };
+-}
 
 -- SignedCmp class
 
@@ -731,8 +755,10 @@ PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
 PSignedCmpEmpty :: PSignedCmp #{};
 PSignedCmpEmpty = { scmp = emptyCmp };
 
+{-
 PSignedCmpField :: (s :: String) -> (a b :: sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #{ (s) :: a | b };
 PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
+-}
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -752,13 +778,19 @@ ecDemote valnum bitsnum =
           bitsnum;
 
 ecInteger :: (val :: Num) -> Integer;
-ecInteger (TCNum val) = natToInt val;
+ecInteger =
+  Num_rec (\ (val::Num) -> Integer) natToInt
+          (error Integer "ecInteger called on TCInf");
 
 ecToInteger :: (n :: Num) -> seq n Bool -> Integer;
-ecToInteger (TCNum n) = bvToInt n;
+ecToInteger =
+  Num_rec (\ (n::Num) -> seq n Bool -> Integer) bvToInt
+          (error (Stream Bool -> Integer) "ecToInteger called on TCInf");
 
 ecFromInteger :: (n :: Num) -> Integer -> seq n Bool;
-ecFromInteger (TCNum n) = intToBv n;
+ecFromInteger =
+  Num_rec (\ (n::Num) -> Integer -> seq n Bool) intToBv
+          (error (Stream Bool -> Integer) "ecFromInteger called on TCInf");
 
 -- Arith
 ecPlus :: (a :: sort 0) -> PArith a -> a -> a -> a;
