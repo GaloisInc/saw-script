@@ -43,7 +43,7 @@ module Verifier.SAW.Term.Functor
   , alphaEquiv
   , alistAllFields, recordAListAsTuple, tupleAsRecordAList
     -- * Sorts
-  , Sort, mkSort, propSort, sortOf
+  , Sort, mkSort, propSort, sortOf, maxSort
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, completeBitSet
@@ -204,6 +204,11 @@ propSort = PropSort
 sortOf :: Sort -> Sort
 sortOf (TypeSort i) = TypeSort (i + 1)
 sortOf PropSort = TypeSort 0
+
+-- | Get the maximum sort in a list, returning Prop for the empty list
+maxSort :: [Sort] -> Sort
+maxSort [] = propSort
+maxSort ss = maximum ss
 
 
 -- External Constants ----------------------------------------------------------

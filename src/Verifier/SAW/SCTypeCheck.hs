@@ -439,8 +439,10 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (RecursorApp d params p_ret cs_fs ixs arg) =
     inferRecursorApp d params p_ret cs_fs ixs arg
   typeInfer (RecordType elems) =
+    -- NOTE: record types are always predicative, i.e., non-Propositional, so we
+    -- ensure below that we return at least sort 0
     do sorts <- mapM (ensureSort . typedType . snd) elems
-       liftTCM scSort (maximum sorts)
+       liftTCM scSort (maxSort $ mkSort 0 : sorts)
   typeInfer (RecordValue elems) =
     liftTCM scFlatTermF $ RecordType $
     map (\(f,TypedTerm _ tp) -> (f,tp)) elems
