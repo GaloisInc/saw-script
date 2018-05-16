@@ -583,4 +583,5 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
      arg_req_tp <-
        liftTCM scFlatTermF $ fmap typedVal $ DataTypeApp d params ixs
      checkSubtype arg arg_req_tp
-     liftTCM scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg]))
+     liftTCM scApplyAll (typedVal p_ret) (map typedVal (ixs ++ [arg])) >>=
+       liftTCM scTypeCheckWHNF
