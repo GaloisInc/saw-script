@@ -167,16 +167,12 @@ ceilModNat :: Nat -> Nat -> Nat;
 ceilModNat x y = subNat (mulNat (ceilDivNat x y) y) x;
 
 tcCeilDiv :: Num -> Num -> Num;
-toCeilDiv x y =
+tcCeilDiv =
   binaryNumFun ceilDivNat (\ (x::Nat) -> TCNum 0) (\ (y::Nat) -> TCInf) TCInf;
 
 tcCeilMod :: Num -> Num -> Num;
-toCeilMod x y =
+tcCeilMod =
   binaryNumFun ceilModNat (\ (x::Nat) -> TCNum 0) (\ (y::Nat) -> TCInf) TCInf;
-
-tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
-tcLenFromThen_Nat x y w =
-  tcLenFromThenTo_Nat x y (ite__def Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
 
 tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThenTo_Nat x y z =
@@ -185,6 +181,10 @@ tcLenFromThenTo_Nat x y z =
               (addNat (divNat (subNat z x) (subNat y x)) 1)) -- increasing
     (ite__def Nat (ltNat x z) 0
               (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
+
+tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThen_Nat x y w =
+  tcLenFromThenTo_Nat x y (ite__def Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThen = trinaryNumFun tcLenFromThen_Nat TCInf;
@@ -790,7 +790,7 @@ ecToInteger =
 ecFromInteger :: (n :: Num) -> Integer -> seq n Bool;
 ecFromInteger =
   Num_rec (\ (n::Num) -> Integer -> seq n Bool) intToBv
-          (error (Stream Bool -> Integer) "ecFromInteger called on TCInf");
+          (error (Integer -> Stream Bool) "ecFromInteger called on TCInf");
 
 -- Arith
 ecPlus :: (a :: sort 0) -> PArith a -> a -> a -> a;
@@ -1160,31 +1160,6 @@ ecError a =
   finNumRec
     (\ (len::Num) -> seq len (bitvector 8) -> a)
     (\ (len::Nat) -> cryError a len);
-
--- Polynomials
-ecPMul :: (a b :: Num) -> seq (tcAdd (TCNum 1) a) Bool ->
-          seq (tcAdd (TCNum 1) b) Bool ->
-          seq (tcAdd (TCNum 1) (tcAdd a b)) Bool;
-ecPMul =
- finNumRec2
-    (\ (a::Num) -> \ (b::Num) -> seq (tcAdd (TCNum 1) a) Bool ->
-       seq (tcAdd (TCNum 1) b) Bool ->
-       seq (tcAdd (TCNum 1) (tcAdd a b)) Bool)
-    bvPMul;
-
-ecPDiv :: (a b :: Num) -> seq a Bool -> seq b Bool -> seq a Bool;
-ecPDiv =
-  finNumRec2
-    (\ (a::Num) -> \ (b::Num) -> seq a Bool -> seq b Bool -> seq a Bool)
-    bvPDiv;
-
-ecPMod :: (a b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool ->
-          seq b Bool;
-ecPMod =
-  finNumRec2
-    (\ (a::Num) -> \ (b :: Num) -> seq a Bool -> seq (tcAdd (TCNum 1) b) Bool ->
-       seq b Bool)
-    bvPMod;
 
 -- Random values
 ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
