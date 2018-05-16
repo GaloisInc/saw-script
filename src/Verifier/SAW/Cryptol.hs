@@ -789,11 +789,21 @@ proveEq sc env t1 t2
            aEq <- proveEq sc env a1 a2
            bEq <- proveEq sc env b1 b2
            scGlobalApply sc "Cryptol.funEq" [a1', a2', b1', b2', aEq, bEq]
-      (C.tIsTuple -> Just ts1, C.tIsTuple -> Just ts2)
+      (C.tIsTuple -> Just (a1 : ts1), C.tIsTuple -> Just (a2 : ts2))
         | length ts1 == length ts2 ->
-          do --ts1' <- traverse (importType sc env) ts1
-             --ts2' <- traverse (importType sc env) ts2
-             fail $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
+          do let b1 = C.tTuple ts1
+                 b2 = C.tTuple ts2
+             a1' <- importType sc env a1
+             a2' <- importType sc env a2
+             b1' <- importType sc env b1
+             b2' <- importType sc env b2
+             aEq <- proveEq sc env a1 a2
+             bEq <- proveEq sc env b1 b2
+             if b1 == b2
+               then scGlobalApply sc "Cryptol.pairEq1" [a1', a2', b1', aEq]
+               else if a1 == a2
+                    then scGlobalApply sc "Cryptol.pairEq2" [a1', b1', b2', bEq]
+                    else scGlobalApply sc "Cryptol.pairEq" [a1', a2', b1', b2', aEq, bEq]
       (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
         | map fst ts1 == map fst ts2 ->
           do fail $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]

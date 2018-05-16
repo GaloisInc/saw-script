@@ -143,12 +143,17 @@ funEq :: (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
   Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) (a -> c) (b -> d);
 funEq _ _ _ _ (Refl _ a) (Refl _ c) = Refl (sort 0) (a -> c);
 
-unitEq :: Eq (sort 0) #() #();
-unitEq = Refl (sort 0) #();
+pairEq :: (a :: sort 0) -> (a' :: sort 0) -> (b :: sort 0) -> (b' :: sort 0) ->
+  Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a' | b');
+pairEq _ _ _ _ (Refl _ a) (Refl _ b) = Refl (sort 0) #(a | b);
 
-pairEq :: (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
-  Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) #(a | c) #(b | d);
-pairEq _ _ _ _ (Refl _ a) (Refl _ c) = Refl (sort 0) #(a | c);
+pairEq1 :: (a :: sort 0) -> (a' :: sort 0) -> (b :: sort 0) ->
+  Eq (sort 0) a a' -> Eq (sort 0) #(a | b) #(a' | b);
+pairEq1 _ _ b (Refl _ a) = Refl (sort 0) #(a | b);
+
+pairEq2 :: (a :: sort 0) -> (b :: sort 0) -> (b' :: sort 0) ->
+  Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a | b');
+pairEq2 a _ _ (Refl _ b) = Refl (sort 0) #(a | b);
 
 emptyEq :: Eq (sort 0) #{} #{};
 emptyEq = Refl (sort 0) #{};
