@@ -45,6 +45,8 @@ import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Recognizer
+import Verifier.SAW.TypedAST
 import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
@@ -275,20 +277,43 @@ instance TypeInferCtx Un.TermVar Un.Term where
 processDecls :: [Un.Decl] -> TCM ()
 processDecls [] = return ()
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
-              Un.TermDef (PosPair _ ((== nm) -> True)) ctx body : rest) =
-  atPos p $
-  do typed_tp <- typeInferComplete tp
+              Un.TermDef (PosPair _ ((== nm) -> True)) vars body : rest) =
+  -- Type-checking for definitions
+  (atPos p $
+   do
+     -- Step 1: type-check the type annotation, and make sure it is a type
+     typed_tp <- typeInferComplete tp
      void $ ensureSort $ typedType typed_tp
-     real_ctx <- completeContext nm ctx $ fst $ Un.asPiList tp
-     typed_body <- typeInferComplete (Un.Lambda (pos body) real_ctx body)
-     checkSubtype typed_body (typedVal typed_tp)
+     def_tp <- liftTCM scTypeCheckWHNF (typedVal typed_tp)
+
+     -- Step 2: assign types to the bound variables of the definition, by
+     -- peeling off the pi-abstraction variables in the type annotation. Any
+     -- remaining body of the pi-type is the required type for the def body.
+     (ctx, req_body_tp) <-
+       case matchPiWithNames (map Un.termVarString vars) def_tp of
+         Just x -> return x
+         Nothing ->
+             throwTCError $
+             DeclError nm ("More variables " ++ show vars ++
+                           " than length of function type:\n" ++
+                           showTerm (typedVal typed_tp))
+
+     -- Step 3: type-check the body of the definition in the context of its
+     -- variables, and build a function that takes in those variables
+     def_tm <-
+       withCtx ctx $
+       do typed_body <- typeInferComplete body
+          checkSubtype typed_body req_body_tp
+          liftTCM scLambdaList ctx (typedVal typed_body)
+
+     -- Step 4: add the definition to the current module
      mnm <- getModuleName
      liftTCM scModifyModule mnm $ \m ->
        insDef m $ Def { defIdent = mkIdent mnm nm,
                         defQualifier = NoQualifier,
-                        defType = typedVal typed_tp,
-                        defBody = Just (typedVal typed_body) }
-     processDecls rest
+                        defType = def_tp,
+                        defBody = Just def_tm }) >>
+  processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
   atPos p $ throwTCError $ DeclError nm "Definition without defining equation"
@@ -296,16 +321,16 @@ processDecls (Un.TypeDecl _ (PosPair p nm) _ :
               Un.TermDef (PosPair _ ((== nm) -> True)) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Primitive or axiom with definition"
 processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
-  atPos p $
-  do typed_tp <- typeInferComplete tp
-     void $ ensureSort $ typedType typed_tp
-     mnm <- getModuleName
-     liftTCM scModifyModule mnm $ \m ->
-       insDef m $ Def { defIdent = mkIdent mnm nm,
-                        defQualifier = q,
-                        defType = typedVal typed_tp,
-                        defBody = Nothing }
-     processDecls rest
+  (atPos p $
+   do typed_tp <- typeInferComplete tp
+      void $ ensureSort $ typedType typed_tp
+      mnm <- getModuleName
+      liftTCM scModifyModule mnm $ \m ->
+        insDef m $ Def { defIdent = mkIdent mnm nm,
+                         defQualifier = q,
+                         defType = typedVal typed_tp,
+                         defBody = Nothing }) >>
+  processDecls rest
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
   atPos p $ throwTCError $ DeclError nm "Dangling definition without a type"
 processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
@@ -315,7 +340,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 1: type-check the parameters
   typeInferCompleteInCtx param_ctx $ \params -> do
   let dtParams = map (\(x,tp,_) -> (x,tp)) params
-  let param_sort = maximum (propSort : map (\(_,_,s) -> s) params)
+  let param_sort = maxSort (map (\(_,_,s) -> s) params)
   let err :: String -> TCM a
       err msg = throwTCError $ DeclError nm msg
 
@@ -328,7 +353,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
       _ -> err "Wrong form for type of datatype"
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs
   let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed
-      ixs_max_sort = maximum (propSort : map (\(_,_,s) -> s) dt_ixs_typed)
+      ixs_max_sort = maxSort (map (\(_,_,s) -> s) dt_ixs_typed)
   dtType <- (liftTCM scPiList (dtParams ++ dtIndices)
              =<< liftTCM scSort dtSort)
 
@@ -337,9 +362,6 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   --
   -- 1. All ix types must be of sort dtSort; AND
   -- 2. All param types must be of sort dtSort+1
-  --
-  -- Note that the addition of propSort as an argument to maximum below is to
-  -- ensure that it is passed a non-empty list
   if dtSort /= propSort && param_sort > sortOf dtSort then
     err ("Universe level of parameters should be no greater \
          than that of the datatype")
@@ -400,37 +422,11 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
 -- Helper functions for type-checking modules
 --
 
--- | Test whether two variable names "match", meaning that they are equal and/or
--- at least one is an unused variable
-termVarsMatch :: Un.TermVar -> Un.TermVar -> Bool
-termVarsMatch (Un.TermVar v1) (Un.TermVar v2) | val v1 == val v2 = True
-termVarsMatch (Un.UnusedVar _) _ = True
-termVarsMatch _ (Un.UnusedVar _) = True
-termVarsMatch _ _ = False
-
--- | Take two term variables that match (as in 'termVarsMatch') and pick the
--- "most defined" one, i.e., the one that is not 'UnusedVar'
-combineTermVars :: Un.TermVar -> Un.TermVar -> Un.TermVar
-combineTermVars (Un.UnusedVar _) v2 = v2
-combineTermVars v1 _ = v1
-
--- | Complete a variable context that might be missing some types against a
--- function type it is intended to match by filling in any types missing in
--- the former with the corresponding type in the latter
-completeContext :: String -> [(Un.TermVar, Maybe Un.Term)] -> Un.TermCtx ->
-                   TCM Un.TermCtx
-completeContext _ [] _ = return []
-completeContext nm ((var, Just tp):ctx) ((var', _):ctx')
-  | termVarsMatch var var' =
-    ((combineTermVars var var', tp) :) <$> completeContext nm ctx ctx'
-completeContext nm ((var, Nothing):ctx) ((var', tp):ctx')
-  | termVarsMatch var var' =
-    ((combineTermVars var var', tp) :) <$> completeContext nm ctx ctx'
-completeContext nm ((var1, _):_) ((var2,_):_) =
-  throwTCError $ DeclError nm ("Definition variable " ++ Un.termVarString var1
-                               ++ " does not match variable used in type: "
-                               ++ Un.termVarString var2)
-completeContext nm ctx ctx' =
-  throwTCError $
-  DeclError nm ("More variables than length of function type:\n" ++
-                show ctx ++ "\n" ++ show ctx')
+-- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
+-- far as the supplied list of variables, and use them as the new names
+matchPiWithNames :: [String] -> Term -> Maybe ([(String,Term)],Term)
+matchPiWithNames [] tp = return ([], tp)
+matchPiWithNames (var:vars) (asPi -> Just (_, arg_tp, body_tp)) =
+  do (ctx,body) <- matchPiWithNames vars body_tp
+     return ((var,arg_tp):ctx,body)
+matchPiWithNames _ _ = Nothing

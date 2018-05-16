@@ -130,9 +130,8 @@ data Decl
    | DataDecl (PosPair String) TermCtx Term [CtorDecl]
      -- ^ A declaration of an inductive data types, with a name, a parameter
      -- context, a return type, and a list of constructor declarations
-   | TermDef (PosPair String) [(TermVar, Maybe Term)] Term
-     -- ^ A declaration of a term having a definition, with some variables that
-     -- are allowed to have or not have type annotations
+   | TermDef (PosPair String) [TermVar] Term
+     -- ^ A declaration of a term having a definition, with variables
   deriving (Show,Read)
 
 -- | A set of constraints on what 'String' names to import from a module

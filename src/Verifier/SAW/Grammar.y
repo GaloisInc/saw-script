@@ -105,7 +105,7 @@ SAWDecl : 'data' Ident VarCtx '::' LTerm 'where' '{' list(CtorDecl) '}'
         | 'axiom' Ident '::' LTerm ';'
              { TypeDecl AxiomQualifier $2 $4 }
         | Ident '::' LTerm ';' { TypeDecl NoQualifier $1 $3 }
-        | Ident DefVarCtx '=' LTerm ';' { TermDef $1 $2 $4 }
+        | Ident list(TermVar) '=' LTerm ';' { TermDef $1 $2 $4 }
 
 ModuleImports :: { ImportConstraint }
 ModuleImports : 'hiding' ImportNames { HidingImports $2 }
