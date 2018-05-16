@@ -61,7 +61,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, showTerm)
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), asFirstOrderType)
 
 data SBV
@@ -503,26 +503,59 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-asPredType :: SharedContext -> Term -> IO [Term]
-asPredType sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
-    (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "non-boolean result type: " ++ showTerm t'
+asPredType :: SValue -> IO [SValue]
+asPredType v =
+  case v of
+    VDataType "Prelude.Bool" [] -> return []
+    VPiType v1 f ->
+      do v2 <- f (error "asPredType: unsupported dependent SAW-Core type")
+         vs <- asPredType v2
+         return (v1 : vs)
+    _ -> fail $ "non-boolean result type: " ++ show v
+
+vAsFirstOrderType :: SValue -> Maybe FirstOrderType
+vAsFirstOrderType v =
+  case v of
+    VDataType "Prelude.Bool" []
+      -> return FOTBit
+    VDataType "Prelude.Integer" []
+      -> return FOTInt
+    VDataType "Prelude.Vec" [VNat n, v2]
+      -> FOTVec (fromInteger n) <$> vAsFirstOrderType v2
+    VUnitType
+      -> return (FOTTuple [])
+    VPairType v1 v2
+      -> do t1 <- vAsFirstOrderType v1
+            t2 <- vAsFirstOrderType v2
+            case t2 of
+              FOTTuple ts -> return (FOTTuple (t1 : ts))
+              _ -> Nothing
+    VEmptyType
+      -> return (FOTRec Map.empty)
+    VFieldType k v1 v2
+      -> do t1 <- vAsFirstOrderType v1
+            t2 <- vAsFirstOrderType v2
+            case t2 of
+              FOTRec tm -> return (FOTRec (Map.insert k t1 tm))
+              _ -> Nothing
+    _ -> Nothing
 
 sbvSolve :: SharedContext
          -> Map Ident SValue
          -> [String]
          -> Term
-         -> IO ([Labeler], Symbolic SBool)
+         -> IO ([Maybe Labeler], Symbolic SBool)
 sbvSolve sc addlPrims unints t = do
-  ty <- scTypeOf sc t
-  argTs <- asPredType sc ty
-  shapes <- traverse (asFirstOrderType sc) argTs
   modmap <- scGetModuleMap sc
-  bval <- sbvSolveBasic modmap addlPrims unints t
-  (labels, vars) <- flip evalStateT 0 $ unzip <$> traverse newVars shapes
+  let eval = sbvSolveBasic modmap addlPrims unints
+  ty <- eval =<< scTypeOf sc t
+  let argNames = map fst (fst (R.asLambdaList t))
+  let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
+  argTs <- asPredType ty
+  (labels, vars) <-
+    flip evalStateT 0 $ unzip <$>
+    sequence (zipWith newVarsForType argTs (argNames ++ moreNames))
+  bval <- eval t
   let prd = do
               bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
               case bval' of
@@ -547,6 +580,16 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
 myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
 myfun = fmap fst A.&&& fmap snd
+
+newVarsForType :: SValue -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
+newVarsForType v nm =
+  case vAsFirstOrderType v of
+    Just fot ->
+      do (l, sv) <- newVars fot
+         return (Just l, sv)
+    Nothing ->
+      do sv <- lift $ parseUninterpreted [] nm v
+         return (Nothing, return sv)
 
 newVars :: FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
 newVars FOTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
