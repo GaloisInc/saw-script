@@ -460,8 +460,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
           GlobalDef{}      -> return ftf
-          FloatLit{}       -> return ftf
-          DoubleLit{}      -> return ftf
           StringLit{}      -> return ftf
           ExtCns{}         -> return ftf
     rewriteTop :: (?cache :: Cache IORef TermIndex Term) =>

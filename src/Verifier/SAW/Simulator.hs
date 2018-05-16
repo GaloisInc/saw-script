@@ -172,8 +172,6 @@ evalTermF cfg lam recEval tf env =
         Sort {}             -> return VType
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
-        FloatLit float      -> return $ VFloat float
-        DoubleLit double    -> return $ VDouble double
         StringLit s         -> return $ VString s
         ExtCns ec           -> do v <- recEval (ecType ec)
                                   simExtCns cfg (ecVarIndex ec) (ecName ec) v

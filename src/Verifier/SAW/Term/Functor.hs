@@ -295,11 +295,7 @@ data FlatTermF e
   | NatLit !Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
-    -- | Floating point literal
-  | FloatLit !Float
-    -- | Double precision floating point literal.
-  | DoubleLit !Double
-    -- | String literal.
+    -- | String literal
   | StringLit !String
 
     -- | An external constant with a name.
@@ -384,10 +380,6 @@ zipWithFlatTermF f = go
 
     go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
-    go (FloatLit fx) (FloatLit fy)
-      | fx == fy = Just $ FloatLit fx
-    go (DoubleLit fx) (DoubleLit fy)
-      | fx == fy = Just $ DoubleLit fx
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
       | V.length vx == V.length vy

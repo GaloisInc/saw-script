@@ -1246,7 +1246,7 @@ bvTrunc = drop Bool;
 -- the n-bit vector x.
 -- msb implementation:
 bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat m n);
-bvUExt m n x = append m n Bool (replicate m Bool False) x;
+bvUExt m n x = append m n Bool (bvNat m 0) x;
 -- lsb implementation:
 -- bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat n m);
 -- bvUExt m n a = append n m Bool x (bvNat m 0);
@@ -1254,11 +1254,14 @@ bvUExt m n x = append m n Bool (replicate m Bool False) x;
 -- | Perform a signed extension of the bitvector.
 -- msb implementation:
 bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat m (Succ n));
-bvSExt m n x = append m (Succ n) Bool (replicate m Bool (msb n x)) x;
+bvSExt m n x = append m (Succ n) Bool (replicateBool m (msb n x)) x;
 -- lsb implementation:
 -- bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
--- bvSExt m n x = append (Succ n) m Bool x (replicate m Bool (msb n x));
+-- bvSExt m n x = append (Succ n) m Bool x (replicateBool m (msb n x));
 
+-- | 'replicateBool' is an version of 'replicate' optimized for type Bool.
+replicateBool :: (n :: Nat) -> Bool -> bitvector n;
+replicateBool n b = ite (bitvector n) b (bvNot n (bvNat n 0)) (bvNat n 0);
 
 --------------------------------------------------------------------------------
 -- Infinite streams
@@ -1380,11 +1383,15 @@ updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 
 primitive Float :: sort 0;
 
+-- mkFloat m e = m * 2^^e
+primitive mkFloat :: Integer -> Integer -> Float;
 -- primitive bvToFloat :: bitvector 32 -> Float;
 -- primitive floatToBV :: Float -> bitvector 32;
 
 primitive Double :: sort 0;
 
+-- mkDouble m e = m * 2^^e
+primitive mkDouble :: Integer -> Integer -> Float;
 -- primitive bvToDouble :: bitvector 64 -> Double;
 -- primitive doubleToBV :: Double -> bitvector 64;
 

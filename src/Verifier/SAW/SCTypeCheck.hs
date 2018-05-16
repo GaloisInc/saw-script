@@ -459,8 +459,6 @@ instance TypeInfer (FlatTermF TypedTerm) where
        tp' <- typeCheckWHNF tp
        forM_ vs $ \v_elem -> checkSubtype v_elem tp'
        liftTCM scVecType n tp'
-  typeInfer (FloatLit{}) = liftTCM scFlatTermF preludeFloatType
-  typeInfer (DoubleLit{}) = liftTCM scFlatTermF preludeDoubleType
   typeInfer (StringLit{}) = liftTCM scFlatTermF preludeStringType
   typeInfer (ExtCns ec) =
     -- FIXME: should we check that the type of ecType is a sort?

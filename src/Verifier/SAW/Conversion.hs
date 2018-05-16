@@ -55,8 +55,6 @@ module Verifier.SAW.Conversion
   , asSort
   , asAnyNatLit
   , asAnyVecLit
-  , asAnyFloatLit
-  , asAnyDoubleLit
   , asExtCns
   , asLocalVar
     -- ** Prelude matchers
@@ -90,6 +88,7 @@ module Verifier.SAW.Conversion
   , natConversions
   , vecConversions
   , bvConversions
+  , zero_NatLit
   , succ_NatLit
   , addNat_NatLit
   , append_VecLit
@@ -301,14 +300,6 @@ asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
 -- | Match a Vec literal
 asAnyVecLit :: (Monad m) => Matcher m (Term, V.Vector Term)
 asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
-
--- | Match a Float literal
-asAnyFloatLit :: (Monad m) => Matcher m Float
-asAnyFloatLit = asVar $ \t -> do FloatLit i <- R.asFTermF t; return i
-
--- | Match a Double literal
-asAnyDoubleLit :: (Monad m) => Matcher m Double
-asAnyDoubleLit = asVar $ \t -> do DoubleLit i <- R.asFTermF t; return i
 
 -- | Match any external constant.
 asExtCns :: (Monad m) => Matcher m (ExtCns Term)
@@ -575,9 +566,15 @@ eq_Record = Conversion $ thenMatcher matcher action
 
 -- | Conversions for operations on Nat literals
 natConversions :: [Conversion]
-natConversions = [ succ_NatLit, addNat_NatLit, subNat_NatLit, mulNat_NatLit
-                 , expNat_NatLit, divNat_NatLit, remNat_NatLit, equalNat_NatLit
+natConversions = [ zero_NatLit, succ_NatLit, addNat_NatLit, subNat_NatLit
+                 , mulNat_NatLit, expNat_NatLit, divNat_NatLit, remNat_NatLit
+                 , equalNat_NatLit
                  ]
+
+zero_NatLit :: Conversion
+zero_NatLit =
+    Conversion $
+    thenMatcher (asCtor "Prelude.Zero" asEmpty) (\_ -> return $ mkNatLit 0)
 
 succ_NatLit :: Conversion
 succ_NatLit =

@@ -109,8 +109,6 @@ scWriteExternal t0 =
             NatLit n            -> unwords ["Nat", show n]
             ArrayValue e v      -> unwords ("Array" : show e :
                                             map show (V.toList v))
-            FloatLit x          -> unwords ["Float", show x]
-            DoubleLit x         -> unwords ["Double", show x]
             StringLit s         -> unwords ["String", show s]
             ExtCns ext          -> unwords ("ExtCns" : writeExtCns ext)
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
@@ -166,8 +164,6 @@ scReadExternal sc input =
         ["Nat", n]          -> FTermF (NatLit (read n))
         ("Array" : e : es)  -> FTermF (ArrayValue (read e)
                                        (V.fromList (map read es)))
-        ["Float", x]        -> FTermF (FloatLit (read x))
-        ["Double", x]       -> FTermF (DoubleLit (read x))
         ("String" : ts)     -> FTermF (StringLit (read (unwords ts)))
         ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
         _ -> error $ "Parse error: " ++ unwords tokens

@@ -76,11 +76,16 @@ data Value l
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
-type family EvalM l :: * -> * -- ^ Evaluation monad for value instantiation 'l'
-type family VBool l :: *      -- ^ Booleans for value instantiation 'l'
-type family VWord l :: *      -- ^ Words for value instantiation 'l'
-type family VInt  l :: *      -- ^ Integers for value instantiation 'l'
-type family Extra l :: *      -- ^ Additional constructors for instantiation 'l'
+-- | Evaluation monad for value instantiation 'l'
+type family EvalM l :: * -> *
+-- | Booleans for value instantiation 'l'
+type family VBool l :: *
+-- | Words for value instantiation 'l'
+type family VWord l :: *
+-- | Integers for value instantiation 'l'
+type family VInt  l :: *
+-- | Additional constructors for instantiation 'l'
+type family Extra l :: *
 
 -- | Short-hand for a monadic value.
 type MValue l     = EvalM l (Value l)

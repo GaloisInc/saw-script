@@ -52,11 +52,14 @@ import Verifier.SAW.Term.Functor
 
 -- | Global options for pretty-printing
 data PPOpts = PPOpts { ppBase :: Int
+                     , ppColor :: Bool
+                     , ppShowLocalNames :: Bool
                      , ppMaxDepth :: Maybe Int }
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts { ppBase = 10, ppMaxDepth = Nothing }
+defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
+                         ppShowLocalNames = True, ppMaxDepth = Nothing }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -117,11 +120,13 @@ newtype VarNaming = VarNaming [String]
 emptyVarNaming :: VarNaming
 emptyVarNaming = VarNaming []
 
--- | Look up a string to use for a variable
-lookupVarName :: VarNaming -> DeBruijnIndex -> String
-lookupVarName (VarNaming names) i
-  | i >= length names = "<unbound#" ++ show i ++ ">"
-lookupVarName (VarNaming names) i = names!!i
+-- | Look up a string to use for a variable, if the first argument is 'True', or
+-- just print the variable number if the first argument is 'False'
+lookupVarName :: Bool -> VarNaming -> DeBruijnIndex -> String
+lookupVarName True (VarNaming names) i
+  | i >= length names = '!' : show (i - length names)
+lookupVarName True (VarNaming names) i = names!!i
+lookupVarName False _ i = '!' : show i
 
 -- | Generate a fresh name from a base name that does not clash with any names
 -- already in a given list, unless it is "_", in which case return it as is
@@ -185,9 +190,18 @@ instance MonadReader PPState PPM where
   ask = PPM ask
   local f (PPM m) = PPM $ local f m
 
+-- | Color a document, using the supplied function (1st argument), if the
+-- 'ppColor' option is set
+maybeColorM :: (Doc -> Doc) -> Doc -> PPM Doc
+maybeColorM f d =
+  (ppColor <$> ppOpts <$> ask) >>= \b ->
+  return ((if b then f else id) d)
+
 -- | Look up the given local variable by deBruijn index to get its name
 varLookupM :: DeBruijnIndex -> PPM String
-varLookupM idx = lookupVarName <$> (ppNaming <$> ask) <*> return idx
+varLookupM idx =
+  lookupVarName <$> (ppShowLocalNames <$> ppOpts <$> ask)
+  <*> (ppNaming <$> ask) <*> return idx
 
 -- | Test if a given term index is memoized, returning its memoization variable
 -- if so and otherwise returning 'Nothing'
@@ -288,6 +302,7 @@ ppLetBlock defs body =
   text " in" <+> body
   where
     ppEqn (var,d) = ppMemoVar var <+> char '=' <+> d
+
 
 -- | Pretty-print old-style tuples as "(x | y)"
 ppOldTuple :: Doc -> Doc -> Doc
@@ -425,10 +440,8 @@ ppFlatTermF prec tf =
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return i
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
-    FloatLit v  -> return $ text (show v)
-    DoubleLit v -> return $ text (show v)
     StringLit s -> return $ text s
-    ExtCns cns -> return $ text $ ecName cns
+    ExtCns cns -> maybeColorM dullred $ text $ ecName cns
 
 
 -- | Pretty-print a non-shared term
@@ -443,8 +456,8 @@ ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
-ppTermF _ (LocalVar x) = text <$> varLookupM x
-ppTermF _ (Constant str _ _) = return $ text str
+ppTermF _ (LocalVar x) = (text <$> varLookupM x) >>= maybeColorM dullgreen
+ppTermF _ (Constant str _ _) = maybeColorM dullblue $ text str
 
 
 -- | Internal function to recursively pretty-print a term
@@ -511,8 +524,6 @@ shouldMemoizeTerm t =
     FTermF Sort{} -> False
     FTermF NatLit{} -> False
     FTermF (ArrayValue _ v) | V.length v == 0 -> False
-    FTermF FloatLit{} -> False
-    FTermF DoubleLit{} -> False
     FTermF StringLit{} -> False
     FTermF ExtCns{} -> False
     LocalVar{} -> False

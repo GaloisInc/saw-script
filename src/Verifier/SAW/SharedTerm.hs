@@ -95,6 +95,7 @@ module Verifier.SAW.SharedTerm
   , scPi
   , scPiList
   , scLocalVar
+  , scConstant
   , scLookupDef
   , scSort
   , scUnitValue
@@ -148,6 +149,7 @@ module Verifier.SAW.SharedTerm
   , scSlice
   -- *** Integer primitives
   , scIntegerType
+  , scIntegerConst
   , scIntAdd, scIntSub, scIntMul
   , scIntDiv, scIntMod, scIntNeg
   , scIntMin, scIntMax
@@ -814,8 +816,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           n <- scNat sc (fromIntegral (V.length vs))
           vec_f <- scFlatTermF sc preludeVecTypeFun
           scApplyAll sc vec_f [n, tp]
-        FloatLit{}  -> lift $ scFlatTermF sc preludeFloatType
-        DoubleLit{} -> lift $ scFlatTermF sc preludeDoubleType
         StringLit{} -> lift $ scFlatTermF sc preludeStringType
         ExtCns ec   -> return $ ecType ec
 
@@ -1152,6 +1152,21 @@ scLocalVar :: SharedContext
            -> IO Term
 scLocalVar sc i = scTermF sc (LocalVar i)
 
+-- | Create an abstract constant with the specified name, body, and
+-- type. The term for the body must not have any loose de Bruijn
+-- indices. If the body contains any ExtCns variables, they will be
+-- abstracted over and reapplied to the resulting constant.
+scConstant :: SharedContext -> String -> Term -> Term -> IO Term
+scConstant sc name rhs ty =
+  do unless (looseVars rhs == emptyBitSet) $
+       fail "scConstant: term contains loose variables"
+     let ecs = getAllExts rhs
+     rhs' <- scAbstractExts sc ecs rhs
+     ty' <- scFunAll sc (map ecType ecs) ty
+     t <- scTermF sc (Constant name rhs' ty')
+     args <- mapM (scFlatTermF sc . ExtCns) ecs
+     scApplyAll sc t args
+
 scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
     do c <- scGlobalDef sc i
@@ -1262,6 +1277,11 @@ scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 scIntegerType :: SharedContext -> IO Term
 scIntegerType sc = scFlatTermF sc preludeIntegerType
+
+scIntegerConst :: SharedContext -> Integer -> IO Term
+scIntegerConst sc i
+  | i >= 0 = scNat sc (fromInteger i)
+  | otherwise = scIntNeg sc =<< scNat sc (fromInteger (- i))
 
 -- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
 scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin

@@ -94,8 +94,8 @@ instance Field2 (a :*: b) (a :*: b') b b' where
 type Recognizer m t a = t -> m a
 
 -- | Tries both recognizers.
-(<>) :: Alternative f => Recognizer f t a -> Recognizer f t a -> Recognizer f t a
-(<>) f g t = f t <|> g t
+orElse :: Alternative f => Recognizer f t a -> Recognizer f t a -> Recognizer f t a
+orElse f g t = f t <|> g t
 
 -- | Recognizes the head and tail of a list, and returns head.
 (<:) :: Monad f
@@ -298,7 +298,7 @@ asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 -- literal @k@ becomes @Succ (k-1)@
 asCtorOrNat :: (Alternative f, Monad f) =>
                Recognizer f Term (Ident, [Term], [Term])
-asCtorOrNat = asCtorParams <> (asNatLit >=> helper . toInteger) where
+asCtorOrNat = asCtorParams `orElse` (asNatLit >=> helper . toInteger) where
   helper 0 = return (preludeZeroIdent, [], [])
   helper k =
     if k > 0 then
@@ -405,8 +405,8 @@ asVecType = isVecType return
 asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNatLit)
-  <> ((isGlobalDef "Prelude.Vec" @> asNatLit)
-      <@ isDataType "Prelude.Bool" emptyl)
+  `orElse` ((isGlobalDef "Prelude.Vec" @> asNatLit)
+            <@ isDataType "Prelude.Bool" emptyl)
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return

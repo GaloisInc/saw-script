@@ -7,13 +7,13 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Constant (scConstant) where
+module Verifier.SAW.Constant (scConst) where
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Conversion
 
-scConstant :: SharedContext -> String -> Term -> IO Term
-scConstant sc name t = do
+scConst :: SharedContext -> String -> Term -> IO Term
+scConst sc name t = do
   ty <- scTypeOf sc t
   ty' <- rewriteSharedTerm sc (addConvs natConversions emptySimpset) ty
-  scTermF sc (Constant name t ty')
+  scConstant sc name t ty'
