@@ -51,6 +51,7 @@ data TCError
   | BadRecordField FieldName Term
   | ArrayTypeMismatch Term Term
   | DanglingVar Int
+  | BadConstType String Term Term
 
 throwTCError :: TCError -> TCM a
 throwTCError = lift . throwE
@@ -84,6 +85,9 @@ prettyTCError e =
       ]
     DanglingVar n ->
       [ "Dangling bound variable index: " ++ show n ]
+    BadConstType n rty ty ->
+      [ "Definition of constant " ++ show n, ishow rty
+      , "doesn't match declared type", ishow ty ]
   where
     ishow = (' ':) . (' ':) . scPrettyTerm defaultPPOpts
 
@@ -150,7 +154,10 @@ scTypeCheck' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> io $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> throwTCError (DanglingVar (i - length env))
-        Constant _ t _ -> memo t
+        Constant n x t ->
+          do tx <- memo x
+             checkEqTy tx t (BadConstType n tx t)
+             return t
     ftermf :: FlatTermF Term -> TCM Term
     ftermf tf =
       case tf of
