@@ -1109,9 +1109,14 @@ primitive bvAdd :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 
 -- | Unsigned and signed comparison functions.
 primitive bvugt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvuge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 primitive bvult :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 primitive bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+
+primitive bvsgt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvslt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 
 bvCarry :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
