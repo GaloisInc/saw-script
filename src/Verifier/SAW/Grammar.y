@@ -112,7 +112,10 @@ ModuleImports : 'hiding' ImportNames { HidingImports $2 }
               | ImportNames { SpecificImports $1 }
 
 ImportNames :: { [String] }
-ImportNames : '(' sepBy(ident, ',') ')' { $2 }
+ImportNames : '(' sepBy(ImportName, ',') ')' { $2 }
+
+ImportName :: { String }
+ImportName : ident { tokIdent $ val $1 }
 
 TermVar :: { TermVar }
 TermVar
