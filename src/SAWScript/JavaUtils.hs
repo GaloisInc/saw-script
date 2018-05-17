@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaUtils
+Description : Miscellaneous utilities for Java.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -5,13 +12,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- |
-Module      : $Header$
-Description : Miscellaneous utilities for Java.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaUtils where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -31,10 +31,10 @@ import Verifier.Java.Simulator as JSS
 import Verifier.Java.SAWImport
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr
-import SAWScript.TypedTerm
 
 type SAWBackend = SharedContext
 type SpecPathState = Path SharedContext
@@ -309,7 +309,7 @@ readJavaValue mlocals ps (CC.Term e) = do
       case Map.lookup f sfields of
         Just v -> return v
         _ -> fail $ "Static field '" ++ fieldIdName f ++
-                    "' not found in class '" ++ fieldIdClass f ++ "'"
+                    "' not found in class '" ++ JSS.unClassName (fieldIdClass f) ++ "'"
 
 readJavaValueSim :: (Monad m) =>
                     JavaExpr

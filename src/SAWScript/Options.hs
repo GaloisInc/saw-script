@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.Options
 Description : Datatype for saw command-line options.
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module SAWScript.Options where
 
 import Data.Char (toLower)
@@ -27,12 +27,20 @@ data Options = Options
   , runInteractively :: Bool
   , showHelp         :: Bool
   , showVersion      :: Bool
+  , printShowPos     :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
   } deriving (Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
 -- level includes the outputs of all lower levels.
-data Verbosity = Silent | OnlyCounterExamples | Error | Warn | Info | Debug
+data Verbosity
+  = Silent
+  | OnlyCounterExamples
+  | Error
+  | Warn
+  | Info
+  | Debug
+  | ExtraDebug
     deriving (Show,Eq,Ord)
 
 defaultOptions :: Options
@@ -42,6 +50,7 @@ defaultOptions
     , classPath = ["."]
     , jarList = []
     , verbLevel = Info
+    , printShowPos = False
     , printOutFn = printOutWith Info
     , simVerbose = 1
     , extraChecks = False
@@ -92,6 +101,10 @@ options =
      "path"
     )
     pathDesc
+  , Option [] ["output-locations"]
+    (NoArg
+     (\opts -> opts { printShowPos = True }))
+     "Show the source locations that are responsible for output."
   , Option "d" ["sim-verbose"]
     (ReqArg
      (\v opts -> opts { simVerbose = read v })

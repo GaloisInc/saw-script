@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.Interpreter
+Description : Interpreter for SAW-Script files and statements.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -12,13 +19,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 
-{- |
-Module      : $Header$
-Description : Interpreter for SAW-Script files and statements.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.Interpreter
   ( interpretStmt
   , interpretFile
@@ -38,14 +38,15 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Text (pack)
+import qualified Data.Vector as Vector
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
-import SAWScript.AST (Located(..))
+import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
-import qualified SAWScript.CryptolEnv as CEnv
+import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -57,15 +58,18 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkDecl, checkDeclGroup)
 import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Prover.Rewrite(basic_ss)
+import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.TypedTerm
+import qualified Verifier.SAW.CryptolEnv as CEnv
 
 import qualified Verifier.Java.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW
@@ -78,6 +82,7 @@ import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
+import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -124,7 +129,28 @@ extendEnv x mt md v rw =
               -> CEnv.bindInteger (ident, n) ce
             VCryptolModule m
               -> CEnv.bindCryptolModule (modname, m) ce
+            VString s
+              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
             _ -> ce
+
+typedTermOfString :: String -> TypedTerm
+typedTermOfString cs = TypedTerm schema trm
+  where
+    nat :: Integer -> Term
+    nat n = Unshared (FTermF (NatLit n))
+    bvNat :: Term
+    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
+    bvNat8 :: Term
+    bvNat8 = Unshared (App bvNat (nat 8))
+    encodeChar :: Char -> Term
+    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
+    bitvector :: Term
+    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
+    byteT :: Term
+    byteT = Unshared (App bitvector (nat 8))
+    trm :: Term
+    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
+    schema = C.Forall [] [] (C.tString (length cs))
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
@@ -152,6 +178,7 @@ bindPatternGeneric ext pat ms v env =
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   _ -> error "bindPattern: expected tuple value"
         _ -> error "bindPattern: expected tuple value"
+    SS.LPattern _ pat' -> bindPatternGeneric ext pat' ms v env
 
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal = bindPatternGeneric extendLocal
@@ -171,10 +198,12 @@ interpret env expr =
                                    cenv <- fmap rwCryptol (getMergedEnv env)
                                    --io $ putStrLn $ "Parsing code: " ++ show str
                                    --showCryptolEnv' cenv
-                                   t <- io $ CEnv.parseTypedTerm sc cenv str
+                                   t <- io $ CEnv.parseTypedTerm sc cenv
+                                           $ locToInput str
                                    return (toValue t)
       SS.CType str           -> do cenv <- fmap rwCryptol (getMergedEnv env)
-                                   s <- io $ CEnv.parseSchema cenv str
+                                   s <- io $ CEnv.parseSchema cenv
+                                           $ locToInput str
                                    return (toValue s)
       SS.Array es            -> VArray <$> traverse (interpret env) es
       SS.Block stmts         -> interpretStmts env stmts
@@ -205,9 +234,24 @@ interpret env expr =
                                    case v1 of
                                      VBool b -> interpret env (if b then e2 else e3)
                                      _ -> fail $ "interpret IfThenElse: " ++ show v1
+      SS.LExpr _ e           -> interpret env e
+
+locToInput :: Located String -> CEnv.InputText
+locToInput l = CEnv.InputText { CEnv.inpText = getVal l
+                              , CEnv.inpFile = file
+                              , CEnv.inpLine = ln
+                              , CEnv.inpCol  = col + 2 -- for dropped }}
+                              }
+  where
+  (file,ln,col) =
+    case locatedPos l of
+      Range f sl sc _ _ -> (f,sl, sc)
+      PosInternal s -> (s,1,1)
+      PosREPL       -> ("<interactive>", 1, 1)
+      Unknown       -> ("Unknown", 1, 1)
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
-interpretDecl env (SS.Decl pat mt expr) = do
+interpretDecl env (SS.Decl _ pat mt expr) = do
   v <- interpret env expr
   return (bindPatternLocal pat mt v env)
 
@@ -224,29 +268,29 @@ interpretDeclGroup env (SS.NonRecursive d) = interpretDecl env d
 interpretDeclGroup env (SS.Recursive ds) = return env'
   where
     env' = foldr addDecl env ds
-    addDecl (SS.Decl pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
+    addDecl (SS.Decl _ pat mty e) = bindPatternLocal pat mty (interpretFunction env' e)
 
 interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
 interpretStmts env stmts =
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind pat _ e : ss ->
+      [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
+      SS.StmtBind _ pat _ e : ss ->
           do v1 <- interpret env e
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
              bindValue v1 (VLambda f)
-      SS.StmtLet bs : ss -> interpret env (SS.Let bs (SS.Block ss))
-      SS.StmtCode s : ss ->
+      SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
+      SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv env
-             ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) s
+             ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
              -- FIXME: Local bindings get saved into the global cryptol environment here.
              -- We should change parseDecls to return only the new bindings instead.
              putTopLevelRW $ rw{rwCryptol = ce'}
              interpretStmts env ss
-      SS.StmtImport _ : _ ->
+      SS.StmtImport _ _ : _ ->
           do fail "block import unimplemented"
-      SS.StmtTypedef name ty : ss ->
+      SS.StmtTypedef _ name ty : ss ->
           do let env' = LocalTypedef (getVal name) ty : env
              interpretStmts env' ss
 
@@ -265,12 +309,12 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl pat Nothing expr'
+  let decl = SS.Decl (getPos expr) pat Nothing expr'
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
-  SS.Decl _ (Just schema) expr'' <-
-    either fail return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+  SS.Decl _ _ (Just schema) expr'' <-
+    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''
 
@@ -308,33 +352,48 @@ interpretStmt ::
   TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
-    SS.StmtBind pat mc expr  -> processStmtBind printBinds pat mc expr
-    SS.StmtLet dg             -> do rw <- getTopLevelRW
-                                    dg' <- either fail return $
+    SS.StmtBind _ pat mc expr -> do {-TODO set loc-} processStmtBind printBinds pat mc expr
+    SS.StmtLet _ dg           -> do rw <- getTopLevelRW
+                                    dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
                                     env <- interpretDeclGroup emptyLocal dg'
                                     getMergedEnv env >>= putTopLevelRW
-    SS.StmtCode lstr          -> do rw <- getTopLevelRW
+    SS.StmtCode _ lstr        -> do rw <- getTopLevelRW
                                     sc <- getSharedContext
                                     --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
                                     --showCryptolEnv
-                                    cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) lstr
+                                    cenv' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput lstr
                                     putTopLevelRW $ rw { rwCryptol = cenv' }
                                     --showCryptolEnv
-    SS.StmtImport imp         -> do rw <- getTopLevelRW
-                                    sc <- getSharedContext
-                                    --showCryptolEnv
-                                    cenv' <- io $ CEnv.importModule sc (rwCryptol rw) imp
-                                    putTopLevelRW $ rw { rwCryptol = cenv' }
-                                    --showCryptolEnv
-    SS.StmtTypedef name ty    -> do rw <- getTopLevelRW
-                                    putTopLevelRW $ addTypedef (getVal name) ty rw
+    SS.StmtImport _ imp ->
+      do rw <- getTopLevelRW
+         sc <- getSharedContext
+         --showCryptolEnv
+         let mLoc = iModule imp
+             qual = iAs imp
+             spec = iSpec imp
+         cenv' <- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual spec
+         putTopLevelRW $ rw { rwCryptol = cenv' }
+         --showCryptolEnv
+
+    SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
+                                     putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
-  mapM_ (interpretStmt False) stmts
+  mapM_ stmtWithPrint stmts
+  where
+    stmtWithPrint s = do let withPos str = unlines $
+                                           ("[output] at " ++ show (getPos s) ++ ": ") :
+                                             map (\l -> "\t"  ++ l) (lines str)
+                         showLoc <- printShowPos <$> getOptions
+                         if showLoc
+                           then localOptions (\o -> o { printOutFn = \lvl str ->
+                                                          printOutFn o lvl (withPos str) })
+                                  (interpretStmt False s)
+                           else interpretStmt False s
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
@@ -403,12 +462,8 @@ processFile opts file = do
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
-  let handler :: X.SomeException -> IO a
-      handler e =
-        do printOutFn opts Error (show e)
-           exitProofUnknown
   _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
-            `X.catch` handler
+            `X.catch` (handleException opts)
   setCurrentDirectory oldpath
   return ()
 
@@ -432,6 +487,11 @@ set_base b = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsBase = b } }
 
+set_color :: Bool -> TopLevel ()
+set_color b = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b } }
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info s
 print_value (VTerm t) = do
@@ -448,7 +508,9 @@ print_value (VTerm t) = do
                               }
   evaled_t <- io $ evaluateTypedTerm sc t'
   doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' evaled_t)
-  io (rethrowEvalError $ print $ doc)
+  sawOpts <- getOptions
+  io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
+
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   printOutLnTop Info (showsPrecValue opts 0 v "")
@@ -552,6 +614,17 @@ primitives = Map.fromList
     (pureVal set_base)
     [ "Set the number base for pretty-printing numeric literals."
     , "Permissible values include 2, 8, 10, and 16." ]
+
+  , prim "set_color"           "Bool -> TopLevel ()"
+    (pureVal set_color)
+    [ "Select whether to pretty-print SAWCore terms using color." ]
+
+  , prim "set_timeout"         "Int -> ProofScript ()"
+    (pureVal set_timeout)
+    [ "Set the timeout, in milliseconds, for any automated prover at the"
+    , "end of this proof script. Not that this is simply ignored for provers"
+    , "that don't support timeouts, for now."
+    ]
 
   , prim "show"                "{a} a -> String"
     (funVal1 showPrim)
@@ -1394,7 +1467,7 @@ primitives = Map.fromList
 
   , prim "caseProofResult"     "{b} ProofResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseProofResultPrim)
-    [ "Branch on the result of proofing."
+    [ "Branch on the result of proving."
     , ""
     , "Usage: caseProofResult <code to run if true> <code to run if false>."
     , ""
@@ -1403,7 +1476,7 @@ primitives = Map.fromList
     , "  r <- prove abc <thm>"
     , "  caseProofResult r <true> <false>"
     , ""
-    , "will run '<trie>' if '<thm>' is proved and will run '<false> <example>'"
+    , "will run '<true>' if '<thm>' is proved and will run '<false> <example>'"
     , "if '<thm>' is false, where '<example>' is a counter example."
     , "If '<thm>' is a curried function, then '<example>' will be a tuple."
     ]
@@ -1418,6 +1491,14 @@ primitives = Map.fromList
     (pureVal exitPrim)
     [ "Exit SAWScript, returning the supplied exit code to the parent"
     , "process."
+    ]
+
+  , prim "fails"               "{a} TopLevel a -> TopLevel ()"
+    (\_ _ -> toValue failsPrim)
+    [ "Run the given inner action and convert failure into success.  Fail"
+    , "if the inner action does NOT raise an exception. This is primarily used"
+    , "for unit testing purposes, to ensure that we can elicit expected"
+    , "failing behaviors."
     ]
 
   , prim "time"                "{a} TopLevel a -> TopLevel a"
@@ -1450,6 +1531,11 @@ primitives = Map.fromList
   , prim "eval_size"          "Type -> Int"
     (funVal1 eval_size)
     [ "Convert a Cryptol size type to a SAWScript Int."
+    ]
+
+  , prim "eval_list"           "Term -> [Term]"
+    (funVal1 eval_list)
+    [ "Evaluate a Cryptol term of type [n]a to a list of terms."
     ]
 
   , prim "parse_core"         "String -> Term"
@@ -1493,7 +1579,11 @@ primitives = Map.fromList
 
   , prim "extract_crucible_llvm"  "LLVMModule -> String -> TopLevel Term"
     (bicVal extract_crucible_llvm)
-    [ "TODO"
+    [ "Translate an LLVM function directly to a Term. The parameters of the"
+    , "Term will be the parameters of the LLVM function, and the return"
+    , "value will be the return value of the functions. Only functions with"
+    , "scalar argument and return types are currently supported. For more"
+    , "flexibility, see 'crucible_llvm_verify'."
     ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
@@ -1511,6 +1601,15 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
+  , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc_readonly)
+    [ "Declare that a read-only memory region of the given type should be"
+    , "allocated in a Crucible specification. The function must not attempt"
+    , "to write to this memory region. Unlike `crucible_alloc`, regions"
+    , "allocated with `crucible_alloc_readonly` are allowed to alias other"
+    , "read-only regions."
+    ]
+
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
     [ "Create a fresh pointer value for use in a Crucible specification."
@@ -1520,7 +1619,11 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_expanded_val)
-    [ "TODO" ]
+    [ "Create a compound type entirely populated with fresh symbolic variables."
+    , "Equivalent to allocating a new struct or array of the given type and"
+    , "eplicitly setting each field or element to contain a fresh symbolic"
+    , "variable."
+    ]
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal (crucible_points_to True))
@@ -1592,7 +1695,10 @@ primitives = Map.fromList
   , prim "crucible_llvm_unsafe_assume_spec"
     "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_unsafe_assume_spec)
-    [ "TODO" ]
+    [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
+    , "as would be returned by llvm_verify but without performing any"
+    , "verification."
+    ]
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"

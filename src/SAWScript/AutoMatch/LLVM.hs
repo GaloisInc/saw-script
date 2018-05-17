@@ -12,7 +12,7 @@ import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent, globalSym, glo
 import Verifier.LLVM.Backend.SAW
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Builtins
+import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Value
 
 --import Data.Maybe
@@ -28,7 +28,7 @@ import SAWScript.AutoMatch.Util
 -- | Parse an LLVM module into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
 getDeclsLLVM :: SharedContext -> LLVMModule -> IO (Interaction (Maybe [Decl]))
-getDeclsLLVM sc (LLVMModule file mdl) =
+getDeclsLLVM sc (LLVMModule file mdl _) =
 
   let dataLayout = parseDataLayout $ modDataLayout mdl
       symbols = map defName (modDefines mdl)

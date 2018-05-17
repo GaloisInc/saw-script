@@ -39,7 +39,7 @@ $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit \' \_]
 $codechar  = [$graphic $whitechar]
 
-@reservedid  = import|and|let|rec|fun|in|do|if|then|else|as|hiding|typedef
+@reservedid  = import|and|let|rec|in|do|if|then|else|as|hiding|typedef
              |CryptolSetup|JavaSetup|LLVMSetup|ProofScript|TopLevel|CrucibleSetup
              |Int|String|Term|Type|Bool|AIG|CFG
 
@@ -92,9 +92,25 @@ cnst f p s   = f p s
 via  c g p s = c p s (g s)
 via' c g p s = c p (g s)
 
+scanTokens :: String -> [Token AlexPosn]
+scanTokens str = go (alexStartPos, '\n', [], str)
+  where go inp@(pos, _, _, str) =
+            case alexScan inp 0 of
+              AlexEOF -> [TEOF pos "EOF"]
+              AlexError ((AlexPn _ line column),_,_,_) -> error $ "lexical error at " ++ (show line) ++ " line, " ++ (show column) ++ " column "
+              AlexSkip inp' len -> go inp'
+              AlexToken inp' len act -> act pos (take len str) :  go inp'
+
 lexSAW :: FilePath -> String -> [Token Pos]
-lexSAW f = dropComments . map (fmap fixPos) . alexScanTokens
-  where fixPos (AlexPn _ l c) = Pos f l c
+lexSAW f = dropComments . map fixPos . scanTokens --alexScanTokens
+  where fixPos tok =
+          let (AlexPn _ sl sc) = tokPos tok
+              pos = case lines (tokStr tok) of
+                      [] -> Range f sl sc sl sc
+                      [l] -> Range f sl sc sl (sc + length l)
+                      (l:ls) -> Range f sl sc (sl + length ls) (length (last (l:ls)))
+          in tok { tokPos = pos }
+
 
 readCode :: String -> String
 readCode = reverse . drop 2 . reverse . drop 2

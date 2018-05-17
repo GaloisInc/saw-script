@@ -24,7 +24,7 @@ library
     , containers
     , cryptol
     , cryptol-verifier
-    , crucible >= 0.3 && < 0.4
+    , crucible >= 0.3.2 && < 0.4
     , crucible-llvm
     , crucible-saw
     , deepseq
@@ -55,7 +55,6 @@ library
     , saw-core-aig
     , saw-core-sbv
     , sbv >= 7.0
-    , smtLib
     , split
     , temporary
     , template-haskell
@@ -68,6 +67,12 @@ library
     , vector
     , xdg-basedir
     , GraphSCC
+    , macaw-base
+    , macaw-x86
+    , macaw-symbolic
+    , macaw-x86-symbolic
+    , flexdis86
+    , elf-edit
 
   hs-source-dirs: src
 
@@ -87,7 +92,7 @@ library
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
-    SAWScript.CryptolEnv
+    SAWScript.Exceptions
     SAWScript.Import
     SAWScript.ImportAIG
     SAWScript.Interpreter
@@ -111,16 +116,34 @@ library
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SAWCorePrimitives
-    SAWScript.SolverStats
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
-    SAWScript.TypedTerm
     SAWScript.Utils
     SAWScript.Value
     SAWScript.VerificationCheck
 
-  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
+    SAWScript.Prover.Mode
+    SAWScript.Prover.Rewrite
+    SAWScript.Prover.SolverStats
+    SAWScript.Prover.Util
+    SAWScript.Prover.SBV
+    SAWScript.Prover.RME
+    SAWScript.Prover.ABC
+    SAWScript.Prover.Exporter
+
+    SAWScript.X86
+    SAWScript.X86SpecNew
+    SAWScript.X86Spec
+    SAWScript.X86Spec.Memory
+    SAWScript.X86Spec.Registers
+    SAWScript.X86Spec.Fresh
+    SAWScript.X86Spec.Literal
+    SAWScript.X86Spec.SAW
+    SAWScript.X86Spec.Monad
+    SAWScript.X86Spec.Types
+
+  GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
 
@@ -161,3 +184,4 @@ executable saw
     , transformers
     , saw-script
     , saw-core
+    , cryptol-verifier

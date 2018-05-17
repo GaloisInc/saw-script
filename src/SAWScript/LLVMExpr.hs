@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMExpr
+Description : Data structures for LLVM expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -10,13 +17,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-{- |
-Module      : $Header$
-Description : Data structures for LLVM expressions and types.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMExpr
   (-- * LLVM Expressions
     LLVMExprF(..)

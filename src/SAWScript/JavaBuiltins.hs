@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaBuiltins
+Description : Implementations of Java-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,13 +13,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of Java-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -38,6 +38,8 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
+import Verifier.SAW.CryptolEnv (schemaNoUser)
 
 import qualified SAWScript.CongruenceClosure as CC
 
@@ -46,11 +48,10 @@ import SAWScript.JavaMethodSpec
 import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaUtils
 
+import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Builtins
-import SAWScript.CryptolEnv (schemaNoUser)
 import SAWScript.Options
 import SAWScript.Proof
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.Value as SS
 
@@ -61,7 +62,7 @@ import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
 loadJavaClass :: BuiltinContext -> String -> IO Class
 loadJavaClass bic =
-  lookupClass (biJavaCodebase bic) fixPos . dotsToSlashes
+  lookupClass (biJavaCodebase bic) fixPos . mkClassName . dotsToSlashes
 
 getActualArgTypes :: JavaSetupState -> Either String [JavaActualType]
 getActualArgTypes s = mapM getActualType declaredTypes
@@ -226,7 +227,7 @@ verifyJava bic opts cls mname overrides setup = do
           case overrides of
             [] -> ""
             irs -> " (overriding " ++ show (map renderName irs) ++ ")"
-        renderName ir = className (specMethodClass ir) ++ "." ++
+        renderName ir = unClassName (className (specMethodClass ir)) ++ "." ++
                         methodName (specMethod ir)
         configs = [ (bs, cl)
                   | bs <- {- concat $ Map.elems $ -} [specBehaviors ms]
@@ -235,12 +236,12 @@ verifyJava bic opts cls mname overrides setup = do
         fl = defaultSimFlags { alwaysBitBlastBranchTerms = True
                              , satAtBranches = jsSatBranches setupRes
                              }
-    printOutLnTop Info $ "Starting verification of " ++ specName ms
+    printOutLnTop Debug $ "Starting verification of " ++ specName ms
     ro <- getTopLevelRO
     rw <- getTopLevelRW
     forM_ configs $ \(bs,cl) -> withSAWBackend Nothing $ \sbe -> io $ do
       liftIO $ bsCheckAliasTypes pos bs
-      liftIO $ printOutLn opts Info $ "Executing " ++ specName ms ++
+      liftIO $ printOutLn opts Debug $ "Executing " ++ specName ms ++
                    " at PC " ++ show (bsLoc bs) ++ "."
       -- runDefSimulator cb sbe $ do
       runSimulator cb sbe defaultSEH (Just fl) $ do
@@ -252,21 +253,21 @@ verifyJava bic opts cls mname overrides setup = do
               let goal = ProofGoal Universal n "vc" (vsVCName vs) glam
               r <- evalStateT script (startProof goal)
               case r of
-                SS.Unsat _ -> liftIO $ printOutLn opts Info "Valid."
+                SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."
                 SS.SatMulti _ vals ->
                        io $ showCexResults opts jsc (rwPPOpts rw) ms vs exts vals
         let ovds = vpOver vp
         initPS <- initializeVerification' jsc ms bs cl
-        liftIO $ printOutLn opts Info $ "Overriding: " ++ show (map specName ovds)
+        liftIO $ printOutLn opts Debug $ "Overriding: " ++ show (map specName ovds)
         mapM_ (overrideFromSpec jsc (specPos ms)) ovds
-        liftIO $ printOutLn opts Info $ "Running method: " ++ specName ms
+        liftIO $ printOutLn opts Debug $ "Running method: " ++ specName ms
         -- Execute code.
         run
-        liftIO $ printOutLn opts Info $ "Checking final state"
+        liftIO $ printOutLn opts Debug $ "Checking final state"
         pvc <- checkFinalState jsc ms bs cl initPS
         let pvcs = [pvc] -- Only one for now, but that might change
-        liftIO $ printOutLn opts Debug "Verifying the following:"
-        liftIO $ mapM_ (printOutLn opts Debug . show . ppPathVC) pvcs
+        liftIO $ printOutLn opts ExtraDebug "Verifying the following:"
+        liftIO $ mapM_ (printOutLn opts ExtraDebug . show . ppPathVC) pvcs
         let validator script = runValidation (prover script) vp jsc pvcs
         case jsTactic setupRes of
           Skip -> liftIO $ printOutLn opts Warn $
@@ -283,13 +284,13 @@ verifyJava bic opts cls mname overrides setup = do
 doExtraChecks :: Options -> SharedContext -> Term -> IO ()
 doExtraChecks opts bsc t = do
   when (extraChecks opts) $ do
-    printOutLn opts Info "Type checking goal..."
+    printOutLn opts Debug "Type checking goal..."
     tcr <- scTypeCheck bsc Nothing t
     case tcr of
       Left e -> printOutLn opts Warn $ unlines $
                 "Ill-typed goal constructed." : prettyTCError e
-      Right _ -> printOutLn opts Info "Done."
-  printOutLn opts Debug $ "Trying to prove: " ++ show t
+      Right _ -> printOutLn opts Debug "Done."
+  printOutLn opts ExtraDebug $ "Trying to prove: " ++ show t
 
 showCexResults :: Options
                -> SharedContext
@@ -338,7 +339,7 @@ exportJSSType jty =
     JavaFloat       -> return FloatType
     JavaDouble      -> return DoubleType
     JavaArray _ ety -> ArrayType <$> exportJSSType ety
-    JavaClass name  -> return $ ClassType (dotsToSlashes name)
+    JavaClass name  -> return $ ClassType (mkClassName (dotsToSlashes name))
 
 exportJavaType :: Codebase -> JavaType -> JavaSetup JavaActualType
 exportJavaType cb jty =
@@ -353,7 +354,7 @@ exportJavaType cb jty =
     JavaDouble      -> return $ PrimitiveType DoubleType
     JavaArray n t   -> ArrayInstance (fromIntegral n) <$> exportJSSType t
     JavaClass name  ->
-      do cls <- liftIO $ lookupClass cb fixPos (dotsToSlashes name)
+      do cls <- liftIO $ lookupClass cb fixPos (mkClassName (dotsToSlashes name))
          return (ClassInstance cls)
 
 checkCompatibleType :: (Monad m, MonadIO m) =>
@@ -431,7 +432,7 @@ javaSatBranches doSat = modify (\s -> s { jsSatBranches = doSat })
 
 javaRequiresClass :: String -> JavaSetup ()
 javaRequiresClass cls = modifySpec $ \ms ->
-  let clss' = dotsToSlashes cls : specInitializedClasses ms in
+  let clss' = mkClassName (dotsToSlashes cls) : specInitializedClasses ms in
   ms { specInitializedClasses = clss' }
 
 javaClassVar :: BuiltinContext -> Options -> String -> JavaType

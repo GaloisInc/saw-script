@@ -20,15 +20,26 @@ packages:
   - deps/crucible/crucible-saw/
   - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
+  - deps/dwarf/
+  - deps/elf-edit/
+  - deps/flexdis86/
+  - deps/flexdis86/binary-symbols/
+  - deps/macaw/base
+  - deps/macaw/symbolic
+  - deps/macaw/x86
+  - deps/macaw/x86_symbolic
   - .
 extra-deps:
+  - GraphSCC-1.0.4
+  - containers-0.5.10.2
   - crackNum-1.9
   - FloatingHex-0.4
-  - QuickCheck-2.9.2
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
-  - monad-supply-0.6
-  - sbv-7.1
+  - monad-supply-0.7
+  - sbv-7.7
   - simple-smt-0.7.1
-  - th-abstraction-0.1.0.0
-resolver: lts-8.14
+  - monadLib-3.7.3
+  - tasty-hunit-0.10.0.1
+  - data-inttrie-0.1.4
+resolver: lts-9.21

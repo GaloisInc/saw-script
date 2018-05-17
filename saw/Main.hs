@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : Main
 Description :
 License     : BSD3
 Maintainer  : atomb

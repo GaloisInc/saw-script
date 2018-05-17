@@ -1,10 +1,14 @@
 # Change these for your platform
-CLANG?=/usr/local/opt/llvm/bin/clang -emit-llvm -DFULL_UNROLL
+CLANG?=/usr/local/opt/llvm/bin/clang
+CLANGCMD=${CLANG} -emit-llvm -DFULL_UNROLL
 LLVM_LINK?=/usr/local/opt/llvm/bin/llvm-link
 SAW?=../../bin/saw
 LSS?=../../bin/lss
+DEPS?=../../deps
+CRYPTOL?=${DEPS}/cryptol
+CRYPTOLPATH?=${CRYPTOL}/examples
 
-OPENSSL_VERSION?=1.0.2f
+OPENSSL_VERSION?=1.1.0g
 SRCDIR=openssl-${OPENSSL_VERSION}
 TARBALL=${SRCDIR}.tar.gz
 
@@ -27,13 +31,13 @@ ${SRCDIR}/Configure: ${TARBALL}
 #     optimizing build.
 #   * The "no-asm" bit is crucial because we can't currently analyze asm.
 ${SRCDIR}/Makefile: ${SRCDIR}/Configure
-	(cd ${SRCDIR} && CC="${CLANG}" ./Configure debug-darwin64-x86_64-cc no-asm)
+	(cd ${SRCDIR} && CC="${CLANGCMD}" ./Configure debug-darwin64-x86_64-cc no-asm)
 
 ${SRCDIR}/crypto/aes/aes_core.o: ${SRCDIR}/Makefile
-	make -C ${SRCDIR}/crypto/aes
+	(cd ${SRCDIR} && make CC="${CLANGCMD}" include/openssl/opensslconf.h crypto/aes/aes_core.o)
 
 aes_wrap.bc: aes_wrap.c ${SRCDIR}/crypto/aes/aes_core.o
-	${CLANG} -c -emit-llvm ${CFLAGS} -o $@ $<
+	${CLANGCMD} -c ${CFLAGS} -o $@ $<
 
 aes_all.bc: aes_wrap.bc ${SRCDIR}/crypto/aes/aes_core.o
 	${LLVM_LINK} -o $@ $^
@@ -42,6 +46,7 @@ aes_imp.aig: aes_all.bc
 	@echo "The next step may take about a minute."
 	time ${LSS} $<
 
+export CRYPTOLPATH := ${CRYPTOLPATH}
 aes_ref.aig: aes_imp.aig aes.saw
 	${SAW} aes.saw
 
