@@ -1251,6 +1251,10 @@ bvUExt m n x = append m n Bool (bvNat m 0) x;
 -- bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat n m);
 -- bvUExt m n a = append n m Bool x (bvNat m 0);
 
+-- | 'replicateBool' is an version of 'replicate' optimized for type Bool.
+replicateBool :: (n :: Nat) -> Bool -> bitvector n;
+replicateBool n b = ite (bitvector n) b (bvNot n (bvNat n 0)) (bvNat n 0);
+
 -- | Perform a signed extension of the bitvector.
 -- msb implementation:
 bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat m (Succ n));
@@ -1258,10 +1262,6 @@ bvSExt m n x = append m (Succ n) Bool (replicateBool m (msb n x)) x;
 -- lsb implementation:
 -- bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
 -- bvSExt m n x = append (Succ n) m Bool x (replicateBool m (msb n x));
-
--- | 'replicateBool' is an version of 'replicate' optimized for type Bool.
-replicateBool :: (n :: Nat) -> Bool -> bitvector n;
-replicateBool n b = ite (bitvector n) b (bvNot n (bvNat n 0)) (bvNat n 0);
 
 --------------------------------------------------------------------------------
 -- Infinite streams
