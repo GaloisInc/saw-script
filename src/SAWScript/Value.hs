@@ -43,6 +43,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Utils as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -348,6 +349,7 @@ data TopLevelRO =
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
+  , roPosition      :: SS.Pos
   }
 
 data TopLevelRW =
@@ -369,6 +371,12 @@ runTopLevel (TopLevel m) = runStateT . runReaderT m
 
 io :: IO a -> TopLevel a
 io = liftIO
+
+withPosition :: SS.Pos -> TopLevel a -> TopLevel a
+withPosition pos (TopLevel m) = TopLevel (local (\ro -> ro{ roPosition = pos }) m)
+
+getPosition :: TopLevel SS.Pos
+getPosition = TopLevel (asks roPosition)
 
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel (asks roSharedContext)

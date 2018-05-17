@@ -38,10 +38,10 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Nonce(GlobalNonceGenerator)
 
-import Lang.Crucible.Types(CrucibleType,TypeRepr,BoolType)
-import Lang.Crucible.Simulator.RegValue(RegValue)
-import Lang.Crucible.Solver.SAWCoreBackend(SAWCoreBackend)
+import Lang.Crucible.Backend.SAWCore(SAWCoreBackend)
 import Lang.Crucible.LLVM.MemModel(LLVMPointerType,pattern LLVMPointerRepr)
+import Lang.Crucible.Simulator.RegValue(RegValue)
+import Lang.Crucible.Types(CrucibleType,TypeRepr,BoolType)
 
 
 -- | The kind of X86 types.

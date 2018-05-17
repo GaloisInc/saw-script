@@ -4,9 +4,9 @@
 {-# Language TypeFamilies #-}
 module SAWScript.X86Spec.SAW (SAW(..)) where
 
-import Lang.Crucible.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseBoolRepr))
+import What4.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseBoolRepr))
 import Lang.Crucible.LLVM.MemModel.Pointer (llvmPointer_bv, projectLLVM_bv)
-import Lang.Crucible.Solver.SAWCoreBackend(bindSAWTerm, toSC)
+import Lang.Crucible.Backend.SAWCore(bindSAWTerm, toSC)
 
 import Verifier.SAW.SharedTerm(Term)
 

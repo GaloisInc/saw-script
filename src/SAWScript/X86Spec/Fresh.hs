@@ -11,9 +11,10 @@ import qualified Data.Vector as Vector
 
 import Data.Parameterized.NatRepr(knownNat)
 
-import Lang.Crucible.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseNatRepr,BaseBoolRepr))
-import Lang.Crucible.Solver.Symbol(SolverSymbol,userSymbol)
-import Lang.Crucible.Solver.Interface(freshConstant)
+import What4.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseNatRepr,BaseBoolRepr))
+import What4.Symbol(SolverSymbol,userSymbol)
+import What4.Interface(freshConstant)
+
 import Lang.Crucible.LLVM.MemModel(LLVMPointerType)
 import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, llvmPointer_bv )
 
