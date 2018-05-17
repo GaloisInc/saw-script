@@ -140,7 +140,7 @@ data TCError
   | NotTupleType Term
   | BadTupleIndex Int Term
   | NotStringLit Term
-  | NotRecordType Term
+  | NotRecordType TypedTerm
   | BadRecordField FieldName Term
   | DanglingVar Int
   | UnboundName String
@@ -187,9 +187,11 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
                 , ishow ty ]
   helper (NotStringLit trm) =
       ppWithPos [ return "Record selector is not a string literal", ishow trm ]
-  helper (NotRecordType ty) =
-      ppWithPos [ return "Record field projection with non-record type" ,
-                  ishow ty ]
+  helper (NotRecordType (TypedTerm trm tp)) =
+      ppWithPos [ return "Record field projection with non-record type"
+                , ishow tp
+                , return "In term:"
+                , ishow trm ]
   helper (BadRecordField n ty) =
       ppWithPos [ return ("Bad record field (" ++ show n ++ ") for type")
                 , ishow ty ]
@@ -391,7 +393,7 @@ instance TypeInfer (FlatTermF TypedTerm) where
     case asPairType tp of
       Just (_, t2) -> typeCheckWHNF t2
       _ -> throwTCError (NotTupleType tp)
-  typeInfer (RecordSelector (TypedTerm _ tp) f@(TypedTerm f_trm _)) =
+  typeInfer (RecordSelector t@(TypedTerm _ tp) f@(TypedTerm f_trm _)) =
     do checkField f
        maybe_str <- asStringLit <$> typeCheckWHNF f_trm
        f_str <- case maybe_str of
@@ -402,7 +404,7 @@ instance TypeInfer (FlatTermF TypedTerm) where
            case Map.lookup f_str m of
              Nothing -> throwTCError $ BadRecordField f_str tp
              Just f_tp -> typeCheckWHNF f_tp
-         _ -> throwTCError (NotRecordType tp)
+         _ -> throwTCError (NotRecordType t)
 
   typeInfer (DataTypeApp d params args) =
     -- Look up the DataType structure, check the length of the params and args,
@@ -446,10 +448,10 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (RecordValue elems) =
     liftTCM scFlatTermF $ RecordType $
     map (\(f,TypedTerm _ tp) -> (f,tp)) elems
-  typeInfer (RecordProj (TypedTerm _ t_tp) fld) =
+  typeInfer (RecordProj t@(TypedTerm _ t_tp) fld) =
     case asRecordType t_tp of
       Just (Map.lookup fld -> Just tp) -> return tp
-      Just _ -> throwTCError $ NotRecordType t_tp
+      Just _ -> throwTCError $ NotRecordType t
       Nothing -> throwTCError $ BadRecordField fld t_tp
   typeInfer (Sort s) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
