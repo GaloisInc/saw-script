@@ -451,8 +451,8 @@ instance TypeInfer (FlatTermF TypedTerm) where
   typeInfer (RecordProj t@(TypedTerm _ t_tp) fld) =
     case asRecordType t_tp of
       Just (Map.lookup fld -> Just tp) -> return tp
-      Just _ -> throwTCError $ NotRecordType t
-      Nothing -> throwTCError $ BadRecordField fld t_tp
+      Just _ -> throwTCError $ BadRecordField fld t_tp
+      Nothing -> throwTCError $ NotRecordType t
   typeInfer (Sort s) = liftTCM scSort (sortOf s)
   typeInfer (NatLit _) = liftTCM scNatType
   typeInfer (ArrayValue (TypedTerm tp tp_tp) vs) =
