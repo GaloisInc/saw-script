@@ -45,7 +45,6 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, mkModuleName, showTerm)
-import qualified Verifier.SAW.Recognizer as R
 
 unimplemented :: Monad m => String -> m a
 unimplemented name = fail ("unimplemented: " ++ name)
@@ -254,27 +253,15 @@ proveProp sc env prop =
                 b' <- importType sc env b
                 pb <- proveProp sc env (C.pZero b)
                 scGlobalApply sc "Cryptol.PZeroFun" [a', b', pb]
-        -- instance Zero ()
-        (C.pIsZero -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PZeroUnit" []
-        -- instance (Zero a, Zero b) => Zero (a, b)
-        (C.pIsZero -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pZero t)
-                pb <- proveProp sc env (C.pZero (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PZeroPair" [a, b, pa, pb]
-        -- instance Zero {}
-        (C.pIsZero -> Just (C.TRec []))
-          -> do scGlobalApply sc "Cryptol.PZeroEmpty" []
-        -- instance (Zero a, Zero b) => instance Zero { x : a, y : b }
-        (C.pIsZero -> Just (C.TRec ((n, t) : fs)))
-          -> do s <- scString sc (C.unpackIdent n)
-                a <- importType sc env t
-                b <- importType sc env (C.TRec fs)
-                pa <- proveProp sc env (C.pZero t)
-                pb <- proveProp sc env (C.pZero (C.TRec fs))
-                scGlobalApply sc "Cryptol.PZeroField" [s, a, b, pa, pb]
+        -- instance (Zero a, Zero b, ...) => Zero (a, b, ...)
+        (C.pIsZero -> Just (C.tIsTuple -> Just ts))
+          -> do ps <- traverse (proveProp sc env . C.pZero) ts
+                scTuple sc ps
+        -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
+        (C.pIsZero -> Just (C.tIsRec -> Just fs))
+          -> do let tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- fs ]
+                pm <- traverse (proveProp sc env . C.pZero) tm
+                scRecord sc pm
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -479,9 +466,7 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "reverse"       -> scGlobalDef sc "Cryptol.ecReverse"     -- {a,b} (fin a) => [a] b -> [a] b
     "transpose"     -> scGlobalDef sc "Cryptol.ecTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
     "@"             -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,i} (fin i) => [n]a -> [i] -> a
-    "@@"            -> scGlobalDef sc "Cryptol.ecAtRange"     -- {n,a,m,i} (fin i) => [n]a -> [m][i] -> [m]a
     "!"             -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
-    "!!"            -> scGlobalDef sc "Cryptol.ecAtRangeBack" -- {n,a,m,i} (fin n, fin i) => [n]a -> [m][i] -> [m]a
     "update"        -> scGlobalDef sc "Cryptol.ecUpdate"      -- {a,b,c} (fin c) => [a]b -> [c] -> b -> [a]b
     "updateEnd"     -> scGlobalDef sc "Cryptol.ecUpdateEnd"   -- {a,b,c} (fin a, fin c) => [a]b -> [c] -> b -> [a]b
     "fromThen"      -> scGlobalDef sc "Cryptol.ecFromThen"
@@ -499,9 +484,6 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "infFrom"       -> scGlobalDef sc "Cryptol.ecInfFrom"     -- {a} (fin a) => [a] -> [inf][a]
     "infFromThen"   -> scGlobalDef sc "Cryptol.ecInfFromThen" -- {a} (fin a) => [a] -> [a] -> [inf][a]
     "error"         -> scGlobalDef sc "Cryptol.ecError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
-    "pmult"         -> scGlobalDef sc "Cryptol.ecPMul"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [max 1 (a + b) - 1]
-    "pdiv"          -> scGlobalDef sc "Cryptol.ecPDiv"        -- {a,b} (fin a, fin b) => [a] -> [b] -> [a]
-    "pmod"          -> scGlobalDef sc "Cryptol.ecPMod"        -- {a,b} (fin a, fin b) => [a] -> [b+1] -> [b]
     "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
     "trace"         -> scGlobalDef sc "Cryptol.ecTrace"       -- {n,a,b} [n][8] -> a -> b -> b
 
@@ -566,16 +548,13 @@ importExpr sc env expr =
                                           scApply sc e' t'
     C.EApp e1 e2                    -> do e1' <- go e1
                                           e2' <- go e2
-                                          t1 <- scTypeOf' sc (envS env) e1' >>= scWhnf sc
-                                          t2 <- scTypeOf' sc (envS env) e2' >>= scWhnf sc
+                                          let t1 = fastTypeOf (envC env) e1
+                                          let t2 = fastTypeOf (envC env) e2
                                           t1a <-
-                                            case R.asPi t1 of
-                                              Just (_, t1a, _) -> return t1a
+                                            case C.tIsFun t1 of
+                                              Just (a, _) -> return a
                                               Nothing -> fail "importExpr: internal error: expected function type"
-                                          e2'' <-
-                                            if alphaEquiv t1a t2
-                                            then return e2'
-                                            else scGlobalApply sc "Prelude.unsafeCoerce" [t2, t1a, e2']
+                                          e2'' <- coerceTerm sc env t2 t1a e2'
                                           scApply sc e1' e2''
     C.EAbs x t e                    -> do t' <- importType sc env t
                                           env' <- bindName sc x (C.Forall [] [] t) env
@@ -658,7 +637,7 @@ mapRecordSelector sc env i = fmap fst . go
           n' <- importType sc env n
           g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
           return (g, C.tFun n b)
-        C.TRec ts | Just b <- lookup i ts -> do
+        (C.tIsRec -> Just ts) | Just b <- lookup i ts -> do
           x <- scLocalVar sc 0
           y <- scRecordSelect sc x (C.unpackIdent i)
           t' <- importType sc env t
@@ -683,7 +662,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
      let x = nameToString (C.dName decl)
      f' <- scLambda sc x t' e'
      rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-     rhs' <- if not isTopLevel then return rhs else scTermF sc (Constant x rhs t')
+     rhs' <- if not isTopLevel then return rhs else scConstant sc x rhs t'
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
@@ -738,7 +717,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      rhss <- mapM (\d -> scRecordSelect sc rhs (nameToString (C.dName d))) decls
 
      -- if toplevel, then wrap each binding with a Constant constructor
-     let wrap d r t = scTermF sc (Constant (nameToString (C.dName d)) r t)
+     let wrap d r t = scConstant sc (nameToString (C.dName d)) r t
      rhss' <- if isTopLevel then sequence (zipWith3 wrap decls rhss ts) else return rhss
 
      let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss' decls
@@ -762,7 +741,7 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
      rhs <- importExpr sc env expr
      rhs' <- if not isTopLevel then return rhs else do
        t <- importSchema sc env (C.dSignature decl)
-       scTermF sc (Constant (nameToString (C.dName decl)) rhs t)
+       scConstant sc (nameToString (C.dName decl)) rhs t
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
@@ -772,6 +751,65 @@ importDeclGroups sc = foldM (importDeclGroup False sc)
 
 importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
 importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
+
+coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
+coerceTerm sc env t1 t2 e
+  | t1 == t2 = do return e
+  | otherwise =
+    do t1' <- importType sc env t1
+       t2' <- importType sc env t2
+       q <- proveEq sc env t1 t2
+       scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
+
+proveEq :: SharedContext -> Env -> C.Type -> C.Type -> IO Term
+proveEq sc env t1 t2
+  | t1 == t2 =
+    do s <- scSort sc (mkSort 0)
+       t' <- importType sc env t1
+       scCtorApp sc "Prelude.Refl" [s, t']
+  | otherwise =
+    case (C.tNoUser t1, C.tNoUser t2) of
+      (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
+        do n1' <- importType sc env n1
+           n2' <- importType sc env n2
+           a1' <- importType sc env a1
+           a2' <- importType sc env a2
+           num <- scDataTypeApp sc "Cryptol.Num" []
+           nEq <- if n1 == n2
+                  then scGlobalApply sc "Prelude.Refl" [num, n1']
+                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
+           aEq <- proveEq sc env a1 a2
+           if a1 == a2
+             then scGlobalApply sc "Cryptol.seqEq1" [n1', n2', a1', nEq]
+             else scGlobalApply sc "Cryptol.seqEq" [n1', n2', a1', a2', nEq, aEq]
+      (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
+        do a1' <- importType sc env a1
+           a2' <- importType sc env a2
+           b1' <- importType sc env b1
+           b2' <- importType sc env b2
+           aEq <- proveEq sc env a1 a2
+           bEq <- proveEq sc env b1 b2
+           scGlobalApply sc "Cryptol.funEq" [a1', a2', b1', b2', aEq, bEq]
+      (C.tIsTuple -> Just (a1 : ts1), C.tIsTuple -> Just (a2 : ts2))
+        | length ts1 == length ts2 ->
+          do let b1 = C.tTuple ts1
+                 b2 = C.tTuple ts2
+             a1' <- importType sc env a1
+             a2' <- importType sc env a2
+             b1' <- importType sc env b1
+             b2' <- importType sc env b2
+             aEq <- proveEq sc env a1 a2
+             bEq <- proveEq sc env b1 b2
+             if b1 == b2
+               then scGlobalApply sc "Cryptol.pairEq1" [a1', a2', b1', aEq]
+               else if a1 == a2
+                    then scGlobalApply sc "Cryptol.pairEq2" [a1', b1', b2', bEq]
+                    else scGlobalApply sc "Cryptol.pairEq" [a1', a2', b1', b2', aEq, bEq]
+      (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
+        | map fst ts1 == map fst ts2 ->
+          do fail $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
+      (_, _) ->
+        fail $ unwords ["Internal type error:", pretty t1, pretty t2]
 
 --------------------------------------------------------------------------------
 -- List comprehensions
@@ -783,24 +821,22 @@ importComp sc env lenT elemT expr mss =
            do (xs, len, ty, args) <- importMatches sc env branch
               m <- importType sc env len
               a <- importType sc env ty
-              return (xs, m, a, [args])
+              return (xs, m, a, [args], len)
          zipAll (branch : branches) =
            do (xs, len, ty, args) <- importMatches sc env branch
               m <- importType sc env len
               a <- importType sc env ty
-              (ys, n, b, argss) <- zipAll branches
+              (ys, n, b, argss, len') <- zipAll branches
               zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
               mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
-              return (zs, mn, ab, args : argss)
-     (xs, n, a, argss) <- zipAll mss
+              return (zs, mn, ab, args : argss, C.tMin len len')
+     (xs, n, a, argss, lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
      ys <- scGlobalApply sc "Cryptol.seqMap" [a, b, n, f, xs]
      -- The resulting type might not match the annotation, so we coerce
-     t1 <- scGlobalApply sc "Cryptol.seq" [n, b]
-     t2 <- importType sc env (C.tSeq lenT elemT)
-     scGlobalApply sc "Prelude.unsafeCoerce" [t1, t2, ys]
+     coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys
 
 lambdaTuples :: SharedContext -> Env -> C.Type -> C.Expr -> [[(C.Name, C.Type)]] -> IO Term
 lambdaTuples sc env _ty expr [] = importExpr sc env expr
@@ -919,7 +955,7 @@ asCryptolTypeValue v =
     SC.VFieldType k v1 v2 -> do
       let name = C.packIdent k
       t1 <- asCryptolTypeValue v1
-      fs <- asCryptolTypeValue v2 >>= tIsRec
+      fs <- asCryptolTypeValue v2 >>= C.tIsRec
       return (C.tRec ((name, t1) : fs))
     SC.VPiType v1 f -> do
       case v1 of
@@ -942,9 +978,6 @@ asCryptolTypeValue v =
           t2 <- asCryptolTypeValue v2
           return (C.tFun t1 t2)
     _ -> Nothing
-  where
-    tIsRec (C.TRec fs) = Just fs
-    tIsRec _           = Nothing
 
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
