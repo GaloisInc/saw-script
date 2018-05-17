@@ -2,6 +2,7 @@
 {-# Language PatternSynonyms, TypeFamilies, TypeSynonymInstances #-}
 {-# Language TypeApplications #-}
 {-# Language TypeOperators #-}
+{-# Language OverloadedStrings #-}
 {-# Language ExistentialQuantification #-}
 {-# Language Rank2Types #-}
 {-# Language FlexibleContexts #-}
@@ -47,6 +48,7 @@ module SAWScript.X86SpecNew
 import GHC.TypeLits(KnownNat)
 import GHC.Natural(Natural)
 import Data.Kind(Type)
+import Control.Lens (view)
 import Control.Monad(foldM,zipWithM)
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
@@ -62,6 +64,11 @@ import Data.Parameterized.Pair
 
 import Data.Foldable(toList)
 
+import What4.Interface
+          (bvLit,isEq, Pred, notPred, orPred
+          , bvUle, truePred, natLit, asNat, andPred )
+import What4.ProgramLoc
+
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.LLVM.MemModel
   ( MemImpl,coerceAny,doLoad,doPtrAddOffset, emptyMem
@@ -76,14 +83,11 @@ import Lang.Crucible.LLVM.MemModel.Generic
     (AllocType(HeapAlloc,GlobalAlloc), Mutability(..))
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
-import Lang.Crucible.Solver.AssumptionStack
-          (Assertion(..), ProofGoal(..))
-import Lang.Crucible.Solver.BoolInterface
-          (addAssertion, addAssumption, getProofObligations)
-import Lang.Crucible.Solver.Interface
-          (bvLit,isEq, Pred, notPred, orPred
-          , bvUle, truePred, natLit, asNat, andPred )
-import Lang.Crucible.Solver.SAWCoreBackend
+import Lang.Crucible.Backend
+          (addAssumption, getProofObligations, assert, AssumptionReason(..)
+          ,LabeledPred(..), ProofGoal(..), labeledPredMsg)
+
+import Lang.Crucible.Backend.SAWCore
   (bindSAWTerm,sawBackendSharedContext,toSC)
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType )
@@ -625,7 +629,7 @@ evalSame sym t v1 v2 =
 doAssert :: Eval p => Opts -> S p -> (String, Prop p) -> IO ()
 doAssert opts s (msg,p) =
   do pr <- evalProp opts p s
-     addAssertion (optsSym opts) pr (AssertFailureSimError msg)
+     assert (optsSym opts) pr (AssertFailureSimError msg)
 
 
 --------------------------------------------------------------------------------
@@ -760,7 +764,10 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
 
      s1 <- foldM (\s' y -> setLoc y sym v s') cur xs
 
-     let same a = addAssumption sym =<< evalSame sym t v a
+     let same a =
+           do p <- evalSame sym t v a
+              let loc = mkProgramLoc "<makeEquiv>" InternalPos
+              addAssumption sym (LabeledPred p (AssumptionReason loc "equivalance class assumption"))
 
      mapM_ same rest
 
@@ -773,13 +780,15 @@ makeEquivs opts mp s = foldM (makeEquiv opts) s (MapF.toList (repBy mp))
 
 
 addAsmp :: Eval p => Opts -> S p -> (String,Prop p) -> IO ()
-addAsmp opts s (_,p) =
+addAsmp opts s (msg,p) =
   case p of
     Same _ (Loc _) _ -> return ()
     Same _ _ (Loc _) -> return ()
     CryPostMem {}    -> return ()
 
-    _ -> addAssumption (optsSym opts) =<< evalProp opts p s
+    _ -> do p' <- evalProp opts p s
+            let loc = mkProgramLoc "<addAssmp>" InternalPos -- FIXME
+            addAssumption (optsSym opts) (LabeledPred p' (AssumptionReason loc msg))
 
 setCryPost :: forall p. Eval p => Opts -> S p -> (String,Prop p) -> IO (S p)
 setCryPost opts s (_nm,p) =
@@ -1003,13 +1012,12 @@ debugPPReg r s =
   do let Just (RV v) = lookupX86Reg r (stateRegs s)
      putStrLn (show r ++ " = " ++ show (ppPtr v))
 
-debugDumpGoals :: Sym -> IO ()
-debugDumpGoals sym =
+_debugDumpGoals :: Sym -> IO ()
+_debugDumpGoals sym =
   do obls <- getProofObligations sym
      mapM_ sh (toList obls)
   where
-  sh (ProofGoal _hyps g) = print (assertLoc g, assertMsg g)
-
+  sh (ProofGoal _hyps g) = print (view labeledPredMsg g)
 
 
 type Overrides = Map (Natural,Integer) (Sym -> CallHandler Sym X86_64)
@@ -1049,7 +1057,7 @@ checkOverlaps sym = check
        opt2 <- bvUle sym x2 y1
        opt3 <- bvUle sym y2 x1
        ok <- orPred sym opt1 =<< orPred sym opt2 opt3
-       addAssertion sym ok $ AssertFailureSimError $
+       assert sym ok $ AssertFailureSimError $
          unlines [ "Potentially aliased pointers:"
                  , "*** " ++ show (ppPtr p1)
                  , "*** " ++ show (ppPtr q1)

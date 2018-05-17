@@ -44,6 +44,7 @@ import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Utils as SS
 import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
@@ -353,7 +354,7 @@ interpretStmt ::
   TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
-    SS.StmtBind _ pat mc expr -> do {-TODO set loc-} processStmtBind printBinds pat mc expr
+    SS.StmtBind pos pat mc expr -> withPosition pos (processStmtBind printBinds pat mc expr)
     SS.StmtLet _ dg           -> do rw <- getTopLevelRW
                                     dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
@@ -438,6 +439,7 @@ buildTopLevelEnv opts =
                    , roJavaCodebase = jcb
                    , roOptions = opts
                    , roHandleAlloc = halloc
+                   , roPosition = SS.Unknown
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc

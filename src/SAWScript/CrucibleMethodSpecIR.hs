@@ -49,14 +49,18 @@ import qualified Lang.Crucible.CFG.Common as Crucible
 --import qualified Lang.Crucible.LLVM.MemModel.Common as C
 import SAWScript.Prover.SolverStats
 
+import qualified What4.Expr.Builder as B
+import           What4.ProgramLoc (ProgramLoc)
+
+import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
 import qualified Lang.Crucible.LLVM.Translation as CL
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtxt
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-import qualified Lang.Crucible.Solver.SAWCoreBackend as Crucible
-import qualified Lang.Crucible.Solver.SimpleBuilder as Crucible
+
+
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -126,9 +130,10 @@ data PointsTo = PointsTo SetupValue SetupValue
   deriving (Show)
 
 data SetupCondition where
-  SetupCond_Equal    :: SetupValue -> SetupValue -> SetupCondition
-  SetupCond_Pred     :: TypedTerm -> SetupCondition
-  SetupCond_Ghost    :: GhostGlobal ->
+  SetupCond_Equal    :: ProgramLoc ->SetupValue -> SetupValue -> SetupCondition
+  SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition
+  SetupCond_Ghost    :: ProgramLoc ->
+                        GhostGlobal ->
                         TypedTerm ->
                         SetupCondition
   deriving (Show)
@@ -164,6 +169,7 @@ data CrucibleMethodSpecIR' t =
   , _csArgBindings     :: Map Integer (t, SetupValue) -- ^ function arguments
   , _csRetValue        :: Maybe SetupValue            -- ^ function return value
   , _csSolverStats     :: SolverStats                 -- ^ statistics about the proof that produced this
+  , _csLoc             :: ProgramLoc
   }
   deriving (Show)
 
@@ -176,7 +182,7 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n) GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
-    do st <- readIORef (Crucible.sbStateManager sym)
+    do st <- readIORef (B.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
        prd' <- Crucible.toSC sym prd
        typ  <- scTypeOf sc (ttTerm thn)
@@ -359,8 +365,9 @@ initialStateSpec =  StateSpec
 initialDefCrucibleMethodSpecIR ::
   (?lc :: TyCtxt.LLVMContext) =>
   L.Define ->
+  ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
-initialDefCrucibleMethodSpecIR def = do
+initialDefCrucibleMethodSpecIR def loc = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
   let L.Symbol nm = L.defName def
@@ -373,13 +380,15 @@ initialDefCrucibleMethodSpecIR def = do
     ,_csArgBindings     = Map.empty
     ,_csRetValue        = Nothing
     ,_csSolverStats     = mempty
+    ,_csLoc             = loc
     }
 
 initialDeclCrucibleMethodSpecIR ::
   (?lc :: TyCtxt.LLVMContext) =>
   L.Declare ->
+  ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
-initialDeclCrucibleMethodSpecIR dec = do
+initialDeclCrucibleMethodSpecIR dec loc = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
   let L.Symbol nm = L.decName dec
@@ -392,15 +401,17 @@ initialDeclCrucibleMethodSpecIR dec = do
     ,_csArgBindings     = Map.empty
     ,_csRetValue        = Nothing
     ,_csSolverStats     = mempty
+    ,_csLoc             = loc
     }
 
 initialCrucibleSetupState ::
   (?lc :: TyCtxt.LLVMContext) =>
   CrucibleContext wptr ->
   L.Define ->
+  ProgramLoc ->
   Either SetupError (CrucibleSetupState wptr)
-initialCrucibleSetupState cc def = do
-  ms <- initialDefCrucibleMethodSpecIR def
+initialCrucibleSetupState cc def loc = do
+  ms <- initialDefCrucibleMethodSpecIR def loc
   return CrucibleSetupState
     { _csVarCounter      = AllocIndex 0
     , _csPrePost         = PreState
@@ -413,9 +424,10 @@ initialCrucibleSetupStateDecl ::
   (?lc :: TyCtxt.LLVMContext) =>
   CrucibleContext wptr ->
   L.Declare ->
+  ProgramLoc ->
   Either SetupError (CrucibleSetupState wptr)
-initialCrucibleSetupStateDecl cc dec = do
-  ms <- initialDeclCrucibleMethodSpecIR dec
+initialCrucibleSetupStateDecl cc dec loc = do
+  ms <- initialDeclCrucibleMethodSpecIR dec loc
   return CrucibleSetupState
     { _csVarCounter      = AllocIndex 0
     , _csPrePost         = PreState
