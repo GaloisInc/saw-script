@@ -495,8 +495,8 @@ scBuildCtor sc d c ctor_names arg_struct =
     iota_red <-
       scShCtxM sc $
       ctxReduceRecursor d (take num_params vars) (vars !! num_params)
-      (zip ctor_names (drop num_params vars)) c
-      (drop (num_params + length ctor_names) vars) arg_struct
+      (zip ctor_names (drop (num_params + 1) vars)) c
+      (drop (num_params + 1 + length ctor_names) vars) arg_struct
     -- Finally, return the required Ctor record
     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
                     ctorDataTypeName = d, ctorType = tp,
