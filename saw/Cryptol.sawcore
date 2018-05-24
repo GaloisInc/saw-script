@@ -121,8 +121,8 @@ tcSub =
 tcMul :: Num -> Num -> Num;
 tcMul =
   binaryNumFun mulNat
-               (\ (x::Nat) -> ite__def Num (equalNat 0 x) (TCNum 0) TCInf)
-               (\ (y::Nat) -> ite__def Num (equalNat 0 y) (TCNum 0) TCInf)
+               (\ (x::Nat) -> if0Nat Num x (TCNum 0) TCInf)
+               (\ (y::Nat) -> if0Nat Num y (TCNum 0) TCInf)
                TCInf;
 
 tcDiv :: Num -> Num -> Num;
@@ -146,10 +146,12 @@ tcExp :: Num -> Num -> Num;
 tcExp =
   binaryNumFun expNat
                (\ (x::Nat) ->
-                  ite__def Num (equalNat 0 x) (TCNum 0)
-                  (ite__def Num (equalNat 1 x) (TCNum 1) TCInf))
-               (\ (y::Nat) ->
-                  ite Num (equalNat 0 y) (TCNum 1) TCInf)
+                  natCase
+                    (\ (_::Nat) -> Num) (TCNum 0)
+                    (\ (x_minus_1::Nat) ->
+                       if0Nat Num x_minus_1 (TCNum 1) TCInf)
+                    x)
+               (\ (y::Nat) -> if0Nat Num y (TCNum 1) TCInf)
                TCInf;
 
 tcMin :: Num -> Num -> Num;
@@ -176,15 +178,15 @@ tcCeilMod =
 
 tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThenTo_Nat x y z =
-  ite__def Nat (ltNat x y)
-    (ite__def Nat (ltNat z x) 0
-              (addNat (divNat (subNat z x) (subNat y x)) 1)) -- increasing
-    (ite__def Nat (ltNat x z) 0
-              (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
+  ite Nat (ltNat x y)
+    (ite Nat (ltNat z x) 0
+         (addNat (divNat (subNat z x) (subNat y x)) 1)) -- increasing
+    (ite Nat (ltNat x z) 0
+         (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
 
 tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat x y w =
-  tcLenFromThenTo_Nat x y (ite__def Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
+  tcLenFromThenTo_Nat x y (ite Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
 tcLenFromThen = trinaryNumFun tcLenFromThen_Nat TCInf;
@@ -305,7 +307,7 @@ from a b =
          -- Case 2: n = (TCNum m, TCInf)
          (natCase
             (\ (m'::Nat) -> (Vec m' a -> (a -> Stream b) ->
-               seq (ite__def Num (equalNat 0 m') (TCNum 0) TCInf) #(a, b)))
+               seq (if0Nat Num m' (TCNum 0) TCInf) #(a, b)))
             (\ (xs :: Vec 0 a) ->
              \ (k :: a -> Stream b) -> EmptyVec #(a, b))
             (\ (m' :: Nat) ->
@@ -320,7 +322,7 @@ from a b =
        (\ (n::Nat) ->
           natCase
             (\ (n'::Nat) -> (Stream a -> (a -> Vec n' b) ->
-                seq (ite__def Num (equalNat 0 n') (TCNum 0) TCInf) #(a, b)))
+                seq (if0Nat Num n' (TCNum 0) TCInf) #(a, b)))
             (\ (xs :: Stream a) ->
              \ (k :: a -> Vec 0 b) -> EmptyVec #(a, b))
             (\ (n' :: Nat) ->
@@ -424,7 +426,7 @@ errorBinary a _ _ = error a "invalid class instance";
 -- Comparisons
 
 boolCmp :: Bool -> Bool -> Bool -> Bool;
-boolCmp x y k = ite__def Bool x (and y k) (or y k);
+boolCmp x y k = ite Bool x (and y k) (or y k);
 
 integerCmp :: Integer -> Integer -> Bool -> Bool;
 integerCmp x y k = or (intLt x y) (and (intEq x y) k);
@@ -1052,7 +1054,7 @@ ecJoin =
        (\ (n::Nat) -> \ (a::sort 0) ->
           natCase
             (\ (n'::Nat) -> Stream (Vec n' a) ->
-               seq (ite__def Num (equalNat 0 n') (TCNum 0) TCInf) a)
+               seq (if0Nat Num n' (TCNum 0) TCInf) a)
             (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
             (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) ->
                streamJoin a n' s)
@@ -1080,7 +1082,7 @@ ecSplit =
        (\ (n::Nat) -> \ (a::sort 0) ->
           natCase
             (\ (n'::Nat) ->
-               seq (ite__def Num (equalNat 0 n') (TCNum 0) TCInf) a ->
+               seq (if0Nat Num n' (TCNum 0) TCInf) a ->
                Stream (Vec n' a))
             (streamConst (Vec 0 a))
             (\ (n'::Nat) -> streamSplit a (Succ n'))
