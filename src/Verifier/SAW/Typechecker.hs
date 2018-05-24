@@ -389,7 +389,9 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
             forM typed_ctors $ \(c, tp) ->
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor dtName (mkIdent mnm c) arg_struct
+                liftTCM scBuildCtor dtName (mkIdent mnm c)
+                (map (mkIdent mnm . fst) typed_ctors)
+                arg_struct
               Nothing -> err ("Malformed type form constructor: " ++ c)
 
   -- Step 6: complete the datatype with the given ctors

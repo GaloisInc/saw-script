@@ -59,6 +59,9 @@ module Verifier.SAW.SharedTerm
   , scFindDef
   , scFindDataType
   , scFindCtor
+  , scRequireDef
+  , scRequireDataType
+  , scRequireCtor
     -- ** Term construction
   , scApply
   , scApplyAll
@@ -309,7 +312,7 @@ scDataTypeAppParams sc ident params args =
 -- arguments. This version does no checking against the module.
 scDataTypeApp :: SharedContext -> Ident -> [Term] -> IO Term
 scDataTypeApp sc d_id args =
-  do Just d <- scFindDataType sc d_id
+  do d <- scRequireDataType sc d_id
      let (params,args') = splitAt (length (dtParams d)) args
      scDataTypeAppParams sc d_id params args'
 
@@ -323,7 +326,7 @@ scCtorAppParams sc ident params args =
 -- arguments. This version does no checking against the module.
 scCtorApp :: SharedContext -> Ident -> [Term] -> IO Term
 scCtorApp sc c_id args =
-  do Just ctor <- scFindCtor sc c_id
+  do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
      scCtorAppParams sc c_id params args'
 
@@ -372,15 +375,39 @@ scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
 scFindDef sc i =
   findDef <$> scFindModule sc (identModule i) <*> return (identName i)
 
+-- | Look up a 'Def' by its identifier, throwing an error if it is not found
+scRequireDef :: SharedContext -> Ident -> IO Def
+scRequireDef sc i =
+  scFindDef sc i >>= \maybe_d ->
+  case maybe_d of
+    Just d -> return d
+    Nothing -> fail ("Could not find definition: " ++ show i)
+
 -- | Look up a datatype by its identifier
 scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
 scFindDataType sc i =
   findDataType <$> scFindModule sc (identModule i) <*> return (identName i)
 
+-- | Look up a datatype by its identifier, throwing an error if it is not found
+scRequireDataType :: SharedContext -> Ident -> IO DataType
+scRequireDataType sc i =
+  scFindDataType sc i >>= \maybe_d ->
+  case maybe_d of
+    Just d -> return d
+    Nothing -> fail ("Could not find datatype: " ++ show i)
+
 -- | Look up a constructor by its identifier
 scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
 scFindCtor sc i =
   findCtor <$> scFindModule sc (identModule i) <*> return (identName i)
+
+-- | Look up a constructor by its identifier, throwing an error if not found
+scRequireCtor :: SharedContext -> Ident -> IO Ctor
+scRequireCtor sc i =
+  scFindCtor sc i >>= \maybe_ctor ->
+  case maybe_ctor of
+    Just ctor -> return ctor
+    Nothing -> fail ("Could not find constructor: " ++ show i)
 
 
 -- SharedContext implementation.
@@ -443,17 +470,39 @@ allowedElimSort dt s =
   else True
 
 
--- | Build a 'Ctor' from a 'CtorArgStruct'
-scBuildCtor :: SharedContext -> Ident -> Ident -> CtorArgStruct d params ixs ->
+-- | Build a 'Ctor' from a 'CtorArgStruct' and a list of the other constructor
+-- names of the 'DataType'. Note that we cannot look up the latter information,
+-- as 'scBuildCtor' is called during construction of the 'DataType'.
+scBuildCtor :: SharedContext -> Ident -> Ident -> [Ident] ->
+               CtorArgStruct d params ixs ->
                IO Ctor
-scBuildCtor sc d c arg_struct =
-  scShCtxM sc $
-  do tp <- ctxCtorType d arg_struct
-     elim_fun <- mkCtorElimTypeFun d c arg_struct
-     return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
-                     ctorDataTypeName = d, ctorType = tp,
-                     ctorElimTypeFun =
-                       (\ps p_ret -> scShCtxM sc $ elim_fun ps p_ret) }
+scBuildCtor sc d c ctor_names arg_struct =
+  do
+    -- Step 1: build the types for the constructor and its eliminator
+    tp <- scShCtxM sc $ ctxCtorType d arg_struct
+    elim_tp_fun <- scShCtxM sc $ mkCtorElimTypeFun d c arg_struct
+
+    -- Step 2: build free variables for params, p_ret, the elims, and the ctor
+    -- arguments
+    let num_params = bindingsLength $ ctorParams arg_struct
+    let num_args =
+          case arg_struct of
+            CtorArgStruct {..} -> bindingsLength ctorArgs
+    let total_vars_minus_1 = num_params + length ctor_names + num_args
+    vars <- reverse <$> mapM (scLocalVar sc) [0 .. total_vars_minus_1]
+    -- Step 3: pass these variables to ctxReduceRecursor to build the
+    -- ctorIotaReduction field
+    iota_red <-
+      scShCtxM sc $
+      ctxReduceRecursor d (take num_params vars) (vars !! num_params)
+      (zip ctor_names (drop num_params vars)) c
+      (drop (num_params + length ctor_names) vars) arg_struct
+    -- Finally, return the required Ctor record
+    return $ Ctor { ctorName = c, ctorArgStruct = arg_struct,
+                    ctorDataTypeName = d, ctorType = tp,
+                    ctorElimTypeFun =
+                      (\ps p_ret -> scShCtxM sc $ elim_tp_fun ps p_ret),
+                    ctorIotaReduction = iota_red }
 
 -- | Given a datatype @d@, parameters @p1,..,pn@ for @d@, and a "motive"
 -- function @p_ret@ of type
@@ -467,12 +516,7 @@ scBuildCtor sc d c arg_struct =
 scRecursorElimTypes :: SharedContext -> Ident -> [Term] -> Term ->
                        IO [(Ident, Term)]
 scRecursorElimTypes sc d_id params p_ret =
-  do maybe_d <- scFindDataType sc d_id
-     d <-
-       case maybe_d of
-         Nothing ->
-           fail $ "scRecursorElimTypes: failed to find datatype " ++ show d_id
-         Just d -> return d
+  do d <- scRequireDataType sc d_id
      forM (dtCtors d) $ \ctor ->
        do elim_type <- ctorElimTypeFun ctor params p_ret
           return (ctorName ctor, elim_type)
@@ -495,17 +539,25 @@ scRecursorRetTypeType sc dt params s =
 --
 -- where @maybe rec_tm_i@ indicates an optional recursive call of the recursor
 -- on one of the @xi@. These recursive calls only exist for those arguments
--- @xi@. See the documentation for 'ctxReduceRecursor' for more details.
+-- @xi@. See the documentation for 'ctxReduceRecursor' and the
+-- 'ctorIotaReduction' field for more details.
 scReduceRecursor :: SharedContext -> Ident -> [Term] -> Term ->
                     [(Ident,Term)] -> Ident -> [Term] -> IO Term
 scReduceRecursor sc d params p_ret cs_fs c args =
-  do maybe_ctor <- scFindCtor sc c
-     case maybe_ctor of
-       Just (Ctor {..}) ->
-         scShCtxM sc $
-         ctxReduceRecursor d params p_ret cs_fs c args ctorArgStruct
-       Nothing ->
-         error ("scReduceRecursor: could not find constructor: " ++ show c)
+  do dt <- scRequireDataType sc d
+     -- This is to sort the eliminators by DataType order
+     elims <-
+       mapM (\c' -> case lookup (ctorName c') cs_fs of
+                Just elim -> return elim
+                Nothing ->
+                  fail ("scReduceRecursor: no eliminator for constructor: "
+                        ++ show c')) $
+       dtCtors dt
+     ctor <- scRequireCtor sc c
+     -- The ctorIotaReduction field caches the result of iota reduction, which
+     -- we just substitute into to perform the reduction
+     instantiateVarList sc 0 (reverse $ params ++ [p_ret] ++ elims ++ args)
+       (ctorIotaReduction ctor)
 
 
 --------------------------------------------------------------------------------
@@ -573,7 +625,7 @@ scWhnf sc t0 =
         p_ret cs_fs _ : xs)   (asCtorOrNat ->
                                Just (c, _, args))               = (scReduceRecursor sc d ps
                                                                    p_ret cs_fs c args) >>= go xs
-    go xs                     (asGlobalDef -> Just c)           = scFindDef sc c >>= tryDef c xs
+    go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
                                Just (d, params, p_ret, cs_fs, ixs,
                                      arg))                      = go (ElimRecursor d params p_ret
@@ -617,8 +669,8 @@ scWhnf sc t0 =
       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
 
     tryDef :: (?cache :: Cache IORef TermIndex Term) =>
-              Ident -> [WHNFElim] -> Maybe Def -> IO Term
-    tryDef _ xs (Just (defBody -> Just t)) = go xs t
+              Ident -> [WHNFElim] -> Def -> IO Term
+    tryDef _ xs (Def {defBody = Just t}) = go xs t
     tryDef ident xs _ = scGlobalDef sc ident >>= flip (foldM reapply) xs
 
 
@@ -693,26 +745,18 @@ reducePi sc t arg = do
 
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
-  do maybe_d <- scFindDef sc ident
-     case maybe_d of
-       Nothing ->
-         fail $ "scTypeOfGlobal: failed to find " ++ show ident ++ " in module."
-       Just d -> scSharedTerm sc (defType d)
+  do d <- scRequireDef sc ident
+     scSharedTerm sc (defType d)
 
 scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
-  do maybe_d <- scFindDataType sc ident
-     case maybe_d of
-       Nothing ->
-         fail $ "scTypeOfDataType: failed to find " ++ show ident
-       Just d -> scSharedTerm sc (dtType d)
+  do d <- scRequireDataType sc ident
+     scSharedTerm sc (dtType d)
 
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
-  do maybe_ctor <- scFindCtor sc ident
-     case maybe_ctor of
-       Nothing -> fail $ "scTypeOfCtor: failed to find " ++ show ident
-       Just ctor -> scSharedTerm sc (ctorType ctor)
+  do ctor <- scRequireCtor sc ident
+     scSharedTerm sc (ctorType ctor)
 
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
@@ -923,6 +967,18 @@ instantiateVar sc k t0 t =
 -- higher deBruijn indices by @length ts@. Assume that deBruijn index 0 in @ts@
 -- refers to deBruijn index @k + length ts@ in the current term; i.e., this
 -- substitution lifts terms in @ts@ by @k@ (plus any additional binders).
+--
+-- For example, @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of
+--
+-- > Lam (Lam (Lam t)) `App` z `App` y `App` x@
+--
+-- Note that the first element of the @ts@ list corresponds to @x@, which is the
+-- outermost, or last, application. In terms of 'instantiateVar', we can write
+-- this as:
+--
+-- > instantiateVarList 0 [x,y,z] t ==
+-- >    instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
+-- >                       (instantiateVar 2 (incVars 0 2 z) t))
 instantiateVarList :: SharedContext
                    -> DeBruijnIndex -> [Term] -> Term -> IO Term
 instantiateVarList _ _ [] t = return t
@@ -943,11 +999,6 @@ instantiateVarList sc k ts t =
               | j >= i + l     = scTermF sc (LocalVar (j - l))
               | j >= i         = term (rs !! (j - i)) i
               | otherwise      = scTermF sc (LocalVar j)
--- ^ Specification in terms of @instantiateVar@ (by example):
--- @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of @Lam
--- (Lam (Lam t)) `App` z `App` y `App` x@, i.e. @instantiateVarList 0
--- [x,y,z] t == instantiateVar 0 x (instantiateVar 1 (incVars 0 1 y)
--- (instantiateVar 2 (incVars 0 2 z) t))@.
 
 
 

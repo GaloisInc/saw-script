@@ -65,6 +65,8 @@ module Verifier.SAW.Module
   , allModulePrimitives
   , allModuleAxioms
   , allModuleActualDefs
+  , allModuleDataTypes
+  , allModuleCtors
     -- * Pretty-printing
   , ppModule
   ) where
@@ -197,12 +199,27 @@ data Ctor =
     --
     -- where the @ps@ are the parameters and the @ix@s are the indices of
     -- datatype @d@
+  , ctorIotaReduction :: Term
+    -- ^ Cached result of one step of iota reduction of the term
+    --
+    -- > RecursorApp d params p_ret elims ixs (c params args)
+    --
+    -- where @params@, @p_ret@, @elims@, and @args@ are distinct free variables,
+    -- in that order, so that the last @arg@ is the most recently-bound
+    -- variable, i.e., has deBruijn index 0. This means that an iota reduction
+    -- of the above recursor application can be performed by substituting the
+    -- concrete parameters, eliminators, and constructor arguments into the
+    -- 'Term' stored in 'ctorIotaReduction'. Note that we are assuming that the
+    -- @elims@ are in the same order as they are listed in the corresponding
+    -- 'DataType' for this constructor.
   }
 
+-- | Return the number of parameters of a constructor
 ctorNumParams :: Ctor -> Int
 ctorNumParams (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorParams
 
+-- | Return the number of non-parameter arguments of a constructor
 ctorNumArgs :: Ctor -> Int
 ctorNumArgs (Ctor { ctorArgStruct = CtorArgStruct {..}}) =
   bindingsLength ctorArgs
@@ -467,6 +484,15 @@ allModuleActualDefs modmap =
     | DefDecl def <- allModuleDecls modmap
     , defQualifier def == NoQualifier
     ]
+
+-- | Get all datatypes in all modules in a module map
+allModuleDataTypes :: ModuleMap -> [DataType]
+allModuleDataTypes modmap = concatMap moduleDataTypes (HMap.elems modmap)
+
+-- | Get all constructors in all modules in a module map
+allModuleCtors :: ModuleMap -> [Ctor]
+allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
+
 
 -- | Pretty-print a 'Module'
 ppModule :: PPOpts -> Module -> Doc
