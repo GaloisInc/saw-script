@@ -64,11 +64,8 @@ data Value l
   | VEmptyType
   | VFieldType FieldName !(Value l) !(Value l)
   | VDataType !Ident [Value l]
-  | VRecursorApp !Ident [Value l] (Value l) [(Ident, Value l)]
-    [Value l] (Value l)
   | VRecordType ![(String, Value l)]
-  | VRecordValue ![(String, Value l)]
-  | VRecordProj (Value l) !String
+  | VRecordValue ![(String, Thunk l)]
   | VIntType
   | VVecType (Value l) (Value l)
   | VType -- ^ Other unknown type
@@ -156,14 +153,12 @@ instance Show (Extra l) => Show (Value l) where
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
-      VRecursorApp {} -> showString "<<recursor>>"
       VRecordType [] -> showString "{}"
       VRecordType ((fld,_):_) ->
         showString "{" . showString fld . showString " :: _, ...}"
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString fld . showString " = _, ...}"
-      VRecordProj x prj -> shows x . showString "." . showString prj
       VIntType       -> showString "Integer"
       VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
                         . showString " " . showParen True (showsPrec p a)
@@ -204,6 +199,14 @@ valRecordSelect :: (VMonad l, Show (Extra l)) =>
 valRecordSelect k (VField k' x r) = if k == k' then force x else valRecordSelect k r
 valRecordSelect k VEmpty = fail $ "valRecordSelect: record field not found: " ++ k
 valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
+
+valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> String -> MValue l
+valRecordProj (VRecordValue fld_map) fld
+  | Just t <- lookup fld fld_map = force t
+valRecordProj v@(VRecordValue _) fld =
+  fail $
+  "valRecordProj: record field not found: " ++ fld ++ " in value: " ++ show v
+valRecordProj v _ = fail $ "valRecordProj: not a record value: " ++ show v
 
 apply :: VMonad l => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x

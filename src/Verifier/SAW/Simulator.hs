@@ -37,7 +37,7 @@ import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
-import Data.Foldable (foldlM)
+import Data.Foldable (foldlM, find)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.Set as Set
@@ -49,6 +49,7 @@ import Data.Traversable
 import qualified Data.Vector as V
 --import qualified Debug.Trace as Debug
 
+import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 
@@ -70,6 +71,7 @@ data SimulatorConfig l =
   { simGlobal :: Ident -> MValue l
   , simExtCns :: VarIndex -> String -> Value l -> MValue l
   , simUninterpreted :: String -> Value l -> Maybe (MValue l)
+  , simModMap :: ModuleMap
   }
 
 ------------------------------------------------------------
@@ -160,15 +162,17 @@ evalTermF cfg lam recEval tf env =
                                   ts' <- mapM recEvalDelay ts
                                   foldM apply v (ps' ++ ts')
         DataTypeApp i ps ts -> liftM (VDataType i) $ mapM recEval (ps ++ ts)
-        RecursorApp d ps p_ret cs_fs ixs arg ->
-          VRecursorApp d <$> mapM recEval ps <*> recEval p_ret <*>
-          mapM (\(c,f) -> (c,) <$> recEval f) cs_fs <*>
-          mapM recEval ixs <*> recEval arg
+        RecursorApp _d ps p_ret cs_fs _ixs arg ->
+          do ps_th <- mapM recEvalDelay ps
+             p_ret_th <- recEvalDelay p_ret
+             cs_fs_th <- mapM (\(c,f) -> (c,) <$> recEvalDelay f) cs_fs
+             arg_v <- recEval arg
+             evalRecursorApp (simModMap cfg) lam ps_th p_ret_th cs_fs_th arg_v
         RecordType elem_tps ->
           VRecordType <$> mapM (\(fld,t) -> (fld,) <$> recEval t) elem_tps
         RecordValue elems   ->
-          VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEval t) elems
-        RecordProj t fld    -> VRecordProj <$> recEval t <*> return fld
+          VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEvalDelay t) elems
+        RecordProj t fld    -> recEval t >>= flip valRecordProj fld
         Sort {}             -> return VType
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
@@ -225,7 +229,7 @@ evalGlobal modmap prims extcns uninterpreted = do
    checkPrimitives modmap prims
    mfix $ \cfg -> do
      thunks <- mapM delay (globals cfg)
-     return (SimulatorConfig (global thunks) extcns uninterpreted)
+     return (SimulatorConfig (global thunks) extcns uninterpreted modmap)
   where
     ms :: [Module]
     ms = HashMap.elems modmap
@@ -281,6 +285,33 @@ checkPrimitives modmap prims = do
 
         unimplementedPrims = Set.toList $ Set.difference primSet implementedPrims
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
+
+
+-- | Evaluate a recursor application given a recursive way to evaluate terms,
+-- the current 'RecursorInfo' structure, and thunks for the @p_ret@, eliminators
+-- for the current inductive type, and the value being pattern-matched
+evalRecursorApp :: (VMonad l, Show (Extra l)) =>
+                   ModuleMap -> (Term -> OpenValue l) ->
+                   [Thunk l] -> Thunk l -> [(Ident, Thunk l)] -> Value l ->
+                   MValue l
+evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp c all_args)
+  | Just ctor <- find ((== c) . ctorName) (allModuleCtors modmap)
+  , Just dt <-
+      find ((== ctorDataTypeName ctor) . dtName) (allModuleDataTypes modmap)
+  = do elims <-
+         mapM (\c' -> case lookup (ctorName c') cs_fs of
+                  Just elim -> return elim
+                  Nothing ->
+                    fail ("evalRecursorApp: internal error: "
+                          ++ "constructor not found in its own datatype: "
+                          ++ show c')) $
+         dtCtors dt
+       let args = drop (length ps) $ V.toList all_args
+       lam (ctorIotaReduction ctor) (reverse $ ps ++ [p_ret] ++ elims ++ args)
+evalRecursorApp _ _ _ _ _ (VCtorApp c _) =
+  fail $ ("evalRecursorApp: could not find info for constructor: " ++ show c)
+evalRecursorApp _ _ _ _ _ v =
+  fail $ "evalRecursorApp: non-constructor value: " ++ show v
 
 
 ----------------------------------------------------------------------
