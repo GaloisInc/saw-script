@@ -466,13 +466,13 @@ parseUninterpreted cws nm ty =
            t2 <- f (ready x)
            parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
-    (VDataType "Prelude.Bool" [])
+    VBoolType
       -> return $ vBool $ mkUninterpreted KBool cws nm
 
     VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
 
-    (VVecType (VNat n) (VDataType "Prelude.Bool" []))
+    (VVecType (VNat n) VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
     (VVecType (VNat n) ety)
@@ -506,7 +506,7 @@ mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
 asPredType :: SValue -> IO [SValue]
 asPredType v =
   case v of
-    VDataType "Prelude.Bool" [] -> return []
+    VBoolType -> return []
     VPiType v1 f ->
       do v2 <- f (error "asPredType: unsupported dependent SAW-Core type")
          vs <- asPredType v2
@@ -516,11 +516,11 @@ asPredType v =
 vAsFirstOrderType :: SValue -> Maybe FirstOrderType
 vAsFirstOrderType v =
   case v of
-    VDataType "Prelude.Bool" []
+    VBoolType
       -> return FOTBit
-    VDataType "Prelude.Integer" []
+    VIntType
       -> return FOTInt
-    VDataType "Prelude.Vec" [VNat n, v2]
+    VVecType (VNat n) v2
       -> FOTVec (fromInteger n) <$> vAsFirstOrderType v2
     VUnitType
       -> return (FOTTuple [])
