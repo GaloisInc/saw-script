@@ -938,7 +938,7 @@ pIsNeq ty = case C.tNoUser ty of
 asCryptolTypeValue :: SC.CValue -> Maybe C.Type
 asCryptolTypeValue v =
   case v of
-    SC.VDataType "Prelude.Bool" [] -> return C.tBit
+    SC.VBoolType -> return C.tBit
     SC.VIntType -> return C.tInteger
     SC.VVecType (SC.VNat n) v2 -> do
       t2 <- asCryptolTypeValue v2
