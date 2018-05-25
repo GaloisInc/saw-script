@@ -50,11 +50,14 @@ data Value l
   | VField FieldName (Thunk l) !(Value l)
   | VCtorApp !Ident !(Vector (Thunk l))
   | VVector !(Vector (Thunk l))
+  | VVecType (Value l) (Value l)
   | VBool (VBool l)
+  | VBoolType
   | VWord (VWord l)
   | VToNat (Value l)
   | VNat !Integer
   | VInt (VInt l)
+  | VIntType
   | VString !String
   | VFloat !Float
   | VDouble !Double
@@ -66,8 +69,6 @@ data Value l
   | VDataType !Ident [Value l]
   | VRecordType ![(String, Value l)]
   | VRecordValue ![(String, Thunk l)]
-  | VIntType
-  | VVecType (Value l) (Value l)
   | VType -- ^ Other unknown type
   | VExtra (Extra l)
 
@@ -137,10 +138,12 @@ instance Show (Extra l) => Show (Value l) where
         | otherwise  -> shows s . showList (toList xv)
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
+      VBoolType      -> showString "Bool"
       VWord _        -> showString "<<bitvector>>"
       VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
+      VIntType       -> showString "Integer"
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s
@@ -159,7 +162,6 @@ instance Show (Extra l) => Show (Value l) where
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
         showString "{" . showString fld . showString " = _, ...}"
-      VIntType       -> showString "Integer"
       VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
                         . showString " " . showParen True (showsPrec p a)
       VType          -> showString "_"
@@ -218,7 +220,7 @@ applyAll = foldM apply
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
-    VDataType "Prelude.Bool" [] -> return FTBit
+    VBoolType -> return FTBit
     VVecType (VNat n) v1 -> do
       t1 <- asFiniteTypeValue v1
       return (FTVec (fromInteger n) t1)

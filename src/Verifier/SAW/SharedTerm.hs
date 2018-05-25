@@ -1227,11 +1227,11 @@ scGlobalApply sc i ts =
 -- Building terms using prelude functions
 
 scBool :: SharedContext -> Bool -> IO Term
-scBool sc True  = scCtorApp sc "Prelude.True" []
-scBool sc False = scCtorApp sc "Prelude.False" []
+scBool sc True  = scGlobalDef sc "Prelude.True"
+scBool sc False = scGlobalDef sc "Prelude.False"
 
 scBoolType :: SharedContext -> IO Term
-scBoolType sc = scDataTypeApp sc "Prelude.Bool" []
+scBoolType sc = scGlobalDef sc "Prelude.Bool"
 
 scNatType :: SharedContext -> IO Term
 scNatType sc = scFlatTermF sc preludeNatType
