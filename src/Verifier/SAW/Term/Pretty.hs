@@ -448,7 +448,7 @@ ppFlatTermF prec tf =
 ppTermF :: Prec -> TermF Term -> PPM Doc
 ppTermF prec (FTermF ftf) = ppFlatTermF prec ftf
 ppTermF prec (App e1 e2) =
-  ppAppList prec <$> ppTerm' PrecArg e1 <*> mapM (ppTerm' PrecArg) [e2]
+  ppAppList prec <$> ppTerm' PrecApp e1 <*> mapM (ppTerm' PrecArg) [e2]
 ppTermF prec (Lambda x tp body) =
   ppParensPrec prec PrecLambda <$>
   (ppLambda <$> ppTerm' PrecApp tp <*> ppTermInBinder PrecLambda x body)
