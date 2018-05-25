@@ -98,15 +98,15 @@ inferResolveNameApp n args =
          do t <- typeInferComplete (LocalVar i :: TermF TypedTerm)
             inferApplyAll t args
        (_, Just (ResolvedCtor ctor)) ->
-         let (params, ixs) = splitAt (ctorNumParams ctor) args in
-         if length ixs == ctorNumArgs ctor then
-           typeInferComplete (CtorApp (ctorName ctor) params ixs)
-         else throwTCError (NotFullyApplied (ctorName ctor))
+         let (params, ctor_args) = splitAt (ctorNumParams ctor) args in
+         -- NOTE: typeInferComplete will check that we have the correct number
+         -- of arguments
+         typeInferComplete (CtorApp (ctorName ctor) params ctor_args)
        (_, Just (ResolvedDataType dt)) ->
          let (params, ixs) = splitAt (length $ dtParams dt) args in
-         if length ixs == length (dtIndices dt) then
-           typeInferComplete (DataTypeApp (dtName dt) params ixs)
-         else throwTCError (NotFullyApplied (dtName dt))
+         -- NOTE: typeInferComplete will check that we have the correct number
+         -- of indices
+         typeInferComplete (DataTypeApp (dtName dt) params ixs)
        (_, Just (ResolvedDef d)) ->
          do f <- typeInferComplete (GlobalDef (defIdent d)
                                     :: FlatTermF TypedTerm)

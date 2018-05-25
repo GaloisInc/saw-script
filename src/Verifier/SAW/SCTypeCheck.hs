@@ -148,7 +148,6 @@ data TCError
   | EmptyVectorLit
   | NoSuchDataType Ident
   | NoSuchCtor Ident
-  | NotFullyApplied Ident
   | NotFullyAppliedRec Ident
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
   | MalformedRecursor Term String
@@ -207,9 +206,6 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
     ppWithPos [ return ("No such data type: " ++ show d)]
   helper (NoSuchCtor c) =
     ppWithPos [ return ("No such constructor: " ++ show c) ]
-  helper (NotFullyApplied i) =
-      ppWithPos [ return ("Constructor or datatype not fully applied: "
-                          ++ show i) ]
   helper (NotFullyAppliedRec i) =
       ppWithPos [ return ("Recursor not fully applied: " ++ show i) ]
   helper (BadParamsOrArgsLength is_dt ident params args) =
