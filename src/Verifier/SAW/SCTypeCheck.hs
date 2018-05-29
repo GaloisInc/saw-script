@@ -150,6 +150,7 @@ data TCError
   | NoSuchCtor Ident
   | NotFullyAppliedRec Ident
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
+  | BadConstType String Term Term
   | MalformedRecursor Term String
   | DeclError String String
   | ErrorPos Pos TCError
@@ -215,6 +216,9 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
         ishow (Unshared $ FTermF $
                (if is_dt then DataTypeApp else CtorApp) ident params args)
       ]
+  helper (BadConstType n rty ty) =
+    ppWithPos [ return ("Type of constant " ++ show n), ishow rty
+              , return "doesn't match declared type", ishow ty ]
   helper (MalformedRecursor trm reason) =
       ppWithPos [ return "Malformed recursor application",
                   ishow trm, return reason ]
@@ -349,9 +353,13 @@ instance TypeInfer (TermF TypedTerm) where
          else
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
-  typeInfer (Constant _ (TypedTerm _ tp) _) =
-    -- FIXME: should we check that the type (3rd arg of Constant) is a type?
-    return tp
+  typeInfer (Constant n (TypedTerm _ tp) (TypedTerm req_tp req_tp_sort)) =
+    do void (ensureSort req_tp_sort)
+       -- NOTE: we do the subtype check here, rather than call checkSubtype, so
+       -- that we can throw the custom BadConstType error on failure
+       ok <- isSubtype tp req_tp
+       if ok then return tp else
+         throwTCError $ BadConstType n tp req_tp
   typeInferComplete tf =
     TypedTerm <$> liftTCM scTermF (fmap typedVal tf) <*> typeInfer tf
 
