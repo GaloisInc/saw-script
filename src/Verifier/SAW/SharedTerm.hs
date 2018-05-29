@@ -1077,7 +1077,7 @@ scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
-scRecord sc m = scFlatTermF sc (RecordType $ Map.assocs m)
+scRecord sc m = scFlatTermF sc (RecordValue $ Map.assocs m)
 
 scOldRecord :: SharedContext -> Map FieldName Term -> IO Term
 scOldRecord sc m = go (Map.assocs m)
