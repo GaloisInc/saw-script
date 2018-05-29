@@ -18,6 +18,8 @@ module Verifier.SAW.Simulator.Concrete
        , CExtra(..)
        , toBool
        , toWord
+       , asVTuple
+       , asVTupleType
        , runIdentity
        ) where
 
