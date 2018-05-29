@@ -946,6 +946,13 @@ asCryptolTypeValue v =
     SC.VDataType "Prelude.Stream" [v1] -> do
       t1 <- asCryptolTypeValue v1
       return (C.tSeq C.tInf t1)
+    (SC.asVTupleType -> Just tps) ->
+      C.tTuple <$> mapM asCryptolTypeValue tps
+    SC.VRecordType elems ->
+      do elems' <- mapM (\(f,tp) ->
+                          let f_id = C.packIdent f in
+                          (f_id,) <$> asCryptolTypeValue tp) elems
+         return (C.tRec elems')
     SC.VUnitType -> return (C.tTuple [])
     SC.VPairType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
@@ -1063,6 +1070,8 @@ exportTupleValue tys v =
   case (tys, v) of
     ([]    , SC.VUnit    ) -> []
     (t : ts, SC.VPair x y) -> (V.ready $ exportValue t (run x)) : exportTupleValue ts (run y)
+    (_     , SC.asVTuple -> Just xs) ->
+      zipWith (\t x -> V.ready $ exportValue t (run x)) tys xs
     _                      -> error $ "exportValue: expected tuple"
   where
     run = SC.runIdentity . force
@@ -1071,7 +1080,11 @@ exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.
 exportRecordValue fields v =
   case (fields, v) of
     ([]         , SC.VEmpty      ) -> []
-    ((n, t) : ts, SC.VField _ x y) -> (n, V.ready $ exportValue t (run x)) : exportRecordValue ts y
+    ((n, t) : ts, SC.VField _ x y) ->
+      (n, V.ready $ exportValue t (run x)) : exportRecordValue ts y
+    (_, SC.VRecordValue (alistAllFields
+                         (map (C.unpackIdent . fst) fields) -> Just ths)) ->
+      zipWith (\(n,t) x -> (n, V.ready $ exportValue t (run x))) fields ths
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
