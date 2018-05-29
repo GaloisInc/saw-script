@@ -178,12 +178,10 @@ instance Show Nil where
 -- Basic operations on values
 
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple [] = VUnit
-vTuple (x : xs) = VPair x (ready (vTuple xs))
+vTuple xs = VRecordValue $ tupleAsRecordAList xs
 
 vTupleType :: VMonad l => [Value l] -> Value l
-vTupleType [] = VUnitType
-vTupleType (x : xs) = VPairType x (vTupleType xs)
+vTupleType ts = VRecordType $ tupleAsRecordAList ts
 
 valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
@@ -194,7 +192,19 @@ valPairRight (VPair _ t2) = force t2
 valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
 
 vRecord :: Map FieldName (Thunk l) -> Value l
-vRecord m = foldr (uncurry VField) VEmpty (Map.assocs m)
+vRecord m = VRecordValue (Map.assocs m)
+
+-- | Match on a 'VRecordValue' that represents a tuple, i.e., whose fields are
+-- all consecutive numbers
+asVTuple :: Value l -> Maybe [Thunk l]
+asVTuple (VRecordValue elems) = recordAListAsTuple elems
+asVTuple _ = Nothing
+
+-- | Match on a 'VRecordType' that represents a tuple type, i.e., whose fields
+-- are all consecutive numbers
+asVTupleType :: Value l -> Maybe [Value l]
+asVTupleType (VRecordType elems) = recordAListAsTuple elems
+asVTupleType _ = Nothing
 
 valRecordSelect :: (VMonad l, Show (Extra l)) =>
   FieldName -> Value l -> MValue l

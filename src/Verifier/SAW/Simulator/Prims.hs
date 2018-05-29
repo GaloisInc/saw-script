@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Prims
@@ -20,7 +21,7 @@ import Prelude hiding (sequence, mapM)
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (foldM, liftM)
+import Control.Monad (foldM, liftM, zipWithM)
 import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Map (Map)
@@ -29,7 +30,7 @@ import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Verifier.SAW.Term.Functor (Ident)
+import Verifier.SAW.Term.Functor (Ident, alistAllFields)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 
@@ -516,6 +517,9 @@ eqOp bp =
     go (VVector v1) x2 =
       do v2 <- toVector (bpUnpack bp) x2
          go (VVector v1) (VVector v2)
+    go (VRecordValue elems1) (VRecordValue
+                              (alistAllFields (map fst elems1) -> Just elems2)) =
+      zipWithM go' (map snd elems1) elems2 >>= foldM (bpAnd bp) (bpTrue bp)
     go (VBool b1) (VBool b2) = bpBoolEq bp b1 b2
     go (VInt i1) (VInt i2) = bpIntEq bp i1 i2
     go x1 x2 = fail $ "eq: invalid arguments: " ++ show (x1, x2)
@@ -1089,6 +1093,11 @@ muxValue bp b = value
     value VEmpty            VEmpty            = return VEmpty
     value (VField xf x1 x2) (VField yf y1 y2) | xf == yf
                                               = VField xf <$> thunk x1 y1 <*> value x2 y2
+    value (VRecordValue elems1) (VRecordValue
+                                 (alistAllFields (map fst elems1) ->
+                                  Just elems2)) =
+      VRecordValue <$>
+      zipWithM (\(f,th1) th2 -> (f,) <$> thunk th1 th2) elems1 elems2
     value (VCtorApp i xv)   (VCtorApp j yv)   | i == j = VCtorApp i <$> thunks xv yv
     value (VVector xv)      (VVector yv)      = VVector <$> thunks xv yv
     value (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
