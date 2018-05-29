@@ -230,6 +230,10 @@ flattenSValue v = do
         VField _ x y              -> do (xs, sx) <- flattenSValue =<< force x
                                         (ys, sy) <- flattenSValue y
                                         return (xs ++ ys, sx ++ sy)
+        VRecordValue elems        -> do (xss, sxs) <-
+                                          unzip <$>
+                                          mapM (flattenSValue <=< force . snd) elems
+                                        return (concat xss, concat sxs)
         VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
@@ -497,6 +501,12 @@ parseUninterpreted cws nm ty =
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VField f (ready x1) x2)
 
+    (VRecordType elem_tps)
+      -> (VRecordValue <$>
+          mapM (\(f,tp) ->
+                 (f,) <$> ready <$>
+                 parseUninterpreted cws (nm ++ "." ++ f) tp) elem_tps)
+
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
@@ -538,6 +548,11 @@ vAsFirstOrderType v =
             case t2 of
               FOTRec tm -> return (FOTRec (Map.insert k t1 tm))
               _ -> Nothing
+    (asVTupleType -> Just vs)
+      -> FOTTuple <$> mapM vAsFirstOrderType vs
+    VRecordType tps
+      -> (FOTRec <$> Map.fromList <$>
+          mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
     _ -> Nothing
 
 sbvSolve :: SharedContext
@@ -718,6 +733,10 @@ sbvSetOutput checkSz (FOTTuple (t:ts)) (VPair l r) i = do
    r' <- liftIO $ force r
    sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'
 
+sbvSetOutput checkSz (FOTTuple ts) (asVTuple -> Just thunks) i = do
+   vs <- liftIO $ mapM force thunks
+   foldM (\j (t,v) -> sbvSetOutput checkSz t v j) i (zip ts vs)
+
 sbvSetOutput _checkSz (FOTRec fs) VUnit i | Map.null fs = do
    return i
 sbvSetOutput checkSz (FOTRec fs) (VField fn x rec) i = do
@@ -727,6 +746,18 @@ sbvSetOutput checkSz (FOTRec fs) (VField fn x rec) i = do
        let fs' = Map.delete fn fs
        sbvSetOutput checkSz t x' i >>= sbvSetOutput checkSz (FOTRec fs') rec
      Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
+
+sbvSetOutput _checkSz (FOTRec fs) (VRecordValue []) i | Map.null fs = return i
+
+sbvSetOutput checkSz (FOTRec fs) (VRecordValue ((fn,x):rest)) i = do
+   x' <- liftIO $ force x
+   case Map.lookup fn fs of
+     Just t -> do
+       let fs' = Map.delete fn fs
+       sbvSetOutput checkSz t x' i >>=
+         sbvSetOutput checkSz (FOTRec fs') (VRecordValue rest)
+     Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
+
 sbvSetOutput _checkSz _ft _v _i = do
    fail "sbvCode gen: type mismatch when setting output values"
 
