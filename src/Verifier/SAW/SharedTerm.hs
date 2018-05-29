@@ -32,6 +32,9 @@ module Verifier.SAW.SharedTerm
   , smallestFreeVar
   , unshare
   , alphaEquiv
+  , recordAListAsTuple
+  , tupleAsRecordAList
+  , alistAllFields
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext
