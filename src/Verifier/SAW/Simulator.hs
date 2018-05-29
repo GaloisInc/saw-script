@@ -310,6 +310,11 @@ evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp c all_args)
        lam (ctorIotaReduction ctor) (reverse $ ps ++ [p_ret] ++ elims ++ args)
 evalRecursorApp _ _ _ _ _ (VCtorApp c _) =
   fail $ ("evalRecursorApp: could not find info for constructor: " ++ show c)
+evalRecursorApp modmap lam ps p_ret cs_fs (VNat 0) =
+  evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp "Prelude.Zero" V.empty)
+evalRecursorApp modmap lam ps p_ret cs_fs (VNat i) =
+  evalRecursorApp modmap lam ps p_ret cs_fs
+  (VCtorApp "Prelude.Succ" (V.singleton $ ready $ VNat $ i-1))
 evalRecursorApp _ _ _ _ _ v =
   fail $ "evalRecursorApp: non-constructor value: " ++ show v
 
