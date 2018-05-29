@@ -796,19 +796,24 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
 -- achieved by projecting the field names from this record.
 importDeclGroup isTopLevel sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
-     -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
-     env1 <- foldM (\e d -> bindName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
+     let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
      -- grab a reference to the outermost variable; this will be the record in the body
      -- of the lambda we build later
-     recv <- scLocalVar sc 0
+     v0 <- scLocalVar sc 0
+
+     -- build a list of projections from a record variable
+     vm <- traverse (scRecordSelect sc v0 . nameToString . C.dName) dm
 
      -- the types of the declarations
-     ts <- mapM (importSchema sc env . C.dSignature) decls
+     tm <- traverse (importSchema sc env . C.dSignature) dm
      -- the type of the recursive record
-     rect <- scRecordType sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) ts
-     -- shift the environment by one more variable to make room for our recursive record
-     let env2 = liftEnv env1 { envS = rect : envS env1 }
+     rect <- scRecordType sc (Map.mapKeys nameToString tm)
+
+     let env1 = liftEnv env
+     let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
+                     , envC = Map.union (fmap C.dSignature dm) (envC env1)
+                     , envS = rect : envS env1 }
 
      let extractDeclExpr decl =
            case C.dDefinition decl of
@@ -818,35 +823,28 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
                                 , show (C.dName decl)]
 
      -- the raw imported bodies of the declarations
-     es <- mapM extractDeclExpr decls
-
-     -- build a list of projections from a record variable
-     projs <- mapM (\d -> scRecordSelect sc recv (nameToString (C.dName d))) decls
-
-     -- substitute into the imported declaration bodies, replacing bindings by record projections
-     -- NB: start at index 1; index 0 is the variable for the record itself
-     es' <- mapM (instantiateVarList sc 1 projs) es
+     em <- traverse extractDeclExpr dm
 
      -- the body of the recursive record
-     rec <- scRecord sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) es'
+     recv <- scRecord sc (Map.mapKeys nameToString em)
 
      -- build a lambda from the record body...
-     f <- scLambda sc "fixRecord" rect rec
+     f <- scLambda sc "fixRecord" rect recv
 
      -- and take its fixpoint
      rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
      -- finally, build projections from the fixed record to shove into the environment
-     rhss <- mapM (\d -> scRecordSelect sc rhs (nameToString (C.dName d))) decls
-
      -- if toplevel, then wrap each binding with a Constant constructor
-     let wrap d r t = scConstant sc (nameToString (C.dName d)) r t
-     rhss' <- if isTopLevel then sequence (zipWith3 wrap decls rhss ts) else return rhss
+     let mkRhs d t =
+           do let s = nameToString (C.dName d)
+              r <- scRecordSelect sc rhs s
+              if isTopLevel then scConstant sc s r t else return r
+     rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-     let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss' decls
-                    , envC = foldr (\d e -> Map.insert (C.dName d) (C.dSignature d) e) (envC env) decls
+     let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
+                    , envC = Map.union (fmap C.dSignature dm) (envC env)
                     }
-
      return env'
 
 importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
