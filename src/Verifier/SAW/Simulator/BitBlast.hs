@@ -132,6 +132,8 @@ flattenBValue (VField _ x y) = do
   vx <- flattenBValue =<< force x
   vy <- flattenBValue y
   return $ AIG.concat [vx, vy]
+flattenBValue (VRecordValue elems) = do
+  AIG.concat <$> mapM (flattenBValue <=< force . snd) elems
 flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
 
 wordFun :: (LitVector l -> IO (BValue l)) -> BValue l
