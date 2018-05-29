@@ -15,7 +15,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
-import Control.Monad (foldM, join, unless, (<=<))
+import Control.Monad (foldM, join, unless)
 import qualified Data.Foldable as Fold
 import Data.List
 import qualified Data.IntTrie as IntTrie
@@ -31,6 +31,7 @@ import qualified Cryptol.Eval.Monad as V
 import qualified Cryptol.Eval.Value as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleSubst)
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
 import qualified Cryptol.Utils.Ident as C (Ident, packIdent, unpackIdent)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
@@ -49,8 +50,8 @@ import Verifier.SAW.TypedAST (mkSort, mkModuleName, showTerm)
 unimplemented :: Monad m => String -> m a
 unimplemented name = fail ("unimplemented: " ++ name)
 
-impossible :: Monad m => String -> m a
-impossible name = fail ("impossible: " ++ name)
+panic :: Monad m => String -> m a
+panic name = fail ("panic: " ++ name)
 
 --------------------------------------------------------------------------------
 -- Type Environments
@@ -135,18 +136,18 @@ importTFun sc tf =
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual     -> impossible "importPC PEqual"
-    C.PNeq       -> impossible "importPC PNeq"
-    C.PGeq       -> impossible "importPC PGeq"
-    C.PFin       -> impossible "importPC PFin"
-    C.PHas _     -> impossible "importPC PHas"
+    C.PEqual     -> panic "importPC PEqual"
+    C.PNeq       -> panic "importPC PNeq"
+    C.PGeq       -> panic "importPC PGeq"
+    C.PFin       -> panic "importPC PFin"
+    C.PHas _     -> panic "importPC PHas"
     C.PZero      -> scGlobalDef sc "Cryptol.PZero"
     C.PLogic     -> scGlobalDef sc "Cryptol.PLogic"
     C.PArith     -> scGlobalDef sc "Cryptol.PArith"
     C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
     C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
-    C.PAnd       -> impossible "importPC PAnd"
-    C.PTrue      -> impossible "importPC PTrue"
+    C.PAnd       -> panic "importPC PAnd"
+    C.PTrue      -> panic "importPC PTrue"
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
 importType :: SharedContext -> Env -> C.Type -> IO Term
@@ -157,7 +158,7 @@ importType sc env ty =
         C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
                          Just (t, j) -> incVars sc 0 j t
-                         Nothing -> fail "internal error: importType TVBound"
+                         Nothing -> panic "importType TVBound"
     C.TUser _ _ t  -> go t
     C.TRec fs -> scRecordType sc =<< mapM (\(f,t) -> (f,) <$> go t) tm
       where tm = [ (C.unpackIdent n, t) | (n, t) <- fs ]
@@ -184,7 +185,7 @@ importType sc env ty =
              tyargs' <- traverse go tyargs
              scApplyAll sc tf' tyargs'
         C.TError _k _msg ->
-          impossible "importType TError"
+          panic "importType TError"
   where
     go = importType sc env
 
@@ -418,7 +419,7 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pSignedCmp (C.TRec fs))
                 scGlobalApply sc "Cryptol.PSignedCmpField" [s, a, b, pa, pb]
 
-        _ -> do fail $ "proveProp: " ++ pretty prop
+        _ -> do panic $ "proveProp: " ++ pretty prop
 
 importPrimitive :: SharedContext -> C.Name -> IO Term
 importPrimitive sc (C.asPrim -> Just nm) =
@@ -487,107 +488,218 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
     "trace"         -> scGlobalDef sc "Cryptol.ecTrace"       -- {n,a,b} [n][8] -> a -> b -> b
 
-    _ -> fail $ unwords ["Unknown Cryptol primitive name:", C.unpackIdent nm]
+    _ -> panic $ unwords ["Unknown Cryptol primitive name:", C.unpackIdent nm]
 
 importPrimitive _ nm =
-  fail $ unwords ["Improper Cryptol primitive name:", show nm]
+  panic $ unwords ["Improper Cryptol primitive name:", show nm]
 
 
+-- | Convert a Cryptol expression to a SAW-Core term. Calling
+-- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
+-- type that is equivalent (i.e. convertible) with the one returned by
+-- @'importSchema' sc env ('fastTypeOf' ('envC' env) expr)@.
 importExpr :: SharedContext -> Env -> C.Expr -> IO Term
 importExpr sc env expr =
   case expr of
-    C.EList es t                -> do t' <- importType sc env t
-                                      es' <- traverse go es
-                                      scVector sc t' es'
-    C.ETuple es                 -> scTuple sc =<< traverse go es
-    C.ERec fs                   -> scRecord sc =<< traverse go (Map.fromList fs')
-                                     where fs' = [ (C.unpackIdent n, e) | (n, e) <- fs ]
-    C.ESel e sel                ->           -- Elimination for tuple/record/list
+    C.EList es t ->
+      do t' <- importType sc env t
+         es' <- traverse (importExpr' sc env (C.tMono t)) es
+         scVector sc t' es'
+
+    C.ETuple es ->
+      do es' <- traverse (importExpr sc env) es
+         scTuple sc es'
+
+    C.ERec fs ->
+      do let em = Map.fromList [ (C.unpackIdent n, e) | (n, e) <- fs ]
+         em' <- traverse (importExpr sc env) em
+         scRecord sc em'
+
+    C.ESel e sel ->
+      -- Elimination for tuple/record/list
       case sel of
-        C.TupleSel i _maybeLen  -> do
-          let t = fastTypeOf (envC env) e
-          case C.tIsTuple t of
-            Just _  -> flip (scTupleSelector sc) (i+1) =<< go e
-            Nothing -> do
-              e' <- go e
-              f <- mapTupleSelector sc env i t
-              scApply sc f e'
-        C.RecordSel x _         -> do
-          let t = fastTypeOf (envC env) e
-          case t of
-            C.TRec{} -> flip (scRecordSelect sc) (C.unpackIdent x) =<< go e
-            _        -> do
-              e' <- go e
-              f <- mapRecordSelector sc env x t
-              scApply sc f e'
-        C.ListSel i _maybeLen   -> do let t = fastTypeOf (envC env) e
-                                      (n, a) <- case C.tIsSeq t of
-                                                  Just (n, a) -> return (n, a)
-                                                  Nothing -> fail "ListSel: not a list type"
-                                      a' <- importType sc env a
-                                      n' <- importType sc env n
-                                      e' <- importExpr sc env e
-                                      i' <- scNat sc (fromIntegral i)
-                                      scGlobalApply sc "Cryptol.eListSel" [a', n', e', i']
-    C.EIf e1 e2 e3              -> do t' <- importType sc env (fastTypeOf (envC env) e2)
-                                      e1' <- importExpr sc env e1
-                                      e2' <- importExpr sc env e2
-                                      e3' <- importExpr sc env e3
-                                      scGlobalApply sc "Prelude.ite" [t', e1', e2', e3']
-    C.EComp len eltty e mss         -> importComp sc env len eltty e mss
-    C.EVar qname                    ->
+        C.TupleSel i _maybeLen ->
+          do e' <- importExpr sc env e
+             let t = fastTypeOf (envC env) e
+             case C.tIsTuple t of
+               Just _  ->
+                 do scTupleSelector sc e' (i+1)
+               Nothing ->
+                 do f <- mapTupleSelector sc env i t
+                    scApply sc f e'
+        C.RecordSel x _ ->
+          do e' <- importExpr sc env e
+             let t = fastTypeOf (envC env) e
+             case t of
+               C.TRec{} ->
+                 do scRecordSelect sc e' (C.unpackIdent x)
+               _ ->
+                 do f <- mapRecordSelector sc env x t
+                    scApply sc f e'
+        C.ListSel i _maybeLen ->
+          do let t = fastTypeOf (envC env) e
+             (n, a) <-
+               case C.tIsSeq t of
+                 Just (n, a) -> return (n, a)
+                 Nothing -> fail "ListSel: not a list type"
+             a' <- importType sc env a
+             n' <- importType sc env n
+             e' <- importExpr sc env e
+             i' <- scNat sc (fromIntegral i)
+             scGlobalApply sc "Cryptol.eListSel" [a', n', e', i']
+
+    C.EIf e1 e2 e3 ->
+      do let ty = fastTypeOf (envC env) e2
+         ty' <- importType sc env ty
+         e1' <- importExpr sc env e1
+         e2' <- importExpr sc env e2
+         e3' <- importExpr' sc env (C.tMono ty) e3
+         scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
+
+    C.EComp len eltty e mss ->
+      importComp sc env len eltty e mss
+
+    C.EVar qname ->
       case Map.lookup qname (envE env) of
-        Just (e', j)                -> incVars sc 0 j e'
-        Nothing                     -> fail $ "internal error: unknown variable: " ++ show qname
-    C.ETAbs tp e                    -> do env' <- bindTParam sc tp env
-                                          k <- importKind sc (C.tpKind tp)
-                                          e' <- importExpr sc env' e
-                                          scLambda sc (tparamToString tp) k e'
-    C.ETApp e t                     -> do e' <- importExpr sc env e
-                                          t' <- importType sc env t
-                                          scApply sc e' t'
-    C.EApp e1 e2                    -> do e1' <- go e1
-                                          e2' <- go e2
-                                          let t1 = fastTypeOf (envC env) e1
-                                          let t2 = fastTypeOf (envC env) e2
-                                          t1a <-
-                                            case C.tIsFun t1 of
-                                              Just (a, _) -> return a
-                                              Nothing -> fail "importExpr: internal error: expected function type"
-                                          e2'' <- coerceTerm sc env t2 t1a e2'
-                                          scApply sc e1' e2''
-    C.EAbs x t e                    -> do t' <- importType sc env t
-                                          env' <- bindName sc x (C.Forall [] [] t) env
-                                          e' <- importExpr sc env' e
-                                          scLambda sc (nameToString x) t' e'
+        Just (e', j) -> incVars sc 0 j e'
+        Nothing      -> panic $ "importExpr: unknown variable: " ++ show qname
+
+    C.ETAbs tp e ->
+      do env' <- bindTParam sc tp env
+         k <- importKind sc (C.tpKind tp)
+         e' <- importExpr sc env' e
+         scLambda sc (tparamToString tp) k e'
+
+    C.ETApp e t ->
+      do e' <- importExpr sc env e
+         t' <- importType sc env t
+         scApply sc e' t'
+
+    C.EApp e1 e2 ->
+      do e1' <- importExpr sc env e1
+         let t1 = fastTypeOf (envC env) e1
+         t1a <-
+           case C.tIsFun t1 of
+             Just (a, _) -> return a
+             Nothing -> panic "importExpr: expected function type"
+         e2' <- importExpr' sc env (C.tMono t1a) e2
+         scApply sc e1' e2'
+
+    C.EAbs x t e ->
+      do t' <- importType sc env t
+         env' <- bindName sc x (C.tMono t) env
+         e' <- importExpr sc env' e
+         scLambda sc (nameToString x) t' e'
+
     C.EProofAbs prop e
-      | isErasedProp prop           -> do importExpr sc env e
-      | otherwise                   -> do p' <- importType sc env prop
-                                          env' <- bindProp sc prop env
-                                          e' <- importExpr sc env' e
-                                          scLambda sc "_P" p' e'
-    C.EProofApp e                   -> case fastSchemaOf (envC env) e of
-                                         C.Forall [] (p : _) _
-                                           | isErasedProp p -> importExpr sc env e
-                                           | otherwise ->
-                                             do e' <- importExpr sc env e
-                                                prf <- proveProp sc env p
-                                                scApply sc e' prf
-                                         s -> impossible $ "EProofApp: invalid type: " ++ show (e, s)
-{-
-    C.ECast e1 t2                   -> do let t1 = fastTypeOf (envC env) e1
-                                          t1' <- importType sc env t1
-                                          t2' <- importType sc env t2
-                                          e1' <- go e1
-                                          aeq <- pure alphaEquiv <*> scWhnf sc t1' <*> scWhnf sc t2'
-                                          if aeq
-                                             then return e1'
-                                             else scGlobalApply sc "Prelude.unsafeCoerce" [t1', t2', e1']
--}
-    C.EWhere e dgs                  -> do env' <- importDeclGroups sc env dgs
-                                          importExpr sc env' e
+      | isErasedProp prop -> importExpr sc env e
+      | otherwise ->
+        do p' <- importType sc env prop
+           env' <- bindProp sc prop env
+           e' <- importExpr sc env' e
+           scLambda sc "_P" p' e'
+
+    C.EProofApp e ->
+      case fastSchemaOf (envC env) e of
+        C.Forall [] (p : _ps) _ty
+          | isErasedProp p -> importExpr sc env e
+          | otherwise ->
+            do e' <- importExpr sc env e
+               prf <- proveProp sc env p
+               scApply sc e' prf
+        s -> panic $ "EProofApp: invalid type: " ++ show (e, s)
+
+    C.EWhere e dgs ->
+      do env' <- importDeclGroups sc env dgs
+         importExpr sc env' e
+
+-- | Convert a Cryptol expression with the given type schema to a
+-- SAW-Core term. Calling 'scTypeOf' on the result of @'importExpr''
+-- sc env schema expr@ must yield a type that is equivalent (i.e.
+-- convertible) with the one returned by @'importSchema' sc env
+-- schema@.
+importExpr' :: SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
+importExpr' sc env schema expr =
+  case expr of
+    C.ETuple es ->
+      do ty <- the (C.isMono schema)
+         ts <- the (C.tIsTuple ty)
+         es' <- sequence (zipWith go ts es)
+         scTuple sc es'
+
+    C.ERec fs ->
+      do ty <- the (C.isMono schema)
+         ts <- the (C.tIsRec ty)
+         let tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- ts ]
+         let em = Map.fromList [ (C.unpackIdent n, e) | (n, e) <- fs ]
+         em' <- sequence (Map.intersectionWith go tm em)
+         scRecord sc em'
+
+    C.EIf e1 e2 e3 ->
+      do ty <- the (C.isMono schema)
+         ty' <- importType sc env ty
+         e1' <- importExpr sc env e1
+         e2' <- importExpr' sc env schema e2
+         e3' <- importExpr' sc env schema e3
+         scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
+
+    C.ETAbs tp e ->
+      do schema' <-
+           case schema of
+             C.Forall (tp1 : tparams) props ty ->
+               let s = C.singleSubst (C.TVBound tp1) (C.TVar (C.TVBound tp))
+               in return (C.Forall tparams (map (plainSubst s) props) (plainSubst s ty))
+             C.Forall [] _ _ -> panic "internal error: unexpected type abstraction"
+         env' <- bindTParam sc tp env
+         k <- importKind sc (C.tpKind tp)
+         e' <- importExpr' sc env' schema' e
+         scLambda sc (tparamToString tp) k e'
+
+    C.EAbs x _ e ->
+      do ty <- the (C.isMono schema)
+         (a, b) <- the (C.tIsFun ty)
+         a' <- importType sc env a
+         env' <- bindName sc x (C.tMono a) env
+         e' <- importExpr' sc env' (C.tMono b) e
+         scLambda sc (nameToString x) a' e'
+
+    C.EProofAbs _ e ->
+      do (prop, schema') <-
+           case schema of
+             C.Forall [] (p : ps) ty -> return (p, C.Forall [] ps ty)
+             C.Forall _ _ _ -> panic "importExpr: internal type error"
+         if isErasedProp prop
+           then importExpr' sc env schema' e
+           else do p' <- importType sc env prop
+                   env' <- bindProp sc prop env
+                   e' <- importExpr' sc env' schema' e
+                   scLambda sc "_P" p' e'
+
+    C.EWhere e dgs ->
+      do env' <- importDeclGroups sc env dgs
+         importExpr' sc env' schema e
+
+    C.EList     {} -> fallback
+    C.ESel      {} -> fallback
+    C.EComp     {} -> fallback
+    C.EVar      {} -> fallback
+    C.EApp      {} -> fallback
+    C.ETApp     {} -> fallback
+    C.EProofApp {} -> fallback
+
   where
-    go = importExpr sc env
+    go :: C.Type -> C.Expr -> IO Term
+    go t = importExpr' sc env (C.tMono t)
+
+    the :: Maybe a -> IO a
+    the = maybe (panic "importExpr: internal type error") return
+
+    fallback :: IO Term
+    fallback =
+      do let t1 = fastTypeOf (envC env) expr
+         t2 <- the (C.isMono schema)
+         expr' <- importExpr sc env expr
+         coerceTerm sc env t1 t2 expr'
 
 mapTupleSelector :: SharedContext -> Env -> Int -> C.Type -> IO Term
 mapTupleSelector sc env i = fmap fst . go
@@ -615,7 +727,7 @@ mapTupleSelector sc env i = fmap fst . go
           t' <- importType sc env t
           f <- scLambda sc "x" t' y
           return (f, ts !! i)
-        _ -> fail $ unwords ["importExpr: invalid tuple selector", show i, show t]
+        _ -> panic $ unwords ["importExpr: invalid tuple selector", show i, show t]
 
 mapRecordSelector :: SharedContext -> Env -> C.Ident -> C.Type -> IO Term
 mapRecordSelector sc env i = fmap fst . go
@@ -643,7 +755,18 @@ mapRecordSelector sc env i = fmap fst . go
           t' <- importType sc env t
           f <- scLambda sc "x" t' y
           return (f, b)
-        _ -> fail $ unwords ["importExpr: invalid record selector", show i, show t]
+        _ -> panic $ unwords ["importExpr: invalid record selector", show i, show t]
+
+-- | Apply a substitution to a type *without* simplifying
+-- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
+-- 'apSubst', which performs simplifications wherever possible.)
+plainSubst :: C.Subst -> C.Type -> C.Type
+plainSubst s ty =
+  case ty of
+    C.TCon tc ts   -> C.TCon tc (map (plainSubst s) ts)
+    C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
+    C.TRec fs      -> C.TRec [ (x, plainSubst s t) | (x, t) <- fs ]
+    C.TVar x       -> C.apSubst s (C.TVar x)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
@@ -654,18 +777,18 @@ importDeclGroup :: Bool -> SharedContext -> Env -> C.DeclGroup -> IO Env
 importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
     C.DPrim ->
-     fail $ unwords ["Primitive declarations cannot be recursive:", show (C.dName decl)]
-    C.DExpr expr -> do
-     env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
-     t' <- importSchema sc env (C.dSignature decl)
-     e' <- importExpr sc env1 expr
-     let x = nameToString (C.dName decl)
-     f' <- scLambda sc x t' e'
-     rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-     rhs' <- if not isTopLevel then return rhs else scConstant sc x rhs t'
-     let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                    , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-     return env'
+      panic $ unwords ["Primitive declarations cannot be recursive:", show (C.dName decl)]
+    C.DExpr expr ->
+      do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
+         t' <- importSchema sc env (C.dSignature decl)
+         e' <- importExpr' sc env1 (C.dSignature decl) expr
+         let x = nameToString (C.dName decl)
+         f' <- scLambda sc x t' e'
+         rhs <- scGlobalApply sc "Prelude.fix" [t', f']
+         rhs' <- if not isTopLevel then return rhs else scConstant sc x rhs t'
+         let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
+                        , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+         return env'
 
 
 -- - A group of mutually-recursive declarations -
@@ -674,56 +797,55 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
 -- achieved by projecting the field names from this record.
 importDeclGroup isTopLevel sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
-     -- NB: the order of the declarations is reversed to get the deBrujin indices to line up properly
-     env1 <- foldM (\e d -> bindName sc (C.dName d) (C.dSignature d) e) env (reverse decls)
+     let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
      -- grab a reference to the outermost variable; this will be the record in the body
      -- of the lambda we build later
-     recv <- scLocalVar sc 0
+     v0 <- scLocalVar sc 0
+
+     -- build a list of projections from a record variable
+     vm <- traverse (scRecordSelect sc v0 . nameToString . C.dName) dm
 
      -- the types of the declarations
-     ts <- mapM (importSchema sc env . C.dSignature) decls
+     tm <- traverse (importSchema sc env . C.dSignature) dm
      -- the type of the recursive record
-     rect <- scRecordType sc $ zip (map (nameToString . C.dName) decls) ts
-     -- shift the environment by one more variable to make room for our recursive record
-     let env2 = liftEnv env1 { envS = rect : envS env1 }
+     rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToString tm)
+
+     let env1 = liftEnv env
+     let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
+                     , envC = Map.union (fmap C.dSignature dm) (envC env1)
+                     , envS = rect : envS env1 }
 
      let extractDeclExpr decl =
            case C.dDefinition decl of
-             C.DExpr expr -> return expr
+             C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
              C.DPrim ->
-                fail $ unwords ["Primitive declarations cannot be recursive:", show (C.dName decl)]
+                panic $ unwords [ "Primitive declarations cannot be recursive:"
+                                , show (C.dName decl)]
 
      -- the raw imported bodies of the declarations
-     es <- mapM (importExpr sc env2 <=< extractDeclExpr) decls
-
-     -- build a list of projections from a record variable
-     projs <- mapM (\d -> scRecordSelect sc recv (nameToString (C.dName d))) decls
-
-     -- substitute into the imported declaration bodies, replacing bindings by record projections
-     -- NB: start at index 1; index 0 is the variable for the record itself
-     es' <- mapM (instantiateVarList sc 1 projs) es
+     em <- traverse extractDeclExpr dm
 
      -- the body of the recursive record
-     rec <- scRecord sc $ Map.fromList $ zip (map (nameToString . C.dName) decls) es'
+     recv <- scRecord sc (Map.mapKeys nameToString em)
 
      -- build a lambda from the record body...
-     f <- scLambda sc "fixRecord" rect rec
+     f <- scLambda sc "fixRecord" rect recv
 
      -- and take its fixpoint
      rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
      -- finally, build projections from the fixed record to shove into the environment
-     rhss <- mapM (\d -> scRecordSelect sc rhs (nameToString (C.dName d))) decls
-
      -- if toplevel, then wrap each binding with a Constant constructor
-     let wrap d r t = scConstant sc (nameToString (C.dName d)) r t
-     rhss' <- if isTopLevel then sequence (zipWith3 wrap decls rhss ts) else return rhss
+     let mkRhs d t =
+           do let s = nameToString (C.dName d)
+              r <- scRecordSelect sc rhs s
+              if isTopLevel then scConstant sc s r t else return r
+     rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-     let env' = env { envE = foldr (\(r,d) e -> Map.insert (C.dName d) (r, 0) e) (envE env) $ zip rhss' decls
-                    , envC = foldr (\d e -> Map.insert (C.dName d) (C.dSignature d) e) (envC env) decls
+     let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
+                    , envC = Map.union (fmap C.dSignature dm) (envC env)
                     }
-
      return env'
 
 importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
@@ -735,10 +857,10 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
         return env'
      | otherwise -> do
-        fail $ unwords ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
+        panic $ unwords ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
-     rhs <- importExpr sc env expr
+     rhs <- importExpr' sc env (C.dSignature decl) expr
      rhs' <- if not isTopLevel then return rhs else do
        t <- importSchema sc env (C.dSignature decl)
        scConstant sc (nameToString (C.dName decl)) rhs t
@@ -807,16 +929,16 @@ proveEq sc env t1 t2
                     else scGlobalApply sc "Cryptol.pairEq" [a1', a2', b1', b2', aEq, bEq]
       (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
         | map fst ts1 == map fst ts2 ->
-          do fail $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
+          do panic $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
       (_, _) ->
-        fail $ unwords ["Internal type error:", pretty t1, pretty t2]
+        panic $ unwords ["Internal type error:", pretty t1, pretty t2]
 
 --------------------------------------------------------------------------------
 -- List comprehensions
 
 importComp :: SharedContext -> Env -> C.Type -> C.Type -> C.Expr -> [[C.Match]] -> IO Term
 importComp sc env lenT elemT expr mss =
-  do let zipAll [] = fail "zero-branch list comprehension"
+  do let zipAll [] = panic "zero-branch list comprehension"
          zipAll [branch] =
            do (xs, len, ty, args) <- importMatches sc env branch
               m <- importType sc env len
