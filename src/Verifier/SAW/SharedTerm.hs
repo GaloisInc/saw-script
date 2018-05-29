@@ -993,7 +993,7 @@ instantiateVarList sc k ts t =
     -- Memoize instantiated versions of ts.
     term :: (Cache IORef DeBruijnIndex Term, Term)
          -> DeBruijnIndex -> IO Term
-    term (cache, x) i = useCache cache i (incVars sc 0 i x)
+    term (cache, x) i = useCache cache i (incVars sc 0 (i-k) x)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache IORef DeBruijnIndex Term, Term)]
        -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
