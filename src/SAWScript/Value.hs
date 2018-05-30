@@ -60,10 +60,11 @@ import SAWScript.SAWCorePrimitives( concretePrimitives )
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
-import Verifier.SAW.SharedTerm
+import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
+                                       ppTerm, scPrettyTerm)
+import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
+                                                       ppTerm, scPrettyTerm)
 import Verifier.SAW.TypedTerm
-import qualified Verifier.SAW.TypedAST as PPTerm (PPOpts(..), defaultPPOpts,
-                                                  ppTerm, scPrettyTerm)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -190,11 +191,11 @@ cryptolPPOpts opts =
     , C.useBase = ppOptsBase opts
     }
 
-sawPPOpts :: PPOpts -> PPTerm.PPOpts
+sawPPOpts :: PPOpts -> SAWCorePP.PPOpts
 sawPPOpts opts =
-  PPTerm.defaultPPOpts
-    { PPTerm.ppBase = ppOptsBase opts
-    , PPTerm.ppColor = ppOptsColor opts
+  SAWCorePP.defaultPPOpts
+    { SAWCorePP.ppBase = ppOptsBase opts
+    , SAWCorePP.ppColor = ppOptsColor opts
     }
 
 quietEvalOpts :: C.EvalOpts
@@ -240,10 +241,10 @@ showSimpset opts ss =
     ppRule r =
       PPL.char '*' PPL.<+>
       (PPL.nest 2 $
-       PPTerm.ppTerm opts' (lhsRewriteRule r)
+       SAWCorePP.ppTerm opts' (lhsRewriteRule r)
        PPL.</> PPL.char '=' PPL.<+>
        ppTerm (rhsRewriteRule r))
-    ppTerm t = PPTerm.ppTerm opts' t
+    ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
@@ -261,7 +262,7 @@ showsPrecValue opts p v =
                        showString n . showString "=" . showsPrecValue opts 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (PPTerm.scPrettyTerm opts' (ttTerm t))
+    VTerm t -> showString (SAWCorePP.scPrettyTerm opts' (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
@@ -269,7 +270,8 @@ showsPrecValue opts p v =
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
     VTheorem (Theorem t) ->
-      showString "Theorem " . showParen True (showString (PPTerm.scPrettyTerm opts' t))
+      showString "Theorem " .
+      showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
     VCrucibleSetup{} -> showString "<<Crucible Setup>>"
