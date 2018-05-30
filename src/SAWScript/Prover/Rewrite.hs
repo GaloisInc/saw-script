@@ -38,6 +38,7 @@ basic_ss sc =
          [ "unsafeCoerce_same"
          , "not_not"
          , "true_implies"
+         , "implies__eq"
          , "and_True"
          , "and_False"
          , "and_True2"
@@ -71,7 +72,7 @@ basic_ss sc =
          ]
        defs = map (mkIdent preludeName)
          [ "not", "and", "or", "xor", "boolEq", "ite", "addNat", "mulNat"
-         , "implies"
+         {- , "implies" -}
          , "compareNat", "equalNat"
          , "bitvector"
          ]
