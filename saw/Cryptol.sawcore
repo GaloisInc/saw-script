@@ -202,6 +202,12 @@ seq :: Num -> sort 0 -> sort 0;
 seq num a =
   Num_rec (\ (num::Num) -> sort 0) (\ (n::Nat) -> Vec n a) (Stream a) num;
 
+-- FIXME: this rule should be derived by scDefRewriteRules
+seq_TCNum :: (n::Nat) -> (a::sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec n a);
+seq_TCNum n a = Refl (sort 0) (Vec n a);
+seq_TCInf :: (a::sort 0) -> Eq (sort 0) (seq TCInf a) (Stream a);
+seq_TCInf a = Refl (sort 0) (Stream a);
+
 seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
 seqMap a b num f =
   Num_rec (\ (n::Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
