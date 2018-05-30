@@ -35,6 +35,14 @@ module Verifier.SAW.SharedTerm
   , recordAListAsTuple
   , tupleAsRecordAList
   , alistAllFields
+    -- * Re-exported pretty-printing functions
+  , PPOpts(..)
+  , defaultPPOpts
+  , ppTerm
+  , ppTermDepth
+  , showTerm
+  , scPrettyTerm
+  , scPrettyTermInCtx
     -- * SharedContext interface for building shared terms
   , SharedContext
   , mkSharedContext

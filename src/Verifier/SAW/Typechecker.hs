@@ -46,7 +46,6 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
-import Verifier.SAW.TypedAST
 import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 
