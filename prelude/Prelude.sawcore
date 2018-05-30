@@ -307,6 +307,10 @@ axiom xor__eq :: (b1 b2::Bool) ->
 implies :: Bool -> Bool -> Bool;
 implies = \ (a::Bool) (b::Bool) -> or (not a) b;
 
+-- FIXME: this rule should be derived by scDefRewriteRules
+implies__eq :: (a b::Bool) -> Eq Bool (implies a b) (or (not a) b);
+implies__eq a b = Refl Bool (implies a b);
+
 -- Decidable Boolean equality, also known as iff
 primitive boolEq :: Bool -> Bool -> Bool;
 axiom boolEq__eq :: (b1 b2::Bool) ->
