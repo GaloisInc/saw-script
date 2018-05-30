@@ -49,7 +49,7 @@ module Verifier.SAW.Recognizer
   , asDataTypeParams
   , asRecursorApp
   , isDataType
-  , asNatLit
+  , asNat
   , asStringLit
   , asLambda
   , asLambdaList
@@ -299,6 +299,8 @@ asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 asCtorOrNat :: (Alternative f, Monad f) =>
                Recognizer f Term (Ident, [Term], [Term])
 asCtorOrNat = asCtorParams `orElse` (asNatLit >=> helper . toInteger) where
+  asNatLit (unwrapTermF -> FTermF (NatLit i)) = return i
+  asNatLit _ = fail "not NatLit"
   helper 0 = return (preludeZeroIdent, [], [])
   helper k =
     if k > 0 then
@@ -329,8 +331,11 @@ isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else fail "not datatype"
 
-asNatLit :: (Monad f) => Recognizer f Term Nat
-asNatLit t = do NatLit i <- asFTermF t; return (fromInteger i)
+asNat :: (Monad f) => Recognizer f Term Nat
+asNat (unwrapTermF -> FTermF (NatLit i)) = return $ fromInteger i
+asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
+asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
+asNat _ = fail "not Nat"
 
 asStringLit :: (Monad f) => Recognizer f Term String
 asStringLit t = do StringLit i <- asFTermF t; return i
@@ -397,15 +402,15 @@ asVectorType = helper ((isGlobalDef "Prelude.Vec" @> return) <@> return) where
 
 isVecType :: (Monad f)
           => Recognizer f Term a -> Recognizer f Term (Nat :*: a)
-isVecType tp = (isGlobalDef "Prelude.Vec" @> asNatLit) <@> tp
+isVecType tp = (isGlobalDef "Prelude.Vec" @> asNat) <@> tp
 
 asVecType :: (Monad f) => Recognizer f Term (Nat :*: Term)
 asVecType = isVecType return
 
 asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
 asBitvectorType =
-  (isGlobalDef "Prelude.bitvector" @> asNatLit)
-  `orElse` ((isGlobalDef "Prelude.Vec" @> asNatLit)
+  (isGlobalDef "Prelude.bitvector" @> asNat)
+  `orElse` ((isGlobalDef "Prelude.Vec" @> asNat)
             <@ isGlobalDef "Prelude.Bool")
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
