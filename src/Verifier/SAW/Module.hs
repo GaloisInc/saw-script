@@ -74,7 +74,7 @@ module Verifier.SAW.Module
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', foldr')
 import Data.Hashable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -396,24 +396,29 @@ completeDataType m (identName -> str) ctors =
 insDef :: Module -> Def -> Module
 insDef m d = insResolvedName m (ResolvedDef d)
 
+-- | Get the resolved names that are local to a module
+localResolvedNames :: Module -> [ResolvedName]
+localResolvedNames m =
+  filter ((== moduleName m) . identModule . resolvedNameIdent)
+  (Map.elems $ moduleResolveMap m)
 
 -- | Get all data types defined in a module
 moduleDataTypes :: Module -> [DataType]
 moduleDataTypes =
-  Map.foldr' (\case { ResolvedDataType dt -> (dt :); _ -> id } ) [] .
-  moduleResolveMap
+  foldr' (\case { ResolvedDataType dt -> (dt :); _ -> id } ) [] .
+  localResolvedNames
 
 -- | Get all constructors defined in a module
 moduleCtors :: Module -> [Ctor]
 moduleCtors =
-  Map.foldr' (\case { ResolvedCtor ctor -> (ctor :); _ -> id } ) [] .
-  moduleResolveMap
+  foldr' (\case { ResolvedCtor ctor -> (ctor :); _ -> id } ) [] .
+  localResolvedNames
 
 -- | Get all definitions defined in a module
 moduleDefs :: Module -> [Def]
 moduleDefs =
-  Map.foldr' (\case { ResolvedDef d -> (d :); _ -> id } ) [] .
-  moduleResolveMap
+  foldr' (\case { ResolvedDef d -> (d :); _ -> id } ) [] .
+  localResolvedNames
 
 -- | Get all declarations that are local to a module, i.e., that defined names
 -- that were not imported from some other module
