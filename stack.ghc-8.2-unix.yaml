@@ -37,4 +37,5 @@ extra-deps:
   - monadLib-3.7.3
   - sbv-7.7
   - tasty-hunit-0.10.0.1
+  - panic-0.4.0.0
 resolver: lts-11.5
