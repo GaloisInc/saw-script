@@ -2,14 +2,22 @@ Name:          saw-script
 Version:       0.2
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
-Build-type:    Simple
-Cabal-version: >= 1.10
+Build-type:    Custom
+Cabal-version: >= 1.24
 License:       BSD3
 License-file:  LICENSE
 
 extra-source-files:
     src/SAWScript/Parser.y
     src/SAWScript/Lexer.x
+
+custom-setup
+  setup-depends:
+      Cabal >= 1.24
+    , base
+    , directory
+    , filepath
+    , process
 
 library
   default-language: Haskell2010
@@ -162,7 +170,7 @@ executable saw
 
   other-modules:
     Paths_saw_script
-    SAWScript.GitRev
+    GitRev
     SAWScript.REPL
     SAWScript.REPL.Command
     SAWScript.REPL.Haskeline
@@ -170,6 +178,10 @@ executable saw
     SAWScript.REPL.Monad
     SAWScript.REPL.Trie
     SAWScript.Version
+
+  autogen-modules:
+    Paths_saw_script
+    GitRev
 
   build-depends:
       base >= 4
@@ -179,7 +191,6 @@ executable saw
     , directory
     , either
     , filepath
-    , gitrev
     , haskeline
     , QuickCheck
     , transformers
