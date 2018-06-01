@@ -37,6 +37,7 @@ library
     , crucible-saw
     , deepseq
     , either
+    , exceptions
     , executable-path
     , directory
     , fgl
@@ -185,6 +186,7 @@ executable saw
 
   build-depends:
       base >= 4
+    , abcBridge
     , ansi-terminal
     , containers
     , cryptol

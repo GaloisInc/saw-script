@@ -20,9 +20,8 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
-import qualified Data.ABC.GIA as GIA
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.AIG as AIG
-import qualified Data.ABC as ABC
 import qualified Data.SBV.Dynamic as SBV
 
 import Cryptol.Utils.PP(pretty)
@@ -37,12 +36,12 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.ImportAIG
 import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
 import SAWScript.Prover.SBV(prepSBV)
+import SAWScript.Value
 
 
 satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
@@ -54,7 +53,7 @@ satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
 satWithExporter exporter path sc mode t0 =
   do t <- case mode of
             CheckSat -> return t0
-            Prove ->
+            Prove -> liftIO $
               do ty <- scTypeOf sc t0
                  let (ts, tf) = asPiList ty
                  tf' <- scWhnf sc tf
@@ -85,28 +84,30 @@ satWithExporter exporter path sc mode t0 =
 
 -- | Write a @Term@ representing a theorem or an arbitrary
 -- function to an AIG file.
-writeAIG :: SharedContext -> FilePath -> Term -> IO ()
-writeAIG sc f t = do
-  aig <- bitblastPrim sc t
-  ABC.writeAiger f aig
+writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> IO ()
+writeAIG proxy sc f t = do
+  liftIO $ do
+    aig <- bitblastPrim proxy sc t
+    AIG.writeAiger f aig
 
 -- | Like @writeAIG@, but takes an additional 'Integer' argument
 -- specifying the number of input and output bits to be interpreted as
 -- latches. Used to implement more friendly SAIG writers
 -- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-writeSAIG :: SharedContext -> FilePath -> Term -> Int -> IO ()
-writeSAIG sc file tt numLatches = do
-  aig <- bitblastPrim sc tt
-  GIA.writeAigerWithLatches file aig numLatches
+writeSAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> IO ()
+writeSAIG proxy sc file tt numLatches = do
+  liftIO $ do
+    aig <- bitblastPrim proxy sc tt
+    AIG.writeAigerWithLatches file aig numLatches
 
 -- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
 -- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: SharedContext -> FilePath -> TypedTerm -> IO ()
-writeSAIGInferLatches sc file tt = do
+writeSAIGInferLatches :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> TypedTerm -> IO ()
+writeSAIGInferLatches proxy sc file tt = do
   ty <- scTypeOf sc (ttTerm tt)
   s <- getStateType ty
   let numLatches = sizeFiniteType s
-  writeSAIG sc file (ttTerm tt) numLatches
+  writeSAIG proxy sc file (ttTerm tt) numLatches
   where
     die :: Monad m => String -> m a
     die why = fail $
@@ -140,23 +141,24 @@ writeSAIGInferLatches sc file tt = do
 -- specifying the number of input and output bits to be interpreted as
 -- latches.
 writeAIGComputedLatches ::
-  SharedContext -> FilePath -> Term -> Int -> IO ()
-writeAIGComputedLatches sc file term numLatches = do
-  writeSAIG sc file term numLatches
+  (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> IO ()
+writeAIGComputedLatches proxy sc file term numLatches =
+  writeSAIG proxy sc file term numLatches
 
-writeCNF :: SharedContext -> FilePath -> Term -> IO ()
-writeCNF sc f t = do
-  AIG.Network be ls <- bitblastPrim sc t
+writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> IO ()
+writeCNF proxy sc f t = do
+  AIG.Network be ls <- bitblastPrim proxy sc t
   case ls of
     [l] -> do
-      _ <- GIA.writeCNF be l f
+      _ <- AIG.writeCNF be l f
       return ()
     _ -> fail "writeCNF: non-boolean term"
 
-write_cnf :: SharedContext -> FilePath -> TypedTerm -> IO ()
+write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_cnf sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  writeCNF sc f t
+  liftIO $ checkBooleanSchema schema
+  proxy <- getProxy
+  io $ writeCNF proxy sc f t
 
 -- | Write a @Term@ representing a theorem to an SMT-Lib version
 -- 2 file.
@@ -182,8 +184,8 @@ writeCore path t = writeFile path (scWriteExternal t)
 
 
 -- | Tranlsate a SAWCore term into an AIG
-bitblastPrim :: SharedContext -> Term -> IO AIGNetwork
-bitblastPrim sc t = do
+bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
+bitblastPrim proxy sc t = do
   t' <- rewriteEqs sc t
 {-
   let s = ttSchema t'
@@ -191,7 +193,7 @@ bitblastPrim sc t = do
     C.Forall [] [] _ -> return ()
     _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
 -}
-  BBSim.withBitBlastedTerm sawProxy sc bitblastPrimitives t' $ \be ls -> do
+  BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
     return (AIG.Network be (toList ls))
 
 

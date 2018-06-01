@@ -111,7 +111,6 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats

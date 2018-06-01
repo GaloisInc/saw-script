@@ -67,7 +67,6 @@ import SAWScript.LLVMUtils
 import SAWScript.Options as Opt
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Utils
 import SAWScript.Value as SV
 
@@ -76,6 +75,8 @@ import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
+
+import qualified Data.AIG as AIG
 
 type Backend = SAWBackend
 type SAWTerm = Term
@@ -94,11 +95,13 @@ llvm_load_module file =
 
 type Assign = (LLVMExpr, TypedTerm)
 
-startSimulator :: Options
+startSimulator :: (AIG.IsAIG l g) =>
+                  Options
                -> SharedContext
                -> LSSOpts
                -> LLVMModule
                -> Symbol
+               -> AIG.Proxy l g
                -> (SharedContext
                    -> SBE SAWBackend
                    -> Codebase SAWBackend
@@ -106,9 +109,9 @@ startSimulator :: Options
                    -> SymDefine Term
                    -> Simulator SAWBackend IO a)
                -> IO a
-startSimulator opts sc lopts (LLVMModule file mdl _) sym body = do
+startSimulator opts sc lopts (LLVMModule file mdl _) sym proxy body = do
   let dl = parseDataLayout $ modDataLayout mdl
-  (sbe, mem, scLLVM) <- createSAWBackend' sawProxy dl sc
+  (sbe, mem, scLLVM) <- createSAWBackend' proxy dl sc
   (warnings, cb) <- mkCodebase sbe dl mdl
   forM_ warnings $ printOutLn opts Warn . ("WARNING: " ++) . show
   case lookupDefine sym cb of
@@ -124,15 +127,16 @@ llvm_symexec :: BuiltinContext
              -> [(String, Term, Integer)]
              -> [(String, Integer)]
              -> Bool
-             -> IO TypedTerm
-llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
+             -> TopLevel TypedTerm
+llvm_symexec bic opts lmod fname allocs inputs outputs doSat = do
+  proxy <- getProxy
   let sym = Symbol fname
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
                       , optsSatAtBranches = doSat
                       , optsSimplifyAddrs = False
                       }
-  in startSimulator opts sc lopts lmod sym $ \scLLVM sbe cb dl md -> do
+  liftIO $ startSimulator opts sc lopts lmod sym proxy $ \scLLVM sbe cb dl md -> do
         setVerbosity (simVerbose opts)
         let mkAssign (s, tm, n) = do
               e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
@@ -201,15 +205,16 @@ llvm_extract :: BuiltinContext
              -> LLVMModule
              -> String
              -> LLVMSetup ()
-             -> IO TypedTerm
-llvm_extract bic opts lmod func _setup =
+             -> TopLevel TypedTerm
+llvm_extract bic opts lmod func _setup = do
   let sym = Symbol func
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
                       , optsSatAtBranches = True
                       , optsSimplifyAddrs = False
                       }
-  in startSimulator opts sc lopts lmod sym $ \scLLVM _sbe _cb _dl md -> do
+  proxy <- getProxy
+  liftIO $ startSimulator opts sc lopts lmod sym proxy $ \scLLVM _sbe _cb _dl md -> do
     setVerbosity (simVerbose opts)
     args <- mapM freshLLVMArg (sdArgs md)
     exts <- mapM (asExtCns . snd) args
@@ -228,16 +233,16 @@ llvm_verify :: BuiltinContext
             -> [LLVMMethodSpecIR]
             -> LLVMSetup ()
             -> TopLevel LLVMMethodSpecIR
-llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup =
+llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup = do
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
-  in do
-    (sbe, mem, scLLVM) <- io $ createSAWBackend' sawProxy dl sc
-    (warnings, cb) <- io $ mkCodebase sbe dl mdl
-    forM_ warnings $ printOutLnTop Warn . ("WARNING: " ++) . show
-    let ms0 = initLLVMMethodSpec pos sbe cb (fromString funcname)
-        lsctx0 = LLVMSetupState {
+  proxy <- getProxy
+  (sbe, mem, scLLVM) <- io $ createSAWBackend' proxy dl sc
+  (warnings, cb) <- io $ mkCodebase sbe dl mdl
+  forM_ warnings $ printOutLnTop Warn . ("WARNING: " ++) . show
+  let ms0 = initLLVMMethodSpec pos sbe cb (fromString funcname)
+      lsctx0 = LLVMSetupState {
                     lsSpec = ms0
                   , lsTactic = Skip
                   , lsContext = scLLVM
@@ -246,27 +251,27 @@ llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup =
                   , lsSimplifyAddrs = False
                   , lsModule        = lmod
                   }
-    (_, lsctx) <- runStateT setup lsctx0
-    let ms = lsSpec lsctx
-    let vp = VerifyParams { vpCode = cb
-                          , vpContext = scLLVM
-                          , vpOpts = opts
-                          , vpSpec = ms
-                          , vpOver = overrides
-                          }
-    let overrideText =
-          case overrides of
-            [] -> ""
-            irs -> " (overriding " ++ show (map specFunction irs) ++ ")"
-    printOutLnTop Info $ "Starting verification of " ++ show (specName ms)
-    let lopts = LSSOpts { optsErrorPathDetails = True
-                        , optsSatAtBranches = lsSatBranches lsctx
-                        , optsSimplifyAddrs = lsSimplifyAddrs lsctx
+  (_, lsctx) <- runStateT setup lsctx0
+  let ms = lsSpec lsctx
+  let vp = VerifyParams { vpCode = cb
+                        , vpContext = scLLVM
+                        , vpOpts = opts
+                        , vpSpec = ms
+                        , vpOver = overrides
                         }
-    ro <- getTopLevelRO
-    rw <- getTopLevelRW
-    vpopts <- getOptions
-    if lsSimulate lsctx then io $ do
+  let overrideText =
+        case overrides of
+          [] -> ""
+          irs -> " (overriding " ++ show (map specFunction irs) ++ ")"
+  printOutLnTop Info $ "Starting verification of " ++ show (specName ms)
+  let lopts = LSSOpts { optsErrorPathDetails = True
+                      , optsSatAtBranches = lsSatBranches lsctx
+                      , optsSimplifyAddrs = lsSimplifyAddrs lsctx
+                      }
+  ro <- getTopLevelRO
+  rw <- getTopLevelRW
+  vpopts <- getOptions
+  if lsSimulate lsctx then io $ do
       liftIO $ printOutLn vpopts Info $ "Executing " ++ show (specName ms)
       ms' <- runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity (simVerbose opts)
