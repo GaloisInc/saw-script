@@ -42,4 +42,5 @@ extra-deps:
   - monadLib-3.7.3
   - tasty-hunit-0.10.0.1
   - data-inttrie-0.1.4
+  - panic-0.4.0.0
 resolver: lts-9.21
