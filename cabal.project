@@ -15,6 +15,7 @@ packages:
     deps/crucible/what4
     deps/crucible/what4-abc
     deps/crucible/crucible
+    deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
     deps/crucible/crucible-saw
     deps/parameterized-utils
