@@ -80,11 +80,11 @@ binaryNumFun f1 f2 f3 f4 num1 num2 =
           (Num_rec (\ (num2'::Num) -> Num) f3 f4 num2)
           num1;
 
--- Build a trinary function on Nums by lifting a trinary function on Nats, with
+-- Build a ternary function on Nums by lifting a ternary function on Nats, with
 -- a single default case if any of the Nums is infinite
-trinaryNumFun :: (Nat -> Nat -> Nat -> Nat) -> Num ->
+ternaryNumFun :: (Nat -> Nat -> Nat -> Nat) -> Num ->
                  Num -> Num -> Num -> Num;
-trinaryNumFun f1 f2 num1 num2 num3 =
+ternaryNumFun f1 f2 num1 num2 num3 =
   Num_rec
     (\ (num1'::Num) -> Num)
     (\ (n1::Nat) ->
@@ -189,10 +189,10 @@ tcLenFromThen_Nat x y w =
   tcLenFromThenTo_Nat x y (ite Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
 
 tcLenFromThen :: Num -> Num -> Num -> Num;
-tcLenFromThen = trinaryNumFun tcLenFromThen_Nat TCInf;
+tcLenFromThen = ternaryNumFun tcLenFromThen_Nat TCInf;
 
 tcLenFromThenTo :: Num -> Num -> Num -> Num;
-tcLenFromThenTo = trinaryNumFun tcLenFromThenTo_Nat TCInf;
+tcLenFromThenTo = ternaryNumFun tcLenFromThenTo_Nat TCInf;
 
 
 --------------------------------------------------------------------------------
