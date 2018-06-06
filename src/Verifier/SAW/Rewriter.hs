@@ -313,7 +313,8 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
                   args' <- traverse (incVars sc 0 i) args
                   let cn = ctorName ctor
                   rhs' <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
-                  return (RewriteRule ctxt' lhs' rhs')
+                  rhs'' <- betaReduce rhs'
+                  return (RewriteRule ctxt' lhs' rhs'')
          dt <- scRequireDataType sc d
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
@@ -325,6 +326,16 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
       do (_, _, body) <- R.asPi funtype
          funtype' <- instantiateVar sc 0 arg body
          piAppType funtype' args
+
+    betaReduce :: Term -> IO Term
+    betaReduce t =
+      case R.asApp t of
+        Nothing -> return t
+        Just (f, arg) ->
+          do f' <- betaReduce f
+             case R.asLambda f' of
+               Nothing -> scApply sc f' arg
+               Just (_, _, body) -> instantiateVar sc 0 arg body
 
 -- | Repeatedly apply the rule transformations in 'scExpandRewriteRule'.
 scExpandRewriteRules :: SharedContext -> [RewriteRule] -> IO [RewriteRule]
