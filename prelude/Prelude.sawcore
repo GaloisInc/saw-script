@@ -35,6 +35,19 @@ data Eq :: (t :: sort 1) -> t -> t -> sort 1 where {
     Refl :: (u :: sort 1) -> (x :: u) -> Eq u x x;
   }
 
+-- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
+-- structure of the Eq type
+Eq__rec :: (t :: sort 1) -> (x :: t) -> (p :: (y :: t) -> Eq t x y -> sort 1) ->
+           p x (Refl t x) -> (y :: t) -> (pf :: Eq t x y) -> p y pf;
+Eq__rec t x p f1 _ (Refl _ _) = f1;
+
+-- Congruence closure for equality
+eq_cong :: (t :: sort 1) -> (x :: t) -> (y :: t) -> Eq t x y ->
+           (u :: sort 1) -> (f :: t -> u) -> Eq u (f x) (f y);
+eq_cong t x y eq u f =
+  Eq__rec t x (\ (y'::t) -> \ (eq'::Eq t x y') -> Eq u (f x) (f y'))
+          (Refl u (f x)) y eq;
+
 trans :: (a :: sort 1) -> (x y z :: a) -> Eq a x y -> Eq a y z -> Eq a x z;
 trans _ _ _ _ (Refl _ _) eq = eq;
 
@@ -75,6 +88,31 @@ data Bool :: sort 0 where {
     False :: Bool;
   }
 
+primitive iteDep :: (p :: Bool -> sort 1) -> (b::Bool) ->
+                    p True -> p False -> p b;
+
+-- Reduction rules for iteDep
+axiom iteDep_True :: (p :: Bool -> sort 1) -> (f1::p True) -> (f2::p False) ->
+                     Eq (p True) (iteDep p True f1 f2) f1;
+axiom iteDep_False :: (p :: Bool -> sort 1) -> (f1::p True) -> (f2::p False) ->
+                      Eq (p False) (iteDep p False f1 f2) f2;
+
+primitive ite :: (a :: sort 1) -> Bool -> a -> a -> a;
+
+-- ite should be the same as iteDep
+axiom ite_eq_iteDep :: (a::sort 1) -> (b::Bool) -> (x y::a) ->
+                       Eq a (ite a b x y) (iteDep (\ (_::Bool) -> a) b x y);
+
+ite_true :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a True x y) x;
+ite_true a x y =
+  trans a (ite a True x y) (iteDep (\ (b::Bool) -> a) True x y) x
+        (ite_eq_iteDep a True x y) (iteDep_True (\ (_::Bool) -> a) x y);
+
+ite_false :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a False x y) y;
+ite_false a x y =
+  trans a (ite a False x y) (iteDep (\ (b::Bool) -> a) False x y) y
+        (ite_eq_iteDep a False x y) (iteDep_False (\ (_::Bool) -> a) x y);
+
 not :: Bool -> Bool;
 not (True) = False;
 not (False) = True;
@@ -97,11 +135,6 @@ implies a b = or (not a) b;
 boolEq :: Bool -> Bool -> Bool;
 boolEq True b = b;
 boolEq False b = not b;
-
--- Could be derived from data declaration.
-ite :: (a :: sort 1) -> Bool -> a -> a -> a;
-ite _ (True)  t _ = t;
-ite _ (False) _ f = f;
 
 -- Rewrite rules for booleans.
 
@@ -175,35 +208,71 @@ not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
 not_and True y = Refl Bool (not y);
 not_and False _ = Refl Bool True;
 
-ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) -> Eq a (ite a (not b) x y) (ite a b y x);
-ite_not a True _ y = Refl a y;
-ite_not a False x _ = Refl a x;
+ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) ->
+           Eq a (ite a (not b) x y) (ite a b y x);
+ite_not a b x y =
+  iteDep (\ (b'::Bool) -> Eq a (ite a (not b') x y) (ite a b' y x))
+         b
+         (trans a (ite a (not True) x y) y (ite a True y x)
+                (trans a (ite a (not True) x y) (ite a False x y) y
+                       (eq_cong Bool (not True) False not_True a
+                                (\ (z::Bool) -> ite a z x y))
+                       (ite_false a x y))
+                (sym a (ite a True y x) y (ite_true a y x)))
+         (trans a (ite a (not False) x y) x (ite a False y x)
+                (trans a (ite a (not False) x y) (ite a True x y) x
+                       (eq_cong Bool (not False) True not_False a
+                                (\ (z::Bool) -> ite a z x y))
+                       (ite_true a x y))
+                (sym a (ite a False y x) x (ite_false a y x)));
 
-ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b (ite a b x y) z) (ite a b x z);
-ite_nest1 a True x y z = Refl a x;
-ite_nest1 a False x y z = Refl a z;
+ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+             Eq a (ite a b x (ite a b y z)) (ite a b x z);
+ite_nest1 a b x y z =
+  iteDep (\ (b'::Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
+         b
+         (trans a (ite a True x (ite a True y z)) x (ite a True x z)
+                (ite_true a x (ite a True y z))
+                (sym a (ite a True x z) x (ite_true a x z)))
+         (trans a (ite a False x (ite a False y z)) z (ite a False x z)
+                (trans a (ite a False x (ite a False y z)) (ite a False y z) z
+                       (ite_false a x (ite a False y z))
+                       (ite_false a y z))
+                (sym a (ite a False x z) z (ite_false a x z)));
 
-ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b x (ite a b y z)) (ite a b x z);
-ite_nest2 a True x y z = Refl a x;
-ite_nest2 a False x y z = Refl a z;
+ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+             Eq a (ite a b (ite a b x y) z) (ite a b x z);
+ite_nest2 a b x y z =
+  iteDep (\ (b'::Bool) -> Eq a (ite a b' (ite a b' x y) z) (ite a b' x z))
+         b
+         (trans a (ite a True (ite a True x y) z) x (ite a True x z)
+                (trans a (ite a True (ite a True x y) z) (ite a True x y) x
+                       (ite_true a (ite a True x y) z)
+                       (ite_true a x y))
+                (sym a (ite a True x z) x (ite_true a x z)))
+         (trans a (ite a False (ite a False x y) z) z (ite a False x z)
+                (ite_false a (ite a False x y) z)
+                (sym a (ite a False x z) z (ite_false a x z)));
 
 axiom ite_bit :: (b :: Bool) -> (c :: Bool) -> (d :: Bool) -> Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
 axiom ite_bit_false_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b False c) (and (not b) c);
 axiom ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) -> Eq Bool (ite Bool b True c) (or b c);
 
 ite_fold_not :: (b :: Bool) -> Eq Bool (ite Bool b False True) (not b);
-ite_fold_not True = Refl Bool False;
-ite_fold_not False = Refl Bool True;
+ite_fold_not b =
+  iteDep (\ (b'::Bool) -> Eq Bool (ite Bool b' False True) (not b'))
+         b
+         (trans Bool (ite Bool True False True) False (not True)
+                (ite_true Bool False True)
+                (sym Bool (not True) False not_True))
+         (trans Bool (ite Bool False False True) True (not False)
+                (ite_false Bool False True)
+                (sym Bool (not False) True not_False));
 
 ite_eq :: (a :: sort 1) -> (b :: Bool) -> (x :: a) -> Eq a (ite a b x x) x;
-ite_eq a True x = Refl a x;
-ite_eq a False x = Refl a x;
-
-ite_true :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a True x y) x;
-ite_true a x y = Refl a x;
-
-ite_false :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a False x y) y;
-ite_false a x y = Refl a y;
+ite_eq a b x =
+  iteDep (\ (b'::Bool) -> Eq a (ite a b' x x) x)
+         b (ite_true a x x) (ite_false a x x);
 
 axiom ite_eq_cong_1 :: (a :: sort 0)
               -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
