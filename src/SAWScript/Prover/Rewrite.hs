@@ -48,6 +48,8 @@ basic_ss sc =
          , "or_True2"
          , "or_False2"
          , "or_idem"
+         , "not_True"
+         , "not_False"
          , "not_or"
          , "not_and"
          , "ite_true"
@@ -72,7 +74,7 @@ basic_ss sc =
          , "bvNat_bvToNat"
          ]
        defs = map (mkIdent preludeName)
-         [ "not", "and", "or", "xor", "boolEq", "addNat", "mulNat"
+         [ "and", "or", "xor", "boolEq", "addNat", "mulNat"
          , "implies"
          , "compareNat", "equalNat"
          , "bitvector"
