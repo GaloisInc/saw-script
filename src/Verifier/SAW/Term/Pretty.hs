@@ -440,7 +440,7 @@ ppFlatTermF prec tf =
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return i
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
-    StringLit s -> return $ text s
+    StringLit s -> return $ text (show s)
     ExtCns cns -> maybeColorM dullred $ text $ ecName cns
 
 
