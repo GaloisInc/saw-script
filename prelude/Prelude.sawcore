@@ -398,6 +398,10 @@ natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n ::
 natCase p z s Zero = z;
 natCase p z s (Succ n) = s n;
 
+-- An if-then-else for whether a Nat = 0
+if0Nat :: (a :: sort 0) -> Nat -> a -> a -> a;
+if0Nat a n x y = natCase (\ (_::Nat) -> a) x (\ (_::Nat) -> y) n;
+
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 primitive data Vec :: Nat -> sort 0 -> sort 0;
