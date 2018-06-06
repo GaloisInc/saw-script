@@ -113,19 +113,19 @@ true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
 true_implies True = Refl Bool True;
 true_implies False = Refl Bool False;
 
-and_True :: (x :: Bool) -> Eq Bool (and x True) x;
-and_True True = Refl Bool True;
-and_True False = Refl Bool False;
+and_True1 :: (x :: Bool) -> Eq Bool (and True x) x;
+and_True1 True = Refl Bool True;
+and_True1 False = Refl Bool False;
 
-and_False :: (x :: Bool) -> Eq Bool (and x False) False;
-and_False True = Refl Bool False;
-and_False False = Refl Bool False;
+and_False1 :: (x :: Bool) -> Eq Bool (and False x) False;
+and_False1 True = Refl Bool False;
+and_False1 False = Refl Bool False;
 
-and_True2 :: (x :: Bool) -> Eq Bool (and True x) x;
+and_True2 :: (x :: Bool) -> Eq Bool (and x True) x;
 and_True2 True = Refl Bool True;
 and_True2 False = Refl Bool False;
 
-and_False2 :: (x :: Bool) -> Eq Bool (and False x) False;
+and_False2 :: (x :: Bool) -> Eq Bool (and x False) False;
 and_False2 True = Refl Bool False;
 and_False2 False = Refl Bool False;
 
@@ -137,19 +137,19 @@ and_idem :: (x :: Bool) -> Eq Bool (and x x) x;
 and_idem True = Refl Bool True;
 and_idem False = Refl Bool False;
 
-or_True :: (x :: Bool) -> Eq Bool (or x True) True;
-or_True True  = Refl Bool True;
-or_True False = Refl Bool True;
+or_True1 :: (x :: Bool) -> Eq Bool (or True x) True;
+or_True1 True  = Refl Bool True;
+or_True1 False = Refl Bool True;
 
-or_False :: (x :: Bool) -> Eq Bool (or x False) x;
-or_False True  = Refl Bool True;
-or_False False = Refl Bool False;
+or_False1 :: (x :: Bool) -> Eq Bool (or False x) x;
+or_False1 True  = Refl Bool True;
+or_False1 False = Refl Bool False;
 
-or_True2 :: (x :: Bool) -> Eq Bool (or True x) True;
+or_True2 :: (x :: Bool) -> Eq Bool (or x True) True;
 or_True2 True  = Refl Bool True;
 or_True2 False = Refl Bool True;
 
-or_False2 :: (x :: Bool) -> Eq Bool (or False x) x;
+or_False2 :: (x :: Bool) -> Eq Bool (or x False) x;
 or_False2 True  = Refl Bool True;
 or_False2 False = Refl Bool False;
 
@@ -173,11 +173,11 @@ ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) -> Eq a (ite a (not b) x y
 ite_not a True _ y = Refl a y;
 ite_not a False x _ = Refl a x;
 
-ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b x (ite a b y z)) (ite a b x z);
+ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b (ite a b x y) z) (ite a b x z);
 ite_nest1 a True x y z = Refl a x;
 ite_nest1 a False x y z = Refl a z;
 
-ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b (ite a b x y) z) (ite a b x z);
+ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) -> Eq a (ite a b x (ite a b y z)) (ite a b x z);
 ite_nest2 a True x y z = Refl a x;
 ite_nest2 a False x y z = Refl a z;
 
