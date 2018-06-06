@@ -155,7 +155,7 @@ ctxLiftNil :: InvBindings tp 'CNil ctx -> f ctx a -> f (CtxApp 'CNil ctx) a
 ctxLiftNil ctx f = case ctxAppNilEq ctx of Refl -> f
 
 -- | Append a 'Bindings' list to an inverted 'InvBindings' list, inverting the
--- former as we go to yield an inverted 'InvBidnings' list. Intuitively, this
+-- former as we go to yield an inverted 'InvBindings' list. Intuitively, this
 -- means we are already "inside" the inverted bindings lists, and we are moving
 -- further "inside" the regular bindings list; at the end we will be "inside"
 -- both, meaning that we will see the combination "from the inside".
