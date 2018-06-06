@@ -105,6 +105,12 @@ ite _ (False) _ f = f;
 
 -- Rewrite rules for booleans.
 
+not_True :: Eq Bool (not True) False;
+not_True = Refl Bool False;
+
+not_False :: Eq Bool (not False) True;
+not_False = Refl Bool True;
+
 not_not :: (x :: Bool) -> Eq Bool (not (not x)) x;
 not_not True = Refl Bool True;
 not_not False = Refl Bool False;
