@@ -72,12 +72,12 @@ finNumRec2 p f =
 binaryNumFun :: (Nat -> Nat -> Nat) -> (Nat -> Num) -> (Nat -> Num) -> Num ->
                 Num -> Num -> Num;
 binaryNumFun f1 f2 f3 f4 num1 num2 =
-  Num_rec (\ (num1'::Num) -> Num)
+  Num#rec (\ (num1'::Num) -> Num)
           (\ (n1::Nat) ->
-             Num_rec (\ (num2'::Num) -> Num)
+             Num#rec (\ (num2'::Num) -> Num)
                      (\ (n2::Nat) -> TCNum (f1 n1 n2))
                      (f2 n1) num2)
-          (Num_rec (\ (num2'::Num) -> Num) f3 f4 num2)
+          (Num#rec (\ (num2'::Num) -> Num) f3 f4 num2)
           num1;
 
 -- Build a ternary function on Nums by lifting a ternary function on Nats, with
@@ -85,13 +85,13 @@ binaryNumFun f1 f2 f3 f4 num1 num2 =
 ternaryNumFun :: (Nat -> Nat -> Nat -> Nat) -> Num ->
                  Num -> Num -> Num -> Num;
 ternaryNumFun f1 f2 num1 num2 num3 =
-  Num_rec
+  Num#rec
     (\ (num1'::Num) -> Num)
     (\ (n1::Nat) ->
-       Num_rec
+       Num#rec
          (\ (num2'::Num) -> Num)
          (\ (n2::Nat) ->
-            Num_rec
+            Num#rec
               (\ (num3'::Num) -> Num)
               (\ (n3::Nat) -> TCNum (f1 n1 n2 n3))
               f2 num3)
@@ -200,7 +200,7 @@ tcLenFromThenTo = ternaryNumFun tcLenFromThenTo_Nat TCInf;
 
 seq :: Num -> sort 0 -> sort 0;
 seq num a =
-  Num_rec (\ (num::Num) -> sort 0) (\ (n::Nat) -> Vec n a) (Stream a) num;
+  Num#rec (\ (num::Num) -> sort 0) (\ (n::Nat) -> Vec n a) (Stream a) num;
 
 -- FIXME: this rule should be derived by scDefRewriteRules
 seq_TCNum :: (n::Nat) -> (a::sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec n a);
@@ -210,7 +210,7 @@ seq_TCInf a = Refl (sort 0) (Stream a);
 
 seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
 seqMap a b num f =
-  Num_rec (\ (n::Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
+  Num#rec (\ (n::Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
 
 seqConst :: (n :: Num) -> (a :: sort 0) -> a -> seq n a;
 seqConst =
@@ -383,7 +383,7 @@ seqZip a b =
 seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) ->
              seq n a -> seq n a -> seq n a;
 seqBinary num a f =
-  Num_rec
+  Num#rec
     (\ (n::Num) -> seq n a -> seq n a -> seq n a)
     (\ (n::Nat) -> zipWith a a a f n)
     (streamMap2 a a a f)
@@ -821,9 +821,9 @@ PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
 
 ecDemote :: (val bits :: Num) -> seq bits Bool;
 ecDemote valnum bitsnum =
-  Num_rec (\ (bits::Num) -> seq bits Bool)
+  Num#rec (\ (bits::Num) -> seq bits Bool)
           (\ (bits::Nat) ->
-             Num_rec (\ (val::Num) -> Vec bits Bool)
+             Num#rec (\ (val::Num) -> Vec bits Bool)
                      (\ (val::Nat) -> bvNat bits val)
                      -- Dummy case (this used to be undefined anyway): treat
                      -- infinity mod 2^bits as 0 (but it doesn't matter)
