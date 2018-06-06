@@ -48,8 +48,8 @@ tcSub TCInf (TCNum _) = TCInf;
 
 tcMul :: Num -> Num -> Num;
 tcMul (TCNum x) (TCNum y) = TCNum (mulNat x y);
-tcMul (TCNum x) TCInf = ite Num (equalNat 0 x) (TCNum 0) TCInf;
-tcMul TCInf (TCNum y) = ite Num (equalNat 0 y) (TCNum 0) TCInf;
+tcMul (TCNum x) TCInf = if0Nat Num x (TCNum 0) TCInf;
+tcMul TCInf (TCNum y) = if0Nat Num y (TCNum 0) TCInf;
 tcMul TCInf TCInf = TCInf;
 
 tcDiv :: Num -> Num -> Num;
@@ -188,7 +188,7 @@ from a b (TCNum m) (TCNum n) =
 from a b (TCNum m) TCInf =
   natCase
     (\ (m'::Nat) -> (Vec m' a -> (a -> Stream b) ->
-        seq (ite Num (equalNat 0 m') (TCNum 0) TCInf) #(a, b)))
+        seq (if0Nat Num m' (TCNum 0) TCInf) #(a, b)))
       (\ (xs :: Vec 0 a) ->
        \ (k :: a -> Stream b) -> EmptyVec #(a, b))
       (\ (m' :: Nat) ->
@@ -201,7 +201,7 @@ from a b (TCNum m) TCInf =
 from a b TCInf (TCNum n) =
   natCase
     (\ (n'::Nat) -> (Stream a -> (a -> Vec n' b) ->
-        seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) #(a, b)))
+        seq (if0Nat Num n' (TCNum 0) TCInf) #(a, b)))
       (\ (xs :: Stream a) ->
        \ (k :: a -> Vec 0 b) -> EmptyVec #(a, b))
       (\ (n' :: Nat) ->
@@ -769,7 +769,7 @@ ecJoin :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
 ecJoin (TCNum m) (TCNum n) a = join m n a;
 ecJoin TCInf (TCNum n) a =
   natCase
-    (\ (n'::Nat) -> Stream (Vec n' a) -> seq (ite Num (equalNat 0 n') (TCNum 0) TCInf) a)
+    (\ (n'::Nat) -> Stream (Vec n' a) -> seq (if0Nat Num n' (TCNum 0) TCInf) a)
       (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
       (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) -> streamJoin a n' s)
       n;
@@ -778,7 +778,7 @@ ecSplit :: (m n :: Num) -> (a :: sort 0) -> seq (tcMul m n) a -> seq m (seq n a)
 ecSplit (TCNum m) (TCNum n) a = split m n a;
 ecSplit TCInf (TCNum n) a =
   natCase
-  (\(n :: Nat) -> seq (ite Num (equalNat 0 n) (TCNum 0) TCInf) a -> Stream (Vec n a))
+  (\(n :: Nat) -> seq (if0Nat Num n (TCNum 0) TCInf) a -> Stream (Vec n a))
   (streamConst (Vec 0 a)) (\(n :: Nat) -> streamSplit a (Succ n)) n;
 
 ecReverse :: (n :: Num) -> (a :: sort 0) -> seq n a -> seq n a;
