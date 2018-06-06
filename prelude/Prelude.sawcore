@@ -83,6 +83,7 @@ piCong1 r _ _ (Refl _ tp) = Refl (sort 0) (r -> tp);
 
 --------------------------------------------------------------------------------
 -- Booleans
+
 data Bool :: sort 0 where {
     True :: Bool;
     False :: Bool;
@@ -113,9 +114,12 @@ ite_false a x y =
   trans a (ite a False x y) (iteDep (\ (b::Bool) -> a) False x y) y
         (ite_eq_iteDep a False x y) (iteDep_False (\ (_::Bool) -> a) x y);
 
-not :: Bool -> Bool;
-not (True) = False;
-not (False) = True;
+--
+-- The Boolean operations
+--
+
+primitive not :: Bool -> Bool;
+axiom not__eq :: (b::Bool) -> Eq Bool (not b) (ite Bool b False True);
 
 and :: Bool -> Bool -> Bool;
 and (True) b = b;
@@ -139,18 +143,24 @@ boolEq False b = not b;
 -- Rewrite rules for booleans.
 
 not_True :: Eq Bool (not True) False;
-not_True = Refl Bool False;
+not_True =
+  trans Bool (not True) (ite Bool True False True) False
+        (not__eq True) (ite_true Bool False True);
 
 not_False :: Eq Bool (not False) True;
-not_False = Refl Bool True;
+not_False =
+  trans Bool (not False) (ite Bool False False True) True
+        (not__eq False) (ite_false Bool False True);
 
 not_not :: (x :: Bool) -> Eq Bool (not (not x)) x;
-not_not True = Refl Bool True;
-not_not False = Refl Bool False;
-
-true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
-true_implies True = Refl Bool True;
-true_implies False = Refl Bool False;
+not_not x =
+  iteDep (\ (b::Bool) -> Eq Bool (not (not b)) b) x
+         (trans Bool (not (not True)) (not False) True
+                (eq_cong Bool (not True) False not_True Bool not)
+                not_False)
+         (trans Bool (not (not False)) (not True) False
+                (eq_cong Bool (not False) True not_False Bool not)
+                not_True);
 
 and_True1 :: (x :: Bool) -> Eq Bool (and True x) x;
 and_True1 True = Refl Bool True;
@@ -200,13 +210,59 @@ or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
 or_idem True = Refl Bool True;
 or_idem False = Refl Bool False;
 
+true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
+true_implies x =
+  trans
+    Bool (or (not True) x) (or False x) x
+    (eq_cong Bool (not True) False not_True
+             Bool (\ (y::Bool) -> or y x))
+    (or_False1 x);
+
 not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
-not_or True _ = Refl Bool False;
-not_or False y = Refl Bool (not y);
+not_or x y =
+  iteDep (\ (b::Bool) -> Eq Bool (not (or b y)) (and (not b) (not y)))
+         x
+         (trans Bool (not (or True y)) False (and (not True) (not y))
+                (trans Bool (not (or True y)) (not True) False
+                       (eq_cong Bool (or True y) True (or_True1 y)
+                                Bool not)
+                       not_True)
+                (trans Bool False (and False (not y)) (and (not True) (not y))
+                       (sym Bool (and False (not y)) False (and_False1 (not y)))
+                       (eq_cong Bool False (not True)
+                                (sym Bool (not True) False not_True)
+                                Bool (\ (z::Bool) -> (and z (not y))))))
+         (trans Bool (not (or False y)) (not y) (and (not False) (not y))
+                (eq_cong Bool (or False y) y (or_False1 y) Bool not)
+                (sym Bool (and (not False) (not y)) (not y)
+                     (trans Bool (and (not False) (not y)) (and True (not y))
+                            (not y)
+                            (eq_cong Bool (not False) True not_False Bool
+                                     (\ (z::Bool) -> (and z (not y))))
+                            (and_True1 (not y)))));
 
 not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
-not_and True y = Refl Bool (not y);
-not_and False _ = Refl Bool True;
+not_and x y =
+  iteDep (\ (b::Bool) -> Eq Bool (not (and b y)) (or (not b) (not y)))
+         x
+         (trans Bool (not (and True y)) (not y) (or (not True) (not y))
+                (eq_cong Bool (and True y) y (and_True1 y) Bool not)
+                (sym Bool (or (not True) (not y)) (not y)
+                     (trans Bool (or (not True) (not y)) (or False (not y))
+                            (not y)
+                            (eq_cong Bool (not True) False not_True Bool
+                                     (\ (z::Bool) -> (or z (not y))))
+                            (or_False1 (not y)))))
+         (trans Bool (not (and False y)) True (or (not False) (not y))
+                (trans Bool (not (and False y)) (not False) True
+                       (eq_cong Bool (and False y) False (and_False1 y)
+                                Bool not)
+                       not_False)
+                (trans Bool True (or True (not y)) (or (not False) (not y))
+                       (sym Bool (or True (not y)) True (or_True1 (not y)))
+                       (eq_cong Bool True (not False)
+                                (sym Bool (not False) True not_False)
+                                Bool (\ (z::Bool) -> (or z (not y))))));
 
 ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) ->
            Eq a (ite a (not b) x y) (ite a b y x);
@@ -282,20 +338,36 @@ axiom ite_eq_cong_2 :: (a :: sort 0)
               -> Eq Bool (eq a z (ite a b x y)) (ite Bool b (eq a z x) (eq a z y));
 
 or_triv1 :: (x :: Bool) -> Eq Bool (or x (not x)) True;
-or_triv1 True = Refl Bool True;
-or_triv1 False = Refl Bool True;
+or_triv1 x =
+  iteDep (\ (b::Bool) -> Eq Bool (or b (not b)) True)
+         x
+         (or_True1 (not True))
+         (trans Bool (or False (not False)) (not False) True
+                (or_False1 (not False)) not_False);
 
 or_triv2 :: (x :: Bool) -> Eq Bool (or (not x) x) True;
-or_triv2 True = Refl Bool True;
-or_triv2 False = Refl Bool True;
+or_triv2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (or (not b) b) True)
+         x
+         (or_True2 (not True))
+         (trans Bool (or (not False) False) (not False) True
+                (or_False2 (not False)) not_False);
 
 and_triv1 :: (x :: Bool) -> Eq Bool (and x (not x)) False;
-and_triv1 True = Refl Bool False;
-and_triv1 False = Refl Bool False;
+and_triv1 x =
+  iteDep (\ (b::Bool) -> Eq Bool (and b (not b)) False)
+         x
+         (trans Bool (and True (not True)) (not True) False
+                (and_True1 (not True)) not_True)
+         (and_False1 (not False));
 
 and_triv2 :: (x :: Bool) -> Eq Bool (and (not x) x) False;
-and_triv2 True = Refl Bool False;
-and_triv2 False = Refl Bool False;
+and_triv2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (and (not b) b) False)
+         x
+         (trans Bool (and (not True) True) (not True) False
+                (and_True2 (not True)) not_True)
+         (and_False2 (not False));
 
 --------------------------------------------------------------------------------
 -- Boolean equality
