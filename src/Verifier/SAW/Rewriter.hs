@@ -260,6 +260,83 @@ scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule]
 scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 
+-- | Transform the given rewrite rule to a set of one or more
+-- equivalent rewrite rules, if possible.
+--
+-- * If the rhs is a lambda, then add an argument to the lhs.
+-- * If the rhs is a recursor, then split into a separate rule for each constructor.
+-- * If the rhs is a record, then split into a separate rule for each accessor.
+scExpandRewriteRule :: SharedContext -> RewriteRule -> IO (Maybe [RewriteRule])
+scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
+  case rhs of
+    (R.asLambda -> Just (_, ty, body)) ->
+      do let ctxt' = ctxt ++ [ty]
+         lhs1 <- incVars sc 0 1 lhs
+         var0 <- scLocalVar sc 0
+         lhs' <- scApply sc lhs1 var0
+         return $ Just [RewriteRule ctxt' lhs' body]
+    (R.asRecordValue -> Just m) ->
+      do let mkRule (k, x) =
+               do l <- scRecordSelect sc lhs k
+                  return (RewriteRule ctxt l x)
+         Just <$> traverse mkRule (Map.assocs m)
+    (R.asRecursorApp -> Just (d, params, p_ret, cs_fs, _ixs, R.asLocalVar -> Just i)) ->
+      do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
+         let ctxt2 = reverse (take i (reverse ctxt))
+         -- The type @ti@ is in the de Bruijn context @ctxt1@.
+         ti <- scWhnf sc (reverse ctxt !! i)
+         -- The datatype parameters are also in context @ctxt1@.
+         (_d, params1, _ixs) <- R.asDataTypeParams ti
+         let ctorRule ctor =
+               do -- Compute the argument types @argTs@ in context @ctxt1@.
+                  ctorT <- piAppType (ctorType ctor) params1
+                  let argTs = map snd (fst (R.asPiList ctorT))
+                  let nargs = length argTs
+                  -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
+                  params2 <- traverse (incVars sc 0 nargs) params1
+                  args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
+                  c <- scCtorAppParams sc (ctorName ctor) params2 args
+                  -- Build the list of types of the new context.
+                  let ctxt' = ctxt1 ++ argTs ++ ctxt2
+                  -- Define function to adjust indices on a term from
+                  -- context @ctxt@ into context @ctxt'@. We also
+                  -- substitute the constructor @c@ in for the old
+                  -- local variable @i@.
+                  let adjust t = instantiateVar sc i c =<< incVars sc (i+1) nargs t
+                  -- Adjust the indices and substitute the new
+                  -- constructor value to make the new params, lhs,
+                  -- and rhs in context @ctxt'@.
+                  params' <- traverse adjust params
+                  lhs' <- adjust lhs
+                  p_ret' <- adjust p_ret
+                  cs_fs' <- traverse (traverse adjust) cs_fs
+                  args' <- traverse (incVars sc 0 i) args
+                  let cn = ctorName ctor
+                  rhs' <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
+                  return (RewriteRule ctxt' lhs' rhs')
+         dt <- scRequireDataType sc d
+         rules <- traverse ctorRule (dtCtors dt)
+         return (Just rules)
+    _ -> return Nothing
+  where
+    piAppType :: Term -> [Term] -> IO Term
+    piAppType funtype [] = return funtype
+    piAppType funtype (arg : args) =
+      do (_, _, body) <- R.asPi funtype
+         funtype' <- instantiateVar sc 0 arg body
+         piAppType funtype' args
+
+-- | Repeatedly apply the rule transformations in 'scExpandRewriteRule'.
+scExpandRewriteRules :: SharedContext -> [RewriteRule] -> IO [RewriteRule]
+scExpandRewriteRules sc rs =
+  case rs of
+    [] -> return []
+    r : rs2 ->
+      do m <- scExpandRewriteRule sc r
+         case m of
+           Nothing -> (r :) <$> scExpandRewriteRules sc rs2
+           Just rs1 -> scExpandRewriteRules sc (rs1 ++ rs2)
+
 -- | Create a rewrite rule for a definition that expands the definition, if it
 -- has a body to expand to, otherwise return the empty list
 scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
@@ -267,7 +344,7 @@ scDefRewriteRules _ (Def { defBody = Nothing }) = return []
 scDefRewriteRules sc (Def { defIdent = ident, defBody = Just body }) =
   do lhs <- scGlobalDef sc ident
      rhs <- scSharedTerm sc body
-     return [RewriteRule { ctxt = [], lhs = lhs, rhs = rhs }]
+     scExpandRewriteRules sc [RewriteRule { ctxt = [], lhs = lhs, rhs = rhs }]
 
 
 ----------------------------------------------------------------------
