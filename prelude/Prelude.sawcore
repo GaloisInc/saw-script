@@ -342,25 +342,25 @@ not_not x =
                 not_True);
 
 
-and_True2 :: (x :: Bool) -> Eq Bool (and True x) x;
-and_True2 x =
+and_True1 :: (x :: Bool) -> Eq Bool (and True x) x;
+and_True1 x =
   trans Bool (and True x) (ite Bool True x False) x
         (and__eq True x) (ite_true Bool x False);
 
-and_False2 :: (x :: Bool) -> Eq Bool (and False x) False;
-and_False2 x =
+and_False1 :: (x :: Bool) -> Eq Bool (and False x) False;
+and_False1 x =
   trans Bool (and False x) (ite Bool False x False) False
         (and__eq False x) (ite_false Bool x False);
 
-and_True :: (x :: Bool) -> Eq Bool (and x True) x;
-and_True x =
+and_True2 :: (x :: Bool) -> Eq Bool (and x True) x;
+and_True2 x =
   iteDep (\ (b::Bool) -> Eq Bool (and b True) b) x
-         (and_True2 True) (and_False2 True);
+         (and_True1 True) (and_False1 True);
 
-and_False :: (x :: Bool) -> Eq Bool (and x False) False;
-and_False x =
+and_False2 :: (x :: Bool) -> Eq Bool (and x False) False;
+and_False2 x =
   iteDep (\ (b::Bool) -> Eq Bool (and b False) False) x
-         (and_True2 False) (and_False2 False);
+         (and_True1 False) (and_False1 False);
 
 -- This is provable with iteDep on x and then y, but yuck!
 axiom and_assoc :: (x y z :: Bool) ->
@@ -369,28 +369,28 @@ axiom and_assoc :: (x y z :: Bool) ->
 and_idem :: (x :: Bool) -> Eq Bool (and x x) x;
 and_idem x =
   iteDep (\ (b::Bool) -> Eq Bool (and b b) b) x
-         (and_True True) (and_False False);
+         (and_True1 True) (and_False1 False);
 
 
-or_True2 :: (x :: Bool) -> Eq Bool (or True x) True;
-or_True2 x =
+or_True1 :: (x :: Bool) -> Eq Bool (or True x) True;
+or_True1 x =
   trans Bool (or True x) (ite Bool True True x) True
         (or__eq True x) (ite_true Bool True x);
 
-or_False2 :: (x :: Bool) -> Eq Bool (or False x) x;
-or_False2 x =
+or_False1 :: (x :: Bool) -> Eq Bool (or False x) x;
+or_False1 x =
   trans Bool (or False x) (ite Bool False True x) x
         (or__eq False x) (ite_false Bool True x);
 
-or_True :: (x :: Bool) -> Eq Bool (or x True) True;
-or_True x =
+or_True2 :: (x :: Bool) -> Eq Bool (or x True) True;
+or_True2 x =
   iteDep (\ (b::Bool) -> Eq Bool (or b True) True) x
-         (or_True2 True) (or_False2 True);
+         (or_True1 True) (or_False1 True);
 
-or_False :: (x :: Bool) -> Eq Bool (or x False) x;
-or_False x =
+or_False2 :: (x :: Bool) -> Eq Bool (or x False) x;
+or_False2 x =
   iteDep (\ (b::Bool) -> Eq Bool (or b False) b) x
-         (or_True2 False) (or_False2 False);
+         (or_True1 False) (or_False1 False);
 
 -- This is provable with iteDep on x and then y, but yuck!
 axiom or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
@@ -398,7 +398,7 @@ axiom or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
 or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
 or_idem x =
   iteDep (\ (b::Bool) -> Eq Bool (or b b) b) x
-         (or_True True) (or_False False);
+         (or_True1 True) (or_False1 False);
 
 
 true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
@@ -407,7 +407,7 @@ true_implies x =
     Bool (or (not True) x) (or False x) x
     (eq_cong Bool (not True) False not_True
              Bool (\ (y::Bool) -> or y x))
-    (or_False2 x);
+    (or_False1 x);
 
 not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
 not_or x y =
@@ -415,22 +415,22 @@ not_or x y =
          x
          (trans Bool (not (or True y)) False (and (not True) (not y))
                 (trans Bool (not (or True y)) (not True) False
-                       (eq_cong Bool (or True y) True (or_True2 y)
+                       (eq_cong Bool (or True y) True (or_True1 y)
                                 Bool not)
                        not_True)
                 (trans Bool False (and False (not y)) (and (not True) (not y))
-                       (sym Bool (and False (not y)) False (and_False2 (not y)))
+                       (sym Bool (and False (not y)) False (and_False1 (not y)))
                        (eq_cong Bool False (not True)
                                 (sym Bool (not True) False not_True)
                                 Bool (\ (z::Bool) -> (and z (not y))))))
          (trans Bool (not (or False y)) (not y) (and (not False) (not y))
-                (eq_cong Bool (or False y) y (or_False2 y) Bool not)
+                (eq_cong Bool (or False y) y (or_False1 y) Bool not)
                 (sym Bool (and (not False) (not y)) (not y)
                      (trans Bool (and (not False) (not y)) (and True (not y))
                             (not y)
                             (eq_cong Bool (not False) True not_False Bool
                                      (\ (z::Bool) -> (and z (not y))))
-                            (and_True2 (not y)))));
+                            (and_True1 (not y)))));
 
 -- We can prove this like not_or, but yuck!
 axiom not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
@@ -454,22 +454,8 @@ ite_not a b x y =
                 (sym a (ite a False y x) x (ite_false a y x)));
 
 ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
-             Eq a (ite a b x (ite a b y z)) (ite a b x z);
-ite_nest1 a b x y z =
-  iteDep (\ (b'::Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
-         b
-         (trans a (ite a True x (ite a True y z)) x (ite a True x z)
-                (ite_true a x (ite a True y z))
-                (sym a (ite a True x z) x (ite_true a x z)))
-         (trans a (ite a False x (ite a False y z)) z (ite a False x z)
-                (trans a (ite a False x (ite a False y z)) (ite a False y z) z
-                       (ite_false a x (ite a False y z))
-                       (ite_false a y z))
-                (sym a (ite a False x z) z (ite_false a x z)));
-
-ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
              Eq a (ite a b (ite a b x y) z) (ite a b x z);
-ite_nest2 a b x y z =
+ite_nest1 a b x y z =
   iteDep (\ (b'::Bool) -> Eq a (ite a b' (ite a b' x y) z) (ite a b' x z))
          b
          (trans a (ite a True (ite a True x y) z) x (ite a True x z)
@@ -479,6 +465,20 @@ ite_nest2 a b x y z =
                 (sym a (ite a True x z) x (ite_true a x z)))
          (trans a (ite a False (ite a False x y) z) z (ite a False x z)
                 (ite_false a (ite a False x y) z)
+                (sym a (ite a False x z) z (ite_false a x z)));
+
+ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+             Eq a (ite a b x (ite a b y z)) (ite a b x z);
+ite_nest2 a b x y z =
+  iteDep (\ (b'::Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
+         b
+         (trans a (ite a True x (ite a True y z)) x (ite a True x z)
+                (ite_true a x (ite a True y z))
+                (sym a (ite a True x z) x (ite_true a x z)))
+         (trans a (ite a False x (ite a False y z)) z (ite a False x z)
+                (trans a (ite a False x (ite a False y z)) (ite a False y z) z
+                       (ite_false a x (ite a False y z))
+                       (ite_false a y z))
                 (sym a (ite a False x z) z (ite_false a x z)));
 
 -- This is provable with iteDep on b, but yuck!
@@ -495,14 +495,14 @@ ite_bit_false_1 b c =
                      (trans Bool (and (not True) c) (and False c) False
                             (eq_cong Bool (not True) False not_True
                                      Bool (\ (z::Bool) -> (and z c)))
-                            (and_False2 c))))
+                            (and_False1 c))))
          (trans Bool (ite Bool False False c) c (and (not False) c)
                 (ite_false Bool False c)
                 (sym Bool (and (not False) c) c
                      (trans Bool (and (not False) c) (and True c) c
                             (eq_cong Bool (not False) True not_False
                                      Bool (\ (z::Bool) -> (and z c)))
-                            (and_True2 c))));
+                            (and_True1 c))));
 
 ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) ->
                   Eq Bool (ite Bool b True c) (or b c);
@@ -511,10 +511,10 @@ ite_bit_true_1 b c =
          b
          (trans Bool (ite Bool True True c) True (or True c)
                 (ite_true Bool True c)
-                (sym Bool (or True c) True (or_True2 c)))
+                (sym Bool (or True c) True (or_True1 c)))
          (trans Bool (ite Bool False True c) c (or False c)
                 (ite_false Bool True c)
-                (sym Bool (or False c) c (or_False2 c)));
+                (sym Bool (or False c) c (or_False1 c)));
 
 ite_fold_not :: (b :: Bool) -> Eq Bool (ite Bool b False True) (not b);
 ite_fold_not b =
@@ -536,33 +536,33 @@ or_triv1 :: (x :: Bool) -> Eq Bool (or x (not x)) True;
 or_triv1 x =
   iteDep (\ (b::Bool) -> Eq Bool (or b (not b)) True)
          x
-         (or_True2 (not True))
+         (or_True1 (not True))
          (trans Bool (or False (not False)) (not False) True
-                (or_False2 (not False)) not_False);
+                (or_False1 (not False)) not_False);
 
 or_triv2 :: (x :: Bool) -> Eq Bool (or (not x) x) True;
 or_triv2 x =
   iteDep (\ (b::Bool) -> Eq Bool (or (not b) b) True)
          x
-         (or_True (not True))
+         (or_True2 (not True))
          (trans Bool (or (not False) False) (not False) True
-                (or_False (not False)) not_False);
+                (or_False2 (not False)) not_False);
 
 and_triv1 :: (x :: Bool) -> Eq Bool (and x (not x)) False;
 and_triv1 x =
   iteDep (\ (b::Bool) -> Eq Bool (and b (not b)) False)
          x
          (trans Bool (and True (not True)) (not True) False
-                (and_True2 (not True)) not_True)
-         (and_False2 (not False));
+                (and_True1 (not True)) not_True)
+         (and_False1 (not False));
 
 and_triv2 :: (x :: Bool) -> Eq Bool (and (not x) x) False;
 and_triv2 x =
   iteDep (\ (b::Bool) -> Eq Bool (and (not b) b) False)
          x
          (trans Bool (and (not True) True) (not True) False
-                (and_True (not True)) not_True)
-         (and_False (not False));
+                (and_True2 (not True)) not_True)
+         (and_False2 (not False));
 
 
 --------------------------------------------------------------------------------
