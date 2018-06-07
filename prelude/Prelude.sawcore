@@ -136,6 +136,8 @@ trans :: (a :: sort 1) -> (x y z :: a) -> Eq a x y -> Eq a y z -> Eq a x z;
 trans a x y z eq1 eq2 =
   Eq__rec a y (\ (y'::a) -> \ (eq'::Eq a y y') -> Eq a x y') eq1 z eq2;
 
+trans2 :: (a :: sort 1) -> (x y z :: a) -> Eq a x z -> Eq a y z -> Eq a x y;
+trans2 a x y z eq1 eq2 = trans a x z y eq1 (sym a y z eq2);
 
 trans4 :: (a :: sort 1) -> (w x y z :: a) ->
           Eq a w x -> Eq a x y -> Eq a y z -> Eq a w z;
@@ -302,6 +304,11 @@ primitive xor :: Bool -> Bool -> Bool;
 axiom xor__eq :: (b1 b2::Bool) ->
                  Eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2);
 
+-- Decidable Boolean equality, also known as iff
+primitive boolEq :: Bool -> Bool -> Bool;
+axiom boolEq__eq :: (b1 b2::Bool) ->
+                    Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2));
+
 -- Implies is not a primitive, as it is not mapped by any of the simulator
 -- back-ends; instead, it is just defined in terms of or and not
 implies :: Bool -> Bool -> Bool;
@@ -310,12 +317,6 @@ implies = \ (a::Bool) (b::Bool) -> or (not a) b;
 -- FIXME: this rule should be derived by scDefRewriteRules
 implies__eq :: (a b::Bool) -> Eq Bool (implies a b) (or (not a) b);
 implies__eq a b = Refl Bool (implies a b);
-
--- Decidable Boolean equality, also known as iff
-primitive boolEq :: Bool -> Bool -> Bool;
-axiom boolEq__eq :: (b1 b2::Bool) ->
-                    Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2));
-
 
 --
 -- Rewrite rules for booleans
@@ -362,9 +363,17 @@ and_False2 x =
   iteDep (\ (b::Bool) -> Eq Bool (and b False) False) x
          (and_True1 False) (and_False1 False);
 
--- This is provable with iteDep on x and then y, but yuck!
-axiom and_assoc :: (x y z :: Bool) ->
-                   Eq Bool (and x (and y z)) (and (and x y) z);
+and_assoc :: (x y z :: Bool) -> Eq Bool (and x (and y z)) (and (and x y) z);
+and_assoc x y z =
+  iteDep (\ (b::Bool) -> Eq Bool (and x (and y b)) (and (and x y) b)) z
+         (trans2 Bool (and x (and y True)) (and (and x y) True) (and x y)
+                 (eq_cong Bool (and y True) y (and_True2 y) Bool (and x))
+                 (and_True2 (and x y)))
+         (trans2 Bool (and x (and y False)) (and (and x y) False) False
+                 (trans Bool (and x (and y False)) (and x False) False
+                        (eq_cong Bool (and y False) False (and_False2 y) Bool (and x))
+                        (and_False2 x))
+                 (and_False2 (and x y)));
 
 and_idem :: (x :: Bool) -> Eq Bool (and x x) x;
 and_idem x =
@@ -392,8 +401,17 @@ or_False2 x =
   iteDep (\ (b::Bool) -> Eq Bool (or b False) b) x
          (or_True1 False) (or_False1 False);
 
--- This is provable with iteDep on x and then y, but yuck!
-axiom or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
+or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
+or_assoc x y z =
+  iteDep (\ (b::Bool) -> Eq Bool (or x (or y b)) (or (or x y) b)) z
+         (trans2 Bool (or x (or y True)) (or (or x y) True) True
+                 (trans Bool (or x (or y True)) (or x True) True
+                        (eq_cong Bool (or y True) True (or_True2 y) Bool (or x))
+                        (or_True2 x))
+                 (or_True2 (or x y)))
+         (trans2 Bool (or x (or y False)) (or (or x y) False) (or x y)
+                 (eq_cong Bool (or y False) y (or_False2 y) Bool (or x))
+                 (or_False2 (or x y)));
 
 or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
 or_idem x =
@@ -408,6 +426,34 @@ true_implies x =
     (eq_cong Bool (not True) False not_True
              Bool (\ (y::Bool) -> or y x))
     (or_False1 x);
+
+xor_True1 :: (x :: Bool) -> Eq Bool (xor True x) (not x);
+xor_True1 x =
+  trans Bool (xor True x) (ite Bool True (not x) x) (not x)
+        (xor__eq True x) (ite_true Bool (not x) x);
+
+xor_False1 :: (x :: Bool) -> Eq Bool (xor False x) x;
+xor_False1 x =
+  trans Bool (xor False x) (ite Bool False (not x) x) x
+        (xor__eq False x) (ite_false Bool (not x) x);
+
+xor_False2 :: (x :: Bool) -> Eq Bool (xor x False) x;
+xor_False2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (xor b False) b) x
+         (trans Bool (xor True False) (not False) True (xor_True1 False) not_False)
+         (xor_False1 False);
+
+xor_True2 :: (x :: Bool) -> Eq Bool (xor x True) (not x);
+xor_True2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (xor b True) (not b)) x
+         (xor_True1 True)
+         (trans2 Bool (xor False True) (not False) True (xor_False1 True) not_False);
+
+xor_same :: (x :: Bool) -> Eq Bool (xor x x) False;
+xor_same x =
+  iteDep (\ (b::Bool) -> Eq Bool (xor b b) False) x
+         (trans Bool (xor True True) (not True) False (xor_True1 True) not_True)
+         (xor_False1 False);
 
 not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
 not_or x y =
@@ -432,8 +478,28 @@ not_or x y =
                                      (\ (z::Bool) -> (and z (not y))))
                             (and_True1 (not y)))));
 
--- We can prove this like not_or, but yuck!
-axiom not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
+not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
+not_and x y =
+  iteDep (\ (b::Bool) -> Eq Bool (not (and b y)) (or (not b) (not y)))
+         x
+         (trans Bool (not (and True y)) (not y) (or (not True) (not y))
+                (eq_cong Bool (and True y) y (and_True1 y) Bool not)
+                (sym Bool (or (not True) (not y)) (not y)
+                     (trans Bool (or (not True) (not y)) (or False (not y))
+                            (not y)
+                            (eq_cong Bool (not True) False not_True Bool
+                                     (\ (z::Bool) -> (or z (not y))))
+                            (or_False1 (not y)))))
+         (trans Bool (not (and False y)) True (or (not False) (not y))
+                (trans Bool (not (and False y)) (not False) True
+                       (eq_cong Bool (and False y) False (and_False1 y)
+                                Bool not)
+                       not_False)
+                (trans Bool True (or True (not y)) (or (not False) (not y))
+                       (sym Bool (or True (not y)) True (or_True1 (not y)))
+                       (eq_cong Bool True (not False)
+                                (sym Bool (not False) True not_False)
+                                Bool (\ (z::Bool) -> (or z (not y))))));
 
 ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) ->
            Eq a (ite a (not b) x y) (ite a b y x);

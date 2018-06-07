@@ -384,8 +384,8 @@ asSort t = do
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: (Monad f) => Recognizer f Term Bool
-asBool (asGlobalDef -> Just i) | i == "Prelude.True" = return True
-asBool (asGlobalDef -> Just i) | i == "Prelude.False" = return False
+asBool (isGlobalDef "Prelude.True" -> Just ()) = return True
+asBool (isGlobalDef "Prelude.False" -> Just ()) = return False
 asBool _ = fail "not bool"
 
 asBoolType :: (Monad f) => Recognizer f Term ()
@@ -410,8 +410,7 @@ asVecType = isVecType return
 asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNat)
-  `orElse` ((isGlobalDef "Prelude.Vec" @> asNat)
-            <@ isGlobalDef "Prelude.Bool")
+  `orElse` ((isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType)
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
