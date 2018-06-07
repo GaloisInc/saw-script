@@ -54,6 +54,9 @@ trans _ _ _ _ (Refl _ _) eq = eq;
 sym :: (a :: sort 1) -> (x y :: a) -> Eq a x y -> Eq a y x;
 sym _ _ _ (Refl a x) = Refl a x;
 
+trans2 :: (a :: sort 1) -> (x y z :: a) -> Eq a x z -> Eq a y z -> Eq a x y;
+trans2 _ _ _ _ eq (Refl _ _) = eq;
+
 -- Unchecked assertion that two types are equal.
 axiom unsafeAssert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
 
@@ -121,13 +124,11 @@ ite_false a x y =
 primitive not :: Bool -> Bool;
 axiom not__eq :: (b::Bool) -> Eq Bool (not b) (ite Bool b False True);
 
-and :: Bool -> Bool -> Bool;
-and (True) b = b;
-and (False) b = False;
+primitive and :: Bool -> Bool -> Bool;
+axiom and__eq :: (b1 b2::Bool) -> Eq Bool (and b1 b2) (ite Bool b1 b2 False);
 
-or :: Bool -> Bool -> Bool;
-or (True) b = True;
-or (False) b = b;
+primitive or :: Bool -> Bool -> Bool;
+axiom or__eq :: (b1 b2::Bool) -> Eq Bool (or b1 b2) (ite Bool b1 True b2);
 
 xor :: Bool -> Bool -> Bool;
 xor (True) b = not b;
@@ -163,52 +164,78 @@ not_not x =
                 not_True);
 
 and_True1 :: (x :: Bool) -> Eq Bool (and True x) x;
-and_True1 True = Refl Bool True;
-and_True1 False = Refl Bool False;
+and_True1 x =
+  trans Bool (and True x) (ite Bool True x False) x
+        (and__eq True x) (ite_true Bool x False);
 
 and_False1 :: (x :: Bool) -> Eq Bool (and False x) False;
-and_False1 True = Refl Bool False;
-and_False1 False = Refl Bool False;
+and_False1 x =
+  trans Bool (and False x) (ite Bool False x False) False
+        (and__eq False x) (ite_false Bool x False);
 
 and_True2 :: (x :: Bool) -> Eq Bool (and x True) x;
-and_True2 True = Refl Bool True;
-and_True2 False = Refl Bool False;
+and_True2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (and b True) b) x
+         (and_True1 True) (and_False1 True);
 
 and_False2 :: (x :: Bool) -> Eq Bool (and x False) False;
-and_False2 True = Refl Bool False;
-and_False2 False = Refl Bool False;
+and_False2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (and b False) False) x
+         (and_True1 False) (and_False1 False);
 
 and_assoc :: (x y z :: Bool) -> Eq Bool (and x (and y z)) (and (and x y) z);
-and_assoc True y z = Refl Bool (and y z);
-and_assoc False _ _ = Refl Bool False;
+and_assoc x y z =
+  iteDep (\ (b::Bool) -> Eq Bool (and x (and y b)) (and (and x y) b)) z
+         (trans2 Bool (and x (and y True)) (and (and x y) True) (and x y)
+                 (eq_cong Bool (and y True) y (and_True2 y) Bool (and x))
+                 (and_True2 (and x y)))
+         (trans2 Bool (and x (and y False)) (and (and x y) False) False
+                 (trans Bool (and x (and y False)) (and x False) False
+                        (eq_cong Bool (and y False) False (and_False2 y) Bool (and x))
+                        (and_False2 x))
+                 (and_False2 (and x y)));
 
 and_idem :: (x :: Bool) -> Eq Bool (and x x) x;
-and_idem True = Refl Bool True;
-and_idem False = Refl Bool False;
+and_idem x =
+  iteDep (\ (b::Bool) -> Eq Bool (and b b) b) x
+         (and_True1 True) (and_False1 False);
 
 or_True1 :: (x :: Bool) -> Eq Bool (or True x) True;
-or_True1 True  = Refl Bool True;
-or_True1 False = Refl Bool True;
+or_True1 x =
+  trans Bool (or True x) (ite Bool True True x) True
+        (or__eq True x) (ite_true Bool True x);
 
 or_False1 :: (x :: Bool) -> Eq Bool (or False x) x;
-or_False1 True  = Refl Bool True;
-or_False1 False = Refl Bool False;
+or_False1 x =
+  trans Bool (or False x) (ite Bool False True x) x
+        (or__eq False x) (ite_false Bool True x);
 
 or_True2 :: (x :: Bool) -> Eq Bool (or x True) True;
-or_True2 True  = Refl Bool True;
-or_True2 False = Refl Bool True;
+or_True2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (or b True) True) x
+         (or_True1 True) (or_False1 True);
 
 or_False2 :: (x :: Bool) -> Eq Bool (or x False) x;
-or_False2 True  = Refl Bool True;
-or_False2 False = Refl Bool False;
+or_False2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (or b False) b) x
+         (or_True1 False) (or_False1 False);
 
 or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
-or_assoc True  _ _ = Refl Bool True;
-or_assoc False y z = Refl Bool (or y z);
+or_assoc x y z =
+  iteDep (\ (b::Bool) -> Eq Bool (or x (or y b)) (or (or x y) b)) z
+         (trans2 Bool (or x (or y True)) (or (or x y) True) True
+                 (trans Bool (or x (or y True)) (or x True) True
+                        (eq_cong Bool (or y True) True (or_True2 y) Bool (or x))
+                        (or_True2 x))
+                 (or_True2 (or x y)))
+         (trans2 Bool (or x (or y False)) (or (or x y) False) (or x y)
+                 (eq_cong Bool (or y False) y (or_False2 y) Bool (or x))
+                 (or_False2 (or x y)));
 
 or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
-or_idem True = Refl Bool True;
-or_idem False = Refl Bool False;
+or_idem x =
+  iteDep (\ (b::Bool) -> Eq Bool (or b b) b) x
+         (or_True1 True) (or_False1 False);
 
 true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
 true_implies x =
