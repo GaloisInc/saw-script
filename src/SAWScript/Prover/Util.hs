@@ -1,8 +1,5 @@
 module SAWScript.Prover.Util where
 
-import qualified Data.AIG as AIG
-import qualified Data.ABC.GIA as GIA
-
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
@@ -31,10 +28,3 @@ liftCexBB tys bs =
   case readFiniteValues tys bs of
     Nothing -> Left "Failed to lift counterexample"
     Just fvs -> Right fvs
-
--- | The 'AIG.Proxy' used by SAWScript.
-sawProxy :: AIG.Proxy GIA.Lit GIA.GIA
-sawProxy = GIA.proxy
-
-
-

@@ -20,6 +20,7 @@ import SAWScript.Utils
 import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
 import SAWScript.Version (shortVersionText)
+import qualified Data.ABC.GIA as GIA
 
 main :: IO ()
 main = do
@@ -36,7 +37,7 @@ main = do
         _ | showHelp opts'' -> err opts'' (usageInfo header options)
         [] -> REPL.run opts''
         _ | runInteractively opts'' -> REPL.run opts''
-        [file] -> processFile opts'' file `catch`
+        [file] -> processFile GIA.proxy opts'' file `catch`
                   (\(ErrorCall msg) -> err opts'' msg)
         (_:_) -> err opts'' "Multiple files not yet supported."
     (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo header options)

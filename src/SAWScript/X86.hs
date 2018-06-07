@@ -18,6 +18,7 @@ module SAWScript.X86
   ) where
 
 
+import Control.Lens (toListOf, folded)
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST(ST,stToIO)
 import           Data.ByteString (ByteString)
@@ -39,6 +40,11 @@ import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Context(Assignment,EmptyCtx,(::>))
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
+-- What4
+import What4.Interface(asNat,asUnsignedBV)
+import What4.FunctionName(functionNameFromText)
+import What4.ProgramLoc(ProgramLoc,Position(OtherPos))
+
 -- Crucible
 import Lang.Crucible.CFG.Core(SomeCFG(..))
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
@@ -48,14 +54,10 @@ import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
           , gpGlobals, AbortedResult(..))
-import Lang.Crucible.Simulator.SimError(SimErrorReason)
-import Lang.Crucible.Solver.BoolInterface(getProofObligations)
-import Lang.Crucible.Solver.Interface(asNat,asUnsignedBV)
-import Lang.Crucible.Solver.AssumptionStack
-          (assertLoc,assertMsg,assertPred,ProofGoal(..))
-import Lang.Crucible.ProgramLoc(ProgramLoc,Position(OtherPos))
+import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
+import Lang.Crucible.Backend(getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred)
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
-import Lang.Crucible.FunctionName(functionNameFromText)
+
 
 -- Crucible LLVM
 import Lang.Crucible.LLVM.MemModel (Mem,ppMem)
@@ -64,7 +66,7 @@ import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
 import Lang.Crucible.LLVM.Bytes(bytesToInteger)
 
 -- Crucible SAW
-import Lang.Crucible.Solver.SAWCoreBackend
+import Lang.Crucible.Backend.SAWCore
   (newSAWCoreBackend, toSC, sawBackendSharedContext
   , sawRegisterSymFunInterp)
 
@@ -550,12 +552,13 @@ getGoals sym =
      mapM toGoal (toList obls)
   where
   toGoal (ProofGoal asmps g) =
-    do as <- mapM (toSC sym) (toList asmps)
-       p  <- toSC sym (g ^. assertPred)
+    do as <- mapM (toSC sym) (toListOf (folded . labeledPred) asmps)
+       p  <- toSC sym (g ^. labeledPred)
+       let SimError loc msg = g^.labeledPredMsg
        return Goal { gAssumes = as
                    , gShows   = p
-                   , gLoc     = assertLoc g
-                   , gMessage = assertMsg g
+                   , gLoc     = loc
+                   , gMessage = msg
                    }
 
 instance Show Goal where

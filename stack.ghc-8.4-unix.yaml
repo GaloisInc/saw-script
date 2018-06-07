@@ -12,11 +12,12 @@ packages:
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
   - deps/llvm-verifier/
+  - deps/crucible/what4/
+  - deps/crucible/what4-abc/
   - deps/crucible/crucible/
-  - deps/crucible/crucible-abc/
+  - deps/crucible/crucible-jvm/
   - deps/crucible/crucible-llvm/
   - deps/crucible/crucible-saw/
-  - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
   - deps/dwarf/
   - deps/elf-edit/
@@ -42,5 +43,6 @@ extra-deps:
   - FloatingHex-0.4
   - data-inttrie-0.1.4
   - monad-supply-0.7
+  - panic-0.4.0.0
 resolver: nightly-2018-04-16
 allow-newer: true

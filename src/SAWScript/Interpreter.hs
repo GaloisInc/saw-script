@@ -44,6 +44,7 @@ import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Utils as SS
 import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
@@ -89,6 +90,8 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+
+import qualified Data.ABC.GIA as GIA
 
 -- Environment -----------------------------------------------------------------
 
@@ -352,7 +355,7 @@ interpretStmt ::
   TopLevel ()
 interpretStmt printBinds stmt =
   case stmt of
-    SS.StmtBind _ pat mc expr -> do {-TODO set loc-} processStmtBind printBinds pat mc expr
+    SS.StmtBind pos pat mc expr -> withPosition pos (processStmtBind printBinds pat mc expr)
     SS.StmtLet _ dg           -> do rw <- getTopLevelRW
                                     dg' <- either failTypecheck return $
                                            checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
@@ -404,8 +407,10 @@ interpretMain = do
     Nothing -> return () -- fail "No 'main' defined"
     Just v -> fromValue v
 
-buildTopLevelEnv :: Options -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
-buildTopLevelEnv opts =
+buildTopLevelEnv :: GIA.Proxy GIA.Lit GIA.GIA
+                 -> Options
+                 -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
+buildTopLevelEnv proxy opts =
     do let mn = mkModuleName ["SAWScript"]
        sc0 <- mkSharedContext
        CryptolSAW.scLoadPreludeModule sc0
@@ -438,6 +443,8 @@ buildTopLevelEnv opts =
                    , roJavaCodebase = jcb
                    , roOptions = opts
                    , roHandleAlloc = halloc
+                   , roPosition = SS.Unknown
+                   , roProxy = proxy
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -456,9 +463,11 @@ buildTopLevelEnv opts =
                    }
        return (bic, ro0, rw0)
 
-processFile :: Options -> FilePath -> IO ()
-processFile opts file = do
-  (_, ro, rw) <- buildTopLevelEnv opts
+processFile :: GIA.Proxy GIA.Lit GIA.GIA
+            -> Options
+            -> FilePath -> IO ()
+processFile proxy opts file = do
+  (_, ro, rw) <- buildTopLevelEnv proxy opts
   oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
   setCurrentDirectory (takeDirectory file')
@@ -735,6 +744,7 @@ primitives = Map.fromList
     , "overrides for any uninterpreted functions that appear in the file."
     ]
 
+    {-
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
@@ -746,6 +756,7 @@ primitives = Map.fromList
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
+    -}
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
     (scVal dsecPrint)
@@ -757,6 +768,7 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
+    {-
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
     [ "Perform a Combinatorial Equivalence Check between two AIGs."
@@ -764,10 +776,11 @@ primitives = Map.fromList
     ]
 
   , prim "bitblast"            "Term -> TopLevel AIG"
-    (scVal bitblastPrim)
+    (bicVal (\bic _ -> bitblastPrim (biProxy bic) (biSharedContext bic)))
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
+    -}
 
   , prim "read_aig"            "String -> TopLevel Term"
     (pureVal readAIGPrim)
@@ -778,14 +791,14 @@ primitives = Map.fromList
     [ "Read a term from a file in the SAWCore external format." ]
 
   , prim "write_aig"           "String -> Term -> TopLevel ()"
-    (scVal writeAIG)
+    (pureVal writeAIGPrim)
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
     , "bits to a finite number of bits."
     ]
 
   , prim "write_saig"          "String -> Term -> TopLevel ()"
-    (scVal writeSAIGInferLatches)
+    (pureVal writeSAIGPrim)
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
     , "bits to a finite number of bits. The type must be of the form"
@@ -798,7 +811,7 @@ primitives = Map.fromList
     ]
 
   , prim "write_saig'"         "String -> Term -> Int -> TopLevel ()"
-    (scVal writeAIGComputedLatches)
+    (pureVal writeSAIGComputedPrim)
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
     , "bits to a finite number of bits, '[m] -> [n]'. The int argument,"
@@ -924,71 +937,71 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript SatResult"
-    (scVal satABC)
+    (pureVal satABC)
     [ "Use the ABC theorem prover to prove the current goal." ]
 
   , prim "boolector"           "ProofScript SatResult"
-    (scVal satBoolector)
+    (pureVal satBoolector)
     [ "Use the Boolector theorem prover to prove the current goal." ]
 
   , prim "cvc4"                "ProofScript SatResult"
-    (scVal satCVC4)
+    (pureVal satCVC4)
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
   , prim "z3"                  "ProofScript SatResult"
-    (scVal satZ3)
+    (pureVal satZ3)
     [ "Use the Z3 theorem prover to prove the current goal." ]
 
   , prim "mathsat"             "ProofScript SatResult"
-    (scVal satMathSAT)
+    (pureVal satMathSAT)
     [ "Use the MathSAT theorem prover to prove the current goal." ]
 
   , prim "yices"               "ProofScript SatResult"
-    (scVal satYices)
+    (pureVal satYices)
     [ "Use the Yices theorem prover to prove the current goal." ]
 
   , prim "unint_z3"            "[String] -> ProofScript SatResult"
-    (scVal satUnintZ3)
+    (pureVal satUnintZ3)
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "unint_cvc4"            "[String] -> ProofScript SatResult"
-    (scVal satUnintCVC4)
+    (pureVal satUnintCVC4)
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "unint_yices"           "[String] -> ProofScript SatResult"
-    (scVal satUnintYices)
+    (pureVal satUnintYices)
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "offline_aig"         "String -> ProofScript SatResult"
-    (scVal satAIG)
+    (pureVal satAIG)
     [ "Write the current goal to the given file in AIGER format." ]
 
   , prim "offline_cnf"         "String -> ProofScript SatResult"
-    (scVal satCNF)
+    (pureVal satCNF)
     [ "Write the current goal to the given file in CNF format." ]
 
   , prim "offline_extcore"     "String -> ProofScript SatResult"
-    (scVal satExtCore)
+    (pureVal satExtCore)
     [ "Write the current goal to the given file in SAWCore format." ]
 
   , prim "offline_smtlib2"     "String -> ProofScript SatResult"
-    (scVal satSMTLib2)
+    (pureVal satSMTLib2)
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
-    (scVal satUnintSMTLib2)
+    (pureVal satUnintSMTLib2)
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
 
   , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
-    (scVal (satExternal True))
+    (pureVal (satExternal True))
     [ "Use an external SAT solver supporting CNF to prove the current goal."
     , "The first argument is the executable name of the solver, and the"
     , "second is the list of arguments to pass to the solver. The string '%f'"
@@ -996,7 +1009,7 @@ primitives = Map.fromList
     , "temporary file holding the CNF version of the formula."]
 
   , prim "external_aig_solver" "String -> [String] -> ProofScript SatResult"
-    (scVal (satExternal False))
+    (pureVal (satExternal False))
     [ "Use an external SAT solver supporting AIG to prove the current goal."
     , "The first argument is the executable name of the solver, and the"
     , "second is the list of arguments to pass to the solver. The string '%f'"
@@ -1004,7 +1017,7 @@ primitives = Map.fromList
     , "temporary file holding the AIG version of the formula."]
 
   , prim "rme"                 "ProofScript SatResult"
-    (scVal satRME)
+    (pureVal satRME)
     [ "Prove the current goal by expansion to Reed-Muller Normal Form." ]
 
   , prim "trivial"             "ProofScript SatResult"

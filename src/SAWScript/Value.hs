@@ -42,7 +42,12 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 
+import qualified Data.ABC.GIA as ABC
+import qualified Data.AIG as AIG
+import qualified Data.ABC.GIA as GIA
+
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Utils as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -53,7 +58,6 @@ import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
-import SAWScript.ImportAIG
 import SAWScript.Prover.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
@@ -120,6 +124,9 @@ data Value
   | VAIG AIGNetwork
   | VCFG LLVM_CFG
   | VGhostVar CIR.GhostGlobal
+
+type AIGNetwork = AIG.Network ABC.Lit ABC.GIA
+type AIGProxy = GIA.Proxy ABC.Lit ABC.GIA
 
 data LLVM_CFG where
   LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> LLVM_CFG
@@ -354,6 +361,8 @@ data TopLevelRO =
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
+  , roPosition      :: SS.Pos
+  , roProxy         :: AIGProxy
   }
 
 data TopLevelRW =
@@ -376,6 +385,12 @@ runTopLevel (TopLevel m) = runStateT . runReaderT m
 io :: IO a -> TopLevel a
 io = liftIO
 
+withPosition :: SS.Pos -> TopLevel a -> TopLevel a
+withPosition pos (TopLevel m) = TopLevel (local (\ro -> ro{ roPosition = pos }) m)
+
+getPosition :: TopLevel SS.Pos
+getPosition = TopLevel (asks roPosition)
+
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel (asks roSharedContext)
 
@@ -384,6 +399,9 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+getProxy :: TopLevel AIGProxy
+getProxy = TopLevel (asks roProxy)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
@@ -595,7 +613,6 @@ instance FromValue CIR.CrucibleMethodSpecIR where
 -----------------------------------------------------------------------------------
 
 
-
 instance IsValue (AIGNetwork) where
     toValue t = VAIG t
 
@@ -778,3 +795,8 @@ addTraceTopLevel str action =
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
 addTraceStateT str action =
   StateT $ \s -> addTraceTopLevel str (runStateT action s)
+
+data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
+                                     , biJavaCodebase  :: JSS.Codebase
+                                     , biBasicSS       :: Simpset
+                                     }

@@ -71,6 +71,7 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 
 import Verifier.SAW.SharedTerm (Term)
 import Verifier.SAW.CryptolEnv
+import qualified Data.ABC.GIA as GIA
 
 --------------------
 
@@ -95,7 +96,7 @@ data RW = RW
 -- | Initial, empty environment.
 defaultRW :: Bool -> Options -> IO RW
 defaultRW isBatch opts = do
-  (_biContext, ro, rw) <- buildTopLevelEnv opts
+  (_biContext, ro, rw) <- buildTopLevelEnv GIA.proxy opts
 
   return RW
     { eContinue   = True

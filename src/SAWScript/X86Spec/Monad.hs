@@ -35,14 +35,15 @@ import qualified Data.Map as Map
 
 import Data.Parameterized.Context(Assignment)
 
+import What4.Interface
+  (natLit,notPred,natEq,getCurrentProgramLoc)
+
 import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
-import Lang.Crucible.Simulator.SimError(SimErrorReason(..))
-import Lang.Crucible.Solver.BoolInterface
-  (addAssertion,addAssumption)
-import Lang.Crucible.Solver.Interface
-  (natLit,notPred,natEq)
-import Lang.Crucible.Solver.SAWCoreBackend (sawBackendSharedContext)
+import Lang.Crucible.Simulator.SimError(SimErrorReason(..), SimError(..))
+import Lang.Crucible.Backend
+  (addAssertion,addAssumption,AssumptionReason(..),LabeledPred(..))
+import Lang.Crucible.Backend.SAWCore (sawBackendSharedContext)
 import Lang.Crucible.LLVM.MemModel ( Mem, emptyMem, LLVMPointerType)
 import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, LLVMPtr )
 import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
@@ -228,9 +229,10 @@ isPtr (Value pt@(LLVMPointer base _off)) yes =
                    if yes then notPred sym isBits else return isBits
 
      pre <- inPre
+     loc <- io $ getCurrentProgramLoc sym
      io $ if pre
-             then addAssumption sym ok
-             else addAssertion sym ok (AssertFailureSimError msg)
+             then addAssumption sym (LabeledPred ok (AssumptionReason loc "precondition"))
+             else addAssertion sym (LabeledPred ok (SimError loc (AssertFailureSimError msg)))
   where
   msg' | yes       = "Expected a pointer, but encounterd a bit value."
        | otherwise = "Expected a bit value, but encounterd a pointer."
@@ -241,7 +243,8 @@ isPtr (Value pt@(LLVMPointer base _off)) yes =
 assume :: Value ABool {- ^ Boolean assumption -} -> Spec Pre ()
 assume (Value p) =
   do sym <- getSym
-     io $ addAssumption sym p
+     loc <- io $ getCurrentProgramLoc sym
+     io $ addAssumption sym (LabeledPred p (AssumptionReason loc "assumption"))
 
 -- | Add an assertion to the post-condition.
 assert ::
@@ -249,7 +252,9 @@ assert ::
   String     {- ^ A message to show if the assrtion fails -} ->
   Spec Post ()
 assert (Value p) msg =
-  withSym $ \sym -> addAssertion sym p (AssertFailureSimError msg)
+  do sym <- getSym
+     loc <- io $ getCurrentProgramLoc sym
+     io $ addAssertion sym (LabeledPred p (SimError loc (AssertFailureSimError msg)))
 
 
 --------------------------------------------------------------------------------

@@ -14,23 +14,25 @@ import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Prover.Util
-         (liftCexBB, bindAllExts, checkBooleanSchema, sawProxy)
+         (liftCexBB, bindAllExts, checkBooleanSchema)
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
 satABC ::
+  (AIG.IsAIG l g) =>
+  AIG.Proxy l g ->
   SharedContext ->
   ProverMode ->
   Term ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satABC sc mode t0 =
+satABC proxy sc mode t0 =
   do TypedTerm schema t <-
         (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
      checkBooleanSchema schema
      tp <- scWhnf sc =<< scTypeOf sc t
      let (args, _) = asPiList tp
          argNames = map fst args
-     BBSim.withBitBlastedPred sawProxy sc bitblastPrimitives t $
+     BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $
       \be lit0 shapes ->
          do let lit = case mode of
                         CheckSat -> lit0

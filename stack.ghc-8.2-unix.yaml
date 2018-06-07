@@ -12,11 +12,12 @@ packages:
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
   - deps/llvm-verifier/
+  - deps/crucible/what4/
+  - deps/crucible/what4-abc/
   - deps/crucible/crucible/
-  - deps/crucible/crucible-abc/
+  - deps/crucible/crucible-jvm/
   - deps/crucible/crucible-llvm/
   - deps/crucible/crucible-saw/
-  - deps/crucible/galois-matlab/
   - deps/parameterized-utils/
   - deps/dwarf/
   - deps/elf-edit/
@@ -37,4 +38,5 @@ extra-deps:
   - monadLib-3.7.3
   - sbv-7.7
   - tasty-hunit-0.10.0.1
+  - panic-0.4.0.0
 resolver: lts-11.5

@@ -48,7 +48,6 @@ import SAWScript.JavaMethodSpec
 import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaUtils
 
-import SAWScript.Prover.Util(sawProxy)
 import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof
@@ -186,7 +185,8 @@ withSAWBackend :: Maybe (IORef [Term])
                -> TopLevel a
 withSAWBackend argsRef a = do
   sc <- getSharedContext
-  io (sawBackend sc argsRef sawProxy) >>= a
+  proxy <- getProxy
+  io (sawBackend sc argsRef proxy) >>= a
 
 runJavaSetup :: Pos -> Codebase -> Class -> String
              -> StateT JavaSetupState TopLevel a
