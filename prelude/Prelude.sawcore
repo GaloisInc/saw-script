@@ -87,10 +87,11 @@ piCong1 r _ _ (Refl _ tp) = Refl (sort 0) (r -> tp);
 --------------------------------------------------------------------------------
 -- Booleans
 
-data Bool :: sort 0 where {
-    True :: Bool;
-    False :: Bool;
-  }
+-- Boolean is a primitive type, because it is handled specially by some of the
+-- back-ends (e.g., the SAT/SMT solvers)
+primitive Bool :: sort 0;
+primitive True :: Bool;
+primitive False :: Bool;
 
 primitive iteDep :: (p :: Bool -> sort 1) -> (b::Bool) ->
                     p True -> p False -> p b;

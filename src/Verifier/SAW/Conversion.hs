@@ -417,8 +417,8 @@ mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))
 
 mkBool :: Bool -> TermBuilder Term
-mkBool True  = mkCtor "Prelude.True" []
-mkBool False = mkCtor "Prelude.False" []
+mkBool True  = mkGlobalDef "Prelude.True"
+mkBool False = mkGlobalDef "Prelude.False"
 
 mkBvNat :: Prim.Nat -> Integer -> TermBuilder Term
 mkBvNat n x = do
@@ -531,10 +531,9 @@ eq_Tuple = Conversion $ thenMatcher matcher action
   where
     matcher = asGlobalDef "Prelude.eq" <:> asAnyTupleType <:> asAny <:> asAny
     action (_ :*: ts :*: x :*: y) =
-      Just (foldr mkAnd mkTrue (map mkEq (zip [1 ..] ts)))
+      Just (foldr mkAnd (mkBool True) (map mkEq (zip [1 ..] ts)))
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t
                       `mkApp` mkTupleSelector i x
@@ -546,10 +545,9 @@ eq_Record = Conversion $ thenMatcher matcher action
   where
     matcher = asGlobalDef "Prelude.eq" <:> asAnyRecordType <:> asAny <:> asAny
     action (_ :*: tm :*: x :*: y) =
-      Just (foldr mkAnd mkTrue (map mkEq (Map.assocs tm)))
+      Just (foldr mkAnd (mkBool True) (map mkEq (Map.assocs tm)))
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        mkTrue = mkTermF (FTermF (CtorApp "Prelude.True" []))
         sel t i = mkTermF . FTermF . RecordSelector t =<< mkTermF (FTermF (StringLit i))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t

@@ -121,7 +121,8 @@ constMap ::
   BasePrims l -> Map Ident (Value l)
 constMap bp = Map.fromList
   -- Boolean
-  [ ("Prelude.True"  , VBool (bpTrue bp))
+  [ ("Prelude.Bool"  , VDataType "Prelude.Bool" [])
+  , ("Prelude.True"  , VBool (bpTrue bp))
   , ("Prelude.False" , VBool (bpFalse bp))
   , ("Prelude.not"   , strictFun (liftM VBool . bpNot bp . toBool))
   , ("Prelude.and"   , boolBinOp (bpAnd bp))
