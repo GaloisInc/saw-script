@@ -130,9 +130,9 @@ axiom and__eq :: (b1 b2::Bool) -> Eq Bool (and b1 b2) (ite Bool b1 b2 False);
 primitive or :: Bool -> Bool -> Bool;
 axiom or__eq :: (b1 b2::Bool) -> Eq Bool (or b1 b2) (ite Bool b1 True b2);
 
-xor :: Bool -> Bool -> Bool;
-xor (True) b = not b;
-xor (False) b = b;
+primitive xor :: Bool -> Bool -> Bool;
+axiom xor__eq :: (b1 b2::Bool) ->
+                 Eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2);
 
 implies :: Bool -> Bool -> Bool;
 implies a b = or (not a) b;
@@ -244,6 +244,34 @@ true_implies x =
     (eq_cong Bool (not True) False not_True
              Bool (\ (y::Bool) -> or y x))
     (or_False1 x);
+
+xor_True1 :: (x :: Bool) -> Eq Bool (xor True x) (not x);
+xor_True1 x =
+  trans Bool (xor True x) (ite Bool True (not x) x) (not x)
+        (xor__eq True x) (ite_true Bool (not x) x);
+
+xor_False1 :: (x :: Bool) -> Eq Bool (xor False x) x;
+xor_False1 x =
+  trans Bool (xor False x) (ite Bool False (not x) x) x
+        (xor__eq False x) (ite_false Bool (not x) x);
+
+xor_False2 :: (x :: Bool) -> Eq Bool (xor x False) x;
+xor_False2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (xor b False) b) x
+         (trans Bool (xor True False) (not False) True (xor_True1 False) not_False)
+         (xor_False1 False);
+
+xor_True2 :: (x :: Bool) -> Eq Bool (xor x True) (not x);
+xor_True2 x =
+  iteDep (\ (b::Bool) -> Eq Bool (xor b True) (not b)) x
+         (xor_True1 True)
+         (trans2 Bool (xor False True) (not False) True (xor_False1 True) not_False);
+
+xor_same :: (x :: Bool) -> Eq Bool (xor x x) False;
+xor_same x =
+  iteDep (\ (b::Bool) -> Eq Bool (xor b b) False) x
+         (trans Bool (xor True True) (not True) False (xor_True1 True) not_True)
+         (xor_False1 False);
 
 not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
 not_or x y =
