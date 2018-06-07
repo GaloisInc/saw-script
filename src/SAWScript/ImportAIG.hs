@@ -55,7 +55,7 @@ bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
   inputs <- liftIO $ do
     atFn <- scApplyPrelude_at sc
     wt <- scNat sc w
-    boolType <- scPrelude_Bool sc
+    boolType <- scApplyPrelude_Bool sc
     V.generateM (fromIntegral w) $ \i -> do
       atFn wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
@@ -81,7 +81,7 @@ parseAIGResultType sc (asBitvectorType -> Just w) = do
   put remaining
   -- Return remaining as a vector.
   liftIO $ do
-    boolType <- scPrelude_Bool sc
+    boolType <- scApplyPrelude_Bool sc
     scVector sc boolType (V.toList base)
 parseAIGResultType _ _ = throwTP "Could not parse AIG output type."
 

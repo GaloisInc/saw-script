@@ -357,7 +357,7 @@ trivial = withFirstGoal $ \goal -> do
     checkTrue t =
       case unwrapTermF t of
         Lambda _ _ t' -> checkTrue t'
-        FTermF (CtorApp "Prelude.True" []) -> return ()
+        FTermF (GlobalDef "Prelude.True") -> return ()
         _ -> fail "trivial: not a trivial goal"
 
 split_goal :: ProofScript ()
