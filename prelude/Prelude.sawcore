@@ -134,12 +134,12 @@ primitive xor :: Bool -> Bool -> Bool;
 axiom xor__eq :: (b1 b2::Bool) ->
                  Eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2);
 
+primitive boolEq :: Bool -> Bool -> Bool;
+axiom boolEq__eq :: (b1 b2::Bool) ->
+                    Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2));
+
 implies :: Bool -> Bool -> Bool;
 implies a b = or (not a) b;
-
-boolEq :: Bool -> Bool -> Bool;
-boolEq True b = b;
-boolEq False b = not b;
 
 -- Rewrite rules for booleans.
 
