@@ -312,9 +312,12 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
                   cs_fs' <- traverse (traverse adjust) cs_fs
                   args' <- traverse (incVars sc 0 i) args
                   let cn = ctorName ctor
-                  rhs' <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
-                  rhs'' <- betaReduce rhs'
-                  return (RewriteRule ctxt' lhs' rhs'')
+                  rhs1 <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
+                  rhs2 <- betaReduce rhs1
+                  -- re-fold recursive occurrences of the original rhs
+                  let ss = addRule (RewriteRule ctxt rhs lhs) emptySimpset
+                  rhs' <- rewriteSharedTerm sc ss rhs2
+                  return (RewriteRule ctxt' lhs' rhs')
          dt <- scRequireDataType sc d
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
