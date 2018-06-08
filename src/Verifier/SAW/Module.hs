@@ -60,6 +60,8 @@ module Verifier.SAW.Module
   , moduleActualDefs
     -- * Module Maps
   , ModuleMap
+  , findCtorInMap
+  , findDataTypeInMap
   , allModuleDefs
   , allModuleDecls
   , allModulePrimitives
@@ -452,6 +454,16 @@ moduleActualDefs m =
 
 -- | The type of mappings from module names to modules
 type ModuleMap = HashMap ModuleName Module
+
+-- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
+findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
+findCtorInMap m i =
+  HMap.lookup (identModule i) m >>= flip findCtor (identName i)
+
+-- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
+findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
+findDataTypeInMap m i =
+  HMap.lookup (identModule i) m >>= flip findDataType (identName i)
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /

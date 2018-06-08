@@ -25,8 +25,10 @@ module Verifier.SAW.TypedAST
  , moduleDataTypes
  , moduleImports
  , findDataType
+ , findDataTypeInMap
  , moduleCtors
  , findCtor
+ , findCtorInMap
  , moduleDefs
  , allModuleDefs
  , findDef

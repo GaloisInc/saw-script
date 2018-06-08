@@ -37,7 +37,7 @@ import Control.Monad (foldM, liftM)
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
-import Data.Foldable (foldlM, find)
+import Data.Foldable (foldlM)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.Set as Set
@@ -295,9 +295,8 @@ evalRecursorApp :: (VMonad l, Show (Extra l)) =>
                    [Thunk l] -> Thunk l -> [(Ident, Thunk l)] -> Value l ->
                    MValue l
 evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp c all_args)
-  | Just ctor <- find ((== c) . ctorName) (allModuleCtors modmap)
-  , Just dt <-
-      find ((== ctorDataTypeName ctor) . dtName) (allModuleDataTypes modmap)
+  | Just ctor <- findCtorInMap modmap c
+  , Just dt <- findDataTypeInMap modmap (ctorDataTypeName ctor)
   = do elims <-
          mapM (\c' -> case lookup (ctorName c') cs_fs of
                   Just elim -> return elim
