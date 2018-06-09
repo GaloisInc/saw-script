@@ -131,10 +131,10 @@ show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 ppAbortedResult :: CrucibleContext arch
                 -> Crucible.AbortedResult Sym (Crucible.LLVM arch)
                 -> Doc
-ppAbortedResult _ (Crucible.AbortedExec (Crucible.SimError _ Crucible.InfeasibleBranchError) _) =
+ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
-ppAbortedResult cc (Crucible.AbortedExec err gp) = do
-  Crucible.ppSimError err <$$> ppGlobalPair cc gp
+ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
+  Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
   text "Aborted branch"
 ppAbortedResult _ (Crucible.AbortedExit ec) =
