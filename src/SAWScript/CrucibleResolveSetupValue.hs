@@ -302,7 +302,8 @@ resolveSAWTerm cc tp tm =
                  mx <- case getAllExts tm' of
                          [] -> do
                            -- Evaluate in SBV to test whether 'tm' is a concrete value
-                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic (scModule sc) Map.empty [] tm'
+                           modmap <- scGetModuleMap sc
+                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
                            return (SBV.svAsInteger sbv)
                          _ -> return Nothing
                  v <- case mx of

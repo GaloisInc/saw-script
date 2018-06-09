@@ -197,6 +197,7 @@ let leq_spec = do {
   x <- ecdsa_arr384 "x";
   y <- ecdsa_arr384 "y";
   java_may_alias [ "x", "y" ];
+  java_sat_branches true;
   java_return {{ x <= y }};
   java_verify_tactic abc;
 };
@@ -507,7 +508,7 @@ let field_sq_spec ss = do {
   java_verify_tactic do {
     unfolding ["p384_field_sq", "p384_field_mul"];
     simplify ss;
-    trivial;
+    z3; //trivial;
   };
 };
 
@@ -523,7 +524,7 @@ let field_mul_spec ss = do {
   java_verify_tactic do {
     unfolding ["p384_field_mul"];
     simplify ss;
-    trivial;
+    z3; //trivial;
   };
 };
 
@@ -546,7 +547,7 @@ let field_muln_spec_noalias ss f = do {
   java_verify_tactic do {
     unfolding ["app2", "app3"];
     simplify ss;
-    trivial;
+    z3; //trivial;
   };
 };
 
@@ -560,7 +561,7 @@ let field_muln_spec_alias ss f = do {
   java_verify_tactic do {
     unfolding ["app2", "app4", "app8"];
     simplify ss;
-    trivial;
+    z3; //trivial;
   };
 };
 

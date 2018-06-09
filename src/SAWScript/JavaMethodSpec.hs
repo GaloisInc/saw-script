@@ -76,6 +76,7 @@ import Verifier.Java.SAWBackend hiding (basic_ss)
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 
 -- JSS Utilities {{{1

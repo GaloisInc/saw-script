@@ -10,6 +10,7 @@ module SAWScript.PathVC where
 import Control.Monad.State
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 
 import SAWScript.VerificationCheck
 
@@ -31,7 +32,7 @@ ppPathVC pvc =
   vcat [ text "Path VC:"
        , nest 2 $
          vcat [ text "Assumptions:"
-              , scPrettyTermDoc defaultPPOpts (pvcAssumptions pvc)
+              , ppTerm defaultPPOpts (pvcAssumptions pvc)
               ]
        , nest 2 $ vcat $
          text "Static errors:" :

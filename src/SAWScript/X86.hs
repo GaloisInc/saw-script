@@ -105,7 +105,7 @@ import Verifier.SAW.Term.Pretty(showTerm)
 
 -- Cryptol Verifier
 import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
-import Verifier.SAW.Cryptol.Prelude(cryptolModule)
+import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec.Types(Sym)
@@ -181,7 +181,9 @@ proof :: ArchitectureInfo X86_64 ->
          Fun ->
          IO (SharedContext,Integer,[Goal])
 proof archi file mbCry globs mkCallMap fun =
-  do sc  <- mkSharedContext cryptolModule
+  do sc  <- mkSharedContext
+     scLoadPreludeModule sc
+     scLoadCryptolModule sc
      sym <- newSAWCoreBackend sc globalNonceGenerator
      cenv <- loadCry sym mbCry
      callMap <- mkCallMap sym cenv

@@ -33,6 +33,7 @@ import qualified Data.AIG as AIG
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (scNot, scAnd, scOr)
+import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
 import SAWScript.Options
 
 type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
@@ -53,15 +54,14 @@ bitblastSharedTerm _ v (asBoolType -> Just ()) = do
   modify (`V.snoc` v)
 bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
   inputs <- liftIO $ do
-    atFn <- scApplyPrelude_at sc
     wt <- scNat sc w
     boolType <- scApplyPrelude_Bool sc
     V.generateM (fromIntegral w) $ \i -> do
-      atFn wt boolType v =<< scNat sc (fromIntegral i)
+      scApplyPrelude_at sc wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
 bitblastSharedTerm _ _ tp = throwTP $ show $
   text "Could not parse AIG input type:" <$$>
-  indent 2 (scPrettyTermDoc defaultPPOpts tp)
+  indent 2 (ppTerm defaultPPOpts tp)
 
 parseAIGResultType :: SharedContext
                    -> Term -- ^ Term for type
@@ -96,10 +96,10 @@ networkAsSharedTerms
     -> IO (V.Vector Term)
 networkAsSharedTerms ntk sc inputTerms outputLits = do
   -- Get evaluator
-  scNot <- scApplyPrelude_not sc
-  scAnd <- scApplyPrelude_and sc
-  scOr <- scApplyPrelude_or sc
-  scImpl <- scApplyPrelude_implies sc
+  let scNot = scApplyPrelude_not sc
+  let scAnd = scApplyPrelude_and sc
+  let scOr = scApplyPrelude_or sc
+  let scImpl = scApplyPrelude_implies sc
   scFalse <- scApplyPrelude_False sc
 
   -- Left is nonnegated, Right is negated
