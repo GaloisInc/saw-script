@@ -33,21 +33,18 @@ checkDef :: Def -> Assertion
 checkDef d = do
   let sym = defIdent d
   let tp = defType d
-  let tpProp = assertBool (namedMsg sym "Type is not ground.") (checkGroundTerm tp)
-  let bodyProps =
-        case defBody d of
-          Nothing -> []
-          Just body ->
-            assertBool (namedMsg sym "Body is not ground.") (checkGroundTerm body)
-
-  sequence_ (tpProp : bodyProps)
+  assertBool (namedMsg sym "Type is not ground.") (checkGroundTerm tp)
+  case defBody d of
+    Nothing -> return ()
+    Just body ->
+      assertBool (namedMsg sym "Body is not ground.") (checkGroundTerm body)
 
 checkPrelude :: Assertion
 checkPrelude =
   do sc <- mkSharedContext
      scLoadPreludeModule sc
      modmap <- scGetModuleMap sc
-     traverse_ checkDef $ allModuleDefs modmap
+     mapM_ checkDef $ allModuleDefs modmap
 
 parserTests :: [TestTree]
 parserTests =

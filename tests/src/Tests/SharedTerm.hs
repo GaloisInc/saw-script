@@ -6,7 +6,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Tests.SharedTerm 
+module Tests.SharedTerm
   ( sharedTermTests
   ) where
 
@@ -33,6 +33,7 @@ sharedTermTests =
 preludeSharedSmokeTest :: TestTree
 preludeSharedSmokeTest =
   testCase "preludeSharedSmokeTest" $ do
-    sc <- mkSharedContext preludeModule
-    void $ scPrelude_Bool sc
+    sc <- mkSharedContext
+    scLoadPreludeModule sc
+    void $ scApplyPrelude_Bool sc
     return ()

@@ -32,11 +32,12 @@ rewriter_tests =
 prelude_bveq_sameL_test :: TestTree
 prelude_bveq_sameL_test =
   testCase "prelude_bveq_sameL_test" $ do
-    sc0 <- mkSharedContext preludeModule
+    sc0 <- mkSharedContext
+    scLoadPreludeModule sc0
     let eqs = [ "Prelude.bveq_sameL" ]
     ss <- scSimpset sc0 [] eqs []
     let sc = rewritingSharedContext sc0 ss
-    natType <- scMkTerm sc (mkDataType "Prelude.Nat" [])
+    natType <- scMkTerm sc (mkDataType "Prelude.Nat" [] [])
     n <- scFreshGlobal sc "n" natType
     bvType <- scMkTerm sc (mkGlobalDef "Prelude.bitvector" `mkApp` return n)
     x <- scFreshGlobal sc "x" bvType
