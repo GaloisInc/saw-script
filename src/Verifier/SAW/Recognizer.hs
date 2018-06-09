@@ -16,7 +16,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Recognizer
   ( Recognizer
-  , (<:), emptyl, endl
+  , (<:>), (<:), emptyl, endl
   , (:*:)(..)
   , asFTermF
 
@@ -31,15 +31,25 @@ module Verifier.SAW.Recognizer
   , asTupleType
   , asTupleValue
   , asTupleSelector
+  , asOldTupleType
+  , asOldTupleValue
+  , asOldTupleSelector
   , asFieldType
   , asFieldValue
   , asRecordType
   , asRecordValue
   , asRecordSelector
+  , asOldRecordType
+  , asOldRecordValue
+  , asOldRecordSelector
+  , asCtorParams
   , asCtor
+  , asCtorOrNat
   , asDataType
+  , asDataTypeParams
+  , asRecursorApp
   , isDataType
-  , asNatLit
+  , asNat
   , asStringLit
   , asLambda
   , asLambdaList
@@ -69,6 +79,8 @@ import qualified Data.Map as Map
 import Verifier.SAW.Prim
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
+import Verifier.SAW.Prelude.Constants
+import Text.Read (readMaybe)
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)
@@ -134,6 +146,12 @@ asApp _ = fail "not app"
   (x, y) <- asApp t
   liftM2 (const id) (f x) (g y)
 
+-- | Recognizes a function application, and returns the function
+(<@) :: (Monad f) => Recognizer f Term a -> Recognizer f Term () -> Recognizer f Term a
+(<@) f g t = do
+  (x, y) <- asApp t
+  liftM2 const (f x) (g y)
+
 asApplyAll :: Term -> (Term, [Term])
 asApplyAll = go []
   where go xs t =
@@ -167,20 +185,41 @@ asTupleType :: (Monad m) => Recognizer m Term [Term]
 asTupleType t = do
   ftf <- asFTermF t
   case ftf of
+    RecordType (recordAListAsTuple -> Just ts) -> return ts
+    _                                          -> fail "asTupleType"
+
+asTupleValue :: (Monad m) => Recognizer m Term [Term]
+asTupleValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    RecordValue (recordAListAsTuple -> Just ts) -> return ts
+    _                                           -> fail "asTupleValue"
+
+asTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
+asTupleSelector t = do
+  ftf <- asFTermF t
+  case ftf of
+    RecordProj u (readMaybe -> Just i) -> return (u, i)
+    _                                  -> fail "asTupleSelector"
+
+asOldTupleType :: (Monad m) => Recognizer m Term [Term]
+asOldTupleType t = do
+  ftf <- asFTermF t
+  case ftf of
     UnitType     -> return []
     PairType x y -> do xs <- asTupleType y; return (x : xs)
     _            -> fail "asTupleType"
 
-asTupleValue :: (Monad m) => Recognizer m Term [Term]
-asTupleValue t = do
+asOldTupleValue :: (Monad m) => Recognizer m Term [Term]
+asOldTupleValue t = do
   ftf <- asFTermF t
   case ftf of
     UnitValue     -> return []
     PairValue x y -> do xs <- asTupleValue y; return (x : xs)
     _             -> fail "asTupleValue"
 
-asTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
-asTupleSelector t = do
+asOldTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
+asOldTupleSelector t = do
   ftf <- asFTermF t
   case ftf of
     PairLeft x  -> return (x, 1)
@@ -205,14 +244,31 @@ asRecordType :: (Monad m) => Recognizer m Term (Map FieldName Term)
 asRecordType t = do
   ftf <- asFTermF t
   case ftf of
+    RecordType elems -> return $ Map.fromList elems
+    _                -> fail $ "asRecordType: " ++ showTerm t
+
+-- | Old version of 'asRecordType', that works on old-style record types
+asOldRecordType :: (Monad m) => Recognizer m Term (Map FieldName Term)
+asOldRecordType t = do
+  ftf <- asFTermF t
+  case ftf of
     EmptyType       -> return Map.empty
     FieldType f x y -> do m <- asRecordType y
                           s <- asStringLit f
                           return (Map.insert s x m)
     _               -> fail $ "asRecordType: " ++ showTerm t
 
+
 asRecordValue :: (Monad m) => Recognizer m Term (Map FieldName Term)
 asRecordValue t = do
+  ftf <- asFTermF t
+  case ftf of
+    RecordValue elems -> return $ Map.fromList elems
+    _                 -> fail $ "asRecordValue: " ++ showTerm t
+
+-- | Old version of 'asRecordValue', that uses 'EmptyValue' and 'FieldValue'
+asOldRecordValue :: (Monad m) => Recognizer m Term (Map FieldName Term)
+asOldRecordValue t = do
   ftf <- asFTermF t
   case ftf of
     EmptyValue       -> return Map.empty
@@ -223,23 +279,63 @@ asRecordValue t = do
 
 asRecordSelector :: (Monad m) => Recognizer m Term (Term, FieldName)
 asRecordSelector t = do
+  RecordProj u s <- asFTermF t
+  return (u, s)
+
+asOldRecordSelector :: (Monad m) => Recognizer m Term (Term, FieldName)
+asOldRecordSelector t = do
   RecordSelector u i <- asFTermF t
   s <- asStringLit i
   return (u, s)
 
-asCtor :: (Monad f) => Recognizer f Term (Ident, [Term])
-asCtor t = do CtorApp c l <- asFTermF t; return (c,l)
+-- | Test whether a term is an application of a constructor, and, if so, return
+-- the constructor, its parameters, and its arguments
+asCtorParams :: (Monad f) => Recognizer f Term (Ident, [Term], [Term])
+asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 
+-- | Just like 'asCtorParams', but treat natural number literals as constructor
+-- applications, i.e., @0@ becomes the constructor @Zero@, and any non-zero
+-- literal @k@ becomes @Succ (k-1)@
+asCtorOrNat :: (Alternative f, Monad f) =>
+               Recognizer f Term (Ident, [Term], [Term])
+asCtorOrNat = asCtorParams `orElse` (asNatLit >=> helper . toInteger) where
+  asNatLit (unwrapTermF -> FTermF (NatLit i)) = return i
+  asNatLit _ = fail "not NatLit"
+  helper 0 = return (preludeZeroIdent, [], [])
+  helper k =
+    if k > 0 then
+      return (preludeSuccIdent, [], [Unshared (FTermF (NatLit $ k-1))])
+    else error "asCtorOrNat: negative natural number literal!"
+
+
+-- | A version of 'asCtorParams' that combines the parameters and normal args
+asCtor :: (Monad f) => Recognizer f Term (Ident, [Term])
+asCtor t = do CtorApp c ps args <- asFTermF t; return (c,ps ++ args)
+
+-- | A version of 'asDataType' that returns the parameters separately
+asDataTypeParams :: (Monad f) => Recognizer f Term (Ident, [Term], [Term])
+asDataTypeParams t = do DataTypeApp c ps args <- asFTermF t; return (c,ps,args)
+
+-- | A version of 'asDataTypeParams' that combines the params and normal args
 asDataType :: (Monad f) => Recognizer f Term (Ident, [Term])
-asDataType t = do DataTypeApp c l <- asFTermF t; return (c,l)
+asDataType t = do DataTypeApp c ps args <- asFTermF t; return (c,ps ++ args)
+
+asRecursorApp :: Monad f => Recognizer f Term (Ident,[Term],Term,
+                                               [(Ident,Term)],[Term],Term)
+asRecursorApp t =
+  do RecursorApp d params p_ret cs_fs ixs arg <- asFTermF t;
+     return (d, params, p_ret, cs_fs, ixs, arg)
 
 isDataType :: (Monad f) => Ident -> Recognizer f [Term] a -> Recognizer f Term a
 isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else fail "not datatype"
 
-asNatLit :: (Monad f) => Recognizer f Term Nat
-asNatLit t = do NatLit i <- asFTermF t; return (fromInteger i)
+asNat :: (Monad f) => Recognizer f Term Nat
+asNat (unwrapTermF -> FTermF (NatLit i)) = return $ fromInteger i
+asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
+asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
+asNat _ = fail "not Nat"
 
 asStringLit :: (Monad f) => Recognizer f Term String
 asStringLit t = do StringLit i <- asFTermF t; return i
@@ -296,24 +392,25 @@ asBoolType :: (Monad f) => Recognizer f Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
 
 asIntegerType :: (Monad f) => Recognizer f Term ()
-asIntegerType = isDataType "Prelude.Integer" emptyl
+asIntegerType = isGlobalDef "Prelude.Integer"
 
 asVectorType :: (Monad f) => Recognizer f Term (Term, Term)
-asVectorType = isDataType "Prelude.Vec" r
-  where r [n, t] = return (n, t)
-        r _ = fail "asVectorType: wrong number of arguments"
+asVectorType = helper ((isGlobalDef "Prelude.Vec" @> return) <@> return) where
+  helper r t =
+    do (n :*: a) <- r t
+       return (n, a)
 
 isVecType :: (Monad f)
           => Recognizer f Term a -> Recognizer f Term (Nat :*: a)
-isVecType tp = isDataType "Prelude.Vec" (asNatLit <:> endl tp)
+isVecType tp = (isGlobalDef "Prelude.Vec" @> asNat) <@> tp
 
 asVecType :: (Monad f) => Recognizer f Term (Nat :*: Term)
 asVecType = isVecType return
 
 asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
 asBitvectorType =
-  (isGlobalDef "Prelude.bitvector" @> asNatLit)
-  `orElse` isDataType "Prelude.Vec" (asNatLit <: endl asBoolType)
+  (isGlobalDef "Prelude.bitvector" @> asNat)
+  `orElse` ((isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType)
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return

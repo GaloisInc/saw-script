@@ -18,15 +18,17 @@ module Verifier.SAW.TypedAST
  , ModuleName, mkModuleName
  , moduleName
  , preludeName
+ , ModuleMap
  , ModuleDecl(..)
  , moduleDecls
  , allModuleDecls
  , moduleDataTypes
  , moduleImports
  , findDataType
- , TypedCtor
+ , findDataTypeInMap
  , moduleCtors
  , findCtor
+ , findCtorInMap
  , moduleDefs
  , allModuleDefs
  , findDef
@@ -42,10 +44,10 @@ module Verifier.SAW.TypedAST
    -- * Data types and definitions.
  , DataType(..)
  , Ctor(..)
+ , ctorNumParams
+ , CtorArg(..)
  , Def(..)
  , DefQualifier(..)
- , DefEqn(..)
- , Pat(..)
  , patBoundVarCount
  , patUnusedVarCount
    -- * Terms and associated operations.
@@ -58,42 +60,25 @@ module Verifier.SAW.TypedAST
  , freesTermF
  , termToPat
 
- , LocalVarDoc
- , emptyLocalVarDoc
- , docShowLocalNames
- , docShowLocalTypes
-
- , TermPrinter
- , TermDoc(..)
  , PPOpts(..)
  , defaultPPOpts
- , ppTermDoc
- , Prec(..)
- , ppAppParens
  , ppTerm
- , ppTermF
- , ppTermF'
- , ppFlatTermF
- , ppFlatTermF'
  , ppTermDepth
+ , showTerm
+ , scPrettyTerm
+ , scPrettyTermInCtx
    -- * Primitive types.
- , Sort, mkSort, sortOf, maxSort
+ , Sort, mkSort, propSort, sortOf, maxSort
  , Ident(identModule, identName), mkIdent
  , parseIdent
  , isIdent
- , ppIdent
- , ppDef
- , ppDefEqn
  , DeBruijnIndex
  , FieldName
  , ExtCns(..)
  , VarIndex
    -- * Utility functions
- , BitSet
- , commaSepList
- , semiTermList
- , ppParens
- , ppLetBlock
+  , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
+  , decrBitSet, completeBitSet
  ) where
 
 import Control.Exception (assert)

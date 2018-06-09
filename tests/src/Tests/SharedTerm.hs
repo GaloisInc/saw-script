@@ -33,6 +33,7 @@ sharedTermTests =
 preludeSharedSmokeTest :: TestTree
 preludeSharedSmokeTest =
   testCase "preludeSharedSmokeTest" $ do
-    sc <- mkSharedContext preludeModule
+    sc <- mkSharedContext
+    scLoadPreludeModule sc
     void $ scApplyPrelude_Bool sc
     return ()

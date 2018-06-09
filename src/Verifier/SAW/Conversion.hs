@@ -270,18 +270,18 @@ asCtor :: (Monad m, ArgsMatchable v m a)
        => Ident -> v m a -> Matcher m a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
-          CtorApp c l <- R.asFTermF t
+          CtorApp c params l <- R.asFTermF t
           unless (c == o) $ fail $ "not " ++ show o
-          return l
+          return (params ++ l)
 
 -- | Match a datatype.
 asDataType :: (Monad m, ArgsMatchable v m a)
            => Ident -> v m a -> Matcher m a
 asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
   where match t = do
-          DataTypeApp dt l <- R.asFTermF t
+          DataTypeApp dt params l <- R.asFTermF t
           unless (dt == o) $ fail $ "not " ++ show o
-          return l
+          return (params ++ l)
 
 -- | Match any sort.
 asAnySort :: (Monad m) => Matcher m Sort
@@ -313,7 +313,7 @@ asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 -- Prelude matchers
 
 asBoolType :: (Monad m) => Matcher m ()
-asBoolType = asDataType "Prelude.Bool" asEmpty
+asBoolType = asGlobalDef "Prelude.Bool"
 
 asSuccLit :: (Functor m, Monad m) => Matcher m Prim.Nat
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
@@ -404,11 +404,18 @@ mkTupleSelector i t
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
   | otherwise = fail "mkTupleSelector: non-positive index"
 
-mkCtor :: Ident -> [TermBuilder Term] -> TermBuilder Term
-mkCtor i l = mkTermF . FTermF . CtorApp i =<< sequence l
+mkCtor :: Ident -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
+mkCtor i paramsB argsB =
+  do params <- sequence paramsB
+     args <- sequence argsB
+     mkTermF $ FTermF $ CtorApp i params args
 
-mkDataType :: Ident -> [TermBuilder Term] -> TermBuilder Term
-mkDataType i l = mkTermF . FTermF . DataTypeApp i =<< sequence l
+mkDataType :: Ident -> [TermBuilder Term] -> [TermBuilder Term] ->
+              TermBuilder Term
+mkDataType i paramsB argsB =
+  do params <- sequence paramsB
+     args <- sequence argsB
+     mkTermF $ FTermF $ DataTypeApp i params args
 
 mkNatLit :: Prim.Nat -> TermBuilder Term
 mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
@@ -518,7 +525,8 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 -- | Conversion for selector on a tuple
 tupleConversion :: Conversion
 tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
-  where action (ts, i) = Just (return (ts !! (i - 1)))
+  where action (ts, i) | i > length ts = error "tupleConversion"
+        action (ts, i) = Just (return (ts !! (i - 1)))
 
 -- | Conversion for selector on a record
 recordConversion :: Conversion

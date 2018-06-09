@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}  -- For `Show` instance, it's OK.
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.Value
@@ -22,7 +23,7 @@ module Verifier.SAW.Simulator.Value
 
 import Prelude hiding (mapM)
 
-import Control.Monad (foldM, liftM)
+import Control.Monad (foldM, liftM, mapM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
@@ -49,11 +50,14 @@ data Value l
   | VField FieldName (Thunk l) !(Value l)
   | VCtorApp !Ident !(Vector (Thunk l))
   | VVector !(Vector (Thunk l))
+  | VVecType (Value l) (Value l)
   | VBool (VBool l)
+  | VBoolType
   | VWord (VWord l)
   | VToNat (Value l)
   | VNat !Integer
   | VInt (VInt l)
+  | VIntType
   | VString !String
   | VFloat !Float
   | VDouble !Double
@@ -63,6 +67,8 @@ data Value l
   | VEmptyType
   | VFieldType FieldName !(Value l) !(Value l)
   | VDataType !Ident [Value l]
+  | VRecordType ![(String, Value l)]
+  | VRecordValue ![(String, Thunk l)]
   | VType -- ^ Other unknown type
   | VExtra (Extra l)
 
@@ -132,10 +138,12 @@ instance Show (Extra l) => Show (Value l) where
         | otherwise  -> shows s . showList (toList xv)
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
+      VBoolType      -> showString "Bool"
       VWord _        -> showString "<<bitvector>>"
       VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
+      VIntType       -> showString "Integer"
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s
@@ -148,6 +156,14 @@ instance Show (Extra l) => Show (Value l) where
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
+      VRecordType [] -> showString "{}"
+      VRecordType ((fld,_):_) ->
+        showString "{" . showString fld . showString " :: _, ...}"
+      VRecordValue [] -> showString "{}"
+      VRecordValue ((fld,_):_) ->
+        showString "{" . showString fld . showString " = _, ...}"
+      VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
+                        . showString " " . showParen True (showsPrec p a)
       VType          -> showString "_"
       VExtra x       -> showsPrec p x
     where
@@ -162,12 +178,10 @@ instance Show Nil where
 -- Basic operations on values
 
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple [] = VUnit
-vTuple (x : xs) = VPair x (ready (vTuple xs))
+vTuple xs = VRecordValue $ tupleAsRecordAList xs
 
 vTupleType :: VMonad l => [Value l] -> Value l
-vTupleType [] = VUnitType
-vTupleType (x : xs) = VPairType x (vTupleType xs)
+vTupleType ts = VRecordType $ tupleAsRecordAList ts
 
 valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
@@ -178,13 +192,33 @@ valPairRight (VPair _ t2) = force t2
 valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
 
 vRecord :: Map FieldName (Thunk l) -> Value l
-vRecord m = foldr (uncurry VField) VEmpty (Map.assocs m)
+vRecord m = VRecordValue (Map.assocs m)
+
+-- | Match on a 'VRecordValue' that represents a tuple, i.e., whose fields are
+-- all consecutive numbers
+asVTuple :: Value l -> Maybe [Thunk l]
+asVTuple (VRecordValue elems) = recordAListAsTuple elems
+asVTuple _ = Nothing
+
+-- | Match on a 'VRecordType' that represents a tuple type, i.e., whose fields
+-- are all consecutive numbers
+asVTupleType :: Value l -> Maybe [Value l]
+asVTupleType (VRecordType elems) = recordAListAsTuple elems
+asVTupleType _ = Nothing
 
 valRecordSelect :: (VMonad l, Show (Extra l)) =>
   FieldName -> Value l -> MValue l
 valRecordSelect k (VField k' x r) = if k == k' then force x else valRecordSelect k r
 valRecordSelect k VEmpty = fail $ "valRecordSelect: record field not found: " ++ k
 valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
+
+valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> String -> MValue l
+valRecordProj (VRecordValue fld_map) fld
+  | Just t <- lookup fld fld_map = force t
+valRecordProj v@(VRecordValue _) fld =
+  fail $
+  "valRecordProj: record field not found: " ++ fld ++ " in value: " ++ show v
+valRecordProj v _ = fail $ "valRecordProj: not a record value: " ++ show v
 
 apply :: VMonad l => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
@@ -196,8 +230,8 @@ applyAll = foldM apply
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
-    VDataType "Prelude.Bool" [] -> return FTBit
-    VDataType "Prelude.Vec" [VNat n, v1] -> do
+    VBoolType -> return FTBit
+    VVecType (VNat n) v1 -> do
       t1 <- asFiniteTypeValue v1
       return (FTVec (fromInteger n) t1)
     VUnitType -> return (FTTuple [])
@@ -214,4 +248,7 @@ asFiniteTypeValue v =
       case t2 of
         FTRec tm -> return (FTRec (Map.insert k t1 tm))
         _ -> Nothing
+    VRecordType elem_tps ->
+      FTRec <$> Map.fromList <$>
+      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeValue tp) elem_tps
     _ -> Nothing

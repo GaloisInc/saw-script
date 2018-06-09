@@ -28,8 +28,6 @@ module Verifier.SAW.Rewriter
   , ruleOfTerm
   , ruleOfTerms
   , ruleOfProp
-  , ruleOfDefEqn
-  , rulesOfTypedDef
   , scDefRewriteRules
   , scEqsRewriteRules
   , scEqRewriteRule
@@ -59,11 +57,10 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Lens
+import Control.Applicative (Alternative)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
-import Data.Bits
 import qualified Data.Foldable as Foldable
 import Data.IORef (IORef)
 import Data.Map (Map)
@@ -87,9 +84,6 @@ data RewriteRule
   deriving (Eq, Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
-
-traverseRhs :: Functor f => (Term -> f Term) -> RewriteRule -> f RewriteRule
-traverseRhs f (RewriteRule c l r) = RewriteRule c l <$> f r
 
 ctxtRewriteRule :: RewriteRule -> [Term]
 ctxtRewriteRule = ctxt
@@ -179,7 +173,9 @@ scMatch sc pat term = do
       --lift $ putStrLn $ "matching (rhs): " ++ show y
       case (unwrapTermF x, unwrapTermF y) of
         -- check that neither x nor y contains bound variables less than `depth`
-        (LocalVar i, _) | i >= depth && looseVars y .&. (bit depth - 1) == 0 ->
+        (LocalVar i, _) | i >= depth &&
+                          (looseVars y `intersectBitSets` (completeBitSet depth)
+                           == emptyBitSet) ->
           do -- decrement loose variables in y by `depth`
              y1 <- lift $ instantiateVarList sc 0 (replicate depth (error "scMatch: impossible")) y
              let (my2, m') = insertLookup (i - depth) y1 m
@@ -226,7 +222,9 @@ vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 ruleOfTerm :: Term -> RewriteRule
 ruleOfTerm t =
     case unwrapTermF t of
-      FTermF (DataTypeApp ident [_, x, y])
+      -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
+      -- (the type of x and y) and x are parameters, and y is an index
+      FTermF (DataTypeApp ident [_, x] [y])
           | ident == eqIdent -> RewriteRule { ctxt = [], lhs = x, rhs = y }
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
@@ -254,63 +252,118 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y
 ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
 ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm defaultPPOpts t
 
--- Create a rewrite rule from an equation.
--- Terms do not have unused variables, so unused variables are introduced
--- as new variables bound after all the used variables.
-ruleOfDefEqn :: Ident -> DefEqn -> RewriteRule
-ruleOfDefEqn ident (DefEqn pats rhs) =
-      RewriteRule { ctxt = Map.elems varmap
-                  , lhs = ruleLhs
-                  , rhs = ruleRhs
-                  }
-  where
-    _lvd = emptyLocalVarDoc
-        & docShowLocalNames .~ False
-        & docShowLocalTypes .~ True
-    _varsUnbound t i = looseVars t `shiftR` i /= 0
-    ruleLhs = foldl mkTermApp (Unshared (FTermF (GlobalDef ident))) args
-    ruleRhs = incVarsSimpleTerm 0 nUnused rhs
-
-    nBound  = sum $ fmap patBoundVarCount  pats
-    nUnused = sum $ fmap patUnusedVarCount pats
-    n = nBound + nUnused
-    mkTermApp :: Term -> Term -> Term
-    mkTermApp f x = Unshared (App f x)
-
-    termOfPat :: Pat -> State (Int, Map Int Term) Term
-    termOfPat pat =
-        case pat of
-          PVar _ i tp -> do
-            (j, m) <- get
-            put (j, Map.insert i tp m)
-            return $ Unshared $ LocalVar (n - 1 - i)
-          PUnused i tp -> do
-            (j, m) <- get
-            put (j + 1, Map.insert j (incVarsSimpleTerm 0 (j - i) tp) m)
-            return $ Unshared $ LocalVar (n - 1 - j)
-          PUnit        -> return $ Unshared (FTermF UnitValue)
-          PPair x y    -> (Unshared . FTermF) <$> (PairValue <$> termOfPat x <*> termOfPat y)
-          PEmpty       -> return $ Unshared (FTermF EmptyValue)
-          PField f x y -> (Unshared . FTermF) <$> (FieldValue <$> termOfPat f <*> termOfPat x <*> termOfPat y)
-          PCtor c ps   -> (Unshared . FTermF . CtorApp c) <$> traverse termOfPat ps
-          PString s    -> return $ Unshared (FTermF (StringLit s))
-
-    (args, (_, varmap)) = runState (traverse termOfPat pats) (nBound, Map.empty)
-
-rulesOfTypedDef :: Def -> [RewriteRule]
-rulesOfTypedDef def = map (ruleOfDefEqn (defIdent def)) (defEqs def)
-
--- | Creates a set of rewrite rules from the defining equations of the named constant.
-scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
-scDefRewriteRules sc def =
-  traverse (traverseRhs (scSharedTerm sc)) (rulesOfTypedDef def)
+-- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
+scEqRewriteRule :: SharedContext -> Ident -> IO RewriteRule
+scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
 scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule]
 scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 
-scEqRewriteRule :: SharedContext -> Ident -> IO RewriteRule
-scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfGlobal sc i
+-- | Transform the given rewrite rule to a set of one or more
+-- equivalent rewrite rules, if possible.
+--
+-- * If the rhs is a lambda, then add an argument to the lhs.
+-- * If the rhs is a recursor, then split into a separate rule for each constructor.
+-- * If the rhs is a record, then split into a separate rule for each accessor.
+scExpandRewriteRule :: SharedContext -> RewriteRule -> IO (Maybe [RewriteRule])
+scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
+  case rhs of
+    (R.asLambda -> Just (_, ty, body)) ->
+      do let ctxt' = ctxt ++ [ty]
+         lhs1 <- incVars sc 0 1 lhs
+         var0 <- scLocalVar sc 0
+         lhs' <- scApply sc lhs1 var0
+         return $ Just [RewriteRule ctxt' lhs' body]
+    (R.asRecordValue -> Just m) ->
+      do let mkRule (k, x) =
+               do l <- scRecordSelect sc lhs k
+                  return (RewriteRule ctxt l x)
+         Just <$> traverse mkRule (Map.assocs m)
+    (R.asApplyAll ->
+     (R.asRecursorApp -> Just (d, params, p_ret, cs_fs, _ixs, R.asLocalVar -> Just i),
+      more)) ->
+      do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
+         let ctxt2 = reverse (take i (reverse ctxt))
+         -- The type @ti@ is in the de Bruijn context @ctxt1@.
+         ti <- scWhnf sc (reverse ctxt !! i)
+         -- The datatype parameters are also in context @ctxt1@.
+         (_d, params1, _ixs) <- R.asDataTypeParams ti
+         let ctorRule ctor =
+               do -- Compute the argument types @argTs@ in context @ctxt1@.
+                  ctorT <- piAppType (ctorType ctor) params1
+                  let argTs = map snd (fst (R.asPiList ctorT))
+                  let nargs = length argTs
+                  -- Build a fully-applied constructor @c@ in context @ctxt1 ++ argTs@.
+                  params2 <- traverse (incVars sc 0 nargs) params1
+                  args <- traverse (scLocalVar sc) (reverse (take nargs [0..]))
+                  c <- scCtorAppParams sc (ctorName ctor) params2 args
+                  -- Build the list of types of the new context.
+                  let ctxt' = ctxt1 ++ argTs ++ ctxt2
+                  -- Define function to adjust indices on a term from
+                  -- context @ctxt@ into context @ctxt'@. We also
+                  -- substitute the constructor @c@ in for the old
+                  -- local variable @i@.
+                  let adjust t = instantiateVar sc i c =<< incVars sc (i+1) nargs t
+                  -- Adjust the indices and substitute the new
+                  -- constructor value to make the new params, lhs,
+                  -- and rhs in context @ctxt'@.
+                  params' <- traverse adjust params
+                  lhs' <- adjust lhs
+                  p_ret' <- adjust p_ret
+                  cs_fs' <- traverse (traverse adjust) cs_fs
+                  args' <- traverse (incVars sc 0 i) args
+                  more' <- traverse adjust more
+                  let cn = ctorName ctor
+                  rhs1 <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
+                  rhs2 <- scApplyAll sc rhs1 more'
+                  rhs3 <- betaReduce rhs2
+                  -- re-fold recursive occurrences of the original rhs
+                  let ss = addRule (RewriteRule ctxt rhs lhs) emptySimpset
+                  rhs' <- rewriteSharedTerm sc ss rhs3
+                  return (RewriteRule ctxt' lhs' rhs')
+         dt <- scRequireDataType sc d
+         rules <- traverse ctorRule (dtCtors dt)
+         return (Just rules)
+    _ -> return Nothing
+  where
+    piAppType :: Term -> [Term] -> IO Term
+    piAppType funtype [] = return funtype
+    piAppType funtype (arg : args) =
+      do (_, _, body) <- R.asPi funtype
+         funtype' <- instantiateVar sc 0 arg body
+         piAppType funtype' args
+
+    betaReduce :: Term -> IO Term
+    betaReduce t =
+      case R.asApp t of
+        Nothing -> return t
+        Just (f, arg) ->
+          do f' <- betaReduce f
+             case R.asLambda f' of
+               Nothing -> scApply sc f' arg
+               Just (_, _, body) -> instantiateVar sc 0 arg body
+
+-- | Repeatedly apply the rule transformations in 'scExpandRewriteRule'.
+scExpandRewriteRules :: SharedContext -> [RewriteRule] -> IO [RewriteRule]
+scExpandRewriteRules sc rs =
+  case rs of
+    [] -> return []
+    r : rs2 ->
+      do m <- scExpandRewriteRule sc r
+         case m of
+           Nothing -> (r :) <$> scExpandRewriteRules sc rs2
+           Just rs1 -> scExpandRewriteRules sc (rs1 ++ rs2)
+
+-- | Create a rewrite rule for a definition that expands the definition, if it
+-- has a body to expand to, otherwise return the empty list
+scDefRewriteRules :: SharedContext -> Def -> IO [RewriteRule]
+scDefRewriteRules _ (Def { defBody = Nothing }) = return []
+scDefRewriteRules sc (Def { defIdent = ident, defBody = Just body }) =
+  do lhs <- scGlobalDef sc ident
+     rhs <- scSharedTerm sc body
+     scExpandRewriteRules sc [RewriteRule { ctxt = [], lhs = lhs, rhs = rhs }]
+
 
 ----------------------------------------------------------------------
 -- Simpsets
@@ -374,6 +427,18 @@ asRecordRedex t =
        ts <- R.asRecordValue x
        return (ts, i)
 
+-- | An iota redex is a recursor application whose main argument is a
+-- constructor application; specifically, this function recognizes
+--
+-- > RecursorApp d params p_ret cs_fs _ (CtorApp c _ args)
+asIotaRedex :: (Monad m, Alternative m) => R.Recognizer m Term
+               (Ident,[Term],Term,[(Ident,Term)],Ident,[Term])
+asIotaRedex t =
+  do (d, params, p_ret, cs_fs, _, arg) <- R.asRecursorApp t
+     (c, _, args) <- asCtorOrNat arg
+     return (d, params, p_ret, cs_fs, c, args)
+
+
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
 
@@ -383,6 +448,8 @@ reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
 reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
 reduceSharedTerm _ (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
+reduceSharedTerm sc (asIotaRedex -> Just (d, params, p_ret, cs_fs, c, args)) =
+  Just $ scReduceRecursor sc d params p_ret cs_fs c args
 reduceSharedTerm _ _ = Nothing
 
 -- | Rewriter for shared terms
@@ -453,7 +520,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
                  case unwrapTermF t1 of
                    -- We only rewrite e2 if type of e1 is not a dependent type.
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
-                   Pi _ _ t | even (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
+                   Pi _ _ t | inBitSet 0 (looseVars t) -> App <$> rewriteAll e1 <*> rewriteAll e2
                    _ -> App <$> rewriteAll e1 <*> pure e2
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           Constant{}     -> return tf
@@ -473,8 +540,17 @@ rewriteSharedTermTypeSafe sc ss t0 =
           FieldValue{}     -> traverse rewriteAll ftf
           FieldType{}      -> return ftf -- doesn't matter
           RecordSelector{} -> traverse rewriteAll ftf
-          CtorApp{}        -> return ftf --FIXME
+
+          -- NOTE: we don't rewrite arguments of constructors, datatypes, or
+          -- recursors because of dependent types, as we could potentially cause
+          -- a term to become ill-typed
+          CtorApp{}        -> return ftf
           DataTypeApp{}    -> return ftf -- could treat same as CtorApp
+          RecursorApp{}    -> return ftf -- could treat same as CtorApp
+
+          RecordType{}     -> traverse rewriteAll ftf
+          RecordValue{}    -> traverse rewriteAll ftf
+          RecordProj{}     -> traverse rewriteAll ftf
           Sort{}           -> return ftf -- doesn't matter
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
@@ -534,7 +610,7 @@ replaceTerm :: SharedContext
             -> IO Term
 replaceTerm sc ss (pat, repl) t = do
     let fvs = looseVars pat
-    unless (fvs == 0) $ fail $ unwords
+    unless (fvs == emptyBitSet) $ fail $ unwords
        [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
@@ -579,13 +655,13 @@ hoistIfs sc t = do
               , "Prelude.ite_bit_true_1"
               , "Prelude.ite_bit"
               , "Prelude.not_not"
-              , "Prelude.and_True"
-              , "Prelude.and_False"
+              , "Prelude.and_True1"
+              , "Prelude.and_False1"
               , "Prelude.and_True2"
               , "Prelude.and_False2"
               , "Prelude.and_idem"
-              , "Prelude.or_True"
-              , "Prelude.or_False"
+              , "Prelude.or_True1"
+              , "Prelude.or_False1"
               , "Prelude.or_True2"
               , "Prelude.or_False2"
               , "Prelude.or_idem"

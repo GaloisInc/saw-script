@@ -23,10 +23,29 @@ import Verifier.SAW.TypedAST
 import Control.Monad.State.Strict as State
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.List
 import qualified Data.Vector as V
 
 --------------------------------------------------------------------------------
 -- External text format
+
+-- | A string to use to separate parameters from normal arguments of datatypes
+-- and constructors
+argsep :: String
+argsep = "|"
+
+-- | Separate a list of arguments into parameters and normal arguments by
+-- finding the occurrence of 'argSep' in the list
+separateArgs :: [String] -> Maybe ([String], [String])
+separateArgs args =
+  case elemIndex argsep args of
+    Just i -> Just (take i args, drop (i+1) args)
+    Nothing -> Nothing
+
+-- | Split the last element from the rest of a list, for non-empty lists
+splitLast :: [a] -> Maybe ([a], a)
+splitLast [] = Nothing
+splitLast xs = Just (take (length xs - 1) xs, last xs)
 
 -- | Render to external text format
 scWriteExternal :: Term -> String
@@ -61,33 +80,45 @@ scWriteExternal t0 =
         Constant x e t -> unwords ["Constant", x, show e, show t]
         FTermF ftf     ->
           case ftf of
-            GlobalDef ident    -> unwords ["Global", show ident]
-            UnitValue          -> unwords ["Unit"]
-            UnitType           -> unwords ["UnitT"]
-            PairValue x y      -> unwords ["Pair", show x, show y]
-            PairType x y       -> unwords ["PairT", show x, show y]
-            PairLeft e         -> unwords ["ProjL", show e]
-            PairRight e        -> unwords ["ProjR", show e]
-            EmptyValue         -> unwords ["Empty"]
-            EmptyType          -> unwords ["EmptyT"]
-            FieldValue f x y   -> unwords ["Record", show f, show x, show y]
-            FieldType f x y    -> unwords ["RecordT", show f, show x, show y]
-            RecordSelector e i -> unwords ["RecordSel", show e, show i]
-            CtorApp i es       -> unwords ("Ctor" : show i : map show es)
-            DataTypeApp i es   -> unwords ("Data" : show i : map show es)
-            Sort s             -> unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
-            NatLit n           -> unwords ["Nat", show n]
-            ArrayValue e v     -> unwords ("Array" : show e : map show (V.toList v))
-            StringLit s        -> unwords ["String", show s]
-            ExtCns ext         -> unwords ("ExtCns" : writeExtCns ext)
+            GlobalDef ident     -> unwords ["Global", show ident]
+            UnitValue           -> unwords ["Unit"]
+            UnitType            -> unwords ["UnitT"]
+            PairValue x y       -> unwords ["Pair", show x, show y]
+            PairType x y        -> unwords ["PairT", show x, show y]
+            PairLeft e          -> unwords ["ProjL", show e]
+            PairRight e         -> unwords ["ProjR", show e]
+            EmptyValue          -> unwords ["Empty"]
+            EmptyType           -> unwords ["EmptyT"]
+            FieldValue f x y    -> unwords ["OldRecord", show f, show x, show y]
+            FieldType f x y     -> unwords ["OldRecordT", show f, show x, show y]
+            RecordSelector e i  -> unwords ["OldRecordSel", show e, show i]
+            CtorApp i ps es     ->
+              unwords ("Ctor" : show i : map show ps ++ argsep : map show es)
+            DataTypeApp i ps es ->
+              unwords ("Data" : show i : map show ps ++ argsep : map show es)
+            RecursorApp i ps p_ret cs_fs ixs e ->
+              unwords (["Recursor" , show i] ++ map show ps ++
+                       [argsep, show p_ret, show cs_fs] ++
+                       map show ixs ++ [show e])
+            RecordType elem_tps -> unwords ["RecordType", show elem_tps]
+            RecordValue elems   -> unwords ["Record", show elems]
+            RecordProj e prj    -> unwords ["RecordProj", show e, prj]
+            Sort s              ->
+              if s == propSort then unwords ["Prop"] else
+                unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
+            NatLit n            -> unwords ["Nat", show n]
+            ArrayValue e v      -> unwords ("Array" : show e :
+                                            map show (V.toList v))
+            StringLit s         -> unwords ["String", show s]
+            ExtCns ext          -> unwords ("ExtCns" : writeExtCns ext)
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
 scReadExternal :: SharedContext -> String -> IO Term
 scReadExternal sc input =
   case map words (lines input) of
-    (["SAWCoreTerm", read -> final] : rows) ->
-        do m <- foldM go Map.empty rows
-           return $ (Map.!) m final
+    (["SAWCoreTerm", (read -> final)] : rows) ->
+      do m <- foldM go Map.empty rows
+         return $ (Map.!) m final
     _ -> fail "scReadExternal: failed to parse input file"
   where
     go :: Map Int Term -> [String] -> IO (Map Int Term)
@@ -113,14 +144,26 @@ scReadExternal sc input =
         ["ProjR", x]        -> FTermF (PairRight (read x))
         ["Empty"]           -> FTermF EmptyValue
         ["EmptyT"]          -> FTermF EmptyType
-        ["Record",f,x,y]    -> FTermF (FieldValue (read f) (read x) (read y))
-        ["RecordT",f,x,y]   -> FTermF (FieldType (read f) (read x) (read y))
-        ["RecordSel", e, i] -> FTermF (RecordSelector (read e) (read i))
-        ("Ctor" : i : es)   -> FTermF (CtorApp (parseIdent i) (map read es))
-        ("Data" : i : es)   -> FTermF (DataTypeApp (parseIdent i) (map read es))
+        ["OldRecord",f,x,y] -> FTermF (FieldValue (read f) (read x) (read y))
+        ["OldRecordT",f,x,y] -> FTermF (FieldType (read f) (read x) (read y))
+        ["OldRecordSel", e, i] -> FTermF (RecordSelector (read e) (read i))
+        ("Ctor" : i : (separateArgs -> Just (ps, es))) ->
+          FTermF (CtorApp (parseIdent i) (map read ps) (map read es))
+        ("Data" : i : (separateArgs -> Just (ps, es))) ->
+          FTermF (DataTypeApp (parseIdent i) (map read ps) (map read es))
+        ("Recursor" : i :
+         (separateArgs ->
+          Just (ps, p_ret : cs_fs : (splitLast -> Just (ixs, arg))))) ->
+          FTermF (RecursorApp (parseIdent i) (map read ps) (read p_ret)
+                  (read cs_fs) (map read ixs) (read arg))
+        ["RecordType", elem_tps] -> FTermF (RecordType $ read elem_tps)
+        ["Record", elems]   -> FTermF (RecordValue $ read elems)
+        ["RecordProj", e, prj] -> FTermF (RecordProj (read e) prj)
+        ["Prop"]            -> FTermF (Sort propSort)
         ["Sort", s]         -> FTermF (Sort (mkSort (read s)))
         ["Nat", n]          -> FTermF (NatLit (read n))
-        ("Array" : e : es)  -> FTermF (ArrayValue (read e) (V.fromList (map read es)))
+        ("Array" : e : es)  -> FTermF (ArrayValue (read e)
+                                       (V.fromList (map read es)))
         ("String" : ts)     -> FTermF (StringLit (read (unwords ts)))
         ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
         _ -> error $ "Parse error: " ++ unwords tokens

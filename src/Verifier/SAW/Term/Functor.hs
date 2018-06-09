@@ -6,6 +6,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE BangPatterns #-}
 
 {- |
 Module      : Verifier.SAW.Term.Functor
@@ -35,24 +37,27 @@ module Verifier.SAW.Term.Functor
   , TermF(..)
   , FlatTermF(..)
   , zipWithFlatTermF
-  , BitSet
   , freesTermF
   , unwrapTermF
   , termToPat
   , alphaEquiv
+  , alistAllFields, recordAListAsTuple, tupleAsRecordAList
     -- * Sorts
-  , Sort, mkSort, sortOf, maxSort
+  , Sort, mkSort, propSort, sortOf, maxSort
+    -- * Sets of free variables
+  , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
+  , decrBitSet, completeBitSet
+  , looseVars, smallestFreeVar
   ) where
 
 import Control.Exception (assert)
-import Control.Lens
 import Data.Bits
 import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import qualified Data.Foldable as Foldable (all, and)
+import qualified Data.Foldable as Foldable (all, and, foldl')
 import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
@@ -87,6 +92,14 @@ instance Hashable ModuleName -- automatically derived
 instance Show ModuleName where
   show (ModuleName s) = BS.toString s
 
+isModNameChar :: Char -> Bool
+isModNameChar c = isIdChar c || c == '.'
+
+instance Read ModuleName where
+  readsPrec _ s =
+    let (str1, str2) = break (not . isModNameChar) (dropWhile isSpace s) in
+    [(ModuleName (BS.fromString str1), str2)]
+
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [String] -> ModuleName
@@ -111,6 +124,11 @@ instance Hashable Ident -- automatically derived
 
 instance Show Ident where
   show (Ident m s) = shows m ('.' : s)
+
+instance Read Ident where
+  readsPrec _ str =
+    let (str1, str2) = break (not . isIdChar) str in
+    [(parseIdent str1, str2)]
 
 mkIdent :: ModuleName -> String -> Ident
 mkIdent = Ident
@@ -146,26 +164,51 @@ isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 
 -- Sorts -----------------------------------------------------------------------
 
-newtype Sort = SortCtor { _sortIndex :: Integer }
-  deriving (Eq, Ord, Generic)
+-- | The sorts, also known as universes, which can either be a predicative
+-- universe with level i or the impredicative universe Prop.
+data Sort
+  = TypeSort Integer
+  | PropSort
+  deriving (Eq, Generic)
+
+-- Prop is the lowest sort
+instance Ord Sort where
+  PropSort <= _ = True
+  (TypeSort _) <= PropSort = False
+  (TypeSort i) <= (TypeSort j) = i <= j
 
 instance Hashable Sort -- automatically derived
 
 instance Show Sort where
-  showsPrec p (SortCtor i) = showParen (p >= 10) (showString "sort " . shows i)
+  showsPrec p (TypeSort i) = showParen (p >= 10) (showString "sort " . shows i)
+  showsPrec _ PropSort = showString "Prop"
 
--- | Create sort for given integer.
+instance Read Sort where
+  readsPrec p str_in =
+    flip (readParen False) (dropWhile isSpace str_in) $ \str ->
+    if take 5 str == "sort " then
+      map (\(i,str') -> (TypeSort i, str')) (readsPrec p (drop 5 str))
+    else if take 4 str == "Prop" then [(PropSort, drop 4 str)]
+         else []
+
+-- | Create sort @Type i@ for the given integer @i@
 mkSort :: Integer -> Sort
-mkSort i | 0 <= i = SortCtor i
+mkSort i | 0 <= i = TypeSort i
          | otherwise = error "Negative index given to sort."
+
+-- | Wrapper around 'PropSort', for export
+propSort :: Sort
+propSort = PropSort
 
 -- | Returns sort of the given sort.
 sortOf :: Sort -> Sort
-sortOf (SortCtor i) = SortCtor (i + 1)
+sortOf (TypeSort i) = TypeSort (i + 1)
+sortOf PropSort = TypeSort 0
 
--- | Returns the larger of the two sorts.
-maxSort :: Sort -> Sort -> Sort
-maxSort (SortCtor x) (SortCtor y) = SortCtor (max x y)
+-- | Get the maximum sort in a list, returning Prop for the empty list
+maxSort :: [Sort] -> Sort
+maxSort [] = propSort
+maxSort ss = maximum ss
 
 
 -- External Constants ----------------------------------------------------------
@@ -194,6 +237,8 @@ instance Hashable (ExtCns e) where
 
 -- Flat Terms ------------------------------------------------------------------
 
+-- | The "flat terms", which are the built-in atomic constructs of SAW core.
+--
 -- NB: If you add constructors to FlatTermF, make sure you update
 --     zipWithFlatTermF!
 data FlatTermF e
@@ -213,9 +258,36 @@ data FlatTermF e
   | FieldType e e e
   | RecordSelector e e -- Record value, field name
 
-  | CtorApp !Ident ![e]
-  | DataTypeApp !Ident ![e]
+    -- | An inductively-defined type, applied to parameters and type indices
+  | DataTypeApp !Ident ![e] ![e]
+    -- | An application of a constructor to its arguments, i.e., an element of
+    -- an inductively-defined type; the parameters (of the inductive type to
+    -- which this constructor belongs) and indices are kept separate
+  | CtorApp !Ident ![e] ![e]
+    -- | An eliminator / pattern-matching function for an inductively-defined
+    -- type, given by:
+    -- * The (identifier of the) inductive type it eliminates;
+    -- * The parameters of that inductive type;
+    -- * The return type, also called the "intent", given by a function from
+    --   type indices of the inductive type to a type;
+    -- * The elimination function for each constructor of that inductive type;
+    -- * The indices for that inductive type; AND
+    -- * The argument that is being eliminated / pattern-matched
+  | RecursorApp !Ident [e] e [(Ident,e)] [e] e
 
+    -- | Non-dependent record types, i.e., N-ary tuple types with named
+    -- fields. These are considered equal up to reordering of fields. Actual
+    -- tuple types are represented with field names @"1"@, @"2"@, etc.
+  | RecordType ![(String, e)]
+    -- | Non-dependent records, i.e., N-ary tuples with named fields. These are
+    -- considered equal up to reordering of fields. Actual tuples are
+    -- represented with field names @"1"@, @"2"@, etc.
+  | RecordValue ![(String, e)]
+    -- | Non-dependent record projection
+  | RecordProj e !String
+
+    -- | Sorts, aka universes, are the types of types; i.e., an object is a
+    -- "type" iff it has type @Sort s@ for some s
   | Sort !Sort
 
     -- Primitive builtin values
@@ -223,7 +295,7 @@ data FlatTermF e
   | NatLit !Integer
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
-    -- | Floating point literal
+    -- | String literal
   | StringLit !String
 
     -- | An external constant with a name.
@@ -232,7 +304,39 @@ data FlatTermF e
 
 instance Hashable e => Hashable (FlatTermF e) -- automatically derived
 
-zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y -> Maybe (FlatTermF z)
+-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+-- precisely the given field names and no more. If so, return the values
+-- associated with those field names, in the order given in the input, and
+-- otherwise return 'Nothing'
+alistAllFields :: Eq k => [k] -> [(k, a)] -> Maybe [a]
+alistAllFields [] [] = Just []
+alistAllFields (fld:flds) alist
+  | Just val <- lookup fld alist =
+    (val :) <$> alistAllFields flds (deleteField fld alist)
+  where
+    deleteField _ [] = error "deleteField"
+    deleteField f ((f',_):rest) | f == f' = rest
+    deleteField f (x:rest) = x : deleteField f rest
+alistAllFields _ _ = Nothing
+
+-- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
+-- field names that are the strings @"1", "2", ...@ indicating that the record
+-- type or value is to be printed as a tuple. If so, return a list of the
+-- values, and otherwise return 'Nothing'.
+recordAListAsTuple :: [(String, e)] -> Maybe [e]
+recordAListAsTuple alist =
+  alistAllFields (map show [1 .. length alist]) alist
+
+-- | Convert a tuple of expression to an association list used in a 'RecordType'
+-- or 'RecordValue' to denote a tuple
+tupleAsRecordAList :: [e] -> [(String, e)]
+tupleAsRecordAList es = zip (map (show :: Integer -> String) [1 ..]) es
+
+-- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
+-- pointwise to immediate subterms, if the two 'FlatTermF's are the same
+-- constructor; otherwise, return 'Nothing' if they use different constructors
+zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
+                    Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
     go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
@@ -253,15 +357,33 @@ zipWithFlatTermF f = go
     go (RecordSelector x1 x2) (RecordSelector y1 y2) =
       Just $ RecordSelector (f x1 y1) (f x2 y2)
 
-    go (CtorApp cx lx) (CtorApp cy ly)
-      | cx == cy = Just $ CtorApp cx (zipWith f lx ly)
-    go (DataTypeApp dx lx) (DataTypeApp dy ly)
-      | dx == dy = Just $ DataTypeApp dx (zipWith f lx ly)
+    go (CtorApp cx psx lx) (CtorApp cy psy ly)
+      | cx == cy = Just $ CtorApp cx (zipWith f psx psy) (zipWith f lx ly)
+    go (DataTypeApp dx psx lx) (DataTypeApp dy psy ly)
+      | dx == dy = Just $ DataTypeApp dx (zipWith f psx psy) (zipWith f lx ly)
+    go (RecursorApp d1 ps1 p1 cs_fs1 ixs1 x1) (RecursorApp d2 ps2 p2 cs_fs2 ixs2 x2)
+      | d1 == d2
+      , Just fs2 <- alistAllFields (map fst cs_fs1) cs_fs2
+      = Just $
+        RecursorApp d1 (zipWith f ps1 ps2) (f p1 p2)
+        (zipWith (\(c,f1) f2 -> (c, f f1 f2)) cs_fs1 fs2)
+        (zipWith f ixs1 ixs2) (f x1 x2)
+
+    go (RecordType elems1) (RecordType elems2)
+      | Just vals2 <- alistAllFields (map fst elems1) elems2 =
+        Just $ RecordType $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
+    go (RecordValue elems1) (RecordValue elems2)
+      | Just vals2 <- alistAllFields (map fst elems1) elems2 =
+        Just $ RecordValue $ zipWith (\(fld,x) y -> (fld, f x y)) elems1 vals2
+    go (RecordProj e1 fld1) (RecordProj e2 fld2)
+      | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
+
     go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
-      | V.length vx == V.length vy = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
+      | V.length vx == V.length vy
+      = Just $ ArrayValue (f tx ty) (V.zipWith f vx vy)
     go (ExtCns (EC xi xn xt)) (ExtCns (EC yi _ yt))
       | xi == yi = Just (ExtCns (EC xi xn (f xt yt)))
 
@@ -271,10 +393,14 @@ zipWithFlatTermF f = go
 -- Term Functor ----------------------------------------------------------------
 
 data TermF e
-    = FTermF !(FlatTermF e)  -- ^ Global variables are referenced by label.
+    = FTermF !(FlatTermF e)
+      -- ^ The atomic, or builtin, term constructs
     | App !e !e
+      -- ^ Applications of functions
     | Lambda !String !e !e
+      -- ^ Function abstractions
     | Pi !String !e !e
+      -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
     | Constant String !e !e
@@ -283,26 +409,6 @@ data TermF e
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived.
-
-
--- Free de Bruijn Variables ----------------------------------------------------
-
-bitwiseOrOf :: (Bits a, Num a) => Fold s a -> s -> a
-bitwiseOrOf fld = foldlOf' fld (.|.) 0
-
--- | A @BitSet@ represents a set of natural numbers.
--- Bit n is a 1 iff n is in the set.
-type BitSet = Integer
-
-freesTermF :: TermF BitSet -> BitSet
-freesTermF tf =
-    case tf of
-      FTermF ftf -> bitwiseOrOf folded ftf
-      App l r -> l .|. r
-      Lambda _name tp rhs -> tp .|. rhs `shiftR` 1
-      Pi _name lhs rhs -> lhs .|. rhs `shiftR` 1
-      LocalVar i -> bit i
-      Constant _ _ _ -> 0 -- assume rhs is a closed term
 
 
 -- Term Datatype ---------------------------------------------------------------
@@ -321,6 +427,7 @@ data Term
 instance Hashable Term where
   hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
+
 
 -- | Combine two given hash values.  'combine' has zero as a left
 -- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
@@ -369,10 +476,81 @@ termToPat t =
       FTermF (GlobalDef d)      -> Net.Atom (identName d)
       FTermF (Sort s)           -> Net.Atom ('*' : show s)
       FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
-      FTermF (DataTypeApp c ts) -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
-      FTermF (CtorApp c ts)     -> foldl Net.App (Net.Atom (identName c)) (map termToPat ts)
+      FTermF (DataTypeApp c ps ts) ->
+        foldl Net.App (Net.Atom (identName c)) (map termToPat (ps ++ ts))
+      FTermF (CtorApp c ps ts)   ->
+        foldl Net.App (Net.Atom (identName c)) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term
 unwrapTermF STApp{stAppTermF = tf} = tf
 unwrapTermF (Unshared tf) = tf
+
+
+-- Free de Bruijn Variables ----------------------------------------------------
+
+-- | A @BitSet@ represents a set of natural numbers.
+-- Bit n is a 1 iff n is in the set.
+newtype BitSet = BitSet Integer deriving (Eq, Ord, Show)
+
+-- | The empty 'BitSet'
+emptyBitSet :: BitSet
+emptyBitSet = BitSet 0
+
+-- | The singleton 'BitSet'
+singletonBitSet :: Int -> BitSet
+singletonBitSet = BitSet . bit
+
+-- | Test if a number is in a 'BitSet'
+inBitSet :: Int -> BitSet -> Bool
+inBitSet i (BitSet j) = testBit j i
+
+-- | Union two 'BitSet's
+unionBitSets :: BitSet -> BitSet -> BitSet
+unionBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .|. i2)
+
+-- | Intersect two 'BitSet's
+intersectBitSets :: BitSet -> BitSet -> BitSet
+intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&. i2)
+
+-- | Decrement all elements of a 'BitSet' by 1, removing 0 if it is in the
+-- set. This is useful for moving a 'BitSet' out of the scope of a variable.
+decrBitSet :: BitSet -> BitSet
+decrBitSet (BitSet i) = BitSet (shiftR i 1)
+
+-- | The 'BitSet' containing all elements less than a given index @i@
+completeBitSet :: Int -> BitSet
+completeBitSet i = BitSet (bit i - 1)
+
+-- | Compute the smallest element of a 'BitSet', if any
+smallestBitSetElem :: BitSet -> Maybe Int
+smallestBitSetElem (BitSet 0) = Nothing
+smallestBitSetElem (BitSet i) | i < 0 = error "smallestBitSetElem"
+smallestBitSetElem (BitSet i) = Just $ go 0 i where
+  go :: Int -> Integer -> Int
+  go !shft !x
+    | xw == 0   = go (shft+64) (shiftR x 64)
+    | otherwise = shft + countTrailingZeros xw
+    where xw :: Word64
+          xw = fromInteger x
+
+-- | Compute the free variables of a term given free variables for its immediate
+-- subterms
+freesTermF :: TermF BitSet -> BitSet
+freesTermF tf =
+    case tf of
+      FTermF ftf -> Foldable.foldl' unionBitSets emptyBitSet ftf
+      App l r -> unionBitSets l r
+      Lambda _name tp rhs -> unionBitSets tp (decrBitSet rhs)
+      Pi _name lhs rhs -> unionBitSets lhs (decrBitSet rhs)
+      LocalVar i -> singletonBitSet i
+      Constant _ _ _ -> emptyBitSet -- assume rhs is a closed term
+
+-- | Return a bitset containing indices of all free local variables
+looseVars :: Term -> BitSet
+looseVars STApp{ stAppFreeVars = x } = x
+looseVars (Unshared f) = freesTermF (fmap looseVars f)
+
+-- | Compute the value of the smallest variable in the term, if any.
+smallestFreeVar :: Term -> Maybe Int
+smallestFreeVar = smallestBitSetElem . looseVars

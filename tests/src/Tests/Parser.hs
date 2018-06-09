@@ -24,38 +24,29 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 checkGroundTerm :: Term -> Bool
-checkGroundTerm t = looseVars t == 0
+checkGroundTerm t = looseVars t == emptyBitSet
 
 namedMsg :: Ident -> String -> String
 namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
-
-checkEqn :: Ident -> DefEqn -> Assertion
-checkEqn sym (DefEqn pats rhs) = do
-  let nbound = sum $ patBoundVarCount <$> pats
-  let lvd = emptyLocalVarDoc
-          & docShowLocalNames .~ False
-          & docShowLocalTypes .~ True
-  let msg = "Equation right hand side has unbound variables:\n"
-         ++ show (ppDefEqn (ppTerm defaultPPOpts) emptyLocalVarDoc (ppIdent sym) (DefEqn pats rhs)) ++ "\n"
-         ++ show (ppTerm defaultPPOpts lvd PrecNone rhs) ++ "\n"
-         ++ show (looseVars rhs) ++ "\n"
-         ++ show (ppTermDoc (ppTermF defaultPPOpts (\_ _ _ -> TermDoc . text . show) lvd PrecNone (looseVars <$> unwrapTermF rhs)))
-
-  assertEqual (namedMsg sym msg) 0 (looseVars rhs `shiftR` nbound)
 
 checkDef :: Def -> Assertion
 checkDef d = do
   let sym = defIdent d
   let tp = defType d
-  let tpProp = assertBool (namedMsg sym "Type is not ground.") (checkGroundTerm tp)
-  let eqProps = checkEqn sym <$> defEqs d
+  assertBool (namedMsg sym "Type is not ground.") (checkGroundTerm tp)
+  case defBody d of
+    Nothing -> return ()
+    Just body ->
+      assertBool (namedMsg sym "Body is not ground.") (checkGroundTerm body)
 
-  sequence_ (tpProp : eqProps)
-
-checkModule :: Module -> Assertion
-checkModule m = sequence_ $ checkDef <$> moduleDefs m
+checkPrelude :: Assertion
+checkPrelude =
+  do sc <- mkSharedContext
+     scLoadPreludeModule sc
+     modmap <- scGetModuleMap sc
+     mapM_ checkDef $ allModuleDefs modmap
 
 parserTests :: [TestTree]
 parserTests =
-  [ testCase "preludeModule" $ checkModule preludeModule
+  [ testCase "preludeModule" checkPrelude
   ]

@@ -26,7 +26,7 @@ data Pos = Pos { -- | Base directory to use for pretty printing purposes
                , posLine  :: !Int
                , posCol   :: !Int
                }
-  deriving (Show)
+  deriving (Show,Read)
 
 posTuple :: Pos -> (Int,Int,FilePath)
 posTuple x = (posLine x, posCol x, posPath x)
@@ -53,7 +53,7 @@ class Positioned v where
   pos :: v -> Pos
 
 data PosPair v = PosPair { _pos :: !Pos, val :: !v }
-  deriving (Eq, Ord, Functor, Show)
+  deriving (Eq, Ord, Functor, Show, Read)
 
 instance Positioned (PosPair v) where
   pos (PosPair p _) = p

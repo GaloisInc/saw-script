@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.UntypedAST
@@ -13,276 +14,221 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.UntypedAST
   ( Module(..)
   , ModuleName, mkModuleName
-  , Import(..)
   , Decl(..)
-  , DeclQualifier(..)
+  , Import(..)
   , ImportConstraint(..)
-  , ImportName(..)
+  , nameSatsConstraint
   , CtorDecl(..)
   , Term(..)
+  , TermVar(..)
+  , termVarString
+  , TermCtx
   , asApp
+  , asPiList
   , mkTupleValue
   , mkTupleType
   , mkTupleSelector
-  , mkRecordValue
-  , mkRecordType
-  , mkFieldNameTerm
-  , Pat(..), ppPat
-  , mkPTuple
-  , mkPRecord
-  , mkFieldNamePat
-  , SimplePat(..)
   , FieldName
-  , Ident, localIdent, asLocalIdent, mkIdent, identModule, setIdentModule
-  , Sort, mkSort, sortOf
+  , Sort, mkSort, propSort, sortOf
   , badTerm
   , module Verifier.SAW.Position
+  , moduleName
+  , moduleTypedDecls
+  , moduleDataDecls
+  , moduleCtorDecls
+  , moduleTypedDataDecls
+  , moduleTypedCtorDecls
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
 #endif
-import Control.Exception (assert)
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
-  , Sort, mkSort, sortOf
-  , FieldName
-  , isIdent
-  , Prec(..), ppAppParens
-  , commaSepList
+  , Sort, mkSort, propSort, sortOf
+  , FieldName, DefQualifier
   )
 
--- | Identifiers represent a compound name (e.g., Prelude.add).
-data Ident = LocalIdent String
-           | Ident ModuleName String
-  deriving (Eq, Ord)
-
-instance Show Ident where
-  show (LocalIdent s) = s
-  show (Ident m s) = shows m ('.':s)
-
-mkIdent :: Maybe ModuleName -> String -> Ident
-mkIdent mnm nm = assert (isIdent nm) $
-  case mnm of
-    Nothing -> LocalIdent nm
-    Just m -> Ident m nm
-
-localIdent :: String -> Ident
-localIdent = mkIdent Nothing
-
-asLocalIdent :: Ident -> Maybe String
-asLocalIdent (LocalIdent s) = Just s
-asLocalIdent _ = Nothing
-
-identModule :: Ident -> Maybe ModuleName
-identModule (Ident m _) = Just m
-identModule (LocalIdent _) = Nothing
-
-setIdentModule :: Ident -> ModuleName -> Ident
-setIdentModule (LocalIdent nm) m = Ident m nm
-setIdentModule (Ident _ nm) m = Ident m nm
-
 data Term
-  = Var (PosPair Ident)
-  | Unused (PosPair String)
-    -- | References a constructor.
-  | Con (PosPair Ident)
+  = Name (PosPair String)
   | Sort Pos Sort
-  | Lambda Pos [([SimplePat],Term)] Term
   | App Term Term
-    -- | Pi is the type of a lambda expression.
-  | Pi [SimplePat] Term Pos Term
-    -- | Tuple expressions and their type.
-  | UnitValue Pos
-  | UnitType Pos
-  | PairValue Pos Term Term
-  | PairType Pos Term Term
-  | PairLeft Pos Term
-  | PairRight Pos Term
-    -- | An empty record value.
-  | EmptyValue Pos
-    -- | A record extended with another field.
-  | FieldValue (Term, Term) Term
-    -- | The value stored in a record.
-  | RecordSelector Term Term
-    -- | Type of an empty record value.
-  | EmptyType Pos
-    -- | Type of a record extended with another field.
-  | FieldType (Term, Term) Term
-    -- | Identifies a type constraint on the term.
+  | Lambda Pos TermCtx Term
+  | Pi Pos TermCtx Term
+  | Recursor (Maybe ModuleName) (PosPair String)
+    -- | New-style records
+  | RecordValue Pos [(PosPair String, Term)]
+  | RecordType Pos [(PosPair String, Term)]
+  | RecordProj Term String
+    -- | Old-style pairs
+  | OldPairValue Pos Term Term
+  | OldPairType Pos Term Term
+  | OldPairLeft Term
+  | OldPairRight Term
+    -- | Identifies a type constraint on the term, i.e., a type ascription
   | TypeConstraint Term Pos Term
-    -- | Arguments to an array constructor.
-  | Paren Pos Term
   | NatLit Pos Integer
   | StringLit Pos String
     -- | Vector literal.
   | VecLit Pos [Term]
   | BadTerm Pos
- deriving (Show)
+ deriving (Show,Read)
 
 -- | A pattern used for matching a variable.
-data SimplePat
-  = PVar (PosPair String)
-  | PUnused (PosPair String)
-  deriving (Eq, Ord, Show)
+data TermVar
+  = TermVar (PosPair String)
+  | UnusedVar Pos
+  deriving (Eq, Ord, Show, Read)
 
--- | A pattern used for matching a variable.
-data Pat
-  = PSimple SimplePat
-  | PUnit Pos
-  | PPair Pos Pat Pat
-  | PEmpty Pos
-  | PField (Pat, Pat) Pat
-  | PCtor (PosPair Ident) [Pat]
-  | PString Pos String
-  deriving (Eq, Ord, Show)
+-- | Return the 'String' name associated with a 'TermVar'
+termVarString :: TermVar -> String
+termVarString (TermVar (PosPair _ str)) = str
+termVarString (UnusedVar _) = "_"
 
-mkPTuple :: Pos -> [Pat] -> Pat
-mkPTuple p = foldr (PPair p) (PUnit p)
-
-mkPRecord :: Pos -> [(Pat, Pat)] -> Pat
-mkPRecord p = foldr PField (PEmpty p)
-
-mkFieldNamePat :: PosPair FieldName -> Pat
-mkFieldNamePat (PosPair p s) = PString p s
-
-asPTuple :: Pat -> Maybe [Pat]
-asPTuple (PUnit _)     = Just []
-asPTuple (PPair _ x y) = (x :) <$> asPTuple y
-asPTuple _             = Nothing
-
-asPRecord :: Pat -> Maybe [(Pat, Pat)]
-asPRecord (PEmpty _)   = Just []
-asPRecord (PField x y) = (x :) <$> asPRecord y
-asPRecord _            = Nothing
-
-ppPat :: Prec -> Pat -> Doc
-ppPat _ (asPTuple -> Just l) = parens $ commaSepList (ppPat PrecNone <$> l)
-ppPat _ (PSimple (PVar pnm)) = text (val pnm)
-ppPat _ (PSimple (PUnused pnm)) = text (val pnm)
-ppPat _ (PUnit _) = text "()"
-ppPat _ (PPair _ x y) = parens $ ppPat PrecNone x <+> text "#" <+> ppPat PrecNone y
-ppPat _ (asPRecord -> Just fl) = braces $ commaSepList (ppFld <$> fl)
-  where ppFld (fld,v) = ppPat PrecNone fld <+> equals <+> ppPat PrecNone v
-ppPat _ (PEmpty _) = text "{}"
-ppPat _ (PField f p) = braces $ commaSepList [ppFld f, other]
-  where ppFld (fld,v) = ppPat PrecNone fld <+> equals <+> ppPat PrecNone v
-        other = text "..." <+> equals <+> ppPat PrecNone p
-ppPat prec (PCtor pnm l) = ppAppParens prec $
-  hsep (text (show (val pnm)) : fmap (ppPat PrecArg) l)
-ppPat _ (PString _ s) = text (show s)
+-- | A context of 0 or more variable bindings, with types
+type TermCtx = [(TermVar,Term)]
 
 instance Positioned Term where
   pos t =
     case t of
-      Var i                -> pos i
-      Unused i             -> pos i
-      Con i                -> pos i
+      Name i               -> pos i
       Sort p _             -> p
       Lambda p _ _         -> p
       App x _              -> pos x
-      Pi _ _ p _           -> p
-      UnitValue p          -> p
-      UnitType p           -> p
-      PairValue p _ _      -> p
-      PairType p _ _       -> p
-      PairLeft p _         -> p
-      PairRight p _        -> p
-      EmptyValue p         -> p
-      FieldValue _ t'      -> pos t'
-      RecordSelector _ i   -> pos i
-      EmptyType p          -> p
-      FieldType _ t'       -> pos t'
+      Pi p _ _             -> p
+      Recursor _ i         -> pos i
+      RecordValue p _      -> p
+      RecordType p _       -> p
+      RecordProj x _       -> pos x
+      OldPairValue p _ _   -> p
+      OldPairType p _ _    -> p
+      OldPairLeft x        -> pos x
+      OldPairRight x       -> pos x
       TypeConstraint _ p _ -> p
-      Paren p _            -> p
       NatLit p _           -> p
       StringLit p _        -> p
       VecLit p _           -> p
       BadTerm p            -> p
 
-instance Positioned SimplePat where
-  pos pat =
-    case pat of
-      PVar i      -> pos i
-      PUnused i   -> pos i
-
-instance Positioned Pat where
-  pos pat =
-    case pat of
-      PSimple i   -> pos i
-      PUnit p     -> p
-      PPair p _ _ -> p
-      PEmpty p    -> p
-      PField f _  -> pos (fst f)
-      PCtor i _   -> pos i
-      PString p _ -> p
+instance Positioned TermVar where
+  pos (TermVar i) = pos i
+  pos (UnusedVar p) = p
 
 badTerm :: Pos -> Term
 badTerm = BadTerm
 
--- | Constructor declaration.
-data CtorDecl = Ctor (PosPair String) Term
-  deriving (Show)
+-- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
+data CtorDecl = Ctor (PosPair String) TermCtx Term deriving (Show,Read)
 
-data Module = Module (PosPair ModuleName) [Import] [Decl]
-
-data Import = Import Bool
-                     (PosPair ModuleName)
-                     (Maybe (PosPair String))
-                     (Maybe ImportConstraint)
-
-data DeclQualifier
-  = NoQualifier
-  | PrimitiveQualifier
-  | AxiomQualifier
- deriving (Eq, Show)
-
--- Data declarations introduce an operator for each constructor, and an operator for the type.
+-- | A top-level declaration in a saw-core file
 data Decl
-   = TypeDecl DeclQualifier [(PosPair String)] Term
-   | DataDecl (PosPair String) Term [CtorDecl]
-   | PrimDataDecl (PosPair String) Term
-   | TermDef (PosPair String) [Pat] Term
-  deriving (Show)
+   = TypeDecl DefQualifier (PosPair String) Term
+     -- ^ A declaration of something having a type, where the declaration
+     -- qualifier states what flavor of thing it is
+   | DataDecl (PosPair String) TermCtx Term [CtorDecl]
+     -- ^ A declaration of an inductive data types, with a name, a parameter
+     -- context, a return type, and a list of constructor declarations
+   | TermDef (PosPair String) [TermVar] Term
+     -- ^ A declaration of a term having a definition, with variables
+  deriving (Show,Read)
 
+-- | A set of constraints on what 'String' names to import from a module
 data ImportConstraint
-  = SpecificImports [ImportName]
-  | HidingImports [ImportName]
- deriving (Eq, Ord, Show)
+  = SpecificImports [String]
+    -- ^ Only import the given names
+  | HidingImports [String]
+    -- ^ Import all but the given names
+ deriving (Eq, Ord, Show, Read)
 
-data ImportName
-  = SingleImport (PosPair String)
-  | AllImport    (PosPair String)
-  | SelectiveImport (PosPair String) [PosPair String]
-  deriving (Eq, Ord, Show)
+-- | An import declaration
+data Import = Import { importModName :: PosPair ModuleName
+                       -- ^ The name of the module to import
+                     , importConstraints :: Maybe ImportConstraint
+                       -- ^ The constraints on what to import
+                     }
+            deriving (Show, Read)
+
+-- | Test whether a 'String' name satisfies the constraints of an 'Import'
+nameSatsConstraint :: Maybe ImportConstraint -> String -> Bool
+nameSatsConstraint Nothing _ = True
+nameSatsConstraint (Just (SpecificImports ns)) n = elem n ns
+nameSatsConstraint (Just (HidingImports ns)) n = notElem n ns
+
+
+-- | A module declaration gives:
+-- * A name for the module;
+-- * A list of imports; AND
+-- * A list of top-level declarations
+data Module = Module (PosPair ModuleName) [Import] [Decl] deriving (Show, Read)
+
+moduleName :: Module -> ModuleName
+moduleName (Module (PosPair _ mnm) _ _) = mnm
+
+-- | Get a list of all names (i.e., definitions, axioms, or primitives) declared
+-- in a module, along with their types and qualifiers
+moduleTypedDecls :: Module -> [(String, Term)]
+moduleTypedDecls (Module _ _ decls) = concatMap helper decls where
+  helper :: Decl -> [(String, Term)]
+  helper (TypeDecl _ (PosPair _ nm) tm) = [(nm,tm)]
+  helper _ = []
+
+-- | Get a list of all datatypes declared in a module
+moduleDataDecls :: Module -> [(String,TermCtx,Term,[CtorDecl])]
+moduleDataDecls (Module _ _ decls) = concatMap helper decls where
+  helper :: Decl -> [(String,TermCtx,Term,[CtorDecl])]
+  helper (DataDecl (PosPair _ nm) params tp ctors) = [(nm, params, tp, ctors)]
+  helper _ = []
+
+moduleTypedDataDecls :: Module -> [(String,Term)]
+moduleTypedDataDecls =
+  map (\(nm,p_ctx,tp,_) ->
+        (nm, Pi (pos tp) p_ctx tp)) . moduleDataDecls
+
+-- | Get a list of all constructors declared in a module, along with the context
+-- of parameters for each one
+moduleCtorDecls :: Module -> [(TermCtx,CtorDecl)]
+moduleCtorDecls =
+  concatMap (\(_,p_ctx,_,ctors) -> map (p_ctx,) ctors) . moduleDataDecls
+
+-- | Get a list of the names and types of all the constructors in a module
+moduleTypedCtorDecls :: Module -> [(String,Term)]
+moduleTypedCtorDecls =
+  concatMap (\(_,p_ctx,_,ctors) ->
+              map (\(Ctor (PosPair _ nm) ctx tp) ->
+                    (nm, Pi (pos tp) (p_ctx ++ ctx) tp)) ctors)
+  . moduleDataDecls
+
+asPiList :: Term -> (TermCtx,Term)
+asPiList (Pi _ ctx1 body1) =
+  let (ctx2,body2) = asPiList body1 in
+  (ctx1 ++ ctx2, body2)
+asPiList t = ([], t)
 
 asApp :: Term -> (Term,[Term])
 asApp = go []
-  where go l (Paren _ t) = go l t
-        go l (App t u)   = go (u:l) t
+  where go l (App t u)   = go (u:l) t
         go l t = (t,l)
 
+mkTupleAList :: [Term] -> [(PosPair String, Term)]
+mkTupleAList ts =
+  zipWith (\i t -> (PosPair (pos t) (show i), t)) [1::Integer ..] ts
+
+-- | Build a tuple value @(x1, .., xn)@ as a record value whose fields are named
+-- @1@, @2@, etc. Unary tuples are not allowed.
 mkTupleValue :: Pos -> [Term] -> Term
-mkTupleValue p = foldr (PairValue p) (UnitValue p)
+mkTupleValue _ [_] = error "mkTupleValue: singleton tuple!"
+mkTupleValue p ts = RecordValue p $ mkTupleAList ts
 
+-- | Build a tuple type @#(x1, .., xn)@ as a record type whose fields are named
+-- @1@, @2@, etc. Unary tuple types are not allowed.
 mkTupleType :: Pos -> [Term] -> Term
-mkTupleType p = foldr (PairType p) (UnitType p)
+mkTupleType _ [_] = error "mkTupleType: singleton type!"
+mkTupleType p tps = RecordType p $ mkTupleAList tps
 
-mkTupleSelector :: Term -> PosPair Integer -> Term
+-- | Build a projection @t.i@ of a tuple
+mkTupleSelector :: Term -> Integer -> Term
 mkTupleSelector t i =
-  case compare (val i) 1 of
-    LT -> error "mkTupleSelector: non-positive index"
-    EQ -> PairLeft (_pos i) t
-    GT -> mkTupleSelector (PairRight (_pos i) t) i{ val = val i - 1 }
-
-mkRecordValue :: Pos -> [(Term, Term)] -> Term
-mkRecordValue p = foldr FieldValue (EmptyValue p)
-
-mkRecordType :: Pos -> [(Term, Term)] -> Term
-mkRecordType p = foldr FieldType (EmptyType p)
-
-mkFieldNameTerm :: PosPair FieldName -> Term
-mkFieldNameTerm (PosPair p s) = StringLit p s
+  if i >= 1 then RecordProj t (show i) else
+    error "mkTupleSelector: non-positive index"

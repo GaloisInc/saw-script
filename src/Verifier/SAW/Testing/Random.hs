@@ -19,7 +19,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.Prim (Nat(..))
 import Verifier.SAW.Recognizer (asBoolType, asPi)
 import Verifier.SAW.SharedTerm
-  (scApplyAll, scModule, scWhnf, SharedContext, Term)
+  (scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term)
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
 import Verifier.SAW.Simulator.Value (Value(..))
 import Verifier.SAW.TypedAST (FieldName)
@@ -87,7 +87,8 @@ scRunTest sc fun gens = do
     apply xs = do
       xs' <- mapM (scFiniteValue sc) xs
       app <- scApplyAll sc fun xs'
-      return $ evalSharedTerm (scModule sc) Map.empty app
+      modmap <- scGetModuleMap sc
+      return $ evalSharedTerm modmap Map.empty app
 
 -- | Given a function type, compute generators for the function's
 -- arguments. The supported function types are of the form
