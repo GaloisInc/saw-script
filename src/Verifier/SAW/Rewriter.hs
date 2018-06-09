@@ -280,7 +280,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
                do l <- scRecordSelect sc lhs k
                   return (RewriteRule ctxt l x)
          Just <$> traverse mkRule (Map.assocs m)
-    (R.asRecursorApp -> Just (d, params, p_ret, cs_fs, _ixs, R.asLocalVar -> Just i)) ->
+    (R.asApplyAll ->
+     (R.asRecursorApp -> Just (d, params, p_ret, cs_fs, _ixs, R.asLocalVar -> Just i),
+      more)) ->
       do let ctxt1 = reverse (drop (i+1) (reverse ctxt))
          let ctxt2 = reverse (take i (reverse ctxt))
          -- The type @ti@ is in the de Bruijn context @ctxt1@.
@@ -311,12 +313,14 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
                   p_ret' <- adjust p_ret
                   cs_fs' <- traverse (traverse adjust) cs_fs
                   args' <- traverse (incVars sc 0 i) args
+                  more' <- traverse adjust more
                   let cn = ctorName ctor
                   rhs1 <- scReduceRecursor sc d params' p_ret' cs_fs' cn args'
-                  rhs2 <- betaReduce rhs1
+                  rhs2 <- scApplyAll sc rhs1 more'
+                  rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
                   let ss = addRule (RewriteRule ctxt rhs lhs) emptySimpset
-                  rhs' <- rewriteSharedTerm sc ss rhs2
+                  rhs' <- rewriteSharedTerm sc ss rhs3
                   return (RewriteRule ctxt' lhs' rhs')
          dt <- scRequireDataType sc d
          rules <- traverse ctorRule (dtCtors dt)
