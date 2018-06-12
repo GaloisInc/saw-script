@@ -50,6 +50,7 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
+import SAWScript.CrucibleJavaBuiltins
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
@@ -1276,6 +1277,12 @@ primitives = Map.fromList
     , "types of variables in scope, the expected results of execution, and"
     , "the tactics to use to verify that the method produces the expected"
     , "results."
+    ]
+
+  , prim "java_method_to_cfg"
+    "JavaClass -> String -> TopLevel CFG"
+    (bicVal java_method_to_cfg)
+    [ "Convert a Java method to a Crucible CFG."
     ]
 
   , prim "llvm_type"           "String -> LLVMType"

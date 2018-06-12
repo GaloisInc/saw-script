@@ -33,6 +33,7 @@ library
     , cryptol
     , cryptol-verifier
     , crucible >= 0.4 && < 0.5
+    , crucible-jvm
     , crucible-llvm
     , crucible-saw
     , deepseq
@@ -98,6 +99,7 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
     SAWScript.CongruenceClosure
+    SAWScript.CrucibleJavaBuiltins
     SAWScript.CrucibleBuiltins
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue

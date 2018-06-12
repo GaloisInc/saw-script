@@ -125,8 +125,9 @@ import SAWScript.CrucibleResolveSetupValue
 
 type MemImpl = Crucible.MemImpl Sym
 
-show_cfg :: LLVM_CFG -> String
+show_cfg :: SAW_CFG -> String
 show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
+show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 
 ppAbortedResult :: CrucibleContext arch
                 -> Crucible.AbortedResult Sym (Crucible.LLVM arch)
@@ -770,7 +771,7 @@ extract_crucible_llvm bic opts lm fn_name =
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> io $ extractFromCFG opts (biSharedContext bic) cc cfg
 
-load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel LLVM_CFG
+load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel SAW_CFG
 load_llvm_cfg bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of

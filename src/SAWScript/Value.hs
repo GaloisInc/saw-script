@@ -44,7 +44,6 @@ import Data.Parameterized.Some
 
 import qualified Data.ABC.GIA as ABC
 import qualified Data.AIG as AIG
-import qualified Data.ABC.GIA as GIA
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Utils as SS
@@ -83,6 +82,7 @@ import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
+import Lang.Crucible.JVM.Translation (JVM)
 
 -- Values ----------------------------------------------------------------------
 
@@ -120,14 +120,15 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
-  | VCFG LLVM_CFG
+  | VCFG SAW_CFG
   | VGhostVar CIR.GhostGlobal
 
 type AIGNetwork = AIG.Network ABC.Lit ABC.GIA
-type AIGProxy = GIA.Proxy ABC.Lit ABC.GIA
+type AIGProxy = AIG.Proxy ABC.Lit ABC.GIA
 
-data LLVM_CFG where
-  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> LLVM_CFG
+data SAW_CFG where
+  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
+  JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data LLVMModule =
   LLVMModule
@@ -590,10 +591,10 @@ instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue LLVM_CFG where
+instance IsValue SAW_CFG where
     toValue t = VCFG t
 
-instance FromValue LLVM_CFG where
+instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
