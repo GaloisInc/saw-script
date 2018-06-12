@@ -274,7 +274,7 @@ autoMatchFiles leftSource@(TaggedSourceFile _ leftPath) rightSource@(TaggedSourc
 loadDecls :: TaggedSourceFile -> TopLevel (Interaction (Maybe [Decl]))
 loadDecls (TaggedSourceFile lang path) = do
    sc <- getSharedContext
-   proxy <- getProxy
+   AIGProxy proxy <- getProxy
    case lang of
       Cryptol -> io $ getDeclsCryptol path
       LLVM    -> llvm_load_module path >>= io . getDeclsLLVM proxy sc

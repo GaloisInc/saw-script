@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module SAWScript.REPL.Monad (
     -- * REPL Monad
@@ -80,8 +81,10 @@ import SAWScript.Exceptions
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
+import SAWScript.Value (AIGProxy(..))
 import Verifier.SAW (SharedContext)
 
+deriving instance Typeable GIA.Proxy
 
 -- REPL Environment ------------------------------------------------------------
 
@@ -96,7 +99,7 @@ data RW = RW
 -- | Initial, empty environment.
 defaultRW :: Bool -> Options -> IO RW
 defaultRW isBatch opts = do
-  (_biContext, ro, rw) <- buildTopLevelEnv GIA.proxy opts
+  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy GIA.proxy) opts
 
   return RW
     { eContinue   = True

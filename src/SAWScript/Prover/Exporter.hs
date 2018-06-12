@@ -157,7 +157,7 @@ writeCNF proxy sc f t = do
 write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_cnf sc f (TypedTerm schema t) = do
   liftIO $ checkBooleanSchema schema
-  proxy <- getProxy
+  AIGProxy proxy <- getProxy
   io $ writeCNF proxy sc f t
 
 -- | Write a @Term@ representing a theorem to an SMT-Lib version

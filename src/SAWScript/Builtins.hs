@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -35,6 +36,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Time.Clock
+import Data.Typeable
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
@@ -89,7 +91,6 @@ import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
-import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
@@ -177,7 +178,7 @@ readSBV path unintlst =
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-dsecPrint sc t1 t2 = SV.getProxy >>= \proxy -> liftIO $ do
+dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> liftIO $ do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
   Prover.writeSAIGInferLatches proxy sc path1 t1
@@ -187,10 +188,13 @@ dsecPrint sc t1 t2 = SV.getProxy >>= \proxy -> liftIO $ do
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
 
-cecPrim :: (AIG.IsAIG l g) => AIG.Network l g -> AIG.Network l g -> TopLevel SV.ProofResult
-cecPrim x y = do
-  io $ verifyAIGCompatible x y
-  res <- io $ AIG.cec x y
+cecPrim :: AIGNetwork -> AIGNetwork -> TopLevel SV.ProofResult
+cecPrim (SV.AIGNetwork x) (SV.AIGNetwork y) = do
+  y' <- case cast y of
+          Just n -> return n
+          Nothing -> fail "Inconsistent AIG types"
+  io $ verifyAIGCompatible x y'
+  res <- io $ AIG.cec x y'
   let stats = solverStats "ABC" 0 -- TODO, count the size of the networks...
   case res of
     AIG.Valid -> return $ SV.Valid stats
@@ -200,21 +204,28 @@ cecPrim x y = do
       | otherwise -> fail "cec: impossible, could not parse counterexample"
     AIG.VerifyUnknown -> fail "cec: unknown result "
 
+bbPrim :: TypedTerm -> TopLevel AIGNetwork
+bbPrim t = do
+  SV.AIGProxy proxy <- SV.getProxy
+  sc <- SV.getSharedContext
+  aig <- io $ Prover.bitblastPrim proxy sc (ttTerm t) 
+  return (SV.AIGNetwork aig)
+
 loadAIGPrim :: FilePath -> TopLevel AIGNetwork
 loadAIGPrim f = do
-  proxy <- SV.getProxy
+  SV.AIGProxy proxy <- SV.getProxy
   exists <- io $ doesFileExist f
   unless exists $ fail $ "AIG file " ++ f ++ " not found."
   et <- io $ loadAIG proxy f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right ntk -> return ntk
+    Right ntk -> return (SV.AIGNetwork ntk)
 
 saveAIGPrim :: String -> AIGNetwork -> TopLevel ()
-saveAIGPrim f n = io $ AIG.writeAiger f n
+saveAIGPrim f (SV.AIGNetwork n) = io $ AIG.writeAiger f n
 
 saveAIGasCNFPrim :: String -> AIGNetwork -> TopLevel ()
-saveAIGasCNFPrim f (AIG.Network be ls) =
+saveAIGasCNFPrim f (SV.AIGNetwork (AIG.Network be ls)) =
   case ls of
     [l] -> do _ <- io $ AIG.writeCNF be l f
               return ()
@@ -226,7 +237,7 @@ saveAIGasCNFPrim f (AIG.Network be ls) =
 readAIGPrim :: FilePath -> TopLevel TypedTerm
 readAIGPrim f = do
   sc <- getSharedContext
-  proxy <- SV.getProxy
+  SV.AIGProxy proxy <- SV.getProxy
   exists <- io $ doesFileExist f
   unless exists $ fail $ "AIG file " ++ f ++ " not found."
   opts <- getOptions
@@ -456,7 +467,7 @@ checkBoolean sc t = do
 -- satisfiability using ABC.
 satABC :: ProofScript SV.SatResult
 satABC = do
-  proxy <- lift SV.getProxy 
+  SV.AIGProxy proxy <- lift SV.getProxy 
   wrapProver (Prover.satABC proxy)
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
@@ -475,7 +486,7 @@ satExternal :: Bool -> String -> [String]
             -> ProofScript SV.SatResult
 satExternal doCNF execName args = withFirstGoal $ \g -> do
   sc <- SV.getSharedContext
-  proxy <- SV.getProxy
+  SV.AIGProxy proxy <- SV.getProxy
   io $ do
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
@@ -528,19 +539,19 @@ writeAIGWithMapping be l path = do
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim f t = do
-  proxy <- SV.getProxy
+  SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
   liftIO $ Prover.writeAIG proxy sc f t
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
 writeSAIGPrim f t = do
-  proxy <- SV.getProxy
+  SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
   liftIO $ Prover.writeSAIGInferLatches proxy sc f t
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim f t n = do
-  proxy <- SV.getProxy
+  SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
   liftIO $ Prover.writeSAIG proxy sc f t n
 
@@ -647,12 +658,12 @@ satWithExporter exporter path ext = withFirstGoal $ \g -> do
 
 satAIG :: FilePath -> ProofScript SV.SatResult
 satAIG path = do
-  proxy <- lift $ SV.getProxy
+  SV.AIGProxy proxy <- lift $ SV.getProxy
   satWithExporter (Prover.writeAIG proxy) path ".aig"
 
 satCNF :: FilePath -> ProofScript SV.SatResult
 satCNF path = do
-  proxy <- lift $ SV.getProxy
+  SV.AIGProxy proxy <- lift $ SV.getProxy
   satWithExporter (Prover.writeCNF proxy) path ".cnf"
 
 satExtCore :: FilePath -> ProofScript SV.SatResult

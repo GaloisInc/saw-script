@@ -91,8 +91,6 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
-import qualified Data.ABC.GIA as GIA
-
 -- Environment -----------------------------------------------------------------
 
 data LocalBinding
@@ -407,7 +405,7 @@ interpretMain = do
     Nothing -> return () -- fail "No 'main' defined"
     Just v -> fromValue v
 
-buildTopLevelEnv :: GIA.Proxy GIA.Lit GIA.GIA
+buildTopLevelEnv :: AIGProxy
                  -> Options
                  -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
 buildTopLevelEnv proxy opts =
@@ -463,7 +461,7 @@ buildTopLevelEnv proxy opts =
                    }
        return (bic, ro0, rw0)
 
-processFile :: GIA.Proxy GIA.Lit GIA.GIA
+processFile :: AIGProxy
             -> Options
             -> FilePath -> IO ()
 processFile proxy opts file = do
@@ -744,7 +742,6 @@ primitives = Map.fromList
     , "overrides for any uninterpreted functions that appear in the file."
     ]
 
-    {-
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
@@ -756,7 +753,6 @@ primitives = Map.fromList
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
-    -}
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
     (scVal dsecPrint)
@@ -768,7 +764,6 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
-    {-
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
     [ "Perform a Combinatorial Equivalence Check between two AIGs."
@@ -776,11 +771,10 @@ primitives = Map.fromList
     ]
 
   , prim "bitblast"            "Term -> TopLevel AIG"
-    (bicVal (\bic _ -> bitblastPrim (biProxy bic) (biSharedContext bic)))
+    (pureVal bbPrim)
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
-    -}
 
   , prim "read_aig"            "String -> TopLevel Term"
     (pureVal readAIGPrim)

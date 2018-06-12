@@ -185,7 +185,7 @@ withSAWBackend :: Maybe (IORef [Term])
                -> TopLevel a
 withSAWBackend argsRef a = do
   sc <- getSharedContext
-  proxy <- getProxy
+  AIGProxy proxy <- getProxy
   io (sawBackend sc argsRef proxy) >>= a
 
 runJavaSetup :: Pos -> Codebase -> Class -> String

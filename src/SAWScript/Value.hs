@@ -8,6 +8,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -41,10 +42,9 @@ import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
+import Data.Typeable
 
-import qualified Data.ABC.GIA as ABC
 import qualified Data.AIG as AIG
-import qualified Data.ABC.GIA as GIA
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Utils as SS
@@ -125,8 +125,13 @@ data Value
   | VCFG LLVM_CFG
   | VGhostVar CIR.GhostGlobal
 
-type AIGNetwork = AIG.Network ABC.Lit ABC.GIA
-type AIGProxy = GIA.Proxy ABC.Lit ABC.GIA
+-- instance (Typeable l, Typeable g) => Typeable (AIG.Network l g)
+
+data AIGNetwork where
+  AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
+
+data AIGProxy where
+  AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Proxy l g -> AIGProxy
 
 data LLVM_CFG where
   LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> LLVM_CFG
