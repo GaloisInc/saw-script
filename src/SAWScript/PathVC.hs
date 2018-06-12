@@ -10,7 +10,6 @@ module SAWScript.PathVC where
 import Control.Monad.State
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
 
 import SAWScript.VerificationCheck
 

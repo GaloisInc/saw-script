@@ -13,7 +13,6 @@ import qualified Cryptol.Eval.Monad as CV
 import qualified Cryptol.Eval.Value as CV
 import Verifier.SAW.Cryptol (exportValueWithSchema, scCryptolType)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
 import Verifier.SAW.Simulator.Concrete (CValue)
 import Text.PrettyPrint.ANSI.Leijen
 

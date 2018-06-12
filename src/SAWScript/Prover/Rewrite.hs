@@ -16,7 +16,6 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
 import Verifier.SAW.Conversion
 import Verifier.SAW.SharedTerm(Term,SharedContext,scFindDef)
-import Verifier.SAW.Module(findDef)
 
 rewriteEqs :: SharedContext -> Term -> IO Term
 rewriteEqs sc t =

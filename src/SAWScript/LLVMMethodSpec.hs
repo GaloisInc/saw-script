@@ -71,7 +71,6 @@ import Verifier.LLVM.Backend.SAW
 
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (Ident)
-import Verifier.SAW.TypedAST
 
 -- | Contextual information needed to evaluate expressions.
 data EvalContext
