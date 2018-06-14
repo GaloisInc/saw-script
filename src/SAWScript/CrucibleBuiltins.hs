@@ -647,6 +647,7 @@ setupCrucibleContext ::
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
   halloc <- getHandleAlloc
+  AIGProxy proxy <- getProxy
   let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
@@ -654,7 +655,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      sym <- Crucible.newSAWCoreBackend sc gen
+      sym <- Crucible.newSAWCoreBackend proxy sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg

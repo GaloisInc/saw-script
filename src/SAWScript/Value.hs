@@ -125,8 +125,6 @@ data Value
   | VCFG LLVM_CFG
   | VGhostVar CIR.GhostGlobal
 
--- instance (Typeable l, Typeable g) => Typeable (AIG.Network l g)
-
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
 
