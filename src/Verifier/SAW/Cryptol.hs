@@ -176,6 +176,7 @@ importType sc env ty =
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
+            C.TCIntMod   -> unimplemented "TCIntMod"
         C.PC pc ->
           do pc' <- importPC sc pc
              tyargs' <- traverse go tyargs
@@ -1186,6 +1187,8 @@ exportValue ty v = case ty of
   TV.TVFun _aty _bty ->
     V.VFun (error "exportValue: TODO functions")
 
+  TV.TVIntMod _n ->
+    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
