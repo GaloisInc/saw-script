@@ -656,20 +656,20 @@ mkLiftedClosedTerm inners t = ctxLift InvNoBind inners $ mkClosedTerm t
 -- @d@, that has a specified list @ixs@ of indices, inside a context @ctx@ of
 -- parameters and earlier arguments
 data CtorArg d ixs ctx a where
+  -- | A fixed, constant type
   ConstArg :: CtxTerm ctx (Typ a) -> CtorArg d ixs ctx (Typ a)
-    -- ^ A fixed, constant type
+  -- | The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
+  -- specifies a recursive argument type of the form
+  --
+  -- > (z1::tp1) -> .. -> (zn::tpn) -> d p1 .. pm e1 .. ek
+  --
+  -- where @d@ is the datatype, the @zi::tpi@ are the elements of the Pi
+  -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
+  -- parameters of @d@ (not given here), and the @ei@ are the type indices of
+  -- @d@.
   RecursiveArg ::
     Bindings CtxTerm ctx zs -> CtxTerms (CtxInvApp ctx zs) ixs ->
     CtorArg d ixs ctx (Typ (Arrows zs d))
-    -- ^ The construct @'RecursiveArg [(z1,tp1),..,(zn,tpn)] [e1,..,ek]'@
-    -- specifies a recursive argument type of the form
-    --
-    -- > (z1::tp1) -> .. -> (zn::tpn) -> d p1 .. pm e1 .. ek
-    --
-    -- where @d@ is the datatype, the @zi::tpi@ are the elements of the Pi
-    -- context (the first argument to 'RecursiveArgType'), the @pi@ are the
-    -- parameters of @d@ (not given here), and the @ei@ are the type indices of
-    -- @d@.
 
 -- | A structure that defines the parameters, arguments, and return type indices
 -- of a constructor, using 'CtxTerm' and friends to get the bindings right
