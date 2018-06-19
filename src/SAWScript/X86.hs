@@ -21,6 +21,7 @@ module SAWScript.X86
 import Control.Lens (toListOf, folded)
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST(ST,stToIO)
+import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -105,7 +106,7 @@ import Verifier.SAW.Term.Pretty(showTerm)
 
 -- Cryptol Verifier
 import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
-import Verifier.SAW.Cryptol.Prelude(cryptolModule)
+import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec.Types(Sym)
@@ -172,7 +173,9 @@ type CallHandler = Sym -> Macaw.CallHandler Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
-proof :: ArchitectureInfo X86_64 ->
+proof :: (AIG.IsAIG l g) =>
+         AIG.Proxy l g ->
+         ArchitectureInfo X86_64 ->
          FilePath {- ^ ELF binary -} ->
          Maybe FilePath {- ^ Cryptol spec, if any -} ->
          [(ByteString,Integer,Unit)] ->
@@ -180,9 +183,11 @@ proof :: ArchitectureInfo X86_64 ->
          {- ^ Funciton call handler; used only for OldStyle -} ->
          Fun ->
          IO (SharedContext,Integer,[Goal])
-proof archi file mbCry globs mkCallMap fun =
-  do sc  <- mkSharedContext cryptolModule
-     sym <- newSAWCoreBackend sc globalNonceGenerator
+proof proxy archi file mbCry globs mkCallMap fun =
+  do sc  <- mkSharedContext
+     scLoadPreludeModule sc
+     scLoadCryptolModule sc
+     sym <- newSAWCoreBackend proxy sc globalNonceGenerator
      cenv <- loadCry sym mbCry
      callMap <- mkCallMap sym cenv
      proofWithOptions Options

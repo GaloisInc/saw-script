@@ -65,7 +65,6 @@ import SAWScript.Value
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Conversion
-import Verifier.SAW.Prelude (preludeModule)
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
@@ -92,8 +91,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
-
-import qualified Data.ABC.GIA as GIA
 
 -- Environment -----------------------------------------------------------------
 
@@ -409,17 +406,18 @@ interpretMain = do
     Nothing -> return () -- fail "No 'main' defined"
     Just v -> fromValue v
 
-buildTopLevelEnv :: GIA.Proxy GIA.Lit GIA.GIA
+buildTopLevelEnv :: AIGProxy
                  -> Options
                  -> IO (BuiltinContext, TopLevelRO, TopLevelRW)
 buildTopLevelEnv proxy opts =
     do let mn = mkModuleName ["SAWScript"]
-       let scm = insImport preludeModule $
-                 insImport JavaSAW.javaModule $
-                 insImport LLVMSAW.llvmModule $
-                 insImport CryptolSAW.cryptolModule $
-                 emptyModule mn
-       sc0 <- mkSharedContext scm
+       sc0 <- mkSharedContext
+       CryptolSAW.scLoadPreludeModule sc0
+       JavaSAW.scLoadJavaModule sc0
+       LLVMSAW.scLoadLLVMModule sc0
+       CryptolSAW.scLoadCryptolModule sc0
+       scLoadModule sc0 (emptyModule mn)
+       cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
        let convs = natConversions
                    ++ bvConversions
                    ++ vecConversions
@@ -428,7 +426,7 @@ buildTopLevelEnv proxy opts =
                       , remove_ident_coerce
                       , remove_ident_unsafeCoerce
                       ]
-           cryptolDefs = filter defPred $ allModuleDefs CryptolSAW.cryptolModule
+           cryptolDefs = filter defPred $ moduleDefs cryptol_mod
            defPred d = defIdent d `Set.member` includedDefs
            includedDefs = Set.fromList
                           [ "Cryptol.ecDemote"
@@ -464,7 +462,7 @@ buildTopLevelEnv proxy opts =
                    }
        return (bic, ro0, rw0)
 
-processFile :: GIA.Proxy GIA.Lit GIA.GIA
+processFile :: AIGProxy
             -> Options
             -> FilePath -> IO ()
 processFile proxy opts file = do
@@ -516,9 +514,11 @@ print_value (VTerm t) = do
   let opts' = V.defaultPPOpts { V.useAscii = ppOptsAscii opts
                               , V.useBase = ppOptsBase opts
                               }
-  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' (evaluateTypedTerm sc t'))
+  evaled_t <- io $ evaluateTypedTerm sc t'
+  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' evaled_t)
   sawOpts <- getOptions
   io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
+
 print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   printOutLnTop Info (showsPrecValue opts 0 v "")
@@ -743,7 +743,6 @@ primitives = Map.fromList
     , "overrides for any uninterpreted functions that appear in the file."
     ]
 
-    {-
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
@@ -755,7 +754,6 @@ primitives = Map.fromList
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
-    -}
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
     (scVal dsecPrint)
@@ -767,7 +765,6 @@ primitives = Map.fromList
     , "You must have an 'abc' executable on your PATH to use this command."
     ]
 
-    {-
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
     [ "Perform a Combinatorial Equivalence Check between two AIGs."
@@ -775,11 +772,10 @@ primitives = Map.fromList
     ]
 
   , prim "bitblast"            "Term -> TopLevel AIG"
-    (bicVal (\bic _ -> bitblastPrim (biProxy bic) (biSharedContext bic)))
+    (pureVal bbPrim)
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
-    -}
 
   , prim "read_aig"            "String -> TopLevel Term"
     (pureVal readAIGPrim)

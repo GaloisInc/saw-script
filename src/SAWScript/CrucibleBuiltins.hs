@@ -132,10 +132,10 @@ show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 ppAbortedResult :: CrucibleContext arch
                 -> Crucible.AbortedResult Sym (Crucible.LLVM arch)
                 -> Doc
-ppAbortedResult _ (Crucible.AbortedExec (Crucible.SimError _ Crucible.InfeasibleBranchError) _) =
+ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
-ppAbortedResult cc (Crucible.AbortedExec err gp) = do
-  Crucible.ppSimError err <$$> ppGlobalPair cc gp
+ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
+  Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
   text "Aborted branch"
 ppAbortedResult _ (Crucible.AbortedExit ec) =
@@ -648,6 +648,7 @@ setupCrucibleContext ::
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
   halloc <- getHandleAlloc
+  AIGProxy proxy <- getProxy
   let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
@@ -655,7 +656,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      sym <- Crucible.newSAWCoreBackend sc gen
+      sym <- Crucible.newSAWCoreBackend proxy sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -872,8 +873,8 @@ addCondition cond = currentState.csConditions %= (cond : )
 logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
                   -> IO (Maybe Term)
 logicTypeOfActual _ sc (Crucible.IntType w) = Just <$> logicTypeForInt sc w
-logicTypeOfActual _ sc Crucible.FloatType = Just <$> scPrelude_Float sc
-logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scPrelude_Double sc
+logicTypeOfActual _ sc Crucible.FloatType = Just <$> scApplyPrelude_Float sc
+logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scApplyPrelude_Double sc
 logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
   melTyp <- logicTypeOfActual dl sc ty
   case melTyp of

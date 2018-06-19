@@ -15,8 +15,7 @@ import Verifier.SAW.Rewriter
          )
 import Verifier.SAW.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
 import Verifier.SAW.Conversion
-import Verifier.SAW.SharedTerm(Term,SharedContext,scModule)
-import Verifier.SAW.Module(findDef)
+import Verifier.SAW.SharedTerm(Term,SharedContext,scFindDef)
 
 rewriteEqs :: SharedContext -> Term -> IO Term
 rewriteEqs sc t =
@@ -38,6 +37,7 @@ basic_ss sc =
          [ "unsafeCoerce_same"
          , "not_not"
          , "true_implies"
+         , "implies__eq"
          , "and_True1"
          , "and_False1"
          , "and_True2"
@@ -74,8 +74,8 @@ basic_ss sc =
          , "bvNat_bvToNat"
          ]
        defs = map (mkIdent preludeName)
-         [ "and", "or", "xor", "boolEq", "addNat", "mulNat"
-         , "implies"
+         [ "addNat", "mulNat"
+         {- , "implies" -}
          , "compareNat", "equalNat"
          , "bitvector"
          ]
@@ -88,6 +88,7 @@ basic_ss sc =
 
 defRewrites :: SharedContext -> Ident -> IO [RewriteRule]
 defRewrites sc ident =
-      case findDef (scModule sc) ident of
-        Nothing -> return []
-        Just def -> scDefRewriteRules sc def
+  scFindDef sc ident >>= \maybe_def ->
+  case maybe_def of
+    Nothing -> return []
+    Just def -> scDefRewriteRules sc def

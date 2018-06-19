@@ -8,6 +8,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -41,8 +42,8 @@ import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
+import Data.Typeable
 
-import qualified Data.ABC.GIA as ABC
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
@@ -63,9 +64,11 @@ import SAWScript.SAWCorePrimitives( concretePrimitives )
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
-import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
+import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
+                                       ppTerm, scPrettyTerm)
+import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
+                                                       ppTerm, scPrettyTerm)
 import Verifier.SAW.TypedTerm
-import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -123,8 +126,11 @@ data Value
   | VCFG SAW_CFG
   | VGhostVar CIR.GhostGlobal
 
-type AIGNetwork = AIG.Network ABC.Lit ABC.GIA
-type AIGProxy = AIG.Proxy ABC.Lit ABC.GIA
+data AIGNetwork where
+  AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
+
+data AIGProxy where
+  AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Proxy l g -> AIGProxy
 
 data SAW_CFG where
   LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
@@ -197,11 +203,11 @@ cryptolPPOpts opts =
     , C.useBase = ppOptsBase opts
     }
 
-sawPPOpts :: PPOpts -> SharedTerm.PPOpts
+sawPPOpts :: PPOpts -> SAWCorePP.PPOpts
 sawPPOpts opts =
-  SharedTerm.defaultPPOpts
-    { SharedTerm.ppBase = ppOptsBase opts
-    , SharedTerm.ppColor = ppOptsColor opts
+  SAWCorePP.defaultPPOpts
+    { SAWCorePP.ppBase = ppOptsBase opts
+    , SAWCorePP.ppColor = ppOptsColor opts
     }
 
 quietEvalOpts :: C.EvalOpts
@@ -247,10 +253,10 @@ showSimpset opts ss =
     ppRule r =
       PPL.char '*' PPL.<+>
       (PPL.nest 2 $
-       ppTerm (lhsRewriteRule r)
+       SAWCorePP.ppTerm opts' (lhsRewriteRule r)
        PPL.</> PPL.char '=' PPL.<+>
        ppTerm (rhsRewriteRule r))
-    ppTerm t = scPrettyTermDoc opts' t
+    ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
@@ -268,14 +274,16 @@ showsPrecValue opts p v =
                        showString n . showString "=" . showsPrecValue opts 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (scPrettyTerm opts' (ttTerm t))
+    VTerm t -> showString (SAWCorePP.scPrettyTerm opts' (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
+    VTheorem (Theorem t) ->
+      showString "Theorem " .
+      showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
     VCrucibleSetup{} -> showString "<<Crucible Setup>>"
@@ -321,12 +329,14 @@ tupleLookupValue (VTuple vs) i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
 
-evaluate :: SharedContext -> Term -> Concrete.CValue
-evaluate sc t = Concrete.evalSharedTerm (scModule sc) concretePrimitives t
+evaluate :: SharedContext -> Term -> IO Concrete.CValue
+evaluate sc t =
+  (\modmap -> Concrete.evalSharedTerm modmap concretePrimitives t) <$>
+  scGetModuleMap sc
 
-evaluateTypedTerm :: SharedContext -> TypedTerm -> C.Value
+evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm schema trm) =
-  exportValueWithSchema schema (evaluate sc trm)
+  exportValueWithSchema schema <$> evaluate sc trm
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x

@@ -36,7 +36,7 @@ import Verifier.Java.SAWBackend
 import Verifier.SAW.Cryptol (exportFirstOrderValue)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.FiniteValue (FirstOrderValue)
-import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.CryptolEnv (schemaNoUser)
@@ -185,7 +185,7 @@ withSAWBackend :: Maybe (IORef [Term])
                -> TopLevel a
 withSAWBackend argsRef a = do
   sc <- getSharedContext
-  proxy <- getProxy
+  AIGProxy proxy <- getProxy
   io (sawBackend sc argsRef proxy) >>= a
 
 runJavaSetup :: Pos -> Codebase -> Class -> String
@@ -285,7 +285,7 @@ doExtraChecks :: Options -> SharedContext -> Term -> IO ()
 doExtraChecks opts bsc t = do
   when (extraChecks opts) $ do
     printOutLn opts Debug "Type checking goal..."
-    tcr <- scTypeCheck bsc t
+    tcr <- scTypeCheck bsc Nothing t
     case tcr of
       Left e -> printOutLn opts Warn $ unlines $
                 "Ill-typed goal constructed." : prettyTCError e

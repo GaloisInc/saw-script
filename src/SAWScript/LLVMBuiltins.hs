@@ -129,7 +129,7 @@ llvm_symexec :: BuiltinContext
              -> Bool
              -> TopLevel TypedTerm
 llvm_symexec bic opts lmod fname allocs inputs outputs doSat = do
-  proxy <- getProxy
+  AIGProxy proxy <- getProxy
   let sym = Symbol fname
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
@@ -213,7 +213,7 @@ llvm_extract bic opts lmod func _setup = do
                       , optsSatAtBranches = True
                       , optsSimplifyAddrs = False
                       }
-  proxy <- getProxy
+  AIGProxy proxy <- getProxy
   liftIO $ startSimulator opts sc lopts lmod sym proxy $ \scLLVM _sbe _cb _dl md -> do
     setVerbosity (simVerbose opts)
     args <- mapM freshLLVMArg (sdArgs md)
@@ -237,7 +237,7 @@ llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup = do
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
-  proxy <- getProxy
+  AIGProxy proxy <- getProxy
   (sbe, mem, scLLVM) <- io $ createSAWBackend' proxy dl sc
   (warnings, cb) <- io $ mkCodebase sbe dl mdl
   forM_ warnings $ printOutLnTop Warn . ("WARNING: " ++) . show
