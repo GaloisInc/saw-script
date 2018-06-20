@@ -78,7 +78,7 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
+import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG, ppCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.Extension as Crucible
@@ -300,7 +300,8 @@ showsPrecValue opts p v =
     VSatResult r -> showsSatResult opts r
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
-    VCFG _ -> showString "<<CFG>>"
+    VCFG (LLVM_CFG g) -> showString (show g)
+    VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
   where

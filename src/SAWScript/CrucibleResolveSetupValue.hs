@@ -255,7 +255,7 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupNull ->
       Crucible.ptrToPtrVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
     SetupGlobal name ->
-      do let mem = cc^.ccEmptyMemImpl
+      do let mem = cc^.ccLLVMEmptyMem
          Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
   where
     sym = cc^.ccBackend

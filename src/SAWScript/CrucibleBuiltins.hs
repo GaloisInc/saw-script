@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances, MultiParamTypeClasses#-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
@@ -16,11 +17,14 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.CrucibleBuiltins
     ( load_llvm_cfg
+    , load_java_cfg
     , show_cfg
+    , extract_crucible_java
     , extract_crucible_llvm
     , crucible_llvm_verify
     , crucible_setup_val_to_typed_term
@@ -44,6 +48,7 @@ module SAWScript.CrucibleBuiltins
 
 import           Control.Lens
 import           Control.Monad.State
+import           Control.Monad.ST
 import           Control.Applicative
 import           Data.Foldable (for_, toList, find)
 import           Data.Function
@@ -66,8 +71,10 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
+import qualified Language.JVM.Parser as J
 
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
@@ -82,14 +89,19 @@ import           What4.Utils.MonadST
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
-  (AnyCFG(..), SomeCFG(..), TypeRepr(..), cfgHandle,
+  (AnyCFG(..), SomeCFG(..), CFG, TypeRepr(..), cfgHandle,
    asBaseType, AsBaseType(..), freshGlobalVar)
+import qualified Lang.Crucible.CFG.Extension as Crucible
+  (IsSyntaxExtension)
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
+import qualified Lang.Crucible.Types as Crucible
+
+import qualified Lang.Crucible.JVM.Translation as JCrucible
 
 import qualified Lang.Crucible.LLVM as Crucible
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
@@ -111,6 +123,7 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
+import SAWScript.Builtins
 import SAWScript.Options
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -130,7 +143,7 @@ show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 
 ppAbortedResult :: CrucibleContext arch
-                -> Crucible.AbortedResult Sym (Crucible.LLVM arch)
+                -> Crucible.AbortedResult Sym a
                 -> Doc
 ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
@@ -169,7 +182,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
 
      -- set up the LLVM memory with a pristine heap
-     let globals = cc^.ccGlobals
+     let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
      mem0 <- case Crucible.lookupGlobal mvar globals of
        Nothing -> fail "internal error: LLVM Memory global not found"
@@ -528,7 +541,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
          do let h   = Crucible.cfgHandle cfg
                 rty = Crucible.handleReturnType h
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
-            let simCtx = cc^.ccSimContext
+            let simCtx = cc^.ccLLVMSimContext
                 conf = W4.getConfiguration sym
             checkSatOpt <- W4.getOptionSetting Crucible.sawCheckPathSat conf
             _ <- W4.setOpt checkSatOpt checkSat
@@ -682,7 +695,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
 
       let simSt = Crucible.initSimState simctx globals Crucible.defaultErrorHandler
       res <- Crucible.runOverrideSim simSt Crucible.UnitRepr setupMem
-      (globals', simctx') <-
+      (lglobals, lsimctx) <-
           case res of
             Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
@@ -691,10 +704,41 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
          CrucibleContext{ _ccLLVMModuleTrans = mtrans
                         , _ccLLVMModule = llvm_mod
                         , _ccBackend = sym
-                        , _ccEmptyMemImpl = mem
-                        , _ccSimContext = simctx'
-                        , _ccGlobals = globals'
+                        , _ccLLVMEmptyMem = mem
+                        , _ccLLVMSimContext = lsimctx
+                        , _ccLLVMGlobals = lglobals
                         }
+      )
+
+setupCrucibleJavaContext ::
+   BuiltinContext -> Options -> J.Class ->
+   (CrucibleJavaContext -> TopLevel a) ->
+   TopLevel a
+setupCrucibleJavaContext bic opts c action = do
+  halloc <- getHandleAlloc
+  AIGProxy proxy <- getProxy
+  action =<< (io $ do
+      let gen = globalNonceGenerator
+      let sc  = biSharedContext bic
+      let verbosity = simVerbose opts
+      sym <- Crucible.newSAWCoreBackend proxy sc gen
+
+      let cfg = W4.getConfiguration sym
+      verbSetting <- W4.getOptionSetting W4.verbosity cfg
+      _ <- W4.setOpt verbSetting (toInteger verbosity)
+
+      let bindings = Crucible.fnBindingsFromList []
+      let javaExtImpl :: Crucible.ExtensionImpl p sym ()
+          javaExtImpl = Crucible.ExtensionImpl (\_sym _iTypes _logFn _f x -> case x of) (\x -> case x of)
+      let jsimctx = Crucible.initSimContext sym MapF.empty halloc stdout
+                        bindings javaExtImpl Crucible.SAWCruciblePersonality
+          jglobals = Crucible.emptyGlobals
+      return
+         CrucibleJavaContext{ _cjcClass = c
+                            , _cjcBackend = sym
+                            , _cjcJavaSimContext = jsimctx
+                            , _cjcJavaGlobals = jglobals
+                            }
       )
 
 --------------------------------------------------------------------------------
@@ -732,36 +776,75 @@ setupArgs sc sym fn = do
 
 --------------------------------------------------------------------------------
 
-extractFromCFG :: Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+getGlobalPair ::
+  Options ->
+  Crucible.PartialResult sym ext v ->
+  IO (Crucible.GlobalPair sym v)
+getGlobalPair opts pr =
+  case pr of
+    Crucible.TotalRes gp -> return gp
+    Crucible.PartialRes _ gp _ -> do
+      printOutLn opts Info "Symbolic simulation completed with side conditions."
+      return gp
+
+runCFG ::
+  (Crucible.IsSyntaxExtension ext) =>
+  Crucible.SimContext p sym ext ->
+  Crucible.SymGlobalState sym ->
+  Crucible.FnHandle args a ->
+  Crucible.CFG ext blocks init a ->
+  Crucible.RegMap sym init ->
+  IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
+runCFG simCtx globals h cfg args = do
+  let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
+  Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
+                 (Crucible.regValue <$> (Crucible.callCFG cfg args))
+
+
+extractFromLLVMCFG :: Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
    Options -> SharedContext -> CrucibleContext arch -> Crucible.AnyCFG (Crucible.LLVM arch) -> IO TypedTerm
-extractFromCFG opts sc cc (Crucible.AnyCFG cfg) =
+extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
   do  let sym = cc^.ccBackend
       let h   = Crucible.cfgHandle cfg
       (ecs, args) <- setupArgs sc sym h
-      let simCtx  = cc^.ccSimContext
-      let globals = cc^.ccGlobals
-      let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
-      res  <- Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
-                 (Crucible.regValue <$> (Crucible.callCFG cfg args))
+      let simCtx  = cc^.ccLLVMSimContext
+      let globals = cc^.ccLLVMGlobals
+      res  <- runCFG simCtx globals h cfg args
       case res of
         Crucible.FinishedExecution _ pr -> do
-            gp <- case pr of
-                    Crucible.TotalRes gp -> return gp
-                    Crucible.PartialRes _ gp _ -> do
-                      printOutLn opts Info "Symbolic simulation completed with side conditions."
-                      return gp
+            gp <- getGlobalPair opts pr
             t <- Crucible.asSymExpr
-                       (gp^.Crucible.gpValue)
-                       (Crucible.toSC sym)
-                       (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
+                   (gp^.Crucible.gpValue)
+                   (Crucible.toSC sym)
+                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
             t' <- scAbstractExts sc (toList ecs) t
-            tt <- mkTypedTerm sc t'
-            return tt
+            mkTypedTerm sc t'
         Crucible.AbortedResult _ ar -> do
           let resultDoc = ppAbortedResult cc ar
           fail $ unlines [ "Symbolic execution failed."
                          , show resultDoc
                          ]
+
+extractFromJavaCFG ::
+   Options -> SharedContext -> CrucibleJavaContext -> Crucible.AnyCFG JCrucible.JVM -> IO TypedTerm
+extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg) =
+  do  let sym = cc^.cjcBackend
+      let h   = Crucible.cfgHandle cfg
+      (ecs, args) <- setupArgs sc sym h
+      let simCtx  = cc^.cjcJavaSimContext
+      let globals = cc^.cjcJavaGlobals
+      res  <- runCFG simCtx globals h cfg args
+      case res of
+        Crucible.FinishedExecution _ pr -> do
+            gp <- getGlobalPair opts pr
+            t <- Crucible.asSymExpr
+                   (gp^.Crucible.gpValue)
+                   (Crucible.toSC sym)
+                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
+            t' <- scAbstractExts sc (toList ecs) t
+            mkTypedTerm sc t'
+        Crucible.AbortedResult _ _ar -> do
+          fail $ unlines [ "Symbolic execution failed." ]
 
 --------------------------------------------------------------------------------
 
@@ -770,7 +853,7 @@ extract_crucible_llvm bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> io $ extractFromCFG opts (biSharedContext bic) cc cfg
+      Just cfg -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
 
 load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel SAW_CFG
 load_llvm_cfg bic opts lm fn_name =
@@ -778,6 +861,54 @@ load_llvm_cfg bic opts lm fn_name =
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> return (LLVM_CFG cfg)
+
+javaTypeToRepr :: J.Type -> Some Crucible.TypeRepr
+javaTypeToRepr t =
+  case t of
+    (J.ArrayType _) -> refRepr
+    J.BooleanType   -> intRepr
+    J.ByteType      -> intRepr
+    J.CharType      -> intRepr
+    (J.ClassType _) -> refRepr
+    J.DoubleType    -> doubleRepr
+    J.FloatType     -> floatRepr
+    J.IntType       -> intRepr
+    J.LongType      -> longRepr
+    J.ShortType     -> intRepr
+  where
+    refRepr    = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMRefType)
+    intRepr    = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMIntType)
+    longRepr   = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMLongType)
+    doubleRepr = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMDoubleType)
+    floatRepr  = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMFloatType)
+
+allParameterTypes :: J.Class -> J.Method -> [J.Type]
+allParameterTypes c m
+  | J.methodIsStatic m = J.methodParameterTypes m
+  | otherwise = J.ClassType (J.className c) : J.methodParameterTypes m
+
+load_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
+load_java_cfg bic _ c mname = do
+  let cb = biJavaCodebase bic
+  (mcls, meth) <- io $ findMethod cb fixPos mname c
+  -- TODO: should mcls below be c?
+  let args = Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth))
+      ret = maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth)
+      cname = J.className mcls
+      mkey = J.methodKey meth
+  let cfg = runST $ case (args, ret) of
+        (Some argsRepr, Some retRepr) -> do
+          h <- Crucible.withHandleAllocator (\halloc -> Crucible.mkHandle' halloc (fromString (J.methodName meth)) argsRepr retRepr)
+          let ctx = JCrucible.JVMContext (Map.fromList [((cname, mkey), JCrucible.JVMHandleInfo meth h)])
+          JCrucible.defineMethod ctx cname meth
+  return (JVM_CFG cfg)
+
+extract_crucible_java :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
+extract_crucible_java bic opts c mname =
+  setupCrucibleJavaContext bic opts c $ \cc -> do
+    sc <- getSharedContext
+    JVM_CFG cfg <- load_java_cfg bic opts c mname
+    io $ extractFromJavaCFG opts sc cc cfg
 
 --------------------------------------------------------------------------------
 

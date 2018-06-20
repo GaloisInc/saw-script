@@ -660,7 +660,7 @@ matchArg _sc cc prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval
          addAssert p (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost))
 
     SetupGlobal name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do let mem = cc^.ccEmptyMemImpl
+      do let mem = cc^.ccLLVMEmptyMem
          sym  <- getSymInterface
          Crucible.LLVMPointer blk' off' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
 

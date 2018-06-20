@@ -50,7 +50,6 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
-import SAWScript.CrucibleJavaBuiltins
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
@@ -1275,10 +1274,18 @@ primitives = Map.fromList
     , "results."
     ]
 
-  , prim "java_method_to_cfg"
+  , prim "load_java_cfg"
     "JavaClass -> String -> TopLevel CFG"
-    (bicVal java_method_to_cfg)
+    (bicVal load_java_cfg)
     [ "Convert a Java method to a Crucible CFG."
+    ]
+
+  , prim "extract_crucible_java"  "JavaClass -> String -> TopLevel Term"
+    (bicVal extract_crucible_java)
+    [ "Translate a Java method directly to a Term. The parameters of the"
+    , "Term will be the parameters of the Java method, and the return"
+    , "value will be the return value of the method. Only methods with"
+    , "scalar argument and return types are currently supported."
     ]
 
   , prim "llvm_type"           "String -> LLVMType"
