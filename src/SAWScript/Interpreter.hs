@@ -1274,14 +1274,14 @@ primitives = Map.fromList
     , "results."
     ]
 
-  , prim "load_java_cfg"
+  , prim "crucible_java_cfg"
     "JavaClass -> String -> TopLevel CFG"
-    (bicVal load_java_cfg)
+    (bicVal crucible_java_cfg)
     [ "Convert a Java method to a Crucible CFG."
     ]
 
-  , prim "extract_crucible_java"  "JavaClass -> String -> TopLevel Term"
-    (bicVal extract_crucible_java)
+  , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
+    (bicVal crucible_java_extract)
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
     , "value will be the return value of the method. Only methods with"
@@ -1593,13 +1593,13 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
     -- Experimental Crucible/LLVM interface
 
-  , prim "load_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
-    (bicVal load_llvm_cfg)
-    [ "Load a function from the given LLVM module."
+  , prim "crucible_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
+    (bicVal crucible_llvm_cfg)
+    [ "Load a function from the given LLVM module into a Crucible CFG."
     ]
 
-  , prim "extract_crucible_llvm"  "LLVMModule -> String -> TopLevel Term"
-    (bicVal extract_crucible_llvm)
+  , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
+    (bicVal crucible_llvm_extract)
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
     , "value will be the return value of the functions. Only functions with"

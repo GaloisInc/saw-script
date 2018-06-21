@@ -21,11 +21,11 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.CrucibleBuiltins
-    ( load_llvm_cfg
-    , load_java_cfg
-    , show_cfg
-    , extract_crucible_java
-    , extract_crucible_llvm
+    ( show_cfg
+    , crucible_java_cfg
+    , crucible_llvm_cfg
+    , crucible_java_extract
+    , crucible_llvm_extract
     , crucible_llvm_verify
     , crucible_setup_val_to_typed_term
     , crucible_spec_size
@@ -848,15 +848,15 @@ extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg) =
 
 --------------------------------------------------------------------------------
 
-extract_crucible_llvm :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel TypedTerm
-extract_crucible_llvm bic opts lm fn_name =
+crucible_llvm_extract :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel TypedTerm
+crucible_llvm_extract bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
 
-load_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel SAW_CFG
-load_llvm_cfg bic opts lm fn_name =
+crucible_llvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel SAW_CFG
+crucible_llvm_cfg bic opts lm fn_name =
   setupCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
@@ -887,8 +887,8 @@ allParameterTypes c m
   | J.methodIsStatic m = J.methodParameterTypes m
   | otherwise = J.ClassType (J.className c) : J.methodParameterTypes m
 
-load_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
-load_java_cfg bic _ c mname = do
+crucible_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
+crucible_java_cfg bic _ c mname = do
   let cb = biJavaCodebase bic
   (mcls, meth) <- io $ findMethod cb fixPos mname c
   -- TODO: should mcls below be c?
@@ -903,11 +903,11 @@ load_java_cfg bic _ c mname = do
           JCrucible.defineMethod ctx cname meth
   return (JVM_CFG cfg)
 
-extract_crucible_java :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
-extract_crucible_java bic opts c mname =
+crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
+crucible_java_extract bic opts c mname = do
+  JVM_CFG cfg <- crucible_java_cfg bic opts c mname
   setupCrucibleJavaContext bic opts c $ \cc -> do
     sc <- getSharedContext
-    JVM_CFG cfg <- load_java_cfg bic opts c mname
     io $ extractFromJavaCFG opts sc cc cfg
 
 --------------------------------------------------------------------------------
