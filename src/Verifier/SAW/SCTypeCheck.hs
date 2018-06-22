@@ -32,6 +32,7 @@ module Verifier.SAW.SCTypeCheck
   , LiftTCM(..)
   , TypedTerm(..)
   , TypeInfer(..)
+  , typeInferCompleteWHNF
   , TypeInferCtx(..)
   , typeInferCompleteInCtx
   , checkSubtype
@@ -96,6 +97,9 @@ askModName = (\(_,mnm,_) -> mnm) <$> ask
 -- variable with the given type. This throws away the memoization table while
 -- running the sub-computation, as memoization tables are tied to specific sets
 -- of bindings.
+--
+-- NOTE: the type given for the variable should be in WHNF, so that we do not
+-- have to normalize the types of variables each time we see them.
 withVar :: String -> Term -> TCM a -> TCM a
 withVar x tp m =
   flip catchError (throwError . ErrorCtx x tp) $
@@ -266,6 +270,14 @@ class TypeInfer a where
   -- | Infer the type of an @a@ and complete it to a 'Term'
   typeInferComplete :: a -> TCM TypedTerm
 
+-- | Infer the type of an @a@ and complete it to a 'Term', and then evaluate the
+-- resulting term to WHNF
+typeInferCompleteWHNF :: TypeInfer a => a -> TCM TypedTerm
+typeInferCompleteWHNF a =
+  do TypedTerm a_trm a_tp <- typeInferComplete a
+     a_whnf <- typeCheckWHNF a_trm
+     return $ TypedTerm a_whnf a_tp
+
 
 -- | Perform type inference on a context, i.e., a list of variable names and
 -- their associated types. The type @var@ gives the type of variable names,
@@ -312,11 +324,17 @@ instance TypeInfer Term where
 -- of the binding forms
 instance TypeInfer (TermF Term) where
   typeInfer (Lambda x a rhs) =
-    typeInfer =<< (Lambda x <$> (typeInferComplete a)
-                   <*> withVar x a (typeInferComplete rhs))
+    do a_tptrm <- typeInferCompleteWHNF a
+       -- NOTE: before adding a type to the context, we want to be sure it is in
+       -- WHNF, so we don't have to normalize each time we look up a var type
+       rhs_tptrm <- withVar x (typedVal a_tptrm) $ typeInferComplete rhs
+       typeInfer (Lambda x a_tptrm rhs_tptrm)
   typeInfer (Pi x a rhs) =
-    typeInfer =<< (Pi x <$> (typeInferComplete a)
-                   <*> withVar x a (typeInferComplete rhs))
+    do a_tptrm <- typeInferCompleteWHNF a
+       -- NOTE: before adding a type to the context, we want to be sure it is in
+       -- WHNF, so we don't have to normalize each time we look up a var type
+       rhs_tptrm <- withVar x (typedVal a_tptrm) $ typeInferComplete rhs
+       typeInfer (Pi x a_tptrm rhs_tptrm)
   typeInfer t = typeInfer =<< mapM typeInferComplete t
   typeInferComplete tf =
     TypedTerm <$> liftTCM scTermF tf <*> typeInfer tf

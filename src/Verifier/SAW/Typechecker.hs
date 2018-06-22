@@ -199,7 +199,9 @@ typeInferCompleteTerm (Un.App f arg) =
   >>= typeInferComplete
 typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
 typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
-  do tp_trm <- typeInferComplete tp
+  do tp_trm <- typeInferCompleteWHNF tp
+     -- Normalize (the Term value of) tp before putting it into the context. See
+     -- the documentation for withVar.
      body <- withVar x (typedVal tp_trm) $
        typeInferComplete $ Un.Lambda p ctx t
      typeInferComplete (Lambda x tp_trm body)
