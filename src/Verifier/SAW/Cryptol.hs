@@ -103,8 +103,17 @@ bindProp sc prop env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
   k <- scSort sc (mkSort 0)
-  return $ env' { envP = Map.insert prop (v, 0) (envP env')
+  return $ env' { envP = Map.insert (normalizeProp prop) (v, 0) (envP env')
                 , envS = k : envS env' }
+
+-- | We normalize the first argument of 'Literal' class constraints
+-- arbitrarily to 'inf', so that we can ignore that parameter when
+-- matching dictionaries.
+normalizeProp :: C.Prop -> C.Prop
+normalizeProp prop =
+  case C.pIsLiteral prop of
+    Just (_, a) -> C.pLiteral C.tInf a
+    Nothing -> prop
 
 --------------------------------------------------------------------------------
 
@@ -146,6 +155,7 @@ importPC sc pc =
     C.PArith     -> scGlobalDef sc "Cryptol.PArith"
     C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
     C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
+    C.PLiteral   -> scGlobalDef sc "Cryptol.PLiteral"
     C.PAnd       -> panic "importPC PAnd"
     C.PTrue      -> panic "importPC PTrue"
 
@@ -170,17 +180,22 @@ importType sc env ty =
             C.TCInf      -> scCtorApp sc "Cryptol.TCInf" []
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
+            C.TCIntMod   -> unimplemented "importType TCIntMod"
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
-            C.TCIntMod   -> unimplemented "TCIntMod"
         C.PC pc ->
-          do pc' <- importPC sc pc
-             tyargs' <- traverse go tyargs
-             scApplyAll sc pc' tyargs'
+          case pc of
+            C.PLiteral -> -- we omit first argument to class Literal
+              do a <- go (tyargs !! 1)
+                 scGlobalApply sc "Cryptol.PLiteral" [a]
+            _ ->
+              do pc' <- importPC sc pc
+                 tyargs' <- traverse go tyargs
+                 scApplyAll sc pc' tyargs'
         C.TF tf ->
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
@@ -198,6 +213,7 @@ isErasedProp prop =
     C.TCon (C.PC C.PArith    ) _ -> False
     C.TCon (C.PC C.PCmp      ) _ -> False
     C.TCon (C.PC C.PSignedCmp) _ -> False
+    C.TCon (C.PC C.PLiteral  ) _ -> False
     _ -> True
 
 importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
@@ -229,7 +245,7 @@ importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams 
 
 proveProp :: SharedContext -> Env -> C.Prop -> IO Term
 proveProp sc env prop =
-  case Map.lookup prop (envP env) of
+  case Map.lookup (normalizeProp prop) (envP env) of
     Just (prf, j) -> incVars sc 0 j prf
     Nothing ->
       case prop of
@@ -420,6 +436,14 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pSignedCmp (C.TRec fs))
                 scGlobalApply sc "Cryptol.PSignedCmpField" [s, a, b, pa, pb]
 
+        -- instance Literal val Integer
+        (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
+          -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
+        -- instance (fin n, n >= width val) => Literal val [n]
+        (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
+
         _ -> do panic $ "proveProp: " ++ pretty prop
 
 importPrimitive :: SharedContext -> C.Name -> IO Term
@@ -428,10 +452,10 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "True"          -> scBool sc True
     "False"         -> scBool sc False
     "demote"        -> scGlobalDef sc "Cryptol.ecDemote"      -- Converts a numeric type into its corresponding value.
-                                                     -- { val, bits } (fin val, fin bits, bits >= width val) => [bits]
-    "integer"       -> scGlobalDef sc "Cryptol.ecInteger"     -- {n} (fin n) => Integer
+                                                              -- {val, a} (Literal val a) => a
     "toInteger"     -> scGlobalDef sc "Cryptol.ecToInteger"   -- {n} (fin n) => [n] -> Integer
-    "fromInteger"   -> scGlobalDef sc "Cryptol.ecFromInteger" -- {n} (fin n) => Integer -> [n]
+    "fromInteger"   -> scGlobalDef sc "Cryptol.ecFromInteger" -- {a} (Arith a) => Integer -> a
+    "fromZ"         -> scGlobalDef sc "Cryptol.ecFromZ"       -- {n} (fin n, n >= 1) => Z n -> Integer
     "+"             -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
     "-"             -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
     "*"             -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Arith a) => a -> a -> a
@@ -1160,6 +1184,9 @@ exportValue ty v = case ty of
   TV.TVInteger ->
     V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
+  TV.TVIntMod _modulus ->
+    error "unimplemented: exportValue TVIntMod"
+
   TV.TVSeq _ e ->
     case v of
       SC.VWord w -> V.word (toInteger (width w)) (unsigned w)
@@ -1186,9 +1213,6 @@ exportValue ty v = case ty of
   -- functions
   TV.TVFun _aty _bty ->
     V.VFun (error "exportValue: TODO functions")
-
-  TV.TVIntMod _n ->
-    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =

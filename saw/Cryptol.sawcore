@@ -604,6 +604,7 @@ PArith a =
    , neg  :: a -> a
    , sdiv :: a -> a -> a
    , smod :: a -> a -> a
+   , int  :: Integer -> a
    };
 
 PArithInteger :: PArith Integer;
@@ -618,6 +619,7 @@ PArithInteger =
   , neg = intNeg
   , sdiv = errorBinary Integer
   , smod = errorBinary Integer
+  , int = \ (i :: Integer) -> i
   };
 
 PArithVec :: (n :: Nat) -> (a :: sort 0) -> PArith a -> PArith (Vec n a);
@@ -632,6 +634,7 @@ PArithVec n a pa =
   , neg = map a a pa.neg n
   , sdiv = zipWith a a a pa.sdiv n
   , smod = zipWith a a a pa.smod n
+  , int = \ (i :: Integer) -> replicate n a (pa.int i)
   };
 
 PArithStream :: (a :: sort 0) -> PArith a -> PArith (Stream a);
@@ -646,6 +649,7 @@ PArithStream a pa =
   , neg = streamMap a a pa.neg
   , sdiv = streamMap2 a a a pa.sdiv
   , smod = streamMap2 a a a pa.smod
+  , int = \ (i :: Integer) -> streamConst a (pa.int i)
   };
 
 PArithSeq :: (n :: Num) -> (a :: sort 0) -> PArith a -> PArith (seq n a);
@@ -668,6 +672,7 @@ PArithWord n =
            (errorBinary (bitvector 0)) bvSDiv n
   , smod = natCase (\ (w::Nat) -> bitvector w -> bitvector w -> bitvector w)
            (errorBinary (bitvector 0)) bvSRem n
+  , int = intToBv n
   };
 
 PArithSeqBool :: (n :: Num) -> PArith (seq n Bool);
@@ -688,6 +693,7 @@ PArithFun a b pb =
   , neg = compose a b b pb.neg
   , sdiv = funBinary a b pb.sdiv
   , smod = funBinary a b pb.smod
+  , int = \ (i :: Integer) -> \ (_ :: a) -> pb.int i
   };
 
 PArithUnit :: PArith #();
@@ -702,6 +708,7 @@ PArithUnit =
   , neg = unitUnary
   , sdiv = unitBinary
   , smod = unitBinary
+  , int = \ (i :: Integer) -> ()
   };
 
 PArithPair :: (a b :: sort 0) -> PArith a -> PArith b -> PArith #(a | b);
@@ -716,6 +723,7 @@ PArithPair a b pa pb =
   , neg = pairUnary a b pa.neg pb.neg
   , sdiv = pairBinary a b pa.sdiv pb.sdiv
   , smod = pairBinary a b pa.smod pb.smod
+  , int = \ (i :: Integer) -> (pa.int i | pb.int i)
   };
 
 PArithEmpty :: PArith #{};
@@ -730,6 +738,7 @@ PArithEmpty =
   , neg = emptyUnary
   , sdiv = emptyBinary
   , smod = emptyBinary
+  , int = \ (i :: Integer) -> {}
   };
 
 {-
@@ -816,37 +825,36 @@ PSignedCmpField :: (s :: String) -> (a b :: sort 0) -> PSignedCmp a -> PSignedCm
 PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
 -}
 
+-- Literal class
+
+-- Compared to Cryptol class 'Literal val a', we omit the 'val' parameter here.
+
+PLiteral :: (a :: sort 0) -> sort 0;
+PLiteral a = Nat -> a;
+
+PLiteralSeqBool :: (n :: Num) -> PLiteral (seq n Bool);
+PLiteralSeqBool n =
+  Num#rec (\ (n :: Num) -> PLiteral (seq n Bool)) bvNat
+          (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
+
+PLiteralInteger :: PLiteral Integer;
+PLiteralInteger = natToInt;
+
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecDemote :: (val bits :: Num) -> seq bits Bool;
-ecDemote valnum bitsnum =
-  Num#rec (\ (bits::Num) -> seq bits Bool)
-          (\ (bits::Nat) ->
-             Num#rec (\ (val::Num) -> Vec bits Bool)
-                     (\ (val::Nat) -> bvNat bits val)
-                     -- Dummy case (this used to be undefined anyway): treat
-                     -- infinity mod 2^bits as 0 (but it doesn't matter)
-                     (bvNat bits 0) valnum)
-          -- Dummy case (this used to be undefined anyway): return the infinite
-          -- stream of 0s (i.e., Falses)
-          (streamConst Bool False)
-          bitsnum;
-
-ecInteger :: (val :: Num) -> Integer;
-ecInteger =
-  Num_rec (\ (val::Num) -> Integer) natToInt
-          (error Integer "ecInteger called on TCInf");
+ecDemote :: (val :: Num) -> (a :: sort 0) -> PLiteral a -> a;
+ecDemote val a pa =
+  Num#rec (\ (_ :: Num) -> a) pa (pa 0) val;
+  -- Dummy case: treat `inf as `0 (this never happens anyway)
 
 ecToInteger :: (n :: Num) -> seq n Bool -> Integer;
 ecToInteger =
   Num_rec (\ (n::Num) -> seq n Bool -> Integer) bvToInt
           (error (Stream Bool -> Integer) "ecToInteger called on TCInf");
 
-ecFromInteger :: (n :: Num) -> Integer -> seq n Bool;
-ecFromInteger =
-  Num_rec (\ (n::Num) -> Integer -> seq n Bool) intToBv
-          (error (Integer -> Stream Bool) "ecFromInteger called on TCInf");
+ecFromInteger :: (a :: sort 0) -> PArith a -> Integer -> a;
+ecFromInteger a pa = pa.int;
 
 -- Arith
 ecPlus :: (a :: sort 0) -> PArith a -> a -> a -> a;
@@ -1150,54 +1158,41 @@ ecFromThen first next =
                                    (bvNat bits (getFinNat first)))
                             (bvNat bits i)))));
 
-ecFromTo :: (first last bits :: Num) ->
-            seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool);
+ecFromTo :: (first last :: Num) -> (a :: sort 0) -> PLiteral a ->
+            seq (tcAdd (TCNum 1) (tcSub last first)) a;
 ecFromTo =
   finNumRec
-    (\ (first::Num) -> (last::Num) -> (bits::Num) ->
-       seq (tcAdd (TCNum 1) (tcSub last first)) (seq bits Bool))
+    (\ (first::Num) -> (last::Num) -> (a :: sort 0) -> PLiteral a ->
+       seq (tcAdd (TCNum 1) (tcSub last first)) a)
     (\ (first::Nat) ->
        finNumRec
-         (\ (last::Num) -> (bits::Num) ->
-            seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) (seq bits Bool))
-         (\ (last::Nat) ->
-            finNumRec
-              (\ (bits::Num) ->
-                 Vec (addNat 1 (subNat last first)) (seq bits Bool))
-              (\ (bits::Nat) ->
-                 gen (addNat 1 (subNat last first)) (Vec bits Bool)
-                     (\ (i :: Nat) -> bvNat bits (addNat i first)))));
+         (\ (last::Num) -> (a :: sort 0) -> PLiteral a ->
+            seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
+         (\ (last::Nat) -> \ (a :: sort 0) -> \ (pa :: PLiteral a) ->
+            gen (addNat 1 (subNat last first)) a
+                (\ (i :: Nat) -> pa (addNat i first))));
 
-ecFromThenTo :: (first next last bits len :: Num) -> seq len (seq bits Bool);
-ecFromThenTo first next _ =
+ecFromThenTo ::
+  (first next last :: Num) -> (a :: sort 0) -> (len :: Num) ->
+  PLiteral a -> PLiteral a -> PLiteral a -> seq len a;
+ecFromThenTo first next _ a =
   finNumRec
-    (\ (bits::Num) -> (len::Num) -> seq len (seq bits Bool))
-    (\ (bits::Nat) ->
-       finNumRec
-         (\ (len::Num) -> seq len (Vec bits Bool))
-         (\ (len::Nat) ->
-            gen len (Vec bits Bool)
-                (\ (i :: Nat) ->
-                   bvNat bits (subNat (addNat (getFinNat first)
-                                              (mulNat i (getFinNat next)))
-                                      (mulNat i (getFinNat first))))));
+    (\ (len::Num) -> PLiteral a -> PLiteral a -> PLiteral a -> seq len a)
+    (\ (len::Nat) -> \ (pa :: PLiteral a) -> \ (_ :: PLiteral a) -> \ (_ :: PLiteral a) ->
+       gen len a
+           (\ (i :: Nat) ->
+              pa (subNat (addNat (getFinNat first)
+                                 (mulNat i (getFinNat next)))
+                         (mulNat i (getFinNat first)))));
 
 -- Infinite word sequences
-ecInfFrom :: (n :: Num) -> seq n Bool -> seq TCInf (seq n Bool);
-ecInfFrom =
-  finNumRec
-    (\ (n::Num) -> seq n Bool -> seq TCInf (seq n Bool))
-    (\ (n::Nat) -> \ (w::Vec n Bool) ->
-       MkStream (bitvector n) (\ (i :: Nat) -> bvAdd n w (bvNat n i)));
+ecInfFrom :: (a :: sort 0) -> PArith a -> a -> seq TCInf a;
+ecInfFrom a pa x =
+  MkStream a (\ (i :: Nat) -> pa.add x (pa.int (natToInt i)));
 
-ecInfFromThen :: (n :: Num) -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool);
-ecInfFromThen =
-  finNumRec
-    (\ (n::Num) -> seq n Bool -> seq n Bool -> seq TCInf (seq n Bool))
-    (\ (n::Nat) -> \ (first::Vec n Bool) -> \ (next::Vec n Bool) ->
-       MkStream (bitvector n)
-                (\ (i :: Nat) ->
-                   bvAdd n first (bvMul n (bvSub n next first) (bvNat n i))));
+ecInfFromThen :: (a :: sort 0) -> PArith a -> a -> a -> seq TCInf a;
+ecInfFromThen a pa x y =
+  MkStream a (\ (i :: Nat) -> pa.add x (pa.mul (pa.sub y x) (pa.int (natToInt i))));
 
 
 -- Run-time error
@@ -1302,11 +1297,13 @@ axiom replicate_False :: (n :: Nat) -> Eq (bitvector n) (replicate n Bool False)
 
 axiom subNat_0 :: (n :: Nat) -> Eq Nat (subNat n 0) n;
 
+{-
 axiom demote_add_distr
   :: (w :: Nat)
   -> (x y :: Num)
   -> Eq (bitvector w)
         (ecDemote (tcAdd x y) (TCNum w))
         (bvAdd w (ecDemote x (TCNum w)) (ecDemote y (TCNum w)));
+-}
 
 --------------------------------------------------------------------------------
