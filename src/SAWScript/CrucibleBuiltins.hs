@@ -751,7 +751,7 @@ setupArg :: SharedContext
 setupArg sc sym ecRef tp =
   case Crucible.asBaseType tp of
     Crucible.AsBaseType btp -> do
-       sc_tp <- Crucible.baseSCType sc btp
+       sc_tp <- Crucible.baseSCType sym sc btp
        i     <- scFreshGlobalVar sc
        ecs   <- readIORef ecRef
        let len = Seq.length ecs
