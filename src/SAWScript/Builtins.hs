@@ -88,6 +88,7 @@ import SAWScript.Prover.Rewrite(rewriteEqs)
 import qualified SAWScript.Prover.SBV as Prover
 import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
+import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -578,6 +579,9 @@ satUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript SV.SatResult
 satUnintSBV conf unints = do
   timeout <- psTimeout <$> get
   wrapProver (Prover.satUnintSBV conf unints timeout)
+
+satWhat4 :: ProofScript SV.SatResult
+satWhat4 = wrapProver Prover.satWhat4
 
 
 wrapProver ::
