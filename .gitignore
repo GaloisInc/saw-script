@@ -14,3 +14,6 @@ stack.yaml
 .DS_Store
 .ghc.environment*
 dist-newstyle
+*~
+*#
+.#*
