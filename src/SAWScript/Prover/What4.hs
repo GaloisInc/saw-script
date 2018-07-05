@@ -1,91 +1,81 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE GADTs #-}
+
 module SAWScript.Prover.What4 where
 
-import qualified Data.Map as Map
-import           Control.Monad(filterM,liftM)
 
+import qualified Data.Map as Map
+import           Control.Monad(filterM)
+import           Data.Maybe (catMaybes)
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
-import Verifier.SAW.Recognizer(asPiList,asPi)
+import Verifier.SAW.Recognizer(asPi)
 
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 
-import What4.Config
-import What4.SatResult
-import What4.Interface
-import What4.Protocol.Online
-import qualified What4.Protocol.SMTLib2 as SMT2
-import qualified What4.Solver.Z3 as Z3
-import qualified Verifier.SAW.Simulator.What4 as W
-import qualified What4.Expr.Builder as B
-
-import Lang.Crucible.Backend.Online as Online
-
 import Data.Parameterized.Nonce
 
-{-
-setupSolverConfig :: (IsExprBuilder sym) => sym -> IO ()
-setupSolverConfig sym = do
-   let cfg = getConfiguration sym
-   extendConfig (solver_adapter_config_options z3Adapter) cfg
-   z3PathSetter <- getOptionSetting z3Path
-   res <- setOpt z3PathSetter "/usr/local/bin/z3"
-   assert (null res) (return ())
--}
+import What4.Config
+import What4.Solver
+import What4.SatResult
+import What4.Interface
+import What4.BaseTypes
+import What4.Expr.GroundEval
+import qualified What4.Solver.Z3 as Z3
+import qualified Verifier.SAW.Simulator.What4 as W
+import Verifier.SAW.Simulator.What4.FirstOrder
+import qualified What4.Expr.Builder as B
 
-----------------------------------------------------------------
--- Derived from Lang/Crucible/Backend/Online
--- SCW note: I want to keep this part independent of the Crucible
--- package. But it does duplicate stuff
+-- TODO: Do we want this dependency on Crucible??
+-- On one hand, it sets up running the solver
+-- On the other hand, it is the only part of the crucible
+-- package that we use so far.
+-- import Lang.Crucible.Backend.Online as Online
 
+-- This class allows the "sim" argument to be passed implicitly,
+-- allowing the What4 module to make an instance of the 'SymbolicValue' class.
+import Data.Reflection(Given(..),give)
 
-
-{-
-type Backend scope solver = B.ExprBuilder scope (BackendState solver)
-
-newtype BackendState solver scope = BackendState
-    { nonceGenerator :: NonceGenerator IO scope
-    , solverProc     :: !(IORef (SolverState scope solver))
-    
--- | Is the solver running or not?
-data SolverState scope solver =
-    SolverNotStarted
-  | SolverStarted (SolverProcess scope solver)
-
-initialState :: NonceGenerator IO t -> IO (BackendState t)
-initialState gen = do
-        procref <- newIORefl SolverNotStarted
-        return $! BackendState gen procref
 
 
 
-type Z3OnlineBackend scope =
-  OnlineBackend scope (SMT2.Writer Z3.Z3)
--}        
 ----------------------------------------------------------------
-    
+
+-- TODO: runST version instead of the GlobalNonceGenerator    
 type Gt = GlobalNonceGenerator
 
-prepWhat4 :: IsExprBuilder sym =>
-   SharedContext -> Term -> sym -> IO (Term, Pred sym)
-prepWhat4 sc t0 sym = do
-    -- Abstract over all non-function ExtCns variables
+data St g = St
+
+type SYM = B.ExprBuilder GlobalNonceGenerator St
+
+
+
+prepWhat4 :: forall sym. (Given sym, IsSymExprBuilder sym) =>
+  SharedContext -> [String] -> Term ->
+  IO (Term, [String], ([Maybe (W.TypedExpr sym)],Pred sym))
+prepWhat4 sc unints t0 = do
+  -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
   exts <- filterM nonFun (getAllExts t0)
+
   TypedTerm schema t' <-
       scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
+
   checkBooleanSchema schema
   
-  lit <- W.solve sc t' sym
-  return (t', lit)
+  (argNames, lit) <- W.w4Solve sc Map.empty unints t'
+  
+  return (t', argNames, lit)
 
-path2Z3 :: String
-path2Z3 = "/usr/local/bin/z3"
   
 -- | Check the satisfiability of a theorem using What4.
 satWhat4 ::
@@ -94,66 +84,57 @@ satWhat4 ::
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-satWhat4 sc mode term = do
-  do let gen = globalNonceGenerator
+satWhat4 sc mode term = 
+  do
+     let gen = globalNonceGenerator
+     sym <- B.newExprBuilder St gen
+
+     let cfg = getConfiguration sym
+     extendConfig (solver_adapter_config_options Z3.z3Adapter) cfg
      
-     Online.withZ3OnlineBackend gen $ \ sym -> do
-     
-       -- symbolically evaluate
-       (t', lit0) <- prepWhat4 sc term sym
-     
-       lit <- case mode of
+     -- symbolically evaluate
+     (t', argNames, iolit0) <- give sym $ prepWhat4 sc [] term
+
+     let (bvs,lit0) = iolit0
+
+       -- lit :: Pred sym === Expr sym BoolType
+     lit <- case mode of
               CheckSat -> return lit0
               Prove    -> notPred sym lit0
 
-       putStrLn $ show lit              
+     -- dummy stats
+     let stats = solverStats "What4->Z3" (scSharedSize t')
 
-       -- dummy stats
-       let stats = solverStats "What4->Z3" (scSharedSize t')
+     -- log to stdout
+     let logger _ str = putStr str
 
-       -- log to stdout
-       let logger str = putStrLn str
-
-       
+     -- dump Z3 file
+     -- handle <- openFile "/Users/sweirich/dump.txt" WriteMode 
+     -- solver_adapter_write_smt2 Z3.z3Adapter sym handle lit 
      
-       -- runZ3
-       -- result <- W.withZ3 sym path2Z3 logger $ \ session ->
-       -- W.runCheckSat session return
-       process <- Online.getSolverProcess sym
+     -- runZ3
+     Z3.runZ3InOverride sym logger lit $ \ result -> case result of 
+         Sat (gndEvalFcn,_) -> do
+           mvals <- mapM (getValues @SYM gndEvalFcn) (zip bvs argNames)
+           return (Just (catMaybes mvals), stats) where
 
-       -- interpret the result                
-       checkSatisfiableWithModel process lit $ \ result -> case result of
-         Sat gndEvalFcn -> return (Just labels, stats) where
-           labels = error "cannot reinterpret yet"
          Unsat   -> return (Nothing, stats)
          Unknown -> fail "Prover returned Unknown"
-  
 
-{-  
-  do TypedTerm schema t <-
-        bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc
-     checkBooleanSchema schema
-     tp <- scWhnf sc =<< scTypeOf sc t
-     let (args, _) = asPiList tp
-         argNames = map fst args
-     RME.withBitBlastedPred sc Map.empty t $ \lit0 shapes ->
-       let lit = case mode of
-                   CheckSat -> lit0
-                   Prove    -> RME.compl lit0
-           stats = solverStats "RME" (scSharedSize t0)
-       in case RME.sat lit of
-            Nothing -> return (Nothing, stats)
-            Just cex -> do
-              let m = Map.fromList cex
-              let n = sum (map sizeFiniteType shapes)
-              let bs = map (maybe False id . flip Map.lookup m) $ take n [0..]
-              let r = liftCexBB shapes bs
-              case r of
-                Left err -> fail $ "Can't parse counterexample: " ++ err
-                Right vs
-                  | length argNames == length vs -> do
-                    let model = zip argNames (map toFirstOrderValue vs)
-                    return (Just model, stats)
-                  | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
-  -}
+getValues :: forall sym gt. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
+  (Maybe (W.TypedExpr sym), String) -> IO (Maybe (String, FirstOrderValue))
+getValues _ (Nothing, _) = return Nothing
+getValues f (Just (W.TypedExpr ty bv), orig) = do
+  gv <- groundEval f bv
+  case (groundToFOV ty gv) of
+    Left err  -> fail err
+    Right fov -> return (Just (orig, fov))
+
+
+printValue :: SYM -> GroundEvalFn Gt -> (Maybe (W.TypedExpr SYM), String) -> IO ()
+printValue _ _ (Nothing, _) = return ()
+printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr Gt ty)), orig) = do
+  gv <- groundEval f @ty bv
+  putStr $ orig ++ "=?"
+  print (groundToFOV ty gv)
 
