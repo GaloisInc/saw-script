@@ -6,7 +6,7 @@
 
 module SAWScript.Prover.What4 where
 
-
+import qualified Data.Vector as V
 import qualified Data.Map as Map
 import           Control.Monad(filterM)
 import           Data.Maybe (catMaybes)
@@ -61,7 +61,7 @@ type SYM = B.ExprBuilder GlobalNonceGenerator St
 
 prepWhat4 :: forall sym. (Given sym, IsSymExprBuilder sym) =>
   SharedContext -> [String] -> Term ->
-  IO (Term, [String], ([Maybe (W.TypedExpr sym)],Pred sym))
+  IO (Term, [String], ([Maybe (W.Labeler sym)],Pred sym))
 prepWhat4 sc unints t0 = do
   -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
@@ -122,13 +122,35 @@ satWhat4 sc mode term =
          Unknown -> fail "Prover returned Unknown"
 
 getValues :: forall sym gt. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
-  (Maybe (W.TypedExpr sym), String) -> IO (Maybe (String, FirstOrderValue))
+  (Maybe (W.Labeler sym), String) -> IO (Maybe (String, FirstOrderValue))
 getValues _ (Nothing, _) = return Nothing
-getValues f (Just (W.TypedExpr ty bv), orig) = do
+getValues f (Just labeler, orig) = do
+  fov <- getLabelValues f labeler
+  return $ Just (orig,fov)
+  
+
+getLabelValues :: forall sym gt. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
+  W.Labeler sym -> IO FirstOrderValue
+  
+getLabelValues f (W.TupleLabel labels) = do
+  vals <- mapM (getLabelValues f) (V.toList labels)
+  return (FOVTuple vals)
+
+getLabelValues f (W.VecLabel labels) = do
+  let vty = error "TODO: compute vector type, or just store it"
+  vals <- mapM (getLabelValues f) (V.toList labels)
+  return (FOVVec vty vals)
+
+getLabelValues f (W.RecLabel m) = do
+  m' <- mapM (getLabelValues f) m
+  return (FOVRec m')
+  
+getLabelValues f (W.BaseLabel (W.TypedExpr ty bv)) = do
   gv <- groundEval f bv
   case (groundToFOV ty gv) of
     Left err  -> fail err
-    Right fov -> return (Just (orig, fov))
+    Right fov -> return fov
+
 
 
 printValue :: SYM -> GroundEvalFn Gt -> (Maybe (W.TypedExpr SYM), String) -> IO ()
