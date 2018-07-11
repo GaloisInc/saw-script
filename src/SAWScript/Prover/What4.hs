@@ -35,7 +35,7 @@ import qualified Verifier.SAW.Simulator.What4 as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
 import qualified What4.Expr.Builder as B
 
--- import System.IO
+import System.IO
 
 -- This class allows the "sim" argument to be passed implicitly,
 -- allowing the What4 module to make an instance of the 'SymbolicValue' class.
@@ -105,9 +105,9 @@ satWhat4 sc mode term =
      let logger _ str = putStr str
 
      -- dump Z3 file (for debugging)
-     -- handle <- openFile "/Users/sweirich/dump.txt" WriteMode 
-     -- solver_adapter_write_smt2 Z3.z3Adapter sym handle lit 
-     -- hClose handle
+     handle <- openFile "/Users/sweirich/dump.txt" WriteMode 
+     solver_adapter_write_smt2 Z3.z3Adapter sym handle lit 
+     hClose handle
      
      -- runZ3
      Z3.runZ3InOverride sym logger lit $ \ result -> case result of 
