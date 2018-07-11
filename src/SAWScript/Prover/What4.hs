@@ -17,35 +17,29 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPi)
 
-import SAWScript.Prover.Rewrite(rewriteEqs)
-import SAWScript.Prover.Mode(ProverMode(..))
-import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Util
+import           SAWScript.Prover.Rewrite(rewriteEqs)
+import           SAWScript.Prover.Mode(ProverMode(..))
+import           SAWScript.Prover.SolverStats
+import           SAWScript.Prover.Util
 
 import Data.Parameterized.Nonce
 
-import What4.Config
-import What4.Solver
-import What4.SatResult
-import What4.Interface
-import What4.BaseTypes
-import What4.Expr.GroundEval
+import           What4.Config
+import           What4.Solver
+import           What4.SatResult
+import           What4.Interface
+import           What4.BaseTypes
+import           What4.Expr.GroundEval
 import qualified What4.Solver.Z3 as Z3
 import qualified Verifier.SAW.Simulator.What4 as W
-import Verifier.SAW.Simulator.What4.FirstOrder
+import           Verifier.SAW.Simulator.What4.FirstOrder
 import qualified What4.Expr.Builder as B
 
 -- import System.IO
 
--- TODO: Do we want this dependency on Crucible??
--- On one hand, it sets up running the solver
--- On the other hand, it is the only part of the crucible
--- package that we use so far.
--- import Lang.Crucible.Backend.Online as Online
-
 -- This class allows the "sim" argument to be passed implicitly,
 -- allowing the What4 module to make an instance of the 'SymbolicValue' class.
-import Data.Reflection(Given(..),give)
+import           Data.Reflection(Given(..),give)
 
 
 
