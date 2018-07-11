@@ -35,6 +35,8 @@ import qualified Verifier.SAW.Simulator.What4 as W
 import Verifier.SAW.Simulator.What4.FirstOrder
 import qualified What4.Expr.Builder as B
 
+-- import System.IO
+
 -- TODO: Do we want this dependency on Crucible??
 -- On one hand, it sets up running the solver
 -- On the other hand, it is the only part of the crucible
@@ -73,7 +75,7 @@ prepWhat4 sc unints t0 = do
   checkBooleanSchema schema
   
   (argNames, lit) <- W.w4Solve sc Map.empty unints t'
-  
+
   return (t', argNames, lit)
 
   
@@ -108,9 +110,10 @@ satWhat4 sc mode term =
      -- log to stdout
      let logger _ str = putStr str
 
-     -- dump Z3 file
+     -- dump Z3 file (for debugging)
      -- handle <- openFile "/Users/sweirich/dump.txt" WriteMode 
      -- solver_adapter_write_smt2 Z3.z3Adapter sym handle lit 
+     -- hClose handle
      
      -- runZ3
      Z3.runZ3InOverride sym logger lit $ \ result -> case result of 
