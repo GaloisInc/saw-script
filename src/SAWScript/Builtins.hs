@@ -581,7 +581,7 @@ satUnintSBV conf unints = do
   wrapProver (Prover.satUnintSBV conf unints timeout)
 
 satWhat4 :: ProofScript SV.SatResult
-satWhat4 = wrapProver Prover.satWhat4
+satWhat4 = wrapProver Prover.satWhat4_z3 
 
 
 wrapProver ::

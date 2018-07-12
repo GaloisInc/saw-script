@@ -30,7 +30,7 @@ import           What4.SatResult
 import           What4.Interface
 import           What4.BaseTypes
 import           What4.Expr.GroundEval
-import qualified What4.Solver.Z3 as Z3
+import qualified What4.Solver as Solver
 import qualified Verifier.SAW.Simulator.What4 as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
 import qualified What4.Expr.Builder as B
@@ -43,15 +43,32 @@ import           Data.Reflection(Given(..),give)
 
 
 
-
 ----------------------------------------------------------------
 
--- TODO: runST version instead of the GlobalNonceGenerator    
-type Gt = GlobalNonceGenerator
 
 data St g = St
 
-type SYM = B.ExprBuilder GlobalNonceGenerator St
+--type SYM = B.ExprBuilder GlobalNonceGenerator St
+
+satWhat4_sym solver sc pm t = do
+  -- TODO: runST version instead of the GlobalNonceGenerator    
+  sym <- B.newExprBuilder St globalNonceGenerator
+  satWhat4_solver solver sym sc pm t
+
+
+satWhat4_z3, satWhat4_boolector, satWhat4_cvc4, satWhat4_dreal, satWhat4_stp, satWhat4_yices ::
+  SharedContext {- ^ Context for working with terms -} ->
+  ProverMode    {- ^ Prove/check -} ->
+  Term          {- ^ A boolean term to be proved/checked. -} ->
+  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+
+satWhat4_z3        = satWhat4_sym z3Adapter
+satWhat4_boolector = satWhat4_sym boolectorAdapter
+satWhat4_cvc4      = satWhat4_sym cvc4Adapter
+satWhat4_dreal     = satWhat4_sym drealAdapter
+satWhat4_stp       = satWhat4_sym stpAdapter
+satWhat4_yices     = satWhat4_sym yicesAdapter
+
 
 
 
@@ -72,47 +89,47 @@ prepWhat4 sc unints t0 = do
 
   return (t', argNames, lit)
 
+
+
   
 -- | Check the satisfiability of a theorem using What4.
-satWhat4 ::
+satWhat4_solver :: forall st t.
+  SolverAdapter st ->
+  B.ExprBuilder t st ->
   SharedContext {- ^ Context for working with terms -} ->
   ProverMode    {- ^ Prove/check -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-satWhat4 sc mode term = 
+satWhat4_solver solver sym sc mode term = 
   do
-     let gen = globalNonceGenerator
-     sym <- B.newExprBuilder St gen
-
-     let cfg = getConfiguration sym
-     extendConfig (solver_adapter_config_options Z3.z3Adapter) cfg
+     extendConfig (solver_adapter_config_options solver)
+                  (getConfiguration sym)
      
      -- symbolically evaluate
      (t', argNames, iolit0) <- give sym $ prepWhat4 sc [] term
 
      let (bvs,lit0) = iolit0
 
-       -- lit :: Pred sym === Expr sym BoolType
      lit <- case mode of
               CheckSat -> return lit0
               Prove    -> notPred sym lit0
 
      -- dummy stats
-     let stats = solverStats "What4->Z3" (scSharedSize t')
+     let stats = solverStats "W4" (scSharedSize t')
 
      -- log to stdout
      let logger _ str = putStr str
 
-     -- dump Z3 file (for debugging)
+     -- dump solver file (for debugging)
      handle <- openFile "/Users/sweirich/dump.txt" WriteMode 
-     solver_adapter_write_smt2 Z3.z3Adapter sym handle lit 
+     solver_adapter_write_smt2 solver sym handle lit 
      hClose handle
-     
-     -- runZ3
-     Z3.runZ3InOverride sym logger lit $ \ result -> case result of 
+
+     -- run solver 
+     solver_adapter_check_sat solver sym logger lit $ \ result -> case result of 
          Sat (gndEvalFcn,_) -> do
-           mvals <- mapM (getValues @SYM gndEvalFcn) (zip bvs argNames)
+           mvals <- mapM (getValues @(B.ExprBuilder t st) gndEvalFcn) (zip bvs argNames)
            return (Just (catMaybes mvals), stats) where
 
          Unsat   -> return (Nothing, stats)
@@ -150,9 +167,10 @@ getLabelValues f (W.BaseLabel (W.TypedExpr ty bv)) = do
 
 
 
-printValue :: SYM -> GroundEvalFn Gt -> (Maybe (W.TypedExpr SYM), String) -> IO ()
+printValue :: (B.ExprBuilder t st) -> GroundEvalFn t ->
+  (Maybe (W.TypedExpr (B.ExprBuilder t st)), String) -> IO ()
 printValue _ _ (Nothing, _) = return ()
-printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr Gt ty)), orig) = do
+printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), orig) = do
   gv <- groundEval f @ty bv
   putStr $ orig ++ "=?"
   print (groundToFOV ty gv)
