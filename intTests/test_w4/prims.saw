@@ -4,7 +4,7 @@ print ".";
 prove_print w4 {{ (0x0F || 131) == 143 }};
 print ".";
 prove_print w4 {{ (0x0F ^ 0xFF) == 240 }};
-print ".";
+print "this is a bug";
 prove_print w4 {{ ~0x0F == 240 }};
 
 

@@ -580,8 +580,6 @@ satUnintSBV conf unints = do
   timeout <- psTimeout <$> get
   wrapProver (Prover.satUnintSBV conf unints timeout)
 
-satWhat4 :: ProofScript SV.SatResult
-satWhat4 = wrapProver Prover.satWhat4_z3 
 
 
 wrapProver ::
@@ -607,12 +605,7 @@ wrapProver f = do
     (Prove, Nothing)    -> return (SV.Unsat stats, stats, Nothing)
     (Prove, Just a)     -> nope (SV.SatMulti stats a)
 
-
-
-
-
-
-
+--------------------------------------------------
 satBoolector :: ProofScript SV.SatResult
 satBoolector = satSBV SBV.boolector
 
@@ -642,6 +635,32 @@ satUnintMathSAT = satUnintSBV SBV.mathSAT
 
 satUnintYices :: [String] -> ProofScript SV.SatResult
 satUnintYices = satUnintSBV SBV.yices
+
+
+--------------------------------------------------
+satWhat4_Boolector :: ProofScript SV.SatResult
+satWhat4_Boolector = wrapProver $ Prover.satWhat4_boolector []
+
+satWhat4_Z3 :: ProofScript SV.SatResult
+satWhat4_Z3 = wrapProver $ Prover.satWhat4_z3 []
+
+satWhat4_CVC4 :: ProofScript SV.SatResult
+satWhat4_CVC4 = wrapProver $ Prover.satWhat4_cvc4 []
+
+satWhat4_Yices :: ProofScript SV.SatResult
+satWhat4_Yices = wrapProver $ Prover.satWhat4_yices []
+
+satWhat4_UnintBoolector :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintBoolector =  wrapProver . Prover.satWhat4_boolector 
+
+satWhat4_UnintZ3 :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintZ3 = wrapProver . Prover.satWhat4_z3
+
+satWhat4_UnintCVC4 :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintCVC4 =  wrapProver . Prover.satWhat4_cvc4
+
+satWhat4_UnintYices :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintYices =  wrapProver . Prover.satWhat4_yices
 
 satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
                 -> String
