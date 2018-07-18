@@ -14,6 +14,7 @@ module Verifier.SAW.Cryptol.Prims
 ( concretePrims
 , bitblastPrims
 , sbvPrims
+, w4Prims
 ) where
 
 import Control.Monad
@@ -27,6 +28,7 @@ import qualified Data.AIG.Operations as AIG
 import qualified Cryptol.TypeCheck.Solver.InfNat as CryNat
 
 import Data.SBV.Dynamic as SBV
+import What4.Interface as W4
 
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Prim as P
@@ -35,6 +37,8 @@ import Verifier.SAW.Simulator.Prims
 import qualified Verifier.SAW.Simulator.BitBlast as BB
 import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Verifier.SAW.Simulator.Concrete as C
+import qualified Verifier.SAW.Simulator.What4 as W4
+import qualified Verifier.SAW.Simulator.What4.SWord as W4
 
 -- primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
 cryError :: VMonad l => (VWord l -> EvalM l Char) -> Value l
@@ -62,6 +66,12 @@ sbvWordAsChar bv =
     Just i -> return $ toEnum $ fromInteger i
     Nothing -> fail "unable to interpret bitvector as character"
 
+w4WordAsChar :: (Monad m,W4.IsExprBuilder sym) => W4.SWord sym -> m Char
+w4WordAsChar bv =
+  case W4.bvAsUnsignedInteger bv of   -- or signed?
+    Just i -> return $ toEnum $ fromInteger i
+    Nothing -> fail "unable to interpret bitvector as character"
+    
 --primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat :: VMonad l => Value l
 tcLenFromThen_Nat =
@@ -106,6 +116,15 @@ sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
   , ("Cryptol.cryError"            , cryError sbvWordAsChar )
+  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
+  , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
+  ]
+
+
+w4Prims :: W4.IsExprBuilder sym => Map Ident (W4.SValue sym)
+w4Prims = Map.fromList
+  [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
+  , ("Cryptol.cryError"            , cryError w4WordAsChar )
   , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
