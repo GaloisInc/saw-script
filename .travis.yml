@@ -33,7 +33,7 @@ before_install:
 
 script:
   - git submodule init
-  - git submodule foreach git submodule init
-  - git submodule update --recursive
+  - git submodule update
+  - (cd deps/abcBridge && git submodule init && git submodule update)
   - cabal update
   - cabal new-build -j --disable-optimization --allow-newer
