@@ -3,7 +3,7 @@ set -x
 set -v
 set -e
 
-TESTABLE="saw-core jvm-verifier llvm-verifier"
+TESTABLE="abcBridge jvm-verifier parameterized-utils saw-core"
 
 dotests="false"
 jobs=""
