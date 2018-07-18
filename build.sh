@@ -23,6 +23,7 @@ while getopts "tpfj:" opt; do
 done
 
 git submodule init
+git submodule foreach git submodule init
 git submodule update --recursive
 
 if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
