@@ -23,8 +23,8 @@ while getopts "tpfj:" opt; do
 done
 
 git submodule init
-git submodule foreach git submodule init
-git submodule update --recursive
+git submodule update
+(cd deps/abcBridge && git submodule init && git submodule update)
 
 if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
     set +x
