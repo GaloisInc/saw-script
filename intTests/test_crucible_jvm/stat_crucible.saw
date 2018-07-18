@@ -1,5 +1,5 @@
 print "Extracting reference term";
-j <- java_load_class "STAT";
+j <- java_load_class "Stat";
 ffs_ref <- crucible_java_extract j "f_ref";
 
 print "Extracting implementation term";
