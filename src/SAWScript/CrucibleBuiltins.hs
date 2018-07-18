@@ -18,6 +18,8 @@ Stability   : provisional
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TupleSections #-}
+
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.CrucibleBuiltins
@@ -47,6 +49,7 @@ module SAWScript.CrucibleBuiltins
     ) where
 
 import           Control.Lens
+import           Control.Monad (zipWithM)
 import           Control.Monad.State
 import           Control.Monad.ST
 import           Control.Applicative
@@ -710,6 +713,13 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
                         }
       )
 
+--data JVMHandleInfo where
+--  JVMHandleInfo :: J.Method -> FnHandle init ret -> JVMHandleInfo
+
+methSig mcls meth = 
+  (Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth)),
+   maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth))
+
 setupCrucibleJavaContext ::
    BuiltinContext -> Options -> J.Class ->
    (CrucibleJavaContext -> TopLevel a) ->
@@ -727,9 +737,25 @@ setupCrucibleJavaContext bic opts c action = do
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
       _ <- W4.setOpt verbSetting (toInteger verbosity)
 
-      let bindings = Crucible.fnBindingsFromList []
+      -- declare bindings for all methods in the *current* class
+      let methods = J.classMethods c
+      let sigs = map (methSig c) methods
+      let mkHandle (Some argTypes, Some retType) meth = do
+           (h :: Crucible.FnHandle args ret) <- Crucible.withHandleAllocator $
+             \halloc -> 
+               (Crucible.mkHandle' halloc (fromString (J.methodName meth)) argTypes retType)
+           return (JCrucible.JVMHandleInfo meth h)
+           
+      let handles = runST $ zipWithM mkHandle sigs methods
+      let methIds = map ((J.className c,) . J.methodKey) methods
+      let ctx = JCrucible.JVMContext (Map.fromList (zip methIds handles)) undefined
+            
+      let fnBindings = runST $ mapM (JCrucible.defineMethod' (J.className c) ctx) handles
+
+      let bindings = Crucible.fnBindingsFromList fnBindings
       let javaExtImpl :: Crucible.ExtensionImpl p sym ()
-          javaExtImpl = Crucible.ExtensionImpl (\_sym _iTypes _logFn _f x -> case x of) (\x -> case x of)
+          javaExtImpl = Crucible.ExtensionImpl (\_sym _iTypes _logFn _f x -> case x of)
+                                               (\x -> case x of)
       let jsimctx = Crucible.initSimContext sym MapF.empty halloc stdout
                         bindings javaExtImpl Crucible.SAWCruciblePersonality
           jglobals = Crucible.emptyGlobals
@@ -862,6 +888,8 @@ crucible_llvm_cfg bic opts lm fn_name =
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> return (LLVM_CFG cfg)
 
+--------------------------------------------------------------------------------
+
 javaTypeToRepr :: J.Type -> Some Crucible.TypeRepr
 javaTypeToRepr t =
   case t of
@@ -887,25 +915,31 @@ allParameterTypes c m
   | J.methodIsStatic m = J.methodParameterTypes m
   | otherwise = J.ClassType (J.className c) : J.methodParameterTypes m
 
+declareMethod :: J.Class -> J.Method -> ST s ((J.ClassName, J.MethodKey), JCrucible.JVMHandleInfo)
+declareMethod mcls meth = do
+   let args  = Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth))
+       ret   = maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth)
+       cname = J.className mcls
+       mkey  = J.methodKey meth
+   case (args, ret) of
+     (Some argsRepr, Some retRepr) -> do
+       h <- Crucible.withHandleAllocator
+         (\halloc -> Crucible.mkHandle' halloc (fromString (J.methodName meth))
+                     argsRepr retRepr)
+       return ((cname, mkey), JCrucible.JVMHandleInfo meth h)
+  
+
 crucible_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
 crucible_java_cfg bic _ c mname = do
   let cb = biJavaCodebase bic
-  -- mcls is the class containing the method meth
+  -- mcls :: J.Class is the class containing the method meth, could be a superclass of c
+  -- meth :: J.Method
   (mcls, meth) <- io $ findMethod cb fixPos mname c
-  -- TODO: should mcls below be c?
-  let args  = Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth))
-      ret   = maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth)
-      cname = J.className mcls
-      mkey  = J.methodKey meth
-  let cfg = runST $ case (args, ret) of
-        (Some argsRepr, Some retRepr) -> do
-          h <- Crucible.withHandleAllocator
-            (\halloc -> Crucible.mkHandle' halloc (fromString (J.methodName meth))
-                        argsRepr retRepr)
-          let ctx = JCrucible.JVMContext
-              (Map.fromList [((cname, mkey), JCrucible.JVMHandleInfo meth h)])
-              undefined
-          JCrucible.defineMethod ctx cname meth
+  let cfg = runST $ do assoc <- declareMethod mcls meth
+                       let otherMeths = J.classMethods c
+                       assocs' <- mapM (declareMethod c) otherMeths
+                       let ctx = JCrucible.JVMContext (Map.fromList (assoc:assocs')) undefined
+                       JCrucible.defineMethod ctx (J.className mcls) meth
   return (JVM_CFG cfg)
 
 crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
