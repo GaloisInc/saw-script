@@ -15,6 +15,7 @@ Description:
 
 library
   build-depends:
+    ansi-wl-pprint,
     base == 4.*,
     containers,
     lens,
@@ -24,7 +25,7 @@ library
     transformers,
     vector,
     parameterized-utils,
-    reflection                                           
+    reflection
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Simulator.What4

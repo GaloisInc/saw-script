@@ -18,6 +18,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Verifier.SAW.Simulator.What4.FirstOrder
   (
