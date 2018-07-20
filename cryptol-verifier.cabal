@@ -33,6 +33,7 @@ library
     saw-core,
     saw-core-aig,
     saw-core-sbv,
+    saw-core-what4,
     what4,
     sbv,
     vector,
