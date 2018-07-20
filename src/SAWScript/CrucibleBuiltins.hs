@@ -900,7 +900,7 @@ crucible_java_cfg bic _ c mname = do
   let cfg = runST $ case (args, ret) of
         (Some argsRepr, Some retRepr) -> do
           h <- Crucible.withHandleAllocator (\halloc -> Crucible.mkHandle' halloc (fromString (J.methodName meth)) argsRepr retRepr)
-          let ctx = JCrucible.JVMContext (Map.fromList [((cname, mkey), JCrucible.JVMHandleInfo meth h)]) undefined
+          let ctx = JCrucible.JVMContext (Map.fromList [((cname, mkey), JCrucible.JVMHandleInfo meth h)])
           JCrucible.defineMethod ctx cname meth
   return (JVM_CFG cfg)
 
