@@ -63,6 +63,7 @@ library
     , saw-core
     , saw-core-aig
     , saw-core-sbv
+    , saw-core-what4
     , sbv >= 7.0
     , split
     , temporary
