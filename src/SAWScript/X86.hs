@@ -29,7 +29,6 @@ import           Data.Map ( Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
-import           Data.Foldable(toList)
 import           Control.Lens((^.))
 import GHC.Natural(Natural)
 import           System.IO(hFlush,stdout)
@@ -56,7 +55,8 @@ import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
           , gpGlobals, AbortedResult(..))
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
-import Lang.Crucible.Backend(getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred)
+import Lang.Crucible.Backend
+          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList)
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 
 
@@ -551,8 +551,8 @@ gGoal ctx g = go (gAssumes g)
 
 getGoals :: Sym -> IO [Goal]
 getGoals sym =
-  do obls <- getProofObligations sym
-     mapM toGoal (toList obls)
+  do obls <- proofGoalsToList <$> getProofObligations sym
+     mapM toGoal obls
   where
   toGoal (ProofGoal asmps g) =
     do as <- mapM (toSC sym) (toListOf (folded . labeledPred) asmps)

@@ -84,7 +84,8 @@ import Lang.Crucible.LLVM.MemModel.Generic
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Backend
-          (addAssumption, getProofObligations, assert, AssumptionReason(..)
+          (addAssumption, getProofObligations, proofGoalsToList
+          ,assert, AssumptionReason(..)
           ,LabeledPred(..), ProofGoal(..), labeledPredMsg)
 
 import Lang.Crucible.Backend.SAWCore
@@ -1014,7 +1015,7 @@ debugPPReg r s =
 
 _debugDumpGoals :: Sym -> IO ()
 _debugDumpGoals sym =
-  do obls <- getProofObligations sym
+  do obls <- proofGoalsToList <$> getProofObligations sym
      mapM_ sh (toList obls)
   where
   sh (ProofGoal _hyps g) = print (view labeledPredMsg g)

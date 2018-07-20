@@ -635,8 +635,8 @@ verifyPoststate opts sc cc mspec env0 globals ret =
        Crucible.assert sym p r
 
      obligations <- io $ Crucible.getProofObligations sym
-     io $ Crucible.setProofObligations sym mempty
-     io $ mapM verifyObligation (toList obligations)
+     io $ Crucible.clearProofObligations sym
+     io $ mapM verifyObligation (Crucible.proofGoalsToList obligations)
 
   where
     sym = cc^.ccBackend
