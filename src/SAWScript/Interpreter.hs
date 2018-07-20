@@ -1018,6 +1018,10 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
+  , prim "w4"             "ProofScript SatResult"
+    (pureVal satWhat4_Z3)
+    [ "Prove the current goal using What4 (Z3 backend)." ]
+  
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
     [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"

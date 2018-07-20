@@ -890,16 +890,17 @@ allParameterTypes c m
 crucible_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
 crucible_java_cfg bic _ c mname = do
   let cb = biJavaCodebase bic
+  -- mcls is the class containing the method meth
   (mcls, meth) <- io $ findMethod cb fixPos mname c
   -- TODO: should mcls below be c?
-  let args = Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth))
-      ret = maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth)
+  let args  = Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth))
+      ret   = maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth)
       cname = J.className mcls
-      mkey = J.methodKey meth
+      mkey  = J.methodKey meth
   let cfg = runST $ case (args, ret) of
         (Some argsRepr, Some retRepr) -> do
           h <- Crucible.withHandleAllocator (\halloc -> Crucible.mkHandle' halloc (fromString (J.methodName meth)) argsRepr retRepr)
-          let ctx = JCrucible.JVMContext (Map.fromList [((cname, mkey), JCrucible.JVMHandleInfo meth h)])
+          let ctx = JCrucible.JVMContext (Map.fromList [((cname, mkey), JCrucible.JVMHandleInfo meth h)]) undefined
           JCrucible.defineMethod ctx cname meth
   return (JVM_CFG cfg)
 

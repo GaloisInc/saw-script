@@ -83,7 +83,8 @@ library
     , macaw-x86-symbolic
     , flexdis86
     , elf-edit
-
+    , reflection
+              
   hs-source-dirs: src
 
   exposed-modules:
@@ -140,6 +141,7 @@ library
     SAWScript.Prover.SBV
     SAWScript.Prover.RME
     SAWScript.Prover.ABC
+    SAWScript.Prover.What4              
     SAWScript.Prover.Exporter
 
     SAWScript.X86
