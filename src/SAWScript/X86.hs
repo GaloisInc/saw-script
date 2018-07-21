@@ -463,7 +463,7 @@ doSim opts elf sfs name (globs,overs) st =
 
 
      gp <- case execResult of
-             FinishedExecution _ res ->
+             FinishedResult _ res ->
                 case res of
                   TotalRes gp -> return gp
                   PartialRes _pre gp _ab -> return gp
