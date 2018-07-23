@@ -24,6 +24,7 @@ Stability   : provisional
 
 module SAWScript.Value where
 
+import Data.Monoid ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
@@ -32,7 +33,7 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (StateT(..), get, put)
+import Control.Monad.State (StateT(..), get, gets, put)
 import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
 import qualified Data.Map as M
@@ -85,7 +86,9 @@ import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import Lang.Crucible.JVM.Translation (JVM)
+
+import           Lang.Crucible.JVM.Translation (JVM)
+import qualified Lang.Crucible.JVM.Translation as CJ
 
 -- Values ----------------------------------------------------------------------
 
@@ -380,6 +383,10 @@ data TopLevelRW =
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
+  , rwClassTrans :: Map JSS.ClassName CJ.ClassTranslation
+  -- ^ crucible-jvm: Classes that have already been translated
+  -- Not sure if this is the best place to store this, but we don't want to
+  -- keep translating the same methods/classes over and over
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
@@ -433,6 +440,17 @@ getTopLevelRW = TopLevel get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
+
+-- | Access the current state of Java Class translation
+getClassTrans :: TopLevel (Map JSS.ClassName CJ.ClassTranslation)
+getClassTrans = TopLevel (gets rwClassTrans)
+
+-- | Add a newly translated class to the translation
+addClassTrans :: JSS.ClassName -> CJ.ClassTranslation -> TopLevel ()
+addClassTrans cn trans = do
+  rw <- getTopLevelRW
+  let ct = rwClassTrans rw
+  putTopLevelRW (rw { rwClassTrans = M.insertWith (<>) cn trans ct })
 
 -- Other SAWScript Monads ------------------------------------------------------
 

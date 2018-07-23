@@ -38,7 +38,6 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 import           Data.IORef
 import           Data.Monoid ((<>))
-import qualified Language.JVM.Parser as J
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
@@ -54,7 +53,6 @@ import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
 import qualified Lang.Crucible.LLVM.Translation as CL
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtxt
@@ -259,18 +257,7 @@ data CrucibleContext wptr =
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   }
 
-data CrucibleJavaContext =
-  CrucibleJavaContext
-  { _cjcClass          :: J.Class
-  , _cjcClassTrans     :: CJ.ClassTranslation
-  , _cjcBackend        :: Sym
-  -- TODO: do we need a CJ.MemImpl ???
-  , _cjcJavaSimContext :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
-  , _cjcJavaGlobals    :: Crucible.SymGlobalState Sym
-  }
-
 makeLenses ''CrucibleContext
-makeLenses ''CrucibleJavaContext
 makeLenses ''CrucibleSetupState
 makeLenses ''ResolvedState
 
@@ -279,10 +266,6 @@ ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
 ccTypeCtx :: Simple Lens (CrucibleContext wptr) TyCtxt.LLVMContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
-
-cjcJVMContext :: Simple Lens CrucibleJavaContext CJ.JVMContext
-cjcJVMContext = cjcClassTrans . CJ.transContext
-
 
 --------------------------------------------------------------------------------
 
