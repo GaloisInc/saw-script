@@ -103,9 +103,8 @@ import qualified Lang.Crucible.CFG.Core as Crucible
 import qualified Lang.Crucible.CFG.Extension as Crucible
   (IsSyntaxExtension)
 import qualified Lang.Crucible.FunctionHandle as Crucible
-import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
+import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Types as Crucible
@@ -559,9 +558,9 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
             checkSatOpt <- W4.getOptionSetting Crucible.sawCheckPathSat conf
             _ <- W4.setOpt checkSatOpt checkSat
 
-            let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
+            let simSt = Crucible.initSimState simCtx globals Crucible.defaultAbortHandler
             res <-
-              Crucible.runOverrideSim simSt rty $
+              Crucible.executeCrucible simSt $ Crucible.runOverrideSim rty $
                 do mapM_ (registerOverride opts cc simCtx)
                          (groupOn (view csName) lemmas)
                    liftIO $ do
@@ -569,7 +568,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                      Crucible.addAssumptions sym (Seq.fromList preds)
                    Crucible.regValue <$> (Crucible.callCFG cfg args')
             case res of
-              Crucible.FinishedExecution _ pr ->
+              Crucible.FinishedResult _ pr ->
                 do Crucible.GlobalPair retval globals1 <-
                      case pr of
                        Crucible.TotalRes gp -> return gp
@@ -648,8 +647,8 @@ verifyPoststate opts sc cc mspec env0 globals ret =
        Crucible.assert sym p r
 
      obligations <- io $ Crucible.getProofObligations sym
-     io $ Crucible.setProofObligations sym mempty
-     io $ mapM verifyObligation (toList obligations)
+     io $ Crucible.clearProofObligations sym
+     io $ mapM verifyObligation (Crucible.proofGoalsToList obligations)
 
   where
     sym = cc^.ccBackend
@@ -706,12 +705,12 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
              -- register all the functions defined in the LLVM module
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
-      let simSt = Crucible.initSimState simctx globals Crucible.defaultErrorHandler
-      res <- Crucible.runOverrideSim simSt Crucible.UnitRepr setupMem
+      let simSt = Crucible.initSimState simctx globals Crucible.defaultAbortHandler
+      res <- Crucible.executeCrucible simSt $ Crucible.runOverrideSim Crucible.UnitRepr setupMem
       (lglobals, lsimctx) <-
           case res of
-            Crucible.FinishedExecution st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.FinishedExecution st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
+            Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
+            Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
       return
          CrucibleContext{ _ccLLVMModuleTrans = mtrans
@@ -826,7 +825,7 @@ getGlobalPair opts pr =
       return gp
 
 runCFG ::
-  (Crucible.IsSyntaxExtension ext) =>
+  (Crucible.IsSyntaxExtension ext, Crucible.IsSymInterface sym) =>
   Crucible.SimContext p sym ext ->
   Crucible.SymGlobalState sym ->
   Crucible.FnHandle args a ->
@@ -834,8 +833,8 @@ runCFG ::
   Crucible.RegMap sym init ->
   IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
 runCFG simCtx globals h cfg args = do
-  let simSt = Crucible.initSimState simCtx globals Crucible.defaultErrorHandler
-  Crucible.runOverrideSim simSt (Crucible.handleReturnType h)
+  let simSt = Crucible.initSimState simCtx globals Crucible.defaultAbortHandler
+  Crucible.executeCrucible simSt $ Crucible.runOverrideSim (Crucible.handleReturnType h)
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
 
 
@@ -849,7 +848,7 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
       let globals = cc^.ccLLVMGlobals
       res  <- runCFG simCtx globals h cfg args
       case res of
-        Crucible.FinishedExecution _ pr -> do
+        Crucible.FinishedResult _ pr -> do
             gp <- getGlobalPair opts pr
             t <- Crucible.asSymExpr
                    (gp^.Crucible.gpValue)
@@ -876,7 +875,7 @@ extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg) =
       
       res  <- runCFG simCtx globals h cfg args
       case res of
-        Crucible.FinishedExecution _ pr -> do
+        Crucible.FinishedResult _ pr -> do
             gp <- getGlobalPair opts pr
             t <- Crucible.asSymExpr
                    (gp^.Crucible.gpValue)
@@ -916,7 +915,6 @@ crucible_java_cfg bic opts c mname = do
      case Map.lookup (J.className mcls, J.methodKey meth) cm of
         Nothing  -> fail $ unwords ["method", show $ J.methodKey meth, "not found"]
         Just (JCrucible.MethodTranslation _ (Crucible.SomeCFG cfg)) -> return (JVM_CFG (Crucible.AnyCFG cfg))
-
 
 crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
 crucible_java_extract bic opts c mname = do

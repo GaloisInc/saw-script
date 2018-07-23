@@ -1,0 +1,452 @@
+/*
+ * This example formally verifies Dr. Daniel Bernstein's reference
+ * implementation [1] of Salsa20 [2], a stream cipher also published by Dr.
+ * Bernstein.  Proofs are based on a Cryptol specification thereof developed
+ * independently by Galois, Inc [3].  The approach herein favors consistency
+ * over brevity and demonstrates SAW method specifications written in terms
+ * of low-level Cryptol method specifications, with an aim toward automating
+ * generation of the former.
+ *
+ * [1] Salsa20 description and various implementations
+ *     <https://cr.yp.to/snuffle.html>
+ *     Mirrored by Galois, Inc.:
+ *     <https://github.com/GaloisInc/saw-script/tree/master/examples/salsa20/djb>
+ * [2] Salsa20 written specification
+ *     <https://cr.yp.to/snuffle/spec.pdf>
+ * [3] Salsa20 Cryptol specification
+ *     <https://github.com/GaloisInc/saw-script/blob/master/examples/salsa20/Salsa20.cry>
+ */
+
+include "util.saw";
+
+/*
+ * Note the `import as` here.  Later, when we define method specifications for
+ * `ECRYPT_keysetup`, `ECRYPT_ivsetup`, `ECRYPT_encrypt_bytes`, etc., we will
+ * find that our SAW method specifications do not refer to the Salsa20 Cryptol
+ * specification.  This reflects that there's not a 1:1 correspondence
+ * between reference implementation functions and functions defined in the
+ * written specification, in order to conform to the ECRYPT interface and for
+ * optimization and portability.  But our approach based on low-level Cryptol
+ * specifications will overcome this deviation...
+ */
+
+import "../Salsa20.cry" as Salsa20;
+
+// various data types and macros that should be easy to update for different platforms
+let {{
+    /* * 8-bit unsigned integer type (Cryptol) */
+    type u8 = [8]
+
+    /* * 32-bit unsigned integer type (Cryptol) */
+    type u32 = [32]
+
+    /* * array index/length type */
+    type size_t = [32]
+
+    /* * void type representation */
+    type void = ()
+
+    /* * void value representation */
+    void = ()
+
+    /* *
+     * struct type from Salsa20 reference implementation:
+     *
+     * typedef struct {
+     *   u32 input[16]; /* could be compressed */
+     * } ECRYPT_ctx;
+     */
+    type ECRYPT_ctx = { input:[16]u32 }
+
+    /* *
+     * group/map a sequence of u8 to a sequence of little-endian u32 (per
+     * reference implementation) */
+    U8TO32_LITTLE : {n} (fin n) => [4*n]u8 -> [n]u32
+    U8TO32_LITTLE s = [Salsa20::littleendian i | i <- ((split s):[n][4][8])]
+
+    /* *
+     * map/join a sequence of little-endian u32 to a sequence of u8 (per
+     * reference implementation) */
+    U32TO8_LITTLE : {n} (fin n) => [n]u32 -> [4*n]u8
+    U32TO8_LITTLE s = join [Salsa20::littleendian_inverse i | i <- s]
+}};
+
+/** 8-bit unsigned integer type (SAW) */
+let u8 = (llvm_int 8);
+
+/** 32-bit unsigned integer type (SAW) */
+let u32 = (llvm_int 32);
+
+/**
+ * method specification for body of 2nd for-loop in salsa20_wordtobyte, which
+ * implements Salsa20::doubleround
+ *
+ * static void salsa20_doubleround(u32 x[16]);
+ */
+let salsa20_doubleround_setup : CrucibleSetup () = do {
+    (x, p_x) <- ptr_to_fresh "output" (llvm_array 16 u32);
+
+    crucible_execute_func [p_x];
+
+    crucible_points_to p_x (crucible_term {{ Salsa20::doubleround x }});
+};
+
+/*
+ * There is a 1:1 correspondence between salsa20_wordtobyte and
+ * Salsa20::Salsa20, so this method specification is straightforward.
+ *
+ * For this example, we aim for method specifications to be "complete", in
+ * the sense that they define the weakest preconditions and strongest
+ * postconditions for all arguments and state relevant to the function, and
+ * are thus useful as overrides for calling functions.
+ *
+ * The body of the 2nd for-loop in salsa20_wordtobyte implements
+ * Salsa20::doubleround, which is straightforward to verify if we refactor the
+ * reference implementation accordingly.  However, we aim to not modify the
+ * original source unless necessary.
+ */
+
+/**
+ * method specification for salsa20_wordtobyte, which implements Salsa20::Salsa20, the Salsa20 "hash" (original written spec) or "core" (updated term on website <https://cr.yp.to/salsa20.html>)
+ *
+ * static void salsa20_wordtobyte(u8 output[64], const u32 input[16])
+ */
+let salsa20_wordtobyte_setup : CrucibleSetup () = do {
+    p_output <- crucible_alloc (llvm_array 64 u8);
+    (input, p_input) <- ptr_to_fresh "input" (llvm_array 16 u32);
+
+    crucible_execute_func [p_output, p_input];
+
+    crucible_points_to p_output (crucible_term {{ Salsa20::Salsa20 (U32TO8_LITTLE input) }});
+    crucible_points_to p_input (crucible_term {{ input }});
+};
+
+/*
+ * From here, the reference implementation deviates substantially from the
+ * written specification, so our overridable SAW method specifications will
+ * not have "Salsa20::" prefixes referring to the Salsa20 Cryptol
+ * specification.  To maintain validity, we will express these SAW method
+ * specifications in terms of low-level Cryptol specifications, and later
+ * verify a relationship between these method specifications and the Salsa20
+ * Cryptol spec.
+ *
+ * For this example, a "low-level Cryptol specification" consistently maps
+ * input arguments (and state in the general case, but the reference
+ * implementation is stateless) to likewise output arguments and a return
+ * value (and state in the general case).  We adopt the tuple convention for
+ * arguments type, again in a bid to clarify their correspondence to source.
+ *
+ * Here, we define a "guard" as a precondition on the arguments that is
+ * implicitly assumed rather than validated by the function.  Later, we define
+ * an implementation to meet a specification for all inputs (arguments and
+ * state) iff either the guard is not satisfied or the implementation and
+ * specification output agree given the same input.
+ *
+ * The low-level Cryptol specs use `undefined` for irrelevant input and `_`
+ * for irrelevant output.  For primitives, from the caller's perspective,
+ * values shouldn't change; however, implementations might change register
+ * values corresponding to these arguments during the course of execution,
+ * and one may wish to model that behavior.
+ */
+// void ECRYPT_keysetup(ECRYPT_ctx *x, const u8 *k, u32 kbits, u32 ivbits);
+let {{
+    type constraint ks_cstr a = (a >= 1, 2 >= a)       /* * type constraint for ECRYPT_keysetup */
+
+    type ks_args a = (ECRYPT_ctx, [16*a]u8, u32, u32)  /* * arguments type for ECRYPT_keysetup */
+    type ks_sig a = signature void (ks_args a)         /* * signature type for ECRYPT_keysetup */
+
+    /* * guard for ECRYPT_keysetup */
+    ks_guard : {a} (ks_cstr a) => guard (ks_args a)
+    ks_guard (x, k, kbits, ivBits) = (kbits == (`a * 128))
+
+    /* * low-level Cryptol specification for ECRYPT_keysetup */
+    ECRYPT_keysetup : {a} (ks_cstr a) => (ks_sig a)
+    ECRYPT_keysetup (x, k, kbits, ivBits) = (void, (x', k, kbits, ivBits))
+      where
+        x' = {input = (if(`a == (2:[2])) then [s0] # k0 # [s1] # n # [s2] # k1 # [s3]
+                                         else [t0] # k0 # [t1] # n # [t2] # k0 # [t3])}
+          where
+            [s0, s1, s2, s3] = U8TO32_LITTLE "expand 32-byte k"
+            [t0, t1, t2, t3] = U8TO32_LITTLE "expand 16-byte k"
+            n = x.input @@ ([6..9]:[4]size_t)
+            [k0, k1] = (split ((U8TO32_LITTLE k) # zero)):[2][4][32]
+}};
+
+/**
+ * method specification for ECRYPT_keysetup, which initializes the key
+ * component of a "context" for encryption in a manner compatible with the
+ * ECRYPT validation framework
+ */
+let ECRYPT_keysetup_setup (kBytes: Int) : CrucibleSetup () = do {
+    x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    (k, p_k) <- ptr_to_fresh "k" (llvm_array kBytes u8);
+    let kbits = {{ (`kBytes * 8):u32 }}; let ct_kbits = crucible_term kbits;
+    let ivbits = {{ 0:u32 }}; let ct_ivbits = crucible_term ivbits; // ignored (ECRYPT test suite compatibility)
+
+    crucible_precond {{ ks_guard (x, k, kbits, ivbits) }};
+
+    crucible_execute_func [p_x, p_k, ct_kbits, ct_ivbits];
+
+    let {{ (_, (x', k', _, _)) = ECRYPT_keysetup (x, k, kbits, undefined) }};
+    let x_input' = {{ x'.input }};
+
+    crucible_points_to p_x (crucible_struct [ crucible_term x_input' ]);
+    crucible_points_to p_k (crucible_term {{ k' }});
+};
+
+// void ECRYPT_ivsetup(ECRYPT_ctx *x,const u8 *iv)
+let {{
+    type ivs_args = (ECRYPT_ctx, [8]u8)     /* * arguments type for ECRYPT_ivsetup */
+    type ivs_sig = signature void ivs_args  /* * signature type for ECRYPT_ivsetup */
+
+    /* * low-level Cryptol specification for ECRYPT_ivsetup */
+    ECRYPT_ivsetup : ivs_sig
+    ECRYPT_ivsetup (x, iv) = (void, (x', iv))
+      where
+        x' = {input = (updates x.input iv_indices _iv)}
+          where
+            iv_indices = ([6..9]:[4]size_t)
+            _iv = (U8TO32_LITTLE iv) # zero
+}};
+
+/** method specification for ECRYPT_ivsetup, which initializes the IV and counter component of a "context" for encryption in a manner compatible with the ECRYPT validation framework */
+let ECRYPT_ivsetup_setup : CrucibleSetup () = do {
+    x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    (iv, p_iv) <- ptr_to_fresh "iv" (llvm_array 8 u8);
+
+    crucible_execute_func [p_x, p_iv];
+
+    let {{ (_, (x', iv')) = ECRYPT_ivsetup (x, iv) }};
+    let ct_x_input' = crucible_term {{ x'.input }};
+
+    crucible_points_to p_x (crucible_struct [ ct_x_input' ]);
+    crucible_points_to p_iv (crucible_term {{ iv' }});
+};
+
+// void ECRYPT_encrypt_bytes(ECRYPT_ctx *x, const u8 *m, u8 *c, u32 bytes)
+let {{
+    type constraint eb_cstr a = (32 >= (width a))     /* * type constraint for ECRYPT_encrypt_bytes */
+    type eb_args a = (ECRYPT_ctx, [a]u8, [a]u8, u32)  /* * arguments type for ECRYPT_encrypt_bytes */
+    type eb_sig a = signature void (eb_args a)        /* * signature type for ECRYPT_encrypt_bytes */
+
+    /* * low-level Cryptol specification of ECRYPT_encrypt_bytes */
+    ECRYPT_encrypt_bytes : {a} (eb_cstr a) => (eb_sig a)
+    ECRYPT_encrypt_bytes (x, m, _, bytes) = (void, (x', m, c', bytes))
+      where
+        x_input = x.input
+        indices = [8..9]:[2]size_t
+        ctr = join (reverse (x_input @@ indices))
+
+        x' = {input = updates x_input indices ctr'}
+          where
+            chunks = (bytes + 63) >> 6
+            ctr' = (reverse ((split (ctr + (zero # chunks))):[2][32]))
+        c' = m ^ salsa
+          where
+            salsa = take (join [ Salsa20::Salsa20 (U32TO8_LITTLE (split (join (updates x_input indices (reverse (split i)))))) | i <- [ctr...] ])
+
+    // ECRYPT_decrypt_bytes is an alias for ECRYPT_encrypt_bytes
+    ECRYPT_decrypt_bytes = ECRYPT_encrypt_bytes
+}};
+
+/** method specification of ECRYPT_encrypt_bytes */
+let ECRYPT_encrypt_bytes_setup (bytes: Int) : CrucibleSetup () = do {
+    x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    (m, p_m) <- ptr_to_fresh "m" (llvm_array bytes u8);
+    p_c <- crucible_alloc (llvm_array bytes u8);
+    let {{ bytes = `bytes:u32 }};
+    let ct_bytes = crucible_term {{ bytes }};
+
+    crucible_execute_func [p_x, p_m, p_c, ct_bytes];
+
+    let {{ (_, (x', m', c', _)) = ECRYPT_encrypt_bytes (x, m, undefined, bytes) }};
+    let x_input' = {{ x'.input }};
+
+    crucible_points_to p_x (crucible_struct [ crucible_term x_input' ]);
+    crucible_points_to p_m (crucible_term {{ m' }});
+    crucible_points_to p_c (crucible_term {{ c' }});
+};
+
+/*
+ * Having defined overridable SAW method specifications for deviant reference
+ * functions in terms of low-level Cryptol specifications, we now need to
+ * justify that they actually have something to do with the Salsa20
+ * specification as expressed in Cryptol.  In this case, we expect that
+ * after initializing the context with a given key and nonce (via
+ * `ECRYPT_keysetup` and `ECRYPT_ivsetup`), then `ECRYPT_encrypt_bytes` will
+ * produce the expected ciphertext from given plaintext.  We could simply
+ * declare the key and nonce as fresh variables and establish a precondition
+ * that context has been initialized for our method specification (see below),
+ * but such a specification would not be useful in overrides.  Alternatively,
+ * we could create a wrapper function and write a method specification tying
+ * the wrapper to the Cryptol spec (a popular approach), but here we will
+ * achieve a similar effect without modifying or adding source by proving a
+ * property about the low-level Cryptol specs.
+ *
+ * This property says "Starting with any initial `ECRYPT_ctx` x, after running
+ * `ECRYPT_keysetup` for key k, then ECRYPT_ivsetup for nonce v, running
+ * `ECRYPT_encrypt_bytes` for plaintext m will output the same ciphertext (c')
+ * as `Salsa20::Salsa20_encrypt` for the same k, v, and m."  It reflects a
+ * wrapper calling these functions in succession.
+ */
+let {{
+    ECRYPT_key_iv_encrypt_meets_spec : {ks, mb} (ks_cstr ks, eb_cstr mb) => ([ks*16]u8, [8]u8, [mb]u8, {input:[16]u32}) -> Bit
+    ECRYPT_key_iv_encrypt_meets_spec (k, v, m, x) = (c'_impl == c'_spec)
+      where
+        kbits = (`ks * 128):u32
+        bytes = `mb
+
+        (_, (x', k', _, _)) = ECRYPT_keysetup (x, k, kbits, undefined)
+        (_, (x'', v')) = ECRYPT_ivsetup (x', v)
+        (_, (x''', m', c'_impl, _)) = ECRYPT_encrypt_bytes (x'', m, undefined, bytes)
+        c'_spec = Salsa20::Salsa20_encrypt (k, v, m)
+}};
+
+/**
+ * This is an alternative, more direct way to say ECRYPT_encrypt_bytes
+ * encrypts plaintext with a given key and IV as we expect, provided context
+ * has been established -- but proofs based on this spec are not useful as
+ * overrides.
+ */
+// void ECRYPT_encrypt_bytes(ECRYPT_ctx *x, const u8 *m, u8 *c, u32 bytes)
+let ECRYPT_encrypt_bytes_setup' (bytes: Int) (a: Int) : CrucibleSetup () = do {
+    k <- crucible_fresh_var "k" (llvm_array (eval_int {{ `(a * 16):[6] }}) u8);
+    v <- crucible_fresh_var "v" (llvm_array 8 u8);
+
+    let x_input = {{ (if (`a == (2:[2])) then [s0] # k0 # [s1] # n # [s2] # k1 # [s3]
+                                         else [t0] # k0 # [t1] # n # [t2] # k0 # [t3])
+              where
+                [s0, s1, s2, s3] = U8TO32_LITTLE "expand 32-byte k"
+                [t0, t1, t2, t3] = U8TO32_LITTLE "expand 16-byte k"
+                n = (U8TO32_LITTLE v) # (zero:[2][32])
+                [k0, k1] = (split ((U8TO32_LITTLE k) # zero)):[2][4][32] }};
+    // x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32);
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+
+    (m, p_m) <- ptr_to_fresh "m" (llvm_array bytes u8);
+    p_c <- crucible_alloc (llvm_array bytes u8);
+
+    let {{ bytes = `bytes:u32 }};
+    let ct_bytes = crucible_term {{ bytes }};
+
+    crucible_execute_func [p_x, p_m, p_c, ct_bytes];
+
+    let x_input' = {{
+      updates x_input indices ((reverse (split chunks)):[2][32])
+        where
+          chunks = (bytes + 63) >> 6
+          indices = [8..9]:[2]size_t
+    }};
+
+    crucible_points_to p_x (crucible_struct [ crucible_term x_input' ]);
+    crucible_points_to p_m (crucible_term {{ m }});
+    crucible_points_to p_c (crucible_term {{ Salsa20::Salsa20_encrypt (k, v, m) }});
+};
+
+let main : TopLevel() = do {
+    print "Loading salsa20.bc...";
+    m <- llvm_load_module "salsa20.bc";
+    print m;
+
+    // print "Verifying salsa20_doubleround...";
+    // salsa20_doubleround_result <- time (crucible_llvm_verify m "salsa20_doubleround" [] false salsa20_doubleround_setup abc);
+
+    print "Verifying salsa20_wordtobyte...";
+    salsa20_wordtobyte_result <- time (crucible_llvm_verify m "salsa20_wordtobyte" [/*salsa20_doubleround_result*/] false salsa20_wordtobyte_setup abc);
+
+    print "Verifying ECRYPT_keysetup (kbits=128)...";
+    ECRYPT_keysetup_16_result <- time (crucible_llvm_verify m "ECRYPT_keysetup" [] false (ECRYPT_keysetup_setup 16) abc);
+
+    print "Verifying ECRYPT_keysetup (kbits=256)...";
+    ECRYPT_keysetup_32_result <- time (crucible_llvm_verify m "ECRYPT_keysetup" [] false (ECRYPT_keysetup_setup 32) abc);
+
+    print "Verifying ECRYPT_ivsetup...";
+    ECRYPT_ivsetup_result <- time (crucible_llvm_verify m "ECRYPT_ivsetup" [] false ECRYPT_ivsetup_setup abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (1 byte message)...";
+    ECRYPT_encrypt_bytes_1_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 1) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (2 byte message)...";
+    ECRYPT_encrypt_bytes_2_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 2) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (4 byte message)...";
+    ECRYPT_encrypt_bytes_4_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 4) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (8 byte message)...";
+    ECRYPT_encrypt_bytes_8_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 8) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (16 byte message)...";
+    ECRYPT_encrypt_bytes_16_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 16) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (32 byte message)...";
+    ECRYPT_encrypt_bytes_32_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 32) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (64 byte message)...";
+    ECRYPT_encrypt_bytes_64_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 64) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (65 byte message)...";
+    ECRYPT_encrypt_bytes_65_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 65) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (96 byte message)...";
+    ECRYPT_encrypt_bytes_96_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 96) abc);
+
+    print "Verifying ECRYPT_encrypt_bytes based on context (128 byte message)...";
+    ECRYPT_encrypt_bytes_128_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 128) abc);
+
+    print "Verifying that the implementation is actually related to the spec for various key/message sizes...";
+
+    print "Key Bytelength: 128, Message Bytelength: 1";
+    ECRYPT_key_iv_encrypt_meets_spec_1_1 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 1} }});
+    print "Key Bytelength: 256, Message Bytelength: 1";
+    ECRYPT_key_iv_encrypt_meets_spec_2_1 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 1} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 2";
+    ECRYPT_key_iv_encrypt_meets_spec_1_2 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 2} }});
+    print "Key Bytelength: 256, Message Bytelength: 2";
+    ECRYPT_key_iv_encrypt_meets_spec_2_2 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 2} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 4";
+    ECRYPT_key_iv_encrypt_meets_spec_1_4 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 4} }});
+    print "Key Bytelength: 256, Message Bytelength: 4";
+    ECRYPT_key_iv_encrypt_meets_spec_2_4 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 4} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 8";
+    ECRYPT_key_iv_encrypt_meets_spec_1_8 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 8} }});
+    print "Key Bytelength: 256, Message Bytelength: 8";
+    ECRYPT_key_iv_encrypt_meets_spec_2_8 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 8} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 16";
+    ECRYPT_key_iv_encrypt_meets_spec_1_16 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 16} }});
+    print "Key Bytelength: 256, Message Bytelength: 16";
+    ECRYPT_key_iv_encrypt_meets_spec_2_16 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 16} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 32";
+    ECRYPT_key_iv_encrypt_meets_spec_1_32 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 32} }});
+    print "Key Bytelength: 256, Message Bytelength: 32";
+    ECRYPT_key_iv_encrypt_meets_spec_2_32 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 32} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 64";
+    ECRYPT_key_iv_encrypt_meets_spec_1_64 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 64} }});
+    print "Key Bytelength: 256, Message Bytelength: 64";
+    ECRYPT_key_iv_encrypt_meets_spec_2_64 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 64} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 65";
+    ECRYPT_key_iv_encrypt_meets_spec_1_65 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 65} }});
+    print "Key Bytelength: 256, Message Bytelength: 65";
+    ECRYPT_key_iv_encrypt_meets_spec_2_65 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 65} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 96";
+    ECRYPT_key_iv_encrypt_meets_spec_1_96 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 96} }});
+    print "Key Bytelength: 256, Message Bytelength: 96";
+    ECRYPT_key_iv_encrypt_meets_spec_2_96 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 96} }});
+
+    print "Key Bytelength: 128, Message Bytelength: 128";
+    ECRYPT_key_iv_encrypt_meets_spec_1_128 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{1, 128} }});
+    print "Key Bytelength: 256, Message Bytelength: 128";
+    ECRYPT_key_iv_encrypt_meets_spec_2_128 <- time (prove_print abc {{ ECRYPT_key_iv_encrypt_meets_spec`{2, 128} }});
+
+    print "salsa20.bc reference implementation verified.";
+};

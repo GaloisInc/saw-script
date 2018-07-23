@@ -110,11 +110,6 @@ satWhat4_solver solver sym unints sc mode term =
      -- log to stdout
      let logger _ str = putStr str
 
-     -- dump solver file (for debugging)
-     handle <- openFile "/Users/sweirich/dump.txt" WriteMode 
-     solver_adapter_write_smt2 solver sym handle lit 
-     hClose handle
-
      -- run solver 
      solver_adapter_check_sat solver sym logger lit $ \ r -> case r of 
          Sat (gndEvalFcn,_) -> do
@@ -123,7 +118,7 @@ satWhat4_solver solver sym unints sc mode term =
            return (Just (catMaybes mvals), stats) where
 
          Unsat   -> return (Nothing, stats)
-         
+
          Unknown -> fail "Prover returned Unknown"
 
 

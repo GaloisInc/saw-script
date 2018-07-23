@@ -32,5 +32,8 @@ before_install:
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
 
 script:
+  - git submodule init
+  - git submodule update
+  - (cd deps/abcBridge && git submodule init && git submodule update)
   - cabal update
   - cabal new-build -j --disable-optimization --allow-newer

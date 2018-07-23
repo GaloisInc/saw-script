@@ -52,3 +52,6 @@
 [submodule "deps/dwarf"]
 	path = deps/dwarf
 	url = https://github.com/GaloisInc/dwarf.git
+[submodule "deps/saw-core-what4"]
+	path = deps/saw-core-what4
+	url = https://github.com/GaloisInc/saw-core-what4.git
