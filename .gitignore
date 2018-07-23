@@ -13,6 +13,7 @@ build-sandbox-version-pins.txt
 stack.yaml
 .DS_Store
 .ghc.environment*
+.class
 dist-newstyle
 *~
 *#
