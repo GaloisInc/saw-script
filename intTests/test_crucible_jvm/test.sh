@@ -1,3 +1,3 @@
-make Stat.class
-javap -c Stat
-stack exec saw stat_crucible.saw
+make Dyn.class
+javap -c Dyn
+stack exec saw dyn_crucible.saw
