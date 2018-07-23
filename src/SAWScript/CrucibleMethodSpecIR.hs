@@ -262,7 +262,9 @@ data CrucibleContext wptr =
 data CrucibleJavaContext =
   CrucibleJavaContext
   { _cjcClass          :: J.Class
+  , _cjcClassTrans     :: CJ.ClassTranslation
   , _cjcBackend        :: Sym
+  -- TODO: do we need a CJ.MemImpl ???
   , _cjcJavaSimContext :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
   , _cjcJavaGlobals    :: Crucible.SymGlobalState Sym
   }
@@ -277,6 +279,10 @@ ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
 ccTypeCtx :: Simple Lens (CrucibleContext wptr) TyCtxt.LLVMContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
+
+cjcJVMContext :: Simple Lens CrucibleJavaContext CJ.JVMContext
+cjcJVMContext = cjcClassTrans . CJ.transContext
+
 
 --------------------------------------------------------------------------------
 

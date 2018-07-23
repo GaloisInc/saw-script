@@ -22,6 +22,11 @@ Stability   : provisional
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+{-# OPTIONS_GHC -fno-warn-unused-local-binds #-}
+{-# OPTIONS_GHC -fno-warn-unused-matches #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+
+
 module SAWScript.CrucibleBuiltins
     ( show_cfg
     , crucible_java_cfg
@@ -75,6 +80,7 @@ import qualified Text.LLVM.PP as L (ppType)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 import qualified Language.JVM.Parser as J
+import qualified Verifier.Java.Codebase as J
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
@@ -103,6 +109,8 @@ import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Types as Crucible
+
+import qualified Lang.Crucible.Analysis.Postdom as Crucible
 
 import qualified Lang.Crucible.JVM.Translation as JCrucible
 
@@ -137,6 +145,8 @@ import SAWScript.Utils as SS
 import SAWScript.CrucibleMethodSpecIR
 import SAWScript.CrucibleOverride
 import SAWScript.CrucibleResolveSetupValue
+
+import Debug.Trace
 
 
 type MemImpl = Crucible.MemImpl Sym
@@ -388,7 +398,7 @@ setupPrePointsTos ::
   [PointsTo]                 ->
   MemImpl                    ->
   IO MemImpl
-setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
+setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts 
   where
     tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
     nameEnv = mspec^.csPreState.csVarTypeNames
@@ -713,57 +723,59 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
                         }
       )
 
---data JVMHandleInfo where
---  JVMHandleInfo :: J.Method -> FnHandle init ret -> JVMHandleInfo
 
-methSig mcls meth = 
-  (Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth)),
-   maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth))
-
+-- NOTE: unlike the LLVM version of this function, which is already provided with a
+-- translated module, this function needs to first *translate* the JVM code to crucible and
+-- then set up the context for symbolic simulation.
 setupCrucibleJavaContext ::
    BuiltinContext -> Options -> J.Class ->
    (CrucibleJavaContext -> TopLevel a) ->
    TopLevel a
 setupCrucibleJavaContext bic opts c action = do
+  -- halloc :: HandleAllocator RealWorld
   halloc <- getHandleAlloc
   AIGProxy proxy <- getProxy
-  action =<< (io $ do
+  action =<< (io $ do   -- only the IO monad, nothing else
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
+      let cb  = biJavaCodebase bic
       let verbosity = simVerbose opts
       sym <- Crucible.newSAWCoreBackend proxy sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
       _ <- W4.setOpt verbSetting (toInteger verbosity)
+      
+      -- translate the class      
+      transClass <- stToIO $ JCrucible.translateClass halloc c
 
-      -- declare bindings for all methods in the *current* class
-      let methods = J.classMethods c
-      let sigs = map (methSig c) methods
-      let mkHandle (Some argTypes, Some retType) meth = do
-           (h :: Crucible.FnHandle args ret) <- Crucible.withHandleAllocator $
-             \halloc -> 
-               (Crucible.mkHandle' halloc (fromString (J.methodName meth)) argTypes retType)
-           return (JCrucible.JVMHandleInfo meth h)
-           
-      let handles = runST $ zipWithM mkHandle sigs methods
-      let methIds = map ((J.className c,) . J.methodKey) methods
-      let ctx = JCrucible.JVMContext (Map.fromList (zip methIds handles)) undefined
+      -- set up the simulation context
+      
+      let sm = JCrucible.symbolMap (transClass^.JCrucible.transContext)
+      let cm = JCrucible.cfgMap transClass
+      let gm = JCrucible.staticTable (transClass^.JCrucible.transContext)
             
-      let fnBindings = runST $ mapM (JCrucible.defineMethod' (J.className c) ctx) handles
+      let bindings = Crucible.fnBindingsFromList (map (mkFunBinding . snd) (Map.toList sm)) where
+            mkFunBinding (JCrucible.JVMHandleInfo m _) = do
+              case Map.lookup (J.className c, J.methodKey m) cm of
+                Just (JCrucible.MethodTranslation h (Crucible.SomeCFG g)) -> 
+                  Crucible.FnBinding h (Crucible.UseCFG g (Crucible.postdomInfo g))
+                Nothing  -> error "cannot find method!"
+            
 
-      let bindings = Crucible.fnBindingsFromList fnBindings
       let javaExtImpl :: Crucible.ExtensionImpl p sym ()
           javaExtImpl = Crucible.ExtensionImpl (\_sym _iTypes _logFn _f x -> case x of)
                                                (\x -> case x of)
-      let jsimctx = Crucible.initSimContext sym MapF.empty halloc stdout
+
+      let jsimctx   = Crucible.initSimContext sym MapF.empty halloc stdout
                         bindings javaExtImpl Crucible.SAWCruciblePersonality
-          jglobals = Crucible.emptyGlobals
+
       return
-         CrucibleJavaContext{ _cjcClass = c
-                            , _cjcBackend = sym
+         CrucibleJavaContext{ _cjcClass          = c
+                            , _cjcClassTrans     = transClass
+                            , _cjcBackend        = sym
                             , _cjcJavaSimContext = jsimctx
-                            , _cjcJavaGlobals = jglobals
+                            , _cjcJavaGlobals    = Crucible.emptyGlobals
                             }
       )
 
@@ -859,6 +871,9 @@ extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg) =
       (ecs, args) <- setupArgs sc sym h
       let simCtx  = cc^.cjcJavaSimContext
       let globals = cc^.cjcJavaGlobals
+      
+      traceIO $ "Running cfg"
+      
       res  <- runCFG simCtx globals h cfg args
       case res of
         Crucible.FinishedExecution _ pr -> do
@@ -890,64 +905,30 @@ crucible_llvm_cfg bic opts lm fn_name =
 
 --------------------------------------------------------------------------------
 
-javaTypeToRepr :: J.Type -> Some Crucible.TypeRepr
-javaTypeToRepr t =
-  case t of
-    (J.ArrayType _) -> refRepr
-    J.BooleanType   -> intRepr
-    J.ByteType      -> intRepr
-    J.CharType      -> intRepr
-    (J.ClassType _) -> refRepr
-    J.DoubleType    -> doubleRepr
-    J.FloatType     -> floatRepr
-    J.IntType       -> intRepr
-    J.LongType      -> longRepr
-    J.ShortType     -> intRepr
-  where
-    refRepr    = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMRefType)
-    intRepr    = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMIntType)
-    longRepr   = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMLongType)
-    doubleRepr = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMDoubleType)
-    floatRepr  = Some (Crucible.knownRepr :: Crucible.TypeRepr JCrucible.JVMFloatType)
-
-allParameterTypes :: J.Class -> J.Method -> [J.Type]
-allParameterTypes c m
-  | J.methodIsStatic m = J.methodParameterTypes m
-  | otherwise = J.ClassType (J.className c) : J.methodParameterTypes m
-
-declareMethod :: J.Class -> J.Method -> ST s ((J.ClassName, J.MethodKey), JCrucible.JVMHandleInfo)
-declareMethod mcls meth = do
-   let args  = Ctx.fromList (map javaTypeToRepr (allParameterTypes mcls meth))
-       ret   = maybe (Some Crucible.UnitRepr) javaTypeToRepr (J.methodReturnType meth)
-       cname = J.className mcls
-       mkey  = J.methodKey meth
-   case (args, ret) of
-     (Some argsRepr, Some retRepr) -> do
-       h <- Crucible.withHandleAllocator
-         (\halloc -> Crucible.mkHandle' halloc (fromString (J.methodName meth))
-                     argsRepr retRepr)
-       return ((cname, mkey), JCrucible.JVMHandleInfo meth h)
   
-
+-- | Create the JavaCFG by translating to Crucible
 crucible_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
-crucible_java_cfg bic _ c mname = do
+crucible_java_cfg bic opts c mname = do
   let cb = biJavaCodebase bic
-  -- mcls :: J.Class is the class containing the method meth, could be a superclass of c
-  -- meth :: J.Method
   (mcls, meth) <- io $ findMethod cb fixPos mname c
-  let cfg = runST $ do assoc <- declareMethod mcls meth
-                       let otherMeths = J.classMethods c
-                       assocs' <- mapM (declareMethod c) otherMeths
-                       let ctx = JCrucible.JVMContext (Map.fromList (assoc:assocs')) undefined
-                       JCrucible.defineMethod ctx (J.className mcls) meth
-  return (JVM_CFG cfg)
+  setupCrucibleJavaContext bic opts c $ \cc -> do
+     let cm = JCrucible.cfgMap (cc^.cjcClassTrans)
+     case Map.lookup (J.className mcls, J.methodKey meth) cm of
+        Nothing  -> fail $ unwords ["method", show $ J.methodKey meth, "not found"]
+        Just (JCrucible.MethodTranslation _ (Crucible.SomeCFG cfg)) -> return (JVM_CFG (Crucible.AnyCFG cfg))
+
 
 crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
 crucible_java_extract bic opts c mname = do
-  JVM_CFG cfg <- crucible_java_cfg bic opts c mname
+  let cb = biJavaCodebase bic
+  (mcls, meth) <- io $ findMethod cb fixPos mname c
   setupCrucibleJavaContext bic opts c $ \cc -> do
-    sc <- getSharedContext
-    io $ extractFromJavaCFG opts sc cc cfg
+     let cm = JCrucible.cfgMap (cc^.cjcClassTrans)
+     case Map.lookup (J.className mcls, J.methodKey meth) cm of
+        Nothing  -> fail $ unwords ["method", show $ J.methodKey meth, "not found"]
+        Just (JCrucible.MethodTranslation _ (Crucible.SomeCFG cfg)) -> do
+          sc <- getSharedContext
+          io $ extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg)
 
 --------------------------------------------------------------------------------
 

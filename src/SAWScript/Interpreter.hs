@@ -1018,15 +1018,15 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
-  , prim "w4"             "ProofScript SatResult"
-    (pureVal satWhat4_Z3)
-    [ "Prove the current goal using What4 (Z3 backend)." ]
+--  , prim "w4"             "ProofScript SatResult"
+--    (pureVal satWhat4_Z3)
+--    [ "Prove the current goal using What4 (Z3 backend)." ]
   
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
     [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
     ,  "goals 'prop1' and 'prop2'." ]
-
+    
   , prim "empty_ss"            "Simpset"
     (pureVal emptySimpset)
     [ "The empty simplification rule set, containing no rules." ]
@@ -1278,11 +1278,11 @@ primitives = Map.fromList
     , "results."
     ]
 
-  , prim "crucible_java_cfg"
+{-  , prim "crucible_java_cfg"
     "JavaClass -> String -> TopLevel CFG"
     (bicVal crucible_java_cfg)
     [ "Convert a Java method to a Crucible CFG."
-    ]
+    ] -}
 
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
     (bicVal crucible_java_extract)
