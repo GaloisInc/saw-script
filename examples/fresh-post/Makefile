@@ -1,7 +1,8 @@
 .PHONY: run clean
 
 run: source.bc
-	../../bin/saw fresh-post.saw
+	../../bin/saw fresh-post-good.saw
+	../../bin/saw fresh-post-bad.saw
 
 clean:
 	rm -f *.bc *.ll
