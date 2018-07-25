@@ -15,15 +15,32 @@ h_ref <- crucible_java_extract j "h_ref";
 print "**Extracting h_imp";
 h_imp <- crucible_java_extract j "h_imp";
 
+print "**Extracting i_imp";
+i_imp <- crucible_java_extract j "i_imp";
+
+
+print "**Evaluating: instance variable";
+sat_print abc {{ \(x:[32]) -> f_imp 3 == x }};
 
 
 print "**Proving equivalence: instance variable";
 prove_print abc {{ \x -> f_ref x == f_imp x }};
 
-print "**Proving equivalence: dynamic method";
+print "**Evaluating: dynamic method (f_virt 3)";
+sat_print abc {{ \(x:[32]) -> f_virt 3 == x }};
+
+print "**Proving equivalence: dynamic method ";
 prove_print abc {{ \x -> f_ref x == f_virt x }};
+
+print "**Evaluating: alternative constructor (h_imp 3)";
+sat_print abc {{ \(x:[32]) -> h_imp 3 == x }};
 
 print "**Proving equivalence: dynamic method";
 prove_print abc {{ \x -> h_ref x == h_imp x }};
+
+
+print "**Evaluating: invoke interface (i_imp 3)";
+sat_print abc {{ \(x:[32]) -> i_imp 3 == x }};
+
 
 print "Done.";
