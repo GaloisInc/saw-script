@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.Proof
 Description : Representations of SAW-Script proof states.
 License     : BSD3
 Maintainer  : huffman
@@ -8,7 +8,7 @@ Stability   : provisional
 module SAWScript.Proof where
 
 import Verifier.SAW.SharedTerm
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 
 -- | A theorem must contain a boolean term, possibly surrounded by one
 -- or more lambdas which are interpreted as universal quantifiers.
@@ -37,13 +37,14 @@ data ProofState =
   { psGoals :: [ProofGoal]
   , psConcl :: ProofGoal
   , psStats :: SolverStats
+  , psTimeout :: Maybe Integer
   }
 
 startProof :: ProofGoal -> ProofState
-startProof g = ProofState [g] g mempty
+startProof g = ProofState [g] g mempty Nothing
 
 finishProof :: ProofState -> (SolverStats, Maybe Theorem)
-finishProof (ProofState gs concl stats) =
+finishProof (ProofState gs concl stats _) =
   case gs of
     []    -> (stats, Just (Theorem (goalTerm concl)))
     _ : _ -> (stats, Nothing)

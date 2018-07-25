@@ -3,6 +3,7 @@ import "../support/MD5.cry";
 let md5_spec = do {
     msg <- java_var "msg" (java_array 16 java_byte);
     java_var "out" (java_array 16 java_byte);
+    java_sat_branches true;
     java_ensure_eq "out" {{ md5_ref msg }};
 };
 

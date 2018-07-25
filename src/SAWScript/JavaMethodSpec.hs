@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaMethodSpec
+Description : Interface to the Java symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
 
-{- |
-Module      : $Header$
-Description : Interface to the Java symbolic simulator.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaMethodSpec
   ( JavaMethodSpecIR
   , specMethod
@@ -65,7 +65,6 @@ import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaMethodSpec.Evaluator
 import SAWScript.JavaUtils
 import SAWScript.PathVC
-import SAWScript.TypedTerm
 import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutTop, printOutLnTop)
 import SAWScript.VerificationCheck
 
@@ -77,6 +76,7 @@ import Verifier.Java.SAWBackend hiding (basic_ss)
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 -- JSS Utilities {{{1
 
@@ -351,7 +351,7 @@ execBehavior meth bsl sc mbThis argLocals ps = do
        mapM_ ocStep (bsCommands bs)
 
 checkClassesInitialized :: MonadSim SharedContext m =>
-                           Pos -> String -> [String]
+                           Pos -> String -> [ClassName]
                         -> SAWJavaSim m ()
 checkClassesInitialized pos nm requiredClasses = do
   forM_ requiredClasses $ \c -> do
@@ -359,7 +359,7 @@ checkClassesInitialized pos nm requiredClasses = do
     let status = Map.lookup c (mem ^. memInitialization)
     when (status /= Just Initialized) $
       let msg = "The method spec \'" ++ nm ++
-                "\' requires that the class " ++ slashesToDots c ++
+                "\' requires that the class " ++ slashesToDots (unClassName c) ++
                 " is initialized.  SAWScript does not " ++
                 "currently support methods that initialize new classes."
        in throwIOExecException pos (ftext msg) ""
@@ -457,9 +457,9 @@ runValidation prover params sc results = do
      forM_ (zip [0..] (pvcChecks pvc)) $ \(n, vc) -> do
        let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
        g <- io $ scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc
-       printOutTop Info $ "Checking " ++ vcName vc
-       printOutTop Debug $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
-       printLn Info ""
+       printOutTop Debug $ "Checking " ++ vcName vc
+       printOutTop ExtraDebug $ " (" ++ scPrettyTerm defaultPPOpts g ++ ")"
+       printOutTop Debug ""
        prover vs n g
     else do
       let vsName = "an invalid path"
@@ -756,7 +756,7 @@ checkFinalState sc ms bs cl initPS = do
     forM_ (Map.toList (finalMem ^. memStaticFields)) $ \(f, fval) ->
       unless (Set.member f mentionedSFields) $
         unless(isArrayType (fieldIdType f)) $
-          let fieldDesc = fieldIdClass f ++ "." ++ fieldIdName f in
+          let fieldDesc = unClassName (fieldIdClass f) ++ "." ++ fieldIdName f in
           case Map.lookup f (initMem ^. memStaticFields) of
             Nothing -> pvcgFail $ hsep
               [ ftext "Modifies the unspecified static field"

@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.LLVMMethodSpecIR
 Description : Provides typechecked representation for LLVM function
               specifications and function for creating it from AST
               representation.
@@ -52,7 +52,7 @@ import Verifier.LLVM.Backend
 import Verifier.LLVM.Backend.SAW
 
 import SAWScript.LLVMExpr
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.Utils
 
 -- BehaviorSpec {{{1

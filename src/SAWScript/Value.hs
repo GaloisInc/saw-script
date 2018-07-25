@@ -1,5 +1,14 @@
+{- |
+Module      : SAWScript.Value
+Description : Value datatype for SAW-Script interpreter.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -13,13 +22,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
 
-{- |
-Module      : $Header$
-Description : Value datatype for SAW-Script interpreter.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.Value where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -29,7 +31,7 @@ import Control.Monad.ST
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (ReaderT(..), ask, asks)
+import Control.Monad.Reader (ReaderT(..), ask, asks, local)
 import Control.Monad.State (StateT(..), get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
@@ -39,9 +41,13 @@ import qualified Text.LLVM    as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import Data.Parameterized.Some
+import Data.Typeable
+
+import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
-import qualified SAWScript.CryptolEnv as CEnv
+import qualified SAWScript.Utils as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -52,15 +58,17 @@ import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
-import SAWScript.TypedTerm
-import SAWScript.ImportAIG
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.SAWCorePrimitives( concretePrimitives )
 
+import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
-import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts)
-import qualified Verifier.SAW.SharedTerm as SharedTerm (PPOpts(..), defaultPPOpts)
+import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
+                                       ppTerm, scPrettyTerm)
+import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
+                                                       ppTerm, scPrettyTerm)
+import Verifier.SAW.TypedTerm
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -72,9 +80,12 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.LLVM as Crucible
+import qualified Lang.Crucible.LLVM.Extension as Crucible
 import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
+import qualified Lang.Crucible.LLVM.Translation as Crucible
+import Lang.Crucible.JVM.Translation (JVM)
 
 -- Values ----------------------------------------------------------------------
 
@@ -113,17 +124,28 @@ data Value
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
-  | VCFG (Crucible.AnyCFG Crucible.LLVM)
+  | VCFG SAW_CFG
   | VGhostVar CIR.GhostGlobal
+
+data AIGNetwork where
+  AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
+
+data AIGProxy where
+  AIGProxy :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Proxy l g -> AIGProxy
+
+data SAW_CFG where
+  LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
+  JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data LLVMModule =
   LLVMModule
   { modName :: String
   , modMod :: L.Module
+  , modTrans :: Some Crucible.ModuleTranslation
   }
 
 showLLVMModule :: LLVMModule -> String
-showLLVMModule (LLVMModule name m) =
+showLLVMModule (LLVMModule name m _) =
   unlines [ "Module: " ++ name
           , "Types:"
           , showParts L.ppTypeDecl (L.modTypes m)
@@ -182,11 +204,11 @@ cryptolPPOpts opts =
     , C.useBase = ppOptsBase opts
     }
 
-sawPPOpts :: PPOpts -> SharedTerm.PPOpts
+sawPPOpts :: PPOpts -> SAWCorePP.PPOpts
 sawPPOpts opts =
-  SharedTerm.defaultPPOpts
-    { SharedTerm.ppBase = ppOptsBase opts
-    , SharedTerm.ppColor = ppOptsColor opts
+  SAWCorePP.defaultPPOpts
+    { SAWCorePP.ppBase = ppOptsBase opts
+    , SAWCorePP.ppColor = ppOptsColor opts
     }
 
 quietEvalOpts :: C.EvalOpts
@@ -232,10 +254,10 @@ showSimpset opts ss =
     ppRule r =
       PPL.char '*' PPL.<+>
       (PPL.nest 2 $
-       ppTerm (lhsRewriteRule r)
+       SAWCorePP.ppTerm opts' (lhsRewriteRule r)
        PPL.</> PPL.char '=' PPL.<+>
        ppTerm (rhsRewriteRule r))
-    ppTerm t = scPrettyTermDoc opts' t
+    ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
 showsPrecValue :: PPOpts -> Int -> Value -> ShowS
@@ -253,14 +275,16 @@ showsPrecValue opts p v =
                        showString n . showString "=" . showsPrecValue opts 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (scPrettyTerm opts' (ttTerm t))
+    VTerm t -> showString (SAWCorePP.scPrettyTerm opts' (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem t) -> showString "Theorem " . showParen True (showString (scPrettyTerm opts' t))
+    VTheorem (Theorem t) ->
+      showString "Theorem " .
+      showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMSetup {} -> showString "<<LLVM Setup>>"
     VCrucibleSetup{} -> showString "<<Crucible Setup>>"
@@ -278,7 +302,8 @@ showsPrecValue opts p v =
     VSatResult r -> showsSatResult opts r
     VUninterp u -> showString "Uninterp: " . shows u
     VAIG _ -> showString "<<AIG>>"
-    VCFG _ -> showString "<<CFG>>"
+    VCFG (LLVM_CFG g) -> showString (show g)
+    VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
   where
@@ -307,12 +332,14 @@ tupleLookupValue (VTuple vs) i
   | otherwise = error $ "no such tuple index: " ++ show i
 tupleLookupValue _ _ = error "tupleLookupValue"
 
-evaluate :: SharedContext -> Term -> Concrete.CValue
-evaluate sc t = Concrete.evalSharedTerm (scModule sc) concretePrimitives t
+evaluate :: SharedContext -> Term -> IO Concrete.CValue
+evaluate sc t =
+  (\modmap -> Concrete.evalSharedTerm modmap concretePrimitives t) <$>
+  scGetModuleMap sc
 
-evaluateTypedTerm :: SharedContext -> TypedTerm -> C.Value
+evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
 evaluateTypedTerm sc (TypedTerm schema trm) =
-  exportValueWithSchema schema (evaluate sc trm)
+  exportValueWithSchema schema <$> evaluate sc trm
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
@@ -342,6 +369,8 @@ data TopLevelRO =
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
+  , roPosition      :: SS.Pos
+  , roProxy         :: AIGProxy
   }
 
 data TopLevelRW =
@@ -364,6 +393,12 @@ runTopLevel (TopLevel m) = runStateT . runReaderT m
 io :: IO a -> TopLevel a
 io = liftIO
 
+withPosition :: SS.Pos -> TopLevel a -> TopLevel a
+withPosition pos (TopLevel m) = TopLevel (local (\ro -> ro{ roPosition = pos }) m)
+
+getPosition :: TopLevel SS.Pos
+getPosition = TopLevel (asks roPosition)
+
 getSharedContext :: TopLevel SharedContext
 getSharedContext = TopLevel (asks roSharedContext)
 
@@ -372,6 +407,12 @@ getJavaCodebase = TopLevel (asks roJavaCodebase)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
+
+getProxy :: TopLevel AIGProxy
+getProxy = TopLevel (asks roProxy)
+
+localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
+localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
 
 printOutLnTop :: Verbosity -> String -> TopLevel ()
 printOutLnTop v s =
@@ -427,11 +468,11 @@ data LLVMSetupState
 
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
-type CrucibleSetup wptr a =
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr) => StateT (CIR.CrucibleSetupState wptr) TopLevel a
+type CrucibleSetup arch a =
+  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
 
 data CrucibleSetupM a =
-  CrucibleSetupM { runCrucibleSetupM :: forall wptr. CrucibleSetup wptr a }
+  CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }
 
 instance Functor CrucibleSetupM where
   fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
@@ -563,10 +604,10 @@ instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue (Crucible.AnyCFG Crucible.LLVM) where
+instance IsValue SAW_CFG where
     toValue t = VCFG t
 
-instance FromValue (Crucible.AnyCFG Crucible.LLVM) where
+instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
@@ -578,7 +619,6 @@ instance FromValue CIR.CrucibleMethodSpecIR where
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
 -----------------------------------------------------------------------------------
-
 
 
 instance IsValue (AIGNetwork) where
@@ -770,3 +810,8 @@ addTraceTopLevel str action =
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
 addTraceStateT str action =
   StateT $ \s -> addTraceTopLevel str (runStateT action s)
+
+data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
+                                     , biJavaCodebase  :: JSS.Codebase
+                                     , biBasicSS       :: Simpset
+                                     }

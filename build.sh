@@ -3,7 +3,7 @@ set -x
 set -v
 set -e
 
-TESTABLE="saw-core jvm-verifier llvm-verifier"
+TESTABLE="abcBridge jvm-verifier parameterized-utils saw-core"
 
 dotests="false"
 jobs=""
@@ -24,6 +24,7 @@ done
 
 git submodule init
 git submodule update
+(cd deps/abcBridge && git submodule init && git submodule update)
 
 if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
     set +x

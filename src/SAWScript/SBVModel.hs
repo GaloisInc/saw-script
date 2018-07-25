@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.SBVModel
 Description : Abstract representation for .sbv file format.
 Maintainer  : jhendrix
 Stability   : provisional

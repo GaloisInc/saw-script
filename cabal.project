@@ -10,12 +10,22 @@ packages:
     deps/saw-core
     deps/saw-core-aig
     deps/saw-core-sbv
+    deps/saw-core-what4
     deps/cryptol-verifier
     deps/jvm-verifier
     deps/llvm-verifier
+    deps/crucible/what4
+    deps/crucible/what4-abc
     deps/crucible/crucible
-    deps/crucible/crucible-abc
+    deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
     deps/crucible/crucible-saw
-    deps/crucible/galois-matlab
     deps/parameterized-utils
+    deps/flexdis86
+    deps/flexdis86/binary-symbols
+    deps/macaw/base
+    deps/macaw/symbolic
+    deps/macaw/x86
+    deps/macaw/x86_symbolic
+    deps/elf-edit
+    deps/dwarf

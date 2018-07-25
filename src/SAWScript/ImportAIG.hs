@@ -1,21 +1,20 @@
+{- |
+Module      : SAWScript.ImportAIG
+Description : And-Inverter Graphs.
+License     : BSD3
+Maintainer  : huffman
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- |
-Module      : $Header$
-Description : And-Inverter Graphs.
-License     : BSD3
-Maintainer  : huffman
-Stability   : provisional
--}
 module SAWScript.ImportAIG
   ( readAIG
   , loadAIG
   , verifyAIGCompatible
-  , AIGNetwork
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -30,16 +29,14 @@ import qualified Data.Vector as V
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.AIG as AIG
-import qualified Data.ABC.GIA as ABC
 
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (scNot, scAnd, scOr)
+import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
 import SAWScript.Options
 
 type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
-
-type AIGNetwork = ABC.Network ABC.Lit ABC.GIA
 
 throwTP :: String -> TypeParser a
 throwTP = lift . throwE
@@ -57,15 +54,14 @@ bitblastSharedTerm _ v (asBoolType -> Just ()) = do
   modify (`V.snoc` v)
 bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
   inputs <- liftIO $ do
-    atFn <- scApplyPrelude_at sc
     wt <- scNat sc w
-    boolType <- scPrelude_Bool sc
+    boolType <- scApplyPrelude_Bool sc
     V.generateM (fromIntegral w) $ \i -> do
-      atFn wt boolType v =<< scNat sc (fromIntegral i)
+      scApplyPrelude_at sc wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
 bitblastSharedTerm _ _ tp = throwTP $ show $
   text "Could not parse AIG input type:" <$$>
-  indent 2 (scPrettyTermDoc defaultPPOpts tp)
+  indent 2 (ppTerm defaultPPOpts tp)
 
 parseAIGResultType :: SharedContext
                    -> Term -- ^ Term for type
@@ -85,7 +81,7 @@ parseAIGResultType sc (asBitvectorType -> Just w) = do
   put remaining
   -- Return remaining as a vector.
   liftIO $ do
-    boolType <- scPrelude_Bool sc
+    boolType <- scApplyPrelude_Bool sc
     scVector sc boolType (V.toList base)
 parseAIGResultType _ _ = throwTP "Could not parse AIG output type."
 
@@ -100,10 +96,10 @@ networkAsSharedTerms
     -> IO (V.Vector Term)
 networkAsSharedTerms ntk sc inputTerms outputLits = do
   -- Get evaluator
-  scNot <- scApplyPrelude_not sc
-  scAnd <- scApplyPrelude_and sc
-  scOr <- scApplyPrelude_or sc
-  scImpl <- scApplyPrelude_implies sc
+  let scNot = scApplyPrelude_not sc
+  let scAnd = scApplyPrelude_and sc
+  let scOr = scApplyPrelude_or sc
+  let scImpl = scApplyPrelude_implies sc
   scFalse <- scApplyPrelude_False sc
 
   -- Left is nonnegated, Right is negated
@@ -136,11 +132,13 @@ bitblastVarsAsInputLits sc args = do
   fmap snd $ runTypeParser V.empty $ do
     zipWithM_ (bitblastSharedTerm sc) inputs args
 
-withReadAiger :: FilePath
-              -> (forall g l. ABC.IsAIG l g => AIG.Network l g -> IO (Either String a))
+withReadAiger :: (AIG.IsAIG l g) =>
+                 AIG.Proxy l g
+              -> FilePath
+              -> (forall g' l'. AIG.IsAIG l' g' => AIG.Network l' g' -> IO (Either String a))
               -> IO (Either String a)
-withReadAiger path action = do
-   mntk <- try (AIG.aigerNetwork ABC.proxy path)
+withReadAiger proxy path action = do
+   mntk <- try (AIG.aigerNetwork proxy path)
    case mntk of
       Left e -> return (Left (show (e :: IOException)))
       Right ntk -> action ntk
@@ -174,16 +172,21 @@ translateNetwork opts sc ntk outputLits args resultType = do
     throwE "AIG contains more outputs than expected."
   lift $ scLambdaList sc args res
 
-loadAIG :: FilePath -> IO (Either String AIGNetwork)
-loadAIG f = do
-   mntk <- try (AIG.aigerNetwork ABC.proxy f)
+loadAIG :: (AIG.IsAIG l g) => AIG.Proxy l g  -> FilePath -> IO (Either String (AIG.Network l g))
+loadAIG p f = do
+   mntk <- try (AIG.aigerNetwork p f)
    case mntk of
       Left e -> return (Left (show (e :: IOException)))
       Right ntk -> return $ Right ntk
 
-readAIG :: Options -> SharedContext -> FilePath -> IO (Either String Term)
-readAIG opts sc f =
-  withReadAiger f $ \(AIG.Network ntk outputLits) -> do
+readAIG :: (AIG.IsAIG l g) =>
+           AIG.Proxy l g
+        -> Options
+        -> SharedContext
+        -> FilePath
+        -> IO (Either String Term)
+readAIG proxy opts sc f =
+  withReadAiger proxy f $ \(AIG.Network ntk outputLits) -> do
     inputs <- AIG.inputCount ntk
     inLen <- scNat sc (fromIntegral inputs)
     outLen <- scNat sc (fromIntegral (length outputLits))
@@ -194,8 +197,8 @@ readAIG opts sc f =
       translateNetwork opts sc ntk outputLits [("x", inType)] outType
 
 -- | Check that the input and output counts of the given
---   AIGNetworks are equal.
-verifyAIGCompatible :: AIGNetwork -> AIGNetwork -> IO ()
+--   networks are equal.
+verifyAIGCompatible :: AIG.Network l g -> AIG.Network l g -> IO ()
 verifyAIGCompatible x y = do
    inx <- AIG.networkInputCount x
    iny <- AIG.networkInputCount y

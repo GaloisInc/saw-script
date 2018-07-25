@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMExpr
+Description : Data structures for LLVM expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -10,13 +17,6 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-{- |
-Module      : $Header$
-Description : Data structures for LLVM expressions and types.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMExpr
   (-- * LLVM Expressions
     LLVMExprF(..)
@@ -331,8 +331,8 @@ logicTypeOfActual _ sc (LSS.IntType w) = do
   bType <- scBoolType sc
   lTm <- scNat sc (fromIntegral w)
   Just <$> scVecType sc lTm bType
-logicTypeOfActual _ sc LSS.FloatType = Just <$> scPrelude_Float sc
-logicTypeOfActual _ sc LSS.DoubleType = Just <$> scPrelude_Double sc
+logicTypeOfActual _ sc LSS.FloatType = Just <$> scApplyPrelude_Float sc
+logicTypeOfActual _ sc LSS.DoubleType = Just <$> scApplyPrelude_Double sc
 logicTypeOfActual dl sc (LSS.ArrayType n ty) = do
   melTyp <- logicTypeOfActual dl sc ty
   case melTyp of

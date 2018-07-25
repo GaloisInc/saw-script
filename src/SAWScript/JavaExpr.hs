@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaExpr
+Description : Data structures for Java expressions and types.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -9,13 +16,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-{- |
-Module      : $Header$
-Description : Data structures for Java expressions and types.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaExpr
   (-- * Java Expressions
     JavaExprF(..)
@@ -298,7 +298,7 @@ cryptolTypeOfActual sc ty = do
   maybe (return Nothing) (\nty -> Just <$> scCryptolType sc nty) mnty
 
 ppActualType :: JavaActualType -> String
-ppActualType (ClassInstance x) = JSS.slashesToDots (JSS.className x)
+ppActualType (ClassInstance x) = JSS.slashesToDots (JSS.unClassName (JSS.className x))
 ppActualType (ArrayInstance l tp) = show tp ++ "[" ++ show l ++ "]"
 ppActualType (PrimitiveType tp) = show tp
 
@@ -347,7 +347,7 @@ parseJavaExpr cb cls meth estr = parseParts eparts
                   "variable " ++ s ++
                   " referenced by name, but no debug info available"
         parseParts (fname:rest) = do
-          let cname = intercalate "/" (reverse rest)
+          let cname = JSS.mkClassName (intercalate "/" (reverse rest))
           mc <- lift $ tryLookupClass cb cname
           case (filter ((== fname) . fieldName) . filter fieldIsStatic . classFields) <$> mc of
             Just [fld] -> do

@@ -4,7 +4,8 @@ CODE     = ${wildcard code/*.c} \
            ${wildcard code/*.cry} \
            ${wildcard code/*.java} \
            ${wildcard code/*.saw}
-SPELLSRC = ${TARGET}.tex 
+TARBALL  = tmp/saw-tutorial-code.tar.gz
+SPELLSRC = ${TARGET}.tex
 NEWSPELL = ${TARGET}.SPELLNEW
 OLDSPELL = ${TARGET}.SPELLOLD
 SPELL    = aspell -t -l
@@ -18,20 +19,23 @@ PDFARGS   = -H tutorial-head.tex \
             --listings \
             -V documentclass:galois-whitepaper \
             -V fontsize:12 \
-            --latex-engine=pdflatex
+            --pdf-engine=pdflatex
 HTMLARGS  = --css doc.css \
             -B tutorial-before.html \
 	    --toc \
             --standalone \
             --self-contained
 
-all: ${TARGET}.pdf ${TARGET}.html
+all: ${TARGET}.pdf ${TARGET}.html ${TARBALL}
 
 ${TARGET}.pdf: ${SRCS} Makefile | tmp
 	pandoc ${PDFARGS} -o $@ ${TARGET}.md
 
 ${TARGET}.html: ${SRCS} Makefile | tmp
 	pandoc ${HTMLARGS} -o $@ ${TARGET}.md
+
+${TARBALL}: ${CODE}
+	tar czf ${TARBALL} code
 
 # Pre-processing step. Right now, does nothing.
 ${TARGET}.md: tutorial.md docode.hs ${CODE} | tmp

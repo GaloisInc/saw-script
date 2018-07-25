@@ -1,6 +1,14 @@
+{- |
+Module      : SAWScript.Builtins
+Description : Implementations of SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -10,22 +18,13 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.Builtins where
 
-import Data.Foldable (toList)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Functor
 import Control.Applicative
 import Data.Monoid
 #endif
-import Control.Lens
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
@@ -37,7 +36,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Time.Clock
-import qualified Data.Vector as V
+import Data.Typeable
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
@@ -45,61 +44,59 @@ import System.IO
 import System.IO.Temp (withSystemTempFile)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
-import Text.Read
+import Text.Read (readMaybe)
 
 
-import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
-  ( FiniteType(..), FiniteValue(..)
-  , readFiniteValues, readFiniteValue
-  , asFiniteTypePure, sizeFiniteType
+  ( FiniteType(..), readFiniteValue
   , FirstOrderValue(..)
-  , toFirstOrderValue, scFirstOrderValue, firstOrderTypeOf, fovVec
+  , toFirstOrderValue, scFirstOrderValue
   )
-import qualified Verifier.SAW.Position as Position
 import Verifier.SAW.Prelude
-import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
+import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
-import qualified Verifier.SAW.Typechecker (checkTerm)
 import Verifier.SAW.TypedAST
-import qualified Verifier.SAW.UntypedAST as UntypedAST
 
-import qualified SAWScript.CryptolEnv as CEnv
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
-import SAWScript.SolverStats
 import SAWScript.TopLevel
-import SAWScript.TypedTerm
 import SAWScript.Utils
 import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV
-import SAWScript.Value (ProofScript, printOutLnTop)
+import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
-import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
+import SAWScript.Prover.Util(checkBooleanSchema,liftCexBB)
+import SAWScript.Prover.Mode(ProverMode(..))
+import SAWScript.Prover.SolverStats
+import SAWScript.Prover.Rewrite(rewriteEqs)
+import qualified SAWScript.Prover.SBV as Prover
+import qualified SAWScript.Prover.RME as Prover
+import qualified SAWScript.Prover.ABC as Prover
+import qualified SAWScript.Prover.What4 as Prover
+import qualified SAWScript.Prover.Exporter as Prover
+
+import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
-import qualified Verifier.SAW.Simulator.RME as RME
-import qualified Verifier.SAW.Simulator.RME.Base as RME
-
-import qualified Data.ABC as ABC
 import qualified Data.SBV.Dynamic as SBV
 
-import qualified Data.ABC.GIA as GIA
 import qualified Data.AIG as AIG
 
 import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig)
@@ -115,11 +112,6 @@ import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
-
-data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biJavaCodebase  :: JSS.Codebase
-                                     , biBasicSS       :: Simpset
-                                     }
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -156,7 +148,7 @@ readSBV path unintlst =
        let schema = C.Forall [] [] (toCType (SBV.typOf pgm))
        trm <- io $ SBV.parseSBVPgm opts sc (\s _ -> Map.lookup s unintmap) pgm
        when (extraChecks opts) $ do
-         tcr <- io $ scTypeCheck sc trm
+         tcr <- io $ scTypeCheck sc Nothing trm
          case tcr of
            Left err ->
              printOutLnTop Error $ unlines $
@@ -176,9 +168,6 @@ readSBV path unintlst =
           SBV.TRecord bs -> C.tRec [ (C.packIdent n, toCType t) | (n, t) <- bs ]
 
 
--- | The 'AIG.Proxy' used by SAWScript.
-sawProxy :: AIG.Proxy GIA.Lit GIA.GIA
-sawProxy = GIA.proxy
 
 -- | Use ABC's 'dsec' command to equivalence check to terms
 -- representing SAIGs. Note that nothing is returned; you must read
@@ -189,61 +178,59 @@ sawProxy = GIA.proxy
 -- have more examples. It might be an improvement to take SAIGs as
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
-dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> IO ()
-dsecPrint sc t1 t2 = do
+dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> liftIO $ do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  writeSAIGInferLatches sc path1 t1
-  writeSAIGInferLatches sc path2 t2
+  Prover.writeSAIGInferLatches proxy sc path1 t1
+  Prover.writeSAIGInferLatches proxy sc path2 t2
   callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
 
 cecPrim :: AIGNetwork -> AIGNetwork -> TopLevel SV.ProofResult
-cecPrim x y = do
-  io $ verifyAIGCompatible x y
-  res <- io $ ABC.cec x y
+cecPrim (SV.AIGNetwork x) (SV.AIGNetwork y) = do
+  y' <- case cast y of
+          Just n -> return n
+          Nothing -> fail "Inconsistent AIG types"
+  io $ verifyAIGCompatible x y'
+  res <- io $ AIG.cec x y'
   let stats = solverStats "ABC" 0 -- TODO, count the size of the networks...
   case res of
-    ABC.Valid -> return $ SV.Valid stats
-    ABC.Invalid bs
+    AIG.Valid -> return $ SV.Valid stats
+    AIG.Invalid bs
       | Just fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
            return $ SV.InvalidMulti stats [("x", toFirstOrderValue fv)]
       | otherwise -> fail "cec: impossible, could not parse counterexample"
-    ABC.VerifyUnknown -> fail "cec: unknown result "
+    AIG.VerifyUnknown -> fail "cec: unknown result "
+
+bbPrim :: TypedTerm -> TopLevel AIGNetwork
+bbPrim t = do
+  SV.AIGProxy proxy <- SV.getProxy
+  sc <- SV.getSharedContext
+  aig <- io $ Prover.bitblastPrim proxy sc (ttTerm t) 
+  return (SV.AIGNetwork aig)
 
 loadAIGPrim :: FilePath -> TopLevel AIGNetwork
 loadAIGPrim f = do
+  SV.AIGProxy proxy <- SV.getProxy
   exists <- io $ doesFileExist f
   unless exists $ fail $ "AIG file " ++ f ++ " not found."
-  et <- io $ loadAIG f
+  et <- io $ loadAIG proxy f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right ntk -> return ntk
+    Right ntk -> return (SV.AIGNetwork ntk)
 
 saveAIGPrim :: String -> AIGNetwork -> TopLevel ()
-saveAIGPrim f n = io $ AIG.writeAiger f n
+saveAIGPrim f (SV.AIGNetwork n) = io $ AIG.writeAiger f n
 
 saveAIGasCNFPrim :: String -> AIGNetwork -> TopLevel ()
-saveAIGasCNFPrim f (AIG.Network be ls) =
+saveAIGasCNFPrim f (SV.AIGNetwork (AIG.Network be ls)) =
   case ls of
-    [l] -> do _ <- io $ GIA.writeCNF be l f
+    [l] -> do _ <- io $ AIG.writeCNF be l f
               return ()
     _ -> fail "save_aig_as_cnf: non-boolean term"
-
--- | Tranlsate a SAWCore term into an AIG
-bitblastPrim :: SharedContext -> Term -> IO AIGNetwork
-bitblastPrim sc t = do
-  t' <- rewriteEqs sc t
-{-
-  let s = ttSchema t'
-  case s of
-    C.Forall [] [] _ -> return ()
-    _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
--}
-  BBSim.withBitBlastedTerm sawProxy sc bitblastPrimitives t' $ \be ls -> do
-    return (AIG.Network be (toList ls))
 
 -- | Read an AIG file representing a theorem or an arbitrary function
 -- and represent its contents as a @Term@ lambda term. This is
@@ -251,10 +238,11 @@ bitblastPrim sc t = do
 readAIGPrim :: FilePath -> TopLevel TypedTerm
 readAIGPrim f = do
   sc <- getSharedContext
+  SV.AIGProxy proxy <- SV.getProxy
   exists <- io $ doesFileExist f
   unless exists $ fail $ "AIG file " ++ f ++ " not found."
   opts <- getOptions
-  et <- io $ readAIG opts sc f
+  et <- io $ readAIG proxy opts sc f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
     Right t -> io $ mkTypedTerm sc t
@@ -269,10 +257,10 @@ replacePrim pat replace t = do
   let fvpat = looseVars tpat
   let fvrepl = looseVars trepl
 
-  unless (fvpat == 0) $ fail $ unlines
+  unless (fvpat == emptyBitSet) $ fail $ unlines
     [ "pattern term is not closed", show tpat ]
 
-  unless (fvrepl == 0) $ fail $ unlines
+  unless (fvrepl == emptyBitSet) $ fail $ unlines
     [ "replacement term is not closed", show trepl ]
 
   io $ do
@@ -319,102 +307,6 @@ checkConvertiblePrim x y = do
             else "Not convertible")
    printOutLnTop Info str
 
--- | Write a @Term@ representing a theorem or an arbitrary
--- function to an AIG file.
-writeAIG :: SharedContext -> FilePath -> Term -> IO ()
-writeAIG sc f t = do
-  aig <- bitblastPrim sc t
-  ABC.writeAiger f aig
-
--- | Like @writeAIG@, but takes an additional 'Integer' argument
--- specifying the number of input and output bits to be interpreted as
--- latches. Used to implement more friendly SAIG writers
--- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-writeSAIG :: SharedContext -> FilePath -> Term -> Int -> IO ()
-writeSAIG sc file tt numLatches = do
-  aig <- bitblastPrim sc tt
-  GIA.writeAigerWithLatches file aig numLatches
-
--- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
--- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: SharedContext -> FilePath -> TypedTerm -> IO ()
-writeSAIGInferLatches sc file tt = do
-  ty <- scTypeOf sc (ttTerm tt)
-  s <- getStateType ty
-  let numLatches = sizeFiniteType s
-  writeSAIG sc file (ttTerm tt) numLatches
-  where
-    die :: Monad m => String -> m a
-    die why = fail $
-      "writeSAIGInferLatches: " ++ why ++ ":\n" ++
-      "term must have type of the form '(i, s) -> (o, s)',\n" ++
-      "where 'i', 's', and 'o' are all fixed-width types,\n" ++
-      "but type of term is:\n" ++ (pretty . ttSchema $ tt)
-
-    -- Decompose type as '(i, s) -> (o, s)' and return 's'.
-    getStateType :: Term -> IO FiniteType
-    getStateType ty = do
-      ty' <- scWhnf sc ty
-      case ty' of
-        (asPi -> Just (_nm, tp, body)) ->
-          -- NB: if we get unexpected "state types are different"
-          -- failures here than we need to 'scWhnf sc' before calling
-          -- 'asFiniteType'.
-          case (asFiniteTypePure tp, asFiniteTypePure body) of
-            (Just dom, Just rng) ->
-              case (dom, rng) of
-                (FTTuple [_i, s], FTTuple [_o, s']) ->
-                  if s == s' then
-                    return s
-                  else
-                    die "state types are different"
-                _ -> die "domain or range not a tuple type"
-            _ -> die "domain or range not finite width"
-        _ -> die "not a function type"
-
--- | Like @writeAIGInferLatches@, but takes an additional argument
--- specifying the number of input and output bits to be interpreted as
--- latches.
-writeAIGComputedLatches ::
-  SharedContext -> FilePath -> Term -> Int -> IO ()
-writeAIGComputedLatches sc file term numLatches = do
-  writeSAIG sc file term numLatches
-
-writeCNF :: SharedContext -> FilePath -> Term -> IO ()
-writeCNF sc f t = do
-  AIG.Network be ls <- bitblastPrim sc t
-  case ls of
-    [l] -> do
-      _ <- GIA.writeCNF be l f
-      return ()
-    _ -> fail "writeCNF: non-boolean term"
-
-write_cnf :: SharedContext -> FilePath -> TypedTerm -> IO ()
-write_cnf sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  writeCNF sc f t
-
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file.
-writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
-writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
-
--- | As above, but check that the type is monomorphic and boolean.
-write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
-write_smtlib2 sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  writeSMTLib2 sc f t
-
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
-writeUnintSMTLib2 unints sc f t = do
-  (_, _, l) <- prepSBV sc unints t
-  txt <- SBV.generateSMTBenchmark True l
-  writeFile f txt
-
-writeCore :: FilePath -> Term -> IO ()
-writeCore path t = writeFile path (scWriteExternal t)
 
 readCore :: FilePath -> TopLevel TypedTerm
 readCore path = do
@@ -423,14 +315,14 @@ readCore path = do
 
 withFirstGoal :: (ProofGoal -> TopLevel (a, SolverStats, Maybe ProofGoal)) -> ProofScript a
 withFirstGoal f =
-  StateT $ \(ProofState goals concl stats) ->
+  StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
     g : gs -> do
       (x, stats', mg') <- f g
       case mg' of
-        Nothing -> return (x, ProofState gs concl (stats <> stats'))
-        Just g' -> return (x, ProofState (g' : gs) concl (stats <> stats'))
+        Nothing -> return (x, ProofState gs concl (stats <> stats') timeout)
+        Just g' -> return (x, ProofState (g' : gs) concl (stats <> stats') timeout)
 
 quickcheckGoal :: SharedContext -> Integer -> ProofScript SV.SatResult
 quickcheckGoal sc n = do
@@ -472,15 +364,12 @@ trivial = withFirstGoal $ \goal -> do
   return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
-    checkTrue t =
-      case unwrapTermF t of
-        Lambda _ _ t' -> checkTrue t'
-        FTermF (CtorApp "Prelude.True" []) -> return ()
-        _ -> fail "trivial: not a trivial goal"
+    checkTrue (asLambdaList -> (_, asBool -> Just True)) = return ()
+    checkTrue _ = fail "trivial: not a trivial goal"
 
 split_goal :: ProofScript ()
 split_goal =
-  StateT $ \(ProofState goals concl stats) ->
+  StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
     (ProofGoal Existential _ _ _ _) : _ -> fail "not a universally-quantified goal"
@@ -494,7 +383,7 @@ split_goal =
              t2 <- io $ scLambdaList sc vars p2
              let g1 = ProofGoal Universal num (ty ++ ".left") name t1
              let g2 = ProofGoal Universal num (ty ++ ".right") name t2
-             return ((), ProofState (g1 : g2 : gs) concl stats)
+             return ((), ProofState (g1 : g2 : gs) concl stats timeout)
 
 getTopLevelPPOpts :: TopLevel PPOpts
 getTopLevelPPOpts = do
@@ -514,7 +403,8 @@ print_term t = do
 print_term_depth :: Int -> Term -> TopLevel ()
 print_term_depth d t = do
   opts <- getTopLevelPPOpts
-  printOutLnTop Info $ show (ppTermDepth opts d t)
+  let opts' = opts { ppMaxDepth = Just d }
+  printOutLnTop Info $ show (scPrettyTerm opts' t)
 
 print_goal :: ProofScript ()
 print_goal = withFirstGoal $ \goal -> do
@@ -526,8 +416,9 @@ print_goal = withFirstGoal $ \goal -> do
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n = withFirstGoal $ \goal -> do
   opts <- getTopLevelPPOpts
+  let opts' = opts { ppMaxDepth = Just n }
   printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-  printOutLnTop Info $ show (ppTermDepth opts n (goalTerm goal))
+  printOutLnTop Info $ scPrettyTerm opts' (goalTerm goal)
   return ((), mempty, Just goal)
 
 printGoalConsts :: ProofScript ()
@@ -563,40 +454,6 @@ beta_reduce_goal = withFirstGoal $ \goal -> do
   trm' <- io $ betaNormalize sc trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using ABC.
-{-
-satABCold :: SharedContext -> ProofScript SV.SatResult
-satABCold sc = StateT $ \g -> withBE $ \be -> do
-  let t = goalTerm g
-  t' <- prepForExport sc t
-  let (args, _) = asLambdaList t'
-      argNames = map fst args
-      argTys = map snd args
-  shapes <- mapM Old.parseShape argTys
-  mbterm <- Old.bitBlast be t'
-  case mbterm of
-    Right bterm -> do
-      case bterm of
-        Old.BBool l -> do
-          satRes <- ABC.checkSat be l
-          case satRes of
-            ABC.Unsat -> do
-              ft <- scApplyPrelude_False sc
-              return (SV.Unsat, g { goalTerm = ft })
-            ABC.Sat cex -> do
-              let r = liftCexBB shapes cex
-              tt <- scApplyPrelude_True sc
-              case r of
-                Left err -> fail $ "Can't parse counterexample: " ++ err
-                Right [v] ->
-                  return (SV.Sat v, g { goalTerm = tt })
-                Right vs -> do
-                  return (SV.SatMulti (zip argNames vs), g { goalTerm = tt })
-        _ -> fail "Can't prove non-boolean term."
-    Left err -> fail $ "Can't bitblast: " ++ err
--}
-
 returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
 returnsBool _ = False
@@ -607,51 +464,12 @@ checkBoolean sc t = do
   unless (returnsBool ty) $
     fail $ "Invalid non-boolean type: " ++ show ty
 
-checkBooleanType :: C.Type -> IO ()
-checkBooleanType (C.tIsBit -> True) = return ()
-checkBooleanType (C.tIsFun -> Just (_, ty')) = checkBooleanType ty'
-checkBooleanType ty =
-  fail $ "Invalid non-boolean type: " ++ pretty ty
-
-checkBooleanSchema :: C.Schema -> IO ()
-checkBooleanSchema (C.Forall [] [] t) = checkBooleanType t
-checkBooleanSchema s =
-  fail $ "Invalid polymorphic type: " ++ pretty s
-
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
-satABC :: SharedContext -> ProofScript SV.SatResult
-satABC sc = withFirstGoal $ \g -> io $ do
-  let t0 = goalTerm g
-  TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  tp <- scWhnf sc =<< scTypeOf sc t
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  BBSim.withBitBlastedPred sawProxy sc bitblastPrimitives t $ \be lit0 shapes -> do
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> AIG.not lit0
-  satRes <- AIG.checkSat be lit
-  ft <- scApplyPrelude_False sc
-  let stats = solverStats "ABC" (scSharedSize t0)
-  case satRes of
-    AIG.Unsat ->
-      case goalQuant g of
-        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    AIG.Sat cex -> do
-      let r = liftCexBB shapes cex
-      case r of
-        Left err -> fail $ "Can't parse counterexample: " ++ err
-        Right vs
-          | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            case goalQuant g of
-              Existential -> return (r', stats, Nothing)
-              Universal -> return (r', stats, Just (g { goalTerm = ft }))
-          | otherwise -> fail $ unwords ["ABC SAT results do not match expected arguments", show argNames, show vs]
-    AIG.SatUnknown -> fail "Unknown result from ABC"
+satABC :: ProofScript SV.SatResult
+satABC = do
+  SV.AIGProxy proxy <- lift SV.getProxy 
+  wrapProver (Prover.satABC proxy)
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
                     -> [String] -- ^ The value lines from the solver
@@ -665,9 +483,12 @@ parseDimacsSolution vars ls = map lkup vars
     assgnMap = Map.fromList (map varToPair vs)
     lkup v = Map.findWithDefault False v assgnMap
 
-satExternal :: Bool -> SharedContext -> String -> [String]
+satExternal :: Bool -> String -> [String]
             -> ProofScript SV.SatResult
-satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
+satExternal doCNF execName args = withFirstGoal $ \g -> do
+  sc <- SV.getSharedContext
+  SV.AIGProxy proxy <- SV.getProxy
+  io $ do
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
@@ -678,11 +499,11 @@ satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
   let args' = map replaceFileName args
       replaceFileName "%f" = path
       replaceFileName a = a
-  BBSim.withBitBlastedPred sawProxy sc bitblastPrimitives t $ \be l0 shapes -> do
+  BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $ \be l0 shapes -> do
   let l = case goalQuant g of
         Existential -> l0
         Universal -> AIG.not l0
-  vars <- (if doCNF then GIA.writeCNF else writeAIGWithMapping) be l path
+  vars <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
   (_ec, out, err) <- readProcessWithExitCode execName args' ""
   removeFile path
   unless (null err) $
@@ -711,226 +532,174 @@ satExternal doCNF sc execName args = withFirstGoal $ \g -> io $ do
         Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
     _ -> fail $ "Unexpected result from SAT solver:\n" ++ out
 
-writeAIGWithMapping :: GIA.GIA s -> GIA.Lit s -> FilePath -> IO [Int]
+writeAIGWithMapping :: AIG.IsAIG l g => g s -> l s -> FilePath -> IO [Int]
 writeAIGWithMapping be l path = do
-  nins <- GIA.inputCount be
-  ABC.writeAiger path (ABC.Network be [l])
+  nins <- AIG.inputCount be
+  AIG.writeAiger path (AIG.Network be [l])
   return [1..nins]
 
-rewriteEqs :: SharedContext -> Term -> IO Term
-rewriteEqs sc t = do
-  let eqs = map (mkIdent preludeName)
-            [ "eq_Bool", "eq_Nat", "eq_bitvector", "eq_VecBool"
-            , "eq_VecVec" ]
-  rs <- scEqsRewriteRules sc eqs
-  ss <- addRules rs <$> basic_ss sc
-  t' <- rewriteSharedTerm sc ss t
-  return t'
+writeAIGPrim :: FilePath -> Term -> TopLevel ()
+writeAIGPrim f t = do
+  SV.AIGProxy proxy <- SV.getProxy
+  sc <- SV.getSharedContext
+  liftIO $ Prover.writeAIG proxy sc f t
+
+writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
+writeSAIGPrim f t = do
+  SV.AIGProxy proxy <- SV.getProxy
+  sc <- SV.getSharedContext
+  liftIO $ Prover.writeSAIGInferLatches proxy sc f t
+
+writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
+writeSAIGComputedPrim f t n = do
+  SV.AIGProxy proxy <- SV.getProxy
+  sc <- SV.getSharedContext
+  liftIO $ Prover.writeSAIG proxy sc f t n
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using the RME library.
-satRME :: SharedContext -> ProofScript SV.SatResult
-satRME sc = withFirstGoal $ \g -> io $ do
-  let t0 = goalTerm g
-  TypedTerm schema t <- (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  tp <- scWhnf sc =<< scTypeOf sc t
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  RME.withBitBlastedPred sc Map.empty t $ \lit0 shapes -> do
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> RME.compl lit0
-  let stats = solverStats "RME" (scSharedSize t0)
-  case RME.sat lit of
-    Nothing ->
-      case goalQuant g of
-        Existential -> do ft <- scApplyPrelude_False sc
-                          return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    Just cex -> do
-      let m = Map.fromList cex
-      let n = sum (map sizeFiniteType shapes)
-      let bs = map (maybe False id . flip Map.lookup m) $ take n [0..]
-      let r = liftCexBB shapes bs
-      case r of
-        Left err -> fail $ "Can't parse counterexample: " ++ err
-        Right vs
-          | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            case goalQuant g of
-              Existential -> return (r', stats, Nothing)
-              Universal -> return (r', stats, Just g)
-          | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
+satRME :: ProofScript SV.SatResult
+satRME = wrapProver Prover.satRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
   SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
-prepSBV :: SharedContext -> [String] -> Term
-        -> IO (Term, [SBVSim.Labeler], SBV.Symbolic SBV.SVal)
-prepSBV sc unints t0 = do
-  -- Abstract over all non-function ExtCns variables
-  let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
-  exts <- filterM nonFun (getAllExts t0)
-  TypedTerm schema t' <- (scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-  checkBooleanSchema schema
-  (labels, lit) <- SBVSim.sbvSolve sc sbvPrimitives unints t'
-  return (t', labels, lit)
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
-satSBV :: SBV.SMTConfig -> SharedContext -> ProofScript SV.SatResult
-satSBV conf sc = satUnintSBV conf sc []
+satSBV :: SBV.SMTConfig -> ProofScript SV.SatResult
+satSBV conf = satUnintSBV conf []
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using SBV. (Currently ignores satisfying assignments.)
 -- Constants with names in @unints@ are kept as uninterpreted functions.
-satUnintSBV :: SBV.SMTConfig -> SharedContext -> [String] -> ProofScript SV.SatResult
-satUnintSBV conf sc unints = withFirstGoal $ \g -> io $ do
-  (t', labels, lit0) <- prepSBV sc unints (goalTerm g)
-  let lit = case goalQuant g of
-        Existential -> lit0
-        Universal -> liftM SBV.svNot lit0
-  tp <- scWhnf sc =<< scTypeOf sc t'
-  let (args, _) = asPiList tp
-      argNames = map fst args
-  SBV.SatResult r <- SBV.satWith conf lit
-  let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
-                          (scSharedSize t')
-  case r of
-    SBV.Satisfiable {} -> do
-      ft <- scApplyPrelude_False sc
-      let dict = SBV.getModelDictionary r
-          r' = getLabels stats labels dict argNames
-      case goalQuant g of
-        Existential -> return (r', stats, Nothing)
-        Universal -> return (r', stats, Just (g { goalTerm = ft }))
-    SBV.SatExtField {} -> fail "Prover returned model in extension field"
-    SBV.Unsatisfiable {} -> do
-      ft <- scApplyPrelude_False sc
-      case goalQuant g of
-        Existential -> return (SV.Unsat stats, stats, Just (g { goalTerm = ft }))
-        Universal -> return (SV.Unsat stats, stats, Nothing)
-    SBV.Unknown {} -> fail "Prover returned Unknown"
-    SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
-
-getLabels :: SolverStats -> [SBVSim.Labeler] -> Map.Map String SBV.CW -> [String] -> SV.SatResult
-getLabels stats ls d argNames =
-  if length argNames == length xs then
-    SV.SatMulti stats (zip argNames xs)
-  else
-    error $ unwords ["SBV SAT results do not match expected arguments", show argNames, show xs]
-
-  where
-    xs = fmap getLabel ls
-    getLabel :: SBVSim.Labeler -> FirstOrderValue
-    getLabel (SBVSim.BoolLabel s) = FOVBit (SBV.cwToBool (d Map.! s))
-    getLabel (SBVSim.IntegerLabel s) = FOVInt (cwToInteger (d Map.! s))
-    getLabel (SBVSim.WordLabel s) = d Map.! s &
-      (\(SBV.KBounded _ n) -> FOVWord (fromIntegral n)) . SBV.kindOf <*> (\(SBV.CWInteger i)-> i) . SBV.cwVal
-    getLabel (SBVSim.VecLabel ns)
-      | V.null ns = error "getLabel of empty vector"
-      | otherwise = fovVec t vs
-      where vs = map getLabel (V.toList ns)
-            t = firstOrderTypeOf (head vs)
-    getLabel (SBVSim.TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
-    getLabel (SBVSim.RecLabel ns) = FOVRec $ fmap getLabel ns
-
-    cwToInteger cw =
-      case SBV.cwVal cw of
-        SBV.CWInteger i -> i
-        _ -> error "cwToInteger"
+satUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript SV.SatResult
+satUnintSBV conf unints = do
+  timeout <- psTimeout <$> get
+  wrapProver (Prover.satUnintSBV conf unints timeout)
 
 
-satBoolector :: SharedContext -> ProofScript SV.SatResult
+
+wrapProver ::
+  ( SharedContext ->
+    ProverMode ->
+    Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ProofScript SV.SatResult
+wrapProver f = do
+  sc <- lift $ SV.getSharedContext
+  withFirstGoal $ \g -> do
+  let mode = case goalQuant g of
+               Existential -> CheckSat
+               Universal   -> Prove
+
+  (mb,stats) <- io $ f sc mode (goalTerm g)
+
+  let nope r = do ft <- io $ scApplyPrelude_False sc
+                  return (r, stats, Just g { goalTerm = ft })
+
+  case (mode,mb) of
+    (CheckSat, Just a)  -> return (SV.SatMulti stats a, stats, Nothing)
+    (CheckSat, Nothing) -> nope (SV.Unsat stats)
+    (Prove, Nothing)    -> return (SV.Unsat stats, stats, Nothing)
+    (Prove, Just a)     -> nope (SV.SatMulti stats a)
+
+--------------------------------------------------
+satBoolector :: ProofScript SV.SatResult
 satBoolector = satSBV SBV.boolector
 
-satZ3 :: SharedContext -> ProofScript SV.SatResult
+satZ3 :: ProofScript SV.SatResult
 satZ3 = satSBV SBV.z3
 
-satCVC4 :: SharedContext -> ProofScript SV.SatResult
+satCVC4 :: ProofScript SV.SatResult
 satCVC4 = satSBV SBV.cvc4
 
-satMathSAT :: SharedContext -> ProofScript SV.SatResult
+satMathSAT :: ProofScript SV.SatResult
 satMathSAT = satSBV SBV.mathSAT
 
-satYices :: SharedContext -> ProofScript SV.SatResult
+satYices :: ProofScript SV.SatResult
 satYices = satSBV SBV.yices
 
-satUnintBoolector :: SharedContext -> [String] -> ProofScript SV.SatResult
+satUnintBoolector :: [String] -> ProofScript SV.SatResult
 satUnintBoolector = satUnintSBV SBV.boolector
 
-satUnintZ3 :: SharedContext -> [String] -> ProofScript SV.SatResult
+satUnintZ3 :: [String] -> ProofScript SV.SatResult
 satUnintZ3 = satUnintSBV SBV.z3
 
-satUnintCVC4 :: SharedContext -> [String] -> ProofScript SV.SatResult
+satUnintCVC4 :: [String] -> ProofScript SV.SatResult
 satUnintCVC4 = satUnintSBV SBV.cvc4
 
-satUnintMathSAT :: SharedContext -> [String] -> ProofScript SV.SatResult
+satUnintMathSAT :: [String] -> ProofScript SV.SatResult
 satUnintMathSAT = satUnintSBV SBV.mathSAT
 
-satUnintYices :: SharedContext -> [String] -> ProofScript SV.SatResult
+satUnintYices :: [String] -> ProofScript SV.SatResult
 satUnintYices = satUnintSBV SBV.yices
 
+
+--------------------------------------------------
+satWhat4_Boolector :: ProofScript SV.SatResult
+satWhat4_Boolector = wrapProver $ Prover.satWhat4_boolector []
+
+satWhat4_Z3 :: ProofScript SV.SatResult
+satWhat4_Z3 = wrapProver $ Prover.satWhat4_z3 []
+
+satWhat4_CVC4 :: ProofScript SV.SatResult
+satWhat4_CVC4 = wrapProver $ Prover.satWhat4_cvc4 []
+
+satWhat4_Yices :: ProofScript SV.SatResult
+satWhat4_Yices = wrapProver $ Prover.satWhat4_yices []
+
+satWhat4_UnintBoolector :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintBoolector =  wrapProver . Prover.satWhat4_boolector 
+
+satWhat4_UnintZ3 :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintZ3 = wrapProver . Prover.satWhat4_z3
+
+satWhat4_UnintCVC4 :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintCVC4 =  wrapProver . Prover.satWhat4_cvc4
+
+satWhat4_UnintYices :: [String] -> ProofScript SV.SatResult
+satWhat4_UnintYices =  wrapProver . Prover.satWhat4_yices
+
 satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
-                -> SharedContext
                 -> String
                 -> String
                 -> ProofScript SV.SatResult
-satWithExporter exporter sc path ext = withFirstGoal $ \g -> io $ do
-  t <- case goalQuant g of
-         Existential -> return (goalTerm g)
-         Universal -> do
-           let t0 = goalTerm g
-           ty <- scTypeOf sc t0
-           let (ts, tf) = asPiList ty
-           tf' <- scWhnf sc tf
-           case asBoolType tf' of
-             Nothing -> fail $ "Invalid non-boolean type: " ++ show ty
-             Just () -> return ()
-           negTerm (map snd ts) t0
-  exporter sc ((path ++ "." ++ goalType g ++ show (goalNum g)) ++ ext) t
-  let stats = solverStats ("offline:"++ drop 1 ext)
-                          (scSharedSize t)
+satWithExporter exporter path ext = withFirstGoal $ \g -> do
+  let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+      mode = case goalQuant g of
+               Existential -> CheckSat
+               Universal   -> Prove
+
+  sc <- SV.getSharedContext
+  stats <- io $ Prover.satWithExporter exporter file sc mode (goalTerm g)
+
   case goalQuant g of
     Existential -> return (SV.Unsat stats, stats, Just g)
-    Universal -> return (SV.Unsat stats, stats, Nothing)
-  where
-    negTerm :: [Term] -> Term -> IO Term
-    negTerm [] p = scNot sc p
-    negTerm (t1 : ts) p = do
-      (x, ty, p') <-
-        case unwrapTermF p of
-          Lambda x ty p' -> return (x, ty, p')
-          _ -> do
-            p1 <- incVars sc 0 1 p
-            x0 <- scLocalVar sc 0
-            p' <- scApply sc p1 x0
-            return ("x", t1, p')
-      scLambda sc x ty =<< negTerm ts p'
+    Universal   -> return (SV.Unsat stats, stats, Nothing)
 
-satAIG :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satAIG sc path = satWithExporter writeAIG sc path ".aig"
+satAIG :: FilePath -> ProofScript SV.SatResult
+satAIG path = do
+  SV.AIGProxy proxy <- lift $ SV.getProxy
+  satWithExporter (Prover.writeAIG proxy) path ".aig"
 
-satCNF :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satCNF sc path = satWithExporter writeCNF sc path ".cnf"
+satCNF :: FilePath -> ProofScript SV.SatResult
+satCNF path = do
+  SV.AIGProxy proxy <- lift $ SV.getProxy
+  satWithExporter (Prover.writeCNF proxy) path ".cnf"
 
-satExtCore :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satExtCore sc path = satWithExporter (const writeCore) sc path ".extcore"
+satExtCore :: FilePath -> ProofScript SV.SatResult
+satExtCore path = satWithExporter (const Prover.writeCore) path ".extcore"
 
-satSMTLib2 :: SharedContext -> FilePath -> ProofScript SV.SatResult
-satSMTLib2 sc path = satWithExporter writeSMTLib2 sc path ".smt2"
+satSMTLib2 :: FilePath -> ProofScript SV.SatResult
+satSMTLib2 path = satWithExporter Prover.writeSMTLib2 path ".smt2"
 
-satUnintSMTLib2 :: SharedContext -> [String] -> FilePath -> ProofScript SV.SatResult
-satUnintSMTLib2 sc unints path = satWithExporter (writeUnintSMTLib2 unints) sc path ".smt2"
+satUnintSMTLib2 :: [String] -> FilePath -> ProofScript SV.SatResult
+satUnintSMTLib2 unints path = satWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
 
-liftCexBB :: [FiniteType] -> [Bool] -> Either String [FiniteValue]
-liftCexBB tys bs =
-  case readFiniteValues tys bs of
-    Nothing -> Left "Failed to lift counterexample"
-    Just fvs -> Right fvs
+set_timeout :: Integer -> ProofScript ()
+set_timeout to = modify (\ps -> ps { psTimeout = Just to })
 
 -- | Translate a @Term@ representing a theorem for input to the
 -- given validity-checking script and attempt to prove it.
@@ -990,9 +759,9 @@ quickCheckPrintPrim opts sc numTests tt = do
 cryptolSimpset :: TopLevel Simpset
 cryptolSimpset = do
   sc <- getSharedContext
-  io $ scSimpset sc cryptolDefs [] []
-  where cryptolDefs = filter (not . excluded) $
-                      moduleDefs CryptolSAW.cryptolModule
+  m <- io $ scFindModule sc (mkModuleName ["Cryptol"])
+  io $ scSimpset sc (cryptolDefs m) [] []
+  where cryptolDefs m = filter (not . excluded) $ moduleDefs m
         excluded d = defIdent d `elem` [ "Cryptol.fix" ]
 
 addPreludeEqs :: [String] -> Simpset
@@ -1020,7 +789,8 @@ addPreludeDefs names ss = do
   return (addRules defRules ss)
     where qualify = mkIdent (mkModuleName ["Prelude"])
           getDef sc n =
-            case findDef (scModule sc) (qualify n) of
+            scFindDef sc (qualify n) >>= \maybe_def ->
+            case maybe_def of
               Just d -> return d
               Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
 
@@ -1126,7 +896,8 @@ cexEvalFn sc args tm = do
   let is = map ecVarIndex exts
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
-  return $ Concrete.evalSharedTerm (scModule sc) concretePrimitives tm'
+  modmap <- scGetModuleMap sc
+  return $ Concrete.evalSharedTerm modmap concretePrimitives tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)
@@ -1220,7 +991,7 @@ eval_bool t = do
     _ -> fail "eval_bool: not type Bit"
   unless (null (getAllExts (ttTerm t))) $
     fail "eval_bool: term contains symbolic variables"
-  v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t
+  v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t
   return (C.fromVBit v)
 
 eval_int :: TypedTerm -> TopLevel Integer
@@ -1235,7 +1006,7 @@ eval_int t = do
   case ttSchema t' of
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
-  v <- io $ rethrowEvalError $ return $ SV.evaluateTypedTerm sc t'
+  v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
   io $ C.runEval SV.quietEvalOpts (C.fromWord "eval_int" v)
 
 -- Predicate on Cryptol types true of integer types, i.e. types
@@ -1243,6 +1014,19 @@ eval_int t = do
 isInteger :: C.Type -> Bool
 isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
 isInteger _ = False
+
+eval_list :: TypedTerm -> TopLevel [TypedTerm]
+eval_list t = do
+  sc <- getSharedContext
+  (n, a) <-
+    case ttSchema t of
+      C.Forall [] [] (C.tIsSeq -> Just (C.tIsNum -> Just n, a)) -> return (n, a)
+      _ -> fail "eval_list: not a monomorphic array type"
+  n' <- io $ scNat sc (fromInteger n)
+  a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+  idxs <- io $ traverse (scNat sc) [0 .. fromInteger n - 1]
+  ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
+  return (map (TypedTerm (C.tMono a)) ts)
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
@@ -1299,12 +1083,11 @@ parseCore input = do
   let (uterm, errs) = parseSAWTerm base path (B.fromString input)
   mapM_ (printOutLnTop Opts.Error . show) errs
   unless (null errs) $ fail $ show errs
-  let imps = [ UntypedAST.Import False (Position.PosPair pos (mkModuleName ["Prelude"])) Nothing Nothing ]
-      pos = Position.Pos base path 0 0
-  (t, _tp) <- case Verifier.SAW.Typechecker.checkTerm [preludeModule] imps uterm of
+  let mnm = Just $ mkModuleName ["Prelude"]
+  err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+  case err_or_t of
     Left err -> fail (show err)
-    Right x -> return x
-  io $ scSharedTerm sc t
+    Right (TC.TypedTerm x _) -> return x
 
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
@@ -1341,6 +1124,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
     prims =
       [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
       , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
+      , ("sext" , "Cryptol.ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
       , ("sgt"  , "Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
       , ("sge"  , "Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
       , ("slt"  , "Cryptol.ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
@@ -1348,8 +1132,13 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       ]
       -- TODO: sext, sdiv, srem, sshr
 
-    noLoc :: String -> Located String
-    noLoc x = Located x x (PosInternal "cryptol_prims")
+    noLoc :: String -> CEnv.InputText
+    noLoc x = CEnv.InputText
+                { CEnv.inpText = x
+                , CEnv.inpFile = "(cryptol_prims)"
+                , CEnv.inpLine = 1
+                , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
+                }
 
     parsePrim :: (String, Ident, String) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do

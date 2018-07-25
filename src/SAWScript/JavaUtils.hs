@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.JavaUtils
+Description : Miscellaneous utilities for Java.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -5,13 +12,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- |
-Module      : $Header$
-Description : Miscellaneous utilities for Java.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.JavaUtils where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -31,10 +31,10 @@ import Verifier.Java.Simulator as JSS
 import Verifier.Java.SAWImport
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.JavaExpr
-import SAWScript.TypedTerm
 
 type SAWBackend = SharedContext
 type SpecPathState = Path SharedContext
@@ -49,27 +49,23 @@ boolExtend' sc x = do
   scBvUExt sc n31 n1 x
 
 arrayApply :: SharedContext
-            -> (SharedContext -> IO (Term -> Term -> IO b))
+            -> (SharedContext -> Term -> Term -> IO b)
             -> Term -> IO b
 arrayApply sc fn tm = do
   ty <- scTypeOf sc =<< scWhnf sc tm
   case ty of
     (asVecType -> Just (n :*: _)) -> do
       l <- scNat sc n
-      f <- fn sc
-      f l tm
+      fn sc l tm
     _ -> fail "Invalid type passed to extendArray"
-
-japply :: (SharedContext -> IO (a -> IO b)) -> SharedContext -> a -> IO b
-japply fn sc tm = fn sc >>= \f -> f tm
 
 extendToIValue :: SharedContext -> JSS.Type -> Term -> IO Term
 extendToIValue sc ty tm = do
   case ty of
-    JSS.BooleanType -> japply scApplyJava_boolExtend sc tm
-    JSS.ByteType -> japply scApplyJava_byteExtend sc tm
-    JSS.ShortType -> japply scApplyJava_shortExtend sc tm
-    JSS.CharType -> japply scApplyJava_charExtend sc tm
+    JSS.BooleanType -> scApplyJava_boolExtend sc tm
+    JSS.ByteType -> scApplyJava_byteExtend sc tm
+    JSS.ShortType -> scApplyJava_shortExtend sc tm
+    JSS.CharType -> scApplyJava_charExtend sc tm
     JSS.IntType -> return tm
     JSS.ArrayType JSS.BooleanType -> arrayApply sc scApplyJava_extendBoolArray tm
     JSS.ArrayType JSS.ByteType -> arrayApply sc scApplyJava_extendByteArray tm
@@ -81,10 +77,10 @@ extendToIValue sc ty tm = do
 truncateIValue :: SharedContext -> JSS.Type -> Term -> IO Term
 truncateIValue sc ty tm = do
   case ty of
-    JSS.BooleanType -> japply scApplyJava_boolTrunc sc tm
-    JSS.ByteType -> japply scApplyJava_byteTrunc sc tm
-    JSS.ShortType -> japply scApplyJava_shortTrunc sc tm
-    JSS.CharType -> japply scApplyJava_shortTrunc sc tm
+    JSS.BooleanType -> scApplyJava_boolTrunc sc tm
+    JSS.ByteType -> scApplyJava_byteTrunc sc tm
+    JSS.ShortType -> scApplyJava_shortTrunc sc tm
+    JSS.CharType -> scApplyJava_shortTrunc sc tm
     JSS.IntType -> return tm
     JSS.ArrayType JSS.BooleanType -> arrayApply sc scApplyJava_truncBoolArray tm
     JSS.ArrayType JSS.ByteType -> arrayApply sc scApplyJava_truncByteArray tm
@@ -260,12 +256,12 @@ valueOfTerm :: (MonadSim SharedContext m) =>
 valueOfTerm sc jty (TypedTerm _schema t) = do
   ty <- liftIO $ (scTypeOf sc t >>= scWhnf sc)
   case (ty, jty) of
-    (asBoolType -> Just (), JSS.BooleanType) -> IValue <$> (liftIO $ japply scApplyJava_boolExtend sc t)
+    (asBoolType -> Just (), JSS.BooleanType) -> IValue <$> (liftIO $ scApplyJava_boolExtend sc t)
     -- TODO: remove the following case when no longer needed, and use extendToIValue
-    (asBitvectorType -> Just 1, JSS.BooleanType) -> IValue <$> (liftIO $ japply scApplyJava_byteExtend sc t)
-    (asBitvectorType -> Just 8, JSS.ByteType) -> IValue <$> (liftIO $ japply scApplyJava_byteExtend sc t)
-    (asBitvectorType -> Just 16, JSS.ShortType) -> IValue <$> (liftIO $ japply scApplyJava_shortExtend sc t)
-    (asBitvectorType -> Just 16, JSS.CharType) -> IValue <$> (liftIO $ japply scApplyJava_charExtend sc t)
+    (asBitvectorType -> Just 1, JSS.BooleanType) -> IValue <$> (liftIO $ scApplyJava_byteExtend sc t)
+    (asBitvectorType -> Just 8, JSS.ByteType) -> IValue <$> (liftIO $ scApplyJava_byteExtend sc t)
+    (asBitvectorType -> Just 16, JSS.ShortType) -> IValue <$> (liftIO $ scApplyJava_shortExtend sc t)
+    (asBitvectorType -> Just 16, JSS.CharType) -> IValue <$> (liftIO $ scApplyJava_charExtend sc t)
     (asBitvectorType -> Just 32, JSS.IntType) -> return (IValue t)
     (asBitvectorType -> Just 64, JSS.LongType) -> return (LValue t)
     (asVecType -> Just (n :*: _), JSS.ArrayType JSS.LongType) -> do
@@ -313,7 +309,7 @@ readJavaValue mlocals ps (CC.Term e) = do
       case Map.lookup f sfields of
         Just v -> return v
         _ -> fail $ "Static field '" ++ fieldIdName f ++
-                    "' not found in class '" ++ fieldIdClass f ++ "'"
+                    "' not found in class '" ++ JSS.unClassName (fieldIdClass f) ++ "'"
 
 readJavaValueSim :: (Monad m) =>
                     JavaExpr

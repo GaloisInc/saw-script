@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMBuiltins
+Description : Implementations of LLVM-related SAW-Script primitives.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -10,13 +17,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-{- |
-Module      : $Header$
-Description : Implementations of LLVM-related SAW-Script primitives.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -24,6 +24,7 @@ import Control.Applicative hiding (many)
 #endif
 import Control.Lens
 import Control.Monad.State hiding (mapM)
+import Control.Monad.ST (stToIO)
 import Control.Monad.Trans.Except
 import Data.Function (on)
 import Data.List (find, partition, sortBy, groupBy)
@@ -54,25 +55,28 @@ import Verifier.SAW.Cryptol (exportFirstOrderValue)
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedTerm
+import Verifier.SAW.CryptolEnv (schemaNoUser)
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.Builtins
-import SAWScript.CryptolEnv (schemaNoUser)
 import SAWScript.LLVMExpr
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMMethodSpec
 import SAWScript.LLVMUtils
 import SAWScript.Options as Opt
 import SAWScript.Proof
-import SAWScript.SolverStats
-import SAWScript.TypedTerm
+import SAWScript.Prover.SolverStats
 import SAWScript.Utils
 import SAWScript.Value as SV
 
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
+
+import qualified Data.AIG as AIG
 
 type Backend = SAWBackend
 type SAWTerm = Term
@@ -82,17 +86,22 @@ llvm_load_module :: FilePath -> TopLevel LLVMModule
 llvm_load_module file =
   io (LLVM.parseBitCodeFromFile file) >>= \case
     Left err -> fail (LLVM.formatError err)
-    Right llvm_mod -> return (LLVMModule file llvm_mod)
+    Right llvm_mod -> do
+      halloc <- getHandleAlloc
+      mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
+      return (LLVMModule file llvm_mod mtrans)
 
 -- LLVM verification and model extraction commands
 
 type Assign = (LLVMExpr, TypedTerm)
 
-startSimulator :: Options
+startSimulator :: (AIG.IsAIG l g) =>
+                  Options
                -> SharedContext
                -> LSSOpts
                -> LLVMModule
                -> Symbol
+               -> AIG.Proxy l g
                -> (SharedContext
                    -> SBE SAWBackend
                    -> Codebase SAWBackend
@@ -100,9 +109,9 @@ startSimulator :: Options
                    -> SymDefine Term
                    -> Simulator SAWBackend IO a)
                -> IO a
-startSimulator opts sc lopts (LLVMModule file mdl) sym body = do
+startSimulator opts sc lopts (LLVMModule file mdl _) sym proxy body = do
   let dl = parseDataLayout $ modDataLayout mdl
-  (sbe, mem, scLLVM) <- createSAWBackend' sawProxy dl sc
+  (sbe, mem, scLLVM) <- createSAWBackend' proxy dl sc
   (warnings, cb) <- mkCodebase sbe dl mdl
   forM_ warnings $ printOutLn opts Warn . ("WARNING: " ++) . show
   case lookupDefine sym cb of
@@ -118,15 +127,16 @@ llvm_symexec :: BuiltinContext
              -> [(String, Term, Integer)]
              -> [(String, Integer)]
              -> Bool
-             -> IO TypedTerm
-llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
+             -> TopLevel TypedTerm
+llvm_symexec bic opts lmod fname allocs inputs outputs doSat = do
+  AIGProxy proxy <- getProxy
   let sym = Symbol fname
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
                       , optsSatAtBranches = doSat
                       , optsSimplifyAddrs = False
                       }
-  in startSimulator opts sc lopts lmod sym $ \scLLVM sbe cb dl md -> do
+  liftIO $ startSimulator opts sc lopts lmod sym proxy $ \scLLVM sbe cb dl md -> do
         setVerbosity (simVerbose opts)
         let mkAssign (s, tm, n) = do
               e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
@@ -135,10 +145,10 @@ llvm_symexec bic opts lmod fname allocs inputs outputs doSat =
               e <- failLeft $ runExceptT $ parseLLVMExpr lmod cb sym s
               case resolveType cb (lssTypeOfLLVMExpr e) of
                 PtrType (MemType ty) -> do
-                  liftIO $ printOutLn opts Info $
+                  liftIO $ printOutLn opts Debug $
                     "Allocating " ++ show n ++ " elements of type " ++ show (ppActualType ty)
                   tm <- allocSome sbe dl n ty
-                  liftIO $ printOutLn opts Info $
+                  liftIO $ printOutLn opts Debug $
                     "Allocated address: " ++ show tm
                   return (e, tm, 1)
                 ty -> fail $ "Allocation parameter " ++ s ++
@@ -195,15 +205,16 @@ llvm_extract :: BuiltinContext
              -> LLVMModule
              -> String
              -> LLVMSetup ()
-             -> IO TypedTerm
-llvm_extract bic opts lmod func _setup =
+             -> TopLevel TypedTerm
+llvm_extract bic opts lmod func _setup = do
   let sym = Symbol func
       sc = biSharedContext bic
       lopts = LSSOpts { optsErrorPathDetails = True
                       , optsSatAtBranches = True
                       , optsSimplifyAddrs = False
                       }
-  in startSimulator opts sc lopts lmod sym $ \scLLVM _sbe _cb _dl md -> do
+  AIGProxy proxy <- getProxy
+  liftIO $ startSimulator opts sc lopts lmod sym proxy $ \scLLVM _sbe _cb _dl md -> do
     setVerbosity (simVerbose opts)
     args <- mapM freshLLVMArg (sdArgs md)
     exts <- mapM (asExtCns . snd) args
@@ -222,16 +233,16 @@ llvm_verify :: BuiltinContext
             -> [LLVMMethodSpecIR]
             -> LLVMSetup ()
             -> TopLevel LLVMMethodSpecIR
-llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
+llvm_verify bic opts lmod@(LLVMModule file mdl _) funcname overrides setup = do
   let pos = fixPos -- TODO
       dl = parseDataLayout $ modDataLayout mdl
       sc = biSharedContext bic
-  in do
-    (sbe, mem, scLLVM) <- io $ createSAWBackend' sawProxy dl sc
-    (warnings, cb) <- io $ mkCodebase sbe dl mdl
-    forM_ warnings $ printOutLnTop Warn . ("WARNING: " ++) . show
-    let ms0 = initLLVMMethodSpec pos sbe cb (fromString funcname)
-        lsctx0 = LLVMSetupState {
+  AIGProxy proxy <- getProxy
+  (sbe, mem, scLLVM) <- io $ createSAWBackend' proxy dl sc
+  (warnings, cb) <- io $ mkCodebase sbe dl mdl
+  forM_ warnings $ printOutLnTop Warn . ("WARNING: " ++) . show
+  let ms0 = initLLVMMethodSpec pos sbe cb (fromString funcname)
+      lsctx0 = LLVMSetupState {
                     lsSpec = ms0
                   , lsTactic = Skip
                   , lsContext = scLLVM
@@ -240,27 +251,27 @@ llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
                   , lsSimplifyAddrs = False
                   , lsModule        = lmod
                   }
-    (_, lsctx) <- runStateT setup lsctx0
-    let ms = lsSpec lsctx
-    let vp = VerifyParams { vpCode = cb
-                          , vpContext = scLLVM
-                          , vpOpts = opts
-                          , vpSpec = ms
-                          , vpOver = overrides
-                          }
-    let overrideText =
-          case overrides of
-            [] -> ""
-            irs -> " (overriding " ++ show (map specFunction irs) ++ ")"
-    printOutLnTop Info $ "Starting verification of " ++ show (specName ms)
-    let lopts = LSSOpts { optsErrorPathDetails = True
-                        , optsSatAtBranches = lsSatBranches lsctx
-                        , optsSimplifyAddrs = lsSimplifyAddrs lsctx
+  (_, lsctx) <- runStateT setup lsctx0
+  let ms = lsSpec lsctx
+  let vp = VerifyParams { vpCode = cb
+                        , vpContext = scLLVM
+                        , vpOpts = opts
+                        , vpSpec = ms
+                        , vpOver = overrides
                         }
-    ro <- getTopLevelRO
-    rw <- getTopLevelRW
-    vpopts <- getOptions
-    if lsSimulate lsctx then io $ do
+  let overrideText =
+        case overrides of
+          [] -> ""
+          irs -> " (overriding " ++ show (map specFunction irs) ++ ")"
+  printOutLnTop Info $ "Starting verification of " ++ show (specName ms)
+  let lopts = LSSOpts { optsErrorPathDetails = True
+                      , optsSatAtBranches = lsSatBranches lsctx
+                      , optsSimplifyAddrs = lsSimplifyAddrs lsctx
+                      }
+  ro <- getTopLevelRO
+  rw <- getTopLevelRW
+  vpopts <- getOptions
+  if lsSimulate lsctx then io $ do
       liftIO $ printOutLn vpopts Info $ "Executing " ++ show (specName ms)
       ms' <- runSimulator cb sbe mem (Just lopts) $ do
         setVerbosity (simVerbose opts)
@@ -273,8 +284,8 @@ llvm_verify bic opts lmod@(LLVMModule file mdl) funcname overrides setup =
         run
         dumpMem 4 "llvm_verify post" Nothing
         res <- checkFinalState scLLVM ms initPS otherPtrs args
-        liftIO $ printOutFn vpopts Info "Verifying the following:"
-        liftIO $ printOutLn vpopts Info $ show (ppPathVC res)
+        liftIO $ printOutFn vpopts Debug "Verifying the following:"
+        liftIO $ printOutLn vpopts Debug $ show (ppPathVC res)
         case lsTactic lsctx of
              Skip -> do
                 liftIO $ printOutLn vpopts Warn $

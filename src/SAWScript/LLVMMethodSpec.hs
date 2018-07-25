@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.LLVMMethodSpec
+Description : Interface to the LLVM symbolic simulator.
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -11,13 +18,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-{- |
-Module      : $Header$
-Description : Interface to the LLVM symbolic simulator.
-License     : BSD3
-Maintainer  : atomb
-Stability   : provisional
--}
 module SAWScript.LLVMMethodSpec
   ( LLVMMethodSpecIR
   , specFunction
@@ -59,7 +59,7 @@ import Verifier.SAW.Prelude
 import SAWScript.LLVMMethodSpecIR
 import SAWScript.LLVMUtils
 import SAWScript.PathVC
-import SAWScript.SolverStats
+import SAWScript.Prover.SolverStats
 import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutLnTop)
 import SAWScript.VerificationCheck
 
@@ -684,9 +684,8 @@ runValidation prover params sc results = do
       mconcat <$> (forM (zip [0..] $ pvcChecks pvc) $ \(n, vc) -> do
         let vs = mkVState (vcName vc) (vcCounterexample sc opts vc)
         g <- io (scImplies sc (pvcAssumptions pvc) =<< vcGoal sc vc)
-        io $ printOutLn (vpOpts params) Info $ "Checking " ++ vcName vc
-        io $ printOutLn (vpOpts params) Debug $ " (" ++ show g ++ ")"
-        io $ printOutLn (vpOpts params) Info "\n"
+        io $ printOutLn (vpOpts params) Debug $ "Checking " ++ vcName vc
+        io $ printOutLn (vpOpts params) ExtraDebug $ " (" ++ show g ++ ")"
         prover vs n g)
     else do
       let vsName = "an invalid path"

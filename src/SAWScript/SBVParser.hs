@@ -1,14 +1,15 @@
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.SBVParser
 Description : Parser for .sbv file format.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
+
 module SAWScript.SBVParser
   ( loadSBV
   , parseSBVPgm
@@ -252,8 +253,7 @@ scTyp sc (TTuple as) =
     do ts <- mapM (scTyp sc) as
        scTupleType sc ts
 scTyp sc (TRecord fields) =
-    do let am = Map.fromList fields
-       tm <- mapM (scTyp sc) am
+    do tm <- mapM (\(f,t) -> (f,) <$> scTyp sc t) fields
        scRecordType sc tm
 
 -- | projects all the components out of the input term

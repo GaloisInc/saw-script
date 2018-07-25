@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Trie
 Description :
 License     : BSD3
 Maintainer  : huffman

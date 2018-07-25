@@ -1,5 +1,5 @@
 {- |
-Module      : $Header$
+Module      : SAWScript.JavaMethodSpecIR
 Description : Provides typechecked representation for method specifications and function for creating it from AST representation.
 License     : BSD3
 Maintainer  : jhendrix, atomb
@@ -13,6 +13,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.JavaMethodSpecIR
   (-- * MethodSpec record
     JavaMethodSpecIR
@@ -73,7 +74,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.Java.Common as JSS
 
-import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.CongruenceClosure (CCSet)
@@ -140,7 +141,7 @@ data BehaviorSpec = BS {
 ppLogicExpr :: LogicExpr -> Doc
 ppLogicExpr (LogicExpr t args) =
   vcat $
-  parens (scPrettyTermDoc defaultPPOpts t) :
+  parens (ppTerm defaultPPOpts t) :
   map (text . ppJavaExpr) args
 
 ppMixedExpr :: MixedExpr -> Doc
@@ -174,7 +175,7 @@ ppBehaviorCommand cmd =
   where
     ppField f = text (JSS.fieldIdName f)
     ppStaticField f =
-      text (JSS.fieldIdClass f) <> "." <> text (JSS.fieldIdName f)
+      text (JSS.unClassName (JSS.fieldIdClass f)) <> "." <> text (JSS.fieldIdName f)
 
 ppBehavior :: BehaviorSpec -> Doc
 ppBehavior bs =
@@ -210,12 +211,12 @@ ppMethodSpec :: JavaMethodSpecIR -> Doc
 ppMethodSpec ms =
   vcat [ "Java Method specification."
        , ""
-       , "Instance class:" <+> text (JSS.className (specThisClass ms))
-       , "Definition class:" <+> text (JSS.className (specMethodClass ms))
+       , "Instance class:" <+> text (JSS.unClassName (JSS.className (specThisClass ms)))
+       , "Definition class:" <+> text (JSS.unClassName (JSS.className (specMethodClass ms)))
        , "Method:" <+> text (JSS.methodName (specMethod ms))
        , ""
        , "Requires these classes to be initialized:"
-       , indent 2 $ vcat $ map text $ specInitializedClasses ms
+       , indent 2 $ vcat $ map (text . JSS.unClassName) $ specInitializedClasses ms
        , ""
        , if specAllowAlloc ms
          then "Allows allocation."
@@ -382,7 +383,7 @@ data JavaMethodSpecIR = MSIR {
     -- | Class names expected to be initialized using JVM "/" separators.
     -- (as opposed to Java "." path separators). Currently this is set
     -- to the list of superclasses of specThisClass.
-  , specInitializedClasses :: [String]
+  , specInitializedClasses :: [JSS.ClassName]
     -- | Behavior specifications for method at different PC values.
     -- A list is used because the behavior may depend on the inputs.
   , specBehaviors :: BehaviorSpec  -- Map JSS.Breakpoint [BehaviorSpec]
@@ -395,7 +396,7 @@ specName :: JavaMethodSpecIR -> String
 specName ir =
  let clName = JSS.className (specThisClass ir)
      mName = JSS.methodName (specMethod ir)
-  in JSS.slashesToDots clName ++ ('.' : mName)
+  in JSS.slashesToDots (JSS.unClassName clName) ++ ('.' : mName)
 
 -- TODO: error if already declared
 specAddVarDecl :: JavaExpr -> JavaActualType

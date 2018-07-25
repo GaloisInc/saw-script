@@ -47,6 +47,7 @@ cp deps/abcBridge/abc-build/copyright.txt     ${TARGET}/ABC_LICENSE
 cp LICENSE                                    ${TARGET}/LICENSE
 cp README.md                                  ${TARGET}/README.md
 cp "$BIN"/bcdump                              ${TARGET}/bin
+cp "$BIN"/cryptol                             ${TARGET}/bin
 cp "$BIN"/jss                                 ${TARGET}/bin
 cp "$BIN"/llvm-disasm                         ${TARGET}/bin
 cp "$BIN"/lss                                 ${TARGET}/bin

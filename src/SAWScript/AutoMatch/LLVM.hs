@@ -7,12 +7,12 @@ module SAWScript.AutoMatch.LLVM where
 import Control.Monad.State hiding (mapM)
 import Control.Monad.Free
 
+import qualified Data.AIG as AIG
 import Text.LLVM hiding (parseDataLayout, Array, Double, Float, FloatType, Void)
 import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent, globalSym, globalType )
 import Verifier.LLVM.Backend.SAW
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Builtins
 import SAWScript.Value
 
 --import Data.Maybe
@@ -27,13 +27,18 @@ import SAWScript.AutoMatch.Util
 
 -- | Parse an LLVM module into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
-getDeclsLLVM :: SharedContext -> LLVMModule -> IO (Interaction (Maybe [Decl]))
-getDeclsLLVM sc (LLVMModule file mdl) =
+getDeclsLLVM ::
+  (AIG.IsAIG l g) =>
+  AIG.Proxy l g ->
+  SharedContext ->
+  LLVMModule ->
+  IO (Interaction (Maybe [Decl]))
+getDeclsLLVM proxy sc (LLVMModule file mdl _) =
 
   let dataLayout = parseDataLayout $ modDataLayout mdl
       symbols = map defName (modDefines mdl)
   in do
-    (sbe, _mem, _scLLVM) <- createSAWBackend' sawProxy dataLayout sc
+    (sbe, _mem, _scLLVM) <- createSAWBackend' proxy dataLayout sc
     (warnings, cb) <- mkCodebase sbe dataLayout mdl
     return $ do
       forM_ warnings $ liftF . flip Warning () . show

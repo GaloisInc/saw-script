@@ -84,6 +84,6 @@ let main : TopLevel () = do {
     s20e32 <- llvm_verify m "s20_expand32" [s20] salsa20_expansion_32;
     s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 63);
     s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 64);
-    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 65);
+    //s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 65);
     print "Done!";
 };

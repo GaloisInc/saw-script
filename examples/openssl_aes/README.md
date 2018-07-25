@@ -7,7 +7,12 @@ proving the equivalence of AES implemented in different styles is very
 computationally expensive, using the most efficient approach is crucial.
 
 The `Makefile` in this directory automatically downloads and compiles
-OpenSSL, and then extracts the relevant LLVM bitcode file.
+OpenSSL, and then extracts the relevant LLVM bitcode file.  However,
+this example has the following dependencies, assumed to be located in a
+`deps` folder relative to SAW's root directory:
+
+  - [Cryptol](https://github.com/GaloisInc/cryptol) ([AES.cry](https://github.com/GaloisInc/cryptol/blob/master/examples/AES.cry))
+  - [LLVM Verifier](https://github.com/GaloisInc/llvm-verifier) ([sym-api.h](https://github.com/GaloisInc/llvm-verifier/blob/master/sym-api/sym-api.h))
 
 Because the OpenSSL implementation uses a separate function to expand
 the key and then perform encryption, while the Cryptol specification

@@ -1,14 +1,15 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-
 {- |
-Module      : $Header$
+Module      : SAWScript.REPL.Monad
 Description :
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module SAWScript.REPL.Monad (
     -- * REPL Monad
     REPL(..), runREPL
@@ -18,6 +19,7 @@ module SAWScript.REPL.Monad (
   , catch
   , catchIO
   , catchFail
+  , catchTypeErrors
 
     -- ** Errors
   , REPLException(..)
@@ -69,16 +71,20 @@ import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 
 import Verifier.SAW.SharedTerm (Term)
+import Verifier.SAW.CryptolEnv
+import qualified Data.ABC.GIA as GIA
 
 --------------------
 
 import SAWScript.AST (Located(getVal))
-import SAWScript.CryptolEnv
+import SAWScript.Exceptions
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
+import SAWScript.Value (AIGProxy(..))
 import Verifier.SAW (SharedContext)
 
+deriving instance Typeable GIA.Proxy
 
 -- REPL Environment ------------------------------------------------------------
 
@@ -93,7 +99,7 @@ data RW = RW
 -- | Initial, empty environment.
 defaultRW :: Bool -> Options -> IO RW
 defaultRW isBatch opts = do
-  (_biContext, ro, rw) <- buildTopLevelEnv opts
+  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy GIA.proxy) opts
 
   return RW
     { eContinue   = True
@@ -193,6 +199,10 @@ catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 -- | Handle 'IOError' exceptions in 'REPL' actions.
 catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
 catchIO = catchEx
+
+-- | Handle SAWScript type error exceptions in 'REPL' actions.
+catchTypeErrors :: REPL a -> (TypeErrors -> REPL a) -> REPL a
+catchTypeErrors = catchEx
 
 -- | Handle 'REPLException' exceptions in 'REPL' actions.
 catch :: REPL a -> (REPLException -> REPL a) -> REPL a

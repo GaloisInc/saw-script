@@ -34,7 +34,7 @@ getDeclsJVM cls = return $ do
 
    when (not . null $ untranslateable) $ do
       separator ThinSep
-      liftF . flip Warning () $ "No translation for the following signatures in " ++ JSS.className cls ++ ".class:"
+      liftF . flip Warning () $ "No translation for the following signatures in " ++ JVM.unClassName (JSS.className cls) ++ ".class:"
       bulleted $ map (("'" ++) . (++ "'")) untranslateable
 
    return $ Just translations
