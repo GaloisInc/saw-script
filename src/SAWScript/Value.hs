@@ -24,7 +24,7 @@ Stability   : provisional
 
 module SAWScript.Value where
 
-import Data.Monoid ((<>))
+import Data.Semigroup ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
@@ -383,7 +383,7 @@ data TopLevelRW =
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
-  , rwClassTrans :: Map JSS.ClassName CJ.ClassTranslation
+  , rwClassTrans :: CJ.JVMTranslation
   -- ^ crucible-jvm: Classes that have already been translated
   -- Not sure if this is the best place to store this, but we don't want to
   -- keep translating the same methods/classes over and over
@@ -442,15 +442,16 @@ putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
 
 -- | Access the current state of Java Class translation
-getClassTrans :: TopLevel (Map JSS.ClassName CJ.ClassTranslation)
+getClassTrans :: TopLevel  CJ.JVMTranslation
 getClassTrans = TopLevel (gets rwClassTrans)
 
 -- | Add a newly translated class to the translation
-addClassTrans :: JSS.ClassName -> CJ.ClassTranslation -> TopLevel ()
-addClassTrans cn trans = do
+addClassTrans :: CJ.JVMTranslation -> TopLevel ()
+addClassTrans trans = do
   rw <- getTopLevelRW
-  let ct = rwClassTrans rw
-  putTopLevelRW (rw { rwClassTrans = M.insertWith (<>) cn trans ct })
+  let jvmt = rwClassTrans rw
+  putTopLevelRW ( rw { rwClassTrans = trans <> jvmt })
+
 
 -- Other SAWScript Monads ------------------------------------------------------
 

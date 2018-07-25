@@ -34,6 +34,7 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import Control.Monad.ST (stToIO)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -50,7 +51,8 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
-import qualified SAWScript.CrucibleBuiltinsJVM as JC
+import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
@@ -452,6 +454,8 @@ buildTopLevelEnv proxy opts =
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
+       ctx <- stToIO $ CJ.mkJVMContext halloc
+       
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv opts bic
                    , rwTypes      = primTypeEnv
@@ -459,7 +463,7 @@ buildTopLevelEnv proxy opts =
                    , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
-                   , rwClassTrans = Map.empty
+                   , rwClassTrans = CJ.JVMTranslation { CJ.translatedClasses = Map.empty, CJ.transContext = ctx }
                    }
        return (bic, ro0, rw0)
 
@@ -1287,7 +1291,7 @@ primitives = Map.fromList
     ] -}
 
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
-    (bicVal JC.crucible_java_extract)
+    (bicVal CJ.crucible_java_extract)
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
     , "value will be the return value of the method. Only methods with"

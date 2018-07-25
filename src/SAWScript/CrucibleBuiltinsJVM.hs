@@ -84,11 +84,12 @@ loadJavaClass bic =
 translateClass :: J.Class -> TopLevel ()
 translateClass c = do
   let cn = J.className c
-  transClassMap <- getClassTrans
+  jvmTrans <- getClassTrans
+  let transClassMap = CJ.translatedClasses jvmTrans
   unless (Map.member cn transClassMap) $ do
        halloc <- getHandleAlloc
-       ct <- io $ stToIO $ CJ.translateClass halloc c
-       addClassTrans (J.className c) ct  
+       newjvm <- io $ stToIO $ CJ.translateClass halloc (CJ.transContext jvmTrans) c
+       addClassTrans newjvm  
 
 ----
 
@@ -118,8 +119,10 @@ setupCrucibleJavaContext bic opts c action = do
   halloc <- getHandleAlloc
   AIGProxy proxy <- getProxy
   -- access the class translation from the toplevel context     
-  transClassMap <- getClassTrans 
-
+  jvmTrans <- getClassTrans
+  
+  let transClassMap = CJ.translatedClasses jvmTrans
+  
   let transClass = transClassMap ! (J.className c)
   
   action =<< (io $ do   -- only the IO monad, nothing else
@@ -136,17 +139,17 @@ setupCrucibleJavaContext bic opts c action = do
 
       -- set up the simulation context
 
-      let ctx = transClass^.CJ.transContext
+      let ctx = CJ.transContext jvmTrans
       let sm = CJ.symbolMap ctx
       let cm = CJ.cfgMap transClass
       let gm = CJ.staticTable ctx
             
-      let bindings = Crucible.fnBindingsFromList (map (mkFunBinding . snd) (Map.toList sm)) where
-            mkFunBinding (CJ.JVMHandleInfo m _) = do
-              case Map.lookup (J.className c, J.methodKey m) cm of
+      let bindings = Crucible.fnBindingsFromList (map mkFunBinding (Map.toList sm)) where
+            mkFunBinding ((cn0,_), CJ.JVMHandleInfo m _) = do
+              case Map.lookup (cn0, J.methodKey m) (CJ.cfgMap (transClassMap ! cn0)) of
                 Just (CJ.MethodTranslation h (Crucible.SomeCFG g)) -> 
                   Crucible.FnBinding h (Crucible.UseCFG g (Crucible.postdomInfo g))
-                Nothing  -> error "cannot find method!"
+                Nothing  -> error $ "cannot find method!" ++ (J.unClassName (J.className c)) ++ "." ++ (J.methodName m)
             
 
       let javaExtImpl :: Crucible.ExtensionImpl p sym ()
@@ -161,7 +164,7 @@ setupCrucibleJavaContext bic opts c action = do
       
 
       return
-         CrucibleJavaContext{ _cjcClassTrans     = Map.singleton (J.className c) transClass
+         CrucibleJavaContext{ _cjcClassTrans     = transClassMap
                             , _cjcBackend        = sym
                             , _cjcJavaSimContext = jsimctx
                             , _cjcJavaGlobals    = globals
@@ -176,7 +179,8 @@ setupCrucibleJavaContext bic opts c action = do
 crucible_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
 crucible_java_cfg bic _opts c mname = do
   translateClass c
-  ctm <- getClassTrans
+  jvmt <- getClassTrans
+  let ctm = CJ.translatedClasses jvmt
   let cb = biJavaCodebase bic
   let cm = CJ.cfgMap (ctm ! J.className c)
   (mcls, meth) <- io $ findMethod cb fixPos mname c
