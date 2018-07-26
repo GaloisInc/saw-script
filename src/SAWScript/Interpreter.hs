@@ -532,12 +532,13 @@ cryptol_load path = do
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
-mir_load :: SharedContext -> FilePath -> TopLevel RustModule
+mir_load :: SharedContext -> FilePath -> TopLevel Mir.RustModule
 mir_load sc fp = io $ Mir.loadMIR sc fp
 
-mir_extract :: SharedContext -> RustModule -> String -> TopLevel TypedTerm
+mir_extract :: SharedContext -> Mir.RustModule -> String -> TopLevel TypedTerm
 mir_extract sc rm s = do
-    t <- io $ Mir.extractMIR sc rm s
+    AIGProxy proxy <- getProxy
+    t <- io $ Mir.extractMIR proxy sc rm s
     io $ mkTypedTerm sc t
 
 

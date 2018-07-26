@@ -43,6 +43,7 @@ extra-deps:
   - monad-supply-0.7
   - sbv-7.7
   - simple-smt-0.7.1
+  - smtLib-1.0.9
   - monadLib-3.7.3
   - tasty-hunit-0.10.0.1
   - data-inttrie-0.1.4

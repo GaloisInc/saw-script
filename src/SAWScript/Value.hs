@@ -54,6 +54,7 @@ import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
+import Mir.SAWInterface
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
@@ -295,7 +296,7 @@ showsPrecValue opts p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
-    VRustModule m -> showString (showRustModule m)
+    VRustModule m -> showString "<<Rust module>>" --(showRustModule m)
     VLLVMModule m -> showString (showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r

@@ -34,6 +34,7 @@ extra-deps:
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
   - simple-smt-0.7.1
+  - smtLib-1.0.9
   - GraphSCC-1.0.4
   - monadLib-3.7.3
   - sbv-7.7
