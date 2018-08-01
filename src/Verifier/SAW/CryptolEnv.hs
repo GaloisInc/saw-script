@@ -133,7 +133,7 @@ nameMatcher xs =
     case modNameChunks (textToModName (pack xs)) of
       []  -> const False
       [x] -> (packIdent x ==) . MN.nameIdent
-      cs -> let m = MN.Declared (packModName (map pack (init cs)))
+      cs -> let m = MN.Declared (packModName (map pack (init cs))) MN.UserName
                 i = packIdent (last cs)
              in \n -> MN.nameIdent n == i && MN.nameInfo n == m
 
@@ -375,7 +375,7 @@ bindIdent ident env = (name, env')
     modEnv = eModuleEnv env
     supply = ME.meSupply modEnv
     fixity = Nothing
-    (name, supply') = MN.mkDeclared interactiveName ident fixity P.emptyRange supply
+    (name, supply') = MN.mkDeclared interactiveName MN.UserName ident fixity P.emptyRange supply
     modEnv' = modEnv { ME.meSupply = supply' }
     env' = env { eModuleEnv = modEnv' }
 
@@ -538,7 +538,7 @@ declareName env mname input = do
   let modEnv = eModuleEnv env
   (cname, modEnv') <-
     liftModuleM modEnv $ MM.interactive $
-    MN.liftSupply (MN.mkDeclared mname (P.getIdent pname) Nothing P.emptyRange)
+    MN.liftSupply (MN.mkDeclared mname MN.UserName (P.getIdent pname) Nothing P.emptyRange)
   let env' = env { eModuleEnv = modEnv' }
   return (cname, env')
 
