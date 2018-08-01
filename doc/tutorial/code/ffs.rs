@@ -1,9 +1,8 @@
-
-fn ffs_ref(w : u32) -> u32 {
+pub fn ffs_ref(w : u32) -> u32 {
     let mut i = 0;
     let mut word = w;
     if word == 0 { return 0; }
-    
+
     let mut cnt = 0;
     while cnt < 32 {
         if (1 << i) & word != 0 {
@@ -16,7 +15,7 @@ fn ffs_ref(w : u32) -> u32 {
     0
 }
 
-fn ffs_imp(j : u32) -> u32 {
+pub fn ffs_imp(j : u32) -> u32 {
     let mut n : u8 = 1;
     let mut i = j;
     if (i & 0xffff) == 0 {
