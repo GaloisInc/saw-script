@@ -451,7 +451,7 @@ importPrimitive sc (C.asPrim -> Just nm) =
   case nm of
     "True"          -> scBool sc True
     "False"         -> scBool sc False
-    "demote"        -> scGlobalDef sc "Cryptol.ecDemote"      -- Converts a numeric type into its corresponding value.
+    "number"        -> scGlobalDef sc "Cryptol.ecNumber"      -- Converts a numeric type into its corresponding value.
                                                               -- {val, a} (Literal val a) => a
     "toInteger"     -> scGlobalDef sc "Cryptol.ecToInteger"   -- {n} (fin n) => [n] -> Integer
     "fromInteger"   -> scGlobalDef sc "Cryptol.ecFromInteger" -- {a} (Arith a) => Integer -> a

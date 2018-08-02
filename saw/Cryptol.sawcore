@@ -843,8 +843,8 @@ PLiteralInteger = natToInt;
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecDemote :: (val :: Num) -> (a :: sort 0) -> PLiteral a -> a;
-ecDemote val a pa =
+ecNumber :: (val :: Num) -> (a :: sort 0) -> PLiteral a -> a;
+ecNumber val a pa =
   Num#rec (\ (_ :: Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
@@ -1302,8 +1302,8 @@ axiom demote_add_distr
   :: (w :: Nat)
   -> (x y :: Num)
   -> Eq (bitvector w)
-        (ecDemote (tcAdd x y) (TCNum w))
-        (bvAdd w (ecDemote x (TCNum w)) (ecDemote y (TCNum w)));
+        (ecNumber (tcAdd x y) (TCNum w))
+        (bvAdd w (ecNumber x (TCNum w)) (ecNumber y (TCNum w)));
 -}
 
 --------------------------------------------------------------------------------
