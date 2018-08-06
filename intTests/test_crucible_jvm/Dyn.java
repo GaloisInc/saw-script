@@ -6,6 +6,16 @@ class Dyn implements Iface {
 	return this.x + y;
     }
 
+    public int binary (int y, boolean b) {
+	if (b) { return y + x; }
+	else { return x;      }
+    }
+
+    static int b (int y) {
+	Dyn d = new Dyn();
+	return d.binary(y, true);
+    }
+    
     // instance variable access
     static int f_imp (int y) {
 	Dyn d = new Dyn();
@@ -19,6 +29,7 @@ class Dyn implements Iface {
 
     
     static int f_ref (int y) { return y + 2; }
+
 
     Dyn() {
 	this.x = 2;

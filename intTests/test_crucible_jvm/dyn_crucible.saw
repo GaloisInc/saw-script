@@ -1,3 +1,6 @@
+obj   <- java_load_class "java.lang.Object";
+iface <- java_load_class "Iface";
+
 j <- java_load_class "Dyn";
 
 print "**Extracting f_ref";
@@ -17,6 +20,9 @@ h_imp <- crucible_java_extract j "h_imp";
 
 print "**Extracting i_imp";
 i_imp <- crucible_java_extract j "i_imp";
+
+print "**Extracting b";
+b <- crucible_java_extract j "b";
 
 
 print "**Evaluating: instance variable";
@@ -38,9 +44,11 @@ sat_print abc {{ \(x:[32]) -> h_imp 3 == x }};
 print "**Proving equivalence: dynamic method";
 prove_print abc {{ \x -> h_ref x == h_imp x }};
 
-
 print "**Evaluating: invoke interface (i_imp 3)";
 sat_print abc {{ \(x:[32]) -> i_imp 3 == x }};
+
+print "**Evaluating: two-argument dynamic method (b 3)";
+sat_print abc {{ \(x:[32]) -> b 3 == x }};
 
 
 print "Done.";

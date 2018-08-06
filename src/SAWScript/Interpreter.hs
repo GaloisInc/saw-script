@@ -454,7 +454,7 @@ buildTopLevelEnv proxy opts =
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
-       ctx <- stToIO $ CJ.mkJVMContext halloc
+       jvmTrans <- stToIO $ CJ.mkInitialJVMTranslation halloc
        
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv opts bic
@@ -463,7 +463,7 @@ buildTopLevelEnv proxy opts =
                    , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
-                   , rwClassTrans = CJ.JVMTranslation { CJ.translatedClasses = Map.empty, CJ.transContext = ctx }
+                   , rwJVMTrans   = jvmTrans
                    }
        return (bic, ro0, rw0)
 
@@ -1241,9 +1241,13 @@ primitives = Map.fromList
     [ "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
 
   , prim "java_load_class"     "String -> TopLevel JavaClass"
-    (bicVal (const . loadJavaClass))
+    (bicVal (const . CJ.loadJavaClass))
     [ "Load the named Java class and return a handle to it." ]
 
+  , prim "java_translate_class" "String -> TopLevel ()"
+    (bicVal (const . CJ.translateClassRefs))
+    [ "Translate the class definition" ]
+    
   --, prim "java_class_info"     "JavaClass -> TopLevel ()"
 
   , prim "java_extract"

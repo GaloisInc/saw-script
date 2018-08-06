@@ -383,7 +383,7 @@ data TopLevelRW =
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
-  , rwClassTrans :: CJ.JVMTranslation
+  , rwJVMTrans :: CJ.JVMTranslation
   -- ^ crucible-jvm: Classes that have already been translated
   -- Not sure if this is the best place to store this, but we don't want to
   -- keep translating the same methods/classes over and over
@@ -442,15 +442,15 @@ putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
 
 -- | Access the current state of Java Class translation
-getClassTrans :: TopLevel  CJ.JVMTranslation
-getClassTrans = TopLevel (gets rwClassTrans)
+getJVMTrans :: TopLevel  CJ.JVMTranslation
+getJVMTrans = TopLevel (gets rwJVMTrans)
 
 -- | Add a newly translated class to the translation
-addClassTrans :: CJ.JVMTranslation -> TopLevel ()
-addClassTrans trans = do
+addJVMTrans :: CJ.JVMTranslation -> TopLevel ()
+addJVMTrans trans = do
   rw <- getTopLevelRW
-  let jvmt = rwClassTrans rw
-  putTopLevelRW ( rw { rwClassTrans = trans <> jvmt })
+  let jvmt = rwJVMTrans rw
+  putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
 
 
 -- Other SAWScript Monads ------------------------------------------------------

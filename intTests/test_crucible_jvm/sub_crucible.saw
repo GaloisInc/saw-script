@@ -1,4 +1,6 @@
+obj <- java_load_class "java.lang.Object";
 dyn <- java_load_class "Dyn";
+ifc <- java_load_class "Iface";
 sub <- java_load_class "Sub";
 
 print "**Extracting Dyn.f_virt";
