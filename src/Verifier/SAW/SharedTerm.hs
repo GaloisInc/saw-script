@@ -1357,8 +1357,8 @@ scIntegerType sc = scFlatTermF sc preludeIntegerType
 
 scIntegerConst :: SharedContext -> Integer -> IO Term
 scIntegerConst sc i
-  | i >= 0 = scNat sc (fromInteger i)
-  | otherwise = scIntNeg sc =<< scNat sc (fromInteger (- i))
+  | i >= 0    = scNatToInt sc =<< scNat sc (fromInteger i)
+  | otherwise = scIntNeg sc =<< scNatToInt sc =<< scNat sc (fromInteger (- i))
 
 -- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
 scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin
