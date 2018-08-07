@@ -96,6 +96,9 @@ module Verifier.SAW.SharedTerm
   , scAddNat
   , scSubNat
   , scMulNat
+  , scDivNat
+  , scModNat
+  , scDivModNat
   , scEqualNat
   , scLtNat
   , scMinNat
@@ -166,7 +169,7 @@ module Verifier.SAW.SharedTerm
   , scIntegerConst
   , scIntAdd, scIntSub, scIntMul
   , scIntDiv, scIntMod, scIntNeg
-  , scIntMin, scIntMax
+  , scIntAbs, scIntMin, scIntMax
   , scIntEq, scIntLe, scIntLt
   , scIntToNat, scNatToInt
   , scIntToBv, scBvToInt, scSbvToInt
@@ -1323,6 +1326,18 @@ scSubNat sc x y = scGlobalApply sc "Prelude.subNat" [x,y]
 scMulNat :: SharedContext -> Term -> Term -> IO Term
 scMulNat sc x y = scGlobalApply sc "Prelude.mulNat" [x,y]
 
+-- divNat :: Nat -> Nat -> Nat;
+scDivNat :: SharedContext -> Term -> Term -> IO Term
+scDivNat sc x y = scGlobalApply sc "Prelude.divNat" [x,y]
+
+-- modNat :: Nat -> Nat -> Nat;
+scModNat :: SharedContext -> Term -> Term -> IO Term
+scModNat sc x y = scGlobalApply sc "Prelude.modNat" [x,y]
+
+-- divModNat :: Nat -> Nat -> #(Nat, Nat);
+scDivModNat :: SharedContext -> Term -> Term -> IO Term
+scDivModNat sc x y = scGlobalApply sc "Prelude.divModNat" [x,y]
+
 scEqualNat :: SharedContext -> Term -> Term -> IO Term
 scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
 
@@ -1356,10 +1371,11 @@ scIntMod sc x y = scGlobalApply sc "Prelude.intMod" [x, y]
 scIntMin sc x y = scGlobalApply sc "Prelude.intMin" [x, y]
 scIntMax sc x y = scGlobalApply sc "Prelude.intMax" [x, y]
 
--- primitive intNeg :: Integer -> Integer;
-scIntNeg
+-- primitive intNeg/intAbs :: Integer -> Integer;
+scIntNeg, scIntAbs
    :: SharedContext -> Term -> IO Term
 scIntNeg sc x = scGlobalApply sc "Prelude.intNeg" [x]
+scIntAbs sc x = scGlobalApply sc "Prelude.intAbs" [x]
 
 -- primitive intEq/intLe/intLt  :: Integer -> Integer -> Bool;
 scIntEq, scIntLe, scIntLt

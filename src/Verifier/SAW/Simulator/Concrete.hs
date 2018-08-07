@@ -212,6 +212,7 @@ prims =
   , Prims.bpIntDiv = pure2 div
   , Prims.bpIntMod = pure2 mod
   , Prims.bpIntNeg = pure1 negate
+  , Prims.bpIntAbs = pure1 abs
   , Prims.bpIntEq  = pure2 (==)
   , Prims.bpIntLe  = pure2 (<=)
   , Prims.bpIntLt  = pure2 (<)

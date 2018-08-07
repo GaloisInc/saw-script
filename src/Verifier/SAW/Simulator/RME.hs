@@ -197,6 +197,7 @@ prims =
   , Prims.bpIntDiv = pure2 div
   , Prims.bpIntMod = pure2 mod
   , Prims.bpIntNeg = pure1 negate
+  , Prims.bpIntAbs = pure1 abs
   , Prims.bpIntEq  = pure2 (\x y -> RME.constant (x == y))
   , Prims.bpIntLe  = pure2 (\x y -> RME.constant (x <= y))
   , Prims.bpIntLt  = pure2 (\x y -> RME.constant (x < y))

@@ -104,6 +104,7 @@ data BasePrims l =
   , bpIntDiv :: VInt l -> VInt l -> MInt l
   , bpIntMod :: VInt l -> VInt l -> MInt l
   , bpIntNeg :: VInt l -> MInt l
+  , bpIntAbs :: VInt l -> MInt l
   , bpIntEq :: VInt l -> VInt l -> MBool l
   , bpIntLe :: VInt l -> VInt l -> MBool l
   , bpIntLt :: VInt l -> VInt l -> MBool l
@@ -182,6 +183,7 @@ constMap bp = Map.fromList
   , ("Prelude.intDiv", intBinOp "intDiv" (bpIntDiv bp))
   , ("Prelude.intMod", intBinOp "intMod" (bpIntMod bp))
   , ("Prelude.intNeg", intUnOp  "intNeg" (bpIntNeg bp))
+  , ("Prelude.intAbs", intUnOp  "intAbs" (bpIntAbs bp))
   , ("Prelude.intEq" , intBinCmp "intEq" (bpIntEq bp))
   , ("Prelude.intLe" , intBinCmp "intLe" (bpIntLe bp))
   , ("Prelude.intLt" , intBinCmp "intLt" (bpIntLt bp))

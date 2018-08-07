@@ -1295,6 +1295,7 @@ primitive intMod :: Integer -> Integer -> Integer;
 primitive intMin :: Integer -> Integer -> Integer;
 primitive intMax :: Integer -> Integer -> Integer;
 primitive intNeg :: Integer -> Integer;
+primitive intAbs :: Integer -> Integer;
 primitive intEq  :: Integer -> Integer -> Bool;
 primitive intLe  :: Integer -> Integer -> Bool;
 primitive intLt  :: Integer -> Integer -> Bool;
