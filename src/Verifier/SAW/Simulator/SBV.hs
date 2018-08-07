@@ -155,6 +155,7 @@ prims =
   , Prims.bpIntDiv = pure2 svQuot
   , Prims.bpIntMod = pure2 svRem
   , Prims.bpIntNeg = pure1 svUNeg
+  , Prims.bpIntAbs = pure1 svAbs
   , Prims.bpIntEq  = pure2 svEqual
   , Prims.bpIntLe  = pure2 svLessEq
   , Prims.bpIntLt  = pure2 svLessThan
