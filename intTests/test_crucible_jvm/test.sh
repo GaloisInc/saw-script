@@ -7,10 +7,10 @@ make Arr.class
 make Obj.class
 make TestStr.class
 javap -c TestStr.class
-# cabal new-exec saw -- -j $RTJAR stat_crucible.saw
-# cabal new-exec saw -- -j $RTJAR dyn_crucible.saw
-# cabal new-exec saw -- -j $RTJAR sub_crucible.saw
-cabal new-exec saw -- -j $RTJAR arr_crucible.saw
+cabal new-exec saw -- -j $RTJAR stat_crucible.saw
+cabal new-exec saw -- -j $RTJAR dyn_crucible.saw
+cabal new-exec saw -- -j $RTJAR sub_crucible.saw
+# cabal new-exec saw -- -j $RTJAR arr_crucible.saw
 # cabal new-exec saw -- -j $RTJAR teststr_crucible.saw
 
 

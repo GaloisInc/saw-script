@@ -34,7 +34,6 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
-import Control.Monad.ST (stToIO)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -454,7 +453,7 @@ buildTopLevelEnv proxy opts =
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
-       jvmTrans <- stToIO $ CJ.mkInitialJVMTranslation halloc
+       jvmTrans <- CJ.mkInitialJVMContext halloc jcb
        
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv opts bic
@@ -1244,10 +1243,6 @@ primitives = Map.fromList
     (bicVal (const . CJ.loadJavaClass))
     [ "Load the named Java class and return a handle to it." ]
 
-  , prim "java_translate_class" "String -> TopLevel ()"
-    (bicVal (const . CJ.translateClassRefs))
-    [ "Translate the class definition" ]
-    
   --, prim "java_class_info"     "JavaClass -> TopLevel ()"
 
   , prim "java_extract"

@@ -19,10 +19,7 @@ Stability   : provisional
 module SAWScript.CrucibleBuiltinsJVM
        (
          loadJavaClass           -- java_load_class: reads a class from the codebase
-       , translateClassTopLevel
-       , translateClassRefs
        , crucible_java_extract   -- 
-       , crucible_java_cfg
        ) where
 
 import           Data.List (isPrefixOf)
@@ -34,6 +31,7 @@ import           Data.Foldable (toList)
 import           System.IO
 import           Control.Monad (forM_,unless,when,foldM)
 import           Control.Monad.ST
+import           Control.Monad.State.Strict
 
 -- parameterized-utils
 import qualified Data.Parameterized.Map as MapF
@@ -65,33 +63,38 @@ import Verifier.SAW.TypedTerm(TypedTerm, mkTypedTerm)
 import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
-import SAWScript.Utils (findMethod, findField, lookupClass, handleException)
 import SAWScript.CrucibleBuiltins(setupArg, setupArgs, getGlobalPair, runCFG)
 
 -- jvm-verifier
 import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
-import qualified "jvm-verifier" Verifier.Java.Codebase as J
+import qualified SAWScript.Utils as J 
+import qualified "jvm-verifier" Verifier.Java.Codebase as JCB
 
 -- crucible-jvm
+import           Lang.Crucible.JVM.Translation(IsCodebase(..))
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified Lang.Crucible.JVM.ClassRefs as CJ
 
 import Debug.Trace
 
------------------------------------------------------------------------
--- This is actually shared with the old Java static simulator.
--- Including it here so that we can retire the 'JavaBuiltins.hs' module
--- in the future.
+--
+-- Use the Codebase implementation from the old Java static simulator
+--
+instance IsCodebase JCB.Codebase where
+  lookupClass cb = J.lookupClass cb fixPos 
+  findMethod  cb = J.findMethod  cb fixPos
 
+-----------------------------------------------------------------------
+
+--
+-- make sure the class is in the database and allocate handles for its
+-- methods and static fields
+--
 loadJavaClass :: BuiltinContext -> String -> TopLevel J.Class
 loadJavaClass bic str = do
-  c <- io $ (lookupClass (biJavaCodebase bic) fixPos . J.mkClassName . J.dotsToSlashes) str
+  c <- io $ findClass (biJavaCodebase bic) str
   prepareClassToplevel bic str
---  jvmTrans <- getJVMTrans
---  let ctx = CJ.transContext jvmTrans
---  addJVMTrans (CJ.JVMTranslation Map.empty (CJ.addToClassTable c ctx))
-  
   return c
 
 -----------------------------------------------------------------------
@@ -101,23 +104,22 @@ prepareClassToplevel :: BuiltinContext -> String -> TopLevel ()
 prepareClassToplevel bic str = do
   
    -- get class from codebase
-   c <- io $ (lookupClass (biJavaCodebase bic) fixPos . J.mkClassName . J.dotsToSlashes) str
-
-   -- get current ctx
-   jvmTrans <- getJVMTrans
-   let ctx0 = CJ.transContext jvmTrans
+   c <- io $ findClass (biJavaCodebase bic) str
 
    -- make sure that we haven't already processed this class
    unless (Map.member (J.className c) (CJ.classTable ctx0)) $ do 
 
+     -- get current ctx
+     ctx0 <- getJVMTrans
+
      -- add handles/global variables for this class
      halloc <- getHandleAlloc
-     ctx <- io $ stToIO $ CJ.extendJVMContext halloc ctx0 c 
+     ctx <- io $ stToIO $ execStateT (CJ.extendJVMContext halloc c) ctx0
    
      -- update ctx
-     addJVMTrans (CJ.JVMTranslation Map.empty (CJ.addToClassTable c ctx))
+     addJVMTrans ctx
 
-
+{-
 -----------------------------------------------------------------------
 -- | translate a given class (if it hasn't already been translated) and
 -- add it to the class translation table
@@ -194,10 +196,11 @@ translateClassRefs bic str = do
          foldM go
            (Set.insert cn found)
            (Set.toList (CJ.classRefs c))
-
+-}
 
 type Sym = CrucibleSAW.SAWCoreBackend Nonce.GlobalNonceGenerator
 
+{-
 data CrucibleJavaContext =
   CrucibleJavaContext
   { _cjcClassTrans     :: Map J.ClassName CJ.ClassTranslation
@@ -278,7 +281,7 @@ crucible_java_cfg bic _opts c mname = do
   let ctm = CJ.translatedClasses jvmt
   let cb = biJavaCodebase bic
   let cm = CJ.cfgMap (ctm ! J.className c)
-  (mcls, meth) <- io $ findMethod cb fixPos mname c
+  (mcls, meth) <- io $ findMethod cb mname c
   case Map.lookup (J.className mcls, J.methodKey meth) cm of
      Nothing  -> fail $ unwords ["method", show $ J.methodKey meth, "not found"]
      Just (CJ.MethodTranslation _ (Crucible.SomeCFG cfg)) -> return (JVM_CFG (Crucible.AnyCFG cfg))
@@ -329,9 +332,10 @@ extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg) =
             mkTypedTerm sc t'
         Crucible.AbortedResult _ _ar -> do
           fail $ unlines [ "Symbolic execution failed." ]
-
+-}
 ---------------------------------------------------------------------------------
 
+{-
 crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
 crucible_java_extract bic opts c mname = do
   traceM $ "extracting " ++ mname
@@ -348,7 +352,7 @@ crucible_java_extract bic opts c mname = do
   sc <- getSharedContext
   
   -- find the handle for the method to extract
-  (mcls, meth) <- io $ findMethod (biJavaCodebase bic) fixPos mname c
+  (mcls, meth) <- io $ findMethod (biJavaCodebase bic) mname c
 
   when (not (J.methodIsStatic meth)) $ do
     fail $ unlines [ "Crucible can only extract static methods" ]
@@ -440,3 +444,55 @@ setupDelayedCrucibleJavaContext bic opts action = do
                             }
       
              )
+-}
+
+
+
+crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
+crucible_java_extract bic opts c mname = do
+  let sc        = biSharedContext bic
+  let cb        = biJavaCodebase bic
+  let verbosity = simVerbose opts
+  let gen       = Nonce.globalNonceGenerator
+
+
+  traceM $ "extracting " ++ mname
+  (mcls, meth) <- io $ CJ.findMethod cb mname c
+  when (not (J.methodIsStatic meth)) $ do
+       fail $ unlines [ "Crucible can only extract static methods" ]
+
+  -- allocate all of the handles/static vars that are directly referenced by
+  -- this class
+  let refs = Set.toList (CJ.classRefs c)
+  traceM $ "refs are " ++ show refs
+  mapM_ (prepareClassToplevel bic . J.unClassName) refs
+
+  halloc <- getHandleAlloc
+  AIGProxy proxy <- getProxy
+  ctx <- getJVMTrans
+
+  io $ do -- only the IO monad, nothing else
+          sym <- CrucibleSAW.newSAWCoreBackend proxy sc gen
+          CJ.setSimulatorVerbosity verbosity sym
+
+          (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth 
+
+          (ecs, args) <- setupArgs sc sym h
+          
+          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx h args
+                         
+          case res of
+            Crucible.FinishedResult _ pr -> do
+              gp <- getGlobalPair opts pr
+              t <- Crucible.asSymExpr
+                   (gp^.Crucible.gpValue)
+                   (CrucibleSAW.toSC sym)
+                   (fail $ unwords ["Unexpected return type:",
+                                    show (Crucible.regType (gp^.Crucible.gpValue))])
+              t' <- scAbstractExts sc (toList ecs) t
+              mkTypedTerm sc t'
+            Crucible.AbortedResult _ _ar -> do
+              fail $ unlines [ "Symbolic execution failed." ]
+
+
+

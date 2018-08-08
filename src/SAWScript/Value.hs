@@ -383,10 +383,8 @@ data TopLevelRW =
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
-  , rwJVMTrans :: CJ.JVMTranslation
-  -- ^ crucible-jvm: Classes that have already been translated
-  -- Not sure if this is the best place to store this, but we don't want to
-  -- keep translating the same methods/classes over and over
+  , rwJVMTrans :: CJ.JVMContext
+  -- ^ crucible-jvm: Handles and info for classes that have already been translated
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
@@ -442,11 +440,11 @@ putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
 
 -- | Access the current state of Java Class translation
-getJVMTrans :: TopLevel  CJ.JVMTranslation
+getJVMTrans :: TopLevel  CJ.JVMContext
 getJVMTrans = TopLevel (gets rwJVMTrans)
 
 -- | Add a newly translated class to the translation
-addJVMTrans :: CJ.JVMTranslation -> TopLevel ()
+addJVMTrans :: CJ.JVMContext -> TopLevel ()
 addJVMTrans trans = do
   rw <- getTopLevelRW
   let jvmt = rwJVMTrans rw
