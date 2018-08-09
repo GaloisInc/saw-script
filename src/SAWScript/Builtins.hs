@@ -1151,3 +1151,12 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
       return (n', TypedTerm s' t')
+
+cryptol_load :: FilePath -> TopLevel CryptolModule
+cryptol_load path = do
+  sc <- getSharedContext
+  rw <- getTopLevelRW
+  let ce = rwCryptol rw
+  (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
+  putTopLevelRW $ rw { rwCryptol = ce' }
+  return m
