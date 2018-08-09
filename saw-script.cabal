@@ -85,10 +85,11 @@ library
     , flexdis86
     , elf-edit
     , reflection
-              
+
   hs-source-dirs: src
 
   exposed-modules:
+    SAWScript
     SAWScript.AST
     SAWScript.AutoMatch
     SAWScript.AutoMatch.Interaction
