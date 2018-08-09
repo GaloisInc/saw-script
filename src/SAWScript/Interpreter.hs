@@ -522,15 +522,6 @@ print_value v = do
   opts <- fmap rwPPOpts getTopLevelRW
   printOutLnTop Info (showsPrecValue opts 0 v "")
 
-cryptol_load :: FilePath -> TopLevel CryptolModule
-cryptol_load path = do
-  sc <- getSharedContext
-  rw <- getTopLevelRW
-  let ce = rwCryptol rw
-  (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
-  putTopLevelRW $ rw { rwCryptol = ce' }
-  return m
-
 readSchema :: String -> SS.Schema
 readSchema str =
   case parseSchema (lexSAW "internal" str) of
