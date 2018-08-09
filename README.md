@@ -125,6 +125,35 @@ downloaded dependencies include:
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
 * `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 
+## For SAW developers
+
+Presently, the `saw-script` main executable cannot be loaded into GHCi due to a
+linker issue. However, the rest of the library can be manipulated in GHCi, with
+a little convincing.
+
+If you are using `cabal` to build, select the `saw-script` target:
+
+```
+$ cabal new-repl saw-script
+```
+
+If you are using `stack` to build, select the `saw-script` *library* target:
+
+```
+$ stack repl saw-script:lib
+```
+
+In order to use interactive tools like `intero`, you need to configure them with
+this target. You can configure `intero-mode` in Emacs to use the `saw-script`
+library target by setting the variable `intero-targets` to the string
+`"saw-script:lib"`. To make this setting persistent for all files in this
+project, place the following snippet in the file `src/.dir-locals.el`:
+
+```elisp
+((haskell-mode
+  (intero-targets "saw-script:lib")))
+```
+
 ## Acknowledgements
 
 Much of the work on SAW has been funded by, and lots of design input was
