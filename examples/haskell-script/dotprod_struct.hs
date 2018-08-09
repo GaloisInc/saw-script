@@ -1,0 +1,65 @@
+import SAWScript
+import qualified Data.ABC.GIA as GIA
+
+main :: IO ()
+main = runSAW (AIGProxy GIA.proxy) defaultOptions $ do
+  m <- llvm_load_module "../llvm/dotprod_struct.bc"
+  cry <- cryptol_load "../llvm/dotprod.cry"
+  return ()
+
+{-
+import "dotprod.cry";
+m <- llvm_load_module "dotprod_struct.bc";
+xs <- fresh_symbolic "xs" {| [2][32] |};
+ys <- fresh_symbolic "ys" {| [2][32] |};
+let allocs = [ ("x", 1), ("y", 1), ("x->0", 2), ("y->0", 2) ];
+let inputs = [ ("*(x->0)", {{ xs }}, 2)
+             , ("*(y->0)", {{ ys }}, 2)
+             , ("x->1", {{ 2:[32] }}, 1)
+             , ("y->1", {{ 2:[32] }}, 1)
+             ];
+let outputs = [("return", 1)];
+t <- llvm_symexec m "dotprod_struct" allocs inputs outputs true;
+thm <- abstract_symbolic {{ t == dotprod xs ys }};
+prove_print abc thm;
+
+let dotprod_spec = do {
+    llvm_ptr "x" (llvm_struct "struct.vec_t");
+    llvm_ptr "y" (llvm_struct "struct.vec_t");
+    llvm_ptr "x->0" (llvm_array 2 (llvm_int 32));
+    llvm_ptr "y->0" (llvm_array 2 (llvm_int 32));
+    xs <- llvm_var "*(x->0)" (llvm_array 2 (llvm_int 32));
+    xn <- llvm_var "x->1" (llvm_int 32);
+    ys <- llvm_var "*(y->0)" (llvm_array 2 (llvm_int 32));
+    yn <- llvm_var "y->1" (llvm_int 32);
+    llvm_sat_branches true;
+    llvm_assert_eq "x->1" {{ 2:[32] }};
+    llvm_assert_eq "y->1" {{ 2:[32] }};
+    llvm_return {{ dotprod xs ys }};
+    llvm_verify_tactic abc;
+};
+
+let dotprod_wrap_spec = do {
+    llvm_ptr "x" (llvm_struct "struct.vec_t");
+    llvm_ptr "y" (llvm_struct "struct.vec_t");
+    llvm_ptr "x->0" (llvm_array 2 (llvm_int 32));
+    llvm_ptr "y->0" (llvm_array 2 (llvm_int 32));
+    xs <- llvm_var "*(x->0)" (llvm_array 2 (llvm_int 32));
+    xn <- llvm_var "x->1" (llvm_int 32);
+    ys <- llvm_var "*(y->0)" (llvm_array 2 (llvm_int 32));
+    yn <- llvm_var "y->1" (llvm_int 32);
+    llvm_assert_eq "x->1" {{ 2:[32] }};
+    llvm_assert_eq "y->1" {{ 2:[32] }};
+    llvm_return {{ dotprod xs ys }};
+    llvm_verify_tactic do {
+      simplify (cryptol_ss ());
+      simplify (add_prelude_defs ["implies"] basic_ss);
+      simplify (add_prelude_eqs ["eq_refl"] basic_ss);
+      simplify (add_prelude_eqs ["or_True"] basic_ss);
+      trivial;
+    };
+};
+
+dotprod_ov <- llvm_verify m "dotprod_struct" [] dotprod_spec;
+llvm_verify m "dotprod_wrap" [dotprod_ov] dotprod_wrap_spec;
+-}
