@@ -15,6 +15,8 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-unused-local-binds #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 
 module SAWScript.CrucibleBuiltinsJVM
        (
@@ -79,16 +81,14 @@ import qualified Lang.Crucible.JVM.ClassRefs as CJ
 import Debug.Trace
 
 --
--- Use the Codebase implementation from the old Java static simulator
+-- | Use the Codebase implementation from the old Java static simulator
 --
 instance IsCodebase JCB.Codebase where
   lookupClass cb = J.lookupClass cb fixPos 
   findMethod  cb = J.findMethod  cb fixPos
 
 -----------------------------------------------------------------------
-
---
--- make sure the class is in the database and allocate handles for its
+-- | Make sure the class is in the database and allocate handles for its
 -- methods and static fields
 --
 loadJavaClass :: BuiltinContext -> String -> TopLevel J.Class
@@ -98,7 +98,7 @@ loadJavaClass bic str = do
   return c
 
 -----------------------------------------------------------------------
--- Allocate the method handles/global static variables for the given
+-- | Allocate the method handles/global static variables for the given
 -- class and add them to the current translation context
 prepareClassToplevel :: BuiltinContext -> String -> TopLevel ()
 prepareClassToplevel bic str = do
@@ -106,11 +106,11 @@ prepareClassToplevel bic str = do
    -- get class from codebase
    c <- io $ findClass (biJavaCodebase bic) str
 
+   -- get current ctx
+   ctx0 <- getJVMTrans
+
    -- make sure that we haven't already processed this class
    unless (Map.member (J.className c) (CJ.classTable ctx0)) $ do 
-
-     -- get current ctx
-     ctx0 <- getJVMTrans
 
      -- add handles/global variables for this class
      halloc <- getHandleAlloc
@@ -119,335 +119,14 @@ prepareClassToplevel bic str = do
      -- update ctx
      addJVMTrans ctx
 
-{-
+
 -----------------------------------------------------------------------
--- | translate a given class (if it hasn't already been translated) and
--- add it to the class translation table
-translateClassTopLevel :: J.Class -> TopLevel ()
-translateClassTopLevel c = do
-  let cn = J.className c
-  jvmTrans <- getJVMTrans
-  let transClassMap = CJ.translatedClasses jvmTrans
-  unless (Map.member cn transClassMap) $ do
-       halloc <- getHandleAlloc
-       newjvm <- io $ stToIO $ CJ.translateClass halloc (CJ.transContext jvmTrans) c
-       addJVMTrans newjvm  
-
-----
-translateClassRefs ::  BuiltinContext -> String -> TopLevel ()
-translateClassRefs bic str = do
-       cns <- go Set.empty cn0
-       traceM $ show cns
-       cs  <- io $ mapM (lookupClass (biJavaCodebase bic) fixPos) (Set.toList cns)
-       halloc <- getHandleAlloc
-       jvmTrans <- getJVMTrans
-       
-       newjvm <- io $ stToIO $ CJ.translateClasses halloc
-         (CJ.transContext jvmTrans) cs
-       addJVMTrans newjvm
-  where
-    cn0 = (J.mkClassName . J.dotsToSlashes) str
-
-    
-    go found cn =
-      if (cn `Set.member` found
-          || ("java/util/" `isPrefixOf` J.unClassName cn)
-          || ("java/math/" `isPrefixOf` J.unClassName cn)
-          || ("java/io/"   `isPrefixOf` J.unClassName cn)
-          || ("java/nio/"  `isPrefixOf` J.unClassName cn)
-          || ("["          `isPrefixOf` J.unClassName cn)
-          || ("java/time/" `isPrefixOf` J.unClassName cn)
-          || ("sun/"       `isPrefixOf` J.unClassName cn)
-          || ("java/security/" `isPrefixOf` J.unClassName cn)
-          || ("java/text/"     `isPrefixOf` J.unClassName cn)
-          || ("java/lang/reflect/"     `isPrefixOf` J.unClassName cn)
-          || ("java/lang/ref/" `isPrefixOf` J.unClassName cn)
-          || ("java/net/"    `isPrefixOf` J.unClassName cn)
-          || ("java/lang/Thread"    `isPrefixOf` J.unClassName cn)
-          || ("java/lang/CharSequence"    `isPrefixOf` J.unClassName cn)
-          || ("java/lang/ClassLoader"    `isPrefixOf` J.unClassName cn)
-          || ("java/lang/Character"    `isPrefixOf` J.unClassName cn)
-          || ("java/lang/ConditionalSpecialCasing"  `isPrefixOf` J.unClassName cn)
-          || cn `elem`
-           [   J.mkClassName "java/lang/Object"
-             , J.mkClassName "java/lang/Class"
-             , J.mkClassName "java/lang/Package"
-             , J.mkClassName "java/lang/SecurityManager"
-             , J.mkClassName "java/lang/Shutdown"
-             , J.mkClassName "java/lang/Process"
-             , J.mkClassName "java/lang/Runtime"
-             , J.mkClassName "java/lang/RuntimePermission"
-             , J.mkClassName "java/lang/StackTraceElement"
-             , J.mkClassName "java/lang/ProcessEnvironment"
-             , J.mkClassName "java/lang/ProcessBuilder"
-             , J.mkClassName "java/lang/Thread"
-             , J.mkClassName "java/lang/ThreadLocal"
-             , J.mkClassName "java/lang/ApplicationShutdownHooks"
-             , J.mkClassName "java/lang/invoke/SerializedLambda"
-             , J.mkClassName "java/lang/System$2"
-             , J.mkClassName "java/lang/AbstractStringBuilder"
-             , J.mkClassName "java/lang/StringBuilder"
-           ])
-        then return found
-        else do
-         traceM $ "go " ++ J.unClassName cn
-         
-         c <- io $ lookupClass (biJavaCodebase bic) fixPos cn
-         foldM go
-           (Set.insert cn found)
-           (Set.toList (CJ.classRefs c))
--}
 
 type Sym = CrucibleSAW.SAWCoreBackend Nonce.GlobalNonceGenerator
 
-{-
-data CrucibleJavaContext =
-  CrucibleJavaContext
-  { _cjcClassTrans     :: Map J.ClassName CJ.ClassTranslation
-  , _cjcBackend        :: Sym
-  , _cjcJavaSimContext :: Crucible.SimContext (CrucibleSAW.SAWCruciblePersonality Sym) Sym CJ.JVM
-  , _cjcJavaGlobals    :: Crucible.SymGlobalState Sym
-  }
 
-makeLenses ''CrucibleJavaContext
-
-
-
--- NOTE: unlike the LLVM version of this function, which is already provided with a
--- translated module, this function needs to first *translate* the JVM code to crucible and
--- then set up the context for symbolic simulation.
-setupCrucibleJavaContext ::
-   BuiltinContext -> Options -> J.Class ->
-   (CrucibleJavaContext -> TopLevel a) ->
-   TopLevel a
-setupCrucibleJavaContext bic opts c action = do
-  -- halloc :: HandleAllocator RealWorld
-  halloc <- getHandleAlloc
-  AIGProxy proxy <- getProxy
-  -- access the class translation from the toplevel context     
-  jvmTrans <- getJVMTrans
-  
-  let transClassMap = CJ.translatedClasses jvmTrans
-  
-  let transClass = transClassMap ! (J.className c)
-  
-  action =<< (io $ do   -- only the IO monad, nothing else
-      let gen = Nonce.globalNonceGenerator
-      let sc  = biSharedContext bic
-      let cb  = biJavaCodebase bic
-      let verbosity = simVerbose opts
-      sym <- CrucibleSAW.newSAWCoreBackend proxy sc gen
-
-      let cfg = W4.getConfiguration sym
-      verbSetting <- W4.getOptionSetting W4.verbosity cfg
-      _ <- W4.setOpt verbSetting (toInteger verbosity)
-      
-
-      -- set up the simulation context
-
-      let ctx = CJ.transContext jvmTrans
-            
-      let bindings = CJ.mkBindings ctx transClassMap 
-
-      let javaExtImpl :: Crucible.ExtensionImpl p sym CJ.JVM
-          javaExtImpl = Crucible.ExtensionImpl (\_sym _iTypes _logFn _f x -> case x of)
-                                               (\x -> case x of)
-
-      let jsimctx   = Crucible.initSimContext sym MapF.empty halloc stdout
-                        bindings javaExtImpl CrucibleSAW.SAWCruciblePersonality
-
-      -- initialize the dynamic class table (to just an empty map)
-      let globals = Crucible.insertGlobal (CJ.dynamicClassTable ctx)
-                                           Map.empty Crucible.emptyGlobals
-      
-
-      return
-         CrucibleJavaContext{ _cjcClassTrans     = transClassMap
-                            , _cjcBackend        = sym
-                            , _cjcJavaSimContext = jsimctx
-                            , _cjcJavaGlobals    = globals
-                            }
-      
-             )
-
-
-  
--- | Return the CFG for a particular method
--- If the class has not already been translated to a Crucible CFG, do so
-crucible_java_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
-crucible_java_cfg bic _opts c mname = do
-  translateClassTopLevel c
-  jvmt <- getJVMTrans
-  let ctm = CJ.translatedClasses jvmt
-  let cb = biJavaCodebase bic
-  let cm = CJ.cfgMap (ctm ! J.className c)
-  (mcls, meth) <- io $ findMethod cb mname c
-  case Map.lookup (J.className mcls, J.methodKey meth) cm of
-     Nothing  -> fail $ unwords ["method", show $ J.methodKey meth, "not found"]
-     Just (CJ.MethodTranslation _ (Crucible.SomeCFG cfg)) -> return (JVM_CFG (Crucible.AnyCFG cfg))
-
-
-
-{-
-crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
-crucible_java_extract bic opts c mname = do
-  translateClassTopLevel c
-  let cb = biJavaCodebase bic
-  let cn = J.className c
-  (mcls, meth) <- io $ findMethod cb fixPos mname c
-  setupCrucibleJavaContext bic opts c $ \cc -> do
-     let ct = (cc^.cjcClassTrans) ! cn
-     let cm = CJ.cfgMap ct 
-     
-     sc <- getSharedContext
-
-     case Map.lookup (J.className mcls, J.methodKey meth) cm of
-        Nothing  -> fail $ unwords ["method", show $ J.methodKey meth, "not found"]
-        Just (CJ.MethodTranslation _ (Crucible.SomeCFG cfg)) -> do
-
-          io $ extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg)
--}
-
-extractFromJavaCFG ::
-   Options -> SharedContext -> CrucibleJavaContext -> Crucible.AnyCFG CJ.JVM -> IO TypedTerm
-extractFromJavaCFG opts sc cc (Crucible.AnyCFG cfg) =
-  do  let sym = cc^.cjcBackend
-      let h   = Crucible.cfgHandle cfg
-      (ecs, args) <- setupArgs sc sym h
-      let simCtx  = cc^.cjcJavaSimContext
-      let globals = cc^.cjcJavaGlobals
-      
-      traceIO $ "Running cfg "
-      
-      res  <- runCFG simCtx globals h cfg args
-      
-      case res of
-        Crucible.FinishedResult _ pr -> do
-            gp <- getGlobalPair opts pr
-            t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (CrucibleSAW.toSC sym)
-                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
-            t' <- scAbstractExts sc (toList ecs) t
-            mkTypedTerm sc t'
-        Crucible.AbortedResult _ _ar -> do
-          fail $ unlines [ "Symbolic execution failed." ]
--}
----------------------------------------------------------------------------------
-
-{-
-crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
-crucible_java_extract bic opts c mname = do
-  traceM $ "extracting " ++ mname
-  
-  let refs = Set.toList (CJ.classRefs c)
-
-  traceM $ "refs are " ++ show refs
-
-  -- allocate all of the handles/static vars that we could need
-  mapM_ (prepareClassToplevel bic . J.unClassName) refs
-
-  jvmTrans <- getJVMTrans
-  let ctx = CJ.transContext jvmTrans
-  sc <- getSharedContext
-  
-  -- find the handle for the method to extract
-  (mcls, meth) <- io $ findMethod (biJavaCodebase bic) mname c
-
-  when (not (J.methodIsStatic meth)) $ do
-    fail $ unlines [ "Crucible can only extract static methods" ]
-  
-  case Map.lookup (J.className mcls, J.methodKey meth) (CJ.methodHandles ctx) of
-    Just (CJ.JVMHandleInfo m2 h) -> do
-      
-      traceM $ "found handle:" ++ show m2 ++ "\n" ++ show h ++ "\n"
-      
-      setupDelayedCrucibleJavaContext bic opts $ \cc -> io $ do
-        
-        traceM $ "setup simcontext "
-        
-        let sym     = cc^.cjcBackend
-        let simCtx  = cc^.cjcJavaSimContext
-        let globals = cc^.cjcJavaGlobals
-        
-        (ecs, args) <- setupArgs sc sym h
-      
-        traceIO $ "Running delayed cfg "
-        let simSt = Crucible.initSimState simCtx globals Crucible.defaultAbortHandler  
-
-        res  <- Crucible.executeCrucible simSt $
-                Crucible.runOverrideSim (Crucible.handleReturnType h)
-                (Crucible.regValue <$> (Crucible.callFnVal (Crucible.HandleFnVal h) args))
-      
-        case res of
-          Crucible.FinishedResult _ pr -> do
-            gp <- getGlobalPair opts pr
-            t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (CrucibleSAW.toSC sym)
-                   (fail $ unwords ["Unexpected return type:",
-                                    show (Crucible.regType (gp^.Crucible.gpValue))])
-            t' <- scAbstractExts sc (toList ecs) t
-            mkTypedTerm sc t'
-          Crucible.AbortedResult _ _ar -> do
-            fail $ unlines [ "Symbolic execution failed." ]
-
-    Nothing -> error $ "BUG: cannot find handle for " ++ J.unClassName (J.className mcls) ++ "/" ++ J.methodName meth
-
-
--- NOTE: unlike the LLVM version of this function, which is already provided with a
--- translated module, this function needs to first *translate* the JVM code to crucible and
--- then set up the context for symbolic simulation.
-setupDelayedCrucibleJavaContext ::
-   BuiltinContext -> Options -> 
-   (CrucibleJavaContext -> TopLevel a) ->
-   TopLevel a
-setupDelayedCrucibleJavaContext bic opts action = do
-  -- halloc :: HandleAllocator RealWorld
-  halloc <- getHandleAlloc
-  AIGProxy proxy <- getProxy
-
-  jvmTrans <- getJVMTrans
-  let ctx = CJ.transContext jvmTrans
-
-  action =<< (io $ do   -- only the IO monad, nothing else
-      let gen = Nonce.globalNonceGenerator
-      let sc  = biSharedContext bic
-      let cb  = biJavaCodebase bic
-      let verbosity = simVerbose opts
-      sym <- CrucibleSAW.newSAWCoreBackend proxy sc gen
-
-      let cfg = W4.getConfiguration sym
-      verbSetting <- W4.getOptionSetting W4.verbosity cfg
-      _ <- W4.setOpt verbSetting (toInteger verbosity)
-      
-
-      -- set up the simulation context
-      let bindings = CJ.mkDelayedBindings ctx
-
-      let javaExtImpl :: Crucible.ExtensionImpl p sym CJ.JVM
-          javaExtImpl = Crucible.ExtensionImpl (\_sym _iTypes _logFn _f x -> case x of)
-                                               (\x -> case x of)
-
-      let jsimctx   = Crucible.initSimContext sym MapF.empty halloc stdout
-                        bindings javaExtImpl CrucibleSAW.SAWCruciblePersonality
-
-      -- initialize the dynamic class table (to just an empty map)
-      let globals = Crucible.insertGlobal (CJ.dynamicClassTable ctx)
-                                           Map.empty Crucible.emptyGlobals
-
-      return
-         CrucibleJavaContext{ _cjcClassTrans     = CJ.translatedClasses jvmTrans
-                            , _cjcBackend        = sym
-                            , _cjcJavaSimContext = jsimctx
-                            , _cjcJavaGlobals    = globals
-                            }
-      
-             )
--}
-
-
-
+-- | Extract a JVM method to saw-core
+-- 
 crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
 crucible_java_extract bic opts c mname = do
   let sc        = biSharedContext bic
@@ -460,6 +139,8 @@ crucible_java_extract bic opts c mname = do
   (mcls, meth) <- io $ CJ.findMethod cb mname c
   when (not (J.methodIsStatic meth)) $ do
        fail $ unlines [ "Crucible can only extract static methods" ]
+
+  let className = J.className c
 
   -- allocate all of the handles/static vars that are directly referenced by
   -- this class
@@ -479,7 +160,7 @@ crucible_java_extract bic opts c mname = do
 
           (ecs, args) <- setupArgs sc sym h
           
-          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx h args
+          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx className h args
                          
           case res of
             Crucible.FinishedResult _ pr -> do
