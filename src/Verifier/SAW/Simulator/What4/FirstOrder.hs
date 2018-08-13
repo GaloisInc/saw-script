@@ -80,6 +80,7 @@ typeReprToFOT BaseRealRepr            = fail "No FO Real"
 typeReprToFOT BaseComplexRepr         = fail "No FO Complex"
 typeReprToFOT BaseStringRepr          = fail "No FO String"
 typeReprToFOT (BaseArrayRepr _ctx _b) = fail "TODO: FO Arrays"
+typeReprToFOT (BaseFloatRepr _)       = fail "No FO Floating point"
 typeReprToFOT (BaseStructRepr ctx)    = FOTTuple <$> assnToList ctx
 
 assnToList :: Assignment BaseTypeRepr ctx -> Either String [FirstOrderType]
@@ -99,6 +100,7 @@ groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (Nat (natValue w)) bv
 groundToFOV BaseRealRepr    _         = fail "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = fail "Complex is not FOV"
 groundToFOV BaseStringRepr          _ = fail "String is not FOV"
+groundToFOV (BaseFloatRepr _)       _ = fail "Floating point is not FOV"
 groundToFOV (BaseArrayRepr _idx _b) _ = fail "TODO: FOV Array"
 groundToFOV (BaseStructRepr ctx) tup  = FOVTuple <$> tupleToList ctx tup
 
