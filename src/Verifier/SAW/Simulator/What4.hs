@@ -186,7 +186,6 @@ prims =
   , Prims.bpIntMul = W.intMul sym
   , Prims.bpIntDiv = W.intDiv sym
   , Prims.bpIntMod = intMod sym
-  , Prims.bpIntAbs = intAbs sym
   , Prims.bpIntNeg = W.intNeg sym
   , Prims.bpIntEq  = W.intEq sym
   , Prims.bpIntLe  = W.intLe sym
@@ -327,9 +326,6 @@ intMod :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMod sym i1 i2 = do
   n3 <- W.intMod sym i1 i2
   W.natToInteger sym n3
-
-intAbs :: (IsExprBuilder sym) => sym -> SInt sym -> IO (SInt sym)
-intAbs sym i = W.natToInteger sym =<< W.intAbs sym i
 
 ------------------------------------------------------------
 -- Stream operations
