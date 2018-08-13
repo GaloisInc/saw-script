@@ -6,7 +6,7 @@
 -- Maintainer  : sweirich@galois.com
 -- Stability   : experimental
 -- Portability : non-portable (language extensions)
--- 
+--
 -- A symbolic simulator for saw-core terms using What4.
 -- (This module is derived from Verifier.SAW.Simulator.SBV)
 ------------------------------------------------------------------------
@@ -91,9 +91,9 @@ import Verifier.SAW.Simulator.What4.FirstOrder
 data What4 (sym :: *)
 
 -- type abbreviations for uniform naming
-type SBool sym = Pred sym 
-type SInt  sym = SymInteger sym 
-  
+type SBool sym = Pred sym
+type SInt  sym = SymInteger sym
+
 type instance EvalM (What4 sym) = IO
 type instance VBool (What4 sym) = SBool sym
 type instance VWord (What4 sym) = SWord sym
@@ -102,7 +102,7 @@ type instance Extra (What4 sym) = What4Extra sym
 
 type SValue sym = Value (What4 sym)
 
--- Constraint 
+-- Constraint
 type Sym sym = (Given sym, IsExprBuilder sym)
 
 ---------------------------------------------------------------------
@@ -115,7 +115,7 @@ instance Show (What4Extra sym) where
 
 ---------------------------------------------------------------------
 --
--- Basic primitive table for What4 data 
+-- Basic primitive table for What4 data
 --
 
 prims :: forall sym. (Sym sym) =>
@@ -125,15 +125,15 @@ prims =
   Prims.BasePrims
   { Prims.bpAsBool  = W.asConstantPred
     -- Bitvectors
-  , Prims.bpUnpack  = bvUnpack sym 
-  , Prims.bpPack    = bvPack   sym 
+  , Prims.bpUnpack  = bvUnpack sym
+  , Prims.bpPack    = bvPack   sym
   , Prims.bpBvAt    = bvAt     sym
-  , Prims.bpBvLit   = bvLit    sym 
+  , Prims.bpBvLit   = bvLit    sym
   , Prims.bpBvSize  = intSizeOf
-  , Prims.bpBvJoin  = bvJoin   sym 
-  , Prims.bpBvSlice = bvSlice  sym  
+  , Prims.bpBvJoin  = bvJoin   sym
+  , Prims.bpBvSlice = bvSlice  sym
     -- Conditionals
-  , Prims.bpMuxBool  = W.itePred sym 
+  , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = bvIte     sym
   , Prims.bpMuxInt   = W.intIte  sym
   , Prims.bpMuxExtra = extraFn
@@ -213,7 +213,7 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp) 
+  , ("Prelude.bvStreamGet", bvStreamGetOp)
   ]
 
 -----------------------------------------------------------------------
@@ -244,7 +244,7 @@ wordFun f = strictFun (\x -> f =<< toWord x)
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: forall sym. (Sym sym) => SValue sym
 natToIntOp =
-  Prims.natFun' "natToInt" $ \n -> 
+  Prims.natFun' "natToInt" $ \n ->
     VInt <$> W.intLit (given :: sym) (toInteger n)
 
 -- interpret bitvector as unsigned integer
@@ -283,7 +283,7 @@ bvShiftOp bvOp natOp =
     case y of
       VNat i   -> VWord <$> natOp x j
         where j = i `min` toInteger (intSizeOf x)
-      VToNat v -> VWord <$> (bvOp x =<< toWord v) 
+      VToNat v -> VWord <$> (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
 
 -- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
@@ -310,12 +310,12 @@ bvSShROp = bvShiftOp (bvSShr    given (W.falsePred @sym given))
 intMin :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMin sym i1 i2 = do
   p <- W.intLt sym i1 i2
-  W.intIte sym p i1 i2 
+  W.intIte sym p i1 i2
 
 intMax :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMax sym i1 i2 = do
   p <- W.intLt sym i1 i2
-  W.intIte sym p i2 i1 
+  W.intIte sym p i2 i1
 
 intAbs :: (IsExprBuilder sym) => sym -> SInt sym -> IO (SInt sym)
 intAbs sym i = do
@@ -396,7 +396,7 @@ lazyMux muxFn c tm fm =
 
 -- selectV merger maxValue valueFn index returns valueFn v when index has value v
 -- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
-selectV :: forall sym a b. (Sym sym, Ord a, Num a, Bits a) => 
+selectV :: forall sym a b. (Sym sym, Ord a, Num a, Bits a) =>
   (SBool sym -> IO b -> IO b -> IO b) -> a -> (a -> IO b) -> SWord sym -> IO b
 selectV merger maxValue valueFn vx =
   case bvAsUnsignedInteger vx of
@@ -415,12 +415,12 @@ selectV merger maxValue valueFn vx =
 -- a symbolic value
 
 w4SolveBasic :: forall sym. (Given sym, IsSymExprBuilder sym) =>
-  ModuleMap 
+  ModuleMap
   -> Map Ident (SValue sym)
   -- ^ additional primatives
-  -> [String] 
+  -> [String]
   -- ^ 'unints' Constants in this list are kept uninterpreted
-  -> Term 
+  -> Term
   -- ^ term to simulate
   -> IO (SValue sym)
 w4SolveBasic m addlPrims unints t = do
@@ -431,16 +431,16 @@ w4SolveBasic m addlPrims unints t = do
   cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims)
          (const parseUninterpreted)
          uninterpreted
-  Sim.evalSharedTerm cfg t      
+  Sim.evalSharedTerm cfg t
 
 
 ------------------------------------------------------------
 -- Given a constant nm of (saw-core) type ty, construct an uninterpreted
--- constant with that type. 
+-- constant with that type.
 -- Importantly: The types of these uninterpreted values are *not*
 -- limited to What4 BaseTypes or FirstOrderTypes.
 
-parseUninterpreted :: forall sym. (Given sym, IsSymExprBuilder sym) => 
+parseUninterpreted :: forall sym. (Given sym, IsSymExprBuilder sym) =>
   String -> SValue sym -> IO (SValue sym)
 parseUninterpreted nm ty =
   case ty of
@@ -462,14 +462,14 @@ parseUninterpreted nm ty =
       -> return $ VWord ZBV
 
     VVecType (VNat n) VBoolType
-      | Just (Some (PosNat nr)) <- somePosNat n 
+      | Just (Some (PosNat nr)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpreted @sym nm (BaseBVRepr nr)
 
     VVecType (VNat 0) _
       -> fail "TODO: 0-width non-bitvectors unsupported"
 
     VVecType (VNat n) ety
-      | Just (Some (PosNat _)) <- somePosNat n      
+      | Just (Some (PosNat _)) <- somePosNat n
       ->  do xs <- sequence $
                   [ parseUninterpreted (nm ++ "@" ++ show i) ety
                   | i <- [0 .. n-1] ]
@@ -496,16 +496,16 @@ parseUninterpreted nm ty =
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
                  parseUninterpreted (nm ++ "." ++ f) tp) elem_tps)
-      
+
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
 
 -- NOTE: Ambiguous type. Must include a type application to call
 -- this function
-mkUninterpreted :: forall sym t. (Given sym, IsSymExprBuilder sym) => 
+mkUninterpreted :: forall sym t. (Given sym, IsSymExprBuilder sym) =>
   String -> BaseTypeRepr t -> IO (SymExpr sym t)
-mkUninterpreted nm rep = 
+mkUninterpreted nm rep =
   case W.userSymbol nm of
     Left err -> fail $ show err ++ ":Cannot create uninterpreted constant " ++ nm
     Right s  -> W.freshConstant (given :: sym) s rep
@@ -538,7 +538,7 @@ flattenSValue v = do
 
 ------------------------------------------------------------
 
-w4Solve :: forall sym. (Given sym, IsSymExprBuilder sym) => 
+w4Solve :: forall sym. (Given sym, IsSymExprBuilder sym) =>
          SharedContext
       -> Map Ident (SValue sym)
       -> [String]
@@ -558,7 +558,7 @@ w4Solve sc ps unints t = do
 
   -- construct symbolic expressions for the variables
   vars' <-
-    flip evalStateT 0 $ 
+    flip evalStateT 0 $
     sequence (zipWith newVarsForType argTs (argNames ++ moreNames))
 
   -- symbolically evaluate
@@ -568,9 +568,9 @@ w4Solve sc ps unints t = do
   let (bvs, vars) = unzip vars'
   let vars'' = fmap ready vars
   bval' <- applyAll bval vars''
-  
+
   prd <- case bval' of
-           VBool b -> return b 
+           VBool b -> return b
            _ -> fail $ "solve: non-boolean result type. " ++ show bval'
   return (argNames, (bvs, prd))
 
@@ -648,7 +648,7 @@ nextId :: StateT Int IO String
 nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
 
-newVarsForType :: forall sym. (Given sym, IsSymExprBuilder sym) => 
+newVarsForType :: forall sym. (Given sym, IsSymExprBuilder sym) =>
   SValue sym -> String -> StateT Int IO (Maybe (Labeler sym), SValue sym)
 newVarsForType v nm =
   case vAsFirstOrderType v of
@@ -705,4 +705,3 @@ typedToSValue (TypedExpr ty expr) =
     BaseIntegerRepr      -> return $ VInt  expr
     (BaseBVRepr w)       -> return $ withKnownNat w $ VWord (DBV expr)
     _                    -> fail "Cannot handle"
-
