@@ -33,9 +33,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-{-# OPTIONS_GHC -fdefer-type-errors #-}
-
-
 -- WithKnownNat
 {-# OPTIONS_GHC -Wno-warnings-deprecations #-}
 
@@ -183,6 +180,7 @@ prims =
   , Prims.bpBvShl    = bvShl sym
   , Prims.bpBvShr    = bvShr sym
     -- Integer operations
+  , Prims.bpIntAbs = intAbs   sym
   , Prims.bpIntAdd = W.intAdd sym
   , Prims.bpIntSub = W.intSub sym
   , Prims.bpIntMul = W.intMul sym
@@ -319,6 +317,11 @@ intMax sym i1 i2 = do
   p <- W.intLt sym i1 i2
   W.intIte sym p i2 i1 
 
+intAbs :: (IsExprBuilder sym) => sym -> SInt sym -> IO (SInt sym)
+intAbs sym i = do
+  n <- W.intAbs sym i
+  W.natToInteger sym n
+
 -- undefined if either argument is negative
 intDiv :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intDiv sym i1 i2 = do
@@ -330,8 +333,7 @@ intDiv sym i1 i2 = do
 -- undefined if second argument is negative
 intMod :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMod sym i1 i2 = do
-  n2 <- W.integerToNat sym i2
-  n3 <- W.intMod sym i1 n2
+  n3 <- W.intMod sym i1 i2
   W.natToInteger sym n3
 
 ------------------------------------------------------------

@@ -55,7 +55,6 @@ module Verifier.SAW.Simulator.What4.SWord where
 
 import           Data.Vector (Vector)
 import qualified Data.Vector as V
-import           Numeric.Natural
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -479,24 +478,18 @@ bvRotateL' :: forall sym w1. (KnownNat w1, IsExprBuilder sym, 1 <= w1) => sym ->
              SymBV sym w1 -> SymInteger sym -> IO (SymBV sym w1)
 bvRotateL' sym x i' = do
     
-    -- w' :: SymNat sym
-    w' <- W.natLit sym w
+    w' <- W.intLit sym w
 
-    -- j :: SymNat sym
-    (j :: W.SymNat sym) <- W.intMod sym i' w'
+    j <- W.intMod sym i' w'
 
-    -- jj :: SymInteger sym
     jj <- W.natToInteger sym j
 
-    -- jjj :: SimBV sym w
     jjj <- W.integerToBV sym jj (knownNat @w1)
     
     x1 <- bvShiftL sym pfalse x jjj
 
-    -- wmj :: SymNat sym
-    wmj <- W.natSub sym w' j
-    wmjj <- W.natToInteger sym wmj
-    wmjjj <- W.integerToBV sym wmjj (knownNat @w1)
+    wmj <- W.intSub sym w' jj
+    wmjjj <- W.integerToBV sym wmj (knownNat @w1)
     
     x2 <- bvShiftR sym (W.bvLshr sym) pfalse x wmjjj
     W.bvOrBits sym x1 x2             
@@ -504,9 +497,7 @@ bvRotateL' sym x i' = do
     pfalse :: Pred sym
     pfalse = W.falsePred sym
     
-    w :: Natural
-    w = fromInteger (natValue (knownNat @w1))
-    
+    w = natValue (knownNat @w1)
 
 -- | Worker function for right rotations
 --
