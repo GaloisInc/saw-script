@@ -180,12 +180,12 @@ prims =
   , Prims.bpBvShl    = bvShl sym
   , Prims.bpBvShr    = bvShr sym
     -- Integer operations
-  , Prims.bpIntAbs = intAbs   sym
+  , Prims.bpIntAbs = W.intAbs sym
   , Prims.bpIntAdd = W.intAdd sym
   , Prims.bpIntSub = W.intSub sym
   , Prims.bpIntMul = W.intMul sym
   , Prims.bpIntDiv = W.intDiv sym
-  , Prims.bpIntMod = intMod sym
+  , Prims.bpIntMod = W.intMod sym
   , Prims.bpIntNeg = W.intNeg sym
   , Prims.bpIntEq  = W.intEq sym
   , Prims.bpIntLe  = W.intLe sym
@@ -316,16 +316,6 @@ intMax :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMax sym i1 i2 = do
   p <- W.intLt sym i1 i2
   W.intIte sym p i2 i1
-
-intAbs :: (IsExprBuilder sym) => sym -> SInt sym -> IO (SInt sym)
-intAbs sym i = do
-  n <- W.intAbs sym i
-  W.natToInteger sym n
-
-intMod :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
-intMod sym i1 i2 = do
-  n3 <- W.intMod sym i1 i2
-  W.natToInteger sym n3
 
 ------------------------------------------------------------
 -- Stream operations

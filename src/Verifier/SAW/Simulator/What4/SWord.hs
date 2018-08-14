@@ -482,16 +482,14 @@ bvRotateL' sym x i' = do
 
     j <- W.intMod sym i' w'
 
-    jj <- W.natToInteger sym j
+    jj <- W.integerToBV sym j (knownNat @w1)
 
-    jjj <- W.integerToBV sym jj (knownNat @w1)
+    x1 <- bvShiftL sym pfalse x jj
 
-    x1 <- bvShiftL sym pfalse x jjj
+    wmj <- W.intSub sym w' j
+    wmjj <- W.integerToBV sym wmj (knownNat @w1)
 
-    wmj <- W.intSub sym w' jj
-    wmjjj <- W.integerToBV sym wmj (knownNat @w1)
-
-    x2 <- bvShiftR sym (W.bvLshr sym) pfalse x wmjjj
+    x2 <- bvShiftR sym (W.bvLshr sym) pfalse x wmjj
     W.bvOrBits sym x1 x2
   where
     pfalse :: Pred sym
