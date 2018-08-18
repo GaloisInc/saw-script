@@ -947,10 +947,10 @@ setupGlobals opts gs fs s
 
            {- NOTE:  Some functions are called multiple times with different
                      sizes. This means that we need different specs for them,
-                     at least unitl we support polymorphic specs.  As a quick
-                     work-around we count the number of times a functon is
+                     at least until we support polymorphic specs.  As a quick
+                     work-around we count the number of times a function is
                      entered and provide this as an input to the spec.
-                     In simple cases this allows the spec to change itslef. -}
+                     In simple cases this allows the spec to change itself. -}
            mkHandler (_f,a, sp) =
               do entryCounter <- newIORef 0
                  return $

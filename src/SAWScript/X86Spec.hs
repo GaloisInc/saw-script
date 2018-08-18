@@ -138,7 +138,7 @@ expectSame s x y =
                          ]
 
 -- | Assert that a given general purpose register is preserved.
-preserveGP :: RegAssign {- ^ Initial register assginment -} ->
+preserveGP :: RegAssign {- ^ Initial register assignment -} ->
               GPReg     {- ^ Register to preserve -} ->
               Spec Post ()
 preserveGP r g =
