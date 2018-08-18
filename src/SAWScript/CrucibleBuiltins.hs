@@ -102,16 +102,7 @@ import qualified Lang.Crucible.Types as Crucible
 
 import qualified Lang.Crucible.JVM.Translation as JCrucible
 
-import qualified Lang.Crucible.LLVM as Crucible
-import qualified Lang.Crucible.LLVM.Bytes as Crucible
-import qualified Lang.Crucible.LLVM.DataLayout as Crucible
-import qualified Lang.Crucible.LLVM.Extension as Crucible
-import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
-import qualified Lang.Crucible.LLVM.MemType as Crucible
-import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
-import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
+import qualified SAWScript.CrucibleLLVM as Crucible
 
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
@@ -343,7 +334,7 @@ checkRegisterCompatibility mt mt' =
      return (st == st')
 
 resolveArguments ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch       ->
   CrucibleMethodSpecIR       ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -377,7 +368,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR       ->
   CrucibleContext arch       ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -409,7 +400,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that shuld be assumed to be true.
 setupPrestateConditions ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR        ->
   CrucibleContext arch        ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -453,26 +444,26 @@ assertEqualVals cc v1 v2 =
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
 doAlloc ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch       ->
   Crucible.MemType           ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
 doAlloc cc tp = StateT $ \mem ->
   do let sym = cc^.ccBackend
-     let dl = TyCtx.llvmDataLayout ?lc
+     let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
      Crucible.mallocRaw sym mem sz
 
 -- | Allocate read-only space on the LLVM heap to store a value of the
 -- given type. Returns the pointer to the allocated memory.
 doAllocConst ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch       ->
   Crucible.MemType           ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
 doAllocConst cc tp = StateT $ \mem ->
   do let sym = cc^.ccBackend
-     let dl = TyCtx.llvmDataLayout ?lc
+     let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
      Crucible.mallocConstRaw sym mem sz
 
@@ -492,7 +483,7 @@ ppGlobalPair cc gp =
 --------------------------------------------------------------------------------
 
 registerOverride ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                    ->
   CrucibleContext arch       ->
   Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
@@ -522,7 +513,7 @@ registerOverride opts cc _ctx cs = do
 --------------------------------------------------------------------------------
 
 verifySimulate ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                       ->
   CrucibleContext arch          ->
   CrucibleMethodSpecIR          ->
@@ -602,7 +593,7 @@ scAndList sc (x : xs) = foldM (scAnd sc) x xs
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                           {- ^ saw script debug and print options           -} ->
   SharedContext                     {- ^ saw core context                             -} ->
   CrucibleContext arch              {- ^ crucible context                             -} ->
@@ -656,7 +647,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
 setupCrucibleContext ::
    BuiltinContext -> Options -> LLVMModule ->
-   (forall arch. (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => CrucibleContext arch -> TopLevel a) ->
+   (forall arch. (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => CrucibleContext arch -> TopLevel a) ->
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
   halloc <- getHandleAlloc
@@ -1043,7 +1034,7 @@ crucible_fresh_var bic _opts name lty = CrucibleSetupM $ do
   lty' <- memTypeForLLVMType bic lty
   cctx <- getCrucibleContext
   let sc = biSharedContext bic
-  let dl = TyCtx.llvmDataLayout (cctx^.ccTypeCtx)
+  let dl = Crucible.llvmDataLayout (cctx^.ccTypeCtx)
   mty <- liftIO $ logicTypeOfActual dl sc lty'
   case mty of
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
@@ -1081,7 +1072,7 @@ crucible_fresh_expanded_val bic _opts lty = CrucibleSetupM $
 
 memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup arch Crucible.MemType
 memTypeForLLVMType _bic lty =
-  do case TyCtx.liftMemType lty of
+  do case Crucible.liftMemType lty of
        Just m -> return m
        Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
 
@@ -1089,7 +1080,7 @@ memTypeForLLVMType _bic lty =
 --
 -- This is the recursively-called worker function.
 constructExpandedSetupValue ::
-  (?lc::TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc::Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext    {- ^ shared context             -} ->
   Crucible.MemType {- ^ LLVM mem type              -} ->
   CrucibleSetup arch SetupValue
@@ -1104,7 +1095,7 @@ constructExpandedSetupValue sc t =
        SetupStruct . toList <$> traverse (constructExpandedSetupValue sc) (Crucible.siFieldTypes si)
 
     Crucible.PtrType symTy ->
-      case TyCtx.asMemType symTy of
+      case Crucible.asMemType symTy of
         Just memTy ->  constructFreshPointer (symTypeAlias symTy) memTy
         Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
 
@@ -1130,8 +1121,8 @@ crucible_alloc ::
   L.Type         ->
   CrucibleSetupM SetupValue
 crucible_alloc _bic _opt lty = CrucibleSetupM $
-  do let ?dl = TyCtx.llvmDataLayout ?lc
-     memTy <- case TyCtx.liftMemType lty of
+  do let ?dl = Crucible.llvmDataLayout ?lc
+     memTy <- case Crucible.liftMemType lty of
        Just s -> return s
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
@@ -1148,8 +1139,8 @@ crucible_alloc_readonly ::
   L.Type         ->
   CrucibleSetupM SetupValue
 crucible_alloc_readonly _bic _opt lty = CrucibleSetupM $
-  do let ?dl = TyCtx.llvmDataLayout ?lc
-     memTy <- case TyCtx.liftMemType lty of
+  do let ?dl = Crucible.llvmDataLayout ?lc
+     memTy <- case Crucible.liftMemType lty of
        Just s -> return s
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
@@ -1199,7 +1190,7 @@ crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
           ptrTy <- typeOfSetupValue cc env nameEnv ptr
           lhsTy <- case ptrTy of
             Crucible.PtrType symTy ->
-              case TyCtx.asMemType symTy of
+              case Crucible.asMemType symTy of
                 Just lhsTy -> return lhsTy
                 Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
             _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
@@ -1260,7 +1251,7 @@ crucible_execute_func :: BuiltinContext
                       -> [SetupValue]
                       -> CrucibleSetupM ()
 crucible_execute_func _bic _opt args = CrucibleSetupM $ do
-  let ?dl   = TyCtx.llvmDataLayout ?lc
+  let ?dl   = Crucible.llvmDataLayout ?lc
   tps <- use (csMethodSpec.csArgs)
   csPrePost .= PostState
   csMethodSpec.csArgBindings .= Map.fromList [ (i, (t,a))

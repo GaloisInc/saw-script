@@ -80,11 +80,8 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.LLVM as Crucible
-import qualified Lang.Crucible.LLVM.Extension as Crucible
-import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
-import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible (HasPtrWidth)
-import qualified Lang.Crucible.LLVM.Translation as Crucible
+
+import qualified SAWScript.CrucibleLLVM as Crucible
 import Lang.Crucible.JVM.Translation (JVM)
 
 -- Values ----------------------------------------------------------------------
@@ -467,7 +464,7 @@ data LLVMSetupState
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
 type CrucibleSetup arch a =
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
 
 data CrucibleSetupM a =
   CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }

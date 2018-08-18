@@ -69,18 +69,18 @@ import What4.Interface
           , bvUle, truePred, natLit, asNat, andPred )
 import What4.ProgramLoc
 
-import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
-import Lang.Crucible.LLVM.MemModel
-  ( MemImpl,coerceAny,doLoad,doPtrAddOffset, emptyMem
+import SAWScript.CrucibleLLVM
+  ( EndianForm(LittleEndian)
+  , MemImpl, coerceAny, doLoad, doPtrAddOffset, emptyMem
   , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
-  , LLVMPointerType, LLVMVal(LLVMValInt) )
-import Lang.Crucible.LLVM.MemModel.Pointer
-    (ptrEq, LLVMPtr, ppPtr, llvmPointerView, projectLLVM_bv, llvmPointer_bv)
-import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
-import qualified Lang.Crucible.LLVM.MemModel.Type as LLVM
-import Lang.Crucible.LLVM.Bytes(Bytes,bytesToInteger,toBytes)
-import Lang.Crucible.LLVM.MemModel.Generic
-    (AllocType(HeapAlloc,GlobalAlloc), Mutability(..))
+  , LLVMPointerType, LLVMVal(LLVMValInt)
+  , ptrEq, LLVMPtr, ppPtr, llvmPointerView, projectLLVM_bv, llvmPointer_bv
+  , bitvectorType
+  , Bytes, bytesToInteger, toBytes
+  , AllocType(HeapAlloc, GlobalAlloc), Mutability(..)
+  )
+import qualified SAWScript.CrucibleLLVM as LLVM (Type)
+
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Backend

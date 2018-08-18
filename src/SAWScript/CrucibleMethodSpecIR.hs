@@ -33,7 +33,6 @@ import           Control.Monad.Trans (lift)
 import           Control.Lens
 import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
-import qualified Lang.Crucible.LLVM.MemType as CL
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 import           Data.IORef
@@ -43,26 +42,24 @@ import qualified Language.JVM.Parser as J
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
 
-import qualified Lang.Crucible.LLVM.Intrinsics as CL
-import qualified Lang.Crucible.Types as Crucible
-import qualified Lang.Crucible.CFG.Common as Crucible
---import qualified Verifier.LLVM.Codebase as LSS
---import qualified Lang.Crucible.LLVM.MemModel.Common as C
 import SAWScript.Prover.SolverStats
 
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
+import qualified Lang.Crucible.Types as Crucible
+  (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
+import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified Lang.Crucible.JVM.Translation as CJ
-import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
-import qualified Lang.Crucible.LLVM.Translation as CL
-import qualified Lang.Crucible.LLVM.LLVMContext as TyCtxt
-import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+  (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
+import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+  (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 
+import qualified Lang.Crucible.JVM.Translation as CJ
 
+import qualified SAWScript.CrucibleLLVM as CL
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -275,7 +272,7 @@ makeLenses ''ResolvedState
 ccLLVMContext :: Simple Lens (CrucibleContext wptr) (CL.LLVMContext wptr)
 ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
-ccTypeCtx :: Simple Lens (CrucibleContext wptr) TyCtxt.LLVMContext
+ccTypeCtx :: Simple Lens (CrucibleContext wptr) CL.LLVMTyCtx
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
@@ -345,21 +342,21 @@ ppSetupError (InvalidArgTypes ts) =
   text "to Crucible types."
 
 resolveArgs ::
-  (?lc :: TyCtxt.LLVMContext) =>
+  (?lc :: CL.LLVMTyCtx) =>
   [L.Type] ->
   Either SetupError [CL.MemType]
 resolveArgs args = do
   -- TODO: make sure we resolve aliases
-  let mtys = traverse TyCtxt.liftMemType args
+  let mtys = traverse CL.liftMemType args
   maybe (Left (InvalidArgTypes args)) Right mtys
 
 resolveRetTy ::
-  (?lc :: TyCtxt.LLVMContext) =>
+  (?lc :: CL.LLVMTyCtx) =>
   L.Type ->
   Either SetupError (Maybe CL.MemType)
 resolveRetTy ty = do
   -- TODO: make sure we resolve aliases
-  let ret = TyCtxt.liftRetType ty
+  let ret = CL.liftRetType ty
   maybe (Left (InvalidReturnType ty)) Right ret
 
 initialStateSpec :: StateSpec
@@ -374,7 +371,7 @@ initialStateSpec =  StateSpec
   }
 
 initialDefCrucibleMethodSpecIR ::
-  (?lc :: TyCtxt.LLVMContext) =>
+  (?lc :: CL.LLVMTyCtx) =>
   L.Define ->
   ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
@@ -395,7 +392,7 @@ initialDefCrucibleMethodSpecIR def loc = do
     }
 
 initialDeclCrucibleMethodSpecIR ::
-  (?lc :: TyCtxt.LLVMContext) =>
+  (?lc :: CL.LLVMTyCtx) =>
   L.Declare ->
   ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
@@ -416,7 +413,7 @@ initialDeclCrucibleMethodSpecIR dec loc = do
     }
 
 initialCrucibleSetupState ::
-  (?lc :: TyCtxt.LLVMContext) =>
+  (?lc :: CL.LLVMTyCtx) =>
   CrucibleContext wptr ->
   L.Define ->
   ProgramLoc ->
@@ -432,7 +429,7 @@ initialCrucibleSetupState cc def loc = do
     }
 
 initialCrucibleSetupStateDecl ::
-  (?lc :: TyCtxt.LLVMContext) =>
+  (?lc :: CL.LLVMTyCtx) =>
   CrucibleContext wptr ->
   L.Declare ->
   ProgramLoc ->

@@ -37,15 +37,7 @@ import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified Lang.Crucible.LLVM.Bytes as Crucible
-import qualified Lang.Crucible.LLVM.DataLayout as Crucible
-import qualified Lang.Crucible.LLVM.Extension as Crucible
-import qualified Lang.Crucible.LLVM.MemType as Crucible
-import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
-import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Type as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
+import qualified SAWScript.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -77,7 +69,7 @@ resolveSetupValueInfo cc env nameEnv v =
     -- SetupGlobal g ->
     SetupVar i
       | Just alias <- Map.lookup i nameEnv
-      , let mdMap = TyCtx.llvmMetadataMap (cc^.ccTypeCtx)
+      , let mdMap = Crucible.llvmMetadataMap (cc^.ccTypeCtx)
       -> L.Pointer (guessAliasInfo mdMap alias)
     SetupField a n ->
        fromMaybe L.Unknown $
@@ -102,7 +94,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
         [] -> Nothing
         o:_ ->
           do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
-             Crucible.StructType si <- let ?lc = lc in TyCtx.asMemType symTy
+             Crucible.StructType si <- let ?lc = lc in Crucible.asMemType symTy
              V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == toInteger o) (Crucible.siFields si)
 
     _ -> Nothing
@@ -162,7 +154,7 @@ typeOfSetupValue' cc env nameEnv val =
          let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array"
          case memTy of
            Crucible.PtrType symTy ->
-             case let ?lc = lc in TyCtx.asMemType symTy of
+             case let ?lc = lc in Crucible.asMemType symTy of
                Just memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
@@ -189,12 +181,12 @@ typeOfSetupValue' cc env nameEnv val =
          case lookup (L.Symbol name) tys of
            Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
            Just ty ->
-             case let ?lc = lc in TyCtx.liftType ty of
+             case let ?lc = lc in Crucible.liftType ty of
                Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
                Just symTy -> return (Crucible.PtrType symTy)
   where
     lc = cc^.ccTypeCtx
-    dl = TyCtx.llvmDataLayout lc
+    dl = Crucible.llvmDataLayout lc
 
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
@@ -233,7 +225,7 @@ resolveSetupVal cc env tyenv nameEnv val =
          let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array"
          delta <- case memTy of
            Crucible.PtrType symTy ->
-             case let ?lc = lc in TyCtx.asMemType symTy of
+             case let ?lc = lc in Crucible.asMemType symTy of
                Just memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
@@ -260,7 +252,7 @@ resolveSetupVal cc env tyenv nameEnv val =
   where
     sym = cc^.ccBackend
     lc = cc^.ccTypeCtx
-    dl = TyCtx.llvmDataLayout lc
+    dl = Crucible.llvmDataLayout lc
 
 resolveTypedTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -346,7 +338,7 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: invalid function type"
   where
     sym = cc^.ccBackend
-    dl = TyCtx.llvmDataLayout (cc^.ccTypeCtx)
+    dl = Crucible.llvmDataLayout (cc^.ccTypeCtx)
 
 toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
 toLLVMType dl tp =

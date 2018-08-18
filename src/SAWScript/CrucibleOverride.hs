@@ -65,15 +65,7 @@ import qualified What4.Expr.Builder as W4
 import qualified What4.Symbol as W4
 import qualified What4.ProgramLoc as W4
 
-import qualified Lang.Crucible.LLVM as Crucible
-import qualified Lang.Crucible.LLVM.Bytes as Crucible
-import qualified Lang.Crucible.LLVM.Extension as Crucible
-import qualified Lang.Crucible.LLVM.MemType as Crucible
-import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
-import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Type as Crucible
-import qualified Lang.Crucible.LLVM.MemModel.Pointer as Crucible
+import qualified SAWScript.CrucibleLLVM as Crucible
 
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -205,7 +197,7 @@ failure e = OM (lift (throwE e))
 
 methodSpecHandler ::
   forall arch rtp args ret.
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -314,7 +306,7 @@ globalMuxUnleveled sym p l r
 -- and execute the post condition.
 methodSpecHandler1 ::
   forall arch ret ctx.
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -345,7 +337,7 @@ methodSpecHandler1 opts sc cc args retTy cs =
        computeReturnValue opts cc sc cs retTy (cs^.csRetValue)
 
 -- learn pre/post condition
-learnCond :: (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+learnCond :: (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
           => Options
           -> SharedContext
           -> CrucibleContext arch
@@ -387,7 +379,7 @@ termId t =
 
 
 -- execute a pre/post condition
-executeCond :: (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+executeCond :: (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
             => Options
             -> SharedContext
             -> CrucibleContext arch
@@ -429,7 +421,7 @@ refreshTerms sc ss =
 -- an override's precondition are disjoint. Read-only allocations are
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch -> StateSpec -> OverrideMatcher arch ()
 enforceDisjointness cc ss =
   do sym <- getSymInterface
@@ -447,7 +439,7 @@ enforceDisjointness cc ss =
                     q (sz qty)
              addAssert c a
 
-        | let dl = TyCtx.llvmDataLayout (cc^.ccTypeCtx)
+        | let dl = Crucible.llvmDataLayout (cc^.ccTypeCtx)
 
               sz p = W4.BVExpr
                        Crucible.PtrWidth
@@ -468,7 +460,7 @@ enforceDisjointness cc ss =
 -- statement cannot be executed until bindings for any/all lhs
 -- variables exist.
 matchPointsTos :: forall arch.
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options          {- ^ saw script print out opts -} ->
   SharedContext    {- ^ term construction context -} ->
   CrucibleContext arch {- ^ simulator context     -} ->
@@ -528,7 +520,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 ------------------------------------------------------------------------
 
 computeReturnValue ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options               {- ^ saw script debug and print options     -} ->
   CrucibleContext arch  {- ^ context of the crucible simulation     -} ->
   SharedContext         {- ^ context for generating saw terms       -} ->
@@ -761,7 +753,7 @@ matchTerm sc cc prepost real expect =
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
 learnSetupCondition ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -793,7 +785,7 @@ learnGhost sc cc prepost var expected =
 -- the CrucibleSetup block. First, load the value from the address
 -- indicated by 'ptr', and then match it against the pattern 'val'.
 learnPointsTo ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -866,16 +858,16 @@ learnPred sc cc prepost t =
 -- | Perform an allocation as indicated by a 'crucible_alloc'
 -- statement from the postcondition section.
 executeAllocation ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
   CrucibleContext arch           ->
   (AllocIndex, Crucible.MemType) ->
   OverrideMatcher arch ()
 executeAllocation opts cc (var, memTy) =
   do let sym = cc^.ccBackend
-     let dl = TyCtx.llvmDataLayout ?lc
+     let dl = Crucible.llvmDataLayout ?lc
      {-
-     memTy <- case TyCtx.asMemType symTy of
+     memTy <- case Crucible.asMemType symTy of
                 Just memTy -> return memTy
                 Nothing    -> fail "executAllocation: failed to resolve type"
                 -}
@@ -893,7 +885,7 @@ executeAllocation opts cc (var, memTy) =
 -- | Update the simulator state based on the postconditions from the
 -- procedure specification.
 executeSetupCondition ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -922,7 +914,7 @@ executeGhost sc var val =
 -- the CrucibleSetup block. First we compute the value indicated by
 -- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -1052,14 +1044,14 @@ resolveSetupValue opts cc sc spec sval =
 ------------------------------------------------------------------------
 
 asPointer ::
-  (?lc :: TyCtx.LLVMContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   (Crucible.MemType, Crucible.AnyValue Sym) ->
   OverrideMatcher arch (Crucible.MemType, LLVMPtr (Crucible.ArchWidth arch))
 
 asPointer
   (Crucible.PtrType pty,
    Crucible.AnyValue Crucible.PtrRepr val)
-  | Just pty' <- TyCtx.asMemType pty
+  | Just pty' <- Crucible.asMemType pty
   = return (pty', val)
 
 asPointer _ = failure BadPointerCast

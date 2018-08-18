@@ -70,7 +70,7 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Utils
 import SAWScript.Value as SV
 
-import qualified Lang.Crucible.LLVM.Translation as Crucible
+import qualified SAWScript.CrucibleLLVM as Crucible (translateModule)
 import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
 import qualified Cryptol.TypeCheck.AST as Cryptol

@@ -85,7 +85,7 @@ library
     , flexdis86
     , elf-edit
     , reflection
-              
+
   hs-source-dirs: src
 
   exposed-modules:
@@ -101,6 +101,7 @@ library
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.CrucibleBuiltins
+    SAWScript.CrucibleLLVM
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
     SAWScript.CrucibleMethodSpecIR
@@ -142,7 +143,7 @@ library
     SAWScript.Prover.SBV
     SAWScript.Prover.RME
     SAWScript.Prover.ABC
-    SAWScript.Prover.What4              
+    SAWScript.Prover.What4
     SAWScript.Prover.Exporter
 
     SAWScript.X86

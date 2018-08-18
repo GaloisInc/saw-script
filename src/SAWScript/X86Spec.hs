@@ -94,8 +94,7 @@ module SAWScript.X86Spec
 import qualified Data.Vector as Vector
 
 import What4.Interface (falsePred, isEq, printSymExpr)
-import Lang.Crucible.LLVM.MemModel.Pointer (ptrEq)
-import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
+import SAWScript.CrucibleLLVM (ptrEq, ppPtr)
 
 import Verifier.SAW.Term.Pretty(showTerm)
 import Verifier.SAW.CryptolEnv(CryptolEnv)

@@ -38,15 +38,16 @@ import Data.Parameterized.Context(Assignment)
 import What4.Interface
   (natLit,notPred,natEq,getCurrentProgramLoc)
 
-import Lang.Crucible.LLVM.DataLayout(EndianForm(LittleEndian))
+import SAWScript.CrucibleLLVM
+  ( EndianForm(LittleEndian)
+  , Mem, emptyMem, LLVMPointerType
+  , pattern LLVMPointer, LLVMPtr, ppPtr
+  )
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.SimError(SimErrorReason(..), SimError(..))
 import Lang.Crucible.Backend
   (addAssertion,addAssumption,AssumptionReason(..),LabeledPred(..))
 import Lang.Crucible.Backend.SAWCore (sawBackendSharedContext)
-import Lang.Crucible.LLVM.MemModel ( Mem, emptyMem, LLVMPointerType)
-import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, LLVMPtr )
-import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
 
 import Verifier.SAW.SharedTerm(Term,SharedContext,scApplyAll)
 

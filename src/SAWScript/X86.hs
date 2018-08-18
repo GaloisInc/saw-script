@@ -61,10 +61,8 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
 
 
 -- Crucible LLVM
-import Lang.Crucible.LLVM.MemModel (Mem,ppMem)
-import Lang.Crucible.LLVM.MemModel.Generic(ppPtr)
-import Lang.Crucible.LLVM.MemModel.Pointer (pattern LLVMPointer)
-import Lang.Crucible.LLVM.Bytes(bytesToInteger)
+import SAWScript.CrucibleLLVM
+  (Mem, ppMem, ppPtr, pattern LLVMPointer, bytesToInteger)
 
 -- Crucible SAW
 import Lang.Crucible.Backend.SAWCore

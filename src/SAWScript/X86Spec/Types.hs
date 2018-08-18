@@ -39,10 +39,10 @@ import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Nonce(GlobalNonceGenerator)
 
 import Lang.Crucible.Backend.SAWCore(SAWCoreBackend)
-import Lang.Crucible.LLVM.MemModel(LLVMPointerType,pattern LLVMPointerRepr)
 import Lang.Crucible.Simulator.RegValue(RegValue)
 import Lang.Crucible.Types(CrucibleType,TypeRepr,BoolType)
 
+import SAWScript.CrucibleLLVM (LLVMPointerType, pattern LLVMPointerRepr)
 
 -- | The kind of X86 types.
 data {- kind -} X86Type = APtr | ABits Nat | ABool | ABigFloat
