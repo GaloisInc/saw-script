@@ -88,6 +88,7 @@
 
 (defconst saw-script-keywords
   '("import"
+    "include"
     "and"
     "as"
     "hiding"
