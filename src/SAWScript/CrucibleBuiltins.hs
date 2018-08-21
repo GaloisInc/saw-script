@@ -352,6 +352,10 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
            fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
                           , "Argument is declared with type: " ++ show mt
                           , "but provided argument has incompatible type: " ++ show mt'
+                          , "Note: this may be because the signature of your " ++
+                            "function changed during compilation. If using " ++
+                            "Clang, check the signature in the disassembled " ++
+                            ".ll file."
                           ]
     resolveArg i =
       case Map.lookup i (mspec^.csArgBindings) of
