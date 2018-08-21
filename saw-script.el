@@ -400,6 +400,10 @@ See URL `http://saw.galois.com' for more information."
   (add-to-list 'compilation-error-regexp-alist 'cryptol-warning)
   (add-to-list 'compilation-error-regexp-alist 'cryptol-error)
 
+  ;; Comment syntax
+  (setq-local comment-start "// ")
+  (setq-local comment-end "")
+
   ;; Setup code for output viewing
   (make-variable-buffer-local 'saw-script-output)
 
