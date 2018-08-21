@@ -92,12 +92,9 @@ module SAWScript.CrucibleLLVM
   , emptyMem
   , LLVMPointerType
   , pattern LLVMPointerRepr
-    -- ** Re-exports from "Lang.Crucible.LLVM.MemModel.Generic"
   , AllocType(HeapAlloc, GlobalAlloc)
   , Mutability(..)
-    -- ** Re-exports from "Lang.Crucible.LLVM.MemModel.Type"
   , typeF
-  , mkStruct
   , Type
   , TypeF(Struct, Float, Double, Array, Bitvector)
   , typeSize
@@ -105,7 +102,7 @@ module SAWScript.CrucibleLLVM
   , bitvectorType
   , fieldPad
   , arrayType
-    -- ** Re-exports from "Lang.Crucible.LLVM.MemModel.Pointer"
+  , mkStructType
   , LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValReal)
   , LLVMPtr
   , HasPtrWidth
@@ -160,18 +157,11 @@ import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeConstRaw, mallocRaw, mallocConstRaw,
    ppMem, packMemValue, unpackMemValue, coerceAny, buildDisjointRegionsAssertion,
    doLoad, doStore, loadRawWithCondition, doPtrAddOffset, emptyMem, doMalloc,
-   pattern LLVMPointerRepr, LLVMPointerType)
-
-import Lang.Crucible.LLVM.MemModel.Generic
-  (AllocType(HeapAlloc, GlobalAlloc), Mutability(..))
-
-import Lang.Crucible.LLVM.MemModel.Type
-  (typeF, mkStruct, Type,
-   TypeF(Struct, Float, Double, Array, Bitvector),
-   typeSize, fieldVal, bitvectorType, fieldPad, arrayType)
-
-import Lang.Crucible.LLVM.MemModel.Pointer
-  (LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValReal),
+   pattern LLVMPointerRepr, LLVMPointerType,
+   AllocType(HeapAlloc, GlobalAlloc), Mutability(..),
+   typeF, Type, TypeF(Struct, Float, Double, Array, Bitvector),
+   typeSize, fieldVal, bitvectorType, fieldPad, arrayType, mkStructType,
+   LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValReal),
    LLVMPtr, HasPtrWidth, ptrToPtrVal, mkNullPointer, ptrIsNull, ppPtr, ptrEq,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
    llvmPointerView, projectLLVM_bv)

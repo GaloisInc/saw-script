@@ -207,7 +207,7 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupStruct vs -> do
       vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
-      let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields dl 0 0 tps))) of
+      let flds = case Crucible.typeF (Crucible.mkStructType (V.fromList (mkFields dl 0 0 tps))) of
             Crucible.Struct v -> v
             _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
@@ -395,7 +395,7 @@ typeOfLLVMVal _dl val =
     Crucible.LLVMValInt _bkl bv ->
        Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (natValue (W4.bvWidth bv))))
     Crucible.LLVMValReal _ _    -> error "FIXME: typeOfLLVMVal LLVMValReal"
-    Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
+    Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
   where
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
