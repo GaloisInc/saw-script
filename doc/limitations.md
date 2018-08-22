@@ -1,4 +1,22 @@
-# Overview
+# Limitations
+
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [Limitations](#limitations)
+    - [Overview](#overview)
+    - [Finite Loops](#finite-loops)
+    - [Identifying and Resolving Non-Termination](#identifying-and-resolving-non-termination)
+    - [Fixed-size Inputs and Outputs](#fixed-size-inputs-and-outputs)
+    - [Other Generic Limitations](#other-generic-limitations)
+    - [Other Java Limitations](#other-java-limitations)
+    - [Other LLVM Limitations](#other-llvm-limitations)
+    - [Crucible LLVM Limitations](#crucible-llvm-limitations)
+
+<!-- markdown-toc end -->
+
+
+## Overview
 
 There are a few limitations on the types of code that SAW can process.
 Some of these limitations arise from the impossibility of automatically
@@ -39,7 +57,7 @@ At the most abstract level, the two key restrictions are these:
 
 The rest of this document describes these limitations in more detail.
 
-# Finite Loops
+## Finite Loops
 
 The standard approach to symbolic execution involves forward execution
 of a program with symbolic values. At each branch, the symbolic
@@ -79,7 +97,7 @@ So, as a general rule, if symbolic execution does not seem to be
 terminating on the program under analysis, consider enabling branch
 satisfiability checking.
 
-# Identifying and Resolving Non-Termination
+## Identifying and Resolving Non-Termination
 
 To determine whether path satisfiability checking will be helpful when
 verification is taking a long time, several debugging flags can help
@@ -108,7 +126,7 @@ constant but large iteration bounds), or it could mean that symbolic
 execution is getting stuck in an infinite loop. In this case, path
 satisfiability checking may allow it to terminate.
 
-# Fixed-size Inputs and Outputs
+## Fixed-size Inputs and Outputs
 
 The second major limitation in SAW is that the inputs and outputs of
 symbolic execution need to have fixed size. In a more concrete technical
@@ -129,7 +147,7 @@ SAW. If a loop must terminate after a fixed number of iterations, it can
 access only a finite portion of a heap data structure (even if, in
 theory, that data structure extends beyond the portion accessed).
 
-# Other Generic Limitations
+## Other Generic Limitations
 
 Neither the Java or the LLVM simulation support handling of exceptions.
 Java programs can throw exceptions, but they are treated as simulation
@@ -151,7 +169,7 @@ completely arbitrary.
 
 Similarly, code that performs system calls is generally not supported.
 
-# Other Java Limitations
+## Other Java Limitations
 
 In Java, there is no way to specify the contents of arrays of
 references. Such arrays can be used internally in computations, but
@@ -199,7 +217,7 @@ methods currently supported by the simulator include:
 * `java.security.AccessController.doPrivileged`
 * `java.util.Arrays.fill`
 
-# Other LLVM Limitations
+## Other LLVM Limitations
 
 Only a subset of the LLVM intrinsic functions are supported. These
 include:
@@ -238,3 +256,39 @@ allowed to be a value of pointer type, and it is never equal to any
 normal pointer. Pointers can be cast to integers only for temporary
 storage and subsequent conversion back to pointer type without
 modification.
+
+## Crucible LLVM Limitations
+
+As with the legacy LLVM backend, only certain intrinsics are implemented.
+These include:
+
+<!-- This list is generated from the Crucible source code:
+     curl https://raw.githubusercontent.com/GaloisInc/crucible/master/crucible-llvm/src/Lang/Crucible/LLVM/Intrinsics.hs | grep "let nm = " | perl -p -i -e 's/let nm = "(.+)" in/\1/' | sort
+-->
+
+* `llvm.ctlz.i32`
+* `llvm.lifetime.end`
+* `llvm.lifetime.start`
+* `llvm.memcpy.p0i8.p0i8.i32`
+* `llvm.memcpy.p0i8.p0i8.i64`
+* `llvm.memmove.p0i8.p0i8.i32`
+* `llvm.memmove.p0i8.p0i8.i64`
+* `llvm.memset.p0i8.i32`
+* `llvm.memset.p0i8.i64`
+* `llvm.objectsize.i32.p0i8`
+* `llvm.objectsize.i64.p0i8`
+
+And the subset of the C standard library:
+
+* `__assert_rtn`
+* `__memcpy_chk`
+* `__memset_chk`
+* `calloc`
+* `free`
+* `malloc`
+* `memcpy`
+* `memmove`
+* `memset`
+* `printf`
+* `putchar`
+* `puts`
