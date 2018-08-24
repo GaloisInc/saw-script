@@ -20,7 +20,7 @@ module SAWScript.X86
 
 import Control.Lens (toListOf, folded)
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST(ST,stToIO)
+import Control.Monad.ST(ST,stToIO,RealWorld)
 import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -37,7 +37,7 @@ import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Classes(knownRepr)
-import Data.Parameterized.Context(Assignment,EmptyCtx,(::>))
+import Data.Parameterized.Context(Assignment,EmptyCtx,(::>),singleton)
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
@@ -46,23 +46,31 @@ import What4.FunctionName(functionNameFromText)
 import What4.ProgramLoc(ProgramLoc,Position(OtherPos))
 
 -- Crucible
-import Lang.Crucible.CFG.Core(SomeCFG(..))
+import Lang.Crucible.Analysis.Postdom (postdomInfo)
+import Lang.Crucible.CFG.Core(SomeCFG(..), TypeRepr(..), cfgHandle)
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
-import Lang.Crucible.Simulator.RegMap(regValue)
+import Lang.Crucible.Simulator.RegMap(regValue, RegMap(..), RegEntry(..))
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
-import Lang.Crucible.Simulator.GlobalState(lookupGlobal)
+import Lang.Crucible.Simulator.GlobalState(lookupGlobal,insertGlobal,emptyGlobals)
+import Lang.Crucible.Simulator.Operations(defaultAbortHandler)
+import Lang.Crucible.Simulator.OverrideSim(runOverrideSim, callCFG)
+import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
-          , gpGlobals, AbortedResult(..))
+          , gpGlobals, AbortedResult(..), SimContext(..), FnState(..)
+          , initSimState
+          )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
           (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList)
-import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator)
+import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
 -- Crucible LLVM
 import SAWScript.CrucibleLLVM
   (Mem, ppMem, ppPtr, pattern LLVMPointer, bytesToInteger)
+import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
+import Lang.Crucible.LLVM.MemModel (mkMemVar)
 
 -- Crucible SAW
 import Lang.Crucible.Backend.SAWCore
@@ -84,10 +92,16 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , resolveElfFuncSymbolsAny )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
-                          , runCodeBlock
-                          , GlobalMap )
-import qualified Data.Macaw.Symbolic as Macaw ( CallHandler )
-import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),MacawExt)
+                          , GlobalMap
+                          , MacawSimulatorState(..)
+                          , macawExtensions
+                          )
+import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
+import Data.Macaw.Symbolic.CrucGen( MacawSymbolicArchFunctions(..)
+                                  , MacawExt
+                                  , MacawFunctionArgs
+                                  , crucArchRegTypes
+                                  )
 import Data.Macaw.Symbolic.PersistentState(macawAssignToCrucM)
 import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
 import Data.Macaw.X86.ArchTypes(X86_64)
@@ -134,6 +148,12 @@ data Options = Options
   , backend :: Sym
     -- ^ The Crucible backend to use.
 
+  , allocator :: HandleAllocator RealWorld
+    -- ^ The handle allocator used to allocate @memvar@
+
+  , memvar :: GlobalVar Mem
+    -- ^ The global variable storing the heap
+
   , funCalls :: Map (Natural,Integer) CallHandler
     {- ^ A mapping for function locations to the code to run to handle
          function calls.  The two integers are the base and offset
@@ -167,7 +187,7 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 --------------------------------------------------------------------------------
 
-type CallHandler = Sym -> Macaw.CallHandler Sym X86_64
+type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
@@ -183,16 +203,20 @@ proof :: (AIG.IsAIG l g) =>
          IO (SharedContext,Integer,[Goal])
 proof proxy archi file mbCry globs mkCallMap fun =
   do sc  <- mkSharedContext
+     halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend proxy sc globalNonceGenerator
      cenv <- loadCry sym mbCry
      callMap <- mkCallMap sym cenv
+     mvar <- stToIO (mkMemVar halloc)
      proofWithOptions Options
        { fileName = file
        , function = fun
        , archInfo = archi
        , backend = sym
+       , allocator = halloc
+       , memvar = mvar
        , funCalls = callMap
        , cryEnv = cenv
        , extraGlobals = globs
@@ -253,11 +277,11 @@ getElf path =
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.
 getRelevant :: Elf 64 -> IO RelevantElf
-getRelevant elf =
+getRelevant elf = do
   case memoryForElf opts elf of
     Left err -> malformed err
-    Right (ixMap, mem, _warnings) ->
-      do let (_errs,addrs) = resolveElfFuncSymbolsAny mem ixMap elf
+    Right (mem, addrs, _warnings, _errs) ->
+      do
 {-
          unless (null errs)
            $ malformed $ unlines $ "Failed to resolve ELF symbols:"
@@ -352,13 +376,14 @@ loadCry sym mb =
 -- Translation
 
 callHandler :: Overrides -> CallHandler
-callHandler callMap sym (mem,regs) =
+callHandler callMap sym = Macaw.LFH $ \st mem regs -> do
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
       case (asNat base, asUnsignedBV off) of
         (Just b, Just o) ->
            case Map.lookup (b,o) callMap of
-             Just h  -> h sym (mem,regs)
+             Just h  -> case h sym of
+                          Macaw.LFH f -> f st mem regs
              Nothing ->
                fail ("No over-ride for function: " ++ show (ppPtr ptr))
 
@@ -378,7 +403,7 @@ translate opts elf fun =
      sayLn ("Translating function: " ++ BSC.unpack name)
 
      let sym   = backend opts
-         sopts = Opts { optsSym = sym, optsCry = cryEnv opts }
+         sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
 
      sfs <- registerSymFuns sopts
 
@@ -406,7 +431,7 @@ translate opts elf fun =
 doSpecOldStyle ::
   Options ->
   Spec Pre (RegAssign, Spec Post ()) ->
-  IO ((GlobalMap Sym X86_64,Overrides), State, State -> IO ())
+  IO ((GlobalMap Sym 64, Overrides), State, State -> IO ())
 doSpecOldStyle opts spec =
   do let sym = backend opts
 
@@ -416,7 +441,7 @@ doSpecOldStyle opts spec =
 
      regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
 
-     return ( (theRegions extra, funCalls opts)
+     return ( (mkGlobalMap (theRegions extra), funCalls opts)
             , State { stateMem = theMem extra, stateRegs = regs }
             , \st1 -> statusBlock "  Setting-up post-conditions... " $
                       runPostSpec sym (cryEnv opts)
@@ -432,7 +457,7 @@ doSim ::
   RelevantElf ->
   SymFuns Sym ->
   ByteString ->
-  (GlobalMap Sym X86_64, Overrides) ->
+  (GlobalMap Sym 64, Overrides) ->
   State ->
   IO (Integer,State)
 doSim opts elf sfs name (globs,overs) st =
@@ -446,19 +471,36 @@ doSim opts elf sfs name (globs,overs) st =
 
      sayLn (show addr)
 
-     (halloc, SomeCFG cfg) <- statusBlock "  Constructing CFG... "
+     SomeCFG cfg <- statusBlock "  Constructing CFG... "
                     $ stToIO (makeCFG opts elf name addr)
 
      -- writeFile "XXX.hs" (show cfg)
 
      let sym = backend opts
+         mvar = memvar opts
 
-     (mvar, execResult) <-
-        statusBlock "  Simulating... " $
-        runCodeBlock sym
-              x86 (x86_64MacawEvalFn sfs) halloc (stateMem st, globs)
-           (callHandler overs sym) cfg (stateRegs st)
-
+     execResult <- statusBlock "  Simulating... " $ do
+       let crucRegTypes = crucArchRegTypes x86
+       let macawStructRepr = StructRepr crucRegTypes
+       let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
+           ctx = SimContext { _ctxSymInterface = sym
+                              , ctxSolverProof = \a -> a
+                              , ctxIntrinsicTypes = llvmIntrinsicTypes
+                              , simHandleAllocator = allocator opts
+                              , printHandle = stdout
+                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym)
+                              , _functionBindings =
+                                   insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
+                                   emptyHandleMap
+                              , _cruciblePersonality = MacawSimulatorState
+                              }
+       let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
+       let s = initSimState ctx initGlobals defaultAbortHandler
+       executeCrucible s $ runOverrideSim macawStructRepr $ do
+         let args :: RegMap Sym (MacawFunctionArgs X86_64)
+             args = RegMap (singleton (RegEntry macawStructRepr (stateRegs st)))
+         crucGenArchConstraints x86 $
+           regValue <$> callCFG cfg args
 
      gp <- case execResult of
              FinishedResult _ res ->
@@ -512,14 +554,13 @@ makeCFG ::
   RelevantElf ->
   ByteString ->
   MemSegmentOff 64 ->
-  ST s ( HandleAllocator s, TheCFG )
+  ST RealWorld TheCFG
 makeCFG opts elf name addr =
   do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
-     halloc  <- newHandleAllocator
-     baseVar <- freshGlobalVar halloc baseName knownRepr
+     baseVar <- freshGlobalVar (allocator opts) baseName knownRepr
      let memBaseVarMap = Map.singleton 1 baseVar
-     g <- mkFunCFG x86 halloc memBaseVarMap cruxName posFn funInfo
-     return (halloc, g)
+     g <- mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
+     return g
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName

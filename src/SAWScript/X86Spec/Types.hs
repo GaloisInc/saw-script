@@ -44,6 +44,8 @@ import Lang.Crucible.Types(CrucibleType,TypeRepr,BoolType)
 
 import SAWScript.CrucibleLLVM (LLVMPointerType, pattern LLVMPointerRepr)
 
+import qualified What4.Expr.Builder as B
+
 -- | The kind of X86 types.
 data {- kind -} X86Type = APtr | ABits Nat | ABool | ABigFloat
 
@@ -154,7 +156,7 @@ bitSize x =
 
 
 -- | The Crucible backend used for speicifcations.
-type Sym = SAWCoreBackend GlobalNonceGenerator
+type Sym = SAWCoreBackend GlobalNonceGenerator (B.Flags B.FloatReal)
 
 -- | A value in a X86 specification.
 newtype Value t = Value (RegValue Sym (Rep t))

@@ -207,9 +207,9 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupStruct vs -> do
       vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
-      let flds = case Crucible.typeF (Crucible.mkStructType (V.fromList (mkFields dl 0 0 tps))) of
-            Crucible.Struct v -> v
-            _ -> error "impossible"
+      let flds = case Crucible.typeF (Crucible.mkStruct (V.fromList (mkFields dl 0 0 tps))) of
+                   Crucible.Struct v -> v
+                   _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupArray [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray vs -> do
@@ -394,8 +394,8 @@ typeOfLLVMVal _dl val =
   case val of
     Crucible.LLVMValInt _bkl bv ->
        Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (natValue (W4.bvWidth bv))))
-    Crucible.LLVMValReal _ _    -> error "FIXME: typeOfLLVMVal LLVMValReal"
-    Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
+    Crucible.LLVMValFloat _ _    -> error "FIXME: typeOfLLVMVal LLVMValFloat"
+    Crucible.LLVMValStruct flds -> Crucible.mkStruct (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
   where
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
@@ -414,8 +414,8 @@ equalValsPred cc v1 v2 = go (v1, v2)
        = do blk_eq <- W4.natEq sym blk1 blk2
             off_eq <- W4.bvEq sym off1 off2
             W4.andPred sym blk_eq off_eq
-  go (Crucible.LLVMValReal xsz x, Crucible.LLVMValReal ysz y) | xsz == ysz
-       = W4.realEq sym x y
+  --go (Crucible.LLVMValFloat xsz x, Crucible.LLVMValFloat ysz y) | xsz == ysz
+  --     = W4.floatEq sym x y -- TODO
   go (Crucible.LLVMValStruct xs, Crucible.LLVMValStruct ys)
        | V.length xs == V.length ys
        = do cs <- mapM go (zip (map snd (toList xs)) (map snd (toList ys)))

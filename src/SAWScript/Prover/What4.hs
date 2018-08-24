@@ -82,9 +82,9 @@ satWhat4_yices     = satWhat4_sym yicesAdapter
 
 
 -- | Check the satisfiability of a theorem using What4.
-satWhat4_solver :: forall st t.
+satWhat4_solver :: forall st t ff.
   SolverAdapter st   {- ^ Which solver to use -} ->
-  B.ExprBuilder t st {- ^ The glorious sym -}  ->
+  B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   [String]           {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   ProverMode         {- ^ Prove/check -} ->
@@ -113,7 +113,7 @@ satWhat4_solver solver sym unints sc mode term =
      -- run solver
      solver_adapter_check_sat solver sym logger lit $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
-           mvals <- mapM (getValues @(B.ExprBuilder t st) gndEvalFcn)
+           mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)
            return (Just (catMaybes mvals), stats) where
 
@@ -170,8 +170,8 @@ getLabelValues f (W.BaseLabel (W.TypedExpr ty bv)) = do
 
 
 -- | For debugging
-printValue :: (B.ExprBuilder t st) -> GroundEvalFn t ->
-  (Maybe (W.TypedExpr (B.ExprBuilder t st)), String) -> IO ()
+printValue :: (B.ExprBuilder t st ff) -> GroundEvalFn t ->
+  (Maybe (W.TypedExpr (B.ExprBuilder t st ff)), String) -> IO ()
 printValue _ _ (Nothing, _) = return ()
 printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), orig) = do
   gv <- groundEval f @ty bv

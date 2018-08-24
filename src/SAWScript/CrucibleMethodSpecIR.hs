@@ -178,8 +178,8 @@ type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
 type GhostGlobal = Crucible.GlobalVar GhostType
 
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n) GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n) GhostValue ctx = TypedTerm
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n (B.Flags B.FloatReal)) GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
     do st <- readIORef (B.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
@@ -244,7 +244,7 @@ data CrucibleSetupState wptr =
   ,_csCrucibleContext :: CrucibleContext wptr
   }
 
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator
+type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (B.Flags B.FloatReal)
 
 data CrucibleContext wptr =
   CrucibleContext
@@ -317,8 +317,7 @@ testResolved val0 rs = go [] val0
     test path (Just paths) = any (`isPrefixOf` path) paths
 
 
-intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn
-                (Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator))
+intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
 intrinsics =
   MapF.insert
     (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)

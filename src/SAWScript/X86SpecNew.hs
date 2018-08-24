@@ -8,6 +8,7 @@
 {-# Language FlexibleContexts #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language ConstraintKinds #-}
+{-# Language PartialTypeSignatures #-}
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
@@ -43,22 +44,27 @@ module SAWScript.X86SpecNew
   , cryCur
   , cryTerm
   , cryConst
+  , mkGlobalMap
   ) where
 
 import GHC.TypeLits(KnownNat)
 import GHC.Natural(Natural)
+import GHC.IO (stToIO)
 import Data.Kind(Type)
-import Control.Lens (view)
-import Control.Monad(foldM,zipWithM)
+import Control.Lens (view, (^.), over)
+import Control.Monad(foldM,zipWithM,join)
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
 import Data.Map (Map)
 import Data.Proxy(Proxy(..))
 import qualified Data.Map as Map
 import Data.IORef(newIORef,atomicModifyIORef')
+import Data.String
+import Control.Monad.Reader
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Pair
 
@@ -69,15 +75,16 @@ import What4.Interface
           , bvUle, truePred, natLit, asNat, andPred )
 import What4.ProgramLoc
 
+import Lang.Crucible.FunctionHandle
 import SAWScript.CrucibleLLVM
   ( EndianForm(LittleEndian)
   , MemImpl, coerceAny, doLoad, doPtrAddOffset, emptyMem
+  , AllocType(HeapAlloc, GlobalAlloc), Mutability(..), Mem
   , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
   , LLVMPointerType, LLVMVal(LLVMValInt)
   , ptrEq, LLVMPtr, ppPtr, llvmPointerView, projectLLVM_bv, llvmPointer_bv
   , bitvectorType
   , Bytes, bytesToInteger, toBytes
-  , AllocType(HeapAlloc, GlobalAlloc), Mutability(..)
   )
 import qualified SAWScript.CrucibleLLVM as LLVM (Type)
 
@@ -87,18 +94,23 @@ import Lang.Crucible.Backend
           (addAssumption, getProofObligations, proofGoalsToList
           ,assert, AssumptionReason(..)
           ,LabeledPred(..), ProofGoal(..), labeledPredMsg)
+import Lang.Crucible.Simulator.ExecutionTree
+import Lang.Crucible.Simulator.OverrideSim
+import Lang.Crucible.CFG.Common
+import Lang.Crucible.Simulator.RegMap
 
 import Lang.Crucible.Backend.SAWCore
   (bindSAWTerm,sawBackendSharedContext,toSC)
 import Lang.Crucible.Types
-  (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType )
+  (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType)
 
 import Verifier.SAW.SharedTerm
   (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
+import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic(freshValue,GlobalMap)
 import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
-import Data.Macaw.Symbolic(Regs, macawAssignToCrucM, CallHandler )
-import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..))
+import Data.Macaw.Symbolic(Regs, macawAssignToCrucM, LookupFunctionHandle(..) )
+import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),crucArchRegTypes)
 import Data.Macaw.X86.X86Reg
 import Data.Macaw.X86.Symbolic
      (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg,freshX86Reg)
@@ -137,6 +149,7 @@ data Unit = Bytes | Words | DWords | QWords | V128s | V256s deriving Show
 
 data Opts = Opts
   { optsSym :: Sym
+  , optsMvar :: GlobalVar Mem
   , optsCry :: CryptolEnv
   }
 
@@ -916,15 +929,24 @@ checkAlloc sym s (l := a) =
      return (p2,p3)
 
 
+mkGlobalMap :: Map.Map RegionIndex (LLVMPtr Sym 64) -> GlobalMap Sym 64
+mkGlobalMap rmap sym mem region off = sequence (addOffset <$> thisRegion)
+  where
+    thisRegion = join (findRegion <$> asNat region)
+    findRegion r = Map.lookup (fromIntegral r) rmap
+    addOffset p = doPtrAddOffset sym mem p off
+      where ?ptrWidth = knownNat
+
+
 -- | Setup globals in a single read-only region (index 0).
 setupGlobals ::
   Opts ->
   [(String,Integer,Unit,[Integer])] ->
   [(String,Integer,Int -> Specification)] ->
   State ->
-  IO ((GlobalMap Sym X86_64,Overrides), State)
+  IO ((GlobalMap Sym 64, Overrides), State)
 setupGlobals opts gs fs s
-  | null regions && null fs = return ((Map.empty,Map.empty), s)
+  | null regions && null fs = return ((mkGlobalMap Map.empty, Map.empty), s)
 
   | not (null overlaps) =
       fail $ unlines $ "Overlapping regions in global spec:"
@@ -943,31 +965,42 @@ setupGlobals opts gs fs s
        let Just base = asNat (fst (llvmPointerView p))
 
        mem1 <- foldM (writeGlob p) mem gs
-       let gMap = Map.singleton 0 p
+       let gMap = mkGlobalMap (Map.singleton 0 p)
 
            {- NOTE:  Some functions are called multiple times with different
                      sizes. This means that we need different specs for them,
                      at least until we support polymorphic specs.  As a quick
                      work-around we count the number of times a function is
                      entered and provide this as an input to the spec.
-                     In simple cases this allows the spec to change itself. -}
-           mkHandler (_f,a, sp) =
+                     In simple cases this allows the spec to change itslef. -}
+           mkHandler (name,a, sp) =
               do entryCounter <- newIORef 0
+                 let fname = fromString name
                  return $
                     ( (base,a)
-                    , \sy (m,r) ->
-                         do -- putStrLn ("ENTER " ++ _f)
-                            let st0 = State { stateRegs = r, stateMem = m }
-
-                            ent <- atomicModifyIORef' entryCounter $
+                    , \_ -> LFH $ \st _ _ ->
+                         do
+                            let sty = crucArchRegTypes x86_64MacawSymbolicFns
+                            let rty = StructRepr sty
+                            let o = mkOverride' fname rty $ do
+                                      ent <- liftIO $ atomicModifyIORef' entryCounter $
                                                              \e -> (e + 1, e)
-                            -- debugPPReg RCX st0
-                            st1 <- overrideMode (sp ent)
-                                              opts { optsSym = sy } st0
-                            -- debugPPReg RCX st1
-                            -- debugDumpGoals sym
-                            -- putStrLn ("EXIT " ++ _f)
-                            return (stateMem st1, stateRegs st1)
+                                      -- liftIO $ putStrLn ("ENTER " ++ _f)
+                                      sym' <- getSymInterface
+                                      RegMap args <- getOverrideArgs
+                                      mem' <- readGlobal (optsMvar opts)
+                                      let st0 = State { stateRegs = regValue (Ctx.last args), stateMem = mem' }
+                                      -- liftIO $ debugPPReg RCX st0
+                                      st1 <- liftIO $ overrideMode (sp ent) opts { optsSym = sym' } st0
+                                      -- liftIO $ debugPPReg RCX st1
+                                      writeGlobal (optsMvar opts) (stateMem st1)
+                                      -- liftIO $ putStrLn ("EXIT " ++ _f)
+                                      return (stateRegs st1)
+                            let halloc = simHandleAllocator (st ^. stateContext)
+                            h <- stToIO $ mkHandle halloc fname
+                            let addBinding = over (stateContext . functionBindings)
+                                               (insertHandleMap h (UseOverride o))
+                            return (h, addBinding st)
                       )
 
        fMap <- Map.fromList <$> mapM mkHandler fs
@@ -1021,14 +1054,17 @@ _debugDumpGoals sym =
   sh (ProofGoal _hyps g) = print (view labeledPredMsg g)
 
 
-type Overrides = Map (Natural,Integer) (Sym -> CallHandler Sym X86_64)
+type Overrides = Map (Natural,Integer) (Sym -> LookupFunctionHandle Sym X86_64)
 
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
 verifyMode ::
-  Specification -> Opts -> IO ( ( GlobalMap Sym X86_64, Overrides )
-                              , State, State -> IO ()
-                              )
+  Specification ->
+  Opts ->
+  IO ( (GlobalMap Sym 64, Overrides)
+     , State
+     , State -> IO ()
+     )
 verifyMode spec opts =
   do let sym = optsSym opts
      s0 <- freshState sym

@@ -703,7 +703,7 @@ valueToSC sym failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
        t     <- liftIO (typeToSC sc ty)
        liftIO (scVector sc t terms)
 
-valueToSC _ _ _ Crucible.LLVMValReal{} =
+valueToSC _ _ _ Crucible.LLVMValFloat{} =
   fail  "valueToSC: Real not supported"
 
 valueToSC _sym failMsg _tval _val =
