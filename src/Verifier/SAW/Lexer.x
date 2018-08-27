@@ -67,10 +67,10 @@ $cntrl     = [$large \@\[\\\]\^\_]
 $idchar    = [a-z A-Z 0-9 \' \_]
 @ident     = [a-z A-Z \_] $idchar*
 
-@punct = "#" | "," | "->" | "." | ".." | ";" | "::" | "=" | "?" | "??" | "???"
+@punct = "#" | "," | "->" | "." | ";" | "::" | "="
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
-@keywords = "as" | "data" | "hiding" | "import" | "in" | "let" | "module"
-          | "qualified" | "sort" | "Prop" | "where" | "primitive" | "axiom"
+@keywords = "data" | "hiding" | "import" | "module"
+          | "sort" | "Prop" | "where" | "primitive" | "axiom"
 @key = @punct | @keywords
 
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hex)

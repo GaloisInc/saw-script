@@ -55,10 +55,6 @@ import Verifier.SAW.Lexer
   '::'    { PosPair _ (TKey "::") }
   ','     { PosPair _ (TKey ",") }
   '.'     { PosPair _ (TKey ".") }
-  '..'    { PosPair _ (TKey "..") }
-  '?'     { PosPair _ (TKey "?") }
-  '??'    { PosPair _ (TKey "??") }
-  '???'   { PosPair _ (TKey "???") }
   '('     { PosPair _ (TKey "(") }
   ')'     { PosPair _ (TKey ")") }
   '['     { PosPair _ (TKey "[") }
@@ -66,14 +62,10 @@ import Verifier.SAW.Lexer
   '{'     { PosPair _ (TKey "{") }
   '}'     { PosPair _ (TKey "}") }
   '|'     { PosPair _ (TKey "|") }
-  'as'        { PosPair _ (TKey "as") }
   'data'      { PosPair _ (TKey "data") }
   'hiding'    { PosPair _ (TKey "hiding") }
   'import'    { PosPair _ (TKey "import") }
-  'in'        { PosPair _ (TKey "in") }
-  'let'       { PosPair _ (TKey "let") }
   'module'    { PosPair _ (TKey "module") }
-  'qualified' { PosPair _ (TKey "qualified") }
   'sort'      { PosPair _ (TKey "sort") }
   'Prop'      { PosPair _ (TKey "Prop") }
   'where'     { PosPair _ (TKey "where") }
