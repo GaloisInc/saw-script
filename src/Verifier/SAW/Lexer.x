@@ -67,7 +67,7 @@ $cntrl     = [$large \@\[\\\]\^\_]
 $idchar    = [a-z A-Z 0-9 \' \_]
 @ident     = [a-z A-Z \_] $idchar*
 
-@punct = "#" | "," | "->" | "." | ";" | "::" | "="
+@punct = "#" | "," | "->" | "." | ";" | ":" | "="
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
 @keywords = "data" | "hiding" | "import" | "module"
           | "sort" | "Prop" | "where" | "primitive" | "axiom"

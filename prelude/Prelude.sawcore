@@ -6,22 +6,17 @@ module Prelude where
 
 -- Grammar for the core prelude types.
 --
--- We use double colons "::" to represent the type constraint on the core symbols.
---   e.g., "Bool :: sort 0" indicates "Bool" has type "sort 0"
+-- We use single colons ":" to represent the type constraint on the core symbols.
+--   e.g., "Bool : sort 0" indicates "Bool" has type "sort 0".
 -- Functions use "->" to separate arguments from result.
---   e.g., "f :: Bool -> Bool -> Bool"indicates "f" is a binary operation on Booleans.
---
--- Single colons ":" are used for for scoping variables to be used in subsequent arguments.
---   "f :: n : Integer -> Signed n -> Signed n"
--- This  indicates "f" is a function that takes an integer argument "n", and returns a function
--- that takes "n"-bit signed integer and returns another "n"-bit signed integer.
+--   e.g., "f : Bool -> Bool -> Bool" indicates "f" is a binary operation on Booleans.
 
 
-id :: (a :: sort 0) -> a -> a;
+id : (a : sort 0) -> a -> a;
 id _ x = x;
 
 -- FIXME: We eventually need to remove this, as it violates soundness...
-primitive fix :: (a :: sort 0) -> (a -> a) -> a;
+primitive fix : (a : sort 0) -> (a -> a) -> a;
 
 
 -- FIXME: below are some defined data-types that could be used in place of
@@ -30,122 +25,122 @@ primitive fix :: (a :: sort 0) -> (a -> a) -> a;
 --------------------------------------------------------------------------------
 -- The Unit type
 
-data UnitType :: sort 0 where {
-    Unit :: UnitType;
+data UnitType : sort 0 where {
+    Unit : UnitType;
   }
 
 -- The recursor for the Unit type at sort 0
-UnitType__rec :: (p :: UnitType -> sort 0) -> p Unit -> (u :: UnitType) -> p u;
+UnitType__rec : (p : UnitType -> sort 0) -> p Unit -> (u : UnitType) -> p u;
 UnitType__rec p f1 u = UnitType#rec p f1 u;
 
 
 --------------------------------------------------------------------------------
 -- Pair types
 
-data PairType (a b :: sort 0) :: sort 0 where {
-  PairValue :: a -> b -> PairType a b;
+data PairType (a b : sort 0) : sort 0 where {
+  PairValue : a -> b -> PairType a b;
 }
 
-pair_example :: (a b :: sort 0) -> a -> b -> PairType a b;
+pair_example : (a b : sort 0) -> a -> b -> PairType a b;
 pair_example a b x y = PairValue a b x y;
 
 -- The recursor for primitive pair types at sort 1
-Pair__rec :: (a b :: sort 0) -> (p :: PairType a b -> sort 0) ->
-             ((x::a) -> (y::b) -> p (PairValue a b x y)) ->
-             (pair :: PairType a b) -> p pair;
+Pair__rec : (a b : sort 0) -> (p : PairType a b -> sort 0) ->
+             ((x:a) -> (y:b) -> p (PairValue a b x y)) ->
+             (pair : PairType a b) -> p pair;
 Pair__rec a b p f pair = PairType#rec a b p f pair;
 
-Pair_fst :: (a b :: sort 0) -> PairType a b -> a;
-Pair_fst a b = Pair__rec a b (\ (p::PairType a b) -> a)
-                             (\ (x::a) -> \ (y:: b) -> x);
+Pair_fst : (a b : sort 0) -> PairType a b -> a;
+Pair_fst a b = Pair__rec a b (\ (p:PairType a b) -> a)
+                             (\ (x:a) -> \ (y: b) -> x);
 
-Pair_snd :: (a b :: sort 0) -> PairType a b -> b;
-Pair_snd a b = Pair__rec a b (\ (p::PairType a b) -> b)
-                             (\ (x::a) -> \ (y::b) -> y);
+Pair_snd : (a b : sort 0) -> PairType a b -> b;
+Pair_snd a b = Pair__rec a b (\ (p:PairType a b) -> b)
+                             (\ (x:a) -> \ (y:b) -> y);
 
-fst :: (a b :: sort 0) -> #(a | b) -> a;
+fst : (a b : sort 0) -> #(a | b) -> a;
 fst a b tup = tup.(1);
 
-snd :: (a b :: sort 0) -> #(a | b) -> b;
+snd : (a b : sort 0) -> #(a | b) -> b;
 snd a b tup = tup.(2);
 
-uncurry :: (a b c :: sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
+uncurry : (a b c : sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
 uncurry a b c f =
-  (\ (x :: #(a, b)) -> f x.1 x.2);
+  (\ (x : #(a, b)) -> f x.1 x.2);
 
 
 --------------------------------------------------------------------------------
 -- String values
 
-primitive String :: sort 0;
+primitive String : sort 0;
 
-primitive error :: (a :: sort 1) -> String -> a;
+primitive error : (a : sort 1) -> String -> a;
 
 
 --------------------------------------------------------------------------------
 -- Record types
 
 -- The empty record
-data EmptyType :: sort 0 where {
-  Empty :: EmptyType;
+data EmptyType : sort 0 where {
+  Empty : EmptyType;
 }
 
 -- The recursor for the empty type at sort 0
-EmptyType__rec :: (p :: EmptyType -> sort 0) -> p Empty ->
-                  (emp :: EmptyType) -> p emp;
+EmptyType__rec : (p : EmptyType -> sort 0) -> p Empty ->
+                  (emp : EmptyType) -> p emp;
 EmptyType__rec p f1 emp = EmptyType#rec p f1 emp;
 
 -- Add a named field to a record type
-data RecordType (s::String) (a b ::sort 0) :: sort 0 where {
-  RecordValue :: a -> b -> RecordType s a b;
+data RecordType (s:String) (a b :sort 0) : sort 0 where {
+  RecordValue : a -> b -> RecordType s a b;
 }
 
 -- The recursor for record types at sort 0
-RecordType__rec :: (s::String) -> (a b ::sort 0) ->
-                   (p:: RecordType s a b -> sort 1) ->
-                   ((x::a) -> (y::b) -> p (RecordValue s a b x y)) ->
-                   (r::RecordType s a b) -> p r;
+RecordType__rec : (s:String) -> (a b :sort 0) ->
+                   (p: RecordType s a b -> sort 1) ->
+                   ((x:a) -> (y:b) -> p (RecordValue s a b x y)) ->
+                   (r:RecordType s a b) -> p r;
 RecordType__rec s a b p f1 r = RecordType#rec s a b p f1 r;
 
 
 --------------------------------------------------------------------------------
 -- Equality proofs.
 
-data Eq (t :: sort 1) (x :: t) :: t -> sort 1 where {
-    Refl :: Eq t x x;
+data Eq (t : sort 1) (x : t) : t -> sort 1 where {
+    Refl : Eq t x x;
   }
 
 -- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
 -- structure of the Eq type
-Eq__rec :: (t :: sort 1) -> (x :: t) -> (p :: (y :: t) -> Eq t x y -> sort 1) ->
-           p x (Refl t x) -> (y :: t) -> (pf :: Eq t x y) -> p y pf;
+Eq__rec : (t : sort 1) -> (x : t) -> (p : (y : t) -> Eq t x y -> sort 1) ->
+           p x (Refl t x) -> (y : t) -> (pf : Eq t x y) -> p y pf;
 Eq__rec t x p f1 y pf = Eq#rec t x p f1 y pf;
 
 -- Congruence closure for equality
-eq_cong :: (t :: sort 1) -> (x :: t) -> (y :: t) -> Eq t x y ->
-           (u :: sort 1) -> (f :: t -> u) -> Eq u (f x) (f y);
+eq_cong : (t : sort 1) -> (x : t) -> (y : t) -> Eq t x y ->
+           (u : sort 1) -> (f : t -> u) -> Eq u (f x) (f y);
 eq_cong t x y eq u f =
-  Eq__rec t x (\ (y'::t) -> \ (eq'::Eq t x y') -> Eq u (f x) (f y'))
+  Eq__rec t x (\ (y':t) -> \ (eq':Eq t x y') -> Eq u (f x) (f y'))
           (Refl u (f x)) y eq;
 
-sym :: (a :: sort 1) -> (x y :: a) -> Eq a x y -> Eq a y x;
+sym : (a : sort 1) -> (x y : a) -> Eq a x y -> Eq a y x;
 sym a x y eq =
-  Eq__rec a x (\ (y'::a) -> \ (eq'::Eq a x y') -> Eq a y' x) (Refl a x) y eq;
+  Eq__rec a x (\ (y':a) -> \ (eq':Eq a x y') -> Eq a y' x) (Refl a x) y eq;
 
-trans :: (a :: sort 1) -> (x y z :: a) -> Eq a x y -> Eq a y z -> Eq a x z;
+trans : (a : sort 1) -> (x y z : a) -> Eq a x y -> Eq a y z -> Eq a x z;
 trans a x y z eq1 eq2 =
-  Eq__rec a y (\ (y'::a) -> \ (eq'::Eq a y y') -> Eq a x y') eq1 z eq2;
+  Eq__rec a y (\ (y':a) -> \ (eq':Eq a y y') -> Eq a x y') eq1 z eq2;
 
-trans2 :: (a :: sort 1) -> (x y z :: a) -> Eq a x z -> Eq a y z -> Eq a x y;
+trans2 : (a : sort 1) -> (x y z : a) -> Eq a x z -> Eq a y z -> Eq a x y;
 trans2 a x y z eq1 eq2 = trans a x z y eq1 (sym a y z eq2);
 
-trans4 :: (a :: sort 1) -> (w x y z :: a) ->
+trans4 : (a : sort 1) -> (w x y z : a) ->
           Eq a w x -> Eq a x y -> Eq a y z -> Eq a w z;
 trans4 a w x y z eq1 eq2 eq3 =
   trans a w x z eq1 (trans a x y z eq2 eq3);
 
-eq_inv_map :: (a b :: sort 1) -> (a1 a2 :: a) -> Eq a a1 a2 ->
-              (f1 f2 :: a -> b) -> Eq b (f1 a2) (f2 a2) ->
+eq_inv_map : (a b : sort 1) -> (a1 a2 : a) -> Eq a a1 a2 ->
+              (f1 f2 : a -> b) -> Eq b (f1 a2) (f2 a2) ->
               Eq b (f1 a1) (f2 a1);
 eq_inv_map a b a1 a2 eq_a f1 f2 eq_f =
   trans
@@ -155,59 +150,59 @@ eq_inv_map a b a1 a2 eq_a f1 f2 eq_f =
            (eq_cong a a2 a1 (sym a a1 a2 eq_a) b f2));
 
 -- Unchecked assertion that two types are equal.
-axiom unsafeAssert :: (a :: sort 1) -> (x :: a) -> (y :: a) -> Eq a x y;
+axiom unsafeAssert : (a : sort 1) -> (x : a) -> (y : a) -> Eq a x y;
 
 
-primitive coerce :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
+primitive coerce : (a b : sort 0) -> Eq (sort 0) a b -> a -> b;
 
-coerce__def :: (a b :: sort 0) -> Eq (sort 0) a b -> a -> b;
+coerce__def : (a b : sort 0) -> Eq (sort 0) a b -> a -> b;
 coerce__def a b eq x =
-   Eq__rec (sort 0) a (\ (b'::sort 0) -> \ (eq'::Eq (sort 0) a b') -> b') x b eq;
+   Eq__rec (sort 0) a (\ (b':sort 0) -> \ (eq':Eq (sort 0) a b') -> b') x b eq;
 
-axiom coerce__eq ::
-  Eq ((a b :: sort 0) -> Eq (sort 0) a b -> a -> b) coerce coerce__def;
+axiom coerce__eq :
+  Eq ((a b : sort 0) -> Eq (sort 0) a b -> a -> b) coerce coerce__def;
 
 
 -- NOTE: this is equivalent to UIP / Axiom K
 {-
-coerce_same :: (a :: sort 0) -> (q :: Eq (sort 0) a a) -> (x :: a) -> Eq a (coerce a a q x) x;
+coerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) -> Eq a (coerce a a q x) x;
 coerce_same a (Refl _ _) x = Refl a x;
 -}
 
-rcoerce :: (a b :: sort 0) -> Eq (sort 0) a b -> b -> a;
+rcoerce : (a b : sort 0) -> Eq (sort 0) a b -> b -> a;
 rcoerce a b q = coerce b a (sym (sort 0) a b q);
 
 -- NOTE: this is equivalent to UIP / Axiom K
 {-
-rcoerce_same :: (a :: sort 0) -> (q :: Eq (sort 0) a a) -> (x :: a) -> Eq a (rcoerce a a q x) x;
+rcoerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) -> Eq a (rcoerce a a q x) x;
 rcoerce_same a q x = coerce_same a (sym (sort 0) a a q) x;
 -}
 
-unsafeCoerce :: (a b :: sort 0) -> a -> b;
+unsafeCoerce : (a b : sort 0) -> a -> b;
 unsafeCoerce a b = coerce a b (unsafeAssert (sort 0) a b);
 
-axiom unsafeCoerce_same :: (a :: sort 0) -> (x :: a) ->
+axiom unsafeCoerce_same : (a : sort 0) -> (x : a) ->
                            Eq a (unsafeCoerce a a x) x;
 
 -- NOTE: We could prove unsafeCoerce_same if we were willing to allow UIP...
 {-
-unsafeCoerce_same :: (a :: sort 0) -> (x :: a) -> Eq a (unsafeCoerce a a x) x;
+unsafeCoerce_same : (a : sort 0) -> (x : a) -> Eq a (unsafeCoerce a a x) x;
 unsafeCoerce_same a x = coerce_same a (unsafeAssert (sort 0) a a) x;
 -}
 
-piCong0 :: (r x y :: sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
+piCong0 : (r x y : sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
 piCong0 r x y eq =
   Eq__rec
     (sort 0) x
-    (\ (y':: sort 0) -> \ (eq':: Eq (sort 0) x y') ->
+    (\ (y': sort 0) -> \ (eq': Eq (sort 0) x y') ->
        Eq (sort 0) (x -> r) (y' -> r))
     (Refl (sort 0) (x -> r)) y eq;
 
-piCong1 :: (r x y :: sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (r -> x) (r -> y));
+piCong1 : (r x y : sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (r -> x) (r -> y));
 piCong1 r x y eq =
   Eq__rec
     (sort 0) x
-    (\ (y':: sort 0) -> \ (eq':: Eq (sort 0) x y') ->
+    (\ (y': sort 0) -> \ (eq': Eq (sort 0) x y') ->
        Eq (sort 0) (r -> x) (r -> y'))
     (Refl (sort 0) (r -> x)) y eq;
 
@@ -215,12 +210,12 @@ piCong1 r x y eq =
 --------------------------------------------------------------------------------
 -- Bits
 
-data Bit :: sort 0 where {
-    Bit1 :: Bit;
-    Bit0 :: Bit;
+data Bit : sort 0 where {
+    Bit1 : Bit;
+    Bit0 : Bit;
   }
 
-Bit__rec :: (p :: Bit -> sort 1) -> (p Bit1) -> (p Bit0) -> (b::Bit) -> p b;
+Bit__rec : (p : Bit -> sort 1) -> (p Bit1) -> (p Bit0) -> (b:Bit) -> p b;
 Bit__rec p f1 f2 b = Bit#rec p f1 f2 b;
 
 
@@ -229,61 +224,61 @@ Bit__rec p f1 f2 b = Bit#rec p f1 f2 b;
 
 -- Boolean is a primitive type, because it is handled specially by some of the
 -- back-ends (e.g., the SAT/SMT solvers)
-primitive Bool :: sort 0;
-primitive True :: Bool;
-primitive False :: Bool;
+primitive Bool : sort 0;
+primitive True : Bool;
+primitive False : Bool;
 
 -- Elimination form for Bool is dependent if-then-else. This is exactly the same
 -- as the recursor for Bit, but it is declared as a primitive because Bool is.
 -- It also rearranges the arguments to look more like normal if-then-else.
-primitive iteDep :: (p :: Bool -> sort 1) -> (b::Bool) ->
+primitive iteDep : (p : Bool -> sort 1) -> (b:Bool) ->
                     p True -> p False -> p b;
 
 -- Reduction rules for iteDep
-axiom iteDep_True :: (p :: Bool -> sort 1) -> (f1::p True) -> (f2::p False) ->
+axiom iteDep_True : (p : Bool -> sort 1) -> (f1:p True) -> (f2:p False) ->
                      Eq (p True) (iteDep p True f1 f2) f1;
-axiom iteDep_False :: (p :: Bool -> sort 1) -> (f1::p True) -> (f2::p False) ->
+axiom iteDep_False : (p : Bool -> sort 1) -> (f1:p True) -> (f2:p False) ->
                       Eq (p False) (iteDep p False f1 f2) f2;
 
 -- Non-dependent if-then-else; this is a primitive because it is handled
 -- specially by some of the back-ends (e.g., the SAT/SMT solvers)
-primitive ite :: (a :: sort 1) -> Bool -> a -> a -> a;
+primitive ite : (a : sort 1) -> Bool -> a -> a -> a;
 
 -- ite should be the same as iteDep
-axiom ite_eq_iteDep :: (a::sort 1) -> (b::Bool) -> (x y::a) ->
-                       Eq a (ite a b x y) (iteDep (\ (_::Bool) -> a) b x y);
+axiom ite_eq_iteDep : (a:sort 1) -> (b:Bool) -> (x y:a) ->
+                       Eq a (ite a b x y) (iteDep (\ (_:Bool) -> a) b x y);
 
-ite_true :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a True x y) x;
+ite_true : (a : sort 1) -> (x y : a) -> Eq a (ite a True x y) x;
 ite_true a x y =
-  trans a (ite a True x y) (iteDep (\ (b::Bool) -> a) True x y) x
-        (ite_eq_iteDep a True x y) (iteDep_True (\ (_::Bool) -> a) x y);
+  trans a (ite a True x y) (iteDep (\ (b:Bool) -> a) True x y) x
+        (ite_eq_iteDep a True x y) (iteDep_True (\ (_:Bool) -> a) x y);
 
-ite_false :: (a :: sort 1) -> (x y :: a) -> Eq a (ite a False x y) y;
+ite_false : (a : sort 1) -> (x y : a) -> Eq a (ite a False x y) y;
 ite_false a x y =
-  trans a (ite a False x y) (iteDep (\ (b::Bool) -> a) False x y) y
-        (ite_eq_iteDep a False x y) (iteDep_False (\ (_::Bool) -> a) x y);
+  trans a (ite a False x y) (iteDep (\ (b:Bool) -> a) False x y) y
+        (ite_eq_iteDep a False x y) (iteDep_False (\ (_:Bool) -> a) x y);
 
 
 --
 -- Converting between Bools and Bits (cause why not?)
 --
 
-bool2bit :: Bool -> Bit;
-bool2bit b = iteDep (\ (_::Bool) -> Bit) b Bit1 Bit0;
+bool2bit : Bool -> Bit;
+bool2bit b = iteDep (\ (_:Bool) -> Bit) b Bit1 Bit0;
 
-bool2bit_True :: Eq Bit (bool2bit True) Bit1;
-bool2bit_True = iteDep_True (\ (_::Bool) -> Bit) Bit1 Bit0;
+bool2bit_True : Eq Bit (bool2bit True) Bit1;
+bool2bit_True = iteDep_True (\ (_:Bool) -> Bit) Bit1 Bit0;
 
-bool2bit_False :: Eq Bit (bool2bit False) Bit0;
-bool2bit_False = iteDep_False (\ (_::Bool) -> Bit) Bit1 Bit0;
+bool2bit_False : Eq Bit (bool2bit False) Bit0;
+bool2bit_False = iteDep_False (\ (_:Bool) -> Bit) Bit1 Bit0;
 
-bit2bool :: Bit -> Bool;
-bit2bool = Bit__rec (\ (_::Bit) -> Bool) True False;
+bit2bool : Bit -> Bool;
+bit2bool = Bit__rec (\ (_:Bit) -> Bool) True False;
 
-bit2bool_Bit1 :: Eq Bool (bit2bool Bit1) True;
+bit2bool_Bit1 : Eq Bool (bit2bool Bit1) True;
 bit2bool_Bit1 = Refl Bool True;
 
-bit2bool_Bit0 :: Eq Bool (bit2bool Bit0) False;
+bit2bool_Bit0 : Eq Bool (bit2bool Bit0) False;
 bit2bool_Bit0 = Refl Bool False;
 
 
@@ -291,50 +286,50 @@ bit2bool_Bit0 = Refl Bool False;
 -- The Boolean operations
 --
 
-primitive not :: Bool -> Bool;
-axiom not__eq :: (b::Bool) -> Eq Bool (not b) (ite Bool b False True);
+primitive not : Bool -> Bool;
+axiom not__eq : (b:Bool) -> Eq Bool (not b) (ite Bool b False True);
 
-primitive and :: Bool -> Bool -> Bool;
-axiom and__eq :: (b1 b2::Bool) -> Eq Bool (and b1 b2) (ite Bool b1 b2 False);
+primitive and : Bool -> Bool -> Bool;
+axiom and__eq : (b1 b2:Bool) -> Eq Bool (and b1 b2) (ite Bool b1 b2 False);
 
-primitive or :: Bool -> Bool -> Bool;
-axiom or__eq :: (b1 b2::Bool) -> Eq Bool (or b1 b2) (ite Bool b1 True b2);
+primitive or : Bool -> Bool -> Bool;
+axiom or__eq : (b1 b2:Bool) -> Eq Bool (or b1 b2) (ite Bool b1 True b2);
 
-primitive xor :: Bool -> Bool -> Bool;
-axiom xor__eq :: (b1 b2::Bool) ->
+primitive xor : Bool -> Bool -> Bool;
+axiom xor__eq : (b1 b2:Bool) ->
                  Eq Bool (xor b1 b2) (ite Bool b1 (not b2) b2);
 
 -- Decidable Boolean equality, also known as iff
-primitive boolEq :: Bool -> Bool -> Bool;
-axiom boolEq__eq :: (b1 b2::Bool) ->
+primitive boolEq : Bool -> Bool -> Bool;
+axiom boolEq__eq : (b1 b2:Bool) ->
                     Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2));
 
 -- Implies is not a primitive, as it is not mapped by any of the simulator
 -- back-ends; instead, it is just defined in terms of or and not
-implies :: Bool -> Bool -> Bool;
-implies = \ (a::Bool) (b::Bool) -> or (not a) b;
+implies : Bool -> Bool -> Bool;
+implies = \ (a:Bool) (b:Bool) -> or (not a) b;
 
 -- FIXME: this rule should be derived by scDefRewriteRules
-implies__eq :: (a b::Bool) -> Eq Bool (implies a b) (or (not a) b);
+implies__eq : (a b:Bool) -> Eq Bool (implies a b) (or (not a) b);
 implies__eq a b = Refl Bool (implies a b);
 
 --
 -- Rewrite rules for booleans
 --
 
-not_True :: Eq Bool (not True) False;
+not_True : Eq Bool (not True) False;
 not_True =
   trans Bool (not True) (ite Bool True False True) False
         (not__eq True) (ite_true Bool False True);
 
-not_False :: Eq Bool (not False) True;
+not_False : Eq Bool (not False) True;
 not_False =
   trans Bool (not False) (ite Bool False False True) True
         (not__eq False) (ite_false Bool False True);
 
-not_not :: (x :: Bool) -> Eq Bool (not (not x)) x;
+not_not : (x : Bool) -> Eq Bool (not (not x)) x;
 not_not x =
-  iteDep (\ (b::Bool) -> Eq Bool (not (not b)) b) x
+  iteDep (\ (b:Bool) -> Eq Bool (not (not b)) b) x
          (trans Bool (not (not True)) (not False) True
                 (eq_cong Bool (not True) False not_True Bool not)
                 not_False)
@@ -343,29 +338,29 @@ not_not x =
                 not_True);
 
 
-and_True1 :: (x :: Bool) -> Eq Bool (and True x) x;
+and_True1 : (x : Bool) -> Eq Bool (and True x) x;
 and_True1 x =
   trans Bool (and True x) (ite Bool True x False) x
         (and__eq True x) (ite_true Bool x False);
 
-and_False1 :: (x :: Bool) -> Eq Bool (and False x) False;
+and_False1 : (x : Bool) -> Eq Bool (and False x) False;
 and_False1 x =
   trans Bool (and False x) (ite Bool False x False) False
         (and__eq False x) (ite_false Bool x False);
 
-and_True2 :: (x :: Bool) -> Eq Bool (and x True) x;
+and_True2 : (x : Bool) -> Eq Bool (and x True) x;
 and_True2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (and b True) b) x
+  iteDep (\ (b:Bool) -> Eq Bool (and b True) b) x
          (and_True1 True) (and_False1 True);
 
-and_False2 :: (x :: Bool) -> Eq Bool (and x False) False;
+and_False2 : (x : Bool) -> Eq Bool (and x False) False;
 and_False2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (and b False) False) x
+  iteDep (\ (b:Bool) -> Eq Bool (and b False) False) x
          (and_True1 False) (and_False1 False);
 
-and_assoc :: (x y z :: Bool) -> Eq Bool (and x (and y z)) (and (and x y) z);
+and_assoc : (x y z : Bool) -> Eq Bool (and x (and y z)) (and (and x y) z);
 and_assoc x y z =
-  iteDep (\ (b::Bool) -> Eq Bool (and x (and y b)) (and (and x y) b)) z
+  iteDep (\ (b:Bool) -> Eq Bool (and x (and y b)) (and (and x y) b)) z
          (trans2 Bool (and x (and y True)) (and (and x y) True) (and x y)
                  (eq_cong Bool (and y True) y (and_True2 y) Bool (and x))
                  (and_True2 (and x y)))
@@ -375,35 +370,35 @@ and_assoc x y z =
                         (and_False2 x))
                  (and_False2 (and x y)));
 
-and_idem :: (x :: Bool) -> Eq Bool (and x x) x;
+and_idem : (x : Bool) -> Eq Bool (and x x) x;
 and_idem x =
-  iteDep (\ (b::Bool) -> Eq Bool (and b b) b) x
+  iteDep (\ (b:Bool) -> Eq Bool (and b b) b) x
          (and_True1 True) (and_False1 False);
 
 
-or_True1 :: (x :: Bool) -> Eq Bool (or True x) True;
+or_True1 : (x : Bool) -> Eq Bool (or True x) True;
 or_True1 x =
   trans Bool (or True x) (ite Bool True True x) True
         (or__eq True x) (ite_true Bool True x);
 
-or_False1 :: (x :: Bool) -> Eq Bool (or False x) x;
+or_False1 : (x : Bool) -> Eq Bool (or False x) x;
 or_False1 x =
   trans Bool (or False x) (ite Bool False True x) x
         (or__eq False x) (ite_false Bool True x);
 
-or_True2 :: (x :: Bool) -> Eq Bool (or x True) True;
+or_True2 : (x : Bool) -> Eq Bool (or x True) True;
 or_True2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (or b True) True) x
+  iteDep (\ (b:Bool) -> Eq Bool (or b True) True) x
          (or_True1 True) (or_False1 True);
 
-or_False2 :: (x :: Bool) -> Eq Bool (or x False) x;
+or_False2 : (x : Bool) -> Eq Bool (or x False) x;
 or_False2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (or b False) b) x
+  iteDep (\ (b:Bool) -> Eq Bool (or b False) b) x
          (or_True1 False) (or_False1 False);
 
-or_assoc :: (x y z :: Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
+or_assoc : (x y z : Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
 or_assoc x y z =
-  iteDep (\ (b::Bool) -> Eq Bool (or x (or y b)) (or (or x y) b)) z
+  iteDep (\ (b:Bool) -> Eq Bool (or x (or y b)) (or (or x y) b)) z
          (trans2 Bool (or x (or y True)) (or (or x y) True) True
                  (trans Bool (or x (or y True)) (or x True) True
                         (eq_cong Bool (or y True) True (or_True2 y) Bool (or x))
@@ -413,51 +408,51 @@ or_assoc x y z =
                  (eq_cong Bool (or y False) y (or_False2 y) Bool (or x))
                  (or_False2 (or x y)));
 
-or_idem :: (x :: Bool) -> Eq Bool (or x x) x;
+or_idem : (x : Bool) -> Eq Bool (or x x) x;
 or_idem x =
-  iteDep (\ (b::Bool) -> Eq Bool (or b b) b) x
+  iteDep (\ (b:Bool) -> Eq Bool (or b b) b) x
          (or_True1 True) (or_False1 False);
 
 
-true_implies :: (x :: Bool) -> Eq Bool (implies True x) x;
+true_implies : (x : Bool) -> Eq Bool (implies True x) x;
 true_implies x =
   trans
     Bool (or (not True) x) (or False x) x
     (eq_cong Bool (not True) False not_True
-             Bool (\ (y::Bool) -> or y x))
+             Bool (\ (y:Bool) -> or y x))
     (or_False1 x);
 
-xor_True1 :: (x :: Bool) -> Eq Bool (xor True x) (not x);
+xor_True1 : (x : Bool) -> Eq Bool (xor True x) (not x);
 xor_True1 x =
   trans Bool (xor True x) (ite Bool True (not x) x) (not x)
         (xor__eq True x) (ite_true Bool (not x) x);
 
-xor_False1 :: (x :: Bool) -> Eq Bool (xor False x) x;
+xor_False1 : (x : Bool) -> Eq Bool (xor False x) x;
 xor_False1 x =
   trans Bool (xor False x) (ite Bool False (not x) x) x
         (xor__eq False x) (ite_false Bool (not x) x);
 
-xor_False2 :: (x :: Bool) -> Eq Bool (xor x False) x;
+xor_False2 : (x : Bool) -> Eq Bool (xor x False) x;
 xor_False2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (xor b False) b) x
+  iteDep (\ (b:Bool) -> Eq Bool (xor b False) b) x
          (trans Bool (xor True False) (not False) True (xor_True1 False) not_False)
          (xor_False1 False);
 
-xor_True2 :: (x :: Bool) -> Eq Bool (xor x True) (not x);
+xor_True2 : (x : Bool) -> Eq Bool (xor x True) (not x);
 xor_True2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (xor b True) (not b)) x
+  iteDep (\ (b:Bool) -> Eq Bool (xor b True) (not b)) x
          (xor_True1 True)
          (trans2 Bool (xor False True) (not False) True (xor_False1 True) not_False);
 
-xor_same :: (x :: Bool) -> Eq Bool (xor x x) False;
+xor_same : (x : Bool) -> Eq Bool (xor x x) False;
 xor_same x =
-  iteDep (\ (b::Bool) -> Eq Bool (xor b b) False) x
+  iteDep (\ (b:Bool) -> Eq Bool (xor b b) False) x
          (trans Bool (xor True True) (not True) False (xor_True1 True) not_True)
          (xor_False1 False);
 
-not_or :: (x y :: Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
+not_or : (x y : Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
 not_or x y =
-  iteDep (\ (b::Bool) -> Eq Bool (not (or b y)) (and (not b) (not y)))
+  iteDep (\ (b:Bool) -> Eq Bool (not (or b y)) (and (not b) (not y)))
          x
          (trans Bool (not (or True y)) False (and (not True) (not y))
                 (trans Bool (not (or True y)) (not True) False
@@ -468,19 +463,19 @@ not_or x y =
                        (sym Bool (and False (not y)) False (and_False1 (not y)))
                        (eq_cong Bool False (not True)
                                 (sym Bool (not True) False not_True)
-                                Bool (\ (z::Bool) -> (and z (not y))))))
+                                Bool (\ (z:Bool) -> (and z (not y))))))
          (trans Bool (not (or False y)) (not y) (and (not False) (not y))
                 (eq_cong Bool (or False y) y (or_False1 y) Bool not)
                 (sym Bool (and (not False) (not y)) (not y)
                      (trans Bool (and (not False) (not y)) (and True (not y))
                             (not y)
                             (eq_cong Bool (not False) True not_False Bool
-                                     (\ (z::Bool) -> (and z (not y))))
+                                     (\ (z:Bool) -> (and z (not y))))
                             (and_True1 (not y)))));
 
-not_and :: (x y :: Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
+not_and : (x y : Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
 not_and x y =
-  iteDep (\ (b::Bool) -> Eq Bool (not (and b y)) (or (not b) (not y)))
+  iteDep (\ (b:Bool) -> Eq Bool (not (and b y)) (or (not b) (not y)))
          x
          (trans Bool (not (and True y)) (not y) (or (not True) (not y))
                 (eq_cong Bool (and True y) y (and_True1 y) Bool not)
@@ -488,7 +483,7 @@ not_and x y =
                      (trans Bool (or (not True) (not y)) (or False (not y))
                             (not y)
                             (eq_cong Bool (not True) False not_True Bool
-                                     (\ (z::Bool) -> (or z (not y))))
+                                     (\ (z:Bool) -> (or z (not y))))
                             (or_False1 (not y)))))
          (trans Bool (not (and False y)) True (or (not False) (not y))
                 (trans Bool (not (and False y)) (not False) True
@@ -499,30 +494,30 @@ not_and x y =
                        (sym Bool (or True (not y)) True (or_True1 (not y)))
                        (eq_cong Bool True (not False)
                                 (sym Bool (not False) True not_False)
-                                Bool (\ (z::Bool) -> (or z (not y))))));
+                                Bool (\ (z:Bool) -> (or z (not y))))));
 
-ite_not :: (a :: sort 1) -> (b :: Bool) -> (x y :: a) ->
+ite_not : (a : sort 1) -> (b : Bool) -> (x y : a) ->
            Eq a (ite a (not b) x y) (ite a b y x);
 ite_not a b x y =
-  iteDep (\ (b'::Bool) -> Eq a (ite a (not b') x y) (ite a b' y x))
+  iteDep (\ (b':Bool) -> Eq a (ite a (not b') x y) (ite a b' y x))
          b
          (trans a (ite a (not True) x y) y (ite a True y x)
                 (trans a (ite a (not True) x y) (ite a False x y) y
                        (eq_cong Bool (not True) False not_True a
-                                (\ (z::Bool) -> ite a z x y))
+                                (\ (z:Bool) -> ite a z x y))
                        (ite_false a x y))
                 (sym a (ite a True y x) y (ite_true a y x)))
          (trans a (ite a (not False) x y) x (ite a False y x)
                 (trans a (ite a (not False) x y) (ite a True x y) x
                        (eq_cong Bool (not False) True not_False a
-                                (\ (z::Bool) -> ite a z x y))
+                                (\ (z:Bool) -> ite a z x y))
                        (ite_true a x y))
                 (sym a (ite a False y x) x (ite_false a y x)));
 
-ite_nest1 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+ite_nest1 : (a : sort 1) -> (b : Bool) -> (x y z : a) ->
              Eq a (ite a b (ite a b x y) z) (ite a b x z);
 ite_nest1 a b x y z =
-  iteDep (\ (b'::Bool) -> Eq a (ite a b' (ite a b' x y) z) (ite a b' x z))
+  iteDep (\ (b':Bool) -> Eq a (ite a b' (ite a b' x y) z) (ite a b' x z))
          b
          (trans a (ite a True (ite a True x y) z) x (ite a True x z)
                 (trans a (ite a True (ite a True x y) z) (ite a True x y) x
@@ -533,10 +528,10 @@ ite_nest1 a b x y z =
                 (ite_false a (ite a False x y) z)
                 (sym a (ite a False x z) z (ite_false a x z)));
 
-ite_nest2 :: (a :: sort 1) -> (b :: Bool) -> (x y z :: a) ->
+ite_nest2 : (a : sort 1) -> (b : Bool) -> (x y z : a) ->
              Eq a (ite a b x (ite a b y z)) (ite a b x z);
 ite_nest2 a b x y z =
-  iteDep (\ (b'::Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
+  iteDep (\ (b':Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
          b
          (trans a (ite a True x (ite a True y z)) x (ite a True x z)
                 (ite_true a x (ite a True y z))
@@ -548,32 +543,32 @@ ite_nest2 a b x y z =
                 (sym a (ite a False x z) z (ite_false a x z)));
 
 -- This is provable with iteDep on b, but yuck!
-axiom ite_bit :: (b :: Bool) -> (c :: Bool) -> (d :: Bool) ->
+axiom ite_bit : (b : Bool) -> (c : Bool) -> (d : Bool) ->
                  Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
 
-ite_bit_false_1 :: (b :: Bool) -> (c :: Bool) ->
+ite_bit_false_1 : (b : Bool) -> (c : Bool) ->
                    Eq Bool (ite Bool b False c) (and (not b) c);
 ite_bit_false_1 b c =
-  iteDep (\ (b'::Bool) -> Eq Bool (ite Bool b' False c) (and (not b') c)) b
+  iteDep (\ (b':Bool) -> Eq Bool (ite Bool b' False c) (and (not b') c)) b
          (trans Bool (ite Bool True False c) False (and (not True) c)
                 (ite_true Bool False c)
                 (sym Bool (and (not True) c) False
                      (trans Bool (and (not True) c) (and False c) False
                             (eq_cong Bool (not True) False not_True
-                                     Bool (\ (z::Bool) -> (and z c)))
+                                     Bool (\ (z:Bool) -> (and z c)))
                             (and_False1 c))))
          (trans Bool (ite Bool False False c) c (and (not False) c)
                 (ite_false Bool False c)
                 (sym Bool (and (not False) c) c
                      (trans Bool (and (not False) c) (and True c) c
                             (eq_cong Bool (not False) True not_False
-                                     Bool (\ (z::Bool) -> (and z c)))
+                                     Bool (\ (z:Bool) -> (and z c)))
                             (and_True1 c))));
 
-ite_bit_true_1 :: (b :: Bool) -> (c :: Bool) ->
+ite_bit_true_1 : (b : Bool) -> (c : Bool) ->
                   Eq Bool (ite Bool b True c) (or b c);
 ite_bit_true_1 b c =
-  iteDep (\ (b'::Bool) -> Eq Bool (ite Bool b' True c) (or b' c))
+  iteDep (\ (b':Bool) -> Eq Bool (ite Bool b' True c) (or b' c))
          b
          (trans Bool (ite Bool True True c) True (or True c)
                 (ite_true Bool True c)
@@ -582,9 +577,9 @@ ite_bit_true_1 b c =
                 (ite_false Bool True c)
                 (sym Bool (or False c) c (or_False1 c)));
 
-ite_fold_not :: (b :: Bool) -> Eq Bool (ite Bool b False True) (not b);
+ite_fold_not : (b : Bool) -> Eq Bool (ite Bool b False True) (not b);
 ite_fold_not b =
-  iteDep (\ (b'::Bool) -> Eq Bool (ite Bool b' False True) (not b'))
+  iteDep (\ (b':Bool) -> Eq Bool (ite Bool b' False True) (not b'))
          b
          (trans Bool (ite Bool True False True) False (not True)
                 (ite_true Bool False True)
@@ -593,38 +588,38 @@ ite_fold_not b =
                 (ite_false Bool False True)
                 (sym Bool (not False) True not_False));
 
-ite_eq :: (a :: sort 1) -> (b :: Bool) -> (x :: a) -> Eq a (ite a b x x) x;
+ite_eq : (a : sort 1) -> (b : Bool) -> (x : a) -> Eq a (ite a b x x) x;
 ite_eq a b x =
-  iteDep (\ (b'::Bool) -> Eq a (ite a b' x x) x)
+  iteDep (\ (b':Bool) -> Eq a (ite a b' x x) x)
          b (ite_true a x x) (ite_false a x x);
 
-or_triv1 :: (x :: Bool) -> Eq Bool (or x (not x)) True;
+or_triv1 : (x : Bool) -> Eq Bool (or x (not x)) True;
 or_triv1 x =
-  iteDep (\ (b::Bool) -> Eq Bool (or b (not b)) True)
+  iteDep (\ (b:Bool) -> Eq Bool (or b (not b)) True)
          x
          (or_True1 (not True))
          (trans Bool (or False (not False)) (not False) True
                 (or_False1 (not False)) not_False);
 
-or_triv2 :: (x :: Bool) -> Eq Bool (or (not x) x) True;
+or_triv2 : (x : Bool) -> Eq Bool (or (not x) x) True;
 or_triv2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (or (not b) b) True)
+  iteDep (\ (b:Bool) -> Eq Bool (or (not b) b) True)
          x
          (or_True2 (not True))
          (trans Bool (or (not False) False) (not False) True
                 (or_False2 (not False)) not_False);
 
-and_triv1 :: (x :: Bool) -> Eq Bool (and x (not x)) False;
+and_triv1 : (x : Bool) -> Eq Bool (and x (not x)) False;
 and_triv1 x =
-  iteDep (\ (b::Bool) -> Eq Bool (and b (not b)) False)
+  iteDep (\ (b:Bool) -> Eq Bool (and b (not b)) False)
          x
          (trans Bool (and True (not True)) (not True) False
                 (and_True1 (not True)) not_True)
          (and_False1 (not False));
 
-and_triv2 :: (x :: Bool) -> Eq Bool (and (not x) x) False;
+and_triv2 : (x : Bool) -> Eq Bool (and (not x) x) False;
 and_triv2 x =
-  iteDep (\ (b::Bool) -> Eq Bool (and (not b) b) False)
+  iteDep (\ (b:Bool) -> Eq Bool (and (not b) b) False)
          x
          (trans Bool (and (not True) True) (not True) False
                 (and_True2 (not True)) not_True)
@@ -637,137 +632,137 @@ and_triv2 x =
 -- FIXME: replace universal decidable equality with a typeclass that determines
 -- which types have an equality tester
 
-primitive eq :: (a :: sort 0) -> a -> a -> Bool;
+primitive eq : (a : sort 0) -> a -> a -> Bool;
 
-axiom eq_refl :: (a :: sort 0) -> (x :: a) -> Eq Bool (eq a x x) True;
+axiom eq_refl : (a : sort 0) -> (x : a) -> Eq Bool (eq a x x) True;
 
-axiom eq_Bool :: Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
+axiom eq_Bool : Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
 
-axiom ite_eq_cong_1 :: (a :: sort 0)
-              -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
+axiom ite_eq_cong_1 : (a : sort 0)
+              -> (b : Bool) -> (x : a) -> (y : a) -> (z : a)
               -> Eq Bool (eq a (ite a b x y) z) (ite Bool b (eq a x z) (eq a y z));
-axiom ite_eq_cong_2 :: (a :: sort 0)
-              -> (b :: Bool) -> (x :: a) -> (y :: a) -> (z :: a)
+axiom ite_eq_cong_2 : (a : sort 0)
+              -> (b : Bool) -> (x : a) -> (y : a) -> (z : a)
               -> Eq Bool (eq a z (ite a b x y)) (ite Bool b (eq a z x) (eq a z y));
 
 
 --------------------------------------------------------------------------------
 -- Either
 
-data Either (s t :: sort 0) :: sort 0 where {
-    Left  :: s -> Either s t;
-    Right :: t -> Either s t;
+data Either (s t : sort 0) : sort 0 where {
+    Left  : s -> Either s t;
+    Right : t -> Either s t;
   }
 
-Either__rec :: (s t :: sort 0) -> (p :: Either s t -> sort 0) ->
-               ((l :: s) -> p (Left s t l)) ->
-               ((r :: t) -> p (Right s t r)) ->
-               (e :: Either s t) -> p e;
+Either__rec : (s t : sort 0) -> (p : Either s t -> sort 0) ->
+               ((l : s) -> p (Left s t l)) ->
+               ((r : t) -> p (Right s t r)) ->
+               (e : Either s t) -> p e;
 Either__rec s t p f1 f2 e = Either#rec s t p f1 f2 e;
 
-either :: (a b c :: sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
+either : (a b c : sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
 either a b c f g e =
-  Either__rec a b (\ (p:: Either a b) -> c) f g e;
+  Either__rec a b (\ (p: Either a b) -> c) f g e;
 
-eitherCong0 :: (t x y :: sort 0) -> Eq (sort 0) x y ->
+eitherCong0 : (t x y : sort 0) -> Eq (sort 0) x y ->
                Eq (sort 0) (Either x t) (Either y t);
 eitherCong0 t x y eq =
-  eq_cong (sort 0) x y eq (sort 0) (\ (y'::sort 0) -> Either y' t);
+  eq_cong (sort 0) x y eq (sort 0) (\ (y':sort 0) -> Either y' t);
 
-eitherCong1 :: (t x y :: sort 0) -> Eq (sort 0) x y ->
+eitherCong1 : (t x y : sort 0) -> Eq (sort 0) x y ->
                Eq (sort 0) (Either t x) (Either t y);
 eitherCong1 t x y eq =
-  eq_cong (sort 0) x y eq (sort 0) (\ (y'::sort 0) -> Either t y');
+  eq_cong (sort 0) x y eq (sort 0) (\ (y':sort 0) -> Either t y');
 
 
 --------------------------------------------------------------------------------
 -- Maybe
 
-data Maybe (a :: sort 0) :: sort 0 where {
-    Nothing :: Maybe a;
-    Just :: a -> Maybe a;
+data Maybe (a : sort 0) : sort 0 where {
+    Nothing : Maybe a;
+    Just : a -> Maybe a;
   }
 
-Maybe__rec :: (a :: sort 0) -> (p :: (Maybe a) -> sort 0) ->
-              p (Nothing a) -> ((x::a) -> p (Just a x)) -> (m :: Maybe a) -> p m;
+Maybe__rec : (a : sort 0) -> (p : (Maybe a) -> sort 0) ->
+              p (Nothing a) -> ((x:a) -> p (Just a x)) -> (m : Maybe a) -> p m;
 Maybe__rec a p f1 f2 m = Maybe#rec a p f1 f2 m;
 
-maybe :: (a b :: sort 0) -> b -> (a -> b) -> Maybe a -> b;
-maybe a b f1 f2 m = Maybe__rec a (\ (m'::Maybe a) -> b) f1 f2 m;
+maybe : (a b : sort 0) -> b -> (a -> b) -> Maybe a -> b;
+maybe a b f1 f2 m = Maybe__rec a (\ (m':Maybe a) -> b) f1 f2 m;
 
 
 --------------------------------------------------------------------------------
 -- Nat
 
-data Nat :: sort 0 where {
-    Zero :: Nat;
-    Succ :: Nat -> Nat;
+data Nat : sort 0 where {
+    Zero : Nat;
+    Succ : Nat -> Nat;
   }
 
-Nat__rec :: (p :: Nat -> sort 1) -> p Zero -> ((n::Nat) -> p n -> p (Succ n)) ->
-            (n::Nat) -> p n;
+Nat__rec : (p : Nat -> sort 1) -> p Zero -> ((n:Nat) -> p n -> p (Succ n)) ->
+            (n:Nat) -> p n;
 Nat__rec p f1 f2 n = Nat#rec p f1 f2 n;
 
-Nat_cases :: (a::sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
-Nat_cases a f1 f2 n = Nat__rec (\ (n::Nat) -> a) f1 f2 n;
+Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
+Nat_cases a f1 f2 n = Nat__rec (\ (n:Nat) -> a) f1 f2 n;
 
 -- Build a binary function for Nats that satisfies:
 --   Nat_cases2 a f1 f2 f3 Zero y = f1 y
 --   Nat_cases2 a f1 f2 f3 (Succ x) Zero = f2 x
 --   Nat_cases2 a f1 f2 f3 (Succ x) (Succ y) = f3 x y (Nat_cases2 ... x y)
-Nat_cases2 :: (a::sort 1) -> (Nat -> a) -> (Nat -> a) ->
+Nat_cases2 : (a:sort 1) -> (Nat -> a) -> (Nat -> a) ->
               (Nat -> Nat -> a -> a) -> Nat -> Nat -> a;
 Nat_cases2 a f1 f2 f3 n m =
-  Nat__rec (\ (n::Nat) -> Nat -> a) f1
-          (\ (n::Nat) -> \ (f_rec :: Nat -> a) -> \ (m::Nat) ->
-             Nat__rec (\ (m'::Nat) -> a) (f2 n)
-                      (\ (m'::Nat) -> \ (frec'::a) -> f3 n m' (f_rec m')) m) n m;
+  Nat__rec (\ (n:Nat) -> Nat -> a) f1
+          (\ (n:Nat) -> \ (f_rec : Nat -> a) -> \ (m:Nat) ->
+             Nat__rec (\ (m':Nat) -> a) (f2 n)
+                      (\ (m':Nat) -> \ (frec':a) -> f3 n m' (f_rec m')) m) n m;
 
-eqNat :: Nat -> Nat -> sort 1;
+eqNat : Nat -> Nat -> sort 1;
 eqNat x y = Eq Nat x y;
 
-eqNatSucc :: (x y :: Nat) -> eqNat x y -> eqNat (Succ x) (Succ y);
-eqNatSucc x y eq = eq_cong Nat x y eq Nat (\ (n::Nat) -> Succ n);
+eqNatSucc : (x y : Nat) -> eqNat x y -> eqNat (Succ x) (Succ y);
+eqNatSucc x y eq = eq_cong Nat x y eq Nat (\ (n:Nat) -> Succ n);
 
 -- Predecessor
-pred :: Nat -> Nat;
-pred x = Nat_cases Nat Zero (\ (n::Nat) -> \ (m::Nat) -> n) x;
+pred : Nat -> Nat;
+pred x = Nat_cases Nat Zero (\ (n:Nat) -> \ (m:Nat) -> n) x;
 
-eqNatPrec :: (x y :: Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
+eqNatPrec : (x y : Nat) -> eqNat (Succ x) (Succ y) -> eqNat x y;
 eqNatPrec x y eq' =
   eq_cong Nat (Succ x) (Succ y) eq' Nat pred;
 
 -- | Addition
-addNat :: Nat -> Nat -> Nat;
+addNat : Nat -> Nat -> Nat;
 addNat x y =
-  Nat_cases Nat y (\ (_::Nat) -> \ (prev_sum::Nat) -> Succ prev_sum) x;
+  Nat_cases Nat y (\ (_:Nat) -> \ (prev_sum:Nat) -> Succ prev_sum) x;
 
-eqNatAdd0 :: (x :: Nat) -> eqNat (addNat x 0) x;
+eqNatAdd0 : (x : Nat) -> eqNat (addNat x 0) x;
 eqNatAdd0 x =
-  Nat__rec (\ (n::Nat) -> eqNat (addNat n 0) n)
+  Nat__rec (\ (n:Nat) -> eqNat (addNat n 0) n)
            (Refl Nat 0)
-           (\ (n::Nat) -> eqNatSucc (addNat n 0) n)
+           (\ (n:Nat) -> eqNatSucc (addNat n 0) n)
            x;
 
-eqNatAddS :: (x y :: Nat) -> eqNat (addNat x (Succ y)) (Succ (addNat x y));
+eqNatAddS : (x y : Nat) -> eqNat (addNat x (Succ y)) (Succ (addNat x y));
 eqNatAddS x y =
-  Nat__rec (\ (x'::Nat) -> (y'::Nat) ->
+  Nat__rec (\ (x':Nat) -> (y':Nat) ->
               eqNat (addNat x' (Succ y')) (Succ (addNat x' y')))
-           (\ (y'::Nat) -> Refl Nat (Succ y'))
-           (\ (x'::Nat) ->
-            \ (eqF :: (y'::Nat) ->
+           (\ (y':Nat) -> Refl Nat (Succ y'))
+           (\ (x':Nat) ->
+            \ (eqF : (y':Nat) ->
                       eqNat (addNat x' (Succ y')) (Succ (addNat x' y'))) ->
-            \ (y'::Nat) ->
+            \ (y':Nat) ->
               eqNatSucc (addNat x' (Succ y')) (Succ (addNat x' y')) (eqF y'))
            x y;
 
-eqNatAddComm :: (x y :: Nat) -> eqNat (addNat x y) (addNat y x);
+eqNatAddComm : (x y : Nat) -> eqNat (addNat x y) (addNat y x);
 eqNatAddComm x y =
-  Nat__rec (\ (y'::Nat) -> (x'::Nat) -> eqNat (addNat x' y') (addNat y' x'))
-           (\ (x'::Nat) -> eqNatAdd0 x')
-           (\ (y'::Nat) ->
-            \ (eqF :: (x'::Nat) -> eqNat (addNat x' y') (addNat y' x')) ->
-            \ (x'::Nat) ->
+  Nat__rec (\ (y':Nat) -> (x':Nat) -> eqNat (addNat x' y') (addNat y' x'))
+           (\ (x':Nat) -> eqNatAdd0 x')
+           (\ (y':Nat) ->
+            \ (eqF : (x':Nat) -> eqNat (addNat x' y') (addNat y' x')) ->
+            \ (x':Nat) ->
               trans Nat
                     (addNat x' (Succ y'))
                     (Succ (addNat x' y'))
@@ -776,238 +771,238 @@ eqNatAddComm x y =
                     (eqNatSucc (addNat x' y') (addNat y' x') (eqF x')))
            y x;
 
-addNat_assoc :: (x y z :: Nat) ->
+addNat_assoc : (x y z : Nat) ->
                 eqNat (addNat x (addNat y z)) (addNat (addNat x y) z);
 addNat_assoc x y z =
-  Nat__rec (\ (x'::Nat) -> eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z))
+  Nat__rec (\ (x':Nat) -> eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z))
            (Refl Nat (addNat y z))
-           (\ (x'::Nat) ->
-            \ (eq :: eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z)) ->
+           (\ (x':Nat) ->
+            \ (eq : eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z)) ->
               eqNatSucc (addNat x' (addNat y z)) (addNat (addNat x' y) z) eq)
            x;
 
 -- | Multiplication
-mulNat :: Nat -> Nat -> Nat;
+mulNat : Nat -> Nat -> Nat;
 mulNat x y =
-  Nat__rec (\ (x'::Nat) -> Nat) 0
-           (\ (x'::Nat) -> \ (prod::Nat) -> addNat y prod) x;
+  Nat__rec (\ (x':Nat) -> Nat) 0
+           (\ (x':Nat) -> \ (prod:Nat) -> addNat y prod) x;
 
-equal0Nat :: Nat -> Bool;
+equal0Nat : Nat -> Bool;
 equal0Nat n =
-  Nat_cases Bool True (\ (n::Nat) -> \ (b::Bool) -> False) n;
+  Nat_cases Bool True (\ (n:Nat) -> \ (b:Bool) -> False) n;
 
-equalNat :: Nat -> Nat -> Bool;
+equalNat : Nat -> Nat -> Bool;
 equalNat x y =
   Nat_cases (Nat -> Bool) equal0Nat
-            (\ (n'::Nat) -> \ (eqN :: Nat -> Bool) -> \ (m::Nat) ->
+            (\ (n':Nat) -> \ (eqN : Nat -> Bool) -> \ (m:Nat) ->
                Nat_cases Bool False
-                         (\ (m'::Nat) -> \ (b::Bool) -> eqN m') m) x y;
+                         (\ (m':Nat) -> \ (b:Bool) -> eqN m') m) x y;
 
-ltNat :: Nat -> Nat -> Bool;
+ltNat : Nat -> Nat -> Bool;
 ltNat x y =
-  Nat_cases2 Bool (\ (x'::Nat) -> False)
-             (\ (y'::Nat) -> True)
-             (\ (y'::Nat) -> \ (x'::Nat) -> \ (lt_mn::Bool) -> lt_mn) y x;
+  Nat_cases2 Bool (\ (x':Nat) -> False)
+             (\ (y':Nat) -> True)
+             (\ (y':Nat) -> \ (x':Nat) -> \ (lt_mn:Bool) -> lt_mn) y x;
 
 -- | Subtraction
-subNat :: Nat -> Nat -> Nat;
+subNat : Nat -> Nat -> Nat;
 subNat x y =
-  Nat_cases2 Nat (\ (x'::Nat) -> x')
-             (\ (y'::Nat) -> Zero)
-             (\ (y'::Nat) -> \ (x'::Nat) -> \ (sub_xy::Nat) -> sub_xy) y x;
+  Nat_cases2 Nat (\ (x':Nat) -> x')
+             (\ (y':Nat) -> Zero)
+             (\ (y':Nat) -> \ (x':Nat) -> \ (sub_xy:Nat) -> sub_xy) y x;
 
 -- | Minimum
-minNat :: Nat -> Nat -> Nat;
+minNat : Nat -> Nat -> Nat;
 minNat x y =
-  Nat_cases2 Nat (\ (y'::Nat) -> Zero)
-             (\ (x'::Nat) -> Zero)
-             (\ (x'::Nat) -> \ (y'::Nat) -> \ (min_xy::Nat) -> Succ min_xy) x y;
+  Nat_cases2 Nat (\ (y':Nat) -> Zero)
+             (\ (x':Nat) -> Zero)
+             (\ (x':Nat) -> \ (y':Nat) -> \ (min_xy:Nat) -> Succ min_xy) x y;
 
 -- | Maximum
-maxNat :: Nat -> Nat -> Nat;
+maxNat : Nat -> Nat -> Nat;
 maxNat x y =
-  Nat_cases2 Nat (\ (x'::Nat) -> x')
-             (\ (y'::Nat) -> Succ y')
-             (\ (y'::Nat) -> \ (x'::Nat) -> \ (sub_xy::Nat) -> sub_xy) y x;
+  Nat_cases2 Nat (\ (x':Nat) -> x')
+             (\ (y':Nat) -> Succ y')
+             (\ (y':Nat) -> \ (x':Nat) -> \ (sub_xy:Nat) -> sub_xy) y x;
 
 -- | Width(n) = 1 + floor(log_2(n))
-primitive widthNat :: Nat -> Nat;
+primitive widthNat : Nat -> Nat;
 
 -- | Axiom: equalNat implements *the* equality on type Nat.
-axiom eq_Nat :: Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
+axiom eq_Nat : Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
 
 -- | Natural exponentiation
-expNat :: Nat -> Nat -> Nat;
+expNat : Nat -> Nat -> Nat;
 expNat b e =
-  Nat_cases Nat 1 (\ (e'::Nat) -> \ (exp_b_e::Nat) -> mulNat b exp_b_e) e;
+  Nat_cases Nat 1 (\ (e':Nat) -> \ (exp_b_e:Nat) -> mulNat b exp_b_e) e;
 
 -- | Natural division and modulus
-primitive divModNat :: Nat -> Nat -> #(Nat, Nat);
+primitive divModNat : Nat -> Nat -> #(Nat, Nat);
 
-divNat :: Nat -> Nat -> Nat;
+divNat : Nat -> Nat -> Nat;
 divNat x y = (divModNat x y).1;
 
-modNat :: Nat -> Nat -> Nat;
+modNat : Nat -> Nat -> Nat;
 modNat x y = (divModNat x y).2;
 
 -- There are implicit constructors from integer literals.
 
 -- Dependent, non-recursive pattern matching combinator for natural numbers
-natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) ->
-           (n :: Nat) -> p n;
-natCase p z s = Nat__rec p z (\ (n::Nat) -> \ (r::p n) -> s n);
+natCase : (p : Nat -> sort 0) -> p Zero -> ((n : Nat) -> p (Succ n)) ->
+           (n : Nat) -> p n;
+natCase p z s = Nat__rec p z (\ (n:Nat) -> \ (r:p n) -> s n);
 
 -- An if-then-else for whether a Nat = 0
-if0Nat :: (a :: sort 0) -> Nat -> a -> a -> a;
-if0Nat a n x y = natCase (\ (_::Nat) -> a) x (\ (_::Nat) -> y) n;
+if0Nat : (a : sort 0) -> Nat -> a -> a -> a;
+if0Nat a n x y = natCase (\ (_:Nat) -> a) x (\ (_:Nat) -> y) n;
 
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
-primitive Vec :: Nat -> sort 0 -> sort 0;
+primitive Vec : Nat -> sort 0 -> sort 0;
 
 -- Primitive function for generating an array.
-primitive gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
+primitive gen : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
 
-primitive atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+primitive atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 
-at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
 at n a v i = atWithDefault n a (error a "at: index out of bounds") v i;
 -- `at n a v i` has the precondition `ltNat i n`
 
-primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
+primitive EmptyVec : (a : sort 0) -> Vec 0 a;
 
-ConsVec :: (a :: sort 0) -> a -> (n :: Nat) -> Vec n a -> Vec (Succ n) a;
+ConsVec : (a : sort 0) -> a -> (n : Nat) -> Vec n a -> Vec (Succ n) a;
 ConsVec a x n v =
-  gen (Succ n) a (Nat_cases a x (\ (i::Nat) -> \ (a'::a) -> at n a v i));
+  gen (Succ n) a (Nat_cases a x (\ (i:Nat) -> \ (a':a) -> at n a v i));
 
-upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
-upd n a v j x = gen n a (\ (i :: Nat) -> ite a (equalNat i j) x (at n a v i));
+upd : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a -> Vec n a;
+upd n a v j x = gen n a (\ (i : Nat) -> ite a (equalNat i j) x (at n a v i));
 -- TODO: assertion that j < n
 
 -- | Defines a function that maps array elements from one range to another.
-map :: (a b :: sort 0) -> (a -> b) -> (n :: Nat) -> Vec n a -> Vec n b;
-map a b f n v = gen n b (\ (i :: Nat) -> f (at n a v i));
+map : (a b : sort 0) -> (a -> b) -> (n : Nat) -> Vec n a -> Vec n b;
+map a b f n v = gen n b (\ (i : Nat) -> f (at n a v i));
 
 -- | Defines a function that maps array elements from one range to another.
-zipWith :: (a b c :: sort 0)
+zipWith : (a b c : sort 0)
         -> (a -> b -> c)
-        -> (n :: Nat) -> Vec n a -> Vec n b -> Vec n c;
-zipWith a b c f n x y = gen n c (\ (i :: Nat) -> f (at n a x i) (at n b y i));
+        -> (n : Nat) -> Vec n a -> Vec n b -> Vec n c;
+zipWith a b c f n x y = gen n c (\ (i : Nat) -> f (at n a x i) (at n b y i));
 
 -- replicate n x returns an array with n copies of x.
-replicate :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a;
-replicate n a x = gen n a (\ (_ :: Nat) -> x);
+replicate : (n : Nat) -> (a : sort 0) -> a -> Vec n a;
+replicate n a x = gen n a (\ (_ : Nat) -> x);
 
 -- | Create a vector of length 1.
-single :: (a :: sort 0) -> a -> Vec 1 a;
+single : (a : sort 0) -> a -> Vec 1 a;
 single = replicate 1;
 
-axiom at_single :: (a :: sort 0) -> (x :: a) -> (i :: Nat) -> Eq a (at 1 a (single a x) i) x;
+axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a x) i) x;
 
 -- Zip together two lists (truncating the longer of the two).
-primitive zip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 
-primitive foldr :: (a b :: sort 0) -> (n :: Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
+primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 
-reverse :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Vec n a;
-reverse n a xs = gen n a (\ (i :: Nat) -> at n a xs (subNat (subNat n 1) i));
+reverse : (n : Nat) -> (a : sort 0) -> Vec n a -> Vec n a;
+reverse n a xs = gen n a (\ (i : Nat) -> at n a xs (subNat (subNat n 1) i));
 
-transpose :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
+transpose : (m n : Nat) -> (a : sort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
 transpose m n a xss =
-  gen n (Vec m a) (\ (j :: Nat) ->
-    gen m a (\ (i :: Nat) -> at n a (at m (Vec n a) xss i) j));
+  gen n (Vec m a) (\ (j : Nat) ->
+    gen m a (\ (i : Nat) -> at n a (at m (Vec n a) xss i) j));
 
 -- | Return true if two vectors are equal, given a comparison function
 -- for elements.
-vecEq :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool)
+vecEq : (n : Nat) -> (a : sort 0) -> (a -> a -> Bool)
       -> Vec n a -> Vec n a -> Bool;
 vecEq n a eqFn x y =
   foldr Bool Bool n and True (zipWith a a Bool eqFn n x y);
 
-axiom eq_Vec :: (n :: Nat) -> (a :: sort 0)
+axiom eq_Vec : (n : Nat) -> (a : sort 0)
        -> Eq (Vec n a -> Vec n a -> Bool) (eq (Vec n a)) (vecEq n a (eq a));
 
 -- | Take a prefix of a vector.
-take :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec m a;
-take a m n v = gen m a (\ (i :: Nat) -> at (addNat m n) a v i);
+take : (a : sort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
+take a m n v = gen m a (\ (i : Nat) -> at (addNat m n) a v i);
 
-vecCong :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n ->
+vecCong : (a : sort 0) -> (m n : Nat) -> Eq Nat m n ->
            Eq (sort 0) (Vec m a) (Vec n a);
-vecCong a m n eq = eq_cong Nat m n eq (sort 0) (\ (i::Nat) -> Vec i a);
+vecCong a m n eq = eq_cong Nat m n eq (sort 0) (\ (i:Nat) -> Vec i a);
 
-coerceVec :: (a :: sort 0) -> (m n :: Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
+coerceVec : (a : sort 0) -> (m n : Nat) -> Eq Nat m n -> Vec m a -> Vec n a;
 coerceVec a m n q = coerce (Vec m a) (Vec n a) (vecCong a m n q);
 
 -- | Simplify take  all elements from a vector.
-axiom take0 :: (a :: sort 0)
-       -> (m :: Nat)
-       -> (v :: Vec (addNat m 0) a)
+axiom take0 : (a : sort 0)
+       -> (m : Nat)
+       -> (v : Vec (addNat m 0) a)
        -> Eq (Vec m a)
              (take a m 0 v)
              (coerceVec a (addNat m 0) m (eqNatAdd0 m) v);
 
 -- | Returns a suffix of a vector after a given number of elements.
-drop :: (a :: sort 0) -> (m n :: Nat) -> Vec (addNat m n) a -> Vec n a;
-drop a m n v = gen n a (\ (i :: Nat) -> at (addNat m n) a v (addNat m i));
+drop : (a : sort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec n a;
+drop a m n v = gen n a (\ (i : Nat) -> at (addNat m n) a v (addNat m i));
 
 -- | Simplify drop 0-elements from a vector.
-axiom drop0 :: (a :: sort 0)
-       -> (n :: Nat)
-       -> (v :: Vec (addNat 0 n) a)
+axiom drop0 : (a : sort 0)
+       -> (n : Nat)
+       -> (v : Vec (addNat 0 n) a)
        -> Eq (Vec n a) (drop a 0 n v) v;
 
 -- | Select a range [i,..,i+n] of values from the array.
-slice :: (a :: sort 0)
-      -> (m n o :: Nat)
+slice : (a : sort 0)
+      -> (m n o : Nat)
       -> Vec (addNat (addNat m n) o) a -> Vec n a;
 slice a m n o v = drop a m n (take a (addNat m n) o v);
 
 -- Concatenate arrays together.
-join  :: (m n :: Nat)
-       -> (a :: sort 0)
+join  : (m n : Nat)
+       -> (a : sort 0)
        -> Vec m (Vec n a)
        -> Vec (mulNat m n) a;
 join m n a v =
-  gen (mulNat m n) a (\ (i :: Nat) ->
+  gen (mulNat m n) a (\ (i : Nat) ->
     at n a (at m (Vec n a) v (divNat i n)) (modNat i n));
 
 -- Split array into list
-split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+split : (m n : Nat) -> (a : sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 split m n a v =
-  gen m (Vec n a) (\ (i :: Nat) ->
-    gen n a (\ (j :: Nat) ->
+  gen m (Vec n a) (\ (i : Nat) ->
+    gen n a (\ (j : Nat) ->
       at (mulNat m n) a v (addNat (mulNat i n) j)));
 
 -- Append two arrays together.
-append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
+append : (m n : Nat) -> (a : sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
 append m n a x y =
   gen (addNat m n) a
-    (\ (i :: Nat) ->
+    (\ (i : Nat) ->
       ite a (ltNat i m) (at m a x i) (at n a y (subNat i m)));
 
 -- Rotate array to the left.
-primitive rotateL :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
--- rotateL n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat i j) n));
+primitive rotateL : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> Vec n a;
+-- rotateL n a v i = gen n a (\ (j:Nat) -> at n a v (modNat (addNat i j) n));
 
 -- Rotate array to the right.
-primitive rotateR :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> Vec n a;
--- rotateR n a v i = gen n a (\ (j::Nat) -> at n a v (modNat (addNat (subNat n i) j) n));
+primitive rotateR : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> Vec n a;
+-- rotateR n a v i = gen n a (\ (j:Nat) -> at n a v (modNat (addNat (subNat n i) j) n));
 
 -- Shift array to the left.
-primitive shiftL :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+primitive shiftL : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 
 -- Shift array to the right.
-primitive shiftR :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> Vec n a;
+primitive shiftR : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> Vec n a;
 
-joinLittleEndian  :: (m n :: Nat)
-                  -> (a :: sort 0)
+joinLittleEndian  : (m n : Nat)
+                  -> (a : sort 0)
                   -> Vec m (Vec n a)
                   -> Vec (mulNat m n) a;
 joinLittleEndian m n a v = join m n a (reverse m (Vec n a) v);
 
-splitLittleEndian :: (m n :: Nat)
-                  -> (a :: sort 0)
+splitLittleEndian : (m n : Nat)
+                  -> (a : sort 0)
                   -> Vec (mulNat m n) a
                   -> Vec m (Vec n a);
 splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
@@ -1016,72 +1011,72 @@ splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
 -- Bitvectors
 
 -- | Bitvector operations expect the most-significant bit first.
-bitvector :: (n :: Nat) -> sort 0;
+bitvector : (n : Nat) -> sort 0;
 bitvector n = Vec n Bool;
 
 -- | Returns most-significant bit in a signed bitvector.
-msb :: (n :: Nat) -> bitvector (Succ n) -> Bool;
+msb : (n : Nat) -> bitvector (Succ n) -> Bool;
 msb n v = at (Succ n) Bool v 0;
 
 -- | Returns least-significant bit in a bitvector.
-lsb :: (n :: Nat) -> bitvector (Succ n) -> Bool;
+lsb : (n : Nat) -> bitvector (Succ n) -> Bool;
 lsb n v = at (Succ n) Bool v n;
 
 -- | (bvNat n x) yields (x mod 2^n) as an n-bit vector.
-primitive bvNat :: (n :: Nat) -> Nat -> bitvector n;
+primitive bvNat : (n : Nat) -> Nat -> bitvector n;
 
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
-primitive bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+primitive bvToNat : (n : Nat) -> bitvector n -> Nat;
 
-bvAt :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
+bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w
      -> a;
 bvAt n a w xs i = at n a xs (bvToNat w i);
 
-bvUpd :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w
+bvUpd : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
-bvRotateL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateL n a w xs i = rotateL n a xs (bvToNat w i);
 
-bvRotateR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w -> Vec n a;
 bvRotateR n a w xs i = rotateR n a xs (bvToNat w i);
 
-bvShiftL :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftL n a w z xs i = shiftL n a z xs (bvToNat w i);
 
-bvShiftR :: (n :: Nat) -> (a :: sort 0) -> (w :: Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
 bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
-primitive bvAdd :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvAdd : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 
 -- | Unsigned and signed comparison functions.
-primitive bvugt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvuge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvult :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvule :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvugt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvuge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvult : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvule : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 
-primitive bvsgt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsge :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvslt :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsle :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsgt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvslt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsle : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 
-bvCarry :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+bvCarry : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
 
-bvSCarry :: (n :: Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
+bvSCarry : (n : Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
 bvSCarry n x y = and (boolEq (msb n x) (msb n y)) (xor (msb n x) (msb n (bvAdd (Succ n) x y)));
 
-bvAddWithCarry :: (n :: Nat) -> bitvector n -> bitvector n -> #(Bool, bitvector n);
+bvAddWithCarry : (n : Nat) -> bitvector n -> bitvector n -> #(Bool, bitvector n);
 bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
-axiom bvAddZeroL :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
-axiom bvAddZeroR :: (n :: Nat) -> (x :: bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
+axiom bvAddZeroL : (n : Nat) -> (x : bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
+axiom bvAddZeroR : (n : Nat) -> (x : bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
 
-primitive bvNeg :: (n :: Nat) -> bitvector n -> bitvector n;
-primitive bvSub :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
-primitive bvMul :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
-primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
+primitive bvNeg : (n : Nat) -> bitvector n -> bitvector n;
+primitive bvSub : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvMul : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvLg2 : (n : Nat) -> bitvector n -> bitvector n;
 
 -- Unsigned division and remainder.
 --
@@ -1090,8 +1085,8 @@ primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 --
 -- These two functions satisfy the property that:
 --   bvAdd x (bvMul x (bvUDiv x u v) v) (bvURem x u v) == u
-primitive bvUDiv :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
-primitive bvURem :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvUDiv : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvURem : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 
 
 -- Signed division.
@@ -1106,223 +1101,223 @@ primitive bvURem :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 -- bvSDiv and bvSRem satisfy the property that:
 --
 --   bvAdd x (bvMul x (bvSDiv x u v) v) (bvSRem x u v) == u
-primitive bvSDiv :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x) -> bitvector (Succ x);
-primitive bvSRem :: (x :: Nat) -> bitvector (Succ x) -> bitvector (Succ x)
+primitive bvSDiv : (x : Nat) -> bitvector (Succ x) -> bitvector (Succ x) -> bitvector (Succ x);
+primitive bvSRem : (x : Nat) -> bitvector (Succ x) -> bitvector (Succ x)
        -> bitvector (Succ x);
 --TODO:
 
 -- | Shift left by the given number of bits.
 -- New bits are False.
-primitive bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+primitive bvShl : (w : Nat) -> bitvector w -> Nat -> bitvector w;
 
 -- Logical right shift.  New bits are False.
-primitive bvShr :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+primitive bvShr : (w : Nat) -> bitvector w -> Nat -> bitvector w;
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
-primitive bvSShr :: (w :: Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
+primitive bvSShr : (w : Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
 
-axiom bvShiftL_bvShl ::
-  (n :: Nat) -> (w :: Nat) -> (x :: Vec n Bool) -> (i :: bitvector w) ->
+axiom bvShiftL_bvShl :
+  (n : Nat) -> (w : Nat) -> (x : Vec n Bool) -> (i : bitvector w) ->
   Eq (Vec n Bool) (bvShiftL n Bool w False x i) (bvShl n x (bvToNat w i));
 
-axiom bvShiftR_bvShr ::
-  (n :: Nat) -> (w :: Nat) -> (x :: Vec n Bool) -> (i :: bitvector w) ->
+axiom bvShiftR_bvShr :
+  (n : Nat) -> (w : Nat) -> (x : Vec n Bool) -> (i : bitvector w) ->
   Eq (Vec n Bool) (bvShiftR n Bool w False x i) (bvShr n x (bvToNat w i));
 
 -- | Zipwith specialized to bitvectors.
-bvZipWith :: (Bool -> Bool -> Bool)
-          -> (n :: Nat)
+bvZipWith : (Bool -> Bool -> Bool)
+          -> (n : Nat)
           -> bitvector n -> bitvector n -> bitvector n;
 bvZipWith = zipWith Bool Bool Bool;
 
 -- | Bitwise complement.
-bvNot :: (n :: Nat) -> bitvector n -> bitvector n;
+bvNot : (n : Nat) -> bitvector n -> bitvector n;
 bvNot = map Bool Bool not;
 
 -- | Pairwise conjunction
-bvAnd :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvAnd : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvAnd = bvZipWith and;
 
 -- | Pairwise disjunction
-bvOr :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvOr : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvOr  = bvZipWith or;
 
 -- | Pairwise exclusive or
-bvXor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvXor : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvXor = bvZipWith xor;
 
 -- | Return true if two bitvectors are equal.
-bvEq :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+bvEq : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 bvEq n x y = vecEq n Bool boolEq x y;
 
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
-axiom eq_bitvector :: (n :: Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
+axiom eq_bitvector : (n : Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
-axiom eq_VecBool :: (n :: Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
+axiom eq_VecBool : (n : Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
 
-axiom eq_VecVec :: (n :: Nat) -> (m :: Nat) -> (a :: sort 0)
+axiom eq_VecVec : (n : Nat) -> (m : Nat) -> (a : sort 0)
           -> Eq (Vec n (Vec m a) -> Vec n (Vec m a) -> Bool)
                 (eq (Vec n (Vec m a)))
                 (vecEq n (Vec m a) (eq (Vec m a)));
 
-axiom equalNat_bv :: (n :: Nat) -> (x :: bitvector n) -> (i :: Nat) ->
+axiom equalNat_bv : (n : Nat) -> (x : bitvector n) -> (i : Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
 
 -- | Returns the bitvector 1 if the boolean is true,
 --   and returns 0 otherwise
-bvBool :: (n :: Nat) -> Bool -> bitvector n;
+bvBool : (n : Nat) -> Bool -> bitvector n;
 bvBool n b = ite (bitvector n) b (bvNat n 1) (bvNat n 0);
 
 -- | Return true if two bitvectors are not equal.
-bvNe :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+bvNe : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 bvNe n x y = not (bvEq n x y);
 
 -- | Return true if the bitvector is nonzero
-bvNonzero :: (n :: Nat) -> bitvector n -> Bool;
+bvNonzero : (n : Nat) -> bitvector n -> Bool;
 bvNonzero n x = bvNe n x (bvNat n 0);
 
 -- | Truncates a vector a smaller size.
 -- msb implementation:
-bvTrunc :: (x y :: Nat) -> bitvector (addNat x y) -> bitvector y;
+bvTrunc : (x y : Nat) -> bitvector (addNat x y) -> bitvector y;
 bvTrunc = drop Bool;
 -- lsb implementation:
--- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
+-- bvTrunc : (x y : Nat) -> bitvector (addNat y x) -> bitvector y;
 -- bvTrunc x y = take Bool y x;
 
 -- | Perform a unsigned extension of the bitvector.
 -- @bvUExt m n x@ adds m bits of zeros to the most-significant bits of
 -- the n-bit vector x.
 -- msb implementation:
-bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat m n);
+bvUExt : (m n : Nat) -> bitvector n -> bitvector (addNat m n);
 bvUExt m n x = append m n Bool (bvNat m 0) x;
 -- lsb implementation:
--- bvUExt :: (m n :: Nat) -> bitvector n -> bitvector (addNat n m);
+-- bvUExt : (m n : Nat) -> bitvector n -> bitvector (addNat n m);
 -- bvUExt m n a = append n m Bool x (bvNat m 0);
 
 -- | 'replicateBool' is an version of 'replicate' optimized for type Bool.
-replicateBool :: (n :: Nat) -> Bool -> bitvector n;
+replicateBool : (n : Nat) -> Bool -> bitvector n;
 replicateBool n b = ite (bitvector n) b (bvNot n (bvNat n 0)) (bvNat n 0);
 
 -- | Perform a signed extension of the bitvector.
 -- msb implementation:
-bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat m (Succ n));
+bvSExt : (m n : Nat) -> bitvector (Succ n) -> bitvector (addNat m (Succ n));
 bvSExt m n x = append m (Succ n) Bool (replicateBool m (msb n x)) x;
 -- lsb implementation:
--- bvSExt :: (m n :: Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
+-- bvSExt : (m n : Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
 -- bvSExt m n x = append (Succ n) m Bool x (replicateBool m (msb n x));
 
 --------------------------------------------------------------------------------
 -- Infinite streams
 
-data Stream (a :: sort 0) :: sort 0 where {
-    MkStream :: (Nat -> a) -> Stream a;
+data Stream (a : sort 0) : sort 0 where {
+    MkStream : (Nat -> a) -> Stream a;
   }
 
-Stream__rec :: (a::sort 0) -> (p::Stream a -> sort 0) ->
-               ((f::Nat -> a) -> p (MkStream a f)) -> (str::Stream a) -> p str;
+Stream__rec : (a:sort 0) -> (p:Stream a -> sort 0) ->
+               ((f:Nat -> a) -> p (MkStream a f)) -> (str:Stream a) -> p str;
 Stream__rec a p f1 str = Stream#rec a p f1 str;
 
-streamUpd :: (a :: sort 0) -> Stream a -> Nat -> a -> Stream a;
+streamUpd : (a : sort 0) -> Stream a -> Nat -> a -> Stream a;
 streamUpd a strm i y =
-  Stream__rec a (\ (strm'::Stream a) -> Stream a)
-              (\ (s::Nat -> a) ->
-                 MkStream a (\ (j :: Nat) -> ite a (equalNat i j) y (s j))) strm;
+  Stream__rec a (\ (strm':Stream a) -> Stream a)
+              (\ (s:Nat -> a) ->
+                 MkStream a (\ (j : Nat) -> ite a (equalNat i j) y (s j))) strm;
 
-bvStreamUpd :: (a :: sort 0) -> (w :: Nat) ->
+bvStreamUpd : (a : sort 0) -> (w : Nat) ->
      Stream a -> bitvector w -> a -> Stream a;
 bvStreamUpd a w xs i y = streamUpd a xs (bvToNat w i) y;
 
-streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
+streamGet : (a : sort 0) -> Stream a -> Nat -> a;
 streamGet a strm i =
-  Stream__rec a (\ (strm'::Stream a) -> a) (\ (s::Nat -> a) -> s i) strm;
+  Stream__rec a (\ (strm':Stream a) -> a) (\ (s:Nat -> a) -> s i) strm;
 
-streamConst :: (a :: sort 0) -> a -> Stream a;
-streamConst a x = MkStream a (\ (i :: Nat) -> x);
+streamConst : (a : sort 0) -> a -> Stream a;
+streamConst a x = MkStream a (\ (i : Nat) -> x);
 
-streamMap :: (a b :: sort 0) -> (a -> b) -> Stream a -> Stream b;
-streamMap a b f xs = MkStream b (\ (i :: Nat) -> f (streamGet a xs i));
+streamMap : (a b : sort 0) -> (a -> b) -> Stream a -> Stream b;
+streamMap a b f xs = MkStream b (\ (i : Nat) -> f (streamGet a xs i));
 
-streamMap2 :: (a b c :: sort 0) -> (a -> b -> c) ->
+streamMap2 : (a b c : sort 0) -> (a -> b -> c) ->
               Stream a -> Stream b -> Stream c;
 streamMap2 a b c f xs ys =
-  MkStream c (\ (i :: Nat) -> f (streamGet a xs i) (streamGet b ys i));
+  MkStream c (\ (i : Nat) -> f (streamGet a xs i) (streamGet b ys i));
 
-streamTake :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Vec n a;
-streamTake a n xs = gen n a (\ (i :: Nat) -> streamGet a xs i);
+streamTake : (a : sort 0) -> (n : Nat) -> Stream a -> Vec n a;
+streamTake a n xs = gen n a (\ (i : Nat) -> streamGet a xs i);
 
-streamDrop :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream a;
-streamDrop a n xs = MkStream a (\ (i :: Nat) -> streamGet a xs (addNat n i));
+streamDrop : (a : sort 0) -> (n : Nat) -> Stream a -> Stream a;
+streamDrop a n xs = MkStream a (\ (i : Nat) -> streamGet a xs (addNat n i));
 
-streamAppend :: (a :: sort 0) -> (n :: Nat) -> Vec n a -> Stream a -> Stream a;
+streamAppend : (a : sort 0) -> (n : Nat) -> Vec n a -> Stream a -> Stream a;
 streamAppend a n xs ys =
-  MkStream a (\ (i :: Nat) ->
+  MkStream a (\ (i : Nat) ->
     atWithDefault n a (streamGet a ys (subNat i n)) xs i);
 
-streamJoin :: (a :: sort 0) -> (n :: Nat)
+streamJoin : (a : sort 0) -> (n : Nat)
            -> Stream (Vec (Succ n) a)
            -> (Stream a);
 streamJoin a n s =
-  MkStream a (\ (i::Nat) ->
+  MkStream a (\ (i:Nat) ->
      at (Succ n) a (streamGet (Vec (Succ n) a) s (divNat i (Succ n)))
                    (modNat i (Succ n)) );
 
-streamSplit :: (a :: sort 0) -> (n :: Nat) -> Stream a -> Stream (Vec n a);
+streamSplit : (a : sort 0) -> (n : Nat) -> Stream a -> Stream (Vec n a);
 streamSplit a n xs =
-  MkStream (Vec n a) (\ (i :: Nat) ->
-    gen n a (\ (j :: Nat) ->
+  MkStream (Vec n a) (\ (i : Nat) ->
+    gen n a (\ (j : Nat) ->
       streamGet a xs (addNat (mulNat i n) j)));
 
-bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
+bvStreamGet : (a : sort 0) -> (w : Nat) -> Stream a -> bitvector w -> a;
 bvStreamGet a w xs i = streamGet a xs (bvToNat w i);
 
-bvStreamShiftL :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> Stream a;
+bvStreamShiftL : (a : sort 0) -> (w : Nat) -> Stream a -> bitvector w -> Stream a;
 bvStreamShiftL a w xs i = streamDrop a (bvToNat w i) xs;
 
-bvStreamShiftR :: (a :: sort 0) -> (w :: Nat) -> a -> Stream a -> bitvector w -> Stream a;
+bvStreamShiftR : (a : sort 0) -> (w : Nat) -> a -> Stream a -> bitvector w -> Stream a;
 bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i) a x) xs;
 
 --------------------------------------------------------------------------------
 -- Integer values
 --   integer values of unbounded precision
 
-primitive Integer :: sort 0;
+primitive Integer : sort 0;
 
-primitive intAdd :: Integer -> Integer -> Integer;
-primitive intSub :: Integer -> Integer -> Integer;
-primitive intMul :: Integer -> Integer -> Integer;
-primitive intDiv :: Integer -> Integer -> Integer;
-primitive intMod :: Integer -> Integer -> Integer;
-primitive intMin :: Integer -> Integer -> Integer;
-primitive intMax :: Integer -> Integer -> Integer;
-primitive intNeg :: Integer -> Integer;
-primitive intAbs :: Integer -> Integer;
-primitive intEq  :: Integer -> Integer -> Bool;
-primitive intLe  :: Integer -> Integer -> Bool;
-primitive intLt  :: Integer -> Integer -> Bool;
+primitive intAdd : Integer -> Integer -> Integer;
+primitive intSub : Integer -> Integer -> Integer;
+primitive intMul : Integer -> Integer -> Integer;
+primitive intDiv : Integer -> Integer -> Integer;
+primitive intMod : Integer -> Integer -> Integer;
+primitive intMin : Integer -> Integer -> Integer;
+primitive intMax : Integer -> Integer -> Integer;
+primitive intNeg : Integer -> Integer;
+primitive intAbs : Integer -> Integer;
+primitive intEq  : Integer -> Integer -> Bool;
+primitive intLe  : Integer -> Integer -> Bool;
+primitive intLt  : Integer -> Integer -> Bool;
 
 -- intToNat x == max 0 x
-primitive intToNat :: Integer -> Nat;
-primitive natToInt :: Nat -> Integer;
+primitive intToNat : Integer -> Nat;
+primitive natToInt : Nat -> Integer;
 
 -- for x >= 0, intToBv n x = x `mod` 2^n
 -- for x <  0, intToBv n x = bvNeg n (-x `mod` 2^n)
-primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+primitive intToBv : (n:Nat) -> Integer -> bitvector n;
 
 -- return the unsigned value of the bitvector as an integer
-primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+primitive bvToInt : (n:Nat) -> bitvector n -> Integer;
 
 -- return the 2's complement signed value of the bitvector as an integer
-primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+primitive sbvToInt : (n:Nat) -> bitvector n -> Integer;
 
 
 --------------------------------------------------------------------------------
 -- Point-update functions
 
-updNatFun :: (a::sort 0)
+updNatFun : (a:sort 0)
 	  -> (Nat -> a) -> Nat -> a -> (Nat -> a);
 updNatFun a f i v x = ite a (equalNat i x) v (f x);
 
-updBvFun :: (n::Nat) -> (a::sort 0)
+updBvFun : (n:Nat) -> (a:sort 0)
 	 -> (bitvector n -> a) -> bitvector n -> a -> (bitvector n -> a);
 updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 
@@ -1330,58 +1325,58 @@ updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 -- Floating-point values
 --    Currently commented out because they are not implemented...
 
-primitive Float :: sort 0;
+primitive Float : sort 0;
 
 -- mkFloat m e = m * 2^^e
-primitive mkFloat :: Integer -> Integer -> Float;
--- primitive bvToFloat :: bitvector 32 -> Float;
--- primitive floatToBV :: Float -> bitvector 32;
+primitive mkFloat : Integer -> Integer -> Float;
+-- primitive bvToFloat : bitvector 32 -> Float;
+-- primitive floatToBV : Float -> bitvector 32;
 
-primitive Double :: sort 0;
+primitive Double : sort 0;
 
 -- mkDouble m e = m * 2^^e
-primitive mkDouble :: Integer -> Integer -> Float;
--- primitive bvToDouble :: bitvector 64 -> Double;
--- primitive doubleToBV :: Double -> bitvector 64;
+primitive mkDouble : Integer -> Integer -> Float;
+-- primitive bvToDouble : bitvector 64 -> Double;
+-- primitive doubleToBV : Double -> bitvector 64;
 
 
-axiom bveq_sameL :: (n :: Nat)
-           -> (x z :: bitvector n)
+axiom bveq_sameL : (n : Nat)
+           -> (x z : bitvector n)
            -> Eq Bool
                  (bvEq n x (bvAdd n x z))
                  (bvEq n (bvNat n 0) z);
 
-axiom bveq_sameR :: (n :: Nat)
-           -> (x y :: bitvector n)
+axiom bveq_sameR : (n : Nat)
+           -> (x y : bitvector n)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) x)
                  (bvEq n y (bvNat n 0));
 
-axiom bveq_same2 :: (n :: Nat)
-           -> (x y z :: bitvector n)
+axiom bveq_same2 : (n : Nat)
+           -> (x y z : bitvector n)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
 
-axiom bvNat_bvToNat :: (n :: Nat)
-              -> (x :: bitvector n)
+axiom bvNat_bvToNat : (n : Nat)
+              -> (x : bitvector n)
               -> Eq (bitvector n)
                     (bvNat n (bvToNat n x))
                     x;
 
-axiom ite_split_cong :: (b :: Bool) -> (x :: Vec 384 Bool) -> (y :: Vec 384 Bool)
+axiom ite_split_cong : (b : Bool) -> (x : Vec 384 Bool) -> (y : Vec 384 Bool)
                -> Eq (Vec 12 (Vec 32 Bool))
                      (split 12 32 Bool (ite (Vec 384 Bool) b x y))
                      (ite (Vec 12 (Vec 32 Bool)) b (split 12 32 Bool x) (split 12 32 Bool y));
 
-axiom ite_join_cong :: (b :: Bool)
-              -> (x :: Vec 12 (Vec 32 Bool))
-              -> (y :: Vec 12 (Vec 32 Bool))
+axiom ite_join_cong : (b : Bool)
+              -> (x : Vec 12 (Vec 32 Bool))
+              -> (y : Vec 12 (Vec 32 Bool))
               -> Eq (Vec 384 Bool)
                     (join 12 32 Bool (ite (Vec 12 (Vec 32 Bool)) b x y))
                     (ite (Vec 384 Bool) b (join 12 32 Bool x) (join 12 32 Bool y));
 
-axiom map_map :: (a b c :: sort 0) -> (f :: a -> b) -> (g :: b -> c) ->
-                 (n :: Nat) -> (xs :: Vec n a) ->
+axiom map_map : (a b c : sort 0) -> (f : a -> b) -> (g : b -> c) ->
+                 (n : Nat) -> (xs : Vec n a) ->
                  Eq (Vec n c) (map b c g n (map a b f n xs))
-                              (map a c (\ (x::a) -> g (f x)) n xs);
+                              (map a c (\ (x:a) -> g (f x)) n xs);

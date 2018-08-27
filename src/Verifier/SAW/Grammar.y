@@ -52,7 +52,7 @@ import Verifier.SAW.Lexer
   '='     { PosPair _ (TKey "=") }
   '\\'    { PosPair _ (TKey "\\") }
   ';'     { PosPair _ (TKey ";") }
-  '::'    { PosPair _ (TKey "::") }
+  ':'     { PosPair _ (TKey ":") }
   ','     { PosPair _ (TKey ",") }
   '.'     { PosPair _ (TKey ".") }
   '('     { PosPair _ (TKey "(") }
@@ -90,13 +90,13 @@ Import : 'import' ModuleName opt(ModuleImports) ';'
           { Import $2 $3 }
 
 SAWDecl :: { Decl }
-SAWDecl : 'data' Ident VarCtx '::' LTerm 'where' '{' list(CtorDecl) '}'
+SAWDecl : 'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}'
              { DataDecl $2 $3 $5 $8 }
-        | 'primitive' Ident '::' LTerm ';'
+        | 'primitive' Ident ':' LTerm ';'
              { TypeDecl PrimQualifier $2 $4 }
-        | 'axiom' Ident '::' LTerm ';'
+        | 'axiom' Ident ':' LTerm ';'
              { TypeDecl AxiomQualifier $2 $4 }
-        | Ident '::' LTerm ';' { TypeDecl NoQualifier $1 $3 }
+        | Ident ':' LTerm ';' { TypeDecl NoQualifier $1 $3 }
         | Ident list(TermVar) '=' LTerm ';' { TermDef $1 $2 $4 }
 
 ModuleImports :: { ImportConstraint }
@@ -120,7 +120,7 @@ DefVarCtx : list(DefVarCtxItem) { concat $1 }
 
 DefVarCtxItem :: { [(TermVar, Maybe Term)] }
 DefVarCtxItem : TermVar { [($1, Nothing)] }
-              | '(' list(TermVar) '::'  LTerm ')'
+              | '(' list(TermVar) ':'  LTerm ')'
                 { map (\var -> (var, Just $4)) $2 }
 
 -- A context of variables, all of which must be typed; i.e., a list syntactic
@@ -129,15 +129,15 @@ VarCtx :: { [(TermVar, Term)] }
 VarCtx : list(VarCtxItem) { concat $1 }
 
 VarCtxItem :: { [(TermVar, Term)] }
-VarCtxItem : '(' list(TermVar) '::' LTerm ')' { map (\var -> (var,$4)) $2 }
+VarCtxItem : '(' list(TermVar) ':' LTerm ')' { map (\var -> (var,$4)) $2 }
 
 -- Constructor declaration of the form "c (x1 x2 :: tp1) ... (z1 :: tpn) :: tp"
 CtorDecl :: { CtorDecl }
-CtorDecl : Ident VarCtx '::' LTerm ';' { Ctor $1 $2 $4 }
+CtorDecl : Ident VarCtx ':' LTerm ';' { Ctor $1 $2 $4 }
 
 Term :: { Term }
 Term : LTerm { $1 }
-     | LTerm '::' LTerm { TypeConstraint $1 (pos $2) $3 }
+     | LTerm ':' LTerm { TypeConstraint $1 (pos $2) $3 }
 
 -- Term with uses of pi and lambda, but no type ascriptions
 LTerm :: { Term }
@@ -185,7 +185,7 @@ FieldValue :: { (PosPair String, Term) }
 FieldValue : Ident '=' Term { ($1, $3) }
 
 FieldType :: { (PosPair String, Term) }
-FieldType : Ident '::' LTerm { ($1, $3) }
+FieldType : Ident ':' LTerm { ($1, $3) }
 
 opt(q) :: { Maybe q }
   : { Nothing }
@@ -332,7 +332,7 @@ exprAsIdentList _ = Nothing
 
 -- | Pi expressions should have one of the forms:
 --
--- * '(' list(Ident) '::' LTerm ')' '->' LTerm
+-- * '(' list(Ident) ':' LTerm ')' '->' LTerm
 -- * AppTerm '->' LTerm
 --
 -- This function takes in a term for the LHS and tests if it is of the first
