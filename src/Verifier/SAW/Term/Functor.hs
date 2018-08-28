@@ -46,7 +46,7 @@ module Verifier.SAW.Term.Functor
   , Sort, mkSort, propSort, sortOf, maxSort
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, completeBitSet
+  , decrBitSet, completeBitSet, singletonBitSet
   , looseVars, smallestFreeVar
   ) where
 
