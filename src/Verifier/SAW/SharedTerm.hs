@@ -1624,8 +1624,9 @@ scInstantiateExt sc vmap t0 = do
   commitChangeT (go t0)
 -}
 
--- | Abstract over the given list of external constants by wrapping the given term with
---   lambdas and replacing the external constant occurences with the appropriate local variables
+-- | Abstract over the given list of external constants by wrapping
+--   the given term with lambdas and replacing the external constant
+--   occurrences with the appropriate local variables.
 scAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scAbstractExts _ [] x = return x
 scAbstractExts sc exts x =
