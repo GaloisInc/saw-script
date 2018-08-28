@@ -710,15 +710,13 @@ addNat : Nat -> Nat -> Nat;
 addNat x y =
   Nat_cases Nat y (\ (_:Nat) -> \ (prev_sum:Nat) -> Succ prev_sum) x;
 
-eqNatAdd0 : (x : Nat) -> eqNat (addNat x 0) x;
-eqNatAdd0 x =
+eqNatAdd0 (x : Nat) : eqNat (addNat x 0) x =
   Nat__rec (\ (n:Nat) -> eqNat (addNat n 0) n)
            (Refl Nat 0)
            (\ (n:Nat) -> eqNatSucc (addNat n 0) n)
            x;
 
-eqNatAddS : (x y : Nat) -> eqNat (addNat x (Succ y)) (Succ (addNat x y));
-eqNatAddS x y =
+eqNatAddS (x y : Nat) : eqNat (addNat x (Succ y)) (Succ (addNat x y)) =
   Nat__rec (\ (x':Nat) -> (y':Nat) ->
               eqNat (addNat x' (Succ y')) (Succ (addNat x' y')))
            (\ (y':Nat) -> Refl Nat (Succ y'))
@@ -729,8 +727,7 @@ eqNatAddS x y =
               eqNatSucc (addNat x' (Succ y')) (Succ (addNat x' y')) (eqF y'))
            x y;
 
-eqNatAddComm : (x y : Nat) -> eqNat (addNat x y) (addNat y x);
-eqNatAddComm x y =
+eqNatAddComm (x y : Nat) : eqNat (addNat x y) (addNat y x) =
   Nat__rec (\ (y':Nat) -> (x':Nat) -> eqNat (addNat x' y') (addNat y' x'))
            (\ (x':Nat) -> eqNatAdd0 x')
            (\ (y':Nat) ->
@@ -744,9 +741,7 @@ eqNatAddComm x y =
                     (eqNatSucc (addNat x' y') (addNat y' x') (eqF x')))
            y x;
 
-addNat_assoc : (x y z : Nat) ->
-                eqNat (addNat x (addNat y z)) (addNat (addNat x y) z);
-addNat_assoc x y z =
+addNat_assoc (x y z : Nat) : eqNat (addNat x (addNat y z)) (addNat (addNat x y) z) =
   Nat__rec (\ (x':Nat) -> eqNat (addNat x' (addNat y z)) (addNat (addNat x' y) z))
            (Refl Nat (addNat y z))
            (\ (x':Nat) ->
