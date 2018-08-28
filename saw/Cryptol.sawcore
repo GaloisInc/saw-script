@@ -9,23 +9,23 @@ import Prelude;
 -- Additional operations on Prelude types
 
 {-
-pairMap :: (a1 b1 a2 b2 :: sort 0) -> (a1 -> b1) -> (a2 -> b2) ->
+pairMap : (a1 b1 a2 b2 : sort 0) -> (a1 -> b1) -> (a2 -> b2) ->
            #(a1, a2) -> #(b1, b2);
 pairMap a1 _ a2 _ f g xy = (f (fst a1 a2 xy), g (snd a1 a2 xy));
 
-pairMap2 :: (a1 b1 c1 a2 b2 c2 :: sort 0) ->
+pairMap2 : (a1 b1 c1 a2 b2 c2 : sort 0) ->
             (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) ->
             #(a1, a2) -> #(b1, b2) -> #(c1, c2);
 pairMap2 a1 b1 _ a2 b2 _ f1 f2 x12 y12 =
   (f1 (fst a1 a2 x12) (fst b1 b2 y12), f2 (snd a1 a2 x12) (snd b1 b2 y12));
 -}
 
-compose :: (a b c :: sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
+compose : (a b c : sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
 
-bvExp :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvExp : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 bvExp n x y = foldr Bool (bitvector n) n
-  (\ (b :: Bool) -> \ (a :: bitvector n) ->
+  (\ (b : Bool) -> \ (a : bitvector n) ->
     ite (bitvector n) b (bvMul n x (bvMul n a a)) (bvMul n a a))
   (bvNat n 1)
   (reverse n Bool y);
@@ -34,149 +34,149 @@ bvExp n x y = foldr Bool (bitvector n) n
 --------------------------------------------------------------------------------
 -- Extended natural numbers
 
-data Num :: sort 0 where {
-    TCNum :: Nat -> Num;
-    TCInf :: Num;
+data Num : sort 0 where {
+    TCNum : Nat -> Num;
+    TCInf : Num;
   }
 
-Num_rec :: (p:: Num -> sort 1) -> ((n::Nat) -> p (TCNum n)) -> p TCInf ->
-           (n::Num) -> p n;
+Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
+           (n:Num) -> p n;
 Num_rec p f1 f2 n = Num#rec p f1 f2 n;
 
 -- Helper function: take a Num that we expect to be finite, and extract its Nat,
 -- raising an error if that Num is not finite
-getFinNat :: (n::Num) -> Nat;
+getFinNat : (n:Num) -> Nat;
 getFinNat =
-  Num_rec (\ (n::Num) -> Nat) (\ (n::Nat) -> n)
+  Num_rec (\ (n:Num) -> Nat) (\ (n:Nat) -> n)
           (error Nat "Unexpected Fin constraint violation!");
 
 -- Helper function: destruct a Num that we expect to be finite
-finNumRec :: (p:: Num -> sort 1) -> ((n::Nat) -> p (TCNum n)) ->
-             (n::Num) -> p n;
+finNumRec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) ->
+             (n:Num) -> p n;
 finNumRec p f =
   Num_rec p f (error (p TCInf) "Unexpected Fin constraint violation!");
 
 -- Helper function: destruct two Nums that we expect to be finite
-finNumRec2 :: (p:: Num -> Num -> sort 1) ->
-              ((m n::Nat) -> p (TCNum m) (TCNum n)) ->
-              (m n::Num) -> p m n;
+finNumRec2 : (p: Num -> Num -> sort 1) ->
+              ((m n:Nat) -> p (TCNum m) (TCNum n)) ->
+              (m n:Num) -> p m n;
 finNumRec2 p f =
   finNumRec
-    (\ (m::Num) -> (n::Num) -> p m n)
-    (\ (m::Nat) -> finNumRec (p (TCNum m)) (f m));
+    (\ (m:Num) -> (n:Num) -> p m n)
+    (\ (m:Nat) -> finNumRec (p (TCNum m)) (f m));
 
 -- Build a binary function on Nums by lifting a binary function on Nats (the
 -- first argument) and using additional cases for: when the first argument is a
 -- Nat and the second is infinite; when the second is a Nat and the first is
 -- infinite; and when both are infinite
-binaryNumFun :: (Nat -> Nat -> Nat) -> (Nat -> Num) -> (Nat -> Num) -> Num ->
+binaryNumFun : (Nat -> Nat -> Nat) -> (Nat -> Num) -> (Nat -> Num) -> Num ->
                 Num -> Num -> Num;
 binaryNumFun f1 f2 f3 f4 num1 num2 =
-  Num#rec (\ (num1'::Num) -> Num)
-          (\ (n1::Nat) ->
-             Num#rec (\ (num2'::Num) -> Num)
-                     (\ (n2::Nat) -> TCNum (f1 n1 n2))
+  Num#rec (\ (num1':Num) -> Num)
+          (\ (n1:Nat) ->
+             Num#rec (\ (num2':Num) -> Num)
+                     (\ (n2:Nat) -> TCNum (f1 n1 n2))
                      (f2 n1) num2)
-          (Num#rec (\ (num2'::Num) -> Num) f3 f4 num2)
+          (Num#rec (\ (num2':Num) -> Num) f3 f4 num2)
           num1;
 
 -- Build a ternary function on Nums by lifting a ternary function on Nats, with
 -- a single default case if any of the Nums is infinite
-ternaryNumFun :: (Nat -> Nat -> Nat -> Nat) -> Num ->
+ternaryNumFun : (Nat -> Nat -> Nat -> Nat) -> Num ->
                  Num -> Num -> Num -> Num;
 ternaryNumFun f1 f2 num1 num2 num3 =
   Num#rec
-    (\ (num1'::Num) -> Num)
-    (\ (n1::Nat) ->
+    (\ (num1':Num) -> Num)
+    (\ (n1:Nat) ->
        Num#rec
-         (\ (num2'::Num) -> Num)
-         (\ (n2::Nat) ->
+         (\ (num2':Num) -> Num)
+         (\ (n2:Nat) ->
             Num#rec
-              (\ (num3'::Num) -> Num)
-              (\ (n3::Nat) -> TCNum (f1 n1 n2 n3))
+              (\ (num3':Num) -> Num)
+              (\ (n3:Nat) -> TCNum (f1 n1 n2 n3))
               f2 num3)
          f2 num2)
     f2 num1;
 
 
 
-tcWidth :: Num -> Num;
-tcWidth = Num_rec (\ (n::Num) -> Num)
-                  (\ (x::Nat) -> TCNum (widthNat x)) TCInf;
+tcWidth : Num -> Num;
+tcWidth = Num_rec (\ (n:Num) -> Num)
+                  (\ (x:Nat) -> TCNum (widthNat x)) TCInf;
 
-tcAdd :: Num -> Num -> Num;
+tcAdd : Num -> Num -> Num;
 tcAdd =
-  binaryNumFun addNat (\ (x::Nat) -> TCInf) (\ (y::Nat) -> TCInf) TCInf;
+  binaryNumFun addNat (\ (x:Nat) -> TCInf) (\ (y:Nat) -> TCInf) TCInf;
 
-tcSub :: Num -> Num -> Num;
+tcSub : Num -> Num -> Num;
 tcSub =
   binaryNumFun subNat
                -- x - infinity = 0
-               (\ (x::Nat) -> TCNum 0)
+               (\ (x:Nat) -> TCNum 0)
                -- infinity - y = infinity
-               (\ (y::Nat) -> TCInf)
+               (\ (y:Nat) -> TCInf)
                -- infinity - infinity = 0
                (TCNum 0);
 
-tcMul :: Num -> Num -> Num;
+tcMul : Num -> Num -> Num;
 tcMul =
   binaryNumFun mulNat
-               (\ (x::Nat) -> if0Nat Num x (TCNum 0) TCInf)
-               (\ (y::Nat) -> if0Nat Num y (TCNum 0) TCInf)
+               (\ (x:Nat) -> if0Nat Num x (TCNum 0) TCInf)
+               (\ (y:Nat) -> if0Nat Num y (TCNum 0) TCInf)
                TCInf;
 
-tcDiv :: Num -> Num -> Num;
+tcDiv : Num -> Num -> Num;
 tcDiv =
-  binaryNumFun (\ (x::Nat) -> \ (y::Nat) -> (divModNat x y).1)
-               (\ (x::Nat) -> TCNum 0)
-               (\ (y::Nat) -> TCInf)
+  binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> (divModNat x y).1)
+               (\ (x:Nat) -> TCNum 0)
+               (\ (y:Nat) -> TCInf)
                -- infinity / infinity = 1
                (TCNum 1);
 
-tcMod :: Num -> Num -> Num;
+tcMod : Num -> Num -> Num;
 tcMod =
-  binaryNumFun (\ (x::Nat) -> \ (y::Nat) -> (divModNat x y).2)
-               (\ (x::Nat) -> TCNum 0)
+  binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> (divModNat x y).2)
+               (\ (x:Nat) -> TCNum 0)
                -- infinity % y = 0, since y*infinity + 0 = infinity
-               (\ (y::Nat) -> TCNum 0)
+               (\ (y:Nat) -> TCNum 0)
                -- infinity % infinity = 0
                (TCNum 0);
 
-tcExp :: Num -> Num -> Num;
+tcExp : Num -> Num -> Num;
 tcExp =
   binaryNumFun expNat
-               (\ (x::Nat) ->
+               (\ (x:Nat) ->
                   natCase
-                    (\ (_::Nat) -> Num) (TCNum 0)
-                    (\ (x_minus_1::Nat) ->
+                    (\ (_:Nat) -> Num) (TCNum 0)
+                    (\ (x_minus_1:Nat) ->
                        if0Nat Num x_minus_1 (TCNum 1) TCInf)
                     x)
-               (\ (y::Nat) -> if0Nat Num y (TCNum 1) TCInf)
+               (\ (y:Nat) -> if0Nat Num y (TCNum 1) TCInf)
                TCInf;
 
-tcMin :: Num -> Num -> Num;
+tcMin : Num -> Num -> Num;
 tcMin =
-  binaryNumFun minNat (\ (x::Nat) -> TCNum x) (\ (y::Nat) -> TCNum y) TCInf;
+  binaryNumFun minNat (\ (x:Nat) -> TCNum x) (\ (y:Nat) -> TCNum y) TCInf;
 
-tcMax :: Num -> Num -> Num;
+tcMax : Num -> Num -> Num;
 tcMax =
-  binaryNumFun maxNat (\ (x::Nat) -> TCInf) (\ (y::Nat) -> TCInf) TCInf;
+  binaryNumFun maxNat (\ (x:Nat) -> TCInf) (\ (y:Nat) -> TCInf) TCInf;
 
-ceilDivNat :: Nat -> Nat -> Nat;
+ceilDivNat : Nat -> Nat -> Nat;
 ceilDivNat x y = divNat (addNat x (subNat y 1)) y;
 
-ceilModNat :: Nat -> Nat -> Nat;
+ceilModNat : Nat -> Nat -> Nat;
 ceilModNat x y = subNat (mulNat (ceilDivNat x y) y) x;
 
-tcCeilDiv :: Num -> Num -> Num;
+tcCeilDiv : Num -> Num -> Num;
 tcCeilDiv =
-  binaryNumFun ceilDivNat (\ (x::Nat) -> TCNum 0) (\ (y::Nat) -> TCInf) TCInf;
+  binaryNumFun ceilDivNat (\ (x:Nat) -> TCNum 0) (\ (y:Nat) -> TCInf) TCInf;
 
-tcCeilMod :: Num -> Num -> Num;
+tcCeilMod : Num -> Num -> Num;
 tcCeilMod =
-  binaryNumFun ceilModNat (\ (x::Nat) -> TCNum 0) (\ (y::Nat) -> TCInf) TCInf;
+  binaryNumFun ceilModNat (\ (x:Nat) -> TCNum 0) (\ (y:Nat) -> TCInf) TCInf;
 
-tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThenTo_Nat : Nat -> Nat -> Nat -> Nat;
 tcLenFromThenTo_Nat x y z =
   ite Nat (ltNat x y)
     (ite Nat (ltNat z x) 0
@@ -184,290 +184,290 @@ tcLenFromThenTo_Nat x y z =
     (ite Nat (ltNat x z) 0
          (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
 
-tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
+tcLenFromThen_Nat : Nat -> Nat -> Nat -> Nat;
 tcLenFromThen_Nat x y w =
   tcLenFromThenTo_Nat x y (ite Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
 
-tcLenFromThen :: Num -> Num -> Num -> Num;
+tcLenFromThen : Num -> Num -> Num -> Num;
 tcLenFromThen = ternaryNumFun tcLenFromThen_Nat TCInf;
 
-tcLenFromThenTo :: Num -> Num -> Num -> Num;
+tcLenFromThenTo : Num -> Num -> Num -> Num;
 tcLenFromThenTo = ternaryNumFun tcLenFromThenTo_Nat TCInf;
 
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
-seq :: Num -> sort 0 -> sort 0;
+seq : Num -> sort 0 -> sort 0;
 seq num a =
-  Num#rec (\ (num::Num) -> sort 0) (\ (n::Nat) -> Vec n a) (Stream a) num;
+  Num#rec (\ (num:Num) -> sort 0) (\ (n:Nat) -> Vec n a) (Stream a) num;
 
 -- FIXME: this rule should be derived by scDefRewriteRules
-seq_TCNum :: (n::Nat) -> (a::sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec n a);
+seq_TCNum : (n:Nat) -> (a:sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec n a);
 seq_TCNum n a = Refl (sort 0) (Vec n a);
-seq_TCInf :: (a::sort 0) -> Eq (sort 0) (seq TCInf a) (Stream a);
+seq_TCInf : (a:sort 0) -> Eq (sort 0) (seq TCInf a) (Stream a);
 seq_TCInf a = Refl (sort 0) (Stream a);
 
-seqMap :: (a b :: sort 0) -> (n :: Num) -> (a -> b) -> seq n a -> seq n b;
+seqMap : (a b : sort 0) -> (n : Num) -> (a -> b) -> seq n a -> seq n b;
 seqMap a b num f =
-  Num#rec (\ (n::Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
+  Num#rec (\ (n:Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
 
-seqConst :: (n :: Num) -> (a :: sort 0) -> a -> seq n a;
+seqConst : (n : Num) -> (a : sort 0) -> a -> seq n a;
 seqConst =
-  Num_rec (\ (n::Num) -> (a :: sort 0) -> a -> seq n a) replicate streamConst;
+  Num_rec (\ (n:Num) -> (a : sort 0) -> a -> seq n a) replicate streamConst;
 
 
 --------------------------------------------------------------------------------
 -- Type coercions
 
-seqEq :: (m :: Num) -> (n :: Num) -> (a :: sort 0) -> (b :: sort 0) ->
+seqEq : (m : Num) -> (n : Num) -> (a : sort 0) -> (b : sort 0) ->
   Eq Num m n -> Eq (sort 0) a b -> Eq (sort 0) (seq m a) (seq n b);
 seqEq m n a b eq_mn eq_ab =
   trans
     (sort 0) (seq m a) (seq n a) (seq n b)
-    (eq_cong Num m n eq_mn (sort 0) (\ (x::Num) -> seq x a))
-    (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x::sort 0) -> seq n x));
+    (eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> seq x a))
+    (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x:sort 0) -> seq n x));
 
-seqEq1 :: (m :: Num) -> (n :: Num) -> (a :: sort 0) ->
+seqEq1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
   Eq Num m n -> Eq (sort 0) (seq m a) (seq n a);
 seqEq1 m n a eq_mn =
-  eq_cong Num m n eq_mn (sort 0) (\ (x::Num) -> seq x a);
+  eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> seq x a);
 
-funEq :: (a :: sort 0) -> (b :: sort 0) -> (c :: sort 0) -> (d :: sort 0) ->
+funEq : (a : sort 0) -> (b : sort 0) -> (c : sort 0) -> (d : sort 0) ->
   Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) (a -> c) (b -> d);
 funEq a b c d eq_ab eq_cd =
   trans
     (sort 0) (a -> c) (b -> c) (b -> d)
-    (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x::sort 0) -> (x -> c)))
-    (eq_cong (sort 0) c d eq_cd (sort 0) (\ (x::sort 0) -> (b -> x)));
+    (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x:sort 0) -> (x -> c)))
+    (eq_cong (sort 0) c d eq_cd (sort 0) (\ (x:sort 0) -> (b -> x)));
 
-pairEq :: (a :: sort 0) -> (a' :: sort 0) -> (b :: sort 0) -> (b' :: sort 0) ->
+pairEq : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
   Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a' | b');
 pairEq a a' b b' eq_a eq_b =
   trans
     (sort 0) #(a | b) #(a' | b) #(a' | b')
-    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x::sort 0) -> #(x | b)))
-    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x::sort 0) -> #(a' | x)));
+    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x | b)))
+    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a' | x)));
 
-pairEq1 :: (a :: sort 0) -> (a' :: sort 0) -> (b :: sort 0) ->
+pairEq1 : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) ->
   Eq (sort 0) a a' -> Eq (sort 0) #(a | b) #(a' | b);
 pairEq1 a a' b eq_a =
-  (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x::sort 0) -> #(x | b)));
+  (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x | b)));
 
-pairEq2 :: (a :: sort 0) -> (b :: sort 0) -> (b' :: sort 0) ->
+pairEq2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
   Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a | b');
 pairEq2 a b b' eq_b =
-  (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x::sort 0) -> #(a | x)));
+  (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a | x)));
 
-emptyEq :: Eq (sort 0) #{} #{};
+emptyEq : Eq (sort 0) #{} #{};
 emptyEq = Refl (sort 0) #{};
 
 -- FIXME: these "just add one field" record types are no longer supported...
 {-
-fieldEq ::
-  (s :: String) -> (a :: sort 0) -> (b :: sort 0) ->
-  (c :: sort 0) -> (d :: sort 0) ->
+fieldEq :
+  (s : String) -> (a : sort 0) -> (b : sort 0) ->
+  (c : sort 0) -> (d : sort 0) ->
   Eq (sort 0) a b -> Eq (sort 0) c d ->
-  Eq (sort 0) #{ (s) :: a | c } #{ (s) :: b | d };
+  Eq (sort 0) #{ (s) : a | c } #{ (s) : b | d };
 fieldEq s a b c d eq_ab eq_cd =
   trans
-    (sort 0) #{ (s) :: a | c } #{ (s) :: b | c } #{ (s) :: b | d }
-    (eq_cong (sort 0) a b eq_ab (\ (x::sort 0) -> #{ (s) :: x | c }))
-    (eq_cong (sort 0) c d eq_cd (\ (x::sort 0) -> #{ (s) :: b | x }));
+    (sort 0) #{ (s) : a | c } #{ (s) : b | c } #{ (s) : b | d }
+    (eq_cong (sort 0) a b eq_ab (\ (x:sort 0) -> #{ (s) : x | c }))
+    (eq_cong (sort 0) c d eq_cd (\ (x:sort 0) -> #{ (s) : b | x }));
 -}
 
-axiom unsafeAssert_same_Num ::
-  (n :: Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);
+axiom unsafeAssert_same_Num :
+  (n : Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);
 
 --------------------------------------------------------------------------------
 -- Auxiliary functions
 
-eListSel :: (a :: sort 0) -> (n :: Num) -> seq n a -> Nat -> a;
+eListSel : (a : sort 0) -> (n : Num) -> seq n a -> Nat -> a;
 eListSel a =
-  Num_rec (\ (num::Num) -> seq num a -> Nat -> a)
-          (\ (n::Nat) -> at n a) (streamGet a);
+  Num_rec (\ (num:Num) -> seq num a -> Nat -> a)
+          (\ (n:Nat) -> at n a) (streamGet a);
 
 
 --------------------------------------------------------------------------------
 -- List comprehensions
 
-from :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> (a -> seq n b) ->
+from : (a b : sort 0) -> (m n : Num) -> seq m a -> (a -> seq n b) ->
         seq (tcMul m n) #(a, b);
 from a b =
   Num_rec
-    (\ (m::Num) -> (n :: Num) -> seq m a -> (a -> seq n b) ->
+    (\ (m:Num) -> (n : Num) -> seq m a -> (a -> seq n b) ->
                    seq (tcMul m n) #(a, b))
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        Num_rec
-         (\ (n::Num) -> Vec m a -> (a -> seq n b) ->
+         (\ (n:Num) -> Vec m a -> (a -> seq n b) ->
                         seq (tcMul (TCNum m) n) #(a, b))
          -- Case 1: (TCNum m, TCNum n)
-         (\ (n::Nat) ->
-            \ (xs :: Vec m a) ->
-            \ (k :: a -> Vec n b) ->
+         (\ (n:Nat) ->
+            \ (xs : Vec m a) ->
+            \ (k : a -> Vec n b) ->
               join m n #(a, b)
                    (map a (Vec n #(a, b))
-                        (\ (x :: a) ->
-                           map b #(a, b) (\ (y :: b) -> (x, y)) n (k x))
+                        (\ (x : a) ->
+                           map b #(a, b) (\ (y : b) -> (x, y)) n (k x))
                         m xs))
          -- Case 2: n = (TCNum m, TCInf)
          (natCase
-            (\ (m'::Nat) -> (Vec m' a -> (a -> Stream b) ->
+            (\ (m':Nat) -> (Vec m' a -> (a -> Stream b) ->
                seq (if0Nat Num m' (TCNum 0) TCInf) #(a, b)))
-            (\ (xs :: Vec 0 a) ->
-             \ (k :: a -> Stream b) -> EmptyVec #(a, b))
-            (\ (m' :: Nat) ->
-             \ (xs :: Vec (Succ m') a) ->
-             \ (k :: a -> Stream b) ->
-               (\ (x :: a) -> streamMap b #(a, b) (\ (y::b) -> (x, y)) (k x))
+            (\ (xs : Vec 0 a) ->
+             \ (k : a -> Stream b) -> EmptyVec #(a, b))
+            (\ (m' : Nat) ->
+             \ (xs : Vec (Succ m') a) ->
+             \ (k : a -> Stream b) ->
+               (\ (x : a) -> streamMap b #(a, b) (\ (y:b) -> (x, y)) (k x))
                (at (Succ m') a xs 0))
             m))
     (Num_rec
-       (\ (n::Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) #(a, b))
+       (\ (n:Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) #(a, b))
        -- Case 3: (TCInf, TCNum n)
-       (\ (n::Nat) ->
+       (\ (n:Nat) ->
           natCase
-            (\ (n'::Nat) -> (Stream a -> (a -> Vec n' b) ->
+            (\ (n':Nat) -> (Stream a -> (a -> Vec n' b) ->
                 seq (if0Nat Num n' (TCNum 0) TCInf) #(a, b)))
-            (\ (xs :: Stream a) ->
-             \ (k :: a -> Vec 0 b) -> EmptyVec #(a, b))
-            (\ (n' :: Nat) ->
-             \ (xs :: Stream a) ->
-             \ (k :: a -> Vec (Succ n') b) ->
+            (\ (xs : Stream a) ->
+             \ (k : a -> Vec 0 b) -> EmptyVec #(a, b))
+            (\ (n' : Nat) ->
+             \ (xs : Stream a) ->
+             \ (k : a -> Vec (Succ n') b) ->
                streamJoin
                  #(a, b) n'
                  (streamMap
                     a (Vec (Succ n') #(a, b))
-                    (\ (x::a) ->
-                       map b #(a, b) (\ (y::b) -> (x, y)) (Succ n') (k x))
+                    (\ (x:a) ->
+                       map b #(a, b) (\ (y:b) -> (x, y)) (Succ n') (k x))
                     xs))
             n)
        -- Case 4: (TCInf, TCInf)
-       (\ (xs :: Stream a) ->
-        \ (k :: a -> Stream b) ->
-          (\ (x :: a) -> streamMap b #(a, b) (\ (y :: b) -> (x, y)) (k x))
+       (\ (xs : Stream a) ->
+        \ (k : a -> Stream b) ->
+          (\ (x : a) -> streamMap b #(a, b) (\ (y : b) -> (x, y)) (k x))
           (streamGet a xs 0)));
 
 
-mlet :: (a b :: sort 0) -> (n :: Num) -> a -> (a -> seq n b) -> seq n #(a, b);
+mlet : (a b : sort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n #(a, b);
 mlet a b =
   Num_rec
-    (\ (n::Num) -> a -> (a -> seq n b) -> seq n #(a, b))
-    (\ (n::Nat) -> \ (x::a) -> \ (f::a -> Vec n b) ->
-       map b #(a, b) (\ (y :: b) -> (x, y)) n (f x))
-    (\ (x::a) -> \ (f::a -> Stream b) ->
-       streamMap b #(a, b) (\ (y :: b) -> (x, y)) (f x));
+    (\ (n:Num) -> a -> (a -> seq n b) -> seq n #(a, b))
+    (\ (n:Nat) -> \ (x:a) -> \ (f:a -> Vec n b) ->
+       map b #(a, b) (\ (y : b) -> (x, y)) n (f x))
+    (\ (x:a) -> \ (f:a -> Stream b) ->
+       streamMap b #(a, b) (\ (y : b) -> (x, y)) (f x));
 
-seqZip :: (a b :: sort 0) -> (m n :: Num) -> seq m a -> seq n b ->
+seqZip : (a b : sort 0) -> (m n : Num) -> seq m a -> seq n b ->
           seq (tcMin m n) #(a, b);
 seqZip a b =
   Num_rec
-    (\ (m::Num) -> (n::Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
-    (\ (m::Nat) ->
+    (\ (m:Num) -> (n:Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
+    (\ (m:Nat) ->
        Num_rec
-         (\ (n::Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
-         (\ (n::Nat) -> zip a b m n)
-         (\ (xs::Vec m a) -> \ (ys::Stream b) ->
-            gen m #(a, b) (\ (i :: Nat) -> (at m a xs i, streamGet b ys i))))
+         (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
+         (\ (n:Nat) -> zip a b m n)
+         (\ (xs:Vec m a) -> \ (ys:Stream b) ->
+            gen m #(a, b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i))))
     (Num_rec
-       (\ (n::Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
-       (\ (n::Nat) ->
-        \ (xs::Stream a) -> \ (ys::Vec n b) ->
-          gen n #(a, b) (\ (i :: Nat) -> (streamGet a xs i, at n b ys i)))
-       (streamMap2 a b #(a, b) (\ (x::a) -> \ (y::b) -> (x, y))));
+       (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
+       (\ (n:Nat) ->
+        \ (xs:Stream a) -> \ (ys:Vec n b) ->
+          gen n #(a, b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
+       (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x, y))));
 
 
 --------------------------------------------------------------------------------
 -- Arith and Logic functions
 
-seqBinary :: (n :: Num) -> (a :: sort 0) -> (a -> a -> a) ->
+seqBinary : (n : Num) -> (a : sort 0) -> (a -> a -> a) ->
              seq n a -> seq n a -> seq n a;
 seqBinary num a f =
   Num#rec
-    (\ (n::Num) -> seq n a -> seq n a -> seq n a)
-    (\ (n::Nat) -> zipWith a a a f n)
+    (\ (n:Num) -> seq n a -> seq n a -> seq n a)
+    (\ (n:Nat) -> zipWith a a a f n)
     (streamMap2 a a a f)
     num;
 
-unitUnary :: #() -> #();
+unitUnary : #() -> #();
 unitUnary _ = ();
 
-emptyUnary :: #{} -> #{};
+emptyUnary : #{} -> #{};
 emptyUnary _ = {};
 
-unitBinary :: #() -> #() -> #();
+unitBinary : #() -> #() -> #();
 unitBinary _ _ = ();
 
-pairUnary :: (a b :: sort 0) -> (a -> a) -> (b -> b) -> #(a | b) -> #(a | b);
+pairUnary : (a b : sort 0) -> (a -> a) -> (b -> b) -> #(a | b) -> #(a | b);
 pairUnary a b f g xy = (f (fst a b xy) | g (snd a b xy));
 
-pairBinary :: (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b)
+pairBinary : (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
            -> #(a | b) -> #(a | b) -> #(a | b);
 pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12) |
                               g (snd a b x12) (snd a b y12));
 
-emptyBinary :: #{} -> #{} -> #{};
+emptyBinary : #{} -> #{} -> #{};
 emptyBinary _ _ = {};
 
 {-
-fieldUnary :: (s :: String) -> (a b :: sort 0) -> (a -> a) -> (b -> b)
-         -> #{ (s) :: a | b } -> #{ (s) :: a | b };
+fieldUnary : (s : String) -> (a b : sort 0) -> (a -> a) -> (b -> b)
+         -> #{ (s) : a | b } -> #{ (s) : a | b };
 fieldUnary s _ _ f g { (_) = x | y } = { (s) = f x | g y };
 
-fieldBinary :: (s :: String) -> (a b :: sort 0) -> (a -> a -> a) -> (b -> b -> b)
-            -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> #{ (s) :: a | b };
+fieldBinary : (s : String) -> (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
+            -> #{ (s) : a | b } -> #{ (s) : a | b } -> #{ (s) : a | b };
 fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g x2 y2 };
 -}
 
-funBinary :: (a b :: sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
+funBinary : (a b : sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
 
-errorUnary :: (a :: sort 0) -> a -> a;
+errorUnary : (a : sort 0) -> a -> a;
 errorUnary a _ = error a "invalid class instance";
 
-errorBinary :: (a :: sort 0) -> a -> a -> a;
+errorBinary : (a : sort 0) -> a -> a -> a;
 errorBinary a _ _ = error a "invalid class instance";
 
 --------------------------------------------------------------------------------
 -- Comparisons
 
-boolCmp :: Bool -> Bool -> Bool -> Bool;
+boolCmp : Bool -> Bool -> Bool -> Bool;
 boolCmp x y k = ite Bool x (and y k) (or y k);
 
-integerCmp :: Integer -> Integer -> Bool -> Bool;
+integerCmp : Integer -> Integer -> Bool -> Bool;
 integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 
-bvCmp :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+bvCmp : (n : Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
 
-bvSCmp :: (n :: Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+bvSCmp : (n : Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
 bvSCmp n x y k = or (bvslt n x y) (and (bvEq n x y) k);
 
-vecCmp :: (n :: Nat) -> (a :: sort 0) -> (a -> a -> Bool -> Bool)
+vecCmp : (n : Nat) -> (a : sort 0) -> (a -> a -> Bool -> Bool)
        -> (Vec n a -> Vec n a -> Bool -> Bool);
 vecCmp n a f xs ys k =
-  foldr (Bool -> Bool) Bool n (\ (f :: Bool -> Bool) -> f) k
+  foldr (Bool -> Bool) Bool n (\ (f : Bool -> Bool) -> f) k
     (zipWith a a (Bool -> Bool) f n xs ys);
 
-unitCmp :: #() -> #() -> Bool -> Bool;
+unitCmp : #() -> #() -> Bool -> Bool;
 unitCmp _ _ _ = False;
 
-emptyCmp :: #{} -> #{} -> Bool -> Bool;
+emptyCmp : #{} -> #{} -> Bool -> Bool;
 emptyCmp _ _ _ = False;
 
-pairCmp :: (a b :: sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
+pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
         -> #(a | b) -> #(a | b) -> Bool -> Bool;
 pairCmp a b f g x12 y12 k =
   f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
 
 {-
-fieldCmp :: (s :: String) -> (a b :: sort 0)
+fieldCmp : (s : String) -> (a b : sort 0)
          -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
-         -> #{ (s) :: a | b } -> #{ (s) :: a | b } -> Bool -> Bool;
+         -> #{ (s) : a | b } -> #{ (s) : a | b } -> Bool -> Bool;
 fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
 -}
 
-errorCmp :: (a :: sort 0) -> a -> a -> Bool -> Bool;
+errorCmp : (a : sort 0) -> a -> a -> Bool -> Bool;
 errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
 
 --------------------------------------------------------------------------------
@@ -475,38 +475,38 @@ errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
 
 -- Zero class
 
-PZero :: sort 0 -> sort 0;
+PZero : sort 0 -> sort 0;
 PZero a = a;
 
-PZeroBit :: PZero Bool;
+PZeroBit : PZero Bool;
 PZeroBit = False;
 
-PZeroInteger :: PZero Integer;
+PZeroInteger : PZero Integer;
 PZeroInteger = natToInt 0;
 
-PZeroSeq :: (n :: Num) -> (a :: sort 0) -> PZero a -> PZero (seq n a);
+PZeroSeq : (n : Num) -> (a : sort 0) -> PZero a -> PZero (seq n a);
 PZeroSeq n a pa = seqConst n a pa;
 
-PZeroSeqBool :: (n :: Num) -> PZero (seq n Bool);
+PZeroSeqBool : (n : Num) -> PZero (seq n Bool);
 PZeroSeqBool =
-  Num_rec (\ (n::Num) -> PZero (seq n Bool))
-          (\ (n::Nat) -> bvNat n 0)
+  Num_rec (\ (n:Num) -> PZero (seq n Bool))
+          (\ (n:Nat) -> bvNat n 0)
           (streamConst Bool False);
 
-PZeroFun :: (a b :: sort 0) -> PZero b -> PZero (a -> b);
-PZeroFun a b pb = (\(_ :: a) -> pb);
+PZeroFun : (a b : sort 0) -> PZero b -> PZero (a -> b);
+PZeroFun a b pb = (\(_ : a) -> pb);
 
 -- Logic class
 
-PLogic :: sort 0 -> sort 0;
+PLogic : sort 0 -> sort 0;
 PLogic a =
-  #{ and  :: a -> a -> a
-   , or   :: a -> a -> a
-   , xor  :: a -> a -> a
-   , not  :: a -> a
+  #{ and  : a -> a -> a
+   , or   : a -> a -> a
+   , xor  : a -> a -> a
+   , not  : a -> a
    };
 
-PLogicBit :: PLogic Bool;
+PLogicBit : PLogic Bool;
 PLogicBit =
   { and  = and
   , or   = or
@@ -514,7 +514,7 @@ PLogicBit =
   , not  = not
   };
 
-PLogicVec :: (n :: Nat) -> (a :: sort 0) -> PLogic a -> PLogic (Vec n a);
+PLogicVec : (n : Nat) -> (a : sort 0) -> PLogic a -> PLogic (Vec n a);
 PLogicVec n a pa =
   { and  = zipWith a a a pa.and n
   , or   = zipWith a a a pa.or  n
@@ -522,7 +522,7 @@ PLogicVec n a pa =
   , not  = map a a pa.not n
   };
 
-PLogicStream :: (a :: sort 0) -> PLogic a -> PLogic (Stream a);
+PLogicStream : (a : sort 0) -> PLogic a -> PLogic (Stream a);
 PLogicStream a pa =
   { and  = streamMap2 a a a pa.and
   , or   = streamMap2 a a a pa.or
@@ -530,12 +530,12 @@ PLogicStream a pa =
   , not  = streamMap a a pa.not
   };
 
-PLogicSeq :: (n :: Num) -> (a :: sort 0) -> PLogic a -> PLogic (seq n a);
+PLogicSeq : (n : Num) -> (a : sort 0) -> PLogic a -> PLogic (seq n a);
 PLogicSeq =
-  Num_rec (\ (n::Num) -> (a::sort 0) -> PLogic a -> PLogic (seq n a))
-          (\ (n::Nat) -> PLogicVec n) PLogicStream;
+  Num_rec (\ (n:Num) -> (a:sort 0) -> PLogic a -> PLogic (seq n a))
+          (\ (n:Nat) -> PLogicVec n) PLogicStream;
 
-PLogicWord :: (n :: Nat) -> PLogic (Vec n Bool);
+PLogicWord : (n : Nat) -> PLogic (Vec n Bool);
 PLogicWord n =
   { and  = bvAnd n
   , or   = bvOr  n
@@ -543,12 +543,12 @@ PLogicWord n =
   , not  = bvNot n
   };
 
-PLogicSeqBool :: (n :: Num) -> PLogic (seq n Bool);
+PLogicSeqBool : (n : Num) -> PLogic (seq n Bool);
 PLogicSeqBool =
-  Num_rec (\ (n::Num) -> PLogic (seq n Bool))
-          (\ (n::Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit);
+  Num_rec (\ (n:Num) -> PLogic (seq n Bool))
+          (\ (n:Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit);
 
-PLogicFun :: (a b :: sort 0) -> PLogic b -> PLogic (a -> b);
+PLogicFun : (a b : sort 0) -> PLogic b -> PLogic (a -> b);
 PLogicFun a b pb =
   { and  = funBinary a b pb.and
   , or   = funBinary a b pb.or
@@ -556,7 +556,7 @@ PLogicFun a b pb =
   , not  = compose a b b pb.not
   };
 
-PLogicUnit :: PLogic #();
+PLogicUnit : PLogic #();
 PLogicUnit =
   { and  = unitBinary
   , or   = unitBinary
@@ -564,7 +564,7 @@ PLogicUnit =
   , not  = unitUnary
   };
 
-PLogicPair :: (a b :: sort 0) -> PLogic a -> PLogic b -> PLogic #(a | b);
+PLogicPair : (a b : sort 0) -> PLogic a -> PLogic b -> PLogic #(a | b);
 PLogicPair a b pa pb =
   { and  = pairBinary a b pa.and pb.and
   , or   = pairBinary a b pa.or  pb.or
@@ -572,7 +572,7 @@ PLogicPair a b pa pb =
   , not  = pairUnary a b pa.not pb.not
   };
 
-PLogicEmpty :: PLogic #{};
+PLogicEmpty : PLogic #{};
 PLogicEmpty =
   { and  = emptyBinary
   , or   = emptyBinary
@@ -581,7 +581,7 @@ PLogicEmpty =
   };
 
 {-
-PLogicField :: (s :: String) -> (a b :: sort 0) -> PLogic a -> PLogic b -> PLogic #{ (s) :: a | b };
+PLogicField : (s : String) -> (a b : sort 0) -> PLogic a -> PLogic b -> PLogic #{ (s) : a | b };
 PLogicField s a b pa pb =
   { and  = fieldBinary s a b pa.and pb.and
   , or   = fieldBinary s a b pa.or  pb.or
@@ -592,22 +592,22 @@ PLogicField s a b pa pb =
 
 -- Arith class
 
-PArith :: sort 0 -> sort 0;
+PArith : sort 0 -> sort 0;
 PArith a =
-  #{ add  :: a -> a -> a
-   , sub  :: a -> a -> a
-   , mul  :: a -> a -> a
-   , div  :: a -> a -> a
-   , mod  :: a -> a -> a
-   , exp  :: a -> a -> a
-   , lg2  :: a -> a
-   , neg  :: a -> a
-   , sdiv :: a -> a -> a
-   , smod :: a -> a -> a
-   , int  :: Integer -> a
+  #{ add  : a -> a -> a
+   , sub  : a -> a -> a
+   , mul  : a -> a -> a
+   , div  : a -> a -> a
+   , mod  : a -> a -> a
+   , exp  : a -> a -> a
+   , lg2  : a -> a
+   , neg  : a -> a
+   , sdiv : a -> a -> a
+   , smod : a -> a -> a
+   , int  : Integer -> a
    };
 
-PArithInteger :: PArith Integer;
+PArithInteger : PArith Integer;
 PArithInteger =
   { add = intAdd
   , sub = intSub
@@ -619,10 +619,10 @@ PArithInteger =
   , neg = intNeg
   , sdiv = errorBinary Integer
   , smod = errorBinary Integer
-  , int = \ (i :: Integer) -> i
+  , int = \ (i : Integer) -> i
   };
 
-PArithVec :: (n :: Nat) -> (a :: sort 0) -> PArith a -> PArith (Vec n a);
+PArithVec : (n : Nat) -> (a : sort 0) -> PArith a -> PArith (Vec n a);
 PArithVec n a pa =
   { add = zipWith a a a pa.add n
   , sub = zipWith a a a pa.sub n
@@ -634,10 +634,10 @@ PArithVec n a pa =
   , neg = map a a pa.neg n
   , sdiv = zipWith a a a pa.sdiv n
   , smod = zipWith a a a pa.smod n
-  , int = \ (i :: Integer) -> replicate n a (pa.int i)
+  , int = \ (i : Integer) -> replicate n a (pa.int i)
   };
 
-PArithStream :: (a :: sort 0) -> PArith a -> PArith (Stream a);
+PArithStream : (a : sort 0) -> PArith a -> PArith (Stream a);
 PArithStream a pa =
   { add = streamMap2 a a a pa.add
   , sub = streamMap2 a a a pa.sub
@@ -649,16 +649,16 @@ PArithStream a pa =
   , neg = streamMap a a pa.neg
   , sdiv = streamMap2 a a a pa.sdiv
   , smod = streamMap2 a a a pa.smod
-  , int = \ (i :: Integer) -> streamConst a (pa.int i)
+  , int = \ (i : Integer) -> streamConst a (pa.int i)
   };
 
-PArithSeq :: (n :: Num) -> (a :: sort 0) -> PArith a -> PArith (seq n a);
+PArithSeq : (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a);
 PArithSeq =
-  Num_rec (\ (n :: Num) -> (a :: sort 0) -> PArith a -> PArith (seq n a))
-          (\ (n::Nat) -> PArithVec n)
+  Num_rec (\ (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a))
+          (\ (n:Nat) -> PArithVec n)
           PArithStream;
 
-PArithWord :: (n :: Nat) -> PArith (Vec n Bool);
+PArithWord : (n : Nat) -> PArith (Vec n Bool);
 PArithWord n =
   { add = bvAdd n
   , sub = bvSub n
@@ -668,20 +668,20 @@ PArithWord n =
   , exp = bvExp n
   , lg2 = bvLg2 n
   , neg = bvNeg n
-  , sdiv = natCase (\ (w::Nat) -> bitvector w -> bitvector w -> bitvector w)
+  , sdiv = natCase (\ (w:Nat) -> bitvector w -> bitvector w -> bitvector w)
            (errorBinary (bitvector 0)) bvSDiv n
-  , smod = natCase (\ (w::Nat) -> bitvector w -> bitvector w -> bitvector w)
+  , smod = natCase (\ (w:Nat) -> bitvector w -> bitvector w -> bitvector w)
            (errorBinary (bitvector 0)) bvSRem n
   , int = intToBv n
   };
 
-PArithSeqBool :: (n :: Num) -> PArith (seq n Bool);
+PArithSeqBool : (n : Num) -> PArith (seq n Bool);
 PArithSeqBool =
-  Num_rec (\ (n::Num) -> PArith (seq n Bool))
-          (\ (n::Nat) -> PArithWord n)
+  Num_rec (\ (n:Num) -> PArith (seq n Bool))
+          (\ (n:Nat) -> PArithWord n)
           (error (PArith (Stream Bool)) "PArithSeqBool: no instance for streams");
 
-PArithFun :: (a b :: sort 0) -> PArith b -> PArith (a -> b);
+PArithFun : (a b : sort 0) -> PArith b -> PArith (a -> b);
 PArithFun a b pb =
   { add = funBinary a b pb.add
   , sub = funBinary a b pb.sub
@@ -693,10 +693,10 @@ PArithFun a b pb =
   , neg = compose a b b pb.neg
   , sdiv = funBinary a b pb.sdiv
   , smod = funBinary a b pb.smod
-  , int = \ (i :: Integer) -> \ (_ :: a) -> pb.int i
+  , int = \ (i : Integer) -> \ (_ : a) -> pb.int i
   };
 
-PArithUnit :: PArith #();
+PArithUnit : PArith #();
 PArithUnit =
   { add = unitBinary
   , sub = unitBinary
@@ -708,10 +708,10 @@ PArithUnit =
   , neg = unitUnary
   , sdiv = unitBinary
   , smod = unitBinary
-  , int = \ (i :: Integer) -> ()
+  , int = \ (i : Integer) -> ()
   };
 
-PArithPair :: (a b :: sort 0) -> PArith a -> PArith b -> PArith #(a | b);
+PArithPair : (a b : sort 0) -> PArith a -> PArith b -> PArith #(a | b);
 PArithPair a b pa pb =
   { add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
@@ -723,10 +723,10 @@ PArithPair a b pa pb =
   , neg = pairUnary a b pa.neg pb.neg
   , sdiv = pairBinary a b pa.sdiv pb.sdiv
   , smod = pairBinary a b pa.smod pb.smod
-  , int = \ (i :: Integer) -> (pa.int i | pb.int i)
+  , int = \ (i : Integer) -> (pa.int i | pb.int i)
   };
 
-PArithEmpty :: PArith #{};
+PArithEmpty : PArith #{};
 PArithEmpty =
   { add = emptyBinary
   , sub = emptyBinary
@@ -738,11 +738,11 @@ PArithEmpty =
   , neg = emptyUnary
   , sdiv = emptyBinary
   , smod = emptyBinary
-  , int = \ (i :: Integer) -> {}
+  , int = \ (i : Integer) -> {}
   };
 
 {-
-PArithField :: (s :: String) -> (a b :: sort 0) -> PArith a -> PArith b -> PArith #{ (s) :: a | b };
+PArithField : (s : String) -> (a b : sort 0) -> PArith a -> PArith b -> PArith #{ (s) : a | b };
 PArithField s a b pa pb =
   { add = fieldBinary s a b pa.add pb.add
   , sub = fieldBinary s a b pa.sub pb.sub
@@ -759,69 +759,69 @@ PArithField s a b pa pb =
 
 -- Cmp class
 
-PCmp :: sort 0 -> sort 0;
-PCmp a = #{ cmp :: a -> a -> Bool -> Bool };
+PCmp : sort 0 -> sort 0;
+PCmp a = #{ cmp : a -> a -> Bool -> Bool };
 
-PCmpBit :: PCmp Bool;
+PCmpBit : PCmp Bool;
 PCmpBit = { cmp = boolCmp };
 
-PCmpInteger :: PCmp Integer;
+PCmpInteger : PCmp Integer;
 PCmpInteger = { cmp = integerCmp };
 
-PCmpVec :: (n :: Nat) -> (a :: sort 0) -> PCmp a -> PCmp (Vec n a);
+PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa = { cmp = vecCmp n a pa.cmp };
 
-PCmpSeq :: (n :: Num) -> (a :: sort 0) -> PCmp a -> PCmp (seq n a);
+PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
 PCmpSeq =
-  Num_rec (\ (n::Num) -> (a :: sort 0) -> PCmp a -> PCmp (seq n a))
-          (\ (n::Nat) -> PCmpVec n)
-          (\ (a::sort 0) (pa :: PCmp a) -> { cmp = errorCmp (Stream a) });
+  Num_rec (\ (n:Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a))
+          (\ (n:Nat) -> PCmpVec n)
+          (\ (a:sort 0) (pa : PCmp a) -> { cmp = errorCmp (Stream a) });
 
-PCmpWord :: (n :: Nat) -> PCmp (Vec n Bool);
+PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
 PCmpWord n = { cmp = bvCmp n };
 
-PCmpSeqBool :: (n :: Num) -> PCmp (seq n Bool);
+PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
 PCmpSeqBool =
-  Num_rec (\ (n :: Num) -> PCmp (seq n Bool))
-          (\ (n::Nat) -> PCmpWord n)
+  Num_rec (\ (n : Num) -> PCmp (seq n Bool))
+          (\ (n:Nat) -> PCmpWord n)
           ({ cmp = errorCmp (Stream Bool) });
 
-PCmpUnit :: PCmp #();
+PCmpUnit : PCmp #();
 PCmpUnit = { cmp = unitCmp };
 
-PCmpPair :: (a b :: sort 0) -> PCmp a -> PCmp b -> PCmp #(a | b);
+PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp #(a | b);
 PCmpPair a b pa pb = { cmp = pairCmp a b pa.cmp pb.cmp };
 
-PCmpEmpty :: PCmp #{};
+PCmpEmpty : PCmp #{};
 PCmpEmpty = { cmp = emptyCmp };
 
 {-
-PCmpField :: (s :: String) -> (a b :: sort 0) -> PCmp a -> PCmp b -> PCmp #{ (s) :: a | b };
+PCmpField : (s : String) -> (a b : sort 0) -> PCmp a -> PCmp b -> PCmp #{ (s) : a | b };
 PCmpField s a b pa pb = { cmp = fieldCmp s a b pa.cmp pb.cmp };
 -}
 
 -- SignedCmp class
 
-PSignedCmp :: sort 0 -> sort 0;
-PSignedCmp a = #{ scmp :: a -> a -> Bool -> Bool };
+PSignedCmp : sort 0 -> sort 0;
+PSignedCmp a = #{ scmp : a -> a -> Bool -> Bool };
 
-PSignedCmpVec :: (n :: Nat) -> (a :: sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
+PSignedCmpVec : (n : Nat) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
 PSignedCmpVec n a pa = { scmp = vecCmp n a pa.scmp };
 
-PSignedCmpWord :: (n :: Nat) -> PSignedCmp (Vec n Bool);
+PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
 PSignedCmpWord n = { scmp = bvSCmp n };
 
-PSignedCmpUnit :: PSignedCmp #();
+PSignedCmpUnit : PSignedCmp #();
 PSignedCmpUnit = { scmp = unitCmp };
 
-PSignedCmpPair :: (a b :: sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #(a | b);
+PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #(a | b);
 PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
 
-PSignedCmpEmpty :: PSignedCmp #{};
+PSignedCmpEmpty : PSignedCmp #{};
 PSignedCmpEmpty = { scmp = emptyCmp };
 
 {-
-PSignedCmpField :: (s :: String) -> (a b :: sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #{ (s) :: a | b };
+PSignedCmpField : (s : String) -> (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #{ (s) : a | b };
 PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
 -}
 
@@ -829,327 +829,327 @@ PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
 
 -- Compared to Cryptol class 'Literal val a', we omit the 'val' parameter here.
 
-PLiteral :: (a :: sort 0) -> sort 0;
+PLiteral : (a : sort 0) -> sort 0;
 PLiteral a = Nat -> a;
 
-PLiteralSeqBool :: (n :: Num) -> PLiteral (seq n Bool);
+PLiteralSeqBool : (n : Num) -> PLiteral (seq n Bool);
 PLiteralSeqBool n =
-  Num#rec (\ (n :: Num) -> PLiteral (seq n Bool)) bvNat
+  Num#rec (\ (n : Num) -> PLiteral (seq n Bool)) bvNat
           (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
 
-PLiteralInteger :: PLiteral Integer;
+PLiteralInteger : PLiteral Integer;
 PLiteralInteger = natToInt;
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecNumber :: (val :: Num) -> (a :: sort 0) -> PLiteral a -> a;
+ecNumber : (val : Num) -> (a : sort 0) -> PLiteral a -> a;
 ecNumber val a pa =
-  Num#rec (\ (_ :: Num) -> a) pa (pa 0) val;
+  Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
-ecToInteger :: (n :: Num) -> seq n Bool -> Integer;
+ecToInteger : (n : Num) -> seq n Bool -> Integer;
 ecToInteger =
-  Num_rec (\ (n::Num) -> seq n Bool -> Integer) bvToInt
+  Num_rec (\ (n:Num) -> seq n Bool -> Integer) bvToInt
           (error (Stream Bool -> Integer) "ecToInteger called on TCInf");
 
-ecFromInteger :: (a :: sort 0) -> PArith a -> Integer -> a;
+ecFromInteger : (a : sort 0) -> PArith a -> Integer -> a;
 ecFromInteger a pa = pa.int;
 
 -- Arith
-ecPlus :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecPlus : (a : sort 0) -> PArith a -> a -> a -> a;
 ecPlus a pa = pa.add;
 
-ecMinus :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMinus : (a : sort 0) -> PArith a -> a -> a -> a;
 ecMinus a pa = pa.sub;
 
-ecMul :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMul : (a : sort 0) -> PArith a -> a -> a -> a;
 ecMul a pa = pa.mul;
 
-ecDiv :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecDiv : (a : sort 0) -> PArith a -> a -> a -> a;
 ecDiv a pa = pa.div;
 
-ecMod :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecMod : (a : sort 0) -> PArith a -> a -> a -> a;
 ecMod a pa = pa.mod;
 
-ecExp :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecExp : (a : sort 0) -> PArith a -> a -> a -> a;
 ecExp a pa = pa.exp;
 
-ecLg2 :: (a :: sort 0) -> PArith a -> a -> a;
+ecLg2 : (a : sort 0) -> PArith a -> a -> a;
 ecLg2 a pa = pa.lg2;
 
-ecNeg :: (a :: sort 0) -> PArith a -> a -> a;
+ecNeg : (a : sort 0) -> PArith a -> a -> a;
 ecNeg a pa = pa.neg;
 
-ecSDiv :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecSDiv : (a : sort 0) -> PArith a -> a -> a -> a;
 ecSDiv a pa = pa.sdiv;
 
-ecSMod :: (a :: sort 0) -> PArith a -> a -> a -> a;
+ecSMod : (a : sort 0) -> PArith a -> a -> a -> a;
 ecSMod a pa = pa.smod;
 
 -- Cmp
-ecLt :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecLt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecLt a pa x y = pa.cmp x y False;
 
-ecGt :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecGt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecGt a pa x y = ecLt a pa y x;
 
-ecLtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecLtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecLtEq a pa x y = not (ecLt a pa y x);
 
-ecGtEq  :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecGtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecGtEq a pa x y = not (ecLt a pa x y);
 
-ecSLt :: (a :: sort 0) -> PSignedCmp a -> a -> a -> Bool;
+ecSLt : (a : sort 0) -> PSignedCmp a -> a -> a -> Bool;
 ecSLt a pa x y = pa.scmp x y False;
 
-ecEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecEq a _ = eq a;
 
-ecNotEq :: (a :: sort 0) -> PCmp a -> a -> a -> Bool;
+ecNotEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecNotEq a pa x y = not (ecEq a pa x y);
 
-ecFunEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunEq : (a b : sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
 ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
 
-ecFunNotEq :: (a b :: sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
+ecFunNotEq : (a b : sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
 ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
 
 -- Logic
-ecAnd :: (a :: sort 0) -> PLogic a -> a -> a -> a;
+ecAnd : (a : sort 0) -> PLogic a -> a -> a -> a;
 ecAnd a pa = pa.and;
 
-ecOr :: (a :: sort 0) -> PLogic a -> a -> a -> a;
+ecOr : (a : sort 0) -> PLogic a -> a -> a -> a;
 ecOr a pa = pa.or;
 
-ecXor :: (a :: sort 0) -> PLogic a -> a -> a -> a;
+ecXor : (a : sort 0) -> PLogic a -> a -> a -> a;
 ecXor a pa = pa.xor;
 
-ecCompl :: (a :: sort 0) -> PLogic a -> a -> a;
+ecCompl : (a : sort 0) -> PLogic a -> a -> a;
 ecCompl a pa = pa.not;
 
-ecZero :: (a :: sort 0) -> PZero a -> a;
+ecZero : (a : sort 0) -> PZero a -> a;
 ecZero a pa = pa;
 
 -- Sequences
-ecShiftL :: (m n :: Num) -> (a :: sort 0) -> PZero a -> seq m a -> seq n Bool ->
+ecShiftL : (m n : Num) -> (a : sort 0) -> PZero a -> seq m a -> seq n Bool ->
             seq m a;
 ecShiftL =
   Num_rec
-    (\ (m::Num) -> (n::Num) -> (a :: sort 0) -> PZero a -> seq m a ->
+    (\ (m:Num) -> (n:Num) -> (a : sort 0) -> PZero a -> seq m a ->
        seq n Bool -> seq m a)
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        finNumRec
-         (\ (n::Num) -> (a :: sort 0) -> PZero a -> Vec m a -> seq n Bool ->
+         (\ (n:Num) -> (a : sort 0) -> PZero a -> Vec m a -> seq n Bool ->
             Vec m a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> \ (pz::PZero a) ->
+         (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
             bvShiftL m a n (ecZero a pz)))
     (finNumRec
-       (\ (n::Num) -> (a::sort 0) -> PZero a -> Stream a -> seq n Bool ->
+       (\ (n:Num) -> (a:sort 0) -> PZero a -> Stream a -> seq n Bool ->
           Stream a)
        -- Case for (infinity, TCNum n)
-       (\ (n::Nat) -> \ (a::sort 0) -> \ (pz::PZero a) ->
+       (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
           bvStreamShiftL a n));
 
-ecShiftR :: (m n :: Num) -> (a :: sort 0) -> PZero a -> seq m a -> seq n Bool ->
+ecShiftR : (m n : Num) -> (a : sort 0) -> PZero a -> seq m a -> seq n Bool ->
             seq m a;
 ecShiftR =
   Num_rec
-    (\ (m::Num) -> (n::Num) -> (a :: sort 0) -> PZero a -> seq m a ->
+    (\ (m:Num) -> (n:Num) -> (a : sort 0) -> PZero a -> seq m a ->
        seq n Bool -> seq m a)
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        finNumRec
-         (\ (n::Num) -> (a :: sort 0) -> PZero a -> Vec m a -> seq n Bool ->
+         (\ (n:Num) -> (a : sort 0) -> PZero a -> Vec m a -> seq n Bool ->
             Vec m a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> \ (pz::PZero a) ->
+         (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
             bvShiftR m a n (ecZero a pz)))
     (finNumRec
-       (\ (n::Num) -> (a::sort 0) -> PZero a -> Stream a -> seq n Bool ->
+       (\ (n:Num) -> (a:sort 0) -> PZero a -> Stream a -> seq n Bool ->
           Stream a)
        -- Case for (infinity, TCNum n)
-       (\ (n::Nat) -> \ (a::sort 0) -> \ (pz::PZero a) ->
+       (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
           bvStreamShiftR a n (ecZero a pz)));
 
-ecSShiftR :: (n k :: Num) -> seq n Bool -> seq k Bool -> seq n Bool;
+ecSShiftR : (n k : Num) -> seq n Bool -> seq k Bool -> seq n Bool;
 ecSShiftR =
   finNumRec
-    (\ (n::Num) -> (k::Num) -> seq n Bool -> seq k Bool -> seq n Bool)
-    (\ (n::Nat) ->
+    (\ (n:Num) -> (k:Num) -> seq n Bool -> seq k Bool -> seq n Bool)
+    (\ (n:Nat) ->
        finNumRec
-         (\ (k::Num) -> Vec n Bool -> seq k Bool -> Vec n Bool)
+         (\ (k:Num) -> Vec n Bool -> seq k Bool -> Vec n Bool)
          -- Case for (TCNum n, TCNum k)
-         (\ (k::Nat) ->
+         (\ (k:Nat) ->
             natCase
-              (\ (w :: Nat) -> bitvector w -> bitvector k -> bitvector w)
-              (\ (x :: bitvector 0) -> \ (i :: bitvector k) -> x)
-              (\ (w :: Nat) -> \ (x :: bitvector (Succ w)) ->
-               \ (i :: bitvector k) -> bvSShr w x (bvToNat k i))
+              (\ (w : Nat) -> bitvector w -> bitvector k -> bitvector w)
+              (\ (x : bitvector 0) -> \ (i : bitvector k) -> x)
+              (\ (w : Nat) -> \ (x : bitvector (Succ w)) ->
+               \ (i : bitvector k) -> bvSShr w x (bvToNat k i))
               n));
 
-ecCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecCarry : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecCarry =
-  finNumRec (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool) bvCarry;
+  finNumRec (\ (n:Num) -> seq n Bool -> seq n Bool -> Bool) bvCarry;
 
-ecSCarry :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSCarry : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSCarry =
   finNumRec
-    (\ (n::Num) -> seq n Bool -> seq n Bool -> Bool)
-    (\ (n::Nat) ->
+    (\ (n:Num) -> seq n Bool -> seq n Bool -> Bool)
+    (\ (n:Nat) ->
        natCase
-         (\ (w :: Nat) -> bitvector w -> bitvector w -> Bool)
-         (\ (_ :: bitvector 0) (_ :: bitvector 0) ->
+         (\ (w : Nat) -> bitvector w -> bitvector w -> Bool)
+         (\ (_ : bitvector 0) (_ : bitvector 0) ->
             error Bool "invalid SCarry instance")
          bvSCarry n);
 
-ecRotL :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool ->
+ecRotL : (m n : Num) -> (a : sort 0) -> seq m a -> seq n Bool ->
           seq m a;
 ecRotL =
   finNumRec2
-    (\ (m::Num) -> \ (n::Num) -> (a::sort 0) -> seq m a -> seq n Bool -> seq m a)
-    (\ (m::Nat) -> \ (n::Nat) -> \ (a::sort 0) -> bvRotateL m a n);
+    (\ (m:Num) -> \ (n:Num) -> (a:sort 0) -> seq m a -> seq n Bool -> seq m a)
+    (\ (m:Nat) -> \ (n:Nat) -> \ (a:sort 0) -> bvRotateL m a n);
 
 
-ecRotR :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n Bool -> seq m a;
+ecRotR : (m n : Num) -> (a : sort 0) -> seq m a -> seq n Bool -> seq m a;
 ecRotR =
   finNumRec2
-    (\ (m::Num) -> \ (n::Num) -> (a::sort 0) -> seq m a -> seq n Bool -> seq m a)
-    (\ (m::Nat) -> \ (n::Nat) -> \ (a::sort 0) -> bvRotateR m a n);
+    (\ (m:Num) -> \ (n:Num) -> (a:sort 0) -> seq m a -> seq n Bool -> seq m a)
+    (\ (m:Nat) -> \ (n:Nat) -> \ (a:sort 0) -> bvRotateR m a n);
 
-ecCat :: (m n :: Num) -> (a :: sort 0) -> seq m a -> seq n a -> seq (tcAdd m n) a;
+ecCat : (m n : Num) -> (a : sort 0) -> seq m a -> seq n a -> seq (tcAdd m n) a;
 ecCat =
   finNumRec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m a -> seq n a ->
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq m a -> seq n a ->
        seq (tcAdd m n) a)
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        Num_rec
-         (\ (n::Num) -> (a::sort 0) -> Vec m a -> seq n a ->
+         (\ (n:Num) -> (a:sort 0) -> Vec m a -> seq n a ->
             seq (tcAdd (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> append m n a)
+         (\ (n:Nat) -> \ (a:sort 0) -> append m n a)
          -- Case for (TCNum m, TCInf)
-         (\ (a::sort 0) -> streamAppend a m));
+         (\ (a:sort 0) -> streamAppend a m));
 
-ecSplitAt :: (m n :: Num) -> (a :: sort 0) -> seq (tcAdd m n) a ->
+ecSplitAt : (m n : Num) -> (a : sort 0) -> seq (tcAdd m n) a ->
              #(seq m a, seq n a);
 ecSplitAt =
   finNumRec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq (tcAdd m n) a ->
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcAdd m n) a ->
        #(seq m a, seq n a))
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        Num_rec
-         (\ (n::Num) -> (a::sort 0) -> seq (tcAdd (TCNum m) n) a ->
+         (\ (n:Num) -> (a:sort 0) -> seq (tcAdd (TCNum m) n) a ->
             #(Vec m a, seq n a))
          -- The case (TCNum n, TCNum m)
-         (\ (n::Nat) -> \ (a::sort 0) -> \ (xs:: Vec (addNat m n) a) ->
+         (\ (n:Nat) -> \ (a:sort 0) -> \ (xs: Vec (addNat m n) a) ->
             (take a m n xs, drop a m n xs))
          -- The case (TCNum m, infinity)
-         (\ (a::sort 0) -> \ (xs:: Stream a) ->
+         (\ (a:sort 0) -> \ (xs: Stream a) ->
             (streamTake a m xs, streamDrop a m xs)));
 
-ecJoin :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
+ecJoin : (m n : Num) -> (a : sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
 ecJoin =
   Num_rec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq m (seq n a) ->
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq m (seq n a) ->
        seq (tcMul m n) a)
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        finNumRec
-         (\ (n::Num) -> (a::sort 0) -> Vec m (seq n a) ->
+         (\ (n:Num) -> (a:sort 0) -> Vec m (seq n a) ->
             seq (tcMul (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> join m n a)
+         (\ (n:Nat) -> \ (a:sort 0) -> join m n a)
          -- No case for (TCNum m, TCInf)
          )
     (finNumRec
-       (\ (n::Num) -> (a::sort 0) -> Stream (seq n a) ->
+       (\ (n:Num) -> (a:sort 0) -> Stream (seq n a) ->
           seq (tcMul TCInf n) a)
        -- Case for (TCInf, TCNum n)
-       (\ (n::Nat) -> \ (a::sort 0) ->
+       (\ (n:Nat) -> \ (a:sort 0) ->
           natCase
-            (\ (n'::Nat) -> Stream (Vec n' a) ->
+            (\ (n':Nat) -> Stream (Vec n' a) ->
                seq (if0Nat Num n' (TCNum 0) TCInf) a)
-            (\ (s::Stream (Vec 0 a)) -> EmptyVec a)
-            (\ (n'::Nat) -> \ (s::Stream (Vec (Succ n') a)) ->
+            (\ (s:Stream (Vec 0 a)) -> EmptyVec a)
+            (\ (n':Nat) -> \ (s:Stream (Vec (Succ n') a)) ->
                streamJoin a n' s)
             n)
        -- No case for (TCInf, TCInf)
        );
 
-ecSplit :: (m n :: Num) -> (a :: sort 0) -> seq (tcMul m n) a ->
+ecSplit : (m n : Num) -> (a : sort 0) -> seq (tcMul m n) a ->
            seq m (seq n a);
 ecSplit =
   Num_rec
-    (\ (m::Num) -> (n::Num) -> (a::sort 0) -> seq (tcMul m n) a ->
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcMul m n) a ->
        seq m (seq n a))
-    (\ (m::Nat) ->
+    (\ (m:Nat) ->
        finNumRec
-         (\ (n::Num) -> (a::sort 0) -> seq (tcMul (TCNum m) n) a ->
+         (\ (n:Num) -> (a:sort 0) -> seq (tcMul (TCNum m) n) a ->
             Vec m (seq n a))
          -- Case for (TCNum m, TCNum n)
-         (\ (n::Nat) -> \ (a::sort 0) -> split m n a)
+         (\ (n:Nat) -> \ (a:sort 0) -> split m n a)
          -- No case for (TCNum m, TCInf)
          )
     (finNumRec
-       (\ (n::Num) -> (a::sort 0) -> seq (tcMul TCInf n) a -> Stream (seq n a))
+       (\ (n:Num) -> (a:sort 0) -> seq (tcMul TCInf n) a -> Stream (seq n a))
        -- Case for (TCInf, TCNum n)
-       (\ (n::Nat) -> \ (a::sort 0) ->
+       (\ (n:Nat) -> \ (a:sort 0) ->
           natCase
-            (\ (n'::Nat) ->
+            (\ (n':Nat) ->
                seq (if0Nat Num n' (TCNum 0) TCInf) a ->
                Stream (Vec n' a))
             (streamConst (Vec 0 a))
-            (\ (n'::Nat) -> streamSplit a (Succ n'))
+            (\ (n':Nat) -> streamSplit a (Succ n'))
             n));
 
-ecReverse :: (n :: Num) -> (a :: sort 0) -> seq n a -> seq n a;
+ecReverse : (n : Num) -> (a : sort 0) -> seq n a -> seq n a;
 ecReverse =
   finNumRec
-    (\ (n::Num) -> (a::sort 0) -> seq n a -> seq n a) reverse;
+    (\ (n:Num) -> (a:sort 0) -> seq n a -> seq n a) reverse;
 
-ecTranspose :: (m n :: Num) -> (a :: sort 0) -> seq m (seq n a) ->
+ecTranspose : (m n : Num) -> (a : sort 0) -> seq m (seq n a) ->
                seq n (seq m a);
 ecTranspose =
   finNumRec2
-    (\ (m::Num) -> \ (n::Num) -> (a::sort 0) -> seq m (seq n a) ->
+    (\ (m:Num) -> \ (n:Num) -> (a:sort 0) -> seq m (seq n a) ->
        seq n (seq m a))
     transpose;
 
 
-ecAt :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a -> seq i Bool -> a;
+ecAt : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a -> seq i Bool -> a;
 ecAt =
   Num_rec
-    (\ (n::Num) -> (a::sort 0) -> (i::Num) -> seq n a -> seq i Bool -> a)
-    (\ (n::Nat) -> \ (a::sort 0) ->
+    (\ (n:Num) -> (a:sort 0) -> (i:Num) -> seq n a -> seq i Bool -> a)
+    (\ (n:Nat) -> \ (a:sort 0) ->
        finNumRec
-         (\ (i::Num) -> Vec n a -> seq i Bool -> a)
+         (\ (i:Num) -> Vec n a -> seq i Bool -> a)
          -- Case for (TCNum n, TCNum i)
-         (\ (i::Nat) -> bvAt n a i)
+         (\ (i:Nat) -> bvAt n a i)
          -- No case for (TCNum n, TCInf)
          )
-    (\ (a::sort 0) ->
+    (\ (a:sort 0) ->
        finNumRec
-         (\ (i::Num) -> Stream a -> seq i Bool -> a)
+         (\ (i:Num) -> Stream a -> seq i Bool -> a)
          -- Case for (TCInf, TCNum i)
-         (\ (i::Nat) -> bvStreamGet a i)
+         (\ (i:Nat) -> bvStreamGet a i)
          -- No case for (TCNum n, TCInf)
          );
 
-ecAtBack :: (n :: Num) -> (a :: sort 0) -> (i :: Num) -> seq n a ->
+ecAtBack : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a ->
             seq i Bool -> a;
 ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
 
 -- Static word sequences
-ecFromThen :: (first next bits len :: Num) -> seq len (seq bits Bool);
+ecFromThen : (first next bits len : Num) -> seq len (seq bits Bool);
 ecFromThen first next =
   finNumRec
-    (\ (bits::Num) -> (len::Num) -> seq len (seq bits Bool))
-    (\ (bits::Nat) ->
+    (\ (bits:Num) -> (len:Num) -> seq len (seq bits Bool))
+    (\ (bits:Nat) ->
        finNumRec
-         (\ (len::Num) -> seq len (Vec bits Bool))
-         (\ (len::Nat) ->
+         (\ (len:Num) -> seq len (Vec bits Bool))
+         (\ (len:Nat) ->
             gen len (Vec bits Bool)
-                (\ (i :: Nat) ->
+                (\ (i : Nat) ->
                    bvAdd
                      bits
                      (bvNat bits (getFinNat first))
@@ -1158,58 +1158,58 @@ ecFromThen first next =
                                    (bvNat bits (getFinNat first)))
                             (bvNat bits i)))));
 
-ecFromTo :: (first last :: Num) -> (a :: sort 0) -> PLiteral a ->
+ecFromTo : (first last : Num) -> (a : sort 0) -> PLiteral a ->
             seq (tcAdd (TCNum 1) (tcSub last first)) a;
 ecFromTo =
   finNumRec
-    (\ (first::Num) -> (last::Num) -> (a :: sort 0) -> PLiteral a ->
+    (\ (first:Num) -> (last:Num) -> (a : sort 0) -> PLiteral a ->
        seq (tcAdd (TCNum 1) (tcSub last first)) a)
-    (\ (first::Nat) ->
+    (\ (first:Nat) ->
        finNumRec
-         (\ (last::Num) -> (a :: sort 0) -> PLiteral a ->
+         (\ (last:Num) -> (a : sort 0) -> PLiteral a ->
             seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
-         (\ (last::Nat) -> \ (a :: sort 0) -> \ (pa :: PLiteral a) ->
+         (\ (last:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) ->
             gen (addNat 1 (subNat last first)) a
-                (\ (i :: Nat) -> pa (addNat i first))));
+                (\ (i : Nat) -> pa (addNat i first))));
 
-ecFromThenTo ::
-  (first next last :: Num) -> (a :: sort 0) -> (len :: Num) ->
+ecFromThenTo :
+  (first next last : Num) -> (a : sort 0) -> (len : Num) ->
   PLiteral a -> PLiteral a -> PLiteral a -> seq len a;
 ecFromThenTo first next _ a =
   finNumRec
-    (\ (len::Num) -> PLiteral a -> PLiteral a -> PLiteral a -> seq len a)
-    (\ (len::Nat) -> \ (pa :: PLiteral a) -> \ (_ :: PLiteral a) -> \ (_ :: PLiteral a) ->
+    (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a -> seq len a)
+    (\ (len:Nat) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) -> \ (_ : PLiteral a) ->
        gen len a
-           (\ (i :: Nat) ->
+           (\ (i : Nat) ->
               pa (subNat (addNat (getFinNat first)
                                  (mulNat i (getFinNat next)))
                          (mulNat i (getFinNat first)))));
 
 -- Infinite word sequences
-ecInfFrom :: (a :: sort 0) -> PArith a -> a -> seq TCInf a;
+ecInfFrom : (a : sort 0) -> PArith a -> a -> seq TCInf a;
 ecInfFrom a pa x =
-  MkStream a (\ (i :: Nat) -> pa.add x (pa.int (natToInt i)));
+  MkStream a (\ (i : Nat) -> pa.add x (pa.int (natToInt i)));
 
-ecInfFromThen :: (a :: sort 0) -> PArith a -> a -> a -> seq TCInf a;
+ecInfFromThen : (a : sort 0) -> PArith a -> a -> a -> seq TCInf a;
 ecInfFromThen a pa x y =
-  MkStream a (\ (i :: Nat) -> pa.add x (pa.mul (pa.sub y x) (pa.int (natToInt i))));
+  MkStream a (\ (i : Nat) -> pa.add x (pa.mul (pa.sub y x) (pa.int (natToInt i))));
 
 
 -- Run-time error
-primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
+primitive cryError : (a : sort 0) -> (n : Nat) -> Vec n (bitvector 8) -> a;
 
-ecError :: (a :: sort 0) -> (len :: Num) -> seq len (bitvector 8) -> a;
+ecError : (a : sort 0) -> (len : Num) -> seq len (bitvector 8) -> a;
 ecError a =
   finNumRec
-    (\ (len::Num) -> seq len (bitvector 8) -> a)
-    (\ (len::Nat) -> cryError a len);
+    (\ (len:Num) -> seq len (bitvector 8) -> a)
+    (\ (len:Nat) -> cryError a len);
 
 -- Random values
-ecRandom :: (a :: sort 0) -> bitvector 32 -> a;
+ecRandom : (a : sort 0) -> bitvector 32 -> a;
 ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
-ecTrace :: (n :: Num) -> (a b :: sort 0) -> seq n (bitvector 8) -> a -> b -> b;
+ecTrace : (n : Num) -> (a b : sort 0) -> seq n (bitvector 8) -> a -> b -> b;
 ecTrace _ _ _ _ _ x = x;
 
 
@@ -1217,90 +1217,90 @@ ecTrace _ _ _ _ _ x = x;
 -- Extra primitives
 
 -- Array update
-ecUpdate :: (n :: Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+ecUpdate : (n : Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
             seq w Bool -> a -> seq n a;
 ecUpdate =
   Num_rec
-    (\ (n::Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+    (\ (n:Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
        seq w Bool -> a -> seq n a)
-    (\ (n::Nat) -> \ (a::sort 0) ->
+    (\ (n:Nat) -> \ (a:sort 0) ->
        -- Case for (TCNum n, TCNum w)
        finNumRec
-         (\ (w::Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
-         (\ (w::Nat) -> bvUpd n a w))
-    (\ (a::sort 0) ->
+         (\ (w:Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
+         (\ (w:Nat) -> bvUpd n a w))
+    (\ (a:sort 0) ->
        finNumRec
-         (\ (w::Num) -> Stream a -> seq w Bool -> a -> Stream a)
+         (\ (w:Num) -> Stream a -> seq w Bool -> a -> Stream a)
          -- Case for (TCInf, TCNum w)
-         (\ (w::Nat) -> bvStreamUpd a w));
+         (\ (w:Nat) -> bvStreamUpd a w));
 
-ecUpdateEnd :: (n :: Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+ecUpdateEnd : (n : Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
                seq w Bool -> a -> seq n a;
 ecUpdateEnd =
   finNumRec
-    (\ (n::Num) -> (a :: sort 0) -> (w :: Num) -> seq n a ->
+    (\ (n:Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
        seq w Bool -> a -> seq n a)
-    (\ (n::Nat) -> \ (a::sort 0) ->
+    (\ (n:Nat) -> \ (a:sort 0) ->
        finNumRec
-         (\ (w::Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
-         (\ (w::Nat) -> \ (xs::Vec n a) -> \ (i::Vec w Bool) -> \ (y::a) ->
+         (\ (w:Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
+         (\ (w:Nat) -> \ (xs:Vec n a) -> \ (i:Vec w Bool) -> \ (y:a) ->
             upd n a xs (subNat (subNat n 1) (bvToNat w i)) y));
 
 -- Bitvector truncation
-ecTrunc :: (m n :: Num) -> seq (tcAdd m n) Bool -> seq n Bool;
+ecTrunc : (m n : Num) -> seq (tcAdd m n) Bool -> seq n Bool;
 ecTrunc =
   finNumRec2
-    (\ (m::Num) -> \ (n::Num) -> seq (tcAdd m n) Bool -> seq n Bool)
+    (\ (m:Num) -> \ (n:Num) -> seq (tcAdd m n) Bool -> seq n Bool)
     bvTrunc;
 
 -- Zero extension
-ecUExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
+ecUExt : (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool;
 ecUExt =
-  finNumRec2 (\ (m::Num) -> \ (n::Num) -> seq n Bool -> seq (tcAdd m n) Bool)
+  finNumRec2 (\ (m:Num) -> \ (n:Num) -> seq n Bool -> seq (tcAdd m n) Bool)
              bvUExt;
 
-ecSExt :: (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool;
+ecSExt : (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool;
 ecSExt =
   finNumRec2
-    (\ (m n :: Num) -> seq n Bool -> seq (tcAdd m n) Bool)
-    (\ (m n :: Nat) ->
+    (\ (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool)
+    (\ (m n : Nat) ->
        natCase
-         (\ (n' :: Nat) -> bitvector n' -> bitvector (addNat m n'))
-         (\ (_ :: bitvector 0) -> bvNat (addNat m 0) 0)
+         (\ (n' : Nat) -> bitvector n' -> bitvector (addNat m n'))
+         (\ (_ : bitvector 0) -> bvNat (addNat m 0) 0)
          (bvSExt m)
          n);
 
 -- Signed greater-than
-ecSgt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSgt : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSgt =
-  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvsgt;
+  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsgt;
 
 -- Signed greater-or-equal
-ecSge :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSge : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSge =
-  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvsge;
+  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsge;
 
 -- Signed less-than
-ecSlt :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSlt : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSlt =
-  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvslt;
+  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvslt;
 
 -- Signed less-or-equal
-ecSle :: (n :: Num) -> seq n Bool -> seq n Bool -> Bool;
+ecSle : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSle =
-  finNumRec (\ (n :: Num) -> seq n Bool -> seq n Bool -> Bool) bvsle;
+  finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsle;
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
 
-axiom replicate_False :: (n :: Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
+axiom replicate_False : (n : Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
 
-axiom subNat_0 :: (n :: Nat) -> Eq Nat (subNat n 0) n;
+axiom subNat_0 : (n : Nat) -> Eq Nat (subNat n 0) n;
 
 {-
 axiom demote_add_distr
-  :: (w :: Nat)
-  -> (x y :: Num)
+  : (w : Nat)
+  -> (x y : Num)
   -> Eq (bitvector w)
         (ecNumber (tcAdd x y) (TCNum w))
         (bvAdd w (ecNumber x (TCNum w)) (ecNumber y (TCNum w)));
