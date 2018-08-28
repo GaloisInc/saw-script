@@ -36,14 +36,10 @@ extra-deps:
   - simple-smt-0.7.1
   - GraphSCC-1.0.4
   - monadLib-3.7.3
-  - sbv-7.7
-  - tasty-hunit-0.10.0.1
-  - MonadRandom-0.5.1
+  - sbv-7.10
   - crackNum-2.0
-  - hashtables-1.2.3.0
   - FloatingHex-0.4
-  - data-inttrie-0.1.4
   - monad-supply-0.7
   - panic-0.4.0.0
-resolver: nightly-2018-04-16
+resolver: lts-12.8
 allow-newer: true

@@ -39,8 +39,7 @@ extra-deps:
   - simple-smt-0.7.1
   - GraphSCC-1.0.4
   - monadLib-3.7.3
-  - sbv-7.7
-  - tasty-hunit-0.10.0.1
+  - sbv-7.10
   - data-inttrie-0.1.4
   - panic-0.4.0.0
-resolver: lts-11.5
+resolver: lts-11.22
