@@ -1,0 +1,26 @@
+j <- java_load_class "Dyn";
+a <- java_load_class "Arr";
+
+print "**Extracting f_ref";
+f_ref <- crucible_java_extract j "f_ref";
+
+print "**Extracting single";
+single <- crucible_java_extract a "single";
+
+print "**Extracting doub";
+doub <- crucible_java_extract a "doub";
+
+print "**Extracting obj";
+h_ref <- crucible_java_extract j "h_ref";
+
+print "**Evaluating: single array ref";
+sat_print abc {{ \(x:[32]) -> single 0 == x }};
+
+print "**Evaluating: double array ref";
+sat_print abc {{ \(x:[32]) -> doub 0 == x }};
+
+print "**Evaluating: obj array ref";
+sat_print abc {{ \(x:[32]) -> obj 0 == x }};
+
+
+print "Done.";

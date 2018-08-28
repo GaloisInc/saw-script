@@ -24,6 +24,7 @@ Stability   : provisional
 
 module SAWScript.Value where
 
+import Data.Semigroup ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
@@ -32,7 +33,7 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (StateT(..), get, put)
+import Control.Monad.State (StateT(..), get, gets, put)
 import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
 import qualified Data.Map as M
@@ -50,6 +51,7 @@ import qualified SAWScript.AST as SS
 import qualified SAWScript.Utils as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
+import qualified SAWScript.CrucibleLLVM as Crucible
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
@@ -80,9 +82,14 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.LLVM as Crucible
+import qualified Lang.Crucible.LLVM.Extension as Crucible
+import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
+import qualified Lang.Crucible.LLVM.MemModel as Crucible (HasPtrWidth)
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 
-import qualified SAWScript.CrucibleLLVM as Crucible
-import Lang.Crucible.JVM.Translation (JVM)
+import           Lang.Crucible.JVM.Translation (JVM)
+import qualified Lang.Crucible.JVM.Translation as CJ
 
 -- Values ----------------------------------------------------------------------
 
@@ -377,6 +384,8 @@ data TopLevelRW =
   , rwCryptol :: CEnv.CryptolEnv
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
+  , rwJVMTrans :: CJ.JVMContext
+  -- ^ crucible-jvm: Handles and info for classes that have already been translated
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
@@ -430,6 +439,18 @@ getTopLevelRW = TopLevel get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
+
+-- | Access the current state of Java Class translation
+getJVMTrans :: TopLevel  CJ.JVMContext
+getJVMTrans = TopLevel (gets rwJVMTrans)
+
+-- | Add a newly translated class to the translation
+addJVMTrans :: CJ.JVMContext -> TopLevel ()
+addJVMTrans trans = do
+  rw <- getTopLevelRW
+  let jvmt = rwJVMTrans rw
+  putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
+
 
 -- Other SAWScript Monads ------------------------------------------------------
 

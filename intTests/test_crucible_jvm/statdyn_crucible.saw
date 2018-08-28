@@ -1,0 +1,37 @@
+jdyn <- java_load_class "Dyn";
+jstat <- java_load_class "Stat";
+
+print "**Extracting f_ref";
+f_ref <- crucible_java_extract jdyn "f_ref";
+
+print "**Extracting f_imp";
+f_imp <- crucible_java_extract jdyn "f_imp";
+
+print "**Extracting f_virt";
+f_virt <- crucible_java_extract jdyn "f_virt";
+
+print "**Extracting h_ref";
+h_ref <- crucible_java_extract jdyn "h_ref";
+
+print "**Extracting h_imp";
+h_imp <- crucible_java_extract jdyn "h_imp";
+
+print "**Extracting g_imp";
+g_imp <- crucible_java_extract jstat "g_imp";
+
+
+
+print "**Proving equivalence: instance variable";
+prove_print abc {{ \x -> f_ref x == f_imp x }};
+
+print "**Proving equivalence: dynamic method";
+prove_print abc {{ \x -> f_ref x == f_virt x }};
+
+/* print "**Proving equivalence: dynamic method";
+prove_print abc {{ \x -> h_ref x == h_imp x }}; */
+
+print "**Proving equivalence: methods two different classes";
+prove_print abc {{ \x -> h_ref x == g_imp x }};
+
+
+print "Done.";

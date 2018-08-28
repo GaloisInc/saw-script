@@ -50,6 +50,8 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
+import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
@@ -451,13 +453,16 @@ buildTopLevelEnv proxy opts =
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
+       jvmTrans <- CJ.mkInitialJVMContext halloc jcb
+       
        let rw0 = TopLevelRW
-                   { rwValues   = valueEnv opts bic
-                   , rwTypes    = primTypeEnv
-                   , rwTypedef  = Map.empty
-                   , rwDocs     = primDocEnv
-                   , rwCryptol  = ce0
-                   , rwPPOpts   = SAWScript.Value.defaultPPOpts
+                   { rwValues     = valueEnv opts bic
+                   , rwTypes      = primTypeEnv
+                   , rwTypedef    = Map.empty
+                   , rwDocs       = primDocEnv
+                   , rwCryptol    = ce0
+                   , rwPPOpts     = SAWScript.Value.defaultPPOpts
+                   , rwJVMTrans   = jvmTrans
                    }
        return (bic, ro0, rw0)
 
@@ -1009,15 +1014,15 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
-  , prim "w4"             "ProofScript SatResult"
-    (pureVal satWhat4_Z3)
-    [ "Prove the current goal using What4 (Z3 backend)." ]
+--  , prim "w4"             "ProofScript SatResult"
+--    (pureVal satWhat4_Z3)
+--    [ "Prove the current goal using What4 (Z3 backend)." ]
   
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
     [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
     ,  "goals 'prop1' and 'prop2'." ]
-
+    
   , prim "empty_ss"            "Simpset"
     (pureVal emptySimpset)
     [ "The empty simplification rule set, containing no rules." ]
@@ -1226,7 +1231,7 @@ primitives = Map.fromList
     [ "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
 
   , prim "java_load_class"     "String -> TopLevel JavaClass"
-    (bicVal (const . loadJavaClass))
+    (bicVal (const . CJ.loadJavaClass))
     [ "Load the named Java class and return a handle to it." ]
 
   --, prim "java_class_info"     "JavaClass -> TopLevel ()"
@@ -1269,14 +1274,14 @@ primitives = Map.fromList
     , "results."
     ]
 
-  , prim "crucible_java_cfg"
+{-  , prim "crucible_java_cfg"
     "JavaClass -> String -> TopLevel CFG"
     (bicVal crucible_java_cfg)
     [ "Convert a Java method to a Crucible CFG."
-    ]
+    ] -}
 
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
-    (bicVal crucible_java_extract)
+    (bicVal CJ.crucible_java_extract)
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
     , "value will be the return value of the method. Only methods with"
