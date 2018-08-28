@@ -284,10 +284,10 @@ ppNat (PPOpts{..}) i
 ppMemoVar :: MemoVar -> Doc
 ppMemoVar mv = text "x@" <> integer (toInteger mv)
 
--- | Pretty-print a type constraint (also known as an ascription) @x :: tp@
+-- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: Doc -> Doc -> Doc
 ppTypeConstraint x tp =
-  hang 2 $ group (x <<$>> text "::" <+> tp)
+  hang 2 $ group (x <<$>> text ":" <+> tp)
 
 -- | Pretty-print an application to 0 or more arguments at the given precedence
 ppAppList :: Prec -> Doc -> [Doc] -> Doc
@@ -328,7 +328,7 @@ ppRecord type_p alist =
   encloseSep lbrace rbrace comma $ map ppField alist
   where
     ppField (fld, rhs) = group (nest 2 (text fld <+> text op_str <<$>> rhs))
-    op_str = if type_p then "::" else "="
+    op_str = if type_p then ":" else "="
 
 -- | Pretty-print a projection / selector "x.f"
 ppProj :: String -> Doc -> Doc
@@ -373,14 +373,14 @@ ppDef d tp Nothing = ppTypeConstraint d tp
 ppDef d tp (Just body) = ppTypeConstraint d tp <+> equals <+> body
 
 -- | Pretty-print a datatype declaration of the form
--- > data d (p1::tp1) .. (pN::tpN) :: tp where {
--- >   c1 (x1_1::tp1_1)  .. (x1_N::tp1_N) :: tp1
+-- > data d (p1:tp1) .. (pN:tpN) : tp where {
+-- >   c1 (x1_1:tp1_1)  .. (x1_N:tp1_N) : tp1
 -- >   ...
 -- > }
 ppDataType :: Ident -> (Doc, ((Doc,Doc), [Doc])) -> Doc
 ppDataType d (params, ((d_ctx,d_tp), ctors)) =
   group $ (group
-           ((text "data" <+> ppIdent d <+> params <+> text "::" <+>
+           ((text "data" <+> ppIdent d <+> params <+> text ":" <+>
              (d_ctx <+> text "->" <+> d_tp))
             <<$>> (text "where" <+> lbrace)))
           <<$>>
