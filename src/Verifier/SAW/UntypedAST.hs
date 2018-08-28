@@ -132,6 +132,8 @@ data Decl
      -- context, a return type, and a list of constructor declarations
    | TermDef (PosPair String) [TermVar] Term
      -- ^ A declaration of a term having a definition, with variables
+   | TypedDef (PosPair String) [(TermVar, Term)] Term Term
+     -- ^ A definition of something with a specific type, with parameters
   deriving (Show,Read)
 
 -- | A set of constraints on what 'String' names to import from a module

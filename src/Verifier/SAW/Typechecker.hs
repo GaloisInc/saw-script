@@ -277,6 +277,9 @@ instance TypeInferCtx Un.TermVar Un.Term where
 -- | Type-check a list of declarations and insert them into the current module
 processDecls :: [Un.Decl] -> TCM ()
 processDecls [] = return ()
+processDecls (Un.TypedDef nm params rty body : rest) =
+  processDecls (Un.TypeDecl NoQualifier nm (Un.Pi (pos nm) params rty) :
+                Un.TermDef nm (map fst params) body : rest)
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
               Un.TermDef (PosPair _ ((== nm) -> True)) vars body : rest) =
   -- Type-checking for definitions

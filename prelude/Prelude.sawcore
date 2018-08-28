@@ -30,8 +30,10 @@ data UnitType : sort 0 where {
   }
 
 -- The recursor for the Unit type at sort 0
-UnitType__rec : (p : UnitType -> sort 0) -> p Unit -> (u : UnitType) -> p u;
-UnitType__rec p f1 u = UnitType#rec p f1 u;
+-- UnitType__rec : (p : UnitType -> sort 0) -> p Unit -> (u : UnitType) -> p u;
+-- UnitType__rec p f1 u = UnitType#rec p f1 u;
+UnitType__rec (p : UnitType -> sort 0) (f1 : p Unit) (u : UnitType) : p u
+  = UnitType#rec p f1 u;
 
 
 --------------------------------------------------------------------------------
@@ -45,10 +47,13 @@ pair_example : (a b : sort 0) -> a -> b -> PairType a b;
 pair_example a b x y = PairValue a b x y;
 
 -- The recursor for primitive pair types at sort 1
-Pair__rec : (a b : sort 0) -> (p : PairType a b -> sort 0) ->
-             ((x:a) -> (y:b) -> p (PairValue a b x y)) ->
-             (pair : PairType a b) -> p pair;
-Pair__rec a b p f pair = PairType#rec a b p f pair;
+Pair__rec
+  (a b : sort 0)
+  (p : PairType a b -> sort 0)
+  (f : (x:a) -> (y:b) -> p (PairValue a b x y))
+  (pair : PairType a b)
+  : p pair
+  = PairType#rec a b p f pair;
 
 Pair_fst : (a b : sort 0) -> PairType a b -> a;
 Pair_fst a b = Pair__rec a b (\ (p:PairType a b) -> a)
@@ -64,9 +69,8 @@ fst a b tup = tup.(1);
 snd : (a b : sort 0) -> #(a | b) -> b;
 snd a b tup = tup.(2);
 
-uncurry : (a b c : sort 0) -> (a -> b -> c) -> (#(a, b) -> c);
-uncurry a b c f =
-  (\ (x : #(a, b)) -> f x.1 x.2);
+uncurry (a b c : sort 0) (f : a -> b -> c) : (#(a, b) -> c)
+  = (\ (x : #(a, b)) -> f x.1 x.2);
 
 
 --------------------------------------------------------------------------------
@@ -96,11 +100,14 @@ data RecordType (s:String) (a b :sort 0) : sort 0 where {
 }
 
 -- The recursor for record types at sort 0
-RecordType__rec : (s:String) -> (a b :sort 0) ->
-                   (p: RecordType s a b -> sort 1) ->
-                   ((x:a) -> (y:b) -> p (RecordValue s a b x y)) ->
-                   (r:RecordType s a b) -> p r;
-RecordType__rec s a b p f1 r = RecordType#rec s a b p f1 r;
+RecordType__rec
+  (s : String)
+  (a b :sort 0)
+  (p : RecordType s a b -> sort 1)
+  (f1 : (x:a) -> (y:b) -> p (RecordValue s a b x y))
+  (r : RecordType s a b)
+  : p r
+  = RecordType#rec s a b p f1 r;
 
 
 --------------------------------------------------------------------------------
@@ -248,13 +255,11 @@ primitive ite : (a : sort 1) -> Bool -> a -> a -> a;
 axiom ite_eq_iteDep : (a:sort 1) -> (b:Bool) -> (x y:a) ->
                        Eq a (ite a b x y) (iteDep (\ (_:Bool) -> a) b x y);
 
-ite_true : (a : sort 1) -> (x y : a) -> Eq a (ite a True x y) x;
-ite_true a x y =
+ite_true (a : sort 1) (x y : a) : Eq a (ite a True x y) x =
   trans a (ite a True x y) (iteDep (\ (b:Bool) -> a) True x y) x
         (ite_eq_iteDep a True x y) (iteDep_True (\ (_:Bool) -> a) x y);
 
-ite_false : (a : sort 1) -> (x y : a) -> Eq a (ite a False x y) y;
-ite_false a x y =
+ite_false (a : sort 1) (x y : a) : Eq a (ite a False x y) y =
   trans a (ite a False x y) (iteDep (\ (b:Bool) -> a) False x y) y
         (ite_eq_iteDep a False x y) (iteDep_False (\ (_:Bool) -> a) x y);
 
@@ -327,8 +332,7 @@ not_False =
   trans Bool (not False) (ite Bool False False True) True
         (not__eq False) (ite_false Bool False True);
 
-not_not : (x : Bool) -> Eq Bool (not (not x)) x;
-not_not x =
+not_not (x : Bool) : Eq Bool (not (not x)) x =
   iteDep (\ (b:Bool) -> Eq Bool (not (not b)) b) x
          (trans Bool (not (not True)) (not False) True
                 (eq_cong Bool (not True) False not_True Bool not)
@@ -338,28 +342,23 @@ not_not x =
                 not_True);
 
 
-and_True1 : (x : Bool) -> Eq Bool (and True x) x;
-and_True1 x =
+and_True1 (x : Bool) : Eq Bool (and True x) x =
   trans Bool (and True x) (ite Bool True x False) x
         (and__eq True x) (ite_true Bool x False);
 
-and_False1 : (x : Bool) -> Eq Bool (and False x) False;
-and_False1 x =
+and_False1 (x : Bool) : Eq Bool (and False x) False =
   trans Bool (and False x) (ite Bool False x False) False
         (and__eq False x) (ite_false Bool x False);
 
-and_True2 : (x : Bool) -> Eq Bool (and x True) x;
-and_True2 x =
+and_True2 (x : Bool) : Eq Bool (and x True) x =
   iteDep (\ (b:Bool) -> Eq Bool (and b True) b) x
          (and_True1 True) (and_False1 True);
 
-and_False2 : (x : Bool) -> Eq Bool (and x False) False;
-and_False2 x =
+and_False2 (x : Bool) : Eq Bool (and x False) False =
   iteDep (\ (b:Bool) -> Eq Bool (and b False) False) x
          (and_True1 False) (and_False1 False);
 
-and_assoc : (x y z : Bool) -> Eq Bool (and x (and y z)) (and (and x y) z);
-and_assoc x y z =
+and_assoc (x y z : Bool) : Eq Bool (and x (and y z)) (and (and x y) z) =
   iteDep (\ (b:Bool) -> Eq Bool (and x (and y b)) (and (and x y) b)) z
          (trans2 Bool (and x (and y True)) (and (and x y) True) (and x y)
                  (eq_cong Bool (and y True) y (and_True2 y) Bool (and x))
@@ -370,34 +369,28 @@ and_assoc x y z =
                         (and_False2 x))
                  (and_False2 (and x y)));
 
-and_idem : (x : Bool) -> Eq Bool (and x x) x;
-and_idem x =
+and_idem (x : Bool) : Eq Bool (and x x) x =
   iteDep (\ (b:Bool) -> Eq Bool (and b b) b) x
          (and_True1 True) (and_False1 False);
 
 
-or_True1 : (x : Bool) -> Eq Bool (or True x) True;
-or_True1 x =
+or_True1 (x : Bool) : Eq Bool (or True x) True =
   trans Bool (or True x) (ite Bool True True x) True
         (or__eq True x) (ite_true Bool True x);
 
-or_False1 : (x : Bool) -> Eq Bool (or False x) x;
-or_False1 x =
+or_False1 (x : Bool) : Eq Bool (or False x) x =
   trans Bool (or False x) (ite Bool False True x) x
         (or__eq False x) (ite_false Bool True x);
 
-or_True2 : (x : Bool) -> Eq Bool (or x True) True;
-or_True2 x =
+or_True2 (x : Bool) : Eq Bool (or x True) True =
   iteDep (\ (b:Bool) -> Eq Bool (or b True) True) x
          (or_True1 True) (or_False1 True);
 
-or_False2 : (x : Bool) -> Eq Bool (or x False) x;
-or_False2 x =
+or_False2 (x : Bool) : Eq Bool (or x False) x =
   iteDep (\ (b:Bool) -> Eq Bool (or b False) b) x
          (or_True1 False) (or_False1 False);
 
-or_assoc : (x y z : Bool) -> Eq Bool (or x (or y z)) (or (or x y) z);
-or_assoc x y z =
+or_assoc (x y z : Bool) : Eq Bool (or x (or y z)) (or (or x y) z) =
   iteDep (\ (b:Bool) -> Eq Bool (or x (or y b)) (or (or x y) b)) z
          (trans2 Bool (or x (or y True)) (or (or x y) True) True
                  (trans Bool (or x (or y True)) (or x True) True
@@ -408,50 +401,42 @@ or_assoc x y z =
                  (eq_cong Bool (or y False) y (or_False2 y) Bool (or x))
                  (or_False2 (or x y)));
 
-or_idem : (x : Bool) -> Eq Bool (or x x) x;
-or_idem x =
+or_idem (x : Bool) : Eq Bool (or x x) x =
   iteDep (\ (b:Bool) -> Eq Bool (or b b) b) x
          (or_True1 True) (or_False1 False);
 
 
-true_implies : (x : Bool) -> Eq Bool (implies True x) x;
-true_implies x =
+true_implies (x : Bool) : Eq Bool (implies True x) x =
   trans
     Bool (or (not True) x) (or False x) x
     (eq_cong Bool (not True) False not_True
              Bool (\ (y:Bool) -> or y x))
     (or_False1 x);
 
-xor_True1 : (x : Bool) -> Eq Bool (xor True x) (not x);
-xor_True1 x =
+xor_True1 (x : Bool) : Eq Bool (xor True x) (not x) =
   trans Bool (xor True x) (ite Bool True (not x) x) (not x)
         (xor__eq True x) (ite_true Bool (not x) x);
 
-xor_False1 : (x : Bool) -> Eq Bool (xor False x) x;
-xor_False1 x =
+xor_False1 (x : Bool) : Eq Bool (xor False x) x =
   trans Bool (xor False x) (ite Bool False (not x) x) x
         (xor__eq False x) (ite_false Bool (not x) x);
 
-xor_False2 : (x : Bool) -> Eq Bool (xor x False) x;
-xor_False2 x =
+xor_False2 (x : Bool) : Eq Bool (xor x False) x =
   iteDep (\ (b:Bool) -> Eq Bool (xor b False) b) x
          (trans Bool (xor True False) (not False) True (xor_True1 False) not_False)
          (xor_False1 False);
 
-xor_True2 : (x : Bool) -> Eq Bool (xor x True) (not x);
-xor_True2 x =
+xor_True2 (x : Bool) : Eq Bool (xor x True) (not x) =
   iteDep (\ (b:Bool) -> Eq Bool (xor b True) (not b)) x
          (xor_True1 True)
          (trans2 Bool (xor False True) (not False) True (xor_False1 True) not_False);
 
-xor_same : (x : Bool) -> Eq Bool (xor x x) False;
-xor_same x =
+xor_same (x : Bool) : Eq Bool (xor x x) False =
   iteDep (\ (b:Bool) -> Eq Bool (xor b b) False) x
          (trans Bool (xor True True) (not True) False (xor_True1 True) not_True)
          (xor_False1 False);
 
-not_or : (x y : Bool) -> Eq Bool (not (or x y)) (and (not x) (not y));
-not_or x y =
+not_or (x y : Bool) : Eq Bool (not (or x y)) (and (not x) (not y)) =
   iteDep (\ (b:Bool) -> Eq Bool (not (or b y)) (and (not b) (not y)))
          x
          (trans Bool (not (or True y)) False (and (not True) (not y))
@@ -473,8 +458,8 @@ not_or x y =
                                      (\ (z:Bool) -> (and z (not y))))
                             (and_True1 (not y)))));
 
-not_and : (x y : Bool) -> Eq Bool (not (and x y)) (or (not x) (not y));
-not_and x y =
+not_and (x y : Bool)
+  : Eq Bool (not (and x y)) (or (not x) (not y)) =
   iteDep (\ (b:Bool) -> Eq Bool (not (and b y)) (or (not b) (not y)))
          x
          (trans Bool (not (and True y)) (not y) (or (not True) (not y))
@@ -496,9 +481,8 @@ not_and x y =
                                 (sym Bool (not False) True not_False)
                                 Bool (\ (z:Bool) -> (or z (not y))))));
 
-ite_not : (a : sort 1) -> (b : Bool) -> (x y : a) ->
-           Eq a (ite a (not b) x y) (ite a b y x);
-ite_not a b x y =
+ite_not (a : sort 1) (b : Bool) (x y : a)
+  : Eq a (ite a (not b) x y) (ite a b y x) =
   iteDep (\ (b':Bool) -> Eq a (ite a (not b') x y) (ite a b' y x))
          b
          (trans a (ite a (not True) x y) y (ite a True y x)
@@ -514,9 +498,8 @@ ite_not a b x y =
                        (ite_true a x y))
                 (sym a (ite a False y x) x (ite_false a y x)));
 
-ite_nest1 : (a : sort 1) -> (b : Bool) -> (x y z : a) ->
-             Eq a (ite a b (ite a b x y) z) (ite a b x z);
-ite_nest1 a b x y z =
+ite_nest1 (a : sort 1) (b : Bool) (x y z : a)
+  : Eq a (ite a b (ite a b x y) z) (ite a b x z) =
   iteDep (\ (b':Bool) -> Eq a (ite a b' (ite a b' x y) z) (ite a b' x z))
          b
          (trans a (ite a True (ite a True x y) z) x (ite a True x z)
@@ -528,9 +511,8 @@ ite_nest1 a b x y z =
                 (ite_false a (ite a False x y) z)
                 (sym a (ite a False x z) z (ite_false a x z)));
 
-ite_nest2 : (a : sort 1) -> (b : Bool) -> (x y z : a) ->
-             Eq a (ite a b x (ite a b y z)) (ite a b x z);
-ite_nest2 a b x y z =
+ite_nest2 (a : sort 1) (b : Bool) (x y z : a)
+  : Eq a (ite a b x (ite a b y z)) (ite a b x z) =
   iteDep (\ (b':Bool) -> Eq a (ite a b' x (ite a b' y z)) (ite a b' x z))
          b
          (trans a (ite a True x (ite a True y z)) x (ite a True x z)
@@ -546,9 +528,8 @@ ite_nest2 a b x y z =
 axiom ite_bit : (b : Bool) -> (c : Bool) -> (d : Bool) ->
                  Eq Bool (ite Bool b c d) (and (or (not b) c) (or b d));
 
-ite_bit_false_1 : (b : Bool) -> (c : Bool) ->
-                   Eq Bool (ite Bool b False c) (and (not b) c);
-ite_bit_false_1 b c =
+ite_bit_false_1 (b c : Bool)
+  : Eq Bool (ite Bool b False c) (and (not b) c) =
   iteDep (\ (b':Bool) -> Eq Bool (ite Bool b' False c) (and (not b') c)) b
          (trans Bool (ite Bool True False c) False (and (not True) c)
                 (ite_true Bool False c)
@@ -565,9 +546,7 @@ ite_bit_false_1 b c =
                                      Bool (\ (z:Bool) -> (and z c)))
                             (and_True1 c))));
 
-ite_bit_true_1 : (b : Bool) -> (c : Bool) ->
-                  Eq Bool (ite Bool b True c) (or b c);
-ite_bit_true_1 b c =
+ite_bit_true_1 (b c : Bool) : Eq Bool (ite Bool b True c) (or b c) =
   iteDep (\ (b':Bool) -> Eq Bool (ite Bool b' True c) (or b' c))
          b
          (trans Bool (ite Bool True True c) True (or True c)
@@ -577,8 +556,7 @@ ite_bit_true_1 b c =
                 (ite_false Bool True c)
                 (sym Bool (or False c) c (or_False1 c)));
 
-ite_fold_not : (b : Bool) -> Eq Bool (ite Bool b False True) (not b);
-ite_fold_not b =
+ite_fold_not (b : Bool) : Eq Bool (ite Bool b False True) (not b) =
   iteDep (\ (b':Bool) -> Eq Bool (ite Bool b' False True) (not b'))
          b
          (trans Bool (ite Bool True False True) False (not True)
@@ -588,37 +566,32 @@ ite_fold_not b =
                 (ite_false Bool False True)
                 (sym Bool (not False) True not_False));
 
-ite_eq : (a : sort 1) -> (b : Bool) -> (x : a) -> Eq a (ite a b x x) x;
-ite_eq a b x =
+ite_eq (a : sort 1) (b : Bool) (x : a) : Eq a (ite a b x x) x =
   iteDep (\ (b':Bool) -> Eq a (ite a b' x x) x)
          b (ite_true a x x) (ite_false a x x);
 
-or_triv1 : (x : Bool) -> Eq Bool (or x (not x)) True;
-or_triv1 x =
+or_triv1 (x : Bool) : Eq Bool (or x (not x)) True =
   iteDep (\ (b:Bool) -> Eq Bool (or b (not b)) True)
          x
          (or_True1 (not True))
          (trans Bool (or False (not False)) (not False) True
                 (or_False1 (not False)) not_False);
 
-or_triv2 : (x : Bool) -> Eq Bool (or (not x) x) True;
-or_triv2 x =
+or_triv2 (x : Bool) : Eq Bool (or (not x) x) True =
   iteDep (\ (b:Bool) -> Eq Bool (or (not b) b) True)
          x
          (or_True2 (not True))
          (trans Bool (or (not False) False) (not False) True
                 (or_False2 (not False)) not_False);
 
-and_triv1 : (x : Bool) -> Eq Bool (and x (not x)) False;
-and_triv1 x =
+and_triv1 (x : Bool) : Eq Bool (and x (not x)) False =
   iteDep (\ (b:Bool) -> Eq Bool (and b (not b)) False)
          x
          (trans Bool (and True (not True)) (not True) False
                 (and_True1 (not True)) not_True)
          (and_False1 (not False));
 
-and_triv2 : (x : Bool) -> Eq Bool (and (not x) x) False;
-and_triv2 x =
+and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
   iteDep (\ (b:Bool) -> Eq Bool (and (not b) b) False)
          x
          (trans Bool (and (not True) True) (not True) False

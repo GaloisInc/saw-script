@@ -96,8 +96,13 @@ SAWDecl : 'data' Ident VarCtx ':' LTerm 'where' '{' list(CtorDecl) '}'
              { TypeDecl PrimQualifier $2 $4 }
         | 'axiom' Ident ':' LTerm ';'
              { TypeDecl AxiomQualifier $2 $4 }
-        | Ident ':' LTerm ';' { TypeDecl NoQualifier $1 $3 }
+        | Ident ':' LTerm opt(DefBody) ';' { maybe (TypeDecl NoQualifier $1 $3)
+                                                   (TypedDef $1 [] $3) $4 }
         | Ident list(TermVar) '=' LTerm ';' { TermDef $1 $2 $4 }
+        | Ident VarCtxItem VarCtx ':' LTerm '=' LTerm ';' { TypedDef $1 ($2 ++ $3) $5 $7 }
+
+DefBody :: { Term }
+DefBody : '=' LTerm { $2 }
 
 ModuleImports :: { ImportConstraint }
 ModuleImports : 'hiding' ImportNames { HidingImports $2 }
