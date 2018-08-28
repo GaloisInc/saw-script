@@ -1,5 +1,5 @@
 ## rt.jar file
-RTJAR=/Library/Java/JavaVirtualMachines/jdk1.8.0_171.jdk/Contents/Home/jre/lib/rt.jar
+RTJAR=`ls /Library/Java/JavaVirtualMachines/jdk1.8*.jdk/Contents/Home/jre/lib/rt.jar`
 make Stat.class
 make Dyn.class
 make Sub.class

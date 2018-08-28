@@ -88,7 +88,7 @@ import SAWScript.Prover.Rewrite(rewriteEqs)
 import qualified SAWScript.Prover.SBV as Prover
 import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
---import qualified SAWScript.Prover.What4 as Prover
+import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -638,7 +638,6 @@ satUnintYices = satUnintSBV SBV.yices
 
 
 --------------------------------------------------
-{-
 satWhat4_Boolector :: ProofScript SV.SatResult
 satWhat4_Boolector = wrapProver $ Prover.satWhat4_boolector []
 
@@ -662,7 +661,6 @@ satWhat4_UnintCVC4 =  wrapProver . Prover.satWhat4_cvc4
 
 satWhat4_UnintYices :: [String] -> ProofScript SV.SatResult
 satWhat4_UnintYices =  wrapProver . Prover.satWhat4_yices
--}
 
 satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
                 -> String
