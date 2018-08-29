@@ -278,7 +278,7 @@ verifyPrestate cc mspec globals = do
   let sym = cc^.ccBackend
   let tyenvRW = mspec^.csPreState.csAllocs
   let tyenvRO = mspec^.csPreState.csConstAllocs
-  let tyenv = tyenvRW <> tyenvRO
+  let tyenv = csAllocations mspec
   let nameEnv = mspec^.csPreState.csVarTypeNames
 
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
@@ -342,7 +342,7 @@ resolveArguments ::
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
-    tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
+    tyenv = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
     nm = mspec^.csName
 
@@ -381,7 +381,7 @@ setupPrePointsTos ::
   IO MemImpl
 setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
-    tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
+    tyenv = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
     go :: MemImpl -> PointsTo -> IO MemImpl
@@ -413,7 +413,7 @@ setupPrestateConditions ::
   IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
 setupPrestateConditions mspec cc env = aux []
   where
-    tyenv = mspec^.csPreState.(csAllocs <> csConstAllocs)
+    tyenv = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
     aux acc globals [] = return (globals, acc)
