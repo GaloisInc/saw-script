@@ -103,6 +103,7 @@ module SAWScript.CrucibleLLVM
   , fieldPad
   , arrayType
   , mkStructType
+  , mkStruct
   , LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValFloat)
   , LLVMPtr
   , HasPtrWidth
@@ -157,15 +158,16 @@ import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeConstRaw, mallocRaw, mallocConstRaw,
    ppMem, packMemValue, unpackMemValue, coerceAny, buildDisjointRegionsAssertion,
    doLoad, doStore, loadRawWithCondition, doPtrAddOffset, emptyMem, doMalloc,
-   pattern LLVMPointerRepr, LLVMPointerType,
-   AllocType(HeapAlloc, GlobalAlloc), Mutability(..),
-   typeF, Type, TypeF(Struct, Float, Double, Array, Bitvector),
-   typeSize, fieldVal, bitvectorType, fieldPad, arrayType, mkStructType,
    LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValFloat),
    LLVMPtr, HasPtrWidth, ptrToPtrVal, mkNullPointer, ptrIsNull, ppPtr, ptrEq,
    pattern LLVMPointerRepr, LLVMPointerType,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
-   llvmPointerView, projectLLVM_bv)
+   llvmPointerView, projectLLVM_bv,
+   typeF, Type, TypeF(Struct, Float, Double, Array, Bitvector),
+   typeSize, fieldVal, bitvectorType, fieldPad, arrayType, mkStructType,
+   AllocType(HeapAlloc, GlobalAlloc), Mutability(..))
+
+import Lang.Crucible.Syntax (mkStruct)
 
 -- | Renamed copy of 'TyCtx.LLVMContext' from module "Lang.Crucible.LLVM.LLVMContext".
 type LLVMTyCtx = TyCtx.LLVMContext

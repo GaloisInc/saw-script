@@ -37,7 +37,6 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 import           Data.IORef
 import           Data.Monoid ((<>))
-import qualified Language.JVM.Parser as J
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
@@ -54,6 +53,9 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
+import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
+--import qualified Lang.Crucible.LLVM.Translation as CL
+import qualified Lang.Crucible.LLVM.LLVMContext as TyCtxt
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 
@@ -256,16 +258,7 @@ data CrucibleContext wptr =
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   }
 
-data CrucibleJavaContext =
-  CrucibleJavaContext
-  { _cjcClass          :: J.Class
-  , _cjcBackend        :: Sym
-  , _cjcJavaSimContext :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
-  , _cjcJavaGlobals    :: Crucible.SymGlobalState Sym
-  }
-
 makeLenses ''CrucibleContext
-makeLenses ''CrucibleJavaContext
 makeLenses ''CrucibleSetupState
 makeLenses ''ResolvedState
 

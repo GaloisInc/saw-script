@@ -1,0 +1,25 @@
+obj <- java_load_class "java.lang.Object";
+dyn <- java_load_class "Dyn";
+ifc <- java_load_class "Iface";
+sub <- java_load_class "Sub";
+
+print "**Extracting Dyn.f_virt";
+f_virt <- crucible_java_extract dyn "f_virt";
+print "**Extracting Dyn.i_imp";
+i_imp <- crucible_java_extract dyn "i_imp";
+print "**Extracting Sub.dyn";
+dyn_g <- crucible_java_extract sub "dyn";
+print "**Extracting Sub.sub";
+sub_g <- crucible_java_extract sub "sub";
+
+print "**Evaluating: dyn (12) ";
+sat_print abc {{ \(x:[32]) -> dyn_g 12 == x }};
+
+print "**Evaluating: sub (12) ";
+sat_print abc {{ \(x:[32]) -> sub_g 12 == x }};
+
+print "**Evaluating: f_virt (12) ";
+sat_print abc {{ \(x:[32]) -> f_virt 12 == x }};
+
+print "**Evaluating: i_imp (12) ";
+sat_print abc {{ \(x:[32]) -> i_imp 12 == x }};
