@@ -183,6 +183,8 @@ scMatch sc pat term =
             _ -> Nothing
 
     match :: Int -> [(String, Term)] -> Term -> Term -> MatchState -> MaybeT IO MatchState
+    match _ _ (STApp i fv _) (STApp j _ _) s
+      | fv == emptyBitSet && i == j = return s
     match depth env x y s@(MatchState m cs) =
       --do
       --lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x
