@@ -1,10 +1,10 @@
 ## rt.jar file
-make Stat.class
-make Dyn.class
-make Sub.class
-make Arr.class
-make Obj.class
-make TestStr.class
+#make Stat.class
+#make Dyn.class
+#make Sub.class
+#make Arr.class
+#make Obj.class
+#make TestStr.class
 # javap -c TestStr.class
 $SAW stat_crucible.saw
 $SAW dyn_crucible.saw
