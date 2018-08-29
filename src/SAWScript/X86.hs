@@ -88,8 +88,7 @@ import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
                         , relativeSegmentAddr, incAddr
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
-                                  , memoryForElf
-                                  , resolveElfFuncSymbolsAny )
+                                  , memoryForElf )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
                           , GlobalMap
