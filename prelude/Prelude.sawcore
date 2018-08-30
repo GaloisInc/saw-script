@@ -406,12 +406,22 @@ or_idem (x : Bool) : Eq Bool (or x x) x =
          (or_True1 True) (or_False1 False);
 
 
-true_implies (x : Bool) : Eq Bool (implies True x) x =
+implies_True1 (x : Bool) : Eq Bool (implies True x) x =
   trans
     Bool (or (not True) x) (or False x) x
     (eq_cong Bool (not True) False not_True
              Bool (\ (y:Bool) -> or y x))
     (or_False1 x);
+
+implies_False1 (x : Bool) : Eq Bool (implies False x) True =
+  trans
+    Bool (or (not False) x) (or True x) True
+    (eq_cong Bool (not False) True not_False
+             Bool (\ (y:Bool) -> or y x))
+    (or_True1 x);
+
+-- Legacy name
+true_implies (x : Bool) : Eq Bool (implies True x) x = implies_True1 x;
 
 xor_True1 (x : Bool) : Eq Bool (xor True x) (not x) =
   trans Bool (xor True x) (ite Bool True (not x) x) (not x)
@@ -435,6 +445,29 @@ xor_same (x : Bool) : Eq Bool (xor x x) False =
   iteDep (\ (b:Bool) -> Eq Bool (xor b b) False) x
          (trans Bool (xor True True) (not True) False (xor_True1 True) not_True)
          (xor_False1 False);
+
+boolEq_True1 (x : Bool) : Eq Bool (boolEq True x) x =
+  trans Bool (boolEq True x) (ite Bool True x (not x)) x
+        (boolEq__eq True x) (ite_true Bool x (not x));
+
+boolEq_False1 (x : Bool) : Eq Bool (boolEq False x) (not x) =
+  trans Bool (boolEq False x) (ite Bool False x (not x)) (not x)
+        (boolEq__eq False x) (ite_false Bool x (not x));
+
+boolEq_True2 (x : Bool) : Eq Bool (boolEq x True) x =
+  iteDep (\ (b:Bool) -> Eq Bool (boolEq b True) b) x
+         (boolEq_True1 True)
+         (trans Bool (boolEq False True) (not True) False (boolEq_False1 True) not_True);
+
+boolEq_False2 (x : Bool) : Eq Bool (boolEq x False) (not x) =
+  iteDep (\ (b:Bool) -> Eq Bool (boolEq b False) (not b)) x
+         (trans2 Bool (boolEq True False) (not True) False (boolEq_True1 False) not_True)
+         (boolEq_False1 False);
+
+boolEq_same (x : Bool) : Eq Bool (boolEq x x) True =
+  iteDep (\ (b:Bool) -> Eq Bool (boolEq b b) True) x
+         (boolEq_True1 True)
+         (trans Bool (boolEq False False) (not False) True (boolEq_False1 False) not_False);
 
 not_or (x y : Bool) : Eq Bool (not (or x y)) (and (not x) (not y)) =
   iteDep (\ (b:Bool) -> Eq Bool (not (or b y)) (and (not b) (not y)))
