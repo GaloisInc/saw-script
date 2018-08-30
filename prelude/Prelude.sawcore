@@ -633,6 +633,13 @@ and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
 
 
 --------------------------------------------------------------------------------
+-- Converting Booleans to Propositions
+
+EqTrue : Bool -> sort 1;
+EqTrue x = Eq Bool x True;
+
+
+--------------------------------------------------------------------------------
 -- Decidable equality
 
 -- FIXME: replace universal decidable equality with a typeclass that determines
