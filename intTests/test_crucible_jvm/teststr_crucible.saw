@@ -11,7 +11,7 @@ print "**Extracting methods";
 m      <- crucible_java_extract teststr "main";
 append <- crucible_java_extract teststr "append";
 pr     <- crucible_java_extract teststr "pr";
-trim   <- crucible_java_extract teststr "trim";
+//trim   <- crucible_java_extract teststr "trim";
 
 
 
@@ -23,15 +23,15 @@ sat_print abc {{ \(x:[32]) -> (append 3 == x) }};
 
 
 
-print "**Evaluating: test, should be 1";
-sat_print abc {{ \(x:[32]) -> (test 3 == x) }};
+//print "**Evaluating: test, should be 1";
+//sat_print abc {{ \(x:[32]) -> (test 3 == x) }};
 
 
 print "**Evaluating: pr, should be 1";
 sat_print abc {{ \(x:[32]) -> (pr 3 == x) }};
 
-print "**Evaluating: trim, should be 1";
-sat_print abc {{ \(x:[32]) -> (trim 3 == x) }};
+//print "**Evaluating: trim, should be 1";
+//sat_print abc {{ \(x:[32]) -> (trim 3 == x) }};
 
 print "**Proving: main";
 prove_print abc {{ \(x:[32]) -> (m x == 3) }};
