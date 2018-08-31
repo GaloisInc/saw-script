@@ -50,6 +50,7 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
+import SAWScript.SepTypes
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -1596,6 +1597,11 @@ primitives = Map.fromList
   , prim "crucible_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
     (bicVal crucible_llvm_cfg)
     [ "Load a function from the given LLVM module into a Crucible CFG."
+    ]
+
+  , prim "crucible_llvm_septypes_extract"     "LLVMModule -> String -> TopLevel String"
+    (bicVal crucible_llvm_septypes_extract)
+    [ "Translate an LLVM function to a Term using separable types"
     ]
 
   , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"

@@ -101,6 +101,7 @@ library
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.CrucibleBuiltins
+    SAWScript.SepTypes
     SAWScript.CrucibleLLVM
     SAWScript.CrucibleOverride
     SAWScript.CrucibleResolveSetupValue
