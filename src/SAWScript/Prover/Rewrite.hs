@@ -73,12 +73,7 @@ basic_ss sc =
          , "bveq_same2"
          , "bvNat_bvToNat"
          ]
-       defs = map (mkIdent preludeName)
-         [ "addNat", "mulNat"
-         {- , "implies" -}
-         , "compareNat", "equalNat"
-         , "bitvector"
-         ]
+       defs = map (mkIdent preludeName) [ "bitvector" ]
        defs' = map (mkIdent (mkModuleName ["Cryptol"]))
                ["seq", "ecEq", "ecNotEq"]
        procs = [tupleConversion, recordConversion] ++
