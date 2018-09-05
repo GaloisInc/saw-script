@@ -5,7 +5,7 @@ import Distribution.Simple.BuildPaths (autogenPackageModulesDir)
 import Distribution.PackageDescription (emptyHookedBuildInfo, allBuildInfo)
 import System.Directory (createDirectoryIfMissing, findExecutable)
 import System.FilePath ((</>))
-import System.Process (readProcessWithExitCode)
+import System.Process (readProcess)
 import System.Exit
 
 main = defaultMainWithHooks myHooks
@@ -18,11 +18,11 @@ myBuild pd lbi uh flags = do
   hasGit <- findExecutable "git"
 
   let gitfailure :: SomeException -> IO (ExitCode, String, String)
-      gitfailure _e = return (ExitFailure 1, "<non-dev-build> ", "")
+      gitfailure _e = return "<non-dev-build> "
       middle (_,v,_) = v
 
   desc <- case hasGit of
-            Just git -> middle <$> readProcessWithExitCode "git" ["describe", "--always", "--dirty"] ""
+            Just git -> readProcess "git" ["describe", "--always", "--dirty"] ""
                                    `catch` gitfailure
             Nothing -> return "<VCS-less build> "
 
