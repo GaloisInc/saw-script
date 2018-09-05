@@ -17,13 +17,12 @@ myBuild pd lbi uh flags = do
 
   hasGit <- findExecutable "git"
 
-  let gitfailure :: SomeException -> IO (ExitCode, String, String)
+  let gitfailure :: SomeException -> IO String
       gitfailure _e = return "<non-dev-build> "
-      middle (_,v,_) = v
 
   desc <- case hasGit of
             Just git -> readProcess "git" ["describe", "--always", "--dirty"] ""
-                                   `catch` gitfailure
+                        `catch` gitfailure
             Nothing -> return "<VCS-less build> "
 
   writeFile (dir </> "GitRev.hs") $ unlines
