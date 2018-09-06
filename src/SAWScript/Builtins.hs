@@ -209,7 +209,7 @@ bbPrim :: TypedTerm -> TopLevel AIGNetwork
 bbPrim t = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  aig <- io $ Prover.bitblastPrim proxy sc (ttTerm t) 
+  aig <- io $ Prover.bitblastPrim proxy sc (ttTerm t)
   return (SV.AIGNetwork aig)
 
 loadAIGPrim :: FilePath -> TopLevel AIGNetwork
@@ -468,7 +468,7 @@ checkBoolean sc t = do
 -- satisfiability using ABC.
 satABC :: ProofScript SV.SatResult
 satABC = do
-  SV.AIGProxy proxy <- lift SV.getProxy 
+  SV.AIGProxy proxy <- lift SV.getProxy
   wrapProver (Prover.satABC proxy)
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
@@ -651,7 +651,7 @@ satWhat4_Yices :: ProofScript SV.SatResult
 satWhat4_Yices = wrapProver $ Prover.satWhat4_yices []
 
 satWhat4_UnintBoolector :: [String] -> ProofScript SV.SatResult
-satWhat4_UnintBoolector =  wrapProver . Prover.satWhat4_boolector 
+satWhat4_UnintBoolector =  wrapProver . Prover.satWhat4_boolector
 
 satWhat4_UnintZ3 :: [String] -> ProofScript SV.SatResult
 satWhat4_UnintZ3 = wrapProver . Prover.satWhat4_z3

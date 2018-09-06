@@ -17,9 +17,9 @@ matrix:
       env: CABALVER="2.2" GHCVER="8.4.3"
       compiler: ": #GHC 8.4.3"
 
-#    - env: CABALVER="2.2" GHCVER="8.2.2"
-#      compiler: ": #GHC 8.2.2"
-#      addons: {apt: {packages: [cabal-install-2.2,ghc-8.2.2], sources: [hvr-ghc]}}
+    - env: CABALVER="2.2" GHCVER="8.2.2"
+      compiler: ": #GHC 8.2.2"
+      addons: {apt: {packages: [cabal-install-2.2,ghc-8.2.2], sources: [hvr-ghc]}}
 
 before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
