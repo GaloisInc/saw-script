@@ -161,7 +161,7 @@ crucible_java_extract bic opts c mname = do
 
           (ecs, args) <- setupArgs sc sym h
 
-          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx className h args
+          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx verbosity className h args
 
           case res of
             Crucible.FinishedResult _ pr -> do
