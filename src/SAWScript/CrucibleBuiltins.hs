@@ -387,7 +387,7 @@ setupPrePointsTos ::
   [PointsTo]                 ->
   MemImpl                    ->
   IO MemImpl
-setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts 
+setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
     tyenv = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames

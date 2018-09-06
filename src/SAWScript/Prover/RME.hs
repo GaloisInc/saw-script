@@ -46,5 +46,3 @@ satRME sc mode t0 =
                     let model = zip argNames (map toFirstOrderValue vs)
                     return (Just model, stats)
                   | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show argNames, show vs]
-  
-

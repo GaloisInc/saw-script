@@ -21,7 +21,7 @@ Stability   : provisional
 module SAWScript.CrucibleBuiltinsJVM
        (
          loadJavaClass           -- java_load_class: reads a class from the codebase
-       , crucible_java_extract   -- 
+       , crucible_java_extract   --
        ) where
 
 import           Data.List (isPrefixOf)
@@ -71,7 +71,7 @@ import SAWScript.CrucibleBuiltins(setupArg, setupArgs, getGlobalPair, runCFG)
 -- jvm-verifier
 import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
-import qualified SAWScript.Utils as J 
+import qualified SAWScript.Utils as J
 import qualified "jvm-verifier" Verifier.Java.Codebase as JCB
 
 -- crucible-jvm
@@ -85,7 +85,7 @@ import Debug.Trace
 -- | Use the Codebase implementation from the old Java static simulator
 --
 instance IsCodebase JCB.Codebase where
-  lookupClass cb = J.lookupClass cb fixPos 
+  lookupClass cb = J.lookupClass cb fixPos
   findMethod  cb = J.findMethod  cb fixPos
 
 -----------------------------------------------------------------------
@@ -103,7 +103,7 @@ loadJavaClass bic str = do
 -- class and add them to the current translation context
 prepareClassToplevel :: BuiltinContext -> String -> TopLevel ()
 prepareClassToplevel bic str = do
-  
+
    -- get class from codebase
    c <- io $ findClass (biJavaCodebase bic) str
 
@@ -111,12 +111,12 @@ prepareClassToplevel bic str = do
    ctx0 <- getJVMTrans
 
    -- make sure that we haven't already processed this class
-   unless (Map.member (J.className c) (CJ.classTable ctx0)) $ do 
+   unless (Map.member (J.className c) (CJ.classTable ctx0)) $ do
 
      -- add handles/global variables for this class
      halloc <- getHandleAlloc
      ctx <- io $ stToIO $ execStateT (CJ.extendJVMContext halloc c) ctx0
-   
+
      -- update ctx
      addJVMTrans ctx
 
@@ -127,7 +127,7 @@ type Sym = CrucibleSAW.SAWCoreBackend Nonce.GlobalNonceGenerator (W4.Flags W4.Fl
 
 
 -- | Extract a JVM method to saw-core
--- 
+--
 crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
 crucible_java_extract bic opts c mname = do
   let sc        = biSharedContext bic
@@ -157,12 +157,12 @@ crucible_java_extract bic opts c mname = do
           sym <- CrucibleSAW.newSAWCoreBackend proxy sc gen
           CJ.setSimulatorVerbosity verbosity sym
 
-          (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth 
+          (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth
 
           (ecs, args) <- setupArgs sc sym h
-          
+
           res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx className h args
-                         
+
           case res of
             Crucible.FinishedResult _ pr -> do
               gp <- getGlobalPair opts pr
@@ -175,6 +175,3 @@ crucible_java_extract bic opts c mname = do
               mkTypedTerm sc t'
             Crucible.AbortedResult _ _ar -> do
               fail $ unlines [ "Symbolic execution failed." ]
-
-
-
