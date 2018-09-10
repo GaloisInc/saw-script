@@ -78,12 +78,12 @@ p384_field_mod(a)
 
     r : [13*32]
     r = (drop(d11):[32])
-      # z11 # z10 #  z9 #  z8 #  z7 #  z6 
+      # z11 # z10 #  z9 #  z8 #  z7 #  z6
       #  z5 #  z4 #  z3 #  z2 #  z1 #  z0
 
     p  = uext(p384_prime) : [13*32]
     // Fix potential underflow
-    r0 = if (d11@0) then r + p else r 
+    r0 = if (d11@0) then r + p else r
     // Fix potential overflow
     (r1,b1)   = sbb(r0, p)
     (r2,b2)   = sbb(r1, p)

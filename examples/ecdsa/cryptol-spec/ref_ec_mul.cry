@@ -18,12 +18,12 @@ ec_mul (m, d, s) = res!0
                  m.double(r)
              | hi <- h
              | ki <- k
-             | r  <- res 
+             | r  <- res
              ]
 
-ec_twin_mul_aux1 : {fv, gv} (fin gv, gv >= 4) => 
+ec_twin_mul_aux1 : {fv, gv} (fin gv, gv >= 4) =>
   (PointOps fv [gv], JacobianPoint fv, [32], [32],
-   AffinePoint fv, AffinePoint fv, AffinePoint fv, AffinePoint fv) 
+   AffinePoint fv, AffinePoint fv, AffinePoint fv, AffinePoint fv)
   -> (JacobianPoint fv)
 ec_twin_mul_aux1(m,rP,u0,u1,sPt,s,sMt,t) = r
   where
@@ -55,7 +55,7 @@ F(t) = if (18 <= t) && (t < 22) then
          12
 
 /* Return d0 * S + d1 * T. All points projective, 0 <= d0, d1 < p. */
-ec_twin_mul : {fv, gv} (fin gv) 
+ec_twin_mul : {fv, gv} (fin gv)
             => (PointOps fv [gv+4], [gv+4], AffinePoint fv, [gv+4], AffinePoint fv)
             -> (JacobianPoint fv)
 ec_twin_mul(m, d0, s, d1, t) =
@@ -91,7 +91,7 @@ ec_twin_mul(m, d0, s, d1, t) =
           where
             abs : {a} (fin a) => [a] -> Bit
             abs(x) = x != zero
-       | [[c00, c01, c02, c03, c04, c05], [c10, c11, c12, c13, c14, c15]] <- c 
+       | [[c00, c01, c02, c03, c04, c05], [c10, c11, c12, c13, c14, c15]] <- c
        | [u0, u1] <- u
        | e0N <- (drop`{4}(d0)) # (zero : [inf])
        | e1N <- (drop`{4}(d1)) # (zero : [inf])
@@ -107,7 +107,7 @@ ec_twin_mul(m, d0, s, d1, t) =
               u0 = if h0 < F(h1) then 0 else if c00 then -1 else 1
               u1 : [32]
               u1 = if h1 < F(h0) then 0 else if c10 then -1 else 1
-       | [[c00, c01, c02, c03, c04, c05], [c10, c11, c12, c13, c14, c15]] <- c 
+       | [[c00, c01, c02, c03, c04, c05], [c10, c11, c12, c13, c14, c15]] <- c
        ]
    r : [inf]_
    r = [(ec_zero_point f)]

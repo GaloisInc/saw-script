@@ -31,7 +31,7 @@ ripple_adc(xx,yy) = (values, carry_strm!0)
 ripple_shr : {m, n} (m >= 1, fin m, n >= 1, fin n) => ([n][m],Bit) -> ([n][m])
 ripple_shr(xl,c) = [ (x' << (width(x) - 1:[width m])) || (x >> 1)
                    | x <- xl
-                   | x' <- drop`{1}(xl) # [(uext([c]))] 
+                   | x' <- drop`{1}(xl) # [(uext([c]))]
                    ]
 
 p384_ec_zero_point : JacobianPoint [384]
@@ -51,7 +51,7 @@ p384_ec_mul (d, s) = res!0
       where
         i        = j >> 5
         c        = i < 11
-        d_at_ip1 = if c then d'@(i+1) else 0 
+        d_at_ip1 = if c then d'@(i+1) else 0
                    /* NB: We guard indexing here to avoid bounds VCs;
                       p384_ec_mul_aux's use of d_at_ip1 is likewise
                       guarded. */
@@ -127,7 +127,7 @@ p384_ec_twin_mul_init(d0, s, d1, t) =
            where g1 = f.mul(sPtP.z, sDiv)
                  g2 = f.sq(g1)
 
-p384_ec_twin_mul_aux1 : 
+p384_ec_twin_mul_aux1 :
   (JacobianPoint [384], [32], [32], AffinePoint [384], AffinePoint [384], AffinePoint [384], AffinePoint [384])
   -> JacobianPoint [384]
 p384_ec_twin_mul_aux1(rP, u0_32, u1_32, sPt, s, sMt, t) =
@@ -142,7 +142,7 @@ p384_ec_twin_mul_aux2 : ([32],[32],[32],[32],[32],[32],[32],Bit,Bit) ->
   , tma2_e1':[32]
   , tma2_sh':[32]
   }
-p384_ec_twin_mul_aux2 (c0, c1, e0, e1, sh, d0i, d1i, dv1, dv2) = 
+p384_ec_twin_mul_aux2 (c0, c1, e0, e1, sh, d0i, d1i, dv1, dv2) =
   { tma2_u0  = u0
   , tma2_u1  = u1
   , tma2_c0' = c0'
@@ -176,7 +176,7 @@ p384_ec_twin_mul_aux_F32 = F
 
 /* Matches Java implementation */
 p384_ec_twin_mul : ([384],AffinePoint[384], [384], AffinePoint [384]) -> JacobianPoint [384]
-p384_ec_twin_mul(d0, s, d1, t) = 
+p384_ec_twin_mul(d0, s, d1, t) =
   if s.x == t.x then i.r else jj_r
   where
    m     = p384_point_ops
@@ -206,10 +206,10 @@ p384_ec_twin_mul(d0, s, d1, t) =
                 (c0', c1') = (aux2.tma2_c0', aux2.tma2_c1')
                 (e0', e1') = (aux2.tma2_e0', aux2.tma2_e1')
                 sh'        = aux2.tma2_sh'
-                (d0i, d1i, 
-                 dv1, dv2) = if dv1i && dv2i then 
+                (d0i, d1i,
+                 dv1, dv2) = if dv1i && dv2i then
                                (d0'@ii, d1'@ii, dv1i, dv2i)
-                             else 
+                             else
                                (zero, zero, dv1i, dv2i)
                              where
                                ii    = (k >> 5) - 1
