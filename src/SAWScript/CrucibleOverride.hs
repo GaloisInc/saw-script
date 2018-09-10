@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
@@ -38,7 +39,7 @@ import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.List.NonEmpty (NonEmpty(..))
-import           Data.IORef (readIORef)
+import           Data.IORef (readIORef, writeIORef, newIORef, IORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -58,11 +59,13 @@ import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
+import qualified Lang.Crucible.Types as Crucible
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Symbol as W4
+import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
 import qualified SAWScript.CrucibleLLVM as Crucible
@@ -135,6 +138,9 @@ instance Exception OverrideFailure
 
 makeLenses ''OverrideState
 
+ppOverrideFailure :: OverrideFailure -> String
+ppOverrideFailure = show -- FIXME, do better than this
+
 ------------------------------------------------------------------------
 
 -- | The initial override matching state starts with an empty substitution
@@ -206,7 +212,79 @@ methodSpecHandler ::
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc css retTy = do
-  let fsym = (head css)^.csName
+  sym <- Crucible.getSymInterface
+  top_loc <- liftIO $ W4.getCurrentProgramLoc sym
+
+  let runSpec :: forall rtp'.
+        W4.Pred Sym ->
+        CrucibleMethodSpecIR ->
+        IORef (W4.Pred Sym) ->
+        Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp' args
+              (Crucible.MaybeType ret)
+              (Crucible.RegValue Sym (Crucible.MaybeType ret))
+      runSpec p cs preCondRef =
+        do
+        g <- Crucible.readGlobals
+        Crucible.RegMap args <- Crucible.getOverrideArgs
+        let initialFree = Set.fromList (map (termId . ttTerm)
+                                       (view (csPreState.csFreshVars) cs))
+        res <- liftIO $ runOverrideMatcher sym g Map.empty Map.empty initialFree (cs^.csLoc)
+                           (methodSpecHandler1 opts sc cc args retTy cs)
+        case res of
+          Left _err ->
+            do Crucible.overrideReturn' (Crucible.RegEntry (Crucible.MaybeRepr retTy) W4.Unassigned)
+          Right (retVal, st) ->
+            do let loc = st^.osLocation 
+               precond <- liftIO $ conjunction sym (map fst (st^.osAsserts))
+               liftIO $ writeIORef preCondRef precond
+               forM_ (st^.osAssumes) $ \asum ->
+                  let rsn = Crucible.AssumptionReason loc "override postcondition" in
+                  liftIO $ Crucible.addAssumption (cc^.ccBackend)
+                             (Crucible.LabeledPred asum rsn)
+               let g' = st^.overrideGlobals
+               Crucible.writeGlobals g'
+               Crucible.overrideReturn' (Crucible.RegEntry (Crucible.MaybeRepr retTy) (W4.justPartExpr sym retVal))
+
+  branches <- forM (zip css [0::Int .. ]) $ \(cs,i) -> liftIO $
+                do let pnm = "overrideLemmaSelector_" ++ show i ++ "_" ++ (cs^.csName)
+                   Right smb <- return $ W4.userSymbol pnm
+                   p <- W4.freshConstant sym smb W4.BaseBoolRepr
+                   preCondRef <- newIORef (W4.falsePred sym)
+                   return (p, cs, preCondRef)
+
+--  let fsym = (head css)^.csName
+--  let defaultBranch =
+--       Crucible.overrideError (Crucible.GenericSimError ("No applicable override for " ++ fsym))
+
+--  liftIO $
+--    do someBranch <- disjunction sym $ map (view _1) branches
+--       Crucible.addAssumption (cc^.ccBackend) (Crucible.LabeledPred someBranch
+--               (Crucible.AssumptionReason top_loc "take some branch"))
+
+  ret <- Crucible.callOverride "overrideBranches"
+            (Crucible.mkOverride' "overrideBranches" (Crucible.MaybeRepr retTy)
+               (Crucible.symbolicBranches Crucible.emptyRegMap $
+                 [ (p,runSpec p cs preCondRef, Just (W4.plSourceLoc (cs^.csLoc)))
+                 | (p,cs,preCondRef) <- branches
+                 ]
+                 ++ [(W4.truePred sym, return W4.Unassigned, Nothing)]
+                 ))
+            =<< Crucible.getOverrideArgs
+
+  liftIO $ do
+     forM_ branches $ \(p,_,preCondRef) ->
+              do pcond <- readIORef preCondRef
+                 eqp <- W4.eqPred sym p pcond
+                 Crucible.addAssumption (cc^.ccBackend) (Crucible.LabeledPred eqp
+                     (Crucible.AssumptionReason top_loc "precondition selector binding"))
+     Crucible.readPartExpr sym (Crucible.regValue ret) (Crucible.GenericSimError "override precondition")
+
+--  Crucible.symbolicBranches Crucible.emptyRegMap
+--      (map fst branches)
+--    (branches ++ [(W4.truePred sym, defaultBranch, Just (W4.plSourceLoc top_loc))])
+ 
+
+{-
   globals <- Crucible.readGlobals
   sym     <- Crucible.getSymInterface
   (Crucible.RegMap args) <- Crucible.getOverrideArgs
@@ -257,6 +335,7 @@ buildGlobalsList sym n g =
   do g1 <- Crucible.globalPushBranch sym intrinsics g
      gs <- buildGlobalsList sym (n-1) g1
      return (g1:gs)
+-}
 
 -- | Compute the conjunction of a set of predicates.
 conjunction :: Foldable t => Sym -> t (W4.Pred Sym) -> IO (W4.Pred Sym)
@@ -266,6 +345,7 @@ conjunction sym = foldM (W4.andPred sym) (W4.truePred sym)
 disjunction :: Foldable t => Sym -> t (W4.Pred Sym) -> IO (W4.Pred Sym)
 disjunction sym = foldM (W4.orPred sym) (W4.falsePred sym)
 
+{-
 -- | Compute the return value from a list of structurally matched
 -- overrides. The result will be a muxed value guarded by the
 -- preconditions of each of the overrides.
@@ -298,6 +378,8 @@ globalMuxUnleveled sym p l r
      do r' <- Crucible.globalAbortBranch sym intrinsics r
         globalMuxUnleveled sym p l r'
   | otherwise = Crucible.globalMuxFn sym intrinsics p l r
+-}
+
 
 ------------------------------------------------------------------------
 
