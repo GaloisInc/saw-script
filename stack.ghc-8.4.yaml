@@ -41,5 +41,5 @@ extra-deps:
   - FloatingHex-0.4
   - monad-supply-0.7
   - panic-0.4.0.0
-resolver: lts-12.8
+resolver: lts-12.9
 allow-newer: true
