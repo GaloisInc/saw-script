@@ -206,6 +206,7 @@ module Verifier.SAW.SharedTerm
   , getConstantSet
   , scInstantiateExt
   , scAbstractExts
+  , scGeneralizeExts
   , incVars
   , scUnfoldConstants
   , scUnfoldConstants'
@@ -1638,6 +1639,16 @@ scAbstractExts sc exts x =
       let lams = [ ( ecName ec, ecType ec ) | ec <- exts ]
       scLambdaList sc lams =<< scInstantiateExt sc m x
 
+-- | Generalize over the given list of external constants by wrapping
+-- the given term with foralls and replacing the external constant
+-- occurrences with the appropriate local variables.
+scGeneralizeExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
+scGeneralizeExts _ [] x = return x
+scGeneralizeExts sc exts x =
+  do ts <- traverse (scLocalVar sc) (reverse (take (length exts) [0 ..]))
+     let m = Map.fromList [ (ecVarIndex ec, t) | (ec, t) <- zip exts ts ]
+     let pis = [ (ecName ec, ecType ec) | ec <- exts ]
+     scPiList sc pis =<< scInstantiateExt sc m x
 
 scUnfoldConstants :: SharedContext -> [String] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
