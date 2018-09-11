@@ -6,9 +6,9 @@ import ec_point_ops
 ec_mul : {fv, gv}  (fin gv) => (PointOps fv [gv], [gv], AffinePoint fv) -> JacobianPoint fv
 ec_mul (m, d, s) = res!0
   where
-    k = d # [False, False]
+    k = [False, False] # d
     h = k + (k + k)
-    res : [gv+3](JacobianPoint fv)
+    res : [gv+2](JacobianPoint fv)
     res = [(ec_zero_point(m.field))]
           #  [ if hi && ~ki then
                  m.add(m.double(r), s)
@@ -16,8 +16,8 @@ ec_mul (m, d, s) = res!0
                  m.sub(m.double(r), s)
                else
                  m.double(r)
-             | hi <- h
-             | ki <- k
+             | hi <- take`{back=1} h
+             | ki <- take`{back=1} k
              | r  <- res
              ]
 
