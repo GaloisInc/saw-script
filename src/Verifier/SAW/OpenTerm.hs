@@ -20,7 +20,7 @@ module Verifier.SAW.OpenTerm (
   -- * Basic operations for building open terms
   closedOpenTerm, flatOpenTerm, applyOpenTerm, lambdaOpenTerm, piOpenTerm,
   -- * Monadic operations for building terms with binders
-  dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
+  OpenTermM, dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM
   ) where
 
@@ -84,9 +84,13 @@ piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Pi x tp body
 
+-- | The monad for building 'OpenTerm's if you want to add in 'IO' actions is
+-- the type-checking monad, which we rename here to be self-contained
+type OpenTermM = TCM
+
 -- | "De-duplicate" an open term, so that duplicating the returned 'OpenTerm'
 -- does not lead to duplicated WHNF work
-dedupOpenTermM :: OpenTerm -> TCM OpenTerm
+dedupOpenTermM :: OpenTerm -> OpenTermM OpenTerm
 dedupOpenTermM (OpenTerm trmM) = do
   trm <- trmM
   return $ OpenTerm $ return trm
@@ -96,8 +100,9 @@ dedupOpenTermM (OpenTerm trmM) = do
 -- 'OpenTerm's that also returns an auxiliary value. Returns the normalized type
 -- and the body, along with the auxiliary result returned by the body-generating
 -- function.
-bindOpenTermAuxM :: String -> OpenTerm -> (OpenTerm -> TCM (OpenTerm, a)) ->
-                    TCM (TypedTerm, TypedTerm, a)
+bindOpenTermAuxM :: String -> OpenTerm ->
+                    (OpenTerm -> OpenTermM (OpenTerm, a)) ->
+                    OpenTermM (TypedTerm, TypedTerm, a)
 bindOpenTermAuxM x (OpenTerm tpM) body_f =
   do TypedTerm tp tp_tp <- tpM
      tp_whnf <- typeCheckWHNF tp
@@ -105,28 +110,31 @@ bindOpenTermAuxM x (OpenTerm tpM) body_f =
      body <- bodyM
      return (TypedTerm tp_whnf tp_tp, body, a)
 
--- | Build a lambda abstraction in the 'TCM' monad
-lambdaOpenTermM :: String -> OpenTerm -> (OpenTerm -> TCM OpenTerm) ->
-                   TCM OpenTerm
+-- | Build a lambda abstraction in the 'OpenTermM' monad
+lambdaOpenTermM :: String -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
+                   OpenTermM OpenTerm
 lambdaOpenTermM x tp body_f =
   fst <$> lambdaOpenTermAuxM x tp (body_f >=> (\t -> return (t, ())))
 
--- | Build a pi abstraction in the 'TCM' monad
-piOpenTermM :: String -> OpenTerm -> (OpenTerm -> TCM OpenTerm) -> TCM OpenTerm
+-- | Build a pi abstraction in the 'OpenTermM' monad
+piOpenTermM :: String -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
+               OpenTermM OpenTerm
 piOpenTermM x tp body_f =
   fst <$> piOpenTermAuxM x tp (body_f >=> (\t -> return (t, ())))
 
--- | Build a lambda abstraction with an auxiliary return value in the 'TCM'
--- monad
-lambdaOpenTermAuxM :: String -> OpenTerm -> (OpenTerm -> TCM (OpenTerm, a)) ->
-                      TCM (OpenTerm, a)
+-- | Build a lambda abstraction with an auxiliary return value in the
+-- 'OpenTermM' monad
+lambdaOpenTermAuxM :: String -> OpenTerm ->
+                      (OpenTerm -> OpenTermM (OpenTerm, a)) ->
+                      OpenTermM (OpenTerm, a)
 lambdaOpenTermAuxM x tp body_f =
   do (tp', body, a) <- bindOpenTermAuxM x tp body_f
      return (OpenTerm (typeInferComplete $ Lambda x tp' body), a)
 
--- | Build a pi abstraction with an auxiliary return value in the 'TCM' monad
-piOpenTermAuxM :: String -> OpenTerm -> (OpenTerm -> TCM (OpenTerm, a)) ->
-                  TCM (OpenTerm, a)
+-- | Build a pi abstraction with an auxiliary return value in the 'OpenTermM'
+-- monad
+piOpenTermAuxM :: String -> OpenTerm -> (OpenTerm -> OpenTermM (OpenTerm, a)) ->
+                  OpenTermM (OpenTerm, a)
 piOpenTermAuxM x tp body_f =
   do (tp', body, a) <- bindOpenTermAuxM x tp body_f
      return (OpenTerm (typeInferComplete $ Pi x tp' body), a)
