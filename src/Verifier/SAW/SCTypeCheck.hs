@@ -32,6 +32,7 @@ module Verifier.SAW.SCTypeCheck
   , LiftTCM(..)
   , TypedTerm(..)
   , TypeInfer(..)
+  , typeCheckWHNF
   , typeInferCompleteWHNF
   , TypeInferCtx(..)
   , typeInferCompleteInCtx
