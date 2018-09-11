@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {- |
 Module      : Verifier.SAW.OpenTerm
@@ -20,11 +21,13 @@ module Verifier.SAW.OpenTerm (
   -- * Basic operations for building open terms
   closedOpenTerm, flatOpenTerm, applyOpenTerm, lambdaOpenTerm, piOpenTerm,
   -- * Monadic operations for building terms with binders
-  OpenTermM, dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
+  OpenTermM, completeOpenTermM,
+  dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM
   ) where
 
 import Control.Monad
+import Control.Monad.IO.Class
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
@@ -33,9 +36,11 @@ import Verifier.SAW.SCTypeCheck
 -- SAW core term and its type
 newtype OpenTerm = OpenTerm { unOpenTerm :: TCM TypedTerm }
 
--- | "Complete" an 'OpenTerm' to a closed term
-completeOpenTerm :: SharedContext -> OpenTerm -> IO (Either TCError Term)
-completeOpenTerm sc (OpenTerm termM) = runTCM (typedVal <$> termM) sc Nothing []
+-- | "Complete" an 'OpenTerm' to a closed term or 'fail' on type-checking error
+completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
+completeOpenTerm sc (OpenTerm termM) =
+  either (fail . show) return =<<
+  runTCM (typedVal <$> termM) sc Nothing []
 
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
@@ -84,16 +89,28 @@ piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Pi x tp body
 
--- | The monad for building 'OpenTerm's if you want to add in 'IO' actions is
--- the type-checking monad, which we rename here to be self-contained
-type OpenTermM = TCM
+-- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
+-- is just the type-checking monad, but we give it a new name to keep this
+-- module self-contained.
+newtype OpenTermM a = OpenTermM { unOpenTermM :: TCM a }
+                    deriving (Functor, Applicative, Monad)
+
+instance MonadIO OpenTermM where
+  liftIO = OpenTermM . liftIO
+
+-- | "Complete" an 'OpenTerm' build in 'OpenTermM' to a closed term, or 'fail'
+-- on a type-checking error
+completeOpenTermM :: SharedContext -> OpenTermM OpenTerm -> IO Term
+completeOpenTermM sc (OpenTermM termM) =
+  either (fail . show) return =<<
+  runTCM (typedVal <$> join (fmap unOpenTerm termM)) sc Nothing []
 
 -- | "De-duplicate" an open term, so that duplicating the returned 'OpenTerm'
 -- does not lead to duplicated WHNF work
 dedupOpenTermM :: OpenTerm -> OpenTermM OpenTerm
-dedupOpenTermM (OpenTerm trmM) = do
-  trm <- trmM
-  return $ OpenTerm $ return trm
+dedupOpenTermM (OpenTerm trmM) =
+  OpenTermM $ do trm <- trmM
+                 return $ OpenTerm $ return trm
 
 -- | Build an open term inside a binder of a variable with the given name and
 -- type, where the binder is represented as a monadic Haskell function on
@@ -104,9 +121,11 @@ bindOpenTermAuxM :: String -> OpenTerm ->
                     (OpenTerm -> OpenTermM (OpenTerm, a)) ->
                     OpenTermM (TypedTerm, TypedTerm, a)
 bindOpenTermAuxM x (OpenTerm tpM) body_f =
+  OpenTermM $
   do TypedTerm tp tp_tp <- tpM
      tp_whnf <- typeCheckWHNF tp
-     (OpenTerm bodyM, a) <- withVar x tp_whnf (openTermTopVar >>= body_f)
+     (OpenTerm bodyM, a) <-
+       withVar x tp_whnf (openTermTopVar >>= (unOpenTermM . body_f))
      body <- bodyM
      return (TypedTerm tp_whnf tp_tp, body, a)
 
