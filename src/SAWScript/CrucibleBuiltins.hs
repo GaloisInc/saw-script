@@ -286,7 +286,7 @@ verifyPrestate cc mspec globals = do
   let sym = cc^.ccBackend
   let tyenvRW = mspec^.csPreState.csAllocs
   let tyenvRO = mspec^.csPreState.csConstAllocs
-  let tyenv = csAllocations mspec
+  let tyenv   = csAllocations mspec
   let nameEnv = mspec^.csPreState.csVarTypeNames
 
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
@@ -389,11 +389,11 @@ setupPrePointsTos ::
   IO MemImpl
 setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
-    tyenv = csAllocations mspec
+    tyenv   = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
     go :: MemImpl -> PointsTo -> IO MemImpl
-    go mem (PointsTo ptr val) =
+    go mem (PointsTo _loc ptr val) =
       do val' <- resolveSetupVal cc env tyenv nameEnv val
          ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
          ptr'' <- case ptr' of
@@ -421,7 +421,7 @@ setupPrestateConditions ::
   IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
 setupPrestateConditions mspec cc env = aux []
   where
-    tyenv = csAllocations mspec
+    tyenv   = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
     aux acc globals [] = return (globals, acc)
@@ -458,9 +458,9 @@ assertEqualVals cc v1 v2 =
 doAlloc ::
   (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch       ->
-  Crucible.MemType           ->
+  (W4.ProgramLoc, Crucible.MemType) ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc tp = StateT $ \mem ->
+doAlloc cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
@@ -471,9 +471,9 @@ doAlloc cc tp = StateT $ \mem ->
 doAllocConst ::
   (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch       ->
-  Crucible.MemType           ->
+  (W4.ProgramLoc, Crucible.MemType) ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAllocConst cc tp = StateT $ \mem ->
+doAllocConst cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
@@ -634,7 +634,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
              Left err      -> fail (show err)
              Right (_, st) -> return st
      io $ for_ (view osAsserts st) $ \(p, r) ->
-       Crucible.assert sym p r
+       Crucible.addAssertion sym (Crucible.LabeledPred p r)
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
@@ -651,7 +651,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
     matchResult =
       case (ret, mspec ^. csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg sc cc PostState r rty expect
+        (Just (rty,r), Just expect) -> matchArg sc cc (mspec^.csLoc) PostState r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
         _ -> return ()
 
@@ -981,7 +981,8 @@ crucible_fresh_expanded_val ::
 crucible_fresh_expanded_val bic _opts lty = CrucibleSetupM $
   do let sc = biSharedContext bic
      lty' <- memTypeForLLVMType bic lty
-     constructExpandedSetupValue sc lty'
+     loc <- toW4Loc "crucible_fresh_expanded_val" <$> lift getPosition
+     constructExpandedSetupValue sc loc lty'
 
 
 memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup arch Crucible.MemType
@@ -996,25 +997,26 @@ memTypeForLLVMType _bic lty =
 constructExpandedSetupValue ::
   (?lc::Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext    {- ^ shared context             -} ->
+  W4.ProgramLoc ->
   Crucible.MemType {- ^ LLVM mem type              -} ->
   CrucibleSetup arch SetupValue
                    {- ^ fresh expanded setup value -}
-constructExpandedSetupValue sc t =
+constructExpandedSetupValue sc loc t =
   case t of
     Crucible.IntType w ->
       do ty <- liftIO (logicTypeForInt sc w)
          SetupTerm <$> freshVariable sc "" ty
 
     Crucible.StructType si ->
-       SetupStruct . toList <$> traverse (constructExpandedSetupValue sc) (Crucible.siFieldTypes si)
+       SetupStruct . toList <$> traverse (constructExpandedSetupValue sc loc) (Crucible.siFieldTypes si)
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of
-        Just memTy ->  constructFreshPointer (symTypeAlias symTy) memTy
+        Just memTy -> constructFreshPointer (symTypeAlias symTy) loc memTy
         Nothing    -> fail ("lhs not a valid pointer type: " ++ show symTy)
 
     Crucible.ArrayType n memTy ->
-       SetupArray <$> replicateM n (constructExpandedSetupValue sc memTy)
+       SetupArray <$> replicateM n (constructExpandedSetupValue sc loc memTy)
 
     Crucible.FloatType    -> fail "crucible_fresh_expanded_var: Float not supported"
     Crucible.DoubleType   -> fail "crucible_fresh_expanded_var: Double not supported"
@@ -1036,11 +1038,12 @@ crucible_alloc ::
   CrucibleSetupM SetupValue
 crucible_alloc _bic _opt lty = CrucibleSetupM $
   do let ?dl = Crucible.llvmDataLayout ?lc
+     loc <- toW4Loc "crucible_alloc" <$> lift getPosition
      memTy <- case Crucible.liftMemType lty of
        Just s -> return s
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csAllocs.at n ?= memTy
+     currentState.csAllocs.at n ?= (loc,memTy)
      -- TODO: refactor
      case llvmTypeAlias lty of
        Just i -> currentState.csVarTypeNames.at n ?= i
@@ -1054,11 +1057,12 @@ crucible_alloc_readonly ::
   CrucibleSetupM SetupValue
 crucible_alloc_readonly _bic _opt lty = CrucibleSetupM $
   do let ?dl = Crucible.llvmDataLayout ?lc
+     loc <- toW4Loc "crucible_alloc_readonly" <$> lift getPosition
      memTy <- case Crucible.liftMemType lty of
        Just s -> return s
        Nothing -> fail ("unsupported type in crucible_alloc: " ++ show (L.ppType lty))
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csConstAllocs.at n ?= memTy
+     currentState.csConstAllocs.at n ?= (loc,memTy)
      case llvmTypeAlias lty of
        Just i -> currentState.csVarTypeNames.at n ?= i
        Nothing -> return ()
@@ -1071,12 +1075,13 @@ crucible_fresh_pointer ::
   CrucibleSetupM SetupValue
 crucible_fresh_pointer bic _opt lty = CrucibleSetupM $
   do memTy <- memTypeForLLVMType bic lty
-     constructFreshPointer (llvmTypeAlias lty) memTy
+     loc <- toW4Loc "crucible_fresh_pointer" <$> lift getPosition
+     constructFreshPointer (llvmTypeAlias lty) loc memTy
 
-constructFreshPointer :: Maybe Crucible.Ident -> Crucible.MemType -> CrucibleSetup arch SetupValue
-constructFreshPointer mid memTy =
+constructFreshPointer :: Maybe Crucible.Ident -> W4.ProgramLoc -> Crucible.MemType -> CrucibleSetup arch SetupValue
+constructFreshPointer mid loc memTy =
   do n <- csVarCounter <<%= nextAllocIndex
-     currentState.csFreshPointers.at n ?= memTy
+     currentState.csFreshPointers.at n ?= (loc,memTy)
      -- TODO: refactor
      case mid of
        Just i -> currentState.csVarTypeNames.at n ?= i
@@ -1092,6 +1097,7 @@ crucible_points_to ::
   CrucibleSetupM ()
 crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
   do cc <- getCrucibleContext
+     loc <- toW4Loc "crucible_points_to" <$> lift getPosition
      Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \wptr -> Crucible.withPtrWidth wptr $
        do let ?lc = cc^.ccTypeCtx
           st <- get
@@ -1110,7 +1116,7 @@ crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
             _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
           valTy <- typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility lhsTy valTy)
-          addPointsTo (PointsTo ptr val)
+          addPointsTo (PointsTo loc ptr val)
 
 toW4Loc :: Text.Text -> SS.Pos -> W4.ProgramLoc
 toW4Loc fnm SS.Unknown          = W4.mkProgramLoc (W4.functionNameFromText fnm) W4.InternalPos

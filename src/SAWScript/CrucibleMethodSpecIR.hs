@@ -124,7 +124,7 @@ data PrePost
   deriving (Eq, Show)
 
 
-data PointsTo = PointsTo SetupValue SetupValue
+data PointsTo = PointsTo ProgramLoc SetupValue SetupValue
   deriving (Show)
 
 data SetupCondition where
@@ -155,7 +155,7 @@ data StateSpec' t = StateSpec
   }
   deriving (Show)
 
-type StateSpec = StateSpec' CL.MemType
+type StateSpec = StateSpec' (ProgramLoc, CL.MemType)
 
 data CrucibleMethodSpecIR' t =
   CrucibleMethodSpec
@@ -190,7 +190,7 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n (B.Flags B.FloatReal
 makeLenses ''CrucibleMethodSpecIR'
 makeLenses ''StateSpec'
 
-csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex CL.MemType
+csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex (ProgramLoc, CL.MemType)
 csAllocations
   = Map.unions
   . toListOf ((csPreState <> csPostState) . (csAllocs <> csConstAllocs <> csFreshPointers))
