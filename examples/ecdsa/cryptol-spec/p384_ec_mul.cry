@@ -74,7 +74,7 @@ p384_ec_mul_aux : ( JacobianPoint [384]
                    , [32], [32], Bit, [32], [32] ) -> JacobianPoint [384]
 p384_ec_mul_aux (r, s, j, hi, i_lt_11, d_at_i, d_at_ip1) = r'
   where
-    m = 1 << j
+    m = 1 << (j && 31)
     ki  = d_at_i >> 1
     ki' = if i_lt_11 then
             ((d_at_ip1 && 1) << 31) || ki
