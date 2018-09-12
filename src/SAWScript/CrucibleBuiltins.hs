@@ -116,6 +116,7 @@ import qualified SAWScript.CrucibleLLVM as Crucible
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
+import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -251,7 +252,9 @@ verifyObligations cc mspec tactic assumes asserts = do
         printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
-        mapM_ (printOutLnTop OnlyCounterExamples . show) vals
+        opts <- sawPPOpts <$> rwPPOpts <$> getTopLevelRW
+        let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val)
+        mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
         io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
