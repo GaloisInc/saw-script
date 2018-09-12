@@ -87,7 +87,7 @@ isFieldMorphism m f g (a1,a2) =
           equalFun1 : (a -> a) -> (b -> b) -> Bit;
           equalFun1 h k = m (h a1) == k b1;
           equalFun2 : ((a,a) -> a) -> ((b,b) -> b) -> Bit;
-          equalFun2 h k = m (h (a1,a2)) == k (b1,b2); 
+          equalFun2 h k = m (h (a1,a2)) == k (b1,b2);
         };
 
 // Are fields f and g isomorphic (via the EP-pair p)?

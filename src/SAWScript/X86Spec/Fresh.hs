@@ -15,8 +15,7 @@ import What4.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseNatRepr,BaseBoolRepr))
 import What4.Symbol(SolverSymbol,userSymbol)
 import What4.Interface(freshConstant)
 
-import Lang.Crucible.LLVM.MemModel(LLVMPointerType)
-import Lang.Crucible.LLVM.MemModel.Pointer( pattern LLVMPointer, llvmPointer_bv )
+import SAWScript.CrucibleLLVM (LLVMPointerType, pattern LLVMPointer, llvmPointer_bv)
 
 import SAWScript.X86Spec.Types
 import SAWScript.X86Spec.Monad

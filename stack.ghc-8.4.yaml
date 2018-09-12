@@ -1,6 +1,4 @@
-flags:
-  abcBridge:
-    enable-pthreads: false
+flags: {}
 packages:
   - deps/llvm-pretty/
   - deps/llvm-pretty-bc-parser/
@@ -36,13 +34,14 @@ extra-deps:
   - IfElse-0.85
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
-  - monad-supply-0.7
   - simple-smt-0.7.1
   - smtLib-1.0.9
   - GraphSCC-1.0.4
   - monadLib-3.7.3
-  - sbv-7.7
-  - tasty-hunit-0.10.0.1
-  - data-inttrie-0.1.4
+  - sbv-7.10
+  - crackNum-2.0
+  - FloatingHex-0.4
+  - monad-supply-0.7
   - panic-0.4.0.0
-resolver: lts-11.5
+resolver: lts-12.9
+allow-newer: true

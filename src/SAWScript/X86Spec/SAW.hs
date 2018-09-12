@@ -5,7 +5,7 @@
 module SAWScript.X86Spec.SAW (SAW(..)) where
 
 import What4.BaseTypes (BaseTypeRepr(BaseBVRepr,BaseBoolRepr))
-import Lang.Crucible.LLVM.MemModel.Pointer (llvmPointer_bv, projectLLVM_bv)
+import SAWScript.CrucibleLLVM (llvmPointer_bv, projectLLVM_bv)
 import Lang.Crucible.Backend.SAWCore(bindSAWTerm, toSC)
 
 import Verifier.SAW.SharedTerm(Term)

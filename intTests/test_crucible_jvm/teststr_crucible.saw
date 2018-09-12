@@ -1,0 +1,37 @@
+print "**loading TestStr";
+str <- java_load_class "java/lang/String";
+t <- java_load_class "java/lang/Throwable";
+e <- java_load_class "java/lang/Exception";
+rt <- java_load_class "java/lang/RuntimeException";
+ob <- java_load_class "java/lang/IndexOutOfBoundsException";
+sob <- java_load_class "java/lang/StringIndexOutOfBoundsException";
+teststr <- java_load_class "TestStr";
+
+print "**Extracting methods";
+m      <- crucible_java_extract teststr "main";
+append <- crucible_java_extract teststr "append";
+pr     <- crucible_java_extract teststr "pr";
+//trim   <- crucible_java_extract teststr "trim";
+
+
+
+print "**Evaluating: main, should be 3";
+sat_print abc {{ \(x:[32]) -> (m 3 == x) }};
+
+print "**Evaluating: append, should be 2";
+sat_print abc {{ \(x:[32]) -> (append 3 == x) }};
+
+
+
+//print "**Evaluating: test, should be 1";
+//sat_print abc {{ \(x:[32]) -> (test 3 == x) }};
+
+
+print "**Evaluating: pr, should be 1";
+sat_print abc {{ \(x:[32]) -> (pr 3 == x) }};
+
+//print "**Evaluating: trim, should be 1";
+//sat_print abc {{ \(x:[32]) -> (trim 3 == x) }};
+
+print "**Proving: main";
+prove_print abc {{ \(x:[32]) -> (m x == 3) }};

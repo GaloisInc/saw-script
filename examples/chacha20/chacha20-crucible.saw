@@ -32,7 +32,7 @@ crypto_stream_chacha20(unsigned char* out,
 */
 
   (_, out_p)       <- ptr_to_fresh       "out"     (llvm_array 256 (llvm_int 8));
-  let olen         =                                              {{ 256:[64] }};
+  let olen         =                                            {{ 256 : [64] }};
   counter          <- crucible_fresh_var "counter"                 (llvm_int 32);
   (nonce, nonce_p) <- ptr_to_fresh       "nonce"   (llvm_array 12  (llvm_int 8));
   (key, key_p)     <- ptr_to_fresh       "key"     (llvm_array 32  (llvm_int 8));

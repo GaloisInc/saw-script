@@ -24,13 +24,13 @@ import GHC.TypeLits(Nat)
 
 import Data.Parameterized.NatRepr(NatRepr,knownNat,natValue)
 
-import qualified Lang.Crucible.LLVM.MemModel.Type as LLVM
-import Lang.Crucible.LLVM.MemModel.Generic(AllocType(HeapAlloc), Mutability(..))
-import Lang.Crucible.LLVM.MemModel
-  ( storeConstRaw, doLoad, doMalloc, doPtrAddOffset, coerceAny, packMemValue )
-import Lang.Crucible.LLVM.Bytes(Bytes,toBytes,bytesToInteger)
-import Lang.Crucible.LLVM.MemModel.Pointer (projectLLVM_bv)
-import Lang.Crucible.LLVM.MemModel.Type(bitvectorType)
+import qualified SAWScript.CrucibleLLVM as LLVM (Type)
+import SAWScript.CrucibleLLVM
+  ( AllocType(HeapAlloc), Mutability(..)
+  , storeConstRaw, doLoad, doMalloc, doPtrAddOffset, coerceAny, packMemValue
+  , Bytes, toBytes, bytesToInteger
+  , projectLLVM_bv, bitvectorType
+  )
 
 import SAWScript.X86Spec.Types
 import SAWScript.X86Spec.Monad

@@ -10,12 +10,12 @@ import ref_ec_mul
 import p384_field
 import p384_ec_point_ops
 import p384_ec_mul
- 
+
 /* Scalar multiply operations {{{1 */
 
 
-test_params : ([384], AffinePoint [384], [384], AffinePoint [384]) 
-test_params = 
+test_params : ([384], AffinePoint [384], [384], AffinePoint [384])
+test_params =
 //  (0x7b52dc21312701d79a2465bb9fdf6fd30c4f76cf74787e44348f8217e6ffd5e02ee8c55a7c5d91b452825b1026d26893, {x=0xdf1c86a62d76090308a0d4c371704b36f3bfa41f0dbf8185d297b8a2c811756f0f4be19871cde079c5d43cfd0fab7fe8; y=0x70521fdd9165b0d33e948be941c590f2fbe7e2754ba110ae24089d41773acfdd34701acaafa669a884d3eefbf557d98b}, 0x211bb4730ad83e31aedbd66a5a750e800cf4de096495323ea94a73f25e9bcb5068a9dcc93e98efecb136eb057e6f41a4, {x=0x6bdf86d8f4cdf5b63a6a1e93a75457c0816fa2f3f69bc706ab69a7b5a63d4956d83cc4ca551f6aaf7653b8dd0991a6af; y=0xa8ce019e78abd658350e5885c8fddb172117a24bf157dfdbe8a1831e03758e630784470287c8e25908d931f22581bf97});
 //  (0x6250471849e0c0eb47e9cf2c8e04c9ad0745e358d1cf11fb53e178a3c5b301b5f9e7f62e61c8f2113615cc4ff9927f9b, {x=0x005255b811499293ea986c66b4698e0748284d391130afd3f9febbc71ef3b39fe13a3deaa1489d817b885edf270b1bf6; y=0xc9a1dcdb74a4ae432edea47750d754d918b2f1fd8d9ee612b4f0cf2bebcb0eeef43ef5d0ce90cb75362bd2cfe69bffad}, 0xd9e8d87abffb84c0c06fe47396aa84871f08420561a7d8cc64fef7796fc0ca9a5406a37a054cc8cd57e26a3a7249fdb3, {x=0x8da95367d9e731f86adda9bfae6ff170cf090be5223f3b33c0d7c6c585bfc1330137d237fdc16bd432797a1da1dfa331; y=0x114d8b24d75d0149603aa6eab6ccec1cd83f5baaca7898dd6edd7c2ca91176893102b9fe129a09f9fdb208e18be46d16});
   (0xe74872524f90425d832a4f264e1f7b9209ec7456e9b4c467d8eac6c68f973ea7fea24f4d3fa8498bb1e26f933eaa261b
@@ -122,7 +122,7 @@ ecdsa_public_verify_imp(c, e, (r, s), q)
 
 /* P384 reference definitions {{{1 */
 
-/* Utility functions {{{2 */ 
+/* Utility functions {{{2 */
 
 type RsltWithCarry a b = { carrybits : a , rslt : b }
 

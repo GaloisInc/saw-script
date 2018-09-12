@@ -7,7 +7,7 @@ module SAWScript.X86Spec.Literal (literal, Literal(..)) where
 import GHC.TypeLits (type (<=))
 
 import What4.Interface(bvLit, truePred, falsePred)
-import Lang.Crucible.LLVM.MemModel.Pointer (llvmPointer_bv)
+import SAWScript.CrucibleLLVM (llvmPointer_bv)
 
 import SAWScript.X86Spec.Types
 import SAWScript.X86Spec.Monad
