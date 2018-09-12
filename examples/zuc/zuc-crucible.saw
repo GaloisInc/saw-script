@@ -50,28 +50,27 @@ let use_LFSR = do {
                t S8, t S9, t S10, t S11, t S12, t S13, t S14, t S15] }};
 };
 
-/*
 let assign_LFSR s' = do {
-    llvm_ensure_eq "LFSR_S0"  {{ (0 # (s' @ 0))  : [32] }};
-    llvm_ensure_eq "LFSR_S1"  {{ (0 # (s' @ 1))  : [32] }};
-    llvm_ensure_eq "LFSR_S2"  {{ (0 # (s' @ 2))  : [32] }};
-    llvm_ensure_eq "LFSR_S3"  {{ (0 # (s' @ 3))  : [32] }};
-    llvm_ensure_eq "LFSR_S4"  {{ (0 # (s' @ 4))  : [32] }};
-    llvm_ensure_eq "LFSR_S5"  {{ (0 # (s' @ 5))  : [32] }};
-    llvm_ensure_eq "LFSR_S6"  {{ (0 # (s' @ 6))  : [32] }};
-    llvm_ensure_eq "LFSR_S7"  {{ (0 # (s' @ 7))  : [32] }};
-    llvm_ensure_eq "LFSR_S8"  {{ (0 # (s' @ 8))  : [32] }};
-    llvm_ensure_eq "LFSR_S9"  {{ (0 # (s' @ 9))  : [32] }};
-    llvm_ensure_eq "LFSR_S10" {{ (0 # (s' @ 10)) : [32] }};
-    llvm_ensure_eq "LFSR_S11" {{ (0 # (s' @ 11)) : [32] }};
-    llvm_ensure_eq "LFSR_S12" {{ (0 # (s' @ 12)) : [32] }};
-    llvm_ensure_eq "LFSR_S13" {{ (0 # (s' @ 13)) : [32] }};
-    llvm_ensure_eq "LFSR_S14" {{ (0 # (s' @ 14)) : [32] }};
-    llvm_ensure_eq "LFSR_S15" {{ (0 # (s' @ 15)) : [32] }};
+    ensure_global "LFSR_S0"  {{ (0 # (s' @ 0))  : [32] }};
+    ensure_global "LFSR_S1"  {{ (0 # (s' @ 1))  : [32] }};
+    ensure_global "LFSR_S2"  {{ (0 # (s' @ 2))  : [32] }};
+    ensure_global "LFSR_S3"  {{ (0 # (s' @ 3))  : [32] }};
+    ensure_global "LFSR_S4"  {{ (0 # (s' @ 4))  : [32] }};
+    ensure_global "LFSR_S5"  {{ (0 # (s' @ 5))  : [32] }};
+    ensure_global "LFSR_S6"  {{ (0 # (s' @ 6))  : [32] }};
+    ensure_global "LFSR_S7"  {{ (0 # (s' @ 7))  : [32] }};
+    ensure_global "LFSR_S8"  {{ (0 # (s' @ 8))  : [32] }};
+    ensure_global "LFSR_S9"  {{ (0 # (s' @ 9))  : [32] }};
+    ensure_global "LFSR_S10" {{ (0 # (s' @ 10)) : [32] }};
+    ensure_global "LFSR_S11" {{ (0 # (s' @ 11)) : [32] }};
+    ensure_global "LFSR_S12" {{ (0 # (s' @ 12)) : [32] }};
+    ensure_global "LFSR_S13" {{ (0 # (s' @ 13)) : [32] }};
+    ensure_global "LFSR_S14" {{ (0 # (s' @ 14)) : [32] }};
+    ensure_global "LFSR_S15" {{ (0 # (s' @ 15)) : [32] }};
 };
-*/
 
-let AddM_spec cry_add = do {
+let AddM_spec cry_plus = do {
+    /*
     a <- crucible_fresh_var "a" (llvm_int 31);
     b <- crucible_fresh_var "b" (llvm_int 31);
 
@@ -79,6 +78,13 @@ let AddM_spec cry_add = do {
                           , (crucible_term {{ [False] # b }})
                           ];
     crucible_return (crucible_term {{ (0 # (cry_add [a, b])) : [32] }});
+    */
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_precond {{ a == (a && 0x7FFFFFFF) }};
+    crucible_precond {{ b == (b && 0x7FFFFFFF) }};
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ 0 # cry_plus (drop`{1} a, drop`{1} b) : [32] }});
 };
 
 let MulPow_spec cry_mulpow = do {
@@ -105,50 +111,46 @@ let BR_spec (zuc : CryptolModule) = do {
     ensure_global "BRC_X3" {{ res @ 3 }};
 };
 
-/*
 let F_spec (zuc : CryptolModule) = do {
-    X0 <- llvm_var "BRC_X0" (llvm_int 32);
-    X1 <- llvm_var "BRC_X1" (llvm_int 32);
-    X2 <- llvm_var "BRC_X2" (llvm_int 32);
-    R1 <- llvm_var "F_R1" (llvm_int 32);
-    R2 <- llvm_var "F_R2" (llvm_int 32);
-    S0a <- llvm_var "S0" (llvm_array 256 (llvm_int 8));
-    S1a <- llvm_var "S1" (llvm_array 256 (llvm_int 8));
-    llvm_assert {{ S0a == zuc::S0Table }};
-    llvm_assert {{ S1a == zuc::S1Table }};
+    X0 <- fresh_global "BRC_X0" (llvm_int 32);
+    X1 <- fresh_global "BRC_X1" (llvm_int 32);
+    X2 <- fresh_global "BRC_X2" (llvm_int 32);
+    R1 <- fresh_global "F_R1" (llvm_int 32);
+    R2 <- fresh_global "F_R2" (llvm_int 32);
+    S0a <- fresh_global "S0" (llvm_array 256 (llvm_int 8));
+    S1a <- fresh_global "S1" (llvm_array 256 (llvm_int 8));
+    crucible_precond {{ S0a == zuc::S0Table }};
+    crucible_precond {{ S1a == zuc::S1Table }};
     let res = {{ zuc::F ([X0, X1, X2], [R1, R2]) }};
-    llvm_return {{ res.0 }};
-    llvm_ensure_eq "F_R1" {{ res.1 @ 0 }};
-    llvm_ensure_eq "F_R2" {{ res.1 @ 1 }};
-    llvm_verify_tactic abc;
+    crucible_execute_func [];
+    crucible_return (crucible_term {{ res.0 }});
+    ensure_global "F_R1" {{ res.1 @ 0 }};
+    ensure_global "F_R2" {{ res.1 @ 1 }};
 };
 
 let L12_spec cry_L12 = do {
-    X <- llvm_var "X" (llvm_int 32);
-    llvm_return {{ cry_L12 X }};
-    llvm_verify_tactic abc;
+    X <- crucible_fresh_var "X" (llvm_int 32);
+    crucible_execute_func [crucible_term X];
+    crucible_return (crucible_term {{ cry_L12 X }});
 };
 
 let LFSRWithInitializationMode_spec cry_LIM = do {
-    u <- llvm_var "u" (llvm_int 32);
-    llvm_assert {{ u == (u && 0x7FFFFFFF) }};
+    u <- crucible_fresh_var "u" (llvm_int 32);
+    crucible_precond {{ u == (u && 0x7FFFFFFF) }};
     s <- use_LFSR;
+    crucible_execute_func [crucible_term u];
     assign_LFSR {{ cry_LIM (t u, s) }};
-    llvm_verify_tactic abc;
 };
-*/
 
 m <- llvm_load_module "zuc.bc";
 zuccry <- cryptol_load "zuc.cry";
 
 print "Proving equivalence with Cryptol spec.";
-AddM_ov <- crucible_llvm_verify m "AddM" [] false (AddM_spec {{ zuccry::add }}) abc;
+AddM_ov <- crucible_llvm_verify m "AddM" [] false (AddM_spec {{ zuccry::plus }}) abc;
 mulpow_ov <- crucible_llvm_verify m "MulByPow2" [] false (MulPow_spec {{ zuccry::mulpow }}) abc;
 BR_ov <- crucible_llvm_verify m "BitReorganization" [] false (BR_spec zuccry) abc;
-/*
-L1_ov <- crucible_llvm_verify "L1" [] (L12_spec {{ zuccry::L1 }});
-L2_ov <- crucible_llvm_verify "L2" [] (L12_spec {{ zuccry::L2 }});
-LIM_ov <- crucible_llvm_verify "LFSRWithInitialisationMode" [AddM_ov, mulpow_ov]
-  (LFSRWithInitializationMode_spec {{zuccry::LFSRWithInitializationModeC}});
-F_ov <- crucible_llvm_verify "F" [L1_ov, L2_ov] (F_spec zuccry);
-*/
+L1_ov <- crucible_llvm_verify m "L1" [] false (L12_spec {{ zuccry::L1 }}) abc;
+L2_ov <- crucible_llvm_verify m "L2" [] false (L12_spec {{ zuccry::L2 }}) abc;
+LIM_ov <- crucible_llvm_verify m "LFSRWithInitialisationMode" [AddM_ov, mulpow_ov] false
+  (LFSRWithInitializationMode_spec {{zuccry::LFSRWithInitializationModeC}}) abc;
+F_ov <- crucible_llvm_verify m "F" [L1_ov, L2_ov] false (F_spec zuccry) abc;
