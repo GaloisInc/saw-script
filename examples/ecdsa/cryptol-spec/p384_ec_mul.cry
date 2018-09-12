@@ -27,12 +27,18 @@ ripple_adc(xx,yy) = (values, carry_strm!0)
     carry_strm : [n+1]
     carry_strm  = [False] # [ c | (c,_) <- list ]
 
+property ripple_adc_toJavaArray x y =
+  ripple_adc (toJavaArray x, toJavaArray y) == (toJavaArray (x + y), carry x y)
+
 /* Returns (xl # c) >> 1. */
 ripple_shr : {m, n} (m >= 1, fin m, n >= 1, fin n) => ([n][m],Bit) -> ([n][m])
 ripple_shr(xl,c) = [ (x' << (width(x) - 1:[width m])) || (x >> 1)
                    | x <- xl
                    | x' <- drop`{1}(xl) # [(uext([c]))]
                    ]
+
+property ripple_shr_toJavaArray x c =
+  ripple_shr (toJavaArray x, c) == toJavaArray (take`{back=1} ([c] # x))
 
 p384_ec_zero_point : JacobianPoint [384]
 p384_ec_zero_point = ec_zero_point(p384_field)
