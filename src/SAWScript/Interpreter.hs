@@ -453,7 +453,7 @@ buildTopLevelEnv proxy opts =
                  }
        ce0 <- CEnv.initCryptolEnv sc
 
-       jvmTrans <- CJ.mkInitialJVMContext halloc jcb
+       jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv opts bic
