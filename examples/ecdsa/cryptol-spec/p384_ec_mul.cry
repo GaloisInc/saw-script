@@ -158,8 +158,8 @@ p384_ec_twin_mul_aux2 (c0, c1, e0, e1, sh, d0i, d1i, dv1, dv2) =
   , tma2_sh' = sh'
   }
   where
-    c0'           = ((if h0Less then 0 else `0x20) ^ (c0 << 1)) || ((e0 >> sh) && `0x1)
-    c1'           = ((if h1Less then 0 else `0x20) ^ (c1 << 1)) || ((e1 >> sh) && `0x1)
+    c0'           = ((if h0Less then 0 else `0x20) ^ (c0 << 1)) || ((e0 >> (sh && 31)) && `0x1)
+    c1'           = ((if h1Less then 0 else `0x20) ^ (c1 << 1)) || ((e1 >> (sh && 31)) && `0x1)
     u0            = if h0Less then 0 else (if (c0 && `0x20) != 0 then (-1) else 1)
     u1            = if h1Less then 0 else (if (c1 && `0x20) != 0 then (-1) else 1)
 
