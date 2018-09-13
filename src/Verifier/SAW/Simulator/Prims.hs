@@ -491,7 +491,9 @@ genOp =
   constFun $
   strictFun $ \f -> do
     let g i = delay $ apply f (ready (VNat (fromIntegral i)))
-    liftM VVector $ V.generateM (fromIntegral n) g
+    if n > fromIntegral (maxBound :: Int) then
+      error ("Verifier.SAW.Simulator.gen: vector size too large: " ++ show n)
+      else liftM VVector $ V.generateM (fromIntegral n) g
 
 -- eq :: (a :: sort 0) -> a -> a -> Bool
 eqOp :: forall l. (VMonadLazy l, Show (Extra l)) => BasePrims l -> Value l
