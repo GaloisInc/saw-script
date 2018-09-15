@@ -185,7 +185,7 @@ readGlobal ::
 readGlobal k =
   do mb <- OM (uses overrideGlobals (Crucible.lookupGlobal k))
      case mb of
-       Nothing -> fail ("No such global: " ++ show k)
+       Nothing -> error ("No such global: " ++ show k)
        Just v  -> return v
 
 writeGlobal ::
@@ -232,7 +232,7 @@ methodSpecHandler opts sc cc css retTy = do
           gs css
 
   outputs <- case partitionEithers matches of
-               (e,[]  ) -> fail ("All overrides failed: " ++ show e)
+               (e,[]  ) -> error ("All overrides failed: " ++ show e)
                (_,s:ss) -> return (s:|ss)
 
   Crucible.writeGlobals =<< liftIO (muxGlobal sym (fmap snd outputs))
@@ -712,7 +712,7 @@ valueToSC sym failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
        liftIO (scVector sc t terms)
 
 valueToSC _ _ _ Crucible.LLVMValReal{} =
-  fail  "valueToSC: Real not supported"
+  error "valueToSC: Real not supported"
 
 valueToSC _sym failMsg _tval _val =
   failure failMsg
@@ -723,8 +723,8 @@ typeToSC :: SharedContext -> Crucible.Type -> IO Term
 typeToSC sc t =
   case Crucible.typeF t of
     Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
-    Crucible.Float -> fail "typeToSC: float not supported"
-    Crucible.Double -> fail "typeToSC: double not supported"
+    Crucible.Float -> error "typeToSC: float not supported"
+    Crucible.Double -> error "typeToSC: double not supported"
     Crucible.Array sz ty ->
       do n <- scNat sc (fromIntegral sz)
          ty' <- typeToSC sc ty
@@ -877,7 +877,7 @@ executeAllocation opts cc (var, memTy) =
      {-
      memTy <- case TyCtx.asMemType symTy of
                 Just memTy -> return memTy
-                Nothing    -> fail "executAllocation: failed to resolve type"
+                Nothing    -> error "executAllocation: failed to resolve type"
                 -}
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)

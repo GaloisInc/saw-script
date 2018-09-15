@@ -19,4 +19,3 @@ instance Exception TypeErrors where
 
 failTypecheck :: [(Pos, String)] -> a
 failTypecheck = throw . TypeErrors
-
