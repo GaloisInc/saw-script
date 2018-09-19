@@ -14,10 +14,10 @@ module SAWScript.StructuredErrors
   , unimplemented
   , unimplementedMessage
 
-  , Impossible
-  , AssertsInvariants
+  , Assertion
+  , assert
   , impossible
-  , impossibleMessage
+  , assertionMessage
   ) where
 
 import Control.Monad.Catch
@@ -115,27 +115,26 @@ formatCallStack =
 
 -- * Internal exceptions
 
--- "Impossible" cases that might not be entirely impossible...
+newtype Assertion
+  = Assertion String
 
-newtype Impossible
-  = Impossible String
+assertionMessage :: Assertion -> String
+assertionMessage (Assertion text) = text
 
-impossibleMessage :: Impossible -> String
-impossibleMessage (Impossible text) = text
-
-instance Show Impossible where
-  show (Impossible text) =
-    concat [ "Internal invariant violation: "
+instance Show Assertion where
+  show (Assertion text) =
+    concat [ "Assertion violation: "
            , text
            ]
 
-instance Exception Impossible
+instance Exception Assertion
 
-type AssertsInvariants
-  = Throws Impossible
+assert :: (Throws Assertion, MonadThrow m) => Bool -> String -> m ()
+assert False text = throwChecked (Assertion text)
+assert True  _    = return ()
 
-impossible :: (AssertsInvariants, MonadThrow m) => String -> m a
-impossible text = throwChecked (Impossible text)
+impossible :: (Throws Assertion, MonadThrow m) => String -> m ()
+impossible text = throwChecked (Assertion text)
 
 -- Unimplemented features...
 
@@ -147,7 +146,7 @@ unimplementedMessage (Unimplemented text) = text
 
 instance Show Unimplemented where
   show (Unimplemented text) =
-    concat [ "Unimplemented feature: "
+    concat [ "Unimplemented: "
            , text
            ]
 
