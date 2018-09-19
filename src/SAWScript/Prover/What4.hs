@@ -29,7 +29,6 @@ import           What4.Config
 import           What4.Solver
 import           What4.SatResult
 import           What4.Interface
-import           What4.BaseTypes
 import           What4.Expr.GroundEval
 import qualified Verifier.SAW.Simulator.What4 as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
@@ -107,7 +106,7 @@ satWhat4_solver solver sym _unints sc mode term =
      let logger _ str = putStr str
 
      -- run solver
-     solver_adapter_check_sat solver sym logger lit $ \ r -> case r of
+     solver_adapter_check_sat solver sym logger "SAW proof" lit $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)
