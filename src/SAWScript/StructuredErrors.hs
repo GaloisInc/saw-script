@@ -134,7 +134,7 @@ assert False text = throwChecked (Assertion text)
 assert True  _    = return ()
 
 impossible :: (Throws Assertion, MonadThrow m) => String -> m ()
-impossible text = throwChecked (Assertion text)
+impossible text = throwChecked (Assertion ("impossible: " ++ text))
 
 -- Unimplemented features...
 

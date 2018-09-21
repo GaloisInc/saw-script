@@ -318,7 +318,7 @@ verifyPrestate cc mspec globals = do
            , "Raw type: " ++ show (mspec^.csRet)
            ]
     (Just sv, Just retTy) ->
-      do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
+      do let retTy' = typeOfSetupValue cc tyenv nameEnv sv
          b <- liftIO $ checkRegisterCompatibility retTy retTy'
          unless b $ error $ unlines
            [ "Incompatible types for return value when verifying " ++ mspec^.csName
@@ -365,7 +365,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec^.csArgBindings) of
         Just (mt, sv) -> do
-          mt' <- typeOfSetupValue cc tyenv nameEnv sv
+          let mt' = typeOfSetupValue cc tyenv nameEnv sv
           checkArgTy i mt mt'
           v <- resolveSetupVal cc env tyenv nameEnv sv
           return (mt, v)
@@ -400,7 +400,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
            _ -> error "Non-pointer value found in points-to assertion"
          -- In case the types are different (from crucible_points_to_untyped)
          -- then the store type should be determined by the rhs.
-         memTy <- typeOfSetupValue cc tyenv nameEnv val
+         let memTy = typeOfSetupValue cc tyenv nameEnv val
          storTy <- Crucible.toStorableType memTy
          let sym = cc^.ccBackend
          mem' <- Crucible.storeConstRaw sym mem ptr'' storTy val'
@@ -1196,14 +1196,14 @@ crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
             else csResolvedState %= markResolved ptr
           let env = csAllocations (st^.csMethodSpec)
               nameEnv = csTypeNames (st^.csMethodSpec)
-          ptrTy <- typeOfSetupValue cc env nameEnv ptr
+          let ptrTy = typeOfSetupValue cc env nameEnv ptr
           lhsTy <- case ptrTy of
             Crucible.PtrType symTy ->
               case TyCtx.asMemType symTy of
                 Just lhsTy -> return lhsTy
                 Nothing -> error $ "lhs not a valid pointer type: " ++ show ptrTy
             _ -> error $ "lhs not a pointer type: " ++ show ptrTy
-          valTy <- typeOfSetupValue cc env nameEnv val
+          let valTy = typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility lhsTy valTy)
           addPointsTo (PointsTo ptr val)
 
@@ -1224,8 +1224,8 @@ crucible_equal _bic _opt val1 val2 = CrucibleSetupM $
      st <- get
      let env = csAllocations (st^.csMethodSpec)
          nameEnv = csTypeNames (st^.csMethodSpec)
-     ty1 <- typeOfSetupValue cc env nameEnv val1
-     ty2 <- typeOfSetupValue cc env nameEnv val2
+     let ty1 = typeOfSetupValue cc env nameEnv val1
+     let ty2 = typeOfSetupValue cc env nameEnv val2
      b <- liftIO $ checkRegisterCompatibility ty1 ty2
      unless b $ error $ unlines
        [ "Incompatible types when asserting equality:"
