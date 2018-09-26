@@ -162,7 +162,7 @@ crucible_java_extract bic opts c mname = do
 
           res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc
                      ctx verbosity className h args
-                         
+
           case res of
             Crucible.FinishedResult _ pr -> do
               gp <- getGlobalPair opts pr

@@ -30,14 +30,16 @@ module SAWScript.JVM.CrucibleBuiltins
     ( crucible_jvm_cfg
     , crucible_jvm_extract
     , crucible_jvm_verify
+    , crucible_jvm_unsafe_assume_spec
     , jvm_return
     , jvm_execute_func
     , jvm_postcond
     , jvm_precond
-    , jvm_points_to
-    , crucible_jvm_unsafe_assume_spec
+    , jvm_field_is
+    , jvm_elem_is
     , jvm_fresh_var
-    , jvm_alloc
+    , jvm_alloc_object
+    , jvm_alloc_array
     ) where
 
 import           Control.Lens
@@ -61,8 +63,6 @@ import qualified Data.Vector as V
 import           Numeric.Natural
 import           System.IO
 
-import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L (ppType)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 --import qualified Control.Monad.Trans.Maybe as MaybeT
 
@@ -71,6 +71,8 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
+
+import qualified Verifier.Java.Codebase as JSS
 
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
@@ -92,10 +94,6 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
-
-
-import qualified SAWScript.CrucibleLLVM as Crucible
-
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
@@ -113,14 +111,14 @@ import SAWScript.Value
 import SAWScript.Utils as SS
 import SAWScript.Options
 
-import SAWScript.CrucibleMethodSpecIR
-import SAWScript.CrucibleOverride
-import SAWScript.CrucibleResolveSetupValue
+import SAWScript.JavaExpr (JavaType(..))
+
+import SAWScript.JVM.CrucibleMethodSpecIR
+import SAWScript.JVM.CrucibleOverride
+import SAWScript.JVM.CrucibleResolveSetupValue
 
 
-type MemImpl = Crucible.MemImpl Sym
-
-ppAbortedResult :: CrucibleContext arch
+ppAbortedResult :: CrucibleContext
                 -> Crucible.AbortedResult Sym a
                 -> Doc
 ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
@@ -135,7 +133,7 @@ ppAbortedResult _ (Crucible.AbortedExit ec) =
 crucible_jvm_verify ::
   BuiltinContext         ->
   Options                ->
-  LLVMModule             ->
+  JSS.Class              ->
   String                 ->
   [CrucibleMethodSpecIR] ->
   Bool                   ->
@@ -143,16 +141,16 @@ crucible_jvm_verify ::
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
 crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
-  setupCrucibleContext bic opts lm $ \cc -> do
-     let sym = cc^.ccBackend
+  setupCrucibleContext bic opts lm $ \cc ->
+  do let sym = cc^.ccBackend
      let nm' = fromString nm
-     let llmod = cc^.ccLLVMModule
+     let llmod = error "llmod" --cc^.ccLLVMModule
 
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
-     def <- case find (\d -> L.defName d == nm') (L.modDefines llmod) of
+     def <- error "def" {-case find (\d -> L.defName d == nm') (L.modDefines llmod) of
                     Nothing -> fail ("Could not find function named" ++ show nm)
-                    Just decl -> return decl
+                    Just decl -> return decl-}
      st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def setupLoc)
 
      -- execute commands of the method spec
@@ -160,12 +158,7 @@ crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
      methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
 
      -- set up the LLVM memory with a pristine heap
-     let globals = cc^.ccLLVMGlobals
-     let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-     mem0 <- case Crucible.lookupGlobal mvar globals of
-       Nothing -> fail "internal error: LLVM Memory global not found"
-       Just mem0 -> return mem0
-     let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
+     let globals = cc^.cjcJavaGlobals
 
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
@@ -191,14 +184,14 @@ crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
 crucible_jvm_unsafe_assume_spec ::
   BuiltinContext   ->
   Options          ->
-  LLVMModule       ->
-  String          {- ^ Name of the function -} ->
+  JavaClass        ->
+  String          {- ^ Name of the method -} ->
   CrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
 crucible_jvm_unsafe_assume_spec bic opts lm nm setup =
   setupCrucibleContext bic opts lm $ \cc -> do
     let nm' = fromString nm
-    let llmod = cc^.ccLLVMModule
+    let llmod = cc^.ccJVMClass
     loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
     st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure loc <|>
                 initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure loc of
@@ -207,7 +200,7 @@ crucible_jvm_unsafe_assume_spec bic opts lm nm setup =
                    Just (Right st0) -> return st0
     (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
 
-verifyObligations :: CrucibleContext arch
+verifyObligations :: CrucibleContext
                   -> CrucibleMethodSpecIR
                   -> ProofScript SatResult
                   -> [Crucible.LabeledPred Term Crucible.AssumptionReason]
@@ -255,36 +248,32 @@ verifyObligations cc mspec tactic assumes asserts = do
 -- Returns a tuple of (arguments, preconditions, pointer values,
 -- memory).
 verifyPrestate ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
-  CrucibleContext arch ->
+  CrucibleContext ->
   CrucibleMethodSpecIR ->
   Crucible.SymGlobalState Sym ->
-  IO ([(Crucible.MemType, LLVMVal)],
+  IO ([(JavaType, JVMVal)],
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
-      Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
+      Map AllocIndex JVMRefVal,
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
   let tyenvRW = mspec^.csPreState.csAllocs
-  let tyenvRO = mspec^.csPreState.csConstAllocs
   let tyenv   = csAllocations mspec
   let nameEnv = mspec^.csPreState.csVarTypeNames
 
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
   liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
-  let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-  let Just mem = Crucible.lookupGlobal lvar globals
+  --let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+  --let Just mem = Crucible.lookupGlobal lvar globals
 
-  -- Allocate LLVM memory for each 'jvm_alloc'
+  -- Allocate objects in memory for each 'jvm_alloc'
   (env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
-  -- Allocate LLVM memory for each 'jvm_alloc_readonly'
-  (env2, mem'') <- runStateT (traverse (doAllocConst cc) tyenvRO) mem'
-  env3 <- Map.traverseWithKey
+  env2 <- Map.traverseWithKey
             (\k _ -> executeFreshPointer cc k)
             (mspec^.csPreState.csFreshPointers)
-  let env = Map.unions [env1, env2, env3]
+  let env = Map.unions [env1, env2]
 
   mem''' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem''
   let globals1 = Crucible.insertGlobal lvar mem''' globals
@@ -314,7 +303,6 @@ verifyPrestate cc mspec globals = do
 --   check than the memory compatiblity check that is done for points-to
 --   assertions.
 checkRegisterCompatibility ::
-  (Crucible.HasPtrWidth wptr) =>
   Crucible.MemType ->
   Crucible.MemType ->
   IO Bool
@@ -324,11 +312,10 @@ checkRegisterCompatibility mt mt' =
      return (st == st')
 
 resolveArguments ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  CrucibleContext arch       ->
-  CrucibleMethodSpecIR       ->
-  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
-  IO [(Crucible.MemType, LLVMVal)]
+  CrucibleContext          ->
+  CrucibleMethodSpecIR     ->
+  Map AllocIndex JVMRefVal ->
+  IO [(JavaType, JVMVal)]
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
@@ -362,12 +349,11 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  CrucibleMethodSpecIR       ->
-  CrucibleContext arch       ->
-  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
-  [PointsTo]                 ->
-  MemImpl                    ->
+  CrucibleMethodSpecIR     ->
+  CrucibleContext          ->
+  Map AllocIndex JVMRefVal ->
+  [PointsTo]               ->
+  MemImpl                  ->
   IO MemImpl
 setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
   where
@@ -394,10 +380,9 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that shuld be assumed to be true.
 setupPrestateConditions ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR        ->
-  CrucibleContext arch        ->
-  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
+  CrucibleContext             ->
+  Map AllocIndex JVMRefVal    ->
   Crucible.SymGlobalState Sym ->
   [SetupCondition]            ->
   IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
@@ -424,11 +409,11 @@ setupPrestateConditions mspec cc env = aux []
 
 --------------------------------------------------------------------------------
 
--- | Create a SAWCore formula asserting that two 'LLVMVal's are equal.
+-- | Create a SAWCore formula asserting that two 'JVMVal's are equal.
 assertEqualVals ::
   CrucibleContext arch ->
-  LLVMVal ->
-  LLVMVal ->
+  JVMVal ->
+  JVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
   Crucible.toSC (cc^.ccBackend) =<< equalValsPred cc v1 v2
@@ -438,10 +423,9 @@ assertEqualVals cc v1 v2 =
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
 doAlloc ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  CrucibleContext arch       ->
-  (W4.ProgramLoc, Crucible.MemType) ->
-  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
+  CrucibleContext        ->
+  (W4.ProgramLoc, JavaType) ->
+  StateT MemImpl IO JVMRefVal
 doAlloc cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
@@ -451,10 +435,9 @@ doAlloc cc (_loc,tp) = StateT $ \mem ->
 -- | Allocate read-only space on the LLVM heap to store a value of the
 -- given type. Returns the pointer to the allocated memory.
 doAllocConst ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  CrucibleContext arch       ->
-  (W4.ProgramLoc, Crucible.MemType) ->
-  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
+  CrucibleContext           ->
+  (W4.ProgramLoc, JavaType) ->
+  StateT MemImpl IO JVMRefVal
 doAllocConst cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
@@ -463,26 +446,25 @@ doAllocConst cc (_loc,tp) = StateT $ \mem ->
 
 --------------------------------------------------------------------------------
 
-ppGlobalPair :: CrucibleContext arch
-             -> Crucible.GlobalPair Sym a
-             -> Doc
-ppGlobalPair cc gp =
-  let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-      globals = gp ^. Crucible.gpGlobals in
-  case Crucible.lookupGlobal mvar globals of
-    Nothing -> text "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem mem
+--ppGlobalPair :: CrucibleContext arch
+--             -> Crucible.GlobalPair Sym a
+--             -> Doc
+--ppGlobalPair cc gp =
+--  let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+--      globals = gp ^. Crucible.gpGlobals in
+--  case Crucible.lookupGlobal mvar globals of
+--    Nothing -> text "LLVM Memory global variable not initialized"
+--    Just mem -> Crucible.ppMem mem
 
 
 --------------------------------------------------------------------------------
 
 registerOverride ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                    ->
-  CrucibleContext arch       ->
-  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
+  CrucibleContext            ->
+  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym JVM ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
+  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym JVM rtp args ret ()
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
@@ -507,16 +489,15 @@ registerOverride opts cc _ctx cs = do
 --------------------------------------------------------------------------------
 
 verifySimulate ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                       ->
-  CrucibleContext arch          ->
+  CrucibleContext               ->
   CrucibleMethodSpecIR          ->
-  [(Crucible.MemType, LLVMVal)] ->
+  [(JavaType, JVMVal)]          ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
-  IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
+  IO (Maybe (JavaType, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc mspec args assumes lemmas globals checkSat =
   do let nm = mspec^.csName
      case Map.lookup (L.Symbol nm) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
@@ -569,7 +550,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
     sym = cc^.ccBackend
     prepareArgs ::
       Ctx.Assignment Crucible.TypeRepr xs ->
-      [LLVMVal] ->
+      [JVMVal] ->
       IO (Crucible.RegMap Sym xs)
     prepareArgs ctx x =
       Crucible.RegMap <$>
@@ -587,14 +568,13 @@ scAndList sc (x : xs) = foldM (scAnd sc) x xs
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                           {- ^ saw script debug and print options           -} ->
   SharedContext                     {- ^ saw core context                             -} ->
-  CrucibleContext arch              {- ^ crucible context                             -} ->
+  CrucibleContext                   {- ^ crucible context                             -} ->
   CrucibleMethodSpecIR              {- ^ specification                                -} ->
-  Map AllocIndex (LLVMPtr wptr)     {- ^ allocation substitution                      -} ->
+  Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
-  Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value                        -} ->
+  Maybe (JavaType, JVMVal)          {- ^ optional return value                        -} ->
   TopLevel [(String, Term)]         {- ^ generated labels and verification conditions -}
 verifyPoststate opts sc cc mspec env0 globals ret =
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
@@ -640,10 +620,11 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 --------------------------------------------------------------------------------
 
 setupCrucibleContext ::
-   BuiltinContext -> Options -> LLVMModule ->
-   (forall arch. (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => CrucibleContext arch -> TopLevel a) ->
-   TopLevel a
-setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
+  BuiltinContext -> Options -> JavaClass ->
+  (CrucibleContext -> TopLevel a) ->
+  TopLevel a
+setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action =
+  do
   halloc <- getHandleAlloc
   AIGProxy proxy <- getProxy
   let ctx = mtrans^.Crucible.transContext
@@ -697,36 +678,35 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
 
 --------------------------------------------------------------------------------
 
-setupArg :: SharedContext
-         -> Sym
-         -> IORef (Seq (ExtCns Term))
-         -> Crucible.TypeRepr tp
-         -> IO (Crucible.RegEntry Sym tp)
+setupArg ::
+  SharedContext -> Sym ->
+  IORef (Seq (ExtCns Term)) ->
+  Crucible.TypeRepr tp ->
+  IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp =
   case Crucible.asBaseType tp of
-    Crucible.AsBaseType btp -> do
-       sc_tp <- Crucible.baseSCType sym sc btp
-       i     <- scFreshGlobalVar sc
-       ecs   <- readIORef ecRef
-       let len = Seq.length ecs
-       let ec = EC i ("arg_"++show len) sc_tp
-       writeIORef ecRef (ecs Seq.|> ec)
-       t     <- scFlatTermF sc (ExtCns ec)
-       elt   <- Crucible.bindSAWTerm sym btp t
-       return (Crucible.RegEntry tp elt)
+    Crucible.AsBaseType btp ->
+      do sc_tp <- Crucible.baseSCType sym sc btp
+         i     <- scFreshGlobalVar sc
+         ecs   <- readIORef ecRef
+         let len = Seq.length ecs
+         let ec = EC i ("arg_"++show len) sc_tp
+         writeIORef ecRef (ecs Seq.|> ec)
+         t     <- scFlatTermF sc (ExtCns ec)
+         elt   <- Crucible.bindSAWTerm sym btp t
+         return (Crucible.RegEntry tp elt)
 
     Crucible.NotBaseType ->
       fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
 
-setupArgs :: SharedContext
-          -> Sym
-          -> Crucible.FnHandle init ret
-          -> IO (Seq (ExtCns Term), Crucible.RegMap Sym init)
-setupArgs sc sym fn = do
-  ecRef  <- newIORef Seq.empty
-  regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
-  ecs    <- readIORef ecRef
-  return (ecs, regmap)
+setupArgs ::
+  SharedContext -> Sym -> Crucible.FnHandle init ret ->
+  IO (Seq (ExtCns Term), Crucible.RegMap Sym init)
+setupArgs sc sym fn =
+  do ecRef  <- newIORef Seq.empty
+     regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
+     ecs    <- readIORef ecRef
+     return (ecs, regmap)
 
 --------------------------------------------------------------------------------
 
@@ -755,43 +735,43 @@ runCFG simCtx globals h cfg args = do
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
 
 
-extractFromLLVMCFG :: Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
-   Options -> SharedContext -> CrucibleContext arch -> Crucible.AnyCFG (Crucible.LLVM arch) -> IO TypedTerm
-extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
-  do  let sym = cc^.ccBackend
-      let h   = Crucible.cfgHandle cfg
-      (ecs, args) <- setupArgs sc sym h
-      let simCtx  = cc^.ccLLVMSimContext
-      let globals = cc^.ccLLVMGlobals
-      res  <- runCFG simCtx globals h cfg args
-      case res of
-        Crucible.FinishedResult _ pr -> do
-            gp <- getGlobalPair opts pr
+extractFromJVMCFG ::
+  Options -> SharedContext -> CrucibleContext -> Crucible.AnyCFG JVM -> IO TypedTerm
+extractFromJVMCFG opts sc cc (Crucible.AnyCFG cfg) =
+  do let sym = cc^.ccBackend
+     let h   = Crucible.cfgHandle cfg
+     (ecs, args) <- setupArgs sc sym h
+     let simCtx  = cc^.ccLLVMSimContext
+     let globals = cc^.ccLLVMGlobals
+     res <- runCFG simCtx globals h cfg args
+     case res of
+       Crucible.FinishedResult _ pr ->
+         do gp <- getGlobalPair opts pr
             t <- Crucible.asSymExpr
                    (gp^.Crucible.gpValue)
                    (Crucible.toSC sym)
                    (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
             t' <- scAbstractExts sc (toList ecs) t
             mkTypedTerm sc t'
-        Crucible.AbortedResult _ ar -> do
-          let resultDoc = ppAbortedResult cc ar
-          fail $ unlines [ "Symbolic execution failed."
-                         , show resultDoc
-                         ]
+       Crucible.AbortedResult _ ar ->
+         do let resultDoc = ppAbortedResult cc ar
+            fail $ unlines [ "Symbolic execution failed."
+                           , show resultDoc
+                           ]
 
 
 --------------------------------------------------------------------------------
 
-crucible_jvm_extract :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel TypedTerm
-crucible_jvm_extract bic opts lm fn_name =
-  setupCrucibleContext bic opts lm $ \cc ->
+crucible_jvm_extract :: BuiltinContext -> Options -> JavaClass -> String -> TopLevel TypedTerm
+crucible_jvm_extract bic opts cls fn_name =
+  setupCrucibleContext bic opts cls $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
 
-crucible_jvm_cfg :: BuiltinContext -> Options -> LLVMModule -> String -> TopLevel SAW_CFG
-crucible_jvm_cfg bic opts lm fn_name =
-  setupCrucibleContext bic opts lm $ \cc ->
+crucible_jvm_cfg :: BuiltinContext -> Options -> JavaClass -> String -> TopLevel SAW_CFG
+crucible_jvm_cfg bic opts cls fn_name =
+  setupCrucibleContext bic opts cls $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> return (LLVM_CFG cfg)
@@ -799,74 +779,73 @@ crucible_jvm_cfg bic opts lm fn_name =
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-diffMemTypes ::
-  Crucible.HasPtrWidth wptr =>
-  Crucible.MemType ->
-  Crucible.MemType ->
-  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
-diffMemTypes x0 y0 =
-  let wptr :: Natural = fromIntegral (natValue ?ptrWidth) in
-  case (x0, y0) of
-    -- Special case; consider a one-element struct to be compatiable with
-    -- the type of its field
-    (Crucible.StructType x, _)
-      | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
-    (_, Crucible.StructType y)
-      | V.length (Crucible.siFields y) == 1 -> diffMemTypes x0 (Crucible.fiType (V.head (Crucible.siFields y)))
+--diffMemTypes ::
+--  Crucible.HasPtrWidth wptr =>
+--  Crucible.MemType ->
+--  Crucible.MemType ->
+--  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
+--diffMemTypes x0 y0 =
+--  let wptr :: Natural = fromIntegral (natValue ?ptrWidth) in
+--  case (x0, y0) of
+--    -- Special case; consider a one-element struct to be compatiable with
+--    -- the type of its field
+--    (Crucible.StructType x, _)
+--      | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
+--    (_, Crucible.StructType y)
+--      | V.length (Crucible.siFields y) == 1 -> diffMemTypes x0 (Crucible.fiType (V.head (Crucible.siFields y)))
+--
+--    (Crucible.IntType x, Crucible.IntType y) | x == y -> []
+--    (Crucible.FloatType, Crucible.FloatType) -> []
+--    (Crucible.DoubleType, Crucible.DoubleType) -> []
+--    (Crucible.PtrType{}, Crucible.PtrType{}) -> []
+--    (Crucible.IntType w, Crucible.PtrType{}) | w == wptr -> []
+--    (Crucible.PtrType{}, Crucible.IntType w) | w == wptr -> []
+--    (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
+--      | xn == yn ->
+--        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
+--    (Crucible.VecType xn xt, Crucible.VecType yn yt)
+--      | xn == yn ->
+--        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
+--    (Crucible.StructType x, Crucible.StructType y)
+--      | Crucible.siIsPacked x == Crucible.siIsPacked y
+--        && V.length (Crucible.siFields x) == V.length (Crucible.siFields y) ->
+--          let xts = Crucible.siFieldTypes x
+--              yts = Crucible.siFieldTypes y
+--          in diffMemTypesList 1 (V.toList (V.zip xts yts))
+--    _ -> [([], x0, y0)]
 
-    (Crucible.IntType x, Crucible.IntType y) | x == y -> []
-    (Crucible.FloatType, Crucible.FloatType) -> []
-    (Crucible.DoubleType, Crucible.DoubleType) -> []
-    (Crucible.PtrType{}, Crucible.PtrType{}) -> []
-    (Crucible.IntType w, Crucible.PtrType{}) | w == wptr -> []
-    (Crucible.PtrType{}, Crucible.IntType w) | w == wptr -> []
-    (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
-      | xn == yn ->
-        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
-    (Crucible.VecType xn xt, Crucible.VecType yn yt)
-      | xn == yn ->
-        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
-    (Crucible.StructType x, Crucible.StructType y)
-      | Crucible.siIsPacked x == Crucible.siIsPacked y
-        && V.length (Crucible.siFields x) == V.length (Crucible.siFields y) ->
-          let xts = Crucible.siFieldTypes x
-              yts = Crucible.siFieldTypes y
-          in diffMemTypesList 1 (V.toList (V.zip xts yts))
-    _ -> [([], x0, y0)]
+--diffMemTypesList ::
+--  Crucible.HasPtrWidth arch =>
+--  Int ->
+--  [(Crucible.MemType, Crucible.MemType)] ->
+--  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
+--diffMemTypesList _ [] = []
+--diffMemTypesList i ((x, y) : ts) =
+--  [ (Just i : path, l , r) | (path, l, r) <- diffMemTypes x y ]
+--  ++ diffMemTypesList (i+1) ts
 
-diffMemTypesList ::
-  Crucible.HasPtrWidth arch =>
-  Int ->
-  [(Crucible.MemType, Crucible.MemType)] ->
-  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
-diffMemTypesList _ [] = []
-diffMemTypesList i ((x, y) : ts) =
-  [ (Just i : path, l , r) | (path, l, r) <- diffMemTypes x y ]
-  ++ diffMemTypesList (i+1) ts
+--showMemTypeDiff :: ([Maybe Int], Crucible.MemType, Crucible.MemType) -> String
+--showMemTypeDiff (path, l, r) = showPath path
+--  where
+--    showStep Nothing  = "element type"
+--    showStep (Just i) = "field " ++ show i
+--    showPath []       = ""
+--    showPath [x]      = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
+--    showPath (x : xs) = showStep x ++ " -> " ++ showPath xs
 
-showMemTypeDiff :: ([Maybe Int], Crucible.MemType, Crucible.MemType) -> String
-showMemTypeDiff (path, l, r) = showPath path
-  where
-    showStep Nothing  = "element type"
-    showStep (Just i) = "field " ++ show i
-    showPath []       = ""
-    showPath [x]      = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
-    showPath (x : xs) = showStep x ++ " -> " ++ showPath xs
-
--- | Succeed if the types have compatible memory layouts. Otherwise,
--- fail with a detailed message indicating how the types differ.
-checkMemTypeCompatibility ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
-  Crucible.MemType ->
-  Crucible.MemType ->
-  CrucibleSetup arch ()
-checkMemTypeCompatibility t1 t2 =
-  case diffMemTypes t1 t2 of
-    [] -> return ()
-    diffs ->
-      fail $ unlines $
-      ["types not memory-compatible:", show t1, show t2]
-      ++ map showMemTypeDiff diffs
+---- | Succeed if the types have compatible memory layouts. Otherwise,
+---- fail with a detailed message indicating how the types differ.
+--checkMemTypeCompatibility ::
+--  JavaType ->
+--  JavaType ->
+--  CrucibleSetup ()
+--checkMemTypeCompatibility t1 t2 =
+--  case diffMemTypes t1 t2 of
+--    [] -> return ()
+--    diffs ->
+--      fail $ unlines $
+--      ["types not memory-compatible:", show t1, show t2]
+--      ++ map showMemTypeDiff diffs
 
 --------------------------------------------------------------------------------
 -- Setup builtins
@@ -888,35 +867,24 @@ addCondition cond = currentState.csConditions %= (cond : )
 
 -- | Returns logical type of actual type if it is an array or primitive
 -- type, or an appropriately-sized bit vector for pointer types.
-logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
-                  -> IO (Maybe Term)
-logicTypeOfActual _ sc (Crucible.IntType w) = Just <$> logicTypeForInt sc w
-logicTypeOfActual _ sc Crucible.FloatType = Just <$> scApplyPrelude_Float sc
-logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scApplyPrelude_Double sc
-logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
-  melTyp <- logicTypeOfActual dl sc ty
-  case melTyp of
-    Just elTyp -> do
-      lTm <- scNat sc (fromIntegral n)
-      Just <$> scVecType sc lTm elTyp
-    Nothing -> return Nothing
-logicTypeOfActual dl sc (Crucible.PtrType _) = do
-  bType <- scBoolType sc
-  lTm <- scNat sc (fromIntegral (Crucible.ptrBitwidth dl))
-  Just <$> scVecType sc lTm bType
-logicTypeOfActual dl sc (Crucible.StructType si) = do
-  let memtypes = V.toList (Crucible.siFieldTypes si)
-  melTyps <- traverse (logicTypeOfActual dl sc) memtypes
-  case sequence melTyps of
-    Just elTyps -> Just <$> scTupleType sc elTyps
-    Nothing -> return Nothing
-logicTypeOfActual _ _ t = fail (show t) -- return Nothing
-
-logicTypeForInt :: SharedContext -> Natural -> IO Term
-logicTypeForInt sc w =
-  do bType <- scBoolType sc
-     lTm <- scNat sc (fromIntegral w)
-     scVecType sc lTm bType
+logicTypeOfActual :: SharedContext -> JavaType -> IO (Maybe Term)
+logicTypeOfActual sc jty =
+  case jty of
+    JavaBoolean -> Just <$> scBoolType sc
+    JavaByte    -> Just <$> scBitvector sc 8
+    JavaChar    -> Just <$> scBitvector sc 16
+    JavaShort   -> Just <$> scBitvector sc 16
+    JavaInt     -> Just <$> scBitvector sc 32
+    JavaLong    -> Just <$> scBitvector sc 64
+    JavaFloat   -> Just <$> scApplyPrelude_Float sc
+    JavaDouble  -> Just <$> scApplyPrelude_Double sc
+    JavaArray len ety ->
+      do mety' <- logicTypeOfActual sc ety
+         case mety' of
+           Just ety' -> do len' <- scNat sc (fromIntegral n)
+                           scVecType sc len' ety'
+           Nothing   -> return Nothing
+    JavaClass _ -> return Nothing
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
@@ -924,17 +892,16 @@ jvm_fresh_var ::
   BuiltinContext          {- ^ context          -} ->
   Options                 {- ^ options          -} ->
   String                  {- ^ variable name    -} ->
-  L.Type                  {- ^ variable type    -} ->
+  JavaType                {- ^ variable type    -} ->
   CrucibleSetupM TypedTerm {- ^ fresh typed term -}
-jvm_fresh_var bic _opts name lty = CrucibleSetupM $ do
-  lty' <- memTypeForLLVMType bic lty
-  cctx <- getCrucibleContext
-  let sc = biSharedContext bic
-  let dl = Crucible.llvmDataLayout (cctx^.ccTypeCtx)
-  mty <- liftIO $ logicTypeOfActual dl sc lty'
-  case mty of
-    Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show (L.ppType lty)
-    Just ty -> freshVariable sc name ty
+jvm_fresh_var bic _opts name jty =
+  CrucibleSetupM $
+  do cctx <- getCrucibleContext
+     let sc = biSharedContext bic
+     mty <- liftIO $ logicTypeOfActual dl sc jty
+     case mty of
+       Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show lty
+       Just ty -> freshVariable sc name ty
 
 -- | Allocate a fresh variable and record this allocation in the
 -- setup state.
@@ -942,71 +909,90 @@ freshVariable ::
   SharedContext {- ^ shared context -} ->
   String        {- ^ variable name  -} ->
   Term          {- ^ variable type  -} ->
-  CrucibleSetup arch TypedTerm
+  CrucibleSetup TypedTerm
 freshVariable sc name ty =
   do tt <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc name ty)
      currentState . csFreshVars %= cons tt
      return tt
 
 
-memTypeForLLVMType :: BuiltinContext -> L.Type -> CrucibleSetup arch Crucible.MemType
-memTypeForLLVMType _bic lty =
-  do case Crucible.liftMemType lty of
-       Just m -> return m
-       Nothing -> fail ("unsupported type: " ++ show (L.ppType lty))
-
-llvmTypeAlias :: L.Type -> Maybe Crucible.Ident
-llvmTypeAlias (L.Alias i) = Just i
-llvmTypeAlias _ = Nothing
-
-jvm_alloc ::
+jvm_alloc_object ::
   BuiltinContext ->
   Options        ->
-  L.Type         ->
+  String {- ^ class name -} ->
   CrucibleSetupM SetupValue
-jvm_alloc _bic _opt lty = CrucibleSetupM $
-  do let ?dl = Crucible.llvmDataLayout ?lc
-     loc <- toW4Loc "jvm_alloc" <$> lift getPosition
-     memTy <- case Crucible.liftMemType lty of
-       Just s -> return s
-       Nothing -> fail ("unsupported type in jvm_alloc: " ++ show (L.ppType lty))
+jvm_alloc_object _bic _opt cname = CrucibleSetupM $
+  do loc <- toW4Loc "jvm_alloc_object" <$> lift getPosition
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csAllocs.at n ?= (loc,memTy)
-     -- TODO: refactor
-     case llvmTypeAlias lty of
-       Just i -> currentState.csVarTypeNames.at n ?= i
-       Nothing -> return ()
+     currentState.csAllocs.at n ?= (loc, JavaClass cname)
      return (SetupVar n)
 
-jvm_points_to ::
+jvm_alloc_array ::
+  BuiltinContext ->
+  Options        ->
+  Int {- array size -} ->
+  JavaType       ->
+  CrucibleSetupM SetupValue
+jvm_alloc_array _bic _opt len ety =
+  CrucibleSetupM $
+  do loc <- toW4Loc "jvm_alloc_array" <$> lift getPosition
+     n <- csVarCounter <<%= nextAllocIndex
+     currentState.csAllocs.at n ?= (loc, JavaArray len ety)
+     return (SetupVar n)
+
+jvm_field_is ::
   Bool {- ^ whether to check type compatibility -} ->
   BuiltinContext ->
   Options        ->
-  SetupValue     ->
-  SetupValue     ->
+  SetupValue {- ^ object -} ->
+  String     {- ^ field name -} ->
+  SetupValue {- ^ field value -} ->
   CrucibleSetupM ()
-jvm_points_to typed _bic _opt ptr val = CrucibleSetupM $
+jvm_field_is typed _bic _opt ptr fname val =
+  CrucibleSetupM $
   do cc <- getCrucibleContext
-     loc <- toW4Loc "jvm_points_to" <$> lift getPosition
-     Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \wptr -> Crucible.withPtrWidth wptr $
-       do let ?lc = cc^.ccTypeCtx
-          st <- get
-          let rs = st^.csResolvedState
-          if st^.csPrePost == PreState && testResolved ptr rs
-            then fail "Multiple points-to preconditions on same pointer"
-            else csResolvedState %= markResolved ptr
-          let env = csAllocations (st^.csMethodSpec)
-              nameEnv = csTypeNames (st^.csMethodSpec)
-          ptrTy <- typeOfSetupValue cc env nameEnv ptr
-          lhsTy <- case ptrTy of
-            Crucible.PtrType symTy ->
-              case Crucible.asMemType symTy of
-                Just lhsTy -> return lhsTy
-                Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
-            _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-          valTy <- typeOfSetupValue cc env nameEnv val
-          when typed (checkMemTypeCompatibility lhsTy valTy)
-          addPointsTo (PointsTo loc ptr val)
+     loc <- toW4Loc "jvm_field_is" <$> lift getPosition
+     st <- get
+     let rs = st^.csResolvedState
+     if st^.csPrePost == PreState && testResolved ptr rs
+       then fail "Multiple points-to preconditions on same pointer"
+       else csResolvedState %= markResolved ptr
+     let env = csAllocations (st^.csMethodSpec)
+         nameEnv = csTypeNames (st^.csMethodSpec)
+     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     valTy <- typeOfSetupValue cc env nameEnv val
+     --when typed (checkMemTypeCompatibility lhsTy valTy)
+     addPointsTo (PointsTo loc ptr val)
+
+jvm_elem_is ::
+  Bool {- ^ whether to check type compatibility -} ->
+  BuiltinContext ->
+  Options        ->
+  SetupValue {- ^ array -} ->
+  Int        {- ^ index -} ->
+  SetupValue {- ^ element value -} ->
+  CrucibleSetupM ()
+jvm_elem_is typed _bic _opt ptr idx val =
+  CrucibleSetupM $
+  do cc <- getCrucibleContext
+     loc <- toW4Loc "jvm_elem_is" <$> lift getPosition
+     st <- get
+     let rs = st^.csResolvedState
+     if st^.csPrePost == PreState && testResolved ptr rs
+       then fail "Multiple points-to preconditions on same pointer"
+       else csResolvedState %= markResolved ptr
+     let env = csAllocations (st^.csMethodSpec)
+         nameEnv = csTypeNames (st^.csMethodSpec)
+     --ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     --lhsTy <- case ptrTy of
+     --  Crucible.PtrType symTy ->
+     --    case Crucible.asMemType symTy of
+     --      Just lhsTy -> return lhsTy
+     --      Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
+     --  _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
+     --valTy <- typeOfSetupValue cc env nameEnv val
+     --when typed (checkMemTypeCompatibility lhsTy valTy)
+     addPointsTo (PointsTo loc ptr val)
 
 toW4Loc :: Text.Text -> SS.Pos -> W4.ProgramLoc
 toW4Loc fnm SS.Unknown          = W4.mkProgramLoc (W4.functionNameFromText fnm) W4.InternalPos
@@ -1060,23 +1046,24 @@ jvm_execute_func :: BuiltinContext
                       -> Options
                       -> [SetupValue]
                       -> CrucibleSetupM ()
-jvm_execute_func _bic _opt args = CrucibleSetupM $ do
-  let ?dl   = Crucible.llvmDataLayout ?lc
-  tps <- use (csMethodSpec.csArgs)
-  csPrePost .= PostState
-  csMethodSpec.csArgBindings .= Map.fromList [ (i, (t,a))
-                                             | i <- [0..]
-                                             | a <- args
-                                             | t <- tps
-                                             ]
+jvm_execute_func _bic _opt args =
+  CrucibleSetupM $
+  do tps <- use (csMethodSpec.csArgs)
+     csPrePost .= PostState
+     csMethodSpec.csArgBindings .= Map.fromList [ (i, (t,a))
+                                                | i <- [0..]
+                                                | a <- args
+                                                | t <- tps
+                                                ]
 
 jvm_return ::
   BuiltinContext -> Options -> SetupValue -> CrucibleSetupM ()
-jvm_return _bic _opt retval = CrucibleSetupM $ do
-  ret <- use (csMethodSpec.csRetValue)
-  case ret of
-    Just _ -> fail "jvm_return: duplicate return value specification"
-    Nothing -> csMethodSpec.csRetValue .= Just retval
+jvm_return _bic _opt retval =
+  CrucibleSetupM $
+  do ret <- use (csMethodSpec.csRetValue)
+     case ret of
+       Just _ -> fail "jvm_return: duplicate return value specification"
+       Nothing -> csMethodSpec.csRetValue .= Just retval
 
 
 --------------------------------------------------------------------------------

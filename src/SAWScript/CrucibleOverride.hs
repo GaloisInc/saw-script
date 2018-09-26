@@ -260,7 +260,7 @@ methodSpecHandler opts sc cc css retTy = do
   -- This internal function runs a single method spec. Note we are careful to avoid
   -- any abort conditions.  As this might cause us to unwind past the code that assembles
   -- and asserts the preconditions.  Instead we use a Maybe return value to encode the
-  -- partiality invoved in selecting among the overrides.
+  -- partiality involved in selecting among the overrides.
   let runSpec :: forall rtp'.
         CrucibleMethodSpecIR {- spec to run -} ->
         IORef (Maybe [(W4.Pred Sym, Crucible.SimError)]) {- IORef to hold the computed precondition -} ->

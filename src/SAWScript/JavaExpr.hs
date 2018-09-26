@@ -375,4 +375,4 @@ data JavaType
   | JavaDouble
   | JavaArray Int JavaType
   | JavaClass String
-  deriving Eq
+  deriving (Eq, Show)

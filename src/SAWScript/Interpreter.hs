@@ -1803,19 +1803,41 @@ primitives = Map.fromList
     , "name is used only for pretty-printing."
     ]
 
-  , prim "jvm_alloc" "LLVMType -> JVMSetup JVMValue"
-    (bicVal jvm_alloc)
-    [ "Declare that an object of the given type should be allocated in a"
+  , prim "jvm_alloc_object" "String -> JVMSetup JVMValue"
+    (bicVal jvm_alloc_object)
+    [ "Declare that an instance of the given class should be allocated in a"
     , "Crucible specification. Before `jvm_execute_func`, this states"
     , "that the function expects the object to be allocated before it runs."
     , "After `jvm_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
     ]
 
-  , prim "jvm_points_to" "JVMValue -> JVMValue -> JVMSetup ()"
-    (bicVal (jvm_points_to True))
-    [ "Declare that the memory location indicated by the given pointer (first"
-    , "argument) contains the given value (second argument)."
+  , prim "jvm_alloc_array" "Int -> JVMType -> JVMSetup JVMValue"
+    (bicVal jvm_alloc_array)
+    [ "Declare that an array of the given size and element type should be"
+    , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
+    , "states that the function expects the array to be allocated before it"
+    , "runs. After `jvm_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
+
+    -- TODO: jvm_alloc_multiarray
+
+  , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
+    (bicVal (jvm_field_is True))
+    [ "Declare that the indicated object (first argument) has a field"
+    , "(second argument) containing the given value (third argument)."
+    , ""
+    , "In the pre-state section (before jvm_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after jvm_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "jvm_elem_is" "JVMValue -> Int -> JVMValue -> JVMSetup ()"
+    (bicVal (jvm_elem_is True))
+    [ "Declare that the indicated array (first argument) has an element"
+    , "(second argument) containing the given value (third argument)."
     , ""
     , "In the pre-state section (before jvm_execute_func) this specifies"
     , "the initial memory layout before function execution. In the post-state"
@@ -1871,7 +1893,7 @@ primitives = Map.fromList
     , "as would be returned by jvm_verify but without performing any"
     , "verification."
     ]
-
+{-
   , prim "jvm_array"
     "[JVMValue] -> JVMValue"
     (pureVal JIR.SetupArray)
@@ -1895,7 +1917,7 @@ primitives = Map.fromList
     (pureVal JIR.SetupField)
     [ "Turn a JVMValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
-
+-}
   , prim "jvm_null"
     "JVMValue"
     (pureVal JIR.SetupNull)
