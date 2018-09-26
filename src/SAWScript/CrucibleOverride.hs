@@ -562,14 +562,15 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupVars :: SetupValue -> Set AllocIndex
     setupVars v =
       case v of
-        SetupVar    i  -> Set.singleton i
-        SetupStruct xs -> foldMap setupVars xs
-        SetupArray  xs -> foldMap setupVars xs
-        SetupElem x _  -> setupVars x
-        SetupField x _ -> setupVars x
-        SetupTerm   _  -> Set.empty
-        SetupNull      -> Set.empty
-        SetupGlobal _  -> Set.empty
+        SetupVar    i            -> Set.singleton i
+        SetupStruct xs           -> foldMap setupVars xs
+        SetupArray  xs           -> foldMap setupVars xs
+        SetupElem x _            -> setupVars x
+        SetupField x _           -> setupVars x
+        SetupTerm   _            -> Set.empty
+        SetupNull                -> Set.empty
+        SetupGlobal _            -> Set.empty
+        SetupGlobalInitializer _ -> Set.empty
 
 
 ------------------------------------------------------------------------
@@ -1059,14 +1060,15 @@ instantiateSetupValue ::
   IO SetupValue
 instantiateSetupValue sc s v =
   case v of
-    SetupVar _     -> return v
-    SetupTerm tt   -> SetupTerm <$> doTerm tt
-    SetupStruct vs -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
-    SetupArray  vs -> SetupArray <$> mapM (instantiateSetupValue sc s) vs
-    SetupElem _ _  -> return v
-    SetupField _ _ -> return v
-    SetupNull      -> return v
-    SetupGlobal _  -> return v
+    SetupVar _               -> return v
+    SetupTerm tt             -> SetupTerm   <$> doTerm tt
+    SetupStruct vs           -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
+    SetupArray  vs           -> SetupArray  <$> mapM (instantiateSetupValue sc s) vs
+    SetupElem _ _            -> return v
+    SetupField _ _           -> return v
+    SetupNull                -> return v
+    SetupGlobal _            -> return v
+    SetupGlobalInitializer _ -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 

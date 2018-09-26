@@ -70,15 +70,21 @@ newtype AllocIndex = AllocIndex Int
 nextAllocIndex :: AllocIndex -> AllocIndex
 nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
 
+-- | From the manual: "The SetupValue type corresponds to values that can occur
+-- during symbolic execution, which includes both Term values, pointers, and
+-- composite types consisting of either of these (both structures and arrays)."
 data SetupValue where
-  SetupVar    :: AllocIndex -> SetupValue
-  SetupTerm   :: TypedTerm -> SetupValue
-  SetupStruct :: [SetupValue] -> SetupValue
-  SetupArray  :: [SetupValue] -> SetupValue
-  SetupElem   :: SetupValue -> Int -> SetupValue
-  SetupField  :: SetupValue -> String -> SetupValue
-  SetupNull   :: SetupValue
-  SetupGlobal :: String -> SetupValue
+  SetupVar               :: AllocIndex -> SetupValue
+  SetupTerm              :: TypedTerm -> SetupValue
+  SetupStruct            :: [SetupValue] -> SetupValue
+  SetupArray             :: [SetupValue] -> SetupValue
+  SetupElem              :: SetupValue -> Int -> SetupValue
+  SetupField             :: SetupValue -> String -> SetupValue
+  SetupNull              :: SetupValue
+  -- | A pointer to a global variable
+  SetupGlobal            :: String -> SetupValue
+  -- | This represents the value of a global's initializer.
+  SetupGlobalInitializer :: String -> SetupValue
   deriving (Show)
 
 setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm

@@ -69,7 +69,6 @@ module SAWScript.CrucibleLLVM
   , transContext
   , llvmPtrWidth
   , initializeMemory
-  , initMemoryCFG
   , LLVMContext
   , translateModule
     -- * Re-exports from "Lang.Crucible.LLVM.MemModel"
@@ -151,7 +150,7 @@ import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
 
 import Lang.Crucible.LLVM.Translation
   (llvmMemVar, toStorableType, symbolMap, LLVMHandleInfo(LLVMHandleInfo),
-   cfgMap, transContext, llvmPtrWidth, initializeMemory, initMemoryCFG,
+   cfgMap, transContext, llvmPtrWidth, initializeMemory,
    ModuleTranslation, LLVMContext, translateModule)
 
 import Lang.Crucible.LLVM.MemModel

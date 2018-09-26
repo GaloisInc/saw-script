@@ -1,5 +1,7 @@
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module SAWScript.CrucibleResolveSetupValue
   ( LLVMVal, LLVMPtr
@@ -37,8 +39,9 @@ import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.ProgramLoc as W4
 
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified SAWScript.CrucibleLLVM as Crucible
+import qualified Lang.Crucible.LLVM.Translation      as CrucibleT
+import qualified Lang.Crucible.Backend.SAWCore       as Crucible
+import qualified SAWScript.CrucibleLLVM              as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -113,7 +116,7 @@ typeOfSetupValue cc env nameEnv val =
   do let ?lc = cc^.ccTypeCtx
      typeOfSetupValue' cc env nameEnv val
 
-typeOfSetupValue' ::
+typeOfSetupValue' :: forall m wptr.
   Monad m =>
   CrucibleContext wptr ->
   Map AllocIndex (W4.ProgramLoc, Crucible.MemType) ->
@@ -174,24 +177,32 @@ typeOfSetupValue' cc env nameEnv val =
       -- and b) it prevents us from doing a type-safe dereference
       -- operation.
       return (Crucible.PtrType Crucible.VoidType)
-    SetupGlobal name ->
-      do let m = cc^.ccLLVMModule
-             tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
-                   [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
-                   [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
-         case lookup (L.Symbol name) tys of
-           Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
-           Just ty ->
-             case let ?lc = lc in Crucible.liftType ty of
-               Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
-               Just symTy -> return (Crucible.PtrType symTy)
+    -- A global and its initializer have the same type.
+    SetupGlobal            name -> do
+      let m = cc^.ccLLVMModule
+          tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
+                [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
+                [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
+      case lookup (L.Symbol name) tys of
+        Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
+        Just ty ->
+          case let ?lc = lc in Crucible.liftType ty of
+            Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
+            Just symTy -> return (Crucible.PtrType symTy)
+    SetupGlobalInitializer name -> do
+      case Map.lookup (L.Symbol name) (CrucibleT.globalMap $ cc^.ccLLVMModuleTrans) of
+        Just (g, _) ->
+          case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
+            Nothing    -> fail $ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
+            Just memTy -> return memTy
+        Nothing             -> fail $ "resolveSetupVal: global not found: " ++ name
   where
     lc = cc^.ccTypeCtx
     dl = Crucible.llvmDataLayout lc
 
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
-resolveSetupVal ::
+resolveSetupVal :: forall arch.
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   CrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -250,6 +261,13 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupGlobal name ->
       do let mem = cc^.ccLLVMEmptyMem
          Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
+    SetupGlobalInitializer name ->
+      case Map.lookup (L.Symbol name) (CrucibleT.globalMap $ cc^.ccLLVMModuleTrans) of
+        -- There was an error in global -> constant translation
+        Just (_, (Left  e)) -> fail e
+        Just (_, (Right v)) ->
+          let ?lc = lc in CrucibleT.constToLLVMVal @arch sym (cc^.ccLLVMEmptyMem) v
+        Nothing             -> fail $ "resolveSetupVal: global not found: " ++ name
   where
     sym = cc^.ccBackend
     lc = cc^.ccTypeCtx

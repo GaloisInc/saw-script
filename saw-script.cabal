@@ -33,7 +33,7 @@ library
     , cryptol-verifier
     , crucible >= 0.4 && < 0.5
     , crucible-jvm
-    , crucible-llvm
+    , crucible-llvm >= 0.2
     , crucible-saw
     , deepseq
     , either

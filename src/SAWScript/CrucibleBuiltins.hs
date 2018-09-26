@@ -99,7 +99,7 @@ import           What4.Utils.MonadST
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
-  (AnyCFG(..), SomeCFG(..), CFG, TypeRepr(..), cfgHandle,
+  (AnyCFG(..), CFG, TypeRepr(..), cfgHandle,
    asBaseType, AsBaseType(..), freshGlobalVar)
 import qualified Lang.Crucible.CFG.Extension as Crucible
   (IsSyntaxExtension)
@@ -689,11 +689,6 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let setupMem = do
              -- register the callable override functions
              _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
-
-             -- initialize LLVM global variables
-             _ <- case Crucible.initMemoryCFG mtrans of
-                     Crucible.SomeCFG initCFG ->
-                       Crucible.callCFG initCFG Crucible.emptyRegMap
 
              -- register all the functions defined in the LLVM module
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
