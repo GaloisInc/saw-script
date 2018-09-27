@@ -18,9 +18,10 @@ module SAWScript.X86
   ) where
 
 
-import Control.Lens (toListOf, folded)
+import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST(ST,stToIO,RealWorld)
+
 import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -29,8 +30,7 @@ import           Data.Map ( Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
-import           Control.Lens((^.))
-import GHC.Natural(Natural)
+import           GHC.Natural(Natural)
 import           System.IO(hFlush,stdout)
 
 import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
@@ -88,7 +88,7 @@ import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
                         , relativeSegmentAddr, incAddr
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
-                                  , memoryForElf )
+                                  , memoryForElfAllSymbols )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
                           , GlobalMap
@@ -276,8 +276,8 @@ getElf path =
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.
 getRelevant :: Elf 64 -> IO RelevantElf
-getRelevant elf = do
-  case memoryForElf opts elf of
+getRelevant elf =
+  case memoryForElfAllSymbols opts elf of
     Left err -> malformed err
     Right (mem, addrs, _warnings, _errs) ->
       do
@@ -321,7 +321,8 @@ loadGlobal ::
   IO [(String, Integer, Unit, [Integer])]
 loadGlobal elf (nm,n,u) =
   case findSymbols (symMap elf) nm of
-    [] -> err "Global not found"
+    [] -> do print $ symMap elf
+             err "Global not found"
     _  -> mapM loadLoc (findSymbols (symMap elf) nm)
   where
   mem   = memory elf
@@ -349,14 +350,14 @@ loadGlobal elf (nm,n,u) =
                    is <- mapM readOne (addrsFor start)
                    return (sname, a, u, is)
 
-  err xs = fail $ unlines $
-                    [ "Railed to load global."
+  err xs = fail $ unlines
+                    [ "Failed to load global."
                     , "*** Global: " ++ show nm
                     , "*** Error: " ++ xs
                     ]
 
 
--- | The possition associated with a specific location.
+-- | The position associated with a specific location.
 posFn :: MemSegmentOff 64 -> Position
 posFn = OtherPos . Text.pack . show
 
@@ -558,8 +559,7 @@ makeCFG opts elf name addr =
   do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
      baseVar <- freshGlobalVar (allocator opts) baseName knownRepr
      let memBaseVarMap = Map.singleton 1 baseVar
-     g <- mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
-     return g
+     mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName
