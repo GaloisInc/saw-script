@@ -34,14 +34,14 @@ import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
                    (NatRepr(..), someNat, natValue, LeqProof(..), isPosNat)
 
-import qualified What4.BaseTypes as W4
-import qualified What4.Interface as W4
+import qualified What4.BaseTypes    as W4
+import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
-import qualified What4.ProgramLoc as W4
+import qualified What4.ProgramLoc   as W4
 
-import qualified Lang.Crucible.LLVM.Translation      as CrucibleT
-import qualified Lang.Crucible.Backend.SAWCore       as Crucible
-import qualified SAWScript.CrucibleLLVM              as Crucible
+import qualified Lang.Crucible.LLVM.Translation.Constant as Crucible
+import qualified Lang.Crucible.Backend.SAWCore           as Crucible
+import qualified SAWScript.CrucibleLLVM                  as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -190,7 +190,7 @@ typeOfSetupValue' cc env nameEnv val =
             Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
             Just symTy -> return (Crucible.PtrType symTy)
     SetupGlobalInitializer name -> do
-      case Map.lookup (L.Symbol name) (CrucibleT.globalMap $ cc^.ccLLVMModuleTrans) of
+      case Map.lookup (L.Symbol name) (CrucibleT.globalInitMap $ cc^.ccLLVMModuleTrans) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
             Nothing    -> fail $ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
@@ -262,7 +262,8 @@ resolveSetupVal cc env tyenv nameEnv val =
       do let mem = cc^.ccLLVMEmptyMem
          Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
     SetupGlobalInitializer name ->
-      case Map.lookup (L.Symbol name) (CrucibleT.globalMap $ cc^.ccLLVMModuleTrans) of
+      case Map.lookup (L.Symbol name)
+                      (CrucibleT.globalInitMap $ cc^.ccLLVMModuleTrans) of
         -- There was an error in global -> constant translation
         Just (_, (Left  e)) -> fail e
         Just (_, (Right v)) ->

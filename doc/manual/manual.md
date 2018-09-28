@@ -2661,38 +2661,38 @@ aren't initialized at the beginning of symbolic simulation. This is intentional
 To understand the issues surrounding global variables, consider the following C
 code:
 
+<!-- This should (partially) match intTests/test0036_globals/test.c -->
 ~~~
 int x = 0;
 
 int f(int y) {
-    x = x + 1;
-    return x + y;
+  x = x + 1;
+  return x + y;
 }
 
 int g(int z) {
-    x = x + 2;
-    return x + z;
+  x = x + 2;
+  return x + z;
 }
 ~~~
 
 One might initially write the following specifications for `f` and `g`:
 
+<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
 ~~~
-let f_setup = do {
+m <- llvm_load_module "./test.bc";
+
+f_spec <- crucible_llvm_verify m "f" [] true (do {
     y <- crucible_fresh_var "y" (llvm_int 32);
     crucible_execute_func [crucible_term y];
     crucible_return (crucible_term {{ 1 + y : [32] }});
-};
+}) abc;
 
-let f_setup = do {
+g_spec <- crucible_llvm_verify m "g" [] true (do {
     z <- crucible_fresh_var "z" (llvm_int 32);
     crucible_execute_func [crucible_term z];
     crucible_return (crucible_term {{ 2 + z : [32] }});
-};
-
-m <- llvm_load_module "module.bc";
-f_ms <- crucible_llvm_verify m "f" [] false f_setup abc;
-g_ms <- crucible_llvm_verify m "g" [] false g_setup abc;
+}) abc;
 ~~~
 
 If globals were always initialized at the beginning of verification, both
@@ -2704,18 +2704,28 @@ variable `x` in a way that crosses function boundaries.
 Instead, the specifications for `f` and `g` must make this reliance on the
 value of `x` explicit, e.g. one could write
 
+<!-- This should (partially) match intTests/test0036_globals/test.saw -->
 ~~~
-let f_setup = do {
+m <- llvm_load_module "./test.bc";
+
+
+let init_global name = do {
+  crucible_points_to (crucible_global name)
+                     (crucible_global_initializer name);
+};
+
+f_spec <- crucible_llvm_verify m "f" [] true (do {
     y <- crucible_fresh_var "y" (llvm_int 32);
-    crucible_points_to (crucible_global "x")
-                       (crucible_global_init "x");
+    init_global "x";
     crucible_execute_func [crucible_term y];
     crucible_return (crucible_term {{ 1 + y : [32] }});
-};
+}) abc;
 ~~~
 
 which initializes `x` to whatever it is initialized to in the C code
-at the beginning of verification.
+at the beginning of verification. This specification is now safe for
+compositional verification: SAW won't rewrite a term with `f_spec`
+unless it can determine that `x` still has its initial value.
 
 ## Preconditions and Postconditions
 
