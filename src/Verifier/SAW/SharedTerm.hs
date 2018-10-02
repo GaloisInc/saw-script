@@ -104,6 +104,7 @@ module Verifier.SAW.SharedTerm
   , scMinNat
   , scMaxNat
 
+  , scEqTrue
   , scBool
   , scBoolType
   , scFunAll
@@ -1240,6 +1241,9 @@ scGlobalApply sc i ts =
 
 ------------------------------------------------------------
 -- Building terms using prelude functions
+
+scEqTrue :: SharedContext -> Term -> IO Term
+scEqTrue sc t = scGlobalApply sc "Prelude.EqTrue" [t]
 
 scBool :: SharedContext -> Bool -> IO Term
 scBool sc True  = scGlobalDef sc "Prelude.True"

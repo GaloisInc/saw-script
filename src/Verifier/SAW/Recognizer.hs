@@ -69,6 +69,7 @@ module Verifier.SAW.Recognizer
   , asVecType
   , isVecType
   , asMux
+  , asEqTrue
   ) where
 
 import Control.Applicative
@@ -414,3 +415,6 @@ asBitvectorType =
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
+
+asEqTrue :: Monad f => Recognizer f Term Term
+asEqTrue = isGlobalDef "Prelude.EqTrue" @> return
