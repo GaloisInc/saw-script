@@ -278,6 +278,8 @@ ruleOfTerms l r = RewriteRule { ctxt = [], lhs = l, rhs = r }
 
 -- | Converts a parameterized equality predicate to a RewriteRule.
 ruleOfProp :: Term -> RewriteRule
+ruleOfProp (R.asPi -> Just (_, ty, body)) =
+  let rule = ruleOfProp body in rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   let rule = ruleOfProp body in rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
@@ -291,6 +293,7 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
+ruleOfProp (R.asEqTrue -> Just body) = ruleOfProp body
 ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm defaultPPOpts t
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
