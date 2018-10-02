@@ -364,7 +364,7 @@ trivial = withFirstGoal $ \goal -> do
   return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
-    checkTrue (asLambdaList -> (_, asBool -> Just True)) = return ()
+    checkTrue (asPiList -> (_, asEqTrue -> Just (asBool -> Just True))) = return ()
     checkTrue _ = fail "trivial: not a trivial goal"
 
 split_goal :: ProofScript ()
@@ -584,7 +584,6 @@ satUnintSBV conf unints = do
 
 wrapProver ::
   ( SharedContext ->
-    ProverMode ->
     Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
   ProofScript SV.SatResult
 wrapProver f = do
@@ -594,7 +593,7 @@ wrapProver f = do
                Existential -> CheckSat
                Universal   -> Prove
 
-  (mb,stats) <- io $ f sc mode (goalTerm g)
+  (mb,stats) <- io $ f sc (goalTerm g)
 
   let nope r = do ft <- io $ scApplyPrelude_False sc
                   return (r, stats, Just g { goalTerm = ft })
@@ -707,7 +706,9 @@ provePrim :: ProofScript SV.SatResult
           -> TypedTerm -> TopLevel SV.ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
+  sc <- getSharedContext
+  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  (r, pstate) <- runStateT script (startProof goal)
   case finishProof pstate of
     (_stats, Just _)  -> return ()
     (_stats, Nothing) -> printOutLnTop Info $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
@@ -716,7 +717,9 @@ provePrim script t = do
 provePrintPrim :: ProofScript SV.SatResult
                -> TypedTerm -> TopLevel Theorem
 provePrintPrim script t = do
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
+  sc <- getSharedContext
+  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  (r, pstate) <- runStateT script (startProof goal)
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
     (_,Just thm) -> do printOutLnTop Info "Valid"
@@ -726,9 +729,11 @@ provePrintPrim script t = do
 
 satPrim :: ProofScript SV.SatResult -> TypedTerm
         -> TopLevel SV.SatResult
-satPrim script t = do
-  io $ checkBooleanSchema (ttSchema t)
-  evalStateT script (startProof (ProofGoal Existential 0 "sat" "sat" (ttTerm t)))
+satPrim script t =
+  do io $ checkBooleanSchema (ttSchema t)
+     sc <- getSharedContext
+     goal <- io $ makeProofGoal sc Existential 0 "sat" "sat" (ttTerm t)
+     evalStateT script (startProof goal)
 
 satPrintPrim :: ProofScript SV.SatResult
              -> TypedTerm -> TopLevel ()

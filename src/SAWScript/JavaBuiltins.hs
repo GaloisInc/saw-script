@@ -248,9 +248,9 @@ verifyJava bic opts cls mname overrides setup = do
         setVerbosity (simVerbose opts)
         let prover script vs n g = do
               let exts = getAllExts g
-              glam <- io $ scAbstractExts jsc exts g
-              io $ doExtraChecks opts bsc glam
-              let goal = ProofGoal Universal n "vc" (vsVCName vs) glam
+              gprop <- io $ scGeneralizeExts jsc exts =<< scEqTrue jsc g
+              io $ doExtraChecks opts bsc gprop
+              let goal = ProofGoal Universal n "vc" (vsVCName vs) gprop
               r <- evalStateT script (startProof goal)
               case r of
                 SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."
