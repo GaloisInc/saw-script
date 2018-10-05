@@ -36,6 +36,7 @@ library
     lens >= 3.8,
     MonadRandom,
     mtl,
+    parameterized-utils,
     pretty,
     random,
     ref-fd,

@@ -36,23 +36,45 @@ this file is organized so at least you will always get the deBruijn indices
 right when you finally get GHC to accept your code. :)
 -}
 
-module Verifier.SAW.Term.CtxTerm (
-  Ctx(..), CtxApp, CtxInvApp, CtxInv, Arrows
-  , ctxTermsForBindings, invAppendBindings, invertBindings
-  , CtxTerm(..), CtxTerms(..), CtxTermsCtx(..)
-  , Typ, mkClosedTerm, mkClosedTyp, elimClosedTerm
-  , ExistsTp(..), ctxBindingsOfTerms
+module Verifier.SAW.Term.CtxTerm
+  (
+    -- * Re-exports from "Data.Parameterized.Context"
+    -- | We use DataKinds to represent contexts of free variables at the type level.
+    -- These contexts are "inside-out", meaning that the most recently-bound
+    -- variable is listed on the outside. We reflect this by having that most
+    -- recently-bound variable to the right in '::>'.
+    Ctx(..), EmptyCtx, (::>), type (<+>)
+    -- * Contexts and Bindings
+  , Typ
+  , CtxInvApp, CtxInv
   , Bindings(..), bindingsLength, InvBindings(..), InBindings(..)
-  , mkLiftedClosedTerm
+  , invAppendBindings, invertBindings
+    -- * Terms in Context
+  , Arrows
+  , CtxTerm(..), CtxTerms(..), CtxTermsCtx(..)
+  , mkClosedTerm, mkClosedTyp, elimClosedTerm
+  , ExistsTp(..), ctxBindingsOfTerms
+  , ctxTermsForBindings
+    -- * Operations on Terms-in-Context
+  , MonadTerm(..)
   , ctxLambda, ctxPi, ctxPi1
-  , MonadTerm(..), CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
-  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType, mkPRetTp
-  , ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor, mkCtorArgStruct
+    -- * Generalized Lifting and Substitution
+  , CtxLiftSubst(..), ctxLift1, ctxLiftInBindings
+  , mkLiftedClosedTerm
+    -- * Constructor Argument Types
+  , CtorArg(..), CtorArgStruct(..), ctxCtorArgType, ctxCtorType
+    -- * Computing with Eliminators
+  , mkPRetTp
+  , ctxCtorElimType, mkCtorElimTypeFun, ctxReduceRecursor
+    -- * Parsing and Building Constructor Types
+  , mkCtorArgStruct
   ) where
 
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad
+
+import Data.Parameterized.Context
 
 import Verifier.SAW.Term.Functor
 
@@ -73,17 +95,6 @@ data Typ (a :: *)
 -- we simplify datatypes to arbitrary Haskell types.
 newtype DataIdent d = DataIdent Ident
 
--- | We use DataKinds to represent contexts of free variables at the type level.
--- These contexts are "inside-out", meaning that the most recently-bound
--- variable is listed on the outside. We reflect this by having that most
--- recently-bound variable to the right in 'CCons'.
-data Ctx a = CNil | CCons (Ctx a) a
-
--- | Append two contexts, where the second one is to the "inside" of the first
-type family CtxApp ctx1 ctx2 where
-  CtxApp ctx1 'CNil = ctx1
-  CtxApp ctx1 ('CCons ctx2 a) = 'CCons (CtxApp ctx1 ctx2) a
-
 -- | Append a list of types to a context, i.e., "invert" the list of types,
 -- putting the last type on the "outside", and append it. The way to think of
 -- this operation is that we are already "inside" @ctx@, and we are moving
@@ -91,10 +102,10 @@ type family CtxApp ctx1 ctx2 where
 -- where the last type of @as@ is bound last, i.e., most recently.
 type family CtxInvApp ctx as where
   CtxInvApp ctx '[] = ctx
-  CtxInvApp ctx (a ': as) = CtxInvApp ('CCons ctx a) as
+  CtxInvApp ctx (a ': as) = CtxInvApp (ctx ::> a) as
 
 -- | Invert a type list to make a context
-type CtxInv as = CtxInvApp 'CNil as
+type CtxInv as = CtxInvApp EmptyCtx as
 
 -- | A sequence of bindings of pairs of a variable name and a type of some form
 -- for that variable. These bindings are relative to ambient context @ctx@, use
@@ -107,7 +118,7 @@ type CtxInv as = CtxInvApp 'CNil as
 -- and just write "represent" in quotes.
 data Bindings (tp :: Ctx * -> * -> *) (ctx :: Ctx *) (as :: [*]) where
   NoBind :: Bindings tp ctx '[]
-  Bind :: String -> tp ctx (Typ a) -> Bindings tp ('CCons ctx a) as ->
+  Bind :: String -> tp ctx (Typ a) -> Bindings tp (ctx ::> a) as ->
           Bindings tp ctx (a ': as)
 
 -- | Compute the number of bindings in a bindings list
@@ -117,9 +128,9 @@ bindingsLength (Bind _ _ bs) = 1 + bindingsLength bs
 
 -- | An inverted list of bindings, seen from the "inside out"
 data InvBindings (tp :: Ctx * -> * -> *) (ctx :: Ctx *) (as :: Ctx *) where
-  InvNoBind :: InvBindings tp ctx 'CNil
-  InvBind :: InvBindings tp ctx as -> String -> tp (CtxApp ctx as) (Typ a) ->
-             InvBindings tp ctx ('CCons as a)
+  InvNoBind :: InvBindings tp ctx EmptyCtx
+  InvBind :: InvBindings tp ctx as -> String -> tp (ctx <+> as) (Typ a) ->
+             InvBindings tp ctx (as ::> a)
 
 -- | Compute the number of bindings in an inverted bindings list
 invBindingsLength :: InvBindings tp ctx as -> Int
@@ -133,10 +144,10 @@ mapInvBindings _ InvNoBind = InvNoBind
 mapInvBindings f (InvBind ctx x tp) =
   InvBind (mapInvBindings f ctx) x (f tp)
 
--- | Typeclass for things from which we can build proofs that 'CNil' is the left
--- unit of 'CtxApp', i.e., that @'CtxApp' 'CNil' ctx@
+-- | Typeclass for things from which we can build proofs that 'EmptyCtx' is the left
+-- unit of '(<+>)', i.e., that @'EmptyCtx' '<+>' ctx ~ ctx@
 class CtxAppNilEq f where
-  ctxAppNilEq :: f ctx -> CtxApp 'CNil ctx :~: ctx
+  ctxAppNilEq :: f ctx -> EmptyCtx <+> ctx :~: ctx
 
 instance CtxAppNilEq (InvBindings tp ctx') where
   ctxAppNilEq InvNoBind = Refl
@@ -150,8 +161,8 @@ instance CtxAppNilEq (CtxTermsCtx ctx') where
     case ctxAppNilEq ts of
       Refl -> Refl
 
--- | Use 'ctxAppNilEq' to lift from @ctx@ to @'CtxApp' 'CNil' ctx@
-ctxLiftNil :: InvBindings tp 'CNil ctx -> f ctx a -> f (CtxApp 'CNil ctx) a
+-- | Use 'ctxAppNilEq' to lift from @ctx@ to @'EmptyCtx' '<+>' ctx@
+ctxLiftNil :: InvBindings tp EmptyCtx ctx -> f ctx a -> f (EmptyCtx <+> ctx) a
 ctxLiftNil ctx f = case ctxAppNilEq ctx of Refl -> f
 
 -- | Append a 'Bindings' list to an inverted 'InvBindings' list, inverting the
@@ -160,7 +171,7 @@ ctxLiftNil ctx f = case ctxAppNilEq ctx of Refl -> f
 -- further "inside" the regular bindings list; at the end we will be "inside"
 -- both, meaning that we will see the combination "from the inside".
 invAppendBindings :: InvBindings tp ctx as ->
-                     Bindings tp (CtxApp ctx as) bs ->
+                     Bindings tp (ctx <+> as) bs ->
                      InvBindings tp ctx (CtxInvApp as bs)
 invAppendBindings as NoBind = as
 invAppendBindings as (Bind y y_tp bs) =
@@ -171,11 +182,11 @@ invertBindings :: Bindings tp ctx as -> InvBindings tp ctx (CtxInv as)
 invertBindings = invAppendBindings InvNoBind
 
 -- | Append two inverted contexts, where the first one is top-level. This
--- restriction allows us to avoid writing a proof of associativity of 'CtxApp',
+-- restriction allows us to avoid writing a proof of associativity of '(<+>)',
 -- and instead just using 'ctxAppNilEq'
-appendTopInvBindings :: InvBindings tp 'CNil ctx1 ->
+appendTopInvBindings :: InvBindings tp EmptyCtx ctx1 ->
                         InvBindings tp ctx1 ctx2 ->
-                        InvBindings tp 'CNil (CtxApp ctx1 ctx2)
+                        InvBindings tp EmptyCtx (ctx1 <+> ctx2)
 appendTopInvBindings ctx1 InvNoBind = ctx1
 appendTopInvBindings ctx1 (InvBind ctx2 x tp) =
   let ret = appendTopInvBindings ctx1 ctx2 in
@@ -218,15 +229,15 @@ castCtxTerm :: Proxy a -> Proxy b -> CtxTerm ctx a -> CtxTerm ctx b
 castCtxTerm _ _ (CtxTerm t) = CtxTerm t
 
 -- | Build a term in the empty context
-mkClosedTerm :: Term -> CtxTerm 'CNil a
+mkClosedTerm :: Term -> CtxTerm EmptyCtx a
 mkClosedTerm = CtxTerm
 
 -- | Build a term to represent a type in the empty context
-mkClosedTyp :: Term -> CtxTerm 'CNil (Typ a)
+mkClosedTyp :: Term -> CtxTerm EmptyCtx (Typ a)
 mkClosedTyp = mkClosedTerm
 
 -- | Take a term out of the empty context
-elimClosedTerm :: CtxTerm 'CNil a -> Term
+elimClosedTerm :: CtxTerm EmptyCtx a -> Term
 elimClosedTerm (CtxTerm t) = t
 
 -- | Existentially quantify over the "type" of an object
@@ -259,9 +270,9 @@ data CtxTerms ctx as where
 
 -- | A list of terms in a given context, stored "inside-out"
 data CtxTermsCtx ctx term_ctx where
-  CtxTermsCtxNil :: CtxTermsCtx ctx 'CNil
+  CtxTermsCtxNil :: CtxTermsCtx ctx EmptyCtx
   CtxTermsCtxCons :: CtxTermsCtx ctx as -> CtxTerm ctx a ->
-                     CtxTermsCtx ctx ('CCons as a)
+                     CtxTermsCtx ctx (as ::> a)
 
 {-
 -- | Get the head and tail of a non-empty 'CtxTerms' list
@@ -270,7 +281,7 @@ ctxTermsHeadTail (CtxTermsCons a as) = (a, as)
 -}
 
 -- | Get the head and tail of a non-empty 'CtxTermsCtx' list
-ctxTermsCtxHeadTail :: CtxTermsCtx ctx ('CCons as a) ->
+ctxTermsCtxHeadTail :: CtxTermsCtx ctx (as ::> a) ->
                        (CtxTermsCtx ctx as, CtxTerm ctx a)
 ctxTermsCtxHeadTail (CtxTermsCtxCons as a) = (as, a)
 
@@ -302,7 +313,7 @@ ctxTermsForBindingsOpen _ _ = Nothing
 -- returning a structured 'CtxTerms' list. Note that the bindings themselves can
 -- be in an arbitrary context, but the terms passed in are assumed to be closed,
 -- i.e., in the empty context.
-ctxTermsForBindings :: Bindings tp ctx as -> [Term] -> Maybe (CtxTerms 'CNil as)
+ctxTermsForBindings :: Bindings tp ctx as -> [Term] -> Maybe (CtxTerms EmptyCtx as)
 ctxTermsForBindings NoBind [] = Just CtxTermsNil
 ctxTermsForBindings (Bind _ _ bs) (t : ts) =
   CtxTermsCons (mkClosedTerm t) <$> ctxTermsForBindings bs ts
@@ -321,7 +332,7 @@ invertCtxTerms :: CtxTerms ctx as -> CtxTermsCtx ctx (CtxInv as)
 invertCtxTerms = invertAppendCtxTerms CtxTermsCtxNil
 
 splitCtxTermsCtx :: InvBindings tp any_ctx ctx2 ->
-                    CtxTermsCtx ctx (CtxApp ctx1 ctx2) ->
+                    CtxTermsCtx ctx (ctx1 <+> ctx2) ->
                     (CtxTermsCtx ctx ctx1, CtxTermsCtx ctx ctx2)
 splitCtxTermsCtx InvNoBind terms = (terms, CtxTermsCtxNil)
 splitCtxTermsCtx (InvBind ctx _ _) (CtxTermsCtxCons ts t) =
@@ -346,22 +357,22 @@ mkFlatTermF :: MonadTerm m => FlatTermF Term -> m Term
 mkFlatTermF = mkTermF . FTermF
 
 -- | Build a free variable as a 'CtxTerm'
-ctxVar :: MonadTerm m => Bindings tp ('CCons ctx1 a) ctx2 ->
-          m (CtxTerm (CtxInvApp ('CCons ctx1 a) ctx2) a)
+ctxVar :: MonadTerm m => Bindings tp (ctx1 ::> a) ctx2 ->
+          m (CtxTerm (CtxInvApp (ctx1 ::> a) ctx2) a)
 ctxVar ctx = CtxTerm <$> mkTermF (LocalVar $ bindingsLength ctx)
 
 -- | Build a list of all the free variables as 'CtxTerm's
 --
 -- FIXME: there should be a nicer way to do this that does not require
 -- ctxAppNilEq
-ctxVars :: MonadTerm m => InvBindings tp 'CNil ctx -> m (CtxTermsCtx ctx ctx)
+ctxVars :: MonadTerm m => InvBindings tp EmptyCtx ctx -> m (CtxTermsCtx ctx ctx)
 ctxVars ctx_top =
   case ctxAppNilEq ctx_top of
     Refl -> helper ctx_top NoBind
       where
-        helper :: MonadTerm m => InvBindings tp 'CNil ctx ->
-                  Bindings tp (CtxApp 'CNil ctx) as ->
-                  m (CtxTermsCtx (CtxInvApp (CtxApp 'CNil ctx) as) ctx)
+        helper :: MonadTerm m => InvBindings tp EmptyCtx ctx ->
+                  Bindings tp (EmptyCtx <+> ctx) as ->
+                  m (CtxTermsCtx (CtxInvApp (EmptyCtx <+> ctx) as) ctx)
         helper InvNoBind _ = return CtxTermsCtxNil
         helper (InvBind vars_ctx x tp) ctx =
           CtxTermsCtxCons <$> helper vars_ctx (Bind x tp ctx) <*> ctxVar ctx
@@ -371,10 +382,10 @@ ctxVars ctx_top =
 -- FIXME: there should be a nicer way to do this that does not require
 -- splitCtxTermsCtx and appendTopInvBindings (the latter of which requires
 -- ctxAppNilEq)
-ctxVars2 :: MonadTerm m => InvBindings tp 'CNil ctx1 ->
+ctxVars2 :: MonadTerm m => InvBindings tp EmptyCtx ctx1 ->
             InvBindings tp ctx1 ctx2 ->
-            m (CtxTermsCtx (CtxApp ctx1 ctx2) ctx1,
-               CtxTermsCtx (CtxApp ctx1 ctx2) ctx2)
+            m (CtxTermsCtx (ctx1 <+> ctx2) ctx1,
+               CtxTermsCtx (ctx1 <+> ctx2) ctx2)
 ctxVars2 vars1 vars2 =
   splitCtxTermsCtx vars2 <$> ctxVars (appendTopInvBindings vars1 vars2)
 
@@ -413,7 +424,7 @@ ctxApplyMulti fm argsm =
 
 -- | Form a lambda-abstraction as a 'CtxTerm'
 ctxLambda1 :: MonadTerm m => String -> CtxTerm ctx (Typ a) ->
-              (CtxTerm ('CCons ctx a) a -> m (CtxTerm ('CCons ctx a) b)) ->
+              (CtxTerm (ctx ::> a) a -> m (CtxTerm (ctx ::> a) b)) ->
               m (CtxTerm ctx (a -> b))
 ctxLambda1 x (CtxTerm tp) body_f =
   do var <- ctxVar NoBind
@@ -434,8 +445,8 @@ ctxLambda (Bind x tp xs) body_f =
 
 -- | Form a pi-abstraction as a 'CtxTerm'
 ctxPi1 :: MonadTerm m => String -> CtxTerm ctx (Typ a) ->
-          (CtxTerm ('CCons ctx a) a ->
-           m (CtxTerm ('CCons ctx a) (Typ b))) ->
+          (CtxTerm (ctx ::> a) a ->
+           m (CtxTerm (ctx ::> a) (Typ b))) ->
           m (CtxTerm ctx (Typ (a -> b)))
 ctxPi1 x (CtxTerm tp) body_f =
   do var <- ctxVar NoBind
@@ -465,7 +476,7 @@ ctxPiProxy _ = ctxPi
 -- | Existential return type of 'ctxAsPi'
 data CtxPi ctx =
   forall b c.
-  CtxPi String (CtxTerm ctx (Typ b)) (CtxTerm ('CCons ctx b) (Typ c))
+  CtxPi String (CtxTerm ctx (Typ b)) (CtxTerm (ctx ::> b) (Typ c))
 
 -- | Test if a 'CtxTerm' is a pi-abstraction, returning its components if so.
 -- Note that we are not returning any equality constraints on the input type,
@@ -501,7 +512,7 @@ ctxDataTypeM (DataIdent d) paramsM ixsM =
 
 -- | Test if a 'CtxTerm' is an application of a specific datatype with the
 -- supplied context of parameters and indices
-ctxAsDataTypeApp :: DataIdent d -> Bindings tp1 'CNil params ->
+ctxAsDataTypeApp :: DataIdent d -> Bindings tp1 EmptyCtx params ->
                     Bindings tp2 (CtxInv params) ixs ->
                     CtxTerm ctx (Typ a) ->
                     Maybe (CtxTerms ctx params, CtxTerms ctx ixs)
@@ -548,48 +559,48 @@ ctxRecursorAppM d paramsM pretM cs_fsM ixsM argM =
 class Monad m => CtxLiftSubst f m where
   -- | Lift an @f@ into an extended context
   ctxLift :: InvBindings tp1 ctx ctx' -> Bindings tp2 ctx as ->
-             f (CtxApp ctx ctx') a ->
-             m (f (CtxApp (CtxInvApp ctx as) ctx') a)
+             f (ctx <+> ctx') a ->
+             m (f (CtxInvApp ctx as <+> ctx') a)
   -- | Substitute a list of terms into an @f@
   ctxSubst :: CtxTermsCtx ctx1 subst ->
-              InvBindings tp (CtxApp ctx1 subst) ctx2 ->
-              f (CtxApp (CtxApp ctx1 subst) ctx2) a ->
-              m (f (CtxApp ctx1 ctx2) a)
+              InvBindings tp (ctx1 <+> subst) ctx2 ->
+              f ((ctx1 <+> subst) <+> ctx2) a ->
+              m (f (ctx1 <+> ctx2) a)
 
 -- | Lift an @f@ into a context extended with one type
-ctxLift1 :: CtxLiftSubst f m => f ctx b -> m (f ('CCons ctx a) b)
+ctxLift1 :: CtxLiftSubst f m => f ctx b -> m (f (ctx ::> a) b)
 ctxLift1 = ctxLift InvNoBind (Bind "_" CtxUnit NoBind)
 
 -- | Lift an @f@ that is in an extended list of 'Bindings'
 ctxLiftInBindings :: CtxLiftSubst f m => InvBindings tp1 ctx ctx1 ->
-                     Bindings tp2 (CtxApp ctx ctx1) ctx2 ->
+                     Bindings tp2 (ctx <+> ctx1) ctx2 ->
                      Bindings tp3 ctx as ->
-                     f (CtxInvApp (CtxApp ctx ctx1) ctx2) a ->
-                     m (f (CtxInvApp (CtxApp (CtxInvApp ctx as) ctx1) ctx2) a)
+                     f (CtxInvApp (ctx <+> ctx1) ctx2) a ->
+                     m (f (CtxInvApp (CtxInvApp ctx as <+> ctx1) ctx2) a)
 ctxLiftInBindings = helper . mapInvBindings (CtxEither . Left)
   where
     helper :: CtxLiftSubst f m => InvBindings (CtxEither tp1 tp2) ctx ctx1 ->
-              Bindings tp2 (CtxApp ctx ctx1) ctx2 ->
+              Bindings tp2 (ctx <+> ctx1) ctx2 ->
               Bindings tp3 ctx as ->
-              f (CtxInvApp (CtxApp ctx ctx1) ctx2) a ->
-              m (f (CtxInvApp (CtxApp (CtxInvApp ctx as) ctx1) ctx2) a)
+              f (CtxInvApp (ctx <+> ctx1) ctx2) a ->
+              m (f (CtxInvApp (CtxInvApp ctx as <+> ctx1) ctx2) a)
     helper ctx1 NoBind as = ctxLift ctx1 as
     helper ctx1 (Bind str tp ctx2) as =
       helper (InvBind ctx1 str (CtxEither $ Right tp)) ctx2 as
 
 -- | Substitute into an @f@ that is in an extended list of 'Bindings'
 ctxSubstInBindings :: CtxLiftSubst f m => CtxTermsCtx ctx1 subst ->
-                      InvBindings tp1 (CtxApp ctx1 subst) ctx2 ->
-                      Bindings tp2 (CtxApp (CtxApp ctx1 subst) ctx2) ctx3 ->
-                      f (CtxInvApp (CtxApp (CtxApp ctx1 subst) ctx2) ctx3) a ->
-                      m (f (CtxInvApp (CtxApp ctx1 ctx2) ctx3) a)
+                      InvBindings tp1 (ctx1 <+> subst) ctx2 ->
+                      Bindings tp2 ((ctx1 <+> subst) <+> ctx2) ctx3 ->
+                      f (CtxInvApp ((ctx1 <+> subst) <+> ctx2) ctx3) a ->
+                      m (f (CtxInvApp (ctx1 <+> ctx2) ctx3) a)
 ctxSubstInBindings subst =
   helper subst . mapInvBindings (CtxEither . Left) where
   helper :: CtxLiftSubst f m => CtxTermsCtx ctx1 s ->
-            InvBindings (CtxEither tp1 tp2) (CtxApp ctx1 s) ctx2 ->
-            Bindings tp2 (CtxApp (CtxApp ctx1 s) ctx2) ctx3 ->
-            f (CtxInvApp (CtxApp (CtxApp ctx1 s) ctx2) ctx3) a ->
-            m (f (CtxInvApp (CtxApp ctx1 ctx2) ctx3) a)
+            InvBindings (CtxEither tp1 tp2) (ctx1 <+> s) ctx2 ->
+            Bindings tp2 ((ctx1 <+> s) <+> ctx2) ctx3 ->
+            f (CtxInvApp ((ctx1 <+> s) <+> ctx2) ctx3) a ->
+            m (f (CtxInvApp (ctx1 <+> ctx2) ctx3) a)
   helper s ctx2 NoBind f = ctxSubst s ctx2 f
   helper s ctx2 (Bind x tp ctx3) f =
     helper s (InvBind ctx2 x (CtxEither $ Right tp)) ctx3 f
@@ -643,7 +654,7 @@ instance MonadTerm m => CtxLiftSubst (CtorArg d ixs) m where
     ctxSubstInBindings subst ctx zs ixs
 
 -- | Make a closed term and then lift it into a context
-mkLiftedClosedTerm :: MonadTerm m => Bindings tp 'CNil as -> Term ->
+mkLiftedClosedTerm :: MonadTerm m => Bindings tp EmptyCtx as -> Term ->
                       m (CtxTerm (CtxInv as) a)
 mkLiftedClosedTerm inners t = ctxLift InvNoBind inners $ mkClosedTerm t
 
@@ -677,7 +688,7 @@ data CtorArgStruct d params ixs =
   forall args.
   CtorArgStruct
   {
-    ctorParams :: Bindings CtxTerm 'CNil params,
+    ctorParams :: Bindings CtxTerm EmptyCtx params,
     ctorArgs :: Bindings (CtorArg d ixs) (CtxInv params) args,
     ctorIndices :: CtxTerms (CtxInvApp (CtxInv params) args) ixs,
     dataTypeIndices :: Bindings CtxTerm (CtxInv params) ixs
@@ -686,10 +697,10 @@ data CtorArgStruct d params ixs =
 -- | Convert a 'CtorArg' into the type that it represents, given a context of
 -- the parameters and of the previous arguments
 ctxCtorArgType :: MonadTerm m => DataIdent d ->
-                  InvBindings CtxTerm 'CNil params ->
+                  InvBindings CtxTerm EmptyCtx params ->
                   InvBindings CtxTerm params prevs ->
-                  CtorArg d ixs (CtxApp params prevs) a ->
-                  m (CtxTerm (CtxApp params prevs) a)
+                  CtorArg d ixs (params <+> prevs) a ->
+                  m (CtxTerm (params <+> prevs) a)
 ctxCtorArgType _ _ _ (ConstArg tp) = return tp
 ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =
   ctxPi zs_ctx $ \_ ->
@@ -698,10 +709,10 @@ ctxCtorArgType d params prevs (RecursiveArg zs_ctx ixs) =
 
 -- | Convert a bindings list of 'CtorArg's to a binding list of types
 ctxCtorArgBindings :: MonadTerm m => DataIdent d ->
-                      InvBindings CtxTerm 'CNil params ->
+                      InvBindings CtxTerm EmptyCtx params ->
                       InvBindings CtxTerm params prevs ->
-                      Bindings (CtorArg d ixs) (CtxApp params prevs) args ->
-                      m (Bindings CtxTerm (CtxApp params prevs) args)
+                      Bindings (CtorArg d ixs) (params <+> prevs) args ->
+                      m (Bindings CtxTerm (params <+> prevs) args)
 ctxCtorArgBindings _ _ _ NoBind = return NoBind
 ctxCtorArgBindings d params prevs (Bind x arg args) =
   do tp <- ctxCtorArgType d params prevs arg
@@ -735,7 +746,7 @@ ctxCtorType d (CtorArgStruct{..}) =
 -- where the @pi@ are free variables for the parameters of @d@, the @ixj@
 -- are the indices of @d@, and @s@ is any sort supplied as an argument.
 ctxPRetTp :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
-             InvBindings CtxTerm 'CNil ps ->
+             InvBindings CtxTerm EmptyCtx ps ->
              Bindings CtxTerm ps ixs -> Sort ->
              m (CtxTerm ps (Typ (Arrows ixs (d -> Typ a))))
 ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
@@ -764,7 +775,7 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
           error "mkPRetTp: incorrect number of parameters"
   where
     castPRet :: InvBindings tp ctx1 ctx -> CtxTerm ctx a ->
-                CtxTerm (CtxApp 'CNil ctx) a
+                CtxTerm (EmptyCtx <+> ctx) a
     castPRet ctx =
       case ctxAppNilEq ctx of
         Refl -> id
@@ -796,7 +807,7 @@ mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
 ctxCtorElimType :: MonadTerm m =>
                    Proxy (Typ ret) -> Proxy (Typ a) -> DataIdent d -> Ident ->
                    CtorArgStruct d params ixs ->
-                   m (CtxTerm ('CCons (CtxInv params)
+                   m (CtxTerm (CtxInv params ::>
                                (Arrows ixs (d -> Typ a))) (Typ ret))
 ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   (CtorArgStruct{..}) =
@@ -811,7 +822,7 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
       ixs <-
         ctxLiftInBindings InvNoBind ctorArgs (Bind "_" p_ret_tp NoBind)
         ctorIndices
-      -- Form the context ('CCons params p_ret)
+      -- Form the context (params ::> p_ret)
       let params_pret = InvBind params "_" (ctxLiftNil params p_ret_tp)
       -- Call the helper and cast the result to (Typ ret)
       castCtxTerm Proxy ret <$>
@@ -824,15 +835,13 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
   -- a slightly richer type, but we are not going to try to compute this richer
   -- type in Haskell land.
   helper :: MonadTerm m => Proxy (Typ a) -> DataIdent d ->
-            InvBindings CtxTerm 'CNil ('CCons ps (Arrows ixs (d -> Typ a))) ->
-            InvBindings CtxTerm ('CCons ps (Arrows ixs (d -> Typ a))) prevs ->
-            Bindings (CtorArg d ixs) (CtxApp
-                                      ('CCons ps
-                                       (Arrows ixs (d -> Typ a))) prevs) args ->
-            CtxTerms (CtxInvApp (CtxApp ('CCons ps (Arrows ixs (d -> Typ a)))
+            InvBindings CtxTerm EmptyCtx (ps ::> Arrows ixs (d -> Typ a)) ->
+            InvBindings CtxTerm (ps ::> Arrows ixs (d -> Typ a)) prevs ->
+            Bindings (CtorArg d ixs) ((ps ::>
+                                       Arrows ixs (d -> Typ a)) <+> prevs) args ->
+            CtxTerms (CtxInvApp ((ps ::> Arrows ixs (d -> Typ a)) <+>
                                  prevs) args) ixs ->
-            m (CtxTerm (CtxApp ('CCons ps
-                                (Arrows ixs (d -> Typ a))) prevs)
+            m (CtxTerm ((ps ::> Arrows ixs (d -> Typ a)) <+> prevs)
                (Typ (Arrows args a)))
   helper _a d params_pret prevs NoBind ret_ixs =
     -- If we are finished with our arguments, construct the final result type
@@ -956,9 +965,9 @@ ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
       error "ctxReduceRecursor: wrong number of constructor arguments!"
   )
   where
-    mk_args :: (MonadTerm m, CtxApp 'CNil ctx ~ ctx) =>
-               CtxTermsCtx 'CNil params -> CtxTermsCtx 'CNil ctx ->
-               CtxTerms 'CNil args -> Bindings (CtorArg d ixs) ctx args ->
+    mk_args :: (MonadTerm m, EmptyCtx <+> ctx ~ ctx) =>
+               CtxTermsCtx EmptyCtx params -> CtxTermsCtx EmptyCtx ctx ->
+               CtxTerms EmptyCtx args -> Bindings (CtorArg d ixs) ctx args ->
                m [Term]
     mk_args _ _ _ NoBind = return []
     mk_args ps pre_xs (CtxTermsCons x xs) (Bind _ (ConstArg _) args) =
@@ -973,9 +982,9 @@ ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
 
     -- Build an individual recursive call, given the parameters, the bindings
     -- for the RecursiveArg, and the argument we are going to recurse on
-    mk_rec_arg :: MonadTerm m => CtxTermsCtx 'CNil params ->
-                  Bindings CtxTerm 'CNil zs -> CtxTerms (CtxInv zs) ixs ->
-                  CtxTerm 'CNil a -> m Term
+    mk_rec_arg :: MonadTerm m => CtxTermsCtx EmptyCtx params ->
+                  Bindings CtxTerm EmptyCtx zs -> CtxTerms (CtxInv zs) ixs ->
+                  CtxTerm EmptyCtx a -> m Term
     mk_rec_arg ps zs_ctx ixs x =
       elimClosedTerm <$> ctxLambda zs_ctx
       (\_ ->
@@ -1019,12 +1028,12 @@ instance UsesDataType (Bindings CtxTerm ctx as) where
 -- where the @pi@ are the distinct bound variables bound in the @params@
 -- context, given as argument, and that the @xj@ have no occurrences of @d@. If
 -- the given type is of this form, return the @xj@.
-asCtorDTApp :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+asCtorDTApp :: DataIdent d -> Bindings CtxTerm EmptyCtx params ->
                Bindings CtxTerm (CtxInv params) ixs ->
                InvBindings tp1 (CtxInv params) ctx1 ->
-               Bindings tp2 (CtxApp (CtxInv params) ctx1) ctx2 ->
-               CtxTerm (CtxInvApp (CtxApp (CtxInv params) ctx1) ctx2) (Typ a) ->
-               Maybe (CtxTerms (CtxInvApp (CtxApp (CtxInv params) ctx1) ctx2) ixs)
+               Bindings tp2 (CtxInv params <+> ctx1) ctx2 ->
+               CtxTerm (CtxInvApp (CtxInv params <+> ctx1) ctx2) (Typ a) ->
+               Maybe (CtxTerms (CtxInvApp (CtxInv params <+> ctx1) ctx2) ixs)
 asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
                                        Just (param_vars, ixs))
   | isVarList Proxy params ctx1 ctx2 param_vars &&
@@ -1036,11 +1045,9 @@ asCtorDTApp d params dt_ixs ctx1 ctx2 (ctxAsDataTypeApp d params dt_ixs ->
     isVarList :: Proxy prev_params ->
                  Bindings tp1 prev_params params ->
                  InvBindings tp2 (CtxInvApp prev_params params) ctx1 ->
-                 Bindings tp3 (CtxApp
-                               (CtxInvApp prev_params params) ctx1) ctx2 ->
+                 Bindings tp3 (CtxInvApp prev_params params <+> ctx1) ctx2 ->
                  CtxTerms (CtxInvApp
-                           (CtxApp
-                            (CtxInvApp prev_params params) ctx1) ctx2) params ->
+                           (CtxInvApp prev_params params <+> ctx1) ctx2) params ->
                  Bool
     isVarList _ _ _ _ CtxTermsNil = True
     isVarList _ (Bind _ _ ps) c1 c2 (CtxTermsCons
@@ -1056,11 +1063,11 @@ data ExCtorArg d ixs ctx =
   forall a. ExCtorArg (CtorArg d ixs ctx (Typ a))
 
 -- | Check that an argument for a constructor has one of the allowed forms
-asCtorArg :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+asCtorArg :: DataIdent d -> Bindings CtxTerm EmptyCtx params ->
              Bindings CtxTerm (CtxInv params) ixs ->
              InvBindings tp (CtxInv params) prevs ->
-             CtxTerm (CtxApp (CtxInv params) prevs) (Typ a) ->
-             Maybe (ExCtorArg d ixs (CtxApp (CtxInv params) prevs))
+             CtxTerm (CtxInv params <+> prevs) (Typ a) ->
+             Maybe (ExCtorArg d ixs (CtxInv params <+> prevs))
 asCtorArg d params dt_ixs prevs (ctxAsPiMulti ->
                                  CtxMultiPi zs
                                  (asCtorDTApp d params dt_ixs prevs zs ->
@@ -1076,22 +1083,22 @@ asCtorArg _ _ _ _ _ = Nothing
 data CtxPiCtorArg d ixs ctx =
   forall a b .
   CtxPiCtorArg String (CtorArg d ixs ctx (Typ a))
-  (CtxTerm ('CCons ctx a) (Typ b))
+  (CtxTerm (ctx ::> a) (Typ b))
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an
 -- argument of one of the allowed forms described by 'CtorArg'
-asPiCtorArg :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+asPiCtorArg :: DataIdent d -> Bindings CtxTerm EmptyCtx params ->
                Bindings CtxTerm (CtxInv params) ixs ->
                InvBindings tp (CtxInv params) prevs ->
-               CtxTerm (CtxApp (CtxInv params) prevs) (Typ a) ->
-               Maybe (CtxPiCtorArg d ixs (CtxApp (CtxInv params) prevs))
+               CtxTerm (CtxInv params <+> prevs) (Typ a) ->
+               Maybe (CtxPiCtorArg d ixs (CtxInv params <+> prevs))
 asPiCtorArg d params dt_ixs prevs (ctxAsPi ->
                                    Just (CtxPi x
                                          (asCtorArg d params dt_ixs prevs ->
                                           Just (ExCtorArg arg)) rest)) =
   Just $ CtxPiCtorArg x arg (castTopCtxElem rest)
   where
-    castTopCtxElem :: CtxTerm ('CCons ctx a1) b -> CtxTerm ('CCons ctx a2) b
+    castTopCtxElem :: CtxTerm (ctx ::> a1) b -> CtxTerm (ctx ::> a2) b
     castTopCtxElem (CtxTerm t) = CtxTerm t
 asPiCtorArg _ _ _ _ _ = Nothing
 
@@ -1102,11 +1109,11 @@ data CtorArgsIxs d ixs prevs =
   (CtxTerms (CtxInvApp prevs args) ixs)
 
 -- | Helper function for 'mkCtorArgStruct'
-mkCtorArgsIxs :: DataIdent d -> Bindings CtxTerm 'CNil params ->
+mkCtorArgsIxs :: DataIdent d -> Bindings CtxTerm EmptyCtx params ->
                  Bindings CtxTerm (CtxInv params) ixs ->
                  InvBindings (CtorArg d ixs) (CtxInv params) prevs ->
-                 CtxTerm (CtxApp (CtxInv params) prevs) (Typ a) ->
-                 Maybe (CtorArgsIxs d ixs (CtxApp (CtxInv params) prevs))
+                 CtxTerm (CtxInv params <+> prevs) (Typ a) ->
+                 Maybe (CtorArgsIxs d ixs (CtxInv params <+> prevs))
 mkCtorArgsIxs d params dt_ixs prevs (asPiCtorArg d params dt_ixs prevs ->
                                      Just (CtxPiCtorArg x arg rest)) =
   case mkCtorArgsIxs d params dt_ixs (InvBind prevs x arg) rest of
@@ -1123,7 +1130,7 @@ mkCtorArgsIxs _ _ _ _ _ = Nothing
 -- constructor type is allowed to have the parameters but not the indices free.
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorArgStruct' for it.
-mkCtorArgStruct :: Ident -> Bindings CtxTerm 'CNil params ->
+mkCtorArgStruct :: Ident -> Bindings CtxTerm EmptyCtx params ->
                    Bindings CtxTerm (CtxInv params) ixs -> Term ->
                    Maybe (CtorArgStruct d params ixs)
 mkCtorArgStruct d params dt_ixs ctor_tp =
