@@ -268,7 +268,7 @@ makeLenses ''ResolvedState
 ccLLVMContext :: Simple Lens (CrucibleContext wptr) (CL.LLVMContext wptr)
 ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
-ccTypeCtx :: Simple Lens (CrucibleContext wptr) CL.LLVMTyCtx
+ccTypeCtx :: Simple Lens (CrucibleContext wptr) CL.TypeContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
@@ -337,22 +337,24 @@ ppSetupError (InvalidArgTypes ts) =
   text "to Crucible types."
 
 resolveArgs ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   [L.Type] ->
   Either SetupError [CL.MemType]
 resolveArgs args = do
   -- TODO: make sure we resolve aliases
   let mtys = traverse CL.liftMemType args
-  maybe (Left (InvalidArgTypes args)) Right mtys
+  -- TODO: should the error message be propagated?
+  either (\_ -> Left (InvalidArgTypes args)) Right mtys
 
 resolveRetTy ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   L.Type ->
   Either SetupError (Maybe CL.MemType)
 resolveRetTy ty = do
   -- TODO: make sure we resolve aliases
   let ret = CL.liftRetType ty
-  maybe (Left (InvalidReturnType ty)) Right ret
+  -- TODO: should the error message be propagated?
+  either (\_ -> Left (InvalidReturnType ty)) Right ret
 
 initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec
@@ -366,7 +368,7 @@ initialStateSpec =  StateSpec
   }
 
 initialDefCrucibleMethodSpecIR ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   L.Define ->
   ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
@@ -387,7 +389,7 @@ initialDefCrucibleMethodSpecIR def loc = do
     }
 
 initialDeclCrucibleMethodSpecIR ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   L.Declare ->
   ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
@@ -408,7 +410,7 @@ initialDeclCrucibleMethodSpecIR dec loc = do
     }
 
 initialCrucibleSetupState ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   CrucibleContext wptr ->
   L.Define ->
   ProgramLoc ->
@@ -424,7 +426,7 @@ initialCrucibleSetupState cc def loc = do
     }
 
 initialCrucibleSetupStateDecl ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   CrucibleContext wptr ->
   L.Declare ->
   ProgramLoc ->
