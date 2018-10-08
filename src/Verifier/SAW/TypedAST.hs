@@ -69,7 +69,7 @@ module Verifier.SAW.TypedAST
  , scPrettyTermInCtx
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf, maxSort
- , Ident(identModule, identName), mkIdent
+ , Ident(..), identName, mkIdent
  , parseIdent
  , isIdent
  , DeBruijnIndex

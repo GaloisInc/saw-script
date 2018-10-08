@@ -23,7 +23,7 @@ module Verifier.SAW.Term.Functor
     ModuleName, mkModuleName
   , preludeName
     -- * Identifiers
-  , Ident(identModule, identName), identBaseName, mkIdent
+  , Ident(identModule, identBaseName), identName, mkIdent
   , parseIdent
   , isIdent
     -- * Data types and definitions
@@ -118,17 +118,17 @@ preludeName = mkModuleName ["Prelude"]
 data Ident =
   Ident
   { identModule :: ModuleName
-  , identName :: String
+  , identBaseName :: Text
   }
   deriving (Eq, Ord, Generic)
 
 instance Hashable Ident -- automatically derived
 
 instance Show Ident where
-  show (Ident m s) = shows m ('.' : s)
+  show (Ident m s) = shows m ('.' : Text.unpack s)
 
-identBaseName :: Ident -> Text
-identBaseName = Text.pack . identName
+identName :: Ident -> String
+identName = Text.unpack . identBaseName
 
 instance Read Ident where
   readsPrec _ str =
@@ -136,7 +136,7 @@ instance Read Ident where
     [(parseIdent str1, str2)]
 
 mkIdent :: ModuleName -> String -> Ident
-mkIdent = Ident
+mkIdent m s = Ident m (Text.pack s)
 
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
