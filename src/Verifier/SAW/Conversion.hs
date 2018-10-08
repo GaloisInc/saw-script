@@ -203,7 +203,7 @@ resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
 
 -- | Match a global definition.
 asGlobalDef :: (Monad m) => Ident -> Matcher m ()
-asGlobalDef ident = Matcher (Net.Atom (identName ident)) f
+asGlobalDef ident = Matcher (Net.Atom (identBaseName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
         f _ = fail (show ident ++ " match failed.")
 
@@ -268,7 +268,7 @@ asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 -- | Match a constructor
 asCtor :: (Monad m, ArgsMatchable v m a)
        => Ident -> v m a -> Matcher m a
-asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
+asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
           CtorApp c params l <- R.asFTermF t
           unless (c == o) $ fail $ "not " ++ show o
@@ -277,7 +277,7 @@ asCtor o = resolveArgs $ Matcher (Net.Atom (identName o)) match
 -- | Match a datatype.
 asDataType :: (Monad m, ArgsMatchable v m a)
            => Ident -> v m a -> Matcher m a
-asDataType o = resolveArgs $ Matcher (Net.Atom (identName o)) match
+asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
           DataTypeApp dt params l <- R.asFTermF t
           unless (dt == o) $ fail $ "not " ++ show o

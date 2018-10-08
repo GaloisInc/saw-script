@@ -33,6 +33,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.List as List
+import Data.Text (Text)
 import Prelude hiding (lookup)
 
 {-
@@ -55,14 +56,14 @@ only wildcards in patterns.  Requires operands to be beta-eta-normal.
 
 -- Laziness is important here, as we will often create and partially
 -- traverse patterns for very large terms.
-data Pat = Atom String | Var | App Pat Pat
+data Pat = Atom Text | Var | App Pat Pat
     deriving Eq
 
 class Pattern t where
   toPat :: t -> Pat
 
 instance Show Pat where
-  showsPrec _ (Atom s) = showString s
+  showsPrec _ (Atom s) = shows s
   showsPrec _ Var = showString "_"
   showsPrec p (App x y) =
       showParen (p > 5) (showsPrec 5 x . showString " " . showsPrec 6 y)
@@ -75,7 +76,7 @@ isVarApp t = case t of
 
 -- Start
 
-data Key = CombK | VarK | AtomK String
+data Key = CombK | VarK | AtomK Text
 
 {-Keys are preorder lists of symbols -- Combinations, Vars, Atoms.
   Any term whose head is a Var is regarded entirely as a Var.
@@ -113,7 +114,7 @@ depth (AtomK _ : keys) = depth keys + 1
 
 data Net a
   = Leaf [a]
-  | Net { comb :: Net a, var :: Net a, atoms :: Map String (Net a) }
+  | Net { comb :: Net a, var :: Net a, atoms :: Map Text (Net a) }
   deriving Show
 
 {-
@@ -166,7 +167,7 @@ insert_term (t, x) = insert (key_of_term (toPat t), x)
 {-** Deletion from a discrimination net **-}
 
 {-Create a new Net node if it would be nonempty-}
-newnet :: Net a -> Net a -> Map String (Net a) -> Net a
+newnet :: Net a -> Net a -> Map Text (Net a) -> Net a
 newnet comb var atoms =
   if is_empty comb && is_empty var && Map.null atoms
   then empty else Net { comb = comb, var = var, atoms = atoms }
@@ -218,7 +219,7 @@ net_skip (Net {comb, var, atoms}) nets =
 {-* Matching and Unification *-}
 
 {-conses the linked net, if present, to nets-}
-look1 :: (Map String (Net a), String) -> [Net a] -> [Net a]
+look1 :: (Map Text (Net a), Text) -> [Net a] -> [Net a]
 look1 (atoms, a) nets =
   case Map.lookup a atoms of
     Just net -> net : nets

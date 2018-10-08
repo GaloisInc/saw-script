@@ -41,6 +41,7 @@ library
     random,
     ref-fd,
     template-haskell,
+    text,
     tf-random,
     transformers,
     transformers-compat,

@@ -23,7 +23,7 @@ module Verifier.SAW.Term.Functor
     ModuleName, mkModuleName
   , preludeName
     -- * Identifiers
-  , Ident(identModule, identName), mkIdent
+  , Ident(identModule, identName), identBaseName, mkIdent
   , parseIdent
   , isIdent
     -- * Data types and definitions
@@ -62,6 +62,8 @@ import Data.Hashable
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -124,6 +126,9 @@ instance Hashable Ident -- automatically derived
 
 instance Show Ident where
   show (Ident m s) = shows m ('.' : s)
+
+identBaseName :: Ident -> Text
+identBaseName = Text.pack . identName
 
 instance Read Ident where
   readsPrec _ str =
@@ -471,15 +476,15 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant d _ _            -> Net.Atom d
+      Constant d _ _            -> Net.Atom (Text.pack d)
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (GlobalDef d)      -> Net.Atom (identName d)
-      FTermF (Sort s)           -> Net.Atom ('*' : show s)
+      FTermF (GlobalDef d)      -> Net.Atom (identBaseName d)
+      FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
       FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identName c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName c)) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identName c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName c)) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term
