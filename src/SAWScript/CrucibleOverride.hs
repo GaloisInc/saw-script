@@ -35,8 +35,10 @@ import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
 import           Control.Monad
+import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
+import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.IORef (readIORef, writeIORef, newIORef, IORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -246,103 +248,58 @@ methodSpecHandler ::
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc css retTy = do
-  sym <- Crucible.getSymInterface
-  top_loc <- liftIO $ W4.getCurrentProgramLoc sym
 
-  -- Invent the necessary selector variables and set up the precondition IORefs.
-  branches <- forM (zip css [0::Int .. ]) $ \(cs,i) -> liftIO $
-                do let pnm = "lemma_" ++ show i ++ "_" ++ (cs^.csName)
-                   Right smb <- return $ W4.userSymbol pnm
-                   p <- W4.freshConstant sym smb W4.BaseBoolRepr
-                   preCondRef <- newIORef Nothing
-                   return (p, cs, preCondRef)
+  let fsym = (head css)^.csName
+  globals <- Crucible.readGlobals
+  sym     <- Crucible.getSymInterface
+  (Crucible.RegMap args) <- Crucible.getOverrideArgs
 
-  -- This internal function runs a single method spec. Note we are careful to avoid
-  -- any abort conditions.  As this might cause us to unwind past the code that assembles
-  -- and asserts the preconditions.  Instead we use a Maybe return value to encode the
-  -- partiality invoved in selecting among the overrides.
-  let runSpec :: forall rtp'.
-        CrucibleMethodSpecIR {- spec to run -} ->
-        IORef (Maybe [(W4.Pred Sym, Crucible.SimError)]) {- IORef to hold the computed precondition -} ->
-        Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp' args
-              (Crucible.MaybeType ret)
-              (Crucible.RegValue Sym (Crucible.MaybeType ret))
-      runSpec cs preCondRef =
-        do
-        g <- Crucible.readGlobals
-        Crucible.RegMap args <- Crucible.getOverrideArgs
-        let initialFree = Set.fromList (map (termId . ttTerm)
-                                       (view (csPreState.csFreshVars) cs))
-        res <- liftIO $ runOverrideMatcher sym g Map.empty Map.empty initialFree (cs^.csLoc)
-                           (methodSpecHandler1 opts sc cc args retTy cs)
-        case res of
-          Left _err ->
-            do Crucible.overrideReturn' (Crucible.RegEntry (Crucible.MaybeRepr retTy) W4.Unassigned)
-          Right (retVal, st) ->
-            do let loc = st^.osLocation
-               liftIO $ writeIORef preCondRef (Just (st^.osAsserts))
-               forM_ (st^.osAssumes) $ \asum ->
-                  let rsn = Crucible.AssumptionReason loc "override postcondition" in
-                  liftIO $ Crucible.addAssumption (cc^.ccBackend)
-                             (Crucible.LabeledPred asum rsn)
-               let g' = st^.overrideGlobals
-               Crucible.writeGlobals g'
-               Crucible.overrideReturn' (Crucible.RegEntry (Crucible.MaybeRepr retTy) (W4.justPartExpr sym retVal))
+  gs <- liftIO (buildGlobalsList sym (length css) globals)
 
-  -- Set up a fresh call frame to contain the branching and force a merge point.
-  -- Run each method spec in a separate branch, with a final default branch that
-  -- returns @Nothing@ to indicate the case when no override applies.
-  ret <- Crucible.callOverride
-            (Crucible.mkOverride' "overrideBranches" (Crucible.MaybeRepr retTy)
-               (Crucible.symbolicBranches Crucible.emptyRegMap $
-                 [ (p,runSpec cs preCondRef, Just (W4.plSourceLoc (cs^.csLoc)))
-                 | (p,cs,preCondRef) <- branches
-                 ]
-                 ++ [(W4.truePred sym, return W4.Unassigned, Nothing)]
-                 ))
-            =<< Crucible.getOverrideArgs
+  matches
+     <- liftIO $
+        zipWithM
+          (\g cs ->
+             let initialFree = Set.fromList (map (termId . ttTerm)
+                                                 (view (csPreState.csFreshVars) cs))
+             in runOverrideMatcher sym g Map.empty Map.empty initialFree (view csLoc cs)
+                  (methodSpecHandler1 opts sc cc args retTy cs))
+          gs css
+
+  outputs <- case partitionEithers matches of
+               (e,[]  ) -> fail ("All overrides failed: " ++ show e)
+               (_,s:ss) -> return (s:|ss)
+
+  Crucible.writeGlobals =<< liftIO (muxGlobal sym (fmap snd outputs))
 
   liftIO $
-        -- Add the assumptions that bind the invented selector variables to the computed
-        -- preconditions
-     do forM_ branches $ \(p,_,preCondRef) ->
-              do readIORef preCondRef >>= \case
-                   -- No precondition computed, equlivalant to false
-                   Nothing ->
-                     do np <- W4.notPred sym p
-                        Crucible.addAssumption (cc^.ccBackend) (Crucible.LabeledPred np
-                           (Crucible.AssumptionReason top_loc "failed override branch"))
-                   -- Take the conjunction of all preconditions, and equate them to
-                   -- the selector variable
-                   Just ps ->
-                     do allps <- conjunction sym $ map (view _1) ps
-                        eqp   <- W4.eqPred sym p allps
-                        Crucible.addAssumption (cc^.ccBackend) (Crucible.LabeledPred eqp
-                              (Crucible.AssumptionReason top_loc "override selector"))
+    do -- assert the disjunction of all the preconditions
+       do ps <- traverse (conjunction sym . toListOf (_2 . osAsserts . folded . _1)) outputs
+          p  <- disjunction sym ps
+          Crucible.assert (cc^.ccBackend) p
+            (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
 
-        -- Now, assert each of the preconditions from each branch separately, but weaken them
-        -- each by the disjunction of all the other selector variables.  This preserves the original
-        -- metadata associated with the preconidition, but is still a necessary condition in
-        -- the overall proof.  The added disjunctions allow for the possibility that other override
-        -- specifications will be chosen instead of this one.
-        forM_ (zip branches (dropith $ map (view _1) branches)) $ \((_,_,preCondRef), otherps) ->
-              do readIORef preCondRef >>= \case
-                   Nothing -> return ()
-                   Just ps ->
-                        forM_ ps $ \(pcond,rsn) ->
-                          do pcond' <- disjunction sym (pcond : otherps)
-                             Crucible.addAssertion (cc^.ccBackend) (Crucible.LabeledPred pcond' rsn)
+       -- Postcondition can be used if precondition holds
+       for_ outputs $ \(_,output) ->
+         do p       <- conjunction sym (toListOf (osAsserts . folded . _1) output)
+            q       <- conjunction sym (view osAssumes output)
+            p_imp_q <- W4.impliesPred sym p q
+            let rsn = Crucible.AssumptionReason (view osLocation output) "Override postcondition"
+            Crucible.addAssumption (cc^.ccBackend) (Crucible.LabeledPred p_imp_q rsn)
 
-        -- Now project the mabye value we defined above.  This has the effect of asserting that
-        -- _some_ override was chosen.
-        let fsym = (head css)^.csName
-        Crucible.readPartExpr sym (Crucible.regValue ret)
-          (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
+       muxReturnValue sym retTy outputs
 
-
-dropith :: [a] -> [[a]]
-dropith [] = []
-dropith (a:as) = as : map (a:) (dropith as)
+-- | When two global states are merged, only the writes since the last branch
+-- are actually merged. Therefore we need to add enough branches to the global
+-- states so that as we merge all of the results of applying overrides that there
+-- are enough branches left over at the end to mux.
+buildGlobalsList :: Sym -> Int -> Crucible.SymGlobalState Sym ->
+  IO [Crucible.SymGlobalState Sym]
+buildGlobalsList _   1 g = return [g]
+buildGlobalsList sym n g =
+  do g1 <- Crucible.globalPushBranch sym intrinsics g
+     gs <- buildGlobalsList sym (n-1) g1
+     return (g1:gs)
 
 
 -- | Compute the conjunction of a set of predicates.
@@ -352,6 +309,40 @@ conjunction sym = foldM (W4.andPred sym) (W4.truePred sym)
 -- | Compute the disjunction of a set of predicates.
 disjunction :: Foldable t => Sym -> t (W4.Pred Sym) -> IO (W4.Pred Sym)
 disjunction sym = foldM (W4.orPred sym) (W4.falsePred sym)
+
+-- | Compute the return value from a list of structurally matched
+-- overrides. The result will be a muxed value guarded by the
+-- preconditions of each of the overrides.
+muxReturnValue ::
+  Sym                   {- ^ symbolic simulator parameters -} ->
+  Crucible.TypeRepr ret {- ^ type of return value          -} ->
+  NonEmpty (Crucible.RegValue Sym ret, OverrideState arch)
+                        {- ^ possible overrides            -} ->
+  IO (Crucible.RegValue Sym ret) {- ^ muxed return value   -}
+muxReturnValue _   _     ((val,_):|[]) = return val
+muxReturnValue sym retTy ((val,x):|y:z) =
+  do ys   <- muxReturnValue sym retTy (y:|z)
+     here <- conjunction sym (map fst (view osAsserts x))
+     Crucible.muxRegForType sym intrinsics retTy here val ys
+
+muxGlobal :: Sym -> NonEmpty (OverrideState arch) -> IO (Crucible.SymGlobalState Sym)
+muxGlobal _ (x:|[]) = return (view overrideGlobals x)
+muxGlobal sym (x:|y:z) =
+  do ys   <- muxGlobal sym (y:|z)
+     here <- conjunction sym (toListOf (osAsserts . folded . _1) x)
+     globalMuxUnleveled sym here (view overrideGlobals x) ys
+
+-- | This mux function can handle cases wher the right-hand side has
+-- more branches that the left-hand side. This can happen when an
+-- override specification was aborted due to structural mismatch.
+globalMuxUnleveled ::
+  Sym -> Crucible.MuxFn (W4.Pred Sym) (Crucible.SymGlobalState Sym)
+globalMuxUnleveled sym p l r
+  | Crucible._globalPendingBranches l < Crucible._globalPendingBranches r =
+     do r' <- Crucible.globalAbortBranch sym intrinsics r
+        globalMuxUnleveled sym p l r'
+  | otherwise = Crucible.globalMuxFn sym intrinsics p l r
+
 
 ------------------------------------------------------------------------
 
