@@ -109,6 +109,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 
 import qualified SAWScript.CrucibleLLVM as Crucible
@@ -683,7 +684,9 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
                         bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
-      mem <- Crucible.initializeMemory sym ctx llvm_mod
+      mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
+               =<< Crucible.initializeMemory sym ctx llvm_mod
+
       let globals  = Crucible.llvmGlobals ctx mem
 
       let setupMem = do
