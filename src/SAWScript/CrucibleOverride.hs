@@ -237,7 +237,7 @@ failure loc e = OM (lift (throwE (OF loc e)))
 --   all the merging is computed.
 methodSpecHandler ::
   forall arch rtp args ret.
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -279,7 +279,7 @@ methodSpecHandler opts sc cc css retTy = do
           Left _err ->
             do Crucible.overrideReturn' (Crucible.RegEntry (Crucible.MaybeRepr retTy) W4.Unassigned)
           Right (retVal, st) ->
-            do let loc = st^.osLocation 
+            do let loc = st^.osLocation
                liftIO $ writeIORef preCondRef (Just (st^.osAsserts))
                forM_ (st^.osAssumes) $ \asum ->
                   let rsn = Crucible.AssumptionReason loc "override postcondition" in
@@ -336,7 +336,7 @@ methodSpecHandler opts sc cc css retTy = do
         -- Now project the mabye value we defined above.  This has the effect of asserting that
         -- _some_ override was chosen.
         let fsym = (head css)^.csName
-        Crucible.readPartExpr sym (Crucible.regValue ret) 
+        Crucible.readPartExpr sym (Crucible.regValue ret)
           (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
 
 
@@ -360,7 +360,7 @@ disjunction sym = foldM (W4.orPred sym) (W4.falsePred sym)
 -- and execute the post condition.
 methodSpecHandler1 ::
   forall arch ret ctx.
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -391,7 +391,7 @@ methodSpecHandler1 opts sc cc args retTy cs =
        computeReturnValue opts cc sc cs retTy (cs^.csRetValue)
 
 -- learn pre/post condition
-learnCond :: (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
           => Options
           -> SharedContext
           -> CrucibleContext arch
@@ -434,7 +434,7 @@ termId t =
 
 
 -- execute a pre/post condition
-executeCond :: (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+executeCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
             => Options
             -> SharedContext
             -> CrucibleContext arch
@@ -476,7 +476,7 @@ refreshTerms sc ss =
 -- an override's precondition are disjoint. Read-only allocations are
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleContext arch -> W4.ProgramLoc -> StateSpec -> OverrideMatcher arch ()
 enforceDisjointness cc loc ss =
   do sym <- getSymInterface
@@ -515,7 +515,7 @@ enforceDisjointness cc loc ss =
 -- statement cannot be executed until bindings for any/all lhs
 -- variables exist.
 matchPointsTos :: forall arch.
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options          {- ^ saw script print out opts -} ->
   SharedContext    {- ^ term construction context -} ->
   CrucibleContext arch {- ^ simulator context     -} ->
@@ -562,20 +562,21 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupVars :: SetupValue -> Set AllocIndex
     setupVars v =
       case v of
-        SetupVar    i  -> Set.singleton i
-        SetupStruct xs -> foldMap setupVars xs
-        SetupArray  xs -> foldMap setupVars xs
-        SetupElem x _  -> setupVars x
-        SetupField x _ -> setupVars x
-        SetupTerm   _  -> Set.empty
-        SetupNull      -> Set.empty
-        SetupGlobal _  -> Set.empty
+        SetupVar    i            -> Set.singleton i
+        SetupStruct xs           -> foldMap setupVars xs
+        SetupArray  xs           -> foldMap setupVars xs
+        SetupElem x _            -> setupVars x
+        SetupField x _           -> setupVars x
+        SetupTerm   _            -> Set.empty
+        SetupNull                -> Set.empty
+        SetupGlobal _            -> Set.empty
+        SetupGlobalInitializer _ -> Set.empty
 
 
 ------------------------------------------------------------------------
 
 computeReturnValue ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options               {- ^ saw script debug and print options     -} ->
   CrucibleContext arch  {- ^ context of the crucible simulation     -} ->
   SharedContext         {- ^ context for generating saw terms       -} ->
@@ -813,7 +814,7 @@ matchTerm sc cc loc prepost real expect =
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
 learnSetupCondition ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -846,7 +847,7 @@ learnGhost sc cc loc prepost var expected =
 -- the CrucibleSetup block. First, load the value from the address
 -- indicated by 'ptr', and then match it against the pattern 'val'.
 learnPointsTo ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -921,7 +922,7 @@ learnPred sc cc loc prepost t =
 -- | Perform an allocation as indicated by a 'crucible_alloc'
 -- statement from the postcondition section.
 executeAllocation ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
   CrucibleContext arch           ->
   (AllocIndex, (W4.ProgramLoc, Crucible.MemType)) ->
@@ -948,7 +949,7 @@ executeAllocation opts cc (var, (loc, memTy)) =
 -- | Update the simulator state based on the postconditions from the
 -- procedure specification.
 executeSetupCondition ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -977,7 +978,7 @@ executeGhost sc var val =
 -- the CrucibleSetup block. First we compute the value indicated by
 -- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
   CrucibleContext arch       ->
@@ -1059,14 +1060,15 @@ instantiateSetupValue ::
   IO SetupValue
 instantiateSetupValue sc s v =
   case v of
-    SetupVar _     -> return v
-    SetupTerm tt   -> SetupTerm <$> doTerm tt
-    SetupStruct vs -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
-    SetupArray  vs -> SetupArray <$> mapM (instantiateSetupValue sc s) vs
-    SetupElem _ _  -> return v
-    SetupField _ _ -> return v
-    SetupNull      -> return v
-    SetupGlobal _  -> return v
+    SetupVar _               -> return v
+    SetupTerm tt             -> SetupTerm   <$> doTerm tt
+    SetupStruct vs           -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
+    SetupArray  vs           -> SetupArray  <$> mapM (instantiateSetupValue sc s) vs
+    SetupElem _ _            -> return v
+    SetupField _ _           -> return v
+    SetupNull                -> return v
+    SetupGlobal _            -> return v
+    SetupGlobalInitializer _ -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 
@@ -1107,7 +1109,7 @@ resolveSetupValue opts cc sc spec sval =
 ------------------------------------------------------------------------
 
 asPointer ::
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   W4.ProgramLoc ->
   (Crucible.MemType, Crucible.AnyValue Sym) ->
   OverrideMatcher arch (Crucible.MemType, LLVMPtr (Crucible.ArchWidth arch))
@@ -1116,7 +1118,7 @@ asPointer
   _
   (Crucible.PtrType pty,
    Crucible.AnyValue Crucible.PtrRepr val)
-  | Just pty' <- Crucible.asMemType pty
+  | Right pty' <- Crucible.asMemType pty
   = return (pty', val)
 
 asPointer loc _ = failure loc BadPointerCast
