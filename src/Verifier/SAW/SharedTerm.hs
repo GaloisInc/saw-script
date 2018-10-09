@@ -986,7 +986,7 @@ instantiateVar sc k t0 t =
 --
 -- For example, @instantiateVarList 0 [x,y,z] t@ is the beta-reduced form of
 --
--- > Lam (Lam (Lam t)) `App` z `App` y `App` x@
+-- > Lam (Lam (Lam t)) `App` z `App` y `App` x
 --
 -- Note that the first element of the @ts@ list corresponds to @x@, which is the
 -- outermost, or last, application. In terms of 'instantiateVar', we can write
