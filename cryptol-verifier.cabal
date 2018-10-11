@@ -45,6 +45,7 @@ library
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Prelude
      Verifier.SAW.Cryptol.Prims
+     Verifier.SAW.Cryptol.Simpset
      Verifier.SAW.CryptolEnv
      Verifier.SAW.TypedTerm
   GHC-options: -Wall -Werror
