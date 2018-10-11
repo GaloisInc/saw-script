@@ -1,3 +1,2 @@
-import Cryptol::Extras
 
 mysum = sum
