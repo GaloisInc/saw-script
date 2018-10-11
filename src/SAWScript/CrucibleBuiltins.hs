@@ -581,6 +581,8 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                           return (Just (ret_mt, v))
                    return (retval', globals1)
 
+              Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
+
               Crucible.AbortedResult _ ar ->
                 do let resultDoc = ppAbortedResult cc ar
                    fail $ unlines [ "Symbolic execution failed."
@@ -702,7 +704,8 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
           case res of
             Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
+            _ -> fail "simulator initialization failed!"
+
       return
          CrucibleContext{ _ccLLVMModuleTrans = mtrans
                         , _ccLLVMModule = llvm_mod
@@ -798,6 +801,8 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
                          , show resultDoc
                          ]
 
+        Crucible.TimeoutResult _ ->
+          fail "Symbolic execution timed out."
 
 --------------------------------------------------------------------------------
 
