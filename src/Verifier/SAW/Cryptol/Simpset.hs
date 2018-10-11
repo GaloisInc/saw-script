@@ -9,7 +9,9 @@ Portability : non-portable (language extensions)
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Verifier.SAW.Cryptol.Simpset where
+module Verifier.SAW.Cryptol.Simpset
+  ( mkCryptolSimpset
+  ) where
 
 import Verifier.SAW.Module
 import Verifier.SAW.Rewriter
@@ -18,8 +20,31 @@ import Verifier.SAW.Term.Functor
 
 mkCryptolSimpset :: SharedContext -> IO Simpset
 mkCryptolSimpset sc =
-  do m <- scFindModule sc (mkModuleName ["Cryptol"])
+  do m <- scFindModule sc cryptolModuleName
      scSimpset sc (cryptolDefs m) [] []
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
-    excluded d = defIdent d `elem` [ "Cryptol.fix" ]
+    excluded d = defIdent d `elem` excludedNames
+
+cryptolModuleName :: ModuleName
+cryptolModuleName = mkModuleName ["Cryptol"]
+
+excludedNames :: [Ident]
+excludedNames =
+  map (mkIdent cryptolModuleName)
+  [ "fix"
+  , "pairEq"
+  , "seqEq"
+  , "pairEq1"
+  , "pairEq2"
+  , "seqEq1"
+  , "emptyEq"
+  , "funEq"
+  , "seq_TCNum"
+  , "seq_TCInf"
+  , "PArith"
+  , "PCmp"
+  , "PLiteral"
+  , "PLogic"
+  , "PSignedCmp"
+  ]

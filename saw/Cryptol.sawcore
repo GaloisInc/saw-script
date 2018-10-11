@@ -46,15 +46,15 @@ Num_rec p f1 f2 n = Num#rec p f1 f2 n;
 -- Helper function: take a Num that we expect to be finite, and extract its Nat,
 -- raising an error if that Num is not finite
 getFinNat : (n:Num) -> Nat;
-getFinNat =
-  Num_rec (\ (n:Num) -> Nat) (\ (n:Nat) -> n)
-          (error Nat "Unexpected Fin constraint violation!");
+getFinNat n =
+  Num#rec (\ (n:Num) -> Nat) (\ (n:Nat) -> n)
+          (error Nat "Unexpected Fin constraint violation!") n;
 
 -- Helper function: destruct a Num that we expect to be finite
 finNumRec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) ->
              (n:Num) -> p n;
-finNumRec p f =
-  Num_rec p f (error (p TCInf) "Unexpected Fin constraint violation!");
+finNumRec p f n =
+  Num#rec p f (error (p TCInf) "Unexpected Fin constraint violation!") n;
 
 -- Helper function: destruct two Nums that we expect to be finite
 finNumRec2 : (p: Num -> Num -> sort 1) ->
@@ -101,8 +101,8 @@ ternaryNumFun f1 f2 num1 num2 num3 =
 
 
 tcWidth : Num -> Num;
-tcWidth = Num_rec (\ (n:Num) -> Num)
-                  (\ (x:Nat) -> TCNum (widthNat x)) TCInf;
+tcWidth n = Num#rec (\ (n:Num) -> Num)
+                    (\ (x:Nat) -> TCNum (widthNat x)) TCInf n;
 
 tcAdd : Num -> Num -> Num;
 tcAdd =
@@ -213,8 +213,8 @@ seqMap a b num f =
   Num#rec (\ (n:Num) -> seq n a -> seq n b) (map a b f) (streamMap a b f) num;
 
 seqConst : (n : Num) -> (a : sort 0) -> a -> seq n a;
-seqConst =
-  Num_rec (\ (n:Num) -> (a : sort 0) -> a -> seq n a) replicate streamConst;
+seqConst n =
+  Num#rec (\ (n:Num) -> (a : sort 0) -> a -> seq n a) replicate streamConst n;
 
 
 --------------------------------------------------------------------------------
@@ -283,9 +283,9 @@ axiom unsafeAssert_same_Num :
 -- Auxiliary functions
 
 eListSel : (a : sort 0) -> (n : Num) -> seq n a -> Nat -> a;
-eListSel a =
-  Num_rec (\ (num:Num) -> seq num a -> Nat -> a)
-          (\ (n:Nat) -> at n a) (streamGet a);
+eListSel a n =
+  Num#rec (\ (num:Num) -> seq num a -> Nat -> a)
+          (\ (n:Nat) -> at n a) (streamGet a) n;
 
 
 --------------------------------------------------------------------------------
@@ -293,12 +293,11 @@ eListSel a =
 
 from : (a b : sort 0) -> (m n : Num) -> seq m a -> (a -> seq n b) ->
         seq (tcMul m n) #(a, b);
-from a b =
-  Num_rec
-    (\ (m:Num) -> (n : Num) -> seq m a -> (a -> seq n b) ->
-                   seq (tcMul m n) #(a, b))
+from a b m n =
+  Num#rec
+    (\ (m:Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b))
     (\ (m:Nat) ->
-       Num_rec
+       Num#rec
          (\ (n:Num) -> Vec m a -> (a -> seq n b) ->
                         seq (tcMul (TCNum m) n) #(a, b))
          -- Case 1: (TCNum m, TCNum n)
@@ -321,8 +320,9 @@ from a b =
              \ (k : a -> Stream b) ->
                (\ (x : a) -> streamMap b #(a, b) (\ (y:b) -> (x, y)) (k x))
                (at (Succ m') a xs 0))
-            m))
-    (Num_rec
+            m)
+         n)
+    (Num#rec
        (\ (n:Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) #(a, b))
        -- Case 3: (TCInf, TCNum n)
        (\ (n:Nat) ->
@@ -346,35 +346,41 @@ from a b =
        (\ (xs : Stream a) ->
         \ (k : a -> Stream b) ->
           (\ (x : a) -> streamMap b #(a, b) (\ (y : b) -> (x, y)) (k x))
-          (streamGet a xs 0)));
+          (streamGet a xs 0))
+       n)
+    m;
 
 
 mlet : (a b : sort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n #(a, b);
-mlet a b =
-  Num_rec
+mlet a b n =
+  Num#rec
     (\ (n:Num) -> a -> (a -> seq n b) -> seq n #(a, b))
     (\ (n:Nat) -> \ (x:a) -> \ (f:a -> Vec n b) ->
        map b #(a, b) (\ (y : b) -> (x, y)) n (f x))
     (\ (x:a) -> \ (f:a -> Stream b) ->
-       streamMap b #(a, b) (\ (y : b) -> (x, y)) (f x));
+       streamMap b #(a, b) (\ (y : b) -> (x, y)) (f x))
+    n;
 
 seqZip : (a b : sort 0) -> (m n : Num) -> seq m a -> seq n b ->
           seq (tcMin m n) #(a, b);
-seqZip a b =
-  Num_rec
-    (\ (m:Num) -> (n:Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
-    (\ (m:Nat) ->
-       Num_rec
+seqZip a b m n =
+  Num#rec
+    (\ (m:Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
+    (\ (m : Nat) ->
+       Num#rec
          (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
          (\ (n:Nat) -> zip a b m n)
          (\ (xs:Vec m a) -> \ (ys:Stream b) ->
-            gen m #(a, b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i))))
-    (Num_rec
+            gen m #(a, b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i)))
+         n)
+    (Num#rec
        (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
        (\ (n:Nat) ->
         \ (xs:Stream a) -> \ (ys:Vec n b) ->
           gen n #(a, b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
-       (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x, y))));
+       (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x, y)))
+       n)
+    m;
 
 
 --------------------------------------------------------------------------------
@@ -488,10 +494,11 @@ PZeroSeq : (n : Num) -> (a : sort 0) -> PZero a -> PZero (seq n a);
 PZeroSeq n a pa = seqConst n a pa;
 
 PZeroSeqBool : (n : Num) -> PZero (seq n Bool);
-PZeroSeqBool =
-  Num_rec (\ (n:Num) -> PZero (seq n Bool))
+PZeroSeqBool n =
+  Num#rec (\ (n:Num) -> PZero (seq n Bool))
           (\ (n:Nat) -> bvNat n 0)
-          (streamConst Bool False);
+          (streamConst Bool False)
+          n;
 
 PZeroFun : (a b : sort 0) -> PZero b -> PZero (a -> b);
 PZeroFun a b pb = (\(_ : a) -> pb);
@@ -531,9 +538,9 @@ PLogicStream a pa =
   };
 
 PLogicSeq : (n : Num) -> (a : sort 0) -> PLogic a -> PLogic (seq n a);
-PLogicSeq =
-  Num_rec (\ (n:Num) -> (a:sort 0) -> PLogic a -> PLogic (seq n a))
-          (\ (n:Nat) -> PLogicVec n) PLogicStream;
+PLogicSeq n =
+  Num#rec (\ (n:Num) -> (a:sort 0) -> PLogic a -> PLogic (seq n a))
+          (\ (n:Nat) -> PLogicVec n) PLogicStream n;
 
 PLogicWord : (n : Nat) -> PLogic (Vec n Bool);
 PLogicWord n =
@@ -544,9 +551,9 @@ PLogicWord n =
   };
 
 PLogicSeqBool : (n : Num) -> PLogic (seq n Bool);
-PLogicSeqBool =
-  Num_rec (\ (n:Num) -> PLogic (seq n Bool))
-          (\ (n:Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit);
+PLogicSeqBool n =
+  Num#rec (\ (n:Num) -> PLogic (seq n Bool))
+          (\ (n:Nat) -> PLogicWord n) (PLogicStream Bool PLogicBit) n;
 
 PLogicFun : (a b : sort 0) -> PLogic b -> PLogic (a -> b);
 PLogicFun a b pb =
@@ -653,10 +660,11 @@ PArithStream a pa =
   };
 
 PArithSeq : (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a);
-PArithSeq =
-  Num_rec (\ (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a))
+PArithSeq n =
+  Num#rec (\ (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a))
           (\ (n:Nat) -> PArithVec n)
-          PArithStream;
+          PArithStream
+          n;
 
 PArithWord : (n : Nat) -> PArith (Vec n Bool);
 PArithWord n =
@@ -676,10 +684,11 @@ PArithWord n =
   };
 
 PArithSeqBool : (n : Num) -> PArith (seq n Bool);
-PArithSeqBool =
-  Num_rec (\ (n:Num) -> PArith (seq n Bool))
+PArithSeqBool n =
+  Num#rec (\ (n:Num) -> PArith (seq n Bool))
           (\ (n:Nat) -> PArithWord n)
-          (error (PArith (Stream Bool)) "PArithSeqBool: no instance for streams");
+          (error (PArith (Stream Bool)) "PArithSeqBool: no instance for streams")
+          n;
 
 PArithFun : (a b : sort 0) -> PArith b -> PArith (a -> b);
 PArithFun a b pb =
@@ -772,19 +781,21 @@ PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa = { cmp = vecCmp n a pa.cmp };
 
 PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
-PCmpSeq =
-  Num_rec (\ (n:Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a))
+PCmpSeq n =
+  Num#rec (\ (n:Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a))
           (\ (n:Nat) -> PCmpVec n)
-          (\ (a:sort 0) (pa : PCmp a) -> { cmp = errorCmp (Stream a) });
+          (\ (a:sort 0) (pa : PCmp a) -> { cmp = errorCmp (Stream a) })
+          n;
 
 PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
 PCmpWord n = { cmp = bvCmp n };
 
 PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
-PCmpSeqBool =
-  Num_rec (\ (n : Num) -> PCmp (seq n Bool))
+PCmpSeqBool n =
+  Num#rec (\ (n : Num) -> PCmp (seq n Bool))
           (\ (n:Nat) -> PCmpWord n)
-          ({ cmp = errorCmp (Stream Bool) });
+          ({ cmp = errorCmp (Stream Bool) })
+          n;
 
 PCmpUnit : PCmp #();
 PCmpUnit = { cmp = unitCmp };
@@ -849,9 +860,10 @@ ecNumber val a pa =
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
 ecToInteger : (n : Num) -> seq n Bool -> Integer;
-ecToInteger =
-  Num_rec (\ (n:Num) -> seq n Bool -> Integer) bvToInt
-          (error (Stream Bool -> Integer) "ecToInteger called on TCInf");
+ecToInteger n =
+  Num#rec (\ (n:Num) -> seq n Bool -> Integer) bvToInt
+          (error (Stream Bool -> Integer) "ecToInteger called on TCInf")
+          n;
 
 ecFromInteger : (a : sort 0) -> PArith a -> Integer -> a;
 ecFromInteger a pa = pa.int;
@@ -928,8 +940,8 @@ ecZero a pa = pa;
 -- Sequences
 ecShiftL : (m n : Num) -> (a : sort 0) -> PZero a -> seq m a -> seq n Bool ->
             seq m a;
-ecShiftL =
-  Num_rec
+ecShiftL m =
+  Num#rec
     (\ (m:Num) -> (n:Num) -> (a : sort 0) -> PZero a -> seq m a ->
        seq n Bool -> seq m a)
     (\ (m:Nat) ->
@@ -944,12 +956,13 @@ ecShiftL =
           Stream a)
        -- Case for (infinity, TCNum n)
        (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
-          bvStreamShiftL a n));
+          bvStreamShiftL a n))
+    m;
 
 ecShiftR : (m n : Num) -> (a : sort 0) -> PZero a -> seq m a -> seq n Bool ->
             seq m a;
-ecShiftR =
-  Num_rec
+ecShiftR m =
+  Num#rec
     (\ (m:Num) -> (n:Num) -> (a : sort 0) -> PZero a -> seq m a ->
        seq n Bool -> seq m a)
     (\ (m:Nat) ->
@@ -964,7 +977,8 @@ ecShiftR =
           Stream a)
        -- Case for (infinity, TCNum n)
        (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
-          bvStreamShiftR a n (ecZero a pz)));
+          bvStreamShiftR a n (ecZero a pz)))
+    m;
 
 ecSShiftR : (n k : Num) -> seq n Bool -> seq k Bool -> seq n Bool;
 ecSShiftR =
@@ -1043,8 +1057,8 @@ ecSplitAt =
             (streamTake a m xs, streamDrop a m xs)));
 
 ecJoin : (m n : Num) -> (a : sort 0) -> seq m (seq n a) -> seq (tcMul m n) a;
-ecJoin =
-  Num_rec
+ecJoin m =
+  Num#rec
     (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq m (seq n a) ->
        seq (tcMul m n) a)
     (\ (m:Nat) ->
@@ -1068,12 +1082,13 @@ ecJoin =
                streamJoin a n' s)
             n)
        -- No case for (TCInf, TCInf)
-       );
+       )
+    m;
 
 ecSplit : (m n : Num) -> (a : sort 0) -> seq (tcMul m n) a ->
            seq m (seq n a);
-ecSplit =
-  Num_rec
+ecSplit m =
+  Num#rec
     (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcMul m n) a ->
        seq m (seq n a))
     (\ (m:Nat) ->
@@ -1094,7 +1109,8 @@ ecSplit =
                Stream (Vec n' a))
             (streamConst (Vec 0 a))
             (\ (n':Nat) -> streamSplit a (Succ n'))
-            n));
+            n))
+    m;
 
 ecReverse : (n : Num) -> (a : sort 0) -> seq n a -> seq n a;
 ecReverse =
@@ -1111,8 +1127,8 @@ ecTranspose =
 
 
 ecAt : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a -> seq i Bool -> a;
-ecAt =
-  Num_rec
+ecAt n =
+  Num#rec
     (\ (n:Num) -> (a:sort 0) -> (i:Num) -> seq n a -> seq i Bool -> a)
     (\ (n:Nat) -> \ (a:sort 0) ->
        finNumRec
@@ -1127,7 +1143,8 @@ ecAt =
          -- Case for (TCInf, TCNum i)
          (\ (i:Nat) -> bvStreamGet a i)
          -- No case for (TCNum n, TCInf)
-         );
+         )
+    n;
 
 ecAtBack : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a ->
             seq i Bool -> a;
@@ -1213,8 +1230,8 @@ ecTrace _ _ _ _ _ x = x;
 -- Array update
 ecUpdate : (n : Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
             seq w Bool -> a -> seq n a;
-ecUpdate =
-  Num_rec
+ecUpdate n =
+  Num#rec
     (\ (n:Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
        seq w Bool -> a -> seq n a)
     (\ (n:Nat) -> \ (a:sort 0) ->
@@ -1226,7 +1243,8 @@ ecUpdate =
        finNumRec
          (\ (w:Num) -> Stream a -> seq w Bool -> a -> Stream a)
          -- Case for (TCInf, TCNum w)
-         (\ (w:Nat) -> bvStreamUpd a w));
+         (\ (w:Nat) -> bvStreamUpd a w))
+    n;
 
 ecUpdateEnd : (n : Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
                seq w Bool -> a -> seq n a;
