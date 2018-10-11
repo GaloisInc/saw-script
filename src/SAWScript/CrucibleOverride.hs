@@ -39,17 +39,19 @@ import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.List.NonEmpty (NonEmpty(..))
-import           Data.IORef (readIORef, writeIORef, newIORef, IORef)
+import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
+import qualified Cryptol.Utils.PP as Cryptol
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
@@ -59,13 +61,13 @@ import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
-import qualified Lang.Crucible.Types as Crucible
+--import qualified Lang.Crucible.Types as Crucible
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Symbol as W4
-import qualified What4.Partial as W4
+--import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
 import qualified SAWScript.CrucibleLLVM as Crucible
@@ -77,6 +79,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
+--import           Verifier.SAW.Term.Pretty
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
@@ -120,8 +123,7 @@ data OverrideState arch = OverrideState
   }
 
 data OverrideFailureReason
-  = BadSymType Crucible.SymType
-  | AmbiguousPointsTos [PointsTo]
+  = AmbiguousPointsTos [PointsTo]
   | AmbiguousVars [TypedTerm]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
@@ -132,10 +134,71 @@ data OverrideFailureReason
                        SetupValue
                        Crucible.MemType
                         -- ^ simulated value, specified value, specified type
-  deriving Show
+
+ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
+ppOverrideFailureReason rsn = case rsn of
+  AmbiguousPointsTos pts ->
+    PP.text "ambiguous collection of points-to assertions" PP.<$$>
+    (PP.indent 2 $ PP.vcat (map ppPointsTo pts))
+  AmbiguousVars vs ->
+    PP.text "ambiguous collection of varaibles" PP.<$$>
+    (PP.indent 2 $ PP.vcat (map ppTypedTerm vs))
+  BadTermMatch x y ->
+    PP.text "terms do not match" PP.<$$>
+    (PP.indent 2 (ppTerm defaultPPOpts x)) PP.<$$>
+    (PP.indent 2 (ppTerm defaultPPOpts y))
+  BadPointerCast ->
+    PP.text "bad pointer cast"
+  BadReturnSpecification ->
+    PP.text "bad return specification"
+  NonlinearPatternNotSupported ->
+    PP.text "nonlinear pattern no supported"
+  BadPointerLoad msg ->
+    PP.text "type error when loading through pointer" PP.<$$>
+    PP.indent 2 (PP.text msg)
+  StructuralMismatch llvmval setupval ty ->
+    PP.text "could not match the following terms" PP.<$$>
+    PP.indent 2 (PP.text $ show llvmval) PP.<$$>
+    PP.indent 2 (ppSetupValue setupval) PP.<$$>
+    PP.text "with type" PP.<$$>
+    PP.indent 2 (Crucible.ppMemType ty)
+
+
+ppTypedTerm :: TypedTerm -> PP.Doc
+ppTypedTerm (TypedTerm tp tm) =
+  ppTerm defaultPPOpts tm
+  PP.<+> PP.text ":" PP.<+>
+  PP.text (show (Cryptol.ppPrec 0 tp))
+
+ppPointsTo :: PointsTo -> PP.Doc
+ppPointsTo (PointsTo _loc ptr val) =
+  ppSetupValue ptr PP.<+> PP.text "|->" PP.<+> ppSetupValue val
+
+ppSetupValue :: SetupValue -> PP.Doc
+ppSetupValue setupval = case setupval of
+  SetupTerm tm   -> ppTypedTerm tm
+  SetupVar i     -> PP.text ("@" ++ show i)
+  SetupNull      -> PP.text "NULL"
+  SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
+  _ -> PP.text (show setupval)-- TODO, make better
+
+instance PP.Pretty OverrideFailureReason where
+  pretty = ppOverrideFailureReason
+instance Show OverrideFailureReason where
+  show = show . PP.pretty
+
 
 data OverrideFailure = OF W4.ProgramLoc OverrideFailureReason
-  deriving Show
+
+ppOverrideFailure :: OverrideFailure -> PP.Doc
+ppOverrideFailure (OF loc rsn) =
+  PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
+  ppOverrideFailureReason rsn
+
+instance PP.Pretty OverrideFailure where
+  pretty = ppOverrideFailure
+instance Show OverrideFailure where
+  show = show . PP.pretty
 
 instance Exception OverrideFailure
 
@@ -718,6 +781,22 @@ matchArg _sc _cc loc _prepost actual expectedTy expected =
 
 ------------------------------------------------------------------------
 
+zeroValueSC :: SharedContext -> Crucible.Type -> IO Term
+zeroValueSC sc tp = case Crucible.typeF tp of
+  Crucible.Float -> fail "zeroValueSC: float unsupported"
+  Crucible.Double -> fail "zeroValueSC: double unsupported"
+  Crucible.Bitvector bs ->
+    do n <- scNat sc (fromInteger (Crucible.bytesToBits bs))
+       z <- scNat sc 0
+       scBvNat sc n z
+  Crucible.Array n tp' ->
+    do sctp <- typeToSC sc tp'
+       v <- zeroValueSC sc tp'
+       scVector sc sctp (replicate (fromIntegral n) v)
+  Crucible.Struct fs ->
+    do tms <- mapM (zeroValueSC sc . view Crucible.fieldVal) (V.toList fs)
+       scTuple sc tms
+
 valueToSC ::
   Sym ->
   W4.ProgramLoc ->
@@ -725,6 +804,11 @@ valueToSC ::
   Cryptol.TValue ->
   Crucible.LLVMVal Sym  ->
   OverrideMatcher arch Term
+valueToSC sym _loc _failMsg _ts (Crucible.LLVMValZero gtp)
+  = liftIO $
+     do sc <- (Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym))
+        zeroValueSC sc gtp
+
 valueToSC sym loc failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)
   | length tys == length vals
   = do terms <- traverse (\(ty, tm) -> valueToSC sym loc failMsg ty (snd tm)) (zip tys (V.toList vals))

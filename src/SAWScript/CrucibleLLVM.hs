@@ -50,6 +50,7 @@ module SAWScript.CrucibleLLVM
   , siFieldTypes
   , siIsPacked
   , mkStructInfo
+  , ppMemType
   , Ident -- re-exported from llvm-pretty package
     -- * Re-exports from "Lang.Crucible.LLVM.LLVMContext"
   , TyCtx.TypeContext
@@ -107,7 +108,7 @@ module SAWScript.CrucibleLLVM
   , arrayType
   , mkStructType
   , mkStruct
-  , LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValFloat)
+  , LLVMVal(..)
   , LLVMPtr
   , HasPtrWidth
   , ptrToPtrVal
@@ -145,7 +146,7 @@ import Lang.Crucible.LLVM.MemType
    MemType(..),
    Ident, memTypeSize, fiOffset, fiType,
    siFields, siFieldInfo, siFieldOffset, siFieldTypes, siIsPacked,
-   mkStructInfo)
+   mkStructInfo, ppMemType)
 
 import Lang.Crucible.LLVM.TypeContext
   (llvmMetadataMap, llvmDataLayout, asMemType, liftType, liftMemType, liftRetType)
@@ -164,7 +165,7 @@ import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeConstRaw, mallocRaw, mallocConstRaw,
    ppMem, packMemValue, unpackMemValue, coerceAny, buildDisjointRegionsAssertion,
    doLoad, doStore, loadRawWithCondition, doPtrAddOffset, emptyMem, doMalloc,
-   LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValFloat),
+   LLVMVal(..),
    LLVMPtr, HasPtrWidth, ptrToPtrVal, mkNullPointer, ptrIsNull, ppPtr, ptrEq,
    pattern LLVMPointerRepr, LLVMPointerType,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
