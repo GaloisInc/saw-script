@@ -909,12 +909,6 @@ ecEq a _ = eq a;
 ecNotEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecNotEq a pa x y = not (ecEq a pa x y);
 
-ecFunEq : (a b : sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
-ecFunEq a b pb f g x = ecEq b pb (f x) (g x);
-
-ecFunNotEq : (a b : sort 0) -> PCmp b -> (a -> b) -> (a -> b) -> a -> Bool;
-ecFunNotEq a b pb f g x = ecNotEq b pb (f x) (g x);
-
 -- Logic
 ecAnd : (a : sort 0) -> PLogic a -> a -> a -> a;
 ecAnd a pa = pa.and;
