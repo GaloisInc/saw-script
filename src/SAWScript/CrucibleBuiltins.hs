@@ -196,8 +196,9 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
+     top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
      (ret, globals3)
-        <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
+        <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
 
      -- collect the proof obligations
      asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -503,9 +504,10 @@ registerOverride ::
   Options                    ->
   CrucibleContext arch       ->
   Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
+  W4.ProgramLoc              ->
   [CrucibleMethodSpecIR]     ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
-registerOverride opts cc _ctx cs = do
+registerOverride opts cc _ctx top_loc cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
   let fsym = (head cs)^.csName
@@ -523,7 +525,7 @@ registerOverride opts cc _ctx cs = do
         $ Crucible.mkOverride'
             (Crucible.handleName h)
             retType
-            (methodSpecHandler opts sc cc cs retType)
+            (methodSpecHandler opts sc cc top_loc cs retType)
     Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
 
 --------------------------------------------------------------------------------
@@ -535,11 +537,12 @@ verifySimulate ::
   CrucibleMethodSpecIR          ->
   [(Crucible.MemType, LLVMVal)] ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  W4.ProgramLoc                 ->
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc mspec args assumes lemmas globals checkSat =
+verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
   do let nm = mspec^.csName
      case Map.lookup (L.Symbol nm) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
        Nothing -> fail $ unwords ["function", show nm, "not found"]
@@ -555,7 +558,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
             let simSt = Crucible.initSimState simCtx globals Crucible.defaultAbortHandler
             res <-
               Crucible.executeCrucible simSt $ Crucible.runOverrideSim rty $
-                do mapM_ (registerOverride opts cc simCtx)
+                do mapM_ (registerOverride opts cc simCtx top_loc)
                          (groupOn (view csName) lemmas)
                    liftIO $ do
                      preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
