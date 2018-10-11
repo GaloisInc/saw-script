@@ -119,12 +119,20 @@ ec_add : {fv, gv} (PointOps fv [gv], JacobianPoint fv, AffinePoint fv) -> Jacobi
 ec_add(p,s,t) =
   if is_zero(r13) then
     if is_zero(r14) then
+      /* This branch handles the case where ec_add is asked to
+         add a point to itself.
+
+         In the Routine 2.2.7 spec, this has the line
+           17: r <- (0,0,0) and return
+	 ec_full_add then checks to see if this (0,0,0) is returned
+	 and calls ec_double.
+
+	 This code avoids the extra logic.
+       */
       p.double(s) /* 17: r <- (0,0,0) and return */
     else
-      { x = p.field.field_unit
-      , y = p.field.field_unit
-      , z = p.field.field_zero
-      } /* 19: r <- (1,1,0) and return */
+      /* Add a point to it's negation and return 0. */
+      ec_zero_point p.field  /* 19: r <- (1,1,0) and return */
   else
     { x = r32, y = r37, z = r27 }
   where
