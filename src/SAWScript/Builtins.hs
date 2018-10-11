@@ -48,6 +48,7 @@ import Text.Read (readMaybe)
 
 
 import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -762,12 +763,9 @@ quickCheckPrintPrim opts sc numTests tt = do
       pretty (ttSchema tt)
 
 cryptolSimpset :: TopLevel Simpset
-cryptolSimpset = do
-  sc <- getSharedContext
-  m <- io $ scFindModule sc (mkModuleName ["Cryptol"])
-  io $ scSimpset sc (cryptolDefs m) [] []
-  where cryptolDefs m = filter (not . excluded) $ moduleDefs m
-        excluded d = defIdent d `elem` [ "Cryptol.fix" ]
+cryptolSimpset =
+  do sc <- getSharedContext
+     io $ Cryptol.mkCryptolSimpset sc
 
 addPreludeEqs :: [String] -> Simpset
               -> TopLevel Simpset
