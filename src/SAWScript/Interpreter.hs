@@ -892,6 +892,12 @@ primitives = Map.fromList
     (pureVal beta_reduce_goal)
     [ "Reduce the current goal to beta-normal form." ]
 
+  , prim "goal_apply"          "Theorem -> ProofScript ()"
+    (pureVal goal_apply)
+    [ "Apply an introduction rule to the current goal. Depending on the"
+    , "rule, this will result in zero or more new subgoals."
+    ]
+
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]

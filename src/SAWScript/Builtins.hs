@@ -455,6 +455,33 @@ beta_reduce_goal = withFirstGoal $ \goal -> do
   trm' <- io $ betaNormalize sc trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
+goal_apply :: Theorem -> ProofScript ()
+goal_apply (Theorem rule) =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_apply failed: no subgoal"
+    goal : goals' ->
+      do sc <- getSharedContext
+         let (goalArgs, goalConcl) = asPiList (goalTerm goal)
+         let (ruleArgs, ruleConcl) = asPiList rule
+         result <- io $ scMatch sc ruleConcl goalConcl
+         case result of
+           Nothing -> fail "goal_apply failed: no match"
+           Just inst ->
+             do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
+                dummy <- io $ scUnitType sc
+                let mkNewGoals (Nothing : mts) ((_, prop) : args) =
+                      do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
+                         c' <- scPiList sc goalArgs c0
+                         cs <- mkNewGoals mts args
+                         return (c' : cs)
+                    mkNewGoals (Just _ : mts) (_ : args) =
+                      mkNewGoals mts args
+                    mkNewGoals _ _ = return []
+                newgoalterms <- io $ mkNewGoals inst' (reverse ruleArgs)
+                let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
+                return ((), ProofState (newgoals ++ goals') concl stats timeout)
+
 returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
 returnsBool _ = False
