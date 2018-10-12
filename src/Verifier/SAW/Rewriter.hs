@@ -46,6 +46,8 @@ module Verifier.SAW.Rewriter
   -- * Term rewriting
   , rewriteSharedTerm
   , rewriteSharedTermTypeSafe
+  -- * Matching
+  , scMatch
   -- * SharedContext
   , rewritingSharedContext
 
@@ -149,8 +151,13 @@ bottom_convs convs t = do
   fromMaybe (return t') $ msum [ runConversion c t' | c <- convs ]
 
 -- | An enhanced matcher that can handle higher-order patterns.
-scMatch :: SharedContext -> Term -> Term -> MaybeT IO (Map DeBruijnIndex Term)
+scMatch ::
+  SharedContext ->
+  Term {- ^ pattern -} ->
+  Term {- ^ term -} ->
+  IO (Maybe (Map DeBruijnIndex Term))
 scMatch sc pat term =
+  runMaybeT $
   do --lift $ putStrLn $ "********** scMatch **********"
      MatchState inst cs <- match 0 [] pat term emptyMatchState
      mapM_ (check inst) cs
@@ -519,7 +526,7 @@ rewriteSharedTerm sc ss t0 =
              [Either RewriteRule Conversion] -> Term -> IO Term
     apply [] t = return t
     apply (Left (RewriteRule {lhs, rhs}) : rules) t = do
-      result <- runMaybeT (scMatch sc lhs t)
+      result <- scMatch sc lhs t
       case result of
         Nothing -> apply rules t
         Just inst
