@@ -1,5 +1,6 @@
 module ref_ec_mul where
 
+import Field
 import ec_point_ops
 
 /* Multiplies a large word scalar by the an affine point. */
@@ -64,7 +65,7 @@ ec_twin_mul(m, d0, s, d1, t) =
   else if ec_is_zero_point(f, sMtP) then /* s = t */
     ec_mul(m, g.add(d0, d1), s)
   else
-    drop`{gv+4}(r)@0
+    drop`{gv+5}(r)@0
  where
    f    = m.field
    g    = m.group_field
@@ -82,8 +83,10 @@ ec_twin_mul(m, d0, s, d1, t) =
           }
      where gd  = f.mul(sPtP.z, sDiv)
            g2 = f.sq(gd)
+
    init_c : [2][6]
    init_c = [zero # (take(d0) : [4]), zero # (take(d1) : [4])]
+
    c : [inf]_
    c = [init_c]
      # [ [[abs(u0) ^ c01, c02, c03, c04, c05, e0N],
@@ -99,9 +102,9 @@ ec_twin_mul(m, d0, s, d1, t) =
    u : [inf]_
    u = [ [u0, u1]
             where
-              h0' = [c05, c04, c03, c02, c01]
+              h0' = [c01, c02, c03, c04, c05]
               h0 = if c00 then 31 - h0' else h0'
-              h1' = [c15, c14, c13, c12, c11]
+              h1' = [c11, c12, c13, c14, c15]
               h1 = if c10 then 31 - h1' else h1'
               u0 : [32]
               u0 = if h0 < F(h1) then 0 else if c00 then -1 else 1
@@ -115,3 +118,16 @@ ec_twin_mul(m, d0, s, d1, t) =
        | rP      <- r
        | [u0, u1] <- u
        ]
+
+/* This defines twin_mul in terms of ec_mul, and can be used to test ec_mul */
+ec_twin_mul_def : {fv, gv} (fin gv)
+            	=> (PointOps fv [gv], [gv], AffinePoint fv, [gv], AffinePoint fv)
+            -> (JacobianPoint fv)
+ec_twin_mul_def(m, d, s, e, t) =
+    if ec_is_zero_point(m.field, et) then
+      ds
+    else
+      ec_add(m, ds, ec_affinify(m.field, et))
+
+  where ds = ec_mul(m, d, s)
+  	et = ec_mul(m, e, t)

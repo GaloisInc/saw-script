@@ -4,6 +4,8 @@ import ec_point_ops
 import p384_field
 import p384_ec_mul
 import ecc
+import ref_ec_mul
+import p384_ec_point_ops
 
 /* Point "S" defined in [NSA 2008, Section 4.4.2] */
 p384_s : AffinePoint [384]
@@ -118,3 +120,23 @@ property test_ds =
 
 property test_ds_et =
   test_p384_ds_et == expected_p384_ds_et
+
+p384_jacobian_eq : (JacobianPoint [384], JacobianPoint [384]) -> Bit
+p384_jacobian_eq(x,y) = ec_jacobian_eq(p384_field, x, y)
+
+/* Simple test to ensure Jacobian_eq does not always return True. */
+property test_ec_jacobian_eq_s_t =
+  p384_jacobian_eq(p384_projectify p384_s, p384_projectify p384_t) == False
+
+/** Check generic twin multiplication. */
+property test_ec_twin_mul_ds_et =
+  ec_jacobian_eq(
+    p384_field,
+    ec_twin_mul(p384_point_ops, p384_d, p384_s, p384_e, p384_t),
+    ec_projectify(p384_field, expected_p384_ds_et))
+
+/** Check twin multiplication definition in terms of ec_mul */
+property test_ec_twin_mul_def_ds_et =
+  p384_jacobian_eq(
+    ec_twin_mul_def(p384_point_ops, p384_d, p384_s, p384_e, p384_t),
+    ec_projectify(p384_field, expected_p384_ds_et))

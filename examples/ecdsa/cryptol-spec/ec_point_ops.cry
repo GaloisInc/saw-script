@@ -48,6 +48,20 @@ is_JacobianPoint f s =
              (s == ec_zero_point f)
   )
 
+/* Return true if two Jacobian points are equal.
+
+   This avoids the partiality and division needed by ec_affinify.
+ */
+ec_jacobian_eq : {fv} (Field fv, JacobianPoint fv, JacobianPoint fv) -> Bit
+ec_jacobian_eq(f, a, b)
+     =  f.is_equal(f.mul(bz2, a.x), f.mul(az2, b.x))
+     && f.is_equal(f.mul(bz3, a.y), f.mul(az3, b.y))
+  where az2 = f.sq(a.z)
+	az3 = f.mul(a.z, az2)
+
+	bz2 = f.sq(b.z)
+	bz3 = f.mul(b.z, bz2)
+
 /* Point operations {{{1 */
 
 type PointOps fv gv = {
