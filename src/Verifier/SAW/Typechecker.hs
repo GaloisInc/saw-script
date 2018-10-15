@@ -230,16 +230,16 @@ typeInferCompleteTerm (Un.UnitValue _) =
 typeInferCompleteTerm (Un.UnitType _) =
   typeInferComplete (UnitType :: FlatTermF TypedTerm)
 
--- Old-style pairs
-typeInferCompleteTerm (Un.OldPairValue _ t1 t2) =
+-- Simple pairs
+typeInferCompleteTerm (Un.PairValue _ t1 t2) =
   (PairValue <$> typeInferComplete t1 <*> typeInferComplete t2)
   >>= typeInferComplete
-typeInferCompleteTerm (Un.OldPairType _ t1 t2) =
+typeInferCompleteTerm (Un.PairType _ t1 t2) =
   (PairType <$> typeInferComplete t1 <*> typeInferComplete t2)
   >>= typeInferComplete
-typeInferCompleteTerm (Un.OldPairLeft t) =
+typeInferCompleteTerm (Un.PairLeft t) =
   (PairLeft <$> typeInferComplete t) >>= typeInferComplete
-typeInferCompleteTerm (Un.OldPairRight t) =
+typeInferCompleteTerm (Un.PairRight t) =
   (PairRight <$> typeInferComplete t) >>= typeInferComplete
 
 -- Type ascriptions

@@ -175,10 +175,9 @@ AtomTerm
   |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
 
-    -- FIXME: old-style pairs, pair types, and pair projections
-  |     '(' Term '|' Term ')'          { OldPairValue (pos $1) $2 $4 }
-  | '#' '(' Term '|' Term ')'          { OldPairType (pos $1) $3 $5 }
-  | AtomTerm '.' '(' nat ')'           {% mkOldTupleProj $1 (tokNat (val $4)) }
+  |     '(' Term '|' Term ')'          { PairValue (pos $1) $2 $4 }
+  | '#' '(' Term '|' Term ')'          { PairType (pos $1) $3 $5 }
+  | AtomTerm '.' '(' nat ')'           {% mkTupleProj $1 (tokNat (val $4)) }
 
 Ident :: { PosPair String }
 Ident : ident { fmap tokIdent $1 }
@@ -362,12 +361,12 @@ parseTupleType p [tp] =
   return (badTerm p)
 parseTupleType p tps = return $ mkTupleType p tps
 
--- | Parse an old-style tuple projection of the form @t.(1)@ or @t.(2)@
-mkOldTupleProj :: Term -> Integer -> Parser Term
-mkOldTupleProj t 1 = return $ OldPairLeft t
-mkOldTupleProj t 2 = return $ OldPairRight t
-mkOldTupleProj t _ =
-  do addParseError (pos t) "Old-style projections must be either .(1) or .(2)"
+-- | Parse a tuple projection of the form @t.(1)@ or @t.(2)@
+mkTupleProj :: Term -> Integer -> Parser Term
+mkTupleProj t 1 = return $ PairLeft t
+mkTupleProj t 2 = return $ PairRight t
+mkTupleProj t _ =
+  do addParseError (pos t) "Projections must be either .(1) or .(2)"
      return (badTerm (pos t))
 
 -- | Parse a term as a dotted list of strings
