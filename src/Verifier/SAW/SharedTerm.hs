@@ -1141,19 +1141,19 @@ scFieldValue sc f x y = scFlatTermF sc (FieldValue f x y)
 scFieldType :: SharedContext -> Term -> Term -> Term -> IO Term
 scFieldType sc f x y = scFlatTermF sc (FieldType f x y)
 
-scTuple :: SharedContext -> [Term] -> IO Term
-scTuple sc ts = scFlatTermF sc (RecordValue $ tupleAsRecordAList ts)
-
 scOldTuple :: SharedContext -> [Term] -> IO Term
-scOldTuple sc [] = scUnitValue sc
-scOldTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
+scOldTuple sc ts = scFlatTermF sc (RecordValue $ tupleAsRecordAList ts)
 
-scTupleType :: SharedContext -> [Term] -> IO Term
-scTupleType sc ts = scFlatTermF sc (RecordType $ tupleAsRecordAList ts)
+scTuple :: SharedContext -> [Term] -> IO Term
+scTuple sc [] = scUnitValue sc
+scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 scOldTupleType :: SharedContext -> [Term] -> IO Term
-scOldTupleType sc [] = scUnitType sc
-scOldTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
+scOldTupleType sc ts = scFlatTermF sc (RecordType $ tupleAsRecordAList ts)
+
+scTupleType :: SharedContext -> [Term] -> IO Term
+scTupleType sc [] = scUnitType sc
+scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc t = scFlatTermF sc (PairLeft t)
@@ -1165,15 +1165,15 @@ scPairSelector :: SharedContext -> Term -> Bool -> IO Term
 scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
 
-scTupleSelector :: SharedContext -> Term -> Int -> IO Term
-scTupleSelector sc t i = scRecordSelect sc t (show i)
-
 scOldTupleSelector :: SharedContext -> Term -> Int -> IO Term
-scOldTupleSelector sc t i
+scOldTupleSelector sc t i = scRecordSelect sc t (show i)
+
+scTupleSelector :: SharedContext -> Term -> Int -> IO Term
+scTupleSelector sc t i
   | i == 1    = scPairLeft sc t
   | i > 1     = do t' <- scPairRight sc t
-                   scOldTupleSelector sc t' (i - 1)
-  | otherwise = fail "scOldTupleSelector: non-positive index"
+                   scTupleSelector sc t' (i - 1)
+  | otherwise = fail "scTupleSelector: non-positive index"
 
 scFun :: SharedContext -> Term -> Term -> IO Term
 scFun sc a b = do b' <- incVars sc 0 1 b

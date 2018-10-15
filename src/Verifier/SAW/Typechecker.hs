@@ -224,6 +224,12 @@ typeInferCompleteTerm (Un.RecordType _ elems) =
 typeInferCompleteTerm (Un.RecordProj t prj) =
   (RecordProj <$> typeInferComplete t <*> return prj) >>= typeInferComplete
 
+-- Unit
+typeInferCompleteTerm (Un.UnitValue _) =
+  typeInferComplete (UnitValue :: FlatTermF TypedTerm)
+typeInferCompleteTerm (Un.UnitType _) =
+  typeInferComplete (UnitType :: FlatTermF TypedTerm)
+
 -- Old-style pairs
 typeInferCompleteTerm (Un.OldPairValue _ t1 t2) =
   (PairValue <$> typeInferComplete t1 <*> typeInferComplete t2)

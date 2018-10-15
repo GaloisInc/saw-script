@@ -58,15 +58,17 @@ data Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
   | Recursor (Maybe ModuleName) (PosPair String)
+  | UnitValue Pos
+  | UnitType Pos
     -- | New-style records
   | RecordValue Pos [(PosPair String, Term)]
   | RecordType Pos [(PosPair String, Term)]
   | RecordProj Term String
-    -- | Old-style pairs
-  | OldPairValue Pos Term Term
-  | OldPairType Pos Term Term
-  | OldPairLeft Term
-  | OldPairRight Term
+    -- | Simple pairs
+  | PairValue Pos Term Term
+  | PairType Pos Term Term
+  | PairLeft Term
+  | PairRight Term
     -- | Identifies a type constraint on the term, i.e., a type ascription
   | TypeConstraint Term Pos Term
   | NatLit Pos Integer
@@ -99,13 +101,15 @@ instance Positioned Term where
       App x _              -> pos x
       Pi p _ _             -> p
       Recursor _ i         -> pos i
+      UnitValue p          -> p
+      UnitType p           -> p
       RecordValue p _      -> p
       RecordType p _       -> p
       RecordProj x _       -> pos x
-      OldPairValue p _ _   -> p
-      OldPairType p _ _    -> p
-      OldPairLeft x        -> pos x
-      OldPairRight x       -> pos x
+      PairValue p _ _      -> p
+      PairType p _ _       -> p
+      PairLeft x           -> pos x
+      PairRight x          -> pos x
       TypeConstraint _ p _ -> p
       NatLit p _           -> p
       StringLit p _        -> p
@@ -213,24 +217,19 @@ asApp = go []
   where go l (App t u)   = go (u:l) t
         go l t = (t,l)
 
-mkTupleAList :: [Term] -> [(PosPair String, Term)]
-mkTupleAList ts =
-  zipWith (\i t -> (PosPair (pos t) (show i), t)) [1::Integer ..] ts
-
--- | Build a tuple value @(x1, .., xn)@ as a record value whose fields are named
--- @1@, @2@, etc. Unary tuples are not allowed.
+-- | Build a tuple value @(x1, .., xn)@. TODO: unary tuples?
 mkTupleValue :: Pos -> [Term] -> Term
-mkTupleValue _ [_] = error "mkTupleValue: singleton tuple!"
-mkTupleValue p ts = RecordValue p $ mkTupleAList ts
+mkTupleValue p [] = UnitValue p
+mkTupleValue p (x:xs) = PairValue (pos x) x (mkTupleValue p xs)
 
--- | Build a tuple type @#(x1, .., xn)@ as a record type whose fields are named
--- @1@, @2@, etc. Unary tuple types are not allowed.
+-- | Build a tuple type @#(x1, .., xn)@. TODO: unary tuples?
 mkTupleType :: Pos -> [Term] -> Term
-mkTupleType _ [_] = error "mkTupleType: singleton type!"
-mkTupleType p tps = RecordType p $ mkTupleAList tps
+mkTupleType p [] = UnitType p
+mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)
 
 -- | Build a projection @t.i@ of a tuple
 mkTupleSelector :: Term -> Integer -> Term
-mkTupleSelector t i =
-  if i >= 1 then RecordProj t (show i) else
-    error "mkTupleSelector: non-positive index"
+mkTupleSelector t i
+  | i == 1    = PairLeft t
+  | i > 1     = mkTupleSelector (PairRight t) (i - 1)
+  | otherwise = error "mkTupleSelector: non-positive index"
