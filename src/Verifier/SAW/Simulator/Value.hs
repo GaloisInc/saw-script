@@ -178,10 +178,12 @@ instance Show Nil where
 -- Basic operations on values
 
 vTuple :: VMonad l => [Thunk l] -> Value l
-vTuple xs = VRecordValue $ tupleAsRecordAList xs
+vTuple [] = VUnit
+vTuple (x:xs) = VPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [Value l] -> Value l
-vTupleType ts = VRecordType $ tupleAsRecordAList ts
+vTupleType [] = VUnitType
+vTupleType (t:ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
