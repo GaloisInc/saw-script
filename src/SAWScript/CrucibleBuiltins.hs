@@ -653,7 +653,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
     sym = cc^.ccBackend
 
     verifyObligation (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
-      hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) (toListOf (folded . Crucible.labeledPred) hyps)
+      hypTerm <- Crucible.toSC sym =<< W4.andAllOf sym (folded . Crucible.labeledPred) hyps
       conclTerm  <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
