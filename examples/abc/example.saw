@@ -1,4 +1,4 @@
-import "AES.cry";
+import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Block/AES.cry";
 
 let {{
 // Random numbers and permutations (https://xkcd.com/221/).

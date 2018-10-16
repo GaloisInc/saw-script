@@ -1,4 +1,4 @@
-m <- cryptol_load "DES.cry";
+m <- cryptol_load "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Block/DES.cry";
 let enc = {{ m::DES.encrypt }};
 let dec = {{ m::DES.decrypt }};
 let {{ thm key msg = dec key (enc key msg) == msg }};
