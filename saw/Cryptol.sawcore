@@ -30,6 +30,21 @@ bvExp n x y = foldr Bool (bitvector n) n
   (bvNat n 1)
   (reverse n Bool y);
 
+--------------------------------------------------------------------------------
+-- Records as nested tuples of Field values
+
+data Field (t : sort 0) : String -> sort 0 where {
+  MkField : (s : String) -> t -> Field t s;
+}
+
+projField : (s : String) -> (t : sort 0) -> Field t s -> t;
+projField s a fld =
+  Field#rec
+    a
+    (\(fs : String) -> \(f : Field a fs) -> a)
+    (\(_ : String) -> \(x : a) -> x)
+    s
+    fld;
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers
@@ -415,15 +430,14 @@ pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12) |
 emptyBinary : #{} -> #{} -> #{};
 emptyBinary _ _ = {};
 
-{-
-fieldUnary : (s : String) -> (a b : sort 0) -> (a -> a) -> (b -> b)
-         -> #{ (s) : a | b } -> #{ (s) : a | b };
-fieldUnary s _ _ f g { (_) = x | y } = { (s) = f x | g y };
+fieldUnary : (s : String) -> (a : sort 0) -> (a -> a)
+          -> Field a s -> Field a s;
+fieldUnary s a f fld = MkField a s (f (projField s a fld));
 
-fieldBinary : (s : String) -> (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
-            -> #{ (s) : a | b } -> #{ (s) : a | b } -> #{ (s) : a | b };
-fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g x2 y2 };
--}
+fieldBinary : (s : String) -> (a : sort 0) -> (a -> a -> a)
+           -> Field a s -> Field a s -> Field a s;
+fieldBinary s a f fld1 fld2 =
+  MkField a s (f (projField s a fld1) (projField s a fld2));
 
 funBinary : (a b : sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
@@ -466,12 +480,11 @@ pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
 pairCmp a b f g x12 y12 k =
   f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
 
-{-
-fieldCmp : (s : String) -> (a b : sort 0)
-         -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
-         -> #{ (s) : a | b } -> #{ (s) : a | b } -> Bool -> Bool;
-fieldCmp s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } k = f x1 y1 (g x2 y2 k);
--}
+fieldCmp : (s : String) -> (a : sort 0)
+         -> (a -> a -> Bool -> Bool)
+         -> Field a s -> Field a s -> Bool -> Bool;
+fieldCmp s a f fld1 fld2 k =
+  f (projField s a fld1) (projField s a fld2) k;
 
 errorCmp : (a : sort 0) -> a -> a -> Bool -> Bool;
 errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
@@ -587,15 +600,13 @@ PLogicEmpty =
   , not  = emptyUnary
   };
 
-{-
-PLogicField : (s : String) -> (a b : sort 0) -> PLogic a -> PLogic b -> PLogic #{ (s) : a | b };
-PLogicField s a b pa pb =
-  { and  = fieldBinary s a b pa.and pb.and
-  , or   = fieldBinary s a b pa.or  pb.or
-  , xor  = fieldBinary s a b pa.xor pb.xor
-  , not  = fieldUnary s a b pa.not pb.not
+PLogicField : (s : String) -> (a : sort 0) -> PLogic a -> PLogic (Field a s);
+PLogicField s a pa =
+  { and  = fieldBinary s a pa.and
+  , or   = fieldBinary s a pa.or
+  , xor  = fieldBinary s a pa.xor
+  , not  = fieldUnary s a pa.not
   };
--}
 
 -- Arith class
 
@@ -750,21 +761,20 @@ PArithEmpty =
   , int = \ (i : Integer) -> {}
   };
 
-{-
-PArithField : (s : String) -> (a b : sort 0) -> PArith a -> PArith b -> PArith #{ (s) : a | b };
-PArithField s a b pa pb =
-  { add = fieldBinary s a b pa.add pb.add
-  , sub = fieldBinary s a b pa.sub pb.sub
-  , mul = fieldBinary s a b pa.mul pb.mul
-  , div = fieldBinary s a b pa.div pb.div
-  , mod = fieldBinary s a b pa.mod pb.mod
-  , exp = fieldBinary s a b pa.exp pb.exp
-  , lg2 = fieldUnary s a b pa.lg2 pb.lg2
-  , neg = fieldUnary s a b pa.neg pb.neg
-  , sdiv = fieldBinary s a b pa.sdiv pb.sdiv
-  , smod = fieldBinary s a b pa.smod pb.smod
+PArithField : (s : String) -> (a : sort 0) -> PArith a -> PArith (Field a s);
+PArithField s a pa =
+  { add = fieldBinary s a pa.add
+  , sub = fieldBinary s a pa.sub
+  , mul = fieldBinary s a pa.mul
+  , div = fieldBinary s a pa.div
+  , mod = fieldBinary s a pa.mod
+  , exp = fieldBinary s a pa.exp
+  , lg2 = fieldUnary s a pa.lg2
+  , neg = fieldUnary s a pa.neg
+  , int = \(i : Integer) -> MkField a s (pa.int i)
+  , sdiv = fieldBinary s a pa.sdiv
+  , smod = fieldBinary s a pa.smod
   };
--}
 
 -- Cmp class
 
@@ -806,10 +816,8 @@ PCmpPair a b pa pb = { cmp = pairCmp a b pa.cmp pb.cmp };
 PCmpEmpty : PCmp #{};
 PCmpEmpty = { cmp = emptyCmp };
 
-{-
-PCmpField : (s : String) -> (a b : sort 0) -> PCmp a -> PCmp b -> PCmp #{ (s) : a | b };
-PCmpField s a b pa pb = { cmp = fieldCmp s a b pa.cmp pb.cmp };
--}
+PCmpField : (s : String) -> (a : sort 0) -> PCmp a -> PCmp (Field a s);
+PCmpField s a pa = { cmp = fieldCmp s a pa.cmp };
 
 -- SignedCmp class
 
@@ -831,10 +839,8 @@ PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
 PSignedCmpEmpty : PSignedCmp #{};
 PSignedCmpEmpty = { scmp = emptyCmp };
 
-{-
-PSignedCmpField : (s : String) -> (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #{ (s) : a | b };
-PSignedCmpField s a b pa pb = { scmp = fieldCmp s a b pa.scmp pb.scmp };
--}
+PSignedCmpField : (s : String) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (Field a s);
+PSignedCmpField s a pa = { scmp = fieldCmp s a pa.scmp };
 
 -- Literal class
 
