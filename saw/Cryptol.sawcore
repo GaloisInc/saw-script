@@ -428,11 +428,11 @@ fieldBinary s a b f g { (_) = x1 | x2 } { (_) = y1 | y2 } = { (s) = f x1 y1 | g 
 funBinary : (a b : sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
 
-errorUnary : (a : sort 0) -> a -> a;
-errorUnary a _ = error a "invalid class instance";
+errorUnary : (s : String) -> (a : sort 0) -> a -> a;
+errorUnary s a _ = error a s;
 
-errorBinary : (a : sort 0) -> a -> a -> a;
-errorBinary a _ _ = error a "invalid class instance";
+errorBinary : (s : String) -> (a : sort 0) -> a -> a -> a;
+errorBinary s a _ _ = error a s;
 
 --------------------------------------------------------------------------------
 -- Comparisons
@@ -621,11 +621,11 @@ PArithInteger =
   , mul = intMul
   , div = intDiv
   , mod = intMod
-  , exp = errorBinary Integer
-  , lg2 = errorUnary Integer
+  , exp = errorBinary "no implementation for exp on Integer" Integer
+  , lg2 = errorUnary "no implementation for lg2 on Integer" Integer
   , neg = intNeg
-  , sdiv = errorBinary Integer
-  , smod = errorBinary Integer
+  , sdiv = errorBinary "no implementation for sdiv on Integer" Integer
+  , smod = errorBinary "no implementation for smod on Integer" Integer
   , int = \ (i : Integer) -> i
   };
 
@@ -677,9 +677,9 @@ PArithWord n =
   , lg2 = bvLg2 n
   , neg = bvNeg n
   , sdiv = natCase (\ (w:Nat) -> bitvector w -> bitvector w -> bitvector w)
-           (errorBinary (bitvector 0)) bvSDiv n
+           (errorBinary "no implementation for sdiv on empty bit vectors" (bitvector 0)) bvSDiv n
   , smod = natCase (\ (w:Nat) -> bitvector w -> bitvector w -> bitvector w)
-           (errorBinary (bitvector 0)) bvSRem n
+           (errorBinary "no implementation for smod on empty bit vectors" (bitvector 0)) bvSRem n
   , int = intToBv n
   };
 
