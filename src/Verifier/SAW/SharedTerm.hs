@@ -129,9 +129,6 @@ module Verifier.SAW.SharedTerm
   , scTuple
   , scTupleType
   , scTupleSelector
-  , scOldTuple
-  , scOldTupleType
-  , scOldTupleSelector
   , scVector
   , scVecType
   , scUpdNatFun
@@ -583,7 +580,7 @@ scReduceRecursor sc d params p_ret cs_fs c args =
 data WHNFElim
   = ElimApp Term
   | ElimProj String
-  | ElimOldPair Bool
+  | ElimPair Bool
   | ElimOldProj FieldName
   | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
 
@@ -624,9 +621,9 @@ scWhnf sc t0 =
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
     go xs                     (asOldRecordSelector -> Just (t, n)) = go (ElimOldProj n : xs) t
-    go xs                     (asPairSelector -> Just (t, i)) = go (ElimOldPair i : xs) t
+    go xs                     (asPairSelector -> Just (t, i)) = go (ElimPair i : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
-    go (ElimOldPair i : xs)   (asPairValue -> Just (a, b))      = go xs (if i then b else a)
+    go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
     go (ElimProj fld : xs)    (asRecordValue -> Just elems)     = case Map.lookup fld elems of
                                                                     Just t -> go xs t
                                                                     Nothing ->
@@ -679,7 +676,7 @@ scWhnf sc t0 =
     reapply :: Term -> WHNFElim -> IO Term
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
-    reapply t (ElimOldPair i) = scPairSelector sc t i
+    reapply t (ElimPair i) = scPairSelector sc t i
     reapply t (ElimOldProj i) = scOldRecordSelect sc t i
     reapply t (ElimRecursor d ps p_ret cs_fs ixs) =
       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
@@ -1141,15 +1138,9 @@ scFieldValue sc f x y = scFlatTermF sc (FieldValue f x y)
 scFieldType :: SharedContext -> Term -> Term -> Term -> IO Term
 scFieldType sc f x y = scFlatTermF sc (FieldType f x y)
 
-scOldTuple :: SharedContext -> [Term] -> IO Term
-scOldTuple sc ts = scFlatTermF sc (RecordValue $ tupleAsRecordAList ts)
-
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc
 scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
-
-scOldTupleType :: SharedContext -> [Term] -> IO Term
-scOldTupleType sc ts = scFlatTermF sc (RecordType $ tupleAsRecordAList ts)
 
 scTupleType :: SharedContext -> [Term] -> IO Term
 scTupleType sc [] = scUnitType sc
@@ -1164,9 +1155,6 @@ scPairRight sc t = scFlatTermF sc (PairRight t)
 scPairSelector :: SharedContext -> Term -> Bool -> IO Term
 scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
-
-scOldTupleSelector :: SharedContext -> Term -> Int -> IO Term
-scOldTupleSelector sc t i = scRecordSelect sc t (show i)
 
 scTupleSelector :: SharedContext -> Term -> Int -> IO Term
 scTupleSelector sc t i

@@ -31,9 +31,6 @@ module Verifier.SAW.Recognizer
   , asTupleType
   , asTupleValue
   , asTupleSelector
-  , asOldTupleType
-  , asOldTupleValue
-  , asOldTupleSelector
   , asFieldType
   , asFieldValue
   , asRecordType
@@ -81,7 +78,6 @@ import Verifier.SAW.Prim
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Prelude.Constants
-import Text.Read (readMaybe)
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)
@@ -181,27 +177,6 @@ asPairSelector t = do
     PairLeft x  -> return (x, False)
     PairRight x -> return (x, True)
     _           -> fail "asPairSelector"
-
-asOldTupleType :: (Monad m) => Recognizer m Term [Term]
-asOldTupleType t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordType (recordAListAsTuple -> Just ts) -> return ts
-    _                                          -> fail "asTupleType"
-
-asOldTupleValue :: (Monad m) => Recognizer m Term [Term]
-asOldTupleValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordValue (recordAListAsTuple -> Just ts) -> return ts
-    _                                           -> fail "asTupleValue"
-
-asOldTupleSelector :: (Monad m) => Recognizer m Term (Term, Int)
-asOldTupleSelector t = do
-  ftf <- asFTermF t
-  case ftf of
-    RecordProj u (readMaybe -> Just i) -> return (u, i)
-    _                                  -> fail "asTupleSelector"
 
 asTupleType :: (Monad m) => Recognizer m Term [Term]
 asTupleType t = do

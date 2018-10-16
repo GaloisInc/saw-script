@@ -304,13 +304,13 @@ ppLetBlock defs body =
     ppEqn (var,d) = ppMemoVar var <+> char '=' <+> d
 
 
--- | Pretty-print old-style tuples as "(x | y)"
-ppOldTuple :: Doc -> Doc -> Doc
-ppOldTuple x y = parens (x <+> char '|' <+> y)
+-- | Pretty-print pairs as "(x | y)"
+ppPair :: Doc -> Doc -> Doc
+ppPair x y = parens (x <+> char '|' <+> y)
 
--- | Pretty-print old-style tuple types as "#(x | y)"
-ppOldTupleType :: Doc -> Doc -> Doc
-ppOldTupleType x y =
+-- | Pretty-print pair types as "#(x | y)"
+ppPairType :: Doc -> Doc -> Doc
+ppPairType x y =
   char '#' <> parens (x <+> char '|' <+> y)
 
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
@@ -400,8 +400,8 @@ ppFlatTermF prec tf =
     GlobalDef i   -> return $ ppIdent i
     UnitValue     -> return $ text "()"
     UnitType      -> return $ text "#()"
-    PairValue x y -> ppOldTuple <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
-    PairType x y  -> ppOldTupleType <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
+    PairValue x y -> ppPair <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
+    PairType x y  -> ppPairType <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
     EmptyValue          -> return $ text "{}"
